@@ -20,6 +20,7 @@ export default function TeacherApp() {
   const [aiReflection, setAiReflection] = useState<string>('');
   const [isGenerating, setIsGenerating] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+  const [activeView, setActiveView] = useState<'hotspots' | 'students' | 'reflection'>('hotspots');
 
   // 加载数据
   useEffect(() => {
@@ -75,6 +76,7 @@ export default function TeacherApp() {
     
     setIsGenerating(true);
     setAiReflection('');
+    setActiveView('reflection');
 
     try {
       const response = await fetch('/api/chat', {
@@ -132,46 +134,57 @@ ${selectedTimeline.segments.slice(0, 10).map(s =>
 
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-50 flex items-center justify-center">
+      <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 flex items-center justify-center">
         <div className="text-center">
-          <div className="w-12 h-12 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin mx-auto mb-4" />
-          <p className="text-gray-600">加载教学数据...</p>
+          <div className="relative w-20 h-20 mx-auto mb-6">
+            <div className="absolute inset-0 rounded-full border-4 border-indigo-200"></div>
+            <div className="absolute inset-0 rounded-full border-4 border-indigo-500 border-t-transparent animate-spin"></div>
+            <div className="absolute inset-0 flex items-center justify-center">
+              <span className="text-3xl">📊</span>
+            </div>
+          </div>
+          <p className="text-gray-600 font-medium">加载教学数据...</p>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-50">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50">
       {/* 顶部导航 */}
-      <header className="bg-white shadow-sm sticky top-0 z-10">
-        <div className="max-w-7xl mx-auto px-4 py-4 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <Link href="/" className="text-gray-500 hover:text-gray-700">
-              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-              </svg>
-            </Link>
-            <div>
-              <h1 className="text-xl font-bold text-gray-900">教师工作台</h1>
-              <p className="text-sm text-gray-500">{new Date().toLocaleDateString('zh-CN')}</p>
+      <header className="bg-white/80 backdrop-blur-lg shadow-sm sticky top-0 z-10 border-b border-indigo-100">
+        <div className="max-w-7xl mx-auto px-4 py-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-4">
+              <Link 
+                href="/" 
+                className="w-10 h-10 bg-indigo-100 rounded-xl flex items-center justify-center text-indigo-600 hover:bg-indigo-200 transition-colors"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                </svg>
+              </Link>
+              <div>
+                <h1 className="text-xl font-bold text-gray-900">教师工作台</h1>
+                <p className="text-sm text-gray-500">{new Date().toLocaleDateString('zh-CN', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</p>
+              </div>
             </div>
-          </div>
-          <div className="flex items-center gap-4">
-            <Link
-              href="/"
-              className="px-3 py-1.5 text-sm text-gray-600 hover:text-gray-900"
-            >
-              学生端
-            </Link>
-            <Link
-              href="/parent"
-              className="px-3 py-1.5 text-sm text-gray-600 hover:text-gray-900"
-            >
-              家长端
-            </Link>
-            <div className="w-10 h-10 bg-indigo-100 rounded-full flex items-center justify-center">
-              <span className="text-lg">👨‍🏫</span>
+            <div className="flex items-center gap-3">
+              <Link
+                href="/"
+                className="px-4 py-2 text-sm text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors"
+              >
+                学生端
+              </Link>
+              <Link
+                href="/parent"
+                className="px-4 py-2 text-sm text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors"
+              >
+                家长端
+              </Link>
+              <div className="w-10 h-10 bg-gradient-to-br from-indigo-500 to-purple-500 rounded-xl flex items-center justify-center shadow-lg shadow-indigo-500/25">
+                <span className="text-lg">👨‍🏫</span>
+              </div>
             </div>
           </div>
         </div>
@@ -179,217 +192,303 @@ ${selectedTimeline.segments.slice(0, 10).map(s =>
 
       <main className="max-w-7xl mx-auto px-4 py-6">
         {/* 统计卡片 */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
           <StatCard
             icon="📚"
             label="今日课程"
             value={stats?.totalSessions || 0}
-            color="blue"
+            gradient="from-blue-500 to-cyan-500"
           />
           <StatCard
             icon="👥"
             label="参与学生"
             value={stats?.totalStudents || 0}
-            color="green"
+            gradient="from-emerald-500 to-teal-500"
           />
           <StatCard
             icon="❓"
             label="困惑点总数"
             value={stats?.totalAnchors || 0}
-            color="yellow"
+            gradient="from-amber-500 to-orange-500"
           />
           <StatCard
             icon="⚠️"
             label="待解决"
             value={stats?.unresolvedAnchors || 0}
-            color="red"
+            gradient="from-rose-500 to-pink-500"
           />
         </div>
 
-        <div className="grid md:grid-cols-2 gap-6">
-          {/* 困惑热区 */}
+        {/* 课程选择器 */}
+        {timelines.length > 0 && (
+          <div className="bg-white rounded-2xl shadow-sm p-4 mb-6">
+            <div className="flex items-center gap-4 overflow-x-auto pb-2">
+              {timelines.map((timeline) => (
+                <button
+                  key={timeline.id}
+                  onClick={() => setSelectedTimeline(timeline)}
+                  className={`flex items-center gap-3 px-4 py-3 rounded-xl transition-all whitespace-nowrap ${
+                    selectedTimeline?.id === timeline.id
+                      ? 'bg-gradient-to-r from-indigo-500 to-purple-500 text-white shadow-lg shadow-indigo-500/25'
+                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                  }`}
+                >
+                  <span className="text-xl">📖</span>
+                  <div className="text-left">
+                    <div className="font-medium">{timeline.subject}</div>
+                    <div className="text-xs opacity-80">{timeline.teacher}</div>
+                  </div>
+                  <div className={`ml-2 px-2 py-1 rounded-full text-xs font-bold ${
+                    selectedTimeline?.id === timeline.id
+                      ? 'bg-white/20'
+                      : 'bg-red-100 text-red-600'
+                  }`}>
+                    {timeline.anchors.length}
+                  </div>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* 视图切换 */}
+        <div className="flex gap-2 mb-6">
+          {[
+            { id: 'hotspots', label: '困惑热区', icon: '🔥' },
+            { id: 'students', label: '学生详情', icon: '👥' },
+            { id: 'reflection', label: 'AI 反思', icon: '🤖' },
+          ].map((view) => (
+            <button
+              key={view.id}
+              onClick={() => setActiveView(view.id as typeof activeView)}
+              className={`flex items-center gap-2 px-5 py-3 rounded-xl font-medium transition-all ${
+                activeView === view.id
+                  ? 'bg-white text-indigo-600 shadow-lg'
+                  : 'bg-white/50 text-gray-600 hover:bg-white/80'
+              }`}
+            >
+              <span>{view.icon}</span>
+              {view.label}
+            </button>
+          ))}
+        </div>
+
+        {/* 困惑热区视图 */}
+        {activeView === 'hotspots' && (
           <div className="bg-white rounded-2xl shadow-sm p-6">
-            <h2 className="text-lg font-bold text-gray-900 mb-4 flex items-center gap-2">
-              <span>🔥</span> 困惑热区
+            <h2 className="text-lg font-bold text-gray-900 mb-6 flex items-center gap-2">
+              <span className="text-2xl">🔥</span> 困惑热区分析
             </h2>
             
             {stats?.hotspots && stats.hotspots.length > 0 ? (
-              <div className="space-y-3">
-                {/* 热区可视化 */}
-                <div className="relative h-8 bg-gray-100 rounded-lg overflow-hidden">
-                  {stats.hotspots.map((hotspot, i) => {
-                    const duration = selectedTimeline?.duration || 1;
-                    const left = (hotspot.startMs / duration) * 100;
-                    const width = ((hotspot.endMs - hotspot.startMs) / duration) * 100;
-                    const intensity = Math.min(hotspot.count / 3, 1);
+              <div className="space-y-6">
+                {/* 热区时间轴可视化 */}
+                <div className="relative">
+                  <div className="h-16 bg-gradient-to-r from-gray-100 to-gray-50 rounded-2xl overflow-hidden relative">
+                    {/* 时间刻度 */}
+                    <div className="absolute inset-x-0 bottom-0 flex justify-between px-4 py-1 text-xs text-gray-400">
+                      <span>00:00</span>
+                      <span>{formatTime((selectedTimeline?.duration || 0) / 2)}</span>
+                      <span>{formatTime(selectedTimeline?.duration || 0)}</span>
+                    </div>
                     
-                    return (
-                      <div
-                        key={i}
-                        className="absolute top-0 bottom-0 transition-opacity hover:opacity-80"
-                        style={{
-                          left: `${left}%`,
-                          width: `${Math.max(width, 2)}%`,
-                          backgroundColor: `rgba(239, 68, 68, ${0.3 + intensity * 0.7})`,
-                        }}
-                        title={`${formatTime(hotspot.startMs)}: ${hotspot.count} 个困惑点`}
-                      />
-                    );
-                  })}
+                    {/* 热区块 */}
+                    {stats.hotspots.map((hotspot, i) => {
+                      const duration = selectedTimeline?.duration || 1;
+                      const left = (hotspot.startMs / duration) * 100;
+                      const width = ((hotspot.endMs - hotspot.startMs) / duration) * 100;
+                      const intensity = Math.min(hotspot.count / 3, 1);
+                      
+                      return (
+                        <div
+                          key={i}
+                          className="absolute top-2 bottom-6 rounded-lg transition-all hover:scale-y-110 cursor-pointer group"
+                          style={{
+                            left: `${left}%`,
+                            width: `${Math.max(width, 2)}%`,
+                            background: `linear-gradient(180deg, rgba(239, 68, 68, ${0.4 + intensity * 0.6}) 0%, rgba(239, 68, 68, ${0.2 + intensity * 0.4}) 100%)`,
+                          }}
+                          title={`${formatTime(hotspot.startMs)}: ${hotspot.count} 个困惑点`}
+                        >
+                          <div className="absolute -top-8 left-1/2 -translate-x-1/2 bg-gray-900 text-white text-xs px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap">
+                            {hotspot.count} 个困惑点
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
                 </div>
                 
                 {/* 热区列表 */}
-                <div className="space-y-2 max-h-64 overflow-y-auto">
-                  {stats.hotspots.slice(0, 10).map((hotspot, i) => (
+                <div className="grid md:grid-cols-2 gap-4">
+                  {stats.hotspots.slice(0, 6).map((hotspot, i) => (
                     <div
                       key={i}
-                      className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg"
+                      className="flex items-center gap-4 p-4 bg-gradient-to-r from-gray-50 to-white rounded-xl border border-gray-100 hover:shadow-md transition-all"
                     >
-                      <div className={`w-8 h-8 rounded-full flex items-center justify-center text-white font-bold text-sm ${
-                        hotspot.count >= 3 ? 'bg-red-500' :
-                        hotspot.count >= 2 ? 'bg-orange-500' : 'bg-yellow-500'
+                      <div className={`w-12 h-12 rounded-xl flex items-center justify-center text-white font-bold shadow-lg ${
+                        hotspot.count >= 3 ? 'bg-gradient-to-br from-red-500 to-rose-500 shadow-red-500/25' :
+                        hotspot.count >= 2 ? 'bg-gradient-to-br from-orange-500 to-amber-500 shadow-orange-500/25' : 
+                        'bg-gradient-to-br from-yellow-500 to-amber-400 shadow-yellow-500/25'
                       }`}>
                         {hotspot.count}
                       </div>
-                      <div className="flex-1">
-                        <div className="text-sm font-medium text-gray-900">
+                      <div className="flex-1 min-w-0">
+                        <div className="font-medium text-gray-900">
                           {formatTime(hotspot.startMs)} - {formatTime(hotspot.endMs)}
                         </div>
-                        <div className="text-xs text-gray-500">
+                        <div className="text-sm text-gray-500 truncate">
                           {getSegmentTextAtTime(selectedTimeline, hotspot.startMs)}
                         </div>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        {Array.from({ length: Math.min(hotspot.count, 5) }).map((_, j) => (
+                          <div key={j} className="w-2 h-2 bg-red-400 rounded-full" />
+                        ))}
                       </div>
                     </div>
                   ))}
                 </div>
               </div>
             ) : (
-              <div className="text-center py-8 text-gray-500">
-                <div className="text-4xl mb-2">🎉</div>
-                <p>今天没有困惑热区</p>
+              <div className="text-center py-16">
+                <div className="w-24 h-24 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-6">
+                  <span className="text-5xl">🎉</span>
+                </div>
+                <h3 className="text-xl font-bold text-gray-900 mb-2">太棒了！</h3>
+                <p className="text-gray-500">今天没有困惑热区，学生们理解得很好</p>
               </div>
             )}
           </div>
+        )}
 
-          {/* AI 课后反思 */}
-          <div className="bg-white rounded-2xl shadow-sm p-6">
-            <div className="flex items-center justify-between mb-4">
+        {/* 学生详情视图 */}
+        {activeView === 'students' && selectedTimeline && (
+          <div className="bg-white rounded-2xl shadow-sm overflow-hidden">
+            <div className="p-6 border-b border-gray-100">
               <h2 className="text-lg font-bold text-gray-900 flex items-center gap-2">
-                <span>🤖</span> AI 课后反思
+                <span className="text-2xl">👥</span> 学生困惑详情
+              </h2>
+            </div>
+            
+            {selectedTimeline.anchors.length > 0 ? (
+              <div className="overflow-x-auto">
+                <table className="w-full">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="text-left py-4 px-6 text-sm font-medium text-gray-500">时间</th>
+                      <th className="text-left py-4 px-6 text-sm font-medium text-gray-500">学生</th>
+                      <th className="text-left py-4 px-6 text-sm font-medium text-gray-500">类型</th>
+                      <th className="text-left py-4 px-6 text-sm font-medium text-gray-500">状态</th>
+                      <th className="text-left py-4 px-6 text-sm font-medium text-gray-500">相关内容</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100">
+                    {selectedTimeline.anchors.map((anchor) => (
+                      <tr key={anchor.id} className="hover:bg-gray-50 transition-colors">
+                        <td className="py-4 px-6">
+                          <span className="font-mono text-sm bg-gray-100 px-2 py-1 rounded">
+                            {formatTime(anchor.timestamp)}
+                          </span>
+                        </td>
+                        <td className="py-4 px-6">
+                          <div className="flex items-center gap-2">
+                            <div className="w-8 h-8 bg-indigo-100 rounded-full flex items-center justify-center">
+                              <span className="text-sm">👤</span>
+                            </div>
+                            <span className="font-medium text-gray-900">{anchor.studentId}</span>
+                          </div>
+                        </td>
+                        <td className="py-4 px-6">
+                          <span className={`inline-flex items-center gap-1 text-xs px-3 py-1.5 rounded-full font-medium ${
+                            anchor.type === 'confusion' ? 'bg-red-100 text-red-700' :
+                            anchor.type === 'question' ? 'bg-blue-100 text-blue-700' :
+                            'bg-yellow-100 text-yellow-700'
+                          }`}>
+                            {anchor.type === 'confusion' ? '❓ 困惑' :
+                             anchor.type === 'question' ? '💬 提问' : '⭐ 重点'}
+                          </span>
+                        </td>
+                        <td className="py-4 px-6">
+                          <span className={`inline-flex items-center gap-1 text-xs px-3 py-1.5 rounded-full font-medium ${
+                            anchor.resolved 
+                              ? 'bg-green-100 text-green-700' 
+                              : 'bg-gray-100 text-gray-600'
+                          }`}>
+                            {anchor.resolved ? '✅ 已解决' : '⏳ 待解决'}
+                          </span>
+                        </td>
+                        <td className="py-4 px-6">
+                          <p className="text-sm text-gray-600 max-w-xs truncate">
+                            {getSegmentTextAtTime(selectedTimeline, anchor.timestamp)}
+                          </p>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <div className="text-center py-16">
+                <div className="w-20 h-20 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                  <span className="text-4xl">📋</span>
+                </div>
+                <p className="text-gray-500">暂无学生困惑记录</p>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* AI 反思视图 */}
+        {activeView === 'reflection' && (
+          <div className="bg-white rounded-2xl shadow-sm p-6">
+            <div className="flex items-center justify-between mb-6">
+              <h2 className="text-lg font-bold text-gray-900 flex items-center gap-2">
+                <span className="text-2xl">🤖</span> AI 课后反思
               </h2>
               <button
                 onClick={generateReflection}
                 disabled={isGenerating}
-                className="px-4 py-2 bg-indigo-500 text-white rounded-lg hover:bg-indigo-600 disabled:opacity-50 text-sm transition-colors"
+                className="px-6 py-3 bg-gradient-to-r from-indigo-500 to-purple-500 text-white rounded-xl font-medium hover:from-indigo-600 hover:to-purple-600 disabled:opacity-50 transition-all shadow-lg shadow-indigo-500/25 flex items-center gap-2"
               >
-                {isGenerating ? '生成中...' : '生成反思'}
+                {isGenerating ? (
+                  <>
+                    <svg className="w-5 h-5 animate-spin" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                    </svg>
+                    生成中...
+                  </>
+                ) : (
+                  <>
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                    </svg>
+                    生成反思
+                  </>
+                )}
               </button>
             </div>
 
             {aiReflection ? (
-              <div className="prose prose-sm max-w-none">
-                <div className="bg-indigo-50 rounded-xl p-4 whitespace-pre-wrap text-gray-700">
-                  {aiReflection}
+              <div className="bg-gradient-to-br from-indigo-50 to-purple-50 rounded-2xl p-6 border border-indigo-100">
+                <div className="prose prose-indigo max-w-none">
+                  <div className="whitespace-pre-wrap text-gray-700 leading-relaxed">
+                    {aiReflection}
+                  </div>
                 </div>
               </div>
             ) : (
-              <div className="text-center py-12 text-gray-400">
-                <div className="text-4xl mb-3">📝</div>
-                <p>点击"生成反思"获取 AI 教学建议</p>
+              <div className="text-center py-20">
+                <div className="w-24 h-24 bg-gradient-to-br from-indigo-100 to-purple-100 rounded-full flex items-center justify-center mx-auto mb-6">
+                  <span className="text-5xl">📝</span>
+                </div>
+                <h3 className="text-xl font-bold text-gray-900 mb-2">生成教学反思</h3>
+                <p className="text-gray-500 max-w-md mx-auto">
+                  AI 将根据今天的课堂数据和学生困惑点，为您生成专业的教学反思和改进建议
+                </p>
               </div>
             )}
-          </div>
-        </div>
-
-        {/* 课程列表 */}
-        <div className="mt-6 bg-white rounded-2xl shadow-sm p-6">
-          <h2 className="text-lg font-bold text-gray-900 mb-4 flex items-center gap-2">
-            <span>📋</span> 今日课程
-          </h2>
-          
-          <div className="space-y-3">
-            {timelines.map((timeline) => (
-              <div
-                key={timeline.id}
-                onClick={() => setSelectedTimeline(timeline)}
-                className={`flex items-center gap-4 p-4 rounded-xl cursor-pointer transition-colors ${
-                  selectedTimeline?.id === timeline.id
-                    ? 'bg-indigo-50 border-2 border-indigo-500'
-                    : 'bg-gray-50 hover:bg-gray-100'
-                }`}
-              >
-                <div className="w-12 h-12 bg-indigo-100 rounded-xl flex items-center justify-center">
-                  <span className="text-2xl">📖</span>
-                </div>
-                <div className="flex-1">
-                  <div className="font-medium text-gray-900">{timeline.subject}</div>
-                  <div className="text-sm text-gray-500">
-                    {timeline.teacher} · {Math.round(timeline.duration / 60000)} 分钟
-                  </div>
-                </div>
-                <div className="text-right">
-                  <div className="text-lg font-bold text-red-500">
-                    {timeline.anchors.length}
-                  </div>
-                  <div className="text-xs text-gray-500">困惑点</div>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* 学生困惑详情 */}
-        {selectedTimeline && selectedTimeline.anchors.length > 0 && (
-          <div className="mt-6 bg-white rounded-2xl shadow-sm p-6">
-            <h2 className="text-lg font-bold text-gray-900 mb-4 flex items-center gap-2">
-              <span>👥</span> 学生困惑详情
-            </h2>
-            
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead>
-                  <tr className="border-b border-gray-200">
-                    <th className="text-left py-3 px-4 text-sm font-medium text-gray-500">时间</th>
-                    <th className="text-left py-3 px-4 text-sm font-medium text-gray-500">学生</th>
-                    <th className="text-left py-3 px-4 text-sm font-medium text-gray-500">类型</th>
-                    <th className="text-left py-3 px-4 text-sm font-medium text-gray-500">状态</th>
-                    <th className="text-left py-3 px-4 text-sm font-medium text-gray-500">相关内容</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {selectedTimeline.anchors.map((anchor) => (
-                    <tr key={anchor.id} className="border-b border-gray-100 hover:bg-gray-50">
-                      <td className="py-3 px-4 text-sm font-mono">
-                        {formatTime(anchor.timestamp)}
-                      </td>
-                      <td className="py-3 px-4 text-sm">
-                        {anchor.studentId}
-                      </td>
-                      <td className="py-3 px-4">
-                        <span className={`text-xs px-2 py-1 rounded-full ${
-                          anchor.type === 'confusion' ? 'bg-red-100 text-red-700' :
-                          anchor.type === 'question' ? 'bg-blue-100 text-blue-700' :
-                          'bg-yellow-100 text-yellow-700'
-                        }`}>
-                          {anchor.type === 'confusion' ? '困惑' :
-                           anchor.type === 'question' ? '提问' : '重点'}
-                        </span>
-                      </td>
-                      <td className="py-3 px-4">
-                        <span className={`text-xs px-2 py-1 rounded-full ${
-                          anchor.resolved ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-700'
-                        }`}>
-                          {anchor.resolved ? '已解决' : '待解决'}
-                        </span>
-                      </td>
-                      <td className="py-3 px-4 text-sm text-gray-600 max-w-xs truncate">
-                        {getSegmentTextAtTime(selectedTimeline, anchor.timestamp)}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
           </div>
         )}
       </main>
@@ -402,25 +501,24 @@ function StatCard({
   icon, 
   label, 
   value, 
-  color 
+  gradient 
 }: { 
   icon: string; 
   label: string; 
   value: number; 
-  color: 'blue' | 'green' | 'yellow' | 'red';
+  gradient: string;
 }) {
-  const colors = {
-    blue: 'bg-blue-50 text-blue-600',
-    green: 'bg-green-50 text-green-600',
-    yellow: 'bg-yellow-50 text-yellow-600',
-    red: 'bg-red-50 text-red-600',
-  };
-
   return (
-    <div className={`${colors[color]} rounded-2xl p-4`}>
-      <div className="text-2xl mb-2">{icon}</div>
-      <div className="text-3xl font-bold">{value}</div>
-      <div className="text-sm opacity-80">{label}</div>
+    <div className="bg-white rounded-2xl shadow-sm p-5 hover:shadow-lg transition-shadow">
+      <div className="flex items-center gap-4">
+        <div className={`w-14 h-14 bg-gradient-to-br ${gradient} rounded-xl flex items-center justify-center shadow-lg`}>
+          <span className="text-2xl">{icon}</span>
+        </div>
+        <div>
+          <div className="text-3xl font-bold text-gray-900">{value}</div>
+          <div className="text-sm text-gray-500">{label}</div>
+        </div>
+      </div>
     </div>
   );
 }

@@ -15,7 +15,7 @@ interface RecorderProps {
 
 type RecorderStatus = 'idle' | 'recording' | 'paused' | 'stopped' | 'transcribing';
 type ServiceStatus = 'checking' | 'available' | 'unavailable' | 'asr-ready';
-type TranscribeMode = 'batch' | 'streaming';  // batch=非流式, streaming=流式
+type TranscribeMode = 'batch' | 'streaming';
 
 export function Recorder({
   onRecordingStart,
@@ -34,11 +34,12 @@ export function Recorder({
   const [canUndo, setCanUndo] = useState(false);
   const [serviceStatus, setServiceStatus] = useState<ServiceStatus>('checking');
   const [transcribeProgress, setTranscribeProgress] = useState<string>('');
-  const [transcribeMode, setTranscribeMode] = useState<TranscribeMode>('streaming');  // 默认流式优先
-  const [streamingAvailable, setStreamingAvailable] = useState(true);  // 启用流式
+  const [transcribeMode, setTranscribeMode] = useState<TranscribeMode>('streaming');
+  const [streamingAvailable, setStreamingAvailable] = useState(true);
   const [apiKey, setApiKey] = useState<string>('');
   const [wsModel, setWsModel] = useState<string>('qwen-asr-realtime-v1');
   const [wsSampleRate, setWsSampleRate] = useState<number>(16000);
+  const [anchorCount, setAnchorCount] = useState(0);
 
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
@@ -48,9 +49,9 @@ export function Recorder({
   const timerRef = useRef<NodeJS.Timeout | null>(null);
   const sessionIdRef = useRef<string>('');
   const lastAnchorTimeRef = useRef<number>(0);
-  const audioChunksRef = useRef<Blob[]>([]);  // 存储录音数据
-  const asrClientRef = useRef<DashScopeASRClient | null>(null);  // 百炼流式转录客户端
-  const transcriptRef = useRef<TranscriptSegment[]>([]);  // 用于流式更新
+  const audioChunksRef = useRef<Blob[]>([]);
+  const asrClientRef = useRef<DashScopeASRClient | null>(null);
+  const transcriptRef = useRef<TranscriptSegment[]>([]);
   const pcmProcessorRef = useRef<ScriptProcessorNode | null>(null);
 
   // 获取 API Key 并检查服务状态
@@ -65,16 +66,13 @@ export function Recorder({
           if (config.sampleRate) setWsSampleRate(config.sampleRate);
           setStreamingAvailable(true);
           setServiceStatus('available');
-          console.log('[Recorder] ASR service ready (streaming preferred)', config.model || 'default');
         } else {
           setStreamingAvailable(false);
           setServiceStatus('unavailable');
-          console.error('[Recorder] Failed to get ASR config');
         }
-      } catch (err) {
+      } catch {
         setStreamingAvailable(false);
         setServiceStatus('unavailable');
-        console.error('[Recorder] Error fetching ASR config:', err);
       }
     };
     fetchConfig();
@@ -97,12 +95,12 @@ export function Recorder({
   const startRecording = async () => {
     try {
       setError(null);
-      audioChunksRef.current = [];  // 清空之前的录音数据
+      audioChunksRef.current = [];
       setTranscript([]);
       transcriptRef.current = [];
       setInterimText('');
+      setAnchorCount(0);
 
-      // 请求麦克风权限
       const stream = await navigator.mediaDevices.getUserMedia({
         audio: {
           channelCount: 1,
@@ -112,14 +110,12 @@ export function Recorder({
         },
       });
 
-      // 创建音频分析器
       audioContextRef.current = new AudioContext({ sampleRate: 16000 });
       const source = audioContextRef.current.createMediaStreamSource(stream);
       analyserRef.current = audioContextRef.current.createAnalyser();
       analyserRef.current.fftSize = 256;
       source.connect(analyserRef.current);
 
-      // 音量监测
       const dataArray = new Uint8Array(analyserRef.current.frequencyBinCount);
       const checkLevel = () => {
         if (!analyserRef.current) return;
@@ -130,10 +126,9 @@ export function Recorder({
       };
       checkLevel();
 
-      // 生成会话 ID
       sessionIdRef.current = `session-${Date.now()}`;
 
-      // 流式模式：初始化百炼 ASR 客户端
+      // 流式模式
       if (transcribeMode === 'streaming' && streamingAvailable && apiKey) {
         asrClientRef.current = new DashScopeASRClient(apiKey, {
           onSentence: (sentence) => {
@@ -149,18 +144,10 @@ export function Recorder({
             setTranscript(transcriptRef.current);
             onTranscriptUpdate?.(transcriptRef.current);
           },
-          onInterim: (text) => {
-            setInterimText(text);
-          },
-          onError: (err) => {
-            console.error('[Streaming] Error:', err);
-            setError(err);
-          },
+          onInterim: (text) => setInterimText(text),
+          onError: (err) => setError(err),
           onStatusChange: (newStatus) => {
-            console.log('[Streaming] Status:', newStatus);
-            if (newStatus === 'transcribing') {
-              setServiceStatus('available');
-            }
+            if (newStatus === 'transcribing') setServiceStatus('available');
           },
         }, {
           model: wsModel,
@@ -168,20 +155,16 @@ export function Recorder({
           format: 'pcm',
         });
         
-        // 启动流式转录
         const started = await asrClientRef.current.start();
         if (!started) {
-          console.warn('[Recorder] Failed to start streaming ASR, falling back to batch mode');
           asrClientRef.current = null;
         } else {
-          // 创建 PCM 处理器发送音频数据
           const bufferSize = 4096;
           pcmProcessorRef.current = audioContextRef.current.createScriptProcessor(bufferSize, 1, 1);
           
           pcmProcessorRef.current.onaudioprocess = (e) => {
             if (asrClientRef.current?.isConnected()) {
               const inputData = e.inputBuffer.getChannelData(0);
-              // 转换为 16-bit PCM
               const pcmData = new Int16Array(inputData.length);
               for (let i = 0; i < inputData.length; i++) {
                 pcmData[i] = Math.max(-32768, Math.min(32767, Math.floor(inputData[i] * 32768)));
@@ -195,7 +178,6 @@ export function Recorder({
         }
       }
 
-      // 创建 MediaRecorder（用于保存完整录音）
       const mimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
         ? 'audio/webm;codecs=opus'
         : 'audio/webm';
@@ -205,18 +187,15 @@ export function Recorder({
         audioBitsPerSecond: 64000,
       });
 
-      // 处理音频数据（保存用于非流式转录或备份）
       mediaRecorder.ondataavailable = async (event) => {
         if (event.data.size > 0) {
           audioChunksRef.current.push(event.data);
         }
       };
 
-      // 每秒保存一次数据
       mediaRecorder.start(1000);
       mediaRecorderRef.current = mediaRecorder;
 
-      // 开始计时
       startTimeRef.current = Date.now();
       timerRef.current = setInterval(() => {
         setElapsedMs(Date.now() - startTimeRef.current);
@@ -234,9 +213,7 @@ export function Recorder({
   const pauseRecording = () => {
     if (mediaRecorderRef.current?.state === 'recording') {
       mediaRecorderRef.current.pause();
-      if (timerRef.current) {
-        clearInterval(timerRef.current);
-      }
+      if (timerRef.current) clearInterval(timerRef.current);
       setStatus('paused');
     }
   };
@@ -256,58 +233,48 @@ export function Recorder({
 
   // 停止录音
   const stopRecording = async () => {
-    // 停止动画
     if (animationIdRef.current) {
       cancelAnimationFrame(animationIdRef.current);
       animationIdRef.current = null;
     }
 
-    // 停止计时
     if (timerRef.current) {
       clearInterval(timerRef.current);
       timerRef.current = null;
     }
 
-    // 停止 PCM 处理器
     if (pcmProcessorRef.current) {
       pcmProcessorRef.current.disconnect();
       pcmProcessorRef.current = null;
     }
 
-    // 停止录音
     if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
       mediaRecorderRef.current.stop();
       mediaRecorderRef.current.stream.getTracks().forEach(track => track.stop());
     }
 
-    // 关闭音频上下文
     if (audioContextRef.current) {
       audioContextRef.current.close();
       audioContextRef.current = null;
     }
 
-    // 停止流式转录
     if (asrClientRef.current) {
       await asrClientRef.current.stop();
       asrClientRef.current = null;
     }
 
-    // 合并音频数据
     const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
-    console.log('[Recorder] Audio blob size:', audioBlob.size);
 
     mediaRecorderRef.current = null;
     analyserRef.current = null;
     setLevel(0);
     setInterimText('');
 
-    // 非流式模式：使用 qwen-asr-flash 进行转录
     if (transcribeMode === 'batch' && audioBlob.size > 0) {
       await transcribeWithQwenASR(audioBlob);
     } else {
-      // 流式模式已经实时转录完成
       if (transcribeMode === 'streaming' && transcriptRef.current.length > 0) {
-        setTranscribeProgress(`流式转录完成，共 ${transcriptRef.current.length} 个句子`);
+        setTranscribeProgress(`转录完成，共 ${transcriptRef.current.length} 句`);
         onTranscriptUpdate?.(transcriptRef.current);
       }
       setStatus('stopped');
@@ -315,38 +282,29 @@ export function Recorder({
     }
   };
 
-  // 使用 qwen-asr-flash 进行非流式转录
+  // 非流式转录
   const transcribeWithQwenASR = async (audioBlob: Blob) => {
     setStatus('transcribing');
     setTranscribeProgress('正在转录音频...');
     onTranscribing?.(true);
 
-    console.log('[Recorder] Starting transcription with Qwen ASR...');
-    console.log('[Recorder] Audio blob:', { size: audioBlob.size, type: audioBlob.type });
-
     try {
       const formData = new FormData();
       formData.append('audio', audioBlob, 'recording.webm');
 
-      console.log('[Recorder] Sending request to /api/transcribe...');
       const response = await fetch('/api/transcribe', {
         method: 'POST',
         body: formData,
       });
 
-      console.log('[Recorder] Response status:', response.status);
-
       if (!response.ok) {
         const errorData = await response.json();
-        console.error('[Recorder] Transcription API error:', errorData);
         throw new Error(errorData.error || '转录失败');
       }
 
       const data = await response.json();
-      console.log('[Recorder] Transcription result:', JSON.stringify(data, null, 2));
 
       if (data.success && data.segments) {
-        // 更新转录结果
         const segments: TranscriptSegment[] = data.segments.map((seg: {
           id: string;
           text: string;
@@ -364,12 +322,11 @@ export function Recorder({
 
         setTranscript(segments);
         onTranscriptUpdate?.(segments);
-        setTranscribeProgress(`转录完成，共 ${segments.length} 个句子`);
+        setTranscribeProgress(`转录完成，共 ${segments.length} 句`);
       } else {
         setTranscribeProgress('转录完成，但未获取到文本');
       }
     } catch (err) {
-      console.error('[Recorder] Transcription error:', err);
       setError(err instanceof Error ? err.message : '转录失败');
       setTranscribeProgress('');
     } finally {
@@ -386,311 +343,305 @@ export function Recorder({
     const timestamp = elapsedMs;
     lastAnchorTimeRef.current = timestamp;
     onAnchorMark?.(timestamp);
+    setAnchorCount(prev => prev + 1);
     setCanUndo(true);
 
-    // 5秒后取消撤销能力
-    setTimeout(() => {
-      setCanUndo(false);
-    }, 5000);
+    setTimeout(() => setCanUndo(false), 5000);
   }, [status, elapsedMs, onAnchorMark]);
 
   // 清理
   useEffect(() => {
     return () => {
-      if (animationIdRef.current) {
-        cancelAnimationFrame(animationIdRef.current);
-      }
-      if (timerRef.current) {
-        clearInterval(timerRef.current);
-      }
-      if (pcmProcessorRef.current) {
-        pcmProcessorRef.current.disconnect();
-      }
+      if (animationIdRef.current) cancelAnimationFrame(animationIdRef.current);
+      if (timerRef.current) clearInterval(timerRef.current);
+      if (pcmProcessorRef.current) pcmProcessorRef.current.disconnect();
       if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
         mediaRecorderRef.current.stop();
         mediaRecorderRef.current.stream.getTracks().forEach(track => track.stop());
       }
-      if (audioContextRef.current) {
-        audioContextRef.current.close();
-      }
-      if (asrClientRef.current) {
-        asrClientRef.current.stop();
-      }
+      if (audioContextRef.current) audioContextRef.current.close();
+      if (asrClientRef.current) asrClientRef.current.stop();
     };
   }, []);
 
+  const isRecording = status === 'recording';
+  const isPaused = status === 'paused';
+  const isTranscribing = status === 'transcribing';
+  const isStopped = status === 'stopped';
+  const isIdle = status === 'idle';
+
   return (
-    <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-      {/* 服务状态指示器 */}
-      <div className="flex items-center justify-between mb-4">
+    <div className="card p-8 animate-fade-in">
+      {/* 顶部状态栏 */}
+      <div className="flex items-center justify-between mb-8">
+        {/* 服务状态 */}
         <div className="flex items-center gap-2">
-          <div className={`w-2 h-2 rounded-full ${
-            serviceStatus === 'checking' ? 'bg-yellow-500 animate-pulse' :
-            serviceStatus === 'available' ? 'bg-green-500' :
-            serviceStatus === 'asr-ready' ? 'bg-blue-500' :
-            'bg-gray-400'
+          <div className={`w-2 h-2 rounded-full transition-colors ${
+            serviceStatus === 'checking' ? 'bg-amber-400 animate-pulse' :
+            serviceStatus === 'available' ? 'bg-emerald-400' :
+            'bg-gray-300'
           }`} />
           <span className="text-xs text-gray-500">
-            {serviceStatus === 'checking' ? '检查服务...' :
-             serviceStatus === 'available' ? '百炼 ASR 已连接（流式）' :
-             serviceStatus === 'asr-ready' ? 'Qwen ASR 就绪' :
-             '本地录音模式'}
+            {serviceStatus === 'checking' ? '连接中...' :
+             serviceStatus === 'available' ? '实时转录就绪' :
+             '本地模式'}
           </span>
         </div>
         
-        {/* 转录模式切换 */}
-        {status === 'idle' && (
-          <div className="flex items-center gap-2">
-            <span className="text-xs text-gray-500">转录模式：</span>
-            <div className="flex bg-gray-100 rounded-lg p-0.5">
-              <button
-                onClick={() => setTranscribeMode('batch')}
-                className={`px-3 py-1 text-xs rounded-md transition-colors ${
-                  transcribeMode === 'batch' 
-                    ? 'bg-blue-500 text-white' 
-                    : 'text-gray-600 hover:bg-gray-200'
-                }`}
-              >
-                非流式（高精度）
-              </button>
-              <button
-                onClick={() => setTranscribeMode('streaming')}
-                disabled={!streamingAvailable}
-                className={`px-3 py-1 text-xs rounded-md transition-colors ${
-                  transcribeMode === 'streaming' 
-                    ? 'bg-green-500 text-white' 
-                    : streamingAvailable 
-                      ? 'text-gray-600 hover:bg-gray-200' 
-                      : 'text-gray-400 cursor-not-allowed'
-                }`}
-                title={!streamingAvailable ? '流式服务暂不可用（浏览器限制）' : ''}
-              >
-                流式（实时）{!streamingAvailable && ' 🚫'}
-              </button>
-            </div>
+        {/* 模式切换 */}
+        {isIdle && (
+          <div className="flex items-center gap-1 p-1 bg-gray-100 rounded-lg">
+            <button
+              onClick={() => setTranscribeMode('streaming')}
+              disabled={!streamingAvailable}
+              className={`px-3 py-1.5 text-xs rounded-md transition-all ${
+                transcribeMode === 'streaming' 
+                  ? 'bg-white text-rose-600 shadow-sm' 
+                  : 'text-gray-500 hover:text-gray-700'
+              } ${!streamingAvailable ? 'opacity-50 cursor-not-allowed' : ''}`}
+            >
+              ⚡ 实时
+            </button>
+            <button
+              onClick={() => setTranscribeMode('batch')}
+              className={`px-3 py-1.5 text-xs rounded-md transition-all ${
+                transcribeMode === 'batch' 
+                  ? 'bg-white text-accent-600 shadow-sm' 
+                  : 'text-gray-500 hover:text-gray-700'
+              }`}
+            >
+              🎯 高精度
+            </button>
           </div>
         )}
         
-        {/* 录音中显示当前模式 */}
-        {status === 'recording' && (
-          <span className={`text-xs px-2 py-1 rounded-full ${
-            transcribeMode === 'streaming' 
-              ? 'bg-green-100 text-green-700' 
-              : 'bg-blue-100 text-blue-700'
-          }`}>
-            {transcribeMode === 'streaming' ? '流式转录中' : '录音后转录'}
+        {/* 录音中状态 */}
+        {(isRecording || isPaused) && (
+          <span className={`badge ${transcribeMode === 'streaming' ? 'badge-streaming' : 'badge-demo'}`}>
+            {transcribeMode === 'streaming' ? '实时转录中' : '录音后转录'}
           </span>
         )}
       </div>
 
       {/* 错误提示 */}
       {error && (
-        <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
-          {error}
+        <div className="mb-6 p-4 bg-red-50 border border-red-100 rounded-xl text-red-600 text-sm animate-slide-up">
+          <div className="flex items-center gap-2">
+            <span>⚠️</span>
+            <span>{error}</span>
+          </div>
         </div>
       )}
 
-      {/* 转录进度提示 */}
-      {status === 'transcribing' && (
-        <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg text-blue-700 text-sm flex items-center gap-2">
-          <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
-            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-          </svg>
-          {transcribeProgress || '正在转录...'}
+      {/* 转录进度 */}
+      {isTranscribing && (
+        <div className="mb-6 p-4 bg-accent-50 border border-accent-100 rounded-xl animate-slide-up">
+          <div className="flex items-center gap-3">
+            <div className="loading-dots">
+              <span></span>
+              <span></span>
+              <span></span>
+            </div>
+            <span className="text-sm text-accent-700">{transcribeProgress || '正在转录...'}</span>
+          </div>
         </div>
       )}
 
-      {/* 录音状态 */}
-      <div className="flex items-center justify-between mb-6">
-        <div className="flex items-center gap-4">
-          {/* 录音指示器 */}
-          <div className={`w-4 h-4 rounded-full ${
-            status === 'recording' ? 'bg-red-500 animate-pulse' :
-            status === 'paused' ? 'bg-yellow-500' :
-            status === 'transcribing' ? 'bg-blue-500 animate-pulse' :
-            status === 'stopped' ? 'bg-gray-400' :
-            'bg-gray-300'
-          }`} />
-          
-          {/* 时间显示 */}
-          <span className="text-2xl font-mono font-bold text-gray-900">
+      {/* 主录音区域 */}
+      <div className="flex flex-col items-center">
+        {/* 时间显示 */}
+        <div className="mb-8 text-center">
+          <div className={`text-5xl font-mono font-bold tracking-tight transition-colors ${
+            isRecording ? 'text-rose-500' : 
+            isPaused ? 'text-amber-500' : 
+            'text-gray-300'
+          }`}>
             {formatTime(elapsedMs)}
-          </span>
+          </div>
+          {isRecording && (
+            <div className="mt-2 flex items-center justify-center gap-2 text-xs text-gray-400">
+              <span className="w-2 h-2 bg-rose-500 rounded-full animate-pulse" />
+              正在录音
+            </div>
+          )}
         </div>
 
-        {/* 音量指示器 */}
-        {status === 'recording' && (
-          <div className="flex items-center gap-1">
-            {[...Array(10)].map((_, i) => (
+        {/* 音量可视化 */}
+        {(isRecording || isPaused) && (
+          <div className="flex items-end justify-center gap-1 h-8 mb-8">
+            {[...Array(12)].map((_, i) => (
               <div
                 key={i}
-                className={`w-1 rounded-full transition-all ${
-                  level * 10 > i ? 'bg-green-500' : 'bg-gray-200'
+                className={`w-1.5 rounded-full transition-all duration-75 ${
+                  isRecording && level * 12 > i ? 'bg-emerald-400' : 'bg-gray-200'
                 }`}
-                style={{ height: `${8 + i * 2}px` }}
+                style={{ 
+                  height: isRecording 
+                    ? `${Math.max(8, Math.min(32, (level * 40) + Math.sin(Date.now() / 200 + i) * 4))}px`
+                    : '8px'
+                }}
               />
             ))}
           </div>
         )}
-      </div>
 
-      {/* 控制按钮 */}
-      <div className="flex items-center justify-center gap-4 mb-6">
-        {status === 'idle' && (
-          <button
-            onClick={startRecording}
-            disabled={disabled}
-            className="flex items-center gap-2 px-6 py-3 bg-red-500 text-white rounded-full hover:bg-red-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-          >
-            <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
-              <circle cx="10" cy="10" r="6" />
-            </svg>
-            开始录音
-          </button>
-        )}
-
-        {status === 'recording' && (
-          <>
+        {/* 控制按钮 */}
+        <div className="flex items-center justify-center gap-4 mb-8">
+          {isIdle && (
             <button
-              onClick={pauseRecording}
-              className="flex items-center gap-2 px-4 py-2 bg-yellow-500 text-white rounded-full hover:bg-yellow-600 transition-colors"
+              onClick={startRecording}
+              disabled={disabled}
+              className="record-btn"
+              aria-label="开始录音"
             >
-              <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
-                <rect x="5" y="4" width="3" height="12" rx="1" />
-                <rect x="12" y="4" width="3" height="12" rx="1" />
+              <svg className="w-8 h-8 text-white" fill="currentColor" viewBox="0 0 24 24">
+                <circle cx="12" cy="12" r="6" />
               </svg>
-              暂停
             </button>
+          )}
+
+          {isRecording && (
+            <>
+              <button
+                onClick={pauseRecording}
+                className="w-14 h-14 rounded-full bg-amber-100 text-amber-600 flex items-center justify-center hover:bg-amber-200 transition-all active:scale-95"
+                aria-label="暂停"
+              >
+                <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 24 24">
+                  <rect x="6" y="4" width="4" height="16" rx="1" />
+                  <rect x="14" y="4" width="4" height="16" rx="1" />
+                </svg>
+              </button>
+              <button
+                onClick={stopRecording}
+                className="w-14 h-14 rounded-full bg-gray-100 text-gray-600 flex items-center justify-center hover:bg-gray-200 transition-all active:scale-95"
+                aria-label="停止"
+              >
+                <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 24 24">
+                  <rect x="6" y="6" width="12" height="12" rx="2" />
+                </svg>
+              </button>
+            </>
+          )}
+
+          {isPaused && (
+            <>
+              <button
+                onClick={resumeRecording}
+                className="w-14 h-14 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center hover:bg-emerald-200 transition-all active:scale-95"
+                aria-label="继续"
+              >
+                <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 24 24">
+                  <path d="M8 5v14l11-7z" />
+                </svg>
+              </button>
+              <button
+                onClick={stopRecording}
+                className="w-14 h-14 rounded-full bg-gray-100 text-gray-600 flex items-center justify-center hover:bg-gray-200 transition-all active:scale-95"
+                aria-label="停止"
+              >
+                <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 24 24">
+                  <rect x="6" y="6" width="12" height="12" rx="2" />
+                </svg>
+              </button>
+            </>
+          )}
+
+          {isTranscribing && (
+            <div className="w-20 h-20 rounded-full bg-accent-100 flex items-center justify-center">
+              <div className="w-8 h-8 border-3 border-accent-500 border-t-transparent rounded-full animate-spin" />
+            </div>
+          )}
+
+          {isStopped && (
             <button
-              onClick={stopRecording}
-              className="flex items-center gap-2 px-4 py-2 bg-gray-500 text-white rounded-full hover:bg-gray-600 transition-colors"
+              onClick={() => {
+                setStatus('idle');
+                setElapsedMs(0);
+                setTranscript([]);
+                setInterimText('');
+                setTranscribeProgress('');
+                setAnchorCount(0);
+                audioChunksRef.current = [];
+              }}
+              className="btn btn-primary px-8 py-4 text-lg"
             >
-              <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
-                <rect x="4" y="4" width="12" height="12" rx="2" />
+              <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
+                <path d="M17.65 6.35A7.958 7.958 0 0012 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08A5.99 5.99 0 0112 18c-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z" />
               </svg>
-              {transcribeMode === 'batch' ? '结束并转录' : '结束录音'}
+              新录音
             </button>
-          </>
-        )}
-
-        {status === 'paused' && (
-          <>
-            <button
-              onClick={resumeRecording}
-              className="flex items-center gap-2 px-4 py-2 bg-green-500 text-white rounded-full hover:bg-green-600 transition-colors"
-            >
-              <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
-                <path d="M6 4l10 6-10 6V4z" />
-              </svg>
-              继续
-            </button>
-            <button
-              onClick={stopRecording}
-              className="flex items-center gap-2 px-4 py-2 bg-gray-500 text-white rounded-full hover:bg-gray-600 transition-colors"
-            >
-              <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
-                <rect x="4" y="4" width="12" height="12" rx="2" />
-              </svg>
-              {transcribeMode === 'batch' ? '结束并转录' : '结束录音'}
-            </button>
-          </>
-        )}
-
-        {status === 'transcribing' && (
-          <button
-            disabled
-            className="flex items-center gap-2 px-6 py-3 bg-blue-400 text-white rounded-full cursor-not-allowed"
-          >
-            <svg className="w-5 h-5 animate-spin" fill="none" viewBox="0 0 24 24">
-              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-            </svg>
-            转录中...
-          </button>
-        )}
-
-        {status === 'stopped' && (
-          <button
-            onClick={() => {
-              setStatus('idle');
-              setElapsedMs(0);
-              setTranscript([]);
-              setInterimText('');
-              setTranscribeProgress('');
-              audioChunksRef.current = [];
-            }}
-            className="flex items-center gap-2 px-6 py-3 bg-blue-500 text-white rounded-full hover:bg-blue-600 transition-colors"
-          >
-            <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
-              <path fillRule="evenodd" d="M4 2a1 1 0 011 1v2.101a7.002 7.002 0 0111.601 2.566 1 1 0 11-1.885.666A5.002 5.002 0 005.999 7H9a1 1 0 010 2H4a1 1 0 01-1-1V3a1 1 0 011-1zm.008 9.057a1 1 0 011.276.61A5.002 5.002 0 0014.001 13H11a1 1 0 110-2h5a1 1 0 011 1v5a1 1 0 11-2 0v-2.101a7.002 7.002 0 01-11.601-2.566 1 1 0 01.61-1.276z" clipRule="evenodd" />
-            </svg>
-            新录音
-          </button>
-        )}
-      </div>
-
-      {/* 断点标记按钮 */}
-      {(status === 'recording' || status === 'paused') && (
-        <div className="border-t border-gray-200 pt-4">
-          <button
-            onClick={markAnchor}
-            disabled={status !== 'recording'}
-            className="w-full py-4 bg-gradient-to-r from-orange-500 to-red-500 text-white rounded-xl font-semibold text-lg hover:from-orange-600 hover:to-red-600 disabled:opacity-50 disabled:cursor-not-allowed transition-all transform active:scale-95"
-          >
-            🎯 我没听懂这里
-          </button>
-          <p className="text-center text-xs text-gray-400 mt-2">
-            {canUndo ? '5秒内可撤销' : '按下标记困惑点'}
-          </p>
+          )}
         </div>
-      )}
+
+        {/* 困惑点按钮 */}
+        {(isRecording || isPaused) && (
+          <div className="w-full animate-slide-up">
+            <button
+              onClick={markAnchor}
+              disabled={!isRecording}
+              className="confusion-btn"
+            >
+              <span className="relative z-10 flex items-center justify-center gap-2">
+                <span className="text-2xl">🎯</span>
+                <span>没听懂？点这里！</span>
+              </span>
+            </button>
+            <div className="mt-3 flex items-center justify-between text-xs text-gray-400">
+              <span>{canUndo ? '5秒内可撤销' : '标记你的困惑点'}</span>
+              {anchorCount > 0 && (
+                <span className="text-rose-500">已标记 {anchorCount} 个</span>
+              )}
+            </div>
+          </div>
+        )}
+      </div>
 
       {/* 实时转录预览 */}
       {(transcript.length > 0 || interimText) && (
-        <div className="mt-4 border-t border-gray-200 pt-4">
-          <h4 className="text-sm font-medium text-gray-700 mb-2 flex items-center gap-2">
-            {status === 'transcribing' ? '转录结果' : 
-             transcribeMode === 'streaming' ? '实时转录' : '转录结果'}
-            {transcribeMode === 'streaming' && (status === 'recording' || transcript.length > 0) && (
-              <span className="text-xs px-2 py-0.5 bg-green-100 text-green-700 rounded-full">
-                百炼 Paraformer
+        <div className="mt-8 pt-6 border-t border-gray-100 animate-fade-in">
+          <div className="flex items-center justify-between mb-3">
+            <h4 className="text-sm font-medium text-gray-700 flex items-center gap-2">
+              {transcribeMode === 'streaming' ? '📝 实时转录' : '📝 转录结果'}
+              <span className="badge badge-streaming">
+                {transcribeMode === 'streaming' ? '百炼 ASR' : 'Qwen ASR'}
               </span>
-            )}
-            {transcribeMode === 'batch' && transcript.length > 0 && (
-              <span className="text-xs px-2 py-0.5 bg-blue-100 text-blue-700 rounded-full">
-                Qwen ASR
-              </span>
-            )}
-          </h4>
-          <div className="max-h-48 overflow-y-auto text-sm text-gray-600 bg-gray-50 rounded-lg p-3">
-            {transcript.slice(-10).map((seg) => (
-              <p key={seg.id} className="mb-1">
-                <span className="text-xs text-gray-400 mr-2">
+            </h4>
+            <span className="text-xs text-gray-400">{transcript.length} 句</span>
+          </div>
+          
+          <div className="max-h-40 overflow-y-auto space-y-2 p-3 bg-gray-50 rounded-xl">
+            {transcript.slice(-8).map((seg) => (
+              <div key={seg.id} className="flex items-start gap-2 text-sm">
+                <span className="text-xs text-gray-400 font-mono shrink-0 mt-0.5">
                   {formatTime(seg.startMs)}
                 </span>
-                {seg.text}
-              </p>
+                <span className="text-gray-700">{seg.text}</span>
+              </div>
             ))}
             {interimText && (
-              <p className="mb-1 text-gray-400 italic">
-                <span className="text-xs mr-2">...</span>
-                {interimText}
-              </p>
+              <div className="flex items-start gap-2 text-sm">
+                <span className="text-xs text-gray-300 font-mono shrink-0 mt-0.5">...</span>
+                <span className="text-gray-400 italic">{interimText}</span>
+              </div>
             )}
           </div>
-          {transcript.length > 10 && (
-            <p className="text-xs text-gray-400 mt-1 text-center">
-              显示最近 10 条，共 {transcript.length} 条
+          
+          {transcript.length > 8 && (
+            <p className="text-xs text-gray-400 mt-2 text-center">
+              显示最近 8 句
             </p>
           )}
         </div>
       )}
 
-      {/* 转录完成提示 */}
-      {status === 'stopped' && transcribeProgress && (
-        <div className="mt-4 p-3 bg-green-50 border border-green-200 rounded-lg text-green-700 text-sm">
-          ✅ {transcribeProgress}
+      {/* 完成提示 */}
+      {isStopped && transcribeProgress && (
+        <div className="mt-6 p-4 bg-emerald-50 border border-emerald-100 rounded-xl animate-scale-in">
+          <div className="flex items-center gap-2 text-emerald-700">
+            <span className="text-lg">✅</span>
+            <span className="text-sm font-medium">{transcribeProgress}</span>
+          </div>
         </div>
       )}
     </div>

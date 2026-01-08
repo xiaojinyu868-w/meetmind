@@ -4,8 +4,7 @@
  * 整合转录结果和断点，生成课堂时间轴
  */
 
-import type { TranscriptSegment } from './capture-service';
-import type { Anchor } from './anchor-service';
+import type { TranscriptSegment, Anchor } from '@/types';
 
 export interface TimelineSegment extends TranscriptSegment {
   anchors: Anchor[];  // 该片段关联的断点

@@ -14,7 +14,7 @@ import { memoryService, type ClassTimeline } from '@/lib/services/memory-service
 import { checkServices, type ServiceStatus as ServiceStatusType } from '@/lib/services/health-check';
 import type { TranscriptSegment } from '@/types';
 
-// Mock 数据（用于演示，当没有真实转录时使用）
+// Demo 数据
 const DEMO_SEGMENTS: TranscriptSegment[] = [
   { id: 's1', text: '今天我们来学习二次函数的图像', startMs: 0, endMs: 15000, confidence: 0.95 },
   { id: 's2', text: '二次函数的一般形式是 y = ax² + bx + c', startMs: 15000, endMs: 35000, confidence: 0.92 },
@@ -33,7 +33,7 @@ const DEMO_SEGMENTS: TranscriptSegment[] = [
 
 type ViewMode = 'record' | 'review';
 type DataSource = 'live' | 'demo';
-type ChatMode = 'tutor' | 'chat'; // 新增：AI 对话模式切换
+type ChatMode = 'tutor' | 'chat';
 
 interface ActionItem {
   id: string;
@@ -46,7 +46,6 @@ interface ActionItem {
 }
 
 export default function StudentApp() {
-  // 状态
   const [viewMode, setViewMode] = useState<ViewMode>('record');
   const [sessionId, setSessionId] = useState<string>('demo-session');
   const [isRecording, setIsRecording] = useState(false);
@@ -61,40 +60,29 @@ export default function StudentApp() {
   const [serviceStatus, setServiceStatus] = useState<ServiceStatusType | null>(null);
   const [audioBlob, setAudioBlob] = useState<Blob | null>(null);
   
-  // 保存录音期间的转录数据
   const liveSegmentsRef = useRef<TranscriptSegment[]>([]);
   const waveformRef = useRef<WaveformPlayerRef>(null);
 
-  // 加载演示数据（仅在 demo 模式下）
+  // 初始化
   useEffect(() => {
-    // 检查服务状态
     checkServices().then(setServiceStatus);
     
-    // 加载本地存储的断点
     const savedAnchors = anchorService.getActive(sessionId);
     setAnchors(savedAnchors);
 
-    // 如果没有录音数据，使用演示数据
     if (segments.length === 0) {
-      const demoSegments = DEMO_SEGMENTS;
-      setSegments(demoSegments);
+      setSegments(DEMO_SEGMENTS);
       setDataSource('demo');
       
-      // 构建时间轴
       const tl = memoryService.buildTimeline(
         sessionId,
-        demoSegments,
+        DEMO_SEGMENTS,
         savedAnchors,
-        {
-          subject: '数学',
-          teacher: '张老师',
-          date: new Date().toISOString().split('T')[0],
-        }
+        { subject: '数学', teacher: '张老师', date: new Date().toISOString().split('T')[0] }
       );
       setTimeline(tl);
     }
 
-    // 选中第一个未解决的断点
     const firstUnresolved = savedAnchors.find(a => !a.resolved);
     if (firstUnresolved) {
       setSelectedAnchor(firstUnresolved);
@@ -102,7 +90,6 @@ export default function StudentApp() {
     }
   }, [sessionId]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // 录音开始
   const handleRecordingStart = useCallback((newSessionId: string) => {
     setSessionId(newSessionId);
     setIsRecording(true);
@@ -113,88 +100,58 @@ export default function StudentApp() {
     anchorService.clear(newSessionId);
   }, []);
 
-  // 录音停止
   const handleRecordingStop = useCallback((blob?: Blob) => {
     setIsRecording(false);
+    if (blob) setAudioBlob(blob);
     
-    // 保存音频 Blob
-    if (blob) {
-      setAudioBlob(blob);
-    }
-    
-    // 使用当前 segments 状态（已通过 handleTranscriptUpdate 更新）
-    // 如果 segments 为空或仍是 DEMO 数据，则使用 liveSegmentsRef
     const currentSegments = segments.length > 0 && segments !== DEMO_SEGMENTS 
       ? segments 
       : liveSegmentsRef.current;
     
-    const finalSegments = currentSegments.length > 0 
-      ? currentSegments 
-      : DEMO_SEGMENTS;
-    
+    const finalSegments = currentSegments.length > 0 ? currentSegments : DEMO_SEGMENTS;
     const isLiveData = currentSegments.length > 0;
     
     setSegments(finalSegments);
     setDataSource(isLiveData ? 'live' : 'demo');
     
-    // 构建时间轴
     const tl = memoryService.buildTimeline(
       sessionId,
       finalSegments,
       anchors,
-      {
-        subject: '数学',
-        teacher: '张老师',
-        date: new Date().toISOString().split('T')[0],
-      }
+      { subject: '数学', teacher: '张老师', date: new Date().toISOString().split('T')[0] }
     );
     setTimeline(tl);
     memoryService.save(tl);
-    
-    // 切换到复习模式
     setViewMode('review');
   }, [sessionId, anchors, segments]);
 
-  // 转录更新（录音期间实时调用）
   const handleTranscriptUpdate = useCallback((newSegments: TranscriptSegment[]) => {
-    // 保存到 ref，避免频繁触发重渲染
     liveSegmentsRef.current = newSegments;
-    // 同时更新状态用于显示
     setSegments(newSegments);
     setDataSource('live');
   }, []);
 
-  // 标记断点
   const handleAnchorMark = useCallback((timestamp: number) => {
     const anchor = anchorService.mark(sessionId, 'student-1', timestamp, 'confusion');
     setAnchors(prev => [...prev, anchor]);
     
-    // 更新时间轴
     if (timeline) {
-      const updatedTimeline = {
-        ...timeline,
-        anchors: [...timeline.anchors, anchor],
-      };
-      setTimeline(updatedTimeline);
+      setTimeline({ ...timeline, anchors: [...timeline.anchors, anchor] });
     }
   }, [sessionId, timeline]);
 
-  // 选择断点
   const handleAnchorSelect = useCallback((anchor: Anchor) => {
     setSelectedAnchor(anchor);
     setCurrentTime(anchor.timestamp);
   }, []);
 
-  // 解决断点
   const handleResolveAnchor = useCallback(() => {
     if (!selectedAnchor) return;
     
     anchorService.resolve(selectedAnchor.id, sessionId);
-    
     setAnchors(prev => prev.map(a => 
       a.id === selectedAnchor.id ? { ...a, resolved: true } : a
     ));
-    
     setSelectedAnchor({ ...selectedAnchor, resolved: true });
     
     if (timeline) {
@@ -207,21 +164,17 @@ export default function StudentApp() {
     }
   }, [selectedAnchor, sessionId, timeline]);
 
-  // 时间轴点击
   const handleTimelineClick = useCallback((timeMs: number) => {
     setCurrentTime(timeMs);
-    // 同步波形播放器
     waveformRef.current?.seekTo(timeMs);
   }, []);
 
-  // 行动项完成
   const handleActionComplete = useCallback((actionId: string) => {
     setActionItems(prev => prev.map(item =>
       item.id === actionId ? { ...item, completed: !item.completed } : item
     ));
   }, []);
 
-  // 转换 Timeline 格式以适配 TimelineView
   const timelineForView = timeline ? {
     lessonId: timeline.lessonId,
     segments: timeline.segments.map(s => ({
@@ -247,7 +200,6 @@ export default function StudentApp() {
     })),
   } : null;
 
-  // 选中的断点转换格式
   const selectedBreakpoint = selectedAnchor ? {
     id: selectedAnchor.id,
     lessonId: sessionId,
@@ -258,73 +210,64 @@ export default function StudentApp() {
     createdAt: selectedAnchor.createdAt,
   } : null;
 
+  const unresolvedCount = anchors.filter(a => !a.resolved).length;
+
   return (
-    <div className="h-screen flex flex-col bg-gray-50">
-      {/* 降级模式横幅 */}
+    <div className="h-screen flex flex-col">
       <DegradedModeBanner status={serviceStatus} />
       
-      {/* 顶部导航 */}
       <Header 
         lessonTitle={viewMode === 'record' ? '课堂录音' : '二次函数的图像与性质'}
         courseName="数学"
       />
 
-      {/* 模式切换 */}
-      <div className="bg-white border-b border-gray-200 px-4 py-2">
-        <div className="flex items-center gap-4">
-          <button
-            onClick={() => setViewMode('record')}
-            className={`px-4 py-2 rounded-lg font-medium transition-colors ${
-              viewMode === 'record'
-                ? 'bg-primary-100 text-primary-700'
-                : 'text-gray-600 hover:bg-gray-100'
-            }`}
-          >
-            🎙️ 录音模式
-          </button>
-          <button
-            onClick={() => setViewMode('review')}
-            className={`px-4 py-2 rounded-lg font-medium transition-colors ${
-              viewMode === 'review'
-                ? 'bg-primary-100 text-primary-700'
-                : 'text-gray-600 hover:bg-gray-100'
-            }`}
-          >
-            📚 复习模式
-          </button>
-          
-          {/* 服务状态指示器 */}
-          <div className="ml-2">
-            <ServiceStatus compact pollInterval={60000} />
+      {/* 模式切换栏 */}
+      <div className="glass border-b border-white/20 px-6 py-3 no-print">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2 p-1 bg-gray-100/80 rounded-xl">
+            <button
+              onClick={() => setViewMode('record')}
+              className={`mode-tab ${viewMode === 'record' ? 'active' : ''}`}
+            >
+              <span className="mr-1.5">🎙️</span>
+              录音
+            </button>
+            <button
+              onClick={() => setViewMode('review')}
+              className={`mode-tab ${viewMode === 'review' ? 'active' : ''}`}
+            >
+              <span className="mr-1.5">📚</span>
+              复习
+            </button>
           </div>
           
-          {/* 断点统计 */}
-          <div className="ml-auto flex items-center gap-4 text-sm">
-            {/* 数据来源指示 */}
-            <span className={`px-2 py-1 rounded text-xs ${
-              dataSource === 'live' 
-                ? 'bg-green-100 text-green-700' 
-                : 'bg-yellow-100 text-yellow-700'
-            }`}>
-              {dataSource === 'live' ? '🎙️ 实时转录' : '📋 演示数据'}
-            </span>
-            <span className="text-gray-500">
-              断点: <span className="font-medium text-gray-900">{anchors.length}</span>
-            </span>
-            <span className="text-gray-500">
-              未解决: <span className="font-medium text-red-600">
-                {anchors.filter(a => !a.resolved).length}
+          <div className="flex items-center gap-4">
+            <ServiceStatus compact pollInterval={60000} />
+            
+            <div className="flex items-center gap-3 text-sm">
+              <span className={`badge ${dataSource === 'live' ? 'badge-live' : 'badge-demo'}`}>
+                {dataSource === 'live' ? '🎙️ 实时' : '📋 演示'}
               </span>
-            </span>
+              
+              <div className="flex items-center gap-2 text-gray-500">
+                <span>困惑点</span>
+                <span className="font-semibold text-gray-900">{anchors.length}</span>
+                {unresolvedCount > 0 && (
+                  <>
+                    <span>·</span>
+                    <span className="text-rose-500 font-semibold">{unresolvedCount} 待解决</span>
+                  </>
+                )}
+              </div>
+            </div>
           </div>
         </div>
       </div>
 
-      {/* 主体内容 */}
+      {/* 主内容区 */}
       {viewMode === 'record' ? (
-        // 录音模式
-        <div className="flex-1 flex items-center justify-center p-8">
-          <div className="w-full max-w-xl">
+        <div className="flex-1 flex items-center justify-center p-8 page-enter">
+          <div className="w-full max-w-lg">
             <Recorder
               onRecordingStart={handleRecordingStart}
               onRecordingStop={handleRecordingStop}
@@ -332,20 +275,22 @@ export default function StudentApp() {
               onAnchorMark={handleAnchorMark}
             />
             
-            {/* 断点列表 */}
+            {/* 已标记的困惑点 */}
             {anchors.length > 0 && (
-              <div className="mt-6 bg-white rounded-xl shadow-sm border border-gray-200 p-4">
-                <h3 className="text-sm font-semibold text-gray-900 mb-3">
-                  已标记的困惑点 ({anchors.length})
+              <div className="mt-6 card p-5 animate-slide-up">
+                <h3 className="text-sm font-semibold text-gray-900 mb-4 flex items-center gap-2">
+                  <span>🎯</span>
+                  已标记的困惑点
+                  <span className="ml-auto text-xs font-normal text-gray-400">{anchors.length} 个</span>
                 </h3>
                 <div className="space-y-2 max-h-48 overflow-y-auto">
                   {anchors.map((anchor, index) => (
                     <div
                       key={anchor.id}
-                      className="flex items-center gap-3 p-2 bg-gray-50 rounded-lg"
+                      className="flex items-center gap-3 p-3 bg-gray-50 rounded-xl hover:bg-gray-100 transition-colors"
                     >
-                      <div className={`w-2 h-2 rounded-full ${
-                        anchor.resolved ? 'bg-green-500' : 'bg-red-500'
+                      <div className={`w-2.5 h-2.5 rounded-full ${
+                        anchor.resolved ? 'bg-emerald-400' : 'bg-rose-400'
                       }`} />
                       <span className="text-sm font-mono text-gray-600">
                         {formatTime(anchor.timestamp)}
@@ -353,6 +298,9 @@ export default function StudentApp() {
                       <span className="text-sm text-gray-500">
                         困惑点 #{index + 1}
                       </span>
+                      {anchor.resolved && (
+                        <span className="ml-auto text-xs text-emerald-600">已解决</span>
+                      )}
                     </div>
                   ))}
                 </div>
@@ -361,10 +309,9 @@ export default function StudentApp() {
           </div>
         </div>
       ) : (
-        // 复习模式 - 三栏布局
-        <div className="flex-1 min-h-0 flex overflow-hidden">
+        <div className="flex-1 min-h-0 flex overflow-hidden page-enter">
           {/* 左栏 - 时间轴 */}
-          <div className="w-80 border-r border-gray-200 flex flex-col bg-white">
+          <div className="w-80 border-r border-gray-100 flex flex-col glass">
             {timelineForView && (
               <TimelineView
                 timeline={timelineForView}
@@ -379,11 +326,11 @@ export default function StudentApp() {
             )}
           </div>
 
-          {/* 中栏 - AI 家教对话 + 波形播放器 */}
+          {/* 中栏 - AI 对话 */}
           <div className="flex-1 flex flex-col min-h-0 bg-white">
             {/* 波形播放器 */}
             {audioBlob && (
-              <div className="p-4 border-b border-gray-200">
+              <div className="p-4 border-b border-gray-100">
                 <WaveformPlayer
                   ref={waveformRef}
                   src={audioBlob}
@@ -402,13 +349,13 @@ export default function StudentApp() {
               </div>
             )}
             
-            {/* AI 对话模式切换 */}
-            <div className="flex items-center gap-2 px-4 py-2 border-b border-gray-100">
+            {/* 对话模式切换 */}
+            <div className="flex items-center gap-2 px-5 py-3 border-b border-gray-100">
               <button
                 onClick={() => setChatMode('tutor')}
-                className={`px-3 py-1 text-sm rounded-full transition-colors ${
+                className={`px-4 py-1.5 text-sm rounded-full transition-all ${
                   chatMode === 'tutor'
-                    ? 'bg-indigo-100 text-indigo-700'
+                    ? 'bg-rose-100 text-rose-700 font-medium'
                     : 'text-gray-500 hover:bg-gray-100'
                 }`}
               >
@@ -416,9 +363,9 @@ export default function StudentApp() {
               </button>
               <button
                 onClick={() => setChatMode('chat')}
-                className={`px-3 py-1 text-sm rounded-full transition-colors ${
+                className={`px-4 py-1.5 text-sm rounded-full transition-all ${
                   chatMode === 'chat'
-                    ? 'bg-indigo-100 text-indigo-700'
+                    ? 'bg-accent-100 text-accent-700 font-medium'
                     : 'text-gray-500 hover:bg-gray-100'
                 }`}
               >
@@ -426,7 +373,7 @@ export default function StudentApp() {
               </button>
             </div>
             
-            {/* AI 对话区域 */}
+            {/* AI 对话区 */}
             <div className="flex-1 min-h-0">
               {chatMode === 'tutor' ? (
                 <AITutor
@@ -447,7 +394,7 @@ export default function StudentApp() {
           </div>
 
           {/* 右栏 - 行动清单 */}
-          <div className="w-80 border-l border-gray-200 bg-white">
+          <div className="w-80 border-l border-gray-100 glass">
             <ActionList
               items={actionItems}
               onComplete={handleActionComplete}
@@ -459,7 +406,6 @@ export default function StudentApp() {
   );
 }
 
-// 辅助函数
 function formatTime(ms: number): string {
   const seconds = Math.floor(ms / 1000);
   const minutes = Math.floor(seconds / 60);

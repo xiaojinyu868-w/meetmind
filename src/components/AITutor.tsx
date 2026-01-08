@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import type { Breakpoint } from '@/lib/services/meetmind-service';
 import { formatTimestamp } from '@/lib/services/longcut-utils';
 import { notebookService, localSearch, type SearchResult } from '@/lib/services/notebook-service';
@@ -18,7 +18,7 @@ interface Segment {
 
 interface AITutorProps {
   breakpoint: Breakpoint | null;
-  segments: Segment[];  // 课堂转录片段
+  segments: Segment[];
   isLoading: boolean;
   onResolve: () => void;
 }
@@ -50,7 +50,6 @@ interface TutorAPIResponse {
     completionTokens: number;
     totalTokens: number;
   };
-  // 新增 Dify 字段
   guidance_question?: GuidanceQuestionType;
   citations?: Citation[];
   conversation_id?: string;
@@ -67,19 +66,22 @@ export function AITutor({ breakpoint, segments, isLoading: externalLoading, onRe
   const [isSearching, setIsSearching] = useState(false);
   const [notebookAvailable, setNotebookAvailable] = useState(false);
   
-  // 新增：Dify 功能开关
   const [enableGuidance, setEnableGuidance] = useState(true);
   const [enableWeb, setEnableWeb] = useState(true);
   const [selectedOptionId, setSelectedOptionId] = useState<string | undefined>();
   const [conversationId, setConversationId] = useState<string | undefined>();
   const [isGuidanceLoading, setIsGuidanceLoading] = useState(false);
+  
+  const chatEndRef = useRef<HTMLDivElement>(null);
 
-  // 检查 Open Notebook 服务
   useEffect(() => {
     notebookService.isAvailable().then(setNotebookAvailable);
   }, []);
 
-  // 语义搜索相关内容
+  useEffect(() => {
+    chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [chatHistory]);
+
   const handleSearch = useCallback(async (query: string) => {
     if (!query.trim()) return;
     
@@ -88,10 +90,8 @@ export function AITutor({ breakpoint, segments, isLoading: externalLoading, onRe
       let results: SearchResult[];
       
       if (notebookAvailable) {
-        // 使用 Open Notebook 向量搜索
         results = await notebookService.search(query, { limit: 5 });
       } else {
-        // 降级到本地搜索
         results = localSearch.search(
           query,
           segments.map(s => ({ id: s.id, text: s.text, timestamp: s.startMs }))
@@ -106,7 +106,6 @@ export function AITutor({ breakpoint, segments, isLoading: externalLoading, onRe
     }
   }, [notebookAvailable, segments]);
 
-  // 当断点变化时，调用 AI 解释
   const explainBreakpoint = useCallback(async () => {
     if (!breakpoint || segments.length === 0) return;
     
@@ -125,7 +124,6 @@ export function AITutor({ breakpoint, segments, isLoading: externalLoading, onRe
           timestamp: breakpoint.timestamp,
           segments,
           model: selectedModel,
-          // 新增：Dify 功能参数
           enable_guidance: enableGuidance,
           enable_web: enableWeb,
         }),
@@ -154,7 +152,6 @@ export function AITutor({ breakpoint, segments, isLoading: externalLoading, onRe
     }
   }, [breakpoint?.id, selectedModel]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // 处理引导问题选择
   const handleGuidanceSelect = async (optionId: string, option: GuidanceOption) => {
     if (!breakpoint) return;
     
@@ -184,22 +181,19 @@ export function AITutor({ breakpoint, segments, isLoading: externalLoading, onRe
 
       const data: TutorAPIResponse = await res.json();
       
-      // 添加到对话历史
       setChatHistory(prev => [
         ...prev,
         { role: 'user', content: `我选择了：${option.text}` },
         { role: 'assistant', content: data.rawContent || '让我针对你的选择进一步解释...' },
       ]);
       
-      // 更新会话 ID
       if (data.conversation_id) {
         setConversationId(data.conversation_id);
       }
       
-      // 如果有新的引导问题，更新响应
       if (data.guidance_question) {
         setResponse(prev => prev ? { ...prev, guidance_question: data.guidance_question } : null);
-        setSelectedOptionId(undefined); // 重置选择状态
+        setSelectedOptionId(undefined);
       }
     } catch (err) {
       setChatHistory(prev => [...prev, { 
@@ -211,14 +205,12 @@ export function AITutor({ breakpoint, segments, isLoading: externalLoading, onRe
     }
   };
 
-  // 发送追问
   const handleSend = async () => {
     if (!userInput.trim() || !breakpoint) return;
     
     const question = userInput.trim();
     setUserInput('');
     
-    // 添加用户消息
     setChatHistory(prev => [...prev, { role: 'user', content: question }]);
     
     try {
@@ -230,7 +222,6 @@ export function AITutor({ breakpoint, segments, isLoading: externalLoading, onRe
           segments,
           model: selectedModel,
           studentQuestion: question,
-          // 新增：Dify 功能参数
           enable_guidance: enableGuidance,
           enable_web: enableWeb,
           conversation_id: conversationId,
@@ -244,18 +235,15 @@ export function AITutor({ breakpoint, segments, isLoading: externalLoading, onRe
 
       const data: TutorAPIResponse = await res.json();
       
-      // 添加 AI 响应
       setChatHistory(prev => [...prev, { 
         role: 'assistant', 
         content: data.rawContent || data.explanation.followUpQuestion 
       }]);
       
-      // 更新会话 ID
       if (data.conversation_id) {
         setConversationId(data.conversation_id);
       }
       
-      // 如果有新的引用，更新
       if (data.citations?.length) {
         setResponse(prev => prev ? { ...prev, citations: data.citations } : null);
       }
@@ -270,10 +258,12 @@ export function AITutor({ breakpoint, segments, isLoading: externalLoading, onRe
   if (!breakpoint) {
     return (
       <div className="flex-1 flex items-center justify-center text-gray-400">
-        <div className="text-center">
-          <div className="text-4xl mb-3">🎯</div>
-          <p>选择一个断点开始学习</p>
-          <p className="text-sm mt-1">点击时间轴上的红点</p>
+        <div className="text-center animate-fade-in">
+          <div className="w-20 h-20 mx-auto mb-4 bg-gray-100 rounded-full flex items-center justify-center">
+            <span className="text-4xl">🎯</span>
+          </div>
+          <p className="text-lg font-medium text-gray-600 mb-1">选择一个困惑点</p>
+          <p className="text-sm">点击时间轴上的红点开始学习</p>
         </div>
       </div>
     );
@@ -283,142 +273,132 @@ export function AITutor({ breakpoint, segments, isLoading: externalLoading, onRe
 
   return (
     <div className="h-full flex flex-col">
-      {/* 断点信息 + 模型选择 */}
-      <div className="p-4 border-b border-gray-200 bg-gray-50">
+      {/* 断点信息 */}
+      <div className="p-4 border-b border-gray-100 bg-gradient-to-r from-rose-50 to-white">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className={`w-3 h-3 rounded-full ${breakpoint.resolved ? 'bg-green-500' : 'bg-red-500'}`} />
+            <div className={`w-3 h-3 rounded-full ${breakpoint.resolved ? 'bg-emerald-400' : 'bg-rose-500 animate-pulse'}`} />
             <div>
-              <p className="text-sm font-medium text-gray-900">
+              <p className="text-sm font-semibold text-gray-900">
                 {formatTimestamp(breakpoint.timestamp)} 的困惑点
               </p>
-              <p className="text-xs text-gray-500">
-                {breakpoint.resolved ? '已解决' : '待解决'}
+              <p className="text-xs text-gray-500 mt-0.5">
+                {breakpoint.resolved ? '✅ 已解决' : '🔴 待解决'}
               </p>
             </div>
           </div>
           <div className="flex items-center gap-2">
-            <ModelSelector 
-              value={selectedModel} 
-              onChange={setSelectedModel} 
-            />
+            <ModelSelector value={selectedModel} onChange={setSelectedModel} />
             {!breakpoint.resolved && (
               <button
                 onClick={onResolve}
-                className="px-3 py-1.5 text-sm bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors"
+                className="btn btn-primary px-4 py-2 text-sm"
               >
-                标记为已懂
+                ✓ 我懂了
               </button>
             )}
           </div>
         </div>
         
-        {/* 显示模型信息 */}
-        {response?.usage && (
-          <div className="mt-2 text-xs text-gray-400">
-            模型: {response.model} | 
-            Token: {response.usage.totalTokens}
-          </div>
-        )}
-        
         {/* 功能开关 */}
         <div className="mt-3 flex items-center gap-4">
-          <label className="flex items-center gap-2 text-xs text-gray-600 cursor-pointer">
+          <label className="flex items-center gap-2 text-xs text-gray-600 cursor-pointer group">
             <input
               type="checkbox"
               checked={enableGuidance}
               onChange={(e) => setEnableGuidance(e.target.checked)}
-              className="w-3.5 h-3.5 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+              className="w-4 h-4 rounded border-gray-300 text-rose-500 focus:ring-rose-400"
             />
-            <span>🎯 引导提问</span>
+            <span className="group-hover:text-gray-900 transition-colors">🎯 引导提问</span>
           </label>
-          <label className="flex items-center gap-2 text-xs text-gray-600 cursor-pointer">
+          <label className="flex items-center gap-2 text-xs text-gray-600 cursor-pointer group">
             <input
               type="checkbox"
               checked={enableWeb}
               onChange={(e) => setEnableWeb(e.target.checked)}
-              className="w-3.5 h-3.5 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+              className="w-4 h-4 rounded border-gray-300 text-rose-500 focus:ring-rose-400"
             />
-            <span>🌐 联网搜索</span>
+            <span className="group-hover:text-gray-900 transition-colors">🌐 联网搜索</span>
           </label>
+          
+          {response?.usage && (
+            <span className="ml-auto text-xs text-gray-400">
+              {response.model} · {response.usage.totalTokens} tokens
+            </span>
+          )}
         </div>
       </div>
 
-      {/* AI 解释内容 */}
-      <div className="flex-1 overflow-y-auto p-4" style={{ minHeight: 0 }}>
+      {/* 内容区 */}
+      <div className="flex-1 overflow-y-auto p-5" style={{ minHeight: 0 }}>
         {error ? (
-          <div className="flex items-center justify-center h-full">
+          <div className="flex items-center justify-center h-full animate-fade-in">
             <div className="text-center">
-              <div className="text-4xl mb-3">⚠️</div>
-              <p className="text-red-500 mb-2">{error}</p>
+              <div className="w-16 h-16 mx-auto mb-4 bg-red-100 rounded-full flex items-center justify-center">
+                <span className="text-3xl">⚠️</span>
+              </div>
+              <p className="text-red-600 mb-4">{error}</p>
               <button
                 onClick={explainBreakpoint}
-                className="px-4 py-2 bg-primary-500 text-white rounded-lg hover:bg-primary-600"
+                className="btn btn-primary px-6 py-2"
               >
                 重试
               </button>
             </div>
           </div>
         ) : loading ? (
-          <div className="flex items-center justify-center h-full">
+          <div className="flex items-center justify-center h-full animate-fade-in">
             <div className="text-center">
-              <div className="animate-spin w-8 h-8 border-2 border-primary-500 border-t-transparent rounded-full mx-auto mb-3" />
-              <p className="text-gray-500">AI 正在分析...</p>
+              <div className="loading-dots mx-auto mb-4">
+                <span></span>
+                <span></span>
+                <span></span>
+              </div>
+              <p className="text-gray-500">AI 正在分析你的困惑...</p>
               <p className="text-xs text-gray-400 mt-1">使用 {selectedModel}</p>
             </div>
           </div>
         ) : response ? (
-          <div className="space-y-6">
+          <div className="space-y-6 animate-slide-up">
             {/* 老师原话 */}
-            <section>
-              <h3 className="text-sm font-semibold text-gray-900 mb-2 flex items-center gap-2">
-                <span>📚</span> 老师是这样讲的
-              </h3>
-              <div className="bg-amber-50 border border-amber-200 rounded-lg p-3">
-                <p className="text-sm text-gray-700 italic">
+            <Section icon="📚" title="老师是这样讲的">
+              <div className="bg-amber-50 border border-amber-100 rounded-xl p-4">
+                <p className="text-sm text-gray-700 italic leading-relaxed">
                   "{response.explanation.teacherSaid}"
                 </p>
                 {response.explanation.citation.timeRange !== '00:00-00:00' && (
-                  <button className="mt-2 inline-flex items-center gap-1 text-xs text-amber-700 hover:text-amber-800">
+                  <button className="mt-3 inline-flex items-center gap-1.5 text-xs text-amber-700 hover:text-amber-800 transition-colors">
                     <span>🔊</span>
                     <span>引用 {response.explanation.citation.timeRange}</span>
                   </button>
                 )}
               </div>
-            </section>
+            </Section>
 
             {/* 可能卡住的点 */}
-            <section>
-              <h3 className="text-sm font-semibold text-gray-900 mb-2 flex items-center gap-2">
-                <span>🤔</span> 你可能卡在这里
-              </h3>
+            <Section icon="🤔" title="你可能卡在这里">
               <ul className="space-y-2">
                 {response.explanation.possibleStuckPoints.map((point, i) => (
                   <li key={i} className="flex items-start gap-2 text-sm text-gray-600">
-                    <span className="text-primary-500">•</span>
-                    {point}
+                    <span className="w-5 h-5 bg-rose-100 text-rose-600 rounded-full flex items-center justify-center text-xs flex-shrink-0 mt-0.5">
+                      {i + 1}
+                    </span>
+                    <span>{point}</span>
                   </li>
                 ))}
               </ul>
-            </section>
+            </Section>
 
             {/* 追问 */}
-            <section>
-              <h3 className="text-sm font-semibold text-gray-900 mb-2 flex items-center gap-2">
-                <span>💬</span> 让我问你一个问题
-              </h3>
-              <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 text-sm text-gray-700">
-                {response.explanation.followUpQuestion}
+            <Section icon="💬" title="让我问你一个问题">
+              <div className="bg-accent-50 border border-accent-100 rounded-xl p-4">
+                <p className="text-sm text-gray-700">{response.explanation.followUpQuestion}</p>
               </div>
-            </section>
+            </Section>
 
-            {/* 引导问题（Dify 返回） */}
+            {/* 引导问题 */}
             {enableGuidance && (
-              <section>
-                <h3 className="text-sm font-semibold text-gray-900 mb-2 flex items-center gap-2">
-                  <span>🎯</span> 帮我定位你的问题
-                  <span className="text-xs font-normal text-indigo-600">(AI 引导)</span>
-                </h3>
+              <Section icon="🎯" title="帮我定位你的问题" badge="AI 引导">
                 {isLoading ? (
                   <GuidanceQuestionSkeleton />
                 ) : response.guidance_question ? (
@@ -430,37 +410,29 @@ export function AITutor({ breakpoint, segments, isLoading: externalLoading, onRe
                     selectedOptionId={selectedOptionId}
                   />
                 ) : (
-                  <div className="bg-gray-50 rounded-lg p-4 text-center text-sm text-gray-500">
+                  <div className="bg-gray-50 rounded-xl p-4 text-center text-sm text-gray-500">
                     <p>引导问题生成中...</p>
-                    <p className="text-xs mt-1">需要配置 Dify API Key</p>
+                    <p className="text-xs mt-1 text-gray-400">需要配置 Dify API Key</p>
                   </div>
                 )}
-              </section>
+              </Section>
             )}
 
-            {/* 联网搜索结果（Dify 返回） */}
+            {/* 联网搜索结果 */}
             {enableWeb && response.citations && response.citations.length > 0 && (
-              <section>
-                <h3 className="text-sm font-semibold text-gray-900 mb-2 flex items-center gap-2">
-                  <span>🌐</span> 联网搜索结果
-                  <span className="text-xs font-normal text-green-600">(实时检索)</span>
-                </h3>
+              <Section icon="🌐" title="联网搜索结果" badge="实时检索">
                 <Citations citations={response.citations} />
-              </section>
+              </Section>
             )}
 
-            {/* 语义搜索 */}
+            {/* 知识库搜索 */}
             {notebookAvailable && (
-              <section>
-                <h3 className="text-sm font-semibold text-gray-900 mb-2 flex items-center gap-2">
-                  <span>🔍</span> 知识库搜索
-                  <span className="text-xs font-normal text-green-600">(Open Notebook)</span>
-                </h3>
-                <div className="flex gap-2 mb-2">
+              <Section icon="🔍" title="知识库搜索" badge="Open Notebook">
+                <div className="flex gap-2 mb-3">
                   <input
                     type="text"
                     placeholder="搜索相关知识..."
-                    className="flex-1 px-3 py-1.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+                    className="input text-sm"
                     onKeyDown={(e) => {
                       if (e.key === 'Enter') {
                         handleSearch((e.target as HTMLInputElement).value);
@@ -473,7 +445,7 @@ export function AITutor({ breakpoint, segments, isLoading: externalLoading, onRe
                       if (input) handleSearch(input.value);
                     }}
                     disabled={isSearching}
-                    className="px-3 py-1.5 text-sm bg-primary-500 text-white rounded-lg hover:bg-primary-600 disabled:opacity-50"
+                    className="btn btn-primary px-4 text-sm"
                   >
                     {isSearching ? '搜索中...' : '搜索'}
                   </button>
@@ -481,52 +453,44 @@ export function AITutor({ breakpoint, segments, isLoading: externalLoading, onRe
                 {searchResults.length > 0 && (
                   <div className="space-y-2 max-h-40 overflow-y-auto">
                     {searchResults.map((result) => (
-                      <div key={result.id} className="p-2 bg-gray-50 rounded-lg text-sm">
+                      <div key={result.id} className="p-3 bg-gray-50 rounded-xl text-sm">
                         <div className="flex items-center justify-between mb-1">
                           <span className="text-xs text-gray-500">{result.source}</span>
-                          <span className="text-xs text-primary-600">
+                          <span className="text-xs text-rose-600">
                             相似度: {Math.round(result.score * 100)}%
                           </span>
                         </div>
                         <p className="text-gray-700 line-clamp-2">{result.content}</p>
-                        {result.metadata?.timestamp && (
-                          <span className="text-xs text-gray-400">
-                            {formatTimestamp(result.metadata.timestamp)}
-                          </span>
-                        )}
                       </div>
                     ))}
                   </div>
                 )}
-              </section>
+              </Section>
             )}
 
             {/* 行动清单 */}
-            <section>
-              <h3 className="text-sm font-semibold text-gray-900 mb-2 flex items-center gap-2">
-                <span>✅</span> 今晚行动清单
-              </h3>
+            <Section icon="✅" title="今晚行动清单">
               <div className="space-y-2">
                 {response.actionItems.map((item) => (
                   <div 
                     key={item.id}
-                    className="flex items-start gap-3 p-3 bg-gray-50 rounded-lg"
+                    className="action-item"
                   >
                     <input 
                       type="checkbox" 
-                      className="mt-1 w-4 h-4 rounded border-gray-300"
+                      className="action-checkbox"
                       defaultChecked={item.completed}
                     />
                     <div className="flex-1">
-                      <div className="flex items-center gap-2">
-                        <span className={`text-xs px-1.5 py-0.5 rounded ${
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className={`text-xs px-2 py-0.5 rounded-full ${
                           item.type === 'replay' ? 'bg-blue-100 text-blue-700' :
-                          item.type === 'exercise' ? 'bg-green-100 text-green-700' :
+                          item.type === 'exercise' ? 'bg-emerald-100 text-emerald-700' :
                           'bg-purple-100 text-purple-700'
                         }`}>
                           {item.type === 'replay' ? '回放' : item.type === 'exercise' ? '练习' : '复习'}
                         </span>
-                        <span className="text-sm font-medium">{item.title}</span>
+                        <span className="text-sm font-medium text-gray-900">{item.title}</span>
                         <span className="text-xs text-gray-400">{item.estimatedMinutes}分钟</span>
                       </div>
                       <p className="text-xs text-gray-500 mt-1">{item.description}</p>
@@ -534,24 +498,24 @@ export function AITutor({ breakpoint, segments, isLoading: externalLoading, onRe
                   </div>
                 ))}
               </div>
-            </section>
+            </Section>
 
             {/* 对话历史 */}
             {chatHistory.length > 0 && (
-              <div className="space-y-3 pt-4 border-t border-gray-200">
-                <h3 className="text-sm font-semibold text-gray-900">对话记录</h3>
+              <div className="space-y-3 pt-4 border-t border-gray-100">
+                <h3 className="text-sm font-semibold text-gray-900 flex items-center gap-2">
+                  <span>💬</span>
+                  对话记录
+                </h3>
                 {chatHistory.map((msg, i) => (
                   <div 
                     key={i} 
-                    className={`p-3 rounded-lg text-sm ${
-                      msg.role === 'user' 
-                        ? 'bg-primary-50 text-primary-900 ml-8' 
-                        : 'bg-gray-50 text-gray-700 mr-8'
-                    }`}
+                    className={`chat-bubble ${msg.role}`}
                   >
-                    <div className="whitespace-pre-wrap">{msg.content}</div>
+                    <div className="whitespace-pre-wrap text-sm">{msg.content}</div>
                   </div>
                 ))}
+                <div ref={chatEndRef} />
               </div>
             )}
           </div>
@@ -559,7 +523,7 @@ export function AITutor({ breakpoint, segments, isLoading: externalLoading, onRe
       </div>
 
       {/* 输入框 */}
-      <div className="p-4 border-t border-gray-200">
+      <div className="p-4 border-t border-gray-100 bg-white">
         <div className="flex gap-2">
           <input
             type="text"
@@ -567,20 +531,20 @@ export function AITutor({ breakpoint, segments, isLoading: externalLoading, onRe
             onChange={(e) => setUserInput(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && handleSend()}
             placeholder="告诉我你哪里不懂..."
-            className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+            className="input"
           />
           <button
             onClick={handleSend}
             disabled={!userInput.trim() || loading}
-            className="px-4 py-2 bg-primary-500 text-white rounded-lg hover:bg-primary-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            className="btn btn-primary px-6 disabled:opacity-50"
           >
             发送
           </button>
         </div>
-        <div className="flex gap-2 mt-2">
+        <div className="flex gap-2 mt-2 flex-wrap">
           <QuickReply text="我不理解这个公式" onClick={setUserInput} />
           <QuickReply text="能举个例子吗？" onClick={setUserInput} />
-          <QuickReply text="你是什么模型" onClick={setUserInput} />
+          <QuickReply text="这个和之前学的有什么关系？" onClick={setUserInput} />
           <QuickReply text="我懂了！" onClick={setUserInput} />
         </div>
       </div>
@@ -588,11 +552,38 @@ export function AITutor({ breakpoint, segments, isLoading: externalLoading, onRe
   );
 }
 
+function Section({ 
+  icon, 
+  title, 
+  badge, 
+  children 
+}: { 
+  icon: string; 
+  title: string; 
+  badge?: string; 
+  children: React.ReactNode;
+}) {
+  return (
+    <section>
+      <h3 className="text-sm font-semibold text-gray-900 mb-3 flex items-center gap-2">
+        <span>{icon}</span>
+        <span>{title}</span>
+        {badge && (
+          <span className="text-xs font-normal text-rose-600 bg-rose-50 px-2 py-0.5 rounded-full">
+            {badge}
+          </span>
+        )}
+      </h3>
+      {children}
+    </section>
+  );
+}
+
 function QuickReply({ text, onClick }: { text: string; onClick: (text: string) => void }) {
   return (
     <button
       onClick={() => onClick(text)}
-      className="text-xs px-2 py-1 bg-gray-100 text-gray-600 rounded hover:bg-gray-200 transition-colors"
+      className="text-xs px-3 py-1.5 bg-gray-100 text-gray-600 rounded-full hover:bg-gray-200 transition-colors"
     >
       {text}
     </button>
