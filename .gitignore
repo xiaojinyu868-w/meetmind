@@ -1,0 +1,37 @@
+﻿# 依赖
+node_modules/
+
+# 构建产物
+.next/
+out/
+dist/
+build/
+
+# 环境变量（包含敏感信息）
+.env
+.env.local
+.env.*.local
+
+# 日志
+*.log
+npm-debug.log*
+
+# 编辑器
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# 系统文件
+.DS_Store
+Thumbs.db
+
+# 数据目录
+notebook_data/
+surreal_data/
+temp-audio/
+public/temp-audio/
+
+# 临时文件
+*.tmp
+*.temp

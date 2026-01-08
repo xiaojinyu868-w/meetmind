@@ -1,0 +1,109 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --foreground-rgb: 0, 0, 0;
+  --background-start-rgb: 250, 250, 250;
+  --background-end-rgb: 255, 255, 255;
+}
+
+html, body {
+  height: 100%;
+  overflow: hidden;
+}
+
+body {
+  color: rgb(var(--foreground-rgb));
+  background: linear-gradient(
+      to bottom,
+      transparent,
+      rgb(var(--background-end-rgb))
+    )
+    rgb(var(--background-start-rgb));
+}
+
+/* 自定义滚动条 */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: #f1f1f1;
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #c1c1c1;
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #a1a1a1;
+}
+
+/* 时间轴样式 */
+.timeline-segment {
+  @apply relative py-2 px-3 rounded-lg transition-all cursor-pointer;
+}
+
+.timeline-segment:hover {
+  @apply bg-gray-100;
+}
+
+.timeline-segment.active {
+  @apply bg-primary-50 border-l-4 border-primary-500;
+}
+
+/* 断点红点 */
+.breakpoint-dot {
+  @apply w-3 h-3 bg-red-500 rounded-full absolute -left-1.5 top-1/2 -translate-y-1/2;
+  animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+  0%, 100% {
+    opacity: 1;
+    transform: translateY(-50%) scale(1);
+  }
+  50% {
+    opacity: 0.7;
+    transform: translateY(-50%) scale(1.2);
+  }
+}
+
+/* AI 对话气泡 */
+.chat-bubble {
+  @apply max-w-[85%] rounded-2xl px-4 py-3;
+}
+
+.chat-bubble.user {
+  @apply bg-primary-500 text-white ml-auto rounded-br-md;
+}
+
+.chat-bubble.assistant {
+  @apply bg-gray-100 text-gray-800 mr-auto rounded-bl-md;
+}
+
+/* 引用标记 */
+.citation {
+  @apply inline-flex items-center gap-1 px-2 py-0.5 bg-amber-100 text-amber-700 rounded text-sm cursor-pointer hover:bg-amber-200 transition-colors;
+}
+
+/* 行动清单 */
+.action-item {
+  @apply flex items-start gap-3 p-3 rounded-lg border border-gray-200 hover:border-primary-300 transition-colors;
+}
+
+.action-item.completed {
+  @apply bg-green-50 border-green-200;
+}
+
+.action-item .checkbox {
+  @apply w-5 h-5 rounded-full border-2 border-gray-300 flex items-center justify-center flex-shrink-0 mt-0.5 cursor-pointer transition-colors;
+}
+
+.action-item.completed .checkbox {
+  @apply bg-green-500 border-green-500 text-white;
+}

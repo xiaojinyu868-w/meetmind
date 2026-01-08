@@ -1,0 +1,18 @@
+services:
+  open_notebook:
+    image: docker.1ms.run/lfnovo/open_notebook:v1-latest-single
+    container_name: open-notebook
+    ports:
+      - "8502:8502"  # Web UI
+      - "5055:5055"  # API
+    environment:
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - SURREAL_URL=ws://localhost:8000/rpc
+      - SURREAL_USER=root
+      - SURREAL_PASSWORD=root
+      - SURREAL_NAMESPACE=open_notebook
+      - SURREAL_DATABASE=production
+    volumes:
+      - ./notebook_data:/app/data
+      - ./surreal_data:/mydata
+    restart: always
