@@ -319,8 +319,17 @@ export default function StudentApp() {
     if (topic.segments.length > 0) {
       const startTime = topic.segments[0].start;
       setCurrentTime(startTime);
-      waveformRef.current?.seekTo(startTime);
+      if (waveformRef.current) {
+        waveformRef.current.seekTo(startTime);
+        waveformRef.current.play();
+      }
     }
+  }, []);
+
+  // 清空精选片段
+  const handleClearTopics = useCallback(() => {
+    setHighlightTopics([]);
+    setSelectedTopic(null);
   }, []);
 
   // 播放全部片段
@@ -649,6 +658,7 @@ export default function StudentApp() {
                   isLoading={isLoadingTopics}
                   onGenerate={handleGenerateTopics}
                   onRegenerateByTheme={handleRegenerateByTheme}
+                  onClear={handleClearTopics}
                 />
               )}
               

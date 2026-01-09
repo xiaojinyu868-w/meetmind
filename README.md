@@ -1,168 +1,85 @@
 # MeetMind 课堂助手
 
 > **首个"家校同频"智能助教系统** —— 为每个家庭配备一位真正"听过课"的专属 AI 家教
+> 
+> MVP 1.0 - 把课堂"变成可回放、可定位、可追溯的时间轴记忆"
 
 [![Next.js](https://img.shields.io/badge/Next.js-14.2-black?logo=next.js)](https://nextjs.org/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.3-blue?logo=typescript)](https://www.typescriptlang.org/)
 [![Tailwind CSS](https://img.shields.io/badge/Tailwind-3.4-38B2AC?logo=tailwind-css)](https://tailwindcss.com/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![阿里云百炼](https://img.shields.io/badge/阿里云百炼-通义千问-orange)](https://bailian.console.aliyun.com/)
 
 ---
 
-## 🎬 演示截图
+## 📋 目录
 
-<details>
-<summary>点击查看截图</summary>
-
-### 学生端 - 录音模式
-![录音模式](./screenshots/record-mode.png)
-
-### 学生端 - 复习模式
-![复习模式](./screenshots/review-mode.png)
-
-### 家长端
-![家长端](./screenshots/parent-view.png)
-
-</details>
+- [产品愿景](#-产品愿景)
+- [核心痛点](#-核心痛点)
+- [核心模块](#-核心模块)
+- [项目结构](#-项目结构)
+- [快速开始](#-快速开始)
+- [已完成功能](#-已完成功能)
+- [技术架构](#-技术架构)
+- [MVP 阶段规划](#-mvp-阶段规划)
+- [TODO LIST](#-todo-list)
+- [关键差异化](#-关键差异化)
+- [贡献指南](#-贡献指南)
 
 ---
 
-## 🚀 快速开始
+## 🎯 产品愿景
 
-### 环境要求
+**MeetMind（原点教育）** 是首个"家校同频"智能助教系统。我们的核心理念是：
 
-- **Node.js** >= 18.0
-- **npm** >= 9.0
-- **API Key**（以下任选其一）：
-  - 阿里云百炼 API Key（推荐，支持实时语音识别）
-  - OpenAI API Key（支持 Whisper 语音转录）
+> **把家教最稀缺、最值钱的能力规模化复制出来：听过课、懂老师讲法、能把错误转成下一步行动。**
 
-### 一键启动
+### 一句话定位
 
-```bash
-# 1. 克隆仓库
-git clone https://github.com/your-username/meetmind.git
-cd meetmind
+通过全天候记录课堂内容并个性化辅导，填补学校与家庭教育间的信息断层。让课后辅导第一次真正拥有"课堂上下文"，从而具备替代家教的可能性。
 
-# 2. 安装依赖
-npm install
+### 目标用户
 
-# 3. 配置环境变量
-cp .env.example .env.local
-# 编辑 .env.local，填入你的 API Key（见下方说明）
-
-# 4. 启动开发服务器
-npm run dev
-
-# 5. 访问应用
-# 学生端：http://localhost:3001
-# 家长端：http://localhost:3001/parent
-# 教师端：http://localhost:3001/teacher
-```
-
-### 环境变量配置
-
-编辑 `.env.local` 文件：
-
-```bash
-# ===== 必需配置（至少配置一项）=====
-
-# 方案一：阿里云百炼（推荐，支持实时语音识别）
-# 获取地址：https://bailian.console.aliyun.com/
-DASHSCOPE_API_KEY=sk-your-dashscope-api-key
-
-# 方案二：OpenAI（支持 Whisper 语音转录）
-OPENAI_API_KEY=sk-your-openai-api-key
-
-# ===== 可选配置 =====
-
-# LLM 模型配置（默认使用通义千问）
-LLM_MODEL=qwen-plus
-LLM_BASE_URL=https://dashscope.aliyuncs.com/compatible-mode/v1
-
-# 实时语音识别配置
-DASHSCOPE_ASR_WS_MODEL=qwen3-asr-flash-realtime
-DASHSCOPE_ASR_WS_SR=16000
-
-# 其他 LLM 提供商（可选）
-# GOOGLE_API_KEY=your-google-api-key
-```
-
-### 功能验证
-
-1. 打开 http://localhost:3001
-2. 点击"实时录音"按钮开始录音
-3. 说几句话，观察实时转录效果
-4. 点击"没听懂？点这里！"标记困惑点
-5. 停止录音，自动进入复习模式
-6. 点击困惑点，与 AI 家教对话
+| 用户群体 | 核心需求 |
+|----------|----------|
+| **学生** | 课堂没听懂的地方能快速补懂，不再盲目刷题 |
+| **家长** | 知道孩子课堂学了什么、卡在哪里，有据可依地辅导 |
+| **教师** | 获得课堂理解反馈，减轻重复解释负担 |
 
 ---
 
-## ✨ 核心功能
+## 🔥 核心痛点
 
-| 功能 | 描述 | 状态 |
-|------|------|:----:|
-| 🎙️ **实时录音转录** | 支持实时流式 + 批处理高精度双模式 | ✅ |
-| 🎯 **困惑点标记** | 一键标记、时间戳关联、5秒可撤销 | ✅ |
-| 📊 **课堂时间轴** | 自动分段、锚点关联、主题提取 | ✅ |
-| 🤖 **AI 家教对话** | 引用老师原话、追问定位、行动清单 | ✅ |
-| 🎵 **波形播放器** | 音频波形可视化、锚点跳转 | ✅ |
-| 📁 **音频上传** | 支持 MP3/WAV/WebM 格式上传转录 | ✅ |
-| ⚡ **精选片段** | AI 智能提取课堂重点片段 | ✅ |
-| 📝 **课堂摘要** | 自动生成结构化课堂摘要 | ✅ |
-| 📒 **笔记系统** | 支持手动添加和管理笔记 | ✅ |
+我们把痛点抽象成三个层级的"断层"：
 
-### 三端视图
+### 断层一：信息断层（家长最愿意付费的源头）
 
-- **学生端** (`/`)：录音、标记困惑点、AI 辅导
-- **家长端** (`/parent`)：查看孩子困惑点、陪学脚本
-- **教师端** (`/teacher`)：困惑热区分析、教学反思
+> 家长的核心困难不是"不会做题"，而是拿不到课堂当天的真实信息：老师讲解顺序、强调点、作业意图、易错提示。
+
+**场景**：晚上 9 点，孩子说"听懂了"，但一做题就卡住。家长翻着教材，明明题目自己会做，却越讲越心虚——她不知道老师今天用的是什么方法。
+
+### 断层二：方法断层（最隐蔽、最耗费学习效率）
+
+> 同一知识点，在学校、补习班、家长的讲法可能完全不同。孩子的脑子被迫装下多套互相打架的体系。
+
+**场景**：学校强调"从定义出发"，补习班强调"模板化套路"。孩子渐渐学会切换不同思维，但真正理解越来越少。
+
+### 断层三：反馈断层（冲刺期最致命的瓶颈）
+
+> 冲刺期最稀缺的不是努力，而是即时、可解释、能转成下一步行动的高质量反馈。
+
+**场景**：考试临近，孩子每天刷题到深夜，错题本越来越厚：错的总是那几类。缺反馈就会陷入题海的时间黑洞。
 
 ---
 
-## 🏗️ 技术架构
+## 🧩 核心模块
 
-```
-┌─────────────────────────────────────────────────────────────┐
-│                        浏览器端                              │
-│  ┌─────────┐  ┌─────────┐  ┌─────────┐                     │
-│  │ 学生端  │  │ 家长端  │  │ 教师端  │                     │
-│  │   /     │  │ /parent │  │ /teacher│                     │
-│  └────┬────┘  └────┬────┘  └────┬────┘                     │
-│       └────────────┴────────────┘                           │
-└─────────────────────┬───────────────────────────────────────┘
-                      │
-┌─────────────────────┴───────────────────────────────────────┐
-│                   服务端 (Next.js + WebSocket)               │
-│  ┌─────────────┐  ┌─────────────┐  ┌──────────────┐         │
-│  │ WebSocket   │  │ /api/chat   │  │ /api/tutor   │         │
-│  │ ASR 代理    │  │ /api/transcribe│              │         │
-│  └──────┬──────┘  └──────┬──────┘  └──────┬───────┘         │
-└─────────┼────────────────┼────────────────┼─────────────────┘
-          │                │                │
-┌─────────┴────────────────┴────────────────┴─────────────────┐
-│                    AI 服务提供商                             │
-│  ┌─────────────────┐  ┌─────────────────┐                   │
-│  │ 阿里云百炼       │  │ OpenAI          │                   │
-│  │ • 实时 ASR      │  │ • Whisper ASR   │                   │
-│  │ • 通义千问 LLM  │  │ • GPT LLM       │                   │
-│  └─────────────────┘  └─────────────────┘                   │
-└─────────────────────────────────────────────────────────────┘
-```
-
-### 技术栈
-
-| 类别 | 技术 |
-|------|------|
-| **框架** | Next.js 14 (App Router) |
-| **语言** | TypeScript 5.3 |
-| **样式** | Tailwind CSS 3.4 |
-| **状态管理** | Zustand + React Hooks |
-| **本地存储** | Dexie (IndexedDB) |
-| **AI SDK** | Vercel AI SDK |
-| **音频处理** | wavesurfer.js, fluent-ffmpeg |
-| **实时通信** | WebSocket (ws) |
+| 模块 | 功能 | 复用来源 |
+|------|------|----------|
+| **Capture** | 课堂音频采集 | Discussion 通义听悟 |
+| **Anchor** | 断点标注 | 新开发 |
+| **Memory** | 课堂时间轴 | LongCut 时间轴 |
+| **Tutor** | AI 家教问答 | Discussion 通义千问 |
+| **Delivery** | 多端交付 | LongCut UI |
 
 ---
 
@@ -170,99 +87,431 @@ DASHSCOPE_ASR_WS_SR=16000
 
 ```
 meetmind/
-├── .env.example          # 环境变量模板
-├── server.js             # WebSocket 代理服务器
-├── package.json          # 项目依赖
-│
-└── src/
-    ├── app/              # Next.js 页面
-    │   ├── page.tsx      # 学生端首页
-    │   ├── parent/       # 家长端
-    │   ├── teacher/      # 教师端
-    │   └── api/          # API 路由
-    │       ├── chat/         # AI 对话
-    │       ├── transcribe/   # 语音转录
-    │       ├── tutor/        # AI 家教
-    │       ├── generate-topics/   # 精选片段生成
-    │       └── generate-summary/  # 摘要生成
-    │
-    ├── components/       # React 组件
-    │   ├── Recorder.tsx      # 录音组件
-    │   ├── AITutor.tsx       # AI 家教
-    │   ├── TimelineView.tsx  # 时间轴
-    │   ├── WaveformPlayer.tsx # 波形播放器
-    │   ├── HighlightsPanel.tsx # 精选片段
-    │   ├── SummaryPanel.tsx   # 摘要面板
-    │   └── NotesPanel.tsx     # 笔记面板
-    │
-    └── lib/              # 核心库
-        ├── services/         # 业务服务
-        │   ├── dashscope-asr-service.ts  # 实时 ASR
-        │   ├── qwen-asr-service.ts       # 批处理 ASR
-        │   ├── highlight-service.ts      # 精选片段
-        │   ├── summary-service.ts        # 摘要服务
-        │   └── memory-service.ts         # 时间轴管理
-        └── db.ts             # IndexedDB 操作
+├── src/
+│   ├── app/                 # Next.js App Router 页面
+│   │   ├── page.tsx         # 学生端首页
+│   │   ├── parent/          # 家长端
+│   │   ├── teacher/         # 教师端
+│   │   ├── all-notes/       # 全部笔记页面
+│   │   └── api/             # API 路由
+│   ├── components/          # React 组件
+│   ├── lib/                 # 核心库和服务
+│   │   ├── services/        # 业务服务层
+│   │   └── longcut/         # LongCut 核心算法
+│   └── types/               # TypeScript 类型
+├── server.js                # WebSocket 代理服务器
+├── package.json             # 项目依赖
+└── .env.example             # 环境变量示例
 ```
 
 ---
 
-## 🔧 常见问题
+## 🚀 快速开始
 
-### Q: 录音没有声音/转录不工作？
+### 环境要求
 
-1. 确保浏览器已授权麦克风权限
-2. 检查 `.env.local` 中的 API Key 是否正确配置
-3. 查看浏览器控制台是否有错误信息
+- Node.js >= 18.0
+- npm >= 9.0
+- 阿里云百炼 API Key
 
-### Q: 支持哪些音频格式上传？
+### 安装步骤
 
-支持 MP3、WAV、WebM、M4A 等常见格式。上传后会自动转录。
+```bash
+# 1. 克隆仓库
+git clone <repository-url>
+cd meetmind
 
-### Q: 如何切换 AI 模型？
+# 2. 安装依赖
+npm install
 
-在 `.env.local` 中修改 `LLM_MODEL` 变量，支持：
-- `qwen-plus`、`qwen-max`（阿里云百炼）
-- `gpt-4o`、`gpt-4o-mini`（OpenAI）
-- `gemini-pro`（Google）
+# 3. 配置环境变量
+cp .env.example .env
+# 编辑 .env，填入你的 API Key
 
-### Q: 实时转录和批处理转录有什么区别？
+# 4. 启动开发服务器（含 WebSocket 代理）
+npm run dev
 
-- **实时转录**：录音时即时显示文字，延迟低，需要百炼 API
-- **批处理转录**：录音结束后统一转录，精度更高，支持 OpenAI Whisper
+# 或者仅启动 Next.js（不含 WebSocket）
+npm run dev:next
+```
+
+### 访问应用
+
+- **学生端**: http://localhost:3000
+- **家长端**: http://localhost:3000/parent  
+- **教师端**: http://localhost:3000/teacher
+
+### 可用命令
+
+| 命令 | 说明 |
+|------|------|
+| `npm run dev` | 开发模式（含 WebSocket 代理） |
+| `npm run dev:next` | 仅启动 Next.js（端口 3001） |
+| `npm run build` | 生产构建 |
+| `npm run start` | 生产运行 |
+
+### 环境变量配置
+
+```bash
+# ===== 阿里云百炼 API（必需）=====
+DASHSCOPE_API_KEY=sk-your-api-key-here
+
+# LLM 模型配置
+LLM_MODEL=qwen3-max
+LLM_BASE_URL=https://dashscope.aliyuncs.com/compatible-mode/v1
+
+# 实时语音识别模型配置
+DASHSCOPE_ASR_WS_MODEL=qwen3-asr-flash-realtime
+DASHSCOPE_ASR_WS_SR=16000
+
+# ===== 可选：其他 LLM 提供商 =====
+# GOOGLE_API_KEY=your-google-api-key
+# OPENAI_API_KEY=your-openai-api-key
+
+# ===== 可选：外部服务 =====
+# NEXT_PUBLIC_NOTEBOOK_API=http://localhost:5055
+# ENABLE_NOTEBOOK=true
+```
+
+---
+
+## ✅ 已完成功能
+
+### 功能完成度总览
+
+| 模块 | 状态 | 说明 |
+|------|:----:|------|
+| 录音转录 | ✅ | 实时流式 + 批处理高精度双模式 |
+| 困惑标记 | ✅ | 一键标记、时间戳关联、5秒可撤销 |
+| 课堂时间轴 | ✅ | 自动分段、锚点关联、主题提取 |
+| AI 家教对话 | ✅ | 引用老师原话、追问定位、行动清单 |
+| 波形播放器 | ✅ | 音频波形可视化、锚点跳转 |
+| 学生端 | ✅ | 录音模式 + 复习模式完整流程 |
+| 家长端 | ✅ | 今日概览、困惑列表、陪学脚本 |
+| 教师端 | ✅ | 困惑热区、学生详情、AI 反思 |
+| 多模型支持 | ✅ | 通义千问/Gemini/OpenAI 可切换 |
+
+### 三端视图详情
+
+#### 学生端 (`/`)
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│  录音模式                          复习模式                  │
+│  ┌─────────────────────┐          ┌─────────────────────┐  │
+│  │ 🎙️ 实时录音          │          │ 📊 时间轴浏览        │  │
+│  │ 📝 语音转录          │          │ 🔴 困惑点回顾        │  │
+│  │ 🔴 困惑点标记        │          │ 🤖 AI 家教对话       │  │
+│  │ 📊 音量可视化        │          │ 💬 自由问答          │  │
+│  └─────────────────────┘          └─────────────────────┘  │
+│                                                             │
+│  ┌─────────────────────────────────────────────────────┐   │
+│  │ 🎵 波形播放器 | ⚙️ 模型选择 | ✅ 行动清单            │   │
+│  └─────────────────────────────────────────────────────┘   │
+└─────────────────────────────────────────────────────────────┘
+```
+
+#### 家长端 (`/parent`)
+
+| 功能 | 描述 |
+|------|------|
+| 今日概览 | 课程数量、困惑点统计、待解决/已解决 |
+| 困惑点列表 | 按科目分类、显示老师原话、跳转 AI 解释 |
+| 陪学脚本 | AI 生成的个性化陪学指南（约 X 分钟） |
+| 任务清单 | 逐个击破困惑点、标记完成状态 |
+| 进度环 | 可视化完成率、鼓励语 |
+
+#### 教师端 (`/teacher`)
+
+| 功能 | 描述 |
+|------|------|
+| 统计卡片 | 今日课程数、参与学生数、困惑点总数 |
+| 困惑热区 | 时间轴可视化热区、热度排序列表 |
+| 学生详情 | 表格展示每个困惑点：时间、学生、状态 |
+| AI 反思 | 基于课堂数据生成教学反思和改进建议 |
+
+### 核心组件
+
+| 组件 | 文件 | 功能 |
+|------|------|------|
+| `Recorder` | `src/components/Recorder.tsx` | 核心录音组件，支持实时/批处理转录、困惑点标记 |
+| `AITutor` | `src/components/AITutor.tsx` | AI 家教对话，解释困惑点、生成行动清单 |
+| `AIChat` | `src/components/AIChat.tsx` | 自由 AI 对话组件 |
+| `TimelineView` | `src/components/TimelineView.tsx` | 课堂时间轴，显示转录和困惑点 |
+| `WaveformPlayer` | `src/components/WaveformPlayer.tsx` | 音频波形播放器，支持锚点跳转 |
+| `ActionList` | `src/components/ActionList.tsx` | 行动清单，显示待完成任务 |
+| `ConfusionHeatmap` | `src/components/ConfusionHeatmap.tsx` | 困惑热区可视化 |
+
+### API 路由
+
+| 路由 | 方法 | 功能 |
+|------|------|------|
+| `/api/chat` | POST | 通用 AI 对话，支持多模型、流式响应 |
+| `/api/chat` | GET | 获取可用模型列表 |
+| `/api/tutor` | POST | AI 家教解释困惑点，支持引导问题、联网搜索 |
+| `/api/transcribe` | POST | 语音转录（同步/异步模式） |
+| `/api/transcribe/status` | GET | 查询异步转录任务状态 |
+| `/api/asr-config` | GET | 获取 ASR 配置信息 |
+| `/api/upload-audio` | POST | 上传音频文件 |
+| `/api/generate-summary` | POST | 生成课堂总结 |
+| `/api/generate-topics` | POST | 生成主题标签 |
+| `WS /api/asr-stream` | WebSocket | 实时语音识别代理 |
+
+---
+
+## 🏗️ 技术架构
+
+### 技术栈
+
+| 类别 | 技术 | 版本 |
+|------|------|------|
+| **框架** | Next.js (App Router) | ^14.2.0 |
+| **语言** | TypeScript | ^5.3.0 |
+| **样式** | Tailwind CSS | ^3.4.0 |
+| **状态管理** | Zustand | ^4.5.0 |
+| **本地存储** | Dexie (IndexedDB) | ^4.2.1 |
+| **AI SDK** | Vercel AI SDK | ^6.0.11 |
+| **音频处理** | wavesurfer.js | ^7.12.1 |
+| **音频转换** | fluent-ffmpeg | ^2.1.3 |
+| **可视化** | @nivo/heatmap | ^0.99.0 |
+| **网络** | ws, axios, swr | latest |
+
+### 核心业务流程
+
+#### 录音转录流程
+
+```
+用户点击录音 → 获取麦克风权限 → 创建 AudioContext (16kHz)
+                                        │
+                    ┌───────────────────┴───────────────────┐
+                    ▼                                       ▼
+            流式模式 (实时)                          批处理模式 (高精度)
+            qwen3-asr-flash-realtime                qwen3-asr-flash
+                    │                                       │
+                    ▼                                       ▼
+            WebSocket 代理                           录音结束后转换
+            (server.js)                             WebM → WAV
+                    │                                       │
+                    ▼                                       ▼
+            实时返回句子                             调用 /api/transcribe
+            {text, beginTime, endTime}              返回完整结果
+                    │                                       │
+                    └───────────────────┬───────────────────┘
+                                        ▼
+                              构建课堂时间轴 (memoryService)
+                              关联困惑点锚点
+                                        │
+                                        ▼
+                              保存到 localStorage
+                              切换到复习模式
+```
+
+#### AI 家教对话流程
+
+```
+学生选择困惑点 → 获取前后 60秒/30秒 转录片段
+                          │
+                          ▼
+                调用 /api/tutor
+                {timestamp, segments, model, enable_guidance, enable_web}
+                          │
+                          ▼
+                ┌─────────────────────────────────────────┐
+                │  AI 响应结构                             │
+                │                                         │
+                │  ## 老师是这样讲的                       │
+                │  [引用 xx:xx-xx:xx] "老师原话..."       │
+                │                                         │
+                │  ## 你可能卡在这里                       │
+                │  - 卡点1：概念理解问题                   │
+                │  - 卡点2：公式记忆问题                   │
+                │                                         │
+                │  ## 让我问你一个问题                     │
+                │  （引导性追问）                          │
+                │                                         │
+                │  ## 今晚行动清单（20分钟）               │
+                │  1. ✅ [回放] 再听一遍 xx:xx-xx:xx      │
+                │  2. ✅ [练习] 做一道类似题目             │
+                │  3. ✅ [复习] 总结知识点                 │
+                └─────────────────────────────────────────┘
+```
+
+---
+
+## 📅 MVP 阶段规划
+
+### MVP 1.0（4-8周可落地试点）
+
+**目标**：验证"当天补懂"闭环，家长能"看完就会做动作"
+
+| 功能 | 状态 | 说明 |
+|------|:----:|------|
+| 纯语音时间轴 | ✅ | 已实现，需优化自动分段 |
+| 课桌按键 | ⚠️ | 软件实现，需硬件方案 |
+| 断点回放 | ✅ | 需优化证据链输出 |
+| 学生问答 | ✅ | 需增加卡点类型选择 |
+| 家长报告 | ⚠️ | 需升级为"三张卡"模式 |
+| 行动清单 | ✅ | 需优化"3步补懂路径" |
+
+**过线标准**：
+- 家长行动清单转化率 > 60%
+- 学校/老师愿意持续让你录（留存/续用）
+
+### MVP 2.0（3个月）
+
+**目标**：学生在"最小有效训练集 + 对话辅导"下，显著提升掌握修复率
+
+| 功能 | 状态 | 说明 |
+|------|:----:|------|
+| 课件文本对齐 | ❌ | 支持课件导入/电子教案同步 |
+| 讲台/黑板关键帧 | ❌ | 事件触发截帧 |
+| 教师反思面板 | ⚠️ | 升级为一键生成模板 |
+| 少题高命中练习 | ❌ | "3题补懂"个性化推荐 |
+
+**过线标准**：
+- 当日掌握修复率 > 80%
+- 复习时间效率提升 > 30%
+
+### MVP 3.0（6-12个月）
+
+**目标**：数据飞轮形成，可规模化部署
+
+| 功能 | 状态 | 说明 |
+|------|:----:|------|
+| 学期级记忆 | ❌ | 跨课迁移、长期知识图谱 |
+| 分层教学建议 | ❌ | 基于班级数据优化 |
+| 学校级质量诊断 | ❌ | 运维面板、合规管理 |
+
+**过线标准**：
+- 断点定位更准、教师端反馈更有用
+- 合规与接受度不下降
+
+---
+
+## 📝 TODO LIST
+
+### 🔴 高优先级（MVP 1.0 必须）
+
+#### 学生端优化
+
+- [ ] **证据链输出优化**：AI 回答必须带来源分钟引用
+  - 文件：`src/lib/services/tutor-service.ts`
+  - 要求：每个解释都引用 `[xx:xx-xx:xx]` 格式的课堂片段
+
+- [ ] **卡点类型一键选择**：提供 4 类快捷按钮
+  - 文件：`src/components/AITutor.tsx`
+  - 选项：概念不清 / 步骤不会 / 计算出错 / 题意不明
+
+- [ ] **补懂闭环四步**：回放 → 定位 → 解释 → 确认
+  - 文件：`src/components/AITutor.tsx`
+  - 要求：完成后标记"已补懂✅"或"仍需复听🔁"
+
+#### 家长端升级
+
+- [ ] **三张卡模式**：断点卡 + 计划卡 + 完成卡
+  - 文件：`src/app/parent/page.tsx`
+  - 断点卡：今天卡住的 3 个点（可播放 1 分钟片段）
+  - 计划卡：今晚 20 分钟怎么安排（3 步陪学脚本）
+  - 完成卡：孩子已补懂✅/待补🔁
+
+- [ ] **陪学脚本优化**：给家长"怎么陪"的脚本，而不是讲题
+  - 文件：`src/lib/services/parent-service.ts`
+
+#### 教师端增强
+
+- [ ] **困惑热点 TOP3**：按分钟段聚合按键分布
+  - 文件：`src/app/teacher/page.tsx`
+  - 显示：可能原因（讲得快/例子不足/前置概念缺失）
+
+- [ ] **一键生成课后反思**：可编辑模板
+  - 文件：`src/lib/services/teaching-suggestion.ts`
+  - 模板：本节亮点 / 改进点 / 下节提醒
+
+### 🟡 中优先级（MVP 2.0）
+
+#### 多模态增强
+
+- [ ] **课件文本对齐**：导入课件/电子教案
+  - 新增服务：`src/lib/services/courseware-service.ts`
+
+- [ ] **讲台/黑板关键帧**：事件触发截帧
+  - 触发条件：按键触发前后各 10 秒
+  - 合规要求：只拍讲台/黑板，不拍学生
+
+#### 练习推荐
+
+- [ ] **少题高命中练习**：基于困惑点生成变式题
+  - 新增服务：`src/lib/services/exercise-service.ts`
+  - 要求：每题标注"为什么是这题"
+
+### 🟢 低优先级（MVP 3.0）
+
+- [ ] 学期级记忆与跨课迁移
+- [ ] 分层教学建议
+- [ ] 学校级运维面板
+- [ ] 合规与数据安全管理
+
+---
+
+## 🎯 关键差异化
+
+### 必须坚持的原则
+
+| 原则 | 说明 |
+|------|------|
+| **证据链输出** | AI 的每一句解释都必须引用课堂原生片段（分钟级） |
+| **最小必要采集** | MVP 只做纯语音，逐步加入关键帧，始终遵循合规 |
+| **Less structure, more intelligence** | 不用重知识图谱，用时间轴 + RAG + LLM |
+| **合作姿态进入校园** | 教师减负，不是监控；学校得到反馈，不是负担 |
+
+### 与竞品的差异
+
+| 维度 | 竞品 | MeetMind |
+|------|------|----------|
+| 数据来源 | 题库/通用内容 | 课堂原生数据 |
+| 解释依据 | AI 自由发挥 | 必须引用老师原话 |
+| 家长参与 | 看成绩/看作业 | 知道"老师怎么讲的" |
+| 教师负担 | 需要录入/操作 | 一键启动、无感采集 |
 
 ---
 
 ## 🤝 贡献指南
 
-欢迎提交 Issue 和 Pull Request！
+### 开发流程
 
-```bash
-# 开发流程
-git checkout -b feature/your-feature
-git commit -m 'feat: add some feature'
-git push origin feature/your-feature
-```
+1. Fork 本仓库
+2. 创建功能分支：`git checkout -b feature/your-feature`
+3. 提交更改：`git commit -m 'Add some feature'`
+4. 推送分支：`git push origin feature/your-feature`
+5. 提交 Pull Request
+
+### 代码规范
+
+- 使用 TypeScript 严格模式
+- 遵循 ESLint 规则
+- 组件使用函数式写法 + Hooks
+- 服务层使用单例模式
 
 ### 提交规范
 
-- `feat`: 新功能
-- `fix`: 修复 bug
-- `docs`: 文档更新
-- `refactor`: 重构
-- `style`: 代码格式
+```
+feat: 新功能
+fix: 修复 bug
+docs: 文档更新
+style: 代码格式
+refactor: 重构
+test: 测试
+chore: 构建/工具
+```
 
 ---
 
 ## 📄 许可证
 
-[MIT License](LICENSE)
+MIT License
 
 ---
 
-## 🙏 致谢
+## 📞 联系我们
 
-- [阿里云百炼](https://bailian.console.aliyun.com/) - 语音识别和 LLM 服务
-- [OpenAI](https://openai.com/) - Whisper 语音转录
-- [Vercel](https://vercel.com/) - AI SDK 和部署平台
-- [wavesurfer.js](https://wavesurfer-js.org/) - 音频波形可视化
+如有问题或建议，欢迎提交 Issue 或 Pull Request。

@@ -26,6 +26,7 @@ interface HighlightsPanelProps {
   isLoading?: boolean;
   onGenerate?: (mode: TopicGenerationMode) => void;
   onRegenerateByTheme?: (theme: string) => void;
+  onClear?: () => void;  // 清空精选片段
 }
 
 // ============ 工具函数 ============
@@ -219,9 +220,10 @@ export function HighlightsPanel({
   totalDuration,
   isLoading = false,
   onGenerate,
-  onRegenerateByTheme
+  onRegenerateByTheme,
+  onClear
 }: HighlightsPanelProps) {
-  const [generationMode, setGenerationMode] = useState<TopicGenerationMode>('smart');
+  const [generationMode, setGenerationMode] = useState<TopicGenerationMode>('fast');
   const [themeInput, setThemeInput] = useState('');
   const [showThemeInput, setShowThemeInput] = useState(false);
   
@@ -252,16 +254,6 @@ export function HighlightsPanel({
           <div className="space-y-3">
             <div className="flex items-center gap-2">
               <button
-                onClick={() => setGenerationMode('smart')}
-                className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                  generationMode === 'smart'
-                    ? 'bg-blue-500 text-white'
-                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                }`}
-              >
-                智能模式
-              </button>
-              <button
                 onClick={() => setGenerationMode('fast')}
                 className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
                   generationMode === 'fast'
@@ -271,6 +263,16 @@ export function HighlightsPanel({
               >
                 快速模式
               </button>
+              <button
+                onClick={() => setGenerationMode('smart')}
+                className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                  generationMode === 'smart'
+                    ? 'bg-blue-500 text-white'
+                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                }`}
+              >
+                智能模式
+              </button>
             </div>
             <button
               onClick={() => onGenerate(generationMode)}
@@ -278,6 +280,9 @@ export function HighlightsPanel({
             >
               生成精选片段
             </button>
+            <p className="text-xs text-gray-400 text-center">
+              {generationMode === 'fast' ? '快速模式：分块并行处理，速度更快' : '智能模式：全文分析，质量更高'}
+            </p>
           </div>
         )}
       </div>
@@ -313,6 +318,16 @@ export function HighlightsPanel({
           <span className="text-sm text-gray-500">
             共 {topics.length} 个片段
           </span>
+          {/* 清空重新生成按钮 */}
+          {onClear && topics.length > 0 && (
+            <button
+              onClick={onClear}
+              className="px-2 py-1 text-xs text-red-500 hover:text-red-700 hover:bg-red-50 rounded transition-colors"
+              title="清空并重新生成"
+            >
+              清空重新生成
+            </button>
+          )}
         </div>
         
         <div className="flex items-center gap-2">
@@ -400,17 +415,24 @@ export function HighlightsPanel({
       
       {/* 片段列表 */}
       <div className="flex-1 overflow-y-auto p-4 space-y-3">
-        {sortedTopics.map((topic, index) => (
-          <TopicCard
-            key={topic.id}
-            topic={topic}
-            index={index}
-            isSelected={selectedTopic?.id === topic.id}
-            isPlaying={isPlayingAll && playAllIndex === index}
-            onSelect={() => onTopicSelect(topic)}
-            onPlay={() => onPlayTopic?.(topic)}
-          />
-        ))}
+        {sortedTopics.map((topic, index) => {
+          // 判断当前片段是否正在播放（根据 currentTime 是否在片段时间范围内）
+          const segmentStart = topic.segments[0]?.start ?? 0;
+          const segmentEnd = topic.segments[topic.segments.length - 1]?.end ?? segmentStart;
+          const isCurrentlyPlaying = currentTime >= segmentStart && currentTime < segmentEnd;
+          
+          return (
+            <TopicCard
+              key={topic.id}
+              topic={topic}
+              index={index}
+              isSelected={selectedTopic?.id === topic.id}
+              isPlaying={(isPlayingAll && playAllIndex === index) || isCurrentlyPlaying}
+              onSelect={() => onTopicSelect(topic)}
+              onPlay={() => onPlayTopic?.(topic)}
+            />
+          );
+        })}
       </div>
     </div>
   );

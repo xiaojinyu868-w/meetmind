@@ -77,6 +77,24 @@ export async function POST(request: NextRequest): Promise<NextResponse<GenerateT
       theme: body.theme
     });
     
+    // 打印前3个转录片段的内容，用于调试
+    if (body.transcript && body.transcript.length > 0) {
+      console.log('[generate-topics] 前3个转录片段:');
+      body.transcript.slice(0, 3).forEach((seg, i) => {
+        console.log(`  [${i}] ${seg.startMs}-${seg.endMs}ms: "${seg.text?.slice(0, 50)}..."`);
+      });
+      
+      // 检查是否有空文本
+      const emptyCount = body.transcript.filter(s => !s.text || s.text.trim() === '').length;
+      if (emptyCount > 0) {
+        console.log(`[generate-topics] 警告: ${emptyCount}/${body.transcript.length} 个片段文本为空!`);
+      }
+      
+      // 计算总文本长度
+      const totalTextLength = body.transcript.reduce((sum, s) => sum + (s.text?.length || 0), 0);
+      console.log(`[generate-topics] 总文本长度: ${totalTextLength} 字符`);
+    }
+    
     // 验证必填字段
     if (!body.sessionId) {
       return NextResponse.json(
@@ -104,6 +122,7 @@ export async function POST(request: NextRequest): Promise<NextResponse<GenerateT
     }));
     
     console.log('[generate-topics] 调用 highlightService.generateTopics...');
+    console.log('[generate-topics] 使用模式:', body.mode);
     
     // 生成精选片段
     const result = await highlightService.generateTopics(
@@ -124,6 +143,11 @@ export async function POST(request: NextRequest): Promise<NextResponse<GenerateT
       topicsCount: result.topics.length,
       modelUsed: result.modelUsed
     });
+    
+    // 如果没有生成主题，记录警告
+    if (result.topics.length === 0) {
+      console.warn('[generate-topics] 警告：未生成任何主题！');
+    }
     
     // 构建响应
     const response: GenerateTopicsResponse = {

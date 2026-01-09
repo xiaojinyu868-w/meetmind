@@ -323,60 +323,341 @@ function parseTimestampRange(timestamp: string): { startMs: number; endMs: numbe
   return null;
 }
 
+
 /**
- * 在转录中定位引用文本
+ * 清洗文本，只保留中文、英文、数字
+ */
+function cleanText(text: string): string {
+  return text.replace(/[^\u4e00-\u9fa5a-zA-Z0-9]/g, '').toLowerCase();
+}
+
+/**
+ * 计算两个字符串的相似度（基于最长公共子串）
+ */
+function calculateSimilarity(str1: string, str2: string): number {
+  if (!str1 || !str2) return 0;
+  
+  const s1 = cleanText(str1);
+  const s2 = cleanText(str2);
+  
+  if (s1.length === 0 || s2.length === 0) return 0;
+  
+  // 使用动态规划计算最长公共子串（更高效）
+  const shorter = s1.length < s2.length ? s1 : s2;
+  const longer = s1.length < s2.length ? s2 : s1;
+  
+  // 对于过长的文本，使用采样方式
+  const maxLen = Math.min(shorter.length, 200);
+  const sampledShorter = shorter.slice(0, maxLen);
+  
+  let maxMatch = 0;
+  
+  // 滑动窗口查找最长匹配
+  for (let len = sampledShorter.length; len >= 4; len--) {
+    for (let i = 0; i <= sampledShorter.length - len; i++) {
+      const substr = sampledShorter.slice(i, i + len);
+      if (longer.includes(substr)) {
+        maxMatch = len;
+        break;
+      }
+    }
+    if (maxMatch > 0) break;
+  }
+  
+  return maxMatch / Math.max(s1.length, s2.length);
+}
+
+/**
+ * 在文本中查找子串的位置（模糊匹配）
+ * 返回 { startIdx, endIdx, matchedText } 或 null
+ */
+function findSubstringPosition(
+  fullText: string,
+  searchText: string,
+  minMatchRatio: number = 0.6
+): { startIdx: number; endIdx: number; matchedText: string } | null {
+  const cleanFull = cleanText(fullText);
+  const cleanSearch = cleanText(searchText);
+  
+  if (cleanFull.length === 0 || cleanSearch.length === 0) return null;
+  
+  // 1. 尝试精确匹配
+  const exactIdx = cleanFull.indexOf(cleanSearch);
+  if (exactIdx !== -1) {
+    return {
+      startIdx: exactIdx,
+      endIdx: exactIdx + cleanSearch.length,
+      matchedText: cleanSearch
+    };
+  }
+  
+  // 2. 尝试查找最长公共子串
+  let bestMatch = { start: 0, length: 0 };
+  
+  for (let len = Math.min(cleanSearch.length, cleanFull.length); len >= Math.floor(cleanSearch.length * minMatchRatio); len--) {
+    for (let i = 0; i <= cleanSearch.length - len; i++) {
+      const substr = cleanSearch.slice(i, i + len);
+      const foundIdx = cleanFull.indexOf(substr);
+      if (foundIdx !== -1 && len > bestMatch.length) {
+        bestMatch = { start: foundIdx, length: len };
+        break;
+      }
+    }
+    if (bestMatch.length > 0) break;
+  }
+  
+  if (bestMatch.length >= Math.floor(cleanSearch.length * minMatchRatio)) {
+    return {
+      startIdx: bestMatch.start,
+      endIdx: bestMatch.start + bestMatch.length,
+      matchedText: cleanFull.slice(bestMatch.start, bestMatch.start + bestMatch.length)
+    };
+  }
+  
+  return null;
+}
+
+/**
+ * 检查两个时间范围是否有交集
+ */
+function hasTimeOverlap(
+  seg: { startMs: number; endMs: number },
+  range: { startMs: number; endMs: number },
+  tolerance: number
+): boolean {
+  return seg.endMs >= range.startMs - tolerance && seg.startMs <= range.endMs + tolerance;
+}
+
+/**
+ * 基于语速计算精确的字符级时间位置
+ * @param segment 转录片段
+ * @param charStartIdx 字符起始索引（在清洗后的文本中）
+ * @param charEndIdx 字符结束索引
+ * @returns 精确的毫秒时间范围
+ */
+function calculatePreciseTime(
+  segment: TranscriptSegment,
+  charStartIdx: number,
+  charEndIdx: number
+): { startMs: number; endMs: number } {
+  const cleanedText = cleanText(segment.text);
+  const charCount = cleanedText.length;
+  
+  if (charCount === 0) {
+    return { startMs: segment.startMs, endMs: segment.endMs };
+  }
+  
+  const duration = segment.endMs - segment.startMs;
+  const msPerChar = duration / charCount;
+  
+  const preciseStart = segment.startMs + charStartIdx * msPerChar;
+  const preciseEnd = segment.startMs + charEndIdx * msPerChar;
+  
+  return { startMs: preciseStart, endMs: preciseEnd };
+}
+
+/**
+ * 在转录中定位引用文本（精确版）
+ * 
+ * 算法流程：
+ * 1. 时间戳作为锚点，筛选候选片段（±30秒容差）
+ * 2. 对候选片段（单个及连续组合）计算文本相似度
+ * 3. 选择最佳匹配，用文本位置矫正时间戳
+ * 4. 基于语速推算精确的字符级时间
+ * 5. 添加 2 秒播放缓冲
  */
 function findQuoteInTranscript(
   segments: TranscriptSegment[],
   quote: { timestamp: string; text: string }
 ): HighlightSegment[] {
-  console.log('[findQuoteInTranscript] 查找:', quote.timestamp, quote.text.slice(0, 30) + '...');
+  console.log('[findQuoteInTranscript] 查找:', quote.timestamp, quote.text?.slice(0, 30) + '...');
   
-  const timeRange = parseTimestampRange(quote.timestamp);
-  if (!timeRange) {
-    console.log('[findQuoteInTranscript] 无法解析时间戳:', quote.timestamp);
+  if (!quote.text || quote.text.length < 3) {
+    console.log('[findQuoteInTranscript] 引用文本过短，跳过');
     return [];
   }
   
-  console.log('[findQuoteInTranscript] 时间范围:', timeRange.startMs, '-', timeRange.endMs);
+  const timeRange = parseTimestampRange(quote.timestamp);
+  const TOLERANCE_MS = 30000; // 30秒容差
+  const BUFFER_MS = 2000; // 2秒播放缓冲
   
-  // 找到时间范围内的片段（放宽容差到 10 秒）
-  let matchingSegments = segments.filter(
-    seg => seg.startMs >= timeRange.startMs - 10000 && seg.startMs <= timeRange.endMs + 10000
-  );
-  
-  // 如果没找到，尝试更宽松的匹配
-  if (matchingSegments.length === 0) {
-    console.log('[findQuoteInTranscript] 精确匹配失败，尝试宽松匹配');
-    matchingSegments = segments.filter(
-      seg => seg.startMs >= timeRange.startMs - 30000 && seg.startMs <= timeRange.endMs + 30000
-    );
+  // Step 1: 筛选候选片段
+  let candidates: TranscriptSegment[];
+  if (timeRange) {
+    console.log('[findQuoteInTranscript] 时间范围:', timeRange.startMs, '-', timeRange.endMs);
+    // 使用时间范围交集筛选
+    candidates = segments.filter(seg => hasTimeOverlap(seg, timeRange, TOLERANCE_MS));
+    
+    // 如果时间范围内没有候选，扩大搜索范围
+    if (candidates.length === 0) {
+      console.log('[findQuoteInTranscript] 时间范围内无候选，扩大搜索');
+      candidates = segments;
+    }
+  } else {
+    console.log('[findQuoteInTranscript] 时间戳解析失败，搜索全部片段');
+    candidates = segments;
   }
   
-  // 如果还是没找到，尝试文本匹配
-  if (matchingSegments.length === 0 && quote.text) {
-    console.log('[findQuoteInTranscript] 时间匹配失败，尝试文本匹配');
-    const quoteWords = quote.text.slice(0, 20).replace(/[^\u4e00-\u9fa5a-zA-Z0-9]/g, '');
-    matchingSegments = segments.filter(seg => {
-      const segWords = seg.text.replace(/[^\u4e00-\u9fa5a-zA-Z0-9]/g, '');
-      return segWords.includes(quoteWords) || quoteWords.includes(segWords.slice(0, 10));
+  console.log('[findQuoteInTranscript] 候选片段数:', candidates.length);
+  
+  // Step 2: 计算所有可能匹配的相似度（单片段 + 连续组合）
+  interface MatchResult {
+    segments: TranscriptSegment[];
+    startIdx: number;
+    endIdx: number;
+    similarity: number;
+    combinedText: string;
+  }
+  
+  const matches: MatchResult[] = [];
+  
+  // 单片段匹配
+  for (let i = 0; i < candidates.length; i++) {
+    const seg = candidates[i];
+    const similarity = calculateSimilarity(quote.text, seg.text);
+    const globalIdx = segments.indexOf(seg);
+    
+    matches.push({
+      segments: [seg],
+      startIdx: globalIdx,
+      endIdx: globalIdx,
+      similarity,
+      combinedText: seg.text
     });
   }
   
-  if (matchingSegments.length === 0) {
-    console.log('[findQuoteInTranscript] 未找到匹配片段');
+  // 连续 2 片段组合
+  for (let i = 0; i < candidates.length - 1; i++) {
+    const seg1 = candidates[i];
+    const seg2 = candidates[i + 1];
+    
+    // 确保是连续的（在原始 segments 中相邻）
+    const idx1 = segments.indexOf(seg1);
+    const idx2 = segments.indexOf(seg2);
+    if (idx2 !== idx1 + 1) continue;
+    
+    const combinedText = seg1.text + seg2.text;
+    const similarity = calculateSimilarity(quote.text, combinedText);
+    
+    matches.push({
+      segments: [seg1, seg2],
+      startIdx: idx1,
+      endIdx: idx2,
+      similarity,
+      combinedText
+    });
+  }
+  
+  // 连续 3 片段组合
+  for (let i = 0; i < candidates.length - 2; i++) {
+    const seg1 = candidates[i];
+    const seg2 = candidates[i + 1];
+    const seg3 = candidates[i + 2];
+    
+    const idx1 = segments.indexOf(seg1);
+    const idx2 = segments.indexOf(seg2);
+    const idx3 = segments.indexOf(seg3);
+    if (idx2 !== idx1 + 1 || idx3 !== idx2 + 1) continue;
+    
+    const combinedText = seg1.text + seg2.text + seg3.text;
+    const similarity = calculateSimilarity(quote.text, combinedText);
+    
+    matches.push({
+      segments: [seg1, seg2, seg3],
+      startIdx: idx1,
+      endIdx: idx3,
+      similarity,
+      combinedText
+    });
+  }
+  
+  // Step 3: 选择最佳匹配
+  matches.sort((a, b) => b.similarity - a.similarity);
+  
+  if (matches.length === 0 || matches[0].similarity < 0.2) {
+    console.log('[findQuoteInTranscript] 无有效匹配，最高相似度:', matches[0]?.similarity?.toFixed(2) || 0);
     return [];
   }
   
-  console.log('[findQuoteInTranscript] 找到', matchingSegments.length, '个匹配片段');
+  const bestMatch = matches[0];
+  console.log('[findQuoteInTranscript] 最佳匹配:', {
+    segmentCount: bestMatch.segments.length,
+    similarity: bestMatch.similarity.toFixed(2),
+    text: bestMatch.combinedText.slice(0, 50) + '...'
+  });
+  
+  // Step 4: 基于语速精确定位
+  let preciseStartMs: number;
+  let preciseEndMs: number;
+  
+  // 在组合文本中查找引用文本的位置
+  const position = findSubstringPosition(bestMatch.combinedText, quote.text);
+  
+  if (position && bestMatch.segments.length === 1) {
+    // 单片段：直接计算精确时间
+    const seg = bestMatch.segments[0];
+    const precise = calculatePreciseTime(seg, position.startIdx, position.endIdx);
+    preciseStartMs = precise.startMs;
+    preciseEndMs = precise.endMs;
+    console.log('[findQuoteInTranscript] 单片段精确定位:', preciseStartMs, '-', preciseEndMs);
+  } else if (position && bestMatch.segments.length > 1) {
+    // 多片段：计算跨片段的精确时间
+    const combinedCleanText = cleanText(bestMatch.combinedText);
+    let charOffset = 0;
+    
+    // 找到 startIdx 落在哪个片段
+    let startSegIdx = 0;
+    let startCharInSeg = position.startIdx;
+    for (let i = 0; i < bestMatch.segments.length; i++) {
+      const segCleanLen = cleanText(bestMatch.segments[i].text).length;
+      if (charOffset + segCleanLen > position.startIdx) {
+        startSegIdx = i;
+        startCharInSeg = position.startIdx - charOffset;
+        break;
+      }
+      charOffset += segCleanLen;
+    }
+    
+    // 找到 endIdx 落在哪个片段
+    charOffset = 0;
+    let endSegIdx = bestMatch.segments.length - 1;
+    let endCharInSeg = position.endIdx;
+    for (let i = 0; i < bestMatch.segments.length; i++) {
+      const segCleanLen = cleanText(bestMatch.segments[i].text).length;
+      if (charOffset + segCleanLen >= position.endIdx) {
+        endSegIdx = i;
+        endCharInSeg = position.endIdx - charOffset;
+        break;
+      }
+      charOffset += segCleanLen;
+    }
+    
+    const startPrecise = calculatePreciseTime(bestMatch.segments[startSegIdx], startCharInSeg, cleanText(bestMatch.segments[startSegIdx].text).length);
+    const endPrecise = calculatePreciseTime(bestMatch.segments[endSegIdx], 0, endCharInSeg);
+    
+    preciseStartMs = startPrecise.startMs;
+    preciseEndMs = endPrecise.endMs;
+    console.log('[findQuoteInTranscript] 多片段精确定位:', preciseStartMs, '-', preciseEndMs);
+  } else {
+    // 无法精确定位，使用片段边界
+    preciseStartMs = bestMatch.segments[0].startMs;
+    preciseEndMs = bestMatch.segments[bestMatch.segments.length - 1].endMs;
+    console.log('[findQuoteInTranscript] 使用片段边界:', preciseStartMs, '-', preciseEndMs);
+  }
+  
+  // Step 5: 添加 2 秒播放缓冲
+  const finalStartMs = Math.max(0, preciseStartMs - BUFFER_MS);
+  const finalEndMs = preciseEndMs;
+  
+  console.log('[findQuoteInTranscript] 最终时间（含缓冲）:', finalStartMs, '-', finalEndMs);
   
   return [{
-    start: matchingSegments[0].startMs,
-    end: matchingSegments[matchingSegments.length - 1].endMs,
-    text: matchingSegments.map(s => s.text).join(' '),
-    startSegmentIdx: segments.indexOf(matchingSegments[0]),
-    endSegmentIdx: segments.indexOf(matchingSegments[matchingSegments.length - 1]),
-    confidence: 0.9
+    start: finalStartMs,
+    end: finalEndMs,
+    text: bestMatch.combinedText,
+    startSegmentIdx: bestMatch.startIdx,
+    endSegmentIdx: bestMatch.endIdx,
+    confidence: bestMatch.similarity
   }];
 }
 
@@ -437,7 +718,7 @@ export async function generateHighlightTopics(
     return { topics: [], modelUsed: '' };
   }
   
-  const mode = options.mode ?? 'smart';
+  const mode = options.mode ?? 'fast';
   const model = options.model ?? (mode === 'smart' ? DEFAULT_MODEL : FAST_MODEL);
   const maxTopics = options.maxTopics ?? DEFAULT_MAX_TOPICS;
   
