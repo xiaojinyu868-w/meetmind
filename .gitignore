@@ -35,3 +35,25 @@ public/temp-audio/
 # 临时文件
 *.tmp
 *.temp
+*.tsbuildinfo
+
+# 测试和调试文件
+test_*.py
+test_*.js
+test_*.ts
+*_test.py
+*_test.js
+*_test.ts
+test-*.py
+test-*.js
+test-*.ts
+
+# 截图和图片文件（临时）
+screenshots/
+current_ui_state.png
+final_ui.png
+updated_ui_state.png
+test_screenshot.png
+
+# 服务器日志
+server.log

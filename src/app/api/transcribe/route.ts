@@ -78,13 +78,29 @@ export async function POST(request: NextRequest) {
     console.log('[Transcribe API] Calling OpenAI Whisper...');
     
     // 调用 OpenAI Whisper 转录
-    const transcription = await openai.audio.transcriptions.create({
+    // 不指定 language 参数，让 Whisper 自动检测源语言并保持原文
+    const transcriptionOptions: {
+      file: File;
+      model: 'whisper-1';
+      response_format: 'verbose_json';
+      timestamp_granularities: ['segment'];
+      language?: string;
+    } = {
       file: file,
       model: 'whisper-1',
       response_format: 'verbose_json',
       timestamp_granularities: ['segment'],
-      language: language || 'zh',
-    });
+    };
+    
+    // 只有明确指定语言时才传递 language 参数
+    if (language) {
+      transcriptionOptions.language = language;
+      console.log('[Transcribe API] Using specified language:', language);
+    } else {
+      console.log('[Transcribe API] Auto-detecting language (no translation)');
+    }
+    
+    const transcription = await openai.audio.transcriptions.create(transcriptionOptions);
 
     console.log('[Transcribe API] Transcription completed');
 

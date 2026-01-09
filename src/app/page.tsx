@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { Recorder } from '@/components/Recorder';
@@ -17,23 +17,7 @@ import { anchorService, type Anchor } from '@/lib/services/anchor-service';
 import { memoryService, type ClassTimeline } from '@/lib/services/memory-service';
 import { checkServices, type ServiceStatus as ServiceStatusType } from '@/lib/services/health-check';
 import type { TranscriptSegment, HighlightTopic, ClassSummary, Note, TopicGenerationMode, NoteSource, NoteMetadata } from '@/types';
-
-// Demo 数据
-const DEMO_SEGMENTS: TranscriptSegment[] = [
-  { id: 's1', text: '今天我们来学习二次函数的图像', startMs: 0, endMs: 15000, confidence: 0.95 },
-  { id: 's2', text: '二次函数的一般形式是 y = ax² + bx + c', startMs: 15000, endMs: 35000, confidence: 0.92 },
-  { id: 's3', text: '其中 a 不等于 0，a 的正负决定了抛物线的开口方向', startMs: 35000, endMs: 60000, confidence: 0.94 },
-  { id: 's4', text: '当 a 大于 0 时，抛物线开口向上', startMs: 60000, endMs: 85000, confidence: 0.96 },
-  { id: 's5', text: '当 a 小于 0 时，抛物线开口向下', startMs: 85000, endMs: 110000, confidence: 0.93 },
-  { id: 's6', text: '顶点坐标公式是 (-b/2a, (4ac-b²)/4a)', startMs: 110000, endMs: 150000, confidence: 0.91 },
-  { id: 's7', text: '这个公式很重要，大家要记住', startMs: 150000, endMs: 170000, confidence: 0.97 },
-  { id: 's8', text: '我们来看一个例题', startMs: 170000, endMs: 190000, confidence: 0.95 },
-  { id: 's9', text: '求 y = 2x² - 4x + 1 的顶点坐标', startMs: 190000, endMs: 220000, confidence: 0.94 },
-  { id: 's10', text: '首先 a = 2, b = -4, c = 1', startMs: 220000, endMs: 250000, confidence: 0.96 },
-  { id: 's11', text: '代入公式 x = -b/2a = 4/4 = 1', startMs: 250000, endMs: 280000, confidence: 0.93 },
-  { id: 's12', text: 'y = 2(1)² - 4(1) + 1 = -1', startMs: 280000, endMs: 310000, confidence: 0.92 },
-  { id: 's13', text: '所以顶点坐标是 (1, -1)', startMs: 310000, endMs: 340000, confidence: 0.98 },
-];
+import { DEMO_SEGMENTS, DEMO_ANCHORS, DEMO_AUDIO_URL } from '@/fixtures/demo-data';
 
 type ViewMode = 'record' | 'review';
 type DataSource = 'live' | 'demo';
@@ -64,6 +48,7 @@ export default function StudentApp() {
   const [chatMode, setChatMode] = useState<ChatMode>('tutor');
   const [serviceStatus, setServiceStatus] = useState<ServiceStatusType | null>(null);
   const [audioBlob, setAudioBlob] = useState<Blob | null>(null);
+  const [audioUrl, setAudioUrl] = useState<string | null>(null);
   
   // 新增状态：精选片段、摘要、笔记
   const [reviewTab, setReviewTab] = useState<ReviewTab>('timeline');
@@ -90,16 +75,24 @@ export default function StudentApp() {
     if (segments.length === 0 && viewMode === 'review') {
       setSegments(DEMO_SEGMENTS);
       
+      // 加载示例音频
+      setAudioUrl(DEMO_AUDIO_URL);
+      
+      // 使用示例锚点（包含30秒断点）
+      setAnchors(DEMO_ANCHORS);
+      
       const tl = memoryService.buildTimeline(
         sessionId,
         DEMO_SEGMENTS,
-        savedAnchors,
+        DEMO_ANCHORS,
         { subject: '数学', teacher: '张老师', date: new Date().toISOString().split('T')[0] }
       );
       setTimeline(tl);
     }
 
-    const firstUnresolved = savedAnchors.find(a => !a.resolved);
+    // 如果是示例数据，优先选择30秒的断点
+    const demoAnchors = viewMode === 'review' ? DEMO_ANCHORS : savedAnchors;
+    const firstUnresolved = demoAnchors.find(a => !a.resolved);
     if (firstUnresolved) {
       setSelectedAnchor(firstUnresolved);
       setCurrentTime(firstUnresolved.timestamp);
@@ -112,6 +105,7 @@ export default function StudentApp() {
     setSegments([]);
     setAnchors([]);
     setDataSource('live');
+    setAudioUrl(null); // 清除示例音频URL
     liveSegmentsRef.current = [];
     anchorService.clear(newSessionId);
   }, []);
@@ -515,6 +509,7 @@ export default function StudentApp() {
                   onTranscriptReady={(newSegments, blob) => {
                     setSegments(newSegments);
                     setAudioBlob(blob);
+                    setAudioUrl(null); // 清除示例音频URL
                     setDataSource('live');
                     
                     // 构建时间轴
@@ -621,7 +616,7 @@ export default function StudentApp() {
                     : 'text-gray-500 hover:text-gray-700 hover:bg-white/50'
                 }`}
               >
-                📒 笔记
+                📄 笔记
                 {notes.length > 0 && (
                   <span className="ml-1 text-xs text-purple-600">({notes.length})</span>
                 )}
@@ -692,11 +687,11 @@ export default function StudentApp() {
           {/* 中栏 - AI 对话 */}
           <div className="flex-1 flex flex-col min-h-0 bg-white">
             {/* 波形播放器 */}
-            {audioBlob && (
+            {(audioBlob || audioUrl) && (
               <div className="p-4 border-b border-gray-100">
                 <WaveformPlayer
                   ref={waveformRef}
-                  src={audioBlob}
+                  src={audioBlob || audioUrl}
                   anchors={anchors.map(a => ({
                     id: a.id,
                     timestamp: a.timestamp,
