@@ -9,10 +9,14 @@ import { Header } from '@/components/Header';
 import { ServiceStatus, DegradedModeBanner } from '@/components/ServiceStatus';
 import { AIChat } from '@/components/AIChat';
 import { WaveformPlayer, type WaveformPlayerRef, type WaveformAnchor } from '@/components/WaveformPlayer';
+import { HighlightsPanel } from '@/components/HighlightsPanel';
+import { SummaryPanel } from '@/components/SummaryPanel';
+import { NotesPanel } from '@/components/NotesPanel';
+import { AudioUploader } from '@/components/AudioUploader';
 import { anchorService, type Anchor } from '@/lib/services/anchor-service';
 import { memoryService, type ClassTimeline } from '@/lib/services/memory-service';
 import { checkServices, type ServiceStatus as ServiceStatusType } from '@/lib/services/health-check';
-import type { TranscriptSegment } from '@/types';
+import type { TranscriptSegment, HighlightTopic, ClassSummary, Note, TopicGenerationMode, NoteSource, NoteMetadata } from '@/types';
 
 // Demo 数据
 const DEMO_SEGMENTS: TranscriptSegment[] = [
@@ -34,6 +38,7 @@ const DEMO_SEGMENTS: TranscriptSegment[] = [
 type ViewMode = 'record' | 'review';
 type DataSource = 'live' | 'demo';
 type ChatMode = 'tutor' | 'chat';
+type ReviewTab = 'timeline' | 'highlights' | 'summary' | 'notes';
 
 interface ActionItem {
   id: string;
@@ -55,10 +60,21 @@ export default function StudentApp() {
   const [selectedAnchor, setSelectedAnchor] = useState<Anchor | null>(null);
   const [actionItems, setActionItems] = useState<ActionItem[]>([]);
   const [currentTime, setCurrentTime] = useState(0);
-  const [dataSource, setDataSource] = useState<DataSource>('demo');
+  const [dataSource, setDataSource] = useState<DataSource>('live');
   const [chatMode, setChatMode] = useState<ChatMode>('tutor');
   const [serviceStatus, setServiceStatus] = useState<ServiceStatusType | null>(null);
   const [audioBlob, setAudioBlob] = useState<Blob | null>(null);
+  
+  // 新增状态：精选片段、摘要、笔记
+  const [reviewTab, setReviewTab] = useState<ReviewTab>('timeline');
+  const [highlightTopics, setHighlightTopics] = useState<HighlightTopic[]>([]);
+  const [selectedTopic, setSelectedTopic] = useState<HighlightTopic | null>(null);
+  const [isLoadingTopics, setIsLoadingTopics] = useState(false);
+  const [classSummary, setClassSummary] = useState<ClassSummary | null>(null);
+  const [isLoadingSummary, setIsLoadingSummary] = useState(false);
+  const [notes, setNotes] = useState<Note[]>([]);
+  const [isPlayingAll, setIsPlayingAll] = useState(false);
+  const [playAllIndex, setPlayAllIndex] = useState(0);
   
   const liveSegmentsRef = useRef<TranscriptSegment[]>([]);
   const waveformRef = useRef<WaveformPlayerRef>(null);
@@ -70,9 +86,9 @@ export default function StudentApp() {
     const savedAnchors = anchorService.getActive(sessionId);
     setAnchors(savedAnchors);
 
-    if (segments.length === 0) {
+    // 仅在复习模式下加载演示数据，不改变 dataSource
+    if (segments.length === 0 && viewMode === 'review') {
       setSegments(DEMO_SEGMENTS);
-      setDataSource('demo');
       
       const tl = memoryService.buildTimeline(
         sessionId,
@@ -88,7 +104,7 @@ export default function StudentApp() {
       setSelectedAnchor(firstUnresolved);
       setCurrentTime(firstUnresolved.timestamp);
     }
-  }, [sessionId]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [sessionId, viewMode]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleRecordingStart = useCallback((newSessionId: string) => {
     setSessionId(newSessionId);
@@ -174,6 +190,184 @@ export default function StudentApp() {
       item.id === actionId ? { ...item, completed: !item.completed } : item
     ));
   }, []);
+
+  // 生成精选片段
+  const handleGenerateTopics = useCallback(async (mode: TopicGenerationMode) => {
+    if (segments.length === 0) {
+      console.warn('无转录内容，无法生成精选片段');
+      return;
+    }
+    
+    setIsLoadingTopics(true);
+    try {
+      console.log('[生成精选片段] 开始，模式:', mode, '片段数:', segments.length);
+      
+      const response = await fetch('/api/generate-topics', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          sessionId,
+          transcript: segments.map(s => ({
+            id: s.id,
+            text: s.text,
+            startMs: s.startMs,
+            endMs: s.endMs,
+            confidence: s.confidence
+          })),
+          mode,
+          sessionInfo: {
+            subject: '数学',
+            topic: '二次函数'
+          }
+        })
+      });
+      
+      const data = await response.json();
+      console.log('[生成精选片段] 响应:', data);
+      
+      if (data.success && data.topics) {
+        setHighlightTopics(data.topics);
+        console.log('[生成精选片段] 成功，生成', data.topics.length, '个片段');
+      } else {
+        console.error('[生成精选片段] 失败:', data.error);
+        alert(`生成失败: ${data.error || '未知错误'}`);
+      }
+    } catch (error) {
+      console.error('生成精选片段失败:', error);
+      alert(`生成失败: ${error instanceof Error ? error.message : '网络错误'}`);
+    } finally {
+      setIsLoadingTopics(false);
+    }
+  }, [sessionId, segments]);
+
+  // 按主题重新生成片段
+  const handleRegenerateByTheme = useCallback(async (theme: string) => {
+    if (segments.length === 0) return;
+    
+    setIsLoadingTopics(true);
+    try {
+      const response = await fetch('/api/generate-topics', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          sessionId,
+          transcript: segments.map(s => ({
+            id: s.id,
+            text: s.text,
+            startMs: s.startMs,
+            endMs: s.endMs
+          })),
+          mode: 'smart',
+          theme,
+          sessionInfo: { subject: '数学' }
+        })
+      });
+      
+      const data = await response.json();
+      if (data.success && data.topics) {
+        setHighlightTopics(data.topics);
+      }
+    } catch (error) {
+      console.error('按主题生成失败:', error);
+    } finally {
+      setIsLoadingTopics(false);
+    }
+  }, [sessionId, segments]);
+
+  // 生成课堂摘要
+  const handleGenerateSummary = useCallback(async () => {
+    if (segments.length === 0) return;
+    
+    setIsLoadingSummary(true);
+    try {
+      const response = await fetch('/api/generate-summary', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          sessionId,
+          transcript: segments.map(s => ({
+            id: s.id,
+            text: s.text,
+            startMs: s.startMs,
+            endMs: s.endMs
+          })),
+          sessionInfo: {
+            subject: '数学',
+            topic: '二次函数'
+          }
+        })
+      });
+      
+      const data = await response.json();
+      if (data.success && data.summary) {
+        setClassSummary({
+          ...data.summary,
+          sessionId,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString()
+        });
+      }
+    } catch (error) {
+      console.error('生成摘要失败:', error);
+    } finally {
+      setIsLoadingSummary(false);
+    }
+  }, [sessionId, segments]);
+
+  // 播放精选片段
+  const handlePlayTopic = useCallback((topic: HighlightTopic) => {
+    if (topic.segments.length > 0) {
+      const startTime = topic.segments[0].start;
+      setCurrentTime(startTime);
+      waveformRef.current?.seekTo(startTime);
+    }
+  }, []);
+
+  // 播放全部片段
+  const handlePlayAll = useCallback(() => {
+    if (isPlayingAll) {
+      setIsPlayingAll(false);
+      return;
+    }
+    
+    if (highlightTopics.length > 0) {
+      setIsPlayingAll(true);
+      setPlayAllIndex(0);
+      handlePlayTopic(highlightTopics[0]);
+    }
+  }, [isPlayingAll, highlightTopics, handlePlayTopic]);
+
+  // 添加笔记
+  const handleAddNote = useCallback((text: string, source: NoteSource = 'custom', metadata?: NoteMetadata) => {
+    const newNote: Note = {
+      id: crypto.randomUUID(),
+      sessionId,
+      studentId: 'student-1',
+      source,
+      text,
+      metadata,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    };
+    setNotes(prev => [newNote, ...prev]);
+  }, [sessionId]);
+
+  // 更新笔记
+  const handleUpdateNote = useCallback((noteId: string, text: string) => {
+    setNotes(prev => prev.map(n => 
+      n.id === noteId ? { ...n, text, updatedAt: new Date().toISOString() } : n
+    ));
+  }, []);
+
+  // 删除笔记
+  const handleDeleteNote = useCallback((noteId: string) => {
+    setNotes(prev => prev.filter(n => n.id !== noteId));
+  }, []);
+
+  // 计算总时长
+  const totalDuration = segments.length > 0 
+    ? segments[segments.length - 1].endMs 
+    : 0;
 
   const timelineForView = timeline ? {
     lessonId: timeline.lessonId,
@@ -267,17 +461,79 @@ export default function StudentApp() {
       {/* 主内容区 */}
       {viewMode === 'record' ? (
         <div className="flex-1 flex items-center justify-center p-8 page-enter">
-          <div className="w-full max-w-lg">
-            <Recorder
-              onRecordingStart={handleRecordingStart}
-              onRecordingStop={handleRecordingStop}
-              onTranscriptUpdate={handleTranscriptUpdate}
-              onAnchorMark={handleAnchorMark}
-            />
+          <div className="w-full max-w-2xl space-y-6">
+            {/* 录音或上传切换 */}
+            <div className="flex items-center justify-center gap-4 mb-4">
+              <span className="text-sm text-gray-500">选择输入方式：</span>
+              <div className="flex items-center gap-2 p-1 bg-gray-100 rounded-xl">
+                <button
+                  onClick={() => setDataSource('live')}
+                  className={`px-4 py-2 text-sm rounded-lg transition-all ${
+                    dataSource === 'live'
+                      ? 'bg-white text-gray-900 font-medium shadow-sm'
+                      : 'text-gray-500 hover:text-gray-700'
+                  }`}
+                >
+                  🎙️ 实时录音
+                </button>
+                <button
+                  onClick={() => setDataSource('demo')}
+                  className={`px-4 py-2 text-sm rounded-lg transition-all ${
+                    dataSource === 'demo'
+                      ? 'bg-white text-gray-900 font-medium shadow-sm'
+                      : 'text-gray-500 hover:text-gray-700'
+                  }`}
+                >
+                  📁 上传音频
+                </button>
+              </div>
+            </div>
+
+            {dataSource === 'live' ? (
+              <Recorder
+                onRecordingStart={handleRecordingStart}
+                onRecordingStop={handleRecordingStop}
+                onTranscriptUpdate={handleTranscriptUpdate}
+                onAnchorMark={handleAnchorMark}
+              />
+            ) : (
+              <div className="card p-6">
+                <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
+                  <span>📁</span>
+                  上传课堂录音
+                </h3>
+                <AudioUploader
+                  onTranscriptReady={(newSegments, blob) => {
+                    setSegments(newSegments);
+                    setAudioBlob(blob);
+                    setDataSource('live');
+                    
+                    // 构建时间轴
+                    const tl = memoryService.buildTimeline(
+                      sessionId,
+                      newSegments,
+                      anchors,
+                      { subject: '数学', teacher: '张老师', date: new Date().toISOString().split('T')[0] }
+                    );
+                    setTimeline(tl);
+                    
+                    // 自动切换到复习模式
+                    setViewMode('review');
+                  }}
+                  onError={(error) => {
+                    console.error('上传失败:', error);
+                  }}
+                  disabled={isRecording}
+                />
+                <p className="mt-4 text-sm text-gray-500 text-center">
+                  支持 MP3、WAV、WebM 等格式，上传后自动转录并进入复习模式
+                </p>
+              </div>
+            )}
             
             {/* 已标记的困惑点 */}
             {anchors.length > 0 && (
-              <div className="mt-6 card p-5 animate-slide-up">
+              <div className="card p-5 animate-slide-up">
                 <h3 className="text-sm font-semibold text-gray-900 mb-4 flex items-center gap-2">
                   <span>🎯</span>
                   已标记的困惑点
@@ -310,20 +566,117 @@ export default function StudentApp() {
         </div>
       ) : (
         <div className="flex-1 min-h-0 flex overflow-hidden page-enter">
-          {/* 左栏 - 时间轴 */}
-          <div className="w-80 border-r border-gray-100 flex flex-col glass">
-            {timelineForView && (
-              <TimelineView
-                timeline={timelineForView}
-                currentTime={currentTime}
-                selectedBreakpoint={selectedBreakpoint}
-                onTimeClick={handleTimelineClick}
-                onBreakpointClick={(bp) => {
-                  const anchor = anchors.find(a => a.id === bp.id);
-                  if (anchor) handleAnchorSelect(anchor);
-                }}
-              />
-            )}
+          {/* 左栏 - 多功能面板 */}
+          <div className="w-96 border-r border-gray-100 flex flex-col glass">
+            {/* 标签页切换 */}
+            <div className="flex items-center gap-1 px-4 py-2 border-b border-gray-100 bg-gray-50/50">
+              <button
+                onClick={() => setReviewTab('timeline')}
+                className={`px-3 py-1.5 text-sm rounded-lg transition-all ${
+                  reviewTab === 'timeline'
+                    ? 'bg-white text-gray-900 font-medium shadow-sm'
+                    : 'text-gray-500 hover:text-gray-700 hover:bg-white/50'
+                }`}
+              >
+                📋 时间轴
+              </button>
+              <button
+                onClick={() => setReviewTab('highlights')}
+                className={`px-3 py-1.5 text-sm rounded-lg transition-all ${
+                  reviewTab === 'highlights'
+                    ? 'bg-white text-gray-900 font-medium shadow-sm'
+                    : 'text-gray-500 hover:text-gray-700 hover:bg-white/50'
+                }`}
+              >
+                ⚡ 精选片段
+                {highlightTopics.length > 0 && (
+                  <span className="ml-1 text-xs text-blue-600">({highlightTopics.length})</span>
+                )}
+              </button>
+              <button
+                onClick={() => setReviewTab('summary')}
+                className={`px-3 py-1.5 text-sm rounded-lg transition-all ${
+                  reviewTab === 'summary'
+                    ? 'bg-white text-gray-900 font-medium shadow-sm'
+                    : 'text-gray-500 hover:text-gray-700 hover:bg-white/50'
+                }`}
+              >
+                📝 摘要
+                {classSummary && <span className="ml-1 text-xs text-green-600">✓</span>}
+              </button>
+              <button
+                onClick={() => setReviewTab('notes')}
+                className={`px-3 py-1.5 text-sm rounded-lg transition-all ${
+                  reviewTab === 'notes'
+                    ? 'bg-white text-gray-900 font-medium shadow-sm'
+                    : 'text-gray-500 hover:text-gray-700 hover:bg-white/50'
+                }`}
+              >
+                📒 笔记
+                {notes.length > 0 && (
+                  <span className="ml-1 text-xs text-purple-600">({notes.length})</span>
+                )}
+              </button>
+            </div>
+            
+            {/* 标签页内容 */}
+            <div className="flex-1 min-h-0 overflow-hidden">
+              {reviewTab === 'timeline' && timelineForView && (
+                <TimelineView
+                  timeline={timelineForView}
+                  currentTime={currentTime}
+                  selectedBreakpoint={selectedBreakpoint}
+                  onTimeClick={handleTimelineClick}
+                  onBreakpointClick={(bp) => {
+                    const anchor = anchors.find(a => a.id === bp.id);
+                    if (anchor) handleAnchorSelect(anchor);
+                  }}
+                />
+              )}
+              
+              {reviewTab === 'highlights' && (
+                <HighlightsPanel
+                  topics={highlightTopics}
+                  selectedTopic={selectedTopic}
+                  onTopicSelect={setSelectedTopic}
+                  onPlayTopic={handlePlayTopic}
+                  onSeek={handleTimelineClick}
+                  onPlayAll={handlePlayAll}
+                  isPlayingAll={isPlayingAll}
+                  playAllIndex={playAllIndex}
+                  currentTime={currentTime}
+                  totalDuration={totalDuration}
+                  isLoading={isLoadingTopics}
+                  onGenerate={handleGenerateTopics}
+                  onRegenerateByTheme={handleRegenerateByTheme}
+                />
+              )}
+              
+              {reviewTab === 'summary' && (
+                <SummaryPanel
+                  summary={classSummary}
+                  isLoading={isLoadingSummary}
+                  onGenerate={handleGenerateSummary}
+                  onSeek={handleTimelineClick}
+                  onAddNote={(text, takeaway) => {
+                    handleAddNote(text, 'takeaways', {
+                      selectedText: takeaway.label,
+                      extra: { timestamps: takeaway.timestamps }
+                    });
+                  }}
+                />
+              )}
+              
+              {reviewTab === 'notes' && (
+                <NotesPanel
+                  notes={notes}
+                  onAddNote={handleAddNote}
+                  onUpdateNote={handleUpdateNote}
+                  onDeleteNote={handleDeleteNote}
+                  onSeek={handleTimelineClick}
+                />
+              )}
+            </div>
           </div>
 
           {/* 中栏 - AI 对话 */}

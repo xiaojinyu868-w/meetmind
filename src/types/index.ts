@@ -257,6 +257,146 @@ export interface SearchResult {
   };
 }
 
+// ==================== AI 精选片段 (Highlight Reels) ====================
+
+/**
+ * 主题生成模式
+ */
+export type TopicGenerationMode = 'smart' | 'fast';
+
+/**
+ * 重要程度
+ */
+export type ImportanceLevel = 'high' | 'medium' | 'low';
+
+/**
+ * 精选片段时间范围
+ */
+export interface HighlightSegment {
+  start: number;           // 开始时间（毫秒）
+  end: number;             // 结束时间（毫秒）
+  text: string;            // 原文内容
+  startSegmentIdx?: number;
+  endSegmentIdx?: number;
+  startCharOffset?: number;
+  endCharOffset?: number;
+  confidence?: number;     // 匹配置信度 (0-1)
+}
+
+/**
+ * 精选片段引用
+ */
+export interface HighlightQuote {
+  timestamp: string;       // [MM:SS-MM:SS] 格式
+  text: string;            // 原文引用
+}
+
+/**
+ * AI 精选片段（Highlight Reel）
+ */
+export interface HighlightTopic {
+  id: string;
+  sessionId: string;
+  title: string;           // 标题（最多10词）
+  description?: string;    // 内容摘要
+  importance: ImportanceLevel;
+  duration: number;        // 片段时长（毫秒）
+  segments: HighlightSegment[];
+  keywords?: string[];
+  quote?: HighlightQuote;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/**
+ * 主题候选项（用于 Fast 模式的中间结果）
+ */
+export interface TopicCandidate {
+  key: string;
+  title: string;
+  quote: HighlightQuote;
+}
+
+// ==================== 结构化摘要 (Summary) ====================
+
+/**
+ * 摘要要点
+ */
+export interface SummaryTakeaway {
+  label: string;           // 标题（最多10词）
+  insight: string;         // 洞察（1-2句）
+  timestamps: string[];    // 时间戳（1-2个）
+}
+
+/**
+ * 课堂结构化摘要
+ */
+export interface ClassSummary {
+  id: string;
+  sessionId: string;
+  overview: string;        // 课堂概要
+  takeaways: SummaryTakeaway[];  // 主要知识点
+  keyDifficulties: string[];     // 重点难点
+  structure: string[];           // 课堂结构
+  createdAt: string;
+  updatedAt: string;
+}
+
+// ==================== 个人笔记系统 ====================
+
+/**
+ * 笔记来源类型
+ */
+export type NoteSource = 'chat' | 'takeaways' | 'transcript' | 'custom';
+
+/**
+ * 笔记元数据
+ */
+export interface NoteMetadata {
+  transcript?: {
+    start: number;         // 开始时间（毫秒）
+    end?: number;          // 结束时间（毫秒）
+    segmentIndex?: number;
+    topicId?: string;
+  };
+  chat?: {
+    messageId: string;
+    role: 'user' | 'assistant';
+    timestamp?: string;
+  };
+  selectedText?: string;   // 选中的原文
+  selectionContext?: string;
+  timestampLabel?: string;
+  extra?: Record<string, unknown>;
+}
+
+/**
+ * 个人笔记
+ */
+export interface Note {
+  id: string;
+  sessionId: string;
+  studentId: string;
+  source: NoteSource;
+  sourceId?: string;       // 来源 ID（如消息 ID、片段 ID）
+  text: string;            // 笔记内容
+  metadata?: NoteMetadata;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/**
+ * 带会话信息的笔记（用于跨课程笔记管理）
+ */
+export interface NoteWithSession extends Note {
+  session: {
+    sessionId: string;
+    subject?: string;
+    topic?: string;
+    date: string;
+  } | null;
+}
+
 // ==================== 工具函数 ====================
 
 /**

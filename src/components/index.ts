@@ -15,6 +15,12 @@ export { ModelSelector } from './ModelSelector';
 export { GuidanceQuestion, GuidanceQuestionSkeleton } from './GuidanceQuestion';
 export { Citations, InlineCitation, CitationsSkeleton } from './Citations';
 
+// 精选片段与摘要组件
+export { HighlightsPanel } from './HighlightsPanel';
+export { SummaryPanel } from './SummaryPanel';
+export { NotesPanel, type EditingNote } from './NotesPanel';
+export { AudioUploader } from './AudioUploader';
+
 // 可视化组件
 export { ConfusionHeatmap, aggregateConfusionData, type ConfusionData } from './ConfusionHeatmap';
 export { ConfusionDetail, ConfusionDetailList, type ConfusionDetailData } from './ConfusionDetail';

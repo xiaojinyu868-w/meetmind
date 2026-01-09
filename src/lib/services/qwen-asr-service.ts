@@ -76,6 +76,9 @@ function getFfmpegPath(): string {
   return 'ffmpeg';
 }
 
+// 单个分块的最大时长（秒），确保 WAV 转换后 base64 不超过 15MB
+const MAX_CHUNK_DURATION_SEC = 180;  // 3分钟
+
 /**
  * 使用 ffmpeg 将音频转换为 WAV 格式
  */
@@ -109,6 +112,86 @@ async function convertToWav(audioBlob: Blob): Promise<Buffer> {
     try {
       if (fs.existsSync(inputPath)) fs.unlinkSync(inputPath);
       if (fs.existsSync(outputPath)) fs.unlinkSync(outputPath);
+    } catch (e) {
+      console.warn('[FFmpeg] Cleanup error:', e);
+    }
+  }
+}
+
+/**
+ * 获取音频时长（秒）
+ */
+function getAudioDuration(inputPath: string): number {
+  const ffmpegPath = getFfmpegPath();
+  try {
+    // 使用 ffprobe 获取时长
+    const ffprobePath = ffmpegPath.replace(/ffmpeg(\.exe)?$/, 'ffprobe$1');
+    const cmd = `"${ffprobePath}" -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 "${inputPath}"`;
+    const output = execSync(cmd, { stdio: 'pipe' }).toString().trim();
+    return parseFloat(output) || 0;
+  } catch (e) {
+    console.warn('[FFmpeg] Failed to get duration:', e);
+    return 0;
+  }
+}
+
+/**
+ * 将音频分割成多个 WAV 分块
+ */
+async function splitAudioToWavChunks(audioBlob: Blob): Promise<{ chunks: Buffer[]; durations: number[] }> {
+  const ffmpegPath = getFfmpegPath();
+  
+  const arrayBuffer = await audioBlob.arrayBuffer();
+  const inputBuffer = Buffer.from(arrayBuffer);
+  
+  const tempDir = os.tmpdir();
+  const timestamp = Date.now();
+  const inputPath = path.join(tempDir, `input_${timestamp}.webm`);
+  
+  fs.writeFileSync(inputPath, inputBuffer);
+  console.log('[FFmpeg] Input file written:', inputPath, 'size:', inputBuffer.length);
+  
+  // 获取总时长
+  const totalDuration = getAudioDuration(inputPath);
+  console.log('[FFmpeg] Total duration:', totalDuration, 'seconds');
+  
+  const chunks: Buffer[] = [];
+  const durations: number[] = [];
+  
+  try {
+    if (totalDuration <= MAX_CHUNK_DURATION_SEC) {
+      // 短音频，直接转换
+      const outputPath = path.join(tempDir, `output_${timestamp}.wav`);
+      const cmd = `"${ffmpegPath}" -y -i "${inputPath}" -ar 16000 -ac 1 -sample_fmt s16 "${outputPath}"`;
+      execSync(cmd, { stdio: 'pipe' });
+      chunks.push(fs.readFileSync(outputPath));
+      durations.push(totalDuration);
+      fs.unlinkSync(outputPath);
+    } else {
+      // 长音频，分块处理
+      const numChunks = Math.ceil(totalDuration / MAX_CHUNK_DURATION_SEC);
+      console.log('[FFmpeg] Splitting into', numChunks, 'chunks');
+      
+      for (let i = 0; i < numChunks; i++) {
+        const startTime = i * MAX_CHUNK_DURATION_SEC;
+        const chunkDuration = Math.min(MAX_CHUNK_DURATION_SEC, totalDuration - startTime);
+        const outputPath = path.join(tempDir, `output_${timestamp}_${i}.wav`);
+        
+        const cmd = `"${ffmpegPath}" -y -ss ${startTime} -t ${chunkDuration} -i "${inputPath}" -ar 16000 -ac 1 -sample_fmt s16 "${outputPath}"`;
+        console.log('[FFmpeg] Chunk', i + 1, '/', numChunks, '- start:', startTime, 'duration:', chunkDuration);
+        execSync(cmd, { stdio: 'pipe' });
+        
+        chunks.push(fs.readFileSync(outputPath));
+        durations.push(chunkDuration);
+        fs.unlinkSync(outputPath);
+      }
+    }
+    
+    return { chunks, durations };
+    
+  } finally {
+    try {
+      if (fs.existsSync(inputPath)) fs.unlinkSync(inputPath);
     } catch (e) {
       console.warn('[FFmpeg] Cleanup error:', e);
     }
@@ -319,11 +402,79 @@ async function waitForTask(
 }
 
 /**
+ * 转录单个 WAV 分块
+ */
+async function transcribeWavChunk(
+  wavBuffer: Buffer,
+  apiKey: string,
+  language: string
+): Promise<{ success: boolean; sentences: ASRSentence[]; text: string; error?: string }> {
+  const audioBase64 = wavBuffer.toString('base64');
+  
+  const requestBody = {
+    model: 'qwen3-asr-flash',
+    input: {
+      audio: [
+        {
+          format: 'wav',
+          content: audioBase64,
+        },
+      ],
+    },
+    parameters: {
+      language: language,
+      enable_punctuation: true,
+    },
+  };
+
+  const response = await fetch(ASR_TRANSCRIPTION_URL, {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${apiKey}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(requestBody),
+  });
+
+  const responseText = await response.text();
+
+  if (!response.ok) {
+    return { success: false, sentences: [], text: '', error: responseText };
+  }
+
+  const data = JSON.parse(responseText);
+  const sentences: ASRSentence[] = [];
+  const resultSentences = data.output?.results?.[0]?.sentences || data.sentences || [];
+  const overallText = data.output?.results?.[0]?.text || data.text || '';
+
+  if (Array.isArray(resultSentences) && resultSentences.length > 0) {
+    for (let i = 0; i < resultSentences.length; i++) {
+      const s = resultSentences[i];
+      sentences.push({
+        id: `seg-${i}`,
+        text: s.text || '',
+        beginTime: s.begin_time ?? s.beginTime ?? s.start_time ?? 0,
+        endTime: s.end_time ?? s.endTime ?? 0,
+        confidence: s.confidence ?? 0.95,
+      });
+    }
+  } else if (overallText) {
+    sentences.push({ id: 'seg-0', text: overallText, beginTime: 0, endTime: 0 });
+  }
+
+  return {
+    success: true,
+    sentences,
+    text: sentences.map(s => s.text).join(' '),
+  };
+}
+
+/**
  * 使用 DashScope ASR 进行转写
  * 
- * 自动选择模式：
- * - 短音频（≤5分钟）：qwen3-asr-flash 同步
- * - 长音频或指定异步：qwen3-asr-flash-filetrans 异步
+ * 模式选择：
+ * - 默认使用 qwen3-asr-flash 同步模式（自动分块处理长音频）
+ * - 如果指定 async=true 且提供 fileUrl，使用异步模式
  */
 export async function transcribeAudio(
   audioBlob: Blob,
@@ -336,14 +487,8 @@ export async function transcribeAudio(
   console.log('[QwenASR] Audio blob:', { size: audioBlob.size, type: audioBlob.type });
   console.log('[QwenASR] Options:', { useAsync, hasFileUrl: !!fileUrl });
 
-  // 估算音频时长（粗略：webm 约 8kbps = 1KB/s）
-  const estimatedDurationSec = audioBlob.size / 1000;
-  const isLongAudio = estimatedDurationSec > 300;  // > 5分钟
-  
-  console.log('[QwenASR] Estimated duration:', estimatedDurationSec, 'seconds, isLong:', isLongAudio);
-
-  // 如果指定了异步模式或是长音频，且提供了 fileUrl，使用异步
-  if ((useAsync || isLongAudio) && fileUrl) {
+  // 如果明确指定异步模式且提供了 fileUrl，使用异步
+  if (useAsync && fileUrl) {
     console.log('[QwenASR] Using async mode with fileUrl');
     onProgress?.('提交转录任务...');
     
@@ -363,15 +508,19 @@ export async function transcribeAudio(
     return waitForTask(submitResult.taskId, apiKey, onProgress);
   }
 
-  // 同步模式：使用 qwen3-asr-flash
+  // 同步模式：使用 qwen3-asr-flash（分块处理长音频）
   try {
-    // 转换为 WAV 格式 (16k/mono)
-    let wavBuffer: Buffer;
+    console.log('[QwenASR] Converting and splitting audio...');
+    onProgress?.('转换音频格式...');
+    
+    let chunks: Buffer[];
+    let durations: number[];
+    
     try {
-      console.log('[QwenASR] Converting audio to WAV...');
-      onProgress?.('转换音频格式...');
-      wavBuffer = await convertToWav(audioBlob);
-      console.log('[QwenASR] WAV conversion done, size:', wavBuffer.length);
+      const result = await splitAudioToWavChunks(audioBlob);
+      chunks = result.chunks;
+      durations = result.durations;
+      console.log('[QwenASR] Split into', chunks.length, 'chunks');
     } catch (error) {
       console.error('[QwenASR] Audio conversion failed:', error);
       return {
@@ -382,75 +531,42 @@ export async function transcribeAudio(
       };
     }
 
-    // Base64 编码
-    const audioBase64 = wavBuffer.toString('base64');
-    
-    onProgress?.('正在转录...');
+    // 逐块转录
+    const allSentences: ASRSentence[] = [];
+    let timeOffset = 0;  // 累计时间偏移（毫秒）
+    let sentenceIndex = 0;
 
-    const requestBody = {
-      model: 'qwen3-asr-flash',
-      input: {
-        audio: [
-          {
-            format: 'wav',
-            content: audioBase64,
-          },
-        ],
-      },
-      parameters: {
-        language: language,
-        enable_punctuation: true,
-      },
-    };
+    for (let i = 0; i < chunks.length; i++) {
+      const chunk = chunks[i];
+      const chunkDuration = durations[i] * 1000;  // 转换为毫秒
+      
+      onProgress?.(`正在转录... (${i + 1}/${chunks.length})`);
+      console.log('[QwenASR] Transcribing chunk', i + 1, '/', chunks.length, 'size:', chunk.length);
 
-    console.log('[QwenASR] Sending request to:', ASR_TRANSCRIPTION_URL);
+      const result = await transcribeWavChunk(chunk, apiKey, language);
+      
+      if (!result.success) {
+        console.error('[QwenASR] Chunk', i + 1, 'failed:', result.error);
+        // 继续处理其他分块，不中断
+        timeOffset += chunkDuration;
+        continue;
+      }
 
-    const response = await fetch(ASR_TRANSCRIPTION_URL, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${apiKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(requestBody),
-    });
-
-    console.log('[QwenASR] Response status:', response.status);
-
-    const responseText = await response.text();
-    console.log('[QwenASR] Response:', responseText.substring(0, 500));
-
-    if (!response.ok) {
-      return {
-        success: false,
-        sentences: [],
-        totalDuration: 0,
-        error: responseText,
-      };
-    }
-
-    const data = JSON.parse(responseText);
-
-    // 解析结果：首选 sentences，其次 text
-    const sentences: ASRSentence[] = [];
-    const resultSentences = data.output?.results?.[0]?.sentences || data.sentences || [];
-    const overallText = data.output?.results?.[0]?.text || data.text || '';
-
-    if (Array.isArray(resultSentences) && resultSentences.length > 0) {
-      for (let i = 0; i < resultSentences.length; i++) {
-        const s = resultSentences[i];
-        sentences.push({
-          id: `seg-${i}`,
-          text: s.text || '',
-          beginTime: s.begin_time ?? s.beginTime ?? s.start_time ?? 0,
-          endTime: s.end_time ?? s.endTime ?? 0,
-          confidence: s.confidence ?? 0.95,
+      // 调整时间戳并添加到结果
+      for (const s of result.sentences) {
+        allSentences.push({
+          id: `seg-${sentenceIndex++}`,
+          text: s.text,
+          beginTime: s.beginTime + timeOffset,
+          endTime: s.endTime + timeOffset,
+          confidence: s.confidence,
         });
       }
-    } else if (overallText) {
-      sentences.push({ id: 'seg-0', text: overallText, beginTime: 0, endTime: 0 });
+
+      timeOffset += chunkDuration;
     }
 
-    if (sentences.length === 0) {
+    if (allSentences.length === 0) {
       return {
         success: false,
         sentences: [],
@@ -461,9 +577,9 @@ export async function transcribeAudio(
 
     return {
       success: true,
-      sentences,
-      totalDuration: sentences[sentences.length - 1]?.endTime || 0,
-      text: sentences.map(s => s.text).join(' '),
+      sentences: allSentences,
+      totalDuration: allSentences[allSentences.length - 1]?.endTime || timeOffset,
+      text: allSentences.map(s => s.text).join(' '),
     };
 
   } catch (error) {

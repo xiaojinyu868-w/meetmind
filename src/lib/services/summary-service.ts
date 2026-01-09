@@ -1,0 +1,306 @@
+/**
+ * 课堂摘要服务 (Summary)
+ * 
+ * 自动生成课堂结构化摘要
+ * 包含：主要知识点、重点难点、课堂结构
+ */
+
+import { chat, type ChatMessage } from './llm-service';
+import type { TranscriptSegment } from '@/lib/db';
+import type { ClassSummary, SummaryTakeaway } from '@/types';
+
+// ============ 配置常量 ============
+
+const DEFAULT_MODEL = 'qwen3-max';
+const MIN_TAKEAWAYS = 4;
+const MAX_TAKEAWAYS = 6;
+
+// ============ 类型定义 ============
+
+export interface GenerateSummaryOptions {
+  sessionInfo?: {
+    subject?: string;
+    topic?: string;
+    teacher?: string;
+  };
+  model?: string;
+}
+
+interface RawTakeaway {
+  label: string;
+  insight: string;
+  timestamps: string[];
+}
+
+interface RawSummary {
+  overview: string;
+  takeaways: RawTakeaway[];
+  keyDifficulties: string[];
+  structure: string[];
+}
+
+// ============ Prompt 构建 ============
+
+/**
+ * 格式化时间戳 (毫秒 -> MM:SS)
+ */
+function formatTimestamp(ms: number): string {
+  const totalSeconds = Math.floor(ms / 1000);
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  return `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+}
+
+/**
+ * 将转录片段格式化为带时间戳的文本
+ */
+function formatTranscriptWithTimestamps(segments: TranscriptSegment[]): string {
+  return segments
+    .map(seg => `[${formatTimestamp(seg.startMs)}] ${seg.text}`)
+    .join('\n');
+}
+
+/**
+ * 构建课堂信息块
+ */
+function buildSessionInfoBlock(sessionInfo?: GenerateSummaryOptions['sessionInfo']): string {
+  if (!sessionInfo) return '';
+  
+  const parts: string[] = [];
+  if (sessionInfo.subject) parts.push(`学科: ${sessionInfo.subject}`);
+  if (sessionInfo.topic) parts.push(`主题: ${sessionInfo.topic}`);
+  if (sessionInfo.teacher) parts.push(`教师: ${sessionInfo.teacher}`);
+  
+  return parts.length > 0 ? parts.join('\n') : '';
+}
+
+/**
+ * 构建摘要生成 Prompt
+ */
+function buildSummaryPrompt(
+  segments: TranscriptSegment[],
+  options: GenerateSummaryOptions
+): string {
+  const transcriptText = formatTranscriptWithTimestamps(segments);
+  const sessionInfoBlock = buildSessionInfoBlock(options.sessionInfo);
+
+  return `<task>
+<role>你是一位资深教育专家，正在为家长整理今日课堂摘要。</role>
+<context>
+${sessionInfoBlock}
+这是一段课堂录音的完整转录文本。
+</context>
+<goal>生成一份结构化的课堂摘要，帮助家长快速了解"今天讲了什么"。</goal>
+<instructions>
+  <step name="课堂概要">
+    <description>用2-3句话概括本节课的主要内容和教学目标。</description>
+  </step>
+  <step name="主要知识点">
+    <description>提取 ${MIN_TAKEAWAYS}-${MAX_TAKEAWAYS} 个核心知识点。</description>
+    <format>
+      <item>label: 知识点标题（不超过10个字）</item>
+      <item>insight: 简明扼要的说明（1-2句话）</item>
+      <item>timestamps: 相关时间戳（1-2个，MM:SS格式）</item>
+    </format>
+    <criteria>
+      <item>只使用转录中明确提到的内容，不要推测</item>
+      <item>每个知识点应该独立，不重叠</item>
+      <item>优先选择老师重点强调的内容</item>
+    </criteria>
+  </step>
+  <step name="重点难点">
+    <description>列出2-4个本节课的重点或难点。</description>
+    <criteria>
+      <item>老师反复强调的内容</item>
+      <item>学生可能容易混淆的概念</item>
+      <item>需要课后复习巩固的内容</item>
+    </criteria>
+  </step>
+  <step name="课堂结构">
+    <description>简要描述课堂的主要环节（3-5个）。</description>
+    <example>["导入新课", "概念讲解", "例题分析", "课堂练习", "总结回顾"]</example>
+  </step>
+</instructions>
+<qualityControl>
+  <item>语言简洁明了，适合家长阅读</item>
+  <item>所有内容必须基于转录文本，不能编造</item>
+  <item>时间戳必须准确对应转录内容</item>
+</qualityControl>
+<outputFormat>
+返回严格的 JSON 对象，格式如下：
+{
+  "overview": "课堂概要文本",
+  "takeaways": [
+    {
+      "label": "知识点标题",
+      "insight": "简明说明",
+      "timestamps": ["MM:SS"]
+    }
+  ],
+  "keyDifficulties": ["难点1", "难点2"],
+  "structure": ["环节1", "环节2", "环节3"]
+}
+不要包含任何 markdown 标记或其他说明文字。
+</outputFormat>
+<transcript><![CDATA[
+${transcriptText}
+]]></transcript>
+</task>`;
+}
+
+/**
+ * 构建家长友好版摘要 Prompt
+ */
+function buildParentFriendlyPrompt(
+  segments: TranscriptSegment[],
+  options: GenerateSummaryOptions
+): string {
+  const transcriptText = formatTranscriptWithTimestamps(segments);
+  const sessionInfoBlock = buildSessionInfoBlock(options.sessionInfo);
+
+  return `<task>
+<role>你是一位善于与家长沟通的班主任老师。</role>
+<context>
+${sessionInfoBlock}
+</context>
+<goal>用家长能理解的语言，总结今天的课堂内容。</goal>
+<instructions>
+  <item>避免使用过于专业的术语</item>
+  <item>重点说明孩子学到了什么、需要注意什么</item>
+  <item>如果有作业或复习建议，也要提及</item>
+  <item>语气亲切、专业</item>
+</instructions>
+<outputFormat>
+返回一段200-300字的文字摘要，可以分段。
+</outputFormat>
+<transcript><![CDATA[
+${transcriptText}
+]]></transcript>
+</task>`;
+}
+
+// ============ 核心处理逻辑 ============
+
+/**
+ * 解析 AI 响应中的 JSON
+ */
+function parseJsonResponse<T>(content: string): T | null {
+  try {
+    return JSON.parse(content);
+  } catch {
+    // 尝试提取 JSON 部分
+    const jsonMatch = content.match(/\{[\s\S]*\}/);
+    if (jsonMatch) {
+      try {
+        return JSON.parse(jsonMatch[0]);
+      } catch {
+        return null;
+      }
+    }
+    return null;
+  }
+}
+
+/**
+ * 验证并修复 takeaway 格式
+ */
+function validateTakeaways(takeaways: RawTakeaway[]): SummaryTakeaway[] {
+  return takeaways
+    .filter(t => t.label && t.insight)
+    .map(t => ({
+      label: t.label.slice(0, 20),
+      insight: t.insight,
+      timestamps: Array.isArray(t.timestamps) ? t.timestamps.slice(0, 2) : []
+    }))
+    .slice(0, MAX_TAKEAWAYS);
+}
+
+// ============ 主要导出函数 ============
+
+/**
+ * 生成课堂结构化摘要
+ */
+export async function generateClassSummary(
+  sessionId: string,
+  segments: TranscriptSegment[],
+  options: GenerateSummaryOptions = {}
+): Promise<ClassSummary> {
+  if (segments.length === 0) {
+    throw new Error('转录内容为空');
+  }
+  
+  const model = options.model ?? DEFAULT_MODEL;
+  const prompt = buildSummaryPrompt(segments, options);
+  const messages: ChatMessage[] = [{ role: 'user', content: prompt }];
+  
+  const response = await chat(messages, model, { temperature: 0.3, maxTokens: 2000 });
+  const rawSummary = parseJsonResponse<RawSummary>(response.content);
+  
+  if (!rawSummary) {
+    throw new Error('无法解析摘要响应');
+  }
+  
+  const now = new Date().toISOString();
+  
+  return {
+    id: crypto.randomUUID(),
+    sessionId,
+    overview: rawSummary.overview || '暂无概要',
+    takeaways: validateTakeaways(rawSummary.takeaways || []),
+    keyDifficulties: rawSummary.keyDifficulties || [],
+    structure: rawSummary.structure || [],
+    createdAt: now,
+    updatedAt: now
+  };
+}
+
+/**
+ * 生成家长友好版摘要（纯文本）
+ */
+export async function generateParentSummary(
+  segments: TranscriptSegment[],
+  options: GenerateSummaryOptions = {}
+): Promise<string> {
+  if (segments.length === 0) {
+    return '暂无课堂内容';
+  }
+  
+  const model = options.model ?? DEFAULT_MODEL;
+  const prompt = buildParentFriendlyPrompt(segments, options);
+  const messages: ChatMessage[] = [{ role: 'user', content: prompt }];
+  
+  const response = await chat(messages, model, { temperature: 0.5, maxTokens: 1000 });
+  
+  return response.content.trim();
+}
+
+/**
+ * 从现有摘要生成简短版本（用于卡片展示）
+ */
+export function generateShortSummary(summary: ClassSummary): string {
+  const parts: string[] = [];
+  
+  if (summary.overview) {
+    parts.push(summary.overview);
+  }
+  
+  if (summary.takeaways.length > 0) {
+    const keyPoints = summary.takeaways
+      .slice(0, 3)
+      .map(t => `• ${t.label}`)
+      .join('\n');
+    parts.push(`\n主要知识点：\n${keyPoints}`);
+  }
+  
+  if (summary.keyDifficulties.length > 0) {
+    parts.push(`\n重点难点：${summary.keyDifficulties.slice(0, 2).join('、')}`);
+  }
+  
+  return parts.join('\n');
+}
+
+export const summaryService = {
+  generateSummary: generateClassSummary,
+  generateParentSummary,
+  generateShortSummary
+};

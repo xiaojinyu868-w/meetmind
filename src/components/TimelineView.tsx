@@ -23,7 +23,7 @@ export function TimelineView({
   const unresolvedCount = timeline.breakpoints.filter(bp => !bp.resolved).length;
 
   return (
-    <div className="flex-1 flex flex-col overflow-hidden">
+    <div className="h-full flex flex-col overflow-hidden">
       {/* 头部统计 */}
       <div className="px-4 py-3 border-b border-gray-100">
         <div className="flex items-center justify-between mb-3">
@@ -92,33 +92,45 @@ export function TimelineView({
         </div>
       )}
 
-      {/* 转录列表 */}
-      <div className="flex-1 overflow-y-auto">
+      {/* 转录列表 - 紧凑布局 */}
+      <div className="flex-1 min-h-0 overflow-y-auto">
         <div className="px-4 py-3">
           <h3 className="text-xs font-medium text-gray-400 uppercase tracking-wider mb-3">
             课堂转录
           </h3>
-          <div className="space-y-1">
-            {timeline.segments.map((segment) => {
+          <div className="space-y-0.5">
+            {timeline.segments.map((segment, index) => {
               const isActive = currentTime >= segment.startMs && currentTime < segment.endMs;
               const breakpoint = timeline.breakpoints.find(
                 (bp) => bp.timestamp >= segment.startMs && bp.timestamp < segment.endMs
               );
+              
+              // 检查是否与上一个片段时间相近（3秒内），用于合并显示时间戳
+              const prevSegment = index > 0 ? timeline.segments[index - 1] : null;
+              const showTimestamp = !prevSegment || (segment.startMs - prevSegment.startMs > 3000);
 
               return (
                 <div
                   key={segment.id}
                   onClick={() => onTimeClick(segment.startMs)}
-                  className={`timeline-item ${isActive ? 'active' : ''}`}
+                  className={`relative py-1 px-2 rounded cursor-pointer transition-colors ${
+                    isActive 
+                      ? 'bg-rose-50 text-rose-900' 
+                      : 'hover:bg-gray-50 text-gray-700'
+                  }`}
                 >
                   {breakpoint && (
-                    <div className={`breakpoint-marker ${breakpoint.resolved ? 'resolved' : ''}`} />
+                    <div className={`absolute left-0 top-1/2 -translate-y-1/2 w-1.5 h-1.5 rounded-full ${
+                      breakpoint.resolved ? 'bg-emerald-400' : 'bg-rose-500'
+                    }`} />
                   )}
-                  <div className="flex items-start gap-3">
-                    <span className="time w-12 text-right">
-                      {formatTimestamp(segment.startMs)}
-                    </span>
-                    <p className="text flex-1">
+                  <div className="flex items-baseline gap-2 pl-3">
+                    {showTimestamp && (
+                      <span className="flex-shrink-0 text-xs font-mono text-gray-400 w-10">
+                        {formatTimestamp(segment.startMs)}
+                      </span>
+                    )}
+                    <p className={`text-sm leading-relaxed ${!showTimestamp ? 'ml-12' : ''}`}>
                       {segment.text}
                     </p>
                   </div>

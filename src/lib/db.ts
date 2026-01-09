@@ -50,6 +50,79 @@ export interface Preference {
   value: any;
 }
 
+/** AI 精选片段 */
+export interface HighlightTopic {
+  id?: number;
+  topicId: string;           // UUID
+  sessionId: string;
+  title: string;
+  description?: string;
+  importance: 'high' | 'medium' | 'low';
+  duration: number;          // 毫秒
+  segments: Array<{
+    start: number;
+    end: number;
+    text: string;
+    startSegmentIdx?: number;
+    endSegmentIdx?: number;
+    confidence?: number;
+  }>;
+  keywords?: string[];
+  quote?: {
+    timestamp: string;
+    text: string;
+  };
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+/** 课堂摘要 */
+export interface ClassSummary {
+  id?: number;
+  summaryId: string;         // UUID
+  sessionId: string;
+  overview: string;
+  takeaways: Array<{
+    label: string;
+    insight: string;
+    timestamps: string[];
+  }>;
+  keyDifficulties: string[];
+  structure: string[];
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+/** 个人笔记 */
+export interface Note {
+  id?: number;
+  noteId: string;            // UUID
+  sessionId: string;
+  studentId: string;
+  source: 'chat' | 'takeaways' | 'transcript' | 'custom';
+  sourceId?: string;
+  text: string;
+  metadata?: {
+    transcript?: {
+      start: number;
+      end?: number;
+      segmentIndex?: number;
+      topicId?: string;
+    };
+    chat?: {
+      messageId: string;
+      role: 'user' | 'assistant';
+      timestamp?: string;
+    };
+    selectedText?: string;
+    selectionContext?: string;
+    timestampLabel?: string;
+    extra?: Record<string, unknown>;
+  };
+  createdAt: Date;
+  updatedAt: Date;
+}
+
 // ============ 数据库定义 ============
 
 class MeetMindDB extends Dexie {
@@ -57,14 +130,30 @@ class MeetMindDB extends Dexie {
   anchors!: Table<Anchor>;
   transcripts!: Table<TranscriptSegment>;
   preferences!: Table<Preference>;
+  highlightTopics!: Table<HighlightTopic>;
+  classSummaries!: Table<ClassSummary>;
+  notes!: Table<Note>;
 
   constructor() {
     super('MeetMindDB');
+    
+    // 版本 1: 原有表
     this.version(1).stores({
       audioSessions: '++id, sessionId, status, createdAt',
       anchors: '++id, sessionId, timestamp, status, type',
       transcripts: '++id, sessionId, startMs, isFinal',
       preferences: 'key'
+    });
+    
+    // 版本 2: 添加精选片段、摘要、笔记表
+    this.version(2).stores({
+      audioSessions: '++id, sessionId, status, createdAt',
+      anchors: '++id, sessionId, timestamp, status, type',
+      transcripts: '++id, sessionId, startMs, isFinal',
+      preferences: 'key',
+      highlightTopics: '++id, topicId, sessionId, importance, createdAt',
+      classSummaries: '++id, summaryId, sessionId, createdAt',
+      notes: '++id, noteId, sessionId, studentId, source, createdAt'
     });
   }
 }
@@ -224,4 +313,181 @@ export async function getStorageUsage(): Promise<{ sessions: number; anchors: nu
     db.transcripts.count()
   ]);
   return { sessions, anchors, transcripts };
+}
+
+// ============ 精选片段 (Highlight Topics) 操作 ============
+
+/** 保存精选片段 */
+export async function saveHighlightTopics(
+  sessionId: string,
+  topics: Omit<HighlightTopic, 'id' | 'createdAt' | 'updatedAt'>[]
+): Promise<number[]> {
+  const now = new Date();
+  const records = topics.map(t => ({
+    ...t,
+    sessionId,
+    createdAt: now,
+    updatedAt: now
+  }));
+  return db.highlightTopics.bulkAdd(records);
+}
+
+/** 获取会话的精选片段 */
+export async function getSessionHighlightTopics(sessionId: string): Promise<HighlightTopic[]> {
+  return db.highlightTopics
+    .where('sessionId')
+    .equals(sessionId)
+    .sortBy('createdAt');
+}
+
+/** 删除会话的所有精选片段 */
+export async function deleteSessionHighlightTopics(sessionId: string): Promise<number> {
+  return db.highlightTopics
+    .where('sessionId')
+    .equals(sessionId)
+    .delete();
+}
+
+/** 更新精选片段 */
+export async function updateHighlightTopic(
+  topicId: string,
+  updates: Partial<Omit<HighlightTopic, 'id' | 'topicId' | 'sessionId' | 'createdAt'>>
+): Promise<number> {
+  return db.highlightTopics
+    .where('topicId')
+    .equals(topicId)
+    .modify({ ...updates, updatedAt: new Date() });
+}
+
+// ============ 课堂摘要 (Class Summary) 操作 ============
+
+/** 保存课堂摘要 */
+export async function saveClassSummary(
+  summary: Omit<ClassSummary, 'id' | 'createdAt' | 'updatedAt'>
+): Promise<number> {
+  const now = new Date();
+  return db.classSummaries.add({
+    ...summary,
+    createdAt: now,
+    updatedAt: now
+  });
+}
+
+/** 获取会话的课堂摘要 */
+export async function getSessionSummary(sessionId: string): Promise<ClassSummary | undefined> {
+  return db.classSummaries
+    .where('sessionId')
+    .equals(sessionId)
+    .first();
+}
+
+/** 删除会话的摘要 */
+export async function deleteSessionSummary(sessionId: string): Promise<number> {
+  return db.classSummaries
+    .where('sessionId')
+    .equals(sessionId)
+    .delete();
+}
+
+/** 更新课堂摘要 */
+export async function updateClassSummary(
+  summaryId: string,
+  updates: Partial<Omit<ClassSummary, 'id' | 'summaryId' | 'sessionId' | 'createdAt'>>
+): Promise<number> {
+  return db.classSummaries
+    .where('summaryId')
+    .equals(summaryId)
+    .modify({ ...updates, updatedAt: new Date() });
+}
+
+// ============ 个人笔记 (Notes) 操作 ============
+
+/** 添加笔记 */
+export async function addNote(
+  note: Omit<Note, 'id' | 'createdAt' | 'updatedAt'>
+): Promise<number> {
+  const now = new Date();
+  return db.notes.add({
+    ...note,
+    createdAt: now,
+    updatedAt: now
+  });
+}
+
+/** 获取会话的所有笔记 */
+export async function getSessionNotes(sessionId: string): Promise<Note[]> {
+  return db.notes
+    .where('sessionId')
+    .equals(sessionId)
+    .sortBy('createdAt');
+}
+
+/** 获取学生的所有笔记 */
+export async function getStudentNotes(studentId: string): Promise<Note[]> {
+  return db.notes
+    .where('studentId')
+    .equals(studentId)
+    .reverse()
+    .sortBy('createdAt');
+}
+
+/** 获取所有笔记（带分页） */
+export async function getAllNotes(options: {
+  offset?: number;
+  limit?: number;
+  studentId?: string;
+} = {}): Promise<Note[]> {
+  let query = db.notes.orderBy('createdAt').reverse();
+  
+  if (options.studentId) {
+    query = db.notes.where('studentId').equals(options.studentId).reverse();
+  }
+  
+  if (options.offset) {
+    query = query.offset(options.offset);
+  }
+  
+  if (options.limit) {
+    query = query.limit(options.limit);
+  }
+  
+  return query.toArray();
+}
+
+/** 更新笔记 */
+export async function updateNote(
+  noteId: string,
+  updates: Partial<Omit<Note, 'id' | 'noteId' | 'sessionId' | 'studentId' | 'createdAt'>>
+): Promise<number> {
+  return db.notes
+    .where('noteId')
+    .equals(noteId)
+    .modify({ ...updates, updatedAt: new Date() });
+}
+
+/** 删除笔记 */
+export async function deleteNote(noteId: string): Promise<number> {
+  return db.notes
+    .where('noteId')
+    .equals(noteId)
+    .delete();
+}
+
+/** 删除会话的所有笔记 */
+export async function deleteSessionNotes(sessionId: string): Promise<number> {
+  return db.notes
+    .where('sessionId')
+    .equals(sessionId)
+    .delete();
+}
+
+/** 按来源获取笔记 */
+export async function getNotesBySource(
+  sessionId: string,
+  source: Note['source']
+): Promise<Note[]> {
+  return db.notes
+    .where(['sessionId', 'source'])
+    .equals([sessionId, source])
+    .sortBy('createdAt');
 }

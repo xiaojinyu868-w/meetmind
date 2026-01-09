@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { parentService, type ParentDailyReport, type ConfusionPoint } from '@/lib/services/parent-service';
 import { memoryService, type ClassTimeline } from '@/lib/services/memory-service';
+import type { ClassSummary } from '@/types';
 
 export default function ParentApp() {
   const [report, setReport] = useState<ParentDailyReport | null>(null);
@@ -12,6 +13,11 @@ export default function ParentApp() {
   const [selectedPoint, setSelectedPoint] = useState<ConfusionPoint | null>(null);
   const [showScript, setShowScript] = useState(false);
   const [activeTab, setActiveTab] = useState<'overview' | 'confusion' | 'tasks'>('overview');
+  
+  // 新增：课堂摘要状态
+  const [classSummaries, setClassSummaries] = useState<ClassSummary[]>([]);
+  const [isLoadingSummary, setIsLoadingSummary] = useState(false);
+  const [expandedSummary, setExpandedSummary] = useState<string | null>(null);
 
   // 加载日报
   useEffect(() => {
@@ -95,6 +101,39 @@ export default function ParentApp() {
 
   // 计算完成率
   const completionRate = report ? parentService.getCompletionRate(report) : 0;
+
+  // 生成课堂摘要
+  const generateSummaryForSession = async (sessionId: string, segments: Array<{ text: string; startMs: number; endMs: number }>, subject: string) => {
+    setIsLoadingSummary(true);
+    try {
+      const response = await fetch('/api/generate-summary', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          sessionId,
+          transcript: segments,
+          sessionInfo: { subject },
+          format: 'structured'
+        })
+      });
+      
+      const data = await response.json();
+      if (data.success && data.summary) {
+        const newSummary: ClassSummary = {
+          ...data.summary,
+          sessionId,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString()
+        };
+        setClassSummaries(prev => [...prev.filter(s => s.sessionId !== sessionId), newSummary]);
+        setExpandedSummary(sessionId);
+      }
+    } catch (err) {
+      console.error('生成摘要失败:', err);
+    } finally {
+      setIsLoadingSummary(false);
+    }
+  };
 
   // 格式化时间
   const formatTime = (ms: number): string => {
@@ -228,6 +267,115 @@ export default function ParentApp() {
         {/* 概览标签页 */}
         {activeTab === 'overview' && (
           <div className="space-y-4">
+            {/* 今日课堂概要卡片 */}
+            <div className="bg-white rounded-2xl shadow-sm overflow-hidden">
+              <div className="p-5 border-b border-gray-100">
+                <div className="flex items-center gap-3">
+                  <div className="w-12 h-12 bg-gradient-to-br from-blue-400 to-indigo-500 rounded-xl flex items-center justify-center shadow-lg shadow-blue-500/25">
+                    <span className="text-2xl">📝</span>
+                  </div>
+                  <div>
+                    <h3 className="font-bold text-gray-900">今日课堂概要</h3>
+                    <p className="text-sm text-gray-500">AI 智能总结课堂内容</p>
+                  </div>
+                </div>
+              </div>
+              
+              <div className="divide-y divide-gray-100">
+                {/* 数学课概要 */}
+                <div className="p-4">
+                  <button
+                    onClick={() => {
+                      if (classSummaries.find(s => s.sessionId === 'demo-session')) {
+                        setExpandedSummary(expandedSummary === 'demo-session' ? null : 'demo-session');
+                      } else {
+                        // 生成摘要
+                        generateSummaryForSession('demo-session', [
+                          { text: '今天我们来学习二次函数的图像', startMs: 0, endMs: 15000 },
+                          { text: '二次函数的一般形式是 y = ax² + bx + c', startMs: 15000, endMs: 35000 },
+                          { text: '其中 a 不等于 0，a 的正负决定了抛物线的开口方向', startMs: 35000, endMs: 60000 },
+                          { text: '当 a 大于 0 时，抛物线开口向上', startMs: 60000, endMs: 85000 },
+                          { text: '顶点坐标公式是 (-b/2a, (4ac-b²)/4a)', startMs: 110000, endMs: 150000 },
+                          { text: '这个公式很重要，大家要记住', startMs: 150000, endMs: 170000 },
+                        ], '数学');
+                      }
+                    }}
+                    className="w-full flex items-center justify-between"
+                  >
+                    <div className="flex items-center gap-3">
+                      <span className="px-2 py-1 bg-blue-100 text-blue-700 text-xs rounded-lg font-medium">数学</span>
+                      <span className="text-gray-900 font-medium">二次函数的图像与性质</span>
+                    </div>
+                    {isLoadingSummary ? (
+                      <div className="w-5 h-5 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
+                    ) : classSummaries.find(s => s.sessionId === 'demo-session') ? (
+                      <svg 
+                        className={`w-5 h-5 text-gray-400 transition-transform ${expandedSummary === 'demo-session' ? 'rotate-180' : ''}`}
+                        fill="none" 
+                        stroke="currentColor" 
+                        viewBox="0 0 24 24"
+                      >
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                      </svg>
+                    ) : (
+                      <span className="text-xs text-blue-600 font-medium">点击生成</span>
+                    )}
+                  </button>
+                  
+                  {/* 展开的摘要内容 */}
+                  {expandedSummary === 'demo-session' && classSummaries.find(s => s.sessionId === 'demo-session') && (
+                    <div className="mt-4 space-y-3 animate-in slide-in-from-top-2 duration-200">
+                      {(() => {
+                        const summary = classSummaries.find(s => s.sessionId === 'demo-session')!;
+                        return (
+                          <>
+                            {/* 课堂概要 */}
+                            <div className="bg-blue-50 rounded-xl p-4">
+                              <p className="text-sm text-blue-800">{summary.overview}</p>
+                            </div>
+                            
+                            {/* 主要知识点 */}
+                            <div>
+                              <h4 className="text-sm font-medium text-gray-700 mb-2">📚 主要知识点</h4>
+                              <div className="space-y-2">
+                                {summary.takeaways.map((takeaway, idx) => (
+                                  <div key={idx} className="bg-gray-50 rounded-lg p-3">
+                                    <div className="flex items-start gap-2">
+                                      <span className="flex-shrink-0 w-5 h-5 bg-green-100 text-green-600 text-xs rounded-full flex items-center justify-center font-medium">
+                                        {idx + 1}
+                                      </span>
+                                      <div>
+                                        <p className="text-sm font-medium text-gray-900">{takeaway.label}</p>
+                                        <p className="text-xs text-gray-600 mt-0.5">{takeaway.insight}</p>
+                                      </div>
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                            
+                            {/* 重点难点 */}
+                            {summary.keyDifficulties.length > 0 && (
+                              <div>
+                                <h4 className="text-sm font-medium text-gray-700 mb-2">⚠️ 重点难点</h4>
+                                <div className="flex flex-wrap gap-2">
+                                  {summary.keyDifficulties.map((diff, idx) => (
+                                    <span key={idx} className="px-3 py-1 bg-orange-100 text-orange-700 text-xs rounded-full">
+                                      {diff}
+                                    </span>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+                          </>
+                        );
+                      })()}
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+            
             {/* 陪学脚本 */}
             <div className="bg-white rounded-2xl shadow-sm overflow-hidden">
               <button
