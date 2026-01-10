@@ -7,22 +7,28 @@ import { AITutor } from '@/components/AITutor';
 import { ActionList } from '@/components/ActionList';
 import { Header } from '@/components/Header';
 import { ServiceStatus, DegradedModeBanner } from '@/components/ServiceStatus';
-import { AIChat } from '@/components/AIChat';
+
 import { WaveformPlayer, type WaveformPlayerRef, type WaveformAnchor } from '@/components/WaveformPlayer';
 import { HighlightsPanel } from '@/components/HighlightsPanel';
 import { SummaryPanel } from '@/components/SummaryPanel';
 import { NotesPanel } from '@/components/NotesPanel';
 import { AudioUploader } from '@/components/AudioUploader';
+import { AnchorDetailPanel } from '@/components/AnchorDetailPanel';
 import { anchorService, type Anchor } from '@/lib/services/anchor-service';
 import { memoryService, type ClassTimeline } from '@/lib/services/memory-service';
 import { checkServices, type ServiceStatus as ServiceStatusType } from '@/lib/services/health-check';
+import { getPreference, setPreference } from '@/lib/db';
 import type { TranscriptSegment, HighlightTopic, ClassSummary, Note, TopicGenerationMode, NoteSource, NoteMetadata } from '@/types';
 import { DEMO_SEGMENTS, DEMO_ANCHORS, DEMO_AUDIO_URL } from '@/fixtures/demo-data';
 
 type ViewMode = 'record' | 'review';
 type DataSource = 'live' | 'demo';
-type ChatMode = 'tutor' | 'chat';
-type ReviewTab = 'timeline' | 'highlights' | 'summary' | 'notes';
+
+type ReviewTab = 'timeline' | 'highlights' | 'summary' | 'notes' | 'anchor-detail';
+
+// 持久化状态的 key
+const APP_STATE_KEY = 'app_last_state';
+const TUTOR_STATE_KEY = 'tutor_last_state';
 
 interface ActionItem {
   id: string;
@@ -45,7 +51,6 @@ export default function StudentApp() {
   const [actionItems, setActionItems] = useState<ActionItem[]>([]);
   const [currentTime, setCurrentTime] = useState(0);
   const [dataSource, setDataSource] = useState<DataSource>('live');
-  const [chatMode, setChatMode] = useState<ChatMode>('tutor');
   const [serviceStatus, setServiceStatus] = useState<ServiceStatusType | null>(null);
   const [audioBlob, setAudioBlob] = useState<Blob | null>(null);
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
@@ -63,41 +68,117 @@ export default function StudentApp() {
   
   const liveSegmentsRef = useRef<TranscriptSegment[]>([]);
   const waveformRef = useRef<WaveformPlayerRef>(null);
+  const hasRestoredState = useRef(false);  // 是否已恢复状态
 
-  // 初始化
-  useEffect(() => {
-    checkServices().then(setServiceStatus);
+  // 保存应用状态到 IndexedDB
+  const saveAppState = useCallback(async () => {
+    if (viewMode !== 'review') return;
     
-    const savedAnchors = anchorService.getActive(sessionId);
-    setAnchors(savedAnchors);
-
-    // 仅在复习模式下加载演示数据，不改变 dataSource
-    if (segments.length === 0 && viewMode === 'review') {
-      setSegments(DEMO_SEGMENTS);
-      
-      // 加载示例音频
-      setAudioUrl(DEMO_AUDIO_URL);
-      
-      // 使用示例锚点（包含30秒断点）
-      setAnchors(DEMO_ANCHORS);
-      
-      const tl = memoryService.buildTimeline(
+    try {
+      await setPreference(APP_STATE_KEY, {
+        viewMode,
         sessionId,
-        DEMO_SEGMENTS,
-        DEMO_ANCHORS,
-        { subject: '数学', teacher: '张老师', date: new Date().toISOString().split('T')[0] }
-      );
-      setTimeline(tl);
+        selectedAnchorId: selectedAnchor?.id,
+        reviewTab,
+        currentTime,
+        savedAt: Date.now(),
+      });
+    } catch (err) {
+      console.error('Failed to save app state:', err);
     }
+  }, [viewMode, sessionId, selectedAnchor?.id, reviewTab, currentTime]);
 
-    // 如果是示例数据，优先选择30秒的断点
-    const demoAnchors = viewMode === 'review' ? DEMO_ANCHORS : savedAnchors;
-    const firstUnresolved = demoAnchors.find(a => !a.resolved);
-    if (firstUnresolved) {
-      setSelectedAnchor(firstUnresolved);
-      setCurrentTime(firstUnresolved.timestamp);
+  // 当关键状态变化时保存
+  useEffect(() => {
+    if (hasRestoredState.current && viewMode === 'review') {
+      saveAppState();
     }
-  }, [sessionId, viewMode]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [selectedAnchor?.id, reviewTab, saveAppState, viewMode]);
+
+  // 初始化 - 恢复状态（仅在首次加载时执行）
+  useEffect(() => {
+    // 防止重复初始化
+    if (hasRestoredState.current) return;
+    
+    const initializeApp = async () => {
+      checkServices().then(setServiceStatus);
+      
+      const savedAnchors = anchorService.getActive(sessionId);
+      setAnchors(savedAnchors);
+
+      // 尝试从 IndexedDB 恢复上次状态
+      let restoredAnchorId: string | null = null;
+      let restoredReviewTab: ReviewTab | null = null;
+      let restoredViewMode: ViewMode | null = null;
+      
+      try {
+        const savedAppState = await getPreference<{
+          viewMode: ViewMode;
+          sessionId: string;
+          selectedAnchorId?: string;
+          reviewTab?: ReviewTab;
+          currentTime?: number;
+          savedAt: number;
+        } | null>(APP_STATE_KEY, null);
+        
+        // 检查是否是最近 24 小时内的状态
+        if (savedAppState && Date.now() - savedAppState.savedAt < 24 * 60 * 60 * 1000) {
+          restoredAnchorId = savedAppState.selectedAnchorId || null;
+          restoredReviewTab = savedAppState.reviewTab || null;
+          restoredViewMode = savedAppState.viewMode || null;
+          
+          if (savedAppState.currentTime) {
+            setCurrentTime(savedAppState.currentTime);
+          }
+        }
+      } catch (err) {
+        console.error('Failed to restore app state:', err);
+      }
+
+      // 确定最终的 viewMode
+      const finalViewMode = restoredViewMode || 'record';
+      
+      // 仅在复习模式下加载演示数据
+      if (finalViewMode === 'review') {
+        setViewMode('review');
+        setSegments(DEMO_SEGMENTS);
+        setAudioUrl(DEMO_AUDIO_URL);
+        setAnchors(DEMO_ANCHORS);
+        
+        const tl = memoryService.buildTimeline(
+          sessionId,
+          DEMO_SEGMENTS,
+          DEMO_ANCHORS,
+          { subject: '数学', teacher: '张老师', date: new Date().toISOString().split('T')[0] }
+        );
+        setTimeline(tl);
+        
+        // 恢复选中的困惑点
+        if (restoredAnchorId) {
+          const restoredAnchor = DEMO_ANCHORS.find(a => a.id === restoredAnchorId);
+          if (restoredAnchor) {
+            setSelectedAnchor(restoredAnchor);
+            setCurrentTime(restoredAnchor.timestamp);
+          }
+        } else {
+          const firstUnresolved = DEMO_ANCHORS.find(a => !a.resolved);
+          if (firstUnresolved) {
+            setSelectedAnchor(firstUnresolved);
+            setCurrentTime(firstUnresolved.timestamp);
+          }
+        }
+        
+        // 恢复标签页
+        if (restoredReviewTab) {
+          setReviewTab(restoredReviewTab);
+        }
+      }
+      
+      hasRestoredState.current = true;
+    };
+    
+    initializeApp();
+  }, [sessionId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleRecordingStart = useCallback((newSessionId: string) => {
     setSessionId(newSessionId);
@@ -150,9 +231,25 @@ export default function StudentApp() {
     }
   }, [sessionId, timeline]);
 
+  // 回放时添加困惑点标注
+  const handlePlaybackAnchorAdd = useCallback((timestamp: number) => {
+    const anchor = anchorService.mark(sessionId, 'student-1', timestamp, 'confusion');
+    setAnchors(prev => [...prev, anchor]);
+    setSelectedAnchor(anchor);
+    
+    if (timeline) {
+      setTimeline({ ...timeline, anchors: [...timeline.anchors, anchor] });
+    }
+    
+    // 自动切换到困惑点详情面板
+    setReviewTab('anchor-detail');
+  }, [sessionId, timeline]);
+
   const handleAnchorSelect = useCallback((anchor: Anchor) => {
     setSelectedAnchor(anchor);
     setCurrentTime(anchor.timestamp);
+    // 自动切换到困惑点详情面板
+    setReviewTab('anchor-detail');
   }, []);
 
   const handleResolveAnchor = useCallback(() => {
@@ -367,6 +464,11 @@ export default function StudentApp() {
     setNotes(prev => prev.filter(n => n.id !== noteId));
   }, []);
 
+  // 处理 AI 家教生成的行动清单
+  const handleActionItemsUpdate = useCallback((items: ActionItem[]) => {
+    setActionItems(items);
+  }, []);
+
   // 计算总时长
   const totalDuration = segments.length > 0 
     ? segments[segments.length - 1].endMs 
@@ -573,10 +675,10 @@ export default function StudentApp() {
           {/* 左栏 - 多功能面板 */}
           <div className="w-96 border-r border-gray-100 flex flex-col glass">
             {/* 标签页切换 */}
-            <div className="flex items-center gap-1 px-4 py-2 border-b border-gray-100 bg-gray-50/50">
+            <div className="flex items-center gap-1 px-4 py-2 border-b border-gray-100 bg-gray-50/50 overflow-x-auto">
               <button
                 onClick={() => setReviewTab('timeline')}
-                className={`px-3 py-1.5 text-sm rounded-lg transition-all ${
+                className={`px-3 py-1.5 text-sm rounded-lg transition-all whitespace-nowrap ${
                   reviewTab === 'timeline'
                     ? 'bg-white text-gray-900 font-medium shadow-sm'
                     : 'text-gray-500 hover:text-gray-700 hover:bg-white/50'
@@ -585,21 +687,34 @@ export default function StudentApp() {
                 📋 时间轴
               </button>
               <button
+                onClick={() => setReviewTab('anchor-detail')}
+                className={`px-3 py-1.5 text-sm rounded-lg transition-all whitespace-nowrap ${
+                  reviewTab === 'anchor-detail'
+                    ? 'bg-white text-gray-900 font-medium shadow-sm'
+                    : 'text-gray-500 hover:text-gray-700 hover:bg-white/50'
+                }`}
+              >
+                🎯 困惑点
+                {selectedAnchor && !selectedAnchor.resolved && (
+                  <span className="ml-1 w-2 h-2 bg-red-500 rounded-full inline-block animate-pulse" />
+                )}
+              </button>
+              <button
                 onClick={() => setReviewTab('highlights')}
-                className={`px-3 py-1.5 text-sm rounded-lg transition-all ${
+                className={`px-3 py-1.5 text-sm rounded-lg transition-all whitespace-nowrap ${
                   reviewTab === 'highlights'
                     ? 'bg-white text-gray-900 font-medium shadow-sm'
                     : 'text-gray-500 hover:text-gray-700 hover:bg-white/50'
                 }`}
               >
-                ⚡ 精选片段
+                ⚡ 精选
                 {highlightTopics.length > 0 && (
                   <span className="ml-1 text-xs text-blue-600">({highlightTopics.length})</span>
                 )}
               </button>
               <button
                 onClick={() => setReviewTab('summary')}
-                className={`px-3 py-1.5 text-sm rounded-lg transition-all ${
+                className={`px-3 py-1.5 text-sm rounded-lg transition-all whitespace-nowrap ${
                   reviewTab === 'summary'
                     ? 'bg-white text-gray-900 font-medium shadow-sm'
                     : 'text-gray-500 hover:text-gray-700 hover:bg-white/50'
@@ -610,7 +725,7 @@ export default function StudentApp() {
               </button>
               <button
                 onClick={() => setReviewTab('notes')}
-                className={`px-3 py-1.5 text-sm rounded-lg transition-all ${
+                className={`px-3 py-1.5 text-sm rounded-lg transition-all whitespace-nowrap ${
                   reviewTab === 'notes'
                     ? 'bg-white text-gray-900 font-medium shadow-sm'
                     : 'text-gray-500 hover:text-gray-700 hover:bg-white/50'
@@ -635,6 +750,32 @@ export default function StudentApp() {
                     const anchor = anchors.find(a => a.id === bp.id);
                     if (anchor) handleAnchorSelect(anchor);
                   }}
+                />
+              )}
+              
+              {reviewTab === 'anchor-detail' && (
+                <AnchorDetailPanel
+                  anchor={selectedAnchor}
+                  segments={segments}
+                  onSeek={(timeMs) => {
+                    setCurrentTime(timeMs);
+                    waveformRef.current?.seekTo(timeMs);
+                  }}
+                  onPlay={(startMs) => {
+                    waveformRef.current?.seekTo(startMs);
+                    waveformRef.current?.play();
+                  }}
+                  onResolve={handleResolveAnchor}
+                  onAskAI={() => {
+                    // AI 家教已经是默认模式，无需切换
+                  }}
+                  onAddNote={(text, anchorId) => {
+                    handleAddNote(text, 'anchor', {
+                      anchorId,
+                      timestamp: selectedAnchor?.timestamp,
+                    });
+                  }}
+                  onClose={() => setReviewTab('timeline')}
                 />
               )}
               
@@ -691,63 +832,41 @@ export default function StudentApp() {
               <div className="p-4 border-b border-gray-100">
                 <WaveformPlayer
                   ref={waveformRef}
-                  src={audioBlob || audioUrl}
+                  src={audioBlob || audioUrl || undefined}
                   anchors={anchors.map(a => ({
                     id: a.id,
                     timestamp: a.timestamp,
                     resolved: a.resolved,
+                    type: a.type,
                   } as WaveformAnchor))}
                   onTimeUpdate={setCurrentTime}
                   onAnchorClick={(anchor) => {
                     const found = anchors.find(a => a.id === anchor.id);
                     if (found) handleAnchorSelect(found);
                   }}
+                  onAnchorAdd={handlePlaybackAnchorAdd}
+                  allowAddAnchor={true}
+                  selectedAnchorId={selectedAnchor?.id}
                   height={60}
                 />
               </div>
             )}
             
-            {/* 对话模式切换 */}
-            <div className="flex items-center gap-2 px-5 py-3 border-b border-gray-100">
-              <button
-                onClick={() => setChatMode('tutor')}
-                className={`px-4 py-1.5 text-sm rounded-full transition-all ${
-                  chatMode === 'tutor'
-                    ? 'bg-rose-100 text-rose-700 font-medium'
-                    : 'text-gray-500 hover:bg-gray-100'
-                }`}
-              >
-                🎓 AI 家教
-              </button>
-              <button
-                onClick={() => setChatMode('chat')}
-                className={`px-4 py-1.5 text-sm rounded-full transition-all ${
-                  chatMode === 'chat'
-                    ? 'bg-accent-100 text-accent-700 font-medium'
-                    : 'text-gray-500 hover:bg-gray-100'
-                }`}
-              >
-                💬 自由对话
-              </button>
-            </div>
-            
-            {/* AI 对话区 */}
+            {/* AI 家教区 */}
             <div className="flex-1 min-h-0">
-              {chatMode === 'tutor' ? (
-                <AITutor
-                  breakpoint={selectedBreakpoint}
-                  segments={segments}
-                  isLoading={false}
-                  onResolve={handleResolveAnchor}
-                />
-              ) : (
-                <AIChat
-                  anchorId={selectedAnchor?.id}
-                  anchorTimestamp={selectedAnchor?.timestamp}
-                  contextText={segments.map(s => s.text).join(' ')}
-                  onTimestampClick={handleTimelineClick}
-                />
-              )}
+              <AITutor
+                breakpoint={selectedBreakpoint}
+                segments={segments}
+                isLoading={false}
+                onResolve={handleResolveAnchor}
+                onActionItemsUpdate={handleActionItemsUpdate}
+                sessionId={sessionId}
+                onSeek={(timeMs) => {
+                  setCurrentTime(timeMs);
+                  waveformRef.current?.seekTo(timeMs);
+                  waveformRef.current?.play();
+                }}
+              />
             </div>
           </div>
 

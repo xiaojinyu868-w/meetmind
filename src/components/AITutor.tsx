@@ -1,13 +1,18 @@
 'use client';
 
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import type { Breakpoint } from '@/lib/services/meetmind-service';
 import { formatTimestamp } from '@/lib/services/longcut-utils';
 import { notebookService, localSearch, type SearchResult } from '@/lib/services/notebook-service';
 import { ModelSelector } from './ModelSelector';
 import { GuidanceQuestion, GuidanceQuestionSkeleton } from './GuidanceQuestion';
 import { Citations, CitationsSkeleton } from './Citations';
+import { useAuth } from '@/lib/hooks/useAuth';
+import { saveTutorResponseCache, getTutorResponseCache, deleteTutorResponseCache, getPreference, setPreference, type TutorResponseCache } from '@/lib/db';
 import type { GuidanceQuestion as GuidanceQuestionType, GuidanceOption, Citation } from '@/types/dify';
+
+// 持久化状态的 key
+const TUTOR_STATE_KEY = 'tutor_last_state';
 
 interface Segment {
   id: string;
@@ -16,11 +21,23 @@ interface Segment {
   endMs: number;
 }
 
+interface ActionItem {
+  id: string;
+  type: 'replay' | 'exercise' | 'review';
+  title: string;
+  description: string;
+  estimatedMinutes: number;
+  completed: boolean;
+}
+
 interface AITutorProps {
   breakpoint: Breakpoint | null;
   segments: Segment[];
   isLoading: boolean;
   onResolve: () => void;
+  onActionItemsUpdate?: (items: ActionItem[]) => void;
+  sessionId?: string;  // 用于缓存关联
+  onSeek?: (timeMs: number) => void;  // 点击时间戳跳转播放
 }
 
 interface TutorAPIResponse {
@@ -55,7 +72,8 @@ interface TutorAPIResponse {
   conversation_id?: string;
 }
 
-export function AITutor({ breakpoint, segments, isLoading: externalLoading, onResolve }: AITutorProps) {
+export function AITutor({ breakpoint, segments, isLoading: externalLoading, onResolve, onActionItemsUpdate, sessionId = 'default', onSeek }: AITutorProps) {
+  const { accessToken } = useAuth();
   const [userInput, setUserInput] = useState('');
   const [chatHistory, setChatHistory] = useState<Array<{ role: 'user' | 'assistant'; content: string }>>([]);
   const [selectedModel, setSelectedModel] = useState('qwen3-max');
@@ -63,16 +81,109 @@ export function AITutor({ breakpoint, segments, isLoading: externalLoading, onRe
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
+  
+  // 缓存相关状态
+  const [isFromCache, setIsFromCache] = useState(false);
+  const [isRestoring, setIsRestoring] = useState(false);  // 正在恢复状态
+  const previousBreakpointId = useRef<string | null>(null);
+  const hasInitialized = useRef(false);  // 是否已完成初始化
   const [isSearching, setIsSearching] = useState(false);
   const [notebookAvailable, setNotebookAvailable] = useState(false);
   
-  const [enableGuidance, setEnableGuidance] = useState(true);
   const [enableWeb, setEnableWeb] = useState(true);
   const [selectedOptionId, setSelectedOptionId] = useState<string | undefined>();
   const [conversationId, setConversationId] = useState<string | undefined>();
   const [isGuidanceLoading, setIsGuidanceLoading] = useState(false);
+  const [seekingTimestamp, setSeekingTimestamp] = useState<number | null>(null);
   
   const chatEndRef = useRef<HTMLDivElement>(null);
+
+  // 获取困惑点前后的转录上下文（前 90 秒，后 60 秒）
+  const contextSegments = useMemo(() => {
+    if (!breakpoint || segments.length === 0) return [];
+    
+    const startMs = Math.max(0, breakpoint.timestamp - 90000);
+    const endMs = breakpoint.timestamp + 60000;
+    
+    return segments.filter(seg => 
+      seg.endMs >= startMs && seg.startMs <= endMs
+    );
+  }, [breakpoint, segments]);
+
+  // 格式化时间
+  const formatTime = useCallback((ms: number) => {
+    const seconds = Math.floor(ms / 1000);
+    const minutes = Math.floor(seconds / 60);
+    const pad = (n: number) => n.toString().padStart(2, '0');
+    return `${pad(minutes)}:${pad(seconds % 60)}`;
+  }, []);
+
+  // 处理时间戳点击 - 添加视觉反馈
+  const handleTimestampClick = useCallback((timeMs: number) => {
+    setSeekingTimestamp(timeMs);
+    onSeek?.(timeMs);
+    // 1.5秒后清除高亮状态
+    setTimeout(() => setSeekingTimestamp(null), 1500);
+  }, [onSeek]);
+
+  // 解析文本中的时间戳并渲染为可点击链接（增强视觉反馈）
+  const renderTextWithTimestamps = useCallback((text: string) => {
+    // 匹配 [MM:SS] 或 [MM:SS-MM:SS] 或 MM:SS-MM:SS 格式的时间戳
+    const timestampRegex = /\[?(\d{1,2}:\d{2})(?:-(\d{1,2}:\d{2}))?\]?/g;
+    const parts: React.ReactNode[] = [];
+    let lastIndex = 0;
+    let match;
+
+    while ((match = timestampRegex.exec(text)) !== null) {
+      // 添加时间戳前的文本
+      if (match.index > lastIndex) {
+        parts.push(<span key={`text-${lastIndex}`}>{text.slice(lastIndex, match.index)}</span>);
+      }
+
+      const startTime = match[1];
+      const endTime = match[2];
+      const startMs = parseTimeToMs(startTime);
+      const displayText = endTime ? `${startTime}-${endTime}` : startTime;
+      const isActive = seekingTimestamp === startMs;
+
+      parts.push(
+        <button
+          key={`ts-${match.index}`}
+          onClick={() => handleTimestampClick(startMs)}
+          className={`
+            inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-mono mx-0.5
+            transition-all duration-300 border
+            ${isActive 
+              ? 'bg-gradient-to-r from-blue-500 to-indigo-500 text-white border-blue-600 shadow-lg shadow-blue-200 scale-110 animate-pulse' 
+              : 'bg-gradient-to-r from-blue-100 to-blue-50 text-blue-700 border-blue-200 hover:from-blue-200 hover:to-blue-100 hover:shadow-md hover:scale-105'
+            }
+          `}
+          title={`点击跳转到 ${displayText}`}
+        >
+          <span className={isActive ? 'animate-bounce' : ''}>▶</span>
+          {displayText}
+        </button>
+      );
+
+      lastIndex = match.index + match[0].length;
+    }
+
+    // 添加剩余文本
+    if (lastIndex < text.length) {
+      parts.push(<span key={`text-${lastIndex}`}>{text.slice(lastIndex)}</span>);
+    }
+
+    return parts.length > 0 ? parts : text;
+  }, [handleTimestampClick, seekingTimestamp]);
+
+  // 解析时间字符串为毫秒
+  const parseTimeToMs = (time: string): number => {
+    const parts = time.split(':');
+    if (parts.length === 2) {
+      return (parseInt(parts[0]) * 60 + parseInt(parts[1])) * 1000;
+    }
+    return 0;
+  };
 
   useEffect(() => {
     notebookService.isAvailable().then(setNotebookAvailable);
@@ -81,6 +192,112 @@ export function AITutor({ breakpoint, segments, isLoading: externalLoading, onRe
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [chatHistory]);
+
+  // 保存当前状态到 IndexedDB（用于页面刷新恢复）
+  const saveCurrentState = useCallback(async () => {
+    if (!breakpoint) return;
+    
+    try {
+      await setPreference(TUTOR_STATE_KEY, {
+        anchorId: breakpoint.id,
+        sessionId,
+        timestamp: breakpoint.timestamp,
+        selectedModel,
+        enableWeb,
+        savedAt: Date.now(),
+      });
+    } catch (err) {
+      console.error('Failed to save tutor state:', err);
+    }
+  }, [breakpoint, sessionId, selectedModel, enableWeb]);
+
+  // 当关键状态变化时保存
+  useEffect(() => {
+    if (breakpoint && response) {
+      saveCurrentState();
+    }
+  }, [breakpoint?.id, response, saveCurrentState]);
+
+  // 当困惑点切换时，尝试从缓存加载
+  useEffect(() => {
+    if (!breakpoint) {
+      setResponse(null);
+      setChatHistory([]);
+      setConversationId(undefined);
+      setIsFromCache(false);
+      previousBreakpointId.current = null;
+      return;
+    }
+
+    // 如果是同一个困惑点，不重新加载
+    if (previousBreakpointId.current === breakpoint.id) {
+      return;
+    }
+
+    previousBreakpointId.current = breakpoint.id;
+
+    // 尝试从缓存加载
+    const loadFromCache = async () => {
+      setIsRestoring(true);
+      try {
+        const cached = await getTutorResponseCache(breakpoint.id);
+        if (cached) {
+          const cachedResponse = JSON.parse(cached.response) as TutorAPIResponse;
+          const cachedHistory = JSON.parse(cached.chatHistory) as Array<{ role: 'user' | 'assistant'; content: string }>;
+          
+          setResponse(cachedResponse);
+          setChatHistory(cachedHistory);
+          setConversationId(cached.conversationId);
+          setIsFromCache(true);
+          setError(null);
+          
+          // 通知父组件更新行动清单
+          if (cachedResponse.actionItems && onActionItemsUpdate) {
+            onActionItemsUpdate(cachedResponse.actionItems);
+          }
+          
+          hasInitialized.current = true;
+          setIsRestoring(false);
+          return true;
+        }
+      } catch (err) {
+        console.error('Failed to load from cache:', err);
+      }
+      
+      // 没有缓存，清空状态
+      setResponse(null);
+      setChatHistory([]);
+      setConversationId(undefined);
+      setIsFromCache(false);
+      hasInitialized.current = true;
+      setIsRestoring(false);
+      return false;
+    };
+
+    loadFromCache();
+  }, [breakpoint, onActionItemsUpdate]);
+
+  // 保存到缓存
+  const saveToCache = useCallback(async (
+    resp: TutorAPIResponse,
+    history: Array<{ role: 'user' | 'assistant'; content: string }>,
+    convId?: string
+  ) => {
+    if (!breakpoint) return;
+    
+    try {
+      await saveTutorResponseCache({
+        anchorId: breakpoint.id,
+        sessionId,
+        timestamp: breakpoint.timestamp,
+        response: JSON.stringify(resp),
+        chatHistory: JSON.stringify(history),
+        conversationId: convId,
+      });
+    } catch (err) {
+      console.error('Failed to save to cache:', err);
+    }
+  }, [breakpoint, sessionId]);
 
   const handleSearch = useCallback(async (query: string) => {
     if (!query.trim()) return;
@@ -117,14 +334,19 @@ export function AITutor({ breakpoint, segments, isLoading: externalLoading, onRe
     setConversationId(undefined);
 
     try {
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      if (accessToken) {
+        headers['Authorization'] = `Bearer ${accessToken}`;
+      }
+      
       const res = await fetch('/api/tutor', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers,
         body: JSON.stringify({
           timestamp: breakpoint.timestamp,
           segments,
           model: selectedModel,
-          enable_guidance: enableGuidance,
+          enable_guidance: true,
           enable_web: enableWeb,
         }),
       });
@@ -136,21 +358,29 @@ export function AITutor({ breakpoint, segments, isLoading: externalLoading, onRe
 
       const data: TutorAPIResponse = await res.json();
       setResponse(data);
+      setIsFromCache(false);
       if (data.conversation_id) {
         setConversationId(data.conversation_id);
       }
+      // 通知父组件更新行动清单
+      if (data.actionItems && onActionItemsUpdate) {
+        onActionItemsUpdate(data.actionItems);
+      }
+      // 保存到缓存
+      await saveToCache(data, [], data.conversation_id);
     } catch (err) {
       setError(err instanceof Error ? err.message : '未知错误');
     } finally {
       setIsLoading(false);
     }
-  }, [breakpoint, segments, selectedModel, enableGuidance, enableWeb]);
+  }, [breakpoint, segments, selectedModel, enableWeb, accessToken, onActionItemsUpdate, saveToCache]);
 
   useEffect(() => {
-    if (breakpoint) {
+    // 只有在没有缓存数据且不在恢复状态时才自动加载
+    if (breakpoint && !response && !isFromCache && !isRestoring && hasInitialized.current) {
       explainBreakpoint();
     }
-  }, [breakpoint?.id, selectedModel]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [breakpoint?.id, selectedModel, isRestoring]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleGuidanceSelect = async (optionId: string, option: GuidanceOption) => {
     if (!breakpoint) return;
@@ -159,14 +389,19 @@ export function AITutor({ breakpoint, segments, isLoading: externalLoading, onRe
     setIsGuidanceLoading(true);
     
     try {
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      if (accessToken) {
+        headers['Authorization'] = `Bearer ${accessToken}`;
+      }
+      
       const res = await fetch('/api/tutor', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers,
         body: JSON.stringify({
           timestamp: breakpoint.timestamp,
           segments,
           model: selectedModel,
-          enable_guidance: enableGuidance,
+          enable_guidance: true,
           enable_web: enableWeb,
           selected_option_id: optionId,
           conversation_id: conversationId,
@@ -181,11 +416,12 @@ export function AITutor({ breakpoint, segments, isLoading: externalLoading, onRe
 
       const data: TutorAPIResponse = await res.json();
       
-      setChatHistory(prev => [
-        ...prev,
-        { role: 'user', content: `我选择了：${option.text}` },
-        { role: 'assistant', content: data.rawContent || '让我针对你的选择进一步解释...' },
-      ]);
+      const newHistory = [
+        ...chatHistory,
+        { role: 'user' as const, content: `我选择了：${option.text}` },
+        { role: 'assistant' as const, content: data.rawContent || '让我针对你的选择进一步解释...' },
+      ];
+      setChatHistory(newHistory);
       
       if (data.conversation_id) {
         setConversationId(data.conversation_id);
@@ -194,6 +430,11 @@ export function AITutor({ breakpoint, segments, isLoading: externalLoading, onRe
       if (data.guidance_question) {
         setResponse(prev => prev ? { ...prev, guidance_question: data.guidance_question } : null);
         setSelectedOptionId(undefined);
+      }
+      
+      // 更新缓存
+      if (response) {
+        await saveToCache(response, newHistory, data.conversation_id || conversationId);
       }
     } catch (err) {
       setChatHistory(prev => [...prev, { 
@@ -214,15 +455,20 @@ export function AITutor({ breakpoint, segments, isLoading: externalLoading, onRe
     setChatHistory(prev => [...prev, { role: 'user', content: question }]);
     
     try {
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      if (accessToken) {
+        headers['Authorization'] = `Bearer ${accessToken}`;
+      }
+      
       const res = await fetch('/api/tutor', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers,
         body: JSON.stringify({
           timestamp: breakpoint.timestamp,
           segments,
           model: selectedModel,
           studentQuestion: question,
-          enable_guidance: enableGuidance,
+          enable_guidance: true,
           enable_web: enableWeb,
           conversation_id: conversationId,
         }),
@@ -235,10 +481,12 @@ export function AITutor({ breakpoint, segments, isLoading: externalLoading, onRe
 
       const data: TutorAPIResponse = await res.json();
       
-      setChatHistory(prev => [...prev, { 
-        role: 'assistant', 
-        content: data.rawContent || data.explanation.followUpQuestion 
-      }]);
+      const newHistory = [
+        ...chatHistory,
+        { role: 'user' as const, content: question },
+        { role: 'assistant' as const, content: data.rawContent || data.explanation.followUpQuestion },
+      ];
+      setChatHistory(newHistory);
       
       if (data.conversation_id) {
         setConversationId(data.conversation_id);
@@ -246,6 +494,11 @@ export function AITutor({ breakpoint, segments, isLoading: externalLoading, onRe
       
       if (data.citations?.length) {
         setResponse(prev => prev ? { ...prev, citations: data.citations } : null);
+      }
+      
+      // 更新缓存
+      if (response) {
+        await saveToCache(response, newHistory, data.conversation_id || conversationId);
       }
     } catch (err) {
       setChatHistory(prev => [...prev, { 
@@ -284,10 +537,28 @@ export function AITutor({ breakpoint, segments, isLoading: externalLoading, onRe
               </p>
               <p className="text-xs text-gray-500 mt-0.5">
                 {breakpoint.resolved ? '✅ 已解决' : '🔴 待解决'}
+                {isFromCache && <span className="ml-2 text-blue-500">📋 已缓存</span>}
               </p>
             </div>
           </div>
           <div className="flex items-center gap-2">
+            {isFromCache && (
+              <button
+                onClick={async () => {
+                  // 先删除缓存，再重新生成
+                  if (breakpoint) {
+                    await deleteTutorResponseCache(breakpoint.id);
+                  }
+                  setIsFromCache(false);
+                  setResponse(null);
+                  explainBreakpoint();
+                }}
+                className="px-3 py-1.5 text-xs text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded-lg transition-colors"
+                title="重新生成"
+              >
+                🔄 刷新
+              </button>
+            )}
             <ModelSelector value={selectedModel} onChange={setSelectedModel} />
             {!breakpoint.resolved && (
               <button
@@ -302,15 +573,6 @@ export function AITutor({ breakpoint, segments, isLoading: externalLoading, onRe
         
         {/* 功能开关 */}
         <div className="mt-3 flex items-center gap-4">
-          <label className="flex items-center gap-2 text-xs text-gray-600 cursor-pointer group">
-            <input
-              type="checkbox"
-              checked={enableGuidance}
-              onChange={(e) => setEnableGuidance(e.target.checked)}
-              className="w-4 h-4 rounded border-gray-300 text-rose-500 focus:ring-rose-400"
-            />
-            <span className="group-hover:text-gray-900 transition-colors">🎯 引导提问</span>
-          </label>
           <label className="flex items-center gap-2 text-xs text-gray-600 cursor-pointer group">
             <input
               type="checkbox"
@@ -360,63 +622,80 @@ export function AITutor({ breakpoint, segments, isLoading: externalLoading, onRe
           </div>
         ) : response ? (
           <div className="space-y-6 animate-slide-up">
-            {/* 老师原话 */}
+            {/* 老师原话 - 扩展上下文 */}
             <Section icon="📚" title="老师是这样讲的">
               <div className="bg-amber-50 border border-amber-100 rounded-xl p-4">
-                <p className="text-sm text-gray-700 italic leading-relaxed">
-                  "{response.explanation.teacherSaid}"
-                </p>
+                {/* 显示完整上下文，每段可点击跳转 */}
+                <div className="text-sm text-gray-700 leading-relaxed space-y-1 max-h-48 overflow-y-auto">
+                  {contextSegments.length > 0 ? (
+                    contextSegments.map((seg) => {
+                      const isNearBreakpoint = breakpoint && 
+                        Math.abs(seg.startMs - breakpoint.timestamp) < 10000;
+                      const isActive = seekingTimestamp === seg.startMs;
+                      return (
+                        <span
+                          key={seg.id}
+                          className={`
+                            inline cursor-pointer transition-all duration-300
+                            ${isActive 
+                              ? 'bg-amber-400 text-amber-900 px-1 rounded shadow-md scale-105' 
+                              : isNearBreakpoint 
+                                ? 'bg-amber-200/60 px-1 rounded hover:bg-amber-300/80' 
+                                : 'hover:bg-amber-200/80'
+                            }
+                          `}
+                          onClick={() => handleTimestampClick(seg.startMs)}
+                          title={`点击跳转到 ${formatTime(seg.startMs)}`}
+                        >
+                          <span className={`text-xs font-mono mr-1 ${isActive ? 'text-amber-800' : 'text-amber-600'}`}>
+                            [{formatTime(seg.startMs)}]
+                          </span>
+                          {seg.text}{' '}
+                        </span>
+                      );
+                    })
+                  ) : (
+                    <span className="italic">"{response.explanation.teacherSaid}"</span>
+                  )}
+                </div>
                 {response.explanation.citation.timeRange !== '00:00-00:00' && (
-                  <button className="mt-3 inline-flex items-center gap-1.5 text-xs text-amber-700 hover:text-amber-800 transition-colors">
-                    <span>🔊</span>
-                    <span>引用 {response.explanation.citation.timeRange}</span>
+                  <button 
+                    onClick={() => handleTimestampClick(response.explanation.citation.startMs)}
+                    className={`
+                      mt-3 inline-flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg transition-all duration-300 border
+                      ${seekingTimestamp === response.explanation.citation.startMs
+                        ? 'bg-gradient-to-r from-amber-500 to-orange-500 text-white border-amber-600 shadow-lg shadow-amber-200 scale-105'
+                        : 'text-amber-700 hover:text-amber-800 bg-amber-100 hover:bg-amber-200 border-amber-200 hover:shadow-md'
+                      }
+                    `}
+                    title="点击跳转播放"
+                  >
+                    <span className={seekingTimestamp === response.explanation.citation.startMs ? 'animate-bounce' : ''}>▶</span>
+                    <span>播放 {response.explanation.citation.timeRange}</span>
                   </button>
                 )}
               </div>
             </Section>
 
-            {/* 可能卡住的点 */}
-            <Section icon="🤔" title="你可能卡在这里">
-              <ul className="space-y-2">
-                {response.explanation.possibleStuckPoints.map((point, i) => (
-                  <li key={i} className="flex items-start gap-2 text-sm text-gray-600">
-                    <span className="w-5 h-5 bg-rose-100 text-rose-600 rounded-full flex items-center justify-center text-xs flex-shrink-0 mt-0.5">
-                      {i + 1}
-                    </span>
-                    <span>{point}</span>
-                  </li>
-                ))}
-              </ul>
+            {/* 引导问题 - 选择题模式定位困惑点 */}
+            <Section icon="🎯" title="帮我定位你的困惑" badge="精准诊断">
+              {isLoading ? (
+                <GuidanceQuestionSkeleton />
+              ) : response.guidance_question ? (
+                <GuidanceQuestion
+                  question={response.guidance_question}
+                  onSelect={handleGuidanceSelect}
+                  isLoading={isGuidanceLoading}
+                  disabled={!!selectedOptionId}
+                  selectedOptionId={selectedOptionId}
+                />
+              ) : (
+                <div className="bg-gray-50 rounded-xl p-4 text-center text-sm text-gray-500">
+                  <p>引导问题生成中...</p>
+                  <p className="text-xs mt-1 text-gray-400">正在分析录音内容</p>
+                </div>
+              )}
             </Section>
-
-            {/* 追问 */}
-            <Section icon="💬" title="让我问你一个问题">
-              <div className="bg-accent-50 border border-accent-100 rounded-xl p-4">
-                <p className="text-sm text-gray-700">{response.explanation.followUpQuestion}</p>
-              </div>
-            </Section>
-
-            {/* 引导问题 */}
-            {enableGuidance && (
-              <Section icon="🎯" title="帮我定位你的问题" badge="AI 引导">
-                {isLoading ? (
-                  <GuidanceQuestionSkeleton />
-                ) : response.guidance_question ? (
-                  <GuidanceQuestion
-                    question={response.guidance_question}
-                    onSelect={handleGuidanceSelect}
-                    isLoading={isGuidanceLoading}
-                    disabled={!!selectedOptionId}
-                    selectedOptionId={selectedOptionId}
-                  />
-                ) : (
-                  <div className="bg-gray-50 rounded-xl p-4 text-center text-sm text-gray-500">
-                    <p>引导问题生成中...</p>
-                    <p className="text-xs mt-1 text-gray-400">需要配置 Dify API Key</p>
-                  </div>
-                )}
-              </Section>
-            )}
 
             {/* 联网搜索结果 */}
             {enableWeb && response.citations && response.citations.length > 0 && (
@@ -468,38 +747,6 @@ export function AITutor({ breakpoint, segments, isLoading: externalLoading, onRe
               </Section>
             )}
 
-            {/* 行动清单 */}
-            <Section icon="✅" title="今晚行动清单">
-              <div className="space-y-2">
-                {response.actionItems.map((item) => (
-                  <div 
-                    key={item.id}
-                    className="action-item"
-                  >
-                    <input 
-                      type="checkbox" 
-                      className="action-checkbox"
-                      defaultChecked={item.completed}
-                    />
-                    <div className="flex-1">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <span className={`text-xs px-2 py-0.5 rounded-full ${
-                          item.type === 'replay' ? 'bg-blue-100 text-blue-700' :
-                          item.type === 'exercise' ? 'bg-emerald-100 text-emerald-700' :
-                          'bg-purple-100 text-purple-700'
-                        }`}>
-                          {item.type === 'replay' ? '回放' : item.type === 'exercise' ? '练习' : '复习'}
-                        </span>
-                        <span className="text-sm font-medium text-gray-900">{item.title}</span>
-                        <span className="text-xs text-gray-400">{item.estimatedMinutes}分钟</span>
-                      </div>
-                      <p className="text-xs text-gray-500 mt-1">{item.description}</p>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </Section>
-
             {/* 对话历史 */}
             {chatHistory.length > 0 && (
               <div className="space-y-3 pt-4 border-t border-gray-100">
@@ -512,7 +759,9 @@ export function AITutor({ breakpoint, segments, isLoading: externalLoading, onRe
                     key={i} 
                     className={`chat-bubble ${msg.role}`}
                   >
-                    <div className="whitespace-pre-wrap text-sm">{msg.content}</div>
+                    <div className="whitespace-pre-wrap text-sm">
+                      {msg.role === 'assistant' ? renderTextWithTimestamps(msg.content) : msg.content}
+                    </div>
                   </div>
                 ))}
                 <div ref={chatEndRef} />

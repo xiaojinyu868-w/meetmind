@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { useState } from 'react';
+import { useAuth } from '@/lib/hooks/useAuth';
 
 interface HeaderProps {
   lessonTitle: string;
@@ -11,6 +12,19 @@ interface HeaderProps {
 
 export function Header({ lessonTitle, courseName, userRole = 'student' }: HeaderProps) {
   const [showUserMenu, setShowUserMenu] = useState(false);
+  const { user, isAuthenticated, logout } = useAuth();
+
+  const handleLogout = async () => {
+    await logout();
+    setShowUserMenu(false);
+  };
+
+  const roleLabels: Record<string, string> = {
+    student: '学生',
+    parent: '家长',
+    teacher: '教师',
+    admin: '管理员',
+  };
 
   return (
     <header className="h-16 glass border-b border-white/20 flex items-center justify-between px-6 flex-shrink-0 no-print">
@@ -44,33 +58,58 @@ export function Header({ lessonTitle, courseName, userRole = 'student' }: Header
           <RoleTab href="/teacher" label="教师" icon="👨‍🏫" active={userRole === 'teacher'} />
         </nav>
 
-        {/* 用户头像 */}
+        {/* 用户头像/登录按钮 */}
         <div className="relative">
-          <button
-            onClick={() => setShowUserMenu(!showUserMenu)}
-            className="w-9 h-9 bg-gradient-to-br from-gray-100 to-gray-200 rounded-full flex items-center justify-center hover:from-gray-200 hover:to-gray-300 transition-all"
-          >
-            <span className="text-base">
-              {userRole === 'parent' ? '👨‍👩‍👧' : userRole === 'teacher' ? '👨‍🏫' : '👤'}
-            </span>
-          </button>
-          
-          {showUserMenu && (
-            <div className="absolute right-0 top-full mt-2 w-48 bg-white rounded-xl shadow-lg border border-gray-100 py-2 animate-scale-in z-50">
-              <div className="px-4 py-2 border-b border-gray-100">
-                <p className="text-sm font-medium text-gray-900">张小明</p>
-                <p className="text-xs text-gray-500">学生账号</p>
-              </div>
-              <button className="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-50 transition-colors">
-                设置
+          {isAuthenticated && user ? (
+            <>
+              <button
+                onClick={() => setShowUserMenu(!showUserMenu)}
+                className="w-9 h-9 bg-gradient-to-br from-gray-100 to-gray-200 rounded-full flex items-center justify-center hover:from-gray-200 hover:to-gray-300 transition-all overflow-hidden"
+              >
+                {user.avatar ? (
+                  <img src={user.avatar} alt={user.nickname} className="w-full h-full object-cover" />
+                ) : (
+                  <span className="text-base">
+                    {user.role === 'parent' ? '👨‍👩‍👧' : user.role === 'teacher' ? '👨‍🏫' : '👤'}
+                  </span>
+                )}
               </button>
-              <button className="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-50 transition-colors">
-                帮助
-              </button>
-              <button className="w-full px-4 py-2 text-left text-sm text-rose-600 hover:bg-rose-50 transition-colors">
-                退出登录
-              </button>
-            </div>
+              
+              {showUserMenu && (
+                <div className="absolute right-0 top-full mt-2 w-48 bg-white rounded-xl shadow-lg border border-gray-100 py-2 animate-scale-in z-50">
+                  <div className="px-4 py-2 border-b border-gray-100">
+                    <p className="text-sm font-medium text-gray-900">{user.nickname}</p>
+                    <p className="text-xs text-gray-500">{roleLabels[user.role] || user.role}账号</p>
+                  </div>
+                  <Link
+                    href="/profile"
+                    onClick={() => setShowUserMenu(false)}
+                    className="block w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-50 transition-colors"
+                  >
+                    个人资料
+                  </Link>
+                  <button className="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-50 transition-colors">
+                    设置
+                  </button>
+                  <button className="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-50 transition-colors">
+                    帮助
+                  </button>
+                  <button
+                    onClick={handleLogout}
+                    className="w-full px-4 py-2 text-left text-sm text-rose-600 hover:bg-rose-50 transition-colors"
+                  >
+                    退出登录
+                  </button>
+                </div>
+              )}
+            </>
+          ) : (
+            <Link
+              href="/login"
+              className="px-4 py-2 text-sm font-medium text-white bg-gradient-to-r from-rose-500 to-rose-600 rounded-lg hover:from-rose-600 hover:to-rose-700 transition-all shadow-md"
+            >
+              登录
+            </Link>
           )}
         </div>
       </div>

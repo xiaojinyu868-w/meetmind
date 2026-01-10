@@ -2,6 +2,7 @@
 
 // wavesurfer.js 音频播放器组件
 // 复用 wavesurfer.js (10k stars) 实现波形可视化
+// 支持离线回放时添加红点标注
 
 import { useEffect, useRef, useCallback, useState, forwardRef, useImperativeHandle } from 'react';
 import WaveSurfer from 'wavesurfer.js';
@@ -14,6 +15,7 @@ export interface WaveformAnchor {
   timestamp: number;
   status?: 'active' | 'resolved' | 'pending';
   resolved?: boolean;
+  type?: 'confusion' | 'important' | 'question';
 }
 
 export interface WaveformPlayerRef {
@@ -24,6 +26,7 @@ export interface WaveformPlayerRef {
   getCurrentTime: () => number;
   getDuration: () => number;
   setPlaybackRate: (rate: number) => void;
+  isPlaying: () => boolean;
 }
 
 interface WaveformPlayerProps {
@@ -39,6 +42,8 @@ interface WaveformPlayerProps {
   onPlayStateChange?: (isPlaying: boolean) => void;
   /** 加载完成回调 */
   onReady?: (duration: number) => void;
+  /** 新增困惑点回调（回放时标注） */
+  onAnchorAdd?: (timestamp: number) => void;
   /** 波形颜色 */
   waveColor?: string;
   /** 进度颜色 */
@@ -47,6 +52,10 @@ interface WaveformPlayerProps {
   height?: number;
   /** 是否显示控制栏 */
   showControls?: boolean;
+  /** 是否允许回放时添加标注 */
+  allowAddAnchor?: boolean;
+  /** 当前选中的困惑点 ID */
+  selectedAnchorId?: string | number;
 }
 
 export const WaveformPlayer = forwardRef<WaveformPlayerRef, WaveformPlayerProps>(({
@@ -56,23 +65,27 @@ export const WaveformPlayer = forwardRef<WaveformPlayerRef, WaveformPlayerProps>
   onAnchorClick,
   onPlayStateChange,
   onReady,
+  onAnchorAdd,
   waveColor = '#6366F1',
   progressColor = '#A5B4FC',
   height = 80,
   showControls = true,
+  allowAddAnchor = false,
+  selectedAnchorId,
 }, ref) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const wavesurferRef = useRef<WaveSurfer | null>(null);
   const regionsRef = useRef<RegionsPlugin | null>(null);
   const audioUrlRef = useRef<string | null>(null);
   
-  const [isPlaying, setIsPlaying] = useState(false);
+  const [isPlayingState, setIsPlayingState] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
   const [isReady, setIsReady] = useState(false);
   const [playbackRate, setPlaybackRateState] = useState(1);
   const [volume, setVolume] = useState(1);
   const [isMuted, setIsMuted] = useState(false);
+  const [showAddHint, setShowAddHint] = useState(false);
 
   // 暴露方法给父组件
   useImperativeHandle(ref, () => ({
@@ -90,6 +103,7 @@ export const WaveformPlayer = forwardRef<WaveformPlayerRef, WaveformPlayerProps>
       wavesurferRef.current?.setPlaybackRate(rate);
       setPlaybackRateState(rate);
     },
+    isPlaying: () => wavesurferRef.current?.isPlaying() ?? false,
   }));
 
   // 初始化 wavesurfer
@@ -129,17 +143,17 @@ export const WaveformPlayer = forwardRef<WaveformPlayerRef, WaveformPlayerProps>
     });
 
     ws.on('play', () => {
-      setIsPlaying(true);
+      setIsPlayingState(true);
       onPlayStateChange?.(true);
     });
 
     ws.on('pause', () => {
-      setIsPlaying(false);
+      setIsPlayingState(false);
       onPlayStateChange?.(false);
     });
 
     ws.on('finish', () => {
-      setIsPlaying(false);
+      setIsPlayingState(false);
       onPlayStateChange?.(false);
     });
 
@@ -206,27 +220,31 @@ export const WaveformPlayer = forwardRef<WaveformPlayerRef, WaveformPlayerProps>
     };
   }, [src]);
 
-  // 更新困惑点标记
+  // 更新困惑点标记（红点）
   useEffect(() => {
     if (!regionsRef.current || !isReady || duration === 0) return;
 
     // 清除现有区域
     regionsRef.current.clearRegions();
 
-    // 添加困惑点区域
+    // 添加困惑点区域（红点标记）
     anchors.forEach((anchor, index) => {
       const startSec = anchor.timestamp / 1000;
       const endSec = Math.min(startSec + 5, duration / 1000); // 5秒区域
       
       // 判断是否已解决
       const isResolved = anchor.status === 'resolved' || anchor.resolved === true;
+      // 判断是否选中
+      const isSelected = selectedAnchorId !== undefined && anchor.id === selectedAnchorId;
 
       const region = regionsRef.current!.addRegion({
         start: startSec,
         end: endSec,
-        color: isResolved 
-          ? 'rgba(34, 197, 94, 0.3)'  // 绿色 - 已解决
-          : 'rgba(239, 68, 68, 0.3)', // 红色 - 未解决
+        color: isSelected
+          ? 'rgba(239, 68, 68, 0.5)'  // 选中状态 - 更深的红色
+          : isResolved 
+            ? 'rgba(34, 197, 94, 0.3)'  // 绿色 - 已解决
+            : 'rgba(239, 68, 68, 0.3)', // 红色 - 未解决
         drag: false,
         resize: false,
         id: `anchor-${anchor.id || index}`,
@@ -237,7 +255,7 @@ export const WaveformPlayer = forwardRef<WaveformPlayerRef, WaveformPlayerProps>
         onAnchorClick?.(anchor);
       });
     });
-  }, [anchors, isReady, duration, onAnchorClick]);
+  }, [anchors, isReady, duration, onAnchorClick, selectedAnchorId]);
 
   // 播放控制
   const togglePlay = useCallback(() => {
@@ -257,6 +275,14 @@ export const WaveformPlayer = forwardRef<WaveformPlayerRef, WaveformPlayerProps>
       wavesurferRef.current.seekTo(newTime / duration);
     }
   }, [currentTime, duration]);
+
+  // 添加困惑点标注（回放时）
+  const handleAddAnchor = useCallback(() => {
+    if (!allowAddAnchor || !onAnchorAdd) return;
+    onAnchorAdd(currentTime);
+    setShowAddHint(true);
+    setTimeout(() => setShowAddHint(false), 2000);
+  }, [allowAddAnchor, onAnchorAdd, currentTime]);
 
   const cyclePlaybackRate = useCallback(() => {
     const rates = [0.5, 0.75, 1, 1.25, 1.5, 2];
@@ -314,12 +340,45 @@ export const WaveformPlayer = forwardRef<WaveformPlayerRef, WaveformPlayerProps>
   return (
     <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
       {/* 波形容器 */}
-      <div className="p-4 bg-gradient-to-br from-gray-50 to-white">
+      <div className="p-4 bg-gradient-to-br from-gray-50 to-white relative">
         <div 
           ref={containerRef} 
           className="rounded-xl overflow-hidden cursor-pointer"
           style={{ minHeight: height }}
         />
+        
+        {/* 红点标记指示器（在波形上方显示） */}
+        {isReady && anchors.length > 0 && (
+          <div className="absolute top-2 left-4 right-4 h-2 pointer-events-none">
+            {anchors.map((anchor, index) => {
+              const position = (anchor.timestamp / duration) * 100;
+              const isResolved = anchor.status === 'resolved' || anchor.resolved === true;
+              const isSelected = selectedAnchorId !== undefined && anchor.id === selectedAnchorId;
+              return (
+                <div
+                  key={anchor.id || index}
+                  className={`absolute w-3 h-3 rounded-full transform -translate-x-1/2 transition-all cursor-pointer pointer-events-auto ${
+                    isSelected 
+                      ? 'bg-red-500 ring-2 ring-red-300 ring-offset-1 scale-125 z-10' 
+                      : isResolved 
+                        ? 'bg-green-500 hover:scale-110' 
+                        : 'bg-red-500 hover:scale-110'
+                  }`}
+                  style={{ left: `${position}%` }}
+                  onClick={() => onAnchorClick?.(anchor)}
+                  title={`困惑点 ${formatTimestampMs(anchor.timestamp)}${isResolved ? ' (已解决)' : ''}`}
+                />
+              );
+            })}
+          </div>
+        )}
+        
+        {/* 添加标注成功提示 */}
+        {showAddHint && (
+          <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 bg-red-500 text-white px-4 py-2 rounded-full text-sm font-medium animate-bounce shadow-lg">
+            🎯 已标记困惑点
+          </div>
+        )}
       </div>
 
       {/* 困惑点图例 */}
@@ -362,7 +421,7 @@ export const WaveformPlayer = forwardRef<WaveformPlayerRef, WaveformPlayerProps>
                 disabled={!isReady}
                 className="w-12 h-12 bg-gradient-to-br from-indigo-500 to-purple-500 text-white rounded-xl hover:from-indigo-600 hover:to-purple-600 disabled:opacity-50 transition-all shadow-lg shadow-indigo-500/25 flex items-center justify-center"
               >
-                {isPlaying ? (
+                {isPlayingState ? (
                   <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 24 24">
                     <path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z" />
                   </svg>
@@ -398,6 +457,19 @@ export const WaveformPlayer = forwardRef<WaveformPlayerRef, WaveformPlayerProps>
             </div>
 
             <div className="flex-1" />
+
+            {/* 添加困惑点按钮（回放时标注） */}
+            {allowAddAnchor && onAnchorAdd && (
+              <button
+                onClick={handleAddAnchor}
+                disabled={!isReady}
+                className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-red-500 to-rose-500 text-white text-sm font-medium rounded-xl hover:from-red-600 hover:to-rose-600 disabled:opacity-50 transition-all shadow-md shadow-red-500/25 active:scale-95"
+                title="标记当前位置为困惑点"
+              >
+                <span>🎯</span>
+                <span>标记困惑</span>
+              </button>
+            )}
 
             {/* 播放速度 */}
             <button

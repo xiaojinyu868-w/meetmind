@@ -347,7 +347,7 @@ export interface ClassSummary {
 /**
  * 笔记来源类型
  */
-export type NoteSource = 'chat' | 'takeaways' | 'transcript' | 'custom';
+export type NoteSource = 'chat' | 'takeaways' | 'transcript' | 'custom' | 'anchor';
 
 /**
  * 笔记元数据
@@ -364,6 +364,8 @@ export interface NoteMetadata {
     role: 'user' | 'assistant';
     timestamp?: string;
   };
+  anchorId?: string;       // 关联的困惑点 ID
+  timestamp?: number;      // 时间戳（毫秒）
   selectedText?: string;   // 选中的原文
   selectionContext?: string;
   timestampLabel?: string;

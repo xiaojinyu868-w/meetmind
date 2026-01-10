@@ -50,6 +50,11 @@ const FOLLOWUP_SYSTEM_PROMPT = `你是一位亲切的 AI 家教，正在和学�
 - 学生提问 → 直接回答问题，不要列清单
 - 学生闲聊 → 友好回应
 
+【重要】时间戳引用规则：
+- 当回答涉及课堂内容时，必须引用对应的时间戳，格式：[MM:SS] 或 [MM:SS-MM:SS]
+- 例如："老师在 [00:58] 提到了氢能源的应用"
+- 时间戳会被渲染为可点击的链接，帮助学生快速定位录音
+
 禁止事项（非常重要）：
 ❌ 禁止使用 ## 标题
 ❌ 禁止输出"老师是这样讲的"
@@ -59,7 +64,8 @@ const FOLLOWUP_SYSTEM_PROMPT = `你是一位亲切的 AI 家教，正在和学�
 
 回复风格：
 - 1-3句话即可，简洁自然
-- 像朋友聊天一样`;
+- 像朋友聊天一样
+- 引用课堂内容时附带时间戳`;
 
 export async function POST(request: NextRequest) {
   try {
@@ -83,11 +89,11 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // 获取断点附近的上下文（前后各 60 秒）
+    // 获取断点附近的上下文（前 90 秒，后 60 秒，增加上下文范围）
     const contextSegments = getSegmentsInRange(
       segments,
-      timestamp - 60000,
-      timestamp + 30000
+      timestamp - 90000,
+      timestamp + 60000
     );
 
     // 合并为完整段落
@@ -133,8 +139,8 @@ export async function POST(request: NextRequest) {
     }
     
     // ===== Mock 模式：Dify 未配置时生成模拟数据 =====
-    if (enable_guidance && !guidanceQuestion) {
-      // 生成模拟的引导问题
+    // 引导问题始终生成（核心交互方式）
+    if (!guidanceQuestion) {
       guidanceQuestion = generateMockGuidanceQuestion(contextText);
     }
     
@@ -294,11 +300,45 @@ function parseTutorResponse(content: string, segments: Segment[]) {
         const minutesMatch = line.match(/(\d+)\s*分钟/);
         const minutes = minutesMatch ? parseInt(minutesMatch[1]) : 5;
         
+        // 清理行内容，去掉序号和勾选符号
+        const cleanedLine = line.replace(/^\d+\.\s*[✅☑️]?\s*/, '').trim();
+        
+        // 提取标题：去掉类型标签和时间信息，保留核心任务描述
+        // 例如: "[回放] 再听一遍 00:25-00:35（3分钟）" -> "再听一遍 00:25-00:35"
+        let title = cleanedLine
+          .replace(/\[回放\]\s*/, '')
+          .replace(/\[练习\]\s*/, '')
+          .replace(/\[复习\]\s*/, '')
+          .split('（')[0]  // 去掉括号及后面的内容
+          .split('(')[0]   // 兼容英文括号
+          .replace(/，.*$/, '')  // 去掉逗号后的详细说明
+          .trim();
+        
+        // 提取描述：括号内或逗号后的详细说明
+        const descMatch = cleanedLine.match(/[（(]([^）)]+)[）)]|，(.+)$/);
+        let description = '';
+        if (descMatch) {
+          description = (descMatch[1] || descMatch[2] || '').trim();
+          // 去掉描述中的时间信息（避免重复）
+          description = description.replace(/^\d+分钟[，,]?\s*/, '');
+        }
+        
+        // 如果描述为空，使用简短的默认描述
+        if (!description) {
+          if (type === 'replay') {
+            description = '注意老师的讲解重点';
+          } else if (type === 'exercise') {
+            description = '动手练习巩固理解';
+          } else {
+            description = '回顾总结知识要点';
+          }
+        }
+        
         actionItems.push({
           id: `action-${index + 1}`,
           type,
-          title: line.replace(/^\d+\.\s*[✅☑️]\s*/, '').split('（')[0].trim(),
-          description: line.replace(/^\d+\.\s*[✅☑️]\s*/, ''),
+          title,
+          description,
           estimatedMinutes: minutes,
           completed: false,
         });
@@ -373,71 +413,249 @@ function parseTimeToMs(time: string): number {
 
 /**
  * 生成模拟的引导问题（Dify 未配置时使用）
+ * 根据具体的困惑点录音内容自动生成精准选项
  */
 function generateMockGuidanceQuestion(context: string): GuidanceQuestion {
-  // 根据上下文内容生成相关的引导问题
-  const hasFormula = context.includes('公式') || context.includes('=') || context.includes('²');
-  const hasGraph = context.includes('图像') || context.includes('抛物线') || context.includes('开口');
-  const hasExample = context.includes('例') || context.includes('题') || context.includes('求');
+  // 分析上下文内容，提取关键信息
+  const lines = context.split('\n').filter(l => l.trim());
   
-  if (hasGraph) {
+  // 提取时间戳和内容
+  const contentParts: Array<{ time: string; text: string }> = [];
+  for (const line of lines) {
+    const match = line.match(/\[(\d{1,2}:\d{2}-\d{1,2}:\d{2})\]\s*(.+)/);
+    if (match) {
+      contentParts.push({ time: match[1], text: match[2] });
+    }
+  }
+  
+  const fullText = contentParts.map(p => p.text).join(' ').toLowerCase();
+  
+  // 检测特定场景并生成精准选项
+  
+  // 场景1：英语听力/口语场景（如 Jane Bond 例子）
+  if (fullText.includes('name') || fullText.includes('bond') || fullText.includes('jane') || 
+      fullText.includes('hello') || fullText.includes('nice to meet')) {
+    const hasRepetition = /(\w+)[,\s]+\1/i.test(fullText); // 检测重复词（如 Jane, Jane）
+    
     return {
-      id: 'mock-guidance-1',
-      question: '你是在听到"今天我们来学习二次函数的图像"这句话时感到困惑了吗？是因为不知道"二次函数"是什么，还是不明白它怎么会有"图像"？',
+      id: 'guidance-english-name',
+      question: '听到这段对话时，你是在哪个环节感到困惑的？',
       type: 'single_choice',
       options: [
-        { id: 'opt-1', text: '不清楚"二次函数"为什么叫"二次"，或者和图像有什么关系', category: 'concept' },
-        { id: 'opt-2', text: '还没建立"代数表达式 y = ax² + bx + c"和"抛物线图像"之间的联系', category: 'concept' },
-        { id: 'opt-3', text: '不理解 a > 0 和 a < 0 时图像为什么会有不同的开口方向', category: 'procedure' },
-        { id: 'opt-4', text: '其他原因，我想直接问问题', category: 'application' },
+        { 
+          id: 'opt-1', 
+          text: '不理解为什么名字会重复说两遍（如 "Jane, Jane Bond"）', 
+          category: 'comprehension' 
+        },
+        { 
+          id: 'opt-2', 
+          text: '分不清昵称（first name）和全名（full name）的区别', 
+          category: 'concept' 
+        },
+        { 
+          id: 'opt-3', 
+          text: '听不清具体发音，不确定说的是什么词', 
+          category: 'comprehension' 
+        },
+        { 
+          id: 'opt-4', 
+          text: '不理解这种自我介绍的文化背景或语法结构', 
+          category: 'application' 
+        },
       ],
-      hint: '选择最接近你困惑的选项，帮助我更好地帮助你',
+      hint: '选择最接近你困惑的选项，帮助我精准定位问题',
     };
   }
   
-  if (hasFormula) {
+  // 场景2：数学公式场景
+  if (fullText.includes('公式') || fullText.includes('=') || fullText.includes('²') ||
+      fullText.includes('函数') || fullText.includes('方程')) {
     return {
-      id: 'mock-guidance-2',
-      question: '关于这个公式，你觉得哪个部分最让你困惑？',
+      id: 'guidance-math-formula',
+      question: '关于这个数学内容，你具体卡在哪个环节？',
       type: 'single_choice',
       options: [
-        { id: 'opt-1', text: '不理解公式中各个字母代表什么', category: 'concept' },
-        { id: 'opt-2', text: '不知道这个公式是怎么推导出来的', category: 'procedure' },
-        { id: 'opt-3', text: '公式我懂，但不知道什么时候用', category: 'application' },
-        { id: 'opt-4', text: '计算时总是出错', category: 'calculation' },
+        { 
+          id: 'opt-1', 
+          text: '不理解公式中字母/符号的含义', 
+          category: 'concept' 
+        },
+        { 
+          id: 'opt-2', 
+          text: '不知道这个公式是怎么推导出来的', 
+          category: 'procedure' 
+        },
+        { 
+          id: 'opt-3', 
+          text: '公式我懂，但不知道什么情况下该用它', 
+          category: 'application' 
+        },
+        { 
+          id: 'opt-4', 
+          text: '代入计算时总是出错', 
+          category: 'calculation' 
+        },
       ],
       hint: '选择最接近你困惑的选项',
     };
   }
   
-  if (hasExample) {
+  // 场景3：图像/图形场景
+  if (fullText.includes('图像') || fullText.includes('图形') || fullText.includes('抛物线') ||
+      fullText.includes('开口') || fullText.includes('坐标')) {
     return {
-      id: 'mock-guidance-3',
-      question: '这道例题让你卡住了，是因为哪个环节？',
+      id: 'guidance-graph',
+      question: '关于图像这部分，你是在哪里卡住了？',
       type: 'single_choice',
       options: [
-        { id: 'opt-1', text: '题目看不懂，不知道要求什么', category: 'comprehension' },
-        { id: 'opt-2', text: '不知道该用什么方法解', category: 'procedure' },
-        { id: 'opt-3', text: '方法知道，但计算过程出错', category: 'calculation' },
-        { id: 'opt-4', text: '答案对了，但不确定理解是否正确', category: 'concept' },
+        { 
+          id: 'opt-1', 
+          text: '不理解图像和公式之间的对应关系', 
+          category: 'concept' 
+        },
+        { 
+          id: 'opt-2', 
+          text: '不知道怎么根据条件画出图像', 
+          category: 'procedure' 
+        },
+        { 
+          id: 'opt-3', 
+          text: '看不懂图像上各个点/线的意义', 
+          category: 'comprehension' 
+        },
+        { 
+          id: 'opt-4', 
+          text: '不理解参数变化对图像的影响', 
+          category: 'concept' 
+        },
       ],
       hint: '选择最接近你困惑的选项',
     };
   }
   
-  // 默认问题
+  // 场景4：物理/化学实验场景
+  if (fullText.includes('实验') || fullText.includes('反应') || fullText.includes('现象') ||
+      fullText.includes('能量') || fullText.includes('力')) {
+    return {
+      id: 'guidance-experiment',
+      question: '关于这个知识点，你具体在哪里感到困惑？',
+      type: 'single_choice',
+      options: [
+        { 
+          id: 'opt-1', 
+          text: '不理解基本概念或原理', 
+          category: 'concept' 
+        },
+        { 
+          id: 'opt-2', 
+          text: '不知道实验步骤或操作方法', 
+          category: 'procedure' 
+        },
+        { 
+          id: 'opt-3', 
+          text: '不理解为什么会出现这种现象', 
+          category: 'comprehension' 
+        },
+        { 
+          id: 'opt-4', 
+          text: '不知道这个知识点在实际中怎么应用', 
+          category: 'application' 
+        },
+      ],
+      hint: '选择最接近你困惑的选项',
+    };
+  }
+  
+  // 场景5：阅读理解/语文场景
+  if (fullText.includes('文章') || fullText.includes('作者') || fullText.includes('意思') ||
+      fullText.includes('表达') || fullText.includes('理解')) {
+    return {
+      id: 'guidance-reading',
+      question: '关于这段内容，你是在哪个层面感到困惑？',
+      type: 'single_choice',
+      options: [
+        { 
+          id: 'opt-1', 
+          text: '有些词语/句子看不懂', 
+          category: 'comprehension' 
+        },
+        { 
+          id: 'opt-2', 
+          text: '不理解作者想表达的意思', 
+          category: 'concept' 
+        },
+        { 
+          id: 'opt-3', 
+          text: '不知道怎么分析文章结构', 
+          category: 'procedure' 
+        },
+        { 
+          id: 'opt-4', 
+          text: '不会用自己的话总结/复述', 
+          category: 'application' 
+        },
+      ],
+      hint: '选择最接近你困惑的选项',
+    };
+  }
+  
+  // 默认场景：通用引导问题
+  // 尝试从上下文中提取关键词来生成更相关的问题
+  const keywords = extractKeywords(fullText);
+  const keywordHint = keywords.length > 0 ? `（涉及：${keywords.slice(0, 3).join('、')}）` : '';
+  
   return {
-    id: 'mock-guidance-default',
-    question: '你觉得是哪个方面让你感到困惑？',
+    id: 'guidance-default',
+    question: `听到这段内容时${keywordHint}，你是在哪个环节感到困惑的？`,
     type: 'single_choice',
     options: [
-      { id: 'opt-1', text: '概念不清楚，基础知识有漏洞', category: 'concept' },
-      { id: 'opt-2', text: '步骤太多，不知道先做什么', category: 'procedure' },
-      { id: 'opt-3', text: '老师讲得太快，没跟上', category: 'comprehension' },
-      { id: 'opt-4', text: '其他原因', category: 'application' },
+      { 
+        id: 'opt-1', 
+        text: '基础概念不清楚，有知识漏洞', 
+        category: 'concept' 
+      },
+      { 
+        id: 'opt-2', 
+        text: '老师讲得太快，没跟上思路', 
+        category: 'comprehension' 
+      },
+      { 
+        id: 'opt-3', 
+        text: '步骤/方法太多，不知道怎么操作', 
+        category: 'procedure' 
+      },
+      { 
+        id: 'opt-4', 
+        text: '其他原因，我想直接描述问题', 
+        category: 'application' 
+      },
     ],
     hint: '选择最接近你困惑的选项，帮助我更好地帮助你',
   };
+}
+
+/**
+ * 从文本中提取关键词
+ */
+function extractKeywords(text: string): string[] {
+  const keywords: string[] = [];
+  
+  // 常见学科关键词
+  const patterns = [
+    /函数|方程|公式|定理|证明/g,
+    /实验|反应|现象|能量|物质/g,
+    /文章|作者|表达|意思|理解/g,
+    /单词|语法|句子|发音|听力/g,
+  ];
+  
+  for (const pattern of patterns) {
+    const matches = text.match(pattern);
+    if (matches) {
+      keywords.push(...matches);
+    }
+  }
+  
+  return [...new Set(keywords)];
 }
 
 /**

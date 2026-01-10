@@ -123,6 +123,19 @@ export interface Note {
   updatedAt: Date;
 }
 
+/** AI 家教响应缓存 */
+export interface TutorResponseCache {
+  id?: number;
+  anchorId: string;           // 困惑点ID
+  sessionId: string;
+  timestamp: number;          // 困惑点时间戳
+  response: string;           // JSON 序列化的完整响应
+  chatHistory: string;        // JSON 序列化的对话历史
+  conversationId?: string;    // Dify 会话ID
+  createdAt: Date;
+  updatedAt: Date;
+}
+
 // ============ 数据库定义 ============
 
 class MeetMindDB extends Dexie {
@@ -133,6 +146,7 @@ class MeetMindDB extends Dexie {
   highlightTopics!: Table<HighlightTopic>;
   classSummaries!: Table<ClassSummary>;
   notes!: Table<Note>;
+  tutorResponseCache!: Table<TutorResponseCache>;
 
   constructor() {
     super('MeetMindDB');
@@ -154,6 +168,18 @@ class MeetMindDB extends Dexie {
       highlightTopics: '++id, topicId, sessionId, importance, createdAt',
       classSummaries: '++id, summaryId, sessionId, createdAt',
       notes: '++id, noteId, sessionId, studentId, source, createdAt'
+    });
+    
+    // 版本 3: 添加 AI 家教响应缓存表
+    this.version(3).stores({
+      audioSessions: '++id, sessionId, status, createdAt',
+      anchors: '++id, sessionId, timestamp, status, type',
+      transcripts: '++id, sessionId, startMs, isFinal',
+      preferences: 'key',
+      highlightTopics: '++id, topicId, sessionId, importance, createdAt',
+      classSummaries: '++id, summaryId, sessionId, createdAt',
+      notes: '++id, noteId, sessionId, studentId, source, createdAt',
+      tutorResponseCache: '++id, anchorId, sessionId, timestamp, createdAt'
     });
   }
 }
@@ -490,4 +516,76 @@ export async function getNotesBySource(
     .where(['sessionId', 'source'])
     .equals([sessionId, source])
     .sortBy('createdAt');
+}
+
+// ============ AI 家教响应缓存操作 ============
+
+/** 保存 AI 家教响应缓存 */
+export async function saveTutorResponseCache(
+  cache: Omit<TutorResponseCache, 'id' | 'createdAt' | 'updatedAt'>
+): Promise<number> {
+  const now = new Date();
+  
+  // 检查是否已存在，存在则更新
+  const existing = await db.tutorResponseCache
+    .where('anchorId')
+    .equals(cache.anchorId)
+    .first();
+  
+  if (existing) {
+    await db.tutorResponseCache.update(existing.id!, {
+      ...cache,
+      updatedAt: now
+    });
+    return existing.id!;
+  }
+  
+  return db.tutorResponseCache.add({
+    ...cache,
+    createdAt: now,
+    updatedAt: now
+  });
+}
+
+/** 获取困惑点的 AI 家教响应缓存 */
+export async function getTutorResponseCache(anchorId: string): Promise<TutorResponseCache | undefined> {
+  return db.tutorResponseCache
+    .where('anchorId')
+    .equals(anchorId)
+    .first();
+}
+
+/** 获取会话的所有 AI 家教响应缓存 */
+export async function getSessionTutorCaches(sessionId: string): Promise<TutorResponseCache[]> {
+  return db.tutorResponseCache
+    .where('sessionId')
+    .equals(sessionId)
+    .sortBy('timestamp');
+}
+
+/** 更新 AI 家教响应缓存 */
+export async function updateTutorResponseCache(
+  anchorId: string,
+  updates: Partial<Omit<TutorResponseCache, 'id' | 'anchorId' | 'sessionId' | 'createdAt'>>
+): Promise<number> {
+  return db.tutorResponseCache
+    .where('anchorId')
+    .equals(anchorId)
+    .modify({ ...updates, updatedAt: new Date() });
+}
+
+/** 删除困惑点的 AI 家教响应缓存 */
+export async function deleteTutorResponseCache(anchorId: string): Promise<number> {
+  return db.tutorResponseCache
+    .where('anchorId')
+    .equals(anchorId)
+    .delete();
+}
+
+/** 删除会话的所有 AI 家教响应缓存 */
+export async function deleteSessionTutorCaches(sessionId: string): Promise<number> {
+  return db.tutorResponseCache
+    .where('sessionId')
+    .equals(sessionId)
+    .delete();
 }
