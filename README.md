@@ -188,10 +188,18 @@ DASHSCOPE_ASR_WS_SR=16000
 | 波形播放器 | ✅ | 音频波形可视化、锚点跳转 |
 | 学生端 | ✅ | 录音模式 + 复习模式完整流程 |
 | 家长端 | ✅ | 今日概览、困惑列表、陪学脚本 |
-| 教师端 | ✅ | 困惑热区、学生详情、AI 反思 |
+| 教师端 | ✅ | 困惑热点 TOP3、AI 流式生成课后反思 |
 | 多模型支持 | ✅ | 通义千问/Gemini/OpenAI 可切换 |
 
-### 最新更新 (v1.1)
+### 最新更新 (v1.2)
+
+#### 教师端全新升级
+
+| 功能 | 描述 |
+|------|------|
+| **困惑热点 TOP3 卡片** | 金/银/铜排名徽章、热度指示条、可展开学生列表 |
+| **AI 流式生成课后反思** | 接入通义千问，实时流式输出教学反思报告 |
+| **学术精致风 UI** | 深蓝靛色主调、暖金色点缀、玻璃态效果 |
 
 #### 交互体验优化
 
@@ -235,10 +243,11 @@ DASHSCOPE_ASR_WS_SR=16000
 
 | 功能 | 描述 |
 |------|------|
-| 统计卡片 | 今日课程数、参与学生数、困惑点总数 |
-| 困惑热区 | 时间轴可视化热区、热度排序列表 |
-| 学生详情 | 表格展示每个困惑点：时间、学生、状态 |
-| AI 反思 | 基于课堂数据生成教学反思和改进建议 |
+| **课程信息卡片** | 学科、教师、时长、学生数统计 |
+| **困惑热点 TOP3** | 金银铜排名、热度可视化、困惑人数、可能原因 |
+| **学生列表展开** | 点击卡片查看具体困惑学生名单 |
+| **AI 课后反思** | 一键生成、流式输出、支持复制和重新生成 |
+| **反思报告结构** | 课堂总结 → 教学亮点 → 问题分析 → 改进建议 |
 
 ### 核心组件
 
@@ -251,6 +260,9 @@ DASHSCOPE_ASR_WS_SR=16000
 | `WaveformPlayer` | `src/components/WaveformPlayer.tsx` | 音频波形播放器，支持锚点跳转 |
 | `ActionList` | `src/components/ActionList.tsx` | 行动清单，显示待完成任务 |
 | `ConfusionHeatmap` | `src/components/ConfusionHeatmap.tsx` | 困惑热区可视化 |
+| `TeacherDashboard` | `src/components/teacher/TeacherDashboard.tsx` | 教师端仪表盘主组件 |
+| `ConfusionHotspotCard` | `src/components/teacher/ConfusionHotspotCard.tsx` | 困惑热点 TOP3 卡片 |
+| `ReflectionGenerator` | `src/components/teacher/ReflectionGenerator.tsx` | AI 流式生成课后反思 |
 
 ### API 路由
 
@@ -374,7 +386,7 @@ DASHSCOPE_ASR_WS_SR=16000
 |------|:----:|------|
 | 课件文本对齐 | ❌ | 支持课件导入/电子教案同步 |
 | 讲台/黑板关键帧 | ❌ | 事件触发截帧 |
-| 教师反思面板 | ⚠️ | 升级为一键生成模板 |
+| 教师反思面板 | ✅ | 已实现 AI 流式生成，待接入真实数据 |
 | 少题高命中练习 | ❌ | "3题补懂"个性化推荐 |
 
 **过线标准**：
@@ -429,13 +441,14 @@ DASHSCOPE_ASR_WS_SR=16000
 
 #### 教师端增强
 
-- [ ] **困惑热点 TOP3**：按分钟段聚合按键分布
-  - 文件：`src/app/teacher/page.tsx`
-  - 显示：可能原因（讲得快/例子不足/前置概念缺失）
+- [x] **困惑热点 TOP3**：按分钟段聚合按键分布
+  - 文件：`src/components/teacher/ConfusionHotspotCard.tsx`
+  - ✅ 已实现：金银铜排名、热度指示条、可展开学生列表
 
-- [ ] **一键生成课后反思**：可编辑模板
-  - 文件：`src/lib/services/teaching-suggestion.ts`
-  - 模板：本节亮点 / 改进点 / 下节提醒
+- [x] **一键生成课后反思**：AI 流式生成
+  - 文件：`src/components/teacher/ReflectionGenerator.tsx`
+  - ✅ 已实现：接入通义千问、流式输出、支持停止/重新生成
+  - 模板：课堂总结 / 教学亮点 / 问题分析 / 改进建议
 
 ### 🟡 中优先级（MVP 2.0）
 

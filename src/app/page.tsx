@@ -512,7 +512,7 @@ export default function StudentApp() {
   const unresolvedCount = anchors.filter(a => !a.resolved).length;
 
   return (
-    <div className="h-screen flex flex-col">
+    <div className="h-screen flex flex-col overflow-hidden">
       <DegradedModeBanner status={serviceStatus} />
       
       <Header 
