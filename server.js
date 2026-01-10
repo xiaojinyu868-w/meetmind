@@ -31,27 +31,6 @@ const handle = app.getRequestHandler();
 // 百炼 WebSocket 地址
 const DASHSCOPE_WSS_URL = 'wss://dashscope.aliyuncs.com/api-ws/v1/realtime';
 
-// 允许访问 ASR 代理的来源
-const ALLOWED_ORIGINS = (process.env.ASR_ALLOWED_ORIGINS || 'http://localhost:3001,http://127.0.0.1:3001')
-  .split(',')
-  .map((origin) => origin.trim())
-  .filter(Boolean);
-
-function getRequestOrigin(req) {
-  const explicitOrigin = req.headers.origin;
-  if (explicitOrigin) return explicitOrigin;
-  if (req.headers.host) {
-    const proto = req.headers['x-forwarded-proto'] || 'http';
-    return `${proto}://${req.headers.host}`;
-  }
-  return '';
-}
-
-function isOriginAllowed(origin) {
-  if (!origin || ALLOWED_ORIGINS.length === 0) return true;
-  return ALLOWED_ORIGINS.some((allowed) => origin.toLowerCase().startsWith(allowed.toLowerCase()));
-}
-
 // 生成事件 ID
 let eventCounter = 0;
 function generateEventId() {
@@ -88,16 +67,8 @@ app.prepare().then(() => {
   // 处理 WebSocket 升级请求
   server.on('upgrade', (request, socket, head) => {
     const { pathname } = parse(request.url || '', true);
-    const origin = getRequestOrigin(request);
 
     if (pathname === '/api/asr-stream') {
-      if (!isOriginAllowed(origin)) {
-        console.warn('[ASR-Proxy] Blocked upgrade from disallowed origin:', origin);
-        socket.write('HTTP/1.1 403 Forbidden\r\n\r\n');
-        socket.destroy();
-        return;
-      }
-
       // ASR WebSocket 请求由我们处理
       wss.handleUpgrade(request, socket, head, (ws) => {
         wss.emit('connection', ws, request);
@@ -136,15 +107,6 @@ app.prepare().then(() => {
     let sentenceIndex = 0;
     let sessionStartTime = Date.now();  // 立即初始化，用于计算相对时间戳
     let lastSentenceEndTime = 0;  // 跟踪上一个句子的结束时间
-    const sessionReadyTimer = setTimeout(() => {
-      if (!isSessionReady) {
-        console.error('[ASR-Proxy] Session failed to become ready within timeout');
-        if (clientWs.readyState === WebSocket.OPEN) {
-          clientWs.send(JSON.stringify({ event: 'error', error: '实时转写服务连接超时，请稍后重试' }));
-          clientWs.close(1013, 'ASR session timeout');
-        }
-      }
-    }, 15000);
 
 
     // 连接到百炼 WebSocket
@@ -205,7 +167,6 @@ app.prepare().then(() => {
               // Session 配置完成，可以开始发送音频
               console.log('[ASR-Proxy] Session updated, ready to receive audio');
               isSessionReady = true;
-              clearTimeout(sessionReadyTimer);
               sessionStartTime = Date.now();  // 记录开始时间
               clientWs.send(JSON.stringify({ event: 'ready' }));
               
@@ -348,7 +309,6 @@ app.prepare().then(() => {
       dashscopeWs.on('close', (code, reason) => {
         console.log('[ASR-Proxy] DashScope closed:', code, reason.toString());
         isSessionReady = false;
-        clearTimeout(sessionReadyTimer);
         if (clientWs.readyState === WebSocket.OPEN) {
           clientWs.send(JSON.stringify({ event: 'closed', code }));
         }
@@ -428,7 +388,6 @@ app.prepare().then(() => {
 
     clientWs.on('close', () => {
       console.log('[ASR-Proxy] Client disconnected');
-      clearTimeout(sessionReadyTimer);
       if (dashscopeWs && dashscopeWs.readyState === WebSocket.OPEN) {
         try {
           const commitEvent = {
