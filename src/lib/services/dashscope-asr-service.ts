@@ -117,11 +117,17 @@ export class DashScopeASRClient {
 
         this.ws.onclose = (event) => {
           console.log('[DashScopeASR] WebSocket closed:', event.code, event.reason);
+          if (!this.isReady && event.code === 1013) {
+            this.callbacks.onError?.('实时转写服务连接超时，请稍后再试');
+          } else if (event.code === 1006) {
+            this.callbacks.onError?.('实时转写连接被中断，请检查网络或刷新页面');
+          }
           if (this.status !== 'stopped') {
             this.updateStatus('stopped');
           }
           this.ws = null;
         };
+
 
         // 超时处理
         setTimeout(() => {

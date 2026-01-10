@@ -1,4 +1,4 @@
-﻿'use client';
+'use client';
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { Recorder } from '@/components/Recorder';
@@ -17,7 +17,9 @@ import { AnchorDetailPanel } from '@/components/AnchorDetailPanel';
 import { anchorService, type Anchor } from '@/lib/services/anchor-service';
 import { memoryService, type ClassTimeline } from '@/lib/services/memory-service';
 import { checkServices, type ServiceStatus as ServiceStatusType } from '@/lib/services/health-check';
-import { getPreference, setPreference } from '@/lib/db';
+import { getPreference, setPreference, db, generateSessionId } from '@/lib/db';
+import { useAuth } from '@/lib/hooks/useAuth';
+import { classroomDataService, type StudentAnchor } from '@/lib/services/classroom-data-service';
 import type { TranscriptSegment, HighlightTopic, ClassSummary, Note, TopicGenerationMode, NoteSource, NoteMetadata } from '@/types';
 import { DEMO_SEGMENTS, DEMO_ANCHORS, DEMO_AUDIO_URL } from '@/fixtures/demo-data';
 
@@ -41,6 +43,9 @@ interface ActionItem {
 }
 
 export default function StudentApp() {
+  // 获取当前登录用户
+  const { user, isAuthenticated } = useAuth();
+  
   const [viewMode, setViewMode] = useState<ViewMode>('record');
   const [sessionId, setSessionId] = useState<string>('demo-session');
   const [isRecording, setIsRecording] = useState(false);
@@ -69,6 +74,10 @@ export default function StudentApp() {
   const liveSegmentsRef = useRef<TranscriptSegment[]>([]);
   const waveformRef = useRef<WaveformPlayerRef>(null);
   const hasRestoredState = useRef(false);  // 是否已恢复状态
+  
+  // 获取当前用户的 studentId 和 studentName
+  const studentId = user?.id || 'anonymous';
+  const studentName = user?.nickname || user?.username || '匿名用户';
 
   // 保存应用状态到 IndexedDB
   const saveAppState = useCallback(async () => {
@@ -145,11 +154,70 @@ export default function StudentApp() {
         setAudioUrl(DEMO_AUDIO_URL);
         setAnchors(DEMO_ANCHORS);
         
+        // 将演示数据写入 classroomDataService（供教师端读取）
+        // 创建演示会话
+        classroomDataService.saveSession({
+          id: sessionId,
+          subject: '英语',
+          topic: 'Australia\'s Moving Experience',
+          teacherName: 'Demo Teacher',
+          duration: DEMO_SEGMENTS.length > 0 ? DEMO_SEGMENTS[DEMO_SEGMENTS.length - 1].endMs : 0,
+          status: 'completed',
+          createdBy: studentId,
+        });
+        
+        // 将演示困惑点写入 classroomDataService
+        DEMO_ANCHORS.forEach(anchor => {
+          // 获取转录上下文
+          const contextSegments = DEMO_SEGMENTS.filter(
+            s => s.startMs <= anchor.timestamp + 5000 && s.endMs >= anchor.timestamp - 5000
+          );
+          const transcriptContext = contextSegments.map(s => s.text).join(' ').slice(0, 200);
+          
+          // 写入共享存储（如果尚未存在）
+          const existingAnchors = classroomDataService.getSessionAnchors(sessionId);
+          const alreadyExists = existingAnchors.some(a => a.id === anchor.id);
+          if (!alreadyExists) {
+            classroomDataService.saveStudentAnchor(
+              sessionId,
+              studentId,
+              studentName,
+              anchor.timestamp,
+              anchor.type,
+              transcriptContext
+            );
+          }
+        });
+        
+        // 将演示转录写入 IndexedDB（供教师端读取）
+        try {
+          const existingTranscripts = await db.transcripts
+            .where('sessionId')
+            .equals(sessionId)
+            .count();
+          
+          if (existingTranscripts === 0) {
+            await db.transcripts.bulkAdd(
+              DEMO_SEGMENTS.map(seg => ({
+                sessionId: sessionId,
+                text: seg.text,
+                startMs: seg.startMs,
+                endMs: seg.endMs,
+                confidence: seg.confidence || 1.0,
+                isFinal: true,
+              }))
+            );
+            console.log(`已保存 ${DEMO_SEGMENTS.length} 条演示转录到 IndexedDB`);
+          }
+        } catch (e) {
+          console.error('保存演示转录到 IndexedDB 失败:', e);
+        }
+        
         const tl = memoryService.buildTimeline(
           sessionId,
           DEMO_SEGMENTS,
           DEMO_ANCHORS,
-          { subject: '数学', teacher: '张老师', date: new Date().toISOString().split('T')[0] }
+          { subject: '英语', teacher: 'Demo Teacher', date: new Date().toISOString().split('T')[0] }
         );
         setTimeline(tl);
         
@@ -189,7 +257,17 @@ export default function StudentApp() {
     setAudioUrl(null); // 清除示例音频URL
     liveSegmentsRef.current = [];
     anchorService.clear(newSessionId);
-  }, []);
+    
+    // 创建课程会话记录 (供教师端读取)
+    classroomDataService.saveSession({
+      id: newSessionId,
+      subject: '英语',
+      topic: '课堂录音',
+      status: 'recording',
+      duration: 0,
+      createdBy: studentId,
+    });
+  }, [studentId]);
 
   const handleRecordingStop = useCallback((blob?: Blob) => {
     setIsRecording(false);
@@ -205,11 +283,26 @@ export default function StudentApp() {
     setSegments(finalSegments);
     setDataSource(isLiveData ? 'live' : 'demo');
     
+    // 计算课程时长
+    const duration = finalSegments.length > 0 
+      ? finalSegments[finalSegments.length - 1].endMs 
+      : 0;
+    
+    // 更新课程会话状态
+    classroomDataService.saveSession({
+      id: sessionId,
+      subject: '英语',
+      topic: '课堂录音',
+      teacherName: 'Teacher',
+      status: 'completed',
+      duration,
+    });
+    
     const tl = memoryService.buildTimeline(
       sessionId,
       finalSegments,
       anchors,
-      { subject: '数学', teacher: '张老师', date: new Date().toISOString().split('T')[0] }
+      { subject: '英语', teacher: 'Teacher', date: new Date().toISOString().split('T')[0] }
     );
     setTimeline(tl);
     memoryService.save(tl);
@@ -223,19 +316,52 @@ export default function StudentApp() {
   }, []);
 
   const handleAnchorMark = useCallback((timestamp: number) => {
-    const anchor = anchorService.mark(sessionId, 'student-1', timestamp, 'confusion');
+    // 同时写入旧版 anchor-service (保持兼容) 和新版共享存储
+    const anchor = anchorService.mark(sessionId, studentId, timestamp, 'confusion');
     setAnchors(prev => [...prev, anchor]);
+    
+    // 获取当前时间点附近的转录内容作为上下文
+    const contextSegments = segments.filter(
+      s => s.startMs <= timestamp + 5000 && s.endMs >= timestamp - 5000
+    );
+    const transcriptContext = contextSegments.map(s => s.text).join(' ').slice(0, 200);
+    
+    // 写入共享存储 (供教师端读取)
+    classroomDataService.saveStudentAnchor(
+      sessionId,
+      studentId,
+      studentName,
+      timestamp,
+      'confusion',
+      transcriptContext
+    );
     
     if (timeline) {
       setTimeline({ ...timeline, anchors: [...timeline.anchors, anchor] });
     }
-  }, [sessionId, timeline]);
+  }, [sessionId, studentId, studentName, timeline, segments]);
 
   // 回放时添加困惑点标注
   const handlePlaybackAnchorAdd = useCallback((timestamp: number) => {
-    const anchor = anchorService.mark(sessionId, 'student-1', timestamp, 'confusion');
+    const anchor = anchorService.mark(sessionId, studentId, timestamp, 'confusion');
     setAnchors(prev => [...prev, anchor]);
     setSelectedAnchor(anchor);
+    
+    // 获取转录上下文
+    const contextSegments = segments.filter(
+      s => s.startMs <= timestamp + 5000 && s.endMs >= timestamp - 5000
+    );
+    const transcriptContext = contextSegments.map(s => s.text).join(' ').slice(0, 200);
+    
+    // 写入共享存储
+    classroomDataService.saveStudentAnchor(
+      sessionId,
+      studentId,
+      studentName,
+      timestamp,
+      'confusion',
+      transcriptContext
+    );
     
     if (timeline) {
       setTimeline({ ...timeline, anchors: [...timeline.anchors, anchor] });
@@ -243,7 +369,7 @@ export default function StudentApp() {
     
     // 自动切换到困惑点详情面板
     setReviewTab('anchor-detail');
-  }, [sessionId, timeline]);
+  }, [sessionId, studentId, studentName, timeline, segments]);
 
   const handleAnchorSelect = useCallback((anchor: Anchor) => {
     setSelectedAnchor(anchor);
@@ -256,6 +382,10 @@ export default function StudentApp() {
     if (!selectedAnchor) return;
     
     anchorService.resolve(selectedAnchor.id, sessionId);
+    
+    // 同步更新共享存储
+    classroomDataService.resolveAnchor(selectedAnchor.id);
+    
     setAnchors(prev => prev.map(a => 
       a.id === selectedAnchor.id ? { ...a, resolved: true } : a
     ));
@@ -442,7 +572,7 @@ export default function StudentApp() {
     const newNote: Note = {
       id: crypto.randomUUID(),
       sessionId,
-      studentId: 'student-1',
+      studentId,
       source,
       text,
       metadata,
@@ -450,7 +580,7 @@ export default function StudentApp() {
       updatedAt: new Date().toISOString()
     };
     setNotes(prev => [newNote, ...prev]);
-  }, [sessionId]);
+  }, [sessionId, studentId]);
 
   // 更新笔记
   const handleUpdateNote = useCallback((noteId: string, text: string) => {
@@ -608,18 +738,52 @@ export default function StudentApp() {
                   上传课堂录音
                 </h3>
                 <AudioUploader
-                  onTranscriptReady={(newSegments, blob) => {
+                  onTranscriptReady={async (newSegments, blob) => {
+                    // 生成新的 sessionId（而不是使用默认的 demo-session）
+                    const newSessionId = generateSessionId();
+                    setSessionId(newSessionId);
                     setSegments(newSegments);
                     setAudioBlob(blob);
                     setAudioUrl(null); // 清除示例音频URL
                     setDataSource('live');
                     
+                    // 将转录数据保存到 IndexedDB（供教师端读取）
+                    try {
+                      await db.transcripts.bulkAdd(
+                        newSegments.map((seg, idx) => ({
+                          sessionId: newSessionId,
+                          text: seg.text,
+                          startMs: seg.startMs,
+                          endMs: seg.endMs,
+                          confidence: seg.confidence || 1.0,
+                          isFinal: true,
+                        }))
+                      );
+                      console.log(`已保存 ${newSegments.length} 条转录到 IndexedDB, sessionId: ${newSessionId}`);
+                    } catch (e) {
+                      console.error('保存转录到 IndexedDB 失败:', e);
+                    }
+                    
+                    // 更新 classroomDataService 会话信息（供教师端读取）
+                    const duration = newSegments.length > 0 
+                      ? newSegments[newSegments.length - 1].endMs 
+                      : 0;
+                    classroomDataService.saveSession({
+                      id: newSessionId,
+                      subject: '英语',
+                      topic: '课堂录音',
+                      teacherName: 'Teacher',
+                      status: 'completed',
+                      duration,
+                      createdBy: studentId,
+                    });
+                    
                     // 构建时间轴
                     const tl = memoryService.buildTimeline(
-                      sessionId,
+                      newSessionId,
                       newSegments,
                       anchors,
-                      { subject: '数学', teacher: '张老师', date: new Date().toISOString().split('T')[0] }
+                      { subject: '英语', teacher: 'Teacher', date: new Date().toISOString().split('T')[0] }
                     );
                     setTimeline(tl);
                     

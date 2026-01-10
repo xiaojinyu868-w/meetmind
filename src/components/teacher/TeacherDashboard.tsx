@@ -1,8 +1,17 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { ConfusionHotspotCard, type HotspotData } from './ConfusionHotspotCard';
 import { ReflectionGenerator } from './ReflectionGenerator';
+import { 
+  classroomDataService, 
+  type ClassSession, 
+  type ConfusionHotspot,
+  type StudentAnchor,
+} from '@/lib/services/classroom-data-service';
+import { db } from '@/lib/db';
+import type { TranscriptSegment } from '@/types';
+import { DEMO_SEGMENTS, DEMO_ANCHORS, DEMO_SESSION_ID } from '@/fixtures/demo-data';
 
 interface LessonData {
   id: string;
@@ -14,57 +23,235 @@ interface LessonData {
   hotspots: HotspotData[];
 }
 
-// 演示数据
+/**
+ * 生成演示数据的困惑热点
+ * 基于 demo-data.ts 中的 DEMO_SEGMENTS 和 DEMO_ANCHORS
+ */
+function generateDemoHotspots(): HotspotData[] {
+  const windowSize = 30000; // 30秒窗口
+  const windowMap = new Map<number, typeof DEMO_ANCHORS>();
+  
+  DEMO_ANCHORS.forEach(anchor => {
+    if (anchor.cancelled) return;
+    const windowStart = Math.floor(anchor.timestamp / windowSize) * windowSize;
+    if (!windowMap.has(windowStart)) {
+      windowMap.set(windowStart, []);
+    }
+    windowMap.get(windowStart)!.push(anchor);
+  });
+  
+  const formatTime = (ms: number) => {
+    const totalSeconds = Math.floor(ms / 1000);
+    const minutes = Math.floor(totalSeconds / 60);
+    const seconds = totalSeconds % 60;
+    return `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+  };
+  
+  const getTranscriptContent = (startMs: number, endMs: number): string => {
+    const relevantSegments = DEMO_SEGMENTS.filter(
+      t => t.startMs < endMs && t.endMs > startMs
+    );
+    if (relevantSegments.length === 0) return '(无转录内容)';
+    return relevantSegments
+      .sort((a, b) => a.startMs - b.startMs)
+      .map(t => t.text)
+      .join(' ')
+      .slice(0, 150);
+  };
+  
+  const hotspots: HotspotData[] = Array.from(windowMap.entries())
+    .map(([startMs, anchors]) => {
+      const endMs = startMs + windowSize;
+      const content = getTranscriptContent(startMs, endMs);
+      
+      return {
+        rank: 0,
+        timeRange: `${formatTime(startMs)} - ${formatTime(endMs)}`,
+        startMs,
+        endMs,
+        count: anchors.length,
+        content,
+        students: anchors.map((_, i) => `演示学生${i + 1}`),
+        possibleReason: content.includes('?') || content.includes('？') 
+          ? '问答环节理解困难' 
+          : '听力内容较难理解',
+      };
+    })
+    .sort((a, b) => b.count - a.count)
+    .map((h, i) => ({ ...h, rank: i + 1 }));
+  
+  return hotspots;
+}
+
+// 演示数据 - 使用统一的 demo-data.ts 数据源
 const DEMO_LESSON: LessonData = {
-  id: 'demo-session',
-  subject: '数学',
-  teacher: '张老师',
+  id: DEMO_SESSION_ID,
+  subject: '英语',
+  teacher: 'Demo Teacher',
   date: new Date().toISOString().split('T')[0],
-  duration: 340000,
-  totalStudents: 42,
-  hotspots: [
-    {
-      rank: 1,
-      timeRange: '01:50 - 02:30',
-      startMs: 110000,
-      endMs: 150000,
-      count: 8,
-      content: '顶点坐标公式 (-b/2a, (4ac-b²)/4a) 的推导过程',
-      students: ['小明', '小红', '小华', '小李', '小张', '小王', '小刘', '小陈'],
-      possibleReason: '公式推导步骤跳跃',
-    },
-    {
-      rank: 2,
-      timeRange: '04:10 - 04:40',
-      startMs: 250000,
-      endMs: 280000,
-      count: 5,
-      content: '代入公式计算 x = -b/2a = 4/4 = 1 的过程',
-      students: ['小明', '小华', '小张', '小刘', '小陈'],
-      possibleReason: '计算步骤不清晰',
-    },
-    {
-      rank: 3,
-      timeRange: '00:15 - 00:35',
-      startMs: 15000,
-      endMs: 35000,
-      count: 3,
-      content: '二次函数的一般形式 y = ax² + bx + c 中参数的含义',
-      students: ['小红', '小李', '小王'],
-      possibleReason: '概念引入过快',
-    },
-  ],
+  duration: DEMO_SEGMENTS.length > 0 ? DEMO_SEGMENTS[DEMO_SEGMENTS.length - 1].endMs : 93000,
+  totalStudents: 1,
+  hotspots: generateDemoHotspots(),
 };
 
-export function TeacherDashboard() {
-  const [lesson, setLesson] = useState<LessonData>(DEMO_LESSON);
-  const [isLoading, setIsLoading] = useState(true);
+interface TeacherDashboardProps {
+  /** 指定课程会话ID，如果不指定则显示最新的课程 */
+  sessionId?: string;
+}
 
-  useEffect(() => {
-    // 模拟加载
-    const timer = setTimeout(() => setIsLoading(false), 800);
-    return () => clearTimeout(timer);
+export function TeacherDashboard({ sessionId: propSessionId }: TeacherDashboardProps) {
+  const [lesson, setLesson] = useState<LessonData | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [availableSessions, setAvailableSessions] = useState<ClassSession[]>([]);
+  const [selectedSessionId, setSelectedSessionId] = useState<string>(propSessionId || '');
+  const [isRealData, setIsRealData] = useState(false);
+  const [lastRefresh, setLastRefresh] = useState<Date>(new Date());
+
+  /**
+   * 将 ConfusionHotspot 转换为 HotspotData
+   */
+  const convertToHotspotData = (hotspot: ConfusionHotspot): HotspotData => ({
+    rank: hotspot.rank,
+    timeRange: hotspot.timeRange,
+    startMs: hotspot.startMs,
+    endMs: hotspot.endMs,
+    count: hotspot.count,
+    content: hotspot.content,
+    students: hotspot.students,
+    possibleReason: hotspot.possibleReason,
+  });
+
+  /**
+   * 加载课堂数据
+   */
+  const loadClassroomData = useCallback(async (sessionId: string) => {
+    setIsLoading(true);
+    setError(null);
+    
+    try {
+      // 获取课程会话信息
+      const session = classroomDataService.getSession(sessionId);
+      
+      // 获取困惑点
+      const anchors = classroomDataService.getSessionAnchors(sessionId);
+      
+      // 从 IndexedDB 获取转录内容
+      let transcripts: TranscriptSegment[] = [];
+      try {
+        transcripts = await db.transcripts
+          .where('sessionId')
+          .equals(sessionId)
+          .sortBy('startMs');
+      } catch (e) {
+        console.warn('获取转录内容失败:', e);
+      }
+      
+      // 如果没有任何数据，使用演示数据
+      if (!session && anchors.length === 0 && transcripts.length === 0) {
+        console.log('未找到真实数据，使用演示数据');
+        setLesson(DEMO_LESSON);
+        setIsRealData(false);
+        setIsLoading(false);
+        return;
+      }
+      
+      // 聚合热点数据
+      const hotspots = classroomDataService.aggregateHotspots(
+        sessionId,
+        transcripts,
+        30000, // 30秒窗口
+        10     // 最多10个热点
+      );
+      
+      // 统计学生数
+      const studentIds = new Set(anchors.map(a => a.studentId));
+      
+      // 构建课程数据
+      const lessonData: LessonData = {
+        id: sessionId,
+        subject: session?.subject || '英语',
+        teacher: session?.teacherName || 'Teacher',
+        date: session?.createdAt 
+          ? new Date(session.createdAt).toISOString().split('T')[0]
+          : new Date().toISOString().split('T')[0],
+        duration: session?.duration || (transcripts.length > 0 ? transcripts[transcripts.length - 1].endMs : 0),
+        totalStudents: studentIds.size || 1,
+        hotspots: hotspots.length > 0 
+          ? hotspots.map(convertToHotspotData)
+          : [], // 有数据但无热点时显示空
+      };
+      
+      setLesson(lessonData);
+      setIsRealData(hotspots.length > 0 || anchors.length > 0 || transcripts.length > 0);
+      setLastRefresh(new Date());
+      
+    } catch (err) {
+      console.error('加载课堂数据失败:', err);
+      setError('加载数据失败');
+      // 降级使用演示数据
+      setLesson(DEMO_LESSON);
+      setIsRealData(false);
+    } finally {
+      setIsLoading(false);
+    }
   }, []);
+
+  /**
+   * 加载可用的课程会话列表
+   */
+  const loadAvailableSessions = useCallback(() => {
+    const sessions = classroomDataService.getAllSessions();
+    setAvailableSessions(sessions);
+    
+    // 如果没有指定 sessionId，选择最新的课程
+    if (!propSessionId && sessions.length > 0) {
+      const latestSession = sessions.sort((a, b) => 
+        new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+      )[0];
+      setSelectedSessionId(latestSession.id);
+    } else if (propSessionId) {
+      setSelectedSessionId(propSessionId);
+    } else {
+      // 没有课程，使用演示数据
+      setSelectedSessionId('demo-session');
+    }
+  }, [propSessionId]);
+
+  // 初始化
+  useEffect(() => {
+    loadAvailableSessions();
+  }, [loadAvailableSessions]);
+
+  // 当选中的课程变化时加载数据
+  useEffect(() => {
+    if (selectedSessionId) {
+      loadClassroomData(selectedSessionId);
+    }
+  }, [selectedSessionId, loadClassroomData]);
+
+  // 监听跨标签页的困惑点更新
+  useEffect(() => {
+    const cleanup = classroomDataService.onAnchorUpdate((action, anchor) => {
+      // 如果是当前课程的更新，刷新数据
+      if (anchor.sessionId === selectedSessionId) {
+        console.log('收到困惑点更新:', action, anchor);
+        loadClassroomData(selectedSessionId);
+      }
+    });
+    
+    return cleanup;
+  }, [selectedSessionId, loadClassroomData]);
+
+  /**
+   * 手动刷新数据
+   */
+  const handleRefresh = () => {
+    loadAvailableSessions();
+    if (selectedSessionId) {
+      loadClassroomData(selectedSessionId);
+    }
+  };
 
   if (isLoading) {
     return (
@@ -83,9 +270,27 @@ export function TeacherDashboard() {
     );
   }
 
+  if (!lesson) {
+    return (
+      <div className="h-screen overflow-y-auto bg-gradient-to-br from-slate-50 via-slate-100 to-indigo-50 flex items-center justify-center">
+        <div className="text-center">
+          <span className="text-6xl mb-4 block">📭</span>
+          <h2 className="text-xl font-bold text-slate-900 mb-2">暂无课堂数据</h2>
+          <p className="text-slate-500 mb-4">请先在学生端录制课程</p>
+          <a 
+            href="/"
+            className="inline-flex items-center gap-2 px-4 py-2 bg-indigo-500 text-white rounded-lg hover:bg-indigo-600 transition-colors"
+          >
+            前往学生端
+          </a>
+        </div>
+      </div>
+    );
+  }
+
   const formatDuration = (ms: number) => {
     const minutes = Math.floor(ms / 60000);
-    return `${minutes} 分钟`;
+    return minutes > 0 ? `${minutes} 分钟` : '进行中';
   };
 
   return (
@@ -117,6 +322,26 @@ export function TeacherDashboard() {
             </div>
             
             <div className="flex items-center gap-3">
+              {/* 数据来源指示 */}
+              <span className={`px-2 py-1 text-xs rounded-full ${
+                isRealData 
+                  ? 'bg-green-100 text-green-700' 
+                  : 'bg-amber-100 text-amber-700'
+              }`}>
+                {isRealData ? '📡 实时数据' : '📋 演示数据'}
+              </span>
+              
+              {/* 刷新按钮 */}
+              <button
+                onClick={handleRefresh}
+                className="p-2 text-slate-500 hover:text-slate-700 hover:bg-slate-100 rounded-lg transition-colors"
+                title={`上次刷新: ${lastRefresh.toLocaleTimeString()}`}
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                </svg>
+              </button>
+              
               <a
                 href="/"
                 className="px-4 py-2 text-sm text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-lg transition-colors"
@@ -138,6 +363,27 @@ export function TeacherDashboard() {
       </header>
 
       <main className="max-w-6xl mx-auto px-6 py-8">
+        {/* 课程选择器 (如果有多个课程) */}
+        {availableSessions.length > 1 && (
+          <div className="mb-6">
+            <label className="block text-sm font-medium text-slate-700 mb-2">
+              选择课程
+            </label>
+            <select
+              value={selectedSessionId}
+              onChange={(e) => setSelectedSessionId(e.target.value)}
+              className="w-full max-w-xs px-4 py-2 bg-white border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            >
+              {availableSessions.map(session => (
+                <option key={session.id} value={session.id}>
+                  {session.subject || '未命名课程'} - {new Date(session.createdAt).toLocaleDateString()}
+                </option>
+              ))}
+              <option value="demo-session">演示数据</option>
+            </select>
+          </div>
+        )}
+
         {/* 课程信息卡片 */}
         <div className="mb-8 p-6 bg-white/80 backdrop-blur-sm rounded-2xl shadow-lg border border-slate-200/50">
           <div className="flex items-center justify-between">
@@ -163,7 +409,7 @@ export function TeacherDashboard() {
                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
                     </svg>
-                    {lesson.totalStudents} 名学生
+                    {lesson.totalStudents > 0 ? `${lesson.totalStudents} 名学生` : '暂无学生数据'}
                   </span>
                 </div>
               </div>
@@ -195,18 +441,27 @@ export function TeacherDashboard() {
               </div>
               <h2 className="text-lg font-bold text-slate-900">困惑热点 TOP3</h2>
             </div>
-            <p className="text-sm text-slate-500">学生最困惑的知识点</p>
+            <p className="text-sm text-slate-500">
+              {isRealData ? '来自学生实时标记' : '学生最困惑的知识点'}
+            </p>
           </div>
           
-          <div className="grid md:grid-cols-3 gap-5">
-            {lesson.hotspots.map((hotspot, index) => (
-              <ConfusionHotspotCard 
-                key={hotspot.rank} 
-                hotspot={hotspot}
-                isTop={index === 0}
-              />
-            ))}
-          </div>
+          {lesson.hotspots.length > 0 ? (
+            <div className="grid md:grid-cols-3 gap-5">
+              {lesson.hotspots.slice(0, 3).map((hotspot, index) => (
+                <ConfusionHotspotCard 
+                  key={`${hotspot.rank}-${hotspot.startMs}`} 
+                  hotspot={hotspot}
+                  isTop={index === 0}
+                />
+              ))}
+            </div>
+          ) : (
+            <div className="text-center py-12 bg-white/50 rounded-2xl border border-dashed border-slate-300">
+              <span className="text-4xl mb-3 block">🎉</span>
+              <p className="text-slate-600">暂无困惑点，学生们都听懂了！</p>
+            </div>
+          )}
         </section>
 
         {/* 课后反思生成器 */}
