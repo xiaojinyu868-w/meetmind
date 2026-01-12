@@ -166,25 +166,41 @@ export const WaveformPlayer = forwardRef<WaveformPlayerRef, WaveformPlayerProps>
 
     // 清理
     return () => {
-      try {
-        // 先暂停播放
-        if (ws.isPlaying()) {
-          ws.pause();
-        }
-        // 使用 setTimeout 延迟销毁，避免 AbortError
-        setTimeout(() => {
-          try {
-            ws.destroy();
-          } catch (e) {
-            // 忽略销毁时的错误
-            console.warn('[WaveformPlayer] Error destroying wavesurfer:', e);
-          }
-        }, 100);
-      } catch (e) {
-        console.warn('[WaveformPlayer] Error in cleanup:', e);
-      }
+      const wsInstance = wavesurferRef.current;
       wavesurferRef.current = null;
       regionsRef.current = null;
+      
+      if (wsInstance) {
+        try {
+          if (wsInstance.isPlaying()) {
+            wsInstance.pause();
+          }
+        } catch {
+          // 忽略暂停时的错误
+        }
+        
+        // 延迟销毁，使用 unhandledrejection 处理异步错误
+        const handleAbortError = (event: PromiseRejectionEvent) => {
+          if (event.reason?.name === 'AbortError') {
+            event.preventDefault();
+          }
+        };
+        window.addEventListener('unhandledrejection', handleAbortError);
+        
+        requestAnimationFrame(() => {
+          setTimeout(() => {
+            try {
+              wsInstance.destroy();
+            } catch {
+              // 忽略销毁时的错误
+            }
+            // 延迟移除监听器
+            setTimeout(() => {
+              window.removeEventListener('unhandledrejection', handleAbortError);
+            }, 100);
+          }, 0);
+        });
+      }
     };
   }, [waveColor, progressColor, height]);
 

@@ -7,14 +7,14 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { chat, chatStream, AVAILABLE_MODELS, type ChatMessage } from '@/lib/services/llm-service';
+import { chat, chatStream, AVAILABLE_MODELS, DEFAULT_MODEL_ID, type ChatMessage } from '@/lib/services/llm-service';
 
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
     const { 
       messages, 
-      model = 'qwen3-max', 
+      model = DEFAULT_MODEL_ID, 
       stream = false,
       context,
       temperature = 0.7,
@@ -111,6 +111,6 @@ export async function POST(request: NextRequest) {
 export async function GET() {
   return NextResponse.json({
     models: AVAILABLE_MODELS,
-    defaultModel: 'qwen3-max',
+    defaultModel: DEFAULT_MODEL_ID,
   });
 }

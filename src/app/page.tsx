@@ -993,7 +993,7 @@ export default function StudentApp() {
           <div className="flex-1 flex flex-col min-h-0 bg-white">
             {/* 波形播放器 */}
             {(audioBlob || audioUrl) && (
-              <div className="p-4 border-b border-gray-100">
+              <div className="px-4 py-2 border-b border-gray-100">
                 <WaveformPlayer
                   ref={waveformRef}
                   src={audioBlob || audioUrl || undefined}
@@ -1011,7 +1011,7 @@ export default function StudentApp() {
                   onAnchorAdd={handlePlaybackAnchorAdd}
                   allowAddAnchor={true}
                   selectedAnchorId={selectedAnchor?.id}
-                  height={60}
+                  height={30}
                 />
               </div>
             )}

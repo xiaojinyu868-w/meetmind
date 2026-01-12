@@ -7,9 +7,11 @@ import { notebookService, localSearch, type SearchResult } from '@/lib/services/
 import { ModelSelector } from './ModelSelector';
 import { GuidanceQuestion, GuidanceQuestionSkeleton } from './GuidanceQuestion';
 import { Citations, CitationsSkeleton } from './Citations';
+import { ImageUpload, useImagePaste, type UploadedImage } from './ImageUpload';
 import { useAuth } from '@/lib/hooks/useAuth';
 import { saveTutorResponseCache, getTutorResponseCache, deleteTutorResponseCache, getPreference, setPreference, type TutorResponseCache } from '@/lib/db';
 import type { GuidanceQuestion as GuidanceQuestionType, GuidanceOption, Citation } from '@/types/dify';
+import { DEFAULT_MODEL_ID } from '@/lib/services/llm-service';
 
 // 持久化状态的 key
 const TUTOR_STATE_KEY = 'tutor_last_state';
@@ -76,7 +78,7 @@ export function AITutor({ breakpoint, segments, isLoading: externalLoading, onRe
   const { accessToken } = useAuth();
   const [userInput, setUserInput] = useState('');
   const [chatHistory, setChatHistory] = useState<Array<{ role: 'user' | 'assistant'; content: string }>>([]);
-  const [selectedModel, setSelectedModel] = useState('qwen3-max');
+  const [selectedModel, setSelectedModel] = useState(DEFAULT_MODEL_ID);
   const [response, setResponse] = useState<TutorAPIResponse | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -96,7 +98,22 @@ export function AITutor({ breakpoint, segments, isLoading: externalLoading, onRe
   const [isGuidanceLoading, setIsGuidanceLoading] = useState(false);
   const [seekingTimestamp, setSeekingTimestamp] = useState<number | null>(null);
   
+  // 多模态相关状态
+  const [supportsMultimodal, setSupportsMultimodal] = useState(true);  // 默认模型支持多模态
+  const [uploadedImages, setUploadedImages] = useState<UploadedImage[]>([]);
+  
   const chatEndRef = useRef<HTMLDivElement>(null);
+  
+  // 监听粘贴事件
+  useImagePaste(
+    (pastedImages) => {
+      if (supportsMultimodal) {
+        setUploadedImages(prev => [...prev, ...pastedImages].slice(0, 5));
+      }
+    },
+    supportsMultimodal && !!breakpoint,
+    10
+  );
 
   // 获取困惑点前后的转录上下文（前 90 秒，后 60 秒）
   const contextSegments = useMemo(() => {
@@ -447,17 +464,43 @@ export function AITutor({ breakpoint, segments, isLoading: externalLoading, onRe
   };
 
   const handleSend = async () => {
-    if (!userInput.trim() || !breakpoint) return;
+    if ((!userInput.trim() && uploadedImages.length === 0) || !breakpoint) return;
     
     const question = userInput.trim();
+    const imagesToSend = [...uploadedImages];
     setUserInput('');
+    setUploadedImages([]);
     
-    setChatHistory(prev => [...prev, { role: 'user', content: question }]);
+    // 构建用户消息显示内容
+    const userDisplayContent = imagesToSend.length > 0
+      ? `${question}${question ? '\n' : ''}[已上传 ${imagesToSend.length} 张图片]`
+      : question;
+    
+    setChatHistory(prev => [...prev, { role: 'user', content: userDisplayContent }]);
     
     try {
       const headers: Record<string, string> = { 'Content-Type': 'application/json' };
       if (accessToken) {
         headers['Authorization'] = `Bearer ${accessToken}`;
+      }
+      
+      // 构建多模态消息内容
+      const messageContent: Array<{ type: string; text?: string; image_url?: { url: string } }> = [];
+      
+      // 添加图片
+      for (const img of imagesToSend) {
+        messageContent.push({
+          type: 'image_url',
+          image_url: { url: img.dataUrl },
+        });
+      }
+      
+      // 添加文本
+      if (question) {
+        messageContent.push({
+          type: 'text',
+          text: question,
+        });
       }
       
       const res = await fetch('/api/tutor', {
@@ -468,6 +511,8 @@ export function AITutor({ breakpoint, segments, isLoading: externalLoading, onRe
           segments,
           model: selectedModel,
           studentQuestion: question,
+          // 如果有图片，传递多模态内容
+          messageContent: imagesToSend.length > 0 ? messageContent : undefined,
           enable_guidance: true,
           enable_web: enableWeb,
           conversation_id: conversationId,
@@ -559,7 +604,11 @@ export function AITutor({ breakpoint, segments, isLoading: externalLoading, onRe
                 🔄 刷新
               </button>
             )}
-            <ModelSelector value={selectedModel} onChange={setSelectedModel} />
+            <ModelSelector 
+              value={selectedModel} 
+              onChange={setSelectedModel}
+              onMultimodalChange={setSupportsMultimodal}
+            />
             {!breakpoint.resolved && (
               <button
                 onClick={onResolve}
@@ -773,23 +822,49 @@ export function AITutor({ breakpoint, segments, isLoading: externalLoading, onRe
 
       {/* 输入框 */}
       <div className="p-4 border-t border-gray-100 bg-white">
-        <div className="flex gap-2">
+        {/* 图片预览区域 */}
+        {supportsMultimodal && uploadedImages.length > 0 && (
+          <div className="mb-3 p-2 bg-gray-50 rounded-lg">
+            <ImageUpload
+              images={uploadedImages}
+              onImagesChange={setUploadedImages}
+              maxImages={5}
+              disabled={loading}
+            />
+          </div>
+        )}
+        
+        <div className="flex gap-2 items-end">
+          {/* 图片上传按钮 */}
+          {supportsMultimodal && (
+            <ImageUpload
+              images={[]}
+              onImagesChange={(newImages) => {
+                setUploadedImages(prev => [...prev, ...newImages].slice(0, 5));
+              }}
+              maxImages={5 - uploadedImages.length}
+              disabled={loading || uploadedImages.length >= 5}
+              className="flex-shrink-0"
+            />
+          )}
+          
           <input
             type="text"
             value={userInput}
             onChange={(e) => setUserInput(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && handleSend()}
+            onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && handleSend()}
             placeholder="告诉我你哪里不懂..."
-            className="input"
+            className="input flex-1"
           />
           <button
             onClick={handleSend}
-            disabled={!userInput.trim() || loading}
-            className="btn btn-primary px-6 disabled:opacity-50"
+            disabled={(!userInput.trim() && uploadedImages.length === 0) || loading}
+            className="btn btn-primary px-6 disabled:opacity-50 flex-shrink-0"
           >
             发送
           </button>
         </div>
+        
         <div className="flex gap-2 mt-2 flex-wrap">
           <QuickReply text="我不理解这个公式" onClick={setUserInput} />
           <QuickReply text="能举个例子吗？" onClick={setUserInput} />

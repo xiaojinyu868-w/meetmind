@@ -8,15 +8,17 @@ interface ModelConfig {
   provider: string;
   description: string;
   recommended?: boolean;
+  supportsMultimodal?: boolean;
 }
 
 interface ModelSelectorProps {
   value: string;
   onChange: (modelId: string) => void;
+  onMultimodalChange?: (supportsMultimodal: boolean) => void;
   className?: string;
 }
 
-export function ModelSelector({ value, onChange, className = '' }: ModelSelectorProps) {
+export function ModelSelector({ value, onChange, onMultimodalChange, className = '' }: ModelSelectorProps) {
   const [models, setModels] = useState<ModelConfig[]>([]);
   const [isOpen, setIsOpen] = useState(false);
 
@@ -26,9 +28,22 @@ export function ModelSelector({ value, onChange, className = '' }: ModelSelector
       .then(res => res.json())
       .then(data => {
         setModels(data.models || []);
+        // 初始化时通知父组件当前模型的多模态支持状态
+        const currentModel = (data.models || []).find((m: ModelConfig) => m.id === value);
+        if (currentModel && onMultimodalChange) {
+          onMultimodalChange(currentModel.supportsMultimodal ?? false);
+        }
       })
       .catch(console.error);
   }, []);
+
+  // 当 value 变化时更新多模态状态
+  useEffect(() => {
+    const currentModel = models.find(m => m.id === value);
+    if (currentModel && onMultimodalChange) {
+      onMultimodalChange(currentModel.supportsMultimodal ?? false);
+    }
+  }, [value, models, onMultimodalChange]);
 
   const selectedModel = models.find(m => m.id === value);
 
@@ -50,6 +65,15 @@ export function ModelSelector({ value, onChange, className = '' }: ModelSelector
     }
   };
 
+  const handleModelChange = (modelId: string) => {
+    onChange(modelId);
+    const model = models.find(m => m.id === modelId);
+    if (model && onMultimodalChange) {
+      onMultimodalChange(model.supportsMultimodal ?? false);
+    }
+    setIsOpen(false);
+  };
+
   return (
     <div className={`relative ${className}`}>
       <button
@@ -58,6 +82,11 @@ export function ModelSelector({ value, onChange, className = '' }: ModelSelector
       >
         <span>{getProviderIcon(selectedModel?.provider || 'qwen')}</span>
         <span className="font-medium">{selectedModel?.name || '选择模型'}</span>
+        {selectedModel?.supportsMultimodal && (
+          <span className="text-xs px-1 py-0.5 bg-blue-100 text-blue-600 rounded" title="支持图片">
+            📷
+          </span>
+        )}
         <svg 
           className={`w-4 h-4 transition-transform ${isOpen ? 'rotate-180' : ''}`} 
           fill="none" 
@@ -74,7 +103,7 @@ export function ModelSelector({ value, onChange, className = '' }: ModelSelector
             className="fixed inset-0 z-10" 
             onClick={() => setIsOpen(false)} 
           />
-          <div className="absolute top-full left-0 mt-1 w-72 bg-white border border-gray-200 rounded-lg shadow-lg z-20 overflow-hidden">
+          <div className="absolute top-full left-0 mt-1 w-80 bg-white border border-gray-200 rounded-lg shadow-lg z-20 overflow-hidden">
             <div className="p-2 border-b border-gray-100">
               <p className="text-xs text-gray-500 px-2">选择 AI 模型</p>
             </div>
@@ -92,10 +121,7 @@ export function ModelSelector({ value, onChange, className = '' }: ModelSelector
                     {providerModels.map(model => (
                       <button
                         key={model.id}
-                        onClick={() => {
-                          onChange(model.id);
-                          setIsOpen(false);
-                        }}
+                        onClick={() => handleModelChange(model.id)}
                         className={`w-full flex items-start gap-3 p-2 rounded-lg text-left transition-colors ${
                           value === model.id 
                             ? getProviderColor(model.provider)
@@ -104,18 +130,23 @@ export function ModelSelector({ value, onChange, className = '' }: ModelSelector
                       >
                         <span className="text-lg">{getProviderIcon(model.provider)}</span>
                         <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2">
+                          <div className="flex items-center gap-2 flex-wrap">
                             <span className="font-medium text-sm">{model.name}</span>
                             {model.recommended && (
                               <span className="text-xs px-1.5 py-0.5 bg-amber-100 text-amber-700 rounded">
                                 推荐
                               </span>
                             )}
+                            {model.supportsMultimodal && (
+                              <span className="text-xs px-1.5 py-0.5 bg-blue-100 text-blue-600 rounded" title="支持图片上传">
+                                📷 多模态
+                              </span>
+                            )}
                           </div>
                           <p className="text-xs text-gray-500 truncate">{model.description}</p>
                         </div>
                         {value === model.id && (
-                          <svg className="w-4 h-4 text-current" fill="currentColor" viewBox="0 0 20 20">
+                          <svg className="w-4 h-4 text-current flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
                             <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
                           </svg>
                         )}

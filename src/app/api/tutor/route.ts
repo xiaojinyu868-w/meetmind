@@ -11,7 +11,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { chat, type ChatMessage } from '@/lib/services/llm-service';
+import { chat, DEFAULT_MODEL_ID, type ChatMessage, type MultimodalContent } from '@/lib/services/llm-service';
 import { mergeSentences, formatTimeRange, getSegmentsInRange, type Segment } from '@/lib/services/longcut-utils';
 import { getDifyService, isDifyEnabled, type DifyWorkflowInput } from '@/lib/services/dify-service';
 import type { ExtendedTutorRequest, ExtendedTutorResponse, GuidanceQuestion, Citation } from '@/types/dify';
@@ -69,12 +69,15 @@ const FOLLOWUP_SYSTEM_PROMPT = `你是一位亲切的 AI 家教，正在和学�
 
 export async function POST(request: NextRequest) {
   try {
-    const body = await request.json() as ExtendedTutorRequest;
+    const body = await request.json() as ExtendedTutorRequest & { 
+      messageContent?: Array<{ type: string; text?: string; image_url?: { url: string } }>;
+    };
     const { 
       timestamp, 
       segments, 
-      model = 'qwen3-max',
+      model = DEFAULT_MODEL_ID,
       studentQuestion,
+      messageContent,  // 多模态消息内容
       // 新增字段
       enable_guidance = false,
       enable_web = false,
@@ -152,17 +155,51 @@ export async function POST(request: NextRequest) {
     // ===== 原有逻辑（保持不变）=====
     const messages: ChatMessage[] = [];
 
-    if (studentQuestion) {
+    if (studentQuestion || messageContent) {
       // 追问模式 - 使用更自然的对话提示词
       messages.push({ role: 'system', content: FOLLOWUP_SYSTEM_PROMPT });
-      messages.push({
-        role: 'user',
-        content: `【课堂转录参考】
+      
+      // 构建用户消息（支持多模态）
+      if (messageContent && messageContent.length > 0) {
+        // 多模态消息：包含图片和文本
+        const userContent: MultimodalContent[] = [
+          // 先添加课堂上下文作为文本
+          {
+            type: 'text',
+            text: `【课堂转录参考】\n${contextText}\n\n【学生说】`,
+          },
+        ];
+        
+        // 添加图片和用户文本
+        for (const item of messageContent) {
+          if (item.type === 'image_url' && item.image_url) {
+            userContent.push({
+              type: 'image_url',
+              image_url: { url: item.image_url.url },
+            });
+          } else if (item.type === 'text' && item.text) {
+            userContent.push({
+              type: 'text',
+              text: item.text,
+            });
+          }
+        }
+        
+        messages.push({
+          role: 'user',
+          content: userContent,
+        });
+      } else {
+        // 纯文本消息
+        messages.push({
+          role: 'user',
+          content: `【课堂转录参考】
 ${contextText}
 
 【学生说】
 ${studentQuestion}`,
-      });
+        });
+      }
     } else {
       // 初次解释模式 - 使用结构化提示词
       messages.push({ role: 'system', content: TUTOR_SYSTEM_PROMPT });
@@ -181,8 +218,8 @@ ${contextText}
     // 调用 LLM
     const response = await chat(messages, model, { temperature: 0.7, maxTokens: 2000 });
 
-    // 如果是追问模式，直接返回原始内容，不解析结构
-    if (studentQuestion) {
+    // 如果是追问模式（有学生问题或多模态内容），直接返回原始内容，不解析结构
+    if (studentQuestion || messageContent) {
       let rawContent = response.content;
       
       // 如果有选项补充解释，追加到回答后面
