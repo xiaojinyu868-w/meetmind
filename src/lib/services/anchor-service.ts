@@ -15,6 +15,7 @@ export interface Anchor {
   cancelled: boolean;
   resolved: boolean;
   createdAt: string;
+  resolvedAt?: string;  // v2.0: 解决时间
   note?: string;
 }
 
@@ -82,6 +83,7 @@ export const anchorService = {
     
     if (anchor) {
       anchor.resolved = true;
+      anchor.resolvedAt = new Date().toISOString();  // v2.0: 记录解决时间
       this.saveAll(sessionId, anchors);
     }
   },

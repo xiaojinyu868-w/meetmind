@@ -64,6 +64,10 @@ function generateDemoHotspots(): HotspotData[] {
       const endMs = startMs + windowSize;
       const content = getTranscriptContent(startMs, endMs);
       
+      // v2.0: 计算搞定率
+      const resolvedCount = anchors.filter(a => a.resolved).length;
+      const resolvedRate = anchors.length > 0 ? Math.round((resolvedCount / anchors.length) * 100) : 0;
+      
       return {
         rank: 0,
         timeRange: `${formatTime(startMs)} - ${formatTime(endMs)}`,
@@ -75,6 +79,8 @@ function generateDemoHotspots(): HotspotData[] {
         possibleReason: content.includes('?') || content.includes('？') 
           ? '问答环节理解困难' 
           : '听力内容较难理解',
+        resolvedCount,
+        resolvedRate,
       };
     })
     .sort((a, b) => b.count - a.count)
@@ -120,6 +126,9 @@ export function TeacherDashboard({ sessionId: propSessionId }: TeacherDashboardP
     content: hotspot.content,
     students: hotspot.students,
     possibleReason: hotspot.possibleReason,
+    // v2.0: 添加搞定率数据
+    resolvedCount: hotspot.resolvedCount,
+    resolvedRate: hotspot.resolvedRate,
   });
 
   /**

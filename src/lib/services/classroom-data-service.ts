@@ -76,6 +76,9 @@ export interface ConfusionHotspot {
   studentIds: string[];          // 学生ID列表
   possibleReason: string;        // 可能原因 (AI 推断)
   anchors: StudentAnchor[];      // 原始困惑点列表
+  // v2.0 新增：搞定率统计
+  resolvedCount: number;         // 已解决数量
+  resolvedRate: number;          // 搞定率 (0-100)
 }
 
 /**
@@ -430,6 +433,11 @@ export const classroomDataService = {
           studentMap.set(a.studentId, a.studentName);
         });
         
+        // v2.0: 计算搞定率
+        const resolvedCount = windowAnchors.filter(a => a.status === 'resolved').length;
+        const totalCount = windowAnchors.length;
+        const resolvedRate = totalCount > 0 ? Math.round((resolvedCount / totalCount) * 100) : 0;
+        
         return {
           rank: 0, // 稍后设置
           timeRange: formatTimeRange(startMs, endMs),
@@ -441,6 +449,8 @@ export const classroomDataService = {
           studentIds: Array.from(studentMap.keys()),
           possibleReason: inferPossibleReason(studentMap.size, content),
           anchors: windowAnchors,
+          resolvedCount,
+          resolvedRate,
         };
       })
       // 按困惑人数降序排序
@@ -726,6 +736,11 @@ export const classroomDataService = {
           studentMap.set(a.studentId, a.studentName);
         });
         
+        // v2.0: 计算搞定率
+        const resolvedCount = windowAnchors.filter(a => a.status === 'resolved').length;
+        const totalCount = windowAnchors.length;
+        const resolvedRate = totalCount > 0 ? Math.round((resolvedCount / totalCount) * 100) : 0;
+        
         return {
           rank: 0,
           timeRange: formatTimeRange(startMs, endMs),
@@ -737,6 +752,8 @@ export const classroomDataService = {
           studentIds: Array.from(studentMap.keys()),
           possibleReason: inferPossibleReason(studentMap.size, content),
           anchors: windowAnchors,
+          resolvedCount,
+          resolvedRate,
         };
       })
       .sort((a, b) => b.count - a.count)

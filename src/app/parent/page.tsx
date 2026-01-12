@@ -226,14 +226,31 @@ export default function ParentApp() {
             </div>
           </div>
           
-          <div className="grid grid-cols-3 gap-3">
+          {/* v2.0: 更直观的困惑点状态展示 */}
+          <div className="bg-white/20 backdrop-blur-sm rounded-2xl p-4 mb-4">
+            <div className="flex items-center justify-between">
+              <span className="text-sm opacity-90">困惑点</span>
+              <span className="font-bold">
+                {report.totalBreakpoints} 个 → 已搞定 {report.totalBreakpoints - report.unresolvedBreakpoints} 个 ✅
+              </span>
+            </div>
+            {/* 进度条 */}
+            <div className="mt-2 h-2 bg-white/30 rounded-full overflow-hidden">
+              <div 
+                className="h-full bg-white rounded-full transition-all duration-500"
+                style={{ 
+                  width: report.totalBreakpoints > 0 
+                    ? `${((report.totalBreakpoints - report.unresolvedBreakpoints) / report.totalBreakpoints) * 100}%` 
+                    : '100%' 
+                }}
+              />
+            </div>
+          </div>
+          
+          <div className="grid grid-cols-2 gap-3">
             <div className="bg-white/20 backdrop-blur-sm rounded-2xl p-3 text-center">
               <div className="text-2xl font-bold">{report.unresolvedBreakpoints}</div>
               <div className="text-xs opacity-80">待解决</div>
-            </div>
-            <div className="bg-white/20 backdrop-blur-sm rounded-2xl p-3 text-center">
-              <div className="text-2xl font-bold">{report.totalBreakpoints - report.unresolvedBreakpoints}</div>
-              <div className="text-xs opacity-80">已解决</div>
             </div>
             <div className="bg-white/20 backdrop-blur-sm rounded-2xl p-3 text-center">
               <div className="text-2xl font-bold">{report.estimatedMinutes}</div>
@@ -492,12 +509,21 @@ export default function ParentApp() {
                       className="w-full text-left"
                     >
                       <div className="flex items-start gap-3">
+                        {/* v2.0: 状态图标 - 已解决显示绿色勾，未解决显示红色数字 */}
                         <div className={`w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 ${
-                          selectedPoint?.id === point.id 
-                            ? 'bg-gradient-to-br from-purple-500 to-fuchsia-500 text-white shadow-lg shadow-purple-500/25' 
-                            : 'bg-red-100 text-red-600'
+                          point.isResolved
+                            ? 'bg-green-100 text-green-600'
+                            : selectedPoint?.id === point.id 
+                              ? 'bg-gradient-to-br from-purple-500 to-fuchsia-500 text-white shadow-lg shadow-purple-500/25' 
+                              : 'bg-red-100 text-red-600'
                         }`}>
-                          <span className="font-bold">{index + 1}</span>
+                          {point.isResolved ? (
+                            <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+                              <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                            </svg>
+                          ) : (
+                            <span className="font-bold">{index + 1}</span>
+                          )}
                         </div>
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2 mb-1">
@@ -505,8 +531,23 @@ export default function ParentApp() {
                               {point.subject}
                             </span>
                             <span className="text-xs text-gray-400">{point.time}</span>
+                            {/* v2.0: 已解决标签 */}
+                            {point.isResolved && (
+                              <span className="px-2 py-0.5 bg-green-100 text-green-700 text-xs rounded-full font-medium">
+                                已搞定
+                              </span>
+                            )}
                           </div>
                           <p className="text-gray-900 font-medium">{point.summary}</p>
+                          {/* v2.0: 学习时长显示 */}
+                          {point.isResolved && point.learningDurationMs && (
+                            <p className="text-xs text-gray-500 mt-1">
+                              学习 {Math.round(point.learningDurationMs / 60000)} 分钟
+                              {point.dialogueRounds && point.dialogueRounds > 0 && (
+                                <span> · 对话 {point.dialogueRounds} 轮</span>
+                              )}
+                            </p>
+                          )}
                         </div>
                         <svg 
                           className={`w-5 h-5 text-gray-400 transition-transform flex-shrink-0 ${

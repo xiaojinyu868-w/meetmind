@@ -16,6 +16,11 @@ export interface ConfusionPoint {
   summary: string;
   teacherQuote: string;
   audioClipUrl?: string;
+  // v2.0 新增：学习过程数据
+  isResolved: boolean;              // 是否已解决
+  learningDurationMs?: number;      // 学习时长（毫秒）
+  dialogueRounds?: number;          // 对话轮数
+  resolvedAt?: string;              // 解决时间
 }
 
 export interface ParentDailyReport {
@@ -46,12 +51,12 @@ export const parentService = {
     timelines: ClassTimeline[],
     date: string = new Date().toISOString().split('T')[0]
   ): Promise<ParentDailyReport> {
-    // 收集所有未解决的断点
+    // v2.0: 收集所有困惑点（包括已解决的），用于展示完整学习轨迹
     const allAnchors: Array<{ anchor: Anchor; timeline: ClassTimeline; segment?: TimelineSegment }> = [];
 
     for (const timeline of timelines) {
       for (const anchor of timeline.anchors) {
-        if (!anchor.resolved && !anchor.cancelled) {
+        if (!anchor.cancelled) {
           // 找到断点对应的片段
           const segment = timeline.segments.find(
             s => s.startMs <= anchor.timestamp && s.endMs >= anchor.timestamp
@@ -61,28 +66,45 @@ export const parentService = {
       }
     }
 
-    // 生成困惑点摘要
-    const confusionPoints: ConfusionPoint[] = allAnchors.map(({ anchor, timeline, segment }) => ({
-      id: anchor.id,
-      subject: timeline.subject,
-      time: this.formatTime(anchor.timestamp),
-      timestamp: anchor.timestamp,
-      summary: segment?.text.slice(0, 50) + '...' || '课堂内容',
-      teacherQuote: segment?.text || '',
-    }));
+    // v2.0: 生成困惑点摘要，包含学习过程数据
+    const confusionPoints: ConfusionPoint[] = allAnchors.map(({ anchor, timeline, segment }) => {
+      // 计算学习时长
+      let learningDurationMs: number | undefined;
+      if (anchor.resolved && anchor.resolvedAt && anchor.createdAt) {
+        const createdTime = new Date(anchor.createdAt).getTime();
+        const resolvedTime = new Date(anchor.resolvedAt).getTime();
+        learningDurationMs = resolvedTime - createdTime;
+      }
+      
+      return {
+        id: anchor.id,
+        subject: timeline.subject,
+        time: this.formatTime(anchor.timestamp),
+        timestamp: anchor.timestamp,
+        summary: segment?.text.slice(0, 50) + '...' || '课堂内容',
+        teacherQuote: segment?.text || '',
+        isResolved: anchor.resolved || false,
+        learningDurationMs,
+        resolvedAt: anchor.resolvedAt,
+      };
+    });
 
-    // 估算陪学时间（每个断点约 7 分钟）
-    const estimatedMinutes = allAnchors.length * 7;
+    // 未解决的困惑点数量
+    const unresolvedCount = allAnchors.filter(({ anchor }) => !anchor.resolved).length;
+    
+    // 估算陪学时间（只计算未解决的，每个约 7 分钟）
+    const estimatedMinutes = unresolvedCount * 7;
 
-    // 生成陪学脚本
+    // 生成陪学脚本（只针对未解决的）
+    const unresolvedPoints = confusionPoints.filter(p => !p.isResolved);
     const actionScript = await this.generateActionScript(
       studentName,
-      confusionPoints,
+      unresolvedPoints,
       estimatedMinutes
     );
 
-    // 生成任务清单
-    const completionStatus = confusionPoints.map((point, index) => ({
+    // 生成任务清单（只针对未解决的）
+    const completionStatus = unresolvedPoints.map((point) => ({
       taskId: `task-${point.id}`,
       title: `${point.subject} - ${point.time} 的困惑点`,
       completed: false,
@@ -92,10 +114,8 @@ export const parentService = {
       date,
       studentName,
       totalLessons: timelines.length,
-      totalBreakpoints: allAnchors.length + timelines.reduce((sum, t) => 
-        sum + t.anchors.filter(a => a.resolved).length, 0
-      ),
-      unresolvedBreakpoints: allAnchors.length,
+      totalBreakpoints: allAnchors.length,
+      unresolvedBreakpoints: unresolvedCount,
       estimatedMinutes,
       confusionPoints,
       actionScript,
