@@ -135,18 +135,49 @@ export function AITutor({ breakpoint, segments, isLoading: externalLoading, onRe
     return `${pad(minutes)}:${pad(seconds % 60)}`;
   }, []);
 
-  // 处理时间戳点击 - 添加视觉反馈
+  // 解析时间字符串为毫秒（支持单点和范围格式，增强鲁棒性）
+  const parseTimeToMs = useCallback((time: string): number => {
+    try {
+      // 处理范围格式 "MM:SS-MM:SS"，取开始时间
+      const rangeParts = time.split('-');
+      const startTime = rangeParts[0].trim();
+      
+      const parts = startTime.split(':');
+      if (parts.length === 2) {
+        const minutes = parseInt(parts[0].trim());
+        const seconds = parseInt(parts[1].trim());
+        if (!isNaN(minutes) && !isNaN(seconds) && minutes >= 0 && seconds >= 0 && seconds < 60) {
+          return (minutes * 60 + seconds) * 1000;
+        }
+      }
+    } catch (error) {
+      console.warn('Failed to parse timestamp:', time, error);
+    }
+    return 0;
+  }, []);
+
+  // 处理时间戳点击 - 添加视觉反馈和验证
   const handleTimestampClick = useCallback((timeMs: number) => {
+    // 验证时间戳有效性
+    if (timeMs < 0 || !isFinite(timeMs)) {
+      console.warn('Invalid timestamp:', timeMs);
+      return;
+    }
+    
     setSeekingTimestamp(timeMs);
     onSeek?.(timeMs);
+    
+    // 调试信息：确保时间戳同步
+    console.log(`[Timestamp Click] Seeking to: ${formatTime(timeMs)} (${timeMs}ms)`);
+    
     // 1.5秒后清除高亮状态
     setTimeout(() => setSeekingTimestamp(null), 1500);
-  }, [onSeek]);
+  }, [onSeek, formatTime]);
 
   // 解析文本中的时间戳并渲染为可点击链接（增强视觉反馈）
   const renderTextWithTimestamps = useCallback((text: string) => {
-    // 匹配 [MM:SS] 或 [MM:SS-MM:SS] 或 MM:SS-MM:SS 格式的时间戳
-    const timestampRegex = /\[?(\d{1,2}:\d{2})(?:-(\d{1,2}:\d{2}))?\]?/g;
+    // 匹配多种时间戳格式：[MM:SS] 或 [MM:SS-MM:SS] 或 MM:SS 或 MM:SS-MM:SS
+    const timestampRegex = /\[?(\d{1,2}:\d{2}(?:-\d{1,2}:\d{2})?)\]?/g;
     const parts: React.ReactNode[] = [];
     let lastIndex = 0;
     let match;
@@ -157,11 +188,12 @@ export function AITutor({ breakpoint, segments, isLoading: externalLoading, onRe
         parts.push(<span key={`text-${lastIndex}`}>{text.slice(lastIndex, match.index)}</span>);
       }
 
-      const startTime = match[1];
-      const endTime = match[2];
-      const startMs = parseTimeToMs(startTime);
-      const displayText = endTime ? `${startTime}-${endTime}` : startTime;
+      const timeString = match[1]; // 完整的时间字符串（可能包含范围）
+      const startMs = parseTimeToMs(timeString);
       const isActive = seekingTimestamp === startMs;
+      
+      // 显示格式：如果是范围格式，显示范围；否则显示单点
+      const displayText = timeString;
 
       parts.push(
         <button
@@ -191,16 +223,7 @@ export function AITutor({ breakpoint, segments, isLoading: externalLoading, onRe
     }
 
     return parts.length > 0 ? parts : text;
-  }, [handleTimestampClick, seekingTimestamp]);
-
-  // 解析时间字符串为毫秒
-  const parseTimeToMs = (time: string): number => {
-    const parts = time.split(':');
-    if (parts.length === 2) {
-      return (parseInt(parts[0]) * 60 + parseInt(parts[1])) * 1000;
-    }
-    return 0;
-  };
+  }, [handleTimestampClick, seekingTimestamp, parseTimeToMs]);
 
   useEffect(() => {
     notebookService.isAvailable().then(setNotebookAvailable);
@@ -672,7 +695,7 @@ export function AITutor({ breakpoint, segments, isLoading: externalLoading, onRe
         ) : response ? (
           <div className="space-y-6 animate-slide-up">
             {/* 老师原话 - 扩展上下文 */}
-            <Section icon="📚" title="老师是这样讲的">
+            <Section icon="📚" title="课堂回顾">
               <div className="bg-amber-50 border border-amber-100 rounded-xl p-4">
                 {/* 显示完整上下文，每段可点击跳转 */}
                 <div className="text-sm text-gray-700 leading-relaxed space-y-1 max-h-48 overflow-y-auto">

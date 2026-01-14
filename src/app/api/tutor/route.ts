@@ -12,7 +12,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { chat, DEFAULT_MODEL_ID, type ChatMessage, type MultimodalContent } from '@/lib/services/llm-service';
-import { mergeSentences, formatTimeRange, getSegmentsInRange, type Segment } from '@/lib/services/longcut-utils';
+import { formatTimeRange, formatTimestamp, getSegmentsInRange, type Segment } from '@/lib/services/longcut-utils';
 import { getDifyService, isDifyEnabled, type DifyWorkflowInput } from '@/lib/services/dify-service';
 import type { ExtendedTutorRequest, ExtendedTutorResponse, GuidanceQuestion, Citation } from '@/types/dify';
 
@@ -20,13 +20,21 @@ import type { ExtendedTutorRequest, ExtendedTutorResponse, GuidanceQuestion, Cit
 const TUTOR_SYSTEM_PROMPT = `你是一位"课堂对齐"的 AI 家教。你的任务是帮助学生补懂课堂上没听懂的内容。
 
 核心原则：
-1. 【证据链】必须引用老师的原话，格式：[引用 mm:ss-mm:ss]
-2. 【追问定位】先复述老师讲法，再追问学生具体卡在哪一步
-3. 【行动清单】最后给出 ≤3 个今晚可执行的任务（总计约20分钟）
+1. 【精确引用】必须引用课堂原话（老师或学生的话），格式：[引用 mm:ss] 或 [引用 mm:ss-mm:ss]
+2. 【时间戳准确性】引用的时间戳必须与转录中显示的时间完全一致，不得估算或猜测
+3. 【说话者识别】准确识别说话者，区分老师讲解和学生回答
+4. 【追问定位】先复述课堂内容，再追问学生具体卡在哪一步
+5. 【行动清单】最后给出 ≤3 个今晚可执行的任务（总计约20分钟）
+
+时间戳引用规则：
+- 如果引用学生在 00:30 说的话，必须写 [引用 00:30]
+- 如果引用老师在 00:25-00:28 的讲解，必须写 [引用 00:25-00:28]
+- 绝对不要使用转录中没有出现的时间戳
+- 每个引用都要对应转录中的具体内容
 
 输出格式（严格遵循）：
-## 老师是这样讲的
-[引用 xx:xx-xx:xx] "老师原话..."
+## 课堂回顾
+[引用 xx:xx] "准确的课堂原话..."
 
 ## 你可能卡在这里
 - 卡点1：...
@@ -72,6 +80,7 @@ export async function POST(request: NextRequest) {
     const body = await request.json() as ExtendedTutorRequest & { 
       messageContent?: Array<{ type: string; text?: string; image_url?: { url: string } }>;
     };
+    
     const { 
       timestamp, 
       segments, 
@@ -99,9 +108,17 @@ export async function POST(request: NextRequest) {
       timestamp + 60000
     );
 
-    // 合并为完整段落
-    const mergedSegments = mergeSentences(contextSegments);
-    const contextText = mergedSegments.map(s => `[${formatTimeRange(s.startMs, s.endMs)}] ${s.text}`).join('\n');
+    // 【修复】不使用合并，直接使用原始segments，避免说话者混淆
+    const mergedSegments = contextSegments; // 使用原始数据保持时间戳精确性
+    
+    // 生成带有说话者标识的上下文（帮助AI区分老师和学生）
+    const contextText = mergedSegments.map(s => {
+      const timeStr = formatTimestamp(s.startMs);
+      // 改进的说话者识别逻辑
+      const isStudent = identifyStudent(s.text);
+      const speaker = isStudent ? '学生' : '老师';
+      return `[${timeStr}] ${speaker}: ${s.text}`;
+    }).join('\n');
 
     // ===== 新增：Dify 增强功能 =====
     let guidanceQuestion: GuidanceQuestion | undefined;
@@ -191,14 +208,19 @@ export async function POST(request: NextRequest) {
         });
       } else {
         // 纯文本消息
-        messages.push({
-          role: 'user',
-          content: `【课堂转录参考】
+        const userPrompt = `【课堂转录参考】
 ${contextText}
 
 【学生说】
-${studentQuestion}`,
+${studentQuestion}`;
+        
+        messages.push({
+          role: 'user',
+          content: userPrompt,
         });
+        
+        // 调试：输出追问模式的完整提示词
+
       }
     } else {
       // 初次解释模式 - 使用结构化提示词
@@ -211,14 +233,23 @@ ${contextText}
 【学生困惑点】
 时间位置: ${formatTimeRange(timestamp - 5000, timestamp + 5000)}
 
+【重要提醒】
+- 请仔细查看每行的时间戳，确保引用的时间与内容完全对应
+- 如果学生在某个时间说了话，必须引用学生说话的准确时间戳
+- 如果老师在某个时间讲解了概念，必须引用老师讲解的准确时间戳
+- 不要猜测或估算时间戳，请使用转录中显示的确切时间
+
 请按照格式要求，帮助学生理解这个知识点。`,
       });
+      
+      // 调试：输出发送给 AI 的上下文
+
     }
 
     // 调用 LLM
     const response = await chat(messages, model, { temperature: 0.7, maxTokens: 2000 });
 
-    // 如果是追问模式（有学生问题或多模态内容），直接返回原始内容，不解析结构
+    // 如果是追问模式（有学生问题或多模态内容），需要验证和修正时间戳
     if (studentQuestion || messageContent) {
       let rawContent = response.content;
       
@@ -226,6 +257,9 @@ ${contextText}
       if (optionFollowup) {
         rawContent += `\n\n${optionFollowup}`;
       }
+
+      // 【重要】修正追问模式下的时间戳错误
+      rawContent = correctTimestampsInResponse(rawContent, mergedSegments, studentQuestion || '');
 
       const result: ExtendedTutorResponse = {
         explanation: {
@@ -250,10 +284,28 @@ ${contextText}
 
     // 初次解释模式，解析响应，提取结构化数据
     const parsed = parseTutorResponse(response.content, mergedSegments);
+    
+    // 验证和修正时间戳引用
+    const correctedParsed = validateAndCorrectTimestamp(parsed, mergedSegments, timestamp);
+    
+    // 同时修正原始回答中的时间戳
+    let correctedRawContent = response.content;
+    if (parsed.explanation?.citation && correctedParsed.explanation?.citation) {
+      const originalTimeRange = parsed.explanation.citation.timeRange;
+      const correctedTimeRange = correctedParsed.explanation.citation.timeRange;
+      
+      if (originalTimeRange !== correctedTimeRange) {
+        // 替换原始内容中的时间戳
+        correctedRawContent = correctedRawContent.replace(
+          new RegExp(`\\[引用\\s*${originalTimeRange.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\]`, 'g'),
+          `[引用 ${correctedTimeRange}]`
+        );
+      }
+    }
 
     const result: ExtendedTutorResponse = {
-      ...parsed,
-      rawContent: response.content,
+      ...correctedParsed,
+      rawContent: correctedRawContent,
       model: response.model,
       usage: response.usage,
       // 新增字段
@@ -277,23 +329,38 @@ ${contextText}
  * 解析 AI 响应为结构化数据
  */
 function parseTutorResponse(content: string, segments: Segment[]) {
-  // 提取引用 [引用 xx:xx-xx:xx]
-  const citationMatch = content.match(/\[引用\s*(\d{1,2}:\d{2})-(\d{1,2}:\d{2})\]/);
+  // 时间解析函数（与前端保持一致）
+  const parseTimeToMs = (time: string): number => {
+    const parts = time.split(':');
+    if (parts.length === 2) {
+      const minutes = parseInt(parts[0]);
+      const seconds = parseInt(parts[1]);
+      if (!isNaN(minutes) && !isNaN(seconds)) {
+        return (minutes * 60 + seconds) * 1000;
+      }
+    }
+    return 0;
+  };
+
+  // 提取引用 [引用 xx:xx-xx:xx] 或单个时间戳 [引用 xx:xx]
+  const citationMatch = content.match(/\[引用\s*(\d{1,2}:\d{2})(?:-(\d{1,2}:\d{2}))?\]/);
   let citation = null;
   
   if (citationMatch) {
     const [, startTime, endTime] = citationMatch;
-    const startMs = parseTimeToMs(startTime);
-    const endMs = parseTimeToMs(endTime);
+    const startMs = parseTimeToMsInternal(startTime);
+    const endMs = endTime ? parseTimeToMsInternal(endTime) : startMs + 5000; // 如果没有结束时间，默认+5秒
     
-    // 找到对应的转录文本
+    // 找到对应的转录文本 - 更精确的匹配
     const matchedSegment = segments.find(s => 
+      Math.abs(s.startMs - startMs) < 2000 // 允许2秒误差
+    ) || segments.find(s => 
       s.startMs <= startMs && s.endMs >= startMs
     );
     
     citation = {
       text: matchedSegment?.text || '',
-      timeRange: `${startTime}-${endTime}`,
+      timeRange: endTime ? `${startTime}-${endTime}` : startTime,
       startMs,
       endMs,
     };
@@ -438,9 +505,9 @@ function extractTeacherQuote(content: string): string {
 }
 
 /**
- * 解析时间字符串为毫秒
+ * 解析时间字符串为毫秒（内部使用）
  */
-function parseTimeToMs(time: string): number {
+function parseTimeToMsInternal(time: string): number {
   const parts = time.split(':');
   if (parts.length === 2) {
     return (parseInt(parts[0]) * 60 + parseInt(parts[1])) * 1000;
@@ -472,7 +539,6 @@ function generateMockGuidanceQuestion(context: string): GuidanceQuestion {
   // 场景1：英语听力/口语场景（如 Jane Bond 例子）
   if (fullText.includes('name') || fullText.includes('bond') || fullText.includes('jane') || 
       fullText.includes('hello') || fullText.includes('nice to meet')) {
-    const hasRepetition = /(\w+)[,\s]+\1/i.test(fullText); // 检测重复词（如 Jane, Jane）
     
     return {
       id: 'guidance-english-name',
@@ -696,6 +762,56 @@ function extractKeywords(text: string): string[] {
 }
 
 /**
+ * 识别说话者是否为学生
+ */
+function identifyStudent(text: string): boolean {
+  const trimmedText = text.trim();
+  
+  // 学生回答的典型特征
+  const studentPatterns = [
+    // 自我介绍
+    /^(My name is|I am|I'm)\b/i,
+    // 简单回应
+    /^(Yes|No|Yeah|Yep|Nope|OK|Okay|Sure|Right|Exactly)\b/i,
+    // 问候
+    /^(Hello|Hi|Hey|Good morning|Good afternoon)\b/i,
+    // 重复或确认
+    /^(So|Let me|I think|I believe|I guess)\b/i,
+    // 短句回答（通常学生回答较短）
+    /^.{1,20}$/,
+  ];
+  
+  // 老师讲解的典型特征
+  const teacherPatterns = [
+    // 教学指令
+    /\b(Now|Today|Let's|We will|You should|Please|Remember|Notice|Look at)\b/i,
+    // 解释性语言
+    /\b(This means|In other words|For example|Such as|Because|Therefore|So that)\b/i,
+    // 问题引导
+    /\b(What|How|Why|When|Where|Which|Can you|Do you)\b.*\?/i,
+    // 长句解释（老师通常说话较长）
+    /.{50,}/,
+  ];
+  
+  // 检查学生特征
+  for (const pattern of studentPatterns) {
+    if (pattern.test(trimmedText)) {
+      return true;
+    }
+  }
+  
+  // 检查老师特征
+  for (const pattern of teacherPatterns) {
+    if (pattern.test(trimmedText)) {
+      return false;
+    }
+  }
+  
+  // 默认情况：根据长度判断（学生回答通常较短）
+  return trimmedText.length < 30;
+}
+
+/**
  * 生成模拟的联网搜索结果（Dify 未配置时使用）
  */
 function generateMockCitations(context: string): Citation[] {
@@ -749,4 +865,154 @@ function generateMockCitations(context: string): Citation[] {
   }
   
   return citations;
+}
+
+/**
+ * 验证和修正时间戳引用
+ */
+function validateAndCorrectTimestamp(
+  parsed: any, 
+  segments: Segment[], 
+  confusionTimestamp: number
+): any {
+  if (!parsed.explanation?.citation) {
+    return parsed;
+  }
+
+  const citation = parsed.explanation.citation;
+  const citationStartMs = citation.startMs;
+  
+  // 如果引用的时间戳与困惑点时间戳相差太大，尝试修正
+  const timeDiff = Math.abs(citationStartMs - confusionTimestamp);
+  
+  if (timeDiff > 10000) { // 相差超过10秒
+    
+    // 查找最接近困惑点时间的段落
+    const nearestSegment = segments.reduce((closest, segment) => {
+      const currentDiff = Math.abs(segment.startMs - confusionTimestamp);
+      const closestDiff = Math.abs(closest.startMs - confusionTimestamp);
+      return currentDiff < closestDiff ? segment : closest;
+    });
+    
+    if (nearestSegment) {
+      
+      // 修正引用
+      const correctedCitation = {
+        ...citation,
+        startMs: nearestSegment.startMs,
+        endMs: nearestSegment.endMs,
+        timeRange: formatTimestamp(nearestSegment.startMs),
+        text: nearestSegment.text,
+      };
+      
+      return {
+        ...parsed,
+        explanation: {
+          ...parsed.explanation,
+          citation: correctedCitation,
+        },
+      };
+    }
+  }
+  
+  return parsed;
+}
+
+/**
+ * 修正AI回复中的时间戳引用错误
+ * 特别针对追问模式下的时间戳修正
+ */
+function correctTimestampsInResponse(
+  content: string, 
+  segments: Segment[], 
+  studentQuestion: string
+): string {
+  // 时间解析函数
+  const parseTimeToMsLocal = (time: string): number => {
+    const parts = time.split(':');
+    if (parts.length === 2) {
+      const minutes = parseInt(parts[0]);
+      const seconds = parseInt(parts[1]);
+      if (!isNaN(minutes) && !isNaN(seconds)) {
+        return (minutes * 60 + seconds) * 1000;
+      }
+    }
+    return 0;
+  };
+
+  // 构建内容到时间戳的映射（用于验证）
+  const contentTimeMap: Map<string, { timeStr: string; startMs: number }> = new Map();
+  
+  for (const segment of segments) {
+    const text = segment.text.toLowerCase().trim();
+    const timeStr = formatTimestamp(segment.startMs);
+    
+    // 存储原文和关键词的映射
+    contentTimeMap.set(text, { timeStr, startMs: segment.startMs });
+    
+    // 提取关键词用于模糊匹配
+    const words = text.split(/\s+/).filter(w => w.length > 3);
+    for (const word of words) {
+      if (!contentTimeMap.has(word)) {
+        contentTimeMap.set(word, { timeStr, startMs: segment.startMs });
+      }
+    }
+  }
+  
+  // 检测用户问题中是否提到了特定内容
+  const questionLower = studentQuestion.toLowerCase();
+  
+  // 尝试从问题中提取关键内容（如 "Jane Bond", "name" 等）
+  let targetContent: string | null = null;
+  let targetTimeStr: string | null = null;
+  
+  // 查找问题中提到的内容在哪个时间点
+  for (const segment of segments) {
+    const segmentText = segment.text.toLowerCase();
+    
+    // 如果问题提到了某个片段的内容
+    const questionWords = questionLower.split(/\s+/).filter(w => w.length > 2);
+    let matchCount = 0;
+    
+    for (const word of questionWords) {
+      if (segmentText.includes(word)) {
+        matchCount++;
+      }
+    }
+    
+    // 如果匹配度较高，记录这个时间戳
+    if (matchCount >= 2 || segmentText.includes('jane') || segmentText.includes('bond') || 
+        segmentText.includes('my name is')) {
+      targetContent = segment.text;
+      targetTimeStr = formatTimestamp(segment.startMs);
+      break;
+    }
+  }
+  
+  // 如果找到了目标内容和时间戳，检查AI回复中的时间戳是否正确
+  if (targetTimeStr && targetContent) {
+    // 匹配AI回复中的所有时间戳引用
+    const timestampPattern = /(\[?\d{1,2}:\d{2}\]?)/g;
+    let correctedContent = content;
+    
+    // 查找所有时间戳
+    const matches = content.match(timestampPattern);
+    if (matches) {
+      for (const match of matches) {
+        const cleanTime = match.replace(/[\[\]]/g, '');
+        const matchMs = parseTimeToMsLocal(cleanTime);
+        const targetMs = parseTimeToMsLocal(targetTimeStr);
+        
+        // 如果AI引用的时间戳与目标内容时间戳不一致，且差距较小（5秒内），修正它
+        if (matchMs !== targetMs && Math.abs(matchMs - targetMs) <= 10000) {
+          // 只替换第一个匹配（避免替换所有）
+          correctedContent = correctedContent.replace(match, targetTimeStr);
+        }
+      }
+    }
+    
+    return correctedContent;
+  }
+  
+  return content;
 }
