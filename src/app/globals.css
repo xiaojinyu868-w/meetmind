@@ -35,6 +35,20 @@
   --color-text-muted: 107 114 128;     /* gray-500 */
   --color-border: 229 231 235;         /* gray-200 */
   
+  /* === 得到风格 · 金色暖调 (Mobile) === */
+  --dedao-gold: #D4A574;               /* 金色主色 */
+  --dedao-gold-light: #E8D4BC;         /* 浅金强调 */
+  --dedao-gold-dark: #C49A6C;          /* 深金色 */
+  --dedao-brown: #8B7355;              /* 深棕辅助 */
+  --dedao-bg: #FBF9F7;                 /* 暖白背景 */
+  --dedao-bg-card: #FFFFFF;            /* 卡片背景 */
+  --dedao-bg-warm: #F5F0EB;            /* 暖灰背景 */
+  --dedao-text: #3D3D3D;               /* 深灰文字 */
+  --dedao-text-secondary: #666666;     /* 次要文字 */
+  --dedao-text-muted: #999999;         /* 弱化文字 */
+  --dedao-confusion: #E57373;          /* 困惑点红 */
+  --dedao-resolved: #81C784;           /* 已解决绿 */
+  
   /* 阴影 */
   --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
   --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.07), 0 2px 4px -2px rgb(0 0 0 / 0.05);

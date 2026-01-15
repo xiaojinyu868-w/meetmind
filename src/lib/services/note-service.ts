@@ -255,7 +255,8 @@ export async function getNotesBySourceGrouped(
     chat: [],
     takeaways: [],
     transcript: [],
-    custom: []
+    custom: [],
+    anchor: []
   };
   
   notes.forEach(note => {
@@ -325,7 +326,8 @@ export async function getNoteStats(studentId: string): Promise<{
     chat: 0,
     takeaways: 0,
     transcript: 0,
-    custom: 0
+    custom: 0,
+    anchor: 0
   };
   
   notes.forEach(note => {

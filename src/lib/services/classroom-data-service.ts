@@ -497,10 +497,20 @@ export const classroomDataService = {
     const anchors = this.getSessionAnchors(sessionId);
     
     // 从 IndexedDB 获取转录内容
-    const transcripts = await db.transcripts
+    const dbTranscripts = await db.transcripts
       .where('sessionId')
       .equals(sessionId)
       .sortBy('startMs');
+    
+    // 转换为 TranscriptSegment 类型
+    const transcripts: TranscriptSegment[] = dbTranscripts.map(t => ({
+      id: String(t.id ?? ''),
+      text: t.text,
+      startMs: t.startMs,
+      endMs: t.endMs,
+      confidence: t.confidence,
+      isFinal: t.isFinal,
+    }));
     
     const hotspots = this.aggregateHotspots(sessionId, transcripts);
     

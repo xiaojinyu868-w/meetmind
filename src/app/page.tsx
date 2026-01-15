@@ -22,6 +22,17 @@ import { useAuth } from '@/lib/hooks/useAuth';
 import { classroomDataService, type StudentAnchor } from '@/lib/services/classroom-data-service';
 import type { TranscriptSegment, HighlightTopic, ClassSummary, Note, TopicGenerationMode, NoteSource, NoteMetadata } from '@/types';
 import { DEMO_SEGMENTS, DEMO_ANCHORS, DEMO_AUDIO_URL } from '@/fixtures/demo-data';
+import { useResponsive } from '@/hooks/useResponsive';
+import { 
+  MiniPlayer,
+  MobileTabSwitch,
+  DedaoTimeline,
+  DedaoConfusionCard,
+  DedaoMenu,
+  DedaoMenuButton,
+  toDedaoEntries,
+  type ConfusionMarker,
+} from '@/components/mobile';
 
 type ViewMode = 'record' | 'review';
 type DataSource = 'live' | 'demo';
@@ -45,6 +56,13 @@ interface ActionItem {
 export default function StudentApp() {
   // 获取当前登录用户
   const { user, isAuthenticated } = useAuth();
+  
+  // 响应式状态
+  const { isMobile } = useResponsive();
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [selectedConfusion, setSelectedConfusion] = useState<ConfusionMarker | null>(null);
+  const [mobileSubPage, setMobileSubPage] = useState<'highlights' | 'summary' | 'notes' | 'tasks' | null>(null);
   
   const [viewMode, setViewMode] = useState<ViewMode>('record');
   const [sessionId, setSessionId] = useState<string>('demo-session');
@@ -643,63 +661,240 @@ export default function StudentApp() {
 
   return (
     <div className="h-screen flex flex-col overflow-hidden">
-      <DegradedModeBanner status={serviceStatus} />
+      {/* 移动端隐藏降级横幅 */}
+      {!isMobile && <DegradedModeBanner status={serviceStatus} />}
       
-      <Header 
-        lessonTitle={viewMode === 'record' ? '课堂录音' : '二次函数的图像与性质'}
-        courseName="数学"
-      />
+      {/* 桌面端 Header - 移动端隐藏 */}
+      {!isMobile && (
+        <Header 
+          lessonTitle={viewMode === 'record' ? '课堂录音' : '二次函数的图像与性质'}
+          courseName="数学"
+        />
+      )}
 
-      {/* 模式切换栏 */}
-      <div className="glass border-b border-white/20 px-6 py-3 no-print">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2 p-1 bg-gray-100/80 rounded-xl">
-            <button
-              onClick={() => setViewMode('record')}
-              className={`mode-tab ${viewMode === 'record' ? 'active' : ''}`}
-            >
-              <span className="mr-1.5">🎙️</span>
-              录音
-            </button>
-            <button
-              onClick={() => setViewMode('review')}
-              className={`mode-tab ${viewMode === 'review' ? 'active' : ''}`}
-            >
-              <span className="mr-1.5">📚</span>
-              复习
-            </button>
-          </div>
-          
-            <div className="flex items-center gap-4">
-            <ServiceStatus compact pollInterval={60000} />
+      {/* 桌面端模式切换栏 - 移动端隐藏 */}
+      {!isMobile && (
+        <div className="glass border-b border-white/20 px-6 py-3 no-print">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2 p-1 bg-gray-100/80 rounded-xl">
+              <button
+                onClick={() => setViewMode('record')}
+                className={`mode-tab ${viewMode === 'record' ? 'active' : ''}`}
+              >
+                <span className="mr-1.5">🎙️</span>
+                录音
+              </button>
+              <button
+                onClick={() => setViewMode('review')}
+                className={`mode-tab ${viewMode === 'review' ? 'active' : ''}`}
+              >
+                <span className="mr-1.5">📚</span>
+                复习
+              </button>
+            </div>
             
-            <div className="flex items-center gap-3 text-sm min-w-0 flex-wrap">
-              <span className={`badge ${dataSource === 'live' ? 'badge-live' : 'badge-demo'} flex-shrink-0`}>
-                {dataSource === 'live' ? '🎙️ 实时' : '📋 演示'}
-              </span>
+              <div className="flex items-center gap-4">
+              <ServiceStatus compact pollInterval={60000} />
               
-              <div className="flex items-center gap-2 text-gray-500 min-w-0 flex-wrap">
-                <span className="whitespace-nowrap">困惑点</span>
-                <span className="font-semibold text-gray-900">{anchors.length}</span>
-                {unresolvedCount > 0 && (
-                  <>
-                    <span>·</span>
-                    <span className="text-rose-500 font-semibold whitespace-nowrap">{unresolvedCount} 待解决</span>
-                  </>
-                )}
+              <div className="flex items-center gap-3 text-sm min-w-0 flex-wrap">
+                <span className={`badge ${dataSource === 'live' ? 'badge-live' : 'badge-demo'} flex-shrink-0`}>
+                  {dataSource === 'live' ? '🎙️ 实时' : '📋 演示'}
+                </span>
+                
+                <div className="flex items-center gap-2 text-gray-500 min-w-0 flex-wrap">
+                  <span className="whitespace-nowrap">困惑点</span>
+                  <span className="font-semibold text-gray-900">{anchors.length}</span>
+                  {unresolvedCount > 0 && (
+                    <>
+                      <span>·</span>
+                      <span className="text-rose-500 font-semibold whitespace-nowrap">{unresolvedCount} 待解决</span>
+                    </>
+                  )}
+                </div>
               </div>
             </div>
           </div>
         </div>
-      </div>
+      )}
 
       {/* 主内容区 */}
       {viewMode === 'record' ? (
-        <div className="flex-1 flex items-center justify-center p-8 page-enter">
-          <div className="w-full max-w-2xl space-y-6">
-            {/* 录音或上传切换 */}
-            <div className="flex items-center justify-center gap-4 mb-4">
-              <span className="text-sm text-gray-500">选择输入方式：</span>
+        <>
+          {/* 移动端录音页面 - 得到风格 */}
+          {isMobile ? (
+            <div className="flex-1 min-h-0 flex flex-col overflow-hidden bg-[var(--dedao-bg)]">
+              {/* 极简顶部栏：Logo + Tab + 菜单 */}
+              <div className="flex-shrink-0 px-4 py-2.5 flex items-center gap-3 bg-white border-b border-[#E8E4DF]">
+                {/* Logo */}
+                <div className="w-8 h-8 bg-gradient-to-br from-[var(--dedao-gold)] to-[var(--dedao-gold-dark)] rounded-lg flex items-center justify-center flex-shrink-0">
+                  <span className="text-white font-bold text-sm">M</span>
+                </div>
+                
+                {/* Tab 切换 */}
+                <div className="flex-1 flex items-center justify-center">
+                  <MobileTabSwitch
+                    activeTab={viewMode}
+                    onTabChange={(tab) => setViewMode(tab)}
+                    className="w-full max-w-[180px]"
+                  />
+                </div>
+                
+                {/* 菜单按钮 */}
+                <DedaoMenuButton onClick={() => setIsMenuOpen(true)} />
+              </div>
+
+              {/* 录音内容区 */}
+              <div className="flex-1 flex flex-col items-center justify-center p-4 overflow-auto">
+                <div className="w-full max-w-md space-y-4">
+                  {/* 录音或上传切换 */}
+                  <div className="flex items-center justify-center gap-2 mb-2">
+                    <span className="text-xs text-gray-500">选择输入方式：</span>
+                    <div className="flex items-center gap-1 p-0.5 bg-gray-100 rounded-xl">
+                      <button
+                        onClick={() => setDataSource('live')}
+                        className={`px-3 py-1.5 text-xs rounded-lg transition-all ${
+                          dataSource === 'live'
+                            ? 'bg-white text-gray-900 font-medium shadow-sm'
+                            : 'text-gray-500 hover:text-gray-700'
+                        }`}
+                      >
+                        🎙️ 实时录音
+                      </button>
+                      <button
+                        onClick={() => setDataSource('demo')}
+                        className={`px-3 py-1.5 text-xs rounded-lg transition-all ${
+                          dataSource === 'demo'
+                            ? 'bg-white text-gray-900 font-medium shadow-sm'
+                            : 'text-gray-500 hover:text-gray-700'
+                        }`}
+                      >
+                        📁 上传音频
+                      </button>
+                    </div>
+                  </div>
+
+                  {dataSource === 'live' ? (
+                    <Recorder
+                      onRecordingStart={handleRecordingStart}
+                      onRecordingStop={handleRecordingStop}
+                      onTranscriptUpdate={handleTranscriptUpdate}
+                      onAnchorMark={handleAnchorMark}
+                    />
+                  ) : (
+                    <div className="card p-4">
+                      <h3 className="text-base font-semibold text-gray-900 mb-3 flex items-center gap-2">
+                        <span>📁</span>
+                        上传课堂录音
+                      </h3>
+                      <AudioUploader
+                        onTranscriptReady={async (newSegments, blob) => {
+                          const newSessionId = generateSessionId();
+                          setSessionId(newSessionId);
+                          setSegments(newSegments);
+                          setAudioBlob(blob);
+                          setAudioUrl(null);
+                          setDataSource('live');
+                          
+                          try {
+                            await db.transcripts.bulkAdd(
+                              newSegments.map((seg) => ({
+                                sessionId: newSessionId,
+                                text: seg.text,
+                                startMs: seg.startMs,
+                                endMs: seg.endMs,
+                                confidence: seg.confidence || 1.0,
+                                isFinal: true,
+                              }))
+                            );
+                          } catch (e) {
+                            console.error('保存转录到 IndexedDB 失败:', e);
+                          }
+                          
+                          const duration = newSegments.length > 0 
+                            ? newSegments[newSegments.length - 1].endMs 
+                            : 0;
+                          classroomDataService.saveSession({
+                            id: newSessionId,
+                            subject: '英语',
+                            topic: '课堂录音',
+                            teacherName: 'Teacher',
+                            status: 'completed',
+                            duration,
+                            createdBy: studentId,
+                          });
+                          
+                          const tl = memoryService.buildTimeline(
+                            newSessionId,
+                            newSegments,
+                            anchors,
+                            { subject: '英语', teacher: 'Teacher', date: new Date().toISOString().split('T')[0] }
+                          );
+                          setTimeline(tl);
+                          setViewMode('review');
+                        }}
+                        onError={(error) => {
+                          console.error('上传失败:', error);
+                        }}
+                        disabled={isRecording}
+                      />
+                      <p className="mt-3 text-xs text-gray-500 text-center">
+                        支持 MP3、WAV、WebM 等格式
+                      </p>
+                    </div>
+                  )}
+                  
+                  {/* 已标记的困惑点 */}
+                  {anchors.length > 0 && (
+                    <div className="card p-4 animate-slide-up">
+                      <h3 className="text-sm font-semibold text-gray-900 mb-3 flex items-center gap-2">
+                        <span>🎯</span>
+                        已标记的困惑点
+                        <span className="ml-auto text-xs font-normal text-gray-400">{anchors.length} 个</span>
+                      </h3>
+                      <div className="space-y-2 max-h-32 overflow-y-auto">
+                        {anchors.map((anchor, index) => (
+                          <div
+                            key={anchor.id}
+                            className="flex items-center gap-2 p-2 bg-gray-50 rounded-lg"
+                          >
+                            <div className={`w-2 h-2 rounded-full ${
+                              anchor.resolved ? 'bg-emerald-400' : 'bg-rose-400'
+                            }`} />
+                            <span className="text-xs font-mono text-gray-600">
+                              {formatTime(anchor.timestamp)}
+                            </span>
+                            <span className="text-xs text-gray-500">
+                              困惑点 #{index + 1}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* 右侧菜单 */}
+              <DedaoMenu
+                isOpen={isMenuOpen}
+                onClose={() => setIsMenuOpen(false)}
+                onNavigate={(page) => {
+                  setMobileSubPage(page);
+                }}
+                badges={{
+                  highlights: highlightTopics.length,
+                  notes: notes.length,
+                  tasks: actionItems.filter(i => !i.completed).length,
+                }}
+              />
+            </div>
+          ) : (
+            /* 桌面端录音页面 */
+            <div className="flex-1 flex items-center justify-center p-8 page-enter">
+              <div className="w-full max-w-2xl space-y-6">
+                {/* 录音或上传切换 */}
+                <div className="flex items-center justify-center gap-4 mb-4">
+                  <span className="text-sm text-gray-500">选择输入方式：</span>
               <div className="flex items-center gap-2 p-1 bg-gray-100 rounded-xl">
                 <button
                   onClick={() => setDataSource('live')}
@@ -801,247 +996,412 @@ export default function StudentApp() {
               </div>
             )}
             
-            {/* 已标记的困惑点 */}
-            {anchors.length > 0 && (
-              <div className="card p-5 animate-slide-up">
-                <h3 className="text-sm font-semibold text-gray-900 mb-4 flex items-center gap-2">
-                  <span>🎯</span>
-                  已标记的困惑点
-                  <span className="ml-auto text-xs font-normal text-gray-400">{anchors.length} 个</span>
-                </h3>
-                <div className="space-y-2 max-h-48 overflow-y-auto">
-                  {anchors.map((anchor, index) => (
-                    <div
-                      key={anchor.id}
-                      className="flex items-center gap-3 p-3 bg-gray-50 rounded-xl hover:bg-gray-100 transition-colors"
-                    >
-                      <div className={`w-2.5 h-2.5 rounded-full ${
-                        anchor.resolved ? 'bg-emerald-400' : 'bg-rose-400'
-                      }`} />
-                      <span className="text-sm font-mono text-gray-600">
-                        {formatTime(anchor.timestamp)}
-                      </span>
-                      <span className="text-sm text-gray-500">
-                        困惑点 #{index + 1}
-                      </span>
-                      {anchor.resolved && (
-                        <span className="ml-auto text-xs text-emerald-600">已解决</span>
-                      )}
+                {/* 已标记的困惑点 */}
+                {anchors.length > 0 && (
+                  <div className="card p-5 animate-slide-up">
+                    <h3 className="text-sm font-semibold text-gray-900 mb-4 flex items-center gap-2">
+                      <span>🎯</span>
+                      已标记的困惑点
+                      <span className="ml-auto text-xs font-normal text-gray-400">{anchors.length} 个</span>
+                    </h3>
+                    <div className="space-y-2 max-h-48 overflow-y-auto">
+                      {anchors.map((anchor, index) => (
+                        <div
+                          key={anchor.id}
+                          className="flex items-center gap-3 p-3 bg-gray-50 rounded-xl hover:bg-gray-100 transition-colors"
+                        >
+                          <div className={`w-2.5 h-2.5 rounded-full ${
+                            anchor.resolved ? 'bg-emerald-400' : 'bg-rose-400'
+                          }`} />
+                          <span className="text-sm font-mono text-gray-600">
+                            {formatTime(anchor.timestamp)}
+                          </span>
+                          <span className="text-sm text-gray-500">
+                            困惑点 #{index + 1}
+                          </span>
+                          {anchor.resolved && (
+                            <span className="ml-auto text-xs text-emerald-600">已解决</span>
+                          )}
+                        </div>
+                      ))}
                     </div>
-                  ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+        </>
+      ) : (
+        <>
+          {/* 桌面端布局 */}
+          {!isMobile ? (
+            <div className="flex-1 min-h-0 flex overflow-hidden page-enter">
+              {/* 左栏 - 多功能面板 */}
+              <div className="w-96 border-r border-gray-100 flex flex-col glass">
+                {/* 标签页切换 */}
+                <div className="flex items-center gap-1 px-4 py-2 border-b border-gray-100 bg-gray-50/50 overflow-x-auto">
+                  <button
+                    onClick={() => setReviewTab('timeline')}
+                    className={`px-3 py-1.5 text-sm rounded-lg transition-all whitespace-nowrap ${
+                      reviewTab === 'timeline'
+                        ? 'bg-white text-gray-900 font-medium shadow-sm'
+                        : 'text-gray-500 hover:text-gray-700 hover:bg-white/50'
+                    }`}
+                  >
+                    📋 时间轴
+                  </button>
+                  <button
+                    onClick={() => setReviewTab('anchor-detail')}
+                    className={`px-3 py-1.5 text-sm rounded-lg transition-all whitespace-nowrap ${
+                      reviewTab === 'anchor-detail'
+                        ? 'bg-white text-gray-900 font-medium shadow-sm'
+                        : 'text-gray-500 hover:text-gray-700 hover:bg-white/50'
+                    }`}
+                  >
+                    🎯 困惑点
+                    {selectedAnchor && !selectedAnchor.resolved && (
+                      <span className="ml-1 w-2 h-2 bg-red-500 rounded-full inline-block animate-pulse" />
+                    )}
+                  </button>
+                  <button
+                    onClick={() => setReviewTab('highlights')}
+                    className={`px-3 py-1.5 text-sm rounded-lg transition-all whitespace-nowrap ${
+                      reviewTab === 'highlights'
+                        ? 'bg-white text-gray-900 font-medium shadow-sm'
+                        : 'text-gray-500 hover:text-gray-700 hover:bg-white/50'
+                    }`}
+                  >
+                    ⚡ 精选
+                    {highlightTopics.length > 0 && (
+                      <span className="ml-1 text-xs text-blue-600">({highlightTopics.length})</span>
+                    )}
+                  </button>
+                  <button
+                    onClick={() => setReviewTab('summary')}
+                    className={`px-3 py-1.5 text-sm rounded-lg transition-all whitespace-nowrap ${
+                      reviewTab === 'summary'
+                        ? 'bg-white text-gray-900 font-medium shadow-sm'
+                        : 'text-gray-500 hover:text-gray-700 hover:bg-white/50'
+                    }`}
+                  >
+                    📝 摘要
+                    {classSummary && <span className="ml-1 text-xs text-green-600">✓</span>}
+                  </button>
+                  <button
+                    onClick={() => setReviewTab('notes')}
+                    className={`px-3 py-1.5 text-sm rounded-lg transition-all whitespace-nowrap ${
+                      reviewTab === 'notes'
+                        ? 'bg-white text-gray-900 font-medium shadow-sm'
+                        : 'text-gray-500 hover:text-gray-700 hover:bg-white/50'
+                    }`}
+                  >
+                    📄 笔记
+                    {notes.length > 0 && (
+                      <span className="ml-1 text-xs text-purple-600">({notes.length})</span>
+                    )}
+                  </button>
+                </div>
+                
+                {/* 标签页内容 */}
+                <div className="flex-1 min-h-0 overflow-hidden">
+                  {reviewTab === 'timeline' && timelineForView && (
+                    <TimelineView
+                      timeline={timelineForView}
+                      currentTime={currentTime}
+                      selectedBreakpoint={selectedBreakpoint}
+                      onTimeClick={handleTimelineClick}
+                      onBreakpointClick={(bp) => {
+                        const anchor = anchors.find(a => a.id === bp.id);
+                        if (anchor) handleAnchorSelect(anchor);
+                      }}
+                    />
+                  )}
+                  
+                  {reviewTab === 'anchor-detail' && (
+                    <AnchorDetailPanel
+                      anchor={selectedAnchor}
+                      segments={segments}
+                      onSeek={(timeMs) => {
+                        setCurrentTime(timeMs);
+                        waveformRef.current?.seekTo(timeMs);
+                      }}
+                      onPlay={(startMs) => {
+                        waveformRef.current?.seekTo(startMs);
+                        waveformRef.current?.play();
+                      }}
+                      onResolve={handleResolveAnchor}
+                      onAskAI={() => {
+                        // AI 家教已经是默认模式，无需切换
+                      }}
+                      onAddNote={(text, anchorId) => {
+                        handleAddNote(text, 'anchor', {
+                          anchorId,
+                          timestamp: selectedAnchor?.timestamp,
+                        });
+                      }}
+                      onClose={() => setReviewTab('timeline')}
+                    />
+                  )}
+                  
+                  {reviewTab === 'highlights' && (
+                    <HighlightsPanel
+                      topics={highlightTopics}
+                      selectedTopic={selectedTopic}
+                      onTopicSelect={setSelectedTopic}
+                      onPlayTopic={handlePlayTopic}
+                      onSeek={handleTimelineClick}
+                      onPlayAll={handlePlayAll}
+                      isPlayingAll={isPlayingAll}
+                      playAllIndex={playAllIndex}
+                      currentTime={currentTime}
+                      totalDuration={totalDuration}
+                      isLoading={isLoadingTopics}
+                      onGenerate={handleGenerateTopics}
+                      onRegenerateByTheme={handleRegenerateByTheme}
+                      onClear={handleClearTopics}
+                    />
+                  )}
+                  
+                  {reviewTab === 'summary' && (
+                    <SummaryPanel
+                      summary={classSummary}
+                      isLoading={isLoadingSummary}
+                      onGenerate={handleGenerateSummary}
+                      onSeek={handleTimelineClick}
+                      onAddNote={(text, takeaway) => {
+                        handleAddNote(text, 'takeaways', {
+                          selectedText: takeaway.label,
+                          extra: { timestamps: takeaway.timestamps }
+                        });
+                      }}
+                    />
+                  )}
+                  
+                  {reviewTab === 'notes' && (
+                    <NotesPanel
+                      notes={notes}
+                      onAddNote={handleAddNote}
+                      onUpdateNote={handleUpdateNote}
+                      onDeleteNote={handleDeleteNote}
+                      onSeek={handleTimelineClick}
+                    />
+                  )}
                 </div>
               </div>
-            )}
-          </div>
-        </div>
-      ) : (
-        <div className="flex-1 min-h-0 flex overflow-hidden page-enter">
-          {/* 左栏 - 多功能面板 */}
-          <div className="w-96 border-r border-gray-100 flex flex-col glass">
-            {/* 标签页切换 */}
-            <div className="flex items-center gap-1 px-4 py-2 border-b border-gray-100 bg-gray-50/50 overflow-x-auto">
-              <button
-                onClick={() => setReviewTab('timeline')}
-                className={`px-3 py-1.5 text-sm rounded-lg transition-all whitespace-nowrap ${
-                  reviewTab === 'timeline'
-                    ? 'bg-white text-gray-900 font-medium shadow-sm'
-                    : 'text-gray-500 hover:text-gray-700 hover:bg-white/50'
-                }`}
-              >
-                📋 时间轴
-              </button>
-              <button
-                onClick={() => setReviewTab('anchor-detail')}
-                className={`px-3 py-1.5 text-sm rounded-lg transition-all whitespace-nowrap ${
-                  reviewTab === 'anchor-detail'
-                    ? 'bg-white text-gray-900 font-medium shadow-sm'
-                    : 'text-gray-500 hover:text-gray-700 hover:bg-white/50'
-                }`}
-              >
-                🎯 困惑点
-                {selectedAnchor && !selectedAnchor.resolved && (
-                  <span className="ml-1 w-2 h-2 bg-red-500 rounded-full inline-block animate-pulse" />
-                )}
-              </button>
-              <button
-                onClick={() => setReviewTab('highlights')}
-                className={`px-3 py-1.5 text-sm rounded-lg transition-all whitespace-nowrap ${
-                  reviewTab === 'highlights'
-                    ? 'bg-white text-gray-900 font-medium shadow-sm'
-                    : 'text-gray-500 hover:text-gray-700 hover:bg-white/50'
-                }`}
-              >
-                ⚡ 精选
-                {highlightTopics.length > 0 && (
-                  <span className="ml-1 text-xs text-blue-600">({highlightTopics.length})</span>
-                )}
-              </button>
-              <button
-                onClick={() => setReviewTab('summary')}
-                className={`px-3 py-1.5 text-sm rounded-lg transition-all whitespace-nowrap ${
-                  reviewTab === 'summary'
-                    ? 'bg-white text-gray-900 font-medium shadow-sm'
-                    : 'text-gray-500 hover:text-gray-700 hover:bg-white/50'
-                }`}
-              >
-                📝 摘要
-                {classSummary && <span className="ml-1 text-xs text-green-600">✓</span>}
-              </button>
-              <button
-                onClick={() => setReviewTab('notes')}
-                className={`px-3 py-1.5 text-sm rounded-lg transition-all whitespace-nowrap ${
-                  reviewTab === 'notes'
-                    ? 'bg-white text-gray-900 font-medium shadow-sm'
-                    : 'text-gray-500 hover:text-gray-700 hover:bg-white/50'
-                }`}
-              >
-                📄 笔记
-                {notes.length > 0 && (
-                  <span className="ml-1 text-xs text-purple-600">({notes.length})</span>
-                )}
-              </button>
-            </div>
-            
-            {/* 标签页内容 */}
-            <div className="flex-1 min-h-0 overflow-hidden">
-              {reviewTab === 'timeline' && timelineForView && (
-                <TimelineView
-                  timeline={timelineForView}
-                  currentTime={currentTime}
-                  selectedBreakpoint={selectedBreakpoint}
-                  onTimeClick={handleTimelineClick}
-                  onBreakpointClick={(bp) => {
-                    const anchor = anchors.find(a => a.id === bp.id);
-                    if (anchor) handleAnchorSelect(anchor);
-                  }}
-                />
-              )}
-              
-              {reviewTab === 'anchor-detail' && (
-                <AnchorDetailPanel
-                  anchor={selectedAnchor}
-                  segments={segments}
-                  onSeek={(timeMs) => {
-                    setCurrentTime(timeMs);
-                    waveformRef.current?.seekTo(timeMs);
-                  }}
-                  onPlay={(startMs) => {
-                    waveformRef.current?.seekTo(startMs);
-                    waveformRef.current?.play();
-                  }}
-                  onResolve={handleResolveAnchor}
-                  onAskAI={() => {
-                    // AI 家教已经是默认模式，无需切换
-                  }}
-                  onAddNote={(text, anchorId) => {
-                    handleAddNote(text, 'anchor', {
-                      anchorId,
-                      timestamp: selectedAnchor?.timestamp,
-                    });
-                  }}
-                  onClose={() => setReviewTab('timeline')}
-                />
-              )}
-              
-              {reviewTab === 'highlights' && (
-                <HighlightsPanel
-                  topics={highlightTopics}
-                  selectedTopic={selectedTopic}
-                  onTopicSelect={setSelectedTopic}
-                  onPlayTopic={handlePlayTopic}
-                  onSeek={handleTimelineClick}
-                  onPlayAll={handlePlayAll}
-                  isPlayingAll={isPlayingAll}
-                  playAllIndex={playAllIndex}
-                  currentTime={currentTime}
-                  totalDuration={totalDuration}
-                  isLoading={isLoadingTopics}
-                  onGenerate={handleGenerateTopics}
-                  onRegenerateByTheme={handleRegenerateByTheme}
-                  onClear={handleClearTopics}
-                />
-              )}
-              
-              {reviewTab === 'summary' && (
-                <SummaryPanel
-                  summary={classSummary}
-                  isLoading={isLoadingSummary}
-                  onGenerate={handleGenerateSummary}
-                  onSeek={handleTimelineClick}
-                  onAddNote={(text, takeaway) => {
-                    handleAddNote(text, 'takeaways', {
-                      selectedText: takeaway.label,
-                      extra: { timestamps: takeaway.timestamps }
-                    });
-                  }}
-                />
-              )}
-              
-              {reviewTab === 'notes' && (
-                <NotesPanel
-                  notes={notes}
-                  onAddNote={handleAddNote}
-                  onUpdateNote={handleUpdateNote}
-                  onDeleteNote={handleDeleteNote}
-                  onSeek={handleTimelineClick}
-                />
-              )}
-            </div>
-          </div>
 
-          {/* 中栏 - AI 对话 */}
-          <div className="flex-1 flex flex-col min-h-0 bg-white">
-            {/* 波形播放器 */}
-            {(audioBlob || audioUrl) && (
-              <div className="px-4 py-2 border-b border-gray-100">
-                <WaveformPlayer
-                  ref={waveformRef}
-                  src={audioBlob || audioUrl || undefined}
-                  anchors={anchors.map(a => ({
-                    id: a.id,
-                    timestamp: a.timestamp,
-                    resolved: a.resolved,
-                    type: a.type,
-                  } as WaveformAnchor))}
-                  onTimeUpdate={setCurrentTime}
-                  onAnchorClick={(anchor) => {
-                    const found = anchors.find(a => a.id === anchor.id);
-                    if (found) handleAnchorSelect(found);
-                  }}
-                  onAnchorAdd={handlePlaybackAnchorAdd}
-                  allowAddAnchor={true}
-                  selectedAnchorId={selectedAnchor?.id}
-                  height={30}
+              {/* 中栏 - AI 对话 */}
+              <div className="flex-1 flex flex-col min-h-0 bg-white">
+                {/* 波形播放器 */}
+                {(audioBlob || audioUrl) && (
+                  <div className="px-4 py-2 border-b border-gray-100">
+                    <WaveformPlayer
+                      ref={waveformRef}
+                      src={audioBlob || audioUrl || undefined}
+                      anchors={anchors.map(a => ({
+                        id: a.id,
+                        timestamp: a.timestamp,
+                        resolved: a.resolved,
+                        type: a.type,
+                      } as WaveformAnchor))}
+                      onTimeUpdate={setCurrentTime}
+                      onAnchorClick={(anchor) => {
+                        const found = anchors.find(a => a.id === anchor.id);
+                        if (found) handleAnchorSelect(found);
+                      }}
+                      onAnchorAdd={handlePlaybackAnchorAdd}
+                      allowAddAnchor={true}
+                      selectedAnchorId={selectedAnchor?.id}
+                      height={30}
+                    />
+                  </div>
+                )}
+                
+                {/* AI 家教区 */}
+                <div className="flex-1 min-h-0">
+                  <AITutor
+                    breakpoint={selectedBreakpoint}
+                    segments={segments}
+                    isLoading={false}
+                    onResolve={handleResolveAnchor}
+                    onActionItemsUpdate={handleActionItemsUpdate}
+                    sessionId={sessionId}
+                    onSeek={(timeMs) => {
+                      setCurrentTime(timeMs);
+                      waveformRef.current?.seekTo(timeMs);
+                      waveformRef.current?.play();
+                    }}
+                  />
+                </div>
+              </div>
+
+              {/* 右栏 - 行动清单 */}
+              <div className="w-80 border-l border-gray-100 glass">
+                <ActionList
+                  items={actionItems}
+                  onComplete={handleActionComplete}
                 />
               </div>
-            )}
-            
-            {/* AI 家教区 */}
-            <div className="flex-1 min-h-0">
-              <AITutor
-                breakpoint={selectedBreakpoint}
-                segments={segments}
-                isLoading={false}
-                onResolve={handleResolveAnchor}
-                onActionItemsUpdate={handleActionItemsUpdate}
-                sessionId={sessionId}
+            </div>
+          ) : (
+            /* 移动端得到风格布局 */
+            <div className="flex-1 min-h-0 flex flex-col overflow-hidden bg-[var(--dedao-bg)]">
+              {/* 极简顶部栏：Logo + Tab + 菜单 */}
+              <div className="flex-shrink-0 px-4 py-2.5 flex items-center gap-3 bg-white border-b border-[#E8E4DF]">
+                {/* Logo */}
+                <div className="w-8 h-8 bg-gradient-to-br from-[var(--dedao-gold)] to-[var(--dedao-gold-dark)] rounded-lg flex items-center justify-center flex-shrink-0">
+                  <span className="text-white font-bold text-sm">M</span>
+                </div>
+                
+                {/* Tab 切换 */}
+                <div className="flex-1 flex items-center justify-center">
+                  <MobileTabSwitch
+                    activeTab={viewMode}
+                    onTabChange={(tab) => setViewMode(tab)}
+                    className="w-full max-w-[180px]"
+                  />
+                </div>
+                
+                {/* 菜单按钮 */}
+                <DedaoMenuButton onClick={() => setIsMenuOpen(true)} />
+              </div>
+
+              {/* 单行极简播放器 */}
+              <MiniPlayer
+                currentTime={currentTime}
+                duration={totalDuration}
+                isPlaying={isPlaying}
+                markers={anchors.map(a => ({
+                  id: a.id,
+                  timestamp: a.timestamp,
+                  resolved: a.resolved,
+                }))}
                 onSeek={(timeMs) => {
                   setCurrentTime(timeMs);
                   waveformRef.current?.seekTo(timeMs);
+                }}
+                onPlayPause={() => {
+                  if (isPlaying) {
+                    waveformRef.current?.pause();
+                  } else {
+                    waveformRef.current?.play();
+                  }
+                  setIsPlaying(!isPlaying);
+                }}
+                onMarkerClick={(marker) => {
+                  const anchor = anchors.find(a => a.id === marker.id);
+                  if (anchor) {
+                    const context = segments.find(
+                      s => marker.timestamp >= s.startMs && marker.timestamp <= s.endMs
+                    )?.text;
+                    
+                    setSelectedConfusion({
+                      id: marker.id,
+                      timestamp: marker.timestamp,
+                      content: anchor.note,
+                      resolved: marker.resolved,
+                      context,
+                    } as ConfusionMarker & { context?: string });
+                    
+                    handleAnchorSelect(anchor);
+                  }
+                }}
+              />
+
+              {/* 隐藏的波形播放器（用于实际音频播放） */}
+              {(audioBlob || audioUrl) && (
+                <div className="hidden">
+                  <WaveformPlayer
+                    ref={waveformRef}
+                    src={audioBlob || audioUrl || undefined}
+                    anchors={anchors.map(a => ({
+                      id: a.id,
+                      timestamp: a.timestamp,
+                      resolved: a.resolved,
+                      type: a.type,
+                    } as WaveformAnchor))}
+                    onTimeUpdate={setCurrentTime}
+                    onPlayStateChange={setIsPlaying}
+                    onAnchorClick={(anchor) => {
+                      const found = anchors.find(a => a.id === anchor.id);
+                      if (found) handleAnchorSelect(found);
+                    }}
+                    onAnchorAdd={handlePlaybackAnchorAdd}
+                    allowAddAnchor={true}
+                    selectedAnchorId={selectedAnchor?.id}
+                    height={0}
+                    showControls={false}
+                  />
+                </div>
+              )}
+
+              {/* 时间轴列表（占满剩余空间） */}
+              <DedaoTimeline
+                entries={toDedaoEntries(segments, anchors)}
+                currentTime={currentTime}
+                onEntryClick={(entry) => {
+                  setCurrentTime(entry.startMs);
+                  waveformRef.current?.seekTo(entry.startMs);
                   waveformRef.current?.play();
+                  setIsPlaying(true);
+                }}
+                onConfusionClick={(entry) => {
+                  const anchor = anchors.find(
+                    a => a.timestamp >= entry.startMs && a.timestamp <= entry.endMs
+                  );
+                  if (anchor) {
+                    setSelectedConfusion({
+                      id: anchor.id,
+                      timestamp: anchor.timestamp,
+                      content: anchor.note,
+                      resolved: anchor.resolved,
+                      context: entry.content,
+                    } as ConfusionMarker & { context?: string });
+                    handleAnchorSelect(anchor);
+                  }
+                }}
+                className="flex-1 min-h-0"
+              />
+
+              {/* 困惑点详情卡片 */}
+              <DedaoConfusionCard
+                isOpen={!!selectedConfusion}
+                onClose={() => setSelectedConfusion(null)}
+                confusion={selectedConfusion ? {
+                  id: selectedConfusion.id,
+                  timestamp: selectedConfusion.timestamp,
+                  content: selectedConfusion.content,
+                  resolved: selectedConfusion.resolved,
+                  context: (selectedConfusion as ConfusionMarker & { context?: string }).context,
+                } : null}
+                onAskAI={(question) => {
+                  setSelectedConfusion(null);
+                }}
+                onResolve={() => {
+                  handleResolveAnchor();
+                  setSelectedConfusion(null);
+                }}
+                onSeek={(timeMs) => {
+                  setCurrentTime(timeMs);
+                  waveformRef.current?.seekTo(timeMs);
+                }}
+              />
+
+              {/* 右侧菜单 */}
+              <DedaoMenu
+                isOpen={isMenuOpen}
+                onClose={() => setIsMenuOpen(false)}
+                onNavigate={(page) => {
+                  setMobileSubPage(page);
+                }}
+                badges={{
+                  highlights: highlightTopics.length,
+                  notes: notes.length,
+                  tasks: actionItems.filter(i => !i.completed).length,
                 }}
               />
             </div>
-          </div>
-
-          {/* 右栏 - 行动清单 */}
-          <div className="w-80 border-l border-gray-100 glass">
-            <ActionList
-              items={actionItems}
-              onComplete={handleActionComplete}
-            />
-          </div>
-        </div>
+          )}
+        </>
       )}
     </div>
   );

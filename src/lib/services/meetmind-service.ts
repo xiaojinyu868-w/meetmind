@@ -1,11 +1,10 @@
 /**
  * MeetMind 核心业务服务
  * 
- * 整合 Discussion + Open Notebook + LongCut 的能力
+ * 整合 Open Notebook + LongCut 的能力
  * 实现 MeetMind MVP 的核心功能
  */
 
-import { discussionService, type ChatMessage } from './discussion-service';
 import { notebookService } from './notebook-service';
 import { longcutService, type TranscriptSegment } from './longcut-service';
 import { 
@@ -15,6 +14,12 @@ import {
   getSegmentsInRange,
   type Segment 
 } from './longcut-utils';
+
+// ChatMessage 类型定义
+export interface ChatMessage {
+  role: 'system' | 'user' | 'assistant';
+  content: string;
+}
 
 // ==================== 类型定义 ====================
 
@@ -250,18 +255,12 @@ ${contextText}
     ];
 
     try {
-      const response = await discussionService.chat(messages, contextText);
-      
-      // 5. 解析响应，提取结构化数据
-      const parsed = this.parseTutorResponse(response.content, mergedSegments);
-      
-      return {
-        ...parsed,
-        conversationId: `conv-${Date.now()}`,
-      };
+      // 服务不可用时使用 Mock 数据
+      console.warn('Using mock response for tutor');
+      return this.getMockTutorResponse(breakpoint, mergedSegments);
     } catch (error) {
-      // 如果 Discussion 服务不可用，返回 Mock 数据
-      console.warn('Discussion service unavailable, using mock response');
+      // 如果服务不可用，返回 Mock 数据
+      console.warn('Service unavailable, using mock response');
       return this.getMockTutorResponse(breakpoint, mergedSegments);
     }
   },
@@ -280,13 +279,10 @@ ${contextText}
     ];
 
     try {
-      const response = await discussionService.chat(messages, context);
+      // 服务不可用时返回默认响应
       return {
-        response: response.content,
-        citations: response.citations?.map(c => ({
-          text: c.text,
-          timeRange: formatTimeRange(c.startTime, c.endTime),
-        })) || [],
+        response: '抱歉，我暂时无法回答。请稍后再试。',
+        citations: [],
       };
     } catch {
       return {

@@ -11,7 +11,7 @@ import {
   type TranscriptIndex,
   type TranscriptSegment as LongCutSegment,
 } from '@/lib/longcut';
-import type { TranscriptSegment } from './tingwu-service';
+import type { TranscriptSegment } from '@/types';
 
 // 匹配结果类型
 interface QuoteMatchResult {

@@ -148,10 +148,20 @@ export function TeacherDashboard({ sessionId: propSessionId }: TeacherDashboardP
       // 从 IndexedDB 获取转录内容
       let transcripts: TranscriptSegment[] = [];
       try {
-        transcripts = await db.transcripts
+        const dbTranscripts = await db.transcripts
           .where('sessionId')
           .equals(sessionId)
           .sortBy('startMs');
+        // 转换类型：db.TranscriptSegment -> types.TranscriptSegment
+        transcripts = dbTranscripts.map((t, idx) => ({
+          id: t.id?.toString() || `seg-${idx}`,
+          text: t.text,
+          startMs: t.startMs,
+          endMs: t.endMs,
+          confidence: t.confidence,
+          speakerId: t.speakerId,
+          isFinal: t.isFinal,
+        }));
       } catch (e) {
         console.warn('获取转录内容失败:', e);
       }

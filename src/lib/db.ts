@@ -99,7 +99,7 @@ export interface Note {
   noteId: string;            // UUID
   sessionId: string;
   studentId: string;
-  source: 'chat' | 'takeaways' | 'transcript' | 'custom';
+  source: 'chat' | 'takeaways' | 'transcript' | 'custom' | 'anchor';
   sourceId?: string;
   text: string;
   metadata?: {

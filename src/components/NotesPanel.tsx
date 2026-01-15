@@ -282,7 +282,8 @@ export function NotesPanel({
       chat: [],
       takeaways: [],
       transcript: [],
-      custom: []
+      custom: [],
+      anchor: []
     };
     
     notes.forEach(note => {

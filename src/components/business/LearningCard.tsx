@@ -17,10 +17,10 @@ interface LearningCardProps {
 }
 
 const statusConfig = {
-  new: { label: "新课程", variant: "info" as const },
-  in_progress: { label: "学习中", variant: "warning" as const },
-  completed: { label: "已完成", variant: "success" as const },
-  review: { label: "待复习", variant: "vermilion" as const },
+  new: { label: "新课程", variant: "default" as const },
+  in_progress: { label: "学习中", variant: "secondary" as const },
+  completed: { label: "已完成", variant: "outline" as const },
+  review: { label: "待复习", variant: "destructive" as const },
 }
 
 export function LearningCard({
@@ -36,7 +36,6 @@ export function LearningCard({
 }: LearningCardProps) {
   return (
     <Card
-      variant="paper"
       className={cn(
         "group cursor-pointer transition-all duration-300 hover:shadow-xl hover:shadow-ink/10 hover:-translate-y-1",
         className
@@ -73,7 +72,7 @@ export function LearningCard({
                   <span>学习进度</span>
                   <span>{progress}%</span>
                 </div>
-                <Progress value={progress} variant="gradient" size="sm" />
+                <Progress value={progress} className="h-1.5" />
               </div>
             )}
             
