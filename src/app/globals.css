@@ -69,6 +69,28 @@ body {
   -moz-osx-font-smoothing: grayscale;
 }
 
+/* === iOS Safari 中文文本断行修复 === */
+* {
+  /* 确保中文文本能够正常换行 */
+  word-break: break-word;
+  /* iOS Safari 需要此属性确保长单词/文本能换行 */
+  overflow-wrap: break-word;
+}
+
+/* 修复 flex 容器中文本被挤压的问题 */
+.flex, [class*="flex-"] {
+  min-width: 0;
+}
+
+/* 确保文本容器有正确的换行行为 */
+p, span, div, h1, h2, h3, h4, h5, h6, li, td, th, label {
+  word-break: break-word;
+  overflow-wrap: break-word;
+  /* 防止 iOS Safari 将中文字符视为不可断开的单词 */
+  -webkit-hyphens: auto;
+  hyphens: auto;
+}
+
 /* === 自定义滚动条 === */
 ::-webkit-scrollbar {
   width: 6px;
@@ -482,6 +504,26 @@ body {
 @media (max-width: 768px) {
   .hide-mobile {
     display: none;
+  }
+  
+  /* iOS Safari 移动端特定修复 */
+  body {
+    /* 防止 iOS Safari 文本大小自动调整 */
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
+  }
+  
+  /* 确保移动端 flex 容器中的文本能正确换行 */
+  .flex, [class*="flex-"], [class*="flex "] {
+    min-width: 0;
+  }
+  
+  /* 移动端文本容器修复 */
+  .text-sm, .text-xs, .text-base, .text-lg {
+    word-break: break-word;
+    overflow-wrap: break-word;
+    /* 确保中文不会被一字一行竖排 */
+    white-space: normal;
   }
 }
 

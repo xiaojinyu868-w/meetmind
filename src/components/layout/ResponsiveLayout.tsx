@@ -163,27 +163,27 @@ export function TabSwitcher({
 }: TabSwitcherProps) {
   const variants = {
     default: {
-      container: "flex items-center gap-1 p-1 bg-ink/5 rounded-xl overflow-x-auto scrollbar-hide",
+      container: "flex items-center gap-1 p-1 bg-ink/5 rounded-xl overflow-x-auto scrollbar-hide min-w-0",
       tab: (active: boolean) => cn(
-        "flex items-center gap-1.5 px-3 py-2 text-sm font-medium rounded-lg whitespace-nowrap transition-all",
+        "flex items-center gap-1.5 px-3 py-2 text-sm font-medium rounded-lg whitespace-nowrap transition-all flex-shrink-0",
         active
           ? "bg-paper text-ink shadow-sm"
           : "text-ink/50 hover:text-ink/70 hover:bg-paper/50"
       ),
     },
     pills: {
-      container: "flex items-center gap-2 overflow-x-auto scrollbar-hide",
+      container: "flex items-center gap-2 overflow-x-auto scrollbar-hide min-w-0",
       tab: (active: boolean) => cn(
-        "flex items-center gap-1.5 px-4 py-2 text-sm font-medium rounded-full whitespace-nowrap transition-all",
+        "flex items-center gap-1.5 px-4 py-2 text-sm font-medium rounded-full whitespace-nowrap transition-all flex-shrink-0",
         active
           ? "bg-ink text-paper shadow-lg shadow-ink/20"
           : "bg-ink/5 text-ink/60 hover:bg-ink/10"
       ),
     },
     underline: {
-      container: "flex items-center gap-4 border-b border-ink/10 overflow-x-auto scrollbar-hide",
+      container: "flex items-center gap-4 border-b border-ink/10 overflow-x-auto scrollbar-hide min-w-0",
       tab: (active: boolean) => cn(
-        "flex items-center gap-1.5 px-1 py-3 text-sm font-medium whitespace-nowrap transition-all relative",
+        "flex items-center gap-1.5 px-1 py-3 text-sm font-medium whitespace-nowrap transition-all relative flex-shrink-0",
         active
           ? "text-ink after:absolute after:bottom-0 after:left-0 after:right-0 after:h-0.5 after:bg-vermilion after:rounded-full"
           : "text-ink/50 hover:text-ink/70"
@@ -281,17 +281,17 @@ export function EmptyState({
 }: EmptyStateProps) {
   return (
     <div className={cn(
-      "flex flex-col items-center justify-center py-12 px-4 text-center",
+      "flex flex-col items-center justify-center py-12 px-4 text-center min-w-0",
       className
     )}>
       {icon && (
-        <div className="w-16 h-16 rounded-full bg-ink/5 flex items-center justify-center mb-4 text-ink/30">
+        <div className="w-16 h-16 rounded-full bg-ink/5 flex items-center justify-center mb-4 text-ink/30 flex-shrink-0">
           {icon}
         </div>
       )}
-      <h3 className="text-lg font-medium text-ink mb-1">{title}</h3>
+      <h3 className="text-lg font-medium text-ink mb-1 break-words">{title}</h3>
       {description && (
-        <p className="text-sm text-ink/50 max-w-xs mb-4">{description}</p>
+        <p className="text-sm text-ink/50 max-w-xs mb-4 break-words">{description}</p>
       )}
       {action}
     </div>

@@ -28,24 +28,24 @@ export function Header({ lessonTitle, courseName, userRole = 'student' }: Header
 
   return (
     <header className="h-16 glass border-b border-white/20 flex items-center justify-between px-6 flex-shrink-0 no-print">
-      <div className="flex items-center gap-5">
+      <div className="flex items-center gap-5 min-w-0">
         {/* Logo */}
-        <Link href="/" className="flex items-center gap-2.5 group">
+        <Link href="/" className="flex items-center gap-2.5 group flex-shrink-0">
           <div className="w-9 h-9 bg-gradient-to-br from-rose-400 to-rose-500 rounded-xl flex items-center justify-center shadow-md group-hover:shadow-lg group-hover:scale-105 transition-all">
             <span className="text-white font-bold text-lg">M</span>
           </div>
-          <span className="font-semibold text-gray-900 text-lg">MeetMind</span>
+          <span className="font-semibold text-gray-900 text-lg whitespace-nowrap">MeetMind</span>
         </Link>
 
         {/* 分隔线 */}
-        <div className="w-px h-6 bg-gray-200" />
+        <div className="w-px h-6 bg-gray-200 flex-shrink-0 hidden sm:block" />
 
         {/* 当前课程 */}
-        <div className="flex items-center gap-2">
-          <span className="px-2.5 py-1 bg-rose-100 text-rose-700 rounded-lg text-xs font-medium">
+        <div className="flex items-center gap-2 min-w-0 hidden sm:flex">
+          <span className="px-2.5 py-1 bg-rose-100 text-rose-700 rounded-lg text-xs font-medium whitespace-nowrap flex-shrink-0">
             {courseName}
           </span>
-          <h1 className="text-sm font-medium text-gray-700">{lessonTitle}</h1>
+          <h1 className="text-sm font-medium text-gray-700 truncate min-w-0">{lessonTitle}</h1>
         </div>
       </div>
 

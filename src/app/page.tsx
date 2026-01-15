@@ -670,21 +670,21 @@ export default function StudentApp() {
             </button>
           </div>
           
-          <div className="flex items-center gap-4">
+            <div className="flex items-center gap-4">
             <ServiceStatus compact pollInterval={60000} />
             
-            <div className="flex items-center gap-3 text-sm">
-              <span className={`badge ${dataSource === 'live' ? 'badge-live' : 'badge-demo'}`}>
+            <div className="flex items-center gap-3 text-sm min-w-0 flex-wrap">
+              <span className={`badge ${dataSource === 'live' ? 'badge-live' : 'badge-demo'} flex-shrink-0`}>
                 {dataSource === 'live' ? '🎙️ 实时' : '📋 演示'}
               </span>
               
-              <div className="flex items-center gap-2 text-gray-500">
-                <span>困惑点</span>
+              <div className="flex items-center gap-2 text-gray-500 min-w-0 flex-wrap">
+                <span className="whitespace-nowrap">困惑点</span>
                 <span className="font-semibold text-gray-900">{anchors.length}</span>
                 {unresolvedCount > 0 && (
                   <>
                     <span>·</span>
-                    <span className="text-rose-500 font-semibold">{unresolvedCount} 待解决</span>
+                    <span className="text-rose-500 font-semibold whitespace-nowrap">{unresolvedCount} 待解决</span>
                   </>
                 )}
               </div>

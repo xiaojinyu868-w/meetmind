@@ -91,18 +91,18 @@ export function ActionList({ items, onComplete }: ActionListProps) {
                   )}
                 </button>
                 <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 flex-wrap">
+                  <div className="flex items-center gap-2 flex-wrap min-w-0">
                     <TypeBadge type={item.type} />
-                    <span className={`text-sm font-medium transition-all ${
+                    <span className={`text-sm font-medium transition-all break-words ${
                       item.completed ? 'text-gray-400 line-through' : 'text-gray-900'
                     }`}>
                       {item.title}
                     </span>
-                    <span className="text-xs text-gray-400">
+                    <span className="text-xs text-gray-400 whitespace-nowrap flex-shrink-0">
                       {item.estimatedMinutes}分钟
                     </span>
                   </div>
-                  <p className={`text-xs mt-1.5 transition-colors ${
+                  <p className={`text-xs mt-1.5 transition-colors break-words ${
                     item.completed ? 'text-gray-300' : 'text-gray-500'
                   }`}>
                     {item.description}

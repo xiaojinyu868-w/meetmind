@@ -55,20 +55,20 @@ export function ConfusionDetail({
         className="flex items-center justify-between px-4 py-3 bg-gradient-to-r from-red-50 to-orange-50 cursor-pointer"
         onClick={() => setIsExpanded(!isExpanded)}
       >
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 bg-red-100 rounded-full flex items-center justify-center">
+        <div className="flex items-center gap-3 min-w-0 flex-1">
+          <div className="w-10 h-10 bg-red-100 rounded-full flex items-center justify-center flex-shrink-0">
             <span className="text-red-600 font-bold">{data.anchors.length}</span>
           </div>
-          <div>
-            <div className="font-medium text-gray-900">
+          <div className="min-w-0 flex-1">
+            <div className="font-medium text-gray-900 break-words">
               {data.timeSlot}
             </div>
-            <div className="text-sm text-gray-500">
+            <div className="text-sm text-gray-500 break-words">
               {uniqueStudents.length} 位学生 · {unresolvedCount} 个待解决
             </div>
           </div>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-shrink-0">
           {onPlaySegment && (
             <button
               onClick={(e) => {
@@ -122,24 +122,24 @@ export function ConfusionDetail({
                 return (
                   <div
                     key={studentId}
-                    className={`flex items-center justify-between p-3 rounded-lg ${
+                    className={`flex items-center justify-between p-3 rounded-lg min-w-0 ${
                       hasUnresolved ? 'bg-red-50' : 'bg-green-50'
                     }`}
                   >
-                    <div className="flex items-center gap-3">
-                      <div className={`w-8 h-8 rounded-full flex items-center justify-center text-white text-sm font-medium ${
+                    <div className="flex items-center gap-3 min-w-0 flex-1">
+                      <div className={`w-8 h-8 rounded-full flex items-center justify-center text-white text-sm font-medium flex-shrink-0 ${
                         hasUnresolved ? 'bg-red-400' : 'bg-green-400'
                       }`}>
                         {studentId.charAt(0)}
                       </div>
-                      <div>
-                        <div className="text-sm font-medium text-gray-900">{studentId}</div>
-                        <div className="text-xs text-gray-500">
+                      <div className="min-w-0 flex-1">
+                        <div className="text-sm font-medium text-gray-900 break-words">{studentId}</div>
+                        <div className="text-xs text-gray-500 break-words">
                           {studentAnchors.map(a => formatTime(a.timestamp)).join(', ')}
                         </div>
                       </div>
                     </div>
-                    <span className={`text-xs px-2 py-1 rounded-full ${
+                    <span className={`text-xs px-2 py-1 rounded-full flex-shrink-0 whitespace-nowrap ${
                       hasUnresolved 
                         ? 'bg-red-100 text-red-700' 
                         : 'bg-green-100 text-green-700'
