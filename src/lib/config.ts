@@ -121,16 +121,11 @@ export async function checkServiceStatus(
 
 /**
  * 检查所有外部服务
+ * 注：Discussion API 和 Notebook API 已不再是核心依赖，返回空数组
  */
 export async function checkAllServices(): Promise<ServiceStatus[]> {
-  const config = getConfig();
-  
-  const checks = await Promise.all([
-    checkServiceStatus('Discussion', config.discussionApi),
-    checkServiceStatus('Open Notebook', config.notebookApi),
-  ]);
-  
-  return checks;
+  // 外部服务检查已禁用，项目使用本地降级方案
+  return [];
 }
 
 /**

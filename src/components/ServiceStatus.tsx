@@ -1,7 +1,7 @@
 'use client';
 
 // 服务状态指示器组件
-// 显示外部服务连接状态
+// 显示浏览器 API 可用性状态
 
 import { useState, useEffect } from 'react';
 import { checkServices, type ServiceStatus as ServiceStatusType } from '@/lib/services/health-check';
@@ -16,7 +16,7 @@ interface ServiceStatusProps {
 }
 
 export function ServiceStatus({ 
-  pollInterval = 30000, 
+  pollInterval = 0,  // 默认不轮询，因为浏览器 API 状态不会变
   showDetails = false,
   compact = false,
 }: ServiceStatusProps) {
@@ -58,12 +58,12 @@ export function ServiceStatus({
     return (
       <div className="flex items-center gap-1.5">
         <div 
-          className={`w-2 h-2 rounded-full ${status.discussion ? 'bg-green-500' : 'bg-gray-400'}`}
-          title={status.discussion ? '通义听悟已连接' : '通义听悟未连接'}
+          className={`w-2 h-2 rounded-full ${status.webSpeech ? 'bg-green-500' : 'bg-gray-400'}`}
+          title={status.webSpeech ? '语音识别可用' : '语音识别不可用'}
         />
         <div 
-          className={`w-2 h-2 rounded-full ${status.notebook ? 'bg-green-500' : 'bg-gray-400'}`}
-          title={status.notebook ? 'Open Notebook 已连接' : 'Open Notebook 未连接'}
+          className={`w-2 h-2 rounded-full ${status.indexedDB ? 'bg-green-500' : 'bg-gray-400'}`}
+          title={status.indexedDB ? '本地存储可用' : '本地存储不可用'}
         />
       </div>
     );
@@ -72,25 +72,25 @@ export function ServiceStatus({
   // 标准模式
   return (
     <div className="flex items-center gap-3">
-      {/* Discussion 状态 */}
+      {/* 语音识别状态 */}
       <div className="flex items-center gap-1.5">
         <div className={`w-2 h-2 rounded-full ${
           isChecking ? 'bg-yellow-500 animate-pulse' :
-          status.discussion ? 'bg-green-500' : 'bg-gray-400'
+          status.webSpeech ? 'bg-green-500' : 'bg-gray-400'
         }`} />
         <span className="text-xs text-gray-600">
-          {status.discussion ? '通义听悟' : '本地识别'}
+          {status.webSpeech ? '语音识别' : '无语音识别'}
         </span>
       </div>
 
-      {/* Notebook 状态 */}
+      {/* 存储状态 */}
       <div className="flex items-center gap-1.5">
         <div className={`w-2 h-2 rounded-full ${
           isChecking ? 'bg-yellow-500 animate-pulse' :
-          status.notebook ? 'bg-green-500' : 'bg-gray-400'
+          status.indexedDB ? 'bg-green-500' : 'bg-gray-400'
         }`} />
         <span className="text-xs text-gray-600">
-          {status.notebook ? '向量搜索' : '本地搜索'}
+          {status.indexedDB ? '本地存储' : '无本地存储'}
         </span>
       </div>
 
@@ -107,6 +107,7 @@ export function ServiceStatus({
 
 /**
  * 降级提示横幅
+ * 注：由于项目已使用本地方案，此组件现在只在关键浏览器 API 不可用时显示
  */
 export function DegradedModeBanner({ 
   status 
@@ -115,21 +116,17 @@ export function DegradedModeBanner({
 }) {
   if (!status) return null;
   
-  // 如果所有服务都可用，不显示横幅
-  if (status.discussion && status.notebook) return null;
+  // 如果浏览器 API 都可用，不显示横幅
+  if (status.webSpeech && status.indexedDB) return null;
 
   const messages: string[] = [];
   
-  if (!status.discussion) {
-    if (status.webSpeech) {
-      messages.push('正在使用浏览器本地语音识别，精度可能较低');
-    } else {
-      messages.push('语音转录功能不可用');
-    }
+  if (!status.webSpeech) {
+    messages.push('浏览器不支持语音识别，录音功能将不可用');
   }
   
-  if (!status.notebook) {
-    messages.push('向量搜索不可用，使用本地关键词搜索');
+  if (!status.indexedDB) {
+    messages.push('浏览器不支持本地存储，数据将无法持久化');
   }
 
   if (messages.length === 0) return null;
@@ -142,7 +139,7 @@ export function DegradedModeBanner({
         </svg>
         <span className="break-words min-w-0 flex-1">{messages.join(' · ')}</span>
         <span className="text-amber-600 text-xs flex-shrink-0 whitespace-nowrap">
-          启动后端服务可获得完整体验
+          建议使用 Chrome 浏览器
         </span>
       </div>
     </div>

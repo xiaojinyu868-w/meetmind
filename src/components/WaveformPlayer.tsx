@@ -164,13 +164,14 @@ export const WaveformPlayer = forwardRef<WaveformPlayerRef, WaveformPlayerProps>
 
     wavesurferRef.current = ws;
 
-    // 清理
+    // 清理函数
     return () => {
       const wsInstance = wavesurferRef.current;
       wavesurferRef.current = null;
       regionsRef.current = null;
       
       if (wsInstance) {
+        // 静默暂停
         try {
           if (wsInstance.isPlaying()) {
             wsInstance.pause();
@@ -179,26 +180,34 @@ export const WaveformPlayer = forwardRef<WaveformPlayerRef, WaveformPlayerProps>
           // 忽略暂停时的错误
         }
         
-        // 延迟销毁，使用 unhandledrejection 处理异步错误
+        // 使用全局事件监听器捕获并静默处理 AbortError
+        // 这些错误是 wavesurfer 内部异步操作被取消导致的，是预期行为
         const handleAbortError = (event: PromiseRejectionEvent) => {
-          if (event.reason?.name === 'AbortError') {
+          const reason = event.reason;
+          if (
+            reason?.name === 'AbortError' ||
+            (reason instanceof DOMException && reason.name === 'AbortError') ||
+            (typeof reason === 'string' && reason.includes('abort'))
+          ) {
             event.preventDefault();
+            event.stopPropagation();
           }
         };
+        
         window.addEventListener('unhandledrejection', handleAbortError);
         
-        requestAnimationFrame(() => {
+        // 使用 queueMicrotask 确保在当前任务完成后再销毁
+        queueMicrotask(() => {
+          try {
+            wsInstance.destroy();
+          } catch {
+            // 忽略销毁时的错误
+          }
+          
+          // 延迟移除监听器，确保所有异步错误都被捕获
           setTimeout(() => {
-            try {
-              wsInstance.destroy();
-            } catch {
-              // 忽略销毁时的错误
-            }
-            // 延迟移除监听器
-            setTimeout(() => {
-              window.removeEventListener('unhandledrejection', handleAbortError);
-            }, 100);
-          }, 0);
+            window.removeEventListener('unhandledrejection', handleAbortError);
+          }, 200);
         });
       }
     };

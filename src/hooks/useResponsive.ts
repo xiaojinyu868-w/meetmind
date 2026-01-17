@@ -11,6 +11,7 @@ export interface ResponsiveState {
   breakpoint: Breakpoint;
   width: number;
   height: number;
+  mounted: boolean;  // 新增：标识客户端是否已挂载
 }
 
 const BREAKPOINTS = {
@@ -18,6 +19,17 @@ const BREAKPOINTS = {
   tablet: 768,
   desktop: 1024,
 } as const;
+
+// SSR 安全的默认值 - 始终返回桌面版，与服务端渲染一致
+const SSR_DEFAULT: ResponsiveState = {
+  isMobile: false,
+  isTablet: false,
+  isDesktop: true,
+  breakpoint: 'desktop',
+  width: 1024,
+  height: 768,
+  mounted: false,
+};
 
 function getBreakpoint(width: number): Breakpoint {
   if (width < BREAKPOINTS.tablet) return 'mobile';
@@ -28,36 +40,17 @@ function getBreakpoint(width: number): Breakpoint {
 /**
  * 响应式状态 Hook
  * 提供当前设备类型和屏幕尺寸信息
+ * 
+ * 重要：为避免 SSR Hydration 错误，首次渲染始终返回桌面版默认值
+ * 客户端挂载后通过 useEffect 更新为真实设备状态
  */
 export function useResponsive(): ResponsiveState {
-  const [state, setState] = useState<ResponsiveState>(() => {
-    // SSR 安全的初始值
-    if (typeof window === 'undefined') {
-      return {
-        isMobile: false,
-        isTablet: false,
-        isDesktop: true,
-        breakpoint: 'desktop',
-        width: 1024,
-        height: 768,
-      };
-    }
-    
-    const width = window.innerWidth;
-    const height = window.innerHeight;
-    const breakpoint = getBreakpoint(width);
-    
-    return {
-      isMobile: breakpoint === 'mobile',
-      isTablet: breakpoint === 'tablet',
-      isDesktop: breakpoint === 'desktop',
-      breakpoint,
-      width,
-      height,
-    };
-  });
+  // 首次渲染始终使用 SSR 默认值，避免 Hydration 不匹配
+  const [state, setState] = useState<ResponsiveState>(SSR_DEFAULT);
 
-  const handleResize = useCallback(() => {
+  const updateState = useCallback(() => {
+    if (typeof window === 'undefined') return;
+    
     const width = window.innerWidth;
     const height = window.innerHeight;
     const breakpoint = getBreakpoint(width);
@@ -69,25 +62,29 @@ export function useResponsive(): ResponsiveState {
       breakpoint,
       width,
       height,
+      mounted: true,
     });
   }, []);
 
   useEffect(() => {
-    // 初始化时立即更新状态
-    handleResize();
+    // 客户端挂载后立即更新状态
+    updateState();
     
     // 添加 resize 监听
-    window.addEventListener('resize', handleResize);
+    window.addEventListener('resize', updateState);
     
     // 使用 ResizeObserver 获取更精确的尺寸变化
-    const resizeObserver = new ResizeObserver(handleResize);
-    resizeObserver.observe(document.body);
+    let resizeObserver: ResizeObserver | null = null;
+    if (typeof ResizeObserver !== 'undefined') {
+      resizeObserver = new ResizeObserver(updateState);
+      resizeObserver.observe(document.body);
+    }
     
     return () => {
-      window.removeEventListener('resize', handleResize);
-      resizeObserver.disconnect();
+      window.removeEventListener('resize', updateState);
+      resizeObserver?.disconnect();
     };
-  }, [handleResize]);
+  }, [updateState]);
 
   return state;
 }

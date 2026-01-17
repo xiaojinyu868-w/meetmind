@@ -41,17 +41,12 @@ export interface NotebookSource {
 export const notebookService = {
   /**
    * 检查服务是否可用
+   * 注：外部 Notebook 服务已不再是核心依赖，直接返回 false 使用本地降级方案
    */
   async isAvailable(): Promise<boolean> {
-    try {
-      const response = await fetch(`${NOTEBOOK_API}/health`, {
-        method: 'GET',
-        signal: AbortSignal.timeout(3000),
-      });
-      return response.ok;
-    } catch {
-      return false;
-    }
+    // 禁用外部服务检查，避免产生 ERR_CONNECTION_REFUSED 错误
+    // 项目已使用 localSearch 作为默认方案
+    return false;
   },
 
   /**

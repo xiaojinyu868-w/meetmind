@@ -20,16 +20,11 @@ export interface SearchResult {
 
 /**
  * 检查 Open Notebook 是否可用
+ * 注：外部 Notebook 服务已不再是核心依赖，直接返回 false
  */
 export async function isNotebookAvailable(): Promise<boolean> {
-  try {
-    const response = await fetch(`${NOTEBOOK_API}/health`, {
-      signal: AbortSignal.timeout(3000),
-    });
-    return response.ok;
-  } catch {
-    return false;
-  }
+  // 禁用外部服务检查，使用本地搜索作为默认方案
+  return false;
 }
 
 /**

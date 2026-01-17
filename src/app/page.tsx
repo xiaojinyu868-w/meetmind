@@ -58,7 +58,7 @@ export default function StudentApp() {
   const { user, isAuthenticated } = useAuth();
   
   // 响应式状态
-  const { isMobile } = useResponsive();
+  const { isMobile, mounted } = useResponsive();
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isPlaying, setIsPlaying] = useState(false);
   const [selectedConfusion, setSelectedConfusion] = useState<ConfusionMarker | null>(null);
@@ -659,6 +659,20 @@ export default function StudentApp() {
   } : null;
 
   const unresolvedCount = anchors.filter(a => !a.resolved).length;
+
+  // 客户端未挂载时显示加载状态，避免 Hydration 错误
+  if (!mounted) {
+    return (
+      <div className="h-screen flex flex-col items-center justify-center bg-gray-50">
+        <div className="animate-pulse flex flex-col items-center gap-4">
+          <div className="w-16 h-16 bg-gradient-to-br from-rose-400 to-rose-500 rounded-2xl flex items-center justify-center">
+            <span className="text-2xl text-white">📚</span>
+          </div>
+          <div className="text-gray-500 text-sm">加载中...</div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="h-screen flex flex-col overflow-hidden">
@@ -1439,7 +1453,7 @@ export default function StudentApp() {
                     onMarkerClick={(marker) => {
                       const anchor = anchors.find(a => a.id === marker.id);
                       if (anchor) {
-                        setSelectedBreakpoint(anchor);
+                        setSelectedAnchor(anchor);
                       }
                     }}
                     className="border-b border-gray-100"
