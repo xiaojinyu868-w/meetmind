@@ -40,6 +40,7 @@ interface AITutorProps {
   onActionItemsUpdate?: (items: ActionItem[]) => void;
   sessionId?: string;  // 用于缓存关联
   onSeek?: (timeMs: number) => void;  // 点击时间戳跳转播放
+  initialQuestion?: string;  // 移动端传入的初始问题
 }
 
 interface TutorAPIResponse {
@@ -74,7 +75,7 @@ interface TutorAPIResponse {
   conversation_id?: string;
 }
 
-export function AITutor({ breakpoint, segments, isLoading: externalLoading, onResolve, onActionItemsUpdate, sessionId = 'default', onSeek }: AITutorProps) {
+export function AITutor({ breakpoint, segments, isLoading: externalLoading, onResolve, onActionItemsUpdate, sessionId = 'default', onSeek, initialQuestion }: AITutorProps) {
   const { accessToken } = useAuth();
   const [userInput, setUserInput] = useState('');
   const [chatHistory, setChatHistory] = useState<Array<{ role: 'user' | 'assistant'; content: string }>>([]);
@@ -89,6 +90,7 @@ export function AITutor({ breakpoint, segments, isLoading: externalLoading, onRe
   const [isRestoring, setIsRestoring] = useState(false);  // 正在恢复状态
   const previousBreakpointId = useRef<string | null>(null);
   const hasInitialized = useRef(false);  // 是否已完成初始化
+  const hasProcessedInitialQuestion = useRef(false);  // 是否已处理初始问题
   const [isSearching, setIsSearching] = useState(false);
   const [notebookAvailable, setNotebookAvailable] = useState(false);
   
@@ -232,6 +234,21 @@ export function AITutor({ breakpoint, segments, isLoading: externalLoading, onRe
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [chatHistory]);
+
+  // 处理移动端传入的初始问题
+  useEffect(() => {
+    if (initialQuestion && !hasProcessedInitialQuestion.current) {
+      hasProcessedInitialQuestion.current = true;
+      setUserInput(initialQuestion);
+      // 自动聚焦输入框
+      setTimeout(() => {
+        const input = document.querySelector('textarea[placeholder*="输入"]') as HTMLTextAreaElement;
+        if (input) {
+          input.focus();
+        }
+      }, 100);
+    }
+  }, [initialQuestion]);
 
   // 保存当前状态到 IndexedDB（用于页面刷新恢复）
   const saveCurrentState = useCallback(async () => {

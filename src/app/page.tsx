@@ -62,7 +62,8 @@ export default function StudentApp() {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isPlaying, setIsPlaying] = useState(false);
   const [selectedConfusion, setSelectedConfusion] = useState<ConfusionMarker | null>(null);
-  const [mobileSubPage, setMobileSubPage] = useState<'highlights' | 'summary' | 'notes' | 'tasks' | null>(null);
+  const [mobileSubPage, setMobileSubPage] = useState<'highlights' | 'summary' | 'notes' | 'tasks' | 'ai-chat' | null>(null);
+  const [mobileAIQuestion, setMobileAIQuestion] = useState<string>(''); // 移动端AI对话的初始问题
   
   const [viewMode, setViewMode] = useState<ViewMode>('record');
   const [sessionId, setSessionId] = useState<string>('demo-session');
@@ -1266,46 +1267,48 @@ export default function StudentApp() {
               </div>
 
               {/* 单行极简播放器 */}
-              <MiniPlayer
-                currentTime={currentTime}
-                duration={totalDuration}
-                isPlaying={isPlaying}
-                markers={anchors.map(a => ({
-                  id: a.id,
-                  timestamp: a.timestamp,
-                  resolved: a.resolved,
-                }))}
-                onSeek={(timeMs) => {
-                  setCurrentTime(timeMs);
-                  waveformRef.current?.seekTo(timeMs);
-                }}
-                onPlayPause={() => {
-                  if (isPlaying) {
-                    waveformRef.current?.pause();
-                  } else {
-                    waveformRef.current?.play();
-                  }
-                  setIsPlaying(!isPlaying);
-                }}
-                onMarkerClick={(marker) => {
-                  const anchor = anchors.find(a => a.id === marker.id);
-                  if (anchor) {
-                    const context = segments.find(
-                      s => marker.timestamp >= s.startMs && marker.timestamp <= s.endMs
-                    )?.text;
-                    
-                    setSelectedConfusion({
-                      id: marker.id,
-                      timestamp: marker.timestamp,
-                      content: anchor.note,
-                      resolved: marker.resolved,
-                      context,
-                    } as ConfusionMarker & { context?: string });
-                    
-                    handleAnchorSelect(anchor);
-                  }
-                }}
-              />
+              {!mobileSubPage && (
+                <MiniPlayer
+                  currentTime={currentTime}
+                  duration={totalDuration}
+                  isPlaying={isPlaying}
+                  markers={anchors.map(a => ({
+                    id: a.id,
+                    timestamp: a.timestamp,
+                    resolved: a.resolved,
+                  }))}
+                  onSeek={(timeMs) => {
+                    setCurrentTime(timeMs);
+                    waveformRef.current?.seekTo(timeMs);
+                  }}
+                  onPlayPause={() => {
+                    if (isPlaying) {
+                      waveformRef.current?.pause();
+                    } else {
+                      waveformRef.current?.play();
+                    }
+                    setIsPlaying(!isPlaying);
+                  }}
+                  onMarkerClick={(marker) => {
+                    const anchor = anchors.find(a => a.id === marker.id);
+                    if (anchor) {
+                      const context = segments.find(
+                        s => marker.timestamp >= s.startMs && marker.timestamp <= s.endMs
+                      )?.text;
+                      
+                      setSelectedConfusion({
+                        id: marker.id,
+                        timestamp: marker.timestamp,
+                        content: anchor.note,
+                        resolved: marker.resolved,
+                        context,
+                      } as ConfusionMarker & { context?: string });
+                      
+                      handleAnchorSelect(anchor);
+                    }
+                  }}
+                />
+              )}
 
               {/* 隐藏的波形播放器（用于实际音频播放） */}
               {(audioBlob || audioUrl) && (
@@ -1334,57 +1337,217 @@ export default function StudentApp() {
                 </div>
               )}
 
-              {/* 时间轴列表（占满剩余空间） */}
-              <DedaoTimeline
-                entries={toDedaoEntries(segments, anchors)}
-                currentTime={currentTime}
-                onEntryClick={(entry) => {
-                  setCurrentTime(entry.startMs);
-                  waveformRef.current?.seekTo(entry.startMs);
-                  waveformRef.current?.play();
-                  setIsPlaying(true);
-                }}
-                onConfusionClick={(entry) => {
-                  const anchor = anchors.find(
-                    a => a.timestamp >= entry.startMs && a.timestamp <= entry.endMs
-                  );
-                  if (anchor) {
-                    setSelectedConfusion({
-                      id: anchor.id,
-                      timestamp: anchor.timestamp,
-                      content: anchor.note,
-                      resolved: anchor.resolved,
-                      context: entry.content,
-                    } as ConfusionMarker & { context?: string });
-                    handleAnchorSelect(anchor);
-                  }
-                }}
-                className="flex-1 min-h-0"
-              />
+              {/* 主内容区：根据 mobileSubPage 条件渲染 */}
+              {mobileSubPage === null && (
+                <>
+                  {/* 时间轴列表（占满剩余空间） */}
+                  <DedaoTimeline
+                    entries={toDedaoEntries(segments, anchors)}
+                    currentTime={currentTime}
+                    onEntryClick={(entry) => {
+                      setCurrentTime(entry.startMs);
+                      waveformRef.current?.seekTo(entry.startMs);
+                      waveformRef.current?.play();
+                      setIsPlaying(true);
+                    }}
+                    onConfusionClick={(entry) => {
+                      const anchor = anchors.find(
+                        a => a.timestamp >= entry.startMs && a.timestamp <= entry.endMs
+                      );
+                      if (anchor) {
+                        setSelectedConfusion({
+                          id: anchor.id,
+                          timestamp: anchor.timestamp,
+                          content: anchor.note,
+                          resolved: anchor.resolved,
+                          context: entry.content,
+                        } as ConfusionMarker & { context?: string });
+                        handleAnchorSelect(anchor);
+                      }
+                    }}
+                    className="flex-1 min-h-0"
+                  />
 
-              {/* 困惑点详情卡片 */}
-              <DedaoConfusionCard
-                isOpen={!!selectedConfusion}
-                onClose={() => setSelectedConfusion(null)}
-                confusion={selectedConfusion ? {
-                  id: selectedConfusion.id,
-                  timestamp: selectedConfusion.timestamp,
-                  content: selectedConfusion.content,
-                  resolved: selectedConfusion.resolved,
-                  context: (selectedConfusion as ConfusionMarker & { context?: string }).context,
-                } : null}
-                onAskAI={(question) => {
-                  setSelectedConfusion(null);
-                }}
-                onResolve={() => {
-                  handleResolveAnchor();
-                  setSelectedConfusion(null);
-                }}
-                onSeek={(timeMs) => {
-                  setCurrentTime(timeMs);
-                  waveformRef.current?.seekTo(timeMs);
-                }}
-              />
+                  {/* 困惑点详情卡片 */}
+                  <DedaoConfusionCard
+                    isOpen={!!selectedConfusion}
+                    onClose={() => setSelectedConfusion(null)}
+                    confusion={selectedConfusion ? {
+                      id: selectedConfusion.id,
+                      timestamp: selectedConfusion.timestamp,
+                      content: selectedConfusion.content,
+                      resolved: selectedConfusion.resolved,
+                      context: (selectedConfusion as ConfusionMarker & { context?: string }).context,
+                    } : null}
+                    onAskAI={(question) => {
+                      setSelectedConfusion(null);
+                      setMobileAIQuestion(question);
+                      setMobileSubPage('ai-chat');
+                    }}
+                    onResolve={() => {
+                      handleResolveAnchor();
+                      setSelectedConfusion(null);
+                    }}
+                    onSeek={(timeMs) => {
+                      setCurrentTime(timeMs);
+                      waveformRef.current?.seekTo(timeMs);
+                    }}
+                  />
+                </>
+              )}
+
+              {/* 移动端 AI 对话页面 */}
+              {mobileSubPage === 'ai-chat' && (
+                <div className="flex-1 min-h-0 flex flex-col bg-white">
+                  {/* 子页面头部 */}
+                  <div className="flex items-center gap-3 px-4 py-3 border-b border-gray-100">
+                    <button
+                      onClick={() => {
+                        setMobileSubPage(null);
+                        setMobileAIQuestion('');
+                      }}
+                      className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-gray-100"
+                    >
+                      <svg className="w-5 h-5 text-gray-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                      </svg>
+                    </button>
+                    <span className="font-medium text-gray-900">AI 助教</span>
+                  </div>
+                  {/* AI 对话区 */}
+                  <div className="flex-1 min-h-0">
+                    <AITutor
+                      breakpoint={selectedBreakpoint}
+                      segments={segments}
+                      isLoading={false}
+                      onResolve={handleResolveAnchor}
+                      onActionItemsUpdate={handleActionItemsUpdate}
+                      sessionId={sessionId}
+                      initialQuestion={mobileAIQuestion}
+                      onSeek={(timeMs) => {
+                        setCurrentTime(timeMs);
+                        waveformRef.current?.seekTo(timeMs);
+                        waveformRef.current?.play();
+                      }}
+                    />
+                  </div>
+                </div>
+              )}
+
+              {/* 移动端精选页面 */}
+              {mobileSubPage === 'highlights' && (
+                <div className="flex-1 min-h-0 flex flex-col bg-white">
+                  <div className="flex items-center gap-3 px-4 py-3 border-b border-gray-100">
+                    <button
+                      onClick={() => setMobileSubPage(null)}
+                      className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-gray-100"
+                    >
+                      <svg className="w-5 h-5 text-gray-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                      </svg>
+                    </button>
+                    <span className="font-medium text-gray-900">精选片段</span>
+                  </div>
+                  <div className="flex-1 min-h-0 overflow-hidden">
+                    <HighlightsPanel
+                      topics={highlightTopics}
+                      selectedTopic={selectedTopic}
+                      onTopicSelect={setSelectedTopic}
+                      onPlayTopic={handlePlayTopic}
+                      onSeek={handleTimelineClick}
+                      onPlayAll={handlePlayAll}
+                      isPlayingAll={isPlayingAll}
+                      playAllIndex={playAllIndex}
+                      currentTime={currentTime}
+                      totalDuration={totalDuration}
+                      isLoading={isLoadingTopics}
+                      onGenerate={handleGenerateTopics}
+                      onRegenerateByTheme={handleRegenerateByTheme}
+                      onClear={handleClearTopics}
+                    />
+                  </div>
+                </div>
+              )}
+
+              {/* 移动端摘要页面 */}
+              {mobileSubPage === 'summary' && (
+                <div className="flex-1 min-h-0 flex flex-col bg-white">
+                  <div className="flex items-center gap-3 px-4 py-3 border-b border-gray-100">
+                    <button
+                      onClick={() => setMobileSubPage(null)}
+                      className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-gray-100"
+                    >
+                      <svg className="w-5 h-5 text-gray-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                      </svg>
+                    </button>
+                    <span className="font-medium text-gray-900">课堂摘要</span>
+                  </div>
+                  <div className="flex-1 min-h-0 overflow-hidden">
+                    <SummaryPanel
+                      summary={classSummary}
+                      isLoading={isLoadingSummary}
+                      onGenerate={handleGenerateSummary}
+                      onSeek={handleTimelineClick}
+                      onAddNote={(text, takeaway) => {
+                        handleAddNote(text, 'takeaways', {
+                          selectedText: takeaway.label,
+                          extra: { timestamps: takeaway.timestamps }
+                        });
+                      }}
+                    />
+                  </div>
+                </div>
+              )}
+
+              {/* 移动端笔记页面 */}
+              {mobileSubPage === 'notes' && (
+                <div className="flex-1 min-h-0 flex flex-col bg-white">
+                  <div className="flex items-center gap-3 px-4 py-3 border-b border-gray-100">
+                    <button
+                      onClick={() => setMobileSubPage(null)}
+                      className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-gray-100"
+                    >
+                      <svg className="w-5 h-5 text-gray-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                      </svg>
+                    </button>
+                    <span className="font-medium text-gray-900">我的笔记</span>
+                  </div>
+                  <div className="flex-1 min-h-0 overflow-hidden">
+                    <NotesPanel
+                      notes={notes}
+                      onAddNote={handleAddNote}
+                      onUpdateNote={handleUpdateNote}
+                      onDeleteNote={handleDeleteNote}
+                      onSeek={handleTimelineClick}
+                    />
+                  </div>
+                </div>
+              )}
+
+              {/* 移动端任务页面 */}
+              {mobileSubPage === 'tasks' && (
+                <div className="flex-1 min-h-0 flex flex-col bg-white">
+                  <div className="flex items-center gap-3 px-4 py-3 border-b border-gray-100">
+                    <button
+                      onClick={() => setMobileSubPage(null)}
+                      className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-gray-100"
+                    >
+                      <svg className="w-5 h-5 text-gray-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                      </svg>
+                    </button>
+                    <span className="font-medium text-gray-900">今日任务</span>
+                  </div>
+                  <div className="flex-1 min-h-0 overflow-hidden">
+                    <ActionList
+                      items={actionItems}
+                      onComplete={handleActionComplete}
+                    />
+                  </div>
+                </div>
+              )}
 
               {/* 右侧菜单 */}
               <DedaoMenu
