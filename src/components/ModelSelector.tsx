@@ -16,9 +16,10 @@ interface ModelSelectorProps {
   onChange: (modelId: string) => void;
   onMultimodalChange?: (supportsMultimodal: boolean) => void;
   className?: string;
+  compact?: boolean;  // 紧凑模式，用于移动端
 }
 
-export function ModelSelector({ value, onChange, onMultimodalChange, className = '' }: ModelSelectorProps) {
+export function ModelSelector({ value, onChange, onMultimodalChange, className = '', compact = false }: ModelSelectorProps) {
   const [models, setModels] = useState<ModelConfig[]>([]);
   const [isOpen, setIsOpen] = useState(false);
 
@@ -78,17 +79,19 @@ export function ModelSelector({ value, onChange, onMultimodalChange, className =
     <div className={`relative ${className}`}>
       <button
         onClick={() => setIsOpen(!isOpen)}
-        className="flex items-center gap-2 px-3 py-1.5 text-sm bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
+        className={`flex items-center gap-1.5 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors ${
+          compact ? 'px-2 py-1 text-xs' : 'px-3 py-1.5 text-sm'
+        }`}
       >
-        <span>{getProviderIcon(selectedModel?.provider || 'qwen')}</span>
-        <span className="font-medium">{selectedModel?.name || '选择模型'}</span>
-        {selectedModel?.supportsMultimodal && (
+        <span className={compact ? 'text-sm' : ''}>{getProviderIcon(selectedModel?.provider || 'qwen')}</span>
+        <span className="font-medium">{compact ? (selectedModel?.name?.split(' ')[0] || '模型') : (selectedModel?.name || '选择模型')}</span>
+        {!compact && selectedModel?.supportsMultimodal && (
           <span className="text-xs px-1 py-0.5 bg-blue-100 text-blue-600 rounded" title="支持图片">
             📷
           </span>
         )}
         <svg 
-          className={`w-4 h-4 transition-transform ${isOpen ? 'rotate-180' : ''}`} 
+          className={`transition-transform ${compact ? 'w-3 h-3' : 'w-4 h-4'} ${isOpen ? 'rotate-180' : ''}`} 
           fill="none" 
           stroke="currentColor" 
           viewBox="0 0 24 24"

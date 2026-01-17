@@ -16,9 +16,10 @@ import type {
 } from '@/types';
 
 // ============ 配置常量 ============
-
+// 注：精选功能只处理文本，不需要多模态能力
+// Smart 模式使用最强推理模型，Fast 模式使用相同模型（当前可用模型列表中无专门的轻量级模型）
 const DEFAULT_MODEL = 'qwen3-max';
-const FAST_MODEL = 'qwen-turbo';
+const FAST_MODEL = 'qwen3-max';  // 与 DEFAULT_MODEL 相同，确保在可用模型列表中
 const DEFAULT_CHUNK_DURATION_MS = 5 * 60 * 1000; // 5分钟
 const DEFAULT_CHUNK_OVERLAP_MS = 45 * 1000; // 45秒重叠
 const CHUNK_MAX_CANDIDATES = 2;

@@ -1414,6 +1414,36 @@ export default function StudentApp() {
                     </button>
                     <span className="font-medium text-gray-900">AI 助教</span>
                   </div>
+                  {/* MiniPlayer 播放进度条 */}
+                  <MiniPlayer
+                    currentTime={currentTime}
+                    duration={totalDuration}
+                    isPlaying={isPlaying}
+                    markers={anchors.map(a => ({
+                      id: a.id,
+                      timestamp: a.timestamp,
+                      resolved: a.resolved,
+                    }))}
+                    onSeek={(timeMs) => {
+                      setCurrentTime(timeMs);
+                      waveformRef.current?.seekTo(timeMs);
+                    }}
+                    onPlayPause={() => {
+                      if (isPlaying) {
+                        waveformRef.current?.pause();
+                      } else {
+                        waveformRef.current?.play();
+                      }
+                      setIsPlaying(!isPlaying);
+                    }}
+                    onMarkerClick={(marker) => {
+                      const anchor = anchors.find(a => a.id === marker.id);
+                      if (anchor) {
+                        setSelectedBreakpoint(anchor);
+                      }
+                    }}
+                    className="border-b border-gray-100"
+                  />
                   {/* AI 对话区 */}
                   <div className="flex-1 min-h-0">
                     <AITutor
@@ -1424,6 +1454,7 @@ export default function StudentApp() {
                       onActionItemsUpdate={handleActionItemsUpdate}
                       sessionId={sessionId}
                       initialQuestion={mobileAIQuestion}
+                      isMobile={true}
                       onSeek={(timeMs) => {
                         setCurrentTime(timeMs);
                         waveformRef.current?.seekTo(timeMs);

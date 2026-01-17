@@ -41,6 +41,7 @@ interface AITutorProps {
   sessionId?: string;  // 用于缓存关联
   onSeek?: (timeMs: number) => void;  // 点击时间戳跳转播放
   initialQuestion?: string;  // 移动端传入的初始问题
+  isMobile?: boolean;  // 移动端模式，使用简化布局
 }
 
 interface TutorAPIResponse {
@@ -75,7 +76,7 @@ interface TutorAPIResponse {
   conversation_id?: string;
 }
 
-export function AITutor({ breakpoint, segments, isLoading: externalLoading, onResolve, onActionItemsUpdate, sessionId = 'default', onSeek, initialQuestion }: AITutorProps) {
+export function AITutor({ breakpoint, segments, isLoading: externalLoading, onResolve, onActionItemsUpdate, sessionId = 'default', onSeek, initialQuestion, isMobile = false }: AITutorProps) {
   const { accessToken } = useAuth();
   const [userInput, setUserInput] = useState('');
   const [chatHistory, setChatHistory] = useState<Array<{ role: 'user' | 'assistant'; content: string }>>([]);
@@ -611,77 +612,131 @@ export function AITutor({ breakpoint, segments, isLoading: externalLoading, onRe
 
   return (
     <div className="h-full flex flex-col">
-      {/* 断点信息 */}
-      <div className="p-4 border-b border-gray-100 bg-gradient-to-r from-rose-50 to-white">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className={`w-3 h-3 rounded-full ${breakpoint.resolved ? 'bg-emerald-400' : 'bg-rose-500 animate-pulse'}`} />
-            <div>
-              <p className="text-sm font-semibold text-gray-900">
+      {/* 断点信息 - 移动端使用紧凑垂直布局 */}
+      <div className={`border-b border-gray-100 bg-gradient-to-r from-rose-50 to-white ${isMobile ? 'p-3' : 'p-4'}`}>
+        {isMobile ? (
+          // 移动端紧凑布局
+          <div className="space-y-2">
+            {/* 第一行：困惑点信息 + 状态 */}
+            <div className="flex items-center gap-2">
+              <div className={`w-2.5 h-2.5 rounded-full flex-shrink-0 ${breakpoint.resolved ? 'bg-emerald-400' : 'bg-rose-500 animate-pulse'}`} />
+              <span className="text-sm font-medium text-gray-900 truncate">
                 {formatTimestamp(breakpoint.timestamp)} 的困惑点
-              </p>
-              <p className="text-xs text-gray-500 mt-0.5">
-                {breakpoint.resolved ? '✅ 已解决' : '🔴 待解决'}
-                {isFromCache && <span className="ml-2 text-blue-500">📋 已缓存</span>}
-              </p>
+              </span>
+              <span className="text-xs text-gray-500 flex-shrink-0">
+                {breakpoint.resolved ? '✅' : '🔴'}
+              </span>
+              {isFromCache && <span className="text-xs text-blue-500 flex-shrink-0">📋</span>}
+            </div>
+            {/* 第二行：模型选择器 + 操作按钮 */}
+            <div className="flex items-center justify-between gap-2">
+              <ModelSelector 
+                value={selectedModel} 
+                onChange={setSelectedModel}
+                onMultimodalChange={setSupportsMultimodal}
+                compact={true}
+              />
+              <div className="flex items-center gap-2">
+                {isFromCache && (
+                  <button
+                    onClick={async () => {
+                      if (breakpoint) {
+                        await deleteTutorResponseCache(breakpoint.id);
+                      }
+                      setIsFromCache(false);
+                      setResponse(null);
+                      explainBreakpoint();
+                    }}
+                    className="px-2 py-1 text-xs text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded transition-colors"
+                    title="重新生成"
+                  >
+                    🔄
+                  </button>
+                )}
+                {!breakpoint.resolved && (
+                  <button
+                    onClick={onResolve}
+                    className="btn btn-primary px-3 py-1.5 text-xs"
+                  >
+                    ✓ 我懂了
+                  </button>
+                )}
+              </div>
             </div>
           </div>
-          <div className="flex items-center gap-2">
-            {isFromCache && (
-              <button
-                onClick={async () => {
-                  // 先删除缓存，再重新生成
-                  if (breakpoint) {
-                    await deleteTutorResponseCache(breakpoint.id);
-                  }
-                  setIsFromCache(false);
-                  setResponse(null);
-                  explainBreakpoint();
-                }}
-                className="px-3 py-1.5 text-xs text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded-lg transition-colors"
-                title="重新生成"
-              >
-                🔄 刷新
-              </button>
-            )}
-            <ModelSelector 
-              value={selectedModel} 
-              onChange={setSelectedModel}
-              onMultimodalChange={setSupportsMultimodal}
-            />
-            {!breakpoint.resolved && (
-              <button
-                onClick={onResolve}
-                className="btn btn-primary px-4 py-2 text-sm"
-              >
-                ✓ 我懂了
-              </button>
-            )}
-          </div>
-        </div>
-        
-        {/* 功能开关 */}
-        <div className="mt-3 flex items-center gap-4">
-          <label className="flex items-center gap-2 text-xs text-gray-600 cursor-pointer group">
-            <input
-              type="checkbox"
-              checked={enableWeb}
-              onChange={(e) => setEnableWeb(e.target.checked)}
-              className="w-4 h-4 rounded border-gray-300 text-rose-500 focus:ring-rose-400"
-            />
-            <span className="group-hover:text-gray-900 transition-colors">🌐 联网搜索</span>
-          </label>
-          
-          {response?.usage && (
-            <span className="ml-auto text-xs text-gray-400">
-              {response.model} · {response.usage.totalTokens} tokens
-            </span>
-          )}
-        </div>
+        ) : (
+          // 桌面端原有布局
+          <>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className={`w-3 h-3 rounded-full ${breakpoint.resolved ? 'bg-emerald-400' : 'bg-rose-500 animate-pulse'}`} />
+                <div>
+                  <p className="text-sm font-semibold text-gray-900">
+                    {formatTimestamp(breakpoint.timestamp)} 的困惑点
+                  </p>
+                  <p className="text-xs text-gray-500 mt-0.5">
+                    {breakpoint.resolved ? '✅ 已解决' : '🔴 待解决'}
+                    {isFromCache && <span className="ml-2 text-blue-500">📋 已缓存</span>}
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                {isFromCache && (
+                  <button
+                    onClick={async () => {
+                      if (breakpoint) {
+                        await deleteTutorResponseCache(breakpoint.id);
+                      }
+                      setIsFromCache(false);
+                      setResponse(null);
+                      explainBreakpoint();
+                    }}
+                    className="px-3 py-1.5 text-xs text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded-lg transition-colors"
+                    title="重新生成"
+                  >
+                    🔄 刷新
+                  </button>
+                )}
+                <ModelSelector 
+                  value={selectedModel} 
+                  onChange={setSelectedModel}
+                  onMultimodalChange={setSupportsMultimodal}
+                />
+                {!breakpoint.resolved && (
+                  <button
+                    onClick={onResolve}
+                    className="btn btn-primary px-4 py-2 text-sm"
+                  >
+                    ✓ 我懂了
+                  </button>
+                )}
+              </div>
+            </div>
+            
+            {/* 功能开关 - 仅桌面端显示 */}
+            <div className="mt-3 flex items-center gap-4">
+              <label className="flex items-center gap-2 text-xs text-gray-600 cursor-pointer group">
+                <input
+                  type="checkbox"
+                  checked={enableWeb}
+                  onChange={(e) => setEnableWeb(e.target.checked)}
+                  className="w-4 h-4 rounded border-gray-300 text-rose-500 focus:ring-rose-400"
+                />
+                <span className="group-hover:text-gray-900 transition-colors">🌐 联网搜索</span>
+              </label>
+              
+              {response?.usage && (
+                <span className="ml-auto text-xs text-gray-400">
+                  {response.model} · {response.usage.totalTokens} tokens
+                </span>
+              )}
+            </div>
+          </>
+        )}
       </div>
 
       {/* 内容区 */}
-      <div className="flex-1 overflow-y-auto p-5" style={{ minHeight: 0 }}>
+      <div className={`flex-1 overflow-y-auto ${isMobile ? 'p-3' : 'p-5'}`} style={{ minHeight: 0 }}>
         {error ? (
           <div className="flex items-center justify-center h-full animate-fade-in">
             <div className="text-center">
