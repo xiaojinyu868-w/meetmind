@@ -86,6 +86,7 @@ export const WaveformPlayer = forwardRef<WaveformPlayerRef, WaveformPlayerProps>
   const [volume, setVolume] = useState(1);
   const [isMuted, setIsMuted] = useState(false);
   const [showAddHint, setShowAddHint] = useState(false);
+  const [loadProgress, setLoadProgress] = useState(0); // 新增：加载进度
 
   // 暴露方法给父组件
   useImperativeHandle(ref, () => ({
@@ -106,7 +107,7 @@ export const WaveformPlayer = forwardRef<WaveformPlayerRef, WaveformPlayerProps>
     isPlaying: () => wavesurferRef.current?.isPlaying() ?? false,
   }));
 
-  // 初始化 wavesurfer
+  // 初始化 wavesurfer - 组件挂载后立即初始化
   useEffect(() => {
     if (!containerRef.current) return;
 
@@ -115,6 +116,7 @@ export const WaveformPlayer = forwardRef<WaveformPlayerRef, WaveformPlayerProps>
     regionsRef.current = regions;
 
     // 创建 WaveSurfer 实例
+    // 优化：使用 MediaElement 后端，支持流式加载（边下边播）
     const ws = WaveSurfer.create({
       container: containerRef.current,
       waveColor,
@@ -125,6 +127,7 @@ export const WaveformPlayer = forwardRef<WaveformPlayerRef, WaveformPlayerProps>
       barGap: 2,
       barRadius: 3,
       normalize: true,
+      backend: 'MediaElement', // 使用 MediaElement 后端，支持流式加载
       plugins: [regions],
     });
 
@@ -133,7 +136,13 @@ export const WaveformPlayer = forwardRef<WaveformPlayerRef, WaveformPlayerProps>
       const dur = ws.getDuration() * 1000;
       setDuration(dur);
       setIsReady(true);
+      setLoadProgress(100);
       onReady?.(dur);
+    });
+
+    // 监听加载进度
+    ws.on('loading', (percent: number) => {
+      setLoadProgress(percent);
     });
 
     ws.on('timeupdate', (time) => {
@@ -181,34 +190,44 @@ export const WaveformPlayer = forwardRef<WaveformPlayerRef, WaveformPlayerProps>
         }
         
         // 使用全局事件监听器捕获并静默处理 AbortError
-        // 这些错误是 wavesurfer 内部异步操作被取消导致的，是预期行为
         const handleAbortError = (event: PromiseRejectionEvent) => {
           const reason = event.reason;
           if (
             reason?.name === 'AbortError' ||
             (reason instanceof DOMException && reason.name === 'AbortError') ||
-            (typeof reason === 'string' && reason.includes('abort'))
+            (typeof reason === 'string' && reason.includes('abort')) ||
+            reason?.message?.includes('abort')
           ) {
             event.preventDefault();
             event.stopPropagation();
           }
         };
         
-        window.addEventListener('unhandledrejection', handleAbortError);
+        // 捕获同步错误的处理器
+        const handleError = (event: ErrorEvent) => {
+          if (event.message?.includes('abort') || event.message?.includes('AbortError')) {
+            event.preventDefault();
+            event.stopPropagation();
+          }
+        };
         
-        // 使用 queueMicrotask 确保在当前任务完成后再销毁
-        queueMicrotask(() => {
+        window.addEventListener('unhandledrejection', handleAbortError);
+        window.addEventListener('error', handleError);
+        
+        // 使用 setTimeout 延迟销毁，给异步操作更多时间完成或取消
+        setTimeout(() => {
           try {
             wsInstance.destroy();
-          } catch {
-            // 忽略销毁时的错误
+          } catch (e) {
+            // 静默忽略所有销毁时的错误
           }
           
-          // 延迟移除监听器，确保所有异步错误都被捕获
+          // 延迟移除监听器
           setTimeout(() => {
             window.removeEventListener('unhandledrejection', handleAbortError);
-          }, 200);
-        });
+            window.removeEventListener('error', handleError);
+          }, 300);
+        }, 50);
       }
     };
   }, [waveColor, progressColor, height]);
@@ -537,12 +556,33 @@ export const WaveformPlayer = forwardRef<WaveformPlayerRef, WaveformPlayerProps>
         </div>
       )}
 
-      {/* 加载状态 */}
+      {/* 加载状态 - 显示进度 */}
       {!isReady && src && (
-        <div className="absolute inset-0 flex items-center justify-center bg-white/90 backdrop-blur-sm">
+        <div className="absolute inset-0 flex items-center justify-center bg-white/90 backdrop-blur-sm rounded-2xl">
           <div className="flex flex-col items-center gap-3">
-            <div className="w-12 h-12 border-4 border-indigo-200 border-t-indigo-500 rounded-full animate-spin" />
-            <span className="text-sm text-gray-600 font-medium">加载音频...</span>
+            <div className="relative w-12 h-12">
+              <div className="absolute inset-0 border-4 border-indigo-200 rounded-full" />
+              <div 
+                className="absolute inset-0 border-4 border-indigo-500 rounded-full animate-spin"
+                style={{ 
+                  clipPath: `polygon(50% 50%, 50% 0%, ${50 + 50 * Math.sin(loadProgress / 100 * Math.PI * 2)}% ${50 - 50 * Math.cos(loadProgress / 100 * Math.PI * 2)}%, 50% 50%)`,
+                  borderColor: 'transparent',
+                  borderTopColor: '#6366F1',
+                }}
+              />
+            </div>
+            <span className="text-sm text-gray-600 font-medium">
+              加载音频 {loadProgress > 0 ? `${loadProgress}%` : '...'}
+            </span>
+            {/* 进度条 */}
+            {loadProgress > 0 && (
+              <div className="w-32 h-1.5 bg-gray-200 rounded-full overflow-hidden">
+                <div 
+                  className="h-full bg-gradient-to-r from-indigo-500 to-purple-500 transition-all duration-300"
+                  style={{ width: `${loadProgress}%` }}
+                />
+              </div>
+            )}
           </div>
         </div>
       )}

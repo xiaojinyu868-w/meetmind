@@ -38,23 +38,31 @@ function generateEventId() {
 }
 
 
+console.log('[Server] Starting app.prepare()...');
+
 app.prepare().then(() => {
-  const server = createServer(async (req, res) => {
-    try {
-      const parsedUrl = parse(req.url, true);
-      await handle(req, res, parsedUrl);
-    } catch (err) {
-      console.error('Error occurred handling', req.url, err);
-      res.statusCode = 500;
-      res.end('internal server error');
-    }
-  });
+  console.log('[Server] app.prepare() completed');
+  
+  try {
+    const server = createServer(async (req, res) => {
+      try {
+        const parsedUrl = parse(req.url, true);
+        await handle(req, res, parsedUrl);
+      } catch (err) {
+        console.error('Error occurred handling', req.url, err);
+        res.statusCode = 500;
+        res.end('internal server error');
+      }
+    });
+    console.log('[Server] HTTP server created');
 
-  // 创建 WebSocket 服务器（仅用于 ASR）
-  const wss = new WebSocketServer({ noServer: true });
+    // 创建 WebSocket 服务器（仅用于 ASR）
+    const wss = new WebSocketServer({ noServer: true });
+    console.log('[Server] WebSocket server created');
 
-  // 获取 Next.js 的 upgrade handler
-  const nextUpgradeHandler = app.getUpgradeHandler();
+    // 获取 Next.js 的 upgrade handler
+    const nextUpgradeHandler = app.getUpgradeHandler();
+    console.log('[Server] Got upgrade handler');
 
   // 标记为已完成 WS 设置，防止 Next.js 再次自动注册 upgrade 监听
   if ('didWebSocketSetup' in app) {
@@ -410,8 +418,22 @@ app.prepare().then(() => {
     });
   });
 
+  console.log('[Server] About to call server.listen on port', port);
+  
   server.listen(port, () => {
     console.log(`> Ready on http://${hostname}:${port}`);
     console.log(`> WebSocket proxy available at ws://${hostname}:${port}/api/asr-stream`);
   });
+  
+  server.on('error', (err) => {
+    console.error('[Server] Server error:', err);
+  });
+  
+  } catch (setupError) {
+    console.error('[Server] Setup error:', setupError);
+    process.exit(1);
+  }
+}).catch((err) => {
+  console.error('[Server] Failed to start:', err);
+  process.exit(1);
 });

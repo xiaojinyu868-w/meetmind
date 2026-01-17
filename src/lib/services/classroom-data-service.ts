@@ -369,6 +369,59 @@ export const classroomDataService = {
     }
   },
 
+  /**
+   * 批量保存学生困惑点（性能优化版本）
+   * 一次性读取、处理、写入，避免循环内多次 I/O
+   */
+  bulkSaveStudentAnchors(
+    sessionId: string,
+    studentId: string,
+    studentName: string,
+    anchorsToAdd: Array<{
+      id: string;
+      timestamp: number;
+      type?: AnchorType;
+      transcriptContext?: string;
+    }>
+  ): StudentAnchor[] {
+    if (anchorsToAdd.length === 0) return [];
+    
+    const existingAnchors = getAllAnchorsFromStorage();
+    const existingIds = new Set(existingAnchors.map(a => a.id));
+    const now = new Date().toISOString();
+    
+    const newAnchors: StudentAnchor[] = [];
+    
+    anchorsToAdd.forEach(item => {
+      // 跳过已存在的
+      if (existingIds.has(item.id)) return;
+      
+      const anchor: StudentAnchor = {
+        id: item.id,
+        sessionId,
+        studentId,
+        studentName,
+        timestamp: item.timestamp,
+        type: item.type || 'confusion',
+        status: 'active',
+        transcriptContext: item.transcriptContext,
+        createdAt: now,
+        updatedAt: now,
+      };
+      
+      newAnchors.push(anchor);
+      existingAnchors.push(anchor);
+    });
+    
+    if (newAnchors.length > 0) {
+      saveAnchorsToStorage(existingAnchors);
+      // 只广播一次，减少广播频率
+      this.broadcastAnchorUpdate('add', newAnchors[0]);
+    }
+    
+    return newAnchors;
+  },
+
   // ============ 教师端数据查询 ============
 
   /**

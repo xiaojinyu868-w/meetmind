@@ -1,19 +1,9 @@
 'use client';
 
-import { useState, useEffect, useCallback, useRef } from 'react';
-import { Recorder } from '@/components/Recorder';
-import { TimelineView } from '@/components/TimelineView';
-import { AITutor } from '@/components/AITutor';
-import { ActionList } from '@/components/ActionList';
+import { useState, useEffect, useCallback, useRef, Suspense } from 'react';
+import dynamic from 'next/dynamic';
 import { Header } from '@/components/Header';
 import { ServiceStatus, DegradedModeBanner } from '@/components/ServiceStatus';
-
-import { WaveformPlayer, type WaveformPlayerRef, type WaveformAnchor } from '@/components/WaveformPlayer';
-import { HighlightsPanel } from '@/components/HighlightsPanel';
-import { SummaryPanel } from '@/components/SummaryPanel';
-import { NotesPanel } from '@/components/NotesPanel';
-import { AudioUploader } from '@/components/AudioUploader';
-import { AnchorDetailPanel } from '@/components/AnchorDetailPanel';
 import { anchorService, type Anchor } from '@/lib/services/anchor-service';
 import { memoryService, type ClassTimeline } from '@/lib/services/memory-service';
 import { checkServices, type ServiceStatus as ServiceStatusType } from '@/lib/services/health-check';
@@ -21,8 +11,50 @@ import { getPreference, setPreference, db, generateSessionId } from '@/lib/db';
 import { useAuth } from '@/lib/hooks/useAuth';
 import { classroomDataService, type StudentAnchor } from '@/lib/services/classroom-data-service';
 import type { TranscriptSegment, HighlightTopic, ClassSummary, Note, TopicGenerationMode, NoteSource, NoteMetadata } from '@/types';
-import { DEMO_SEGMENTS, DEMO_ANCHORS, DEMO_AUDIO_URL } from '@/fixtures/demo-data';
 import { useResponsive } from '@/hooks/useResponsive';
+
+// WaveformPlayer 使用 forwardRef，需要静态导入以支持 ref
+import { WaveformPlayer, type WaveformPlayerRef, type WaveformAnchor } from '@/components/WaveformPlayer';
+
+// 动态导入大型组件 - 代码分割优化
+const Recorder = dynamic(() => import('@/components/Recorder').then(m => ({ default: m.Recorder })), {
+  ssr: false,
+  loading: () => <div className="h-32 bg-gray-100 animate-pulse rounded-xl" />
+});
+
+const TimelineView = dynamic(() => import('@/components/TimelineView').then(m => ({ default: m.TimelineView })), {
+  loading: () => <div className="h-64 bg-gray-50 animate-pulse rounded-lg" />
+});
+
+const AITutor = dynamic(() => import('@/components/AITutor').then(m => ({ default: m.AITutor })), {
+  ssr: false,
+  loading: () => <div className="h-96 bg-gray-50 animate-pulse rounded-lg" />
+});
+
+const ActionList = dynamic(() => import('@/components/ActionList').then(m => ({ default: m.ActionList })));
+
+const HighlightsPanel = dynamic(() => import('@/components/HighlightsPanel').then(m => ({ default: m.HighlightsPanel })));
+const SummaryPanel = dynamic(() => import('@/components/SummaryPanel').then(m => ({ default: m.SummaryPanel })));
+const NotesPanel = dynamic(() => import('@/components/NotesPanel').then(m => ({ default: m.NotesPanel })));
+const AudioUploader = dynamic(() => import('@/components/AudioUploader').then(m => ({ default: m.AudioUploader })), { ssr: false });
+const AnchorDetailPanel = dynamic(() => import('@/components/AnchorDetailPanel').then(m => ({ default: m.AnchorDetailPanel })));
+
+import type { ConfusionMarker } from '@/components/mobile';
+
+// 演示数据延迟加载
+let DEMO_DATA_CACHE: { DEMO_SEGMENTS: TranscriptSegment[]; DEMO_ANCHORS: Anchor[]; DEMO_AUDIO_URL: string } | null = null;
+const loadDemoData = async () => {
+  if (DEMO_DATA_CACHE) return DEMO_DATA_CACHE;
+  const data = await import('@/fixtures/demo-data');
+  DEMO_DATA_CACHE = {
+    DEMO_SEGMENTS: data.DEMO_SEGMENTS,
+    DEMO_ANCHORS: data.DEMO_ANCHORS,
+    DEMO_AUDIO_URL: data.DEMO_AUDIO_URL,
+  };
+  return DEMO_DATA_CACHE;
+};
+
+// 移动端组件导入
 import { 
   MiniPlayer,
   MobileTabSwitch,
@@ -31,7 +63,6 @@ import {
   DedaoMenu,
   DedaoMenuButton,
   toDedaoEntries,
-  type ConfusionMarker,
 } from '@/components/mobile';
 
 type ViewMode = 'record' | 'review';
@@ -124,43 +155,42 @@ export default function StudentApp() {
   }, [selectedAnchor?.id, reviewTab, saveAppState, viewMode]);
 
   // 初始化 - 恢复状态（仅在首次加载时执行）
+  // 优化：使用并行加载和批量操作提升性能
   useEffect(() => {
     // 防止重复初始化
     if (hasRestoredState.current) return;
     
     const initializeApp = async () => {
-      checkServices().then(setServiceStatus);
-      
-      const savedAnchors = anchorService.getActive(sessionId);
-      setAnchors(savedAnchors);
-
-      // 尝试从 IndexedDB 恢复上次状态
-      let restoredAnchorId: string | null = null;
-      let restoredReviewTab: ReviewTab | null = null;
-      let restoredViewMode: ViewMode | null = null;
-      
-      try {
-        const savedAppState = await getPreference<{
+      // 第一批并行操作：服务检查 + 状态恢复 + anchors 获取
+      const [, savedAppState, savedAnchors] = await Promise.all([
+        checkServices().then(setServiceStatus),
+        getPreference<{
           viewMode: ViewMode;
           sessionId: string;
           selectedAnchorId?: string;
           reviewTab?: ReviewTab;
           currentTime?: number;
           savedAt: number;
-        } | null>(APP_STATE_KEY, null);
+        } | null>(APP_STATE_KEY, null).catch(() => null),
+        Promise.resolve(anchorService.getActive(sessionId)),
+      ]);
+      
+      setAnchors(savedAnchors);
+
+      // 解析恢复的状态
+      let restoredAnchorId: string | null = null;
+      let restoredReviewTab: ReviewTab | null = null;
+      let restoredViewMode: ViewMode | null = null;
+      
+      // 检查是否是最近 24 小时内的状态
+      if (savedAppState && Date.now() - savedAppState.savedAt < 24 * 60 * 60 * 1000) {
+        restoredAnchorId = savedAppState.selectedAnchorId || null;
+        restoredReviewTab = savedAppState.reviewTab || null;
+        restoredViewMode = savedAppState.viewMode || null;
         
-        // 检查是否是最近 24 小时内的状态
-        if (savedAppState && Date.now() - savedAppState.savedAt < 24 * 60 * 60 * 1000) {
-          restoredAnchorId = savedAppState.selectedAnchorId || null;
-          restoredReviewTab = savedAppState.reviewTab || null;
-          restoredViewMode = savedAppState.viewMode || null;
-          
-          if (savedAppState.currentTime) {
-            setCurrentTime(savedAppState.currentTime);
-          }
+        if (savedAppState.currentTime) {
+          setCurrentTime(savedAppState.currentTime);
         }
-      } catch (err) {
-        console.error('Failed to restore app state:', err);
       }
 
       // 确定最终的 viewMode
@@ -169,86 +199,36 @@ export default function StudentApp() {
       // 仅在复习模式下加载演示数据
       if (finalViewMode === 'review') {
         setViewMode('review');
-        setSegments(DEMO_SEGMENTS);
-        setAudioUrl(DEMO_AUDIO_URL);
-        setAnchors(DEMO_ANCHORS);
         
-        // 将演示数据写入 classroomDataService（供教师端读取）
-        // 创建演示会话
-        classroomDataService.saveSession({
-          id: sessionId,
-          subject: '英语',
-          topic: 'Australia\'s Moving Experience',
-          teacherName: 'Demo Teacher',
-          duration: DEMO_SEGMENTS.length > 0 ? DEMO_SEGMENTS[DEMO_SEGMENTS.length - 1].endMs : 0,
-          status: 'completed',
-          createdBy: studentId,
-        });
+        // 第二批并行操作：加载演示数据 + 检查已有转录
+        const [demoData, existingTranscriptCount] = await Promise.all([
+          loadDemoData(),
+          db.transcripts.where('sessionId').equals(sessionId).count().catch(() => 0),
+        ]);
         
-        // 将演示困惑点写入 classroomDataService
-        DEMO_ANCHORS.forEach(anchor => {
-          // 获取转录上下文
-          const contextSegments = DEMO_SEGMENTS.filter(
-            s => s.startMs <= anchor.timestamp + 5000 && s.endMs >= anchor.timestamp - 5000
-          );
-          const transcriptContext = contextSegments.map(s => s.text).join(' ').slice(0, 200);
-          
-          // 写入共享存储（如果尚未存在）
-          const existingAnchors = classroomDataService.getSessionAnchors(sessionId);
-          const alreadyExists = existingAnchors.some(a => a.id === anchor.id);
-          if (!alreadyExists) {
-            classroomDataService.saveStudentAnchor(
-              sessionId,
-              studentId,
-              studentName,
-              anchor.timestamp,
-              anchor.type,
-              transcriptContext
-            );
-          }
-        });
+        // 立即设置 UI 状态（让用户更快看到内容）
+        setSegments(demoData.DEMO_SEGMENTS);
+        setAudioUrl(demoData.DEMO_AUDIO_URL);
+        setAnchors(demoData.DEMO_ANCHORS);
         
-        // 将演示转录写入 IndexedDB（供教师端读取）
-        try {
-          const existingTranscripts = await db.transcripts
-            .where('sessionId')
-            .equals(sessionId)
-            .count();
-          
-          if (existingTranscripts === 0) {
-            await db.transcripts.bulkAdd(
-              DEMO_SEGMENTS.map(seg => ({
-                sessionId: sessionId,
-                text: seg.text,
-                startMs: seg.startMs,
-                endMs: seg.endMs,
-                confidence: seg.confidence || 1.0,
-                isFinal: true,
-              }))
-            );
-            console.log(`已保存 ${DEMO_SEGMENTS.length} 条演示转录到 IndexedDB`);
-          }
-        } catch (e) {
-          console.error('保存演示转录到 IndexedDB 失败:', e);
-        }
-        
+        // 构建时间轴（同步操作，优先完成）
         const tl = memoryService.buildTimeline(
           sessionId,
-          DEMO_SEGMENTS,
-          DEMO_ANCHORS,
+          demoData.DEMO_SEGMENTS,
+          demoData.DEMO_ANCHORS,
           { subject: '英语', teacher: 'Demo Teacher', date: new Date().toISOString().split('T')[0] }
         );
         setTimeline(tl);
         
         // 恢复选中的困惑点
         if (restoredAnchorId) {
-          const restoredAnchor = DEMO_ANCHORS.find(a => a.id === restoredAnchorId);
+          const restoredAnchor = demoData.DEMO_ANCHORS.find(a => a.id === restoredAnchorId);
           if (restoredAnchor) {
             setSelectedAnchor(restoredAnchor);
             setCurrentTime(restoredAnchor.timestamp);
           }
         } else {
-          const firstUnresolved = DEMO_ANCHORS.find(a => !a.resolved);
+          const firstUnresolved = demoData.DEMO_ANCHORS.find(a => !a.resolved);
           if (firstUnresolved) {
             setSelectedAnchor(firstUnresolved);
             setCurrentTime(firstUnresolved.timestamp);
@@ -259,6 +239,50 @@ export default function StudentApp() {
         if (restoredReviewTab) {
           setReviewTab(restoredReviewTab);
         }
+        
+        // 第三批：后台异步写入（不阻塞 UI）
+        // 使用 queueMicrotask 延迟执行，让 UI 先渲染
+        queueMicrotask(() => {
+          // 保存会话信息
+          classroomDataService.saveSession({
+            id: sessionId,
+            subject: '英语',
+            topic: 'Australia\'s Moving Experience',
+            teacherName: 'Demo Teacher',
+            duration: demoData.DEMO_SEGMENTS.length > 0 ? demoData.DEMO_SEGMENTS[demoData.DEMO_SEGMENTS.length - 1].endMs : 0,
+            status: 'completed',
+            createdBy: studentId,
+          });
+          
+          // 批量保存演示困惑点（优化：一次性处理）
+          const anchorsToAdd = demoData.DEMO_ANCHORS.map(anchor => {
+            const contextSegments = demoData.DEMO_SEGMENTS.filter(
+              s => s.startMs <= anchor.timestamp + 5000 && s.endMs >= anchor.timestamp - 5000
+            );
+            const transcriptContext = contextSegments.map(s => s.text).join(' ').slice(0, 200);
+            return {
+              id: anchor.id,
+              timestamp: anchor.timestamp,
+              type: anchor.type,
+              transcriptContext,
+            };
+          });
+          classroomDataService.bulkSaveStudentAnchors(sessionId, studentId, studentName, anchorsToAdd);
+          
+          // 保存转录到 IndexedDB（如果不存在）
+          if (existingTranscriptCount === 0) {
+            db.transcripts.bulkAdd(
+              demoData.DEMO_SEGMENTS.map(seg => ({
+                sessionId: sessionId,
+                text: seg.text,
+                startMs: seg.startMs,
+                endMs: seg.endMs,
+                confidence: seg.confidence || 1.0,
+                isFinal: true,
+              }))
+            ).catch(e => console.error('保存演示转录到 IndexedDB 失败:', e));
+          }
+        });
       }
       
       hasRestoredState.current = true;
@@ -292,15 +316,16 @@ export default function StudentApp() {
     setIsRecording(false);
     if (blob) setAudioBlob(blob);
     
-    const currentSegments = segments.length > 0 && segments !== DEMO_SEGMENTS 
-      ? segments 
-      : liveSegmentsRef.current;
+    // 使用 liveSegmentsRef 判断是否有实时转录数据
+    const currentSegments = liveSegmentsRef.current.length > 0 
+      ? liveSegmentsRef.current 
+      : segments;
     
-    const finalSegments = currentSegments.length > 0 ? currentSegments : DEMO_SEGMENTS;
-    const isLiveData = currentSegments.length > 0;
+    const hasLiveData = liveSegmentsRef.current.length > 0;
+    const finalSegments = currentSegments;
     
     setSegments(finalSegments);
-    setDataSource(isLiveData ? 'live' : 'demo');
+    setDataSource(hasLiveData ? 'live' : 'demo');
     
     // 计算课程时长
     const duration = finalSegments.length > 0 

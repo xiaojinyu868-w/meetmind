@@ -106,7 +106,6 @@ function buildSmartPrompt(
   options: GenerateTopicsOptions
 ): string {
   const transcriptText = formatTranscriptWithTimestamps(segments);
-  const sessionInfoBlock = buildSessionInfoBlock(options.sessionInfo);
   const maxTopics = options.maxTopics ?? DEFAULT_MAX_TOPICS;
   const minTopics = options.minTopics ?? DEFAULT_MIN_TOPICS;
   
@@ -115,38 +114,36 @@ function buildSmartPrompt(
     : '';
 
   return `<task>
-<role>你是一位专业的教育内容策划师，正在为学生整理课堂精华片段。</role>
+<role>你是一位专业的内容策划师，负责从音视频转录中提取精华片段。</role>
 <context>
-${sessionInfoBlock}
-这是一段课堂录音的转录文本。
+这是一段录音的转录文本。
 </context>
-<goal>从转录文本中提取 ${minTopics}-${maxTopics} 个最有价值的知识点片段，帮助学生快速回顾课堂重点。</goal>
+<goal>从转录文本中提取 ${minTopics}-${maxTopics} 个最有价值的片段。根据实际内容自行判断主题，找出值得回顾的重点。</goal>
 <instructions>
   <step name="识别主题">
-    <description>分析整个转录文本，找出最有价值的知识点。</description>
+    <description>分析整个转录文本，找出最有价值的内容片段。</description>
     <criteria>
-      <item>重要概念：核心定义、关键原理</item>
-      <item>难点解析：容易混淆或理解困难的内容</item>
-      <item>实例说明：生动的例子或类比</item>
-      <item>方法技巧：解题方法、记忆技巧</item>
-      <item>总结归纳：老师的重点强调或总结</item>
+      <item>重要概念：核心定义、关键信息</item>
+      <item>关键对话：重要的问答或讨论</item>
+      <item>实例说明：生动的例子或具体案例</item>
+      <item>方法技巧：实用的方法或建议</item>
+      <item>总结要点：重点强调或总结性内容</item>
     </criteria>
   </step>
   <step name="选择片段">
     <description>为每个主题选择最能说明问题的片段。</description>
     <criteria>
-      <item>片段应该是连续的，时长约 30-90 秒</item>
+      <item>片段应该是连续的，时长约 10-60 秒</item>
       <item>必须是原文逐字引用，不能改写或省略</item>
       <item>片段应该能独立理解，有完整的上下文</item>
-      <item>优先选择老师讲解清晰、重点突出的部分</item>
     </criteria>
   </step>
 </instructions>
 <qualityControl>
   <item>每个片段标题简洁有力，不超过15个字</item>
   <item>片段之间不应有内容重叠</item>
-  <item>片段应分布在课堂的不同时间段</item>
-  <item>如果内容不足，宁可少选也不要凑数</item>
+  <item>片段应分布在录音的不同时间段</item>
+  <item>必须返回至少1个片段，即使内容较短</item>
 </qualityControl>
 ${themeGuidance}
 <outputFormat>
@@ -156,11 +153,11 @@ ${themeGuidance}
     "title": "片段标题",
     "quote": {
       "timestamp": "[MM:SS-MM:SS]",
-      "text": "原文引用内容"
+      "text": "原文引用内容（必须与转录完全一致）"
     }
   }
 ]
-不要包含任何 markdown 标记或其他说明文字。
+不要包含任何 markdown 标记或其他说明文字。如果转录有内容，必须返回至少1个片段。
 </outputFormat>
 <transcript><![CDATA[
 ${transcriptText}
@@ -178,7 +175,6 @@ function buildChunkPrompt(
   theme?: string
 ): string {
   const transcriptText = formatTranscriptWithTimestamps(chunk.segments);
-  const sessionInfoBlock = buildSessionInfoBlock(sessionInfo);
   const chunkWindow = `${formatTimestamp(chunk.startMs)} - ${formatTimestamp(chunk.endMs)}`;
   
   const themeInstruction = theme 
@@ -186,18 +182,16 @@ function buildChunkPrompt(
     : '';
 
   return `<task>
-<role>你是一位教育内容策划师，正在审阅课堂转录的一部分。</role>
+<role>你是一位内容策划师，正在审阅录音转录的一部分。</role>
 <context>
-${sessionInfoBlock}
 片段时间范围: ${chunkWindow}
 </context>
-<goal>从这段转录中找出最多 ${maxCandidates} 个值得标记的知识点。</goal>
+<goal>从这段转录中找出最多 ${maxCandidates} 个值得标记的重点内容。</goal>
 <instructions>
   <item>只使用本片段中的内容。如果没有突出内容，返回空数组。</item>
-  <item>每个知识点需要一个简洁的标题（不超过15字）和一段连续的原文引用（约30-60秒）。</item>
+  <item>每个重点需要一个简洁的标题（不超过15字）和一段连续的原文引用（约10-60秒）。</item>
   <item>引用必须与转录完全匹配，不能改写。</item>
   <item>使用 [MM:SS-MM:SS] 格式的绝对时间戳。</item>
-  <item>优先选择：核心概念、难点解析、生动例子、方法技巧。</item>
   ${themeInstruction}
 </instructions>
 <outputFormat>返回严格的 JSON 数组：[{"title":"string","quote":{"timestamp":"[MM:SS-MM:SS]","text":"原文引用"}}]</outputFormat>
@@ -285,19 +279,51 @@ function chunkTranscript(
  * 解析 AI 响应中的 JSON
  */
 function parseJsonResponse<T>(content: string): T | null {
+  console.log('[parseJsonResponse] 开始解析，内容长度:', content.length);
+  console.log('[parseJsonResponse] 原始内容:\n', content);
+  
   try {
     // 尝试直接解析
-    return JSON.parse(content);
-  } catch {
-    // 尝试提取 JSON 部分
-    const jsonMatch = content.match(/\[[\s\S]*\]/);
+    const direct = JSON.parse(content);
+    console.log('[parseJsonResponse] 直接解析成功');
+    return direct;
+  } catch (directError) {
+    console.log('[parseJsonResponse] 直接解析失败:', (directError as Error).message);
+    
+    // 尝试移除 markdown 代码块
+    let cleanContent = content;
+    
+    // 移除 ```json ... ``` 或 ``` ... ```
+    const codeBlockMatch = content.match(/```(?:json)?\s*([\s\S]*?)```/);
+    if (codeBlockMatch) {
+      cleanContent = codeBlockMatch[1].trim();
+      console.log('[parseJsonResponse] 移除代码块后:', cleanContent.slice(0, 200));
+      
+      try {
+        const parsed = JSON.parse(cleanContent);
+        console.log('[parseJsonResponse] 移除代码块后解析成功');
+        return parsed;
+      } catch (e) {
+        console.log('[parseJsonResponse] 移除代码块后解析失败:', (e as Error).message);
+      }
+    }
+    
+    // 尝试提取 JSON 数组部分
+    const jsonMatch = content.match(/\[[\s\S]*?\]/);
+    console.log('[parseJsonResponse] 正则匹配结果:', jsonMatch ? jsonMatch[0].slice(0, 200) : 'null');
+    
     if (jsonMatch) {
       try {
-        return JSON.parse(jsonMatch[0]);
-      } catch {
+        const parsed = JSON.parse(jsonMatch[0]);
+        console.log('[parseJsonResponse] 正则提取后解析成功');
+        return parsed;
+      } catch (regexError) {
+        console.log('[parseJsonResponse] 正则提取后解析失败:', (regexError as Error).message);
         return null;
       }
     }
+    
+    console.log('[parseJsonResponse] 无法提取 JSON，返回 null');
     return null;
   }
 }
@@ -737,12 +763,25 @@ export async function generateHighlightTopics(
     const prompt = buildSmartPrompt(segments, options);
     const messages: ChatMessage[] = [{ role: 'user', content: prompt }];
     
-    console.log('[highlightService] 调用 LLM...');
-    const response = await chat(messages, model, { temperature: 0.3, maxTokens: 4000 });
-    console.log('[highlightService] LLM 响应长度:', response.content.length);
+    console.log('[highlightService] ========== LLM 请求开始 ==========');
+    console.log('[highlightService] Prompt 长度:', prompt.length);
+    console.log('[highlightService] Prompt 前 500 字符:\n', prompt.slice(0, 500));
+    console.log('[highlightService] Prompt 后 500 字符:\n', prompt.slice(-500));
     
-    rawTopics = parseJsonResponse<RawTopic[]>(response.content) ?? [];
-    console.log('[highlightService] 解析得到', rawTopics.length, '个原始主题');
+    try {
+      const response = await chat(messages, model, { temperature: 0.3, maxTokens: 4000 });
+      console.log('[highlightService] ========== LLM 响应 ==========');
+      console.log('[highlightService] 响应长度:', response.content.length);
+      console.log('[highlightService] 完整响应内容:\n', response.content);
+      console.log('[highlightService] ========== 响应结束 ==========');
+      
+      rawTopics = parseJsonResponse<RawTopic[]>(response.content) ?? [];
+      console.log('[highlightService] JSON 解析结果:', JSON.stringify(rawTopics, null, 2));
+      console.log('[highlightService] 解析得到', rawTopics.length, '个原始主题');
+    } catch (llmError) {
+      console.error('[highlightService] LLM 调用失败:', llmError);
+      throw llmError;
+    }
   } 
   // Fast 模式：分块处理 + Map-Reduce
   else {
@@ -752,20 +791,29 @@ export async function generateHighlightTopics(
     
     // 并行处理每个块
     const chunkResults = await Promise.all(
-      chunks.map(async (chunk) => {
+      chunks.map(async (chunk, chunkIdx) => {
         const prompt = buildChunkPrompt(chunk, CHUNK_MAX_CANDIDATES, options.sessionInfo, options.theme);
         const messages: ChatMessage[] = [{ role: 'user', content: prompt }];
         
+        console.log(`[highlightService] ========== 块 ${chunkIdx} LLM 请求 ==========`);
+        console.log(`[highlightService] 块 ${chunkIdx} Prompt 长度:`, prompt.length);
+        
         try {
           const response = await chat(messages, FAST_MODEL, { temperature: 0.3, maxTokens: 1000 });
+          console.log(`[highlightService] ========== 块 ${chunkIdx} LLM 响应 ==========`);
+          console.log(`[highlightService] 块 ${chunkIdx} 响应长度:`, response.content.length);
+          console.log(`[highlightService] 块 ${chunkIdx} 响应内容:\n`, response.content);
+          
           const parsed = parseJsonResponse<RawTopic[]>(response.content);
+          console.log(`[highlightService] 块 ${chunkIdx} 解析结果:`, JSON.stringify(parsed, null, 2));
+          
           return (parsed ?? []).map(t => ({
             key: `${chunk.chunkIndex}-${t.title.slice(0, 10)}`,
             title: t.title,
             quote: t.quote!
           }));
         } catch (e) {
-          console.error('[highlightService] 块处理失败:', e);
+          console.error(`[highlightService] 块 ${chunkIdx} 处理失败:`, e);
           return [];
         }
       })
@@ -774,6 +822,7 @@ export async function generateHighlightTopics(
     // 去重并合并候选项
     candidates = dedupeCandidates(chunkResults.flat().filter(c => c.quote));
     console.log('[highlightService] 去重后候选项:', candidates.length);
+    console.log('[highlightService] 候选项详情:', JSON.stringify(candidates, null, 2));
     
     if (candidates.length > maxTopics) {
       // 使用 Reduce 筛选
@@ -806,13 +855,26 @@ export async function generateHighlightTopics(
   }
   
   console.log('[highlightService] 原始主题数:', rawTopics.length);
+  console.log('[highlightService] 原始主题详情:', JSON.stringify(rawTopics, null, 2));
   
   // 转换为 HighlightTopic 格式
   const now = new Date().toISOString();
+  
+  console.log('[highlightService] ========== 开始转换主题 ==========');
+  
   const topics: HighlightTopic[] = rawTopics
-    .filter(t => t.quote)
+    .filter(t => {
+      const hasQuote = !!t.quote;
+      console.log(`[highlightService] 主题 "${t.title}" 有 quote: ${hasQuote}`);
+      return hasQuote;
+    })
     .map((t, index) => {
+      console.log(`[highlightService] 处理主题 ${index}: "${t.title}"`);
+      console.log(`[highlightService] quote:`, JSON.stringify(t.quote));
+      
       const highlightSegments = findQuoteInTranscript(segments, t.quote!);
+      console.log(`[highlightService] 找到 ${highlightSegments.length} 个匹配片段`);
+      
       const duration = highlightSegments.length > 0 
         ? highlightSegments[0].end - highlightSegments[0].start 
         : 0;
@@ -829,10 +891,16 @@ export async function generateHighlightTopics(
         updatedAt: now
       };
     })
-    .filter(t => t.segments.length > 0)
+    .filter(t => {
+      const hasSegments = t.segments.length > 0;
+      console.log(`[highlightService] 主题 "${t.title}" 有 segments: ${hasSegments}`);
+      return hasSegments;
+    })
     .sort((a, b) => (a.segments[0]?.start ?? 0) - (b.segments[0]?.start ?? 0));
   
+  console.log('[highlightService] ========== 转换完成 ==========');
   console.log('[highlightService] 最终主题数:', topics.length);
+  console.log('[highlightService] 最终主题:', JSON.stringify(topics.map(t => ({ title: t.title, segmentsCount: t.segments.length })), null, 2));
   
   return {
     topics,

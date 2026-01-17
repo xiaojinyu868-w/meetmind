@@ -17,6 +17,15 @@ export default function RootLayout({
 }) {
   return (
     <html lang="zh-CN">
+      <head>
+        {/* 预加载 demo 音频文件，加速复习页面加载 */}
+        <link 
+          rel="preload" 
+          href="/demo-audio.mp3" 
+          as="audio" 
+          type="audio/mpeg"
+        />
+      </head>
       <body className={inter.className}>
         <AuthProvider>
           {children}
