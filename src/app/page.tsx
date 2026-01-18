@@ -479,11 +479,7 @@ export default function StudentApp() {
             endMs: s.endMs,
             confidence: s.confidence
           })),
-          mode,
-          sessionInfo: {
-            subject: '数学',
-            topic: '二次函数'
-          }
+          mode
         })
       });
       
@@ -523,8 +519,7 @@ export default function StudentApp() {
             endMs: s.endMs
           })),
           mode: 'smart',
-          theme,
-          sessionInfo: { subject: '数学' }
+          theme
         })
       });
       
@@ -555,11 +550,7 @@ export default function StudentApp() {
             text: s.text,
             startMs: s.startMs,
             endMs: s.endMs
-          })),
-          sessionInfo: {
-            subject: '数学',
-            topic: '二次函数'
-          }
+          }))
         })
       });
       
@@ -707,8 +698,8 @@ export default function StudentApp() {
       {/* 桌面端 Header - 移动端隐藏 */}
       {!isMobile && (
         <Header 
-          lessonTitle={viewMode === 'record' ? '课堂录音' : '二次函数的图像与性质'}
-          courseName="数学"
+          lessonTitle={viewMode === 'record' ? '课堂录音' : '课堂回顾'}
+          courseName=""
         />
       )}
 

@@ -103,7 +103,7 @@ export default function ParentApp() {
   const completionRate = report ? parentService.getCompletionRate(report) : 0;
 
   // 生成课堂摘要
-  const generateSummaryForSession = async (sessionId: string, segments: Array<{ text: string; startMs: number; endMs: number }>, subject: string) => {
+  const generateSummaryForSession = async (sessionId: string, segments: Array<{ text: string; startMs: number; endMs: number }>) => {
     setIsLoadingSummary(true);
     try {
       const response = await fetch('/api/generate-summary', {
@@ -112,7 +112,6 @@ export default function ParentApp() {
         body: JSON.stringify({
           sessionId,
           transcript: segments,
-          sessionInfo: { subject },
           format: 'structured'
         })
       });
@@ -314,7 +313,7 @@ export default function ParentApp() {
                           { text: '当 a 大于 0 时，抛物线开口向上', startMs: 60000, endMs: 85000 },
                           { text: '顶点坐标公式是 (-b/2a, (4ac-b²)/4a)', startMs: 110000, endMs: 150000 },
                           { text: '这个公式很重要，大家要记住', startMs: 150000, endMs: 170000 },
-                        ], '数学');
+                        ]);
                       }
                     }}
                     className="w-full flex items-center justify-between"

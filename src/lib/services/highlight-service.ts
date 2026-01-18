@@ -85,20 +85,6 @@ function formatTranscriptWithTimestamps(segments: TranscriptSegment[]): string {
 }
 
 /**
- * 构建课堂信息块
- */
-function buildSessionInfoBlock(sessionInfo?: GenerateTopicsOptions['sessionInfo']): string {
-  if (!sessionInfo) return '';
-  
-  const parts: string[] = [];
-  if (sessionInfo.subject) parts.push(`学科: ${sessionInfo.subject}`);
-  if (sessionInfo.topic) parts.push(`主题: ${sessionInfo.topic}`);
-  if (sessionInfo.teacher) parts.push(`教师: ${sessionInfo.teacher}`);
-  
-  return parts.length > 0 ? parts.join('\n') : '';
-}
-
-/**
  * 构建 Smart 模式 Prompt（单次全文处理）
  */
 function buildSmartPrompt(
@@ -171,7 +157,6 @@ ${transcriptText}
 function buildChunkPrompt(
   chunk: TranscriptChunk,
   maxCandidates: number,
-  sessionInfo?: GenerateTopicsOptions['sessionInfo'],
   theme?: string
 ): string {
   const transcriptText = formatTranscriptWithTimestamps(chunk.segments);
@@ -206,24 +191,20 @@ ${transcriptText}
  */
 function buildReducePrompt(
   candidates: TopicCandidate[],
-  maxTopics: number,
-  sessionInfo?: GenerateTopicsOptions['sessionInfo']
+  maxTopics: number
 ): string {
-  const sessionInfoBlock = buildSessionInfoBlock(sessionInfo);
-  
   const candidateBlock = candidates
     .map((c, i) => `${i + 1}. 标题: ${c.title}\n   时间: ${c.quote.timestamp}\n   引用: ${c.quote.text.slice(0, 100)}...`)
     .join('\n\n');
 
   return `<task>
-<role>你是一位资深教育编辑，正在为学生整理最终的课堂精华列表。</role>
+<role>你是一位内容编辑，负责整理最终的精华片段列表。</role>
 <context>
-${sessionInfoBlock}
-你有 ${candidates.length} 个候选知识点。
+你有 ${candidates.length} 个候选片段。
 </context>
 <goal>从中选择最优质、最有代表性的 ${maxTopics} 个片段。</goal>
 <instructions>
-  <item>选择最强、最独特的知识点。</item>
+  <item>选择最有价值、最独特的片段。</item>
   <item>如果两个候选内容重叠，保留更好的那个。</item>
   <item>可以优化标题使其更清晰，但必须保持原有的引用文本和时间戳。</item>
   <item>返回格式：[{"candidateIndex": 数字, "title": "优化后的标题"}]，索引从1开始。</item>
@@ -792,7 +773,7 @@ export async function generateHighlightTopics(
     // 并行处理每个块
     const chunkResults = await Promise.all(
       chunks.map(async (chunk, chunkIdx) => {
-        const prompt = buildChunkPrompt(chunk, CHUNK_MAX_CANDIDATES, options.sessionInfo, options.theme);
+        const prompt = buildChunkPrompt(chunk, CHUNK_MAX_CANDIDATES, options.theme);
         const messages: ChatMessage[] = [{ role: 'user', content: prompt }];
         
         console.log(`[highlightService] ========== 块 ${chunkIdx} LLM 请求 ==========`);
@@ -826,7 +807,7 @@ export async function generateHighlightTopics(
     
     if (candidates.length > maxTopics) {
       // 使用 Reduce 筛选
-      const reducePrompt = buildReducePrompt(candidates, maxTopics, options.sessionInfo);
+      const reducePrompt = buildReducePrompt(candidates, maxTopics);
       const reduceMessages: ChatMessage[] = [{ role: 'user', content: reducePrompt }];
       
       const reduceResponse = await chat(reduceMessages, model, { temperature: 0.2, maxTokens: 1000 });

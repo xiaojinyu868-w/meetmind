@@ -61,20 +61,6 @@ function formatTranscriptWithTimestamps(segments: TranscriptSegment[]): string {
 }
 
 /**
- * 构建课堂信息块
- */
-function buildSessionInfoBlock(sessionInfo?: GenerateSummaryOptions['sessionInfo']): string {
-  if (!sessionInfo) return '';
-  
-  const parts: string[] = [];
-  if (sessionInfo.subject) parts.push(`学科: ${sessionInfo.subject}`);
-  if (sessionInfo.topic) parts.push(`主题: ${sessionInfo.topic}`);
-  if (sessionInfo.teacher) parts.push(`教师: ${sessionInfo.teacher}`);
-  
-  return parts.length > 0 ? parts.join('\n') : '';
-}
-
-/**
  * 构建摘要生成 Prompt
  */
 function buildSummaryPrompt(
@@ -82,62 +68,53 @@ function buildSummaryPrompt(
   options: GenerateSummaryOptions
 ): string {
   const transcriptText = formatTranscriptWithTimestamps(segments);
-  const sessionInfoBlock = buildSessionInfoBlock(options.sessionInfo);
 
   return `<task>
-<role>你是一位资深教育专家，正在为家长整理今日课堂摘要。</role>
+<role>你是一位专业的内容分析专家，负责从录音转录中提取结构化摘要。</role>
 <context>
-${sessionInfoBlock}
-这是一段课堂录音的完整转录文本。
+这是一段录音的完整转录文本。请根据实际内容自行判断主题和类型。
 </context>
-<goal>生成一份结构化的课堂摘要，帮助家长快速了解"今天讲了什么"。</goal>
+<goal>生成一份结构化摘要，帮助用户快速了解录音的核心内容。</goal>
 <instructions>
-  <step name="课堂概要">
-    <description>用2-3句话概括本节课的主要内容和教学目标。</description>
+  <step name="内容概要">
+    <description>用2-3句话概括录音的主要内容。</description>
   </step>
-  <step name="主要知识点">
-    <description>提取 ${MIN_TAKEAWAYS}-${MAX_TAKEAWAYS} 个核心知识点。</description>
+  <step name="主要要点">
+    <description>提取 ${MIN_TAKEAWAYS}-${MAX_TAKEAWAYS} 个核心要点。</description>
     <format>
-      <item>label: 知识点标题（不超过10个字）</item>
+      <item>label: 要点标题（不超过10个字）</item>
       <item>insight: 简明扼要的说明（1-2句话）</item>
       <item>timestamps: 相关时间戳（1-2个，MM:SS格式）</item>
     </format>
     <criteria>
       <item>只使用转录中明确提到的内容，不要推测</item>
-      <item>每个知识点应该独立，不重叠</item>
-      <item>优先选择老师重点强调的内容</item>
+      <item>每个要点应该独立，不重叠</item>
     </criteria>
   </step>
   <step name="重点难点">
-    <description>列出2-4个本节课的重点或难点。</description>
-    <criteria>
-      <item>老师反复强调的内容</item>
-      <item>学生可能容易混淆的概念</item>
-      <item>需要课后复习巩固的内容</item>
-    </criteria>
+    <description>列出2-4个重点或需要关注的内容。</description>
   </step>
-  <step name="课堂结构">
-    <description>简要描述课堂的主要环节（3-5个）。</description>
-    <example>["导入新课", "概念讲解", "例题分析", "课堂练习", "总结回顾"]</example>
+  <step name="内容结构">
+    <description>简要描述内容的主要环节（3-5个）。</description>
   </step>
 </instructions>
 <qualityControl>
-  <item>语言简洁明了，适合家长阅读</item>
+  <item>语言简洁明了</item>
   <item>所有内容必须基于转录文本，不能编造</item>
   <item>时间戳必须准确对应转录内容</item>
 </qualityControl>
 <outputFormat>
 返回严格的 JSON 对象，格式如下：
 {
-  "overview": "课堂概要文本",
+  "overview": "内容概要文本",
   "takeaways": [
     {
-      "label": "知识点标题",
+      "label": "要点标题",
       "insight": "简明说明",
       "timestamps": ["MM:SS"]
     }
   ],
-  "keyDifficulties": ["难点1", "难点2"],
+  "keyDifficulties": ["重点1", "重点2"],
   "structure": ["环节1", "环节2", "环节3"]
 }
 不要包含任何 markdown 标记或其他说明文字。
@@ -156,19 +133,17 @@ function buildParentFriendlyPrompt(
   options: GenerateSummaryOptions
 ): string {
   const transcriptText = formatTranscriptWithTimestamps(segments);
-  const sessionInfoBlock = buildSessionInfoBlock(options.sessionInfo);
 
   return `<task>
-<role>你是一位善于与家长沟通的班主任老师。</role>
+<role>你是一位善于总结的内容分析师。</role>
 <context>
-${sessionInfoBlock}
+这是一段录音的转录文本。
 </context>
-<goal>用家长能理解的语言，总结今天的课堂内容。</goal>
+<goal>用简洁易懂的语言，总结这段录音的核心内容。</goal>
 <instructions>
   <item>避免使用过于专业的术语</item>
-  <item>重点说明孩子学到了什么、需要注意什么</item>
-  <item>如果有作业或复习建议，也要提及</item>
-  <item>语气亲切、专业</item>
+  <item>重点说明核心内容和要点</item>
+  <item>语气专业、清晰</item>
 </instructions>
 <outputFormat>
 返回一段200-300字的文字摘要，可以分段。
