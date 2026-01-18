@@ -4,9 +4,14 @@
  * 生成家长日报和陪学脚本
  */
 
-import type { Anchor } from './anchor-service';
+import type { Anchor } from '@/types';
 import type { ClassTimeline, TimelineSegment } from './memory-service';
 import { chat } from './llm-service';
+import { FeatureConfig } from '@/lib/config';
+import { formatTimestamp } from '@/lib/utils';
+
+// 从配置读取困惑点估时
+const CONFUSION_ESTIMATE_MINUTES = FeatureConfig.parent.confusionEstimateMinutes;
 
 export interface ConfusionPoint {
   id: string;
@@ -79,7 +84,7 @@ export const parentService = {
       return {
         id: anchor.id,
         subject: timeline.subject,
-        time: this.formatTime(anchor.timestamp),
+        time: formatTimestamp(anchor.timestamp),
         timestamp: anchor.timestamp,
         summary: segment?.text.slice(0, 50) + '...' || '课堂内容',
         teacherQuote: segment?.text || '',
@@ -92,8 +97,8 @@ export const parentService = {
     // 未解决的困惑点数量
     const unresolvedCount = allAnchors.filter(({ anchor }) => !anchor.resolved).length;
     
-    // 估算陪学时间（只计算未解决的，每个约 7 分钟）
-    const estimatedMinutes = unresolvedCount * 7;
+    // 估算陪学时间（只计算未解决的）
+    const estimatedMinutes = unresolvedCount * CONFUSION_ESTIMATE_MINUTES;
 
     // 生成陪学脚本（只针对未解决的）
     const unresolvedPoints = confusionPoints.filter(p => !p.isResolved);
@@ -205,16 +210,6 @@ ${i + 1}. ${p.subject} - ${p.time}
 - 提醒明天课堂继续用 MeetMind
 
 💪 加油！${subjects.join('、')}都是可以攻克的！`;
-  },
-
-  /**
-   * 格式化时间
-   */
-  formatTime(ms: number): string {
-    const seconds = Math.floor(ms / 1000);
-    const minutes = Math.floor(seconds / 60);
-    const pad = (n: number) => n.toString().padStart(2, '0');
-    return `${pad(minutes)}:${pad(seconds % 60)}`;
   },
 
   /**

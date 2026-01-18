@@ -16,6 +16,7 @@
 - [产品愿景](#-产品愿景)
 - [核心痛点](#-核心痛点)
 - [快速开始](#-快速开始)
+- [技术架构](#-技术架构)
 - [三端视图](#-三端视图)
 - [已完成功能](#-已完成功能)
 - [关键差异化](#-关键差异化)
@@ -74,7 +75,7 @@
 
 - Node.js >= 18.0
 - npm >= 9.0
-- 阿里云百炼 API Key
+- 阿里云百炼 API Key（[获取地址](https://bailian.console.aliyun.com/)）
 
 ### 安装步骤
 
@@ -93,24 +94,27 @@ cp .env.example .env
 # 4. 启动开发服务器（含 WebSocket 代理）
 npm run dev
 
-# 或者仅启动 Next.js（不含 WebSocket）
+# 或者仅启动 Next.js（不含 WebSocket 实时转录）
 npm run dev:next
 ```
 
 ### 访问应用
 
-- **学生端**: http://localhost:3001
-- **家长端**: http://localhost:3001/parent  
-- **教师端**: http://localhost:3001/teacher
+| 端口 | 地址 | 说明 |
+|------|------|------|
+| 3001 | http://localhost:3001 | 学生端（录音/复习） |
+| 3001 | http://localhost:3001/parent | 家长端（日报/陪学脚本） |
+| 3001 | http://localhost:3001/teacher | 教师端（困惑热点/教学反思） |
 
 ### 可用命令
 
 | 命令 | 说明 |
 |------|------|
-| `npm run dev` | 开发模式（含 WebSocket 代理） |
+| `npm run dev` | 开发模式（含 WebSocket ASR 代理） |
 | `npm run dev:next` | 仅启动 Next.js（端口 3001） |
 | `npm run build` | 生产构建 |
 | `npm run start` | 生产运行 |
+| `npm run lint` | ESLint 代码检查 |
 
 ### 环境变量配置
 
@@ -126,13 +130,97 @@ LLM_BASE_URL=https://dashscope.aliyuncs.com/compatible-mode/v1
 DASHSCOPE_ASR_WS_MODEL=qwen3-asr-flash-realtime
 DASHSCOPE_ASR_WS_SR=16000
 
+# 离线语音转录配置（云服务器部署时需要配置公网访问）
+PUBLIC_HOST=your-server-ip:3001
+PUBLIC_PROTOCOL=http
+
 # ===== 可选：其他 LLM 提供商 =====
 # GOOGLE_API_KEY=your-google-api-key
 # OPENAI_API_KEY=your-openai-api-key
 
+# ===== 可选：认证配置 =====
+# JWT_SECRET=your-jwt-secret-change-in-production
+# JWT_EXPIRES_IN=7200
+# JWT_REFRESH_EXPIRES_IN=604800
+
 # ===== 可选：外部服务 =====
 # NEXT_PUBLIC_NOTEBOOK_API=http://localhost:5055
 # ENABLE_NOTEBOOK=true
+```
+
+---
+
+## 🏗️ 技术架构
+
+### 技术栈
+
+| 类别 | 技术 | 版本 |
+|------|------|------|
+| **框架** | Next.js (App Router) | ^14.2.0 |
+| **语言** | TypeScript | ^5.3.0 |
+| **样式** | Tailwind CSS | ^3.4.0 |
+| **状态管理** | Zustand | ^4.5.0 |
+| **本地存储** | Dexie (IndexedDB) | ^4.2.1 |
+| **AI SDK** | Vercel AI SDK | ^6.0.11 |
+| **音频处理** | wavesurfer.js | ^7.12.1 |
+| **音频转换** | fluent-ffmpeg | ^2.1.3 |
+| **可视化** | @nivo/heatmap | ^0.99.0 |
+| **网络** | ws, axios, swr | latest |
+
+### 项目结构
+
+```
+meetmind/
+├── server.js                    # 自定义服务器 (WebSocket ASR 代理 + Next.js)
+├── package.json                 # 项目依赖
+├── .env.example                 # 环境变量示例
+│
+├── src/
+│   ├── app/                     # Next.js App Router 页面
+│   │   ├── page.tsx             # 学生端首页 (录音/复习)
+│   │   ├── parent/page.tsx      # 家长端
+│   │   ├── teacher/page.tsx     # 教师端
+│   │   └── api/                 # API 路由
+│   │
+│   ├── components/              # React 组件
+│   │   ├── ui/                  # 基础 UI 组件 (shadcn/ui)
+│   │   ├── mobile/              # 移动端组件
+│   │   ├── teacher/             # 教师端组件
+│   │   └── business/            # 业务组件
+│   │
+│   ├── hooks/                   # 自定义 Hooks
+│   │   ├── useAnchors.ts        # 困惑点管理
+│   │   ├── useAudio.ts          # 音频播放控制
+│   │   ├── useRecording.ts      # 录音状态管理
+│   │   └── useTranscript.ts     # 转录数据管理
+│   │
+│   ├── lib/
+│   │   ├── config/              # 统一配置管理
+│   │   │   └── app.config.ts    # 应用配置 (LLM/Auth/ASR/Feature/UI)
+│   │   ├── services/            # 服务层
+│   │   │   ├── llm-service.ts   # LLM 调用封装
+│   │   │   ├── tutor-service.ts # AI 家教服务
+│   │   │   ├── highlight-service.ts # 精选片段生成
+│   │   │   └── ...              # 其他服务
+│   │   ├── utils/               # 工具函数
+│   │   │   ├── time-utils.ts    # 时间处理
+│   │   │   ├── json-utils.ts    # JSON 解析
+│   │   │   └── transcript-utils.ts # 转录文本处理
+│   │   └── db.ts                # IndexedDB 数据库 (Dexie)
+│   │
+│   ├── types/                   # TypeScript 类型定义
+│   │   ├── index.ts             # 核心业务类型
+│   │   └── user.ts              # 用户/认证类型
+│   │
+│   └── fixtures/                # 演示数据
+│       └── demo-data.ts         # 统一演示数据源
+│
+└── 项目开发文档/                 # 开发文档
+    ├── 项目结构.md
+    ├── 技术架构.md
+    ├── API接口文档.md
+    ├── 开发路线图.md
+    └── 家长端升级规划v2.0.md
 ```
 
 ---
@@ -183,7 +271,7 @@ DASHSCOPE_ASR_WS_SR=16000
 
 | 模块 | 状态 | 说明 |
 |------|:----:|------|
-| 录音转录 | ✅ | 实时流式 + 批处理高精度双模式 |
+| 录音转录 | ✅ | 实时流式 + 离线异步双模式（阿里云 ASR） |
 | 困惑标记 | ✅ | 一键标记、时间戳关联、5秒可撤销 |
 | 课堂时间轴 | ✅ | 自动分段、锚点关联、主题提取 |
 | AI 家教对话 | ✅ | 选择题精准定位困惑、可点击时间戳跳转 |
@@ -192,8 +280,30 @@ DASHSCOPE_ASR_WS_SR=16000
 | 家长端 | ✅ | 今日概览、困惑列表、陪学脚本 |
 | 教师端 | ✅ | 困惑热点 TOP3、AI 流式生成课后反思、数据同步 |
 | 多模型支持 | ✅ | 通义千问/Gemini/OpenAI 可切换 |
+| 配置管理 | ✅ | 统一配置中心，支持环境变量覆盖 |
+| 类型安全 | ✅ | 完整 TypeScript 类型定义，DB/应用层类型分离 |
 
 ### 最新更新
+
+#### v1.7 - 离线转录架构升级
+
+| 功能 | 描述 |
+|------|------|
+| **阿里云异步 ASR** | 替换 OpenAI Whisper，使用 `qwen3-asr-flash-filetrans` 异步模式 |
+| **长音频支持** | 支持整节课（40-90分钟）音频完整转录，保留完整上下文 |
+| **公网 URL 机制** | 音频保存到 `public/temp-audio/`，通过公网 URL 供阿里云访问 |
+| **自动清理** | 临时音频文件 2 小时后自动清理 |
+
+#### v1.6 - 代码重构与架构优化
+
+| 功能 | 描述 |
+|------|------|
+| **配置集中化** | 新增 `app.config.ts` 统一管理 LLM/Auth/ASR/Feature/UI/Dev 配置，敏感信息移至环境变量 |
+| **工具函数模块化** | 消除 4 处重复的 `formatTimestamp`，拆分为 `time-utils`、`json-utils`、`transcript-utils` 三个独立模块 |
+| **类型系统优化** | 区分 DB 层类型（`DBAnchor`、`DBTranscriptSegment`，id 为 number）和应用层类型（id 为 string），添加 `dbToTranscriptSegment` 转换函数 |
+| **Hooks 提取** | 从 page.tsx 抽离 4 个业务 Hooks：`useAnchors`（困惑点管理）、`useAudio`（音频控制）、`useRecording`（录音状态）、`useTranscript`（转录数据） |
+| **服务层规范化** | 6 个服务文件统一风格，使用统一工具函数，补齐 `updateAnchorStatus` 等缺失方法 |
+| **页面精简** | 移除硬编码学科名称，改用 `UIConfig.defaultSubject`；Header 数据使用配置驱动 |
 
 #### v1.5 - 移动端体验优化
 
@@ -202,7 +312,6 @@ DASHSCOPE_ASR_WS_SR=16000
 | **移动端 AI 对话优化** | AI 助教页面添加 MiniPlayer 进度条，点击时间戳可同步查看播放进度 |
 | **紧凑布局重构** | 移动端头部采用垂直紧凑布局，隐藏联网搜索和 token 显示等冗余信息 |
 | **ModelSelector 改进** | 新增 `compact` 属性支持紧凑模式，移动端显示更简洁 |
-| **精选功能模型修复** | 将过时的 `qwen-turbo` 模型更换为 `qwen3-max`，修复"未知模型"错误 |
 
 #### v1.4 - WebSocket 代理架构升级
 
@@ -215,16 +324,7 @@ DASHSCOPE_ASR_WS_SR=16000
 | 功能 | 描述 |
 |------|------|
 | **统一演示数据源** | 学生端和教师端使用相同的 `demo-data.ts` 数据源，确保显示一致 |
-| **演示数据升级** | 从二次函数数学课程改为英语听力课程（Australia's Moving Experience） |
 | **数据流打通** | 教师端可正确读取学生端的转录内容和困惑点标记 |
-
-#### v1.2 - 教师端全新升级
-
-| 功能 | 描述 |
-|------|------|
-| **困惑热点 TOP3 卡片** | 金/银/铜排名徽章、热度指示条、可展开学生列表 |
-| **AI 流式生成课后反思** | 接入通义千问，实时流式输出教学反思报告 |
-| **学术精致风 UI** | 深蓝靛色主调、暖金色点缀、玻璃态效果 |
 
 ---
 
@@ -280,6 +380,7 @@ DASHSCOPE_ASR_WS_SR=16000
 - 遵循 ESLint 规则
 - 组件使用函数式写法 + Hooks
 - 服务层使用单例模式
+- 配置项统一放置在 `app.config.ts`
 
 ### 提交规范
 

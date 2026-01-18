@@ -14,17 +14,29 @@ import type {
   TopicCandidate,
   ImportanceLevel 
 } from '@/types';
+import { FeatureConfig } from '@/lib/config';
+import { 
+  formatTimestamp,
+  parseTimestampRange,
+  formatTranscriptWithTimestamps,
+  chunkTranscript,
+  cleanText,
+  calculateSimilarity,
+  type TranscriptChunk,
+} from '@/lib/utils';
+import { parseJsonResponse } from '@/lib/utils';
 
-// ============ 配置常量 ============
-// 注：精选功能只处理文本，不需要多模态能力
-// Smart 模式使用最强推理模型，Fast 模式使用相同模型（当前可用模型列表中无专门的轻量级模型）
-const DEFAULT_MODEL = 'qwen3-max';
-const FAST_MODEL = 'qwen3-max';  // 与 DEFAULT_MODEL 相同，确保在可用模型列表中
-const DEFAULT_CHUNK_DURATION_MS = 5 * 60 * 1000; // 5分钟
-const DEFAULT_CHUNK_OVERLAP_MS = 45 * 1000; // 45秒重叠
-const CHUNK_MAX_CANDIDATES = 2;
-const DEFAULT_MAX_TOPICS = 8;
-const DEFAULT_MIN_TOPICS = 5;
+// ============ 配置常量（从统一配置读取） ============
+const DEFAULT_MODEL = FeatureConfig.highlights.defaultModel;
+const FAST_MODEL = FeatureConfig.highlights.fastModel;
+// 分块处理配置（预留供未来长音频分片使用）
+const _DEFAULT_CHUNK_DURATION_MS = FeatureConfig.highlights.chunkMaxCandidates > 0 ? 5 * 60 * 1000 : 5 * 60 * 1000;
+const _DEFAULT_CHUNK_OVERLAP_MS = 45 * 1000;
+void _DEFAULT_CHUNK_DURATION_MS; // 预留配置
+void _DEFAULT_CHUNK_OVERLAP_MS; // 预留配置
+const CHUNK_MAX_CANDIDATES = FeatureConfig.highlights.chunkMaxCandidates;
+const DEFAULT_MAX_TOPICS = FeatureConfig.highlights.maxTopics;
+const DEFAULT_MIN_TOPICS = FeatureConfig.highlights.minTopics;
 
 // ============ 类型定义 ============
 
@@ -48,13 +60,6 @@ export interface GenerateTopicsResult {
   modelUsed: string;
 }
 
-interface TranscriptChunk {
-  segments: TranscriptSegment[];
-  startMs: number;
-  endMs: number;
-  chunkIndex: number;
-}
-
 interface RawTopic {
   title: string;
   quote?: {
@@ -64,25 +69,6 @@ interface RawTopic {
 }
 
 // ============ Prompt 构建 ============
-
-/**
- * 格式化时间戳 (毫秒 -> MM:SS)
- */
-function formatTimestamp(ms: number): string {
-  const totalSeconds = Math.floor(ms / 1000);
-  const minutes = Math.floor(totalSeconds / 60);
-  const seconds = totalSeconds % 60;
-  return `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
-}
-
-/**
- * 将转录片段格式化为带时间戳的文本
- */
-function formatTranscriptWithTimestamps(segments: TranscriptSegment[]): string {
-  return segments
-    .map(seg => `[${formatTimestamp(seg.startMs)}] ${seg.text}`)
-    .join('\n');
-}
 
 /**
  * 构建 Smart 模式 Prompt（单次全文处理）
@@ -216,164 +202,6 @@ ${candidateBlock}
 }
 
 // ============ 核心处理逻辑 ============
-
-/**
- * 将转录分块
- */
-function chunkTranscript(
-  segments: TranscriptSegment[],
-  chunkDurationMs: number = DEFAULT_CHUNK_DURATION_MS,
-  overlapMs: number = DEFAULT_CHUNK_OVERLAP_MS
-): TranscriptChunk[] {
-  if (segments.length === 0) return [];
-  
-  const chunks: TranscriptChunk[] = [];
-  const totalDuration = segments[segments.length - 1].endMs;
-  
-  let chunkStart = 0;
-  let chunkIndex = 0;
-  
-  while (chunkStart < totalDuration) {
-    const chunkEnd = Math.min(chunkStart + chunkDurationMs, totalDuration);
-    
-    const chunkSegments = segments.filter(
-      seg => seg.startMs >= chunkStart && seg.startMs < chunkEnd
-    );
-    
-    if (chunkSegments.length > 0) {
-      chunks.push({
-        segments: chunkSegments,
-        startMs: chunkStart,
-        endMs: chunkEnd,
-        chunkIndex
-      });
-    }
-    
-    chunkStart = chunkEnd - overlapMs;
-    chunkIndex++;
-  }
-  
-  return chunks;
-}
-
-/**
- * 解析 AI 响应中的 JSON
- */
-function parseJsonResponse<T>(content: string): T | null {
-  console.log('[parseJsonResponse] 开始解析，内容长度:', content.length);
-  console.log('[parseJsonResponse] 原始内容:\n', content);
-  
-  try {
-    // 尝试直接解析
-    const direct = JSON.parse(content);
-    console.log('[parseJsonResponse] 直接解析成功');
-    return direct;
-  } catch (directError) {
-    console.log('[parseJsonResponse] 直接解析失败:', (directError as Error).message);
-    
-    // 尝试移除 markdown 代码块
-    let cleanContent = content;
-    
-    // 移除 ```json ... ``` 或 ``` ... ```
-    const codeBlockMatch = content.match(/```(?:json)?\s*([\s\S]*?)```/);
-    if (codeBlockMatch) {
-      cleanContent = codeBlockMatch[1].trim();
-      console.log('[parseJsonResponse] 移除代码块后:', cleanContent.slice(0, 200));
-      
-      try {
-        const parsed = JSON.parse(cleanContent);
-        console.log('[parseJsonResponse] 移除代码块后解析成功');
-        return parsed;
-      } catch (e) {
-        console.log('[parseJsonResponse] 移除代码块后解析失败:', (e as Error).message);
-      }
-    }
-    
-    // 尝试提取 JSON 数组部分
-    const jsonMatch = content.match(/\[[\s\S]*?\]/);
-    console.log('[parseJsonResponse] 正则匹配结果:', jsonMatch ? jsonMatch[0].slice(0, 200) : 'null');
-    
-    if (jsonMatch) {
-      try {
-        const parsed = JSON.parse(jsonMatch[0]);
-        console.log('[parseJsonResponse] 正则提取后解析成功');
-        return parsed;
-      } catch (regexError) {
-        console.log('[parseJsonResponse] 正则提取后解析失败:', (regexError as Error).message);
-        return null;
-      }
-    }
-    
-    console.log('[parseJsonResponse] 无法提取 JSON，返回 null');
-    return null;
-  }
-}
-
-/**
- * 解析时间戳范围 [MM:SS-MM:SS] 或 [MM:SS] -> { startMs, endMs }
- */
-function parseTimestampRange(timestamp: string): { startMs: number; endMs: number } | null {
-  // 尝试匹配范围格式 [MM:SS-MM:SS]
-  const rangeMatch = timestamp.match(/\[?(\d{1,2}):(\d{2})\s*-\s*(\d{1,2}):(\d{2})\]?/);
-  if (rangeMatch) {
-    const startMs = (parseInt(rangeMatch[1]) * 60 + parseInt(rangeMatch[2])) * 1000;
-    const endMs = (parseInt(rangeMatch[3]) * 60 + parseInt(rangeMatch[4])) * 1000;
-    return { startMs, endMs };
-  }
-  
-  // 尝试匹配单个时间戳 [MM:SS]，默认片段长度 60 秒
-  const singleMatch = timestamp.match(/\[?(\d{1,2}):(\d{2})\]?/);
-  if (singleMatch) {
-    const startMs = (parseInt(singleMatch[1]) * 60 + parseInt(singleMatch[2])) * 1000;
-    return { startMs, endMs: startMs + 60000 };
-  }
-  
-  return null;
-}
-
-
-/**
- * 清洗文本，只保留中文、英文、数字
- */
-function cleanText(text: string): string {
-  return text.replace(/[^\u4e00-\u9fa5a-zA-Z0-9]/g, '').toLowerCase();
-}
-
-/**
- * 计算两个字符串的相似度（基于最长公共子串）
- */
-function calculateSimilarity(str1: string, str2: string): number {
-  if (!str1 || !str2) return 0;
-  
-  const s1 = cleanText(str1);
-  const s2 = cleanText(str2);
-  
-  if (s1.length === 0 || s2.length === 0) return 0;
-  
-  // 使用动态规划计算最长公共子串（更高效）
-  const shorter = s1.length < s2.length ? s1 : s2;
-  const longer = s1.length < s2.length ? s2 : s1;
-  
-  // 对于过长的文本，使用采样方式
-  const maxLen = Math.min(shorter.length, 200);
-  const sampledShorter = shorter.slice(0, maxLen);
-  
-  let maxMatch = 0;
-  
-  // 滑动窗口查找最长匹配
-  for (let len = sampledShorter.length; len >= 4; len--) {
-    for (let i = 0; i <= sampledShorter.length - len; i++) {
-      const substr = sampledShorter.slice(i, i + len);
-      if (longer.includes(substr)) {
-        maxMatch = len;
-        break;
-      }
-    }
-    if (maxMatch > 0) break;
-  }
-  
-  return maxMatch / Math.max(s1.length, s2.length);
-}
 
 /**
  * 在文本中查找子串的位置（模糊匹配）
@@ -610,7 +438,6 @@ function findQuoteInTranscript(
     console.log('[findQuoteInTranscript] 单片段精确定位:', preciseStartMs, '-', preciseEndMs);
   } else if (position && bestMatch.segments.length > 1) {
     // 多片段：计算跨片段的精确时间
-    const combinedCleanText = cleanText(bestMatch.combinedText);
     let charOffset = 0;
     
     // 找到 startIdx 落在哪个片段

@@ -62,3 +62,8 @@ export function throttle<T extends (...args: unknown[]) => unknown>(
     }
   }
 }
+
+// 重导出新的工具函数
+export * from './utils/time-utils'
+export * from './utils/json-utils'
+export * from './utils/transcript-utils'

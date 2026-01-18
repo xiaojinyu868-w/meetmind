@@ -23,7 +23,39 @@ export interface Anchor {
   cancelled: boolean;
   resolved: boolean;
   createdAt: string;
+  resolvedAt?: string;  // 解决时间
   note?: string;
+}
+
+/**
+ * 数据库层 Anchor（兼容 db.ts 的自增 ID）
+ */
+export interface DBAnchor {
+  id?: number;
+  sessionId: string;
+  timestamp: number;
+  type: AnchorType;
+  status: 'active' | 'resolved';
+  note?: string;
+  aiExplanation?: string;
+  createdAt: Date;
+  resolvedAt?: Date;
+}
+
+/**
+ * 困惑点状态
+ */
+export type AnchorStatus = 'active' | 'cancelled' | 'resolved';
+
+/**
+ * 学生困惑点记录（扩展版本，用于教师端）
+ */
+export interface StudentAnchor extends Anchor {
+  studentName: string;           // 学生昵称
+  status: AnchorStatus;          // 状态
+  aiExplanation?: string;        // AI 解释内容
+  transcriptContext?: string;    // 关联的转录文本上下文
+  updatedAt: string;             // 更新时间
 }
 
 /**
@@ -41,7 +73,7 @@ export interface Breakpoint {
 }
 
 /**
- * 转录片段
+ * 转录片段（应用层使用）
  */
 export interface TranscriptSegment {
   id: string;
@@ -51,6 +83,35 @@ export interface TranscriptSegment {
   confidence: number;
   speakerId?: string;
   isFinal?: boolean;
+}
+
+/**
+ * 数据库层转录片段（兼容 db.ts 的自增 ID）
+ */
+export interface DBTranscriptSegment {
+  id?: number;
+  sessionId: string;
+  text: string;
+  startMs: number;
+  endMs: number;
+  speakerId?: string;
+  confidence: number;
+  isFinal: boolean;
+}
+
+/**
+ * 转换 DB 层转录片段到应用层
+ */
+export function dbToTranscriptSegment(dbSeg: DBTranscriptSegment): TranscriptSegment {
+  return {
+    id: String(dbSeg.id ?? ''),
+    text: dbSeg.text,
+    startMs: dbSeg.startMs,
+    endMs: dbSeg.endMs,
+    confidence: dbSeg.confidence,
+    speakerId: dbSeg.speakerId,
+    isFinal: dbSeg.isFinal,
+  };
 }
 
 /**

@@ -4,20 +4,10 @@
  * 管理学生在课堂中标记的困惑点
  */
 
-export type AnchorType = 'confusion' | 'important' | 'question';
+import type { Anchor, AnchorType } from '@/types';
 
-export interface Anchor {
-  id: string;
-  sessionId: string;
-  studentId: string;
-  timestamp: number;  // 课堂时间戳（毫秒）
-  type: AnchorType;
-  cancelled: boolean;
-  resolved: boolean;
-  createdAt: string;
-  resolvedAt?: string;  // v2.0: 解决时间
-  note?: string;
-}
+// 重导出类型以保持向后兼容
+export type { Anchor, AnchorType } from '@/types';
 
 // 本地存储 key
 const STORAGE_KEY = 'meetmind_anchors';

@@ -23,13 +23,27 @@ import type {
   AuthResponse,
   UserProfile,
 } from '@/types/user';
+import { AuthConfig } from '@/lib/config';
 
-// ==================== 配置 ====================
+// ==================== 配置（从统一配置读取） ====================
 
-const JWT_SECRET = process.env.JWT_SECRET || 'meetmind-jwt-secret-change-in-production';
-const JWT_EXPIRES_IN = 60 * 60 * 2; // 2小时
-const REFRESH_TOKEN_EXPIRES_IN = 60 * 60 * 24 * 7; // 7天
-const SALT_ROUNDS = 16;
+const JWT_SECRET = AuthConfig.jwt.secret;
+const JWT_EXPIRES_IN = AuthConfig.jwt.expiresIn;
+const REFRESH_TOKEN_EXPIRES_IN = AuthConfig.jwt.refreshExpiresIn;
+const SALT_ROUNDS = AuthConfig.password.saltRounds;
+
+// 登录限流配置
+const MAX_LOGIN_ATTEMPTS = AuthConfig.rateLimit.maxAttempts;
+const LOCK_DURATION = AuthConfig.rateLimit.lockDurationMs;
+const ATTEMPT_WINDOW = AuthConfig.rateLimit.attemptWindowMs;
+
+// CSRF Token 配置
+const CSRF_TOKEN_EXPIRES = AuthConfig.csrf.tokenExpiresMs;
+
+// 检查配置有效性
+if (!JWT_SECRET) {
+  console.warn('[AuthService] 警告: JWT_SECRET 未配置，请在环境变量中设置');
+}
 
 // ==================== 内存存储（生产环境应使用数据库） ====================
 
@@ -39,28 +53,46 @@ const refreshTokens = new Map<string, { userId: string; expiresAt: number }>();
 
 // 登录失败限流记录
 const loginAttempts = new Map<string, { count: number; firstAttempt: number; lockedUntil?: number }>();
-const MAX_LOGIN_ATTEMPTS = 5;
-const LOCK_DURATION = 15 * 60 * 1000; // 15分钟锁定
-const ATTEMPT_WINDOW = 10 * 60 * 1000; // 10分钟窗口期
 
 // CSRF Token 存储
 const csrfTokens = new Map<string, { userId?: string; createdAt: number }>();
-const CSRF_TOKEN_EXPIRES = 60 * 60 * 1000; // 1小时过期
 
-// 初始化管理员账户
-const adminId = 'admin-001';
-users.set(adminId, {
-  id: adminId,
-  username: 'admin',
-  nickname: '管理员',
-  role: 'admin',
-  status: 'active',
-  passwordHash: hashPassword('admin123', 'admin-salt').hash,
-  salt: 'admin-salt',
-  authProviders: [],
-  createdAt: new Date().toISOString(),
-  updatedAt: new Date().toISOString(),
-});
+// 初始化管理员账户（仅当环境变量配置时）
+function initializeAdminAccount(): void {
+  const adminUsername = AuthConfig.admin.username;
+  const adminPassword = AuthConfig.admin.password;
+  
+  if (adminUsername && adminPassword) {
+    const adminId = 'admin-001';
+    const { hash, salt } = hashPassword(adminPassword);
+    
+    users.set(adminId, {
+      id: adminId,
+      username: adminUsername,
+      nickname: '管理员',
+      role: 'admin',
+      status: 'active',
+      passwordHash: hash,
+      salt: salt,
+      authProviders: [],
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    });
+    
+    console.log('[AuthService] 管理员账户已初始化');
+  } else {
+    console.warn('[AuthService] 未配置管理员账户，请设置 ADMIN_USERNAME 和 ADMIN_PASSWORD 环境变量');
+  }
+}
+
+// 延迟初始化管理员账户
+let adminInitialized = false;
+function ensureAdminInitialized(): void {
+  if (!adminInitialized) {
+    initializeAdminAccount();
+    adminInitialized = true;
+  }
+}
 
 // ==================== 密码处理 ====================
 
@@ -431,6 +463,9 @@ export const authService = {
    * 用户登录
    */
   async login(request: LoginRequest): Promise<AuthResponse> {
+    // 确保管理员账户已初始化
+    ensureAdminInitialized();
+    
     const { username, password } = request;
     
     // 检查登录限流

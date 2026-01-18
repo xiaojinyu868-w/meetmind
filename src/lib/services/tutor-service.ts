@@ -12,6 +12,8 @@ import {
   type TranscriptSegment as LongCutSegment,
 } from '@/lib/longcut';
 import type { TranscriptSegment } from '@/types';
+import { FeatureConfig } from '@/lib/config';
+import { formatTimestamp, getContextAroundTimestamp, formatTranscriptWithTimestamps } from '@/lib/utils';
 
 // 匹配结果类型
 interface QuoteMatchResult {
@@ -48,6 +50,10 @@ export interface TutorResponse {
   /** 引用时间戳 */
   quoteTimestamps?: number[];
 }
+
+// 从配置读取上下文时间范围
+const CONTEXT_BEFORE_MS = FeatureConfig.tutor.contextBeforeMs;
+const CONTEXT_AFTER_MS = FeatureConfig.tutor.contextAfterMs;
 
 /**
  * AI 家教服务类
@@ -89,31 +95,15 @@ export class TutorService {
   /**
    * 获取困惑点周围的上下文
    */
-  getContextAroundTimestamp(
-    timestamp: number,
-    beforeMs: number = 60000,
-    afterMs: number = 30000
-  ): TranscriptSegment[] {
-    const startTime = Math.max(0, timestamp - beforeMs);
-    const endTime = timestamp + afterMs;
-
-    return this.segments.filter(
-      seg => seg.startMs >= startTime && seg.endMs <= endTime
-    );
+  getContextSegments(timestamp: number): TranscriptSegment[] {
+    return getContextAroundTimestamp(this.segments, timestamp, CONTEXT_BEFORE_MS, CONTEXT_AFTER_MS);
   }
 
   /**
    * 格式化上下文为文本
    */
   formatContextText(segments: TranscriptSegment[]): string {
-    return segments
-      .map(seg => {
-        const minutes = Math.floor(seg.startMs / 60000);
-        const seconds = Math.floor((seg.startMs % 60000) / 1000);
-        const timeStr = `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
-        return `[${timeStr}] ${seg.text}`;
-      })
-      .join('\n');
+    return formatTranscriptWithTimestamps(segments);
   }
 
   /**
@@ -121,11 +111,7 @@ export class TutorService {
    */
   async generateResponse(context: TutorContext): Promise<TutorResponse> {
     // 获取困惑点周围的上下文
-    const contextSegments = this.getContextAroundTimestamp(
-      context.anchorTimestamp,
-      60000,
-      30000
-    );
+    const contextSegments = this.getContextSegments(context.anchorTimestamp);
     const contextText = this.formatContextText(contextSegments);
 
     try {
@@ -196,9 +182,7 @@ export class TutorService {
     contextText: string,
     question?: string
   ): string {
-    const minutes = Math.floor(timestamp / 60000);
-    const seconds = Math.floor((timestamp % 60000) / 1000);
-    const timeStr = `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+    const timeStr = formatTimestamp(timestamp);
 
     let message = `我在 ${timeStr} 的时候按下了"不懂"按钮。\n\n`;
     message += `这是老师讲的内容：\n\n${contextText}\n\n`;
@@ -217,7 +201,7 @@ export class TutorService {
    */
   private parseResponse(
     content: string,
-    contextSegments: TranscriptSegment[]
+    _contextSegments: TranscriptSegment[]
   ): TutorResponse {
     const response: TutorResponse = {
       confusionAnalysis: '',

@@ -2,6 +2,9 @@
  * 配置管理和验证
  */
 
+// 重导出新的配置模块
+export * from './config/app.config';
+
 export interface AppConfig {
   // LLM 配置
   dashscopeApiKey: string;

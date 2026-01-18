@@ -12,6 +12,7 @@ import { useAuth } from '@/lib/hooks/useAuth';
 import { classroomDataService, type StudentAnchor } from '@/lib/services/classroom-data-service';
 import type { TranscriptSegment, HighlightTopic, ClassSummary, Note, TopicGenerationMode, NoteSource, NoteMetadata } from '@/types';
 import { useResponsive } from '@/hooks/useResponsive';
+import { UIConfig } from '@/lib/config';
 
 // WaveformPlayer 使用 forwardRef，需要静态导入以支持 ref
 import { WaveformPlayer, type WaveformPlayerRef, type WaveformAnchor } from '@/components/WaveformPlayer';
@@ -216,7 +217,7 @@ export default function StudentApp() {
           sessionId,
           demoData.DEMO_SEGMENTS,
           demoData.DEMO_ANCHORS,
-          { subject: '英语', teacher: 'Demo Teacher', date: new Date().toISOString().split('T')[0] }
+          { subject: UIConfig.defaultSubject, teacher: 'Demo Teacher', date: new Date().toISOString().split('T')[0] }
         );
         setTimeline(tl);
         
@@ -246,7 +247,7 @@ export default function StudentApp() {
           // 保存会话信息
           classroomDataService.saveSession({
             id: sessionId,
-            subject: '英语',
+            subject: UIConfig.defaultSubject,
             topic: 'Australia\'s Moving Experience',
             teacherName: 'Demo Teacher',
             duration: demoData.DEMO_SEGMENTS.length > 0 ? demoData.DEMO_SEGMENTS[demoData.DEMO_SEGMENTS.length - 1].endMs : 0,
@@ -304,8 +305,8 @@ export default function StudentApp() {
     // 创建课程会话记录 (供教师端读取)
     classroomDataService.saveSession({
       id: newSessionId,
-      subject: '英语',
-      topic: '课堂录音',
+      subject: UIConfig.defaultSubject,
+      topic: UIConfig.defaultLessonTitle,
       status: 'recording',
       duration: 0,
       createdBy: studentId,
@@ -335,9 +336,9 @@ export default function StudentApp() {
     // 更新课程会话状态
     classroomDataService.saveSession({
       id: sessionId,
-      subject: '英语',
-      topic: '课堂录音',
-      teacherName: 'Teacher',
+      subject: UIConfig.defaultSubject,
+      topic: UIConfig.defaultLessonTitle,
+      teacherName: UIConfig.defaultTeacher || 'Teacher',
       status: 'completed',
       duration,
     });
@@ -346,7 +347,7 @@ export default function StudentApp() {
       sessionId,
       finalSegments,
       anchors,
-      { subject: '英语', teacher: 'Teacher', date: new Date().toISOString().split('T')[0] }
+      { subject: UIConfig.defaultSubject, teacher: UIConfig.defaultTeacher || 'Teacher', date: new Date().toISOString().split('T')[0] }
     );
     setTimeline(tl);
     memoryService.save(tl);
@@ -846,9 +847,9 @@ export default function StudentApp() {
                             : 0;
                           classroomDataService.saveSession({
                             id: newSessionId,
-                            subject: '英语',
-                            topic: '课堂录音',
-                            teacherName: 'Teacher',
+                            subject: UIConfig.defaultSubject,
+                            topic: UIConfig.defaultLessonTitle,
+                            teacherName: UIConfig.defaultTeacher || 'Teacher',
                             status: 'completed',
                             duration,
                             createdBy: studentId,
@@ -858,7 +859,7 @@ export default function StudentApp() {
                             newSessionId,
                             newSegments,
                             anchors,
-                            { subject: '英语', teacher: 'Teacher', date: new Date().toISOString().split('T')[0] }
+                            { subject: UIConfig.defaultSubject, teacher: UIConfig.defaultTeacher || 'Teacher', date: new Date().toISOString().split('T')[0] }
                           );
                           setTimeline(tl);
                           setViewMode('review');
@@ -996,9 +997,9 @@ export default function StudentApp() {
                       : 0;
                     classroomDataService.saveSession({
                       id: newSessionId,
-                      subject: '英语',
-                      topic: '课堂录音',
-                      teacherName: 'Teacher',
+                      subject: UIConfig.defaultSubject,
+                      topic: UIConfig.defaultLessonTitle,
+                      teacherName: UIConfig.defaultTeacher || 'Teacher',
                       status: 'completed',
                       duration,
                       createdBy: studentId,
@@ -1009,7 +1010,7 @@ export default function StudentApp() {
                       newSessionId,
                       newSegments,
                       anchors,
-                      { subject: '英语', teacher: 'Teacher', date: new Date().toISOString().split('T')[0] }
+                      { subject: UIConfig.defaultSubject, teacher: UIConfig.defaultTeacher || 'Teacher', date: new Date().toISOString().split('T')[0] }
                     );
                     setTimeline(tl);
                     

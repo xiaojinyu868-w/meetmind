@@ -7,76 +7,16 @@
  * - OpenAI (gpt-5.2, gpt-5.2-mini)
  */
 
-export type ModelProvider = 'qwen' | 'gemini' | 'openai';
+import { LLMConfig, type ModelConfig, type ModelProvider } from '@/lib/config';
 
-export interface ModelConfig {
-  id: string;
-  name: string;
-  provider: ModelProvider;
-  description: string;
-  maxTokens: number;
-  recommended?: boolean;
-  supportsMultimodal?: boolean;  // 是否支持多模态（图片上传）
-}
+// 重导出类型和配置
+export type { ModelConfig, ModelProvider };
 
-// 可用模型列表
-export const AVAILABLE_MODELS: ModelConfig[] = [
-  // 通义千问系列
-  {
-    id: 'qwen3-vl-plus-2025-12-19',
-    name: '通义千问 3 VL',
-    provider: 'qwen',
-    description: '多模态视觉模型，支持图片理解',
-    maxTokens: 8192,
-    recommended: true,
-    supportsMultimodal: true,
-  },
-  {
-    id: 'qwen3-max',
-    name: '通义千问 3 Max',
-    provider: 'qwen',
-    description: '最强推理能力，纯文本模型',
-    maxTokens: 8192,
-    supportsMultimodal: false,
-  },
-  // Gemini 系列
-  {
-    id: 'gemini-3-pro',
-    name: 'Gemini 3 Pro',
-    provider: 'gemini',
-    description: '最强多模态，100万上下文',
-    maxTokens: 8192,
-    supportsMultimodal: true,
-  },
-  {
-    id: 'gemini-3-flash',
-    name: 'Gemini 3 Flash',
-    provider: 'gemini',
-    description: '快速响应，多模态能力',
-    maxTokens: 8192,
-    supportsMultimodal: true,
-  },
-  // OpenAI 系列
-  {
-    id: 'gpt-5.2',
-    name: 'GPT-5.2',
-    provider: 'openai',
-    description: '最新旗舰模型，全能多模态',
-    maxTokens: 8192,
-    supportsMultimodal: true,
-  },
-  {
-    id: 'gpt-5-mini',
-    name: 'GPT-5 Mini',
-    provider: 'openai',
-    description: '轻量快速，支持多模态',
-    maxTokens: 4096,
-    supportsMultimodal: true,
-  },
-];
+// 从统一配置获取模型列表
+export const AVAILABLE_MODELS: ModelConfig[] = LLMConfig.models;
 
 // 获取默认模型ID
-export const DEFAULT_MODEL_ID = 'qwen3-vl-plus-2025-12-19';
+export const DEFAULT_MODEL_ID = LLMConfig.defaultVisionModel;
 
 // ==================== 消息类型定义 ====================
 

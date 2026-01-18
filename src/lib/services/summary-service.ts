@@ -8,12 +8,15 @@
 import { chat, type ChatMessage } from './llm-service';
 import type { TranscriptSegment } from '@/lib/db';
 import type { ClassSummary, SummaryTakeaway } from '@/types';
+import { FeatureConfig } from '@/lib/config';
+import { formatTranscriptWithTimestamps } from '@/lib/utils';
+import { parseJsonResponse } from '@/lib/utils';
 
-// ============ 配置常量 ============
+// ============ 配置常量（从统一配置读取） ============
 
-const DEFAULT_MODEL = 'qwen3-max';
-const MIN_TAKEAWAYS = 4;
-const MAX_TAKEAWAYS = 6;
+const DEFAULT_MODEL = FeatureConfig.summary.defaultModel;
+const MIN_TAKEAWAYS = FeatureConfig.summary.minTakeaways;
+const MAX_TAKEAWAYS = FeatureConfig.summary.maxTakeaways;
 
 // ============ 类型定义 ============
 
@@ -40,25 +43,6 @@ interface RawSummary {
 }
 
 // ============ Prompt 构建 ============
-
-/**
- * 格式化时间戳 (毫秒 -> MM:SS)
- */
-function formatTimestamp(ms: number): string {
-  const totalSeconds = Math.floor(ms / 1000);
-  const minutes = Math.floor(totalSeconds / 60);
-  const seconds = totalSeconds % 60;
-  return `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
-}
-
-/**
- * 将转录片段格式化为带时间戳的文本
- */
-function formatTranscriptWithTimestamps(segments: TranscriptSegment[]): string {
-  return segments
-    .map(seg => `[${formatTimestamp(seg.startMs)}] ${seg.text}`)
-    .join('\n');
-}
 
 /**
  * 构建摘要生成 Prompt
@@ -155,26 +139,6 @@ ${transcriptText}
 }
 
 // ============ 核心处理逻辑 ============
-
-/**
- * 解析 AI 响应中的 JSON
- */
-function parseJsonResponse<T>(content: string): T | null {
-  try {
-    return JSON.parse(content);
-  } catch {
-    // 尝试提取 JSON 部分
-    const jsonMatch = content.match(/\{[\s\S]*\}/);
-    if (jsonMatch) {
-      try {
-        return JSON.parse(jsonMatch[0]);
-      } catch {
-        return null;
-      }
-    }
-    return null;
-  }
-}
 
 /**
  * 验证并修复 takeaway 格式

@@ -14,36 +14,13 @@
  */
 
 import { db, generateSessionId } from '@/lib/db';
-import type { TranscriptSegment } from '@/types';
+import type { TranscriptSegment, AnchorType, AnchorStatus, StudentAnchor } from '@/types';
 import { DEMO_SEGMENTS, DEMO_ANCHORS, DEMO_SESSION_ID } from '@/fixtures/demo-data';
 
+// 重导出类型以保持向后兼容
+export type { AnchorType, AnchorStatus, StudentAnchor } from '@/types';
+
 // ==================== 类型定义 ====================
-
-/** 困惑点类型 */
-export type AnchorType = 'confusion' | 'important' | 'question';
-
-/** 困惑点状态 */
-export type AnchorStatus = 'active' | 'cancelled' | 'resolved';
-
-/**
- * 学生困惑点记录
- * 统一的困惑点数据结构，用于学生端写入和教师端读取
- */
-export interface StudentAnchor {
-  id: string;                    // 唯一标识 (UUID)
-  sessionId: string;             // 课程会话ID
-  studentId: string;             // 学生用户ID (来自认证系统)
-  studentName: string;           // 学生昵称 (用于教师端显示)
-  timestamp: number;             // 课堂时间戳 (毫秒)
-  type: AnchorType;              // 困惑点类型
-  status: AnchorStatus;          // 状态
-  note?: string;                 // 学生备注
-  aiExplanation?: string;        // AI 解释内容
-  transcriptContext?: string;    // 关联的转录文本上下文
-  createdAt: string;             // 创建时间 (ISO 字符串)
-  resolvedAt?: string;           // 解决时间
-  updatedAt: string;             // 更新时间
-}
 
 /**
  * 课程会话信息
@@ -299,6 +276,8 @@ export const classroomDataService = {
       studentName,
       timestamp,
       type,
+      cancelled: false,
+      resolved: false,
       status: 'active',
       transcriptContext,
       createdAt: now,
@@ -370,6 +349,27 @@ export const classroomDataService = {
   },
 
   /**
+   * 更新困惑点状态
+   */
+  updateAnchorStatus(anchorId: string, status: AnchorStatus): void {
+    const anchors = getAllAnchorsFromStorage();
+    const anchor = anchors.find(a => a.id === anchorId);
+    
+    if (anchor) {
+      anchor.status = status;
+      anchor.cancelled = status === 'cancelled';
+      anchor.resolved = status === 'resolved';
+      if (status === 'resolved') {
+        anchor.resolvedAt = new Date().toISOString();
+      }
+      anchor.updatedAt = new Date().toISOString();
+      saveAnchorsToStorage(anchors);
+      
+      this.broadcastAnchorUpdate(status === 'resolved' ? 'resolve' : 'cancel', anchor);
+    }
+  },
+
+  /**
    * 批量保存学生困惑点（性能优化版本）
    * 一次性读取、处理、写入，避免循环内多次 I/O
    */
@@ -403,6 +403,8 @@ export const classroomDataService = {
         studentName,
         timestamp: item.timestamp,
         type: item.type || 'confusion',
+        cancelled: false,
+        resolved: false,
         status: 'active',
         transcriptContext: item.transcriptContext,
         createdAt: now,
@@ -711,6 +713,8 @@ export const classroomDataService = {
           studentName: studentName,
           timestamp: legacy.timestamp,
           type: legacy.type,
+          cancelled: legacy.cancelled,
+          resolved: legacy.resolved,
           status: legacy.cancelled ? 'cancelled' : (legacy.resolved ? 'resolved' : 'active'),
           note: legacy.note,
           createdAt: legacy.createdAt,
@@ -752,7 +756,9 @@ export const classroomDataService = {
       studentName: '演示学生',
       timestamp: anchor.timestamp,
       type: anchor.type,
-      status: anchor.resolved ? 'resolved' : (anchor.cancelled ? 'cancelled' : 'active'),
+      cancelled: anchor.cancelled,
+      resolved: anchor.resolved,
+      status: anchor.resolved ? 'resolved' : (anchor.cancelled ? 'cancelled' : 'active') as AnchorStatus,
       createdAt: anchor.createdAt,
       updatedAt: anchor.createdAt,
     }));
