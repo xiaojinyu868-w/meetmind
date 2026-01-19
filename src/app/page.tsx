@@ -827,11 +827,19 @@ export default function StudentApp() {
                       <AudioUploader
                         onTranscriptReady={async (newSegments, blob) => {
                           const newSessionId = generateSessionId();
+                          // 清除旧会话的所有状态
                           setSessionId(newSessionId);
                           setSegments(newSegments);
+                          setAnchors([]); // 清除旧困惑点
+                          setSelectedAnchor(null); // 清除选中的困惑点
+                          setHighlightTopics([]); // 清除精选片段
+                          setClassSummary(null); // 清除摘要
+                          setNotes([]); // 清除笔记
+                          setActionItems([]); // 清除行动清单
                           setAudioBlob(blob);
                           setAudioUrl(null);
                           setDataSource('live');
+                          liveSegmentsRef.current = [];
                           
                           try {
                             await db.transcripts.bulkAdd(
@@ -864,7 +872,7 @@ export default function StudentApp() {
                           const tl = memoryService.buildTimeline(
                             newSessionId,
                             newSegments,
-                            anchors,
+                            [], // 新会话没有困惑点
                             { subject: UIConfig.defaultSubject, teacher: UIConfig.defaultTeacher || 'Teacher', date: new Date().toISOString().split('T')[0] }
                           );
                           setTimeline(tl);
@@ -989,11 +997,19 @@ export default function StudentApp() {
                   onTranscriptReady={async (newSegments, blob) => {
                     // 生成新的 sessionId（而不是使用默认的 demo-session）
                     const newSessionId = generateSessionId();
+                    // 清除旧会话的所有状态
                     setSessionId(newSessionId);
                     setSegments(newSegments);
+                    setAnchors([]); // 清除旧困惑点
+                    setSelectedAnchor(null); // 清除选中的困惑点
+                    setHighlightTopics([]); // 清除精选片段
+                    setClassSummary(null); // 清除摘要
+                    setNotes([]); // 清除笔记
+                    setActionItems([]); // 清除行动清单
                     setAudioBlob(blob);
                     setAudioUrl(null); // 清除示例音频URL
                     setDataSource('live');
+                    liveSegmentsRef.current = [];
                     
                     // 将转录数据保存到 IndexedDB（供教师端读取）
                     try {
@@ -1030,7 +1046,7 @@ export default function StudentApp() {
                     const tl = memoryService.buildTimeline(
                       newSessionId,
                       newSegments,
-                      anchors,
+                      [], // 新会话没有困惑点
                       { subject: UIConfig.defaultSubject, teacher: UIConfig.defaultTeacher || 'Teacher', date: new Date().toISOString().split('T')[0] }
                     );
                     setTimeline(tl);
