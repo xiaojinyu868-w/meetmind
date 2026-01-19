@@ -1,30 +1,98 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 300 200" fill="none">
-  <!-- 背景装饰圆 -->
-  <circle cx="250" cy="40" r="30" fill="#FFD93D" opacity="0.15"/>
-  <circle cx="40" cy="160" r="25" fill="#6C5CE7" opacity="0.1"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 300">
+  <defs>
+    <linearGradient id="emptyGrad1" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#FEF3C7;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#FDE68A;stop-opacity:0.6" />
+    </linearGradient>
+    <linearGradient id="emptyGrad2" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#F59E0B;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#D97706;stop-opacity:1" />
+    </linearGradient>
+    <linearGradient id="boxGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#E5E7EB;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#D1D5DB;stop-opacity:1" />
+    </linearGradient>
+  </defs>
   
-  <!-- 空盒子/容器 -->
-  <g transform="translate(80, 40)">
+  <!-- 背景装饰 -->
+  <circle cx="200" cy="150" r="130" fill="url(#emptyGrad1)" opacity="0.4"/>
+  <circle cx="100" cy="80" r="40" fill="#DBEAFE" opacity="0.3"/>
+  <circle cx="320" cy="200" r="35" fill="#D1FAE5" opacity="0.3"/>
+  
+  <!-- 空盒子 -->
+  <g transform="translate(120, 80)">
     <!-- 盒子主体 -->
-    <path d="M10 60 L70 30 L130 60 L130 140 L70 170 L10 140 Z" fill="white" stroke="#E5E7EB" stroke-width="2"/>
-    <!-- 盒子顶面 -->
-    <path d="M10 60 L70 30 L130 60 L70 90 Z" fill="#F8F9FA" stroke="#E5E7EB" stroke-width="2"/>
-    <!-- 盒子右面阴影 -->
-    <path d="M70 90 L130 60 L130 140 L70 170 Z" fill="#F3F4F6"/>
+    <path d="M20,60 L20,150 L160,150 L160,60 Z" fill="url(#boxGrad)"/>
+    <!-- 盒子前面 -->
+    <path d="M20,60 L0,80 L0,170 L20,150 Z" fill="#9CA3AF"/>
+    <!-- 盒子右侧 -->
+    <path d="M160,60 L180,80 L180,170 L160,150 Z" fill="#6B7280"/>
+    <!-- 盒子顶部（打开状态） -->
+    <path d="M20,60 L90,30 L160,60 L90,90 Z" fill="#F3F4F6"/>
     
-    <!-- 虚线表示空 -->
-    <line x1="40" y1="100" x2="100" y2="100" stroke="#DCD6F7" stroke-width="2" stroke-dasharray="5,5"/>
-    <line x1="45" y1="120" x2="95" y2="120" stroke="#DCD6F7" stroke-width="2" stroke-dasharray="5,5"/>
+    <!-- 盒子翻盖（左） -->
+    <g transform="rotate(-30, 20, 60)">
+      <path d="M20,60 L20,20 L90,0 L90,40 Z" fill="#E5E7EB" opacity="0.9"/>
+    </g>
+    
+    <!-- 盒子翻盖（右） -->
+    <g transform="rotate(30, 160, 60)">
+      <path d="M160,60 L160,20 L90,0 L90,40 Z" fill="#D1D5DB" opacity="0.9"/>
+    </g>
   </g>
   
-  <!-- 问号/等待标记 -->
-  <g transform="translate(135, 70)">
-    <circle cx="15" cy="15" r="20" fill="#6C5CE7" opacity="0.1"/>
-    <text x="15" y="22" font-family="Arial" font-size="20" font-weight="bold" fill="#6C5CE7" text-anchor="middle">?</text>
+  <!-- 飞出的元素（表示空空如也但有潜力） -->
+  <g opacity="0.6">
+    <!-- 星星 -->
+    <g transform="translate(250, 70)">
+      <polygon points="15,0 18,10 28,10 20,16 23,26 15,20 7,26 10,16 2,10 12,10" fill="#FBBF24">
+        <animate attributeName="transform" type="translate" values="0,0; 5,-10; 0,0" dur="3s" repeatCount="indefinite"/>
+      </polygon>
+    </g>
+    
+    <!-- 圆形 -->
+    <circle cx="280" cy="120" r="12" fill="#60A5FA" opacity="0.7">
+      <animate attributeName="transform" type="translate" values="0,0; 10,-5; 0,0" dur="2.5s" repeatCount="indefinite"/>
+    </circle>
+    
+    <!-- 三角形 -->
+    <polygon points="100,90 115,70 130,90" fill="#34D399" opacity="0.7">
+      <animate attributeName="transform" type="translate" values="0,0; -5,-8; 0,0" dur="2.8s" repeatCount="indefinite"/>
+    </polygon>
+    
+    <!-- 小方块 -->
+    <rect x="85" y="60" width="15" height="15" rx="3" fill="#F472B6" opacity="0.6">
+      <animate attributeName="transform" type="translate" values="0,0; -8,-12; 0,0" dur="3.2s" repeatCount="indefinite"/>
+    </rect>
   </g>
   
-  <!-- 小装饰元素 -->
-  <circle cx="60" cy="50" r="5" fill="#A8E6CF"/>
-  <circle cx="240" cy="150" r="4" fill="#FF8A80"/>
-  <polygon points="230,80 232,86 238,86 233,90 235,96 230,92 225,96 227,90 222,86 228,86" fill="#FFD93D" opacity="0.7"/>
+  <!-- 虚线圆圈（等待填充） -->
+  <circle cx="200" cy="130" r="50" fill="none" stroke="#D1D5DB" stroke-width="3" stroke-dasharray="10,8"/>
+  
+  <!-- 加号（添加内容提示） -->
+  <g transform="translate(175, 105)">
+    <rect x="20" y="0" width="10" height="50" rx="5" fill="url(#emptyGrad2)" opacity="0.8"/>
+    <rect x="0" y="20" width="50" height="10" rx="5" fill="url(#emptyGrad2)" opacity="0.8"/>
+  </g>
+  
+  <!-- 底部波浪装饰 -->
+  <path d="M0,260 Q100,240 200,260 T400,260 L400,300 L0,300 Z" fill="#FEF3C7" opacity="0.5"/>
+  <path d="M0,270 Q100,250 200,270 T400,270 L400,300 L0,300 Z" fill="#FDE68A" opacity="0.3"/>
+  
+  <!-- 小点装饰 -->
+  <g fill="#9CA3AF" opacity="0.4">
+    <circle cx="60" cy="180" r="4"/>
+    <circle cx="75" cy="195" r="3"/>
+    <circle cx="50" cy="200" r="2"/>
+    <circle cx="340" cy="100" r="4"/>
+    <circle cx="355" cy="115" r="3"/>
+    <circle cx="330" cy="120" r="2"/>
+  </g>
+  
+  <!-- 眨眼效果的小表情（在盒子里若隐若现） -->
+  <g transform="translate(165, 115)" opacity="0.3">
+    <circle cx="15" cy="0" r="5" fill="#6B7280"/>
+    <circle cx="45" cy="0" r="5" fill="#6B7280"/>
+    <path d="M15,15 Q30,25 45,15" stroke="#6B7280" stroke-width="3" fill="none" stroke-linecap="round"/>
+  </g>
 </svg>

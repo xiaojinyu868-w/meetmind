@@ -17,6 +17,9 @@ import { UIConfig } from '@/lib/config';
 // WaveformPlayer 使用 forwardRef，需要静态导入以支持 ref
 import { WaveformPlayer, type WaveformPlayerRef, type WaveformAnchor } from '@/components/WaveformPlayer';
 
+// 开屏动画组件
+import { AppLoading } from '@/components/AppLoading';
+
 // 动态导入大型组件 - 代码分割优化
 const Recorder = dynamic(() => import('@/components/Recorder').then(m => ({ default: m.Recorder })), {
   ssr: false,
@@ -92,6 +95,10 @@ interface ActionItem {
 }
 
 export default function StudentApp() {
+  // 开屏动画状态
+  const [showSplash, setShowSplash] = useState(true);
+  const [appReady, setAppReady] = useState(false);
+  
   // 获取当前登录用户
   const { user, isAuthenticated } = useAuth();
   
@@ -299,11 +306,18 @@ export default function StudentApp() {
         });
       }
       
+      // 标记应用已准备就绪
+      setAppReady(true);
       hasRestoredState.current = true;
     };
     
     initializeApp();
   }, [sessionId]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // 处理开屏动画完成
+  const handleSplashComplete = useCallback(() => {
+    setShowSplash(false);
+  }, []);
 
   const handleRecordingStart = useCallback((newSessionId: string) => {
     // 清除旧会话的所有状态
@@ -711,13 +725,21 @@ export default function StudentApp() {
 
   // 客户端未挂载时显示加载状态，避免 Hydration 错误
   if (!mounted) {
-    // 使用动态导入避免服务端渲染问题
-    const AppLoading = require('@/components/AppLoading').default;
     return <AppLoading message="准备学习环境" />;
   }
 
+  // 显示开屏动画（等待应用准备就绪）
+  if (showSplash) {
+    return (
+      <AppLoading 
+        message={appReady ? "即将就绪" : undefined}
+        onComplete={appReady ? handleSplashComplete : undefined}
+      />
+    );
+  }
+
   return (
-    <div className="h-screen flex flex-col overflow-hidden">
+    <div className="h-screen flex flex-col overflow-hidden main-content-enter">
       {/* 移动端隐藏降级横幅 */}
       {!isMobile && <DegradedModeBanner status={serviceStatus} />}
       

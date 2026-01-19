@@ -390,28 +390,33 @@ export function Recorder({
         
         {/* 模式切换 */}
         {isIdle && (
-          <div className="flex items-center gap-1 p-1 bg-gray-100 rounded-lg">
-            <button
-              onClick={() => setTranscribeMode('streaming')}
-              disabled={!streamingAvailable}
-              className={`px-3 py-1.5 text-xs rounded-md transition-all ${
-                transcribeMode === 'streaming' 
-                  ? 'bg-white text-amber-600 shadow-sm' 
-                  : 'text-gray-500 hover:text-gray-700'
-              } ${!streamingAvailable ? 'opacity-50 cursor-not-allowed' : ''}`}
-            >
-              ⚡ 实时
-            </button>
-            <button
-              onClick={() => setTranscribeMode('batch')}
-              className={`px-3 py-1.5 text-xs rounded-md transition-all ${
-                transcribeMode === 'batch' 
-                  ? 'bg-white text-accent-600 shadow-sm' 
-                  : 'text-gray-500 hover:text-gray-700'
-              }`}
-            >
-              🎯 高精度
-            </button>
+          <div className="flex flex-col items-end gap-1">
+            <div className="flex items-center gap-1 p-1 bg-gray-100 rounded-lg">
+              <button
+                onClick={() => setTranscribeMode('streaming')}
+                disabled={!streamingAvailable}
+                className={`px-3 py-1.5 text-xs rounded-md transition-all ${
+                  transcribeMode === 'streaming' 
+                    ? 'bg-white text-amber-600 shadow-sm' 
+                    : 'text-gray-500 hover:text-gray-700'
+                } ${!streamingAvailable ? 'opacity-50 cursor-not-allowed' : ''}`}
+              >
+                ⚡ 边录边转
+              </button>
+              <button
+                onClick={() => setTranscribeMode('batch')}
+                className={`px-3 py-1.5 text-xs rounded-md transition-all ${
+                  transcribeMode === 'batch' 
+                    ? 'bg-white text-accent-600 shadow-sm' 
+                    : 'text-gray-500 hover:text-gray-700'
+                }`}
+              >
+                🎯 录完转译
+              </button>
+            </div>
+            <span className="text-[10px] text-gray-400">
+              {transcribeMode === 'streaming' ? '边听边看文字，适合上课' : '录完再转，更准确'}
+            </span>
           </div>
         )}
         

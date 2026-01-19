@@ -1,238 +1,396 @@
 /**
- * 家长端服务
+ * 家长端服务 v3.0
  * 
- * 生成家长日报和陪学脚本
+ * 核心理念：聚焦"了解孩子的学习情况"这一单点需求
+ * 直接基于 classroomDataService 的真实数据
  */
 
-import type { Anchor } from '@/types';
-import type { ClassTimeline, TimelineSegment } from './memory-service';
+import { classroomDataService, type StudentAnchor, type ClassSession } from './classroom-data-service';
+import { db } from '@/lib/db';
+import type { TranscriptSegment } from '@/types';
 import { chat } from './llm-service';
-import { FeatureConfig } from '@/lib/config';
-import { formatTimestamp } from '@/lib/utils';
 
-// 从配置读取困惑点估时
-const CONFUSION_ESTIMATE_MINUTES = FeatureConfig.parent.confusionEstimateMinutes;
+// ==================== 类型定义 ====================
 
-export interface ConfusionPoint {
+/**
+ * 困惑时刻 - 时间线上的一个点
+ */
+export interface ConfusionMoment {
   id: string;
-  subject: string;
-  time: string;
-  timestamp: number;
-  summary: string;
-  teacherQuote: string;
-  audioClipUrl?: string;
-  // v2.0 新增：学习过程数据
-  isResolved: boolean;              // 是否已解决
-  learningDurationMs?: number;      // 学习时长（毫秒）
-  dialogueRounds?: number;          // 对话轮数
-  resolvedAt?: string;              // 解决时间
-}
-
-export interface ParentDailyReport {
-  date: string;
-  studentName: string;
-  totalLessons: number;
-  totalBreakpoints: number;
-  unresolvedBreakpoints: number;
-  estimatedMinutes: number;
-  confusionPoints: ConfusionPoint[];
-  actionScript: string;
-  completionStatus: Array<{
-    taskId: string;
-    title: string;
-    completed: boolean;
-  }>;
+  timestamp: number;           // 毫秒时间戳
+  timeDisplay: string;         // "09:35" 格式
+  
+  // 课程信息
+  sessionId: string;
+  subject: string;             // "数学" | "英语" | "语文"
+  
+  // 困惑内容
+  knowledgePoint: string;      // AI 识别的知识点
+  transcriptContext: string;   // 困惑点上下文文字（前后30秒）
+  
+  // 状态
+  resolved: boolean;
+  resolvedAt?: string;
+  resolvedBy?: 'ai' | 'parent' | 'self';
+  
+  // 音频信息
+  audioUrl?: string;
+  audioStartMs: number;        // 音频片段开始时间
+  audioEndMs: number;          // 音频片段结束时间
 }
 
 /**
- * 家长端服务
+ * 今日学情 - 家长端核心数据结构
  */
+export interface TodayLearningStatus {
+  studentId: string;
+  studentName: string;
+  date: string;               // YYYY-MM-DD
+  
+  // 概览数据
+  overview: {
+    totalClasses: number;      // 上课节数
+    totalConfusions: number;   // 困惑点总数
+    resolvedCount: number;     // 已解决数
+  };
+  
+  // 困惑时刻列表（按时间排序）
+  confusions: ConfusionMoment[];
+  
+  // AI 总结
+  aiSummary: string;
+}
+
+// ==================== 辅助函数 ====================
+
+/**
+ * 格式化时间戳为 HH:MM 格式
+ */
+function formatTimeDisplay(timestamp: number): string {
+  const date = new Date(timestamp);
+  const hours = date.getHours().toString().padStart(2, '0');
+  const minutes = date.getMinutes().toString().padStart(2, '0');
+  return `${hours}:${minutes}`;
+}
+
+/**
+ * 从转录文本中提取知识点（简化版）
+ */
+function extractKnowledgePoint(text: string): string {
+  if (!text || text.length < 10) return '课堂内容';
+  
+  // 尝试提取关键词
+  const keywords = [
+    '分数', '小数', '方程', '函数', '几何', '三角形', '圆', '面积', '体积',
+    '动词', '名词', '时态', '过去式', '现在完成时', '定语从句', '单词',
+    '古诗', '文言文', '作文', '阅读理解', '成语', '修辞',
+    '物理', '化学', '生物', '力学', '电学', '细胞',
+  ];
+  
+  for (const keyword of keywords) {
+    if (text.includes(keyword)) {
+      return keyword;
+    }
+  }
+  
+  // 截取前20个字符作为描述
+  return text.slice(0, 20).replace(/\s+/g, '') + '...';
+}
+
+/**
+ * 根据学科标签推断学科
+ */
+function inferSubject(session: ClassSession | null, text: string): string {
+  if (session?.subject) return session.subject;
+  
+  // 根据内容推断学科
+  const subjectKeywords: Record<string, string[]> = {
+    '数学': ['分数', '小数', '方程', '函数', '几何', '代数', '计算', '公式'],
+    '英语': ['English', 'word', '单词', '语法', '时态', '动词', 'the', 'is'],
+    '语文': ['古诗', '文言文', '作文', '阅读', '成语', '修辞', '段落'],
+    '物理': ['力学', '电学', '光学', '运动', '速度', '加速度'],
+    '化学': ['元素', '分子', '化合物', '反应', '酸碱'],
+  };
+  
+  for (const [subject, keywords] of Object.entries(subjectKeywords)) {
+    if (keywords.some(kw => text.includes(kw))) {
+      return subject;
+    }
+  }
+  
+  return '课程';
+}
+
+// ==================== 家长端服务 ====================
+
 export const parentService = {
   /**
-   * 生成家长日报
+   * 获取今日学情
+   * 核心接口：聚合孩子今天的所有学习数据
    */
-  async generateDailyReport(
+  async getTodayLearningStatus(
+    studentId: string,
     studentName: string,
-    timelines: ClassTimeline[],
     date: string = new Date().toISOString().split('T')[0]
-  ): Promise<ParentDailyReport> {
-    // v2.0: 收集所有困惑点（包括已解决的），用于展示完整学习轨迹
-    const allAnchors: Array<{ anchor: Anchor; timeline: ClassTimeline; segment?: TimelineSegment }> = [];
-
-    for (const timeline of timelines) {
-      for (const anchor of timeline.anchors) {
-        if (!anchor.cancelled) {
-          // 找到断点对应的片段
-          const segment = timeline.segments.find(
-            s => s.startMs <= anchor.timestamp && s.endMs >= anchor.timestamp
-          );
-          allAnchors.push({ anchor, timeline, segment });
-        }
+  ): Promise<TodayLearningStatus> {
+    // 获取所有课程会话
+    const allSessions = classroomDataService.getAllSessions();
+    
+    // 过滤出今天的会话（基于创建时间）
+    const todaySessions = allSessions.filter(session => {
+      const sessionDate = session.createdAt.split('T')[0];
+      return sessionDate === date;
+    });
+    
+    // 收集今天所有困惑点
+    const allConfusions: ConfusionMoment[] = [];
+    
+    for (const session of todaySessions) {
+      // 获取该会话的困惑点
+      const anchors = classroomDataService.getStudentAnchors(session.id, studentId);
+      
+      // 获取转录内容
+      const transcripts = await db.transcripts
+        .where('sessionId')
+        .equals(session.id)
+        .sortBy('startMs');
+      
+      // 转换为 ConfusionMoment
+      for (const anchor of anchors) {
+        // 获取困惑点前后 30 秒的转录内容
+        const startMs = Math.max(0, anchor.timestamp - 30000);
+        const endMs = anchor.timestamp + 30000;
+        
+        const contextSegments = transcripts.filter(
+          t => t.startMs < endMs && t.endMs > startMs
+        );
+        const transcriptContext = contextSegments.map(t => t.text).join(' ');
+        
+        allConfusions.push({
+          id: anchor.id,
+          timestamp: anchor.timestamp,
+          timeDisplay: formatTimeDisplay(
+            new Date(anchor.createdAt).getTime()
+          ),
+          sessionId: session.id,
+          subject: inferSubject(session, transcriptContext),
+          knowledgePoint: extractKnowledgePoint(transcriptContext),
+          transcriptContext: transcriptContext.slice(0, 200),
+          resolved: anchor.resolved || anchor.status === 'resolved',
+          resolvedAt: anchor.resolvedAt,
+          resolvedBy: anchor.resolvedAt ? 'ai' : undefined,
+          audioStartMs: startMs,
+          audioEndMs: endMs,
+        });
       }
     }
-
-    // v2.0: 生成困惑点摘要，包含学习过程数据
-    const confusionPoints: ConfusionPoint[] = allAnchors.map(({ anchor, timeline, segment }) => {
-      // 计算学习时长
-      let learningDurationMs: number | undefined;
-      if (anchor.resolved && anchor.resolvedAt && anchor.createdAt) {
-        const createdTime = new Date(anchor.createdAt).getTime();
-        const resolvedTime = new Date(anchor.resolvedAt).getTime();
-        learningDurationMs = resolvedTime - createdTime;
-      }
-      
-      return {
-        id: anchor.id,
-        subject: timeline.subject,
-        time: formatTimestamp(anchor.timestamp),
-        timestamp: anchor.timestamp,
-        summary: segment?.text.slice(0, 50) + '...' || '课堂内容',
-        teacherQuote: segment?.text || '',
-        isResolved: anchor.resolved || false,
-        learningDurationMs,
-        resolvedAt: anchor.resolvedAt,
-      };
-    });
-
-    // 未解决的困惑点数量
-    const unresolvedCount = allAnchors.filter(({ anchor }) => !anchor.resolved).length;
     
-    // 估算陪学时间（只计算未解决的）
-    const estimatedMinutes = unresolvedCount * CONFUSION_ESTIMATE_MINUTES;
-
-    // 生成陪学脚本（只针对未解决的）
-    const unresolvedPoints = confusionPoints.filter(p => !p.isResolved);
-    const actionScript = await this.generateActionScript(
+    // 按时间排序（最新的在前）
+    allConfusions.sort((a, b) => b.timestamp - a.timestamp);
+    
+    // 统计
+    const resolvedCount = allConfusions.filter(c => c.resolved).length;
+    
+    // 生成 AI 总结
+    const aiSummary = await this.generateAISummary(
       studentName,
-      unresolvedPoints,
-      estimatedMinutes
+      allConfusions,
+      todaySessions.length
     );
-
-    // 生成任务清单（只针对未解决的）
-    const completionStatus = unresolvedPoints.map((point) => ({
-      taskId: `task-${point.id}`,
-      title: `${point.subject} - ${point.time} 的困惑点`,
-      completed: false,
-    }));
-
+    
     return {
-      date,
+      studentId,
       studentName,
-      totalLessons: timelines.length,
-      totalBreakpoints: allAnchors.length,
-      unresolvedBreakpoints: unresolvedCount,
-      estimatedMinutes,
-      confusionPoints,
-      actionScript,
-      completionStatus,
+      date,
+      overview: {
+        totalClasses: todaySessions.length,
+        totalConfusions: allConfusions.length,
+        resolvedCount,
+      },
+      confusions: allConfusions,
+      aiSummary,
     };
   },
 
   /**
-   * 生成陪学脚本
+   * 获取指定学生的所有困惑点（不限日期）
    */
-  async generateActionScript(
-    studentName: string,
-    confusionPoints: ConfusionPoint[],
-    estimatedMinutes: number
-  ): Promise<string> {
-    if (confusionPoints.length === 0) {
-      return `🎉 太棒了！${studentName}今天课堂上没有标记困惑点，看起来都听懂了！
-
-建议今晚：
-1. 问问孩子今天学了什么新知识
-2. 让孩子用自己的话复述一遍
-3. 表扬孩子的专注力`;
+  async getAllConfusions(studentId: string): Promise<ConfusionMoment[]> {
+    const allSessions = classroomDataService.getAllSessions();
+    const allConfusions: ConfusionMoment[] = [];
+    
+    for (const session of allSessions) {
+      const anchors = classroomDataService.getStudentAnchors(session.id, studentId);
+      
+      const transcripts = await db.transcripts
+        .where('sessionId')
+        .equals(session.id)
+        .sortBy('startMs');
+      
+      for (const anchor of anchors) {
+        const startMs = Math.max(0, anchor.timestamp - 30000);
+        const endMs = anchor.timestamp + 30000;
+        
+        const contextSegments = transcripts.filter(
+          t => t.startMs < endMs && t.endMs > startMs
+        );
+        const transcriptContext = contextSegments.map(t => t.text).join(' ');
+        
+        allConfusions.push({
+          id: anchor.id,
+          timestamp: anchor.timestamp,
+          timeDisplay: formatTimeDisplay(new Date(anchor.createdAt).getTime()),
+          sessionId: session.id,
+          subject: inferSubject(session, transcriptContext),
+          knowledgePoint: extractKnowledgePoint(transcriptContext),
+          transcriptContext: transcriptContext.slice(0, 200),
+          resolved: anchor.resolved || anchor.status === 'resolved',
+          resolvedAt: anchor.resolvedAt,
+          audioStartMs: startMs,
+          audioEndMs: endMs,
+        });
+      }
     }
+    
+    return allConfusions.sort((a, b) => b.timestamp - a.timestamp);
+  },
 
-    // 使用 AI 生成个性化脚本
+  /**
+   * 标记困惑点已解决（家长端操作）
+   */
+  markResolved(confusionId: string): void {
+    classroomDataService.updateAnchorStatus(confusionId, 'resolved');
+  },
+
+  /**
+   * 生成 AI 一句话总结
+   */
+  async generateAISummary(
+    studentName: string,
+    confusions: ConfusionMoment[],
+    totalClasses: number
+  ): Promise<string> {
+    // 无数据场景
+    if (totalClasses === 0) {
+      return `今天还没有学习记录，等${studentName}上课后会自动同步 📚`;
+    }
+    
+    // 无困惑点场景
+    if (confusions.length === 0) {
+      return `太棒了！${studentName}今天上课没有标记困惑点，状态很好 🎉`;
+    }
+    
+    // 全部解决场景
+    const unresolvedCount = confusions.filter(c => !c.resolved).length;
+    if (unresolvedCount === 0) {
+      return `${studentName}今天的 ${confusions.length} 个困惑都已解决，继续加油！✅`;
+    }
+    
+    // 有未解决困惑点，尝试用 AI 生成个性化总结
     try {
+      // 统计学科分布
+      const subjectCounts: Record<string, number> = {};
+      confusions.filter(c => !c.resolved).forEach(c => {
+        subjectCounts[c.subject] = (subjectCounts[c.subject] || 0) + 1;
+      });
+      
+      const topSubject = Object.entries(subjectCounts)
+        .sort((a, b) => b[1] - a[1])[0];
+      
       const response = await chat(
         [
           {
             role: 'system',
-            content: `你是一位家庭教育顾问。请根据孩子今天课堂上的困惑点，生成一份简洁的"今晚陪学脚本"。
-
-要求：
-1. 语气亲切，像朋友一样
-2. 给出具体的操作步骤
-3. 控制在 ${estimatedMinutes} 分钟左右
-4. 包含鼓励和正向引导`,
+            content: `你是一位温和的家庭教育顾问。请用一句话（不超过50字）总结孩子今天的学习情况，语气亲切，给家长信心。`,
           },
           {
             role: 'user',
             content: `学生：${studentName}
-困惑点数量：${confusionPoints.length}
-预计时间：${estimatedMinutes} 分钟
+今日困惑点：${confusions.length} 个
+未解决：${unresolvedCount} 个
+主要学科：${topSubject?.[0] || '综合'}（${topSubject?.[1] || 0} 个困惑）
+困惑内容：${confusions.slice(0, 3).map(c => c.knowledgePoint).join('、')}
 
-困惑点详情：
-${confusionPoints.map((p, i) => `${i + 1}. ${p.subject} ${p.time}：${p.summary}`).join('\n')}
-
-请生成今晚的陪学脚本。`,
+请生成一句话总结。`,
           },
         ],
         'qwen3-max',
-        { temperature: 0.7, maxTokens: 500 }
+        { temperature: 0.7, maxTokens: 100 }
       );
-
-      return response.content;
+      
+      return response.content.replace(/"/g, '');
     } catch {
-      // 降级到模板脚本
-      return this.getTemplateScript(studentName, confusionPoints, estimatedMinutes);
+      // AI 失败时使用模板
+      const mainSubject = Object.entries(
+        confusions.reduce((acc, c) => {
+          acc[c.subject] = (acc[c.subject] || 0) + 1;
+          return acc;
+        }, {} as Record<string, number>)
+      ).sort((a, b) => b[1] - a[1])[0]?.[0] || '学习';
+      
+      return `${studentName}今天在${mainSubject}上有 ${unresolvedCount} 个困惑待解决，建议今晚看看 💪`;
     }
   },
 
   /**
-   * 模板脚本（AI 不可用时使用）
+   * 获取指定困惑点的音频片段 URL
+   * 基于 sessionId 和时间范围
    */
-  getTemplateScript(
-    studentName: string,
-    confusionPoints: ConfusionPoint[],
-    estimatedMinutes: number
-  ): string {
-    const subjects = [...new Set(confusionPoints.map(p => p.subject))];
-
-    return `📚 今晚陪学脚本（约 ${estimatedMinutes} 分钟）
-
-👋 开场（2分钟）
-"${studentName}，今天课上有 ${confusionPoints.length} 个地方你按了'没听懂'，我们一起来看看。"
-
-📖 逐个击破（${confusionPoints.length * 5} 分钟）
-${confusionPoints.map((p, i) => `
-${i + 1}. ${p.subject} - ${p.time}
-   - 先问："这里老师讲了什么？"
-   - 听孩子说完，再一起看 AI 解释
-   - 确认懂了就打勾 ✓`).join('')}
-
-🎯 收尾（3分钟）
-- 问问孩子："今天哪个知识点最有意思？"
-- 表扬孩子主动标记困惑点的习惯
-- 提醒明天课堂继续用 MeetMind
-
-💪 加油！${subjects.join('、')}都是可以攻克的！`;
+  getAudioClipUrl(sessionId: string, startMs: number, endMs: number): string | null {
+    // 目前返回完整音频 URL，前端播放时设置时间范围
+    // 后续可以实现服务端音频切片
+    return `/api/audio/${sessionId}?start=${startMs}&end=${endMs}`;
   },
 
   /**
-   * 标记任务完成
+   * 获取演示数据（开发/演示用）
    */
-  markTaskComplete(
-    report: ParentDailyReport,
-    taskId: string
-  ): ParentDailyReport {
+  async getDemoLearningStatus(): Promise<TodayLearningStatus> {
+    const demoAnchors = classroomDataService.getDemoAnchors();
+    const demoTranscripts = classroomDataService.getDemoTranscripts();
+    
+    const confusions: ConfusionMoment[] = demoAnchors
+      .filter(a => a.status !== 'cancelled')
+      .map(anchor => {
+        const startMs = Math.max(0, anchor.timestamp - 30000);
+        const endMs = anchor.timestamp + 30000;
+        
+        const contextSegments = demoTranscripts.filter(
+          t => t.startMs < endMs && t.endMs > startMs
+        );
+        const transcriptContext = contextSegments.map(t => t.text).join(' ');
+        
+        return {
+          id: anchor.id,
+          timestamp: anchor.timestamp,
+          timeDisplay: formatTimeDisplay(Date.now() - (Math.random() * 3600000)),
+          sessionId: anchor.sessionId,
+          subject: '英语',
+          knowledgePoint: extractKnowledgePoint(transcriptContext),
+          transcriptContext: transcriptContext.slice(0, 200),
+          resolved: anchor.resolved,
+          resolvedAt: anchor.resolvedAt,
+          audioStartMs: startMs,
+          audioEndMs: endMs,
+        };
+      })
+      .sort((a, b) => b.timestamp - a.timestamp);
+    
+    const resolvedCount = confusions.filter(c => c.resolved).length;
+    
     return {
-      ...report,
-      completionStatus: report.completionStatus.map(task =>
-        task.taskId === taskId ? { ...task, completed: true } : task
-      ),
+      studentId: 'demo-student',
+      studentName: '小明',
+      date: new Date().toISOString().split('T')[0],
+      overview: {
+        totalClasses: 3,
+        totalConfusions: confusions.length,
+        resolvedCount,
+      },
+      confusions,
+      aiSummary: `小明今天在英语课上有 ${confusions.length - resolvedCount} 个困惑点待解决，主要集中在时态变化，建议今晚重点看看 💪`,
     };
   },
-
-  /**
-   * 计算完成率
-   */
-  getCompletionRate(report: ParentDailyReport): number {
-    if (report.completionStatus.length === 0) return 100;
-    const completed = report.completionStatus.filter(t => t.completed).length;
-    return Math.round((completed / report.completionStatus.length) * 100);
-  },
 };
+
+export default parentService;
