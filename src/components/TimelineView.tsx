@@ -27,7 +27,7 @@ export function TimelineView({
       {/* 头部统计 */}
       <div className="px-4 py-3 border-b border-gray-100">
         <div className="flex items-center justify-between mb-3">
-          <h2 className="text-sm font-semibold text-gray-900">课堂时间轴</h2>
+          <h2 className="text-sm font-semibold text-navy">课堂时间轴</h2>
           {unresolvedCount > 0 && (
             <span className="badge badge-streaming">
               {unresolvedCount} 待解决
@@ -44,7 +44,7 @@ export function TimelineView({
           <div className="h-2 bg-gray-100 rounded-full relative overflow-visible">
             {/* 进度 */}
             <div
-              className="absolute left-0 top-0 h-full bg-gradient-to-r from-rose-400 to-rose-500 rounded-full transition-all duration-100"
+              className="absolute left-0 top-0 h-full bg-gradient-to-r from-amber-400 to-amber-500 rounded-full transition-all duration-100"
               style={{ width: `${progressPercent}%` }}
             />
             {/* 断点标记 */}
@@ -54,9 +54,9 @@ export function TimelineView({
                 onClick={() => onBreakpointClick(bp)}
                 className={`absolute top-1/2 -translate-y-1/2 -translate-x-1/2 w-4 h-4 rounded-full border-2 border-white shadow-md transition-all hover:scale-125 z-10 ${
                   bp.resolved 
-                    ? 'bg-emerald-400' 
-                    : 'bg-rose-500 animate-pulse'
-                } ${selectedBreakpoint?.id === bp.id ? 'ring-2 ring-rose-300 scale-125' : ''}`}
+                    ? 'bg-mint' 
+                    : 'bg-coral animate-pulse'
+                } ${selectedBreakpoint?.id === bp.id ? 'ring-2 ring-amber-300 scale-125' : ''}`}
                 style={{ left: `${(bp.timestamp / totalDuration) * 100}%` }}
                 title={`${formatTimestamp(bp.timestamp)} - ${bp.resolved ? '已解决' : '待解决'}`}
               />
@@ -80,8 +80,8 @@ export function TimelineView({
                   onClick={() => onTimeClick(topic.startMs)}
                   className={`text-xs px-2.5 py-1.5 rounded-lg transition-all ${
                     isActive
-                      ? 'bg-rose-100 text-rose-700 font-medium shadow-sm'
-                      : 'bg-gray-50 text-gray-600 hover:bg-gray-100'
+                      ? 'bg-amber-100 text-amber-700 font-medium shadow-sm'
+                      : 'bg-gray-50 text-gray-600 hover:bg-amber-50'
                   }`}
                 >
                   {index + 1}. {topic.title}
@@ -115,13 +115,13 @@ export function TimelineView({
                   onClick={() => onTimeClick(segment.startMs)}
                   className={`relative py-1 px-2 rounded cursor-pointer transition-colors ${
                     isActive 
-                      ? 'bg-rose-50 text-rose-900' 
-                      : 'hover:bg-gray-50 text-gray-700'
+                      ? 'bg-lilac-100/50 text-navy' 
+                      : 'hover:bg-surface-soft text-gray-700'
                   }`}
                 >
                   {breakpoint && (
                     <div className={`absolute left-0 top-1/2 -translate-y-1/2 w-1.5 h-1.5 rounded-full ${
-                      breakpoint.resolved ? 'bg-emerald-400' : 'bg-rose-500'
+                      breakpoint.resolved ? 'bg-mint' : 'bg-coral'
                     }`} />
                   )}
                   <div className="flex items-baseline gap-2 pl-3">

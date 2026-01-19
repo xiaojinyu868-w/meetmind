@@ -136,6 +136,35 @@ export interface TutorResponseCache {
   updatedAt: Date;
 }
 
+/** 对话历史记录 */
+export interface ConversationHistoryRecord {
+  id?: number;
+  conversationId: string;      // UUID
+  userId: string;              // 用户ID，用于数据隔离
+  type: 'tutor' | 'chat';      // 对话类型
+  title: string;               // 对话标题
+  sessionId?: string;          // 关联的音频会话ID
+  anchorId?: string;           // 关联的困惑点ID
+  anchorTimestamp?: number;    // 困惑点时间戳
+  messageCount: number;        // 消息数量
+  lastMessage?: string;        // 最后一条消息预览
+  model?: string;              // 使用的AI模型
+  metadata?: string;           // JSON序列化的扩展元数据
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+/** 对话消息记录 */
+export interface ConversationMessageRecord {
+  id?: number;
+  messageId: string;           // UUID
+  conversationId: string;      // 关联对话ID
+  role: 'user' | 'assistant' | 'system';
+  content: string;
+  attachments?: string;        // JSON序列化的附件数组
+  createdAt: Date;
+}
+
 // ============ 数据库定义 ============
 
 class MeetMindDB extends Dexie {
@@ -147,6 +176,8 @@ class MeetMindDB extends Dexie {
   classSummaries!: Table<ClassSummary>;
   notes!: Table<Note>;
   tutorResponseCache!: Table<TutorResponseCache>;
+  conversationHistory!: Table<ConversationHistoryRecord>;
+  conversationMessages!: Table<ConversationMessageRecord>;
 
   constructor() {
     super('MeetMindDB');
@@ -180,6 +211,34 @@ class MeetMindDB extends Dexie {
       classSummaries: '++id, summaryId, sessionId, createdAt',
       notes: '++id, noteId, sessionId, studentId, source, createdAt',
       tutorResponseCache: '++id, anchorId, sessionId, timestamp, createdAt'
+    });
+    
+    // 版本 4: 添加对话历史表
+    this.version(4).stores({
+      audioSessions: '++id, sessionId, status, createdAt',
+      anchors: '++id, sessionId, timestamp, status, type',
+      transcripts: '++id, sessionId, startMs, isFinal',
+      preferences: 'key',
+      highlightTopics: '++id, topicId, sessionId, importance, createdAt',
+      classSummaries: '++id, summaryId, sessionId, createdAt',
+      notes: '++id, noteId, sessionId, studentId, source, createdAt',
+      tutorResponseCache: '++id, anchorId, sessionId, timestamp, createdAt',
+      conversationHistory: '++id, conversationId, userId, type, sessionId, anchorId, [userId+type], [userId+updatedAt], updatedAt',
+      conversationMessages: '++id, messageId, conversationId, createdAt'
+    });
+    
+    // 版本 5: 修复复合索引问题
+    this.version(5).stores({
+      audioSessions: '++id, sessionId, status, createdAt',
+      anchors: '++id, sessionId, timestamp, status, type',
+      transcripts: '++id, sessionId, startMs, isFinal',
+      preferences: 'key',
+      highlightTopics: '++id, topicId, sessionId, importance, createdAt',
+      classSummaries: '++id, summaryId, sessionId, createdAt',
+      notes: '++id, noteId, sessionId, studentId, source, createdAt',
+      tutorResponseCache: '++id, anchorId, sessionId, timestamp, createdAt',
+      conversationHistory: '++id, conversationId, userId, type, sessionId, anchorId, [userId+type], updatedAt',
+      conversationMessages: '++id, messageId, conversationId, createdAt'
     });
   }
 }
@@ -587,5 +646,201 @@ export async function deleteSessionTutorCaches(sessionId: string): Promise<numbe
   return db.tutorResponseCache
     .where('sessionId')
     .equals(sessionId)
+    .delete();
+}
+
+// ============ 对话历史操作 ============
+
+/** 创建对话历史 */
+export async function createConversationHistory(
+  conversation: Omit<ConversationHistoryRecord, 'id' | 'createdAt' | 'updatedAt'>
+): Promise<number> {
+  const now = new Date();
+  return db.conversationHistory.add({
+    ...conversation,
+    createdAt: now,
+    updatedAt: now
+  });
+}
+
+/** 根据 conversationId 获取对话历史 */
+export async function getConversationById(conversationId: string): Promise<ConversationHistoryRecord | undefined> {
+  return db.conversationHistory
+    .where('conversationId')
+    .equals(conversationId)
+    .first();
+}
+
+/** 根据 anchorId 获取对话历史（tutor 类型） */
+export async function getConversationByAnchorId(anchorId: string): Promise<ConversationHistoryRecord | undefined> {
+  return db.conversationHistory
+    .where('anchorId')
+    .equals(anchorId)
+    .first();
+}
+
+/** 获取用户的对话历史列表 */
+export async function getUserConversations(
+  userId: string,
+  options: { type?: 'tutor' | 'chat'; sessionId?: string; limit?: number; offset?: number } = {}
+): Promise<ConversationHistoryRecord[]> {
+  let collection;
+  
+  if (options.type) {
+    collection = db.conversationHistory
+      .where('[userId+type]')
+      .equals([userId, options.type]);
+  } else {
+    collection = db.conversationHistory
+      .where('userId')
+      .equals(userId);
+  }
+  
+  let results = await collection.reverse().sortBy('updatedAt');
+  
+  // 按 sessionId 过滤
+  if (options.sessionId) {
+    results = results.filter(r => r.sessionId === options.sessionId);
+  }
+  
+  // 分页
+  if (options.offset) {
+    results = results.slice(options.offset);
+  }
+  if (options.limit) {
+    results = results.slice(0, options.limit);
+  }
+  
+  return results;
+}
+
+/** 搜索用户对话历史 */
+export async function searchUserConversations(
+  userId: string,
+  keyword: string,
+  options: { type?: 'tutor' | 'chat'; limit?: number } = {}
+): Promise<ConversationHistoryRecord[]> {
+  const lowerKeyword = keyword.toLowerCase();
+  
+  let collection;
+  if (options.type) {
+    collection = db.conversationHistory
+      .where('[userId+type]')
+      .equals([userId, options.type]);
+  } else {
+    collection = db.conversationHistory
+      .where('userId')
+      .equals(userId);
+  }
+  
+  const all = await collection.toArray();
+  
+  // 在标题和最后消息中搜索
+  let results = all.filter(c => 
+    c.title.toLowerCase().includes(lowerKeyword) ||
+    (c.lastMessage && c.lastMessage.toLowerCase().includes(lowerKeyword))
+  );
+  
+  // 按更新时间降序
+  results.sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime());
+  
+  if (options.limit) {
+    results = results.slice(0, options.limit);
+  }
+  
+  return results;
+}
+
+/** 更新对话历史 */
+export async function updateConversationHistory(
+  conversationId: string,
+  updates: Partial<Omit<ConversationHistoryRecord, 'id' | 'conversationId' | 'userId' | 'createdAt'>>
+): Promise<number> {
+  return db.conversationHistory
+    .where('conversationId')
+    .equals(conversationId)
+    .modify({ ...updates, updatedAt: new Date() });
+}
+
+/** 删除对话历史（包括消息） */
+export async function deleteConversationHistory(conversationId: string): Promise<void> {
+  await db.transaction('rw', [db.conversationHistory, db.conversationMessages], async () => {
+    await db.conversationMessages
+      .where('conversationId')
+      .equals(conversationId)
+      .delete();
+    await db.conversationHistory
+      .where('conversationId')
+      .equals(conversationId)
+      .delete();
+  });
+}
+
+/** 删除用户所有对话历史 */
+export async function deleteUserConversations(userId: string): Promise<void> {
+  const conversations = await db.conversationHistory
+    .where('userId')
+    .equals(userId)
+    .toArray();
+  
+  const conversationIds = conversations.map(c => c.conversationId);
+  
+  await db.transaction('rw', [db.conversationHistory, db.conversationMessages], async () => {
+    await db.conversationMessages
+      .where('conversationId')
+      .anyOf(conversationIds)
+      .delete();
+    await db.conversationHistory
+      .where('userId')
+      .equals(userId)
+      .delete();
+  });
+}
+
+// ============ 对话消息操作 ============
+
+/** 添加对话消息 */
+export async function addConversationMessage(
+  message: Omit<ConversationMessageRecord, 'id' | 'createdAt'>
+): Promise<number> {
+  return db.conversationMessages.add({
+    ...message,
+    createdAt: new Date()
+  });
+}
+
+/** 批量添加对话消息 */
+export async function addConversationMessages(
+  messages: Omit<ConversationMessageRecord, 'id' | 'createdAt'>[]
+): Promise<number[]> {
+  const now = new Date();
+  const records = messages.map(m => ({
+    ...m,
+    createdAt: now
+  }));
+  return db.conversationMessages.bulkAdd(records, { allKeys: true }) as Promise<number[]>;
+}
+
+/** 获取对话的所有消息 */
+export async function getConversationMessages(conversationId: string): Promise<ConversationMessageRecord[]> {
+  return db.conversationMessages
+    .where('conversationId')
+    .equals(conversationId)
+    .sortBy('createdAt');
+}
+
+/** 获取对话消息数量 */
+export async function getConversationMessageCount(conversationId: string): Promise<number> {
+  return db.conversationMessages
+    .where('conversationId')
+    .equals(conversationId)
+    .count();
+}
+
+/** 删除对话的所有消息 */
+export async function deleteConversationMessages(conversationId: string): Promise<number> {
+  return db.conversationMessages
+    .where('conversationId')
+    .equals(conversationId)
     .delete();
 }

@@ -1,10 +1,13 @@
 'use client';
 
 // AI 家教聊天组件
-// 简化实现，直接调用 /api/chat
+// 支持对话历史持久化存储
 
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 import { formatTimestampMs } from '@/lib/longcut';
+import { useAuth } from '@/lib/hooks/useAuth';
+import { conversationService, getEffectiveUserId } from '@/lib/services/conversation-service';
+import type { ConversationHistory, ConversationMessage } from '@/types/conversation';
 
 interface Message {
   id: string;
@@ -23,6 +26,12 @@ interface AIChatProps {
   onTimestampClick?: (timeMs: number) => void;
   /** API 端点 */
   apiEndpoint?: string;
+  /** 关联的音频会话 ID */
+  sessionId?: string;
+  /** 指定继续的对话 ID */
+  conversationId?: string;
+  /** 对话创建/更新回调 */
+  onConversationChange?: (conversation: ConversationHistory) => void;
 }
 
 // AI 家教系统提示词
@@ -46,17 +55,97 @@ export function AIChat({
   contextText,
   onTimestampClick,
   apiEndpoint = '/api/chat',
+  sessionId,
+  conversationId: initialConversationId,
+  onConversationChange,
 }: AIChatProps) {
+  const { user } = useAuth();
+  const userId = getEffectiveUserId(user?.id);
+  
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const [inputValue, setInputValue] = useState('');
   const [messages, setMessages] = useState<Message[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  
+  // 对话历史状态
+  const [conversation, setConversation] = useState<ConversationHistory | null>(null);
+  const [isInitializing, setIsInitializing] = useState(false);
+  const conversationIdRef = useRef<string | null>(initialConversationId || null);
 
   // 自动滚动到底部
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
+
+  // 初始化或恢复对话
+  useEffect(() => {
+    const initConversation = async () => {
+      // 如果指定了对话 ID，加载历史
+      if (initialConversationId) {
+        setIsInitializing(true);
+        try {
+          const conv = await conversationService.getConversation(initialConversationId);
+          if (conv) {
+            setConversation(conv);
+            conversationIdRef.current = conv.conversationId;
+            
+            // 加载历史消息
+            const historyMessages = await conversationService.getMessages(conv.conversationId);
+            setMessages(historyMessages.map(m => ({
+              id: m.messageId,
+              role: m.role as 'user' | 'assistant',
+              content: m.content,
+            })));
+          }
+        } catch (err) {
+          console.error('Failed to load conversation:', err);
+        } finally {
+          setIsInitializing(false);
+        }
+      }
+    };
+    
+    initConversation();
+  }, [initialConversationId]);
+
+  // 创建新对话
+  const createConversation = useCallback(async (firstMessage: string) => {
+    try {
+      const title = conversationService.generateTitleFromMessage(firstMessage);
+      const conv = await conversationService.createConversation({
+        userId,
+        type: 'chat',
+        title,
+        sessionId,
+        anchorId,
+        anchorTimestamp,
+      });
+      
+      setConversation(conv);
+      conversationIdRef.current = conv.conversationId;
+      onConversationChange?.(conv);
+      
+      return conv;
+    } catch (err) {
+      console.error('Failed to create conversation:', err);
+      return null;
+    }
+  }, [userId, sessionId, anchorId, anchorTimestamp, onConversationChange]);
+
+  // 保存消息到对话历史
+  const saveMessage = useCallback(async (role: 'user' | 'assistant', content: string) => {
+    if (!conversationIdRef.current) return;
+    
+    try {
+      await conversationService.addMessage(conversationIdRef.current, {
+        role,
+        content,
+      });
+    } catch (err) {
+      console.error('Failed to save message:', err);
+    }
+  }, []);
 
   // 发送消息
   const sendMessage = async (content: string) => {
@@ -74,6 +163,14 @@ export function AIChat({
     setError(null);
 
     try {
+      // 如果是首条消息，创建对话
+      if (!conversationIdRef.current) {
+        await createConversation(content.trim());
+      }
+      
+      // 保存用户消息
+      await saveMessage('user', userMessage.content);
+
       // 构建消息历史，包含系统提示词
       const apiMessages = [
         { role: 'system' as const, content: TUTOR_SYSTEM_PROMPT },
@@ -108,6 +205,9 @@ export function AIChat({
       };
 
       setMessages(prev => [...prev, assistantMessage]);
+      
+      // 保存助手消息
+      await saveMessage('assistant', assistantMessage.content);
     } catch (err) {
       setError(err instanceof Error ? err.message : '发送失败');
     } finally {
@@ -148,7 +248,7 @@ export function AIChat({
           <button
             key={index}
             onClick={() => onTimestampClick?.(timeMs)}
-            className="inline-flex items-center px-1.5 py-0.5 bg-indigo-100 text-indigo-700 rounded text-sm font-mono hover:bg-indigo-200 transition-colors"
+            className="inline-flex items-center px-1.5 py-0.5 bg-amber-100 text-amber-700 rounded text-sm font-mono hover:bg-amber-200 transition-colors"
           >
             ▶ {part}
           </button>
@@ -158,6 +258,30 @@ export function AIChat({
     });
   };
 
+  // 清空当前对话
+  const clearConversation = useCallback(() => {
+    setMessages([]);
+    setConversation(null);
+    conversationIdRef.current = null;
+  }, []);
+
+  if (isInitializing) {
+    return (
+      <div className="flex flex-col h-full min-h-0 bg-white rounded-lg border border-gray-200">
+        <div className="flex-1 flex items-center justify-center">
+          <div className="text-center">
+            <div className="flex gap-1 justify-center mb-2">
+              <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
+              <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
+              <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+            </div>
+            <p className="text-sm text-gray-500">加载对话历史...</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="flex flex-col h-full min-h-0 bg-white rounded-lg border border-gray-200">
       {/* 头部 */}
@@ -165,12 +289,28 @@ export function AIChat({
         <div className="flex items-center gap-2">
           <span className="text-lg">🎓</span>
           <span className="font-medium text-gray-900">AI 家教</span>
+          {conversation && (
+            <span className="text-xs text-gray-400 truncate max-w-[120px]" title={conversation.title}>
+              · {conversation.title}
+            </span>
+          )}
         </div>
-        {anchorTimestamp && (
-          <span className="text-xs text-gray-500">
-            困惑点: {formatTimestampMs(anchorTimestamp)}
-          </span>
-        )}
+        <div className="flex items-center gap-2">
+          {anchorTimestamp && (
+            <span className="text-xs text-gray-500">
+              困惑点: {formatTimestampMs(anchorTimestamp)}
+            </span>
+          )}
+          {messages.length > 0 && (
+            <button
+              onClick={clearConversation}
+              className="text-xs text-gray-400 hover:text-gray-600 transition-colors"
+              title="开始新对话"
+            >
+              🔄 新对话
+            </button>
+          )}
+        </div>
       </div>
 
       {/* 消息列表 */}
@@ -209,7 +349,7 @@ export function AIChat({
             <div
               className={`max-w-[85%] rounded-lg px-4 py-2 ${
                 message.role === 'user'
-                  ? 'bg-indigo-500 text-white'
+                  ? 'bg-amber-500 text-white'
                   : 'bg-gray-100 text-gray-900'
               }`}
             >
@@ -267,12 +407,12 @@ export function AIChat({
             onChange={(e) => setInputValue(e.target.value)}
             disabled={isLoading}
             placeholder="输入你的问题..."
-            className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed"
+            className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-400 focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed"
           />
           <button
             type="submit"
             disabled={isLoading || !inputValue.trim()}
-            className="px-4 py-2 bg-indigo-500 text-white rounded-lg hover:bg-indigo-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            className="px-4 py-2 bg-amber-500 text-white rounded-lg hover:bg-amber-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
           >
             发送
           </button>

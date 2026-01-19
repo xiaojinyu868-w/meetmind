@@ -10,6 +10,7 @@ import { Citations, CitationsSkeleton } from './Citations';
 import { ImageUpload, useImagePaste, type UploadedImage } from './ImageUpload';
 import { useAuth } from '@/lib/hooks/useAuth';
 import { saveTutorResponseCache, getTutorResponseCache, deleteTutorResponseCache, getPreference, setPreference, type TutorResponseCache } from '@/lib/db';
+import { conversationService, getEffectiveUserId } from '@/lib/services/conversation-service';
 import type { GuidanceQuestion as GuidanceQuestionType, GuidanceOption, Citation } from '@/types/dify';
 import { DEFAULT_MODEL_ID } from '@/lib/services/llm-service';
 
@@ -77,7 +78,8 @@ interface TutorAPIResponse {
 }
 
 export function AITutor({ breakpoint, segments, isLoading: externalLoading, onResolve, onActionItemsUpdate, sessionId = 'default', onSeek, initialQuestion, isMobile = false }: AITutorProps) {
-  const { accessToken } = useAuth();
+  const { accessToken, user } = useAuth();
+  const userId = getEffectiveUserId(user?.id);
   const [userInput, setUserInput] = useState('');
   const [chatHistory, setChatHistory] = useState<Array<{ role: 'user' | 'assistant'; content: string }>>([]);
   const [selectedModel, setSelectedModel] = useState(DEFAULT_MODEL_ID);
@@ -94,6 +96,9 @@ export function AITutor({ breakpoint, segments, isLoading: externalLoading, onRe
   const hasProcessedInitialQuestion = useRef(false);  // 是否已处理初始问题
   const [isSearching, setIsSearching] = useState(false);
   const [notebookAvailable, setNotebookAvailable] = useState(false);
+  
+  // 对话历史相关
+  const conversationIdRef = useRef<string | null>(null);
   
   const [enableWeb, setEnableWeb] = useState(true);
   const [selectedOptionId, setSelectedOptionId] = useState<string | undefined>();
@@ -199,15 +204,15 @@ export function AITutor({ breakpoint, segments, isLoading: externalLoading, onRe
       const displayText = timeString;
 
       parts.push(
-        <button
+          <button
           key={`ts-${match.index}`}
           onClick={() => handleTimestampClick(startMs)}
           className={`
             inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-mono mx-0.5
             transition-all duration-300 border
             ${isActive 
-              ? 'bg-gradient-to-r from-blue-500 to-indigo-500 text-white border-blue-600 shadow-lg shadow-blue-200 scale-110 animate-pulse' 
-              : 'bg-gradient-to-r from-blue-100 to-blue-50 text-blue-700 border-blue-200 hover:from-blue-200 hover:to-blue-100 hover:shadow-md hover:scale-105'
+              ? 'bg-gradient-to-r from-amber-500 to-amber-600 text-white border-amber-600 shadow-lg shadow-amber-200 scale-110 animate-pulse' 
+              : 'bg-gradient-to-r from-amber-100 to-amber-50 text-amber-700 border-amber-200 hover:from-amber-200 hover:to-amber-100 hover:shadow-md hover:scale-105'
             }
           `}
           title={`点击跳转到 ${displayText}`}
@@ -344,6 +349,7 @@ export function AITutor({ breakpoint, segments, isLoading: externalLoading, onRe
     if (!breakpoint) return;
     
     try {
+      // 保存到 TutorResponseCache（原有缓存）
       await saveTutorResponseCache({
         anchorId: breakpoint.id,
         sessionId,
@@ -352,10 +358,57 @@ export function AITutor({ breakpoint, segments, isLoading: externalLoading, onRe
         chatHistory: JSON.stringify(history),
         conversationId: convId,
       });
+      
+      // 同步到对话历史系统
+      await syncToConversationHistory(resp, history);
     } catch (err) {
       console.error('Failed to save to cache:', err);
     }
   }, [breakpoint, sessionId]);
+
+  // 同步到对话历史系统
+  const syncToConversationHistory = useCallback(async (
+    resp: TutorAPIResponse,
+    history: Array<{ role: 'user' | 'assistant'; content: string }>
+  ) => {
+    if (!breakpoint) return;
+    
+    try {
+      // 获取或创建对话记录
+      let conv = await conversationService.getConversationByAnchor(breakpoint.id);
+      
+      if (!conv) {
+        // 创建新对话
+        conv = await conversationService.createConversation({
+          userId,
+          type: 'tutor',
+          title: `困惑点 ${formatTimestamp(breakpoint.timestamp)}`,
+          sessionId,
+          anchorId: breakpoint.id,
+          anchorTimestamp: breakpoint.timestamp,
+          model: selectedModel,
+        });
+        conversationIdRef.current = conv.conversationId;
+      }
+      
+      // 获取已保存的消息数
+      const existingMessages = await conversationService.getMessages(conv.conversationId);
+      
+      // 只同步新增的消息
+      if (history.length > existingMessages.length) {
+        const newMessages = history.slice(existingMessages.length);
+        await conversationService.addMessages(
+          conv.conversationId,
+          newMessages.map(m => ({
+            role: m.role,
+            content: m.content,
+          }))
+        );
+      }
+    } catch (err) {
+      console.error('Failed to sync to conversation history:', err);
+    }
+  }, [breakpoint, userId, sessionId, selectedModel]);
 
   const handleSearch = useCallback(async (query: string) => {
     if (!query.trim()) return;
@@ -613,20 +666,20 @@ export function AITutor({ breakpoint, segments, isLoading: externalLoading, onRe
   return (
     <div className="h-full flex flex-col">
       {/* 断点信息 - 移动端使用紧凑垂直布局 */}
-      <div className={`border-b border-gray-100 bg-gradient-to-r from-rose-50 to-white ${isMobile ? 'p-3' : 'p-4'}`}>
+      <div className={`border-b border-gray-100 bg-gradient-to-r from-lilac-100/50 to-white ${isMobile ? 'p-3' : 'p-4'}`}>
         {isMobile ? (
           // 移动端紧凑布局
           <div className="space-y-2">
             {/* 第一行：困惑点信息 + 状态 */}
             <div className="flex items-center gap-2">
-              <div className={`w-2.5 h-2.5 rounded-full flex-shrink-0 ${breakpoint.resolved ? 'bg-emerald-400' : 'bg-rose-500 animate-pulse'}`} />
-              <span className="text-sm font-medium text-gray-900 truncate">
+              <div className={`w-2.5 h-2.5 rounded-full flex-shrink-0 ${breakpoint.resolved ? 'bg-mint' : 'bg-coral animate-pulse'}`} />
+              <span className="text-sm font-medium text-navy truncate">
                 {formatTimestamp(breakpoint.timestamp)} 的困惑点
               </span>
               <span className="text-xs text-gray-500 flex-shrink-0">
                 {breakpoint.resolved ? '✅' : '🔴'}
               </span>
-              {isFromCache && <span className="text-xs text-blue-500 flex-shrink-0">📋</span>}
+              {isFromCache && <span className="text-xs text-skyblue flex-shrink-0">📋</span>}
             </div>
             {/* 第二行：模型选择器 + 操作按钮 */}
             <div className="flex items-center justify-between gap-2">
@@ -669,14 +722,14 @@ export function AITutor({ breakpoint, segments, isLoading: externalLoading, onRe
           <>
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
-                <div className={`w-3 h-3 rounded-full ${breakpoint.resolved ? 'bg-emerald-400' : 'bg-rose-500 animate-pulse'}`} />
+                <div className={`w-3 h-3 rounded-full ${breakpoint.resolved ? 'bg-mint' : 'bg-coral animate-pulse'}`} />
                 <div>
-                  <p className="text-sm font-semibold text-gray-900">
+                  <p className="text-sm font-semibold text-navy">
                     {formatTimestamp(breakpoint.timestamp)} 的困惑点
                   </p>
                   <p className="text-xs text-gray-500 mt-0.5">
                     {breakpoint.resolved ? '✅ 已解决' : '🔴 待解决'}
-                    {isFromCache && <span className="ml-2 text-blue-500">📋 已缓存</span>}
+                    {isFromCache && <span className="ml-2 text-skyblue">📋 已缓存</span>}
                   </p>
                 </div>
               </div>
@@ -720,7 +773,7 @@ export function AITutor({ breakpoint, segments, isLoading: externalLoading, onRe
                   type="checkbox"
                   checked={enableWeb}
                   onChange={(e) => setEnableWeb(e.target.checked)}
-                  className="w-4 h-4 rounded border-gray-300 text-rose-500 focus:ring-rose-400"
+                  className="w-4 h-4 rounded border-gray-300 text-amber-500 focus:ring-amber-400"
                 />
                 <span className="group-hover:text-gray-900 transition-colors">🌐 联网搜索</span>
               </label>
@@ -768,7 +821,7 @@ export function AITutor({ breakpoint, segments, isLoading: externalLoading, onRe
           <div className="space-y-6 animate-slide-up">
             {/* 老师原话 - 扩展上下文 */}
             <Section icon="📚" title="课堂回顾">
-              <div className="bg-amber-50 border border-amber-100 rounded-xl p-4">
+              <div className="bg-sunflower-50 border border-sunflower-200 rounded-xl p-4">
                 {/* 显示完整上下文，每段可点击跳转 */}
                 <div className="text-sm text-gray-700 leading-relaxed space-y-1 max-h-48 overflow-y-auto">
                   {contextSegments.length > 0 ? (
@@ -782,16 +835,16 @@ export function AITutor({ breakpoint, segments, isLoading: externalLoading, onRe
                           className={`
                             inline cursor-pointer transition-all duration-300
                             ${isActive 
-                              ? 'bg-amber-400 text-amber-900 px-1 rounded shadow-md scale-105' 
+                              ? 'bg-sunflower px-1 rounded shadow-md scale-105' 
                               : isNearBreakpoint 
-                                ? 'bg-amber-200/60 px-1 rounded hover:bg-amber-300/80' 
-                                : 'hover:bg-amber-200/80'
+                                ? 'bg-sunflower-200/60 px-1 rounded hover:bg-sunflower-300/80' 
+                                : 'hover:bg-sunflower-200/80'
                             }
                           `}
                           onClick={() => handleTimestampClick(seg.startMs)}
                           title={`点击跳转到 ${formatTime(seg.startMs)}`}
                         >
-                          <span className={`text-xs font-mono mr-1 ${isActive ? 'text-amber-800' : 'text-amber-600'}`}>
+                          <span className={`text-xs font-mono mr-1 ${isActive ? 'text-navy' : 'text-warmOrange-700'}`}>
                             [{formatTime(seg.startMs)}]
                           </span>
                           {seg.text}{' '}
@@ -808,8 +861,8 @@ export function AITutor({ breakpoint, segments, isLoading: externalLoading, onRe
                     className={`
                       mt-3 inline-flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg transition-all duration-300 border
                       ${seekingTimestamp === response.explanation.citation.startMs
-                        ? 'bg-gradient-to-r from-amber-500 to-orange-500 text-white border-amber-600 shadow-lg shadow-amber-200 scale-105'
-                        : 'text-amber-700 hover:text-amber-800 bg-amber-100 hover:bg-amber-200 border-amber-200 hover:shadow-md'
+                        ? 'bg-gradient-to-r from-sunflower to-warmOrange text-navy border-sunflower-600 shadow-lg shadow-sunflower-200 scale-105'
+                        : 'text-warmOrange-700 hover:text-warmOrange-800 bg-sunflower-100 hover:bg-sunflower-200 border-sunflower-200 hover:shadow-md'
                       }
                     `}
                     title="点击跳转播放"
@@ -879,7 +932,7 @@ export function AITutor({ breakpoint, segments, isLoading: externalLoading, onRe
                       <div key={result.id} className="p-3 bg-gray-50 rounded-xl text-sm">
                         <div className="flex items-center justify-between mb-1">
                           <span className="text-xs text-gray-500">{result.source}</span>
-                          <span className="text-xs text-rose-600">
+                          <span className="text-xs text-coral">
                             相似度: {Math.round(result.score * 100)}%
                           </span>
                         </div>
@@ -988,7 +1041,7 @@ function Section({
         <span>{icon}</span>
         <span>{title}</span>
         {badge && (
-          <span className="text-xs font-normal text-rose-600 bg-rose-50 px-2 py-0.5 rounded-full">
+          <span className="text-xs font-normal text-coral bg-coral-50 px-2 py-0.5 rounded-full">
             {badge}
           </span>
         )}

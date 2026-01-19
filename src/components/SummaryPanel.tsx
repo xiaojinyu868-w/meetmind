@@ -265,7 +265,7 @@ export function SummaryPanel({
         <Section
           title="课堂结构"
           icon={
-            <svg className="w-5 h-5 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg className="w-5 h-5 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 10h16M4 14h16M4 18h16" />
             </svg>
           }
@@ -274,7 +274,7 @@ export function SummaryPanel({
           <div className="flex flex-wrap gap-2">
             {summary.structure.map((item, index) => (
               <React.Fragment key={index}>
-                <span className="px-3 py-1.5 bg-purple-100 text-purple-700 text-sm rounded-full">
+                <span className="px-3 py-1.5 bg-amber-100 text-amber-700 text-sm rounded-full">
                   {item}
                 </span>
                 {index < summary.structure.length - 1 && (

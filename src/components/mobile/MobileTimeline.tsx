@@ -55,16 +55,16 @@ function TimelineItem({
         "w-full text-left px-4 py-3 transition-all duration-200",
         "border-l-2 focus:outline-none",
         isActive
-          ? "bg-indigo-500/10 border-l-indigo-500"
+          ? "bg-amber-500/10 border-l-amber-500"
           : "bg-transparent border-l-transparent hover:bg-slate-800/50",
-        isSelected && "ring-1 ring-indigo-500/50 rounded-r-lg"
+        isSelected && "ring-1 ring-amber-500/50 rounded-r-lg"
       )}
     >
       <div className="flex items-start gap-3">
         {/* 时间标签 */}
         <div className={cn(
           "flex-shrink-0 text-xs font-mono px-2 py-0.5 rounded",
-          isActive ? "bg-indigo-500/20 text-indigo-300" : "bg-slate-800 text-slate-500"
+          isActive ? "bg-amber-500/20 text-amber-300" : "bg-slate-800 text-slate-500"
         )}>
           {formatTime(entry.startMs)}
         </div>

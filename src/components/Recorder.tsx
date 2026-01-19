@@ -377,8 +377,8 @@ export function Recorder({
         {/* 服务状态 */}
         <div className="flex items-center gap-2">
           <div className={`w-2 h-2 rounded-full transition-colors ${
-            serviceStatus === 'checking' ? 'bg-amber-400 animate-pulse' :
-            serviceStatus === 'available' ? 'bg-emerald-400' :
+            serviceStatus === 'checking' ? 'bg-sunflower animate-pulse' :
+            serviceStatus === 'available' ? 'bg-mint' :
             'bg-gray-300'
           }`} />
           <span className="text-xs text-gray-500">
@@ -396,7 +396,7 @@ export function Recorder({
               disabled={!streamingAvailable}
               className={`px-3 py-1.5 text-xs rounded-md transition-all ${
                 transcribeMode === 'streaming' 
-                  ? 'bg-white text-rose-600 shadow-sm' 
+                  ? 'bg-white text-amber-600 shadow-sm' 
                   : 'text-gray-500 hover:text-gray-700'
               } ${!streamingAvailable ? 'opacity-50 cursor-not-allowed' : ''}`}
             >
@@ -425,7 +425,7 @@ export function Recorder({
 
       {/* 错误提示 */}
       {error && (
-        <div className="mb-6 p-4 bg-red-50 border border-red-100 rounded-xl text-red-600 text-sm animate-slide-up">
+        <div className="mb-6 p-4 bg-coral-50 border border-coral-100 rounded-xl text-coral-600 text-sm animate-slide-up">
           <div className="flex items-center gap-2">
             <span>⚠️</span>
             <span>{error}</span>
@@ -435,14 +435,14 @@ export function Recorder({
 
       {/* 转录进度 */}
       {isTranscribing && (
-        <div className="mb-6 p-4 bg-accent-50 border border-accent-100 rounded-xl animate-slide-up">
+        <div className="mb-6 p-4 bg-sunflower-50 border border-sunflower-100 rounded-xl animate-slide-up">
           <div className="flex items-center gap-3">
             <div className="loading-dots">
               <span></span>
               <span></span>
               <span></span>
             </div>
-            <span className="text-sm text-accent-700">{transcribeProgress || '正在转录...'}</span>
+            <span className="text-sm text-warmOrange-700">{transcribeProgress || '正在转录...'}</span>
           </div>
         </div>
       )}
@@ -452,15 +452,15 @@ export function Recorder({
         {/* 时间显示 */}
         <div className="mb-8 text-center">
           <div className={`text-5xl font-mono font-bold tracking-tight transition-colors ${
-            isRecording ? 'text-rose-500' : 
-            isPaused ? 'text-amber-500' : 
+            isRecording ? 'text-coral' : 
+            isPaused ? 'text-sunflower-600' : 
             'text-gray-300'
           }`}>
             {formatTime(elapsedMs)}
           </div>
           {isRecording && (
             <div className="mt-2 flex items-center justify-center gap-2 text-xs text-gray-400">
-              <span className="w-2 h-2 bg-rose-500 rounded-full animate-pulse" />
+              <span className="w-2 h-2 bg-coral rounded-full animate-pulse" />
               正在录音
             </div>
           )}
@@ -473,7 +473,7 @@ export function Recorder({
               <div
                 key={i}
                 className={`w-1.5 rounded-full transition-all duration-75 ${
-                  isRecording && level * 12 > i ? 'bg-emerald-400' : 'bg-gray-200'
+                  isRecording && level * 12 > i ? 'bg-mint' : 'bg-gray-200'
                 }`}
                 style={{ 
                   height: isRecording 
@@ -504,7 +504,7 @@ export function Recorder({
             <>
               <button
                 onClick={pauseRecording}
-                className="w-14 h-14 rounded-full bg-amber-100 text-amber-600 flex items-center justify-center hover:bg-amber-200 transition-all active:scale-95"
+                className="w-14 h-14 rounded-full bg-sunflower-100 text-sunflower-700 flex items-center justify-center hover:bg-sunflower-200 transition-all active:scale-95"
                 aria-label="暂停"
               >
                 <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 24 24">
@@ -528,7 +528,7 @@ export function Recorder({
             <>
               <button
                 onClick={resumeRecording}
-                className="w-14 h-14 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center hover:bg-emerald-200 transition-all active:scale-95"
+                className="w-14 h-14 rounded-full bg-mint-100 text-mint-700 flex items-center justify-center hover:bg-mint-200 transition-all active:scale-95"
                 aria-label="继续"
               >
                 <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 24 24">
@@ -548,8 +548,8 @@ export function Recorder({
           )}
 
           {isTranscribing && (
-            <div className="w-20 h-20 rounded-full bg-accent-100 flex items-center justify-center">
-              <div className="w-8 h-8 border-3 border-accent-500 border-t-transparent rounded-full animate-spin" />
+            <div className="w-20 h-20 rounded-full bg-sunflower-100 flex items-center justify-center">
+              <div className="w-8 h-8 border-3 border-sunflower border-t-transparent rounded-full animate-spin" />
             </div>
           )}
 
@@ -590,7 +590,7 @@ export function Recorder({
             <div className="mt-3 flex items-center justify-between text-xs text-gray-400">
               <span>{canUndo ? '5秒内可撤销' : '标记你的困惑点'}</span>
               {anchorCount > 0 && (
-                <span className="text-rose-500">已标记 {anchorCount} 个</span>
+                <span className="text-coral">已标记 {anchorCount} 个</span>
               )}
             </div>
           </div>
@@ -637,8 +637,8 @@ export function Recorder({
 
       {/* 完成提示 */}
       {isStopped && transcribeProgress && (
-        <div className="mt-6 p-4 bg-emerald-50 border border-emerald-100 rounded-xl animate-scale-in">
-          <div className="flex items-center gap-2 text-emerald-700">
+        <div className="mt-6 p-4 bg-mint-50 border border-mint-200 rounded-xl animate-scale-in">
+          <div className="flex items-center gap-2 text-mint-700">
             <span className="text-lg">✅</span>
             <span className="text-sm font-medium">{transcribeProgress}</span>
           </div>

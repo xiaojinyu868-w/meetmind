@@ -148,10 +148,10 @@ export function PodcastPlayer({
           onClick={onPlayPause}
           className={cn(
             "w-14 h-14 rounded-full flex items-center justify-center",
-            "bg-gradient-to-br from-indigo-500 to-purple-600",
-            "text-white shadow-lg shadow-indigo-500/30",
+            "bg-gradient-to-br from-amber-400 to-amber-500",
+            "text-white shadow-lg shadow-amber-500/30",
             "active:scale-95 transition-transform",
-            "focus:outline-none focus:ring-2 focus:ring-indigo-400 focus:ring-offset-2 focus:ring-offset-slate-900"
+            "focus:outline-none focus:ring-2 focus:ring-amber-400 focus:ring-offset-2 focus:ring-offset-slate-900"
           )}
           aria-label={isPlaying ? '暂停' : '播放'}
         >
@@ -194,7 +194,7 @@ export function PodcastPlayer({
         >
           {/* 已播放进度 */}
           <div
-            className="absolute inset-y-0 left-0 rounded-full bg-gradient-to-r from-indigo-500 to-purple-500"
+            className="absolute inset-y-0 left-0 rounded-full bg-gradient-to-r from-amber-400 to-amber-500"
             style={{ width: `${progress}%` }}
           />
           
@@ -203,7 +203,7 @@ export function PodcastPlayer({
             className={cn(
               "absolute top-1/2 -translate-y-1/2 -translate-x-1/2",
               "w-4 h-4 rounded-full bg-white shadow-md",
-              "border-2 border-indigo-500",
+              "border-2 border-amber-500",
               isDragging && "scale-125"
             )}
             style={{ left: `${progress}%` }}

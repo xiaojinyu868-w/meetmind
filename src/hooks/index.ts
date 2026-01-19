@@ -19,3 +19,5 @@ export { useAudio } from './useAudio';
 export { useRecording } from './useRecording';
 export { useResponsive } from './useResponsive';
 export { useDragGesture } from './useDragGesture';
+export { useConversationHistory, useSingleConversation } from './useConversationHistory';
+export { useResizable } from './useResizable';

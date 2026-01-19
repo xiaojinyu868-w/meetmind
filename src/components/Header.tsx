@@ -27,14 +27,14 @@ export function Header({ lessonTitle, courseName, userRole = 'student' }: Header
   };
 
   return (
-    <header className="h-16 glass border-b border-white/20 flex items-center justify-between px-6 flex-shrink-0 no-print">
+    <header className="h-16 bg-white border-b flex items-center justify-between px-6 flex-shrink-0 no-print" style={{ borderColor: 'var(--edu-border-light)' }}>
       <div className="flex items-center gap-5 min-w-0">
         {/* Logo */}
         <Link href="/" className="flex items-center gap-2.5 group flex-shrink-0">
-          <div className="w-9 h-9 bg-gradient-to-br from-rose-400 to-rose-500 rounded-xl flex items-center justify-center shadow-md group-hover:shadow-lg group-hover:scale-105 transition-all">
+          <div className="w-9 h-9 bg-gradient-to-br from-amber-400 to-amber-500 rounded-xl flex items-center justify-center shadow-md group-hover:shadow-lg group-hover:scale-105 transition-all">
             <span className="text-white font-bold text-lg">M</span>
           </div>
-          <span className="font-semibold text-gray-900 text-lg whitespace-nowrap">MeetMind</span>
+          <span className="font-semibold text-navy text-lg whitespace-nowrap">MeetMind</span>
         </Link>
 
         {/* 分隔线 */}
@@ -42,17 +42,17 @@ export function Header({ lessonTitle, courseName, userRole = 'student' }: Header
 
         {/* 当前课程 */}
         <div className="flex items-center gap-2 min-w-0 hidden sm:flex">
-          <span className="px-2.5 py-1 bg-rose-100 text-rose-700 rounded-lg text-xs font-medium whitespace-nowrap flex-shrink-0">
+          <span className="px-2.5 py-1 bg-sunflower-100 text-sunflower-800 rounded-lg text-xs font-medium whitespace-nowrap flex-shrink-0">
             {courseName}
           </span>
-          <h1 className="text-sm font-medium text-gray-700 truncate min-w-0">{lessonTitle}</h1>
+          <h1 className="text-sm font-medium text-navy truncate min-w-0">{lessonTitle}</h1>
         </div>
       </div>
 
       {/* 右侧 */}
       <div className="flex items-center gap-4">
         {/* 角色切换 */}
-        <nav className="flex items-center gap-1 p-1 bg-gray-100/80 rounded-xl">
+        <nav className="flex items-center gap-1 p-1 rounded-xl" style={{ background: 'var(--edu-bg-soft)' }}>
           <RoleTab href="/" label="学生" icon="👤" active={userRole === 'student'} />
           <RoleTab href="/parent" label="家长" icon="👨‍👩‍👧" active={userRole === 'parent'} />
           <RoleTab href="/teacher" label="教师" icon="👨‍🏫" active={userRole === 'teacher'} />
@@ -64,7 +64,7 @@ export function Header({ lessonTitle, courseName, userRole = 'student' }: Header
             <>
               <button
                 onClick={() => setShowUserMenu(!showUserMenu)}
-                className="w-9 h-9 bg-gradient-to-br from-gray-100 to-gray-200 rounded-full flex items-center justify-center hover:from-gray-200 hover:to-gray-300 transition-all overflow-hidden"
+                className="w-9 h-9 bg-gradient-to-br from-lilac-200 to-lilac-300 rounded-full flex items-center justify-center hover:from-lilac-300 hover:to-lilac-400 transition-all overflow-hidden"
               >
                 {user.avatar ? (
                   <img src={user.avatar} alt={user.nickname} className="w-full h-full object-cover" />
@@ -78,25 +78,25 @@ export function Header({ lessonTitle, courseName, userRole = 'student' }: Header
               {showUserMenu && (
                 <div className="absolute right-0 top-full mt-2 w-48 bg-white rounded-xl shadow-lg border border-gray-100 py-2 animate-scale-in z-50">
                   <div className="px-4 py-2 border-b border-gray-100">
-                    <p className="text-sm font-medium text-gray-900">{user.nickname}</p>
+                    <p className="text-sm font-medium text-navy">{user.nickname}</p>
                     <p className="text-xs text-gray-500">{roleLabels[user.role] || user.role}账号</p>
                   </div>
                   <Link
                     href="/profile"
                     onClick={() => setShowUserMenu(false)}
-                    className="block w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-50 transition-colors"
+                    className="block w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-lilac-50 transition-colors"
                   >
                     个人资料
                   </Link>
-                  <button className="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-50 transition-colors">
+                  <button className="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-lilac-50 transition-colors">
                     设置
                   </button>
-                  <button className="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-50 transition-colors">
+                  <button className="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-lilac-50 transition-colors">
                     帮助
                   </button>
                   <button
                     onClick={handleLogout}
-                    className="w-full px-4 py-2 text-left text-sm text-rose-600 hover:bg-rose-50 transition-colors"
+                    className="w-full px-4 py-2 text-left text-sm text-coral-600 hover:bg-coral-50 transition-colors"
                   >
                     退出登录
                   </button>
@@ -106,7 +106,7 @@ export function Header({ lessonTitle, courseName, userRole = 'student' }: Header
           ) : (
             <Link
               href="/login"
-              className="px-4 py-2 text-sm font-medium text-white bg-gradient-to-r from-rose-500 to-rose-600 rounded-lg hover:from-rose-600 hover:to-rose-700 transition-all shadow-md"
+              className="px-4 py-2 text-sm font-medium text-white bg-gradient-to-r from-amber-400 to-amber-500 rounded-lg hover:from-amber-500 hover:to-amber-600 transition-all shadow-md"
             >
               登录
             </Link>
@@ -133,8 +133,8 @@ function RoleTab({
       href={href}
       className={`px-3 py-1.5 rounded-lg text-sm flex items-center gap-1.5 transition-all ${
         active
-          ? 'bg-white text-gray-900 shadow-sm font-medium'
-          : 'text-gray-500 hover:text-gray-700 hover:bg-white/50'
+          ? 'bg-white text-amber-600 shadow-sm font-medium'
+          : 'text-gray-500 hover:text-navy hover:bg-white/50'
       }`}
     >
       <span className="text-xs">{icon}</span>

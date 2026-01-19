@@ -10,6 +10,7 @@ export { TimelineView } from './TimelineView';
 export { AITutor } from './AITutor';
 export { AIChat } from './AIChat';
 export { ModelSelector } from './ModelSelector';
+export { ConversationList, ConversationItem } from './ConversationHistory';
 
 // Dify 引导组件（新增）
 export { GuidanceQuestion, GuidanceQuestionSkeleton } from './GuidanceQuestion';
@@ -32,3 +33,6 @@ export { ServiceStatus, DegradedModeBanner } from './ServiceStatus';
 export { Header } from './Header';
 export { ActionList } from './ActionList';
 export { LessonList } from './LessonList';
+export { ActionSidebar } from './ActionSidebar';
+export { ActionDrawer } from './ActionDrawer';
+export { ResizablePanel } from './layout/ResizablePanel';

@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 300 200" fill="none">
+  <!-- 背景装饰圆 -->
+  <circle cx="250" cy="40" r="30" fill="#FFD93D" opacity="0.15"/>
+  <circle cx="40" cy="160" r="25" fill="#6C5CE7" opacity="0.1"/>
+  
+  <!-- 空盒子/容器 -->
+  <g transform="translate(80, 40)">
+    <!-- 盒子主体 -->
+    <path d="M10 60 L70 30 L130 60 L130 140 L70 170 L10 140 Z" fill="white" stroke="#E5E7EB" stroke-width="2"/>
+    <!-- 盒子顶面 -->
+    <path d="M10 60 L70 30 L130 60 L70 90 Z" fill="#F8F9FA" stroke="#E5E7EB" stroke-width="2"/>
+    <!-- 盒子右面阴影 -->
+    <path d="M70 90 L130 60 L130 140 L70 170 Z" fill="#F3F4F6"/>
+    
+    <!-- 虚线表示空 -->
+    <line x1="40" y1="100" x2="100" y2="100" stroke="#DCD6F7" stroke-width="2" stroke-dasharray="5,5"/>
+    <line x1="45" y1="120" x2="95" y2="120" stroke="#DCD6F7" stroke-width="2" stroke-dasharray="5,5"/>
+  </g>
+  
+  <!-- 问号/等待标记 -->
+  <g transform="translate(135, 70)">
+    <circle cx="15" cy="15" r="20" fill="#6C5CE7" opacity="0.1"/>
+    <text x="15" y="22" font-family="Arial" font-size="20" font-weight="bold" fill="#6C5CE7" text-anchor="middle">?</text>
+  </g>
+  
+  <!-- 小装饰元素 -->
+  <circle cx="60" cy="50" r="5" fill="#A8E6CF"/>
+  <circle cx="240" cy="150" r="4" fill="#FF8A80"/>
+  <polygon points="230,80 232,86 238,86 233,90 235,96 230,92 225,96 227,90 222,86 228,86" fill="#FFD93D" opacity="0.7"/>
+</svg>

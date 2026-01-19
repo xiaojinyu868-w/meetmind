@@ -8,6 +8,7 @@ import { useEffect, useRef, useCallback, useState, forwardRef, useImperativeHand
 import WaveSurfer from 'wavesurfer.js';
 import RegionsPlugin, { Region } from 'wavesurfer.js/plugins/regions';
 import { formatTimestampMs } from '@/lib/longcut';
+import { cn } from '@/lib/utils';
 
 // 简化的 Anchor 类型，兼容不同来源
 export interface WaveformAnchor {
@@ -56,6 +57,8 @@ interface WaveformPlayerProps {
   allowAddAnchor?: boolean;
   /** 当前选中的困惑点 ID */
   selectedAnchorId?: string | number;
+  /** 紧凑模式 - 高度减半，隐藏图例 */
+  compact?: boolean;
 }
 
 export const WaveformPlayer = forwardRef<WaveformPlayerRef, WaveformPlayerProps>(({
@@ -66,13 +69,16 @@ export const WaveformPlayer = forwardRef<WaveformPlayerRef, WaveformPlayerProps>
   onPlayStateChange,
   onReady,
   onAnchorAdd,
-  waveColor = '#6366F1',
-  progressColor = '#A5B4FC',
-  height = 80,
+  waveColor = '#D4A574',      // dedao-gold 教育金色
+  progressColor = '#F5E6D3',  // 暖米色
+  height: heightProp,
   showControls = true,
   allowAddAnchor = false,
   selectedAnchorId,
+  compact = false,
 }, ref) => {
+  // 紧凑模式下高度减半
+  const height = heightProp ?? (compact ? 40 : 80);
   const containerRef = useRef<HTMLDivElement>(null);
   const wavesurferRef = useRef<WaveSurfer | null>(null);
   const regionsRef = useRef<RegionsPlugin | null>(null);
@@ -121,7 +127,7 @@ export const WaveformPlayer = forwardRef<WaveformPlayerRef, WaveformPlayerProps>
       container: containerRef.current,
       waveColor,
       progressColor,
-      cursorColor: '#EF4444',
+      cursorColor: '#FF8A80',  // coral 珊瑚粉
       height,
       barWidth: 3,
       barGap: 2,
@@ -285,10 +291,10 @@ export const WaveformPlayer = forwardRef<WaveformPlayerRef, WaveformPlayerProps>
         start: startSec,
         end: endSec,
         color: isSelected
-          ? 'rgba(239, 68, 68, 0.5)'  // 选中状态 - 更深的红色
+          ? 'rgba(255, 138, 128, 0.5)'  // 选中状态 - coral 珊瑚粉
           : isResolved 
-            ? 'rgba(34, 197, 94, 0.3)'  // 绿色 - 已解决
-            : 'rgba(239, 68, 68, 0.3)', // 红色 - 未解决
+            ? 'rgba(168, 230, 207, 0.4)'  // mint 薄荷绿 - 已解决
+            : 'rgba(255, 138, 128, 0.3)', // coral 珊瑚粉 - 未解决
         drag: false,
         resize: false,
         id: `anchor-${anchor.id || index}`,
@@ -382,9 +388,15 @@ export const WaveformPlayer = forwardRef<WaveformPlayerRef, WaveformPlayerProps>
   }
 
   return (
-    <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
+    <div className={cn(
+      "bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden",
+      compact && "rounded-xl"
+    )}>
       {/* 波形容器 */}
-      <div className="p-4 bg-gradient-to-br from-gray-50 to-white relative">
+      <div className={cn(
+        "bg-gradient-to-br from-gray-50 to-white relative",
+        compact ? "p-2" : "p-4"
+      )}>
         <div 
           ref={containerRef} 
           className="rounded-xl overflow-hidden cursor-pointer"
@@ -403,10 +415,10 @@ export const WaveformPlayer = forwardRef<WaveformPlayerRef, WaveformPlayerProps>
                   key={anchor.id || index}
                   className={`absolute w-3 h-3 rounded-full transform -translate-x-1/2 transition-all cursor-pointer pointer-events-auto ${
                     isSelected 
-                      ? 'bg-red-500 ring-2 ring-red-300 ring-offset-1 scale-125 z-10' 
+                      ? 'bg-coral ring-2 ring-coral-300 ring-offset-1 scale-125 z-10' 
                       : isResolved 
-                        ? 'bg-green-500 hover:scale-110' 
-                        : 'bg-red-500 hover:scale-110'
+                        ? 'bg-mint hover:scale-110' 
+                        : 'bg-coral hover:scale-110'
                   }`}
                   style={{ left: `${position}%` }}
                   onClick={() => onAnchorClick?.(anchor)}
@@ -419,21 +431,21 @@ export const WaveformPlayer = forwardRef<WaveformPlayerRef, WaveformPlayerProps>
         
         {/* 添加标注成功提示 */}
         {showAddHint && (
-          <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 bg-red-500 text-white px-4 py-2 rounded-full text-sm font-medium animate-bounce shadow-lg">
-            🎯 已标记困惑点
+          <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 bg-coral text-white px-4 py-2 rounded-full text-sm font-medium animate-bounce shadow-lg">
+            已标记困惑点
           </div>
         )}
       </div>
 
-      {/* 困惑点图例 */}
-      {anchors.length > 0 && (
+      {/* 困惑点图例 - 紧凑模式下隐藏 */}
+      {!compact && anchors.length > 0 && (
         <div className="px-4 py-2 bg-gray-50 border-t border-gray-100 flex items-center gap-6 text-xs">
           <div className="flex items-center gap-2">
-            <div className="w-4 h-4 bg-red-500/30 rounded border border-red-300" />
+            <div className="w-4 h-4 bg-coral/30 rounded border border-coral-300" />
             <span className="text-gray-600">未解决困惑点</span>
           </div>
           <div className="flex items-center gap-2">
-            <div className="w-4 h-4 bg-green-500/30 rounded border border-green-300" />
+            <div className="w-4 h-4 bg-mint/30 rounded border border-mint-300" />
             <span className="text-gray-600">已解决</span>
           </div>
           <div className="flex-1" />
@@ -443,54 +455,71 @@ export const WaveformPlayer = forwardRef<WaveformPlayerRef, WaveformPlayerProps>
 
       {/* 控制栏 */}
       {showControls && (
-        <div className="px-4 py-3 bg-white border-t border-gray-100">
-          <div className="flex items-center gap-4">
+        <div className={cn(
+          "bg-white border-t border-gray-100",
+          compact ? "px-3 py-2" : "px-4 py-3"
+        )}>
+          <div className="flex items-center gap-3">
             {/* 播放控制 */}
             <div className="flex items-center gap-1">
-              {/* 后退 10s */}
-              <button
-                onClick={skipBackward}
-                disabled={!isReady}
-                className="w-10 h-10 flex items-center justify-center text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-xl transition-all disabled:opacity-50"
-                title="后退 10 秒"
-              >
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12.066 11.2a1 1 0 000 1.6l5.334 4A1 1 0 0019 16V8a1 1 0 00-1.6-.8l-5.333 4zM4.066 11.2a1 1 0 000 1.6l5.334 4A1 1 0 0011 16V8a1 1 0 00-1.6-.8l-5.334 4z" />
-                </svg>
-              </button>
+              {/* 后退 10s - 紧凑模式下隐藏 */}
+              {!compact && (
+                <button
+                  onClick={skipBackward}
+                  disabled={!isReady}
+                  className="w-10 h-10 flex items-center justify-center text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-xl transition-all disabled:opacity-50"
+                  title="后退 10 秒"
+                >
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12.066 11.2a1 1 0 000 1.6l5.334 4A1 1 0 0019 16V8a1 1 0 00-1.6-.8l-5.333 4zM4.066 11.2a1 1 0 000 1.6l5.334 4A1 1 0 0011 16V8a1 1 0 00-1.6-.8l-5.334 4z" />
+                  </svg>
+                </button>
+              )}
 
               {/* 播放/暂停 */}
               <button
                 onClick={togglePlay}
                 disabled={!isReady}
-                className="w-12 h-12 bg-gradient-to-br from-indigo-500 to-purple-500 text-white rounded-xl hover:from-indigo-600 hover:to-purple-600 disabled:opacity-50 transition-all shadow-lg shadow-indigo-500/25 flex items-center justify-center"
+                className={cn(
+                  "text-white disabled:opacity-50 transition-all shadow-lg flex items-center justify-center",
+                  compact ? "w-9 h-9 rounded-lg" : "w-12 h-12 rounded-xl"
+                )}
+                style={{
+                  background: 'linear-gradient(135deg, #D4A574 0%, #C49A6C 100%)',
+                  boxShadow: '0 4px 12px rgba(212, 165, 116, 0.35)'
+                }}
               >
                 {isPlayingState ? (
-                  <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 24 24">
+                  <svg className={cn(compact ? "w-4 h-4" : "w-6 h-6")} fill="currentColor" viewBox="0 0 24 24">
                     <path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z" />
                   </svg>
                 ) : (
-                  <svg className="w-6 h-6 ml-0.5" fill="currentColor" viewBox="0 0 24 24">
+                  <svg className={cn(compact ? "w-4 h-4 ml-0.5" : "w-6 h-6 ml-0.5")} fill="currentColor" viewBox="0 0 24 24">
                     <path d="M8 5v14l11-7z" />
                   </svg>
                 )}
               </button>
 
-              {/* 前进 10s */}
-              <button
-                onClick={skipForward}
-                disabled={!isReady}
-                className="w-10 h-10 flex items-center justify-center text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-xl transition-all disabled:opacity-50"
-                title="前进 10 秒"
-              >
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11.933 12.8a1 1 0 000-1.6L6.6 7.2A1 1 0 005 8v8a1 1 0 001.6.8l5.333-4zM19.933 12.8a1 1 0 000-1.6l-5.333-4A1 1 0 0013 8v8a1 1 0 001.6.8l5.333-4z" />
-                </svg>
-              </button>
+              {/* 前进 10s - 紧凑模式下隐藏 */}
+              {!compact && (
+                <button
+                  onClick={skipForward}
+                  disabled={!isReady}
+                  className="w-10 h-10 flex items-center justify-center text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-xl transition-all disabled:opacity-50"
+                  title="前进 10 秒"
+                >
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11.933 12.8a1 1 0 000-1.6L6.6 7.2A1 1 0 005 8v8a1 1 0 001.6.8l5.333-4zM19.933 12.8a1 1 0 000-1.6l-5.333-4A1 1 0 0013 8v8a1 1 0 001.6.8l5.333-4z" />
+                  </svg>
+                </button>
+              )}
             </div>
 
             {/* 时间显示 */}
-            <div className="flex items-center gap-2 text-sm">
+            <div className={cn(
+              "flex items-center gap-1.5",
+              compact ? "text-xs" : "text-sm"
+            )}>
               <span className="font-mono text-gray-900 font-medium">
                 {formatTimestampMs(currentTime)}
               </span>
@@ -507,7 +536,14 @@ export const WaveformPlayer = forwardRef<WaveformPlayerRef, WaveformPlayerProps>
               <button
                 onClick={handleAddAnchor}
                 disabled={!isReady}
-                className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-red-500 to-rose-500 text-white text-sm font-medium rounded-xl hover:from-red-600 hover:to-rose-600 disabled:opacity-50 transition-all shadow-md shadow-red-500/25 active:scale-95"
+                className={cn(
+                  "flex items-center gap-1.5 text-white font-medium rounded-xl disabled:opacity-50 transition-all active:scale-95",
+                  compact ? "px-2.5 py-1.5 text-xs" : "px-4 py-2 text-sm"
+                )}
+                style={{
+                  background: 'linear-gradient(135deg, #FF8A80 0%, #FF574A 100%)',
+                  boxShadow: '0 4px 12px rgba(255, 138, 128, 0.35)'
+                }}
                 title="标记当前位置为困惑点"
               >
                 <span>🎯</span>
@@ -519,39 +555,44 @@ export const WaveformPlayer = forwardRef<WaveformPlayerRef, WaveformPlayerProps>
             <button
               onClick={cyclePlaybackRate}
               disabled={!isReady}
-              className="px-3 py-1.5 text-sm font-medium text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-all disabled:opacity-50 border border-gray-200"
+              className={cn(
+                "font-medium text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-all disabled:opacity-50 border border-gray-200",
+                compact ? "px-2 py-1 text-xs" : "px-3 py-1.5 text-sm"
+              )}
               title="播放速度"
             >
               {playbackRate}x
             </button>
 
-            {/* 音量控制 */}
-            <div className="flex items-center gap-2">
-              <button
-                onClick={toggleMute}
-                className="w-8 h-8 flex items-center justify-center text-gray-500 hover:text-gray-700 rounded-lg transition-colors"
-              >
-                {isMuted || volume === 0 ? (
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2" />
-                  </svg>
-                ) : (
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
-                  </svg>
-                )}
-              </button>
-              <input
-                type="range"
-                min="0"
-                max="1"
-                step="0.1"
-                value={isMuted ? 0 : volume}
-                onChange={handleVolumeChange}
-                className="w-20 h-1.5 bg-gray-200 rounded-full appearance-none cursor-pointer accent-indigo-500"
-              />
-            </div>
+            {/* 音量控制 - 紧凑模式下隐藏 */}
+            {!compact && (
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={toggleMute}
+                  className="w-8 h-8 flex items-center justify-center text-gray-500 hover:text-gray-700 rounded-lg transition-colors"
+                >
+                  {isMuted || volume === 0 ? (
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2" />
+                    </svg>
+                  ) : (
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
+                    </svg>
+                  )}
+                </button>
+                <input
+                  type="range"
+                  min="0"
+                  max="1"
+                  step="0.1"
+                  value={isMuted ? 0 : volume}
+                  onChange={handleVolumeChange}
+                  className="w-20 h-1.5 bg-gray-200 rounded-full appearance-none cursor-pointer accent-amber-500"
+                />
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -561,13 +602,13 @@ export const WaveformPlayer = forwardRef<WaveformPlayerRef, WaveformPlayerProps>
         <div className="absolute inset-0 flex items-center justify-center bg-white/90 backdrop-blur-sm rounded-2xl">
           <div className="flex flex-col items-center gap-3">
             <div className="relative w-12 h-12">
-              <div className="absolute inset-0 border-4 border-indigo-200 rounded-full" />
+              <div className="absolute inset-0 border-4 rounded-full" style={{ borderColor: '#F5E6D3' }} />
               <div 
-                className="absolute inset-0 border-4 border-indigo-500 rounded-full animate-spin"
+                className="absolute inset-0 border-4 rounded-full animate-spin"
                 style={{ 
                   clipPath: `polygon(50% 50%, 50% 0%, ${50 + 50 * Math.sin(loadProgress / 100 * Math.PI * 2)}% ${50 - 50 * Math.cos(loadProgress / 100 * Math.PI * 2)}%, 50% 50%)`,
                   borderColor: 'transparent',
-                  borderTopColor: '#6366F1',
+                  borderTopColor: '#D4A574',
                 }}
               />
             </div>
@@ -578,8 +619,11 @@ export const WaveformPlayer = forwardRef<WaveformPlayerRef, WaveformPlayerProps>
             {loadProgress > 0 && (
               <div className="w-32 h-1.5 bg-gray-200 rounded-full overflow-hidden">
                 <div 
-                  className="h-full bg-gradient-to-r from-indigo-500 to-purple-500 transition-all duration-300"
-                  style={{ width: `${loadProgress}%` }}
+                  className="h-full transition-all duration-300"
+                  style={{ 
+                    width: `${loadProgress}%`,
+                    background: 'linear-gradient(90deg, #D4A574 0%, #E8B88C 100%)'
+                  }}
                 />
               </div>
             )}

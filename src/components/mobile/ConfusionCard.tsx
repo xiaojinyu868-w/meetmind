@@ -104,7 +104,7 @@ export function ConfusionCard({
                 </h3>
                 <button
                   onClick={() => onSeek?.(confusion.timestamp)}
-                  className="text-xs text-indigo-400 hover:text-indigo-300 flex items-center gap-1"
+                  className="text-xs text-amber-400 hover:text-amber-300 flex items-center gap-1"
                 >
                   <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
@@ -161,7 +161,7 @@ export function ConfusionCard({
                   <button
                     key={q}
                     onClick={() => onAskAI(q)}
-                    className="text-xs px-3 py-1.5 rounded-full bg-indigo-500/20 text-indigo-300 hover:bg-indigo-500/30 transition-colors"
+                    className="text-xs px-3 py-1.5 rounded-full bg-amber-500/20 text-amber-300 hover:bg-amber-500/30 transition-colors"
                   >
                     {q}
                   </button>
@@ -186,16 +186,16 @@ export function ConfusionCard({
                   className={cn(
                     "flex-1 bg-slate-800 rounded-full px-4 py-2.5",
                     "text-sm text-white placeholder-slate-500",
-                    "border border-slate-700 focus:border-indigo-500",
-                    "focus:outline-none focus:ring-1 focus:ring-indigo-500/50"
+                    "border border-slate-700 focus:border-amber-500",
+                    "focus:outline-none focus:ring-1 focus:ring-amber-500/50"
                   )}
                 />
                 <button
                   onClick={handleAskAI}
                   className={cn(
                     "w-10 h-10 rounded-full flex items-center justify-center",
-                    "bg-gradient-to-br from-indigo-500 to-purple-600",
-                    "text-white shadow-lg shadow-indigo-500/20",
+                    "bg-gradient-to-br from-amber-400 to-amber-500",
+                    "text-white shadow-lg shadow-amber-500/20",
                     "active:scale-95 transition-transform"
                   )}
                 >
@@ -218,9 +218,9 @@ export function ConfusionCard({
               onClick={() => onAskAI()}
               className={cn(
                 "w-full py-3 rounded-full",
-                "bg-gradient-to-r from-indigo-500 to-purple-600",
+                "bg-gradient-to-r from-amber-400 to-amber-500",
                 "text-white text-sm font-medium",
-                "shadow-lg shadow-indigo-500/20",
+                "shadow-lg shadow-amber-500/20",
                 "active:scale-[0.98] transition-transform"
               )}
             >

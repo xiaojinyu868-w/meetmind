@@ -35,7 +35,7 @@ export function ActionList({ items, onComplete }: ActionListProps) {
         <div className="px-4 py-3 border-b border-gray-100">
           <div className="flex items-center justify-between text-xs mb-2">
             <span className="text-gray-500">完成进度</span>
-            <span className={`font-medium ${progressPercent === 100 ? 'text-emerald-600' : 'text-gray-700'}`}>
+            <span className={`font-medium ${progressPercent === 100 ? 'text-mint-600' : 'text-navy'}`}>
               {Math.round(progressPercent)}%
             </span>
           </div>
@@ -43,15 +43,15 @@ export function ActionList({ items, onComplete }: ActionListProps) {
             <div
               className={`h-full rounded-full transition-all duration-500 ease-out-expo ${
                 progressPercent === 100 
-                  ? 'bg-gradient-to-r from-emerald-400 to-emerald-500' 
-                  : 'bg-gradient-to-r from-rose-400 to-rose-500'
+                  ? 'bg-gradient-to-r from-mint to-mint-600' 
+                  : 'bg-gradient-to-r from-amber-400 to-amber-500'
               }`}
               style={{ width: `${progressPercent}%` }}
             />
           </div>
           {remainingMinutes > 0 && (
             <p className="text-xs text-gray-400 mt-2">
-              还需约 <span className="font-medium text-gray-600">{remainingMinutes}</span> 分钟
+              还需约 <span className="font-medium text-navy">{remainingMinutes}</span> 分钟
             </p>
           )}
         </div>
@@ -94,7 +94,7 @@ export function ActionList({ items, onComplete }: ActionListProps) {
                   <div className="flex items-center gap-2 flex-wrap min-w-0">
                     <TypeBadge type={item.type} />
                     <span className={`text-sm font-medium transition-all break-words ${
-                      item.completed ? 'text-gray-400 line-through' : 'text-gray-900'
+                      item.completed ? 'text-gray-400 line-through' : 'text-navy'
                     }`}>
                       {item.title}
                     </span>
@@ -145,7 +145,7 @@ function TypeBadge({ type }: { type: ActionItem['type'] }) {
   const config = {
     replay: { label: '回放', className: 'bg-blue-100 text-blue-700' },
     exercise: { label: '练习', className: 'bg-emerald-100 text-emerald-700' },
-    review: { label: '复习', className: 'bg-purple-100 text-purple-700' },
+    review: { label: '复习', className: 'bg-amber-100 text-amber-700' },
   };
 
   const { label, className } = config[type];

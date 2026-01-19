@@ -33,14 +33,20 @@ const AITutor = dynamic(() => import('@/components/AITutor').then(m => ({ defaul
 });
 
 const ActionList = dynamic(() => import('@/components/ActionList').then(m => ({ default: m.ActionList })));
+const ActionSidebar = dynamic(() => import('@/components/ActionSidebar').then(m => ({ default: m.ActionSidebar })));
+const ActionDrawer = dynamic(() => import('@/components/ActionDrawer').then(m => ({ default: m.ActionDrawer })));
+const ResizablePanel = dynamic(() => import('@/components/layout/ResizablePanel').then(m => ({ default: m.ResizablePanel })));
 
 const HighlightsPanel = dynamic(() => import('@/components/HighlightsPanel').then(m => ({ default: m.HighlightsPanel })));
 const SummaryPanel = dynamic(() => import('@/components/SummaryPanel').then(m => ({ default: m.SummaryPanel })));
 const NotesPanel = dynamic(() => import('@/components/NotesPanel').then(m => ({ default: m.NotesPanel })));
 const AudioUploader = dynamic(() => import('@/components/AudioUploader').then(m => ({ default: m.AudioUploader })), { ssr: false });
 const AnchorDetailPanel = dynamic(() => import('@/components/AnchorDetailPanel').then(m => ({ default: m.AnchorDetailPanel })));
+const ConversationList = dynamic(() => import('@/components/ConversationHistory').then(m => ({ default: m.ConversationList })));
+const AIChat = dynamic(() => import('@/components/AIChat').then(m => ({ default: m.AIChat })), { ssr: false });
 
 import type { ConfusionMarker } from '@/components/mobile';
+import type { ConversationHistory } from '@/types/conversation';
 
 // 演示数据延迟加载
 let DEMO_DATA_CACHE: { DEMO_SEGMENTS: TranscriptSegment[]; DEMO_ANCHORS: Anchor[]; DEMO_AUDIO_URL: string } | null = null;
@@ -121,6 +127,13 @@ export default function StudentApp() {
   const [notes, setNotes] = useState<Note[]>([]);
   const [isPlayingAll, setIsPlayingAll] = useState(false);
   const [playAllIndex, setPlayAllIndex] = useState(0);
+  
+  // 历史对话相关状态
+  const [showConversationHistory, setShowConversationHistory] = useState(false);
+  const [selectedHistoryConversation, setSelectedHistoryConversation] = useState<ConversationHistory | null>(null);
+  
+  // 行动清单抽屉状态
+  const [isActionDrawerOpen, setIsActionDrawerOpen] = useState(false);
   
   const liveSegmentsRef = useRef<TranscriptSegment[]>([]);
   const waveformRef = useRef<WaveformPlayerRef>(null);
@@ -679,16 +692,9 @@ export default function StudentApp() {
 
   // 客户端未挂载时显示加载状态，避免 Hydration 错误
   if (!mounted) {
-    return (
-      <div className="h-screen flex flex-col items-center justify-center bg-gray-50">
-        <div className="animate-pulse flex flex-col items-center gap-4">
-          <div className="w-16 h-16 bg-gradient-to-br from-rose-400 to-rose-500 rounded-2xl flex items-center justify-center">
-            <span className="text-2xl text-white">📚</span>
-          </div>
-          <div className="text-gray-500 text-sm">加载中...</div>
-        </div>
-      </div>
-    );
+    // 使用动态导入避免服务端渲染问题
+    const AppLoading = require('@/components/AppLoading').default;
+    return <AppLoading message="准备学习环境" />;
   }
 
   return (
@@ -706,9 +712,9 @@ export default function StudentApp() {
 
       {/* 桌面端模式切换栏 - 移动端隐藏 */}
       {!isMobile && (
-        <div className="glass border-b border-white/20 px-6 py-3 no-print">
+        <div className="border-b px-6 py-3 no-print" style={{ background: 'var(--edu-bg-secondary)', borderColor: 'var(--edu-border-light)' }}>
           <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2 p-1 bg-gray-100/80 rounded-xl">
+            <div className="flex items-center gap-2 p-1 rounded-xl" style={{ background: 'var(--edu-bg-soft)' }}>
               <button
                 onClick={() => setViewMode('record')}
                 className={`mode-tab ${viewMode === 'record' ? 'active' : ''}`}
@@ -735,11 +741,11 @@ export default function StudentApp() {
                 
                 <div className="flex items-center gap-2 text-gray-500 min-w-0 flex-wrap">
                   <span className="whitespace-nowrap">困惑点</span>
-                  <span className="font-semibold text-gray-900">{anchors.length}</span>
+                  <span className="font-semibold text-navy">{anchors.length}</span>
                   {unresolvedCount > 0 && (
                     <>
                       <span>·</span>
-                      <span className="text-rose-500 font-semibold whitespace-nowrap">{unresolvedCount} 待解决</span>
+                      <span className="text-coral-500 font-semibold whitespace-nowrap">{unresolvedCount} 待解决</span>
                     </>
                   )}
                 </div>
@@ -754,11 +760,11 @@ export default function StudentApp() {
         <>
           {/* 移动端录音页面 - 得到风格 */}
           {isMobile ? (
-            <div className="flex-1 min-h-0 flex flex-col overflow-hidden bg-[var(--dedao-bg)]">
+            <div className="flex-1 min-h-0 flex flex-col overflow-hidden" style={{ background: 'var(--edu-bg-primary)' }}>
               {/* 极简顶部栏：Logo + Tab + 菜单 */}
-              <div className="flex-shrink-0 px-4 py-2.5 flex items-center gap-3 bg-white border-b border-[#E8E4DF]">
+              <div className="flex-shrink-0 px-4 py-2.5 flex items-center gap-3 bg-white border-b" style={{ borderColor: 'var(--edu-border-light)' }}>
                 {/* Logo */}
-                <div className="w-8 h-8 bg-gradient-to-br from-[var(--dedao-gold)] to-[var(--dedao-gold-dark)] rounded-lg flex items-center justify-center flex-shrink-0">
+                <div className="w-8 h-8 bg-gradient-to-br from-amber-400 to-amber-500 rounded-lg flex items-center justify-center flex-shrink-0">
                   <span className="text-white font-bold text-sm">M</span>
                 </div>
                 
@@ -813,7 +819,7 @@ export default function StudentApp() {
                       onAnchorMark={handleAnchorMark}
                     />
                   ) : (
-                    <div className="card p-4">
+                    <div className="card-edu p-4">
                       <h3 className="text-base font-semibold text-gray-900 mb-3 flex items-center gap-2">
                         <span>📁</span>
                         上传课堂录音
@@ -877,7 +883,7 @@ export default function StudentApp() {
                   
                   {/* 已标记的困惑点 */}
                   {anchors.length > 0 && (
-                    <div className="card p-4 animate-slide-up">
+                    <div className="card-edu p-4 animate-slide-up">
                       <h3 className="text-sm font-semibold text-gray-900 mb-3 flex items-center gap-2">
                         <span>🎯</span>
                         已标记的困惑点
@@ -885,13 +891,14 @@ export default function StudentApp() {
                       </h3>
                       <div className="space-y-2 max-h-32 overflow-y-auto">
                         {anchors.map((anchor, index) => (
-                          <div
-                            key={anchor.id}
-                            className="flex items-center gap-2 p-2 bg-gray-50 rounded-lg"
-                          >
-                            <div className={`w-2 h-2 rounded-full ${
-                              anchor.resolved ? 'bg-emerald-400' : 'bg-rose-400'
-                            }`} />
+                                  <div
+                                            key={anchor.id}
+                                            className="flex items-center gap-2 p-2 rounded-lg"
+                                            style={{ background: 'var(--edu-bg-soft)' }}
+                                          >
+                                            <div className={`w-2 h-2 rounded-full ${
+                                              anchor.resolved ? 'bg-mint' : 'bg-coral'
+                                            }`} />
                             <span className="text-xs font-mono text-gray-600">
                               {formatTime(anchor.timestamp)}
                             </span>
@@ -921,19 +928,27 @@ export default function StudentApp() {
               />
             </div>
           ) : (
-            /* 桌面端录音页面 */
-            <div className="flex-1 flex items-center justify-center p-8 page-enter">
-              <div className="w-full max-w-2xl space-y-6">
+            /* 桌面端录音页面 - 教育风格 */
+            <div className="flex-1 flex items-center justify-center p-8 page-enter relative overflow-hidden" style={{ background: 'var(--edu-bg-primary)' }}>
+              {/* 背景装饰 */}
+              <div className="absolute top-10 right-10 w-48 h-48 opacity-20 pointer-events-none">
+                <img src="/illustrations/learning.svg" alt="" className="w-full h-full" />
+              </div>
+              <div className="absolute bottom-10 left-10 w-32 h-32 opacity-15 pointer-events-none">
+                <img src="/illustrations/ai-tutor.svg" alt="" className="w-full h-full" />
+              </div>
+              
+              <div className="w-full max-w-2xl space-y-6 relative z-10">
                 {/* 录音或上传切换 */}
                 <div className="flex items-center justify-center gap-4 mb-4">
                   <span className="text-sm text-gray-500">选择输入方式：</span>
-              <div className="flex items-center gap-2 p-1 bg-gray-100 rounded-xl">
+              <div className="flex items-center gap-2 p-1 rounded-xl" style={{ background: 'var(--edu-bg-soft)' }}>
                 <button
                   onClick={() => setDataSource('live')}
                   className={`px-4 py-2 text-sm rounded-lg transition-all ${
                     dataSource === 'live'
-                      ? 'bg-white text-gray-900 font-medium shadow-sm'
-                      : 'text-gray-500 hover:text-gray-700'
+                      ? 'bg-white text-navy font-medium shadow-sm'
+                      : 'text-gray-500 hover:text-navy'
                   }`}
                 >
                   🎙️ 实时录音
@@ -942,8 +957,8 @@ export default function StudentApp() {
                   onClick={() => setDataSource('demo')}
                   className={`px-4 py-2 text-sm rounded-lg transition-all ${
                     dataSource === 'demo'
-                      ? 'bg-white text-gray-900 font-medium shadow-sm'
-                      : 'text-gray-500 hover:text-gray-700'
+                      ? 'bg-white text-navy font-medium shadow-sm'
+                      : 'text-gray-500 hover:text-navy'
                   }`}
                 >
                   📁 上传音频
@@ -952,14 +967,20 @@ export default function StudentApp() {
             </div>
 
             {dataSource === 'live' ? (
-              <Recorder
-                onRecordingStart={handleRecordingStart}
-                onRecordingStop={handleRecordingStop}
-                onTranscriptUpdate={handleTranscriptUpdate}
-                onAnchorMark={handleAnchorMark}
-              />
+              <div className="relative">
+                {/* 装饰插画 */}
+                <div className="absolute -right-20 -top-10 w-24 h-24 opacity-30 pointer-events-none hidden lg:block">
+                  <img src="/illustrations/recording.svg" alt="" className="w-full h-full" />
+                </div>
+                <Recorder
+                  onRecordingStart={handleRecordingStart}
+                  onRecordingStop={handleRecordingStop}
+                  onTranscriptUpdate={handleTranscriptUpdate}
+                  onAnchorMark={handleAnchorMark}
+                />
+              </div>
             ) : (
-              <div className="card p-6">
+              <div className="card-edu p-6">
                 <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
                   <span>📁</span>
                   上传课堂录音
@@ -1030,7 +1051,7 @@ export default function StudentApp() {
             
                 {/* 已标记的困惑点 */}
                 {anchors.length > 0 && (
-                  <div className="card p-5 animate-slide-up">
+                  <div className="card-edu p-5 animate-slide-up">
                     <h3 className="text-sm font-semibold text-gray-900 mb-4 flex items-center gap-2">
                       <span>🎯</span>
                       已标记的困惑点
@@ -1038,23 +1059,24 @@ export default function StudentApp() {
                     </h3>
                     <div className="space-y-2 max-h-48 overflow-y-auto">
                       {anchors.map((anchor, index) => (
-                        <div
-                          key={anchor.id}
-                          className="flex items-center gap-3 p-3 bg-gray-50 rounded-xl hover:bg-gray-100 transition-colors"
-                        >
-                          <div className={`w-2.5 h-2.5 rounded-full ${
-                            anchor.resolved ? 'bg-emerald-400' : 'bg-rose-400'
-                          }`} />
-                          <span className="text-sm font-mono text-gray-600">
-                            {formatTime(anchor.timestamp)}
-                          </span>
-                          <span className="text-sm text-gray-500">
-                            困惑点 #{index + 1}
-                          </span>
-                          {anchor.resolved && (
-                            <span className="ml-auto text-xs text-emerald-600">已解决</span>
-                          )}
-                        </div>
+                          <div
+                            key={anchor.id}
+                            className="flex items-center gap-3 p-3 rounded-xl transition-colors"
+                            style={{ background: 'var(--edu-bg-soft)' }}
+                          >
+                            <div className={`w-2.5 h-2.5 rounded-full ${
+                              anchor.resolved ? 'bg-mint' : 'bg-coral'
+                            }`} />
+                            <span className="text-sm font-mono text-gray-600">
+                              {formatTime(anchor.timestamp)}
+                            </span>
+                            <span className="text-sm text-gray-500">
+                              困惑点 #{index + 1}
+                            </span>
+                            {anchor.resolved && (
+                              <span className="ml-auto text-xs text-mint-600">已解决</span>
+                            )}
+                          </div>
                       ))}
                     </div>
                   </div>
@@ -1067,220 +1089,317 @@ export default function StudentApp() {
         <>
           {/* 桌面端布局 */}
           {!isMobile ? (
-            <div className="flex-1 min-h-0 flex overflow-hidden page-enter">
-              {/* 左栏 - 多功能面板 */}
-              <div className="w-96 border-r border-gray-100 flex flex-col glass">
-                {/* 标签页切换 */}
-                <div className="flex items-center gap-1 px-4 py-2 border-b border-gray-100 bg-gray-50/50 overflow-x-auto">
-                  <button
-                    onClick={() => setReviewTab('timeline')}
-                    className={`px-3 py-1.5 text-sm rounded-lg transition-all whitespace-nowrap ${
-                      reviewTab === 'timeline'
-                        ? 'bg-white text-gray-900 font-medium shadow-sm'
-                        : 'text-gray-500 hover:text-gray-700 hover:bg-white/50'
-                    }`}
-                  >
-                    📋 时间轴
-                  </button>
-                  <button
-                    onClick={() => setReviewTab('anchor-detail')}
-                    className={`px-3 py-1.5 text-sm rounded-lg transition-all whitespace-nowrap ${
-                      reviewTab === 'anchor-detail'
-                        ? 'bg-white text-gray-900 font-medium shadow-sm'
-                        : 'text-gray-500 hover:text-gray-700 hover:bg-white/50'
-                    }`}
-                  >
-                    🎯 困惑点
-                    {selectedAnchor && !selectedAnchor.resolved && (
-                      <span className="ml-1 w-2 h-2 bg-red-500 rounded-full inline-block animate-pulse" />
-                    )}
-                  </button>
-                  <button
-                    onClick={() => setReviewTab('highlights')}
-                    className={`px-3 py-1.5 text-sm rounded-lg transition-all whitespace-nowrap ${
-                      reviewTab === 'highlights'
-                        ? 'bg-white text-gray-900 font-medium shadow-sm'
-                        : 'text-gray-500 hover:text-gray-700 hover:bg-white/50'
-                    }`}
-                  >
-                    ⚡ 精选
-                    {highlightTopics.length > 0 && (
-                      <span className="ml-1 text-xs text-blue-600">({highlightTopics.length})</span>
-                    )}
-                  </button>
-                  <button
-                    onClick={() => setReviewTab('summary')}
-                    className={`px-3 py-1.5 text-sm rounded-lg transition-all whitespace-nowrap ${
-                      reviewTab === 'summary'
-                        ? 'bg-white text-gray-900 font-medium shadow-sm'
-                        : 'text-gray-500 hover:text-gray-700 hover:bg-white/50'
-                    }`}
-                  >
-                    📝 摘要
-                    {classSummary && <span className="ml-1 text-xs text-green-600">✓</span>}
-                  </button>
-                  <button
-                    onClick={() => setReviewTab('notes')}
-                    className={`px-3 py-1.5 text-sm rounded-lg transition-all whitespace-nowrap ${
-                      reviewTab === 'notes'
-                        ? 'bg-white text-gray-900 font-medium shadow-sm'
-                        : 'text-gray-500 hover:text-gray-700 hover:bg-white/50'
-                    }`}
-                  >
-                    📄 笔记
-                    {notes.length > 0 && (
-                      <span className="ml-1 text-xs text-purple-600">({notes.length})</span>
-                    )}
-                  </button>
-                </div>
-                
-                {/* 标签页内容 */}
-                <div className="flex-1 min-h-0 overflow-hidden">
-                  {reviewTab === 'timeline' && timelineForView && (
-                    <TimelineView
-                      timeline={timelineForView}
-                      currentTime={currentTime}
-                      selectedBreakpoint={selectedBreakpoint}
-                      onTimeClick={handleTimelineClick}
-                      onBreakpointClick={(bp) => {
-                        const anchor = anchors.find(a => a.id === bp.id);
-                        if (anchor) handleAnchorSelect(anchor);
-                      }}
-                    />
-                  )}
-                  
-                  {reviewTab === 'anchor-detail' && (
-                    <AnchorDetailPanel
-                      anchor={selectedAnchor}
-                      segments={segments}
-                      onSeek={(timeMs) => {
-                        setCurrentTime(timeMs);
-                        waveformRef.current?.seekTo(timeMs);
-                      }}
-                      onPlay={(startMs) => {
-                        waveformRef.current?.seekTo(startMs);
-                        waveformRef.current?.play();
-                      }}
-                      onResolve={handleResolveAnchor}
-                      onAskAI={() => {
-                        // AI 家教已经是默认模式，无需切换
-                      }}
-                      onAddNote={(text, anchorId) => {
-                        handleAddNote(text, 'anchor', {
-                          anchorId,
-                          timestamp: selectedAnchor?.timestamp,
-                        });
-                      }}
-                      onClose={() => setReviewTab('timeline')}
-                    />
-                  )}
-                  
-                  {reviewTab === 'highlights' && (
-                    <HighlightsPanel
-                      topics={highlightTopics}
-                      selectedTopic={selectedTopic}
-                      onTopicSelect={setSelectedTopic}
-                      onPlayTopic={handlePlayTopic}
-                      onSeek={handleTimelineClick}
-                      onPlayAll={handlePlayAll}
-                      isPlayingAll={isPlayingAll}
-                      playAllIndex={playAllIndex}
-                      currentTime={currentTime}
-                      totalDuration={totalDuration}
-                      isLoading={isLoadingTopics}
-                      onGenerate={handleGenerateTopics}
-                      onRegenerateByTheme={handleRegenerateByTheme}
-                      onClear={handleClearTopics}
-                    />
-                  )}
-                  
-                  {reviewTab === 'summary' && (
-                    <SummaryPanel
-                      summary={classSummary}
-                      isLoading={isLoadingSummary}
-                      onGenerate={handleGenerateSummary}
-                      onSeek={handleTimelineClick}
-                      onAddNote={(text, takeaway) => {
-                        handleAddNote(text, 'takeaways', {
-                          selectedText: takeaway.label,
-                          extra: { timestamps: takeaway.timestamps }
-                        });
-                      }}
-                    />
-                  )}
-                  
-                  {reviewTab === 'notes' && (
-                    <NotesPanel
-                      notes={notes}
-                      onAddNote={handleAddNote}
-                      onUpdateNote={handleUpdateNote}
-                      onDeleteNote={handleDeleteNote}
-                      onSeek={handleTimelineClick}
-                    />
-                  )}
-                </div>
-              </div>
-
-              {/* 中栏 - AI 对话 */}
-              <div className="flex-1 flex flex-col min-h-0 bg-white">
-                {/* 波形播放器 */}
-                {(audioBlob || audioUrl) && (
-                  <div className="px-4 py-2 border-b border-gray-100">
-                    <WaveformPlayer
-                      ref={waveformRef}
-                      src={audioBlob || audioUrl || undefined}
-                      anchors={anchors.map(a => ({
-                        id: a.id,
-                        timestamp: a.timestamp,
-                        resolved: a.resolved,
-                        type: a.type,
-                      } as WaveformAnchor))}
-                      onTimeUpdate={setCurrentTime}
-                      onAnchorClick={(anchor) => {
-                        const found = anchors.find(a => a.id === anchor.id);
-                        if (found) handleAnchorSelect(found);
-                      }}
-                      onAnchorAdd={handlePlaybackAnchorAdd}
-                      allowAddAnchor={true}
-                      selectedAnchorId={selectedAnchor?.id}
-                      height={30}
-                    />
+            <div className="flex-1 min-h-0 flex overflow-hidden page-enter" style={{ background: 'var(--edu-bg-primary)' }}>
+              {/* 可拖拽左右面板 */}
+              <ResizablePanel
+                className="flex-1"
+                defaultLeftWidth={360}
+                minLeftWidth={280}
+                maxLeftWidth={480}
+                storageKey="meetmind-left-panel-width"
+                leftPanel={
+                  /* 左栏 - 多功能面板 */
+                  <div className="h-full flex flex-col bg-white" style={{ borderRight: '1px solid var(--edu-border-light)' }}>
+                    {/* 标签页切换 */}
+                    <div className="flex items-center gap-1 px-3 py-2 border-b overflow-x-auto flex-shrink-0" style={{ background: 'var(--edu-bg-soft)', borderColor: 'var(--edu-border-light)' }}>
+                      <button
+                        onClick={() => setReviewTab('timeline')}
+                        className={`px-2.5 py-1.5 text-sm rounded-lg transition-all whitespace-nowrap ${
+                          reviewTab === 'timeline'
+                            ? 'bg-white text-amber-600 font-medium shadow-sm'
+                            : 'text-gray-500 hover:text-navy hover:bg-white/50'
+                        }`}
+                      >
+                        📋 时间轴
+                      </button>
+                      <button
+                        onClick={() => setReviewTab('anchor-detail')}
+                        className={`px-2.5 py-1.5 text-sm rounded-lg transition-all whitespace-nowrap ${
+                          reviewTab === 'anchor-detail'
+                            ? 'bg-white text-amber-600 font-medium shadow-sm'
+                            : 'text-gray-500 hover:text-navy hover:bg-white/50'
+                        }`}
+                      >
+                        🎯 困惑点
+                        {selectedAnchor && !selectedAnchor.resolved && (
+                          <span className="ml-1 w-2 h-2 bg-coral rounded-full inline-block animate-pulse" />
+                        )}
+                      </button>
+                      <button
+                        onClick={() => setReviewTab('highlights')}
+                        className={`px-2.5 py-1.5 text-sm rounded-lg transition-all whitespace-nowrap ${
+                          reviewTab === 'highlights'
+                            ? 'bg-white text-amber-600 font-medium shadow-sm'
+                            : 'text-gray-500 hover:text-navy hover:bg-white/50'
+                        }`}
+                      >
+                        ⚡ 精选
+                        {highlightTopics.length > 0 && (
+                          <span className="ml-1 text-xs text-skyblue-600">({highlightTopics.length})</span>
+                        )}
+                      </button>
+                      <button
+                        onClick={() => setReviewTab('summary')}
+                        className={`px-2.5 py-1.5 text-sm rounded-lg transition-all whitespace-nowrap ${
+                          reviewTab === 'summary'
+                            ? 'bg-white text-amber-600 font-medium shadow-sm'
+                            : 'text-gray-500 hover:text-navy hover:bg-white/50'
+                        }`}
+                      >
+                        📝 摘要
+                        {classSummary && <span className="ml-1 text-xs text-mint-600">✓</span>}
+                      </button>
+                      <button
+                        onClick={() => setReviewTab('notes')}
+                        className={`px-2.5 py-1.5 text-sm rounded-lg transition-all whitespace-nowrap ${
+                          reviewTab === 'notes'
+                            ? 'bg-white text-amber-600 font-medium shadow-sm'
+                            : 'text-gray-500 hover:text-navy hover:bg-white/50'
+                        }`}
+                      >
+                        📄 笔记
+                        {notes.length > 0 && (
+                          <span className="ml-1 text-xs text-amber-600">({notes.length})</span>
+                        )}
+                      </button>
+                    </div>
+                    
+                    {/* 标签页内容 */}
+                    <div className="flex-1 min-h-0 overflow-hidden">
+                      {reviewTab === 'timeline' && timelineForView && (
+                        <TimelineView
+                          timeline={timelineForView}
+                          currentTime={currentTime}
+                          selectedBreakpoint={selectedBreakpoint}
+                          onTimeClick={handleTimelineClick}
+                          onBreakpointClick={(bp) => {
+                            const anchor = anchors.find(a => a.id === bp.id);
+                            if (anchor) handleAnchorSelect(anchor);
+                          }}
+                        />
+                      )}
+                      
+                      {reviewTab === 'anchor-detail' && (
+                        <AnchorDetailPanel
+                          anchor={selectedAnchor}
+                          segments={segments}
+                          onSeek={(timeMs) => {
+                            setCurrentTime(timeMs);
+                            waveformRef.current?.seekTo(timeMs);
+                          }}
+                          onPlay={(startMs) => {
+                            waveformRef.current?.seekTo(startMs);
+                            waveformRef.current?.play();
+                          }}
+                          onResolve={handleResolveAnchor}
+                          onAskAI={(anchor, contextText) => {
+                            // 确保退出历史模式，进入当前对话
+                            setShowConversationHistory(false);
+                            setSelectedHistoryConversation(null);
+                            // 滚动到 AI 对话区（右侧面板会自动显示 AITutor）
+                          }}
+                          onAddNote={(text, anchorId) => {
+                            handleAddNote(text, 'anchor', {
+                              anchorId,
+                              timestamp: selectedAnchor?.timestamp,
+                            });
+                          }}
+                          onClose={() => setReviewTab('timeline')}
+                        />
+                      )}
+                      
+                      {reviewTab === 'highlights' && (
+                        <HighlightsPanel
+                          topics={highlightTopics}
+                          selectedTopic={selectedTopic}
+                          onTopicSelect={setSelectedTopic}
+                          onPlayTopic={handlePlayTopic}
+                          onSeek={handleTimelineClick}
+                          onPlayAll={handlePlayAll}
+                          isPlayingAll={isPlayingAll}
+                          playAllIndex={playAllIndex}
+                          currentTime={currentTime}
+                          totalDuration={totalDuration}
+                          isLoading={isLoadingTopics}
+                          onGenerate={handleGenerateTopics}
+                          onRegenerateByTheme={handleRegenerateByTheme}
+                          onClear={handleClearTopics}
+                        />
+                      )}
+                      
+                      {reviewTab === 'summary' && (
+                        <SummaryPanel
+                          summary={classSummary}
+                          isLoading={isLoadingSummary}
+                          onGenerate={handleGenerateSummary}
+                          onSeek={handleTimelineClick}
+                          onAddNote={(text, takeaway) => {
+                            handleAddNote(text, 'takeaways', {
+                              selectedText: takeaway.label,
+                              extra: { timestamps: takeaway.timestamps }
+                            });
+                          }}
+                        />
+                      )}
+                      
+                      {reviewTab === 'notes' && (
+                        <NotesPanel
+                          notes={notes}
+                          onAddNote={handleAddNote}
+                          onUpdateNote={handleUpdateNote}
+                          onDeleteNote={handleDeleteNote}
+                          onSeek={handleTimelineClick}
+                        />
+                      )}
+                    </div>
                   </div>
-                )}
-                
-                {/* AI 家教区 */}
-                <div className="flex-1 min-h-0">
-                  <AITutor
-                    breakpoint={selectedBreakpoint}
-                    segments={segments}
-                    isLoading={false}
-                    onResolve={handleResolveAnchor}
-                    onActionItemsUpdate={handleActionItemsUpdate}
-                    sessionId={sessionId}
-                    onSeek={(timeMs) => {
-                      setCurrentTime(timeMs);
-                      waveformRef.current?.seekTo(timeMs);
-                      waveformRef.current?.play();
-                    }}
-                  />
-                </div>
-              </div>
+                }
+                rightPanel={
+                  /* 中栏 - AI 对话区（现在是右侧主面板） */
+                  <div className="h-full flex flex-col bg-white">
+                    {/* 精简波形播放器 - compact 模式，置于顶部 */}
+                    {(audioBlob || audioUrl) && (
+                      <div className="flex-shrink-0 border-b" style={{ background: 'var(--edu-bg-soft)', borderColor: 'var(--edu-border-light)' }}>
+                        <WaveformPlayer
+                          ref={waveformRef}
+                          src={audioBlob || audioUrl || undefined}
+                          anchors={anchors.map(a => ({
+                            id: a.id,
+                            timestamp: a.timestamp,
+                            resolved: a.resolved,
+                            type: a.type,
+                          } as WaveformAnchor))}
+                          onTimeUpdate={setCurrentTime}
+                          onPlayStateChange={setIsPlaying}
+                          onAnchorClick={(anchor) => {
+                            const found = anchors.find(a => a.id === anchor.id);
+                            if (found) handleAnchorSelect(found);
+                          }}
+                          onAnchorAdd={handlePlaybackAnchorAdd}
+                          allowAddAnchor={true}
+                          selectedAnchorId={selectedAnchor?.id}
+                          compact={true}
+                        />
+                      </div>
+                    )}
+                    
+                    {/* AI 家教区 */}
+                    <div className="flex-1 min-h-0 flex flex-col">
+                      {/* 内容区 */}
+                      <div className="flex-1 min-h-0 overflow-hidden">
+                        {showConversationHistory ? (
+                          selectedHistoryConversation ? (
+                            <div className="h-full flex flex-col">
+                              <div className="px-4 py-2 border-b flex items-center justify-between flex-shrink-0" style={{ background: 'var(--edu-bg-soft)', borderColor: 'var(--edu-border-light)' }}>
+                                <span className="text-sm text-gray-600 truncate">{selectedHistoryConversation.title}</span>
+                                <div className="flex items-center gap-2">
+                                  <button
+                                    onClick={() => setSelectedHistoryConversation(null)}
+                                    className="text-xs text-gray-500 hover:text-navy"
+                                  >
+                                    ← 返回列表
+                                  </button>
+                                  <button
+                                    onClick={() => {
+                                      setShowConversationHistory(false);
+                                      setSelectedHistoryConversation(null);
+                                    }}
+                                    className="text-xs text-amber-600 hover:text-amber-700"
+                                  >
+                                    新对话
+                                  </button>
+                                </div>
+                              </div>
+                              <div className="flex-1 min-h-0">
+                                <AIChat
+                                  conversationId={selectedHistoryConversation.conversationId}
+                                  sessionId={sessionId}
+                                  onTimestampClick={(timeMs) => {
+                                    setCurrentTime(timeMs);
+                                    waveformRef.current?.seekTo(timeMs);
+                                    waveformRef.current?.play();
+                                  }}
+                                />
+                              </div>
+                            </div>
+                          ) : (
+                            <div className="h-full flex flex-col">
+                              <div className="px-4 py-2 border-b flex items-center justify-between flex-shrink-0" style={{ background: 'var(--edu-bg-soft)', borderColor: 'var(--edu-border-light)' }}>
+                                <span className="text-sm font-medium text-navy">历史对话</span>
+                                <button
+                                  onClick={() => {
+                                    setShowConversationHistory(false);
+                                    setSelectedHistoryConversation(null);
+                                  }}
+                                  className="text-xs text-amber-600 hover:text-amber-700 flex items-center gap-1"
+                                >
+                                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                                  </svg>
+                                  新对话
+                                </button>
+                              </div>
+                              <div className="flex-1 min-h-0">
+                                <ConversationList
+                                  sessionId={sessionId}
+                                  onSelect={(conv) => setSelectedHistoryConversation(conv)}
+                                  showSearch={true}
+                                  maxHeight="100%"
+                                />
+                              </div>
+                            </div>
+                          )
+                        ) : (
+                          <AITutor
+                            breakpoint={selectedBreakpoint}
+                            segments={segments}
+                            isLoading={false}
+                            onResolve={handleResolveAnchor}
+                            onActionItemsUpdate={handleActionItemsUpdate}
+                            sessionId={sessionId}
+                            onSeek={(timeMs) => {
+                              setCurrentTime(timeMs);
+                              waveformRef.current?.seekTo(timeMs);
+                              waveformRef.current?.play();
+                            }}
+                          />
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                }
+              />
 
-              {/* 右栏 - 行动清单 */}
-              <div className="w-80 border-l border-gray-100 glass">
-                <ActionList
-                  items={actionItems}
-                  onComplete={handleActionComplete}
-                />
-              </div>
+              {/* 右侧 - 图标条 */}
+              <ActionSidebar
+                actionCount={actionItems.filter(i => !i.completed).length}
+                totalCount={actionItems.length}
+                isDrawerOpen={isActionDrawerOpen}
+                onToggleDrawer={() => setIsActionDrawerOpen(!isActionDrawerOpen)}
+                onShowHistory={() => {
+                  setShowConversationHistory(!showConversationHistory);
+                  if (showConversationHistory) {
+                    setSelectedHistoryConversation(null);
+                  }
+                }}
+                isHistoryActive={showConversationHistory}
+              />
+
+              {/* 行动清单抽屉 */}
+              <ActionDrawer
+                isOpen={isActionDrawerOpen}
+                onClose={() => setIsActionDrawerOpen(false)}
+                items={actionItems}
+                onComplete={handleActionComplete}
+              />
             </div>
           ) : (
-            /* 移动端得到风格布局 */
-            <div className="flex-1 min-h-0 flex flex-col overflow-hidden bg-[var(--dedao-bg)]">
+            /* 移动端教育风格布局 */
+            <div className="flex-1 min-h-0 flex flex-col overflow-hidden" style={{ background: 'var(--edu-bg-primary)' }}>
               {/* 极简顶部栏：Logo + Tab + 菜单 */}
-              <div className="flex-shrink-0 px-4 py-2.5 flex items-center gap-3 bg-white border-b border-[#E8E4DF]">
+              <div className="flex-shrink-0 px-4 py-2.5 flex items-center gap-3 bg-white border-b" style={{ borderColor: 'var(--edu-border-light)' }}>
                 {/* Logo */}
-                <div className="w-8 h-8 bg-gradient-to-br from-[var(--dedao-gold)] to-[var(--dedao-gold-dark)] rounded-lg flex items-center justify-center flex-shrink-0">
+                <div className="w-8 h-8 bg-gradient-to-br from-amber-400 to-amber-500 rounded-lg flex items-center justify-center flex-shrink-0">
                   <span className="text-white font-bold text-sm">M</span>
                 </div>
                 
@@ -1436,6 +1555,8 @@ export default function StudentApp() {
                       onClick={() => {
                         setMobileSubPage(null);
                         setMobileAIQuestion('');
+                        setShowConversationHistory(false);
+                        setSelectedHistoryConversation(null);
                       }}
                       className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-gray-100"
                     >
@@ -1444,7 +1565,35 @@ export default function StudentApp() {
                       </svg>
                     </button>
                     <span className="font-medium text-gray-900">AI 助教</span>
+                    
+                    {/* 历史记录切换按钮 */}
+                    <div className="ml-auto flex items-center gap-1">
+                      <button
+                        onClick={() => {
+                          setShowConversationHistory(false);
+                          setSelectedHistoryConversation(null);
+                        }}
+                        className={`px-2.5 py-1 text-xs rounded-full transition-all ${
+                          !showConversationHistory
+                            ? 'bg-lavender-100 text-lavender-700 font-medium'
+                            : 'text-gray-500 hover:bg-gray-100'
+                        }`}
+                      >
+                        当前
+                      </button>
+                      <button
+                        onClick={() => setShowConversationHistory(true)}
+                        className={`px-2.5 py-1 text-xs rounded-full transition-all ${
+                          showConversationHistory
+                            ? 'bg-lavender-100 text-lavender-700 font-medium'
+                            : 'text-gray-500 hover:bg-gray-100'
+                        }`}
+                      >
+                        📜 历史
+                      </button>
+                    </div>
                   </div>
+                  
                   {/* MiniPlayer 播放进度条 */}
                   <MiniPlayer
                     currentTime={currentTime}
@@ -1475,23 +1624,61 @@ export default function StudentApp() {
                     }}
                     className="border-b border-gray-100"
                   />
+                  
                   {/* AI 对话区 */}
                   <div className="flex-1 min-h-0">
-                    <AITutor
-                      breakpoint={selectedBreakpoint}
-                      segments={segments}
-                      isLoading={false}
-                      onResolve={handleResolveAnchor}
-                      onActionItemsUpdate={handleActionItemsUpdate}
-                      sessionId={sessionId}
-                      initialQuestion={mobileAIQuestion}
-                      isMobile={true}
-                      onSeek={(timeMs) => {
-                        setCurrentTime(timeMs);
-                        waveformRef.current?.seekTo(timeMs);
-                        waveformRef.current?.play();
-                      }}
-                    />
+                    {showConversationHistory ? (
+                      selectedHistoryConversation ? (
+                        // 继续历史对话
+                        <div className="h-full flex flex-col">
+                          <div className="px-4 py-2 bg-gray-50 border-b border-gray-100 flex items-center justify-between">
+                            <span className="text-sm text-gray-600 truncate">{selectedHistoryConversation.title}</span>
+                            <button
+                              onClick={() => setSelectedHistoryConversation(null)}
+                              className="text-xs text-amber-600"
+                            >
+                              ← 返回
+                            </button>
+                          </div>
+                          <div className="flex-1 min-h-0">
+                            <AIChat
+                              conversationId={selectedHistoryConversation.conversationId}
+                              sessionId={sessionId}
+                              onTimestampClick={(timeMs) => {
+                                setCurrentTime(timeMs);
+                                waveformRef.current?.seekTo(timeMs);
+                                waveformRef.current?.play();
+                              }}
+                            />
+                          </div>
+                        </div>
+                      ) : (
+                        // 历史对话列表
+                        <ConversationList
+                          sessionId={sessionId}
+                          onSelect={(conv) => setSelectedHistoryConversation(conv)}
+                          showSearch={true}
+                          maxHeight="100%"
+                        />
+                      )
+                    ) : (
+                      // 当前困惑点对话
+                      <AITutor
+                        breakpoint={selectedBreakpoint}
+                        segments={segments}
+                        isLoading={false}
+                        onResolve={handleResolveAnchor}
+                        onActionItemsUpdate={handleActionItemsUpdate}
+                        sessionId={sessionId}
+                        initialQuestion={mobileAIQuestion}
+                        isMobile={true}
+                        onSeek={(timeMs) => {
+                          setCurrentTime(timeMs);
+                          waveformRef.current?.seekTo(timeMs);
+                          waveformRef.current?.play();
+                        }}
+                      />
+                    )}
                   </div>
                 </div>
               )}

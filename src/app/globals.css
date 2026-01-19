@@ -3,63 +3,90 @@
 @tailwind utilities;
 
 /* ========================================
-   MeetMind Design System
-   美学方向：温暖学术风 (Warm Academic)
-   - 柔和的暖色调，减少学习焦虑
-   - 清晰的层次感，信息易于扫描
-   - 精致的微交互，提升操作反馈
+   MeetMind Design System v3.0
+   美学方向：温馨教育风 (Warm Educational)
+   - 奶油色暖调背景，温馨友好
+   - 多彩点缀色，活力有趣
+   - 大圆角卡片，柔和阴影
+   - 手绘插画装饰，教育氛围
    ======================================== */
 
 /* === 设计令牌 === */
 :root {
-  /* 主色调：温暖的珊瑚橙 */
-  --color-primary: 251 113 133;        /* rose-400 */
-  --color-primary-light: 254 205 211;  /* rose-200 */
-  --color-primary-dark: 225 29 72;     /* rose-600 */
+  /* 主色调：深海蓝 */
+  --color-navy: 30 59 77;           /* #1E3B4D */
+  --color-navy-light: 71 103 153;   /* #476799 */
   
-  /* 强调色：学术蓝 */
-  --color-accent: 99 102 241;          /* indigo-500 */
-  --color-accent-light: 199 210 254;   /* indigo-200 */
+  /* 主色调：琥珀金（得到风） */
+  --color-lavender: 212 165 116;     /* #D4A574 */
+  --color-lavender-light: 245 230 211; /* #F5E6D3 */
   
-  /* 成功/已解决：薄荷绿 */
-  --color-success: 52 211 153;         /* emerald-400 */
+  /* 强调色：向日葵黄 */
+  --color-sunflower: 255 217 61;    /* #FFD93D */
+  --color-warm-orange: 255 171 94;  /* #FFAB5E */
   
-  /* 警告/困惑：琥珀色 */
-  --color-warning: 251 191 36;         /* amber-400 */
+  /* 辅助色 */
+  --color-skyblue: 116 192 252;     /* #74C0FC */
+  --color-mint: 168 230 207;        /* #A8E6CF */
+  --color-coral: 255 138 128;       /* #FF8A80 */
+  --color-lilac: 245 230 211;       /* #F5E6D3 暖米色 */
+  --color-cream: 255 245 230;       /* #FFF5E6 */
   
-  /* 中性色 */
-  --color-surface: 255 255 255;
-  --color-surface-dim: 249 250 251;    /* gray-50 */
-  --color-surface-bright: 255 255 255;
-  --color-text: 17 24 39;              /* gray-900 */
-  --color-text-muted: 107 114 128;     /* gray-500 */
-  --color-border: 229 231 235;         /* gray-200 */
+  /* === 教育风格 · 奶油暖调 === */
+  --edu-bg-primary: #FFF9F5;        /* 主背景-暖奶油 */
+  --edu-bg-secondary: #FFFBF0;      /* 次背景-浅奶油 */
+  --edu-bg-card: #FFFFFF;           /* 卡片背景-纯白 */
+  --edu-bg-soft: #FFF5E6;           /* 柔和背景-米黄 */
+  --edu-bg-accent: #F0EEFE;         /* 强调背景-淡紫 */
+  --edu-border: #F5E6D3;            /* 边框色-暖米 */
+  --edu-border-light: #FAF0E6;      /* 浅边框色 */
+  
+  /* 背景色 */
+  --color-surface: 255 255 255;     /* #FFFFFF */
+  --color-surface-soft: 255 249 245; /* #FFF9F5 - 改为奶油色 */
+  --color-surface-warm: 255 251 240; /* #FFFBF0 */
+  --color-surface-mint: 240 255 244; /* #F0FFF4 */
+  
+  /* 文字色 */
+  --color-text-primary: 30 59 77;   /* #1E3B4D */
+  --color-text-secondary: 107 114 128; /* #6B7280 */
+  --color-text-muted: 156 163 175;  /* #9CA3AF */
+  --color-text-inverse: 255 255 255; /* #FFFFFF */
+  
+  /* 边框色 */
+  --color-border: 245 230 211;      /* #F5E6D3 - 暖米边框 */
+  --color-border-light: 250 240 230; /* #FAF0E6 */
   
   /* === 得到风格 · 金色暖调 (Mobile) === */
-  --dedao-gold: #D4A574;               /* 金色主色 */
-  --dedao-gold-light: #E8D4BC;         /* 浅金强调 */
-  --dedao-gold-dark: #C49A6C;          /* 深金色 */
-  --dedao-brown: #8B7355;              /* 深棕辅助 */
-  --dedao-bg: #FBF9F7;                 /* 暖白背景 */
-  --dedao-bg-card: #FFFFFF;            /* 卡片背景 */
-  --dedao-bg-warm: #F5F0EB;            /* 暖灰背景 */
-  --dedao-text: #3D3D3D;               /* 深灰文字 */
-  --dedao-text-secondary: #666666;     /* 次要文字 */
-  --dedao-text-muted: #999999;         /* 弱化文字 */
-  --dedao-confusion: #E57373;          /* 困惑点红 */
-  --dedao-resolved: #81C784;           /* 已解决绿 */
+  --dedao-gold: #D4A574;
+  --dedao-gold-light: #E8D4BC;
+  --dedao-gold-dark: #C49A6C;
+  --dedao-brown: #8B7355;
+  --dedao-bg: #FFF9F5;              /* 统一为奶油色 */
+  --dedao-bg-card: #FFFFFF;
+  --dedao-bg-warm: #FFF5E6;
+  --dedao-text: #3D3D3D;
+  --dedao-text-secondary: #666666;
+  --dedao-text-muted: #999999;
+  --dedao-confusion: #FF8A80;       /* 使用珊瑚粉 */
+  --dedao-resolved: #A8E6CF;        /* 使用薄荷绿 */
   
-  /* 阴影 */
-  --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
-  --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.07), 0 2px 4px -2px rgb(0 0 0 / 0.05);
-  --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.08), 0 4px 6px -4px rgb(0 0 0 / 0.05);
-  --shadow-glow: 0 0 20px rgb(251 113 133 / 0.3);
+  /* 阴影 - 更柔和的暖色调阴影 */
+  --shadow-sm: 0 1px 3px 0 rgb(245 200 150 / 0.08);
+  --shadow-md: 0 4px 12px -2px rgb(245 200 150 / 0.12), 0 2px 6px -2px rgb(245 200 150 / 0.08);
+  --shadow-lg: 0 12px 24px -4px rgb(245 200 150 / 0.15), 0 4px 8px -4px rgb(245 200 150 / 0.08);
+  --shadow-card: 0 4px 16px -2px rgb(255 213 128 / 0.1), 0 2px 4px -2px rgb(255 213 128 / 0.06);
+  --shadow-card-hover: 0 8px 24px -4px rgb(255 213 128 / 0.16), 0 4px 8px -4px rgb(255 213 128 / 0.08);
+  --shadow-glow: 0 0 20px rgb(108 92 231 / 0.3);
+  --shadow-glow-yellow: 0 0 20px rgb(255 217 61 / 0.4);
   
-  /* 圆角 */
-  --radius-sm: 0.5rem;
-  --radius-md: 0.75rem;
-  --radius-lg: 1rem;
-  --radius-xl: 1.5rem;
+  /* 圆角 - 更大更圆润 */
+  --radius-sm: 0.5rem;    /* 8px */
+  --radius-md: 0.75rem;   /* 12px */
+  --radius-lg: 1rem;      /* 16px */
+  --radius-xl: 1.25rem;   /* 20px */
+  --radius-2xl: 1.5rem;   /* 24px */
+  --radius-3xl: 2rem;     /* 32px */
   --radius-full: 9999px;
   
   /* 动画 */
@@ -77,8 +104,8 @@ html, body {
 
 body {
   font-family: 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', -apple-system, BlinkMacSystemFont, sans-serif;
-  color: rgb(var(--color-text));
-  background: linear-gradient(135deg, #fdf2f8 0%, #faf5ff 50%, #eff6ff 100%);
+  color: rgb(var(--color-text-primary));
+  background: var(--edu-bg-primary);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
@@ -139,20 +166,39 @@ p, span, div, h1, h2, h3, h4, h5, h6, li, td, th, label {
   -webkit-backdrop-filter: blur(12px);
 }
 
-/* === 卡片样式 === */
+/* === 卡片样式 - 教育风格 === */
 .card {
-  @apply bg-white rounded-xl border border-gray-100;
-  box-shadow: var(--shadow-md);
+  @apply bg-white rounded-2xl;
+  border: 1px solid var(--edu-border-light);
+  box-shadow: var(--shadow-card);
   transition: box-shadow var(--duration-normal) var(--ease-out),
               transform var(--duration-normal) var(--ease-out);
 }
 
 .card:hover {
-  box-shadow: var(--shadow-lg);
+  box-shadow: var(--shadow-card-hover);
 }
 
 .card-interactive:hover {
   transform: translateY(-2px);
+}
+
+/* 教育风格卡片变体 */
+.card-edu {
+  @apply bg-white rounded-2xl;
+  border: 1px solid var(--edu-border);
+  box-shadow: var(--shadow-card);
+}
+
+.card-edu-soft {
+  background: var(--edu-bg-soft);
+  @apply rounded-2xl;
+  border: 1px solid var(--edu-border-light);
+}
+
+.card-edu-accent {
+  background: var(--edu-bg-accent);
+  @apply rounded-2xl border-0;
 }
 
 /* === 按钮样式 === */
@@ -168,17 +214,19 @@ p, span, div, h1, h2, h3, h4, h5, h6, li, td, th, label {
 }
 
 .btn-primary {
-  @apply bg-gradient-to-r from-rose-400 to-rose-500 text-white;
-  box-shadow: 0 2px 8px rgb(251 113 133 / 0.4);
+  background: linear-gradient(135deg, #D4A574 0%, #C4956A 100%);
+  @apply text-white;
+  box-shadow: 0 2px 8px rgb(212 165 116 / 0.4);
 }
 
 .btn-primary:hover {
-  @apply from-rose-500 to-rose-600;
-  box-shadow: 0 4px 12px rgb(251 113 133 / 0.5);
+  background: linear-gradient(135deg, #C4956A 0%, #B08560 100%);
+  box-shadow: 0 4px 12px rgb(212 165 116 / 0.5);
 }
 
 .btn-secondary {
-  @apply bg-white text-gray-700 border border-gray-200;
+  @apply bg-white border border-gray-200;
+  color: #1E3B4D;
 }
 
 .btn-secondary:hover {
@@ -186,30 +234,44 @@ p, span, div, h1, h2, h3, h4, h5, h6, li, td, th, label {
 }
 
 .btn-ghost {
-  @apply bg-transparent text-gray-600;
+  @apply bg-transparent;
+  color: #6B7280;
 }
 
 .btn-ghost:hover {
-  @apply bg-gray-100 text-gray-900;
+  @apply bg-gray-100;
+  color: #1E3B4D;
+}
+
+.btn-accent {
+  background: linear-gradient(180deg, #FFD93D 0%, #FFAB5E 100%);
+  color: #1E3B4D;
+  @apply font-semibold;
+  box-shadow: 0 2px 8px rgb(255 217 61 / 0.4);
+}
+
+.btn-accent:hover {
+  box-shadow: 0 4px 12px rgb(255 217 61 / 0.5);
 }
 
 .btn-danger {
-  @apply bg-gradient-to-r from-red-500 to-rose-500 text-white;
-  box-shadow: 0 2px 8px rgb(239 68 68 / 0.4);
+  background: linear-gradient(135deg, #FF8A80 0%, #FF574A 100%);
+  @apply text-white;
+  box-shadow: 0 2px 8px rgb(255 138 128 / 0.4);
 }
 
 /* === 录音按钮特效 === */
 .record-btn {
   @apply relative w-20 h-20 rounded-full flex items-center justify-center;
-  background: linear-gradient(135deg, #fb7185 0%, #f43f5e 100%);
-  box-shadow: 0 4px 20px rgb(244 63 94 / 0.4),
+  background: linear-gradient(135deg, #D4A574 0%, #C4956A 100%);
+  box-shadow: 0 4px 20px rgb(212 165 116 / 0.4),
               inset 0 2px 4px rgb(255 255 255 / 0.2);
   transition: all var(--duration-normal) var(--ease-spring);
 }
 
 .record-btn:hover {
   transform: scale(1.05);
-  box-shadow: 0 6px 30px rgb(244 63 94 / 0.5),
+  box-shadow: 0 6px 30px rgb(212 165 116 / 0.5),
               inset 0 2px 4px rgb(255 255 255 / 0.2);
 }
 
@@ -223,20 +285,21 @@ p, span, div, h1, h2, h3, h4, h5, h6, li, td, th, label {
 
 @keyframes record-pulse {
   0%, 100% {
-    box-shadow: 0 4px 20px rgb(244 63 94 / 0.4),
-                0 0 0 0 rgb(244 63 94 / 0.4);
+    box-shadow: 0 4px 20px rgb(212 165 116 / 0.4),
+                0 0 0 0 rgb(212 165 116 / 0.4);
   }
   50% {
-    box-shadow: 0 4px 20px rgb(244 63 94 / 0.4),
-                0 0 0 20px rgb(244 63 94 / 0);
+    box-shadow: 0 4px 20px rgb(212 165 116 / 0.4),
+                0 0 0 20px rgb(212 165 116 / 0);
   }
 }
 
 /* === 困惑按钮 === */
 .confusion-btn {
-  @apply relative w-full py-5 rounded-2xl font-bold text-lg text-white overflow-hidden;
-  background: linear-gradient(135deg, #f97316 0%, #ef4444 100%);
-  box-shadow: 0 4px 20px rgb(249 115 22 / 0.4);
+  @apply relative w-full py-5 rounded-2xl font-bold text-lg overflow-hidden;
+  background: linear-gradient(135deg, #FF8A80 0%, #FF574A 100%);
+  color: white;
+  box-shadow: 0 4px 20px rgb(255 138 128 / 0.4);
   transition: all var(--duration-normal) var(--ease-spring);
 }
 
@@ -248,7 +311,7 @@ p, span, div, h1, h2, h3, h4, h5, h6, li, td, th, label {
 
 .confusion-btn:hover {
   transform: translateY(-2px);
-  box-shadow: 0 8px 30px rgb(249 115 22 / 0.5);
+  box-shadow: 0 8px 30px rgb(255 138 128 / 0.5);
 }
 
 .confusion-btn:active {
@@ -267,32 +330,36 @@ p, span, div, h1, h2, h3, h4, h5, h6, li, td, th, label {
 }
 
 .timeline-item:hover {
-  @apply bg-rose-50/50;
+  background: rgb(245 230 211 / 0.3);
 }
 
 .timeline-item.active {
-  @apply bg-rose-50 border-l-4 border-rose-400;
+  background: rgb(245 230 211 / 0.5);
+  @apply border-l-4;
+  border-left-color: #D4A574;
 }
 
 .timeline-item .time {
-  @apply text-xs font-mono text-gray-400;
+  @apply text-xs font-mono;
+  color: #9CA3AF;
 }
 
 .timeline-item .text {
-  @apply text-sm text-gray-700 line-clamp-2 mt-1;
+  @apply text-sm line-clamp-2 mt-1;
+  color: #1E3B4D;
 }
 
 /* === 断点标记 === */
 .breakpoint-marker {
   @apply absolute -left-1.5 top-1/2 -translate-y-1/2 w-3 h-3 rounded-full;
-  background: linear-gradient(135deg, #f43f5e 0%, #ef4444 100%);
-  box-shadow: 0 0 8px rgb(244 63 94 / 0.6);
+  background: linear-gradient(135deg, #FF8A80 0%, #FF574A 100%);
+  box-shadow: 0 0 8px rgb(255 138 128 / 0.6);
   animation: breakpoint-glow 2s ease-in-out infinite;
 }
 
 .breakpoint-marker.resolved {
-  background: linear-gradient(135deg, #34d399 0%, #10b981 100%);
-  box-shadow: 0 0 8px rgb(52 211 153 / 0.6);
+  background: linear-gradient(135deg, #A8E6CF 0%, #4ADE80 100%);
+  box-shadow: 0 0 8px rgb(168 230 207 / 0.6);
   animation: none;
 }
 
@@ -315,8 +382,9 @@ p, span, div, h1, h2, h3, h4, h5, h6, li, td, th, label {
 
 .chat-bubble.user {
   @apply ml-auto rounded-br-md;
-  background: linear-gradient(135deg, #818cf8 0%, #6366f1 100%);
+  background: linear-gradient(135deg, #B8956A 0%, #A68354 100%);
   color: white;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
 }
 
 .chat-bubble.assistant {
@@ -338,13 +406,13 @@ p, span, div, h1, h2, h3, h4, h5, h6, li, td, th, label {
 /* === 引用标记 === */
 .citation {
   @apply inline-flex items-center gap-1 px-2 py-0.5 rounded text-sm cursor-pointer transition-all;
-  background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
-  color: #b45309;
+  background: linear-gradient(180deg, #FFD93D 0%, #FFAB5E 100%);
+  color: #1E3B4D;
 }
 
 .citation:hover {
   transform: translateY(-1px);
-  box-shadow: 0 2px 8px rgb(251 191 36 / 0.3);
+  box-shadow: 0 2px 8px rgb(255 217 61 / 0.4);
 }
 
 /* === 行动清单 === */
@@ -354,24 +422,28 @@ p, span, div, h1, h2, h3, h4, h5, h6, li, td, th, label {
 }
 
 .action-item:hover {
-  @apply border-rose-200;
+  border-color: #F5E6D3;
   box-shadow: var(--shadow-md);
 }
 
 .action-item.completed {
-  @apply bg-emerald-50/50 border-emerald-200;
+  background: rgb(168 230 207 / 0.2);
+  border-color: #A8E6CF;
 }
 
 .action-checkbox {
-  @apply w-5 h-5 rounded-full border-2 border-gray-300 flex items-center justify-center flex-shrink-0 mt-0.5 cursor-pointer transition-all;
+  @apply w-5 h-5 rounded-full border-2 flex items-center justify-center flex-shrink-0 mt-0.5 cursor-pointer transition-all;
+  border-color: #9CA3AF;
 }
 
 .action-checkbox:hover {
-  @apply border-rose-400;
+  border-color: #D4A574;
 }
 
 .action-item.completed .action-checkbox {
-  @apply bg-emerald-500 border-emerald-500 text-white;
+  background: #A8E6CF;
+  border-color: #A8E6CF;
+  @apply text-white;
 }
 
 /* === 音量指示器 === */
@@ -381,7 +453,7 @@ p, span, div, h1, h2, h3, h4, h5, h6, li, td, th, label {
 }
 
 .volume-bar.active {
-  @apply bg-emerald-400;
+  background: #A8E6CF;
 }
 
 .volume-bar.inactive {
@@ -390,7 +462,8 @@ p, span, div, h1, h2, h3, h4, h5, h6, li, td, th, label {
 
 /* === 波形动画 === */
 .waveform-bar {
-  @apply w-1 bg-rose-400 rounded-full;
+  @apply w-1 rounded-full;
+  background: #D4A574;
   animation: waveform 1s ease-in-out infinite;
 }
 
@@ -411,7 +484,8 @@ p, span, div, h1, h2, h3, h4, h5, h6, li, td, th, label {
 }
 
 .loading-dots span {
-  @apply w-2 h-2 bg-rose-400 rounded-full;
+  @apply w-2 h-2 rounded-full;
+  background: #D4A574;
   animation: loading-bounce 1.4s ease-in-out infinite;
 }
 
@@ -430,6 +504,70 @@ p, span, div, h1, h2, h3, h4, h5, h6, li, td, th, label {
   }
 }
 
+/* === 自定义颜色工具类 === */
+/* Tailwind 需要显式定义这些颜色变体 */
+.bg-coral { background-color: #FF8A80; }
+.bg-coral\/30 { background-color: rgba(255, 138, 128, 0.3); }
+.bg-coral-50 { background-color: #FFF5F4; }
+.bg-coral-100 { background-color: #FFE9E7; }
+.text-coral { color: #FF8A80; }
+.text-coral-600 { color: #FF574A; }
+.border-coral { border-color: #FF8A80; }
+.border-coral-100 { border-color: #FFE9E7; }
+.border-coral-300 { border-color: #FFBFB8; }
+.ring-coral-300 { --tw-ring-color: #FFBFB8; }
+
+.bg-mint { background-color: #A8E6CF; }
+.bg-mint\/30 { background-color: rgba(168, 230, 207, 0.3); }
+.bg-mint-50 { background-color: #F0FDF7; }
+.bg-mint-100 { background-color: #DCFCE8; }
+.text-mint { color: #A8E6CF; }
+.text-mint-700 { color: #16A34A; }
+.border-mint-200 { border-color: #BBF7D3; }
+.border-mint-300 { border-color: #A8E6CF; }
+
+.bg-sunflower { background-color: #FFD93D; }
+.bg-sunflower-50 { background-color: #FFFBEB; }
+.bg-sunflower-100 { background-color: #FEF7D6; }
+.text-sunflower-600 { color: #F5C800; }
+.text-sunflower-700 { color: #C29E00; }
+.border-sunflower { border-color: #FFD93D; }
+.border-sunflower-100 { border-color: #FEF7D6; }
+.border-sunflower-200 { border-color: #FEEFAD; }
+
+.bg-skyblue { background-color: #74C0FC; }
+.bg-skyblue-50 { background-color: #EBF6FF; }
+.text-skyblue { color: #74C0FC; }
+.text-skyblue-600 { color: #1A90F1; }
+.border-skyblue-200 { border-color: #AFDBFF; }
+.border-skyblue-400 { border-color: #74C0FC; }
+
+.bg-lavender { background-color: #D4A574; }
+.bg-lavender-50 { background-color: #FDF8F4; }
+.bg-lavender-100 { background-color: #F5E6D3; }
+.text-lavender { color: #D4A574; }
+.text-lavender-600 { color: #C4956A; }
+.text-lavender-700 { color: #B08560; }
+.text-lavender-900 { color: #7A5D42; }
+.border-lavender { border-color: #D4A574; }
+.border-lavender-100 { border-color: #F5E6D3; }
+.border-lavender-200 { border-color: #E8D4BE; }
+.border-lavender-500 { border-color: #D4A574; }
+.ring-lavender-200 { --tw-ring-color: #E8D4BE; }
+.ring-lavender-400 { --tw-ring-color: #D4A574; }
+
+.bg-warmOrange { background-color: #FFAB5E; }
+.bg-warmOrange-50 { background-color: #FFF7ED; }
+.text-warmOrange { color: #FFAB5E; }
+.text-warmOrange-700 { color: #F96800; }
+.text-warmOrange-800 { color: #C95300; }
+.border-warmOrange-200 { border-color: #FFDFB3; }
+.border-warmOrange-400 { border-color: #FFBF68; }
+
+.bg-lilac { background-color: #F5E6D3; }
+.bg-lilac-50 { background-color: #FDF8F4; }
+.bg-lilac-100\/50 { background-color: rgba(245, 230, 211, 0.5); }
+
 /* === 骨架屏 === */
 .skeleton {
   @apply bg-gray-200 rounded animate-pulse;
@@ -441,29 +579,35 @@ p, span, div, h1, h2, h3, h4, h5, h6, li, td, th, label {
 }
 
 .badge-live {
-  @apply bg-emerald-100 text-emerald-700;
+  background: rgb(168 230 207 / 0.3);
+  color: #16A34A;
 }
 
 .badge-demo {
-  @apply bg-amber-100 text-amber-700;
+  background: rgb(255 217 61 / 0.3);
+  color: #C29E00;
 }
 
 .badge-streaming {
-  @apply bg-rose-100 text-rose-700;
+  background: rgb(245 230 211 / 0.5);
+  color: #D4A574;
 }
 
 /* === 输入框 === */
 .input {
-  @apply w-full px-4 py-3 rounded-xl border border-gray-200 bg-white transition-all;
+  @apply w-full px-4 py-3 rounded-xl border bg-white transition-all;
+  border-color: #E5E7EB;
   transition-duration: var(--duration-fast);
 }
 
 .input:focus {
-  @apply outline-none border-rose-300 ring-4 ring-rose-100;
+  @apply outline-none;
+  border-color: #D4A574;
+  box-shadow: 0 0 0 4px rgb(212 165 116 / 0.1);
 }
 
 .input::placeholder {
-  @apply text-gray-400;
+  color: #9CA3AF;
 }
 
 /* === 模式切换标签 === */
@@ -473,12 +617,18 @@ p, span, div, h1, h2, h3, h4, h5, h6, li, td, th, label {
 }
 
 .mode-tab.active {
-  @apply bg-white text-rose-600;
+  @apply bg-white;
+  color: #D4A574;
   box-shadow: var(--shadow-sm);
 }
 
 .mode-tab:not(.active) {
-  @apply text-gray-500 hover:text-gray-700 hover:bg-white/50;
+  color: #6B7280;
+}
+
+.mode-tab:not(.active):hover {
+  color: #1E3B4D;
+  background: rgb(255 255 255 / 0.5);
 }
 
 /* === 页面过渡 === */
@@ -543,7 +693,8 @@ p, span, div, h1, h2, h3, h4, h5, h6, li, td, th, label {
 
 /* === 焦点可见性 === */
 :focus-visible {
-  @apply outline-none ring-2 ring-rose-400 ring-offset-2;
+  @apply outline-none ring-2 ring-offset-2;
+  --tw-ring-color: #D4A574;
 }
 
 /* === 打印样式 === */

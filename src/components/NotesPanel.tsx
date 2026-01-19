@@ -53,6 +53,8 @@ function getSourceLabel(source: NoteSource): string {
       return '知识点';
     case 'transcript':
       return '转录';
+    case 'anchor':
+      return '困惑点';
     case 'custom':
       return '自定义';
     default:
@@ -63,11 +65,13 @@ function getSourceLabel(source: NoteSource): string {
 function getSourceColor(source: NoteSource): string {
   switch (source) {
     case 'chat':
-      return 'bg-purple-100 text-purple-700';
+      return 'bg-amber-100 text-amber-700';
     case 'takeaways':
-      return 'bg-green-100 text-green-700';
+      return 'bg-mint-100 text-mint-700';
     case 'transcript':
-      return 'bg-blue-100 text-blue-700';
+      return 'bg-skyblue-100 text-skyblue-700';
+    case 'anchor':
+      return 'bg-coral-100 text-coral-700';
     case 'custom':
       return 'bg-gray-100 text-gray-700';
     default:
@@ -89,10 +93,10 @@ function NoteEditor({ initialText = '', selectedText, source, onSave, onCancel }
   const [text, setText] = useState(initialText);
   
   return (
-    <div className="bg-white rounded-lg border-2 border-blue-500 p-4 shadow-lg">
+    <div className="bg-white rounded-lg border-2 border-amber-400 p-4 shadow-lg">
       {/* 引用内容 */}
       {selectedText && (
-        <div className="mb-3 p-3 bg-gray-50 rounded-lg border-l-4 border-blue-400">
+        <div className="mb-3 p-3 bg-surface-soft rounded-lg border-l-4 border-amber-300">
           <div className="flex items-center gap-2 mb-1">
             {source && (
               <span className={`px-2 py-0.5 text-xs rounded ${getSourceColor(source)}`}>
@@ -110,7 +114,7 @@ function NoteEditor({ initialText = '', selectedText, source, onSave, onCancel }
         value={text}
         onChange={(e) => setText(e.target.value)}
         placeholder="写下你的笔记..."
-        className="w-full h-24 p-3 border rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-blue-500"
+        className="w-full h-24 p-3 border rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-amber-400"
         autoFocus
       />
       
@@ -118,7 +122,7 @@ function NoteEditor({ initialText = '', selectedText, source, onSave, onCancel }
       <div className="flex items-center justify-end gap-2 mt-3">
         <button
           onClick={onCancel}
-          className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded-lg transition-colors"
+          className="px-4 py-2 text-sm text-gray-600 hover:text-navy hover:bg-amber-50 rounded-lg transition-colors"
         >
           取消
         </button>
@@ -129,7 +133,7 @@ function NoteEditor({ initialText = '', selectedText, source, onSave, onCancel }
             }
           }}
           disabled={!text.trim()}
-          className="px-4 py-2 text-sm bg-blue-500 hover:bg-blue-600 text-white rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          className="px-4 py-2 text-sm bg-amber-500 hover:bg-amber-600 text-white rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
         >
           保存笔记
         </button>
@@ -386,6 +390,13 @@ export function NotesPanel({
         {/* 分组显示 */}
         {!editingNoteId && (
           <>
+            <NoteGroup
+              title="困惑点笔记"
+              notes={groupedNotes.anchor}
+              onEdit={onUpdateNote ? setEditingNoteId : undefined}
+              onDelete={onDeleteNote}
+              onSeek={onSeek}
+            />
             <NoteGroup
               title="AI 对话笔记"
               notes={groupedNotes.chat}

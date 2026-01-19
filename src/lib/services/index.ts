@@ -9,3 +9,4 @@
 export * from './notebook-service';
 export * from './longcut-service';
 export * from './meetmind-service';
+export { conversationService, getEffectiveUserId } from './conversation-service';
