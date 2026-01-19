@@ -776,6 +776,29 @@ export async function deleteConversationHistory(conversationId: string): Promise
   });
 }
 
+/** 删除会话关联的所有对话历史（包括消息） */
+export async function deleteSessionConversations(sessionId: string): Promise<void> {
+  const conversations = await db.conversationHistory
+    .where('sessionId')
+    .equals(sessionId)
+    .toArray();
+  
+  const conversationIds = conversations.map(c => c.conversationId);
+  
+  if (conversationIds.length > 0) {
+    await db.transaction('rw', [db.conversationHistory, db.conversationMessages], async () => {
+      await db.conversationMessages
+        .where('conversationId')
+        .anyOf(conversationIds)
+        .delete();
+      await db.conversationHistory
+        .where('sessionId')
+        .equals(sessionId)
+        .delete();
+    });
+  }
+}
+
 /** 删除用户所有对话历史 */
 export async function deleteUserConversations(userId: string): Promise<void> {
   const conversations = await db.conversationHistory

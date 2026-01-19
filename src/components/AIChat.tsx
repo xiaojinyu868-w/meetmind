@@ -109,6 +109,16 @@ export function AIChat({
     initConversation();
   }, [initialConversationId]);
 
+  // 监听 sessionId 变化，清理消息状态
+  useEffect(() => {
+    // sessionId 变化时重置所有对话状态
+    setMessages([]);
+    setConversation(null);
+    setError(null);
+    setInputValue('');
+    conversationIdRef.current = null;
+  }, [sessionId]);
+
   // 创建新对话
   const createConversation = useCallback(async (firstMessage: string) => {
     try {

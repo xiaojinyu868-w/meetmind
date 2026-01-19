@@ -4,7 +4,7 @@
  * 对话历史列表组件
  */
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { useConversationHistory } from '@/hooks/useConversationHistory';
 import { ConversationItem } from './ConversationItem';
 import type { ConversationType, ConversationHistory } from '@/types/conversation';
@@ -52,6 +52,13 @@ export function ConversationList({
     autoLoad: true,
     limit: 50,
   });
+
+  // 监听 sessionId 变化，清理搜索状态
+  useEffect(() => {
+    setSearchKeyword('');
+    setSearchResults(null);
+    setIsSearching(false);
+  }, [sessionId]);
 
   // 搜索对话
   const handleSearch = useCallback(async () => {

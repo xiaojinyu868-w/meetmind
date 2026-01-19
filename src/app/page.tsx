@@ -306,14 +306,25 @@ export default function StudentApp() {
   }, [sessionId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleRecordingStart = useCallback((newSessionId: string) => {
+    // 清除旧会话的所有状态
     setSessionId(newSessionId);
     setIsRecording(true);
     setSegments([]);
     setAnchors([]);
+    setSelectedAnchor(null); // 清除选中的困惑点
+    setHighlightTopics([]); // 清除精选片段
+    setClassSummary(null); // 清除摘要
+    setNotes([]); // 清除笔记
+    setActionItems([]); // 清除行动清单
+    setTimeline(null); // 清除时间轴
     setDataSource('live');
     setAudioUrl(null); // 清除示例音频URL
+    setAudioBlob(null); // 清除音频 blob
     liveSegmentsRef.current = [];
     anchorService.clear(newSessionId);
+    // 清理历史对话相关状态
+    setShowConversationHistory(false);
+    setSelectedHistoryConversation(null);
     
     // 创建课程会话记录 (供教师端读取)
     classroomDataService.saveSession({
@@ -366,6 +377,14 @@ export default function StudentApp() {
     memoryService.save(tl);
     setViewMode('review');
   }, [sessionId, anchors, segments]);
+
+  // 处理 viewMode 切换，同时清理历史对话相关状态
+  const handleViewModeChange = useCallback((newMode: 'record' | 'review') => {
+    setViewMode(newMode);
+    // 切换模式时清理历史对话面板状态
+    setShowConversationHistory(false);
+    setSelectedHistoryConversation(null);
+  }, []);
 
   const handleTranscriptUpdate = useCallback((newSegments: TranscriptSegment[]) => {
     liveSegmentsRef.current = newSegments;
@@ -716,14 +735,14 @@ export default function StudentApp() {
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2 p-1 rounded-xl" style={{ background: 'var(--edu-bg-soft)' }}>
               <button
-                onClick={() => setViewMode('record')}
+                onClick={() => handleViewModeChange('record')}
                 className={`mode-tab ${viewMode === 'record' ? 'active' : ''}`}
               >
                 <span className="mr-1.5">🎙️</span>
                 录音
               </button>
               <button
-                onClick={() => setViewMode('review')}
+                onClick={() => handleViewModeChange('review')}
                 className={`mode-tab ${viewMode === 'review' ? 'active' : ''}`}
               >
                 <span className="mr-1.5">📚</span>
@@ -772,7 +791,7 @@ export default function StudentApp() {
                 <div className="flex-1 flex items-center justify-center">
                   <MobileTabSwitch
                     activeTab={viewMode}
-                    onTabChange={(tab) => setViewMode(tab)}
+                    onTabChange={(tab) => handleViewModeChange(tab)}
                     className="w-full max-w-[180px]"
                   />
                 </div>
@@ -1423,7 +1442,7 @@ export default function StudentApp() {
                 <div className="flex-1 flex items-center justify-center">
                   <MobileTabSwitch
                     activeTab={viewMode}
-                    onTabChange={(tab) => setViewMode(tab)}
+                    onTabChange={(tab) => handleViewModeChange(tab)}
                     className="w-full max-w-[180px]"
                   />
                 </div>

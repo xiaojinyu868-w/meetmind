@@ -13,7 +13,16 @@
  * 学生端 → saveStudentAnchor() → IndexedDB → getClassroomData() → 教师端
  */
 
-import { db, generateSessionId } from '@/lib/db';
+import { 
+  db, 
+  generateSessionId,
+  deleteSessionHighlightTopics,
+  deleteSessionSummary,
+  deleteSessionNotes,
+  deleteSessionTutorCaches,
+  deleteSessionConversations,
+} from '@/lib/db';
+import { memoryService } from './memory-service';
 import type { TranscriptSegment, AnchorType, AnchorStatus, StudentAnchor } from '@/types';
 import { DEMO_SEGMENTS, DEMO_ANCHORS, DEMO_SESSION_ID } from '@/fixtures/demo-data';
 
@@ -645,18 +654,36 @@ export const classroomDataService = {
   // ============ 数据清理 ============
 
   /**
-   * 清除课程数据
+   * 清除课程数据（包括 localStorage 和 IndexedDB）
    */
-  clearSessionData(sessionId: string): void {
-    // 清除困惑点
+  async clearSessionData(sessionId: string): Promise<void> {
+    // 清除 localStorage 中的困惑点
     const anchors = getAllAnchorsFromStorage();
     const filtered = anchors.filter(a => a.sessionId !== sessionId);
     saveAnchorsToStorage(filtered);
     
-    // 清除会话
+    // 清除 localStorage 中的会话
     const sessions = getAllSessionsFromStorage();
     const filteredSessions = sessions.filter(s => s.id !== sessionId);
     saveSessionsToStorage(filteredSessions);
+    
+    // 清除 localStorage 中的时间轴
+    memoryService.delete(sessionId);
+    
+    // 清除 IndexedDB 中的相关数据
+    try {
+      await Promise.all([
+        deleteSessionHighlightTopics(sessionId),
+        deleteSessionSummary(sessionId),
+        deleteSessionNotes(sessionId),
+        deleteSessionTutorCaches(sessionId),
+        deleteSessionConversations(sessionId),
+        // 清除转录数据
+        db.transcripts.where('sessionId').equals(sessionId).delete(),
+      ]);
+    } catch (error) {
+      console.error('Failed to clear IndexedDB session data:', error);
+    }
   },
 
   /**

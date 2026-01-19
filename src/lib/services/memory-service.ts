@@ -202,4 +202,12 @@ export const memoryService = {
       return null;
     }
   },
+
+  /**
+   * 删除本地存储中的时间轴
+   */
+  delete(lessonId: string): void {
+    if (typeof window === 'undefined') return;
+    localStorage.removeItem(`meetmind_timeline_${lessonId}`);
+  },
 };

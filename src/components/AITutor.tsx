@@ -340,6 +340,22 @@ export function AITutor({ breakpoint, segments, isLoading: externalLoading, onRe
     loadFromCache();
   }, [breakpoint, onActionItemsUpdate]);
 
+  // 监听 sessionId 变化，清理旧会话状态
+  useEffect(() => {
+    // sessionId 变化时重置所有状态
+    setChatHistory([]);
+    setResponse(null);
+    setConversationId(undefined);
+    setIsFromCache(false);
+    setError(null);
+    setSearchResults([]);
+    setSelectedOptionId(undefined);
+    previousBreakpointId.current = null;
+    hasInitialized.current = false;
+    hasProcessedInitialQuestion.current = false;
+    conversationIdRef.current = null;
+  }, [sessionId]);
+
   // 保存到缓存
   const saveToCache = useCallback(async (
     resp: TutorAPIResponse,
