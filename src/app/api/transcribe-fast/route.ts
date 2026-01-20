@@ -40,10 +40,10 @@ const TASK_QUERY_URL = `${DASHSCOPE_API_BASE}/tasks`;
 const PUBLIC_HOST = process.env.PUBLIC_HOST || '47.112.160.134:3001';
 const PUBLIC_PROTOCOL = process.env.PUBLIC_PROTOCOL || 'http';
 
-// 分片配置（经测试 3 分钟是最优平衡点）
+// 分片配置（阿里云建议：3-5分钟最优，RPM限制100次/分钟）
 const SEGMENT_DURATION_SEC = 180;  // 每片 3 分钟
 const MIN_DURATION_FOR_SPLIT = 240; // 超过 4 分钟才分片
-const MAX_PARALLEL_TASKS = 10;     // 最大并行任务数
+const MAX_PARALLEL_TASKS = 10;     // 最大并行任务数（留有余量避免触发限流）
 
 // ==================== 工具函数 ====================
 
@@ -223,7 +223,7 @@ async function fetchTranscriptionResult(url: string): Promise<ASRSentence[]> {
 }
 
 /**
- * 等待单个任务完成
+ * 等待单个任务完成（使用指数退避策略减少轮询开销）
  */
 async function waitForSingleTask(
   taskId: string,
@@ -231,7 +231,9 @@ async function waitForSingleTask(
   maxWaitMs: number = 300000
 ): Promise<{ success: boolean; sentences: ASRSentence[]; error?: string }> {
   const startTime = Date.now();
-  const pollInterval = 1500; // 1.5秒轮询一次
+  let pollInterval = 2000; // 初始 2 秒
+  const maxInterval = 5000; // 最大 5 秒
+  const intervalGrowth = 1.2; // 增长系数
   
   while (Date.now() - startTime < maxWaitMs) {
     const result = await queryTaskStatus(taskId, apiKey);
@@ -246,6 +248,8 @@ async function waitForSingleTask(
     }
     
     await new Promise(r => setTimeout(r, pollInterval));
+    // 指数退避：逐渐增加轮询间隔
+    pollInterval = Math.min(pollInterval * intervalGrowth, maxInterval);
   }
   
   return { success: false, sentences: [], error: '任务超时' };
