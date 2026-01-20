@@ -407,13 +407,48 @@ export default function StudentApp() {
   }, []);
 
   const handleAnchorMark = useCallback((timestamp: number) => {
+    // 修正时间戳：如果 segments 存在，将 anchor 时间戳对齐到最近的 segment
+    // 这是因为前端 elapsedMs 和后端 ASR 时间戳可能存在偏差
+    let alignedTimestamp = timestamp;
+    if (segments.length > 0) {
+      // 找到最近的 segment（优先找包含该时间点的，否则找最接近的）
+      let nearestSeg = segments[0];
+      let minDistance = Math.abs(timestamp - (nearestSeg.startMs + nearestSeg.endMs) / 2);
+      
+      for (const seg of segments) {
+        // 如果时间点在 segment 范围内，直接使用
+        if (timestamp >= seg.startMs && timestamp <= seg.endMs) {
+          alignedTimestamp = timestamp; // 在范围内，保持原值
+          nearestSeg = seg;
+          break;
+        }
+        // 否则找最近的
+        const segMid = (seg.startMs + seg.endMs) / 2;
+        const distance = Math.abs(timestamp - segMid);
+        if (distance < minDistance) {
+          minDistance = distance;
+          nearestSeg = seg;
+        }
+      }
+      
+      // 如果原始时间戳超出 segments 范围较多（>5秒），对齐到最近 segment
+      const lastSeg = segments[segments.length - 1];
+      if (timestamp > lastSeg.endMs + 5000) {
+        alignedTimestamp = lastSeg.endMs;
+        console.log('[AnchorMark] Timestamp aligned:', timestamp, '->', alignedTimestamp, '(was beyond segments range)');
+      } else if (timestamp < segments[0].startMs - 5000) {
+        alignedTimestamp = segments[0].startMs;
+        console.log('[AnchorMark] Timestamp aligned:', timestamp, '->', alignedTimestamp, '(was before segments range)');
+      }
+    }
+    
     // 同时写入旧版 anchor-service (保持兼容) 和新版共享存储
-    const anchor = anchorService.mark(sessionId, studentId, timestamp, 'confusion');
+    const anchor = anchorService.mark(sessionId, studentId, alignedTimestamp, 'confusion');
     setAnchors(prev => [...prev, anchor]);
     
     // 获取当前时间点附近的转录内容作为上下文
     const contextSegments = segments.filter(
-      s => s.startMs <= timestamp + 5000 && s.endMs >= timestamp - 5000
+      s => s.startMs <= alignedTimestamp + 5000 && s.endMs >= alignedTimestamp - 5000
     );
     const transcriptContext = contextSegments.map(s => s.text).join(' ').slice(0, 200);
     
@@ -422,7 +457,7 @@ export default function StudentApp() {
       sessionId,
       studentId,
       studentName,
-      timestamp,
+      alignedTimestamp,
       'confusion',
       transcriptContext
     );
@@ -434,13 +469,25 @@ export default function StudentApp() {
 
   // 回放时添加困惑点标注
   const handlePlaybackAnchorAdd = useCallback((timestamp: number) => {
-    const anchor = anchorService.mark(sessionId, studentId, timestamp, 'confusion');
+    // 回放时 timestamp 来自波形播放位置，通常与 segments 对齐
+    // 但仍做校验确保在有效范围内
+    let alignedTimestamp = timestamp;
+    if (segments.length > 0) {
+      const lastSeg = segments[segments.length - 1];
+      if (timestamp > lastSeg.endMs) {
+        alignedTimestamp = lastSeg.endMs;
+      } else if (timestamp < segments[0].startMs) {
+        alignedTimestamp = segments[0].startMs;
+      }
+    }
+    
+    const anchor = anchorService.mark(sessionId, studentId, alignedTimestamp, 'confusion');
     setAnchors(prev => [...prev, anchor]);
     setSelectedAnchor(anchor);
     
     // 获取转录上下文
     const contextSegments = segments.filter(
-      s => s.startMs <= timestamp + 5000 && s.endMs >= timestamp - 5000
+      s => s.startMs <= alignedTimestamp + 5000 && s.endMs >= alignedTimestamp - 5000
     );
     const transcriptContext = contextSegments.map(s => s.text).join(' ').slice(0, 200);
     
@@ -449,7 +496,7 @@ export default function StudentApp() {
       sessionId,
       studentId,
       studentName,
-      timestamp,
+      alignedTimestamp,
       'confusion',
       transcriptContext
     );
