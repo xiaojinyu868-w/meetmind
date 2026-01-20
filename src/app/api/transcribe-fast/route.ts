@@ -40,10 +40,10 @@ const TASK_QUERY_URL = `${DASHSCOPE_API_BASE}/tasks`;
 const PUBLIC_HOST = process.env.PUBLIC_HOST || '47.112.160.134:3001';
 const PUBLIC_PROTOCOL = process.env.PUBLIC_PROTOCOL || 'http';
 
-// 分片配置
-const SEGMENT_DURATION_SEC = 120;  // 每片 2 分钟（更多并行 = 更快）
-const MIN_DURATION_FOR_SPLIT = 180; // 超过 3 分钟才分片
-const MAX_PARALLEL_TASKS = 15;     // 最大并行任务数
+// 分片配置（经测试 3 分钟是最优平衡点）
+const SEGMENT_DURATION_SEC = 180;  // 每片 3 分钟
+const MIN_DURATION_FOR_SPLIT = 240; // 超过 4 分钟才分片
+const MAX_PARALLEL_TASKS = 10;     // 最大并行任务数
 
 // ==================== 工具函数 ====================
 
