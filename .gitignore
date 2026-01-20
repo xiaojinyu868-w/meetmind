@@ -57,3 +57,9 @@ test_screenshot.png
 
 # 服务器日志
 server.log
+
+/src/generated/prisma
+
+# Prisma
+prisma/meetmind.db
+prisma/meetmind.db-journal

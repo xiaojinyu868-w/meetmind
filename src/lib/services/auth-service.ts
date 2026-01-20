@@ -3,6 +3,8 @@
  * 
  * 提供用户注册、登录、会话管理、权限验证等功能
  * 使用 JWT 进行无状态认证，支持刷新令牌机制
+ * 
+ * 数据存储：SQLite (通过 Prisma ORM)
  */
 
 import { createHash, randomBytes, createHmac } from 'crypto';
@@ -24,6 +26,7 @@ import type {
   UserProfile,
 } from '@/types/user';
 import { AuthConfig } from '@/lib/config';
+import prisma from '@/lib/prisma';
 
 // ==================== 配置（从统一配置读取） ====================
 
@@ -45,41 +48,38 @@ if (!JWT_SECRET) {
   console.warn('[AuthService] 警告: JWT_SECRET 未配置，请在环境变量中设置');
 }
 
-// ==================== 内存存储（生产环境应使用数据库） ====================
+// ==================== 初始化管理员账户 ====================
 
-const users = new Map<string, UserWithAuth>();
-const sessions = new Map<string, UserSession>();
-const refreshTokens = new Map<string, { userId: string; expiresAt: number }>();
-
-// 登录失败限流记录
-const loginAttempts = new Map<string, { count: number; firstAttempt: number; lockedUntil?: number }>();
-
-// CSRF Token 存储
-const csrfTokens = new Map<string, { userId?: string; createdAt: number }>();
-
-// 初始化管理员账户（仅当环境变量配置时）
-function initializeAdminAccount(): void {
+async function initializeAdminAccount(): Promise<void> {
   const adminUsername = AuthConfig.admin.username;
   const adminPassword = AuthConfig.admin.password;
   
   if (adminUsername && adminPassword) {
-    const adminId = 'admin-001';
-    const { hash, salt } = hashPassword(adminPassword);
-    
-    users.set(adminId, {
-      id: adminId,
-      username: adminUsername,
-      nickname: '管理员',
-      role: 'admin',
-      status: 'active',
-      passwordHash: hash,
-      salt: salt,
-      authProviders: [],
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    });
-    
-    console.log('[AuthService] 管理员账户已初始化');
+    try {
+      // 检查管理员是否已存在
+      const existingAdmin = await prisma.user.findUnique({
+        where: { username: adminUsername }
+      });
+      
+      if (!existingAdmin) {
+        const { hash, salt } = hashPassword(adminPassword);
+        
+        await prisma.user.create({
+          data: {
+            username: adminUsername,
+            nickname: '管理员',
+            role: 'admin',
+            status: 'active',
+            passwordHash: hash,
+            salt: salt,
+          }
+        });
+        
+        console.log('[AuthService] 管理员账户已初始化');
+      }
+    } catch (error) {
+      console.error('[AuthService] 初始化管理员账户失败:', error);
+    }
   } else {
     console.warn('[AuthService] 未配置管理员账户，请设置 ADMIN_USERNAME 和 ADMIN_PASSWORD 环境变量');
   }
@@ -87,9 +87,9 @@ function initializeAdminAccount(): void {
 
 // 延迟初始化管理员账户
 let adminInitialized = false;
-function ensureAdminInitialized(): void {
+async function ensureAdminInitialized(): Promise<void> {
   if (!adminInitialized) {
-    initializeAdminAccount();
+    await initializeAdminAccount();
     adminInitialized = true;
   }
 }
@@ -136,11 +136,14 @@ function validatePasswordStrength(password: string): { valid: boolean; error?: s
 }
 
 /**
- * 检查登录限流
+ * 检查登录限流（使用数据库）
  */
-function checkLoginRateLimit(identifier: string): { allowed: boolean; retryAfter?: number } {
-  const now = Date.now();
-  const record = loginAttempts.get(identifier);
+async function checkLoginRateLimit(identifier: string): Promise<{ allowed: boolean; retryAfter?: number }> {
+  const now = new Date();
+  
+  const record = await prisma.loginAttempt.findUnique({
+    where: { identifier }
+  });
   
   if (!record) {
     return { allowed: true };
@@ -148,18 +151,19 @@ function checkLoginRateLimit(identifier: string): { allowed: boolean; retryAfter
   
   // 检查是否被锁定
   if (record.lockedUntil && record.lockedUntil > now) {
-    return { allowed: false, retryAfter: Math.ceil((record.lockedUntil - now) / 1000) };
+    const retryAfter = Math.ceil((record.lockedUntil.getTime() - now.getTime()) / 1000);
+    return { allowed: false, retryAfter };
   }
   
   // 清除过期的锁定
   if (record.lockedUntil && record.lockedUntil <= now) {
-    loginAttempts.delete(identifier);
+    await prisma.loginAttempt.delete({ where: { identifier } });
     return { allowed: true };
   }
   
   // 检查是否在窗口期内
-  if (now - record.firstAttempt > ATTEMPT_WINDOW) {
-    loginAttempts.delete(identifier);
+  if (now.getTime() - record.firstAttempt.getTime() > ATTEMPT_WINDOW) {
+    await prisma.loginAttempt.delete({ where: { identifier } });
     return { allowed: true };
   }
   
@@ -167,52 +171,68 @@ function checkLoginRateLimit(identifier: string): { allowed: boolean; retryAfter
 }
 
 /**
- * 记录登录失败
+ * 记录登录失败（使用数据库）
  */
-function recordLoginFailure(identifier: string): void {
-  const now = Date.now();
-  const record = loginAttempts.get(identifier);
+async function recordLoginFailure(identifier: string): Promise<void> {
+  const now = new Date();
   
-  if (!record || now - record.firstAttempt > ATTEMPT_WINDOW) {
-    loginAttempts.set(identifier, { count: 1, firstAttempt: now });
+  const record = await prisma.loginAttempt.findUnique({
+    where: { identifier }
+  });
+  
+  if (!record || now.getTime() - record.firstAttempt.getTime() > ATTEMPT_WINDOW) {
+    await prisma.loginAttempt.upsert({
+      where: { identifier },
+      update: { count: 1, firstAttempt: now, lockedUntil: null },
+      create: { identifier, count: 1, firstAttempt: now }
+    });
     return;
   }
   
-  record.count++;
+  const newCount = record.count + 1;
+  const lockedUntil = newCount >= MAX_LOGIN_ATTEMPTS 
+    ? new Date(now.getTime() + LOCK_DURATION) 
+    : null;
   
-  if (record.count >= MAX_LOGIN_ATTEMPTS) {
-    record.lockedUntil = now + LOCK_DURATION;
-  }
-  
-  loginAttempts.set(identifier, record);
+  await prisma.loginAttempt.update({
+    where: { identifier },
+    data: { count: newCount, lockedUntil }
+  });
 }
 
 /**
  * 清除登录失败记录
  */
-function clearLoginFailures(identifier: string): void {
-  loginAttempts.delete(identifier);
+async function clearLoginFailures(identifier: string): Promise<void> {
+  await prisma.loginAttempt.deleteMany({
+    where: { identifier }
+  });
 }
 
 /**
- * 生成 CSRF Token
+ * 生成 CSRF Token（使用数据库）
  */
-function generateCsrfToken(userId?: string): string {
+async function generateCsrfTokenDb(userId?: string): Promise<string> {
   const token = randomBytes(32).toString('hex');
-  csrfTokens.set(token, { userId, createdAt: Date.now() });
+  await prisma.csrfToken.create({
+    data: { token, userId }
+  });
   return token;
 }
 
 /**
- * 验证 CSRF Token
+ * 验证 CSRF Token（使用数据库）
  */
-function verifyCsrfToken(token: string, userId?: string): boolean {
-  const record = csrfTokens.get(token);
+async function verifyCsrfTokenDb(token: string, userId?: string): Promise<boolean> {
+  const record = await prisma.csrfToken.findUnique({
+    where: { token }
+  });
+  
   if (!record) return false;
   
   // 检查过期
-  if (Date.now() - record.createdAt > CSRF_TOKEN_EXPIRES) {
-    csrfTokens.delete(token);
+  if (Date.now() - record.createdAt.getTime() > CSRF_TOKEN_EXPIRES) {
+    await prisma.csrfToken.delete({ where: { token } });
     return false;
   }
   
@@ -222,7 +242,7 @@ function verifyCsrfToken(token: string, userId?: string): boolean {
   }
   
   // 一次性使用
-  csrfTokens.delete(token);
+  await prisma.csrfToken.delete({ where: { token } });
   return true;
 }
 
@@ -306,37 +326,46 @@ function verifyJWT(token: string): JWTPayload | null {
 }
 
 /**
- * 生成刷新令牌
+ * 生成刷新令牌（使用数据库）
  */
-function generateRefreshToken(userId: string): string {
+async function generateRefreshTokenDb(userId: string): Promise<string> {
   const jti = randomBytes(32).toString('hex');
-  const expiresAt = Date.now() + REFRESH_TOKEN_EXPIRES_IN * 1000;
+  const expiresAt = new Date(Date.now() + REFRESH_TOKEN_EXPIRES_IN * 1000);
   
-  refreshTokens.set(jti, { userId, expiresAt });
+  await prisma.refreshToken.create({
+    data: {
+      token: jti,
+      userId,
+      expiresAt
+    }
+  });
   
   const payload: RefreshTokenPayload = {
     sub: userId,
     jti,
     iat: Math.floor(Date.now() / 1000),
-    exp: Math.floor(expiresAt / 1000),
+    exp: Math.floor(expiresAt.getTime() / 1000),
   };
   
   return base64UrlEncode(JSON.stringify(payload));
 }
 
 /**
- * 验证刷新令牌
+ * 验证刷新令牌（使用数据库）
  */
-function verifyRefreshToken(token: string): { userId: string } | null {
+async function verifyRefreshTokenDb(token: string): Promise<{ userId: string } | null> {
   try {
     const payload: RefreshTokenPayload = JSON.parse(base64UrlDecode(token));
     
     if (payload.exp < Math.floor(Date.now() / 1000)) {
-      refreshTokens.delete(payload.jti);
+      await prisma.refreshToken.deleteMany({ where: { token: payload.jti } });
       return null;
     }
     
-    const stored = refreshTokens.get(payload.jti);
+    const stored = await prisma.refreshToken.findUnique({
+      where: { token: payload.jti }
+    });
+    
     if (!stored || stored.userId !== payload.sub) return null;
     
     return { userId: payload.sub };
@@ -383,6 +412,25 @@ function getRolePermissions(role: UserRole): Permission[] {
   return permissions[role] || [];
 }
 
+/**
+ * 将数据库用户转换为应用用户类型
+ */
+function dbUserToUser(dbUser: any): User {
+  return {
+    id: dbUser.id,
+    username: dbUser.username,
+    email: dbUser.email || undefined,
+    phone: dbUser.phone || undefined,
+    nickname: dbUser.nickname,
+    avatar: dbUser.avatar || undefined,
+    role: dbUser.role as UserRole,
+    status: dbUser.status as UserStatus,
+    createdAt: dbUser.createdAt.toISOString(),
+    updatedAt: dbUser.updatedAt.toISOString(),
+    lastLoginAt: dbUser.lastLoginAt?.toISOString(),
+  };
+}
+
 // ==================== 认证服务 ====================
 
 export const authService = {
@@ -398,14 +446,24 @@ export const authService = {
     }
     
     // 检查用户名是否已存在
-    for (const user of users.values()) {
-      if (user.username === username) {
+    const existingUser = await prisma.user.findFirst({
+      where: {
+        OR: [
+          { username },
+          ...(email ? [{ email }] : []),
+          ...(phone ? [{ phone }] : []),
+        ]
+      }
+    });
+    
+    if (existingUser) {
+      if (existingUser.username === username) {
         return { success: false, error: '用户名已存在' };
       }
-      if (email && user.email === email) {
+      if (email && existingUser.email === email) {
         return { success: false, error: '邮箱已被使用' };
       }
-      if (phone && user.phone === phone) {
+      if (phone && existingUser.phone === phone) {
         return { success: false, error: '手机号已被使用' };
       }
     }
@@ -417,42 +475,34 @@ export const authService = {
     }
     
     // 创建用户
-    const userId = `user-${Date.now()}-${randomBytes(4).toString('hex')}`;
     const { hash, salt } = hashPassword(password);
     
-    const newUser: UserWithAuth = {
-      id: userId,
-      username,
-      email,
-      phone,
-      nickname: nickname || username,
-      role: role as UserRole,
-      status: 'active',
-      passwordHash: hash,
-      salt,
-      authProviders: [],
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    };
-    
-    users.set(userId, newUser);
+    const newUser = await prisma.user.create({
+      data: {
+        username,
+        email,
+        phone,
+        nickname: nickname || username,
+        role: role as string,
+        status: 'active',
+        passwordHash: hash,
+        salt,
+      }
+    });
     
     // 生成令牌
-    const permissions = getRolePermissions(newUser.role);
+    const permissions = getRolePermissions(role as UserRole);
     const accessToken = generateJWT({
-      sub: userId,
+      sub: newUser.id,
       username: newUser.username,
-      role: newUser.role,
+      role: newUser.role as UserRole,
       permissions,
     });
-    const refreshToken = generateRefreshToken(userId);
-    
-    // 返回用户信息（不含敏感数据）
-    const { passwordHash: _, salt: __, ...safeUser } = newUser;
+    const refreshToken = await generateRefreshTokenDb(newUser.id);
     
     return {
       success: true,
-      user: safeUser as User,
+      user: dbUserToUser(newUser),
       accessToken,
       refreshToken,
       expiresIn: JWT_EXPIRES_IN,
@@ -464,12 +514,12 @@ export const authService = {
    */
   async login(request: LoginRequest): Promise<AuthResponse> {
     // 确保管理员账户已初始化
-    ensureAdminInitialized();
+    await ensureAdminInitialized();
     
     const { username, password } = request;
     
     // 检查登录限流
-    const rateLimit = checkLoginRateLimit(username);
+    const rateLimit = await checkLoginRateLimit(username);
     if (!rateLimit.allowed) {
       return { 
         success: false, 
@@ -478,16 +528,18 @@ export const authService = {
     }
     
     // 查找用户
-    let foundUser: UserWithAuth | null = null;
-    for (const user of users.values()) {
-      if (user.username === username || user.email === username || user.phone === username) {
-        foundUser = user;
-        break;
+    const foundUser = await prisma.user.findFirst({
+      where: {
+        OR: [
+          { username },
+          { email: username },
+          { phone: username },
+        ]
       }
-    }
+    });
     
     if (!foundUser) {
-      recordLoginFailure(username);
+      await recordLoginFailure(username);
       return { success: false, error: '用户名或密码错误' };
     }
     
@@ -502,33 +554,32 @@ export const authService = {
     }
     
     if (!verifyPassword(password, foundUser.passwordHash, foundUser.salt)) {
-      recordLoginFailure(username);
+      await recordLoginFailure(username);
       return { success: false, error: '用户名或密码错误' };
     }
     
     // 登录成功，清除失败记录
-    clearLoginFailures(username);
+    await clearLoginFailures(username);
     
     // 更新最后登录时间
-    foundUser.lastLoginAt = new Date().toISOString();
-    foundUser.updatedAt = new Date().toISOString();
+    const updatedUser = await prisma.user.update({
+      where: { id: foundUser.id },
+      data: { lastLoginAt: new Date() }
+    });
     
     // 生成令牌
-    const permissions = getRolePermissions(foundUser.role);
+    const permissions = getRolePermissions(updatedUser.role as UserRole);
     const accessToken = generateJWT({
-      sub: foundUser.id,
-      username: foundUser.username,
-      role: foundUser.role,
+      sub: updatedUser.id,
+      username: updatedUser.username,
+      role: updatedUser.role as UserRole,
       permissions,
     });
-    const refreshToken = generateRefreshToken(foundUser.id);
-    
-    // 返回用户信息
-    const { passwordHash: _, salt: __, ...safeUser } = foundUser;
+    const refreshToken = await generateRefreshTokenDb(updatedUser.id);
     
     return {
       success: true,
-      user: safeUser as User,
+      user: dbUserToUser(updatedUser),
       accessToken,
       refreshToken,
       expiresIn: JWT_EXPIRES_IN,
@@ -539,30 +590,31 @@ export const authService = {
    * 刷新访问令牌
    */
   async refreshAccessToken(refreshToken: string): Promise<AuthResponse> {
-    const result = verifyRefreshToken(refreshToken);
+    const result = await verifyRefreshTokenDb(refreshToken);
     if (!result) {
       return { success: false, error: '刷新令牌无效或已过期' };
     }
     
-    const user = users.get(result.userId);
+    const user = await prisma.user.findUnique({
+      where: { id: result.userId }
+    });
+    
     if (!user || user.status !== 'active') {
       return { success: false, error: '用户不存在或已被禁用' };
     }
     
     // 生成新的访问令牌
-    const permissions = getRolePermissions(user.role);
+    const permissions = getRolePermissions(user.role as UserRole);
     const accessToken = generateJWT({
       sub: user.id,
       username: user.username,
-      role: user.role,
+      role: user.role as UserRole,
       permissions,
     });
     
-    const { passwordHash: _, salt: __, ...safeUser } = user;
-    
     return {
       success: true,
-      user: safeUser as User,
+      user: dbUserToUser(user),
       accessToken,
       expiresIn: JWT_EXPIRES_IN,
     };
@@ -581,7 +633,9 @@ export const authService = {
   async logout(refreshToken: string): Promise<void> {
     try {
       const payload: RefreshTokenPayload = JSON.parse(base64UrlDecode(refreshToken));
-      refreshTokens.delete(payload.jti);
+      await prisma.refreshToken.deleteMany({
+        where: { token: payload.jti }
+      });
     } catch {
       // 忽略无效令牌
     }
@@ -591,35 +645,45 @@ export const authService = {
    * 获取用户信息
    */
   async getUserById(userId: string): Promise<User | null> {
-    const user = users.get(userId);
-    if (!user) return null;
+    const user = await prisma.user.findUnique({
+      where: { id: userId }
+    });
     
-    const { passwordHash: _, salt: __, ...safeUser } = user;
-    return safeUser as User;
+    if (!user) return null;
+    return dbUserToUser(user);
   },
 
   /**
    * 更新用户资料
    */
   async updateProfile(userId: string, profile: Partial<UserProfile>): Promise<User | null> {
-    const user = users.get(userId);
+    const user = await prisma.user.findUnique({
+      where: { id: userId }
+    });
+    
     if (!user) return null;
     
-    if (profile.nickname) user.nickname = profile.nickname;
-    if (profile.avatar) user.avatar = profile.avatar;
-    if (profile.email) user.email = profile.email;
-    if (profile.phone) user.phone = profile.phone;
-    user.updatedAt = new Date().toISOString();
+    const updatedUser = await prisma.user.update({
+      where: { id: userId },
+      data: {
+        ...(profile.nickname && { nickname: profile.nickname }),
+        ...(profile.avatar && { avatar: profile.avatar }),
+        ...(profile.email && { email: profile.email }),
+        ...(profile.phone && { phone: profile.phone }),
+      }
+    });
     
-    const { passwordHash: _, salt: __, ...safeUser } = user;
-    return safeUser as User;
+    return dbUserToUser(updatedUser);
   },
 
   /**
    * 修改密码
    */
   async changePassword(userId: string, oldPassword: string, newPassword: string): Promise<{ success: boolean; error?: string }> {
-    const user = users.get(userId);
+    const user = await prisma.user.findUnique({
+      where: { id: userId }
+    });
+    
     if (!user) {
       return { success: false, error: '用户不存在' };
     }
@@ -643,9 +707,11 @@ export const authService = {
     }
     
     const { hash, salt } = hashPassword(newPassword);
-    user.passwordHash = hash;
-    user.salt = salt;
-    user.updatedAt = new Date().toISOString();
+    
+    await prisma.user.update({
+      where: { id: userId },
+      data: { passwordHash: hash, salt }
+    });
     
     return { success: true };
   },
@@ -661,37 +727,45 @@ export const authService = {
    * 获取所有用户（管理员）
    */
   async getAllUsers(): Promise<User[]> {
-    const result: User[] = [];
-    for (const user of users.values()) {
-      const { passwordHash: _, salt: __, ...safeUser } = user;
-      result.push(safeUser as User);
-    }
-    return result;
+    const users = await prisma.user.findMany({
+      orderBy: { createdAt: 'desc' }
+    });
+    
+    return users.map(dbUserToUser);
   },
 
   /**
    * 绑定第三方登录
    */
   async linkAuthProvider(userId: string, provider: AuthProvider, providerData: Omit<AuthProviderLink, 'provider' | 'linkedAt'>): Promise<boolean> {
-    const user = users.get(userId);
+    const user = await prisma.user.findUnique({
+      where: { id: userId }
+    });
+    
     if (!user) return false;
     
-    // 检查是否已绑定
-    const existingIndex = user.authProviders.findIndex(p => p.provider === provider);
+    await prisma.authProvider.upsert({
+      where: {
+        provider_providerId: {
+          provider,
+          providerId: providerData.providerId
+        }
+      },
+      update: {
+        accessToken: providerData.accessToken,
+        refreshToken: providerData.refreshToken,
+        expiresAt: providerData.expiresAt ? new Date(providerData.expiresAt) : null,
+      },
+      create: {
+        userId,
+        provider,
+        providerId: providerData.providerId,
+        accessToken: providerData.accessToken,
+        refreshToken: providerData.refreshToken,
+        expiresAt: providerData.expiresAt ? new Date(providerData.expiresAt) : null,
+      }
+    });
     
-    const link: AuthProviderLink = {
-      provider,
-      ...providerData,
-      linkedAt: new Date().toISOString(),
-    };
-    
-    if (existingIndex >= 0) {
-      user.authProviders[existingIndex] = link;
-    } else {
-      user.authProviders.push(link);
-    }
-    
-    user.updatedAt = new Date().toISOString();
     return true;
   },
 
@@ -699,28 +773,29 @@ export const authService = {
    * 通过第三方登录查找用户
    */
   async findUserByProvider(provider: AuthProvider, providerId: string): Promise<User | null> {
-    for (const user of users.values()) {
-      const link = user.authProviders.find(p => p.provider === provider && p.providerId === providerId);
-      if (link) {
-        const { passwordHash: _, salt: __, ...safeUser } = user;
-        return safeUser as User;
-      }
-    }
-    return null;
+    const authProvider = await prisma.authProvider.findUnique({
+      where: {
+        provider_providerId: { provider, providerId }
+      },
+      include: { user: true }
+    });
+    
+    if (!authProvider) return null;
+    return dbUserToUser(authProvider.user);
   },
 
   /**
    * 生成 CSRF Token
    */
-  generateCsrfToken(userId?: string): string {
-    return generateCsrfToken(userId);
+  async generateCsrfToken(userId?: string): Promise<string> {
+    return generateCsrfTokenDb(userId);
   },
 
   /**
    * 验证 CSRF Token
    */
-  verifyCsrfToken(token: string, userId?: string): boolean {
-    return verifyCsrfToken(token, userId);
+  async verifyCsrfToken(token: string, userId?: string): Promise<boolean> {
+    return verifyCsrfTokenDb(token, userId);
   },
 
   /**
