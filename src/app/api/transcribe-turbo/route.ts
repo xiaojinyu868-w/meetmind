@@ -72,43 +72,61 @@ async function splitAudio(
   console.log('[Turbo] Total duration:', totalDuration, 'seconds');
   
   if (totalDuration <= MIN_DURATION_FOR_SPLIT) {
-    return { segments: [inputPath], durations: [totalDuration * 1000] };
+    // 即使不分片，也转换为标准 MP3 格式确保兼容性
+    const outputPath = path.join(outputDir, `${baseName}_turbo0.mp3`);
+    try {
+      await execAsync(
+        `ffmpeg -y -i "${inputPath}" -acodec libmp3lame -ar 16000 -ac 1 -b:a 64k "${outputPath}" 2>/dev/null`
+      );
+      return { segments: [outputPath], durations: [totalDuration * 1000] };
+    } catch {
+      return { segments: [inputPath], durations: [totalDuration * 1000] };
+    }
   }
   
   const segments: string[] = [];
   const durations: number[] = [];
-  const ext = path.extname(inputPath);
   
   let startTime = 0;
   let segIndex = 0;
   
+  // 并行切分提高速度
+  const splitPromises: Promise<void>[] = [];
+  const segmentInfos: { index: number; outputPath: string; duration: number; startTime: number }[] = [];
+  
   while (startTime < totalDuration) {
-    const outputPath = path.join(outputDir, `${baseName}_turbo${segIndex}${ext}`);
     const duration = Math.min(segmentDuration, totalDuration - startTime);
+    const outputPath = path.join(outputDir, `${baseName}_turbo${segIndex}.mp3`);
     
-    try {
-      await execAsync(
-        `ffmpeg -y -ss ${startTime} -i "${inputPath}" -t ${duration} -c copy "${outputPath}" 2>/dev/null`
-      );
-      segments.push(outputPath);
-      durations.push(duration * 1000);
-      console.log(`[Turbo] Segment ${segIndex}: ${startTime}s - ${startTime + duration}s`);
-    } catch (e) {
-      try {
-        await execAsync(
-          `ffmpeg -y -ss ${startTime} -i "${inputPath}" -t ${duration} "${outputPath}" 2>/dev/null`
-        );
-        segments.push(outputPath);
-        durations.push(duration * 1000);
-      } catch (e2) {
-        console.error(`[Turbo] Split error at segment ${segIndex}:`, e2);
-      }
-    }
+    segmentInfos.push({ index: segIndex, outputPath, duration, startTime });
+    
+    // 强制重编码为 MP3，确保格式正确
+    const cmd = `ffmpeg -y -ss ${startTime} -i "${inputPath}" -t ${duration} -acodec libmp3lame -ar 16000 -ac 1 -b:a 64k "${outputPath}" 2>/dev/null`;
+    
+    splitPromises.push(
+      execAsync(cmd).then(() => {
+        console.log(`[Turbo] Segment ${segIndex}: ${startTime}s - ${startTime + duration}s`);
+      }).catch((e) => {
+        console.error(`[Turbo] Split error at segment ${segIndex}:`, e);
+      })
+    );
     
     startTime += segmentDuration;
     segIndex++;
   }
   
+  // 等待所有切分完成
+  await Promise.all(splitPromises);
+  
+  // 按顺序收集结果
+  for (const info of segmentInfos) {
+    if (fs.existsSync(info.outputPath)) {
+      segments.push(info.outputPath);
+      durations.push(info.duration * 1000);
+    }
+  }
+  
+  console.log(`[Turbo] Split completed: ${segments.length} segments`);
   return { segments, durations };
 }
 
