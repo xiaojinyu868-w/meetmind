@@ -142,14 +142,15 @@ interface ASRSentence {
 /**
  * 同步调用 qwen3-asr-flash（使用 DashScope 多模态格式）
  * 限制：≤30秒、≤10MB、需域名
+ * 包含重试机制处理限流
  */
 async function syncTranscribe(
   fileUrl: string,
   apiKey: string,
   language: string = 'zh',
-  segmentIndex: number = 0
+  segmentIndex: number = 0,
+  maxRetries: number = 3
 ): Promise<{ success: boolean; sentences: ASRSentence[]; error?: string }> {
-  // 使用正确的 DashScope 多模态请求格式
   const requestBody = {
     model: 'qwen3-asr-flash',
     input: {
@@ -157,7 +158,7 @@ async function syncTranscribe(
         {
           role: 'user',
           content: [
-            { audio: fileUrl }  // 注意：用 audio 字段，不是 file_url
+            { audio: fileUrl }
           ]
         }
       ]
@@ -170,53 +171,83 @@ async function syncTranscribe(
     }
   };
   
-  console.log(`[Turbo] Segment ${segmentIndex} sync call: ${fileUrl}`);
-  const startTime = Date.now();
+  let lastError = '';
   
-  try {
-    const response = await fetch(SYNC_ASR_URL, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${apiKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(requestBody),
-    });
-    
-    const elapsed = Date.now() - startTime;
-    
-    if (!response.ok) {
-      const text = await response.text();
-      console.error(`[Turbo] Sync call failed (${elapsed}ms):`, text);
-      return { success: false, sentences: [], error: `API 错误: ${text}` };
+  for (let attempt = 0; attempt < maxRetries; attempt++) {
+    if (attempt > 0) {
+      // 指数退避：1秒、2秒、4秒...
+      const delay = Math.pow(2, attempt) * 1000;
+      console.log(`[Turbo] Segment ${segmentIndex} retry ${attempt}/${maxRetries} after ${delay}ms`);
+      await new Promise(resolve => setTimeout(resolve, delay));
     }
     
-    const data = await response.json();
-    console.log(`[Turbo] Segment ${segmentIndex} completed in ${elapsed}ms`);
+    console.log(`[Turbo] Segment ${segmentIndex} sync call (attempt ${attempt + 1}): ${fileUrl}`);
+    const startTime = Date.now();
     
-    // 解析 DashScope 多模态返回格式
-    const sentences: ASRSentence[] = [];
-    
-    // 格式: output.choices[0].message.content[0].text
-    const choices = data.output?.choices;
-    if (choices?.[0]?.message?.content) {
-      const content = choices[0].message.content;
-      if (Array.isArray(content) && content[0]?.text) {
-        // 同步返回的是纯文本，没有时间戳
-        sentences.push({ text: content[0].text, begin_time: 0, end_time: 0 });
-      } else if (typeof content === 'string') {
-        sentences.push({ text: content, begin_time: 0, end_time: 0 });
+    try {
+      const response = await fetch(SYNC_ASR_URL, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${apiKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(requestBody),
+      });
+      
+      const elapsed = Date.now() - startTime;
+      
+      if (!response.ok) {
+        const text = await response.text();
+        console.error(`[Turbo] Segment ${segmentIndex} failed (${elapsed}ms):`, text);
+        
+        // 检查是否是限流错误（429 或包含 rate limit 相关信息）
+        const isRateLimitError = response.status === 429 || 
+          text.includes('rate') || 
+          text.includes('limit') ||
+          text.includes('too many') ||
+          text.includes('Throttling');
+        
+        if (isRateLimitError && attempt < maxRetries - 1) {
+          lastError = `限流错误: ${text}`;
+          continue;  // 重试
+        }
+        
+        return { success: false, sentences: [], error: `API 错误: ${text}` };
       }
-    } else if (data.output?.text) {
-      sentences.push({ text: data.output.text, begin_time: 0, end_time: 0 });
+      
+      const data = await response.json();
+      console.log(`[Turbo] Segment ${segmentIndex} completed in ${elapsed}ms`);
+      
+      // 解析 DashScope 多模态返回格式
+      const sentences: ASRSentence[] = [];
+      
+      // 格式: output.choices[0].message.content[0].text
+      const choices = data.output?.choices;
+      if (choices?.[0]?.message?.content) {
+        const content = choices[0].message.content;
+        if (Array.isArray(content) && content[0]?.text) {
+          sentences.push({ text: content[0].text, begin_time: 0, end_time: 0 });
+        } else if (typeof content === 'string') {
+          sentences.push({ text: content, begin_time: 0, end_time: 0 });
+        }
+      } else if (data.output?.text) {
+        sentences.push({ text: data.output.text, begin_time: 0, end_time: 0 });
+      }
+      
+      return { success: sentences.length > 0, sentences };
+      
+    } catch (e) {
+      console.error(`[Turbo] Segment ${segmentIndex} exception:`, e);
+      lastError = e instanceof Error ? e.message : String(e);
+      
+      // 网络错误也重试
+      if (attempt < maxRetries - 1) {
+        continue;
+      }
     }
-    
-    return { success: sentences.length > 0, sentences };
-    
-  } catch (e) {
-    console.error('[Turbo] Sync call exception:', e);
-    return { success: false, sentences: [], error: e instanceof Error ? e.message : String(e) };
   }
+  
+  return { success: false, sentences: [], error: lastError || '重试次数用尽' };
 }
 
 /**
