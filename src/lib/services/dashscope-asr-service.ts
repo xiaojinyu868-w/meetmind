@@ -88,45 +88,86 @@ export class DashScopeASRClient {
         this.updateStatus('connecting');
         
         // 连接到后端 WebSocket 代理
+        // 优先尝试 8443 端口（绕过运营商 WebSocket 限制），失败后降级到默认端口
         const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-        const wsUrl = `${protocol}//${window.location.host}/api/asr-stream`;
+        const hostname = window.location.hostname;
+        const defaultPort = window.location.port || (protocol === 'wss:' ? '443' : '80');
         
-        console.log('[DashScopeASR] Connecting to proxy:', wsUrl);
-        this.ws = new WebSocket(wsUrl);
-
-        this.ws.onopen = () => {
-          console.log('[DashScopeASR] Connected to proxy');
-          this.updateStatus('connected');
-        };
-
-        let resolved = false;
-        this.ws.onmessage = (event) => {
-          this.handleMessage(event.data);
+        // 尝试的端口列表：8443（备用）-> 默认端口
+        const portsToTry = protocol === 'wss:' ? ['8443', defaultPort] : [defaultPort];
+        let currentPortIndex = 0;
+        
+        const tryConnect = (portIndex: number) => {
+          if (portIndex >= portsToTry.length) {
+            console.error('[DashScopeASR] All ports failed');
+            this.updateStatus('error');
+            this.callbacks.onError?.('所有连接端口均失败');
+            resolve(false);
+            return;
+          }
           
-          // 如果收到 ready 事件，resolve（只执行一次）
-          if (this.isReady && !resolved) {
-            resolved = true;
-            resolve(true);
-          }
+          const port = portsToTry[portIndex];
+          const wsUrl = `${protocol}//${hostname}:${port}/api/asr-stream`;
+          
+          console.log(`[DashScopeASR] Trying port ${port}:`, wsUrl);
+          this.ws = new WebSocket(wsUrl);
+          
+          let connectionTimeout: NodeJS.Timeout;
+          let resolved = false;
+          
+          // 单个端口的连接超时（5秒）
+          connectionTimeout = setTimeout(() => {
+            if (this.ws && this.ws.readyState === WebSocket.CONNECTING) {
+              console.log(`[DashScopeASR] Port ${port} timeout, trying next...`);
+              this.ws.close();
+              tryConnect(portIndex + 1);
+            }
+          }, 5000);
+          
+          this.ws.onopen = () => {
+            clearTimeout(connectionTimeout);
+            console.log(`[DashScopeASR] Connected via port ${port}`);
+            this.updateStatus('connected');
+          };
+          
+          this.ws.onmessage = (event) => {
+            this.handleMessage(event.data);
+            
+            // 如果收到 ready 事件，resolve（只执行一次）
+            if (this.isReady && !resolved) {
+              resolved = true;
+              resolve(true);
+            }
+          };
+          
+          this.ws.onerror = (error) => {
+            clearTimeout(connectionTimeout);
+            console.error(`[DashScopeASR] Port ${port} error:`, error);
+            // 尝试下一个端口
+            if (!resolved && portIndex < portsToTry.length - 1) {
+              console.log('[DashScopeASR] Trying next port...');
+              tryConnect(portIndex + 1);
+            } else if (!resolved) {
+              this.updateStatus('error');
+              this.callbacks.onError?.('WebSocket 连接错误');
+              resolve(false);
+            }
+          };
+          
+          this.ws.onclose = (event) => {
+            clearTimeout(connectionTimeout);
+            console.log('[DashScopeASR] WebSocket closed:', event.code, event.reason);
+            if (this.status !== 'stopped') {
+              this.updateStatus('stopped');
+            }
+            this.ws = null;
+          };
         };
+        
+        // 开始尝试连接
+        tryConnect(0);
 
-        this.ws.onerror = (error) => {
-          console.error('[DashScopeASR] WebSocket error:', error);
-          this.updateStatus('error');
-          this.callbacks.onError?.('WebSocket 连接错误');
-          resolve(false);
-        };
-
-        this.ws.onclose = (event) => {
-          console.log('[DashScopeASR] WebSocket closed:', event.code, event.reason);
-          if (this.status !== 'stopped') {
-            this.updateStatus('stopped');
-          }
-          this.ws = null;
-        };
-
-
-        // 超时处理
+        // 总超时处理（15秒）
         setTimeout(() => {
           if (!this.isReady) {
             console.error('[DashScopeASR] Connection timeout');

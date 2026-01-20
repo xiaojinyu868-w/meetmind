@@ -75,10 +75,13 @@ app.prepare().then(() => {
   // 处理 WebSocket 升级请求
   server.on('upgrade', (request, socket, head) => {
     const { pathname } = parse(request.url || '', true);
+    console.log('[Server] Upgrade request received:', pathname, 'from:', request.headers['x-real-ip'] || request.socket.remoteAddress);
 
     if (pathname === '/api/asr-stream') {
       // ASR WebSocket 请求由我们处理
+      console.log('[Server] Handling ASR WebSocket upgrade');
       wss.handleUpgrade(request, socket, head, (ws) => {
+        console.log('[Server] ASR WebSocket upgrade completed');
         wss.emit('connection', ws, request);
       });
       return;
