@@ -54,6 +54,20 @@ export function Recorder({
   const transcriptRef = useRef<TranscriptSegment[]>([]);
   const pcmProcessorRef = useRef<ScriptProcessorNode | null>(null);
 
+  // VAD 检测状态
+  const vadStateRef = useRef({
+    isSpeaking: false,           // 当前是否在说话
+    speechStartMs: 0,            // 语音开始时间 (elapsedMs)
+    silenceStartMs: 0,           // 静音开始时间 (elapsedMs)
+  });
+
+  // VAD 配置常量
+  const VAD_CONFIG = {
+    energyThreshold: 0.08,       // 能量阈值 (0-1)，根据环境噪音调整
+    silenceDuration: 600,        // 静音判定时长 (毫秒)，与百炼 server_vad 对齐
+    minSpeechDuration: 200,      // 最小语音时长 (毫秒)，过滤误触发
+  };
+
   // 获取 API Key 并检查服务状态
   useEffect(() => {
     const fetchConfig = async () => {
@@ -104,24 +118,92 @@ export function Recorder({
       const stream = await navigator.mediaDevices.getUserMedia({
         audio: {
           channelCount: 1,
-          sampleRate: 16000,
           echoCancellation: true,
           noiseSuppression: true,
         },
       });
 
-      audioContextRef.current = new AudioContext({ sampleRate: 16000 });
+      // 不强制指定采样率，让 AudioContext 自动匹配设备
+      // 某些设备（如手机）不支持指定采样率，会导致 createMediaStreamSource 报错
+      audioContextRef.current = new AudioContext();
       const source = audioContextRef.current.createMediaStreamSource(stream);
+      const actualSampleRate = audioContextRef.current.sampleRate;
+      console.log('[Recorder] AudioContext sampleRate:', actualSampleRate);
       analyserRef.current = audioContextRef.current.createAnalyser();
       analyserRef.current.fftSize = 256;
       source.connect(analyserRef.current);
 
       const dataArray = new Uint8Array(analyserRef.current.frequencyBinCount);
+      
+      // 重要：提前初始化 startTimeRef，确保 VAD 时间戳基准正确
+      // 此时录音实际上已开始准备，与 MediaRecorder.start() 几乎同时
+      startTimeRef.current = Date.now();
+      
+      // 重置 VAD 状态
+      vadStateRef.current = {
+        isSpeaking: false,
+        speechStartMs: 0,
+        silenceStartMs: 0,
+      };
+      
       const checkLevel = () => {
         if (!analyserRef.current) return;
         analyserRef.current.getByteFrequencyData(dataArray);
         const average = dataArray.reduce((a, b) => a + b, 0) / dataArray.length;
-        setLevel(average / 255);
+        const normalizedLevel = average / 255;
+        setLevel(normalizedLevel);
+
+        // VAD 能量检测逻辑
+        // 确保 startTimeRef 已初始化（> 0）
+        if (startTimeRef.current > 0) {
+          const currentElapsedMs = Date.now() - startTimeRef.current;
+          const vadState = vadStateRef.current;
+          
+          if (normalizedLevel > VAD_CONFIG.energyThreshold) {
+            // 检测到声音
+            if (!vadState.isSpeaking) {
+              // 语音开始 - 立即发送开始时间戳给后端
+              vadState.isSpeaking = true;
+              vadState.speechStartMs = currentElapsedMs;
+              vadState.silenceStartMs = 0;
+              console.log('[VAD] Speech started at', vadState.speechStartMs, 'ms, level:', normalizedLevel.toFixed(3));
+              
+              // 发送 speech-start 事件
+              if (asrClientRef.current?.isConnected()) {
+                asrClientRef.current.sendVADEvent('start', vadState.speechStartMs);
+              }
+            }
+            // 重置静音计时
+            vadState.silenceStartMs = 0;
+          } else {
+            // 静音状态
+            if (vadState.isSpeaking) {
+              // 正在说话但检测到静音
+              if (vadState.silenceStartMs === 0) {
+                // 开始计时静音
+                vadState.silenceStartMs = currentElapsedMs;
+              } else {
+                // 检查静音是否达到阈值
+                const silenceDuration = currentElapsedMs - vadState.silenceStartMs;
+                if (silenceDuration >= VAD_CONFIG.silenceDuration) {
+                  // 语音结束
+                  const speechDuration = vadState.silenceStartMs - vadState.speechStartMs;
+                  if (speechDuration >= VAD_CONFIG.minSpeechDuration) {
+                    // 有效语音段结束，发送结束时间戳
+                    console.log('[VAD] Speech ended:', vadState.speechStartMs, '-', vadState.silenceStartMs, 'ms, duration:', speechDuration, 'ms');
+                    if (asrClientRef.current?.isConnected()) {
+                      asrClientRef.current.sendVADEvent('end', vadState.silenceStartMs);
+                    }
+                  }
+                  vadState.isSpeaking = false;
+                  vadState.speechStartMs = 0;
+                  vadState.silenceStartMs = 0;
+                }
+              }
+            }
+          }
+        }
+
         animationIdRef.current = requestAnimationFrame(checkLevel);
       };
       checkLevel();
@@ -162,12 +244,31 @@ export function Recorder({
           const bufferSize = 4096;
           pcmProcessorRef.current = audioContextRef.current.createScriptProcessor(bufferSize, 1, 1);
           
+          // 重采样函数：将设备采样率转换为目标采样率 (16000Hz)
+          const resample = (inputData: Float32Array, fromRate: number, toRate: number): Float32Array => {
+            if (fromRate === toRate) return inputData;
+            const ratio = fromRate / toRate;
+            const newLength = Math.round(inputData.length / ratio);
+            const result = new Float32Array(newLength);
+            for (let i = 0; i < newLength; i++) {
+              const srcIndex = i * ratio;
+              const srcIndexFloor = Math.floor(srcIndex);
+              const srcIndexCeil = Math.min(srcIndexFloor + 1, inputData.length - 1);
+              const t = srcIndex - srcIndexFloor;
+              // 线性插值
+              result[i] = inputData[srcIndexFloor] * (1 - t) + inputData[srcIndexCeil] * t;
+            }
+            return result;
+          };
+          
           pcmProcessorRef.current.onaudioprocess = (e) => {
             if (asrClientRef.current?.isConnected()) {
               const inputData = e.inputBuffer.getChannelData(0);
-              const pcmData = new Int16Array(inputData.length);
-              for (let i = 0; i < inputData.length; i++) {
-                pcmData[i] = Math.max(-32768, Math.min(32767, Math.floor(inputData[i] * 32768)));
+              // 重采样到 16000Hz
+              const resampledData = resample(inputData, actualSampleRate, wsSampleRate);
+              const pcmData = new Int16Array(resampledData.length);
+              for (let i = 0; i < resampledData.length; i++) {
+                pcmData[i] = Math.max(-32768, Math.min(32767, Math.floor(resampledData[i] * 32768)));
               }
               asrClientRef.current.sendAudio(pcmData.buffer);
             }
@@ -196,7 +297,7 @@ export function Recorder({
       mediaRecorder.start(1000);
       mediaRecorderRef.current = mediaRecorder;
 
-      startTimeRef.current = Date.now();
+      // startTimeRef.current 已在 checkLevel 初始化前设置，此处仅启动计时器
       timerRef.current = setInterval(() => {
         setElapsedMs(Date.now() - startTimeRef.current);
       }, 100);
@@ -227,12 +328,32 @@ export function Recorder({
       timerRef.current = setInterval(() => {
         setElapsedMs(Date.now() - startTimeRef.current);
       }, 100);
+      
+      // 重置 VAD 状态，避免暂停期间的静音被误判
+      vadStateRef.current = {
+        isSpeaking: false,
+        speechStartMs: 0,
+        silenceStartMs: 0,
+      };
+      
       setStatus('recording');
     }
   };
 
   // 停止录音
   const stopRecording = async () => {
+    // 首先停止 ASR，阻止继续处理音频
+    if (asrClientRef.current) {
+      await asrClientRef.current.stop();
+      asrClientRef.current = null;
+    }
+
+    // 断开音频处理器
+    if (pcmProcessorRef.current) {
+      pcmProcessorRef.current.disconnect();
+      pcmProcessorRef.current = null;
+    }
+
     if (animationIdRef.current) {
       cancelAnimationFrame(animationIdRef.current);
       animationIdRef.current = null;
@@ -243,11 +364,6 @@ export function Recorder({
       timerRef.current = null;
     }
 
-    if (pcmProcessorRef.current) {
-      pcmProcessorRef.current.disconnect();
-      pcmProcessorRef.current = null;
-    }
-
     if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
       mediaRecorderRef.current.stop();
       mediaRecorderRef.current.stream.getTracks().forEach(track => track.stop());
@@ -256,11 +372,6 @@ export function Recorder({
     if (audioContextRef.current) {
       audioContextRef.current.close();
       audioContextRef.current = null;
-    }
-
-    if (asrClientRef.current) {
-      await asrClientRef.current.stop();
-      asrClientRef.current = null;
     }
 
     const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
@@ -618,8 +729,8 @@ export function Recorder({
           <div className="max-h-40 overflow-y-auto space-y-2 p-3 bg-gray-50 rounded-xl">
             {transcript.slice(-8).map((seg) => (
               <div key={seg.id} className="flex items-start gap-2 text-sm">
-                <span className="text-xs text-gray-400 font-mono shrink-0 mt-0.5">
-                  {formatTime(seg.startMs)}
+                <span className="text-xs text-gray-400 font-mono shrink-0 mt-0.5 bg-gray-100 px-1.5 py-0.5 rounded">
+                  {formatTime(seg.startMs)} - {formatTime(seg.endMs)}
                 </span>
                 <span className="text-gray-700">{seg.text}</span>
               </div>

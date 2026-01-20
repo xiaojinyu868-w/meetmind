@@ -114,6 +114,7 @@ export class DashScopeASRClient {
           
           let connectionTimeout: NodeJS.Timeout;
           let resolved = false;
+          let connected = false;  // 标记是否已连接成功
           
           // 单个端口的连接超时（5秒）
           connectionTimeout = setTimeout(() => {
@@ -126,6 +127,7 @@ export class DashScopeASRClient {
           
           this.ws.onopen = () => {
             clearTimeout(connectionTimeout);
+            connected = true;  // 标记已连接
             console.log(`[DashScopeASR] Connected via port ${port}`);
             this.updateStatus('connected');
           };
@@ -143,15 +145,16 @@ export class DashScopeASRClient {
           this.ws.onerror = (error) => {
             clearTimeout(connectionTimeout);
             console.error(`[DashScopeASR] Port ${port} error:`, error);
-            // 尝试下一个端口
-            if (!resolved && portIndex < portsToTry.length - 1) {
+            // 只有在未连接成功时才尝试下一个端口
+            if (!connected && !resolved && portIndex < portsToTry.length - 1) {
               console.log('[DashScopeASR] Trying next port...');
               tryConnect(portIndex + 1);
-            } else if (!resolved) {
+            } else if (!connected && !resolved) {
               this.updateStatus('error');
               this.callbacks.onError?.('WebSocket 连接错误');
               resolve(false);
             }
+            // 如果已连接但出错，不尝试其他端口，只记录错误
           };
           
           this.ws.onclose = (event) => {
@@ -235,7 +238,7 @@ export class DashScopeASRClient {
 
   /**
    * 处理识别结果
-   * 使用前端计算的时间戳（更准确）
+   * 服务器已经计算好了基于录音经过时间的时间戳
    */
   private handleResult(sentence: {
     text?: string;
@@ -246,21 +249,12 @@ export class DashScopeASRClient {
     if (!sentence || !sentence.text) return;
 
     if (sentence.isFinal) {
-      // 计算前端时间戳
-      const now = Date.now();
-      const elapsedMs = now - this.sessionStartTime;
+      // 直接使用服务器返回的时间戳（已经是录音经过时间）
+      const beginTime = sentence.beginTime ?? 0;
+      const endTime = sentence.endTime ?? beginTime + 1000;
       
-      // beginTime = 上一句的结束时间
-      // endTime = 当前经过时间
-      const beginTime = this.lastSentenceEndTime;
-      const endTime = elapsedMs;
+      console.log(`[DashScopeASR] Sentence: "${sentence.text}" @ ${beginTime}ms - ${endTime}ms`);
       
-      // 更新上一句结束时间
-      this.lastSentenceEndTime = endTime;
-      
-      console.log(`[DashScopeASR] Sentence timestamp: ${beginTime}ms - ${endTime}ms (frontend calculated)`);
-      
-      // 最终结果
       const result: ASRSentence = {
         id: `seg-${Date.now()}-${this.sentenceIndex++}`,
         text: sentence.text,
@@ -270,7 +264,7 @@ export class DashScopeASRClient {
       };
       this.callbacks.onSentence?.(result);
     } else {
-      // 中间结果 - 使用当前经过时间
+      // 中间结果
       const elapsedMs = Date.now() - this.sessionStartTime;
       this.callbacks.onInterim?.(sentence.text, elapsedMs);
     }
@@ -312,32 +306,67 @@ export class DashScopeASRClient {
   }
 
   /**
+   * 发送 VAD 时间戳到后端
+   * 用于替换百炼 ASR 不准确的时间戳
+   */
+  sendVADTimestamp(startMs: number, endMs: number): void {
+    if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
+      console.warn('[DashScopeASR] Cannot send VAD timestamp, WebSocket not connected');
+      return;
+    }
+    
+    const message = {
+      type: 'vad-timestamp',
+      startMs,
+      endMs,
+    };
+    
+    this.ws.send(JSON.stringify(message));
+    console.log('[DashScopeASR] VAD timestamp sent:', startMs, '-', endMs);
+  }
+
+  /**
+   * 发送 VAD 事件到后端
+   * @param event 'start' 表示语音开始，'end' 表示语音结束
+   * @param timestampMs 事件发生时的时间戳（相对于录音开始的毫秒数）
+   */
+  sendVADEvent(event: 'start' | 'end', timestampMs: number): void {
+    if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
+      console.warn('[DashScopeASR] Cannot send VAD event, WebSocket not connected');
+      return;
+    }
+    
+    const message = {
+      type: 'vad-event',
+      event,
+      timestampMs,
+    };
+    
+    this.ws.send(JSON.stringify(message));
+    console.log('[DashScopeASR] VAD event sent:', event, 'at', timestampMs, 'ms');
+  }
+
+  /**
    * 停止识别
    */
   async stop(): Promise<void> {
+    // 立即标记为停止状态，阻止后续音频发送
+    this.isReady = false;
+    this.updateStatus('stopped');
+    
     if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
-      this.updateStatus('stopped');
       return;
     }
 
     // 发送停止指令
-    this.ws.send(JSON.stringify({ action: 'stop' }));
+    try {
+      this.ws.send(JSON.stringify({ action: 'stop' }));
+    } catch (e) {
+      // 忽略发送错误
+    }
 
-    // 等待任务结束或超时
-    return new Promise((resolve) => {
-      const timeout = setTimeout(() => {
-        this.closeConnection();
-        resolve();
-      }, 5000);
-
-      const originalOnTaskFinished = this.callbacks.onTaskFinished;
-      this.callbacks.onTaskFinished = () => {
-        clearTimeout(timeout);
-        originalOnTaskFinished?.();
-        this.closeConnection();
-        resolve();
-      };
-    });
+    // 立即关闭连接，不等待服务器响应
+    this.closeConnection();
   }
 
   /**

@@ -19,6 +19,11 @@ import type { ExtendedTutorRequest, ExtendedTutorResponse, GuidanceQuestion, Cit
 // AI 家教系统提示词（初次解释用）
 const TUTOR_SYSTEM_PROMPT = `你是一位"课堂对齐"的 AI 家教。你的任务是帮助学生补懂课堂上没听懂的内容。
 
+【最重要原则】只能基于提供的课堂转录内容回答！
+- 绝对禁止编造、臆想、猜测任何转录中没有的内容
+- 如果转录内容不足，直接告诉学生"转录内容较少，请继续录音"
+- 不要假设课堂讲了什么，只能引用实际存在的文字
+
 核心原则：
 1. 【精确引用】必须引用课堂原话（老师或学生的话），格式：[引用 mm:ss] 或 [引用 mm:ss-mm:ss]
 2. 【时间戳准确性】引用的时间戳必须与转录中显示的时间完全一致，不得估算或猜测
@@ -111,14 +116,38 @@ export async function POST(request: NextRequest) {
     // 【修复】不使用合并，直接使用原始segments，避免说话者混淆
     const mergedSegments = contextSegments; // 使用原始数据保持时间戳精确性
     
-    // 生成带有说话者标识的上下文（帮助AI区分老师和学生）
+    // 【新增】检查转录内容是否足够
+    const totalTextLength = mergedSegments.reduce((sum, s) => sum + (s.text?.length || 0), 0);
+    if (mergedSegments.length < 2 || totalTextLength < 50) {
+      console.log('[Tutor API] 转录内容不足，无法分析');
+      return NextResponse.json({
+        explanation: {
+          teacherSaid: '',
+          citation: { text: '', timeRange: '00:00-00:00', startMs: 0, endMs: 0 },
+          possibleStuckPoints: [],
+          followUpQuestion: '',
+        },
+        actionItems: [],
+        rawContent: '📝 当前录音内容较少，无法进行有效分析。\n\n建议：\n- 继续录音，获取更多课堂内容\n- 或者在有更多内容后再标记困惑点',
+        model: model,
+        usage: { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 },
+      });
+    }
+    
+    // 生成上下文（暂时不标注说话人，直到有真正的 diarization）
     const contextText = mergedSegments.map(s => {
       const timeStr = formatTimestamp(s.startMs);
-      // 改进的说话者识别逻辑
-      const isStudent = identifyStudent(s.text);
-      const speaker = isStudent ? '学生' : '老师';
-      return `[${timeStr}] ${speaker}: ${s.text}`;
+      return `[${timeStr}] ${s.text}`;
     }).join('\n');
+
+    // 【调试日志】输出发送给大模型的原始数据
+    console.log('\n========== [Tutor API] 发送给大模型的内容 ==========');
+    console.log('[输入参数] timestamp:', timestamp, 'ms =', formatTimestamp(timestamp));
+    console.log('[输入参数] segments数量:', segments.length);
+    console.log('[上下文范围] contextSegments数量:', contextSegments.length);
+    console.log('\n[课堂转录内容]:');
+    console.log(contextText);
+    console.log('\n====================================================\n');
 
     // ===== 新增：Dify 增强功能 =====
     let guidanceQuestion: GuidanceQuestion | undefined;
@@ -759,56 +788,6 @@ function extractKeywords(text: string): string[] {
   }
   
   return [...new Set(keywords)];
-}
-
-/**
- * 识别说话者是否为学生
- */
-function identifyStudent(text: string): boolean {
-  const trimmedText = text.trim();
-  
-  // 学生回答的典型特征
-  const studentPatterns = [
-    // 自我介绍
-    /^(My name is|I am|I'm)\b/i,
-    // 简单回应
-    /^(Yes|No|Yeah|Yep|Nope|OK|Okay|Sure|Right|Exactly)\b/i,
-    // 问候
-    /^(Hello|Hi|Hey|Good morning|Good afternoon)\b/i,
-    // 重复或确认
-    /^(So|Let me|I think|I believe|I guess)\b/i,
-    // 短句回答（通常学生回答较短）
-    /^.{1,20}$/,
-  ];
-  
-  // 老师讲解的典型特征
-  const teacherPatterns = [
-    // 教学指令
-    /\b(Now|Today|Let's|We will|You should|Please|Remember|Notice|Look at)\b/i,
-    // 解释性语言
-    /\b(This means|In other words|For example|Such as|Because|Therefore|So that)\b/i,
-    // 问题引导
-    /\b(What|How|Why|When|Where|Which|Can you|Do you)\b.*\?/i,
-    // 长句解释（老师通常说话较长）
-    /.{50,}/,
-  ];
-  
-  // 检查学生特征
-  for (const pattern of studentPatterns) {
-    if (pattern.test(trimmedText)) {
-      return true;
-    }
-  }
-  
-  // 检查老师特征
-  for (const pattern of teacherPatterns) {
-    if (pattern.test(trimmedText)) {
-      return false;
-    }
-  }
-  
-  // 默认情况：根据长度判断（学生回答通常较短）
-  return trimmedText.length < 30;
 }
 
 /**

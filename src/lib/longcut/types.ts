@@ -81,7 +81,7 @@ export interface ChatMessage {
   };
 }
 
-export type NoteSource = 'chat' | 'takeaways' | 'transcript' | 'custom';
+export type NoteSource = 'chat' | 'takeaways' | 'transcript' | 'custom' | 'anchor';
 
 export interface NoteMetadata {
   transcript?: {

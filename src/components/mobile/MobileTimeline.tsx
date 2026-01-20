@@ -227,7 +227,7 @@ export function segmentsToTimelineEntries(
       endMs: segment.endMs,
       hasConfusion: !!confusion,
       confusionResolved: confusion?.resolved,
-      speaker: segment.speakerId,
+      // speaker: segment.speakerId,  // 暂时隐藏，直到有真正的 diarization
     };
   });
 }

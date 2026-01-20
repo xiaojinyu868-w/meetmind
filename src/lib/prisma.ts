@@ -1,20 +1,34 @@
 /**
  * Prisma 客户端单例
  * 
- * 确保在开发环境热重载时不会创建多个数据库连接
+ * Prisma 7 需要使用 adapter 模式
  */
 
 import { PrismaClient } from '@prisma/client';
+import { PrismaBetterSqlite3 } from '@prisma/adapter-better-sqlite3';
+import path from 'path';
+
+// SQLite 数据库文件路径
+const dbPath = path.resolve(process.cwd(), 'prisma/meetmind.db');
 
 const globalForPrisma = globalThis as unknown as {
   prisma: PrismaClient | undefined;
 };
 
-export const prisma =
-  globalForPrisma.prisma ??
-  new PrismaClient({
-    log: process.env.NODE_ENV === 'development' ? ['query', 'error', 'warn'] : ['error'],
+function createPrismaClient(): PrismaClient {
+  // Prisma 7 adapter 使用 url 参数
+  const adapter = new PrismaBetterSqlite3({
+    url: `file:${dbPath}`,
   });
+  
+  // 创建 PrismaClient
+  return new PrismaClient({
+    adapter,
+    log: process.env.NODE_ENV === 'development' ? ['error', 'warn'] : ['error'],
+  });
+}
+
+export const prisma = globalForPrisma.prisma ?? createPrismaClient();
 
 if (process.env.NODE_ENV !== 'production') {
   globalForPrisma.prisma = prisma;

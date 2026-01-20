@@ -119,6 +119,11 @@ app.prepare().then(() => {
     let sessionStartTime = Date.now();  // 立即初始化，用于计算相对时间戳
     let lastSentenceEndTime = 0;  // 跟踪上一个句子的结束时间
 
+    // VAD 状态（前端检测的语音起止时间）
+    let currentSpeechStartMs = null;  // 当前语音段的开始时间
+    let lastSpeechEndMs = 0;          // 上一个语音段的结束时间
+    const vadTimestampQueue = [];     // 备用队列模式（保留兼容）
+
 
     // 连接到百炼 WebSocket
     try {
@@ -211,46 +216,83 @@ app.prepare().then(() => {
                 finalText = msg.text;
               }
               
-              // 尝试提取时间戳（百炼可能返回的字段）
-              // 检查多种可能的字段名
-              const possibleBeginFields = ['begin_time', 'start_time', 'beginTime', 'startTime', 'audio_start_ms'];
-              const possibleEndFields = ['end_time', 'endTime', 'audio_end_ms'];
+              // 时间戳优先级：
+              // 1. 前端 VAD 事件模式（实时跟踪语音开始/结束）
+              // 2. VAD 队列模式（兼容旧方式）
+              // 3. 百炼返回的时间戳
+              // 4. 服务端经过时间（fallback）
               
-              for (const field of possibleBeginFields) {
-                if (msg[field] !== undefined) {
-                  beginTime = msg[field];
-                  console.log('[ASR-Proxy] Found beginTime in msg.' + field + ':', beginTime);
-                  break;
-                }
-                if (msg.item?.[field] !== undefined) {
-                  beginTime = msg.item[field];
-                  console.log('[ASR-Proxy] Found beginTime in msg.item.' + field + ':', beginTime);
-                  break;
-                }
-              }
+              const now = Date.now();
+              const currentElapsedMs = now - sessionStartTime;
               
-              for (const field of possibleEndFields) {
-                if (msg[field] !== undefined) {
-                  endTime = msg[field];
-                  console.log('[ASR-Proxy] Found endTime in msg.' + field + ':', endTime);
-                  break;
-                }
-                if (msg.item?.[field] !== undefined) {
-                  endTime = msg.item[field];
-                  console.log('[ASR-Proxy] Found endTime in msg.item.' + field + ':', endTime);
-                  break;
-                }
-              }
+              // 调试：打印当前 VAD 状态
+              console.log('[ASR-Proxy] VAD state - speechStart:', currentSpeechStartMs, 'speechEnd:', lastSpeechEndMs, 'queueSize:', vadTimestampQueue.length);
               
-              // 如果没有时间戳，使用录音经过时间
-              if (beginTime === 0 && endTime === 0) {
-                const now = Date.now();
-                const elapsedMs = now - sessionStartTime;
-                // 使用上一个句子的结束时间作为开始时间
-                beginTime = lastSentenceEndTime;
-                endTime = elapsedMs;
-                lastSentenceEndTime = elapsedMs;
-                console.log('[ASR-Proxy] Using elapsed time as timestamp:', beginTime, '-', endTime);
+              if (currentSpeechStartMs !== null) {
+                // 使用 VAD 事件模式的时间戳
+                beginTime = currentSpeechStartMs;
+                // 结束时间使用：已知的语音结束时间 或 当前时间
+                endTime = lastSpeechEndMs > currentSpeechStartMs ? lastSpeechEndMs : currentElapsedMs;
+                lastSentenceEndTime = endTime;
+                console.log('[ASR-Proxy] Using VAD event timestamp:', beginTime, '-', endTime);
+                
+                // 重置当前语音段开始时间，为下一段做准备
+                currentSpeechStartMs = null;
+              } else {
+                // 尝试队列模式
+                const vadTimestamp = vadTimestampQueue.shift();
+                if (vadTimestamp) {
+                  beginTime = vadTimestamp.startMs;
+                  endTime = vadTimestamp.endMs;
+                  lastSentenceEndTime = endTime;
+                  console.log('[ASR-Proxy] Using VAD queue timestamp:', beginTime, '-', endTime, 'remaining:', vadTimestampQueue.length);
+                } else {
+                  // 回退：尝试提取百炼返回的时间戳
+                  const possibleBeginFields = ['begin_time', 'start_time', 'beginTime', 'startTime', 'audio_start_ms'];
+                  const possibleEndFields = ['end_time', 'endTime', 'audio_end_ms'];
+                  
+                  let serverBeginTime = null;
+                  let serverEndTime = null;
+                  
+                  for (const field of possibleBeginFields) {
+                    if (msg[field] !== undefined) {
+                      serverBeginTime = msg[field];
+                      console.log('[ASR-Proxy] Found beginTime in msg.' + field + ':', serverBeginTime);
+                      break;
+                    }
+                    if (msg.item?.[field] !== undefined) {
+                      serverBeginTime = msg.item[field];
+                      console.log('[ASR-Proxy] Found beginTime in msg.item.' + field + ':', serverBeginTime);
+                      break;
+                    }
+                  }
+                  
+                  for (const field of possibleEndFields) {
+                    if (msg[field] !== undefined) {
+                      serverEndTime = msg[field];
+                      console.log('[ASR-Proxy] Found endTime in msg.' + field + ':', serverEndTime);
+                      break;
+                    }
+                    if (msg.item?.[field] !== undefined) {
+                      serverEndTime = msg.item[field];
+                      console.log('[ASR-Proxy] Found endTime in msg.item.' + field + ':', serverEndTime);
+                      break;
+                    }
+                  }
+                  
+                  if (serverBeginTime !== null && serverEndTime !== null) {
+                    beginTime = serverBeginTime;
+                    endTime = serverEndTime;
+                    lastSentenceEndTime = endTime;
+                    console.log('[ASR-Proxy] Using server timestamp (fallback 1):', beginTime, '-', endTime);
+                  } else {
+                    // 最后回退：使用客户端录音经过时间
+                    beginTime = lastSentenceEndTime;
+                    endTime = currentElapsedMs;
+                    lastSentenceEndTime = currentElapsedMs;
+                    console.log('[ASR-Proxy] Using client elapsed time (fallback 2):', beginTime, '-', endTime);
+                  }
+                }
               }
               
               if (finalText) {
@@ -321,6 +363,9 @@ app.prepare().then(() => {
         console.log('[ASR-Proxy] DashScope closed:', code, reason.toString());
         isSessionReady = false;
         if (clientWs.readyState === WebSocket.OPEN) {
+          // 先发送 finished 事件，通知前端 ASR 会话已完成
+          clientWs.send(JSON.stringify({ event: 'finished', code }));
+          // 再发送 closed 事件
           clientWs.send(JSON.stringify({ event: 'closed', code }));
         }
       });
@@ -360,39 +405,75 @@ app.prepare().then(() => {
 
     // 处理客户端消息
     clientWs.on('message', (data, isBinary) => {
-      if (isBinary || Buffer.isBuffer(data)) {
-        // 二进制数据 = PCM 音频
+      const dataLen = data.length || data.byteLength || 0;
+      
+      // 调试日志：打印消息类型
+      if (dataLen < 200) {
+        console.log('[ASR-Proxy] Received msg, isBinary:', isBinary, 'len:', dataLen, 'preview:', data.toString('utf8').substring(0, 100));
+      }
+      
+      // 优先使用 ws 库的 isBinary 标志
+      // 如果明确是二进制，直接处理为音频
+      if (isBinary) {
         if (isSessionReady) {
           sendAudioToDashScope(data);
         } else {
-          // 连接未就绪，加入队列
           audioQueue.push(data);
         }
-      } else {
-        // 文本消息（控制指令）
-        try {
-          const msg = JSON.parse(data.toString());
-          if (msg.action === 'stop') {
-            console.log('[ASR-Proxy] Stop requested');
-            if (dashscopeWs && dashscopeWs.readyState === WebSocket.OPEN) {
-              // 发送 input_audio_buffer.commit 提交缓冲区
-              const commitEvent = {
-                event_id: generateEventId(),
-                type: 'input_audio_buffer.commit',
-              };
-              dashscopeWs.send(JSON.stringify(commitEvent));
-              console.log('[ASR-Proxy] Audio buffer committed');
-              
-              // 稍后关闭连接
-              setTimeout(() => {
-                if (dashscopeWs && dashscopeWs.readyState === WebSocket.OPEN) {
-                  dashscopeWs.close(1000, 'Client stop');
-                }
-              }, 2000);
-            }
+        return;
+      }
+      
+      // 非二进制消息，尝试解析为 JSON
+      try {
+        const jsonText = typeof data === 'string' ? data : data.toString('utf8');
+        const msg = JSON.parse(jsonText);
+        
+        // 处理 VAD 事件消息（新的事件驱动模式）
+        if (msg.type === 'vad-event') {
+          if (msg.event === 'start') {
+            currentSpeechStartMs = msg.timestampMs;
+            console.log('[ASR-Proxy] VAD speech start:', currentSpeechStartMs, 'ms');
+          } else if (msg.event === 'end') {
+            lastSpeechEndMs = msg.timestampMs;
+            console.log('[ASR-Proxy] VAD speech end:', lastSpeechEndMs, 'ms');
           }
-        } catch (e) {
-          console.error('[ASR-Proxy] Client message parse error:', e);
+          return;
+        }
+        
+        // 处理 VAD 时间戳消息（保留队列模式兼容）
+        if (msg.type === 'vad-timestamp') {
+          vadTimestampQueue.push({
+            startMs: msg.startMs,
+            endMs: msg.endMs
+          });
+          console.log('[ASR-Proxy] VAD timestamp queued:', msg.startMs, '-', msg.endMs, 'queue size:', vadTimestampQueue.length);
+          return;
+        }
+        
+        if (msg.action === 'stop') {
+          console.log('[ASR-Proxy] Stop requested');
+          if (dashscopeWs && dashscopeWs.readyState === WebSocket.OPEN) {
+            const commitEvent = {
+              event_id: generateEventId(),
+              type: 'input_audio_buffer.commit',
+            };
+            dashscopeWs.send(JSON.stringify(commitEvent));
+            console.log('[ASR-Proxy] Audio buffer committed');
+            
+            setTimeout(() => {
+              if (dashscopeWs && dashscopeWs.readyState === WebSocket.OPEN) {
+                dashscopeWs.close(1000, 'Client stop');
+              }
+            }, 2000);
+          }
+        }
+      } catch (e) {
+        // JSON 解析失败，可能是二进制音频数据被误判为文本
+        // 尝试作为音频处理
+        if (isSessionReady) {
+          sendAudioToDashScope(data);
+        } else {
+          audioQueue.push(data);
         }
       }
     });
