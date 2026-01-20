@@ -262,7 +262,7 @@ export function AudioUploader({ onTranscriptReady, onError, disabled }: AudioUpl
             </p>
             {transcribeMode === 'turbo' && (
               <p className="text-xs text-green-500 mt-2">
-                极速模式：20分钟音频约20秒完成（同步调用）
+                极速模式：18分钟音频约15秒完成（需配置域名）
               </p>
             )}
             {transcribeMode === 'fast' && (

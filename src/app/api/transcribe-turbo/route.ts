@@ -2,16 +2,20 @@
  * 极速转录 API（同步调用模式）
  * 
  * POST /api/transcribe-turbo
- * 使用 qwen3-asr-flash 同步调用，每片 5 分钟内音频约 5-10 秒返回
- * 比异步模式快 3-5 倍！
+ * 使用 qwen3-asr-flash 同步调用，无需轮询直接返回结果
+ * 
+ * 同步调用限制（阿里云官方）：
+ * - 时长：≤30秒
+ * - 文件：≤10MB
+ * - URL：必须使用域名，不能用 IP
  * 
  * 原理：
- * 1. 切分为 ≤5 分钟的片段
- * 2. 并行同步调用 qwen3-asr-flash
+ * 1. 切分为 ≤30 秒的片段
+ * 2. 并行同步调用 qwen3-asr-flash（最多 36 个并行，受 100 RPM 限制）
  * 3. 直接返回结果，无需轮询
  * 
  * 性能预估：
- * - 18 分钟音频 → 4 片 × 5-10 秒 = ~15-25 秒完成
+ * - 18 分钟音频 → 36 片 × ~3秒 = ~10-15 秒完成（理论值）
  */
 
 import { NextRequest, NextResponse } from 'next/server';
@@ -30,13 +34,13 @@ const UPLOAD_DIR = path.join(process.cwd(), 'public', 'temp-audio');
 // 同步调用 API 端点（正确的 DashScope 多模态端点）
 const SYNC_ASR_URL = 'https://dashscope.aliyuncs.com/api/v1/services/aigc/multimodal-generation/generation';
 
-const PUBLIC_HOST = process.env.PUBLIC_HOST || '47.112.160.134:3001';
-const PUBLIC_PROTOCOL = process.env.PUBLIC_PROTOCOL || 'http';
+const PUBLIC_HOST = process.env.PUBLIC_DOMAIN || process.env.PUBLIC_HOST || 'meetmind.example.com';
+const PUBLIC_PROTOCOL = process.env.PUBLIC_PROTOCOL || 'https';  // 同步调用建议用 HTTPS
 
-// 分片配置（同步调用限制 ≤5 分钟）
-const SEGMENT_DURATION_SEC = 300;   // 每片 5 分钟（同步最大限制）
-const MIN_DURATION_FOR_SPLIT = 300; // 超过 5 分钟才分片
-const MAX_PARALLEL_TASKS = 10;      // 最大并行（注意 RPM 100 限制）
+// 分片配置（同步调用限制 ≤30秒、≤10MB）
+const SEGMENT_DURATION_SEC = 30;    // 每片 30 秒（同步最大限制）
+const MIN_DURATION_FOR_SPLIT = 30;  // 超过 30 秒就分片
+const MAX_PARALLEL_TASKS = 50;      // 最大并行（注意 RPM 100 限制）
 
 // ==================== 工具函数 ====================
 
@@ -119,21 +123,19 @@ interface ASRSentence {
 
 /**
  * 同步调用 qwen3-asr-flash（使用 DashScope 多模态格式）
+ * 限制：≤30秒、≤10MB、需域名
  */
 async function syncTranscribe(
   fileUrl: string,
   apiKey: string,
-  language: string = 'zh'
+  language: string = 'zh',
+  segmentIndex: number = 0
 ): Promise<{ success: boolean; sentences: ASRSentence[]; error?: string }> {
   // 使用正确的 DashScope 多模态请求格式
   const requestBody = {
     model: 'qwen3-asr-flash',
     input: {
       messages: [
-        {
-          role: 'system',
-          content: [{ text: '' }]  // 可用于上下文增强
-        },
         {
           role: 'user',
           content: [
@@ -150,7 +152,7 @@ async function syncTranscribe(
     }
   };
   
-  console.log(`[Turbo] Sync call: ${fileUrl}`);
+  console.log(`[Turbo] Segment ${segmentIndex} sync call: ${fileUrl}`);
   const startTime = Date.now();
   
   try {
@@ -172,7 +174,7 @@ async function syncTranscribe(
     }
     
     const data = await response.json();
-    console.log(`[Turbo] Sync call completed in ${elapsed}ms, response:`, JSON.stringify(data).slice(0, 500));
+    console.log(`[Turbo] Segment ${segmentIndex} completed in ${elapsed}ms`);
     
     // 解析 DashScope 多模态返回格式
     const sentences: ASRSentence[] = [];
@@ -212,14 +214,27 @@ async function processParallelSync(
   
   console.log(`[Turbo] Processing ${segmentPaths.length} segments in parallel...`);
   
-  // 构建 URL 并并行调用
-  const promises = segmentPaths.map(async (segPath, index) => {
-    const fileName = path.basename(segPath);
-    const fileUrl = `${PUBLIC_PROTOCOL}://${PUBLIC_HOST}/temp-audio/${fileName}`;
-    return syncTranscribe(fileUrl, apiKey, language);
-  });
+  // 构建 URL 并并行调用（分批处理避免触发限流）
+  const batchSize = Math.min(MAX_PARALLEL_TASKS, 50);  // 每批最多50个
+  const results: { success: boolean; sentences: ASRSentence[]; error?: string }[] = [];
   
-  const results = await Promise.all(promises);
+  for (let i = 0; i < segmentPaths.length; i += batchSize) {
+    const batch = segmentPaths.slice(i, i + batchSize);
+    const batchPromises = batch.map(async (segPath, batchIndex) => {
+      const index = i + batchIndex;
+      const fileName = path.basename(segPath);
+      const fileUrl = `${PUBLIC_PROTOCOL}://${PUBLIC_HOST}/temp-audio/${fileName}`;
+      return syncTranscribe(fileUrl, apiKey, language, index);
+    });
+    
+    const batchResults = await Promise.all(batchPromises);
+    results.push(...batchResults);
+    
+    // 如果还有更多批次，等待一小段时间避免触发限流
+    if (i + batchSize < segmentPaths.length) {
+      await new Promise(resolve => setTimeout(resolve, 100));
+    }
+  }
   
   // 合并结果并调整时间戳
   const allSentences: ASRSentence[] = [];
@@ -291,8 +306,8 @@ export async function POST(request: NextRequest) {
     const buffer = Buffer.from(await audioFile.arrayBuffer());
     fs.writeFileSync(originalPath, buffer);
     
-    // 切分音频（≤5分钟片段）
-    console.log('[Turbo] Splitting audio...');
+    // 切分音频（≤30秒片段，同步调用限制）
+    console.log('[Turbo] Splitting audio into 30s segments...');
     const { segments, durations } = await splitAudio(
       originalPath,
       UPLOAD_DIR,
