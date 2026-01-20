@@ -10,14 +10,14 @@ interface AudioUploaderProps {
 }
 
 type UploadStatus = 'idle' | 'uploading' | 'transcribing' | 'success' | 'error';
-type TranscribeMode = 'fast' | 'standard';  // 快速模式（并行）或标准模式
+type TranscribeMode = 'turbo' | 'fast' | 'standard';  // 极速模式（同步）、快速模式（异步并行）、标准模式
 
 export function AudioUploader({ onTranscriptReady, onError, disabled }: AudioUploaderProps) {
   const [status, setStatus] = useState<UploadStatus>('idle');
   const [progress, setProgress] = useState(0);
   const [errorMessage, setErrorMessage] = useState('');
   const [fileName, setFileName] = useState('');
-  const [transcribeMode, setTranscribeMode] = useState<TranscribeMode>('fast');
+  const [transcribeMode, setTranscribeMode] = useState<TranscribeMode>('turbo');
   const [processingInfo, setProcessingInfo] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
   const startTimeRef = useRef<number>(0);
@@ -33,8 +33,8 @@ export function AudioUploader({ onTranscriptReady, onError, disabled }: AudioUpl
       return;
     }
 
-    // 验证文件大小（最大 500MB for fast mode）
-    const maxSize = transcribeMode === 'fast' ? 500 * 1024 * 1024 : 100 * 1024 * 1024;
+    // 验证文件大小（最大 500MB for turbo/fast mode）
+    const maxSize = transcribeMode === 'standard' ? 100 * 1024 * 1024 : 500 * 1024 * 1024;
     if (file.size > maxSize) {
       const error = `文件过大，最大支持 ${maxSize / 1024 / 1024}MB`;
       setErrorMessage(error);
@@ -58,21 +58,29 @@ export function AudioUploader({ onTranscriptReady, onError, disabled }: AudioUpl
       formData.append('audio', file);
 
       // 根据模式选择 API
-      const apiUrl = transcribeMode === 'fast' ? '/api/transcribe-fast' : '/api/transcribe';
+      const apiUrl = transcribeMode === 'turbo' 
+        ? '/api/transcribe-turbo'
+        : transcribeMode === 'fast' 
+          ? '/api/transcribe-fast' 
+          : '/api/transcribe';
       
       // 进度阶段：上传(20%) -> 切分(30%) -> 提交任务(40%) -> 转录中(40-90%) -> 合并(90-100%)
       // 由于无法获取实时进度，使用基于时间的估算
-      const estimatedDurationMs = transcribeMode === 'fast' 
-        ? Math.max(30000, file.size / 1024 / 1024 * 3000)  // 估算：每MB约3秒
-        : Math.max(60000, file.size / 1024 / 1024 * 8000); // 标准模式更慢
+      const estimatedDurationMs = transcribeMode === 'turbo'
+        ? Math.max(15000, file.size / 1024 / 1024 * 1000)  // 极速模式：每MB约1秒
+        : transcribeMode === 'fast' 
+          ? Math.max(30000, file.size / 1024 / 1024 * 3000)  // 快速模式：每MB约3秒
+          : Math.max(60000, file.size / 1024 / 1024 * 8000); // 标准模式更慢
       
       const startProgress = 25;
       const endProgress = 92;
       const progressRange = endProgress - startProgress;
       
-      setProcessingInfo(transcribeMode === 'fast' 
-        ? '音频切分中...' 
-        : '转录处理中...'
+      setProcessingInfo(transcribeMode === 'turbo'
+        ? '极速同步转录中...' 
+        : transcribeMode === 'fast' 
+          ? '音频切分中...' 
+          : '转录处理中...'
       );
 
       // 基于预估时间的平滑进度更新
@@ -88,9 +96,13 @@ export function AudioUploader({ onTranscriptReady, onError, disabled }: AudioUpl
         
         // 更新阶段提示
         if (elapsed < 5000) {
-          setProcessingInfo(transcribeMode === 'fast' ? '音频切分中...' : '上传处理中...');
+          setProcessingInfo(transcribeMode === 'turbo' 
+            ? '极速同步转录中...'
+            : transcribeMode === 'fast' ? '音频切分中...' : '上传处理中...');
         } else if (elapsed < 15000) {
-          setProcessingInfo(transcribeMode === 'fast' ? '并行转录任务已提交...' : '转录处理中...');
+          setProcessingInfo(transcribeMode === 'turbo'
+            ? '同步转录处理中...'
+            : transcribeMode === 'fast' ? '并行转录任务已提交...' : '转录处理中...');
         } else {
           const remainingSec = Math.max(0, Math.ceil((estimatedDurationMs - elapsed) / 1000));
           setProcessingInfo(`转录进行中，预计还需 ${remainingSec} 秒...`);
@@ -191,7 +203,18 @@ export function AudioUploader({ onTranscriptReady, onError, disabled }: AudioUpl
       {status === 'idle' && (
         <div className="space-y-4">
           {/* 模式选择 */}
-          <div className="flex items-center justify-center gap-4 text-sm">
+          <div className="flex items-center justify-center gap-4 text-sm flex-wrap">
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input
+                type="radio"
+                name="mode"
+                checked={transcribeMode === 'turbo'}
+                onChange={() => setTranscribeMode('turbo')}
+                className="w-4 h-4 text-green-500"
+              />
+              <span className="font-medium text-green-700">极速模式</span>
+              <span className="text-xs text-green-500">（同步调用，最快）</span>
+            </label>
             <label className="flex items-center gap-2 cursor-pointer">
               <input
                 type="radio"
@@ -200,8 +223,8 @@ export function AudioUploader({ onTranscriptReady, onError, disabled }: AudioUpl
                 onChange={() => setTranscribeMode('fast')}
                 className="w-4 h-4 text-blue-500"
               />
-              <span className="font-medium text-gray-700">快速模式</span>
-              <span className="text-xs text-gray-400">（并行处理，推荐）</span>
+              <span className="text-gray-700">快速模式</span>
+              <span className="text-xs text-gray-400">（并行异步）</span>
             </label>
             <label className="flex items-center gap-2 cursor-pointer">
               <input
@@ -235,8 +258,13 @@ export function AudioUploader({ onTranscriptReady, onError, disabled }: AudioUpl
             </div>
             <p className="text-gray-700 font-medium mb-1">点击或拖拽上传音频文件</p>
             <p className="text-sm text-gray-500">
-              支持 MP3、WAV、WebM 等格式，最大 {transcribeMode === 'fast' ? '500' : '100'}MB
+              支持 MP3、WAV、WebM 等格式，最大 {transcribeMode === 'standard' ? '100' : '500'}MB
             </p>
+            {transcribeMode === 'turbo' && (
+              <p className="text-xs text-green-500 mt-2">
+                极速模式：20分钟音频约20秒完成（同步调用）
+              </p>
+            )}
             {transcribeMode === 'fast' && (
               <p className="text-xs text-blue-500 mt-2">
                 快速模式：50分钟音频约1分钟完成

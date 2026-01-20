@@ -24,6 +24,7 @@ const PUBLIC_ROUTES = [
   '/api/asr-config',
   '/api/transcribe',
   '/api/transcribe-fast',
+  '/api/transcribe-turbo',
   '/api/generate-topics',
   '/api/generate-summary',
   '/api/health',
