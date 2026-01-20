@@ -27,8 +27,8 @@ const execAsync = promisify(exec);
 const MAX_FILE_SIZE = 500 * 1024 * 1024;
 const UPLOAD_DIR = path.join(process.cwd(), 'public', 'temp-audio');
 
-// 同步调用 API（qwen3-asr-flash 支持同步）
-const SYNC_ASR_URL = 'https://dashscope.aliyuncs.com/api/v1/services/audio/asr/transcription';
+// 同步调用 API 端点（正确的 DashScope 多模态端点）
+const SYNC_ASR_URL = 'https://dashscope.aliyuncs.com/api/v1/services/aigc/multimodal-generation/generation';
 
 const PUBLIC_HOST = process.env.PUBLIC_HOST || '47.112.160.134:3001';
 const PUBLIC_PROTOCOL = process.env.PUBLIC_PROTOCOL || 'http';
@@ -118,20 +118,36 @@ interface ASRSentence {
 }
 
 /**
- * 同步调用 qwen3-asr-flash（直接返回结果，无需轮询）
+ * 同步调用 qwen3-asr-flash（使用 DashScope 多模态格式）
  */
 async function syncTranscribe(
   fileUrl: string,
   apiKey: string,
   language: string = 'zh'
 ): Promise<{ success: boolean; sentences: ASRSentence[]; error?: string }> {
+  // 使用正确的 DashScope 多模态请求格式
   const requestBody = {
-    model: 'qwen3-asr-flash',  // 同步模型（不是 filetrans）
-    input: { file_url: fileUrl },
-    parameters: {
-      language: language,
-      // 不加 enable_itn 可能更快
+    model: 'qwen3-asr-flash',
+    input: {
+      messages: [
+        {
+          role: 'system',
+          content: [{ text: '' }]  // 可用于上下文增强
+        },
+        {
+          role: 'user',
+          content: [
+            { audio: fileUrl }  // 注意：用 audio 字段，不是 file_url
+          ]
+        }
+      ]
     },
+    parameters: {
+      asr_options: {
+        language: language,
+        enable_itn: true
+      }
+    }
   };
   
   console.log(`[Turbo] Sync call: ${fileUrl}`);
@@ -143,7 +159,6 @@ async function syncTranscribe(
       headers: {
         'Authorization': `Bearer ${apiKey}`,
         'Content-Type': 'application/json',
-        // 注意：同步调用不需要 X-DashScope-Async 头
       },
       body: JSON.stringify(requestBody),
     });
@@ -157,25 +172,23 @@ async function syncTranscribe(
     }
     
     const data = await response.json();
-    console.log(`[Turbo] Sync call completed in ${elapsed}ms`);
+    console.log(`[Turbo] Sync call completed in ${elapsed}ms, response:`, JSON.stringify(data).slice(0, 500));
     
-    // 解析结果
+    // 解析 DashScope 多模态返回格式
     const sentences: ASRSentence[] = [];
     
-    // 同步调用的返回格式可能不同，尝试多种解析方式
-    if (data.output?.sentences) {
-      sentences.push(...data.output.sentences);
+    // 格式: output.choices[0].message.content[0].text
+    const choices = data.output?.choices;
+    if (choices?.[0]?.message?.content) {
+      const content = choices[0].message.content;
+      if (Array.isArray(content) && content[0]?.text) {
+        // 同步返回的是纯文本，没有时间戳
+        sentences.push({ text: content[0].text, begin_time: 0, end_time: 0 });
+      } else if (typeof content === 'string') {
+        sentences.push({ text: content, begin_time: 0, end_time: 0 });
+      }
     } else if (data.output?.text) {
       sentences.push({ text: data.output.text, begin_time: 0, end_time: 0 });
-    } else if (data.output?.transcription_url) {
-      // 如果返回的是 URL，需要再获取一次
-      const transResponse = await fetch(data.output.transcription_url);
-      const transData = await transResponse.json();
-      if (transData.transcripts?.[0]?.sentences) {
-        sentences.push(...transData.transcripts[0].sentences);
-      } else if (transData.sentences) {
-        sentences.push(...transData.sentences);
-      }
     }
     
     return { success: sentences.length > 0, sentences };
