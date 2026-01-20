@@ -60,18 +60,42 @@ export function AudioUploader({ onTranscriptReady, onError, disabled }: AudioUpl
       // 根据模式选择 API
       const apiUrl = transcribeMode === 'fast' ? '/api/transcribe-fast' : '/api/transcribe';
       
+      // 进度阶段：上传(20%) -> 切分(30%) -> 提交任务(40%) -> 转录中(40-90%) -> 合并(90-100%)
+      // 由于无法获取实时进度，使用基于时间的估算
+      const estimatedDurationMs = transcribeMode === 'fast' 
+        ? Math.max(30000, file.size / 1024 / 1024 * 3000)  // 估算：每MB约3秒
+        : Math.max(60000, file.size / 1024 / 1024 * 8000); // 标准模式更慢
+      
+      const startProgress = 25;
+      const endProgress = 92;
+      const progressRange = endProgress - startProgress;
+      
       setProcessingInfo(transcribeMode === 'fast' 
-        ? '并行处理中，速度更快...' 
-        : '标准转录中...'
+        ? '音频切分中...' 
+        : '转录处理中...'
       );
 
-      // 模拟进度更新
+      // 基于预估时间的平滑进度更新
+      const progressStartTime = Date.now();
       const progressInterval = setInterval(() => {
-        setProgress(prev => {
-          if (prev >= 85) return prev;
-          return prev + Math.random() * 5;
-        });
-      }, 2000);
+        const elapsed = Date.now() - progressStartTime;
+        const estimatedProgress = startProgress + (elapsed / estimatedDurationMs) * progressRange;
+        
+        // 使用 easeOut 曲线，越接近结束越慢（避免卡在某个点）
+        const easedProgress = startProgress + progressRange * (1 - Math.pow(1 - Math.min(elapsed / estimatedDurationMs, 0.95), 2));
+        
+        setProgress(Math.min(easedProgress, endProgress));
+        
+        // 更新阶段提示
+        if (elapsed < 5000) {
+          setProcessingInfo(transcribeMode === 'fast' ? '音频切分中...' : '上传处理中...');
+        } else if (elapsed < 15000) {
+          setProcessingInfo(transcribeMode === 'fast' ? '并行转录任务已提交...' : '转录处理中...');
+        } else {
+          const remainingSec = Math.max(0, Math.ceil((estimatedDurationMs - elapsed) / 1000));
+          setProcessingInfo(`转录进行中，预计还需 ${remainingSec} 秒...`);
+        }
+      }, 500);
 
       const response = await fetch(apiUrl, {
         method: 'POST',
@@ -79,7 +103,7 @@ export function AudioUploader({ onTranscriptReady, onError, disabled }: AudioUpl
       });
 
       clearInterval(progressInterval);
-      setProgress(90);
+      setProgress(95);
 
       const data = await response.json();
 
