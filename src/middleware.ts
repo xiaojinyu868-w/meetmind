@@ -23,6 +23,7 @@ const PUBLIC_ROUTES = [
   '/api/chat',
   '/api/asr-config',
   '/api/transcribe',
+  '/api/transcribe-fast',
   '/api/generate-topics',
   '/api/generate-summary',
   '/api/health',
