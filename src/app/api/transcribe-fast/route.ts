@@ -41,9 +41,9 @@ const PUBLIC_HOST = process.env.PUBLIC_HOST || '47.112.160.134:3001';
 const PUBLIC_PROTOCOL = process.env.PUBLIC_PROTOCOL || 'http';
 
 // 分片配置
-const SEGMENT_DURATION_SEC = 180;  // 每片 3 分钟
-const MIN_DURATION_FOR_SPLIT = 300; // 超过 5 分钟才分片
-const MAX_PARALLEL_TASKS = 10;     // 最大并行任务数
+const SEGMENT_DURATION_SEC = 120;  // 每片 2 分钟（更多并行 = 更快）
+const MIN_DURATION_FOR_SPLIT = 180; // 超过 3 分钟才分片
+const MAX_PARALLEL_TASKS = 15;     // 最大并行任务数
 
 // ==================== 工具函数 ====================
 
@@ -231,7 +231,7 @@ async function waitForSingleTask(
   maxWaitMs: number = 300000
 ): Promise<{ success: boolean; sentences: ASRSentence[]; error?: string }> {
   const startTime = Date.now();
-  const pollInterval = 2000; // 2秒轮询一次（比原来快）
+  const pollInterval = 1500; // 1.5秒轮询一次
   
   while (Date.now() - startTime < maxWaitMs) {
     const result = await queryTaskStatus(taskId, apiKey);
