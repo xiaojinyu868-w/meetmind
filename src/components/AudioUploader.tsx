@@ -10,13 +10,17 @@ interface AudioUploaderProps {
 }
 
 type UploadStatus = 'idle' | 'uploading' | 'transcribing' | 'success' | 'error';
+type TranscribeMode = 'fast' | 'standard';  // 快速模式（并行）或标准模式
 
 export function AudioUploader({ onTranscriptReady, onError, disabled }: AudioUploaderProps) {
   const [status, setStatus] = useState<UploadStatus>('idle');
   const [progress, setProgress] = useState(0);
   const [errorMessage, setErrorMessage] = useState('');
   const [fileName, setFileName] = useState('');
+  const [transcribeMode, setTranscribeMode] = useState<TranscribeMode>('fast');
+  const [processingInfo, setProcessingInfo] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const startTimeRef = useRef<number>(0);
 
   const handleFileSelect = useCallback(async (file: File) => {
     // 验证文件类型
@@ -29,9 +33,10 @@ export function AudioUploader({ onTranscriptReady, onError, disabled }: AudioUpl
       return;
     }
 
-    // 验证文件大小（最大 100MB）
-    if (file.size > 100 * 1024 * 1024) {
-      const error = '文件过大，最大支持 100MB';
+    // 验证文件大小（最大 500MB for fast mode）
+    const maxSize = transcribeMode === 'fast' ? 500 * 1024 * 1024 : 100 * 1024 * 1024;
+    if (file.size > maxSize) {
+      const error = `文件过大，最大支持 ${maxSize / 1024 / 1024}MB`;
       setErrorMessage(error);
       setStatus('error');
       onError?.(error);
@@ -42,21 +47,39 @@ export function AudioUploader({ onTranscriptReady, onError, disabled }: AudioUpl
     setStatus('uploading');
     setProgress(10);
     setErrorMessage('');
+    setProcessingInfo('');
+    startTimeRef.current = Date.now();
 
     try {
-      // 直接同步转录，不再区分长短音频
       setStatus('transcribing');
-      setProgress(30);
+      setProgress(20);
 
       const formData = new FormData();
       formData.append('audio', file);
 
-      const response = await fetch('/api/transcribe', {
+      // 根据模式选择 API
+      const apiUrl = transcribeMode === 'fast' ? '/api/transcribe-fast' : '/api/transcribe';
+      
+      setProcessingInfo(transcribeMode === 'fast' 
+        ? '并行处理中，速度更快...' 
+        : '标准转录中...'
+      );
+
+      // 模拟进度更新
+      const progressInterval = setInterval(() => {
+        setProgress(prev => {
+          if (prev >= 85) return prev;
+          return prev + Math.random() * 5;
+        });
+      }, 2000);
+
+      const response = await fetch(apiUrl, {
         method: 'POST',
         body: formData,
       });
 
-      setProgress(70);
+      clearInterval(progressInterval);
+      setProgress(90);
 
       const data = await response.json();
 
@@ -78,6 +101,11 @@ export function AudioUploader({ onTranscriptReady, onError, disabled }: AudioUpl
       // 创建音频 Blob
       const audioBlob = new Blob([await file.arrayBuffer()], { type: file.type });
 
+      // 计算处理时间
+      const elapsedSec = Math.floor((Date.now() - startTimeRef.current) / 1000);
+      const audioDurationMin = data.totalDuration ? (data.totalDuration / 1000 / 60).toFixed(1) : '?';
+      setProcessingInfo(`${audioDurationMin}分钟音频，${elapsedSec}秒完成`);
+
       setStatus('success');
       setProgress(100);
       onTranscriptReady(segments, audioBlob);
@@ -88,7 +116,7 @@ export function AudioUploader({ onTranscriptReady, onError, disabled }: AudioUpl
       setStatus('error');
       onError?.(message);
     }
-  }, [onTranscriptReady, onError]);
+  }, [onTranscriptReady, onError, transcribeMode]);
 
   const handleDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -137,26 +165,60 @@ export function AudioUploader({ onTranscriptReady, onError, disabled }: AudioUpl
       />
 
       {status === 'idle' && (
-        <div
-          onClick={handleClick}
-          onDrop={handleDrop}
-          onDragOver={handleDragOver}
-          className={`
-            border-2 border-dashed rounded-xl p-8 text-center cursor-pointer
-            transition-all duration-200
-            ${disabled 
-              ? 'border-gray-200 bg-gray-50 cursor-not-allowed' 
-              : 'border-blue-200 hover:border-blue-400 hover:bg-blue-50/50'
-            }
-          `}
-        >
-          <div className="w-16 h-16 mx-auto mb-4 bg-blue-100 rounded-full flex items-center justify-center">
-            <svg className="w-8 h-8 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
-            </svg>
+        <div className="space-y-4">
+          {/* 模式选择 */}
+          <div className="flex items-center justify-center gap-4 text-sm">
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input
+                type="radio"
+                name="mode"
+                checked={transcribeMode === 'fast'}
+                onChange={() => setTranscribeMode('fast')}
+                className="w-4 h-4 text-blue-500"
+              />
+              <span className="font-medium text-gray-700">快速模式</span>
+              <span className="text-xs text-gray-400">（并行处理，推荐）</span>
+            </label>
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input
+                type="radio"
+                name="mode"
+                checked={transcribeMode === 'standard'}
+                onChange={() => setTranscribeMode('standard')}
+                className="w-4 h-4 text-gray-500"
+              />
+              <span className="text-gray-600">标准模式</span>
+            </label>
           </div>
-          <p className="text-gray-700 font-medium mb-1">点击或拖拽上传音频文件</p>
-          <p className="text-sm text-gray-500">支持 MP3、WAV、WebM、OGG、M4A 格式，最大 100MB</p>
+          
+          <div
+            onClick={handleClick}
+            onDrop={handleDrop}
+            onDragOver={handleDragOver}
+            className={`
+              border-2 border-dashed rounded-xl p-8 text-center cursor-pointer
+              transition-all duration-200
+              ${disabled 
+                ? 'border-gray-200 bg-gray-50 cursor-not-allowed' 
+                : 'border-blue-200 hover:border-blue-400 hover:bg-blue-50/50'
+              }
+            `}
+          >
+            <div className="w-16 h-16 mx-auto mb-4 bg-blue-100 rounded-full flex items-center justify-center">
+              <svg className="w-8 h-8 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+              </svg>
+            </div>
+            <p className="text-gray-700 font-medium mb-1">点击或拖拽上传音频文件</p>
+            <p className="text-sm text-gray-500">
+              支持 MP3、WAV、WebM 等格式，最大 {transcribeMode === 'fast' ? '500' : '100'}MB
+            </p>
+            {transcribeMode === 'fast' && (
+              <p className="text-xs text-blue-500 mt-2">
+                快速模式：50分钟音频约1分钟完成
+              </p>
+            )}
+          </div>
         </div>
       )}
 
@@ -169,7 +231,7 @@ export function AudioUploader({ onTranscriptReady, onError, disabled }: AudioUpl
             <div>
               <p className="font-medium text-gray-900">{fileName}</p>
               <p className="text-sm text-blue-600">
-                {status === 'uploading' ? '正在上传...' : '正在转录，请稍候...'}
+                {status === 'uploading' ? '正在上传...' : processingInfo || '正在转录，请稍候...'}
               </p>
             </div>
           </div>
@@ -179,7 +241,7 @@ export function AudioUploader({ onTranscriptReady, onError, disabled }: AudioUpl
               style={{ width: `${progress}%` }}
             />
           </div>
-          <p className="text-xs text-gray-500 mt-2 text-right">{progress}%</p>
+          <p className="text-xs text-gray-500 mt-2 text-right">{Math.round(progress)}%</p>
         </div>
       )}
 
@@ -194,7 +256,9 @@ export function AudioUploader({ onTranscriptReady, onError, disabled }: AudioUpl
               </div>
               <div>
                 <p className="font-medium text-gray-900">{fileName}</p>
-                <p className="text-sm text-green-600">转录完成！</p>
+                <p className="text-sm text-green-600">
+                  转录完成！{processingInfo && <span className="text-gray-500 ml-1">({processingInfo})</span>}
+                </p>
               </div>
             </div>
             <button
