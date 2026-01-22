@@ -405,12 +405,42 @@ export default function StudentApp() {
   }, [sessionId, anchors, segments]);
 
   // 处理 viewMode 切换，同时清理历史对话相关状态
-  const handleViewModeChange = useCallback((newMode: 'record' | 'review') => {
+  // 如果切换到复习模式且没有数据，自动加载 demo 数据
+  const handleViewModeChange = useCallback(async (newMode: 'record' | 'review') => {
     setViewMode(newMode);
     // 切换模式时清理历史对话面板状态
     setShowConversationHistory(false);
     setSelectedHistoryConversation(null);
-  }, []);
+    
+    // 切换到复习模式时，如果没有数据则加载 demo
+    if (newMode === 'review' && segments.length === 0) {
+      try {
+        const demoData = await loadDemoData();
+        setSegments(demoData.DEMO_SEGMENTS);
+        setAudioUrl(demoData.DEMO_AUDIO_URL);
+        setAnchors(demoData.DEMO_ANCHORS);
+        setDataSource('demo');
+        
+        // 构建时间轴
+        const tl = memoryService.buildTimeline(
+          sessionId,
+          demoData.DEMO_SEGMENTS,
+          demoData.DEMO_ANCHORS,
+          { subject: UIConfig.defaultSubject, teacher: 'Demo Teacher', date: new Date().toISOString().split('T')[0] }
+        );
+        setTimeline(tl);
+        
+        // 选中第一个未解决的困惑点
+        const firstUnresolved = demoData.DEMO_ANCHORS.find(a => !a.resolved);
+        if (firstUnresolved) {
+          setSelectedAnchor(firstUnresolved);
+          setCurrentTime(firstUnresolved.timestamp);
+        }
+      } catch (err) {
+        console.error('Failed to load demo data:', err);
+      }
+    }
+  }, [segments.length, sessionId]);
 
   const handleTranscriptUpdate = useCallback((newSegments: TranscriptSegment[]) => {
     liveSegmentsRef.current = newSegments;
