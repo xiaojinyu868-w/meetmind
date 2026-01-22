@@ -26,8 +26,6 @@ interface AnchorDetailPanelProps {
   onPlay?: (startMs: number, endMs: number) => void;
   /** 标记为已解决 */
   onResolve?: () => void;
-  /** 发起 AI 对话 */
-  onAskAI?: (anchor: Anchor, contextText: string) => void;
   /** 添加笔记 */
   onAddNote?: (text: string, anchorId: string) => void;
   /** 关闭面板 */
@@ -43,7 +41,6 @@ export function AnchorDetailPanel({
   onSeek,
   onPlay,
   onResolve,
-  onAskAI,
   onAddNote,
   onClose,
   contextBeforeMs = 30000,
@@ -110,12 +107,6 @@ export function AnchorDetailPanel({
     if (!anchor || !onSeek) return;
     onSeek(anchor.timestamp);
   }, [anchor, onSeek]);
-
-  // 发起 AI 对话
-  const handleAskAI = useCallback(() => {
-    if (!anchor || !onAskAI) return;
-    onAskAI(anchor, fullContextText);
-  }, [anchor, onAskAI, fullContextText]);
 
   // 提交笔记
   const handleSubmitNote = useCallback(() => {
@@ -280,17 +271,6 @@ export function AnchorDetailPanel({
 
       {/* 底部操作区 */}
       <div className="border-t border-gray-100 p-4 space-y-3">
-        {/* AI 解答按钮 */}
-        {onAskAI && hasContext && (
-          <button
-            onClick={handleAskAI}
-            className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-gradient-to-r from-amber-400 to-amber-500 text-white font-medium rounded-xl hover:from-amber-500 hover:to-amber-600 transition-all shadow-lg shadow-amber-400/25 active:scale-[0.98]"
-          >
-            <span>🎓</span>
-            <span>让 AI 家教帮我解答这个困惑</span>
-          </button>
-        )}
-
         {/* 添加笔记 */}
         {onAddNote && (
           <div>

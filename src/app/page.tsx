@@ -1253,12 +1253,6 @@ export default function StudentApp() {
                             waveformRef.current?.play();
                           }}
                           onResolve={handleResolveAnchor}
-                          onAskAI={(anchor, contextText) => {
-                            // 确保退出历史模式，进入当前对话
-                            setShowConversationHistory(false);
-                            setSelectedHistoryConversation(null);
-                            // 滚动到 AI 对话区（右侧面板会自动显示 AITutor）
-                          }}
                           onAddNote={(text, anchorId) => {
                             handleAddNote(text, 'anchor', {
                               anchorId,
