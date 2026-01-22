@@ -14,6 +14,9 @@ import type { TranscriptSegment, HighlightTopic, ClassSummary, Note, TopicGenera
 import { useResponsive } from '@/hooks/useResponsive';
 import { UIConfig } from '@/lib/config';
 
+// SWR 数据 Hooks - 统一管理 API 请求
+import { useTopics, useSummary } from '@/hooks/data';
+
 // WaveformPlayer 使用 forwardRef，需要静态导入以支持 ref
 import { WaveformPlayer, type WaveformPlayerRef, type WaveformAnchor } from '@/components/WaveformPlayer';
 
@@ -48,7 +51,7 @@ const AnchorDetailPanel = dynamic(() => import('@/components/AnchorDetailPanel')
 const ConversationList = dynamic(() => import('@/components/ConversationHistory').then(m => ({ default: m.ConversationList })));
 const AIChat = dynamic(() => import('@/components/AIChat').then(m => ({ default: m.AIChat })), { ssr: false });
 
-import type { ConfusionMarker } from '@/components/mobile';
+import type { ConfusionMarker } from '@/components/mobile/PodcastPlayer';
 import type { ConversationHistory } from '@/types/conversation';
 
 // 演示数据延迟加载
@@ -64,16 +67,12 @@ const loadDemoData = async () => {
   return DEMO_DATA_CACHE;
 };
 
-// 移动端组件导入
-import { 
-  MiniPlayer,
-  MobileTabSwitch,
-  DedaoTimeline,
-  DedaoConfusionCard,
-  DedaoMenu,
-  DedaoMenuButton,
-  toDedaoEntries,
-} from '@/components/mobile';
+// 移动端组件导入 - 直接导入避免 barrel file 导致的 tree-shaking 失效
+import { MiniPlayer } from '@/components/mobile/MiniPlayer';
+import { MobileTabSwitch } from '@/components/mobile/MobileTabSwitch';
+import { DedaoTimeline, toDedaoEntries } from '@/components/mobile/DedaoTimeline';
+import { DedaoConfusionCard } from '@/components/mobile/DedaoConfusionCard';
+import { DedaoMenu, DedaoMenuButton } from '@/components/mobile/DedaoMenu';
 
 type ViewMode = 'record' | 'review';
 type DataSource = 'live' | 'demo';
@@ -126,11 +125,24 @@ export default function StudentApp() {
   
   // 新增状态：精选片段、摘要、笔记
   const [reviewTab, setReviewTab] = useState<ReviewTab>('timeline');
-  const [highlightTopics, setHighlightTopics] = useState<HighlightTopic[]>([]);
-  const [selectedTopic, setSelectedTopic] = useState<HighlightTopic | null>(null);
-  const [isLoadingTopics, setIsLoadingTopics] = useState(false);
-  const [classSummary, setClassSummary] = useState<ClassSummary | null>(null);
-  const [isLoadingSummary, setIsLoadingSummary] = useState(false);
+  // 使用 SWR Hooks 管理精选片段和摘要 - 自动去重、缓存、重试
+  const { 
+    topics: highlightTopics, 
+    selectedTopic, 
+    isLoading: isLoadingTopics, 
+    generate: generateTopics,
+    regenerateByTheme,
+    setSelectedTopic,
+    clear: clearTopics
+  } = useTopics({ sessionId, segments });
+  
+  const {
+    summary: classSummary,
+    isLoading: isLoadingSummary,
+    generate: generateSummary,
+    clear: clearSummary,
+  } = useSummary({ sessionId, segments });
+  
   const [notes, setNotes] = useState<Note[]>([]);
   const [isPlayingAll, setIsPlayingAll] = useState(false);
   const [playAllIndex, setPlayAllIndex] = useState(0);
@@ -326,8 +338,8 @@ export default function StudentApp() {
     setSegments([]);
     setAnchors([]);
     setSelectedAnchor(null); // 清除选中的困惑点
-    setHighlightTopics([]); // 清除精选片段
-    setClassSummary(null); // 清除摘要
+    clearTopics(); // 清除精选片段（使用 SWR Hook）
+    clearSummary(); // 清除摘要（使用 SWR Hook）
     setNotes([]); // 清除笔记
     setActionItems([]); // 清除行动清单
     setTimeline(null); // 清除时间轴
@@ -550,119 +562,35 @@ export default function StudentApp() {
     ));
   }, []);
 
-  // 生成精选片段
+  // 生成精选片段 - 使用 SWR Hook（自动请求去重、缓存、重试）
   const handleGenerateTopics = useCallback(async (mode: TopicGenerationMode) => {
-    if (segments.length === 0) {
-      console.warn('无转录内容，无法生成精选片段');
-      return;
-    }
-    
-    setIsLoadingTopics(true);
     try {
       console.log('[生成精选片段] 开始，模式:', mode, '片段数:', segments.length);
-      
-      const response = await fetch('/api/generate-topics', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          sessionId,
-          transcript: segments.map(s => ({
-            id: s.id,
-            text: s.text,
-            startMs: s.startMs,
-            endMs: s.endMs,
-            confidence: s.confidence
-          })),
-          mode
-        })
-      });
-      
-      const data = await response.json();
-      console.log('[生成精选片段] 响应:', data);
-      
-      if (data.success && data.topics) {
-        setHighlightTopics(data.topics);
-        console.log('[生成精选片段] 成功，生成', data.topics.length, '个片段');
-      } else {
-        console.error('[生成精选片段] 失败:', data.error);
-        alert(`生成失败: ${data.error || '未知错误'}`);
-      }
+      await generateTopics(mode);
+      console.log('[生成精选片段] 完成');
     } catch (error) {
       console.error('生成精选片段失败:', error);
       alert(`生成失败: ${error instanceof Error ? error.message : '网络错误'}`);
-    } finally {
-      setIsLoadingTopics(false);
     }
-  }, [sessionId, segments]);
+  }, [segments.length, generateTopics]);
 
-  // 按主题重新生成片段
+  // 按主题重新生成片段 - 使用 SWR Hook
   const handleRegenerateByTheme = useCallback(async (theme: string) => {
-    if (segments.length === 0) return;
-    
-    setIsLoadingTopics(true);
     try {
-      const response = await fetch('/api/generate-topics', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          sessionId,
-          transcript: segments.map(s => ({
-            id: s.id,
-            text: s.text,
-            startMs: s.startMs,
-            endMs: s.endMs
-          })),
-          mode: 'smart',
-          theme
-        })
-      });
-      
-      const data = await response.json();
-      if (data.success && data.topics) {
-        setHighlightTopics(data.topics);
-      }
+      await regenerateByTheme(theme);
     } catch (error) {
       console.error('按主题生成失败:', error);
-    } finally {
-      setIsLoadingTopics(false);
     }
-  }, [sessionId, segments]);
+  }, [regenerateByTheme]);
 
-  // 生成课堂摘要
+  // 生成课堂摘要 - 使用 SWR Hook
   const handleGenerateSummary = useCallback(async () => {
-    if (segments.length === 0) return;
-    
-    setIsLoadingSummary(true);
     try {
-      const response = await fetch('/api/generate-summary', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          sessionId,
-          transcript: segments.map(s => ({
-            id: s.id,
-            text: s.text,
-            startMs: s.startMs,
-            endMs: s.endMs
-          }))
-        })
-      });
-      
-      const data = await response.json();
-      if (data.success && data.summary) {
-        setClassSummary({
-          ...data.summary,
-          sessionId,
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString()
-        });
-      }
+      await generateSummary();
     } catch (error) {
       console.error('生成摘要失败:', error);
-    } finally {
-      setIsLoadingSummary(false);
     }
-  }, [sessionId, segments]);
+  }, [generateSummary]);
 
   // 播放精选片段
   const handlePlayTopic = useCallback((topic: HighlightTopic) => {
@@ -676,11 +604,10 @@ export default function StudentApp() {
     }
   }, []);
 
-  // 清空精选片段
+  // 清空精选片段 - 使用 SWR Hook
   const handleClearTopics = useCallback(() => {
-    setHighlightTopics([]);
-    setSelectedTopic(null);
-  }, []);
+    clearTopics();
+  }, [clearTopics]);
 
   // 播放全部片段
   const handlePlayAll = useCallback(() => {
@@ -920,8 +847,8 @@ export default function StudentApp() {
                           setSegments(newSegments);
                           setAnchors([]); // 清除旧困惑点
                           setSelectedAnchor(null); // 清除选中的困惑点
-                          setHighlightTopics([]); // 清除精选片段
-                          setClassSummary(null); // 清除摘要
+                          clearTopics(); // 清除精选片段（使用 SWR Hook）
+                          clearSummary(); // 清除摘要（使用 SWR Hook）
                           setNotes([]); // 清除笔记
                           setActionItems([]); // 清除行动清单
                           setAudioBlob(blob);
@@ -1090,8 +1017,8 @@ export default function StudentApp() {
                     setSegments(newSegments);
                     setAnchors([]); // 清除旧困惑点
                     setSelectedAnchor(null); // 清除选中的困惑点
-                    setHighlightTopics([]); // 清除精选片段
-                    setClassSummary(null); // 清除摘要
+                    clearTopics(); // 清除精选片段（使用 SWR Hook）
+                    clearSummary(); // 清除摘要（使用 SWR Hook）
                     setNotes([]); // 清除笔记
                     setActionItems([]); // 清除行动清单
                     setAudioBlob(blob);

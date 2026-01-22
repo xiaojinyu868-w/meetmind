@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import { Inter } from 'next/font/google';
 import './globals.css';
 import { AuthProvider } from '@/lib/hooks/useAuth';
+import { SWRProvider } from '@/lib/swr';
 
 const inter = Inter({ subsets: ['latin'] });
 
@@ -28,7 +29,9 @@ export default function RootLayout({
       </head>
       <body className={inter.className}>
         <AuthProvider>
-          {children}
+          <SWRProvider>
+            {children}
+          </SWRProvider>
         </AuthProvider>
       </body>
     </html>

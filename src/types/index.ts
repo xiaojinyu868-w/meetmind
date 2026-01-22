@@ -149,6 +149,19 @@ export interface Session {
 }
 
 /**
+ * 音频录音
+ */
+export interface AudioRecording {
+  id: string;
+  sessionId: string;
+  filename: string;
+  duration: number;  // 时长（毫秒）
+  size: number;      // 文件大小（字节）
+  url?: string;
+  createdAt: string;
+}
+
+/**
  * 课堂时间轴
  */
 export interface ClassTimeline {
