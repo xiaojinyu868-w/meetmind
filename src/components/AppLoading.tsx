@@ -34,26 +34,28 @@ export function AppLoading({ message, onComplete }: AppLoadingProps) {
   const [isLogoAnimated, setIsLogoAnimated] = useState(false);
   const [showContent, setShowContent] = useState(false);
   const [isFadingOut, setIsFadingOut] = useState(false);
+  const [isMounted, setIsMounted] = useState(false);
   const progressRef = useRef(0);
   const animationRef = useRef<number>();
   
-  // 生成粒子 - 使用固定种子避免 hydration 不匹配
+  // 标记客户端已挂载，避免 SSR 水合不匹配
+  useEffect(() => {
+    setIsMounted(true);
+  }, []);
+  
+  // 生成粒子 - 只在客户端生成，避免 hydration 不匹配
   const particles = useMemo<Particle[]>(() => {
-    // 使用确定性的伪随机数，基于索引生成
-    const seededRandom = (seed: number) => {
-      const x = Math.sin(seed * 9999) * 10000;
-      return x - Math.floor(x);
-    };
+    if (!isMounted) return [];
     return Array.from({ length: 20 }, (_, i) => ({
       id: i,
-      x: seededRandom(i * 1) * 100,
-      y: seededRandom(i * 2) * 100,
-      size: seededRandom(i * 3) * 4 + 2,
-      opacity: seededRandom(i * 4) * 0.3 + 0.1,
-      speed: seededRandom(i * 5) * 20 + 10,
-      angle: seededRandom(i * 6) * 360,
+      x: Math.random() * 100,
+      y: Math.random() * 100,
+      size: Math.random() * 4 + 2,
+      opacity: Math.random() * 0.3 + 0.1,
+      speed: Math.random() * 20 + 10,
+      angle: Math.random() * 360,
     }));
-  }, []);
+  }, [isMounted]);
 
   // Logo 入场动画
   useEffect(() => {
