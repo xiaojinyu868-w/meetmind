@@ -6,7 +6,7 @@
  */
 
 import { chat, type ChatMessage } from './llm-service';
-import type { TranscriptSegment } from '@/lib/db';
+import type { TranscriptSegment } from '@/types';
 import type { 
   HighlightTopic, 
   HighlightSegment, 

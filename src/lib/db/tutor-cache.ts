@@ -32,26 +32,39 @@ export async function saveTutorResponseCache(
   });
 }
 
-/** 获取困惑点的 AI 家教响应缓存 */
-export async function getTutorResponseCache(anchorId: string): Promise<TutorResponseCache | undefined> {
-  return db.tutorResponseCache
+/** 获取困惑点的 AI 家教响应缓存（按用户过滤） */
+export async function getTutorResponseCache(
+  anchorId: string,
+  userId: string
+): Promise<TutorResponseCache | undefined> {
+  const cache = await db.tutorResponseCache
     .where('anchorId')
     .equals(anchorId)
     .first();
+  
+  // 验证用户权限
+  if (cache && cache.userId !== userId && cache.userId !== 'anonymous') {
+    return undefined;
+  }
+  
+  return cache;
 }
 
-/** 获取会话的所有 AI 家教响应缓存 */
-export async function getSessionTutorCaches(sessionId: string): Promise<TutorResponseCache[]> {
+/** 获取会话的所有 AI 家教响应缓存（按用户过滤） */
+export async function getSessionTutorCaches(
+  sessionId: string,
+  userId: string
+): Promise<TutorResponseCache[]> {
   return db.tutorResponseCache
-    .where('sessionId')
-    .equals(sessionId)
+    .where('[userId+sessionId]')
+    .equals([userId, sessionId])
     .sortBy('timestamp');
 }
 
 /** 更新 AI 家教响应缓存 */
 export async function updateTutorResponseCache(
   anchorId: string,
-  updates: Partial<Omit<TutorResponseCache, 'id' | 'anchorId' | 'sessionId' | 'createdAt'>>
+  updates: Partial<Omit<TutorResponseCache, 'id' | 'anchorId' | 'sessionId' | 'userId' | 'createdAt'>>
 ): Promise<number> {
   return db.tutorResponseCache
     .where('anchorId')
@@ -68,9 +81,20 @@ export async function deleteTutorResponseCache(anchorId: string): Promise<number
 }
 
 /** 删除会话的所有 AI 家教响应缓存 */
-export async function deleteSessionTutorCaches(sessionId: string): Promise<number> {
+export async function deleteSessionTutorCaches(
+  sessionId: string,
+  userId: string
+): Promise<number> {
   return db.tutorResponseCache
-    .where('sessionId')
-    .equals(sessionId)
+    .where('[userId+sessionId]')
+    .equals([userId, sessionId])
+    .delete();
+}
+
+/** 删除用户的所有 AI 家教响应缓存 */
+export async function deleteUserTutorCaches(userId: string): Promise<number> {
+  return db.tutorResponseCache
+    .where('userId')
+    .equals(userId)
     .delete();
 }

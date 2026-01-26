@@ -9,6 +9,7 @@ import Dexie, { Table } from 'dexie';
 export interface AudioSession {
   id?: number;
   sessionId: string;           // UUID
+  userId: string;              // 用户ID，用于数据隔离
   blob: Blob;                  // 音频数据
   mimeType: string;            // 'audio/webm'
   duration: number;            // 毫秒
@@ -23,6 +24,7 @@ export interface AudioSession {
 export interface Anchor {
   id?: number;
   sessionId: string;
+  userId: string;              // 用户ID，用于数据隔离
   timestamp: number;           // 毫秒
   type: 'confusion' | 'important' | 'question';
   status: 'active' | 'resolved';
@@ -36,6 +38,7 @@ export interface Anchor {
 export interface TranscriptSegment {
   id?: number;
   sessionId: string;
+  userId: string;              // 用户ID，用于数据隔离
   text: string;
   startMs: number;
   endMs: number;
@@ -55,6 +58,7 @@ export interface HighlightTopic {
   id?: number;
   topicId: string;           // UUID
   sessionId: string;
+  userId: string;            // 用户ID，用于数据隔离
   title: string;
   description?: string;
   importance: 'high' | 'medium' | 'low';
@@ -81,6 +85,7 @@ export interface ClassSummary {
   id?: number;
   summaryId: string;         // UUID
   sessionId: string;
+  userId: string;            // 用户ID，用于数据隔离
   overview: string;
   takeaways: Array<{
     label: string;
@@ -128,6 +133,7 @@ export interface TutorResponseCache {
   id?: number;
   anchorId: string;           // 困惑点ID
   sessionId: string;
+  userId: string;             // 用户ID，用于数据隔离
   timestamp: number;          // 困惑点时间戳
   response: string;           // JSON 序列化的完整响应
   chatHistory: string;        // JSON 序列化的对话历史
@@ -239,6 +245,44 @@ export class MeetMindDB extends Dexie {
       tutorResponseCache: '++id, anchorId, sessionId, timestamp, createdAt',
       conversationHistory: '++id, conversationId, userId, type, sessionId, anchorId, [userId+type], updatedAt',
       conversationMessages: '++id, messageId, conversationId, createdAt'
+    });
+    
+    // 版本 6: 添加 userId 字段索引，支持用户数据隔离
+    this.version(6).stores({
+      audioSessions: '++id, sessionId, userId, status, createdAt, [userId+status], [userId+createdAt]',
+      anchors: '++id, sessionId, userId, timestamp, status, type, [userId+sessionId]',
+      transcripts: '++id, sessionId, userId, startMs, isFinal, [userId+sessionId]',
+      preferences: 'key',
+      highlightTopics: '++id, topicId, sessionId, userId, importance, createdAt, [userId+sessionId]',
+      classSummaries: '++id, summaryId, sessionId, userId, createdAt, [userId+sessionId]',
+      notes: '++id, noteId, sessionId, studentId, source, createdAt',
+      tutorResponseCache: '++id, anchorId, sessionId, userId, timestamp, createdAt, [userId+sessionId]',
+      conversationHistory: '++id, conversationId, userId, type, sessionId, anchorId, [userId+type], updatedAt',
+      conversationMessages: '++id, messageId, conversationId, createdAt'
+    }).upgrade(tx => {
+      // 迁移现有数据：为没有 userId 的记录设置默认值 'anonymous'
+      const defaultUserId = 'anonymous';
+      
+      return Promise.all([
+        tx.table('audioSessions').toCollection().modify(record => {
+          if (!record.userId) record.userId = defaultUserId;
+        }),
+        tx.table('anchors').toCollection().modify(record => {
+          if (!record.userId) record.userId = defaultUserId;
+        }),
+        tx.table('transcripts').toCollection().modify(record => {
+          if (!record.userId) record.userId = defaultUserId;
+        }),
+        tx.table('highlightTopics').toCollection().modify(record => {
+          if (!record.userId) record.userId = defaultUserId;
+        }),
+        tx.table('classSummaries').toCollection().modify(record => {
+          if (!record.userId) record.userId = defaultUserId;
+        }),
+        tx.table('tutorResponseCache').toCollection().modify(record => {
+          if (!record.userId) record.userId = defaultUserId;
+        }),
+      ]);
     });
   }
 }

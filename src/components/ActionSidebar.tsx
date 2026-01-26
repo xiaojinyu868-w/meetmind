@@ -5,6 +5,7 @@
  * 
  * 右侧紧凑的图标条，显示：
  * - 行动清单入口（带 badge）
+ * - 课程记录入口
  * - 历史对话入口
  * 设计参考移动端菜单，保持一致性
  */
@@ -20,9 +21,15 @@ export interface ActionSidebarProps {
   isDrawerOpen: boolean;
   /** 切换抽屉 */
   onToggleDrawer: () => void;
-  /** 显示历史 */
+  /** 显示课程记录 */
+  onShowSessions?: () => void;
+  /** 课程记录是否激活 */
+  isSessionsActive?: boolean;
+  /** 课程记录数量 */
+  sessionCount?: number;
+  /** 显示历史对话 */
   onShowHistory?: () => void;
-  /** 历史是否激活 */
+  /** 历史对话是否激活 */
   isHistoryActive?: boolean;
   /** 自定义类名 */
   className?: string;
@@ -32,6 +39,9 @@ export function ActionSidebar({
   actionCount,
   isDrawerOpen,
   onToggleDrawer,
+  onShowSessions,
+  isSessionsActive = false,
+  sessionCount = 0,
   onShowHistory,
   isHistoryActive = false,
   className,
@@ -66,6 +76,31 @@ export function ActionSidebar({
           </span>
         )}
       </button>
+
+      {/* 课程记录按钮 */}
+      {onShowSessions && (
+        <button
+          onClick={onShowSessions}
+          className={cn(
+            'relative w-9 h-9 flex items-center justify-center rounded-lg transition-all',
+            isSessionsActive
+              ? 'bg-amber-100 text-amber-600'
+              : 'text-gray-500 hover:bg-amber-50 hover:text-amber-600'
+          )}
+          title="课程记录"
+        >
+          <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
+          </svg>
+          
+          {/* Badge - 显示课程数量 */}
+          {sessionCount > 0 && (
+            <span className="absolute -top-1 -right-1 min-w-[16px] h-4 px-1 flex items-center justify-center bg-amber-500 text-white text-[10px] font-medium rounded-full">
+              {sessionCount > 99 ? '99+' : sessionCount}
+            </span>
+          )}
+        </button>
+      )}
 
       {/* 历史对话按钮 */}
       {onShowHistory && (

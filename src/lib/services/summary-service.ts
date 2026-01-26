@@ -6,7 +6,7 @@
  */
 
 import { chat, type ChatMessage } from './llm-service';
-import type { TranscriptSegment } from '@/lib/db';
+import type { TranscriptSegment } from '@/types';
 import type { ClassSummary, SummaryTakeaway } from '@/types';
 import { FeatureConfig } from '@/lib/config';
 import { formatTranscriptWithTimestamps } from '@/lib/utils';

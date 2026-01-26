@@ -8,8 +8,8 @@ import { PrismaClient } from '@prisma/client';
 import { PrismaBetterSqlite3 } from '@prisma/adapter-better-sqlite3';
 import path from 'path';
 
-// SQLite 数据库文件路径
-const dbPath = path.resolve(process.cwd(), 'prisma/meetmind.db');
+// SQLite 数据库文件路径（使用 dev.db 与 prisma db push 保持一致）
+const dbPath = path.resolve(process.cwd(), 'dev.db');
 
 const globalForPrisma = globalThis as unknown as {
   prisma: PrismaClient | undefined;

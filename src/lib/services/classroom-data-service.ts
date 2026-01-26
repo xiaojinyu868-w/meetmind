@@ -671,12 +671,15 @@ export const classroomDataService = {
     memoryService.delete(sessionId);
     
     // 清除 IndexedDB 中的相关数据
+    // 注意：这里使用 'anonymous' 作为默认用户ID，因为无法获取当前用户
+    // 实际使用时应传入正确的 userId
+    const defaultUserId = 'anonymous';
     try {
       await Promise.all([
-        deleteSessionHighlightTopics(sessionId),
-        deleteSessionSummary(sessionId),
+        deleteSessionHighlightTopics(sessionId, defaultUserId),
+        deleteSessionSummary(sessionId, defaultUserId),
         deleteSessionNotes(sessionId),
-        deleteSessionTutorCaches(sessionId),
+        deleteSessionTutorCaches(sessionId, defaultUserId),
         deleteSessionConversations(sessionId),
         // 清除转录数据
         db.transcripts.where('sessionId').equals(sessionId).delete(),

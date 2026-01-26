@@ -8,7 +8,6 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useAuth } from '@/lib/hooks/useAuth';
-import type { UserRole } from '@/types/user';
 
 export default function RegisterPage() {
   const router = useRouter();
@@ -19,8 +18,6 @@ export default function RegisterPage() {
     password: '',
     confirmPassword: '',
     email: '',
-    nickname: '',
-    role: 'student' as UserRole,
   });
   const [error, setError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -64,8 +61,6 @@ export default function RegisterPage() {
         username: formData.username,
         password: formData.password,
         email: formData.email || undefined,
-        nickname: formData.nickname || undefined,
-        role: formData.role,
       });
       
       if (result.success) {
@@ -150,40 +145,8 @@ export default function RegisterPage() {
                 value={formData.email}
                 onChange={handleChange}
                 className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-rose-500/20 focus:border-rose-300 transition-all"
-                placeholder="用于找回密码"
+                placeholder="用于找回密码（选填）"
               />
-            </div>
-
-            <div>
-              <label htmlFor="nickname" className="block text-sm font-medium text-gray-700 mb-1.5">
-                昵称
-              </label>
-              <input
-                id="nickname"
-                name="nickname"
-                type="text"
-                value={formData.nickname}
-                onChange={handleChange}
-                className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-rose-500/20 focus:border-rose-300 transition-all"
-                placeholder="显示名称"
-              />
-            </div>
-
-            <div>
-              <label htmlFor="role" className="block text-sm font-medium text-gray-700 mb-1.5">
-                身份
-              </label>
-              <select
-                id="role"
-                name="role"
-                value={formData.role}
-                onChange={handleChange}
-                className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-rose-500/20 focus:border-rose-300 transition-all bg-white"
-              >
-                <option value="student">学生</option>
-                <option value="parent">家长</option>
-                <option value="teacher">教师</option>
-              </select>
             </div>
 
             <div>

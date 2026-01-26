@@ -2,15 +2,62 @@
 // 使用 useLiveQuery 实现响应式数据
 
 import { useLiveQuery } from 'dexie-react-hooks';
-import { db, AudioSession, Anchor, TranscriptSegment } from '../lib/db';
+import { db, AudioSession, deleteSession as dbDeleteSession } from '../lib/db';
+import { useAuth } from '@/lib/hooks/useAuth';
+import { useCallback } from 'react';
 
 /**
  * 获取所有音频会话（响应式）
+ * @deprecated 推荐使用 useUserSessions 获取当前用户的会话
  */
 export function useAudioSessions() {
   return useLiveQuery(
     () => db.audioSessions.orderBy('createdAt').reverse().toArray()
   ) ?? [];
+}
+
+/**
+ * 获取当前用户的音频会话（响应式，支持 userId 过滤）
+ */
+export function useUserSessions(options: {
+  status?: AudioSession['status'];
+  limit?: number;
+} = {}) {
+  const { user } = useAuth();
+  const userId = user?.id || '';
+
+  const sessions = useLiveQuery(
+    async () => {
+      if (!userId) return [];
+      
+      let query = db.audioSessions.where('userId').equals(userId);
+      
+      if (options.status) {
+        query = db.audioSessions.where('[userId+status]').equals([userId, options.status]);
+      }
+      
+      let collection = query.reverse(); // 按时间倒序
+      
+      if (options.limit) {
+        collection = collection.limit(options.limit);
+      }
+      
+      return collection.toArray();
+    },
+    [userId, options.status, options.limit]
+  ) ?? [];
+
+  const deleteSession = useCallback(async (sessionId: string): Promise<boolean> => {
+    if (!userId) return false;
+    return dbDeleteSession(sessionId, userId);
+  }, [userId]);
+
+  return {
+    sessions,
+    isLoading: sessions === undefined,
+    deleteSession,
+    userId,
+  };
 }
 
 /**
@@ -27,6 +74,7 @@ export function useAudioSession(sessionId: string | undefined) {
 
 /**
  * 获取今日会话（响应式）
+ * @deprecated 推荐使用 useUserTodaySessions 获取当前用户今日会话
  */
 export function useTodaySessions() {
   return useLiveQuery(() => {
@@ -38,6 +86,27 @@ export function useTodaySessions() {
       .reverse()
       .toArray();
   }) ?? [];
+}
+
+/**
+ * 获取当前用户今日会话（响应式）
+ */
+export function useUserTodaySessions() {
+  const { user } = useAuth();
+  const userId = user?.id || '';
+
+  return useLiveQuery(async () => {
+    if (!userId) return [];
+    
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    
+    return db.audioSessions
+      .where('[userId+createdAt]')
+      .between([userId, today], [userId, new Date()], true, true)
+      .reverse()
+      .toArray();
+  }, [userId]) ?? [];
 }
 
 /**
@@ -133,4 +202,23 @@ export function useTodayStats() {
     resolvedAnchors: 0,
     completionRate: 100
   };
+}
+
+/**
+ * 获取当前用户的存储统计
+ */
+export function useUserStorageStats() {
+  const { user } = useAuth();
+  const userId = user?.id || '';
+
+  return useLiveQuery(async () => {
+    if (!userId) return { sessions: 0, anchors: 0, transcripts: 0 };
+    
+    const [sessions, anchors, transcripts] = await Promise.all([
+      db.audioSessions.where('userId').equals(userId).count(),
+      db.anchors.where('userId').equals(userId).count(),
+      db.transcripts.where('userId').equals(userId).count()
+    ]);
+    return { sessions, anchors, transcripts };
+  }, [userId]) ?? { sessions: 0, anchors: 0, transcripts: 0 };
 }

@@ -91,6 +91,7 @@ export interface TranscriptSegment {
 export interface DBTranscriptSegment {
   id?: number;
   sessionId: string;
+  userId?: string;          // 用户ID，用于数据隔离
   text: string;
   startMs: number;
   endMs: number;

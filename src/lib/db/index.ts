@@ -38,8 +38,12 @@ export {
   saveAudioSession,
   updateSessionStatus,
   getTodaySessions,
+  getUserSessions,
+  getSession,
   cleanOldData,
   getStorageUsage,
+  deleteSession,
+  deleteUserSessions,
 } from './sessions';
 
 // Anchors
@@ -47,18 +51,23 @@ export {
   addAnchor,
   resolveAnchor,
   getSessionAnchors,
+  getUserAnchors,
+  deleteSessionAnchors,
 } from './anchors';
 
 // Transcripts
 export {
   addTranscript,
+  addTranscripts,
   getSessionTranscripts,
+  deleteSessionTranscripts,
 } from './transcripts';
 
 // Highlights
 export {
   saveHighlightTopics,
   getSessionHighlightTopics,
+  getUserHighlightTopics,
   deleteSessionHighlightTopics,
   updateHighlightTopic,
 } from './highlights';
@@ -67,6 +76,7 @@ export {
 export {
   saveClassSummary,
   getSessionSummary,
+  getUserSummaries,
   deleteSessionSummary,
   updateClassSummary,
 } from './summaries';
@@ -109,6 +119,7 @@ export {
   updateTutorResponseCache,
   deleteTutorResponseCache,
   deleteSessionTutorCaches,
+  deleteUserTutorCaches,
 } from './tutor-cache';
 
 // Preferences

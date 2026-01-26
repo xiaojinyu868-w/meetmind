@@ -303,7 +303,8 @@ export function AITutor({ breakpoint, segments, isLoading: externalLoading, onRe
     const loadFromCache = async () => {
       setIsRestoring(true);
       try {
-        const cached = await getTutorResponseCache(breakpoint.id);
+        const userId = getEffectiveUserId();
+        const cached = await getTutorResponseCache(breakpoint.id, userId);
         if (cached) {
           const cachedResponse = JSON.parse(cached.response) as TutorAPIResponse;
           const cachedHistory = JSON.parse(cached.chatHistory) as Array<{ role: 'user' | 'assistant'; content: string }>;
@@ -366,9 +367,11 @@ export function AITutor({ breakpoint, segments, isLoading: externalLoading, onRe
     
     try {
       // 保存到 TutorResponseCache（原有缓存）
+      const userId = getEffectiveUserId();
       await saveTutorResponseCache({
         anchorId: breakpoint.id,
         sessionId,
+        userId,
         timestamp: breakpoint.timestamp,
         response: JSON.stringify(resp),
         chatHistory: JSON.stringify(history),

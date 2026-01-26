@@ -9,6 +9,7 @@ import type { TranscriptSegment, ClassTimeline } from '@/types';
 import { dbToTranscriptSegment } from '@/types';
 import { memoryService } from '@/lib/services/memory-service';
 import { db } from '@/lib/db';
+import { useAuth } from '@/lib/hooks/useAuth';
 
 interface UseTranscriptOptions {
   sessionId: string;
@@ -31,6 +32,8 @@ interface UseTranscriptReturn {
 
 export function useTranscript(options: UseTranscriptOptions): UseTranscriptReturn {
   const { sessionId } = options;
+  const { user } = useAuth();
+  const userId = user?.id || 'anonymous';
   
   const [segments, setSegments] = useState<TranscriptSegment[]>([]);
   const [dataSource, setDataSource] = useState<'live' | 'demo'>('live');
@@ -76,6 +79,7 @@ export function useTranscript(options: UseTranscriptOptions): UseTranscriptRetur
     await db.transcripts.bulkPut(
       currentSegments.map(seg => ({
         sessionId,
+        userId,
         text: seg.text,
         startMs: seg.startMs,
         endMs: seg.endMs,
@@ -84,7 +88,7 @@ export function useTranscript(options: UseTranscriptOptions): UseTranscriptRetur
         isFinal: seg.isFinal ?? true,
       }))
     );
-  }, [sessionId, segments]);
+  }, [sessionId, userId, segments]);
 
   // 从 IndexedDB 加载转录
   const loadTranscript = useCallback(async (): Promise<TranscriptSegment[]> => {

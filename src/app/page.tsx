@@ -50,9 +50,11 @@ const AudioUploader = dynamic(() => import('@/components/AudioUploader').then(m 
 const AnchorDetailPanel = dynamic(() => import('@/components/AnchorDetailPanel').then(m => ({ default: m.AnchorDetailPanel })));
 const ConversationList = dynamic(() => import('@/components/ConversationHistory').then(m => ({ default: m.ConversationList })));
 const AIChat = dynamic(() => import('@/components/AIChat').then(m => ({ default: m.AIChat })), { ssr: false });
+const SessionHistoryPanel = dynamic(() => import('@/components/SessionHistory').then(m => ({ default: m.SessionHistoryPanel })), { ssr: false });
 
 import type { ConfusionMarker } from '@/components/mobile/PodcastPlayer';
 import type { ConversationHistory } from '@/types/conversation';
+import type { AudioSession } from '@/lib/db';
 
 // 演示数据延迟加载
 let DEMO_DATA_CACHE: { DEMO_SEGMENTS: TranscriptSegment[]; DEMO_ANCHORS: Anchor[]; DEMO_AUDIO_URL: string } | null = null;
@@ -150,6 +152,9 @@ export default function StudentApp() {
   // 历史对话相关状态
   const [showConversationHistory, setShowConversationHistory] = useState(false);
   const [selectedHistoryConversation, setSelectedHistoryConversation] = useState<ConversationHistory | null>(null);
+  
+  // 课程记录面板状态
+  const [showSessionHistory, setShowSessionHistory] = useState(false);
   
   // 行动清单抽屉状态
   const [isActionDrawerOpen, setIsActionDrawerOpen] = useState(false);
@@ -983,6 +988,19 @@ export default function StudentApp() {
           ) : (
             /* 桌面端录音页面 - 教育风格 */
             <div className="flex-1 flex items-center justify-center p-8 page-enter relative overflow-hidden" style={{ background: 'var(--edu-bg-primary)' }}>
+              {/* 课程记录入口按钮 */}
+              <button
+                onClick={() => setShowSessionHistory(true)}
+                className="absolute top-4 right-4 z-20 flex items-center gap-2 px-4 py-2.5 bg-white rounded-xl shadow-md hover:shadow-lg transition-all group border"
+                style={{ borderColor: 'var(--edu-border-light)' }}
+                title="查看历史课程记录"
+              >
+                <svg className="w-5 h-5 text-amber-500 group-hover:scale-110 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+                </svg>
+                <span className="text-sm font-medium text-gray-700">课程记录</span>
+              </button>
+
               {/* 背景装饰 */}
               <div className="absolute top-10 right-10 w-48 h-48 opacity-20 pointer-events-none">
                 <img src="/illustrations/learning.svg" alt="" className="w-full h-full" />
@@ -1870,6 +1888,29 @@ export default function StudentApp() {
           )}
         </>
       )}
+
+      {/* 课程记录面板 - Manus 风格 */}
+      <SessionHistoryPanel
+        isOpen={showSessionHistory}
+        onClose={() => setShowSessionHistory(false)}
+        onSelectSession={(session: AudioSession) => {
+          // 切换到选中的会话进行复习
+          setSessionId(session.sessionId);
+          setViewMode('review');
+          
+          // 加载该会话的音频
+          if (session.blob) {
+            const url = URL.createObjectURL(session.blob);
+            setAudioUrl(url);
+            setAudioBlob(session.blob);
+          }
+        }}
+        onNewRecording={() => {
+          setShowSessionHistory(false);
+          handleViewModeChange('record');
+        }}
+        currentSessionId={sessionId}
+      />
     </div>
   );
 }

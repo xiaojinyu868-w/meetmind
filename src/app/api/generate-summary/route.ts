@@ -76,7 +76,7 @@ export async function POST(request: NextRequest): Promise<NextResponse<GenerateS
     
     // 转换转录格式
     const segments = body.transcript.map((seg, index) => ({
-      id: seg.id ? parseInt(seg.id) : index,
+      id: seg.id ? String(seg.id) : String(index),
       sessionId: body.sessionId,
       text: seg.text,
       startMs: seg.startMs,
