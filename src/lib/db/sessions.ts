@@ -76,3 +76,33 @@ export async function getStorageUsage(): Promise<{ sessions: number; anchors: nu
   ]);
   return { sessions, anchors, transcripts };
 }
+
+/** 获取所有会话列表（按创建时间倒序） */
+export async function getAllSessions(): Promise<AudioSession[]> {
+  return db.audioSessions
+    .orderBy('createdAt')
+    .reverse()
+    .toArray();
+}
+
+/** 根据 sessionId 获取单个会话 */
+export async function getSessionById(sessionId: string): Promise<AudioSession | undefined> {
+  return db.audioSessions
+    .where('sessionId')
+    .equals(sessionId)
+    .first();
+}
+
+/** 删除会话及其关联数据 */
+export async function deleteSession(sessionId: string): Promise<void> {
+  await Promise.all([
+    db.transcripts.where('sessionId').equals(sessionId).delete(),
+    db.anchors.where('sessionId').equals(sessionId).delete(),
+    db.highlightTopics.where('sessionId').equals(sessionId).delete(),
+    db.classSummaries.where('sessionId').equals(sessionId).delete(),
+    db.notes.where('sessionId').equals(sessionId).delete(),
+    db.tutorResponseCache.where('sessionId').equals(sessionId).delete(),
+    db.conversationHistory.where('sessionId').equals(sessionId).delete(),
+  ]);
+  await db.audioSessions.where('sessionId').equals(sessionId).delete();
+}

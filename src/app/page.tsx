@@ -7,7 +7,7 @@ import { ServiceStatus, DegradedModeBanner } from '@/components/ServiceStatus';
 import { anchorService, type Anchor } from '@/lib/services/anchor-service';
 import { memoryService, type ClassTimeline } from '@/lib/services/memory-service';
 import { checkServices, type ServiceStatus as ServiceStatusType } from '@/lib/services/health-check';
-import { getPreference, setPreference, db, generateSessionId } from '@/lib/db';
+import { getPreference, setPreference, db, generateSessionId, saveAudioSession } from '@/lib/db';
 import { useAuth } from '@/lib/hooks/useAuth';
 import { classroomDataService, type StudentAnchor } from '@/lib/services/classroom-data-service';
 import type { TranscriptSegment, HighlightTopic, ClassSummary, Note, TopicGenerationMode, NoteSource, NoteMetadata } from '@/types';
@@ -50,9 +50,11 @@ const AudioUploader = dynamic(() => import('@/components/AudioUploader').then(m 
 const AnchorDetailPanel = dynamic(() => import('@/components/AnchorDetailPanel').then(m => ({ default: m.AnchorDetailPanel })));
 const ConversationList = dynamic(() => import('@/components/ConversationHistory').then(m => ({ default: m.ConversationList })));
 const AIChat = dynamic(() => import('@/components/AIChat').then(m => ({ default: m.AIChat })), { ssr: false });
+const SessionHistoryList = dynamic(() => import('@/components/SessionHistoryList').then(m => ({ default: m.SessionHistoryList })));
 
 import type { ConfusionMarker } from '@/components/mobile/PodcastPlayer';
 import type { ConversationHistory } from '@/types/conversation';
+import type { AudioSession } from '@/lib/db';
 
 // 演示数据延迟加载
 let DEMO_DATA_CACHE: { DEMO_SEGMENTS: TranscriptSegment[]; DEMO_ANCHORS: Anchor[]; DEMO_AUDIO_URL: string } | null = null;
@@ -150,6 +152,9 @@ export default function StudentApp() {
   // 历史对话相关状态
   const [showConversationHistory, setShowConversationHistory] = useState(false);
   const [selectedHistoryConversation, setSelectedHistoryConversation] = useState<ConversationHistory | null>(null);
+  
+  // 录音历史相关状态
+  const [showSessionHistory, setShowSessionHistory] = useState(false);
   
   // 行动清单抽屉状态
   const [isActionDrawerOpen, setIsActionDrawerOpen] = useState(false);
@@ -393,6 +398,28 @@ export default function StudentApp() {
       duration,
     });
     
+    // 保存音频和转录到 IndexedDB 历史记录
+    if (blob && hasLiveData) {
+      // 保存音频
+      saveAudioSession(blob, sessionId, {
+        subject: UIConfig.defaultSubject,
+        topic: UIConfig.defaultLessonTitle,
+        duration,
+      }).catch(err => console.error('保存录音到历史失败:', err));
+      
+      // 保存转录到 IndexedDB（供历史记录加载）
+      db.transcripts.bulkAdd(
+        finalSegments.map((seg) => ({
+          sessionId: sessionId,
+          text: seg.text,
+          startMs: seg.startMs,
+          endMs: seg.endMs,
+          confidence: seg.confidence || 1.0,
+          isFinal: true,
+        }))
+      ).catch(err => console.error('保存转录到 IndexedDB 失败:', err));
+    }
+    
     const tl = memoryService.buildTimeline(
       sessionId,
       finalSegments,
@@ -411,6 +438,7 @@ export default function StudentApp() {
     // 切换模式时清理历史对话面板状态
     setShowConversationHistory(false);
     setSelectedHistoryConversation(null);
+    setShowSessionHistory(false);
     
     // 切换到复习模式时，如果没有数据则加载 demo
     if (newMode === 'review' && segments.length === 0) {
@@ -441,6 +469,90 @@ export default function StudentApp() {
       }
     }
   }, [segments.length, sessionId]);
+
+  // 从历史记录加载会话并进入复习模式
+  const handleLoadHistorySession = useCallback(async (session: AudioSession) => {
+    try {
+      // 清除旧会话状态
+      setSessionId(session.sessionId);
+      setAnchors([]);
+      setSelectedAnchor(null);
+      clearTopics();
+      clearSummary();
+      setNotes([]);
+      setActionItems([]);
+      liveSegmentsRef.current = [];
+      setShowSessionHistory(false);
+      
+      // 从 IndexedDB 加载转录数据
+      const transcripts = await db.transcripts
+        .where('sessionId')
+        .equals(session.sessionId)
+        .toArray();
+      
+      // 按时间排序
+      const sortedTranscripts = transcripts.sort((a, b) => a.startMs - b.startMs);
+      const loadedSegments: TranscriptSegment[] = sortedTranscripts.map(t => ({
+        text: t.text,
+        startMs: t.startMs,
+        endMs: t.endMs,
+        confidence: t.confidence,
+        isFinal: t.isFinal,
+      }));
+      
+      setSegments(loadedSegments);
+      
+      // 从 IndexedDB 加载困惑点
+      const loadedAnchors = await db.anchors
+        .where('sessionId')
+        .equals(session.sessionId)
+        .toArray();
+      
+      // 转换为 Anchor 类型
+      const anchorsWithResolved = loadedAnchors.map(a => ({
+        id: a.id?.toString() || '',
+        sessionId: a.sessionId,
+        studentId: '',
+        timestamp: a.timestamp,
+        type: a.type,
+        resolved: a.status === 'resolved',
+        note: a.note,
+        aiExplanation: a.aiExplanation,
+        createdAt: a.createdAt.toISOString(),
+      }));
+      setAnchors(anchorsWithResolved);
+      
+      // 创建音频 URL
+      if (session.blob) {
+        const url = URL.createObjectURL(session.blob);
+        setAudioUrl(url);
+        setAudioBlob(session.blob);
+      }
+      
+      setDataSource('live');
+      
+      // 构建时间轴
+      const tl = memoryService.buildTimeline(
+        session.sessionId,
+        loadedSegments,
+        anchorsWithResolved,
+        { 
+          subject: session.subject || UIConfig.defaultSubject, 
+          teacher: UIConfig.defaultTeacher || 'Teacher', 
+          date: new Date(session.createdAt).toISOString().split('T')[0] 
+        }
+      );
+      setTimeline(tl);
+      
+      // 切换到复习模式
+      setViewMode('review');
+      
+      console.log(`已加载历史会话: ${session.sessionId}, 转录: ${loadedSegments.length} 条, 困惑点: ${anchorsWithResolved.length} 个`);
+    } catch (err) {
+      console.error('加载历史会话失败:', err);
+      alert('加载历史会话失败，请重试');
+    }
+  }, [clearTopics, clearSummary]);
 
   const handleTranscriptUpdate = useCallback((newSegments: TranscriptSegment[]) => {
     liveSegmentsRef.current = newSegments;
@@ -834,9 +946,9 @@ export default function StudentApp() {
                     <span className="text-xs text-gray-500">选择输入方式：</span>
                     <div className="flex items-center gap-1 p-0.5 bg-gray-100 rounded-xl">
                       <button
-                        onClick={() => setDataSource('live')}
+                        onClick={() => { setDataSource('live'); setShowSessionHistory(false); }}
                         className={`px-3 py-1.5 text-xs rounded-lg transition-all ${
-                          dataSource === 'live'
+                          dataSource === 'live' && !showSessionHistory
                             ? 'bg-white text-gray-900 font-medium shadow-sm'
                             : 'text-gray-500 hover:text-gray-700'
                         }`}
@@ -844,25 +956,45 @@ export default function StudentApp() {
                         🎙️ 实时录音
                       </button>
                       <button
-                        onClick={() => setDataSource('demo')}
+                        onClick={() => { setDataSource('demo'); setShowSessionHistory(false); }}
                         className={`px-3 py-1.5 text-xs rounded-lg transition-all ${
-                          dataSource === 'demo'
+                          dataSource === 'demo' && !showSessionHistory
                             ? 'bg-white text-gray-900 font-medium shadow-sm'
                             : 'text-gray-500 hover:text-gray-700'
                         }`}
                       >
                         📁 上传音频
                       </button>
+                      <button
+                        onClick={() => setShowSessionHistory(true)}
+                        className={`px-3 py-1.5 text-xs rounded-lg transition-all ${
+                          showSessionHistory
+                            ? 'bg-white text-gray-900 font-medium shadow-sm'
+                            : 'text-gray-500 hover:text-gray-700'
+                        }`}
+                      >
+                        📋 历史
+                      </button>
                     </div>
                   </div>
 
-                  {dataSource === 'live' ? (
+                  {dataSource === 'live' && !showSessionHistory ? (
                     <Recorder
                       onRecordingStart={handleRecordingStart}
                       onRecordingStop={handleRecordingStop}
                       onTranscriptUpdate={handleTranscriptUpdate}
                       onAnchorMark={handleAnchorMark}
                     />
+                  ) : showSessionHistory ? (
+                    <div className="card-edu p-0 overflow-hidden" style={{ maxHeight: '400px' }}>
+                      <SessionHistoryList
+                        onSessionSelect={handleLoadHistorySession}
+                        onClose={() => setShowSessionHistory(false)}
+                        activeSessionId={sessionId}
+                        maxHeight="400px"
+                        showHeader={false}
+                      />
+                    </div>
                   ) : (
                     <div className="card-edu p-4">
                       <h3 className="text-base font-semibold text-gray-900 mb-3 flex items-center gap-2">
@@ -913,6 +1045,15 @@ export default function StudentApp() {
                             duration,
                             createdBy: studentId,
                           });
+                          
+                          // 保存上传的音频到 IndexedDB 历史记录
+                          if (blob) {
+                            saveAudioSession(blob, newSessionId, {
+                              subject: UIConfig.defaultSubject,
+                              topic: UIConfig.defaultLessonTitle,
+                              duration,
+                            }).catch(err => console.error('保存上传音频到历史失败:', err));
+                          }
                           
                           const tl = memoryService.buildTimeline(
                             newSessionId,
@@ -970,9 +1111,7 @@ export default function StudentApp() {
               <DedaoMenu
                 isOpen={isMenuOpen}
                 onClose={() => setIsMenuOpen(false)}
-                onNavigate={(page) => {
-                  setMobileSubPage(page);
-                }}
+                onNavigate={(page) => setMobileSubPage(page)}
                 badges={{
                   highlights: highlightTopics.length,
                   notes: notes.length,
@@ -997,9 +1136,9 @@ export default function StudentApp() {
                   <span className="text-sm text-gray-500">选择输入方式：</span>
               <div className="flex items-center gap-2 p-1 rounded-xl" style={{ background: 'var(--edu-bg-soft)' }}>
                 <button
-                  onClick={() => setDataSource('live')}
+                  onClick={() => { setDataSource('live'); setShowSessionHistory(false); }}
                   className={`px-4 py-2 text-sm rounded-lg transition-all ${
-                    dataSource === 'live'
+                    dataSource === 'live' && !showSessionHistory
                       ? 'bg-white text-navy font-medium shadow-sm'
                       : 'text-gray-500 hover:text-navy'
                   }`}
@@ -1007,19 +1146,29 @@ export default function StudentApp() {
                   🎙️ 实时录音
                 </button>
                 <button
-                  onClick={() => setDataSource('demo')}
+                  onClick={() => { setDataSource('demo'); setShowSessionHistory(false); }}
                   className={`px-4 py-2 text-sm rounded-lg transition-all ${
-                    dataSource === 'demo'
+                    dataSource === 'demo' && !showSessionHistory
                       ? 'bg-white text-navy font-medium shadow-sm'
                       : 'text-gray-500 hover:text-navy'
                   }`}
                 >
                   📁 上传音频
                 </button>
+                <button
+                  onClick={() => setShowSessionHistory(true)}
+                  className={`px-4 py-2 text-sm rounded-lg transition-all ${
+                    showSessionHistory
+                      ? 'bg-white text-navy font-medium shadow-sm'
+                      : 'text-gray-500 hover:text-navy'
+                  }`}
+                >
+                  📋 录音历史
+                </button>
               </div>
             </div>
 
-            {dataSource === 'live' ? (
+            {dataSource === 'live' && !showSessionHistory ? (
               <div className="relative">
                 {/* 装饰插画 */}
                 <div className="absolute -right-20 -top-10 w-24 h-24 opacity-30 pointer-events-none hidden lg:block">
@@ -1030,6 +1179,16 @@ export default function StudentApp() {
                   onRecordingStop={handleRecordingStop}
                   onTranscriptUpdate={handleTranscriptUpdate}
                   onAnchorMark={handleAnchorMark}
+                />
+              </div>
+            ) : showSessionHistory ? (
+              <div className="card-edu p-0 overflow-hidden" style={{ maxHeight: '500px' }}>
+                <SessionHistoryList
+                  onSessionSelect={handleLoadHistorySession}
+                  onClose={() => setShowSessionHistory(false)}
+                  activeSessionId={sessionId}
+                  maxHeight="500px"
+                  showHeader={false}
                 />
               </div>
             ) : (
@@ -1086,6 +1245,15 @@ export default function StudentApp() {
                       duration,
                       createdBy: studentId,
                     });
+                    
+                    // 保存上传的音频到 IndexedDB 历史记录
+                    if (blob) {
+                      saveAudioSession(blob, newSessionId, {
+                        subject: UIConfig.defaultSubject,
+                        topic: UIConfig.defaultLessonTitle,
+                        duration,
+                      }).catch(err => console.error('保存上传音频到历史失败:', err));
+                    }
                     
                     // 构建时间轴
                     const tl = memoryService.buildTimeline(
@@ -1857,9 +2025,7 @@ export default function StudentApp() {
               <DedaoMenu
                 isOpen={isMenuOpen}
                 onClose={() => setIsMenuOpen(false)}
-                onNavigate={(page) => {
-                  setMobileSubPage(page);
-                }}
+                onNavigate={(page) => setMobileSubPage(page)}
                 badges={{
                   highlights: highlightTopics.length,
                   notes: notes.length,

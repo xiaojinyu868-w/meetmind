@@ -40,6 +40,9 @@ export {
   getTodaySessions,
   cleanOldData,
   getStorageUsage,
+  getAllSessions,
+  getSessionById,
+  deleteSession,
 } from './sessions';
 
 // Anchors
