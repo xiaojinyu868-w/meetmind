@@ -7,7 +7,7 @@ import { ServiceStatus, DegradedModeBanner } from '@/components/ServiceStatus';
 import { anchorService, type Anchor } from '@/lib/services/anchor-service';
 import { memoryService, type ClassTimeline } from '@/lib/services/memory-service';
 import { checkServices, type ServiceStatus as ServiceStatusType } from '@/lib/services/health-check';
-import { getPreference, setPreference, db, generateSessionId, saveAudioSession } from '@/lib/db';
+import { getPreference, setPreference, db, generateSessionId, saveAudioSession, addTranscripts, ANONYMOUS_USER_ID } from '@/lib/db';
 import { useAuth } from '@/lib/hooks/useAuth';
 import { classroomDataService, type StudentAnchor } from '@/lib/services/classroom-data-service';
 import type { TranscriptSegment, HighlightTopic, ClassSummary, Note, TopicGenerationMode, NoteSource, NoteMetadata } from '@/types';
@@ -312,6 +312,7 @@ export default function StudentApp() {
             db.transcripts.bulkAdd(
               demoData.DEMO_SEGMENTS.map(seg => ({
                 sessionId: sessionId,
+                userId: ANONYMOUS_USER_ID, // demo 数据使用匿名用户
                 text: seg.text,
                 startMs: seg.startMs,
                 endMs: seg.endMs,
@@ -400,24 +401,23 @@ export default function StudentApp() {
     
     // 保存音频和转录到 IndexedDB 历史记录
     if (blob && hasLiveData) {
+      const currentUserId = user?.id || ANONYMOUS_USER_ID;
+      
       // 保存音频
-      saveAudioSession(blob, sessionId, {
+      saveAudioSession(blob, sessionId, currentUserId, {
         subject: UIConfig.defaultSubject,
         topic: UIConfig.defaultLessonTitle,
         duration,
       }).catch(err => console.error('保存录音到历史失败:', err));
       
       // 保存转录到 IndexedDB（供历史记录加载）
-      db.transcripts.bulkAdd(
-        finalSegments.map((seg) => ({
-          sessionId: sessionId,
-          text: seg.text,
-          startMs: seg.startMs,
-          endMs: seg.endMs,
-          confidence: seg.confidence || 1.0,
-          isFinal: true,
-        }))
-      ).catch(err => console.error('保存转录到 IndexedDB 失败:', err));
+      addTranscripts(sessionId, currentUserId, finalSegments.map((seg) => ({
+        text: seg.text,
+        startMs: seg.startMs,
+        endMs: seg.endMs,
+        confidence: seg.confidence || 1.0,
+        isFinal: true,
+      }))).catch(err => console.error('保存转录到 IndexedDB 失败:', err));
     }
     
     const tl = memoryService.buildTimeline(
@@ -429,7 +429,7 @@ export default function StudentApp() {
     setTimeline(tl);
     memoryService.save(tl);
     setViewMode('review');
-  }, [sessionId, anchors, segments]);
+  }, [sessionId, anchors, segments, user]);
 
   // 处理 viewMode 切换，同时清理历史对话相关状态
   // 如果切换到复习模式且没有数据，自动加载 demo 数据
@@ -988,6 +988,7 @@ export default function StudentApp() {
                   ) : showSessionHistory ? (
                     <div className="card-edu p-0 overflow-hidden" style={{ maxHeight: '400px' }}>
                       <SessionHistoryList
+                        userId={user?.id}
                         onSessionSelect={handleLoadHistorySession}
                         onClose={() => setShowSessionHistory(false)}
                         activeSessionId={sessionId}
@@ -1019,9 +1020,11 @@ export default function StudentApp() {
                           liveSegmentsRef.current = [];
                           
                           try {
+                            const currentUserId = user?.id || ANONYMOUS_USER_ID;
                             await db.transcripts.bulkAdd(
                               newSegments.map((seg) => ({
                                 sessionId: newSessionId,
+                                userId: currentUserId,
                                 text: seg.text,
                                 startMs: seg.startMs,
                                 endMs: seg.endMs,
@@ -1048,7 +1051,8 @@ export default function StudentApp() {
                           
                           // 保存上传的音频到 IndexedDB 历史记录
                           if (blob) {
-                            saveAudioSession(blob, newSessionId, {
+                            const currentUserId = user?.id || ANONYMOUS_USER_ID;
+                            saveAudioSession(blob, newSessionId, currentUserId, {
                               subject: UIConfig.defaultSubject,
                               topic: UIConfig.defaultLessonTitle,
                               duration,
@@ -1184,6 +1188,7 @@ export default function StudentApp() {
             ) : showSessionHistory ? (
               <div className="card-edu p-0 overflow-hidden" style={{ maxHeight: '500px' }}>
                 <SessionHistoryList
+                  userId={user?.id}
                   onSessionSelect={handleLoadHistorySession}
                   onClose={() => setShowSessionHistory(false)}
                   activeSessionId={sessionId}
@@ -1217,9 +1222,11 @@ export default function StudentApp() {
                     
                     // 将转录数据保存到 IndexedDB（供教师端读取）
                     try {
+                      const currentUserId = user?.id || ANONYMOUS_USER_ID;
                       await db.transcripts.bulkAdd(
                         newSegments.map((seg, idx) => ({
                           sessionId: newSessionId,
+                          userId: currentUserId,
                           text: seg.text,
                           startMs: seg.startMs,
                           endMs: seg.endMs,
@@ -1248,7 +1255,8 @@ export default function StudentApp() {
                     
                     // 保存上传的音频到 IndexedDB 历史记录
                     if (blob) {
-                      saveAudioSession(blob, newSessionId, {
+                      const currentUserId = user?.id || ANONYMOUS_USER_ID;
+                      saveAudioSession(blob, newSessionId, currentUserId, {
                         subject: UIConfig.defaultSubject,
                         topic: UIConfig.defaultLessonTitle,
                         duration,

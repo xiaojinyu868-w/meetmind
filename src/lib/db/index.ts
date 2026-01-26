@@ -35,6 +35,7 @@ export {
 
 // Sessions
 export {
+  ANONYMOUS_USER_ID,
   saveAudioSession,
   updateSessionStatus,
   getTodaySessions,
@@ -55,6 +56,7 @@ export {
 // Transcripts
 export {
   addTranscript,
+  addTranscripts,
   getSessionTranscripts,
 } from './transcripts';
 

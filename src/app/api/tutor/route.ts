@@ -162,7 +162,7 @@ export async function POST(request: NextRequest) {
         const difyInput: DifyWorkflowInput = {
           timestamp,
           context: contextText,
-          subject: '数学', // TODO: 从请求中获取
+          // 不传学科，让 AI 自动从上下文推断
           enable_guidance,
           enable_web,
           selected_option_id,

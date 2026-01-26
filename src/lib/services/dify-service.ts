@@ -114,7 +114,8 @@ export class DifyService {
       inputs: {
         timestamp: input.timestamp.toString(),
         context: input.context,
-        subject: input.subject || '数学',
+        // subject 已移除硬编码默认值，AI 会自动从 context 推断学科
+        subject: input.subject || '',
         enable_guidance: input.enable_guidance ? 'true' : 'false',
         enable_web: input.enable_web ? 'true' : 'false',
         selected_option_id: input.selected_option_id || '',
@@ -166,7 +167,8 @@ export class DifyService {
       inputs: {
         timestamp: input.timestamp.toString(),
         context: input.context,
-        subject: input.subject || '数学',
+        // subject 已移除硬编码默认值，AI 会自动从 context 推断学科
+        subject: input.subject || '',
         enable_guidance: input.enable_guidance ? 'true' : 'false',
         enable_web: input.enable_web ? 'true' : 'false',
         selected_option_id: input.selected_option_id || '',

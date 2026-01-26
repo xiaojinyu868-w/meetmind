@@ -2,16 +2,18 @@
 
 /**
  * 会话历史列表组件
- * 展示所有录音/上传的历史会话，支持选择进入复习模式
+ * 展示当前用户的录音/上传历史会话，支持选择进入复习模式
  */
 
 import { useState, useEffect, useCallback } from 'react';
 import { formatDistanceToNow } from 'date-fns';
 import { zhCN } from 'date-fns/locale';
-import { getAllSessions, deleteSession, type AudioSession } from '@/lib/db';
+import { getAllSessions, deleteSession, ANONYMOUS_USER_ID, type AudioSession } from '@/lib/db';
 import { cn } from '@/lib/utils';
 
 interface SessionHistoryListProps {
+  /** 当前用户ID（未登录时为 undefined） */
+  userId?: string;
   /** 选择会话回调 */
   onSessionSelect: (session: AudioSession) => void;
   /** 关闭面板回调 */
@@ -134,6 +136,7 @@ function SessionItem({
 }
 
 export function SessionHistoryList({
+  userId,
   onSessionSelect,
   onClose,
   activeSessionId,
@@ -145,12 +148,13 @@ export function SessionHistoryList({
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // 加载会话列表
+  // 加载会话列表（按用户过滤）
   const loadSessions = useCallback(async () => {
     setIsLoading(true);
     setError(null);
     try {
-      const data = await getAllSessions();
+      const currentUserId = userId || ANONYMOUS_USER_ID;
+      const data = await getAllSessions(currentUserId);
       setSessions(data);
     } catch (err) {
       console.error('加载会话历史失败:', err);
@@ -158,7 +162,7 @@ export function SessionHistoryList({
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [userId]);
 
   useEffect(() => {
     loadSessions();

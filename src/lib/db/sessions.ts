@@ -5,14 +5,19 @@
 
 import { db, type AudioSession } from './schema';
 
+/** 默认用户ID（未登录时使用） */
+export const ANONYMOUS_USER_ID = 'anonymous';
+
 /** 保存音频会话 */
 export async function saveAudioSession(
   blob: Blob,
   sessionId: string,
+  userId: string,
   options: { subject?: string; topic?: string; duration?: number } = {}
 ): Promise<number> {
   return db.audioSessions.add({
     sessionId,
+    userId: userId || ANONYMOUS_USER_ID,
     blob,
     mimeType: blob.type || 'audio/webm',
     duration: options.duration ?? 0,
@@ -35,14 +40,15 @@ export async function updateSessionStatus(
     .modify({ status, updatedAt: new Date() });
 }
 
-/** 获取今日会话 */
-export async function getTodaySessions(): Promise<AudioSession[]> {
+/** 获取今日会话（按用户） */
+export async function getTodaySessions(userId: string): Promise<AudioSession[]> {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
   
   return db.audioSessions
-    .where('createdAt')
-    .aboveOrEqual(today)
+    .where('userId')
+    .equals(userId || ANONYMOUS_USER_ID)
+    .and(session => session.createdAt >= today)
     .toArray();
 }
 
@@ -77,12 +83,13 @@ export async function getStorageUsage(): Promise<{ sessions: number; anchors: nu
   return { sessions, anchors, transcripts };
 }
 
-/** 获取所有会话列表（按创建时间倒序） */
-export async function getAllSessions(): Promise<AudioSession[]> {
+/** 获取所有会话列表（按创建时间倒序，按用户过滤） */
+export async function getAllSessions(userId: string): Promise<AudioSession[]> {
   return db.audioSessions
-    .orderBy('createdAt')
+    .where('userId')
+    .equals(userId || ANONYMOUS_USER_ID)
     .reverse()
-    .toArray();
+    .sortBy('createdAt');
 }
 
 /** 根据 sessionId 获取单个会话 */

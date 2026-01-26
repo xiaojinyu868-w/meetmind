@@ -9,6 +9,7 @@ import Dexie, { Table } from 'dexie';
 export interface AudioSession {
   id?: number;
   sessionId: string;           // UUID
+  userId: string;              // 用户ID，用于数据隔离
   blob: Blob;                  // 音频数据
   mimeType: string;            // 'audio/webm'
   duration: number;            // 毫秒
@@ -36,6 +37,7 @@ export interface Anchor {
 export interface TranscriptSegment {
   id?: number;
   sessionId: string;
+  userId: string;              // 用户ID，用于数据隔离
   text: string;
   startMs: number;
   endMs: number;
@@ -239,6 +241,34 @@ export class MeetMindDB extends Dexie {
       tutorResponseCache: '++id, anchorId, sessionId, timestamp, createdAt',
       conversationHistory: '++id, conversationId, userId, type, sessionId, anchorId, [userId+type], updatedAt',
       conversationMessages: '++id, messageId, conversationId, createdAt'
+    });
+    
+    // 版本 6: audioSessions 和 transcripts 增加 userId 字段支持用户数据隔离
+    this.version(6).stores({
+      audioSessions: '++id, sessionId, userId, status, createdAt, [userId+createdAt]',
+      anchors: '++id, sessionId, timestamp, status, type',
+      transcripts: '++id, sessionId, userId, startMs, isFinal',
+      preferences: 'key',
+      highlightTopics: '++id, topicId, sessionId, importance, createdAt',
+      classSummaries: '++id, summaryId, sessionId, createdAt',
+      notes: '++id, noteId, sessionId, studentId, source, createdAt',
+      tutorResponseCache: '++id, anchorId, sessionId, timestamp, createdAt',
+      conversationHistory: '++id, conversationId, userId, type, sessionId, anchorId, [userId+type], updatedAt',
+      conversationMessages: '++id, messageId, conversationId, createdAt'
+    }).upgrade(tx => {
+      // 迁移旧数据：为没有 userId 的记录设置默认值 'anonymous'
+      return Promise.all([
+        tx.table('audioSessions').toCollection().modify(session => {
+          if (!session.userId) {
+            session.userId = 'anonymous';
+          }
+        }),
+        tx.table('transcripts').toCollection().modify(transcript => {
+          if (!transcript.userId) {
+            transcript.userId = 'anonymous';
+          }
+        })
+      ]);
     });
   }
 }
