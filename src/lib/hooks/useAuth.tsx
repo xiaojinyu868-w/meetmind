@@ -19,8 +19,16 @@ interface AuthState {
   accessToken: string | null;
 }
 
+interface LoginWithCodeRequest {
+  target: string;
+  code: string;
+  type: 'email' | 'sms';
+  rememberMe?: boolean;
+}
+
 interface AuthContextValue extends AuthState {
   login: (request: LoginRequest) => Promise<AuthResponse>;
+  loginWithCode: (request: LoginWithCodeRequest) => Promise<AuthResponse>;
   register: (request: RegisterRequest) => Promise<AuthResponse>;
   logout: () => Promise<void>;
   refreshToken: () => Promise<boolean>;
@@ -225,6 +233,35 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
+  // 验证码登录
+  const loginWithCode = useCallback(async (request: LoginWithCodeRequest): Promise<AuthResponse> => {
+    try {
+      const response = await fetch('/api/auth/login-with-code', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(request),
+        credentials: 'include',
+      });
+      
+      const data: AuthResponse = await response.json();
+      
+      if (data.success && data.accessToken && data.user) {
+        setStoredToken(data.accessToken);
+        setState({
+          user: data.user,
+          isLoading: false,
+          isAuthenticated: true,
+          permissions: [],
+          accessToken: data.accessToken,
+        });
+      }
+      
+      return data;
+    } catch (error) {
+      return { success: false, error: '网络错误' };
+    }
+  }, []);
+
   // 注册
   const register = useCallback(async (request: RegisterRequest): Promise<AuthResponse> => {
     try {
@@ -326,6 +363,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const value: AuthContextValue = {
     ...state,
     login,
+    loginWithCode,
     register,
     logout,
     refreshToken,

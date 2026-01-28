@@ -103,3 +103,19 @@ model CsrfToken {
 
   @@index([token])
 }
+
+// 验证码表（邮箱/短信通用）
+model VerificationCode {
+  id         String   @id @default(cuid())
+  target     String   // 邮箱或手机号
+  code       String   // 6位验证码
+  type       String   // email, sms
+  purpose    String   // login, register, reset_password
+  attempts   Int      @default(0) // 验证尝试次数
+  verified   Boolean  @default(false)
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
+
+  @@index([target, type, purpose])
+  @@index([code])
+}

@@ -804,6 +804,67 @@ export const authService = {
   validatePasswordStrength(password: string): { valid: boolean; error?: string } {
     return validatePasswordStrength(password);
   },
+
+  /**
+   * 验证码登录（邮箱或手机号）
+   * 如果用户不存在则自动注册
+   */
+  async loginWithCode(target: string, type: 'email' | 'phone'): Promise<AuthResponse> {
+    // 确保管理员账户已初始化
+    await ensureAdminInitialized();
+
+    // 查找用户
+    const whereCondition = type === 'email' ? { email: target } : { phone: target };
+    let foundUser = await prisma.user.findFirst({ where: whereCondition });
+
+    // 如果用户不存在，自动创建
+    if (!foundUser) {
+      const username = type === 'email' 
+        ? target.split('@')[0] + '_' + Date.now().toString(36)
+        : 'user_' + target.slice(-4) + '_' + Date.now().toString(36);
+      
+      foundUser = await prisma.user.create({
+        data: {
+          username,
+          [type]: target,
+          nickname: type === 'email' ? target.split('@')[0] : `用户${target.slice(-4)}`,
+          role: 'student',
+          status: 'active',
+        }
+      });
+      
+      console.log(`[AuthService] 验证码登录自动注册: ${target}`);
+    }
+
+    // 检查账户状态
+    if (foundUser.status !== 'active') {
+      return { success: false, error: '账户已被禁用' };
+    }
+
+    // 更新最后登录时间
+    const updatedUser = await prisma.user.update({
+      where: { id: foundUser.id },
+      data: { lastLoginAt: new Date() }
+    });
+
+    // 生成令牌
+    const permissions = getRolePermissions(updatedUser.role as UserRole);
+    const accessToken = generateJWT({
+      sub: updatedUser.id,
+      username: updatedUser.username,
+      role: updatedUser.role as UserRole,
+      permissions,
+    });
+    const refreshToken = await generateRefreshTokenDb(updatedUser.id);
+
+    return {
+      success: true,
+      user: dbUserToUser(updatedUser),
+      accessToken,
+      refreshToken,
+      expiresIn: JWT_EXPIRES_IN,
+    };
+  },
 };
 
 export default authService;

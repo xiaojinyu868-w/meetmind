@@ -13,7 +13,10 @@ const PUBLIC_ROUTES = [
   '/login',
   '/register',
   '/forgot-password',
+  '/app',  // 主应用页面（访客模式可访问）
   '/api/auth/login',
+  '/api/auth/login-with-code',  // 验证码登录
+  '/api/auth/send-code',        // 发送验证码
   '/api/auth/register',
   '/api/auth/refresh',
   '/api/auth/wechat',
