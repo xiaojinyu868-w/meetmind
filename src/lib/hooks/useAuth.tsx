@@ -35,6 +35,7 @@ interface AuthContextValue extends AuthState {
   updateProfile: (data: Partial<User>) => Promise<boolean>;
   hasPermission: (permission: Permission) => boolean;
   getWechatAuthUrl: () => Promise<string | null>;
+  isCheckingAuth: boolean; // 新增：是否正在检查认证状态
 }
 
 // ==================== Context ====================
@@ -62,13 +63,18 @@ function setStoredToken(token: string | null): void {
 // ==================== Provider ====================
 
 export function AuthProvider({ children }: { children: ReactNode }) {
+  // 性能优化：isLoading 默认 false，不阻塞 UI 渲染
+  // 登录页会自行处理已登录用户的跳转
   const [state, setState] = useState<AuthState>({
     user: null,
-    isLoading: true,
+    isLoading: false,
     isAuthenticated: false,
     permissions: [],
     accessToken: null,
   });
+  
+  // 标记是否正在检查认证状态（用于需要等待认证结果的场景）
+  const [isCheckingAuth, setIsCheckingAuth] = useState(true);
 
   // 处理微信登录回调的临时会话
   const handleWechatSession = async (sessionToken: string): Promise<boolean> => {
@@ -112,7 +118,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  // 初始化 - 检查登录状态
+  // 初始化 - 检查登录状态（非阻塞）
   useEffect(() => {
     const initAuth = async () => {
       // 检查 URL 中是否有微信登录的临时会话 token
@@ -128,14 +134,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           
           // 交换临时会话获取 accessToken
           const success = await handleWechatSession(sessionToken);
-          if (success) return;
+          if (success) {
+            setIsCheckingAuth(false);
+            return;
+          }
         }
       }
       
       const token = getStoredToken();
       
       if (!token) {
-        setState(prev => ({ ...prev, isLoading: false }));
+        setIsCheckingAuth(false);
         return;
       }
       
@@ -154,6 +163,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
               permissions: data.permissions || [],
               accessToken: token,
             });
+            setIsCheckingAuth(false);
             return;
           }
         }
@@ -168,7 +178,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setStoredToken(null);
       }
       
-      setState(prev => ({ ...prev, isLoading: false }));
+      setIsCheckingAuth(false);
     };
     
     initAuth();
@@ -370,6 +380,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     updateProfile,
     hasPermission,
     getWechatAuthUrl,
+    isCheckingAuth,
   };
 
   return (

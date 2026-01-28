@@ -21,6 +21,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { exec } from 'child_process';
 import { promisify } from 'util';
+import { applyRateLimit } from '@/lib/utils/rate-limit';
 
 const execAsync = promisify(exec);
 
@@ -339,6 +340,10 @@ async function processParallelTasks(
 // ==================== API Handler ====================
 
 export async function POST(request: NextRequest) {
+  // 应用速率限制
+  const rateLimitResponse = await applyRateLimit(request, 'transcribe');
+  if (rateLimitResponse) return rateLimitResponse;
+
   console.log('[TranscribeFast] ===== Request received =====');
   const overallStartTime = Date.now();
   

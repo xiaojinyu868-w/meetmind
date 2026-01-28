@@ -10,6 +10,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { highlightService } from '@/lib/services/highlight-service';
 import type { TopicGenerationMode } from '@/types';
+import { applyRateLimit } from '@/lib/utils/rate-limit';
 
 // 请求体类型
 interface GenerateTopicsRequest {
@@ -65,6 +66,10 @@ interface GenerateTopicsResponse {
 }
 
 export async function POST(request: NextRequest): Promise<NextResponse<GenerateTopicsResponse>> {
+  // 应用速率限制
+  const rateLimitResponse = await applyRateLimit(request, 'generateTopics');
+  if (rateLimitResponse) return rateLimitResponse as NextResponse<GenerateTopicsResponse>;
+
   console.log('[generate-topics] ===== 请求开始 =====');
   
   try {

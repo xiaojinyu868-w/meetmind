@@ -9,6 +9,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { summaryService } from '@/lib/services/summary-service';
+import { applyRateLimit } from '@/lib/utils/rate-limit';
 
 // 请求体类型
 interface GenerateSummaryRequest {
@@ -56,6 +57,10 @@ interface ParentSummaryResponse {
 type GenerateSummaryResponse = StructuredSummaryResponse | ParentSummaryResponse;
 
 export async function POST(request: NextRequest): Promise<NextResponse<GenerateSummaryResponse>> {
+  // 应用速率限制
+  const rateLimitResponse = await applyRateLimit(request, 'generateSummary');
+  if (rateLimitResponse) return rateLimitResponse as NextResponse<GenerateSummaryResponse>;
+
   try {
     const body: GenerateSummaryRequest = await request.json();
     

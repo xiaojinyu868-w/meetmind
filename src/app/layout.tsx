@@ -4,7 +4,12 @@ import './globals.css';
 import { AuthProvider } from '@/lib/hooks/useAuth';
 import { SWRProvider } from '@/lib/swr';
 
-const inter = Inter({ subsets: ['latin'] });
+// 优化字体加载：display: swap 避免阻塞渲染
+const inter = Inter({ 
+  subsets: ['latin'],
+  display: 'swap',
+  preload: true,
+});
 
 export const metadata: Metadata = {
   title: 'MeetMind - 课堂对齐的 AI 家教',
@@ -19,12 +24,12 @@ export default function RootLayout({
   return (
     <html lang="zh-CN">
       <head>
-        {/* 预加载 demo 音频文件，加速复习页面加载 */}
+        {/* 预加载登录页海报图，确保快速显示 */}
         <link 
           rel="preload" 
-          href="/demo-audio.mp3" 
-          as="audio" 
-          type="audio/mpeg"
+          href="/videos/poster.jpg" 
+          as="image"
+          type="image/jpeg"
         />
       </head>
       <body className={inter.className}>

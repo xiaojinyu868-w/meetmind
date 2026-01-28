@@ -15,6 +15,7 @@ import { chat, DEFAULT_MODEL_ID, type ChatMessage, type MultimodalContent } from
 import { formatTimeRange, formatTimestamp, getSegmentsInRange, type Segment } from '@/lib/services/longcut-utils';
 import { getDifyService, isDifyEnabled, type DifyWorkflowInput } from '@/lib/services/dify-service';
 import type { ExtendedTutorRequest, ExtendedTutorResponse, GuidanceQuestion, Citation } from '@/types/dify';
+import { applyRateLimit } from '@/lib/utils/rate-limit';
 
 // AI 家教系统提示词（初次解释用）
 const TUTOR_SYSTEM_PROMPT = `你是一位"课堂对齐"的 AI 家教。你的任务是帮助学生补懂课堂上没听懂的内容。
@@ -81,6 +82,10 @@ const FOLLOWUP_SYSTEM_PROMPT = `你是一位亲切的 AI 家教，正在和学�
 - 引用课堂内容时附带时间戳`;
 
 export async function POST(request: NextRequest) {
+  // 应用速率限制
+  const rateLimitResponse = await applyRateLimit(request, 'tutor');
+  if (rateLimitResponse) return rateLimitResponse;
+
   try {
     const body = await request.json() as ExtendedTutorRequest & { 
       messageContent?: Array<{ type: string; text?: string; image_url?: { url: string } }>;

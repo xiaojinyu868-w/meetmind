@@ -4,12 +4,18 @@
  * POST /api/chat
  * - 支持多模型选择
  * - 支持流式响应
+ * - 包含速率限制（防刷）
  */
 
 import { NextRequest, NextResponse } from 'next/server';
 import { chat, chatStream, AVAILABLE_MODELS, DEFAULT_MODEL_ID, type ChatMessage } from '@/lib/services/llm-service';
+import { applyRateLimit } from '@/lib/utils/rate-limit';
 
 export async function POST(request: NextRequest) {
+  // 应用速率限制
+  const rateLimitResponse = await applyRateLimit(request, 'chat');
+  if (rateLimitResponse) return rateLimitResponse;
+
   try {
     const body = await request.json();
     const { 

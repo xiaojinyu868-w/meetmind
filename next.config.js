@@ -9,6 +9,16 @@ const nextConfig = {
   // 静态资源缓存配置
   async headers() {
     return [
+      // 视频文件长期缓存（登录页背景等）
+      {
+        source: '/:path*.mp4',
+        headers: [
+          {
+            key: 'Cache-Control',
+            value: 'public, max-age=31536000, immutable',
+          },
+        ],
+      },
       // 音频文件长期缓存
       {
         source: '/:path*.mp3',

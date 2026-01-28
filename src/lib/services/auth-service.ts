@@ -550,7 +550,7 @@ export const authService = {
     
     // 验证密码
     if (!foundUser.passwordHash || !foundUser.salt) {
-      return { success: false, error: '请使用第三方登录' };
+      return { success: false, error: '该账户未设置密码，请使用验证码登录' };
     }
     
     if (!verifyPassword(password, foundUser.passwordHash, foundUser.salt)) {
@@ -714,6 +714,89 @@ export const authService = {
     });
     
     return { success: true };
+  },
+
+  /**
+   * 设置密码（用于未设置密码的用户）
+   */
+  async setPassword(userId: string, newPassword: string): Promise<{ success: boolean; error?: string }> {
+    const user = await prisma.user.findUnique({
+      where: { id: userId }
+    });
+    
+    if (!user) {
+      return { success: false, error: '用户不存在' };
+    }
+    
+    // 已有密码则不能使用此方法
+    if (user.passwordHash && user.salt) {
+      return { success: false, error: '已设置密码，请使用修改密码功能' };
+    }
+    
+    if (newPassword.length < 8) {
+      return { success: false, error: '密码至少8个字符' };
+    }
+    
+    // 验证密码强度
+    const passwordValidation = validatePasswordStrength(newPassword);
+    if (!passwordValidation.valid) {
+      return { success: false, error: passwordValidation.error };
+    }
+    
+    const { hash, salt } = hashPassword(newPassword);
+    
+    await prisma.user.update({
+      where: { id: userId },
+      data: { passwordHash: hash, salt }
+    });
+    
+    return { success: true };
+  },
+
+  /**
+   * 重置密码（通过验证码验证后）
+   * 用于忘记密码场景
+   */
+  async resetPassword(target: string, newPassword: string): Promise<{ success: boolean; error?: string }> {
+    // 根据 target 查找用户（支持邮箱和手机号）
+    const isEmail = target.includes('@');
+    const user = await prisma.user.findFirst({
+      where: isEmail ? { email: target } : { phone: target }
+    });
+    
+    if (!user) {
+      return { success: false, error: '用户不存在' };
+    }
+    
+    if (newPassword.length < 8) {
+      return { success: false, error: '密码至少8个字符' };
+    }
+    
+    // 验证密码强度
+    const passwordValidation = validatePasswordStrength(newPassword);
+    if (!passwordValidation.valid) {
+      return { success: false, error: passwordValidation.error };
+    }
+    
+    const { hash, salt } = hashPassword(newPassword);
+    
+    await prisma.user.update({
+      where: { id: user.id },
+      data: { passwordHash: hash, salt }
+    });
+    
+    return { success: true };
+  },
+
+  /**
+   * 检查用户是否已设置密码
+   */
+  async hasPassword(userId: string): Promise<boolean> {
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { passwordHash: true, salt: true }
+    });
+    return !!(user?.passwordHash && user?.salt);
   },
 
   /**

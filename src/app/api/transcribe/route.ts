@@ -15,6 +15,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import * as fs from 'fs';
 import * as path from 'path';
+import { applyRateLimit } from '@/lib/utils/rate-limit';
 
 // ==================== 配置 ====================
 
@@ -271,6 +272,10 @@ async function waitForTask(
 // ==================== API Handler ====================
 
 export async function POST(request: NextRequest) {
+  // 应用速率限制
+  const rateLimitResponse = await applyRateLimit(request, 'transcribe');
+  if (rateLimitResponse) return rateLimitResponse;
+
   console.log('[Transcribe API] ===== Request received =====');
   
   try {
