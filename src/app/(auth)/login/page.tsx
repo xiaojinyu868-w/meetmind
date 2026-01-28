@@ -638,6 +638,15 @@ function LoginForm() {
       router.replace('/app');
       return true;
     } else {
+      // 检测用户未设置密码的情况，自动切换到验证码登录
+      if (result.error?.includes('未设置密码')) {
+        setError('该账户未设置密码，已为您切换到验证码登录');
+        setLoginMethod('code');
+        setPassword('');
+        // 2秒后自动清除提示
+        setTimeout(() => setError(''), 2000);
+        return false;
+      }
       setError(result.error || '登录失败');
       return false;
     }
@@ -750,17 +759,17 @@ function LoginForm() {
             </div>
             <div>
               <span className="font-bold text-3xl text-white drop-shadow-lg">MeetMind</span>
-              <p className="text-sm text-white/70">AI 智能学习助手</p>
+              <p className="text-sm text-white/70">AI智能学习助手 - 你的专属AI同桌</p>
             </div>
           </div>
 
-          {/* 登录卡片 - 玻璃态 */}
+          {/* 登录卡片 - 毛玻璃效果 */}
           <div 
             className="w-full rounded-3xl p-8 backdrop-blur-xl animate-slide-up"
             style={{ 
-              backgroundColor: 'rgba(255,241,242,0.85)',
-              boxShadow: '0 25px 50px -12px rgba(0,0,0,0.25), 0 0 0 1px rgba(255,255,255,0.1)',
-              border: '1px solid rgba(255,255,255,0.2)'
+              backgroundColor: 'rgba(255,255,255,0.6)',
+              boxShadow: '0 25px 50px -12px rgba(0,0,0,0.25), 0 8px 32px rgba(255,255,255,0.1) inset',
+              border: '1px solid rgba(255,255,255,0.4)'
             }}
           >
             {/* 登录类型切换 */}
@@ -776,14 +785,16 @@ function LoginForm() {
                 邮箱登录
               </button>
               <button
-                onClick={() => handleLoginTypeChange('phone')}
-                className="text-base pb-1 border-b-2 transition-all font-medium"
+                disabled
+                className="text-base pb-1 border-b-2 transition-all font-medium cursor-not-allowed opacity-50"
                 style={{ 
-                  color: loginType === 'phone' ? '#E11D48' : '#6B7280',
-                  borderColor: loginType === 'phone' ? '#E11D48' : 'transparent',
+                  color: '#9CA3AF',
+                  borderColor: 'transparent',
                 }}
+                title="即将开放"
               >
                 手机号登录
+                <span className="ml-1 text-xs text-gray-400">(即将开放)</span>
               </button>
             </div>
 

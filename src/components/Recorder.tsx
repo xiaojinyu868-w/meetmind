@@ -609,6 +609,7 @@ export function Recorder({
               disabled={disabled}
               className="record-btn"
               aria-label="开始录音"
+              data-onboarding="record-button"
             >
               <svg className="w-8 h-8 text-white" fill="currentColor" viewBox="0 0 24 24">
                 <circle cx="12" cy="12" r="6" />
@@ -697,6 +698,7 @@ export function Recorder({
               onClick={markAnchor}
               disabled={!isRecording}
               className="confusion-btn"
+              data-onboarding="confusion-button"
             >
               <span className="relative z-10 flex items-center justify-center gap-2">
                 <span className="text-2xl">🎯</span>

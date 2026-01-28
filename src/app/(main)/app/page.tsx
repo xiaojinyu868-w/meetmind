@@ -56,6 +56,10 @@ import type { ConfusionMarker } from '@/components/mobile/PodcastPlayer';
 import type { ConversationHistory } from '@/types/conversation';
 import type { AudioSession } from '@/lib/db';
 
+// 用户引导组件
+import { useOnboarding } from '@/hooks/useOnboarding';
+import { OnboardingGuide, WelcomeModal } from '@/components/OnboardingGuide';
+
 // 演示数据延迟加载
 let DEMO_DATA_CACHE: { DEMO_SEGMENTS: TranscriptSegment[]; DEMO_ANCHORS: Anchor[]; DEMO_AUDIO_URL: string } | null = null;
 const loadDemoData = async () => {
@@ -159,6 +163,10 @@ export default function StudentApp() {
   // 行动清单抽屉状态
   const [isActionDrawerOpen, setIsActionDrawerOpen] = useState(false);
   
+  // 用户引导状态
+  const [showWelcome, setShowWelcome] = useState(false);
+  const onboarding = useOnboarding();
+  
   const liveSegmentsRef = useRef<TranscriptSegment[]>([]);
   const waveformRef = useRef<WaveformPlayerRef>(null);
   const hasRestoredState = useRef(false);  // 是否已恢复状态
@@ -199,8 +207,8 @@ export default function StudentApp() {
     if (hasRestoredState.current) return;
     
     const initializeApp = async () => {
-      // 第一批并行操作：服务检查 + 状态恢复 + anchors 获取
-      const [, savedAppState, savedAnchors] = await Promise.all([
+      // 第一批并行操作：服务检查 + 状态恢复 + anchors 获取 + 引导状态检查
+      const [, savedAppState, savedAnchors, savedOnboardingState] = await Promise.all([
         checkServices().then(setServiceStatus),
         getPreference<{
           viewMode: ViewMode;
@@ -211,28 +219,35 @@ export default function StudentApp() {
           savedAt: number;
         } | null>(APP_STATE_KEY, null).catch(() => null),
         Promise.resolve(anchorService.getActive(sessionId)),
+        getPreference<{ completedFlows?: string[]; skippedFlows?: string[] } | null>('onboarding_state', null).catch(() => null),
       ]);
       
       setAnchors(savedAnchors);
+      
+      // 检查是否是首次访问（需要显示引导）
+      const isFirstVisit = !savedOnboardingState || 
+        (!savedOnboardingState.completedFlows?.includes('welcome') && 
+         !savedOnboardingState.skippedFlows?.includes('welcome'));
 
       // 解析恢复的状态
       let restoredAnchorId: string | null = null;
       let restoredReviewTab: ReviewTab | null = null;
       let restoredViewMode: ViewMode | null = null;
       
-      // 检查是否是最近 24 小时内的状态
+      // 检查是否是最近 24 小时内的状态（但首次访问时不恢复到复习页面）
       if (savedAppState && Date.now() - savedAppState.savedAt < 24 * 60 * 60 * 1000) {
         restoredAnchorId = savedAppState.selectedAnchorId || null;
         restoredReviewTab = savedAppState.reviewTab || null;
-        restoredViewMode = savedAppState.viewMode || null;
+        // 首次访问时强制进入录音页面
+        restoredViewMode = isFirstVisit ? null : (savedAppState.viewMode || null);
         
-        if (savedAppState.currentTime) {
+        if (savedAppState.currentTime && !isFirstVisit) {
           setCurrentTime(savedAppState.currentTime);
         }
       }
 
-      // 确定最终的 viewMode
-      const finalViewMode = restoredViewMode || 'record';
+      // 确定最终的 viewMode（首次访问强制录音页面）
+      const finalViewMode = isFirstVisit ? 'record' : (restoredViewMode || 'record');
       
       // 仅在复习模式下加载演示数据
       if (finalViewMode === 'review') {
@@ -327,10 +342,25 @@ export default function StudentApp() {
       // 标记应用已准备就绪
       setAppReady(true);
       hasRestoredState.current = true;
+      
+      // 首次访问检测 - 显示欢迎弹窗
+      if (isFirstVisit) {
+        // 延迟显示，让用户先看到页面
+        setTimeout(() => setShowWelcome(true), 800);
+      }
     };
     
     initializeApp();
   }, [sessionId]); // eslint-disable-line react-hooks/exhaustive-deps
+  
+  // 备用：监听 onboarding 加载完成后检查（只在首次触发）
+  const hasTriggeredWelcome = useRef(false);
+  useEffect(() => {
+    if (!onboarding.isLoading && appReady && !showSplash && !hasTriggeredWelcome.current && onboarding.shouldShowFlow('welcome')) {
+      hasTriggeredWelcome.current = true;
+      setShowWelcome(true);
+    }
+  }, [onboarding.isLoading, appReady, showSplash, onboarding.shouldShowFlow]);
 
   // 处理开屏动画完成
   const handleSplashComplete = useCallback(() => {
@@ -871,7 +901,11 @@ export default function StudentApp() {
       {!isMobile && (
         <div className="border-b px-6 py-3 no-print" style={{ background: 'var(--edu-bg-secondary)', borderColor: 'var(--edu-border-light)' }}>
           <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2 p-1 rounded-xl" style={{ background: 'var(--edu-bg-soft)' }}>
+            <div 
+              className="flex items-center gap-2 p-1 rounded-xl" 
+              style={{ background: 'var(--edu-bg-soft)' }}
+              data-onboarding="mode-switch"
+            >
               <button
                 onClick={() => handleViewModeChange('record')}
                 className={`mode-tab ${viewMode === 'record' ? 'active' : ''}`}
@@ -1138,7 +1172,11 @@ export default function StudentApp() {
                 {/* 录音或上传切换 */}
                 <div className="flex items-center justify-center gap-4 mb-4">
                   <span className="text-sm text-gray-500">选择输入方式：</span>
-              <div className="flex items-center gap-2 p-1 rounded-xl" style={{ background: 'var(--edu-bg-soft)' }}>
+              <div 
+                className="flex items-center gap-2 p-1 rounded-xl" 
+                style={{ background: 'var(--edu-bg-soft)' }}
+                data-onboarding="input-methods"
+              >
                 <button
                   onClick={() => { setDataSource('live'); setShowSessionHistory(false); }}
                   className={`px-4 py-2 text-sm rounded-lg transition-all ${
@@ -2044,6 +2082,31 @@ export default function StudentApp() {
           )}
         </>
       )}
+      
+      {/* 用户引导组件 */}
+      <WelcomeModal
+        isOpen={showWelcome}
+        onStart={() => {
+          setShowWelcome(false);
+          // 标记 welcome 流程完成，然后启动 recording 引导
+          onboarding.completeFlow();
+          setTimeout(() => {
+            onboarding.startFlow('recording');
+          }, 100);
+        }}
+        onSkip={() => {
+          setShowWelcome(false);
+        }}
+      />
+      
+      <OnboardingGuide
+        step={onboarding.currentStep}
+        stepIndex={onboarding.currentStepIndex}
+        totalSteps={onboarding.totalSteps}
+        onNext={onboarding.nextStep}
+        onSkip={onboarding.skipFlow}
+        isActive={onboarding.isActive}
+      />
     </div>
   );
 }
