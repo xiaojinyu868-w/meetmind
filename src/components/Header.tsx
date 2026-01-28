@@ -91,9 +91,20 @@ export function Header({ lessonTitle, courseName, userRole = 'student' }: Header
                   <button className="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-lilac-50 transition-colors">
                     设置
                   </button>
-                  <button className="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-lilac-50 transition-colors">
+                  <Link
+                    href="/help"
+                    onClick={() => setShowUserMenu(false)}
+                    className="block w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-lilac-50 transition-colors"
+                  >
                     帮助
-                  </button>
+                  </Link>
+                  <Link
+                    href="/feedback"
+                    onClick={() => setShowUserMenu(false)}
+                    className="block w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-lilac-50 transition-colors"
+                  >
+                    意见反馈
+                  </Link>
                   <button
                     onClick={handleLogout}
                     className="w-full px-4 py-2 text-left text-sm text-coral-600 hover:bg-coral-50 transition-colors"

@@ -11,56 +11,73 @@ export default function Error({
 }) {
   useEffect(() => {
     // 可以在这里上报错误到监控服务
-    console.error('页面错误:', error);
+    console.error('Application Error:', error);
   }, [error]);
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-rose-50 to-amber-50 flex items-center justify-center p-4">
-      <div className="max-w-md w-full bg-white rounded-2xl shadow-xl p-8 text-center">
+    <div className="min-h-screen bg-gradient-to-br from-rose-50 via-white to-rose-50 flex items-center justify-center p-4">
+      <div className="max-w-md w-full text-center">
         {/* 错误图标 */}
-        <div className="w-20 h-20 mx-auto mb-6 bg-rose-100 rounded-full flex items-center justify-center">
-          <svg className="w-10 h-10 text-rose-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-          </svg>
+        <div className="mb-8">
+          <div className="w-24 h-24 mx-auto bg-gradient-to-br from-orange-400 to-rose-500 rounded-full flex items-center justify-center shadow-lg">
+            <svg className="w-12 h-12 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+            </svg>
+          </div>
         </div>
 
-        {/* 标题 */}
-        <h1 className="text-2xl font-bold text-gray-900 mb-2">
-          哎呀，出错了
+        {/* 标题和描述 */}
+        <h1 className="text-2xl font-bold text-gray-800 mb-3">
+          出了点问题
         </h1>
-        
-        {/* 描述 */}
-        <p className="text-gray-600 mb-6">
-          页面遇到了一些问题，请稍后再试。
-          {error.digest && (
-            <span className="block text-xs text-gray-400 mt-2">
-              错误代码: {error.digest}
-            </span>
-          )}
+        <p className="text-gray-500 mb-6">
+          抱歉，页面加载时遇到了错误。<br />
+          请尝试刷新页面或返回首页。
         </p>
+
+        {/* 错误详情（开发环境显示） */}
+        {process.env.NODE_ENV === 'development' && (
+          <div className="mb-6 p-4 bg-gray-100 rounded-xl text-left">
+            <p className="text-xs font-mono text-gray-600 break-all">
+              {error.message}
+            </p>
+            {error.digest && (
+              <p className="text-xs text-gray-400 mt-2">
+                Error ID: {error.digest}
+              </p>
+            )}
+          </div>
+        )}
 
         {/* 操作按钮 */}
         <div className="flex flex-col sm:flex-row gap-3 justify-center">
           <button
             onClick={reset}
-            className="px-6 py-3 bg-gradient-to-r from-rose-500 to-rose-400 text-white font-medium rounded-xl hover:from-rose-600 hover:to-rose-500 transition-all shadow-lg hover:shadow-xl"
+            className="inline-flex items-center justify-center gap-2 px-6 py-3 bg-gradient-to-r from-rose-500 to-rose-400 text-white font-medium rounded-xl shadow-lg hover:shadow-xl hover:-translate-y-0.5 transition-all"
           >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+            </svg>
             重试
           </button>
           <a
-            href="/"
-            className="px-6 py-3 bg-gray-100 text-gray-700 font-medium rounded-xl hover:bg-gray-200 transition-all"
+            href="/app"
+            className="inline-flex items-center justify-center gap-2 px-6 py-3 bg-white text-gray-700 font-medium rounded-xl border-2 border-gray-200 hover:border-rose-200 hover:bg-rose-50 transition-all"
           >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
+            </svg>
             返回首页
           </a>
         </div>
 
-        {/* 反馈链接 */}
-        <p className="mt-6 text-sm text-gray-500">
-          问题持续存在？
-          <a href="/feedback" className="text-rose-500 hover:underline ml-1">
-            向我们反馈
+        {/* 帮助提示 */}
+        <p className="mt-8 text-sm text-gray-400">
+          如果问题持续存在，请
+          <a href="/feedback" className="text-rose-500 hover:underline mx-1">
+            联系我们
           </a>
+          或发送邮件至 originedu@meetmind.online
         </p>
       </div>
     </div>

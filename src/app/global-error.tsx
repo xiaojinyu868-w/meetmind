@@ -1,7 +1,5 @@
 'use client';
 
-import { useEffect } from 'react';
-
 export default function GlobalError({
   error,
   reset,
@@ -9,108 +7,88 @@ export default function GlobalError({
   error: Error & { digest?: string };
   reset: () => void;
 }) {
-  useEffect(() => {
-    console.error('全局错误:', error);
-  }, [error]);
-
   return (
-    <html lang="zh-CN">
+    <html>
       <body>
         <div style={{
           minHeight: '100vh',
-          background: 'linear-gradient(to bottom right, #fff1f2, #fffbeb)',
+          background: 'linear-gradient(135deg, #FFF1F2 0%, #FFFFFF 50%, #FFF1F2 100%)',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          padding: '1rem',
-          fontFamily: 'system-ui, -apple-system, sans-serif',
+          padding: '16px',
+          fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
         }}>
-          <div style={{
-            maxWidth: '28rem',
-            width: '100%',
-            background: 'white',
-            borderRadius: '1rem',
-            boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)',
-            padding: '2rem',
-            textAlign: 'center',
-          }}>
+          <div style={{ maxWidth: '400px', width: '100%', textAlign: 'center' }}>
             {/* 错误图标 */}
             <div style={{
-              width: '5rem',
-              height: '5rem',
-              margin: '0 auto 1.5rem',
-              background: '#fee2e2',
+              width: '96px',
+              height: '96px',
+              margin: '0 auto 32px',
+              background: 'linear-gradient(135deg, #F43F5E 0%, #E11D48 100%)',
               borderRadius: '50%',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
+              boxShadow: '0 10px 40px -10px rgba(244,63,94,0.5)',
             }}>
-              <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#f43f5e" strokeWidth="2">
+              <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2">
                 <circle cx="12" cy="12" r="10" />
-                <path d="M12 8v4M12 16h.01" />
+                <line x1="12" y1="8" x2="12" y2="12" />
+                <line x1="12" y1="16" x2="12.01" y2="16" />
               </svg>
             </div>
 
             {/* 标题 */}
             <h1 style={{
-              fontSize: '1.5rem',
+              fontSize: '24px',
               fontWeight: 'bold',
-              color: '#111827',
-              marginBottom: '0.5rem',
+              color: '#1F2937',
+              marginBottom: '12px',
             }}>
-              服务暂时不可用
+              系统错误
             </h1>
-            
+
             {/* 描述 */}
             <p style={{
-              color: '#6b7280',
-              marginBottom: '1.5rem',
+              color: '#6B7280',
+              marginBottom: '32px',
+              lineHeight: '1.6',
             }}>
-              抱歉，系统遇到了严重问题。我们正在紧急修复中。
+              抱歉，系统遇到了严重错误。<br />
+              请刷新页面重试。
             </p>
 
-            {/* 操作按钮 */}
-            <div style={{
-              display: 'flex',
-              flexDirection: 'column',
-              gap: '0.75rem',
-            }}>
-              <button
-                onClick={reset}
-                style={{
-                  padding: '0.75rem 1.5rem',
-                  background: 'linear-gradient(135deg, #f43f5e, #fb7185)',
-                  color: 'white',
-                  fontWeight: '500',
-                  borderRadius: '0.75rem',
-                  border: 'none',
-                  cursor: 'pointer',
-                  fontSize: '1rem',
-                }}
-              >
-                重试
-              </button>
-              <a
-                href="/"
-                style={{
-                  padding: '0.75rem 1.5rem',
-                  background: '#f3f4f6',
-                  color: '#374151',
-                  fontWeight: '500',
-                  borderRadius: '0.75rem',
-                  textDecoration: 'none',
-                  fontSize: '1rem',
-                }}
-              >
-                返回首页
-              </a>
-            </div>
+            {/* 重试按钮 */}
+            <button
+              onClick={reset}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '8px',
+                padding: '14px 28px',
+                background: 'linear-gradient(135deg, #E11D48 0%, #F43F5E 100%)',
+                color: 'white',
+                fontWeight: '500',
+                fontSize: '16px',
+                border: 'none',
+                borderRadius: '12px',
+                cursor: 'pointer',
+                boxShadow: '0 10px 30px -5px rgba(225,29,72,0.4)',
+              }}
+            >
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+              </svg>
+              刷新页面
+            </button>
 
             {/* 联系方式 */}
             <p style={{
-              marginTop: '1.5rem',
-              fontSize: '0.875rem',
-              color: '#9ca3af',
+              marginTop: '32px',
+              fontSize: '14px',
+              color: '#9CA3AF',
             }}>
               如需帮助，请联系 originedu@meetmind.online
             </p>

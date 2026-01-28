@@ -119,3 +119,23 @@ model VerificationCode {
   @@index([target, type, purpose])
   @@index([code])
 }
+
+// 用户反馈表
+model Feedback {
+  id        String   @id @default(cuid())
+  type      String   // bug, feature, question, other
+  title     String
+  content   String
+  contact   String?  // 用户提供的联系方式
+  userId    String?  // 登录用户的ID（可选）
+  userAgent String?
+  ip        String?
+  status    String   @default("pending") // pending, processing, resolved, closed
+  adminNote String?  // 管理员备注
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([type])
+  @@index([status])
+  @@index([userId])
+}

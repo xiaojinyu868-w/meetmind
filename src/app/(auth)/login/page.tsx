@@ -13,6 +13,7 @@
 
 import { useState, useEffect, Suspense, useCallback, useRef } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
+import Link from 'next/link';
 import { useAuth } from '@/lib/hooks/useAuth';
 
 type LoginMethod = 'password' | 'code';

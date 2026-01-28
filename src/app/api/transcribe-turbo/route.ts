@@ -438,12 +438,3 @@ export async function POST(request: NextRequest) {
 }
 
 export const maxDuration = 300;
-
-// 允许大文件上传 (500MB)
-export const config = {
-  api: {
-    bodyParser: {
-      sizeLimit: '500mb',
-    },
-  },
-};

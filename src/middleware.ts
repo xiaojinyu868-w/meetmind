@@ -13,6 +13,8 @@ const PUBLIC_ROUTES = [
   '/login',
   '/register',
   '/forgot-password',
+  '/help',           // 帮助中心
+  '/feedback',       // 意见反馈
   '/app',  // 主应用页面（访客模式可访问）
   '/api/auth/login',
   '/api/auth/login-with-code',  // 验证码登录
@@ -30,6 +32,7 @@ const PUBLIC_ROUTES = [
   '/api/transcribe-turbo',
   '/api/generate-topics',
   '/api/generate-summary',
+  '/api/feedback',   // 反馈 API（允许未登录用户提交）
   '/api/health',
 ];
 
