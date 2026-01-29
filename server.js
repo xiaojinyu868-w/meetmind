@@ -141,6 +141,7 @@ app.prepare().then(() => {
         console.log('[ASR-Proxy] Connected to DashScope');
         
         // 发送正确格式的 session.update
+        // 启用 semantic_punctuation_enabled 进行语义断句优化
         const sessionConfig = {
           event_id: generateEventId(),
           type: 'session.update',
@@ -149,6 +150,9 @@ app.prepare().then(() => {
             sample_rate: sampleRate,
             input_audio_transcription: {
               language: 'zh',
+              // 启用语义断句模式（基于标点符号断句，替代传统 VAD 断句）
+              // 这会使断句更精准，适合课堂转写场景
+              semantic_punctuation_enabled: true,
             },
             turn_detection: {
               type: 'server_vad',

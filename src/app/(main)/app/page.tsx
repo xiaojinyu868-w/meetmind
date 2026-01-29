@@ -1,13 +1,12 @@
 'use client';
 
 import { useState, useEffect, useCallback, useRef, Suspense } from 'react';
-import dynamic from 'next/dynamic';
 import { Header } from '@/components/Header';
 import { ServiceStatus, DegradedModeBanner } from '@/components/ServiceStatus';
 import { anchorService, type Anchor } from '@/lib/services/anchor-service';
 import { memoryService, type ClassTimeline } from '@/lib/services/memory-service';
 import { checkServices, type ServiceStatus as ServiceStatusType } from '@/lib/services/health-check';
-import { getPreference, setPreference, db, generateSessionId, saveAudioSession, addTranscripts, ANONYMOUS_USER_ID } from '@/lib/db';
+import { getPreference, setPreference, db, generateSessionId, saveAudioSession, addTranscripts, ANONYMOUS_USER_ID, resetAppState } from '@/lib/db';
 import { useAuth } from '@/lib/hooks/useAuth';
 import { classroomDataService, type StudentAnchor } from '@/lib/services/classroom-data-service';
 import type { TranscriptSegment, HighlightTopic, ClassSummary, Note, TopicGenerationMode, NoteSource, NoteMetadata } from '@/types';
@@ -23,34 +22,22 @@ import { WaveformPlayer, type WaveformPlayerRef, type WaveformAnchor } from '@/c
 // 开屏动画组件
 import { AppLoading } from '@/components/AppLoading';
 
-// 动态导入大型组件 - 代码分割优化
-const Recorder = dynamic(() => import('@/components/Recorder').then(m => ({ default: m.Recorder })), {
-  ssr: false,
-  loading: () => <div className="h-32 bg-gray-100 animate-pulse rounded-xl" />
-});
-
-const TimelineView = dynamic(() => import('@/components/TimelineView').then(m => ({ default: m.TimelineView })), {
-  loading: () => <div className="h-64 bg-gray-50 animate-pulse rounded-lg" />
-});
-
-const AITutor = dynamic(() => import('@/components/AITutor').then(m => ({ default: m.AITutor })), {
-  ssr: false,
-  loading: () => <div className="h-96 bg-gray-50 animate-pulse rounded-lg" />
-});
-
-const ActionList = dynamic(() => import('@/components/ActionList').then(m => ({ default: m.ActionList })));
-const ActionSidebar = dynamic(() => import('@/components/ActionSidebar').then(m => ({ default: m.ActionSidebar })));
-const ActionDrawer = dynamic(() => import('@/components/ActionDrawer').then(m => ({ default: m.ActionDrawer })));
-const ResizablePanel = dynamic(() => import('@/components/layout/ResizablePanel').then(m => ({ default: m.ResizablePanel })));
-
-const HighlightsPanel = dynamic(() => import('@/components/HighlightsPanel').then(m => ({ default: m.HighlightsPanel })));
-const SummaryPanel = dynamic(() => import('@/components/SummaryPanel').then(m => ({ default: m.SummaryPanel })));
-const NotesPanel = dynamic(() => import('@/components/NotesPanel').then(m => ({ default: m.NotesPanel })));
-const AudioUploader = dynamic(() => import('@/components/AudioUploader').then(m => ({ default: m.AudioUploader })), { ssr: false });
-const AnchorDetailPanel = dynamic(() => import('@/components/AnchorDetailPanel').then(m => ({ default: m.AnchorDetailPanel })));
-const ConversationList = dynamic(() => import('@/components/ConversationHistory').then(m => ({ default: m.ConversationList })));
-const AIChat = dynamic(() => import('@/components/AIChat').then(m => ({ default: m.AIChat })), { ssr: false });
-const SessionHistoryList = dynamic(() => import('@/components/SessionHistoryList').then(m => ({ default: m.SessionHistoryList })));
+// 静态导入所有组件 - 解决 Next.js dynamic import chunk 加载失败问题
+import { Recorder } from '@/components/Recorder';
+import { TimelineView } from '@/components/TimelineView';
+import { AITutor } from '@/components/AITutor';
+import { ActionList } from '@/components/ActionList';
+import { ActionSidebar } from '@/components/ActionSidebar';
+import { ActionDrawer } from '@/components/ActionDrawer';
+import { ResizablePanel } from '@/components/layout/ResizablePanel';
+import { HighlightsPanel } from '@/components/HighlightsPanel';
+import { SummaryPanel } from '@/components/SummaryPanel';
+import { NotesPanel } from '@/components/NotesPanel';
+import { AudioUploader } from '@/components/AudioUploader';
+import { AnchorDetailPanel } from '@/components/AnchorDetailPanel';
+import { ConversationList } from '@/components/ConversationHistory';
+import { AIChat } from '@/components/AIChat';
+import { SessionHistoryList } from '@/components/SessionHistoryList';
 
 import type { ConfusionMarker } from '@/components/mobile/PodcastPlayer';
 import type { ConversationHistory } from '@/types/conversation';
@@ -79,6 +66,7 @@ import { MobileTabSwitch } from '@/components/mobile/MobileTabSwitch';
 import { DedaoTimeline, toDedaoEntries } from '@/components/mobile/DedaoTimeline';
 import { DedaoConfusionCard } from '@/components/mobile/DedaoConfusionCard';
 import { DedaoMenu, DedaoMenuButton } from '@/components/mobile/DedaoMenu';
+import { MobileAIFab } from '@/components/mobile/MobileAIFab';
 
 type ViewMode = 'record' | 'review';
 type DataSource = 'live' | 'demo';
@@ -170,6 +158,18 @@ export default function StudentApp() {
   const liveSegmentsRef = useRef<TranscriptSegment[]>([]);
   const waveformRef = useRef<WaveformPlayerRef>(null);
   const hasRestoredState = useRef(false);  // 是否已恢复状态
+  
+  // 引导结束后的清理：关闭引导期间打开的面板
+  useEffect(() => {
+    // 当引导结束时，关闭引导期间打开的面板
+    if (!onboarding.isActive) {
+      // 给用户一点时间看最后的操作结果，然后关闭面板
+      const timer = setTimeout(() => {
+        setIsActionDrawerOpen(false);
+      }, 500);
+      return () => clearTimeout(timer);
+    }
+  }, [onboarding.isActive]);
   
   // 获取当前用户的 studentId 和 studentName
   const studentId = user?.id || 'anonymous';
@@ -975,7 +975,6 @@ export default function StudentApp() {
                   <MobileTabSwitch
                     activeTab={viewMode}
                     onTabChange={(tab) => handleViewModeChange(tab)}
-                    className="w-full max-w-[180px]"
                     data-onboarding="mode-switch"
                   />
                 </div>
@@ -985,10 +984,10 @@ export default function StudentApp() {
               </div>
 
               {/* 录音内容区 */}
-              <div className="flex-1 flex flex-col items-center justify-center p-4 overflow-auto">
-                <div className="w-full max-w-md space-y-4">
+              <div className="flex-1 flex flex-col p-4 overflow-hidden min-h-0">
+                <div className="w-full max-w-md mx-auto flex flex-col flex-1 min-h-0">
                   {/* 录音或上传切换 */}
-                  <div className="flex items-center justify-center gap-2 mb-2">
+                  <div className="flex-shrink-0 flex items-center justify-center gap-2 mb-2">
                     <span className="text-xs text-gray-500">选择输入方式：</span>
                     <div 
                       className="flex items-center gap-1 p-0.5 bg-gray-100 rounded-xl"
@@ -1028,12 +1027,14 @@ export default function StudentApp() {
                   </div>
 
                   {dataSource === 'live' && !showSessionHistory ? (
-                    <Recorder
-                      onRecordingStart={handleRecordingStart}
-                      onRecordingStop={handleRecordingStop}
-                      onTranscriptUpdate={handleTranscriptUpdate}
-                      onAnchorMark={handleAnchorMark}
-                    />
+                    <div className="flex-1 min-h-0">
+                      <Recorder
+                        onRecordingStart={handleRecordingStart}
+                        onRecordingStop={handleRecordingStop}
+                        onTranscriptUpdate={handleTranscriptUpdate}
+                        onAnchorMark={handleAnchorMark}
+                      />
+                    </div>
                   ) : showSessionHistory ? (
                     <div className="card-edu p-0 overflow-hidden" style={{ maxHeight: '400px' }}>
                       <SessionHistoryList
@@ -1394,9 +1395,9 @@ export default function StudentApp() {
                     <div 
                       className="flex items-center gap-1 px-3 py-2 border-b overflow-x-auto flex-shrink-0" 
                       style={{ background: 'var(--edu-bg-soft)', borderColor: 'var(--edu-border-light)' }}
-                      data-onboarding="timeline"
                     >
                       <button
+                        data-onboarding="timeline"
                         onClick={() => setReviewTab('timeline')}
                         className={`px-2.5 py-1.5 text-sm rounded-lg transition-all whitespace-nowrap ${
                           reviewTab === 'timeline'
@@ -1696,7 +1697,6 @@ export default function StudentApp() {
                   <MobileTabSwitch
                     activeTab={viewMode}
                     onTabChange={(tab) => handleViewModeChange(tab)}
-                    className="w-full max-w-[180px]"
                     data-onboarding="mode-switch"
                   />
                 </div>
@@ -1805,7 +1805,6 @@ export default function StudentApp() {
                       }
                     }}
                     className="flex-1 min-h-0"
-                    data-onboarding="timeline"
                   />
 
                   {/* 困惑点详情卡片 */}
@@ -1832,6 +1831,18 @@ export default function StudentApp() {
                       setCurrentTime(timeMs);
                       waveformRef.current?.seekTo(timeMs);
                     }}
+                  />
+
+                  {/* 悬浮 AI 对话按钮 - 进入全局 AI 对话 */}
+                  <MobileAIFab
+                    onClick={() => {
+                      setSelectedAnchor(null);  // 清除选中的困惑点，进入全局对话模式
+                      setMobileAIQuestion('');
+                      setMobileSubPage('ai-chat');
+                    }}
+                    visible={!selectedConfusion}
+                    pulse={segments.length > 0 && anchors.length === 0}
+                    tooltip="和 AI 聊聊这节课"
                   />
                 </>
               )}
@@ -2130,6 +2141,23 @@ export default function StudentApp() {
         onSkip={onboarding.skipFlow}
         isActive={onboarding.isActive}
       />
+      
+      {/* 开发环境调试按钮：重置引导和页面状态 */}
+      {process.env.NODE_ENV === 'development' && (
+        <button
+          onClick={async () => {
+            if (confirm('确定要重置引导和页面状态吗？页面将刷新。')) {
+              await resetAppState();
+              onboarding.resetAll();
+              window.location.reload();
+            }
+          }}
+          className="fixed bottom-4 right-4 z-50 px-3 py-1.5 bg-gray-800 text-white text-xs rounded-lg opacity-50 hover:opacity-100 transition-opacity"
+          title="重置引导和页面状态"
+        >
+          🔄 重置引导
+        </button>
+      )}
     </div>
   );
 }

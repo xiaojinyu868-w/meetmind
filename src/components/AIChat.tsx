@@ -1,13 +1,16 @@
 'use client';
 
 // AI 家教聊天组件
-// 支持对话历史持久化存储
+// 支持对话历史持久化存储、模型选择、图片上传
 
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { formatTimestampMs } from '@/lib/longcut';
 import { useAuth } from '@/lib/hooks/useAuth';
 import { conversationService, getEffectiveUserId } from '@/lib/services/conversation-service';
 import type { ConversationHistory, ConversationMessage } from '@/types/conversation';
+import { ModelSelector } from './ModelSelector';
+import { ImageUpload, useImagePaste, type UploadedImage } from './ImageUpload';
+import { DEFAULT_MODEL_ID } from '@/lib/services/llm-service';
 
 interface Message {
   id: string;
@@ -59,7 +62,7 @@ export function AIChat({
   conversationId: initialConversationId,
   onConversationChange,
 }: AIChatProps) {
-  const { user } = useAuth();
+  const { user, accessToken } = useAuth();
   const userId = getEffectiveUserId(user?.id);
   
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -68,10 +71,28 @@ export function AIChat({
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   
+  // 模型选择
+  const [selectedModel, setSelectedModel] = useState(DEFAULT_MODEL_ID);
+  const [supportsMultimodal, setSupportsMultimodal] = useState(true);
+  
+  // 图片上传
+  const [uploadedImages, setUploadedImages] = useState<UploadedImage[]>([]);
+  
   // 对话历史状态
   const [conversation, setConversation] = useState<ConversationHistory | null>(null);
   const [isInitializing, setIsInitializing] = useState(false);
   const conversationIdRef = useRef<string | null>(initialConversationId || null);
+
+  // 监听粘贴事件
+  useImagePaste(
+    (pastedImages) => {
+      if (supportsMultimodal) {
+        setUploadedImages(prev => [...prev, ...pastedImages].slice(0, 5));
+      }
+    },
+    supportsMultimodal,
+    10
+  );
 
   // 自动滚动到底部
   useEffect(() => {
@@ -159,12 +180,12 @@ export function AIChat({
 
   // 发送消息
   const sendMessage = async (content: string) => {
-    if (!content.trim() || isLoading) return;
+    if ((!content.trim() && uploadedImages.length === 0) || isLoading) return;
 
     const userMessage: Message = {
       id: Date.now().toString(),
       role: 'user',
-      content: content.trim(),
+      content: content.trim() || '(发送了图片)',
     };
 
     setMessages(prev => [...prev, userMessage]);
@@ -175,31 +196,50 @@ export function AIChat({
     try {
       // 如果是首条消息，创建对话
       if (!conversationIdRef.current) {
-        await createConversation(content.trim());
+        await createConversation(content.trim() || '图片问题');
       }
       
       // 保存用户消息
       await saveMessage('user', userMessage.content);
 
-      // 构建消息历史，包含系统提示词
-      const apiMessages = [
-        { role: 'system' as const, content: TUTOR_SYSTEM_PROMPT },
-        ...messages.map(m => ({
-          role: m.role as 'user' | 'assistant',
-          content: m.content,
-        })),
-        { role: 'user' as const, content: userMessage.content },
-      ];
+      // 构建请求头
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      if (accessToken) {
+        headers['Authorization'] = `Bearer ${accessToken}`;
+      }
+
+      // 构建请求体
+      const requestBody: Record<string, unknown> = {
+        messages: [
+          { role: 'system' as const, content: TUTOR_SYSTEM_PROMPT },
+          ...messages.map(m => ({
+            role: m.role as 'user' | 'assistant',
+            content: m.content,
+          })),
+          { role: 'user' as const, content: userMessage.content },
+        ],
+        model: selectedModel,
+        context: contextText,
+        anchorId,
+        stream: false,
+      };
+
+      // 支持多模态（图片上传）
+      if (supportsMultimodal && uploadedImages.length > 0) {
+        requestBody.messageContent = [
+          ...uploadedImages.map(img => ({
+            type: 'image_url',
+            image_url: { url: img.base64 },
+          })),
+          { type: 'text', text: content.trim() || '请描述这张图片' },
+        ];
+        setUploadedImages([]);  // 清空图片
+      }
 
       const response = await fetch(apiEndpoint, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          messages: apiMessages,
-          context: contextText,
-          anchorId,
-          stream: false,
-        }),
+        headers,
+        body: JSON.stringify(requestBody),
       });
 
       if (!response.ok) {
@@ -306,6 +346,12 @@ export function AIChat({
           )}
         </div>
         <div className="flex items-center gap-2">
+          <ModelSelector
+            value={selectedModel}
+            onChange={setSelectedModel}
+            onMultimodalChange={setSupportsMultimodal}
+            compact={true}
+          />
           {anchorTimestamp && (
             <span className="text-xs text-gray-500">
               困惑点: {formatTimestampMs(anchorTimestamp)}
@@ -410,7 +456,32 @@ export function AIChat({
 
       {/* 输入框 */}
       <form onSubmit={handleSubmit} className="p-4 border-t border-gray-200">
-        <div className="flex gap-2">
+        {/* 图片预览区域 */}
+        {supportsMultimodal && uploadedImages.length > 0 && (
+          <div className="mb-3 p-2 bg-gray-50 rounded-lg">
+            <ImageUpload
+              images={uploadedImages}
+              onImagesChange={setUploadedImages}
+              maxImages={5}
+              disabled={isLoading}
+            />
+          </div>
+        )}
+        
+        <div className="flex gap-2 items-end">
+          {/* 图片上传按钮 */}
+          {supportsMultimodal && (
+            <ImageUpload
+              images={[]}
+              onImagesChange={(newImages) => {
+                setUploadedImages(prev => [...prev, ...newImages].slice(0, 5));
+              }}
+              maxImages={5 - uploadedImages.length}
+              disabled={isLoading || uploadedImages.length >= 5}
+              className="flex-shrink-0"
+            />
+          )}
+          
           <input
             type="text"
             value={inputValue}
@@ -421,7 +492,7 @@ export function AIChat({
           />
           <button
             type="submit"
-            disabled={isLoading || !inputValue.trim()}
+            disabled={isLoading || (!inputValue.trim() && uploadedImages.length === 0)}
             className="px-4 py-2 bg-amber-500 text-white rounded-lg hover:bg-amber-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
           >
             发送

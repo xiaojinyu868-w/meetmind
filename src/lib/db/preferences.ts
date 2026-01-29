@@ -15,3 +15,15 @@ export async function getPreference<T>(key: string, defaultValue: T): Promise<T>
 export async function setPreference<T>(key: string, value: T): Promise<void> {
   await db.preferences.put({ key, value });
 }
+
+/** 删除用户偏好 */
+export async function deletePreference(key: string): Promise<void> {
+  await db.preferences.delete(key);
+}
+
+/** 清除所有引导和页面状态（用于调试/重置） */
+export async function resetAppState(): Promise<void> {
+  await db.preferences.delete('onboarding_state');
+  await db.preferences.delete('app_last_state');
+  await db.preferences.delete('tutor_last_state');
+}

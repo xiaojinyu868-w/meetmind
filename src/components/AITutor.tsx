@@ -9,7 +9,7 @@ import { GuidanceQuestion, GuidanceQuestionSkeleton } from './GuidanceQuestion';
 import { Citations, CitationsSkeleton } from './Citations';
 import { ImageUpload, useImagePaste, type UploadedImage } from './ImageUpload';
 import { useAuth } from '@/lib/hooks/useAuth';
-import { saveTutorResponseCache, getTutorResponseCache, deleteTutorResponseCache, getPreference, setPreference, type TutorResponseCache } from '@/lib/db';
+import { saveTutorResponseCache, getTutorResponseCache, deleteTutorResponseCache, getPreference, setPreference, type TutorResponseCache, saveClassSummary, getSessionSummary } from '@/lib/db';
 import { conversationService, getEffectiveUserId } from '@/lib/services/conversation-service';
 import type { GuidanceQuestion as GuidanceQuestionType, GuidanceOption, Citation } from '@/types/dify';
 import { DEFAULT_MODEL_ID } from '@/lib/services/llm-service';
@@ -75,6 +75,13 @@ interface TutorAPIResponse {
   guidance_question?: GuidanceQuestionType;
   citations?: Citation[];
   conversation_id?: string;
+  // 摘要相关字段
+  summary_generated?: boolean;
+  cached_summary?: {
+    overview: string;
+    takeaways: string;
+    keyDifficulties: string[];
+  };
 }
 
 export function AITutor({ breakpoint, segments, isLoading: externalLoading, onResolve, onActionItemsUpdate, sessionId = 'default', onSeek, initialQuestion, isMobile = false }: AITutorProps) {
@@ -134,6 +141,49 @@ export function AITutor({ breakpoint, segments, isLoading: externalLoading, onRe
       seg.endMs >= startMs && seg.startMs <= endMs
     );
   }, [breakpoint, segments]);
+
+  // 处理 AI 返回的摘要 - 如果是新生成的，保存到 IndexedDB
+  const handleSummaryFromResponse = useCallback(async (data: TutorAPIResponse) => {
+    if (data.summary_generated && data.cached_summary && sessionId && sessionId !== 'default') {
+      try {
+        // 先检查是否已经存在摘要
+        const existingSummary = await getSessionSummary(sessionId);
+        if (!existingSummary) {
+          // 解析 takeaways 字符串为结构化数据
+          const takeawaysLines = data.cached_summary.takeaways.split('\n').filter(line => line.trim());
+          const takeaways = takeawaysLines.map(line => {
+            // 格式：- 知识点: 说明 [时间戳1, 时间戳2]
+            const match = line.match(/^-\s*(.+?):\s*(.+?)\s*\[(.+?)\]$/);
+            if (match) {
+              return {
+                label: match[1].trim(),
+                insight: match[2].trim(),
+                timestamps: match[3].split(',').map(t => t.trim()),
+              };
+            }
+            // 简单格式
+            return {
+              label: '要点',
+              insight: line.replace(/^-\s*/, '').trim(),
+              timestamps: [],
+            };
+          });
+
+          await saveClassSummary({
+            summaryId: crypto.randomUUID(),
+            sessionId,
+            overview: data.cached_summary.overview,
+            takeaways,
+            keyDifficulties: data.cached_summary.keyDifficulties,
+            structure: [], // 结构暂时为空
+          });
+          console.log('[AITutor] 摘要已自动保存到 IndexedDB');
+        }
+      } catch (err) {
+        console.error('[AITutor] 保存摘要失败:', err);
+      }
+    }
+  }, [sessionId]);
 
   // 格式化时间
   const formatTime = useCallback((ms: number) => {
@@ -475,6 +525,7 @@ export function AITutor({ breakpoint, segments, isLoading: externalLoading, onRe
           model: selectedModel,
           enable_guidance: true,
           enable_web: enableWeb,
+          sessionId,  // 传递 sessionId 用于摘要缓存
         }),
       });
 
@@ -493,6 +544,8 @@ export function AITutor({ breakpoint, segments, isLoading: externalLoading, onRe
       if (data.actionItems && onActionItemsUpdate) {
         onActionItemsUpdate(data.actionItems);
       }
+      // 保存摘要到 IndexedDB（如果是新生成的）
+      await handleSummaryFromResponse(data);
       // 保存到缓存
       await saveToCache(data, [], data.conversation_id);
     } catch (err) {
@@ -500,7 +553,7 @@ export function AITutor({ breakpoint, segments, isLoading: externalLoading, onRe
     } finally {
       setIsLoading(false);
     }
-  }, [breakpoint, segments, selectedModel, enableWeb, accessToken, onActionItemsUpdate, saveToCache]);
+  }, [breakpoint, segments, selectedModel, enableWeb, accessToken, onActionItemsUpdate, saveToCache, handleSummaryFromResponse]);
 
   useEffect(() => {
     // 只有在没有缓存数据且不在恢复状态时才自动加载
@@ -533,6 +586,7 @@ export function AITutor({ breakpoint, segments, isLoading: externalLoading, onRe
           selected_option_id: optionId,
           conversation_id: conversationId,
           studentQuestion: `我选择了：${option.text}`,
+          sessionId,  // 传递 sessionId 用于摘要缓存
         }),
       });
 
@@ -558,6 +612,9 @@ export function AITutor({ breakpoint, segments, isLoading: externalLoading, onRe
         setResponse(prev => prev ? { ...prev, guidance_question: data.guidance_question } : null);
         setSelectedOptionId(undefined);
       }
+      
+      // 保存摘要到 IndexedDB（如果是新生成的）
+      await handleSummaryFromResponse(data);
       
       // 更新缓存
       if (response) {
@@ -626,6 +683,7 @@ export function AITutor({ breakpoint, segments, isLoading: externalLoading, onRe
           enable_guidance: true,
           enable_web: enableWeb,
           conversation_id: conversationId,
+          sessionId,  // 传递 sessionId 用于摘要缓存
         }),
       });
 
@@ -651,6 +709,9 @@ export function AITutor({ breakpoint, segments, isLoading: externalLoading, onRe
         setResponse(prev => prev ? { ...prev, citations: data.citations } : null);
       }
       
+      // 保存摘要到 IndexedDB（如果是新生成的）
+      await handleSummaryFromResponse(data);
+      
       // 更新缓存
       if (response) {
         await saveToCache(response, newHistory, data.conversation_id || conversationId);
@@ -663,15 +724,320 @@ export function AITutor({ breakpoint, segments, isLoading: externalLoading, onRe
     }
   };
 
-  if (!breakpoint) {
+
+  // ===== 全局对话模式（无困惑点时）=====
+  // 当没有选中困惑点时，进入全局对话模式，可以针对整节课提问
+  const isGlobalMode = !breakpoint;
+
+  // 全局模式下的对话历史
+  const [globalChatHistory, setGlobalChatHistory] = useState<Array<{ role: 'user' | 'assistant'; content: string }>>([]);
+  const [globalLoading, setGlobalLoading] = useState(false);
+  
+  // 全局模式：发送消息（必须在 useEffect 之前定义）
+  const handleGlobalSend = useCallback(async (questionOverride?: string) => {
+    const question = questionOverride || userInput.trim();
+    if (!question || segments.length === 0) return;
+    
+    if (!questionOverride) {
+      setUserInput('');
+    }
+    
+    // 添加用户消息
+    setGlobalChatHistory(prev => [...prev, { role: 'user', content: question }]);
+    setGlobalLoading(true);
+
+    try {
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      if (accessToken) {
+        headers['Authorization'] = `Bearer ${accessToken}`;
+      }
+
+      // 构建请求体
+      const requestBody: Record<string, unknown> = {
+        timestamp: 0,
+        segments,
+        model: selectedModel,
+        studentQuestion: question,
+        globalMode: true,  // 全局对话模式
+        enable_guidance: false,
+        enable_web: enableWeb,
+        sessionId,  // 传递 sessionId
+      };
+
+      // 支持多模态（图片上传）
+      if (supportsMultimodal && uploadedImages.length > 0) {
+        requestBody.messageContent = [
+          ...uploadedImages.map(img => ({
+            type: 'image_url',
+            image_url: { url: img.base64 },
+          })),
+          { type: 'text', text: question },
+        ];
+        setUploadedImages([]);  // 清空图片
+      }
+
+      const res = await fetch('/api/tutor', {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(requestBody),
+      });
+
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error || '请求失败');
+      }
+
+      const data = await res.json();
+      
+      setGlobalChatHistory(prev => [...prev, { 
+        role: 'assistant', 
+        content: data.rawContent || '抱歉，我没有理解你的问题，能换个方式问吗？'
+      }]);
+
+      // 保存摘要到 IndexedDB（如果是新生成的）
+      await handleSummaryFromResponse(data);
+
+      // 保存到对话历史
+      if (!conversationIdRef.current) {
+        try {
+          const conv = await conversationService.createConversation({
+            userId,
+            type: 'global-chat',
+            title: conversationService.generateTitleFromMessage(question),
+            sessionId,
+          });
+          conversationIdRef.current = conv.conversationId;
+        } catch (err) {
+          console.error('Failed to create conversation:', err);
+        }
+      }
+
+      if (conversationIdRef.current) {
+        try {
+          await conversationService.addMessages(conversationIdRef.current, [
+            { role: 'user', content: question },
+            { role: 'assistant', content: data.rawContent || '' },
+          ]);
+        } catch (err) {
+          console.error('Failed to save messages:', err);
+        }
+      }
+
+    } catch (err) {
+      setGlobalChatHistory(prev => [...prev, { 
+        role: 'assistant', 
+        content: `抱歉，出现错误：${err instanceof Error ? err.message : '未知错误'}` 
+      }]);
+    } finally {
+      setGlobalLoading(false);
+    }
+  }, [userInput, segments, selectedModel, enableWeb, supportsMultimodal, uploadedImages, accessToken, userId, sessionId]);
+
+  // 全局模式：处理初始问题（handleGlobalSend 已在上方定义）
+  useEffect(() => {
+    if (isGlobalMode && initialQuestion && !hasProcessedInitialQuestion.current && segments.length > 0) {
+      hasProcessedInitialQuestion.current = true;
+      setTimeout(() => {
+        handleGlobalSend(initialQuestion);
+      }, 300);
+    }
+  }, [isGlobalMode, initialQuestion, segments.length, handleGlobalSend]);
+
+  // 重置 sessionId 变化时的全局对话状态
+  useEffect(() => {
+    if (isGlobalMode) {
+      setGlobalChatHistory([]);
+      conversationIdRef.current = null;
+      hasProcessedInitialQuestion.current = false;
+    }
+  }, [sessionId, isGlobalMode]);
+
+  // ===== 全局对话模式渲染 =====
+  if (isGlobalMode) {
     return (
-      <div className="flex-1 flex items-center justify-center text-gray-400">
-        <div className="text-center animate-fade-in">
-          <div className="w-20 h-20 mx-auto mb-4 bg-gray-100 rounded-full flex items-center justify-center">
-            <span className="text-4xl">🎯</span>
+      <div className="h-full flex flex-col bg-white">
+        {/* 头部 */}
+        <div className={`border-b border-gray-100 bg-gradient-to-r from-lilac-100/50 to-white ${isMobile ? 'p-3' : 'p-4'}`}>
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <span className="text-lg">💬</span>
+              <div>
+                <h3 className={`font-medium text-gray-800 ${isMobile ? 'text-sm' : 'text-base'}`}>
+                  AI 课堂助手
+                </h3>
+                <p className="text-xs text-gray-500">
+                  基于整节课内容回答问题
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <ModelSelector
+                value={selectedModel}
+                onChange={setSelectedModel}
+                onMultimodalChange={setSupportsMultimodal}
+                compact={isMobile}
+              />
+            </div>
           </div>
-          <p className="text-lg font-medium text-gray-600 mb-1">选择一个困惑点</p>
-          <p className="text-sm">点击时间轴上的红点开始学习</p>
+          
+          {/* 功能开关 - 仅桌面端显示 */}
+          {!isMobile && (
+            <div className="mt-3 flex items-center gap-4">
+              <label className="flex items-center gap-2 text-xs text-gray-600 cursor-pointer group">
+                <input
+                  type="checkbox"
+                  checked={enableWeb}
+                  onChange={(e) => setEnableWeb(e.target.checked)}
+                  className="w-4 h-4 rounded border-gray-300 text-amber-500 focus:ring-amber-400"
+                />
+                <span className="group-hover:text-gray-900 transition-colors">🌐 联网搜索</span>
+              </label>
+            </div>
+          )}
+        </div>
+
+        {/* 对话区域 */}
+        <div className={`flex-1 overflow-y-auto ${isMobile ? 'p-3' : 'p-5'}`} style={{ minHeight: 0 }}>
+          {segments.length === 0 ? (
+            // 无转录内容
+            <div className="h-full flex flex-col items-center justify-center text-center">
+              <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mb-4">
+                <span className="text-3xl">💬</span>
+              </div>
+              <h3 className="text-lg font-medium text-gray-700 mb-2">暂无课堂内容</h3>
+              <p className="text-sm text-gray-500">请先录制课堂或上传录音</p>
+            </div>
+          ) : globalChatHistory.length === 0 ? (
+            // 欢迎界面
+            <div className="h-full flex flex-col items-center justify-center text-center">
+              <div className="w-20 h-20 bg-gradient-to-br from-amber-100 to-amber-200 rounded-full flex items-center justify-center mb-4">
+                <span className="text-4xl">🎓</span>
+              </div>
+              <h3 className="text-lg font-medium text-gray-800 mb-2">
+                有什么问题想问？
+              </h3>
+              <p className="text-sm text-gray-500 mb-6 max-w-xs">
+                我已经学习了这节课的内容，可以帮你解答疑惑、总结要点
+              </p>
+              
+              {/* 快捷问题 */}
+              <div className="flex flex-wrap justify-center gap-2 max-w-sm">
+                <button
+                  onClick={() => handleGlobalSend('这节课讲了什么？')}
+                  className="px-4 py-2 bg-gradient-to-r from-amber-50 to-amber-100 text-amber-700 rounded-full text-sm hover:from-amber-100 hover:to-amber-200 transition-colors border border-amber-200"
+                >
+                  这节课讲了什么？
+                </button>
+                <button
+                  onClick={() => handleGlobalSend('帮我总结这节课的重点')}
+                  className="px-4 py-2 bg-gradient-to-r from-amber-50 to-amber-100 text-amber-700 rounded-full text-sm hover:from-amber-100 hover:to-amber-200 transition-colors border border-amber-200"
+                >
+                  帮我总结重点
+                </button>
+                <button
+                  onClick={() => handleGlobalSend('这节课有哪些需要注意的地方？')}
+                  className="px-4 py-2 bg-gradient-to-r from-amber-50 to-amber-100 text-amber-700 rounded-full text-sm hover:from-amber-100 hover:to-amber-200 transition-colors border border-amber-200"
+                >
+                  有哪些需要注意的？
+                </button>
+              </div>
+            </div>
+          ) : (
+            // 对话内容
+            <div className="space-y-4">
+              {globalChatHistory.map((msg, i) => (
+                <div
+                  key={i}
+                  className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
+                >
+                  <div
+                    className={`max-w-[85%] rounded-2xl px-4 py-3 ${
+                      msg.role === 'user'
+                        ? 'bg-gradient-to-r from-amber-500 to-amber-600 text-white'
+                        : 'bg-gray-100 text-gray-800'
+                    }`}
+                  >
+                    <div className={`text-sm whitespace-pre-wrap leading-relaxed ${isMobile ? 'text-xs' : ''}`}>
+                      {msg.role === 'assistant' ? renderTextWithTimestamps(msg.content) : msg.content}
+                    </div>
+                  </div>
+                </div>
+              ))}
+              
+              {globalLoading && (
+                <div className="flex justify-start">
+                  <div className="bg-gray-100 rounded-2xl px-4 py-3">
+                    <div className="flex items-center gap-2 text-gray-500">
+                      <div className="loading-dots">
+                        <span></span>
+                        <span></span>
+                        <span></span>
+                      </div>
+                      <span className="text-xs">思考中...</span>
+                    </div>
+                  </div>
+                </div>
+              )}
+              
+              <div ref={chatEndRef} />
+            </div>
+          )}
+        </div>
+
+        {/* 输入区域 */}
+        <div className="p-4 border-t border-gray-100 bg-white">
+          {/* 图片预览区域 */}
+          {supportsMultimodal && uploadedImages.length > 0 && (
+            <div className="mb-3 p-2 bg-gray-50 rounded-lg">
+              <ImageUpload
+                images={uploadedImages}
+                onImagesChange={setUploadedImages}
+                maxImages={5}
+                disabled={globalLoading}
+              />
+            </div>
+          )}
+          
+          <div className="flex gap-2 items-end">
+            {/* 图片上传按钮 */}
+            {supportsMultimodal && (
+              <ImageUpload
+                images={[]}
+                onImagesChange={(newImages) => {
+                  setUploadedImages(prev => [...prev, ...newImages].slice(0, 5));
+                }}
+                maxImages={5 - uploadedImages.length}
+                disabled={globalLoading || uploadedImages.length >= 5}
+                className="flex-shrink-0"
+              />
+            )}
+            
+            <input
+              type="text"
+              value={userInput}
+              onChange={(e) => setUserInput(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && handleGlobalSend()}
+              placeholder="问我任何关于这节课的问题..."
+              className={`input flex-1 ${isMobile ? 'text-sm' : ''}`}
+              disabled={globalLoading || segments.length === 0}
+            />
+            <button
+              onClick={() => handleGlobalSend()}
+              disabled={(!userInput.trim() && uploadedImages.length === 0) || globalLoading || segments.length === 0}
+              className={`btn btn-primary disabled:opacity-50 ${isMobile ? 'px-4' : 'px-6'}`}
+            >
+              发送
+            </button>
+          </div>
+          
+          {/* 快捷回复 */}
+          {globalChatHistory.length > 0 && (
+            <div className="flex flex-wrap gap-2 mt-2">
+              <QuickReply text="再详细说说" onClick={setUserInput} />
+              <QuickReply text="举个例子" onClick={setUserInput} />
+              <QuickReply text="谢谢，我懂了" onClick={setUserInput} />
+            </div>
+          )}
         </div>
       </div>
     );

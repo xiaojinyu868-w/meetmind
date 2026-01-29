@@ -28,10 +28,39 @@ export function OnboardingGuide({
   const [mounted, setMounted] = useState(false);
   const [arrowPosition, setArrowPosition] = useState<'top' | 'bottom' | 'left' | 'right'>('bottom');
   const { isMobile } = useResponsive();
+  const targetElementRef = useRef<Element | null>(null);
+  
+  // 从步骤配置中读取是否为交互式（默认 true）
+  const isInteractive = step?.interactive !== false;
 
   useEffect(() => {
     setMounted(true);
   }, []);
+
+  // 交互式引导：监听目标元素的点击事件
+  useEffect(() => {
+    if (!isInteractive || !isActive || !step?.targetSelector) return;
+
+    const target = document.querySelector(step.targetSelector);
+    if (!target) return;
+
+    targetElementRef.current = target;
+
+    const handleTargetClick = (e: Event) => {
+      // 阻止事件冒泡，避免触发遮罩的点击事件
+      e.stopPropagation();
+      // 延迟一点执行下一步，让用户能看到点击效果
+      setTimeout(() => {
+        onNext();
+      }, 150);
+    };
+
+    target.addEventListener('click', handleTargetClick, { capture: true });
+
+    return () => {
+      target.removeEventListener('click', handleTargetClick, { capture: true });
+    };
+  }, [isInteractive, isActive, step?.targetSelector, onNext]);
 
   // 查找目标元素并计算位置
   const updatePosition = useCallback(() => {
@@ -176,35 +205,76 @@ export function OnboardingGuide({
   };
 
   const content = (
-    <div className="fixed inset-0 z-[9999]">
-      {/* SVG 遮罩 + 镂空 */}
-      <svg className="absolute inset-0 w-full h-full pointer-events-none">
-        <defs>
-          <mask id="spotlight-mask">
-            <rect x="0" y="0" width="100%" height="100%" fill="white" />
-            {targetRect && step.spotlight && (
-              <rect
-                x={targetRect.left - (isMobile ? 6 : 8)}
-                y={targetRect.top - (isMobile ? 6 : 8)}
-                width={targetRect.width + (isMobile ? 12 : 16)}
-                height={targetRect.height + (isMobile ? 12 : 16)}
-                rx={isMobile ? 8 : 12}
-                fill="black"
-              />
-            )}
-          </mask>
-        </defs>
-        <rect
-          x="0"
-          y="0"
-          width="100%"
-          height="100%"
-          fill="rgba(0, 0, 0, 0.6)"
-          mask="url(#spotlight-mask)"
-          className="pointer-events-auto"
-          onClick={onSkip}
-        />
-      </svg>
+    <div className="fixed inset-0 z-[9999]" style={{ pointerEvents: 'none' }}>
+      {/* 遮罩层 - 使用四个矩形围绕目标元素，保留镂空区域可点击 */}
+      {targetRect && step.spotlight && isInteractive ? (
+        // 交互式模式：四个独立的遮罩块，中间镂空可点击
+        // 注意：交互式模式下点击遮罩不退出引导，只有点击目标元素才进入下一步
+        <>
+          {/* 上方遮罩 */}
+          <div 
+            className="absolute left-0 right-0 top-0 bg-black/60 pointer-events-auto cursor-default"
+            style={{ height: Math.max(0, targetRect.top - (isMobile ? 6 : 8)) }}
+            onClick={(e) => e.stopPropagation()}
+          />
+          {/* 下方遮罩 */}
+          <div 
+            className="absolute left-0 right-0 bottom-0 bg-black/60 pointer-events-auto cursor-default"
+            style={{ top: targetRect.bottom + (isMobile ? 6 : 8) }}
+            onClick={(e) => e.stopPropagation()}
+          />
+          {/* 左侧遮罩 */}
+          <div 
+            className="absolute left-0 bg-black/60 pointer-events-auto cursor-default"
+            style={{ 
+              top: targetRect.top - (isMobile ? 6 : 8),
+              width: Math.max(0, targetRect.left - (isMobile ? 6 : 8)),
+              height: targetRect.height + (isMobile ? 12 : 16),
+            }}
+            onClick={(e) => e.stopPropagation()}
+          />
+          {/* 右侧遮罩 */}
+          <div 
+            className="absolute right-0 bg-black/60 pointer-events-auto cursor-default"
+            style={{ 
+              top: targetRect.top - (isMobile ? 6 : 8),
+              left: targetRect.right + (isMobile ? 6 : 8),
+              height: targetRect.height + (isMobile ? 12 : 16),
+            }}
+            onClick={(e) => e.stopPropagation()}
+          />
+        </>
+      ) : (
+        // 非交互式模式或无目标：使用 SVG 遮罩
+        // 点击遮罩不退出引导，避免用户误操作
+        <svg className="absolute inset-0 w-full h-full pointer-events-none">
+          <defs>
+            <mask id="spotlight-mask">
+              <rect x="0" y="0" width="100%" height="100%" fill="white" />
+              {targetRect && step.spotlight && (
+                <rect
+                  x={targetRect.left - (isMobile ? 6 : 8)}
+                  y={targetRect.top - (isMobile ? 6 : 8)}
+                  width={targetRect.width + (isMobile ? 12 : 16)}
+                  height={targetRect.height + (isMobile ? 12 : 16)}
+                  rx={isMobile ? 8 : 12}
+                  fill="black"
+                />
+              )}
+            </mask>
+          </defs>
+          <rect
+            x="0"
+            y="0"
+            width="100%"
+            height="100%"
+            fill="rgba(0, 0, 0, 0.6)"
+            mask="url(#spotlight-mask)"
+            className="pointer-events-auto cursor-default"
+            onClick={(e) => e.stopPropagation()}
+          />
+        </svg>
+      )}
 
       {/* 高亮边框 */}
       {targetRect && step.spotlight && (
@@ -270,12 +340,20 @@ export function OnboardingGuide({
             >
               跳过引导
             </button>
-            <button
-              onClick={onNext}
-              className="px-3 sm:px-5 py-1.5 sm:py-2 bg-rose-500 hover:bg-rose-600 text-white text-xs sm:text-sm font-medium rounded-full transition-colors shadow-lg"
-            >
-              {stepIndex === totalSteps - 1 ? '开始使用' : '下一步'}
-            </button>
+            {/* 交互式模式：显示"点击试试"提示；非交互式：显示下一步按钮 */}
+            {isInteractive && targetRect ? (
+              <span className="px-3 sm:px-5 py-1.5 sm:py-2 text-rose-500 text-xs sm:text-sm font-medium flex items-center gap-1">
+                <span className="animate-bounce">👆</span>
+                点击试试
+              </span>
+            ) : (
+              <button
+                onClick={onNext}
+                className="px-3 sm:px-5 py-1.5 sm:py-2 bg-rose-500 hover:bg-rose-600 text-white text-xs sm:text-sm font-medium rounded-full transition-colors shadow-lg"
+              >
+                {stepIndex === totalSteps - 1 ? '开始使用' : '下一步'}
+              </button>
+            )}
           </div>
         </div>
       </div>

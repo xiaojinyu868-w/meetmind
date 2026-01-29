@@ -13,6 +13,12 @@ export interface OnboardingStep {
   spotlight?: boolean;
   action?: 'click' | 'wait' | 'auto';
   delay?: number;
+  /** 是否为交互式步骤（用户点击目标元素进入下一步）
+   * - true: 用户需要点击目标元素，元素的原有功能会生效
+   * - false: 用户点击"下一步"按钮，不触发元素功能
+   * - 默认为 true
+   */
+  interactive?: boolean;
 }
 
 // 引导流程定义
@@ -84,21 +90,33 @@ export const DESKTOP_ONBOARDING_FLOWS: Record<string, OnboardingFlow> = {
     steps: [
       {
         id: 'timeline',
-        title: '1/2 课堂时间轴',
-        description: '这里展示课堂内容的时间轴，点击可跳转到对应位置播放',
+        title: '1/3 功能标签栏',
+        description: '点击「时间轴」按钮，可以查看课堂内容。还有困惑点、精选、摘要等功能等你探索',
         targetSelector: '[data-onboarding="timeline"]',
         position: 'right',
         spotlight: true,
         action: 'click',
+        interactive: true, // 点击真的切换 Tab
       },
       {
         id: 'ai-tutor',
-        title: '2/2 AI 家教',
+        title: '2/3 AI 家教',
         description: '有问题随时问 AI，它会根据课堂内容为你解答疑惑',
         targetSelector: '[data-onboarding="ai-tutor"]',
         position: 'left',
         spotlight: true,
         action: 'click',
+        interactive: false, // 点击进入下一步，不触发功能
+      },
+      {
+        id: 'action-list',
+        title: '3/3 行动清单',
+        description: 'AI 会根据课堂内容生成学习任务，点击查看',
+        targetSelector: '[data-onboarding="action-list"]',
+        position: 'left',
+        spotlight: true,
+        action: 'click',
+        interactive: true, // 点击真的展开抽屉
       },
     ],
   },
@@ -157,29 +175,31 @@ export const MOBILE_ONBOARDING_FLOWS: Record<string, OnboardingFlow> = {
     ],
   },
   
-  // 移动端复习引导 - 适配移动端布局
+  // 移动端复习引导 - 引导 AI 对话入口
   review: {
     id: 'review',
     name: '复习引导',
     trigger: 'feature-first-use',
     steps: [
       {
-        id: 'timeline',
-        title: '1/2 课堂时间轴',
-        description: '滑动查看课堂内容，点击可跳转播放对应片段',
-        targetSelector: '[data-onboarding="timeline"]',
-        position: 'bottom',  // 移动端时间轴在顶部，tooltip 在下方
+        id: 'ai-fab',
+        title: '1/2 AI 助教',
+        description: '点这里可以问 AI 任何关于这节课的问题',
+        targetSelector: '[data-onboarding="ai-fab"]',
+        position: 'top',  // 悬浮按钮在底部，tooltip 在上方
         spotlight: true,
         action: 'click',
+        interactive: true, // 点击打开 AI 对话
       },
       {
         id: 'menu-button',
         title: '2/2 更多功能',
-        description: '点击菜单进入 AI 助教、精选片段、摘要笔记等功能',
+        description: '点击菜单查看精选片段、生成摘要等',
         targetSelector: '[data-onboarding="menu-button"]',
-        position: 'bottom',
+        position: 'left',  // 菜单按钮在右上角，tooltip 在左侧
         spotlight: true,
         action: 'click',
+        interactive: true, // 点击展开菜单
       },
     ],
   },

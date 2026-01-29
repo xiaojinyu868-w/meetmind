@@ -67,6 +67,7 @@
     "react-dom": "^18.2.0",
     "swr": "^2.2.0",
     "tailwind-merge": "^2.2.0",
+    "undici": "^7.19.2",
     "uuid": "^13.0.0",
     "wavesurfer.js": "^7.12.1",
     "ws": "^8.19.0",

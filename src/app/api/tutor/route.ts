@@ -16,6 +16,10 @@ import { formatTimeRange, formatTimestamp, getSegmentsInRange, type Segment } fr
 import { getDifyService, isDifyEnabled, type DifyWorkflowInput } from '@/lib/services/dify-service';
 import type { ExtendedTutorRequest, ExtendedTutorResponse, GuidanceQuestion, Citation } from '@/types/dify';
 import { applyRateLimit } from '@/lib/utils/rate-limit';
+import { summaryService } from '@/lib/services/summary-service';
+
+// 内存缓存摘要（避免重复生成，服务重启后失效）
+const summaryCache = new Map<string, { overview: string; takeaways: string; keyDifficulties: string[] }>();
 
 // AI 家教系统提示词（初次解释用）
 const TUTOR_SYSTEM_PROMPT = `你是一位"课堂对齐"的 AI 家教。你的任务是帮助学生补懂课堂上没听懂的内容。
@@ -81,6 +85,26 @@ const FOLLOWUP_SYSTEM_PROMPT = `你是一位亲切的 AI 家教，正在和学�
 - 像朋友聊天一样
 - 引用课堂内容时附带时间戳`;
 
+// 全局对话模式的系统提示词（基于完整课堂上下文）
+const GLOBAL_CHAT_SYSTEM_PROMPT = `你是一位专业的 AI 家教，正在帮助学生复习整节课的内容。
+
+【核心原则】
+1. 基于提供的课堂转录内容回答问题
+2. 用简单易懂的语言解释复杂概念
+3. 提供相关例子帮助理解
+4. 如果转录中没有相关内容，诚实告知并基于通用知识回答
+
+【时间戳引用规则】
+- 当回答涉及课堂内容时，必须引用对应的时间戳，格式：[MM:SS] 或 [MM:SS-MM:SS]
+- 例如："老师在 [02:30] 讲解了这个概念"
+- 时间戳会被渲染为可点击的链接，帮助学生快速定位录音
+
+【回答风格】
+- 简洁自然，像朋友聊天一样
+- 适当引用课堂原文并标注时间戳
+- 鼓励学生继续提问
+- 回复控制在 3-5 句话内，除非学生要求详细解释`;
+
 export async function POST(request: NextRequest) {
   // 应用速率限制
   const rateLimitResponse = await applyRateLimit(request, 'tutor');
@@ -89,6 +113,8 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json() as ExtendedTutorRequest & { 
       messageContent?: Array<{ type: string; text?: string; image_url?: { url: string } }>;
+      globalMode?: boolean;  // 全局对话模式
+      sessionId?: string;    // 会话ID，用于摘要缓存
     };
     
     const { 
@@ -102,6 +128,8 @@ export async function POST(request: NextRequest) {
       enable_web = false,
       selected_option_id,
       conversation_id,
+      globalMode = false,  // 全局对话模式，使用完整课堂上下文
+      sessionId,           // 会话ID
     } = body;
 
     if (!segments || !Array.isArray(segments)) {
@@ -111,12 +139,34 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // 获取断点附近的上下文（前 90 秒，后 60 秒，增加上下文范围）
-    const contextSegments = getSegmentsInRange(
-      segments,
-      timestamp - 90000,
-      timestamp + 60000
-    );
+    // 根据模式获取上下文
+    // 全局模式：使用完整课堂转录（限制长度避免 token 超限）
+    // 困惑点模式：获取断点附近的上下文（前 90 秒，后 60 秒）
+    let contextSegments: typeof segments;
+    
+    if (globalMode) {
+      // 全局模式：使用完整转录，但限制长度
+      // 按时间顺序取前 N 条，确保总字符数不超过 8000
+      let totalLength = 0;
+      const maxLength = 8000;
+      const selectedSegments: typeof segments = [];
+      
+      for (const seg of segments) {
+        if (totalLength + (seg.text?.length || 0) > maxLength) break;
+        selectedSegments.push(seg);
+        totalLength += seg.text?.length || 0;
+      }
+      
+      contextSegments = selectedSegments;
+      console.log(`[Tutor API] 全局模式: 使用 ${contextSegments.length}/${segments.length} 条转录，总字符: ${totalLength}`);
+    } else {
+      // 困惑点模式：获取断点附近的上下文
+      contextSegments = getSegmentsInRange(
+        segments,
+        timestamp - 90000,
+        timestamp + 60000
+      );
+    }
 
     // 【修复】不使用合并，直接使用原始segments，避免说话者混淆
     const mergedSegments = contextSegments; // 使用原始数据保持时间戳精确性
@@ -139,18 +189,89 @@ export async function POST(request: NextRequest) {
       });
     }
     
-    // 生成上下文（暂时不标注说话人，直到有真正的 diarization）
-    const contextText = mergedSegments.map(s => {
+    // 生成局部上下文（困惑点附近的详细转录）
+    const localContextText = mergedSegments.map(s => {
       const timeStr = formatTimestamp(s.startMs);
       return `[${timeStr}] ${s.text}`;
     }).join('\n');
+
+    // ===== 新增：获取或生成课堂摘要作为全局上下文 =====
+    let summaryContext = '';
+    let summaryGenerated = false;
+    
+    // 只在困惑点模式下使用摘要（全局模式已经使用完整转录）
+    if (!globalMode && sessionId && segments.length >= 10) {
+      try {
+        // 先检查缓存
+        let cachedSummary = summaryCache.get(sessionId);
+        
+        if (!cachedSummary) {
+          console.log(`[Tutor API] 为 session ${sessionId} 生成摘要...`);
+          
+          // 生成摘要
+          const summaryResult = await summaryService.generateSummary(
+            sessionId,
+            segments.map((s, i) => ({
+              id: i,
+              sessionId: sessionId,
+              userId: 'anonymous',  // API 调用时使用匿名用户
+              text: s.text,
+              startMs: s.startMs,
+              endMs: s.endMs,
+              confidence: 1.0,
+              isFinal: true,
+            }))
+          );
+          
+          // 格式化 takeaways
+          const takeawaysText = summaryResult.takeaways
+            .map(t => `- ${t.label}: ${t.insight} [${t.timestamps.join(', ')}]`)
+            .join('\n');
+          
+          // 缓存摘要
+          cachedSummary = {
+            overview: summaryResult.overview,
+            takeaways: takeawaysText,
+            keyDifficulties: summaryResult.keyDifficulties,
+          };
+          summaryCache.set(sessionId, cachedSummary);
+          summaryGenerated = true;
+          
+          console.log(`[Tutor API] 摘要已生成并缓存`);
+        } else {
+          console.log(`[Tutor API] 使用缓存的摘要`);
+        }
+        
+        // 构建摘要上下文
+        summaryContext = `【课堂概要】
+${cachedSummary.overview}
+
+【主要知识点】
+${cachedSummary.takeaways}
+
+【重点难点】
+${cachedSummary.keyDifficulties.map(d => `- ${d}`).join('\n')}
+
+---
+`;
+      } catch (error) {
+        console.error('[Tutor API] 摘要生成失败，使用局部上下文:', error);
+        // 摘要生成失败不影响主流程
+      }
+    }
+    
+    // 组合完整上下文：摘要（全局）+ 局部详情
+    const contextText = summaryContext 
+      ? `${summaryContext}\n【困惑点附近的详细内容 ${formatTimestamp(timestamp - 90000)} ~ ${formatTimestamp(timestamp + 60000)}】\n${localContextText}`
+      : localContextText;
 
     // 【调试日志】输出发送给大模型的原始数据
     console.log('\n========== [Tutor API] 发送给大模型的内容 ==========');
     console.log('[输入参数] timestamp:', timestamp, 'ms =', formatTimestamp(timestamp));
     console.log('[输入参数] segments数量:', segments.length);
     console.log('[上下文范围] contextSegments数量:', contextSegments.length);
-    console.log('\n[课堂转录内容]:');
+    console.log('[摘要状态]', summaryContext ? (summaryGenerated ? '新生成' : '使用缓存') : '无摘要');
+    console.log('\n[完整上下文]:');
     console.log(contextText);
     console.log('\n====================================================\n');
 
@@ -207,8 +328,10 @@ export async function POST(request: NextRequest) {
     const messages: ChatMessage[] = [];
 
     if (studentQuestion || messageContent) {
-      // 追问模式 - 使用更自然的对话提示词
-      messages.push({ role: 'system', content: FOLLOWUP_SYSTEM_PROMPT });
+      // 追问模式 / 全局对话模式
+      // 全局模式使用专用提示词，追问模式使用追问提示词
+      const systemPrompt = globalMode ? GLOBAL_CHAT_SYSTEM_PROMPT : FOLLOWUP_SYSTEM_PROMPT;
+      messages.push({ role: 'system', content: systemPrompt });
       
       // 构建用户消息（支持多模态）
       if (messageContent && messageContent.length > 0) {
@@ -217,7 +340,9 @@ export async function POST(request: NextRequest) {
           // 先添加课堂上下文作为文本
           {
             type: 'text',
-            text: `【课堂转录参考】\n${contextText}\n\n【学生说】`,
+            text: globalMode 
+              ? `【整节课转录内容】\n${contextText}\n\n【学生提问】`
+              : `【课堂转录参考】\n${contextText}\n\n【学生说】`,
           },
         ];
         
@@ -242,7 +367,13 @@ export async function POST(request: NextRequest) {
         });
       } else {
         // 纯文本消息
-        const userPrompt = `【课堂转录参考】
+        const userPrompt = globalMode
+          ? `【整节课转录内容】
+${contextText}
+
+【学生提问】
+${studentQuestion}`
+          : `【课堂转录参考】
 ${contextText}
 
 【学生说】
@@ -311,6 +442,9 @@ ${contextText}
         option_followup: optionFollowup,
         citations: citations?.length ? citations : undefined,
         conversation_id: difyConversationId,
+        // 摘要信息（如果新生成的话）
+        summary_generated: summaryGenerated,
+        cached_summary: summaryGenerated && sessionId ? summaryCache.get(sessionId) : undefined,
       };
 
       return NextResponse.json(result);
@@ -346,6 +480,9 @@ ${contextText}
       guidance_question: guidanceQuestion,
       citations: citations?.length ? citations : undefined,
       conversation_id: difyConversationId,
+      // 摘要信息（如果新生成的话）
+      summary_generated: summaryGenerated,
+      cached_summary: summaryGenerated && sessionId ? summaryCache.get(sessionId) : undefined,
     };
 
     return NextResponse.json(result);

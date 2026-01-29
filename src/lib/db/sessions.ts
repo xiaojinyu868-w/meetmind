@@ -40,6 +40,17 @@ export async function updateSessionStatus(
     .modify({ status, updatedAt: new Date() });
 }
 
+/** 更新会话标题/主题 */
+export async function updateSessionTopic(
+  sessionId: string,
+  topic: string
+): Promise<void> {
+  await db.audioSessions
+    .where('sessionId')
+    .equals(sessionId)
+    .modify({ topic, updatedAt: new Date() });
+}
+
 /** 获取今日会话（按用户） */
 export async function getTodaySessions(userId: string): Promise<AudioSession[]> {
   const today = new Date();

@@ -3,6 +3,8 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
 import type { TranscriptSegment } from '@/types';
 import { DashScopeASRClient } from '@/lib/services/dashscope-asr-service';
+import { TranscriptPreviewPanel } from './TranscriptPreviewPanel';
+import { TranscriptEnhanceManager, type EnhancedTranscriptSegment } from '@/lib/services/transcript-enhancer';
 
 interface RecorderProps {
   onRecordingStart?: (sessionId: string) => void;
@@ -31,7 +33,6 @@ export function Recorder({
   const [transcript, setTranscript] = useState<TranscriptSegment[]>([]);
   const [interimText, setInterimText] = useState('');
   const [error, setError] = useState<string | null>(null);
-  const [canUndo, setCanUndo] = useState(false);
   const [serviceStatus, setServiceStatus] = useState<ServiceStatus>('checking');
   const [transcribeProgress, setTranscribeProgress] = useState<string>('');
   const [transcribeMode, setTranscribeMode] = useState<TranscribeMode>('streaming');
@@ -53,6 +54,11 @@ export function Recorder({
   const asrClientRef = useRef<DashScopeASRClient | null>(null);
   const transcriptRef = useRef<TranscriptSegment[]>([]);
   const pcmProcessorRef = useRef<ScriptProcessorNode | null>(null);
+  
+  // ASR 后处理增强管理器
+  const enhanceManagerRef = useRef<TranscriptEnhanceManager | null>(null);
+  const [enhancedSegments, setEnhancedSegments] = useState<Map<string, EnhancedTranscriptSegment>>(new Map());
+  const [enhanceStats, setEnhanceStats] = useState({ enhanced: 0, total: 0, isEnhancing: false });
 
   // VAD 检测状态
   const vadStateRef = useRef({
@@ -114,6 +120,33 @@ export function Recorder({
       transcriptRef.current = [];
       setInterimText('');
       setAnchorCount(0);
+      
+      // 初始化 ASR 后处理增强管理器
+      setEnhancedSegments(new Map());
+      setEnhanceStats({ enhanced: 0, total: 0, isEnhancing: false });
+      enhanceManagerRef.current = new TranscriptEnhanceManager({
+        minBatchSize: 1,          // 最少 1 句就可以触发优化（降低门槛方便测试）
+        silenceThreshold: 3000,   // 3 秒静音触发优化
+        model: 'qwen3-max',       // 使用可用的 qwen3-max 模型
+        onEnhanced: (segments) => {
+          // 优化完成回调：更新增强后的文本
+          console.log('[Recorder] Enhanced callback received:', segments.length, 'segments');
+          console.log('[Recorder] Enhanced segments:', segments.map(s => ({ id: s.id, status: s.enhanceStatus, text: s.text?.slice(0, 30) })));
+          setEnhancedSegments(prev => {
+            const newMap = new Map(prev);
+            for (const seg of segments) {
+              newMap.set(seg.id, seg);
+            }
+            return newMap;
+          });
+          setEnhanceStats(prev => ({
+            ...prev,
+            enhanced: prev.enhanced + segments.filter(s => s.enhanceStatus === 'enhanced').length,
+            isEnhancing: false,
+          }));
+        },
+      });
+      console.log('[Recorder] TranscriptEnhanceManager initialized');
 
       const stream = await navigator.mediaDevices.getUserMedia({
         audio: {
@@ -225,8 +258,21 @@ export function Recorder({
             transcriptRef.current = [...transcriptRef.current, segment];
             setTranscript(transcriptRef.current);
             onTranscriptUpdate?.(transcriptRef.current);
+            
+            // 将新句子添加到增强管理器，等待批量优化
+            if (enhanceManagerRef.current) {
+              console.log('[Recorder] Adding segment to enhance manager:', segment.id, segment.text?.slice(0, 30));
+              enhanceManagerRef.current.addSegment(segment);
+              setEnhanceStats(prev => ({ ...prev, total: prev.total + 1 }));
+            }
           },
-          onInterim: (text) => setInterimText(text),
+          onInterim: (text) => {
+            setInterimText(text);
+            // 更新活动时间，用于静音检测
+            if (enhanceManagerRef.current) {
+              enhanceManagerRef.current.updateActivity();
+            }
+          },
           onError: (err) => setError(err),
           onStatusChange: (newStatus) => {
             if (newStatus === 'transcribing') setServiceStatus('available');
@@ -381,11 +427,28 @@ export function Recorder({
     setLevel(0);
     setInterimText('');
 
+    // 触发最终的 ASR 后处理优化
+    if (enhanceManagerRef.current && transcribeMode === 'streaming') {
+      setEnhanceStats(prev => ({ ...prev, isEnhancing: true }));
+      console.log('[Recorder] Finalizing transcript enhancement...');
+      try {
+        await enhanceManagerRef.current.finalize();
+      } catch (err) {
+        console.error('[Recorder] Enhancement finalize error:', err);
+      }
+      // 清理增强管理器
+      enhanceManagerRef.current.dispose();
+      enhanceManagerRef.current = null;
+    }
+
     if (transcribeMode === 'batch' && audioBlob.size > 0) {
       await transcribeWithQwenASR(audioBlob);
     } else {
       if (transcribeMode === 'streaming' && transcriptRef.current.length > 0) {
-        setTranscribeProgress(`转录完成，共 ${transcriptRef.current.length} 句`);
+        const enhancedCount = enhanceStats.enhanced;
+        const totalCount = transcriptRef.current.length;
+        const enhanceInfo = enhancedCount > 0 ? `，已优化 ${enhancedCount} 句` : '';
+        setTranscribeProgress(`转录完成，共 ${totalCount} 句${enhanceInfo}`);
         onTranscriptUpdate?.(transcriptRef.current);
       }
       setStatus('stopped');
@@ -455,9 +518,6 @@ export function Recorder({
     lastAnchorTimeRef.current = timestamp;
     onAnchorMark?.(timestamp);
     setAnchorCount(prev => prev + 1);
-    setCanUndo(true);
-
-    setTimeout(() => setCanUndo(false), 5000);
   }, [status, elapsedMs, onAnchorMark]);
 
   // 清理
@@ -472,35 +532,49 @@ export function Recorder({
       }
       if (audioContextRef.current) audioContextRef.current.close();
       if (asrClientRef.current) asrClientRef.current.stop();
+      if (enhanceManagerRef.current) enhanceManagerRef.current.dispose();
     };
   }, []);
 
+
   const isRecording = status === 'recording';
-  const isPaused = status === 'paused';
   const isTranscribing = status === 'transcribing';
   const isStopped = status === 'stopped';
   const isIdle = status === 'idle';
 
-  return (
-    <div className="card p-8 animate-fade-in">
-      {/* 顶部状态栏 */}
-      <div className="flex items-center justify-between mb-8">
-        {/* 服务状态 */}
-        <div className="flex items-center gap-2">
-          <div className={`w-2 h-2 rounded-full transition-colors ${
-            serviceStatus === 'checking' ? 'bg-sunflower animate-pulse' :
-            serviceStatus === 'available' ? 'bg-mint' :
-            'bg-gray-300'
-          }`} />
-          <span className="text-xs text-gray-500">
-            {serviceStatus === 'checking' ? '连接中...' :
-             serviceStatus === 'available' ? '实时转录就绪' :
-             '本地模式'}
-          </span>
-        </div>
-        
-        {/* 模式切换 */}
-        {isIdle && (
+  // 合并原始转录和增强后的文本，优先显示增强版本
+  const displayTranscript = transcript.map(seg => {
+    const enhanced = enhancedSegments.get(seg.id);
+    if (enhanced && enhanced.enhanceStatus === 'enhanced' && enhanced.text !== seg.text) {
+      return {
+        ...seg,
+        text: enhanced.text,
+        originalText: seg.text, // 保留原始文本以便对比
+      };
+    }
+    return seg;
+  });
+
+  // ===== 闲置状态：显示开始录音界面 =====
+  if (isIdle) {
+    return (
+      <div className="card p-8 animate-fade-in">
+        {/* 顶部状态栏 */}
+        <div className="flex items-center justify-between mb-8">
+          <div className="flex items-center gap-2">
+            <div className={`w-2 h-2 rounded-full transition-colors ${
+              serviceStatus === 'checking' ? 'bg-sunflower animate-pulse' :
+              serviceStatus === 'available' ? 'bg-mint' :
+              'bg-gray-300'
+            }`} />
+            <span className="text-xs text-gray-500">
+              {serviceStatus === 'checking' ? '连接中...' :
+               serviceStatus === 'available' ? '实时转录就绪' :
+               '本地模式'}
+            </span>
+          </div>
+          
+          {/* 模式切换 */}
           <div className="flex flex-col items-end gap-1">
             <div className="flex items-center gap-1 p-1 bg-gray-100 rounded-lg">
               <button
@@ -529,19 +603,191 @@ export function Recorder({
               {transcribeMode === 'streaming' ? '边听边看文字，适合上课' : '录完再转，更准确'}
             </span>
           </div>
+        </div>
+
+        {/* 错误提示 */}
+        {error && (
+          <div className="mb-6 p-4 bg-coral-50 border border-coral-100 rounded-xl text-coral-600 text-sm animate-slide-up">
+            <div className="flex items-center gap-2">
+              <span>⚠️</span>
+              <span>{error}</span>
+            </div>
+          </div>
         )}
-        
-        {/* 录音中状态 */}
-        {(isRecording || isPaused) && (
-          <span className={`badge ${transcribeMode === 'streaming' ? 'badge-streaming' : 'badge-demo'}`}>
-            {transcribeMode === 'streaming' ? '实时转录中' : '录音后转录'}
+
+        {/* 开始录音区域 */}
+        <div className="flex flex-col items-center py-12">
+          <div className="text-6xl font-mono font-bold text-gray-200 mb-4">
+            00:00
+          </div>
+          <p className="text-sm text-gray-400 mb-8">点击开始录制课堂</p>
+          <button
+            onClick={startRecording}
+            disabled={disabled}
+            className="record-btn"
+            aria-label="开始录音"
+            data-onboarding="record-button"
+          >
+            <svg className="w-8 h-8 text-white" fill="currentColor" viewBox="0 0 24 24">
+              <circle cx="12" cy="12" r="6" />
+            </svg>
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // ===== 转录中状态 =====
+  if (isTranscribing) {
+    return (
+      <div className="card p-8 animate-fade-in">
+        <div className="flex flex-col items-center py-12">
+          <div className="w-20 h-20 rounded-full bg-sunflower-100 flex items-center justify-center mb-6">
+            <div className="w-8 h-8 border-3 border-sunflower border-t-transparent rounded-full animate-spin" />
+          </div>
+          <div className="text-lg font-medium text-gray-700 mb-2">正在转录</div>
+          <p className="text-sm text-gray-500">{transcribeProgress || '请稍候...'}</p>
+        </div>
+      </div>
+    );
+  }
+
+  // ===== 停止状态：显示完成界面 =====
+  if (isStopped) {
+    return (
+      <div className="card p-8 animate-fade-in">
+        {/* 完成提示 */}
+        {transcribeProgress && (
+          <div className="mb-6 p-4 bg-mint-50 border border-mint-200 rounded-xl animate-scale-in">
+            <div className="flex items-center gap-2 text-mint-700">
+              <span className="text-lg">✅</span>
+              <span className="text-sm font-medium">{transcribeProgress}</span>
+            </div>
+          </div>
+        )}
+
+        {/* 转录结果预览 - 使用增强后的文本 */}
+        <TranscriptPreviewPanel
+          transcript={displayTranscript}
+          interimText=""
+          isRecording={false}
+          transcribeMode={transcribeMode}
+          collapsedCount={10}
+          formatTime={formatTime}
+          defaultExpanded={true}
+        />
+
+        {/* 操作按钮 */}
+        <div className="mt-6 flex justify-center">
+          <button
+            onClick={() => {
+              setStatus('idle');
+              setElapsedMs(0);
+              setTranscript([]);
+              setInterimText('');
+              setTranscribeProgress('');
+              setAnchorCount(0);
+              setEnhancedSegments(new Map());
+              setEnhanceStats({ enhanced: 0, total: 0, isEnhancing: false });
+              audioChunksRef.current = [];
+            }}
+            className="btn btn-primary px-8 py-3"
+          >
+            <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
+              <path d="M17.65 6.35A7.958 7.958 0 0012 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08A5.99 5.99 0 0112 18c-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z" />
+            </svg>
+            开始新录音
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // ===== 录音活动状态：沉浸式转录布局 =====
+  return (
+    <div className="flex flex-col h-full bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden animate-fade-in">
+      {/* ===== 极简顶栏 (移动端 84px / 桌面端 60px) ===== */}
+      <div className="flex-shrink-0 h-[84px] sm:h-[60px] px-4 flex items-center justify-between border-b border-gray-100 bg-gradient-to-r from-gray-50 to-white">
+        {/* 左侧：状态和时间 */}
+        <div className="flex items-center gap-3 sm:gap-3">
+          {/* 录音状态指示器 */}
+          <div className="flex items-center gap-2 sm:gap-2">
+            <div className={`w-3.5 h-3.5 sm:w-2.5 sm:h-2.5 rounded-full ${isRecording ? 'bg-coral animate-pulse' : 'bg-sunflower-500'}`} />
+            <span className={`text-lg sm:text-sm font-medium ${isRecording ? 'text-coral' : 'text-sunflower-600'}`}>
+              {isRecording ? '录音中' : '已暂停'}
+            </span>
+          </div>
+          
+          {/* 时间显示 - 移动端更大 (放大1.3倍) */}
+          <div className={`font-mono text-4xl sm:text-2xl font-semibold tabular-nums ${isRecording ? 'text-gray-800' : 'text-gray-500'}`}>
+            {formatTime(elapsedMs)}
+          </div>
+          
+          {/* 音量指示器 - 仅桌面端显示 */}
+          {isRecording && (
+            <div className="hidden sm:flex items-center gap-0.5 h-5">
+              {[...Array(5)].map((_, i) => (
+                <div
+                  key={i}
+                  className={`w-1 rounded-full transition-all duration-75 ${
+                    level * 5 > i ? 'bg-mint' : 'bg-gray-200'
+                  }`}
+                  style={{ 
+                    height: `${Math.max(4, Math.min(16, (level * 20) + Math.sin(Date.now() / 200 + i) * 2))}px`
+                  }}
+                />
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* 右侧：控制按钮和模式标签 */}
+        <div className="flex items-center gap-4 sm:gap-4">
+          {/* 模式标签 */}
+          <span className="text-sm sm:text-xs text-gray-400 hidden sm:inline">
+            {transcribeMode === 'streaming' ? '边录边转' : '录完转译'}
           </span>
-        )}
+          
+          {/* 控制按钮组 - 移动端大触摸目标 (72px，放大1.3倍)，桌面端 (48px) */}
+          <div className="flex items-center gap-4 sm:gap-2">
+            {isRecording ? (
+              <button
+                onClick={pauseRecording}
+                className="w-[72px] h-[72px] sm:w-[48px] sm:h-[48px] rounded-full bg-sunflower-100 text-sunflower-700 flex items-center justify-center hover:bg-sunflower-200 transition-all active:scale-95 shadow-sm"
+                aria-label="暂停"
+              >
+                <svg className="w-9 h-9 sm:w-6 sm:h-6" fill="currentColor" viewBox="0 0 24 24">
+                  <rect x="6" y="4" width="4" height="16" rx="1" />
+                  <rect x="14" y="4" width="4" height="16" rx="1" />
+                </svg>
+              </button>
+            ) : (
+              <button
+                onClick={resumeRecording}
+                className="w-[72px] h-[72px] sm:w-[48px] sm:h-[48px] rounded-full bg-mint-100 text-mint-700 flex items-center justify-center hover:bg-mint-200 transition-all active:scale-95 shadow-sm"
+                aria-label="继续"
+              >
+                <svg className="w-9 h-9 sm:w-6 sm:h-6" fill="currentColor" viewBox="0 0 24 24">
+                  <path d="M8 5v14l11-7z" />
+                </svg>
+              </button>
+            )}
+            <button
+              onClick={stopRecording}
+              className="w-[72px] h-[72px] sm:w-[48px] sm:h-[48px] rounded-full bg-gray-100 text-gray-600 flex items-center justify-center hover:bg-gray-200 transition-all active:scale-95 shadow-sm"
+              aria-label="停止"
+            >
+              <svg className="w-9 h-9 sm:w-6 sm:h-6" fill="currentColor" viewBox="0 0 24 24">
+                <rect x="6" y="6" width="12" height="12" rx="2" />
+              </svg>
+            </button>
+          </div>
+        </div>
       </div>
 
-      {/* 错误提示 */}
+      {/* ===== 错误提示（如有） ===== */}
       {error && (
-        <div className="mb-6 p-4 bg-coral-50 border border-coral-100 rounded-xl text-coral-600 text-sm animate-slide-up">
+        <div className="flex-shrink-0 mx-4 mt-3 p-3 bg-coral-50 border border-coral-100 rounded-xl text-coral-600 text-sm animate-slide-up">
           <div className="flex items-center gap-2">
             <span>⚠️</span>
             <span>{error}</span>
@@ -549,219 +795,60 @@ export function Recorder({
         </div>
       )}
 
-      {/* 转录进度 */}
-      {isTranscribing && (
-        <div className="mb-6 p-4 bg-sunflower-50 border border-sunflower-100 rounded-xl animate-slide-up">
-          <div className="flex items-center gap-3">
-            <div className="loading-dots">
-              <span></span>
-              <span></span>
-              <span></span>
-            </div>
-            <span className="text-sm text-warmOrange-700">{transcribeProgress || '正在转录...'}</span>
-          </div>
+      {/* ===== ASR 后处理优化状态指示器 ===== */}
+      {transcribeMode === 'streaming' && enhanceStats.total > 0 && (
+        <div className="flex-shrink-0 mx-4 mt-2 flex items-center gap-2 text-xs text-gray-400">
+          {enhanceStats.isEnhancing ? (
+            <>
+              <div className="w-3 h-3 border-2 border-amber-400 border-t-transparent rounded-full animate-spin" />
+              <span>正在优化文本...</span>
+            </>
+          ) : enhanceStats.enhanced > 0 ? (
+            <>
+              <span className="text-mint-600">✨</span>
+              <span>已优化 {enhanceStats.enhanced}/{enhanceStats.total} 句</span>
+            </>
+          ) : null}
         </div>
       )}
 
-      {/* 主录音区域 */}
-      <div className="flex flex-col items-center">
-        {/* 时间显示 */}
-        <div className="mb-8 text-center">
-          <div className={`text-5xl font-mono font-bold tracking-tight transition-colors ${
-            isRecording ? 'text-coral' : 
-            isPaused ? 'text-sunflower-600' : 
-            'text-gray-300'
-          }`}>
-            {formatTime(elapsedMs)}
-          </div>
-          {isRecording && (
-            <div className="mt-2 flex items-center justify-center gap-2 text-xs text-gray-400">
-              <span className="w-2 h-2 bg-coral rounded-full animate-pulse" />
-              正在录音
-            </div>
-          )}
-        </div>
-
-        {/* 音量可视化 */}
-        {(isRecording || isPaused) && (
-          <div className="flex items-end justify-center gap-1 h-8 mb-8">
-            {[...Array(12)].map((_, i) => (
-              <div
-                key={i}
-                className={`w-1.5 rounded-full transition-all duration-75 ${
-                  isRecording && level * 12 > i ? 'bg-mint' : 'bg-gray-200'
-                }`}
-                style={{ 
-                  height: isRecording 
-                    ? `${Math.max(8, Math.min(32, (level * 40) + Math.sin(Date.now() / 200 + i) * 4))}px`
-                    : '8px'
-                }}
-              />
-            ))}
-          </div>
-        )}
-
-        {/* 控制按钮 */}
-        <div className="flex items-center justify-center gap-4 mb-8">
-          {isIdle && (
-            <button
-              onClick={startRecording}
-              disabled={disabled}
-              className="record-btn"
-              aria-label="开始录音"
-              data-onboarding="record-button"
-            >
-              <svg className="w-8 h-8 text-white" fill="currentColor" viewBox="0 0 24 24">
-                <circle cx="12" cy="12" r="6" />
-              </svg>
-            </button>
-          )}
-
-          {isRecording && (
-            <>
-              <button
-                onClick={pauseRecording}
-                className="w-14 h-14 rounded-full bg-sunflower-100 text-sunflower-700 flex items-center justify-center hover:bg-sunflower-200 transition-all active:scale-95"
-                aria-label="暂停"
-              >
-                <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 24 24">
-                  <rect x="6" y="4" width="4" height="16" rx="1" />
-                  <rect x="14" y="4" width="4" height="16" rx="1" />
-                </svg>
-              </button>
-              <button
-                onClick={stopRecording}
-                className="w-14 h-14 rounded-full bg-gray-100 text-gray-600 flex items-center justify-center hover:bg-gray-200 transition-all active:scale-95"
-                aria-label="停止"
-              >
-                <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 24 24">
-                  <rect x="6" y="6" width="12" height="12" rx="2" />
-                </svg>
-              </button>
-            </>
-          )}
-
-          {isPaused && (
-            <>
-              <button
-                onClick={resumeRecording}
-                className="w-14 h-14 rounded-full bg-mint-100 text-mint-700 flex items-center justify-center hover:bg-mint-200 transition-all active:scale-95"
-                aria-label="继续"
-              >
-                <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 24 24">
-                  <path d="M8 5v14l11-7z" />
-                </svg>
-              </button>
-              <button
-                onClick={stopRecording}
-                className="w-14 h-14 rounded-full bg-gray-100 text-gray-600 flex items-center justify-center hover:bg-gray-200 transition-all active:scale-95"
-                aria-label="停止"
-              >
-                <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 24 24">
-                  <rect x="6" y="6" width="12" height="12" rx="2" />
-                </svg>
-              </button>
-            </>
-          )}
-
-          {isTranscribing && (
-            <div className="w-20 h-20 rounded-full bg-sunflower-100 flex items-center justify-center">
-              <div className="w-8 h-8 border-3 border-sunflower border-t-transparent rounded-full animate-spin" />
-            </div>
-          )}
-
-          {isStopped && (
-            <button
-              onClick={() => {
-                setStatus('idle');
-                setElapsedMs(0);
-                setTranscript([]);
-                setInterimText('');
-                setTranscribeProgress('');
-                setAnchorCount(0);
-                audioChunksRef.current = [];
-              }}
-              className="btn btn-primary px-8 py-4 text-lg"
-            >
-              <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
-                <path d="M17.65 6.35A7.958 7.958 0 0012 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08A5.99 5.99 0 0112 18c-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z" />
-              </svg>
-              新录音
-            </button>
-          )}
-        </div>
-
-        {/* 困惑点按钮 */}
-        {(isRecording || isPaused) && (
-          <div className="w-full animate-slide-up">
-            <button
-              onClick={markAnchor}
-              disabled={!isRecording}
-              className="confusion-btn"
-              data-onboarding="confusion-button"
-            >
-              <span className="relative z-10 flex items-center justify-center gap-2">
-                <span className="text-2xl">🎯</span>
-                <span>没听懂？点这里！</span>
-              </span>
-            </button>
-            <div className="mt-3 flex items-center justify-between text-xs text-gray-400">
-              <span>{canUndo ? '5秒内可撤销' : '标记你的困惑点'}</span>
-              {anchorCount > 0 && (
-                <span className="text-coral">已标记 {anchorCount} 个</span>
-              )}
-            </div>
-          </div>
-        )}
+      {/* ===== 沉浸式转录区域（占据主要空间，可滚动） ===== */}
+      <div className="flex-1 overflow-y-auto min-h-0">
+        <TranscriptPreviewPanel
+          transcript={displayTranscript}
+          interimText={interimText}
+          isRecording={isRecording}
+          transcribeMode={transcribeMode}
+          collapsedCount={999}
+          formatTime={formatTime}
+          defaultExpanded={true}
+          immersiveMode={true}
+        />
       </div>
 
-      {/* 实时转录预览 */}
-      {(transcript.length > 0 || interimText) && (
-        <div className="mt-8 pt-6 border-t border-gray-100 animate-fade-in">
-          <div className="flex items-center justify-between mb-3">
-            <h4 className="text-sm font-medium text-gray-700 flex items-center gap-2">
-              {transcribeMode === 'streaming' ? '📝 实时转录' : '📝 转录结果'}
-              <span className="badge badge-streaming">
-                {transcribeMode === 'streaming' ? '百炼 ASR' : 'Qwen ASR'}
-              </span>
-            </h4>
-            <span className="text-xs text-gray-400">{transcript.length} 句</span>
-          </div>
-          
-          <div className="max-h-40 overflow-y-auto space-y-2 p-3 bg-gray-50 rounded-xl">
-            {transcript.slice(-8).map((seg) => (
-              <div key={seg.id} className="flex items-start gap-2 text-sm">
-                <span className="text-xs text-gray-400 font-mono shrink-0 mt-0.5 bg-gray-100 px-1.5 py-0.5 rounded">
-                  {formatTime(seg.startMs)} - {formatTime(seg.endMs)}
-                </span>
-                <span className="text-gray-700">{seg.text}</span>
-              </div>
-            ))}
-            {interimText && (
-              <div className="flex items-start gap-2 text-sm">
-                <span className="text-xs text-gray-300 font-mono shrink-0 mt-0.5">...</span>
-                <span className="text-gray-400 italic">{interimText}</span>
-              </div>
-            )}
-          </div>
-          
-          {transcript.length > 8 && (
-            <p className="text-xs text-gray-400 mt-2 text-center">
-              显示最近 8 句
-            </p>
+      {/* ===== 固定底部：困惑点按钮 (48px) ===== */}
+      <div className="flex-shrink-0 border-t border-gray-100 bg-gradient-to-r from-white to-gray-50">
+        <button
+          onClick={markAnchor}
+          disabled={!isRecording}
+          className={`w-full h-14 flex items-center justify-center gap-3 transition-all ${
+            isRecording 
+              ? 'bg-gradient-to-r from-coral-500 to-warmOrange-500 text-white hover:from-coral-600 hover:to-warmOrange-600 active:scale-[0.99]' 
+              : 'bg-gray-100 text-gray-400 cursor-not-allowed'
+          }`}
+          data-onboarding="confusion-button"
+        >
+          <span className="text-xl">🎯</span>
+          <span className="font-medium">没听懂？点这里！</span>
+          {anchorCount > 0 && (
+            <span className={`ml-2 px-2 py-0.5 rounded-full text-xs ${
+              isRecording ? 'bg-white/20' : 'bg-gray-200'
+            }`}>
+              已标记 {anchorCount}
+            </span>
           )}
-        </div>
-      )}
-
-      {/* 完成提示 */}
-      {isStopped && transcribeProgress && (
-        <div className="mt-6 p-4 bg-mint-50 border border-mint-200 rounded-xl animate-scale-in">
-          <div className="flex items-center gap-2 text-mint-700">
-            <span className="text-lg">✅</span>
-            <span className="text-sm font-medium">{transcribeProgress}</span>
-          </div>
-        </div>
-      )}
+        </button>
+      </div>
     </div>
   );
 }

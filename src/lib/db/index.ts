@@ -38,6 +38,7 @@ export {
   ANONYMOUS_USER_ID,
   saveAudioSession,
   updateSessionStatus,
+  updateSessionTopic,
   getTodaySessions,
   cleanOldData,
   getStorageUsage,
@@ -120,4 +121,6 @@ export {
 export {
   getPreference,
   setPreference,
+  deletePreference,
+  resetAppState,
 } from './preferences';

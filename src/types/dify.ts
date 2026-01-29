@@ -121,6 +121,14 @@ export interface ExtendedTutorResponse {
   citations?: Citation[];
   /** Dify 会话 ID */
   conversation_id?: string;
+  /** 是否新生成了摘要 */
+  summary_generated?: boolean;
+  /** 缓存的摘要数据（如果新生成的话） */
+  cached_summary?: {
+    overview: string;
+    takeaways: string;
+    keyDifficulties: string[];
+  };
 }
 
 // ==================== JSON Schema（供文档/验证使用）====================
