@@ -9,12 +9,14 @@ export interface MobileTabSwitchProps {
   activeTab: TabId;
   onTabChange: (tab: TabId) => void;
   className?: string;
+  'data-onboarding'?: string;  // 支持引导系统标记
 }
 
 export function MobileTabSwitch({
   activeTab,
   onTabChange,
   className,
+  'data-onboarding': dataOnboarding,
 }: MobileTabSwitchProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [indicatorStyle, setIndicatorStyle] = useState({ left: 0, width: 0 });
@@ -39,6 +41,7 @@ export function MobileTabSwitch({
   return (
     <div
       ref={containerRef}
+      data-onboarding={dataOnboarding}
       className={cn(
         'relative inline-flex items-center p-0.5 rounded-full',
         'bg-[#F0EBE5]',

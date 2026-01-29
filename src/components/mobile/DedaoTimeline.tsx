@@ -20,6 +20,7 @@ export interface DedaoTimelineProps {
   onEntryClick: (entry: DedaoTimelineEntry) => void;
   onConfusionClick?: (entry: DedaoTimelineEntry) => void;
   className?: string;
+  'data-onboarding'?: string;  // 支持引导系统标记
 }
 
 // 格式化时间
@@ -56,6 +57,7 @@ export function DedaoTimeline({
   onEntryClick,
   onConfusionClick,
   className,
+  'data-onboarding': dataOnboarding,
 }: DedaoTimelineProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const activeEntryRef = useRef<HTMLDivElement>(null);
@@ -84,6 +86,7 @@ export function DedaoTimeline({
   return (
     <div
       ref={containerRef}
+      data-onboarding={dataOnboarding}
       className={cn(
         'overflow-y-auto overflow-x-hidden',
         'bg-[var(--dedao-bg)]',

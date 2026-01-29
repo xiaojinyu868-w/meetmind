@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import type { OnboardingStep } from '@/hooks/useOnboarding';
+import { useResponsive } from '@/hooks/useResponsive';
 
 interface OnboardingGuideProps {
   step: OnboardingStep | null;
@@ -26,6 +27,7 @@ export function OnboardingGuide({
   const tooltipRef = useRef<HTMLDivElement>(null);
   const [mounted, setMounted] = useState(false);
   const [arrowPosition, setArrowPosition] = useState<'top' | 'bottom' | 'left' | 'right'>('bottom');
+  const { isMobile } = useResponsive();
 
   useEffect(() => {
     setMounted(true);
@@ -57,7 +59,9 @@ export function OnboardingGuide({
       if (!tooltip) return;
 
       const tooltipRect = tooltip.getBoundingClientRect();
-      const padding = 16;
+      // 移动端使用更小的 padding，并考虑安全区域
+      const padding = isMobile ? 12 : 16;
+      const safeAreaBottom = isMobile ? 34 : 0; // iPhone 底部安全区域
       const viewportWidth = window.innerWidth;
       const viewportHeight = window.innerHeight;
 
@@ -92,16 +96,18 @@ export function OnboardingGuide({
           arrow = 'top';
       }
 
-      // 边界检测
+      // 边界检测 - 水平方向
       if (left < padding) left = padding;
       if (left + tooltipRect.width > viewportWidth - padding) {
         left = viewportWidth - tooltipRect.width - padding;
       }
+      
+      // 边界检测 - 垂直方向（考虑安全区域）
       if (top < padding) {
         top = rect.bottom + padding;
         arrow = 'top';
       }
-      if (top + tooltipRect.height > viewportHeight - padding) {
+      if (top + tooltipRect.height > viewportHeight - padding - safeAreaBottom) {
         top = rect.top - tooltipRect.height - padding;
         arrow = 'bottom';
       }
@@ -113,7 +119,7 @@ export function OnboardingGuide({
         left: `${left}px`,
       });
     });
-  }, [step]);
+  }, [step, isMobile]);
 
   useEffect(() => {
     if (!isActive || !step) return;
@@ -154,17 +160,18 @@ export function OnboardingGuide({
 
   const isCenter = step.position === 'center' || !step.targetSelector;
 
-  const getArrowStyles = () => {
+  // 响应式箭头样式（使用固定的 Tailwind 类名）
+  const getArrowStylesFixed = () => {
     const base = 'absolute w-0 h-0';
     switch (arrowPosition) {
       case 'top':
-        return `${base} top-0 left-1/2 -translate-x-1/2 -translate-y-full border-l-[10px] border-r-[10px] border-b-[10px] border-l-transparent border-r-transparent border-b-white`;
+        return `${base} top-0 left-1/2 -translate-x-1/2 -translate-y-full border-l-[8px] border-r-[8px] border-b-[8px] border-l-transparent border-r-transparent border-b-white sm:border-l-[10px] sm:border-r-[10px] sm:border-b-[10px]`;
       case 'bottom':
-        return `${base} bottom-0 left-1/2 -translate-x-1/2 translate-y-full border-l-[10px] border-r-[10px] border-t-[10px] border-l-transparent border-r-transparent border-t-white`;
+        return `${base} bottom-0 left-1/2 -translate-x-1/2 translate-y-full border-l-[8px] border-r-[8px] border-t-[8px] border-l-transparent border-r-transparent border-t-white sm:border-l-[10px] sm:border-r-[10px] sm:border-t-[10px]`;
       case 'left':
-        return `${base} left-0 top-1/2 -translate-x-full -translate-y-1/2 border-t-[10px] border-b-[10px] border-r-[10px] border-t-transparent border-b-transparent border-r-white`;
+        return `${base} left-0 top-1/2 -translate-x-full -translate-y-1/2 border-t-[8px] border-b-[8px] border-r-[8px] border-t-transparent border-b-transparent border-r-white sm:border-t-[10px] sm:border-b-[10px] sm:border-r-[10px]`;
       case 'right':
-        return `${base} right-0 top-1/2 translate-x-full -translate-y-1/2 border-t-[10px] border-b-[10px] border-l-[10px] border-t-transparent border-b-transparent border-l-white`;
+        return `${base} right-0 top-1/2 translate-x-full -translate-y-1/2 border-t-[8px] border-b-[8px] border-l-[8px] border-t-transparent border-b-transparent border-l-white sm:border-t-[10px] sm:border-b-[10px] sm:border-l-[10px]`;
     }
   };
 
@@ -177,11 +184,11 @@ export function OnboardingGuide({
             <rect x="0" y="0" width="100%" height="100%" fill="white" />
             {targetRect && step.spotlight && (
               <rect
-                x={targetRect.left - 8}
-                y={targetRect.top - 8}
-                width={targetRect.width + 16}
-                height={targetRect.height + 16}
-                rx="12"
+                x={targetRect.left - (isMobile ? 6 : 8)}
+                y={targetRect.top - (isMobile ? 6 : 8)}
+                width={targetRect.width + (isMobile ? 12 : 16)}
+                height={targetRect.height + (isMobile ? 12 : 16)}
+                rx={isMobile ? 8 : 12}
                 fill="black"
               />
             )}
@@ -202,62 +209,70 @@ export function OnboardingGuide({
       {/* 高亮边框 */}
       {targetRect && step.spotlight && (
         <div
-          className="absolute pointer-events-none rounded-xl"
+          className="absolute pointer-events-none rounded-lg sm:rounded-xl"
           style={{
-            top: targetRect.top - 8,
-            left: targetRect.left - 8,
-            width: targetRect.width + 16,
-            height: targetRect.height + 16,
+            top: targetRect.top - (isMobile ? 6 : 8),
+            left: targetRect.left - (isMobile ? 6 : 8),
+            width: targetRect.width + (isMobile ? 12 : 16),
+            height: targetRect.height + (isMobile ? 12 : 16),
             boxShadow: '0 0 0 3px rgba(225, 29, 72, 0.6), 0 0 20px rgba(225, 29, 72, 0.4)',
             animation: 'pulse-ring 2s ease-in-out infinite',
           }}
         />
       )}
 
-      {/* 提示气泡 */}
+      {/* 提示气泡 - 响应式样式 */}
       <div
         ref={tooltipRef}
-        className="bg-white rounded-2xl shadow-2xl p-5 max-w-sm pointer-events-auto z-10"
+        className={`
+          bg-white shadow-2xl pointer-events-auto z-10
+          rounded-xl sm:rounded-2xl
+          p-3 sm:p-5
+          w-[calc(100vw-24px)] sm:w-auto sm:max-w-sm
+          max-w-[320px] sm:max-w-sm
+        `}
         style={isCenter ? {
           position: 'fixed',
           top: '50%',
           left: '50%',
           transform: 'translate(-50%, -50%)',
+          width: isMobile ? 'calc(100vw - 48px)' : undefined,
+          maxWidth: isMobile ? '320px' : '384px',
         } : tooltipStyle}
       >
-        {!isCenter && <div className={getArrowStyles()} />}
+        {!isCenter && <div className={getArrowStylesFixed()} />}
 
-        <div className="space-y-3">
+        <div className="space-y-2 sm:space-y-3">
           {totalSteps > 1 && (
-            <div className="flex items-center gap-1.5">
+            <div className="flex items-center gap-1 sm:gap-1.5">
               {Array.from({ length: totalSteps }).map((_, i) => (
                 <div
                   key={i}
-                  className={`h-1.5 rounded-full transition-all ${
+                  className={`h-1 sm:h-1.5 rounded-full transition-all ${
                     i === stepIndex
-                      ? 'w-6 bg-rose-500'
+                      ? 'w-4 sm:w-6 bg-rose-500'
                       : i < stepIndex
-                        ? 'w-1.5 bg-rose-300'
-                        : 'w-1.5 bg-gray-200'
+                        ? 'w-1 sm:w-1.5 bg-rose-300'
+                        : 'w-1 sm:w-1.5 bg-gray-200'
                   }`}
                 />
               ))}
             </div>
           )}
 
-          <h3 className="text-lg font-bold text-gray-900">{step.title}</h3>
-          <p className="text-sm text-gray-600 leading-relaxed">{step.description}</p>
+          <h3 className="text-base sm:text-lg font-bold text-gray-900">{step.title}</h3>
+          <p className="text-xs sm:text-sm text-gray-600 leading-relaxed">{step.description}</p>
 
-          <div className="flex items-center justify-between pt-2">
+          <div className="flex items-center justify-between pt-1 sm:pt-2">
             <button
               onClick={onSkip}
-              className="text-sm text-gray-400 hover:text-gray-600 transition-colors"
+              className="text-xs sm:text-sm text-gray-400 hover:text-gray-600 transition-colors"
             >
               跳过引导
             </button>
             <button
               onClick={onNext}
-              className="px-5 py-2 bg-rose-500 hover:bg-rose-600 text-white text-sm font-medium rounded-full transition-colors shadow-lg"
+              className="px-3 sm:px-5 py-1.5 sm:py-2 bg-rose-500 hover:bg-rose-600 text-white text-xs sm:text-sm font-medium rounded-full transition-colors shadow-lg"
             >
               {stepIndex === totalSteps - 1 ? '开始使用' : '下一步'}
             </button>
@@ -270,7 +285,7 @@ export function OnboardingGuide({
   return createPortal(content, document.body);
 }
 
-// 欢迎弹窗组件 - 完全居中
+// 欢迎弹窗组件 - 完全居中，响应式适配
 export function WelcomeModal({
   isOpen,
   onStart,
@@ -290,8 +305,7 @@ export function WelcomeModal({
 
   const content = (
     <div 
-      className="fixed inset-0 z-[10000] flex items-center justify-center"
-      style={{ padding: '20px' }}
+      className="fixed inset-0 z-[10000] flex items-center justify-center p-4 sm:p-5"
     >
       {/* 遮罩 - 点击关闭 */}
       <div
@@ -299,63 +313,63 @@ export function WelcomeModal({
         onClick={onSkip}
       />
 
-      {/* 弹窗容器 - 使用 flex 居中 */}
+      {/* 弹窗容器 - 响应式布局 */}
       <div 
-        className="relative bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden"
+        className="relative bg-white rounded-2xl sm:rounded-3xl shadow-2xl w-full max-w-[calc(100vw-32px)] sm:max-w-md overflow-hidden max-h-[90vh] flex flex-col"
         style={{ 
           animation: 'modal-pop 0.3s ease-out forwards',
         }}
       >
-        {/* 顶部装饰 */}
-        <div className="h-28 bg-gradient-to-br from-rose-400 via-rose-500 to-amber-500 relative overflow-hidden">
-          <div className="absolute -top-8 -right-8 w-32 h-32 bg-white/10 rounded-full" />
-          <div className="absolute -bottom-4 -left-4 w-20 h-20 bg-white/10 rounded-full" />
+        {/* 顶部装饰 - 移动端高度缩小 */}
+        <div className="h-20 sm:h-28 bg-gradient-to-br from-rose-400 via-rose-500 to-amber-500 relative overflow-hidden flex-shrink-0">
+          <div className="absolute -top-6 -right-6 sm:-top-8 sm:-right-8 w-24 h-24 sm:w-32 sm:h-32 bg-white/10 rounded-full" />
+          <div className="absolute -bottom-3 -left-3 sm:-bottom-4 sm:-left-4 w-16 h-16 sm:w-20 sm:h-20 bg-white/10 rounded-full" />
           <div className="absolute inset-0 flex items-center justify-center">
-            <div className="w-16 h-16 bg-white rounded-2xl shadow-lg flex items-center justify-center">
-              <span className="text-3xl font-bold text-rose-500">M</span>
+            <div className="w-12 h-12 sm:w-16 sm:h-16 bg-white rounded-xl sm:rounded-2xl shadow-lg flex items-center justify-center">
+              <span className="text-2xl sm:text-3xl font-bold text-rose-500">M</span>
             </div>
           </div>
         </div>
 
-        {/* 内容 */}
-        <div className="p-6 text-center">
-          <h2 className="text-xl font-bold text-gray-900 mb-1">欢迎使用 MeetMind</h2>
-          <p className="text-gray-500 text-sm mb-4">AI智能学习助手 - 你的专属AI同桌</p>
+        {/* 内容 - 可滚动，响应式内边距 */}
+        <div className="p-4 sm:p-6 text-center overflow-y-auto flex-1">
+          <h2 className="text-lg sm:text-xl font-bold text-gray-900 mb-0.5 sm:mb-1">欢迎使用 MeetMind</h2>
+          <p className="text-gray-500 text-xs sm:text-sm mb-3 sm:mb-4">AI智能学习助手 - 你的专属AI同桌</p>
 
-          <div className="space-y-2 text-left mb-5">
-            <div className="flex items-center gap-3 p-2.5 rounded-xl bg-rose-50">
-              <span className="text-lg">🎙️</span>
+          <div className="space-y-1.5 sm:space-y-2 text-left mb-4 sm:mb-5">
+            <div className="flex items-center gap-2 sm:gap-3 p-2 sm:p-2.5 rounded-lg sm:rounded-xl bg-rose-50">
+              <span className="text-base sm:text-lg">🎙️</span>
               <div>
-                <div className="font-medium text-gray-900 text-sm">课堂录音</div>
-                <div className="text-xs text-gray-500">实时转写，不错过重点</div>
+                <div className="font-medium text-gray-900 text-xs sm:text-sm">课堂录音</div>
+                <div className="text-[10px] sm:text-xs text-gray-500">实时转写，不错过重点</div>
               </div>
             </div>
-            <div className="flex items-center gap-3 p-2.5 rounded-xl bg-amber-50">
-              <span className="text-lg">🎯</span>
+            <div className="flex items-center gap-2 sm:gap-3 p-2 sm:p-2.5 rounded-lg sm:rounded-xl bg-amber-50">
+              <span className="text-base sm:text-lg">🎯</span>
               <div>
-                <div className="font-medium text-gray-900 text-sm">困惑标记</div>
-                <div className="text-xs text-gray-500">一键标记，课后 AI 解答</div>
+                <div className="font-medium text-gray-900 text-xs sm:text-sm">困惑标记</div>
+                <div className="text-[10px] sm:text-xs text-gray-500">一键标记，课后 AI 解答</div>
               </div>
             </div>
-            <div className="flex items-center gap-3 p-2.5 rounded-xl bg-blue-50">
-              <span className="text-lg">🤖</span>
+            <div className="flex items-center gap-2 sm:gap-3 p-2 sm:p-2.5 rounded-lg sm:rounded-xl bg-blue-50">
+              <span className="text-base sm:text-lg">🤖</span>
               <div>
-                <div className="font-medium text-gray-900 text-sm">AI 家教</div>
-                <div className="text-xs text-gray-500">基于课堂内容，精准辅导</div>
+                <div className="font-medium text-gray-900 text-xs sm:text-sm">AI 家教</div>
+                <div className="text-[10px] sm:text-xs text-gray-500">基于课堂内容，精准辅导</div>
               </div>
             </div>
           </div>
 
-          <div className="space-y-2">
+          <div className="space-y-1.5 sm:space-y-2">
             <button
               onClick={onStart}
-              className="w-full py-2.5 bg-gradient-to-r from-rose-500 to-rose-600 hover:from-rose-600 hover:to-rose-700 text-white font-medium rounded-xl transition-all shadow-lg shadow-rose-500/25"
+              className="w-full py-2 sm:py-2.5 bg-gradient-to-r from-rose-500 to-rose-600 hover:from-rose-600 hover:to-rose-700 text-white text-sm sm:text-base font-medium rounded-lg sm:rounded-xl transition-all shadow-lg shadow-rose-500/25"
             >
               开始体验
             </button>
             <button
               onClick={onSkip}
-              className="w-full py-2 text-gray-400 hover:text-gray-600 text-sm transition-colors"
+              className="w-full py-1.5 sm:py-2 text-gray-400 hover:text-gray-600 text-xs sm:text-sm transition-colors"
             >
               我已了解，直接使用
             </button>

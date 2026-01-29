@@ -165,7 +165,7 @@ export default function StudentApp() {
   
   // 用户引导状态
   const [showWelcome, setShowWelcome] = useState(false);
-  const onboarding = useOnboarding();
+  const onboarding = useOnboarding({ isMobile });
   
   const liveSegmentsRef = useRef<TranscriptSegment[]>([]);
   const waveformRef = useRef<WaveformPlayerRef>(null);
@@ -494,11 +494,22 @@ export default function StudentApp() {
           setSelectedAnchor(firstUnresolved);
           setCurrentTime(firstUnresolved.timestamp);
         }
+        
+        // 首次进入复习模式时触发复习引导（有数据后）
+        // 如果当前没有引导在进行，且 review 流程未完成
+        if (!onboarding.isActive && onboarding.shouldShowFlow('review')) {
+          setTimeout(() => onboarding.startFlow('review'), 500);
+        }
       } catch (err) {
         console.error('Failed to load demo data:', err);
       }
+    } else if (newMode === 'review' && segments.length > 0) {
+      // 已有数据，首次进入复习模式时触发引导
+      if (!onboarding.isActive && onboarding.shouldShowFlow('review')) {
+        setTimeout(() => onboarding.startFlow('review'), 300);
+      }
     }
-  }, [segments.length, sessionId]);
+  }, [segments.length, sessionId, onboarding]);
 
   // 从历史记录加载会话并进入复习模式
   const handleLoadHistorySession = useCallback(async (session: AudioSession) => {
@@ -965,6 +976,7 @@ export default function StudentApp() {
                     activeTab={viewMode}
                     onTabChange={(tab) => handleViewModeChange(tab)}
                     className="w-full max-w-[180px]"
+                    data-onboarding="mode-switch"
                   />
                 </div>
                 
@@ -978,7 +990,10 @@ export default function StudentApp() {
                   {/* 录音或上传切换 */}
                   <div className="flex items-center justify-center gap-2 mb-2">
                     <span className="text-xs text-gray-500">选择输入方式：</span>
-                    <div className="flex items-center gap-1 p-0.5 bg-gray-100 rounded-xl">
+                    <div 
+                      className="flex items-center gap-1 p-0.5 bg-gray-100 rounded-xl"
+                      data-onboarding="input-methods"
+                    >
                       <button
                         onClick={() => { setDataSource('live'); setShowSessionHistory(false); }}
                         className={`px-3 py-1.5 text-xs rounded-lg transition-all ${
@@ -1376,7 +1391,11 @@ export default function StudentApp() {
                   /* 左栏 - 多功能面板 */
                   <div className="h-full flex flex-col bg-white" style={{ borderRight: '1px solid var(--edu-border-light)' }}>
                     {/* 标签页切换 */}
-                    <div className="flex items-center gap-1 px-3 py-2 border-b overflow-x-auto flex-shrink-0" style={{ background: 'var(--edu-bg-soft)', borderColor: 'var(--edu-border-light)' }}>
+                    <div 
+                      className="flex items-center gap-1 px-3 py-2 border-b overflow-x-auto flex-shrink-0" 
+                      style={{ background: 'var(--edu-bg-soft)', borderColor: 'var(--edu-border-light)' }}
+                      data-onboarding="timeline"
+                    >
                       <button
                         onClick={() => setReviewTab('timeline')}
                         className={`px-2.5 py-1.5 text-sm rounded-lg transition-all whitespace-nowrap ${
@@ -1553,7 +1572,7 @@ export default function StudentApp() {
                     )}
                     
                     {/* AI 家教区 */}
-                    <div className="flex-1 min-h-0 flex flex-col">
+                    <div className="flex-1 min-h-0 flex flex-col" data-onboarding="ai-tutor">
                       {/* 内容区 */}
                       <div className="flex-1 min-h-0 overflow-hidden">
                         {showConversationHistory ? (
@@ -1678,11 +1697,12 @@ export default function StudentApp() {
                     activeTab={viewMode}
                     onTabChange={(tab) => handleViewModeChange(tab)}
                     className="w-full max-w-[180px]"
+                    data-onboarding="mode-switch"
                   />
                 </div>
                 
                 {/* 菜单按钮 */}
-                <DedaoMenuButton onClick={() => setIsMenuOpen(true)} />
+                <DedaoMenuButton onClick={() => setIsMenuOpen(true)} data-onboarding="menu-button" />
               </div>
 
               {/* 单行极简播放器 */}
@@ -1785,6 +1805,7 @@ export default function StudentApp() {
                       }
                     }}
                     className="flex-1 min-h-0"
+                    data-onboarding="timeline"
                   />
 
                   {/* 困惑点详情卡片 */}
@@ -2089,13 +2110,15 @@ export default function StudentApp() {
         onStart={() => {
           setShowWelcome(false);
           // 标记 welcome 流程完成，然后启动 recording 引导
-          onboarding.completeFlow();
+          onboarding.markFlowComplete('welcome');
           setTimeout(() => {
             onboarding.startFlow('recording');
           }, 100);
         }}
         onSkip={() => {
           setShowWelcome(false);
+          // 标记 welcome 被跳过
+          onboarding.markFlowSkipped('welcome');
         }}
       />
       
