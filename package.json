@@ -16,7 +16,6 @@
     "@ffmpeg-installer/ffmpeg": "^1.1.0",
     "@ffmpeg/ffmpeg": "^0.12.15",
     "@ffmpeg/util": "^0.12.2",
-    "@next/swc-linux-x64-gnu": "^16.1.1",
     "@nivo/core": "^0.99.0",
     "@nivo/heatmap": "^0.99.0",
     "@prisma/adapter-better-sqlite3": "^7.2.0",
