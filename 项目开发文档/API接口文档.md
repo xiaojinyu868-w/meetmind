@@ -13,6 +13,7 @@
 | `/api/tutor` | POST | AI 家教解释困惑点，支持引导问题、联网搜索 |
 | `/api/transcribe` | POST | 语音转录（同步/异步模式） |
 | `/api/transcribe/status` | GET | 查询异步转录任务状态 |
+| `/api/transcript-enhance` | POST | 转录文本增强优化（AI 智能纠错、分段） |
 | `/api/asr-config` | GET | 获取 ASR 配置信息 |
 | `/api/upload-audio` | POST | 上传音频文件 |
 | `/api/generate-summary` | POST | 生成课堂总结 |
@@ -32,9 +33,12 @@
 | `WaveformPlayer` | `src/components/WaveformPlayer.tsx` | 音频波形播放器，支持锚点跳转 |
 | `ActionList` | `src/components/ActionList.tsx` | 行动清单，显示待完成任务 |
 | `ConfusionHeatmap` | `src/components/ConfusionHeatmap.tsx` | 困惑热区可视化 |
+| `OnboardingGuide` | `src/components/OnboardingGuide.tsx` | 新用户引导组件，支持交互式引导 |
+| `TranscriptPreviewPanel` | `src/components/TranscriptPreviewPanel.tsx` | 转录预览面板，支持编辑和增强 |
 | `TeacherDashboard` | `src/components/teacher/TeacherDashboard.tsx` | 教师端仪表盘主组件 |
 | `ConfusionHotspotCard` | `src/components/teacher/ConfusionHotspotCard.tsx` | 困惑热点 TOP3 卡片 |
 | `ReflectionGenerator` | `src/components/teacher/ReflectionGenerator.tsx` | AI 流式生成课后反思 |
+| `MobileAIFab` | `src/components/mobile/MobileAIFab.tsx` | 移动端 AI 悬浮按钮 |
 
 ---
 
@@ -204,5 +208,6 @@ D. 不理解文化背景或语法结构
 
 ---
 
-*文档版本：v1.0*  
-*从 README.md 拆分*
+*文档版本：v1.1*  
+*更新日期：2026-01-29*  
+*更新内容：新增转录增强 API 和引导系统组件*
