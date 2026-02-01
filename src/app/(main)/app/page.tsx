@@ -1613,6 +1613,49 @@ export default function StudentApp() {
                     
                     {/* AI 家教区 */}
                     <div className="flex-1 min-h-0 flex flex-col" data-onboarding="ai-tutor">
+                      {/* AI 对话模式切换栏 */}
+                      {!showConversationHistory && (
+                        <div 
+                          className="flex-shrink-0 px-3 py-2 flex items-center gap-2 border-b"
+                          style={{ background: 'var(--edu-bg-soft)', borderColor: 'var(--edu-border-light)' }}
+                        >
+                          <button
+                            onClick={() => setSelectedAnchor(null)}
+                            className={`px-3 py-1.5 text-xs rounded-lg transition-all flex items-center gap-1.5 ${
+                              !selectedAnchor
+                                ? 'bg-gradient-to-r from-amber-500 to-amber-600 text-white shadow-sm'
+                                : 'bg-white text-gray-600 hover:text-amber-600 hover:bg-amber-50 border border-gray-200'
+                            }`}
+                            title="基于整节课内容与 AI 对话"
+                          >
+                            <span>💬</span>
+                            整节课对话
+                          </button>
+                          {selectedAnchor && (
+                            <div className="flex items-center gap-1.5 px-3 py-1.5 bg-white rounded-lg border border-amber-200 text-xs">
+                              <span className={`w-2 h-2 rounded-full ${selectedAnchor.resolved ? 'bg-mint' : 'bg-coral animate-pulse'}`} />
+                              <span className="text-amber-700 font-medium">
+                                困惑点 {formatTime(selectedAnchor.timestamp)}
+                              </span>
+                              <button
+                                onClick={() => setSelectedAnchor(null)}
+                                className="ml-1 text-gray-400 hover:text-gray-600"
+                                title="返回整节课对话"
+                              >
+                                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                </svg>
+                              </button>
+                            </div>
+                          )}
+                          {!selectedAnchor && anchors.length > 0 && (
+                            <span className="text-xs text-gray-400 ml-auto">
+                              点击左侧困惑点可切换到针对性解答
+                            </span>
+                          )}
+                        </div>
+                      )}
+                      
                       {/* 内容区 */}
                       <div className="flex-1 min-h-0 overflow-hidden">
                         {showConversationHistory ? (
