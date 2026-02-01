@@ -449,8 +449,12 @@ ${contextText}
       return new Response(readable, {
         headers: {
           'Content-Type': 'text/event-stream',
-          'Cache-Control': 'no-cache',
+          'Cache-Control': 'no-cache, no-store, must-revalidate',
           'Connection': 'keep-alive',
+          // 关键：禁用各种代理/CDN的缓冲
+          'X-Accel-Buffering': 'no',           // Nginx
+          'X-Content-Type-Options': 'nosniff',
+          'Transfer-Encoding': 'chunked',
         },
       });
     }

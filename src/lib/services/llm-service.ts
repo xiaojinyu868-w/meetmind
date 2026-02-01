@@ -334,7 +334,8 @@ export async function chat(
 }
 
 /**
- * 流式调用 LLM (通义千问)
+ * 流式调用 LLM
+ * 支持：通义千问、OpenAI
  */
 export async function* chatStream(
   messages: ChatMessage[],
@@ -343,21 +344,50 @@ export async function* chatStream(
 ): AsyncGenerator<string> {
   const modelConfig = getModelConfig(modelId);
   
-  if (!modelConfig || modelConfig.provider !== 'qwen') {
-    // 目前只支持通义千问的流式调用
+  if (!modelConfig) {
+    throw new Error(`未知模型: ${modelId}`);
+  }
+
+  // Gemini 暂不支持流式，退化为非流式
+  if (modelConfig.provider === 'gemini') {
     const response = await chat(messages, modelId, options);
-    yield response.content;
+    // 模拟流式效果：将内容分段输出
+    const content = response.content;
+    const chunkSize = 20; // 每次输出约20个字符
+    for (let i = 0; i < content.length; i += chunkSize) {
+      yield content.slice(i, i + chunkSize);
+      // 小延迟模拟打字效果
+      await new Promise(resolve => setTimeout(resolve, 30));
+    }
     return;
   }
 
-  const config = getApiConfig('qwen');
+  // 通义千问和 OpenAI 都支持 OpenAI 兼容的流式 API
+  const config = modelConfig.provider === 'qwen' 
+    ? getApiConfig('qwen') 
+    : getApiConfig('openai');
   
   if (!config.apiKey) {
-    throw new Error('DASHSCOPE_API_KEY 未配置');
+    throw new Error(`${modelConfig.provider === 'qwen' ? 'DASHSCOPE_API_KEY' : 'OPENAI_API_KEY'} 未配置`);
   }
 
   const supportsMultimodal = isMultimodalModel(modelId);
   const formattedMessages = buildOpenAIMessages(messages, supportsMultimodal);
+
+  // 构建请求体
+  const requestBody: Record<string, unknown> = {
+    model: modelId,
+    messages: formattedMessages,
+    temperature: options?.temperature ?? 0.7,
+    stream: true,
+  };
+
+  // OpenAI 使用 max_completion_tokens，Qwen 使用 max_tokens
+  if (modelConfig.provider === 'openai') {
+    requestBody.max_completion_tokens = options?.maxTokens ?? 2000;
+  } else {
+    requestBody.max_tokens = options?.maxTokens ?? 2000;
+  }
 
   const response = await fetch(`${config.baseUrl}/chat/completions`, {
     method: 'POST',
@@ -365,18 +395,12 @@ export async function* chatStream(
       'Content-Type': 'application/json',
       'Authorization': `Bearer ${config.apiKey}`,
     },
-    body: JSON.stringify({
-      model: modelId,
-      messages: formattedMessages,
-      temperature: options?.temperature ?? 0.7,
-      max_tokens: options?.maxTokens ?? 2000,
-      stream: true,
-    }),
+    body: JSON.stringify(requestBody),
   });
 
   if (!response.ok) {
     const error = await response.text();
-    throw new Error(`通义千问 API 错误: ${response.status} - ${error}`);
+    throw new Error(`${modelConfig.name} API 错误: ${response.status} - ${error}`);
   }
 
   if (!response.body) {
@@ -385,16 +409,20 @@ export async function* chatStream(
 
   const reader = response.body.getReader();
   const decoder = new TextDecoder();
+  let buffer = '';
 
   while (true) {
     const { done, value } = await reader.read();
     if (done) break;
 
-    const chunk = decoder.decode(value, { stream: true });
-    const lines = chunk.split('\n').filter(line => line.startsWith('data: '));
+    buffer += decoder.decode(value, { stream: true });
+    const lines = buffer.split('\n');
+    buffer = lines.pop() || ''; // 保留不完整的行
 
     for (const line of lines) {
-      const data = line.slice(6);
+      if (!line.startsWith('data: ')) continue;
+      
+      const data = line.slice(6).trim();
       if (data === '[DONE]') continue;
 
       try {
@@ -404,7 +432,7 @@ export async function* chatStream(
           yield content;
         }
       } catch {
-        // 忽略解析错误
+        // 忽略解析错误（不完整的JSON）
       }
     }
   }
