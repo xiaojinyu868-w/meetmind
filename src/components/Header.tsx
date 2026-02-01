@@ -70,29 +70,29 @@ export function Header({ lessonTitle, courseName, userRole = 'student' }: Header
       </div>
 
       {/* 右侧 */}
-      <div className="flex items-center gap-2 sm:gap-4">
+      <div className="flex items-center gap-4">
         {/* 角色切换 */}
-        <nav className="flex items-center gap-0.5 sm:gap-1 p-0.5 sm:p-1 rounded-xl" style={{ background: 'var(--edu-bg-soft)' }}>
-          <RoleTab
-            href="/"
-            label="学生"
-            icon="👤"
-            active={userRole === 'student'}
+        <nav className="flex items-center gap-1 p-1 rounded-xl" style={{ background: 'var(--edu-bg-soft)' }}>
+          <RoleTab 
+            href="/" 
+            label="学生" 
+            icon="👤" 
+            active={userRole === 'student'} 
             loading={loadingRole === 'student'}
             onClick={() => handleRoleChange('/', 'student')}
           />
-          <RoleTab
-            href="/parent"
-            label="家长"
-            icon="👨‍👩‍👧"
+          <RoleTab 
+            href="/parent" 
+            label="家长" 
+            icon="👨‍👩‍👧" 
             active={userRole === 'parent'}
             loading={loadingRole === 'parent'}
             onClick={() => handleRoleChange('/parent', 'parent')}
           />
-          <RoleTab
-            href="/teacher"
-            label="教师"
-            icon="👨‍🏫"
+          <RoleTab 
+            href="/teacher" 
+            label="教师" 
+            icon="👨‍🏫" 
             active={userRole === 'teacher'}
             loading={loadingRole === 'teacher'}
             onClick={() => handleRoleChange('/teacher', 'teacher')}
@@ -158,10 +158,9 @@ export function Header({ lessonTitle, courseName, userRole = 'student' }: Header
           ) : (
             <Link
               href="/login"
-              className="px-2.5 sm:px-4 py-1.5 sm:py-2 text-xs sm:text-sm font-medium text-white bg-gradient-to-r from-amber-400 to-amber-500 rounded-lg hover:from-amber-500 hover:to-amber-600 transition-all shadow-md whitespace-nowrap"
+              className="px-4 py-2 text-sm font-medium text-white bg-gradient-to-r from-amber-400 to-amber-500 rounded-lg hover:from-amber-500 hover:to-amber-600 transition-all shadow-md"
             >
-              <span className="sm:hidden">👤</span>
-              <span className="hidden sm:inline">登录</span>
+              登录
             </Link>
           )}
         </div>
@@ -189,7 +188,7 @@ function RoleTab({
     <button
       onClick={onClick}
       disabled={loading}
-      className={`px-2 sm:px-3 py-1.5 rounded-lg text-sm flex items-center gap-1 sm:gap-1.5 transition-all ${
+      className={`px-3 py-1.5 rounded-lg text-sm flex items-center gap-1.5 transition-all ${
         active
           ? 'bg-white text-amber-600 shadow-sm font-medium'
           : loading

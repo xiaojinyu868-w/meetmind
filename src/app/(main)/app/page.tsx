@@ -1,7 +1,6 @@
 'use client';
 
 import { useState, useEffect, useCallback, useRef, Suspense } from 'react';
-import Link from 'next/link';
 import { Header } from '@/components/Header';
 import { ServiceStatus, DegradedModeBanner } from '@/components/ServiceStatus';
 import { anchorService, type Anchor } from '@/lib/services/anchor-service';
@@ -964,13 +963,13 @@ export default function StudentApp() {
           {/* 移动端录音页面 - 得到风格 */}
           {isMobile ? (
             <div className="flex-1 min-h-0 flex flex-col overflow-hidden" style={{ background: 'var(--edu-bg-primary)' }}>
-              {/* 极简顶部栏：Logo + Tab + 登录/菜单 */}
-              <div className="flex-shrink-0 px-4 py-2.5 flex items-center gap-3 bg-white border-b" style={{ borderColor: 'var(--edu-border-light)' }}>
+              {/* 极简顶部栏：Logo + Tab + 用户 + 菜单 */}
+              <div className="flex-shrink-0 px-4 py-2.5 flex items-center gap-2 bg-white border-b" style={{ borderColor: 'var(--edu-border-light)' }}>
                 {/* Logo */}
                 <div className="w-8 h-8 bg-gradient-to-br from-amber-400 to-amber-500 rounded-lg flex items-center justify-center flex-shrink-0">
                   <span className="text-white font-bold text-sm">M</span>
                 </div>
-
+                
                 {/* Tab 切换 */}
                 <div className="flex-1 flex items-center justify-center">
                   <MobileTabSwitch
@@ -979,18 +978,30 @@ export default function StudentApp() {
                     data-onboarding="mode-switch"
                   />
                 </div>
-
-                {/* 登录按钮或菜单按钮 */}
+                
+                {/* 用户头像/登录按钮 */}
                 {isAuthenticated && user ? (
-                  <DedaoMenuButton onClick={() => setIsMenuOpen(true)} />
+                  <button
+                    onClick={() => setIsMenuOpen(true)}
+                    className="w-8 h-8 bg-gradient-to-br from-lilac-200 to-lilac-300 rounded-full flex items-center justify-center overflow-hidden flex-shrink-0"
+                  >
+                    {user.avatar ? (
+                      <img src={user.avatar} alt={user.nickname} className="w-full h-full object-cover" />
+                    ) : (
+                      <span className="text-sm">👤</span>
+                    )}
+                  </button>
                 ) : (
-                  <Link
+                  <a
                     href="/login"
-                    className="w-8 h-8 flex items-center justify-center rounded-lg bg-gradient-to-r from-amber-400 to-amber-500 text-white text-xs font-medium"
+                    className="px-2.5 py-1.5 text-xs font-medium text-white bg-gradient-to-r from-amber-400 to-amber-500 rounded-lg flex-shrink-0"
                   >
                     登录
-                  </Link>
+                  </a>
                 )}
+                
+                {/* 菜单按钮 */}
+                <DedaoMenuButton onClick={() => setIsMenuOpen(true)} />
               </div>
 
               {/* 录音内容区 */}
@@ -1176,13 +1187,12 @@ export default function StudentApp() {
                 isOpen={isMenuOpen}
                 onClose={() => setIsMenuOpen(false)}
                 onNavigate={(page) => setMobileSubPage(page)}
+                userRole="student"
                 badges={{
                   highlights: highlightTopics.length,
                   notes: notes.length,
                   tasks: actionItems.filter(i => !i.completed).length,
                 }}
-                isAuthenticated={isAuthenticated}
-                user={user}
               />
             </div>
           ) : (
@@ -1697,13 +1707,13 @@ export default function StudentApp() {
           ) : (
             /* 移动端教育风格布局 */
             <div className="flex-1 min-h-0 flex flex-col overflow-hidden" style={{ background: 'var(--edu-bg-primary)' }}>
-              {/* 极简顶部栏：Logo + Tab + 登录/菜单 */}
-              <div className="flex-shrink-0 px-4 py-2.5 flex items-center gap-3 bg-white border-b" style={{ borderColor: 'var(--edu-border-light)' }}>
+              {/* 极简顶部栏：Logo + Tab + 用户 + 菜单 */}
+              <div className="flex-shrink-0 px-4 py-2.5 flex items-center gap-2 bg-white border-b" style={{ borderColor: 'var(--edu-border-light)' }}>
                 {/* Logo */}
                 <div className="w-8 h-8 bg-gradient-to-br from-amber-400 to-amber-500 rounded-lg flex items-center justify-center flex-shrink-0">
                   <span className="text-white font-bold text-sm">M</span>
                 </div>
-
+                
                 {/* Tab 切换 */}
                 <div className="flex-1 flex items-center justify-center">
                   <MobileTabSwitch
@@ -1712,18 +1722,30 @@ export default function StudentApp() {
                     data-onboarding="mode-switch"
                   />
                 </div>
-
-                {/* 登录按钮或菜单按钮 */}
+                
+                {/* 用户头像/登录按钮 */}
                 {isAuthenticated && user ? (
-                  <DedaoMenuButton onClick={() => setIsMenuOpen(true)} data-onboarding="menu-button" />
+                  <button
+                    onClick={() => setIsMenuOpen(true)}
+                    className="w-8 h-8 bg-gradient-to-br from-lilac-200 to-lilac-300 rounded-full flex items-center justify-center overflow-hidden flex-shrink-0"
+                  >
+                    {user.avatar ? (
+                      <img src={user.avatar} alt={user.nickname} className="w-full h-full object-cover" />
+                    ) : (
+                      <span className="text-sm">👤</span>
+                    )}
+                  </button>
                 ) : (
-                  <Link
+                  <a
                     href="/login"
-                    className="w-8 h-8 flex items-center justify-center rounded-lg bg-gradient-to-r from-amber-400 to-amber-500 text-white text-xs font-medium"
+                    className="px-2.5 py-1.5 text-xs font-medium text-white bg-gradient-to-r from-amber-400 to-amber-500 rounded-lg flex-shrink-0"
                   >
                     登录
-                  </Link>
+                  </a>
                 )}
+                
+                {/* 菜单按钮 */}
+                <DedaoMenuButton onClick={() => setIsMenuOpen(true)} data-onboarding="menu-button" />
               </div>
 
               {/* 单行极简播放器 */}
@@ -2125,13 +2147,12 @@ export default function StudentApp() {
                 isOpen={isMenuOpen}
                 onClose={() => setIsMenuOpen(false)}
                 onNavigate={(page) => setMobileSubPage(page)}
+                userRole="student"
                 badges={{
                   highlights: highlightTopics.length,
                   notes: notes.length,
                   tasks: actionItems.filter(i => !i.completed).length,
                 }}
-                isAuthenticated={isAuthenticated}
-                user={user}
               />
             </div>
           )}
