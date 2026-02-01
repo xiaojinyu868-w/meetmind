@@ -40,7 +40,7 @@ const TERMS_SECTIONS: AgreementSection[] = [
   {
     title: '一、服务说明',
     content: [
-      { text: 'MeetMind 是一款 AI 驱动的智能学习助手，提供以下核心功能：' },
+      { text: 'MeetMind 是清华北大联合团队打造的 AI 学习助手，为每个孩子配备一位"听过课、记得住、讲得清"的智能同桌。核心功能包括：' },
       { items: [
         '语音转文字：将音频内容转换为文字记录',
         'AI 对话：基于学习内容的智能问答和辅导',
@@ -769,7 +769,7 @@ function LoginForm() {
             </div>
             <div>
               <span className="font-bold text-3xl text-white drop-shadow-lg">MeetMind</span>
-              <p className="text-sm text-white/70">AI智能学习助手 - 你的专属AI同桌</p>
+              <p className="text-sm text-white/70">清华北大联合团队打造 - 你的智能同桌</p>
             </div>
           </div>
 

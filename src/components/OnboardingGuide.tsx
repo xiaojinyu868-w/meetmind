@@ -412,7 +412,7 @@ export function WelcomeModal({
         {/* 内容 - 可滚动，响应式内边距 */}
         <div className="p-4 sm:p-6 text-center overflow-y-auto flex-1">
           <h2 className="text-lg sm:text-xl font-bold text-gray-900 mb-0.5 sm:mb-1">欢迎使用 MeetMind</h2>
-          <p className="text-gray-500 text-xs sm:text-sm mb-3 sm:mb-4">AI智能学习助手 - 你的专属AI同桌</p>
+          <p className="text-gray-500 text-xs sm:text-sm mb-3 sm:mb-4">清华北大联合团队打造 - 你的智能同桌</p>
 
           <div className="space-y-1.5 sm:space-y-2 text-left mb-4 sm:mb-5">
             <div className="flex items-center gap-2 sm:gap-3 p-2 sm:p-2.5 rounded-lg sm:rounded-xl bg-rose-50">

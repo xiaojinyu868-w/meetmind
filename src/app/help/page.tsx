@@ -21,7 +21,7 @@ const HELP_SECTIONS: HelpSection[] = [
     items: [
       {
         question: 'MeetMind 是什么？',
-        answer: 'MeetMind 是一款 AI 驱动的智能学习助手，可以帮助你将音频内容（如课堂录音、讲座、会议）转换为文字，并提供智能摘要、话题提取、AI 对话辅导等功能，让学习更高效。'
+        answer: 'MeetMind 是清华北大联合团队打造的 AI 学习助手，为每个孩子配备一位"听过课、记得住、讲得清"的智能同桌。支持课堂录音、语音转文字、AI 辅导答疑、时间轴复习等功能，让课堂内容随时可回听、随处可追问。'
       },
       {
         question: '如何开始使用？',
