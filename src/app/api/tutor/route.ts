@@ -11,7 +11,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { chat, DEFAULT_MODEL_ID, type ChatMessage, type MultimodalContent } from '@/lib/services/llm-service';
+import { chat, chatStream, DEFAULT_MODEL_ID, type ChatMessage, type MultimodalContent } from '@/lib/services/llm-service';
 import { formatTimeRange, formatTimestamp, getSegmentsInRange, type Segment } from '@/lib/services/longcut-utils';
 import { getDifyService, isDifyEnabled, type DifyWorkflowInput } from '@/lib/services/dify-service';
 import type { ExtendedTutorRequest, ExtendedTutorResponse, GuidanceQuestion, Citation } from '@/types/dify';
@@ -115,6 +115,7 @@ export async function POST(request: NextRequest) {
       messageContent?: Array<{ type: string; text?: string; image_url?: { url: string } }>;
       globalMode?: boolean;  // 全局对话模式
       sessionId?: string;    // 会话ID，用于摘要缓存
+      stream?: boolean;      // 是否启用流式输出
     };
     
     const { 
@@ -130,6 +131,7 @@ export async function POST(request: NextRequest) {
       conversation_id,
       globalMode = false,  // 全局对话模式，使用完整课堂上下文
       sessionId,           // 会话ID
+      stream = false,      // 流式输出（默认关闭，保持向后兼容）
     } = body;
 
     if (!segments || !Array.isArray(segments)) {
@@ -411,6 +413,49 @@ ${contextText}
 
     }
 
+    // ===== 流式响应模式 =====
+    if (stream && (studentQuestion || messageContent || globalMode)) {
+      const encoder = new TextEncoder();
+      
+      const readable = new ReadableStream({
+        async start(controller) {
+          try {
+            // 发送初始元数据
+            const metadata = {
+              type: 'metadata',
+              guidance_question: guidanceQuestion,
+              citations: citations?.length ? citations : undefined,
+              conversation_id: difyConversationId,
+              summary_generated: summaryGenerated,
+            };
+            controller.enqueue(encoder.encode(`data: ${JSON.stringify(metadata)}\n\n`));
+            
+            // 流式输出 LLM 内容
+            for await (const chunk of chatStream(messages, model, { temperature: 0.7, maxTokens: 2000 })) {
+              controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: 'content', content: chunk })}\n\n`));
+            }
+            
+            // 发送完成信号
+            controller.enqueue(encoder.encode('data: [DONE]\n\n'));
+            controller.close();
+          } catch (error) {
+            const errorMessage = error instanceof Error ? error.message : '未知错误';
+            controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: 'error', error: errorMessage })}\n\n`));
+            controller.close();
+          }
+        },
+      });
+      
+      return new Response(readable, {
+        headers: {
+          'Content-Type': 'text/event-stream',
+          'Cache-Control': 'no-cache',
+          'Connection': 'keep-alive',
+        },
+      });
+    }
+
+    // ===== 非流式响应模式（原有逻辑） =====
     // 调用 LLM
     const response = await chat(messages, model, { temperature: 0.7, maxTokens: 2000 });
 

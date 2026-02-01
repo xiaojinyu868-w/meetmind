@@ -9,10 +9,12 @@ import { GuidanceQuestion, GuidanceQuestionSkeleton } from './GuidanceQuestion';
 import { Citations, CitationsSkeleton } from './Citations';
 import { ImageUpload, useImagePaste, type UploadedImage } from './ImageUpload';
 import { useAuth } from '@/lib/hooks/useAuth';
+import { useSimpleSSEStream, type SSEEvent } from '@/lib/hooks/useSSEStream';
 import { saveTutorResponseCache, getTutorResponseCache, deleteTutorResponseCache, getPreference, setPreference, type TutorResponseCache, saveClassSummary, getSessionSummary } from '@/lib/db';
 import { conversationService, getEffectiveUserId } from '@/lib/services/conversation-service';
 import type { GuidanceQuestion as GuidanceQuestionType, GuidanceOption, Citation } from '@/types/dify';
 import { DEFAULT_MODEL_ID } from '@/lib/services/llm-service';
+import { StreamingMarkdown } from './StreamingMarkdown';
 
 // 持久化状态的 key
 const TUTOR_STATE_KEY = 'tutor_last_state';
@@ -112,6 +114,15 @@ export function AITutor({ breakpoint, segments, isLoading: externalLoading, onRe
   const [conversationId, setConversationId] = useState<string | undefined>();
   const [isGuidanceLoading, setIsGuidanceLoading] = useState(false);
   const [seekingTimestamp, setSeekingTimestamp] = useState<number | null>(null);
+  
+  // 困惑点模式的流式输出 - 使用统一的 SSE Hook
+  const {
+    fetchStream: breakpointFetchStream,
+    stopStream: breakpointStopStream,
+    isStreaming: isBreakpointStreaming,
+    streamingContent: breakpointStreamingContent,
+    clearContent: clearBreakpointContent,
+  } = useSimpleSSEStream();
   
   // 多模态相关状态
   const [supportsMultimodal, setSupportsMultimodal] = useState(true);  // 默认模型支持多模态
@@ -562,69 +573,82 @@ export function AITutor({ breakpoint, segments, isLoading: externalLoading, onRe
     }
   }, [breakpoint?.id, selectedModel, isRestoring]); // eslint-disable-line react-hooks/exhaustive-deps
 
+
   const handleGuidanceSelect = async (optionId: string, option: GuidanceOption) => {
     if (!breakpoint) return;
     
     setSelectedOptionId(optionId);
     setIsGuidanceLoading(true);
     
+    // 添加用户消息
+    const userMessage = `我选择了：${option.text}`;
+    setChatHistory(prev => [...prev, { role: 'user', content: userMessage }]);
+    
+    // 用于接收元数据
+    let newGuidanceQuestion: GuidanceQuestionType | undefined;
+    let newConversationId: string | undefined;
+    
     try {
-      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      const headers: Record<string, string> = {};
       if (accessToken) {
         headers['Authorization'] = `Bearer ${accessToken}`;
       }
       
-      const res = await fetch('/api/tutor', {
-        method: 'POST',
+      const fullContent = await breakpointFetchStream('/api/tutor', {
+        timestamp: breakpoint.timestamp,
+        segments,
+        model: selectedModel,
+        enable_guidance: true,
+        enable_web: enableWeb,
+        selected_option_id: optionId,
+        conversation_id: conversationId,
+        studentQuestion: userMessage,
+        sessionId,
+        stream: true,
+      }, {
         headers,
-        body: JSON.stringify({
-          timestamp: breakpoint.timestamp,
-          segments,
-          model: selectedModel,
-          enable_guidance: true,
-          enable_web: enableWeb,
-          selected_option_id: optionId,
-          conversation_id: conversationId,
-          studentQuestion: `我选择了：${option.text}`,
-          sessionId,  // 传递 sessionId 用于摘要缓存
-        }),
+        onMetadata: (metadata: SSEEvent) => {
+          if (metadata.conversation_id) {
+            newConversationId = metadata.conversation_id as string;
+          }
+          if (metadata.guidance_question) {
+            newGuidanceQuestion = metadata.guidance_question as GuidanceQuestionType;
+          }
+        },
       });
 
-      if (!res.ok) {
-        const data = await res.json();
-        throw new Error(data.error || '请求失败');
-      }
-
-      const data: TutorAPIResponse = await res.json();
-      
+      // 流式完成
       const newHistory = [
         ...chatHistory,
-        { role: 'user' as const, content: `我选择了：${option.text}` },
-        { role: 'assistant' as const, content: data.rawContent || '让我针对你的选择进一步解释...' },
+        { role: 'user' as const, content: userMessage },
+        { role: 'assistant' as const, content: fullContent || '让我针对你的选择进一步解释...' },
       ];
       setChatHistory(newHistory);
+      clearBreakpointContent();
       
-      if (data.conversation_id) {
-        setConversationId(data.conversation_id);
+      if (newConversationId) {
+        setConversationId(newConversationId);
       }
       
-      if (data.guidance_question) {
-        setResponse(prev => prev ? { ...prev, guidance_question: data.guidance_question } : null);
+      if (newGuidanceQuestion) {
+        setResponse(prev => prev ? { ...prev, guidance_question: newGuidanceQuestion } : null);
         setSelectedOptionId(undefined);
       }
       
-      // 保存摘要到 IndexedDB（如果是新生成的）
-      await handleSummaryFromResponse(data);
-      
       // 更新缓存
       if (response) {
-        await saveToCache(response, newHistory, data.conversation_id || conversationId);
+        await saveToCache(response, newHistory, newConversationId || conversationId);
       }
     } catch (err) {
+      // 用户取消不显示错误
+      if (err instanceof Error && err.name === 'AbortError') {
+        return;
+      }
       setChatHistory(prev => [...prev, { 
         role: 'assistant', 
         content: `抱歉，出现错误：${err instanceof Error ? err.message : '未知错误'}` 
       }]);
+      clearBreakpointContent();
     } finally {
       setIsGuidanceLoading(false);
     }
@@ -646,7 +670,7 @@ export function AITutor({ breakpoint, segments, isLoading: externalLoading, onRe
     setChatHistory(prev => [...prev, { role: 'user', content: userDisplayContent }]);
     
     try {
-      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      const headers: Record<string, string> = {};
       if (accessToken) {
         headers['Authorization'] = `Bearer ${accessToken}`;
       }
@@ -670,57 +694,52 @@ export function AITutor({ breakpoint, segments, isLoading: externalLoading, onRe
         });
       }
       
-      const res = await fetch('/api/tutor', {
-        method: 'POST',
+      const fullContent = await breakpointFetchStream('/api/tutor', {
+        timestamp: breakpoint.timestamp,
+        segments,
+        model: selectedModel,
+        studentQuestion: question,
+        messageContent: imagesToSend.length > 0 ? messageContent : undefined,
+        enable_guidance: true,
+        enable_web: enableWeb,
+        conversation_id: conversationId,
+        sessionId,
+        stream: true,
+      }, {
         headers,
-        body: JSON.stringify({
-          timestamp: breakpoint.timestamp,
-          segments,
-          model: selectedModel,
-          studentQuestion: question,
-          // 如果有图片，传递多模态内容
-          messageContent: imagesToSend.length > 0 ? messageContent : undefined,
-          enable_guidance: true,
-          enable_web: enableWeb,
-          conversation_id: conversationId,
-          sessionId,  // 传递 sessionId 用于摘要缓存
-        }),
+        onMetadata: (metadata: SSEEvent) => {
+          if (metadata.conversation_id) {
+            setConversationId(metadata.conversation_id as string);
+          }
+          if ((metadata.citations as Citation[] | undefined)?.length) {
+            setResponse(prev => prev ? { ...prev, citations: metadata.citations as Citation[] } : null);
+          }
+        },
       });
 
-      if (!res.ok) {
-        const data = await res.json();
-        throw new Error(data.error || '请求失败');
-      }
-
-      const data: TutorAPIResponse = await res.json();
-      
+      // 流式完成，添加到历史
       const newHistory = [
         ...chatHistory,
-        { role: 'user' as const, content: question },
-        { role: 'assistant' as const, content: data.rawContent || data.explanation.followUpQuestion },
+        { role: 'user' as const, content: userDisplayContent },
+        { role: 'assistant' as const, content: fullContent || '抱歉，我没有理解你的问题' },
       ];
       setChatHistory(newHistory);
-      
-      if (data.conversation_id) {
-        setConversationId(data.conversation_id);
-      }
-      
-      if (data.citations?.length) {
-        setResponse(prev => prev ? { ...prev, citations: data.citations } : null);
-      }
-      
-      // 保存摘要到 IndexedDB（如果是新生成的）
-      await handleSummaryFromResponse(data);
+      clearBreakpointContent();
       
       // 更新缓存
       if (response) {
-        await saveToCache(response, newHistory, data.conversation_id || conversationId);
+        await saveToCache(response, newHistory, conversationId);
       }
     } catch (err) {
+      // 用户取消不显示错误
+      if (err instanceof Error && err.name === 'AbortError') {
+        return;
+      }
       setChatHistory(prev => [...prev, { 
         role: 'assistant', 
         content: `抱歉，出现错误：${err instanceof Error ? err.message : '未知错误'}` 
       }]);
+      clearBreakpointContent();
     }
   };
 
@@ -732,6 +751,15 @@ export function AITutor({ breakpoint, segments, isLoading: externalLoading, onRe
   // 全局模式下的对话历史
   const [globalChatHistory, setGlobalChatHistory] = useState<Array<{ role: 'user' | 'assistant'; content: string }>>([]);
   const [globalLoading, setGlobalLoading] = useState(false);
+  
+  // 全局模式的流式输出 - 使用统一的 SSE Hook
+  const {
+    fetchStream: globalFetchStream,
+    stopStream: globalStopStream,
+    isStreaming,
+    streamingContent,
+    clearContent: clearGlobalContent,
+  } = useSimpleSSEStream();
   
   // 全局模式：发送消息（必须在 useEffect 之前定义）
   const handleGlobalSend = useCallback(async (questionOverride?: string) => {
@@ -746,56 +774,45 @@ export function AITutor({ breakpoint, segments, isLoading: externalLoading, onRe
     setGlobalChatHistory(prev => [...prev, { role: 'user', content: question }]);
     setGlobalLoading(true);
 
+    // 构建请求体
+    const requestBody: Record<string, unknown> = {
+      timestamp: 0,
+      segments,
+      model: selectedModel,
+      studentQuestion: question,
+      globalMode: true,
+      enable_guidance: false,
+      enable_web: enableWeb,
+      sessionId,
+      stream: true,
+    };
+
+    // 支持多模态（图片上传）
+    if (supportsMultimodal && uploadedImages.length > 0) {
+      requestBody.messageContent = [
+        ...uploadedImages.map(img => ({
+          type: 'image_url',
+          image_url: { url: img.base64 },
+        })),
+        { type: 'text', text: question },
+      ];
+      setUploadedImages([]);
+    }
+
     try {
-      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      const headers: Record<string, string> = {};
       if (accessToken) {
         headers['Authorization'] = `Bearer ${accessToken}`;
       }
 
-      // 构建请求体
-      const requestBody: Record<string, unknown> = {
-        timestamp: 0,
-        segments,
-        model: selectedModel,
-        studentQuestion: question,
-        globalMode: true,  // 全局对话模式
-        enable_guidance: false,
-        enable_web: enableWeb,
-        sessionId,  // 传递 sessionId
-      };
+      const fullContent = await globalFetchStream('/api/tutor', requestBody, { headers });
 
-      // 支持多模态（图片上传）
-      if (supportsMultimodal && uploadedImages.length > 0) {
-        requestBody.messageContent = [
-          ...uploadedImages.map(img => ({
-            type: 'image_url',
-            image_url: { url: img.base64 },
-          })),
-          { type: 'text', text: question },
-        ];
-        setUploadedImages([]);  // 清空图片
-      }
-
-      const res = await fetch('/api/tutor', {
-        method: 'POST',
-        headers,
-        body: JSON.stringify(requestBody),
-      });
-
-      if (!res.ok) {
-        const data = await res.json();
-        throw new Error(data.error || '请求失败');
-      }
-
-      const data = await res.json();
-      
+      // 流式完成，将完整内容添加到历史
       setGlobalChatHistory(prev => [...prev, { 
         role: 'assistant', 
-        content: data.rawContent || '抱歉，我没有理解你的问题，能换个方式问吗？'
+        content: fullContent || '抱歉，我没有理解你的问题，能换个方式问吗？'
       }]);
-
-      // 保存摘要到 IndexedDB（如果是新生成的）
-      await handleSummaryFromResponse(data);
+      clearGlobalContent();
 
       // 保存到对话历史
       if (!conversationIdRef.current) {
@@ -816,7 +833,7 @@ export function AITutor({ breakpoint, segments, isLoading: externalLoading, onRe
         try {
           await conversationService.addMessages(conversationIdRef.current, [
             { role: 'user', content: question },
-            { role: 'assistant', content: data.rawContent || '' },
+            { role: 'assistant', content: fullContent || '' },
           ]);
         } catch (err) {
           console.error('Failed to save messages:', err);
@@ -824,14 +841,47 @@ export function AITutor({ breakpoint, segments, isLoading: externalLoading, onRe
       }
 
     } catch (err) {
+      // 用户取消不显示错误
+      if (err instanceof Error && err.name === 'AbortError') {
+        return;
+      }
       setGlobalChatHistory(prev => [...prev, { 
         role: 'assistant', 
         content: `抱歉，出现错误：${err instanceof Error ? err.message : '未知错误'}` 
       }]);
+      clearGlobalContent();
     } finally {
       setGlobalLoading(false);
     }
-  }, [userInput, segments, selectedModel, enableWeb, supportsMultimodal, uploadedImages, accessToken, userId, sessionId]);
+  }, [userInput, segments, selectedModel, enableWeb, supportsMultimodal, uploadedImages, accessToken, userId, sessionId, globalFetchStream, clearGlobalContent]);
+
+  // 全局模式：停止生成
+  const stopGlobalGeneration = useCallback(() => {
+    globalStopStream();
+    setGlobalLoading(false);
+    // 如果有部分内容，保存到历史
+    if (streamingContent) {
+      setGlobalChatHistory(prev => [...prev, { 
+        role: 'assistant', 
+        content: streamingContent + '\n\n[生成已停止]'
+      }]);
+      clearGlobalContent();
+    }
+  }, [streamingContent, globalStopStream, clearGlobalContent]);
+
+  // 困惑点模式：停止生成
+  const stopBreakpointGeneration = useCallback(() => {
+    breakpointStopStream();
+    setIsGuidanceLoading(false);
+    // 如果有部分内容，保存到历史
+    if (breakpointStreamingContent) {
+      setChatHistory(prev => [...prev, { 
+        role: 'assistant', 
+        content: breakpointStreamingContent + '\n\n[生成已停止]'
+      }]);
+      clearBreakpointContent();
+    }
+  }, [breakpointStreamingContent, breakpointStopStream, clearBreakpointContent]);
 
   // 全局模式：处理初始问题（handleGlobalSend 已在上方定义）
   useEffect(() => {
@@ -957,14 +1007,37 @@ export function AITutor({ breakpoint, segments, isLoading: externalLoading, onRe
                         : 'bg-gray-100 text-gray-800'
                     }`}
                   >
-                    <div className={`text-sm whitespace-pre-wrap leading-relaxed ${isMobile ? 'text-xs' : ''}`}>
-                      {msg.role === 'assistant' ? renderTextWithTimestamps(msg.content) : msg.content}
-                    </div>
+                    {msg.role === 'assistant' ? (
+                      <StreamingMarkdown
+                        content={msg.content}
+                        onTimestampClick={handleTimestampClick}
+                        className={`text-sm leading-relaxed ${isMobile ? 'text-xs' : ''}`}
+                      />
+                    ) : (
+                      <div className={`text-sm whitespace-pre-wrap leading-relaxed ${isMobile ? 'text-xs' : ''}`}>
+                        {msg.content}
+                      </div>
+                    )}
                   </div>
                 </div>
               ))}
               
-              {globalLoading && (
+              {/* 流式输出中的消息 */}
+              {isStreaming && streamingContent && (
+                <div className="flex justify-start">
+                  <div className="max-w-[85%] rounded-2xl px-4 py-3 bg-gray-100 text-gray-800">
+                    <StreamingMarkdown
+                      content={streamingContent}
+                      isStreaming={true}
+                      onTimestampClick={handleTimestampClick}
+                      className={`text-sm leading-relaxed ${isMobile ? 'text-xs' : ''}`}
+                    />
+                  </div>
+                </div>
+              )}
+              
+              {/* 等待开始流式输出时显示 loading */}
+              {globalLoading && !streamingContent && (
                 <div className="flex justify-start">
                   <div className="bg-gray-100 rounded-2xl px-4 py-3">
                     <div className="flex items-center gap-2 text-gray-500">
@@ -1016,18 +1089,32 @@ export function AITutor({ breakpoint, segments, isLoading: externalLoading, onRe
               type="text"
               value={userInput}
               onChange={(e) => setUserInput(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && handleGlobalSend()}
+              onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && !isStreaming && handleGlobalSend()}
               placeholder="问我任何关于这节课的问题..."
               className={`input flex-1 ${isMobile ? 'text-sm' : ''}`}
               disabled={globalLoading || segments.length === 0}
             />
-            <button
-              onClick={() => handleGlobalSend()}
-              disabled={(!userInput.trim() && uploadedImages.length === 0) || globalLoading || segments.length === 0}
-              className={`btn btn-primary disabled:opacity-50 ${isMobile ? 'px-4' : 'px-6'}`}
-            >
-              发送
-            </button>
+            {isStreaming ? (
+              <button
+                onClick={stopGlobalGeneration}
+                className={`btn bg-red-500 hover:bg-red-600 text-white ${isMobile ? 'px-4' : 'px-6'}`}
+              >
+                <span className="flex items-center gap-1.5">
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                  停止
+                </span>
+              </button>
+            ) : (
+              <button
+                onClick={() => handleGlobalSend()}
+                disabled={(!userInput.trim() && uploadedImages.length === 0) || globalLoading || segments.length === 0}
+                className={`btn btn-primary disabled:opacity-50 ${isMobile ? 'px-4' : 'px-6'}`}
+              >
+                发送
+              </button>
+            )}
           </div>
           
           {/* 快捷回复 */}
@@ -1327,7 +1414,7 @@ export function AITutor({ breakpoint, segments, isLoading: externalLoading, onRe
             )}
 
             {/* 对话历史 */}
-            {chatHistory.length > 0 && (
+            {(chatHistory.length > 0 || isBreakpointStreaming) && (
               <div className="space-y-3 pt-4 border-t border-gray-100">
                 <h3 className="text-sm font-semibold text-gray-900 flex items-center gap-2">
                   <span>💬</span>
@@ -1338,11 +1425,46 @@ export function AITutor({ breakpoint, segments, isLoading: externalLoading, onRe
                     key={i} 
                     className={`chat-bubble ${msg.role}`}
                   >
-                    <div className="whitespace-pre-wrap text-sm">
-                      {msg.role === 'assistant' ? renderTextWithTimestamps(msg.content) : msg.content}
-                    </div>
+                    {msg.role === 'assistant' ? (
+                      <StreamingMarkdown
+                        content={msg.content}
+                        onTimestampClick={handleTimestampClick}
+                        className="text-sm"
+                      />
+                    ) : (
+                      <div className="whitespace-pre-wrap text-sm">
+                        {msg.content}
+                      </div>
+                    )}
                   </div>
                 ))}
+                
+                {/* 流式输出中的消息 */}
+                {isBreakpointStreaming && breakpointStreamingContent && (
+                  <div className="chat-bubble assistant">
+                    <StreamingMarkdown
+                      content={breakpointStreamingContent}
+                      isStreaming={true}
+                      onTimestampClick={handleTimestampClick}
+                      className="text-sm"
+                    />
+                  </div>
+                )}
+                
+                {/* 等待开始流式输出时显示 loading */}
+                {isBreakpointStreaming && !breakpointStreamingContent && (
+                  <div className="chat-bubble assistant">
+                    <div className="flex items-center gap-2 text-gray-500">
+                      <div className="loading-dots">
+                        <span></span>
+                        <span></span>
+                        <span></span>
+                      </div>
+                      <span className="text-xs">思考中...</span>
+                    </div>
+                  </div>
+                )}
+                
                 <div ref={chatEndRef} />
               </div>
             )}
@@ -1382,17 +1504,32 @@ export function AITutor({ breakpoint, segments, isLoading: externalLoading, onRe
             type="text"
             value={userInput}
             onChange={(e) => setUserInput(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && handleSend()}
+            onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && !isBreakpointStreaming && handleSend()}
             placeholder="告诉我你哪里不懂..."
             className="input flex-1"
+            disabled={isBreakpointStreaming}
           />
-          <button
-            onClick={handleSend}
-            disabled={(!userInput.trim() && uploadedImages.length === 0) || loading}
-            className="btn btn-primary px-6 disabled:opacity-50 flex-shrink-0"
-          >
-            发送
-          </button>
+          {isBreakpointStreaming ? (
+            <button
+              onClick={stopBreakpointGeneration}
+              className="btn bg-red-500 hover:bg-red-600 text-white px-6 flex-shrink-0"
+            >
+              <span className="flex items-center gap-1.5">
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+                停止
+              </span>
+            </button>
+          ) : (
+            <button
+              onClick={handleSend}
+              disabled={(!userInput.trim() && uploadedImages.length === 0) || loading}
+              className="btn btn-primary px-6 disabled:opacity-50 flex-shrink-0"
+            >
+              发送
+            </button>
+          )}
         </div>
         
         <div className="flex gap-2 mt-2 flex-wrap">

@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useRef } from 'react';
+import { useSimpleSSEStream } from '@/lib/hooks/useSSEStream';
 
 interface ReflectionGeneratorProps {
   lessonInfo: {
@@ -19,12 +20,18 @@ interface ReflectionGeneratorProps {
 }
 
 export function ReflectionGenerator({ lessonInfo, hotspots, onGenerate }: ReflectionGeneratorProps) {
-  const [isGenerating, setIsGenerating] = useState(false);
-  const [streamedText, setStreamedText] = useState('');
   const [isComplete, setIsComplete] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const contentRef = useRef<HTMLDivElement>(null);
-  const abortControllerRef = useRef<AbortController | null>(null);
+  
+  // 使用统一的 SSE Hook
+  const {
+    fetchStream,
+    stopStream,
+    isStreaming: isGenerating,
+    streamingContent: streamedText,
+    clearContent,
+  } = useSimpleSSEStream();
 
   // 构建 AI 提示词
   const buildPrompt = () => {
@@ -67,93 +74,31 @@ ${hotspotsText}
 
   // 调用 AI 流式生成
   const generateReflection = async () => {
-    // 取消之前的请求
-    if (abortControllerRef.current) {
-      abortControllerRef.current.abort();
-    }
-
-    setIsGenerating(true);
-    setStreamedText('');
+    clearContent();
     setIsComplete(false);
     setError(null);
     onGenerate?.();
 
-    abortControllerRef.current = new AbortController();
-
     try {
-      const response = await fetch('/api/chat', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          messages: [
-            { role: 'user', content: buildPrompt() }
-          ],
-          model: 'qwen3-max',
-          stream: true,
-          temperature: 0.7,
-          maxTokens: 1000,
-        }),
-        signal: abortControllerRef.current.signal,
+      await fetchStream('/api/chat', {
+        messages: [
+          { role: 'user', content: buildPrompt() }
+        ],
+        model: 'qwen3-max',
+        stream: true,
+        temperature: 0.7,
+        maxTokens: 1000,
+      }, {
+        onContent: () => {
+          // 滚动到底部
+          requestAnimationFrame(() => {
+            if (contentRef.current) {
+              contentRef.current.scrollTop = contentRef.current.scrollHeight;
+            }
+          });
+        },
       });
-
-      if (!response.ok) {
-        throw new Error(`API 请求失败: ${response.status}`);
-      }
-
-      const reader = response.body?.getReader();
-      if (!reader) {
-        throw new Error('无法获取响应流');
-      }
-
-      const decoder = new TextDecoder();
-      let buffer = '';
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-
-        buffer += decoder.decode(value, { stream: true });
-        
-        // 解析 SSE 数据
-        const lines = buffer.split('\n');
-        buffer = lines.pop() || ''; // 保留不完整的行
-
-        for (const line of lines) {
-          if (line.startsWith('data: ')) {
-            const data = line.slice(6);
-            
-            if (data === '[DONE]') {
-              setIsComplete(true);
-              continue;
-            }
-
-            try {
-              const parsed = JSON.parse(data);
-              if (parsed.content) {
-                setStreamedText(prev => {
-                  const newText = prev + parsed.content;
-                  // 滚动到底部
-                  requestAnimationFrame(() => {
-                    if (contentRef.current) {
-                      contentRef.current.scrollTop = contentRef.current.scrollHeight;
-                    }
-                  });
-                  return newText;
-                });
-              }
-              if (parsed.error) {
-                throw new Error(parsed.error);
-              }
-            } catch (e) {
-              // 忽略解析错误，可能是不完整的 JSON
-              if (e instanceof Error && e.message !== 'Unexpected end of JSON input') {
-                console.warn('解析 SSE 数据失败:', e);
-              }
-            }
-          }
-        }
-      }
-
+      
       setIsComplete(true);
     } catch (err) {
       if (err instanceof Error && err.name === 'AbortError') {
@@ -162,19 +107,13 @@ ${hotspotsText}
       }
       console.error('生成反思失败:', err);
       setError(err instanceof Error ? err.message : '生成失败，请重试');
-    } finally {
-      setIsGenerating(false);
-      abortControllerRef.current = null;
     }
   };
 
   // 停止生成
   const stopGeneration = () => {
-    if (abortControllerRef.current) {
-      abortControllerRef.current.abort();
-      setIsGenerating(false);
-      setIsComplete(true);
-    }
+    stopStream();
+    setIsComplete(true);
   };
 
   // 复制到剪贴板

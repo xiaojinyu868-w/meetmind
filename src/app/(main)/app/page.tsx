@@ -91,6 +91,7 @@ export default function StudentApp() {
   // 开屏动画状态
   const [showSplash, setShowSplash] = useState(true);
   const [appReady, setAppReady] = useState(false);
+  const [loadingProgress, setLoadingProgress] = useState(0); // 真实加载进度 0-100
   
   // 获取当前登录用户
   const { user, isAuthenticated } = useAuth();
@@ -207,6 +208,9 @@ export default function StudentApp() {
     if (hasRestoredState.current) return;
     
     const initializeApp = async () => {
+      // 开始初始化
+      setLoadingProgress(10);
+      
       // 第一批并行操作：服务检查 + 状态恢复 + anchors 获取 + 引导状态检查
       const [, savedAppState, savedAnchors, savedOnboardingState] = await Promise.all([
         checkServices().then(setServiceStatus),
@@ -221,6 +225,9 @@ export default function StudentApp() {
         Promise.resolve(anchorService.getActive(sessionId)),
         getPreference<{ completedFlows?: string[]; skippedFlows?: string[] } | null>('onboarding_state', null).catch(() => null),
       ]);
+      
+      // 第一批完成
+      setLoadingProgress(40);
       
       setAnchors(savedAnchors);
       
@@ -249,15 +256,21 @@ export default function StudentApp() {
       // 确定最终的 viewMode（首次访问强制录音页面）
       const finalViewMode = isFirstVisit ? 'record' : (restoredViewMode || 'record');
       
+      setLoadingProgress(50);
+      
       // 仅在复习模式下加载演示数据
       if (finalViewMode === 'review') {
         setViewMode('review');
+        
+        setLoadingProgress(60);
         
         // 第二批并行操作：加载演示数据 + 检查已有转录
         const [demoData, existingTranscriptCount] = await Promise.all([
           loadDemoData(),
           db.transcripts.where('sessionId').equals(sessionId).count().catch(() => 0),
         ]);
+        
+        setLoadingProgress(80);
         
         // 立即设置 UI 状态（让用户更快看到内容）
         setSegments(demoData.DEMO_SEGMENTS);
@@ -292,6 +305,8 @@ export default function StudentApp() {
         if (restoredReviewTab) {
           setReviewTab(restoredReviewTab);
         }
+        
+        setLoadingProgress(90);
         
         // 第三批：后台异步写入（不阻塞 UI）
         // 使用 queueMicrotask 延迟执行，让 UI 先渲染
@@ -340,6 +355,7 @@ export default function StudentApp() {
       }
       
       // 标记应用已准备就绪
+      setLoadingProgress(100);
       setAppReady(true);
       hasRestoredState.current = true;
       
@@ -889,8 +905,9 @@ export default function StudentApp() {
   if (showSplash) {
     return (
       <AppLoading 
-        message={appReady ? "即将就绪" : undefined}
-        onComplete={appReady ? handleSplashComplete : undefined}
+        progress={loadingProgress}
+        message={loadingProgress >= 100 ? "即将进入" : undefined}
+        onComplete={loadingProgress >= 100 ? handleSplashComplete : undefined}
       />
     );
   }
