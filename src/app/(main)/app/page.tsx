@@ -1171,6 +1171,8 @@ export default function StudentApp() {
                   notes: notes.length,
                   tasks: actionItems.filter(i => !i.completed).length,
                 }}
+                isAuthenticated={isAuthenticated}
+                user={user}
               />
             </div>
           ) : (
@@ -2109,6 +2111,8 @@ export default function StudentApp() {
                   notes: notes.length,
                   tasks: actionItems.filter(i => !i.completed).length,
                 }}
+                isAuthenticated={isAuthenticated}
+                user={user}
               />
             </div>
           )}

@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useEffect } from 'react';
+import Link from 'next/link';
 import { cn } from '@/lib/utils';
 
 export interface DedaoMenuProps {
@@ -12,6 +13,12 @@ export interface DedaoMenuProps {
     notes?: number;
     tasks?: number;
   };
+  isAuthenticated?: boolean;
+  user?: {
+    nickname?: string;
+    role?: string;
+  } | null;
+  onLogout?: () => void;
 }
 
 export function DedaoMenu({
@@ -19,6 +26,9 @@ export function DedaoMenu({
   onClose,
   onNavigate,
   badges = {},
+  isAuthenticated,
+  user,
+  onLogout,
 }: DedaoMenuProps) {
   // 禁止背景滚动
   useEffect(() => {
@@ -153,15 +163,15 @@ export function DedaoMenu({
               )}
             >
               <span className={cn(
-                'highlight' in item && item.highlight 
-                  ? 'text-amber-500' 
+                'highlight' in item && item.highlight
+                  ? 'text-amber-500'
                   : 'text-[var(--dedao-gold)]'
               )}>{item.icon}</span>
               <div className="flex-1 min-w-0">
                 <span className={cn(
                   'block text-sm font-medium',
-                  'highlight' in item && item.highlight 
-                    ? 'text-amber-700' 
+                  'highlight' in item && item.highlight
+                    ? 'text-amber-700'
                     : 'text-[var(--dedao-text)]'
                 )}>
                   {item.label}
@@ -182,6 +192,61 @@ export function DedaoMenu({
               </svg>
             </button>
           ))}
+        </div>
+
+        {/* 底部：用户登录/信息 */}
+        <div className="absolute bottom-0 left-0 right-0 border-t border-gray-100 bg-white">
+          {isAuthenticated && user ? (
+            <div className="px-4 py-3">
+              <div className="flex items-center gap-3 mb-3">
+                <div className="w-10 h-10 bg-gradient-to-br from-lilac-200 to-lilac-300 rounded-full flex items-center justify-center">
+                  <span className="text-lg">
+                    {user.role === 'parent' ? '👨‍👩‍👧' : user.role === 'teacher' ? '👨‍🏫' : '👤'}
+                  </span>
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium text-gray-900 truncate">{user.nickname}</p>
+                  <p className="text-xs text-gray-500">
+                    {user.role === 'parent' ? '家长' : user.role === 'teacher' ? '教师' : '学生'}账号
+                  </p>
+                </div>
+              </div>
+              <div className="flex gap-2">
+                <Link
+                  href="/profile"
+                  onClick={onClose}
+                  className="flex-1 px-3 py-2 text-center text-sm text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
+                >
+                  个人资料
+                </Link>
+                {onLogout && (
+                  <button
+                    onClick={() => {
+                      onLogout();
+                      onClose();
+                    }}
+                    className="flex-1 px-3 py-2 text-sm text-coral-600 bg-coral-50 rounded-lg hover:bg-coral-100 transition-colors"
+                  >
+                    退出登录
+                  </button>
+                )}
+              </div>
+            </div>
+          ) : (
+            <div className="px-4 py-3">
+              <Link
+                href="/login"
+                onClick={onClose}
+                className="flex items-center justify-center gap-2 w-full px-4 py-2.5 text-sm font-medium text-white bg-gradient-to-r from-amber-400 to-amber-500 rounded-lg hover:from-amber-500 hover:to-amber-600 transition-all"
+              >
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 16l-4-4m0 0l4-4m-4 4h14m-5 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h7a3 3 0 013 3v1" />
+                </svg>
+                登录 / 注册
+              </Link>
+              <p className="text-center text-xs text-gray-400 mt-2">登录后可同步学习数据</p>
+            </div>
+          )}
         </div>
       </div>
     </>
