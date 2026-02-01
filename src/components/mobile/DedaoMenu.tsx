@@ -128,11 +128,12 @@ export function DedaoMenu({
           'fixed top-0 right-0 bottom-0 w-64 z-50',
           'bg-white shadow-xl',
           'transform transition-transform duration-300 ease-out',
+          'flex flex-col',
           isOpen ? 'translate-x-0' : 'translate-x-full'
         )}
       >
         {/* 头部 */}
-        <div className="px-4 py-4 border-b border-gray-100">
+        <div className="px-4 py-4 border-b border-gray-100 flex-shrink-0">
           <div className="flex items-center justify-between">
             <h2 className="text-base font-semibold text-[var(--dedao-text)]">更多功能</h2>
             <button
@@ -147,7 +148,7 @@ export function DedaoMenu({
         </div>
 
         {/* 菜单列表 */}
-        <div className="py-2">
+        <div className="flex-1 overflow-y-auto py-2">
           {menuItems.map((item) => (
             <button
               key={item.id}
@@ -195,7 +196,7 @@ export function DedaoMenu({
         </div>
 
         {/* 底部：用户登录/信息 */}
-        <div className="absolute bottom-0 left-0 right-0 border-t border-gray-100 bg-white">
+        <div className="flex-shrink-0 border-t border-gray-100 bg-white">
           {isAuthenticated && user ? (
             <div className="px-4 py-3">
               <div className="flex items-center gap-3 mb-3">
