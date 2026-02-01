@@ -16,7 +16,7 @@ export interface OnboardingStep {
   /** 是否为交互式步骤（用户点击目标元素进入下一步）
    * - true: 用户需要点击目标元素，元素的原有功能会生效
    * - false: 用户点击"下一步"按钮，不触发元素功能
-   * - 默认为 true
+   * - 默认为 false（统一使用下一步按钮，避免用户困惑）
    */
   interactive?: boolean;
 }
@@ -96,7 +96,7 @@ export const DESKTOP_ONBOARDING_FLOWS: Record<string, OnboardingFlow> = {
         position: 'right',
         spotlight: true,
         action: 'click',
-        interactive: true, // 点击真的切换 Tab
+        interactive: false, // 统一使用下一步按钮
       },
       {
         id: 'ai-tutor',
@@ -106,7 +106,7 @@ export const DESKTOP_ONBOARDING_FLOWS: Record<string, OnboardingFlow> = {
         position: 'left',
         spotlight: true,
         action: 'click',
-        interactive: false, // 点击进入下一步，不触发功能
+        interactive: false, // 统一使用下一步按钮
       },
       {
         id: 'action-list',
@@ -116,7 +116,7 @@ export const DESKTOP_ONBOARDING_FLOWS: Record<string, OnboardingFlow> = {
         position: 'left',
         spotlight: true,
         action: 'click',
-        interactive: true, // 点击真的展开抽屉
+        interactive: false, // 统一使用下一步按钮
       },
     ],
   },
@@ -189,7 +189,7 @@ export const MOBILE_ONBOARDING_FLOWS: Record<string, OnboardingFlow> = {
         position: 'top',  // 悬浮按钮在底部，tooltip 在上方
         spotlight: true,
         action: 'click',
-        interactive: true, // 点击打开 AI 对话
+        interactive: false, // 统一使用下一步按钮
       },
       {
         id: 'menu-button',
@@ -199,7 +199,7 @@ export const MOBILE_ONBOARDING_FLOWS: Record<string, OnboardingFlow> = {
         position: 'left',  // 菜单按钮在右上角，tooltip 在左侧
         spotlight: true,
         action: 'click',
-        interactive: true, // 点击展开菜单
+        interactive: false, // 统一使用下一步按钮
       },
     ],
   },
@@ -240,7 +240,9 @@ export function useOnboarding(options: UseOnboardingOptions = {}) {
   const { isMobile = false } = options;
   
   const [state, setState] = useState<OnboardingState>(DEFAULT_STATE);
-  const [isLoading, setIsLoading] = useState(true);
+  // 乐观 UI：不阻塞渲染，立即使用默认状态显示
+  // isHydrated 用于标记是否已从 IndexedDB 加载完成
+  const [isHydrated, setIsHydrated] = useState(false);
   const [isActive, setIsActive] = useState(false);
   const stateRef = useRef(state);
   
@@ -252,11 +254,11 @@ export function useOnboarding(options: UseOnboardingOptions = {}) {
     stateRef.current = state;
   }, [state]);
 
-  // 加载状态
+  // 异步加载状态（乐观 UI：不阻塞首屏渲染）
   useEffect(() => {
     const loadState = async () => {
       try {
-        const saved = await getPreference<OnboardingState>(ONBOARDING_STATE_KEY);
+        const saved = await getPreference<OnboardingState>(ONBOARDING_STATE_KEY, DEFAULT_STATE);
         if (saved) {
           setState(saved);
           stateRef.current = saved;
@@ -264,7 +266,7 @@ export function useOnboarding(options: UseOnboardingOptions = {}) {
       } catch (err) {
         console.error('Failed to load onboarding state:', err);
       } finally {
-        setIsLoading(false);
+        setIsHydrated(true);
       }
     };
     loadState();
@@ -405,7 +407,9 @@ export function useOnboarding(options: UseOnboardingOptions = {}) {
   const totalSteps = currentFlow?.steps.length || 0;
 
   return {
-    isLoading,
+    // 向后兼容：isLoading 始终为 false（乐观 UI，不阻塞渲染）
+    isLoading: false,
+    isHydrated, // 新增：标记是否已从 IndexedDB 加载完成
     isActive,
     isMobile,
     currentFlow,

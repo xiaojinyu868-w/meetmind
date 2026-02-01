@@ -1,7 +1,8 @@
 'use client';
 
 import Link from 'next/link';
-import { useState } from 'react';
+import { useRouter } from 'next/navigation';
+import { useState, useTransition, useEffect } from 'react';
 import { useAuth } from '@/lib/hooks/useAuth';
 
 interface HeaderProps {
@@ -12,7 +13,26 @@ interface HeaderProps {
 
 export function Header({ lessonTitle, courseName, userRole = 'student' }: HeaderProps) {
   const [showUserMenu, setShowUserMenu] = useState(false);
+  const [loadingRole, setLoadingRole] = useState<string | null>(null);
+  const [isPending, startTransition] = useTransition();
+  const router = useRouter();
   const { user, isAuthenticated, logout } = useAuth();
+
+  // 预加载角色切换的目标页面，提升跳转速度
+  // bundle-preload: Preload on hover/focus for perceived speed
+  useEffect(() => {
+    router.prefetch('/');
+    router.prefetch('/parent');
+    router.prefetch('/teacher');
+  }, [router]);
+
+  const handleRoleChange = (href: string, role: string) => {
+    if (userRole === role) return; // 已经是当前角色
+    setLoadingRole(role);
+    startTransition(() => {
+      router.push(href);
+    });
+  };
 
   const handleLogout = async () => {
     await logout();
@@ -53,9 +73,30 @@ export function Header({ lessonTitle, courseName, userRole = 'student' }: Header
       <div className="flex items-center gap-4">
         {/* 角色切换 */}
         <nav className="flex items-center gap-1 p-1 rounded-xl" style={{ background: 'var(--edu-bg-soft)' }}>
-          <RoleTab href="/" label="学生" icon="👤" active={userRole === 'student'} />
-          <RoleTab href="/parent" label="家长" icon="👨‍👩‍👧" active={userRole === 'parent'} />
-          <RoleTab href="/teacher" label="教师" icon="👨‍🏫" active={userRole === 'teacher'} />
+          <RoleTab 
+            href="/" 
+            label="学生" 
+            icon="👤" 
+            active={userRole === 'student'} 
+            loading={loadingRole === 'student'}
+            onClick={() => handleRoleChange('/', 'student')}
+          />
+          <RoleTab 
+            href="/parent" 
+            label="家长" 
+            icon="👨‍👩‍👧" 
+            active={userRole === 'parent'}
+            loading={loadingRole === 'parent'}
+            onClick={() => handleRoleChange('/parent', 'parent')}
+          />
+          <RoleTab 
+            href="/teacher" 
+            label="教师" 
+            icon="👨‍🏫" 
+            active={userRole === 'teacher'}
+            loading={loadingRole === 'teacher'}
+            onClick={() => handleRoleChange('/teacher', 'teacher')}
+          />
         </nav>
 
         {/* 用户头像/登录按钮 */}
@@ -132,24 +173,38 @@ function RoleTab({
   href, 
   label, 
   icon, 
-  active 
+  active,
+  loading,
+  onClick,
 }: { 
   href: string; 
   label: string; 
   icon: string; 
   active: boolean;
+  loading?: boolean;
+  onClick?: () => void;
 }) {
   return (
-    <Link
-      href={href}
+    <button
+      onClick={onClick}
+      disabled={loading}
       className={`px-3 py-1.5 rounded-lg text-sm flex items-center gap-1.5 transition-all ${
         active
           ? 'bg-white text-amber-600 shadow-sm font-medium'
-          : 'text-gray-500 hover:text-navy hover:bg-white/50'
+          : loading
+            ? 'text-gray-400 cursor-wait'
+            : 'text-gray-500 hover:text-navy hover:bg-white/50'
       }`}
     >
-      <span className="text-xs">{icon}</span>
+      {loading ? (
+        <svg className="animate-spin h-3.5 w-3.5 text-amber-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+        </svg>
+      ) : (
+        <span className="text-xs">{icon}</span>
+      )}
       <span className="hide-mobile">{label}</span>
-    </Link>
+    </button>
   );
 }

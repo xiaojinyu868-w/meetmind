@@ -30,8 +30,8 @@ export function OnboardingGuide({
   const { isMobile } = useResponsive();
   const targetElementRef = useRef<Element | null>(null);
   
-  // 从步骤配置中读取是否为交互式（默认 true）
-  const isInteractive = step?.interactive !== false;
+  // 从步骤配置中读取是否为交互式（默认 false，统一使用下一步按钮）
+  const isInteractive = step?.interactive === true;
 
   useEffect(() => {
     setMounted(true);

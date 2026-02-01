@@ -2141,23 +2141,6 @@ export default function StudentApp() {
         onSkip={onboarding.skipFlow}
         isActive={onboarding.isActive}
       />
-      
-      {/* 开发环境调试按钮：重置引导和页面状态 */}
-      {process.env.NODE_ENV === 'development' && (
-        <button
-          onClick={async () => {
-            if (confirm('确定要重置引导和页面状态吗？页面将刷新。')) {
-              await resetAppState();
-              onboarding.resetAll();
-              window.location.reload();
-            }
-          }}
-          className="fixed bottom-4 right-4 z-50 px-3 py-1.5 bg-gray-800 text-white text-xs rounded-lg opacity-50 hover:opacity-100 transition-opacity"
-          title="重置引导和页面状态"
-        >
-          🔄 重置引导
-        </button>
-      )}
     </div>
   );
 }

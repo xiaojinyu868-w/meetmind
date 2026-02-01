@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef, useCallback } from 'react';
+import { useState, useRef, useCallback, useEffect } from 'react';
 import type { TranscriptSegment } from '@/types';
 
 interface AudioUploaderProps {
@@ -12,6 +12,25 @@ interface AudioUploaderProps {
 type UploadStatus = 'idle' | 'uploading' | 'transcribing' | 'success' | 'error';
 type TranscribeMode = 'turbo' | 'fast' | 'standard';  // 极速模式（同步）、快速模式（异步并行）、标准模式
 
+// 检测是否为移动端
+function useIsMobile() {
+  const [isMobile, setIsMobile] = useState(false);
+  
+  useEffect(() => {
+    const checkMobile = () => {
+      setIsMobile(
+        /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) ||
+        window.innerWidth < 768
+      );
+    };
+    checkMobile();
+    window.addEventListener('resize', checkMobile);
+    return () => window.removeEventListener('resize', checkMobile);
+  }, []);
+  
+  return isMobile;
+}
+
 export function AudioUploader({ onTranscriptReady, onError, disabled }: AudioUploaderProps) {
   const [status, setStatus] = useState<UploadStatus>('idle');
   const [progress, setProgress] = useState(0);
@@ -19,8 +38,10 @@ export function AudioUploader({ onTranscriptReady, onError, disabled }: AudioUpl
   const [fileName, setFileName] = useState('');
   const [transcribeMode, setTranscribeMode] = useState<TranscribeMode>('turbo');
   const [processingInfo, setProcessingInfo] = useState('');
+  const [isSelectingFile, setIsSelectingFile] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const startTimeRef = useRef<number>(0);
+  const isMobile = useIsMobile();
 
   const handleFileSelect = useCallback(async (file: File) => {
     // 验证文件类型
@@ -170,13 +191,19 @@ export function AudioUploader({ onTranscriptReady, onError, disabled }: AudioUpl
 
   const handleClick = useCallback(() => {
     if (disabled || status === 'uploading' || status === 'transcribing') return;
+    setIsSelectingFile(true);
     fileInputRef.current?.click();
   }, [disabled, status]);
 
   const handleInputChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    setIsSelectingFile(false);
     const file = e.target.files?.[0];
     if (file) {
       handleFileSelect(file);
+    }
+    // 重置 input 以便可以重新选择相同文件
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
     }
   }, [handleFileSelect]);
 
@@ -185,6 +212,7 @@ export function AudioUploader({ onTranscriptReady, onError, disabled }: AudioUpl
     setProgress(0);
     setErrorMessage('');
     setFileName('');
+    setIsSelectingFile(false);
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
     }
@@ -192,17 +220,18 @@ export function AudioUploader({ onTranscriptReady, onError, disabled }: AudioUpl
 
   return (
     <div className="w-full">
+      {/* 移动端使用更广泛的 accept 类型 */}
       <input
         ref={fileInputRef}
         type="file"
-        accept="audio/mp3,audio/mpeg,audio/wav,audio/webm,audio/ogg,audio/m4a,.mp3,.wav,.webm,.ogg,.m4a"
+        accept="audio/*,audio/mp3,audio/mpeg,audio/wav,audio/webm,audio/ogg,audio/m4a,audio/x-m4a,.mp3,.wav,.webm,.ogg,.m4a,.aac,.flac"
         onChange={handleInputChange}
         className="hidden"
       />
 
       {status === 'idle' && (
         <div className="space-y-4">
-          {/* 模式选择 */}
+          {/* 模式选择 - 移动端隐藏详细说明 */}
           <div className="flex items-center justify-center gap-4 text-sm flex-wrap">
             <label className="flex items-center gap-2 cursor-pointer">
               <input
@@ -213,7 +242,7 @@ export function AudioUploader({ onTranscriptReady, onError, disabled }: AudioUpl
                 className="w-4 h-4 text-green-500"
               />
               <span className="font-medium text-green-700">极速模式</span>
-              <span className="text-xs text-green-500">（同步调用，最快）</span>
+              {!isMobile && <span className="text-xs text-green-500">（同步调用，最快）</span>}
             </label>
             <label className="flex items-center gap-2 cursor-pointer">
               <input
@@ -224,7 +253,7 @@ export function AudioUploader({ onTranscriptReady, onError, disabled }: AudioUpl
                 className="w-4 h-4 text-blue-500"
               />
               <span className="text-gray-700">快速模式</span>
-              <span className="text-xs text-gray-400">（并行异步）</span>
+              {!isMobile && <span className="text-xs text-gray-400">（并行异步）</span>}
             </label>
             <label className="flex items-center gap-2 cursor-pointer">
               <input
@@ -238,6 +267,7 @@ export function AudioUploader({ onTranscriptReady, onError, disabled }: AudioUpl
             </label>
           </div>
           
+          {/* 上传区域 */}
           <div
             onClick={handleClick}
             onDrop={handleDrop}
@@ -247,28 +277,69 @@ export function AudioUploader({ onTranscriptReady, onError, disabled }: AudioUpl
               transition-all duration-200
               ${disabled 
                 ? 'border-gray-200 bg-gray-50 cursor-not-allowed' 
-                : 'border-blue-200 hover:border-blue-400 hover:bg-blue-50/50'
+                : isSelectingFile
+                  ? 'border-blue-400 bg-blue-50/70 ring-2 ring-blue-200'
+                  : 'border-blue-200 hover:border-blue-400 hover:bg-blue-50/50'
               }
             `}
           >
             <div className="w-16 h-16 mx-auto mb-4 bg-blue-100 rounded-full flex items-center justify-center">
-              <svg className="w-8 h-8 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
-              </svg>
+              {isSelectingFile ? (
+                <svg className="animate-spin h-8 w-8 text-blue-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>
+              ) : (
+                <svg className="w-8 h-8 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                </svg>
+              )}
             </div>
-            <p className="text-gray-700 font-medium mb-1">点击或拖拽上传音频文件</p>
-            <p className="text-sm text-gray-500">
-              支持 MP3、WAV、WebM 等格式，最大 {transcribeMode === 'standard' ? '100' : '500'}MB
+            <p className="text-gray-700 font-medium mb-1">
+              {isSelectingFile ? '正在选择文件...' : (isMobile ? '点击选择音频文件' : '点击或拖拽上传音频文件')}
             </p>
-            {transcribeMode === 'turbo' && (
+            <p className="text-sm text-gray-500">
+              支持 MP3、WAV、M4A 等格式，最大 {transcribeMode === 'standard' ? '100' : '500'}MB
+            </p>
+            {transcribeMode === 'turbo' && !isMobile && (
               <p className="text-xs text-green-500 mt-2">
                 极速模式：18分钟音频约15秒完成（需配置域名）
               </p>
             )}
-            {transcribeMode === 'fast' && (
+            {transcribeMode === 'fast' && !isMobile && (
               <p className="text-xs text-blue-500 mt-2">
                 快速模式：50分钟音频约1分钟完成
               </p>
+            )}
+            
+            {/* 移动端专用上传按钮 */}
+            {isMobile && (
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleClick();
+                }}
+                disabled={disabled || isSelectingFile}
+                className="mt-4 px-6 py-2.5 bg-blue-500 hover:bg-blue-600 text-white font-medium rounded-xl transition-all shadow-lg disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 mx-auto"
+              >
+                {isSelectingFile ? (
+                  <>
+                    <svg className="animate-spin h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    <span>选择中...</span>
+                  </>
+                ) : (
+                  <>
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+                    </svg>
+                    <span>选择并上传</span>
+                  </>
+                )}
+              </button>
             )}
           </div>
         </div>
