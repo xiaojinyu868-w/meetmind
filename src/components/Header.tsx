@@ -189,7 +189,7 @@ function RoleTab({
     <button
       onClick={onClick}
       disabled={loading}
-      className={`px-3 py-1.5 rounded-lg text-sm flex items-center gap-1.5 transition-all ${
+      className={`px-2 sm:px-3 py-1.5 rounded-lg text-sm flex items-center gap-1 sm:gap-1.5 transition-all ${
         active
           ? 'bg-white text-amber-600 shadow-sm font-medium'
           : loading
