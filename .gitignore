@@ -1,6 +1,9 @@
 # 依赖
 node_modules/
 
+# 外部项目
+openclaw/
+
 # 构建产物
 .next/
 out/
