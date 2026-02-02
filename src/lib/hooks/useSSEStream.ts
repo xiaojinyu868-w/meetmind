@@ -356,6 +356,11 @@ export function useSimpleSSEStream() {
     setThinkingContent('');
   }, []);
   
+  /** 只清空流式内容，保留思考内容 */
+  const clearStreamingOnly = useCallback(() => {
+    setStreamingContent('');
+  }, []);
+  
   return {
     fetchStream,
     stopStream,
@@ -364,5 +369,6 @@ export function useSimpleSSEStream() {
     streamingContent,
     thinkingContent,
     clearContent,
+    clearStreamingOnly,
   };
 }

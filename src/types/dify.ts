@@ -27,6 +27,8 @@ export interface ExtendedTutorRequest {
   enable_guidance?: boolean;
   /** 启用联网检索功能 */
   enable_web?: boolean;
+  /** 启用学霸思维引导模式 */
+  enable_thinking_guide?: boolean;
   /** 学生选择的引导选项 ID */
   selected_option_id?: string;
   /** Dify 会话 ID（多轮对话） */

@@ -101,10 +101,48 @@ const GLOBAL_CHAT_SYSTEM_PROMPT = `你是一位专业的 AI 家教，正在帮�
 - 时间戳会被渲染为可点击的链接，帮助学生快速定位录音
 
 【回答风格】
-- 简洁自然，像朋友聊天一样
+- 自然，像家教辅导一样
 - 适当引用课堂原文并标注时间戳
 - 鼓励学生继续提问
 - 回复控制在 3-5 句话内，除非学生要求详细解释`;
+
+
+
+// 学霸思维引导 Prompt - 结构固定，内容灵活
+const THINKING_GUIDE_PROMPT = `
+
+【学霸思维引导模式】
+你是一位清北学霸学长/学姐，你非常擅长应试思维，各种中高考考试大纲都能融会贯通，你的目的是让学弟学妹能模仿你的思维方式。
+
+请按以下结构回答（结构固定，但每一步的标题和内容你自由发挥）：
+
+---思维演示---
+
+【你自己起的步骤名】
+用"我"的口吻自然地写这一步你是怎么想的...
+引用课堂内容时标注 [MM:SS]
+
+💡 心得（可迁移的思维技巧）
+
+【下一步的名字，你自己定】
+继续展示思路...
+
+💡 心得
+
+（步骤数量根据问题复杂度灵活调整）
+
+🌟 本次思维方法：方法1 → 方法2 → 方法3
+
+---正式回答---
+
+这里给出正式的回答内容
+
+【格式要求】
+- 用 ---思维演示--- 和 ---正式回答--- 作为分隔
+- 每个步骤用【步骤名】开头
+- 每步后用 💡 给一句可迁移的心得
+- 最后用 🌟 总结用到的思维方法
+- 语气像一位同桌一样即可`;
 
 export async function POST(request: NextRequest) {
   // 应用速率限制
@@ -117,6 +155,7 @@ export async function POST(request: NextRequest) {
       globalMode?: boolean;  // 全局对话模式
       sessionId?: string;    // 会话ID，用于摘要缓存
       stream?: boolean;      // 是否启用流式输出
+      enable_thinking_guide?: boolean;  // 学霸思维引导模式
     };
     
     const { 
@@ -128,6 +167,7 @@ export async function POST(request: NextRequest) {
       // 新增字段
       enable_guidance = false,
       enable_web = false,
+      enable_thinking_guide = false,  // 学霸思维引导模式
       selected_option_id,
       conversation_id,
       globalMode = false,  // 全局对话模式，使用完整课堂上下文
@@ -341,7 +381,13 @@ ${cachedSummary.keyDifficulties.map(d => `- ${d}`).join('\n')}
     if (studentQuestion || messageContent) {
       // 追问模式 / 全局对话模式
       // 全局模式使用专用提示词，追问模式使用追问提示词
-      const systemPrompt = globalMode ? GLOBAL_CHAT_SYSTEM_PROMPT : FOLLOWUP_SYSTEM_PROMPT;
+      let systemPrompt = globalMode ? GLOBAL_CHAT_SYSTEM_PROMPT : FOLLOWUP_SYSTEM_PROMPT;
+      
+      // 如果启用学霸思维引导模式，追加格式要求
+      if (enable_thinking_guide) {
+        systemPrompt += THINKING_GUIDE_PROMPT;
+      }
+      
       messages.push({ role: 'system', content: systemPrompt });
       
       // 构建用户消息（支持多模态）

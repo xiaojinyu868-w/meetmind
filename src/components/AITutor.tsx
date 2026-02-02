@@ -15,6 +15,8 @@ import { conversationService, getEffectiveUserId } from '@/lib/services/conversa
 import type { GuidanceQuestion as GuidanceQuestionType, GuidanceOption, Citation } from '@/types/dify';
 import { DEFAULT_MODEL_ID } from '@/lib/services/llm-service';
 import { StreamingMarkdown } from './StreamingMarkdown';
+import { ThinkingVisualizer } from './ThinkingVisualizer';
+import { ThinkingGuideRenderer } from './ThinkingGuideRenderer';
 
 // 持久化状态的 key
 const TUTOR_STATE_KEY = 'tutor_last_state';
@@ -109,11 +111,16 @@ export function AITutor({ breakpoint, segments, isLoading: externalLoading, onRe
   // 对话历史相关
   const conversationIdRef = useRef<string | null>(null);
   
-  const [enableWeb, setEnableWeb] = useState(true);
+  const [enableWeb, setEnableWeb] = useState(false);  // 联网搜索默认关闭
+  const [enableThinkingGuide, setEnableThinkingGuide] = useState(true);  // 学霸思维引导模式默认开启
   const [selectedOptionId, setSelectedOptionId] = useState<string | undefined>();
   const [conversationId, setConversationId] = useState<string | undefined>();
   const [isGuidanceLoading, setIsGuidanceLoading] = useState(false);
   const [seekingTimestamp, setSeekingTimestamp] = useState<number | null>(null);
+  
+  // 思考开始时间（用于计算耗时）
+  const [thinkingStartTime, setThinkingStartTime] = useState<number | undefined>();
+  const [globalThinkingStartTime, setGlobalThinkingStartTime] = useState<number | undefined>();
   
   // 困惑点模式的流式输出 - 使用统一的 SSE Hook
   const {
@@ -124,6 +131,7 @@ export function AITutor({ breakpoint, segments, isLoading: externalLoading, onRe
     streamingContent: breakpointStreamingContent,
     thinkingContent: breakpointThinkingContent,
     clearContent: clearBreakpointContent,
+    clearStreamingOnly: clearBreakpointStreamingOnly,
   } = useSimpleSSEStream();
   
   // 思考过程折叠状态
@@ -599,12 +607,16 @@ export function AITutor({ breakpoint, segments, isLoading: externalLoading, onRe
         headers['Authorization'] = `Bearer ${accessToken}`;
       }
       
+      // 记录思考开始时间
+      setThinkingStartTime(Date.now());
+      
       const result = await breakpointFetchStream('/api/tutor', {
         timestamp: breakpoint.timestamp,
         segments,
         model: selectedModel,
         enable_guidance: true,
         enable_web: enableWeb,
+        enable_thinking_guide: enableThinkingGuide,
         selected_option_id: optionId,
         conversation_id: conversationId,
         studentQuestion: userMessage,
@@ -629,7 +641,7 @@ export function AITutor({ breakpoint, segments, isLoading: externalLoading, onRe
         { role: 'assistant' as const, content: result.content || '让我针对你的选择进一步解释...' },
       ];
       setChatHistory(newHistory);
-      clearBreakpointContent();
+      clearBreakpointStreamingOnly();  // 只清空流式内容，保留思考内容
       
       if (newConversationId) {
         setConversationId(newConversationId);
@@ -653,7 +665,7 @@ export function AITutor({ breakpoint, segments, isLoading: externalLoading, onRe
         role: 'assistant', 
         content: `抱歉，出现错误：${err instanceof Error ? err.message : '未知错误'}` 
       }]);
-      clearBreakpointContent();
+      clearBreakpointStreamingOnly();  // 只清空流式内容，保留思考内容
     } finally {
       setIsGuidanceLoading(false);
     }
@@ -699,6 +711,9 @@ export function AITutor({ breakpoint, segments, isLoading: externalLoading, onRe
         });
       }
       
+      // 记录思考开始时间
+      setThinkingStartTime(Date.now());
+      
       const result = await breakpointFetchStream('/api/tutor', {
         timestamp: breakpoint.timestamp,
         segments,
@@ -707,6 +722,7 @@ export function AITutor({ breakpoint, segments, isLoading: externalLoading, onRe
         messageContent: imagesToSend.length > 0 ? messageContent : undefined,
         enable_guidance: true,
         enable_web: enableWeb,
+        enable_thinking_guide: enableThinkingGuide,
         conversation_id: conversationId,
         sessionId,
         stream: true,
@@ -729,7 +745,7 @@ export function AITutor({ breakpoint, segments, isLoading: externalLoading, onRe
         { role: 'assistant' as const, content: result.content || '抱歉，我没有理解你的问题' },
       ];
       setChatHistory(newHistory);
-      clearBreakpointContent();
+      clearBreakpointStreamingOnly();  // 只清空流式内容，保留思考内容
       
       // 更新缓存
       if (response) {
@@ -744,7 +760,7 @@ export function AITutor({ breakpoint, segments, isLoading: externalLoading, onRe
         role: 'assistant', 
         content: `抱歉，出现错误：${err instanceof Error ? err.message : '未知错误'}` 
       }]);
-      clearBreakpointContent();
+      clearBreakpointStreamingOnly();  // 只清空流式内容，保留思考内容
     }
   };
 
@@ -766,6 +782,7 @@ export function AITutor({ breakpoint, segments, isLoading: externalLoading, onRe
     streamingContent,
     thinkingContent: globalThinkingContent,
     clearContent: clearGlobalContent,
+    clearStreamingOnly: clearGlobalStreamingOnly,
   } = useSimpleSSEStream();
   
   // 全局模式思考过程折叠状态
@@ -784,6 +801,7 @@ export function AITutor({ breakpoint, segments, isLoading: externalLoading, onRe
     setGlobalChatHistory(prev => [...prev, { role: 'user', content: question }]);
     setGlobalLoading(true);
 
+
     // 构建请求体
     const requestBody: Record<string, unknown> = {
       timestamp: 0,
@@ -793,6 +811,7 @@ export function AITutor({ breakpoint, segments, isLoading: externalLoading, onRe
       globalMode: true,
       enable_guidance: false,
       enable_web: enableWeb,
+      enable_thinking_guide: enableThinkingGuide,
       sessionId,
       stream: true,
     };
@@ -815,14 +834,18 @@ export function AITutor({ breakpoint, segments, isLoading: externalLoading, onRe
         headers['Authorization'] = `Bearer ${accessToken}`;
       }
 
+      // 记录思考开始时间
+      setGlobalThinkingStartTime(Date.now());
+
       const result = await globalFetchStream('/api/tutor', requestBody, { headers });
+
 
       // 流式完成，将完整内容添加到历史
       setGlobalChatHistory(prev => [...prev, { 
         role: 'assistant', 
         content: result.content || '抱歉，我没有理解你的问题，能换个方式问吗？'
       }]);
-      clearGlobalContent();
+      clearGlobalStreamingOnly();  // 只清空流式内容，保留思考内容
 
       // 保存到对话历史
       if (!conversationIdRef.current) {
@@ -859,7 +882,7 @@ export function AITutor({ breakpoint, segments, isLoading: externalLoading, onRe
         role: 'assistant', 
         content: `抱歉，出现错误：${err instanceof Error ? err.message : '未知错误'}` 
       }]);
-      clearGlobalContent();
+      clearGlobalStreamingOnly();  // 只清空流式内容，保留思考内容
     } finally {
       setGlobalLoading(false);
     }
@@ -875,9 +898,9 @@ export function AITutor({ breakpoint, segments, isLoading: externalLoading, onRe
         role: 'assistant', 
         content: streamingContent + '\n\n[生成已停止]'
       }]);
-      clearGlobalContent();
+      clearGlobalStreamingOnly();  // 只清空流式内容，保留思考内容
     }
-  }, [streamingContent, globalStopStream, clearGlobalContent]);
+  }, [streamingContent, globalStopStream, clearGlobalStreamingOnly]);
 
   // 困惑点模式：停止生成
   const stopBreakpointGeneration = useCallback(() => {
@@ -889,9 +912,9 @@ export function AITutor({ breakpoint, segments, isLoading: externalLoading, onRe
         role: 'assistant', 
         content: breakpointStreamingContent + '\n\n[生成已停止]'
       }]);
-      clearBreakpointContent();
+      clearBreakpointStreamingOnly();  // 只清空流式内容，保留思考内容
     }
-  }, [breakpointStreamingContent, breakpointStopStream, clearBreakpointContent]);
+  }, [breakpointStreamingContent, breakpointStopStream, clearBreakpointStreamingOnly]);
 
   // 全局模式：处理初始问题（handleGlobalSend 已在上方定义）
   useEffect(() => {
@@ -951,6 +974,15 @@ export function AITutor({ breakpoint, segments, isLoading: externalLoading, onRe
                   className="w-4 h-4 rounded border-gray-300 text-amber-500 focus:ring-amber-400"
                 />
                 <span className="group-hover:text-gray-900 transition-colors">🌐 联网搜索</span>
+              </label>
+              <label className="flex items-center gap-2 text-xs text-gray-600 cursor-pointer group">
+                <input
+                  type="checkbox"
+                  checked={enableThinkingGuide}
+                  onChange={(e) => setEnableThinkingGuide(e.target.checked)}
+                  className="w-4 h-4 rounded border-gray-300 text-violet-500 focus:ring-violet-400"
+                />
+                <span className="group-hover:text-gray-900 transition-colors">🧠 思维引导</span>
               </label>
             </div>
           )}
@@ -1018,11 +1050,21 @@ export function AITutor({ breakpoint, segments, isLoading: externalLoading, onRe
                     }`}
                   >
                     {msg.role === 'assistant' ? (
-                      <StreamingMarkdown
-                        content={msg.content}
-                        onTimestampClick={handleTimestampClick}
-                        className={`text-sm leading-relaxed ${isMobile ? 'text-xs' : ''}`}
-                      />
+                      // 助手消息：根据是否开启学霸引导选择渲染器
+                      enableThinkingGuide ? (
+                        <ThinkingGuideRenderer
+                          content={msg.content}
+                          onTimestampClick={handleTimestampClick}
+                          isMobile={isMobile}
+                          className={`text-sm leading-relaxed ${isMobile ? 'text-xs' : ''}`}
+                        />
+                      ) : (
+                        <StreamingMarkdown
+                          content={msg.content}
+                          onTimestampClick={handleTimestampClick}
+                          className={`text-sm leading-relaxed ${isMobile ? 'text-xs' : ''}`}
+                        />
+                      )
                     ) : (
                       <div className={`text-sm whitespace-pre-wrap leading-relaxed ${isMobile ? 'text-xs' : ''}`}>
                         {msg.content}
@@ -1032,56 +1074,20 @@ export function AITutor({ breakpoint, segments, isLoading: externalLoading, onRe
                 </div>
               ))}
               
-              {/* 思考过程展示（全局模式） */}
-              {isStreaming && globalThinkingContent && (
+              {/* 思考过程展示（全局模式） - 仅在非学霸引导模式下显示模型的 thinking */}
+              {globalThinkingContent && !enableThinkingGuide && (
                 <div className="flex justify-start">
                   <div className="max-w-[85%] w-full">
-                    <div 
-                      className={`rounded-2xl border transition-all duration-300 ${
-                        isGlobalThinking 
-                          ? 'bg-gradient-to-r from-violet-50 to-purple-50 border-violet-200' 
-                          : 'bg-violet-50/50 border-violet-100'
-                      }`}
-                    >
-                      {/* 思考过程标题栏 */}
-                      <button
-                        onClick={() => setIsGlobalThinkingCollapsed(!isGlobalThinkingCollapsed)}
-                        className="w-full px-4 py-2 flex items-center justify-between text-left hover:bg-violet-100/50 rounded-t-2xl transition-colors"
-                      >
-                        <div className="flex items-center gap-2">
-                          <span className={`text-violet-600 ${isGlobalThinking ? 'animate-pulse' : ''}`}>
-                            {isGlobalThinking ? '🧠' : '💭'}
-                          </span>
-                          <span className="text-xs font-medium text-violet-700">
-                            {isGlobalThinking ? 'AI 正在思考...' : '思考过程'}
-                          </span>
-                          {isGlobalThinking && (
-                            <div className="loading-dots scale-75">
-                              <span></span>
-                              <span></span>
-                              <span></span>
-                            </div>
-                          )}
-                        </div>
-                        <svg 
-                          className={`w-4 h-4 text-violet-500 transition-transform duration-200 ${isGlobalThinkingCollapsed ? '' : 'rotate-180'}`}
-                          fill="none" 
-                          stroke="currentColor" 
-                          viewBox="0 0 24 24"
-                        >
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                        </svg>
-                      </button>
-                      
-                      {/* 思考过程内容 */}
-                      {!isGlobalThinkingCollapsed && (
-                        <div className="px-4 pb-3 pt-1">
-                          <div className={`text-xs text-violet-700/80 leading-relaxed italic max-h-48 overflow-y-auto ${isMobile ? 'text-[10px]' : ''}`}>
-                            {globalThinkingContent}
-                          </div>
-                        </div>
-                      )}
-                    </div>
+                    <ThinkingVisualizer
+                      content={globalThinkingContent}
+                      isThinking={isGlobalThinking}
+                      isCollapsed={isGlobalThinkingCollapsed}
+                      onToggleCollapse={() => setIsGlobalThinkingCollapsed(!isGlobalThinkingCollapsed)}
+                      enableGuideMode={false}
+                      onTimestampClick={handleTimestampClick}
+                      startTime={globalThinkingStartTime}
+                      isMobile={isMobile}
+                    />
                   </div>
                 </div>
               )}
@@ -1090,12 +1096,22 @@ export function AITutor({ breakpoint, segments, isLoading: externalLoading, onRe
               {isStreaming && streamingContent && (
                 <div className="flex justify-start">
                   <div className="max-w-[85%] rounded-2xl px-4 py-3 bg-gray-100 text-gray-800">
-                    <StreamingMarkdown
-                      content={streamingContent}
-                      isStreaming={true}
-                      onTimestampClick={handleTimestampClick}
-                      className={`text-sm leading-relaxed ${isMobile ? 'text-xs' : ''}`}
-                    />
+                    {enableThinkingGuide ? (
+                      <ThinkingGuideRenderer
+                        content={streamingContent}
+                        isStreaming={true}
+                        onTimestampClick={handleTimestampClick}
+                        isMobile={isMobile}
+                        className={`text-sm leading-relaxed ${isMobile ? 'text-xs' : ''}`}
+                      />
+                    ) : (
+                      <StreamingMarkdown
+                        content={streamingContent}
+                        isStreaming={true}
+                        onTimestampClick={handleTimestampClick}
+                        className={`text-sm leading-relaxed ${isMobile ? 'text-xs' : ''}`}
+                      />
+                    )}
                   </div>
                 </div>
               )}
@@ -1262,6 +1278,15 @@ export function AITutor({ breakpoint, segments, isLoading: externalLoading, onRe
                   className="w-4 h-4 rounded border-gray-300 text-amber-500 focus:ring-amber-400"
                 />
                 <span className="group-hover:text-gray-900 transition-colors">🌐 联网搜索</span>
+              </label>
+              <label className="flex items-center gap-2 text-xs text-gray-600 cursor-pointer group">
+                <input
+                  type="checkbox"
+                  checked={enableThinkingGuide}
+                  onChange={(e) => setEnableThinkingGuide(e.target.checked)}
+                  className="w-4 h-4 rounded border-gray-300 text-violet-500 focus:ring-violet-400"
+                />
+                <span className="group-hover:text-gray-900 transition-colors">🧠 思维引导</span>
               </label>
               {response?.usage && (
                 <span className="text-xs text-gray-400">
@@ -1473,11 +1498,20 @@ export function AITutor({ breakpoint, segments, isLoading: externalLoading, onRe
                     className={`chat-bubble ${msg.role}`}
                   >
                     {msg.role === 'assistant' ? (
-                      <StreamingMarkdown
-                        content={msg.content}
-                        onTimestampClick={handleTimestampClick}
-                        className="text-sm"
-                      />
+                      enableThinkingGuide ? (
+                        <ThinkingGuideRenderer
+                          content={msg.content}
+                          onTimestampClick={handleTimestampClick}
+                          isMobile={isMobile}
+                          className="text-sm"
+                        />
+                      ) : (
+                        <StreamingMarkdown
+                          content={msg.content}
+                          onTimestampClick={handleTimestampClick}
+                          className="text-sm"
+                        />
+                      )
                     ) : (
                       <div className="whitespace-pre-wrap text-sm">
                         {msg.content}
@@ -1486,67 +1520,41 @@ export function AITutor({ breakpoint, segments, isLoading: externalLoading, onRe
                   </div>
                 ))}
                 
-                {/* 思考过程展示（困惑点模式） */}
-                {isBreakpointStreaming && breakpointThinkingContent && (
+                {/* 思考过程展示（困惑点模式） - 仅在非学霸引导模式下显示模型的 thinking */}
+                {breakpointThinkingContent && !enableThinkingGuide && (
                   <div className="w-full">
-                    <div 
-                      className={`rounded-xl border transition-all duration-300 ${
-                        isBreakpointThinking 
-                          ? 'bg-gradient-to-r from-violet-50 to-purple-50 border-violet-200' 
-                          : 'bg-violet-50/50 border-violet-100'
-                      }`}
-                    >
-                      {/* 思考过程标题栏 */}
-                      <button
-                        onClick={() => setIsThinkingCollapsed(!isThinkingCollapsed)}
-                        className="w-full px-3 py-2 flex items-center justify-between text-left hover:bg-violet-100/50 rounded-t-xl transition-colors"
-                      >
-                        <div className="flex items-center gap-2">
-                          <span className={`text-violet-600 ${isBreakpointThinking ? 'animate-pulse' : ''}`}>
-                            {isBreakpointThinking ? '🧠' : '💭'}
-                          </span>
-                          <span className="text-xs font-medium text-violet-700">
-                            {isBreakpointThinking ? 'AI 正在思考...' : '思考过程'}
-                          </span>
-                          {isBreakpointThinking && (
-                            <div className="loading-dots scale-75">
-                              <span></span>
-                              <span></span>
-                              <span></span>
-                            </div>
-                          )}
-                        </div>
-                        <svg 
-                          className={`w-4 h-4 text-violet-500 transition-transform duration-200 ${isThinkingCollapsed ? '' : 'rotate-180'}`}
-                          fill="none" 
-                          stroke="currentColor" 
-                          viewBox="0 0 24 24"
-                        >
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                        </svg>
-                      </button>
-                      
-                      {/* 思考过程内容 */}
-                      {!isThinkingCollapsed && (
-                        <div className="px-3 pb-2 pt-1">
-                          <div className="text-xs text-violet-700/80 leading-relaxed italic max-h-40 overflow-y-auto">
-                            {breakpointThinkingContent}
-                          </div>
-                        </div>
-                      )}
-                    </div>
+                    <ThinkingVisualizer
+                      content={breakpointThinkingContent}
+                      isThinking={isBreakpointThinking}
+                      isCollapsed={isThinkingCollapsed}
+                      onToggleCollapse={() => setIsThinkingCollapsed(!isThinkingCollapsed)}
+                      enableGuideMode={false}
+                      onTimestampClick={handleTimestampClick}
+                      startTime={thinkingStartTime}
+                      isMobile={isMobile}
+                    />
                   </div>
                 )}
                 
                 {/* 流式输出中的消息 */}
                 {isBreakpointStreaming && breakpointStreamingContent && (
                   <div className="chat-bubble assistant">
-                    <StreamingMarkdown
-                      content={breakpointStreamingContent}
-                      isStreaming={true}
-                      onTimestampClick={handleTimestampClick}
-                      className="text-sm"
-                    />
+                    {enableThinkingGuide ? (
+                      <ThinkingGuideRenderer
+                        content={breakpointStreamingContent}
+                        isStreaming={true}
+                        onTimestampClick={handleTimestampClick}
+                        isMobile={isMobile}
+                        className="text-sm"
+                      />
+                    ) : (
+                      <StreamingMarkdown
+                        content={breakpointStreamingContent}
+                        isStreaming={true}
+                        onTimestampClick={handleTimestampClick}
+                        className="text-sm"
+                      />
+                    )}
                   </div>
                 )}
                 
