@@ -314,7 +314,7 @@ export const parentService = {
 请生成一句话总结。`,
           },
         ],
-        'qwen3-max',
+        'qwen3-max-2026-01-23',
         { temperature: 0.7, maxTokens: 100 }
       );
       

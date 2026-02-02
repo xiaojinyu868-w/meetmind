@@ -99,7 +99,7 @@ export async function POST(request: NextRequest) {
 
   try {
     const body: EnhanceRequestBody = await request.json();
-    const { segments, model = 'qwen3-max', isFinal = false } = body;
+    const { segments, model = 'qwen3-max-2026-01-23', isFinal = false } = body;
 
     if (!segments || !Array.isArray(segments) || segments.length === 0) {
       return NextResponse.json(

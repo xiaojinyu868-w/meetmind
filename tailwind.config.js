@@ -245,6 +245,7 @@ module.exports = {
         'fade-in': 'fade-in 0.3s ease-out',
         'slide-up': 'slide-up 0.4s cubic-bezier(0.16, 1, 0.3, 1)',
         'scale-in': 'scale-in 0.2s cubic-bezier(0.34, 1.56, 0.64, 1)',
+        'ripple': 'ripple 0.6s cubic-bezier(0.4, 0, 0.2, 1)',
       },
       keyframes: {
         'bounce-gentle': {
@@ -262,6 +263,10 @@ module.exports = {
         'scale-in': {
           from: { opacity: '0', transform: 'scale(0.95)' },
           to: { opacity: '1', transform: 'scale(1)' },
+        },
+        'ripple': {
+          from: { transform: 'scale(0)', opacity: '1' },
+          to: { transform: 'scale(1)', opacity: '0' },
         },
       },
       borderRadius: {

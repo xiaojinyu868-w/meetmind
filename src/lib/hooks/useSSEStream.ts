@@ -13,7 +13,7 @@ import { useRef, useCallback, useState } from 'react';
 
 /** SSE 事件的数据类型 */
 export interface SSEEvent {
-  type: 'content' | 'metadata' | 'error';
+  type: 'content' | 'metadata' | 'error' | 'thinking';
   content?: string;
   error?: string;
   // 元数据字段
@@ -232,10 +232,13 @@ export function useSSEStream(options: UseSSEStreamOptions = {}): UseSSEStreamRet
  * 支持两种 SSE 格式：
  * 1. { type: 'content', content: '...' } - /api/tutor 使用
  * 2. { content: '...' } - /api/chat 使用
+ * 3. { type: 'thinking', content: '...' } - 思考模式的思考过程
  */
 export function useSimpleSSEStream() {
   const [isStreaming, setIsStreaming] = useState(false);
   const [streamingContent, setStreamingContent] = useState('');
+  const [thinkingContent, setThinkingContent] = useState('');
+  const [isThinking, setIsThinking] = useState(false);
   const abortControllerRef = useRef<AbortController | null>(null);
   
   const fetchStream = useCallback(async (
@@ -246,9 +249,11 @@ export function useSimpleSSEStream() {
       onMetadata?: (metadata: SSEEvent) => void;
       /** 收到内容时的回调，可用于额外处理（如滚动） */
       onContent?: (chunk: string, fullContent: string) => void;
+      /** 收到思考内容时的回调 */
+      onThinking?: (chunk: string, fullThinking: string) => void;
     } = {}
-  ): Promise<string> => {
-    const { headers = {}, onMetadata, onContent } = options;
+  ): Promise<{ content: string; thinking: string }> => {
+    const { headers = {}, onMetadata, onContent, onThinking } = options;
     
     // 取消之前的请求
     abortControllerRef.current?.abort();
@@ -256,8 +261,11 @@ export function useSimpleSSEStream() {
     
     setIsStreaming(true);
     setStreamingContent('');
+    setThinkingContent('');
+    setIsThinking(true);
     
     let fullContent = '';
+    let fullThinking = '';
     
     try {
       const response = await fetch(url, {
@@ -294,10 +302,20 @@ export function useSimpleSSEStream() {
             try {
               const parsed = JSON.parse(data) as SSEEvent;
               
+              // 思考模式：处理 thinking 类型
+              if (parsed.type === 'thinking' && parsed.content) {
+                fullThinking += parsed.content;
+                setThinkingContent(fullThinking);
+                onThinking?.(parsed.content, fullThinking);
+              }
               // 支持两种格式：
               // 格式1: { type: 'content', content: '...' }
               // 格式2: { content: '...' } (无 type 字段)
-              if ((parsed.type === 'content' || !parsed.type) && parsed.content) {
+              else if ((parsed.type === 'content' || !parsed.type) && parsed.content) {
+                // 收到 content 说明思考阶段结束
+                if (isThinking) {
+                  setIsThinking(false);
+                }
                 fullContent += parsed.content;
                 setStreamingContent(fullContent);
                 onContent?.(parsed.content, fullContent);
@@ -318,9 +336,10 @@ export function useSimpleSSEStream() {
         }
       }
       
-      return fullContent;
+      return { content: fullContent, thinking: fullThinking };
     } finally {
       setIsStreaming(false);
+      setIsThinking(false);
       abortControllerRef.current = null;
     }
   }, []);
@@ -328,18 +347,22 @@ export function useSimpleSSEStream() {
   const stopStream = useCallback(() => {
     abortControllerRef.current?.abort();
     setIsStreaming(false);
+    setIsThinking(false);
     abortControllerRef.current = null;
   }, []);
   
   const clearContent = useCallback(() => {
     setStreamingContent('');
+    setThinkingContent('');
   }, []);
   
   return {
     fetchStream,
     stopStream,
     isStreaming,
+    isThinking,
     streamingContent,
+    thinkingContent,
     clearContent,
   };
 }

@@ -111,8 +111,8 @@ export function ModelSelector({ value, onChange, onMultimodalChange, className =
               <p className="text-xs text-gray-500 px-2">选择 AI 模型</p>
             </div>
             <div className="max-h-80 overflow-y-auto">
-              {/* 按提供商分组 */}
-              {['qwen', 'gemini', 'openai'].map(provider => {
+              {/* 按提供商分组 - 目前只启用通义千问 */}
+              {['qwen'].map(provider => {
                 const providerModels = models.filter(m => m.provider === provider);
                 if (providerModels.length === 0) return null;
                 

@@ -9,12 +9,16 @@
  * - 视频延迟加载，先显示海报图
  * - 移除 isLoading 阻塞，立即渲染 UI
  * - 微信授权 URL 异步获取，不阻塞渲染
+ * - 发送验证码使用乐观更新，即时响应
+ * - 按钮使用涟漪效果，提供即时视觉反馈
  */
 
 import { useState, useEffect, Suspense, useCallback, useRef } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { useAuth } from '@/lib/hooks/useAuth';
+import { AppLoading } from '@/components/AppLoading';
+import { RippleButton } from '@/components/ui/ripple-button';
 
 type LoginMethod = 'password' | 'code';
 type LoginType = 'email' | 'phone';
@@ -485,14 +489,20 @@ function LazyVideoBackground() {
 
   return (
     <>
+      {/* 底层背景色 - 防止任何情况下露出空白 */}
+      <div 
+        className="absolute inset-0"
+        style={{ backgroundColor: '#1a1a2e' }}
+      />
+      
       {/* 海报图背景 - 始终显示，视频就绪后淡出 */}
       <div 
-        className="absolute inset-0 bg-cover bg-center transition-opacity duration-1000"
+        className="absolute transition-opacity duration-1000"
         style={{ 
+          inset: '-20px', // 扩展边界确保覆盖
           backgroundImage: 'url(/videos/poster.jpg)',
           backgroundSize: 'cover',
           backgroundPosition: 'center',
-          transform: 'scale(1.05)',
           opacity: isVideoReady ? 0 : 1,
         }}
       />
@@ -506,11 +516,11 @@ function LazyVideoBackground() {
           loop
           playsInline
           onCanPlay={handleVideoCanPlay}
-          className="absolute inset-0 w-full h-full object-cover transition-opacity duration-1000"
+          className="absolute inset-0 w-full h-full transition-opacity duration-1000"
           style={{ 
             objectFit: 'cover',
-            objectPosition: 'center center',
-            transform: 'scale(1.05)',
+            objectPosition: 'center',
+            transform: 'scale(1.1)', // 放大10%确保完全覆盖
             opacity: isVideoReady ? 1 : 0,
           }}
         >
@@ -544,6 +554,7 @@ function LoginForm() {
   const [rememberMe, setRememberMe] = useState(false);
   const [error, setError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isGuestLoading, setIsGuestLoading] = useState(false);
   const [wechatAuthUrl, setWechatAuthUrl] = useState<string | null>(null);
   const [showAgreement, setShowAgreement] = useState<AgreementType>(null);
   
@@ -607,8 +618,12 @@ function LoginForm() {
       return;
     }
 
+    // 乐观更新：立即显示发送中状态和启动倒计时
     setIsSendingCode(true);
     setError('');
+    
+    // 立即启动倒计时（乐观更新）
+    setCountdown(60);
 
     try {
       const response = await fetch('/api/auth/send-code', {
@@ -623,13 +638,15 @@ function LoginForm() {
 
       const result = await response.json();
 
-      if (result.success) {
-        setCountdown(60);
-      } else {
+      if (!result.success) {
+        // 发送失败，回滚倒计时
+        setCountdown(result.retryAfter || 0);
         setError(result.error || '发送失败');
-        if (result.retryAfter) setCountdown(result.retryAfter);
       }
+      // 成功时不需要做任何事，乐观更新已经处理了
     } catch {
+      // 网络错误，回滚倒计时
+      setCountdown(0);
       setError('网络错误，请稍后重试');
     } finally {
       setIsSendingCode(false);
@@ -702,8 +719,9 @@ function LoginForm() {
   };
 
   const handleGuestMode = () => {
-    // 直接跳转，让用户在 /app 页面看到品牌加载页
-    // 不显示登录页的 spinner，避免双重等待
+    // 立即显示加载状态
+    setIsGuestLoading(true);
+    // 跳转到 /app 页面
     router.push('/app');
   };
 
@@ -747,8 +765,18 @@ function LoginForm() {
 
   const currentTarget = loginType === 'email' ? email : phone;
 
+  // 访客模式点击后显示全屏加载动画
+  if (isGuestLoading) {
+    return <AppLoading message="正在进入体验模式" />;
+  }
+
   return (
-    <div className="min-h-screen relative overflow-hidden">
+    <div 
+      className="min-h-screen relative overflow-hidden"
+      style={{
+        backgroundColor: '#1a1a2e',
+      }}
+    >
       {/* 延迟加载视频背景 */}
       <LazyVideoBackground />
 
@@ -890,14 +918,16 @@ function LoginForm() {
                       maxLength={6}
                       className="flex-1 px-4 py-3.5 rounded-xl transition-all focus:outline-none bg-white border-2 border-rose-100 focus:border-rose-400 focus:ring-4 focus:ring-rose-100 text-gray-800 placeholder-gray-400"
                     />
-                    <button
+                    <RippleButton
                       type="button"
+                      variant="soft"
                       onClick={sendVerificationCode}
-                      disabled={isSendingCode || countdown > 0}
-                      className="px-4 py-3.5 rounded-xl font-medium whitespace-nowrap transition-all disabled:opacity-50 disabled:cursor-not-allowed bg-rose-100 text-rose-600 hover:bg-rose-200 border border-rose-200"
+                      disabled={countdown > 0}
+                      loading={isSendingCode}
+                      className="px-4 whitespace-nowrap"
                     >
-                      {isSendingCode ? '发送中...' : countdown > 0 ? `${countdown}s` : '获取验证码'}
-                    </button>
+                      {countdown > 0 ? `${countdown}s` : '获取验证码'}
+                    </RippleButton>
                   </div>
                 </div>
               )}
@@ -921,17 +951,20 @@ function LoginForm() {
               </div>
 
               {/* 登录按钮 */}
-              <button
+              <RippleButton
                 type="submit"
-                disabled={isSubmitting}
-                className="w-full py-4 px-4 font-semibold rounded-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed text-white text-base shadow-lg hover:shadow-xl hover:-translate-y-0.5 active:translate-y-0"
+                variant="primary"
+                size="lg"
+                loading={isSubmitting}
+                loadingText="登录中..."
+                className="w-full"
                 style={{ 
                   background: 'linear-gradient(135deg, #E11D48 0%, #F43F5E 100%)',
                   boxShadow: '0 10px 30px -5px rgba(225,29,72,0.4)'
                 }}
               >
-                {isSubmitting ? '登录中...' : (loginMethod === 'code' ? '登录 / 注册' : '登录')}
-              </button>
+                {loginMethod === 'code' ? '登录 / 注册' : '登录'}
+              </RippleButton>
 
               {/* 验证码登录提示 */}
               {loginMethod === 'code' && (
@@ -941,13 +974,15 @@ function LoginForm() {
               )}
 
               {/* 访客模式 */}
-              <button
+              <RippleButton
                 type="button"
+                variant="secondary"
                 onClick={handleGuestMode}
-                className="w-full py-3.5 px-4 font-medium rounded-xl transition-all bg-white border-2 border-rose-200 text-rose-500 hover:bg-rose-50 hover:border-rose-300 flex items-center justify-center gap-2"
+                disabled={isSubmitting}
+                className="w-full"
               >
                 访客模式体验
-              </button>
+              </RippleButton>
             </form>
 
             {/* 微信登录 */}
@@ -1015,7 +1050,15 @@ function LoginForm() {
 export default function LoginPage() {
   return (
     <Suspense fallback={
-      <div className="min-h-screen flex items-center justify-center bg-black">
+      <div 
+        className="min-h-screen flex items-center justify-center"
+        style={{ 
+          backgroundColor: '#1a1a2e',
+          backgroundImage: 'url(/videos/poster.jpg)',
+          backgroundSize: 'cover',
+          backgroundPosition: 'center',
+        }}
+      >
         <div className="flex items-center gap-2">
           <div className="w-3 h-3 rounded-full animate-bounce bg-rose-400" style={{ animationDelay: '0ms' }} />
           <div className="w-3 h-3 rounded-full animate-bounce bg-rose-300" style={{ animationDelay: '150ms' }} />

@@ -10,7 +10,69 @@ import {
   AISummaryCard,
   ParentEmptyState,
 } from '@/components/parent';
+import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
+
+/**
+ * 家长端骨架屏组件
+ * 提供更好的首屏加载体验
+ */
+function ParentPageSkeleton() {
+  return (
+    <div className="space-y-6 animate-in fade-in duration-300">
+      {/* 今日概览骨架屏 */}
+      <div className="bg-white rounded-2xl p-4 shadow-sm">
+        <div className="flex items-center justify-between mb-4">
+          <Skeleton className="h-5 w-24" />
+          <Skeleton className="h-4 w-16" />
+        </div>
+        <div className="grid grid-cols-3 gap-4">
+          {[1, 2, 3].map((i) => (
+            <div key={i} className="text-center">
+              <Skeleton className="h-8 w-12 mx-auto mb-2" />
+              <Skeleton className="h-3 w-16 mx-auto" />
+            </div>
+          ))}
+        </div>
+      </div>
+      
+      {/* AI 总结骨架屏 */}
+      <div className="bg-gradient-to-r from-amber-50 to-orange-50 rounded-2xl p-4">
+        <div className="flex items-center gap-2 mb-3">
+          <Skeleton className="h-6 w-6 rounded-full" />
+          <Skeleton className="h-4 w-20" />
+        </div>
+        <Skeleton className="h-4 w-full mb-2" />
+        <Skeleton className="h-4 w-3/4" />
+      </div>
+      
+      {/* 困惑时刻骨架屏 */}
+      <div>
+        <div className="flex items-center gap-2 mb-4">
+          <Skeleton className="h-5 w-5 rounded" />
+          <Skeleton className="h-5 w-20" />
+        </div>
+        <div className="space-y-4">
+          {[1, 2, 3].map((i) => (
+            <div key={i} className="bg-white rounded-xl p-4 shadow-sm">
+              <div className="flex items-start gap-3">
+                <Skeleton className="h-10 w-10 rounded-full flex-shrink-0" />
+                <div className="flex-1 space-y-2">
+                  <Skeleton className="h-4 w-3/4" />
+                  <Skeleton className="h-3 w-1/2" />
+                  <div className="flex gap-2 mt-3">
+                    <Skeleton className="h-8 w-20 rounded-lg" />
+                    <Skeleton className="h-8 w-20 rounded-lg" />
+                  </div>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
 
 export default function ParentPage() {
   const { user } = useAuth();
@@ -211,21 +273,18 @@ export default function ParentPage() {
       
       {/* 主内容区 */}
       <main className="max-w-lg mx-auto px-4 py-6">
-        {/* 加载状态 */}
+        {/* 加载状态 - 使用骨架屏 */}
         {isLoading && !learningStatus && (
-          <div className="flex flex-col items-center justify-center py-20">
-            <div className="w-12 h-12 border-4 border-amber-200 border-t-amber-500 rounded-full animate-spin mb-4" />
-            <p className="text-sm text-gray-500">正在加载学习情况...</p>
-          </div>
+          <ParentPageSkeleton />
         )}
         
         {/* 错误状态 */}
         {error && !learningStatus && (
-          <div className="p-4 bg-red-50 rounded-2xl border border-red-100 text-center">
+          <div className="p-4 bg-red-50 rounded-2xl border border-red-100 text-center animate-in fade-in duration-300">
             <p className="text-red-600 mb-2">{error}</p>
             <button
               onClick={handleRefresh}
-              className="text-sm text-red-500 underline"
+              className="text-sm text-red-500 underline hover:text-red-600 transition-colors"
             >
               点击重试
             </button>
@@ -233,7 +292,11 @@ export default function ParentPage() {
         )}
         
         {/* 主内容 */}
-        {renderContent()}
+        {!isLoading && learningStatus && (
+          <div className="animate-in fade-in duration-300">
+            {renderContent()}
+          </div>
+        )}
       </main>
       
       {/* 底部安全区 */}

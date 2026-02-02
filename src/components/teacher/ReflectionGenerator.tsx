@@ -84,7 +84,7 @@ ${hotspotsText}
         messages: [
           { role: 'user', content: buildPrompt() }
         ],
-        model: 'qwen3-max',
+        model: 'qwen3-max-2026-01-23',
         stream: true,
         temperature: 0.7,
         maxTokens: 1000,

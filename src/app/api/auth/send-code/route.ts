@@ -7,6 +7,10 @@
  * - target: string (邮箱或手机号)
  * - type: 'email' | 'sms'
  * - purpose: 'login' | 'register' | 'reset_password'
+ * 
+ * 性能优化：
+ * - 邮件采用异步发送模式，快速返回响应（<200ms）
+ * - 验证码先入库，邮件在后台发送
  */
 
 import { NextRequest, NextResponse } from 'next/server';
@@ -48,7 +52,8 @@ export async function POST(request: NextRequest) {
     // 发送验证码
     let result;
     if (type === 'email') {
-      result = await emailService.sendVerificationCode(target, purpose);
+      // 使用异步发送模式，快速返回响应
+      result = await emailService.sendVerificationCodeAsync(target, purpose);
     } else {
       result = await smsService.sendVerificationCode(target, purpose);
     }

@@ -123,7 +123,7 @@ export async function enhanceTranscript(
     return { segments: [], success: true };
   }
 
-  const model = options?.model || 'qwen3-max';
+  const model = options?.model || 'qwen3-max-2026-01-23';
   
   try {
     // 构建请求
@@ -193,7 +193,7 @@ export class TranscriptEnhanceManager {
   private readonly config = {
     minBatchSize: 3,           // 最小批量大小
     silenceThreshold: 2000,    // 静音阈值（毫秒）
-    model: 'qwen3-max',        // 使用 qwen3-max 模型
+    model: 'qwen3-max-2026-01-23',        // 使用思考模式 qwen3-max 模型
   };
   
   // 回调

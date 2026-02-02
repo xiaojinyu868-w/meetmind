@@ -74,7 +74,10 @@ export async function POST(request: NextRequest) {
         async start(controller) {
           try {
             for await (const chunk of chatStream(finalMessages, model, { temperature, maxTokens })) {
-              controller.enqueue(encoder.encode(`data: ${JSON.stringify({ content: chunk })}\n\n`));
+              // chunk 是 { type: 'thinking' | 'content', content: string }
+              // 为了兼容旧的格式，这里只传递 content 内容
+              // 如果是思考模式，也可以传递 thinking 类型
+              controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: chunk.type, content: chunk.content })}\n\n`));
             }
             controller.enqueue(encoder.encode('data: [DONE]\n\n'));
             controller.close();

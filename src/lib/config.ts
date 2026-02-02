@@ -30,7 +30,7 @@ export function getConfig(): AppConfig {
   return {
     // LLM
     dashscopeApiKey: process.env.DASHSCOPE_API_KEY || '',
-    llmModel: process.env.LLM_MODEL || 'qwen3-max',
+    llmModel: process.env.LLM_MODEL || 'qwen3-max-2026-01-23',
     llmBaseUrl: process.env.LLM_BASE_URL || 'https://dashscope.aliyuncs.com/compatible-mode/v1',
     
     // 外部服务

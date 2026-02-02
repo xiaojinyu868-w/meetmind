@@ -2,7 +2,7 @@
  * LLM 服务 - 真实 AI 模型调用
  * 
  * 支持模型：
- * - 通义千问 (qwen3-vl-plus, qwen3-max)
+ * - 通义千问 (qwen3-vl-plus, qwen3-max-2026-01-23)
  * - Gemini (gemini-3-pro, gemini-3-flash)
  * - OpenAI (gpt-5.2, gpt-5.2-mini)
  */
@@ -47,11 +47,18 @@ export interface ChatMessage {
 export interface LLMResponse {
   content: string;
   model: string;
+  thinkingContent?: string;  // 思考模式的思考过程
   usage?: {
     promptTokens: number;
     completionTokens: number;
     totalTokens: number;
   };
+}
+
+/** 流式输出的 chunk 类型 */
+export interface StreamChunk {
+  type: 'thinking' | 'content';
+  content: string;
 }
 
 // ==================== 辅助函数 ====================
@@ -112,6 +119,7 @@ function buildOpenAIMessages(messages: ChatMessage[], supportsMultimodal: boolea
 /**
  * 调用通义千问 API (OpenAI 兼容格式)
  * 支持多模态：qwen3-vl-plus-2025-12-19
+ * 支持思考模式：qwen3-max-2026-01-23
  */
 async function callQwen(
   messages: ChatMessage[],
@@ -119,13 +127,37 @@ async function callQwen(
   options?: { temperature?: number; maxTokens?: number }
 ): Promise<LLMResponse> {
   const config = getApiConfig('qwen');
+  const modelConfig = getModelConfig(modelId);
   
   if (!config.apiKey) {
     throw new Error('DASHSCOPE_API_KEY 未配置');
   }
 
   const supportsMultimodal = isMultimodalModel(modelId);
+  const enableThinking = modelConfig?.enableThinking ?? false;
   const formattedMessages = buildOpenAIMessages(messages, supportsMultimodal);
+
+  // 构建请求体
+  const requestBody: Record<string, unknown> = {
+    model: modelId,
+    messages: formattedMessages,
+    temperature: options?.temperature ?? 0.7,
+    max_tokens: options?.maxTokens ?? (enableThinking ? 32768 : 2000),
+  };
+
+  // qwen3-max-2026-01-23 思考模式特殊配置
+  if (enableThinking) {
+    // 启用思考模式
+    requestBody.extra_body = { enable_thinking: true };
+    // 添加内置工具（联网搜索、网页信息提取、代码解释器）
+    requestBody.tools = [
+      { type: 'web_search' },
+      { type: 'web_extractor' },
+      { type: 'code_interpreter' }
+    ];
+    // 使用 agent_max 搜索策略（最佳效果）
+    requestBody.search_strategy = 'agent_max';
+  }
 
   const response = await fetch(`${config.baseUrl}/chat/completions`, {
     method: 'POST',
@@ -133,12 +165,7 @@ async function callQwen(
       'Content-Type': 'application/json',
       'Authorization': `Bearer ${config.apiKey}`,
     },
-    body: JSON.stringify({
-      model: modelId,
-      messages: formattedMessages,
-      temperature: options?.temperature ?? 0.7,
-      max_tokens: options?.maxTokens ?? 2000,
-    }),
+    body: JSON.stringify(requestBody),
   });
 
   if (!response.ok) {
@@ -148,9 +175,19 @@ async function callQwen(
 
   const data = await response.json();
   
+  // 思考模式可能返回 reasoning_content，需要处理
+  const responseContent = data.choices[0]?.message?.content || '';
+  const thinkingContent = data.choices[0]?.message?.reasoning_content;
+  
+  // 如果有思考内容，可以记录日志
+  if (thinkingContent) {
+    console.log('[LLM] Thinking content:', thinkingContent.substring(0, 200) + '...');
+  }
+  
   return {
-    content: data.choices[0]?.message?.content || '',
+    content: responseContent,
     model: modelId,
+    thinkingContent,  // 返回思考内容
     usage: data.usage ? {
       promptTokens: data.usage.prompt_tokens,
       completionTokens: data.usage.completion_tokens,
@@ -336,12 +373,13 @@ export async function chat(
 /**
  * 流式调用 LLM
  * 支持：通义千问、OpenAI
+ * 支持思考模式：qwen3 会输出 reasoning_content
  */
 export async function* chatStream(
   messages: ChatMessage[],
   modelId: string = DEFAULT_MODEL_ID,
   options?: { temperature?: number; maxTokens?: number }
-): AsyncGenerator<string> {
+): AsyncGenerator<StreamChunk> {
   const modelConfig = getModelConfig(modelId);
   
   if (!modelConfig) {
@@ -355,7 +393,7 @@ export async function* chatStream(
     const content = response.content;
     const chunkSize = 20; // 每次输出约20个字符
     for (let i = 0; i < content.length; i += chunkSize) {
-      yield content.slice(i, i + chunkSize);
+      yield { type: 'content', content: content.slice(i, i + chunkSize) };
       // 小延迟模拟打字效果
       await new Promise(resolve => setTimeout(resolve, 30));
     }
@@ -372,6 +410,7 @@ export async function* chatStream(
   }
 
   const supportsMultimodal = isMultimodalModel(modelId);
+  const enableThinking = modelConfig.enableThinking ?? false;
   const formattedMessages = buildOpenAIMessages(messages, supportsMultimodal);
 
   // 构建请求体
@@ -386,7 +425,19 @@ export async function* chatStream(
   if (modelConfig.provider === 'openai') {
     requestBody.max_completion_tokens = options?.maxTokens ?? 2000;
   } else {
-    requestBody.max_tokens = options?.maxTokens ?? 2000;
+    requestBody.max_tokens = options?.maxTokens ?? (enableThinking ? 32768 : 2000);
+  }
+
+  // qwen3-max-2026-01-23 思考模式特殊配置
+  if (enableThinking && modelConfig.provider === 'qwen') {
+    // enable_thinking 需要放在请求体根级别
+    requestBody.enable_thinking = true;
+    requestBody.tools = [
+      { type: 'web_search' },
+      { type: 'web_extractor' },
+      { type: 'code_interpreter' }
+    ];
+    requestBody.search_strategy = 'agent_max';
   }
 
   const response = await fetch(`${config.baseUrl}/chat/completions`, {
@@ -427,9 +478,16 @@ export async function* chatStream(
 
       try {
         const parsed = JSON.parse(data);
-        const content = parsed.choices?.[0]?.delta?.content;
-        if (content) {
-          yield content;
+        const delta = parsed.choices?.[0]?.delta;
+        
+        // 处理思考内容（qwen3 思考模式使用 reasoning_content 字段）
+        if (delta?.reasoning_content) {
+          yield { type: 'thinking', content: delta.reasoning_content };
+        }
+        
+        // 处理正常内容
+        if (delta?.content) {
+          yield { type: 'content', content: delta.content };
         }
       } catch {
         // 忽略解析错误（不完整的JSON）

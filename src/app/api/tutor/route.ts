@@ -17,6 +17,7 @@ import { getDifyService, isDifyEnabled, type DifyWorkflowInput } from '@/lib/ser
 import type { ExtendedTutorRequest, ExtendedTutorResponse, GuidanceQuestion, Citation } from '@/types/dify';
 import { applyRateLimit } from '@/lib/utils/rate-limit';
 import { summaryService } from '@/lib/services/summary-service';
+import { webSearch } from '@/lib/services/web-search-service';
 
 // 内存缓存摘要（避免重复生成，服务重启后失效）
 const summaryCache = new Map<string, { overview: string; takeaways: string; keyDifficulties: string[] }>();
@@ -321,9 +322,17 @@ ${cachedSummary.keyDifficulties.map(d => `- ${d}`).join('\n')}
       guidanceQuestion = generateMockGuidanceQuestion(contextText);
     }
     
+    // 联网搜索：使用真正的搜索服务
     if (enable_web && (!citations || citations.length === 0)) {
-      // 生成模拟的联网搜索结果
-      citations = generateMockCitations(contextText);
+      try {
+        // 异步执行搜索，不阻塞主流程
+        citations = await webSearch(contextText, { maxResults: 3 });
+        console.log('[Tutor] Web search returned', citations?.length || 0, 'results');
+      } catch (error) {
+        console.error('[Tutor] Web search failed:', error);
+        // 搜索失败时不返回空，保持用户体验
+        citations = [];
+      }
     }
 
     // ===== 原有逻辑（保持不变）=====
@@ -430,9 +439,10 @@ ${contextText}
             };
             controller.enqueue(encoder.encode(`data: ${JSON.stringify(metadata)}\n\n`));
             
-            // 流式输出 LLM 内容
+            // 流式输出 LLM 内容（支持思考模式）
             for await (const chunk of chatStream(messages, model, { temperature: 0.7, maxTokens: 2000 })) {
-              controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: 'content', content: chunk })}\n\n`));
+              // chunk 现在是 { type: 'thinking' | 'content', content: string }
+              controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: chunk.type, content: chunk.content })}\n\n`));
             }
             
             // 发送完成信号
@@ -981,61 +991,7 @@ function extractKeywords(text: string): string[] {
   return [...new Set(keywords)];
 }
 
-/**
- * 生成模拟的联网搜索结果（Dify 未配置时使用）
- */
-function generateMockCitations(context: string): Citation[] {
-  const citations: Citation[] = [];
-  
-  // 根据上下文判断主题
-  const isQuadratic = context.includes('二次函数') || context.includes('抛物线') || context.includes('ax²');
-  const isMath = context.includes('数学') || context.includes('公式') || context.includes('计算');
-  
-  if (isQuadratic) {
-    citations.push(
-      {
-        id: 'cite-1',
-        title: '二次函数图像与性质 - 知乎专栏',
-        url: 'https://zhuanlan.zhihu.com/p/123456789',
-        snippet: '二次函数 y = ax² + bx + c 的图像是一条抛物线。当 a > 0 时，抛物线开口向上；当 a < 0 时，抛物线开口向下...',
-        source_type: 'web',
-      },
-      {
-        id: 'cite-2',
-        title: '初中数学：二次函数知识点总结',
-        url: 'https://www.bilibili.com/video/BV1234567890',
-        snippet: '本视频详细讲解了二次函数的顶点式、一般式、交点式三种表达形式，以及如何根据图像特征确定函数表达式...',
-        source_type: 'web',
-      },
-      {
-        id: 'cite-3',
-        title: '二次函数 - 百度百科',
-        url: 'https://baike.baidu.com/item/二次函数',
-        snippet: '二次函数是指自变量x的最高次数为2的多项式函数。二次函数的一般形式为 y = ax² + bx + c (a≠0)...',
-        source_type: 'web',
-      }
-    );
-  } else if (isMath) {
-    citations.push(
-      {
-        id: 'cite-1',
-        title: '数学学习方法与技巧',
-        url: 'https://www.zhihu.com/question/12345678',
-        snippet: '学好数学的关键在于理解概念、掌握方法、多做练习。遇到不会的题目，要学会分析题目条件...',
-        source_type: 'web',
-      },
-      {
-        id: 'cite-2',
-        title: '初中数学公式大全',
-        url: 'https://www.example.com/math-formulas',
-        snippet: '本文整理了初中阶段常用的数学公式，包括代数、几何、函数等各个板块...',
-        source_type: 'web',
-      }
-    );
-  }
-  
-  return citations;
-}
+// generateMockCitations 函数已移至 web-search-service.ts
 
 /**
  * 验证和修正时间戳引用

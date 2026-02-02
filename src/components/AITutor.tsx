@@ -120,9 +120,14 @@ export function AITutor({ breakpoint, segments, isLoading: externalLoading, onRe
     fetchStream: breakpointFetchStream,
     stopStream: breakpointStopStream,
     isStreaming: isBreakpointStreaming,
+    isThinking: isBreakpointThinking,
     streamingContent: breakpointStreamingContent,
+    thinkingContent: breakpointThinkingContent,
     clearContent: clearBreakpointContent,
   } = useSimpleSSEStream();
+  
+  // 思考过程折叠状态
+  const [isThinkingCollapsed, setIsThinkingCollapsed] = useState(false);
   
   // 多模态相关状态
   const [supportsMultimodal, setSupportsMultimodal] = useState(true);  // 默认模型支持多模态
@@ -594,7 +599,7 @@ export function AITutor({ breakpoint, segments, isLoading: externalLoading, onRe
         headers['Authorization'] = `Bearer ${accessToken}`;
       }
       
-      const fullContent = await breakpointFetchStream('/api/tutor', {
+      const result = await breakpointFetchStream('/api/tutor', {
         timestamp: breakpoint.timestamp,
         segments,
         model: selectedModel,
@@ -621,7 +626,7 @@ export function AITutor({ breakpoint, segments, isLoading: externalLoading, onRe
       const newHistory = [
         ...chatHistory,
         { role: 'user' as const, content: userMessage },
-        { role: 'assistant' as const, content: fullContent || '让我针对你的选择进一步解释...' },
+        { role: 'assistant' as const, content: result.content || '让我针对你的选择进一步解释...' },
       ];
       setChatHistory(newHistory);
       clearBreakpointContent();
@@ -694,7 +699,7 @@ export function AITutor({ breakpoint, segments, isLoading: externalLoading, onRe
         });
       }
       
-      const fullContent = await breakpointFetchStream('/api/tutor', {
+      const result = await breakpointFetchStream('/api/tutor', {
         timestamp: breakpoint.timestamp,
         segments,
         model: selectedModel,
@@ -721,7 +726,7 @@ export function AITutor({ breakpoint, segments, isLoading: externalLoading, onRe
       const newHistory = [
         ...chatHistory,
         { role: 'user' as const, content: userDisplayContent },
-        { role: 'assistant' as const, content: fullContent || '抱歉，我没有理解你的问题' },
+        { role: 'assistant' as const, content: result.content || '抱歉，我没有理解你的问题' },
       ];
       setChatHistory(newHistory);
       clearBreakpointContent();
@@ -757,9 +762,14 @@ export function AITutor({ breakpoint, segments, isLoading: externalLoading, onRe
     fetchStream: globalFetchStream,
     stopStream: globalStopStream,
     isStreaming,
+    isThinking: isGlobalThinking,
     streamingContent,
+    thinkingContent: globalThinkingContent,
     clearContent: clearGlobalContent,
   } = useSimpleSSEStream();
+  
+  // 全局模式思考过程折叠状态
+  const [isGlobalThinkingCollapsed, setIsGlobalThinkingCollapsed] = useState(false);
   
   // 全局模式：发送消息（必须在 useEffect 之前定义）
   const handleGlobalSend = useCallback(async (questionOverride?: string) => {
@@ -805,12 +815,12 @@ export function AITutor({ breakpoint, segments, isLoading: externalLoading, onRe
         headers['Authorization'] = `Bearer ${accessToken}`;
       }
 
-      const fullContent = await globalFetchStream('/api/tutor', requestBody, { headers });
+      const result = await globalFetchStream('/api/tutor', requestBody, { headers });
 
       // 流式完成，将完整内容添加到历史
       setGlobalChatHistory(prev => [...prev, { 
         role: 'assistant', 
-        content: fullContent || '抱歉，我没有理解你的问题，能换个方式问吗？'
+        content: result.content || '抱歉，我没有理解你的问题，能换个方式问吗？'
       }]);
       clearGlobalContent();
 
@@ -833,7 +843,7 @@ export function AITutor({ breakpoint, segments, isLoading: externalLoading, onRe
         try {
           await conversationService.addMessages(conversationIdRef.current, [
             { role: 'user', content: question },
-            { role: 'assistant', content: fullContent || '' },
+            { role: 'assistant', content: result.content || '' },
           ]);
         } catch (err) {
           console.error('Failed to save messages:', err);
@@ -1022,6 +1032,60 @@ export function AITutor({ breakpoint, segments, isLoading: externalLoading, onRe
                 </div>
               ))}
               
+              {/* 思考过程展示（全局模式） */}
+              {isStreaming && globalThinkingContent && (
+                <div className="flex justify-start">
+                  <div className="max-w-[85%] w-full">
+                    <div 
+                      className={`rounded-2xl border transition-all duration-300 ${
+                        isGlobalThinking 
+                          ? 'bg-gradient-to-r from-violet-50 to-purple-50 border-violet-200' 
+                          : 'bg-violet-50/50 border-violet-100'
+                      }`}
+                    >
+                      {/* 思考过程标题栏 */}
+                      <button
+                        onClick={() => setIsGlobalThinkingCollapsed(!isGlobalThinkingCollapsed)}
+                        className="w-full px-4 py-2 flex items-center justify-between text-left hover:bg-violet-100/50 rounded-t-2xl transition-colors"
+                      >
+                        <div className="flex items-center gap-2">
+                          <span className={`text-violet-600 ${isGlobalThinking ? 'animate-pulse' : ''}`}>
+                            {isGlobalThinking ? '🧠' : '💭'}
+                          </span>
+                          <span className="text-xs font-medium text-violet-700">
+                            {isGlobalThinking ? 'AI 正在思考...' : '思考过程'}
+                          </span>
+                          {isGlobalThinking && (
+                            <div className="loading-dots scale-75">
+                              <span></span>
+                              <span></span>
+                              <span></span>
+                            </div>
+                          )}
+                        </div>
+                        <svg 
+                          className={`w-4 h-4 text-violet-500 transition-transform duration-200 ${isGlobalThinkingCollapsed ? '' : 'rotate-180'}`}
+                          fill="none" 
+                          stroke="currentColor" 
+                          viewBox="0 0 24 24"
+                        >
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                        </svg>
+                      </button>
+                      
+                      {/* 思考过程内容 */}
+                      {!isGlobalThinkingCollapsed && (
+                        <div className="px-4 pb-3 pt-1">
+                          <div className={`text-xs text-violet-700/80 leading-relaxed italic max-h-48 overflow-y-auto ${isMobile ? 'text-[10px]' : ''}`}>
+                            {globalThinkingContent}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
+              
               {/* 流式输出中的消息 */}
               {isStreaming && streamingContent && (
                 <div className="flex justify-start">
@@ -1037,7 +1101,7 @@ export function AITutor({ breakpoint, segments, isLoading: externalLoading, onRe
               )}
               
               {/* 等待开始流式输出时显示 loading */}
-              {globalLoading && !streamingContent && (
+              {globalLoading && !streamingContent && !globalThinkingContent && (
                 <div className="flex justify-start">
                   <div className="bg-gray-100 rounded-2xl px-4 py-3">
                     <div className="flex items-center gap-2 text-gray-500">
@@ -1134,8 +1198,8 @@ export function AITutor({ breakpoint, segments, isLoading: externalLoading, onRe
 
   return (
     <div className="h-full flex flex-col">
-      {/* 断点信息 - 移动端使用紧凑垂直布局 */}
-      <div className={`border-b border-gray-100 bg-gradient-to-r from-lilac-100/50 to-white ${isMobile ? 'p-3' : 'p-4'}`}>
+      {/* 头部控制栏 - 简化版，只保留必要操作 */}
+      <div className={`border-b border-gray-100 bg-gradient-to-r from-lilac-100/50 to-white ${isMobile ? 'p-3' : 'px-4 py-2'}`}>
         {isMobile ? (
           // 移动端紧凑布局
           <div className="space-y-2">
@@ -1187,56 +1251,9 @@ export function AITutor({ breakpoint, segments, isLoading: externalLoading, onRe
             </div>
           </div>
         ) : (
-          // 桌面端原有布局
-          <>
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <div className={`w-3 h-3 rounded-full ${breakpoint.resolved ? 'bg-mint' : 'bg-coral animate-pulse'}`} />
-                <div>
-                  <p className="text-sm font-semibold text-navy">
-                    {formatTimestamp(breakpoint.timestamp)} 的困惑点
-                  </p>
-                  <p className="text-xs text-gray-500 mt-0.5">
-                    {breakpoint.resolved ? '✅ 已解决' : '🔴 待解决'}
-                    {isFromCache && <span className="ml-2 text-skyblue">📋 已缓存</span>}
-                  </p>
-                </div>
-              </div>
-              <div className="flex items-center gap-2">
-                {isFromCache && (
-                  <button
-                    onClick={async () => {
-                      if (breakpoint) {
-                        await deleteTutorResponseCache(breakpoint.id);
-                      }
-                      setIsFromCache(false);
-                      setResponse(null);
-                      explainBreakpoint();
-                    }}
-                    className="px-3 py-1.5 text-xs text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded-lg transition-colors"
-                    title="重新生成"
-                  >
-                    🔄 刷新
-                  </button>
-                )}
-                <ModelSelector 
-                  value={selectedModel} 
-                  onChange={setSelectedModel}
-                  onMultimodalChange={setSupportsMultimodal}
-                />
-                {!breakpoint.resolved && (
-                  <button
-                    onClick={onResolve}
-                    className="btn btn-primary px-4 py-2 text-sm"
-                  >
-                    ✓ 我懂了
-                  </button>
-                )}
-              </div>
-            </div>
-            
-            {/* 功能开关 - 仅桌面端显示 */}
-            <div className="mt-3 flex items-center gap-4">
+          // 桌面端简化布局 - 只保留操作按钮，标题信息由外层切换栏显示
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
               <label className="flex items-center gap-2 text-xs text-gray-600 cursor-pointer group">
                 <input
                   type="checkbox"
@@ -1246,14 +1263,44 @@ export function AITutor({ breakpoint, segments, isLoading: externalLoading, onRe
                 />
                 <span className="group-hover:text-gray-900 transition-colors">🌐 联网搜索</span>
               </label>
-              
               {response?.usage && (
-                <span className="ml-auto text-xs text-gray-400">
+                <span className="text-xs text-gray-400">
                   {response.model} · {response.usage.totalTokens} tokens
                 </span>
               )}
             </div>
-          </>
+            <div className="flex items-center gap-2">
+              {isFromCache && (
+                <button
+                  onClick={async () => {
+                    if (breakpoint) {
+                      await deleteTutorResponseCache(breakpoint.id);
+                    }
+                    setIsFromCache(false);
+                    setResponse(null);
+                    explainBreakpoint();
+                  }}
+                  className="px-2 py-1 text-xs text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded transition-colors"
+                  title="重新生成"
+                >
+                  🔄 刷新
+                </button>
+              )}
+              <ModelSelector 
+                value={selectedModel} 
+                onChange={setSelectedModel}
+                onMultimodalChange={setSupportsMultimodal}
+              />
+              {!breakpoint.resolved && (
+                <button
+                  onClick={onResolve}
+                  className="btn btn-primary px-3 py-1.5 text-sm"
+                >
+                  ✓ 我懂了
+                </button>
+              )}
+            </div>
+          </div>
         )}
       </div>
 
@@ -1439,6 +1486,58 @@ export function AITutor({ breakpoint, segments, isLoading: externalLoading, onRe
                   </div>
                 ))}
                 
+                {/* 思考过程展示（困惑点模式） */}
+                {isBreakpointStreaming && breakpointThinkingContent && (
+                  <div className="w-full">
+                    <div 
+                      className={`rounded-xl border transition-all duration-300 ${
+                        isBreakpointThinking 
+                          ? 'bg-gradient-to-r from-violet-50 to-purple-50 border-violet-200' 
+                          : 'bg-violet-50/50 border-violet-100'
+                      }`}
+                    >
+                      {/* 思考过程标题栏 */}
+                      <button
+                        onClick={() => setIsThinkingCollapsed(!isThinkingCollapsed)}
+                        className="w-full px-3 py-2 flex items-center justify-between text-left hover:bg-violet-100/50 rounded-t-xl transition-colors"
+                      >
+                        <div className="flex items-center gap-2">
+                          <span className={`text-violet-600 ${isBreakpointThinking ? 'animate-pulse' : ''}`}>
+                            {isBreakpointThinking ? '🧠' : '💭'}
+                          </span>
+                          <span className="text-xs font-medium text-violet-700">
+                            {isBreakpointThinking ? 'AI 正在思考...' : '思考过程'}
+                          </span>
+                          {isBreakpointThinking && (
+                            <div className="loading-dots scale-75">
+                              <span></span>
+                              <span></span>
+                              <span></span>
+                            </div>
+                          )}
+                        </div>
+                        <svg 
+                          className={`w-4 h-4 text-violet-500 transition-transform duration-200 ${isThinkingCollapsed ? '' : 'rotate-180'}`}
+                          fill="none" 
+                          stroke="currentColor" 
+                          viewBox="0 0 24 24"
+                        >
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                        </svg>
+                      </button>
+                      
+                      {/* 思考过程内容 */}
+                      {!isThinkingCollapsed && (
+                        <div className="px-3 pb-2 pt-1">
+                          <div className="text-xs text-violet-700/80 leading-relaxed italic max-h-40 overflow-y-auto">
+                            {breakpointThinkingContent}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+                
                 {/* 流式输出中的消息 */}
                 {isBreakpointStreaming && breakpointStreamingContent && (
                   <div className="chat-bubble assistant">
@@ -1452,7 +1551,7 @@ export function AITutor({ breakpoint, segments, isLoading: externalLoading, onRe
                 )}
                 
                 {/* 等待开始流式输出时显示 loading */}
-                {isBreakpointStreaming && !breakpointStreamingContent && (
+                {isBreakpointStreaming && !breakpointStreamingContent && !breakpointThinkingContent && (
                   <div className="chat-bubble assistant">
                     <div className="flex items-center gap-2 text-gray-500">
                       <div className="loading-dots">

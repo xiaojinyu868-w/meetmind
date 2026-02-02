@@ -17,13 +17,14 @@ export interface ModelConfig {
   maxTokens: number;
   recommended?: boolean;
   supportsMultimodal?: boolean;
+  enableThinking?: boolean;  // 启用思考模式（qwen3-max-2026-01-23）
 }
 
 // ==================== LLM 配置 ====================
 
 export const LLMConfig = {
   // 默认模型
-  defaultModel: process.env.LLM_MODEL || 'qwen3-max',
+  defaultModel: process.env.LLM_MODEL || 'qwen3-max-2026-01-23',
   defaultVisionModel: 'qwen3-vl-plus-2025-12-19' as string,
   
   // API 配置
@@ -51,47 +52,49 @@ export const LLMConfig = {
       supportsMultimodal: true,
     },
     {
-      id: 'qwen3-max',
+      id: 'qwen3-max-2026-01-23',
       name: '通义千问 3 Max',
       provider: 'qwen' as ModelProvider,
-      description: '最强推理能力，纯文本模型',
-      maxTokens: 8192,
+      description: '思考模式，支持联网搜索和代码解释器，262K上下文',
+      maxTokens: 32768,
       supportsMultimodal: false,
+      enableThinking: true,  // 启用思考模式
     },
+    // ========== 以下模型暂时禁用（未配置 API Key）==========
     // Gemini 系列
-    {
-      id: 'gemini-3-pro',
-      name: 'Gemini 3 Pro',
-      provider: 'gemini' as ModelProvider,
-      description: '最强多模态，100万上下文',
-      maxTokens: 8192,
-      supportsMultimodal: true,
-    },
-    {
-      id: 'gemini-3-flash',
-      name: 'Gemini 3 Flash',
-      provider: 'gemini' as ModelProvider,
-      description: '快速响应，多模态能力',
-      maxTokens: 8192,
-      supportsMultimodal: true,
-    },
+    // {
+    //   id: 'gemini-3-pro',
+    //   name: 'Gemini 3 Pro',
+    //   provider: 'gemini' as ModelProvider,
+    //   description: '最强多模态，100万上下文',
+    //   maxTokens: 8192,
+    //   supportsMultimodal: true,
+    // },
+    // {
+    //   id: 'gemini-3-flash',
+    //   name: 'Gemini 3 Flash',
+    //   provider: 'gemini' as ModelProvider,
+    //   description: '快速响应，多模态能力',
+    //   maxTokens: 8192,
+    //   supportsMultimodal: true,
+    // },
     // OpenAI 系列
-    {
-      id: 'gpt-5.2',
-      name: 'GPT-5.2',
-      provider: 'openai' as ModelProvider,
-      description: '最新旗舰模型，全能多模态',
-      maxTokens: 8192,
-      supportsMultimodal: true,
-    },
-    {
-      id: 'gpt-5-mini',
-      name: 'GPT-5 Mini',
-      provider: 'openai' as ModelProvider,
-      description: '轻量快速，支持多模态',
-      maxTokens: 4096,
-      supportsMultimodal: true,
-    },
+    // {
+    //   id: 'gpt-5.2',
+    //   name: 'GPT-5.2',
+    //   provider: 'openai' as ModelProvider,
+    //   description: '最新旗舰模型，全能多模态',
+    //   maxTokens: 8192,
+    //   supportsMultimodal: true,
+    // },
+    // {
+    //   id: 'gpt-5-mini',
+    //   name: 'GPT-5 Mini',
+    //   provider: 'openai' as ModelProvider,
+    //   description: '轻量快速，支持多模态',
+    //   maxTokens: 4096,
+    //   supportsMultimodal: true,
+    // },
   ] as ModelConfig[],
   
   // 获取模型配置
@@ -170,8 +173,8 @@ export const ASRConfig = {
 export const FeatureConfig = {
   // 精选片段
   highlights: {
-    defaultModel: 'qwen3-max',
-    fastModel: 'qwen3-max',
+    defaultModel: 'qwen3-max-2026-01-23',
+    fastModel: 'qwen3-max-2026-01-23',
     maxTopics: 8,
     minTopics: 5,
     chunkMaxCandidates: 2,
@@ -179,7 +182,7 @@ export const FeatureConfig = {
   
   // 摘要生成
   summary: {
-    defaultModel: 'qwen3-max',
+    defaultModel: 'qwen3-max-2026-01-23',
     minTakeaways: 4,
     maxTakeaways: 6,
   },

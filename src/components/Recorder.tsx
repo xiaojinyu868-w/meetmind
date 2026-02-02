@@ -127,7 +127,7 @@ export function Recorder({
       enhanceManagerRef.current = new TranscriptEnhanceManager({
         minBatchSize: 1,          // 最少 1 句就可以触发优化（降低门槛方便测试）
         silenceThreshold: 3000,   // 3 秒静音触发优化
-        model: 'qwen3-max',       // 使用可用的 qwen3-max 模型
+        model: 'qwen3-max-2026-01-23',       // 使用思考模式的 qwen3-max 模型
         onEnhanced: (segments) => {
           // 优化完成回调：更新增强后的文本
           console.log('[Recorder] Enhanced callback received:', segments.length, 'segments');
