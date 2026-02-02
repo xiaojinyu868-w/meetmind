@@ -1,0 +1,3 @@
+# 魔搭创空间要求使用 Python
+# 本项目使用 Node.js 运行，Python 仅作为启动器
+# 无需额外 Python 依赖

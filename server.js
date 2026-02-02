@@ -22,8 +22,8 @@ const next = require('next');
 const { WebSocketServer, WebSocket } = require('ws');
 
 const dev = process.env.NODE_ENV !== 'production';
-const hostname = 'localhost';
-const port = parseInt(process.env.PORT || '3001', 10);
+const hostname = process.env.HOST || '0.0.0.0';
+const port = parseInt(process.env.PORT || '7860', 10);
 
 const app = next({ dev, hostname, port });
 const handle = app.getRequestHandler();
