@@ -89,34 +89,36 @@ export default function ParentPage() {
   const studentId = 'demo-student';
   const studentName = '小明';
   
-  // 加载今日学情
+  // 加载今日学情 - 优化：并行请求真实数据和演示数据
   const loadTodayStatus = useCallback(async () => {
     setIsLoading(true);
     setError(null);
     
     try {
-      // 优先使用真实数据，没有则用演示数据
-      let status = await parentService.getTodayLearningStatus(
-        studentId,
-        studentName
-      );
+      // 并行请求：真实数据 + 演示数据（作为 fallback）
+      // 使用 Promise.allSettled 确保即使一个失败也能继续
+      const [realDataResult, demoDataResult] = await Promise.allSettled([
+        parentService.getTodayLearningStatus(studentId, studentName),
+        parentService.getDemoLearningStatus(),
+      ]);
       
-      // 如果没有真实数据，使用演示数据
-      if (status.overview.totalClasses === 0) {
-        status = await parentService.getDemoLearningStatus();
+      // 优先使用真实数据
+      if (realDataResult.status === 'fulfilled' && realDataResult.value.overview.totalClasses > 0) {
+        setLearningStatus(realDataResult.value);
+        return;
       }
       
-      setLearningStatus(status);
+      // 没有真实数据或请求失败，使用演示数据
+      if (demoDataResult.status === 'fulfilled') {
+        setLearningStatus(demoDataResult.value);
+        return;
+      }
+      
+      // 两个都失败了
+      throw new Error('无法加载学习数据');
     } catch (err) {
       console.error('Failed to load learning status:', err);
       setError('加载失败，请稍后重试');
-      // 降级到演示数据
-      try {
-        const demoStatus = await parentService.getDemoLearningStatus();
-        setLearningStatus(demoStatus);
-      } catch {
-        // 静默失败
-      }
     } finally {
       setIsLoading(false);
     }

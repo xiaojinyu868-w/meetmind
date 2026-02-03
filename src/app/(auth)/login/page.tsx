@@ -17,7 +17,6 @@ import { useState, useEffect, Suspense, useCallback, useRef } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { useAuth } from '@/lib/hooks/useAuth';
-import { AppLoading } from '@/components/AppLoading';
 import { RippleButton } from '@/components/ui/ripple-button';
 
 type LoginMethod = 'password' | 'code';
@@ -719,10 +718,10 @@ function LoginForm() {
   };
 
   const handleGuestMode = () => {
-    // 立即显示加载状态
+    // 立即显示加载状态（涟漪效果会提供即时反馈）
     setIsGuestLoading(true);
-    // 跳转到 /app 页面
-    router.push('/app');
+    // 使用 replace 避免返回到登录页，添加 guest=1 参数让 /app 页跳过 Splash
+    router.replace('/app?guest=1');
   };
 
   const handleLoginTypeChange = (type: LoginType) => {
@@ -765,10 +764,9 @@ function LoginForm() {
 
   const currentTarget = loginType === 'email' ? email : phone;
 
-  // 访客模式点击后显示全屏加载动画
-  if (isGuestLoading) {
-    return <AppLoading message="正在进入体验模式" />;
-  }
+  // 访客模式：不再显示全屏加载，让 /app 页的 Splash 统一处理
+  // 这样避免了 login 页 AppLoading → /app 页 Splash 的双重加载问题
+  // isGuestLoading 状态仅用于禁用按钮，防止重复点击
 
   return (
     <div 
@@ -978,7 +976,8 @@ function LoginForm() {
                 type="button"
                 variant="secondary"
                 onClick={handleGuestMode}
-                disabled={isSubmitting}
+                disabled={isSubmitting || isGuestLoading}
+                loading={isGuestLoading}
                 className="w-full"
               >
                 访客模式体验

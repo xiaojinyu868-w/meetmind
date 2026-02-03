@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback, useRef, Suspense } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { Header } from '@/components/Header';
 import { ServiceStatus, DegradedModeBanner } from '@/components/ServiceStatus';
 import { anchorService, type Anchor } from '@/lib/services/anchor-service';
@@ -88,10 +89,14 @@ interface ActionItem {
 }
 
 export default function StudentApp() {
-  // 开屏动画状态
-  const [showSplash, setShowSplash] = useState(true);
+  // 检测 URL 参数（访客快速入口）
+  const searchParams = useSearchParams();
+  const isGuestFastEntry = searchParams.get('guest') === '1';
+  
+  // 开屏动画状态 - 访客快速入口跳过 Splash
+  const [showSplash, setShowSplash] = useState(!isGuestFastEntry);
   const [appReady, setAppReady] = useState(false);
-  const [loadingProgress, setLoadingProgress] = useState(0); // 真实加载进度 0-100
+  const [loadingProgress, setLoadingProgress] = useState(isGuestFastEntry ? 50 : 0); // 访客模式从50%开始，感知更快
   
   // 获取当前登录用户
   const { user, isAuthenticated } = useAuth();
@@ -208,8 +213,9 @@ export default function StudentApp() {
     if (hasRestoredState.current) return;
     
     const initializeApp = async () => {
-      // 开始初始化
-      setLoadingProgress(10);
+      // 开始初始化 - 访客模式从较高进度开始
+      const baseProgress = isGuestFastEntry ? 30 : 10;
+      setLoadingProgress(baseProgress);
       
       // 第一批并行操作：服务检查 + 状态恢复 + anchors 获取 + 引导状态检查
       const [, savedAppState, savedAnchors, savedOnboardingState] = await Promise.all([
@@ -227,12 +233,12 @@ export default function StudentApp() {
       ]);
       
       // 第一批完成
-      setLoadingProgress(40);
+      setLoadingProgress(isGuestFastEntry ? 60 : 40);
       
       setAnchors(savedAnchors);
       
-      // 检查是否是首次访问（需要显示引导）
-      const isFirstVisit = !savedOnboardingState || 
+      // 检查是否是首次访问（需要显示引导）- 访客模式视为首次访问
+      const isFirstVisit = isGuestFastEntry || !savedOnboardingState || 
         (!savedOnboardingState.completedFlows?.includes('welcome') && 
          !savedOnboardingState.skippedFlows?.includes('welcome'));
 
@@ -253,10 +259,10 @@ export default function StudentApp() {
         }
       }
 
-      // 确定最终的 viewMode（首次访问强制录音页面）
+      // 确定最终的 viewMode（首次访问/访客强制录音页面）
       const finalViewMode = isFirstVisit ? 'record' : (restoredViewMode || 'record');
       
-      setLoadingProgress(50);
+      setLoadingProgress(isGuestFastEntry ? 75 : 50);
       
       // 仅在复习模式下加载演示数据
       if (finalViewMode === 'review') {
@@ -359,24 +365,24 @@ export default function StudentApp() {
       setAppReady(true);
       hasRestoredState.current = true;
       
-      // 首次访问检测 - 显示欢迎弹窗
-      if (isFirstVisit) {
+      // 首次访问检测 - 显示欢迎弹窗（访客模式跳过，让他们直接体验）
+      if (isFirstVisit && !isGuestFastEntry) {
         // 延迟显示，让用户先看到页面
         setTimeout(() => setShowWelcome(true), 800);
       }
     };
     
     initializeApp();
-  }, [sessionId]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [sessionId, isGuestFastEntry]); // eslint-disable-line react-hooks/exhaustive-deps
   
-  // 备用：监听 onboarding 加载完成后检查（只在首次触发）
+  // 备用：监听 onboarding 加载完成后检查（只在首次触发，访客模式跳过）
   const hasTriggeredWelcome = useRef(false);
   useEffect(() => {
-    if (!onboarding.isLoading && appReady && !showSplash && !hasTriggeredWelcome.current && onboarding.shouldShowFlow('welcome')) {
+    if (!isGuestFastEntry && !onboarding.isLoading && appReady && !showSplash && !hasTriggeredWelcome.current && onboarding.shouldShowFlow('welcome')) {
       hasTriggeredWelcome.current = true;
       setShowWelcome(true);
     }
-  }, [onboarding.isLoading, appReady, showSplash, onboarding.shouldShowFlow]);
+  }, [isGuestFastEntry, onboarding.isLoading, appReady, showSplash, onboarding.shouldShowFlow]);
 
   // 处理开屏动画完成
   const handleSplashComplete = useCallback(() => {
