@@ -170,13 +170,13 @@ const StepCard = memo(function StepCard({
         {step.tip && (
           <div className="mt-2 flex items-start gap-1.5 px-2 py-1.5 bg-amber-50 rounded-lg border border-amber-100">
             <span className="text-amber-500 text-sm">💡</span>
-            <p className={`text-amber-700 ${isMobile ? 'text-[10px]' : 'text-xs'} leading-relaxed`}>
+            <div className={`text-amber-700 ${isMobile ? 'text-[10px]' : 'text-xs'} leading-relaxed`}>
               <StreamingMarkdown
                 content={step.tip}
                 isStreaming={false}
                 onTimestampClick={onTimestampClick}
               />
-            </p>
+            </div>
           </div>
         )}
       </div>
