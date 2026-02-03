@@ -3,6 +3,7 @@ import { Inter } from 'next/font/google';
 import './globals.css';
 import { AuthProvider } from '@/lib/hooks/useAuth';
 import { SWRProvider } from '@/lib/swr';
+import { AnalyticsProvider } from '@/components/AnalyticsProvider';
 
 // 优化字体加载：display: swap 避免阻塞渲染
 const inter = Inter({ 
@@ -35,7 +36,9 @@ export default function RootLayout({
       <body className={inter.className}>
         <AuthProvider>
           <SWRProvider>
-            {children}
+            <AnalyticsProvider>
+              {children}
+            </AnalyticsProvider>
           </SWRProvider>
         </AuthProvider>
       </body>

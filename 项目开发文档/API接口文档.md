@@ -18,6 +18,8 @@
 | `/api/upload-audio` | POST | 上传音频文件 |
 | `/api/generate-summary` | POST | 生成课堂总结 |
 | `/api/generate-topics` | POST | 生成主题标签 |
+| `/api/analytics` | POST | 数据分析上报（v2.0 新增） |
+| `/api/analytics/stats` | GET | 统计数据查询（v2.0 新增） |
 | `WS /api/asr-stream` | WebSocket | 实时语音识别代理 |
 
 ---
@@ -34,6 +36,7 @@
 | `ActionList` | `src/components/ActionList.tsx` | 行动清单，显示待完成任务 |
 | `ConfusionHeatmap` | `src/components/ConfusionHeatmap.tsx` | 困惑热区可视化 |
 | `OnboardingGuide` | `src/components/OnboardingGuide.tsx` | 新用户引导组件，支持交互式引导 |
+| `AnalyticsProvider` | `src/components/AnalyticsProvider.tsx` | 数据分析上下文提供者（v2.0 新增） |
 | `TranscriptPreviewPanel` | `src/components/TranscriptPreviewPanel.tsx` | 转录预览面板，支持编辑和增强 |
 | `TeacherDashboard` | `src/components/teacher/TeacherDashboard.tsx` | 教师端仪表盘主组件 |
 | `ConfusionHotspotCard` | `src/components/teacher/ConfusionHotspotCard.tsx` | 困惑热点 TOP3 卡片 |
@@ -208,6 +211,166 @@ D. 不理解文化背景或语法结构
 
 ---
 
-*文档版本：v1.1*  
-*更新日期：2026-01-29*  
-*更新内容：新增转录增强 API 和引导系统组件*
+## 数据分析 API（v2.0 新增）
+
+### POST /api/analytics
+
+数据上报接口，用于收集用户行为数据。
+
+**请求参数**：
+```json
+{
+  "action": "session_start | session_update | session_end | page_view | event | batch",
+  "sessionToken": "1706947200000-abc123def",
+  "userId": "user_id (可选)",
+  "data": {
+    // 根据 action 类型提供不同字段
+  }
+}
+```
+
+**action 类型说明**：
+
+| action | 说明 | data 字段 |
+|--------|------|-----------|
+| `session_start` | 会话开始 | `entryPage`, `isNewUser` |
+| `session_update` | 心跳上报 | `durationMs`, `exitPage` |
+| `session_end` | 会话结束 | `durationMs`, `exitPage` |
+| `page_view` | 页面访问 | `path`, `referrer`, `pageDuration` |
+| `event` | 事件追踪 | `eventName`, `eventCategory`, `eventData` |
+| `batch` | 批量事件 | `events[]`, `durationMs`, `exitPage` |
+
+**示例 - 会话开始**：
+```json
+{
+  "action": "session_start",
+  "sessionToken": "1706947200000-abc123",
+  "data": {
+    "entryPage": "/",
+    "isNewUser": true
+  }
+}
+```
+
+**示例 - 事件追踪**：
+```json
+{
+  "action": "event",
+  "sessionToken": "1706947200000-abc123",
+  "data": {
+    "eventName": "recording_start",
+    "eventCategory": "recording",
+    "eventData": {
+      "subject": "英语",
+      "duration": 0
+    }
+  }
+}
+```
+
+**响应**：
+```json
+{
+  "success": true,
+  "data": { /* 创建/更新的记录 */ }
+}
+```
+
+---
+
+### GET /api/analytics/stats
+
+统计数据查询接口，需要管理员或教师角色认证。
+
+**请求头**：
+```
+Authorization: Bearer <token>
+```
+
+**查询参数**：
+
+| 参数 | 类型 | 说明 |
+|------|------|------|
+| `type` | string | 查询类型：`overview` / `trend` / `ip` |
+| `days` | number | 趋势天数（仅 `type=trend` 时有效，默认 30） |
+
+**示例请求**：
+```bash
+# 综合概览
+GET /api/analytics/stats?type=overview
+
+# 每日趋势（最近 30 天）
+GET /api/analytics/stats?type=trend&days=30
+
+# IP 分布
+GET /api/analytics/stats?type=ip
+```
+
+**响应 - 综合概览**：
+```json
+{
+  "success": true,
+  "data": {
+    "totalUsers": 100,
+    "newUsersToday": 5,
+    "newUsersThisWeek": 20,
+    "newUsersThisMonth": 50,
+    "dauToday": 30,
+    "dauYesterday": 25,
+    "wau": 60,
+    "mau": 80,
+    "avgSessionDuration": 300,
+    "totalSessionDuration": 90000,
+    "totalSessions": 300,
+    "sessionsToday": 45,
+    "topPages": [
+      { "path": "/", "views": 500 },
+      { "path": "/parent", "views": 200 }
+    ],
+    "topEvents": [
+      { "eventName": "recording_start", "count": 150 },
+      { "eventName": "anchor_mark", "count": 80 }
+    ]
+  }
+}
+```
+
+**响应 - 每日趋势**：
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "date": "2026-02-01",
+      "sessions": 45,
+      "activeUsers": 30,
+      "newUsers": 5,
+      "avgDuration": 300
+    },
+    {
+      "date": "2026-02-02",
+      "sessions": 50,
+      "activeUsers": 35,
+      "newUsers": 3,
+      "avgDuration": 280
+    }
+  ]
+}
+```
+
+**响应 - IP 分布**：
+```json
+{
+  "success": true,
+  "data": [
+    { "ip": "223.104.xxx.xxx", "count": 50 },
+    { "ip": "116.179.xxx.xxx", "count": 30 }
+  ]
+}
+```
+
+---
+
+*文档版本：v1.2*  
+*更新日期：2026-02-03*  
+*更新内容：新增 v2.0 数据分析 API（/api/analytics 上报接口、/api/analytics/stats 统计查询）*

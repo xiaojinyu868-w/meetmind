@@ -139,3 +139,62 @@ model Feedback {
   @@index([status])
   @@index([userId])
 }
+
+// ==================== 数据分析模型 ====================
+
+// 用户分析会话表 - 记录每次用户访问的完整会话
+model UserAnalytics {
+  id           String    @id @default(cuid())
+  userId       String?   // 可选，支持匿名用户追踪
+  sessionToken String    @unique // 客户端生成的会话标识
+  ip           String?   // 用户IP地址
+  userAgent    String?   // 浏览器/设备信息
+  entryPage    String?   // 入口页面
+  exitPage     String?   // 退出页面
+  startedAt    DateTime  @default(now()) // 会话开始时间
+  endedAt      DateTime? // 会话结束时间
+  durationMs   Int       @default(0) // 总时长（毫秒）
+  isNewUser    Boolean   @default(false) // 是否新用户首次访问
+
+  // 关联
+  pageViews PageView[]
+  events    EventTrack[]
+
+  @@index([userId])
+  @@index([startedAt])
+  @@index([ip])
+  @@index([isNewUser])
+}
+
+// 页面访问记录表 - 记录用户访问的每个页面
+model PageView {
+  id          String   @id @default(cuid())
+  analyticsId String   // 关联的会话ID
+  path        String   // 页面路径
+  visitedAt   DateTime @default(now()) // 访问时间
+  durationMs  Int      @default(0) // 页面停留时长（毫秒）
+  referrer    String?  // 来源页面
+
+  analytics UserAnalytics @relation(fields: [analyticsId], references: [id], onDelete: Cascade)
+
+  @@index([analyticsId])
+  @@index([path])
+  @@index([visitedAt])
+}
+
+// 事件追踪表 - 记录用户的关键交互行为
+model EventTrack {
+  id            String   @id @default(cuid())
+  analyticsId   String   // 关联的会话ID
+  eventName     String   // 事件名称（如 recording_start, anchor_mark）
+  eventCategory String?  // 事件分类（如 recording, learning, ai）
+  eventData     String?  // 额外数据（JSON格式）
+  createdAt     DateTime @default(now())
+
+  analytics UserAnalytics @relation(fields: [analyticsId], references: [id], onDelete: Cascade)
+
+  @@index([analyticsId])
+  @@index([eventName])
+  @@index([eventCategory])
+  @@index([createdAt])
+}
