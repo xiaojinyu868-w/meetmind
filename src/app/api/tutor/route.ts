@@ -142,7 +142,7 @@ const THINKING_GUIDE_PROMPT = `
 - 每个步骤用【步骤名】开头
 - 每步后用 💡 给一句可迁移的心得
 - 最后用 🌟 总结用到的思维方法
-- 语气像一位同桌一样即可`;
+- 语气像一位同桌`;
 
 export async function POST(request: NextRequest) {
   // 应用速率限制
