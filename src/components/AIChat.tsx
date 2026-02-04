@@ -11,6 +11,8 @@ import type { ConversationHistory, ConversationMessage } from '@/types/conversat
 import { ModelSelector } from './ModelSelector';
 import { ImageUpload, useImagePaste, type UploadedImage } from './ImageUpload';
 import { DEFAULT_MODEL_ID } from '@/lib/services/llm-service';
+import { ThinkingGuideRenderer } from './ThinkingGuideRenderer';
+import { StreamingMarkdown } from './StreamingMarkdown';
 
 interface Message {
   id: string;
@@ -35,6 +37,8 @@ interface AIChatProps {
   conversationId?: string;
   /** 对话创建/更新回调 */
   onConversationChange?: (conversation: ConversationHistory) => void;
+  /** 是否为移动端 */
+  isMobile?: boolean;
 }
 
 // AI 家教系统提示词
@@ -61,6 +65,7 @@ export function AIChat({
   sessionId,
   conversationId: initialConversationId,
   onConversationChange,
+  isMobile = false,
 }: AIChatProps) {
   const { user, accessToken } = useAuth();
   const userId = getEffectiveUserId(user?.id);
@@ -279,35 +284,6 @@ export function AIChat({
     '我应该怎么练习？',
   ];
 
-  // 解析消息中的时间戳
-  const renderMessageContent = (content: string) => {
-    const timestampRegex = /\[(\d{1,2}:\d{2}(?::\d{2})?)\]/g;
-    const parts = content.split(timestampRegex);
-
-    return parts.map((part, index) => {
-      if (index % 2 === 1) {
-        const timeParts = part.split(':').map(Number);
-        let timeMs = 0;
-        if (timeParts.length === 2) {
-          timeMs = (timeParts[0] * 60 + timeParts[1]) * 1000;
-        } else if (timeParts.length === 3) {
-          timeMs = (timeParts[0] * 3600 + timeParts[1] * 60 + timeParts[2]) * 1000;
-        }
-
-        return (
-          <button
-            key={index}
-            onClick={() => onTimestampClick?.(timeMs)}
-            className="inline-flex items-center px-1.5 py-0.5 bg-amber-100 text-amber-700 rounded text-sm font-mono hover:bg-amber-200 transition-colors"
-          >
-            ▶ {part}
-          </button>
-        );
-      }
-      return <span key={index}>{part}</span>;
-    });
-  };
-
   // 清空当前对话
   const clearConversation = useCallback(() => {
     setMessages([]);
@@ -403,18 +379,24 @@ export function AIChat({
             className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}
           >
             <div
-              className={`max-w-[85%] rounded-lg px-4 py-2 ${
+              className={`max-w-[90%] rounded-2xl ${isMobile ? 'px-3 py-2' : 'px-4 py-3'} ${
                 message.role === 'user'
-                  ? 'bg-amber-500 text-white'
-                  : 'bg-gray-100 text-gray-900'
+                  ? 'bg-gradient-to-r from-amber-500 to-amber-600 text-white'
+                  : 'bg-gray-50 text-gray-800'
               }`}
             >
               {message.role === 'assistant' ? (
-                <div className="prose prose-sm max-w-none">
-                  {renderMessageContent(message.content)}
-                </div>
+                // 助手消息：使用 ThinkingGuideRenderer 自动检测并渲染思维链
+                <ThinkingGuideRenderer
+                  content={message.content}
+                  onTimestampClick={onTimestampClick}
+                  isMobile={isMobile}
+                  className={`${isMobile ? 'text-xs' : 'text-sm'} leading-relaxed`}
+                />
               ) : (
-                message.content
+                <div className={`${isMobile ? 'text-xs' : 'text-sm'} whitespace-pre-wrap`}>
+                  {message.content}
+                </div>
               )}
             </div>
           </div>

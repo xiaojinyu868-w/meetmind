@@ -1043,7 +1043,7 @@ export function AITutor({ breakpoint, segments, isLoading: externalLoading, onRe
                   className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
                 >
                   <div
-                    className={`max-w-[85%] rounded-2xl px-4 py-3 ${
+                    className={`${isMobile ? 'max-w-[92%]' : 'max-w-[85%]'} rounded-2xl ${isMobile ? 'px-3 py-2' : 'px-4 py-3'} ${
                       msg.role === 'user'
                         ? 'bg-gradient-to-r from-amber-500 to-amber-600 text-white'
                         : 'bg-gray-100 text-gray-800'
@@ -1056,17 +1056,17 @@ export function AITutor({ breakpoint, segments, isLoading: externalLoading, onRe
                           content={msg.content}
                           onTimestampClick={handleTimestampClick}
                           isMobile={isMobile}
-                          className={`text-sm leading-relaxed ${isMobile ? 'text-xs' : ''}`}
+                          className={`leading-relaxed ${isMobile ? 'text-xs' : 'text-sm'}`}
                         />
                       ) : (
                         <StreamingMarkdown
                           content={msg.content}
                           onTimestampClick={handleTimestampClick}
-                          className={`text-sm leading-relaxed ${isMobile ? 'text-xs' : ''}`}
+                          className={`leading-relaxed ${isMobile ? 'text-xs' : 'text-sm'}`}
                         />
                       )
                     ) : (
-                      <div className={`text-sm whitespace-pre-wrap leading-relaxed ${isMobile ? 'text-xs' : ''}`}>
+                      <div className={`whitespace-pre-wrap leading-relaxed ${isMobile ? 'text-xs' : 'text-sm'}`}>
                         {msg.content}
                       </div>
                     )}
@@ -1095,21 +1095,21 @@ export function AITutor({ breakpoint, segments, isLoading: externalLoading, onRe
               {/* 流式输出中的消息 */}
               {isStreaming && streamingContent && (
                 <div className="flex justify-start">
-                  <div className="max-w-[85%] rounded-2xl px-4 py-3 bg-gray-100 text-gray-800">
+                  <div className={`${isMobile ? 'max-w-[92%]' : 'max-w-[85%]'} rounded-2xl ${isMobile ? 'px-3 py-2' : 'px-4 py-3'} bg-gray-100 text-gray-800`}>
                     {enableThinkingGuide ? (
                       <ThinkingGuideRenderer
                         content={streamingContent}
                         isStreaming={true}
                         onTimestampClick={handleTimestampClick}
                         isMobile={isMobile}
-                        className={`text-sm leading-relaxed ${isMobile ? 'text-xs' : ''}`}
+                        className={`leading-relaxed ${isMobile ? 'text-xs' : 'text-sm'}`}
                       />
                     ) : (
                       <StreamingMarkdown
                         content={streamingContent}
                         isStreaming={true}
                         onTimestampClick={handleTimestampClick}
-                        className={`text-sm leading-relaxed ${isMobile ? 'text-xs' : ''}`}
+                        className={`leading-relaxed ${isMobile ? 'text-xs' : 'text-sm'}`}
                       />
                     )}
                   </div>

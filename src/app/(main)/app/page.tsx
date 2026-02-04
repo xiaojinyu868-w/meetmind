@@ -1670,22 +1670,30 @@ export default function StudentApp() {
                           selectedHistoryConversation ? (
                             <div className="h-full flex flex-col">
                               <div className="px-4 py-2 border-b flex items-center justify-between flex-shrink-0" style={{ background: 'var(--edu-bg-soft)', borderColor: 'var(--edu-border-light)' }}>
-                                <span className="text-sm text-gray-600 truncate">{selectedHistoryConversation.title}</span>
-                                <div className="flex items-center gap-2">
+                                <span className="text-sm text-gray-600 truncate flex-1 mr-2">{selectedHistoryConversation.title}</span>
+                                <div className="flex items-center gap-1">
+                                  {/* 返回列表 - 使用图标 */}
                                   <button
                                     onClick={() => setSelectedHistoryConversation(null)}
-                                    className="text-xs text-gray-500 hover:text-navy"
+                                    className="w-8 h-8 flex items-center justify-center rounded-lg text-gray-500 hover:text-navy hover:bg-gray-100 transition-colors"
+                                    title="返回列表"
                                   >
-                                    ← 返回列表
+                                    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 10h16M4 14h16M4 18h16" />
+                                    </svg>
                                   </button>
+                                  {/* 新对话 - 使用图标 */}
                                   <button
                                     onClick={() => {
                                       setShowConversationHistory(false);
                                       setSelectedHistoryConversation(null);
                                     }}
-                                    className="text-xs text-amber-600 hover:text-amber-700"
+                                    className="w-8 h-8 flex items-center justify-center rounded-lg text-amber-600 hover:text-amber-700 hover:bg-amber-50 transition-colors"
+                                    title="新对话"
                                   >
-                                    新对话
+                                    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                                    </svg>
                                   </button>
                                 </div>
                               </div>
@@ -1705,17 +1713,18 @@ export default function StudentApp() {
                             <div className="h-full flex flex-col">
                               <div className="px-4 py-2 border-b flex items-center justify-between flex-shrink-0" style={{ background: 'var(--edu-bg-soft)', borderColor: 'var(--edu-border-light)' }}>
                                 <span className="text-sm font-medium text-navy">历史对话</span>
+                                {/* 新对话按钮 */}
                                 <button
                                   onClick={() => {
                                     setShowConversationHistory(false);
                                     setSelectedHistoryConversation(null);
                                   }}
-                                  className="text-xs text-amber-600 hover:text-amber-700 flex items-center gap-1"
+                                  className="w-8 h-8 flex items-center justify-center rounded-lg text-amber-600 hover:text-amber-700 hover:bg-amber-50 transition-colors"
+                                  title="新对话"
                                 >
-                                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
                                   </svg>
-                                  新对话
                                 </button>
                               </div>
                               <div className="flex-1 min-h-0">
@@ -1978,30 +1987,38 @@ export default function StudentApp() {
                     </button>
                     <span className="font-medium text-gray-900">AI 助教</span>
                     
-                    {/* 历史记录切换按钮 */}
-                    <div className="ml-auto flex items-center gap-1">
+                    {/* 历史记录切换 - ChatGPT 风格图标按钮 */}
+                    <div className="ml-auto flex items-center gap-1 bg-gray-100 rounded-lg p-0.5">
+                      {/* 当前对话 */}
                       <button
                         onClick={() => {
                           setShowConversationHistory(false);
                           setSelectedHistoryConversation(null);
                         }}
-                        className={`px-2.5 py-1 text-xs rounded-full transition-all ${
+                        className={`w-8 h-8 flex items-center justify-center rounded-md transition-all ${
                           !showConversationHistory
-                            ? 'bg-lavender-100 text-lavender-700 font-medium'
-                            : 'text-gray-500 hover:bg-gray-100'
+                            ? 'bg-white text-amber-600 shadow-sm'
+                            : 'text-gray-400 hover:text-gray-600'
                         }`}
+                        title="当前对话"
                       >
-                        当前
+                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                        </svg>
                       </button>
+                      {/* 历史记录 */}
                       <button
                         onClick={() => setShowConversationHistory(true)}
-                        className={`px-2.5 py-1 text-xs rounded-full transition-all ${
+                        className={`w-8 h-8 flex items-center justify-center rounded-md transition-all ${
                           showConversationHistory
-                            ? 'bg-lavender-100 text-lavender-700 font-medium'
-                            : 'text-gray-500 hover:bg-gray-100'
+                            ? 'bg-white text-amber-600 shadow-sm'
+                            : 'text-gray-400 hover:text-gray-600'
                         }`}
+                        title="历史对话"
                       >
-                        📜 历史
+                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
                       </button>
                     </div>
                   </div>
@@ -2043,19 +2060,39 @@ export default function StudentApp() {
                       selectedHistoryConversation ? (
                         // 继续历史对话
                         <div className="h-full flex flex-col">
-                          <div className="px-4 py-2 bg-gray-50 border-b border-gray-100 flex items-center justify-between">
-                            <span className="text-sm text-gray-600 truncate">{selectedHistoryConversation.title}</span>
-                            <button
-                              onClick={() => setSelectedHistoryConversation(null)}
-                              className="text-xs text-amber-600"
-                            >
-                              ← 返回
-                            </button>
+                          <div className="px-3 py-2 bg-gray-50 border-b border-gray-100 flex items-center justify-between">
+                            <span className="text-xs text-gray-600 truncate flex-1 mr-2">{selectedHistoryConversation.title}</span>
+                            <div className="flex items-center gap-1">
+                              {/* 返回列表 */}
+                              <button
+                                onClick={() => setSelectedHistoryConversation(null)}
+                                className="w-7 h-7 flex items-center justify-center rounded-lg text-gray-500 hover:bg-gray-100"
+                                title="返回列表"
+                              >
+                                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 10h16M4 14h16M4 18h16" />
+                                </svg>
+                              </button>
+                              {/* 新对话 */}
+                              <button
+                                onClick={() => {
+                                  setShowConversationHistory(false);
+                                  setSelectedHistoryConversation(null);
+                                }}
+                                className="w-7 h-7 flex items-center justify-center rounded-lg text-amber-600 hover:bg-amber-50"
+                                title="新对话"
+                              >
+                                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                                </svg>
+                              </button>
+                            </div>
                           </div>
                           <div className="flex-1 min-h-0">
                             <AIChat
                               conversationId={selectedHistoryConversation.conversationId}
                               sessionId={sessionId}
+                              isMobile={true}
                               onTimestampClick={(timeMs) => {
                                 setCurrentTime(timeMs);
                                 waveformRef.current?.seekTo(timeMs);
