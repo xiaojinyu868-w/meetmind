@@ -140,67 +140,26 @@ const StepCard = memo(function StepCard({
   const icon = getStepIcon(step.title);
   const isLast = index === total - 1;
 
-  // 移动端使用更紧凑的卡片式布局，桌面端保留时间线布局
-  if (isMobile) {
-    return (
-      <div className={`${!isLast ? 'mb-3' : ''}`}>
-        {/* 移动端紧凑布局 - 卡片式 */}
-        <div className="bg-white/70 rounded-lg p-3 border border-violet-100">
-          {/* 标题行：图标 + 标题 */}
-          <div className="flex items-center gap-2 mb-2">
-            <span className="w-6 h-6 rounded-full bg-violet-100 flex items-center justify-center text-xs flex-shrink-0">
-              {icon}
-            </span>
-            <span className="font-medium text-violet-800 text-xs">{step.title}</span>
-          </div>
-
-          {/* 内容 */}
-          <div className="text-xs text-gray-700 leading-relaxed pl-8">
-            <StreamingMarkdown
-              content={step.content}
-              isStreaming={false}
-              onTimestampClick={onTimestampClick}
-            />
-          </div>
-
-          {/* 💡心得 */}
-          {step.tip && (
-            <div className="mt-2 ml-8 flex items-start gap-1 px-2 py-1.5 bg-amber-50/80 rounded border border-amber-100/50">
-              <span className="text-amber-500 text-xs flex-shrink-0">💡</span>
-              <div className="text-amber-700 text-[10px] leading-relaxed">
-                <StreamingMarkdown
-                  content={step.tip}
-                  isStreaming={false}
-                  onTimestampClick={onTimestampClick}
-                />
-              </div>
-            </div>
-          )}
-        </div>
-      </div>
-    );
-  }
-
-  // 桌面端保留原有时间线布局
+  // 统一布局：移动端和桌面端共用时间线布局，仅调整尺寸和间距
   return (
     <div className="relative">
-      {/* 左侧时间线 */}
-      <div className="absolute left-4 top-0 bottom-0 flex flex-col items-center">
-        <div className={`w-8 h-8 rounded-full bg-violet-100 border-2 border-violet-300 flex items-center justify-center text-sm z-10`}>
+      {/* 左侧时间线 - 移动端左移 */}
+      <div className={`absolute top-0 bottom-0 flex flex-col items-center ${isMobile ? 'left-1' : 'left-4'}`}>
+        <div className={`rounded-full bg-violet-100 border-2 border-violet-300 flex items-center justify-center z-10 ${isMobile ? 'w-6 h-6 text-xs' : 'w-8 h-8 text-sm'}`}>
           {icon}
         </div>
         {!isLast && <div className="flex-1 w-0.5 bg-violet-200 mt-1" />}
       </div>
 
-      {/* 内容区域 */}
-      <div className="ml-14 pb-4">
+      {/* 内容区域 - 移动端左边距缩小 */}
+      <div className={`pb-4 ${isMobile ? 'ml-9' : 'ml-14'}`}>
         {/* 标题 */}
-        <div className="font-medium text-violet-800 mb-1.5 text-sm">
+        <div className={`font-medium text-violet-800 mb-1.5 ${isMobile ? 'text-xs' : 'text-sm'}`}>
           {step.title}
         </div>
 
         {/* 内容 */}
-        <div className="text-sm text-gray-700 leading-relaxed bg-white/60 rounded-lg px-3 py-2 border border-gray-100">
+        <div className={`text-gray-700 leading-relaxed bg-white/60 rounded-lg border border-gray-100 ${isMobile ? 'text-xs px-2 py-1.5' : 'text-sm px-3 py-2'}`}>
           <StreamingMarkdown
             content={step.content}
             isStreaming={false}
@@ -210,9 +169,9 @@ const StepCard = memo(function StepCard({
 
         {/* 💡心得 */}
         {step.tip && (
-          <div className="mt-2 flex items-start gap-1.5 px-2 py-1.5 bg-amber-50 rounded-lg border border-amber-100">
-            <span className="text-amber-500 text-sm">💡</span>
-            <div className="text-amber-700 text-xs leading-relaxed">
+          <div className={`mt-2 flex items-start gap-1.5 bg-amber-50 rounded-lg border border-amber-100 ${isMobile ? 'px-1.5 py-1' : 'px-2 py-1.5'}`}>
+            <span className={`text-amber-500 ${isMobile ? 'text-xs' : 'text-sm'}`}>💡</span>
+            <div className={`text-amber-700 leading-relaxed ${isMobile ? 'text-[10px]' : 'text-xs'}`}>
               <StreamingMarkdown
                 content={step.tip}
                 isStreaming={false}
@@ -277,9 +236,9 @@ export const ThinkingGuideRenderer = memo(function ThinkingGuideRenderer({
           ))}
         </div>
 
-        {/* 思维方法总结 */}
+        {/* 思维方法总结 - 统一使用左边距 */}
         {parsed.methods && (
-          <div className={`mt-2 flex items-center gap-2 px-3 py-2 bg-emerald-50 rounded-lg border border-emerald-200 ${isMobile ? '' : 'ml-14'}`}>
+          <div className={`mt-2 flex items-center gap-2 bg-emerald-50 rounded-lg border border-emerald-200 ${isMobile ? 'ml-9 px-2 py-1.5' : 'ml-14 px-3 py-2'}`}>
             <span className="text-emerald-500 flex-shrink-0">🌟</span>
             <p className={`text-emerald-700 ${isMobile ? 'text-[10px]' : 'text-xs'}`}>
               <span className="font-medium">思维方法：</span>
