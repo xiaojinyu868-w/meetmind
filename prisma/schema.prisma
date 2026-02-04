@@ -140,6 +140,25 @@ model Feedback {
   @@index([userId])
 }
 
+// ==================== API 使用记录模型 ====================
+
+// API 使用统计表 - 记录用户 API 调用配额
+model ApiUsage {
+  id        String   @id @default(cuid())
+  userId    String   // 用户ID（可以是 guest_xxx 表示访客）
+  quotaType String   // 配额类型：transcribe, ai_summary, ai_topics, ai_tutor, ai_chat
+  date      DateTime // 统计日期（精确到天）
+  count     Int      @default(0) // 使用次数
+  metadata  String?  // 额外元数据（JSON）
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([userId, quotaType, date], name: "userId_quotaType_date")
+  @@index([userId])
+  @@index([quotaType])
+  @@index([date])
+}
+
 // ==================== 数据分析模型 ====================
 
 // 用户分析会话表 - 记录每次用户访问的完整会话

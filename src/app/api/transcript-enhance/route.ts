@@ -94,7 +94,7 @@ function parseEnhanceOutput(output: string): Map<string, string> {
 
 export async function POST(request: NextRequest) {
   // 应用速率限制
-  const rateLimitResponse = await applyRateLimit(request, 'transcript-enhance');
+  const rateLimitResponse = await applyRateLimit(request, 'transcriptEnhance');
   if (rateLimitResponse) return rateLimitResponse;
 
   try {

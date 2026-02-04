@@ -229,7 +229,7 @@ export function AIChat({
         requestBody.messageContent = [
           ...uploadedImages.map(img => ({
             type: 'image_url',
-            image_url: { url: img.base64 },
+            image_url: { url: img.dataUrl },
           })),
           { type: 'text', text: content.trim() || '请描述这张图片' },
         ];

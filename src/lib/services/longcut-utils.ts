@@ -6,6 +6,7 @@
  */
 
 export interface Segment {
+  id?: string;
   text: string;
   startMs: number;
   endMs: number;

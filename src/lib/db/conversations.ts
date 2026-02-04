@@ -38,7 +38,7 @@ export async function getConversationByAnchorId(anchorId: string): Promise<Conve
 /** 获取用户的对话历史列表 */
 export async function getUserConversations(
   userId: string,
-  options: { type?: 'tutor' | 'chat'; sessionId?: string; limit?: number; offset?: number } = {}
+  options: { type?: 'tutor' | 'chat' | 'global-chat'; sessionId?: string; limit?: number; offset?: number } = {}
 ): Promise<ConversationHistoryRecord[]> {
   let collection;
   
@@ -74,7 +74,7 @@ export async function getUserConversations(
 export async function searchUserConversations(
   userId: string,
   keyword: string,
-  options: { type?: 'tutor' | 'chat'; limit?: number } = {}
+  options: { type?: 'tutor' | 'chat' | 'global-chat'; limit?: number } = {}
 ): Promise<ConversationHistoryRecord[]> {
   const lowerKeyword = keyword.toLowerCase();
   

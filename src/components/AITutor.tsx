@@ -821,7 +821,7 @@ export function AITutor({ breakpoint, segments, isLoading: externalLoading, onRe
       requestBody.messageContent = [
         ...uploadedImages.map(img => ({
           type: 'image_url',
-          image_url: { url: img.base64 },
+          image_url: { url: img.dataUrl },
         })),
         { type: 'text', text: question },
       ];
@@ -938,9 +938,9 @@ export function AITutor({ breakpoint, segments, isLoading: externalLoading, onRe
   // ===== 全局对话模式渲染 =====
   if (isGlobalMode) {
     return (
-      <div className="h-full flex flex-col bg-white">
-        {/* 头部 */}
-        <div className={`border-b border-gray-100 bg-gradient-to-r from-lilac-100/50 to-white ${isMobile ? 'p-3' : 'p-4'}`}>
+      <div className="h-full flex flex-col bg-white ai-chat-container">
+        {/* 头部 - 紧凑设计 */}
+        <div className={`border-b border-gray-100 bg-gradient-to-r from-lilac-100/50 to-white flex-shrink-0 ${isMobile ? 'p-3' : 'px-4 py-3'}`}>
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <span className="text-lg">💬</span>
@@ -988,8 +988,8 @@ export function AITutor({ breakpoint, segments, isLoading: externalLoading, onRe
           )}
         </div>
 
-        {/* 对话区域 */}
-        <div className={`flex-1 overflow-y-auto ${isMobile ? 'p-3' : 'p-5'}`} style={{ minHeight: 0 }}>
+        {/* 对话区域 - 优化空间利用 */}
+        <div className={`flex-1 overflow-y-auto chat-messages ${isMobile ? 'p-3' : 'p-4'}`} style={{ minHeight: 0 }}>
           {segments.length === 0 ? (
             // 无转录内容
             <div className="h-full flex flex-col items-center justify-center text-center">
@@ -1137,8 +1137,8 @@ export function AITutor({ breakpoint, segments, isLoading: externalLoading, onRe
           )}
         </div>
 
-        {/* 输入区域 */}
-        <div className="p-4 border-t border-gray-100 bg-white">
+        {/* 输入区域 - 紧凑设计 */}
+        <div className="px-4 py-3 border-t border-gray-100 bg-white flex-shrink-0">
           {/* 图片预览区域 */}
           {supportsMultimodal && uploadedImages.length > 0 && (
             <div className="mb-3 p-2 bg-gray-50 rounded-lg">
@@ -1213,9 +1213,9 @@ export function AITutor({ breakpoint, segments, isLoading: externalLoading, onRe
   const loading = isLoading || externalLoading;
 
   return (
-    <div className="h-full flex flex-col">
-      {/* 头部控制栏 - 简化版，只保留必要操作 */}
-      <div className={`border-b border-gray-100 bg-gradient-to-r from-lilac-100/50 to-white ${isMobile ? 'p-3' : 'px-4 py-2'}`}>
+    <div className="h-full flex flex-col ai-chat-container">
+      {/* 头部控制栏 - 紧凑设计 */}
+      <div className={`border-b border-gray-100 bg-gradient-to-r from-lilac-100/50 to-white flex-shrink-0 ${isMobile ? 'p-3' : 'px-4 py-2'}`}>
         {isMobile ? (
           // 移动端紧凑布局
           <div className="space-y-2">
@@ -1329,8 +1329,8 @@ export function AITutor({ breakpoint, segments, isLoading: externalLoading, onRe
         )}
       </div>
 
-      {/* 内容区 */}
-      <div className={`flex-1 overflow-y-auto ${isMobile ? 'p-3' : 'p-5'}`} style={{ minHeight: 0 }}>
+      {/* 内容区 - 优化空间利用 */}
+      <div className={`flex-1 overflow-y-auto chat-messages ${isMobile ? 'p-3' : 'p-4'}`} style={{ minHeight: 0 }}>
         {error ? (
           <div className="flex items-center justify-center h-full animate-fade-in">
             <div className="text-center">
@@ -1579,8 +1579,8 @@ export function AITutor({ breakpoint, segments, isLoading: externalLoading, onRe
         ) : null}
       </div>
 
-      {/* 输入框 */}
-      <div className="p-4 border-t border-gray-100 bg-white">
+      {/* 输入框 - 紧凑设计 */}
+      <div className="px-4 py-3 border-t border-gray-100 bg-white flex-shrink-0">
         {/* 图片预览区域 */}
         {supportsMultimodal && uploadedImages.length > 0 && (
           <div className="mb-3 p-2 bg-gray-50 rounded-lg">

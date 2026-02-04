@@ -94,7 +94,7 @@ function parseGuide(content: string): ParsedGuide {
 
     // 提取💡心得
     let tip: string | undefined;
-    const tipMatch = stepContent.match(/💡\s*(.+?)(?=\n\n|\n【|$)/s);
+    const tipMatch = stepContent.match(/💡\s*([\s\S]+?)(?=\n\n|\n【|$)/);
     if (tipMatch) {
       tip = tipMatch[1].trim();
       stepContent = stepContent.replace(tipMatch[0], '').trim();

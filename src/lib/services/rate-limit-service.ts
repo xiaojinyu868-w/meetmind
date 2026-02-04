@@ -26,7 +26,6 @@ function getRedis(): Redis | null {
   try {
     redis = new Redis(redisUrl, {
       maxRetriesPerRequest: 3,
-      retryDelayOnFailover: 100,
       enableReadyCheck: true,
       lazyConnect: true,
     });
@@ -78,6 +77,13 @@ export const RATE_LIMITS = {
   },
   // 生成话题 - 每分钟10次，每小时100次，每天500次
   generateTopics: {
+    perMinute: 10,
+    perHour: 100,
+    perDay: 500,
+    cost: 'medium',
+  },
+  // 转录增强 - 每分钟10次，每小时100次，每天500次
+  transcriptEnhance: {
     perMinute: 10,
     perHour: 100,
     perDay: 500,

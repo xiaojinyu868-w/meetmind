@@ -9,7 +9,7 @@
 /**
  * 对话来源类型
  */
-export type ConversationType = 'tutor' | 'chat';
+export type ConversationType = 'tutor' | 'chat' | 'global-chat';
 
 /**
  * 消息角色

@@ -119,6 +119,7 @@ export async function POST(request: NextRequest): Promise<NextResponse<GenerateT
     const segments = body.transcript.map((seg, index) => ({
       id: seg.id ? parseInt(seg.id) : index,
       sessionId: body.sessionId,
+      userId: 'anonymous',
       text: seg.text,
       startMs: seg.startMs,
       endMs: seg.endMs,

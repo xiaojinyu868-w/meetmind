@@ -1,4 +1,4 @@
-import type { Metadata } from 'next';
+import type { Metadata, Viewport } from 'next';
 import { Inter } from 'next/font/google';
 import './globals.css';
 import { AuthProvider } from '@/lib/hooks/useAuth';
@@ -15,6 +15,18 @@ const inter = Inter({
 export const metadata: Metadata = {
   title: 'MeetMind - 课堂对齐的 AI 家教',
   description: '把课堂变成可回放、可定位、可追溯的时间轴记忆',
+};
+
+// 优化移动端视口配置
+export const viewport: Viewport = {
+  width: 'device-width',
+  initialScale: 1,
+  maximumScale: 5,
+  userScalable: true,
+  // 适配 iOS 安全区域
+  viewportFit: 'cover',
+  // 主题色
+  themeColor: '#FFF9F5',
 };
 
 export default function RootLayout({

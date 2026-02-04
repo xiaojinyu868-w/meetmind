@@ -143,7 +143,7 @@ export interface ConversationHistoryRecord {
   id?: number;
   conversationId: string;      // UUID
   userId: string;              // 用户ID，用于数据隔离
-  type: 'tutor' | 'chat';      // 对话类型
+  type: 'tutor' | 'chat' | 'global-chat';      // 对话类型
   title: string;               // 对话标题
   sessionId?: string;          // 关联的音频会话ID
   anchorId?: string;           // 关联的困惑点ID

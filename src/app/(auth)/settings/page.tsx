@@ -22,7 +22,7 @@ const DEFAULT_SETTINGS: Settings = {
 };
 
 export default function SettingsPage() {
-  const { user, isAuthenticated, loading: authLoading } = useAuth();
+  const { user, isAuthenticated, isLoading: authLoading } = useAuth();
   const [settings, setSettings] = useState<Settings>(DEFAULT_SETTINGS);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -33,13 +33,13 @@ export default function SettingsPage() {
     const loadSettings = async () => {
       try {
         const [autoSave, modelPreference] = await Promise.all([
-          getPreference(SETTINGS_KEYS.AUTO_SAVE),
-          getPreference(SETTINGS_KEYS.MODEL_PREFERENCE),
+          getPreference(SETTINGS_KEYS.AUTO_SAVE, DEFAULT_SETTINGS.autoSave),
+          getPreference(SETTINGS_KEYS.MODEL_PREFERENCE, DEFAULT_SETTINGS.modelPreference),
         ]);
 
         setSettings({
-          autoSave: autoSave ?? DEFAULT_SETTINGS.autoSave,
-          modelPreference: modelPreference ?? DEFAULT_SETTINGS.modelPreference,
+          autoSave,
+          modelPreference,
         });
       } catch (error) {
         console.error('Failed to load settings:', error);

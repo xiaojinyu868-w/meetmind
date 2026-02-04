@@ -555,7 +555,8 @@ export default function StudentApp() {
       
       // 按时间排序
       const sortedTranscripts = transcripts.sort((a, b) => a.startMs - b.startMs);
-      const loadedSegments: TranscriptSegment[] = sortedTranscripts.map(t => ({
+      const loadedSegments: TranscriptSegment[] = sortedTranscripts.map((t, index) => ({
+        id: `loaded-${t.startMs}-${index}`,
         text: t.text,
         startMs: t.startMs,
         endMs: t.endMs,
@@ -579,6 +580,7 @@ export default function StudentApp() {
         timestamp: a.timestamp,
         type: a.type,
         resolved: a.status === 'resolved',
+        cancelled: false,
         note: a.note,
         aiExplanation: a.aiExplanation,
         createdAt: a.createdAt.toISOString(),
@@ -919,7 +921,7 @@ export default function StudentApp() {
   }
 
   return (
-    <div className="h-screen flex flex-col overflow-hidden main-content-enter">
+    <div className="h-dvh flex flex-col overflow-hidden main-content-enter" style={{ height: '100dvh', minHeight: '-webkit-fill-available' }}>
       {/* 移动端隐藏降级横幅 */}
       {!isMobile && <DegradedModeBanner status={serviceStatus} />}
       
@@ -931,9 +933,9 @@ export default function StudentApp() {
         />
       )}
 
-      {/* 桌面端模式切换栏 - 移动端隐藏 */}
+      {/* 桌面端模式切换栏 - 移动端隐藏，增加 z-index 防止被遮挡 */}
       {!isMobile && (
-        <div className="border-b px-6 py-3 no-print" style={{ background: 'var(--edu-bg-secondary)', borderColor: 'var(--edu-border-light)' }}>
+        <div className="border-b px-6 py-3 no-print flex-shrink-0 relative z-20" style={{ background: 'var(--edu-bg-secondary)', borderColor: 'var(--edu-border-light)' }}>
           <div className="flex items-center justify-between">
             <div 
               className="flex items-center gap-2 p-1 rounded-xl" 
@@ -1429,22 +1431,22 @@ export default function StudentApp() {
               {/* 可拖拽左右面板 */}
               <ResizablePanel
                 className="flex-1"
-                defaultLeftWidth={360}
-                minLeftWidth={280}
-                maxLeftWidth={480}
+                defaultLeftWidth={320}
+                minLeftWidth={260}
+                maxLeftWidth={450}
                 storageKey="meetmind-left-panel-width"
                 leftPanel={
                   /* 左栏 - 多功能面板 */
                   <div className="h-full flex flex-col bg-white" style={{ borderRight: '1px solid var(--edu-border-light)' }}>
-                    {/* 标签页切换 */}
+                    {/* 标签页切换 - 增强可点击性和防遮挡 */}
                     <div 
-                      className="flex items-center gap-1 px-3 py-2 border-b overflow-x-auto flex-shrink-0" 
+                      className="flex items-center gap-1 px-3 py-2.5 border-b overflow-x-auto flex-shrink-0 relative z-10 tab-buttons-container" 
                       style={{ background: 'var(--edu-bg-soft)', borderColor: 'var(--edu-border-light)' }}
                     >
                       <button
                         data-onboarding="timeline"
                         onClick={() => setReviewTab('timeline')}
-                        className={`px-2.5 py-1.5 text-sm rounded-lg transition-all whitespace-nowrap ${
+                        className={`px-3 py-2 text-sm rounded-lg transition-all whitespace-nowrap tab-button ${
                           reviewTab === 'timeline'
                             ? 'bg-white text-amber-600 font-medium shadow-sm'
                             : 'text-gray-500 hover:text-navy hover:bg-white/50'
@@ -1454,7 +1456,7 @@ export default function StudentApp() {
                       </button>
                       <button
                         onClick={() => setReviewTab('anchor-detail')}
-                        className={`px-2.5 py-1.5 text-sm rounded-lg transition-all whitespace-nowrap ${
+                        className={`px-3 py-2 text-sm rounded-lg transition-all whitespace-nowrap tab-button ${
                           reviewTab === 'anchor-detail'
                             ? 'bg-white text-amber-600 font-medium shadow-sm'
                             : 'text-gray-500 hover:text-navy hover:bg-white/50'
@@ -1467,7 +1469,7 @@ export default function StudentApp() {
                       </button>
                       <button
                         onClick={() => setReviewTab('highlights')}
-                        className={`px-2.5 py-1.5 text-sm rounded-lg transition-all whitespace-nowrap ${
+                        className={`px-3 py-2 text-sm rounded-lg transition-all whitespace-nowrap tab-button ${
                           reviewTab === 'highlights'
                             ? 'bg-white text-amber-600 font-medium shadow-sm'
                             : 'text-gray-500 hover:text-navy hover:bg-white/50'
@@ -1480,7 +1482,7 @@ export default function StudentApp() {
                       </button>
                       <button
                         onClick={() => setReviewTab('summary')}
-                        className={`px-2.5 py-1.5 text-sm rounded-lg transition-all whitespace-nowrap ${
+                        className={`px-3 py-2 text-sm rounded-lg transition-all whitespace-nowrap tab-button ${
                           reviewTab === 'summary'
                             ? 'bg-white text-amber-600 font-medium shadow-sm'
                             : 'text-gray-500 hover:text-navy hover:bg-white/50'
@@ -1491,7 +1493,7 @@ export default function StudentApp() {
                       </button>
                       <button
                         onClick={() => setReviewTab('notes')}
-                        className={`px-2.5 py-1.5 text-sm rounded-lg transition-all whitespace-nowrap ${
+                        className={`px-3 py-2 text-sm rounded-lg transition-all whitespace-nowrap tab-button ${
                           reviewTab === 'notes'
                             ? 'bg-white text-amber-600 font-medium shadow-sm'
                             : 'text-gray-500 hover:text-navy hover:bg-white/50'
@@ -1590,10 +1592,10 @@ export default function StudentApp() {
                 }
                 rightPanel={
                   /* 中栏 - AI 对话区（现在是右侧主面板） */
-                  <div className="h-full flex flex-col bg-white">
+                  <div className="h-full flex flex-col bg-white ai-chat-container">
                     {/* 精简波形播放器 - compact 模式，置于顶部 */}
                     {(audioBlob || audioUrl) && (
-                      <div className="flex-shrink-0 border-b" style={{ background: 'var(--edu-bg-soft)', borderColor: 'var(--edu-border-light)' }}>
+                      <div className="flex-shrink-0 border-b" style={{ background: 'var(--edu-bg-soft)', borderColor: 'var(--edu-border-light)', maxHeight: '120px' }}>
                         <WaveformPlayer
                           ref={waveformRef}
                           src={audioBlob || audioUrl || undefined}
@@ -1617,8 +1619,8 @@ export default function StudentApp() {
                       </div>
                     )}
                     
-                    {/* AI 家教区 */}
-                    <div className="flex-1 min-h-0 flex flex-col" data-onboarding="ai-tutor">
+                    {/* AI 家教区 - 确保有足够的显示空间 */}
+                    <div className="flex-1 min-h-0 flex flex-col" data-onboarding="ai-tutor" style={{ minHeight: 'var(--ai-chat-min-height, 300px)' }}>
                       {/* AI 对话模式切换栏 */}
                       {!showConversationHistory && (
                         <div 

@@ -46,9 +46,9 @@ export async function POST(request: NextRequest) {
         || request.headers.get('Authorization')?.replace('Bearer ', '');
       
       if (token) {
-        const payload = await authService.verifyAccessToken(token);
+        const payload = authService.verifyToken(token);
         if (payload) {
-          userId = payload.userId;
+          userId = payload.sub;
         }
       }
     } catch {

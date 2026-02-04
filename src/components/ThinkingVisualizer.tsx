@@ -108,7 +108,7 @@ function parseThinkingContent(content: string): ParsedThinking {
     let tip: string | undefined;
 
     // 提取学霸笔记
-    const tipMatch = stepContent.match(/学霸笔记[：:]\s*(.+?)(?=\n\n|$)/s);
+    const tipMatch = stepContent.match(/学霸笔记[：:]\s*([\s\S]+?)(?=\n\n|$)/);
     if (tipMatch) {
       tip = tipMatch[1].trim();
       // 移除学霸笔记部分，保留纯内容

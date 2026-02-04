@@ -6,21 +6,58 @@
 
 ## API 路由
 
+### 核心功能 API
+
 | 路由 | 方法 | 功能 |
 |------|------|------|
 | `/api/chat` | POST | 通用 AI 对话，支持多模型、流式响应 |
 | `/api/chat` | GET | 获取可用模型列表 |
 | `/api/tutor` | POST | AI 家教解释困惑点，支持引导问题、联网搜索 |
-| `/api/transcribe` | POST | 语音转录（同步/异步模式） |
+| `/api/feedback` | POST | 提交用户反馈 |
+
+### 语音转录 API
+
+| 路由 | 方法 | 功能 |
+|------|------|------|
+| `/api/transcribe` | POST | 离线语音转录（阿里云异步 ASR） |
 | `/api/transcribe/status` | GET | 查询异步转录任务状态 |
+| `/api/transcribe-fast` | POST | 快速转录 API |
+| `/api/transcribe-turbo` | POST | Turbo 转录 API（高速模式） |
 | `/api/transcript-enhance` | POST | 转录文本增强优化（AI 智能纠错、分段） |
 | `/api/asr-config` | GET | 获取 ASR 配置信息 |
 | `/api/upload-audio` | POST | 上传音频文件 |
-| `/api/generate-summary` | POST | 生成课堂总结 |
-| `/api/generate-topics` | POST | 生成主题标签 |
-| `/api/analytics` | POST | 数据分析上报（v2.0 新增） |
-| `/api/analytics/stats` | GET | 统计数据查询（v2.0 新增） |
 | `WS /api/asr-stream` | WebSocket | 实时语音识别代理 |
+
+### 内容生成 API
+
+| 路由 | 方法 | 功能 |
+|------|------|------|
+| `/api/generate-summary` | POST | 生成课堂总结 |
+| `/api/generate-topics` | POST | 生成主题标签/精选片段 |
+
+### 认证 API（12个接口）
+
+| 路由 | 方法 | 功能 |
+|------|------|------|
+| `/api/auth/login` | POST | 用户登录 |
+| `/api/auth/register` | POST | 用户注册 |
+| `/api/auth/refresh` | POST | 刷新令牌 |
+| `/api/auth/logout` | POST | 用户登出 |
+| `/api/auth/send-code` | POST | 发送验证码（邮箱/短信） |
+| `/api/auth/verify-code` | POST | 验证码校验 |
+| `/api/auth/reset-password` | POST | 重置密码 |
+| `/api/auth/profile` | GET | 获取用户资料 |
+| `/api/auth/profile` | PUT | 更新用户资料 |
+| `/api/auth/wechat/login` | POST | 微信登录 |
+| `/api/auth/wechat/callback` | GET | 微信回调 |
+| `/api/auth/check` | GET | 检查登录状态 |
+
+### 数据分析 API
+
+| 路由 | 方法 | 功能 |
+|------|------|------|
+| `/api/analytics` | POST | 数据分析上报 |
+| `/api/analytics/stats` | GET | 统计数据查询 |
 
 ---
 
@@ -36,12 +73,32 @@
 | `ActionList` | `src/components/ActionList.tsx` | 行动清单，显示待完成任务 |
 | `ConfusionHeatmap` | `src/components/ConfusionHeatmap.tsx` | 困惑热区可视化 |
 | `OnboardingGuide` | `src/components/OnboardingGuide.tsx` | 新用户引导组件，支持交互式引导 |
-| `AnalyticsProvider` | `src/components/AnalyticsProvider.tsx` | 数据分析上下文提供者（v2.0 新增） |
+| `AnalyticsProvider` | `src/components/AnalyticsProvider.tsx` | 数据分析上下文提供者 |
 | `TranscriptPreviewPanel` | `src/components/TranscriptPreviewPanel.tsx` | 转录预览面板，支持编辑和增强 |
+| `ThinkingVisualizer` | `src/components/ThinkingVisualizer.tsx` | AI 思维过程可视化组件 |
+| `ThinkingGuideRenderer` | `src/components/ThinkingGuideRenderer.tsx` | 思维引导渲染器 |
+| `ConversationHistory` | `src/components/ConversationHistory/` | 对话历史组件（v2.1 新增） |
+| `SessionHistoryList` | `src/components/SessionHistoryList.tsx` | 会话历史列表 |
+| `AppLoading` | `src/components/AppLoading.tsx` | 应用加载状态 |
+| `ServiceStatus` | `src/components/ServiceStatus.tsx` | 服务状态显示 |
+| `ImageUpload` | `src/components/ImageUpload.tsx` | 图片上传组件 |
+| `GuidanceQuestion` | `src/components/GuidanceQuestion.tsx` | 引导问题组件 |
+| `Citations` | `src/components/Citations.tsx` | 引用/来源展示 |
+| `StreamingMarkdown` | `src/components/StreamingMarkdown.tsx` | 流式 Markdown 渲染 |
 | `TeacherDashboard` | `src/components/teacher/TeacherDashboard.tsx` | 教师端仪表盘主组件 |
 | `ConfusionHotspotCard` | `src/components/teacher/ConfusionHotspotCard.tsx` | 困惑热点 TOP3 卡片 |
 | `ReflectionGenerator` | `src/components/teacher/ReflectionGenerator.tsx` | AI 流式生成课后反思 |
 | `MobileAIFab` | `src/components/mobile/MobileAIFab.tsx` | 移动端 AI 悬浮按钮 |
+| `MobileRecorder` | `src/components/mobile/MobileRecorder.tsx` | 移动端录音器 |
+| `MobileAITutor` | `src/components/mobile/MobileAITutor.tsx` | 移动端 AI 家教 |
+| `MiniPlayer` | `src/components/mobile/MiniPlayer.tsx` | 迷你播放器 |
+| `MobileLayout` | `src/components/mobile/MobileLayout.tsx` | 移动端布局容器 |
+| `MobileTimeline` | `src/components/mobile/MobileTimeline.tsx` | 移动端时间轴 |
+| `BottomPanel` | `src/components/mobile/BottomPanel.tsx` | 底部面板 |
+| `ConfusionCard` | `src/components/mobile/ConfusionCard.tsx` | 困惑点卡片 |
+| `MenuDrawer` | `src/components/mobile/MenuDrawer.tsx` | 菜单抽屉 |
+| `ResizablePanel` | `src/components/layout/ResizablePanel.tsx` | 可调整大小面板 |
+| `ResponsiveLayout` | `src/components/layout/ResponsiveLayout.tsx` | 响应式布局 |
 
 ---
 
@@ -371,6 +428,6 @@ GET /api/analytics/stats?type=ip
 
 ---
 
-*文档版本：v1.2*  
-*更新日期：2026-02-03*  
-*更新内容：新增 v2.0 数据分析 API（/api/analytics 上报接口、/api/analytics/stats 统计查询）*
+*文档版本：v1.4*  
+*更新日期：2026-02-04*  
+*更新内容：新增移动端组件列表、新用户引导组件、完善组件索引*

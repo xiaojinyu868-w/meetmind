@@ -76,6 +76,7 @@ export function useTranscript(options: UseTranscriptOptions): UseTranscriptRetur
     await db.transcripts.bulkPut(
       currentSegments.map(seg => ({
         sessionId,
+        userId: 'anonymous',
         text: seg.text,
         startMs: seg.startMs,
         endMs: seg.endMs,

@@ -208,7 +208,7 @@ export async function POST(request: NextRequest) {
         segments,
         timestamp - 90000,
         timestamp + 60000
-      );
+      ) as typeof segments;
     }
 
     // 【修复】不使用合并，直接使用原始segments，避免说话者混淆

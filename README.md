@@ -2,11 +2,12 @@
 
 > **MeetMind 是清华北大联合团队打造的 AI 学习助手，为每个孩子配备一位"听过课、记得住、讲得清"的智能同桌。**
 >
-> MVP 1.0 - 把课堂"变成可回放、可定位、可追溯的时间轴记忆"
+> MVP 2.5 - 把课堂"变成可回放、可定位、可追溯的时间轴记忆"
 
 [![Next.js](https://img.shields.io/badge/Next.js-14.2-black?logo=next.js)](https://nextjs.org/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.3-blue?logo=typescript)](https://www.typescriptlang.org/)
 [![Tailwind CSS](https://img.shields.io/badge/Tailwind-3.4-38B2AC?logo=tailwind-css)](https://tailwindcss.com/)
+[![Prisma](https://img.shields.io/badge/Prisma-7.2-2D3748?logo=prisma)](https://www.prisma.io/)
 [![阿里云百炼](https://img.shields.io/badge/阿里云百炼-通义千问-orange)](https://bailian.console.aliyun.com/)
 
 ---
@@ -160,11 +161,13 @@ PUBLIC_PROTOCOL=http
 | **语言** | TypeScript | ^5.3.0 |
 | **样式** | Tailwind CSS | ^3.4.0 |
 | **状态管理** | Zustand | ^4.5.0 |
-| **本地存储** | Dexie (IndexedDB) | ^4.2.1 |
+| **服务端数据库** | Prisma + SQLite | ^7.2.0 |
+| **客户端存储** | Dexie (IndexedDB) | ^4.2.1 |
 | **AI SDK** | Vercel AI SDK | ^6.0.11 |
 | **音频处理** | wavesurfer.js | ^7.12.1 |
 | **音频转换** | fluent-ffmpeg | ^2.1.3 |
 | **可视化** | @nivo/heatmap | ^0.99.0 |
+| **缓存/限流** | ioredis (可选) | ^5.9.2 |
 | **网络** | ws, axios, swr | latest |
 
 ### 项目结构
@@ -174,43 +177,81 @@ meetmind/
 ├── server.js                    # 自定义服务器 (WebSocket ASR 代理 + Next.js)
 ├── package.json                 # 项目依赖
 ├── .env.example                 # 环境变量示例
+├── prisma/                      # Prisma ORM
+│   ├── schema.prisma            # 数据库模型定义
+│   └── meetmind.db              # SQLite 数据库文件
 │
 ├── src/
 │   ├── app/                     # Next.js App Router 页面
 │   │   ├── page.tsx             # 学生端首页 (录音/复习)
-│   │   ├── parent/page.tsx      # 家长端
-│   │   ├── teacher/page.tsx     # 教师端
+│   │   ├── (auth)/              # 认证页面组
+│   │   │   ├── login/           # 登录
+│   │   │   ├── register/        # 注册
+│   │   │   ├── settings/        # 设置
+│   │   │   └── profile/         # 个人中心
+│   │   ├── (main)/              # 主应用页面组
+│   │   │   └── app/             # 应用主页
+│   │   ├── parent/              # 家长端
+│   │   ├── teacher/             # 教师端
+│   │   ├── all-notes/           # 全部笔记
+│   │   ├── feedback/            # 反馈页面
+│   │   ├── help/                # 帮助页面
 │   │   └── api/                 # API 路由
+│   │       ├── analytics/       # 数据分析 API
+│   │       ├── auth/            # 认证 API (12个接口)
+│   │       ├── tutor/           # AI 家教 API
+│   │       ├── chat/            # AI 对话 API
+│   │       ├── transcribe/      # 离线转录 API
+│   │       ├── transcribe-fast/ # 快速转录 API
+│   │       ├── transcribe-turbo/# Turbo 转录 API
+│   │       ├── transcript-enhance/ # 转录增强 API
+│   │       ├── generate-topics/ # 精选片段生成
+│   │       ├── generate-summary/# 课堂摘要生成
+│   │       ├── upload-audio/    # 音频上传
+│   │       ├── feedback/        # 用户反馈
+│   │       └── asr-config/      # ASR 配置
 │   │
 │   ├── components/              # React 组件
-│   │   ├── ui/                  # 基础 UI 组件 (shadcn/ui)
-│   │   ├── mobile/              # 移动端组件
+│   │   ├── ui/                  # 基础 UI 组件 (shadcn/ui, 24个)
+│   │   ├── mobile/              # 移动端组件 (14个)
 │   │   ├── teacher/             # 教师端组件
-│   │   └── business/            # 业务组件
+│   │   ├── parent/              # 家长端组件
+│   │   ├── business/            # 业务组件
+│   │   ├── layout/              # 布局组件
+│   │   └── ConversationHistory/ # 对话历史组件
 │   │
-│   ├── hooks/                   # 自定义 Hooks
+│   ├── hooks/                   # 自定义 Hooks (13个)
+│   │   ├── useAnalytics.ts      # 数据分析
 │   │   ├── useAnchors.ts        # 困惑点管理
 │   │   ├── useAudio.ts          # 音频播放控制
+│   │   ├── useAudioSessions.ts  # IndexedDB 会话查询（Dexie 响应式）
 │   │   ├── useRecording.ts      # 录音状态管理
-│   │   └── useTranscript.ts     # 转录数据管理
+│   │   ├── useTranscript.ts     # 转录数据管理
+│   │   ├── useOnboarding.ts     # 新用户引导
+│   │   ├── useConversationHistory.ts # 对话历史
+│   │   ├── useResponsive.ts     # 响应式布局检测
+│   │   ├── useDragGesture.ts    # 拖拽手势处理
+│   │   ├── useResizable.ts      # 可调整大小
+│   │   └── data/                # SWR 数据 Hooks
 │   │
 │   ├── lib/
 │   │   ├── config/              # 统一配置管理
 │   │   │   └── app.config.ts    # 应用配置 (LLM/Auth/ASR/Feature/UI)
-│   │   ├── services/            # 服务层
+│   │   ├── services/            # 服务层 (31个服务)
 │   │   │   ├── llm-service.ts   # LLM 调用封装
 │   │   │   ├── tutor-service.ts # AI 家教服务
-│   │   │   ├── highlight-service.ts # 精选片段生成
+│   │   │   ├── analytics-service.ts # 数据分析服务
+│   │   │   ├── quota-service.ts # API 配额服务
+│   │   │   ├── rate-limit-service.ts # 限流服务
 │   │   │   └── ...              # 其他服务
+│   │   ├── db/                  # IndexedDB 模块 (Dexie)
 │   │   ├── utils/               # 工具函数
-│   │   │   ├── time-utils.ts    # 时间处理
-│   │   │   ├── json-utils.ts    # JSON 解析
-│   │   │   └── transcript-utils.ts # 转录文本处理
-│   │   └── db.ts                # IndexedDB 数据库 (Dexie)
+│   │   └── swr/                 # SWR 数据获取层
 │   │
 │   ├── types/                   # TypeScript 类型定义
 │   │   ├── index.ts             # 核心业务类型
-│   │   └── user.ts              # 用户/认证类型
+│   │   ├── user.ts              # 用户/认证类型
+│   │   └── conversation.ts      # 对话类型
 │   │
 │   └── fixtures/                # 演示数据
 │       └── demo-data.ts         # 统一演示数据源
@@ -220,7 +261,8 @@ meetmind/
     ├── 技术架构.md
     ├── API接口文档.md
     ├── 开发路线图.md
-    └── 家长端升级规划v2.0.md
+    ├── 家长端升级规划v3.0.md
+    └── 异步开发分工方案.md
 ```
 
 ---
@@ -274,7 +316,7 @@ meetmind/
 | 录音转录 | ✅ | 实时流式 + 离线异步双模式（阿里云 ASR） |
 | 困惑标记 | ✅ | 一键标记、时间戳关联、5秒可撤销 |
 | 课堂时间轴 | ✅ | 自动分段、锚点关联、主题提取 |
-| AI 家教对话 | ✅ | 选择题精准定位困惑、可点击时间戳跳转 |
+| AI 家教对话 | ✅ | 选择题精准定位困惑、可点击时间戳跳转、对话历史持久化 |
 | 波形播放器 | ✅ | 音频波形可视化、锚点跳转 |
 | 学生端 | ✅ | 录音模式 + 复习模式完整流程 |
 | 家长端 | ✅ | 今日概览、困惑列表、陪学脚本 |
@@ -284,10 +326,34 @@ meetmind/
 | 类型安全 | ✅ | 完整 TypeScript 类型定义，DB/应用层类型分离 |
 | 新用户引导 | ✅ | 欢迎弹窗 + 交互式引导教程，支持聚光灯高亮 |
 | **数据分析** | ✅ | 轻量级无感知采集，会话/页面/事件追踪，统计看板 |
+| **API 配额系统** | ✅ | 用户级别配额管理，支持访客和注册用户区分 |
+| **限流服务** | ✅ | 基于 Redis/内存的请求限流，保护后端服务 |
+| **对话历史** | ✅ | AI 对话记录持久化，支持历史查询和续聊 |
+| **自适应布局** | ✅ | 多端适配、安全区域支持、AI对话框高度优化 |
 
 ### 最新更新
 
-#### v2.0 - 轻量级数据分析系统（内测版）
+#### v2.5 - 自适应布局与多端体验优化
+
+| 功能 | 描述 |
+|------|------|
+| **自适应布局** | 使用 `100dvh` 动态视口高度，适配各种浏览器工具栏 |
+| **安全区域支持** | 添加 `safe-area-inset` 支持，适配 iOS/Android 刘海屏/挖孔屏 |
+| **AI 对话框优化** | 根据屏幕高度动态调整最小高度（200px-350px） |
+| **标签按钮防遮挡** | 增加 z-index 和点击区域，修复联想 Edge 等浏览器遮挡问题 |
+| **Viewport 配置** | 添加 viewport meta 配置，优化移动端缩放体验 |
+
+#### v2.1 - API 配额与对话历史系统
+
+| 功能 | 描述 |
+|------|------|
+| **API 使用配额** | 新增 `ApiUsage` 模型，记录用户 API 调用配额（转录、AI 摘要、AI 家教等） |
+| **访客配额支持** | 支持 `guest_xxx` 形式的访客用户配额追踪 |
+| **对话历史持久化** | AI 家教对话记录保存到 IndexedDB，支持历史查询 |
+| **限流服务优化** | 移除无效的 Redis 配置选项，提升服务稳定性 |
+| **思维可视化** | AI 推理过程可视化展示，引导学生思考 |
+
+#### v2.0 - 轻量级数据分析系统
 
 | 功能 | 描述 |
 |------|------|
