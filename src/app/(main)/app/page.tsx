@@ -625,6 +625,13 @@ export default function StudentApp() {
     setDataSource('live');
   }, []);
 
+  // 处理转录增强完成后的更新
+  const handleTranscriptEnhanced = useCallback((enhancedSegments: TranscriptSegment[]) => {
+    console.log('[Page] Received enhanced transcript:', enhancedSegments.length, 'segments');
+    liveSegmentsRef.current = enhancedSegments;
+    setSegments(enhancedSegments);
+  }, []);
+
   const handleAnchorMark = useCallback((timestamp: number) => {
     // 修正时间戳：如果 segments 存在，将 anchor 时间戳对齐到最近的 segment
     // 这是因为前端 elapsedMs 和后端 ASR 时间戳可能存在偏差
@@ -1078,6 +1085,7 @@ export default function StudentApp() {
                         onRecordingStart={handleRecordingStart}
                         onRecordingStop={handleRecordingStop}
                         onTranscriptUpdate={handleTranscriptUpdate}
+                        onTranscriptEnhanced={handleTranscriptEnhanced}
                         onAnchorMark={handleAnchorMark}
                       />
                     </div>
@@ -1283,6 +1291,7 @@ export default function StudentApp() {
                   onRecordingStart={handleRecordingStart}
                   onRecordingStop={handleRecordingStop}
                   onTranscriptUpdate={handleTranscriptUpdate}
+                  onTranscriptEnhanced={handleTranscriptEnhanced}
                   onAnchorMark={handleAnchorMark}
                 />
               </div>

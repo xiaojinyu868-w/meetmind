@@ -10,6 +10,8 @@ interface RecorderProps {
   onRecordingStart?: (sessionId: string) => void;
   onRecordingStop?: (audioBlob?: Blob) => void;
   onTranscriptUpdate?: (segments: TranscriptSegment[]) => void;
+  /** 转录增强完成后的回调，传递优化后的文本 */
+  onTranscriptEnhanced?: (segments: TranscriptSegment[]) => void;
   onAnchorMark?: (timestamp: number) => void;
   onTranscribing?: (isTranscribing: boolean) => void;
   disabled?: boolean;
@@ -23,6 +25,7 @@ export function Recorder({
   onRecordingStart,
   onRecordingStop,
   onTranscriptUpdate,
+  onTranscriptEnhanced,
   onAnchorMark,
   onTranscribing,
   disabled = false,
@@ -137,6 +140,22 @@ export function Recorder({
             for (const seg of segments) {
               newMap.set(seg.id, seg);
             }
+            
+            // 【关键】构建完整的增强后转录文本并通知父组件
+            // 使用 function 形式获取最新的 transcriptRef
+            const currentTranscript = transcriptRef.current;
+            const enhancedTranscript = currentTranscript.map(seg => {
+              const enhanced = newMap.get(seg.id);
+              if (enhanced && enhanced.enhanceStatus === 'enhanced' && enhanced.text !== seg.text) {
+                return { ...seg, text: enhanced.text };
+              }
+              return seg;
+            });
+            
+            // 通知父组件增强后的文本
+            console.log('[Recorder] Notifying parent of enhanced transcript:', enhancedTranscript.length, 'segments');
+            onTranscriptEnhanced?.(enhancedTranscript);
+            
             return newMap;
           });
           setEnhanceStats(prev => ({
@@ -496,7 +515,63 @@ export function Recorder({
 
         setTranscript(segments);
         onTranscriptUpdate?.(segments);
-        setTranscribeProgress(`转录完成，共 ${segments.length} 句`);
+        
+        // 【新增】batch 模式下也触发转录增强
+        if (segments.length > 0) {
+          setTranscribeProgress(`转录完成，正在优化文本...`);
+          setEnhanceStats(prev => ({ ...prev, total: segments.length, isEnhancing: true }));
+          
+          // 初始化增强管理器
+          enhanceManagerRef.current = new TranscriptEnhanceManager({
+            minBatchSize: 1,
+            silenceThreshold: 0, // batch 模式下立即触发
+            model: 'qwen3-max-2026-01-23',
+            onEnhanced: (enhancedSegs) => {
+              console.log('[Recorder] Batch mode enhanced:', enhancedSegs.length, 'segments');
+              setEnhancedSegments(prev => {
+                const newMap = new Map(prev);
+                for (const seg of enhancedSegs) {
+                  newMap.set(seg.id, seg);
+                }
+                
+                // 【关键】构建完整的增强后转录文本并通知父组件
+                const enhancedTranscript = segments.map(seg => {
+                  const enhanced = newMap.get(seg.id);
+                  if (enhanced && enhanced.enhanceStatus === 'enhanced' && enhanced.text !== seg.text) {
+                    return { ...seg, text: enhanced.text };
+                  }
+                  return seg;
+                });
+                
+                // 通知父组件增强后的文本
+                console.log('[Recorder] Notifying parent of batch enhanced transcript:', enhancedTranscript.length, 'segments');
+                onTranscriptEnhanced?.(enhancedTranscript);
+                
+                return newMap;
+              });
+              setEnhanceStats(prev => ({
+                ...prev,
+                enhanced: prev.enhanced + enhancedSegs.filter(s => s.enhanceStatus === 'enhanced').length,
+                isEnhancing: false,
+              }));
+            },
+          });
+          
+          // 添加所有句子到增强管理器
+          for (const seg of segments) {
+            enhanceManagerRef.current.addSegment(seg);
+          }
+          
+          // 触发最终优化
+          enhanceManagerRef.current.finalize().then(() => {
+            const enhancedCount = enhanceManagerRef.current?.getAllEnhanced().filter(s => s.enhanceStatus === 'enhanced').length || 0;
+            setTranscribeProgress(`转录完成，共 ${segments.length} 句，已优化 ${enhancedCount} 句`);
+            enhanceManagerRef.current?.dispose();
+            enhanceManagerRef.current = null;
+          });
+        } else {
+          setTranscribeProgress(`转录完成，共 ${segments.length} 句`);
+        }
       } else {
         setTranscribeProgress('转录完成，但未获取到文本');
       }
