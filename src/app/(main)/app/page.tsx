@@ -88,11 +88,8 @@ interface ActionItem {
   relatedTimestamp?: number;
 }
 
-export default function StudentApp() {
-  // 检测 URL 参数（访客快速入口）
-  const searchParams = useSearchParams();
-  const isGuestFastEntry = searchParams.get('guest') === '1';
-  
+// 包装组件 - 处理 useSearchParams 需要 Suspense 边界的问题
+function StudentAppContent({ isGuestFastEntry }: { isGuestFastEntry: boolean }) {
   // 开屏动画状态 - 访客快速入口跳过 Splash
   const [showSplash, setShowSplash] = useState(!isGuestFastEntry);
   const [appReady, setAppReady] = useState(false);
@@ -2308,4 +2305,20 @@ function formatTime(ms: number): string {
   const minutes = Math.floor(seconds / 60);
   const pad = (n: number) => n.toString().padStart(2, '0');
   return `${pad(minutes)}:${pad(seconds % 60)}`;
+}
+
+// 读取 URL 参数的内部组件
+function SearchParamsReader() {
+  const searchParams = useSearchParams();
+  const isGuestFastEntry = searchParams.get('guest') === '1';
+  return <StudentAppContent isGuestFastEntry={isGuestFastEntry} />;
+}
+
+// 默认导出 - 用 Suspense 包裹 useSearchParams
+export default function StudentApp() {
+  return (
+    <Suspense fallback={<AppLoading message="加载中..." />}>
+      <SearchParamsReader />
+    </Suspense>
+  );
 }
