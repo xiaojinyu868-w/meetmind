@@ -37,14 +37,14 @@ async function autoRegisterUser(payload: {
   email?: string;
   phone?: string;
   role?: string;
-}) {
+}): Promise<any> {
   try {
     // 从 payload 提取用户信息
     const userId = payload.sub;
     const username = payload.username || `user_${userId.slice(0, 8)}`;
     const nickname = payload.nickname || username;
-    const email = payload.email || null;
-    const phone = payload.phone || null;
+    const email = payload.email || undefined;
+    const phone = payload.phone || undefined;
     const role = (payload.role as any) || 'student';
     
     console.log('[AutoRegister] 自动创建用户:', { userId, username, nickname });
@@ -66,7 +66,21 @@ async function autoRegisterUser(payload: {
     });
     
     console.log('[AutoRegister] 用户创建成功:', newUser.id);
-    return newUser;
+    
+    // 转换为 API 返回格式
+    return {
+      id: newUser.id,
+      username: newUser.username,
+      email: newUser.email || undefined,
+      phone: newUser.phone || undefined,
+      nickname: newUser.nickname,
+      avatar: newUser.avatar || undefined,
+      role: newUser.role,
+      status: newUser.status,
+      createdAt: newUser.createdAt.toISOString(),
+      updatedAt: newUser.updatedAt.toISOString(),
+      lastLoginAt: newUser.lastLoginAt?.toISOString(),
+    };
   } catch (error) {
     console.error('[AutoRegister] 自动注册失败:', error);
     return null;
@@ -103,12 +117,16 @@ export async function GET(request: NextRequest) {
       }
     }
     
+    // 判断是否为自动注册的用户（1分钟内创建的）
+    const autoRegistered = typeof user.createdAt === 'string' 
+      ? new Date(user.createdAt).getTime() > Date.now() - 60000
+      : false;
+    
     return NextResponse.json({
       success: true,
       user,
       permissions: payload.permissions,
-      // 标记是否为自动注册的用户
-      autoRegistered: user.createdAt.getTime() > Date.now() - 60000, // 1分钟内创建的视为新注册
+      autoRegistered,
     });
   } catch (error) {
     console.error('获取用户信息错误:', error);
