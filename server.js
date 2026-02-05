@@ -508,16 +508,9 @@ app.prepare().then(() => {
 
   console.log('[Server] About to call server.listen on port', port);
   
-  // 主端口 3001
   server.listen(port, () => {
     console.log(`> Ready on http://${hostname}:${port}`);
     console.log(`> WebSocket proxy available at ws://${hostname}:${port}/api/asr-stream`);
-  });
-
-  // 额外监听 8443 端口（WebSocket 备用端口，绕过运营商限制）
-  const altPort = 8443;
-  server.listen(altPort, () => {
-    console.log(`> Alternate WebSocket port ready on ${altPort}`);
   });
   
   server.on('error', (err) => {
