@@ -566,3 +566,9 @@ MIT License
 - 修复会话归属丢失：`src/lib/services/classroom-data-service.ts` 的 `saveSession()` 更新会话时保留 `createdBy`（及已有元数据），避免后续更新把学生归属覆盖为 `undefined`。
 - 验证结果：`npm run lint`、`npx tsc --noEmit` 通过；并完成自动化回归（Playwright，模拟“学生已标困惑点 -> 家长端显示待解决”）验证通过。
 
+## 2026-02-06 回归修复（教师端 chunk 加载失败）
+
+- 修复教师端页面动态 chunk 崩溃：`src/app/teacher/page.tsx` 将 `TeacherDashboard` 从 `next/dynamic` 改为静态导入，避免出现 `Loading chunk ... TeacherDashboard_tsx failed (/_next/undefined)`。
+- 验证结果：`npm run lint`、`npx tsc --noEmit`、`npm run build` 均通过。
+- 若本地 dev 仍偶发历史缓存错误，请先停止进程后清理 `.next` 再重启：`rd /s /q .next && npm run dev`。
+
