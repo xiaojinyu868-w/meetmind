@@ -7,12 +7,11 @@ import { useState, useRef, useEffect, useCallback } from 'react';
 import { formatTimestampMs } from '@/lib/longcut';
 import { useAuth } from '@/lib/hooks/useAuth';
 import { conversationService, getEffectiveUserId } from '@/lib/services/conversation-service';
-import type { ConversationHistory, ConversationMessage } from '@/types/conversation';
+import type { ConversationHistory } from '@/types/conversation';
 import { ModelSelector } from './ModelSelector';
 import { ImageUpload, useImagePaste, type UploadedImage } from './ImageUpload';
 import { DEFAULT_MODEL_ID } from '@/lib/services/llm-service';
 import { ThinkingGuideRenderer } from './ThinkingGuideRenderer';
-import { StreamingMarkdown } from './StreamingMarkdown';
 
 interface Message {
   id: string;

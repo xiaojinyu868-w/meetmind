@@ -9,7 +9,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import Link from 'next/link';
 import { Header } from '@/components/Header';
-import type { Note, NoteSource, NoteWithSession } from '@/types';
+import type { NoteSource, NoteWithSession } from '@/types';
 
 // Demo 笔记数据
 const DEMO_NOTES: NoteWithSession[] = [

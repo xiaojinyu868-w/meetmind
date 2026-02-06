@@ -15,7 +15,18 @@ export interface SearchResult {
   score: number;
   source: 'notebook' | 'local';
   timestamp?: number;
-  metadata?: Record<string, any>;
+  metadata?: Record<string, unknown>;
+}
+
+interface NotebookSearchItem {
+  content?: string;
+  text?: string;
+  score?: number;
+  similarity?: number;
+  metadata?: {
+    timestamp?: number;
+    [key: string]: unknown;
+  };
 }
 
 /**
@@ -44,9 +55,9 @@ async function vectorSearch(query: string): Promise<SearchResult[]> {
 
   const data = await response.json();
   
-  return (data.results || []).map((r: any) => ({
-    content: r.content || r.text,
-    score: r.score || r.similarity || 0,
+  return (data.results as NotebookSearchItem[] || []).map((r) => ({
+    content: r.content || r.text || '',
+    score: r.score ?? r.similarity ?? 0,
     source: 'notebook' as const,
     timestamp: r.metadata?.timestamp,
     metadata: r.metadata,

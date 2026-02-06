@@ -82,7 +82,7 @@ const MAX_CHUNK_DURATION_SEC = 180;  // 3分钟
 /**
  * 使用 ffmpeg 将音频转换为 WAV 格式
  */
-async function convertToWav(audioBlob: Blob): Promise<Buffer> {
+async function _convertToWav(audioBlob: Blob): Promise<Buffer> {
   const ffmpegPath = getFfmpegPath();
   
   const arrayBuffer = await audioBlob.arrayBuffer();

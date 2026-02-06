@@ -31,6 +31,20 @@ interface RawSearchResult {
   displayUrl?: string;
 }
 
+interface BingWebPageResult {
+  name?: string;
+  url?: string;
+  snippet?: string;
+  displayUrl?: string;
+}
+
+interface SerpOrganicResult {
+  title?: string;
+  link?: string;
+  snippet?: string;
+  displayed_link?: string;
+}
+
 /**
  * 从上下文中提取搜索关键词
  */
@@ -110,10 +124,10 @@ async function bingSearch(query: string, options: SearchOptions = {}): Promise<R
   
   const data = await response.json();
   
-  return (data.webPages?.value || []).map((item: any) => ({
-    title: item.name,
-    url: item.url,
-    snippet: item.snippet,
+  return (data.webPages?.value as BingWebPageResult[] || []).map((item) => ({
+    title: item.name || '',
+    url: item.url || '',
+    snippet: item.snippet || '',
     displayUrl: item.displayUrl,
   }));
 }
@@ -145,10 +159,10 @@ async function serpApiSearch(query: string, options: SearchOptions = {}): Promis
   
   const data = await response.json();
   
-  return (data.organic_results || []).map((item: any) => ({
-    title: item.title,
-    url: item.link,
-    snippet: item.snippet,
+  return (data.organic_results as SerpOrganicResult[] || []).map((item) => ({
+    title: item.title || '',
+    url: item.link || '',
+    snippet: item.snippet || '',
     displayUrl: item.displayed_link,
   }));
 }

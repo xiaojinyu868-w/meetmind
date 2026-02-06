@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/lib/hooks/useAuth';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 
 export interface DedaoMenuProps {
   isOpen: boolean;
@@ -159,13 +160,14 @@ export function DedaoMenu({
             {isAuthenticated && user ? (
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 bg-gradient-to-br from-lilac-200 to-lilac-300 rounded-full flex items-center justify-center overflow-hidden">
-                  {user.avatar ? (
-                    <img src={user.avatar} alt={user.nickname} className="w-full h-full object-cover" />
-                  ) : (
-                    <span className="text-lg">
+                  <Avatar className="w-full h-full">
+                    {user.avatar ? (
+                      <AvatarImage src={user.avatar} alt={user.nickname} className="object-cover" />
+                    ) : null}
+                    <AvatarFallback className="bg-transparent text-lg">
                       {user.role === 'parent' ? '👨‍👩‍👧' : user.role === 'teacher' ? '👨‍🏫' : '👤'}
-                    </span>
-                  )}
+                    </AvatarFallback>
+                  </Avatar>
                 </div>
                 <div>
                   <p className="text-sm font-medium text-[var(--dedao-text)]">{user.nickname}</p>

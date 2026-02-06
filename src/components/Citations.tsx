@@ -32,19 +32,6 @@ export function Citations({
   const visibleCitations = isExpanded ? citations : citations.slice(0, maxVisible);
   const hasMore = citations.length > maxVisible;
 
-  // 来源类型图标
-  const sourceIcons: Record<Citation['source_type'], string> = {
-    web: '🌐',
-    knowledge_base: '📚',
-    transcript: '🎙️',
-  };
-
-  const sourceLabels: Record<Citation['source_type'], string> = {
-    web: '网页',
-    knowledge_base: '知识库',
-    transcript: '课堂转录',
-  };
-
   return (
     <div className="bg-gray-50 rounded-lg border border-gray-200 overflow-hidden">
       {/* 标题栏 */}

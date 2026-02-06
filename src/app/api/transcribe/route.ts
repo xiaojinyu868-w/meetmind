@@ -142,7 +142,7 @@ async function submitAsyncTask(
     
     console.log('[ASR] Task ID:', taskId);
     return { success: true, taskId };
-  } catch (e) {
+  } catch {
     return { success: false, error: '解析响应失败: ' + responseText };
   }
 }

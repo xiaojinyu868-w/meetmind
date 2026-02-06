@@ -29,7 +29,7 @@ export function AudioPlayer({
   breakpoints = [],
   onTimeUpdate,
   onBreakpointClick,
-  showWaveform = false,
+  showWaveform: _showWaveform = false,
   compact = false,
 }: AudioPlayerProps) {
   const audioRef = useRef<HTMLAudioElement>(null);

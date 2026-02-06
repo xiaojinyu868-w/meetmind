@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback, useEffect } from 'react';
+import { useEffect } from 'react';
 import { cn } from '@/lib/utils';
 
 export interface MenuDrawerProps {

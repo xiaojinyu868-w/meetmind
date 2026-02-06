@@ -24,7 +24,6 @@ import {
   type ClassroomData,
   type ConfusionHotspot,
   type ClassSession,
-  type AnchorType,
 } from '@/lib/services/classroom-data-service';
 import type { TranscriptSegment } from '@/types';
 
@@ -79,7 +78,7 @@ interface UseClassroomDataReturn {
 export function useClassroomData(options: UseClassroomDataOptions): UseClassroomDataReturn {
   const { sessionId, autoRefresh = false, refreshInterval = 5000, transcripts = [] } = options;
   
-  const { user, isAuthenticated } = useAuth();
+  const { user } = useAuth();
   
   // 状态
   const [isLoading, setIsLoading] = useState(true);

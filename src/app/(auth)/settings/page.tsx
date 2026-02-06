@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useAuth } from '@/lib/hooks/useAuth';
 import { getPreference, setPreference } from '@/lib/db';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 
 // 设置项的键名
 const SETTINGS_KEYS = {
@@ -113,11 +114,12 @@ export default function SettingsPage() {
           <section className="bg-white rounded-xl shadow-sm border border-gray-100 p-4">
             <div className="flex items-center gap-4">
               <div className="w-14 h-14 bg-gradient-to-br from-amber-100 to-amber-200 rounded-full flex items-center justify-center">
-                {user.avatar ? (
-                  <img src={user.avatar} alt={user.nickname} className="w-full h-full rounded-full object-cover" />
-                ) : (
-                  <span className="text-2xl">👤</span>
-                )}
+                <Avatar className="w-full h-full">
+                  {user.avatar ? (
+                    <AvatarImage src={user.avatar} alt={user.nickname} className="object-cover" />
+                  ) : null}
+                  <AvatarFallback className="bg-transparent text-2xl">👤</AvatarFallback>
+                </Avatar>
               </div>
               <div className="flex-1">
                 <h3 className="font-medium text-gray-900">{user.nickname}</h3>

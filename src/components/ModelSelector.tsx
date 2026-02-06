@@ -29,11 +29,6 @@ export function ModelSelector({ value, onChange, onMultimodalChange, className =
       .then(res => res.json())
       .then(data => {
         setModels(data.models || []);
-        // 初始化时通知父组件当前模型的多模态支持状态
-        const currentModel = (data.models || []).find((m: ModelConfig) => m.id === value);
-        if (currentModel && onMultimodalChange) {
-          onMultimodalChange(currentModel.supportsMultimodal ?? false);
-        }
       })
       .catch(console.error);
   }, []);

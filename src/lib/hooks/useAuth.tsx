@@ -238,7 +238,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
       
       return data;
-    } catch (error) {
+    } catch {
       return { success: false, error: '网络错误' };
     }
   }, []);
@@ -267,7 +267,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
       
       return data;
-    } catch (error) {
+    } catch {
       return { success: false, error: '网络错误' };
     }
   }, []);
@@ -296,7 +296,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
       
       return data;
-    } catch (error) {
+    } catch {
       return { success: false, error: '网络错误' };
     }
   }, []);

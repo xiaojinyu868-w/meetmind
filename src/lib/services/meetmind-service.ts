@@ -5,8 +5,7 @@
  * 实现 MeetMind MVP 的核心功能
  */
 
-import { notebookService } from './notebook-service';
-import { longcutService, type TranscriptSegment } from './longcut-service';
+import { type TranscriptSegment } from './longcut-service';
 import { 
   mergeSentences, 
   matchQuotes, 
@@ -86,7 +85,7 @@ export interface TutorResponse {
 
 // ==================== AI 家教 Prompt ====================
 
-const TUTOR_SYSTEM_PROMPT = `你是一位"课堂对齐"的 AI 家教。你的任务是帮助学生补懂课堂上没听懂的内容。
+const _TUTOR_SYSTEM_PROMPT = `你是一位"课堂对齐"的 AI 家教。你的任务是帮助学生补懂课堂上没听懂的内容。
 
 核心原则：
 1. 【证据链】必须引用老师的原话，格式：[引用 mm:ss-mm:ss]
@@ -117,7 +116,7 @@ export const meetmindService = {
   /**
    * 获取今日课程列表
    */
-  async getTodayLessons(studentId: string): Promise<Lesson[]> {
+  async getTodayLessons(_studentId: string): Promise<Lesson[]> {
     // TODO: 从数据库获取，目前返回 Mock 数据
     return [
       {
@@ -237,11 +236,11 @@ export const meetmindService = {
 
     // 2. 合并为完整段落
     const mergedSegments = mergeSentences(contextSegments);
-    const contextText = mergedSegments.map(s => s.text).join('\n');
+    const _contextText = mergedSegments.map(s => s.text).join('\n');
 
     // 3. 构建 Prompt
-    const userMessage = `【课堂转录】
-${contextText}
+    const _userMessage = `【课堂转录】
+${_contextText}
 
 【学生困惑点】
 时间位置: ${formatTimeRange(breakpoint.timestamp - 5000, breakpoint.timestamp + 5000)}
@@ -249,16 +248,16 @@ ${contextText}
 请按照格式要求，帮助学生理解这个知识点。`;
 
     // 4. 调用 Discussion 的 LLM 服务
-    const messages: ChatMessage[] = [
-      { role: 'system', content: TUTOR_SYSTEM_PROMPT },
-      { role: 'user', content: userMessage },
+    const _messages: ChatMessage[] = [
+      { role: 'system', content: _TUTOR_SYSTEM_PROMPT },
+      { role: 'user', content: _userMessage },
     ];
 
     try {
       // 服务不可用时使用 Mock 数据
       console.warn('Using mock response for tutor');
       return this.getMockTutorResponse(breakpoint, mergedSegments);
-    } catch (error) {
+    } catch {
       // 如果服务不可用，返回 Mock 数据
       console.warn('Service unavailable, using mock response');
       return this.getMockTutorResponse(breakpoint, mergedSegments);
@@ -271,10 +270,12 @@ ${contextText}
   async followUp(
     conversationId: string,
     message: string,
-    context: string
+    _context: string
   ): Promise<{ response: string; citations: Array<{ text: string; timeRange: string }> }> {
-    const messages: ChatMessage[] = [
-      { role: 'system', content: TUTOR_SYSTEM_PROMPT },
+    void conversationId;
+
+    const _messages: ChatMessage[] = [
+      { role: 'system', content: _TUTOR_SYSTEM_PROMPT },
       { role: 'user', content: message },
     ];
 
@@ -330,7 +331,7 @@ ${contextText}
   /**
    * 从响应中提取行动清单
    */
-  extractActionItems(content: string): ActionItem[] {
+  extractActionItems(_content: string): ActionItem[] {
     // 简化实现：返回默认的行动清单
     // TODO: 用正则或 LLM 解析实际内容
     return [

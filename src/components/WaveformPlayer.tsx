@@ -6,7 +6,7 @@
 
 import { useEffect, useRef, useCallback, useState, forwardRef, useImperativeHandle } from 'react';
 import WaveSurfer from 'wavesurfer.js';
-import RegionsPlugin, { Region } from 'wavesurfer.js/plugins/regions';
+import RegionsPlugin from 'wavesurfer.js/plugins/regions';
 import { formatTimestampMs } from '@/lib/longcut';
 import { cn } from '@/lib/utils';
 
@@ -224,7 +224,7 @@ export const WaveformPlayer = forwardRef<WaveformPlayerRef, WaveformPlayerProps>
         setTimeout(() => {
           try {
             wsInstance.destroy();
-          } catch (e) {
+          } catch {
             // 静默忽略所有销毁时的错误
           }
           
@@ -236,7 +236,7 @@ export const WaveformPlayer = forwardRef<WaveformPlayerRef, WaveformPlayerProps>
         }, 50);
       }
     };
-  }, [waveColor, progressColor, height]);
+  }, [waveColor, progressColor, height, onReady, onTimeUpdate, onPlayStateChange]);
 
   // 加载音频
   useEffect(() => {
@@ -360,14 +360,6 @@ export const WaveformPlayer = forwardRef<WaveformPlayerRef, WaveformPlayerProps>
       setIsMuted(true);
     }
   }, [isMuted, volume]);
-
-  // 进度条点击
-  const handleProgressClick = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
-    if (!wavesurferRef.current || duration === 0) return;
-    const rect = e.currentTarget.getBoundingClientRect();
-    const percent = (e.clientX - rect.left) / rect.width;
-    wavesurferRef.current.seekTo(percent);
-  }, [duration]);
 
   // 无音频时的占位
   if (!src) {

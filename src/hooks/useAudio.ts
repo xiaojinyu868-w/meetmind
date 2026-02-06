@@ -35,7 +35,7 @@ export function useAudio(options: UseAudioOptions = {}): UseAudioReturn {
   const [audioBlob, setAudioBlob] = useState<Blob | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTimeState] = useState(0);
-  const [duration, setDuration] = useState(0);
+  const [duration] = useState(0);
   
   const waveformRef = useRef<WaveformPlayerRef>(null);
 

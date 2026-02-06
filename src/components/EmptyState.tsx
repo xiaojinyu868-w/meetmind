@@ -29,11 +29,13 @@ export function EmptyState({
 
   return (
     <div className={`flex flex-col items-center justify-center p-8 text-center ${className}`}>
-      <div className="w-48 h-48 mb-6 opacity-80">
-        <img
+      <div className="relative w-48 h-48 mb-6 opacity-80">
+        <Image
           src={illustrationMap[illustration]}
           alt={title}
-          className="w-full h-full object-contain"
+          fill
+          sizes="192px"
+          className="object-contain"
         />
       </div>
       <h3 className="text-lg font-semibold text-navy mb-2">{title}</h3>

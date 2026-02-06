@@ -14,7 +14,6 @@ const SMS_SECRET_KEY = process.env.TENCENT_SMS_SECRET_KEY || '';
 const SMS_SDK_APP_ID = process.env.TENCENT_SMS_SDK_APP_ID || '';
 const SMS_SIGN_NAME = process.env.TENCENT_SMS_SIGN_NAME || 'MeetMind';
 const SMS_TEMPLATE_ID = process.env.TENCENT_SMS_TEMPLATE_ID || '';
-const APP_NAME = process.env.APP_NAME || 'MeetMind';
 
 // 腾讯云 API 地址
 const SMS_HOST = 'sms.tencentcloudapi.com';

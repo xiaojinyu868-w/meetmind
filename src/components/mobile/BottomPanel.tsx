@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef, useCallback, useEffect } from 'react';
+import { useState, useRef, useCallback } from 'react';
 import { useDragGesture } from '@/hooks/useDragGesture';
 import { cn } from '@/lib/utils';
 
@@ -27,12 +27,6 @@ export interface BottomPanelProps {
   /** 点击遮罩收起 */
   onOverlayClick?: () => void;
 }
-
-const STATE_HEIGHTS: Record<PanelState, number> = {
-  collapsed: 15,
-  partial: 45,
-  expanded: 85,
-};
 
 /**
  * 可拖拽底部面板组件

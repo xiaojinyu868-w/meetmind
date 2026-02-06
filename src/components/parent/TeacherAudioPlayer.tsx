@@ -138,7 +138,7 @@ export function TeacherAudioPlayer({
           {confusion.transcriptContext && (
             <div className="mb-6 p-4 bg-amber-50 rounded-2xl border border-amber-100">
               <p className="text-sm text-gray-700 leading-relaxed">
-                "{confusion.transcriptContext}"
+                &quot;{confusion.transcriptContext}&quot;
               </p>
             </div>
           )}

@@ -313,9 +313,7 @@ export function useSimpleSSEStream() {
               // 格式2: { content: '...' } (无 type 字段)
               else if ((parsed.type === 'content' || !parsed.type) && parsed.content) {
                 // 收到 content 说明思考阶段结束
-                if (isThinking) {
-                  setIsThinking(false);
-                }
+                setIsThinking(false);
                 fullContent += parsed.content;
                 setStreamingContent(fullContent);
                 onContent?.(parsed.content, fullContent);

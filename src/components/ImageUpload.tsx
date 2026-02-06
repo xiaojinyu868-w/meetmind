@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef, useCallback, useEffect } from 'react';
+import { useRef, useCallback, useEffect } from 'react';
 
 export interface UploadedImage {
   id: string;
@@ -120,6 +120,8 @@ export function ImageUpload({
           key={img.id}
           className="relative group w-12 h-12 rounded-lg overflow-hidden border border-gray-200 bg-gray-50 flex-shrink-0"
         >
+          {/* data URL 预览使用原生 img，避免 next/image 在 blob/base64 场景下引入额外约束 */}
+          {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
             src={img.dataUrl}
             alt={img.name}
@@ -253,6 +255,8 @@ export function ImagePreviewModal({
       onClick={onClose}
     >
       <div className="relative max-w-4xl max-h-[90vh] p-2">
+        {/* data URL 放大预览保持原生 img，避免运行时 loader 约束 */}
+        {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
           src={image.dataUrl}
           alt={image.name}

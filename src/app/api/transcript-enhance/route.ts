@@ -6,7 +6,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { chat, DEFAULT_MODEL_ID } from '@/lib/services/llm-service';
+import { chat } from '@/lib/services/llm-service';
 import type { TranscriptSegment } from '@/types';
 import { applyRateLimit } from '@/lib/utils/rate-limit';
 
@@ -99,7 +99,7 @@ export async function POST(request: NextRequest) {
 
   try {
     const body: EnhanceRequestBody = await request.json();
-    const { segments, model = 'qwen3-max-2026-01-23', isFinal = false } = body;
+    const { segments, model = 'qwen3-max-2026-01-23', isFinal: _isFinal = false } = body;
 
     if (!segments || !Array.isArray(segments) || segments.length === 0) {
       return NextResponse.json(

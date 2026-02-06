@@ -51,7 +51,7 @@ export async function POST(request: NextRequest) {
     }
 
     // 如果有上下文，添加到系统消息中
-    let finalMessages = [...messages];
+    const finalMessages = [...messages];
     if (context) {
       const systemIndex = finalMessages.findIndex(m => m.role === 'system');
       if (systemIndex >= 0) {

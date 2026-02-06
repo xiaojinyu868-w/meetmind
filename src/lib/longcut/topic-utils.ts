@@ -8,6 +8,13 @@ import { parseTimestampRange as parseTimestampRangeStrict } from './timestamp-ut
 
 type TopicSegment = Topic['segments'][number];
 
+function toRecord(value: unknown): Record<string, unknown> | null {
+  if (value && typeof value === 'object') {
+    return value as Record<string, unknown>;
+  }
+  return null;
+}
+
 function coerceToNumber(value: unknown): number | null {
   if (typeof value === 'number' && Number.isFinite(value)) {
     return value;
@@ -26,17 +33,20 @@ function coerceToNumber(value: unknown): number | null {
 function normalizeSegment(segment: TopicSegment | null | undefined): TopicSegment | null {
   if (!segment) return null;
 
-  const start = coerceToNumber((segment as any).start);
-  const end = coerceToNumber((segment as any).end);
+  const rawSegment = toRecord(segment);
+  if (!rawSegment) return null;
+
+  const start = coerceToNumber(rawSegment.start);
+  const end = coerceToNumber(rawSegment.end);
 
   if (start === null || end === null) {
     return null;
   }
 
-  const startSegmentIdx = coerceToNumber((segment as any).startSegmentIdx);
-  const endSegmentIdx = coerceToNumber((segment as any).endSegmentIdx);
-  const startCharOffset = coerceToNumber((segment as any).startCharOffset);
-  const endCharOffset = coerceToNumber((segment as any).endCharOffset);
+  const startSegmentIdx = coerceToNumber(rawSegment.startSegmentIdx);
+  const endSegmentIdx = coerceToNumber(rawSegment.endSegmentIdx);
+  const startCharOffset = coerceToNumber(rawSegment.startCharOffset);
+  const endCharOffset = coerceToNumber(rawSegment.endCharOffset);
 
   return {
     ...segment,
@@ -67,17 +77,18 @@ function normalizeTranscriptSegment(
 ): TranscriptSegment | null {
   if (!segment) return null;
 
-  const start = coerceToNumber((segment as any).start);
-  const duration = coerceToNumber((segment as any).duration);
+  const rawSegment = toRecord(segment);
+  if (!rawSegment) return null;
+
+  const start = coerceToNumber(rawSegment.start);
+  const duration = coerceToNumber(rawSegment.duration);
 
   if (start === null || duration === null) {
     return null;
   }
 
-  const text =
-    typeof (segment as any).text === 'string'
-      ? (segment as any).text
-      : String((segment as any).text ?? '');
+  const rawText = rawSegment.text;
+  const text = typeof rawText === 'string' ? rawText : String(rawText ?? '');
 
   return {
     text,
@@ -104,8 +115,8 @@ export function normalizeTranscript(
 function computeDuration(segments: TopicSegment[] = []): number {
   return segments.reduce((total, segment) => {
     if (!segment) return total;
-    const start = coerceToNumber((segment as any).start);
-    const end = coerceToNumber((segment as any).end);
+    const start = coerceToNumber(segment.start);
+    const end = coerceToNumber(segment.end);
     if (start === null || end === null) return total;
     return total + Math.max(0, end - start);
   }, 0);
@@ -123,7 +134,7 @@ function approximateTimeOffset(segment: TranscriptSegment | undefined, charOffse
     return 0;
   }
 
-  const duration = coerceToNumber((segment as any).duration);
+  const duration = coerceToNumber(segment.duration);
   if (duration === null || duration <= 0) {
     return 0;
   }
@@ -313,7 +324,8 @@ export function hydrateTopicsWithTranscript(
   let transcriptIndex: TranscriptIndex | null = null;
 
   return topics.map((topic) => {
-    let hydratedSegments = normalizeSegments((topic as any)?.segments);
+    const rawTopic = topic as Topic & { segments?: TopicSegment[] | null };
+    let hydratedSegments = normalizeSegments(rawTopic.segments);
 
     if (hasTranscript && hydratedSegments.length === 0) {
       if (topic.quote?.text) {

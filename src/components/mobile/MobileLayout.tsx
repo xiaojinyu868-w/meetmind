@@ -2,7 +2,7 @@
 
 import { useState, useCallback } from 'react';
 import { BottomPanel, BottomPanelHeader, PanelState } from './BottomPanel';
-import { MenuDrawer, DrawerMenuItem, DrawerDivider } from './MenuDrawer';
+import { MenuDrawer } from './MenuDrawer';
 import { cn } from '@/lib/utils';
 
 export interface MobileLayoutProps {

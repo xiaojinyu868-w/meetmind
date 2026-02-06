@@ -36,7 +36,9 @@ interface VerifyCodeResult {
  * 生成6位数字验证码
  */
 function generateCode(): string {
-  return String(randomInt(100000, 999999));
+  const min = 10 ** (CODE_LENGTH - 1);
+  const max = 10 ** CODE_LENGTH;
+  return String(randomInt(min, max));
 }
 
 /**

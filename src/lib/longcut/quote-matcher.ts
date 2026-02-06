@@ -132,7 +132,6 @@ export function buildTranscriptIndex(transcript: TranscriptSegment[]): Transcrip
     }
     
     const segmentStartPos = fullTextSpace.length;
-    const normalizedStartPos = normalizedText.length;
     const segmentNormalized = normalizeForMatching(segment.text);
     
     fullTextSpace += segment.text;
@@ -141,7 +140,7 @@ export function buildTranscriptIndex(transcript: TranscriptSegment[]): Transcrip
     
     // Build word index for this segment
     const words = segmentNormalized.split(/\s+/);
-    words.forEach((word, wordIdx) => {
+    words.forEach((word) => {
       if (word.length > 2) {
         const positions = wordIndex.get(word) || [];
         positions.push(idx);
@@ -202,7 +201,7 @@ export function findTextInTranscript(
 } | null {
   const {
     startIdx = 0,
-    strategy = 'all',
+    strategy: _strategy = 'all',
     minSimilarity = QUOTE_MATCH_CONFIG.FUZZY_MATCH_THRESHOLD,
     maxSegmentWindow = 30
   } = options;
@@ -348,7 +347,7 @@ export function mapNormalizedMatchToSegments(
   normalizedMatchIdx: number,
   normalizedTargetText: string,
   index: TranscriptIndex,
-  originalTargetText: string
+  _originalTargetText: string
 ): {
   found: boolean;
   startSegmentIdx: number;

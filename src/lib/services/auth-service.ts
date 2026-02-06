@@ -7,19 +7,16 @@
  * 数据存储：SQLite (通过 Prisma ORM)
  */
 
-import { createHash, randomBytes, createHmac } from 'crypto';
+import { randomBytes, createHmac } from 'crypto';
 import type {
   User,
-  UserWithAuth,
   UserRole,
   UserStatus,
   AuthProvider,
   AuthProviderLink,
-  UserSession,
   JWTPayload,
   RefreshTokenPayload,
   Permission,
-  ROLE_PERMISSIONS,
   RegisterRequest,
   LoginRequest,
   AuthResponse,
@@ -42,6 +39,20 @@ const ATTEMPT_WINDOW = AuthConfig.rateLimit.attemptWindowMs;
 
 // CSRF Token 配置
 const CSRF_TOKEN_EXPIRES = AuthConfig.csrf.tokenExpiresMs;
+
+interface DbUserRecord {
+  id: string;
+  username: string;
+  email: string | null;
+  phone: string | null;
+  nickname: string;
+  avatar: string | null;
+  role: string;
+  status: string;
+  createdAt: Date;
+  updatedAt: Date;
+  lastLoginAt: Date | null;
+}
 
 // 检查配置有效性
 if (!JWT_SECRET) {
@@ -415,7 +426,7 @@ function getRolePermissions(role: UserRole): Permission[] {
 /**
  * 将数据库用户转换为应用用户类型
  */
-function dbUserToUser(dbUser: any): User {
+function dbUserToUser(dbUser: DbUserRecord): User {
   return {
     id: dbUser.id,
     username: dbUser.username,

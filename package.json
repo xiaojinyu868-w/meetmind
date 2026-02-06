@@ -6,6 +6,8 @@
   "scripts": {
     "dev": "node server.js",
     "dev:next": "next dev -p 3001",
+    "prisma:generate": "prisma generate",
+    "prebuild": "npm run prisma:generate",
     "build": "next build",
     "start": "NODE_ENV=production node server.js",
     "start:next": "next start -p 3001",
@@ -84,6 +86,8 @@
     "@types/uuid": "^10.0.0",
     "@types/ws": "^8.18.1",
     "autoprefixer": "^10.4.0",
+    "eslint": "^8.57.1",
+    "eslint-config-next": "^14.2.35",
     "postcss": "^8.4.0",
     "tailwindcss": "^3.4.0",
     "typescript": "^5.3.0"

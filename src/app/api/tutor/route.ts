@@ -605,19 +605,6 @@ ${contextText}
  * 解析 AI 响应为结构化数据
  */
 function parseTutorResponse(content: string, segments: Segment[]) {
-  // 时间解析函数（与前端保持一致）
-  const parseTimeToMs = (time: string): number => {
-    const parts = time.split(':');
-    if (parts.length === 2) {
-      const minutes = parseInt(parts[0]);
-      const seconds = parseInt(parts[1]);
-      if (!isNaN(minutes) && !isNaN(seconds)) {
-        return (minutes * 60 + seconds) * 1000;
-      }
-    }
-    return 0;
-  };
-
   // 提取引用 [引用 xx:xx-xx:xx] 或单个时间戳 [引用 xx:xx]
   const citationMatch = content.match(/\[引用\s*(\d{1,2}:\d{2})(?:-(\d{1,2}:\d{2}))?\]/);
   let citation = null;
@@ -685,7 +672,7 @@ function parseTutorResponse(content: string, segments: Segment[]) {
         
         // 提取标题：去掉类型标签和时间信息，保留核心任务描述
         // 例如: "[回放] 再听一遍 00:25-00:35（3分钟）" -> "再听一遍 00:25-00:35"
-        let title = cleanedLine
+        const title = cleanedLine
           .replace(/\[回放\]\s*/, '')
           .replace(/\[练习\]\s*/, '')
           .replace(/\[复习\]\s*/, '')
@@ -771,6 +758,8 @@ function parseTutorResponse(content: string, segments: Segment[]) {
     actionItems,
   };
 }
+
+type ParsedTutorResponse = ReturnType<typeof parseTutorResponse>;
 
 /**
  * 从内容中提取老师原话
@@ -1043,10 +1032,10 @@ function extractKeywords(text: string): string[] {
  * 验证和修正时间戳引用
  */
 function validateAndCorrectTimestamp(
-  parsed: any, 
+  parsed: ParsedTutorResponse,
   segments: Segment[], 
   confusionTimestamp: number
-): any {
+): ParsedTutorResponse {
   if (!parsed.explanation?.citation) {
     return parsed;
   }

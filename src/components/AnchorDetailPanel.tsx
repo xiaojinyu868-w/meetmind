@@ -76,16 +76,6 @@ export function AnchorDetailPanel({
     return { before, at, after };
   }, [anchor, segments, contextBeforeMs, contextAfterMs]);
 
-  // 合并上下文文本
-  const fullContextText = useMemo(() => {
-    const allSegments = [
-      ...contextSegments.before,
-      ...contextSegments.at,
-      ...contextSegments.after,
-    ];
-    return allSegments.map(s => s.text).join(' ');
-  }, [contextSegments]);
-
   // 格式化时间
   const formatTime = useCallback((ms: number) => {
     const seconds = Math.floor(ms / 1000);

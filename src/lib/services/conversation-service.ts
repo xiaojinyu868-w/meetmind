@@ -5,7 +5,6 @@
  */
 
 import {
-  db,
   createConversationHistory,
   getConversationById,
   getConversationByAnchorId,
@@ -29,7 +28,6 @@ import type {
   AddMessageParams,
   ListConversationsParams,
   SearchConversationsParams,
-  MessageAttachment,
 } from '@/types/conversation';
 
 // ==================== 类型转换 ====================

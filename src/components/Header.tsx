@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useState, useTransition, useEffect, useCallback } from 'react';
 import { useAuth } from '@/lib/hooks/useAuth';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 
 interface HeaderProps {
   lessonTitle: string;
@@ -103,7 +104,6 @@ export function Header({ lessonTitle, courseName, userRole = 'student' }: Header
         {/* 角色切换 */}
         <nav className="flex items-center gap-1 p-1 rounded-xl" style={{ background: 'var(--edu-bg-soft)' }}>
           <RoleTab 
-            href="/" 
             label="学生" 
             icon="👤" 
             active={userRole === 'student'} 
@@ -112,7 +112,6 @@ export function Header({ lessonTitle, courseName, userRole = 'student' }: Header
             onHover={() => handleRoleHover('/')}
           />
           <RoleTab 
-            href="/parent" 
             label="家长" 
             icon="👨‍👩‍👧" 
             active={userRole === 'parent'}
@@ -121,7 +120,6 @@ export function Header({ lessonTitle, courseName, userRole = 'student' }: Header
             onHover={() => handleRoleHover('/parent')}
           />
           <RoleTab 
-            href="/teacher" 
             label="教师" 
             icon="👨‍🏫" 
             active={userRole === 'teacher'}
@@ -139,13 +137,14 @@ export function Header({ lessonTitle, courseName, userRole = 'student' }: Header
                 onClick={() => setShowUserMenu(!showUserMenu)}
                 className="w-9 h-9 bg-gradient-to-br from-lilac-200 to-lilac-300 rounded-full flex items-center justify-center hover:from-lilac-300 hover:to-lilac-400 transition-all overflow-hidden"
               >
-                {user.avatar ? (
-                  <img src={user.avatar} alt={user.nickname} className="w-full h-full object-cover" />
-                ) : (
-                  <span className="text-base">
+                <Avatar className="w-full h-full">
+                  {user.avatar ? (
+                    <AvatarImage src={user.avatar} alt={user.nickname} className="object-cover" />
+                  ) : null}
+                  <AvatarFallback className="bg-transparent text-base">
                     {user.role === 'parent' ? '👨‍👩‍👧' : user.role === 'teacher' ? '👨‍🏫' : '👤'}
-                  </span>
-                )}
+                  </AvatarFallback>
+                </Avatar>
               </button>
               
               {showUserMenu && (
@@ -206,7 +205,6 @@ export function Header({ lessonTitle, courseName, userRole = 'student' }: Header
 }
 
 function RoleTab({ 
-  href, 
   label, 
   icon, 
   active,
@@ -214,7 +212,6 @@ function RoleTab({
   onClick,
   onHover,
 }: { 
-  href: string; 
   label: string; 
   icon: string; 
   active: boolean;

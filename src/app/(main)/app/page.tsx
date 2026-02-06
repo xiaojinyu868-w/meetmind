@@ -2,15 +2,16 @@
 
 import { useState, useEffect, useCallback, useRef, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
+import Image from 'next/image';
 import { Header } from '@/components/Header';
 import { ServiceStatus, DegradedModeBanner } from '@/components/ServiceStatus';
 import { anchorService, type Anchor } from '@/lib/services/anchor-service';
 import { memoryService, type ClassTimeline } from '@/lib/services/memory-service';
 import { checkServices, type ServiceStatus as ServiceStatusType } from '@/lib/services/health-check';
-import { getPreference, setPreference, db, generateSessionId, saveAudioSession, addTranscripts, ANONYMOUS_USER_ID, resetAppState } from '@/lib/db';
+import { getPreference, setPreference, db, generateSessionId, saveAudioSession, addTranscripts, ANONYMOUS_USER_ID } from '@/lib/db';
 import { useAuth } from '@/lib/hooks/useAuth';
-import { classroomDataService, type StudentAnchor } from '@/lib/services/classroom-data-service';
-import type { TranscriptSegment, HighlightTopic, ClassSummary, Note, TopicGenerationMode, NoteSource, NoteMetadata } from '@/types';
+import { classroomDataService } from '@/lib/services/classroom-data-service';
+import type { TranscriptSegment, HighlightTopic, Note, TopicGenerationMode, NoteSource, NoteMetadata } from '@/types';
 import { useResponsive } from '@/hooks/useResponsive';
 import { UIConfig } from '@/lib/config';
 
@@ -22,23 +23,17 @@ import { WaveformPlayer, type WaveformPlayerRef, type WaveformAnchor } from '@/c
 
 // 开屏动画组件
 import { AppLoading } from '@/components/AppLoading';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 
 // 静态导入所有组件 - 解决 Next.js dynamic import chunk 加载失败问题
 import { Recorder } from '@/components/Recorder';
 import { TimelineView } from '@/components/TimelineView';
-import { AITutor } from '@/components/AITutor';
 import { ActionList } from '@/components/ActionList';
 import { ActionSidebar } from '@/components/ActionSidebar';
 import { ActionDrawer } from '@/components/ActionDrawer';
 import { ResizablePanel } from '@/components/layout/ResizablePanel';
-import { HighlightsPanel } from '@/components/HighlightsPanel';
-import { SummaryPanel } from '@/components/SummaryPanel';
-import { NotesPanel } from '@/components/NotesPanel';
 import { AudioUploader } from '@/components/AudioUploader';
-import { AnchorDetailPanel } from '@/components/AnchorDetailPanel';
-import { ConversationList } from '@/components/ConversationHistory';
-import { AIChat } from '@/components/AIChat';
-import { SessionHistoryList } from '@/components/SessionHistoryList';
+import { AITutor } from '@/components/AITutor';
 
 import type { ConfusionMarker } from '@/components/mobile/PodcastPlayer';
 import type { ConversationHistory } from '@/types/conversation';
@@ -47,6 +42,13 @@ import type { AudioSession } from '@/lib/db';
 // 用户引导组件
 import { useOnboarding } from '@/hooks/useOnboarding';
 import { OnboardingGuide, WelcomeModal } from '@/components/OnboardingGuide';
+import { HighlightsPanel } from '@/components/HighlightsPanel';
+import { SummaryPanel } from '@/components/SummaryPanel';
+import { NotesPanel } from '@/components/NotesPanel';
+import { AnchorDetailPanel } from '@/components/AnchorDetailPanel';
+import { ConversationList } from '@/components/ConversationHistory/ConversationList';
+import { AIChat } from '@/components/AIChat';
+import { SessionHistoryList } from '@/components/SessionHistoryList';
 
 // 演示数据延迟加载
 let DEMO_DATA_CACHE: { DEMO_SEGMENTS: TranscriptSegment[]; DEMO_ANCHORS: Anchor[]; DEMO_AUDIO_URL: string } | null = null;
@@ -76,7 +78,6 @@ type ReviewTab = 'timeline' | 'highlights' | 'summary' | 'notes' | 'anchor-detai
 
 // 持久化状态的 key
 const APP_STATE_KEY = 'app_last_state';
-const TUTOR_STATE_KEY = 'tutor_last_state';
 
 interface ActionItem {
   id: string;
@@ -379,7 +380,7 @@ function StudentAppContent({ isGuestFastEntry }: { isGuestFastEntry: boolean }) 
       hasTriggeredWelcome.current = true;
       setShowWelcome(true);
     }
-  }, [isGuestFastEntry, onboarding.isLoading, appReady, showSplash, onboarding.shouldShowFlow]);
+  }, [isGuestFastEntry, onboarding, appReady, showSplash]);
 
   // 处理开屏动画完成
   const handleSplashComplete = useCallback(() => {
@@ -416,7 +417,7 @@ function StudentAppContent({ isGuestFastEntry }: { isGuestFastEntry: boolean }) 
       duration: 0,
       createdBy: studentId,
     });
-  }, [studentId]);
+  }, [studentId, clearTopics, clearSummary]);
 
   const handleRecordingStop = useCallback((blob?: Blob) => {
     setIsRecording(false);
@@ -1014,11 +1015,12 @@ function StudentAppContent({ isGuestFastEntry }: { isGuestFastEntry: boolean }) 
                     onClick={() => setIsMenuOpen(true)}
                     className="w-8 h-8 bg-gradient-to-br from-lilac-200 to-lilac-300 rounded-full flex items-center justify-center overflow-hidden flex-shrink-0"
                   >
-                    {user.avatar ? (
-                      <img src={user.avatar} alt={user.nickname} className="w-full h-full object-cover" />
-                    ) : (
-                      <span className="text-sm">👤</span>
-                    )}
+                    <Avatar className="w-full h-full">
+                      {user.avatar ? (
+                        <AvatarImage src={user.avatar} alt={user.nickname} className="object-cover" />
+                      ) : null}
+                      <AvatarFallback className="bg-transparent text-sm">👤</AvatarFallback>
+                    </Avatar>
                   </button>
                 ) : (
                   <a
@@ -1230,13 +1232,25 @@ function StudentAppContent({ isGuestFastEntry }: { isGuestFastEntry: boolean }) 
             <div className="flex-1 flex items-center justify-center p-8 page-enter relative overflow-hidden" style={{ background: 'var(--edu-bg-primary)' }}>
               {/* 背景装饰 */}
               <div className="absolute top-10 right-10 w-48 h-48 opacity-20 pointer-events-none">
-                <img src="/illustrations/learning.svg" alt="" className="w-full h-full" />
+                <Image
+                  src="/illustrations/learning.svg"
+                  alt=""
+                  fill
+                  sizes="192px"
+                  className="w-full h-full"
+                />
               </div>
               <div className="absolute bottom-10 left-10 w-32 h-32 opacity-15 pointer-events-none">
-                <img src="/illustrations/ai-tutor.svg" alt="" className="w-full h-full" />
+                <Image
+                  src="/illustrations/ai-tutor.svg"
+                  alt=""
+                  fill
+                  sizes="128px"
+                  className="w-full h-full"
+                />
               </div>
               
-              <div className="w-full max-w-2xl space-y-6 relative z-10">
+              <div className="w-full max-w-2xl mx-auto space-y-6 relative z-10">
                 {/* 录音或上传切换 */}
                 <div className="flex items-center justify-center gap-4 mb-4">
                   <span className="text-sm text-gray-500">选择输入方式：</span>
@@ -1282,7 +1296,13 @@ function StudentAppContent({ isGuestFastEntry }: { isGuestFastEntry: boolean }) 
               <div className="relative">
                 {/* 装饰插画 */}
                 <div className="absolute -right-20 -top-10 w-24 h-24 opacity-30 pointer-events-none hidden lg:block">
-                  <img src="/illustrations/recording.svg" alt="" className="w-full h-full" />
+                  <Image
+                    src="/illustrations/recording.svg"
+                    alt=""
+                    fill
+                    sizes="96px"
+                    className="w-full h-full"
+                  />
                 </div>
                 <Recorder
                   onRecordingStart={handleRecordingStart}
@@ -1331,7 +1351,7 @@ function StudentAppContent({ isGuestFastEntry }: { isGuestFastEntry: boolean }) 
                     try {
                       const currentUserId = user?.id || ANONYMOUS_USER_ID;
                       await db.transcripts.bulkAdd(
-                        newSegments.map((seg, idx) => ({
+                        newSegments.map((seg) => ({
                           sessionId: newSessionId,
                           userId: currentUserId,
                           text: seg.text,
@@ -1812,11 +1832,12 @@ function StudentAppContent({ isGuestFastEntry }: { isGuestFastEntry: boolean }) 
                     onClick={() => setIsMenuOpen(true)}
                     className="w-8 h-8 bg-gradient-to-br from-lilac-200 to-lilac-300 rounded-full flex items-center justify-center overflow-hidden flex-shrink-0"
                   >
-                    {user.avatar ? (
-                      <img src={user.avatar} alt={user.nickname} className="w-full h-full object-cover" />
-                    ) : (
-                      <span className="text-sm">👤</span>
-                    )}
+                    <Avatar className="w-full h-full">
+                      {user.avatar ? (
+                        <AvatarImage src={user.avatar} alt={user.nickname} className="object-cover" />
+                      ) : null}
+                      <AvatarFallback className="bg-transparent text-sm">👤</AvatarFallback>
+                    </Avatar>
                   </button>
                 ) : (
                   <a

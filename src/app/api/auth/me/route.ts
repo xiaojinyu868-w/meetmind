@@ -10,7 +10,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { authService } from '@/lib/services/auth-service';
 import prisma from '@/lib/prisma';
-import type { UpdateProfileRequest } from '@/types/user';
+import type { UpdateProfileRequest, User, UserRole, UserStatus } from '@/types/user';
 
 /**
  * 从请求头获取并验证令牌
@@ -37,7 +37,7 @@ async function autoRegisterUser(payload: {
   email?: string;
   phone?: string;
   role?: string;
-}): Promise<any> {
+}): Promise<User | null> {
   try {
     // 从 payload 提取用户信息
     const userId = payload.sub;
@@ -45,7 +45,13 @@ async function autoRegisterUser(payload: {
     const nickname = payload.nickname || username;
     const email = payload.email || undefined;
     const phone = payload.phone || undefined;
-    const role = (payload.role as any) || 'student';
+    const role: UserRole =
+      payload.role === 'student' ||
+      payload.role === 'parent' ||
+      payload.role === 'teacher' ||
+      payload.role === 'admin'
+        ? payload.role
+        : 'student';
     
     console.log('[AutoRegister] 自动创建用户:', { userId, username, nickname });
     
@@ -75,8 +81,8 @@ async function autoRegisterUser(payload: {
       phone: newUser.phone || undefined,
       nickname: newUser.nickname,
       avatar: newUser.avatar || undefined,
-      role: newUser.role,
-      status: newUser.status,
+      role: newUser.role as UserRole,
+      status: newUser.status as UserStatus,
       createdAt: newUser.createdAt.toISOString(),
       updatedAt: newUser.updatedAt.toISOString(),
       lastLoginAt: newUser.lastLoginAt?.toISOString(),

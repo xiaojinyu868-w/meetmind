@@ -14,7 +14,6 @@ import type {
   WechatUserInfo,
   WechatTokenResponse,
   WechatAuthState,
-  User,
   AuthResponse,
 } from '@/types/user';
 import { authService } from './auth-service';

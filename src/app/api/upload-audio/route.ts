@@ -42,8 +42,8 @@ function cleanupOldFiles() {
         console.log('[Upload] Cleaned up old file:', file);
       }
     }
-  } catch (e) {
-    console.warn('[Upload] Cleanup error:', e);
+  } catch (error) {
+    console.warn('[Upload] Cleanup error:', error);
   }
 }
 
@@ -66,7 +66,7 @@ function getFfmpegPath(): string {
     if (ffmpegStatic && fs.existsSync(ffmpegStatic)) {
       return ffmpegStatic;
     }
-  } catch (e) {
+  } catch {
     // ignore
   }
   
@@ -140,7 +140,7 @@ export async function POST(request: NextRequest) {
         // 清理临时文件
         try {
           if (fs.existsSync(tempInputPath)) fs.unlinkSync(tempInputPath);
-        } catch (e) {
+        } catch {
           // ignore
         }
       }

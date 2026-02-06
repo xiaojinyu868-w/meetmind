@@ -15,7 +15,6 @@
 
 import { 
   db, 
-  generateSessionId,
   deleteSessionHighlightTopics,
   deleteSessionSummary,
   deleteSessionNotes,
@@ -197,17 +196,18 @@ export const classroomDataService = {
     const now = new Date().toISOString();
     
     const existingIndex = sessions.findIndex(s => s.id === session.id);
+    const existingSession = existingIndex >= 0 ? sessions[existingIndex] : undefined;
     
     const fullSession: ClassSession = {
       id: session.id,
-      subject: session.subject || '未知学科',
-      topic: session.topic,
-      teacherName: session.teacherName,
-      duration: session.duration || 0,
-      status: session.status || 'recording',
-      createdAt: existingIndex >= 0 ? sessions[existingIndex].createdAt : now,
+      subject: session.subject ?? existingSession?.subject ?? '未知学科',
+      topic: session.topic ?? existingSession?.topic,
+      teacherName: session.teacherName ?? existingSession?.teacherName,
+      duration: session.duration ?? existingSession?.duration ?? 0,
+      status: session.status ?? existingSession?.status ?? 'recording',
+      createdAt: existingSession?.createdAt ?? now,
       updatedAt: now,
-      createdBy: session.createdBy,
+      createdBy: session.createdBy ?? existingSession?.createdBy,
     };
     
     if (existingIndex >= 0) {

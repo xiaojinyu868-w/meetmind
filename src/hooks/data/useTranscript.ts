@@ -9,7 +9,6 @@
 
 import useSWRMutation from 'swr/mutation';
 import { useState, useCallback } from 'react';
-import { postFetcher } from '@/lib/swr';
 import type { TranscriptSegment } from '@/types';
 
 // ==================== 类型定义 ====================

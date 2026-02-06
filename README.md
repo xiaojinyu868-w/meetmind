@@ -115,7 +115,7 @@ npm run dev:next
 | `npm run dev:next` | 仅启动 Next.js（端口 3001） |
 | `npm run build` | 生产构建 |
 | `npm run start` | 生产运行 |
-| `npm run lint` | ESLint 代码检查 |
+| `npm run lint` | ESLint 代码检查（非交互，可直接用于 CI） |
 
 ### 环境变量配置
 
@@ -147,6 +147,24 @@ PUBLIC_PROTOCOL=http
 # ===== 可选：外部服务 =====
 # NEXT_PUBLIC_NOTEBOOK_API=http://localhost:5055
 # ENABLE_NOTEBOOK=true
+```
+
+### 常见问题
+
+```text
+Server Error: Cannot find module './xxxx.js' (来自 .next/server/webpack-runtime.js)
+```
+
+这是 `.next` 缓存与当前运行进程不一致导致的。修复步骤：
+
+```bash
+# 1) 先停止所有本项目 dev 进程（终端里 Ctrl+C）
+
+# 2) 删除构建缓存
+rd /s /q .next
+
+# 3) 重新启动
+npm run dev
 ```
 
 ---
@@ -333,6 +351,15 @@ meetmind/
 
 ### 最新更新
 
+#### v2.6 - 低开发熵治理（稳定性与可维护性）
+
+| 功能 | 描述 |
+|------|------|
+| **Lint 非交互化** | 新增 `.eslintrc.json`，`npm run lint` 可在本地/CI 直接执行，无交互提示 |
+| **类型与未使用代码清理** | 统一清理 hooks、middleware、services、longcut 模块中的类型告警与未使用变量 |
+| **构建基线验证** | 当前代码基线已验证 `npm run lint` 与 `npm run build` 均通过 |
+| **内测策略同步** | 微信登录链路保留接口能力，但当前内测阶段不作为主流程入口 |
+
 #### v2.5 - 自适应布局与多端体验优化
 
 | 功能 | 描述 |
@@ -506,3 +533,36 @@ MIT License
 ## 📞 联系我们
 
 如有问题或建议，欢迎提交 Issue 或 Pull Request。
+
+## 2026-02-06 Internal Beta Optimization Update
+
+- Lint is now non-interactive and runnable via npm run lint (CI friendly).
+- Kept gradual lint governance: legacy debt remains warnings to avoid blocking iteration.
+- Optimized src/app/(main)/app/page.tsx with dynamic imports and local decorative images via next/image.
+- Unified avatar rendering through shared `Avatar` component in app/profile/settings/header/mobile menu to reduce duplicate `<img>` usage.
+- Resolved all current `@next/next/no-img-element` warnings (data URL previews are explicitly documented and exempted where needed).
+- Verified build output: `/app` route is now `66.8 kB` (First Load JS `219 kB`).
+- This round prioritized low-entropy fixes only; high-risk refactors and non-critical hardening remain intentionally deferred.
+
+## 2026-02-06 内测稳定性补充更新（低熵）
+
+- 修复录音页居中偏移：`src/app/(main)/app/page.tsx` 中 3 处装饰图容器去除 `absolute + relative` 冲突定位，录音卡片中心偏移由 `+160px` 回到 `0px`。
+- 修复录音结束后复盘页潜在 chunk 失败：`AITutor` 从动态导入改为静态导入，避免开发态出现 `/_next/undefined` 的动态 chunk 加载路径。
+- 完整回归验证已通过：`npm run lint`、`npm run build`、自动化录音开始/结束流程、复盘页切换流程均无页面崩溃。
+
+## 2026-02-06 回归修复（录音与乱码）
+
+- 修复 `Recorder` 并发启动竞态：新增 `isStartingRecording` 启动锁，避免重复点击导致多套音频节点并行初始化。
+- 修复 `AudioNode` 跨 `AudioContext` 风险：录音启动阶段统一使用同一 `audioContext` 局部实例创建并连接 `source/analyser/processor`。
+- 增强异常清理：启动失败时统一回收 `MediaStream`、`ScriptProcessorNode`、`AudioContext`、计时器与动画帧句柄。
+- 清理中文乱码：修复 `dashscope-asr-service.ts`、`meetmind-service.ts`、`quota-service.ts` 的错误转码文本。
+- 修复录音历史 chunk 崩溃：`src/app/(main)/app/page.tsx` 中将 `SessionHistoryList` 等同页关键动态组件改为静态导入，避免 `Loading chunk ... (/_next/undefined)`。
+- 验证结果：`npm run lint`（0 warning）、`npx tsc --noEmit`、`npm run build` 全部通过；自动化回归覆盖“进入录音历史 -> 返回实时录音”路径无 chunk 报错。
+
+## 2026-02-06 回归修复（家长端困惑点同步）
+
+- 修复家长端学生标识写死问题：`src/app/parent/page.tsx` 不再固定使用 `demo-student`，改为优先使用当前登录用户，未登录时回退到最近有困惑点记录的学生。
+- 修复家长统计口径偏差：`src/lib/services/parent-service.ts` 的 `getTodayLearningStatus()` 只统计“目标学生相关会话”，避免把其他学生会话计入 `totalClasses` 后误判“没有标记困惑点”。
+- 修复会话归属丢失：`src/lib/services/classroom-data-service.ts` 的 `saveSession()` 更新会话时保留 `createdBy`（及已有元数据），避免后续更新把学生归属覆盖为 `undefined`。
+- 验证结果：`npm run lint`、`npx tsc --noEmit` 通过；并完成自动化回归（Playwright，模拟“学生已标困惑点 -> 家长端显示待解决”）验证通过。
+

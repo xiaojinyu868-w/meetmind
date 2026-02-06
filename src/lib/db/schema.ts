@@ -49,7 +49,7 @@ export interface TranscriptSegment {
 /** 用户偏好 */
 export interface Preference {
   key: string;
-  value: any;
+  value: unknown;
 }
 
 /** AI 精选片段 */

@@ -49,7 +49,7 @@ interface RawSummary {
  */
 function buildSummaryPrompt(
   segments: TranscriptSegment[],
-  options: GenerateSummaryOptions
+  _options: GenerateSummaryOptions
 ): string {
   const transcriptText = formatTranscriptWithTimestamps(segments);
 
@@ -114,7 +114,7 @@ ${transcriptText}
  */
 function buildParentFriendlyPrompt(
   segments: TranscriptSegment[],
-  options: GenerateSummaryOptions
+  _options: GenerateSummaryOptions
 ): string {
   const transcriptText = formatTranscriptWithTimestamps(segments);
 

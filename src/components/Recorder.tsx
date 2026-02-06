@@ -57,6 +57,8 @@ export function Recorder({
   const asrClientRef = useRef<DashScopeASRClient | null>(null);
   const transcriptRef = useRef<TranscriptSegment[]>([]);
   const pcmProcessorRef = useRef<ScriptProcessorNode | null>(null);
+  const isStartingRecordingRef = useRef(false);
+  const [isStartingRecording, setIsStartingRecording] = useState(false);
   
   // ASR 后处理增强管理器
   const enhanceManagerRef = useRef<TranscriptEnhanceManager | null>(null);
@@ -116,6 +118,13 @@ export function Recorder({
 
   // 开始录音
   const startRecording = async () => {
+    if (isStartingRecordingRef.current || status !== 'idle') return;
+
+    isStartingRecordingRef.current = true;
+    setIsStartingRecording(true);
+    let stream: MediaStream | null = null;
+    let audioContext: AudioContext | null = null;
+
     try {
       setError(null);
       audioChunksRef.current = [];
@@ -123,6 +132,30 @@ export function Recorder({
       transcriptRef.current = [];
       setInterimText('');
       setAnchorCount(0);
+
+      // 防御性清理：处理上一次异常中断遗留的音频节点
+      if (animationIdRef.current) {
+        cancelAnimationFrame(animationIdRef.current);
+        animationIdRef.current = null;
+      }
+      if (timerRef.current) {
+        clearInterval(timerRef.current);
+        timerRef.current = null;
+      }
+      if (pcmProcessorRef.current) {
+        pcmProcessorRef.current.disconnect();
+        pcmProcessorRef.current.onaudioprocess = null;
+        pcmProcessorRef.current = null;
+      }
+      if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+        mediaRecorderRef.current.stop();
+        mediaRecorderRef.current.stream.getTracks().forEach(track => track.stop());
+        mediaRecorderRef.current = null;
+      }
+      if (audioContextRef.current) {
+        await audioContextRef.current.close();
+        audioContextRef.current = null;
+      }
       
       // 初始化 ASR 后处理增强管理器
       setEnhancedSegments(new Map());
@@ -167,7 +200,7 @@ export function Recorder({
       });
       console.log('[Recorder] TranscriptEnhanceManager initialized');
 
-      const stream = await navigator.mediaDevices.getUserMedia({
+      stream = await navigator.mediaDevices.getUserMedia({
         audio: {
           channelCount: 1,
           echoCancellation: true,
@@ -177,11 +210,12 @@ export function Recorder({
 
       // 不强制指定采样率，让 AudioContext 自动匹配设备
       // 某些设备（如手机）不支持指定采样率，会导致 createMediaStreamSource 报错
-      audioContextRef.current = new AudioContext();
-      const source = audioContextRef.current.createMediaStreamSource(stream);
-      const actualSampleRate = audioContextRef.current.sampleRate;
+      audioContext = new AudioContext();
+      audioContextRef.current = audioContext;
+      const source = audioContext.createMediaStreamSource(stream);
+      const actualSampleRate = audioContext.sampleRate;
       console.log('[Recorder] AudioContext sampleRate:', actualSampleRate);
-      analyserRef.current = audioContextRef.current.createAnalyser();
+      analyserRef.current = audioContext.createAnalyser();
       analyserRef.current.fftSize = 256;
       source.connect(analyserRef.current);
 
@@ -307,7 +341,7 @@ export function Recorder({
           asrClientRef.current = null;
         } else {
           const bufferSize = 4096;
-          pcmProcessorRef.current = audioContextRef.current.createScriptProcessor(bufferSize, 1, 1);
+          pcmProcessorRef.current = audioContext.createScriptProcessor(bufferSize, 1, 1);
           
           // 重采样函数：将设备采样率转换为目标采样率 (16000Hz)
           const resample = (inputData: Float32Array, fromRate: number, toRate: number): Float32Array => {
@@ -340,7 +374,7 @@ export function Recorder({
           };
           
           source.connect(pcmProcessorRef.current);
-          pcmProcessorRef.current.connect(audioContextRef.current.destination);
+          pcmProcessorRef.current.connect(audioContext.destination);
         }
       }
 
@@ -371,7 +405,33 @@ export function Recorder({
       onRecordingStart?.(sessionIdRef.current);
 
     } catch (err) {
+      if (stream) {
+        stream.getTracks().forEach(track => track.stop());
+      }
+      if (pcmProcessorRef.current) {
+        pcmProcessorRef.current.disconnect();
+        pcmProcessorRef.current.onaudioprocess = null;
+        pcmProcessorRef.current = null;
+      }
+      if (audioContext) {
+        await audioContext.close().catch(() => {});
+        if (audioContextRef.current === audioContext) {
+          audioContextRef.current = null;
+        }
+      }
+      analyserRef.current = null;
+      if (animationIdRef.current) {
+        cancelAnimationFrame(animationIdRef.current);
+        animationIdRef.current = null;
+      }
+      if (timerRef.current) {
+        clearInterval(timerRef.current);
+        timerRef.current = null;
+      }
       setError(err instanceof Error ? err.message : '录音启动失败');
+    } finally {
+      isStartingRecordingRef.current = false;
+      setIsStartingRecording(false);
     }
   };
 
@@ -698,7 +758,7 @@ export function Recorder({
           <p className="text-sm text-gray-400 mb-8">点击开始录制课堂</p>
           <button
             onClick={startRecording}
-            disabled={disabled}
+            disabled={disabled || isStartingRecording}
             className="record-btn"
             aria-label="开始录音"
             data-onboarding="record-button"

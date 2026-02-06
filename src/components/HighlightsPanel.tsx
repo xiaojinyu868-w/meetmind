@@ -176,7 +176,7 @@ function TopicCard({ topic, index, isSelected, isPlaying, onSelect, onPlay }: To
           {/* 引用预览 */}
           {topic.quote && (
             <p className="mt-2 text-sm text-gray-600 line-clamp-2">
-              "{topic.quote.text.slice(0, 100)}..."
+              &quot;{topic.quote.text.slice(0, 100)}...&quot;
             </p>
           )}
         </div>

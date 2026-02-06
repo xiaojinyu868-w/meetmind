@@ -92,6 +92,14 @@ export interface DifyConfig {
   timeout?: number;
 }
 
+interface DifyWorkflowRunResponse {
+  data?: {
+    outputs?: Record<string, unknown>;
+  };
+  conversation_id?: string;
+  workflow_run_id?: string;
+}
+
 // ==================== Dify 服务类 ====================
 
 export class DifyService {
@@ -146,7 +154,7 @@ export class DifyService {
         );
       }
 
-      const data = await response.json();
+      const data = (await response.json()) as DifyWorkflowRunResponse;
       return this.parseWorkflowOutput(data);
     } catch (error) {
       if (error instanceof DifyError) throw error;
@@ -229,16 +237,19 @@ export class DifyService {
   /**
    * 解析工作流输出
    */
-  private parseWorkflowOutput(data: any): DifyWorkflowOutput {
-    const outputs = data.data?.outputs || {};
+  private parseWorkflowOutput(data: DifyWorkflowRunResponse): DifyWorkflowOutput {
+    const outputs = data.data?.outputs ?? {};
     
     // 解析引导问题
     let guidanceQuestion: GuidanceQuestion | undefined;
     if (outputs.guidance_question) {
       try {
-        guidanceQuestion = typeof outputs.guidance_question === 'string'
+        const parsedGuidance = typeof outputs.guidance_question === 'string'
           ? JSON.parse(outputs.guidance_question)
           : outputs.guidance_question;
+        if (parsedGuidance && typeof parsedGuidance === 'object') {
+          guidanceQuestion = parsedGuidance as GuidanceQuestion;
+        }
       } catch {
         console.warn('Failed to parse guidance_question');
       }
@@ -248,23 +259,32 @@ export class DifyService {
     let citations: Citation[] | undefined;
     if (outputs.citations) {
       try {
-        citations = typeof outputs.citations === 'string'
+        const parsedCitations = typeof outputs.citations === 'string'
           ? JSON.parse(outputs.citations)
           : outputs.citations;
+        if (Array.isArray(parsedCitations)) {
+          citations = parsedCitations as Citation[];
+        }
       } catch {
         console.warn('Failed to parse citations');
       }
     }
 
     return {
-      answer: outputs.answer || '',
+      answer: typeof outputs.answer === 'string' ? outputs.answer : '',
       guidance_question: guidanceQuestion,
-      option_followup: outputs.option_followup,
+      option_followup:
+        typeof outputs.option_followup === 'string'
+          ? outputs.option_followup
+          : undefined,
       citations: citations || [],
       conversation_id: data.conversation_id,
       metadata: {
-        model: outputs.model || 'unknown',
-        total_tokens: outputs.total_tokens || 0,
+        model: typeof outputs.model === 'string' ? outputs.model : 'unknown',
+        total_tokens:
+          typeof outputs.total_tokens === 'number'
+            ? outputs.total_tokens
+            : 0,
         workflow_run_id: data.workflow_run_id || '',
       },
     };
@@ -283,7 +303,7 @@ export interface DifyStreamEvent {
     node_type?: string;
     title?: string;
     text?: string;
-    outputs?: Record<string, any>;
+    outputs?: Record<string, unknown>;
   };
 }
 
@@ -293,7 +313,7 @@ export class DifyError extends Error {
   constructor(
     message: string,
     public statusCode: number,
-    public details?: any
+    public details?: unknown
   ) {
     super(message);
     this.name = 'DifyError';

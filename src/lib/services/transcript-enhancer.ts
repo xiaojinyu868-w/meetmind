@@ -73,7 +73,7 @@ function buildInputText(segments: TranscriptSegment[]): string {
 /**
  * 解析 LLM 输出
  */
-function parseEnhanceOutput(output: string): Map<string, string> {
+function _parseEnhanceOutput(output: string): Map<string, string> {
   const result = new Map<string, string>();
   
   try {
@@ -128,7 +128,7 @@ export async function enhanceTranscript(
   try {
     // 构建请求
     const inputText = buildInputText(segments);
-    const fullPrompt = ENHANCE_PROMPT + '\n' + inputText;
+    const _fullPrompt = ENHANCE_PROMPT + '\n' + inputText;
     
     console.log('[TranscriptEnhancer] Enhancing', segments.length, 'segments with', model);
     

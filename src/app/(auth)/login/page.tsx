@@ -23,6 +23,8 @@ type LoginMethod = 'password' | 'code';
 type LoginType = 'email' | 'phone';
 type AgreementType = 'terms' | 'privacy' | null;
 
+const WECHAT_LOGIN_ENABLED = process.env.NEXT_PUBLIC_ENABLE_WECHAT_LOGIN === 'true';
+
 // 协议内容结构化数据
 interface AgreementSection {
   title: string;
@@ -579,6 +581,11 @@ function LoginForm() {
 
   // 异步获取微信授权 URL，不阻塞 UI 渲染
   useEffect(() => {
+    if (!WECHAT_LOGIN_ENABLED || isAuthenticated) {
+      setWechatAuthUrl(null);
+      return;
+    }
+
     // 使用 requestIdleCallback 延迟获取，优先保证 UI 响应
     const fetchWechatUrl = () => {
       getWechatAuthUrl().then(setWechatAuthUrl);
@@ -591,7 +598,7 @@ function LoginForm() {
       const timer = setTimeout(fetchWechatUrl, 500);
       return () => clearTimeout(timer);
     }
-  }, [getWechatAuthUrl]);
+  }, [getWechatAuthUrl, isAuthenticated]);
 
   useEffect(() => {
     if (countdown > 0) {
@@ -985,7 +992,7 @@ function LoginForm() {
             </form>
 
             {/* 微信登录 */}
-            {wechatAuthUrl && (
+            {WECHAT_LOGIN_ENABLED && wechatAuthUrl && (
               <div className="mt-5 pt-5 border-t border-rose-200/50">
                 <a
                   href={wechatAuthUrl}

@@ -28,7 +28,7 @@ const execAsync = promisify(exec);
 // ==================== 配置 ====================
 
 const MAX_FILE_SIZE = 500 * 1024 * 1024;
-const SUPPORTED_FORMATS = [
+const _SUPPORTED_FORMATS = [
   'audio/mpeg', 'audio/mp3', 'audio/x-m4a', 'audio/mp4',
   'audio/wav', 'audio/webm', 'audio/ogg', 'audio/flac'
 ];
@@ -44,7 +44,7 @@ const PUBLIC_PROTOCOL = process.env.PUBLIC_PROTOCOL || 'http';
 // 分片配置（阿里云建议：3-5分钟最优，RPM限制100次/分钟）
 const SEGMENT_DURATION_SEC = 180;  // 每片 3 分钟
 const MIN_DURATION_FOR_SPLIT = 240; // 超过 4 分钟才分片
-const MAX_PARALLEL_TASKS = 10;     // 最大并行任务数（留有余量避免触发限流）
+const _MAX_PARALLEL_TASKS = 10;    // 最大并行任务数（留有余量避免触发限流）
 
 // ==================== 工具函数 ====================
 
@@ -297,7 +297,7 @@ async function processParallelTasks(
   console.log(`[Parallel] ${validTaskCount}/${segmentPaths.length} tasks submitted successfully`);
   
   // 2. 并行等待所有任务完成
-  const waitPromises = taskIds.map((taskId, index) => {
+  const waitPromises = taskIds.map((taskId) => {
     if (!taskId) {
       return Promise.resolve({ success: false, sentences: [] as ASRSentence[], error: '未提交' });
     }

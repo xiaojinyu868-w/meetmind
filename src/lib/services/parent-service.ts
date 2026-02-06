@@ -5,9 +5,8 @@
  * 直接基于 classroomDataService 的真实数据
  */
 
-import { classroomDataService, type StudentAnchor, type ClassSession } from './classroom-data-service';
+import { classroomDataService, type ClassSession } from './classroom-data-service';
 import { db } from '@/lib/db';
-import type { TranscriptSegment } from '@/types';
 import { chat } from './llm-service';
 
 // ==================== 类型定义 ====================
@@ -136,10 +135,12 @@ export const parentService = {
     // 获取所有课程会话
     const allSessions = classroomDataService.getAllSessions();
     
-    // 过滤出今天的会话（基于创建时间）
+    // 过滤出今天且属于目标学生的会话（避免把其他学生会话计入 totalClasses）
     const todaySessions = allSessions.filter(session => {
       const sessionDate = session.createdAt.split('T')[0];
-      return sessionDate === date;
+      if (sessionDate !== date) return false;
+      if (session.createdBy === studentId) return true;
+      return classroomDataService.getStudentAnchors(session.id, studentId).length > 0;
     });
     
     // 收集今天所有困惑点

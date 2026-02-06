@@ -143,7 +143,7 @@ export function ConfusionCard({
             <div className="mb-4">
               <p className="text-xs text-slate-500 mb-1">相关上下文</p>
               <p className="text-sm text-slate-400 bg-slate-800/30 rounded-lg px-3 py-2 italic">
-                "{confusion.context}"
+                &quot;{confusion.context}&quot;
               </p>
             </div>
           )}

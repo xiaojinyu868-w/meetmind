@@ -7,7 +7,6 @@ import {
   classroomDataService, 
   type ClassSession, 
   type ConfusionHotspot,
-  type StudentAnchor,
 } from '@/lib/services/classroom-data-service';
 import { db } from '@/lib/db';
 import type { TranscriptSegment } from '@/types';
@@ -108,7 +107,7 @@ interface TeacherDashboardProps {
 export function TeacherDashboard({ sessionId: propSessionId }: TeacherDashboardProps) {
   const [lesson, setLesson] = useState<LessonData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [, setError] = useState<string | null>(null);
   const [availableSessions, setAvailableSessions] = useState<ClassSession[]>([]);
   const [selectedSessionId, setSelectedSessionId] = useState<string>(propSessionId || '');
   const [isRealData, setIsRealData] = useState(false);

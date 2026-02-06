@@ -1,7 +1,6 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { useAuth } from '@/lib/hooks/useAuth';
 import { parentService, type TodayLearningStatus, type ConfusionMoment } from '@/lib/services/parent-service';
 import {
   TodayOverview,
@@ -12,6 +11,13 @@ import {
 } from '@/components/parent';
 import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
+import { useAuth } from '@/lib/hooks/useAuth';
+import { classroomDataService } from '@/lib/services/classroom-data-service';
+
+interface StudentProfile {
+  id: string;
+  name: string;
+}
 
 /**
  * 家长端骨架屏组件
@@ -75,8 +81,6 @@ function ParentPageSkeleton() {
 }
 
 export default function ParentPage() {
-  const { user } = useAuth();
-  
   // 核心状态
   const [learningStatus, setLearningStatus] = useState<TodayLearningStatus | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -84,13 +88,43 @@ export default function ParentPage() {
   
   // 播放器状态
   const [selectedConfusion, setSelectedConfusion] = useState<ConfusionMoment | null>(null);
+  const [targetStudent, setTargetStudent] = useState<StudentProfile>({ id: 'demo-student', name: '小明' });
   
-  // 学生信息（实际应从绑定关系获取）
-  const studentId = 'demo-student';
-  const studentName = '小明';
+  const { user } = useAuth();
+  const displayStudentName = learningStatus?.studentName || targetStudent.name;
+
+  // 解析当前应展示的学生：
+  // 1) 优先当前登录用户；2) 否则回退到最近一次有困惑点记录的学生；3) 再回退演示学生
+  const resolveTargetStudent = useCallback((): StudentProfile => {
+    if (user?.id) {
+      return {
+        id: user.id,
+        name: user.nickname || user.username || '匿名用户',
+      };
+    }
+
+    const sessions = classroomDataService
+      .getAllSessions()
+      .slice()
+      .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
+
+    for (const session of sessions) {
+      const sessionAnchors = classroomDataService.getSessionAnchors(session.id);
+      if (sessionAnchors.length === 0) continue;
+      const latestAnchor = sessionAnchors[sessionAnchors.length - 1];
+      return {
+        id: latestAnchor.studentId,
+        name: latestAnchor.studentName || '学生',
+      };
+    }
+
+    return { id: 'demo-student', name: '小明' };
+  }, [user?.id, user?.nickname, user?.username]);
   
   // 加载今日学情 - 优化：并行请求真实数据和演示数据
   const loadTodayStatus = useCallback(async () => {
+    const student = resolveTargetStudent();
+    setTargetStudent(student);
     setIsLoading(true);
     setError(null);
     
@@ -98,7 +132,7 @@ export default function ParentPage() {
       // 并行请求：真实数据 + 演示数据（作为 fallback）
       // 使用 Promise.allSettled 确保即使一个失败也能继续
       const [realDataResult, demoDataResult] = await Promise.allSettled([
-        parentService.getTodayLearningStatus(studentId, studentName),
+        parentService.getTodayLearningStatus(student.id, student.name),
         parentService.getDemoLearningStatus(),
       ]);
       
@@ -122,7 +156,7 @@ export default function ParentPage() {
     } finally {
       setIsLoading(false);
     }
-  }, [studentId, studentName]);
+  }, [resolveTargetStudent]);
   
   // 初始加载
   useEffect(() => {
@@ -177,7 +211,7 @@ export default function ParentPage() {
       return (
         <ParentEmptyState
           type="no-data"
-          studentName={studentName}
+          studentName={displayStudentName}
         />
       );
     }
@@ -189,7 +223,7 @@ export default function ParentPage() {
           <TodayOverview {...overview} className="mb-6" />
           <ParentEmptyState
             type="no-confusions"
-            studentName={studentName}
+            studentName={displayStudentName}
           />
         </>
       );
@@ -248,7 +282,7 @@ export default function ParentPage() {
             {/* 标题 */}
             <div>
               <h1 className="text-lg font-semibold text-gray-800">
-                {studentName}的学习情况
+                {displayStudentName}的学习情况
               </h1>
               <p className="text-xs text-gray-400">
                 {learningStatus?.date || new Date().toLocaleDateString('zh-CN')}

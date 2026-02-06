@@ -35,6 +35,19 @@ export interface NotebookSource {
   createdAt: string;
 }
 
+interface NotebookSearchResponseItem {
+  id: string;
+  content?: string;
+  text?: string;
+  score?: number;
+  similarity?: number;
+  source_title?: string;
+  source?: string;
+  timestamp?: number;
+  source_id?: string;
+  type?: string;
+}
+
 /**
  * Open Notebook 服务
  */
@@ -89,11 +102,11 @@ export const notebookService = {
       const data = await response.json();
       
       // 转换结果格式
-      return (data.results || []).map((item: any) => ({
+      return (data.results as NotebookSearchResponseItem[] || []).map((item) => ({
         id: item.id,
-        content: item.content || item.text,
-        score: item.score || item.similarity,
-        source: item.source_title || item.source,
+        content: item.content || item.text || '',
+        score: item.score ?? item.similarity ?? 0,
+        source: item.source_title || item.source || 'unknown',
         metadata: {
           timestamp: item.timestamp,
           sourceId: item.source_id,

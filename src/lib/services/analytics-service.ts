@@ -267,7 +267,7 @@ export async function trackEvents(events: EventParams[]) {
 /**
  * 获取综合统计数据
  */
-export async function getStats(query?: StatsQuery): Promise<AnalyticsStats> {
+export async function getStats(_query?: StatsQuery): Promise<AnalyticsStats> {
   const now = new Date();
   const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
   const yesterdayStart = new Date(todayStart);

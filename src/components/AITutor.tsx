@@ -6,11 +6,11 @@ import { formatTimestamp } from '@/lib/services/longcut-utils';
 import { notebookService, localSearch, type SearchResult } from '@/lib/services/notebook-service';
 import { ModelSelector } from './ModelSelector';
 import { GuidanceQuestion, GuidanceQuestionSkeleton } from './GuidanceQuestion';
-import { Citations, CitationsSkeleton } from './Citations';
+import { Citations } from './Citations';
 import { ImageUpload, useImagePaste, type UploadedImage } from './ImageUpload';
 import { useAuth } from '@/lib/hooks/useAuth';
 import { useSimpleSSEStream, type SSEEvent } from '@/lib/hooks/useSSEStream';
-import { saveTutorResponseCache, getTutorResponseCache, deleteTutorResponseCache, getPreference, setPreference, type TutorResponseCache, saveClassSummary, getSessionSummary } from '@/lib/db';
+import { saveTutorResponseCache, getTutorResponseCache, deleteTutorResponseCache, setPreference, saveClassSummary, getSessionSummary } from '@/lib/db';
 import { conversationService, getEffectiveUserId } from '@/lib/services/conversation-service';
 import type { GuidanceQuestion as GuidanceQuestionType, GuidanceOption, Citation } from '@/types/dify';
 import { DEFAULT_MODEL_ID } from '@/lib/services/llm-service';
@@ -130,7 +130,7 @@ export function AITutor({ breakpoint, segments, isLoading: externalLoading, onRe
     isThinking: isBreakpointThinking,
     streamingContent: breakpointStreamingContent,
     thinkingContent: breakpointThinkingContent,
-    clearContent: clearBreakpointContent,
+    clearContent: _clearBreakpointContent,
     clearStreamingOnly: clearBreakpointStreamingOnly,
   } = useSimpleSSEStream();
   
@@ -217,27 +217,6 @@ export function AITutor({ breakpoint, segments, isLoading: externalLoading, onRe
     return `${pad(minutes)}:${pad(seconds % 60)}`;
   }, []);
 
-  // 解析时间字符串为毫秒（支持单点和范围格式，增强鲁棒性）
-  const parseTimeToMs = useCallback((time: string): number => {
-    try {
-      // 处理范围格式 "MM:SS-MM:SS"，取开始时间
-      const rangeParts = time.split('-');
-      const startTime = rangeParts[0].trim();
-      
-      const parts = startTime.split(':');
-      if (parts.length === 2) {
-        const minutes = parseInt(parts[0].trim());
-        const seconds = parseInt(parts[1].trim());
-        if (!isNaN(minutes) && !isNaN(seconds) && minutes >= 0 && seconds >= 0 && seconds < 60) {
-          return (minutes * 60 + seconds) * 1000;
-        }
-      }
-    } catch (error) {
-      console.warn('Failed to parse timestamp:', time, error);
-    }
-    return 0;
-  }, []);
-
   // 处理时间戳点击 - 添加视觉反馈和验证
   const handleTimestampClick = useCallback((timeMs: number) => {
     // 验证时间戳有效性
@@ -255,57 +234,6 @@ export function AITutor({ breakpoint, segments, isLoading: externalLoading, onRe
     // 1.5秒后清除高亮状态
     setTimeout(() => setSeekingTimestamp(null), 1500);
   }, [onSeek, formatTime]);
-
-  // 解析文本中的时间戳并渲染为可点击链接（增强视觉反馈）
-  const renderTextWithTimestamps = useCallback((text: string) => {
-    // 匹配多种时间戳格式：[MM:SS] 或 [MM:SS-MM:SS] 或 MM:SS 或 MM:SS-MM:SS
-    const timestampRegex = /\[?(\d{1,2}:\d{2}(?:-\d{1,2}:\d{2})?)\]?/g;
-    const parts: React.ReactNode[] = [];
-    let lastIndex = 0;
-    let match;
-
-    while ((match = timestampRegex.exec(text)) !== null) {
-      // 添加时间戳前的文本
-      if (match.index > lastIndex) {
-        parts.push(<span key={`text-${lastIndex}`}>{text.slice(lastIndex, match.index)}</span>);
-      }
-
-      const timeString = match[1]; // 完整的时间字符串（可能包含范围）
-      const startMs = parseTimeToMs(timeString);
-      const isActive = seekingTimestamp === startMs;
-      
-      // 显示格式：如果是范围格式，显示范围；否则显示单点
-      const displayText = timeString;
-
-      parts.push(
-          <button
-          key={`ts-${match.index}`}
-          onClick={() => handleTimestampClick(startMs)}
-          className={`
-            inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-mono mx-0.5
-            transition-all duration-300 border
-            ${isActive 
-              ? 'bg-gradient-to-r from-amber-500 to-amber-600 text-white border-amber-600 shadow-lg shadow-amber-200 scale-110 animate-pulse' 
-              : 'bg-gradient-to-r from-amber-100 to-amber-50 text-amber-700 border-amber-200 hover:from-amber-200 hover:to-amber-100 hover:shadow-md hover:scale-105'
-            }
-          `}
-          title={`点击跳转到 ${displayText}`}
-        >
-          <span className={isActive ? 'animate-bounce' : ''}>▶</span>
-          {displayText}
-        </button>
-      );
-
-      lastIndex = match.index + match[0].length;
-    }
-
-    // 添加剩余文本
-    if (lastIndex < text.length) {
-      parts.push(<span key={`text-${lastIndex}`}>{text.slice(lastIndex)}</span>);
-    }
-
-    return parts.length > 0 ? parts : text;
-  }, [handleTimestampClick, seekingTimestamp, parseTimeToMs]);
 
   useEffect(() => {
     notebookService.isAvailable().then(setNotebookAvailable);
@@ -350,7 +278,7 @@ export function AITutor({ breakpoint, segments, isLoading: externalLoading, onRe
 
   // 当关键状态变化时保存
   useEffect(() => {
-    if (breakpoint && response) {
+    if (response) {
       saveCurrentState();
     }
   }, [breakpoint?.id, response, saveCurrentState]);
@@ -431,6 +359,7 @@ export function AITutor({ breakpoint, segments, isLoading: externalLoading, onRe
   }, [sessionId]);
 
   // 保存到缓存
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   const saveToCache = useCallback(async (
     resp: TutorAPIResponse,
     history: Array<{ role: 'user' | 'assistant'; content: string }>,
@@ -454,6 +383,7 @@ export function AITutor({ breakpoint, segments, isLoading: externalLoading, onRe
     } catch (err) {
       console.error('Failed to save to cache:', err);
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [breakpoint, sessionId]);
 
   // 同步到对话历史系统
@@ -577,7 +507,7 @@ export function AITutor({ breakpoint, segments, isLoading: externalLoading, onRe
     } finally {
       setIsLoading(false);
     }
-  }, [breakpoint, segments, selectedModel, enableWeb, accessToken, onActionItemsUpdate, saveToCache, handleSummaryFromResponse]);
+  }, [breakpoint, segments, selectedModel, enableWeb, accessToken, onActionItemsUpdate, saveToCache, handleSummaryFromResponse, sessionId]);
 
   useEffect(() => {
     // 只有在没有缓存数据且不在恢复状态时才自动加载
@@ -781,7 +711,7 @@ export function AITutor({ breakpoint, segments, isLoading: externalLoading, onRe
     isThinking: isGlobalThinking,
     streamingContent,
     thinkingContent: globalThinkingContent,
-    clearContent: clearGlobalContent,
+    clearContent: _clearGlobalContent,
     clearStreamingOnly: clearGlobalStreamingOnly,
   } = useSimpleSSEStream();
   
@@ -886,7 +816,7 @@ export function AITutor({ breakpoint, segments, isLoading: externalLoading, onRe
     } finally {
       setGlobalLoading(false);
     }
-  }, [userInput, segments, selectedModel, enableWeb, supportsMultimodal, uploadedImages, accessToken, userId, sessionId, globalFetchStream, clearGlobalContent]);
+  }, [userInput, segments, selectedModel, enableWeb, enableThinkingGuide, supportsMultimodal, uploadedImages, accessToken, userId, sessionId, globalFetchStream, clearGlobalStreamingOnly]);
 
   // 全局模式：停止生成
   const stopGlobalGeneration = useCallback(() => {
@@ -1393,7 +1323,7 @@ export function AITutor({ breakpoint, segments, isLoading: externalLoading, onRe
                       );
                     })
                   ) : (
-                    <span className="italic">"{response.explanation.teacherSaid}"</span>
+                    <span className="italic">&quot;{response.explanation.teacherSaid}&quot;</span>
                   )}
                 </div>
                 {response.explanation.citation.timeRange !== '00:00-00:00' && (

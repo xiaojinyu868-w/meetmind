@@ -6,7 +6,6 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { wechatAuthService } from '@/lib/services/wechat-auth-service';
-import { authService } from '@/lib/services/auth-service';
 
 /**
  * 获取微信授权 URL

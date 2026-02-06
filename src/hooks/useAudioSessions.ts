@@ -2,7 +2,7 @@
 // 使用 useLiveQuery 实现响应式数据
 
 import { useLiveQuery } from 'dexie-react-hooks';
-import { db, AudioSession, Anchor, TranscriptSegment } from '../lib/db';
+import { db } from '../lib/db';
 
 /**
  * 获取所有音频会话（响应式）

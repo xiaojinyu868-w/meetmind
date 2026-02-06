@@ -75,8 +75,6 @@ const ipRequestCache = new Map<string, { count: number; resetTime: number }>();
 
 // 内存缓存用户配额（减少数据库查询）
 const userQuotaCache = new Map<string, { data: UserQuotaData; expireAt: number }>();
-const CACHE_TTL = 60 * 1000; // 缓存1分钟
-
 interface UserQuotaData {
   dailyUsage: Record<QuotaType, number>;
   monthlyUsage: Record<QuotaType, number>;
@@ -95,6 +93,12 @@ interface QuotaCheckResult {
     daily: number;
     monthly: number;
   };
+}
+
+interface QuotaInfo {
+  used: { daily: number; monthly: number };
+  limit: { daily: number; monthly: number };
+  remaining: { daily: number; monthly: number };
 }
 
 export const quotaService = {
@@ -210,7 +214,6 @@ export const quotaService = {
     const actualUserId = userId || `guest_${ip || 'unknown'}`;
     const now = new Date();
     const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-    const thisMonth = new Date(now.getFullYear(), now.getMonth(), 1);
 
     try {
       // 使用 upsert 更新或创建记录
@@ -287,13 +290,9 @@ export const quotaService = {
   /**
    * 获取用户完整配额信息
    */
-  async getUserQuotaInfo(userId: string, role: string): Promise<Record<QuotaType, {
-    used: { daily: number; monthly: number };
-    limit: { daily: number; monthly: number };
-    remaining: { daily: number; monthly: number };
-  }>> {
+  async getUserQuotaInfo(userId: string, role: string): Promise<Record<QuotaType, QuotaInfo>> {
     const quotaTypes: QuotaType[] = ['transcribe', 'ai_summary', 'ai_topics', 'ai_tutor', 'ai_chat'];
-    const result: Record<string, { used: any; limit: any; remaining: any }> = {};
+    const result: Partial<Record<QuotaType, QuotaInfo>> = {};
 
     for (const quotaType of quotaTypes) {
       const usage = await this.getUserUsage(userId, quotaType);
@@ -309,7 +308,7 @@ export const quotaService = {
       };
     }
 
-    return result as any;
+    return result as Record<QuotaType, QuotaInfo>;
   },
 
   /**

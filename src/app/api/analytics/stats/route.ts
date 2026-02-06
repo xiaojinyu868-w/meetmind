@@ -9,6 +9,11 @@ import { NextRequest, NextResponse } from 'next/server';
 import analyticsService from '@/lib/services/analytics-service';
 import authService from '@/lib/services/auth-service';
 
+export const dynamic = 'force-dynamic';
+
+const DEFAULT_TREND_DAYS = 30;
+const MAX_TREND_DAYS = 90;
+
 export async function GET(request: NextRequest) {
   try {
     // 验证用户身份和权限 - 通过 Authorization header 获取 token
@@ -44,7 +49,10 @@ export async function GET(request: NextRequest) {
     // 获取查询参数
     const { searchParams } = new URL(request.url);
     const type = searchParams.get('type') || 'overview';
-    const days = parseInt(searchParams.get('days') || '30', 10);
+    const rawDays = Number.parseInt(searchParams.get('days') || `${DEFAULT_TREND_DAYS}`, 10);
+    const days = Number.isFinite(rawDays)
+      ? Math.min(Math.max(rawDays, 1), MAX_TREND_DAYS)
+      : DEFAULT_TREND_DAYS;
     
     let data;
     

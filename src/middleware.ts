@@ -61,14 +61,20 @@ function matchPath(pathname: string, patterns: string[]): boolean {
 /**
  * 验证 JWT 令牌（简化版，仅检查格式和过期时间）
  */
-function verifyToken(token: string): { valid: boolean; payload?: any } {
+type TokenPayload = {
+  exp?: number;
+  sub?: string;
+  role?: string;
+};
+
+function verifyToken(token: string): { valid: boolean; payload?: TokenPayload } {
   try {
     const parts = token.split('.');
     if (parts.length !== 3) return { valid: false };
     
     // Base64URL 解码
     const payloadStr = parts[1].replace(/-/g, '+').replace(/_/g, '/');
-    const payload = JSON.parse(Buffer.from(payloadStr, 'base64').toString('utf8'));
+    const payload = JSON.parse(Buffer.from(payloadStr, 'base64').toString('utf8')) as TokenPayload;
     
     // 检查过期时间
     if (payload.exp && payload.exp < Math.floor(Date.now() / 1000)) {
@@ -117,8 +123,12 @@ export function middleware(request: NextRequest) {
     
     // 将用户信息添加到请求头（供 API 路由使用）
     const requestHeaders = new Headers(request.headers);
-    requestHeaders.set('x-user-id', payload.sub);
-    requestHeaders.set('x-user-role', payload.role);
+    if (payload?.sub) {
+      requestHeaders.set('x-user-id', payload.sub);
+    }
+    if (payload?.role) {
+      requestHeaders.set('x-user-role', payload.role);
+    }
     
     return NextResponse.next({
       request: {

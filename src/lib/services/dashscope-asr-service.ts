@@ -95,7 +95,6 @@ export class DashScopeASRClient {
         
         // 尝试的端口列表：8443（备用）-> 默认端口
         const portsToTry = protocol === 'wss:' ? ['8443', defaultPort] : [defaultPort];
-        let currentPortIndex = 0;
         
         const tryConnect = (portIndex: number) => {
           if (portIndex >= portsToTry.length) {
@@ -112,18 +111,15 @@ export class DashScopeASRClient {
           console.log(`[DashScopeASR] Trying port ${port}:`, wsUrl);
           this.ws = new WebSocket(wsUrl);
           
-          let connectionTimeout: NodeJS.Timeout;
-          let resolved = false;
-          let connected = false;  // 标记是否已连接成功
-          
-          // 单个端口的连接超时（5秒）
-          connectionTimeout = setTimeout(() => {
+          const connectionTimeout: NodeJS.Timeout = setTimeout(() => {
             if (this.ws && this.ws.readyState === WebSocket.CONNECTING) {
               console.log(`[DashScopeASR] Port ${port} timeout, trying next...`);
               this.ws.close();
               tryConnect(portIndex + 1);
             }
           }, 5000);
+          let resolved = false;
+          let connected = false;  // 标记是否已连接成功
           
           this.ws.onopen = () => {
             clearTimeout(connectionTimeout);
@@ -361,7 +357,7 @@ export class DashScopeASRClient {
     // 发送停止指令
     try {
       this.ws.send(JSON.stringify({ action: 'stop' }));
-    } catch (e) {
+    } catch {
       // 忽略发送错误
     }
 

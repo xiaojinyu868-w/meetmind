@@ -8,6 +8,7 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useAuth } from '@/lib/hooks/useAuth';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 
 export default function ProfilePage() {
   const router = useRouter();
@@ -112,11 +113,12 @@ export default function ProfilePage() {
           <div className="relative px-8 pb-8">
             <div className="absolute -top-12 left-8">
               <div className="w-24 h-24 bg-white rounded-2xl shadow-lg flex items-center justify-center text-4xl border-4 border-white">
-                {user.avatar ? (
-                  <img src={user.avatar} alt={user.nickname} className="w-full h-full rounded-xl object-cover" />
-                ) : (
-                  <span>👤</span>
-                )}
+                <Avatar className="w-full h-full rounded-xl">
+                  {user.avatar ? (
+                    <AvatarImage src={user.avatar} alt={user.nickname} className="rounded-xl object-cover" />
+                  ) : null}
+                  <AvatarFallback className="rounded-xl bg-white text-4xl">👤</AvatarFallback>
+                </Avatar>
               </div>
             </div>
             
@@ -255,9 +257,9 @@ export default function ProfilePage() {
               </svg>
             </Link>
             
-            <Link
-              href="/profile/bindwechat"
-              className="flex items-center justify-between py-3 border-b border-gray-100 hover:bg-gray-50 -mx-4 px-4 rounded-lg transition-colors"
+            <div
+              className="flex items-center justify-between py-3 border-b border-gray-100 hover:bg-gray-50 -mx-4 px-4 rounded-lg transition-colors opacity-60 pointer-events-none"
+              title="WeChat login is disabled in beta"
             >
               <div className="flex items-center gap-3">
                 <span className="text-xl">💬</span>
@@ -266,7 +268,7 @@ export default function ProfilePage() {
               <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
               </svg>
-            </Link>
+            </div>
           </div>
         </div>
 

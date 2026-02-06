@@ -152,7 +152,6 @@ async function checkRateLimitRedis(
   apiType: RateLimitType
 ): Promise<RateLimitResult> {
   const limits = RATE_LIMITS[apiType];
-  const now = Date.now();
   
   const keyMinute = `ratelimit:${identifier}:${apiType}:minute`;
   const keyHour = `ratelimit:${identifier}:${apiType}:hour`;

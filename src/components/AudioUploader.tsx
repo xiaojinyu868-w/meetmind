@@ -108,8 +108,6 @@ export function AudioUploader({ onTranscriptReady, onError, disabled }: AudioUpl
       const progressStartTime = Date.now();
       const progressInterval = setInterval(() => {
         const elapsed = Date.now() - progressStartTime;
-        const estimatedProgress = startProgress + (elapsed / estimatedDurationMs) * progressRange;
-        
         // 使用 easeOut 曲线，越接近结束越慢（避免卡在某个点）
         const easedProgress = startProgress + progressRange * (1 - Math.pow(1 - Math.min(elapsed / estimatedDurationMs, 0.95), 2));
         

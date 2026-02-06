@@ -173,7 +173,7 @@ function ConfusionCard({
           {confusion.transcriptContext && (
             <div className="p-3 bg-white/60 rounded-xl">
               <p className="text-sm text-gray-600 leading-relaxed">
-                "{confusion.transcriptContext}"
+                &quot;{confusion.transcriptContext}&quot;
               </p>
             </div>
           )}
