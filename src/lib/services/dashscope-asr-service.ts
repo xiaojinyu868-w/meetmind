@@ -346,7 +346,9 @@ export class DashScopeASRClient {
    * 停止识别
    */
   async stop(): Promise<void> {
-    // 立即标记为停止状态，阻止后续音频发送
+    // 先阻止继续发送新音频，但不要立刻断开连接。
+    // 在高延迟网络（公网容器）下，立刻 close 会让已发送但未处理完的音频丢失，
+    // 服务端随后 commit 时会被判定为空流。
     this.isReady = false;
     this.updateStatus('stopped');
     
@@ -358,11 +360,16 @@ export class DashScopeASRClient {
     try {
       this.ws.send(JSON.stringify({ action: 'stop' }));
     } catch {
-      // 忽略发送错误
+      // 发送失败时直接关闭连接
+      this.closeConnection();
+      return;
     }
 
-    // 立即关闭连接，不等待服务器响应
-    this.closeConnection();
+    // 等待服务端完成 commit / close；超时后兜底关闭
+    await new Promise(resolve => setTimeout(resolve, 1500));
+    if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+      this.closeConnection();
+    }
   }
 
   /**

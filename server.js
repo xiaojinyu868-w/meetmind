@@ -118,11 +118,55 @@ app.prepare().then(() => {
     let sentenceIndex = 0;
     let sessionStartTime = Date.now();  // 立即初始化，用于计算相对时间戳
     let lastSentenceEndTime = 0;  // 跟踪上一个句子的结束时间
+    let hasAudioAppended = false; // 是否至少发送过一次有效音频
+    let hasCommittedAudioBuffer = false; // 防止重复 commit
+    let closeTimer = null; // 防止重复 close 定时器
+    let receivedBinaryChunks = 0; // 记录客户端传来的二进制音频包数量
+    let receivedBinaryBytes = 0; // 记录客户端传来的二进制音频总字节数
+    let appendedChunks = 0; // 记录成功 append 到 DashScope 的包数量
 
     // VAD 状态（前端检测的语音起止时间）
     let currentSpeechStartMs = null;  // 当前语音段的开始时间
     let lastSpeechEndMs = 0;          // 上一个语音段的结束时间
     const vadTimestampQueue = [];     // 备用队列模式（保留兼容）
+
+    function scheduleDashscopeClose(reason, delayMs = 200) {
+      if (closeTimer) return;
+      closeTimer = setTimeout(() => {
+        closeTimer = null;
+        if (dashscopeWs && dashscopeWs.readyState === WebSocket.OPEN) {
+          dashscopeWs.close(1000, reason);
+        }
+      }, delayMs);
+    }
+
+    function commitAudioBuffer(commitReason) {
+      if (!dashscopeWs || dashscopeWs.readyState !== WebSocket.OPEN) return false;
+
+      if (hasCommittedAudioBuffer) {
+        console.log(`[ASR-Proxy] Skip duplicate commit (${commitReason})`);
+        return false;
+      }
+
+      if (!hasAudioAppended && audioQueue.length === 0) {
+        console.log(`[ASR-Proxy] Skip commit (${commitReason}): no audio appended, recvChunks=${receivedBinaryChunks}, recvBytes=${receivedBinaryBytes}, queue=${audioQueue.length}`);
+        return false;
+      }
+
+      try {
+        const commitEvent = {
+          event_id: generateEventId(),
+          type: 'input_audio_buffer.commit',
+        };
+        dashscopeWs.send(JSON.stringify(commitEvent));
+        hasCommittedAudioBuffer = true;
+        console.log(`[ASR-Proxy] Audio buffer committed (${commitReason}), recvChunks=${receivedBinaryChunks}, recvBytes=${receivedBinaryBytes}, appended=${appendedChunks}, queue=${audioQueue.length}`);
+        return true;
+      } catch (err) {
+        console.error('[ASR-Proxy] Commit failed:', err);
+        return false;
+      }
+    }
 
 
     // 连接到百炼 WebSocket
@@ -340,6 +384,16 @@ app.prepare().then(() => {
 
             case 'error':
               const error = msg.error?.message || msg.message || '识别错误';
+              // 空音频提交是可恢复场景：不向前端抛 error，直接结束会话
+              if (
+                typeof error === 'string' &&
+                error.includes('Error committing input audio buffer') &&
+                !hasAudioAppended
+              ) {
+                console.warn('[ASR-Proxy] Ignore empty-audio commit error');
+                scheduleDashscopeClose('Client disconnected', 100);
+                break;
+              }
               console.error('[ASR-Proxy] Error:', msg.error || msg);
               clientWs.send(JSON.stringify({ event: 'error', error }));
               break;
@@ -385,9 +439,12 @@ app.prepare().then(() => {
     // 发送音频到百炼（使用 input_audio_buffer.append 事件，Base64 编码）
     function sendAudioToDashScope(pcmData) {
       if (!dashscopeWs || dashscopeWs.readyState !== WebSocket.OPEN) return;
+      const chunkSize = pcmData?.length || pcmData?.byteLength || 0;
+      if (chunkSize <= 0) return;
       
       // 将 PCM 数据转为 Base64
       const base64Audio = Buffer.from(pcmData).toString('base64');
+      if (!base64Audio) return;
       
       // 使用 input_audio_buffer.append 事件发送
       const appendEvent = {
@@ -397,6 +454,8 @@ app.prepare().then(() => {
       };
       
       dashscopeWs.send(JSON.stringify(appendEvent));
+      hasAudioAppended = true;
+      appendedChunks += 1;
     }
 
     // 发送队列中的音频
@@ -419,6 +478,11 @@ app.prepare().then(() => {
       // 优先使用 ws 库的 isBinary 标志
       // 如果明确是二进制，直接处理为音频
       if (isBinary) {
+        receivedBinaryChunks += 1;
+        receivedBinaryBytes += dataLen;
+        if (receivedBinaryChunks % 50 === 0) {
+          console.log(`[ASR-Proxy] Audio ingress: chunks=${receivedBinaryChunks}, bytes=${receivedBinaryBytes}`);
+        }
         if (isSessionReady) {
           sendAudioToDashScope(data);
         } else {
@@ -456,24 +520,14 @@ app.prepare().then(() => {
         
         if (msg.action === 'stop') {
           console.log('[ASR-Proxy] Stop requested');
-          if (dashscopeWs && dashscopeWs.readyState === WebSocket.OPEN) {
-            const commitEvent = {
-              event_id: generateEventId(),
-              type: 'input_audio_buffer.commit',
-            };
-            dashscopeWs.send(JSON.stringify(commitEvent));
-            console.log('[ASR-Proxy] Audio buffer committed');
-            
-            setTimeout(() => {
-              if (dashscopeWs && dashscopeWs.readyState === WebSocket.OPEN) {
-                dashscopeWs.close(1000, 'Client stop');
-              }
-            }, 2000);
-          }
+          const committed = commitAudioBuffer('client stop');
+          scheduleDashscopeClose('Client stop', committed ? 1200 : 100);
         }
       } catch (e) {
         // JSON 解析失败，可能是二进制音频数据被误判为文本
         // 尝试作为音频处理
+        receivedBinaryChunks += 1;
+        receivedBinaryBytes += dataLen;
         if (isSessionReady) {
           sendAudioToDashScope(data);
         } else {
@@ -483,21 +537,9 @@ app.prepare().then(() => {
     });
 
     clientWs.on('close', () => {
-      console.log('[ASR-Proxy] Client disconnected');
-      if (dashscopeWs && dashscopeWs.readyState === WebSocket.OPEN) {
-        try {
-          const commitEvent = {
-            event_id: generateEventId(),
-            type: 'input_audio_buffer.commit',
-          };
-          dashscopeWs.send(JSON.stringify(commitEvent));
-        } catch (e) {}
-        setTimeout(() => {
-          if (dashscopeWs && dashscopeWs.readyState === WebSocket.OPEN) {
-            dashscopeWs.close(1000, 'Client disconnected');
-          }
-        }, 1000);
-      }
+      console.log(`[ASR-Proxy] Client disconnected, recvChunks=${receivedBinaryChunks}, recvBytes=${receivedBinaryBytes}, appended=${appendedChunks}, queue=${audioQueue.length}`);
+      const committed = commitAudioBuffer('client disconnected');
+      scheduleDashscopeClose('Client disconnected', committed ? 800 : 100);
     });
 
 
