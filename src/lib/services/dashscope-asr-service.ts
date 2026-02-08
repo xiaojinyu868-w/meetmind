@@ -68,6 +68,20 @@ export class DashScopeASRClient {
     };
   }
 
+  private normalizeErrorMessage(error: unknown, fallback = '识别错误'): string {
+    if (typeof error === 'string') return error;
+    if (error && typeof error === 'object') {
+      const message = (error as { message?: unknown }).message;
+      if (typeof message === 'string' && message.trim()) return message;
+    }
+    return fallback;
+  }
+
+  private isIgnorableStopError(error: string): boolean {
+    if (typeof error !== 'string') return false;
+    return this.status === 'stopped' && /error committing input audio buffer/i.test(error);
+  }
+
   /**
    * 连接到后端 WebSocket 代理
    */
@@ -193,7 +207,12 @@ export class DashScopeASRClient {
       console.log('[DashScopeASR] Received:', msg.event || msg);
 
       if (msg.error) {
-        this.callbacks.onError?.(msg.error);
+        const errorMessage = this.normalizeErrorMessage(msg.error);
+        if (this.isIgnorableStopError(errorMessage)) {
+          console.warn('[DashScopeASR] Ignore stop-time commit error:', errorMessage);
+          return;
+        }
+        this.callbacks.onError?.(errorMessage);
         this.updateStatus('error');
         return;
       }
@@ -213,15 +232,32 @@ export class DashScopeASRClient {
           this.handleResult(msg.sentence);
           break;
 
+        case 'interim': {
+          const interimText = typeof msg.text === 'string' ? msg.text : '';
+          if (interimText) {
+            const elapsedMs = this.sessionStartTime > 0
+              ? Date.now() - this.sessionStartTime
+              : 0;
+            this.callbacks.onInterim?.(interimText, elapsedMs);
+          }
+          break;
+        }
+
         case 'finished':
           this.updateStatus('stopped');
           this.callbacks.onTaskFinished?.();
           break;
 
-        case 'error':
-          this.callbacks.onError?.(msg.error || '识别错误');
+        case 'error': {
+          const errorMessage = this.normalizeErrorMessage(msg.error ?? msg.message);
+          if (this.isIgnorableStopError(errorMessage)) {
+            console.warn('[DashScopeASR] Ignore stop-time error event:', errorMessage);
+            break;
+          }
+          this.callbacks.onError?.(errorMessage);
           this.updateStatus('error');
           break;
+        }
 
         case 'closed':
           this.updateStatus('stopped');

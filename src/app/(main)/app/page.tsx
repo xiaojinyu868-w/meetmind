@@ -630,6 +630,63 @@ function StudentAppContent({ isGuestFastEntry }: { isGuestFastEntry: boolean }) 
     setSegments(enhancedSegments);
   }, []);
 
+  const handleTranscriptTextUpdate = useCallback((segmentId: string, nextText: string) => {
+    const normalized = nextText.trim();
+    if (!normalized) return;
+
+    const targetSegment = segments.find(seg => seg.id === segmentId);
+    if (!targetSegment || targetSegment.text === normalized) return;
+
+    const updatedSegments = segments.map(seg =>
+      seg.id === segmentId ? { ...seg, text: normalized } : seg
+    );
+
+    setSegments(updatedSegments);
+    liveSegmentsRef.current = updatedSegments;
+
+    const metadata = timeline
+      ? { subject: timeline.subject, teacher: timeline.teacher, date: timeline.date }
+      : {
+          subject: UIConfig.defaultSubject,
+          teacher: UIConfig.defaultTeacher || 'Teacher',
+          date: new Date().toISOString().split('T')[0],
+        };
+
+    const nextTimeline = memoryService.buildTimeline(
+      sessionId,
+      updatedSegments,
+      anchors,
+      metadata
+    );
+    setTimeline(nextTimeline);
+    memoryService.save(nextTimeline);
+
+    // 按 session + 时间范围匹配持久化记录，避免依赖应用层临时 id。
+    void (async () => {
+      try {
+        const transcripts = await db.transcripts
+          .where('sessionId')
+          .equals(sessionId)
+          .toArray();
+        const matched = transcripts.filter(
+          (item) =>
+            item.startMs === targetSegment.startMs &&
+            item.endMs === targetSegment.endMs
+        );
+        if (matched.length === 0) return;
+
+        await db.transcripts.bulkPut(
+          matched.map((item) => ({
+            ...item,
+            text: normalized,
+          }))
+        );
+      } catch (err) {
+        console.error('[TranscriptEdit] Persist failed:', err);
+      }
+    })();
+  }, [anchors, segments, sessionId, timeline]);
+
   const handleAnchorMark = useCallback((timestamp: number) => {
     // 修正时间戳：如果 segments 存在，将 anchor 时间戳对齐到最近的 segment
     // 这是因为前端 elapsedMs 和后端 ASR 时间戳可能存在偏差
@@ -1084,6 +1141,7 @@ function StudentAppContent({ isGuestFastEntry }: { isGuestFastEntry: boolean }) 
                         onRecordingStart={handleRecordingStart}
                         onRecordingStop={handleRecordingStop}
                         onTranscriptUpdate={handleTranscriptUpdate}
+                        onTranscriptTextUpdate={handleTranscriptTextUpdate}
                         onTranscriptEnhanced={handleTranscriptEnhanced}
                         onAnchorMark={handleAnchorMark}
                       />
@@ -1250,9 +1308,9 @@ function StudentAppContent({ isGuestFastEntry }: { isGuestFastEntry: boolean }) 
                 />
               </div>
               
-              <div className="w-full max-w-2xl mx-auto space-y-6 relative z-10">
+              <div className="w-full max-w-2xl mx-auto relative z-10 h-full min-h-0 flex flex-col gap-6">
                 {/* 录音或上传切换 */}
-                <div className="flex items-center justify-center gap-4 mb-4">
+                <div className="flex-shrink-0 flex items-center justify-center gap-4 mb-4">
                   <span className="text-sm text-gray-500">选择输入方式：</span>
               <div 
                 className="flex items-center gap-2 p-1 rounded-xl" 
@@ -1293,7 +1351,7 @@ function StudentAppContent({ isGuestFastEntry }: { isGuestFastEntry: boolean }) 
             </div>
 
             {dataSource === 'live' && !showSessionHistory ? (
-              <div className="relative">
+              <div className="relative flex-1 min-h-0">
                 {/* 装饰插画 */}
                 <div className="absolute -right-20 -top-10 w-24 h-24 opacity-30 pointer-events-none hidden lg:block">
                   <Image
@@ -1308,6 +1366,7 @@ function StudentAppContent({ isGuestFastEntry }: { isGuestFastEntry: boolean }) 
                   onRecordingStart={handleRecordingStart}
                   onRecordingStop={handleRecordingStop}
                   onTranscriptUpdate={handleTranscriptUpdate}
+                  onTranscriptTextUpdate={handleTranscriptTextUpdate}
                   onTranscriptEnhanced={handleTranscriptEnhanced}
                   onAnchorMark={handleAnchorMark}
                 />
@@ -1544,6 +1603,7 @@ function StudentAppContent({ isGuestFastEntry }: { isGuestFastEntry: boolean }) 
                             const anchor = anchors.find(a => a.id === bp.id);
                             if (anchor) handleAnchorSelect(anchor);
                           }}
+                          onSegmentTextUpdate={handleTranscriptTextUpdate}
                         />
                       )}
                       
@@ -1950,6 +2010,9 @@ function StudentAppContent({ isGuestFastEntry }: { isGuestFastEntry: boolean }) 
                         } as ConfusionMarker & { context?: string });
                         handleAnchorSelect(anchor);
                       }
+                    }}
+                    onEntryTextUpdate={(entry, text) => {
+                      handleTranscriptTextUpdate(entry.id, text);
                     }}
                     className="flex-1 min-h-0"
                   />

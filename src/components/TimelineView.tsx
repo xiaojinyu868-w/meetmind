@@ -1,5 +1,6 @@
-'use client';
+﻿'use client';
 
+import { useCallback, useState } from 'react';
 import type { Timeline, Breakpoint } from '@/lib/services/meetmind-service';
 import { formatTimestamp } from '@/lib/services/longcut-utils';
 
@@ -9,6 +10,7 @@ interface TimelineViewProps {
   selectedBreakpoint: Breakpoint | null;
   onTimeClick: (timeMs: number) => void;
   onBreakpointClick: (breakpoint: Breakpoint) => void;
+  onSegmentTextUpdate?: (segmentId: string, text: string) => void;
 }
 
 export function TimelineView({
@@ -17,45 +19,71 @@ export function TimelineView({
   selectedBreakpoint,
   onTimeClick,
   onBreakpointClick,
+  onSegmentTextUpdate,
 }: TimelineViewProps) {
+  const [editingSegmentId, setEditingSegmentId] = useState<string | null>(null);
+  const [draftText, setDraftText] = useState('');
+  const [editingOriginalText, setEditingOriginalText] = useState('');
+
+  const startEditing = useCallback((segmentId: string, currentText: string) => {
+    if (!onSegmentTextUpdate) return;
+    setEditingSegmentId(segmentId);
+    setDraftText(currentText);
+    setEditingOriginalText(currentText);
+  }, [onSegmentTextUpdate]);
+
+  const cancelEditing = useCallback(() => {
+    setEditingSegmentId(null);
+    setDraftText('');
+    setEditingOriginalText('');
+  }, []);
+
+  const saveEditing = useCallback(() => {
+    if (!editingSegmentId || !onSegmentTextUpdate) {
+      cancelEditing();
+      return;
+    }
+
+    const normalized = draftText.trim();
+    if (!normalized || normalized === editingOriginalText.trim()) {
+      cancelEditing();
+      return;
+    }
+
+    onSegmentTextUpdate(editingSegmentId, normalized);
+    cancelEditing();
+  }, [cancelEditing, draftText, editingOriginalText, editingSegmentId, onSegmentTextUpdate]);
+
   const totalDuration = timeline.segments[timeline.segments.length - 1]?.endMs || 1;
   const progressPercent = (currentTime / totalDuration) * 100;
-  const unresolvedCount = timeline.breakpoints.filter(bp => !bp.resolved).length;
+  const unresolvedCount = timeline.breakpoints.filter((bp) => !bp.resolved).length;
 
   return (
     <div className="h-full flex flex-col overflow-hidden">
-      {/* 头部统计 */}
       <div className="px-4 py-3 border-b border-gray-100">
         <div className="flex items-center justify-between mb-3">
           <h2 className="text-sm font-semibold text-navy">课堂时间轴</h2>
           {unresolvedCount > 0 && (
-            <span className="badge badge-streaming">
-              {unresolvedCount} 待解决
-            </span>
+            <span className="badge badge-streaming">{unresolvedCount} 待解决</span>
           )}
         </div>
-        
-        {/* 进度条 */}
+
         <div className="relative">
           <div className="flex items-center justify-between text-xs text-gray-400 mb-1.5">
             <span className="font-mono">{formatTimestamp(currentTime)}</span>
             <span className="font-mono">{formatTimestamp(totalDuration)}</span>
           </div>
           <div className="h-2 bg-gray-100 rounded-full relative overflow-visible">
-            {/* 进度 */}
             <div
               className="absolute left-0 top-0 h-full bg-gradient-to-r from-amber-400 to-amber-500 rounded-full transition-all duration-100"
               style={{ width: `${progressPercent}%` }}
             />
-            {/* 断点标记 */}
             {timeline.breakpoints.map((bp) => (
               <button
                 key={bp.id}
                 onClick={() => onBreakpointClick(bp)}
                 className={`absolute top-1/2 -translate-y-1/2 -translate-x-1/2 w-4 h-4 rounded-full border-2 border-white shadow-md transition-all hover:scale-125 z-10 ${
-                  bp.resolved 
-                    ? 'bg-mint' 
-                    : 'bg-coral animate-pulse'
+                  bp.resolved ? 'bg-mint' : 'bg-coral animate-pulse'
                 } ${selectedBreakpoint?.id === bp.id ? 'ring-2 ring-amber-300 scale-125' : ''}`}
                 style={{ left: `${(bp.timestamp / totalDuration) * 100}%` }}
                 title={`${formatTimestamp(bp.timestamp)} - ${bp.resolved ? '已解决' : '待解决'}`}
@@ -65,12 +93,9 @@ export function TimelineView({
         </div>
       </div>
 
-      {/* 主题标签 */}
       {timeline.topics.length > 0 && (
         <div className="px-4 py-3 border-b border-gray-100">
-          <h3 className="text-xs font-medium text-gray-400 uppercase tracking-wider mb-2">
-            知识点
-          </h3>
+          <h3 className="text-xs font-medium text-gray-400 uppercase tracking-wider mb-2">知识点</h3>
           <div className="flex gap-1.5 flex-wrap">
             {timeline.topics.map((topic, index) => {
               const isActive = currentTime >= topic.startMs && currentTime < topic.endMs;
@@ -92,47 +117,77 @@ export function TimelineView({
         </div>
       )}
 
-      {/* 转录列表 - 紧凑布局 */}
       <div className="flex-1 min-h-0 overflow-y-auto">
         <div className="px-4 py-3">
-          <h3 className="text-xs font-medium text-gray-400 uppercase tracking-wider mb-3">
-            课堂转录
-          </h3>
+          <h3 className="text-xs font-medium text-gray-400 uppercase tracking-wider mb-3">课堂转录</h3>
           <div className="space-y-0.5">
             {timeline.segments.map((segment, index) => {
               const isActive = currentTime >= segment.startMs && currentTime < segment.endMs;
               const breakpoint = timeline.breakpoints.find(
                 (bp) => bp.timestamp >= segment.startMs && bp.timestamp < segment.endMs
               );
-              
-              // 检查是否与上一个片段时间相近（3秒内），用于合并显示时间戳
+
               const prevSegment = index > 0 ? timeline.segments[index - 1] : null;
-              const showTimestamp = !prevSegment || (segment.startMs - prevSegment.startMs > 3000);
+              const showTimestamp = !prevSegment || segment.startMs - prevSegment.startMs > 3000;
+              const isEditing = editingSegmentId === segment.id;
 
               return (
                 <div
                   key={segment.id}
-                  onClick={() => onTimeClick(segment.startMs)}
+                  onClick={() => {
+                    if (isEditing) return;
+                    onTimeClick(segment.startMs);
+                  }}
                   className={`relative py-1 px-2 rounded cursor-pointer transition-colors ${
-                    isActive 
-                      ? 'bg-lilac-100/50 text-navy' 
-                      : 'hover:bg-surface-soft text-gray-700'
+                    isActive ? 'bg-lilac-100/50 text-navy' : 'hover:bg-surface-soft text-gray-700'
                   }`}
                 >
                   {breakpoint && (
-                    <div className={`absolute left-0 top-1/2 -translate-y-1/2 w-1.5 h-1.5 rounded-full ${
-                      breakpoint.resolved ? 'bg-mint' : 'bg-coral'
-                    }`} />
+                    <div
+                      className={`absolute left-0 top-1/2 -translate-y-1/2 w-1.5 h-1.5 rounded-full ${
+                        breakpoint.resolved ? 'bg-mint' : 'bg-coral'
+                      }`}
+                    />
                   )}
+
                   <div className="flex items-baseline gap-2 pl-3">
                     {showTimestamp && (
                       <span className="flex-shrink-0 text-xs font-mono text-gray-400 w-10">
                         {formatTimestamp(segment.startMs)}
                       </span>
                     )}
-                    <p className={`text-sm leading-relaxed ${!showTimestamp ? 'ml-12' : ''}`}>
-                      {segment.text}
-                    </p>
+
+                    <div className={`flex-1 min-w-0 ${!showTimestamp ? 'ml-12' : ''}`}>
+                      {isEditing ? (
+                        <textarea
+                          value={draftText}
+                          onChange={(e) => setDraftText(e.target.value)}
+                          onBlur={saveEditing}
+                          onClick={(e) => e.stopPropagation()}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Escape') {
+                              e.preventDefault();
+                              cancelEditing();
+                            }
+                          }}
+                          className="w-full min-h-[80px] rounded-lg border border-amber-200 bg-white px-2.5 py-2 text-sm leading-relaxed focus:outline-none focus:ring-2 focus:ring-amber-200"
+                          autoFocus
+                        />
+                      ) : onSegmentTextUpdate ? (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            startEditing(segment.id, segment.text);
+                          }}
+                          className="w-full text-left text-sm leading-relaxed rounded-md px-1 py-0.5 -mx-1 hover:bg-white/70 transition-colors cursor-text"
+                          title="点击编辑"
+                        >
+                          {segment.text}
+                        </button>
+                      ) : (
+                        <p className="text-sm leading-relaxed">{segment.text}</p>
+                      )}
+                    </div>
                   </div>
                 </div>
               );
@@ -141,12 +196,11 @@ export function TimelineView({
         </div>
       </div>
 
-      {/* 底部快捷操作 */}
       <div className="px-4 py-3 border-t border-gray-100">
         <div className="flex gap-2">
           <button
             onClick={() => {
-              const firstUnresolved = timeline.breakpoints.find(bp => !bp.resolved);
+              const firstUnresolved = timeline.breakpoints.find((bp) => !bp.resolved);
               if (firstUnresolved) onBreakpointClick(firstUnresolved);
             }}
             disabled={unresolvedCount === 0}

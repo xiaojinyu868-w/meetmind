@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import { useState, useRef, useCallback, useEffect } from 'react';
 import type { TranscriptSegment } from '@/types';
@@ -10,7 +10,8 @@ interface RecorderProps {
   onRecordingStart?: (sessionId: string) => void;
   onRecordingStop?: (audioBlob?: Blob) => void;
   onTranscriptUpdate?: (segments: TranscriptSegment[]) => void;
-  /** 转录增强完成后的回调，传递优化后的文本 */
+  onTranscriptTextUpdate?: (segmentId: string, text: string) => void;
+
   onTranscriptEnhanced?: (segments: TranscriptSegment[]) => void;
   onAnchorMark?: (timestamp: number) => void;
   onTranscribing?: (isTranscribing: boolean) => void;
@@ -25,6 +26,7 @@ export function Recorder({
   onRecordingStart,
   onRecordingStop,
   onTranscriptUpdate,
+  onTranscriptTextUpdate,
   onTranscriptEnhanced,
   onAnchorMark,
   onTranscribing,
@@ -59,27 +61,28 @@ export function Recorder({
   const pcmProcessorRef = useRef<ScriptProcessorNode | null>(null);
   const isStartingRecordingRef = useRef(false);
   const [isStartingRecording, setIsStartingRecording] = useState(false);
+  const manuallyEditedSegmentIdsRef = useRef<Set<string>>(new Set());
   
-  // ASR 后处理增强管理器
+
   const enhanceManagerRef = useRef<TranscriptEnhanceManager | null>(null);
   const [enhancedSegments, setEnhancedSegments] = useState<Map<string, EnhancedTranscriptSegment>>(new Map());
   const [enhanceStats, setEnhanceStats] = useState({ enhanced: 0, total: 0, isEnhancing: false });
 
-  // VAD 检测状态
+
   const vadStateRef = useRef({
-    isSpeaking: false,           // 当前是否在说话
-    speechStartMs: 0,            // 语音开始时间 (elapsedMs)
-    silenceStartMs: 0,           // 静音开始时间 (elapsedMs)
+    isSpeaking: false,
+    speechStartMs: 0,
+    silenceStartMs: 0,
   });
 
-  // VAD 配置常量
+
   const VAD_CONFIG = {
-    energyThreshold: 0.08,       // 能量阈值 (0-1)，根据环境噪音调整
-    silenceDuration: 600,        // 静音判定时长 (毫秒)，与百炼 server_vad 对齐
-    minSpeechDuration: 200,      // 最小语音时长 (毫秒)，过滤误触发
+    energyThreshold: 0.08,
+    silenceDuration: 600,
+    minSpeechDuration: 200,
   };
 
-  // 获取 API Key 并检查服务状态
+
   useEffect(() => {
     const fetchConfig = async () => {
       try {
@@ -103,7 +106,7 @@ export function Recorder({
     fetchConfig();
   }, []);
 
-  // 格式化时间
+
   const formatTime = (ms: number) => {
     const seconds = Math.floor(ms / 1000);
     const minutes = Math.floor(seconds / 60);
@@ -116,7 +119,7 @@ export function Recorder({
     return `${pad(minutes)}:${pad(seconds % 60)}`;
   };
 
-  // 开始录音
+
   const startRecording = async () => {
     if (isStartingRecordingRef.current || status !== 'idle') return;
 
@@ -130,10 +133,11 @@ export function Recorder({
       audioChunksRef.current = [];
       setTranscript([]);
       transcriptRef.current = [];
+      manuallyEditedSegmentIdsRef.current.clear();
       setInterimText('');
       setAnchorCount(0);
 
-      // 防御性清理：处理上一次异常中断遗留的音频节点
+
       if (animationIdRef.current) {
         cancelAnimationFrame(animationIdRef.current);
         animationIdRef.current = null;
@@ -157,27 +161,29 @@ export function Recorder({
         audioContextRef.current = null;
       }
       
-      // 初始化 ASR 后处理增强管理器
+
       setEnhancedSegments(new Map());
       setEnhanceStats({ enhanced: 0, total: 0, isEnhancing: false });
       enhanceManagerRef.current = new TranscriptEnhanceManager({
-        minBatchSize: 1,          // 最少 1 句就可以触发优化（降低门槛方便测试）
-        silenceThreshold: 3000,   // 3 秒静音触发优化
-        model: 'qwen3-max-2026-01-23',       // 使用思考模式的 qwen3-max 模型
+        minBatchSize: 1,
+        silenceThreshold: 3000,
+        model: 'qwen3-max-2026-01-23',
         onEnhanced: (segments) => {
-          // 优化完成回调：更新增强后的文本
+
           console.log('[Recorder] Enhanced callback received:', segments.length, 'segments');
           console.log('[Recorder] Enhanced segments:', segments.map(s => ({ id: s.id, status: s.enhanceStatus, text: s.text?.slice(0, 30) })));
           setEnhancedSegments(prev => {
             const newMap = new Map(prev);
             for (const seg of segments) {
+              if (manuallyEditedSegmentIdsRef.current.has(seg.id)) continue;
               newMap.set(seg.id, seg);
             }
             
-            // 【关键】构建完整的增强后转录文本并通知父组件
-            // 使用 function 形式获取最新的 transcriptRef
+
+
             const currentTranscript = transcriptRef.current;
             const enhancedTranscript = currentTranscript.map(seg => {
+              if (manuallyEditedSegmentIdsRef.current.has(seg.id)) return seg;
               const enhanced = newMap.get(seg.id);
               if (enhanced && enhanced.enhanceStatus === 'enhanced' && enhanced.text !== seg.text) {
                 return { ...seg, text: enhanced.text };
@@ -185,7 +191,7 @@ export function Recorder({
               return seg;
             });
             
-            // 通知父组件增强后的文本
+
             console.log('[Recorder] Notifying parent of enhanced transcript:', enhancedTranscript.length, 'segments');
             onTranscriptEnhanced?.(enhancedTranscript);
             
@@ -208,8 +214,8 @@ export function Recorder({
         },
       });
 
-      // 不强制指定采样率，让 AudioContext 自动匹配设备
-      // 某些设备（如手机）不支持指定采样率，会导致 createMediaStreamSource 报错
+
+
       audioContext = new AudioContext();
       audioContextRef.current = audioContext;
       const source = audioContext.createMediaStreamSource(stream);
@@ -221,11 +227,11 @@ export function Recorder({
 
       const dataArray = new Uint8Array(analyserRef.current.frequencyBinCount);
       
-      // 重要：提前初始化 startTimeRef，确保 VAD 时间戳基准正确
-      // 此时录音实际上已开始准备，与 MediaRecorder.start() 几乎同时
+
+
       startTimeRef.current = Date.now();
       
-      // 重置 VAD 状态
+
       vadStateRef.current = {
         isSpeaking: false,
         speechStartMs: 0,
@@ -239,43 +245,43 @@ export function Recorder({
         const normalizedLevel = average / 255;
         setLevel(normalizedLevel);
 
-        // VAD 能量检测逻辑
-        // 确保 startTimeRef 已初始化（> 0）
+
+
         if (startTimeRef.current > 0) {
           const currentElapsedMs = Date.now() - startTimeRef.current;
           const vadState = vadStateRef.current;
           
           if (normalizedLevel > VAD_CONFIG.energyThreshold) {
-            // 检测到声音
+
             if (!vadState.isSpeaking) {
-              // 语音开始 - 立即发送开始时间戳给后端
+
               vadState.isSpeaking = true;
               vadState.speechStartMs = currentElapsedMs;
               vadState.silenceStartMs = 0;
               console.log('[VAD] Speech started at', vadState.speechStartMs, 'ms, level:', normalizedLevel.toFixed(3));
               
-              // 发送 speech-start 事件
+
               if (asrClientRef.current?.isConnected()) {
                 asrClientRef.current.sendVADEvent('start', vadState.speechStartMs);
               }
             }
-            // 重置静音计时
+
             vadState.silenceStartMs = 0;
           } else {
-            // 静音状态
+
             if (vadState.isSpeaking) {
-              // 正在说话但检测到静音
+
               if (vadState.silenceStartMs === 0) {
-                // 开始计时静音
+
                 vadState.silenceStartMs = currentElapsedMs;
               } else {
-                // 检查静音是否达到阈值
+
                 const silenceDuration = currentElapsedMs - vadState.silenceStartMs;
                 if (silenceDuration >= VAD_CONFIG.silenceDuration) {
-                  // 语音结束
+
                   const speechDuration = vadState.silenceStartMs - vadState.speechStartMs;
                   if (speechDuration >= VAD_CONFIG.minSpeechDuration) {
-                    // 有效语音段结束，发送结束时间戳
+
                     console.log('[VAD] Speech ended:', vadState.speechStartMs, '-', vadState.silenceStartMs, 'ms, duration:', speechDuration, 'ms');
                     if (asrClientRef.current?.isConnected()) {
                       asrClientRef.current.sendVADEvent('end', vadState.silenceStartMs);
@@ -296,7 +302,7 @@ export function Recorder({
 
       sessionIdRef.current = `session-${Date.now()}`;
 
-      // 流式模式
+
       if (transcribeMode === 'streaming' && streamingAvailable && apiKey) {
         asrClientRef.current = new DashScopeASRClient(apiKey, {
           onSentence: (sentence) => {
@@ -312,7 +318,7 @@ export function Recorder({
             setTranscript(transcriptRef.current);
             onTranscriptUpdate?.(transcriptRef.current);
             
-            // 将新句子添加到增强管理器，等待批量优化
+
             if (enhanceManagerRef.current) {
               console.log('[Recorder] Adding segment to enhance manager:', segment.id, segment.text?.slice(0, 30));
               enhanceManagerRef.current.addSegment(segment);
@@ -321,7 +327,7 @@ export function Recorder({
           },
           onInterim: (text) => {
             setInterimText(text);
-            // 更新活动时间，用于静音检测
+
             if (enhanceManagerRef.current) {
               enhanceManagerRef.current.updateActivity();
             }
@@ -343,7 +349,7 @@ export function Recorder({
           const bufferSize = 4096;
           pcmProcessorRef.current = audioContext.createScriptProcessor(bufferSize, 1, 1);
           
-          // 重采样函数：将设备采样率转换为目标采样率 (16000Hz)
+
           const resample = (inputData: Float32Array, fromRate: number, toRate: number): Float32Array => {
             if (fromRate === toRate) return inputData;
             const ratio = fromRate / toRate;
@@ -354,7 +360,7 @@ export function Recorder({
               const srcIndexFloor = Math.floor(srcIndex);
               const srcIndexCeil = Math.min(srcIndexFloor + 1, inputData.length - 1);
               const t = srcIndex - srcIndexFloor;
-              // 线性插值
+
               result[i] = inputData[srcIndexFloor] * (1 - t) + inputData[srcIndexCeil] * t;
             }
             return result;
@@ -363,7 +369,7 @@ export function Recorder({
           pcmProcessorRef.current.onaudioprocess = (e) => {
             if (asrClientRef.current?.isConnected()) {
               const inputData = e.inputBuffer.getChannelData(0);
-              // 重采样到 16000Hz
+
               const resampledData = resample(inputData, actualSampleRate, wsSampleRate);
               const pcmData = new Int16Array(resampledData.length);
               for (let i = 0; i < resampledData.length; i++) {
@@ -396,7 +402,7 @@ export function Recorder({
       mediaRecorder.start(1000);
       mediaRecorderRef.current = mediaRecorder;
 
-      // startTimeRef.current 已在 checkLevel 初始化前设置，此处仅启动计时器
+
       timerRef.current = setInterval(() => {
         setElapsedMs(Date.now() - startTimeRef.current);
       }, 100);
@@ -435,7 +441,7 @@ export function Recorder({
     }
   };
 
-  // 暂停录音
+
   const pauseRecording = () => {
     if (mediaRecorderRef.current?.state === 'recording') {
       mediaRecorderRef.current.pause();
@@ -444,7 +450,7 @@ export function Recorder({
     }
   };
 
-  // 继续录音
+
   const resumeRecording = () => {
     if (mediaRecorderRef.current?.state === 'paused') {
       mediaRecorderRef.current.resume();
@@ -454,7 +460,7 @@ export function Recorder({
         setElapsedMs(Date.now() - startTimeRef.current);
       }, 100);
       
-      // 重置 VAD 状态，避免暂停期间的静音被误判
+
       vadStateRef.current = {
         isSpeaking: false,
         speechStartMs: 0,
@@ -465,15 +471,15 @@ export function Recorder({
     }
   };
 
-  // 停止录音
+
   const stopRecording = async () => {
-    // 首先停止 ASR，阻止继续处理音频
+
     if (asrClientRef.current) {
       await asrClientRef.current.stop();
       asrClientRef.current = null;
     }
 
-    // 断开音频处理器
+
     if (pcmProcessorRef.current) {
       pcmProcessorRef.current.disconnect();
       pcmProcessorRef.current = null;
@@ -506,7 +512,7 @@ export function Recorder({
     setLevel(0);
     setInterimText('');
 
-    // 触发最终的 ASR 后处理优化
+
     if (enhanceManagerRef.current && transcribeMode === 'streaming') {
       setEnhanceStats(prev => ({ ...prev, isEnhancing: true }));
       console.log('[Recorder] Finalizing transcript enhancement...');
@@ -515,7 +521,7 @@ export function Recorder({
       } catch (err) {
         console.error('[Recorder] Enhancement finalize error:', err);
       }
-      // 清理增强管理器
+
       enhanceManagerRef.current.dispose();
       enhanceManagerRef.current = null;
     }
@@ -535,7 +541,7 @@ export function Recorder({
     }
   };
 
-  // 非流式转录
+
   const transcribeWithQwenASR = async (audioBlob: Blob) => {
     setStatus('transcribing');
     setTranscribeProgress('正在转录音频...');
@@ -574,28 +580,31 @@ export function Recorder({
         }));
 
         setTranscript(segments);
+        transcriptRef.current = segments;
         onTranscriptUpdate?.(segments);
         
-        // 【新增】batch 模式下也触发转录增强
+
         if (segments.length > 0) {
-          setTranscribeProgress(`转录完成，正在优化文本...`);
+          setTranscribeProgress('转录完成，正在优化文本...');
           setEnhanceStats(prev => ({ ...prev, total: segments.length, isEnhancing: true }));
           
-          // 初始化增强管理器
+
           enhanceManagerRef.current = new TranscriptEnhanceManager({
             minBatchSize: 1,
-            silenceThreshold: 0, // batch 模式下立即触发
+            silenceThreshold: 0,
             model: 'qwen3-max-2026-01-23',
             onEnhanced: (enhancedSegs) => {
               console.log('[Recorder] Batch mode enhanced:', enhancedSegs.length, 'segments');
               setEnhancedSegments(prev => {
                 const newMap = new Map(prev);
                 for (const seg of enhancedSegs) {
+                  if (manuallyEditedSegmentIdsRef.current.has(seg.id)) continue;
                   newMap.set(seg.id, seg);
                 }
                 
-                // 【关键】构建完整的增强后转录文本并通知父组件
+
                 const enhancedTranscript = segments.map(seg => {
+                  if (manuallyEditedSegmentIdsRef.current.has(seg.id)) return seg;
                   const enhanced = newMap.get(seg.id);
                   if (enhanced && enhanced.enhanceStatus === 'enhanced' && enhanced.text !== seg.text) {
                     return { ...seg, text: enhanced.text };
@@ -603,7 +612,7 @@ export function Recorder({
                   return seg;
                 });
                 
-                // 通知父组件增强后的文本
+
                 console.log('[Recorder] Notifying parent of batch enhanced transcript:', enhancedTranscript.length, 'segments');
                 onTranscriptEnhanced?.(enhancedTranscript);
                 
@@ -617,12 +626,12 @@ export function Recorder({
             },
           });
           
-          // 添加所有句子到增强管理器
+
           for (const seg of segments) {
             enhanceManagerRef.current.addSegment(seg);
           }
           
-          // 触发最终优化
+
           enhanceManagerRef.current.finalize().then(() => {
             const enhancedCount = enhanceManagerRef.current?.getAllEnhanced().filter(s => s.enhanceStatus === 'enhanced').length || 0;
             setTranscribeProgress(`转录完成，共 ${segments.length} 句，已优化 ${enhancedCount} 句`);
@@ -645,7 +654,7 @@ export function Recorder({
     }
   };
 
-  // 标记断点
+
   const markAnchor = useCallback(() => {
     if (status !== 'recording') return;
     
@@ -655,7 +664,7 @@ export function Recorder({
     setAnchorCount(prev => prev + 1);
   }, [status, elapsedMs, onAnchorMark]);
 
-  // 清理
+
   useEffect(() => {
     return () => {
       if (animationIdRef.current) cancelAnimationFrame(animationIdRef.current);
@@ -677,24 +686,50 @@ export function Recorder({
   const isStopped = status === 'stopped';
   const isIdle = status === 'idle';
 
-  // 合并原始转录和增强后的文本，优先显示增强版本
+  const handleSegmentTextUpdate = useCallback((segmentId: string, nextText: string) => {
+    const normalized = nextText.trim();
+    if (!normalized) return;
+
+    const target = transcriptRef.current.find((seg) => seg.id === segmentId);
+    if (!target || target.text === normalized) return;
+
+    const updatedTranscript = transcriptRef.current.map((seg) =>
+      seg.id === segmentId ? { ...seg, text: normalized } : seg
+    );
+
+    transcriptRef.current = updatedTranscript;
+    setTranscript(updatedTranscript);
+    onTranscriptUpdate?.(updatedTranscript);
+
+    manuallyEditedSegmentIdsRef.current.add(segmentId);
+    setEnhancedSegments((prev) => {
+      if (!prev.has(segmentId)) return prev;
+      const next = new Map(prev);
+      next.delete(segmentId);
+      return next;
+    });
+
+    onTranscriptTextUpdate?.(segmentId, normalized);
+  }, [onTranscriptTextUpdate, onTranscriptUpdate]);
+
   const displayTranscript = transcript.map(seg => {
+    if (manuallyEditedSegmentIdsRef.current.has(seg.id)) return seg;
     const enhanced = enhancedSegments.get(seg.id);
     if (enhanced && enhanced.enhanceStatus === 'enhanced' && enhanced.text !== seg.text) {
       return {
         ...seg,
         text: enhanced.text,
-        originalText: seg.text, // 保留原始文本以便对比
+        originalText: seg.text,
       };
     }
     return seg;
   });
 
-  // ===== 闲置状态：显示开始录音界面 =====
+
   if (isIdle) {
     return (
       <div className="card p-8 animate-fade-in">
-        {/* 顶部状态栏 */}
+        {/* */}
         <div className="flex items-center justify-between mb-8">
           <div className="flex items-center gap-2">
             <div className={`w-2 h-2 rounded-full transition-colors ${
@@ -709,7 +744,7 @@ export function Recorder({
             </span>
           </div>
           
-          {/* 模式切换 */}
+          {/* */}
           <div className="flex flex-col items-end gap-1">
             <div className="flex items-center gap-1 p-1 bg-gray-100 rounded-lg">
               <button
@@ -721,7 +756,7 @@ export function Recorder({
                     : 'text-gray-500 hover:text-gray-700'
                 } ${!streamingAvailable ? 'opacity-50 cursor-not-allowed' : ''}`}
               >
-                ⚡ 边录边转
+                📝 边录边转
               </button>
               <button
                 onClick={() => setTranscribeMode('batch')}
@@ -731,7 +766,7 @@ export function Recorder({
                     : 'text-gray-500 hover:text-gray-700'
                 }`}
               >
-                🎯 录完转译
+                🎞 录完转写
               </button>
             </div>
             <span className="text-[10px] text-gray-400">
@@ -740,7 +775,7 @@ export function Recorder({
           </div>
         </div>
 
-        {/* 错误提示 */}
+        {/* */}
         {error && (
           <div className="mb-6 p-4 bg-coral-50 border border-coral-100 rounded-xl text-coral-600 text-sm animate-slide-up">
             <div className="flex items-center gap-2">
@@ -750,7 +785,7 @@ export function Recorder({
           </div>
         )}
 
-        {/* 开始录音区域 */}
+        {/* */}
         <div className="flex flex-col items-center py-12">
           <div className="text-6xl font-mono font-bold text-gray-200 mb-4">
             00:00
@@ -772,7 +807,7 @@ export function Recorder({
     );
   }
 
-  // ===== 转录中状态 =====
+
   if (isTranscribing) {
     return (
       <div className="card p-8 animate-fade-in">
@@ -787,21 +822,21 @@ export function Recorder({
     );
   }
 
-  // ===== 停止状态：显示完成界面 =====
+
   if (isStopped) {
     return (
       <div className="card p-8 animate-fade-in">
-        {/* 完成提示 */}
+        {/* */}
         {transcribeProgress && (
           <div className="mb-6 p-4 bg-mint-50 border border-mint-200 rounded-xl animate-scale-in">
             <div className="flex items-center gap-2 text-mint-700">
-              <span className="text-lg">✅</span>
+              <span className="text-lg">✓</span>
               <span className="text-sm font-medium">{transcribeProgress}</span>
             </div>
           </div>
         )}
 
-        {/* 转录结果预览 - 使用增强后的文本 */}
+        {/* */}
         <TranscriptPreviewPanel
           transcript={displayTranscript}
           interimText=""
@@ -810,20 +845,24 @@ export function Recorder({
           collapsedCount={10}
           formatTime={formatTime}
           defaultExpanded={true}
+          editable={true}
+          onSegmentTextUpdate={handleSegmentTextUpdate}
         />
 
-        {/* 操作按钮 */}
+        {/* */}
         <div className="mt-6 flex justify-center">
           <button
             onClick={() => {
               setStatus('idle');
               setElapsedMs(0);
               setTranscript([]);
+              transcriptRef.current = [];
               setInterimText('');
               setTranscribeProgress('');
               setAnchorCount(0);
               setEnhancedSegments(new Map());
               setEnhanceStats({ enhanced: 0, total: 0, isEnhancing: false });
+              manuallyEditedSegmentIdsRef.current.clear();
               audioChunksRef.current = [];
             }}
             className="btn btn-primary px-8 py-3"
@@ -838,14 +877,14 @@ export function Recorder({
     );
   }
 
-  // ===== 录音活动状态：沉浸式转录布局 =====
+
   return (
-    <div className="flex flex-col h-full bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden animate-fade-in">
-      {/* ===== 极简顶栏 (移动端 84px / 桌面端 60px) ===== */}
+    <div className="flex flex-col h-full min-h-0 bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden animate-fade-in">
+      {/* */}
       <div className="flex-shrink-0 h-[84px] sm:h-[60px] px-4 flex items-center justify-between border-b border-gray-100 bg-gradient-to-r from-gray-50 to-white">
-        {/* 左侧：状态和时间 */}
+        {/* */}
         <div className="flex items-center gap-3 sm:gap-3">
-          {/* 录音状态指示器 */}
+          {/* */}
           <div className="flex items-center gap-2 sm:gap-2">
             <div className={`w-3.5 h-3.5 sm:w-2.5 sm:h-2.5 rounded-full ${isRecording ? 'bg-coral animate-pulse' : 'bg-sunflower-500'}`} />
             <span className={`text-lg sm:text-sm font-medium ${isRecording ? 'text-coral' : 'text-sunflower-600'}`}>
@@ -853,12 +892,12 @@ export function Recorder({
             </span>
           </div>
           
-          {/* 时间显示 - 移动端更大 (放大1.3倍) */}
+          {/* */}
           <div className={`font-mono text-4xl sm:text-2xl font-semibold tabular-nums ${isRecording ? 'text-gray-800' : 'text-gray-500'}`}>
             {formatTime(elapsedMs)}
           </div>
           
-          {/* 音量指示器 - 仅桌面端显示 */}
+          {/* */}
           {isRecording && (
             <div className="hidden sm:flex items-center gap-0.5 h-5">
               {[...Array(5)].map((_, i) => (
@@ -876,14 +915,14 @@ export function Recorder({
           )}
         </div>
 
-        {/* 右侧：控制按钮和模式标签 */}
+        {/* */}
         <div className="flex items-center gap-4 sm:gap-4">
-          {/* 模式标签 */}
+          {/* */}
           <span className="text-sm sm:text-xs text-gray-400 hidden sm:inline">
-            {transcribeMode === 'streaming' ? '边录边转' : '录完转译'}
+            {transcribeMode === 'streaming' ? '边录边转' : '录完转写'}
           </span>
           
-          {/* 控制按钮组 - 移动端大触摸目标 (72px，放大1.3倍)，桌面端 (48px) */}
+          {/* */}
           <div className="flex items-center gap-4 sm:gap-2">
             {isRecording ? (
               <button
@@ -920,7 +959,7 @@ export function Recorder({
         </div>
       </div>
 
-      {/* ===== 错误提示（如有） ===== */}
+      {/* */}
       {error && (
         <div className="flex-shrink-0 mx-4 mt-3 p-3 bg-coral-50 border border-coral-100 rounded-xl text-coral-600 text-sm animate-slide-up">
           <div className="flex items-center gap-2">
@@ -930,7 +969,7 @@ export function Recorder({
         </div>
       )}
 
-      {/* ===== ASR 后处理优化状态指示器 ===== */}
+      {/* */}
       {transcribeMode === 'streaming' && enhanceStats.total > 0 && (
         <div className="flex-shrink-0 mx-4 mt-2 flex items-center gap-2 text-xs text-gray-400">
           {enhanceStats.isEnhancing ? (
@@ -940,14 +979,14 @@ export function Recorder({
             </>
           ) : enhanceStats.enhanced > 0 ? (
             <>
-              <span className="text-mint-600">✨</span>
+              <span className="text-mint-600">✓</span>
               <span>已优化 {enhanceStats.enhanced}/{enhanceStats.total} 句</span>
             </>
           ) : null}
         </div>
       )}
 
-      {/* ===== 沉浸式转录区域（占据主要空间，可滚动） ===== */}
+      {/* */}
       <div className="flex-1 overflow-y-auto min-h-0">
         <TranscriptPreviewPanel
           transcript={displayTranscript}
@@ -958,10 +997,12 @@ export function Recorder({
           formatTime={formatTime}
           defaultExpanded={true}
           immersiveMode={true}
+          editable={true}
+          onSegmentTextUpdate={handleSegmentTextUpdate}
         />
       </div>
 
-      {/* ===== 固定底部：困惑点按钮 (48px) ===== */}
+      {/* */}
       <div className="flex-shrink-0 border-t border-gray-100 bg-gradient-to-r from-white to-gray-50">
         <button
           onClick={markAnchor}
@@ -987,3 +1028,4 @@ export function Recorder({
     </div>
   );
 }
+

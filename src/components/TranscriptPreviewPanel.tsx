@@ -1,6 +1,15 @@
-'use client';
+﻿'use client';
 
-import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
+import {
+  useState,
+  useRef,
+  useEffect,
+  useCallback,
+  useMemo,
+  type KeyboardEvent,
+  type ReactNode,
+  type UIEvent,
+} from 'react';
 import type { TranscriptSegment } from '@/types';
 
 interface TranscriptPreviewPanelProps {
@@ -8,32 +17,50 @@ interface TranscriptPreviewPanelProps {
   interimText?: string;
   isRecording?: boolean;
   transcribeMode?: 'streaming' | 'batch';
-  /** 默认收起时显示的条数 */
   collapsedCount?: number;
-  /** 是否默认展开 */
   defaultExpanded?: boolean;
-  /** 格式化时间的函数 */
   formatTime?: (ms: number) => string;
-  /** 沉浸式模式：无边框、无标题栏，占满容器 */
   immersiveMode?: boolean;
+  editable?: boolean;
+  onSegmentTextUpdate?: (segmentId: string, text: string) => void;
 }
 
-// 默认时间格式化函数
 const defaultFormatTime = (ms: number) => {
   const seconds = Math.floor(ms / 1000);
   const minutes = Math.floor(seconds / 60);
   const hours = Math.floor(minutes / 60);
   const pad = (n: number) => n.toString().padStart(2, '0');
-  
+
   if (hours > 0) {
     return `${pad(hours)}:${pad(minutes % 60)}:${pad(seconds % 60)}`;
   }
   return `${pad(minutes)}:${pad(seconds % 60)}`;
 };
 
-// 虚拟滚动配置
-const ITEM_HEIGHT = 44; // 每个转录项的估算高度
-const BUFFER_SIZE = 5;  // 上下缓冲区数量
+const ITEM_HEIGHT = 44;
+const BUFFER_SIZE = 5;
+
+function highlightText(text: string, searchQuery?: string): ReactNode {
+  if (!searchQuery?.trim()) return text;
+
+  const query = searchQuery.toLowerCase();
+  const lowerText = text.toLowerCase();
+  const index = lowerText.indexOf(query);
+
+  if (index === -1) return text;
+
+  const before = text.slice(0, index);
+  const match = text.slice(index, index + query.length);
+  const after = text.slice(index + query.length);
+
+  return (
+    <>
+      {before}
+      <mark className="bg-amber-200 text-amber-900 px-0.5 rounded">{match}</mark>
+      {after}
+    </>
+  );
+}
 
 export function TranscriptPreviewPanel({
   transcript,
@@ -44,6 +71,8 @@ export function TranscriptPreviewPanel({
   defaultExpanded = false,
   formatTime = defaultFormatTime,
   immersiveMode = false,
+  editable = false,
+  onSegmentTextUpdate,
 }: TranscriptPreviewPanelProps) {
   const [isExpanded, setIsExpanded] = useState(defaultExpanded || immersiveMode);
   const [searchQuery, setSearchQuery] = useState('');
@@ -52,27 +81,63 @@ export function TranscriptPreviewPanel({
   const [autoScrollEnabled, setAutoScrollEnabled] = useState(true);
   const [scrollTop, setScrollTop] = useState(0);
   const [containerHeight, setContainerHeight] = useState(0);
+  const [editingSegmentId, setEditingSegmentId] = useState<string | null>(null);
+  const [draftText, setDraftText] = useState('');
+  const [editingOriginalText, setEditingOriginalText] = useState('');
 
-  // 过滤转录内容
+  const canEdit = editable && typeof onSegmentTextUpdate === 'function';
+
   const filteredTranscript = useMemo(() => {
     if (!searchQuery.trim()) return transcript;
     const query = searchQuery.toLowerCase();
-    return transcript.filter(seg => 
-      seg.text.toLowerCase().includes(query)
-    );
+    return transcript.filter((seg) => seg.text.toLowerCase().includes(query));
   }, [transcript, searchQuery]);
 
-  // 显示的转录内容
   const displayTranscript = useMemo(() => {
     if (isExpanded) return filteredTranscript;
-    // 收起状态显示最后 N 条
     return filteredTranscript.slice(-collapsedCount);
   }, [filteredTranscript, isExpanded, collapsedCount]);
 
-  // 虚拟滚动计算（仅展开状态使用）
+  const startEditing = useCallback((segment: TranscriptSegment) => {
+    if (!canEdit) return;
+    setEditingSegmentId(segment.id);
+    setDraftText(segment.text);
+    setEditingOriginalText(segment.text);
+    setAutoScrollEnabled(false);
+  }, [canEdit]);
+
+  const cancelEditing = useCallback(() => {
+    setEditingSegmentId(null);
+    setDraftText('');
+    setEditingOriginalText('');
+  }, []);
+
+  const commitEditing = useCallback(() => {
+    if (!editingSegmentId || !canEdit || !onSegmentTextUpdate) {
+      cancelEditing();
+      return;
+    }
+
+    const normalized = draftText.trim();
+    if (!normalized || normalized === editingOriginalText.trim()) {
+      cancelEditing();
+      return;
+    }
+
+    onSegmentTextUpdate(editingSegmentId, normalized);
+    cancelEditing();
+  }, [canEdit, cancelEditing, draftText, editingOriginalText, editingSegmentId, onSegmentTextUpdate]);
+
+  useEffect(() => {
+    if (!editingSegmentId) return;
+    const exists = transcript.some((seg) => seg.id === editingSegmentId);
+    if (!exists) {
+      cancelEditing();
+    }
+  }, [cancelEditing, editingSegmentId, transcript]);
+
   const virtualItems = useMemo(() => {
     if (!isExpanded || displayTranscript.length <= 50) {
-      // 数量较少时不使用虚拟滚动
       return {
         items: displayTranscript.map((seg, index) => ({ seg, index })),
         totalHeight: displayTranscript.length * ITEM_HEIGHT,
@@ -90,8 +155,8 @@ export function TranscriptPreviewPanel({
       startIndex + visibleCount + BUFFER_SIZE * 2
     );
 
-    const items = [];
-    for (let i = startIndex; i <= endIndex; i++) {
+    const items: Array<{ seg: TranscriptSegment; index: number }> = [];
+    for (let i = startIndex; i <= endIndex; i += 1) {
       items.push({ seg: displayTranscript[i], index: i });
     }
 
@@ -104,33 +169,28 @@ export function TranscriptPreviewPanel({
     };
   }, [displayTranscript, isExpanded, scrollTop, containerHeight]);
 
-  // 自动滚动到底部
   const scrollToBottom = useCallback(() => {
     if (scrollContainerRef.current && autoScrollEnabled) {
       scrollContainerRef.current.scrollTop = scrollContainerRef.current.scrollHeight;
     }
   }, [autoScrollEnabled]);
 
-  // 新转录时自动滚动
   useEffect(() => {
-    if (isRecording && autoScrollEnabled) {
+    if (isRecording && autoScrollEnabled && !editingSegmentId) {
       scrollToBottom();
     }
-  }, [transcript.length, isRecording, autoScrollEnabled, scrollToBottom]);
+  }, [transcript.length, isRecording, autoScrollEnabled, editingSegmentId, scrollToBottom]);
 
-  // 监听滚动事件
-  const handleScroll = useCallback((e: React.UIEvent<HTMLDivElement>) => {
+  const handleScroll = useCallback((e: UIEvent<HTMLDivElement>) => {
     const target = e.target as HTMLDivElement;
     setScrollTop(target.scrollTop);
 
-    // 检测是否在底部附近，自动开启自动滚动
     const isNearBottom = target.scrollHeight - target.scrollTop - target.clientHeight < 50;
-    if (isNearBottom !== autoScrollEnabled && isRecording) {
+    if (isNearBottom !== autoScrollEnabled && isRecording && !editingSegmentId) {
       setAutoScrollEnabled(isNearBottom);
     }
-  }, [autoScrollEnabled, isRecording]);
+  }, [autoScrollEnabled, editingSegmentId, isRecording]);
 
-  // 监听容器尺寸变化
   useEffect(() => {
     const container = scrollContainerRef.current;
     if (!container) return;
@@ -147,22 +207,18 @@ export function TranscriptPreviewPanel({
     return () => observer.disconnect();
   }, []);
 
-  // 跳转到最新
   const handleJumpToLatest = useCallback(() => {
     setAutoScrollEnabled(true);
     scrollToBottom();
   }, [scrollToBottom]);
 
-  // 切换展开状态
   const toggleExpanded = useCallback(() => {
-    setIsExpanded(prev => !prev);
+    setIsExpanded((prev) => !prev);
     if (!isExpanded) {
-      // 展开时滚动到底部
       setTimeout(() => scrollToBottom(), 100);
     }
   }, [isExpanded, scrollToBottom]);
 
-  // 没有内容时显示空状态（沉浸式模式显示引导）
   if (transcript.length === 0 && !interimText) {
     if (immersiveMode) {
       return (
@@ -174,8 +230,8 @@ export function TranscriptPreviewPanel({
           </div>
           <h3 className="text-lg font-medium text-gray-700 mb-2">正在聆听...</h3>
           <p className="text-sm text-gray-400 max-w-xs">
-            {transcribeMode === 'streaming' 
-              ? '开始说话后，文字会实时出现在这里' 
+            {transcribeMode === 'streaming'
+              ? '开始说话后，文字会实时出现在这里'
               : '录音结束后会自动转换为文字'}
           </p>
         </div>
@@ -187,26 +243,19 @@ export function TranscriptPreviewPanel({
   const hiddenCount = transcript.length - collapsedCount;
   const hasMore = !isExpanded && hiddenCount > 0;
 
-  // ===== 沉浸式模式：全屏转录显示 =====
   if (immersiveMode) {
     return (
       <div className="flex flex-col h-full relative">
-        {/* 迷你工具栏 */}
         <div className="flex-shrink-0 px-4 py-2 flex items-center justify-between bg-gray-50/50">
           <div className="flex items-center gap-2">
-            <span className="text-xs font-medium text-gray-500">
-              📝 {transcript.length} 句
-            </span>
+            <span className="text-xs font-medium text-gray-500">📝 {transcript.length} 句</span>
             {searchQuery && (
-              <span className="text-xs text-amber-600">
-                · 匹配 {filteredTranscript.length}
-              </span>
+              <span className="text-xs text-amber-600">· 匹配 {filteredTranscript.length}</span>
             )}
           </div>
           <div className="flex items-center gap-2">
-            {/* 搜索按钮 */}
             <button
-              onClick={() => setShowSearch(prev => !prev)}
+              onClick={() => setShowSearch((prev) => !prev)}
               className={`p-1.5 rounded-lg transition-colors ${
                 showSearch ? 'bg-amber-100 text-amber-600' : 'text-gray-400 hover:text-gray-600 hover:bg-gray-100'
               }`}
@@ -219,7 +268,6 @@ export function TranscriptPreviewPanel({
           </div>
         </div>
 
-        {/* 搜索框 */}
         {showSearch && (
           <div className="flex-shrink-0 px-4 pb-2 animate-slide-down">
             <div className="relative">
@@ -248,8 +296,7 @@ export function TranscriptPreviewPanel({
           </div>
         )}
 
-        {/* 沉浸式转录内容区域 */}
-        <div 
+        <div
           ref={scrollContainerRef}
           onScroll={handleScroll}
           className="flex-1 overflow-y-auto px-4 pb-4 min-h-0"
@@ -261,20 +308,25 @@ export function TranscriptPreviewPanel({
                 segment={seg}
                 formatTime={formatTime}
                 searchQuery={searchQuery}
+                editable={canEdit}
+                isEditing={editingSegmentId === seg.id}
+                draftText={editingSegmentId === seg.id ? draftText : ''}
+                onStartEdit={startEditing}
+                onDraftChange={setDraftText}
+                onCommitEdit={commitEditing}
+                onCancelEdit={cancelEditing}
               />
             ))}
 
-            {/* 正在输入的文本 */}
             {interimText && (
               <div className="flex items-start gap-3 py-2 animate-pulse">
-                <span className="text-xs text-gray-300 font-mono shrink-0 pt-1">▌</span>
+                <span className="text-xs text-gray-300 font-mono shrink-0 pt-1">...</span>
                 <span className="text-gray-400 italic text-base leading-relaxed">{interimText}</span>
               </div>
             )}
           </div>
         </div>
 
-        {/* 回到最新按钮 */}
         {isRecording && !autoScrollEnabled && (
           <div className="absolute bottom-4 right-4">
             <button
@@ -292,11 +344,8 @@ export function TranscriptPreviewPanel({
     );
   }
 
-  // ===== 普通模式：带边框的卡片样式 =====
-
   return (
     <div className="mt-8 pt-6 border-t border-gray-100 animate-fade-in">
-      {/* 标题栏 */}
       <div className="flex items-center justify-between mb-3">
         <h4 className="text-sm font-medium text-gray-700 flex items-center gap-2">
           {transcribeMode === 'streaming' ? '📝 实时转录' : '📝 转录结果'}
@@ -305,10 +354,9 @@ export function TranscriptPreviewPanel({
           </span>
         </h4>
         <div className="flex items-center gap-2">
-          {/* 搜索按钮（仅展开时显示） */}
           {isExpanded && (
             <button
-              onClick={() => setShowSearch(prev => !prev)}
+              onClick={() => setShowSearch((prev) => !prev)}
               className={`p-1.5 rounded-lg transition-colors ${
                 showSearch ? 'bg-amber-100 text-amber-600' : 'text-gray-400 hover:text-gray-600 hover:bg-gray-100'
               }`}
@@ -319,9 +367,7 @@ export function TranscriptPreviewPanel({
               </svg>
             </button>
           )}
-          {/* 句数统计 */}
           <span className="text-xs text-gray-400">{transcript.length} 句</span>
-          {/* 展开/收起按钮 */}
           <button
             onClick={toggleExpanded}
             className="text-xs text-amber-600 hover:text-amber-700 flex items-center gap-1 transition-colors"
@@ -345,7 +391,6 @@ export function TranscriptPreviewPanel({
         </div>
       </div>
 
-      {/* 搜索框 */}
       {showSearch && isExpanded && (
         <div className="mb-3 animate-slide-down">
           <div className="relative">
@@ -371,15 +416,12 @@ export function TranscriptPreviewPanel({
             )}
           </div>
           {searchQuery && (
-            <p className="mt-1 text-xs text-gray-400">
-              找到 {filteredTranscript.length} 条匹配
-            </p>
+            <p className="mt-1 text-xs text-gray-400">找到 {filteredTranscript.length} 条匹配</p>
           )}
         </div>
       )}
 
-      {/* 转录内容区域 */}
-      <div 
+      <div
         ref={scrollContainerRef}
         onScroll={handleScroll}
         className={`overflow-y-auto space-y-2 p-3 bg-gray-50 rounded-xl transition-all ${
@@ -387,7 +429,6 @@ export function TranscriptPreviewPanel({
         }`}
         style={isExpanded && displayTranscript.length > 50 ? { position: 'relative' } : undefined}
       >
-        {/* 虚拟滚动容器 */}
         {isExpanded && displayTranscript.length > 50 ? (
           <div style={{ height: virtualItems.totalHeight, position: 'relative' }}>
             <div style={{ transform: `translateY(${virtualItems.offsetTop}px)` }}>
@@ -397,23 +438,35 @@ export function TranscriptPreviewPanel({
                   segment={seg}
                   formatTime={formatTime}
                   searchQuery={searchQuery}
+                  editable={canEdit}
+                  isEditing={editingSegmentId === seg.id}
+                  draftText={editingSegmentId === seg.id ? draftText : ''}
+                  onStartEdit={startEditing}
+                  onDraftChange={setDraftText}
+                  onCommitEdit={commitEditing}
+                  onCancelEdit={cancelEditing}
                 />
               ))}
             </div>
           </div>
         ) : (
-          // 普通渲染
           displayTranscript.map((seg) => (
             <TranscriptItem
               key={seg.id}
               segment={seg}
               formatTime={formatTime}
               searchQuery={searchQuery}
+              editable={canEdit}
+              isEditing={editingSegmentId === seg.id}
+              draftText={editingSegmentId === seg.id ? draftText : ''}
+              onStartEdit={startEditing}
+              onDraftChange={setDraftText}
+              onCommitEdit={commitEditing}
+              onCancelEdit={cancelEditing}
             />
           ))
         )}
 
-        {/* 正在输入的文本 */}
         {interimText && (
           <div className="flex items-start gap-2 text-sm">
             <span className="text-xs text-gray-300 font-mono shrink-0 mt-0.5">...</span>
@@ -422,20 +475,18 @@ export function TranscriptPreviewPanel({
         )}
       </div>
 
-      {/* 底部提示栏 */}
       <div className="mt-2 flex items-center justify-between">
-        {/* 隐藏条数提示 */}
-        {hasMore && (
+        {hasMore ? (
           <button
             onClick={toggleExpanded}
             className="text-xs text-gray-400 hover:text-amber-600 transition-colors"
           >
             还有 {hiddenCount} 条，点击展开查看
           </button>
+        ) : (
+          <span />
         )}
-        {!hasMore && <span />}
 
-        {/* 回到最新按钮 */}
         {isExpanded && isRecording && !autoScrollEnabled && (
           <button
             onClick={handleJumpToLatest}
@@ -452,82 +503,110 @@ export function TranscriptPreviewPanel({
   );
 }
 
-// 单个转录项组件（普通模式）
-interface TranscriptItemProps {
+interface BaseTranscriptItemProps {
   segment: TranscriptSegment;
   formatTime: (ms: number) => string;
   searchQuery?: string;
+  editable?: boolean;
+  isEditing?: boolean;
+  draftText: string;
+  onStartEdit?: (segment: TranscriptSegment) => void;
+  onDraftChange?: (text: string) => void;
+  onCommitEdit?: () => void;
+  onCancelEdit?: () => void;
 }
 
-function TranscriptItem({ segment, formatTime, searchQuery }: TranscriptItemProps) {
-  // 高亮搜索词
-  const highlightedText = useMemo(() => {
-    if (!searchQuery?.trim()) return segment.text;
-    
-    const query = searchQuery.toLowerCase();
-    const text = segment.text;
-    const lowerText = text.toLowerCase();
-    const index = lowerText.indexOf(query);
-    
-    if (index === -1) return text;
-    
-    const before = text.slice(0, index);
-    const match = text.slice(index, index + query.length);
-    const after = text.slice(index + query.length);
-    
-    return (
-      <>
-        {before}
-        <mark className="bg-amber-200 text-amber-900 px-0.5 rounded">{match}</mark>
-        {after}
-      </>
-    );
-  }, [segment.text, searchQuery]);
+function handleEditKeyDown(e: KeyboardEvent<HTMLTextAreaElement>, onCancelEdit?: () => void) {
+  if (e.key === 'Escape') {
+    e.preventDefault();
+    onCancelEdit?.();
+  }
+}
+
+function TranscriptItem({
+  segment,
+  formatTime,
+  searchQuery,
+  editable = false,
+  isEditing = false,
+  draftText,
+  onStartEdit,
+  onDraftChange,
+  onCommitEdit,
+  onCancelEdit,
+}: BaseTranscriptItemProps) {
+  const highlighted = useMemo(() => highlightText(segment.text, searchQuery), [segment.text, searchQuery]);
 
   return (
     <div className="flex items-start gap-2 text-sm py-1">
       <span className="text-xs text-gray-400 font-mono shrink-0 mt-0.5 bg-gray-100 px-1.5 py-0.5 rounded whitespace-nowrap">
         {formatTime(segment.startMs)} - {formatTime(segment.endMs)}
       </span>
-      <span className="text-gray-700 leading-relaxed">{highlightedText}</span>
+
+      {isEditing ? (
+        <textarea
+          value={draftText}
+          onChange={(e) => onDraftChange?.(e.target.value)}
+          onBlur={onCommitEdit}
+          onKeyDown={(e) => handleEditKeyDown(e, onCancelEdit)}
+          className="flex-1 min-h-[84px] rounded-lg border border-amber-200 bg-white px-2.5 py-2 text-sm leading-relaxed focus:outline-none focus:ring-2 focus:ring-amber-200"
+          autoFocus
+        />
+      ) : editable ? (
+        <button
+          onClick={() => onStartEdit?.(segment)}
+          className="flex-1 text-left text-gray-700 leading-relaxed rounded-md px-1 py-0.5 -mx-1 hover:bg-white transition-colors cursor-text"
+          title="点击编辑"
+        >
+          {highlighted}
+        </button>
+      ) : (
+        <span className="text-gray-700 leading-relaxed">{highlighted}</span>
+      )}
     </div>
   );
 }
 
-// 单个转录项组件（沉浸式模式）
-function ImmersiveTranscriptItem({ segment, formatTime, searchQuery }: TranscriptItemProps) {
-  // 高亮搜索词
-  const highlightedText = useMemo(() => {
-    if (!searchQuery?.trim()) return segment.text;
-    
-    const query = searchQuery.toLowerCase();
-    const text = segment.text;
-    const lowerText = text.toLowerCase();
-    const index = lowerText.indexOf(query);
-    
-    if (index === -1) return text;
-    
-    const before = text.slice(0, index);
-    const match = text.slice(index, index + query.length);
-    const after = text.slice(index + query.length);
-    
-    return (
-      <>
-        {before}
-        <mark className="bg-amber-200 text-amber-900 px-0.5 rounded">{match}</mark>
-        {after}
-      </>
-    );
-  }, [segment.text, searchQuery]);
+function ImmersiveTranscriptItem({
+  segment,
+  formatTime,
+  searchQuery,
+  editable = false,
+  isEditing = false,
+  draftText,
+  onStartEdit,
+  onDraftChange,
+  onCommitEdit,
+  onCancelEdit,
+}: BaseTranscriptItemProps) {
+  const highlighted = useMemo(() => highlightText(segment.text, searchQuery), [segment.text, searchQuery]);
 
   return (
     <div className="group flex items-start gap-4 py-3 border-b border-gray-50 hover:bg-gray-50/50 transition-colors -mx-2 px-2 rounded-lg">
-      {/* 时间戳 - 简洁样式 */}
       <span className="text-xs text-gray-400 font-mono shrink-0 pt-1 tabular-nums opacity-60 group-hover:opacity-100 transition-opacity">
         {formatTime(segment.startMs)}
       </span>
-      {/* 文本内容 - 更大字号，更好的行间距 */}
-      <span className="text-gray-800 text-base leading-relaxed flex-1">{highlightedText}</span>
+
+      {isEditing ? (
+        <textarea
+          value={draftText}
+          onChange={(e) => onDraftChange?.(e.target.value)}
+          onBlur={onCommitEdit}
+          onKeyDown={(e) => handleEditKeyDown(e, onCancelEdit)}
+          className="flex-1 min-h-[92px] rounded-lg border border-amber-200 bg-white px-2.5 py-2 text-sm leading-relaxed focus:outline-none focus:ring-2 focus:ring-amber-200"
+          autoFocus
+        />
+      ) : editable ? (
+        <button
+          onClick={() => onStartEdit?.(segment)}
+          className="flex-1 text-left text-gray-800 text-base leading-relaxed rounded-md px-1 py-0.5 -mx-1 hover:bg-white/80 transition-colors cursor-text"
+          title="点击编辑"
+        >
+          {highlighted}
+        </button>
+      ) : (
+        <span className="text-gray-800 text-base leading-relaxed flex-1">{highlighted}</span>
+      )}
     </div>
   );
 }

@@ -105,6 +105,10 @@ app.prepare().then(() => {
     const apiKey = process.env.DASHSCOPE_API_KEY;
     const model = process.env.DASHSCOPE_ASR_WS_MODEL || 'qwen3-asr-flash-realtime';
     const sampleRate = parseInt(process.env.DASHSCOPE_ASR_WS_SR || '16000', 10);
+    const turnSilenceRaw = parseInt(process.env.DASHSCOPE_ASR_WS_VAD_SILENCE_MS || '500', 10);
+    const turnSilenceMs = Number.isFinite(turnSilenceRaw)
+      ? Math.min(2000, Math.max(200, turnSilenceRaw))
+      : 500;
 
     if (!apiKey) {
       clientWs.send(JSON.stringify({ event: 'error', error: 'API Key 未配置' }));
@@ -121,9 +125,12 @@ app.prepare().then(() => {
     let hasAudioAppended = false; // 是否至少发送过一次有效音频
     let hasCommittedAudioBuffer = false; // 防止重复 commit
     let closeTimer = null; // 防止重复 close 定时器
+    let stopRequestedByClient = false; // 仅在 stop/断开阶段忽略可恢复 commit 错误
     let receivedBinaryChunks = 0; // 记录客户端传来的二进制音频包数量
     let receivedBinaryBytes = 0; // 记录客户端传来的二进制音频总字节数
     let appendedChunks = 0; // 记录成功 append 到 DashScope 的包数量
+    let lastTurnCommitChunkCount = 0; // 记录上次 turn commit 时已 append 的包数量
+    let lastTurnCommitAt = 0; // 防抖：避免短时间内重复 turn commit
 
     // VAD 状态（前端检测的语音起止时间）
     let currentSpeechStartMs = null;  // 当前语音段的开始时间
@@ -168,6 +175,102 @@ app.prepare().then(() => {
       }
     }
 
+    function commitCurrentTurn(commitReason) {
+      if (!dashscopeWs || dashscopeWs.readyState !== WebSocket.OPEN) return false;
+      if (!isSessionReady || !hasAudioAppended) return false;
+      if (appendedChunks <= lastTurnCommitChunkCount) return false;
+
+      const now = Date.now();
+      // 避免 VAD 抖动导致的高频 commit
+      if (now - lastTurnCommitAt < 600) return false;
+
+      try {
+        const commitEvent = {
+          event_id: generateEventId(),
+          type: 'input_audio_buffer.commit',
+        };
+        dashscopeWs.send(JSON.stringify(commitEvent));
+        lastTurnCommitChunkCount = appendedChunks;
+        lastTurnCommitAt = now;
+        console.log(`[ASR-Proxy] Turn commit (${commitReason}), appended=${appendedChunks}`);
+        return true;
+      } catch (err) {
+        console.error('[ASR-Proxy] Turn commit failed:', err);
+        return false;
+      }
+    }
+
+    function isIgnorableCommitError(message) {
+      if (typeof message !== 'string') return false;
+      return /error committing input audio buffer/i.test(message);
+    }
+
+    function splitLongTranscript(text, beginTime, endTime) {
+      const normalized = (text || '').trim();
+      if (!normalized) return [];
+
+      // 常规短句保持原样，避免过度切分
+      if (normalized.length <= 48) {
+        return [{
+          text: normalized,
+          beginTime,
+          endTime,
+        }];
+      }
+
+      const chunks = [];
+      let current = '';
+      const punctuation = /[。！？!?；;，,]/;
+
+      for (const ch of normalized) {
+        current += ch;
+
+        // 句末标点直接切；超长无标点时按长度兜底切分
+        if (punctuation.test(ch) || current.length >= 36) {
+          if (current.trim()) chunks.push(current.trim());
+          current = '';
+        }
+      }
+      if (current.trim()) chunks.push(current.trim());
+
+      if (chunks.length <= 1) {
+        return [{
+          text: normalized,
+          beginTime,
+          endTime,
+        }];
+      }
+
+      const duration = Math.max(1, endTime - beginTime);
+      const totalChars = chunks.reduce((sum, chunk) => sum + chunk.length, 0);
+      if (totalChars <= 0) {
+        return [{
+          text: normalized,
+          beginTime,
+          endTime,
+        }];
+      }
+
+      let consumed = 0;
+      return chunks.map((chunk, index) => {
+        const segBegin = Math.round(beginTime + (duration * consumed) / totalChars);
+        consumed += chunk.length;
+        let segEnd = index === chunks.length - 1
+          ? endTime
+          : Math.round(beginTime + (duration * consumed) / totalChars);
+
+        if (segEnd <= segBegin) {
+          segEnd = Math.min(endTime, segBegin + 200);
+        }
+
+        return {
+          text: chunk,
+          beginTime: segBegin,
+          endTime: segEnd,
+        };
+      });
+    }
+
 
     // 连接到百炼 WebSocket
     try {
@@ -201,7 +304,7 @@ app.prepare().then(() => {
             turn_detection: {
               type: 'server_vad',
               threshold: 0.2,
-              silence_duration_ms: 800,
+              silence_duration_ms: turnSilenceMs,
             },
           },
         };
@@ -219,8 +322,12 @@ app.prepare().then(() => {
           
           const msg = JSON.parse(data.toString());
           const msgType = msg.type;
-          
-          console.log('[ASR-Proxy] Event:', msgType);
+          const isVerboseEvent =
+            msgType === 'conversation.item.input_audio_transcription.text' ||
+            msgType === 'conversation.item.input_audio_transcription.delta';
+          if (!isVerboseEvent) {
+            console.log('[ASR-Proxy] Event:', msgType);
+          }
 
           switch (msgType) {
             case 'session.created':
@@ -241,10 +348,14 @@ app.prepare().then(() => {
 
             case 'input_audio_buffer.speech_started':
               console.log('[ASR-Proxy] Speech started');
+              if (currentSpeechStartMs === null) {
+                currentSpeechStartMs = Math.max(lastSentenceEndTime, Date.now() - sessionStartTime);
+              }
               break;
 
             case 'input_audio_buffer.speech_stopped':
               console.log('[ASR-Proxy] Speech stopped');
+              lastSpeechEndMs = Math.max(lastSpeechEndMs, Date.now() - sessionStartTime);
               break;
 
             case 'conversation.item.input_audio_transcription.completed':
@@ -345,16 +456,19 @@ app.prepare().then(() => {
               
               if (finalText) {
                 console.log('[ASR-Proxy] Final Transcript:', finalText, 'time:', beginTime, '-', endTime);
-                clientWs.send(JSON.stringify({
-                  event: 'result',
-                  sentence: {
-                    id: `seg-${sentenceIndex++}`,
-                    text: finalText,
-                    beginTime: beginTime,
-                    endTime: endTime,
-                    isFinal: true,
-                  },
-                }));
+                const splitSegments = splitLongTranscript(finalText, beginTime, endTime);
+                for (const seg of splitSegments) {
+                  clientWs.send(JSON.stringify({
+                    event: 'result',
+                    sentence: {
+                      id: `seg-${sentenceIndex++}`,
+                      text: seg.text,
+                      beginTime: seg.beginTime,
+                      endTime: seg.endTime,
+                      isFinal: true,
+                    },
+                  }));
+                }
               } else {
                 console.log('[ASR-Proxy] Completed but no text found:', JSON.stringify(msg).substring(0, 300));
               }
@@ -364,7 +478,6 @@ app.prepare().then(() => {
               // 增量转录文本（实时显示）
               const interimText = msg.text || msg.delta || '';
               if (interimText) {
-                console.log('[ASR-Proxy] Interim:', interimText);
                 clientWs.send(JSON.stringify({
                   event: 'interim',
                   text: interimText,
@@ -384,18 +497,24 @@ app.prepare().then(() => {
 
             case 'error':
               const error = msg.error?.message || msg.message || '识别错误';
-              // 空音频提交是可恢复场景：不向前端抛 error，直接结束会话
-              if (
-                typeof error === 'string' &&
-                error.includes('Error committing input audio buffer') &&
-                !hasAudioAppended
-              ) {
-                console.warn('[ASR-Proxy] Ignore empty-audio commit error');
-                scheduleDashscopeClose('Client disconnected', 100);
+              // commit 失败通常可恢复：避免前端被英文报错打断
+              if (isIgnorableCommitError(error)) {
+                if (stopRequestedByClient || hasCommittedAudioBuffer) {
+                  console.warn(`[ASR-Proxy] Ignore stop-time commit error: ${error}`);
+                  scheduleDashscopeClose('Client disconnected', 100);
+                } else {
+                  console.warn(`[ASR-Proxy] Ignore streaming commit error: ${error}`);
+                }
                 break;
               }
               console.error('[ASR-Proxy] Error:', msg.error || msg);
               clientWs.send(JSON.stringify({ event: 'error', error }));
+              break;
+
+            case 'input_audio_buffer.committed':
+              // 记录服务端 commit，避免被视作未处理噪音事件
+              lastTurnCommitChunkCount = appendedChunks;
+              lastTurnCommitAt = Date.now();
               break;
 
             case 'response.done':
@@ -504,6 +623,8 @@ app.prepare().then(() => {
           } else if (msg.event === 'end') {
             lastSpeechEndMs = msg.timestampMs;
             console.log('[ASR-Proxy] VAD speech end:', lastSpeechEndMs, 'ms');
+            // 客户端 VAD 已判定本段结束，主动 commit 一次，避免后段长时间不出句
+            commitCurrentTurn('client vad end');
           }
           return;
         }
@@ -520,6 +641,7 @@ app.prepare().then(() => {
         
         if (msg.action === 'stop') {
           console.log('[ASR-Proxy] Stop requested');
+          stopRequestedByClient = true;
           const committed = commitAudioBuffer('client stop');
           scheduleDashscopeClose('Client stop', committed ? 1200 : 100);
         }
@@ -538,6 +660,7 @@ app.prepare().then(() => {
 
     clientWs.on('close', () => {
       console.log(`[ASR-Proxy] Client disconnected, recvChunks=${receivedBinaryChunks}, recvBytes=${receivedBinaryBytes}, appended=${appendedChunks}, queue=${audioQueue.length}`);
+      stopRequestedByClient = true;
       const committed = commitAudioBuffer('client disconnected');
       scheduleDashscopeClose('Client disconnected', committed ? 800 : 100);
     });
