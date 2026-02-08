@@ -1,162 +1,371 @@
-/**
- * 转录增强 API 路由
- * 
- * POST /api/transcript-enhance
- * 使用 LLM 对 ASR 转录结果进行后处理优化
- */
-
 import { NextRequest, NextResponse } from 'next/server';
 import { chat } from '@/lib/services/llm-service';
 import type { TranscriptSegment } from '@/types';
 import { applyRateLimit } from '@/lib/utils/rate-limit';
 
-// 优化状态
 type EnhanceStatus = 'pending' | 'enhancing' | 'enhanced' | 'failed';
+type CorrectionStrategy = 'layered' | 'rule-only';
 
-// 带优化状态的转录片段
+type CorrectionLevel = 'rule' | 'lexicon' | 'llm' | 'none';
+
 interface EnhancedTranscriptSegment extends TranscriptSegment {
   originalText?: string;
+  rawText?: string;
   enhanceStatus: EnhanceStatus;
+  correctionLevel?: CorrectionLevel;
   enhancedAt?: string;
 }
 
-// 请求体
+interface LexiconTerm {
+  term: string;
+  canonical: string;
+  aliases?: string[];
+  scope?: 'classroom' | 'meeting' | 'global';
+  status?: 'pending' | 'active' | 'disabled';
+}
+
 interface EnhanceRequestBody {
   segments: TranscriptSegment[];
   model?: string;
+  fallbackModel?: string;
+  strategy?: CorrectionStrategy;
   isFinal?: boolean;
+  lexiconTerms?: LexiconTerm[];
+  enableModelCorrection?: boolean;
 }
 
-/**
- * 转录增强 Prompt
- * 
- * 设计原则：
- * 1. 结果导向 + 规则导向结合
- * 2. 控制 Prompt 长度
- * 3. 输出格式严格约束
- */
-const ENHANCE_SYSTEM_PROMPT = `你是一位课堂转录优化助手。你的任务是将语音识别的原始文本优化为流畅易读的书面文本。`;
+const DEFAULT_MODEL = process.env.TRANSCRIPT_LIGHT_MODEL || 'qwen-turbo';
+const DEFAULT_FALLBACK_MODEL = process.env.TRANSCRIPT_FALLBACK_MODEL || 'qwen-plus';
+const ENABLE_MAX_FALLBACK = String(process.env.TRANSCRIPT_ENABLE_MAX_FALLBACK || 'false').toLowerCase() === 'true';
+const modelAvailability = new Map<string, 'available' | 'unavailable'>();
 
-const ENHANCE_USER_PROMPT = `【任务】优化以下 ASR 转录文本
+const SYSTEM_PROMPT = `你是课堂转录纠错助手。\n只在必要时最小修改，保留原意。\n你必须只输出 JSON 数组，不要输出额外解释。`;
 
-【规则】
-- 删除语气词（嗯、啊、那个、就是、然后等）
-- 去除重复（我我我 → 我）
-- 纠正同音字错误
-- 保持原意和专业术语
+const USER_PROMPT_PREFIX = `任务：修正以下 ASR 文本。\n规则：\n1. 删除口头禅和明显重复。\n2. 修正常见同音或拼写错误。\n3. 保持术语、专有名词和语气。\n4. 只返回 JSON 数组，每项包含 id 和 text。\n输入：\n`;
 
-【输出】严格按 JSON 数组格式返回，每项包含 id 和优化后的 text
-示例：[{"id":"seg-1","text":"优化后的文本"}]
+function markModelAvailability(model: string, next: 'available' | 'unavailable'): void {
+  const prev = modelAvailability.get(model);
+  if (prev !== next) {
+    console.log(`[TranscriptEnhance API] Model ${model} is ${next}`);
+  }
+  modelAvailability.set(model, next);
+}
 
-【输入】
-`;
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
 
-/**
- * 解析 LLM 输出
- */
+function normalizeText(value: string): string {
+  return (value || '')
+    .normalize('NFKC')
+    .trim();
+}
+
+function normalizeCompareKey(value: string): string {
+  return normalizeText(value)
+    .toLowerCase()
+    .replace(/[\s，。！？、,.!?;；:："“”'‘’（）()【】\[\]-]/g, '');
+}
+
+function applyRuleLayer(text: string): { text: string; changed: boolean } {
+  let next = normalizeText(text);
+  const original = next;
+
+  // Remove obvious filler words and repeated filler chunks.
+  next = next
+    .replace(/(嗯|呃|额|啊){2,}/g, '$1')
+    .replace(/(就是|然后|那个|这个){2,}/g, '$1')
+    .replace(/\b([A-Za-z]+)\s+\1\b/gi, '$1');
+
+  // Collapse repeated characters and punctuation.
+  next = next
+    .replace(/([^\s])\1{2,}/g, '$1')
+    .replace(/([，。！？,.!?])\1+/g, '$1');
+
+  // Normalize punctuation spacing.
+  next = next
+    .replace(/\s+([，。！？,.!?;；:：])/g, '$1')
+    .replace(/([，。！？,.!?;；:：])(\S)/g, '$1 $2')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  // Common misspellings in bilingual content.
+  next = next
+    .replace(/\bqustions\b/gi, 'questions')
+    .replace(/\bsugguest\b/gi, 'suggest')
+    .replace(/\btakeawayy?\b/gi, 'takeaway');
+
+  return {
+    text: next,
+    changed: next !== original,
+  };
+}
+
+function applyLexiconLayer(text: string, lexiconTerms: LexiconTerm[]): { text: string; changed: boolean; conflict: boolean } {
+  if (!lexiconTerms.length) {
+    return { text, changed: false, conflict: false };
+  }
+
+  let next = text;
+  let changed = false;
+  let conflict = false;
+
+  const sortedTerms = lexiconTerms
+    .filter((term) => term && term.term && term.canonical && term.status !== 'disabled')
+    .sort((a, b) => b.term.length - a.term.length);
+
+  for (const term of sortedTerms) {
+    const canonical = normalizeText(term.canonical);
+    if (!canonical) continue;
+
+    const variants = [term.term, ...(term.aliases || [])]
+      .map((item) => normalizeText(item))
+      .filter(Boolean);
+
+    for (const variant of variants) {
+      const escaped = escapeRegExp(variant);
+      if (!escaped) continue;
+
+      const regex = /[A-Za-z]/.test(variant)
+        ? new RegExp(`\\b${escaped}\\b`, 'gi')
+        : new RegExp(escaped, 'g');
+
+      if (regex.test(next) && !next.includes(canonical)) {
+        conflict = true;
+      }
+
+      regex.lastIndex = 0;
+      const replaced = next.replace(regex, canonical);
+      if (replaced !== next) {
+        changed = true;
+        next = replaced;
+      }
+    }
+  }
+
+  return { text: next, changed, conflict };
+}
+
+function shouldUseModelCorrection(segment: TranscriptSegment, text: string, hasLexiconConflict: boolean): boolean {
+  if (hasLexiconConflict) return true;
+  if ((segment.confidence ?? 1) < 0.85) return true;
+
+  const normalized = normalizeText(text);
+  if (!normalized) return false;
+
+  const hasPunctuation = /[，。！？,.!?;；]/.test(normalized);
+  if (!hasPunctuation && normalized.length >= 30) return true;
+  if (/(.{2,})\1{1,}/.test(normalized)) return true;
+  if (/\b(qustions|sugguest|takeawayy?)\b/i.test(normalized)) return true;
+
+  return false;
+}
+
 function parseEnhanceOutput(output: string): Map<string, string> {
   const result = new Map<string, string>();
-  
-  try {
-    // 尝试直接解析 JSON
-    const parsed = JSON.parse(output.trim());
-    if (Array.isArray(parsed)) {
-      for (const item of parsed) {
-        if (item.id && item.text) {
-          result.set(item.id, item.text);
-        }
-      }
-      return result;
-    }
-  } catch {
-    // JSON 解析失败
-  }
-  
-  // 尝试提取 JSON 块
-  const jsonMatch = output.match(/\[[\s\S]*?\]/);
-  if (jsonMatch) {
+  const candidates: string[] = [];
+
+  const trimmed = output.trim();
+  if (trimmed) candidates.push(trimmed);
+
+  const fenced = output.match(/```(?:json)?\s*([\s\S]*?)```/i);
+  if (fenced?.[1]) candidates.push(fenced[1].trim());
+
+  const bracketBlock = output.match(/\[[\s\S]*\]/);
+  if (bracketBlock?.[0]) candidates.push(bracketBlock[0].trim());
+
+  for (const candidate of candidates) {
     try {
-      const parsed = JSON.parse(jsonMatch[0]);
-      if (Array.isArray(parsed)) {
-        for (const item of parsed) {
-          if (item.id && item.text) {
-            result.set(item.id, item.text);
-          }
+      const parsed = JSON.parse(candidate);
+      if (!Array.isArray(parsed)) continue;
+
+      for (const item of parsed) {
+        if (item && typeof item.id === 'string' && typeof item.text === 'string') {
+          result.set(item.id, item.text.trim());
         }
       }
+
+      if (result.size > 0) return result;
     } catch {
-      console.error('[TranscriptEnhance API] Failed to parse JSON block');
+      // Continue with next parser candidate.
     }
   }
-  
+
   return result;
 }
 
+async function runModelCorrection(
+  segments: TranscriptSegment[],
+  model: string,
+): Promise<{ texts: Map<string, string>; model: string; usage?: unknown }> {
+  if (modelAvailability.get(model) === 'unavailable') {
+    throw new Error(`Model ${model} marked unavailable in runtime cache`);
+  }
+
+  const inputItems = segments.map((seg) => ({
+    id: seg.id,
+    text: seg.text,
+  }));
+
+  const response = await chat(
+      [
+        { role: 'system', content: SYSTEM_PROMPT },
+        { role: 'user', content: USER_PROMPT_PREFIX + JSON.stringify(inputItems) },
+      ],
+      model,
+      {
+        temperature: 0.2,
+        maxTokens: 2000,
+      }
+    );
+
+  const parsed = parseEnhanceOutput(response.content || '');
+  if (parsed.size === 0) {
+    markModelAvailability(model, 'unavailable');
+    throw new Error(`Model ${model} returned non-JSON or empty payload`);
+  }
+
+  markModelAvailability(model, 'available');
+
+  return {
+    texts: parsed,
+    model: response.model || model,
+    usage: response.usage,
+  };
+}
+
 export async function POST(request: NextRequest) {
-  // 应用速率限制
   const rateLimitResponse = await applyRateLimit(request, 'transcriptEnhance');
   if (rateLimitResponse) return rateLimitResponse;
 
   try {
     const body: EnhanceRequestBody = await request.json();
-    const { segments, model = 'qwen3-max-2026-01-23', isFinal: _isFinal = false } = body;
+    const {
+      segments,
+      model = DEFAULT_MODEL,
+      fallbackModel = DEFAULT_FALLBACK_MODEL,
+      strategy = (process.env.TRANSCRIPT_CORRECTION_MODE as CorrectionStrategy) || 'layered',
+      lexiconTerms = [],
+      enableModelCorrection = true,
+    } = body;
 
     if (!segments || !Array.isArray(segments) || segments.length === 0) {
-      return NextResponse.json(
-        { error: '缺少 segments 参数' },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: 'Missing segments' }, { status: 400 });
     }
 
-    console.log(`[TranscriptEnhance API] Enhancing ${segments.length} segments with ${model}`);
+    const stageResult = new Map<string, {
+      text: string;
+      ruleChanged: boolean;
+      lexiconChanged: boolean;
+      llmChanged: boolean;
+      lexiconConflict: boolean;
+    }>();
 
-    // 构建输入文本
-    const inputItems = segments.map(seg => ({
-      id: seg.id,
-      text: seg.text,
-    }));
-    const inputText = JSON.stringify(inputItems, null, 0);
-    const fullPrompt = ENHANCE_USER_PROMPT + inputText;
+    for (const seg of segments) {
+      const rawText = seg.text || '';
+      const rule = applyRuleLayer(rawText);
+      const lexicon = applyLexiconLayer(rule.text, lexiconTerms);
 
-    // 调用 LLM
-    const response = await chat(
-      [
-        { role: 'system', content: ENHANCE_SYSTEM_PROMPT },
-        { role: 'user', content: fullPrompt },
-      ],
-      model,
-      { 
-        temperature: 0.3,  // 低温度，保持稳定输出
-        maxTokens: 2000,
+      stageResult.set(seg.id, {
+        text: lexicon.text,
+        ruleChanged: rule.changed,
+        lexiconChanged: lexicon.changed,
+        llmChanged: false,
+        lexiconConflict: lexicon.conflict,
+      });
+    }
+
+    let modelUsed = 'none';
+    let modelFallbackUsed: string | null = null;
+    let modelUsage: unknown = undefined;
+
+    const modelEligibleSegments = strategy === 'layered' && enableModelCorrection
+      ? segments.filter((seg) => {
+          const staged = stageResult.get(seg.id);
+          return staged ? shouldUseModelCorrection(seg, staged.text, staged.lexiconConflict) : false;
+        })
+      : [];
+
+    if (modelEligibleSegments.length > 0) {
+      const modelInput = modelEligibleSegments.map((seg) => ({
+        ...seg,
+        text: stageResult.get(seg.id)?.text || seg.text,
+      }));
+
+      let modelTexts = new Map<string, string>();
+
+      try {
+        const primary = await runModelCorrection(modelInput, model);
+        modelTexts = primary.texts;
+        modelUsed = primary.model;
+        modelUsage = primary.usage;
+      } catch (primaryError) {
+        console.warn('[TranscriptEnhance API] Primary model failed:', primaryError);
+
+        try {
+          const fallback = await runModelCorrection(modelInput, fallbackModel);
+          modelTexts = fallback.texts;
+          modelUsed = fallback.model;
+          modelFallbackUsed = fallbackModel;
+          modelUsage = fallback.usage;
+        } catch (fallbackError) {
+          console.warn('[TranscriptEnhance API] Fallback model failed:', fallbackError);
+
+          if (ENABLE_MAX_FALLBACK && fallbackModel !== 'qwen3-max-2026-01-23') {
+            try {
+              const maxFallback = await runModelCorrection(modelInput, 'qwen3-max-2026-01-23');
+              modelTexts = maxFallback.texts;
+              modelUsed = maxFallback.model;
+              modelFallbackUsed = 'qwen3-max-2026-01-23';
+              modelUsage = maxFallback.usage;
+            } catch (maxError) {
+              console.warn('[TranscriptEnhance API] Max fallback failed:', maxError);
+            }
+          }
+        }
       }
-    );
 
-    // 解析输出
-    const enhancedTexts = parseEnhanceOutput(response.content);
-    
-    // 构建返回结果
-    const enhancedSegments: EnhancedTranscriptSegment[] = segments.map(seg => {
-      const enhancedText = enhancedTexts.get(seg.id);
-      
-      if (enhancedText && enhancedText !== seg.text) {
-        return {
-          ...seg,
-          originalText: seg.text,
-          text: enhancedText,
-          enhanceStatus: 'enhanced' as EnhanceStatus,
-          enhancedAt: new Date().toISOString(),
-        };
+      for (const seg of modelEligibleSegments) {
+        const nextText = modelTexts.get(seg.id);
+        if (!nextText) continue;
+
+        const staged = stageResult.get(seg.id);
+        if (!staged) continue;
+
+        const normalized = normalizeText(nextText);
+        if (!normalized) continue;
+
+        const changed = normalizeCompareKey(normalized) !== normalizeCompareKey(staged.text);
+        stageResult.set(seg.id, {
+          ...staged,
+          text: normalized,
+          llmChanged: changed,
+        });
       }
-      
-      // 未被优化（可能是解析失败或文本已足够好）
+    }
+
+    const enhancedSegments: EnhancedTranscriptSegment[] = segments.map((seg) => {
+      const staged = stageResult.get(seg.id);
+      const finalText = staged?.text || seg.text;
+      const changed = normalizeCompareKey(finalText) !== normalizeCompareKey(seg.text);
+
+      let correctionLevel: CorrectionLevel = 'none';
+      if (staged?.llmChanged) correctionLevel = 'llm';
+      else if (staged?.lexiconChanged) correctionLevel = 'lexicon';
+      else if (staged?.ruleChanged) correctionLevel = 'rule';
+
       return {
         ...seg,
-        enhanceStatus: enhancedText ? 'enhanced' : 'pending' as EnhanceStatus,
+        rawText: seg.text,
+        originalText: changed ? seg.text : undefined,
+        text: finalText,
+        correctionLevel,
+        enhanceStatus: changed ? 'enhanced' : 'pending',
+        enhancedAt: changed ? new Date().toISOString() : undefined,
       };
     });
 
-    const enhancedCount = enhancedSegments.filter(s => s.enhanceStatus === 'enhanced').length;
-    console.log(`[TranscriptEnhance API] Enhanced ${enhancedCount}/${segments.length} segments`);
+    const enhancedCount = enhancedSegments.filter((item) => item.enhanceStatus === 'enhanced').length;
 
     return NextResponse.json({
       success: true,
@@ -164,17 +373,17 @@ export async function POST(request: NextRequest) {
       stats: {
         total: segments.length,
         enhanced: enhancedCount,
-        model: response.model,
-        usage: response.usage,
+        strategy,
+        model: modelUsed,
+        fallbackModel: modelFallbackUsed,
+        modelCandidates: modelEligibleSegments.length,
+        usage: modelUsage,
       },
     });
-
   } catch (error) {
     console.error('[TranscriptEnhance API] Error:', error);
-    const errorMessage = error instanceof Error ? error.message : '优化失败';
-    return NextResponse.json(
-      { success: false, error: errorMessage },
-      { status: 500 }
-    );
+    const errorMessage = error instanceof Error ? error.message : 'Transcript enhancement failed';
+    return NextResponse.json({ success: false, error: errorMessage }, { status: 500 });
   }
 }
+

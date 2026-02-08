@@ -1,14 +1,3 @@
-/**
- * 自定义 Next.js 服务器
- * 支持 WebSocket 代理到百炼 ASR (qwen3-asr-flash-realtime)
- * 
- * 正确的协议：
- * - Endpoint: /api-ws/v1/realtime?model=qwen3-asr-flash-realtime
- * - session.update 使用 input_audio_transcription（不是 transcription_params）
- * - 音频必须通过 input_audio_buffer.append 事件发送（Base64 编码）
- */
-
-// 先尝试加载 .env.local，如果不存在则加载 .env
 const fs = require('fs');
 if (fs.existsSync('.env.local')) {
   require('dotenv').config({ path: '.env.local' });
@@ -28,43 +17,186 @@ const port = parseInt(process.env.PORT || '3001', 10);
 const app = next({ dev, hostname, port });
 const handle = app.getRequestHandler();
 
-// 百炼 WebSocket 地址
 const DASHSCOPE_WSS_URL = 'wss://dashscope.aliyuncs.com/api-ws/v1/realtime';
 
-// 生成事件 ID
 let eventCounter = 0;
 function generateEventId() {
   return `event_${Date.now()}_${eventCounter++}`;
 }
 
+function clampNumber(value, min, max, fallback) {
+  if (!Number.isFinite(value)) return fallback;
+  return Math.min(max, Math.max(min, value));
+}
+
+function normalizeCompareText(text) {
+  return String(text || '')
+    .normalize('NFKC')
+    .toLowerCase()
+    .replace(/[\s，。！？、,.!?;；:：'"“”‘’（）()【】\[\]-]/g, '');
+}
+
+function longestCommonSubstringRatio(a, b) {
+  const left = normalizeCompareText(a);
+  const right = normalizeCompareText(b);
+  if (!left || !right) return 0;
+  if (left === right) return 1;
+
+  const shorter = left.length <= right.length ? left : right;
+  const longer = left.length <= right.length ? right : left;
+
+  const dp = new Array(shorter.length + 1).fill(0);
+  let maxLen = 0;
+
+  for (let i = 1; i <= longer.length; i += 1) {
+    for (let j = shorter.length; j >= 1; j -= 1) {
+      if (longer[i - 1] === shorter[j - 1]) {
+        dp[j] = dp[j - 1] + 1;
+        if (dp[j] > maxLen) maxLen = dp[j];
+      } else {
+        dp[j] = 0;
+      }
+    }
+  }
+
+  return maxLen / shorter.length;
+}
+
+function shouldDedupSegment(lastSegment, nextSegment, dedupSimilarity, dedupGapMs) {
+  if (!lastSegment || !nextSegment) return false;
+
+  const similarity = longestCommonSubstringRatio(lastSegment.text, nextSegment.text);
+  const overlap = nextSegment.beginTime <= lastSegment.endTime;
+  const gap = Math.max(0, nextSegment.beginTime - lastSegment.endTime);
+
+  return similarity >= dedupSimilarity && (overlap || gap <= dedupGapMs);
+}
+
+function splitLongTranscript(text, beginTime, endTime) {
+  const normalized = String(text || '').trim();
+  if (!normalized) return [];
+
+  if (normalized.length <= 48) {
+    return [{ text: normalized, beginTime, endTime }];
+  }
+
+  const chunks = [];
+  let current = '';
+  const punctuation = /[。！？!?；;，,]/;
+
+  for (const ch of normalized) {
+    current += ch;
+    if (punctuation.test(ch) || current.length >= 36) {
+      if (current.trim()) chunks.push(current.trim());
+      current = '';
+    }
+  }
+
+  if (current.trim()) chunks.push(current.trim());
+
+  if (chunks.length <= 1) {
+    return [{ text: normalized, beginTime, endTime }];
+  }
+
+  const duration = Math.max(1, endTime - beginTime);
+  const totalChars = chunks.reduce((sum, chunk) => sum + chunk.length, 0);
+  if (totalChars <= 0) {
+    return [{ text: normalized, beginTime, endTime }];
+  }
+
+  let consumed = 0;
+  return chunks.map((chunk, index) => {
+    const segBegin = Math.round(beginTime + (duration * consumed) / totalChars);
+    consumed += chunk.length;
+    let segEnd = index === chunks.length - 1
+      ? endTime
+      : Math.round(beginTime + (duration * consumed) / totalChars);
+
+    if (segEnd <= segBegin) {
+      segEnd = Math.min(endTime, segBegin + 200);
+    }
+
+    return {
+      text: chunk,
+      beginTime: segBegin,
+      endTime: segEnd,
+    };
+  });
+}
+
+function extractItemId(msg) {
+  return msg.item_id || msg.item?.id || null;
+}
+
+function extractFinalText(msg) {
+  const candidates = [
+    msg.item?.content?.[0]?.text,
+    msg.transcript,
+    msg.text,
+    msg.item?.text,
+  ];
+
+  for (const candidate of candidates) {
+    if (typeof candidate === 'string' && candidate.trim()) {
+      return candidate.trim();
+    }
+  }
+
+  return '';
+}
+
+function extractServerTimestamp(msg, kind) {
+  const beginFields = ['begin_time', 'start_time', 'beginTime', 'startTime', 'audio_start_ms'];
+  const endFields = ['end_time', 'endTime', 'audio_end_ms'];
+  const fields = kind === 'begin' ? beginFields : endFields;
+
+  for (const field of fields) {
+    if (msg[field] !== undefined) return Number(msg[field]);
+    if (msg.item?.[field] !== undefined) return Number(msg.item[field]);
+  }
+
+  return null;
+}
+
+function extractInterimPayload(msg) {
+  const stableText = typeof msg.text === 'string' ? msg.text : '';
+  const unstableText = typeof msg.stash === 'string'
+    ? msg.stash
+    : (typeof msg.delta === 'string' ? msg.delta : '');
+
+  let composed = `${stableText}${unstableText}`.trim();
+  if (!composed) {
+    composed = stableText || unstableText || '';
+  }
+
+  return {
+    stableText,
+    unstableText,
+    text: composed,
+  };
+}
+
+function isIgnorableCommitError(message) {
+  return typeof message === 'string' && /error committing input audio buffer/i.test(message);
+}
 
 console.log('[Server] Starting app.prepare()...');
 
 app.prepare().then(() => {
-  console.log('[Server] app.prepare() completed');
-  
-  try {
-    const server = createServer(async (req, res) => {
-      try {
-        const parsedUrl = parse(req.url, true);
-        await handle(req, res, parsedUrl);
-      } catch (err) {
-        console.error('Error occurred handling', req.url, err);
-        res.statusCode = 500;
-        res.end('internal server error');
-      }
-    });
-    console.log('[Server] HTTP server created');
+  const server = createServer(async (req, res) => {
+    try {
+      const parsedUrl = parse(req.url, true);
+      await handle(req, res, parsedUrl);
+    } catch (error) {
+      console.error('Error occurred handling', req.url, error);
+      res.statusCode = 500;
+      res.end('internal server error');
+    }
+  });
 
-    // 创建 WebSocket 服务器（仅用于 ASR）
-    const wss = new WebSocketServer({ noServer: true });
-    console.log('[Server] WebSocket server created');
+  const wss = new WebSocketServer({ noServer: true });
+  const nextUpgradeHandler = app.getUpgradeHandler();
 
-    // 获取 Next.js 的 upgrade handler
-    const nextUpgradeHandler = app.getUpgradeHandler();
-    console.log('[Server] Got upgrade handler');
-
-  // 标记为已完成 WS 设置，防止 Next.js 再次自动注册 upgrade 监听
   if ('didWebSocketSetup' in app) {
     app.didWebSocketSetup = true;
   }
@@ -72,43 +204,54 @@ app.prepare().then(() => {
     app.options.httpServer = server;
   }
 
-  // 处理 WebSocket 升级请求
   server.on('upgrade', (request, socket, head) => {
     const { pathname } = parse(request.url || '', true);
-    console.log('[Server] Upgrade request received:', pathname, 'from:', request.headers['x-real-ip'] || request.socket.remoteAddress);
 
     if (pathname === '/api/asr-stream') {
-      // ASR WebSocket 请求由我们处理
-      console.log('[Server] Handling ASR WebSocket upgrade');
       wss.handleUpgrade(request, socket, head, (ws) => {
-        console.log('[Server] ASR WebSocket upgrade completed');
         wss.emit('connection', ws, request);
       });
       return;
     }
 
-    // 其他 WebSocket 请求（如 Next.js HMR）交给 Next.js 处理
     try {
       nextUpgradeHandler(request, socket, head);
-    } catch (err) {
-      console.error('Error delegating upgrade to Next.js:', err);
+    } catch (error) {
+      console.error('Error delegating upgrade to Next.js:', error);
       socket.destroy();
     }
   });
 
-
-
-  // 处理 WebSocket 连接
-  wss.on('connection', (clientWs, request) => {
+  wss.on('connection', (clientWs) => {
     console.log('[ASR-Proxy] Client connected');
 
     const apiKey = process.env.DASHSCOPE_API_KEY;
     const model = process.env.DASHSCOPE_ASR_WS_MODEL || 'qwen3-asr-flash-realtime';
     const sampleRate = parseInt(process.env.DASHSCOPE_ASR_WS_SR || '16000', 10);
-    const turnSilenceRaw = parseInt(process.env.DASHSCOPE_ASR_WS_VAD_SILENCE_MS || '500', 10);
-    const turnSilenceMs = Number.isFinite(turnSilenceRaw)
-      ? Math.min(2000, Math.max(200, turnSilenceRaw))
-      : 500;
+    const turnSilenceMs = clampNumber(
+      parseInt(process.env.DASHSCOPE_ASR_WS_VAD_SILENCE_MS || '500', 10),
+      200,
+      2000,
+      500
+    );
+    const draftFlushMs = clampNumber(
+      parseInt(process.env.ASR_DRAFT_FLUSH_MS || '800', 10),
+      200,
+      2500,
+      800
+    );
+    const dedupSimilarity = clampNumber(
+      parseFloat(process.env.ASR_DEDUP_SIMILARITY || '0.95'),
+      0.7,
+      1,
+      0.95
+    );
+    const dedupGapMs = clampNumber(
+      parseInt(process.env.ASR_DEDUP_GAP_MS || '1500', 10),
+      200,
+      10000,
+      1500
+    );
 
     if (!apiKey) {
       clientWs.send(JSON.stringify({ event: 'error', error: 'API Key 未配置' }));
@@ -119,23 +262,31 @@ app.prepare().then(() => {
     let dashscopeWs = null;
     let isSessionReady = false;
     const audioQueue = [];
-    let sentenceIndex = 0;
-    let sessionStartTime = Date.now();  // 立即初始化，用于计算相对时间戳
-    let lastSentenceEndTime = 0;  // 跟踪上一个句子的结束时间
-    let hasAudioAppended = false; // 是否至少发送过一次有效音频
-    let hasCommittedAudioBuffer = false; // 防止重复 commit
-    let closeTimer = null; // 防止重复 close 定时器
-    let stopRequestedByClient = false; // 仅在 stop/断开阶段忽略可恢复 commit 错误
-    let receivedBinaryChunks = 0; // 记录客户端传来的二进制音频包数量
-    let receivedBinaryBytes = 0; // 记录客户端传来的二进制音频总字节数
-    let appendedChunks = 0; // 记录成功 append 到 DashScope 的包数量
-    let lastTurnCommitChunkCount = 0; // 记录上次 turn commit 时已 append 的包数量
-    let lastTurnCommitAt = 0; // 防抖：避免短时间内重复 turn commit
 
-    // VAD 状态（前端检测的语音起止时间）
-    let currentSpeechStartMs = null;  // 当前语音段的开始时间
-    let lastSpeechEndMs = 0;          // 上一个语音段的结束时间
-    const vadTimestampQueue = [];     // 备用队列模式（保留兼容）
+    let sessionStartTime = Date.now();
+    let sentenceIndex = 0;
+    let lastSentenceEndTime = 0;
+    let currentSpeechStartMs = null;
+    let lastSpeechEndMs = 0;
+
+    let hasAudioAppended = false;
+    let hasCommittedAudioBuffer = false;
+    let stopRequestedByClient = false;
+    let closeTimer = null;
+
+    let receivedBinaryChunks = 0;
+    let receivedBinaryBytes = 0;
+    let appendedChunks = 0;
+
+    const vadTimestampQueue = [];
+    const interimByItemId = new Map();
+    let activeInterimItemId = null;
+    let lastFinalSegment = null;
+
+    function sendClientEvent(payload) {
+      if (clientWs.readyState !== WebSocket.OPEN) return;
+      clientWs.send(JSON.stringify(payload));
+    }
 
     function scheduleDashscopeClose(reason, delayMs = 200) {
       if (closeTimer) return;
@@ -149,147 +300,184 @@ app.prepare().then(() => {
 
     function commitAudioBuffer(commitReason) {
       if (!dashscopeWs || dashscopeWs.readyState !== WebSocket.OPEN) return false;
-
-      if (hasCommittedAudioBuffer) {
-        console.log(`[ASR-Proxy] Skip duplicate commit (${commitReason})`);
-        return false;
-      }
-
-      if (!hasAudioAppended && audioQueue.length === 0) {
-        console.log(`[ASR-Proxy] Skip commit (${commitReason}): no audio appended, recvChunks=${receivedBinaryChunks}, recvBytes=${receivedBinaryBytes}, queue=${audioQueue.length}`);
-        return false;
-      }
+      if (hasCommittedAudioBuffer) return false;
+      if (!hasAudioAppended && audioQueue.length === 0) return false;
 
       try {
-        const commitEvent = {
+        dashscopeWs.send(JSON.stringify({
           event_id: generateEventId(),
           type: 'input_audio_buffer.commit',
-        };
-        dashscopeWs.send(JSON.stringify(commitEvent));
+        }));
         hasCommittedAudioBuffer = true;
-        console.log(`[ASR-Proxy] Audio buffer committed (${commitReason}), recvChunks=${receivedBinaryChunks}, recvBytes=${receivedBinaryBytes}, appended=${appendedChunks}, queue=${audioQueue.length}`);
+        console.log(`[ASR-Proxy] Audio buffer committed (${commitReason})`);
         return true;
-      } catch (err) {
-        console.error('[ASR-Proxy] Commit failed:', err);
+      } catch (error) {
+        console.error('[ASR-Proxy] Commit failed:', error);
         return false;
       }
     }
 
-    function commitCurrentTurn(commitReason) {
-      if (!dashscopeWs || dashscopeWs.readyState !== WebSocket.OPEN) return false;
-      if (!isSessionReady || !hasAudioAppended) return false;
-      if (appendedChunks <= lastTurnCommitChunkCount) return false;
+    function sendAudioToDashScope(pcmData) {
+      if (!dashscopeWs || dashscopeWs.readyState !== WebSocket.OPEN) return;
+      const chunkSize = pcmData?.length || pcmData?.byteLength || 0;
+      if (chunkSize <= 0) return;
+
+      const base64Audio = Buffer.from(pcmData).toString('base64');
+      if (!base64Audio) return;
+
+      dashscopeWs.send(JSON.stringify({
+        event_id: generateEventId(),
+        type: 'input_audio_buffer.append',
+        audio: base64Audio,
+      }));
+
+      hasAudioAppended = true;
+      appendedChunks += 1;
+    }
+
+    function flushAudioQueue() {
+      while (audioQueue.length > 0) {
+        const audioData = audioQueue.shift();
+        sendAudioToDashScope(audioData);
+      }
+    }
+
+    function resolveTimestamp(msg) {
+      const currentElapsedMs = Date.now() - sessionStartTime;
+      let beginTime = 0;
+      let endTime = 0;
+
+      if (currentSpeechStartMs !== null) {
+        beginTime = currentSpeechStartMs;
+        endTime = lastSpeechEndMs > currentSpeechStartMs ? lastSpeechEndMs : currentElapsedMs;
+        currentSpeechStartMs = null;
+      } else {
+        const queued = vadTimestampQueue.shift();
+        if (queued) {
+          beginTime = queued.startMs;
+          endTime = queued.endMs;
+        } else {
+          const serverBegin = extractServerTimestamp(msg, 'begin');
+          const serverEnd = extractServerTimestamp(msg, 'end');
+          if (serverBegin !== null && serverEnd !== null) {
+            beginTime = serverBegin;
+            endTime = serverEnd;
+          } else {
+            beginTime = lastSentenceEndTime;
+            endTime = currentElapsedMs;
+          }
+        }
+      }
+
+      if (endTime < beginTime) {
+        endTime = beginTime;
+      }
+
+      lastSentenceEndTime = Math.max(lastSentenceEndTime, endTime);
+      return { beginTime, endTime };
+    }
+
+    function upsertInterimState(itemId, payload) {
+      const currentElapsedMs = Date.now() - sessionStartTime;
+      const prev = interimByItemId.get(itemId) || {
+        text: '',
+        stableText: '',
+        unstableText: '',
+        beginTime: currentSpeechStartMs ?? Math.max(0, lastSentenceEndTime),
+        endTime: currentElapsedMs,
+        lastSentAt: 0,
+        lastSentText: '',
+      };
+
+      const next = {
+        ...prev,
+        text: payload.text,
+        stableText: payload.stableText,
+        unstableText: payload.unstableText,
+        endTime: currentElapsedMs,
+      };
+
+      interimByItemId.set(itemId, next);
+      return next;
+    }
+
+    function maybeSendInterim(itemId, force = false) {
+      const state = interimByItemId.get(itemId);
+      if (!state) return;
 
       const now = Date.now();
-      // 避免 VAD 抖动导致的高频 commit
-      if (now - lastTurnCommitAt < 600) return false;
+      const changed = state.text !== state.lastSentText;
+      const due = now - state.lastSentAt >= draftFlushMs;
+      if (!force && !(changed && due)) return;
+      if (!state.text && !force) return;
 
-      try {
-        const commitEvent = {
-          event_id: generateEventId(),
-          type: 'input_audio_buffer.commit',
-        };
-        dashscopeWs.send(JSON.stringify(commitEvent));
-        lastTurnCommitChunkCount = appendedChunks;
-        lastTurnCommitAt = now;
-        console.log(`[ASR-Proxy] Turn commit (${commitReason}), appended=${appendedChunks}`);
-        return true;
-      } catch (err) {
-        console.error('[ASR-Proxy] Turn commit failed:', err);
-        return false;
-      }
-    }
+      state.lastSentAt = now;
+      state.lastSentText = state.text;
 
-    function isIgnorableCommitError(message) {
-      if (typeof message !== 'string') return false;
-      return /error committing input audio buffer/i.test(message);
-    }
-
-    function splitLongTranscript(text, beginTime, endTime) {
-      const normalized = (text || '').trim();
-      if (!normalized) return [];
-
-      // 常规短句保持原样，避免过度切分
-      if (normalized.length <= 48) {
-        return [{
-          text: normalized,
-          beginTime,
-          endTime,
-        }];
-      }
-
-      const chunks = [];
-      let current = '';
-      const punctuation = /[。！？!?；;，,]/;
-
-      for (const ch of normalized) {
-        current += ch;
-
-        // 句末标点直接切；超长无标点时按长度兜底切分
-        if (punctuation.test(ch) || current.length >= 36) {
-          if (current.trim()) chunks.push(current.trim());
-          current = '';
-        }
-      }
-      if (current.trim()) chunks.push(current.trim());
-
-      if (chunks.length <= 1) {
-        return [{
-          text: normalized,
-          beginTime,
-          endTime,
-        }];
-      }
-
-      const duration = Math.max(1, endTime - beginTime);
-      const totalChars = chunks.reduce((sum, chunk) => sum + chunk.length, 0);
-      if (totalChars <= 0) {
-        return [{
-          text: normalized,
-          beginTime,
-          endTime,
-        }];
-      }
-
-      let consumed = 0;
-      return chunks.map((chunk, index) => {
-        const segBegin = Math.round(beginTime + (duration * consumed) / totalChars);
-        consumed += chunk.length;
-        let segEnd = index === chunks.length - 1
-          ? endTime
-          : Math.round(beginTime + (duration * consumed) / totalChars);
-
-        if (segEnd <= segBegin) {
-          segEnd = Math.min(endTime, segBegin + 200);
-        }
-
-        return {
-          text: chunk,
-          beginTime: segBegin,
-          endTime: segEnd,
-        };
+      sendClientEvent({
+        event: 'interim',
+        itemId,
+        text: state.text,
+        stableText: state.stableText,
+        unstableText: state.unstableText,
+        provisional: true,
+        beginTime: state.beginTime,
+        endTime: state.endTime,
       });
     }
 
+    function clearInterim(itemId) {
+      if (!itemId) return;
+      interimByItemId.delete(itemId);
+      if (activeInterimItemId === itemId) {
+        activeInterimItemId = null;
+      }
 
-    // 连接到百炼 WebSocket
+      sendClientEvent({
+        event: 'interim',
+        itemId,
+        text: '',
+        stableText: '',
+        unstableText: '',
+        provisional: true,
+      });
+    }
+
+    function sendFinalSegment(segment, itemId) {
+      const nextFinal = {
+        id: `seg-${sentenceIndex++}`,
+        text: segment.text,
+        beginTime: segment.beginTime,
+        endTime: segment.endTime,
+        isFinal: true,
+        itemId: itemId || undefined,
+      };
+
+      let replaces;
+      if (shouldDedupSegment(lastFinalSegment, nextFinal, dedupSimilarity, dedupGapMs)) {
+        replaces = [lastFinalSegment.id];
+      }
+
+      sendClientEvent({
+        event: 'result',
+        provisional: false,
+        replaces,
+        sentence: nextFinal,
+      });
+
+      lastFinalSegment = nextFinal;
+    }
+
     try {
       const wsUrl = `${DASHSCOPE_WSS_URL}?model=${encodeURIComponent(model)}`;
-      
-      console.log('[ASR-Proxy] Connecting to:', wsUrl);
-      
       dashscopeWs = new WebSocket(wsUrl, {
         headers: {
-          'Authorization': `Bearer ${apiKey}`,
+          Authorization: `Bearer ${apiKey}`,
         },
       });
 
       dashscopeWs.on('open', () => {
-        console.log('[ASR-Proxy] Connected to DashScope');
-        
-        // 发送正确格式的 session.update
-        // 启用 semantic_punctuation_enabled 进行语义断句优化
-        const sessionConfig = {
+        dashscopeWs.send(JSON.stringify({
           event_id: generateEventId(),
           type: 'session.update',
           session: {
@@ -297,8 +485,6 @@ app.prepare().then(() => {
             sample_rate: sampleRate,
             input_audio_transcription: {
               language: 'zh',
-              // 启用语义断句模式（基于标点符号断句，替代传统 VAD 断句）
-              // 这会使断句更精准，适合课堂转写场景
               semantic_punctuation_enabled: true,
             },
             turn_detection: {
@@ -307,301 +493,149 @@ app.prepare().then(() => {
               silence_duration_ms: turnSilenceMs,
             },
           },
-        };
-        
-        console.log('[ASR-Proxy] Sending session.update:', JSON.stringify(sessionConfig));
-        dashscopeWs.send(JSON.stringify(sessionConfig));
+        }));
       });
 
       dashscopeWs.on('message', (data, isBinary) => {
         try {
-          if (isBinary) {
-            console.log('[ASR-Proxy] Received binary (unexpected)');
-            return;
-          }
-          
+          if (isBinary) return;
+
           const msg = JSON.parse(data.toString());
           const msgType = msg.type;
-          const isVerboseEvent =
-            msgType === 'conversation.item.input_audio_transcription.text' ||
-            msgType === 'conversation.item.input_audio_transcription.delta';
-          if (!isVerboseEvent) {
-            console.log('[ASR-Proxy] Event:', msgType);
-          }
 
           switch (msgType) {
             case 'session.created':
-              console.log('[ASR-Proxy] Session created');
               break;
 
             case 'session.updated':
-              // Session 配置完成，可以开始发送音频
-              console.log('[ASR-Proxy] Session updated, ready to receive audio');
               isSessionReady = true;
-              sessionStartTime = Date.now();  // 记录开始时间
-              clientWs.send(JSON.stringify({ event: 'ready' }));
-              
-              // 发送队列中的音频
+              sessionStartTime = Date.now();
+              sendClientEvent({ event: 'ready' });
               flushAudioQueue();
               break;
 
-
             case 'input_audio_buffer.speech_started':
-              console.log('[ASR-Proxy] Speech started');
               if (currentSpeechStartMs === null) {
                 currentSpeechStartMs = Math.max(lastSentenceEndTime, Date.now() - sessionStartTime);
               }
               break;
 
             case 'input_audio_buffer.speech_stopped':
-              console.log('[ASR-Proxy] Speech stopped');
               lastSpeechEndMs = Math.max(lastSpeechEndMs, Date.now() - sessionStartTime);
               break;
 
-            case 'conversation.item.input_audio_transcription.completed':
-              // 转录完成 - 尝试多种可能的结构
-              let finalText = '';
-              let beginTime = 0;
-              let endTime = 0;
-              
-              // 打印完整消息结构以便调试
-              console.log('[ASR-Proxy] Completed msg:', JSON.stringify(msg));
-              
-              if (msg.item?.content?.[0]?.text) {
-                finalText = msg.item.content[0].text;
-              } else if (msg.transcript) {
-                finalText = msg.transcript;
-              } else if (msg.text) {
-                finalText = msg.text;
-              }
-              
-              // 时间戳优先级：
-              // 1. 前端 VAD 事件模式（实时跟踪语音开始/结束）
-              // 2. VAD 队列模式（兼容旧方式）
-              // 3. 百炼返回的时间戳
-              // 4. 服务端经过时间（fallback）
-              
-              const now = Date.now();
-              const currentElapsedMs = now - sessionStartTime;
-              
-              // 调试：打印当前 VAD 状态
-              console.log('[ASR-Proxy] VAD state - speechStart:', currentSpeechStartMs, 'speechEnd:', lastSpeechEndMs, 'queueSize:', vadTimestampQueue.length);
-              
-              if (currentSpeechStartMs !== null) {
-                // 使用 VAD 事件模式的时间戳
-                beginTime = currentSpeechStartMs;
-                // 结束时间使用：已知的语音结束时间 或 当前时间
-                endTime = lastSpeechEndMs > currentSpeechStartMs ? lastSpeechEndMs : currentElapsedMs;
-                lastSentenceEndTime = endTime;
-                console.log('[ASR-Proxy] Using VAD event timestamp:', beginTime, '-', endTime);
-                
-                // 重置当前语音段开始时间，为下一段做准备
-                currentSpeechStartMs = null;
-              } else {
-                // 尝试队列模式
-                const vadTimestamp = vadTimestampQueue.shift();
-                if (vadTimestamp) {
-                  beginTime = vadTimestamp.startMs;
-                  endTime = vadTimestamp.endMs;
-                  lastSentenceEndTime = endTime;
-                  console.log('[ASR-Proxy] Using VAD queue timestamp:', beginTime, '-', endTime, 'remaining:', vadTimestampQueue.length);
-                } else {
-                  // 回退：尝试提取百炼返回的时间戳
-                  const possibleBeginFields = ['begin_time', 'start_time', 'beginTime', 'startTime', 'audio_start_ms'];
-                  const possibleEndFields = ['end_time', 'endTime', 'audio_end_ms'];
-                  
-                  let serverBeginTime = null;
-                  let serverEndTime = null;
-                  
-                  for (const field of possibleBeginFields) {
-                    if (msg[field] !== undefined) {
-                      serverBeginTime = msg[field];
-                      console.log('[ASR-Proxy] Found beginTime in msg.' + field + ':', serverBeginTime);
-                      break;
-                    }
-                    if (msg.item?.[field] !== undefined) {
-                      serverBeginTime = msg.item[field];
-                      console.log('[ASR-Proxy] Found beginTime in msg.item.' + field + ':', serverBeginTime);
-                      break;
-                    }
-                  }
-                  
-                  for (const field of possibleEndFields) {
-                    if (msg[field] !== undefined) {
-                      serverEndTime = msg[field];
-                      console.log('[ASR-Proxy] Found endTime in msg.' + field + ':', serverEndTime);
-                      break;
-                    }
-                    if (msg.item?.[field] !== undefined) {
-                      serverEndTime = msg.item[field];
-                      console.log('[ASR-Proxy] Found endTime in msg.item.' + field + ':', serverEndTime);
-                      break;
-                    }
-                  }
-                  
-                  if (serverBeginTime !== null && serverEndTime !== null) {
-                    beginTime = serverBeginTime;
-                    endTime = serverEndTime;
-                    lastSentenceEndTime = endTime;
-                    console.log('[ASR-Proxy] Using server timestamp (fallback 1):', beginTime, '-', endTime);
-                  } else {
-                    // 最后回退：使用客户端录音经过时间
-                    beginTime = lastSentenceEndTime;
-                    endTime = currentElapsedMs;
-                    lastSentenceEndTime = currentElapsedMs;
-                    console.log('[ASR-Proxy] Using client elapsed time (fallback 2):', beginTime, '-', endTime);
-                  }
+            case 'conversation.item.created': {
+              const itemId = extractItemId(msg);
+              if (itemId) {
+                activeInterimItemId = itemId;
+                if (!interimByItemId.has(itemId)) {
+                  interimByItemId.set(itemId, {
+                    text: '',
+                    stableText: '',
+                    unstableText: '',
+                    beginTime: currentSpeechStartMs ?? Math.max(0, lastSentenceEndTime),
+                    endTime: Date.now() - sessionStartTime,
+                    lastSentAt: 0,
+                    lastSentText: '',
+                  });
                 }
-              }
-              
-              if (finalText) {
-                console.log('[ASR-Proxy] Final Transcript:', finalText, 'time:', beginTime, '-', endTime);
-                const splitSegments = splitLongTranscript(finalText, beginTime, endTime);
-                for (const seg of splitSegments) {
-                  clientWs.send(JSON.stringify({
-                    event: 'result',
-                    sentence: {
-                      id: `seg-${sentenceIndex++}`,
-                      text: seg.text,
-                      beginTime: seg.beginTime,
-                      endTime: seg.endTime,
-                      isFinal: true,
-                    },
-                  }));
-                }
-              } else {
-                console.log('[ASR-Proxy] Completed but no text found:', JSON.stringify(msg).substring(0, 300));
               }
               break;
+            }
 
+            case 'conversation.item.input_audio_transcription.partial':
             case 'conversation.item.input_audio_transcription.text':
-              // 增量转录文本（实时显示）
-              const interimText = msg.text || msg.delta || '';
-              if (interimText) {
-                clientWs.send(JSON.stringify({
-                  event: 'interim',
-                  text: interimText,
-                }));
-              }
-              break;
+            case 'conversation.item.input_audio_transcription.delta': {
+              const itemId = extractItemId(msg) || activeInterimItemId || `item-${sentenceIndex}`;
+              if (!itemId) break;
+              activeInterimItemId = itemId;
 
-            case 'conversation.item.input_audio_transcription.delta':
-              // 增量转录结果（备用）
-              if (msg.delta) {
-                clientWs.send(JSON.stringify({
-                  event: 'interim',
-                  text: msg.delta,
-                }));
-              }
-              break;
+              const payload = extractInterimPayload(msg);
+              const state = upsertInterimState(itemId, payload);
 
-            case 'error':
-              const error = msg.error?.message || msg.message || '识别错误';
-              // commit 失败通常可恢复：避免前端被英文报错打断
-              if (isIgnorableCommitError(error)) {
-                if (stopRequestedByClient || hasCommittedAudioBuffer) {
-                  console.warn(`[ASR-Proxy] Ignore stop-time commit error: ${error}`);
-                  scheduleDashscopeClose('Client disconnected', 100);
-                } else {
-                  console.warn(`[ASR-Proxy] Ignore streaming commit error: ${error}`);
-                }
+              const now = Date.now();
+              const shouldForce = !state.lastSentText || (payload.text && payload.text.length - state.lastSentText.length >= 8);
+              maybeSendInterim(itemId, shouldForce || now - state.lastSentAt >= draftFlushMs);
+              break;
+            }
+
+            case 'conversation.item.input_audio_transcription.completed': {
+              const itemId = extractItemId(msg) || activeInterimItemId;
+              const finalText = extractFinalText(msg);
+              const { beginTime, endTime } = resolveTimestamp(msg);
+
+              clearInterim(itemId);
+
+              if (!finalText) {
                 break;
               }
-              console.error('[ASR-Proxy] Error:', msg.error || msg);
-              clientWs.send(JSON.stringify({ event: 'error', error }));
+
+              const splitSegments = splitLongTranscript(finalText, beginTime, endTime);
+              for (const seg of splitSegments) {
+                sendFinalSegment(seg, itemId);
+              }
               break;
+            }
 
             case 'input_audio_buffer.committed':
-              // 记录服务端 commit，避免被视作未处理噪音事件
-              lastTurnCommitChunkCount = appendedChunks;
-              lastTurnCommitAt = Date.now();
               break;
 
             case 'response.done':
-              console.log('[ASR-Proxy] Response done');
               break;
 
-            default:
-              if (msgType) {
-                console.log('[ASR-Proxy] Unhandled event:', msgType);
+            case 'error': {
+              const error = msg.error?.message || msg.message || '识别错误';
+              if (isIgnorableCommitError(error)) {
+                if (stopRequestedByClient || hasCommittedAudioBuffer) {
+                  scheduleDashscopeClose('Client disconnected', 100);
+                }
+                break;
               }
+
+              console.error('[ASR-Proxy] Error:', msg.error || msg);
+              sendClientEvent({ event: 'error', error });
+              break;
+            }
+
+            default:
+              break;
           }
-        } catch (e) {
-          console.error('[ASR-Proxy] Parse error:', e);
+        } catch (error) {
+          console.error('[ASR-Proxy] Parse error:', error);
         }
       });
 
       dashscopeWs.on('error', (error) => {
         console.error('[ASR-Proxy] DashScope error:', error.message);
-        clientWs.send(JSON.stringify({ event: 'error', error: 'DashScope 连接错误: ' + error.message }));
+        sendClientEvent({ event: 'error', error: `DashScope 连接错误: ${error.message}` });
       });
 
       dashscopeWs.on('close', (code, reason) => {
-        console.log('[ASR-Proxy] DashScope closed:', code, reason.toString());
+        console.log('[ASR-Proxy] DashScope closed:', code, String(reason || ''));
         isSessionReady = false;
+
         if (clientWs.readyState === WebSocket.OPEN) {
-          // 先发送 finished 事件，通知前端 ASR 会话已完成
-          clientWs.send(JSON.stringify({ event: 'finished', code }));
-          // 再发送 closed 事件
-          clientWs.send(JSON.stringify({ event: 'closed', code }));
+          sendClientEvent({ event: 'finished', code });
+          sendClientEvent({ event: 'closed', code });
         }
       });
-
-
     } catch (error) {
       console.error('[ASR-Proxy] Failed to connect:', error);
-      clientWs.send(JSON.stringify({ event: 'error', error: '连接失败' }));
+      sendClientEvent({ event: 'error', error: '连接失败' });
       clientWs.close();
       return;
     }
 
-    // 发送音频到百炼（使用 input_audio_buffer.append 事件，Base64 编码）
-    function sendAudioToDashScope(pcmData) {
-      if (!dashscopeWs || dashscopeWs.readyState !== WebSocket.OPEN) return;
-      const chunkSize = pcmData?.length || pcmData?.byteLength || 0;
-      if (chunkSize <= 0) return;
-      
-      // 将 PCM 数据转为 Base64
-      const base64Audio = Buffer.from(pcmData).toString('base64');
-      if (!base64Audio) return;
-      
-      // 使用 input_audio_buffer.append 事件发送
-      const appendEvent = {
-        event_id: generateEventId(),
-        type: 'input_audio_buffer.append',
-        audio: base64Audio,
-      };
-      
-      dashscopeWs.send(JSON.stringify(appendEvent));
-      hasAudioAppended = true;
-      appendedChunks += 1;
-    }
-
-    // 发送队列中的音频
-    function flushAudioQueue() {
-      while (audioQueue.length > 0) {
-        const audioData = audioQueue.shift();
-        sendAudioToDashScope(audioData);
-      }
-    }
-
-    // 处理客户端消息
     clientWs.on('message', (data, isBinary) => {
       const dataLen = data.length || data.byteLength || 0;
-      
-      // 调试日志：打印消息类型
-      if (dataLen < 200) {
-        console.log('[ASR-Proxy] Received msg, isBinary:', isBinary, 'len:', dataLen, 'preview:', data.toString('utf8').substring(0, 100));
-      }
-      
-      // 优先使用 ws 库的 isBinary 标志
-      // 如果明确是二进制，直接处理为音频
+
       if (isBinary) {
         receivedBinaryChunks += 1;
         receivedBinaryBytes += dataLen;
         if (receivedBinaryChunks % 50 === 0) {
-          console.log(`[ASR-Proxy] Audio ingress: chunks=${receivedBinaryChunks}, bytes=${receivedBinaryBytes}`);
+          console.log(`[ASR-Proxy] Audio ingress: chunks=${receivedBinaryChunks}, bytes=${receivedBinaryBytes}, appended=${appendedChunks}`);
         }
+
         if (isSessionReady) {
           sendAudioToDashScope(data);
         } else {
@@ -609,45 +643,34 @@ app.prepare().then(() => {
         }
         return;
       }
-      
-      // 非二进制消息，尝试解析为 JSON
+
       try {
         const jsonText = typeof data === 'string' ? data : data.toString('utf8');
         const msg = JSON.parse(jsonText);
-        
-        // 处理 VAD 事件消息（新的事件驱动模式）
+
         if (msg.type === 'vad-event') {
           if (msg.event === 'start') {
             currentSpeechStartMs = msg.timestampMs;
-            console.log('[ASR-Proxy] VAD speech start:', currentSpeechStartMs, 'ms');
           } else if (msg.event === 'end') {
             lastSpeechEndMs = msg.timestampMs;
-            console.log('[ASR-Proxy] VAD speech end:', lastSpeechEndMs, 'ms');
-            // 客户端 VAD 已判定本段结束，主动 commit 一次，避免后段长时间不出句
-            commitCurrentTurn('client vad end');
           }
           return;
         }
-        
-        // 处理 VAD 时间戳消息（保留队列模式兼容）
+
         if (msg.type === 'vad-timestamp') {
           vadTimestampQueue.push({
             startMs: msg.startMs,
-            endMs: msg.endMs
+            endMs: msg.endMs,
           });
-          console.log('[ASR-Proxy] VAD timestamp queued:', msg.startMs, '-', msg.endMs, 'queue size:', vadTimestampQueue.length);
           return;
         }
-        
+
         if (msg.action === 'stop') {
-          console.log('[ASR-Proxy] Stop requested');
           stopRequestedByClient = true;
           const committed = commitAudioBuffer('client stop');
           scheduleDashscopeClose('Client stop', committed ? 1200 : 100);
         }
-      } catch (e) {
-        // JSON 解析失败，可能是二进制音频数据被误判为文本
-        // 尝试作为音频处理
+      } catch {
         receivedBinaryChunks += 1;
         receivedBinaryBytes += dataLen;
         if (isSessionReady) {
@@ -659,34 +682,30 @@ app.prepare().then(() => {
     });
 
     clientWs.on('close', () => {
-      console.log(`[ASR-Proxy] Client disconnected, recvChunks=${receivedBinaryChunks}, recvBytes=${receivedBinaryBytes}, appended=${appendedChunks}, queue=${audioQueue.length}`);
+      console.log(
+        `[ASR-Proxy] Client disconnected, recvChunks=${receivedBinaryChunks}, recvBytes=${receivedBinaryBytes}, appended=${appendedChunks}, queue=${audioQueue.length}`
+      );
+
       stopRequestedByClient = true;
       const committed = commitAudioBuffer('client disconnected');
       scheduleDashscopeClose('Client disconnected', committed ? 800 : 100);
     });
-
 
     clientWs.on('error', (error) => {
       console.error('[ASR-Proxy] Client error:', error.message);
     });
   });
 
-  console.log('[Server] About to call server.listen on port', port);
-  
   server.listen(port, () => {
     console.log(`> Ready on http://${hostname}:${port}`);
     console.log(`> WebSocket proxy available at ws://${hostname}:${port}/api/asr-stream`);
   });
-  
-  server.on('error', (err) => {
-    console.error('[Server] Server error:', err);
+
+  server.on('error', (error) => {
+    console.error('[Server] Server error:', error);
   });
-  
-  } catch (setupError) {
-    console.error('[Server] Setup error:', setupError);
-    process.exit(1);
-  }
-}).catch((err) => {
-  console.error('[Server] Failed to start:', err);
+}).catch((error) => {
+  console.error('[Server] Failed to start:', error);
   process.exit(1);
 });
+

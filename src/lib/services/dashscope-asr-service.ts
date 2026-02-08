@@ -1,22 +1,28 @@
-/**
- * 百炼 DashScope 实时语音识别服务
- * 
- * 通过后端 WebSocket 代理连接到百炼 ASR
- * 解决浏览器 WebSocket 无法设置自定义 Header 的问题
- */
-
 export interface ASRSentence {
   id: string;
   text: string;
-  beginTime: number;  // 毫秒
-  endTime: number | null;    // 毫秒，null 表示中间结果
+  beginTime: number;
+  endTime: number | null;
   isFinal: boolean;
   confidence?: number;
+  itemId?: string;
+  provisional?: boolean;
+  replaces?: string[];
+}
+
+export interface ASRInterim {
+  itemId?: string;
+  text: string;
+  stableText?: string;
+  unstableText?: string;
+  provisional?: boolean;
+  beginTime?: number;
+  endTime?: number;
 }
 
 export interface DashScopeASRCallbacks {
   onSentence?: (sentence: ASRSentence) => void;
-  onInterim?: (text: string, beginTime: number) => void;
+  onInterim?: (interim: ASRInterim) => void;
   onError?: (error: string) => void;
   onStatusChange?: (status: 'connecting' | 'connected' | 'transcribing' | 'stopped' | 'error') => void;
   onTaskStarted?: () => void;
@@ -30,31 +36,20 @@ export interface DashScopeASROptions {
   language?: string[];
 }
 
-/**
- * 百炼实时语音识别客户端
- * 通过后端 WebSocket 代理连接
- * 
- * 时间戳由前端计算，更准确：
- * - 记录录音开始时间
- * - 每个句子的 beginTime = 上一句的 endTime
- * - 每个句子的 endTime = 收到结果时的经过时间
- */
 export class DashScopeASRClient {
   private callbacks: DashScopeASRCallbacks;
   private options: DashScopeASROptions;
-  
+
   private ws: WebSocket | null = null;
   private status: 'idle' | 'connecting' | 'connected' | 'transcribing' | 'stopped' | 'error' = 'idle';
   private sentenceIndex = 0;
   private isReady = false;
   private audioQueue: ArrayBuffer[] = [];
-  
-  // 前端时间戳跟踪
-  private sessionStartTime = 0;      // 录音开始时间
-  private lastSentenceEndTime = 0;   // 上一个句子的结束时间
+
+  private sessionStartTime = 0;
 
   constructor(
-    _apiKey: string,  // 不再需要，由后端处理
+    _apiKey: string,
     callbacks: DashScopeASRCallbacks = {},
     options: DashScopeASROptions = {}
   ) {
@@ -82,9 +77,6 @@ export class DashScopeASRClient {
     return this.status === 'stopped' && /error committing input audio buffer/i.test(error);
   }
 
-  /**
-   * 连接到后端 WebSocket 代理
-   */
   async start(): Promise<boolean> {
     if (this.ws) {
       console.warn('[DashScopeASR] Already connected');
@@ -95,78 +87,64 @@ export class DashScopeASRClient {
     this.isReady = false;
     this.audioQueue = [];
     this.sessionStartTime = 0;
-    this.lastSentenceEndTime = 0;
 
     return new Promise((resolve) => {
       try {
         this.updateStatus('connecting');
-        
-        // 连接到后端 WebSocket 代理
-        // 优先尝试 8443 端口（绕过运营商 WebSocket 限制），失败后降级到默认端口
+
         const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
         const hostname = window.location.hostname;
         const defaultPort = window.location.port || (protocol === 'wss:' ? '443' : '80');
-        
-        // 尝试的端口列表：8443（备用）-> 默认端口
         const portsToTry = protocol === 'wss:' ? ['8443', defaultPort] : [defaultPort];
-        
+
         const tryConnect = (portIndex: number) => {
           if (portIndex >= portsToTry.length) {
-            console.error('[DashScopeASR] All ports failed');
             this.updateStatus('error');
             this.callbacks.onError?.('所有连接端口均失败');
             resolve(false);
             return;
           }
-          
+
           const port = portsToTry[portIndex];
           const wsUrl = `${protocol}//${hostname}:${port}/api/asr-stream`;
-          
-          console.log(`[DashScopeASR] Trying port ${port}:`, wsUrl);
           this.ws = new WebSocket(wsUrl);
-          
+
           const connectionTimeout: NodeJS.Timeout = setTimeout(() => {
             if (this.ws && this.ws.readyState === WebSocket.CONNECTING) {
-              console.log(`[DashScopeASR] Port ${port} timeout, trying next...`);
               this.ws.close();
               tryConnect(portIndex + 1);
             }
           }, 5000);
+
           let resolved = false;
-          let connected = false;  // 标记是否已连接成功
-          
+          let connected = false;
+
           this.ws.onopen = () => {
             clearTimeout(connectionTimeout);
-            connected = true;  // 标记已连接
-            console.log(`[DashScopeASR] Connected via port ${port}`);
+            connected = true;
             this.updateStatus('connected');
           };
-          
+
           this.ws.onmessage = (event) => {
             this.handleMessage(event.data);
-            
-            // 如果收到 ready 事件，resolve（只执行一次）
             if (this.isReady && !resolved) {
               resolved = true;
               resolve(true);
             }
           };
-          
+
           this.ws.onerror = (error) => {
             clearTimeout(connectionTimeout);
             console.error(`[DashScopeASR] Port ${port} error:`, error);
-            // 只有在未连接成功时才尝试下一个端口
             if (!connected && !resolved && portIndex < portsToTry.length - 1) {
-              console.log('[DashScopeASR] Trying next port...');
               tryConnect(portIndex + 1);
             } else if (!connected && !resolved) {
               this.updateStatus('error');
               this.callbacks.onError?.('WebSocket 连接错误');
               resolve(false);
             }
-            // 如果已连接但出错，不尝试其他端口，只记录错误
           };
-          
+
           this.ws.onclose = (event) => {
             clearTimeout(connectionTimeout);
             console.log('[DashScopeASR] WebSocket closed:', event.code, event.reason);
@@ -176,19 +154,15 @@ export class DashScopeASRClient {
             this.ws = null;
           };
         };
-        
-        // 开始尝试连接
+
         tryConnect(0);
 
-        // 总超时处理（15秒）
         setTimeout(() => {
           if (!this.isReady) {
-            console.error('[DashScopeASR] Connection timeout');
             this.callbacks.onError?.('连接超时');
             resolve(false);
           }
         }, 15000);
-
       } catch (error) {
         console.error('[DashScopeASR] Failed to connect:', error);
         this.updateStatus('error');
@@ -198,13 +172,9 @@ export class DashScopeASRClient {
     });
   }
 
-  /**
-   * 处理服务端消息
-   */
   private handleMessage(data: string): void {
     try {
       const msg = JSON.parse(data);
-      console.log('[DashScopeASR] Received:', msg.event || msg);
 
       if (msg.error) {
         const errorMessage = this.normalizeErrorMessage(msg.error);
@@ -220,25 +190,29 @@ export class DashScopeASRClient {
       switch (msg.event) {
         case 'ready':
           this.isReady = true;
-          this.sessionStartTime = Date.now();  // 记录录音开始时间
-          this.lastSentenceEndTime = 0;
+          this.sessionStartTime = Date.now();
           this.updateStatus('transcribing');
           this.callbacks.onTaskStarted?.();
-          // 发送队列中的音频
           this.flushAudioQueue();
           break;
 
         case 'result':
-          this.handleResult(msg.sentence);
+          this.handleResult(msg.sentence, msg.replaces, msg.provisional);
           break;
 
         case 'interim': {
-          const interimText = typeof msg.text === 'string' ? msg.text : '';
-          if (interimText) {
-            const elapsedMs = this.sessionStartTime > 0
-              ? Date.now() - this.sessionStartTime
-              : 0;
-            this.callbacks.onInterim?.(interimText, elapsedMs);
+          const payload: ASRInterim = {
+            itemId: typeof msg.itemId === 'string' ? msg.itemId : undefined,
+            text: typeof msg.text === 'string' ? msg.text : '',
+            stableText: typeof msg.stableText === 'string' ? msg.stableText : undefined,
+            unstableText: typeof msg.unstableText === 'string' ? msg.unstableText : undefined,
+            provisional: msg.provisional !== false,
+            beginTime: typeof msg.beginTime === 'number' ? msg.beginTime : undefined,
+            endTime: typeof msg.endTime === 'number' ? msg.endTime : undefined,
+          };
+
+          if (payload.text || payload.itemId) {
+            this.callbacks.onInterim?.(payload);
           }
           break;
         }
@@ -251,7 +225,6 @@ export class DashScopeASRClient {
         case 'error': {
           const errorMessage = this.normalizeErrorMessage(msg.error ?? msg.message);
           if (this.isIgnorableStopError(errorMessage)) {
-            console.warn('[DashScopeASR] Ignore stop-time error event:', errorMessage);
             break;
           }
           this.callbacks.onError?.(errorMessage);
@@ -268,46 +241,53 @@ export class DashScopeASRClient {
     }
   }
 
-  /**
-   * 处理识别结果
-   * 服务器已经计算好了基于录音经过时间的时间戳
-   */
-  private handleResult(sentence: {
-    text?: string;
-    beginTime?: number;
-    endTime?: number | null;
-    isFinal?: boolean;
-  } | undefined): void {
+  private handleResult(
+    sentence:
+      | {
+          id?: string;
+          text?: string;
+          beginTime?: number;
+          endTime?: number | null;
+          isFinal?: boolean;
+          itemId?: string;
+          confidence?: number;
+        }
+      | undefined,
+    replaces?: string[],
+    provisional?: boolean,
+  ): void {
     if (!sentence || !sentence.text) return;
 
-    if (sentence.isFinal) {
-      // 直接使用服务器返回的时间戳（已经是录音经过时间）
+    if (sentence.isFinal !== false) {
       const beginTime = sentence.beginTime ?? 0;
       const endTime = sentence.endTime ?? beginTime + 1000;
-      
-      console.log(`[DashScopeASR] Sentence: "${sentence.text}" @ ${beginTime}ms - ${endTime}ms`);
-      
+
       const result: ASRSentence = {
-        id: `seg-${Date.now()}-${this.sentenceIndex++}`,
+        id: sentence.id || `seg-${Date.now()}-${this.sentenceIndex++}`,
         text: sentence.text,
-        beginTime: beginTime,
-        endTime: endTime,
+        beginTime,
+        endTime,
         isFinal: true,
+        confidence: sentence.confidence,
+        itemId: sentence.itemId,
+        provisional: provisional === true,
+        replaces: Array.isArray(replaces) ? replaces : undefined,
       };
       this.callbacks.onSentence?.(result);
     } else {
-      // 中间结果
-      const elapsedMs = Date.now() - this.sessionStartTime;
-      this.callbacks.onInterim?.(sentence.text, elapsedMs);
+      this.callbacks.onInterim?.({
+        itemId: sentence.itemId,
+        text: sentence.text,
+        provisional: true,
+        beginTime: sentence.beginTime,
+        endTime: sentence.endTime ?? undefined,
+      });
     }
   }
 
-  /**
-   * 发送音频数据
-   */
   sendAudio(audioData: ArrayBuffer | Blob): void {
     if (audioData instanceof Blob) {
-      audioData.arrayBuffer().then(buffer => this.sendAudioBuffer(buffer));
+      audioData.arrayBuffer().then((buffer) => this.sendAudioBuffer(buffer));
     } else {
       this.sendAudioBuffer(audioData);
     }
@@ -315,7 +295,6 @@ export class DashScopeASRClient {
 
   private sendAudioBuffer(buffer: ArrayBuffer): void {
     if (!this.isReady) {
-      // 任务未启动，加入队列
       this.audioQueue.push(buffer);
       return;
     }
@@ -325,9 +304,6 @@ export class DashScopeASRClient {
     }
   }
 
-  /**
-   * 发送队列中的音频
-   */
   private flushAudioQueue(): void {
     while (this.audioQueue.length > 0) {
       const buffer = this.audioQueue.shift();
@@ -337,80 +313,55 @@ export class DashScopeASRClient {
     }
   }
 
-  /**
-   * 发送 VAD 时间戳到后端
-   * 用于替换百炼 ASR 不准确的时间戳
-   */
   sendVADTimestamp(startMs: number, endMs: number): void {
     if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
-      console.warn('[DashScopeASR] Cannot send VAD timestamp, WebSocket not connected');
       return;
     }
-    
-    const message = {
-      type: 'vad-timestamp',
-      startMs,
-      endMs,
-    };
-    
-    this.ws.send(JSON.stringify(message));
-    console.log('[DashScopeASR] VAD timestamp sent:', startMs, '-', endMs);
+
+    this.ws.send(
+      JSON.stringify({
+        type: 'vad-timestamp',
+        startMs,
+        endMs,
+      })
+    );
   }
 
-  /**
-   * 发送 VAD 事件到后端
-   * @param event 'start' 表示语音开始，'end' 表示语音结束
-   * @param timestampMs 事件发生时的时间戳（相对于录音开始的毫秒数）
-   */
   sendVADEvent(event: 'start' | 'end', timestampMs: number): void {
     if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
-      console.warn('[DashScopeASR] Cannot send VAD event, WebSocket not connected');
       return;
     }
-    
-    const message = {
-      type: 'vad-event',
-      event,
-      timestampMs,
-    };
-    
-    this.ws.send(JSON.stringify(message));
-    console.log('[DashScopeASR] VAD event sent:', event, 'at', timestampMs, 'ms');
+
+    this.ws.send(
+      JSON.stringify({
+        type: 'vad-event',
+        event,
+        timestampMs,
+      })
+    );
   }
 
-  /**
-   * 停止识别
-   */
   async stop(): Promise<void> {
-    // 先阻止继续发送新音频，但不要立刻断开连接。
-    // 在高延迟网络（公网容器）下，立刻 close 会让已发送但未处理完的音频丢失，
-    // 服务端随后 commit 时会被判定为空流。
     this.isReady = false;
     this.updateStatus('stopped');
-    
+
     if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
       return;
     }
 
-    // 发送停止指令
     try {
       this.ws.send(JSON.stringify({ action: 'stop' }));
     } catch {
-      // 发送失败时直接关闭连接
       this.closeConnection();
       return;
     }
 
-    // 等待服务端完成 commit / close；超时后兜底关闭
-    await new Promise(resolve => setTimeout(resolve, 1500));
+    await new Promise((resolve) => setTimeout(resolve, 1500));
     if (this.ws && this.ws.readyState === WebSocket.OPEN) {
       this.closeConnection();
     }
   }
 
-  /**
-   * 关闭连接
-   */
   private closeConnection(): void {
     if (this.ws) {
       this.ws.close();
@@ -419,34 +370,21 @@ export class DashScopeASRClient {
     this.updateStatus('stopped');
   }
 
-  /**
-   * 更新状态
-   */
   private updateStatus(status: 'connecting' | 'connected' | 'transcribing' | 'stopped' | 'error'): void {
     this.status = status;
     this.callbacks.onStatusChange?.(status);
   }
 
-  /**
-   * 获取当前状态
-   */
   getStatus(): string {
     return this.status;
   }
 
-  /**
-   * 检查是否已连接
-   */
   isConnected(): boolean {
     return this.ws !== null && this.ws.readyState === WebSocket.OPEN && this.isReady;
   }
 }
 
-/**
- * 检查 ASR 服务是否可用
- */
 export async function checkDashScopeASRAvailable(): Promise<boolean> {
-  // 检查后端代理是否可用
   try {
     const response = await fetch('/api/asr-config');
     return response.ok;
@@ -455,9 +393,6 @@ export async function checkDashScopeASRAvailable(): Promise<boolean> {
   }
 }
 
-/**
- * 百炼 ASR 服务单例
- */
 export const dashScopeASRService = {
   createClient(
     apiKey: string,
@@ -471,3 +406,4 @@ export const dashScopeASRService = {
 };
 
 export default dashScopeASRService;
+

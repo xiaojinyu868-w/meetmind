@@ -1,4 +1,4 @@
-﻿'use client';
+'use client';
 
 import {
   useState,
@@ -60,6 +60,13 @@ function highlightText(text: string, searchQuery?: string): ReactNode {
       {after}
     </>
   );
+}
+
+function normalizeCompareText(value: string): string {
+  return (value || '')
+    .normalize('NFKC')
+    .toLowerCase()
+    .replace(/[\s，。！？、,.!?;；:：'"“”‘’（）()【】\[\]-]/g, '');
 }
 
 export function TranscriptPreviewPanel({
@@ -219,7 +226,13 @@ export function TranscriptPreviewPanel({
     }
   }, [isExpanded, scrollToBottom]);
 
-  if (transcript.length === 0 && !interimText) {
+  const lastVisibleText = displayTranscript[displayTranscript.length - 1]?.text || '';
+  const interimVisibleText =
+    normalizeCompareText(interimText) && normalizeCompareText(interimText) === normalizeCompareText(lastVisibleText)
+      ? ''
+      : interimText;
+
+  if (transcript.length === 0 && !interimVisibleText) {
     if (immersiveMode) {
       return (
         <div className="flex flex-col items-center justify-center h-full py-16 text-center">
@@ -318,10 +331,10 @@ export function TranscriptPreviewPanel({
               />
             ))}
 
-            {interimText && (
+            {interimVisibleText && (
               <div className="flex items-start gap-3 py-2 animate-pulse">
                 <span className="text-xs text-gray-300 font-mono shrink-0 pt-1">...</span>
-                <span className="text-gray-400 italic text-base leading-relaxed">{interimText}</span>
+                <span className="text-gray-400 italic text-base leading-relaxed">{interimVisibleText}</span>
               </div>
             )}
           </div>
@@ -467,10 +480,10 @@ export function TranscriptPreviewPanel({
           ))
         )}
 
-        {interimText && (
+        {interimVisibleText && (
           <div className="flex items-start gap-2 text-sm">
             <span className="text-xs text-gray-300 font-mono shrink-0 mt-0.5">...</span>
-            <span className="text-gray-400 italic">{interimText}</span>
+            <span className="text-gray-400 italic">{interimVisibleText}</span>
           </div>
         )}
       </div>

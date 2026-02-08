@@ -5,7 +5,9 @@
   "private": true,
   "scripts": {
     "dev": "node server.js",
+    "dev:clean": "npm run clean:next && node server.js",
     "dev:next": "next dev -p 3001",
+    "clean:next": "node -e \"try{require('fs').rmSync('.next',{recursive:true,force:true});console.log('cleaned .next')}catch(e){console.log('skip clean', e?.message||e)}\"",
     "prisma:generate": "prisma generate",
     "prebuild": "npm run prisma:generate",
     "build": "next build",

@@ -1,34 +1,34 @@
 /**
- * MeetMind 统一类型定义
+ * MeetMind 缁熶竴绫诲瀷瀹氫箟
  */
 
-// ==================== 基础类型 ====================
+// ==================== 鍩虹绫诲瀷 ====================
 
 export type AnchorType = 'confusion' | 'important' | 'question';
 export type SegmentType = 'lecture' | 'qa' | 'exercise';
 export type SessionStatus = 'recording' | 'paused' | 'completed';
 export type UserRole = 'student' | 'parent' | 'teacher';
 
-// ==================== 核心实体 ====================
+// ==================== 鏍稿績瀹炰綋 ====================
 
 /**
- * 断点/锚点 - 学生标记的困惑点
+ * 鏂偣/閿氱偣 - 瀛︾敓鏍囪鐨勫洶鎯戠偣
  */
 export interface Anchor {
   id: string;
   sessionId: string;
   studentId: string;
-  timestamp: number;  // 课堂时间戳（毫秒）
+  timestamp: number;  // 璇惧爞鏃堕棿鎴筹紙姣锛?
   type: AnchorType;
   cancelled: boolean;
   resolved: boolean;
   createdAt: string;
-  resolvedAt?: string;  // 解决时间
+  resolvedAt?: string;  // 瑙ｅ喅鏃堕棿
   note?: string;
 }
 
 /**
- * 数据库层 Anchor（兼容 db.ts 的自增 ID）
+ * 鏁版嵁搴撳眰 Anchor锛堝吋瀹?db.ts 鐨勮嚜澧?ID锛?
  */
 export interface DBAnchor {
   id?: number;
@@ -43,24 +43,24 @@ export interface DBAnchor {
 }
 
 /**
- * 困惑点状态
+ * 鍥版儜鐐圭姸鎬?
  */
 export type AnchorStatus = 'active' | 'cancelled' | 'resolved';
 
 /**
- * 学生困惑点记录（扩展版本，用于教师端）
+ * 瀛︾敓鍥版儜鐐硅褰曪紙鎵╁睍鐗堟湰锛岀敤浜庢暀甯堢锛?
  */
 export interface StudentAnchor extends Anchor {
-  studentName: string;           // 学生昵称
-  status: AnchorStatus;          // 状态
-  aiExplanation?: string;        // AI 解释内容
-  transcriptContext?: string;    // 关联的转录文本上下文
-  updatedAt: string;             // 更新时间
+  studentName: string;           // 瀛︾敓鏄电О
+  status: AnchorStatus;          // 鐘舵€?
+  aiExplanation?: string;        // AI 瑙ｉ噴鍐呭
+  transcriptContext?: string;    // 鍏宠仈鐨勮浆褰曟枃鏈笂涓嬫枃
+  updatedAt: string;             // 鏇存柊鏃堕棿
 }
 
 /**
- * 断点（兼容旧接口）
- * @deprecated 使用 Anchor 代替
+ * 鏂偣锛堝吋瀹规棫鎺ュ彛锛?
+ * @deprecated 浣跨敤 Anchor 浠ｆ浛
  */
 export interface Breakpoint {
   id: string;
@@ -73,7 +73,7 @@ export interface Breakpoint {
 }
 
 /**
- * 转录片段（应用层使用）
+ * 杞綍鐗囨锛堝簲鐢ㄥ眰浣跨敤锛?
  */
 export interface TranscriptSegment {
   id: string;
@@ -83,10 +83,16 @@ export interface TranscriptSegment {
   confidence: number;
   speakerId?: string;
   isFinal?: boolean;
+  provisional?: boolean;
+  lockedByUser?: boolean;
+  correctionLevel?: 'rule' | 'lexicon' | 'llm' | 'none';
+  rawText?: string;
+  originalText?: string;
+  sourceItemId?: string;
 }
 
 /**
- * 数据库层转录片段（兼容 db.ts 的自增 ID）
+ * 鏁版嵁搴撳眰杞綍鐗囨锛堝吋瀹?db.ts 鐨勮嚜澧?ID锛?
  */
 export interface DBTranscriptSegment {
   id?: number;
@@ -100,7 +106,7 @@ export interface DBTranscriptSegment {
 }
 
 /**
- * 转换 DB 层转录片段到应用层
+ * 杞崲 DB 灞傝浆褰曠墖娈靛埌搴旂敤灞?
  */
 export function dbToTranscriptSegment(dbSeg: DBTranscriptSegment): TranscriptSegment {
   return {
@@ -115,7 +121,7 @@ export function dbToTranscriptSegment(dbSeg: DBTranscriptSegment): TranscriptSeg
 }
 
 /**
- * 时间轴片段（包含断点关联）
+ * 鏃堕棿杞寸墖娈碉紙鍖呭惈鏂偣鍏宠仈锛?
  */
 export interface TimelineSegment extends TranscriptSegment {
   anchors: Anchor[];
@@ -123,7 +129,7 @@ export interface TimelineSegment extends TranscriptSegment {
 }
 
 /**
- * 主题/章节
+ * 涓婚/绔犺妭
  */
 export interface Topic {
   id: string;
@@ -134,7 +140,7 @@ export interface Topic {
 }
 
 /**
- * 课堂会话
+ * 璇惧爞浼氳瘽
  */
 export interface Session {
   id: string;
@@ -149,20 +155,20 @@ export interface Session {
 }
 
 /**
- * 音频录音
+ * 闊抽褰曢煶
  */
 export interface AudioRecording {
   id: string;
   sessionId: string;
   filename: string;
-  duration: number;  // 时长（毫秒）
-  size: number;      // 文件大小（字节）
+  duration: number;  // 鏃堕暱锛堟绉掞級
+  size: number;      // 鏂囦欢澶у皬锛堝瓧鑺傦級
   url?: string;
   createdAt: string;
 }
 
 /**
- * 课堂时间轴
+ * 璇惧爞鏃堕棿杞?
  */
 export interface ClassTimeline {
   id: string;
@@ -170,21 +176,21 @@ export interface ClassTimeline {
   date: string;
   subject: string;
   teacher: string;
-  duration: number;  // 总时长（毫秒）
+  duration: number;  // 鎬绘椂闀匡紙姣锛?
   segments: TimelineSegment[];
   anchors: Anchor[];
   audioUrl?: string;
 }
 
-// ==================== AI 相关 ====================
+// ==================== AI 鐩稿叧 ====================
 
 /**
- * AI 模型提供商
+ * AI 妯″瀷鎻愪緵鍟?
  */
 export type ModelProvider = 'qwen' | 'gemini' | 'openai';
 
 /**
- * 模型配置
+ * 妯″瀷閰嶇疆
  */
 export interface ModelConfig {
   id: string;
@@ -196,7 +202,7 @@ export interface ModelConfig {
 }
 
 /**
- * 聊天消息
+ * 鑱婂ぉ娑堟伅
  */
 export interface ChatMessage {
   role: 'user' | 'assistant' | 'system';
@@ -204,7 +210,7 @@ export interface ChatMessage {
 }
 
 /**
- * LLM 响应
+ * LLM 鍝嶅簲
  */
 export interface LLMResponse {
   content: string;
@@ -217,7 +223,7 @@ export interface LLMResponse {
 }
 
 /**
- * AI 家教响应
+ * AI 瀹舵暀鍝嶅簲
  */
 export interface TutorResponse {
   explanation: {
@@ -237,12 +243,12 @@ export interface TutorResponse {
   usage?: LLMResponse['usage'];
 }
 
-// ==================== 行动项 ====================
+// ==================== 琛屽姩椤?====================
 
 export type ActionItemType = 'replay' | 'exercise' | 'review';
 
 /**
- * 行动项
+ * 琛屽姩椤?
  */
 export interface ActionItem {
   id: string;
@@ -254,10 +260,10 @@ export interface ActionItem {
   relatedTimestamp?: number;
 }
 
-// ==================== 家长端 ====================
+// ==================== 瀹堕暱绔?====================
 
 /**
- * 困惑点摘要
+ * 鍥版儜鐐规憳瑕?
  */
 export interface ConfusionPoint {
   id: string;
@@ -270,7 +276,7 @@ export interface ConfusionPoint {
 }
 
 /**
- * 家长日报
+ * 瀹堕暱鏃ユ姤
  */
 export interface ParentDailyReport {
   date: string;
@@ -288,10 +294,10 @@ export interface ParentDailyReport {
   }>;
 }
 
-// ==================== 教师端 ====================
+// ==================== 鏁欏笀绔?====================
 
 /**
- * 困惑热区
+ * 鍥版儜鐑尯
  */
 export interface ConfusionHotspot {
   startMs: number;
@@ -301,7 +307,7 @@ export interface ConfusionHotspot {
 }
 
 /**
- * 教师日报
+ * 鏁欏笀鏃ユ姤
  */
 export interface TeacherDailyReport {
   date: string;
@@ -314,10 +320,10 @@ export interface TeacherDailyReport {
   suggestions: string[];
 }
 
-// ==================== 搜索相关 ====================
+// ==================== 鎼滅储鐩稿叧 ====================
 
 /**
- * 搜索结果
+ * 鎼滅储缁撴灉
  */
 export interface SearchResult {
   id: string;
@@ -331,50 +337,50 @@ export interface SearchResult {
   };
 }
 
-// ==================== AI 精选片段 (Highlight Reels) ====================
+// ==================== AI 绮鹃€夌墖娈?(Highlight Reels) ====================
 
 /**
- * 主题生成模式
+ * 涓婚鐢熸垚妯″紡
  */
 export type TopicGenerationMode = 'smart' | 'fast';
 
 /**
- * 重要程度
+ * 閲嶈绋嬪害
  */
 export type ImportanceLevel = 'high' | 'medium' | 'low';
 
 /**
- * 精选片段时间范围
+ * 绮鹃€夌墖娈垫椂闂磋寖鍥?
  */
 export interface HighlightSegment {
-  start: number;           // 开始时间（毫秒）
-  end: number;             // 结束时间（毫秒）
-  text: string;            // 原文内容
+  start: number;           // 寮€濮嬫椂闂达紙姣锛?
+  end: number;             // 缁撴潫鏃堕棿锛堟绉掞級
+  text: string;            // 鍘熸枃鍐呭
   startSegmentIdx?: number;
   endSegmentIdx?: number;
   startCharOffset?: number;
   endCharOffset?: number;
-  confidence?: number;     // 匹配置信度 (0-1)
+  confidence?: number;     // 鍖归厤缃俊搴?(0-1)
 }
 
 /**
- * 精选片段引用
+ * 绮鹃€夌墖娈靛紩鐢?
  */
 export interface HighlightQuote {
-  timestamp: string;       // [MM:SS-MM:SS] 格式
-  text: string;            // 原文引用
+  timestamp: string;       // [MM:SS-MM:SS] 鏍煎紡
+  text: string;            // 鍘熸枃寮曠敤
 }
 
 /**
- * AI 精选片段（Highlight Reel）
+ * AI 绮鹃€夌墖娈碉紙Highlight Reel锛?
  */
 export interface HighlightTopic {
   id: string;
   sessionId: string;
-  title: string;           // 标题（最多10词）
-  description?: string;    // 内容摘要
+  title: string;           // 鏍囬锛堟渶澶?0璇嶏級
+  description?: string;    // 鍐呭鎽樿
   importance: ImportanceLevel;
-  duration: number;        // 片段时长（毫秒）
+  duration: number;        // 鐗囨鏃堕暱锛堟绉掞級
   segments: HighlightSegment[];
   keywords?: string[];
   quote?: HighlightQuote;
@@ -383,7 +389,7 @@ export interface HighlightTopic {
 }
 
 /**
- * 主题候选项（用于 Fast 模式的中间结果）
+ * 涓婚鍊欓€夐」锛堢敤浜?Fast 妯″紡鐨勪腑闂寸粨鏋滐級
  */
 export interface TopicCandidate {
   key: string;
@@ -391,45 +397,45 @@ export interface TopicCandidate {
   quote: HighlightQuote;
 }
 
-// ==================== 结构化摘要 (Summary) ====================
+// ==================== 缁撴瀯鍖栨憳瑕?(Summary) ====================
 
 /**
- * 摘要要点
+ * 鎽樿瑕佺偣
  */
 export interface SummaryTakeaway {
-  label: string;           // 标题（最多10词）
-  insight: string;         // 洞察（1-2句）
-  timestamps: string[];    // 时间戳（1-2个）
+  label: string;           // 鏍囬锛堟渶澶?0璇嶏級
+  insight: string;         // 娲炲療锛?-2鍙ワ級
+  timestamps: string[];    // 鏃堕棿鎴筹紙1-2涓級
 }
 
 /**
- * 课堂结构化摘要
+ * 璇惧爞缁撴瀯鍖栨憳瑕?
  */
 export interface ClassSummary {
   id: string;
   sessionId: string;
-  overview: string;        // 课堂概要
-  takeaways: SummaryTakeaway[];  // 主要知识点
-  keyDifficulties: string[];     // 重点难点
-  structure: string[];           // 课堂结构
+  overview: string;        // 璇惧爞姒傝
+  takeaways: SummaryTakeaway[];  // 涓昏鐭ヨ瘑鐐?
+  keyDifficulties: string[];     // 閲嶇偣闅剧偣
+  structure: string[];           // 璇惧爞缁撴瀯
   createdAt: string;
   updatedAt: string;
 }
 
-// ==================== 个人笔记系统 ====================
+// ==================== 涓汉绗旇绯荤粺 ====================
 
 /**
- * 笔记来源类型
+ * 绗旇鏉ユ簮绫诲瀷
  */
 export type NoteSource = 'chat' | 'takeaways' | 'transcript' | 'custom' | 'anchor';
 
 /**
- * 笔记元数据
+ * 绗旇鍏冩暟鎹?
  */
 export interface NoteMetadata {
   transcript?: {
-    start: number;         // 开始时间（毫秒）
-    end?: number;          // 结束时间（毫秒）
+    start: number;         // 寮€濮嬫椂闂达紙姣锛?
+    end?: number;          // 缁撴潫鏃堕棿锛堟绉掞級
     segmentIndex?: number;
     topicId?: string;
   };
@@ -438,31 +444,31 @@ export interface NoteMetadata {
     role: 'user' | 'assistant';
     timestamp?: string;
   };
-  anchorId?: string;       // 关联的困惑点 ID
-  timestamp?: number;      // 时间戳（毫秒）
-  selectedText?: string;   // 选中的原文
+  anchorId?: string;       // 鍏宠仈鐨勫洶鎯戠偣 ID
+  timestamp?: number;      // 鏃堕棿鎴筹紙姣锛?
+  selectedText?: string;   // 閫変腑鐨勫師鏂?
   selectionContext?: string;
   timestampLabel?: string;
   extra?: Record<string, unknown>;
 }
 
 /**
- * 个人笔记
+ * 涓汉绗旇
  */
 export interface Note {
   id: string;
   sessionId: string;
   studentId: string;
   source: NoteSource;
-  sourceId?: string;       // 来源 ID（如消息 ID、片段 ID）
-  text: string;            // 笔记内容
+  sourceId?: string;       // 鏉ユ簮 ID锛堝娑堟伅 ID銆佺墖娈?ID锛?
+  text: string;            // 绗旇鍐呭
   metadata?: NoteMetadata;
   createdAt: string;
   updatedAt: string;
 }
 
 /**
- * 带会话信息的笔记（用于跨课程笔记管理）
+ * 甯︿細璇濅俊鎭殑绗旇锛堢敤浜庤法璇剧▼绗旇绠＄悊锛?
  */
 export interface NoteWithSession extends Note {
   session: {
@@ -473,10 +479,10 @@ export interface NoteWithSession extends Note {
   } | null;
 }
 
-// ==================== 工具函数 ====================
+// ==================== 宸ュ叿鍑芥暟 ====================
 
 /**
- * Anchor 转 Breakpoint（兼容旧代码）
+ * Anchor 杞?Breakpoint锛堝吋瀹规棫浠ｇ爜锛?
  */
 export function anchorToBreakpoint(anchor: Anchor): Breakpoint {
   return {
@@ -491,7 +497,7 @@ export function anchorToBreakpoint(anchor: Anchor): Breakpoint {
 }
 
 /**
- * Breakpoint 转 Anchor
+ * Breakpoint 杞?Anchor
  */
 export function breakpointToAnchor(bp: Breakpoint): Anchor {
   return {
