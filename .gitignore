@@ -63,3 +63,4 @@ server.log
 # Prisma
 prisma/meetmind.db
 prisma/meetmind.db-journal
+.next-dev/

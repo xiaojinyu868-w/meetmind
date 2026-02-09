@@ -1,4 +1,5 @@
 const fs = require('fs');
+const path = require('path');
 if (fs.existsSync('.env.local')) {
   require('dotenv').config({ path: '.env.local' });
 } else {
@@ -10,9 +11,15 @@ const { parse } = require('url');
 const next = require('next');
 const { WebSocketServer, WebSocket } = require('ws');
 
+if (!process.env.NODE_ENV) {
+  process.env.NODE_ENV = 'development';
+}
+
 const dev = process.env.NODE_ENV !== 'production';
 const hostname = 'localhost';
 const port = parseInt(process.env.PORT || '3001', 10);
+const devDistDir = process.env.NEXT_DEV_DIST_DIR || '.next-dev';
+const activeDistDir = dev ? devDistDir : '.next';
 
 const app = next({ dev, hostname, port });
 const handle = app.getRequestHandler();
@@ -180,7 +187,41 @@ function isIgnorableCommitError(message) {
   return typeof message === 'string' && /error committing input audio buffer/i.test(message);
 }
 
+function isMissingNextChunkError(error) {
+  const message = typeof error?.message === 'string' ? error.message : '';
+  const stack = typeof error?.stack === 'string' ? error.stack : '';
+  const missingChunkPattern = /Cannot find module '\.\/\d+\.js'/;
+  return missingChunkPattern.test(message) && (
+    stack.includes(`${path.sep}${activeDistDir}${path.sep}server${path.sep}webpack-runtime.js`) ||
+    message.includes('webpack-runtime.js')
+  );
+}
+
+let isRecoveringDevCache = false;
+function recoverDevBuildCacheIfNeeded(error) {
+  if (!dev || isRecoveringDevCache || !isMissingNextChunkError(error)) {
+    return false;
+  }
+
+  isRecoveringDevCache = true;
+  const absDistDir = path.join(process.cwd(), activeDistDir);
+
+  try {
+    fs.rmSync(absDistDir, { recursive: true, force: true });
+    console.warn(`[Server] Cleared corrupted Next.js dev cache: ${absDistDir}`);
+  } catch (cleanupError) {
+    console.warn('[Server] Failed to clear corrupted Next.js dev cache:', cleanupError);
+  }
+
+  setTimeout(() => {
+    isRecoveringDevCache = false;
+  }, 5000);
+
+  return true;
+}
+
 console.log('[Server] Starting app.prepare()...');
+console.log(`[Server] Environment: ${process.env.NODE_ENV}, distDir: ${activeDistDir}`);
 
 app.prepare().then(() => {
   const server = createServer(async (req, res) => {
@@ -188,6 +229,15 @@ app.prepare().then(() => {
       const parsedUrl = parse(req.url, true);
       await handle(req, res, parsedUrl);
     } catch (error) {
+      if (recoverDevBuildCacheIfNeeded(error)) {
+        if (!res.headersSent) {
+          res.statusCode = 503;
+          res.setHeader('Cache-Control', 'no-store');
+        }
+        res.end('Detected stale Next.js dev cache. Cache has been reset, please refresh in 2-3 seconds.');
+        return;
+      }
+
       console.error('Error occurred handling', req.url, error);
       res.statusCode = 500;
       res.end('internal server error');

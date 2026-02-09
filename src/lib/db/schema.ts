@@ -4,11 +4,24 @@ export interface AudioSession {
   id?: number;
   sessionId: string;
   userId: string;
-  blob: Blob;
+  blob?: Blob;
   mimeType: string;
   duration: number;
   subject?: string;
   topic?: string;
+  sourceType?: 'recording' | 'upload' | 'video-link';
+  mediaUrl?: string;
+  videoUrl?: string;
+  videoEmbedUrl?: string;
+  videoProvider?: string;
+  thumbnailUrl?: string;
+  importSourceMode?: 'bili-native' | 'bili-subtitle' | 'yt-dlp' | 'direct';
+  importTrace?: Array<{
+    stage: string;
+    ok: boolean;
+    code?: string;
+    detail?: string;
+  }>;
   status: 'recording' | 'completed' | 'archived';
   createdAt: Date;
   updatedAt: Date;

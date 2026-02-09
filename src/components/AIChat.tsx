@@ -38,6 +38,15 @@ interface AIChatProps {
   onConversationChange?: (conversation: ConversationHistory) => void;
   /** 是否为移动端 */
   isMobile?: boolean;
+  /** 是否强制回答携带时间戳引用 */
+  forceTimestampCitations?: boolean;
+  /** 助手回答回调（用于外部构建时间轴高亮） */
+  onAssistantMessage?: (payload: {
+    id: string;
+    prompt: string;
+    content: string;
+    timestamps: number[];
+  }) => void;
 }
 
 // AI 家教系统提示词
@@ -55,6 +64,31 @@ const TUTOR_SYSTEM_PROMPT = `你是一位专业的 AI 家教，专门帮助学�
 - 如果学生问的内容不在课堂转录中，诚实告知并尝试基于已有知识回答
 - 保持耐心和鼓励的态度`;
 
+const STRICT_TIMESTAMP_HINT = `请尽量在回答中给出 2-6 个关键时间点，统一使用 [MM:SS] 格式，并把时间点和对应观点绑定。`;
+
+function extractTimestampMs(content: string): number[] {
+  if (!content) return [];
+  const timestamps = new Set<number>();
+  const patterns = [
+    /\[(\d{1,2}):([0-5]\d)\]/g,
+    /(?:^|[\s(（【])(\d{1,2}):([0-5]\d)(?=$|[\s)\]）】,，。.!?])/g,
+  ];
+
+  for (const pattern of patterns) {
+    let match: RegExpExecArray | null = pattern.exec(content);
+    while (match) {
+      const minutes = Number.parseInt(match[1], 10);
+      const seconds = Number.parseInt(match[2], 10);
+      if (Number.isFinite(minutes) && Number.isFinite(seconds)) {
+        timestamps.add(minutes * 60000 + seconds * 1000);
+      }
+      match = pattern.exec(content);
+    }
+  }
+
+  return Array.from(timestamps).sort((a, b) => a - b);
+}
+
 export function AIChat({
   anchorId,
   anchorTimestamp,
@@ -65,6 +99,8 @@ export function AIChat({
   conversationId: initialConversationId,
   onConversationChange,
   isMobile = false,
+  forceTimestampCitations = false,
+  onAssistantMessage,
 }: AIChatProps) {
   const { user, accessToken } = useAuth();
   const userId = getEffectiveUserId(user?.id);
@@ -215,7 +251,12 @@ export function AIChat({
       // 构建请求体
       const requestBody: Record<string, unknown> = {
         messages: [
-          { role: 'system' as const, content: TUTOR_SYSTEM_PROMPT },
+          {
+            role: 'system' as const,
+            content: forceTimestampCitations
+              ? `${TUTOR_SYSTEM_PROMPT}\n\n${STRICT_TIMESTAMP_HINT}`
+              : TUTOR_SYSTEM_PROMPT,
+          },
           ...messages.map(m => ({
             role: m.role as 'user' | 'assistant',
             content: m.content,
@@ -259,6 +300,12 @@ export function AIChat({
       };
 
       setMessages(prev => [...prev, assistantMessage]);
+      onAssistantMessage?.({
+        id: assistantMessage.id,
+        prompt: userMessage.content,
+        content: assistantMessage.content,
+        timestamps: extractTimestampMs(assistantMessage.content),
+      });
       
       // 保存助手消息
       await saveMessage('assistant', assistantMessage.content);
