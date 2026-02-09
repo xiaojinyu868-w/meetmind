@@ -224,9 +224,38 @@ console.log('[Server] Starting app.prepare()...');
 console.log(`[Server] Environment: ${process.env.NODE_ENV}, distDir: ${activeDistDir}`);
 
 app.prepare().then(() => {
+  console.log('[Server] app.prepare() completed');
   const server = createServer(async (req, res) => {
     try {
       const parsedUrl = parse(req.url, true);
+
+      // 处理 temp-audio 静态文件请求（运行时生成的音频文件）
+      if (parsedUrl.pathname && parsedUrl.pathname.startsWith('/temp-audio/')) {
+        const fileName = path.basename(parsedUrl.pathname);
+        const filePath = path.join(process.cwd(), 'public', 'temp-audio', fileName);
+        if (fileName.includes('..')) {
+          res.statusCode = 403;
+          res.end('Forbidden');
+          return;
+        }
+        try {
+          if (fs.existsSync(filePath)) {
+            const stat = fs.statSync(filePath);
+            const ext = path.extname(fileName).toLowerCase();
+            const mimeTypes = { '.mp3': 'audio/mpeg', '.wav': 'audio/wav', '.ogg': 'audio/ogg', '.webm': 'audio/webm', '.m4a': 'audio/mp4' };
+            res.setHeader('Content-Type', mimeTypes[ext] || 'application/octet-stream');
+            res.setHeader('Content-Length', stat.size);
+            fs.createReadStream(filePath).pipe(res);
+            return;
+          }
+        } catch {
+          // fall through to 404
+        }
+        res.statusCode = 404;
+        res.end('Not Found');
+        return;
+      }
+
       await handle(req, res, parsedUrl);
     } catch (error) {
       if (recoverDevBuildCacheIfNeeded(error)) {
@@ -239,8 +268,12 @@ app.prepare().then(() => {
       }
 
       console.error('Error occurred handling', req.url, error);
-      res.statusCode = 500;
-      res.end('internal server error');
+      if (!res.headersSent) {
+        res.statusCode = 500;
+      }
+      if (!res.writableEnded) {
+        res.end('internal server error');
+      }
     }
   });
 
