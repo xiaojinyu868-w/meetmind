@@ -12,6 +12,7 @@ import { ModelSelector } from './ModelSelector';
 import { ImageUpload, useImagePaste, type UploadedImage } from './ImageUpload';
 import { DEFAULT_MODEL_ID } from '@/lib/services/llm-service';
 import { ThinkingGuideRenderer } from './ThinkingGuideRenderer';
+import { VoiceMicButton } from './VoiceMicButton';
 
 interface Message {
   id: string;
@@ -472,6 +473,10 @@ export function AIChat({
             disabled={isLoading}
             placeholder="输入你的问题..."
             className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-400 focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed"
+          />
+          <VoiceMicButton
+            onTranscript={(text) => setInputValue(prev => prev + text)}
+            disabled={isLoading}
           />
           <button
             type="submit"

@@ -17,6 +17,7 @@ import { DEFAULT_MODEL_ID } from '@/lib/services/llm-service';
 import { StreamingMarkdown } from './StreamingMarkdown';
 import { ThinkingVisualizer } from './ThinkingVisualizer';
 import { ThinkingGuideRenderer } from './ThinkingGuideRenderer';
+import { VoiceMicButton } from './VoiceMicButton';
 
 // 持久化状态的 key
 const TUTOR_STATE_KEY = 'tutor_last_state';
@@ -1104,6 +1105,11 @@ export function AITutor({ breakpoint, segments, isLoading: externalLoading, onRe
               className={`input flex-1 ${isMobile ? 'text-sm' : ''}`}
               disabled={globalLoading || segments.length === 0}
             />
+            <VoiceMicButton
+              onTranscript={(text) => setUserInput(prev => prev + text)}
+              disabled={globalLoading || segments.length === 0}
+              size={isMobile ? 'sm' : 'md'}
+            />
             {isStreaming ? (
               <button
                 onClick={stopGlobalGeneration}
@@ -1544,6 +1550,10 @@ export function AITutor({ breakpoint, segments, isLoading: externalLoading, onRe
             onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && !isBreakpointStreaming && handleSend()}
             placeholder="告诉我你哪里不懂..."
             className="input flex-1"
+            disabled={isBreakpointStreaming}
+          />
+          <VoiceMicButton
+            onTranscript={(text) => setUserInput(prev => prev + text)}
             disabled={isBreakpointStreaming}
           />
           {isBreakpointStreaming ? (

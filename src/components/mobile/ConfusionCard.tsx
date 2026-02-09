@@ -2,6 +2,7 @@
 
 import React, { useState } from 'react';
 import { cn } from '@/lib/utils';
+import { VoiceMicButton } from '@/components/VoiceMicButton';
 
 export interface ConfusionCardProps {
   isOpen: boolean;
@@ -189,6 +190,11 @@ export function ConfusionCard({
                     "border border-slate-700 focus:border-amber-500",
                     "focus:outline-none focus:ring-1 focus:ring-amber-500/50"
                   )}
+                />
+                <VoiceMicButton
+                  onTranscript={(text) => setQuestion(prev => prev + text)}
+                  size="sm"
+                  dark
                 />
                 <button
                   onClick={handleAskAI}
