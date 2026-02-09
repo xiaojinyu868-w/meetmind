@@ -101,7 +101,15 @@ export const WaveformPlayer = forwardRef<WaveformPlayerRef, WaveformPlayerProps>
     playPause: () => wavesurferRef.current?.playPause(),
     seekTo: (timeMs: number) => {
       if (wavesurferRef.current && duration > 0) {
-        wavesurferRef.current.seekTo(timeMs / 1000 / (duration / 1000));
+        const ws = wavesurferRef.current;
+        const wasPlaying = ws.isPlaying();
+        if (wasPlaying) {
+          ws.pause();
+        }
+        ws.seekTo(timeMs / 1000 / (duration / 1000));
+        if (wasPlaying) {
+          ws.play();
+        }
       }
     },
     getCurrentTime: () => (wavesurferRef.current?.getCurrentTime() ?? 0) * 1000,

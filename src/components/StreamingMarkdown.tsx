@@ -3,6 +3,9 @@
 import React, { useMemo, useCallback } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import remarkMath from 'remark-math';
+import rehypeKatex from 'rehype-katex';
+import 'katex/dist/katex.min.css';
 import type { Components } from 'react-markdown';
 
 interface StreamingMarkdownProps {
@@ -92,17 +95,28 @@ export function StreamingMarkdown({
   }, [currentTime, onTimestampClick, parseTimeToMs]);
 
   // 递归处理 children，将字符串中的时间戳转换为按钮
+  // 跳过 KaTeX 渲染的数学公式元素，避免破坏其 DOM 结构
   const processChildren = useCallback((children: React.ReactNode): React.ReactNode => {
     return React.Children.map(children, (child) => {
       if (typeof child === 'string') {
         return renderTextWithTimestamps(child);
       }
       
-      if (React.isValidElement(child) && child.props.children) {
-        return React.cloneElement(child, {
-          ...child.props,
-          children: processChildren(child.props.children),
-        } as React.Attributes);
+      if (React.isValidElement(child)) {
+        // 跳过 KaTeX 渲染的元素（span.katex, span.katex-display 等）
+        const className = child.props.className;
+        if (typeof className === 'string' && (
+          className.includes('katex') || className.includes('math')
+        )) {
+          return child;
+        }
+        
+        if (child.props.children) {
+          return React.cloneElement(child, {
+            ...child.props,
+            children: processChildren(child.props.children),
+          } as React.Attributes);
+        }
       }
       
       return child;
@@ -216,7 +230,8 @@ export function StreamingMarkdown({
   return (
     <div className={`streaming-markdown ${className}`}>
       <ReactMarkdown
-        remarkPlugins={[remarkGfm]}
+        remarkPlugins={[remarkGfm, remarkMath]}
+        rehypePlugins={[rehypeKatex]}
         components={components}
       >
         {content}
