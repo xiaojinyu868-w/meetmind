@@ -1,137 +1,25 @@
-/**
- * 极速转录 API（同步调用模式）
- * 
- * POST /api/transcribe-turbo
- * 使用 qwen3-asr-flash 同步调用，无需轮询直接返回结果
- * 
- * 同步调用限制（阿里云官方）：
- * - 时长：≤30秒
- * - 文件：≤10MB
- * - URL：必须使用域名，不能用 IP
- * 
- * 原理：
- * 1. 切分为 ≤30 秒的片段
- * 2. 并行同步调用 qwen3-asr-flash（最多 36 个并行，受 100 RPM 限制）
- * 3. 直接返回结果，无需轮询
- * 
- * 性能预估：
- * - 18 分钟音频 → 36 片 × ~3秒 = ~10-15 秒完成（理论值）
- */
-
-import { NextRequest, NextResponse } from 'next/server';
+﻿import { NextRequest, NextResponse } from 'next/server';
 import * as fs from 'fs';
 import * as path from 'path';
-import { exec } from 'child_process';
-import { promisify } from 'util';
 import { applyRateLimit } from '@/lib/utils/rate-limit';
-
-const execAsync = promisify(exec);
-
-// ==================== 配置 ====================
+import {
+  MediaToolError,
+  isToolNotFoundError,
+  resolveFfmpegPath,
+  resolveFfprobePath,
+  resolvePublicBaseUrl,
+  runCommand,
+  safeUnlink,
+} from '@/lib/services/media-tooling';
 
 const MAX_FILE_SIZE = 500 * 1024 * 1024;
 const UPLOAD_DIR = path.join(process.cwd(), 'public', 'temp-audio');
-
-// 同步调用 API 端点（正确的 DashScope 多模态端点）
 const SYNC_ASR_URL = 'https://dashscope.aliyuncs.com/api/v1/services/aigc/multimodal-generation/generation';
 
-const PUBLIC_HOST = process.env.PUBLIC_DOMAIN || process.env.PUBLIC_HOST || 'meetmind.example.com';
-const PUBLIC_PROTOCOL = process.env.PUBLIC_PROTOCOL || 'https';  // 同步调用建议用 HTTPS
-
-// 分片配置（同步调用限制 ≤30秒、≤10MB）
-const SEGMENT_DURATION_SEC = 30;    // 每片 30 秒（同步最大限制）
-const MIN_DURATION_FOR_SPLIT = 30;  // 超过 30 秒就分片
-const MAX_PARALLEL_TASKS = 50;      // 最大并行（注意 RPM 100 限制）
-
-// ==================== 工具函数 ====================
-
-function ensureUploadDir() {
-  if (!fs.existsSync(UPLOAD_DIR)) {
-    fs.mkdirSync(UPLOAD_DIR, { recursive: true });
-  }
-}
-
-async function getAudioDuration(filePath: string): Promise<number> {
-  try {
-    const { stdout } = await execAsync(
-      `ffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 "${filePath}"`
-    );
-    return parseFloat(stdout.trim()) || 0;
-  } catch (e) {
-    console.error('[FFProbe] Error:', e);
-    return 0;
-  }
-}
-
-async function splitAudio(
-  inputPath: string,
-  outputDir: string,
-  segmentDuration: number,
-  baseName: string
-): Promise<{ segments: string[]; durations: number[] }> {
-  const totalDuration = await getAudioDuration(inputPath);
-  console.log('[Turbo] Total duration:', totalDuration, 'seconds');
-  
-  if (totalDuration <= MIN_DURATION_FOR_SPLIT) {
-    // 即使不分片，也转换为标准 MP3 格式确保兼容性
-    const outputPath = path.join(outputDir, `${baseName}_turbo0.mp3`);
-    try {
-      await execAsync(
-        `ffmpeg -y -i "${inputPath}" -acodec libmp3lame -ar 16000 -ac 1 -b:a 64k "${outputPath}" 2>/dev/null`
-      );
-      return { segments: [outputPath], durations: [totalDuration * 1000] };
-    } catch {
-      return { segments: [inputPath], durations: [totalDuration * 1000] };
-    }
-  }
-  
-  const segments: string[] = [];
-  const durations: number[] = [];
-  
-  let startTime = 0;
-  let segIndex = 0;
-  
-  // 并行切分提高速度
-  const splitPromises: Promise<void>[] = [];
-  const segmentInfos: { index: number; outputPath: string; duration: number; startTime: number }[] = [];
-  
-  while (startTime < totalDuration) {
-    const duration = Math.min(segmentDuration, totalDuration - startTime);
-    const outputPath = path.join(outputDir, `${baseName}_turbo${segIndex}.mp3`);
-    
-    segmentInfos.push({ index: segIndex, outputPath, duration, startTime });
-    
-    // 强制重编码为 MP3，确保格式正确
-    const cmd = `ffmpeg -y -ss ${startTime} -i "${inputPath}" -t ${duration} -acodec libmp3lame -ar 16000 -ac 1 -b:a 64k "${outputPath}" 2>/dev/null`;
-    
-    splitPromises.push(
-      execAsync(cmd).then(() => {
-        console.log(`[Turbo] Segment ${segIndex}: ${startTime}s - ${startTime + duration}s`);
-      }).catch((e) => {
-        console.error(`[Turbo] Split error at segment ${segIndex}:`, e);
-      })
-    );
-    
-    startTime += segmentDuration;
-    segIndex++;
-  }
-  
-  // 等待所有切分完成
-  await Promise.all(splitPromises);
-  
-  // 按顺序收集结果
-  for (const info of segmentInfos) {
-    if (fs.existsSync(info.outputPath)) {
-      segments.push(info.outputPath);
-      durations.push(info.duration * 1000);
-    }
-  }
-  
-  console.log(`[Turbo] Split completed: ${segments.length} segments`);
-  return { segments, durations };
-}
-
-// ==================== 同步调用 ASR ====================
+const SEGMENT_DURATION_SEC = 30;
+const MIN_DURATION_FOR_SPLIT = 40;
+const MAX_RETRIES = 3;
+const BATCH_SIZE = Number.parseInt(process.env.ASR_TURBO_BATCH_SIZE || '8', 10);
 
 interface ASRSentence {
   text: string;
@@ -140,301 +28,474 @@ interface ASRSentence {
   start_time?: number;
 }
 
-/**
- * 同步调用 qwen3-asr-flash（使用 DashScope 多模态格式）
- * 限制：≤30秒、≤10MB、需域名
- * 包含重试机制处理限流
- */
-async function syncTranscribe(
+interface SegmentTask {
+  path: string;
+  durationMs: number;
+  index: number;
+}
+
+interface SegmentResult {
+  ok: boolean;
+  sentence?: ASRSentence;
+  error?: string;
+}
+
+function ensureUploadDir(): void {
+  if (!fs.existsSync(UPLOAD_DIR)) {
+    fs.mkdirSync(UPLOAD_DIR, { recursive: true });
+  }
+}
+
+function cleanupOldFiles(): void {
+  try {
+    if (!fs.existsSync(UPLOAD_DIR)) return;
+    const files = fs.readdirSync(UPLOAD_DIR);
+    const now = Date.now();
+    const maxAge = 2 * 60 * 60 * 1000;
+
+    for (const fileName of files) {
+      const filePath = path.join(UPLOAD_DIR, fileName);
+      try {
+        const stat = fs.statSync(filePath);
+        if (now - stat.mtimeMs > maxAge) {
+          fs.unlinkSync(filePath);
+        }
+      } catch {
+        // ignore single-file cleanup errors
+      }
+    }
+  } catch {
+    // ignore cleanup errors
+  }
+}
+
+async function getAudioDuration(filePath: string, ffprobePath: string): Promise<number> {
+  try {
+    const result = await runCommand(
+      ffprobePath,
+      ['-v', 'error', '-show_entries', 'format=duration', '-of', 'default=noprint_wrappers=1:nokey=1', filePath],
+      { toolName: 'ffprobe' }
+    );
+    return Number.parseFloat(result.stdout.trim()) || 0;
+  } catch {
+    return 0;
+  }
+}
+
+async function transcodeSegment(
+  inputPath: string,
+  outputPath: string,
+  ffmpegPath: string,
+  startTimeSec?: number,
+  durationSec?: number
+): Promise<void> {
+  const args = ['-y'];
+
+  if (Number.isFinite(startTimeSec)) {
+    args.push('-ss', String(startTimeSec));
+  }
+
+  args.push('-i', inputPath);
+
+  if (Number.isFinite(durationSec)) {
+    args.push('-t', String(durationSec));
+  }
+
+  args.push('-ar', '16000', '-ac', '1', '-b:a', '64k', outputPath);
+
+  await runCommand(ffmpegPath, args, { toolName: 'ffmpeg' });
+}
+
+async function splitAudioToSegments(
+  inputPath: string,
+  baseName: string,
+  ffmpegPath: string,
+  ffprobePath: string
+): Promise<SegmentTask[]> {
+  const totalDuration = await getAudioDuration(inputPath, ffprobePath);
+
+  if (totalDuration <= MIN_DURATION_FOR_SPLIT) {
+    const outputPath = path.join(UPLOAD_DIR, `${baseName}_seg0.mp3`);
+    await transcodeSegment(inputPath, outputPath, ffmpegPath);
+
+    return [
+      {
+        path: outputPath,
+        durationMs: Math.max(1, Math.round(totalDuration * 1000)),
+        index: 0,
+      },
+    ];
+  }
+
+  const tasks: SegmentTask[] = [];
+  let startTime = 0;
+  let index = 0;
+
+  while (startTime < totalDuration) {
+    const duration = Math.min(SEGMENT_DURATION_SEC, totalDuration - startTime);
+    const outputPath = path.join(UPLOAD_DIR, `${baseName}_seg${index}.mp3`);
+
+    await transcodeSegment(inputPath, outputPath, ffmpegPath, startTime, duration);
+
+    tasks.push({
+      path: outputPath,
+      durationMs: Math.max(1, Math.round(duration * 1000)),
+      index,
+    });
+
+    startTime += SEGMENT_DURATION_SEC;
+    index += 1;
+  }
+
+  return tasks;
+}
+
+function extractTextFromSyncResponse(payload: unknown): string {
+  if (!payload || typeof payload !== 'object') return '';
+
+  const root = payload as Record<string, unknown>;
+  const output = root.output as Record<string, unknown> | undefined;
+
+  const directText = output?.text;
+  if (typeof directText === 'string' && directText.trim()) {
+    return directText.trim();
+  }
+
+  const choices = output?.choices;
+  if (Array.isArray(choices) && choices.length > 0) {
+    const firstChoice = choices[0] as Record<string, unknown>;
+    const message = firstChoice.message as Record<string, unknown> | undefined;
+    const content = message?.content;
+
+    if (typeof content === 'string' && content.trim()) {
+      return content.trim();
+    }
+
+    if (Array.isArray(content)) {
+      const textParts = content
+        .map((item) => {
+          if (!item || typeof item !== 'object') return '';
+          const text = (item as Record<string, unknown>).text;
+          return typeof text === 'string' ? text.trim() : '';
+        })
+        .filter(Boolean);
+
+      if (textParts.length > 0) {
+        return textParts.join(' ').trim();
+      }
+    }
+  }
+
+  return '';
+}
+
+function normalizeSyncErrorText(text: string): string {
+  const trimmed = text.trim();
+  if (!trimmed) return 'unknown error';
+  return trimmed.length > 600 ? `${trimmed.slice(0, 600)}...` : trimmed;
+}
+
+function isRetryableTurboError(status: number, text: string): boolean {
+  if (status === 429 || status >= 500) return true;
+  return /rate|limit|throttle|too many/i.test(text);
+}
+
+async function syncTranscribeSegment(
   fileUrl: string,
   apiKey: string,
-  language: string = 'zh',
-  segmentIndex: number = 0,
-  maxRetries: number = 3
-): Promise<{ success: boolean; sentences: ASRSentence[]; error?: string }> {
+  language: string,
+  segmentIndex: number
+): Promise<SegmentResult> {
   const requestBody = {
     model: 'qwen3-asr-flash',
     input: {
       messages: [
         {
           role: 'user',
-          content: [
-            { audio: fileUrl }
-          ]
-        }
-      ]
+          content: [{ audio: fileUrl }],
+        },
+      ],
     },
     parameters: {
       asr_options: {
-        language: language,
-        enable_itn: true
-      }
-    }
+        language,
+        enable_itn: true,
+      },
+    },
   };
-  
-  let lastError = '';
-  
-  for (let attempt = 0; attempt < maxRetries; attempt++) {
+
+  let lastError = 'unknown error';
+
+  for (let attempt = 0; attempt < MAX_RETRIES; attempt += 1) {
     if (attempt > 0) {
-      // 指数退避：1秒、2秒、4秒...
-      const delay = Math.pow(2, attempt) * 1000;
-      console.log(`[Turbo] Segment ${segmentIndex} retry ${attempt}/${maxRetries} after ${delay}ms`);
-      await new Promise(resolve => setTimeout(resolve, delay));
+      const delay = Math.pow(2, attempt) * 600;
+      await new Promise((resolve) => setTimeout(resolve, delay));
     }
-    
-    console.log(`[Turbo] Segment ${segmentIndex} sync call (attempt ${attempt + 1}): ${fileUrl}`);
-    const startTime = Date.now();
-    
+
     try {
       const response = await fetch(SYNC_ASR_URL, {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${apiKey}`,
+          Authorization: `Bearer ${apiKey}`,
           'Content-Type': 'application/json',
         },
         body: JSON.stringify(requestBody),
       });
-      
-      const elapsed = Date.now() - startTime;
-      
+
+      const responseText = await response.text();
       if (!response.ok) {
-        const text = await response.text();
-        console.error(`[Turbo] Segment ${segmentIndex} failed (${elapsed}ms):`, text);
-        
-        // 检查是否是限流错误（429 或包含 rate limit 相关信息）
-        const isRateLimitError = response.status === 429 || 
-          text.includes('rate') || 
-          text.includes('limit') ||
-          text.includes('too many') ||
-          text.includes('Throttling');
-        
-        if (isRateLimitError && attempt < maxRetries - 1) {
-          lastError = `限流错误: ${text}`;
-          continue;  // 重试
+        lastError = normalizeSyncErrorText(responseText || `HTTP ${response.status}`);
+        if (attempt < MAX_RETRIES - 1 && isRetryableTurboError(response.status, responseText)) {
+          continue;
         }
-        
-        return { success: false, sentences: [], error: `API 错误: ${text}` };
+        return {
+          ok: false,
+          error: `segment ${segmentIndex}: ${lastError}`,
+        };
       }
-      
-      const data = await response.json();
-      console.log(`[Turbo] Segment ${segmentIndex} completed in ${elapsed}ms`);
-      
-      // 解析 DashScope 多模态返回格式
-      const sentences: ASRSentence[] = [];
-      
-      // 格式: output.choices[0].message.content[0].text
-      const choices = data.output?.choices;
-      if (choices?.[0]?.message?.content) {
-        const content = choices[0].message.content;
-        if (Array.isArray(content) && content[0]?.text) {
-          sentences.push({ text: content[0].text, begin_time: 0, end_time: 0 });
-        } else if (typeof content === 'string') {
-          sentences.push({ text: content, begin_time: 0, end_time: 0 });
+
+      let payload: unknown = null;
+      try {
+        payload = JSON.parse(responseText);
+      } catch {
+        lastError = 'invalid json response';
+        if (attempt < MAX_RETRIES - 1) {
+          continue;
         }
-      } else if (data.output?.text) {
-        sentences.push({ text: data.output.text, begin_time: 0, end_time: 0 });
+        return {
+          ok: false,
+          error: `segment ${segmentIndex}: ${lastError}`,
+        };
       }
-      
-      return { success: sentences.length > 0, sentences };
-      
-    } catch (e) {
-      console.error(`[Turbo] Segment ${segmentIndex} exception:`, e);
-      lastError = e instanceof Error ? e.message : String(e);
-      
-      // 网络错误也重试
-      if (attempt < maxRetries - 1) {
-        continue;
+
+      const text = extractTextFromSyncResponse(payload);
+      if (!text) {
+        lastError = 'empty transcription';
+        if (attempt < MAX_RETRIES - 1) {
+          continue;
+        }
+        return {
+          ok: false,
+          error: `segment ${segmentIndex}: ${lastError}`,
+        };
+      }
+
+      return {
+        ok: true,
+        sentence: {
+          text,
+          begin_time: 0,
+          end_time: 0,
+        },
+      };
+    } catch (error) {
+      lastError = error instanceof Error ? error.message : String(error);
+      if (attempt >= MAX_RETRIES - 1) {
+        return {
+          ok: false,
+          error: `segment ${segmentIndex}: ${lastError}`,
+        };
       }
     }
   }
-  
-  return { success: false, sentences: [], error: lastError || '重试次数用尽' };
+
+  return {
+    ok: false,
+    error: `segment ${segmentIndex}: ${lastError}`,
+  };
 }
 
-/**
- * 并行同步转录多个片段
- */
-async function processParallelSync(
-  segmentPaths: string[],
-  segmentDurations: number[],
+async function processSegmentBatch(
+  tasks: SegmentTask[],
   apiKey: string,
-  language: string
-): Promise<{ success: boolean; allSentences: ASRSentence[]; error?: string }> {
-  const startTime = Date.now();
-  
-  console.log(`[Turbo] Processing ${segmentPaths.length} segments in parallel...`);
-  
-  // 构建 URL 并并行调用（分批处理避免触发限流）
-  const batchSize = Math.min(MAX_PARALLEL_TASKS, 50);  // 每批最多50个
-  const results: { success: boolean; sentences: ASRSentence[]; error?: string }[] = [];
-  
-  for (let i = 0; i < segmentPaths.length; i += batchSize) {
-    const batch = segmentPaths.slice(i, i + batchSize);
-    const batchPromises = batch.map(async (segPath, batchIndex) => {
-      const index = i + batchIndex;
-      const fileName = path.basename(segPath);
-      const fileUrl = `${PUBLIC_PROTOCOL}://${PUBLIC_HOST}/temp-audio/${fileName}`;
-      return syncTranscribe(fileUrl, apiKey, language, index);
-    });
-    
-    const batchResults = await Promise.all(batchPromises);
-    results.push(...batchResults);
-    
-    // 如果还有更多批次，等待一小段时间避免触发限流
-    if (i + batchSize < segmentPaths.length) {
-      await new Promise(resolve => setTimeout(resolve, 100));
-    }
-  }
-  
-  // 合并结果并调整时间戳
-  const allSentences: ASRSentence[] = [];
-  let timeOffset = 0;
-  
-  for (let i = 0; i < results.length; i++) {
-    const result = results[i];
-    
-    if (result.success && result.sentences.length > 0) {
-      const adjustedSentences = result.sentences.map(s => ({
-        ...s,
-        begin_time: (s.begin_time ?? s.start_time ?? 0) + timeOffset,
-        end_time: (s.end_time ?? 0) + timeOffset,
-      }));
-      
-      allSentences.push(...adjustedSentences);
-      console.log(`[Turbo] Segment ${i}: ${result.sentences.length} sentences, offset: ${timeOffset}ms`);
-    } else {
-      console.warn(`[Turbo] Segment ${i} failed: ${result.error}`);
-    }
-    
-    timeOffset += segmentDurations[i] || 0;
-  }
-  
-  const totalTime = Math.floor((Date.now() - startTime) / 1000);
-  console.log(`[Turbo] All segments completed in ${totalTime}s, total sentences: ${allSentences.length}`);
-  
-  return { success: allSentences.length > 0, allSentences };
-}
+  language: string,
+  publicBaseUrl: string
+): Promise<{ ok: boolean; sentences: ASRSentence[]; error?: string }> {
+  const sorted = [...tasks].sort((a, b) => a.index - b.index);
+  const sentences: ASRSentence[] = [];
+  const errors: string[] = [];
+  const batchSize = Number.isFinite(BATCH_SIZE) && BATCH_SIZE > 0 ? BATCH_SIZE : 8;
 
-// ==================== API Handler ====================
+  const resultByIndex = new Map<number, SegmentResult>();
+
+  for (let start = 0; start < sorted.length; start += batchSize) {
+    const batch = sorted.slice(start, start + batchSize);
+
+    const batchResults = await Promise.all(
+      batch.map(async (task) => {
+        const fileName = path.basename(task.path);
+        const fileUrl = `${publicBaseUrl}/temp-audio/${encodeURIComponent(fileName)}`;
+        const result = await syncTranscribeSegment(fileUrl, apiKey, language, task.index);
+        return { index: task.index, result };
+      })
+    );
+
+    for (const item of batchResults) {
+      resultByIndex.set(item.index, item.result);
+    }
+
+    if (start + batchSize < sorted.length) {
+      await new Promise((resolve) => setTimeout(resolve, 80));
+    }
+  }
+
+  let offset = 0;
+  for (const task of sorted) {
+    const result = resultByIndex.get(task.index);
+
+    if (result?.ok && result.sentence) {
+      sentences.push({
+        text: result.sentence.text,
+        begin_time: offset,
+        end_time: offset + task.durationMs,
+      });
+    } else {
+      errors.push(result?.error || `segment ${task.index}: unknown failure`);
+    }
+
+    offset += task.durationMs;
+  }
+
+  if (sentences.length === 0) {
+    return {
+      ok: false,
+      sentences: [],
+      error: errors[0] || 'all segments failed',
+    };
+  }
+
+  return {
+    ok: true,
+    sentences,
+    error: errors.length > 0 ? errors.slice(0, 3).join(' | ') : undefined,
+  };
+}
 
 export async function POST(request: NextRequest) {
-  // 应用速率限制
   const rateLimitResponse = await applyRateLimit(request, 'transcribe');
   if (rateLimitResponse) return rateLimitResponse;
 
-  console.log('[Turbo] ===== Request received =====');
-  const overallStartTime = Date.now();
-  
+  const tempFiles = new Set<string>();
+
   try {
     const apiKey = process.env.DASHSCOPE_API_KEY;
     if (!apiKey) {
-      return NextResponse.json({ error: 'DASHSCOPE_API_KEY 未配置' }, { status: 500 });
+      return NextResponse.json({ error: '服务未配置转写密钥', code: 'ASR_API_KEY_MISSING' }, { status: 500 });
     }
-    
+
+    const publicBase = resolvePublicBaseUrl();
+    if (!publicBase.ok || !publicBase.baseUrl) {
+      return NextResponse.json(
+        {
+          error: '服务端未配置可访问的公网地址，暂时无法转写',
+          code: 'ASR_PUBLIC_HOST_MISSING',
+          detail: publicBase.error,
+        },
+        { status: 500 }
+      );
+    }
+
     ensureUploadDir();
-    
+    cleanupOldFiles();
+
     const formData = await request.formData();
     const audioFile = formData.get('audio') as File | null;
     const language = (formData.get('language') as string) || 'zh';
-    
+
     if (!audioFile) {
-      return NextResponse.json({ error: '未提供音频文件' }, { status: 400 });
+      return NextResponse.json({ error: '未提供音频文件', code: 'ASR_AUDIO_MISSING' }, { status: 400 });
     }
-    
+
     if (audioFile.size > MAX_FILE_SIZE) {
-      return NextResponse.json({ error: '文件过大' }, { status: 400 });
+      return NextResponse.json({ error: '文件过大', code: 'ASR_AUDIO_TOO_LARGE' }, { status: 400 });
     }
-    
-    console.log('[Turbo] Received:', {
-      name: audioFile.name,
-      size: `${(audioFile.size / 1024 / 1024).toFixed(2)}MB`,
-    });
-    
-    // 保存原始音频
+
     const timestamp = Date.now();
-    const randomId = Math.random().toString(36).substring(2, 8);
+    const randomId = Math.random().toString(36).slice(2, 8);
     const ext = path.extname(audioFile.name) || '.mp3';
     const baseName = `turbo_${timestamp}_${randomId}`;
     const originalPath = path.join(UPLOAD_DIR, `${baseName}${ext}`);
-    
-    const buffer = Buffer.from(await audioFile.arrayBuffer());
-    fs.writeFileSync(originalPath, buffer);
-    
-    // 切分音频（≤30秒片段，同步调用限制）
-    console.log('[Turbo] Splitting audio into 30s segments...');
-    const { segments, durations } = await splitAudio(
-      originalPath,
-      UPLOAD_DIR,
-      SEGMENT_DURATION_SEC,
-      baseName
-    );
-    
-    console.log(`[Turbo] Split into ${segments.length} segments`);
-    
-    // 并行同步转录
-    const result = await processParallelSync(segments, durations, apiKey, language);
-    
-    // 清理临时文件
-    for (const seg of segments) {
-      try { fs.unlinkSync(seg); } catch {}
+
+    const bytes = Buffer.from(await audioFile.arrayBuffer());
+    fs.writeFileSync(originalPath, bytes);
+    tempFiles.add(originalPath);
+
+    const ffmpegPath = resolveFfmpegPath();
+    const ffprobePath = resolveFfprobePath(ffmpegPath);
+
+    const segmentTasks = await splitAudioToSegments(originalPath, baseName, ffmpegPath, ffprobePath);
+    for (const task of segmentTasks) {
+      tempFiles.add(task.path);
     }
-    if (segments[0] !== originalPath) {
-      try { fs.unlinkSync(originalPath); } catch {}
+
+    const turboResult = await processSegmentBatch(segmentTasks, apiKey, language, publicBase.baseUrl);
+
+    if (!turboResult.ok) {
+      return NextResponse.json(
+        {
+          error: '转写失败',
+          code: 'ASR_TURBO_TASK_FAILED',
+          detail: turboResult.error,
+        },
+        { status: 500 }
+      );
     }
-    
-    if (!result.success) {
-      return NextResponse.json({ error: result.error || '转录失败' }, { status: 500 });
-    }
-    
-    // 格式化输出
-    const outputSegments = result.allSentences.map((s, i) => ({
-      id: `seg-${i}`,
-      text: s.text.trim(),
-      startMs: s.begin_time ?? s.start_time ?? 0,
-      endMs: s.end_time ?? 0,
+
+    const segments = turboResult.sentences.map((sentence, index) => ({
+      id: `seg-${index}`,
+      text: sentence.text.trim(),
+      startMs: sentence.begin_time ?? sentence.start_time ?? 0,
+      endMs: sentence.end_time ?? 0,
       confidence: 0.95,
       isFinal: true,
     }));
-    
-    const totalDuration = outputSegments.length > 0
-      ? outputSegments[outputSegments.length - 1].endMs
-      : 0;
-    
-    const fullText = outputSegments.map(s => s.text).join('');
-    
-    const totalTime = Math.floor((Date.now() - overallStartTime) / 1000);
-    const speedRatio = totalDuration > 0 ? (totalDuration / 1000 / totalTime).toFixed(1) : '0';
-    
-    console.log('[Turbo] Completed:', {
-      segments: outputSegments.length,
-      duration: `${(totalDuration / 1000 / 60).toFixed(1)}分钟`,
-      processingTime: `${totalTime}秒`,
-      speedRatio: `${speedRatio}x 实时`,
-    });
-    
+
+    const totalDuration = segments.length > 0 ? segments[segments.length - 1].endMs : 0;
+    const text = segments.map((segment) => segment.text).join('');
+
     return NextResponse.json({
       success: true,
-      text: fullText,
-      sentences: outputSegments.map(s => ({
-        id: s.id,
-        text: s.text,
-        beginTime: s.startMs,
-        endTime: s.endMs,
+      text,
+      sentences: segments.map((segment) => ({
+        id: segment.id,
+        text: segment.text,
+        beginTime: segment.startMs,
+        endTime: segment.endMs,
       })),
       totalDuration,
-      segments: outputSegments,
+      segments,
       language,
-      processingTime: totalTime,
       mode: 'turbo-sync',
+      warning: turboResult.error,
     });
-    
   } catch (error) {
-    console.error('[Turbo] Error:', error);
+    if (
+      error instanceof MediaToolError &&
+      (isToolNotFoundError(error, 'ffmpeg') || isToolNotFoundError(error, 'ffprobe'))
+    ) {
+      return NextResponse.json(
+        {
+          error: '服务端未安装 ffmpeg/ffprobe，无法处理音频',
+          code: 'FFMPEG_NOT_FOUND',
+          detail: error.detail || error.message,
+        },
+        { status: 500 }
+      );
+    }
+
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : '服务器错误' },
+      {
+        error: '极速转写服务异常',
+        code: 'ASR_TURBO_INTERNAL_ERROR',
+        detail: error instanceof Error ? error.message : String(error),
+      },
       { status: 500 }
     );
+  } finally {
+    for (const filePath of tempFiles) {
+      safeUnlink(filePath);
+    }
   }
 }
 
-export const maxDuration = 300;
+export const maxDuration = 600;

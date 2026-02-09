@@ -11,7 +11,16 @@ import { checkServices, type ServiceStatus as ServiceStatusType } from '@/lib/se
 import { getPreference, setPreference, db, generateSessionId, saveAudioSession, addTranscripts, ANONYMOUS_USER_ID } from '@/lib/db';
 import { useAuth } from '@/lib/hooks/useAuth';
 import { classroomDataService } from '@/lib/services/classroom-data-service';
-import type { TranscriptSegment, HighlightTopic, Note, TopicGenerationMode, NoteSource, NoteMetadata } from '@/types';
+import type {
+  TranscriptSegment,
+  HighlightTopic,
+  Note,
+  TopicGenerationMode,
+  NoteSource,
+  NoteMetadata,
+  ImportedVideoResult,
+  ImportedVideoSource,
+} from '@/types';
 import { useResponsive } from '@/hooks/useResponsive';
 import { UIConfig } from '@/lib/config';
 
@@ -33,7 +42,11 @@ import { ActionSidebar } from '@/components/ActionSidebar';
 import { ActionDrawer } from '@/components/ActionDrawer';
 import { ResizablePanel } from '@/components/layout/ResizablePanel';
 import { AudioUploader } from '@/components/AudioUploader';
+import { VideoLinkImporter } from '@/components/VideoLinkImporter';
+import { VideoReviewPlayer } from '@/components/VideoReviewPlayer';
 import { AITutor } from '@/components/AITutor';
+import { TranscriptPreviewPanel } from '@/components/TranscriptPreviewPanel';
+import { VideoInsightTimeline, type VideoInsightItem } from '@/components/VideoInsightTimeline';
 
 import type { ConfusionMarker } from '@/components/mobile/PodcastPlayer';
 import type { ConversationHistory } from '@/types/conversation';
@@ -72,9 +85,10 @@ import { DedaoMenu, DedaoMenuButton } from '@/components/mobile/DedaoMenu';
 import { MobileAIFab } from '@/components/mobile/MobileAIFab';
 
 type ViewMode = 'record' | 'review';
-type DataSource = 'live' | 'demo';
+type DataSource = 'live' | 'demo' | 'video';
 
 type ReviewTab = 'timeline' | 'highlights' | 'summary' | 'notes' | 'anchor-detail';
+type VideoWorkspaceTab = 'transcript' | 'chat' | 'summary' | 'notes';
 
 // 持久化状态的 key
 const APP_STATE_KEY = 'app_last_state';
@@ -87,6 +101,42 @@ interface ActionItem {
   estimatedMinutes: number;
   completed: boolean;
   relatedTimestamp?: number;
+}
+
+const VIDEO_INSIGHT_COLORS = ['#B48EFA', '#7FD4B2', '#7FADEB', '#F2AE8F', '#F0CD70', '#90D4DD'];
+
+function compactText(value: string, maxLength: number): string {
+  const normalized = (value || '').replace(/\s+/g, ' ').trim();
+  if (normalized.length <= maxLength) return normalized;
+  return `${normalized.slice(0, maxLength - 1)}…`;
+}
+
+function buildSeedVideoInsights(segments: TranscriptSegment[]): VideoInsightItem[] {
+  if (!Array.isArray(segments) || segments.length === 0) return [];
+
+  const valid = segments.filter((seg) => seg && typeof seg.text === 'string' && seg.text.trim().length > 0);
+  if (valid.length === 0) return [];
+
+  const maxPoints = 5;
+  const step = Math.max(1, Math.floor(valid.length / maxPoints));
+  const timestamps: number[] = [];
+  for (let index = 0; index < valid.length && timestamps.length < maxPoints; index += step) {
+    timestamps.push(Math.max(0, valid[index].startMs));
+  }
+
+  if (timestamps.length === 0) {
+    timestamps.push(Math.max(0, valid[0].startMs));
+  }
+
+  return [
+    {
+      id: 'seed-overview',
+      prompt: '导入完成，时间轴预览',
+      summary: compactText(valid.slice(0, 3).map((seg) => seg.text).join(' '), 120),
+      timestamps: Array.from(new Set(timestamps)).sort((a, b) => a - b),
+      color: VIDEO_INSIGHT_COLORS[0],
+    },
+  ];
 }
 
 // 包装组件 - 处理 useSearchParams 需要 Suspense 边界的问题
@@ -104,7 +154,7 @@ function StudentAppContent({ isGuestFastEntry }: { isGuestFastEntry: boolean }) 
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isPlaying, setIsPlaying] = useState(false);
   const [selectedConfusion, setSelectedConfusion] = useState<ConfusionMarker | null>(null);
-  const [mobileSubPage, setMobileSubPage] = useState<'highlights' | 'summary' | 'notes' | 'tasks' | 'ai-chat' | null>(null);
+  const [mobileSubPage, setMobileSubPage] = useState<'highlights' | 'summary' | 'notes' | 'tasks' | 'ai-chat' | 'transcript' | null>(null);
   const [mobileAIQuestion, setMobileAIQuestion] = useState<string>(''); // 移动端AI对话的初始问题
   
   const [viewMode, setViewMode] = useState<ViewMode>('record');
@@ -116,13 +166,18 @@ function StudentAppContent({ isGuestFastEntry }: { isGuestFastEntry: boolean }) 
   const [selectedAnchor, setSelectedAnchor] = useState<Anchor | null>(null);
   const [actionItems, setActionItems] = useState<ActionItem[]>([]);
   const [currentTime, setCurrentTime] = useState(0);
+  const [videoSeekNonce, setVideoSeekNonce] = useState(0);
   const [dataSource, setDataSource] = useState<DataSource>('live');
   const [serviceStatus, setServiceStatus] = useState<ServiceStatusType | null>(null);
   const [audioBlob, setAudioBlob] = useState<Blob | null>(null);
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
+  const [videoSource, setVideoSource] = useState<ImportedVideoSource | null>(null);
   
   // 新增状态：精选片段、摘要、笔记
   const [reviewTab, setReviewTab] = useState<ReviewTab>('timeline');
+  const [videoWorkspaceTab, setVideoWorkspaceTab] = useState<VideoWorkspaceTab>('chat');
+  const [videoInsightItems, setVideoInsightItems] = useState<VideoInsightItem[]>([]);
+  const [activeVideoInsightId, setActiveVideoInsightId] = useState<string | null>(null);
   // 使用 SWR Hooks 管理精选片段和摘要 - 自动去重、缓存、重试
   const { 
     topics: highlightTopics, 
@@ -162,6 +217,32 @@ function StudentAppContent({ isGuestFastEntry }: { isGuestFastEntry: boolean }) 
   const liveSegmentsRef = useRef<TranscriptSegment[]>([]);
   const waveformRef = useRef<WaveformPlayerRef>(null);
   const hasRestoredState = useRef(false);  // 是否已恢复状态
+
+  const handleVideoSeek = useCallback((timeMs: number) => {
+    const safeTime = Math.max(0, Math.floor(timeMs));
+    setCurrentTime(safeTime);
+    setVideoSeekNonce((prev) => prev + 1);
+  }, []);
+
+  const handleUnifiedSeek = useCallback((timeMs: number, autoPlay: boolean = false) => {
+    const safeTime = Math.max(0, Math.floor(timeMs));
+    if (videoSource) {
+      handleVideoSeek(safeTime);
+      return;
+    }
+    setCurrentTime(safeTime);
+    waveformRef.current?.seekTo(safeTime);
+    if (autoPlay) {
+      waveformRef.current?.play();
+      setIsPlaying(true);
+    }
+  }, [handleVideoSeek, videoSource]);
+
+  useEffect(() => {
+    if (!videoSource) {
+      setVideoSeekNonce(0);
+    }
+  }, [videoSource]);
   
   // 引导结束后的清理：关闭引导期间打开的面板
   useEffect(() => {
@@ -280,6 +361,8 @@ function StudentAppContent({ isGuestFastEntry }: { isGuestFastEntry: boolean }) 
         setSegments(demoData.DEMO_SEGMENTS);
         setAudioUrl(demoData.DEMO_AUDIO_URL);
         setAnchors(demoData.DEMO_ANCHORS);
+        setVideoSource(null);
+        setDataSource('demo');
         
         // 构建时间轴（同步操作，优先完成）
         const tl = memoryService.buildTimeline(
@@ -402,6 +485,9 @@ function StudentAppContent({ isGuestFastEntry }: { isGuestFastEntry: boolean }) 
     setDataSource('live');
     setAudioUrl(null); // 清除示例音频URL
     setAudioBlob(null); // 清除音频 blob
+    setVideoSource(null);
+    setVideoInsightItems([]);
+    setActiveVideoInsightId(null);
     liveSegmentsRef.current = [];
     anchorService.clear(newSessionId);
     // 清理历史对话相关状态
@@ -433,6 +519,11 @@ function StudentAppContent({ isGuestFastEntry }: { isGuestFastEntry: boolean }) 
     
     setSegments(finalSegments);
     setDataSource(hasLiveData ? 'live' : 'demo');
+    if (hasLiveData) {
+      setVideoSource(null);
+      setVideoInsightItems([]);
+      setActiveVideoInsightId(null);
+    }
     
     // 计算课程时长
     const duration = finalSegments.length > 0 
@@ -489,6 +580,12 @@ function StudentAppContent({ isGuestFastEntry }: { isGuestFastEntry: boolean }) 
     setShowConversationHistory(false);
     setSelectedHistoryConversation(null);
     setShowSessionHistory(false);
+    if (newMode === 'record') {
+      setVideoSource(null);
+      setVideoInsightItems([]);
+      setActiveVideoInsightId(null);
+      setVideoWorkspaceTab('chat');
+    }
     
     // 切换到复习模式时，如果没有数据则加载 demo
     if (newMode === 'review' && segments.length === 0) {
@@ -497,6 +594,7 @@ function StudentAppContent({ isGuestFastEntry }: { isGuestFastEntry: boolean }) 
         setSegments(demoData.DEMO_SEGMENTS);
         setAudioUrl(demoData.DEMO_AUDIO_URL);
         setAnchors(demoData.DEMO_ANCHORS);
+        setVideoSource(null);
         setDataSource('demo');
         
         // 构建时间轴
@@ -544,6 +642,10 @@ function StudentAppContent({ isGuestFastEntry }: { isGuestFastEntry: boolean }) 
       setActionItems([]);
       liveSegmentsRef.current = [];
       setShowSessionHistory(false);
+      setVideoSource(null);
+      setVideoInsightItems([]);
+      setActiveVideoInsightId(null);
+      setVideoWorkspaceTab('chat');
       
       // 从 IndexedDB 加载转录数据
       const transcripts = await db.transcripts
@@ -621,6 +723,7 @@ function StudentAppContent({ isGuestFastEntry }: { isGuestFastEntry: boolean }) 
     liveSegmentsRef.current = newSegments;
     setSegments(newSegments);
     setDataSource('live');
+    setVideoSource(null);
   }, []);
 
   // 处理转录增强完成后的更新
@@ -629,6 +732,111 @@ function StudentAppContent({ isGuestFastEntry }: { isGuestFastEntry: boolean }) 
     liveSegmentsRef.current = enhancedSegments;
     setSegments(enhancedSegments);
   }, []);
+
+  const handleVideoImportReady = useCallback(async (result: ImportedVideoResult) => {
+    const importedSegments = Array.isArray(result.segments) ? result.segments : [];
+    if (importedSegments.length === 0) {
+      alert('视频已导入，但转录为空，请更换视频或重试。');
+      return;
+    }
+
+    const newSessionId = generateSessionId();
+    setSessionId(newSessionId);
+    setViewMode('review');
+    setDataSource('video');
+    setVideoSource(result.source);
+    setVideoWorkspaceTab('chat');
+    setCurrentTime(0);
+    setVideoSeekNonce(0);
+
+    setSegments(importedSegments);
+    setAnchors([]);
+    setSelectedAnchor(null);
+    clearTopics();
+    clearSummary();
+    setNotes([]);
+    setActionItems([]);
+    setAudioBlob(null);
+    setAudioUrl(null);
+    setShowConversationHistory(false);
+    setSelectedHistoryConversation(null);
+    liveSegmentsRef.current = importedSegments;
+
+    const duration = importedSegments[importedSegments.length - 1]?.endMs || 0;
+    const seededInsights = buildSeedVideoInsights(importedSegments);
+    setVideoInsightItems(seededInsights);
+    setActiveVideoInsightId(seededInsights[0]?.id || null);
+
+    try {
+      const currentUserId = user?.id || ANONYMOUS_USER_ID;
+      await db.transcripts.bulkAdd(
+        importedSegments.map((seg) => ({
+          sessionId: newSessionId,
+          userId: currentUserId,
+          text: seg.text,
+          startMs: seg.startMs,
+          endMs: seg.endMs,
+          confidence: seg.confidence || 1.0,
+          isFinal: true,
+        }))
+      );
+    } catch (error) {
+      console.error('保存视频转录到 IndexedDB 失败:', error);
+    }
+
+    classroomDataService.saveSession({
+      id: newSessionId,
+      subject: UIConfig.defaultSubject,
+      topic: result.source.title || '视频复习',
+      teacherName: UIConfig.defaultTeacher || 'Teacher',
+      status: 'completed',
+      duration,
+      createdBy: studentId,
+    });
+
+    const nextTimeline = memoryService.buildTimeline(
+      newSessionId,
+      importedSegments,
+      [],
+      {
+        subject: UIConfig.defaultSubject,
+        teacher: UIConfig.defaultTeacher || 'Teacher',
+        date: new Date().toISOString().split('T')[0],
+      }
+    );
+    setTimeline(nextTimeline);
+    memoryService.save(nextTimeline);
+  }, [clearSummary, clearTopics, studentId, user?.id]);
+
+  const handleVideoAssistantMessage = useCallback((payload: {
+    id: string;
+    prompt: string;
+    content: string;
+    timestamps: number[];
+  }) => {
+    if (!videoSource) return;
+
+    const normalizedTimestamps = Array.from(new Set(payload.timestamps))
+      .filter((value) => Number.isFinite(value) && value >= 0)
+      .sort((a, b) => a - b);
+    const insightTimestamps = normalizedTimestamps.length > 0
+      ? normalizedTimestamps
+      : [Math.max(0, currentTime)];
+
+    const insightId = `insight-${payload.id}`;
+    setVideoInsightItems((prev) => {
+      const baseItems = prev.filter((item) => !item.id.startsWith('seed-'));
+      const nextItem: VideoInsightItem = {
+        id: insightId,
+        prompt: compactText(payload.prompt || '本轮提问', 48),
+        summary: compactText(payload.content, 120),
+        timestamps: insightTimestamps,
+        color: VIDEO_INSIGHT_COLORS[baseItems.length % VIDEO_INSIGHT_COLORS.length],
+      };
+      return [nextItem, ...baseItems].slice(0, 12);
+    });
+    setActiveVideoInsightId(insightId);
+  }, [currentTime, videoSource]);
 
   const handleTranscriptTextUpdate = useCallback((segmentId: string, nextText: string) => {
     const normalized = nextText.trim();
@@ -982,8 +1190,15 @@ function StudentAppContent({ isGuestFastEntry }: { isGuestFastEntry: boolean }) 
     );
   }
 
+  const shouldAllowPageScroll = !isMobile && viewMode === 'review' && !!videoSource;
+
   return (
-    <div className="h-dvh flex flex-col overflow-hidden main-content-enter" style={{ height: '100dvh', minHeight: '-webkit-fill-available' }}>
+    <div
+      className={`h-dvh flex flex-col main-content-enter browser-safe-top ${
+        shouldAllowPageScroll ? 'overflow-y-auto overflow-x-hidden' : 'overflow-hidden'
+      }`}
+      style={{ height: '100dvh', minHeight: '-webkit-fill-available' }}
+    >
       {/* 移动端隐藏降级横幅 */}
       {!isMobile && <DegradedModeBanner status={serviceStatus} />}
       
@@ -1025,7 +1240,7 @@ function StudentAppContent({ isGuestFastEntry }: { isGuestFastEntry: boolean }) 
               
               <div className="flex items-center gap-3 text-sm min-w-0 flex-wrap">
                 <span className={`badge ${dataSource === 'live' ? 'badge-live' : 'badge-demo'} flex-shrink-0`}>
-                  {dataSource === 'live' ? '🎙️ 实时' : '📋 演示'}
+                  {dataSource === 'live' ? '🎙️ 实时' : dataSource === 'video' ? '🎬 视频' : '📋 演示'}
                 </span>
                 
                 <div className="flex items-center gap-2 text-gray-500 min-w-0 flex-wrap">
@@ -1123,6 +1338,16 @@ function StudentAppContent({ isGuestFastEntry }: { isGuestFastEntry: boolean }) 
                         📁 上传音频
                       </button>
                       <button
+                        onClick={() => { setDataSource('video'); setShowSessionHistory(false); }}
+                        className={`px-3 py-1.5 text-xs rounded-lg transition-all ${
+                          dataSource === 'video' && !showSessionHistory
+                            ? 'bg-white text-gray-900 font-medium shadow-sm'
+                            : 'text-gray-500 hover:text-gray-700'
+                        }`}
+                      >
+                        🎬 视频链接
+                      </button>
+                      <button
                         onClick={() => setShowSessionHistory(true)}
                         className={`px-3 py-1.5 text-xs rounded-lg transition-all ${
                           showSessionHistory
@@ -1157,6 +1382,21 @@ function StudentAppContent({ isGuestFastEntry }: { isGuestFastEntry: boolean }) 
                         showHeader={false}
                       />
                     </div>
+                  ) : dataSource === 'video' ? (
+                    <div className="card-edu p-4">
+                      <h3 className="text-base font-semibold text-gray-900 mb-3 flex items-center gap-2">
+                        <span>🎬</span>
+                        导入视频链接
+                      </h3>
+                      <VideoLinkImporter
+                        onImportReady={handleVideoImportReady}
+                        onError={(error) => {
+                          console.error('视频导入失败:', error);
+                          alert(error);
+                        }}
+                        disabled={isRecording}
+                      />
+                    </div>
                   ) : (
                     <div className="card-edu p-4">
                       <h3 className="text-base font-semibold text-gray-900 mb-3 flex items-center gap-2">
@@ -1178,6 +1418,9 @@ function StudentAppContent({ isGuestFastEntry }: { isGuestFastEntry: boolean }) 
                           setAudioBlob(blob);
                           setAudioUrl(null);
                           setDataSource('live');
+                          setVideoSource(null);
+                          setVideoInsightItems([]);
+                          setActiveVideoInsightId(null);
                           liveSegmentsRef.current = [];
                           
                           try {
@@ -1338,6 +1581,16 @@ function StudentAppContent({ isGuestFastEntry }: { isGuestFastEntry: boolean }) 
                   📁 上传音频
                 </button>
                 <button
+                  onClick={() => { setDataSource('video'); setShowSessionHistory(false); }}
+                  className={`px-4 py-2 text-sm rounded-lg transition-all ${
+                    dataSource === 'video' && !showSessionHistory
+                      ? 'bg-white text-navy font-medium shadow-sm'
+                      : 'text-gray-500 hover:text-navy'
+                  }`}
+                >
+                  🎬 视频链接
+                </button>
+                <button
                   onClick={() => setShowSessionHistory(true)}
                   className={`px-4 py-2 text-sm rounded-lg transition-all ${
                     showSessionHistory
@@ -1382,6 +1635,21 @@ function StudentAppContent({ isGuestFastEntry }: { isGuestFastEntry: boolean }) 
                   showHeader={false}
                 />
               </div>
+            ) : dataSource === 'video' ? (
+              <div className="card-edu p-6">
+                <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
+                  <span>🎬</span>
+                  导入视频链接
+                </h3>
+                <VideoLinkImporter
+                  onImportReady={handleVideoImportReady}
+                  onError={(error) => {
+                    console.error('视频导入失败:', error);
+                    alert(error);
+                  }}
+                  disabled={isRecording}
+                />
+              </div>
             ) : (
               <div className="card-edu p-6">
                 <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
@@ -1404,6 +1672,9 @@ function StudentAppContent({ isGuestFastEntry }: { isGuestFastEntry: boolean }) 
                     setAudioBlob(blob);
                     setAudioUrl(null); // 清除示例音频URL
                     setDataSource('live');
+                    setVideoSource(null);
+                    setVideoInsightItems([]);
+                    setActiveVideoInsightId(null);
                     liveSegmentsRef.current = [];
                     
                     // 将转录数据保存到 IndexedDB（供教师端读取）
@@ -1512,7 +1783,135 @@ function StudentAppContent({ isGuestFastEntry }: { isGuestFastEntry: boolean }) 
         <>
           {/* 桌面端布局 */}
           {!isMobile ? (
-            <div className="flex-1 min-h-0 flex overflow-hidden page-enter" style={{ background: 'var(--edu-bg-primary)' }}>
+            <div
+              className={`flex-1 min-h-0 flex page-enter ${videoSource ? 'overflow-visible' : 'overflow-hidden'}`}
+              style={{ background: 'var(--edu-bg-primary)' }}
+            >
+              {videoSource ? (
+                <div className="flex-1 min-h-0 grid grid-cols-1 xl:grid-cols-[minmax(0,1.2fr)_380px] 2xl:grid-cols-[minmax(0,1.35fr)_420px] gap-4 p-4">
+                  <div className="min-h-0 flex flex-col gap-4">
+                    <VideoReviewPlayer
+                      source={videoSource}
+                      className="w-full"
+                      seekToMs={currentTime}
+                      seekNonce={videoSeekNonce}
+                    />
+
+                    <div className="card-edu p-4">
+                      <div className="flex items-center justify-between mb-3">
+                        <h3 className="text-sm font-semibold text-gray-900">问答高亮时间轴</h3>
+                        <span className="text-xs text-gray-500">按回答聚合</span>
+                      </div>
+                      <div className="pr-1">
+                        <VideoInsightTimeline
+                          items={videoInsightItems}
+                          activeItemId={activeVideoInsightId}
+                          totalDuration={totalDuration}
+                          formatTime={formatTime}
+                          onSelectItem={setActiveVideoInsightId}
+                          onSeek={handleVideoSeek}
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="min-h-[560px] xl:min-h-0 flex flex-col bg-white rounded-2xl border border-gray-200 overflow-hidden">
+                    <div className="flex items-center gap-1 p-2 border-b bg-gray-50" style={{ borderColor: 'var(--edu-border-light)' }}>
+                      <button
+                        onClick={() => setVideoWorkspaceTab('transcript')}
+                        className={`px-3 py-1.5 text-xs rounded-lg transition-all ${
+                          videoWorkspaceTab === 'transcript'
+                            ? 'bg-white text-amber-600 font-medium shadow-sm'
+                            : 'text-gray-500 hover:text-navy'
+                        }`}
+                      >
+                        转录
+                      </button>
+                      <button
+                        onClick={() => setVideoWorkspaceTab('chat')}
+                        className={`px-3 py-1.5 text-xs rounded-lg transition-all ${
+                          videoWorkspaceTab === 'chat'
+                            ? 'bg-white text-amber-600 font-medium shadow-sm'
+                            : 'text-gray-500 hover:text-navy'
+                        }`}
+                      >
+                        对话
+                      </button>
+                      <button
+                        onClick={() => setVideoWorkspaceTab('summary')}
+                        className={`px-3 py-1.5 text-xs rounded-lg transition-all ${
+                          videoWorkspaceTab === 'summary'
+                            ? 'bg-white text-amber-600 font-medium shadow-sm'
+                            : 'text-gray-500 hover:text-navy'
+                        }`}
+                      >
+                        摘要
+                      </button>
+                      <button
+                        onClick={() => setVideoWorkspaceTab('notes')}
+                        className={`px-3 py-1.5 text-xs rounded-lg transition-all ${
+                          videoWorkspaceTab === 'notes'
+                            ? 'bg-white text-amber-600 font-medium shadow-sm'
+                            : 'text-gray-500 hover:text-navy'
+                        }`}
+                      >
+                        笔记
+                      </button>
+                    </div>
+
+                    <div className="flex-1 min-h-0 overflow-hidden">
+                      {videoWorkspaceTab === 'transcript' && (
+                        <div className="h-full overflow-auto p-3">
+                          <TranscriptPreviewPanel
+                            transcript={segments}
+                            immersiveMode={true}
+                            editable={true}
+                            onSegmentTextUpdate={handleTranscriptTextUpdate}
+                          />
+                        </div>
+                      )}
+
+                      {videoWorkspaceTab === 'chat' && (
+                        <div className="h-full min-h-0 p-3">
+                          <AIChat
+                            sessionId={sessionId}
+                            contextText={segments.map((seg) => `[${formatTime(seg.startMs)}] ${seg.text}`).join('\n')}
+                            onTimestampClick={handleVideoSeek}
+                            forceTimestampCitations={true}
+                            onAssistantMessage={handleVideoAssistantMessage}
+                          />
+                        </div>
+                      )}
+
+                      {videoWorkspaceTab === 'summary' && (
+                        <SummaryPanel
+                          summary={classSummary}
+                          isLoading={isLoadingSummary}
+                          onGenerate={handleGenerateSummary}
+                          onSeek={handleTimelineClick}
+                          onAddNote={(text, takeaway) => {
+                            handleAddNote(text, 'takeaways', {
+                              selectedText: takeaway.label,
+                              extra: { timestamps: takeaway.timestamps }
+                            });
+                          }}
+                        />
+                      )}
+
+                      {videoWorkspaceTab === 'notes' && (
+                        <NotesPanel
+                          notes={notes}
+                          onAddNote={handleAddNote}
+                          onUpdateNote={handleUpdateNote}
+                          onDeleteNote={handleDeleteNote}
+                          onSeek={handleTimelineClick}
+                        />
+                      )}
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <>
               {/* 可拖拽左右面板 */}
               <ResizablePanel
                 className="flex-1"
@@ -1866,6 +2265,8 @@ function StudentAppContent({ isGuestFastEntry }: { isGuestFastEntry: boolean }) 
                 items={actionItems}
                 onComplete={handleActionComplete}
               />
+                </>
+              )}
             </div>
           ) : (
             /* 移动端教育风格布局 */
@@ -1924,8 +2325,7 @@ function StudentAppContent({ isGuestFastEntry }: { isGuestFastEntry: boolean }) 
                     resolved: a.resolved,
                   }))}
                   onSeek={(timeMs) => {
-                    setCurrentTime(timeMs);
-                    waveformRef.current?.seekTo(timeMs);
+                    handleUnifiedSeek(timeMs);
                   }}
                   onPlayPause={() => {
                     if (isPlaying) {
@@ -1986,15 +2386,22 @@ function StudentAppContent({ isGuestFastEntry }: { isGuestFastEntry: boolean }) 
               {/* 主内容区：根据 mobileSubPage 条件渲染 */}
               {mobileSubPage === null && (
                 <>
+                  {videoSource && (
+                    <div className="px-4 pt-3">
+                      <VideoReviewPlayer
+                        source={videoSource}
+                        seekToMs={currentTime}
+                        seekNonce={videoSeekNonce}
+                      />
+                    </div>
+                  )}
+
                   {/* 时间轴列表（占满剩余空间） */}
                   <DedaoTimeline
                     entries={toDedaoEntries(segments, anchors)}
                     currentTime={currentTime}
                     onEntryClick={(entry) => {
-                      setCurrentTime(entry.startMs);
-                      waveformRef.current?.seekTo(entry.startMs);
-                      waveformRef.current?.play();
-                      setIsPlaying(true);
+                      handleUnifiedSeek(entry.startMs, true);
                     }}
                     onConfusionClick={(entry) => {
                       const anchor = anchors.find(
@@ -2038,8 +2445,7 @@ function StudentAppContent({ isGuestFastEntry }: { isGuestFastEntry: boolean }) 
                       setSelectedConfusion(null);
                     }}
                     onSeek={(timeMs) => {
-                      setCurrentTime(timeMs);
-                      waveformRef.current?.seekTo(timeMs);
+                      handleUnifiedSeek(timeMs);
                     }}
                   />
 
@@ -2124,8 +2530,7 @@ function StudentAppContent({ isGuestFastEntry }: { isGuestFastEntry: boolean }) 
                       resolved: a.resolved,
                     }))}
                     onSeek={(timeMs) => {
-                      setCurrentTime(timeMs);
-                      waveformRef.current?.seekTo(timeMs);
+                      handleUnifiedSeek(timeMs);
                     }}
                     onPlayPause={() => {
                       if (isPlaying) {
@@ -2184,9 +2589,7 @@ function StudentAppContent({ isGuestFastEntry }: { isGuestFastEntry: boolean }) 
                               sessionId={sessionId}
                               isMobile={true}
                               onTimestampClick={(timeMs) => {
-                                setCurrentTime(timeMs);
-                                waveformRef.current?.seekTo(timeMs);
-                                waveformRef.current?.play();
+                                handleUnifiedSeek(timeMs, true);
                               }}
                             />
                           </div>

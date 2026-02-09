@@ -207,6 +207,7 @@ function SessionItem({
       hour: '2-digit',
       minute: '2-digit',
     });
+  const isVideoSession = session.sourceType === 'video-link';
 
   return (
     <div
@@ -222,7 +223,9 @@ function SessionItem({
         <div className="flex-1 min-w-0">
           {/* 标题 */}
           <div className="flex items-center gap-2">
-            <span className="text-sm">🎙️</span>
+            <span className="inline-flex rounded-md bg-gray-100 px-1.5 py-0.5 text-[10px] font-semibold text-gray-600">
+              {isVideoSession ? 'VIDEO' : 'AUDIO'}
+            </span>
             <h4 className={cn(
               'text-sm font-medium truncate',
               isActive ? 'text-amber-900' : 'text-gray-900'
@@ -236,6 +239,8 @@ function SessionItem({
             <span>{timeAgo}</span>
             <span>·</span>
             <span>{formatDuration(session.duration)}</span>
+            <span>·</span>
+            <span>{isVideoSession ? 'video-link' : 'audio'}</span>
             {session.subject && (
               <>
                 <span>·</span>

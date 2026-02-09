@@ -1,10 +1,12 @@
-﻿'use client';
+'use client';
 
 import { useState, useRef, useCallback, useEffect } from 'react';
 import type { TranscriptSegment } from '@/types';
 import { DashScopeASRClient } from '@/lib/services/dashscope-asr-service';
 import { TranscriptPreviewPanel } from './TranscriptPreviewPanel';
 import { TranscriptEnhanceManager, type EnhancedTranscriptSegment } from '@/lib/services/transcript-enhancer';
+import { calculateSimilarity } from '@/lib/utils/transcript-utils';
+import { recordTranscriptEditDiff } from '@/lib/db/lexicon';
 
 interface RecorderProps {
   onRecordingStart?: (sessionId: string) => void;
@@ -21,6 +23,33 @@ interface RecorderProps {
 type RecorderStatus = 'idle' | 'recording' | 'paused' | 'stopped' | 'transcribing';
 type ServiceStatus = 'checking' | 'available' | 'unavailable' | 'asr-ready';
 type TranscribeMode = 'batch' | 'streaming';
+
+const DEDUP_SIMILARITY = Number(process.env.NEXT_PUBLIC_ASR_DEDUP_SIMILARITY || 0.95);
+const DEDUP_GAP_MS = Number(process.env.NEXT_PUBLIC_ASR_DEDUP_GAP_MS || 1500);
+const ENABLE_AUTO_GAIN_CONTROL = String(process.env.NEXT_PUBLIC_ASR_AUTO_GAIN_CONTROL || 'true').toLowerCase() !== 'false';
+const CORRECTION_MODEL = process.env.NEXT_PUBLIC_TRANSCRIPT_LIGHT_MODEL || 'qwen-turbo';
+const CORRECTION_FALLBACK_MODEL = process.env.NEXT_PUBLIC_TRANSCRIPT_FALLBACK_MODEL || 'qwen-plus';
+
+function normalizeCompareText(text: string): string {
+  return (text || '')
+    .normalize('NFKC')
+    .toLowerCase()
+    .replace(/[\s，。！？、,.!?;；:：'"“”‘’（）()【】\[\]-]/g, '');
+}
+
+function shouldReplaceLastSegment(last: TranscriptSegment, next: TranscriptSegment): boolean {
+  const gap = Math.max(0, next.startMs - last.endMs);
+  const overlap = next.startMs <= last.endMs;
+  const similarity = calculateSimilarity(last.text, next.text);
+
+  if (similarity >= DEDUP_SIMILARITY && (overlap || gap <= DEDUP_GAP_MS)) {
+    return true;
+  }
+
+  const lastKey = normalizeCompareText(last.text);
+  const nextKey = normalizeCompareText(next.text);
+  return !!lastKey && lastKey === nextKey && (overlap || gap <= DEDUP_GAP_MS);
+}
 
 export function Recorder({
   onRecordingStart,
@@ -43,7 +72,7 @@ export function Recorder({
   const [transcribeMode, setTranscribeMode] = useState<TranscribeMode>('streaming');
   const [streamingAvailable, setStreamingAvailable] = useState(true);
   const [apiKey, setApiKey] = useState<string>('');
-  const [wsModel, setWsModel] = useState<string>('qwen-asr-realtime-v1');
+  const [wsModel, setWsModel] = useState<string>('qwen3-asr-flash-realtime');
   const [wsSampleRate, setWsSampleRate] = useState<number>(16000);
   const [anchorCount, setAnchorCount] = useState(0);
 
@@ -62,6 +91,8 @@ export function Recorder({
   const isStartingRecordingRef = useRef(false);
   const [isStartingRecording, setIsStartingRecording] = useState(false);
   const manuallyEditedSegmentIdsRef = useRef<Set<string>>(new Set());
+  const interimItemIdRef = useRef<string | null>(null);
+  const noiseFloorRef = useRef(0.02);
   
 
   const enhanceManagerRef = useRef<TranscriptEnhanceManager | null>(null);
@@ -77,7 +108,9 @@ export function Recorder({
 
 
   const VAD_CONFIG = {
-    energyThreshold: 0.08,
+    baseEnergyThreshold: 0.05,
+    noiseMargin: 0.035,
+    speakingNoiseMargin: 0.02,
     silenceDuration: 600,
     minSpeechDuration: 200,
   };
@@ -135,6 +168,7 @@ export function Recorder({
       transcriptRef.current = [];
       manuallyEditedSegmentIdsRef.current.clear();
       setInterimText('');
+      interimItemIdRef.current = null;
       setAnchorCount(0);
 
 
@@ -167,7 +201,10 @@ export function Recorder({
       enhanceManagerRef.current = new TranscriptEnhanceManager({
         minBatchSize: 1,
         silenceThreshold: 3000,
-        model: 'qwen3-max-2026-01-23',
+        model: CORRECTION_MODEL,
+        fallbackModel: CORRECTION_FALLBACK_MODEL,
+        strategy: 'layered',
+        lexiconScope: 'classroom',
         onEnhanced: (segments) => {
 
           console.log('[Recorder] Enhanced callback received:', segments.length, 'segments');
@@ -211,6 +248,7 @@ export function Recorder({
           channelCount: 1,
           echoCancellation: true,
           noiseSuppression: true,
+          autoGainControl: ENABLE_AUTO_GAIN_CONTROL,
         },
       });
 
@@ -237,6 +275,7 @@ export function Recorder({
         speechStartMs: 0,
         silenceStartMs: 0,
       };
+      noiseFloorRef.current = 0.02;
       
       const checkLevel = () => {
         if (!analyserRef.current) return;
@@ -251,14 +290,34 @@ export function Recorder({
           const currentElapsedMs = Date.now() - startTimeRef.current;
           const vadState = vadStateRef.current;
           
-          if (normalizedLevel > VAD_CONFIG.energyThreshold) {
+          if (!vadState.isSpeaking) {
+            noiseFloorRef.current = noiseFloorRef.current * 0.96 + normalizedLevel * 0.04;
+          } else {
+            noiseFloorRef.current = noiseFloorRef.current * 0.995 + normalizedLevel * 0.005;
+          }
+
+          const dynamicThreshold = Math.max(
+            VAD_CONFIG.baseEnergyThreshold,
+            noiseFloorRef.current + (vadState.isSpeaking ? VAD_CONFIG.speakingNoiseMargin : VAD_CONFIG.noiseMargin)
+          );
+
+          if (normalizedLevel > dynamicThreshold) {
 
             if (!vadState.isSpeaking) {
 
               vadState.isSpeaking = true;
               vadState.speechStartMs = currentElapsedMs;
               vadState.silenceStartMs = 0;
-              console.log('[VAD] Speech started at', vadState.speechStartMs, 'ms, level:', normalizedLevel.toFixed(3));
+              console.log(
+                '[VAD] Speech started at',
+                vadState.speechStartMs,
+                'ms, level:',
+                normalizedLevel.toFixed(3),
+                'noiseFloor:',
+                noiseFloorRef.current.toFixed(3),
+                'threshold:',
+                dynamicThreshold.toFixed(3)
+              );
               
 
               if (asrClientRef.current?.isConnected()) {
@@ -282,7 +341,15 @@ export function Recorder({
                   const speechDuration = vadState.silenceStartMs - vadState.speechStartMs;
                   if (speechDuration >= VAD_CONFIG.minSpeechDuration) {
 
-                    console.log('[VAD] Speech ended:', vadState.speechStartMs, '-', vadState.silenceStartMs, 'ms, duration:', speechDuration, 'ms');
+                    console.log(
+                      '[VAD] Speech ended:',
+                      vadState.speechStartMs,
+                      '-',
+                      vadState.silenceStartMs,
+                      'ms, duration:',
+                      speechDuration,
+                      'ms'
+                    );
                     if (asrClientRef.current?.isConnected()) {
                       asrClientRef.current.sendVADEvent('end', vadState.silenceStartMs);
                     }
@@ -311,22 +378,76 @@ export function Recorder({
               text: sentence.text,
               startMs: sentence.beginTime,
               endMs: sentence.endTime || sentence.beginTime,
-              confidence: 0.95,
+              confidence: sentence.confidence ?? 0.95,
               isFinal: true,
+              provisional: false,
+              sourceItemId: sentence.itemId,
             };
-            transcriptRef.current = [...transcriptRef.current, segment];
-            setTranscript(transcriptRef.current);
-            onTranscriptUpdate?.(transcriptRef.current);
-            
 
-            if (enhanceManagerRef.current) {
-              console.log('[Recorder] Adding segment to enhance manager:', segment.id, segment.text?.slice(0, 30));
+            if (sentence.itemId && interimItemIdRef.current === sentence.itemId) {
+              interimItemIdRef.current = null;
+              setInterimText('');
+            } else {
+              setInterimText((prev) => {
+                if (!prev) return prev;
+                const prevKey = normalizeCompareText(prev);
+                const finalKey = normalizeCompareText(sentence.text);
+                return prevKey && prevKey === finalKey ? '' : prev;
+              });
+            }
+
+            const nextTranscript = [...transcriptRef.current];
+            let replaced = false;
+
+            if (sentence.replaces?.length) {
+              for (const replaceId of sentence.replaces) {
+                const replaceIndex = nextTranscript.findIndex((seg) => seg.id === replaceId);
+                if (replaceIndex >= 0) {
+                  nextTranscript[replaceIndex] = segment;
+                  replaced = true;
+                  break;
+                }
+              }
+            }
+
+            if (!replaced && nextTranscript.length > 0) {
+              const last = nextTranscript[nextTranscript.length - 1];
+              if (shouldReplaceLastSegment(last, segment)) {
+                nextTranscript[nextTranscript.length - 1] = segment;
+                replaced = true;
+              }
+            }
+
+            if (!replaced) {
+              nextTranscript.push(segment);
+            }
+
+            transcriptRef.current = nextTranscript;
+            setTranscript(nextTranscript);
+            onTranscriptUpdate?.(nextTranscript);
+
+            if (enhanceManagerRef.current && !sentence.provisional && !replaced) {
               enhanceManagerRef.current.addSegment(segment);
-              setEnhanceStats(prev => ({ ...prev, total: prev.total + 1 }));
+              setEnhanceStats((prev) => ({ ...prev, total: prev.total + 1 }));
             }
           },
-          onInterim: (text) => {
-            setInterimText(text);
+          onInterim: (interim) => {
+            if (interim.itemId) {
+              interimItemIdRef.current = interim.itemId;
+            }
+
+            const nextText = (interim.text || '').trim();
+            if (!nextText) {
+              if (!interim.itemId || interim.itemId === interimItemIdRef.current) {
+                interimItemIdRef.current = null;
+                setInterimText('');
+              }
+            } else {
+              const lastFinal = transcriptRef.current[transcriptRef.current.length - 1];
+              const interimKey = normalizeCompareText(nextText);
+              const lastKey = normalizeCompareText(lastFinal?.text || '');
+              setInterimText(interimKey && interimKey === lastKey ? '' : nextText);
+            }
 
             if (enhanceManagerRef.current) {
               enhanceManagerRef.current.updateActivity();
@@ -466,6 +587,7 @@ export function Recorder({
         speechStartMs: 0,
         silenceStartMs: 0,
       };
+      noiseFloorRef.current = 0.02;
       
       setStatus('recording');
     }
@@ -511,6 +633,7 @@ export function Recorder({
     analyserRef.current = null;
     setLevel(0);
     setInterimText('');
+    interimItemIdRef.current = null;
 
 
     if (enhanceManagerRef.current && transcribeMode === 'streaming') {
@@ -592,7 +715,10 @@ export function Recorder({
           enhanceManagerRef.current = new TranscriptEnhanceManager({
             minBatchSize: 1,
             silenceThreshold: 0,
-            model: 'qwen3-max-2026-01-23',
+            model: CORRECTION_MODEL,
+            fallbackModel: CORRECTION_FALLBACK_MODEL,
+            strategy: 'layered',
+            lexiconScope: 'classroom',
             onEnhanced: (enhancedSegs) => {
               console.log('[Recorder] Batch mode enhanced:', enhancedSegs.length, 'segments');
               setEnhancedSegments(prev => {
@@ -694,7 +820,14 @@ export function Recorder({
     if (!target || target.text === normalized) return;
 
     const updatedTranscript = transcriptRef.current.map((seg) =>
-      seg.id === segmentId ? { ...seg, text: normalized } : seg
+      seg.id === segmentId
+        ? {
+            ...seg,
+            text: normalized,
+            lockedByUser: true,
+            rawText: seg.rawText || seg.text,
+          }
+        : seg
     );
 
     transcriptRef.current = updatedTranscript;
@@ -710,16 +843,26 @@ export function Recorder({
     });
 
     onTranscriptTextUpdate?.(segmentId, normalized);
+
+    void recordTranscriptEditDiff({
+      originalText: target.text,
+      correctedText: normalized,
+      scope: 'classroom',
+    }).catch((error) => {
+      console.warn('[Recorder] Failed to record transcript edit diff:', error);
+    });
   }, [onTranscriptTextUpdate, onTranscriptUpdate]);
 
   const displayTranscript = transcript.map(seg => {
-    if (manuallyEditedSegmentIdsRef.current.has(seg.id)) return seg;
+    if (seg.lockedByUser || manuallyEditedSegmentIdsRef.current.has(seg.id)) return seg;
     const enhanced = enhancedSegments.get(seg.id);
     if (enhanced && enhanced.enhanceStatus === 'enhanced' && enhanced.text !== seg.text) {
       return {
         ...seg,
         text: enhanced.text,
         originalText: seg.text,
+        correctionLevel: enhanced.correctionLevel,
+        rawText: enhanced.rawText || seg.rawText || seg.text,
       };
     }
     return seg;
@@ -858,6 +1001,7 @@ export function Recorder({
               setTranscript([]);
               transcriptRef.current = [];
               setInterimText('');
+              interimItemIdRef.current = null;
               setTranscribeProgress('');
               setAnchorCount(0);
               setEnhancedSegments(new Map());

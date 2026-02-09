@@ -4,12 +4,14 @@
   "description": "MeetMind MVP - 课堂对齐的 AI 家教（依赖 Open Notebook + Discussion + LongCut）",
   "private": true,
   "scripts": {
-    "dev": "node server.js",
+    "dev": "npm run clean:next && node -e \"process.env.NODE_ENV='development'; require('./server.js')\"",
+    "dev:clean": "npm run clean:next && node -e \"process.env.NODE_ENV='development'; require('./server.js')\"",
     "dev:next": "next dev -p 3001",
+    "clean:next": "node -e \"const fs=require('fs');for(const dir of ['.next','.next-dev']){try{fs.rmSync(dir,{recursive:true,force:true});console.log('cleaned',dir)}catch(e){console.log('skip clean',dir,e?.message||e)}}\"",
     "prisma:generate": "prisma generate",
     "prebuild": "npm run prisma:generate",
     "build": "next build",
-    "start": "NODE_ENV=production node server.js",
+    "start": "node -e \"process.env.NODE_ENV='production'; require('./server.js')\"",
     "start:next": "next start -p 3001",
     "lint": "next lint"
   },

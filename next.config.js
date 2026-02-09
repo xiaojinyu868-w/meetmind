@@ -1,5 +1,9 @@
 /** @type {import('next').NextConfig} */
+const isProduction = process.env.NODE_ENV === 'production';
+const devDistDir = process.env.NEXT_DEV_DIST_DIR || '.next-dev';
+
 const nextConfig = {
+  distDir: isProduction ? '.next' : devDistDir,
   // 允许上传大文件 (500MB)
   experimental: {
     serverActions: {

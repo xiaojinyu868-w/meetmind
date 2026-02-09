@@ -10,19 +10,40 @@ export const ANONYMOUS_USER_ID = 'anonymous';
 
 /** 保存音频会话 */
 export async function saveAudioSession(
-  blob: Blob,
+  blob: Blob | null,
   sessionId: string,
   userId: string,
-  options: { subject?: string; topic?: string; duration?: number } = {}
+  options: {
+    subject?: string;
+    topic?: string;
+    duration?: number;
+    sourceType?: AudioSession['sourceType'];
+    mediaUrl?: string;
+    videoUrl?: string;
+    videoEmbedUrl?: string;
+    videoProvider?: string;
+    thumbnailUrl?: string;
+    importSourceMode?: AudioSession['importSourceMode'];
+    importTrace?: AudioSession['importTrace'];
+    mimeType?: string;
+  } = {}
 ): Promise<number> {
   return db.audioSessions.add({
     sessionId,
     userId: userId || ANONYMOUS_USER_ID,
-    blob,
-    mimeType: blob.type || 'audio/webm',
+    ...(blob ? { blob } : {}),
+    mimeType: options.mimeType || blob?.type || 'audio/webm',
     duration: options.duration ?? 0,
     subject: options.subject,
     topic: options.topic,
+    sourceType: options.sourceType || 'recording',
+    mediaUrl: options.mediaUrl,
+    videoUrl: options.videoUrl,
+    videoEmbedUrl: options.videoEmbedUrl,
+    videoProvider: options.videoProvider,
+    thumbnailUrl: options.thumbnailUrl,
+    importSourceMode: options.importSourceMode,
+    importTrace: options.importTrace,
     status: 'completed',
     createdAt: new Date(),
     updatedAt: new Date()
