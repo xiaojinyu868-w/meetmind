@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useRef, useEffect } from 'react';
+import { useTranslations } from 'next-intl';
 import { cn } from '@/lib/utils';
 import type { ConfusionMoment } from '@/lib/services/parent-service';
 
@@ -17,6 +18,7 @@ export function TeacherAudioPlayer({
   onClose,
   className,
 }: TeacherAudioPlayerProps) {
+  const t = useTranslations('parent.teacherAudioPlayer');
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
@@ -118,7 +120,7 @@ export function TeacherAudioPlayer({
           <div className="flex items-center justify-between mb-4">
             <div>
               <h3 className="font-semibold text-gray-800">
-                老师原话
+                {t('title')}
               </h3>
               <p className="text-sm text-gray-500">
                 {confusion.subject} · {confusion.knowledgePoint}

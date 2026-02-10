@@ -144,6 +144,19 @@ const THINKING_GUIDE_PROMPT = `
 - 最后用 🌟 总结用到的思维方法
 - 语气像一位同桌`;
 
+/**
+ * 根据语言添加语言指令到系统提示
+ */
+function withLanguageInstruction(prompt: string, locale: string): string {
+  if (locale === 'en') {
+    return `${prompt}
+
+【LANGUAGE INSTRUCTION】
+You must respond in English only. All explanations, questions, and action items should be in English.`;
+  }
+  return prompt;
+}
+
 export async function POST(request: NextRequest) {
   // 应用速率限制
   const rateLimitResponse = await applyRateLimit(request, 'tutor');
@@ -158,9 +171,9 @@ export async function POST(request: NextRequest) {
       enable_thinking_guide?: boolean;  // 学霸思维引导模式
     };
     
-    const { 
-      timestamp, 
-      segments, 
+    const {
+      timestamp,
+      segments,
       model = DEFAULT_MODEL_ID,
       studentQuestion,
       messageContent,  // 多模态消息内容
@@ -173,6 +186,7 @@ export async function POST(request: NextRequest) {
       globalMode = false,  // 全局对话模式，使用完整课堂上下文
       sessionId,           // 会话ID
       stream = false,      // 流式输出（默认关闭，保持向后兼容）
+      locale = 'zh',       // 语言
     } = body;
 
     if (!segments || !Array.isArray(segments)) {
@@ -359,7 +373,7 @@ ${cachedSummary.keyDifficulties.map(d => `- ${d}`).join('\n')}
     // ===== Mock 模式：Dify 未配置时生成模拟数据 =====
     // 引导问题始终生成（核心交互方式）
     if (!guidanceQuestion) {
-      guidanceQuestion = generateMockGuidanceQuestion(contextText);
+      guidanceQuestion = generateMockGuidanceQuestion(contextText, locale);
     }
     
     // 联网搜索：使用真正的搜索服务
@@ -382,13 +396,13 @@ ${cachedSummary.keyDifficulties.map(d => `- ${d}`).join('\n')}
       // 追问模式 / 全局对话模式
       // 全局模式使用专用提示词，追问模式使用追问提示词
       let systemPrompt = globalMode ? GLOBAL_CHAT_SYSTEM_PROMPT : FOLLOWUP_SYSTEM_PROMPT;
-      
+
       // 如果启用学霸思维引导模式，追加格式要求
       if (enable_thinking_guide) {
         systemPrompt += THINKING_GUIDE_PROMPT;
       }
-      
-      messages.push({ role: 'system', content: systemPrompt });
+
+      messages.push({ role: 'system', content: withLanguageInstruction(systemPrompt, locale) });
       
       // 构建用户消息（支持多模态）
       if (messageContent && messageContent.length > 0) {
@@ -446,7 +460,7 @@ ${studentQuestion}`;
       }
     } else {
       // 初次解释模式 - 使用结构化提示词
-      messages.push({ role: 'system', content: TUTOR_SYSTEM_PROMPT });
+      messages.push({ role: 'system', content: withLanguageInstruction(TUTOR_SYSTEM_PROMPT, locale) });
       messages.push({
         role: 'user',
         content: `【课堂转录】
@@ -783,11 +797,14 @@ function parseTimeToMsInternal(time: string): number {
 /**
  * 生成模拟的引导问题（Dify 未配置时使用）
  * 根据具体的困惑点录音内容自动生成精准选项
+ * 支持中英文切换
  */
-function generateMockGuidanceQuestion(context: string): GuidanceQuestion {
+function generateMockGuidanceQuestion(context: string, locale: string = 'zh'): GuidanceQuestion {
+  const isEnglish = locale === 'en';
+
   // 分析上下文内容，提取关键信息
   const lines = context.split('\n').filter(l => l.trim());
-  
+
   // 提取时间戳和内容
   const contentParts: Array<{ time: string; text: string }> = [];
   for (const line of lines) {
@@ -796,207 +813,206 @@ function generateMockGuidanceQuestion(context: string): GuidanceQuestion {
       contentParts.push({ time: match[1], text: match[2] });
     }
   }
-  
+
   const fullText = contentParts.map(p => p.text).join(' ').toLowerCase();
-  
+
   // 检测特定场景并生成精准选项
-  
+
   // 场景1：英语听力/口语场景（如 Jane Bond 例子）
-  if (fullText.includes('name') || fullText.includes('bond') || fullText.includes('jane') || 
+  if (fullText.includes('name') || fullText.includes('bond') || fullText.includes('jane') ||
       fullText.includes('hello') || fullText.includes('nice to meet')) {
-    
+
+    if (isEnglish) {
+      return {
+        id: 'guidance-english-name',
+        question: 'Which part of this conversation confused you?',
+        type: 'single_choice',
+        options: [
+          { id: 'opt-1', text: 'Why the name is repeated twice (e.g., "Jane, Jane Bond")', category: 'comprehension' },
+          { id: 'opt-2', text: 'The difference between first name and full name', category: 'concept' },
+          { id: 'opt-3', text: 'Couldn\'t hear the pronunciation clearly', category: 'comprehension' },
+          { id: 'opt-4', text: 'The cultural background or grammar structure of self-introduction', category: 'application' },
+        ],
+        hint: 'Choose the option closest to your confusion to help me locate the problem',
+      };
+    }
+
     return {
       id: 'guidance-english-name',
       question: '听到这段对话时，你是在哪个环节感到困惑的？',
       type: 'single_choice',
       options: [
-        { 
-          id: 'opt-1', 
-          text: '不理解为什么名字会重复说两遍（如 "Jane, Jane Bond"）', 
-          category: 'comprehension' 
-        },
-        { 
-          id: 'opt-2', 
-          text: '分不清昵称（first name）和全名（full name）的区别', 
-          category: 'concept' 
-        },
-        { 
-          id: 'opt-3', 
-          text: '听不清具体发音，不确定说的是什么词', 
-          category: 'comprehension' 
-        },
-        { 
-          id: 'opt-4', 
-          text: '不理解这种自我介绍的文化背景或语法结构', 
-          category: 'application' 
-        },
+        { id: 'opt-1', text: '不理解为什么名字会重复说两遍（如 "Jane, Jane Bond"）', category: 'comprehension' },
+        { id: 'opt-2', text: '分不清昵称（first name）和全名（full name）的区别', category: 'concept' },
+        { id: 'opt-3', text: '听不清具体发音，不确定说的是什么词', category: 'comprehension' },
+        { id: 'opt-4', text: '不理解这种自我介绍的文化背景或语法结构', category: 'application' },
       ],
       hint: '选择最接近你困惑的选项，帮助我精准定位问题',
     };
   }
-  
+
   // 场景2：数学公式场景
   if (fullText.includes('公式') || fullText.includes('=') || fullText.includes('²') ||
       fullText.includes('函数') || fullText.includes('方程')) {
+
+    if (isEnglish) {
+      return {
+        id: 'guidance-math-formula',
+        question: 'Which part of this math content are you stuck on?',
+        type: 'single_choice',
+        options: [
+          { id: 'opt-1', text: 'Don\'t understand the meaning of letters/symbols in the formula', category: 'concept' },
+          { id: 'opt-2', text: 'Don\'t know how the formula is derived', category: 'procedure' },
+          { id: 'opt-3', text: 'I understand the formula but don\'t know when to use it', category: 'application' },
+          { id: 'opt-4', text: 'Always make mistakes when substituting values', category: 'calculation' },
+        ],
+        hint: 'Choose the option closest to your confusion',
+      };
+    }
+
     return {
       id: 'guidance-math-formula',
       question: '关于这个数学内容，你具体卡在哪个环节？',
       type: 'single_choice',
       options: [
-        { 
-          id: 'opt-1', 
-          text: '不理解公式中字母/符号的含义', 
-          category: 'concept' 
-        },
-        { 
-          id: 'opt-2', 
-          text: '不知道这个公式是怎么推导出来的', 
-          category: 'procedure' 
-        },
-        { 
-          id: 'opt-3', 
-          text: '公式我懂，但不知道什么情况下该用它', 
-          category: 'application' 
-        },
-        { 
-          id: 'opt-4', 
-          text: '代入计算时总是出错', 
-          category: 'calculation' 
-        },
+        { id: 'opt-1', text: '不理解公式中字母/符号的含义', category: 'concept' },
+        { id: 'opt-2', text: '不知道这个公式是怎么推导出来的', category: 'procedure' },
+        { id: 'opt-3', text: '公式我懂，但不知道什么情况下该用它', category: 'application' },
+        { id: 'opt-4', text: '代入计算时总是出错', category: 'calculation' },
       ],
       hint: '选择最接近你困惑的选项',
     };
   }
-  
+
   // 场景3：图像/图形场景
   if (fullText.includes('图像') || fullText.includes('图形') || fullText.includes('抛物线') ||
       fullText.includes('开口') || fullText.includes('坐标')) {
+
+    if (isEnglish) {
+      return {
+        id: 'guidance-graph',
+        question: 'Where did you get stuck with this graph?',
+        type: 'single_choice',
+        options: [
+          { id: 'opt-1', text: 'Don\'t understand the relationship between the graph and formula', category: 'concept' },
+          { id: 'opt-2', text: 'Don\'t know how to draw the graph based on conditions', category: 'procedure' },
+          { id: 'opt-3', text: 'Can\'t understand the meaning of points/lines on the graph', category: 'comprehension' },
+          { id: 'opt-4', text: 'Don\'t understand how parameter changes affect the graph', category: 'concept' },
+        ],
+        hint: 'Choose the option closest to your confusion',
+      };
+    }
+
     return {
       id: 'guidance-graph',
       question: '关于图像这部分，你是在哪里卡住了？',
       type: 'single_choice',
       options: [
-        { 
-          id: 'opt-1', 
-          text: '不理解图像和公式之间的对应关系', 
-          category: 'concept' 
-        },
-        { 
-          id: 'opt-2', 
-          text: '不知道怎么根据条件画出图像', 
-          category: 'procedure' 
-        },
-        { 
-          id: 'opt-3', 
-          text: '看不懂图像上各个点/线的意义', 
-          category: 'comprehension' 
-        },
-        { 
-          id: 'opt-4', 
-          text: '不理解参数变化对图像的影响', 
-          category: 'concept' 
-        },
+        { id: 'opt-1', text: '不理解图像和公式之间的对应关系', category: 'concept' },
+        { id: 'opt-2', text: '不知道怎么根据条件画出图像', category: 'procedure' },
+        { id: 'opt-3', text: '看不懂图像上各个点/线的意义', category: 'comprehension' },
+        { id: 'opt-4', text: '不理解参数变化对图像的影响', category: 'concept' },
       ],
       hint: '选择最接近你困惑的选项',
     };
   }
-  
+
   // 场景4：物理/化学实验场景
   if (fullText.includes('实验') || fullText.includes('反应') || fullText.includes('现象') ||
       fullText.includes('能量') || fullText.includes('力')) {
+
+    if (isEnglish) {
+      return {
+        id: 'guidance-experiment',
+        question: 'Where exactly are you confused about this topic?',
+        type: 'single_choice',
+        options: [
+          { id: 'opt-1', text: 'Don\'t understand the basic concept or principle', category: 'concept' },
+          { id: 'opt-2', text: 'Don\'t know the experimental steps or methods', category: 'procedure' },
+          { id: 'opt-3', text: 'Don\'t understand why this phenomenon occurs', category: 'comprehension' },
+          { id: 'opt-4', text: 'Don\'t know how to apply this knowledge in practice', category: 'application' },
+        ],
+        hint: 'Choose the option closest to your confusion',
+      };
+    }
+
     return {
       id: 'guidance-experiment',
       question: '关于这个知识点，你具体在哪里感到困惑？',
       type: 'single_choice',
       options: [
-        { 
-          id: 'opt-1', 
-          text: '不理解基本概念或原理', 
-          category: 'concept' 
-        },
-        { 
-          id: 'opt-2', 
-          text: '不知道实验步骤或操作方法', 
-          category: 'procedure' 
-        },
-        { 
-          id: 'opt-3', 
-          text: '不理解为什么会出现这种现象', 
-          category: 'comprehension' 
-        },
-        { 
-          id: 'opt-4', 
-          text: '不知道这个知识点在实际中怎么应用', 
-          category: 'application' 
-        },
+        { id: 'opt-1', text: '不理解基本概念或原理', category: 'concept' },
+        { id: 'opt-2', text: '不知道实验步骤或操作方法', category: 'procedure' },
+        { id: 'opt-3', text: '不理解为什么会出现这种现象', category: 'comprehension' },
+        { id: 'opt-4', text: '不知道这个知识点在实际中怎么应用', category: 'application' },
       ],
       hint: '选择最接近你困惑的选项',
     };
   }
-  
+
   // 场景5：阅读理解/语文场景
   if (fullText.includes('文章') || fullText.includes('作者') || fullText.includes('意思') ||
       fullText.includes('表达') || fullText.includes('理解')) {
+
+    if (isEnglish) {
+      return {
+        id: 'guidance-reading',
+        question: 'At which level are you confused about this content?',
+        type: 'single_choice',
+        options: [
+          { id: 'opt-1', text: 'Some words/sentences are difficult to understand', category: 'comprehension' },
+          { id: 'opt-2', text: 'Don\'t understand what the author is trying to express', category: 'concept' },
+          { id: 'opt-3', text: 'Don\'t know how to analyze the article structure', category: 'procedure' },
+          { id: 'opt-4', text: 'Can\'t summarize or retell in my own words', category: 'application' },
+        ],
+        hint: 'Choose the option closest to your confusion',
+      };
+    }
+
     return {
       id: 'guidance-reading',
       question: '关于这段内容，你是在哪个层面感到困惑？',
       type: 'single_choice',
       options: [
-        { 
-          id: 'opt-1', 
-          text: '有些词语/句子看不懂', 
-          category: 'comprehension' 
-        },
-        { 
-          id: 'opt-2', 
-          text: '不理解作者想表达的意思', 
-          category: 'concept' 
-        },
-        { 
-          id: 'opt-3', 
-          text: '不知道怎么分析文章结构', 
-          category: 'procedure' 
-        },
-        { 
-          id: 'opt-4', 
-          text: '不会用自己的话总结/复述', 
-          category: 'application' 
-        },
+        { id: 'opt-1', text: '有些词语/句子看不懂', category: 'comprehension' },
+        { id: 'opt-2', text: '不理解作者想表达的意思', category: 'concept' },
+        { id: 'opt-3', text: '不知道怎么分析文章结构', category: 'procedure' },
+        { id: 'opt-4', text: '不会用自己的话总结/复述', category: 'application' },
       ],
       hint: '选择最接近你困惑的选项',
     };
   }
-  
+
   // 默认场景：通用引导问题
   // 尝试从上下文中提取关键词来生成更相关的问题
   const keywords = extractKeywords(fullText);
+
+  if (isEnglish) {
+    const keywordHint = keywords.length > 0 ? ` (involving: ${keywords.slice(0, 3).join(', ')})` : '';
+    return {
+      id: 'guidance-default',
+      question: `When listening to this content${keywordHint}, which part confused you?`,
+      type: 'single_choice',
+      options: [
+        { id: 'opt-1', text: 'Basic concept is unclear, have knowledge gaps', category: 'concept' },
+        { id: 'opt-2', text: 'Teacher spoke too fast, couldn\'t follow the logic', category: 'comprehension' },
+        { id: 'opt-3', text: 'Too many steps/methods, don\'t know how to proceed', category: 'procedure' },
+        { id: 'opt-4', text: 'Other reasons, I want to describe the problem directly', category: 'application' },
+      ],
+      hint: 'Choose the option closest to your confusion to help me better assist you',
+    };
+  }
+
   const keywordHint = keywords.length > 0 ? `（涉及：${keywords.slice(0, 3).join('、')}）` : '';
-  
   return {
     id: 'guidance-default',
     question: `听到这段内容时${keywordHint}，你是在哪个环节感到困惑的？`,
     type: 'single_choice',
     options: [
-      { 
-        id: 'opt-1', 
-        text: '基础概念不清楚，有知识漏洞', 
-        category: 'concept' 
-      },
-      { 
-        id: 'opt-2', 
-        text: '老师讲得太快，没跟上思路', 
-        category: 'comprehension' 
-      },
-      { 
-        id: 'opt-3', 
-        text: '步骤/方法太多，不知道怎么操作', 
-        category: 'procedure' 
-      },
-      { 
-        id: 'opt-4', 
-        text: '其他原因，我想直接描述问题', 
-        category: 'application' 
-      },
+      { id: 'opt-1', text: '基础概念不清楚，有知识漏洞', category: 'concept' },
+      { id: 'opt-2', text: '老师讲得太快，没跟上思路', category: 'comprehension' },
+      { id: 'opt-3', text: '步骤/方法太多，不知道怎么操作', category: 'procedure' },
+      { id: 'opt-4', text: '其他原因，我想直接描述问题', category: 'application' },
     ],
     hint: '选择最接近你困惑的选项，帮助我更好地帮助你',
   };

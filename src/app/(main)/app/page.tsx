@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
+import { useTranslations } from 'next-intl';
 import Image from 'next/image';
 import { Header } from '@/components/Header';
 import { ServiceStatus, DegradedModeBanner } from '@/components/ServiceStatus';
@@ -141,6 +142,8 @@ function buildSeedVideoInsights(segments: TranscriptSegment[]): VideoInsightItem
 
 // 包装组件 - 处理 useSearchParams 需要 Suspense 边界的问题
 function StudentAppContent({ isGuestFastEntry }: { isGuestFastEntry: boolean }) {
+  const t = useTranslations();
+  
   // 开屏动画状态 - 访客快速入口跳过 Splash
   const [showSplash, setShowSplash] = useState(!isGuestFastEntry);
   const [appReady, setAppReady] = useState(false);
@@ -258,7 +261,7 @@ function StudentAppContent({ isGuestFastEntry }: { isGuestFastEntry: boolean }) 
   
   // 获取当前用户的 studentId 和 studentName
   const studentId = user?.id || 'anonymous';
-  const studentName = user?.nickname || user?.username || '匿名用户';
+  const studentName = user?.nickname || user?.username || t('common.anonymous');
 
   // 保存应用状态到 IndexedDB
   const saveAppState = useCallback(async () => {
@@ -1175,8 +1178,8 @@ function StudentAppContent({ isGuestFastEntry }: { isGuestFastEntry: boolean }) 
   const unresolvedCount = anchors.filter(a => !a.resolved).length;
 
   // 客户端未挂载时显示加载状态，避免 Hydration 错误
-  if (!mounted) {
-    return <AppLoading message="准备学习环境" />;
+    if (!mounted) {
+    return <AppLoading message={t('student.loadingMessage')} />;
   }
 
   // 显示开屏动画（等待应用准备就绪）
@@ -1184,7 +1187,7 @@ function StudentAppContent({ isGuestFastEntry }: { isGuestFastEntry: boolean }) 
     return (
       <AppLoading 
         progress={loadingProgress}
-        message={loadingProgress >= 100 ? "即将进入" : undefined}
+        message={loadingProgress >= 100 ? t('student.readyMessage') : undefined}
         onComplete={loadingProgress >= 100 ? handleSplashComplete : undefined}
       />
     );
@@ -1205,7 +1208,7 @@ function StudentAppContent({ isGuestFastEntry }: { isGuestFastEntry: boolean }) 
       {/* 桌面端 Header - 移动端隐藏 */}
       {!isMobile && (
         <Header 
-          lessonTitle={viewMode === 'record' ? '课堂录音' : '课堂回顾'}
+          lessonTitle={viewMode === 'record' ? t('student.title') : t('student.titleReview')}
           courseName=""
         />
       )}
@@ -1224,14 +1227,14 @@ function StudentAppContent({ isGuestFastEntry }: { isGuestFastEntry: boolean }) 
                 className={`mode-tab ${viewMode === 'record' ? 'active' : ''}`}
               >
                 <span className="mr-1.5">🎙️</span>
-                录音
+                {t('student.record')}
               </button>
               <button
                 onClick={() => handleViewModeChange('review')}
                 className={`mode-tab ${viewMode === 'review' ? 'active' : ''}`}
               >
                 <span className="mr-1.5">📚</span>
-                复习
+                {t('student.review')}
               </button>
             </div>
             
@@ -1240,16 +1243,16 @@ function StudentAppContent({ isGuestFastEntry }: { isGuestFastEntry: boolean }) 
               
               <div className="flex items-center gap-3 text-sm min-w-0 flex-wrap">
                 <span className={`badge ${dataSource === 'live' ? 'badge-live' : 'badge-demo'} flex-shrink-0`}>
-                  {dataSource === 'live' ? '🎙️ 实时' : dataSource === 'video' ? '🎬 视频' : '📋 演示'}
+                  {dataSource === 'live' ? `🎙️ ${t('student.live')}` : dataSource === 'video' ? `🎬 ${t('student.video')}` : `📋 ${t('student.demo')}`}
                 </span>
                 
                 <div className="flex items-center gap-2 text-gray-500 min-w-0 flex-wrap">
-                  <span className="whitespace-nowrap">困惑点</span>
+                  <span className="whitespace-nowrap">{t('student.confusionPoints')}</span>
                   <span className="font-semibold text-navy">{anchors.length}</span>
                   {unresolvedCount > 0 && (
                     <>
                       <span>·</span>
-                      <span className="text-coral-500 font-semibold whitespace-nowrap">{unresolvedCount} 待解决</span>
+                      <span className="text-coral-500 font-semibold whitespace-nowrap">{unresolvedCount} {t('student.unresolved')}</span>
                     </>
                   )}
                 </div>
@@ -1299,7 +1302,7 @@ function StudentAppContent({ isGuestFastEntry }: { isGuestFastEntry: boolean }) 
                     href="/login"
                     className="px-2.5 py-1.5 text-xs font-medium text-white bg-gradient-to-r from-amber-400 to-amber-500 rounded-lg flex-shrink-0"
                   >
-                    登录
+                    {t('student.clickToLogin')}
                   </a>
                 )}
                 
@@ -1312,7 +1315,7 @@ function StudentAppContent({ isGuestFastEntry }: { isGuestFastEntry: boolean }) 
                 <div className="w-full max-w-md mx-auto flex flex-col flex-1 min-h-0">
                   {/* 录音或上传切换 */}
                   <div className="flex-shrink-0 flex items-center justify-center gap-2 mb-2">
-                    <span className="text-xs text-gray-500">选择输入方式：</span>
+                    <span className="text-xs text-gray-500">{t('student.selectInput')}</span>
                     <div 
                       className="flex items-center gap-1 p-0.5 bg-gray-100 rounded-xl"
                       data-onboarding="input-methods"
@@ -1325,7 +1328,7 @@ function StudentAppContent({ isGuestFastEntry }: { isGuestFastEntry: boolean }) 
                             : 'text-gray-500 hover:text-gray-700'
                         }`}
                       >
-                        🎙️ 实时录音
+                        🎙️ {t('student.liveRecord')}
                       </button>
                       <button
                         onClick={() => { setDataSource('demo'); setShowSessionHistory(false); }}
@@ -1335,7 +1338,7 @@ function StudentAppContent({ isGuestFastEntry }: { isGuestFastEntry: boolean }) 
                             : 'text-gray-500 hover:text-gray-700'
                         }`}
                       >
-                        📁 上传音频
+                        📁 {t('student.uploadAudio')}
                       </button>
                       <button
                         onClick={() => { setDataSource('video'); setShowSessionHistory(false); }}
@@ -1345,7 +1348,7 @@ function StudentAppContent({ isGuestFastEntry }: { isGuestFastEntry: boolean }) 
                             : 'text-gray-500 hover:text-gray-700'
                         }`}
                       >
-                        🎬 视频链接
+                        🎬 {t('student.videoLink')}
                       </button>
                       <button
                         onClick={() => setShowSessionHistory(true)}
@@ -1355,7 +1358,7 @@ function StudentAppContent({ isGuestFastEntry }: { isGuestFastEntry: boolean }) 
                             : 'text-gray-500 hover:text-gray-700'
                         }`}
                       >
-                        📋 历史
+                        📋 {t('student.history')}
                       </button>
                     </div>
                   </div>
@@ -1386,7 +1389,7 @@ function StudentAppContent({ isGuestFastEntry }: { isGuestFastEntry: boolean }) 
                     <div className="card-edu p-4">
                       <h3 className="text-base font-semibold text-gray-900 mb-3 flex items-center gap-2">
                         <span>🎬</span>
-                        导入视频链接
+                        {t('student.importVideoLink')}
                       </h3>
                       <VideoLinkImporter
                         onImportReady={handleVideoImportReady}
@@ -1401,7 +1404,7 @@ function StudentAppContent({ isGuestFastEntry }: { isGuestFastEntry: boolean }) 
                     <div className="card-edu p-4">
                       <h3 className="text-base font-semibold text-gray-900 mb-3 flex items-center gap-2">
                         <span>📁</span>
-                        上传课堂录音
+                        {t('student.uploadClassRecording')}
                       </h3>
                       <AudioUploader
                         onTranscriptReady={async (newSegments, blob) => {
@@ -1488,8 +1491,8 @@ function StudentAppContent({ isGuestFastEntry }: { isGuestFastEntry: boolean }) 
                     <div className="card-edu p-4 animate-slide-up">
                       <h3 className="text-sm font-semibold text-gray-900 mb-3 flex items-center gap-2">
                         <span>🎯</span>
-                        已标记的困惑点
-                        <span className="ml-auto text-xs font-normal text-gray-400">{anchors.length} 个</span>
+                        {t('student.markedConfusions')}
+                        <span className="ml-auto text-xs font-normal text-gray-400">{t('student.confusionCount', { count: anchors.length })}</span>
                       </h3>
                       <div className="space-y-2 max-h-32 overflow-y-auto">
                         {anchors.map((anchor, index) => (
@@ -1505,7 +1508,7 @@ function StudentAppContent({ isGuestFastEntry }: { isGuestFastEntry: boolean }) 
                               {formatTime(anchor.timestamp)}
                             </span>
                             <span className="text-xs text-gray-500">
-                              困惑点 #{index + 1}
+                              {t('student.confusionPointNumber', { number: index + 1 })}
                             </span>
                           </div>
                         ))}
@@ -1554,7 +1557,7 @@ function StudentAppContent({ isGuestFastEntry }: { isGuestFastEntry: boolean }) 
               <div className="w-full max-w-2xl mx-auto relative z-10 h-full min-h-0 flex flex-col gap-6">
                 {/* 录音或上传切换 */}
                 <div className="flex-shrink-0 flex items-center justify-center gap-4 mb-4">
-                  <span className="text-sm text-gray-500">选择输入方式：</span>
+                  <span className="text-sm text-gray-500">{t('student.selectInput')}</span>
               <div 
                 className="flex items-center gap-2 p-1 rounded-xl" 
                 style={{ background: 'var(--edu-bg-soft)' }}
@@ -1568,7 +1571,7 @@ function StudentAppContent({ isGuestFastEntry }: { isGuestFastEntry: boolean }) 
                       : 'text-gray-500 hover:text-navy'
                   }`}
                 >
-                  🎙️ 实时录音
+                  🎙️ {t('student.liveRecord')}
                 </button>
                 <button
                   onClick={() => { setDataSource('demo'); setShowSessionHistory(false); }}
@@ -1578,7 +1581,7 @@ function StudentAppContent({ isGuestFastEntry }: { isGuestFastEntry: boolean }) 
                       : 'text-gray-500 hover:text-navy'
                   }`}
                 >
-                  📁 上传音频
+                  📁 {t('student.uploadAudio')}
                 </button>
                 <button
                   onClick={() => { setDataSource('video'); setShowSessionHistory(false); }}
@@ -1588,18 +1591,18 @@ function StudentAppContent({ isGuestFastEntry }: { isGuestFastEntry: boolean }) 
                       : 'text-gray-500 hover:text-navy'
                   }`}
                 >
-                  🎬 视频链接
+                  🎬 {t('student.videoLink')}
                 </button>
-                <button
-                  onClick={() => setShowSessionHistory(true)}
-                  className={`px-4 py-2 text-sm rounded-lg transition-all ${
-                    showSessionHistory
-                      ? 'bg-white text-navy font-medium shadow-sm'
-                      : 'text-gray-500 hover:text-navy'
-                  }`}
-                >
-                  📋 录音历史
-                </button>
+                      <button
+                        onClick={() => setShowSessionHistory(true)}
+                        className={`px-4 py-2 text-sm rounded-lg transition-all ${
+                          showSessionHistory
+                            ? 'bg-white text-navy font-medium shadow-sm'
+                            : 'text-gray-500 hover:text-navy'
+                        }`}
+                      >
+                        📋 {t('student.history')}
+                      </button>
               </div>
             </div>
 
@@ -1639,7 +1642,7 @@ function StudentAppContent({ isGuestFastEntry }: { isGuestFastEntry: boolean }) 
               <div className="card-edu p-6">
                 <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
                   <span>🎬</span>
-                  导入视频链接
+                  {t('student.importVideoLink')}
                 </h3>
                 <VideoLinkImporter
                   onImportReady={handleVideoImportReady}
@@ -1654,7 +1657,7 @@ function StudentAppContent({ isGuestFastEntry }: { isGuestFastEntry: boolean }) 
               <div className="card-edu p-6">
                 <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
                   <span>📁</span>
-                  上传课堂录音
+                  {t('student.uploadClassRecording')}
                 </h3>
                 <AudioUploader
                   onTranscriptReady={async (newSegments, blob) => {
@@ -1748,8 +1751,8 @@ function StudentAppContent({ isGuestFastEntry }: { isGuestFastEntry: boolean }) 
                   <div className="card-edu p-5 animate-slide-up">
                     <h3 className="text-sm font-semibold text-gray-900 mb-4 flex items-center gap-2">
                       <span>🎯</span>
-                      已标记的困惑点
-                      <span className="ml-auto text-xs font-normal text-gray-400">{anchors.length} 个</span>
+                      {t('student.markedConfusions')}
+                      <span className="ml-auto text-xs font-normal text-gray-400">{t('student.confusionCount', { count: anchors.length })}</span>
                     </h3>
                     <div className="space-y-2 max-h-48 overflow-y-auto">
                       {anchors.map((anchor, index) => (
@@ -1765,10 +1768,10 @@ function StudentAppContent({ isGuestFastEntry }: { isGuestFastEntry: boolean }) 
                               {formatTime(anchor.timestamp)}
                             </span>
                             <span className="text-sm text-gray-500">
-                              困惑点 #{index + 1}
+                              {t('recorder.confusionPointNumber', { number: index + 1 })}
                             </span>
                             {anchor.resolved && (
-                              <span className="ml-auto text-xs text-mint-600">已解决</span>
+                              <span className="ml-auto text-xs text-mint-600">{t('student.resolved')}</span>
                             )}
                           </div>
                       ))}
@@ -1818,45 +1821,45 @@ function StudentAppContent({ isGuestFastEntry }: { isGuestFastEntry: boolean }) 
                   <div className="min-h-[560px] xl:min-h-0 flex flex-col bg-white rounded-2xl border border-gray-200 overflow-hidden">
                     <div className="flex items-center gap-1 p-2 border-b bg-gray-50" style={{ borderColor: 'var(--edu-border-light)' }}>
                       <button
-                        onClick={() => setVideoWorkspaceTab('transcript')}
-                        className={`px-3 py-1.5 text-xs rounded-lg transition-all ${
-                          videoWorkspaceTab === 'transcript'
-                            ? 'bg-white text-amber-600 font-medium shadow-sm'
-                            : 'text-gray-500 hover:text-navy'
-                        }`}
-                      >
-                        转录
-                      </button>
-                      <button
-                        onClick={() => setVideoWorkspaceTab('chat')}
-                        className={`px-3 py-1.5 text-xs rounded-lg transition-all ${
-                          videoWorkspaceTab === 'chat'
-                            ? 'bg-white text-amber-600 font-medium shadow-sm'
-                            : 'text-gray-500 hover:text-navy'
-                        }`}
-                      >
-                        对话
-                      </button>
-                      <button
-                        onClick={() => setVideoWorkspaceTab('summary')}
-                        className={`px-3 py-1.5 text-xs rounded-lg transition-all ${
-                          videoWorkspaceTab === 'summary'
-                            ? 'bg-white text-amber-600 font-medium shadow-sm'
-                            : 'text-gray-500 hover:text-navy'
-                        }`}
-                      >
-                        摘要
-                      </button>
-                      <button
-                        onClick={() => setVideoWorkspaceTab('notes')}
-                        className={`px-3 py-1.5 text-xs rounded-lg transition-all ${
-                          videoWorkspaceTab === 'notes'
-                            ? 'bg-white text-amber-600 font-medium shadow-sm'
-                            : 'text-gray-500 hover:text-navy'
-                        }`}
-                      >
-                        笔记
-                      </button>
+                      onClick={() => setVideoWorkspaceTab('transcript')}
+                      className={`px-3 py-1.5 text-xs rounded-lg transition-all ${
+                        videoWorkspaceTab === 'transcript'
+                          ? 'bg-white text-amber-600 font-medium shadow-sm'
+                          : 'text-gray-500 hover:text-navy'
+                      }`}
+                    >
+                      {t('student.transcript')}
+                    </button>
+                    <button
+                      onClick={() => setVideoWorkspaceTab('chat')}
+                      className={`px-3 py-1.5 text-xs rounded-lg transition-all ${
+                        videoWorkspaceTab === 'chat'
+                          ? 'bg-white text-amber-600 font-medium shadow-sm'
+                          : 'text-gray-500 hover:text-navy'
+                      }`}
+                    >
+                      {t('student.chat')}
+                    </button>
+                    <button
+                      onClick={() => setVideoWorkspaceTab('summary')}
+                      className={`px-3 py-1.5 text-xs rounded-lg transition-all ${
+                        videoWorkspaceTab === 'summary'
+                          ? 'bg-white text-amber-600 font-medium shadow-sm'
+                          : 'text-gray-500 hover:text-navy'
+                      }`}
+                    >
+                      {t('student.summary')}
+                    </button>
+                    <button
+                      onClick={() => setVideoWorkspaceTab('notes')}
+                      className={`px-3 py-1.5 text-xs rounded-lg transition-all ${
+                        videoWorkspaceTab === 'notes'
+                          ? 'bg-white text-amber-600 font-medium shadow-sm'
+                          : 'text-gray-500 hover:text-navy'
+                      }`}
+                    >
+                      {t('student.notes')}
+                    </button>
                     </div>
 
                     <div className="flex-1 min-h-0 overflow-hidden">
@@ -1936,7 +1939,7 @@ function StudentAppContent({ isGuestFastEntry }: { isGuestFastEntry: boolean }) 
                             : 'text-gray-500 hover:text-navy hover:bg-white/50'
                         }`}
                       >
-                        📋 时间轴
+                        📋 {t('timeline.timeline')}
                       </button>
                       <button
                         onClick={() => setReviewTab('anchor-detail')}
@@ -1946,7 +1949,7 @@ function StudentAppContent({ isGuestFastEntry }: { isGuestFastEntry: boolean }) 
                             : 'text-gray-500 hover:text-navy hover:bg-white/50'
                         }`}
                       >
-                        🎯 困惑点
+                        🎯 {t('timeline.confusion')}
                         {selectedAnchor && !selectedAnchor.resolved && (
                           <span className="ml-1 w-2 h-2 bg-coral rounded-full inline-block animate-pulse" />
                         )}
@@ -1959,7 +1962,7 @@ function StudentAppContent({ isGuestFastEntry }: { isGuestFastEntry: boolean }) 
                             : 'text-gray-500 hover:text-navy hover:bg-white/50'
                         }`}
                       >
-                        ⚡ 精选
+                        ⚡ {t('timeline.highlights')}
                         {highlightTopics.length > 0 && (
                           <span className="ml-1 text-xs text-skyblue-600">({highlightTopics.length})</span>
                         )}
@@ -1972,7 +1975,7 @@ function StudentAppContent({ isGuestFastEntry }: { isGuestFastEntry: boolean }) 
                             : 'text-gray-500 hover:text-navy hover:bg-white/50'
                         }`}
                       >
-                        📝 摘要
+                        📝 {t('timeline.summary')}
                         {classSummary && <span className="ml-1 text-xs text-mint-600">✓</span>}
                       </button>
                       <button
@@ -1983,7 +1986,7 @@ function StudentAppContent({ isGuestFastEntry }: { isGuestFastEntry: boolean }) 
                             : 'text-gray-500 hover:text-navy hover:bg-white/50'
                         }`}
                       >
-                        📄 笔记
+                        📄 {t('timeline.notes')}
                         {notes.length > 0 && (
                           <span className="ml-1 text-xs text-amber-600">({notes.length})</span>
                         )}
@@ -2119,21 +2122,21 @@ function StudentAppContent({ isGuestFastEntry }: { isGuestFastEntry: boolean }) 
                                 ? 'bg-gradient-to-r from-amber-500 to-amber-600 text-white shadow-sm'
                                 : 'bg-white text-gray-600 hover:text-amber-600 hover:bg-amber-50 border border-gray-200'
                             }`}
-                            title="基于整节课内容与 AI 对话"
+                            title={t('aiTutor.chatWithFullClass')}
                           >
                             <span>💬</span>
-                            整节课对话
+                            {t('aiTutor.fullClassChat')}
                           </button>
                           {selectedAnchor && (
                             <div className="flex items-center gap-1.5 px-3 py-1.5 bg-white rounded-lg border border-amber-200 text-xs">
                               <span className={`w-2 h-2 rounded-full ${selectedAnchor.resolved ? 'bg-mint' : 'bg-coral animate-pulse'}`} />
                               <span className="text-amber-700 font-medium">
-                                困惑点 {formatTime(selectedAnchor.timestamp)}
+                                {t('aiTutor.confusionPoint', { time: formatTime(selectedAnchor.timestamp) })}
                               </span>
                               <button
                                 onClick={() => setSelectedAnchor(null)}
                                 className="ml-1 text-gray-400 hover:text-gray-600"
-                                title="返回整节课对话"
+                                title={t('aiTutor.backToFullClass')}
                               >
                                 <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -2143,7 +2146,7 @@ function StudentAppContent({ isGuestFastEntry }: { isGuestFastEntry: boolean }) 
                           )}
                           {!selectedAnchor && anchors.length > 0 && (
                             <span className="text-xs text-gray-400 ml-auto">
-                              点击左侧困惑点可切换到针对性解答
+                              {t('aiTutor.switchToAnchorHint')}
                             </span>
                           )}
                         </div>
@@ -2703,7 +2706,7 @@ function StudentAppContent({ isGuestFastEntry }: { isGuestFastEntry: boolean }) 
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
                       </svg>
                     </button>
-                    <span className="font-medium text-gray-900">我的笔记</span>
+                    <span className="font-medium text-gray-900">{t('student.myNotes')}</span>
                   </div>
                   <div className="flex-1 min-h-0 overflow-hidden">
                     <NotesPanel
@@ -2729,7 +2732,7 @@ function StudentAppContent({ isGuestFastEntry }: { isGuestFastEntry: boolean }) 
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
                       </svg>
                     </button>
-                    <span className="font-medium text-gray-900">今日任务</span>
+                    <span className="font-medium text-gray-900">{t('student.todayTasks')}</span>
                   </div>
                   <div className="flex-1 min-h-0 overflow-hidden">
                     <ActionList

@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { useTranslations } from 'next-intl';
 import { cn } from '@/lib/utils';
 import type { ConfusionMoment } from '@/lib/services/parent-service';
 
@@ -11,27 +12,13 @@ interface ConfusionTimelineProps {
   className?: string;
 }
 
-// 学科颜色映射
-const subjectColors: Record<string, { bg: string; text: string; border: string }> = {
-  '数学': { bg: 'bg-blue-50', text: 'text-blue-600', border: 'border-blue-200' },
-  '英语': { bg: 'bg-purple-50', text: 'text-purple-600', border: 'border-purple-200' },
-  '语文': { bg: 'bg-amber-50', text: 'text-amber-600', border: 'border-amber-200' },
-  '物理': { bg: 'bg-cyan-50', text: 'text-cyan-600', border: 'border-cyan-200' },
-  '化学': { bg: 'bg-pink-50', text: 'text-pink-600', border: 'border-pink-200' },
-  '生物': { bg: 'bg-green-50', text: 'text-green-600', border: 'border-green-200' },
-  '课程': { bg: 'bg-gray-50', text: 'text-gray-600', border: 'border-gray-200' },
-};
-
-function getSubjectColor(subject: string) {
-  return subjectColors[subject] || subjectColors['课程'];
-}
-
 export function ConfusionTimeline({
   confusions,
   onPlayAudio,
   onMarkResolved,
   className,
 }: ConfusionTimelineProps) {
+  const t = useTranslations('parent.confusionTimeline');
   const [expandedId, setExpandedId] = useState<string | null>(null);
   
   // 分离未解决和已解决
@@ -42,6 +29,20 @@ export function ConfusionTimeline({
     return null;
   }
   
+  // 获取学科颜色
+  const getSubjectColor = (subject: string) => {
+    const subjectKey = subject.toLowerCase();
+    const colorMap: Record<string, { bg: string; text: string; border: string }> = {
+      'math': { bg: 'bg-blue-50', text: 'text-blue-600', border: 'border-blue-200' },
+      'english': { bg: 'bg-purple-50', text: 'text-purple-600', border: 'border-purple-200' },
+      'chinese': { bg: 'bg-amber-50', text: 'text-amber-600', border: 'border-amber-200' },
+      'physics': { bg: 'bg-cyan-50', text: 'text-cyan-600', border: 'border-cyan-200' },
+      'chemistry': { bg: 'bg-pink-50', text: 'text-pink-600', border: 'border-pink-200' },
+      'biology': { bg: 'bg-green-50', text: 'text-green-600', border: 'border-green-200' },
+    };
+    return colorMap[subjectKey] || { bg: 'bg-gray-50', text: 'text-gray-600', border: 'border-gray-200' };
+  };
+  
   return (
     <div className={cn('space-y-3', className)}>
       {/* 未解决的困惑点（优先显示） */}
@@ -49,7 +50,7 @@ export function ConfusionTimeline({
         <div className="space-y-2">
           <h3 className="text-sm font-medium text-gray-500 px-1 flex items-center gap-2">
             <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse" />
-            待解决 ({unresolvedConfusions.length})
+            {t('pendingTitle')} ({unresolvedConfusions.length})
           </h3>
           {unresolvedConfusions.map((confusion) => (
             <ConfusionCard
@@ -69,7 +70,7 @@ export function ConfusionTimeline({
         <div className="space-y-2">
           <h3 className="text-sm font-medium text-gray-400 px-1 flex items-center gap-2">
             <span className="w-2 h-2 rounded-full bg-emerald-400" />
-            已解决 ({resolvedConfusions.length})
+            {t('resolvedTitle')} ({resolvedConfusions.length})
           </h3>
           {resolvedConfusions.map((confusion) => (
             <ConfusionCard
@@ -105,7 +106,8 @@ function ConfusionCard({
   onPlayAudio,
   onMarkResolved,
 }: ConfusionCardProps) {
-  const colors = getSubjectColor(confusion.subject);
+  const t = useTranslations('parent.confusionTimeline');
+  const colors = { bg: 'bg-gray-50', text: 'text-gray-600', border: 'border-gray-200' };
   
   return (
     <div
@@ -198,7 +200,7 @@ function ConfusionCard({
               <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
                 <path d="M8 5v14l11-7z" />
               </svg>
-              听老师原话
+              {t('playAudio')}
             </button>
             
             {/* 标记已解决（仅未解决时显示） */}
@@ -220,7 +222,7 @@ function ConfusionCard({
                 <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                 </svg>
-                已在家解决
+                {t('markResolved')}
               </button>
             )}
           </div>

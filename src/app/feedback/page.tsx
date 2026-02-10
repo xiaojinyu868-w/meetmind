@@ -2,17 +2,12 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
+import { useTranslations } from 'next-intl';
 
 type FeedbackType = 'bug' | 'feature' | 'question' | 'other';
 
-const FEEDBACK_TYPES: { value: FeedbackType; label: string; icon: string; description: string }[] = [
-  { value: 'bug', label: '问题反馈', icon: '🐛', description: '报告功能异常或错误' },
-  { value: 'feature', label: '功能建议', icon: '💡', description: '提出新功能或改进建议' },
-  { value: 'question', label: '使用咨询', icon: '❓', description: '咨询产品使用方法' },
-  { value: 'other', label: '其他', icon: '📝', description: '其他类型的反馈' },
-];
-
 export default function FeedbackPage() {
+  const t = useTranslations();
   const [feedbackType, setFeedbackType] = useState<FeedbackType>('bug');
   const [title, setTitle] = useState('');
   const [content, setContent] = useState('');
@@ -20,11 +15,18 @@ export default function FeedbackPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitResult, setSubmitResult] = useState<{ success: boolean; message: string } | null>(null);
 
+  const FEEDBACK_TYPES: { value: FeedbackType; label: string; icon: string; description: string }[] = [
+    { value: 'bug', label: t('feedback.types.bug.label'), icon: '🐛', description: t('feedback.types.bug.description') },
+    { value: 'feature', label: t('feedback.types.feature.label'), icon: '💡', description: t('feedback.types.feature.description') },
+    { value: 'question', label: t('feedback.types.question.label'), icon: '❓', description: t('feedback.types.question.description') },
+    { value: 'other', label: t('feedback.types.other.label'), icon: '📝', description: t('feedback.types.other.description') },
+  ];
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
     if (!title.trim() || !content.trim()) {
-      setSubmitResult({ success: false, message: '请填写标题和详细描述' });
+      setSubmitResult({ success: false, message: t('feedback.titleRequired') });
       return;
     }
 
@@ -46,16 +48,16 @@ export default function FeedbackPage() {
       const result = await response.json();
 
       if (result.success) {
-        setSubmitResult({ success: true, message: '感谢您的反馈！我们会认真处理。' });
+        setSubmitResult({ success: true, message: t('feedback.successMessage') });
         // 清空表单
         setTitle('');
         setContent('');
         setContact('');
       } else {
-        setSubmitResult({ success: false, message: result.error || '提交失败，请稍后重试' });
+        setSubmitResult({ success: false, message: result.error || t('feedback.errorMessage') });
       }
     } catch {
-      setSubmitResult({ success: false, message: '网络错误，请稍后重试' });
+      setSubmitResult({ success: false, message: t('feedback.networkError') });
     } finally {
       setIsSubmitting(false);
     }
@@ -70,9 +72,9 @@ export default function FeedbackPage() {
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
             </svg>
-            <span>返回</span>
+            <span>{t('feedback.back')}</span>
           </Link>
-          <h1 className="text-lg font-semibold text-gray-800">意见反馈</h1>
+          <h1 className="text-lg font-semibold text-gray-800">{t('feedback.title')}</h1>
           <div className="w-16" />
         </div>
       </header>
@@ -88,7 +90,7 @@ export default function FeedbackPage() {
             </div>
             <div>
               <p className="font-medium text-green-800">{submitResult.message}</p>
-              <p className="text-sm text-green-600 mt-0.5">我们会尽快处理您的反馈</p>
+              <p className="text-sm text-green-600 mt-0.5">{t('feedback.successSubtitle')}</p>
             </div>
           </div>
         )}
@@ -96,7 +98,7 @@ export default function FeedbackPage() {
         <form onSubmit={handleSubmit} className="space-y-6">
           {/* 反馈类型选择 */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-3">反馈类型</label>
+            <label className="block text-sm font-medium text-gray-700 mb-3">{t('feedback.typeLabel')}</label>
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
               {FEEDBACK_TYPES.map((type) => (
                 <button
@@ -124,13 +126,13 @@ export default function FeedbackPage() {
           {/* 标题 */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
-              标题 <span className="text-rose-500">*</span>
+              {t('feedback.titleLabel')} <span className="text-rose-500">*</span>
             </label>
             <input
               type="text"
               value={title}
               onChange={(e) => setTitle(e.target.value)}
-              placeholder="请简要描述您的问题或建议"
+              placeholder={t('feedback.titlePlaceholder')}
               maxLength={100}
               className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-rose-400 focus:ring-4 focus:ring-rose-100 outline-none transition-all"
             />
@@ -140,12 +142,12 @@ export default function FeedbackPage() {
           {/* 详细描述 */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
-              详细描述 <span className="text-rose-500">*</span>
+              {t('feedback.descriptionLabel')} <span className="text-rose-500">*</span>
             </label>
             <textarea
               value={content}
               onChange={(e) => setContent(e.target.value)}
-              placeholder="请详细描述您遇到的问题、期望的功能或其他建议。&#10;&#10;如果是问题反馈，请尽量提供：&#10;- 问题出现的步骤&#10;- 预期的结果&#10;- 实际的结果"
+              placeholder={t('feedback.descriptionPlaceholder')}
               rows={6}
               maxLength={2000}
               className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-rose-400 focus:ring-4 focus:ring-rose-100 outline-none transition-all resize-none"
@@ -156,13 +158,13 @@ export default function FeedbackPage() {
           {/* 联系方式 */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
-              联系方式 <span className="text-gray-400 font-normal">(可选)</span>
+              {t('feedback.contactLabel')} <span className="text-gray-400 font-normal">{t('feedback.contactOptional')}</span>
             </label>
             <input
               type="text"
               value={contact}
               onChange={(e) => setContact(e.target.value)}
-              placeholder="邮箱或手机号，方便我们与您联系"
+              placeholder={t('feedback.contactPlaceholder')}
               className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-rose-400 focus:ring-4 focus:ring-rose-100 outline-none transition-all"
             />
           </div>
@@ -186,15 +188,15 @@ export default function FeedbackPage() {
                   <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                   <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
                 </svg>
-                提交中...
+                {t('feedback.submitting')}
               </span>
-            ) : '提交反馈'}
+            ) : t('feedback.submit')}
           </button>
         </form>
 
         {/* 其他联系方式 */}
         <div className="mt-12 p-6 bg-white rounded-2xl border border-gray-100 shadow-sm">
-          <h3 className="font-semibold text-gray-800 mb-4">其他联系方式</h3>
+          <h3 className="font-semibold text-gray-800 mb-4">{t('feedback.otherContact.title')}</h3>
           <div className="space-y-3 text-sm text-gray-600">
             <div className="flex items-center gap-3">
               <div className="w-8 h-8 bg-rose-100 rounded-lg flex items-center justify-center">
@@ -202,10 +204,10 @@ export default function FeedbackPage() {
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
                 </svg>
               </div>
-              <span>邮箱：originedu@meetmind.online</span>
+              <span>{t('feedback.otherContact.email')}</span>
             </div>
             <p className="text-xs text-gray-400 ml-11">
-              我们通常会在 1-3 个工作日内回复
+              {t('feedback.otherContact.responseTime')}
             </p>
           </div>
         </div>

@@ -18,13 +18,14 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json();
-    const { 
-      messages, 
-      model = DEFAULT_MODEL_ID, 
+    const {
+      messages,
+      model = DEFAULT_MODEL_ID,
       stream = false,
       context,
       temperature = 0.7,
       maxTokens = 2000,
+      locale = 'zh',
     } = body as {
       messages: ChatMessage[];
       model?: string;
@@ -32,6 +33,7 @@ export async function POST(request: NextRequest) {
       context?: string;
       temperature?: number;
       maxTokens?: number;
+      locale?: string;
     };
 
     if (!messages || !Array.isArray(messages)) {
@@ -50,6 +52,11 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // 语言指令
+    const langInstruction = locale === 'en'
+      ? '\n\n【LANGUAGE INSTRUCTION】You must respond in English only.'
+      : '';
+
     // 如果有上下文，添加到系统消息中
     const finalMessages = [...messages];
     if (context) {
@@ -57,13 +64,22 @@ export async function POST(request: NextRequest) {
       if (systemIndex >= 0) {
         finalMessages[systemIndex] = {
           ...finalMessages[systemIndex],
-          content: `${finalMessages[systemIndex].content}\n\n【参考资料】\n${context}`,
+          content: `${finalMessages[systemIndex].content}\n\n【参考资料】\n${context}${langInstruction}`,
         };
       } else {
         finalMessages.unshift({
           role: 'system',
-          content: `【参考资料】\n${context}`,
+          content: `【参考资料】\n${context}${langInstruction}`,
         });
+      }
+    } else if (locale === 'en') {
+      // 没有上下文但语言是英文时，添加语言指令到现有系统消息
+      const systemIndex = finalMessages.findIndex(m => m.role === 'system');
+      if (systemIndex >= 0) {
+        finalMessages[systemIndex] = {
+          ...finalMessages[systemIndex],
+          content: `${finalMessages[systemIndex].content}${langInstruction}`,
+        };
       }
     }
 

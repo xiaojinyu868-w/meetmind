@@ -5,6 +5,7 @@
 // 支持离线回放时添加红点标注
 
 import { useEffect, useRef, useCallback, useState, forwardRef, useImperativeHandle } from 'react';
+import { useTranslations } from 'next-intl';
 import WaveSurfer from 'wavesurfer.js';
 import RegionsPlugin from 'wavesurfer.js/plugins/regions';
 import { formatTimestampMs } from '@/lib/longcut';
@@ -69,14 +70,15 @@ export const WaveformPlayer = forwardRef<WaveformPlayerRef, WaveformPlayerProps>
   onPlayStateChange,
   onReady,
   onAnchorAdd,
-  waveColor = '#D4A574',      // dedao-gold 教育金色
-  progressColor = '#F5E6D3',  // 暖米色
+  waveColor = '#D4A574',
+  progressColor = '#F5E6D3',
   height: heightProp,
   showControls = true,
   allowAddAnchor = false,
   selectedAnchorId,
   compact = false,
 }, ref) => {
+  const t = useTranslations();
   // 紧凑模式下高度减半
   const height = heightProp ?? (compact ? 40 : 80);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -380,8 +382,8 @@ export const WaveformPlayer = forwardRef<WaveformPlayerRef, WaveformPlayerProps>
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2" />
             </svg>
           </div>
-          <span className="text-sm font-medium">暂无音频</span>
-          <span className="text-xs">录制课堂后将在此显示波形</span>
+          <span className="text-sm font-medium">{t('waveform.noAudio.title')}</span>
+          <span className="text-xs">{t('waveform.noAudio.desc')}</span>
         </div>
       </div>
     );
@@ -422,7 +424,7 @@ export const WaveformPlayer = forwardRef<WaveformPlayerRef, WaveformPlayerProps>
                   }`}
                   style={{ left: `${position}%` }}
                   onClick={() => onAnchorClick?.(anchor)}
-                  title={`困惑点 ${formatTimestampMs(anchor.timestamp)}${isResolved ? ' (已解决)' : ''}`}
+                  title={t('waveform.anchor.tooltip', { timestamp: formatTimestampMs(anchor.timestamp), resolved: isResolved ? t('waveform.anchor.resolved') : '' })} 
                 />
               );
             })}
@@ -432,7 +434,7 @@ export const WaveformPlayer = forwardRef<WaveformPlayerRef, WaveformPlayerProps>
         {/* 添加标注成功提示 */}
         {showAddHint && (
           <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 bg-coral text-white px-4 py-2 rounded-full text-sm font-medium animate-bounce shadow-lg">
-            已标记困惑点
+            {t('waveform.anchor.added')}
           </div>
         )}
       </div>
@@ -442,14 +444,14 @@ export const WaveformPlayer = forwardRef<WaveformPlayerRef, WaveformPlayerProps>
         <div className="px-4 py-2 bg-gray-50 border-t border-gray-100 flex items-center gap-6 text-xs">
           <div className="flex items-center gap-2">
             <div className="w-4 h-4 bg-coral/30 rounded border border-coral-300" />
-            <span className="text-gray-600">未解决困惑点</span>
+            <span className="text-gray-600">{t('waveform.legend.unresolved')}</span>
           </div>
           <div className="flex items-center gap-2">
             <div className="w-4 h-4 bg-mint/30 rounded border border-mint-300" />
-            <span className="text-gray-600">已解决</span>
+            <span className="text-gray-600">{t('waveform.legend.resolved')}</span>
           </div>
           <div className="flex-1" />
-          <span className="text-gray-400 font-medium">共 {anchors.length} 个困惑点</span>
+          <span className="text-gray-400 font-medium">{t('waveform.legend.count', { count: anchors.length })}</span>
         </div>
       )}
 
@@ -468,7 +470,7 @@ export const WaveformPlayer = forwardRef<WaveformPlayerRef, WaveformPlayerProps>
                   onClick={skipBackward}
                   disabled={!isReady}
                   className="w-10 h-10 flex items-center justify-center text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-xl transition-all disabled:opacity-50"
-                  title="后退 10 秒"
+                  title={t('waveform.controls.skipBackward')}
                 >
                   <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12.066 11.2a1 1 0 000 1.6l5.334 4A1 1 0 0019 16V8a1 1 0 00-1.6-.8l-5.333 4zM4.066 11.2a1 1 0 000 1.6l5.334 4A1 1 0 0011 16V8a1 1 0 00-1.6-.8l-5.334 4z" />
@@ -506,7 +508,7 @@ export const WaveformPlayer = forwardRef<WaveformPlayerRef, WaveformPlayerProps>
                   onClick={skipForward}
                   disabled={!isReady}
                   className="w-10 h-10 flex items-center justify-center text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-xl transition-all disabled:opacity-50"
-                  title="前进 10 秒"
+                  title={t('waveform.controls.skipForward')}
                 >
                   <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11.933 12.8a1 1 0 000-1.6L6.6 7.2A1 1 0 005 8v8a1 1 0 001.6.8l5.333-4zM19.933 12.8a1 1 0 000-1.6l-5.333-4A1 1 0 0013 8v8a1 1 0 001.6.8l5.333-4z" />
@@ -544,10 +546,10 @@ export const WaveformPlayer = forwardRef<WaveformPlayerRef, WaveformPlayerProps>
                   background: 'linear-gradient(135deg, #FF8A80 0%, #FF574A 100%)',
                   boxShadow: '0 4px 12px rgba(255, 138, 128, 0.35)'
                 }}
-                title="标记当前位置为困惑点"
+                title={t('waveform.controls.addAnchor')}
               >
                 <span>🎯</span>
-                <span>标记困惑</span>
+                <span>{t('recorder.anchor.button')}</span>
               </button>
             )}
 
@@ -559,7 +561,7 @@ export const WaveformPlayer = forwardRef<WaveformPlayerRef, WaveformPlayerProps>
                 "font-medium text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-all disabled:opacity-50 border border-gray-200",
                 compact ? "px-2 py-1 text-xs" : "px-3 py-1.5 text-sm"
               )}
-              title="播放速度"
+              title={t('waveform.controls.playbackRate')}
             >
               {playbackRate}x
             </button>
@@ -613,7 +615,7 @@ export const WaveformPlayer = forwardRef<WaveformPlayerRef, WaveformPlayerProps>
               />
             </div>
             <span className="text-sm text-gray-600 font-medium">
-              加载音频 {loadProgress > 0 ? `${loadProgress}%` : '...'}
+              {t('waveform.loading.audio', { progress: loadProgress > 0 ? `${loadProgress}%` : '...' })}
             </span>
             {/* 进度条 */}
             {loadProgress > 0 && (

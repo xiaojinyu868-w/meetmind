@@ -1,5 +1,6 @@
 'use client';
 
+import { useTranslations } from 'next-intl';
 import { cn } from '@/lib/utils';
 
 interface AISummaryCardProps {
@@ -13,6 +14,8 @@ export function AISummaryCard({
   isLoading = false,
   className,
 }: AISummaryCardProps) {
+  const t = useTranslations('parent.aiSummary');
+
   return (
     <div
       className={cn(
@@ -38,7 +41,7 @@ export function AISummaryCard({
         {/* 总结内容 */}
         <div className="flex-1 min-w-0">
           <p className="text-xs text-amber-600/70 mb-1 font-medium">
-            AI 总结
+            {t('title')}
           </p>
           {isLoading ? (
             <div className="flex items-center gap-2">
@@ -47,11 +50,11 @@ export function AISummaryCard({
                 <span className="w-2 h-2 bg-amber-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
                 <span className="w-2 h-2 bg-amber-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
               </div>
-              <span className="text-sm text-gray-400">正在分析...</span>
+              <span className="text-sm text-gray-400">{t('loading')}</span>
             </div>
           ) : (
             <p className="text-sm text-gray-700 leading-relaxed">
-              {summary}
+              {summary || t('noData')}
             </p>
           )}
         </div>

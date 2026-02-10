@@ -8,6 +8,7 @@
  */
 
 import { useState } from 'react';
+import { useTranslations } from 'next-intl';
 import type { GuidanceQuestion as GuidanceQuestionType, GuidanceOption } from '@/types/dify';
 
 interface GuidanceQuestionProps {
@@ -30,6 +31,7 @@ export function GuidanceQuestion({
   disabled = false,
   selectedOptionId,
 }: GuidanceQuestionProps) {
+  const t = useTranslations('aiTutor');
   const [hoveredId, setHoveredId] = useState<string | null>(null);
 
   // 选项分类对应的颜色（使用内联样式）- 教育暖色调
@@ -42,11 +44,11 @@ export function GuidanceQuestion({
   };
 
   const categoryLabels: Record<GuidanceOption['category'], string> = {
-    concept: '概念理解',
-    procedure: '步骤方法',
-    calculation: '计算过程',
-    comprehension: '审题理解',
-    application: '实际应用',
+    concept: t('guidanceCategories.concept'),
+    procedure: t('guidanceCategories.procedure'),
+    calculation: t('guidanceCategories.calculation'),
+    comprehension: t('guidanceCategories.comprehension'),
+    application: t('guidanceCategories.application'),
   };
 
   return (
@@ -73,11 +75,11 @@ export function GuidanceQuestion({
             <p className="text-sm text-gray-500 mt-1">{question.hint}</p>
           )}
         </div>
-        <span 
+        <span
           className="text-xs px-2 py-1 rounded-full"
           style={{ color: '#8B7355', background: '#FFF5E6' }}
         >
-          单选
+          {t('singleChoice')}
         </span>
       </div>
 

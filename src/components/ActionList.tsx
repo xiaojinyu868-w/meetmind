@@ -1,5 +1,6 @@
 'use client';
 
+import { useTranslations } from 'next-intl';
 import type { ActionItem } from '@/lib/services/meetmind-service';
 
 interface ActionListProps {
@@ -8,6 +9,7 @@ interface ActionListProps {
 }
 
 export function ActionList({ items, onComplete }: ActionListProps) {
+  const t = useTranslations();
   const completedCount = items.filter((i) => i.completed).length;
   const totalMinutes = items.reduce((sum, i) => sum + i.estimatedMinutes, 0);
   const remainingMinutes = items
@@ -21,11 +23,11 @@ export function ActionList({ items, onComplete }: ActionListProps) {
       <div className="p-4 border-b border-gray-100">
         <h2 className="font-semibold text-gray-900 flex items-center gap-2">
           <span className="text-lg">📋</span>
-          今晚行动清单
+          {t('actionList.title')}
         </h2>
         {items.length > 0 && (
           <p className="text-xs text-gray-500 mt-1">
-            约 {totalMinutes} 分钟 · 已完成 {completedCount}/{items.length}
+            {t('actionList.timeEstimate', { totalMinutes })} · {t('actionList.progress', { completedCount, total: items.length })}
           </p>
         )}
       </div>
@@ -34,7 +36,7 @@ export function ActionList({ items, onComplete }: ActionListProps) {
       {items.length > 0 && (
         <div className="px-4 py-3 border-b border-gray-100">
           <div className="flex items-center justify-between text-xs mb-2">
-            <span className="text-gray-500">完成进度</span>
+            <span className="text-gray-500">{t('actionList.completion')}</span>
             <span className={`font-medium ${progressPercent === 100 ? 'text-mint-600' : 'text-navy'}`}>
               {Math.round(progressPercent)}%
             </span>
@@ -51,7 +53,7 @@ export function ActionList({ items, onComplete }: ActionListProps) {
           </div>
           {remainingMinutes > 0 && (
             <p className="text-xs text-gray-400 mt-2">
-              还需约 <span className="font-medium text-navy">{remainingMinutes}</span> 分钟
+              {t('actionList.remainingTime', { remainingMinutes })}
             </p>
           )}
         </div>
@@ -64,8 +66,8 @@ export function ActionList({ items, onComplete }: ActionListProps) {
             <div className="w-16 h-16 mx-auto mb-4 bg-gray-100 rounded-full flex items-center justify-center">
               <span className="text-3xl">✨</span>
             </div>
-            <p className="text-sm text-gray-500 mb-1">暂无行动清单</p>
-            <p className="text-xs text-gray-400">选择困惑点后会自动生成</p>
+            <p className="text-sm text-gray-500 mb-1">{t('actionList.empty')}</p>
+            <p className="text-xs text-gray-400">{t('actionList.emptyDesc')}</p>
           </div>
         ) : (
           <div className="space-y-3">
@@ -78,7 +80,7 @@ export function ActionList({ items, onComplete }: ActionListProps) {
                 <button
                   onClick={() => onComplete(item.id)}
                   className="action-checkbox"
-                  aria-label={item.completed ? '标记为未完成' : '标记为已完成'}
+                  aria-label={item.completed ? t('actionList.markIncomplete') : t('actionList.markComplete')}
                 >
                   {item.completed && (
                     <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
@@ -99,7 +101,7 @@ export function ActionList({ items, onComplete }: ActionListProps) {
                       {item.title}
                     </span>
                     <span className="text-xs text-gray-400 whitespace-nowrap flex-shrink-0">
-                      {item.estimatedMinutes}分钟
+                      {t('actionList.minutes', { minutes: item.estimatedMinutes })}
                     </span>
                   </div>
                   <p className={`text-xs mt-1.5 transition-colors break-words ${
@@ -122,8 +124,8 @@ export function ActionList({ items, onComplete }: ActionListProps) {
               <span className="text-xl">🎉</span>
             </div>
             <div>
-              <p className="font-semibold text-emerald-700">太棒了！</p>
-              <p className="text-xs text-emerald-600">今天的任务已全部完成</p>
+              <p className="font-semibold text-emerald-700">{t('actionList.allCompletedTitle')}</p>
+              <p className="text-xs text-emerald-600">{t('actionList.allCompletedDesc')}</p>
             </div>
           </div>
         </div>
@@ -133,7 +135,7 @@ export function ActionList({ items, onComplete }: ActionListProps) {
       {items.length > 0 && completedCount < items.length && (
         <div className="p-4 border-t border-gray-100">
           <button className="w-full btn btn-secondary py-2.5 text-sm">
-            开始下一个任务
+            {t('actionList.startNext')}
           </button>
         </div>
       )}
@@ -142,10 +144,11 @@ export function ActionList({ items, onComplete }: ActionListProps) {
 }
 
 function TypeBadge({ type }: { type: ActionItem['type'] }) {
+  const t = useTranslations();
   const config = {
-    replay: { label: '回放', className: 'bg-blue-100 text-blue-700' },
-    exercise: { label: '练习', className: 'bg-emerald-100 text-emerald-700' },
-    review: { label: '复习', className: 'bg-amber-100 text-amber-700' },
+    replay: { label: t('actionList.type.replay'), className: 'bg-blue-100 text-blue-700' },
+    exercise: { label: t('actionList.type.exercise'), className: 'bg-emerald-100 text-emerald-700' },
+    review: { label: t('actionList.type.review'), className: 'bg-amber-100 text-amber-700' },
   };
 
   const { label, className } = config[type];

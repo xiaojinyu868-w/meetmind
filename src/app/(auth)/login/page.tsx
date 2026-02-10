@@ -18,6 +18,8 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { useAuth } from '@/lib/hooks/useAuth';
 import { RippleButton } from '@/components/ui/ripple-button';
+import { useTranslations } from 'next-intl';
+import { LanguageSwitcher } from '@/components/LanguageSwitcher';
 
 type LoginMethod = 'password' | 'code';
 type LoginType = 'email' | 'phone';
@@ -383,7 +385,7 @@ function AgreementModal({
         <div className="sticky top-0 z-10 flex items-center justify-between px-6 py-4 bg-gradient-to-r from-rose-500 to-rose-400 text-white">
           <div>
             <h2 className="text-lg font-semibold">{title}</h2>
-            <p className="text-xs text-white/80 mt-0.5">生效日期：{updateDate}</p>
+            <p className="text-xs text-white/80 mt-0.5">{updateDate}</p>
           </div>
           <button 
             onClick={onClose}
@@ -543,6 +545,7 @@ function LazyVideoBackground() {
 function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const t = useTranslations();
   const { login, loginWithCode, isAuthenticated, getWechatAuthUrl } = useAuth();
   
   const [loginMethod, setLoginMethod] = useState<LoginMethod>('code');
@@ -611,16 +614,16 @@ function LoginForm() {
     const target = loginType === 'email' ? email : phone;
     
     if (!target) {
-      setError(loginType === 'email' ? '请输入邮箱' : '请输入手机号');
+      setError(loginType === 'email' ? t('auth.emailRequired') : t('auth.phoneRequired'));
       return;
     }
 
     if (loginType === 'email' && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(target)) {
-      setError('请输入正确的邮箱格式');
+      setError(t('auth.emailInvalid'));
       return;
     }
     if (loginType === 'phone' && !/^1[3-9]\d{9}$/.test(target)) {
-      setError('请输入正确的手机号');
+      setError(t('auth.phoneInvalid'));
       return;
     }
 
@@ -647,13 +650,13 @@ function LoginForm() {
       if (!result.success) {
         // 发送失败，回滚倒计时
         setCountdown(result.retryAfter || 0);
-        setError(result.error || '发送失败');
+        setError(result.error || t('auth.codeSendFailed'));
       }
       // 成功时不需要做任何事，乐观更新已经处理了
     } catch {
       // 网络错误，回滚倒计时
       setCountdown(0);
-      setError('网络错误，请稍后重试');
+      setError(t('common.networkError'));
     } finally {
       setIsSendingCode(false);
     }
@@ -669,7 +672,7 @@ function LoginForm() {
     } else {
       // 检测用户未设置密码的情况，自动切换到验证码登录
       if (result.error?.includes('未设置密码')) {
-        setError('该账户未设置密码，已为您切换到验证码登录');
+        setError(t('auth.noPasswordSet'));
         setLoginMethod('code');
         setPassword('');
         // 2秒后自动清除提示
@@ -696,7 +699,7 @@ function LoginForm() {
       router.replace('/app');
       return true;
     } else {
-      setError(result.error || '登录失败');
+      setError(result.error || t('auth.loginFailed'));
       return false;
     }
   };
@@ -719,7 +722,7 @@ function LoginForm() {
       }
       // 登录成功时保持 isSubmitting=true，直到页面跳转完成
     } catch {
-      setError('网络错误，请稍后重试');
+      setError(t('common.networkError'));
       setIsSubmitting(false);
     }
   };
@@ -760,7 +763,7 @@ function LoginForm() {
           isAutoLoginTriggered.current = false;
         }
       } catch {
-        setError('网络错误，请稍后重试');
+        setError(t('common.networkError'));
         setIsSubmitting(false);
         isAutoLoginTriggered.current = false;
       }
@@ -785,6 +788,13 @@ function LoginForm() {
       {/* 延迟加载视频背景 */}
       <LazyVideoBackground />
 
+      {/* 语言切换器 - 右上角 */}
+      <div className="absolute top-4 right-4 z-20">
+        <div className="bg-white/20 backdrop-blur-md rounded-full p-1">
+          <LanguageSwitcher />
+        </div>
+      </div>
+
       {/* 主内容区 */}
       <div className="relative z-10 min-h-screen flex items-center justify-center lg:justify-end px-4 lg:pr-16 xl:pr-24">
         <div className="w-full max-w-[400px] flex flex-col items-center">
@@ -802,7 +812,7 @@ function LoginForm() {
             </div>
             <div>
               <span className="font-bold text-3xl text-white drop-shadow-lg">MeetMind</span>
-              <p className="text-sm text-white/70">清华北大联合团队打造 - 你的智能同桌</p>
+              <p className="text-sm text-white/70">{t('login.tagline')}</p>
             </div>
           </div>
 
@@ -825,7 +835,7 @@ function LoginForm() {
                   borderColor: loginType === 'email' ? '#E11D48' : 'transparent',
                 }}
               >
-                邮箱登录
+                {t('auth.email')}
               </button>
               <button
                 disabled
@@ -834,10 +844,10 @@ function LoginForm() {
                   color: '#9CA3AF',
                   borderColor: 'transparent',
                 }}
-                title="即将开放"
+                title={t('common.comingSoon')}
               >
-                手机号登录
-                <span className="ml-1 text-xs text-gray-400">(即将开放)</span>
+                {t('auth.phone')}
+                <span className="ml-1 text-xs text-gray-400">({t('common.comingSoon')})</span>
               </button>
             </div>
 
@@ -853,7 +863,7 @@ function LoginForm() {
                     border: loginMethod === 'code' ? '1px solid #FECACA' : '1px solid transparent'
                   }}
                 >
-                  验证码登录
+                  {t('auth.loginWithCode')}
                 </button>
                 <button
                   onClick={() => setLoginMethod('password')}
@@ -864,7 +874,7 @@ function LoginForm() {
                     border: loginMethod === 'password' ? '1px solid #FECACA' : '1px solid transparent'
                   }}
                 >
-                  密码登录
+                  {t('auth.loginWithPassword')}
                 </button>
               </div>
             )}
@@ -880,13 +890,13 @@ function LoginForm() {
               {/* 邮箱/手机号输入 */}
               <div>
                 <label className="block text-sm font-medium mb-2 text-gray-700">
-                  {loginType === 'email' ? '邮箱地址' : '手机号码'}
+                  {loginType === 'email' ? t('auth.email') : t('auth.phone')}
                 </label>
                 <input
                   type={loginType === 'email' ? 'email' : 'tel'}
                   value={currentTarget}
                   onChange={(e) => loginType === 'email' ? setEmail(e.target.value) : setPhone(e.target.value)}
-                  placeholder={loginType === 'email' ? '请输入邮箱地址' : '请输入手机号码'}
+                  placeholder={loginType === 'email' ? t('auth.emailRequired') : t('auth.phoneRequired')}
                   required
                   className="w-full px-4 py-3.5 rounded-xl transition-all focus:outline-none bg-white border-2 border-rose-100 focus:border-rose-400 focus:ring-4 focus:ring-rose-100 text-gray-800 placeholder-gray-400"
                 />
@@ -895,12 +905,12 @@ function LoginForm() {
               {/* 密码输入 */}
               {loginMethod === 'password' && loginType === 'email' && (
                 <div>
-                  <label className="block text-sm font-medium mb-2 text-gray-700">密码</label>
+                  <label className="block text-sm font-medium mb-2 text-gray-700">{t('auth.password')}</label>
                   <input
                     type="password"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
-                    placeholder="请输入密码"
+                    placeholder={t('auth.passwordRequired')}
                     required
                     className="w-full px-4 py-3.5 rounded-xl transition-all focus:outline-none bg-white border-2 border-rose-100 focus:border-rose-400 focus:ring-4 focus:ring-rose-100 text-gray-800 placeholder-gray-400"
                   />
@@ -911,14 +921,14 @@ function LoginForm() {
               {(loginMethod === 'code' || loginType === 'phone') && (
                 <div>
                   <label className="block text-sm font-medium mb-2 text-gray-700">
-                    {loginType === 'email' ? '邮箱验证码' : '短信验证码'}
+                    {loginType === 'email' ? t('auth.verificationCode') : t('auth.verificationCode')}
                   </label>
                   <div className="flex gap-3">
                     <input
                       type="text"
                       value={code}
                       onChange={(e) => handleCodeChange(e.target.value)}
-                      placeholder="请输入6位验证码"
+                      placeholder={t('auth.codeRequired')}
                       required
                       maxLength={6}
                       className="flex-1 px-4 py-3.5 rounded-xl transition-all focus:outline-none bg-white border-2 border-rose-100 focus:border-rose-400 focus:ring-4 focus:ring-rose-100 text-gray-800 placeholder-gray-400"
@@ -931,7 +941,7 @@ function LoginForm() {
                       loading={isSendingCode}
                       className="px-4 whitespace-nowrap"
                     >
-                      {countdown > 0 ? `${countdown}s` : '获取验证码'}
+                      {countdown > 0 ? `${countdown}s` : t('auth.sendCode')}
                     </RippleButton>
                   </div>
                 </div>
@@ -946,11 +956,11 @@ function LoginForm() {
                     onChange={(e) => setRememberMe(e.target.checked)}
                     className="w-4 h-4 rounded border-rose-300 text-rose-500 focus:ring-rose-400"
                   />
-                  <span className="text-gray-600">记住登录30天</span>
+                  <span className="text-gray-600">{t('auth.rememberMe')}</span>
                 </label>
                 {loginMethod === 'password' && (
                   <Link href="/forgot-password" className="text-rose-500 hover:text-rose-600 hover:underline">
-                    忘记密码？
+                    {t('auth.forgotPassword')}
                   </Link>
                 )}
               </div>
@@ -961,20 +971,20 @@ function LoginForm() {
                 variant="primary"
                 size="lg"
                 loading={isSubmitting}
-                loadingText="登录中..."
+                loadingText={t('auth.loggingIn')}
                 className="w-full"
                 style={{ 
                   background: 'linear-gradient(135deg, #E11D48 0%, #F43F5E 100%)',
                   boxShadow: '0 10px 30px -5px rgba(225,29,72,0.4)'
                 }}
               >
-                {loginMethod === 'code' ? '登录 / 注册' : '登录'}
+                {loginMethod === 'code' ? t('auth.loginOrRegister') : t('auth.login')}
               </RippleButton>
 
               {/* 验证码登录提示 */}
               {loginMethod === 'code' && (
                 <p className="text-center text-xs text-gray-500">
-                  新用户使用验证码登录将自动创建账户
+                  {t('login.codeLoginHint')}
                 </p>
               )}
 
@@ -987,7 +997,7 @@ function LoginForm() {
                 loading={isGuestLoading}
                 className="w-full"
               >
-                访客模式体验
+                {t('auth.guestMode')}
               </RippleButton>
             </form>
 
@@ -1001,28 +1011,28 @@ function LoginForm() {
                   <svg className="w-5 h-5" viewBox="0 0 24 24" fill="currentColor">
                     <path d="M8.691 2.188C3.891 2.188 0 5.476 0 9.53c0 2.212 1.17 4.203 3.002 5.55a.59.59 0 01.213.665l-.39 1.48c-.019.07-.048.141-.048.213 0 .163.13.295.29.295a.326.326 0 00.167-.054l1.903-1.114a.864.864 0 01.717-.098 10.16 10.16 0 002.837.403c.276 0 .543-.027.811-.05-.857-2.578.157-4.972 1.932-6.446 1.703-1.415 3.882-1.98 5.853-1.838-.576-3.583-4.196-6.348-8.596-6.348zM5.785 5.991c.642 0 1.162.529 1.162 1.18a1.17 1.17 0 01-1.162 1.178A1.17 1.17 0 014.623 7.17c0-.651.52-1.18 1.162-1.18zm5.813 0c.642 0 1.162.529 1.162 1.18a1.17 1.17 0 01-1.162 1.178 1.17 1.17 0 01-1.162-1.178c0-.651.52-1.18 1.162-1.18zm5.34 2.867c-1.797-.052-3.746.512-5.28 1.786-1.72 1.428-2.687 3.72-1.78 6.22.942 2.453 3.666 4.229 6.884 4.229.826 0 1.622-.12 2.361-.336a.722.722 0 01.598.082l1.584.926a.272.272 0 00.14.045c.134 0 .24-.111.24-.247 0-.06-.023-.12-.038-.177l-.327-1.233a.582.582 0 01-.023-.156.49.49 0 01.201-.398C23.024 18.48 24 16.82 24 14.98c0-3.21-2.931-5.837-6.656-6.088V8.89c-.135-.01-.269-.03-.406-.03zm-2.344 3.356c.535 0 .969.44.969.982a.976.976 0 01-.969.983.976.976 0 01-.969-.983c0-.542.434-.982.97-.982zm4.844 0c.535 0 .969.44.969.982a.976.976 0 01-.969.983.976.976 0 01-.969-.983c0-.542.434-.982.969-.982z"/>
                   </svg>
-                  <span>微信登录</span>
+                  <span>{t('auth.loginWithWechat')}</span>
                 </a>
               </div>
             )}
 
             {/* 协议提示 */}
             <p className="mt-5 text-center text-xs leading-relaxed text-gray-500">
-              登录即表示您同意{' '}
+              {t('auth.agreeToTerms')}{' '}
               <button 
                 type="button"
                 onClick={() => setShowAgreement('terms')} 
                 className="text-rose-500 hover:underline"
               >
-                用户协议
+                {t('auth.termsOfService')}
               </button>
-              {' '}和{' '}
+              {' '}{t('auth.and')}{' '}
               <button 
                 type="button"
                 onClick={() => setShowAgreement('privacy')} 
                 className="text-rose-500 hover:underline"
               >
-                隐私政策
+                {t('auth.privacyPolicy')}
               </button>
             </p>
           </div>

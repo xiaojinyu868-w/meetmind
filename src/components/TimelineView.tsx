@@ -1,6 +1,7 @@
 ﻿'use client';
 
 import { useCallback, useState } from 'react';
+import { useTranslations } from 'next-intl';
 import type { Timeline, Breakpoint } from '@/lib/services/meetmind-service';
 import { formatTimestamp } from '@/lib/services/longcut-utils';
 
@@ -21,6 +22,7 @@ export function TimelineView({
   onBreakpointClick,
   onSegmentTextUpdate,
 }: TimelineViewProps) {
+  const t = useTranslations();
   const [editingSegmentId, setEditingSegmentId] = useState<string | null>(null);
   const [draftText, setDraftText] = useState('');
   const [editingOriginalText, setEditingOriginalText] = useState('');
@@ -62,9 +64,9 @@ export function TimelineView({
     <div className="h-full flex flex-col overflow-hidden">
       <div className="px-4 py-3 border-b border-gray-100">
         <div className="flex items-center justify-between mb-3">
-          <h2 className="text-sm font-semibold text-navy">课堂时间轴</h2>
+          <h2 className="text-sm font-semibold text-navy">{t('timeline.title')}</h2>
           {unresolvedCount > 0 && (
-            <span className="badge badge-streaming">{unresolvedCount} 待解决</span>
+            <span className="badge badge-streaming">{t('timeline.unresolvedCount', { count: unresolvedCount })}</span>
           )}
         </div>
 
@@ -86,7 +88,7 @@ export function TimelineView({
                   bp.resolved ? 'bg-mint' : 'bg-coral animate-pulse'
                 } ${selectedBreakpoint?.id === bp.id ? 'ring-2 ring-amber-300 scale-125' : ''}`}
                 style={{ left: `${(bp.timestamp / totalDuration) * 100}%` }}
-                title={`${formatTimestamp(bp.timestamp)} - ${bp.resolved ? '已解决' : '待解决'}`}
+                title={`${formatTimestamp(bp.timestamp)} - ${bp.resolved ? t('timeline.resolved') : t('timeline.unresolved')}`}
               />
             ))}
           </div>
@@ -95,7 +97,7 @@ export function TimelineView({
 
       {timeline.topics.length > 0 && (
         <div className="px-4 py-3 border-b border-gray-100">
-          <h3 className="text-xs font-medium text-gray-400 uppercase tracking-wider mb-2">知识点</h3>
+          <h3 className="text-xs font-medium text-gray-400 uppercase tracking-wider mb-2">{t('timeline.topics')}</h3>
           <div className="flex gap-1.5 flex-wrap">
             {timeline.topics.map((topic, index) => {
               const isActive = currentTime >= topic.startMs && currentTime < topic.endMs;
@@ -119,7 +121,7 @@ export function TimelineView({
 
       <div className="flex-1 min-h-0 overflow-y-auto">
         <div className="px-4 py-3">
-          <h3 className="text-xs font-medium text-gray-400 uppercase tracking-wider mb-3">课堂转录</h3>
+          <h3 className="text-xs font-medium text-gray-400 uppercase tracking-wider mb-3">{t('timeline.transcript')}</h3>
           <div className="space-y-0.5">
             {timeline.segments.map((segment, index) => {
               const isActive = currentTime >= segment.startMs && currentTime < segment.endMs;
@@ -180,7 +182,7 @@ export function TimelineView({
                             startEditing(segment.id, segment.text);
                           }}
                           className="w-full text-left text-sm leading-relaxed rounded-md px-1 py-0.5 -mx-1 hover:bg-white/70 transition-colors cursor-text"
-                          title="点击编辑"
+                          title={t('timeline.clickToEdit')}
                         >
                           {segment.text}
                         </button>
@@ -206,7 +208,7 @@ export function TimelineView({
             disabled={unresolvedCount === 0}
             className="flex-1 btn btn-secondary py-2 text-sm disabled:opacity-50"
           >
-            跳转下一个困惑点
+            {t('timeline.jumpToNextConfusion')}
           </button>
         </div>
       </div>

@@ -1,5 +1,6 @@
 'use client';
 
+import { useTranslations } from 'next-intl';
 import { cn } from '@/lib/utils';
 
 interface TodayOverviewProps {
@@ -17,6 +18,7 @@ export function TodayOverview({
   onStatClick,
   className,
 }: TodayOverviewProps) {
+  const t = useTranslations('parent.todayOverview');
   const unresolvedCount = totalConfusions - resolvedCount;
   
   return (
@@ -35,7 +37,7 @@ export function TodayOverview({
         <span className="text-3xl font-bold text-sky-600">
           {totalClasses}
         </span>
-        <span className="text-xs text-sky-600/70 mt-1">节课</span>
+        <span className="text-xs text-sky-600/70 mt-1">{t('classes')}</span>
       </button>
       
       {/* 困惑点数 */}
@@ -54,7 +56,7 @@ export function TodayOverview({
           {totalConfusions}
         </span>
         <span className="text-xs text-amber-600/70 mt-1">
-          {unresolvedCount > 0 ? `${unresolvedCount} 待解决` : '个困惑'}
+          {unresolvedCount > 0 ? t('pending', { count: unresolvedCount }) : t('confusions')}
         </span>
       </button>
       
@@ -72,7 +74,7 @@ export function TodayOverview({
         <span className="text-3xl font-bold text-emerald-600">
           {resolvedCount}
         </span>
-        <span className="text-xs text-emerald-600/70 mt-1">已解决</span>
+        <span className="text-xs text-emerald-600/70 mt-1">{t('resolved')}</span>
       </button>
     </div>
   );

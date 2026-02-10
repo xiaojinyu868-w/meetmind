@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useRef, useCallback } from 'react';
 import Image from 'next/image';
+import { useTranslations } from 'next-intl';
 
 interface AppLoadingProps {
   /** 外部传入的真实进度 0-100，如果不传则显示 indeterminate 动画 */
@@ -12,14 +13,14 @@ interface AppLoadingProps {
   onComplete?: () => void;
 }
 
-// 动态加载文案 - 更丰富的阶段提示
-const LOADING_MESSAGES = [
-  { min: 0, max: 15, texts: ['正在启动...', '初始化中...'] },
-  { min: 15, max: 35, texts: ['连接服务...', '检查环境...', '准备资源...'] },
-  { min: 35, max: 55, texts: ['加载数据...', '同步状态...', '配置完成...'] },
-  { min: 55, max: 75, texts: ['渲染界面...', '优化体验...', '即将就绪...'] },
-  { min: 75, max: 95, texts: ['最后准备...', '马上就好...', '几乎完成...'] },
-  { min: 95, max: 100, texts: ['加载完成！', '准备就绪！'] },
+// 加载文案配置 - 返回 key 数组，在组件内翻译
+const getLoadingMessageKeys = () => [
+  { min: 0, max: 15, keys: ['loading.messages.starting', 'loading.messages.initializing'] as const },
+  { min: 15, max: 35, keys: ['loading.messages.connecting', 'loading.messages.checking', 'loading.messages.preparing'] as const },
+  { min: 35, max: 55, keys: ['loading.messages.loading', 'loading.messages.syncing', 'loading.messages.configured'] as const },
+  { min: 55, max: 75, keys: ['loading.messages.rendering', 'loading.messages.optimizing', 'loading.messages.almostReady'] as const },
+  { min: 75, max: 95, keys: ['loading.messages.finalPrep', 'loading.messages.almostDone', 'loading.messages.nearlyComplete'] as const },
+  { min: 95, max: 100, keys: ['loading.messages.complete', 'loading.messages.ready'] as const },
 ];
 
 /**
@@ -33,9 +34,11 @@ const LOADING_MESSAGES = [
  * 5. 进度条流光效果增强
  */
 export function AppLoading({ progress, message, onComplete }: AppLoadingProps) {
+  const t = useTranslations();
+  const messageKeys = getLoadingMessageKeys();
   const [isFadingOut, setIsFadingOut] = useState(false);
   const [displayProgress, setDisplayProgress] = useState(0);
-  const [dynamicMessage, setDynamicMessage] = useState('正在启动...');
+  const [dynamicMessage, setDynamicMessage] = useState(t('loading.messages.starting'));
   const lastMessageChangeTime = useRef(0);
   const messageIndexRef = useRef(0);
   
@@ -74,15 +77,15 @@ export function AppLoading({ progress, message, onComplete }: AppLoadingProps) {
     if (now - lastMessageChangeTime.current < 1500) return;
     
     const currentProgress = displayProgress;
-    const stage = LOADING_MESSAGES.find(
+    const stage = messageKeys.find(
       s => currentProgress >= s.min && currentProgress < s.max
-    ) || LOADING_MESSAGES[LOADING_MESSAGES.length - 1];
+    ) || messageKeys[messageKeys.length - 1];
     
-    // 循环切换当前阶段的文案
-    messageIndexRef.current = (messageIndexRef.current + 1) % stage.texts.length;
-    setDynamicMessage(stage.texts[messageIndexRef.current]);
+    // 循环切换当前阶段的文案（实时翻译）
+    messageIndexRef.current = (messageIndexRef.current + 1) % stage.keys.length;
+    setDynamicMessage(t(stage.keys[messageIndexRef.current]));
     lastMessageChangeTime.current = now;
-  }, [displayProgress, message]);
+  }, [displayProgress, message, messageKeys, t]);
   
   // 定时更新文案
   useEffect(() => {
@@ -122,7 +125,7 @@ export function AppLoading({ progress, message, onComplete }: AppLoadingProps) {
       <div className="relative flex-1 w-full">
         <Image
           src="/videos/加载页.jpg"
-          alt="MeetMind - 你的第一个AI同桌"
+          alt={t('loading.brand')}
           fill
           priority
           className="object-cover object-center"

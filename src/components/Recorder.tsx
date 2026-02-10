@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useRef, useCallback, useEffect } from 'react';
+import { useTranslations } from 'next-intl';
 import type { TranscriptSegment } from '@/types';
 import { DashScopeASRClient } from '@/lib/services/dashscope-asr-service';
 import { TranscriptPreviewPanel } from './TranscriptPreviewPanel';
@@ -61,6 +62,7 @@ export function Recorder({
   onTranscribing,
   disabled = false,
 }: RecorderProps) {
+  const t = useTranslations();
   const [status, setStatus] = useState<RecorderStatus>('idle');
   const [elapsedMs, setElapsedMs] = useState(0);
   const [level, setLevel] = useState(0);
@@ -555,7 +557,7 @@ export function Recorder({
         clearInterval(timerRef.current);
         timerRef.current = null;
       }
-      setError(err instanceof Error ? err.message : '录音启动失败');
+      setError(err instanceof Error ? err.message : t('recorder.error.startFailed'));
     } finally {
       isStartingRecordingRef.current = false;
       setIsStartingRecording(false);
@@ -652,11 +654,11 @@ export function Recorder({
     if (transcribeMode === 'batch' && audioBlob.size > 0) {
       await transcribeWithQwenASR(audioBlob);
     } else {
-      if (transcribeMode === 'streaming' && transcriptRef.current.length > 0) {
+        if (transcribeMode === 'streaming' && transcriptRef.current.length > 0) {
         const enhancedCount = enhanceStats.enhanced;
         const totalCount = transcriptRef.current.length;
-        const enhanceInfo = enhancedCount > 0 ? `，已优化 ${enhancedCount} 句` : '';
-        setTranscribeProgress(`转录完成，共 ${totalCount} 句${enhanceInfo}`);
+        const enhanceInfo = enhancedCount > 0 ? t('recorder.transcribe.enhancedInfo', { count: enhancedCount }) : '';
+        setTranscribeProgress(t('recorder.transcribe.complete', { count: totalCount }) + enhanceInfo);
         onTranscriptUpdate?.(transcriptRef.current);
       }
       setStatus('stopped');
@@ -667,7 +669,7 @@ export function Recorder({
 
   const transcribeWithQwenASR = async (audioBlob: Blob) => {
     setStatus('transcribing');
-    setTranscribeProgress('正在转录音频...');
+    setTranscribeProgress(t('recorder.transcribing.title'));
     onTranscribing?.(true);
 
     try {
@@ -681,7 +683,7 @@ export function Recorder({
 
       if (!response.ok) {
         const errorData = await response.json();
-        throw new Error(errorData.error || '转录失败');
+        throw new Error(errorData.error || t('recorder.transcribeFailed'));
       }
 
       const data = await response.json();
@@ -708,7 +710,7 @@ export function Recorder({
         
 
         if (segments.length > 0) {
-          setTranscribeProgress('转录完成，正在优化文本...');
+          setTranscribeProgress(t('recorder.transcribe.optimizing'));
           setEnhanceStats(prev => ({ ...prev, total: segments.length, isEnhancing: true }));
           
 
@@ -760,18 +762,18 @@ export function Recorder({
 
           enhanceManagerRef.current.finalize().then(() => {
             const enhancedCount = enhanceManagerRef.current?.getAllEnhanced().filter(s => s.enhanceStatus === 'enhanced').length || 0;
-            setTranscribeProgress(`转录完成，共 ${segments.length} 句，已优化 ${enhancedCount} 句`);
+            setTranscribeProgress(t('recorder.transcribe.batchComplete', { count: segments.length, enhanced: enhancedCount }));
             enhanceManagerRef.current?.dispose();
             enhanceManagerRef.current = null;
           });
         } else {
-          setTranscribeProgress(`转录完成，共 ${segments.length} 句`);
+          setTranscribeProgress(t('recorder.transcribe.complete', { count: segments.length }));
         }
       } else {
-        setTranscribeProgress('转录完成，但未获取到文本');
+        setTranscribeProgress(t('recorder.transcribeNoText'));
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : '转录失败');
+      setError(err instanceof Error ? err.message : t('recorder.transcribe.error'));
       setTranscribeProgress('');
     } finally {
       onTranscribing?.(false);
@@ -881,9 +883,9 @@ export function Recorder({
               'bg-gray-300'
             }`} />
             <span className="text-xs text-gray-500">
-              {serviceStatus === 'checking' ? '连接中...' :
-               serviceStatus === 'available' ? '实时转录就绪' :
-               '本地模式'}
+              {serviceStatus === 'checking' ? t('recorder.status.connecting') :
+               serviceStatus === 'available' ? t('recorder.status.ready') :
+               t('recorder.status.localMode')}
             </span>
           </div>
           
@@ -899,7 +901,7 @@ export function Recorder({
                     : 'text-gray-500 hover:text-gray-700'
                 } ${!streamingAvailable ? 'opacity-50 cursor-not-allowed' : ''}`}
               >
-                📝 边录边转
+                📝 {t('recorder.mode.streaming')}
               </button>
               <button
                 onClick={() => setTranscribeMode('batch')}
@@ -909,11 +911,11 @@ export function Recorder({
                     : 'text-gray-500 hover:text-gray-700'
                 }`}
               >
-                🎞 录完转写
+                🎞 {t('recorder.mode.batch')}
               </button>
             </div>
             <span className="text-[10px] text-gray-400">
-              {transcribeMode === 'streaming' ? '边听边看文字，适合上课' : '录完再转，更准确'}
+              {transcribeMode === 'streaming' ? t('recorder.mode.streamingDesc') : t('recorder.mode.batchDesc')}
             </span>
           </div>
         </div>
@@ -933,12 +935,12 @@ export function Recorder({
           <div className="text-6xl font-mono font-bold text-gray-200 mb-4">
             00:00
           </div>
-          <p className="text-sm text-gray-400 mb-8">点击开始录制课堂</p>
+          <p className="text-sm text-gray-400 mb-8">{t('recorder.idle.hint')}</p>
           <button
             onClick={startRecording}
             disabled={disabled || isStartingRecording}
             className="record-btn"
-            aria-label="开始录音"
+            aria-label={t('recorder.recording.status')}
             data-onboarding="record-button"
           >
             <svg className="w-8 h-8 text-white" fill="currentColor" viewBox="0 0 24 24">
@@ -958,8 +960,8 @@ export function Recorder({
           <div className="w-20 h-20 rounded-full bg-sunflower-100 flex items-center justify-center mb-6">
             <div className="w-8 h-8 border-3 border-sunflower border-t-transparent rounded-full animate-spin" />
           </div>
-          <div className="text-lg font-medium text-gray-700 mb-2">正在转录</div>
-          <p className="text-sm text-gray-500">{transcribeProgress || '请稍候...'}</p>
+          <div className="text-lg font-medium text-gray-700 mb-2">{t('recorder.transcribing.title')}</div>
+          <p className="text-sm text-gray-500">{transcribeProgress || t('recorder.transcribing.wait')}</p>
         </div>
       </div>
     );
@@ -1014,7 +1016,7 @@ export function Recorder({
             <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
               <path d="M17.65 6.35A7.958 7.958 0 0012 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08A5.99 5.99 0 0112 18c-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z" />
             </svg>
-            开始新录音
+            {t('recorder.stopped.newRecording')}
           </button>
         </div>
       </div>
@@ -1032,7 +1034,7 @@ export function Recorder({
           <div className="flex items-center gap-2 sm:gap-2">
             <div className={`w-3.5 h-3.5 sm:w-2.5 sm:h-2.5 rounded-full ${isRecording ? 'bg-coral animate-pulse' : 'bg-sunflower-500'}`} />
             <span className={`text-lg sm:text-sm font-medium ${isRecording ? 'text-coral' : 'text-sunflower-600'}`}>
-              {isRecording ? '录音中' : '已暂停'}
+              {isRecording ? t('recorder.recording.status') : t('recorder.recording.paused')}
             </span>
           </div>
           
@@ -1063,7 +1065,7 @@ export function Recorder({
         <div className="flex items-center gap-4 sm:gap-4">
           {/* */}
           <span className="text-sm sm:text-xs text-gray-400 hidden sm:inline">
-            {transcribeMode === 'streaming' ? '边录边转' : '录完转写'}
+            {transcribeMode === 'streaming' ? t('recorder.recording.streamingLabel') : t('recorder.recording.batchLabel')}
           </span>
           
           {/* */}
@@ -1072,7 +1074,7 @@ export function Recorder({
               <button
                 onClick={pauseRecording}
                 className="w-[72px] h-[72px] sm:w-[48px] sm:h-[48px] rounded-full bg-sunflower-100 text-sunflower-700 flex items-center justify-center hover:bg-sunflower-200 transition-all active:scale-95 shadow-sm"
-                aria-label="暂停"
+                aria-label={t('recorder.controls.pause')}
               >
                 <svg className="w-9 h-9 sm:w-6 sm:h-6" fill="currentColor" viewBox="0 0 24 24">
                   <rect x="6" y="4" width="4" height="16" rx="1" />
@@ -1083,7 +1085,7 @@ export function Recorder({
               <button
                 onClick={resumeRecording}
                 className="w-[72px] h-[72px] sm:w-[48px] sm:h-[48px] rounded-full bg-mint-100 text-mint-700 flex items-center justify-center hover:bg-mint-200 transition-all active:scale-95 shadow-sm"
-                aria-label="继续"
+                aria-label={t('recorder.resume')}
               >
                 <svg className="w-9 h-9 sm:w-6 sm:h-6" fill="currentColor" viewBox="0 0 24 24">
                   <path d="M8 5v14l11-7z" />
@@ -1093,7 +1095,7 @@ export function Recorder({
             <button
               onClick={stopRecording}
               className="w-[72px] h-[72px] sm:w-[48px] sm:h-[48px] rounded-full bg-gray-100 text-gray-600 flex items-center justify-center hover:bg-gray-200 transition-all active:scale-95 shadow-sm"
-              aria-label="停止"
+              aria-label={t('recorder.controls.stop')}
             >
               <svg className="w-9 h-9 sm:w-6 sm:h-6" fill="currentColor" viewBox="0 0 24 24">
                 <rect x="6" y="6" width="12" height="12" rx="2" />
@@ -1119,12 +1121,12 @@ export function Recorder({
           {enhanceStats.isEnhancing ? (
             <>
               <div className="w-3 h-3 border-2 border-amber-400 border-t-transparent rounded-full animate-spin" />
-              <span>正在优化文本...</span>
+              <span>{t('recorder.enhance.optimizing')}</span>
             </>
           ) : enhanceStats.enhanced > 0 ? (
             <>
               <span className="text-mint-600">✓</span>
-              <span>已优化 {enhanceStats.enhanced}/{enhanceStats.total} 句</span>
+              <span>{t('recorder.enhance.progress', { enhanced: enhanceStats.enhanced, total: enhanceStats.total })}</span>
             </>
           ) : null}
         </div>
@@ -1159,12 +1161,12 @@ export function Recorder({
           data-onboarding="confusion-button"
         >
           <span className="text-xl">🎯</span>
-          <span className="font-medium">没听懂？点这里！</span>
+          <span className="font-medium">{t('recorder.anchor.button')}</span>
           {anchorCount > 0 && (
             <span className={`ml-2 px-2 py-0.5 rounded-full text-xs ${
               isRecording ? 'bg-white/20' : 'bg-gray-200'
             }`}>
-              已标记 {anchorCount}
+              {t('recorder.anchor.count', { count: anchorCount })}
             </span>
           )}
         </button>

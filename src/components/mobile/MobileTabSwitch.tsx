@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useRef, useEffect, useState } from 'react';
+import { useTranslations } from 'next-intl';
 import { cn } from '@/lib/utils';
 
 export type TabId = 'record' | 'review';
@@ -18,6 +19,7 @@ export function MobileTabSwitch({
   className,
   'data-onboarding': dataOnboarding,
 }: MobileTabSwitchProps) {
+  const t = useTranslations();
   const containerRef = useRef<HTMLDivElement>(null);
   const [indicatorStyle, setIndicatorStyle] = useState({ left: 0, width: 0 });
 
@@ -68,7 +70,7 @@ export function MobileTabSwitch({
             : 'text-[var(--dedao-text-muted)]'
         )}
       >
-        录音
+        {t('student.record')}
       </button>
 
       {/* 复习 Tab */}
@@ -82,7 +84,7 @@ export function MobileTabSwitch({
             : 'text-[var(--dedao-text-muted)]'
         )}
       >
-        复习
+        {t('student.review')}
       </button>
     </div>
   );

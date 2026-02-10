@@ -4,6 +4,7 @@
 // 显示浏览器 API 可用性状态
 
 import { useState, useEffect } from 'react';
+import { useTranslations } from 'next-intl';
 import { checkServices, type ServiceStatus as ServiceStatusType } from '@/lib/services/health-check';
 
 interface ServiceStatusProps {
@@ -16,10 +17,11 @@ interface ServiceStatusProps {
 }
 
 export function ServiceStatus({ 
-  pollInterval = 0,  // 默认不轮询，因为浏览器 API 状态不会变
+  pollInterval = 0,
   showDetails = false,
   compact = false,
 }: ServiceStatusProps) {
+  const t = useTranslations();
   const [status, setStatus] = useState<ServiceStatusType | null>(null);
   const [isChecking, setIsChecking] = useState(true);
 
@@ -48,7 +50,7 @@ export function ServiceStatus({
     return (
       <div className="flex items-center gap-2 text-gray-400">
         <div className="w-2 h-2 rounded-full bg-gray-300 animate-pulse" />
-        <span className="text-xs">检查服务...</span>
+        <span className="text-xs">{t('serviceStatus.checking')}</span>
       </div>
     );
   }
@@ -59,11 +61,11 @@ export function ServiceStatus({
       <div className="flex items-center gap-1.5">
         <div 
           className={`w-2 h-2 rounded-full ${status.webSpeech ? 'bg-green-500' : 'bg-gray-400'}`}
-          title={status.webSpeech ? '语音识别可用' : '语音识别不可用'}
+          title={status.webSpeech ? t('serviceStatus.tooltip.speechAvailable') : t('serviceStatus.tooltip.speechUnavailable')}
         />
         <div 
           className={`w-2 h-2 rounded-full ${status.indexedDB ? 'bg-green-500' : 'bg-gray-400'}`}
-          title={status.indexedDB ? '本地存储可用' : '本地存储不可用'}
+          title={status.indexedDB ? t('serviceStatus.tooltip.storageAvailable') : t('serviceStatus.tooltip.storageUnavailable')}
         />
       </div>
     );
@@ -79,7 +81,7 @@ export function ServiceStatus({
           status.webSpeech ? 'bg-green-500' : 'bg-gray-400'
         }`} />
         <span className="text-xs text-gray-600">
-          {status.webSpeech ? '语音识别' : '无语音识别'}
+          {status.webSpeech ? t('serviceStatus.label.speech') : t('serviceStatus.label.noSpeech')}
         </span>
       </div>
 
@@ -90,7 +92,7 @@ export function ServiceStatus({
           status.indexedDB ? 'bg-green-500' : 'bg-gray-400'
         }`} />
         <span className="text-xs text-gray-600">
-          {status.indexedDB ? '本地存储' : '无本地存储'}
+          {status.indexedDB ? t('serviceStatus.label.storage') : t('serviceStatus.label.noStorage')}
         </span>
       </div>
 
@@ -109,24 +111,26 @@ export function ServiceStatus({
  * 降级提示横幅
  * 注：由于项目已使用本地方案，此组件现在只在关键浏览器 API 不可用时显示
  */
-export function DegradedModeBanner({ 
-  status 
-}: { 
-  status: ServiceStatusType | null 
+export function DegradedModeBanner({
+  status
+}: {
+  status: ServiceStatusType | null
 }) {
+  const t = useTranslations();
+
   if (!status) return null;
-  
+
   // 如果浏览器 API 都可用，不显示横幅
   if (status.webSpeech && status.indexedDB) return null;
 
   const messages: string[] = [];
-  
+
   if (!status.webSpeech) {
-    messages.push('浏览器不支持语音识别，录音功能将不可用');
+    messages.push(t('serviceStatus.banner.noSpeech'));
   }
-  
+
   if (!status.indexedDB) {
-    messages.push('浏览器不支持本地存储，数据将无法持久化');
+    messages.push(t('serviceStatus.banner.noStorage'));
   }
 
   if (messages.length === 0) return null;
@@ -139,7 +143,7 @@ export function DegradedModeBanner({
         </svg>
         <span className="break-words min-w-0 flex-1">{messages.join(' · ')}</span>
         <span className="text-amber-600 text-xs flex-shrink-0 whitespace-nowrap">
-          建议使用 Chrome 浏览器
+          {t('serviceStatus.banner.suggestChrome')}
         </span>
       </div>
     </div>

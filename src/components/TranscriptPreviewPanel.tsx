@@ -10,6 +10,7 @@ import {
   type ReactNode,
   type UIEvent,
 } from 'react';
+import { useTranslations } from 'next-intl';
 import type { TranscriptSegment } from '@/types';
 
 interface TranscriptPreviewPanelProps {
@@ -81,6 +82,7 @@ export function TranscriptPreviewPanel({
   editable = false,
   onSegmentTextUpdate,
 }: TranscriptPreviewPanelProps) {
+  const t = useTranslations();
   const [isExpanded, setIsExpanded] = useState(defaultExpanded || immersiveMode);
   const [searchQuery, setSearchQuery] = useState('');
   const [showSearch, setShowSearch] = useState(false);
@@ -241,11 +243,11 @@ export function TranscriptPreviewPanel({
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
             </svg>
           </div>
-          <h3 className="text-lg font-medium text-gray-700 mb-2">正在聆听...</h3>
+          <h3 className="text-lg font-medium text-gray-700 mb-2">{t('transcript.listening')}</h3>
           <p className="text-sm text-gray-400 max-w-xs">
             {transcribeMode === 'streaming'
-              ? '开始说话后，文字会实时出现在这里'
-              : '录音结束后会自动转换为文字'}
+              ? t('transcript.streamingHint')
+              : t('transcript.batchHint')}
           </p>
         </div>
       );
@@ -261,9 +263,9 @@ export function TranscriptPreviewPanel({
       <div className="flex flex-col h-full relative">
         <div className="flex-shrink-0 px-4 py-2 flex items-center justify-between bg-gray-50/50">
           <div className="flex items-center gap-2">
-            <span className="text-xs font-medium text-gray-500">📝 {transcript.length} 句</span>
+            <span className="text-xs font-medium text-gray-500">{t('transcript.sentenceCount', { count: transcript.length })}</span>
             {searchQuery && (
-              <span className="text-xs text-amber-600">· 匹配 {filteredTranscript.length}</span>
+              <span className="text-xs text-amber-600">· {t('transcript.matchesFound', { count: filteredTranscript.length })}</span>
             )}
           </div>
           <div className="flex items-center gap-2">
@@ -272,7 +274,7 @@ export function TranscriptPreviewPanel({
               className={`p-1.5 rounded-lg transition-colors ${
                 showSearch ? 'bg-amber-100 text-amber-600' : 'text-gray-400 hover:text-gray-600 hover:bg-gray-100'
               }`}
-              title="搜索转录"
+              title={t('transcript.searchTitle')}
             >
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
@@ -288,7 +290,7 @@ export function TranscriptPreviewPanel({
                 type="text"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="搜索转录内容..."
+                placeholder={t('transcript.searchPlaceholder')}
                 className="w-full pl-9 pr-8 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-200 focus:border-amber-400 bg-white"
                 autoFocus
               />
@@ -349,7 +351,7 @@ export function TranscriptPreviewPanel({
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 14l-7 7m0 0l-7-7m7 7V3" />
               </svg>
-              最新
+              {t('transcript.latest')}
             </button>
           </div>
         )}
@@ -361,9 +363,9 @@ export function TranscriptPreviewPanel({
     <div className="mt-8 pt-6 border-t border-gray-100 animate-fade-in">
       <div className="flex items-center justify-between mb-3">
         <h4 className="text-sm font-medium text-gray-700 flex items-center gap-2">
-          {transcribeMode === 'streaming' ? '📝 实时转录' : '📝 转录结果'}
+          {transcribeMode === 'streaming' ? t('transcript.realtimeTranscript') : t('transcript.transcriptResult')}
           <span className="badge badge-streaming">
-            {transcribeMode === 'streaming' ? '百炼 ASR' : 'Qwen ASR'}
+            {transcribeMode === 'streaming' ? t('transcript.baiLianASR') : t('transcript.qwenASR')}
           </span>
         </h4>
         <div className="flex items-center gap-2">
@@ -373,28 +375,28 @@ export function TranscriptPreviewPanel({
               className={`p-1.5 rounded-lg transition-colors ${
                 showSearch ? 'bg-amber-100 text-amber-600' : 'text-gray-400 hover:text-gray-600 hover:bg-gray-100'
               }`}
-              title="搜索转录"
+              title={t('transcript.searchTitle')}
             >
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
               </svg>
             </button>
           )}
-          <span className="text-xs text-gray-400">{transcript.length} 句</span>
+          <span className="text-xs text-gray-400">{t('transcript.sentenceCount', { count: transcript.length })}</span>
           <button
             onClick={toggleExpanded}
             className="text-xs text-amber-600 hover:text-amber-700 flex items-center gap-1 transition-colors"
           >
             {isExpanded ? (
               <>
-                收起
+                {t('transcript.collapse')}
                 <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" />
                 </svg>
               </>
             ) : (
               <>
-                查看全部
+                {t('transcript.viewAll')}
                 <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                 </svg>
@@ -411,7 +413,7 @@ export function TranscriptPreviewPanel({
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="搜索转录内容..."
+              placeholder={t('transcript.searchPlaceholder')}
               className="w-full pl-9 pr-8 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-200 focus:border-amber-400"
             />
             <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -429,7 +431,7 @@ export function TranscriptPreviewPanel({
             )}
           </div>
           {searchQuery && (
-            <p className="mt-1 text-xs text-gray-400">找到 {filteredTranscript.length} 条匹配</p>
+            <p className="mt-1 text-xs text-gray-400">{t('transcript.matchesFound', { count: filteredTranscript.length })}</p>
           )}
         </div>
       )}
@@ -494,7 +496,7 @@ export function TranscriptPreviewPanel({
             onClick={toggleExpanded}
             className="text-xs text-gray-400 hover:text-amber-600 transition-colors"
           >
-            还有 {hiddenCount} 条，点击展开查看
+            {t('transcript.moreItems', { count: hiddenCount })}
           </button>
         ) : (
           <span />
@@ -508,7 +510,7 @@ export function TranscriptPreviewPanel({
             <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 14l-7 7m0 0l-7-7m7 7V3" />
             </svg>
-            回到最新
+            {t('transcript.backToLatest')}
           </button>
         )}
       </div>

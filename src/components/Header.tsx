@@ -3,8 +3,10 @@
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useState, useTransition, useEffect, useCallback } from 'react';
+import { useTranslations } from 'next-intl';
 import { useAuth } from '@/lib/hooks/useAuth';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { LanguageSwitcher } from './LanguageSwitcher';
 
 interface HeaderProps {
   lessonTitle: string;
@@ -18,6 +20,7 @@ export function Header({ lessonTitle, courseName, userRole = 'student' }: Header
   const [isPending, startTransition] = useTransition();
   const router = useRouter();
   const { user, isAuthenticated, logout } = useAuth();
+  const t = useTranslations();
 
   // 预加载角色切换的目标页面，提升跳转速度
   // bundle-preload: Preload on hover/focus for perceived speed
@@ -70,10 +73,10 @@ export function Header({ lessonTitle, courseName, userRole = 'student' }: Header
   };
 
   const roleLabels: Record<string, string> = {
-    student: '学生',
-    parent: '家长',
-    teacher: '教师',
-    admin: '管理员',
+    student: t('nav.student'),
+    parent: t('nav.parent'),
+    teacher: t('nav.teacher'),
+    admin: t('nav.admin'),
   };
 
   return (
@@ -101,10 +104,13 @@ export function Header({ lessonTitle, courseName, userRole = 'student' }: Header
 
       {/* 右侧 */}
       <div className="flex items-center gap-4">
+        {/* 语言切换 */}
+        <LanguageSwitcher />
+        
         {/* 角色切换 */}
         <nav className="flex items-center gap-1 p-1 rounded-xl" style={{ background: 'var(--edu-bg-soft)' }}>
           <RoleTab 
-            label="学生" 
+            label={t('nav.student') || '学生'}
             icon="👤" 
             active={userRole === 'student'} 
             loading={loadingRole === 'student'}
@@ -112,7 +118,7 @@ export function Header({ lessonTitle, courseName, userRole = 'student' }: Header
             onHover={() => handleRoleHover('/')}
           />
           <RoleTab 
-            label="家长" 
+            label={t('nav.parent') || '家长'}
             icon="👨‍👩‍👧" 
             active={userRole === 'parent'}
             loading={loadingRole === 'parent'}
@@ -120,7 +126,7 @@ export function Header({ lessonTitle, courseName, userRole = 'student' }: Header
             onHover={() => handleRoleHover('/parent')}
           />
           <RoleTab 
-            label="教师" 
+            label={t('nav.teacher') || '教师'}
             icon="👨‍🏫" 
             active={userRole === 'teacher'}
             loading={loadingRole === 'teacher'}
@@ -151,41 +157,41 @@ export function Header({ lessonTitle, courseName, userRole = 'student' }: Header
                 <div className="absolute right-0 top-full mt-2 w-48 bg-white rounded-xl shadow-lg border border-gray-100 py-2 animate-scale-in z-50">
                   <div className="px-4 py-2 border-b border-gray-100">
                     <p className="text-sm font-medium text-navy">{user.nickname}</p>
-                    <p className="text-xs text-gray-500">{roleLabels[user.role] || user.role}账号</p>
+                    <p className="text-xs text-gray-500">{roleLabels[user.role] || user.role}</p>
                   </div>
                   <Link
                     href="/profile"
                     onClick={() => setShowUserMenu(false)}
                     className="block w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-lilac-50 transition-colors"
                   >
-                    个人资料
+                    {t('settings.profile')}
                   </Link>
                   <Link
                     href="/settings"
                     onClick={() => setShowUserMenu(false)}
                     className="block w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-lilac-50 transition-colors"
                   >
-                    设置
+                    {t('settings.title')}
                   </Link>
                   <Link
                     href="/help"
                     onClick={() => setShowUserMenu(false)}
                     className="block w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-lilac-50 transition-colors"
                   >
-                    帮助
+                    {t('settings.help')}
                   </Link>
                   <Link
                     href="/feedback"
                     onClick={() => setShowUserMenu(false)}
                     className="block w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-lilac-50 transition-colors"
                   >
-                    意见反馈
+                    {t('settings.feedback')}
                   </Link>
                   <button
                     onClick={handleLogout}
                     className="w-full px-4 py-2 text-left text-sm text-coral-600 hover:bg-coral-50 transition-colors"
                   >
-                    退出登录
+                    {t('nav.logout')}
                   </button>
                 </div>
               )}
@@ -195,7 +201,7 @@ export function Header({ lessonTitle, courseName, userRole = 'student' }: Header
               href="/login"
               className="px-4 py-2 text-sm font-medium text-white bg-gradient-to-r from-amber-400 to-amber-500 rounded-lg hover:from-amber-500 hover:to-amber-600 transition-all shadow-md"
             >
-              登录
+              {t('nav.login')}
             </Link>
           )}
         </div>

@@ -8,6 +8,7 @@
 'use client';
 
 import React, { useState } from 'react';
+import { useTranslations } from 'next-intl';
 import type { ClassSummary, SummaryTakeaway } from '@/types';
 
 // ============ 类型定义 ============
@@ -39,6 +40,7 @@ interface TakeawayCardProps {
 
 function TakeawayCard({ takeaway, index, onSeek, onAddNote }: TakeawayCardProps) {
   const [isExpanded, setIsExpanded] = useState(false);
+  const t = useTranslations();
   
   return (
     <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
@@ -106,7 +108,7 @@ function TakeawayCard({ takeaway, index, onSeek, onAddNote }: TakeawayCardProps)
                 <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
                 </svg>
-                添加笔记
+                {t('summaryPanel.addNote')}
               </button>
             )}
           </div>
@@ -164,6 +166,8 @@ export function SummaryPanel({
   onSeek,
   onAddNote
 }: SummaryPanelProps) {
+  const t = useTranslations();
+  
   // 空状态
   if (!isLoading && !summary) {
     return (
@@ -173,9 +177,9 @@ export function SummaryPanel({
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
           </svg>
         </div>
-        <h3 className="text-lg font-medium text-gray-900 mb-2">暂无课堂摘要</h3>
+        <h3 className="text-lg font-medium text-gray-900 mb-2">{t('summaryPanel.emptyTitle')}</h3>
         <p className="text-gray-500 mb-6 max-w-sm">
-          AI 将自动生成课堂概要，帮助家长快速了解今天讲了什么
+          {t('summaryPanel.emptyDesc')}
         </p>
         
         {onGenerate && (
@@ -183,7 +187,7 @@ export function SummaryPanel({
             onClick={onGenerate}
             className="px-6 py-3 bg-blue-500 hover:bg-blue-600 text-white font-medium rounded-lg transition-colors"
           >
-            生成课堂摘要
+            {t('summaryPanel.generate')}
           </button>
         )}
       </div>
@@ -195,8 +199,8 @@ export function SummaryPanel({
     return (
       <div className="flex flex-col items-center justify-center py-12 px-4">
         <div className="w-12 h-12 mb-4 border-4 border-blue-500 border-t-transparent rounded-full animate-spin" />
-        <p className="text-gray-600">正在生成课堂摘要...</p>
-        <p className="text-sm text-gray-400 mt-1">AI 正在分析课堂内容</p>
+        <p className="text-gray-600">{t('summaryPanel.loading')}</p>
+        <p className="text-sm text-gray-400 mt-1">{t('summaryPanel.loadingSub')}</p>
       </div>
     );
   }
@@ -211,14 +215,14 @@ export function SummaryPanel({
           <svg className="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
           </svg>
-          <h3 className="font-medium text-blue-900">课堂概要</h3>
+          <h3 className="font-medium text-blue-900">{t('summaryPanel.overview')}</h3>
         </div>
         <p className="text-blue-800">{summary.overview}</p>
       </div>
       
       {/* 主要知识点 */}
       <Section
-        title="主要知识点"
+        title={t('summaryPanel.keyPoints')}
         icon={
           <svg className="w-5 h-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
@@ -241,7 +245,7 @@ export function SummaryPanel({
       {/* 重点难点 */}
       {summary.keyDifficulties.length > 0 && (
         <Section
-          title="重点难点"
+          title={t('summaryPanel.difficulties')}
           icon={
             <svg className="w-5 h-5 text-orange-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
@@ -263,7 +267,7 @@ export function SummaryPanel({
       {/* 课堂结构 */}
       {summary.structure.length > 0 && (
         <Section
-          title="课堂结构"
+          title={t('summaryPanel.structure')}
           icon={
             <svg className="w-5 h-5 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 10h16M4 14h16M4 18h16" />

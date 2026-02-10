@@ -1,4 +1,4 @@
-# MeetMind 课堂助手
+﻿# MeetMind 课堂助手
 
 > **MeetMind 是清华北大联合团队打造的 AI 学习助手，为每个孩子配备一位"听过课、记得住、讲得清"的智能同桌。**
 >
@@ -351,6 +351,16 @@ meetmind/
 
 ### 最新更新
 
+#### v2.7 - 视频导入与语音输入链路并入（分支合并修复）
+
+| 功能 | 描述 |
+|------|------|
+| **分支合并修复** | 以 `fix/internal-beta-low-entropy-sync` 为主，合并 `feat/asr-quality-polish-v1`，修复 `server.js` 冲突残留与启动报错 |
+| **视频链接导入** | 新增 `/api/video/import`，接入 B 站链接解析、音频提取与转写链路 |
+| **视频复盘组件** | 新增 `VideoLinkImporter`、`VideoReviewPlayer`、`VideoInsightTimeline`，支持视频复盘联动 |
+| **语音输入追加** | 新增 `useVoiceInput`，支持先输入文本再通过语音转文字追加到对话框 |
+| **构建可用性验证** | 完整验证 `npm run build` 可通过，恢复可运行开发状态 |
+
 #### v2.6 - 低开发熵治理（稳定性与可维护性）
 
 | 功能 | 描述 |
@@ -571,4 +581,3 @@ MIT License
 - 修复教师端页面动态 chunk 崩溃：`src/app/teacher/page.tsx` 将 `TeacherDashboard` 从 `next/dynamic` 改为静态导入，避免出现 `Loading chunk ... TeacherDashboard_tsx failed (/_next/undefined)`。
 - 验证结果：`npm run lint`、`npx tsc --noEmit`、`npm run build` 均通过。
 - 若本地 dev 仍偶发历史缓存错误，请先停止进程后清理 `.next` 再重启：`rd /s /q .next && npm run dev`。
-

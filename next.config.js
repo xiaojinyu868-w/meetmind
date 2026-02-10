@@ -1,3 +1,7 @@
+const createNextIntlPlugin = require('next-intl/plugin');
+
+const withNextIntl = createNextIntlPlugin('./src/i18n/i18n.ts');
+
 /** @type {import('next').NextConfig} */
 const isProduction = process.env.NODE_ENV === 'production';
 const devDistDir = process.env.NEXT_DEV_DIST_DIR || '.next-dev';
@@ -67,4 +71,4 @@ const nextConfig = {
   },
 };
 
-module.exports = nextConfig;
+module.exports = withNextIntl(nextConfig);

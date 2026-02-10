@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useMemo, memo } from 'react';
+import { useTranslations } from 'next-intl';
 import { StreamingMarkdown } from './StreamingMarkdown';
 
 /**
@@ -195,6 +196,7 @@ export const ThinkingGuideRenderer = memo(function ThinkingGuideRenderer({
   isMobile = false,
   className = '',
 }: ThinkingGuideRendererProps) {
+  const t = useTranslations('aiTutor');
 
   const parsed = useMemo(() => parseGuide(content), [content]);
 
@@ -259,7 +261,7 @@ export const ThinkingGuideRenderer = memo(function ThinkingGuideRenderer({
           <div className={`flex items-center gap-2 pb-2 border-b border-blue-100 ${isMobile ? 'mb-2' : 'mb-3'}`}>
             <span className={isMobile ? 'text-base' : 'text-lg'}>📝</span>
             <span className={`font-semibold text-blue-800 ${isMobile ? 'text-xs' : 'text-base'}`}>
-              正式回答
+              {t('formalAnswer')}
             </span>
           </div>
 

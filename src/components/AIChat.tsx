@@ -4,6 +4,7 @@
 // 支持对话历史持久化存储、模型选择、图片上传
 
 import { useState, useRef, useEffect, useCallback } from 'react';
+import { useTranslations, useLocale } from 'next-intl';
 import { formatTimestampMs } from '@/lib/longcut';
 import { useAuth } from '@/lib/hooks/useAuth';
 import { conversationService, getEffectiveUserId } from '@/lib/services/conversation-service';
@@ -103,6 +104,8 @@ export function AIChat({
   forceTimestampCitations = false,
   onAssistantMessage,
 }: AIChatProps) {
+  const t = useTranslations();
+  const locale = useLocale();
   const { user, accessToken } = useAuth();
   const userId = getEffectiveUserId(user?.id);
   
@@ -268,6 +271,7 @@ export function AIChat({
         context: contextText,
         anchorId,
         stream: false,
+        locale,
       };
 
       // 支持多模态（图片上传）
@@ -289,7 +293,7 @@ export function AIChat({
       });
 
       if (!response.ok) {
-        throw new Error(`请求失败: ${response.status}`);
+        throw new Error(t('aiChat.requestFailed', { status: response.status }));
       }
 
       const data = await response.json();
@@ -311,7 +315,7 @@ export function AIChat({
       // 保存助手消息
       await saveMessage('assistant', assistantMessage.content);
     } catch (err) {
-      setError(err instanceof Error ? err.message : '发送失败');
+      setError(err instanceof Error ? err.message : t('aiChat.sendFailed'));
     } finally {
       setIsLoading(false);
     }
@@ -325,10 +329,10 @@ export function AIChat({
 
   // 快捷问题
   const quickQuestions = [
-    '这个概念能再解释一下吗？',
-    '有没有类似的例子？',
-    '这个和之前学的有什么关系？',
-    '我应该怎么练习？',
+    t('aiChat.quickQuestion1'),
+    t('aiChat.quickQuestion2'),
+    t('aiChat.quickQuestion3'),
+    t('aiChat.quickQuestion4'),
   ];
 
   // 清空当前对话
@@ -348,7 +352,7 @@ export function AIChat({
               <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
               <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
             </div>
-            <p className="text-sm text-gray-500">加载对话历史...</p>
+            <p className="text-sm text-gray-500">{t('aiChat.loadingHistory')}</p>
           </div>
         </div>
       </div>
@@ -361,7 +365,7 @@ export function AIChat({
       <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200">
         <div className="flex items-center gap-2">
           <span className="text-lg">🎓</span>
-          <span className="font-medium text-gray-900">AI 家教</span>
+          <span className="font-medium text-gray-900">{t('aiChat.title')}</span>
           {conversation && (
             <span className="text-xs text-gray-400 truncate max-w-[120px]" title={conversation.title}>
               · {conversation.title}
@@ -377,7 +381,7 @@ export function AIChat({
           />
           {anchorTimestamp && (
             <span className="text-xs text-gray-500">
-              困惑点: {formatTimestampMs(anchorTimestamp)}
+              {t('aiChat.confusionLabel')}: {formatTimestampMs(anchorTimestamp)}
             </span>
           )}
           {messages.length > 0 && (
@@ -400,9 +404,9 @@ export function AIChat({
         {messages.length === 0 && (
           <div className="text-center py-8">
             <div className="text-4xl mb-3">🤔</div>
-            <h3 className="font-medium text-gray-900 mb-2">有什么不明白的？</h3>
+            <h3 className="font-medium text-gray-900 mb-2">{t('aiChat.emptyTitle')}</h3>
             <p className="text-sm text-gray-500 mb-4">
-              我会根据老师讲的内容帮你解答
+              {t('aiChat.emptyDesc')}
             </p>
 
             {/* 快捷问题 */}
@@ -461,7 +465,7 @@ export function AIChat({
                   <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
                   <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
                 </div>
-                <span className="text-sm">思考中...</span>
+                <span className="text-sm">{t('aiTutor.thinking')}</span>
               </div>
             </div>
           </div>
@@ -518,7 +522,7 @@ export function AIChat({
             value={inputValue}
             onChange={(e) => setInputValue(e.target.value)}
             disabled={isLoading}
-            placeholder="输入你的问题..."
+            placeholder={t('aiChat.inputPlaceholder')}
             className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-400 focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed"
           />
           <VoiceMicButton
@@ -530,7 +534,7 @@ export function AIChat({
             disabled={isLoading || (!inputValue.trim() && uploadedImages.length === 0)}
             className="px-4 py-2 bg-amber-500 text-white rounded-lg hover:bg-amber-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
           >
-            发送
+            {t('common.send')}
           </button>
         </div>
       </form>

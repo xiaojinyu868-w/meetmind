@@ -3,6 +3,7 @@
 import React, { useEffect, useState, useTransition } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import { useTranslations } from 'next-intl';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/lib/hooks/useAuth';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -26,6 +27,7 @@ export function DedaoMenu({
   userRole = 'student',
   badges = {},
 }: DedaoMenuProps) {
+  const t = useTranslations();
   const { user, isAuthenticated, logout } = useAuth();
   const router = useRouter();
   const [loadingRole, setLoadingRole] = useState<string | null>(null);
@@ -71,17 +73,17 @@ export function DedaoMenu({
   };
 
   const roleLabels: Record<string, string> = {
-    student: '学生',
-    parent: '家长',
-    teacher: '教师',
-    admin: '管理员',
+    student: t('nav.student'),
+    parent: t('nav.parent'),
+    teacher: t('nav.teacher'),
+    admin: t('nav.admin'),
   };
 
   const menuItems = [
     {
       id: 'ai-chat' as const,
-      label: 'AI 助教',
-      description: '有问题随时问',
+      label: t('menu.aiTutor'),
+      description: t('menu.aiTutorDesc'),
       icon: (
         <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
           <path strokeLinecap="round" strokeLinejoin="round" d="M8.625 12a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0H8.25m4.125 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0H12m4.125 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0h-.375M21 12c0 4.556-4.03 8.25-9 8.25a9.764 9.764 0 01-2.555-.337A5.972 5.972 0 015.41 20.97a5.969 5.969 0 01-.474-.065 4.48 4.48 0 00.978-2.025c.09-.457-.133-.901-.467-1.226C3.93 16.178 3 14.189 3 12c0-4.556 4.03-8.25 9-8.25s9 3.694 9 8.25z" />
@@ -91,8 +93,8 @@ export function DedaoMenu({
     },
     {
       id: 'highlights' as const,
-      label: '精选片段',
-      description: 'AI 提取的重点',
+      label: t('menu.highlights'),
+      description: t('menu.highlightsDesc'),
       icon: (
         <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
           <path strokeLinecap="round" strokeLinejoin="round" d="M11.48 3.499a.562.562 0 011.04 0l2.125 5.111a.563.563 0 00.475.345l5.518.442c.499.04.701.663.321.988l-4.204 3.602a.563.563 0 00-.182.557l1.285 5.385a.562.562 0 01-.84.61l-4.725-2.885a.563.563 0 00-.586 0L6.982 20.54a.562.562 0 01-.84-.61l1.285-5.386a.562.562 0 00-.182-.557l-4.204-3.602a.563.563 0 01.321-.988l5.518-.442a.563.563 0 00.475-.345L11.48 3.5z" />
@@ -102,8 +104,8 @@ export function DedaoMenu({
     },
     {
       id: 'summary' as const,
-      label: '课堂摘要',
-      description: '一分钟了解全课',
+      label: t('menu.summary'),
+      description: t('menu.summaryDesc'),
       icon: (
         <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
           <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />
@@ -112,8 +114,8 @@ export function DedaoMenu({
     },
     {
       id: 'notes' as const,
-      label: '我的笔记',
-      description: '查看和管理笔记',
+      label: t('menu.myNotes'),
+      description: t('menu.myNotesDesc'),
       icon: (
         <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
           <path strokeLinecap="round" strokeLinejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0115.75 21H5.25A2.25 2.25 0 013 18.75V8.25A2.25 2.25 0 015.25 6H10" />
@@ -123,8 +125,8 @@ export function DedaoMenu({
     },
     {
       id: 'tasks' as const,
-      label: '今日任务',
-      description: 'AI 推荐的复习任务',
+      label: t('menu.todayTasks'),
+      description: t('menu.todayTasksDesc'),
       icon: (
         <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
           <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
@@ -171,7 +173,7 @@ export function DedaoMenu({
                 </div>
                 <div>
                   <p className="text-sm font-medium text-[var(--dedao-text)]">{user.nickname}</p>
-                  <p className="text-xs text-gray-400">{roleLabels[user.role] || user.role}账号</p>
+                  <p className="text-xs text-gray-400">{roleLabels[user.role] || user.role}{t('menu.account')}</p>
                 </div>
               </div>
             ) : (
@@ -184,8 +186,8 @@ export function DedaoMenu({
                   <span className="text-lg">👤</span>
                 </div>
                 <div>
-                  <p className="text-sm font-medium text-amber-600">点击登录</p>
-                  <p className="text-xs text-gray-400">登录后数据云端同步</p>
+                  <p className="text-sm font-medium text-amber-600">{t('menu.clickToLogin')}</p>
+                  <p className="text-xs text-gray-400">{t('menu.loginSync')}</p>
                 </div>
               </Link>
             )}
@@ -202,12 +204,12 @@ export function DedaoMenu({
 
         {/* 角色切换 */}
         <div className="px-4 py-3 border-b border-gray-100">
-          <p className="text-xs text-gray-400 mb-2">切换视角</p>
+          <p className="text-xs text-gray-400 mb-2">{t('menu.switchView')}</p>
           <div className="flex items-center gap-2">
             {[
-              { id: 'student', href: '/', label: '学生', icon: '👤' },
-              { id: 'parent', href: '/parent', label: '家长', icon: '👨‍👩‍👧' },
-              { id: 'teacher', href: '/teacher', label: '教师', icon: '👨‍🏫' },
+              { id: 'student', href: '/', label: t('nav.student'), icon: '👤' },
+              { id: 'parent', href: '/parent', label: t('nav.parent'), icon: '👨‍👩‍👧' },
+              { id: 'teacher', href: '/teacher', label: t('nav.teacher'), icon: '👨‍🏫' },
             ].map((role) => (
               <button
                 key={role.id}
@@ -295,7 +297,7 @@ export function DedaoMenu({
               <svg className="w-5 h-5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z" />
               </svg>
-              <span className="text-sm text-gray-600">个人资料</span>
+              <span className="text-sm text-gray-600">{t('menu.profile')}</span>
             </Link>
           )}
           <Link
@@ -306,7 +308,7 @@ export function DedaoMenu({
             <svg className="w-5 h-5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M9.879 7.519c1.171-1.025 3.071-1.025 4.242 0 1.172 1.025 1.172 2.687 0 3.712-.203.179-.43.326-.67.442-.745.361-1.45.999-1.45 1.827v.75M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-9 5.25h.008v.008H12v-.008z" />
             </svg>
-            <span className="text-sm text-gray-600">帮助中心</span>
+            <span className="text-sm text-gray-600">{t('menu.help')}</span>
           </Link>
           <Link
             href="/feedback"
@@ -316,7 +318,7 @@ export function DedaoMenu({
             <svg className="w-5 h-5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M7.5 8.25h9m-9 3H12m-9.75 1.51c0 1.6 1.123 2.994 2.707 3.227 1.129.166 2.27.293 3.423.379.35.026.67.21.865.501L12 21l2.755-4.133a1.14 1.14 0 01.865-.501 48.172 48.172 0 003.423-.379c1.584-.233 2.707-1.626 2.707-3.228V6.741c0-1.602-1.123-2.995-2.707-3.228A48.394 48.394 0 0012 3c-2.392 0-4.744.175-7.043.513C3.373 3.746 2.25 5.14 2.25 6.741v6.018z" />
             </svg>
-            <span className="text-sm text-gray-600">意见反馈</span>
+            <span className="text-sm text-gray-600">{t('menu.feedback')}</span>
           </Link>
           {isAuthenticated && user && (
             <button
@@ -326,7 +328,7 @@ export function DedaoMenu({
               <svg className="w-5 h-5 text-coral-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0013.5 3h-6a2.25 2.25 0 00-2.25 2.25v13.5A2.25 2.25 0 007.5 21h6a2.25 2.25 0 002.25-2.25V15M12 9l-3 3m0 0l3 3m-3-3h12.75" />
               </svg>
-              <span className="text-sm text-coral-600">退出登录</span>
+              <span className="text-sm text-coral-600">{t('menu.logout')}</span>
             </button>
           )}
         </div>

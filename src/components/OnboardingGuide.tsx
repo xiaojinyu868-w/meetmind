@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { createPortal } from 'react-dom';
+import { useTranslations } from 'next-intl';
 import type { OnboardingStep } from '@/hooks/useOnboarding';
 import { useResponsive } from '@/hooks/useResponsive';
 
@@ -22,6 +23,7 @@ export function OnboardingGuide({
   onSkip,
   isActive,
 }: OnboardingGuideProps) {
+  const t = useTranslations();
   const [targetRect, setTargetRect] = useState<DOMRect | null>(null);
   const [tooltipStyle, setTooltipStyle] = useState<React.CSSProperties>({});
   const tooltipRef = useRef<HTMLDivElement>(null);
@@ -338,20 +340,20 @@ export function OnboardingGuide({
               onClick={onSkip}
               className="text-xs sm:text-sm text-gray-400 hover:text-gray-600 transition-colors"
             >
-              跳过引导
+              {t('onboarding.skip')}
             </button>
             {/* 交互式模式：显示"点击试试"提示；非交互式：显示下一步按钮 */}
             {isInteractive && targetRect ? (
               <span className="px-3 sm:px-5 py-1.5 sm:py-2 text-rose-500 text-xs sm:text-sm font-medium flex items-center gap-1">
                 <span className="animate-bounce">👆</span>
-                点击试试
+                {t('onboarding.try')}
               </span>
             ) : (
               <button
                 onClick={onNext}
                 className="px-3 sm:px-5 py-1.5 sm:py-2 bg-rose-500 hover:bg-rose-600 text-white text-xs sm:text-sm font-medium rounded-full transition-colors shadow-lg"
               >
-                {stepIndex === totalSteps - 1 ? '开始使用' : '下一步'}
+                {stepIndex === totalSteps - 1 ? t('onboarding.start') : t('onboarding.next')}
               </button>
             )}
           </div>
@@ -373,6 +375,7 @@ export function WelcomeModal({
   onStart: () => void;
   onSkip: () => void;
 }) {
+  const t = useTranslations();
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
@@ -411,29 +414,29 @@ export function WelcomeModal({
 
         {/* 内容 - 可滚动，响应式内边距 */}
         <div className="p-4 sm:p-6 text-center overflow-y-auto flex-1">
-          <h2 className="text-lg sm:text-xl font-bold text-gray-900 mb-0.5 sm:mb-1">欢迎使用 MeetMind</h2>
-          <p className="text-gray-500 text-xs sm:text-sm mb-3 sm:mb-4">清华北大联合团队打造 - 你的智能同桌</p>
+          <h2 className="text-lg sm:text-xl font-bold text-gray-900 mb-0.5 sm:mb-1">{t('onboarding.welcome.title')}</h2>
+          <p className="text-gray-500 text-xs sm:text-sm mb-3 sm:mb-4">{t('onboarding.welcome.subtitle')}</p>
 
           <div className="space-y-1.5 sm:space-y-2 text-left mb-4 sm:mb-5">
             <div className="flex items-center gap-2 sm:gap-3 p-2 sm:p-2.5 rounded-lg sm:rounded-xl bg-rose-50">
               <span className="text-base sm:text-lg">🎙️</span>
               <div>
-                <div className="font-medium text-gray-900 text-xs sm:text-sm">课堂录音</div>
-                <div className="text-[10px] sm:text-xs text-gray-500">实时转写，不错过重点</div>
+                <div className="font-medium text-gray-900 text-xs sm:text-sm">{t('onboarding.welcome.feature1')}</div>
+                <div className="text-[10px] sm:text-xs text-gray-500">{t('onboarding.welcome.feature1Desc')}</div>
               </div>
             </div>
             <div className="flex items-center gap-2 sm:gap-3 p-2 sm:p-2.5 rounded-lg sm:rounded-xl bg-amber-50">
               <span className="text-base sm:text-lg">🎯</span>
               <div>
-                <div className="font-medium text-gray-900 text-xs sm:text-sm">困惑标记</div>
-                <div className="text-[10px] sm:text-xs text-gray-500">一键标记，课后 AI 解答</div>
+                <div className="font-medium text-gray-900 text-xs sm:text-sm">{t('onboarding.welcome.feature2')}</div>
+                <div className="text-[10px] sm:text-xs text-gray-500">{t('onboarding.welcome.feature2Desc')}</div>
               </div>
             </div>
             <div className="flex items-center gap-2 sm:gap-3 p-2 sm:p-2.5 rounded-lg sm:rounded-xl bg-blue-50">
               <span className="text-base sm:text-lg">🤖</span>
               <div>
-                <div className="font-medium text-gray-900 text-xs sm:text-sm">AI 家教</div>
-                <div className="text-[10px] sm:text-xs text-gray-500">基于课堂内容，精准辅导</div>
+                <div className="font-medium text-gray-900 text-xs sm:text-sm">{t('onboarding.welcome.feature3')}</div>
+                <div className="text-[10px] sm:text-xs text-gray-500">{t('onboarding.welcome.feature3Desc')}</div>
               </div>
             </div>
           </div>
@@ -443,13 +446,13 @@ export function WelcomeModal({
               onClick={onStart}
               className="w-full py-2 sm:py-2.5 bg-gradient-to-r from-rose-500 to-rose-600 hover:from-rose-600 hover:to-rose-700 text-white text-sm sm:text-base font-medium rounded-lg sm:rounded-xl transition-all shadow-lg shadow-rose-500/25"
             >
-              开始体验
+              {t('onboarding.welcome.start')}
             </button>
             <button
               onClick={onSkip}
               className="w-full py-1.5 sm:py-2 text-gray-400 hover:text-gray-600 text-xs sm:text-sm transition-colors"
             >
-              我已了解，直接使用
+              {t('onboarding.welcome.skip')}
             </button>
           </div>
         </div>

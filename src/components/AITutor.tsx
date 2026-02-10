@@ -1,6 +1,7 @@
 ﻿'use client';
 
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import { useTranslations, useLocale } from 'next-intl';
 import type { Breakpoint } from '@/lib/services/meetmind-service';
 import { formatTimestamp } from '@/lib/services/longcut-utils';
 import { notebookService, localSearch, type SearchResult } from '@/lib/services/notebook-service';
@@ -90,6 +91,8 @@ interface TutorAPIResponse {
 }
 
 export function AITutor({ breakpoint, segments, isLoading: externalLoading, onResolve, onActionItemsUpdate, sessionId = 'default', onSeek, initialQuestion, isMobile = false }: AITutorProps) {
+  const t = useTranslations();
+  const locale = useLocale();
   const { accessToken, user } = useAuth();
   const userId = getEffectiveUserId(user?.id);
   const [userInput, setUserInput] = useState('');
@@ -473,7 +476,7 @@ export function AITutor({ breakpoint, segments, isLoading: externalLoading, onRe
         conv = await conversationService.createConversation({
           userId,
           type: 'tutor',
-          title: `困惑点 ${formatTimestamp(breakpoint.timestamp)}`,
+          title: t('aiTutor.breakpointTitle', { time: formatTimestamp(breakpoint.timestamp) }),
           sessionId,
           anchorId: breakpoint.id,
           anchorTimestamp: breakpoint.timestamp,
@@ -551,6 +554,7 @@ export function AITutor({ breakpoint, segments, isLoading: externalLoading, onRe
           enable_guidance: true,
           enable_web: enableWeb,
           sessionId,  // 传递 sessionId 用于摘要缓存
+          locale,
         }),
       });
 
@@ -623,6 +627,7 @@ export function AITutor({ breakpoint, segments, isLoading: externalLoading, onRe
         studentQuestion: userMessage,
         sessionId,
         stream: true,
+        locale,
       }, {
         headers,
         onMetadata: (metadata: SSEEvent) => {
@@ -727,6 +732,7 @@ export function AITutor({ breakpoint, segments, isLoading: externalLoading, onRe
         conversation_id: conversationId,
         sessionId,
         stream: true,
+        locale,
       }, {
         headers,
         onMetadata: (metadata: SSEEvent) => {
@@ -815,6 +821,7 @@ export function AITutor({ breakpoint, segments, isLoading: externalLoading, onRe
       enable_thinking_guide: enableThinkingGuide,
       sessionId,
       stream: true,
+      locale,
     };
 
     // 支持多模态（图片上传）
@@ -950,7 +957,7 @@ export function AITutor({ breakpoint, segments, isLoading: externalLoading, onRe
                   AI 课堂助手
                 </h3>
                 <p className="text-xs text-gray-500">
-                  基于整节课内容回答问题
+                  {t('aiTutor.basedOnFullClass')}
                 </p>
               </div>
             </div>
@@ -974,7 +981,7 @@ export function AITutor({ breakpoint, segments, isLoading: externalLoading, onRe
                   onChange={(e) => setEnableWeb(e.target.checked)}
                   className="w-4 h-4 rounded border-gray-300 text-amber-500 focus:ring-amber-400"
                 />
-                <span className="group-hover:text-gray-900 transition-colors">🌐 联网搜索</span>
+                <span className="group-hover:text-gray-900 transition-colors">{t('aiTutor.webSearch')}</span>
               </label>
               <label className="flex items-center gap-2 text-xs text-gray-600 cursor-pointer group">
                 <input
@@ -983,7 +990,7 @@ export function AITutor({ breakpoint, segments, isLoading: externalLoading, onRe
                   onChange={(e) => setEnableThinkingGuide(e.target.checked)}
                   className="w-4 h-4 rounded border-gray-300 text-violet-500 focus:ring-violet-400"
                 />
-                <span className="group-hover:text-gray-900 transition-colors">🧠 思维引导</span>
+                <span className="group-hover:text-gray-900 transition-colors">{t('aiTutor.thinkingGuide')}</span>
               </label>
             </div>
           )}
@@ -1007,31 +1014,31 @@ export function AITutor({ breakpoint, segments, isLoading: externalLoading, onRe
                 <span className="text-4xl">🎓</span>
               </div>
               <h3 className="text-lg font-medium text-gray-800 mb-2">
-                有什么问题想问？
+                {t('aiTutor.emptyTitle')}
               </h3>
               <p className="text-sm text-gray-500 mb-6 max-w-xs">
-                我已经学习了这节课的内容，可以帮你解答疑惑、总结要点
+                {t('aiTutor.emptyDesc')}
               </p>
-              
+
               {/* 快捷问题 */}
               <div className="flex flex-wrap justify-center gap-2 max-w-sm">
                 <button
-                  onClick={() => handleGlobalSend('这节课讲了什么？')}
+                  onClick={() => handleGlobalSend(t('aiTutor.quickQuestion1'))}
                   className="px-4 py-2 bg-gradient-to-r from-amber-50 to-amber-100 text-amber-700 rounded-full text-sm hover:from-amber-100 hover:to-amber-200 transition-colors border border-amber-200"
                 >
-                  这节课讲了什么？
+                  {t('aiTutor.quickQuestion1')}
                 </button>
                 <button
-                  onClick={() => handleGlobalSend('帮我总结这节课的重点')}
+                  onClick={() => handleGlobalSend(t('aiTutor.quickQuestion2'))}
                   className="px-4 py-2 bg-gradient-to-r from-amber-50 to-amber-100 text-amber-700 rounded-full text-sm hover:from-amber-100 hover:to-amber-200 transition-colors border border-amber-200"
                 >
-                  帮我总结重点
+                  {t('aiTutor.quickQuestion2')}
                 </button>
                 <button
-                  onClick={() => handleGlobalSend('这节课有哪些需要注意的地方？')}
+                  onClick={() => handleGlobalSend(t('aiTutor.quickQuestion3'))}
                   className="px-4 py-2 bg-gradient-to-r from-amber-50 to-amber-100 text-amber-700 rounded-full text-sm hover:from-amber-100 hover:to-amber-200 transition-colors border border-amber-200"
                 >
-                  有哪些需要注意的？
+                  {t('aiTutor.quickQuestion3')}
                 </button>
               </div>
             </div>
@@ -1127,12 +1134,12 @@ export function AITutor({ breakpoint, segments, isLoading: externalLoading, onRe
                         <span></span>
                         <span></span>
                       </div>
-                      <span className="text-xs">思考中...</span>
+                      <span className="text-xs">{t('aiTutor.thinking')}</span>
                     </div>
                   </div>
                 </div>
               )}
-              
+
               <div ref={chatEndRef} />
             </div>
           )}
@@ -1198,7 +1205,7 @@ export function AITutor({ breakpoint, segments, isLoading: externalLoading, onRe
                 disabled={(!userInput.trim() && uploadedImages.length === 0) || globalLoading || segments.length === 0}
                 className={`btn btn-primary disabled:opacity-50 ${isMobile ? 'px-4' : 'px-6'}`}
               >
-                发送
+                {t('common.send')}
               </button>
             )}
           </div>
@@ -1206,9 +1213,9 @@ export function AITutor({ breakpoint, segments, isLoading: externalLoading, onRe
           {/* 快捷回复 */}
           {globalChatHistory.length > 0 && (
             <div className="flex flex-wrap gap-2 mt-2">
-              <QuickReply text="再详细说说" onClick={setUserInput} />
-              <QuickReply text="举个例子" onClick={setUserInput} />
-              <QuickReply text="谢谢，我懂了" onClick={setUserInput} />
+              <QuickReply text={t('aiTutor.quickReply1')} onClick={setUserInput} />
+              <QuickReply text={t('aiTutor.quickReply2')} onClick={setUserInput} />
+              <QuickReply text={t('aiTutor.quickReply3')} onClick={setUserInput} />
             </div>
           )}
         </div>
@@ -1229,7 +1236,7 @@ export function AITutor({ breakpoint, segments, isLoading: externalLoading, onRe
             <div className="flex items-center gap-2">
               <div className={`w-2.5 h-2.5 rounded-full flex-shrink-0 ${breakpoint.resolved ? 'bg-mint' : 'bg-coral animate-pulse'}`} />
               <span className="text-sm font-medium text-navy truncate">
-                {formatTimestamp(breakpoint.timestamp)} 的困惑点
+                {t('aiTutor.breakpointAt', { time: formatTimestamp(breakpoint.timestamp) })}
               </span>
               <span className="text-xs text-gray-500 flex-shrink-0">
                 {breakpoint.resolved ? '✅' : '🔴'}
@@ -1266,7 +1273,7 @@ export function AITutor({ breakpoint, segments, isLoading: externalLoading, onRe
                     onClick={onResolve}
                     className="btn btn-primary px-3 py-1.5 text-xs"
                   >
-                    ✓ 我懂了
+                    {t('aiTutor.iUnderstand')}
                   </button>
                 )}
               </div>
@@ -1283,7 +1290,7 @@ export function AITutor({ breakpoint, segments, isLoading: externalLoading, onRe
                   onChange={(e) => setEnableWeb(e.target.checked)}
                   className="w-4 h-4 rounded border-gray-300 text-amber-500 focus:ring-amber-400"
                 />
-                <span className="group-hover:text-gray-900 transition-colors">🌐 联网搜索</span>
+                <span className="group-hover:text-gray-900 transition-colors">{t('aiTutor.webSearch')}</span>
               </label>
               <label className="flex items-center gap-2 text-xs text-gray-600 cursor-pointer group">
                 <input
@@ -1292,7 +1299,7 @@ export function AITutor({ breakpoint, segments, isLoading: externalLoading, onRe
                   onChange={(e) => setEnableThinkingGuide(e.target.checked)}
                   className="w-4 h-4 rounded border-gray-300 text-violet-500 focus:ring-violet-400"
                 />
-                <span className="group-hover:text-gray-900 transition-colors">🧠 思维引导</span>
+                <span className="group-hover:text-gray-900 transition-colors">{t('aiTutor.thinkingGuide')}</span>
               </label>
               {response?.usage && (
                 <span className="text-xs text-gray-400">
@@ -1312,9 +1319,9 @@ export function AITutor({ breakpoint, segments, isLoading: externalLoading, onRe
                     explainBreakpoint();
                   }}
                   className="px-2 py-1 text-xs text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded transition-colors"
-                  title="重新生成"
+                  title={t('aiTutor.regenerate')}
                 >
-                  🔄 刷新
+                  🔄 {t('common.refresh')}
                 </button>
               )}
               <ModelSelector 
@@ -1327,7 +1334,7 @@ export function AITutor({ breakpoint, segments, isLoading: externalLoading, onRe
                   onClick={onResolve}
                   className="btn btn-primary px-3 py-1.5 text-sm"
                 >
-                  ✓ 我懂了
+                  {t('aiTutor.iUnderstand')}
                 </button>
               )}
             </div>
@@ -1422,7 +1429,7 @@ export function AITutor({ breakpoint, segments, isLoading: externalLoading, onRe
             </Section>
 
             {/* 引导问题 - 选择题模式定位困惑点 */}
-            <Section icon="🎯" title="帮我定位你的困惑" badge="精准诊断">
+            <Section icon="🎯" title={t('aiTutor.locateConfusion')} badge={t('aiTutor.preciseDiagnosis')}>
               {isLoading ? (
                 <GuidanceQuestionSkeleton />
               ) : response.guidance_question ? (
@@ -1435,15 +1442,15 @@ export function AITutor({ breakpoint, segments, isLoading: externalLoading, onRe
                 />
               ) : (
                 <div className="bg-gray-50 rounded-xl p-4 text-center text-sm text-gray-500">
-                  <p>引导问题生成中...</p>
-                  <p className="text-xs mt-1 text-gray-400">正在分析录音内容</p>
+                  <p>{t('aiTutor.generatingGuidance')}</p>
+                  <p className="text-xs mt-1 text-gray-400">{t('aiTutor.analyzingRecording')}</p>
                 </div>
               )}
             </Section>
 
             {/* 联网搜索结果 */}
             {enableWeb && response.citations && response.citations.length > 0 && (
-              <Section icon="🌐" title="联网搜索结果" badge="实时检索">
+              <Section icon="🌐" title={t('aiTutor.webSearchResults')} badge={t('aiTutor.realtimeSearch')}>
                 <Citations citations={response.citations} />
               </Section>
             )}
@@ -1573,7 +1580,7 @@ export function AITutor({ breakpoint, segments, isLoading: externalLoading, onRe
                         <span></span>
                         <span></span>
                       </div>
-                      <span className="text-xs">思考中...</span>
+                      <span className="text-xs">{t('aiTutor.thinking')}</span>
                     </div>
                   </div>
                 )}
@@ -1618,7 +1625,7 @@ export function AITutor({ breakpoint, segments, isLoading: externalLoading, onRe
             value={userInput}
             onChange={(e) => setUserInput(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && !isBreakpointStreaming && handleSend()}
-            placeholder="告诉我你哪里不懂..."
+            placeholder={t('aiTutor.inputPlaceholder')}
             className="input flex-1"
             disabled={isBreakpointStreaming}
           />
@@ -1635,7 +1642,7 @@ export function AITutor({ breakpoint, segments, isLoading: externalLoading, onRe
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                 </svg>
-                停止
+                {t('common.stop')}
               </span>
             </button>
           ) : (
@@ -1644,16 +1651,16 @@ export function AITutor({ breakpoint, segments, isLoading: externalLoading, onRe
               disabled={(!userInput.trim() && uploadedImages.length === 0) || loading}
               className="btn btn-primary px-6 disabled:opacity-50 flex-shrink-0"
             >
-              发送
+              {t('common.send')}
             </button>
           )}
         </div>
-        
+
         <div className="flex gap-2 mt-2 flex-wrap">
-          <QuickReply text="我不理解这个公式" onClick={setUserInput} />
-          <QuickReply text="能举个例子吗？" onClick={setUserInput} />
-          <QuickReply text="这个和之前学的有什么关系？" onClick={setUserInput} />
-          <QuickReply text="我懂了！" onClick={setUserInput} />
+          <QuickReply text={t('aiTutor.quickReply4')} onClick={setUserInput} />
+          <QuickReply text={t('aiTutor.quickReply5')} onClick={setUserInput} />
+          <QuickReply text={t('aiTutor.quickReply6')} onClick={setUserInput} />
+          <QuickReply text={t('aiTutor.quickReply7')} onClick={setUserInput} />
         </div>
       </div>
     </div>

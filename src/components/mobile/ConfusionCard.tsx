@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
+import { useTranslations } from 'next-intl';
 import { cn } from '@/lib/utils';
 import { VoiceMicButton } from '@/components/VoiceMicButton';
 
@@ -37,6 +38,7 @@ export function ConfusionCard({
   onSeek,
   className,
 }: ConfusionCardProps) {
+  const t = useTranslations('aiTutor');
   const [question, setQuestion] = useState('');
 
   if (!isOpen || !confusion) return null;
@@ -154,11 +156,7 @@ export function ConfusionCard({
             <div className="mb-4">
               <p className="text-xs text-slate-500 mb-2">快捷提问</p>
               <div className="flex flex-wrap gap-2">
-                {[
-                  '详细解释一下',
-                  '举个例子',
-                  '这个重要吗？',
-                ].map((q) => (
+                {[t('quickQuestions.explain'), t('quickQuestions.example'), t('quickQuestions.important')].map((q) => (
                   <button
                     key={q}
                     onClick={() => onAskAI(q)}

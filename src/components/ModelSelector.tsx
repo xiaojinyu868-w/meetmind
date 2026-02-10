@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useTranslations } from 'next-intl';
 
 interface ModelConfig {
   id: string;
@@ -20,6 +21,7 @@ interface ModelSelectorProps {
 }
 
 export function ModelSelector({ value, onChange, onMultimodalChange, className = '', compact = false }: ModelSelectorProps) {
+  const t = useTranslations();
   const [models, setModels] = useState<ModelConfig[]>([]);
   const [isOpen, setIsOpen] = useState(false);
 
@@ -61,6 +63,15 @@ export function ModelSelector({ value, onChange, onMultimodalChange, className =
     }
   };
 
+  const getProviderName = (provider: string) => {
+    switch (provider) {
+      case 'qwen': return t('modelSelector.qwen');
+      case 'gemini': return t('modelSelector.gemini');
+      case 'openai': return t('modelSelector.openai');
+      default: return provider;
+    }
+  };
+
   const handleModelChange = (modelId: string) => {
     onChange(modelId);
     const model = models.find(m => m.id === modelId);
@@ -79,9 +90,9 @@ export function ModelSelector({ value, onChange, onMultimodalChange, className =
         }`}
       >
         <span className={compact ? 'text-sm' : ''}>{getProviderIcon(selectedModel?.provider || 'qwen')}</span>
-        <span className="font-medium">{compact ? (selectedModel?.name?.split(' ')[0] || '模型') : (selectedModel?.name || '选择模型')}</span>
+        <span className="font-medium">{compact ? (selectedModel?.name?.split(' ')[0] || t('modelSelector.short')) : (selectedModel?.name || t('modelSelector.default'))}</span>
         {!compact && selectedModel?.supportsMultimodal && (
-          <span className="text-xs px-1 py-0.5 bg-blue-100 text-blue-600 rounded" title="支持图片">
+          <span className="text-xs px-1 py-0.5 bg-blue-100 text-blue-600 rounded" title={t('modelSelector.supportsImage')}>
             📷
           </span>
         )}
@@ -103,7 +114,7 @@ export function ModelSelector({ value, onChange, onMultimodalChange, className =
           />
           <div className="absolute top-full left-0 mt-1 w-80 bg-white border border-gray-200 rounded-lg shadow-lg z-20 overflow-hidden">
             <div className="p-2 border-b border-gray-100">
-              <p className="text-xs text-gray-500 px-2">选择 AI 模型</p>
+              <p className="text-xs text-gray-500 px-2">{t('modelSelector.title')}</p>
             </div>
             <div className="max-h-80 overflow-y-auto">
               {/* 按提供商分组 - 目前只启用通义千问 */}
@@ -114,7 +125,7 @@ export function ModelSelector({ value, onChange, onMultimodalChange, className =
                 return (
                   <div key={provider} className="p-2">
                     <p className="text-xs text-gray-400 px-2 mb-1 uppercase">
-                      {provider === 'qwen' ? '通义千问' : provider === 'gemini' ? 'Google Gemini' : 'OpenAI'}
+                      {getProviderName(provider)}
                     </p>
                     {providerModels.map(model => (
                       <button
@@ -132,12 +143,12 @@ export function ModelSelector({ value, onChange, onMultimodalChange, className =
                             <span className="font-medium text-sm">{model.name}</span>
                             {model.recommended && (
                               <span className="text-xs px-1.5 py-0.5 bg-amber-100 text-amber-700 rounded">
-                                推荐
+                                {t('modelSelector.recommended')}
                               </span>
                             )}
                             {model.supportsMultimodal && (
-                              <span className="text-xs px-1.5 py-0.5 bg-blue-100 text-blue-600 rounded" title="支持图片上传">
-                                📷 多模态
+                              <span className="text-xs px-1.5 py-0.5 bg-blue-100 text-blue-600 rounded" title={t('modelSelector.supportsImage')}>
+                                {t('modelSelector.multimodal')}
                               </span>
                             )}
                           </div>

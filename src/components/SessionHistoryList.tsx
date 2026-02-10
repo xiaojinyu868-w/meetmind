@@ -7,8 +7,9 @@
  */
 
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { useTranslations } from 'next-intl';
 import { formatDistanceToNow } from 'date-fns';
-import { zhCN } from 'date-fns/locale';
+import { zhCN, enUS, type Locale } from 'date-fns/locale';
 import { getAllSessions, deleteSession, updateSessionTopic, ANONYMOUS_USER_ID, type AudioSession } from '@/lib/db';
 import { cn } from '@/lib/utils';
 
@@ -43,8 +44,8 @@ function ConfirmDialog({
   isOpen,
   title,
   message,
-  confirmText = '确定',
-  cancelText = '取消',
+  confirmText,
+  cancelText,
   onConfirm,
   onCancel,
   variant = 'danger',
@@ -109,11 +110,19 @@ function ConfirmDialog({
 function RenameInput({
   isOpen,
   currentName,
+  confirmText,
+  cancelText,
+  placeholder,
+  title,
   onConfirm,
   onCancel,
 }: {
   isOpen: boolean;
   currentName: string;
+  confirmText?: string;
+  cancelText?: string;
+  placeholder?: string;
+  title?: string;
   onConfirm: (newName: string) => void;
   onCancel: () => void;
 }) {
@@ -146,7 +155,7 @@ function RenameInput({
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
             </svg>
           </div>
-          <h3 className="text-lg font-semibold text-gray-900">重命名录音</h3>
+          <h3 className="text-lg font-semibold text-gray-900">{title}</h3>
         </div>
         
         <form onSubmit={handleSubmit}>
@@ -156,7 +165,7 @@ function RenameInput({
             value={value}
             onChange={(e) => setValue(e.target.value)}
             className="w-full px-4 py-3 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-amber-500/50 focus:border-amber-500 mb-4"
-            placeholder="输入新名称"
+            placeholder={placeholder}
           />
           <div className="flex gap-3">
             <button
@@ -164,14 +173,14 @@ function RenameInput({
               onClick={onCancel}
               className="flex-1 px-4 py-2.5 text-sm font-medium text-gray-700 bg-gray-100 rounded-xl hover:bg-gray-200 transition-colors"
             >
-              取消
+              {cancelText}
             </button>
             <button
               type="submit"
               disabled={!value.trim()}
               className="flex-1 px-4 py-2.5 text-sm font-medium text-white bg-amber-600 rounded-xl hover:bg-amber-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              确定
+              {confirmText}
             </button>
           </div>
         </form>
@@ -184,24 +193,36 @@ function RenameInput({
 function SessionItem({
   session,
   isActive,
+  locale,
+  videoLabel,
+  audioLabel,
+  completedLabel,
+  renameTitle,
+  deleteTitle,
   onSelect,
   onRename,
   onDelete,
 }: {
   session: AudioSession;
   isActive: boolean;
+  locale: Locale;
+  videoLabel: string;
+  audioLabel: string;
+  completedLabel: string;
+  renameTitle: string;
+  deleteTitle: string;
   onSelect: () => void;
   onRename: () => void;
   onDelete: () => void;
 }) {
   const timeAgo = formatDistanceToNow(new Date(session.createdAt), {
     addSuffix: true,
-    locale: zhCN,
+    locale: locale,
   });
 
   // 生成标题：优先使用 topic，否则使用日期
   const title = session.topic || session.subject || 
-    new Date(session.createdAt).toLocaleDateString('zh-CN', {
+    new Date(session.createdAt).toLocaleDateString(locale === zhCN ? 'zh-CN' : 'en-US', {
       month: 'long',
       day: 'numeric',
       hour: '2-digit',
@@ -224,7 +245,7 @@ function SessionItem({
           {/* 标题 */}
           <div className="flex items-center gap-2">
             <span className="inline-flex rounded-md bg-gray-100 px-1.5 py-0.5 text-[10px] font-semibold text-gray-600">
-              {isVideoSession ? 'VIDEO' : 'AUDIO'}
+              {isVideoSession ? videoLabel : audioLabel}
             </span>
             <h4 className={cn(
               'text-sm font-medium truncate',
@@ -254,7 +275,7 @@ function SessionItem({
         <div className="flex items-center gap-1">
           {session.status === 'completed' && (
             <span className="px-1.5 py-0.5 text-[10px] font-medium bg-green-100 text-green-700 rounded mr-1">
-              已完成
+              {completedLabel}
             </span>
           )}
           
@@ -269,7 +290,7 @@ function SessionItem({
               'opacity-0 group-hover:opacity-100',
               'text-gray-400 hover:text-amber-600 hover:bg-amber-50'
             )}
-            title="重命名"
+            title={renameTitle}
           >
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
@@ -287,7 +308,7 @@ function SessionItem({
               'opacity-0 group-hover:opacity-100',
               'text-gray-400 hover:text-red-500 hover:bg-red-50'
             )}
-            title="删除记录"
+            title={deleteTitle}
           >
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
@@ -308,6 +329,7 @@ export function SessionHistoryList({
   showHeader = true,
   className,
 }: SessionHistoryListProps) {
+  const t = useTranslations();
   const [sessions, setSessions] = useState<AudioSession[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -326,11 +348,11 @@ export function SessionHistoryList({
       setSessions(data);
     } catch (err) {
       console.error('加载会话历史失败:', err);
-      setError('加载失败，请重试');
+      setError(t('sessionHistory.loadingError'));
     } finally {
       setIsLoading(false);
     }
-  }, [userId]);
+  }, [userId, t]);
 
   useEffect(() => {
     loadSessions();
@@ -345,9 +367,9 @@ export function SessionHistoryList({
       setDeleteTarget(null);
     } catch (err) {
       console.error('删除会话失败:', err);
-      alert('删除失败，请重试');
+      alert(t('common.actionFailed'));
     }
-  }, [deleteTarget]);
+  }, [deleteTarget, t]);
 
   // 重命名会话
   const handleRename = useCallback(async (newName: string) => {
@@ -362,16 +384,19 @@ export function SessionHistoryList({
       setRenameTarget(null);
     } catch (err) {
       console.error('重命名会话失败:', err);
-      alert('重命名失败，请重试');
+      alert(t('common.actionFailed'));
     }
-  }, [renameTarget]);
+  }, [renameTarget, t]);
+
+  // 根据语言选择 date-fns locale
+  const dateLocale = typeof window !== 'undefined' && document.documentElement.lang === 'zh-CN' ? zhCN : enUS;
 
   return (
     <div className={cn('flex flex-col h-full', className)}>
       {/* 头部 - 可选显示 */}
       {showHeader && (
         <div className="p-3 border-b border-gray-100 flex items-center justify-between">
-          <h3 className="text-sm font-semibold text-gray-900">录音历史</h3>
+          <h3 className="text-sm font-semibold text-gray-900">{t('sessionHistory.title')}</h3>
           {onClose && (
             <button
               onClick={onClose}
@@ -405,14 +430,14 @@ export function SessionHistoryList({
               onClick={loadSessions}
               className="text-sm text-amber-600 hover:text-amber-700"
             >
-              重试
+              {t('sessionHistory.retry')}
             </button>
           </div>
         ) : sessions.length === 0 ? (
           <div className="text-center py-8">
             <div className="text-3xl mb-2">🎙️</div>
-            <p className="text-sm text-gray-500">暂无录音记录</p>
-            <p className="text-xs text-gray-400 mt-1">录音或上传音频后会自动保存</p>
+            <p className="text-sm text-gray-500">{t('sessionHistory.emptyTitle')}</p>
+            <p className="text-xs text-gray-400 mt-1">{t('sessionHistory.emptyDesc')}</p>
           </div>
         ) : (
           <div className="space-y-1">
@@ -421,6 +446,12 @@ export function SessionHistoryList({
                 key={session.sessionId}
                 session={session}
                 isActive={session.sessionId === activeSessionId}
+                locale={dateLocale}
+                videoLabel={t('sessionHistory.videoLabel')}
+                audioLabel={t('sessionHistory.audioLabel')}
+                completedLabel={t('sessionHistory.completed')}
+                renameTitle={t('sessionHistory.rename')}
+                deleteTitle={t('sessionHistory.delete')}
                 onSelect={() => onSessionSelect(session)}
                 onRename={() => setRenameTarget(session)}
                 onDelete={() => setDeleteTarget(session)}
@@ -434,7 +465,7 @@ export function SessionHistoryList({
       {!isLoading && sessions.length > 0 && (
         <div className="p-2 border-t border-gray-100 text-center">
           <span className="text-xs text-gray-400">
-            共 {sessions.length} 条录音记录
+            {t('sessionHistory.totalCount', { count: sessions.length })}
           </span>
         </div>
       )}
@@ -442,10 +473,10 @@ export function SessionHistoryList({
       {/* 删除确认弹窗 */}
       <ConfirmDialog
         isOpen={!!deleteTarget}
-        title="删除录音记录"
-        message="确定要删除这条录音记录吗？相关的转录、笔记等数据也会被删除，此操作无法撤销。"
-        confirmText="删除"
-        cancelText="取消"
+        title={t('sessionHistory.deleteTitle')}
+        message={t('sessionHistory.deleteConfirm')}
+        confirmText={t('common.delete')}
+        cancelText={t('common.cancel')}
         onConfirm={handleDelete}
         onCancel={() => setDeleteTarget(null)}
         variant="danger"
@@ -455,6 +486,10 @@ export function SessionHistoryList({
       <RenameInput
         isOpen={!!renameTarget}
         currentName={renameTarget?.topic || renameTarget?.subject || ''}
+        title={t('sessionHistory.renameTitle')}
+        placeholder={t('sessionHistory.newNamePlaceholder')}
+        confirmText={t('sessionHistory.confirm')}
+        cancelText={t('sessionHistory.cancel')}
         onConfirm={handleRename}
         onCancel={() => setRenameTarget(null)}
       />

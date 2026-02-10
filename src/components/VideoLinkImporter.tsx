@@ -1,6 +1,7 @@
 'use client';
 
 import { useMemo, useState } from 'react';
+import { useTranslations } from 'next-intl';
 import type {
   ImportedVideoResult,
   ImportedVideoSource,
@@ -41,26 +42,30 @@ interface ImportApiResponse {
   sentences?: RawSegmentLike[];
 }
 
-const ERROR_MESSAGE_MAP: Record<string, string> = {
-  MISSING_VIDEO_URL: '请先输入视频链接。',
-  INVALID_VIDEO_URL: '链接格式无法识别，请检查后重试。',
-  VIDEO_URL_UNSAFE: '该链接暂不支持导入。',
-  BILI_URL_PARSE_FAILED: '无法解析 B站链接，请确认链接可访问。',
-  BILI_PLAYURL_FAILED: '未能获取视频音频流，请稍后重试。',
-  BILI_COOKIE_EXPIRED: 'B站登录状态已过期，请联系管理员更新 Cookie 后重试。',
-  BILI_AUDIO_DOWNLOAD_FORBIDDEN: '当前视频受平台限制，暂时无法直接导入。',
-  YTDLP_UNAVAILABLE: '服务端导入能力暂不可用，请稍后重试。',
-  FFMPEG_NOT_FOUND: '服务端音频处理组件未就绪，请联系管理员。',
-  DIRECT_MEDIA_TIMEOUT: '直链媒体下载超时，请稍后重试。',
-  DIRECT_MEDIA_TOO_LARGE: '直链媒体文件过大，请更换较短视频或音频源。',
-  ASR_TRANSCRIBE_FAILED: '视频已解析，但转写失败，请稍后重试。',
-};
+function useErrorMessageMap(t: ReturnType<typeof useTranslations>): Record<string, string> {
+  return {
+    MISSING_VIDEO_URL: t('videoImporter.errors.missingUrl'),
+    INVALID_VIDEO_URL: t('videoImporter.errors.invalidUrl'),
+    VIDEO_URL_UNSAFE: t('videoImporter.errors.unsafeUrl'),
+    BILI_URL_PARSE_FAILED: t('videoImporter.errors.biliParseFailed'),
+    BILI_PLAYURL_FAILED: t('videoImporter.errors.biliPlayUrlFailed'),
+    BILI_COOKIE_EXPIRED: t('videoImporter.errors.biliCookieExpired'),
+    BILI_AUDIO_DOWNLOAD_FORBIDDEN: t('videoImporter.errors.biliAudioForbidden'),
+    YTDLP_UNAVAILABLE: t('videoImporter.errors.ytdlpUnavailable'),
+    FFMPEG_NOT_FOUND: t('videoImporter.errors.ffmpegNotFound'),
+    DIRECT_MEDIA_TIMEOUT: t('videoImporter.errors.directMediaTimeout'),
+    DIRECT_MEDIA_TOO_LARGE: t('videoImporter.errors.directMediaTooLarge'),
+    ASR_TRANSCRIBE_FAILED: t('videoImporter.errors.asrFailed'),
+  };
+}
 
-const MODE_HELP_TEXT: Record<TranscribeMode, string> = {
-  turbo: '极速模式：优先走 Turbo 转写，速度最快；失败会自动回退到快速/标准。',
-  fast: '快速模式：优先走并行分段转写，适合长视频；失败会自动回退到其它模式。',
-  standard: '标准模式：优先走标准异步转写，稳定性更高；失败会自动回退到快速/极速。',
-};
+function useModeHelpText(t: ReturnType<typeof useTranslations>): Record<TranscribeMode, string> {
+  return {
+    turbo: t('videoImporter.turboHelp'),
+    fast: t('videoImporter.fastHelp'),
+    standard: t('videoImporter.standardHelp'),
+  };
+}
 
 function mapSegments(data: Pick<ImportApiResponse, 'segments' | 'sentences'>): TranscriptSegment[] {
   const rawList = data.segments || data.sentences || [];
@@ -84,17 +89,17 @@ function formatDuration(durationSec?: number): string | null {
   return `${minutes}:${seconds.toString().padStart(2, '0')}`;
 }
 
-function mapImportError(code?: string, fallback?: string): string {
-  if (code && ERROR_MESSAGE_MAP[code]) {
-    return ERROR_MESSAGE_MAP[code];
+function mapImportError(code: string | undefined, fallback: string | undefined, errorMap: Record<string, string>, t: ReturnType<typeof useTranslations>): string {
+  if (code && errorMap[code]) {
+    return errorMap[code];
   }
 
   const normalized = (fallback || '').toLowerCase();
   if (normalized.includes('未授权') || normalized.includes('unauthorized') || normalized.includes('401')) {
-    return '登录状态已失效，请刷新页面后重试。';
+    return t('videoImporter.errors.unauthorized');
   }
 
-  return fallback || '视频导入失败，请稍后再试。';
+  return fallback || t('videoImporter.errors.default');
 }
 
 function pickPrimaryErrorCode(data: ImportApiResponse): string | undefined {
@@ -123,6 +128,7 @@ function pickPrimaryErrorCode(data: ImportApiResponse): string | undefined {
 }
 
 export function VideoLinkImporter({ onImportReady, onError, disabled }: VideoLinkImporterProps) {
+  const t = useTranslations();
   const [url, setUrl] = useState('');
   const [mode, setMode] = useState<TranscribeMode>('turbo');
   const [status, setStatus] = useState<ImportStatus>('idle');
@@ -130,6 +136,8 @@ export function VideoLinkImporter({ onImportReady, onError, disabled }: VideoLin
   const [processingMessage, setProcessingMessage] = useState('');
   const [lastSource, setLastSource] = useState<ImportedVideoSource | null>(null);
 
+  const errorMap = useErrorMessageMap(t);
+  const modeHelpText = useModeHelpText(t);
   const parsedPreview = useMemo(() => parseVideoLink(url), [url]);
 
   async function handleImport() {
@@ -137,7 +145,7 @@ export function VideoLinkImporter({ onImportReady, onError, disabled }: VideoLin
 
     const trimmed = url.trim();
     if (!trimmed) {
-      const message = '请先输入视频链接。';
+      const message = t('videoImporter.errors.missingUrl');
       setStatus('error');
       setErrorMessage(message);
       onError?.(message);
@@ -146,11 +154,11 @@ export function VideoLinkImporter({ onImportReady, onError, disabled }: VideoLin
 
     setStatus('processing');
     setErrorMessage('');
-    setProcessingMessage('正在解析视频...');
+    setProcessingMessage(t('videoImporter.parsing'));
 
     const timers: NodeJS.Timeout[] = [];
-    timers.push(setTimeout(() => setProcessingMessage('正在提取音频...'), 800));
-    timers.push(setTimeout(() => setProcessingMessage('正在转写...'), 2200));
+    timers.push(setTimeout(() => setProcessingMessage(t('videoImporter.extracting')), 800));
+    timers.push(setTimeout(() => setProcessingMessage(t('videoImporter.transcribing')), 2200));
 
     try {
       const response = await fetch('/api/video/import', {
@@ -164,7 +172,7 @@ export function VideoLinkImporter({ onImportReady, onError, disabled }: VideoLin
 
       if (!response.ok || !data?.success) {
         const primaryCode = pickPrimaryErrorCode(data);
-        const message = mapImportError(primaryCode, data?.error || `请求失败 (${response.status})`);
+        const message = mapImportError(primaryCode, data?.error || `请求失败 (${response.status})`, errorMap, t);
         throw new Error(message);
       }
 
@@ -189,7 +197,7 @@ export function VideoLinkImporter({ onImportReady, onError, disabled }: VideoLin
         importTrace: trace,
       };
 
-      setProcessingMessage('导入完成');
+      setProcessingMessage(t('common.completed'));
       setLastSource(source);
       setStatus('success');
 
@@ -200,7 +208,7 @@ export function VideoLinkImporter({ onImportReady, onError, disabled }: VideoLin
         trace,
       });
     } catch (error) {
-      const message = error instanceof Error ? error.message : '视频导入失败，请稍后再试。';
+      const message = error instanceof Error ? error.message : t('videoImporter.errors.default');
       setStatus('error');
       setErrorMessage(message);
       onError?.(message);
@@ -212,12 +220,12 @@ export function VideoLinkImporter({ onImportReady, onError, disabled }: VideoLin
   return (
     <div className="space-y-4">
       <div className="space-y-2">
-        <label className="text-sm font-medium text-gray-700">视频链接</label>
+        <label className="text-sm font-medium text-gray-700">{t('videoImporter.label')}</label>
         <input
           type="url"
           value={url}
           onChange={(event) => setUrl(event.target.value)}
-          placeholder="粘贴 B站、YouTube、抖音或媒体直链"
+          placeholder={t('videoImporter.placeholder')}
           className="w-full rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm text-gray-900 outline-none transition focus:border-amber-400 focus:ring-2 focus:ring-amber-100"
           disabled={disabled || status === 'processing'}
         />
@@ -232,7 +240,7 @@ export function VideoLinkImporter({ onImportReady, onError, disabled }: VideoLin
             onChange={() => setMode('turbo')}
             disabled={disabled || status === 'processing'}
           />
-          <span className="font-medium text-green-700">极速模式（推荐）</span>
+          <span className="font-medium text-green-700">{t('videoImporter.turboLabel')}</span>
         </label>
         <label className="flex items-center gap-2">
           <input
@@ -242,7 +250,7 @@ export function VideoLinkImporter({ onImportReady, onError, disabled }: VideoLin
             onChange={() => setMode('fast')}
             disabled={disabled || status === 'processing'}
           />
-          <span className="text-gray-700">快速模式</span>
+          <span className="text-gray-700">{t('videoImporter.fastLabel')}</span>
         </label>
         <label className="flex items-center gap-2">
           <input
@@ -252,22 +260,22 @@ export function VideoLinkImporter({ onImportReady, onError, disabled }: VideoLin
             onChange={() => setMode('standard')}
             disabled={disabled || status === 'processing'}
           />
-          <span className="text-gray-700">标准模式</span>
+          <span className="text-gray-700">{t('videoImporter.standardLabel')}</span>
         </label>
       </div>
 
       <div className="rounded-xl border border-gray-100 bg-gray-50 px-3 py-2 text-xs text-gray-700">
-        {MODE_HELP_TEXT[mode]}
+        {modeHelpText[mode]}
       </div>
 
       {parsedPreview && (
         <div className="rounded-xl border border-gray-100 bg-gray-50 px-3 py-2 text-xs text-gray-600">
-          识别平台: {parsedPreview.providerLabel}
+          {t('videoImporter.platformDetected', { platform: parsedPreview.providerLabel })}
         </div>
       )}
 
       <div className="text-xs text-gray-500">
-        说明：三种模式只决定“优先策略”，导入链路会自动回退，不需要你手动反复切换。
+        {t('videoImporter.modeNote')}
       </div>
 
       <button
@@ -276,7 +284,7 @@ export function VideoLinkImporter({ onImportReady, onError, disabled }: VideoLin
         disabled={disabled || status === 'processing'}
         className="w-full rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 px-4 py-3 text-sm font-medium text-white shadow-sm transition hover:from-amber-600 hover:to-orange-600 disabled:cursor-not-allowed disabled:opacity-60"
       >
-        {status === 'processing' ? '处理中...' : '导入并转写'}
+        {status === 'processing' ? t('videoImporter.processing') : t('videoImporter.import')}
       </button>
 
       {status === 'processing' && (
@@ -293,8 +301,8 @@ export function VideoLinkImporter({ onImportReady, onError, disabled }: VideoLin
 
       {status === 'success' && lastSource && (
         <div className="rounded-xl border border-green-100 bg-green-50 px-3 py-2 text-sm text-green-700">
-          已导入: {lastSource.title || lastSource.providerLabel}
-          {formatDuration(lastSource.durationSec) ? ` | 时长 ${formatDuration(lastSource.durationSec)}` : ''}
+          {t('videoImporter.imported', { title: lastSource.title || lastSource.providerLabel })}
+          {formatDuration(lastSource.durationSec) ? ` | ${t('videoImporter.duration', { duration: formatDuration(lastSource.durationSec)! })}` : ''}
         </div>
       )}
     </div>

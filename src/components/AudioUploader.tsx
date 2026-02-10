@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useRef, useCallback, useEffect } from 'react';
+import { useTranslations } from 'next-intl';
 import type { TranscriptSegment } from '@/types';
 
 interface AudioUploaderProps {
@@ -32,6 +33,7 @@ function useIsMobile() {
 }
 
 export function AudioUploader({ onTranscriptReady, onError, disabled }: AudioUploaderProps) {
+  const t = useTranslations();
   const [status, setStatus] = useState<UploadStatus>('idle');
   const [progress, setProgress] = useState(0);
   const [errorMessage, setErrorMessage] = useState('');
@@ -47,7 +49,7 @@ export function AudioUploader({ onTranscriptReady, onError, disabled }: AudioUpl
     // 验证文件类型
     const validTypes = ['audio/mp3', 'audio/mpeg', 'audio/wav', 'audio/webm', 'audio/ogg', 'audio/m4a', 'audio/x-m4a'];
     if (!validTypes.includes(file.type) && !file.name.match(/\.(mp3|wav|webm|ogg|m4a)$/i)) {
-      const error = '不支持的文件格式，请上传 MP3、WAV、WebM、OGG 或 M4A 文件';
+      const error = t('uploader.error.unsupportedFormat');
       setErrorMessage(error);
       setStatus('error');
       onError?.(error);
@@ -57,7 +59,7 @@ export function AudioUploader({ onTranscriptReady, onError, disabled }: AudioUpl
     // 验证文件大小（最大 500MB for turbo/fast mode）
     const maxSize = transcribeMode === 'standard' ? 100 * 1024 * 1024 : 500 * 1024 * 1024;
     if (file.size > maxSize) {
-      const error = `文件过大，最大支持 ${maxSize / 1024 / 1024}MB`;
+      const error = t('uploader.error.fileTooLarge', { size: Math.round(maxSize / 1024 / 1024) });
       setErrorMessage(error);
       setStatus('error');
       onError?.(error);
@@ -98,10 +100,10 @@ export function AudioUploader({ onTranscriptReady, onError, disabled }: AudioUpl
       const progressRange = endProgress - startProgress;
       
       setProcessingInfo(transcribeMode === 'turbo'
-        ? '极速同步转录中...' 
-        : transcribeMode === 'fast' 
-          ? '音频切分中...' 
-          : '转录处理中...'
+        ? t('uploader.processing.turbo')
+        : transcribeMode === 'fast'
+          ? t('uploader.processing.splitting')
+          : t('uploader.processing.standard')
       );
 
       // 基于预估时间的平滑进度更新
@@ -115,16 +117,16 @@ export function AudioUploader({ onTranscriptReady, onError, disabled }: AudioUpl
         
         // 更新阶段提示
         if (elapsed < 5000) {
-          setProcessingInfo(transcribeMode === 'turbo' 
-            ? '极速同步转录中...'
-            : transcribeMode === 'fast' ? '音频切分中...' : '上传处理中...');
+          setProcessingInfo(transcribeMode === 'turbo'
+            ? t('uploader.processing.turbo')
+            : transcribeMode === 'fast' ? t('uploader.processing.splitting') : t('uploader.progress.uploading'));
         } else if (elapsed < 15000) {
           setProcessingInfo(transcribeMode === 'turbo'
-            ? '同步转录处理中...'
-            : transcribeMode === 'fast' ? '并行转录任务已提交...' : '转录处理中...');
+            ? t('uploader.progress.turboSync')
+            : transcribeMode === 'fast' ? t('uploader.progress.fastParallel') : t('uploader.processing.standard'));
         } else {
           const remainingSec = Math.max(0, Math.ceil((estimatedDurationMs - elapsed) / 1000));
-          setProcessingInfo(`转录进行中，预计还需 ${remainingSec} 秒...`);
+          setProcessingInfo(t('uploader.progress.remaining', { time: remainingSec }));
         }
       }, 500);
 
@@ -139,7 +141,7 @@ export function AudioUploader({ onTranscriptReady, onError, disabled }: AudioUpl
       const data = await response.json();
 
       if (!data.success) {
-        throw new Error(data.error || '转录失败');
+        throw new Error(data.error || t('uploader.error.title'));
       }
 
       // 转换为 TranscriptSegment 格式
@@ -159,19 +161,19 @@ export function AudioUploader({ onTranscriptReady, onError, disabled }: AudioUpl
       // 计算处理时间
       const elapsedSec = Math.floor((Date.now() - startTimeRef.current) / 1000);
       const audioDurationMin = data.totalDuration ? (data.totalDuration / 1000 / 60).toFixed(1) : '?';
-      setProcessingInfo(`${audioDurationMin}分钟音频，${elapsedSec}秒完成`);
+      setProcessingInfo(t('uploader.success.stats', { duration: audioDurationMin, time: elapsedSec }));
 
       setStatus('success');
       setProgress(100);
       onTranscriptReady(segments, audioBlob);
 
     } catch (error) {
-      const message = error instanceof Error ? error.message : '上传或转录失败';
+      const message = error instanceof Error ? error.message : t('uploader.error.title');
       setErrorMessage(message);
       setStatus('error');
       onError?.(message);
     }
-  }, [onTranscriptReady, onError, transcribeMode]);
+  }, [onTranscriptReady, onError, transcribeMode, t]);
 
   const handleDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -239,8 +241,8 @@ export function AudioUploader({ onTranscriptReady, onError, disabled }: AudioUpl
                 onChange={() => setTranscribeMode('turbo')}
                 className="w-4 h-4 text-green-500"
               />
-              <span className="font-medium text-green-700">极速模式</span>
-              {!isMobile && <span className="text-xs text-green-500">（同步调用，最快）</span>}
+              <span className="font-medium text-green-700">{t('uploader.mode.turbo')}</span>
+              {!isMobile && <span className="text-xs text-green-500">{t('uploader.mode.turboDesc')}</span>}
             </label>
             <label className="flex items-center gap-2 cursor-pointer">
               <input
@@ -250,8 +252,8 @@ export function AudioUploader({ onTranscriptReady, onError, disabled }: AudioUpl
                 onChange={() => setTranscribeMode('fast')}
                 className="w-4 h-4 text-blue-500"
               />
-              <span className="text-gray-700">快速模式</span>
-              {!isMobile && <span className="text-xs text-gray-400">（并行异步）</span>}
+              <span className="text-gray-700">{t('uploader.mode.fast')}</span>
+              {!isMobile && <span className="text-xs text-gray-400">{t('uploader.mode.fastDesc')}</span>}
             </label>
             <label className="flex items-center gap-2 cursor-pointer">
               <input
@@ -261,7 +263,7 @@ export function AudioUploader({ onTranscriptReady, onError, disabled }: AudioUpl
                 onChange={() => setTranscribeMode('standard')}
                 className="w-4 h-4 text-gray-500"
               />
-              <span className="text-gray-600">标准模式</span>
+              <span className="text-gray-600">{t('uploader.mode.standard')}</span>
             </label>
           </div>
           
@@ -294,19 +296,19 @@ export function AudioUploader({ onTranscriptReady, onError, disabled }: AudioUpl
               )}
             </div>
             <p className="text-gray-700 font-medium mb-1">
-              {isSelectingFile ? '正在选择文件...' : (isMobile ? '点击选择音频文件' : '点击或拖拽上传音频文件')}
+              {isSelectingFile ? t('uploader.idle.selecting') : (isMobile ? t('uploader.idle.mobile') : t('uploader.idle.desktop'))}
             </p>
             <p className="text-sm text-gray-500">
-              支持 MP3、WAV、M4A 等格式，最大 {transcribeMode === 'standard' ? '100' : '500'}MB
+              {t('uploader.idle.formats', { size: transcribeMode === 'standard' ? '100' : '500' })}
             </p>
             {transcribeMode === 'turbo' && !isMobile && (
               <p className="text-xs text-green-500 mt-2">
-                极速模式：18分钟音频约15秒完成（需配置域名）
+                {t('uploader.idle.turboHint')}
               </p>
             )}
             {transcribeMode === 'fast' && !isMobile && (
               <p className="text-xs text-blue-500 mt-2">
-                快速模式：50分钟音频约1分钟完成
+                {t('uploader.idle.fastHint')}
               </p>
             )}
             
@@ -327,14 +329,14 @@ export function AudioUploader({ onTranscriptReady, onError, disabled }: AudioUpl
                       <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                       <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                     </svg>
-                    <span>选择中...</span>
+                    <span>{t('uploader.mobile.selecting')}</span>
                   </>
                 ) : (
                   <>
                     <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
                     </svg>
-                    <span>选择并上传</span>
+                    <span>{t('uploader.mobile.upload')}</span>
                   </>
                 )}
               </button>
@@ -352,7 +354,7 @@ export function AudioUploader({ onTranscriptReady, onError, disabled }: AudioUpl
             <div>
               <p className="font-medium text-gray-900">{fileName}</p>
               <p className="text-sm text-blue-600">
-                {status === 'uploading' ? '正在上传...' : processingInfo || '正在转录，请稍候...'}
+                {status === 'uploading' ? t('uploader.progress.uploading') : processingInfo || t('uploader.progress.transcribing')}
               </p>
             </div>
           </div>
@@ -378,7 +380,7 @@ export function AudioUploader({ onTranscriptReady, onError, disabled }: AudioUpl
               <div>
                 <p className="font-medium text-gray-900">{fileName}</p>
                 <p className="text-sm text-green-600">
-                  转录完成！{processingInfo && <span className="text-gray-500 ml-1">({processingInfo})</span>}
+                  {t('uploader.success.complete')}{processingInfo && <span className="text-gray-500 ml-1">({processingInfo})</span>}
                 </p>
               </div>
             </div>
@@ -386,7 +388,7 @@ export function AudioUploader({ onTranscriptReady, onError, disabled }: AudioUpl
               onClick={handleReset}
               className="text-sm text-gray-500 hover:text-gray-700"
             >
-              上传新文件
+              {t('uploader.success.newFile')}
             </button>
           </div>
         </div>
@@ -402,7 +404,7 @@ export function AudioUploader({ onTranscriptReady, onError, disabled }: AudioUpl
                 </svg>
               </div>
               <div>
-                <p className="font-medium text-gray-900">上传失败</p>
+                <p className="font-medium text-gray-900">{t('uploader.error.title')}</p>
                 <p className="text-sm text-red-600">{errorMessage}</p>
               </div>
             </div>
@@ -410,7 +412,7 @@ export function AudioUploader({ onTranscriptReady, onError, disabled }: AudioUpl
               onClick={handleReset}
               className="text-sm text-blue-600 hover:text-blue-700 font-medium"
             >
-              重试
+              {t('uploader.retry')}
             </button>
           </div>
         </div>

@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useMemo, useState, useEffect, memo } from 'react';
+import { useTranslations } from 'next-intl';
 import { StreamingMarkdown } from './StreamingMarkdown';
 
 /**
@@ -281,7 +282,7 @@ const StructuredThinking = memo(function StructuredThinking({
             <span></span>
             <span></span>
           </div>
-          <span className={`${isMobile ? 'text-[10px]' : 'text-xs'}`}>继续思考中...</span>
+          <span className={`${isMobile ? 'text-[10px]' : 'text-xs'}`}>{t('thinkingContinue')}</span>
         </div>
       )}
     </div>
@@ -306,6 +307,7 @@ export const ThinkingVisualizer = memo(function ThinkingVisualizer({
   isMobile = false,
   className = '',
 }: ThinkingVisualizerProps) {
+  const t = useTranslations('aiTutor');
   const [elapsedTime, setElapsedTime] = useState<number>(0);
 
   // 计算思考耗时
