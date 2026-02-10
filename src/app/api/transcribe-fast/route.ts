@@ -40,6 +40,25 @@ function ensureUploadDir() {
   }
 }
 
+function cleanupOldFiles() {
+  try {
+    if (!fs.existsSync(UPLOAD_DIR)) return;
+    const files = fs.readdirSync(UPLOAD_DIR);
+    const now = Date.now();
+    const maxAge = 2 * 60 * 60 * 1000; // 2小时
+
+    for (const file of files) {
+      const filePath = path.join(UPLOAD_DIR, file);
+      try {
+        const stats = fs.statSync(filePath);
+        if (now - stats.mtimeMs > maxAge) {
+          fs.unlinkSync(filePath);
+        }
+      } catch { /* ignore */ }
+    }
+  } catch { /* ignore */ }
+}
+
 async function getAudioDuration(filePath: string, ffprobePath: string): Promise<number> {
   try {
     const result = await runCommand(
@@ -246,8 +265,13 @@ async function processParallelTasks(
     result.success && result.taskId ? result.taskId : null
   );
 
+  const submittedCount = taskIds.filter(Boolean).length;
+  console.log(`[transcribe-fast] submitted ${submittedCount}/${segmentPaths.length} async tasks`);
+
   if (taskIds.every((taskId) => taskId === null)) {
-    return { success: false, allSentences: [], error: 'all task submit failed' };
+    const firstError = submitResults.find((r) => r.error)?.error || 'unknown';
+    console.error(`[transcribe-fast] all task submits failed, first error: ${firstError}`);
+    return { success: false, allSentences: [], error: `all task submit failed: ${firstError}` };
   }
 
   const taskResults = await Promise.all(
@@ -276,6 +300,8 @@ async function processParallelTasks(
     timeOffset += segmentDurations[index] || 0;
   }
 
+  console.log(`[transcribe-fast] processParallelTasks result: ${allSentences.length} sentences from ${segmentPaths.length} segments`);
+
   return {
     success: allSentences.length > 0,
     allSentences,
@@ -286,6 +312,9 @@ async function processParallelTasks(
 export async function POST(request: NextRequest) {
   const rateLimitResponse = await applyRateLimit(request, 'transcribe');
   if (rateLimitResponse) return rateLimitResponse;
+
+  // 用于 finally 清理的临时文件集合
+  const tempFiles = new Set<string>();
 
   try {
     const apiKey = process.env.DASHSCOPE_API_KEY;
@@ -306,6 +335,7 @@ export async function POST(request: NextRequest) {
     }
 
     ensureUploadDir();
+    cleanupOldFiles();
 
     const formData = await request.formData();
     const audioFile = formData.get('audio') as File | null;
@@ -327,6 +357,7 @@ export async function POST(request: NextRequest) {
 
     const buffer = Buffer.from(await audioFile.arrayBuffer());
     fs.writeFileSync(originalPath, buffer);
+    tempFiles.add(originalPath);
 
     const ffmpegPath = resolveFfmpegPath();
     const ffprobePath = resolveFfprobePath(ffmpegPath);
@@ -340,14 +371,12 @@ export async function POST(request: NextRequest) {
       ffprobePath
     );
 
-    const result = await processParallelTasks(segments, durations, apiKey, language, publicBase.baseUrl);
+    // 记录所有分段文件用于 finally 清理
+    for (const segPath of segments) {
+      tempFiles.add(segPath);
+    }
 
-    for (const segmentPath of segments) {
-      safeUnlink(segmentPath);
-    }
-    if (segments[0] !== originalPath) {
-      safeUnlink(originalPath);
-    }
+    const result = await processParallelTasks(segments, durations, apiKey, language, publicBase.baseUrl);
 
     if (!result.success) {
       return NextResponse.json(
@@ -409,6 +438,11 @@ export async function POST(request: NextRequest) {
       },
       { status: 500 }
     );
+  } finally {
+    // 确保所有临时文件被清理，无论成功还是异常
+    for (const filePath of tempFiles) {
+      safeUnlink(filePath);
+    }
   }
 }
 

@@ -4,6 +4,8 @@ import './globals.css';
 import { AuthProvider } from '@/lib/hooks/useAuth';
 import { SWRProvider } from '@/lib/swr';
 import { AnalyticsProvider } from '@/components/AnalyticsProvider';
+import { NetworkStatusBanner } from '@/components/NetworkStatusBanner';
+import { Toaster } from 'sonner';
 
 // 优化字体加载：display: swap 避免阻塞渲染
 const inter = Inter({ 
@@ -49,7 +51,9 @@ export default function RootLayout({
         <AuthProvider>
           <SWRProvider>
             <AnalyticsProvider>
+              <NetworkStatusBanner />
               {children}
+              <Toaster position="top-center" richColors closeButton />
             </AnalyticsProvider>
           </SWRProvider>
         </AuthProvider>

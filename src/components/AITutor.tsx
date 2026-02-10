@@ -1,4 +1,4 @@
-﻿'use client';
+'use client';
 
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import type { Breakpoint } from '@/lib/services/meetmind-service';

@@ -7,6 +7,7 @@
  */
 
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { toast } from 'sonner';
 import { formatDistanceToNow } from 'date-fns';
 import { zhCN } from 'date-fns/locale';
 import { getAllSessions, deleteSession, updateSessionTopic, ANONYMOUS_USER_ID, type AudioSession } from '@/lib/db';
@@ -362,7 +363,7 @@ export function SessionHistoryList({
       setRenameTarget(null);
     } catch (err) {
       console.error('重命名会话失败:', err);
-      alert('重命名失败，请重试');
+      toast.error('重命名失败，请重试');
     }
   }, [renameTarget]);
 

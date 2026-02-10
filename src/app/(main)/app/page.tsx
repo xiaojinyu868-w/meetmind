@@ -23,6 +23,7 @@ import type {
 } from '@/types';
 import { useResponsive } from '@/hooks/useResponsive';
 import { UIConfig } from '@/lib/config';
+import { toast } from 'sonner';
 
 // SWR 数据 Hooks - 统一管理 API 请求
 import { useTopics, useSummary } from '@/hooks/data';
@@ -88,7 +89,7 @@ type ViewMode = 'record' | 'review';
 type DataSource = 'live' | 'demo' | 'video';
 
 type ReviewTab = 'timeline' | 'highlights' | 'summary' | 'notes' | 'anchor-detail';
-type VideoWorkspaceTab = 'transcript' | 'chat' | 'summary' | 'notes';
+type VideoWorkspaceTab = 'chat' | 'confusion' | 'highlights' | 'summary' | 'notes';
 
 // 持久化状态的 key
 const APP_STATE_KEY = 'app_last_state';
@@ -176,6 +177,8 @@ function StudentAppContent({ isGuestFastEntry }: { isGuestFastEntry: boolean }) 
   // 新增状态：精选片段、摘要、笔记
   const [reviewTab, setReviewTab] = useState<ReviewTab>('timeline');
   const [videoWorkspaceTab, setVideoWorkspaceTab] = useState<VideoWorkspaceTab>('chat');
+  const [showTranscriptBar, setShowTranscriptBar] = useState(false);
+  const [confusionChatAnchor, setConfusionChatAnchor] = useState<Anchor | null>(null);
   const [videoInsightItems, setVideoInsightItems] = useState<VideoInsightItem[]>([]);
   const [activeVideoInsightId, setActiveVideoInsightId] = useState<string | null>(null);
   // 使用 SWR Hooks 管理精选片段和摘要 - 自动去重、缓存、重试
@@ -256,6 +259,16 @@ function StudentAppContent({ isGuestFastEntry }: { isGuestFastEntry: boolean }) 
     }
   }, [onboarding.isActive]);
   
+  // 录音中关闭/刷新页面时警告用户
+  useEffect(() => {
+    if (!isRecording) return;
+    const handler = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+    };
+    window.addEventListener('beforeunload', handler);
+    return () => window.removeEventListener('beforeunload', handler);
+  }, [isRecording]);
+
   // 获取当前用户的 studentId 和 studentName
   const studentId = user?.id || 'anonymous';
   const studentName = user?.nickname || user?.username || '匿名用户';
@@ -586,8 +599,6 @@ function StudentAppContent({ isGuestFastEntry }: { isGuestFastEntry: boolean }) 
       setActiveVideoInsightId(null);
       setVideoWorkspaceTab('chat');
     }
-    
-    // 切换到复习模式时，如果没有数据则加载 demo
     if (newMode === 'review' && segments.length === 0) {
       try {
         const demoData = await loadDemoData();
@@ -715,7 +726,7 @@ function StudentAppContent({ isGuestFastEntry }: { isGuestFastEntry: boolean }) 
       console.log(`已加载历史会话: ${session.sessionId}, 转录: ${loadedSegments.length} 条, 困惑点: ${anchorsWithResolved.length} 个`);
     } catch (err) {
       console.error('加载历史会话失败:', err);
-      alert('加载历史会话失败，请重试');
+      toast.error('加载历史会话失败，请重试');
     }
   }, [clearTopics, clearSummary]);
 
@@ -736,7 +747,7 @@ function StudentAppContent({ isGuestFastEntry }: { isGuestFastEntry: boolean }) 
   const handleVideoImportReady = useCallback(async (result: ImportedVideoResult) => {
     const importedSegments = Array.isArray(result.segments) ? result.segments : [];
     if (importedSegments.length === 0) {
-      alert('视频已导入，但转录为空，请更换视频或重试。');
+      toast.warning('视频已导入，但转录为空，请更换视频或重试。');
       return;
     }
 
@@ -1392,7 +1403,7 @@ function StudentAppContent({ isGuestFastEntry }: { isGuestFastEntry: boolean }) 
                         onImportReady={handleVideoImportReady}
                         onError={(error) => {
                           console.error('视频导入失败:', error);
-                          alert(error);
+                          toast.error(String(error));
                         }}
                         disabled={isRecording}
                       />
@@ -1645,7 +1656,7 @@ function StudentAppContent({ isGuestFastEntry }: { isGuestFastEntry: boolean }) 
                   onImportReady={handleVideoImportReady}
                   onError={(error) => {
                     console.error('视频导入失败:', error);
-                    alert(error);
+                    toast.error(String(error));
                   }}
                   disabled={isRecording}
                 />
@@ -1788,80 +1799,42 @@ function StudentAppContent({ isGuestFastEntry }: { isGuestFastEntry: boolean }) 
               style={{ background: 'var(--edu-bg-primary)' }}
             >
               {videoSource ? (
-                <div className="flex-1 min-h-0 grid grid-cols-1 xl:grid-cols-[minmax(0,1.2fr)_380px] 2xl:grid-cols-[minmax(0,1.35fr)_420px] gap-4 p-4">
-                  <div className="min-h-0 flex flex-col gap-4">
-                    <VideoReviewPlayer
-                      source={videoSource}
-                      className="w-full"
-                      seekToMs={currentTime}
-                      seekNonce={videoSeekNonce}
-                    />
-
-                    <div className="card-edu p-4">
-                      <div className="flex items-center justify-between mb-3">
-                        <h3 className="text-sm font-semibold text-gray-900">问答高亮时间轴</h3>
-                        <span className="text-xs text-gray-500">按回答聚合</span>
-                      </div>
-                      <div className="pr-1">
-                        <VideoInsightTimeline
-                          items={videoInsightItems}
-                          activeItemId={activeVideoInsightId}
-                          totalDuration={totalDuration}
-                          formatTime={formatTime}
-                          onSelectItem={setActiveVideoInsightId}
-                          onSeek={handleVideoSeek}
-                        />
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="min-h-[560px] xl:min-h-0 flex flex-col bg-white rounded-2xl border border-gray-200 overflow-hidden">
-                    <div className="flex items-center gap-1 p-2 border-b bg-gray-50" style={{ borderColor: 'var(--edu-border-light)' }}>
-                      <button
-                        onClick={() => setVideoWorkspaceTab('transcript')}
-                        className={`px-3 py-1.5 text-xs rounded-lg transition-all ${
-                          videoWorkspaceTab === 'transcript'
-                            ? 'bg-white text-amber-600 font-medium shadow-sm'
-                            : 'text-gray-500 hover:text-navy'
-                        }`}
-                      >
-                        转录
-                      </button>
-                      <button
-                        onClick={() => setVideoWorkspaceTab('chat')}
-                        className={`px-3 py-1.5 text-xs rounded-lg transition-all ${
-                          videoWorkspaceTab === 'chat'
-                            ? 'bg-white text-amber-600 font-medium shadow-sm'
-                            : 'text-gray-500 hover:text-navy'
-                        }`}
-                      >
-                        对话
-                      </button>
-                      <button
-                        onClick={() => setVideoWorkspaceTab('summary')}
-                        className={`px-3 py-1.5 text-xs rounded-lg transition-all ${
-                          videoWorkspaceTab === 'summary'
-                            ? 'bg-white text-amber-600 font-medium shadow-sm'
-                            : 'text-gray-500 hover:text-navy'
-                        }`}
-                      >
-                        摘要
-                      </button>
-                      <button
-                        onClick={() => setVideoWorkspaceTab('notes')}
-                        className={`px-3 py-1.5 text-xs rounded-lg transition-all ${
-                          videoWorkspaceTab === 'notes'
-                            ? 'bg-white text-amber-600 font-medium shadow-sm'
-                            : 'text-gray-500 hover:text-navy'
-                        }`}
-                      >
-                        笔记
-                      </button>
+                <div className="flex-1 min-h-0 flex flex-col lg:flex-row overflow-hidden">
+                  {/* ===== 左侧：视频 + 可折叠字幕 + 时间轴 ===== */}
+                  <div className="min-h-0 flex flex-col lg:w-[55%] xl:w-[58%] border-r" style={{ borderColor: 'var(--edu-border-light)' }}>
+                    {/* 视频播放器 */}
+                    <div className="shrink-0 bg-black">
+                      <VideoReviewPlayer
+                        source={videoSource}
+                        className="w-full"
+                        seekToMs={currentTime}
+                        seekNonce={videoSeekNonce}
+                      />
                     </div>
 
-                    <div className="flex-1 min-h-0 overflow-hidden">
-                      {videoWorkspaceTab === 'transcript' && (
-                        <div className="h-full overflow-auto p-3">
+                    {/* 可折叠字幕条 */}
+                    <div className="shrink-0 border-b" style={{ borderColor: 'var(--edu-border-light)' }}>
+                      <button
+                        onClick={() => setShowTranscriptBar(prev => !prev)}
+                        className="w-full flex items-center justify-between px-4 py-2 text-xs hover:bg-gray-50 transition-colors"
+                        style={{ background: 'var(--edu-bg-soft)' }}
+                      >
+                        <div className="flex items-center gap-1.5">
+                          <svg className="w-3.5 h-3.5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                          </svg>
+                          <span className="text-gray-500 font-medium">转录字幕</span>
+                          <span className="text-gray-400">{segments.length} 句</span>
+                        </div>
+                        <svg
+                          className={`w-4 h-4 text-gray-400 transition-transform duration-200 ${showTranscriptBar ? 'rotate-180' : ''}`}
+                          fill="none" stroke="currentColor" viewBox="0 0 24 24"
+                        >
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                        </svg>
+                      </button>
+                      {showTranscriptBar && (
+                        <div className="max-h-[200px] overflow-y-auto px-4 py-3 bg-white">
                           <TranscriptPreviewPanel
                             transcript={segments}
                             immersiveMode={true}
@@ -1870,9 +1843,86 @@ function StudentAppContent({ isGuestFastEntry }: { isGuestFastEntry: boolean }) 
                           />
                         </div>
                       )}
+                    </div>
 
+                    {/* 可视化时间轴 + 高亮片段列表 */}
+                    <div className="flex-1 min-h-0 overflow-y-auto" style={{ background: 'var(--edu-bg-primary)' }}>
+                      <div className="p-4">
+                        <div className="flex items-center justify-between mb-3">
+                          <div className="flex items-center gap-2">
+                            <span className="text-sm font-semibold text-gray-800">高亮时间轴</span>
+                            <span className="text-xs text-gray-400">{videoInsightItems.filter(i => !i.id.startsWith('seed-')).length} 轮对话</span>
+                          </div>
+                        </div>
+                        <VideoInsightTimeline
+                          items={videoInsightItems}
+                          activeItemId={activeVideoInsightId}
+                          totalDuration={totalDuration}
+                          formatTime={formatTime}
+                          onSelectItem={setActiveVideoInsightId}
+                          onSeek={handleVideoSeek}
+                        />
+                        {videoInsightItems.length === 0 && (
+                          <div className="py-10 text-center">
+                            <div className="w-14 h-14 mx-auto mb-3 rounded-full flex items-center justify-center bg-gray-50">
+                              <svg className="w-7 h-7 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                              </svg>
+                            </div>
+                            <p className="text-sm text-gray-400 mb-1">暂无高亮</p>
+                            <p className="text-xs text-gray-300">在右侧对话后，高亮点会自动出现在这里</p>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* ===== 右侧：5 Tab 工作面板 ===== */}
+                  <div className="min-h-0 flex flex-col flex-1 bg-white overflow-hidden">
+                    {/* 标签栏 */}
+                    <div
+                      className="flex items-center gap-0.5 px-3 py-2 border-b shrink-0 overflow-x-auto"
+                      style={{ background: 'var(--edu-bg-soft)', borderColor: 'var(--edu-border-light)' }}
+                    >
+                      {([
+                        { key: 'chat' as const, label: '对话', icon: '💬' },
+                        { key: 'confusion' as const, label: '困惑点', icon: '🎯' },
+                        { key: 'highlights' as const, label: '精选', icon: '⚡' },
+                        { key: 'summary' as const, label: '摘要', icon: '📝' },
+                        { key: 'notes' as const, label: '笔记', icon: '📄' },
+                      ]).map((tab) => (
+                        <button
+                          key={tab.key}
+                          onClick={() => {
+                            setVideoWorkspaceTab(tab.key);
+                            if (tab.key !== 'confusion') setConfusionChatAnchor(null);
+                          }}
+                          className={`flex items-center gap-1 px-3 py-1.5 text-sm rounded-lg transition-all whitespace-nowrap ${
+                            videoWorkspaceTab === tab.key
+                              ? 'bg-white text-amber-600 font-medium shadow-sm'
+                              : 'text-gray-500 hover:text-gray-800 hover:bg-white/60'
+                          }`}
+                        >
+                          <span>{tab.icon}</span>
+                          {tab.label}
+                          {tab.key === 'confusion' && anchors.filter(a => !a.resolved).length > 0 && (
+                            <span className="ml-0.5 w-1.5 h-1.5 bg-red-400 rounded-full inline-block animate-pulse" />
+                          )}
+                          {tab.key === 'highlights' && highlightTopics.length > 0 && (
+                            <span className="ml-0.5 text-xs opacity-60">({highlightTopics.length})</span>
+                          )}
+                          {tab.key === 'notes' && notes.length > 0 && (
+                            <span className="ml-0.5 text-xs opacity-60">({notes.length})</span>
+                          )}
+                        </button>
+                      ))}
+                    </div>
+
+                    {/* 内容区 */}
+                    <div className="flex-1 min-h-0 overflow-hidden">
+                      {/* 对话 Tab - 全局 AI 对话 */}
                       {videoWorkspaceTab === 'chat' && (
-                        <div className="h-full min-h-0 p-3">
+                        <div className="h-full min-h-0">
                           <AIChat
                             sessionId={sessionId}
                             contextText={segments.map((seg) => `[${formatTime(seg.startMs)}] ${seg.text}`).join('\n')}
@@ -1881,6 +1931,149 @@ function StudentAppContent({ isGuestFastEntry }: { isGuestFastEntry: boolean }) 
                             onAssistantMessage={handleVideoAssistantMessage}
                           />
                         </div>
+                      )}
+
+                      {/* 困惑点 Tab - 列表 / 独立对话 */}
+                      {videoWorkspaceTab === 'confusion' && (
+                        <div className="h-full overflow-hidden flex flex-col">
+                          {confusionChatAnchor ? (
+                            <>
+                              {/* 困惑点对话头部 */}
+                              <div className="shrink-0 flex items-center gap-2 px-4 py-2.5 border-b" style={{ background: 'var(--edu-bg-soft)', borderColor: 'var(--edu-border-light)' }}>
+                                <button
+                                  onClick={() => setConfusionChatAnchor(null)}
+                                  className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-gray-200/60 transition-colors text-gray-500"
+                                  title="返回列表"
+                                >
+                                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                                  </svg>
+                                </button>
+                                <div className="flex items-center gap-1.5 flex-1 min-w-0">
+                                  <span className={`w-2 h-2 rounded-full shrink-0 ${confusionChatAnchor.resolved ? 'bg-green-400' : 'bg-amber-400 animate-pulse'}`} />
+                                  <span className="text-xs font-mono text-gray-500">{formatTime(confusionChatAnchor.timestamp)}</span>
+                                  {confusionChatAnchor.note && (
+                                    <span className="text-xs text-gray-600 truncate">{confusionChatAnchor.note}</span>
+                                  )}
+                                </div>
+                                {!confusionChatAnchor.resolved && (
+                                  <button
+                                    onClick={() => {
+                                      setSelectedAnchor(confusionChatAnchor);
+                                      handleResolveAnchor();
+                                      setConfusionChatAnchor({ ...confusionChatAnchor, resolved: true });
+                                    }}
+                                    className="shrink-0 px-2.5 py-1 text-xs rounded-lg bg-green-50 text-green-600 hover:bg-green-100 transition-colors"
+                                  >
+                                    标记已解决
+                                  </button>
+                                )}
+                              </div>
+                              {/* 困惑点独立对话 */}
+                              <div className="flex-1 min-h-0">
+                                <AIChat
+                                  key={`confusion-${confusionChatAnchor.id}`}
+                                  anchorId={confusionChatAnchor.id}
+                                  anchorTimestamp={confusionChatAnchor.timestamp}
+                                  sessionId={sessionId}
+                                  contextText={(() => {
+                                    const nearby = segments.filter(
+                                      s => s.startMs <= confusionChatAnchor.timestamp + 30000 && s.endMs >= confusionChatAnchor.timestamp - 30000
+                                    );
+                                    return nearby.map(seg => `[${formatTime(seg.startMs)}] ${seg.text}`).join('\n');
+                                  })()}
+                                  onTimestampClick={handleVideoSeek}
+                                  forceTimestampCitations={true}
+                                  onAssistantMessage={handleVideoAssistantMessage}
+                                />
+                              </div>
+                            </>
+                          ) : (
+                            <div className="h-full overflow-y-auto p-4">
+                              {/* 标记困惑按钮 */}
+                              <button
+                                onClick={() => {
+                                  handleAnchorMark(currentTime);
+                                }}
+                                className="w-full mb-4 flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl border-2 border-dashed border-amber-200 text-amber-600 hover:bg-amber-50 hover:border-amber-300 transition-all text-sm font-medium"
+                              >
+                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                                </svg>
+                                在当前位置标记困惑 ({formatTime(currentTime)})
+                              </button>
+
+                              {anchors.length > 0 ? (
+                                <div className="space-y-2">
+                                  <div className="flex items-center justify-between mb-2">
+                                    <span className="text-xs text-gray-400">{anchors.length} 个困惑点</span>
+                                    {anchors.filter(a => !a.resolved).length > 0 && (
+                                      <span className="text-xs text-red-400">{anchors.filter(a => !a.resolved).length} 个未解决</span>
+                                    )}
+                                  </div>
+                                  {anchors.map((anchor, index) => (
+                                    <button
+                                      key={anchor.id}
+                                      onClick={() => {
+                                        setConfusionChatAnchor(anchor);
+                                        setSelectedAnchor(anchor);
+                                        handleVideoSeek(anchor.timestamp);
+                                      }}
+                                      className={`w-full text-left p-3 rounded-xl border transition-all hover:shadow-sm group ${
+                                        anchor.resolved
+                                          ? 'border-green-100 bg-green-50/50'
+                                          : 'border-amber-100 bg-amber-50/50 hover:border-amber-200'
+                                      }`}
+                                    >
+                                      <div className="flex items-center gap-2">
+                                        <span className={`w-2 h-2 rounded-full shrink-0 ${anchor.resolved ? 'bg-green-400' : 'bg-amber-400'}`} />
+                                        <span className="text-xs font-mono text-gray-400">{formatTime(anchor.timestamp)}</span>
+                                        <span className="text-xs text-gray-500">困惑 #{index + 1}</span>
+                                        {anchor.resolved ? (
+                                          <span className="text-xs text-green-500 ml-auto">已解决</span>
+                                        ) : (
+                                          <span className="text-xs text-amber-500 ml-auto">点击对话 →</span>
+                                        )}
+                                      </div>
+                                      {anchor.note && (
+                                        <p className="mt-1.5 text-sm text-gray-600 line-clamp-2 pl-4">{anchor.note}</p>
+                                      )}
+                                    </button>
+                                  ))}
+                                </div>
+                              ) : (
+                                <div className="py-10 text-center">
+                                  <div className="w-14 h-14 mx-auto mb-3 rounded-full flex items-center justify-center bg-gray-50">
+                                    <svg className="w-7 h-7 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                    </svg>
+                                  </div>
+                                  <p className="text-sm text-gray-400 mb-1">暂无困惑点</p>
+                                  <p className="text-xs text-gray-300">点击上方按钮标记你不理解的地方</p>
+                                </div>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      )}
+
+                      {videoWorkspaceTab === 'highlights' && (
+                        <HighlightsPanel
+                          topics={highlightTopics}
+                          selectedTopic={selectedTopic}
+                          onTopicSelect={setSelectedTopic}
+                          onPlayTopic={handlePlayTopic}
+                          onSeek={handleVideoSeek}
+                          onPlayAll={handlePlayAll}
+                          isPlayingAll={isPlayingAll}
+                          playAllIndex={playAllIndex}
+                          currentTime={currentTime}
+                          totalDuration={totalDuration}
+                          isLoading={isLoadingTopics}
+                          onGenerate={handleGenerateTopics}
+                          onRegenerateByTheme={handleRegenerateByTheme}
+                          onClear={handleClearTopics}
+                        />
                       )}
 
                       {videoWorkspaceTab === 'summary' && (

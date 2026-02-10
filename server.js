@@ -345,6 +345,7 @@ app.prepare().then(() => {
     let dashscopeWs = null;
     let isSessionReady = false;
     const audioQueue = [];
+    const AUDIO_QUEUE_MAX_SIZE = 500; // 上限 500 个 chunk（约 16 秒 @16kHz）
 
     let sessionStartTime = Date.now();
     let sentenceIndex = 0;
@@ -421,7 +422,7 @@ app.prepare().then(() => {
     function flushAudioQueue() {
       while (audioQueue.length > 0) {
         const audioData = audioQueue.shift();
-        sendAudioToDashScope(audioData);
+        if (audioData) sendAudioToDashScope(audioData);
       }
     }
 
@@ -664,6 +665,10 @@ app.prepare().then(() => {
               break;
 
             case 'response.done':
+              // DashScope 完成了一轮处理；如果客户端已请求停止，可以安全关闭
+              if (stopRequestedByClient && hasCommittedAudioBuffer) {
+                scheduleDashscopeClose('response.done after client stop', 300);
+              }
               break;
 
             case 'error': {
@@ -691,6 +696,10 @@ app.prepare().then(() => {
       dashscopeWs.on('error', (error) => {
         console.error('[ASR-Proxy] DashScope error:', error.message);
         sendClientEvent({ event: 'error', error: `DashScope 连接错误: ${error.message}` });
+        // DashScope 连接异常，关闭客户端避免 audioQueue 无限增长
+        if (clientWs.readyState === WebSocket.OPEN) {
+          clientWs.close(1011, 'DashScope connection error');
+        }
       });
 
       dashscopeWs.on('close', (code, reason) => {
@@ -700,6 +709,10 @@ app.prepare().then(() => {
         if (clientWs.readyState === WebSocket.OPEN) {
           sendClientEvent({ event: 'finished', code });
           sendClientEvent({ event: 'closed', code });
+          // 仅异常断开时主动关闭客户端（code 1000 = 正常关闭，由客户端 stop 触发）
+          if (code !== 1000 && !stopRequestedByClient) {
+            clientWs.close(1000, 'DashScope disconnected unexpectedly');
+          }
         }
       });
     } catch (error) {
@@ -722,7 +735,13 @@ app.prepare().then(() => {
         if (isSessionReady) {
           sendAudioToDashScope(data);
         } else {
-          audioQueue.push(data);
+          if (audioQueue.length < AUDIO_QUEUE_MAX_SIZE) {
+            audioQueue.push(data);
+          } else if (audioQueue.length === AUDIO_QUEUE_MAX_SIZE) {
+            // 仅首次触发时警告，避免日志刷屏
+            console.warn('[ASR-Proxy] audioQueue reached max size, dropping new chunks until DashScope ready');
+            audioQueue.push(null); // 哨兵值，标记已溢出，长度变为 MAX+1 后不再进入此分支
+          }
         }
         return;
       }
@@ -751,16 +770,13 @@ app.prepare().then(() => {
         if (msg.action === 'stop') {
           stopRequestedByClient = true;
           const committed = commitAudioBuffer('client stop');
-          scheduleDashscopeClose('Client stop', committed ? 1200 : 100);
+          // 给 DashScope 足够时间处理缓冲区中的音频（文件转写场景音频一次性发完）
+          // 主关闭由 response.done 触发，这里是保底超时
+          scheduleDashscopeClose('Client stop', committed ? 15000 : 100);
         }
       } catch {
-        receivedBinaryChunks += 1;
-        receivedBinaryBytes += dataLen;
-        if (isSessionReady) {
-          sendAudioToDashScope(data);
-        } else {
-          audioQueue.push(data);
-        }
+        // 文本消息 JSON 解析失败，记录警告并忽略（不当作音频处理）
+        console.warn('[ASR-Proxy] Ignoring non-JSON text message, length:', dataLen);
       }
     });
 
@@ -771,7 +787,7 @@ app.prepare().then(() => {
 
       stopRequestedByClient = true;
       const committed = commitAudioBuffer('client disconnected');
-      scheduleDashscopeClose('Client disconnected', committed ? 800 : 100);
+      scheduleDashscopeClose('Client disconnected', committed ? 10000 : 100);
     });
 
     clientWs.on('error', (error) => {

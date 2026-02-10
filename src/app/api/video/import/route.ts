@@ -1,4 +1,4 @@
-﻿import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import * as fs from 'fs';
 import * as fsp from 'fs/promises';
 import * as path from 'path';
@@ -460,41 +460,98 @@ async function transcribeWithFallback(
   audioFilePath: string,
   requestedMode: TranscribeMode,
   language: string,
-  trace: ImportTraceEntry[]
+  trace: ImportTraceEntry[],
+  expectedDurationSec?: number
 ): Promise<{ data: Record<string, unknown>; usedMode: TranscribeMode }> {
   const origin = getOriginFromRequest(request);
   const fileName = path.basename(audioFilePath);
+
+  // Log the audio file size being sent to ASR
+  const audioFileSize = await getFileSizeBytes(audioFilePath);
+  console.log(`[video-import] transcribeWithFallback: file=${fileName}, size=${audioFileSize} bytes (${(audioFileSize / 1024).toFixed(1)} KB), modes=${buildModeOrder(requestedMode).join(',')}, expectedDuration=${expectedDurationSec ?? 'unknown'}s`);
+
   const openAsBlob = (fsp as unknown as { openAsBlob?: (path: string, options?: { type?: string }) => Promise<Blob> }).openAsBlob;
   const audioBlob = openAsBlob
     ? await openAsBlob(audioFilePath, { type: 'audio/mpeg' })
     : new Blob([await fsp.readFile(audioFilePath)], { type: 'audio/mpeg' });
 
   let lastFailure = 'unknown';
+  let bestPartialResult: { data: Record<string, unknown>; usedMode: TranscribeMode } | null = null;
 
   for (const mode of buildModeOrder(requestedMode)) {
     const endpoint = `${origin}${getTranscribeApiPath(mode)}`;
+    console.log(`[video-import] trying ASR mode=${mode}, endpoint=${endpoint}`);
     const formData = new FormData();
     formData.append('audio', new File([audioBlob], fileName, { type: 'audio/mpeg' }));
     formData.append('language', language);
 
-    const response = await fetch(endpoint, {
-      method: 'POST',
-      body: formData,
-    });
+    let response: Response;
+    try {
+      response = await fetch(endpoint, {
+        method: 'POST',
+        body: formData,
+      });
+    } catch (fetchError) {
+      const detail = fetchError instanceof Error ? fetchError.message : String(fetchError);
+      console.error(`[video-import] ASR mode=${mode} fetch error: ${detail}`);
+      trace.push({ stage: `asr-${mode}`, ok: false, code: `ASR_${mode.toUpperCase()}_FETCH_ERROR`, detail });
+      lastFailure = `ASR_${mode.toUpperCase()}_FETCH_ERROR: ${detail}`;
+      continue;
+    }
 
     const data = (await response.json().catch(() => null)) as Record<string, unknown> | null;
     const isSuccess = response.ok && data?.success === true;
 
     if (isSuccess && data) {
-      trace.push({ stage: `asr-${mode}`, ok: true });
+      const segCount = Array.isArray(data.segments) ? data.segments.length : Array.isArray(data.sentences) ? data.sentences.length : 0;
+      const textLen = typeof data.text === 'string' ? (data.text as string).length : 0;
+      console.log(`[video-import] ASR mode=${mode} success: ${segCount} segments, ${textLen} chars`);
+
+      // 质量校验：如果视频时长已知且 > 60s，检查返回的文本量是否严重不足
+      // 中文语速大约 3-5 字/秒，保守取 1 字/秒作为最低阈值
+      const MIN_CHARS_PER_SEC = 1;
+      const isResultInsufficient =
+        expectedDurationSec &&
+        expectedDurationSec > 60 &&
+        textLen > 0 &&
+        textLen < expectedDurationSec * MIN_CHARS_PER_SEC * 0.2; // 不到预期最低量的 20%
+
+      if (isResultInsufficient) {
+        const expectedMin = Math.round(expectedDurationSec * MIN_CHARS_PER_SEC * 0.2);
+        console.warn(`[video-import] ASR mode=${mode} result insufficient: ${textLen} chars for ${expectedDurationSec}s video (expected ≥ ${expectedMin} chars), trying next mode`);
+        trace.push({
+          stage: `asr-${mode}`,
+          ok: false,
+          code: 'ASR_RESULT_INSUFFICIENT',
+          detail: `${segCount} segments, ${textLen} chars – too little for ${expectedDurationSec}s video`,
+        });
+        // 保存为候选（万一所有模式都不足，使用最佳的那个）
+        if (!bestPartialResult || textLen > (typeof bestPartialResult.data.text === 'string' ? (bestPartialResult.data.text as string).length : 0)) {
+          bestPartialResult = { data, usedMode: mode };
+        }
+        lastFailure = `ASR_RESULT_INSUFFICIENT: ${textLen} chars for ${expectedDurationSec}s video`;
+        continue;
+      }
+
+      trace.push({ stage: `asr-${mode}`, ok: true, detail: `${segCount} segments, ${textLen} chars` });
       return { data, usedMode: mode };
     }
 
     const code = parseErrorCode(data) || `ASR_${mode.toUpperCase()}_FAILED`;
     const errorMessage = parseErrorMessage(data) || `转写失败 (${response.status})`;
     const detail = parseErrorDetail(data);
+    console.error(`[video-import] ASR mode=${mode} failed: ${code} - ${detail || errorMessage}`);
     trace.push({ stage: `asr-${mode}`, ok: false, code, detail: detail || errorMessage });
     lastFailure = `${code}: ${detail || errorMessage}`;
+  }
+
+  // 所有HTTP模式结果都不足时，抛出异常让调用方有机会尝试 WS fallback
+  // 把 bestPartialResult 附到异常上，WS fallback 也失败时可以降级使用
+  if (bestPartialResult) {
+    console.warn(`[video-import] all ASR modes produced insufficient results, throwing to trigger WS fallback (best partial mode=${bestPartialResult.usedMode})`);
+    const err = new ImportPipelineError('ASR_TRANSCRIBE_FAILED', '音频转写失败', lastFailure);
+    (err as ImportPipelineError & { partialResult?: typeof bestPartialResult }).partialResult = bestPartialResult;
+    throw err;
   }
 
   throw new ImportPipelineError('ASR_TRANSCRIBE_FAILED', '音频转写失败', lastFailure);
@@ -595,6 +652,7 @@ function pickMostInformativeStageError(failures: StageFailure[]): ImportPipeline
     'ASR_API_KEY_MISSING',
     'BILI_COOKIE_EXPIRED',
     'BILI_AUDIO_DOWNLOAD_FORBIDDEN',
+    'BILI_AUDIO_INCOMPLETE',
     'BILI_PLAYURL_FAILED',
     'BILI_URL_PARSE_FAILED',
     'BILI_VIEW_META_FAILED',
@@ -615,13 +673,47 @@ function pickMostInformativeStageError(failures: StageFailure[]): ImportPipeline
   return failures[failures.length - 1].error;
 }
 
+async function getFileSizeBytes(filePath: string): Promise<number> {
+  try {
+    const stat = await fsp.stat(filePath);
+    return stat.size;
+  } catch {
+    return 0;
+  }
+}
+
+async function getAudioDurationSec(filePath: string): Promise<number> {
+  try {
+    const ffprobePath = resolveFfmpegPath().replace(/ffmpeg(\.exe)?$/i, (m) =>
+      m.toLowerCase().includes('.exe') ? 'ffprobe.exe' : 'ffprobe'
+    );
+    const result = await runCommand(
+      ffprobePath,
+      ['-v', 'error', '-show_entries', 'format=duration', '-of', 'default=noprint_wrappers=1:nokey=1', filePath],
+      { toolName: 'ffprobe' }
+    );
+    return Number.parseFloat(result.stdout.trim()) || 0;
+  } catch {
+    return 0;
+  }
+}
+
+const BILI_MIN_AUDIO_BYTES = 10 * 1024; // 10 KB – smaller than this is certainly broken
+const BILI_MIN_AUDIO_DURATION_RATIO = 0.25; // mp3 duration must be ≥ 25 % of declared video duration
+
 async function executeBiliNativeStage(videoUrl: string, baseName: string): Promise<StageResult> {
   const resolved = await resolveBilibiliUrl(videoUrl);
   const viewMeta = await fetchViewMeta(resolved.bvid, resolved.page);
 
   try {
     const subtitleResult = await fetchPlayerSubtitle(viewMeta.bvid, viewMeta.cid);
-    if (subtitleResult?.segments?.length) {
+    // 字幕段数太少时（如 AI 概述字幕只返回 1-2 条），不采用字幕，改走音频转录
+    const MIN_SUBTITLE_SEGMENTS = 3;
+    const durationBasedMin = viewMeta.durationSec && viewMeta.durationSec > 60
+      ? Math.max(MIN_SUBTITLE_SEGMENTS, Math.floor(viewMeta.durationSec / 30))
+      : MIN_SUBTITLE_SEGMENTS;
+    if (subtitleResult?.segments?.length && subtitleResult.segments.length >= Math.min(durationBasedMin, MIN_SUBTITLE_SEGMENTS)) {
+      console.log(`[video-import] bili subtitle accepted: ${subtitleResult.segments.length} segments for ${viewMeta.durationSec}s video`);
       return {
         sourceMode: 'bili-subtitle',
         subtitleSegments: subtitleResult.segments,
@@ -636,6 +728,9 @@ async function executeBiliNativeStage(videoUrl: string, baseName: string): Promi
         },
       };
     }
+    if (subtitleResult?.segments?.length) {
+      console.log(`[video-import] bili subtitle rejected: only ${subtitleResult.segments.length} segments (need ≥${Math.min(durationBasedMin, MIN_SUBTITLE_SEGMENTS)}) for ${viewMeta.durationSec}s video, falling back to audio`);
+    }
   } catch {
     // subtitle is optional and should not block import
   }
@@ -646,7 +741,35 @@ async function executeBiliNativeStage(videoUrl: string, baseName: string): Promi
 
   try {
     await downloadBiliAudio(audioResult.audioUrl, rawPath);
+
+    // 检查原始下载文件的大小
+    const rawSize = await getFileSizeBytes(rawPath);
+    console.log(`[video-import] bili audio downloaded: ${rawSize} bytes (${(rawSize / 1024).toFixed(1)} KB), mode=${audioResult.mode}`);
+    if (rawSize < BILI_MIN_AUDIO_BYTES) {
+      throw new ImportPipelineError(
+        'BILI_AUDIO_INCOMPLETE',
+        'B站音频下载不完整',
+        `downloaded ${rawSize} bytes, minimum ${BILI_MIN_AUDIO_BYTES} bytes required`
+      );
+    }
+
     await transcodeToMp3(rawPath, mp3Path);
+
+    // 检查转码后 mp3 的时长是否合理
+    const mp3Size = await getFileSizeBytes(mp3Path);
+    const mp3Duration = await getAudioDurationSec(mp3Path);
+    console.log(`[video-import] bili mp3 ready: ${mp3Size} bytes (${(mp3Size / 1024).toFixed(1)} KB), duration=${mp3Duration.toFixed(1)}s, declared video duration=${viewMeta.durationSec}s`);
+
+    if (viewMeta.durationSec && viewMeta.durationSec > 30 && mp3Duration > 0) {
+      const ratio = mp3Duration / viewMeta.durationSec;
+      if (ratio < BILI_MIN_AUDIO_DURATION_RATIO) {
+        throw new ImportPipelineError(
+          'BILI_AUDIO_INCOMPLETE',
+          'B站音频下载不完整',
+          `mp3 duration ${mp3Duration.toFixed(1)}s is only ${(ratio * 100).toFixed(0)}% of video ${viewMeta.durationSec}s (min ${(BILI_MIN_AUDIO_DURATION_RATIO * 100).toFixed(0)}%)`
+        );
+      }
+    }
 
     return {
       sourceMode: 'bili-native',
@@ -897,7 +1020,15 @@ async function transcribeWithWsProxy(
           if (collected.length > 0) {
             succeed();
           } else {
-            fail('WS proxy finished without transcript');
+            // DashScope 可能还在处理最后的音频片段，等待一段时间后再判定
+            setTimeout(() => {
+              if (settled) return;
+              if (collected.length > 0) {
+                succeed();
+              } else {
+                fail('WS proxy finished without transcript');
+              }
+            }, 3000);
           }
         }
       } catch (error) {
@@ -1125,12 +1256,91 @@ function scaleTimeline(segments: NormalizedSegment[], targetDurationMs: number):
   }));
 }
 
+/**
+ * 将过长的单个 segment 按中文标点分句拆分成多个小段。
+ * 典型场景：turbo 同步 API 把 30s 音频的所有文字合成一段返回。
+ */
+function splitLongSegments(
+  segments: NormalizedSegment[],
+  maxCharsPerSegment: number = 80
+): NormalizedSegment[] {
+  const result: NormalizedSegment[] = [];
+
+  for (const segment of segments) {
+    if (segment.text.length <= maxCharsPerSegment) {
+      result.push(segment);
+      continue;
+    }
+
+    // 按中文句号、问号、叹号、分号、换行拆分
+    const parts = segment.text
+      .split(/(?<=[。！？；\n])/g)
+      .map((s) => s.trim())
+      .filter(Boolean);
+
+    // 如果按句号拆不出来，尝试按逗号拆
+    let chunks: string[];
+    if (parts.length <= 1) {
+      chunks = segment.text
+        .split(/(?<=[，,、])/g)
+        .map((s) => s.trim())
+        .filter(Boolean);
+    } else {
+      // 合并过短的句子
+      chunks = [];
+      let buf = '';
+      for (const part of parts) {
+        if (buf.length + part.length <= maxCharsPerSegment) {
+          buf += part;
+        } else {
+          if (buf) chunks.push(buf);
+          buf = part;
+        }
+      }
+      if (buf) chunks.push(buf);
+    }
+
+    if (chunks.length <= 1) {
+      // 实在拆不动，按固定长度切
+      chunks = [];
+      for (let i = 0; i < segment.text.length; i += maxCharsPerSegment) {
+        chunks.push(segment.text.slice(i, i + maxCharsPerSegment));
+      }
+    }
+
+    // 按字符比例分配时间
+    const segDuration = segment.endMs - segment.startMs;
+    const totalChars = chunks.reduce((sum, c) => sum + c.length, 0);
+    let cursor = segment.startMs;
+
+    for (const chunk of chunks) {
+      const chunkDuration = Math.max(200, Math.round((segDuration * chunk.length) / Math.max(1, totalChars)));
+      const endMs = Math.min(cursor + chunkDuration, segment.endMs);
+      result.push({
+        ...segment,
+        id: `seg-${result.length}`,
+        text: chunk,
+        startMs: cursor,
+        endMs: Math.max(cursor + 200, endMs),
+        confidence: segment.confidence,
+        isFinal: segment.isFinal,
+      });
+      cursor = endMs;
+    }
+  }
+
+  return result;
+}
+
 function normalizeImportedSegments(
   data: Record<string, unknown>,
   sourceDurationSec?: number
 ): NormalizedSegment[] {
   let segments = deduplicateAdjacentSegments(parseSegmentsFromPayload(data));
   if (segments.length === 0) return [];
+
+  // 拆分过长的单 segment（turbo 同步 API 常返回整段文本合为一句）
+  segments = splitLongSegments(segments);
 
   const declaredDurationMs =
     Number.isFinite(sourceDurationSec) && (sourceDurationSec || 0) > 0
@@ -1290,36 +1500,52 @@ export async function POST(request: NextRequest) {
     let transcribed: { data: Record<string, unknown>; usedMode: TranscribeMode };
 
     try {
-      transcribed = await transcribeWithFallback(request, stageResult.audioFilePath, mode, language, trace);
+      transcribed = await transcribeWithFallback(request, stageResult.audioFilePath, mode, language, trace, stageResult.meta.durationSec);
     } catch (error) {
       const importError = toPipelineError(error);
+      // 从异常中提取 partialResult（transcribeWithFallback 在结果不足时附带）
+      const partialResult = (error as { partialResult?: { data: Record<string, unknown>; usedMode: TranscribeMode } })?.partialResult;
       const enableWsFallback = process.env.VIDEO_IMPORT_ENABLE_WS_FALLBACK !== 'false';
       const shouldTryWsFallback = enableWsFallback && importError.code === 'ASR_TRANSCRIBE_FAILED';
 
       if (!shouldTryWsFallback) {
-        throw importError;
-      }
+        // 不能走 WS fallback，但有部分结果时降级使用
+        if (partialResult) {
+          console.warn(`[video-import] cannot try WS fallback, using partial result (mode=${partialResult.usedMode})`);
+          trace.push({ stage: `asr-${partialResult.usedMode}-partial`, ok: true, detail: 'using partial result (no ws fallback)' });
+          transcribed = partialResult;
+        } else {
+          throw importError;
+        }
+      } else {
+        try {
+          const wsData = await transcribeWithWsProxy(request, stageResult.audioFilePath);
+          trace.push({ stage: 'asr-ws-fallback', ok: true });
+          transcribed = { data: wsData, usedMode: mode };
+        } catch (wsError) {
+          const wsPipelineError = toPipelineError(wsError);
+          trace.push({
+            stage: 'asr-ws-fallback',
+            ok: false,
+            code: wsPipelineError.code,
+            detail: wsPipelineError.detail || wsPipelineError.message,
+          });
 
-      try {
-        const wsData = await transcribeWithWsProxy(request, stageResult.audioFilePath);
-        trace.push({ stage: 'asr-ws-fallback', ok: true });
-        transcribed = { data: wsData, usedMode: mode };
-      } catch (wsError) {
-        const wsPipelineError = toPipelineError(wsError);
-        trace.push({
-          stage: 'asr-ws-fallback',
-          ok: false,
-          code: wsPipelineError.code,
-          detail: wsPipelineError.detail || wsPipelineError.message,
-        });
-
-        throw new ImportPipelineError(
-          importError.code,
-          importError.message,
-          [importError.detail || importError.message, `ws fallback: ${wsPipelineError.detail || wsPipelineError.message}`]
-            .filter(Boolean)
-            .join(' | ')
-        );
+          // WS fallback 也失败了，如果有 HTTP ASR 的部分结果则降级使用
+          if (partialResult) {
+            console.warn(`[video-import] WS fallback failed, using partial result from mode=${partialResult.usedMode}`);
+            trace.push({ stage: `asr-${partialResult.usedMode}-partial`, ok: true, detail: 'using partial result after ws fallback failed' });
+            transcribed = partialResult;
+          } else {
+            throw new ImportPipelineError(
+              importError.code,
+              importError.message,
+              [importError.detail || importError.message, `ws fallback: ${wsPipelineError.detail || wsPipelineError.message}`]
+                .filter(Boolean)
+                .join(' | ')
+            );
+          }
+        }
       }
     }
 

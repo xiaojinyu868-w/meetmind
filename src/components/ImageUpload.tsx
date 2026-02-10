@@ -1,6 +1,7 @@
 'use client';
 
 import { useRef, useCallback, useEffect } from 'react';
+import { toast } from 'sonner';
 
 export interface UploadedImage {
   id: string;
@@ -71,7 +72,7 @@ export function ImageUpload({
       
       // 验证文件大小
       if (file.size > maxSizeBytes) {
-        alert(`图片 ${file.name} 超过 ${maxSizeMB}MB 限制`);
+        toast.warning(`图片 ${file.name} 超过 ${maxSizeMB}MB 限制`);
         continue;
       }
       

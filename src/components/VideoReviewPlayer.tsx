@@ -14,6 +14,21 @@ function isDirectVideo(source: ImportedVideoSource): boolean {
   return source.provider === 'direct-file' && !!source.playableUrl;
 }
 
+function isBilibili(source: ImportedVideoSource): boolean {
+  return source.provider === 'bilibili';
+}
+
+function buildBilibiliEmbedUrl(source: ImportedVideoSource, seekToMs: number): string {
+  const bvid = source.bvid || '';
+  const base = bvid
+    ? `https://player.bilibili.com/player.html?bvid=${encodeURIComponent(bvid)}&page=1&high_quality=1&danmaku=0&autoplay=0`
+    : source.embedUrl || '';
+  if (!base) return '';
+  if (seekToMs <= 0) return base;
+  const sep = base.includes('?') ? '&' : '?';
+  return `${base}${sep}t=${Math.max(0, Math.floor(seekToMs / 1000))}`;
+}
+
 function withStartTime(url: string, seekToMs: number, seekNonce: number): string {
   try {
     const parsed = new URL(url);
@@ -32,76 +47,79 @@ function VideoReviewPlayerComponent({
   seekNonce = 0,
 }: VideoReviewPlayerProps) {
   const videoRef = useRef<HTMLVideoElement | null>(null);
-  const baseEmbedUrl = source?.embedUrl || '';
-  const [embedSrc, setEmbedSrc] = useState(baseEmbedUrl);
+  const [iframeError, setIframeError] = useState(false);
+
+  const embedSrc = useMemo(() => {
+    if (!source) return '';
+    if (isBilibili(source)) return buildBilibiliEmbedUrl(source, seekToMs);
+    if (source.embedUrl) return withStartTime(source.embedUrl, seekToMs, seekNonce);
+    return '';
+  }, [source, seekToMs, seekNonce]);
 
   useEffect(() => {
-    setEmbedSrc(baseEmbedUrl);
-  }, [baseEmbedUrl]);
-
-  useEffect(() => {
-    if (!source) return;
-    if (source.embedUrl && seekToMs > 0) {
-      setEmbedSrc(withStartTime(source.embedUrl, seekToMs, seekNonce));
-      return;
-    }
-    if (isDirectVideo(source) && videoRef.current && seekToMs >= 0) {
+    if (source && isDirectVideo(source) && videoRef.current && seekToMs >= 0) {
       videoRef.current.currentTime = seekToMs / 1000;
     }
   }, [source, seekToMs, seekNonce]);
 
-  const effectiveEmbedSrc = useMemo(
-    () => embedSrc || source?.embedUrl || '',
-    [embedSrc, source?.embedUrl]
-  );
-
   if (!source) return null;
 
-  return (
-    <section className={className}>
-      <div className="rounded-2xl border border-gray-200 bg-white p-3 shadow-sm">
-        <div className="mb-2 flex items-center justify-between gap-3">
-          <div className="min-w-0">
-            <h3 className="truncate text-sm font-semibold text-gray-900">{source.title || '视频复习'}</h3>
-            <p className="text-xs text-gray-500">{source.providerLabel}</p>
-          </div>
-          <a
-            href={source.resolvedUrl || source.originalUrl}
-            target="_blank"
-            rel="noreferrer"
-            className="shrink-0 rounded-lg border border-gray-200 px-2 py-1 text-xs text-gray-600 transition hover:border-gray-300 hover:text-gray-900"
-          >
-            打开原视频
-          </a>
-        </div>
+  const originalUrl = source.resolvedUrl || source.originalUrl;
 
-        {source.embedUrl ? (
-          <div className="overflow-hidden rounded-xl border border-gray-100">
-            <div className="relative w-full pb-[56.25%]">
-              <iframe
-                src={effectiveEmbedSrc}
-                title={source.title || 'review-video'}
-                className="absolute inset-0 h-full w-full"
-                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-                allowFullScreen
-              />
-            </div>
-          </div>
-        ) : isDirectVideo(source) ? (
-          <video
-            ref={videoRef}
-            src={source.playableUrl}
-            controls
-            preload="metadata"
-            className="h-auto w-full rounded-xl border border-gray-100"
-          />
-        ) : (
-          <p className="rounded-xl border border-gray-100 bg-gray-50 px-3 py-2 text-xs text-gray-500">
-            该平台限制内嵌播放，请点击“打开原视频”观看。
-          </p>
-        )}
+  // 直链视频 - 原生 video 标签
+  if (isDirectVideo(source)) {
+    return (
+      <div className={className}>
+        <video
+          ref={videoRef}
+          src={source.playableUrl}
+          controls
+          preload="metadata"
+          className="aspect-video w-full bg-black"
+        />
       </div>
-    </section>
+    );
+  }
+
+  // iframe 嵌入（B站/YouTube 等）
+  if (embedSrc && !iframeError) {
+    return (
+      <div className={className}>
+        <div className="relative aspect-video w-full overflow-hidden bg-black">
+          <iframe
+            src={embedSrc}
+            title={source.title || 'video'}
+            className="absolute inset-0 h-full w-full"
+            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+            allowFullScreen
+            sandbox="allow-scripts allow-same-origin allow-popups allow-forms allow-top-navigation"
+            onError={() => setIframeError(true)}
+          />
+        </div>
+      </div>
+    );
+  }
+
+  // fallback: 无法嵌入，显示跳转按钮
+  return (
+    <div className={className}>
+      <div className="flex aspect-video w-full flex-col items-center justify-center gap-3 bg-gray-900">
+        <div className="flex h-14 w-14 items-center justify-center rounded-full bg-white/10">
+          <svg className="h-7 w-7 text-white/60" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
+          </svg>
+        </div>
+        <p className="text-sm text-white/50">无法嵌入播放</p>
+        <a
+          href={originalUrl}
+          target="_blank"
+          rel="noreferrer"
+          className="rounded-lg bg-white/10 px-4 py-1.5 text-sm text-white transition hover:bg-white/20"
+        >
+          在新窗口打开
+        </a>
+      </div>
+    </div>
   );
 }
 

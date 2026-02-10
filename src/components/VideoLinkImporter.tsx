@@ -49,6 +49,7 @@ const ERROR_MESSAGE_MAP: Record<string, string> = {
   BILI_PLAYURL_FAILED: '未能获取视频音频流，请稍后重试。',
   BILI_COOKIE_EXPIRED: 'B站登录状态已过期，请联系管理员更新 Cookie 后重试。',
   BILI_AUDIO_DOWNLOAD_FORBIDDEN: '当前视频受平台限制，暂时无法直接导入。',
+  BILI_AUDIO_INCOMPLETE: 'B站音频下载不完整，可能受平台限制，请稍后重试或更换视频。',
   YTDLP_UNAVAILABLE: '服务端导入能力暂不可用，请稍后重试。',
   FFMPEG_NOT_FOUND: '服务端音频处理组件未就绪，请联系管理员。',
   DIRECT_MEDIA_TIMEOUT: '直链媒体下载超时，请稍后重试。',

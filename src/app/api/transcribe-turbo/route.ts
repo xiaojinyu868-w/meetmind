@@ -364,6 +364,20 @@ async function processSegmentBatch(
     };
   }
 
+  // 当多数分段失败时（成功率 < 50%），视为整体失败，让调用方 fallback 到其他 ASR 模式。
+  // 典型场景：DashScope 无法通过公网 URL 下载分段音频，只有第一个分段偶然成功。
+  const successRate = sentences.length / sorted.length;
+  if (sorted.length > 1 && successRate < 0.5) {
+    console.warn(
+      `[transcribe-turbo] low segment success rate: ${sentences.length}/${sorted.length} (${(successRate * 100).toFixed(0)}%), treating as failure`
+    );
+    return {
+      ok: false,
+      sentences,
+      error: `only ${sentences.length}/${sorted.length} segments succeeded (${(successRate * 100).toFixed(0)}%) | ${errors.slice(0, 3).join(' | ')}`,
+    };
+  }
+
   return {
     ok: true,
     sentences,

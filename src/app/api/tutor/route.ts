@@ -19,8 +19,37 @@ import { applyRateLimit } from '@/lib/utils/rate-limit';
 import { summaryService } from '@/lib/services/summary-service';
 import { webSearch } from '@/lib/services/web-search-service';
 
-// 内存缓存摘要（避免重复生成，服务重启后失效）
-const summaryCache = new Map<string, { overview: string; takeaways: string; keyDifficulties: string[] }>();
+// 内存缓存摘要（带 TTL 和大小限制，避免内存泄漏）
+const SUMMARY_CACHE_MAX_SIZE = 200;
+const SUMMARY_CACHE_TTL_MS = 2 * 60 * 60 * 1000; // 2小时
+
+interface SummaryCacheEntry {
+  overview: string;
+  takeaways: string;
+  keyDifficulties: string[];
+  createdAt: number;
+}
+
+const summaryCache = new Map<string, SummaryCacheEntry>();
+
+function getSummaryCache(sessionId: string) {
+  const entry = summaryCache.get(sessionId);
+  if (!entry) return undefined;
+  if (Date.now() - entry.createdAt > SUMMARY_CACHE_TTL_MS) {
+    summaryCache.delete(sessionId);
+    return undefined;
+  }
+  return { overview: entry.overview, takeaways: entry.takeaways, keyDifficulties: entry.keyDifficulties };
+}
+
+function setSummaryCache(sessionId: string, data: { overview: string; takeaways: string; keyDifficulties: string[] }) {
+  // 超过上限时淘汰最旧的条目
+  if (summaryCache.size >= SUMMARY_CACHE_MAX_SIZE) {
+    const firstKey = summaryCache.keys().next().value;
+    if (firstKey) summaryCache.delete(firstKey);
+  }
+  summaryCache.set(sessionId, { ...data, createdAt: Date.now() });
+}
 
 // AI 家教系统提示词（初次解释用）
 const TUTOR_SYSTEM_PROMPT = `你是一位"课堂对齐"的 AI 家教。你的任务是帮助学生补懂课堂上没听懂的内容。
@@ -246,7 +275,7 @@ export async function POST(request: NextRequest) {
     if (!globalMode && sessionId && segments.length >= 10) {
       try {
         // 先检查缓存
-        let cachedSummary = summaryCache.get(sessionId);
+        let cachedSummary = getSummaryCache(sessionId);
         
         if (!cachedSummary) {
           console.log(`[Tutor API] 为 session ${sessionId} 生成摘要...`);
@@ -277,7 +306,7 @@ export async function POST(request: NextRequest) {
             takeaways: takeawaysText,
             keyDifficulties: summaryResult.keyDifficulties,
           };
-          summaryCache.set(sessionId, cachedSummary);
+          setSummaryCache(sessionId, cachedSummary);
           summaryGenerated = true;
           
           console.log(`[Tutor API] 摘要已生成并缓存`);
