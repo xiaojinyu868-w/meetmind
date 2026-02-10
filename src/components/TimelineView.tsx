@@ -1,8 +1,10 @@
 ﻿'use client';
 
-import { useCallback, useState } from 'react';
+import { useCallback, useState, useRef } from 'react';
 import type { Timeline, Breakpoint } from '@/lib/services/meetmind-service';
 import { formatTimestamp } from '@/lib/services/longcut-utils';
+import { useTextSelection } from '@/hooks/useTextSelection';
+import { WordExplainer } from './WordExplainer';
 
 interface TimelineViewProps {
   timeline: Timeline;
@@ -11,6 +13,10 @@ interface TimelineViewProps {
   onTimeClick: (timeMs: number) => void;
   onBreakpointClick: (breakpoint: Breakpoint) => void;
   onSegmentTextUpdate?: (segmentId: string, text: string) => void;
+  /** 启用选词解释功能 */
+  enableWordExplainer?: boolean;
+  /** 完整转录上下文（用于 AI 解释时的参考） */
+  fullContextText?: string;
 }
 
 export function TimelineView({
@@ -20,10 +26,18 @@ export function TimelineView({
   onTimeClick,
   onBreakpointClick,
   onSegmentTextUpdate,
+  enableWordExplainer = false,
+  fullContextText,
 }: TimelineViewProps) {
   const [editingSegmentId, setEditingSegmentId] = useState<string | null>(null);
   const [draftText, setDraftText] = useState('');
   const [editingOriginalText, setEditingOriginalText] = useState('');
+
+  // 选词解释
+  const transcriptContainerRef = useRef<HTMLDivElement>(null);
+  const { selection, clearSelection } = useTextSelection(
+    enableWordExplainer ? transcriptContainerRef : { current: null } as React.RefObject<HTMLElement | null>
+  );
 
   const startEditing = useCallback((segmentId: string, currentText: string) => {
     if (!onSegmentTextUpdate) return;
@@ -117,7 +131,7 @@ export function TimelineView({
         </div>
       )}
 
-      <div className="flex-1 min-h-0 overflow-y-auto">
+      <div ref={transcriptContainerRef} className="flex-1 min-h-0 overflow-y-auto">
         <div className="px-4 py-3">
           <h3 className="text-xs font-medium text-gray-400 uppercase tracking-wider mb-3">课堂转录</h3>
           <div className="space-y-0.5">
@@ -173,19 +187,17 @@ export function TimelineView({
                           className="w-full min-h-[80px] rounded-lg border border-amber-200 bg-white px-2.5 py-2 text-sm leading-relaxed focus:outline-none focus:ring-2 focus:ring-amber-200"
                           autoFocus
                         />
-                      ) : onSegmentTextUpdate ? (
-                        <button
-                          onClick={(e) => {
+                      ) : (
+                        <span
+                          onDoubleClick={onSegmentTextUpdate ? (e) => {
                             e.stopPropagation();
                             startEditing(segment.id, segment.text);
-                          }}
-                          className="w-full text-left text-sm leading-relaxed rounded-md px-1 py-0.5 -mx-1 hover:bg-white/70 transition-colors cursor-text"
-                          title="点击编辑"
+                          } : undefined}
+                          className={`text-sm leading-relaxed select-text ${onSegmentTextUpdate ? 'rounded-md px-1 py-0.5 -mx-1 hover:bg-white/70 transition-colors' : ''}`}
+                          title={onSegmentTextUpdate ? '双击编辑' : undefined}
                         >
                           {segment.text}
-                        </button>
-                      ) : (
-                        <p className="text-sm leading-relaxed">{segment.text}</p>
+                        </span>
                       )}
                     </div>
                   </div>
@@ -195,6 +207,16 @@ export function TimelineView({
           </div>
         </div>
       </div>
+
+      {/* 选词解释浮窗 */}
+      {enableWordExplainer && selection && (
+        <WordExplainer
+          selection={selection}
+          fullContextText={fullContextText}
+          onClose={clearSelection}
+          onTimestampClick={(timeMs) => onTimeClick(timeMs)}
+        />
+      )}
 
       <div className="px-4 py-3 border-t border-gray-100">
         <div className="flex gap-2">

@@ -1,7 +1,7 @@
 'use client';
 
 // AI 家教聊天组件
-// 支持对话历史持久化存储、模型选择、图片上传
+// 支持流式输出、思维引导、思考过程可视化、对话历史持久化、模型选择、图片上传
 
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { formatTimestampMs } from '@/lib/longcut';
@@ -12,12 +12,17 @@ import { ModelSelector } from './ModelSelector';
 import { ImageUpload, useImagePaste, type UploadedImage } from './ImageUpload';
 import { DEFAULT_MODEL_ID } from '@/lib/services/llm-service';
 import { ThinkingGuideRenderer } from './ThinkingGuideRenderer';
+import { StreamingMarkdown } from './StreamingMarkdown';
+import { ThinkingVisualizer } from './ThinkingVisualizer';
+import { useSimpleSSEStream } from '@/lib/hooks/useSSEStream';
 import { VoiceMicButton } from './VoiceMicButton';
 
 interface Message {
   id: string;
   role: 'user' | 'assistant';
   content: string;
+  /** 思考过程内容（仅 assistant） */
+  thinking?: string;
 }
 
 interface AIChatProps {
@@ -124,6 +129,24 @@ export function AIChat({
   const [isInitializing, setIsInitializing] = useState(false);
   const conversationIdRef = useRef<string | null>(initialConversationId || null);
 
+  // 思维引导开关
+  const [enableThinkingGuide, setEnableThinkingGuide] = useState(true);
+  // 思考过程折叠状态
+  const [thinkingCollapsed, setThinkingCollapsed] = useState(false);
+  // 思考开始时间
+  const [thinkingStartTime, setThinkingStartTime] = useState<number | undefined>();
+
+  // 流式输出 SSE Hook
+  const {
+    fetchStream,
+    stopStream,
+    isStreaming,
+    isThinking,
+    streamingContent,
+    thinkingContent,
+    clearContent,
+  } = useSimpleSSEStream();
+
   // 监听粘贴事件
   useImagePaste(
     (pastedImages) => {
@@ -138,7 +161,7 @@ export function AIChat({
   // 自动滚动到底部
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages]);
+  }, [messages, streamingContent, thinkingContent]);
 
   // 初始化或恢复对话
   useEffect(() => {
@@ -219,9 +242,9 @@ export function AIChat({
     }
   }, []);
 
-  // 发送消息
+  // 发送消息（流式）
   const sendMessage = async (content: string) => {
-    if ((!content.trim() && uploadedImages.length === 0) || isLoading) return;
+    if ((!content.trim() && uploadedImages.length === 0) || isLoading || isStreaming) return;
 
     const userMessage: Message = {
       id: Date.now().toString(),
@@ -233,6 +256,9 @@ export function AIChat({
     setInputValue('');
     setIsLoading(true);
     setError(null);
+    clearContent();
+    setThinkingCollapsed(false);
+    setThinkingStartTime(Date.now());
 
     try {
       // 如果是首条消息，创建对话
@@ -244,7 +270,7 @@ export function AIChat({
       await saveMessage('user', userMessage.content);
 
       // 构建请求头
-      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      const headers: Record<string, string> = {};
       if (accessToken) {
         headers['Authorization'] = `Bearer ${accessToken}`;
       }
@@ -267,7 +293,8 @@ export function AIChat({
         model: selectedModel,
         context: contextText,
         anchorId,
-        stream: false,
+        stream: true,
+        enable_thinking_guide: enableThinkingGuide,
       };
 
       // 支持多模态（图片上传）
@@ -279,25 +306,16 @@ export function AIChat({
           })),
           { type: 'text', text: content.trim() || '请描述这张图片' },
         ];
-        setUploadedImages([]);  // 清空图片
+        setUploadedImages([]);
       }
 
-      const response = await fetch(apiEndpoint, {
-        method: 'POST',
-        headers,
-        body: JSON.stringify(requestBody),
-      });
-
-      if (!response.ok) {
-        throw new Error(`请求失败: ${response.status}`);
-      }
-
-      const data = await response.json();
+      const result = await fetchStream(apiEndpoint, requestBody, { headers });
       
       const assistantMessage: Message = {
         id: (Date.now() + 1).toString(),
         role: 'assistant',
-        content: data.content || data.message || '抱歉，我无法回答这个问题。',
+        content: result.content || '抱歉，我无法回答这个问题。',
+        thinking: result.thinking || undefined,
       };
 
       setMessages(prev => [...prev, assistantMessage]);
@@ -310,12 +328,36 @@ export function AIChat({
       
       // 保存助手消息
       await saveMessage('assistant', assistantMessage.content);
+      clearContent();
     } catch (err) {
-      setError(err instanceof Error ? err.message : '发送失败');
+      // 用户取消不算错误
+      if (err instanceof Error && err.name === 'AbortError') {
+        // 把已经流式输出的内容保存为消息
+        const partialContent = streamingContent;
+        if (partialContent) {
+          const partialMessage: Message = {
+            id: (Date.now() + 1).toString(),
+            role: 'assistant',
+            content: partialContent + '\n\n[生成已停止]',
+            thinking: thinkingContent || undefined,
+          };
+          setMessages(prev => [...prev, partialMessage]);
+          await saveMessage('assistant', partialMessage.content);
+        }
+        clearContent();
+      } else {
+        setError(err instanceof Error ? err.message : '发送失败');
+      }
     } finally {
       setIsLoading(false);
+      setThinkingStartTime(undefined);
     }
   };
+
+  // 停止生成
+  const handleStopGeneration = useCallback(() => {
+    stopStream();
+  }, [stopStream]);
 
   // 表单提交
   const handleSubmit = (e: React.FormEvent) => {
@@ -369,6 +411,18 @@ export function AIChat({
           )}
         </div>
         <div className="flex items-center gap-2">
+          {/* 思维引导开关 */}
+          {!isMobile && (
+            <label className="flex items-center gap-1 cursor-pointer select-none" title="开启后 AI 会展示解题思路引导">
+              <input
+                type="checkbox"
+                checked={enableThinkingGuide}
+                onChange={(e) => setEnableThinkingGuide(e.target.checked)}
+                className="w-3.5 h-3.5 rounded border-gray-300 text-violet-600 focus:ring-violet-500 cursor-pointer"
+              />
+              <span className="text-xs text-gray-500">🧠 思维引导</span>
+            </label>
+          )}
           <ModelSelector
             value={selectedModel}
             onChange={setSelectedModel}
@@ -411,7 +465,7 @@ export function AIChat({
                 <button
                   key={i}
                   onClick={() => sendMessage(q)}
-                  disabled={isLoading}
+                  disabled={isLoading || isStreaming}
                   className="px-3 py-1.5 text-sm bg-gray-100 text-gray-700 rounded-full hover:bg-gray-200 transition-colors disabled:opacity-50"
                 >
                   {q}
@@ -435,13 +489,37 @@ export function AIChat({
               }`}
             >
               {message.role === 'assistant' ? (
-                // 助手消息：使用 ThinkingGuideRenderer 自动检测并渲染思维链
-                <ThinkingGuideRenderer
-                  content={message.content}
-                  onTimestampClick={onTimestampClick}
-                  isMobile={isMobile}
-                  className={`${isMobile ? 'text-xs' : 'text-sm'} leading-relaxed`}
-                />
+                <div>
+                  {/* 已完成消息的思考过程 */}
+                  {message.thinking && !enableThinkingGuide && (
+                    <div className="mb-2">
+                      <ThinkingVisualizer
+                        content={message.thinking}
+                        isThinking={false}
+                        isCollapsed={true}
+                        onToggleCollapse={() => {}}
+                        enableGuideMode={false}
+                        onTimestampClick={onTimestampClick}
+                        isMobile={isMobile}
+                      />
+                    </div>
+                  )}
+                  {enableThinkingGuide ? (
+                    <ThinkingGuideRenderer
+                      content={message.content}
+                      onTimestampClick={onTimestampClick}
+                      isMobile={isMobile}
+                      className={`${isMobile ? 'text-xs' : 'text-sm'} leading-relaxed`}
+                    />
+                  ) : (
+                    <StreamingMarkdown
+                      content={message.content}
+                      isStreaming={false}
+                      onTimestampClick={onTimestampClick}
+                      className={`${isMobile ? 'text-xs' : 'text-sm'} leading-relaxed`}
+                    />
+                  )}
+                </div>
               ) : (
                 <div className={`${isMobile ? 'text-xs' : 'text-sm'} whitespace-pre-wrap`}>
                   {message.content}
@@ -451,19 +529,68 @@ export function AIChat({
           </div>
         ))}
 
-        {/* 加载状态 */}
-        {isLoading && (
+        {/* 流式输出中的内容 */}
+        {(isStreaming || isLoading) && (
           <div className="flex justify-start">
-            <div className="bg-gray-100 rounded-lg px-4 py-2">
-              <div className="flex items-center gap-2 text-gray-500">
-                <div className="flex gap-1">
-                  <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
-                  <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
-                  <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+            <div className={`max-w-[90%] rounded-2xl ${isMobile ? 'px-3 py-2' : 'px-4 py-3'} bg-gray-50 text-gray-800`}>
+              {/* 思考过程可视化 */}
+              {thinkingContent && !enableThinkingGuide && (
+                <div className="mb-2">
+                  <ThinkingVisualizer
+                    content={thinkingContent}
+                    isThinking={isThinking}
+                    isCollapsed={thinkingCollapsed}
+                    onToggleCollapse={() => setThinkingCollapsed(prev => !prev)}
+                    enableGuideMode={false}
+                    onTimestampClick={onTimestampClick}
+                    startTime={thinkingStartTime}
+                    isMobile={isMobile}
+                  />
                 </div>
-                <span className="text-sm">思考中...</span>
-              </div>
+              )}
+              {/* 流式内容 */}
+              {streamingContent ? (
+                enableThinkingGuide ? (
+                  <ThinkingGuideRenderer
+                    content={streamingContent}
+                    onTimestampClick={onTimestampClick}
+                    isMobile={isMobile}
+                    className={`${isMobile ? 'text-xs' : 'text-sm'} leading-relaxed`}
+                  />
+                ) : (
+                  <StreamingMarkdown
+                    content={streamingContent}
+                    isStreaming={isStreaming}
+                    onTimestampClick={onTimestampClick}
+                    className={`${isMobile ? 'text-xs' : 'text-sm'} leading-relaxed`}
+                  />
+                )
+              ) : (
+                <div className="flex items-center gap-2 text-gray-500">
+                  <div className="flex gap-1">
+                    <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
+                    <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
+                    <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+                  </div>
+                  <span className="text-sm">{isThinking ? '正在思考...' : '生成中...'}</span>
+                </div>
+              )}
             </div>
+          </div>
+        )}
+
+        {/* 停止生成按钮 */}
+        {isStreaming && (
+          <div className="flex justify-center">
+            <button
+              onClick={handleStopGeneration}
+              className="flex items-center gap-1.5 px-4 py-1.5 text-xs text-red-600 bg-red-50 hover:bg-red-100 border border-red-200 rounded-full transition-colors"
+            >
+              <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 24 24">
+                <rect x="6" y="6" width="12" height="12" rx="1" />
+              </svg>
+              停止生成
+            </button>
           </div>
         )}
 
@@ -517,17 +644,17 @@ export function AIChat({
             type="text"
             value={inputValue}
             onChange={(e) => setInputValue(e.target.value)}
-            disabled={isLoading}
+            disabled={isLoading || isStreaming}
             placeholder="输入你的问题..."
             className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-400 focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed"
           />
           <VoiceMicButton
             onTranscript={(text) => setInputValue(prev => prev + text)}
-            disabled={isLoading}
+            disabled={isLoading || isStreaming}
           />
           <button
             type="submit"
-            disabled={isLoading || (!inputValue.trim() && uploadedImages.length === 0)}
+            disabled={isLoading || isStreaming || (!inputValue.trim() && uploadedImages.length === 0)}
             className="px-4 py-2 bg-amber-500 text-white rounded-lg hover:bg-amber-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
           >
             发送

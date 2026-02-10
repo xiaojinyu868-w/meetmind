@@ -238,7 +238,7 @@ meetmind/
 │   │   ├── layout/              # 布局组件
 │   │   └── ConversationHistory/ # 对话历史组件
 │   │
-│   ├── hooks/                   # 自定义 Hooks (13个)
+│   ├── hooks/                   # 自定义 Hooks (15个)
 │   │   ├── useAnalytics.ts      # 数据分析
 │   │   ├── useAnchors.ts        # 困惑点管理
 │   │   ├── useAudio.ts          # 音频播放控制
@@ -250,6 +250,7 @@ meetmind/
 │   │   ├── useResponsive.ts     # 响应式布局检测
 │   │   ├── useDragGesture.ts    # 拖拽手势处理
 │   │   ├── useResizable.ts      # 可调整大小
+│   │   ├── useTextSelection.ts  # 文本选择监听（选词解释用）
 │   │   └── data/                # SWR 数据 Hooks
 │   │
 │   ├── lib/
@@ -348,8 +349,20 @@ meetmind/
 | **限流服务** | ✅ | 基于 Redis/内存的请求限流，保护后端服务 |
 | **对话历史** | ✅ | AI 对话记录持久化，支持历史查询和续聊 |
 | **自适应布局** | ✅ | 多端适配、安全区域支持、AI对话框高度优化 |
+| **AIChat 流式输出** | ✅ | SSE 流式渲染、思维引导、停止生成 |
+| **选词解释** | ✅ | 转录文本选词即解释，支持追问、语音、图片 |
 
 ### 最新更新
+
+#### v2.7 - AI 交互增强：流式输出、选词解释、多模态
+
+| 功能 | 描述 |
+|------|------|
+| **AIChat 流式输出** | 从一次性请求升级为 SSE 流式输出，新增思维引导开关、思考过程可视化、停止生成按钮、流式 Markdown 渲染 |
+| **选词解释功能** | 在转录面板/时间轴中选中文本后弹出「解释一下」浮窗，AI 结合课堂上下文流式解释，支持多轮追问 |
+| **WordExplainer 浮窗** | 支持拖拽移动、四边/四角缩放、语音输入（VoiceMicButton）、图片上传/粘贴、模型切换 |
+| **编辑交互优化** | TranscriptPreviewPanel 和 TimelineView 的转录文本编辑从单击改为双击触发，避免与选词解释冲突 |
+| **B站视频导入 ASR 回退** | 改善视频导入场景下的语音识别回退策略 |
 
 #### v2.6 - 低开发熵治理（稳定性与可维护性）
 
@@ -534,41 +547,4 @@ MIT License
 
 如有问题或建议，欢迎提交 Issue 或 Pull Request。
 
-## 2026-02-06 Internal Beta Optimization Update
-
-- Lint is now non-interactive and runnable via npm run lint (CI friendly).
-- Kept gradual lint governance: legacy debt remains warnings to avoid blocking iteration.
-- Optimized src/app/(main)/app/page.tsx with dynamic imports and local decorative images via next/image.
-- Unified avatar rendering through shared `Avatar` component in app/profile/settings/header/mobile menu to reduce duplicate `<img>` usage.
-- Resolved all current `@next/next/no-img-element` warnings (data URL previews are explicitly documented and exempted where needed).
-- Verified build output: `/app` route is now `66.8 kB` (First Load JS `219 kB`).
-- This round prioritized low-entropy fixes only; high-risk refactors and non-critical hardening remain intentionally deferred.
-
-## 2026-02-06 内测稳定性补充更新（低熵）
-
-- 修复录音页居中偏移：`src/app/(main)/app/page.tsx` 中 3 处装饰图容器去除 `absolute + relative` 冲突定位，录音卡片中心偏移由 `+160px` 回到 `0px`。
-- 修复录音结束后复盘页潜在 chunk 失败：`AITutor` 从动态导入改为静态导入，避免开发态出现 `/_next/undefined` 的动态 chunk 加载路径。
-- 完整回归验证已通过：`npm run lint`、`npm run build`、自动化录音开始/结束流程、复盘页切换流程均无页面崩溃。
-
-## 2026-02-06 回归修复（录音与乱码）
-
-- 修复 `Recorder` 并发启动竞态：新增 `isStartingRecording` 启动锁，避免重复点击导致多套音频节点并行初始化。
-- 修复 `AudioNode` 跨 `AudioContext` 风险：录音启动阶段统一使用同一 `audioContext` 局部实例创建并连接 `source/analyser/processor`。
-- 增强异常清理：启动失败时统一回收 `MediaStream`、`ScriptProcessorNode`、`AudioContext`、计时器与动画帧句柄。
-- 清理中文乱码：修复 `dashscope-asr-service.ts`、`meetmind-service.ts`、`quota-service.ts` 的错误转码文本。
-- 修复录音历史 chunk 崩溃：`src/app/(main)/app/page.tsx` 中将 `SessionHistoryList` 等同页关键动态组件改为静态导入，避免 `Loading chunk ... (/_next/undefined)`。
-- 验证结果：`npm run lint`（0 warning）、`npx tsc --noEmit`、`npm run build` 全部通过；自动化回归覆盖“进入录音历史 -> 返回实时录音”路径无 chunk 报错。
-
-## 2026-02-06 回归修复（家长端困惑点同步）
-
-- 修复家长端学生标识写死问题：`src/app/parent/page.tsx` 不再固定使用 `demo-student`，改为优先使用当前登录用户，未登录时回退到最近有困惑点记录的学生。
-- 修复家长统计口径偏差：`src/lib/services/parent-service.ts` 的 `getTodayLearningStatus()` 只统计“目标学生相关会话”，避免把其他学生会话计入 `totalClasses` 后误判“没有标记困惑点”。
-- 修复会话归属丢失：`src/lib/services/classroom-data-service.ts` 的 `saveSession()` 更新会话时保留 `createdBy`（及已有元数据），避免后续更新把学生归属覆盖为 `undefined`。
-- 验证结果：`npm run lint`、`npx tsc --noEmit` 通过；并完成自动化回归（Playwright，模拟“学生已标困惑点 -> 家长端显示待解决”）验证通过。
-
-## 2026-02-06 回归修复（教师端 chunk 加载失败）
-
-- 修复教师端页面动态 chunk 崩溃：`src/app/teacher/page.tsx` 将 `TeacherDashboard` 从 `next/dynamic` 改为静态导入，避免出现 `Loading chunk ... TeacherDashboard_tsx failed (/_next/undefined)`。
-- 验证结果：`npm run lint`、`npx tsc --noEmit`、`npm run build` 均通过。
-- 若本地 dev 仍偶发历史缓存错误，请先停止进程后清理 `.next` 再重启：`rd /s /q .next && npm run dev`。
 

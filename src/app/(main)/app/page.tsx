@@ -1840,6 +1840,9 @@ function StudentAppContent({ isGuestFastEntry }: { isGuestFastEntry: boolean }) 
                             immersiveMode={true}
                             editable={true}
                             onSegmentTextUpdate={handleTranscriptTextUpdate}
+                            enableWordExplainer={true}
+                            fullContextText={segments.map(s => `[${formatTime(s.startMs)}] ${s.text}`).join('\n')}
+                            onTimestampClick={handleVideoSeek}
                           />
                         </div>
                       )}
@@ -2196,6 +2199,8 @@ function StudentAppContent({ isGuestFastEntry }: { isGuestFastEntry: boolean }) 
                             if (anchor) handleAnchorSelect(anchor);
                           }}
                           onSegmentTextUpdate={handleTranscriptTextUpdate}
+                          enableWordExplainer={true}
+                          fullContextText={segments.map(s => `[${formatTime(s.startMs)}] ${s.text}`).join('\n')}
                         />
                       )}
                       

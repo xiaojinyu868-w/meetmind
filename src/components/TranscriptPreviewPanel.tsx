@@ -11,6 +11,8 @@ import {
   type UIEvent,
 } from 'react';
 import type { TranscriptSegment } from '@/types';
+import { useTextSelection } from '@/hooks/useTextSelection';
+import { WordExplainer } from './WordExplainer';
 
 interface TranscriptPreviewPanelProps {
   transcript: TranscriptSegment[];
@@ -23,6 +25,12 @@ interface TranscriptPreviewPanelProps {
   immersiveMode?: boolean;
   editable?: boolean;
   onSegmentTextUpdate?: (segmentId: string, text: string) => void;
+  /** 启用选词解释功能 */
+  enableWordExplainer?: boolean;
+  /** 完整转录上下文（用于 AI 解释时的参考） */
+  fullContextText?: string;
+  /** 时间戳点击回调 */
+  onTimestampClick?: (timeMs: number) => void;
 }
 
 const defaultFormatTime = (ms: number) => {
@@ -80,6 +88,9 @@ export function TranscriptPreviewPanel({
   immersiveMode = false,
   editable = false,
   onSegmentTextUpdate,
+  enableWordExplainer = false,
+  fullContextText,
+  onTimestampClick,
 }: TranscriptPreviewPanelProps) {
   const [isExpanded, setIsExpanded] = useState(defaultExpanded || immersiveMode);
   const [searchQuery, setSearchQuery] = useState('');
@@ -91,6 +102,12 @@ export function TranscriptPreviewPanel({
   const [editingSegmentId, setEditingSegmentId] = useState<string | null>(null);
   const [draftText, setDraftText] = useState('');
   const [editingOriginalText, setEditingOriginalText] = useState('');
+
+  // 选词解释
+  const wordExplainerContainerRef = useRef<HTMLDivElement>(null);
+  const { selection, clearSelection } = useTextSelection(
+    enableWordExplainer ? wordExplainerContainerRef : { current: null } as React.RefObject<HTMLElement | null>
+  );
 
   const canEdit = editable && typeof onSegmentTextUpdate === 'function';
 
@@ -258,7 +275,7 @@ export function TranscriptPreviewPanel({
 
   if (immersiveMode) {
     return (
-      <div className="flex flex-col h-full relative">
+      <div ref={wordExplainerContainerRef} className="flex flex-col h-full relative">
         <div className="flex-shrink-0 px-4 py-2 flex items-center justify-between bg-gray-50/50">
           <div className="flex items-center gap-2">
             <span className="text-xs font-medium text-gray-500">📝 {transcript.length} 句</span>
@@ -353,12 +370,22 @@ export function TranscriptPreviewPanel({
             </button>
           </div>
         )}
+
+        {/* 选词解释浮窗 */}
+        {enableWordExplainer && selection && (
+          <WordExplainer
+            selection={selection}
+            fullContextText={fullContextText}
+            onClose={clearSelection}
+            onTimestampClick={onTimestampClick}
+          />
+        )}
       </div>
     );
   }
 
   return (
-    <div className="mt-8 pt-6 border-t border-gray-100 animate-fade-in">
+    <div ref={!immersiveMode ? wordExplainerContainerRef : undefined} className="mt-8 pt-6 border-t border-gray-100 animate-fade-in">
       <div className="flex items-center justify-between mb-3">
         <h4 className="text-sm font-medium text-gray-700 flex items-center gap-2">
           {transcribeMode === 'streaming' ? '📝 实时转录' : '📝 转录结果'}
@@ -512,6 +539,16 @@ export function TranscriptPreviewPanel({
           </button>
         )}
       </div>
+
+      {/* 选词解释浮窗 */}
+      {enableWordExplainer && selection && (
+        <WordExplainer
+          selection={selection}
+          fullContextText={fullContextText}
+          onClose={clearSelection}
+          onTimestampClick={onTimestampClick}
+        />
+      )}
     </div>
   );
 }
@@ -565,16 +602,14 @@ function TranscriptItem({
           className="flex-1 min-h-[84px] rounded-lg border border-amber-200 bg-white px-2.5 py-2 text-sm leading-relaxed focus:outline-none focus:ring-2 focus:ring-amber-200"
           autoFocus
         />
-      ) : editable ? (
-        <button
-          onClick={() => onStartEdit?.(segment)}
-          className="flex-1 text-left text-gray-700 leading-relaxed rounded-md px-1 py-0.5 -mx-1 hover:bg-white transition-colors cursor-text"
-          title="点击编辑"
+      ) : (
+        <span
+          onDoubleClick={editable ? () => onStartEdit?.(segment) : undefined}
+          className={`flex-1 text-gray-700 leading-relaxed select-text ${editable ? 'rounded-md px-1 py-0.5 -mx-1 hover:bg-white transition-colors' : ''}`}
+          title={editable ? '双击编辑' : undefined}
         >
           {highlighted}
-        </button>
-      ) : (
-        <span className="text-gray-700 leading-relaxed">{highlighted}</span>
+        </span>
       )}
     </div>
   );
@@ -609,16 +644,14 @@ function ImmersiveTranscriptItem({
           className="flex-1 min-h-[92px] rounded-lg border border-amber-200 bg-white px-2.5 py-2 text-sm leading-relaxed focus:outline-none focus:ring-2 focus:ring-amber-200"
           autoFocus
         />
-      ) : editable ? (
-        <button
-          onClick={() => onStartEdit?.(segment)}
-          className="flex-1 text-left text-gray-800 text-base leading-relaxed rounded-md px-1 py-0.5 -mx-1 hover:bg-white/80 transition-colors cursor-text"
-          title="点击编辑"
+      ) : (
+        <span
+          onDoubleClick={editable ? () => onStartEdit?.(segment) : undefined}
+          className={`flex-1 text-gray-800 text-base leading-relaxed select-text ${editable ? 'rounded-md px-1 py-0.5 -mx-1 hover:bg-white/80 transition-colors' : ''}`}
+          title={editable ? '双击编辑' : undefined}
         >
           {highlighted}
-        </button>
-      ) : (
-        <span className="text-gray-800 text-base leading-relaxed flex-1">{highlighted}</span>
+        </span>
       )}
     </div>
   );

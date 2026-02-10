@@ -67,21 +67,23 @@
 |------|------|------|
 | `Recorder` | `src/components/Recorder.tsx` | 核心录音组件，支持实时/批处理转录、困惑点标记 |
 | `AITutor` | `src/components/AITutor.tsx` | AI 家教对话，解释困惑点、生成行动清单 |
-| `AIChat` | `src/components/AIChat.tsx` | 自由 AI 对话组件 |
-| `TimelineView` | `src/components/TimelineView.tsx` | 课堂时间轴，显示转录和困惑点 |
+| `AIChat` | `src/components/AIChat.tsx` | AI 对话组件（SSE 流式输出、思维引导、停止生成） |
+| `TimelineView` | `src/components/TimelineView.tsx` | 课堂时间轴，显示转录和困惑点，支持选词解释 |
 | `WaveformPlayer` | `src/components/WaveformPlayer.tsx` | 音频波形播放器，支持锚点跳转 |
 | `ActionList` | `src/components/ActionList.tsx` | 行动清单，显示待完成任务 |
 | `ConfusionHeatmap` | `src/components/ConfusionHeatmap.tsx` | 困惑热区可视化 |
 | `OnboardingGuide` | `src/components/OnboardingGuide.tsx` | 新用户引导组件，支持交互式引导 |
 | `AnalyticsProvider` | `src/components/AnalyticsProvider.tsx` | 数据分析上下文提供者 |
-| `TranscriptPreviewPanel` | `src/components/TranscriptPreviewPanel.tsx` | 转录预览面板，支持编辑和增强 |
+| `TranscriptPreviewPanel` | `src/components/TranscriptPreviewPanel.tsx` | 转录预览面板，支持编辑、增强、选词解释 |
 | `ThinkingVisualizer` | `src/components/ThinkingVisualizer.tsx` | AI 思维过程可视化组件 |
 | `ThinkingGuideRenderer` | `src/components/ThinkingGuideRenderer.tsx` | 思维引导渲染器 |
 | `ConversationHistory` | `src/components/ConversationHistory/` | 对话历史组件（v2.1 新增） |
 | `SessionHistoryList` | `src/components/SessionHistoryList.tsx` | 会话历史列表 |
 | `AppLoading` | `src/components/AppLoading.tsx` | 应用加载状态 |
 | `ServiceStatus` | `src/components/ServiceStatus.tsx` | 服务状态显示 |
-| `ImageUpload` | `src/components/ImageUpload.tsx` | 图片上传组件 |
+| `ImageUpload` | `src/components/ImageUpload.tsx` | 图片上传组件（支持粘贴） |
+| `WordExplainer` | `src/components/WordExplainer.tsx` | 选词解释浮窗（拖拽/缩放/语音/图片/追问，v2.7 新增） |
+| `VoiceMicButton` | `src/components/VoiceMicButton.tsx` | 语音输入按钮 |
 | `GuidanceQuestion` | `src/components/GuidanceQuestion.tsx` | 引导问题组件 |
 | `Citations` | `src/components/Citations.tsx` | 引用/来源展示 |
 | `StreamingMarkdown` | `src/components/StreamingMarkdown.tsx` | 流式 Markdown 渲染 |
@@ -428,6 +430,6 @@ GET /api/analytics/stats?type=ip
 
 ---
 
-*文档版本：v1.4*  
-*更新日期：2026-02-04*  
-*更新内容：新增移动端组件列表、新用户引导组件、完善组件索引*
+*文档版本：v1.5*  
+*更新日期：2026-02-10*  
+*更新内容：新增 WordExplainer、VoiceMicButton 组件；更新 AIChat、TimelineView、TranscriptPreviewPanel 描述*
