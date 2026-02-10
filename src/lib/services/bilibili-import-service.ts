@@ -127,6 +127,12 @@ function getCommonHeaders(extraHeaders?: Record<string, string>): HeadersInit {
     'User-Agent': BILIBILI_USER_AGENT,
   };
 
+  // 自动携带 Cookie，让所有 B 站 API 请求都有登录态
+  const cookie = process.env.BILIBILI_COOKIE;
+  if (cookie) {
+    headers.Cookie = cookie;
+  }
+
   if (extraHeaders) {
     for (const [key, value] of Object.entries(extraHeaders)) {
       if (value) headers[key] = value;
@@ -346,7 +352,8 @@ export async function fetchPlayurlAudio(bvid: string, cid: number): Promise<Bili
 
   const dashAudio = Array.isArray(dashData.dash?.audio) ? dashData.dash.audio : [];
   if (dashAudio.length > 0) {
-    const sorted = [...dashAudio].sort((a, b) => (b.bandwidth || 0) - (a.bandwidth || 0));
+    // 选最低码率音频：ASR 只需语音内容，低码率省带宽、省内存、减少 OOM 风险
+    const sorted = [...dashAudio].sort((a, b) => (a.bandwidth || 0) - (b.bandwidth || 0));
     const selected = sorted[0];
     const audioUrl = selected.baseUrl || selected.base_url;
     if (audioUrl) {

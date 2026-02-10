@@ -7,7 +7,6 @@ import { pipeline } from 'stream/promises';
 import type { ReadableStream as WebReadableStream } from 'stream/web';
 import { WebSocket } from 'undici';
 import { parseVideoLink, isLikelyDirectMediaUrl } from '@/lib/utils/video-link';
-import { applyRateLimit } from '@/lib/utils/rate-limit';
 import {
   BILIBILI_REFERER,
   BILIBILI_USER_AGENT,
@@ -55,6 +54,7 @@ interface ImportRequestBody {
   url?: string;
   mode?: TranscribeMode;
   language?: string;
+  biliCookie?: string;
 }
 
 interface VideoImportMeta {
@@ -584,6 +584,10 @@ function toPipelineError(error: unknown): ImportPipelineError {
     if (isToolNotFoundError(error, 'yt-dlp')) {
       return new ImportPipelineError('YTDLP_UNAVAILABLE', '下载器不可用', error.detail || error.message);
     }
+    // ffmpeg 被 OOM kill 时 code=null，给出更明确的提示
+    if (error.code === 'FFMPEG_FAILED' && (error.detail || '').includes('code null')) {
+      return new ImportPipelineError(error.code, '音频转码被系统终止（内存不足），请稍后重试', error.detail || error.message);
+    }
     return new ImportPipelineError(error.code, '媒体处理失败', error.detail || error.message);
   }
 
@@ -701,7 +705,9 @@ async function getAudioDurationSec(filePath: string): Promise<number> {
 const BILI_MIN_AUDIO_BYTES = 10 * 1024; // 10 KB – smaller than this is certainly broken
 const BILI_MIN_AUDIO_DURATION_RATIO = 0.25; // mp3 duration must be ≥ 25 % of declared video duration
 
-async function executeBiliNativeStage(videoUrl: string, baseName: string): Promise<StageResult> {
+async function executeBiliNativeStage(videoUrl: string, baseName: string, userCookie?: string): Promise<StageResult> {
+  // 用户 Cookie 优先，其次 .env 全局 Cookie
+  const effectiveCookie = userCookie || process.env.BILIBILI_COOKIE || '';
   const resolved = await resolveBilibiliUrl(videoUrl);
   const viewMeta = await fetchViewMeta(resolved.bvid, resolved.page);
 
@@ -740,7 +746,7 @@ async function executeBiliNativeStage(videoUrl: string, baseName: string): Promi
   const mp3Path = resolveOutputPath(UPLOAD_DIR, baseName, '.mp3');
 
   try {
-    await downloadBiliAudio(audioResult.audioUrl, rawPath);
+    await downloadBiliAudio(audioResult.audioUrl, rawPath, { cookie: effectiveCookie || undefined });
 
     // 检查原始下载文件的大小
     const rawSize = await getFileSizeBytes(rawPath);
@@ -1381,8 +1387,7 @@ function normalizeImportedSegments(
 }
 
 export async function POST(request: NextRequest) {
-  const rateLimitResponse = await applyRateLimit(request, 'transcribe');
-  if (rateLimitResponse) return rateLimitResponse;
+  // 视频导入不再使用 transcribe 限流，避免自测/正常使用被误拦
 
   const trace: ImportTraceEntry[] = [];
 
@@ -1394,6 +1399,8 @@ export async function POST(request: NextRequest) {
     const videoUrl = body.url?.trim() || '';
     const mode = normalizeMode(body.mode);
     const language = normalizeLanguage(body.language);
+    // 用户可通过「设置 → 视频导入」配置自己的 B 站 Cookie
+    const userBiliCookie = body.biliCookie?.trim() || '';
 
     if (!videoUrl) {
       throw new ImportPipelineError('MISSING_VIDEO_URL', '缺少视频链接');
@@ -1420,7 +1427,7 @@ export async function POST(request: NextRequest) {
     for (const stage of stageOrder) {
       try {
         if (stage === 'bili-native') {
-          stageResult = await executeBiliNativeStage(videoUrl, baseName);
+          stageResult = await executeBiliNativeStage(videoUrl, baseName, userBiliCookie);
         } else if (stage === 'yt-dlp-fallback') {
           stageResult = await executeYtDlpStage(videoUrl, baseName, parsed.provider);
         } else {

@@ -1923,9 +1923,8 @@ function StudentAppContent({ isGuestFastEntry }: { isGuestFastEntry: boolean }) 
 
                     {/* 内容区 */}
                     <div className="flex-1 min-h-0 overflow-hidden">
-                      {/* 对话 Tab - 全局 AI 对话 */}
-                      {videoWorkspaceTab === 'chat' && (
-                        <div className="h-full min-h-0">
+                      {/* 对话 Tab - 全局 AI 对话（使用 CSS 隐藏保留组件状态） */}
+                      <div className={`h-full min-h-0 ${videoWorkspaceTab === 'chat' ? '' : 'hidden'}`}>
                           <AIChat
                             sessionId={sessionId}
                             contextText={segments.map((seg) => `[${formatTime(seg.startMs)}] ${seg.text}`).join('\n')}
@@ -1933,8 +1932,7 @@ function StudentAppContent({ isGuestFastEntry }: { isGuestFastEntry: boolean }) 
                             forceTimestampCitations={true}
                             onAssistantMessage={handleVideoAssistantMessage}
                           />
-                        </div>
-                      )}
+                      </div>
 
                       {/* 困惑点 Tab - 列表 / 独立对话 */}
                       {videoWorkspaceTab === 'confusion' && (

@@ -10,16 +10,19 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 const SETTINGS_KEYS = {
   AUTO_SAVE: 'settings_auto_save',
   MODEL_PREFERENCE: 'settings_model_preference',
+  BILIBILI_COOKIE: 'settings_bilibili_cookie',
 };
 
 interface Settings {
   autoSave: boolean;
   modelPreference: string;
+  bilibiliCookie: string;
 }
 
 const DEFAULT_SETTINGS: Settings = {
   autoSave: true,
   modelPreference: 'auto',
+  bilibiliCookie: '',
 };
 
 export default function SettingsPage() {
@@ -33,14 +36,16 @@ export default function SettingsPage() {
   useEffect(() => {
     const loadSettings = async () => {
       try {
-        const [autoSave, modelPreference] = await Promise.all([
+        const [autoSave, modelPreference, bilibiliCookie] = await Promise.all([
           getPreference(SETTINGS_KEYS.AUTO_SAVE, DEFAULT_SETTINGS.autoSave),
           getPreference(SETTINGS_KEYS.MODEL_PREFERENCE, DEFAULT_SETTINGS.modelPreference),
+          getPreference(SETTINGS_KEYS.BILIBILI_COOKIE, DEFAULT_SETTINGS.bilibiliCookie),
         ]);
 
         setSettings({
           autoSave,
           modelPreference,
+          bilibiliCookie,
         });
       } catch (error) {
         console.error('Failed to load settings:', error);
@@ -57,6 +62,7 @@ export default function SettingsPage() {
     const keyMap: Record<keyof Settings, string> = {
       autoSave: SETTINGS_KEYS.AUTO_SAVE,
       modelPreference: SETTINGS_KEYS.MODEL_PREFERENCE,
+      bilibiliCookie: SETTINGS_KEYS.BILIBILI_COOKIE,
     };
 
     setSaving(true);
@@ -178,6 +184,55 @@ export default function SettingsPage() {
                   <option value="qwen3-max-2026-01-23">通义千问 3 Max（思考模式）</option>
                 </select>
               </div>
+            </div>
+          </div>
+        </section>
+
+        {/* 视频导入设置 */}
+        <section className="bg-white rounded-xl shadow-sm border border-gray-100">
+          <h2 className="px-4 py-3 text-sm font-medium text-gray-500 border-b border-gray-100">
+            视频导入
+          </h2>
+
+          <div className="divide-y divide-gray-100">
+            <div className="px-4 py-4 space-y-3">
+              <div>
+                <p className="text-sm font-medium text-gray-900">B站 Cookie</p>
+                <p className="text-xs text-gray-500 mt-0.5">
+                  配置后可导入更多B站视频。Cookie 仅存储在你的浏览器中，不会上传到服务器保存。
+                </p>
+              </div>
+              <textarea
+                value={settings.bilibiliCookie}
+                onChange={(e) => setSettings(prev => ({ ...prev, bilibiliCookie: e.target.value }))}
+                onBlur={() => updateSetting('bilibiliCookie', settings.bilibiliCookie.trim())}
+                placeholder="粘贴你的 B站 Cookie（包含 SESSDATA、bili_jct 等字段）"
+                rows={3}
+                disabled={saving}
+                className="w-full px-3 py-2 text-xs font-mono border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-400 focus:border-transparent resize-none placeholder:text-gray-400"
+              />
+              <details className="text-xs text-gray-500">
+                <summary className="cursor-pointer hover:text-amber-600 transition-colors">如何获取 Cookie？</summary>
+                <ol className="mt-2 ml-4 space-y-1 list-decimal">
+                  <li>用浏览器登录 <a href="https://www.bilibili.com" target="_blank" rel="noopener noreferrer" className="text-amber-600 underline">bilibili.com</a></li>
+                  <li>按 F12 打开开发者工具</li>
+                  <li>切换到「应用」(Application) 标签</li>
+                  <li>左侧找到 Cookie → https://www.bilibili.com</li>
+                  <li>复制 SESSDATA、bili_jct、DedeUserID 的值，格式如：<br/><code className="bg-gray-100 px-1 rounded">SESSDATA=xxx; bili_jct=xxx; DedeUserID=xxx</code></li>
+                </ol>
+              </details>
+              {settings.bilibiliCookie && (
+                <div className="flex items-center gap-2">
+                  <span className="inline-block w-2 h-2 rounded-full bg-green-400"></span>
+                  <span className="text-xs text-green-600">Cookie 已配置</span>
+                  <button
+                    onClick={() => updateSetting('bilibiliCookie', '')}
+                    className="ml-auto text-xs text-red-400 hover:text-red-600 transition-colors"
+                  >
+                    清除
+                  </button>
+                </div>
+              )}
             </div>
           </div>
         </section>

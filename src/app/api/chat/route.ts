@@ -25,6 +25,7 @@ export async function POST(request: NextRequest) {
       context,
       temperature = 0.7,
       maxTokens = 2000,
+      enable_thinking_guide = false,
     } = body as {
       messages: ChatMessage[];
       model?: string;
@@ -32,6 +33,7 @@ export async function POST(request: NextRequest) {
       context?: string;
       temperature?: number;
       maxTokens?: number;
+      enable_thinking_guide?: boolean;
     };
 
     if (!messages || !Array.isArray(messages)) {
@@ -50,8 +52,61 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // 学霸思维引导 Prompt
+    const THINKING_GUIDE_PROMPT = `
+
+【学霸思维引导模式】
+你是一位清北学霸学长/学姐，你非常擅长应试思维，各种中高考考试大纲都能融会贯通，你的目的是让学弟学妹能模仿你的思维方式。
+
+请按以下结构回答（结构固定，但每一步的标题和内容你自由发挥）：
+
+---思维演示---
+
+【你自己起的步骤名】
+用"我"的口吻自然地写这一步你是怎么想的...
+引用课堂内容时标注 [MM:SS]
+
+💡 心得（可迁移的思维技巧）
+
+【下一步的名字，你自己定】
+继续展示思路...
+
+💡 心得
+
+（步骤数量根据问题复杂度灵活调整）
+
+🌟 本次思维方法：方法1 → 方法2 → 方法3
+
+---正式回答---
+
+这里给出正式的回答内容
+
+【格式要求】
+- 用 ---思维演示--- 和 ---正式回答--- 作为分隔
+- 每个步骤用【步骤名】开头
+- 每步后用 💡 给一句可迁移的心得
+- 最后用 🌟 总结用到的思维方法
+- 语气像一位同桌`;
+
     // 如果有上下文，添加到系统消息中
     const finalMessages = [...messages];
+
+    // 注入思维引导 prompt 到系统消息
+    if (enable_thinking_guide) {
+      const systemIndex = finalMessages.findIndex(m => m.role === 'system');
+      if (systemIndex >= 0) {
+        finalMessages[systemIndex] = {
+          ...finalMessages[systemIndex],
+          content: `${finalMessages[systemIndex].content}${THINKING_GUIDE_PROMPT}`,
+        };
+      } else {
+        finalMessages.unshift({
+          role: 'system',
+          content: THINKING_GUIDE_PROMPT,
+        });
+      }
+    }
+
     if (context) {
       const systemIndex = finalMessages.findIndex(m => m.role === 'system');
       if (systemIndex >= 0) {

@@ -129,6 +129,9 @@ export function AIChat({
   const [isInitializing, setIsInitializing] = useState(false);
   const conversationIdRef = useRef<string | null>(initialConversationId || null);
 
+  // 根据 sessionId + anchorId 生成持久化 key，用于 tab 切换后恢复对话
+  const persistKey = `aichat_conv_${sessionId || 'default'}${anchorId ? `_${anchorId}` : ''}`;
+
   // 思维引导开关
   const [enableThinkingGuide, setEnableThinkingGuide] = useState(true);
   // 思考过程折叠状态
@@ -166,11 +169,15 @@ export function AIChat({
   // 初始化或恢复对话
   useEffect(() => {
     const initConversation = async () => {
-      // 如果指定了对话 ID，加载历史
-      if (initialConversationId) {
+      // 确定要加载的对话 ID：优先使用传入的，其次从 sessionStorage 恢复
+      const targetConvId = initialConversationId || (() => {
+        try { return sessionStorage.getItem(persistKey) || undefined; } catch { return undefined; }
+      })();
+
+      if (targetConvId) {
         setIsInitializing(true);
         try {
-          const conv = await conversationService.getConversation(initialConversationId);
+          const conv = await conversationService.getConversation(targetConvId);
           if (conv) {
             setConversation(conv);
             conversationIdRef.current = conv.conversationId;
@@ -192,7 +199,8 @@ export function AIChat({
     };
     
     initConversation();
-  }, [initialConversationId]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialConversationId, persistKey]);
 
   // 监听 sessionId 变化，清理消息状态
   useEffect(() => {
@@ -202,6 +210,8 @@ export function AIChat({
     setError(null);
     setInputValue('');
     conversationIdRef.current = null;
+    try { sessionStorage.removeItem(persistKey); } catch { /* ignore */ }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sessionId]);
 
   // 创建新对话
@@ -220,13 +230,16 @@ export function AIChat({
       setConversation(conv);
       conversationIdRef.current = conv.conversationId;
       onConversationChange?.(conv);
+
+      // 持久化 conversationId，tab 切换后可恢复
+      try { sessionStorage.setItem(persistKey, conv.conversationId); } catch { /* ignore */ }
       
       return conv;
     } catch (err) {
       console.error('Failed to create conversation:', err);
       return null;
     }
-  }, [userId, sessionId, anchorId, anchorTimestamp, onConversationChange]);
+  }, [userId, sessionId, anchorId, anchorTimestamp, onConversationChange, persistKey]);
 
   // 保存消息到对话历史
   const saveMessage = useCallback(async (role: 'user' | 'assistant', content: string) => {
@@ -378,7 +391,8 @@ export function AIChat({
     setMessages([]);
     setConversation(null);
     conversationIdRef.current = null;
-  }, []);
+    try { sessionStorage.removeItem(persistKey); } catch { /* ignore */ }
+  }, [persistKey]);
 
   if (isInitializing) {
     return (

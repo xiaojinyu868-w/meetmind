@@ -66,6 +66,16 @@ export function resolveFfmpegPath(): string {
     return envPath;
   }
 
+  // 优先使用系统安装的 ffmpeg（更稳定），ffmpeg-static 包可能二进制不兼容
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { execFileSync } = require('child_process');
+    execFileSync('ffmpeg', ['-version'], { stdio: 'ignore', timeout: 3000 });
+    return 'ffmpeg';
+  } catch {
+    // 系统 ffmpeg 不可用，尝试 ffmpeg-static
+  }
+
   try {
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     const ffmpegStatic = require('ffmpeg-static') as string | null;
@@ -76,8 +86,6 @@ export function resolveFfmpegPath(): string {
     // ignore optional dependency resolution errors
   }
 
-  // Some bundled runtimes cannot resolve `require('ffmpeg-static')` reliably.
-  // Fallback to common node_modules paths before PATH lookup.
   const localCandidates = [
     path.join(process.cwd(), 'node_modules', 'ffmpeg-static', 'ffmpeg.exe'),
     path.join(process.cwd(), 'node_modules', 'ffmpeg-static', 'ffmpeg'),
@@ -123,6 +131,8 @@ export async function runCommand(
     const child = spawn(command, args, {
       windowsHide: true,
       cwd: options.cwd,
+      // 限制子进程内存，防止 OOM killer 杀掉主进程
+      ...(options.toolName === 'ffmpeg' ? { env: { ...process.env, MALLOC_ARENA_MAX: '2' } } : {}),
     });
 
     let stdout = '';
@@ -178,7 +188,16 @@ export async function transcodeToMp3(inputPath: string, outputPath: string): Pro
   const ffmpegPath = resolveFfmpegPath();
   await runCommand(
     ffmpegPath,
-    ['-y', '-i', inputPath, '-ar', '16000', '-ac', '1', '-b:a', '64k', outputPath],
+    [
+      '-y',
+      '-threads', '1',           // 限制线程数，减少内存占用
+      '-i', inputPath,
+      '-ar', '16000',
+      '-ac', '1',
+      '-b:a', '64k',
+      '-max_muxing_queue_size', '128',  // 限制 muxing 缓冲区
+      outputPath,
+    ],
     { toolName: 'ffmpeg' }
   );
 }

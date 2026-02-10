@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import type {
   ImportedVideoResult,
   ImportedVideoSource,
@@ -9,9 +9,12 @@ import type {
   VideoSourceMode,
 } from '@/types';
 import { parseVideoLink } from '@/lib/utils/video-link';
+import { getPreference, setPreference } from '@/lib/db';
 
 type TranscribeMode = 'turbo' | 'fast' | 'standard';
 type ImportStatus = 'idle' | 'processing' | 'error' | 'success';
+
+const BILI_COOKIE_KEY = 'settings_bilibili_cookie';
 
 interface VideoLinkImporterProps {
   onImportReady: (result: ImportedVideoResult) => void;
@@ -47,8 +50,8 @@ const ERROR_MESSAGE_MAP: Record<string, string> = {
   VIDEO_URL_UNSAFE: '该链接暂不支持导入。',
   BILI_URL_PARSE_FAILED: '无法解析 B站链接，请确认链接可访问。',
   BILI_PLAYURL_FAILED: '未能获取视频音频流，请稍后重试。',
-  BILI_COOKIE_EXPIRED: 'B站登录状态已过期，请联系管理员更新 Cookie 后重试。',
-  BILI_AUDIO_DOWNLOAD_FORBIDDEN: '当前视频受平台限制，暂时无法直接导入。',
+  BILI_COOKIE_EXPIRED: 'B站登录状态已过期，请前往「设置 → 视频导入」更新 Cookie。',
+  BILI_AUDIO_DOWNLOAD_FORBIDDEN: '该视频需要登录B站才能导入，请前往「设置 → 视频导入」配置你的B站 Cookie。',
   BILI_AUDIO_INCOMPLETE: 'B站音频下载不完整，可能受平台限制，请稍后重试或更换视频。',
   YTDLP_UNAVAILABLE: '服务端导入能力暂不可用，请稍后重试。',
   FFMPEG_NOT_FOUND: '服务端音频处理组件未就绪，请联系管理员。',
@@ -131,7 +134,51 @@ export function VideoLinkImporter({ onImportReady, onError, disabled }: VideoLin
   const [processingMessage, setProcessingMessage] = useState('');
   const [lastSource, setLastSource] = useState<ImportedVideoSource | null>(null);
 
+  // B 站 Cookie 内联配置
+  const [hasBiliCookie, setHasBiliCookie] = useState<boolean | null>(null); // null = loading
+  const [showCookiePanel, setShowCookiePanel] = useState(false);
+  const [cookieInput, setCookieInput] = useState('');
+  const [cookieSaving, setCookieSaving] = useState(false);
+
   const parsedPreview = useMemo(() => parseVideoLink(url), [url]);
+  const isBiliLink = parsedPreview?.provider === 'bilibili';
+
+  // 初始化时检查是否已配置 Cookie
+  useEffect(() => {
+    getPreference<string>(BILI_COOKIE_KEY, '').then((v) => {
+      setHasBiliCookie(!!v);
+      if (v) setCookieInput(v);
+    }).catch(() => setHasBiliCookie(false));
+  }, []);
+
+  // 保存 Cookie
+  async function saveBiliCookie() {
+    const trimmed = cookieInput.trim();
+    setCookieSaving(true);
+    try {
+      await setPreference(BILI_COOKIE_KEY, trimmed);
+      setHasBiliCookie(!!trimmed);
+      if (trimmed) setShowCookiePanel(false);
+    } catch {
+      // ignore
+    } finally {
+      setCookieSaving(false);
+    }
+  }
+
+  // 清除 Cookie
+  async function clearBiliCookie() {
+    setCookieSaving(true);
+    try {
+      await setPreference(BILI_COOKIE_KEY, '');
+      setHasBiliCookie(false);
+      setCookieInput('');
+    } catch {
+      // ignore
+    } finally {
+      setCookieSaving(false);
+    }
+  }
 
   async function handleImport() {
     if (disabled || status === 'processing') return;
@@ -154,10 +201,21 @@ export function VideoLinkImporter({ onImportReady, onError, disabled }: VideoLin
     timers.push(setTimeout(() => setProcessingMessage('正在转写...'), 2200));
 
     try {
+      // 如果是 B 站链接，从本地 IndexedDB 读取用户 Cookie 一并发送
+      let biliCookie: string | undefined;
+      if (isBiliLink) {
+        try {
+          const savedCookie = await getPreference<string>(BILI_COOKIE_KEY, '');
+          if (savedCookie) biliCookie = savedCookie;
+        } catch {
+          // 读取失败不影响导入
+        }
+      }
+
       const response = await fetch('/api/video/import', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url: trimmed, mode, language: 'zh' }),
+        body: JSON.stringify({ url: trimmed, mode, language: 'zh', ...(biliCookie ? { biliCookie } : {}) }),
       });
 
       const text = await response.text();
@@ -224,6 +282,89 @@ export function VideoLinkImporter({ onImportReady, onError, disabled }: VideoLin
         />
       </div>
 
+      {/* B 站 Cookie 已配置时显示简要状态 */}
+      {isBiliLink && hasBiliCookie === true && !showCookiePanel && (
+        <div className="flex items-center gap-2 rounded-xl border border-green-100 bg-green-50 px-3 py-2">
+          <span className="inline-block w-2 h-2 rounded-full bg-green-400 shrink-0"></span>
+          <span className="text-xs text-green-700">B站 Cookie 已配置</span>
+          <button
+            type="button"
+            onClick={() => setShowCookiePanel(true)}
+            className="ml-auto text-xs text-gray-400 hover:text-amber-600 transition"
+          >
+            修改
+          </button>
+        </div>
+      )}
+
+      {/* Cookie 配置面板（仅失败时展开或手动点开） */}
+      {showCookiePanel && (
+        <div className="rounded-xl border border-gray-200 bg-white px-4 py-4 space-y-3 shadow-sm">
+          <div className="flex items-center justify-between">
+            <p className="text-sm font-medium text-gray-800">配置 B 站 Cookie（可选）</p>
+            <button
+              type="button"
+              onClick={() => setShowCookiePanel(false)}
+              className="text-gray-400 hover:text-gray-600 text-lg leading-none"
+            >
+              ×
+            </button>
+          </div>
+
+          <p className="text-xs text-gray-500">
+            少数视频需要B站登录态才能导入。配置 Cookie 后即可解锁。Cookie 只存在你的浏览器里，不会上传。
+          </p>
+
+          <details className="text-xs text-gray-600">
+            <summary className="cursor-pointer font-medium text-amber-700 hover:text-amber-800">
+              如何获取？
+            </summary>
+            <ol className="mt-2 ml-4 space-y-1 list-decimal text-gray-600">
+              <li>电脑浏览器登录 <a href="https://www.bilibili.com" target="_blank" rel="noopener noreferrer" className="text-blue-600 underline">bilibili.com</a></li>
+              <li>按 F12 → 点「应用 / Application」→ 左侧 Cookie</li>
+              <li>复制 SESSDATA、bili_jct、DedeUserID 的值粘贴到下方</li>
+            </ol>
+          </details>
+
+          <textarea
+            value={cookieInput}
+            onChange={(e) => setCookieInput(e.target.value)}
+            placeholder="SESSDATA=xxx; bili_jct=xxx; DedeUserID=xxx"
+            rows={2}
+            disabled={cookieSaving}
+            className="w-full px-3 py-2 text-xs font-mono border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-400 focus:border-transparent resize-none placeholder:text-gray-400"
+          />
+
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={saveBiliCookie}
+              disabled={cookieSaving || !cookieInput.trim()}
+              className="px-4 py-1.5 rounded-lg bg-amber-500 text-white text-xs font-medium hover:bg-amber-600 disabled:opacity-50 disabled:cursor-not-allowed transition"
+            >
+              {cookieSaving ? '保存中...' : '保存'}
+            </button>
+            {hasBiliCookie && (
+              <button
+                type="button"
+                onClick={clearBiliCookie}
+                disabled={cookieSaving}
+                className="px-3 py-1.5 rounded-lg text-red-500 text-xs hover:bg-red-50 transition"
+              >
+                清除
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={() => setShowCookiePanel(false)}
+              className="ml-auto px-3 py-1.5 rounded-lg text-gray-500 text-xs hover:bg-gray-100 transition"
+            >
+              取消
+            </button>
+          </div>
+        </div>
+      )}
+
       <div className="flex flex-wrap items-center gap-3 text-sm">
         <label className="flex items-center gap-2">
           <input
@@ -268,7 +409,7 @@ export function VideoLinkImporter({ onImportReady, onError, disabled }: VideoLin
       )}
 
       <div className="text-xs text-gray-500">
-        说明：三种模式只决定“优先策略”，导入链路会自动回退，不需要你手动反复切换。
+        说明：三种模式只决定&ldquo;优先策略&rdquo;，导入链路会自动回退，不需要你手动反复切换。
       </div>
 
       <button
@@ -287,8 +428,18 @@ export function VideoLinkImporter({ onImportReady, onError, disabled }: VideoLin
       )}
 
       {status === 'error' && (
-        <div className="rounded-xl border border-red-100 bg-red-50 px-3 py-2 text-sm text-red-600">
-          {errorMessage}
+        <div className="rounded-xl border border-red-100 bg-red-50 px-3 py-3 space-y-2">
+          <p className="text-sm text-red-600">{errorMessage}</p>
+          {/* 如果是 B 站 Cookie 相关错误，直接提供配置按钮 */}
+          {isBiliLink && (errorMessage.includes('Cookie') || errorMessage.includes('登录') || errorMessage.includes('内存不足')) && !hasBiliCookie && (
+            <button
+              type="button"
+              onClick={() => setShowCookiePanel(true)}
+              className="text-xs font-medium text-amber-700 bg-amber-100 hover:bg-amber-200 px-3 py-1.5 rounded-lg transition"
+            >
+              配置 B 站 Cookie 后重试
+            </button>
+          )}
         </div>
       )}
 
