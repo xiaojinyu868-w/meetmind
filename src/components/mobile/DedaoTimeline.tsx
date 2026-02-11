@@ -1,9 +1,10 @@
 ﻿'use client';
 
-import React, { useRef, useEffect, useCallback, useState } from 'react';
+import React, { useRef, useEffect } from 'react';
 import { cn } from '@/lib/utils';
 import type { TranscriptSegment } from '@/types';
 import type { Anchor } from '@/lib/services/anchor-service';
+import { TranscriptFlowView } from '../TranscriptFlowView';
 
 export interface DedaoTimelineEntry {
   id: string;
@@ -22,13 +23,6 @@ export interface DedaoTimelineProps {
   onEntryTextUpdate?: (entry: DedaoTimelineEntry, text: string) => void;
   className?: string;
   'data-onboarding'?: string;
-}
-
-function formatTime(ms: number): string {
-  const totalSeconds = Math.floor(ms / 1000);
-  const minutes = Math.floor(totalSeconds / 60);
-  const seconds = totalSeconds % 60;
-  return `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
 }
 
 export function toDedaoEntries(
@@ -60,64 +54,24 @@ export function DedaoTimeline({
   className,
   'data-onboarding': dataOnboarding,
 }: DedaoTimelineProps) {
-  const containerRef = useRef<HTMLDivElement>(null);
-  const activeEntryRef = useRef<HTMLDivElement>(null);
-  const [editingEntryId, setEditingEntryId] = useState<string | null>(null);
-  const [draftText, setDraftText] = useState('');
-  const [editingOriginalText, setEditingOriginalText] = useState('');
+  // Convert entries back to TranscriptSegment format for TranscriptFlowView
+  const segments: TranscriptSegment[] = entries.map((entry) => ({
+    id: entry.id,
+    text: entry.content,
+    startMs: entry.startMs,
+    endMs: entry.endMs,
+    confidence: 1,
+  }));
 
-  const startEditing = useCallback((entry: DedaoTimelineEntry) => {
-    if (!onEntryTextUpdate) return;
-    setEditingEntryId(entry.id);
-    setDraftText(entry.content);
-    setEditingOriginalText(entry.content);
-  }, [onEntryTextUpdate]);
-
-  const cancelEditing = useCallback(() => {
-    setEditingEntryId(null);
-    setDraftText('');
-    setEditingOriginalText('');
-  }, []);
-
-  const saveEditing = useCallback((entry: DedaoTimelineEntry) => {
-    if (!onEntryTextUpdate) {
-      cancelEditing();
-      return;
-    }
-
-    const normalized = draftText.trim();
-    if (!normalized || normalized === editingOriginalText.trim()) {
-      cancelEditing();
-      return;
-    }
-
-    onEntryTextUpdate(entry, normalized);
-    cancelEditing();
-  }, [cancelEditing, draftText, editingOriginalText, onEntryTextUpdate]);
-
-  useEffect(() => {
-    if (editingEntryId) return;
-
-    if (activeEntryRef.current && containerRef.current) {
-      const container = containerRef.current;
-      const entry = activeEntryRef.current;
-
-      const containerRect = container.getBoundingClientRect();
-      const entryRect = entry.getBoundingClientRect();
-
-      if (entryRect.top < containerRect.top || entryRect.bottom > containerRect.bottom) {
-        entry.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      }
-    }
-  }, [currentTime, editingEntryId]);
-
-  const activeEntryId = entries.find(
-    (e) => currentTime >= e.startMs && currentTime <= e.endMs
-  )?.id;
+  const confusionTimestamps = entries
+    .filter((e) => e.hasConfusion)
+    .map((e) => ({
+      timestamp: e.startMs,
+      resolved: e.confusionResolved ?? false,
+    }));
 
   return (
     <div
-      ref={containerRef}
       data-onboarding={dataOnboarding}
       className={cn(
         'overflow-y-auto overflow-x-hidden',
@@ -126,117 +80,31 @@ export function DedaoTimeline({
       )}
     >
       <div className="px-4 py-3">
-        <h3 className="text-sm font-medium text-[var(--dedao-text-secondary)] mb-3">
-          课堂时间轴
-        </h3>
-
-        <div className="space-y-2">
-          {entries.map((entry) => {
-            const isActive = entry.id === activeEntryId;
-            const isEditing = editingEntryId === entry.id;
-
-            return (
-              <div
-                key={entry.id}
-                ref={isActive ? activeEntryRef : undefined}
-                onClick={() => {
-                  if (isEditing) return;
-                  onEntryClick(entry);
-                }}
-                className={cn(
-                  'relative p-3 rounded-xl cursor-pointer',
-                  'transition-all duration-200',
-                  isActive
-                    ? 'bg-white shadow-sm border border-[var(--dedao-gold-light)]'
-                    : 'bg-[var(--dedao-bg-card)] hover:bg-white hover:shadow-sm'
-                )}
-              >
-                <div className="flex items-center gap-2 mb-1.5">
-                  <span
-                    className={cn(
-                      'text-xs px-2 py-0.5 rounded-full font-medium tabular-nums',
-                      isActive
-                        ? 'bg-[var(--dedao-gold)] text-white'
-                        : 'bg-[var(--dedao-bg-warm)] text-[var(--dedao-text-secondary)]'
-                    )}
-                  >
-                    {formatTime(entry.startMs)}
-                  </span>
-
-                  {entry.hasConfusion && (
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        onConfusionClick?.(entry);
-                      }}
-                      className={cn(
-                        'flex items-center gap-1 text-xs px-2 py-0.5 rounded-full',
-                        'transition-colors duration-150',
-                        entry.confusionResolved
-                          ? 'bg-green-50 text-green-600'
-                          : 'bg-red-50 text-red-500 hover:bg-red-100'
-                      )}
-                    >
-                      <span
-                        className={cn(
-                          'w-1.5 h-1.5 rounded-full',
-                          entry.confusionResolved ? 'bg-green-500' : 'bg-red-500'
-                        )}
-                      />
-                      {entry.confusionResolved ? '已解决' : '困惑点'}
-                    </button>
-                  )}
-                </div>
-
-                {isEditing ? (
-                  <div className="space-y-2" onClick={(e) => e.stopPropagation()}>
-                    <textarea
-                      value={draftText}
-                      onChange={(e) => setDraftText(e.target.value)}
-                      onBlur={() => saveEditing(entry)}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Escape') {
-                          e.preventDefault();
-                          cancelEditing();
-                        }
-                      }}
-                      className="w-full min-h-[92px] rounded-lg border border-[var(--dedao-gold-light)] bg-white px-2.5 py-2 text-sm leading-relaxed focus:outline-none focus:ring-2 focus:ring-[var(--dedao-gold-light)]"
-                      autoFocus
-                    />
-                  </div>
-                ) : onEntryTextUpdate ? (
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      startEditing(entry);
-                    }}
-                    className={cn(
-                      'w-full text-left rounded-md px-1 py-0.5 -mx-1 transition-colors cursor-text',
-                      'hover:bg-white/80',
-                      isActive ? 'text-[var(--dedao-text)]' : 'text-[var(--dedao-text-secondary)]'
-                    )}
-                    title="点击编辑"
-                  >
-                    <span className="text-sm leading-relaxed">{entry.content}</span>
-                  </button>
-                ) : (
-                  <p
-                    className={cn(
-                      'text-sm leading-relaxed',
-                      isActive ? 'text-[var(--dedao-text)]' : 'text-[var(--dedao-text-secondary)]'
-                    )}
-                  >
-                    {entry.content}
-                  </p>
-                )}
-
-                {isActive && (
-                  <div className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-8 bg-[var(--dedao-gold)] rounded-r-full" />
-                )}
-              </div>
+        <TranscriptFlowView
+          segments={segments}
+          variant="review"
+          currentTime={currentTime}
+          onTimestampClick={(timeMs) => {
+            const entry = entries.find(
+              (e) => timeMs >= e.startMs && timeMs <= e.endMs
             );
-          })}
-        </div>
+            if (entry) onEntryClick(entry);
+          }}
+          editable={!!onEntryTextUpdate}
+          onSegmentTextUpdate={
+            onEntryTextUpdate
+              ? (segmentId, text) => {
+                  const entry = entries.find((e) => e.id === segmentId);
+                  if (entry) onEntryTextUpdate(entry, text);
+                }
+              : undefined
+          }
+          confusionTimestamps={confusionTimestamps}
+          defaultExpanded={true}
+          showHeader={true}
+          headerTitle="课堂时间轴"
+          className="h-full"
+        />
 
         {entries.length === 0 && (
           <div className="py-12 text-center text-[var(--dedao-text-muted)]">

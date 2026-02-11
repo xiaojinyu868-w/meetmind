@@ -14,6 +14,7 @@
 import { useState, useCallback, useMemo } from 'react';
 import type { Anchor } from '@/lib/services/anchor-service';
 import type { TranscriptSegment } from '@/types';
+import { TranscriptFlowView } from './TranscriptFlowView';
 
 interface AnchorDetailPanelProps {
   /** 选中的困惑点 */
@@ -200,23 +201,9 @@ export function AnchorDetailPanel({
         </h4>
 
         {hasContext ? (
-          <div className="space-y-2">
-            {/* 之前的内容 */}
-            {contextSegments.before.map((seg) => (
-              <div
-                key={seg.id}
-                onClick={() => onSeek?.(seg.startMs)}
-                className="flex items-start gap-2 p-2 rounded-lg hover:bg-gray-50 cursor-pointer transition-colors"
-              >
-                <span className="text-xs text-gray-400 font-mono shrink-0 mt-0.5">
-                  {formatTime(seg.startMs)}
-                </span>
-                <span className="text-sm text-gray-600">{seg.text}</span>
-              </div>
-            ))}
-
+          <div>
             {/* 困惑点位置标记 */}
-            <div className="flex items-center gap-2 py-2">
+            <div className="flex items-center gap-2 py-2 mb-2">
               <div className="flex-1 h-px bg-red-200" />
               <span className="text-xs text-red-500 font-medium px-2 py-1 bg-red-50 rounded-full">
                 🎯 困惑点 {formatTime(anchor.timestamp)}
@@ -224,33 +211,15 @@ export function AnchorDetailPanel({
               <div className="flex-1 h-px bg-red-200" />
             </div>
 
-            {/* 困惑点时刻的内容 */}
-            {contextSegments.at.map((seg) => (
-              <div
-                key={seg.id}
-                onClick={() => onSeek?.(seg.startMs)}
-                className="flex items-start gap-2 p-2 rounded-lg bg-red-50 border border-red-100 cursor-pointer"
-              >
-                <span className="text-xs text-red-400 font-mono shrink-0 mt-0.5">
-                  {formatTime(seg.startMs)}
-                </span>
-                <span className="text-sm text-red-700">{seg.text}</span>
-              </div>
-            ))}
-
-            {/* 之后的内容 */}
-            {contextSegments.after.map((seg) => (
-              <div
-                key={seg.id}
-                onClick={() => onSeek?.(seg.startMs)}
-                className="flex items-start gap-2 p-2 rounded-lg hover:bg-gray-50 cursor-pointer transition-colors"
-              >
-                <span className="text-xs text-gray-400 font-mono shrink-0 mt-0.5">
-                  {formatTime(seg.startMs)}
-                </span>
-                <span className="text-sm text-gray-600">{seg.text}</span>
-              </div>
-            ))}
+            <TranscriptFlowView
+              segments={[...contextSegments.before, ...contextSegments.at, ...contextSegments.after]}
+              variant="context"
+              confusionAtMs={anchor.timestamp}
+              onTimestampClick={onSeek}
+              defaultExpanded={true}
+              showHeader={false}
+              paragraphGapMs={15000}
+            />
           </div>
         ) : (
           <div className="text-center py-8 text-gray-400">

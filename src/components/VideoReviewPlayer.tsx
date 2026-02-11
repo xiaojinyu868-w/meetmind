@@ -1,6 +1,6 @@
 'use client';
 
-import { memo, useEffect, useMemo, useRef, useState } from 'react';
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { ImportedVideoSource } from '@/types';
 
 interface VideoReviewPlayerProps {
@@ -8,6 +8,10 @@ interface VideoReviewPlayerProps {
   className?: string;
   seekToMs?: number;
   seekNonce?: number;
+  /** 播放进度回调（毫秒） */
+  onTimeUpdate?: (currentTimeMs: number) => void;
+  /** 视频总时长（毫秒），用于 iframe 进度条 */
+  totalDurationMs?: number;
 }
 
 function isDirectVideo(source: ImportedVideoSource): boolean {
@@ -40,11 +44,183 @@ function withStartTime(url: string, seekToMs: number, seekNonce: number): string
   }
 }
 
+/** 格式化 ms → M:SS */
+function fmtTime(ms: number): string {
+  const s = Math.max(0, Math.floor(ms / 1000));
+  return `${Math.floor(s / 60)}:${(s % 60).toString().padStart(2, '0')}`;
+}
+
+// ─── iframe 字幕同步控制条 ───
+
+const SPEED_OPTIONS = [0.5, 0.75, 1, 1.25, 1.5, 2] as const;
+
+interface IframeSyncBarProps {
+  seekToMs: number;
+  seekNonce: number;
+  totalDurationMs: number;
+  onTimeUpdate?: (ms: number) => void;
+}
+
+function IframeSyncBar({ seekToMs, seekNonce, totalDurationMs, onTimeUpdate }: IframeSyncBarProps) {
+  const [playing, setPlaying] = useState(false);
+  const [simTime, setSimTime] = useState(seekToMs);
+  const [speed, setSpeed] = useState(1);
+  const [dragging, setDragging] = useState(false);
+  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const simTimeRef = useRef(simTime);
+  const barRef = useRef<HTMLDivElement>(null);
+  simTimeRef.current = simTime;
+
+  const duration = totalDurationMs > 0 ? totalDurationMs : 1;
+  const progress = Math.min(1, Math.max(0, simTime / duration));
+
+  // 外部 seek 时同步
+  useEffect(() => {
+    setSimTime(seekToMs);
+    onTimeUpdate?.(seekToMs);
+  }, [seekToMs, seekNonce]);
+
+  // 计时器
+  useEffect(() => {
+    if (intervalRef.current) {
+      clearInterval(intervalRef.current);
+      intervalRef.current = null;
+    }
+    if (playing && !dragging) {
+      const tickMs = 200;
+      intervalRef.current = setInterval(() => {
+        const next = Math.min(simTimeRef.current + tickMs * speed, duration);
+        setSimTime(next);
+        onTimeUpdate?.(next);
+        if (next >= duration) {
+          setPlaying(false);
+        }
+      }, tickMs);
+    }
+    return () => {
+      if (intervalRef.current) clearInterval(intervalRef.current);
+    };
+  }, [playing, speed, dragging, duration, onTimeUpdate]);
+
+  const togglePlay = useCallback(() => {
+    setPlaying(p => {
+      if (!p && simTimeRef.current >= duration) {
+        setSimTime(0);
+        onTimeUpdate?.(0);
+      }
+      return !p;
+    });
+  }, [duration, onTimeUpdate]);
+
+  const cycleSpeed = useCallback(() => {
+    setSpeed(prev => {
+      const idx = SPEED_OPTIONS.indexOf(prev as (typeof SPEED_OPTIONS)[number]);
+      return SPEED_OPTIONS[(idx + 1) % SPEED_OPTIONS.length];
+    });
+  }, []);
+
+  // 进度条拖拽
+  const handleBarInteraction = useCallback((clientX: number) => {
+    if (!barRef.current) return;
+    const rect = barRef.current.getBoundingClientRect();
+    const ratio = Math.min(1, Math.max(0, (clientX - rect.left) / rect.width));
+    const newTime = ratio * duration;
+    setSimTime(newTime);
+    onTimeUpdate?.(newTime);
+  }, [duration, onTimeUpdate]);
+
+  const handleMouseDown = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    setDragging(true);
+    handleBarInteraction(e.clientX);
+
+    const onMove = (ev: MouseEvent) => handleBarInteraction(ev.clientX);
+    const onUp = () => {
+      setDragging(false);
+      window.removeEventListener('mousemove', onMove);
+      window.removeEventListener('mouseup', onUp);
+    };
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
+  }, [handleBarInteraction]);
+
+  return (
+    <div className="bg-gray-900/90 backdrop-blur-sm px-3 py-2 select-none">
+      {/* 进度条 */}
+      <div
+        ref={barRef}
+        className="relative h-1.5 bg-white/10 rounded-full cursor-pointer group mb-2"
+        onMouseDown={handleMouseDown}
+      >
+        {/* 已播放部分 */}
+        <div
+          className="absolute left-0 top-0 h-full bg-yellow-400 rounded-full transition-[width] duration-100"
+          style={{ width: `${progress * 100}%` }}
+        />
+        {/* 拖拽手柄 */}
+        <div
+          className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 w-3 h-3 bg-yellow-400 rounded-full shadow-md opacity-0 group-hover:opacity-100 transition-opacity"
+          style={{ left: `${progress * 100}%` }}
+        />
+      </div>
+
+      {/* 控制按钮行 */}
+      <div className="flex items-center gap-2">
+        {/* 播放/暂停 */}
+        <button
+          onClick={togglePlay}
+          className="flex items-center justify-center w-7 h-7 rounded-full bg-yellow-400/20 hover:bg-yellow-400/30 transition-colors"
+          title={playing ? '暂停字幕同步' : '开始字幕同步'}
+        >
+          {playing ? (
+            <svg className="w-3.5 h-3.5 text-yellow-300" fill="currentColor" viewBox="0 0 24 24">
+              <rect x="6" y="4" width="4" height="16" rx="1" />
+              <rect x="14" y="4" width="4" height="16" rx="1" />
+            </svg>
+          ) : (
+            <svg className="w-3.5 h-3.5 text-yellow-300 ml-0.5" fill="currentColor" viewBox="0 0 24 24">
+              <path d="M8 5v14l11-7z" />
+            </svg>
+          )}
+        </button>
+
+        {/* 时间 */}
+        <span className="text-xs font-mono text-white/80 tabular-nums min-w-[6rem]">
+          {fmtTime(simTime)} / {fmtTime(duration)}
+        </span>
+
+        {/* 倍速 */}
+        <button
+          onClick={cycleSpeed}
+          className="px-1.5 py-0.5 text-[11px] font-mono rounded bg-white/10 hover:bg-white/20 text-white/70 hover:text-white transition-colors tabular-nums"
+          title="切换倍速"
+        >
+          {speed}x
+        </button>
+
+        {/* 状态提示 */}
+        <div className="flex-1" />
+        <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${
+          playing
+            ? 'bg-yellow-400/20 text-yellow-300 animate-pulse'
+            : 'bg-white/5 text-white/30'
+        }`}>
+          {playing ? '字幕同步中' : '在B站播放视频后，点 ▶ 同步字幕高亮'}
+        </span>
+      </div>
+    </div>
+  );
+}
+
+// ─── 主组件 ───
+
 function VideoReviewPlayerComponent({
   source,
   className,
   seekToMs = 0,
   seekNonce = 0,
+  onTimeUpdate,
+  totalDurationMs = 0,
 }: VideoReviewPlayerProps) {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const [iframeError, setIframeError] = useState(false);
@@ -62,11 +238,18 @@ function VideoReviewPlayerComponent({
     }
   }, [source, seekToMs, seekNonce]);
 
+  const isEmbed = !!source && !isDirectVideo(source) && !!embedSrc && !iframeError;
+
+  // 从 source.durationSec 或 prop 获取总时长
+  const effectiveDuration = totalDurationMs > 0
+    ? totalDurationMs
+    : (source?.durationSec ? source.durationSec * 1000 : 0);
+
   if (!source) return null;
 
   const originalUrl = source.resolvedUrl || source.originalUrl;
 
-  // 直链视频 - 原生 video 标签
+  // 直链视频 - 原生 video 标签（timeupdate 天然支持）
   if (isDirectVideo(source)) {
     return (
       <div className={className}>
@@ -76,13 +259,14 @@ function VideoReviewPlayerComponent({
           controls
           preload="metadata"
           className="aspect-video w-full bg-black"
+          onTimeUpdate={onTimeUpdate ? (e) => onTimeUpdate((e.target as HTMLVideoElement).currentTime * 1000) : undefined}
         />
       </div>
     );
   }
 
-  // iframe 嵌入（B站/YouTube 等）
-  if (embedSrc && !iframeError) {
+  // iframe 嵌入（B站/YouTube 等）+ 字幕同步控制条
+  if (isEmbed) {
     return (
       <div className={className}>
         <div className="relative aspect-video w-full overflow-hidden bg-black">
@@ -96,6 +280,15 @@ function VideoReviewPlayerComponent({
             onError={() => setIframeError(true)}
           />
         </div>
+        {/* 字幕同步控制条 — B站/YouTube iframe 跨域无法直接获取播放进度 */}
+        {onTimeUpdate && effectiveDuration > 0 && (
+          <IframeSyncBar
+            seekToMs={seekToMs}
+            seekNonce={seekNonce}
+            totalDurationMs={effectiveDuration}
+            onTimeUpdate={onTimeUpdate}
+          />
+        )}
       </div>
     );
   }

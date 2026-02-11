@@ -1,10 +1,8 @@
 ﻿'use client';
 
-import { useCallback, useState, useRef } from 'react';
 import type { Timeline, Breakpoint } from '@/lib/services/meetmind-service';
 import { formatTimestamp } from '@/lib/services/longcut-utils';
-import { useTextSelection } from '@/hooks/useTextSelection';
-import { WordExplainer } from './WordExplainer';
+import { TranscriptFlowView } from './TranscriptFlowView';
 
 interface TimelineViewProps {
   timeline: Timeline;
@@ -29,48 +27,14 @@ export function TimelineView({
   enableWordExplainer = false,
   fullContextText,
 }: TimelineViewProps) {
-  const [editingSegmentId, setEditingSegmentId] = useState<string | null>(null);
-  const [draftText, setDraftText] = useState('');
-  const [editingOriginalText, setEditingOriginalText] = useState('');
-
-  // 选词解释
-  const transcriptContainerRef = useRef<HTMLDivElement>(null);
-  const { selection, clearSelection } = useTextSelection(
-    enableWordExplainer ? transcriptContainerRef : { current: null } as React.RefObject<HTMLElement | null>
-  );
-
-  const startEditing = useCallback((segmentId: string, currentText: string) => {
-    if (!onSegmentTextUpdate) return;
-    setEditingSegmentId(segmentId);
-    setDraftText(currentText);
-    setEditingOriginalText(currentText);
-  }, [onSegmentTextUpdate]);
-
-  const cancelEditing = useCallback(() => {
-    setEditingSegmentId(null);
-    setDraftText('');
-    setEditingOriginalText('');
-  }, []);
-
-  const saveEditing = useCallback(() => {
-    if (!editingSegmentId || !onSegmentTextUpdate) {
-      cancelEditing();
-      return;
-    }
-
-    const normalized = draftText.trim();
-    if (!normalized || normalized === editingOriginalText.trim()) {
-      cancelEditing();
-      return;
-    }
-
-    onSegmentTextUpdate(editingSegmentId, normalized);
-    cancelEditing();
-  }, [cancelEditing, draftText, editingOriginalText, editingSegmentId, onSegmentTextUpdate]);
-
   const totalDuration = timeline.segments[timeline.segments.length - 1]?.endMs || 1;
   const progressPercent = (currentTime / totalDuration) * 100;
   const unresolvedCount = timeline.breakpoints.filter((bp) => !bp.resolved).length;
+
+  const confusionTimestamps = timeline.breakpoints.map((bp) => ({
+    timestamp: bp.timestamp,
+    resolved: bp.resolved,
+  }));
 
   return (
     <div className="h-full flex flex-col overflow-hidden">
@@ -131,92 +95,23 @@ export function TimelineView({
         </div>
       )}
 
-      <div ref={transcriptContainerRef} className="flex-1 min-h-0 overflow-y-auto">
-        <div className="px-4 py-3">
-          <h3 className="text-xs font-medium text-gray-400 uppercase tracking-wider mb-3">课堂转录</h3>
-          <div className="space-y-0.5">
-            {timeline.segments.map((segment, index) => {
-              const isActive = currentTime >= segment.startMs && currentTime < segment.endMs;
-              const breakpoint = timeline.breakpoints.find(
-                (bp) => bp.timestamp >= segment.startMs && bp.timestamp < segment.endMs
-              );
-
-              const prevSegment = index > 0 ? timeline.segments[index - 1] : null;
-              const showTimestamp = !prevSegment || segment.startMs - prevSegment.startMs > 3000;
-              const isEditing = editingSegmentId === segment.id;
-
-              return (
-                <div
-                  key={segment.id}
-                  onClick={() => {
-                    if (isEditing) return;
-                    onTimeClick(segment.startMs);
-                  }}
-                  className={`relative py-1 px-2 rounded cursor-pointer transition-colors ${
-                    isActive ? 'bg-lilac-100/50 text-navy' : 'hover:bg-surface-soft text-gray-700'
-                  }`}
-                >
-                  {breakpoint && (
-                    <div
-                      className={`absolute left-0 top-1/2 -translate-y-1/2 w-1.5 h-1.5 rounded-full ${
-                        breakpoint.resolved ? 'bg-mint' : 'bg-coral'
-                      }`}
-                    />
-                  )}
-
-                  <div className="flex items-baseline gap-2 pl-3">
-                    {showTimestamp && (
-                      <span className="flex-shrink-0 text-xs font-mono text-gray-400 w-10">
-                        {formatTimestamp(segment.startMs)}
-                      </span>
-                    )}
-
-                    <div className={`flex-1 min-w-0 ${!showTimestamp ? 'ml-12' : ''}`}>
-                      {isEditing ? (
-                        <textarea
-                          value={draftText}
-                          onChange={(e) => setDraftText(e.target.value)}
-                          onBlur={saveEditing}
-                          onClick={(e) => e.stopPropagation()}
-                          onKeyDown={(e) => {
-                            if (e.key === 'Escape') {
-                              e.preventDefault();
-                              cancelEditing();
-                            }
-                          }}
-                          className="w-full min-h-[80px] rounded-lg border border-amber-200 bg-white px-2.5 py-2 text-sm leading-relaxed focus:outline-none focus:ring-2 focus:ring-amber-200"
-                          autoFocus
-                        />
-                      ) : (
-                        <span
-                          onDoubleClick={onSegmentTextUpdate ? (e) => {
-                            e.stopPropagation();
-                            startEditing(segment.id, segment.text);
-                          } : undefined}
-                          className={`text-sm leading-relaxed select-text ${onSegmentTextUpdate ? 'rounded-md px-1 py-0.5 -mx-1 hover:bg-white/70 transition-colors' : ''}`}
-                          title={onSegmentTextUpdate ? '双击编辑' : undefined}
-                        >
-                          {segment.text}
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      </div>
-
-      {/* 选词解释浮窗 */}
-      {enableWordExplainer && selection && (
-        <WordExplainer
-          selection={selection}
+      <div className="flex-1 min-h-0 overflow-hidden px-4 py-3">
+        <TranscriptFlowView
+          segments={timeline.segments}
+          variant="review"
+          currentTime={currentTime}
+          onTimestampClick={onTimeClick}
+          editable={!!onSegmentTextUpdate}
+          onSegmentTextUpdate={onSegmentTextUpdate}
+          enableWordExplainer={enableWordExplainer}
           fullContextText={fullContextText}
-          onClose={clearSelection}
-          onTimestampClick={(timeMs) => onTimeClick(timeMs)}
+          confusionTimestamps={confusionTimestamps}
+          defaultExpanded={true}
+          showHeader={true}
+          headerTitle="课堂转录"
+          className="h-full flex flex-col"
         />
-      )}
+      </div>
 
       <div className="px-4 py-3 border-t border-gray-100">
         <div className="flex gap-2">

@@ -64,3 +64,4 @@ server.log
 prisma/meetmind.db
 prisma/meetmind.db-journal
 .next-dev/
+screenlog.0

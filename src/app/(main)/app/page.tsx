@@ -47,6 +47,7 @@ import { VideoLinkImporter } from '@/components/VideoLinkImporter';
 import { VideoReviewPlayer } from '@/components/VideoReviewPlayer';
 import { AITutor } from '@/components/AITutor';
 import { TranscriptPreviewPanel } from '@/components/TranscriptPreviewPanel';
+import { TranscriptFlowView } from '@/components/TranscriptFlowView';
 import { VideoInsightTimeline, type VideoInsightItem } from '@/components/VideoInsightTimeline';
 
 import type { ConfusionMarker } from '@/components/mobile/PodcastPlayer';
@@ -698,14 +699,38 @@ function StudentAppContent({ isGuestFastEntry }: { isGuestFastEntry: boolean }) 
       }));
       setAnchors(anchorsWithResolved);
       
-      // 创建音频 URL
-      if (session.blob) {
-        const url = URL.createObjectURL(session.blob);
-        setAudioUrl(url);
-        setAudioBlob(session.blob);
+      // 视频类型会话：恢复 videoSource
+      if (session.sourceType === 'video-link' && session.videoUrl) {
+        const restoredSource: ImportedVideoSource = {
+          provider: session.videoProvider || 'bilibili',
+          providerLabel: session.videoProvider || 'bilibili',
+          originalUrl: session.videoUrl,
+          embedUrl: session.videoEmbedUrl,
+          thumbnailUrl: session.thumbnailUrl,
+          title: session.topic,
+          durationSec: session.duration ? session.duration / 1000 : undefined,
+          sourceMode: session.importSourceMode as ImportedVideoSource['sourceMode'],
+          importTrace: session.importTrace as ImportedVideoSource['importTrace'],
+          bvid: session.videoUrl.match(/BV[a-zA-Z0-9]+/)?.[0],
+        };
+        setVideoSource(restoredSource);
+        setDataSource('video');
+        setCurrentTime(0);
+        setVideoSeekNonce(0);
+
+        // 构建初始 insight
+        const seededInsights = buildSeedVideoInsights(loadedSegments);
+        setVideoInsightItems(seededInsights);
+        setActiveVideoInsightId(seededInsights[0]?.id || null);
+      } else {
+        // 音频类型会话
+        if (session.blob) {
+          const url = URL.createObjectURL(session.blob);
+          setAudioUrl(url);
+          setAudioBlob(session.blob);
+        }
+        setDataSource('live');
       }
-      
-      setDataSource('live');
       
       // 构建时间轴
       const tl = memoryService.buildTimeline(
@@ -791,6 +816,20 @@ function StudentAppContent({ isGuestFastEntry }: { isGuestFastEntry: boolean }) 
           isFinal: true,
         }))
       );
+
+      // 保存到 audioSessions 以便在历史列表中显示
+      await saveAudioSession(null, newSessionId, currentUserId, {
+        subject: UIConfig.defaultSubject,
+        topic: result.source.title || '视频复习',
+        duration,
+        sourceType: 'video-link',
+        videoUrl: result.source.originalUrl,
+        videoEmbedUrl: result.source.embedUrl,
+        videoProvider: result.source.provider,
+        thumbnailUrl: result.source.thumbnailUrl,
+        importSourceMode: result.source.sourceMode as AudioSession['importSourceMode'],
+        importTrace: result.source.importTrace,
+      });
     } catch (error) {
       console.error('保存视频转录到 IndexedDB 失败:', error);
     }
@@ -1809,6 +1848,8 @@ function StudentAppContent({ isGuestFastEntry }: { isGuestFastEntry: boolean }) 
                         className="w-full"
                         seekToMs={currentTime}
                         seekNonce={videoSeekNonce}
+                        onTimeUpdate={setCurrentTime}
+                        totalDurationMs={totalDuration}
                       />
                     </div>
 
@@ -1834,15 +1875,23 @@ function StudentAppContent({ isGuestFastEntry }: { isGuestFastEntry: boolean }) 
                         </svg>
                       </button>
                       {showTranscriptBar && (
-                        <div className="max-h-[200px] overflow-y-auto px-4 py-3 bg-white">
-                          <TranscriptPreviewPanel
-                            transcript={segments}
-                            immersiveMode={true}
+                        <div className="max-h-[300px] overflow-y-auto px-4 py-3 bg-white">
+                          <TranscriptFlowView
+                            segments={segments}
+                            variant="video"
+                            currentTime={currentTime}
                             editable={true}
                             onSegmentTextUpdate={handleTranscriptTextUpdate}
                             enableWordExplainer={true}
                             fullContextText={segments.map(s => `[${formatTime(s.startMs)}] ${s.text}`).join('\n')}
                             onTimestampClick={handleVideoSeek}
+                            onMarkConfusion={(timeMs, segmentId) => {
+                              handleAnchorMark(timeMs);
+                            }}
+                            confusionTimestamps={anchors.map(a => ({ timestamp: a.timestamp, resolved: a.resolved }))}
+                            defaultExpanded={true}
+                            showHeader={true}
+                            headerTitle="视频内容"
                           />
                         </div>
                       )}
@@ -1925,12 +1974,13 @@ function StudentAppContent({ isGuestFastEntry }: { isGuestFastEntry: boolean }) 
                     <div className="flex-1 min-h-0 overflow-hidden">
                       {/* 对话 Tab - 全局 AI 对话（使用 CSS 隐藏保留组件状态） */}
                       <div className={`h-full min-h-0 ${videoWorkspaceTab === 'chat' ? '' : 'hidden'}`}>
-                          <AIChat
+                          <AITutor
+                            breakpoint={null}
+                            segments={segments}
+                            isLoading={false}
+                            onResolve={() => {}}
                             sessionId={sessionId}
-                            contextText={segments.map((seg) => `[${formatTime(seg.startMs)}] ${seg.text}`).join('\n')}
-                            onTimestampClick={handleVideoSeek}
-                            forceTimestampCitations={true}
-                            onAssistantMessage={handleVideoAssistantMessage}
+                            onSeek={handleVideoSeek}
                           />
                       </div>
 
@@ -1972,20 +2022,26 @@ function StudentAppContent({ isGuestFastEntry }: { isGuestFastEntry: boolean }) 
                               </div>
                               {/* 困惑点独立对话 */}
                               <div className="flex-1 min-h-0">
-                                <AIChat
+                                <AITutor
                                   key={`confusion-${confusionChatAnchor.id}`}
-                                  anchorId={confusionChatAnchor.id}
-                                  anchorTimestamp={confusionChatAnchor.timestamp}
+                                  breakpoint={{
+                                    id: confusionChatAnchor.id,
+                                    lessonId: sessionId,
+                                    studentId: studentId,
+                                    timestamp: confusionChatAnchor.timestamp,
+                                    type: confusionChatAnchor.type as 'confusion' | 'important' | 'question',
+                                    resolved: confusionChatAnchor.resolved,
+                                    createdAt: confusionChatAnchor.createdAt,
+                                  }}
+                                  segments={segments}
+                                  isLoading={false}
+                                  onResolve={() => {
+                                    setSelectedAnchor(confusionChatAnchor);
+                                    handleResolveAnchor();
+                                    setConfusionChatAnchor({ ...confusionChatAnchor, resolved: true });
+                                  }}
                                   sessionId={sessionId}
-                                  contextText={(() => {
-                                    const nearby = segments.filter(
-                                      s => s.startMs <= confusionChatAnchor.timestamp + 30000 && s.endMs >= confusionChatAnchor.timestamp - 30000
-                                    );
-                                    return nearby.map(seg => `[${formatTime(seg.startMs)}] ${seg.text}`).join('\n');
-                                  })()}
-                                  onTimestampClick={handleVideoSeek}
-                                  forceTimestampCitations={true}
-                                  onAssistantMessage={handleVideoAssistantMessage}
+                                  onSeek={handleVideoSeek}
                                 />
                               </div>
                             </>
@@ -2588,6 +2644,8 @@ function StudentAppContent({ isGuestFastEntry }: { isGuestFastEntry: boolean }) 
                         source={videoSource}
                         seekToMs={currentTime}
                         seekNonce={videoSeekNonce}
+                        onTimeUpdate={setCurrentTime}
+                        totalDurationMs={totalDuration}
                       />
                     </div>
                   )}

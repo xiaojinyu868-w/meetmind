@@ -75,6 +75,8 @@
 | `OnboardingGuide` | `src/components/OnboardingGuide.tsx` | 新用户引导组件，支持交互式引导 |
 | `AnalyticsProvider` | `src/components/AnalyticsProvider.tsx` | 数据分析上下文提供者 |
 | `TranscriptPreviewPanel` | `src/components/TranscriptPreviewPanel.tsx` | 转录预览面板，支持编辑、增强、选词解释 |
+| `TranscriptFlowView` | `src/components/TranscriptFlowView.tsx` | 统一转录文本显示组件（v2.7.2 新增），支持荧光笔高亮、四种模式 |
+| `VideoReviewPlayer` | `src/components/VideoReviewPlayer.tsx` | 视频复习播放器（v2.7.2 增强），支持 iframe 字幕同步控制条 |
 | `ThinkingVisualizer` | `src/components/ThinkingVisualizer.tsx` | AI 思维过程可视化组件 |
 | `ThinkingGuideRenderer` | `src/components/ThinkingGuideRenderer.tsx` | 思维引导渲染器 |
 | `ConversationHistory` | `src/components/ConversationHistory/` | 对话历史组件（v2.1 新增） |
@@ -430,6 +432,6 @@ GET /api/analytics/stats?type=ip
 
 ---
 
-*文档版本：v1.5*  
-*更新日期：2026-02-10*  
-*更新内容：新增 WordExplainer、VoiceMicButton 组件；更新 AIChat、TimelineView、TranscriptPreviewPanel 描述*
+*文档版本：v1.6*  
+*更新日期：2026-02-11*  
+*更新内容：新增 TranscriptFlowView、VideoReviewPlayer 组件（v2.7.2 视频字幕高亮功能）*

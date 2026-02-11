@@ -4,6 +4,7 @@ import { useState, useRef, useCallback, useEffect } from 'react';
 import type { TranscriptSegment } from '@/types';
 import { DashScopeASRClient } from '@/lib/services/dashscope-asr-service';
 import { TranscriptPreviewPanel } from './TranscriptPreviewPanel';
+import { TranscriptFlowView } from './TranscriptFlowView';
 import { TranscriptEnhanceManager, type EnhancedTranscriptSegment } from '@/lib/services/transcript-enhancer';
 import { calculateSimilarity } from '@/lib/utils/transcript-utils';
 import { recordTranscriptEditDiff } from '@/lib/db/lexicon';
@@ -980,16 +981,14 @@ export function Recorder({
         )}
 
         {/* */}
-        <TranscriptPreviewPanel
-          transcript={displayTranscript}
-          interimText=""
-          isRecording={false}
-          transcribeMode={transcribeMode}
-          collapsedCount={10}
-          formatTime={formatTime}
-          defaultExpanded={true}
+        <TranscriptFlowView
+          segments={displayTranscript}
+          variant="review"
           editable={true}
           onSegmentTextUpdate={handleSegmentTextUpdate}
+          transcribeMode={transcribeMode}
+          defaultExpanded={true}
+          showHeader={true}
         />
 
         {/* */}
@@ -1132,17 +1131,16 @@ export function Recorder({
 
       {/* */}
       <div className="flex-1 overflow-y-auto min-h-0">
-        <TranscriptPreviewPanel
-          transcript={displayTranscript}
+        <TranscriptFlowView
+          segments={displayTranscript}
+          variant="live"
           interimText={interimText}
           isRecording={isRecording}
           transcribeMode={transcribeMode}
-          collapsedCount={999}
-          formatTime={formatTime}
-          defaultExpanded={true}
-          immersiveMode={true}
           editable={true}
           onSegmentTextUpdate={handleSegmentTextUpdate}
+          defaultExpanded={true}
+          showHeader={true}
         />
       </div>
 

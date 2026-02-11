@@ -160,15 +160,28 @@ export function OnboardingGuide({
       setTimeout(updatePosition, 300),
     ];
 
+    // 如果目标选择器存在但元素始终找不到，1.5s 后自动跳到下一步
+    let skipTimer: ReturnType<typeof setTimeout> | null = null;
+    if (step.targetSelector) {
+      skipTimer = setTimeout(() => {
+        const el = document.querySelector(step.targetSelector!);
+        if (!el) {
+          console.warn(`[OnboardingGuide] Target "${step.targetSelector}" not found, auto-skipping`);
+          onNext();
+        }
+      }, 1500);
+    }
+
     window.addEventListener('resize', updatePosition);
     window.addEventListener('scroll', updatePosition, true);
 
     return () => {
       timers.forEach(clearTimeout);
+      if (skipTimer) clearTimeout(skipTimer);
       window.removeEventListener('resize', updatePosition);
       window.removeEventListener('scroll', updatePosition, true);
     };
-  }, [isActive, step, updatePosition]);
+  }, [isActive, step, updatePosition, onNext]);
 
   useEffect(() => {
     if (!isActive) return;
@@ -270,7 +283,7 @@ export function OnboardingGuide({
             height="100%"
             fill="rgba(0, 0, 0, 0.6)"
             mask="url(#spotlight-mask)"
-            className="pointer-events-auto cursor-default"
+            className={`${targetRect || isCenter ? 'pointer-events-auto' : 'pointer-events-none'} cursor-default`}
             onClick={(e) => e.stopPropagation()}
           />
         </svg>
