@@ -1415,6 +1415,11 @@ export async function POST(request: NextRequest) {
       throw new ImportPipelineError('INVALID_VIDEO_URL', '无法识别的视频链接');
     }
 
+    // 目前仅支持 B站视频导入
+    if (parsed.provider !== 'bilibili') {
+      throw new ImportPipelineError('UNSUPPORTED_PLATFORM', '目前仅支持 B站视频链接，其他平台即将支持');
+    }
+
     const strategy = process.env.VIDEO_IMPORT_STRATEGY === 'yt-dlp-first' ? 'yt-dlp-first' : 'bili-native-first';
     const enableYtDlpFallback = process.env.VIDEO_IMPORT_ENABLE_YTDLP_FALLBACK !== 'false';
     const stageOrder = buildStageOrder(parsed.provider, videoUrl, strategy, enableYtDlpFallback);

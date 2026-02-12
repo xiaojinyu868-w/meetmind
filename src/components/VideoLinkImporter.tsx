@@ -57,6 +57,7 @@ const ERROR_MESSAGE_MAP: Record<string, string> = {
   FFMPEG_NOT_FOUND: '服务端音频处理组件未就绪，请联系管理员。',
   DIRECT_MEDIA_TIMEOUT: '直链媒体下载超时，请稍后重试。',
   DIRECT_MEDIA_TOO_LARGE: '直链媒体文件过大，请更换较短视频或音频源。',
+  UNSUPPORTED_PLATFORM: '目前仅支持 B站视频链接，其他平台即将支持。',
   ASR_TRANSCRIBE_FAILED: '视频已解析，但转写失败，请稍后重试。',
 };
 
@@ -192,6 +193,15 @@ export function VideoLinkImporter({ onImportReady, onError, disabled }: VideoLin
       return;
     }
 
+    // 只支持 B站链接
+    if (parsedPreview && parsedPreview.provider !== 'bilibili') {
+      const message = '目前仅支持 B站视频链接，其他平台即将支持。';
+      setStatus('error');
+      setErrorMessage(message);
+      onError?.(message);
+      return;
+    }
+
     setStatus('processing');
     setErrorMessage('');
     setProcessingMessage('正在解析视频...');
@@ -276,7 +286,7 @@ export function VideoLinkImporter({ onImportReady, onError, disabled }: VideoLin
           type="url"
           value={url}
           onChange={(event) => setUrl(event.target.value)}
-          placeholder="粘贴 B站、YouTube、抖音或媒体直链"
+          placeholder="粘贴 B站视频链接（bilibili.com 或 b23.tv）"
           className="w-full rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm text-gray-900 outline-none transition focus:border-amber-400 focus:ring-2 focus:ring-amber-100"
           disabled={disabled || status === 'processing'}
         />
@@ -415,7 +425,7 @@ export function VideoLinkImporter({ onImportReady, onError, disabled }: VideoLin
       <button
         type="button"
         onClick={handleImport}
-        disabled={disabled || status === 'processing'}
+        disabled={disabled || status === 'processing' || (!!parsedPreview && parsedPreview.provider !== 'bilibili')}
         className="w-full rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 px-4 py-3 text-sm font-medium text-white shadow-sm transition hover:from-amber-600 hover:to-orange-600 disabled:cursor-not-allowed disabled:opacity-60"
       >
         {status === 'processing' ? '处理中...' : '导入并转写'}
