@@ -1653,28 +1653,28 @@ function StudentAppContent({ isGuestFastEntry }: { isGuestFastEntry: boolean }) 
               </div>
             </div>
 
-            {dataSource === 'live' && !showSessionHistory ? (
-              <div className="relative flex-1 min-h-0">
-                {/* 装饰插画 */}
-                <div className="absolute -right-20 -top-10 w-24 h-24 opacity-30 pointer-events-none hidden lg:block">
-                  <Image
-                    src="/illustrations/recording.svg"
-                    alt=""
-                    fill
-                    sizes="96px"
-                    className="w-full h-full"
-                  />
-                </div>
-                <Recorder
-                  onRecordingStart={handleRecordingStart}
-                  onRecordingStop={handleRecordingStop}
-                  onTranscriptUpdate={handleTranscriptUpdate}
-                  onTranscriptTextUpdate={handleTranscriptTextUpdate}
-                  onTranscriptEnhanced={handleTranscriptEnhanced}
-                  onAnchorMark={handleAnchorMark}
+            {/* Recorder 始终挂载，通过 CSS 显示/隐藏，防止切换 tab 时录音状态丢失 */}
+            <div className="relative flex-1 min-h-0" style={{ display: dataSource === 'live' && !showSessionHistory ? undefined : 'none' }}>
+              {/* 装饰插画 */}
+              <div className="absolute -right-20 -top-10 w-24 h-24 opacity-30 pointer-events-none hidden lg:block">
+                <Image
+                  src="/illustrations/recording.svg"
+                  alt=""
+                  fill
+                  sizes="96px"
+                  className="w-full h-full"
                 />
               </div>
-            ) : showSessionHistory ? (
+              <Recorder
+                onRecordingStart={handleRecordingStart}
+                onRecordingStop={handleRecordingStop}
+                onTranscriptUpdate={handleTranscriptUpdate}
+                onTranscriptTextUpdate={handleTranscriptTextUpdate}
+                onTranscriptEnhanced={handleTranscriptEnhanced}
+                onAnchorMark={handleAnchorMark}
+              />
+            </div>
+            {showSessionHistory ? (
               <div className="card-edu p-0 overflow-hidden" style={{ maxHeight: '500px' }}>
                 <SessionHistoryList
                   userId={user?.id}
@@ -1685,7 +1685,7 @@ function StudentAppContent({ isGuestFastEntry }: { isGuestFastEntry: boolean }) 
                   showHeader={false}
                 />
               </div>
-            ) : dataSource === 'video' ? (
+            ) : dataSource === 'live' ? null : dataSource === 'video' ? (
               <div className="card-edu p-6">
                 <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
                   <span>🎬</span>

@@ -28,6 +28,8 @@ type TranscribeMode = 'batch' | 'streaming';
 const DEDUP_SIMILARITY = Number(process.env.NEXT_PUBLIC_ASR_DEDUP_SIMILARITY || 0.95);
 const DEDUP_GAP_MS = Number(process.env.NEXT_PUBLIC_ASR_DEDUP_GAP_MS || 1500);
 const ENABLE_AUTO_GAIN_CONTROL = String(process.env.NEXT_PUBLIC_ASR_AUTO_GAIN_CONTROL || 'true').toLowerCase() !== 'false';
+const ENABLE_ECHO_CANCELLATION = String(process.env.NEXT_PUBLIC_ASR_ECHO_CANCELLATION || 'false').toLowerCase() !== 'false';
+const ENABLE_NOISE_SUPPRESSION = String(process.env.NEXT_PUBLIC_ASR_NOISE_SUPPRESSION || 'true').toLowerCase() !== 'false';
 const CORRECTION_MODEL = process.env.NEXT_PUBLIC_TRANSCRIPT_LIGHT_MODEL || 'qwen-turbo';
 const CORRECTION_FALLBACK_MODEL = process.env.NEXT_PUBLIC_TRANSCRIPT_FALLBACK_MODEL || 'qwen-plus';
 
@@ -247,8 +249,8 @@ export function Recorder({
       stream = await navigator.mediaDevices.getUserMedia({
         audio: {
           channelCount: 1,
-          echoCancellation: true,
-          noiseSuppression: true,
+          echoCancellation: ENABLE_ECHO_CANCELLATION,
+          noiseSuppression: ENABLE_NOISE_SUPPRESSION,
           autoGainControl: ENABLE_AUTO_GAIN_CONTROL,
         },
       });
@@ -567,6 +569,8 @@ export function Recorder({
   const pauseRecording = () => {
     if (mediaRecorderRef.current?.state === 'recording') {
       mediaRecorderRef.current.pause();
+      // 挂起 AudioContext，停止 ScriptProcessor 向 ASR 发送音频
+      audioContextRef.current?.suspend();
       if (timerRef.current) clearInterval(timerRef.current);
       setStatus('paused');
     }
@@ -576,6 +580,8 @@ export function Recorder({
   const resumeRecording = () => {
     if (mediaRecorderRef.current?.state === 'paused') {
       mediaRecorderRef.current.resume();
+      // 恢复 AudioContext，重新开始向 ASR 发送音频
+      audioContextRef.current?.resume();
       const pausedTime = elapsedMs;
       startTimeRef.current = Date.now() - pausedTime;
       timerRef.current = setInterval(() => {
@@ -989,6 +995,7 @@ export function Recorder({
           transcribeMode={transcribeMode}
           defaultExpanded={true}
           showHeader={true}
+          enableWordExplainer={true}
         />
 
         {/* */}
@@ -1141,6 +1148,7 @@ export function Recorder({
           onSegmentTextUpdate={handleSegmentTextUpdate}
           defaultExpanded={true}
           showHeader={true}
+          enableWordExplainer={true}
         />
       </div>
 
