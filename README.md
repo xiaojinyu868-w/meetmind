@@ -2,7 +2,7 @@
 
 > **MeetMind 是清华北大联合团队打造的 AI 学习助手，为每个孩子配备一位"听过课、记得住、讲得清"的智能同桌。**
 >
-> MVP 2.5 - 把课堂"变成可回放、可定位、可追溯的时间轴记忆"
+> MVP 2.7.3 - 把课堂"变成可回放、可定位、可追溯的时间轴记忆"
 
 [![Next.js](https://img.shields.io/badge/Next.js-14.2-black?logo=next.js)](https://nextjs.org/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.3-blue?logo=typescript)](https://www.typescriptlang.org/)
@@ -229,16 +229,16 @@ meetmind/
 │   │       ├── feedback/        # 用户反馈
 │   │       └── asr-config/      # ASR 配置
 │   │
-│   ├── components/              # React 组件
+│   ├── components/              # React 组件 (100+)
 │   │   ├── ui/                  # 基础 UI 组件 (shadcn/ui, 24个)
-│   │   ├── mobile/              # 移动端组件 (14个)
+│   │   ├── mobile/              # 移动端组件
 │   │   ├── teacher/             # 教师端组件
 │   │   ├── parent/              # 家长端组件
 │   │   ├── business/            # 业务组件
 │   │   ├── layout/              # 布局组件
 │   │   └── ConversationHistory/ # 对话历史组件
 │   │
-│   ├── hooks/                   # 自定义 Hooks (15个)
+│   ├── hooks/                   # 自定义 Hooks (21个)
 │   │   ├── useAnalytics.ts      # 数据分析
 │   │   ├── useAnchors.ts        # 困惑点管理
 │   │   ├── useAudio.ts          # 音频播放控制
@@ -251,12 +251,14 @@ meetmind/
 │   │   ├── useDragGesture.ts    # 拖拽手势处理
 │   │   ├── useResizable.ts      # 可调整大小
 │   │   ├── useTextSelection.ts  # 文本选择监听（选词解释用）
+│   │   ├── useVoiceInput.ts     # 语音输入
+│   │   ├── useNetworkStatus.ts  # 网络状态检测
 │   │   └── data/                # SWR 数据 Hooks
 │   │
 │   ├── lib/
 │   │   ├── config/              # 统一配置管理
 │   │   │   └── app.config.ts    # 应用配置 (LLM/Auth/ASR/Feature/UI)
-│   │   ├── services/            # 服务层 (31个服务)
+│   │   ├── services/            # 服务层 (33个服务)
 │   │   │   ├── llm-service.ts   # LLM 调用封装
 │   │   │   ├── tutor-service.ts # AI 家教服务
 │   │   │   ├── analytics-service.ts # 数据分析服务
@@ -354,7 +356,16 @@ meetmind/
 
 ### 最新更新
 
-#### v2.7.2 - 视频字幕高亮与历史会话恢复（2025-02-11）
+#### v2.7.3 - 录音体验优化（2026-02-11）
+
+| 功能 | 描述 |
+|------|------|
+| **切换 Tab 保持录音状态** | 录音组件改为 CSS 隐藏而非卸载，切换 Tab 再切回不会丢失录音状态 |
+| **暂停真正停止转录** | 暂停时挂起 AudioContext，彻底停止向 ASR 发送音频 |
+| **实时录音划词提问** | 录音过程中选中文本即可弹出 WordExplainer 进行划词提问 |
+| **麦克风回声消除默认关闭** | `echoCancellation` 默认关闭，让麦克风能录到电脑外放的声音 |
+
+#### v2.7.2 - 视频字幕高亮与历史会话恢复（2026-02-11）
 
 | 功能 | 描述 |
 |------|------|
