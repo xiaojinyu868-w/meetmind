@@ -284,6 +284,7 @@ export function VideoLinkImporter({ onImportReady, onError, disabled }: VideoLin
         <label className="text-sm font-medium text-gray-700">视频链接</label>
         <input
           type="url"
+          data-testid="video-link-input"
           value={url}
           onChange={(event) => setUrl(event.target.value)}
           placeholder="粘贴 B站视频链接（bilibili.com 或 b23.tv）"
@@ -424,6 +425,7 @@ export function VideoLinkImporter({ onImportReady, onError, disabled }: VideoLin
 
       <button
         type="button"
+        data-testid="video-import-button"
         onClick={handleImport}
         disabled={disabled || status === 'processing' || (!!parsedPreview && parsedPreview.provider !== 'bilibili')}
         className="w-full rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 px-4 py-3 text-sm font-medium text-white shadow-sm transition hover:from-amber-600 hover:to-orange-600 disabled:cursor-not-allowed disabled:opacity-60"

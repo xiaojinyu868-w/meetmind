@@ -15,6 +15,7 @@ export interface Anchor {
   createdAt: string;
   resolvedAt?: string;
   note?: string;
+  aiExplanation?: string;
 }
 
 export interface DBAnchor {

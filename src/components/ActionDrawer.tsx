@@ -24,6 +24,8 @@ export interface ActionDrawerProps {
   items: ActionItem[];
   /** 完成回调 */
   onComplete: (id: string) => void;
+  /** 开始下一个任务 */
+  onStartNext?: () => void;
   /** 自定义类名 */
   className?: string;
 }
@@ -33,6 +35,7 @@ export function ActionDrawer({
   onClose,
   items,
   onComplete,
+  onStartNext,
   className,
 }: ActionDrawerProps) {
   const titleId = useId();
@@ -82,6 +85,7 @@ export function ActionDrawer({
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
+        data-testid="action-drawer"
         className={cn(
           'fixed top-0 right-0 bottom-0 w-80 z-50',
           'bg-white shadow-2xl',
@@ -123,6 +127,7 @@ export function ActionDrawer({
           <ActionList
             items={items}
             onComplete={onComplete}
+            onStartNext={onStartNext}
           />
         </div>
 

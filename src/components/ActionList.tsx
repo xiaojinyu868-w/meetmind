@@ -5,9 +5,10 @@ import type { ActionItem } from '@/lib/services/meetmind-service';
 interface ActionListProps {
   items: ActionItem[];
   onComplete: (id: string) => void;
+  onStartNext?: () => void;
 }
 
-export function ActionList({ items, onComplete }: ActionListProps) {
+export function ActionList({ items, onComplete, onStartNext }: ActionListProps) {
   const completedCount = items.filter((i) => i.completed).length;
   const totalMinutes = items.reduce((sum, i) => sum + i.estimatedMinutes, 0);
   const remainingMinutes = items
@@ -72,10 +73,13 @@ export function ActionList({ items, onComplete }: ActionListProps) {
             {items.map((item, index) => (
               <div
                 key={item.id}
+                data-testid={`action-item-${item.id}`}
+                data-completed={item.completed ? 'true' : 'false'}
                 className={`action-item animate-slide-up ${item.completed ? 'completed' : ''}`}
                 style={{ animationDelay: `${index * 50}ms` }}
               >
                 <button
+                  data-testid={`action-checkbox-${item.id}`}
                   onClick={() => onComplete(item.id)}
                   className="action-checkbox"
                   aria-label={item.completed ? '标记为未完成' : '标记为已完成'}
@@ -132,7 +136,11 @@ export function ActionList({ items, onComplete }: ActionListProps) {
       {/* 快捷操作 */}
       {items.length > 0 && completedCount < items.length && (
         <div className="p-4 border-t border-gray-100">
-          <button className="w-full btn btn-secondary py-2.5 text-sm">
+          <button
+            data-testid="action-start-next"
+            onClick={onStartNext}
+            className="w-full btn btn-secondary py-2.5 text-sm"
+          >
             开始下一个任务
           </button>
         </div>

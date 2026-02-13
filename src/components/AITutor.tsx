@@ -9,8 +9,9 @@ import { GuidanceQuestion, GuidanceQuestionSkeleton } from './GuidanceQuestion';
 import { Citations, CitationsSkeleton } from './Citations';
 import { ImageUpload, useImagePaste, type UploadedImage } from './ImageUpload';
 import { useAuth } from '@/lib/hooks/useAuth';
+import { useAnalyticsContext } from '@/components/AnalyticsProvider';
 import { useSimpleSSEStream, type SSEEvent } from '@/lib/hooks/useSSEStream';
-import { saveTutorResponseCache, getTutorResponseCache, deleteTutorResponseCache, getPreference, setPreference, type TutorResponseCache, saveClassSummary, getSessionSummary } from '@/lib/db';
+import { saveTutorResponseCache, getTutorResponseCache, deleteTutorResponseCache, getPreference, setPreference, saveClassSummary, getSessionSummary } from '@/lib/db';
 import { conversationService, getEffectiveUserId } from '@/lib/services/conversation-service';
 import type { GuidanceQuestion as GuidanceQuestionType, GuidanceOption, Citation } from '@/types/dify';
 import { DEFAULT_MODEL_ID } from '@/lib/services/llm-service';
@@ -43,11 +44,56 @@ interface AITutorProps {
   segments: Segment[];
   isLoading: boolean;
   onResolve: () => void;
-  onActionItemsUpdate?: (items: ActionItem[]) => void;
+  onActionItemsUpdate?: (items: ActionItem[], sourceAnchorId?: string) => void;
   sessionId?: string;  // 用于缓存关联
   onSeek?: (timeMs: number) => void;  // 点击时间戳跳转播放
   initialQuestion?: string;  // 移动端传入的初始问题
   isMobile?: boolean;  // 移动端模式，使用简化布局
+}
+
+interface TutorCacheEnvelopeV1 {
+  version: 1;
+  model: string;
+  transcriptSignature: string;
+  response: TutorAPIResponse;
+}
+
+function toTranscriptSignature(segments: Segment[]): string {
+  if (!Array.isArray(segments) || segments.length === 0) return 'empty';
+  const first = segments[0];
+  const last = segments[segments.length - 1];
+  const textLength = segments.reduce((sum, seg) => sum + (seg.text?.length || 0), 0);
+  return `${segments.length}:${first.startMs}:${last.endMs}:${textLength}`;
+}
+
+function unpackTutorCachePayload(raw: string): {
+  envelope: TutorCacheEnvelopeV1 | null;
+  response: TutorAPIResponse | null;
+} {
+  try {
+    const parsed = JSON.parse(raw) as TutorCacheEnvelopeV1 | TutorAPIResponse;
+    if (
+      parsed &&
+      typeof parsed === 'object' &&
+      'version' in parsed &&
+      parsed.version === 1 &&
+      'response' in parsed
+    ) {
+      return {
+        envelope: parsed as TutorCacheEnvelopeV1,
+        response: (parsed as TutorCacheEnvelopeV1).response,
+      };
+    }
+    return {
+      envelope: null,
+      response: parsed as TutorAPIResponse,
+    };
+  } catch {
+    return {
+      envelope: null,
+      response: null,
+    };
+  }
 }
 
 interface TutorAPIResponse {
@@ -92,6 +138,7 @@ interface TutorAPIResponse {
 export function AITutor({ breakpoint, segments, isLoading: externalLoading, onResolve, onActionItemsUpdate, sessionId = 'default', onSeek, initialQuestion, isMobile = false }: AITutorProps) {
   const { accessToken, user } = useAuth();
   const userId = getEffectiveUserId(user?.id);
+  const { trackCoreEvent } = useAnalyticsContext();
   const [userInput, setUserInput] = useState('');
   const [chatHistory, setChatHistory] = useState<Array<{ role: 'user' | 'assistant'; content: string }>>([]);
   const [selectedModel, setSelectedModel] = useState(DEFAULT_MODEL_ID);
@@ -141,6 +188,7 @@ export function AITutor({ breakpoint, segments, isLoading: externalLoading, onRe
   // 多模态相关状态
   const [supportsMultimodal, setSupportsMultimodal] = useState(true);  // 默认模型支持多模态
   const [uploadedImages, setUploadedImages] = useState<UploadedImage[]>([]);
+  const transcriptSignature = useMemo(() => toTranscriptSignature(segments), [segments]);
   
   const chatEndRef = useRef<HTMLDivElement>(null);
   
@@ -367,12 +415,14 @@ export function AITutor({ breakpoint, segments, isLoading: externalLoading, onRe
       return;
     }
 
-    // 如果是同一个困惑点，不重新加载
-    if (previousBreakpointId.current === breakpoint.id) {
+    const cacheKey = `${breakpoint.id}:${selectedModel}:${transcriptSignature}`;
+
+    // 相同锚点 + 相同模型 + 相同转录签名时，复用当前状态
+    if (previousBreakpointId.current === cacheKey) {
       return;
     }
 
-    previousBreakpointId.current = breakpoint.id;
+    previousBreakpointId.current = cacheKey;
 
     // 尝试从缓存加载
     const loadFromCache = async () => {
@@ -380,7 +430,41 @@ export function AITutor({ breakpoint, segments, isLoading: externalLoading, onRe
       try {
         const cached = await getTutorResponseCache(breakpoint.id);
         if (cached) {
-          const cachedResponse = JSON.parse(cached.response) as TutorAPIResponse;
+          const { envelope, response: cachedResponse } = unpackTutorCachePayload(cached.response);
+          if (!cachedResponse) {
+            setResponse(null);
+            setChatHistory([]);
+            setConversationId(undefined);
+            setIsFromCache(false);
+            hasInitialized.current = true;
+            setIsRestoring(false);
+            return false;
+          }
+
+          if (!envelope) {
+            await deleteTutorResponseCache(breakpoint.id);
+            setResponse(null);
+            setChatHistory([]);
+            setConversationId(undefined);
+            setIsFromCache(false);
+            hasInitialized.current = true;
+            setIsRestoring(false);
+            return false;
+          }
+
+          const sameModel = envelope.model === selectedModel;
+          const sameTranscript = envelope.transcriptSignature === transcriptSignature;
+          if (!sameModel || !sameTranscript) {
+            await deleteTutorResponseCache(breakpoint.id);
+            setResponse(null);
+            setChatHistory([]);
+            setConversationId(undefined);
+            setIsFromCache(false);
+            hasInitialized.current = true;
+            setIsRestoring(false);
+            return false;
+          }
+
           const cachedHistory = JSON.parse(cached.chatHistory) as Array<{ role: 'user' | 'assistant'; content: string }>;
           
           setResponse(cachedResponse);
@@ -391,7 +475,7 @@ export function AITutor({ breakpoint, segments, isLoading: externalLoading, onRe
           
           // 通知父组件更新行动清单
           if (cachedResponse.actionItems && onActionItemsUpdate) {
-            onActionItemsUpdate(cachedResponse.actionItems);
+            onActionItemsUpdate(cachedResponse.actionItems, breakpoint.id);
           }
           
           hasInitialized.current = true;
@@ -413,7 +497,7 @@ export function AITutor({ breakpoint, segments, isLoading: externalLoading, onRe
     };
 
     loadFromCache();
-  }, [breakpoint, onActionItemsUpdate]);
+  }, [breakpoint, onActionItemsUpdate, selectedModel, transcriptSignature]);
 
   // 监听 sessionId 变化，清理旧会话状态
   useEffect(() => {
@@ -440,12 +524,19 @@ export function AITutor({ breakpoint, segments, isLoading: externalLoading, onRe
     if (!breakpoint) return;
     
     try {
+      const cachePayload: TutorCacheEnvelopeV1 = {
+        version: 1,
+        model: selectedModel,
+        transcriptSignature,
+        response: resp,
+      };
+
       // 保存到 TutorResponseCache（原有缓存）
       await saveTutorResponseCache({
         anchorId: breakpoint.id,
         sessionId,
         timestamp: breakpoint.timestamp,
-        response: JSON.stringify(resp),
+        response: JSON.stringify(cachePayload),
         chatHistory: JSON.stringify(history),
         conversationId: convId,
       });
@@ -455,7 +546,7 @@ export function AITutor({ breakpoint, segments, isLoading: externalLoading, onRe
     } catch (err) {
       console.error('Failed to save to cache:', err);
     }
-  }, [breakpoint, sessionId]);
+  }, [breakpoint, sessionId, selectedModel, transcriptSignature]);
 
   // 同步到对话历史系统
   const syncToConversationHistory = useCallback(async (
@@ -534,6 +625,11 @@ export function AITutor({ breakpoint, segments, isLoading: externalLoading, onRe
     setChatHistory([]);
     setSelectedOptionId(undefined);
     setConversationId(undefined);
+    trackCoreEvent('tutor_chat_start', {
+      mode: 'breakpoint-initial',
+      anchorId: breakpoint.id,
+      sessionId,
+    });
 
     try {
       const headers: Record<string, string> = { 'Content-Type': 'application/json' };
@@ -567,18 +663,23 @@ export function AITutor({ breakpoint, segments, isLoading: externalLoading, onRe
       }
       // 通知父组件更新行动清单
       if (data.actionItems && onActionItemsUpdate) {
-        onActionItemsUpdate(data.actionItems);
+        onActionItemsUpdate(data.actionItems, breakpoint.id);
       }
       // 保存摘要到 IndexedDB（如果是新生成的）
       await handleSummaryFromResponse(data);
       // 保存到缓存
       await saveToCache(data, [], data.conversation_id);
+      trackCoreEvent('tutor_chat_complete', {
+        mode: 'breakpoint-initial',
+        anchorId: breakpoint.id,
+        sessionId,
+      });
     } catch (err) {
       setError(err instanceof Error ? err.message : '未知错误');
     } finally {
       setIsLoading(false);
     }
-  }, [breakpoint, segments, selectedModel, enableWeb, accessToken, onActionItemsUpdate, saveToCache, handleSummaryFromResponse]);
+  }, [breakpoint, segments, selectedModel, enableWeb, accessToken, onActionItemsUpdate, saveToCache, handleSummaryFromResponse, trackCoreEvent, sessionId]);
 
   useEffect(() => {
     // 只有在没有缓存数据且不在恢复状态时才自动加载
@@ -603,6 +704,11 @@ export function AITutor({ breakpoint, segments, isLoading: externalLoading, onRe
     let newConversationId: string | undefined;
     
     try {
+      trackCoreEvent('tutor_chat_start', {
+        mode: 'guidance-followup',
+        anchorId: breakpoint.id,
+        sessionId,
+      });
       const headers: Record<string, string> = {};
       if (accessToken) {
         headers['Authorization'] = `Bearer ${accessToken}`;
@@ -657,6 +763,11 @@ export function AITutor({ breakpoint, segments, isLoading: externalLoading, onRe
       if (response) {
         await saveToCache(response, newHistory, newConversationId || conversationId);
       }
+      trackCoreEvent('tutor_chat_complete', {
+        mode: 'guidance-followup',
+        anchorId: breakpoint.id,
+        sessionId,
+      });
     } catch (err) {
       // 用户取消不显示错误
       if (err instanceof Error && err.name === 'AbortError') {
@@ -688,6 +799,11 @@ export function AITutor({ breakpoint, segments, isLoading: externalLoading, onRe
     setChatHistory(prev => [...prev, { role: 'user', content: userDisplayContent }]);
     
     try {
+      trackCoreEvent('tutor_chat_start', {
+        mode: 'breakpoint-chat',
+        anchorId: breakpoint.id,
+        sessionId,
+      });
       const headers: Record<string, string> = {};
       if (accessToken) {
         headers['Authorization'] = `Bearer ${accessToken}`;
@@ -752,6 +868,11 @@ export function AITutor({ breakpoint, segments, isLoading: externalLoading, onRe
       if (response) {
         await saveToCache(response, newHistory, conversationId);
       }
+      trackCoreEvent('tutor_chat_complete', {
+        mode: 'breakpoint-chat',
+        anchorId: breakpoint.id,
+        sessionId,
+      });
     } catch (err) {
       // 用户取消不显示错误
       if (err instanceof Error && err.name === 'AbortError') {
@@ -801,6 +922,10 @@ export function AITutor({ breakpoint, segments, isLoading: externalLoading, onRe
     // 添加用户消息
     setGlobalChatHistory(prev => [...prev, { role: 'user', content: question }]);
     setGlobalLoading(true);
+    trackCoreEvent('tutor_chat_start', {
+      mode: 'global-chat',
+      sessionId,
+    });
 
 
     // 构建请求体
@@ -874,6 +999,11 @@ export function AITutor({ breakpoint, segments, isLoading: externalLoading, onRe
         }
       }
 
+      trackCoreEvent('tutor_chat_complete', {
+        mode: 'global-chat',
+        sessionId,
+      });
+
     } catch (err) {
       // 用户取消不显示错误
       if (err instanceof Error && err.name === 'AbortError') {
@@ -887,7 +1017,7 @@ export function AITutor({ breakpoint, segments, isLoading: externalLoading, onRe
     } finally {
       setGlobalLoading(false);
     }
-  }, [userInput, segments, selectedModel, enableWeb, supportsMultimodal, uploadedImages, accessToken, userId, sessionId, globalFetchStream, clearGlobalContent]);
+  }, [userInput, segments, selectedModel, enableWeb, supportsMultimodal, uploadedImages, accessToken, userId, sessionId, globalFetchStream, clearGlobalContent, trackCoreEvent]);
 
   // 全局模式：停止生成
   const stopGlobalGeneration = useCallback(() => {
@@ -1263,6 +1393,7 @@ export function AITutor({ breakpoint, segments, isLoading: externalLoading, onRe
                 )}
                 {!breakpoint.resolved && (
                   <button
+                    data-testid="tutor-resolve-button"
                     onClick={onResolve}
                     className="btn btn-primary px-3 py-1.5 text-xs"
                   >
@@ -1324,6 +1455,7 @@ export function AITutor({ breakpoint, segments, isLoading: externalLoading, onRe
               />
               {!breakpoint.resolved && (
                 <button
+                  data-testid="tutor-resolve-button"
                   onClick={onResolve}
                   className="btn btn-primary px-3 py-1.5 text-sm"
                 >

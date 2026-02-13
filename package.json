@@ -13,7 +13,10 @@
     "build": "next build",
     "start": "node -e \"process.env.NODE_ENV='production'; require('./server.js')\"",
     "start:next": "next start -p 3001",
-    "lint": "next lint"
+    "lint": "next lint",
+    "e2e": "playwright test",
+    "e2e:headed": "playwright test --headed",
+    "e2e:ui": "playwright test --ui"
   },
   "dependencies": {
     "@ai-sdk/react": "^3.0.11",
@@ -85,6 +88,7 @@
     "zustand": "^4.5.0"
   },
   "devDependencies": {
+    "@playwright/test": "^1.52.0",
     "@types/fluent-ffmpeg": "^2.1.28",
     "@types/node": "^20.0.0",
     "@types/nodemailer": "^7.0.9",

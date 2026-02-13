@@ -520,7 +520,7 @@ export const WaveformPlayer = forwardRef<WaveformPlayerRef, WaveformPlayerProps>
               "flex items-center gap-1.5",
               compact ? "text-xs" : "text-sm"
             )}>
-              <span className="font-mono text-gray-900 font-medium">
+              <span data-testid="waveform-current-time" className="font-mono text-gray-900 font-medium">
                 {formatTimestampMs(currentTime)}
               </span>
               <span className="text-gray-400">/</span>

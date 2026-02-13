@@ -94,6 +94,11 @@ type VideoWorkspaceTab = 'chat' | 'confusion' | 'highlights' | 'summary' | 'note
 
 // 持久化状态的 key
 const APP_STATE_KEY = 'app_last_state';
+const ACTION_PROGRESS_KEY_PREFIX = 'action_progress:';
+
+function getActionProgressKey(sessionId: string): string {
+  return `${ACTION_PROGRESS_KEY_PREFIX}${sessionId}`;
+}
 
 interface ActionItem {
   id: string;
@@ -641,6 +646,13 @@ function StudentAppContent({ isGuestFastEntry }: { isGuestFastEntry: boolean }) 
     }
   }, [segments.length, sessionId, onboarding]);
 
+  useEffect(() => {
+    if (viewMode !== 'review' || !videoSource) return;
+    if (onboarding.isActive || !onboarding.shouldShowFlow('video-review')) return;
+    const timer = setTimeout(() => onboarding.startFlow('video-review'), 300);
+    return () => clearTimeout(timer);
+  }, [viewMode, videoSource, onboarding]);
+
   // 从历史记录加载会话并进入复习模式
   const handleLoadHistorySession = useCallback(async (session: AudioSession) => {
     try {
@@ -1084,10 +1096,29 @@ function StudentAppContent({ isGuestFastEntry }: { isGuestFastEntry: boolean }) 
   }, []);
 
   const handleActionComplete = useCallback((actionId: string) => {
-    setActionItems(prev => prev.map(item =>
-      item.id === actionId ? { ...item, completed: !item.completed } : item
-    ));
-  }, []);
+    setActionItems(prev => {
+      const next = prev.map(item =>
+        item.id === actionId ? { ...item, completed: !item.completed } : item
+      );
+      const completionState = next.reduce<Record<string, boolean>>((acc, item) => {
+        if (item.completed) acc[item.id] = true;
+        return acc;
+      }, {});
+      void setPreference(getActionProgressKey(sessionId), completionState).catch((err) => {
+        console.error('Failed to persist action completion:', err);
+      });
+      return next;
+    });
+  }, [sessionId]);
+
+  const handleStartNextAction = useCallback(() => {
+    const nextPending = actionItems.find((item) => !item.completed);
+    if (!nextPending) return;
+    const nextTimestamp = typeof nextPending.relatedTimestamp === 'number'
+      ? nextPending.relatedTimestamp
+      : (selectedAnchor?.timestamp ?? anchors.find((anchor) => !anchor.resolved)?.timestamp ?? currentTime);
+    handleUnifiedSeek(nextTimestamp, true);
+  }, [actionItems, selectedAnchor?.timestamp, anchors, currentTime, handleUnifiedSeek]);
 
   // 生成精选片段 - 使用 SWR Hook（自动请求去重、缓存、重试）
   const handleGenerateTopics = useCallback(async (mode: TopicGenerationMode) => {
@@ -1179,8 +1210,20 @@ function StudentAppContent({ isGuestFastEntry }: { isGuestFastEntry: boolean }) 
 
   // 处理 AI 家教生成的行动清单
   const handleActionItemsUpdate = useCallback((items: ActionItem[]) => {
-    setActionItems(items);
-  }, []);
+    void (async () => {
+      try {
+        const completionState = await getPreference<Record<string, boolean>>(getActionProgressKey(sessionId), {});
+        const mergedItems = items.map((item) => ({
+          ...item,
+          completed: completionState[item.id] ?? item.completed,
+        }));
+        setActionItems(mergedItems);
+      } catch (err) {
+        console.error('Failed to restore action completion:', err);
+        setActionItems(items);
+      }
+    })();
+  }, [sessionId]);
 
   // 计算总时长
   const totalDuration = segments.length > 0 
@@ -1271,6 +1314,7 @@ function StudentAppContent({ isGuestFastEntry }: { isGuestFastEntry: boolean }) 
             >
               <button
                 onClick={() => handleViewModeChange('record')}
+                data-testid="mode-record-button"
                 className={`mode-tab ${viewMode === 'record' ? 'active' : ''}`}
               >
                 <span className="mr-1.5">🎙️</span>
@@ -1278,6 +1322,7 @@ function StudentAppContent({ isGuestFastEntry }: { isGuestFastEntry: boolean }) 
               </button>
               <button
                 onClick={() => handleViewModeChange('review')}
+                data-testid="mode-review-button"
                 className={`mode-tab ${viewMode === 'review' ? 'active' : ''}`}
               >
                 <span className="mr-1.5">📚</span>
@@ -1296,14 +1341,14 @@ function StudentAppContent({ isGuestFastEntry }: { isGuestFastEntry: boolean }) 
                 <div className="flex items-center gap-2 text-gray-500 min-w-0 flex-wrap">
                   <span className="whitespace-nowrap">困惑点</span>
                   <span className="font-semibold text-navy">{anchors.length}</span>
-                  {unresolvedCount > 0 && (
-                    <>
-                      <span>·</span>
-                      <span className="text-coral-500 font-semibold whitespace-nowrap">{unresolvedCount} 待解决</span>
-                    </>
-                  )}
+                    {unresolvedCount > 0 && (
+                      <>
+                        <span>·</span>
+                        <span data-testid="unresolved-count" data-count={unresolvedCount} className="text-coral-500 font-semibold whitespace-nowrap">{unresolvedCount} 待解决</span>
+                      </>
+                    )}
+                  </div>
                 </div>
-              </div>
             </div>
           </div>
         </div>
@@ -1369,6 +1414,7 @@ function StudentAppContent({ isGuestFastEntry }: { isGuestFastEntry: boolean }) 
                     >
                       <button
                         onClick={() => { setDataSource('live'); setShowSessionHistory(false); }}
+                        data-testid="source-live-button"
                         className={`px-3 py-1.5 text-xs rounded-lg transition-all ${
                           dataSource === 'live' && !showSessionHistory
                             ? 'bg-white text-gray-900 font-medium shadow-sm'
@@ -1379,6 +1425,7 @@ function StudentAppContent({ isGuestFastEntry }: { isGuestFastEntry: boolean }) 
                       </button>
                       <button
                         onClick={() => { setDataSource('demo'); setShowSessionHistory(false); }}
+                        data-testid="source-upload-button"
                         className={`px-3 py-1.5 text-xs rounded-lg transition-all ${
                           dataSource === 'demo' && !showSessionHistory
                             ? 'bg-white text-gray-900 font-medium shadow-sm'
@@ -1389,6 +1436,7 @@ function StudentAppContent({ isGuestFastEntry }: { isGuestFastEntry: boolean }) 
                       </button>
                       <button
                         onClick={() => { setDataSource('video'); setShowSessionHistory(false); }}
+                        data-testid="source-video-button"
                         className={`px-3 py-1.5 text-xs rounded-lg transition-all ${
                           dataSource === 'video' && !showSessionHistory
                             ? 'bg-white text-gray-900 font-medium shadow-sm'
@@ -1399,6 +1447,7 @@ function StudentAppContent({ isGuestFastEntry }: { isGuestFastEntry: boolean }) 
                       </button>
                       <button
                         onClick={() => setShowSessionHistory(true)}
+                        data-testid="source-history-button"
                         className={`px-3 py-1.5 text-xs rounded-lg transition-all ${
                           showSessionHistory
                             ? 'bg-white text-gray-900 font-medium shadow-sm'
@@ -1612,6 +1661,7 @@ function StudentAppContent({ isGuestFastEntry }: { isGuestFastEntry: boolean }) 
               >
                 <button
                   onClick={() => { setDataSource('live'); setShowSessionHistory(false); }}
+                  data-testid="source-live-button"
                   className={`px-4 py-2 text-sm rounded-lg transition-all ${
                     dataSource === 'live' && !showSessionHistory
                       ? 'bg-white text-navy font-medium shadow-sm'
@@ -1622,6 +1672,7 @@ function StudentAppContent({ isGuestFastEntry }: { isGuestFastEntry: boolean }) 
                 </button>
                 <button
                   onClick={() => { setDataSource('demo'); setShowSessionHistory(false); }}
+                  data-testid="source-upload-button"
                   className={`px-4 py-2 text-sm rounded-lg transition-all ${
                     dataSource === 'demo' && !showSessionHistory
                       ? 'bg-white text-navy font-medium shadow-sm'
@@ -1632,6 +1683,7 @@ function StudentAppContent({ isGuestFastEntry }: { isGuestFastEntry: boolean }) 
                 </button>
                 <button
                   onClick={() => { setDataSource('video'); setShowSessionHistory(false); }}
+                  data-testid="source-video-button"
                   className={`px-4 py-2 text-sm rounded-lg transition-all ${
                     dataSource === 'video' && !showSessionHistory
                       ? 'bg-white text-navy font-medium shadow-sm'
@@ -1642,6 +1694,7 @@ function StudentAppContent({ isGuestFastEntry }: { isGuestFastEntry: boolean }) 
                 </button>
                 <button
                   onClick={() => setShowSessionHistory(true)}
+                  data-testid="source-history-button"
                   className={`px-4 py-2 text-sm rounded-lg transition-all ${
                     showSessionHistory
                       ? 'bg-white text-navy font-medium shadow-sm'
@@ -2516,6 +2569,7 @@ function StudentAppContent({ isGuestFastEntry }: { isGuestFastEntry: boolean }) 
                 onClose={() => setIsActionDrawerOpen(false)}
                 items={actionItems}
                 onComplete={handleActionComplete}
+                onStartNext={handleStartNextAction}
               />
                 </>
               )}
@@ -2989,6 +3043,7 @@ function StudentAppContent({ isGuestFastEntry }: { isGuestFastEntry: boolean }) 
                     <ActionList
                       items={actionItems}
                       onComplete={handleActionComplete}
+                      onStartNext={handleStartNextAction}
                     />
                   </div>
                 </div>

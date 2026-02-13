@@ -8,9 +8,7 @@ interface VideoReviewPlayerProps {
   className?: string;
   seekToMs?: number;
   seekNonce?: number;
-  /** 播放进度回调（毫秒） */
   onTimeUpdate?: (currentTimeMs: number) => void;
-  /** 视频总时长（毫秒），用于 iframe 进度条 */
   totalDurationMs?: number;
 }
 
@@ -22,15 +20,12 @@ function isBilibili(source: ImportedVideoSource): boolean {
   return source.provider === 'bilibili';
 }
 
-function buildBilibiliEmbedUrl(source: ImportedVideoSource, seekToMs: number): string {
+function buildBilibiliEmbedBaseUrl(source: ImportedVideoSource): string {
   const bvid = source.bvid || '';
-  const base = bvid
-    ? `https://player.bilibili.com/player.html?bvid=${encodeURIComponent(bvid)}&page=1&high_quality=1&danmaku=0&autoplay=0`
-    : source.embedUrl || '';
-  if (!base) return '';
-  if (seekToMs <= 0) return base;
-  const sep = base.includes('?') ? '&' : '?';
-  return `${base}${sep}t=${Math.max(0, Math.floor(seekToMs / 1000))}`;
+  if (bvid) {
+    return `https://player.bilibili.com/player.html?bvid=${encodeURIComponent(bvid)}&page=1&high_quality=1&danmaku=0&autoplay=0`;
+  }
+  return source.embedUrl || '';
 }
 
 function withStartTime(url: string, seekToMs: number, seekNonce: number): string {
@@ -44,13 +39,10 @@ function withStartTime(url: string, seekToMs: number, seekNonce: number): string
   }
 }
 
-/** 格式化 ms → M:SS */
 function fmtTime(ms: number): string {
-  const s = Math.max(0, Math.floor(ms / 1000));
-  return `${Math.floor(s / 60)}:${(s % 60).toString().padStart(2, '0')}`;
+  const seconds = Math.max(0, Math.floor(ms / 1000));
+  return `${Math.floor(seconds / 60)}:${(seconds % 60).toString().padStart(2, '0')}`;
 }
-
-// ─── iframe 字幕同步控制条 ───
 
 const SPEED_OPTIONS = [0.5, 0.75, 1, 1.25, 1.5, 2] as const;
 
@@ -59,34 +51,59 @@ interface IframeSyncBarProps {
   seekNonce: number;
   totalDurationMs: number;
   onTimeUpdate?: (ms: number) => void;
+  audioUrl?: string;
 }
 
-function IframeSyncBar({ seekToMs, seekNonce, totalDurationMs, onTimeUpdate }: IframeSyncBarProps) {
+function IframeSyncBar({
+  seekToMs,
+  seekNonce,
+  totalDurationMs,
+  onTimeUpdate,
+  audioUrl,
+}: IframeSyncBarProps) {
   const [playing, setPlaying] = useState(false);
+  const [expanded, setExpanded] = useState(false);
   const [simTime, setSimTime] = useState(seekToMs);
   const [speed, setSpeed] = useState(1);
   const [dragging, setDragging] = useState(false);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const simTimeRef = useRef(simTime);
   const barRef = useRef<HTMLDivElement>(null);
+  const audioRef = useRef<HTMLAudioElement>(null);
+  const seekNonceRef = useRef<number>(seekNonce);
+
   simTimeRef.current = simTime;
 
+  const hasAudio = Boolean(audioUrl);
   const duration = totalDurationMs > 0 ? totalDurationMs : 1;
   const progress = Math.min(1, Math.max(0, simTime / duration));
 
-  // 外部 seek 时同步
   useEffect(() => {
-    setSimTime(seekToMs);
-    onTimeUpdate?.(seekToMs);
-  }, [seekToMs, seekNonce]);
+    if (audioRef.current) {
+      audioRef.current.playbackRate = speed;
+    }
+  }, [speed]);
 
-  // 计时器
+  useEffect(() => {
+    if (seekNonceRef.current === seekNonce) return;
+    seekNonceRef.current = seekNonce;
+
+    const next = Math.max(0, seekToMs);
+    setSimTime(next);
+    simTimeRef.current = next;
+
+    if (hasAudio && audioRef.current) {
+      audioRef.current.currentTime = next / 1000;
+    }
+  }, [seekNonce, seekToMs, hasAudio]);
+
   useEffect(() => {
     if (intervalRef.current) {
       clearInterval(intervalRef.current);
       intervalRef.current = null;
     }
-    if (playing && !dragging) {
+
+    if (!hasAudio && playing && !dragging) {
       const tickMs = 200;
       intervalRef.current = setInterval(() => {
         const next = Math.min(simTimeRef.current + tickMs * speed, duration);
@@ -97,44 +114,75 @@ function IframeSyncBar({ seekToMs, seekNonce, totalDurationMs, onTimeUpdate }: I
         }
       }, tickMs);
     }
-    return () => {
-      if (intervalRef.current) clearInterval(intervalRef.current);
-    };
-  }, [playing, speed, dragging, duration, onTimeUpdate]);
 
-  const togglePlay = useCallback(() => {
-    setPlaying(p => {
-      if (!p && simTimeRef.current >= duration) {
-        setSimTime(0);
-        onTimeUpdate?.(0);
+    return () => {
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current);
       }
-      return !p;
-    });
-  }, [duration, onTimeUpdate]);
+    };
+  }, [hasAudio, playing, dragging, speed, duration, onTimeUpdate]);
+
+  const seekBarTime = useCallback((nextMs: number) => {
+    const next = Math.max(0, Math.min(nextMs, duration));
+    setSimTime(next);
+    simTimeRef.current = next;
+    onTimeUpdate?.(next);
+
+    if (hasAudio && audioRef.current) {
+      audioRef.current.currentTime = next / 1000;
+    }
+  }, [duration, hasAudio, onTimeUpdate]);
+
+  const togglePlay = useCallback(async () => {
+    if (!hasAudio) {
+      setPlaying((prev) => {
+        if (!prev && simTimeRef.current >= duration) {
+          seekBarTime(0);
+        }
+        return !prev;
+      });
+      return;
+    }
+
+    const audio = audioRef.current;
+    if (!audio) return;
+
+    if (audio.paused) {
+      if (audio.currentTime * 1000 >= duration) {
+        seekBarTime(0);
+      }
+      try {
+        await audio.play();
+        setPlaying(true);
+      } catch {
+        setPlaying(false);
+      }
+    } else {
+      audio.pause();
+      setPlaying(false);
+    }
+  }, [hasAudio, duration, seekBarTime]);
 
   const cycleSpeed = useCallback(() => {
-    setSpeed(prev => {
-      const idx = SPEED_OPTIONS.indexOf(prev as (typeof SPEED_OPTIONS)[number]);
-      return SPEED_OPTIONS[(idx + 1) % SPEED_OPTIONS.length];
+    setSpeed((prev) => {
+      const index = SPEED_OPTIONS.indexOf(prev as (typeof SPEED_OPTIONS)[number]);
+      return SPEED_OPTIONS[(index + 1) % SPEED_OPTIONS.length];
     });
   }, []);
 
-  // 进度条拖拽
   const handleBarInteraction = useCallback((clientX: number) => {
     if (!barRef.current) return;
     const rect = barRef.current.getBoundingClientRect();
     const ratio = Math.min(1, Math.max(0, (clientX - rect.left) / rect.width));
-    const newTime = ratio * duration;
-    setSimTime(newTime);
-    onTimeUpdate?.(newTime);
-  }, [duration, onTimeUpdate]);
+    seekBarTime(ratio * duration);
+  }, [duration, seekBarTime]);
 
-  const handleMouseDown = useCallback((e: React.MouseEvent) => {
-    e.preventDefault();
+  const handleMouseDown = useCallback((event: React.MouseEvent) => {
+    event.preventDefault();
     setDragging(true);
-    handleBarInteraction(e.clientX);
+    handleBarInteraction(event.clientX);
 
-    const onMove = (ev: MouseEvent) => handleBarInteraction(ev.clientX);
+    const onMove = (moveEvent: MouseEvent) => handleBarInteraction(moveEvent.clientX);
     const onUp = () => {
       setDragging(false);
       window.removeEventListener('mousemove', onMove);
@@ -144,75 +192,111 @@ function IframeSyncBar({ seekToMs, seekNonce, totalDurationMs, onTimeUpdate }: I
     window.addEventListener('mouseup', onUp);
   }, [handleBarInteraction]);
 
-  return (
-    <div className="bg-gray-900/90 backdrop-blur-sm px-3 py-2 select-none">
-      {/* 进度条 */}
-      <div
-        ref={barRef}
-        className="relative h-1.5 bg-white/10 rounded-full cursor-pointer group mb-2"
-        onMouseDown={handleMouseDown}
-      >
-        {/* 已播放部分 */}
-        <div
-          className="absolute left-0 top-0 h-full bg-yellow-400 rounded-full transition-[width] duration-100"
-          style={{ width: `${progress * 100}%` }}
-        />
-        {/* 拖拽手柄 */}
-        <div
-          className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 w-3 h-3 bg-yellow-400 rounded-full shadow-md opacity-0 group-hover:opacity-100 transition-opacity"
-          style={{ left: `${progress * 100}%` }}
-        />
-      </div>
+  const handleAudioTimeUpdate = useCallback(() => {
+    if (!audioRef.current) return;
+    const nowMs = audioRef.current.currentTime * 1000;
+    setSimTime(nowMs);
+    onTimeUpdate?.(nowMs);
+  }, [onTimeUpdate]);
 
-      {/* 控制按钮行 */}
-      <div className="flex items-center gap-2">
-        {/* 播放/暂停 */}
+  const statusText = hasAudio
+    ? (playing ? '音轨同步中' : '可播放音轨回放')
+    : (playing ? '字幕同步中' : '仅字幕同步（无音轨）');
+
+  return (
+    <div className="bg-slate-950/95 backdrop-blur-sm border-t border-white/10 select-none">
+      {hasAudio && (
+        <audio
+          ref={audioRef}
+          src={audioUrl}
+          preload="metadata"
+          onTimeUpdate={handleAudioTimeUpdate}
+          onEnded={() => setPlaying(false)}
+          onPause={() => setPlaying(false)}
+          onPlay={() => setPlaying(true)}
+        />
+      )}
+
+      <div className="flex items-center gap-2 px-3 py-2">
+        <span className="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium bg-rose-400/15 text-rose-300 border border-rose-300/30">
+          学习时间轴
+        </span>
+        <span className="text-[11px] text-white/60 truncate">
+          用于字幕同步与困惑点时间定位
+        </span>
+        <div className="flex-1" />
         <button
           onClick={togglePlay}
-          className="flex items-center justify-center w-7 h-7 rounded-full bg-yellow-400/20 hover:bg-yellow-400/30 transition-colors"
-          title={playing ? '暂停字幕同步' : '开始字幕同步'}
+          className="flex items-center justify-center w-7 h-7 rounded-full bg-rose-300/20 hover:bg-rose-300/30 transition-colors"
+          title={hasAudio ? '播放或暂停音轨回放' : '开始或暂停字幕同步'}
         >
           {playing ? (
-            <svg className="w-3.5 h-3.5 text-yellow-300" fill="currentColor" viewBox="0 0 24 24">
+            <svg className="w-3.5 h-3.5 text-rose-200" fill="currentColor" viewBox="0 0 24 24">
               <rect x="6" y="4" width="4" height="16" rx="1" />
               <rect x="14" y="4" width="4" height="16" rx="1" />
             </svg>
           ) : (
-            <svg className="w-3.5 h-3.5 text-yellow-300 ml-0.5" fill="currentColor" viewBox="0 0 24 24">
+            <svg className="w-3.5 h-3.5 text-rose-200 ml-0.5" fill="currentColor" viewBox="0 0 24 24">
               <path d="M8 5v14l11-7z" />
             </svg>
           )}
         </button>
-
-        {/* 时间 */}
-        <span className="text-xs font-mono text-white/80 tabular-nums min-w-[6rem]">
+        <span className="text-[11px] font-mono text-white/75 tabular-nums min-w-[5.5rem] text-right">
           {fmtTime(simTime)} / {fmtTime(duration)}
         </span>
-
-        {/* 倍速 */}
         <button
-          onClick={cycleSpeed}
-          className="px-1.5 py-0.5 text-[11px] font-mono rounded bg-white/10 hover:bg-white/20 text-white/70 hover:text-white transition-colors tabular-nums"
-          title="切换倍速"
+          type="button"
+          data-testid="learning-track-toggle"
+          data-onboarding="learning-track"
+          onClick={() => setExpanded((prev) => !prev)}
+          className="rounded-md border border-white/15 bg-white/5 px-2 py-1 text-[11px] text-white/75 hover:bg-white/10 transition-colors"
+          title={expanded ? '收起学习时间轴' : '展开学习时间轴'}
         >
-          {speed}x
+          {expanded ? '收起' : '展开'}
         </button>
-
-        {/* 状态提示 */}
-        <div className="flex-1" />
-        <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${
-          playing
-            ? 'bg-yellow-400/20 text-yellow-300 animate-pulse'
-            : 'bg-white/5 text-white/30'
-        }`}>
-          {playing ? '字幕同步中' : '在B站播放视频后，点 ▶ 同步字幕高亮'}
-        </span>
       </div>
+
+      {expanded && (
+        <div className="px-3 pb-2" data-testid="learning-track-panel">
+          <div
+            ref={barRef}
+            className="relative h-1.5 bg-white/10 rounded-full cursor-pointer group mb-2"
+            onMouseDown={handleMouseDown}
+          >
+            <div
+              className="absolute left-0 top-0 h-full bg-rose-300 rounded-full transition-[width] duration-100"
+              style={{ width: `${progress * 100}%` }}
+            />
+            <div
+              className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 w-3 h-3 bg-rose-300 rounded-full shadow-md opacity-0 group-hover:opacity-100 transition-opacity"
+              style={{ left: `${progress * 100}%` }}
+            />
+          </div>
+
+          <div className="flex items-center gap-2">
+            <button
+              onClick={cycleSpeed}
+              className="px-1.5 py-0.5 text-[11px] font-mono rounded bg-white/10 hover:bg-white/20 text-white/70 hover:text-white transition-colors tabular-nums"
+              title="切换播放倍速"
+            >
+              {speed}x
+            </button>
+            <div className="flex-1" />
+            <span
+              className={`text-[10px] px-1.5 py-0.5 rounded-full ${
+                playing
+                  ? 'bg-rose-300/20 text-rose-200'
+                  : 'bg-white/5 text-white/40'
+              }`}
+            >
+              {statusText}
+            </span>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
-
-// ─── 主组件 ───
 
 function VideoReviewPlayerComponent({
   source,
@@ -224,13 +308,30 @@ function VideoReviewPlayerComponent({
 }: VideoReviewPlayerProps) {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const [iframeError, setIframeError] = useState(false);
+  const [iframeSrc, setIframeSrc] = useState('');
 
-  const embedSrc = useMemo(() => {
+  const baseEmbedSrc = useMemo(() => {
     if (!source) return '';
-    if (isBilibili(source)) return buildBilibiliEmbedUrl(source, seekToMs);
-    if (source.embedUrl) return withStartTime(source.embedUrl, seekToMs, seekNonce);
-    return '';
-  }, [source, seekToMs, seekNonce]);
+    if (isBilibili(source)) return buildBilibiliEmbedBaseUrl(source);
+    return source.embedUrl || '';
+  }, [source]);
+
+  useEffect(() => {
+    if (!source || isDirectVideo(source)) {
+      setIframeSrc('');
+      setIframeError(false);
+      return;
+    }
+    setIframeError(false);
+    setIframeSrc(withStartTime(baseEmbedSrc, seekToMs, 0));
+  }, [source, baseEmbedSrc]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (!source || isDirectVideo(source)) return;
+    if (!baseEmbedSrc) return;
+    if (seekNonce <= 0) return;
+    setIframeSrc(withStartTime(baseEmbedSrc, seekToMs, seekNonce));
+  }, [source, baseEmbedSrc, seekNonce, seekToMs]);
 
   useEffect(() => {
     if (source && isDirectVideo(source) && videoRef.current && seekToMs >= 0) {
@@ -238,9 +339,7 @@ function VideoReviewPlayerComponent({
     }
   }, [source, seekToMs, seekNonce]);
 
-  const isEmbed = !!source && !isDirectVideo(source) && !!embedSrc && !iframeError;
-
-  // 从 source.durationSec 或 prop 获取总时长
+  const isEmbed = !!source && !isDirectVideo(source) && !!iframeSrc && !iframeError;
   const effectiveDuration = totalDurationMs > 0
     ? totalDurationMs
     : (source?.durationSec ? source.durationSec * 1000 : 0);
@@ -249,29 +348,27 @@ function VideoReviewPlayerComponent({
 
   const originalUrl = source.resolvedUrl || source.originalUrl;
 
-  // 直链视频 - 原生 video 标签（timeupdate 天然支持）
   if (isDirectVideo(source)) {
     return (
-      <div className={className}>
+      <div className={className} data-testid="video-review-player">
         <video
           ref={videoRef}
           src={source.playableUrl}
           controls
           preload="metadata"
           className="aspect-video w-full bg-black"
-          onTimeUpdate={onTimeUpdate ? (e) => onTimeUpdate((e.target as HTMLVideoElement).currentTime * 1000) : undefined}
+          onTimeUpdate={onTimeUpdate ? (event) => onTimeUpdate((event.target as HTMLVideoElement).currentTime * 1000) : undefined}
         />
       </div>
     );
   }
 
-  // iframe 嵌入（B站/YouTube 等）+ 字幕同步控制条
   if (isEmbed) {
     return (
-      <div className={className}>
+      <div className={className} data-testid="video-review-player">
         <div className="relative aspect-video w-full overflow-hidden bg-black">
           <iframe
-            src={embedSrc}
+            src={iframeSrc}
             title={source.title || 'video'}
             className="absolute inset-0 h-full w-full"
             allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
@@ -280,40 +377,38 @@ function VideoReviewPlayerComponent({
             onError={() => setIframeError(true)}
           />
         </div>
-        {/* 字幕同步控制条 — B站/YouTube iframe 跨域无法直接获取播放进度 */}
         {onTimeUpdate && effectiveDuration > 0 && (
           <IframeSyncBar
             seekToMs={seekToMs}
             seekNonce={seekNonce}
             totalDurationMs={effectiveDuration}
             onTimeUpdate={onTimeUpdate}
+            audioUrl={source.audioUrl}
           />
         )}
       </div>
     );
   }
 
-  // fallback: 无法嵌入，显示跳转按钮
   return (
-    <div className={className}>
+    <div className={className} data-testid="video-review-player">
       <div className="flex aspect-video w-full flex-col items-center justify-center gap-3 bg-gray-900">
         <div className="flex h-14 w-14 items-center justify-center rounded-full bg-white/10">
           <svg className="h-7 w-7 text-white/60" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
           </svg>
         </div>
-        <p className="text-sm text-white/50">无法嵌入播放</p>
+        <p className="text-sm text-white/50">无法内嵌播放</p>
         <a
           href={originalUrl}
           target="_blank"
           rel="noreferrer"
           className="rounded-lg bg-white/10 px-4 py-1.5 text-sm text-white transition hover:bg-white/20"
-        >
-          在新窗口打开
-        </a>
+        >在新窗口打开</a>
       </div>
     </div>
   );
 }
 
 export const VideoReviewPlayer = memo(VideoReviewPlayerComponent);
+

@@ -3,7 +3,6 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { getPreference, setPreference } from '@/lib/db';
 
-// 引导步骤定义
 export interface OnboardingStep {
   id: string;
   title: string;
@@ -13,15 +12,10 @@ export interface OnboardingStep {
   spotlight?: boolean;
   action?: 'click' | 'wait' | 'auto';
   delay?: number;
-  /** 是否为交互式步骤（用户点击目标元素进入下一步）
-   * - true: 用户需要点击目标元素，元素的原有功能会生效
-   * - false: 用户点击"下一步"按钮，不触发元素功能
-   * - 默认为 false（统一使用下一步按钮，避免用户困惑）
-   */
+  // true 表示需要用户点击目标元素触发下一步
   interactive?: boolean;
 }
 
-// 引导流程定义
 export interface OnboardingFlow {
   id: string;
   name: string;
@@ -29,7 +23,6 @@ export interface OnboardingFlow {
   trigger: 'first-visit' | 'manual' | 'feature-first-use';
 }
 
-// 桌面端引导流程
 export const DESKTOP_ONBOARDING_FLOWS: Record<string, OnboardingFlow> = {
   welcome: {
     id: 'welcome',
@@ -39,14 +32,13 @@ export const DESKTOP_ONBOARDING_FLOWS: Record<string, OnboardingFlow> = {
       {
         id: 'welcome-intro',
         title: '欢迎使用 MeetMind',
-        description: '你的专属 AI 同桌，让课堂学习更高效',
+        description: '你的专属 AI 同学，让课堂学习更高效。',
         position: 'center',
         action: 'click',
       },
     ],
   },
-  
-  // 首次进入录音页面的引导（3步）
+
   recording: {
     id: 'recording',
     name: '录音引导',
@@ -55,7 +47,7 @@ export const DESKTOP_ONBOARDING_FLOWS: Record<string, OnboardingFlow> = {
       {
         id: 'record-button',
         title: '1/3 开始录音',
-        description: '点击红色按钮开始录制课堂内容，AI 会实时将语音转换为文字',
+        description: '点击录音按钮开始记录课堂内容，系统会实时转写。',
         targetSelector: '[data-onboarding="record-button"]',
         position: 'bottom',
         spotlight: true,
@@ -63,8 +55,8 @@ export const DESKTOP_ONBOARDING_FLOWS: Record<string, OnboardingFlow> = {
       },
       {
         id: 'input-method',
-        title: '2/3 多种输入方式',
-        description: '除了实时录音，你还可以上传已有的音频文件，或查看历史录音记录',
+        title: '2/3 输入方式',
+        description: '你也可以上传音频或使用历史会话继续学习。',
         targetSelector: '[data-onboarding="input-methods"]',
         position: 'bottom',
         spotlight: true,
@@ -73,7 +65,7 @@ export const DESKTOP_ONBOARDING_FLOWS: Record<string, OnboardingFlow> = {
       {
         id: 'mode-switch',
         title: '3/3 录音与复习',
-        description: '录音完成后切换到「复习」模式，可以回放音频、查看转录、与 AI 对话',
+        description: '录音后切到复习模式，查看转录、困惑点并与 AI 互动。',
         targetSelector: '[data-onboarding="mode-switch"]',
         position: 'bottom',
         spotlight: true,
@@ -81,8 +73,7 @@ export const DESKTOP_ONBOARDING_FLOWS: Record<string, OnboardingFlow> = {
       },
     ],
   },
-  
-  // 复习模式引导（首次进入复习时触发）- 桌面端
+
   review: {
     id: 'review',
     name: '复习引导',
@@ -90,39 +81,56 @@ export const DESKTOP_ONBOARDING_FLOWS: Record<string, OnboardingFlow> = {
     steps: [
       {
         id: 'timeline',
-        title: '1/3 功能标签栏',
-        description: '点击「时间轴」按钮，可以查看课堂内容。还有困惑点、精选、摘要等功能等你探索',
+        title: '1/3 功能标签',
+        description: '在这里切换时间轴、困惑点、精选和摘要等复习视图。',
         targetSelector: '[data-onboarding="timeline"]',
         position: 'right',
         spotlight: true,
         action: 'click',
-        interactive: false, // 统一使用下一步按钮
+        interactive: false,
       },
       {
         id: 'ai-tutor',
         title: '2/3 AI 家教',
-        description: '有问题随时问 AI，它会根据课堂内容为你解答疑惑',
+        description: '你可以针对课堂内容随时提问，AI 会结合上下文回答。',
         targetSelector: '[data-onboarding="ai-tutor"]',
         position: 'left',
         spotlight: true,
         action: 'click',
-        interactive: false, // 统一使用下一步按钮
+        interactive: false,
       },
       {
         id: 'action-list',
         title: '3/3 行动清单',
-        description: 'AI 会根据课堂内容生成学习任务，点击查看',
+        description: '系统会自动生成学习任务，帮助你快速进入下一步练习。',
         targetSelector: '[data-onboarding="action-list"]',
         position: 'left',
         spotlight: true,
         action: 'click',
-        interactive: false, // 统一使用下一步按钮
+        interactive: false,
+      },
+    ],
+  },
+
+  'video-review': {
+    id: 'video-review',
+    name: '视频回放引导',
+    trigger: 'feature-first-use',
+    steps: [
+      {
+        id: 'learning-track',
+        title: '1/1 学习时间轴',
+        description: '学习时间轴用于字幕同步和困惑点定位，不替代上方平台原生进度条。',
+        targetSelector: '[data-onboarding="learning-track"]',
+        position: 'top',
+        spotlight: true,
+        action: 'click',
+        interactive: false,
       },
     ],
   },
 };
 
-// 移动端引导流程 - 针对移动端布局优化
 export const MOBILE_ONBOARDING_FLOWS: Record<string, OnboardingFlow> = {
   welcome: {
     id: 'welcome',
@@ -132,14 +140,13 @@ export const MOBILE_ONBOARDING_FLOWS: Record<string, OnboardingFlow> = {
       {
         id: 'welcome-intro',
         title: '欢迎使用 MeetMind',
-        description: '你的专属 AI 同桌，让课堂学习更高效',
+        description: '你的专属 AI 同学，让课堂学习更高效。',
         position: 'center',
         action: 'click',
       },
     ],
   },
-  
-  // 移动端录音引导（3步）- 适配移动端垂直布局
+
   recording: {
     id: 'recording',
     name: '录音引导',
@@ -148,16 +155,16 @@ export const MOBILE_ONBOARDING_FLOWS: Record<string, OnboardingFlow> = {
       {
         id: 'record-button',
         title: '1/3 开始录音',
-        description: '点击红色按钮开始录制课堂内容，AI 会实时将语音转换为文字',
+        description: '点击录音按钮开始记录课堂内容，系统会实时转写。',
         targetSelector: '[data-onboarding="record-button"]',
-        position: 'top',  // 移动端录音按钮在下方，tooltip 显示在上方
+        position: 'top',
         spotlight: true,
         action: 'click',
       },
       {
         id: 'input-method',
-        title: '2/3 多种输入方式',
-        description: '除了实时录音，你还可以上传音频文件或查看历史记录',
+        title: '2/3 输入方式',
+        description: '你也可以上传音频或使用历史会话继续学习。',
         targetSelector: '[data-onboarding="input-methods"]',
         position: 'bottom',
         spotlight: true,
@@ -166,7 +173,7 @@ export const MOBILE_ONBOARDING_FLOWS: Record<string, OnboardingFlow> = {
       {
         id: 'mode-switch',
         title: '3/3 录音与复习',
-        description: '录音完成后切换到「复习」模式，回放音频、与 AI 对话',
+        description: '录音后切到复习模式，查看转录、困惑点并与 AI 互动。',
         targetSelector: '[data-onboarding="mode-switch"]',
         position: 'bottom',
         spotlight: true,
@@ -174,8 +181,7 @@ export const MOBILE_ONBOARDING_FLOWS: Record<string, OnboardingFlow> = {
       },
     ],
   },
-  
-  // 移动端复习引导 - 引导 AI 对话入口
+
   review: {
     id: 'review',
     name: '复习引导',
@@ -184,31 +190,47 @@ export const MOBILE_ONBOARDING_FLOWS: Record<string, OnboardingFlow> = {
       {
         id: 'ai-fab',
         title: '1/2 AI 助教',
-        description: '点这里可以问 AI 任何关于这节课的问题',
+        description: '点击这里可以针对当前课程随时向 AI 提问。',
         targetSelector: '[data-onboarding="ai-fab"]',
-        position: 'top',  // 悬浮按钮在底部，tooltip 在上方
+        position: 'top',
         spotlight: true,
         action: 'click',
-        interactive: false, // 统一使用下一步按钮
+        interactive: false,
       },
       {
         id: 'menu-button',
         title: '2/2 更多功能',
-        description: '点击菜单查看精选片段、生成摘要等',
+        description: '通过菜单可以查看精选片段、摘要和其他复习入口。',
         targetSelector: '[data-onboarding="menu-button"]',
-        position: 'left',  // 菜单按钮在右上角，tooltip 在左侧
+        position: 'left',
         spotlight: true,
         action: 'click',
-        interactive: false, // 统一使用下一步按钮
+        interactive: false,
+      },
+    ],
+  },
+
+  'video-review': {
+    id: 'video-review',
+    name: '视频回放引导',
+    trigger: 'feature-first-use',
+    steps: [
+      {
+        id: 'learning-track',
+        title: '1/1 学习时间轴',
+        description: '学习时间轴用于字幕同步和困惑点定位，建议先展开看一遍。',
+        targetSelector: '[data-onboarding="learning-track"]',
+        position: 'top',
+        spotlight: true,
+        action: 'click',
+        interactive: false,
       },
     ],
   },
 };
 
-// 兼容旧代码的导出（默认使用桌面端流程）
 export const ONBOARDING_FLOWS = DESKTOP_ONBOARDING_FLOWS;
 
-// 根据设备类型获取引导流程
 export function getOnboardingFlows(isMobile: boolean): Record<string, OnboardingFlow> {
   return isMobile ? MOBILE_ONBOARDING_FLOWS : DESKTOP_ONBOARDING_FLOWS;
 }
@@ -231,30 +253,24 @@ const DEFAULT_STATE: OnboardingState = {
   lastUpdated: Date.now(),
 };
 
-// Hook 配置选项
 export interface UseOnboardingOptions {
   isMobile?: boolean;
 }
 
 export function useOnboarding(options: UseOnboardingOptions = {}) {
   const { isMobile = false } = options;
-  
+
   const [state, setState] = useState<OnboardingState>(DEFAULT_STATE);
-  // 乐观 UI：不阻塞渲染，立即使用默认状态显示
-  // isHydrated 用于标记是否已从 IndexedDB 加载完成
   const [isHydrated, setIsHydrated] = useState(false);
   const [isActive, setIsActive] = useState(false);
   const stateRef = useRef(state);
-  
-  // 根据设备类型获取对应的引导流程
+
   const flows = useMemo(() => getOnboardingFlows(isMobile), [isMobile]);
-  
-  // 保持 ref 同步
+
   useEffect(() => {
     stateRef.current = state;
   }, [state]);
 
-  // 异步加载状态（乐观 UI：不阻塞首屏渲染）
   useEffect(() => {
     const loadState = async () => {
       try {
@@ -269,10 +285,10 @@ export function useOnboarding(options: UseOnboardingOptions = {}) {
         setIsHydrated(true);
       }
     };
-    loadState();
+
+    void loadState();
   }, []);
 
-  // 保存状态
   const saveState = useCallback(async (newState: OnboardingState) => {
     setState(newState);
     stateRef.current = newState;
@@ -283,73 +299,72 @@ export function useOnboarding(options: UseOnboardingOptions = {}) {
     }
   }, []);
 
-  // 检查是否需要显示某个引导流程
   const shouldShowFlow = useCallback((flowId: string): boolean => {
     const s = stateRef.current;
+    if (!flows[flowId]) return false;
     return !s.completedFlows.includes(flowId) && !s.skippedFlows.includes(flowId);
-  }, []);
+  }, [flows]);
 
-  // 完成当前流程
   const completeFlow = useCallback(() => {
     const s = stateRef.current;
     const flowToComplete = s.currentFlow;
-    
+
     setIsActive(false);
-    
-    if (flowToComplete) {
-      saveState({
-        ...s,
-        completedFlows: [...s.completedFlows, flowToComplete],
-        currentFlow: null,
-        currentStepIndex: 0,
-        lastUpdated: Date.now(),
-      });
-    }
+
+    if (!flowToComplete) return;
+
+    saveState({
+      ...s,
+      completedFlows: s.completedFlows.includes(flowToComplete)
+        ? s.completedFlows
+        : [...s.completedFlows, flowToComplete],
+      currentFlow: null,
+      currentStepIndex: 0,
+      lastUpdated: Date.now(),
+    });
   }, [saveState]);
 
-  // 跳过当前流程
   const skipFlow = useCallback(() => {
     const s = stateRef.current;
     const flowToSkip = s.currentFlow;
-    
+
     setIsActive(false);
-    
-    if (flowToSkip) {
-      saveState({
-        ...s,
-        skippedFlows: [...s.skippedFlows, flowToSkip],
-        currentFlow: null,
-        currentStepIndex: 0,
-        lastUpdated: Date.now(),
-      });
-    }
+
+    if (!flowToSkip) return;
+
+    saveState({
+      ...s,
+      skippedFlows: s.skippedFlows.includes(flowToSkip)
+        ? s.skippedFlows
+        : [...s.skippedFlows, flowToSkip],
+      currentFlow: null,
+      currentStepIndex: 0,
+      lastUpdated: Date.now(),
+    });
   }, [saveState]);
 
-  // 直接标记某个流程为完成（不依赖 currentFlow，用于外部弹窗如 WelcomeModal）
   const markFlowComplete = useCallback((flowId: string) => {
     const s = stateRef.current;
-    if (s.completedFlows.includes(flowId)) return; // 已完成则跳过
-    
+    if (!flows[flowId] || s.completedFlows.includes(flowId)) return;
+
     saveState({
       ...s,
       completedFlows: [...s.completedFlows, flowId],
       lastUpdated: Date.now(),
     });
-  }, [saveState]);
+  }, [saveState, flows]);
 
-  // 直接标记某个流程为跳过（不依赖 currentFlow）
   const markFlowSkipped = useCallback((flowId: string) => {
     const s = stateRef.current;
-    if (s.skippedFlows.includes(flowId)) return; // 已跳过则跳过
-    
+    if (!flows[flowId] || s.skippedFlows.includes(flowId)) return;
+
     saveState({
       ...s,
       skippedFlows: [...s.skippedFlows, flowId],
       lastUpdated: Date.now(),
     });
-  }, [saveState]);
+  }, [saveState, flows]);
 
-  // 开始引导流程
   const startFlow = useCallback((flowId: string) => {
     const flow = flows[flowId];
     if (!flow) {
@@ -359,6 +374,7 @@ export function useOnboarding(options: UseOnboardingOptions = {}) {
 
     const s = stateRef.current;
     setIsActive(true);
+
     saveState({
       ...s,
       currentFlow: flowId,
@@ -367,7 +383,6 @@ export function useOnboarding(options: UseOnboardingOptions = {}) {
     });
   }, [saveState, flows]);
 
-  // 进入下一步
   const nextStep = useCallback(() => {
     const s = stateRef.current;
     if (!s.currentFlow) return;
@@ -376,40 +391,36 @@ export function useOnboarding(options: UseOnboardingOptions = {}) {
     if (!flow) return;
 
     const nextIndex = s.currentStepIndex + 1;
-    
     if (nextIndex >= flow.steps.length) {
-      // 流程完成
       completeFlow();
-    } else {
-      saveState({
-        ...s,
-        currentStepIndex: nextIndex,
-        lastUpdated: Date.now(),
-      });
+      return;
     }
+
+    saveState({
+      ...s,
+      currentStepIndex: nextIndex,
+      lastUpdated: Date.now(),
+    });
   }, [saveState, completeFlow, flows]);
 
-  // 重置所有引导
   const resetAll = useCallback(() => {
     setIsActive(false);
-    saveState(DEFAULT_STATE);
+    void saveState({ ...DEFAULT_STATE, lastUpdated: Date.now() });
   }, [saveState]);
 
-  // 获取当前步骤（使用设备对应的流程）
-  const currentStep = state.currentFlow 
-    ? flows[state.currentFlow]?.steps[state.currentStepIndex] 
+  const currentStep = state.currentFlow
+    ? flows[state.currentFlow]?.steps[state.currentStepIndex] ?? null
     : null;
 
-  const currentFlow = state.currentFlow 
-    ? flows[state.currentFlow] 
+  const currentFlow = state.currentFlow
+    ? flows[state.currentFlow] ?? null
     : null;
 
   const totalSteps = currentFlow?.steps.length || 0;
 
   return {
-    // 向后兼容：isLoading 始终为 false（乐观 UI，不阻塞渲染）
     isLoading: false,
-    isHydrated, // 新增：标记是否已从 IndexedDB 加载完成
+    isHydrated,
     isActive,
     isMobile,
     currentFlow,

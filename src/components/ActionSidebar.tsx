@@ -48,6 +48,7 @@ export function ActionSidebar({
       {/* 行动清单按钮 */}
       <button
         data-onboarding="action-list"
+        data-testid="action-sidebar-toggle"
         onClick={onToggleDrawer}
         className={cn(
           'relative w-9 h-9 flex items-center justify-center rounded-lg transition-all',
@@ -73,6 +74,7 @@ export function ActionSidebar({
       {onShowHistory && (
         <button
           data-onboarding="conversation-history"
+          data-testid="conversation-history-toggle"
           onClick={onShowHistory}
           className={cn(
             'w-9 h-9 flex items-center justify-center rounded-lg transition-all',
