@@ -1496,18 +1496,52 @@ function StudentAppContent({ isGuestFastEntry }: { isGuestFastEntry: boolean }) 
   const renderInputSourceTabs = useCallback((layout: 'mobile' | 'desktop') => {
     const isMobileLayout = layout === 'mobile';
     const activeClass = isMobileLayout
-      ? 'bg-white text-gray-900 font-medium shadow-sm'
+      ? 'border border-amber-200 bg-gradient-to-b from-white to-amber-50 text-amber-700 font-semibold shadow-[0_6px_14px_rgba(214,165,87,0.18)]'
       : 'bg-white text-navy font-medium shadow-sm';
     const inactiveClass = isMobileLayout
-      ? 'text-gray-500 hover:text-gray-700'
+      ? 'border border-transparent text-slate-500 hover:text-slate-700 hover:bg-white/70'
       : 'text-gray-500 hover:text-navy';
     const buttonBaseClass = isMobileLayout
-      ? 'px-3 py-1.5 text-xs rounded-lg transition-all'
-      : 'px-4 py-2 text-sm rounded-lg transition-all';
+      ? 'shrink-0 min-w-[84px] px-2.5 py-2 text-[12px] leading-none rounded-xl transition-all duration-200 whitespace-nowrap flex items-center justify-center gap-1.5'
+      : 'px-4 py-2 text-sm rounded-lg transition-all whitespace-nowrap';
     const wrapperClass = isMobileLayout
-      ? 'flex items-center gap-1 p-0.5 bg-gray-100 rounded-xl'
+      ? 'w-full flex items-center gap-1 p-1 rounded-2xl border border-amber-100/80 bg-white/85 backdrop-blur-sm overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden shadow-[0_10px_24px_rgba(214,165,87,0.14)]'
       : 'flex items-center gap-2 p-1 rounded-xl';
-    const historyLabel = isMobileLayout ? '📋 历史' : '📋 录音历史';
+
+    const sourceTabs = [
+      {
+        key: 'live',
+        icon: '🎙️',
+        label: '实时录音',
+        testId: 'source-live-button',
+        active: dataSource === 'live' && !showSessionHistory,
+        onClick: () => { setDataSource('live'); setShowSessionHistory(false); },
+      },
+      {
+        key: 'demo',
+        icon: '📁',
+        label: '上传音频',
+        testId: 'source-upload-button',
+        active: dataSource === 'demo' && !showSessionHistory,
+        onClick: () => { setDataSource('demo'); setShowSessionHistory(false); },
+      },
+      {
+        key: 'video',
+        icon: '🎬',
+        label: '视频链接',
+        testId: 'source-video-button',
+        active: dataSource === 'video' && !showSessionHistory,
+        onClick: () => { setDataSource('video'); setShowSessionHistory(false); },
+      },
+      {
+        key: 'history',
+        icon: '📋',
+        label: isMobileLayout ? '历史' : '录音历史',
+        testId: 'source-history-button',
+        active: showSessionHistory,
+        onClick: () => setShowSessionHistory(true),
+      },
+    ] as const;
 
     return (
       <div
@@ -1515,34 +1549,17 @@ function StudentAppContent({ isGuestFastEntry }: { isGuestFastEntry: boolean }) 
         style={isMobileLayout ? undefined : { background: 'var(--edu-bg-soft)' }}
         data-onboarding="input-methods"
       >
-        <button
-          onClick={() => { setDataSource('live'); setShowSessionHistory(false); }}
-          data-testid="source-live-button"
-          className={`${buttonBaseClass} ${dataSource === 'live' && !showSessionHistory ? activeClass : inactiveClass}`}
-        >
-          🎙️ 实时录音
-        </button>
-        <button
-          onClick={() => { setDataSource('demo'); setShowSessionHistory(false); }}
-          data-testid="source-upload-button"
-          className={`${buttonBaseClass} ${dataSource === 'demo' && !showSessionHistory ? activeClass : inactiveClass}`}
-        >
-          📁 上传音频
-        </button>
-        <button
-          onClick={() => { setDataSource('video'); setShowSessionHistory(false); }}
-          data-testid="source-video-button"
-          className={`${buttonBaseClass} ${dataSource === 'video' && !showSessionHistory ? activeClass : inactiveClass}`}
-        >
-          🎬 视频链接
-        </button>
-        <button
-          onClick={() => setShowSessionHistory(true)}
-          data-testid="source-history-button"
-          className={`${buttonBaseClass} ${showSessionHistory ? activeClass : inactiveClass}`}
-        >
-          {historyLabel}
-        </button>
+        {sourceTabs.map((tab) => (
+          <button
+            key={tab.key}
+            onClick={tab.onClick}
+            data-testid={tab.testId}
+            className={`${buttonBaseClass} ${tab.active ? activeClass : inactiveClass}`}
+          >
+            <span aria-hidden className={isMobileLayout ? 'text-[13px] leading-none' : undefined}>{tab.icon}</span>
+            <span>{tab.label}</span>
+          </button>
+        ))}
       </div>
     );
   }, [dataSource, showSessionHistory]);
@@ -1881,8 +1898,11 @@ function StudentAppContent({ isGuestFastEntry }: { isGuestFastEntry: boolean }) 
               <div className="flex-1 flex flex-col p-4 overflow-hidden min-h-0">
                 <div className="w-full max-w-md mx-auto flex flex-col flex-1 min-h-0">
                   {/* 录音或上传切换 */}
-                  <div className="flex-shrink-0 flex items-center justify-center gap-2 mb-2">
-                    <span className="text-xs text-gray-500">选择输入方式：</span>
+                  <div className="flex-shrink-0 mb-3">
+                    <div className="mb-1.5 flex items-center justify-between">
+                      <span className="text-[11px] font-medium tracking-[0.02em] text-slate-500">选择输入方式</span>
+                      <span className="text-[10px] text-slate-400">课堂采集入口</span>
+                    </div>
                     {renderInputSourceTabs('mobile')}
                   </div>
 
