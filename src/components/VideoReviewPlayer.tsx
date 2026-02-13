@@ -25,7 +25,17 @@ function buildBilibiliEmbedBaseUrl(source: ImportedVideoSource): string {
   if (source.embedUrl) {
     try {
       const parsed = new URL(source.embedUrl);
-      // 保留后端解析出的 page/cid 等参数，仅补齐播放器体验参数
+      // 保留后端解析出的 page/cid 参数，并补齐播放器体验参数。
+      const page = parsed.searchParams.get('page');
+      if (page && !parsed.searchParams.get('p')) {
+        parsed.searchParams.set('p', page);
+      }
+      if (source.cid && !parsed.searchParams.get('cid')) {
+        parsed.searchParams.set('cid', String(source.cid));
+      }
+      if (source.bvid && !parsed.searchParams.get('bvid')) {
+        parsed.searchParams.set('bvid', source.bvid);
+      }
       parsed.searchParams.set('high_quality', '1');
       parsed.searchParams.set('danmaku', '0');
       parsed.searchParams.set('autoplay', '0');
@@ -36,17 +46,24 @@ function buildBilibiliEmbedBaseUrl(source: ImportedVideoSource): string {
   }
 
   const bvid = source.bvid || '';
+  const cidPart = source.cid ? `&cid=${encodeURIComponent(String(source.cid))}` : '';
   if (bvid) {
-    return `https://player.bilibili.com/player.html?bvid=${encodeURIComponent(bvid)}&page=1&high_quality=1&danmaku=0&autoplay=0`;
+    return `https://player.bilibili.com/player.html?bvid=${encodeURIComponent(bvid)}&p=1${cidPart}&high_quality=1&danmaku=0&autoplay=0`;
   }
   return source.embedUrl || '';
 }
 
-function withStartTime(url: string, seekToMs: number, seekNonce: number): string {
+function withStartTime(url: string, seekToMs: number, seekNonce: number, autoplay: boolean = false): string {
   try {
+    const safeMs = Math.max(0, Math.floor(seekToMs));
+    const safeSec = Math.floor(safeMs / 1000);
     const parsed = new URL(url);
-    parsed.searchParams.set('t', String(Math.max(0, Math.floor(seekToMs / 1000))));
+    // Write multiple start parameters for bilibili embed compatibility.
+    parsed.searchParams.set('t', String(safeSec));
+    parsed.searchParams.set('start', String(safeSec));
+    parsed.searchParams.set('start_progress', String(safeMs));
     parsed.searchParams.set('seek_nonce', String(seekNonce));
+    parsed.searchParams.set('autoplay', autoplay ? '1' : '0');
     return parsed.toString();
   } catch {
     return url;
@@ -67,7 +84,7 @@ interface IframeSyncBarProps {
   totalDurationMs: number;
   onTimeUpdate?: (ms: number) => void;
   audioUrl?: string;
-  onSyncMainVideo?: (timeMs: number) => void;
+  onSyncMainVideo?: (timeMs: number, autoPlay?: boolean) => void;
 }
 
 function IframeSyncBar({
@@ -233,12 +250,14 @@ function IframeSyncBar({
     const onMove = (moveEvent: MouseEvent) => handleBarInteraction(moveEvent.clientX);
     const onUp = () => {
       setDragging(false);
+      // Sync main video after explicit seek to avoid frequent iframe reloads while dragging.
+      onSyncMainVideo?.(simTimeRef.current, playing);
       window.removeEventListener('mousemove', onMove);
       window.removeEventListener('mouseup', onUp);
     };
     window.addEventListener('mousemove', onMove);
     window.addEventListener('mouseup', onUp);
-  }, [handleBarInteraction]);
+  }, [handleBarInteraction, onSyncMainVideo, playing]);
 
   const handleAudioTimeUpdate = useCallback(() => {
     if (!audioRef.current) return;
@@ -284,7 +303,7 @@ function IframeSyncBar({
         {onSyncMainVideo && (
           <button
             type="button"
-            onClick={() => onSyncMainVideo(simTimeRef.current)}
+            onClick={() => onSyncMainVideo(simTimeRef.current, playing)}
             className="rounded-md border border-white/15 bg-white/5 px-2 py-1 text-[11px] text-white/75 hover:bg-white/10 transition-colors"
             title="把主视频同步到当前学习时间轴位置（会重载主视频）"
           >
@@ -376,6 +395,8 @@ function VideoReviewPlayerComponent({
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const [iframeError, setIframeError] = useState(false);
   const [iframeSrc, setIframeSrc] = useState('');
+  const seekNonceRef = useRef(seekNonce);
+  const playNonceRef = useRef(playNonce);
 
   const baseEmbedSrc = useMemo(() => {
     if (!source) return '';
@@ -399,10 +420,26 @@ function VideoReviewPlayerComponent({
     }
   }, [source, seekToMs, seekNonce]);
 
-  const syncMainVideo = useCallback((timeMs: number) => {
+  useEffect(() => {
+    // Embedded bilibili player cannot be seeked directly; update URL on explicit seek/autoplay requests.
+    if (!source || isDirectVideo(source) || !baseEmbedSrc) {
+      seekNonceRef.current = seekNonce;
+      playNonceRef.current = playNonce;
+      return;
+    }
+    const seekChanged = seekNonceRef.current !== seekNonce;
+    const playChanged = playNonceRef.current !== playNonce;
+    seekNonceRef.current = seekNonce;
+    playNonceRef.current = playNonce;
+    if (!seekChanged && !playChanged) return;
+    setIframeError(false);
+    setIframeSrc(withStartTime(baseEmbedSrc, seekToMs, Date.now(), playChanged));
+  }, [baseEmbedSrc, playNonce, seekNonce, seekToMs, source]);
+
+  const syncMainVideo = useCallback((timeMs: number, autoPlay: boolean = false) => {
     if (!source || isDirectVideo(source)) return;
     if (!baseEmbedSrc) return;
-    setIframeSrc(withStartTime(baseEmbedSrc, timeMs, Date.now()));
+    setIframeSrc(withStartTime(baseEmbedSrc, timeMs, Date.now(), autoPlay));
   }, [baseEmbedSrc, source]);
 
   const isEmbed = !!source && !isDirectVideo(source) && !!iframeSrc && !iframeError;
@@ -479,4 +516,5 @@ function VideoReviewPlayerComponent({
 }
 
 export const VideoReviewPlayer = memo(VideoReviewPlayerComponent);
+
 

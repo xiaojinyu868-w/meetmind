@@ -266,9 +266,33 @@ function StudentAppContent({ isGuestFastEntry }: { isGuestFastEntry: boolean }) 
   const waveformRef = useRef<WaveformPlayerRef>(null);
   const hasRestoredState = useRef(false);  // 是否已恢复状态
 
-  const normalizeSeekTime = useCallback((timeMs: number): number | null => {
-    const numeric = Number(timeMs);
-    if (!Number.isFinite(numeric)) return null;
+  const normalizeSeekTime = useCallback((timeMs: number | string): number | null => {
+    let numeric: number | null = null;
+
+    if (typeof timeMs === 'string') {
+      const trimmed = timeMs.trim();
+      const clockMatch = trimmed.match(/^(\d{1,2}):(\d{2})(?::(\d{2}))?$/);
+      if (clockMatch) {
+        const hourPart = clockMatch[3] ? Number(clockMatch[1]) : 0;
+        const minutePart = clockMatch[3] ? Number(clockMatch[2]) : Number(clockMatch[1]);
+        const secondPart = clockMatch[3] ? Number(clockMatch[3]) : Number(clockMatch[2]);
+        if ([hourPart, minutePart, secondPart].every((value) => Number.isFinite(value) && value >= 0)) {
+          numeric = ((hourPart * 60 + minutePart) * 60 + secondPart) * 1000;
+        }
+      } else {
+        const parsed = Number(trimmed);
+        if (Number.isFinite(parsed)) {
+          numeric = parsed;
+        }
+      }
+    } else {
+      const parsed = Number(timeMs);
+      if (Number.isFinite(parsed)) {
+        numeric = parsed;
+      }
+    }
+
+    if (numeric === null) return null;
 
     const totalMs = segments.length > 0 ? segments[segments.length - 1].endMs : 0;
     let next = numeric;

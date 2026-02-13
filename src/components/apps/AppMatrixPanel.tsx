@@ -68,8 +68,20 @@ function normalizePluginList(plugins: AppPluginManifest[]): AppPluginManifest[] 
 function normalizeCardActionPayload(payload: Record<string, unknown> | undefined): number | null {
   if (!payload) return null;
   const timestamp = payload.timestamp;
-  if (typeof timestamp === 'number' && Number.isFinite(timestamp)) {
-    return timestamp;
+  if (typeof timestamp === 'number' && Number.isFinite(timestamp)) return timestamp;
+  if (typeof timestamp === 'string') {
+    const trimmed = timestamp.trim();
+    const clockMatch = trimmed.match(/^(\d{1,2}):(\d{2})(?::(\d{2}))?$/);
+    if (clockMatch) {
+      const hourPart = clockMatch[3] ? Number(clockMatch[1]) : 0;
+      const minutePart = clockMatch[3] ? Number(clockMatch[2]) : Number(clockMatch[1]);
+      const secondPart = clockMatch[3] ? Number(clockMatch[3]) : Number(clockMatch[2]);
+      if ([hourPart, minutePart, secondPart].every((value) => Number.isFinite(value) && value >= 0)) {
+        return ((hourPart * 60 + minutePart) * 60 + secondPart) * 1000;
+      }
+    }
+    const parsed = Number(trimmed);
+    if (Number.isFinite(parsed)) return parsed;
   }
   return null;
 }
@@ -113,6 +125,27 @@ export function AppMatrixPanel({
   const evidenceCardCount = result?.cards.filter((card) => (card.citations?.length || 0) > 0).length || 0;
   const totalCardCount = result?.cards.length || 0;
   const evidenceCoveragePercent = totalCardCount === 0 ? 0 : Math.round((evidenceCardCount / totalCardCount) * 100);
+  const transcriptDurationMs = transcript.length > 0 ? transcript[transcript.length - 1].endMs : 0;
+
+  const normalizeSeekTarget = useCallback((rawValue: unknown): number | null => {
+    const raw =
+      typeof rawValue === 'number'
+        ? rawValue
+        : typeof rawValue === 'string'
+          ? normalizeCardActionPayload({ timestamp: rawValue })
+          : null;
+    if (raw === null || !Number.isFinite(raw)) return null;
+
+    let next = raw;
+    if (next > 0 && next < 1000 && transcriptDurationMs >= 30000) {
+      next *= 1000;
+    }
+    next = Math.max(0, Math.floor(next));
+    if (transcriptDurationMs > 0) {
+      next = Math.min(next, transcriptDurationMs);
+    }
+    return next;
+  }, [transcriptDurationMs]);
 
   const restoreTaskState = useCallback(
     async (pluginId: string) => {
@@ -240,7 +273,7 @@ export function AppMatrixPanel({
   const handleCardAction = useCallback(
     (card: AppCard, action: NonNullable<AppCard['actions']>[number]) => {
       if (action.kind === 'seek') {
-        const timestamp = normalizeCardActionPayload(action.payload);
+        const timestamp = normalizeSeekTarget(normalizeCardActionPayload(action.payload));
         if (timestamp !== null) {
           onSeek(timestamp, true);
         }
@@ -255,7 +288,7 @@ export function AppMatrixPanel({
         }
       }
     },
-    [onSeek, toggleTask]
+    [normalizeSeekTarget, onSeek, toggleTask]
   );
 
   return (
@@ -365,7 +398,10 @@ export function AppMatrixPanel({
                   {typeof task.relatedTimestamp === 'number' && (
                     <button
                       type="button"
-                      onClick={() => onSeek(task.relatedTimestamp!, true)}
+                      onClick={() => {
+                        const target = normalizeSeekTarget(task.relatedTimestamp);
+                        if (target !== null) onSeek(target, true);
+                      }}
                       className={styles.seekMini}
                     >
                       回放
@@ -397,7 +433,10 @@ export function AppMatrixPanel({
                       <button
                         key={`${card.id}-citation-${index}`}
                         type="button"
-                        onClick={() => onSeek(citation.startMs, true)}
+                        onClick={() => {
+                          const target = normalizeSeekTarget(citation.startMs);
+                          if (target !== null) onSeek(target, true);
+                        }}
                         className={styles.citationBtn}
                       >
                         <span className={styles.citationTime}>
