@@ -9,6 +9,13 @@ import { anchorService, type Anchor } from '@/lib/services/anchor-service';
 import { memoryService, type ClassTimeline } from '@/lib/services/memory-service';
 import { checkServices, type ServiceStatus as ServiceStatusType } from '@/lib/services/health-check';
 import { getPreference, setPreference, db, generateSessionId, saveAudioSession, addTranscripts, ANONYMOUS_USER_ID } from '@/lib/db';
+import {
+  APP_STATE_VERSION,
+  getPersistedAppState,
+  isPersistedAppStateFresh,
+  setPersistedAppState,
+  type PersistedAppState,
+} from '@/lib/services/app-workspace-state';
 import { useAuth } from '@/lib/hooks/useAuth';
 import { classroomDataService } from '@/lib/services/classroom-data-service';
 import type {
@@ -125,28 +132,10 @@ function isSharedWorkspaceTab(tab: WorkspaceTab): tab is SharedWorkspaceTab {
   return tab === 'highlights' || tab === 'summary' || tab === 'notes' || tab === 'apps';
 }
 
-// 持久化状态的 key
-const APP_STATE_KEY = 'app_last_state';
-const APP_STATE_TTL_MS = 24 * 60 * 60 * 1000;
-const APP_STATE_VERSION = 2;
 const ACTION_PROGRESS_KEY_PREFIX = 'action_progress:';
 
 function getActionProgressKey(sessionId: string): string {
   return `${ACTION_PROGRESS_KEY_PREFIX}${sessionId}`;
-}
-
-interface PersistedAppState {
-  version?: number;
-  savedAt: number;
-  viewMode: ViewMode;
-  sessionId: string;
-  dataSource?: DataSource;
-  showSessionHistory?: boolean;
-  reviewTab?: ReviewTab;
-  videoWorkspaceTab?: VideoWorkspaceTab;
-  selectedAnchorId?: string;
-  currentTime?: number;
-  showTranscriptBar?: boolean;
 }
 
 interface ActionItem {
@@ -383,7 +372,7 @@ function StudentAppContent({ isGuestFastEntry }: { isGuestFastEntry: boolean }) 
     };
 
     try {
-      await setPreference(APP_STATE_KEY, snapshot);
+      await setPersistedAppState(snapshot);
     } catch (err) {
       console.error('Failed to save app state:', err);
     }
@@ -558,7 +547,7 @@ function StudentAppContent({ isGuestFastEntry }: { isGuestFastEntry: boolean }) 
 
       const [, rawSavedAppState, savedOnboardingState] = await Promise.all([
         checkServices().then(setServiceStatus),
-        getPreference<PersistedAppState | null>(APP_STATE_KEY, null).catch(() => null),
+        getPersistedAppState(),
         getPreference<{ completedFlows?: string[]; skippedFlows?: string[] } | null>('onboarding_state', null).catch(() => null),
       ]);
 
@@ -571,11 +560,7 @@ function StudentAppContent({ isGuestFastEntry }: { isGuestFastEntry: boolean }) 
       const normalizedSavedState = rawSavedAppState && typeof rawSavedAppState === 'object'
         ? rawSavedAppState
         : null;
-      const hasFreshState = !!(
-        normalizedSavedState &&
-        typeof normalizedSavedState.savedAt === 'number' &&
-        Date.now() - normalizedSavedState.savedAt < APP_STATE_TTL_MS
-      );
+      const hasFreshState = isPersistedAppStateFresh(normalizedSavedState);
       const savedAppState = hasFreshState ? normalizedSavedState : null;
       const finalViewMode: ViewMode = isFirstVisit && !savedAppState
         ? 'record'
