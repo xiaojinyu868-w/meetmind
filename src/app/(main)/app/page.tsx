@@ -199,7 +199,7 @@ function StudentAppContent({ isGuestFastEntry }: { isGuestFastEntry: boolean }) 
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isPlaying, setIsPlaying] = useState(false);
   const [selectedConfusion, setSelectedConfusion] = useState<ConfusionMarker | null>(null);
-  const [mobileSubPage, setMobileSubPage] = useState<'highlights' | 'summary' | 'notes' | 'tasks' | 'ai-chat' | 'transcript' | null>(null);
+  const [mobileSubPage, setMobileSubPage] = useState<'highlights' | 'summary' | 'notes' | 'tasks' | 'apps' | 'ai-chat' | 'transcript' | null>(null);
   const [mobileAIQuestion, setMobileAIQuestion] = useState<string>(''); // 移动端AI对话的初始问题
   
   const [viewMode, setViewMode] = useState<ViewMode>('record');
@@ -877,6 +877,7 @@ function StudentAppContent({ isGuestFastEntry }: { isGuestFastEntry: boolean }) 
   // 如果切换到复习模式且没有数据，自动加载 demo 数据
   const handleViewModeChange = useCallback(async (newMode: 'record' | 'review') => {
     setViewMode(newMode);
+    setMobileSubPage(null);
     // 切换模式时清理历史对话面板状态
     setShowConversationHistory(false);
     setSelectedHistoryConversation(null);
@@ -1935,6 +1936,7 @@ function StudentAppContent({ isGuestFastEntry }: { isGuestFastEntry: boolean }) 
                 isOpen={isMenuOpen}
                 onClose={() => setIsMenuOpen(false)}
                 onNavigate={(page) => setMobileSubPage(page)}
+                showApps={false}
                 userRole="student"
                 badges={{
                   highlights: highlightTopics.length,
@@ -2323,7 +2325,7 @@ function StudentAppContent({ isGuestFastEntry }: { isGuestFastEntry: boolean }) 
                 className="flex-1"
                 defaultLeftWidth={320}
                 minLeftWidth={260}
-                maxLeftWidth={450}
+                maxLeftWidth={820}
                 storageKey="meetmind-left-panel-width"
                 leftPanel={
                   /* 左栏 - 多功能面板 */
@@ -2972,7 +2974,7 @@ function StudentAppContent({ isGuestFastEntry }: { isGuestFastEntry: boolean }) 
                       selectedTopic={selectedTopic}
                       onTopicSelect={setSelectedTopic}
                       onPlayTopic={handlePlayTopic}
-                      onSeek={handleTimelineClick}
+                      onSeek={handleUnifiedSeek}
                       onPlayAll={handlePlayAll}
                       isPlayingAll={isPlayingAll}
                       playAllIndex={playAllIndex}
@@ -3006,7 +3008,7 @@ function StudentAppContent({ isGuestFastEntry }: { isGuestFastEntry: boolean }) 
                       summary={classSummary}
                       isLoading={isLoadingSummary}
                       onGenerate={handleGenerateSummary}
-                      onSeek={handleTimelineClick}
+                      onSeek={handleUnifiedSeek}
                       onAddNote={(text, takeaway) => {
                         handleAddNote(text, 'takeaways', {
                           selectedText: takeaway.label,
@@ -3038,8 +3040,28 @@ function StudentAppContent({ isGuestFastEntry }: { isGuestFastEntry: boolean }) 
                       onAddNote={handleAddNote}
                       onUpdateNote={handleUpdateNote}
                       onDeleteNote={handleDeleteNote}
-                      onSeek={handleTimelineClick}
+                      onSeek={handleUnifiedSeek}
                     />
+                  </div>
+                </div>
+              )}
+
+              {/* 移动端应用矩阵页面 */}
+              {mobileSubPage === 'apps' && (
+                <div className="flex-1 min-h-0 flex flex-col bg-white">
+                  <div className="flex items-center gap-3 px-4 py-3 border-b border-gray-100">
+                    <button
+                      onClick={() => setMobileSubPage(null)}
+                      className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-gray-100"
+                    >
+                      <svg className="w-5 h-5 text-gray-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                      </svg>
+                    </button>
+                    <span className="font-medium text-gray-900">应用矩阵</span>
+                  </div>
+                  <div className="flex-1 min-h-0 overflow-hidden">
+                    {renderSharedWorkspacePanel('apps')}
                   </div>
                 </div>
               )}
@@ -3073,10 +3095,12 @@ function StudentAppContent({ isGuestFastEntry }: { isGuestFastEntry: boolean }) 
                 isOpen={isMenuOpen}
                 onClose={() => setIsMenuOpen(false)}
                 onNavigate={(page) => setMobileSubPage(page)}
+                showApps={true}
                 userRole="student"
                 badges={{
                   highlights: highlightTopics.length,
                   notes: notes.length,
+                  apps: segments.length > 0 ? 1 : 0,
                   tasks: actionItems.filter(i => !i.completed).length,
                 }}
               />
