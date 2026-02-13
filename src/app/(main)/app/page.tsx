@@ -1048,6 +1048,81 @@ function StudentAppContent({ isGuestFastEntry }: { isGuestFastEntry: boolean }) 
     memoryService.save(nextTimeline);
   }, [clearSummary, clearTopics, studentId, user?.id]);
 
+  const handleUploadedTranscriptReady = useCallback(async (newSegments: TranscriptSegment[], blob?: Blob) => {
+    const newSessionId = generateSessionId();
+    // 清除旧会话的所有状态
+    setSessionId(newSessionId);
+    setSegments(newSegments);
+    setAnchors([]); // 清除旧困惑点
+    setSelectedAnchor(null); // 清除选中的困惑点
+    clearTopics(); // 清除精选片段（使用 SWR Hook）
+    clearSummary(); // 清除摘要（使用 SWR Hook）
+    setNotes([]); // 清除笔记
+    setActionItems([]); // 清除行动清单
+    setAudioBlob(blob || null);
+    setAudioUrl(null); // 清除示例音频URL
+    setDataSource('live');
+    setVideoSource(null);
+    setVideoInsightItems([]);
+    setActiveVideoInsightId(null);
+    liveSegmentsRef.current = [];
+    
+    // 将转录数据保存到 IndexedDB（供教师端读取）
+    try {
+      const currentUserId = user?.id || ANONYMOUS_USER_ID;
+      await db.transcripts.bulkAdd(
+        newSegments.map((seg) => ({
+          sessionId: newSessionId,
+          userId: currentUserId,
+          text: seg.text,
+          startMs: seg.startMs,
+          endMs: seg.endMs,
+          confidence: seg.confidence || 1.0,
+          isFinal: true,
+        }))
+      );
+      console.log(`已保存 ${newSegments.length} 条转录到 IndexedDB, sessionId: ${newSessionId}`);
+    } catch (error) {
+      console.error('保存转录到 IndexedDB 失败:', error);
+    }
+    
+    // 更新 classroomDataService 会话信息（供教师端读取）
+    const duration = newSegments.length > 0
+      ? newSegments[newSegments.length - 1].endMs
+      : 0;
+    classroomDataService.saveSession({
+      id: newSessionId,
+      subject: UIConfig.defaultSubject,
+      topic: UIConfig.defaultLessonTitle,
+      teacherName: UIConfig.defaultTeacher || 'Teacher',
+      status: 'completed',
+      duration,
+      createdBy: studentId,
+    });
+    
+    // 保存上传的音频到 IndexedDB 历史记录
+    if (blob) {
+      const currentUserId = user?.id || ANONYMOUS_USER_ID;
+      saveAudioSession(blob, newSessionId, currentUserId, {
+        subject: UIConfig.defaultSubject,
+        topic: UIConfig.defaultLessonTitle,
+        duration,
+      }).catch((err) => console.error('保存上传音频到历史失败:', err));
+    }
+    
+    // 构建时间轴
+    const timelineData = memoryService.buildTimeline(
+      newSessionId,
+      newSegments,
+      [], // 新会话没有困惑点
+      { subject: UIConfig.defaultSubject, teacher: UIConfig.defaultTeacher || 'Teacher', date: new Date().toISOString().split('T')[0] }
+    );
+    setTimeline(timelineData);
+    
+    // 自动切换到复习模式
+    setViewMode('review');
+  }, [clearSummary, clearTopics, studentId, user?.id]);
+
   const handleVideoAssistantMessage = useCallback((payload: {
     id: string;
     prompt: string;
@@ -1408,6 +1483,129 @@ function StudentAppContent({ isGuestFastEntry }: { isGuestFastEntry: boolean }) 
     ? segments[segments.length - 1].endMs 
     : 0;
 
+  const renderInputSourceTabs = useCallback((layout: 'mobile' | 'desktop') => {
+    const isMobileLayout = layout === 'mobile';
+    const activeClass = isMobileLayout
+      ? 'bg-white text-gray-900 font-medium shadow-sm'
+      : 'bg-white text-navy font-medium shadow-sm';
+    const inactiveClass = isMobileLayout
+      ? 'text-gray-500 hover:text-gray-700'
+      : 'text-gray-500 hover:text-navy';
+    const buttonBaseClass = isMobileLayout
+      ? 'px-3 py-1.5 text-xs rounded-lg transition-all'
+      : 'px-4 py-2 text-sm rounded-lg transition-all';
+    const wrapperClass = isMobileLayout
+      ? 'flex items-center gap-1 p-0.5 bg-gray-100 rounded-xl'
+      : 'flex items-center gap-2 p-1 rounded-xl';
+    const historyLabel = isMobileLayout ? '📋 历史' : '📋 录音历史';
+
+    return (
+      <div
+        className={wrapperClass}
+        style={isMobileLayout ? undefined : { background: 'var(--edu-bg-soft)' }}
+        data-onboarding="input-methods"
+      >
+        <button
+          onClick={() => { setDataSource('live'); setShowSessionHistory(false); }}
+          data-testid="source-live-button"
+          className={`${buttonBaseClass} ${dataSource === 'live' && !showSessionHistory ? activeClass : inactiveClass}`}
+        >
+          🎙️ 实时录音
+        </button>
+        <button
+          onClick={() => { setDataSource('demo'); setShowSessionHistory(false); }}
+          data-testid="source-upload-button"
+          className={`${buttonBaseClass} ${dataSource === 'demo' && !showSessionHistory ? activeClass : inactiveClass}`}
+        >
+          📁 上传音频
+        </button>
+        <button
+          onClick={() => { setDataSource('video'); setShowSessionHistory(false); }}
+          data-testid="source-video-button"
+          className={`${buttonBaseClass} ${dataSource === 'video' && !showSessionHistory ? activeClass : inactiveClass}`}
+        >
+          🎬 视频链接
+        </button>
+        <button
+          onClick={() => setShowSessionHistory(true)}
+          data-testid="source-history-button"
+          className={`${buttonBaseClass} ${showSessionHistory ? activeClass : inactiveClass}`}
+        >
+          {historyLabel}
+        </button>
+      </div>
+    );
+  }, [dataSource, showSessionHistory]);
+
+  const renderInputSecondaryPanels = useCallback((layout: 'mobile' | 'desktop') => {
+    const isMobileLayout = layout === 'mobile';
+    const historyMaxHeight = isMobileLayout ? '400px' : '500px';
+    const cardPaddingClass = isMobileLayout ? 'p-4' : 'p-6';
+    const titleClass = isMobileLayout
+      ? 'text-base font-semibold text-gray-900 mb-3 flex items-center gap-2'
+      : 'text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2';
+    const helperText = isMobileLayout
+      ? '支持 MP3、WAV、WebM 等格式'
+      : '支持 MP3、WAV、WebM 等格式，上传后自动转录并进入复习模式';
+    const helperTextClass = isMobileLayout
+      ? 'mt-3 text-xs text-gray-500 text-center'
+      : 'mt-4 text-sm text-gray-500 text-center';
+
+    return (
+      <>
+        <div className="card-edu p-0 overflow-hidden" style={{ maxHeight: historyMaxHeight, display: showSessionHistory ? undefined : 'none' }}>
+          <SessionHistoryList
+            userId={user?.id}
+            onSessionSelect={handleLoadHistorySession}
+            onClose={() => setShowSessionHistory(false)}
+            activeSessionId={sessionId}
+            maxHeight={historyMaxHeight}
+            showHeader={false}
+          />
+        </div>
+        <div className={`card-edu ${cardPaddingClass}`} style={{ display: dataSource === 'video' && !showSessionHistory ? undefined : 'none' }}>
+          <h3 className={titleClass}>
+            <span>🎬</span>
+            导入视频链接
+          </h3>
+          <VideoLinkImporter
+            onImportReady={handleVideoImportReady}
+            onError={(error) => {
+              console.error('视频导入失败:', error);
+              toast.error(String(error));
+            }}
+            disabled={isRecording}
+          />
+        </div>
+        <div className={`card-edu ${cardPaddingClass}`} style={{ display: dataSource === 'demo' && !showSessionHistory ? undefined : 'none' }}>
+          <h3 className={titleClass}>
+            <span>📁</span>
+            上传课堂录音
+          </h3>
+          <AudioUploader
+            onTranscriptReady={handleUploadedTranscriptReady}
+            onError={(error) => {
+              console.error('上传失败:', error);
+            }}
+            disabled={isRecording}
+          />
+          <p className={helperTextClass}>
+            {helperText}
+          </p>
+        </div>
+      </>
+    );
+  }, [
+    dataSource,
+    handleLoadHistorySession,
+    handleUploadedTranscriptReady,
+    handleVideoImportReady,
+    isRecording,
+    sessionId,
+    showSessionHistory,
+    user?.id,
+  ]);
+
   const renderSharedWorkspacePanel = useCallback((tab: SharedWorkspaceTab) => {
     if (tab === 'highlights') {
       return (
@@ -1675,55 +1873,7 @@ function StudentAppContent({ isGuestFastEntry }: { isGuestFastEntry: boolean }) 
                   {/* 录音或上传切换 */}
                   <div className="flex-shrink-0 flex items-center justify-center gap-2 mb-2">
                     <span className="text-xs text-gray-500">选择输入方式：</span>
-                    <div 
-                      className="flex items-center gap-1 p-0.5 bg-gray-100 rounded-xl"
-                      data-onboarding="input-methods"
-                    >
-                      <button
-                        onClick={() => { setDataSource('live'); setShowSessionHistory(false); }}
-                        data-testid="source-live-button"
-                        className={`px-3 py-1.5 text-xs rounded-lg transition-all ${
-                          dataSource === 'live' && !showSessionHistory
-                            ? 'bg-white text-gray-900 font-medium shadow-sm'
-                            : 'text-gray-500 hover:text-gray-700'
-                        }`}
-                      >
-                        🎙️ 实时录音
-                      </button>
-                      <button
-                        onClick={() => { setDataSource('demo'); setShowSessionHistory(false); }}
-                        data-testid="source-upload-button"
-                        className={`px-3 py-1.5 text-xs rounded-lg transition-all ${
-                          dataSource === 'demo' && !showSessionHistory
-                            ? 'bg-white text-gray-900 font-medium shadow-sm'
-                            : 'text-gray-500 hover:text-gray-700'
-                        }`}
-                      >
-                        📁 上传音频
-                      </button>
-                      <button
-                        onClick={() => { setDataSource('video'); setShowSessionHistory(false); }}
-                        data-testid="source-video-button"
-                        className={`px-3 py-1.5 text-xs rounded-lg transition-all ${
-                          dataSource === 'video' && !showSessionHistory
-                            ? 'bg-white text-gray-900 font-medium shadow-sm'
-                            : 'text-gray-500 hover:text-gray-700'
-                        }`}
-                      >
-                        🎬 视频链接
-                      </button>
-                      <button
-                        onClick={() => setShowSessionHistory(true)}
-                        data-testid="source-history-button"
-                        className={`px-3 py-1.5 text-xs rounded-lg transition-all ${
-                          showSessionHistory
-                            ? 'bg-white text-gray-900 font-medium shadow-sm'
-                            : 'text-gray-500 hover:text-gray-700'
-                        }`}
-                      >
-                        📋 历史
-                      </button>
-                    </div>
+                    {renderInputSourceTabs('mobile')}
                   </div>
 
                   <div className="flex-1 min-h-0" style={{ display: dataSource === 'live' && !showSessionHistory ? undefined : 'none' }}>
@@ -1737,115 +1887,7 @@ function StudentAppContent({ isGuestFastEntry }: { isGuestFastEntry: boolean }) 
                     />
                   </div>
 
-                  <div className="card-edu p-0 overflow-hidden" style={{ maxHeight: '400px', display: showSessionHistory ? undefined : 'none' }}>
-                    <SessionHistoryList
-                      userId={user?.id}
-                      onSessionSelect={handleLoadHistorySession}
-                      onClose={() => setShowSessionHistory(false)}
-                      activeSessionId={sessionId}
-                      maxHeight="400px"
-                      showHeader={false}
-                    />
-                  </div>
-
-                  <div className="card-edu p-4" style={{ display: dataSource === 'video' && !showSessionHistory ? undefined : 'none' }}>
-                    <h3 className="text-base font-semibold text-gray-900 mb-3 flex items-center gap-2">
-                      <span>🎬</span>
-                      导入视频链接
-                    </h3>
-                    <VideoLinkImporter
-                      onImportReady={handleVideoImportReady}
-                      onError={(error) => {
-                        console.error('视频导入失败:', error);
-                        toast.error(String(error));
-                      }}
-                      disabled={isRecording}
-                    />
-                  </div>
-
-                  <div className="card-edu p-4" style={{ display: dataSource === 'demo' && !showSessionHistory ? undefined : 'none' }}>
-                    <h3 className="text-base font-semibold text-gray-900 mb-3 flex items-center gap-2">
-                      <span>📁</span>
-                      上传课堂录音
-                    </h3>
-                    <AudioUploader
-                      onTranscriptReady={async (newSegments, blob) => {
-                        const newSessionId = generateSessionId();
-                        // 清除旧会话的所有状态
-                        setSessionId(newSessionId);
-                        setSegments(newSegments);
-                        setAnchors([]); // 清除旧困惑点
-                        setSelectedAnchor(null); // 清除选中的困惑点
-                        clearTopics(); // 清除精选片段（使用 SWR Hook）
-                        clearSummary(); // 清除摘要（使用 SWR Hook）
-                        setNotes([]); // 清除笔记
-                        setActionItems([]); // 清除行动清单
-                        setAudioBlob(blob);
-                        setAudioUrl(null);
-                        setDataSource('live');
-                        setVideoSource(null);
-                        setVideoInsightItems([]);
-                        setActiveVideoInsightId(null);
-                        liveSegmentsRef.current = [];
-                        
-                        try {
-                          const currentUserId = user?.id || ANONYMOUS_USER_ID;
-                          await db.transcripts.bulkAdd(
-                            newSegments.map((seg) => ({
-                              sessionId: newSessionId,
-                              userId: currentUserId,
-                              text: seg.text,
-                              startMs: seg.startMs,
-                              endMs: seg.endMs,
-                              confidence: seg.confidence || 1.0,
-                              isFinal: true,
-                            }))
-                          );
-                        } catch (e) {
-                          console.error('保存转录到 IndexedDB 失败:', e);
-                        }
-                        
-                        const duration = newSegments.length > 0 
-                          ? newSegments[newSegments.length - 1].endMs 
-                          : 0;
-                        classroomDataService.saveSession({
-                          id: newSessionId,
-                          subject: UIConfig.defaultSubject,
-                          topic: UIConfig.defaultLessonTitle,
-                          teacherName: UIConfig.defaultTeacher || 'Teacher',
-                          status: 'completed',
-                          duration,
-                          createdBy: studentId,
-                        });
-                        
-                        // 保存上传的音频到 IndexedDB 历史记录
-                        if (blob) {
-                          const currentUserId = user?.id || ANONYMOUS_USER_ID;
-                          saveAudioSession(blob, newSessionId, currentUserId, {
-                            subject: UIConfig.defaultSubject,
-                            topic: UIConfig.defaultLessonTitle,
-                            duration,
-                          }).catch(err => console.error('保存上传音频到历史失败:', err));
-                        }
-                        
-                        const tl = memoryService.buildTimeline(
-                          newSessionId,
-                          newSegments,
-                          [], // 新会话没有困惑点
-                          { subject: UIConfig.defaultSubject, teacher: UIConfig.defaultTeacher || 'Teacher', date: new Date().toISOString().split('T')[0] }
-                        );
-                        setTimeline(tl);
-                        setViewMode('review');
-                      }}
-                      onError={(error) => {
-                        console.error('上传失败:', error);
-                      }}
-                      disabled={isRecording}
-                    />
-                    <p className="mt-3 text-xs text-gray-500 text-center">
-                      支持 MP3、WAV、WebM 等格式
-                    </p>
-                  </div>
+                  {renderInputSecondaryPanels('mobile')}
                   
                   {/* 已标记的困惑点 */}
                   {anchors.length > 0 && (
@@ -1919,56 +1961,7 @@ function StudentAppContent({ isGuestFastEntry }: { isGuestFastEntry: boolean }) 
                 {/* 录音或上传切换 */}
                 <div className="flex-shrink-0 flex items-center justify-center gap-4 mb-4">
                   <span className="text-sm text-gray-500">选择输入方式：</span>
-              <div 
-                className="flex items-center gap-2 p-1 rounded-xl" 
-                style={{ background: 'var(--edu-bg-soft)' }}
-                data-onboarding="input-methods"
-              >
-                <button
-                  onClick={() => { setDataSource('live'); setShowSessionHistory(false); }}
-                  data-testid="source-live-button"
-                  className={`px-4 py-2 text-sm rounded-lg transition-all ${
-                    dataSource === 'live' && !showSessionHistory
-                      ? 'bg-white text-navy font-medium shadow-sm'
-                      : 'text-gray-500 hover:text-navy'
-                  }`}
-                >
-                  🎙️ 实时录音
-                </button>
-                <button
-                  onClick={() => { setDataSource('demo'); setShowSessionHistory(false); }}
-                  data-testid="source-upload-button"
-                  className={`px-4 py-2 text-sm rounded-lg transition-all ${
-                    dataSource === 'demo' && !showSessionHistory
-                      ? 'bg-white text-navy font-medium shadow-sm'
-                      : 'text-gray-500 hover:text-navy'
-                  }`}
-                >
-                  📁 上传音频
-                </button>
-                <button
-                  onClick={() => { setDataSource('video'); setShowSessionHistory(false); }}
-                  data-testid="source-video-button"
-                  className={`px-4 py-2 text-sm rounded-lg transition-all ${
-                    dataSource === 'video' && !showSessionHistory
-                      ? 'bg-white text-navy font-medium shadow-sm'
-                      : 'text-gray-500 hover:text-navy'
-                  }`}
-                >
-                  🎬 视频链接
-                </button>
-                <button
-                  onClick={() => setShowSessionHistory(true)}
-                  data-testid="source-history-button"
-                  className={`px-4 py-2 text-sm rounded-lg transition-all ${
-                    showSessionHistory
-                      ? 'bg-white text-navy font-medium shadow-sm'
-                      : 'text-gray-500 hover:text-navy'
-                  }`}
-                >
-                  📋 录音历史
-                </button>
-              </div>
+              {renderInputSourceTabs('desktop')}
             </div>
 
             {/* Recorder 始终挂载，通过 CSS 显示/隐藏，防止切换 tab 时录音状态丢失 */}
@@ -1992,120 +1985,7 @@ function StudentAppContent({ isGuestFastEntry }: { isGuestFastEntry: boolean }) 
                 onAnchorMark={handleAnchorMark}
               />
             </div>
-            <div className="card-edu p-0 overflow-hidden" style={{ maxHeight: '500px', display: showSessionHistory ? undefined : 'none' }}>
-              <SessionHistoryList
-                userId={user?.id}
-                onSessionSelect={handleLoadHistorySession}
-                onClose={() => setShowSessionHistory(false)}
-                activeSessionId={sessionId}
-                maxHeight="500px"
-                showHeader={false}
-              />
-            </div>
-            <div className="card-edu p-6" style={{ display: dataSource === 'video' && !showSessionHistory ? undefined : 'none' }}>
-              <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
-                <span>🎬</span>
-                导入视频链接
-              </h3>
-              <VideoLinkImporter
-                onImportReady={handleVideoImportReady}
-                onError={(error) => {
-                  console.error('视频导入失败:', error);
-                  toast.error(String(error));
-                }}
-                disabled={isRecording}
-              />
-            </div>
-            <div className="card-edu p-6" style={{ display: dataSource === 'demo' && !showSessionHistory ? undefined : 'none' }}>
-              <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
-                <span>📁</span>
-                上传课堂录音
-              </h3>
-              <AudioUploader
-                onTranscriptReady={async (newSegments, blob) => {
-                  // 生成新的 sessionId（而不是使用默认的 demo-session）
-                  const newSessionId = generateSessionId();
-                  // 清除旧会话的所有状态
-                  setSessionId(newSessionId);
-                  setSegments(newSegments);
-                  setAnchors([]); // 清除旧困惑点
-                  setSelectedAnchor(null); // 清除选中的困惑点
-                  clearTopics(); // 清除精选片段（使用 SWR Hook）
-                  clearSummary(); // 清除摘要（使用 SWR Hook）
-                  setNotes([]); // 清除笔记
-                  setActionItems([]); // 清除行动清单
-                  setAudioBlob(blob);
-                  setAudioUrl(null); // 清除示例音频URL
-                  setDataSource('live');
-                  setVideoSource(null);
-                  setVideoInsightItems([]);
-                  setActiveVideoInsightId(null);
-                  liveSegmentsRef.current = [];
-                  
-                  // 将转录数据保存到 IndexedDB（供教师端读取）
-                  try {
-                    const currentUserId = user?.id || ANONYMOUS_USER_ID;
-                    await db.transcripts.bulkAdd(
-                      newSegments.map((seg) => ({
-                        sessionId: newSessionId,
-                        userId: currentUserId,
-                        text: seg.text,
-                        startMs: seg.startMs,
-                        endMs: seg.endMs,
-                        confidence: seg.confidence || 1.0,
-                        isFinal: true,
-                      }))
-                    );
-                    console.log(`已保存 ${newSegments.length} 条转录到 IndexedDB, sessionId: ${newSessionId}`);
-                  } catch (e) {
-                    console.error('保存转录到 IndexedDB 失败:', e);
-                  }
-                  
-                  // 更新 classroomDataService 会话信息（供教师端读取）
-                  const duration = newSegments.length > 0 
-                    ? newSegments[newSegments.length - 1].endMs 
-                    : 0;
-                  classroomDataService.saveSession({
-                    id: newSessionId,
-                    subject: UIConfig.defaultSubject,
-                    topic: UIConfig.defaultLessonTitle,
-                    teacherName: UIConfig.defaultTeacher || 'Teacher',
-                    status: 'completed',
-                    duration,
-                    createdBy: studentId,
-                  });
-                  
-                  // 保存上传的音频到 IndexedDB 历史记录
-                  if (blob) {
-                    const currentUserId = user?.id || ANONYMOUS_USER_ID;
-                    saveAudioSession(blob, newSessionId, currentUserId, {
-                      subject: UIConfig.defaultSubject,
-                      topic: UIConfig.defaultLessonTitle,
-                      duration,
-                    }).catch(err => console.error('保存上传音频到历史失败:', err));
-                  }
-                  
-                  // 构建时间轴
-                  const tl = memoryService.buildTimeline(
-                    newSessionId,
-                    newSegments,
-                    [], // 新会话没有困惑点
-                    { subject: UIConfig.defaultSubject, teacher: UIConfig.defaultTeacher || 'Teacher', date: new Date().toISOString().split('T')[0] }
-                  );
-                  setTimeline(tl);
-                  
-                  // 自动切换到复习模式
-                  setViewMode('review');
-                }}
-                onError={(error) => {
-                  console.error('上传失败:', error);
-                }}
-                disabled={isRecording}
-              />
-              <p className="mt-4 text-sm text-gray-500 text-center">
-                支持 MP3、WAV、WebM 等格式，上传后自动转录并进入复习模式
-              </p>
-            </div>
+            {renderInputSecondaryPanels('desktop')}
             
                 {/* 已标记的困惑点 */}
                 {anchors.length > 0 && (
