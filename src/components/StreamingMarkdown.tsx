@@ -32,14 +32,33 @@ export function StreamingMarkdown({
 }: StreamingMarkdownProps) {
   
   // 解析时间戳为毫秒
-  const parseTimeToMs = useCallback((time: string): number => {
+  const parseTimeToMs = useCallback((time: string): number | null => {
     const parts = time.split(':');
     if (parts.length === 2) {
-      return (parseInt(parts[0], 10) * 60 + parseInt(parts[1], 10)) * 1000;
+      const minutes = parseInt(parts[0], 10);
+      const seconds = parseInt(parts[1], 10);
+      if (Number.isFinite(minutes) && Number.isFinite(seconds) && seconds >= 0 && seconds < 60) {
+        return (minutes * 60 + seconds) * 1000;
+      }
+      return null;
     } else if (parts.length === 3) {
-      return (parseInt(parts[0], 10) * 3600 + parseInt(parts[1], 10) * 60 + parseInt(parts[2], 10)) * 1000;
+      const hours = parseInt(parts[0], 10);
+      const minutes = parseInt(parts[1], 10);
+      const seconds = parseInt(parts[2], 10);
+      if (
+        Number.isFinite(hours) &&
+        Number.isFinite(minutes) &&
+        Number.isFinite(seconds) &&
+        minutes >= 0 &&
+        minutes < 60 &&
+        seconds >= 0 &&
+        seconds < 60
+      ) {
+        return (hours * 3600 + minutes * 60 + seconds) * 1000;
+      }
+      return null;
     }
-    return 0;
+    return null;
   }, []);
 
   // 渲染包含时间戳的文本
@@ -59,6 +78,11 @@ export function StreamingMarkdown({
 
       const [, fullTime, startTime] = match;
       const startMs = parseTimeToMs(startTime);
+      if (startMs === null) {
+        parts.push(match[0]);
+        lastIndex = match.index + match[0].length;
+        continue;
+      }
       const isActive = currentTime >= startMs && currentTime <= startMs + 5000;
 
       parts.push(

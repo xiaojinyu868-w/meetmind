@@ -338,6 +338,7 @@ export function TranscriptPreviewPanel({
                 segment={seg}
                 formatTime={formatTime}
                 searchQuery={searchQuery}
+                onTimestampClick={onTimestampClick}
                 editable={canEdit}
                 isEditing={editingSegmentId === seg.id}
                 draftText={editingSegmentId === seg.id ? draftText : ''}
@@ -478,6 +479,7 @@ export function TranscriptPreviewPanel({
                   segment={seg}
                   formatTime={formatTime}
                   searchQuery={searchQuery}
+                  onTimestampClick={onTimestampClick}
                   editable={canEdit}
                   isEditing={editingSegmentId === seg.id}
                   draftText={editingSegmentId === seg.id ? draftText : ''}
@@ -496,6 +498,7 @@ export function TranscriptPreviewPanel({
               segment={seg}
               formatTime={formatTime}
               searchQuery={searchQuery}
+              onTimestampClick={onTimestampClick}
               editable={canEdit}
               isEditing={editingSegmentId === seg.id}
               draftText={editingSegmentId === seg.id ? draftText : ''}
@@ -557,6 +560,7 @@ interface BaseTranscriptItemProps {
   segment: TranscriptSegment;
   formatTime: (ms: number) => string;
   searchQuery?: string;
+  onTimestampClick?: (timeMs: number) => void;
   editable?: boolean;
   isEditing?: boolean;
   draftText: string;
@@ -577,6 +581,7 @@ function TranscriptItem({
   segment,
   formatTime,
   searchQuery,
+  onTimestampClick,
   editable = false,
   isEditing = false,
   draftText,
@@ -589,9 +594,14 @@ function TranscriptItem({
 
   return (
     <div className="flex items-start gap-2 text-sm py-1">
-      <span className="text-xs text-gray-400 font-mono shrink-0 mt-0.5 bg-gray-100 px-1.5 py-0.5 rounded whitespace-nowrap">
+      <button
+        type="button"
+        onClick={() => onTimestampClick?.(segment.startMs)}
+        className="text-xs text-gray-400 font-mono shrink-0 mt-0.5 bg-gray-100 px-1.5 py-0.5 rounded whitespace-nowrap hover:bg-amber-50 hover:text-amber-700 transition-colors"
+        title="点击跳转并播放到该时间点"
+      >
         {formatTime(segment.startMs)} - {formatTime(segment.endMs)}
-      </span>
+      </button>
 
       {isEditing ? (
         <textarea
@@ -619,6 +629,7 @@ function ImmersiveTranscriptItem({
   segment,
   formatTime,
   searchQuery,
+  onTimestampClick,
   editable = false,
   isEditing = false,
   draftText,
@@ -631,9 +642,14 @@ function ImmersiveTranscriptItem({
 
   return (
     <div className="group flex items-start gap-4 py-3 border-b border-gray-50 hover:bg-gray-50/50 transition-colors -mx-2 px-2 rounded-lg">
-      <span className="text-xs text-gray-400 font-mono shrink-0 pt-1 tabular-nums opacity-60 group-hover:opacity-100 transition-opacity">
+      <button
+        type="button"
+        onClick={() => onTimestampClick?.(segment.startMs)}
+        className="text-xs text-gray-400 font-mono shrink-0 pt-1 tabular-nums opacity-60 group-hover:opacity-100 transition-opacity hover:text-amber-700"
+        title="点击跳转并播放到该时间点"
+      >
         {formatTime(segment.startMs)}
-      </span>
+      </button>
 
       {isEditing ? (
         <textarea

@@ -59,6 +59,8 @@ const ERROR_MESSAGE_MAP: Record<string, string> = {
   DIRECT_MEDIA_TOO_LARGE: '直链媒体文件过大，请更换较短视频或音频源。',
   UNSUPPORTED_PLATFORM: '目前仅支持 B站视频链接，其他平台即将支持。',
   ASR_TRANSCRIBE_FAILED: '视频已解析，但转写失败，请稍后重试。',
+  ASR_PUBLIC_HOST_MISSING: '当前环境缺少公网可访问地址，阿里云文件转写不可用。请配置 PUBLIC_DOMAIN/PUBLIC_HOST。',
+  ASR_API_KEY_MISSING: '服务端未配置转写密钥，请检查 DASHSCOPE_API_KEY。',
 };
 
 const MODE_HELP_TEXT: Record<TranscribeMode, string> = {
@@ -89,9 +91,22 @@ function formatDuration(durationSec?: number): string | null {
   return `${minutes}:${seconds.toString().padStart(2, '0')}`;
 }
 
+function isLikelyMojibakeText(value: string): boolean {
+  if (!value) return false;
+  if (value.includes('�')) return true;
+  if (/\?{3,}/.test(value)) return true;
+  const latinExtendedCount = (value.match(/[À-ÿ]/g) || []).length;
+  const cjkCount = (value.match(/[\u4e00-\u9fff]/g) || []).length;
+  return latinExtendedCount >= 3 && latinExtendedCount > cjkCount;
+}
+
 function mapImportError(code?: string, fallback?: string): string {
   if (code && ERROR_MESSAGE_MAP[code]) {
     return ERROR_MESSAGE_MAP[code];
+  }
+
+  if (isLikelyMojibakeText(fallback || '')) {
+    return '视频导入失败，请稍后重试。';
   }
 
   const normalized = (fallback || '').toLowerCase();

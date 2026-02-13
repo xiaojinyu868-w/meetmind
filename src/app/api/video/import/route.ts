@@ -22,6 +22,7 @@ import {
   extFromContentType,
   isToolNotFoundError,
   resolveFfmpegPath,
+  resolveFfprobePath,
   resolveOutputPath,
   runCommand,
   safeUnlink,
@@ -38,6 +39,18 @@ const CLEANUP_EVERY_N_REQUESTS = Number.parseInt(process.env.VIDEO_IMPORT_CLEANU
 const YTDLP_AVAILABILITY_TTL_MS = Number.parseInt(process.env.VIDEO_IMPORT_YTDLP_CACHE_MS || '300000', 10);
 const DIRECT_DOWNLOAD_TIMEOUT_MS = Number.parseInt(process.env.VIDEO_DIRECT_DOWNLOAD_TIMEOUT_MS || '120000', 10);
 const DIRECT_DOWNLOAD_MAX_BYTES = Number.parseInt(process.env.VIDEO_DIRECT_DOWNLOAD_MAX_BYTES || `${300 * 1024 * 1024}`, 10);
+const MIN_DURATION_FOR_COMPLETENESS_CHECK_SEC = 60;
+const MIN_TEXT_CHARS_PER_SEC = 1;
+const MIN_TEXT_COVERAGE_RATIO = 0.45;
+const MIN_TIMELINE_COVERAGE_SHORT = 0.6;
+const MIN_TIMELINE_COVERAGE_LONG = 0.7;
+const TIMELINE_SCALE_RATIO_MIN = 0.65;
+const TIMELINE_SCALE_RATIO_MAX = 1.35;
+const PCM_BYTES_PER_SEC = 16000 * 2;
+const WS_CHUNK_PCM_BYTES = Number.parseInt(
+  process.env.VIDEO_IMPORT_WS_CHUNK_PCM_BYTES || `${10 * 1024 * 1024}`,
+  10
+);
 
 type TranscribeMode = 'turbo' | 'fast' | 'standard';
 type VideoSourceMode = 'bili-native' | 'bili-subtitle' | 'yt-dlp' | 'direct';
@@ -455,6 +468,40 @@ function parseErrorDetail(data: unknown): string | undefined {
   return undefined;
 }
 
+function toFiniteNumber(value: unknown): number | null {
+  return typeof value === 'number' && Number.isFinite(value) ? value : null;
+}
+
+function readSegmentEndMs(entry: Record<string, unknown>): number {
+  const endCandidates = [entry.endMs, entry.endTime, entry.end_time];
+  for (const value of endCandidates) {
+    const parsed = toFiniteNumber(value);
+    if (parsed !== null) return Math.max(0, Math.round(parsed));
+  }
+  return 0;
+}
+
+function summarizeAsrResult(data: Record<string, unknown>): { segCount: number; textLen: number; lastEndMs: number } {
+  const rawSegments = Array.isArray(data.segments)
+    ? data.segments
+    : Array.isArray(data.sentences)
+      ? data.sentences
+      : [];
+  const segments = rawSegments.filter((item): item is Record<string, unknown> => !!item && typeof item === 'object');
+  const textLenFromData = typeof data.text === 'string' ? (data.text as string).length : 0;
+  const textLenFromSegments = segments.reduce((sum, segment) => {
+    const text = typeof segment.text === 'string' ? segment.text.trim() : '';
+    return sum + text.length;
+  }, 0);
+  const textLen = Math.max(textLenFromData, textLenFromSegments);
+  const lastEndMs = segments.reduce((max, segment) => Math.max(max, readSegmentEndMs(segment)), 0);
+  return {
+    segCount: segments.length,
+    textLen,
+    lastEndMs,
+  };
+}
+
 async function transcribeWithFallback(
   request: NextRequest,
   audioFilePath: string,
@@ -503,33 +550,51 @@ async function transcribeWithFallback(
     const isSuccess = response.ok && data?.success === true;
 
     if (isSuccess && data) {
-      const segCount = Array.isArray(data.segments) ? data.segments.length : Array.isArray(data.sentences) ? data.sentences.length : 0;
-      const textLen = typeof data.text === 'string' ? (data.text as string).length : 0;
-      console.log(`[video-import] ASR mode=${mode} success: ${segCount} segments, ${textLen} chars`);
+      const { segCount, textLen, lastEndMs } = summarizeAsrResult(data);
+      const expectedDurationMs =
+        Number.isFinite(expectedDurationSec) && (expectedDurationSec || 0) > 0
+          ? Math.round((expectedDurationSec as number) * 1000)
+          : 0;
+      const timelineCoverage = expectedDurationMs > 0 && lastEndMs > 0 ? lastEndMs / expectedDurationMs : null;
+      console.log(
+        `[video-import] ASR mode=${mode} success: ${segCount} segments, ${textLen} chars, lastEndMs=${lastEndMs}, timelineCoverage=${timelineCoverage === null ? 'n/a' : timelineCoverage.toFixed(2)}`
+      );
 
-      // 质量校验：如果视频时长已知且 > 60s，检查返回的文本量是否严重不足
-      // 中文语速大约 3-5 字/秒，保守取 1 字/秒作为最低阈值
-      const MIN_CHARS_PER_SEC = 1;
-      const isResultInsufficient =
+      const minTimelineCoverage =
+        expectedDurationSec && expectedDurationSec > 120
+          ? MIN_TIMELINE_COVERAGE_LONG
+          : MIN_TIMELINE_COVERAGE_SHORT;
+      const isTextInsufficient =
         expectedDurationSec &&
-        expectedDurationSec > 60 &&
+        expectedDurationSec > MIN_DURATION_FOR_COMPLETENESS_CHECK_SEC &&
         textLen > 0 &&
-        textLen < expectedDurationSec * MIN_CHARS_PER_SEC * 0.2; // 不到预期最低量的 20%
+        textLen < expectedDurationSec * MIN_TEXT_CHARS_PER_SEC * MIN_TEXT_COVERAGE_RATIO;
+      const isTimelineInsufficient =
+        expectedDurationSec &&
+        expectedDurationSec > MIN_DURATION_FOR_COMPLETENESS_CHECK_SEC &&
+        timelineCoverage !== null &&
+        timelineCoverage < minTimelineCoverage;
+      const isResultInsufficient = Boolean(isTextInsufficient || isTimelineInsufficient);
 
       if (isResultInsufficient) {
-        const expectedMin = Math.round(expectedDurationSec * MIN_CHARS_PER_SEC * 0.2);
-        console.warn(`[video-import] ASR mode=${mode} result insufficient: ${textLen} chars for ${expectedDurationSec}s video (expected ≥ ${expectedMin} chars), trying next mode`);
+        const expectedMin = Math.round((expectedDurationSec || 0) * MIN_TEXT_CHARS_PER_SEC * MIN_TEXT_COVERAGE_RATIO);
+        const timelineDetail =
+          timelineCoverage === null
+            ? 'timelineCoverage=n/a'
+            : `timelineCoverage=${timelineCoverage.toFixed(2)} (need >=${minTimelineCoverage})`;
+        console.warn(
+          `[video-import] ASR mode=${mode} result insufficient: ${textLen} chars for ${expectedDurationSec}s video (expected >=${expectedMin} chars), ${timelineDetail}; trying next mode`
+        );
         trace.push({
           stage: `asr-${mode}`,
           ok: false,
           code: 'ASR_RESULT_INSUFFICIENT',
-          detail: `${segCount} segments, ${textLen} chars – too little for ${expectedDurationSec}s video`,
+          detail: `${segCount} segments, ${textLen} chars, ${timelineDetail}`,
         });
-        // 保存为候选（万一所有模式都不足，使用最佳的那个）
         if (!bestPartialResult || textLen > (typeof bestPartialResult.data.text === 'string' ? (bestPartialResult.data.text as string).length : 0)) {
           bestPartialResult = { data, usedMode: mode };
         }
-        lastFailure = `ASR_RESULT_INSUFFICIENT: ${textLen} chars for ${expectedDurationSec}s video`;
+        lastFailure = `ASR_RESULT_INSUFFICIENT: ${textLen} chars, ${timelineDetail} for ${expectedDurationSec}s video`;
         continue;
       }
 
@@ -688,9 +753,8 @@ async function getFileSizeBytes(filePath: string): Promise<number> {
 
 async function getAudioDurationSec(filePath: string): Promise<number> {
   try {
-    const ffprobePath = resolveFfmpegPath().replace(/ffmpeg(\.exe)?$/i, (m) =>
-      m.toLowerCase().includes('.exe') ? 'ffprobe.exe' : 'ffprobe'
-    );
+    const ffmpegPath = resolveFfmpegPath();
+    const ffprobePath = resolveFfprobePath(ffmpegPath);
     const result = await runCommand(
       ffprobePath,
       ['-v', 'error', '-show_entries', 'format=duration', '-of', 'default=noprint_wrappers=1:nokey=1', filePath],
@@ -713,13 +777,29 @@ async function executeBiliNativeStage(videoUrl: string, baseName: string, userCo
 
   try {
     const subtitleResult = await fetchPlayerSubtitle(viewMeta.bvid, viewMeta.cid);
-    // 字幕段数太少时（如 AI 概述字幕只返回 1-2 条），不采用字幕，改走音频转录
-    const MIN_SUBTITLE_SEGMENTS = 3;
+    // 字幕兜底策略：必须满足最低段数与时间覆盖，避免概述型字幕被误当完整转录。
+    const MIN_SUBTITLE_SEGMENTS = 4;
     const durationBasedMin = viewMeta.durationSec && viewMeta.durationSec > 60
-      ? Math.max(MIN_SUBTITLE_SEGMENTS, Math.floor(viewMeta.durationSec / 30))
+      ? Math.max(6, Math.floor(viewMeta.durationSec / 18))
       : MIN_SUBTITLE_SEGMENTS;
-    if (subtitleResult?.segments?.length && subtitleResult.segments.length >= Math.min(durationBasedMin, MIN_SUBTITLE_SEGMENTS)) {
-      console.log(`[video-import] bili subtitle accepted: ${subtitleResult.segments.length} segments for ${viewMeta.durationSec}s video`);
+
+    const subtitleCount = subtitleResult?.segments?.length || 0;
+    const subtitleSpanMs = subtitleCount > 0
+      ? Math.max(0, subtitleResult!.segments[subtitleCount - 1].endMs - subtitleResult!.segments[0].startMs)
+      : 0;
+    const declaredDurationMs = viewMeta.durationSec ? Math.round(viewMeta.durationSec * 1000) : 0;
+    const subtitleCoverage = declaredDurationMs > 0 ? subtitleSpanMs / declaredDurationMs : 1;
+    const minCoverage = viewMeta.durationSec && viewMeta.durationSec > 120 ? 0.7 : 0.55;
+
+    const subtitleUsable =
+      declaredDurationMs > 0 &&
+      subtitleCount >= durationBasedMin &&
+      subtitleCoverage >= minCoverage;
+
+    if (subtitleResult?.segments?.length && subtitleUsable) {
+      console.log(
+        `[video-import] bili subtitle accepted: count=${subtitleCount}, min=${durationBasedMin}, coverage=${subtitleCoverage.toFixed(2)}`
+      );
       return {
         sourceMode: 'bili-subtitle',
         subtitleSegments: subtitleResult.segments,
@@ -735,7 +815,9 @@ async function executeBiliNativeStage(videoUrl: string, baseName: string, userCo
       };
     }
     if (subtitleResult?.segments?.length) {
-      console.log(`[video-import] bili subtitle rejected: only ${subtitleResult.segments.length} segments (need ≥${Math.min(durationBasedMin, MIN_SUBTITLE_SEGMENTS)}) for ${viewMeta.durationSec}s video, falling back to audio`);
+      console.log(
+        `[video-import] bili subtitle rejected: count=${subtitleCount} (need >=${durationBasedMin}), coverage=${subtitleCoverage.toFixed(2)} (need >=${minCoverage}) for ${viewMeta.durationSec}s video, falling back to audio`
+      );
     }
   } catch {
     // subtitle is optional and should not block import
@@ -888,49 +970,20 @@ function normalizeWsSegments(
   });
 }
 
-async function transcribeWithWsProxy(
-  request: NextRequest,
-  audioFilePath: string
-): Promise<Record<string, unknown>> {
-  const ffmpegPath = resolveFfmpegPath();
-  const baseName = path.basename(audioFilePath, path.extname(audioFilePath));
-  const pcmPath = resolveOutputPath(UPLOAD_DIR, `${baseName}_ws`, '.pcm');
+function estimatePcmDurationMs(bytes: number): number {
+  if (!Number.isFinite(bytes) || bytes <= 0) return 0;
+  return Math.round((bytes / PCM_BYTES_PER_SEC) * 1000);
+}
 
-  await runCommand(
-    ffmpegPath,
-    [
-      '-y',
-      '-i',
-      audioFilePath,
-      '-f',
-      's16le',
-      '-acodec',
-      'pcm_s16le',
-      '-ac',
-      '1',
-      '-ar',
-      '16000',
-      pcmPath,
-    ],
-    { toolName: 'ffmpeg' }
-  );
-
-  let pcmBuffer: Buffer;
-  try {
-    pcmBuffer = await fsp.readFile(pcmPath);
-  } finally {
-    safeUnlink(pcmPath);
-  }
-
-  if (!pcmBuffer || pcmBuffer.length === 0) {
-    throw new ImportPipelineError('ASR_WS_FALLBACK_FAILED', '转写失败', 'PCM 数据为空');
-  }
-
-  const wsUrl = buildWsProxyUrl(request);
+async function transcribeWsChunk(
+  wsUrl: string,
+  pcmBuffer: Buffer,
+  baseOffsetMs: number
+): Promise<WsResultSentence[]> {
   const chunkSize = 3200;
   const timeoutMs = 240000;
 
-  const wsSentences = await new Promise<WsResultSentence[]>((resolve, reject) => {
+  return new Promise<WsResultSentence[]>((resolve, reject) => {
     const ws = new WebSocket(wsUrl);
     const collected: WsResultSentence[] = [];
     let settled = false;
@@ -1013,7 +1066,14 @@ async function transcribeWithWsProxy(
         }
 
         if (payload.event === 'result' && payload.sentence?.text) {
-          collected.push(payload.sentence);
+          const sentence = payload.sentence;
+          const begin = Number.isFinite(sentence.beginTime) ? Number(sentence.beginTime) + baseOffsetMs : undefined;
+          const end = Number.isFinite(sentence.endTime) ? Number(sentence.endTime) + baseOffsetMs : undefined;
+          collected.push({
+            ...sentence,
+            beginTime: begin,
+            endTime: end,
+          });
           return;
         }
 
@@ -1055,6 +1115,61 @@ async function transcribeWithWsProxy(
       }
     };
   });
+}
+
+async function transcribeWithWsProxy(
+  request: NextRequest,
+  audioFilePath: string
+): Promise<Record<string, unknown>> {
+  const ffmpegPath = resolveFfmpegPath();
+  const baseName = path.basename(audioFilePath, path.extname(audioFilePath));
+  const pcmPath = resolveOutputPath(UPLOAD_DIR, `${baseName}_ws`, '.pcm');
+
+  await runCommand(
+    ffmpegPath,
+    [
+      '-y',
+      '-i',
+      audioFilePath,
+      '-f',
+      's16le',
+      '-acodec',
+      'pcm_s16le',
+      '-ac',
+      '1',
+      '-ar',
+      '16000',
+      pcmPath,
+    ],
+    { toolName: 'ffmpeg' }
+  );
+
+  let pcmBuffer: Buffer;
+  try {
+    pcmBuffer = await fsp.readFile(pcmPath);
+  } finally {
+    safeUnlink(pcmPath);
+  }
+
+  if (!pcmBuffer || pcmBuffer.length === 0) {
+    throw new ImportPipelineError('ASR_WS_FALLBACK_FAILED', '转写失败', 'PCM 数据为空');
+  }
+
+  const wsUrl = buildWsProxyUrl(request);
+  const safeChunkBytes = Number.isFinite(WS_CHUNK_PCM_BYTES)
+    ? Math.max(1 * 1024 * 1024, Math.min(24 * 1024 * 1024, WS_CHUNK_PCM_BYTES))
+    : 10 * 1024 * 1024;
+  const wsSentences: WsResultSentence[] = [];
+  let offsetBytes = 0;
+
+  while (offsetBytes < pcmBuffer.length) {
+    const end = Math.min(offsetBytes + safeChunkBytes, pcmBuffer.length);
+    const chunk = pcmBuffer.subarray(offsetBytes, end);
+    const chunkOffsetMs = estimatePcmDurationMs(offsetBytes);
+    const partSentences = await transcribeWsChunk(wsUrl, chunk, chunkOffsetMs);
+    wsSentences.push(...partSentences);
+    offsetBytes = end;
+  }
 
   const segments = normalizeWsSegments(wsSentences);
   if (segments.length === 0) {
@@ -1363,9 +1478,10 @@ function normalizeImportedSegments(
 
   // 时间轴明显压缩时（典型 WS fallback），按原视频时长拉伸
   if (declaredDurationMs > 0) {
-    const tooShort = rawLastEnd > 0 && rawLastEnd < declaredDurationMs * 0.55;
-    const tooLong = rawLastEnd > declaredDurationMs * 1.8;
-    if (tooShort || tooLong) {
+    const ratio = rawLastEnd > 0 ? rawLastEnd / declaredDurationMs : 1;
+    const drift = Math.abs(1 - ratio);
+    const canSafelyScale = ratio >= TIMELINE_SCALE_RATIO_MIN && ratio <= TIMELINE_SCALE_RATIO_MAX;
+    if (canSafelyScale && drift > 0.08) {
       segments = scaleTimeline(segments, declaredDurationMs);
     }
   }
@@ -1463,6 +1579,20 @@ export async function POST(request: NextRequest) {
     }
 
     stageResult.meta = normalizeVideoMeta(stageResult.meta);
+    if (
+      (!stageResult.meta.durationSec || stageResult.meta.durationSec <= 0) &&
+      stageResult.audioFilePath
+    ) {
+      const fallbackDurationSec = await getAudioDurationSec(stageResult.audioFilePath);
+      if (fallbackDurationSec > 0) {
+        stageResult.meta.durationSec = fallbackDurationSec;
+        trace.push({
+          stage: 'duration-ffprobe',
+          ok: true,
+          detail: `resolved ${fallbackDurationSec.toFixed(2)}s from audio`,
+        });
+      }
+    }
     const resolvedParsed = parseVideoLink(stageResult.meta.resolvedUrl || videoUrl) || parsed;
     const source = {
       provider: resolvedParsed.provider,
@@ -1519,14 +1649,22 @@ export async function POST(request: NextRequest) {
       const partialResult = (error as { partialResult?: { data: Record<string, unknown>; usedMode: TranscribeMode } })?.partialResult;
       const enableWsFallback = process.env.VIDEO_IMPORT_ENABLE_WS_FALLBACK !== 'false';
       const shouldTryWsFallback = enableWsFallback && importError.code === 'ASR_TRANSCRIBE_FAILED';
+      const allowPartialResult = process.env.VIDEO_IMPORT_ALLOW_PARTIAL_RESULT === 'true';
 
       if (!shouldTryWsFallback) {
-        // 不能走 WS fallback，但有部分结果时降级使用
-        if (partialResult) {
-          console.warn(`[video-import] cannot try WS fallback, using partial result (mode=${partialResult.usedMode})`);
-          trace.push({ stage: `asr-${partialResult.usedMode}-partial`, ok: true, detail: 'using partial result (no ws fallback)' });
+        if (partialResult && allowPartialResult) {
+          console.warn(`[video-import] cannot try WS fallback, using partial result due to VIDEO_IMPORT_ALLOW_PARTIAL_RESULT=true (mode=${partialResult.usedMode})`);
+          trace.push({ stage: `asr-${partialResult.usedMode}-partial`, ok: true, detail: 'using partial result (no ws fallback, explicitly allowed)' });
           transcribed = partialResult;
         } else {
+          if (partialResult) {
+            trace.push({
+              stage: `asr-${partialResult.usedMode}-partial`,
+              ok: false,
+              code: 'ASR_PARTIAL_REJECTED',
+              detail: 'partial result rejected (ws fallback unavailable)',
+            });
+          }
           throw importError;
         }
       } else {
@@ -1543,12 +1681,19 @@ export async function POST(request: NextRequest) {
             detail: wsPipelineError.detail || wsPipelineError.message,
           });
 
-          // WS fallback 也失败了，如果有 HTTP ASR 的部分结果则降级使用
-          if (partialResult) {
-            console.warn(`[video-import] WS fallback failed, using partial result from mode=${partialResult.usedMode}`);
-            trace.push({ stage: `asr-${partialResult.usedMode}-partial`, ok: true, detail: 'using partial result after ws fallback failed' });
+          if (partialResult && allowPartialResult) {
+            console.warn(`[video-import] WS fallback failed, using partial result due to VIDEO_IMPORT_ALLOW_PARTIAL_RESULT=true (mode=${partialResult.usedMode})`);
+            trace.push({ stage: `asr-${partialResult.usedMode}-partial`, ok: true, detail: 'using partial result after ws fallback failed (explicitly allowed)' });
             transcribed = partialResult;
           } else {
+            if (partialResult) {
+              trace.push({
+                stage: `asr-${partialResult.usedMode}-partial`,
+                ok: false,
+                code: 'ASR_PARTIAL_REJECTED',
+                detail: 'partial result rejected after ws fallback failure',
+              });
+            }
             throw new ImportPipelineError(
               importError.code,
               importError.message,
@@ -1607,8 +1752,3 @@ export async function POST(request: NextRequest) {
     );
   }
 }
-
-
-
-
-

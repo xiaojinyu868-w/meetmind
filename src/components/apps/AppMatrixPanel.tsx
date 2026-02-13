@@ -12,6 +12,7 @@ import type {
   AppPluginManifest,
   DataSourceType,
 } from '@/lib/ai-native/types';
+import styles from './AppMatrixPanel.module.css';
 
 const PRIMARY_PLUGIN_ID = 'knowledge-cards';
 const TASK_STATE_KEY_PREFIX = 'app_matrix_task_state:';
@@ -41,6 +42,13 @@ function formatTime(ms: number): string {
   const minutes = Math.floor(totalSeconds / 60);
   const seconds = totalSeconds % 60;
   return `${minutes}:${String(seconds).padStart(2, '0')}`;
+}
+
+function formatDataSourceLabel(dataSource: DataSourceType): string {
+  if (dataSource === 'video') return '视频导入';
+  if (dataSource === 'live') return '实时录音';
+  if (dataSource === 'demo') return '演示数据';
+  return '未知来源';
 }
 
 function toTaskStateKey(sessionId: string, pluginId: string): string {
@@ -99,6 +107,12 @@ export function AppMatrixPanel({
 
   const completedCount = tasks.filter((task) => task.completed).length;
   const completionPercent = tasks.length === 0 ? 0 : Math.round((completedCount / tasks.length) * 100);
+  const totalEstimatedMinutes = tasks.reduce((sum, task) => sum + (task.estimatedMinutes || 0), 0);
+  const activePlugin = visiblePlugins.find((plugin) => plugin.id === selectedPluginId);
+  const activePluginDescription = activePlugin?.description || '基于课堂上下文生成证据链卡片与行动任务。';
+  const evidenceCardCount = result?.cards.filter((card) => (card.citations?.length || 0) > 0).length || 0;
+  const totalCardCount = result?.cards.length || 0;
+  const evidenceCoveragePercent = totalCardCount === 0 ? 0 : Math.round((evidenceCardCount / totalCardCount) * 100);
 
   const restoreTaskState = useCallback(
     async (pluginId: string) => {
@@ -245,97 +259,93 @@ export function AppMatrixPanel({
   );
 
   return (
-    <div className="relative h-full overflow-y-auto p-4 sm:p-5 bg-gradient-to-br from-[#fffdf6] via-[#fff6ea] to-[#f9fbff]" data-testid="app-matrix-panel">
-      <div className="pointer-events-none absolute -top-16 right-8 h-44 w-44 rounded-full bg-amber-300/30 blur-3xl" />
-      <div className="pointer-events-none absolute bottom-0 left-0 h-48 w-48 rounded-full bg-sky-200/30 blur-3xl" />
-
-      <div className="relative rounded-3xl border border-white/60 bg-white/65 p-4 backdrop-blur-xl shadow-[0_18px_40px_rgba(212,165,116,0.22)]">
-        <div className="flex flex-wrap items-center justify-between gap-3">
+    <div className={styles.root} data-testid="app-matrix-panel">
+      <section className={`${styles.surface} ${styles.hero}`}>
+        <div className={styles.heroTop}>
           <div>
-            <p className="text-xs font-medium uppercase tracking-[0.14em] text-amber-600/90">App Matrix</p>
-            <h3 className="mt-1 text-lg font-semibold text-[#294058]">知识卡片工作台</h3>
-            <p className="mt-1 text-xs text-slate-500">课堂证据链优先，生成后可直接回放并勾选完成。</p>
+            <p className={styles.eyebrow}>Classroom-native App Matrix</p>
+            <h3 className={styles.title}>知识卡片工作台</h3>
+            <p className={styles.subtitle}>每张卡都绑定课堂证据，支持一键回放、行动回写与学习闭环跟踪。</p>
+            <p className={styles.pluginHint}>{activePluginDescription}</p>
           </div>
-          <div className="flex items-center gap-2">
+          <div className={styles.controls}>
             <ModelSelector value={selectedModel} onChange={setSelectedModel} compact />
             <button
               type="button"
               onClick={runPlugin}
               disabled={isRunning}
               data-testid="app-matrix-run"
-              className="rounded-2xl px-4 py-2 text-sm font-semibold text-[#5b3e14] transition-all disabled:cursor-not-allowed disabled:opacity-60"
-              style={{
-                background: 'linear-gradient(145deg, #f9d58f, #efc16a)',
-                boxShadow:
-                  'inset 2px 2px 6px rgba(255,255,255,0.72), inset -2px -3px 6px rgba(178,126,46,0.32), 0 8px 16px rgba(212,165,116,0.35)',
-              }}
+              className={styles.runButton}
             >
               {isRunning ? '生成中...' : '生成卡片'}
             </button>
           </div>
         </div>
 
+        <div className={styles.metaRow}>
+          <span className={styles.metaChip}>数据来源：{formatDataSourceLabel(dataSource)}</span>
+          <span className={styles.metaChip}>课堂片段：{transcript.length} 条</span>
+          <span className={styles.metaChip}>当前插件：{activePlugin?.name || selectedPluginId}</span>
+          {result?.model && <span className={styles.metaChip}>生成模型：{result.model}</span>}
+          {tasks.length > 0 && <span className={styles.metaChip}>预计耗时：{totalEstimatedMinutes} 分钟</span>}
+          {evidenceCardCount > 0 && <span className={styles.metaChip}>证据卡：{evidenceCardCount} 张</span>}
+          {totalCardCount > 0 && <span className={styles.metaChip}>证据覆盖：{evidenceCoveragePercent}%</span>}
+        </div>
+
         {visiblePlugins.length > 1 && (
-          <div className="mt-3">
-            <select
-              value={selectedPluginId}
-              onChange={(event) => setSelectedPluginId(event.target.value)}
-              className="w-full rounded-xl border border-amber-200 bg-white/85 px-3 py-2 text-sm text-slate-700"
-            >
-              {visiblePlugins.map((plugin) => (
-                <option key={plugin.id} value={plugin.id}>
-                  {plugin.name}
-                </option>
-              ))}
-            </select>
-          </div>
+          <select
+            value={selectedPluginId}
+            onChange={(event) => setSelectedPluginId(event.target.value)}
+            className={styles.pluginSelect}
+          >
+            {visiblePlugins.map((plugin) => (
+              <option key={plugin.id} value={plugin.id}>
+                {plugin.name}
+              </option>
+            ))}
+          </select>
         )}
-      </div>
+      </section>
 
       {!result && (
-        <div className="mt-4 rounded-3xl border border-dashed border-amber-200 bg-white/80 p-8 text-center">
-          <p className="text-sm text-slate-500">点击「生成卡片」，按课堂证据链生成复习卡片与行动清单。</p>
-        </div>
+        <section className={`${styles.surface} ${styles.empty}`}>
+          <p className={styles.emptyTitle}>先生成一组课堂证据卡片</p>
+          <p className={styles.emptySubtitle}>系统会自动绑定时间戳与行动任务，让学生在最短路径内完成复习闭环。</p>
+        </section>
       )}
 
       {result && (
-        <div className="mt-4 space-y-4">
-          <div className="rounded-3xl bg-[#f4ead8] p-4 shadow-[inset_3px_3px_8px_rgba(255,255,255,0.85),inset_-4px_-4px_10px_rgba(177,136,82,0.24),0_10px_22px_rgba(212,165,116,0.16)]">
-            <div className="flex items-center justify-between">
-              <h4 className="text-sm font-semibold text-[#5a4220]">行动清单</h4>
-              <span className="text-xs text-[#7a6442]">
+        <section className={`${styles.surface} ${styles.board}`}>
+          <aside className={styles.taskBoard}>
+            <div className={styles.taskHeader}>
+              <h4 className={styles.taskTitle}>行动清单</h4>
+              <p className={styles.taskHint}>
                 {completedCount}/{tasks.length} 完成 · {completionPercent}%
-              </span>
+              </p>
             </div>
-            <div className="mt-3 h-2 overflow-hidden rounded-full bg-white/70">
-              <div
-                className="h-full rounded-full bg-gradient-to-r from-amber-400 to-amber-500 transition-all duration-300"
-                style={{ width: `${completionPercent}%` }}
-              />
+            <div className={styles.progressRail}>
+              <div className={styles.progressFill} style={{ width: `${completionPercent}%` }} />
             </div>
-            <div className="mt-3 space-y-2">
+            <div className={styles.taskList}>
+              {tasks.length === 0 && (
+                <p className={styles.taskEmpty}>本次没有拆分行动任务，你可以直接从右侧证据卡片开始复习。</p>
+              )}
               {tasks.map((task) => (
                 <div
                   key={task.id}
                   data-testid={`app-task-${task.id}`}
                   data-completed={task.completed ? 'true' : 'false'}
-                  className={`flex items-start gap-3 rounded-2xl border px-3 py-2.5 transition-all ${
-                    task.completed
-                      ? 'border-emerald-200 bg-emerald-50/80'
-                      : 'border-white/80 bg-white/80'
-                  }`}
+                  className={`${styles.taskItem} ${task.completed ? styles.taskItemDone : ''}`}
                 >
                   <button
                     type="button"
                     data-testid={`app-task-toggle-${task.id}`}
                     onClick={() => toggleTask(task.id)}
-                    className={`mt-0.5 h-5 w-5 shrink-0 rounded-full border transition-all ${
-                      task.completed ? 'border-emerald-500 bg-emerald-500' : 'border-slate-300 bg-white'
-                    }`}
+                    className={`${styles.checkButton} ${task.completed ? styles.checkButtonDone : ''}`}
                     aria-label={task.completed ? '标记未完成' : '标记完成'}
                   >
                     {task.completed && (
-                      <svg className="mx-auto mt-0.5 h-3 w-3 text-white" viewBox="0 0 20 20" fill="currentColor">
+                      <svg className="h-3 w-3" viewBox="0 0 20 20" fill="currentColor">
                         <path
                           fillRule="evenodd"
                           d="M16.707 5.293a1 1 0 010 1.414l-8.2 8.2a1 1 0 01-1.414 0L3.293 10.1a1 1 0 111.414-1.414l3.093 3.093 7.493-7.492a1 1 0 011.414 0z"
@@ -344,12 +354,10 @@ export function AppMatrixPanel({
                       </svg>
                     )}
                   </button>
-                  <div className="min-w-0 flex-1">
-                    <p className={`text-sm font-medium ${task.completed ? 'text-emerald-700 line-through' : 'text-slate-700'}`}>
-                      {task.label}
-                    </p>
-                    {task.reason && <p className="mt-1 text-xs text-slate-500">{task.reason}</p>}
-                    <div className="mt-1.5 flex items-center gap-2 text-xs text-slate-400">
+                  <div className={styles.taskContent}>
+                    <p className={`${styles.taskLabel} ${task.completed ? styles.taskLabelDone : ''}`}>{task.label}</p>
+                    {task.reason && <p className={styles.taskReason}>{task.reason}</p>}
+                    <div className={styles.taskMeta}>
                       {typeof task.relatedTimestamp === 'number' && <span>@ {formatTime(task.relatedTimestamp)}</span>}
                       {typeof task.estimatedMinutes === 'number' && <span>{task.estimatedMinutes} 分钟</span>}
                     </div>
@@ -358,7 +366,7 @@ export function AppMatrixPanel({
                     <button
                       type="button"
                       onClick={() => onSeek(task.relatedTimestamp!, true)}
-                      className="shrink-0 rounded-xl border border-slate-200 bg-white px-2 py-1 text-xs text-slate-600 hover:bg-slate-50"
+                      className={styles.seekMini}
                     >
                       回放
                     </button>
@@ -366,51 +374,49 @@ export function AppMatrixPanel({
                 </div>
               ))}
             </div>
-          </div>
+          </aside>
 
-          <div className="grid gap-3 md:grid-cols-2">
+          <div className={styles.cardGrid}>
+            {result.cards.length === 0 && (
+              <article className={`${styles.card} ${styles.cardEmpty}`}>
+                <p className={styles.cardEmptyTitle}>还没有生成卡片内容</p>
+                <p className={styles.cardEmptyBody}>请先点击“生成卡片”，系统会自动从课堂上下文抽取证据并整理为复习卡。</p>
+              </article>
+            )}
             {result.cards.map((card) => (
-              <article
-                key={card.id}
-                data-testid={`app-card-${card.id}`}
-                className="rounded-3xl border border-white/70 bg-white/70 p-4 backdrop-blur-xl shadow-[0_14px_28px_rgba(71,103,153,0.12)]"
-              >
-                <div className="flex items-start justify-between gap-2">
-                  <h4 className="text-sm font-semibold text-[#2c415a]">{card.title}</h4>
-                  {card.priority && (
-                    <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-medium text-amber-700">
-                      {card.priority}
-                    </span>
-                  )}
+              <article key={card.id} data-testid={`app-card-${card.id}`} className={styles.card}>
+                <div className={styles.cardHead}>
+                  <h4 className={styles.cardTitle}>{card.title}</h4>
+                  {card.priority && <span className={styles.priority}>{card.priority}</span>}
                 </div>
-                <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-slate-600">{card.body}</p>
+                <p className={styles.cardBody}>{card.body}</p>
 
                 {card.citations && card.citations.length > 0 && (
-                  <div className="mt-3 space-y-1.5">
+                  <div className={styles.citationList}>
                     {card.citations.map((citation, index) => (
                       <button
                         key={`${card.id}-citation-${index}`}
                         type="button"
                         onClick={() => onSeek(citation.startMs, true)}
-                        className="w-full rounded-xl border border-slate-200 bg-slate-50/80 px-2.5 py-2 text-left text-xs text-slate-600 hover:bg-slate-100"
+                        className={styles.citationBtn}
                       >
-                        <span className="font-mono text-[11px] text-slate-400">
+                        <span className={styles.citationTime}>
                           {formatTime(citation.startMs)} - {formatTime(citation.endMs)}
                         </span>
-                        {citation.snippet && <p className="mt-1 line-clamp-2">{citation.snippet}</p>}
+                        {citation.snippet && <p className={styles.citationText}>{citation.snippet}</p>}
                       </button>
                     ))}
                   </div>
                 )}
 
                 {card.actions && card.actions.length > 0 && (
-                  <div className="mt-3 flex flex-wrap gap-2">
+                  <div className={styles.actionRow}>
                     {card.actions.map((action) => (
                       <button
                         key={action.id}
                         type="button"
                         onClick={() => handleCardAction(card, action)}
-                        className="rounded-xl border border-amber-200 bg-amber-50 px-2.5 py-1.5 text-xs font-medium text-amber-700 hover:bg-amber-100"
+                        className={styles.actionBtn}
                       >
                         {action.label}
                       </button>
@@ -420,7 +426,7 @@ export function AppMatrixPanel({
               </article>
             ))}
           </div>
-        </div>
+        </section>
       )}
     </div>
   );

@@ -8,6 +8,7 @@ interface VideoReviewPlayerProps {
   className?: string;
   seekToMs?: number;
   seekNonce?: number;
+  playNonce?: number;
   onTimeUpdate?: (currentTimeMs: number) => void;
   totalDurationMs?: number;
 }
@@ -21,6 +22,19 @@ function isBilibili(source: ImportedVideoSource): boolean {
 }
 
 function buildBilibiliEmbedBaseUrl(source: ImportedVideoSource): string {
+  if (source.embedUrl) {
+    try {
+      const parsed = new URL(source.embedUrl);
+      // 保留后端解析出的 page/cid 等参数，仅补齐播放器体验参数
+      parsed.searchParams.set('high_quality', '1');
+      parsed.searchParams.set('danmaku', '0');
+      parsed.searchParams.set('autoplay', '0');
+      return parsed.toString();
+    } catch {
+      // ignore and fallback below
+    }
+  }
+
   const bvid = source.bvid || '';
   if (bvid) {
     return `https://player.bilibili.com/player.html?bvid=${encodeURIComponent(bvid)}&page=1&high_quality=1&danmaku=0&autoplay=0`;
@@ -49,17 +63,21 @@ const SPEED_OPTIONS = [0.5, 0.75, 1, 1.25, 1.5, 2] as const;
 interface IframeSyncBarProps {
   seekToMs: number;
   seekNonce: number;
+  playNonce: number;
   totalDurationMs: number;
   onTimeUpdate?: (ms: number) => void;
   audioUrl?: string;
+  onSyncMainVideo?: (timeMs: number) => void;
 }
 
 function IframeSyncBar({
   seekToMs,
   seekNonce,
+  playNonce,
   totalDurationMs,
   onTimeUpdate,
   audioUrl,
+  onSyncMainVideo,
 }: IframeSyncBarProps) {
   const [playing, setPlaying] = useState(false);
   const [expanded, setExpanded] = useState(false);
@@ -71,12 +89,14 @@ function IframeSyncBar({
   const barRef = useRef<HTMLDivElement>(null);
   const audioRef = useRef<HTMLAudioElement>(null);
   const seekNonceRef = useRef<number>(seekNonce);
+  const playNonceRef = useRef<number>(playNonce);
 
   simTimeRef.current = simTime;
 
   const hasAudio = Boolean(audioUrl);
   const duration = totalDurationMs > 0 ? totalDurationMs : 1;
   const progress = Math.min(1, Math.max(0, simTime / duration));
+  const normalizedSeekMs = Number.isFinite(seekToMs) ? Math.max(0, seekToMs) : 0;
 
   useEffect(() => {
     if (audioRef.current) {
@@ -88,14 +108,42 @@ function IframeSyncBar({
     if (seekNonceRef.current === seekNonce) return;
     seekNonceRef.current = seekNonce;
 
-    const next = Math.max(0, seekToMs);
+    const next = normalizedSeekMs;
     setSimTime(next);
     simTimeRef.current = next;
 
     if (hasAudio && audioRef.current) {
-      audioRef.current.currentTime = next / 1000;
+      try {
+        audioRef.current.currentTime = next / 1000;
+      } catch {
+        // ignore seek errors before metadata is ready
+      }
     }
-  }, [seekNonce, seekToMs, hasAudio]);
+  }, [hasAudio, normalizedSeekMs, seekNonce]);
+
+  useEffect(() => {
+    if (playNonceRef.current === playNonce) return;
+    playNonceRef.current = playNonce;
+
+    if (hasAudio && audioRef.current) {
+      const audio = audioRef.current;
+      try {
+        if (Math.abs(audio.currentTime - normalizedSeekMs / 1000) > 0.2) {
+          audio.currentTime = normalizedSeekMs / 1000;
+        }
+      } catch {
+        // ignore seek errors before metadata is ready
+      }
+      void audio.play().then(() => {
+        setPlaying(true);
+      }).catch(() => {
+        setPlaying(false);
+      });
+      return;
+    }
+
+    setPlaying(true);
+  }, [hasAudio, normalizedSeekMs, playNonce]);
 
   useEffect(() => {
     if (intervalRef.current) {
@@ -210,6 +258,14 @@ function IframeSyncBar({
           ref={audioRef}
           src={audioUrl}
           preload="metadata"
+          onLoadedMetadata={() => {
+            if (!audioRef.current) return;
+            try {
+              audioRef.current.currentTime = normalizedSeekMs / 1000;
+            } catch {
+              // ignore
+            }
+          }}
           onTimeUpdate={handleAudioTimeUpdate}
           onEnded={() => setPlaying(false)}
           onPause={() => setPlaying(false)}
@@ -222,9 +278,19 @@ function IframeSyncBar({
           学习时间轴
         </span>
         <span className="text-[11px] text-white/60 truncate">
-          用于字幕同步与困惑点时间定位
+          点击即播；主视频按需同步
         </span>
         <div className="flex-1" />
+        {onSyncMainVideo && (
+          <button
+            type="button"
+            onClick={() => onSyncMainVideo(simTimeRef.current)}
+            className="rounded-md border border-white/15 bg-white/5 px-2 py-1 text-[11px] text-white/75 hover:bg-white/10 transition-colors"
+            title="把主视频同步到当前学习时间轴位置（会重载主视频）"
+          >
+            同步主视频
+          </button>
+        )}
         <button
           onClick={togglePlay}
           className="flex items-center justify-center w-7 h-7 rounded-full bg-rose-300/20 hover:bg-rose-300/30 transition-colors"
@@ -303,6 +369,7 @@ function VideoReviewPlayerComponent({
   className,
   seekToMs = 0,
   seekNonce = 0,
+  playNonce = 0,
   onTimeUpdate,
   totalDurationMs = 0,
 }: VideoReviewPlayerProps) {
@@ -327,17 +394,16 @@ function VideoReviewPlayerComponent({
   }, [source, baseEmbedSrc]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
-    if (!source || isDirectVideo(source)) return;
-    if (!baseEmbedSrc) return;
-    if (seekNonce <= 0) return;
-    setIframeSrc(withStartTime(baseEmbedSrc, seekToMs, seekNonce));
-  }, [source, baseEmbedSrc, seekNonce, seekToMs]);
-
-  useEffect(() => {
     if (source && isDirectVideo(source) && videoRef.current && seekToMs >= 0) {
       videoRef.current.currentTime = seekToMs / 1000;
     }
   }, [source, seekToMs, seekNonce]);
+
+  const syncMainVideo = useCallback((timeMs: number) => {
+    if (!source || isDirectVideo(source)) return;
+    if (!baseEmbedSrc) return;
+    setIframeSrc(withStartTime(baseEmbedSrc, timeMs, Date.now()));
+  }, [baseEmbedSrc, source]);
 
   const isEmbed = !!source && !isDirectVideo(source) && !!iframeSrc && !iframeError;
   const effectiveDuration = totalDurationMs > 0
@@ -381,9 +447,11 @@ function VideoReviewPlayerComponent({
           <IframeSyncBar
             seekToMs={seekToMs}
             seekNonce={seekNonce}
+            playNonce={playNonce}
             totalDurationMs={effectiveDuration}
             onTimeUpdate={onTimeUpdate}
             audioUrl={source.audioUrl}
+            onSyncMainVideo={syncMainVideo}
           />
         )}
       </div>

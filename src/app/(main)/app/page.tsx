@@ -127,10 +127,26 @@ function isSharedWorkspaceTab(tab: WorkspaceTab): tab is SharedWorkspaceTab {
 
 // 持久化状态的 key
 const APP_STATE_KEY = 'app_last_state';
+const APP_STATE_TTL_MS = 24 * 60 * 60 * 1000;
+const APP_STATE_VERSION = 2;
 const ACTION_PROGRESS_KEY_PREFIX = 'action_progress:';
 
 function getActionProgressKey(sessionId: string): string {
   return `${ACTION_PROGRESS_KEY_PREFIX}${sessionId}`;
+}
+
+interface PersistedAppState {
+  version?: number;
+  savedAt: number;
+  viewMode: ViewMode;
+  sessionId: string;
+  dataSource?: DataSource;
+  showSessionHistory?: boolean;
+  reviewTab?: ReviewTab;
+  videoWorkspaceTab?: VideoWorkspaceTab;
+  selectedAnchorId?: string;
+  currentTime?: number;
+  showTranscriptBar?: boolean;
 }
 
 interface ActionItem {
@@ -207,6 +223,7 @@ function StudentAppContent({ isGuestFastEntry }: { isGuestFastEntry: boolean }) 
   const [actionItems, setActionItems] = useState<ActionItem[]>([]);
   const [currentTime, setCurrentTime] = useState(0);
   const [videoSeekNonce, setVideoSeekNonce] = useState(0);
+  const [videoPlayNonce, setVideoPlayNonce] = useState(0);
   const [dataSource, setDataSource] = useState<DataSource>('live');
   const [serviceStatus, setServiceStatus] = useState<ServiceStatusType | null>(null);
   const [audioBlob, setAudioBlob] = useState<Blob | null>(null);
@@ -260,16 +277,48 @@ function StudentAppContent({ isGuestFastEntry }: { isGuestFastEntry: boolean }) 
   const waveformRef = useRef<WaveformPlayerRef>(null);
   const hasRestoredState = useRef(false);  // 是否已恢复状态
 
-  const handleVideoSeek = useCallback((timeMs: number) => {
-    const safeTime = Math.max(0, Math.floor(timeMs));
+  const normalizeSeekTime = useCallback((timeMs: number): number | null => {
+    const numeric = Number(timeMs);
+    if (!Number.isFinite(numeric)) return null;
+
+    const totalMs = segments.length > 0 ? segments[segments.length - 1].endMs : 0;
+    let next = numeric;
+
+    // 兼容少数“秒单位”来源（如 46 表示 46s），统一转换为毫秒
+    if (next > 0 && next < 1000 && totalMs >= 30000) {
+      next *= 1000;
+    }
+
+    next = Math.max(0, Math.floor(next));
+
+    if (totalMs > 0) {
+      next = Math.min(next, totalMs);
+    }
+
+    return next;
+  }, [segments]);
+
+  const handleVideoSeek = useCallback((timeMs: number, autoPlay: boolean = false) => {
+    const safeTime = normalizeSeekTime(timeMs);
+    if (safeTime === null) {
+      console.warn('[VideoSeek] Invalid seek time:', timeMs);
+      return;
+    }
     setCurrentTime(safeTime);
     setVideoSeekNonce((prev) => prev + 1);
-  }, []);
+    if (autoPlay) {
+      setVideoPlayNonce((prev) => prev + 1);
+    }
+  }, [normalizeSeekTime]);
 
   const handleUnifiedSeek = useCallback((timeMs: number, autoPlay: boolean = false) => {
-    const safeTime = Math.max(0, Math.floor(timeMs));
+    const safeTime = normalizeSeekTime(timeMs);
+    if (safeTime === null) {
+      console.warn('[UnifiedSeek] Invalid seek time:', timeMs);
+      return;
+    }
     if (videoSource) {
-      handleVideoSeek(safeTime);
+      handleVideoSeek(safeTime, autoPlay);
       return;
     }
     setCurrentTime(safeTime);
@@ -278,11 +327,12 @@ function StudentAppContent({ isGuestFastEntry }: { isGuestFastEntry: boolean }) 
       waveformRef.current?.play();
       setIsPlaying(true);
     }
-  }, [handleVideoSeek, videoSource]);
+  }, [handleVideoSeek, normalizeSeekTime, videoSource]);
 
   useEffect(() => {
     if (!videoSource) {
       setVideoSeekNonce(0);
+      setVideoPlayNonce(0);
     }
   }, [videoSource]);
   
@@ -312,201 +362,391 @@ function StudentAppContent({ isGuestFastEntry }: { isGuestFastEntry: boolean }) 
   const studentId = user?.id || 'anonymous';
   const studentName = user?.nickname || user?.username || '匿名用户';
 
-  // 保存应用状态到 IndexedDB
+  const persistedCurrentTime = Math.max(0, Math.floor(currentTime / 5000) * 5000);
+
+  // 保存应用状态到 IndexedDB（用于刷新恢复）
   const saveAppState = useCallback(async () => {
-    if (viewMode !== 'review') return;
-    
+    if (!hasRestoredState.current) return;
+
+    const snapshot: PersistedAppState = {
+      version: APP_STATE_VERSION,
+      savedAt: Date.now(),
+      viewMode,
+      sessionId,
+      dataSource,
+      showSessionHistory,
+      reviewTab,
+      videoWorkspaceTab,
+      selectedAnchorId: selectedAnchor?.id,
+      currentTime: persistedCurrentTime,
+      showTranscriptBar,
+    };
+
     try {
-      await setPreference(APP_STATE_KEY, {
-        viewMode,
-        sessionId,
-        selectedAnchorId: selectedAnchor?.id,
-        reviewTab,
-        currentTime,
-        savedAt: Date.now(),
-      });
+      await setPreference(APP_STATE_KEY, snapshot);
     } catch (err) {
       console.error('Failed to save app state:', err);
     }
-  }, [viewMode, sessionId, selectedAnchor?.id, reviewTab, currentTime]);
+  }, [
+    dataSource,
+    persistedCurrentTime,
+    reviewTab,
+    selectedAnchor?.id,
+    sessionId,
+    showSessionHistory,
+    showTranscriptBar,
+    videoWorkspaceTab,
+    viewMode,
+  ]);
 
   // 当关键状态变化时保存
   useEffect(() => {
-    if (hasRestoredState.current && viewMode === 'review') {
-      saveAppState();
+    if (!appReady) return;
+    void saveAppState();
+  }, [appReady, saveAppState]);
+
+  const restoreReviewSession = useCallback(async (
+    targetSessionId: string,
+    options?: {
+      selectedAnchorId?: string | null;
+      currentTime?: number;
+      reviewTab?: ReviewTab | null;
+      videoWorkspaceTab?: VideoWorkspaceTab | null;
+      showTranscriptBar?: boolean;
     }
-  }, [selectedAnchor?.id, reviewTab, saveAppState, viewMode]);
+  ): Promise<boolean> => {
+    const session = await db.audioSessions
+      .where('sessionId')
+      .equals(targetSessionId)
+      .first();
+    if (!session) return false;
+
+    const transcripts = await db.transcripts
+      .where('sessionId')
+      .equals(targetSessionId)
+      .toArray();
+    if (!transcripts.length) return false;
+
+    const sortedTranscripts = transcripts.sort((a, b) => a.startMs - b.startMs);
+    const loadedSegments: TranscriptSegment[] = sortedTranscripts.map((item, index) => ({
+      id: `loaded-${item.startMs}-${index}`,
+      text: item.text,
+      startMs: item.startMs,
+      endMs: item.endMs,
+      confidence: item.confidence,
+      isFinal: item.isFinal,
+    }));
+
+    const loadedAnchors = await db.anchors
+      .where('sessionId')
+      .equals(targetSessionId)
+      .toArray();
+    const anchorsWithResolved: Anchor[] = loadedAnchors.map((anchor) => ({
+      id: anchor.id?.toString() || '',
+      sessionId: anchor.sessionId,
+      studentId: '',
+      timestamp: anchor.timestamp,
+      type: anchor.type,
+      resolved: anchor.status === 'resolved',
+      cancelled: false,
+      note: anchor.note,
+      aiExplanation: anchor.aiExplanation,
+      createdAt: anchor.createdAt.toISOString(),
+    }));
+
+    setSessionId(targetSessionId);
+    setViewMode('review');
+    setSegments(loadedSegments);
+    setAnchors(anchorsWithResolved);
+    setSelectedAnchor(null);
+    setShowSessionHistory(false);
+    setShowConversationHistory(false);
+    setSelectedHistoryConversation(null);
+    setActionItems([]);
+    clearTopics();
+    clearSummary();
+    setNotes([]);
+    liveSegmentsRef.current = loadedSegments;
+
+    const isVideoSession = session.sourceType === 'video-link' && !!session.videoUrl;
+    if (isVideoSession) {
+      const provider = session.videoProvider || 'bilibili';
+      const restoredSource: ImportedVideoSource = {
+        provider,
+        providerLabel: provider === 'bilibili' ? 'Bilibili' : provider,
+        originalUrl: session.videoUrl || '',
+        embedUrl: session.videoEmbedUrl,
+        thumbnailUrl: session.thumbnailUrl,
+        title: session.topic,
+        durationSec: session.duration ? session.duration / 1000 : undefined,
+        sourceMode: session.importSourceMode as ImportedVideoSource['sourceMode'],
+        importTrace: session.importTrace as ImportedVideoSource['importTrace'],
+        bvid: session.videoUrl?.match(/BV[a-zA-Z0-9]+/)?.[0],
+      };
+      setVideoSource(restoredSource);
+      setDataSource('video');
+      setVideoWorkspaceTab(options?.videoWorkspaceTab || 'chat');
+      setShowTranscriptBar(Boolean(options?.showTranscriptBar));
+      setVideoSeekNonce(0);
+      setVideoPlayNonce(0);
+      const seededInsights = buildSeedVideoInsights(loadedSegments);
+      setVideoInsightItems(seededInsights);
+      setActiveVideoInsightId(seededInsights[0]?.id || null);
+      setAudioBlob(null);
+      setAudioUrl(null);
+      setReviewTab(options?.reviewTab || 'timeline');
+    } else {
+      setVideoSource(null);
+      setDataSource('live');
+      setVideoWorkspaceTab('chat');
+      setVideoInsightItems([]);
+      setActiveVideoInsightId(null);
+      setShowTranscriptBar(false);
+      setVideoSeekNonce(0);
+      setVideoPlayNonce(0);
+      setReviewTab(options?.reviewTab || 'timeline');
+      if (session.blob) {
+        setAudioBlob(session.blob);
+      } else {
+        setAudioBlob(null);
+      }
+      setAudioUrl(null);
+    }
+
+    const restoredAnchor = options?.selectedAnchorId
+      ? anchorsWithResolved.find((anchor) => anchor.id === options.selectedAnchorId)
+      : null;
+    if (restoredAnchor) {
+      setSelectedAnchor(restoredAnchor);
+      setCurrentTime(restoredAnchor.timestamp);
+      if (!isVideoSession) {
+        setReviewTab('anchor-detail');
+      }
+    } else if (typeof options?.currentTime === 'number' && Number.isFinite(options.currentTime)) {
+      setCurrentTime(Math.max(0, Math.floor(options.currentTime)));
+    } else {
+      setCurrentTime(0);
+    }
+
+    const sessionDate = session.createdAt instanceof Date
+      ? session.createdAt
+      : new Date(session.createdAt);
+    const timelineData = memoryService.buildTimeline(
+      targetSessionId,
+      loadedSegments,
+      anchorsWithResolved,
+      {
+        subject: session.subject || UIConfig.defaultSubject,
+        teacher: UIConfig.defaultTeacher || 'Teacher',
+        date: sessionDate.toISOString().split('T')[0],
+      }
+    );
+    setTimeline(timelineData);
+    memoryService.save(timelineData);
+
+    return true;
+  }, [clearSummary, clearTopics]);
 
   // 初始化 - 恢复状态（仅在首次加载时执行）
   // 优化：使用并行加载和批量操作提升性能
   useEffect(() => {
-    // 防止重复初始化
     if (hasRestoredState.current) return;
-    
+
     const initializeApp = async () => {
-      // 开始初始化 - 访客模式从较高进度开始
       const baseProgress = isGuestFastEntry ? 30 : 10;
       setLoadingProgress(baseProgress);
-      
-      // 第一批并行操作：服务检查 + 状态恢复 + anchors 获取 + 引导状态检查
-      const [, savedAppState, savedAnchors, savedOnboardingState] = await Promise.all([
+
+      const [, rawSavedAppState, savedOnboardingState] = await Promise.all([
         checkServices().then(setServiceStatus),
-        getPreference<{
-          viewMode: ViewMode;
-          sessionId: string;
-          selectedAnchorId?: string;
-          reviewTab?: ReviewTab;
-          currentTime?: number;
-          savedAt: number;
-        } | null>(APP_STATE_KEY, null).catch(() => null),
-        Promise.resolve(anchorService.getActive(sessionId)),
+        getPreference<PersistedAppState | null>(APP_STATE_KEY, null).catch(() => null),
         getPreference<{ completedFlows?: string[]; skippedFlows?: string[] } | null>('onboarding_state', null).catch(() => null),
       ]);
-      
-      // 第一批完成
+
       setLoadingProgress(isGuestFastEntry ? 60 : 40);
-      
-      setAnchors(savedAnchors);
-      
-      // 检查是否是首次访问（需要显示引导）- 访客模式视为首次访问
-      const isFirstVisit = isGuestFastEntry || !savedOnboardingState || 
-        (!savedOnboardingState.completedFlows?.includes('welcome') && 
+
+      const isFirstVisit = isGuestFastEntry || !savedOnboardingState ||
+        (!savedOnboardingState.completedFlows?.includes('welcome') &&
          !savedOnboardingState.skippedFlows?.includes('welcome'));
 
-      // 解析恢复的状态
-      let restoredAnchorId: string | null = null;
-      let restoredReviewTab: ReviewTab | null = null;
-      let restoredViewMode: ViewMode | null = null;
-      
-      // 检查是否是最近 24 小时内的状态（但首次访问时不恢复到复习页面）
-      if (savedAppState && Date.now() - savedAppState.savedAt < 24 * 60 * 60 * 1000) {
-        restoredAnchorId = savedAppState.selectedAnchorId || null;
-        restoredReviewTab = savedAppState.reviewTab || null;
-        // 首次访问时强制进入录音页面
-        restoredViewMode = isFirstVisit ? null : (savedAppState.viewMode || null);
-        
-        if (savedAppState.currentTime && !isFirstVisit) {
-          setCurrentTime(savedAppState.currentTime);
-        }
+      const normalizedSavedState = rawSavedAppState && typeof rawSavedAppState === 'object'
+        ? rawSavedAppState
+        : null;
+      const hasFreshState = !!(
+        normalizedSavedState &&
+        typeof normalizedSavedState.savedAt === 'number' &&
+        Date.now() - normalizedSavedState.savedAt < APP_STATE_TTL_MS
+      );
+      const savedAppState = hasFreshState ? normalizedSavedState : null;
+      const finalViewMode: ViewMode = isFirstVisit && !savedAppState
+        ? 'record'
+        : (savedAppState?.viewMode || 'record');
+
+      setLoadingProgress(isGuestFastEntry ? 75 : 50);
+
+      if (savedAppState?.sessionId) {
+        setSessionId(savedAppState.sessionId);
+      }
+      if (savedAppState?.reviewTab) {
+        setReviewTab(savedAppState.reviewTab);
+      }
+      if (savedAppState?.videoWorkspaceTab) {
+        setVideoWorkspaceTab(savedAppState.videoWorkspaceTab);
+      }
+      if (typeof savedAppState?.showTranscriptBar === 'boolean') {
+        setShowTranscriptBar(savedAppState.showTranscriptBar);
+      }
+      if (savedAppState?.dataSource) {
+        setDataSource(savedAppState.dataSource);
+      }
+      if (typeof savedAppState?.showSessionHistory === 'boolean') {
+        setShowSessionHistory(savedAppState.showSessionHistory);
       }
 
-      // 确定最终的 viewMode（首次访问/访客强制录音页面）
-      const finalViewMode = isFirstVisit ? 'record' : (restoredViewMode || 'record');
-      
-      setLoadingProgress(isGuestFastEntry ? 75 : 50);
-      
-      // 仅在复习模式下加载演示数据
       if (finalViewMode === 'review') {
-        setViewMode('review');
-        
-        setLoadingProgress(60);
-        
-        // 第二批并行操作：加载演示数据 + 检查已有转录
-        const [demoData, existingTranscriptCount] = await Promise.all([
-          loadDemoData(),
-          db.transcripts.where('sessionId').equals(sessionId).count().catch(() => 0),
-        ]);
-        
-        setLoadingProgress(80);
-        
-        // 立即设置 UI 状态（让用户更快看到内容）
-        setSegments(demoData.DEMO_SEGMENTS);
-        setAudioUrl(demoData.DEMO_AUDIO_URL);
-        setAnchors(demoData.DEMO_ANCHORS);
-        setVideoSource(null);
-        setDataSource('demo');
-        
-        // 构建时间轴（同步操作，优先完成）
-        const tl = memoryService.buildTimeline(
-          sessionId,
-          demoData.DEMO_SEGMENTS,
-          demoData.DEMO_ANCHORS,
-          { subject: UIConfig.defaultSubject, teacher: 'Demo Teacher', date: new Date().toISOString().split('T')[0] }
-        );
-        setTimeline(tl);
-        
-        // 恢复选中的困惑点
-        if (restoredAnchorId) {
-          const restoredAnchor = demoData.DEMO_ANCHORS.find(a => a.id === restoredAnchorId);
-          if (restoredAnchor) {
-            setSelectedAnchor(restoredAnchor);
-            setCurrentTime(restoredAnchor.timestamp);
+        let restoredFromSession = false;
+        if (savedAppState?.sessionId) {
+          restoredFromSession = await restoreReviewSession(savedAppState.sessionId, {
+            selectedAnchorId: savedAppState.selectedAnchorId || null,
+            currentTime: savedAppState.currentTime,
+            reviewTab: savedAppState.reviewTab || null,
+            videoWorkspaceTab: savedAppState.videoWorkspaceTab || null,
+            showTranscriptBar: savedAppState.showTranscriptBar,
+          });
+        }
+
+        if (!restoredFromSession) {
+          setViewMode('review');
+          setSessionId('demo-session');
+          setShowSessionHistory(false);
+          setDataSource('demo');
+          setVideoSource(null);
+          setVideoInsightItems([]);
+          setActiveVideoInsightId(null);
+          setVideoWorkspaceTab('chat');
+          setShowTranscriptBar(false);
+
+          setLoadingProgress(60);
+
+          const [demoData, existingTranscriptCount] = await Promise.all([
+            loadDemoData(),
+            db.transcripts.where('sessionId').equals('demo-session').count().catch(() => 0),
+          ]);
+
+          setLoadingProgress(80);
+
+          setSegments(demoData.DEMO_SEGMENTS);
+          setAudioUrl(demoData.DEMO_AUDIO_URL);
+          setAudioBlob(null);
+          setAnchors(demoData.DEMO_ANCHORS);
+
+          const tl = memoryService.buildTimeline(
+            'demo-session',
+            demoData.DEMO_SEGMENTS,
+            demoData.DEMO_ANCHORS,
+            { subject: UIConfig.defaultSubject, teacher: 'Demo Teacher', date: new Date().toISOString().split('T')[0] }
+          );
+          setTimeline(tl);
+
+          if (savedAppState?.selectedAnchorId) {
+            const restoredAnchor = demoData.DEMO_ANCHORS.find((anchor) => anchor.id === savedAppState.selectedAnchorId);
+            if (restoredAnchor) {
+              setSelectedAnchor(restoredAnchor);
+              setCurrentTime(restoredAnchor.timestamp);
+            }
+          } else if (typeof savedAppState?.currentTime === 'number' && Number.isFinite(savedAppState.currentTime)) {
+            setSelectedAnchor(null);
+            setCurrentTime(Math.max(0, Math.floor(savedAppState.currentTime)));
+          } else {
+            const firstUnresolved = demoData.DEMO_ANCHORS.find((anchor) => !anchor.resolved);
+            if (firstUnresolved) {
+              setSelectedAnchor(firstUnresolved);
+              setCurrentTime(firstUnresolved.timestamp);
+            }
           }
+
+          if (savedAppState?.reviewTab) {
+            setReviewTab(savedAppState.reviewTab);
+          }
+
+          setLoadingProgress(90);
+
+          queueMicrotask(() => {
+            classroomDataService.saveSession({
+              id: 'demo-session',
+              subject: UIConfig.defaultSubject,
+              topic: 'Australia\'s Moving Experience',
+              teacherName: 'Demo Teacher',
+              duration: demoData.DEMO_SEGMENTS.length > 0 ? demoData.DEMO_SEGMENTS[demoData.DEMO_SEGMENTS.length - 1].endMs : 0,
+              status: 'completed',
+              createdBy: studentId,
+            });
+
+            const anchorsToAdd = demoData.DEMO_ANCHORS.map((anchor) => {
+              const contextSegments = demoData.DEMO_SEGMENTS.filter(
+                (segment) => segment.startMs <= anchor.timestamp + 5000 && segment.endMs >= anchor.timestamp - 5000
+              );
+              const transcriptContext = contextSegments.map((segment) => segment.text).join(' ').slice(0, 200);
+              return {
+                id: anchor.id,
+                timestamp: anchor.timestamp,
+                type: anchor.type,
+                transcriptContext,
+              };
+            });
+            classroomDataService.bulkSaveStudentAnchors('demo-session', studentId, studentName, anchorsToAdd);
+
+            if (existingTranscriptCount === 0) {
+              db.transcripts.bulkAdd(
+                demoData.DEMO_SEGMENTS.map((segment) => ({
+                  sessionId: 'demo-session',
+                  userId: ANONYMOUS_USER_ID, // demo 数据使用匿名用户
+                  text: segment.text,
+                  startMs: segment.startMs,
+                  endMs: segment.endMs,
+                  confidence: segment.confidence || 1.0,
+                  isFinal: true,
+                }))
+              ).catch((error) => console.error('保存演示转录到 IndexedDB 失败:', error));
+            }
+          });
         } else {
-          const firstUnresolved = demoData.DEMO_ANCHORS.find(a => !a.resolved);
-          if (firstUnresolved) {
-            setSelectedAnchor(firstUnresolved);
-            setCurrentTime(firstUnresolved.timestamp);
-          }
+          setLoadingProgress(90);
         }
-        
-        // 恢复标签页
-        if (restoredReviewTab) {
-          setReviewTab(restoredReviewTab);
+      } else {
+        setViewMode('record');
+        setSelectedAnchor(null);
+        if (!savedAppState) {
+          setDataSource('live');
+          setShowSessionHistory(false);
+          setVideoSource(null);
+          setVideoInsightItems([]);
+          setActiveVideoInsightId(null);
+          setVideoWorkspaceTab('chat');
+          setShowTranscriptBar(false);
+        } else if (savedAppState.dataSource !== 'video') {
+          setVideoSource(null);
+          setVideoInsightItems([]);
+          setActiveVideoInsightId(null);
+          setShowTranscriptBar(false);
+          setVideoWorkspaceTab(savedAppState.videoWorkspaceTab || 'chat');
         }
-        
-        setLoadingProgress(90);
-        
-        // 第三批：后台异步写入（不阻塞 UI）
-        // 使用 queueMicrotask 延迟执行，让 UI 先渲染
-        queueMicrotask(() => {
-          // 保存会话信息
-          classroomDataService.saveSession({
-            id: sessionId,
-            subject: UIConfig.defaultSubject,
-            topic: 'Australia\'s Moving Experience',
-            teacherName: 'Demo Teacher',
-            duration: demoData.DEMO_SEGMENTS.length > 0 ? demoData.DEMO_SEGMENTS[demoData.DEMO_SEGMENTS.length - 1].endMs : 0,
-            status: 'completed',
-            createdBy: studentId,
-          });
-          
-          // 批量保存演示困惑点（优化：一次性处理）
-          const anchorsToAdd = demoData.DEMO_ANCHORS.map(anchor => {
-            const contextSegments = demoData.DEMO_SEGMENTS.filter(
-              s => s.startMs <= anchor.timestamp + 5000 && s.endMs >= anchor.timestamp - 5000
-            );
-            const transcriptContext = contextSegments.map(s => s.text).join(' ').slice(0, 200);
-            return {
-              id: anchor.id,
-              timestamp: anchor.timestamp,
-              type: anchor.type,
-              transcriptContext,
-            };
-          });
-          classroomDataService.bulkSaveStudentAnchors(sessionId, studentId, studentName, anchorsToAdd);
-          
-          // 保存转录到 IndexedDB（如果不存在）
-          if (existingTranscriptCount === 0) {
-            db.transcripts.bulkAdd(
-              demoData.DEMO_SEGMENTS.map(seg => ({
-                sessionId: sessionId,
-                userId: ANONYMOUS_USER_ID, // demo 数据使用匿名用户
-                text: seg.text,
-                startMs: seg.startMs,
-                endMs: seg.endMs,
-                confidence: seg.confidence || 1.0,
-                isFinal: true,
-              }))
-            ).catch(e => console.error('保存演示转录到 IndexedDB 失败:', e));
-          }
-        });
+        if (typeof savedAppState?.currentTime === 'number' && Number.isFinite(savedAppState.currentTime)) {
+          setCurrentTime(Math.max(0, Math.floor(savedAppState.currentTime)));
+        }
+        setLoadingProgress(85);
       }
-      
-      // 标记应用已准备就绪
+
       setLoadingProgress(100);
       setAppReady(true);
       hasRestoredState.current = true;
-      
-      // 首次访问检测 - 显示欢迎弹窗（访客模式跳过，让他们直接体验）
-      if (isFirstVisit && !isGuestFastEntry) {
-        // 延迟显示，让用户先看到页面
+
+      if (isFirstVisit && !savedAppState && !isGuestFastEntry) {
         setTimeout(() => setShowWelcome(true), 800);
       }
     };
-    
+
     initializeApp();
-  }, [sessionId, isGuestFastEntry]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [isGuestFastEntry]); // eslint-disable-line react-hooks/exhaustive-deps
   
   // 备用：监听 onboarding 加载完成后检查（只在首次触发，访客模式跳过）
   const hasTriggeredWelcome = useRef(false);
@@ -689,116 +929,20 @@ function StudentAppContent({ isGuestFastEntry }: { isGuestFastEntry: boolean }) 
   // 从历史记录加载会话并进入复习模式
   const handleLoadHistorySession = useCallback(async (session: AudioSession) => {
     try {
-      // 清除旧会话状态
-      setSessionId(session.sessionId);
-      setAnchors([]);
-      setSelectedAnchor(null);
-      clearTopics();
-      clearSummary();
-      setNotes([]);
-      setActionItems([]);
-      liveSegmentsRef.current = [];
-      setShowSessionHistory(false);
-      setVideoSource(null);
-      setVideoInsightItems([]);
-      setActiveVideoInsightId(null);
-      setVideoWorkspaceTab('chat');
-      
-      // 从 IndexedDB 加载转录数据
-      const transcripts = await db.transcripts
-        .where('sessionId')
-        .equals(session.sessionId)
-        .toArray();
-      
-      // 按时间排序
-      const sortedTranscripts = transcripts.sort((a, b) => a.startMs - b.startMs);
-      const loadedSegments: TranscriptSegment[] = sortedTranscripts.map((t, index) => ({
-        id: `loaded-${t.startMs}-${index}`,
-        text: t.text,
-        startMs: t.startMs,
-        endMs: t.endMs,
-        confidence: t.confidence,
-        isFinal: t.isFinal,
-      }));
-      
-      setSegments(loadedSegments);
-      
-      // 从 IndexedDB 加载困惑点
-      const loadedAnchors = await db.anchors
-        .where('sessionId')
-        .equals(session.sessionId)
-        .toArray();
-      
-      // 转换为 Anchor 类型
-      const anchorsWithResolved = loadedAnchors.map(a => ({
-        id: a.id?.toString() || '',
-        sessionId: a.sessionId,
-        studentId: '',
-        timestamp: a.timestamp,
-        type: a.type,
-        resolved: a.status === 'resolved',
-        cancelled: false,
-        note: a.note,
-        aiExplanation: a.aiExplanation,
-        createdAt: a.createdAt.toISOString(),
-      }));
-      setAnchors(anchorsWithResolved);
-      
-      // 视频类型会话：恢复 videoSource
-      if (session.sourceType === 'video-link' && session.videoUrl) {
-        const restoredSource: ImportedVideoSource = {
-          provider: session.videoProvider || 'bilibili',
-          providerLabel: session.videoProvider || 'bilibili',
-          originalUrl: session.videoUrl,
-          embedUrl: session.videoEmbedUrl,
-          thumbnailUrl: session.thumbnailUrl,
-          title: session.topic,
-          durationSec: session.duration ? session.duration / 1000 : undefined,
-          sourceMode: session.importSourceMode as ImportedVideoSource['sourceMode'],
-          importTrace: session.importTrace as ImportedVideoSource['importTrace'],
-          bvid: session.videoUrl.match(/BV[a-zA-Z0-9]+/)?.[0],
-        };
-        setVideoSource(restoredSource);
-        setDataSource('video');
-        setCurrentTime(0);
-        setVideoSeekNonce(0);
-
-        // 构建初始 insight
-        const seededInsights = buildSeedVideoInsights(loadedSegments);
-        setVideoInsightItems(seededInsights);
-        setActiveVideoInsightId(seededInsights[0]?.id || null);
-      } else {
-        // 音频类型会话
-        if (session.blob) {
-          const url = URL.createObjectURL(session.blob);
-          setAudioUrl(url);
-          setAudioBlob(session.blob);
-        }
-        setDataSource('live');
+      const restored = await restoreReviewSession(session.sessionId, {
+        reviewTab: 'timeline',
+        videoWorkspaceTab: 'chat',
+        currentTime: 0,
+        showTranscriptBar: false,
+      });
+      if (!restored) {
+        throw new Error('session-not-restored');
       }
-      
-      // 构建时间轴
-      const tl = memoryService.buildTimeline(
-        session.sessionId,
-        loadedSegments,
-        anchorsWithResolved,
-        { 
-          subject: session.subject || UIConfig.defaultSubject, 
-          teacher: UIConfig.defaultTeacher || 'Teacher', 
-          date: new Date(session.createdAt).toISOString().split('T')[0] 
-        }
-      );
-      setTimeline(tl);
-      
-      // 切换到复习模式
-      setViewMode('review');
-      
-      console.log(`已加载历史会话: ${session.sessionId}, 转录: ${loadedSegments.length} 条, 困惑点: ${anchorsWithResolved.length} 个`);
     } catch (err) {
       console.error('加载历史会话失败:', err);
       toast.error('加载历史会话失败，请重试');
     }
-  }, [clearTopics, clearSummary]);
+  }, [restoreReviewSession]);
 
   const handleTranscriptUpdate = useCallback((newSegments: TranscriptSegment[]) => {
     liveSegmentsRef.current = newSegments;
@@ -829,6 +973,7 @@ function StudentAppContent({ isGuestFastEntry }: { isGuestFastEntry: boolean }) 
     setVideoWorkspaceTab('chat');
     setCurrentTime(0);
     setVideoSeekNonce(0);
+    setVideoPlayNonce(0);
 
     setSegments(importedSegments);
     setAnchors([]);
@@ -1581,128 +1726,126 @@ function StudentAppContent({ isGuestFastEntry }: { isGuestFastEntry: boolean }) 
                     </div>
                   </div>
 
-                  {dataSource === 'live' && !showSessionHistory ? (
-                    <div className="flex-1 min-h-0">
-                      <Recorder
-                        onRecordingStart={handleRecordingStart}
-                        onRecordingStop={handleRecordingStop}
-                        onTranscriptUpdate={handleTranscriptUpdate}
-                        onTranscriptTextUpdate={handleTranscriptTextUpdate}
-                        onTranscriptEnhanced={handleTranscriptEnhanced}
-                        onAnchorMark={handleAnchorMark}
-                      />
-                    </div>
-                  ) : showSessionHistory ? (
-                    <div className="card-edu p-0 overflow-hidden" style={{ maxHeight: '400px' }}>
-                      <SessionHistoryList
-                        userId={user?.id}
-                        onSessionSelect={handleLoadHistorySession}
-                        onClose={() => setShowSessionHistory(false)}
-                        activeSessionId={sessionId}
-                        maxHeight="400px"
-                        showHeader={false}
-                      />
-                    </div>
-                  ) : dataSource === 'video' ? (
-                    <div className="card-edu p-4">
-                      <h3 className="text-base font-semibold text-gray-900 mb-3 flex items-center gap-2">
-                        <span>🎬</span>
-                        导入视频链接
-                      </h3>
-                      <VideoLinkImporter
-                        onImportReady={handleVideoImportReady}
-                        onError={(error) => {
-                          console.error('视频导入失败:', error);
-                          toast.error(String(error));
-                        }}
-                        disabled={isRecording}
-                      />
-                    </div>
-                  ) : (
-                    <div className="card-edu p-4">
-                      <h3 className="text-base font-semibold text-gray-900 mb-3 flex items-center gap-2">
-                        <span>📁</span>
-                        上传课堂录音
-                      </h3>
-                      <AudioUploader
-                        onTranscriptReady={async (newSegments, blob) => {
-                          const newSessionId = generateSessionId();
-                          // 清除旧会话的所有状态
-                          setSessionId(newSessionId);
-                          setSegments(newSegments);
-                          setAnchors([]); // 清除旧困惑点
-                          setSelectedAnchor(null); // 清除选中的困惑点
-                          clearTopics(); // 清除精选片段（使用 SWR Hook）
-                          clearSummary(); // 清除摘要（使用 SWR Hook）
-                          setNotes([]); // 清除笔记
-                          setActionItems([]); // 清除行动清单
-                          setAudioBlob(blob);
-                          setAudioUrl(null);
-                          setDataSource('live');
-                          setVideoSource(null);
-                          setVideoInsightItems([]);
-                          setActiveVideoInsightId(null);
-                          liveSegmentsRef.current = [];
-                          
-                          try {
-                            const currentUserId = user?.id || ANONYMOUS_USER_ID;
-                            await db.transcripts.bulkAdd(
-                              newSegments.map((seg) => ({
-                                sessionId: newSessionId,
-                                userId: currentUserId,
-                                text: seg.text,
-                                startMs: seg.startMs,
-                                endMs: seg.endMs,
-                                confidence: seg.confidence || 1.0,
-                                isFinal: true,
-                              }))
-                            );
-                          } catch (e) {
-                            console.error('保存转录到 IndexedDB 失败:', e);
-                          }
-                          
-                          const duration = newSegments.length > 0 
-                            ? newSegments[newSegments.length - 1].endMs 
-                            : 0;
-                          classroomDataService.saveSession({
-                            id: newSessionId,
+                  <div className="flex-1 min-h-0" style={{ display: dataSource === 'live' && !showSessionHistory ? undefined : 'none' }}>
+                    <Recorder
+                      onRecordingStart={handleRecordingStart}
+                      onRecordingStop={handleRecordingStop}
+                      onTranscriptUpdate={handleTranscriptUpdate}
+                      onTranscriptTextUpdate={handleTranscriptTextUpdate}
+                      onTranscriptEnhanced={handleTranscriptEnhanced}
+                      onAnchorMark={handleAnchorMark}
+                    />
+                  </div>
+
+                  <div className="card-edu p-0 overflow-hidden" style={{ maxHeight: '400px', display: showSessionHistory ? undefined : 'none' }}>
+                    <SessionHistoryList
+                      userId={user?.id}
+                      onSessionSelect={handleLoadHistorySession}
+                      onClose={() => setShowSessionHistory(false)}
+                      activeSessionId={sessionId}
+                      maxHeight="400px"
+                      showHeader={false}
+                    />
+                  </div>
+
+                  <div className="card-edu p-4" style={{ display: dataSource === 'video' && !showSessionHistory ? undefined : 'none' }}>
+                    <h3 className="text-base font-semibold text-gray-900 mb-3 flex items-center gap-2">
+                      <span>🎬</span>
+                      导入视频链接
+                    </h3>
+                    <VideoLinkImporter
+                      onImportReady={handleVideoImportReady}
+                      onError={(error) => {
+                        console.error('视频导入失败:', error);
+                        toast.error(String(error));
+                      }}
+                      disabled={isRecording}
+                    />
+                  </div>
+
+                  <div className="card-edu p-4" style={{ display: dataSource === 'demo' && !showSessionHistory ? undefined : 'none' }}>
+                    <h3 className="text-base font-semibold text-gray-900 mb-3 flex items-center gap-2">
+                      <span>📁</span>
+                      上传课堂录音
+                    </h3>
+                    <AudioUploader
+                      onTranscriptReady={async (newSegments, blob) => {
+                        const newSessionId = generateSessionId();
+                        // 清除旧会话的所有状态
+                        setSessionId(newSessionId);
+                        setSegments(newSegments);
+                        setAnchors([]); // 清除旧困惑点
+                        setSelectedAnchor(null); // 清除选中的困惑点
+                        clearTopics(); // 清除精选片段（使用 SWR Hook）
+                        clearSummary(); // 清除摘要（使用 SWR Hook）
+                        setNotes([]); // 清除笔记
+                        setActionItems([]); // 清除行动清单
+                        setAudioBlob(blob);
+                        setAudioUrl(null);
+                        setDataSource('live');
+                        setVideoSource(null);
+                        setVideoInsightItems([]);
+                        setActiveVideoInsightId(null);
+                        liveSegmentsRef.current = [];
+                        
+                        try {
+                          const currentUserId = user?.id || ANONYMOUS_USER_ID;
+                          await db.transcripts.bulkAdd(
+                            newSegments.map((seg) => ({
+                              sessionId: newSessionId,
+                              userId: currentUserId,
+                              text: seg.text,
+                              startMs: seg.startMs,
+                              endMs: seg.endMs,
+                              confidence: seg.confidence || 1.0,
+                              isFinal: true,
+                            }))
+                          );
+                        } catch (e) {
+                          console.error('保存转录到 IndexedDB 失败:', e);
+                        }
+                        
+                        const duration = newSegments.length > 0 
+                          ? newSegments[newSegments.length - 1].endMs 
+                          : 0;
+                        classroomDataService.saveSession({
+                          id: newSessionId,
+                          subject: UIConfig.defaultSubject,
+                          topic: UIConfig.defaultLessonTitle,
+                          teacherName: UIConfig.defaultTeacher || 'Teacher',
+                          status: 'completed',
+                          duration,
+                          createdBy: studentId,
+                        });
+                        
+                        // 保存上传的音频到 IndexedDB 历史记录
+                        if (blob) {
+                          const currentUserId = user?.id || ANONYMOUS_USER_ID;
+                          saveAudioSession(blob, newSessionId, currentUserId, {
                             subject: UIConfig.defaultSubject,
                             topic: UIConfig.defaultLessonTitle,
-                            teacherName: UIConfig.defaultTeacher || 'Teacher',
-                            status: 'completed',
                             duration,
-                            createdBy: studentId,
-                          });
-                          
-                          // 保存上传的音频到 IndexedDB 历史记录
-                          if (blob) {
-                            const currentUserId = user?.id || ANONYMOUS_USER_ID;
-                            saveAudioSession(blob, newSessionId, currentUserId, {
-                              subject: UIConfig.defaultSubject,
-                              topic: UIConfig.defaultLessonTitle,
-                              duration,
-                            }).catch(err => console.error('保存上传音频到历史失败:', err));
-                          }
-                          
-                          const tl = memoryService.buildTimeline(
-                            newSessionId,
-                            newSegments,
-                            [], // 新会话没有困惑点
-                            { subject: UIConfig.defaultSubject, teacher: UIConfig.defaultTeacher || 'Teacher', date: new Date().toISOString().split('T')[0] }
-                          );
-                          setTimeline(tl);
-                          setViewMode('review');
-                        }}
-                        onError={(error) => {
-                          console.error('上传失败:', error);
-                        }}
-                        disabled={isRecording}
-                      />
-                      <p className="mt-3 text-xs text-gray-500 text-center">
-                        支持 MP3、WAV、WebM 等格式
-                      </p>
-                    </div>
-                  )}
+                          }).catch(err => console.error('保存上传音频到历史失败:', err));
+                        }
+                        
+                        const tl = memoryService.buildTimeline(
+                          newSessionId,
+                          newSegments,
+                          [], // 新会话没有困惑点
+                          { subject: UIConfig.defaultSubject, teacher: UIConfig.defaultTeacher || 'Teacher', date: new Date().toISOString().split('T')[0] }
+                        );
+                        setTimeline(tl);
+                        setViewMode('review');
+                      }}
+                      onError={(error) => {
+                        console.error('上传失败:', error);
+                      }}
+                      disabled={isRecording}
+                    />
+                    <p className="mt-3 text-xs text-gray-500 text-center">
+                      支持 MP3、WAV、WebM 等格式
+                    </p>
+                  </div>
                   
                   {/* 已标记的困惑点 */}
                   {anchors.length > 0 && (
@@ -1849,124 +1992,120 @@ function StudentAppContent({ isGuestFastEntry }: { isGuestFastEntry: boolean }) 
                 onAnchorMark={handleAnchorMark}
               />
             </div>
-            {showSessionHistory ? (
-              <div className="card-edu p-0 overflow-hidden" style={{ maxHeight: '500px' }}>
-                <SessionHistoryList
-                  userId={user?.id}
-                  onSessionSelect={handleLoadHistorySession}
-                  onClose={() => setShowSessionHistory(false)}
-                  activeSessionId={sessionId}
-                  maxHeight="500px"
-                  showHeader={false}
-                />
-              </div>
-            ) : dataSource === 'live' ? null : dataSource === 'video' ? (
-              <div className="card-edu p-6">
-                <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
-                  <span>🎬</span>
-                  导入视频链接
-                </h3>
-                <VideoLinkImporter
-                  onImportReady={handleVideoImportReady}
-                  onError={(error) => {
-                    console.error('视频导入失败:', error);
-                    toast.error(String(error));
-                  }}
-                  disabled={isRecording}
-                />
-              </div>
-            ) : (
-              <div className="card-edu p-6">
-                <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
-                  <span>📁</span>
-                  上传课堂录音
-                </h3>
-                <AudioUploader
-                  onTranscriptReady={async (newSegments, blob) => {
-                    // 生成新的 sessionId（而不是使用默认的 demo-session）
-                    const newSessionId = generateSessionId();
-                    // 清除旧会话的所有状态
-                    setSessionId(newSessionId);
-                    setSegments(newSegments);
-                    setAnchors([]); // 清除旧困惑点
-                    setSelectedAnchor(null); // 清除选中的困惑点
-                    clearTopics(); // 清除精选片段（使用 SWR Hook）
-                    clearSummary(); // 清除摘要（使用 SWR Hook）
-                    setNotes([]); // 清除笔记
-                    setActionItems([]); // 清除行动清单
-                    setAudioBlob(blob);
-                    setAudioUrl(null); // 清除示例音频URL
-                    setDataSource('live');
-                    setVideoSource(null);
-                    setVideoInsightItems([]);
-                    setActiveVideoInsightId(null);
-                    liveSegmentsRef.current = [];
-                    
-                    // 将转录数据保存到 IndexedDB（供教师端读取）
-                    try {
-                      const currentUserId = user?.id || ANONYMOUS_USER_ID;
-                      await db.transcripts.bulkAdd(
-                        newSegments.map((seg) => ({
-                          sessionId: newSessionId,
-                          userId: currentUserId,
-                          text: seg.text,
-                          startMs: seg.startMs,
-                          endMs: seg.endMs,
-                          confidence: seg.confidence || 1.0,
-                          isFinal: true,
-                        }))
-                      );
-                      console.log(`已保存 ${newSegments.length} 条转录到 IndexedDB, sessionId: ${newSessionId}`);
-                    } catch (e) {
-                      console.error('保存转录到 IndexedDB 失败:', e);
-                    }
-                    
-                    // 更新 classroomDataService 会话信息（供教师端读取）
-                    const duration = newSegments.length > 0 
-                      ? newSegments[newSegments.length - 1].endMs 
-                      : 0;
-                    classroomDataService.saveSession({
-                      id: newSessionId,
+            <div className="card-edu p-0 overflow-hidden" style={{ maxHeight: '500px', display: showSessionHistory ? undefined : 'none' }}>
+              <SessionHistoryList
+                userId={user?.id}
+                onSessionSelect={handleLoadHistorySession}
+                onClose={() => setShowSessionHistory(false)}
+                activeSessionId={sessionId}
+                maxHeight="500px"
+                showHeader={false}
+              />
+            </div>
+            <div className="card-edu p-6" style={{ display: dataSource === 'video' && !showSessionHistory ? undefined : 'none' }}>
+              <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
+                <span>🎬</span>
+                导入视频链接
+              </h3>
+              <VideoLinkImporter
+                onImportReady={handleVideoImportReady}
+                onError={(error) => {
+                  console.error('视频导入失败:', error);
+                  toast.error(String(error));
+                }}
+                disabled={isRecording}
+              />
+            </div>
+            <div className="card-edu p-6" style={{ display: dataSource === 'demo' && !showSessionHistory ? undefined : 'none' }}>
+              <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
+                <span>📁</span>
+                上传课堂录音
+              </h3>
+              <AudioUploader
+                onTranscriptReady={async (newSegments, blob) => {
+                  // 生成新的 sessionId（而不是使用默认的 demo-session）
+                  const newSessionId = generateSessionId();
+                  // 清除旧会话的所有状态
+                  setSessionId(newSessionId);
+                  setSegments(newSegments);
+                  setAnchors([]); // 清除旧困惑点
+                  setSelectedAnchor(null); // 清除选中的困惑点
+                  clearTopics(); // 清除精选片段（使用 SWR Hook）
+                  clearSummary(); // 清除摘要（使用 SWR Hook）
+                  setNotes([]); // 清除笔记
+                  setActionItems([]); // 清除行动清单
+                  setAudioBlob(blob);
+                  setAudioUrl(null); // 清除示例音频URL
+                  setDataSource('live');
+                  setVideoSource(null);
+                  setVideoInsightItems([]);
+                  setActiveVideoInsightId(null);
+                  liveSegmentsRef.current = [];
+                  
+                  // 将转录数据保存到 IndexedDB（供教师端读取）
+                  try {
+                    const currentUserId = user?.id || ANONYMOUS_USER_ID;
+                    await db.transcripts.bulkAdd(
+                      newSegments.map((seg) => ({
+                        sessionId: newSessionId,
+                        userId: currentUserId,
+                        text: seg.text,
+                        startMs: seg.startMs,
+                        endMs: seg.endMs,
+                        confidence: seg.confidence || 1.0,
+                        isFinal: true,
+                      }))
+                    );
+                    console.log(`已保存 ${newSegments.length} 条转录到 IndexedDB, sessionId: ${newSessionId}`);
+                  } catch (e) {
+                    console.error('保存转录到 IndexedDB 失败:', e);
+                  }
+                  
+                  // 更新 classroomDataService 会话信息（供教师端读取）
+                  const duration = newSegments.length > 0 
+                    ? newSegments[newSegments.length - 1].endMs 
+                    : 0;
+                  classroomDataService.saveSession({
+                    id: newSessionId,
+                    subject: UIConfig.defaultSubject,
+                    topic: UIConfig.defaultLessonTitle,
+                    teacherName: UIConfig.defaultTeacher || 'Teacher',
+                    status: 'completed',
+                    duration,
+                    createdBy: studentId,
+                  });
+                  
+                  // 保存上传的音频到 IndexedDB 历史记录
+                  if (blob) {
+                    const currentUserId = user?.id || ANONYMOUS_USER_ID;
+                    saveAudioSession(blob, newSessionId, currentUserId, {
                       subject: UIConfig.defaultSubject,
                       topic: UIConfig.defaultLessonTitle,
-                      teacherName: UIConfig.defaultTeacher || 'Teacher',
-                      status: 'completed',
                       duration,
-                      createdBy: studentId,
-                    });
-                    
-                    // 保存上传的音频到 IndexedDB 历史记录
-                    if (blob) {
-                      const currentUserId = user?.id || ANONYMOUS_USER_ID;
-                      saveAudioSession(blob, newSessionId, currentUserId, {
-                        subject: UIConfig.defaultSubject,
-                        topic: UIConfig.defaultLessonTitle,
-                        duration,
-                      }).catch(err => console.error('保存上传音频到历史失败:', err));
-                    }
-                    
-                    // 构建时间轴
-                    const tl = memoryService.buildTimeline(
-                      newSessionId,
-                      newSegments,
-                      [], // 新会话没有困惑点
-                      { subject: UIConfig.defaultSubject, teacher: UIConfig.defaultTeacher || 'Teacher', date: new Date().toISOString().split('T')[0] }
-                    );
-                    setTimeline(tl);
-                    
-                    // 自动切换到复习模式
-                    setViewMode('review');
-                  }}
-                  onError={(error) => {
-                    console.error('上传失败:', error);
-                  }}
-                  disabled={isRecording}
-                />
-                <p className="mt-4 text-sm text-gray-500 text-center">
-                  支持 MP3、WAV、WebM 等格式，上传后自动转录并进入复习模式
-                </p>
-              </div>
-            )}
+                    }).catch(err => console.error('保存上传音频到历史失败:', err));
+                  }
+                  
+                  // 构建时间轴
+                  const tl = memoryService.buildTimeline(
+                    newSessionId,
+                    newSegments,
+                    [], // 新会话没有困惑点
+                    { subject: UIConfig.defaultSubject, teacher: UIConfig.defaultTeacher || 'Teacher', date: new Date().toISOString().split('T')[0] }
+                  );
+                  setTimeline(tl);
+                  
+                  // 自动切换到复习模式
+                  setViewMode('review');
+                }}
+                onError={(error) => {
+                  console.error('上传失败:', error);
+                }}
+                disabled={isRecording}
+              />
+              <p className="mt-4 text-sm text-gray-500 text-center">
+                支持 MP3、WAV、WebM 等格式，上传后自动转录并进入复习模式
+              </p>
+            </div>
             
                 {/* 已标记的困惑点 */}
                 {anchors.length > 0 && (
@@ -2023,6 +2162,7 @@ function StudentAppContent({ isGuestFastEntry }: { isGuestFastEntry: boolean }) 
                         className="w-full"
                         seekToMs={currentTime}
                         seekNonce={videoSeekNonce}
+                        playNonce={videoPlayNonce}
                         onTimeUpdate={setCurrentTime}
                         totalDurationMs={totalDuration}
                       />
@@ -2059,7 +2199,7 @@ function StudentAppContent({ isGuestFastEntry }: { isGuestFastEntry: boolean }) 
                             onSegmentTextUpdate={handleTranscriptTextUpdate}
                             enableWordExplainer={true}
                             fullContextText={segments.map(s => `[${formatTime(s.startMs)}] ${s.text}`).join('\n')}
-                            onTimestampClick={handleVideoSeek}
+                            onTimestampClick={(timeMs) => handleUnifiedSeek(timeMs, true)}
                             onMarkConfusion={(timeMs, segmentId) => {
                               handleAnchorMark(timeMs);
                             }}
@@ -2087,7 +2227,7 @@ function StudentAppContent({ isGuestFastEntry }: { isGuestFastEntry: boolean }) 
                           totalDuration={totalDuration}
                           formatTime={formatTime}
                           onSelectItem={setActiveVideoInsightId}
-                          onSeek={handleVideoSeek}
+                          onSeek={(timeMs) => handleUnifiedSeek(timeMs, true)}
                         />
                         {videoInsightItems.length === 0 && (
                           <div className="py-10 text-center">
@@ -2149,7 +2289,7 @@ function StudentAppContent({ isGuestFastEntry }: { isGuestFastEntry: boolean }) 
                             isLoading={false}
                             onResolve={() => {}}
                             sessionId={sessionId}
-                            onSeek={handleVideoSeek}
+                            onSeek={(timeMs) => handleUnifiedSeek(timeMs, true)}
                           />
                       </div>
 
@@ -2210,7 +2350,7 @@ function StudentAppContent({ isGuestFastEntry }: { isGuestFastEntry: boolean }) 
                                     setConfusionChatAnchor({ ...confusionChatAnchor, resolved: true });
                                   }}
                                   sessionId={sessionId}
-                                  onSeek={handleVideoSeek}
+                                  onSeek={(timeMs) => handleUnifiedSeek(timeMs, true)}
                                 />
                               </div>
                             </>
@@ -2243,7 +2383,7 @@ function StudentAppContent({ isGuestFastEntry }: { isGuestFastEntry: boolean }) 
                                       onClick={() => {
                                         setConfusionChatAnchor(anchor);
                                         setSelectedAnchor(anchor);
-                                        handleVideoSeek(anchor.timestamp);
+                                        handleUnifiedSeek(anchor.timestamp, true);
                                       }}
                                       className={`w-full text-left p-3 rounded-xl border transition-all hover:shadow-sm group ${
                                         anchor.resolved
@@ -2354,8 +2494,7 @@ function StudentAppContent({ isGuestFastEntry }: { isGuestFastEntry: boolean }) 
                           anchor={selectedAnchor}
                           segments={segments}
                           onSeek={(timeMs) => {
-                            setCurrentTime(timeMs);
-                            waveformRef.current?.seekTo(timeMs);
+                            handleUnifiedSeek(timeMs);
                           }}
                           onPlay={(startMs) => {
                             waveformRef.current?.seekTo(startMs);
@@ -2488,9 +2627,7 @@ function StudentAppContent({ isGuestFastEntry }: { isGuestFastEntry: boolean }) 
                                   conversationId={selectedHistoryConversation.conversationId}
                                   sessionId={sessionId}
                                   onTimestampClick={(timeMs) => {
-                                    setCurrentTime(timeMs);
-                                    waveformRef.current?.seekTo(timeMs);
-                                    waveformRef.current?.play();
+                                    handleUnifiedSeek(timeMs, true);
                                   }}
                                 />
                               </div>
@@ -2532,9 +2669,7 @@ function StudentAppContent({ isGuestFastEntry }: { isGuestFastEntry: boolean }) 
                             onActionItemsUpdate={handleActionItemsUpdate}
                             sessionId={sessionId}
                             onSeek={(timeMs) => {
-                              setCurrentTime(timeMs);
-                              waveformRef.current?.seekTo(timeMs);
-                              waveformRef.current?.play();
+                              handleUnifiedSeek(timeMs, true);
                             }}
                           />
                         )}
@@ -2694,6 +2829,7 @@ function StudentAppContent({ isGuestFastEntry }: { isGuestFastEntry: boolean }) 
                         source={videoSource}
                         seekToMs={currentTime}
                         seekNonce={videoSeekNonce}
+                        playNonce={videoPlayNonce}
                         onTimeUpdate={setCurrentTime}
                         totalDurationMs={totalDuration}
                       />
@@ -2919,9 +3055,7 @@ function StudentAppContent({ isGuestFastEntry }: { isGuestFastEntry: boolean }) 
                         initialQuestion={mobileAIQuestion}
                         isMobile={true}
                         onSeek={(timeMs) => {
-                          setCurrentTime(timeMs);
-                          waveformRef.current?.seekTo(timeMs);
-                          waveformRef.current?.play();
+                          handleUnifiedSeek(timeMs, true);
                         }}
                       />
                     )}

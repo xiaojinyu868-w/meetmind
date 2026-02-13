@@ -267,7 +267,7 @@ export function AITutor({ breakpoint, segments, isLoading: externalLoading, onRe
   }, []);
 
   // 解析时间字符串为毫秒（支持单点和范围格式，增强鲁棒性）
-  const parseTimeToMs = useCallback((time: string): number => {
+  const parseTimeToMs = useCallback((time: string): number | null => {
     try {
       // 处理范围格式 "MM:SS-MM:SS"，取开始时间
       const rangeParts = time.split('-');
@@ -284,7 +284,7 @@ export function AITutor({ breakpoint, segments, isLoading: externalLoading, onRe
     } catch (error) {
       console.warn('Failed to parse timestamp:', time, error);
     }
-    return 0;
+    return null;
   }, []);
 
   // 处理时间戳点击 - 添加视觉反馈和验证
@@ -321,6 +321,11 @@ export function AITutor({ breakpoint, segments, isLoading: externalLoading, onRe
 
       const timeString = match[1]; // 完整的时间字符串（可能包含范围）
       const startMs = parseTimeToMs(timeString);
+      if (startMs === null) {
+        parts.push(<span key={`ts-text-${match.index}`}>{match[0]}</span>);
+        lastIndex = timestampRegex.lastIndex;
+        continue;
+      }
       const isActive = seekingTimestamp === startMs;
       
       // 显示格式：如果是范围格式，显示范围；否则显示单点
