@@ -52,6 +52,58 @@ const DEFAULT_ACTION_ITEMS = [
   },
 ] as const;
 
+const MOCK_APP_MATRIX_PLUGINS = {
+  plugins: [
+    {
+      id: 'knowledge-cards',
+      name: '知识卡片',
+      version: '0.1.0',
+      description: '课堂证据卡片插件',
+      tags: ['student', 'cards'],
+      capabilities: ['citation-card', 'task-writeback'],
+      enabledByDefault: true,
+    },
+  ],
+  count: 1,
+};
+
+const MOCK_APP_MATRIX_EXECUTION = {
+  ok: true,
+  pluginId: 'knowledge-cards',
+  result: {
+    pluginId: 'knowledge-cards',
+    version: '0.1.0',
+    model: 'qwen3-max-2026-01-23',
+    trace: ['intent=复习模式：生成课堂证据知识卡片', 'strategy=context_first'],
+    cards: [
+      {
+        id: 'knowledge-card-1',
+        type: 'timeline',
+        title: '条件从句速记卡',
+        body: '先识别 if 从句，再判断主句时态，最后反推语义。',
+        priority: 'high',
+        citations: [{ startMs: 10_000, endMs: 20_000, snippet: 'mock snippet' }],
+        actions: [
+          { id: 'seek-1', label: '回放 0:10', kind: 'seek', payload: { timestamp: 10_000 } },
+          { id: 'mark-1', label: '标记已掌握', kind: 'mark_done', payload: { taskId: 'knowledge-task-1' } },
+        ],
+      },
+    ],
+    tasks: [
+      {
+        id: 'knowledge-task-1',
+        label: '复习卡片 1（0:10）',
+        reason: '先听再复述',
+        estimatedMinutes: 5,
+        relatedTimestamp: 10_000,
+      },
+    ],
+    raw: {
+      generatedAt: '2026-02-13T00:00:00.000Z',
+    },
+  },
+};
+
 function buildTutorResponse(actionItems = DEFAULT_ACTION_ITEMS) {
   return {
     explanation: {
@@ -88,6 +140,24 @@ async function mockVideoImportApi(page: Page): Promise<void> {
       status: 200,
       contentType: 'application/json',
       body: JSON.stringify(MOCK_VIDEO_IMPORT_RESPONSE),
+    });
+  });
+}
+
+async function mockAppMatrixApi(page: Page): Promise<void> {
+  await page.route('**/api/apps/plugins', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify(MOCK_APP_MATRIX_PLUGINS),
+    });
+  });
+
+  await page.route('**/api/apps/execute', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify(MOCK_APP_MATRIX_EXECUTION),
     });
   });
 }
@@ -273,6 +343,26 @@ test.describe('Closed Loop Regression', () => {
     await page.getByTestId('mode-review-button').click();
     await page.getByTestId('action-sidebar-toggle').click();
     await expect(page.getByTestId('action-item-task-replay')).toHaveAttribute('data-completed', 'true');
+  });
+
+  test('app matrix knowledge cards can run and persist task state', async ({ page }) => {
+    await mockAppMatrixApi(page);
+    await openApp(page);
+    await enterReviewMode(page);
+
+    await page.getByTestId('review-tab-apps').click();
+    await expect(page.getByTestId('app-matrix-panel')).toBeVisible();
+
+    await page.getByTestId('app-matrix-run').click();
+    await expect(page.getByTestId('app-card-knowledge-card-1')).toBeVisible();
+
+    await page.getByTestId('app-task-toggle-knowledge-task-1').click();
+    await expect(page.getByTestId('app-task-knowledge-task-1')).toHaveAttribute('data-completed', 'true');
+
+    await page.reload();
+    await page.getByTestId('mode-review-button').click();
+    await page.getByTestId('review-tab-apps').click();
+    await expect(page.getByTestId('app-task-knowledge-task-1')).toHaveAttribute('data-completed', 'true');
   });
 
   test('start-next-task seeks playback forward', async ({ page }) => {

@@ -61,6 +61,7 @@ import { HighlightsPanel } from '@/components/HighlightsPanel';
 import { SummaryPanel } from '@/components/SummaryPanel';
 import { NotesPanel } from '@/components/NotesPanel';
 import { AnchorDetailPanel } from '@/components/AnchorDetailPanel';
+import { AppMatrixPanel } from '@/components/apps/AppMatrixPanel';
 import { ConversationList } from '@/components/ConversationHistory/ConversationList';
 import { AIChat } from '@/components/AIChat';
 import { SessionHistoryList } from '@/components/SessionHistoryList';
@@ -89,8 +90,8 @@ import { MobileAIFab } from '@/components/mobile/MobileAIFab';
 type ViewMode = 'record' | 'review';
 type DataSource = 'live' | 'demo' | 'video';
 
-type ReviewTab = 'timeline' | 'highlights' | 'summary' | 'notes' | 'anchor-detail';
-type VideoWorkspaceTab = 'chat' | 'confusion' | 'highlights' | 'summary' | 'notes';
+type ReviewTab = 'timeline' | 'highlights' | 'summary' | 'notes' | 'anchor-detail' | 'apps';
+type VideoWorkspaceTab = 'chat' | 'confusion' | 'highlights' | 'summary' | 'notes' | 'apps';
 
 // 持久化状态的 key
 const APP_STATE_KEY = 'app_last_state';
@@ -1994,6 +1995,7 @@ function StudentAppContent({ isGuestFastEntry }: { isGuestFastEntry: boolean }) 
                         { key: 'confusion' as const, label: '困惑点', icon: '🎯' },
                         { key: 'highlights' as const, label: '精选', icon: '⚡' },
                         { key: 'summary' as const, label: '摘要', icon: '📝' },
+                        { key: 'apps' as const, label: '应用矩阵', icon: '🧩' },
                         { key: 'notes' as const, label: '笔记', icon: '📄' },
                       ]).map((tab) => (
                         <button
@@ -2201,6 +2203,18 @@ function StudentAppContent({ isGuestFastEntry }: { isGuestFastEntry: boolean }) 
                         />
                       )}
 
+                      {videoWorkspaceTab === 'apps' && (
+                        <AppMatrixPanel
+                          sessionId={sessionId}
+                          dataSource={dataSource}
+                          transcript={segments}
+                          anchors={anchors}
+                          summaryOverview={classSummary?.overview}
+                          keyDifficulties={classSummary?.keyDifficulties}
+                          onSeek={handleUnifiedSeek}
+                        />
+                      )}
+
                       {videoWorkspaceTab === 'notes' && (
                         <NotesPanel
                           notes={notes}
@@ -2277,6 +2291,17 @@ function StudentAppContent({ isGuestFastEntry }: { isGuestFastEntry: boolean }) 
                       >
                         📝 摘要
                         {classSummary && <span className="ml-1 text-xs text-mint-600">✓</span>}
+                      </button>
+                      <button
+                        data-testid="review-tab-apps"
+                        onClick={() => setReviewTab('apps')}
+                        className={`px-3 py-2 text-sm rounded-lg transition-all whitespace-nowrap tab-button ${
+                          reviewTab === 'apps'
+                            ? 'bg-white text-amber-600 font-medium shadow-sm'
+                            : 'text-gray-500 hover:text-navy hover:bg-white/50'
+                        }`}
+                      >
+                        🧩 应用矩阵
                       </button>
                       <button
                         onClick={() => setReviewTab('notes')}
@@ -2365,6 +2390,18 @@ function StudentAppContent({ isGuestFastEntry }: { isGuestFastEntry: boolean }) 
                               extra: { timestamps: takeaway.timestamps }
                             });
                           }}
+                        />
+                      )}
+
+                      {reviewTab === 'apps' && (
+                        <AppMatrixPanel
+                          sessionId={sessionId}
+                          dataSource={dataSource}
+                          transcript={segments}
+                          anchors={anchors}
+                          summaryOverview={classSummary?.overview}
+                          keyDifficulties={classSummary?.keyDifficulties}
+                          onSeek={handleUnifiedSeek}
                         />
                       )}
                       

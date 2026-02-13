@@ -33,6 +33,8 @@ const PUBLIC_ROUTES = [
   '/api/video/import',
   '/api/generate-topics',
   '/api/generate-summary',
+  '/api/apps/plugins',
+  '/api/apps/execute',
   '/api/feedback',   // 反馈 API（允许未登录用户提交）
   '/api/health',
 ];
