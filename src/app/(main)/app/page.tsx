@@ -90,8 +90,40 @@ import { MobileAIFab } from '@/components/mobile/MobileAIFab';
 type ViewMode = 'record' | 'review';
 type DataSource = 'live' | 'demo' | 'video';
 
-type ReviewTab = 'timeline' | 'highlights' | 'summary' | 'notes' | 'anchor-detail' | 'apps';
-type VideoWorkspaceTab = 'chat' | 'confusion' | 'highlights' | 'summary' | 'notes' | 'apps';
+type SharedWorkspaceTab = 'highlights' | 'summary' | 'notes' | 'apps';
+type WorkspaceTab = 'timeline' | 'anchor-detail' | 'chat' | 'confusion' | SharedWorkspaceTab;
+type ReviewTab = Extract<WorkspaceTab, 'timeline' | 'anchor-detail' | SharedWorkspaceTab>;
+type VideoWorkspaceTab = Extract<WorkspaceTab, 'chat' | 'confusion' | SharedWorkspaceTab>;
+
+interface WorkspaceTabConfig<T extends WorkspaceTab> {
+  key: T;
+  label: string;
+  icon: string;
+  testId?: string;
+}
+
+const SHARED_WORKSPACE_TABS: WorkspaceTabConfig<SharedWorkspaceTab>[] = [
+  { key: 'highlights', label: '精选', icon: '⚡' },
+  { key: 'summary', label: '摘要', icon: '📝' },
+  { key: 'apps', label: '应用矩阵', icon: '🧩', testId: 'review-tab-apps' },
+  { key: 'notes', label: '笔记', icon: '📄' },
+];
+
+const VIDEO_WORKSPACE_TABS: WorkspaceTabConfig<VideoWorkspaceTab>[] = [
+  { key: 'chat', label: '对话', icon: '💬' },
+  { key: 'confusion', label: '困惑点', icon: '🎯' },
+  ...SHARED_WORKSPACE_TABS,
+];
+
+const REVIEW_WORKSPACE_TABS: WorkspaceTabConfig<ReviewTab>[] = [
+  { key: 'timeline', label: '时间轴', icon: '📋' },
+  { key: 'anchor-detail', label: '困惑点', icon: '🎯' },
+  ...SHARED_WORKSPACE_TABS,
+];
+
+function isSharedWorkspaceTab(tab: WorkspaceTab): tab is SharedWorkspaceTab {
+  return tab === 'highlights' || tab === 'summary' || tab === 'notes' || tab === 'apps';
+}
 
 // 持久化状态的 key
 const APP_STATE_KEY = 'app_last_state';
@@ -1231,6 +1263,95 @@ function StudentAppContent({ isGuestFastEntry }: { isGuestFastEntry: boolean }) 
     ? segments[segments.length - 1].endMs 
     : 0;
 
+  const renderSharedWorkspacePanel = useCallback((tab: SharedWorkspaceTab) => {
+    if (tab === 'highlights') {
+      return (
+        <HighlightsPanel
+          topics={highlightTopics}
+          selectedTopic={selectedTopic}
+          onTopicSelect={setSelectedTopic}
+          onPlayTopic={handlePlayTopic}
+          onSeek={handleUnifiedSeek}
+          onPlayAll={handlePlayAll}
+          isPlayingAll={isPlayingAll}
+          playAllIndex={playAllIndex}
+          currentTime={currentTime}
+          totalDuration={totalDuration}
+          isLoading={isLoadingTopics}
+          onGenerate={handleGenerateTopics}
+          onRegenerateByTheme={handleRegenerateByTheme}
+          onClear={handleClearTopics}
+        />
+      );
+    }
+
+    if (tab === 'summary') {
+      return (
+        <SummaryPanel
+          summary={classSummary}
+          isLoading={isLoadingSummary}
+          onGenerate={handleGenerateSummary}
+          onSeek={handleUnifiedSeek}
+          onAddNote={(text, takeaway) => {
+            handleAddNote(text, 'takeaways', {
+              selectedText: takeaway.label,
+              extra: { timestamps: takeaway.timestamps }
+            });
+          }}
+        />
+      );
+    }
+
+    if (tab === 'apps') {
+      return (
+        <AppMatrixPanel
+          sessionId={sessionId}
+          dataSource={dataSource}
+          transcript={segments}
+          anchors={anchors}
+          summaryOverview={classSummary?.overview}
+          keyDifficulties={classSummary?.keyDifficulties}
+          onSeek={handleUnifiedSeek}
+        />
+      );
+    }
+
+    return (
+      <NotesPanel
+        notes={notes}
+        onAddNote={handleAddNote}
+        onUpdateNote={handleUpdateNote}
+        onDeleteNote={handleDeleteNote}
+        onSeek={handleUnifiedSeek}
+      />
+    );
+  }, [
+    anchors,
+    classSummary,
+    currentTime,
+    dataSource,
+    handleAddNote,
+    handleClearTopics,
+    handleDeleteNote,
+    handleGenerateSummary,
+    handleGenerateTopics,
+    handlePlayAll,
+    handlePlayTopic,
+    handleRegenerateByTheme,
+    handleUnifiedSeek,
+    handleUpdateNote,
+    highlightTopics,
+    isLoadingSummary,
+    isLoadingTopics,
+    isPlayingAll,
+    notes,
+    playAllIndex,
+    segments,
+    selectedTopic,
+    sessionId,
+    totalDuration,
+  ]);
+
   const timelineForView = timeline ? {
     lessonId: timeline.lessonId,
     segments: timeline.segments.map(s => ({
@@ -1990,14 +2111,7 @@ function StudentAppContent({ isGuestFastEntry }: { isGuestFastEntry: boolean }) 
                       className="flex items-center gap-0.5 px-3 py-2 border-b shrink-0 overflow-x-auto"
                       style={{ background: 'var(--edu-bg-soft)', borderColor: 'var(--edu-border-light)' }}
                     >
-                      {([
-                        { key: 'chat' as const, label: '对话', icon: '💬' },
-                        { key: 'confusion' as const, label: '困惑点', icon: '🎯' },
-                        { key: 'highlights' as const, label: '精选', icon: '⚡' },
-                        { key: 'summary' as const, label: '摘要', icon: '📝' },
-                        { key: 'apps' as const, label: '应用矩阵', icon: '🧩' },
-                        { key: 'notes' as const, label: '笔记', icon: '📄' },
-                      ]).map((tab) => (
+                      {VIDEO_WORKSPACE_TABS.map((tab) => (
                         <button
                           key={tab.key}
                           onClick={() => {
@@ -2169,61 +2283,7 @@ function StudentAppContent({ isGuestFastEntry }: { isGuestFastEntry: boolean }) 
                         </div>
                       )}
 
-                      {videoWorkspaceTab === 'highlights' && (
-                        <HighlightsPanel
-                          topics={highlightTopics}
-                          selectedTopic={selectedTopic}
-                          onTopicSelect={setSelectedTopic}
-                          onPlayTopic={handlePlayTopic}
-                          onSeek={handleVideoSeek}
-                          onPlayAll={handlePlayAll}
-                          isPlayingAll={isPlayingAll}
-                          playAllIndex={playAllIndex}
-                          currentTime={currentTime}
-                          totalDuration={totalDuration}
-                          isLoading={isLoadingTopics}
-                          onGenerate={handleGenerateTopics}
-                          onRegenerateByTheme={handleRegenerateByTheme}
-                          onClear={handleClearTopics}
-                        />
-                      )}
-
-                      {videoWorkspaceTab === 'summary' && (
-                        <SummaryPanel
-                          summary={classSummary}
-                          isLoading={isLoadingSummary}
-                          onGenerate={handleGenerateSummary}
-                          onSeek={handleTimelineClick}
-                          onAddNote={(text, takeaway) => {
-                            handleAddNote(text, 'takeaways', {
-                              selectedText: takeaway.label,
-                              extra: { timestamps: takeaway.timestamps }
-                            });
-                          }}
-                        />
-                      )}
-
-                      {videoWorkspaceTab === 'apps' && (
-                        <AppMatrixPanel
-                          sessionId={sessionId}
-                          dataSource={dataSource}
-                          transcript={segments}
-                          anchors={anchors}
-                          summaryOverview={classSummary?.overview}
-                          keyDifficulties={classSummary?.keyDifficulties}
-                          onSeek={handleUnifiedSeek}
-                        />
-                      )}
-
-                      {videoWorkspaceTab === 'notes' && (
-                        <NotesPanel
-                          notes={notes}
-                          onAddNote={handleAddNote}
-                          onUpdateNote={handleUpdateNote}
-                          onDeleteNote={handleDeleteNote}
-                          onSeek={handleTimelineClick}
-                        />
-                      )}
+                      {isSharedWorkspaceTab(videoWorkspaceTab) && renderSharedWorkspacePanel(videoWorkspaceTab)}
                     </div>
                   </div>
                 </div>
@@ -2244,78 +2304,31 @@ function StudentAppContent({ isGuestFastEntry }: { isGuestFastEntry: boolean }) 
                       className="flex items-center gap-1 px-3 py-2.5 border-b overflow-x-auto flex-shrink-0 relative z-10 tab-buttons-container" 
                       style={{ background: 'var(--edu-bg-soft)', borderColor: 'var(--edu-border-light)' }}
                     >
-                      <button
-                        data-onboarding="timeline"
-                        onClick={() => setReviewTab('timeline')}
-                        className={`px-3 py-2 text-sm rounded-lg transition-all whitespace-nowrap tab-button ${
-                          reviewTab === 'timeline'
-                            ? 'bg-white text-amber-600 font-medium shadow-sm'
-                            : 'text-gray-500 hover:text-navy hover:bg-white/50'
-                        }`}
-                      >
-                        📋 时间轴
-                      </button>
-                      <button
-                        onClick={() => setReviewTab('anchor-detail')}
-                        className={`px-3 py-2 text-sm rounded-lg transition-all whitespace-nowrap tab-button ${
-                          reviewTab === 'anchor-detail'
-                            ? 'bg-white text-amber-600 font-medium shadow-sm'
-                            : 'text-gray-500 hover:text-navy hover:bg-white/50'
-                        }`}
-                      >
-                        🎯 困惑点
-                        {selectedAnchor && !selectedAnchor.resolved && (
-                          <span className="ml-1 w-2 h-2 bg-coral rounded-full inline-block animate-pulse" />
-                        )}
-                      </button>
-                      <button
-                        onClick={() => setReviewTab('highlights')}
-                        className={`px-3 py-2 text-sm rounded-lg transition-all whitespace-nowrap tab-button ${
-                          reviewTab === 'highlights'
-                            ? 'bg-white text-amber-600 font-medium shadow-sm'
-                            : 'text-gray-500 hover:text-navy hover:bg-white/50'
-                        }`}
-                      >
-                        ⚡ 精选
-                        {highlightTopics.length > 0 && (
-                          <span className="ml-1 text-xs text-skyblue-600">({highlightTopics.length})</span>
-                        )}
-                      </button>
-                      <button
-                        onClick={() => setReviewTab('summary')}
-                        className={`px-3 py-2 text-sm rounded-lg transition-all whitespace-nowrap tab-button ${
-                          reviewTab === 'summary'
-                            ? 'bg-white text-amber-600 font-medium shadow-sm'
-                            : 'text-gray-500 hover:text-navy hover:bg-white/50'
-                        }`}
-                      >
-                        📝 摘要
-                        {classSummary && <span className="ml-1 text-xs text-mint-600">✓</span>}
-                      </button>
-                      <button
-                        data-testid="review-tab-apps"
-                        onClick={() => setReviewTab('apps')}
-                        className={`px-3 py-2 text-sm rounded-lg transition-all whitespace-nowrap tab-button ${
-                          reviewTab === 'apps'
-                            ? 'bg-white text-amber-600 font-medium shadow-sm'
-                            : 'text-gray-500 hover:text-navy hover:bg-white/50'
-                        }`}
-                      >
-                        🧩 应用矩阵
-                      </button>
-                      <button
-                        onClick={() => setReviewTab('notes')}
-                        className={`px-3 py-2 text-sm rounded-lg transition-all whitespace-nowrap tab-button ${
-                          reviewTab === 'notes'
-                            ? 'bg-white text-amber-600 font-medium shadow-sm'
-                            : 'text-gray-500 hover:text-navy hover:bg-white/50'
-                        }`}
-                      >
-                        📄 笔记
-                        {notes.length > 0 && (
-                          <span className="ml-1 text-xs text-amber-600">({notes.length})</span>
-                        )}
-                      </button>
+                      {REVIEW_WORKSPACE_TABS.map((tab) => (
+                        <button
+                          key={tab.key}
+                          data-onboarding={tab.key === 'timeline' ? 'timeline' : undefined}
+                          data-testid={tab.testId}
+                          onClick={() => setReviewTab(tab.key)}
+                          className={`px-3 py-2 text-sm rounded-lg transition-all whitespace-nowrap tab-button ${
+                            reviewTab === tab.key
+                              ? 'bg-white text-amber-600 font-medium shadow-sm'
+                              : 'text-gray-500 hover:text-navy hover:bg-white/50'
+                          }`}
+                        >
+                          {tab.icon} {tab.label}
+                          {tab.key === 'anchor-detail' && selectedAnchor && !selectedAnchor.resolved && (
+                            <span className="ml-1 w-2 h-2 bg-coral rounded-full inline-block animate-pulse" />
+                          )}
+                          {tab.key === 'highlights' && highlightTopics.length > 0 && (
+                            <span className="ml-1 text-xs text-skyblue-600">({highlightTopics.length})</span>
+                          )}
+                          {tab.key === 'summary' && classSummary && <span className="ml-1 text-xs text-mint-600">✓</span>}
+                          {tab.key === 'notes' && notes.length > 0 && (
+                            <span className="ml-1 text-xs text-amber-600">({notes.length})</span>
+                          )}
+                        </button>
+                      ))}
                     </div>
                     
                     {/* 标签页内容 */}
@@ -2359,61 +2372,7 @@ function StudentAppContent({ isGuestFastEntry }: { isGuestFastEntry: boolean }) 
                         />
                       )}
                       
-                      {reviewTab === 'highlights' && (
-                        <HighlightsPanel
-                          topics={highlightTopics}
-                          selectedTopic={selectedTopic}
-                          onTopicSelect={setSelectedTopic}
-                          onPlayTopic={handlePlayTopic}
-                          onSeek={handleTimelineClick}
-                          onPlayAll={handlePlayAll}
-                          isPlayingAll={isPlayingAll}
-                          playAllIndex={playAllIndex}
-                          currentTime={currentTime}
-                          totalDuration={totalDuration}
-                          isLoading={isLoadingTopics}
-                          onGenerate={handleGenerateTopics}
-                          onRegenerateByTheme={handleRegenerateByTheme}
-                          onClear={handleClearTopics}
-                        />
-                      )}
-                      
-                      {reviewTab === 'summary' && (
-                        <SummaryPanel
-                          summary={classSummary}
-                          isLoading={isLoadingSummary}
-                          onGenerate={handleGenerateSummary}
-                          onSeek={handleTimelineClick}
-                          onAddNote={(text, takeaway) => {
-                            handleAddNote(text, 'takeaways', {
-                              selectedText: takeaway.label,
-                              extra: { timestamps: takeaway.timestamps }
-                            });
-                          }}
-                        />
-                      )}
-
-                      {reviewTab === 'apps' && (
-                        <AppMatrixPanel
-                          sessionId={sessionId}
-                          dataSource={dataSource}
-                          transcript={segments}
-                          anchors={anchors}
-                          summaryOverview={classSummary?.overview}
-                          keyDifficulties={classSummary?.keyDifficulties}
-                          onSeek={handleUnifiedSeek}
-                        />
-                      )}
-                      
-                      {reviewTab === 'notes' && (
-                        <NotesPanel
-                          notes={notes}
-                          onAddNote={handleAddNote}
-                          onUpdateNote={handleUpdateNote}
-                          onDeleteNote={handleDeleteNote}
-                          onSeek={handleTimelineClick}
-                        />
-                      )}
+                      {isSharedWorkspaceTab(reviewTab) && renderSharedWorkspacePanel(reviewTab)}
                     </div>
                   </div>
                 }
