@@ -10,6 +10,7 @@ export const BILIBILI_USER_AGENT =
   'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36';
 const BILI_FETCH_TIMEOUT_MS = Number.parseInt(process.env.BILI_FETCH_TIMEOUT_MS || '12000', 10);
 const BILI_FETCH_MAX_RETRIES = Number.parseInt(process.env.BILI_FETCH_MAX_RETRIES || '2', 10);
+const BILI_AUDIO_DOWNLOAD_TIMEOUT_MS = Number.parseInt(process.env.BILI_AUDIO_DOWNLOAD_TIMEOUT_MS || '600000', 10); // 10 min for large audio
 
 export type BilibiliSourceMode = 'bili-native' | 'bili-subtitle';
 
@@ -403,50 +404,58 @@ export async function downloadBiliAudio(
     headers.Cookie = process.env.BILIBILI_COOKIE;
   }
 
-  const response = await fetchWithRetry(
-    audioUrl,
-    {
-      headers,
-      redirect: 'follow',
-    },
-    'B站音频下载'
-  );
+  const controller = new AbortController();
+  const downloadTimeout = setTimeout(() => controller.abort(), BILI_AUDIO_DOWNLOAD_TIMEOUT_MS);
 
-  const hasCookie = Boolean(options.cookie || process.env.BILIBILI_COOKIE);
-  if (response.status === 401 || response.status === 403 || response.status === 412) {
-    if (hasCookie) {
+  try {
+    const response = await fetchWithRetry(
+      audioUrl,
+      {
+        headers,
+        redirect: 'follow',
+        signal: controller.signal,
+      },
+      'B站音频下载'
+    );
+
+    const hasCookie = Boolean(options.cookie || process.env.BILIBILI_COOKIE);
+    if (response.status === 401 || response.status === 403 || response.status === 412) {
+      if (hasCookie) {
+        throw new BilibiliImportError(
+          'BILI_COOKIE_EXPIRED',
+          'B站登录状态已过期，请更新 Cookie',
+          `HTTP ${response.status}`
+        );
+      }
       throw new BilibiliImportError(
-        'BILI_COOKIE_EXPIRED',
-        'B站登录状态已过期，请更新 Cookie',
+        'BILI_AUDIO_DOWNLOAD_FORBIDDEN',
+        'B站音频下载被拒绝',
         `HTTP ${response.status}`
       );
     }
-    throw new BilibiliImportError(
-      'BILI_AUDIO_DOWNLOAD_FORBIDDEN',
-      'B站音频下载被拒绝',
-      `HTTP ${response.status}`
+
+    if (!response.ok || !response.body) {
+      throw new BilibiliImportError(
+        'BILI_AUDIO_DOWNLOAD_FAILED',
+        'B站音频下载失败',
+        `HTTP ${response.status}`
+      );
+    }
+
+    await fs.promises.mkdir(path.dirname(outputPath), { recursive: true });
+    const writable = fs.createWriteStream(outputPath);
+    await pipeline(
+      Readable.fromWeb(response.body as unknown as WebReadableStream<Uint8Array>),
+      writable
     );
+
+    return {
+      outputPath,
+      ext: extFromContentType(response.headers.get('content-type')),
+    };
+  } finally {
+    clearTimeout(downloadTimeout);
   }
-
-  if (!response.ok || !response.body) {
-    throw new BilibiliImportError(
-      'BILI_AUDIO_DOWNLOAD_FAILED',
-      'B站音频下载失败',
-      `HTTP ${response.status}`
-    );
-  }
-
-  await fs.promises.mkdir(path.dirname(outputPath), { recursive: true });
-  const writable = fs.createWriteStream(outputPath);
-  await pipeline(
-    Readable.fromWeb(response.body as unknown as WebReadableStream<Uint8Array>),
-    writable
-  );
-
-  return {
-    outputPath,
-    ext: extFromContentType(response.headers.get('content-type')),
-  };
 }
 
 export function normalizeBiliAudioExt(rawExt: string): string {

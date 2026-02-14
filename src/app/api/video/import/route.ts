@@ -768,6 +768,7 @@ async function getAudioDurationSec(filePath: string): Promise<number> {
 
 const BILI_MIN_AUDIO_BYTES = 10 * 1024; // 10 KB – smaller than this is certainly broken
 const BILI_MIN_AUDIO_DURATION_RATIO = 0.25; // mp3 duration must be ≥ 25 % of declared video duration
+const BILI_MIN_PARTIAL_AUDIO_SEC = 60; // 如果已下载音频 >= 60s，即使不到 25% 也允许部分转录
 
 async function executeBiliNativeStage(videoUrl: string, baseName: string, userCookie?: string): Promise<StageResult> {
   // 用户 Cookie 优先，其次 .env 全局 Cookie
@@ -851,11 +852,18 @@ async function executeBiliNativeStage(videoUrl: string, baseName: string, userCo
     if (viewMeta.durationSec && viewMeta.durationSec > 30 && mp3Duration > 0) {
       const ratio = mp3Duration / viewMeta.durationSec;
       if (ratio < BILI_MIN_AUDIO_DURATION_RATIO) {
-        throw new ImportPipelineError(
-          'BILI_AUDIO_INCOMPLETE',
-          'B站音频下载不完整',
-          `mp3 duration ${mp3Duration.toFixed(1)}s is only ${(ratio * 100).toFixed(0)}% of video ${viewMeta.durationSec}s (min ${(BILI_MIN_AUDIO_DURATION_RATIO * 100).toFixed(0)}%)`
-        );
+        // 长视频部分下载：如果已下载音频 >= 60s，则允许部分转录而不报错
+        if (mp3Duration >= BILI_MIN_PARTIAL_AUDIO_SEC) {
+          console.log(
+            `[video-import] bili audio partial: ${mp3Duration.toFixed(1)}s / ${viewMeta.durationSec}s (${(ratio * 100).toFixed(0)}%), allowing partial transcription`
+          );
+        } else {
+          throw new ImportPipelineError(
+            'BILI_AUDIO_INCOMPLETE',
+            'B站音频下载不完整',
+            `mp3 duration ${mp3Duration.toFixed(1)}s is only ${(ratio * 100).toFixed(0)}% of video ${viewMeta.durationSec}s (min ${(BILI_MIN_AUDIO_DURATION_RATIO * 100).toFixed(0)}%)`
+          );
+        }
       }
     }
 
