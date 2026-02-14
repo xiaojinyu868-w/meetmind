@@ -145,6 +145,50 @@
   margin-top: 14px;
 }
 
+.tabRow {
+  margin-top: 14px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.tabButton {
+  border: 1px solid rgba(102, 131, 160, 0.2);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.72);
+  color: var(--mm-ink-mid);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1;
+  padding: 8px 12px;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  transition: all 160ms ease;
+}
+
+.tabButton:hover {
+  background: rgba(255, 255, 255, 0.9);
+  border-color: rgba(184, 133, 51, 0.28);
+}
+
+.tabButtonActive {
+  color: #85591d;
+  border-color: rgba(184, 133, 51, 0.32);
+  background: linear-gradient(160deg, rgba(255, 248, 231, 0.95), rgba(255, 238, 207, 0.85));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.84),
+    0 8px 14px rgba(184, 133, 51, 0.16);
+}
+
+.tabBadge {
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: #46b294;
+  box-shadow: 0 0 0 2px rgba(70, 178, 148, 0.2);
+}
+
 .metaChip {
   border-radius: 999px;
   border: 1px solid rgba(78, 108, 138, 0.16);
@@ -153,6 +197,129 @@
   font-size: 11px;
   color: var(--mm-ink-mid);
   white-space: nowrap;
+}
+
+.catalog {
+  margin-top: 14px;
+  border-radius: 26px;
+  border: 1px solid rgba(255, 255, 255, 0.76);
+  background: linear-gradient(155deg, rgba(255, 255, 255, 0.76), rgba(255, 255, 255, 0.58));
+  box-shadow:
+    0 18px 34px rgba(106, 128, 150, 0.17),
+    inset 0 1px 0 rgba(255, 255, 255, 0.85);
+  padding: 18px;
+}
+
+.catalogTitle {
+  margin: 0;
+  color: var(--mm-ink-strong);
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.catalogSubtitle {
+  margin: 8px 0 0;
+  color: var(--mm-ink-soft);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.catalogGrid {
+  margin-top: 14px;
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(auto-fit, minmax(235px, 1fr));
+}
+
+.catalogCard {
+  border-radius: 18px;
+  border: 1px solid rgba(255, 255, 255, 0.82);
+  background: rgba(255, 255, 255, 0.82);
+  padding: 12px;
+  box-shadow:
+    0 10px 20px rgba(105, 124, 146, 0.13),
+    inset 0 1px 0 rgba(255, 255, 255, 0.86);
+}
+
+.catalogHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.catalogName {
+  margin: 0;
+  font-size: 14px;
+  color: var(--mm-ink-strong);
+  font-weight: 700;
+}
+
+.catalogDone {
+  border-radius: 999px;
+  border: 1px solid rgba(62, 160, 129, 0.36);
+  background: rgba(235, 250, 245, 0.9);
+  color: #2b8c70;
+  font-size: 10px;
+  font-weight: 600;
+  padding: 3px 8px;
+}
+
+.catalogDesc {
+  margin: 8px 0 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--mm-ink-mid);
+}
+
+.catalogMeta {
+  margin: 8px 0 0;
+  font-size: 11px;
+  line-height: 1.4;
+  color: #7b8fa3;
+}
+
+.catalogActions {
+  margin-top: 10px;
+  display: flex;
+  gap: 8px;
+}
+
+.catalogPrimary,
+.catalogSecondary {
+  flex: 1;
+  border-radius: 11px;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 7px 10px;
+  transition: all 160ms ease;
+}
+
+.catalogPrimary {
+  border: 1px solid rgba(221, 159, 62, 0.36);
+  color: #8f5d1c;
+  background: rgba(255, 247, 228, 0.88);
+}
+
+.catalogPrimary:hover {
+  transform: translateY(-1px);
+  background: rgba(255, 240, 205, 0.92);
+}
+
+.catalogSecondary {
+  border: 1px solid rgba(102, 131, 160, 0.24);
+  color: #4f677f;
+  background: rgba(245, 250, 255, 0.85);
+}
+
+.catalogSecondary:hover:not(:disabled) {
+  transform: translateY(-1px);
+  background: rgba(236, 245, 255, 0.95);
+}
+
+.catalogSecondary:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
 }
 
 .pluginSelect {
@@ -543,9 +710,29 @@
   .metaChip {
     white-space: normal;
   }
+
+  .catalogGrid {
+    grid-template-columns: 1fr;
+  }
 }
 
 @container (max-width: 640px) {
+  .tabRow {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    padding-bottom: 2px;
+    scrollbar-width: none;
+  }
+
+  .tabRow::-webkit-scrollbar {
+    display: none;
+  }
+
+  .tabButton {
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+
   .cardGrid {
     grid-template-columns: 1fr;
   }
@@ -578,6 +765,11 @@
   .controls {
     width: 100%;
     justify-content: space-between;
+  }
+
+  .catalog {
+    border-radius: 22px;
+    padding: 14px;
   }
 }
 
