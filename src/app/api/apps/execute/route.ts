@@ -9,6 +9,7 @@ export async function POST(request: NextRequest) {
   try {
     const payload = (await request.json()) as Partial<AppExecuteRequest>;
     const appKey = typeof payload.appKey === 'string' ? payload.appKey.trim() : '';
+    const traceHints: string[] = [];
 
     if (!payload?.input?.transcript || !Array.isArray(payload.input.transcript)) {
       return NextResponse.json(
@@ -24,9 +25,19 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    let pluginId = typeof payload.pluginId === 'string' ? payload.pluginId : undefined;
-    if (!pluginId && appKey) {
-      pluginId = getWorkshopAppByKey(appKey)?.pluginId;
+    const requestedPluginId = typeof payload.pluginId === 'string' ? payload.pluginId.trim() : '';
+    const catalogPluginId = appKey ? getWorkshopAppByKey(appKey)?.pluginId : undefined;
+
+    // appKey 是新链路的唯一分发依据，避免前端陈旧 pluginId 造成 500
+    let pluginId: string | undefined = catalogPluginId || (requestedPluginId || undefined);
+    if (catalogPluginId && requestedPluginId && requestedPluginId !== catalogPluginId) {
+      traceHints.push(`plugin_override=${requestedPluginId}->${catalogPluginId}`);
+    }
+
+    // 兼容旧链路：若传入未知 pluginId，回退为自动匹配，避免直接失败
+    if (!catalogPluginId && pluginId && !appPluginRegistry.get(pluginId)) {
+      traceHints.push(`legacy_pluginid_unknown=${pluginId}`);
+      pluginId = undefined;
     }
 
     const context = buildExecutionContext({
@@ -35,12 +46,14 @@ export async function POST(request: NextRequest) {
     });
     const result = await appPluginRegistry.execute(context, pluginId);
 
-    const tracedResult = !appKey
-      ? {
-          ...result,
-          trace: [...result.trace, 'legacy_appkey_fallback'],
-        }
-      : result;
+    const tracedResult = {
+      ...result,
+      trace: [
+        ...result.trace,
+        ...traceHints,
+        ...(!appKey ? ['legacy_appkey_fallback'] : []),
+      ],
+    };
 
     return NextResponse.json({
       ok: true,

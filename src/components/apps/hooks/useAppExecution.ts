@@ -131,7 +131,6 @@ export function useAppExecution(params: UseAppExecutionParams): UseAppExecutionR
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             appKey: app.key,
-            pluginId: app.pluginId,
             model,
             goal: {
               intent: app.intent,
@@ -175,7 +174,7 @@ export function useAppExecution(params: UseAppExecutionParams): UseAppExecutionR
         return null;
       }
     },
-    [anchors, app.intent, app.key, app.pluginId, dataSource, keyDifficulties, model, result, sessionId, summaryOverview, transcript]
+    [anchors, app.intent, app.key, dataSource, keyDifficulties, model, result, sessionId, summaryOverview, transcript]
   );
 
   useEffect(() => {

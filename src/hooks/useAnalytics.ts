@@ -12,6 +12,9 @@
 
 import { useCallback, useEffect, useRef } from 'react';
 
+let analyticsNetworkWarned = false;
+let analyticsBackoffUntil = 0;
+
 // 生成唯一会话ID
 function generateSessionToken(): string {
   return `${Date.now()}-${Math.random().toString(36).substring(2, 15)}`;
@@ -43,6 +46,10 @@ function checkIsNewUser(): boolean {
 
 // 数据上报函数
 async function sendAnalytics(payload: Record<string, unknown>, useBeacon = false): Promise<boolean> {
+  if (Date.now() < analyticsBackoffUntil) {
+    return false;
+  }
+
   const url = '/api/analytics';
   const data = JSON.stringify(payload);
   
@@ -59,9 +66,20 @@ async function sendAnalytics(payload: Record<string, unknown>, useBeacon = false
       body: data,
       keepalive: true, // 允许在页面卸载时继续请求
     });
-    return response.ok;
+    if (response.ok) {
+      analyticsNetworkWarned = false;
+      return true;
+    }
+
+    // analytics 失败不影响主流程：进入短暂退避，避免高频重试
+    analyticsBackoffUntil = Date.now() + 60_000;
+    return false;
   } catch {
-    console.warn('[Analytics] Failed to send data');
+    analyticsBackoffUntil = Date.now() + 60_000;
+    if (!analyticsNetworkWarned) {
+      analyticsNetworkWarned = true;
+      console.warn('[Analytics] Failed to send data');
+    }
     return false;
   }
 }
