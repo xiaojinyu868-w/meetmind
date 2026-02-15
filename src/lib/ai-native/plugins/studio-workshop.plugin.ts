@@ -257,6 +257,21 @@ function normalizePodcastSpeaker(raw: string | undefined, index: number, mapping
   return normalized;
 }
 
+function hasTimestampPollution(rounds: VolcPodcastResult['rounds']): boolean {
+  if (!Array.isArray(rounds) || rounds.length === 0) return false;
+  let polluted = 0;
+  rounds.forEach((round) => {
+    const text = round.text?.trim() || '';
+    if (!text) return;
+    const hits = countTimestampHints(text);
+    const hasMeta = PODCAST_META_PATTERN.test(text) || PODCAST_SEGMENT_LABEL_PATTERN.test(text);
+    if (hits > 0 || hasMeta) polluted += 1;
+    PODCAST_META_PATTERN.lastIndex = 0;
+    PODCAST_SEGMENT_LABEL_PATTERN.lastIndex = 0;
+  });
+  return polluted >= Math.max(2, Math.ceil(rounds.length * 0.25));
+}
+
 async function generatePodcastPlan(context: AppExecutionContext, model: string): Promise<PodcastPlan | null> {
   const corpus = buildPodcastTranscriptCorpus(context.input.transcript, 8500);
   if (!corpus) return null;
@@ -417,7 +432,8 @@ function buildPodcastInputText(
   output: StudioOutput | null,
   evidenceSegments: TranscriptSegment[],
   cards: AppExecutionResult['cards'],
-  podcastPlan: PodcastPlan | null
+  podcastPlan: PodcastPlan | null,
+  strictNoTimestamp: boolean = false
 ): string {
   const scriptSeed = extractScriptLines(cards)
     .map((line) => sanitizePodcastNarration(`${line.speaker}：${line.line}`))
@@ -463,6 +479,7 @@ function buildPodcastInputText(
     corpus ? `课堂素材（无时间戳清洗版）：\n${corpus}` : '',
     evidenceSeed ? `关键证据片段（供交叉核验）：\n${evidenceSeed}` : '',
     `输出预期：围绕知识点讲“是什么-为什么-怎么用”，减少口头禅，语言自然。`,
+    strictNoTimestamp ? `纠偏指令：本次输出若出现任何“分/秒/00:00”样式时间表达，即视为失败，请彻底避免。` : '',
   ]
     .filter(Boolean)
     .join('\n\n')
@@ -859,6 +876,20 @@ export const studioWorkshopPlugin: AppPlugin = {
             useHeadMusic: false,
             useTailMusic: false,
           });
+          if (hasTimestampPollution(podcastResult.rounds)) {
+            trace.push('podcast_retry=timestamp_pollution_detected');
+            const retryInput = buildPodcastInputText(context, output, evidenceSegments, cards, podcastPlan, true);
+            trace.push(`podcast_retry_input_chars=${retryInput.length}`);
+            podcastResult = await generateVolcPodcast({
+              inputText: retryInput,
+              timeoutMs: PODCAST_TIMEOUT_MS,
+              format: 'mp3',
+              sampleRate: 24000,
+              speechRate: 0,
+              useHeadMusic: false,
+              useTailMusic: false,
+            });
+          }
           trace.push(`podcast_rounds=${podcastResult.roundCount}`);
           trace.push(`podcast_audio_url=${podcastResult.audioUrl ? 'yes' : 'no'}`);
           trace.push(`podcast_audio_bytes=${podcastResult.audioBytes}`);
