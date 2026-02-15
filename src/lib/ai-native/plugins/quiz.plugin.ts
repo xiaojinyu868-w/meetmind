@@ -2,6 +2,7 @@ import type { TranscriptSegment } from '@/types';
 import { parseJsonResponse } from '@/lib/utils/json-utils';
 import { chat, DEFAULT_MODEL_ID } from '@/lib/services/llm-service';
 import type { AppExecutionContext, AppExecutionResult, AppPlugin, AppPluginTools } from '../types';
+import { buildPromptAnchorContext, buildPromptTranscriptContext } from '../prompt-context';
 
 const KEYWORDS = ['测验', '自测', 'quiz', '测试', '练习题', '题目'];
 const TARGET_QUESTION_COUNT = 8;
@@ -51,16 +52,6 @@ function toTimestamp(value: unknown, fallback: number): number {
   return fallback;
 }
 
-function buildPrompt(segments: TranscriptSegment[]): string {
-  return segments
-    .map((segment, index) => {
-      const start = formatTimestamp(segment.startMs);
-      const end = formatTimestamp(segment.endMs);
-      return `证据${index + 1} [${start}-${end}] startMs=${segment.startMs} endMs=${segment.endMs}\n${segment.text}`;
-    })
-    .join('\n\n');
-}
-
 function normalizeOptions(options: unknown): string[] {
   if (!Array.isArray(options)) return [];
   return options
@@ -89,20 +80,23 @@ function fallbackDraft(segment: TranscriptSegment): QuizDraft {
 async function generateQuizWithLLM(
   context: AppExecutionContext,
   model: string,
-  segments: TranscriptSegment[]
+  transcriptContext: string,
+  anchorContext: string
 ): Promise<QuizLLMOutput | null> {
-  const prompt = buildPrompt(segments);
   const response = await chat(
     [
       {
         role: 'system',
         content:
-          '你是一位命题研究专家，擅长设计能区分“真正理解”和“表面记忆”的课堂测验。严格基于证据，不得编造。输出纯 JSON。',
+          '你是一位命题研究员。请设计能区分“真正理解”和“表面记忆”的课堂测验。严格基于课堂证据，输出纯 JSON。',
       },
       {
         role: 'user',
         content: `学习目标：${context.goal.intent}
-请基于课堂证据设计一组高质量测验，帮助学生发现理解盲区。你可以自行决定题量和难度层次。
+用户画像：学生希望快速发现知识盲区，并获得可执行的纠错反馈。
+
+请基于课堂内容设计一组高质量测验。题量、难度与题型由你判断，只要能有效检验理解深度。
+
 最小输出契约（仅字段约束）：
 {
   "title": "测验标题",
@@ -118,8 +112,12 @@ async function generateQuizWithLLM(
     }
   ]
 }
+说明：answer 可返回选项字母或选项原文；startMs/endMs 为可选证据定位字段。
 
-课堂证据：${prompt}`,
+课堂原文：
+${transcriptContext}
+
+${anchorContext ? `学习者关注点：\n${anchorContext}` : ''}`,
       },
     ],
     model,
@@ -214,6 +212,13 @@ export const quizPlugin: AppPlugin = {
     return includesKeyword(intent) || context.goal.expectedOutput === 'cards';
   },
   async run(context: AppExecutionContext, tools: AppPluginTools): Promise<AppExecutionResult> {
+    const promptContext = buildPromptTranscriptContext(context.input.transcript, {
+      maxChars: 22_000,
+      includeIndex: true,
+      includeTimestamp: false,
+      minCharsPerSegment: 52,
+    });
+    const anchorContext = buildPromptAnchorContext(context.input.anchors, 12);
     const evidenceSegments = pickEvidenceSegments(
       context.input.transcript,
       Math.min(TARGET_QUESTION_COUNT, Math.max(4, Math.ceil(context.input.transcript.length / 4)))
@@ -222,7 +227,7 @@ export const quizPlugin: AppPlugin = {
 
     let llmOutput: QuizLLMOutput | null = null;
     try {
-      llmOutput = await generateQuizWithLLM(context, model, evidenceSegments);
+      llmOutput = await generateQuizWithLLM(context, model, promptContext.text, anchorContext);
     } catch {
       llmOutput = null;
     }
@@ -240,6 +245,8 @@ export const quizPlugin: AppPlugin = {
         `model=${model}`,
         `transcript_segments=${context.input.transcript.length}`,
         `questions=${evidenceSegments.length}`,
+        `prompt_segments=${promptContext.usedSegments}/${promptContext.totalSegments}`,
+        `prompt_truncated=${promptContext.truncated ? 'yes' : 'no'}`,
         `llm=${llmOutput ? 'enabled' : 'fallback'}`,
       ],
       cards,

@@ -2,6 +2,7 @@ import type { TranscriptSegment } from '@/types';
 import { parseJsonResponse } from '@/lib/utils/json-utils';
 import { chat, DEFAULT_MODEL_ID } from '@/lib/services/llm-service';
 import type { AppExecutionContext, AppExecutionResult, AppPlugin, AppPluginTools } from '../types';
+import { buildPromptAnchorContext, buildPromptTranscriptContext } from '../prompt-context';
 
 const KEYWORDS = ['导图', '思维导图', '结构', '知识图谱', 'mindmap'];
 const TARGET_BRANCH_COUNT = 5;
@@ -56,33 +57,26 @@ function toPoints(value: unknown): string[] {
     .slice(0, 6);
 }
 
-function buildPrompt(segments: TranscriptSegment[]): string {
-  return segments
-    .map((segment, index) => {
-      const start = formatTimestamp(segment.startMs);
-      const end = formatTimestamp(segment.endMs);
-      return `片段${index + 1} [${start}-${end}] startMs=${segment.startMs} endMs=${segment.endMs}\n${segment.text}`;
-    })
-    .join('\n\n');
-}
-
 async function generateMindMap(
   context: AppExecutionContext,
   model: string,
-  segments: TranscriptSegment[]
+  transcriptContext: string,
+  anchorContext: string
 ): Promise<MindMapOutput | null> {
-  const prompt = buildPrompt(segments);
   const response = await chat(
     [
       {
         role: 'system',
         content:
-          '你是一位知识架构师，擅长把课堂信息重组为可讲解、可复述、可迁移的结构化导图。严格基于证据，输出纯 JSON。',
+          '你是一位知识架构师，擅长把课堂内容重组为可讲解、可复述、可迁移的学习导图。严格基于课堂证据，输出纯 JSON。',
       },
       {
         role: 'user',
         content: `目标：${context.goal.intent}
-请输出一份结构清晰的课堂导图。你可以自主决定分支数量和层次深度，但要覆盖核心概念、关键关系和常见误区。
+用户画像：学生要用导图做课堂复盘，要求“能看懂、能复述、能迁移”。
+
+请输出一份结构清晰的课堂导图。你可以自主决定分支数量和层次深度，但要覆盖：核心概念、关键关系、易错点、实际应用。
+
 最小输出契约（仅字段约束）：
 {
   "rootTitle": "主题",
@@ -95,8 +89,12 @@ async function generateMindMap(
     }
   ]
 }
+说明：startMs/endMs 为可选证据定位字段，不确定可留空。
 
-课堂片段：${prompt}`,
+课堂原文：
+${transcriptContext}
+
+${anchorContext ? `学习者关注点：\n${anchorContext}` : ''}`,
       },
     ],
     model,
@@ -131,6 +129,13 @@ export const mindmapPlugin: AppPlugin = {
     return includesKeyword(intent);
   },
   async run(context: AppExecutionContext, tools: AppPluginTools): Promise<AppExecutionResult> {
+    const promptContext = buildPromptTranscriptContext(context.input.transcript, {
+      maxChars: 22_000,
+      includeIndex: true,
+      includeTimestamp: false,
+      minCharsPerSegment: 52,
+    });
+    const anchorContext = buildPromptAnchorContext(context.input.anchors, 12);
     const evidenceSegments = pickEvidenceSegments(
       context.input.transcript,
       Math.min(TARGET_BRANCH_COUNT, Math.max(3, Math.ceil(context.input.transcript.length / 5)))
@@ -139,7 +144,7 @@ export const mindmapPlugin: AppPlugin = {
 
     let llmOutput: MindMapOutput | null = null;
     try {
-      llmOutput = await generateMindMap(context, model, evidenceSegments);
+      llmOutput = await generateMindMap(context, model, promptContext.text, anchorContext);
     } catch {
       llmOutput = null;
     }
@@ -223,6 +228,8 @@ export const mindmapPlugin: AppPlugin = {
         `model=${model}`,
         `transcript_segments=${context.input.transcript.length}`,
         `branches=${normalizedBranches.length}`,
+        `prompt_segments=${promptContext.usedSegments}/${promptContext.totalSegments}`,
+        `prompt_truncated=${promptContext.truncated ? 'yes' : 'no'}`,
         `llm=${llmOutput ? 'enabled' : 'fallback'}`,
       ],
       cards,

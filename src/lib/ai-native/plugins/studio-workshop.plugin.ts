@@ -13,6 +13,7 @@ import type {
   AppPluginTools,
   AppRenderMode,
 } from '../types';
+import { buildPromptAnchorContext, buildPromptTranscriptContext } from '../prompt-context';
 
 type StudioMode = 'podcast' | 'video' | 'report' | 'infographic' | 'slides' | 'table' | 'general';
 
@@ -176,14 +177,58 @@ function toDialogue(value: unknown): Array<{ speaker: string; line: string }> {
     .slice(0, 28);
 }
 
-function buildEvidencePrompt(segments: TranscriptSegment[]): string {
-  return segments
-    .map((segment, index) => {
-      const start = formatTimestamp(segment.startMs);
-      const end = formatTimestamp(segment.endMs);
-      return `片段${index + 1} [${start}-${end}] startMs=${segment.startMs} endMs=${segment.endMs}\n${segment.text}`;
-    })
-    .join('\n\n');
+function modeRole(mode: StudioMode): string {
+  if (mode === 'video') return '学习视频编辑';
+  if (mode === 'report') return '学习复盘顾问';
+  if (mode === 'infographic') return '信息设计师';
+  if (mode === 'slides') return '课堂演示设计师';
+  if (mode === 'table') return '知识对照分析师';
+  if (mode === 'podcast') return '中文教育播客总编导';
+  return '学习内容产品经理';
+}
+
+function modeContract(mode: StudioMode): string {
+  if (mode === 'infographic') {
+    return `{
+  "title": "结果标题",
+  "summary": "一句话摘要",
+  "cards": [{ "title": "模块标题", "body": "模块正文", "bullets": ["要点"] }],
+  "infographic": {
+    "title": "信息图标题",
+    "subtitle": "副标题",
+    "keyPoints": ["关键点"],
+    "visualPlan": ["版式建议"],
+    "imagePrompt": "文生图提示词",
+    "stylePreset": "风格描述"
+  }
+}`;
+  }
+
+  if (mode === 'slides') {
+    return `{
+  "title": "结果标题",
+  "summary": "一句话摘要",
+  "cards": [{ "title": "模块标题", "body": "模块正文", "bullets": ["要点"] }],
+  "slides": [{ "title": "页标题", "subtitle": "副标题", "bullets": ["要点"], "notes": "讲解备注", "relatedTimestamp": 12000 }],
+  "tasks": [{ "label": "下一步动作", "reason": "原因", "estimatedMinutes": 5, "relatedTimestamp": 12000 }]
+}`;
+  }
+
+  if (mode === 'table') {
+    return `{
+  "title": "结果标题",
+  "summary": "一句话摘要",
+  "cards": [{ "title": "表格说明", "body": "说明", "columns": ["列1", "列2"], "rows": [["值1", "值2"]] }],
+  "tasks": [{ "label": "下一步动作", "reason": "原因", "estimatedMinutes": 5 }]
+}`;
+  }
+
+  return `{
+  "title": "结果标题",
+  "summary": "一句话摘要",
+  "cards": [{ "title": "模块标题", "body": "模块正文", "bullets": ["要点"], "dialogue": [{ "speaker": "角色", "line": "台词" }], "startMs": 12000, "endMs": 18000 }],
+  "tasks": [{ "label": "下一步动作", "reason": "原因", "estimatedMinutes": 5, "relatedTimestamp": 12000 }]
+}`;
 }
 
 function stripPodcastMetaNoise(text: string): string {
@@ -212,32 +257,16 @@ function sanitizePodcastNarration(text: string): string {
     .trim();
 }
 
-function pickPodcastCorpusSegments(transcript: TranscriptSegment[], maxSegments: number): TranscriptSegment[] {
-  if (transcript.length <= maxSegments) return transcript;
-  const headCount = Math.max(1, Math.floor(maxSegments * 0.35));
-  const tailCount = Math.max(1, Math.floor(maxSegments * 0.25));
-  const middleCount = Math.max(1, maxSegments - headCount - tailCount);
-  const middleStart = headCount;
-  const middleEnd = Math.max(middleStart + 1, transcript.length - tailCount);
-  const middleWindow = transcript.slice(middleStart, middleEnd);
-
-  const middlePicked: TranscriptSegment[] = [];
-  if (middleWindow.length <= middleCount) {
-    middlePicked.push(...middleWindow);
-  } else {
-    const step = (middleWindow.length - 1) / Math.max(1, middleCount - 1);
-    for (let index = 0; index < middleCount; index += 1) {
-      middlePicked.push(middleWindow[Math.round(index * step)]);
-    }
-  }
-
-  return [...transcript.slice(0, headCount), ...middlePicked, ...transcript.slice(-tailCount)];
-}
-
 function buildPodcastTranscriptCorpus(transcript: TranscriptSegment[], maxChars: number = 9000): string {
-  const selectedSegments = pickPodcastCorpusSegments(transcript, 80);
-  const merged = selectedSegments
-    .map((segment) => sanitizePodcastNarration(segment.text))
+  const promptContext = buildPromptTranscriptContext(transcript, {
+    maxChars: Math.max(12_000, maxChars * 2),
+    includeIndex: false,
+    includeTimestamp: false,
+    minCharsPerSegment: 56,
+  });
+  const merged = promptContext.text
+    .split('\n')
+    .map((line) => sanitizePodcastNarration(line))
     .filter(Boolean)
     .join('\n');
 
@@ -275,30 +304,20 @@ function hasTimestampPollution(rounds: VolcPodcastResult['rounds']): boolean {
 async function generatePodcastPlan(context: AppExecutionContext, model: string): Promise<PodcastPlan | null> {
   const corpus = buildPodcastTranscriptCorpus(context.input.transcript, 8500);
   if (!corpus) return null;
-  const anchorHints = context.input.anchors
-    .filter((anchor) => !anchor.cancelled)
-    .slice(0, 10)
-    .map((anchor) => {
-      const status = anchor.resolved ? '已解决' : '待澄清';
-      return `${status}困惑：${anchor.note?.trim() || '课堂中出现理解阻塞，请重点解释原因与应用。'}`;
-    })
-    .join('\n');
+  const anchorHints = buildPromptAnchorContext(context.input.anchors, 10);
 
   const response = await chat(
     [
       {
         role: 'system',
         content:
-          '你是中文教育播客总编导。目标是把课堂内容改写成自然、好听、有学习价值的双人播客提纲。禁止逐秒报时。输出纯 JSON。',
+          '你是中文教育播客总编导。请把课堂内容改写成自然、好听、有学习价值的双人播客提纲。严格基于课堂证据，输出纯 JSON。',
       },
       {
         role: 'user',
         content: `课堂主题：${context.goal.intent}
 
-请产出播客策划提纲，要求：
-- 强调“理解与应用”，不是朗读逐字稿
-- 不要出现任何时间戳、分秒、片段编号、startMs/endMs
-- 主持人命名只用“主持人A”“主持人B”
+用户画像：学生想在通勤场景用播客高效复盘课堂，重点是“理解+应用”，不是逐字转写。
 
 最小输出契约：
 {
@@ -310,6 +329,7 @@ async function generatePodcastPlan(context: AppExecutionContext, model: string):
   ],
   "tone": "语气与节奏建议"
 }
+约束：禁止逐秒报时，禁止输出 startMs/endMs/片段编号；主持人命名只用“主持人A”“主持人B”。
 
 课堂素材：
 ${corpus}
@@ -328,66 +348,34 @@ async function generateStudioOutput(
   context: AppExecutionContext,
   model: string,
   mode: StudioMode,
-  segments: TranscriptSegment[]
+  transcriptContext: string,
+  anchorContext: string
 ): Promise<StudioOutput | null> {
-  const evidencePrompt = buildEvidencePrompt(segments);
   const response = await chat(
     [
       {
         role: 'system',
         content:
-          '你是学习应用工坊总设计师，目标是把课堂证据转成可直接消费的学习产物。严格基于证据，不编造。输出纯 JSON。',
+          `你是${modeRole(mode)}，目标是把课堂内容转成可直接使用的学习产物。严格基于课堂证据，不编造。输出纯 JSON。`,
       },
       {
         role: 'user',
         content: `应用目标：${context.goal.intent}
-输出形态要求：${MODE_HINTS[mode]}
+应用形态：${MODE_HINTS[mode]}
+用户目标：用更低的认知成本完成课堂复盘，直接可用，不要“模板化空话”。
 
-最小输出契约（仅字段约束，不限制你的组织方式）：
-{
-  "title": "应用结果标题",
-  "summary": "摘要",
-  "cards": [
-    {
-      "title": "内容标题",
-      "body": "正文",
-      "cardKind": "script|table|slide|report|infographic|timeline（可选）",
-      "bullets": ["要点1", "要点2（可选）"],
-      "dialogue": [{"speaker": "主持人A", "line": "..."}],
-      "columns": ["列1", "列2（可选）"],
-      "rows": [["值1", "值2（可选）"]],
-      "startMs": 12000,
-      "endMs": 18000
-    }
-  ],
-  "slides": [
-    {
-      "title": "第1页标题",
-      "subtitle": "副标题",
-      "bullets": ["要点1", "要点2", "要点3"],
-      "notes": "讲解备注",
-      "relatedTimestamp": 12000
-    }
-  ],
-  "tasks": [
-    {
-      "label": "任务标题",
-      "reason": "任务原因",
-      "estimatedMinutes": 5,
-      "relatedTimestamp": 12000
-    }
-  ],
-  "infographic": {
-    "title": "信息图标题",
-    "subtitle": "副标题",
-    "keyPoints": ["关键点1", "关键点2"],
-    "visualPlan": ["版式建议1", "版式建议2"],
-    "imagePrompt": "可直接用于文生图的中文提示词",
-    "stylePreset": "可选风格描述"
-  }
-}
+最小输出契约（仅字段约束）：
+${modeContract(mode)}
 
-课堂证据：${evidencePrompt}`,
+说明：
+- 你可以自由决定模块数量与结构层次
+- startMs/endMs/relatedTimestamp 为可选证据定位字段，不确定可留空
+- 文风要自然、可执行、可复述
+
+课堂原文：
+${transcriptContext}
+
+${anchorContext ? `学习者关注点：\n${anchorContext}` : ''}`,
       },
     ],
     model,
@@ -726,6 +714,13 @@ export const studioWorkshopPlugin: AppPlugin = {
   },
   async run(context: AppExecutionContext, tools: AppPluginTools): Promise<AppExecutionResult> {
     const mode = detectMode(context.goal.intent, context.goal.appKey);
+    const promptContext = buildPromptTranscriptContext(context.input.transcript, {
+      maxChars: 24_000,
+      includeIndex: true,
+      includeTimestamp: false,
+      minCharsPerSegment: 56,
+    });
+    const anchorContext = buildPromptAnchorContext(context.input.anchors, 12);
     const evidenceSegments = pickEvidenceSegments(context.input.transcript, 8);
     const model = context.model || DEFAULT_MODEL_ID;
     const trace: string[] = [
@@ -734,6 +729,8 @@ export const studioWorkshopPlugin: AppPlugin = {
       `mode=${mode}`,
       `model=${model}`,
       `transcript_segments=${context.input.transcript.length}`,
+      `prompt_segments=${promptContext.usedSegments}/${promptContext.totalSegments}`,
+      `prompt_truncated=${promptContext.truncated ? 'yes' : 'no'}`,
     ];
 
     let output: StudioOutput | null = null;
@@ -749,7 +746,7 @@ export const studioWorkshopPlugin: AppPlugin = {
       trace.push('podcast_pipeline=volc_direct');
     } else {
       try {
-        output = await generateStudioOutput(context, model, mode, evidenceSegments);
+        output = await generateStudioOutput(context, model, mode, promptContext.text, anchorContext);
         trace.push('llm=enabled');
       } catch {
         output = null;

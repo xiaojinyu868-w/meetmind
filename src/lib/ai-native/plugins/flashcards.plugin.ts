@@ -2,6 +2,7 @@ import type { TranscriptSegment } from '@/types';
 import { parseJsonResponse } from '@/lib/utils/json-utils';
 import { chat, DEFAULT_MODEL_ID } from '@/lib/services/llm-service';
 import type { AppExecutionContext, AppExecutionResult, AppPlugin, AppPluginTools } from '../types';
+import { buildPromptAnchorContext, buildPromptTranscriptContext } from '../prompt-context';
 
 const KEYWORDS = ['闪卡', '记忆', '背诵', '复习卡', '知识卡', 'flashcard'];
 const TARGET_CARD_COUNT = 10;
@@ -64,16 +65,6 @@ function toTimestamp(value: unknown, fallback: number): number {
   return fallback;
 }
 
-function buildEvidencePrompt(segments: TranscriptSegment[]): string {
-  return segments
-    .map((segment, index) => {
-      const start = formatTimestamp(segment.startMs);
-      const end = formatTimestamp(segment.endMs);
-      return `片段${index + 1} [${start}-${end}] startMs=${segment.startMs} endMs=${segment.endMs}\n${segment.text}`;
-    })
-    .join('\n\n');
-}
-
 function fallbackDraft(segment: TranscriptSegment): FlashcardDraft {
   const cleaned = segment.text.replace(/\s+/g, ' ').trim();
   const stem = cleaned.length > 38 ? `${cleaned.slice(0, 38)}...` : cleaned;
@@ -90,21 +81,24 @@ function fallbackDraft(segment: TranscriptSegment): FlashcardDraft {
 async function generateDeckWithLLM(
   context: AppExecutionContext,
   model: string,
-  segments: TranscriptSegment[]
+  transcriptContext: string,
+  anchorContext: string
 ): Promise<FlashcardLLMOutput | null> {
-  const evidencePrompt = buildEvidencePrompt(segments);
   const response = await chat(
     [
       {
         role: 'system',
         content:
-          '你是一位顶级学习教练，擅长把课堂内容转成高质量主动回忆闪卡。严格基于证据，不得编造。输出纯 JSON。',
+          '你是一位认知科学学习教练。请把课堂内容设计成真正能促进理解和迁移的主动回忆闪卡。严格基于课堂证据，输出纯 JSON。',
       },
       {
         role: 'user',
         content: `学习目标：${context.goal.intent}
-请基于课堂证据生成一组“能帮助学生真正学会”的闪卡。你可以自行决定卡片数量与难度层次，但要覆盖核心概念、关键方法、常见误区与迁移应用。
-最小输出契约（仅字段约束，不限制表达方式）：
+用户画像：刚完成一节课复习，需要通过主动回忆快速定位“懂了”和“没懂”。
+
+请生成一组高质量闪卡。你可以自行决定题量、难度和组织方式，但要覆盖：核心概念、关键方法、易错点、迁移应用。
+
+最小输出契约（仅字段约束）：
 {
   "deckTitle": "闪卡标题",
   "overview": "训练建议",
@@ -119,8 +113,12 @@ async function generateDeckWithLLM(
     }
   ]
 }
+说明：startMs/endMs 为可选证据定位字段，不确定可留空。
 
-课堂证据：${evidencePrompt}`,
+课堂原文：
+${transcriptContext}
+
+${anchorContext ? `学习者关注点：\n${anchorContext}` : ''}`,
       },
     ],
     model,
@@ -242,6 +240,13 @@ export const flashcardsPlugin: AppPlugin = {
     return includesKeyword(intent) || context.goal.expectedOutput === 'cards';
   },
   async run(context: AppExecutionContext, tools: AppPluginTools): Promise<AppExecutionResult> {
+    const promptContext = buildPromptTranscriptContext(context.input.transcript, {
+      maxChars: 22_000,
+      includeIndex: true,
+      includeTimestamp: false,
+      minCharsPerSegment: 52,
+    });
+    const anchorContext = buildPromptAnchorContext(context.input.anchors, 12);
     const evidenceSegments = pickEvidenceSegments(
       context.input.transcript,
       Math.min(TARGET_CARD_COUNT, Math.max(4, Math.ceil(context.input.transcript.length / 3)))
@@ -250,7 +255,7 @@ export const flashcardsPlugin: AppPlugin = {
 
     let llmOutput: FlashcardLLMOutput | null = null;
     try {
-      llmOutput = await generateDeckWithLLM(context, model, evidenceSegments);
+      llmOutput = await generateDeckWithLLM(context, model, promptContext.text, anchorContext);
     } catch {
       llmOutput = null;
     }
@@ -268,6 +273,8 @@ export const flashcardsPlugin: AppPlugin = {
         `model=${model}`,
         `transcript_segments=${context.input.transcript.length}`,
         `evidence_segments=${evidenceSegments.length}`,
+        `prompt_segments=${promptContext.usedSegments}/${promptContext.totalSegments}`,
+        `prompt_truncated=${promptContext.truncated ? 'yes' : 'no'}`,
         `llm=${llmOutput ? 'enabled' : 'fallback'}`,
       ],
       cards,
