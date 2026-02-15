@@ -226,6 +226,17 @@ function compactText(value: string, maxLength: number): string {
   return `${normalized.slice(0, maxLength - 1)}...`;
 }
 
+async function readJsonApiResponse<T>(response: Response, errorPrefix: string): Promise<T> {
+  const raw = await response.text();
+  try {
+    return JSON.parse(raw) as T;
+  } catch {
+    const snippet = compactText(raw.replace(/\s+/g, ' ').trim(), 200);
+    const detail = snippet ? `：${snippet}` : '';
+    throw new Error(`${errorPrefix}（接口返回非 JSON，HTTP ${response.status}）${detail}`);
+  }
+}
+
 function buildASRContextHint(params: {
   manualHint: string;
   recentSegments: TranscriptSegment[];
@@ -1741,7 +1752,7 @@ const _handleVideoAssistantMessage = useCallback((payload: {
       method: 'POST',
       body: formData,
     });
-    const payload = (await response.json()) as {
+    const payload = await readJsonApiResponse<{
       success?: boolean;
       error?: string;
       segments?: TranscriptSegment[];
@@ -1751,7 +1762,7 @@ const _handleVideoAssistantMessage = useCallback((payload: {
         beginTime?: number;
         endTime?: number;
       }>;
-    };
+    }>(response, '音频转写失败');
     if (!response.ok || !payload.success) {
       throw new Error(payload.error || '音频转写失败');
     }
@@ -1781,13 +1792,13 @@ const _handleVideoAssistantMessage = useCallback((payload: {
       method: 'POST',
       body: formData,
     });
-    const payload = (await response.json()) as {
+    const payload = await readJsonApiResponse<{
       success?: boolean;
       error?: string;
       title?: string;
       fileType?: string;
       segments?: TranscriptSegment[];
-    };
+    }>(response, '文档导入失败');
     if (!response.ok || !payload.success || !Array.isArray(payload.segments)) {
       throw new Error(payload.error || '文档导入失败');
     }
@@ -1913,12 +1924,12 @@ const _handleVideoAssistantMessage = useCallback((payload: {
           text,
         }),
       });
-      const payload = (await response.json()) as {
+      const payload = await readJsonApiResponse<{
         success?: boolean;
         error?: string;
         title?: string;
         segments?: TranscriptSegment[];
-      };
+      }>(response, '文本导入失败');
       if (!response.ok || !payload.success || !Array.isArray(payload.segments)) {
         throw new Error(payload.error || '文本导入失败');
       }
