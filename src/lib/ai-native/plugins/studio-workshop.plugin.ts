@@ -78,6 +78,12 @@ const MODE_HINTS: Record<StudioMode, string> = {
   general: '结构化输出，覆盖核心结论、证据、行动建议',
 };
 
+const PODCAST_TIMEOUT_MS = (() => {
+  const raw = Number.parseInt(process.env.VOLCENGINE_PODCAST_TIMEOUT_MS || '45000', 10);
+  if (!Number.isFinite(raw)) return 45000;
+  return Math.min(120000, Math.max(10000, raw));
+})();
+
 function detectMode(intent: string, appKey?: string): StudioMode {
   const normalizedAppKey = (appKey || '').toLowerCase();
   if (normalizedAppKey === 'audio-overview') return 'podcast';
@@ -655,7 +661,7 @@ export const studioWorkshopPlugin: AppPlugin = {
           const podcastInput = buildPodcastInputText(context, output, evidenceSegments, cards);
           podcastResult = await generateVolcPodcast({
             inputText: podcastInput,
-            timeoutMs: 180_000,
+            timeoutMs: PODCAST_TIMEOUT_MS,
             format: 'mp3',
             sampleRate: 24000,
             speechRate: 0,
