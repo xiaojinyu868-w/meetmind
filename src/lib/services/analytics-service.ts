@@ -10,6 +10,36 @@
 
 import prisma from '@/lib/prisma';
 
+let analyticsStorageEnabled = true;
+
+function isMissingAnalyticsTableError(error: unknown): boolean {
+  if (!error || typeof error !== 'object') return false;
+  const code = (error as { code?: unknown }).code;
+  if (code !== 'P2021') return false;
+
+  const meta = (error as { meta?: { modelName?: unknown } }).meta;
+  const modelName = typeof meta?.modelName === 'string' ? meta.modelName : '';
+  if (!modelName) return true;
+
+  return ['UserAnalytics', 'PageView', 'EventTrack'].includes(modelName);
+}
+
+function handleAnalyticsError(scope: string, error: unknown) {
+  if (isMissingAnalyticsTableError(error)) {
+    if (analyticsStorageEnabled) {
+      analyticsStorageEnabled = false;
+      console.warn('[Analytics] Analytics tables are missing. Analytics write/query has been disabled for this runtime.');
+    }
+    return;
+  }
+
+  console.error(`[Analytics] Failed to ${scope}:`, error);
+}
+
+function canUseAnalyticsStorage() {
+  return analyticsStorageEnabled;
+}
+
 // ==================== 类型定义 ====================
 
 export interface CreateSessionParams {
@@ -82,6 +112,7 @@ export interface AnalyticsStats {
  * 创建新的分析会话
  */
 export async function createSession(params: CreateSessionParams) {
+  if (!canUseAnalyticsStorage()) return null;
   const { sessionToken, userId, ip, userAgent, entryPage, isNewUser } = params;
   
   try {
@@ -108,7 +139,7 @@ export async function createSession(params: CreateSessionParams) {
     
     return session;
   } catch (error) {
-    console.error('[Analytics] Failed to create session:', error);
+    handleAnalyticsError('create session', error);
     return null;
   }
 }
@@ -117,6 +148,7 @@ export async function createSession(params: CreateSessionParams) {
  * 更新会话信息（心跳上报）
  */
 export async function updateSession(params: UpdateSessionParams) {
+  if (!canUseAnalyticsStorage()) return null;
   const { sessionToken, durationMs, exitPage, endSession } = params;
   
   try {
@@ -141,7 +173,7 @@ export async function updateSession(params: UpdateSessionParams) {
     
     return session;
   } catch (error) {
-    console.error('[Analytics] Failed to update session:', error);
+    handleAnalyticsError('update session', error);
     return null;
   }
 }
@@ -150,6 +182,7 @@ export async function updateSession(params: UpdateSessionParams) {
  * 根据 sessionToken 获取会话
  */
 export async function getSession(sessionToken: string) {
+  if (!canUseAnalyticsStorage()) return null;
   try {
     return await prisma.userAnalytics.findUnique({
       where: { sessionToken },
@@ -159,7 +192,7 @@ export async function getSession(sessionToken: string) {
       }
     });
   } catch (error) {
-    console.error('[Analytics] Failed to get session:', error);
+    handleAnalyticsError('get session', error);
     return null;
   }
 }
@@ -170,6 +203,7 @@ export async function getSession(sessionToken: string) {
  * 记录页面访问
  */
 export async function trackPageView(params: PageViewParams) {
+  if (!canUseAnalyticsStorage()) return null;
   const { sessionToken, path, durationMs, referrer } = params;
   
   try {
@@ -195,7 +229,7 @@ export async function trackPageView(params: PageViewParams) {
     
     return pageView;
   } catch (error) {
-    console.error('[Analytics] Failed to track pageView:', error);
+    handleAnalyticsError('track pageView', error);
     return null;
   }
 }
@@ -204,13 +238,14 @@ export async function trackPageView(params: PageViewParams) {
  * 更新页面停留时长
  */
 export async function updatePageViewDuration(pageViewId: string, durationMs: number) {
+  if (!canUseAnalyticsStorage()) return null;
   try {
     return await prisma.pageView.update({
       where: { id: pageViewId },
       data: { durationMs }
     });
   } catch (error) {
-    console.error('[Analytics] Failed to update pageView duration:', error);
+    handleAnalyticsError('update pageView duration', error);
     return null;
   }
 }
@@ -221,6 +256,7 @@ export async function updatePageViewDuration(pageViewId: string, durationMs: num
  * 记录用户事件
  */
 export async function trackEvent(params: EventParams) {
+  if (!canUseAnalyticsStorage()) return null;
   const { sessionToken, eventName, eventCategory, eventData } = params;
   
   try {
@@ -246,7 +282,7 @@ export async function trackEvent(params: EventParams) {
     
     return event;
   } catch (error) {
-    console.error('[Analytics] Failed to track event:', error);
+    handleAnalyticsError('track event', error);
     return null;
   }
 }

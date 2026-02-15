@@ -49,6 +49,14 @@ interface StudioOutput {
   cards?: StudioCardDraft[];
   slides?: StudioSlideDraft[];
   tasks?: StudioTaskDraft[];
+  infographic?: {
+    title?: string;
+    subtitle?: string;
+    keyPoints?: string[];
+    visualPlan?: string[];
+    imagePrompt?: string;
+    stylePreset?: string;
+  };
 }
 
 interface SlidePage {
@@ -70,7 +78,14 @@ const MODE_HINTS: Record<StudioMode, string> = {
   general: '结构化输出，覆盖核心结论、证据、行动建议',
 };
 
-function detectMode(intent: string): StudioMode {
+function detectMode(intent: string, appKey?: string): StudioMode {
+  const normalizedAppKey = (appKey || '').toLowerCase();
+  if (normalizedAppKey === 'audio-overview') return 'podcast';
+  if (normalizedAppKey === 'infographic') return 'infographic';
+  if (normalizedAppKey === 'mindmap') return 'general';
+  if (normalizedAppKey === 'quiz') return 'general';
+  if (normalizedAppKey === 'flashcards') return 'general';
+
   const lower = intent.toLowerCase();
   if (lower.includes('播客') || lower.includes('audio overview')) return 'podcast';
   if (lower.includes('视频') || lower.includes('video overview')) return 'video';
@@ -163,25 +178,26 @@ async function generateStudioOutput(
       {
         role: 'system',
         content:
-          '你是学习应用工坊的生成引擎。只允许使用给定课堂证据，不允许编造事实。仅输出 JSON。',
+          '你是学习应用工坊总设计师，目标是把课堂证据转成可直接消费的学习产物。严格基于证据，不编造。输出纯 JSON。',
       },
       {
         role: 'user',
         content: `应用目标：${context.goal.intent}
 输出形态要求：${MODE_HINTS[mode]}
 
-JSON 格式：{
+最小输出契约（仅字段约束，不限制你的组织方式）：
+{
   "title": "应用结果标题",
-  "summary": "一句话摘要",
+  "summary": "摘要",
   "cards": [
     {
       "title": "内容标题",
       "body": "正文",
-      "cardKind": "script|table|slide|report|infographic|timeline",
-      "bullets": ["要点1", "要点2"],
-      "dialogue": [{"speaker": "主持人A", "line": "..."}, {"speaker": "主持人B", "line": "..."}],
-      "columns": ["列1", "列2"],
-      "rows": [["值1", "值2"]],
+      "cardKind": "script|table|slide|report|infographic|timeline（可选）",
+      "bullets": ["要点1", "要点2（可选）"],
+      "dialogue": [{"speaker": "主持人A", "line": "..."}],
+      "columns": ["列1", "列2（可选）"],
+      "rows": [["值1", "值2（可选）"]],
       "startMs": 12000,
       "endMs": 18000
     }
@@ -202,7 +218,15 @@ JSON 格式：{
       "estimatedMinutes": 5,
       "relatedTimestamp": 12000
     }
-  ]
+  ],
+  "infographic": {
+    "title": "信息图标题",
+    "subtitle": "副标题",
+    "keyPoints": ["关键点1", "关键点2"],
+    "visualPlan": ["版式建议1", "版式建议2"],
+    "imagePrompt": "可直接用于文生图的中文提示词",
+    "stylePreset": "可选风格描述"
+  }
 }
 
 课堂证据：${evidencePrompt}`,
@@ -220,6 +244,7 @@ function resolveRenderMode(mode: StudioMode): AppRenderMode {
   if (mode === 'slides') return 'slides';
   if (mode === 'table') return 'table';
   if (mode === 'video') return 'script';
+  if (mode === 'infographic') return 'custom';
   return 'document';
 }
 
@@ -368,6 +393,42 @@ function buildSlidePages(
   }));
 }
 
+function buildInfographicDraft(output: StudioOutput | null, cards: AppExecutionResult['cards']) {
+  const keyPoints =
+    toStringArray(output?.infographic?.keyPoints, 8).length > 0
+      ? toStringArray(output?.infographic?.keyPoints, 8)
+      : cards
+          .slice(0, 5)
+          .map((card) => card.title || card.body)
+          .filter(Boolean)
+          .slice(0, 5);
+
+  const visualPlan =
+    toStringArray(output?.infographic?.visualPlan, 6).length > 0
+      ? toStringArray(output?.infographic?.visualPlan, 6)
+      : ['顶部标题区 + 三段式知识点区 + 底部复习提示区'];
+
+  const imagePrompt =
+    output?.infographic?.imagePrompt?.trim() ||
+    [
+      output?.title?.trim() || '课堂信息图',
+      keyPoints.length > 0 ? `关键信息：${keyPoints.join('；')}` : '',
+      `视觉布局：${visualPlan.join('；')}`,
+      '要求：中文信息图、层级清晰、适合学习复盘分享。',
+    ]
+      .filter(Boolean)
+      .join('\n');
+
+  return {
+    title: output?.infographic?.title?.trim() || output?.title?.trim() || '课堂信息图草案',
+    subtitle: output?.infographic?.subtitle?.trim() || output?.summary?.trim() || '',
+    keyPoints,
+    visualPlan,
+    imagePrompt,
+    stylePreset: output?.infographic?.stylePreset?.trim() || '教育学习海报，清爽明亮，信息层级明确',
+  };
+}
+
 function buildRenderPayload(params: {
   renderMode: AppRenderMode;
   cards: AppExecutionResult['cards'];
@@ -375,8 +436,9 @@ function buildRenderPayload(params: {
   evidenceSegments: TranscriptSegment[];
   podcastResult: VolcPodcastResult | null;
   podcastError: string;
+  mode: StudioMode;
 }) {
-  const { renderMode, cards, output, evidenceSegments, podcastResult, podcastError } = params;
+  const { renderMode, cards, output, evidenceSegments, podcastResult, podcastError, mode } = params;
 
   if (renderMode === 'table') {
     return {
@@ -427,6 +489,23 @@ function buildRenderPayload(params: {
     };
   }
 
+  if (mode === 'infographic') {
+    const draft = buildInfographicDraft(output, cards);
+    return {
+      blocks: [
+        {
+          id: 'infographic-draft',
+          type: 'infographic-draft',
+          title: draft.title,
+          text: draft.subtitle,
+          items: draft.keyPoints,
+        },
+      ],
+      draft,
+      image: null,
+    };
+  }
+
   return {
     sections: cards.map((card) => ({
       id: card.id,
@@ -451,11 +530,12 @@ export const studioWorkshopPlugin: AppPlugin = {
     return context.input.transcript.length > 0;
   },
   async run(context: AppExecutionContext, tools: AppPluginTools): Promise<AppExecutionResult> {
-    const mode = detectMode(context.goal.intent);
+    const mode = detectMode(context.goal.intent, context.goal.appKey);
     const evidenceSegments = pickEvidenceSegments(context.input.transcript, 8);
     const model = context.model || DEFAULT_MODEL_ID;
     const trace: string[] = [
       `intent=${context.goal.intent}`,
+      `app_key=${context.goal.appKey || 'none'}`,
       `mode=${mode}`,
       `model=${model}`,
       `transcript_segments=${context.input.transcript.length}`,
@@ -633,6 +713,7 @@ export const studioWorkshopPlugin: AppPlugin = {
     }
 
     const renderMode = resolveRenderMode(mode);
+    const infographicDraft = mode === 'infographic' ? buildInfographicDraft(output, cards) : undefined;
 
     return {
       pluginId: 'studio-workshop',
@@ -652,11 +733,14 @@ export const studioWorkshopPlugin: AppPlugin = {
           evidenceSegments,
           podcastResult,
           podcastError,
+          mode,
         }),
       },
       raw: {
         generatedAt: tools.now(),
         mode,
+        appKey: context.goal.appKey || undefined,
+        infographicDraft,
         podcast: podcastResult
           ? {
               inputId: podcastResult.inputId,

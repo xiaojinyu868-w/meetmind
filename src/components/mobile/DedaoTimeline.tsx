@@ -1,6 +1,6 @@
 ﻿'use client';
 
-import React, { useRef, useEffect } from 'react';
+import React from 'react';
 import { cn } from '@/lib/utils';
 import type { TranscriptSegment } from '@/types';
 import type { Anchor } from '@/lib/services/anchor-service';
@@ -49,7 +49,7 @@ export function DedaoTimeline({
   entries,
   currentTime,
   onEntryClick,
-  onConfusionClick,
+  onConfusionClick: _onConfusionClick,
   onEntryTextUpdate,
   className,
   'data-onboarding': dataOnboarding,

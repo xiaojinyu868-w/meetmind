@@ -128,8 +128,8 @@ export function DedaoMenu({
       ? [
           {
             id: 'apps' as const,
-            label: '应用矩阵',
-            description: '课堂原生学习应用',
+            label: 'AI工坊',
+            description: '进入 AI 学习应用黄页',
             icon: (
               <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6.75A2.25 2.25 0 016 4.5h3a2.25 2.25 0 012.25 2.25v3A2.25 2.25 0 019 12H6a2.25 2.25 0 01-2.25-2.25v-3zM12.75 6.75A2.25 2.25 0 0115 4.5h3a2.25 2.25 0 012.25 2.25v3A2.25 2.25 0 0118 12h-3a2.25 2.25 0 01-2.25-2.25v-3zM3.75 15A2.25 2.25 0 016 12.75h3A2.25 2.25 0 0111.25 15v3A2.25 2.25 0 019 20.25H6A2.25 2.25 0 013.75 18v-3zM12.75 15A2.25 2.25 0 0115 12.75h3A2.25 2.25 0 0120.25 15v3A2.25 2.25 0 0118 20.25h-3A2.25 2.25 0 0112.75 18v-3z" />

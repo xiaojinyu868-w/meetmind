@@ -4,7 +4,7 @@ import { chat, DEFAULT_MODEL_ID } from '@/lib/services/llm-service';
 import type { AppExecutionContext, AppExecutionResult, AppPlugin, AppPluginTools } from '../types';
 
 const KEYWORDS = ['测验', '自测', 'quiz', '测试', '练习题', '题目'];
-const TARGET_QUESTION_COUNT = 6;
+const TARGET_QUESTION_COUNT = 8;
 
 interface QuizDraft {
   stem?: string;
@@ -97,21 +97,22 @@ async function generateQuizWithLLM(
       {
         role: 'system',
         content:
-          '你是课堂测验设计助手。只能基于给定课堂证据出题，不允许编造。仅输出 JSON，不要输出额外解释。',
+          '你是一位命题研究专家，擅长设计能区分“真正理解”和“表面记忆”的课堂测验。严格基于证据，不得编造。输出纯 JSON。',
       },
       {
         role: 'user',
         content: `学习目标：${context.goal.intent}
-请基于课堂证据生成 ${segments.length} 道单选题，每题 4 个选项，答案用 A/B/C/D。题目必须可由证据直接验证，并提供一句解析说明。
-JSON 格式：{
+请基于课堂证据设计一组高质量测验，帮助学生发现理解盲区。你可以自行决定题量和难度层次。
+最小输出契约（仅字段约束）：
+{
   "title": "测验标题",
-  "strategy": "建议先做题再看解析",
+  "strategy": "作答建议",
   "questions": [
     {
       "stem": "题干",
       "options": ["A. ...", "B. ...", "C. ...", "D. ..."],
       "answer": "A",
-      "explanation": "为什么 A 正确",
+      "explanation": "解析",
       "startMs": 12000,
       "endMs": 18000
     }
@@ -143,9 +144,14 @@ function buildCards(
     },
   ];
 
-  segments.forEach((segment, index) => {
-    const llmQuestion = llmOutput?.questions?.[index];
-    const draft = llmQuestion?.stem?.trim() ? llmQuestion : fallbackDraft(segment);
+  const questionDrafts =
+    Array.isArray(llmOutput?.questions) && llmOutput.questions.length > 0
+      ? llmOutput.questions.slice(0, TARGET_QUESTION_COUNT)
+      : segments.map((segment) => fallbackDraft(segment));
+
+  questionDrafts.forEach((questionDraft, index) => {
+    const segment = segments[index % Math.max(1, segments.length)] || segments[0];
+    const draft = questionDraft?.stem?.trim() ? questionDraft : fallbackDraft(segment);
     const stem = draft.stem?.trim() || `请根据 ${formatTimestamp(segment.startMs)} 片段作答`;
     const options = normalizeOptions(draft.options);
     const normalizedOptions = options.length === 4
@@ -153,8 +159,10 @@ function buildCards(
       : fallbackDraft(segment).options || ['A', 'B', 'C', 'D'];
     const answer = (draft.answer || 'A').trim().toUpperCase().slice(0, 1);
     const explanation = draft.explanation?.trim() || tools.summarizeSegments([segment], 120) || '请回放原片段核对关键概念。';
-    const startMs = toTimestamp(draft.startMs, segment.startMs);
-    const endMs = toTimestamp(draft.endMs, segment.endMs);
+    const fallbackStart = segment?.startMs ?? 0;
+    const fallbackEnd = segment?.endMs ?? fallbackStart + 8000;
+    const startMs = toTimestamp(draft.startMs, fallbackStart);
+    const endMs = toTimestamp(draft.endMs, fallbackEnd);
 
     cards.push({
       id: `quiz-card-${index + 1}`,
@@ -221,6 +229,8 @@ export const quizPlugin: AppPlugin = {
 
     const cards = buildCards(tools, evidenceSegments, llmOutput);
 
+    const questionCards = cards.filter((card) => card.meta?.cardKind === 'quiz');
+
     return {
       pluginId: 'quiz-arena',
       version: '0.1.0',
@@ -233,21 +243,19 @@ export const quizPlugin: AppPlugin = {
         `llm=${llmOutput ? 'enabled' : 'fallback'}`,
       ],
       cards,
-      tasks: evidenceSegments.map((segment, index) => ({
+      tasks: questionCards.map((card, index) => ({
         id: `quiz-task-${index + 1}`,
         label: `完成测验 ${index + 1}`,
         reason: '测后回看证据，能快速定位理解偏差。',
         estimatedMinutes: 4,
-        relatedTimestamp: segment.startMs,
+        relatedTimestamp: card.citations?.[0]?.startMs ?? evidenceSegments[index % evidenceSegments.length]?.startMs,
       })),
       render: {
         mode: 'quiz',
         title: llmOutput?.title?.trim() || '课堂测验',
         description: llmOutput?.strategy?.trim() || '先作答，再核对答案与证据。',
         payload: {
-          questions: cards
-            .filter((card) => card.meta?.cardKind === 'quiz')
-            .map((card) => ({
+          questions: questionCards.map((card) => ({
               id: card.id,
               title: card.title,
               stem: typeof card.meta?.stem === 'string' ? card.meta.stem : card.body,

@@ -76,13 +76,15 @@ async function generateMindMap(
     [
       {
         role: 'system',
-        content: '你是课堂知识结构化助手。只根据给定片段输出 JSON，不要输出额外文本。',
+        content:
+          '你是一位知识架构师，擅长把课堂信息重组为可讲解、可复述、可迁移的结构化导图。严格基于证据，输出纯 JSON。',
       },
       {
         role: 'user',
         content: `目标：${context.goal.intent}
-请把课堂内容整理为 1 个主干 + ${segments.length} 个分支。每个分支至少 2 个要点，并尽量补全 startMs/endMs。
-JSON 格式：{
+请输出一份结构清晰的课堂导图。你可以自主决定分支数量和层次深度，但要覆盖核心概念、关键关系和常见误区。
+最小输出契约（仅字段约束）：
+{
   "rootTitle": "主题",
   "branches": [
     {
@@ -142,15 +144,28 @@ export const mindmapPlugin: AppPlugin = {
       llmOutput = null;
     }
 
-    const normalizedBranches = evidenceSegments.map((segment, index) => {
-      const draft = llmOutput?.branches?.[index];
+    const branchDrafts =
+      Array.isArray(llmOutput?.branches) && llmOutput.branches.length > 0
+        ? llmOutput.branches.slice(0, TARGET_BRANCH_COUNT + 3)
+        : evidenceSegments.map((segment) => ({
+            title: tools.summarizeSegments([segment], 28) || `分支`,
+            points: [tools.summarizeSegments([segment], 80) || segment.text.slice(0, 80)],
+            startMs: segment.startMs,
+            endMs: segment.endMs,
+          }));
+
+    const normalizedBranches = branchDrafts.map((draft, index) => {
+      const segment = evidenceSegments[index % Math.max(1, evidenceSegments.length)] || evidenceSegments[0];
       const title = draft?.title?.trim() || `分支 ${index + 1}`;
       const points = toPoints(draft?.points);
       return {
         title,
-        points: points.length > 0 ? points : [tools.summarizeSegments([segment], 60) || segment.text.slice(0, 60)],
-        startMs: toTimestamp(draft?.startMs, segment.startMs),
-        endMs: toTimestamp(draft?.endMs, segment.endMs),
+        points:
+          points.length > 0
+            ? points
+            : [tools.summarizeSegments([segment], 60) || segment.text.slice(0, 60)],
+        startMs: toTimestamp(draft?.startMs, segment?.startMs ?? 0),
+        endMs: toTimestamp(draft?.endMs, segment?.endMs ?? (segment?.startMs ?? 0) + 8000),
         source: segment,
       };
     });

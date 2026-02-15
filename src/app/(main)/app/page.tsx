@@ -18,6 +18,7 @@ import {
 } from '@/lib/services/app-workspace-state';
 import { useAuth } from '@/lib/hooks/useAuth';
 import { classroomDataService } from '@/lib/services/classroom-data-service';
+import { runMemoryMigration } from '@/lib/services/memory-migration';
 import type {
   TranscriptSegment,
   HighlightTopic,
@@ -52,7 +53,6 @@ import { ResizablePanel } from '@/components/layout/ResizablePanel';
 import { VideoLinkImporter } from '@/components/VideoLinkImporter';
 import { VideoReviewPlayer } from '@/components/VideoReviewPlayer';
 import { AITutor } from '@/components/AITutor';
-import { TranscriptPreviewPanel } from '@/components/TranscriptPreviewPanel';
 import { TranscriptFlowView } from '@/components/TranscriptFlowView';
 import { VideoInsightTimeline, type VideoInsightItem } from '@/components/VideoInsightTimeline';
 
@@ -67,7 +67,7 @@ import { HighlightsPanel } from '@/components/HighlightsPanel';
 import { SummaryPanel } from '@/components/SummaryPanel';
 import { NotesPanel } from '@/components/NotesPanel';
 import { AnchorDetailPanel } from '@/components/AnchorDetailPanel';
-import { AppMatrixPanel } from '@/components/apps/AppMatrixPanel';
+import { WorkshopYellowPage } from '@/components/apps/WorkshopYellowPage';
 import { ConversationList } from '@/components/ConversationHistory/ConversationList';
 import { AIChat } from '@/components/AIChat';
 import { SessionHistoryList } from '@/components/SessionHistoryList';
@@ -111,7 +111,7 @@ interface WorkspaceTabConfig<T extends WorkspaceTab> {
 const SHARED_WORKSPACE_TABS: WorkspaceTabConfig<SharedWorkspaceTab>[] = [
   { key: 'highlights', label: '精选', icon: '精' },
   { key: 'summary', label: '摘要', icon: '摘' },
-  { key: 'apps', label: '应用矩阵', icon: '矩', testId: 'review-tab-apps' },
+  { key: 'apps', label: 'AI工坊', icon: '坊', testId: 'review-tab-apps' },
   { key: 'notes', label: '笔记', icon: '记' },
 ];
 
@@ -228,7 +228,13 @@ function buildSeedVideoInsights(segments: TranscriptSegment[]): VideoInsightItem
 }
 
 // 鍖呰缁勪欢 - 澶勭悊 useSearchParams 闇€瑕?Suspense 杈圭晫鐨勯棶棰?
-function StudentAppContent({ isGuestFastEntry }: { isGuestFastEntry: boolean }) {
+function StudentAppContent({
+  isGuestFastEntry,
+  forcedWorkspaceTab,
+}: {
+  isGuestFastEntry: boolean;
+  forcedWorkspaceTab: SharedWorkspaceTab | null;
+}) {
   // 寮€灞忓姩鐢荤姸鎬?- 璁垮蹇€熷叆鍙ｈ烦杩?Splash
   const [showSplash, setShowSplash] = useState(!isGuestFastEntry);
   const [appReady, setAppReady] = useState(false);
@@ -263,8 +269,16 @@ function StudentAppContent({ isGuestFastEntry }: { isGuestFastEntry: boolean }) 
   const [videoSource, setVideoSource] = useState<ImportedVideoSource | null>(null);
   
   // 鏂板鐘舵€侊細绮鹃€夌墖娈点€佹憳瑕併€佺瑪璁?
-  const [reviewTab, setReviewTab] = useState<ReviewTab>('timeline');
-  const [videoWorkspaceTab, setVideoWorkspaceTab] = useState<VideoWorkspaceTab>('chat');
+  const [reviewTab, setReviewTab] = useState<ReviewTab>(forcedWorkspaceTab === 'apps' ? 'apps' : 'timeline');
+  const [videoWorkspaceTab, setVideoWorkspaceTab] = useState<VideoWorkspaceTab>(forcedWorkspaceTab === 'apps' ? 'apps' : 'chat');
+  const forcedWorkspaceAppliedRef = useRef(false);
+  useEffect(() => {
+    if (forcedWorkspaceAppliedRef.current) return;
+    if (forcedWorkspaceTab !== 'apps') return;
+    setReviewTab('apps');
+    setVideoWorkspaceTab('apps');
+    forcedWorkspaceAppliedRef.current = true;
+  }, [forcedWorkspaceTab]);
   const [showTranscriptBar, setShowTranscriptBar] = useState(false);
   const [confusionChatAnchor, setConfusionChatAnchor] = useState<Anchor | null>(null);
   const [videoInsightItems, setVideoInsightItems] = useState<VideoInsightItem[]>([]);
@@ -328,6 +342,21 @@ function StudentAppContent({ isGuestFastEntry }: { isGuestFastEntry: boolean }) 
   useEffect(() => {
     sessionIdRef.current = sessionId;
   }, [sessionId]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const run = async () => {
+      const migration = await runMemoryMigration();
+      if (cancelled) return;
+      if (!migration.ok) {
+        toast.warning('历史数据迁移未完全完成，可继续使用，部分历史数据可能缺失。');
+      }
+    };
+    void run();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const normalizeSeekTime = useCallback((timeMs: number | string): number | null => {
     let numeric: number | null = null;
@@ -1039,7 +1068,7 @@ function StudentAppContent({ isGuestFastEntry }: { isGuestFastEntry: boolean }) 
     setSegments(enhancedSegments);
   }, []);
 
-const handleVideoAssistantMessage = useCallback((payload: {
+const _handleVideoAssistantMessage = useCallback((payload: {
     id: string;
     prompt: string;
     content: string;
@@ -2007,14 +2036,9 @@ const renderInputSourceTabs = useCallback((layout: 'mobile' | 'desktop') => {
 
     if (tab === 'apps') {
       return (
-        <AppMatrixPanel
+        <WorkshopYellowPage
           sessionId={sessionId}
           dataSource={dataSource}
-          transcript={segments}
-          anchors={anchors}
-          summaryOverview={classSummary?.overview}
-          keyDifficulties={classSummary?.keyDifficulties}
-          onSeek={handleUnifiedSeek}
         />
       );
     }
@@ -2029,7 +2053,6 @@ const renderInputSourceTabs = useCallback((layout: 'mobile' | 'desktop') => {
       />
     );
   }, [
-    anchors,
     classSummary,
     currentTime,
     dataSource,
@@ -2049,8 +2072,8 @@ const renderInputSourceTabs = useCallback((layout: 'mobile' | 'desktop') => {
     isPlayingAll,
     notes,
     playAllIndex,
-    segments,
     selectedTopic,
+    setSelectedTopic,
     sessionId,
     totalDuration,
   ]);
@@ -2442,7 +2465,7 @@ const renderInputSourceTabs = useCallback((layout: 'mobile' | 'desktop') => {
                             enableWordExplainer={true}
                             fullContextText={segments.map(s => `[${formatTime(s.startMs)}] ${s.text}`).join('\n')}
                             onTimestampClick={(timeMs) => handleUnifiedSeek(timeMs, true)}
-                            onMarkConfusion={(timeMs, segmentId) => {
+                            onMarkConfusion={(timeMs, _segmentId) => {
                               handleAnchorMark(timeMs);
                             }}
                             confusionTimestamps={anchors.map(a => ({ timestamp: a.timestamp, resolved: a.resolved }))}
@@ -2544,7 +2567,7 @@ const renderInputSourceTabs = useCallback((layout: 'mobile' | 'desktop') => {
                                 <button
                                   onClick={() => setConfusionChatAnchor(null)}
                                   className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-gray-200/60 transition-colors text-gray-500"
-                                  title="杩斿洖鍒楄〃"
+                                  title="返回列表"
                                 >
                                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
@@ -2566,7 +2589,7 @@ const renderInputSourceTabs = useCallback((layout: 'mobile' | 'desktop') => {
                                     }}
                                     className="shrink-0 px-2.5 py-1 text-xs rounded-lg bg-green-50 text-green-600 hover:bg-green-100 transition-colors"
                                   >
-                                    鏍囪宸茶В鍐?
+                                    标记已解决
                                   </button>
                                 )}
                               </div>
@@ -2607,15 +2630,15 @@ const renderInputSourceTabs = useCallback((layout: 'mobile' | 'desktop') => {
                                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
                                 </svg>
-                                鍦ㄥ綋鍓嶄綅缃爣璁板洶鎯?({formatTime(currentTime)})
+                                在当前位置标记困惑 ({formatTime(currentTime)})
                               </button>
 
                               {anchors.length > 0 ? (
                                 <div className="space-y-2">
                                   <div className="flex items-center justify-between mb-2">
-                                    <span className="text-xs text-gray-400">{anchors.length} 涓洶鎯戠偣</span>
+                                    <span className="text-xs text-gray-400">{anchors.length} 个困惑点</span>
                                     {anchors.filter(a => !a.resolved).length > 0 && (
-                                      <span className="text-xs text-red-400">{anchors.filter(a => !a.resolved).length} 涓湭瑙ｅ喅</span>
+                                      <span className="text-xs text-red-400">{anchors.filter(a => !a.resolved).length} 个待解决</span>
                                     )}
                                   </div>
                                   {anchors.map((anchor, index) => (
@@ -2635,7 +2658,7 @@ const renderInputSourceTabs = useCallback((layout: 'mobile' | 'desktop') => {
                                       <div className="flex items-center gap-2">
                                         <span className={`w-2 h-2 rounded-full shrink-0 ${anchor.resolved ? 'bg-green-400' : 'bg-amber-400'}`} />
                                         <span className="text-xs font-mono text-gray-400">{formatTime(anchor.timestamp)}</span>
-                                        <span className="text-xs text-gray-500">鍥版儜 #{index + 1}</span>
+                                        <span className="text-xs text-gray-500">困惑点 #{index + 1}</span>
                                         {anchor.resolved ? (
                                           <span className="text-xs text-green-500 ml-auto">已解决</span>
                                         ) : (
@@ -3408,7 +3431,7 @@ const renderInputSourceTabs = useCallback((layout: 'mobile' | 'desktop') => {
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
                       </svg>
                     </button>
-                    <span className="font-medium text-gray-900">应用矩阵</span>
+                    <span className="font-medium text-gray-900">AI工坊</span>
                   </div>
                   <div className="flex-1 min-h-0 overflow-hidden">
                     {renderSharedWorkspacePanel('apps')}
@@ -3500,7 +3523,8 @@ function formatTime(ms: number): string {
 function SearchParamsReader() {
   const searchParams = useSearchParams();
   const isGuestFastEntry = searchParams.get('guest') === '1';
-  return <StudentAppContent isGuestFastEntry={isGuestFastEntry} />;
+  const forcedWorkspaceTab = searchParams.get('workspace') === 'apps' ? 'apps' : null;
+  return <StudentAppContent isGuestFastEntry={isGuestFastEntry} forcedWorkspaceTab={forcedWorkspaceTab} />;
 }
 
 // 榛樿瀵煎嚭 - 鐢?Suspense 鍖呰９ useSearchParams

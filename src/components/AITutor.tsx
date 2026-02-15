@@ -6,12 +6,12 @@ import { formatTimestamp } from '@/lib/services/longcut-utils';
 import { notebookService, localSearch, type SearchResult } from '@/lib/services/notebook-service';
 import { ModelSelector } from './ModelSelector';
 import { GuidanceQuestion, GuidanceQuestionSkeleton } from './GuidanceQuestion';
-import { Citations, CitationsSkeleton } from './Citations';
+import { Citations } from './Citations';
 import { ImageUpload, useImagePaste, type UploadedImage } from './ImageUpload';
 import { useAuth } from '@/lib/hooks/useAuth';
 import { useAnalyticsContext } from '@/components/AnalyticsProvider';
 import { useSimpleSSEStream, type SSEEvent } from '@/lib/hooks/useSSEStream';
-import { saveTutorResponseCache, getTutorResponseCache, deleteTutorResponseCache, getPreference, setPreference, saveClassSummary, getSessionSummary } from '@/lib/db';
+import { saveTutorResponseCache, getTutorResponseCache, deleteTutorResponseCache, setPreference, saveClassSummary, getSessionSummary } from '@/lib/db';
 import { conversationService, getEffectiveUserId } from '@/lib/services/conversation-service';
 import type { GuidanceQuestion as GuidanceQuestionType, GuidanceOption, Citation } from '@/types/dify';
 import { DEFAULT_MODEL_ID } from '@/lib/services/llm-service';
@@ -178,7 +178,7 @@ export function AITutor({ breakpoint, segments, isLoading: externalLoading, onRe
     isThinking: isBreakpointThinking,
     streamingContent: breakpointStreamingContent,
     thinkingContent: breakpointThinkingContent,
-    clearContent: clearBreakpointContent,
+    clearContent: _clearBreakpointContent,
     clearStreamingOnly: clearBreakpointStreamingOnly,
   } = useSimpleSSEStream();
   
@@ -306,7 +306,7 @@ export function AITutor({ breakpoint, segments, isLoading: externalLoading, onRe
   }, [onSeek, formatTime]);
 
   // 解析文本中的时间戳并渲染为可点击链接（增强视觉反馈）
-  const renderTextWithTimestamps = useCallback((text: string) => {
+  const _renderTextWithTimestamps = useCallback((text: string) => {
     // 匹配多种时间戳格式：[MM:SS] 或 [MM:SS-MM:SS] 或 MM:SS 或 MM:SS-MM:SS
     const timestampRegex = /\[?(\d{1,2}:\d{2}(?:-\d{1,2}:\d{2})?)\]?/g;
     const parts: React.ReactNode[] = [];
@@ -407,7 +407,7 @@ export function AITutor({ breakpoint, segments, isLoading: externalLoading, onRe
     if (breakpoint && response) {
       saveCurrentState();
     }
-  }, [breakpoint?.id, response, saveCurrentState]);
+  }, [breakpoint, response, saveCurrentState]);
 
   // 当困惑点切换时，尝试从缓存加载
   useEffect(() => {
@@ -551,6 +551,7 @@ export function AITutor({ breakpoint, segments, isLoading: externalLoading, onRe
     } catch (err) {
       console.error('Failed to save to cache:', err);
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- syncToConversationHistory is declared below and intentionally stable for this closure.
   }, [breakpoint, sessionId, selectedModel, transcriptSignature]);
 
   // 同步到对话历史系统
@@ -908,7 +909,7 @@ export function AITutor({ breakpoint, segments, isLoading: externalLoading, onRe
     isThinking: isGlobalThinking,
     streamingContent,
     thinkingContent: globalThinkingContent,
-    clearContent: clearGlobalContent,
+    clearContent: _clearGlobalContent,
     clearStreamingOnly: clearGlobalStreamingOnly,
   } = useSimpleSSEStream();
   
@@ -1022,7 +1023,7 @@ export function AITutor({ breakpoint, segments, isLoading: externalLoading, onRe
     } finally {
       setGlobalLoading(false);
     }
-  }, [userInput, segments, selectedModel, enableWeb, supportsMultimodal, uploadedImages, accessToken, userId, sessionId, globalFetchStream, clearGlobalContent, trackCoreEvent]);
+  }, [userInput, segments, selectedModel, enableWeb, enableThinkingGuide, supportsMultimodal, uploadedImages, accessToken, userId, sessionId, globalFetchStream, clearGlobalStreamingOnly, trackCoreEvent]);
 
   // 全局模式：停止生成
   const stopGlobalGeneration = useCallback(() => {
@@ -1536,7 +1537,7 @@ export function AITutor({ breakpoint, segments, isLoading: externalLoading, onRe
                       );
                     })
                   ) : (
-                    <span className="italic">"{response.explanation.teacherSaid}"</span>
+                    <span className="italic">“{response.explanation.teacherSaid}”</span>
                   )}
                 </div>
                 {response.explanation.citation.timeRange !== '00:00-00:00' && (

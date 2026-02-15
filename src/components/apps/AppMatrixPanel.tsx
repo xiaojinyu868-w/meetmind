@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import Image from 'next/image';
 import { toast } from 'sonner';
 import { ModelSelector } from '@/components/ModelSelector';
 import { DEFAULT_MODEL_ID } from '@/lib/services/llm-service';
@@ -1232,7 +1233,14 @@ export function AppMatrixPanel({
                 </ul>
               )}
               {block.type === 'image' && block.src && (
-                <img src={block.src} alt={block.alt || block.title || '生成图像'} className={styles.customImage} />
+                <Image
+                  src={block.src}
+                  alt={block.alt || block.title || '生成图像'}
+                  width={1200}
+                  height={800}
+                  className={styles.customImage}
+                  unoptimized
+                />
               )}
               {block.type === 'audio' && block.src && (
                 <audio controls preload="none" src={block.src} className={styles.audioPlayer} />

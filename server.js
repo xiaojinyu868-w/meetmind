@@ -21,7 +21,18 @@ const port = parseInt(process.env.PORT || '3001', 10);
 const devDistDir = process.env.NEXT_DEV_DIST_DIR || '.next-dev';
 const activeDistDir = dev ? devDistDir : '.next';
 
-const app = next({ dev, hostname, port });
+// Guard against "node -e require('./server.js')" startup.
+// Next worker processes inherit execArgv; leaving -e here can recursively restart this server in children.
+if (Array.isArray(process.execArgv) && process.execArgv.length > 0) {
+  const evalIndex = process.execArgv.findIndex((arg) => arg === '-e' || arg === '--eval');
+  if (evalIndex !== -1) {
+    const removed = process.execArgv.slice(evalIndex, evalIndex + 2).join(' ');
+    process.execArgv.splice(evalIndex, 2);
+    console.warn(`[Server] Detected eval startup args ("${removed}"). Sanitized worker execArgv to avoid recursive boot.`);
+  }
+}
+
+const app = next({ dev, hostname, port, conf: { distDir: activeDistDir } });
 const handle = app.getRequestHandler();
 
 const DASHSCOPE_WSS_URL = 'wss://dashscope.aliyuncs.com/api-ws/v1/realtime';
@@ -801,6 +812,10 @@ app.prepare().then(() => {
   });
 
   server.on('error', (error) => {
+    if (error && error.code === 'EADDRINUSE') {
+      console.error(`[Server] Port ${port} is already in use. Stop the existing process or run another port.`);
+      process.exit(1);
+    }
     console.error('[Server] Server error:', error);
   });
 }).catch((error) => {

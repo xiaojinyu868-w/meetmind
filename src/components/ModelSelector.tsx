@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 
 interface ModelConfig {
   id: string;
@@ -17,11 +17,28 @@ interface ModelSelectorProps {
   onMultimodalChange?: (supportsMultimodal: boolean) => void;
   className?: string;
   compact?: boolean;  // 紧凑模式，用于移动端
+  allowedProviders?: string[];
 }
 
-export function ModelSelector({ value, onChange, onMultimodalChange, className = '', compact = false }: ModelSelectorProps) {
+export function ModelSelector({
+  value,
+  onChange,
+  onMultimodalChange,
+  className = '',
+  compact = false,
+  allowedProviders,
+}: ModelSelectorProps) {
   const [models, setModels] = useState<ModelConfig[]>([]);
   const [isOpen, setIsOpen] = useState(false);
+
+  const allowedProviderSet = useMemo(
+    () => new Set((allowedProviders || []).map((provider) => provider.trim()).filter(Boolean)),
+    [allowedProviders]
+  );
+  const scopedModels = useMemo(() => {
+    if (allowedProviderSet.size === 0) return models;
+    return models.filter((model) => allowedProviderSet.has(model.provider));
+  }, [allowedProviderSet, models]);
 
   useEffect(() => {
     // 获取可用模型列表
@@ -35,16 +52,23 @@ export function ModelSelector({ value, onChange, onMultimodalChange, className =
 
   // 当 value 变化时更新多模态状态
   useEffect(() => {
-    const currentModel = models.find(m => m.id === value);
+    const currentModel = scopedModels.find(m => m.id === value);
     if (currentModel && onMultimodalChange) {
       onMultimodalChange(currentModel.supportsMultimodal ?? false);
     }
-  }, [value, models, onMultimodalChange]);
+  }, [value, scopedModels, onMultimodalChange]);
 
-  const selectedModel = models.find(m => m.id === value);
+  useEffect(() => {
+    if (scopedModels.length === 0) return;
+    if (!scopedModels.some((model) => model.id === value)) {
+      onChange(scopedModels[0].id);
+    }
+  }, [onChange, scopedModels, value]);
+
+  const selectedModel = scopedModels.find(m => m.id === value);
   const providerOrder = ['qwen', 'volcengine', 'relay'];
   const activeProviders = providerOrder.filter((provider) =>
-    models.some((model) => model.provider === provider)
+    scopedModels.some((model) => model.provider === provider)
   );
 
   const getProviderIcon = (provider: string) => {
@@ -76,7 +100,7 @@ export function ModelSelector({ value, onChange, onMultimodalChange, className =
 
   const handleModelChange = (modelId: string) => {
     onChange(modelId);
-    const model = models.find(m => m.id === modelId);
+    const model = scopedModels.find(m => m.id === modelId);
     if (model && onMultimodalChange) {
       onMultimodalChange(model.supportsMultimodal ?? false);
     }
@@ -121,7 +145,7 @@ export function ModelSelector({ value, onChange, onMultimodalChange, className =
             <div className="max-h-80 overflow-y-auto">
               {/* 按提供商分组（仅显示当前已启用的 provider） */}
               {activeProviders.map(provider => {
-                const providerModels = models.filter(m => m.provider === provider);
+                const providerModels = scopedModels.filter(m => m.provider === provider);
                 if (providerModels.length === 0) return null;
                 
                 return (

@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useRef, useEffect, useMemo } from 'react';
+import React, { useMemo } from 'react';
 import { cn } from '@/lib/utils';
 import type { TranscriptSegment } from '@/types';
 import { TranscriptFlowView } from '../TranscriptFlowView';
@@ -31,10 +31,10 @@ export function MobileTimeline({
   entries,
   currentTime,
   onEntryClick,
-  onConfusionClick,
-  selectedEntryId,
+  onConfusionClick: _onConfusionClick,
+  selectedEntryId: _selectedEntryId,
   className,
-  autoScroll = true,
+  autoScroll: _autoScroll = true,
 }: MobileTimelineProps) {
   // Convert entries to TranscriptSegment format
   const segments: TranscriptSegment[] = useMemo(

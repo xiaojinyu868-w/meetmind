@@ -88,6 +88,9 @@ export interface ClassroomData {
 const STORAGE_PREFIX = 'meetmind_classroom';
 const ANCHORS_KEY = `${STORAGE_PREFIX}_anchors`;
 const SESSIONS_KEY = `${STORAGE_PREFIX}_sessions`;
+let classroomAnchorsCache: StudentAnchor[] | null = null;
+let classroomSessionsCache: ClassSession[] | null = null;
+let idbWarmStarted = false;
 
 // ==================== 辅助函数 ====================
 
@@ -145,10 +148,13 @@ function inferPossibleReason(count: number, content: string): string {
  * 获取所有困惑点 (从 localStorage)
  */
 function getAllAnchorsFromStorage(): StudentAnchor[] {
+  if (classroomAnchorsCache) return classroomAnchorsCache;
   if (typeof window === 'undefined') return [];
+  warmCacheFromIndexedDb();
   try {
     const data = localStorage.getItem(ANCHORS_KEY);
-    return data ? JSON.parse(data) : [];
+    classroomAnchorsCache = data ? JSON.parse(data) : [];
+    return classroomAnchorsCache || [];
   } catch {
     return [];
   }
@@ -158,18 +164,22 @@ function getAllAnchorsFromStorage(): StudentAnchor[] {
  * 保存困惑点到 localStorage
  */
 function saveAnchorsToStorage(anchors: StudentAnchor[]): void {
+  classroomAnchorsCache = [...anchors];
   if (typeof window === 'undefined') return;
-  localStorage.setItem(ANCHORS_KEY, JSON.stringify(anchors));
+  void persistAnchorsToIndexedDb(classroomAnchorsCache).catch(() => undefined);
 }
 
 /**
  * 获取所有课程会话
  */
 function getAllSessionsFromStorage(): ClassSession[] {
+  if (classroomSessionsCache) return classroomSessionsCache;
   if (typeof window === 'undefined') return [];
+  warmCacheFromIndexedDb();
   try {
     const data = localStorage.getItem(SESSIONS_KEY);
-    return data ? JSON.parse(data) : [];
+    classroomSessionsCache = data ? JSON.parse(data) : [];
+    return classroomSessionsCache || [];
   } catch {
     return [];
   }
@@ -179,8 +189,139 @@ function getAllSessionsFromStorage(): ClassSession[] {
  * 保存课程会话
  */
 function saveSessionsToStorage(sessions: ClassSession[]): void {
+  classroomSessionsCache = [...sessions];
   if (typeof window === 'undefined') return;
-  localStorage.setItem(SESSIONS_KEY, JSON.stringify(sessions));
+  void persistSessionsToIndexedDb(classroomSessionsCache).catch(() => undefined);
+}
+
+function mapDbAnchorToStudentAnchor(
+  row: {
+    id?: number;
+    sessionId: string;
+    timestamp: number;
+    type: AnchorType;
+    status: 'active' | 'resolved';
+    note?: string;
+    aiExplanation?: string;
+    createdAt: Date;
+    resolvedAt?: Date;
+  },
+  index: number
+): StudentAnchor {
+  const createdAt = row.createdAt.toISOString();
+  return {
+    id: `db-anchor-${row.id ?? index + 1}`,
+    sessionId: row.sessionId,
+    studentId: 'local-student',
+    studentName: '本机用户',
+    timestamp: row.timestamp,
+    type: row.type,
+    cancelled: false,
+    resolved: row.status === 'resolved',
+    status: row.status === 'resolved' ? 'resolved' : 'active',
+    createdAt,
+    updatedAt: createdAt,
+    resolvedAt: row.resolvedAt?.toISOString(),
+    note: row.note,
+    aiExplanation: row.aiExplanation,
+  };
+}
+
+function mapDbSessionToClassSession(
+  row: {
+    sessionId: string;
+    subject?: string;
+    topic?: string;
+    duration: number;
+    status: 'recording' | 'completed' | 'archived';
+    createdAt: Date;
+    updatedAt: Date;
+  }
+): ClassSession {
+  return {
+    id: row.sessionId,
+    subject: row.subject || '未知学科',
+    topic: row.topic,
+    duration: row.duration,
+    status: row.status,
+    createdAt: row.createdAt.toISOString(),
+    updatedAt: row.updatedAt.toISOString(),
+  };
+}
+
+function warmCacheFromIndexedDb(): void {
+  if (idbWarmStarted || typeof window === 'undefined') return;
+  idbWarmStarted = true;
+  void Promise.all([db.anchors.toArray(), db.audioSessions.toArray()])
+    .then(([anchorRows, sessionRows]) => {
+      if (!classroomAnchorsCache || classroomAnchorsCache.length === 0) {
+        classroomAnchorsCache = anchorRows.map((row, index) => mapDbAnchorToStudentAnchor(row, index));
+      }
+      if (!classroomSessionsCache || classroomSessionsCache.length === 0) {
+        classroomSessionsCache = sessionRows.map((row) => mapDbSessionToClassSession(row));
+      }
+    })
+    .catch(() => undefined);
+}
+
+async function persistAnchorsToIndexedDb(anchors: StudentAnchor[]): Promise<void> {
+  const grouped = new Map<string, StudentAnchor[]>();
+  for (const anchor of anchors) {
+    const bucket = grouped.get(anchor.sessionId) || [];
+    bucket.push(anchor);
+    grouped.set(anchor.sessionId, bucket);
+  }
+
+  for (const [sessionId, sessionAnchors] of grouped.entries()) {
+    await db.anchors.where('sessionId').equals(sessionId).delete();
+    const rows = sessionAnchors
+      .filter((anchor) => !anchor.cancelled)
+      .map((anchor) => ({
+        sessionId,
+        timestamp: anchor.timestamp,
+        type: anchor.type,
+        status: (anchor.resolved ? 'resolved' : 'active') as 'active' | 'resolved',
+        note: anchor.note,
+        aiExplanation: anchor.aiExplanation,
+        createdAt: new Date(anchor.createdAt),
+        resolvedAt: anchor.resolvedAt ? new Date(anchor.resolvedAt) : undefined,
+      }));
+    if (rows.length > 0) {
+      await db.anchors.bulkAdd(rows);
+    }
+  }
+}
+
+async function persistSessionsToIndexedDb(sessions: ClassSession[]): Promise<void> {
+  for (const session of sessions) {
+    const existing = await db.audioSessions.where('sessionId').equals(session.id).first();
+    const createdAt = session.createdAt ? new Date(session.createdAt) : new Date();
+    const updatedAt = session.updatedAt ? new Date(session.updatedAt) : createdAt;
+
+    if (existing) {
+      await db.audioSessions.update(existing.id as number, {
+        subject: session.subject,
+        topic: session.topic,
+        duration: session.duration,
+        status: session.status,
+        updatedAt: Number.isNaN(updatedAt.getTime()) ? new Date() : updatedAt,
+      });
+      continue;
+    }
+
+    await db.audioSessions.add({
+      sessionId: session.id,
+      userId: 'anonymous',
+      mimeType: 'audio/webm',
+      duration: session.duration,
+      subject: session.subject,
+      topic: session.topic,
+      sourceType: 'recording',
+      status: session.status,
+      createdAt: Number.isNaN(createdAt.getTime()) ? new Date() : createdAt,
+      updatedAt: Number.isNaN(updatedAt.getTime()) ? new Date() : updatedAt,
+    });
+  }
 }
 
 // ==================== 课堂数据服务 ====================

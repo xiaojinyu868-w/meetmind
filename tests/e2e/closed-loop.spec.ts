@@ -67,42 +67,83 @@ const MOCK_APP_MATRIX_PLUGINS = {
   count: 1,
 };
 
+const MOCK_WORKSHOP_CATALOG = {
+  apps: [
+    {
+      key: 'flashcards',
+      name: 'Flashcards',
+      category: 'Memory',
+      headline: 'Active Recall Flashcards',
+      description: 'Generate flashcards from classroom evidence with training flow.',
+      tags: ['recall', 'spaced', 'practice'],
+      coverImage: '/images/apps/flashcards-cover.svg',
+      pluginId: 'flashcards-lab',
+      intent: 'Generate flashcards from class evidence for active recall.',
+      outputType: 'Training flashcards',
+      renderMode: 'flashcards',
+      status: 'ready',
+      enabled: true,
+    },
+  ],
+  count: 1,
+};
+
 const MOCK_APP_MATRIX_EXECUTION = {
   ok: true,
-  pluginId: 'knowledge-cards',
+  pluginId: 'flashcards-lab',
   result: {
-    pluginId: 'knowledge-cards',
+    pluginId: 'flashcards-lab',
     version: '0.1.0',
     model: 'qwen3-max-2026-01-23',
-    trace: ['intent=复习模式：生成课堂证据知识卡片', 'strategy=context_first'],
+    trace: ['intent=flashcards-training', 'strategy=context_first'],
     cards: [
       {
-        id: 'knowledge-card-1',
-        type: 'timeline',
-        title: '条件从句速记卡',
-        body: '先识别 if 从句，再判断主句时态，最后反推语义。',
+        id: 'flashcard-card-1',
+        type: 'flashcard',
+        title: '?? 1',
+        body: 'What is active recall?',
         priority: 'high',
         citations: [{ startMs: 10_000, endMs: 20_000, snippet: 'mock snippet' }],
-        actions: [
-          { id: 'seek-1', label: '回放 0:10', kind: 'seek', payload: { timestamp: 10_000 } },
-          { id: 'mark-1', label: '标记已掌握', kind: 'mark_done', payload: { taskId: 'knowledge-task-1' } },
-        ],
+        actions: [{ id: 'seek-1', label: '?? 0:10', kind: 'seek', payload: { timestamp: 10_000 } }],
+        meta: {
+          cardKind: 'flashcard',
+          front: 'What is active recall?',
+          back: 'Recall first, then verify with answer.',
+          hint: 'Define first, then provide one class example',
+        },
       },
     ],
     tasks: [
       {
-        id: 'knowledge-task-1',
-        label: '复习卡片 1（0:10）',
-        reason: '先听再复述',
+        id: 'flashcard-task-1',
+        label: 'Complete flashcard 1',
+        reason: 'Recall before checking answer',
         estimatedMinutes: 5,
         relatedTimestamp: 10_000,
       },
     ],
+    render: {
+      mode: 'flashcards',
+      title: 'Class Flashcards',
+      description: 'Recall before checking answer',
+      payload: {
+        cards: [
+          {
+            id: 'flashcard-card-1',
+            title: '?? 1',
+            front: 'What is active recall?',
+            back: 'Recall first, then verify with answer.',
+            hint: 'Define first, then provide one class example',
+          },
+        ],
+      },
+    },
     raw: {
       generatedAt: '2026-02-13T00:00:00.000Z',
     },
   },
 };
+
 
 function buildTutorResponse(actionItems = DEFAULT_ACTION_ITEMS) {
   return {
@@ -145,6 +186,14 @@ async function mockVideoImportApi(page: Page): Promise<void> {
 }
 
 async function mockAppMatrixApi(page: Page): Promise<void> {
+  await page.route('**/api/apps/catalog', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify(MOCK_WORKSHOP_CATALOG),
+    });
+  });
+
   await page.route('**/api/apps/plugins', async (route) => {
     await route.fulfill({
       status: 200,
@@ -160,7 +209,20 @@ async function mockAppMatrixApi(page: Page): Promise<void> {
       body: JSON.stringify(MOCK_APP_MATRIX_EXECUTION),
     });
   });
+
+  await page.route('**/api/apps/infographic/generate-image', async (route) => {
+    if (route.request().method() === 'GET') {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ ok: true, enabled: false, model: 'qwen-image-max' }),
+      });
+      return;
+    }
+    await route.continue();
+  });
 }
+
 
 async function openDbInBrowser(page: Page): Promise<void> {
   await page.evaluate(async () => {
@@ -345,25 +407,31 @@ test.describe('Closed Loop Regression', () => {
     await expect(page.getByTestId('action-item-task-replay')).toHaveAttribute('data-completed', 'true');
   });
 
-  test('app matrix knowledge cards can run and persist task state', async ({ page }) => {
+  test('ai workshop opens yellow page and enters independent app window', async ({ page }) => {
     await mockAppMatrixApi(page);
     await openApp(page);
     await enterReviewMode(page);
 
     await page.getByTestId('review-tab-apps').click();
-    await expect(page.getByTestId('app-matrix-panel')).toBeVisible();
+    await expect(page.getByTestId('workshop-card-flashcards')).toBeVisible();
 
-    await page.getByTestId('app-matrix-run').click();
-    await expect(page.getByTestId('app-card-knowledge-card-1')).toBeVisible();
+    await page.getByTestId('workshop-card-flashcards').getByRole('link').click();
+    await expect(page).toHaveURL(/\/app\/matrix\/flashcards/);
+    await expect(page.getByTestId('app-window-shell')).toBeVisible();
+    await expect(page.getByTestId('flashcards-window')).toBeVisible();
 
-    await page.getByTestId('app-task-toggle-knowledge-task-1').click();
-    await expect(page.getByTestId('app-task-knowledge-task-1')).toHaveAttribute('data-completed', 'true');
+    const cached = await page.evaluate(() => {
+      const url = new URL(window.location.href);
+      const sessionId = url.searchParams.get('sessionId');
+      if (!sessionId) return false;
+      return Boolean(window.localStorage.getItem(`app_workspace_result:${sessionId}:flashcards`));
+    });
+    expect(cached).toBeTruthy();
 
     await page.reload();
-    await page.getByTestId('mode-review-button').click();
-    await page.getByTestId('review-tab-apps').click();
-    await expect(page.getByTestId('app-task-knowledge-task-1')).toHaveAttribute('data-completed', 'true');
+    await expect(page.getByTestId('flashcards-window')).toBeVisible();
   });
+
 
   test('start-next-task seeks playback forward', async ({ page }) => {
     await mockTutorApi(page, DEFAULT_ACTION_ITEMS);

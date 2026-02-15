@@ -33,6 +33,7 @@ export interface ApplicationGoal {
   intent: string;
   constraints?: string[];
   expectedOutput?: 'chat' | 'cards' | 'tasks' | 'mixed';
+  appKey?: string;
 }
 
 export interface AppExecutionContext {
@@ -82,6 +83,7 @@ export type AppRenderMode =
   | 'table'
   | 'script'
   | 'audio'
+  | 'image'
   | 'slides'
   | 'mindmap'
   | 'flashcards'
@@ -137,6 +139,7 @@ export interface AppPlugin {
 }
 
 export interface AppExecuteRequest {
+  appKey?: string;
   pluginId?: string;
   model?: string;
   goal: ApplicationGoal | string;

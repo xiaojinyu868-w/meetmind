@@ -4,7 +4,7 @@ import { chat, DEFAULT_MODEL_ID } from '@/lib/services/llm-service';
 import type { AppExecutionContext, AppExecutionResult, AppPlugin, AppPluginTools } from '../types';
 
 const KEYWORDS = ['闪卡', '记忆', '背诵', '复习卡', '知识卡', 'flashcard'];
-const TARGET_CARD_COUNT = 8;
+const TARGET_CARD_COUNT = 10;
 
 interface FlashcardDraft {
   question?: string;
@@ -98,21 +98,22 @@ async function generateDeckWithLLM(
       {
         role: 'system',
         content:
-          '你是课堂闪卡教练。只能基于给定课堂片段生成闪卡，禁止编造未出现事实。仅输出 JSON，不要输出额外说明。',
+          '你是一位顶级学习教练，擅长把课堂内容转成高质量主动回忆闪卡。严格基于证据，不得编造。输出纯 JSON。',
       },
       {
         role: 'user',
         content: `学习目标：${context.goal.intent}
-请生成 ${segments.length} 张闪卡，覆盖定义、方法、易错点和迁移应用。每张闪卡必须包含 question/answer/hint，并尽量填写 startMs/endMs。
-JSON 输出格式：{
+请基于课堂证据生成一组“能帮助学生真正学会”的闪卡。你可以自行决定卡片数量与难度层次，但要覆盖核心概念、关键方法、常见误区与迁移应用。
+最小输出契约（仅字段约束，不限制表达方式）：
+{
   "deckTitle": "闪卡标题",
-  "overview": "使用建议，1句话",
+  "overview": "训练建议",
   "cards": [
     {
       "question": "正面问题",
       "answer": "背面答案",
-      "hint": "提示",
-      "difficulty": "core 或 challenge",
+      "hint": "提示（可选）",
+      "difficulty": "core|challenge（可选）",
       "startMs": 12000,
       "endMs": 21000
     }
@@ -146,13 +147,31 @@ function buildCards(
     priority: 'high',
   });
 
-  segments.forEach((segment, index) => {
-    const taskId = `flashcard-task-${index + 1}`;
-    const llmCard = llmOutput?.cards?.[index];
-    const draft = llmCard?.question?.trim() && llmCard?.answer?.trim() ? llmCard : fallbackDraft(segment);
+  const draftCards =
+    Array.isArray(llmOutput?.cards) && llmOutput.cards.length > 0
+      ? llmOutput.cards.slice(0, TARGET_CARD_COUNT)
+      : segments.map((segment) => fallbackDraft(segment));
 
-    const startMs = toTimestamp(draft.startMs, segment.startMs);
-    const endMs = toTimestamp(draft.endMs, segment.endMs);
+  draftCards.forEach((draftCard, index) => {
+    const segment = segments[index % Math.max(1, segments.length)] || segments[0];
+    const taskId = `flashcard-task-${index + 1}`;
+    const draft =
+      draftCard?.question?.trim() && draftCard?.answer?.trim()
+        ? draftCard
+        : fallbackDraft(
+            segment || {
+              id: `virtual-${index + 1}`,
+              text: tools.summarizeSegments(segments, 120) || '请根据课堂内容完成复述。',
+              startMs: 0,
+              endMs: 8000,
+              confidence: 1,
+            }
+          );
+
+    const fallbackStart = segment?.startMs ?? 0;
+    const fallbackEnd = segment?.endMs ?? fallbackStart + 8000;
+    const startMs = toTimestamp(draft.startMs, fallbackStart);
+    const endMs = toTimestamp(draft.endMs, fallbackEnd);
     const front = draft.question?.trim() || `请复述 ${formatTimestamp(segment.startMs)} 的核心内容`;
     const back = draft.answer?.trim() || segment.text.trim();
     const hint = draft.hint?.trim() || '回放证据后，先给结论再给依据。';
@@ -167,7 +186,7 @@ function buildCards(
         {
           startMs,
           endMs,
-          snippet: segment.text.slice(0, 120),
+            snippet: segment.text.slice(0, 120),
         },
       ],
       actions: [
@@ -238,6 +257,8 @@ export const flashcardsPlugin: AppPlugin = {
 
     const cards = buildCards(tools, evidenceSegments, llmOutput);
 
+    const deckCards = cards.filter((card) => card.meta?.cardKind === 'flashcard');
+
     return {
       pluginId: 'flashcards-lab',
       version: '0.1.0',
@@ -250,15 +271,24 @@ export const flashcardsPlugin: AppPlugin = {
         `llm=${llmOutput ? 'enabled' : 'fallback'}`,
       ],
       cards,
-      tasks: buildTasks(evidenceSegments),
+      tasks: buildTasks(deckCards.map((card, index) => ({
+        id: card.id,
+        text:
+          typeof card.meta?.front === 'string'
+            ? card.meta.front
+            : typeof card.body === 'string'
+              ? card.body
+              : '',
+        startMs: card.citations?.[0]?.startMs ?? evidenceSegments[index % evidenceSegments.length]?.startMs ?? 0,
+        endMs: card.citations?.[0]?.endMs ?? evidenceSegments[index % evidenceSegments.length]?.endMs ?? 8000,
+        confidence: 1,
+      }))),
       render: {
         mode: 'flashcards',
         title: llmOutput?.deckTitle?.trim() || '课堂闪卡',
         description: llmOutput?.overview?.trim() || '先回忆再看答案，配合证据回放。',
         payload: {
-          cards: cards
-            .filter((card) => card.meta?.cardKind === 'flashcard')
-            .map((card) => ({
+          cards: deckCards.map((card) => ({
               id: card.id,
               title: card.title,
               front: typeof card.meta?.front === 'string' ? card.meta.front : card.body,

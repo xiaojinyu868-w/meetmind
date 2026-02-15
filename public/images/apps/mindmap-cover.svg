@@ -1,0 +1,19 @@
+<svg width="1200" height="630" viewBox="0 0 1200 630" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1200" y2="630" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#C9C4FF"/>
+      <stop offset="1" stop-color="#88A5FF"/>
+    </linearGradient>
+  </defs>
+  <rect width="1200" height="630" rx="44" fill="url(#bg)"/>
+  <circle cx="600" cy="315" r="84" fill="#FFFFFF"/>
+  <text x="538" y="325" fill="#4338CA" font-size="34" font-family="PingFang SC, Microsoft YaHei, sans-serif" font-weight="700">主干</text>
+  <path d="M540 250L380 170" stroke="#FFFFFF" stroke-width="12" stroke-linecap="round"/>
+  <path d="M540 380L360 470" stroke="#FFFFFF" stroke-width="12" stroke-linecap="round"/>
+  <path d="M660 250L820 170" stroke="#FFFFFF" stroke-width="12" stroke-linecap="round"/>
+  <path d="M660 380L850 470" stroke="#FFFFFF" stroke-width="12" stroke-linecap="round"/>
+  <rect x="250" y="120" width="180" height="92" rx="18" fill="#F8FAFC"/>
+  <rect x="220" y="430" width="220" height="92" rx="18" fill="#F8FAFC"/>
+  <rect x="770" y="120" width="190" height="92" rx="18" fill="#F8FAFC"/>
+  <rect x="760" y="430" width="230" height="92" rx="18" fill="#F8FAFC"/>
+</svg>

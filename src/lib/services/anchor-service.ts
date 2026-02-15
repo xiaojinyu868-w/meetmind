@@ -1,24 +1,95 @@
-/**
- * 断点标注服务
- * 
- * 管理学生在课堂中标记的困惑点
- */
-
+import { db } from '@/lib/db';
 import type { Anchor, AnchorType } from '@/types';
 
-// 重导出类型以保持向后兼容
 export type { Anchor, AnchorType } from '@/types';
 
-// 本地存储 key
-const STORAGE_KEY = 'meetmind_anchors';
+const LEGACY_STORAGE_KEY = 'meetmind_anchors';
+const sessionAnchorCache = new Map<string, Anchor[]>();
 
-/**
- * 断点服务
- */
+function cloneAnchors(anchors: Anchor[]): Anchor[] {
+  return anchors.map((anchor) => ({ ...anchor }));
+}
+
+function loadLegacyAnchors(sessionId: string): Anchor[] {
+  if (typeof window === 'undefined') return [];
+  try {
+    const raw = window.localStorage.getItem(`${LEGACY_STORAGE_KEY}_${sessionId}`);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw) as Anchor[];
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+function toDbStatus(anchor: Anchor): 'active' | 'resolved' {
+  return anchor.resolved ? 'resolved' : 'active';
+}
+
+async function flushSessionToDb(sessionId: string): Promise<void> {
+  const anchors = sessionAnchorCache.get(sessionId) || [];
+  await db.transaction('rw', db.anchors, async () => {
+    await db.anchors.where('sessionId').equals(sessionId).delete();
+    if (anchors.length === 0) return;
+    await db.anchors.bulkAdd(
+      anchors
+        .filter((anchor) => !anchor.cancelled)
+        .map((anchor) => ({
+          sessionId,
+          timestamp: anchor.timestamp,
+          type: anchor.type,
+          status: toDbStatus(anchor),
+          note: anchor.note,
+          aiExplanation: anchor.aiExplanation,
+          createdAt: new Date(anchor.createdAt),
+          resolvedAt: anchor.resolvedAt ? new Date(anchor.resolvedAt) : undefined,
+        }))
+    );
+  });
+}
+
+function warmSessionFromDb(sessionId: string): void {
+  if (typeof window === 'undefined') return;
+  void db.anchors
+    .where('sessionId')
+    .equals(sessionId)
+    .sortBy('timestamp')
+    .then((rows) => {
+      const current = sessionAnchorCache.get(sessionId) || [];
+      if (current.length > 0) return;
+      const mapped: Anchor[] = rows.map((row, index) => ({
+        id: `db-anchor-${row.id ?? index + 1}`,
+        sessionId,
+        studentId: 'local-student',
+        timestamp: row.timestamp,
+        type: row.type,
+        cancelled: false,
+        resolved: row.status === 'resolved',
+        createdAt: row.createdAt.toISOString(),
+        resolvedAt: row.resolvedAt?.toISOString(),
+        note: row.note,
+        aiExplanation: row.aiExplanation,
+      }));
+      sessionAnchorCache.set(sessionId, mapped);
+    })
+    .catch(() => undefined);
+}
+
+function ensureSessionCache(sessionId: string): Anchor[] {
+  const cached = sessionAnchorCache.get(sessionId);
+  if (cached) return cached;
+  const legacy = loadLegacyAnchors(sessionId);
+  sessionAnchorCache.set(sessionId, legacy);
+  warmSessionFromDb(sessionId);
+  return legacy;
+}
+
+function saveSessionCache(sessionId: string, anchors: Anchor[]): void {
+  sessionAnchorCache.set(sessionId, cloneAnchors(anchors));
+  void flushSessionToDb(sessionId).catch(() => undefined);
+}
+
 export const anchorService = {
-  /**
-   * 标记断点
-   */
   mark(
     sessionId: string,
     studentId: string,
@@ -36,102 +107,58 @@ export const anchorService = {
       createdAt: new Date().toISOString(),
     };
 
-    // 保存到本地存储
-    const anchors = this.getAll(sessionId);
+    const anchors = ensureSessionCache(sessionId);
     anchors.push(anchor);
-    this.saveAll(sessionId, anchors);
-
+    saveSessionCache(sessionId, anchors);
     return anchor;
   },
 
-  /**
-   * 撤销断点（5秒内可撤销）
-   */
   cancel(anchorId: string, sessionId: string): boolean {
-    const anchors = this.getAll(sessionId);
-    const anchor = anchors.find(a => a.id === anchorId);
-    
+    const anchors = ensureSessionCache(sessionId);
+    const anchor = anchors.find((item) => item.id === anchorId);
     if (!anchor) return false;
-    
-    // 检查是否在5秒内
     const elapsed = Date.now() - new Date(anchor.createdAt).getTime();
-    if (elapsed > 5000) {
-      return false;
-    }
-
+    if (elapsed > 5000) return false;
     anchor.cancelled = true;
-    this.saveAll(sessionId, anchors);
+    saveSessionCache(sessionId, anchors);
     return true;
   },
 
-  /**
-   * 标记为已解决
-   */
   resolve(anchorId: string, sessionId: string): void {
-    const anchors = this.getAll(sessionId);
-    const anchor = anchors.find(a => a.id === anchorId);
-    
-    if (anchor) {
-      anchor.resolved = true;
-      anchor.resolvedAt = new Date().toISOString();  // v2.0: 记录解决时间
-      this.saveAll(sessionId, anchors);
-    }
+    const anchors = ensureSessionCache(sessionId);
+    const anchor = anchors.find((item) => item.id === anchorId);
+    if (!anchor) return;
+    anchor.resolved = true;
+    anchor.resolvedAt = new Date().toISOString();
+    saveSessionCache(sessionId, anchors);
   },
 
-  /**
-   * 获取会话的所有断点
-   */
   getAll(sessionId: string): Anchor[] {
-    if (typeof window === 'undefined') return [];
-    
-    try {
-      const data = localStorage.getItem(`${STORAGE_KEY}_${sessionId}`);
-      return data ? JSON.parse(data) : [];
-    } catch {
-      return [];
-    }
+    return cloneAnchors(ensureSessionCache(sessionId));
   },
 
-  /**
-   * 获取有效断点（未撤销的）
-   */
   getActive(sessionId: string): Anchor[] {
-    return this.getAll(sessionId).filter(a => !a.cancelled);
+    return this.getAll(sessionId).filter((anchor) => !anchor.cancelled);
   },
 
-  /**
-   * 获取未解决的断点
-   */
   getUnresolved(sessionId: string): Anchor[] {
-    return this.getActive(sessionId).filter(a => !a.resolved);
+    return this.getActive(sessionId).filter((anchor) => !anchor.resolved);
   },
 
-  /**
-   * 保存所有断点
-   */
   saveAll(sessionId: string, anchors: Anchor[]): void {
-    if (typeof window === 'undefined') return;
-    localStorage.setItem(`${STORAGE_KEY}_${sessionId}`, JSON.stringify(anchors));
+    saveSessionCache(sessionId, anchors);
   },
 
-  /**
-   * 清空会话断点
-   */
   clear(sessionId: string): void {
-    if (typeof window === 'undefined') return;
-    localStorage.removeItem(`${STORAGE_KEY}_${sessionId}`);
+    sessionAnchorCache.set(sessionId, []);
+    void db.anchors.where('sessionId').equals(sessionId).delete().catch(() => undefined);
   },
 
-  /**
-   * 添加备注
-   */
   addNote(anchorId: string, sessionId: string, note: string): void {
-    const anchors = this.getAll(sessionId);
-    const anchor = anchors.find(a => a.id === anchorId);
-    
-    if (anchor) {
-      anchor.note = note;
-      this.saveAll(sessionId, anchors);
-    }
+    const anchors = ensureSessionCache(sessionId);
+    const anchor = anchors.find((item) => item.id === anchorId);
+    if (!anchor) return;
+    anchor.note = note;
+    saveSessionCache(sessionId, anchors);
   },
 };

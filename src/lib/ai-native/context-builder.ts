@@ -1,17 +1,12 @@
 import type { Anchor, TranscriptSegment } from '@/types';
-import type {
-  AppExecuteRequest,
-  AppExecutionContext,
-  ApplicationGoal,
-  DataSourceType,
-  MemoryLayerSnapshot,
-} from './types';
+import type { AppExecuteRequest, AppExecutionContext, ApplicationGoal, DataSourceType, MemoryLayerSnapshot } from './types';
 
-function normalizeGoal(goal: ApplicationGoal | string): ApplicationGoal {
+function normalizeGoal(goal: ApplicationGoal | string, appKey?: string): ApplicationGoal {
   if (typeof goal === 'string') {
     return {
       intent: goal.trim() || '未定义目标',
       expectedOutput: 'mixed',
+      appKey: appKey || undefined,
     };
   }
 
@@ -19,6 +14,7 @@ function normalizeGoal(goal: ApplicationGoal | string): ApplicationGoal {
     intent: goal.intent?.trim() || '未定义目标',
     constraints: Array.isArray(goal.constraints) ? goal.constraints : undefined,
     expectedOutput: goal.expectedOutput ?? 'mixed',
+    appKey: goal.appKey || appKey || undefined,
   };
 }
 
@@ -62,6 +58,7 @@ export function buildExecutionContext(payload: AppExecuteRequest): AppExecutionC
   const sessionId = payload.input?.sessionId?.trim() || `session-${Date.now()}`;
   const dataSource: DataSourceType = payload.input?.dataSource ?? 'unknown';
   const model = payload.model?.trim();
+  const appKey = payload.appKey?.trim();
 
   const memory: MemoryLayerSnapshot = {
     ...payload.memory,
@@ -77,7 +74,7 @@ export function buildExecutionContext(payload: AppExecuteRequest): AppExecutionC
       metadata: payload.input?.metadata,
     },
     memory,
-    goal: normalizeGoal(payload.goal),
+    goal: normalizeGoal(payload.goal, appKey),
     model: model || undefined,
   };
 }

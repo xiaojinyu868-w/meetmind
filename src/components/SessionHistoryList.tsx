@@ -30,6 +30,30 @@ interface SessionHistoryListProps {
   className?: string;
 }
 
+/**
+ * 会话去重：
+ * - 同一个 sessionId 可能因历史写入出现重复记录
+ * - 保留 updatedAt 最新的一条，避免 React key 冲突
+ */
+function dedupeSessionsBySessionId(list: AudioSession[]): AudioSession[] {
+  const map = new Map<string, AudioSession>();
+  for (const item of list) {
+    const existed = map.get(item.sessionId);
+    if (!existed) {
+      map.set(item.sessionId, item);
+      continue;
+    }
+    const existedTime = new Date(existed.updatedAt).getTime();
+    const nextTime = new Date(item.updatedAt).getTime();
+    if (Number.isFinite(nextTime) && nextTime >= existedTime) {
+      map.set(item.sessionId, item);
+    }
+  }
+  return Array.from(map.values()).sort(
+    (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+  );
+}
+
 /** 格式化时长显示 */
 function formatDuration(ms: number): string {
   if (!ms || ms <= 0) return '0:00';
@@ -324,7 +348,7 @@ export function SessionHistoryList({
     try {
       const currentUserId = userId || ANONYMOUS_USER_ID;
       const data = await getAllSessions(currentUserId);
-      setSessions(data);
+      setSessions(dedupeSessionsBySessionId(data));
     } catch (err) {
       console.error('加载会话历史失败:', err);
       setError('加载失败，请重试');
@@ -419,7 +443,7 @@ export function SessionHistoryList({
           <div className="space-y-1">
             {sessions.map((session) => (
               <SessionItem
-                key={session.sessionId}
+                key={`${session.sessionId}-${session.id ?? session.createdAt}`}
                 session={session}
                 isActive={session.sessionId === activeSessionId}
                 onSelect={() => onSessionSelect(session)}

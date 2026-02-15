@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useCallback, useState, useEffect } from 'react';
-import { useVoiceInput, VoiceInputStatus } from '@/hooks/useVoiceInput';
+import { useVoiceInput } from '@/hooks/useVoiceInput';
 
 interface VoiceMicButtonProps {
   /** 识别到的最终文字追加到输入框 */

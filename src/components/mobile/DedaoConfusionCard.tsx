@@ -35,28 +35,22 @@ export function DedaoConfusionCard({
 }: DedaoConfusionCardProps) {
   const cardRef = useRef<HTMLDivElement>(null);
 
-  // 点击外部关闭
   useEffect(() => {
     if (!isOpen) return;
-
-    const handleClickOutside = (e: MouseEvent) => {
-      if (cardRef.current && !cardRef.current.contains(e.target as Node)) {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (cardRef.current && !cardRef.current.contains(event.target as Node)) {
         onClose();
       }
     };
-
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [isOpen, onClose]);
 
-  // ESC 关闭
   useEffect(() => {
     if (!isOpen) return;
-
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') onClose();
     };
-
     document.addEventListener('keydown', handleKeyDown);
     return () => document.removeEventListener('keydown', handleKeyDown);
   }, [isOpen, onClose]);
@@ -65,44 +59,34 @@ export function DedaoConfusionCard({
 
   return (
     <>
-      {/* 遮罩层 */}
-      <div 
-        className="fixed inset-0 bg-black/30 z-40 animate-fade-in"
-        onClick={onClose}
-      />
+      <div className="fixed inset-0 z-40 bg-black/30 animate-fade-in" onClick={onClose} />
 
-      {/* 卡片 */}
       <div
         ref={cardRef}
         className={cn(
           'fixed left-4 right-4 bottom-4 z-50',
-          'bg-white rounded-2xl shadow-xl overflow-hidden',
+          'overflow-hidden rounded-2xl bg-white shadow-xl',
           'animate-slide-up'
         )}
         style={{ maxHeight: '60vh' }}
       >
-        {/* 顶部拖拽指示器 */}
         <div className="flex justify-center pt-3 pb-2">
-          <div className="w-10 h-1 bg-gray-200 rounded-full" />
+          <div className="h-1 w-10 rounded-full bg-gray-200" />
         </div>
 
-        {/* 头部 */}
-        <div className="px-4 pb-3 border-b border-gray-100">
+        <div className="border-b border-gray-100 px-4 pb-3">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <span className={cn(
-                'w-2 h-2 rounded-full',
-                confusion.resolved ? 'bg-green-500' : 'bg-red-500'
-              )} />
+              <span className={cn('h-2 w-2 rounded-full', confusion.resolved ? 'bg-green-500' : 'bg-red-500')} />
               <span className="text-sm font-medium text-[var(--dedao-text)]">
                 {confusion.resolved ? '已解决的困惑' : '待解决的困惑'}
               </span>
             </div>
             <button
               onClick={() => onSeek?.(confusion.timestamp)}
-              className="flex items-center gap-1 text-xs text-[var(--dedao-gold)] font-medium"
+              className="flex items-center gap-1 text-xs font-medium text-[var(--dedao-gold)]"
             >
-              <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24">
+              <svg className="h-3.5 w-3.5" fill="currentColor" viewBox="0 0 24 24">
                 <path d="M8 5v14l11-7z" />
               </svg>
               {formatTime(confusion.timestamp)}
@@ -110,39 +94,30 @@ export function DedaoConfusionCard({
           </div>
         </div>
 
-        {/* 内容区 */}
-        <div className="px-4 py-4 max-h-[40vh] overflow-y-auto">
-          {/* 上下文 */}
-          {confusion.context && (
-            <div className="mb-4 p-3 bg-[var(--dedao-bg-warm)] rounded-xl">
-              <p className="text-xs text-[var(--dedao-text-muted)] mb-1">课堂内容</p>
-              <p className="text-sm text-[var(--dedao-text)] leading-relaxed">
-                {confusion.context}
-              </p>
+        <div className="max-h-[40vh] overflow-y-auto px-4 py-4">
+          {confusion.context ? (
+            <div className="mb-4 rounded-xl bg-[var(--dedao-bg-warm)] p-3">
+              <p className="mb-1 text-xs text-[var(--dedao-text-muted)]">课堂内容</p>
+              <p className="text-sm leading-relaxed text-[var(--dedao-text)]">{confusion.context}</p>
             </div>
-          )}
+          ) : null}
 
-          {/* 困惑点内容 */}
-          {confusion.content && (
+          {confusion.content ? (
             <div className="mb-4">
-              <p className="text-xs text-[var(--dedao-text-muted)] mb-1">我的困惑</p>
-              <p className="text-sm text-[var(--dedao-text)] leading-relaxed">
-                {confusion.content}
-              </p>
+              <p className="mb-1 text-xs text-[var(--dedao-text-muted)]">我的困惑</p>
+              <p className="text-sm leading-relaxed text-[var(--dedao-text)]">{confusion.content}</p>
             </div>
-          )}
+          ) : null}
         </div>
 
-        {/* 操作按钮 */}
-        <div className="px-4 py-3 border-t border-gray-100 flex gap-3">
-          {!confusion.resolved && (
+        <div className="flex gap-3 border-t border-gray-100 px-4 py-3">
+          {!confusion.resolved ? (
             <>
               <button
                 onClick={() => onAskAI?.(confusion.content || '帮我解释一下这里')}
                 className={cn(
-                  'flex-1 py-2.5 rounded-xl text-sm font-medium',
-                  'bg-[var(--dedao-gold)] text-white',
-                  'active:scale-98 transition-transform duration-150'
+                  'flex-1 rounded-xl py-2.5 text-sm font-medium text-white',
+                  'bg-[var(--dedao-gold)] transition-transform duration-150 active:scale-98'
                 )}
               >
                 问 AI
@@ -150,22 +125,19 @@ export function DedaoConfusionCard({
               <button
                 onClick={onResolve}
                 className={cn(
-                  'flex-1 py-2.5 rounded-xl text-sm font-medium',
-                  'bg-[var(--dedao-bg-warm)] text-[var(--dedao-text)]',
-                  'active:scale-98 transition-transform duration-150'
+                  'flex-1 rounded-xl py-2.5 text-sm font-medium',
+                  'bg-[var(--dedao-bg-warm)] text-[var(--dedao-text)] transition-transform duration-150 active:scale-98'
                 )}
               >
                 已解决
               </button>
             </>
-          )}
-          {confusion.resolved && (
+          ) : (
             <button
               onClick={onClose}
               className={cn(
-                'flex-1 py-2.5 rounded-xl text-sm font-medium',
-                'bg-[var(--dedao-bg-warm)] text-[var(--dedao-text)]',
-                'active:scale-98 transition-transform duration-150'
+                'flex-1 rounded-xl py-2.5 text-sm font-medium',
+                'bg-[var(--dedao-bg-warm)] text-[var(--dedao-text)] transition-transform duration-150 active:scale-98'
               )}
             >
               关闭
@@ -176,15 +148,19 @@ export function DedaoConfusionCard({
 
       <style jsx>{`
         @keyframes fade-in {
-          from { opacity: 0; }
-          to { opacity: 1; }
+          from {
+            opacity: 0;
+          }
+          to {
+            opacity: 1;
+          }
         }
         @keyframes slide-up {
-          from { 
+          from {
             opacity: 0;
             transform: translateY(100%);
           }
-          to { 
+          to {
             opacity: 1;
             transform: translateY(0);
           }
