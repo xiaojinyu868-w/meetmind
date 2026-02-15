@@ -59,6 +59,14 @@ interface StudioOutput {
   };
 }
 
+interface PodcastPlan {
+  title?: string;
+  opening?: string;
+  keyTakeaways?: string[];
+  structure?: Array<{ title?: string; focus?: string }>;
+  tone?: string;
+}
+
 interface SlidePage {
   id: string;
   title: string;
@@ -83,6 +91,12 @@ const PODCAST_TIMEOUT_MS = (() => {
   if (!Number.isFinite(raw)) return 45000;
   return Math.min(120000, Math.max(10000, raw));
 })();
+
+const PODCAST_TIMESTAMP_PATTERN = /\b\d{1,2}:\d{2}(?::\d{2})?\b/g;
+const PODCAST_META_PATTERN = /\b(startMs|endMs)\s*=\s*\d+\b/gi;
+const PODCAST_SEGMENT_LABEL_PATTERN = /片段\s*\d+/g;
+const PODCAST_CHINESE_TIMESTAMP_PATTERN =
+  /(?:零|一|二|三|四|五|六|七|八|九|十|百|两|\d)+点(?:零|一|二|三|四|五|六|七|八|九|十|百|两|\d)+(?:分(?:零|一|二|三|四|五|六|七|八|九|十|百|两|\d)*秒?|秒)|(?:零|一|二|三|四|五|六|七|八|九|十|百|两|\d)+分(?:零|一|二|三|四|五|六|七|八|九|十|百|两|\d)+秒/g;
 
 function detectMode(intent: string, appKey?: string): StudioMode {
   const normalizedAppKey = (appKey || '').toLowerCase();
@@ -170,6 +184,129 @@ function buildEvidencePrompt(segments: TranscriptSegment[]): string {
       return `片段${index + 1} [${start}-${end}] startMs=${segment.startMs} endMs=${segment.endMs}\n${segment.text}`;
     })
     .join('\n\n');
+}
+
+function stripPodcastMetaNoise(text: string): string {
+  return text
+    .replace(PODCAST_META_PATTERN, ' ')
+    .replace(PODCAST_SEGMENT_LABEL_PATTERN, ' ')
+    .replace(/\[(?:\d{1,2}:)?\d{1,2}:\d{2}\]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function countTimestampHints(text: string): number {
+  const western = text.match(PODCAST_TIMESTAMP_PATTERN)?.length || 0;
+  const chinese = text.match(PODCAST_CHINESE_TIMESTAMP_PATTERN)?.length || 0;
+  return western + chinese;
+}
+
+function sanitizePodcastNarration(text: string): string {
+  const noiseRemoved = stripPodcastMetaNoise(text);
+  if (!noiseRemoved) return '';
+  if (countTimestampHints(noiseRemoved) < 2) return noiseRemoved;
+  return noiseRemoved
+    .replace(PODCAST_TIMESTAMP_PATTERN, ' ')
+    .replace(PODCAST_CHINESE_TIMESTAMP_PATTERN, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function pickPodcastCorpusSegments(transcript: TranscriptSegment[], maxSegments: number): TranscriptSegment[] {
+  if (transcript.length <= maxSegments) return transcript;
+  const headCount = Math.max(1, Math.floor(maxSegments * 0.35));
+  const tailCount = Math.max(1, Math.floor(maxSegments * 0.25));
+  const middleCount = Math.max(1, maxSegments - headCount - tailCount);
+  const middleStart = headCount;
+  const middleEnd = Math.max(middleStart + 1, transcript.length - tailCount);
+  const middleWindow = transcript.slice(middleStart, middleEnd);
+
+  const middlePicked: TranscriptSegment[] = [];
+  if (middleWindow.length <= middleCount) {
+    middlePicked.push(...middleWindow);
+  } else {
+    const step = (middleWindow.length - 1) / Math.max(1, middleCount - 1);
+    for (let index = 0; index < middleCount; index += 1) {
+      middlePicked.push(middleWindow[Math.round(index * step)]);
+    }
+  }
+
+  return [...transcript.slice(0, headCount), ...middlePicked, ...transcript.slice(-tailCount)];
+}
+
+function buildPodcastTranscriptCorpus(transcript: TranscriptSegment[], maxChars: number = 9000): string {
+  const selectedSegments = pickPodcastCorpusSegments(transcript, 80);
+  const merged = selectedSegments
+    .map((segment) => sanitizePodcastNarration(segment.text))
+    .filter(Boolean)
+    .join('\n');
+
+  if (merged.length <= maxChars) return merged;
+  return `${merged.slice(0, Math.max(0, maxChars - 3))}...`;
+}
+
+function normalizePodcastSpeaker(raw: string | undefined, index: number, mapping: Map<string, string>): string {
+  const normalized = raw?.trim() || '';
+  if (!normalized) return index % 2 === 0 ? '主持人A' : '主持人B';
+  if (mapping.has(normalized)) return mapping.get(normalized)!;
+  if (/^zh[_-]/i.test(normalized) || /^voice[_-]/i.test(normalized) || normalized.includes('bigtts')) {
+    const alias = mapping.size % 2 === 0 ? '主持人A' : '主持人B';
+    mapping.set(normalized, alias);
+    return alias;
+  }
+  return normalized;
+}
+
+async function generatePodcastPlan(context: AppExecutionContext, model: string): Promise<PodcastPlan | null> {
+  const corpus = buildPodcastTranscriptCorpus(context.input.transcript, 8500);
+  if (!corpus) return null;
+  const anchorHints = context.input.anchors
+    .filter((anchor) => !anchor.cancelled)
+    .slice(0, 10)
+    .map((anchor) => {
+      const status = anchor.resolved ? '已解决' : '待澄清';
+      return `${status}困惑：${anchor.note?.trim() || '课堂中出现理解阻塞，请重点解释原因与应用。'}`;
+    })
+    .join('\n');
+
+  const response = await chat(
+    [
+      {
+        role: 'system',
+        content:
+          '你是中文教育播客总编导。目标是把课堂内容改写成自然、好听、有学习价值的双人播客提纲。禁止逐秒报时。输出纯 JSON。',
+      },
+      {
+        role: 'user',
+        content: `课堂主题：${context.goal.intent}
+
+请产出播客策划提纲，要求：
+- 强调“理解与应用”，不是朗读逐字稿
+- 不要出现任何时间戳、分秒、片段编号、startMs/endMs
+- 主持人命名只用“主持人A”“主持人B”
+
+最小输出契约：
+{
+  "title": "标题",
+  "opening": "开场句",
+  "keyTakeaways": ["要点1", "要点2"],
+  "structure": [
+    { "title": "章节1", "focus": "讨论焦点" }
+  ],
+  "tone": "语气与节奏建议"
+}
+
+课堂素材：
+${corpus}
+
+${anchorHints ? `学习者关注点：\n${anchorHints}` : ''}`,
+      },
+    ],
+    model,
+    { temperature: 0.45, maxTokens: 1200 }
+  );
+
+  return parseJsonResponse<PodcastPlan>(response.content);
 }
 
 async function generateStudioOutput(
@@ -279,20 +416,53 @@ function buildPodcastInputText(
   context: AppExecutionContext,
   output: StudioOutput | null,
   evidenceSegments: TranscriptSegment[],
-  cards: AppExecutionResult['cards']
+  cards: AppExecutionResult['cards'],
+  podcastPlan: PodcastPlan | null
 ): string {
   const scriptSeed = extractScriptLines(cards)
-    .map((line) => `${line.speaker}：${line.line}`)
+    .map((line) => sanitizePodcastNarration(`${line.speaker}：${line.line}`))
+    .filter(Boolean)
     .join('\n');
   const evidenceSeed = evidenceSegments
-    .map((segment) => `[${formatTimestamp(segment.startMs)}] ${segment.text}`)
+    .map((segment) => sanitizePodcastNarration(segment.text))
+    .filter(Boolean)
     .join('\n');
+  const corpus = buildPodcastTranscriptCorpus(context.input.transcript, 9000);
+
+  const planSection = podcastPlan
+    ? [
+        podcastPlan.title ? `节目标题：${podcastPlan.title}` : '',
+        podcastPlan.opening ? `开场建议：${sanitizePodcastNarration(podcastPlan.opening)}` : '',
+        Array.isArray(podcastPlan.keyTakeaways) && podcastPlan.keyTakeaways.length > 0
+          ? `核心要点：${podcastPlan.keyTakeaways.map((item) => sanitizePodcastNarration(item)).join('；')}`
+          : '',
+        Array.isArray(podcastPlan.structure) && podcastPlan.structure.length > 0
+          ? `讨论结构：${podcastPlan.structure
+              .slice(0, 6)
+              .map((item, index) => {
+                const title = sanitizePodcastNarration(item.title || `章节${index + 1}`);
+                const focus = sanitizePodcastNarration(item.focus || '');
+                return `${index + 1}. ${title}${focus ? ` - ${focus}` : ''}`;
+              })
+              .join('\n')}`
+          : '',
+        podcastPlan.tone ? `表达风格：${sanitizePodcastNarration(podcastPlan.tone)}` : '',
+      ]
+        .filter(Boolean)
+        .join('\n')
+    : '';
 
   const text = [
-    `目标：${context.goal.intent}`,
-    output?.summary ? `摘要：${output.summary}` : '',
-    scriptSeed ? `脚本草案：\n${scriptSeed}` : '',
-    evidenceSeed ? `课堂证据：\n${evidenceSeed}` : '',
+    `任务目标：把课堂内容做成自然流畅的双人中文学习播客。`,
+    `课堂主题：${sanitizePodcastNarration(context.goal.intent)}`,
+    `口播硬约束：禁止逐秒报时；不要出现任何时间戳（如 08:25、8点25秒）、片段编号、startMs/endMs。`,
+    `主持人约束：只用“主持人A”“主持人B”两位角色对话，不要输出技术语音ID。`,
+    output?.summary ? `学习摘要：${sanitizePodcastNarration(output.summary)}` : '',
+    planSection ? `播客策划提纲：\n${planSection}` : '',
+    scriptSeed ? `已有脚本草案：\n${scriptSeed}` : '',
+    corpus ? `课堂素材（无时间戳清洗版）：\n${corpus}` : '',
+    evidenceSeed ? `关键证据片段（供交叉核验）：\n${evidenceSeed}` : '',
+    `输出预期：围绕知识点讲“是什么-为什么-怎么用”，减少口头禅，语言自然。`,
   ]
     .filter(Boolean)
     .join('\n\n')
@@ -307,6 +477,7 @@ function buildPodcastRoundCards(
 ): AppExecutionResult['cards'] {
   if (!Array.isArray(rounds) || rounds.length === 0) return [];
   const safeEvidence = evidenceSegments.length > 0 ? evidenceSegments : [];
+  const speakerAliasMap = new Map<string, string>();
 
   return rounds
     .filter((round) => typeof round.text === 'string' && round.text.trim().length > 0)
@@ -315,8 +486,9 @@ function buildPodcastRoundCards(
       const fallback = safeEvidence[index % Math.max(1, safeEvidence.length)];
       const startMs = fallback?.startMs ?? 0;
       const endMs = fallback?.endMs ?? startMs + 8000;
-      const speaker = round.speaker?.trim() || (index % 2 === 0 ? '主持人A' : '主持人B');
-      const line = round.text?.trim() || '';
+      const speaker = normalizePodcastSpeaker(round.speaker, index, speakerAliasMap);
+      const rawLine = round.text?.trim() || '';
+      const line = sanitizePodcastNarration(rawLine) || rawLine;
 
       return {
         id: `studio-podcast-round-${index + 1}`,
@@ -548,8 +720,15 @@ export const studioWorkshopPlugin: AppPlugin = {
     ];
 
     let output: StudioOutput | null = null;
+    let podcastPlan: PodcastPlan | null = null;
     if (mode === 'podcast') {
-      trace.push('llm=skipped');
+      try {
+        podcastPlan = await generatePodcastPlan(context, model);
+        trace.push('llm=podcast_plan_enabled');
+      } catch {
+        podcastPlan = null;
+        trace.push('llm=podcast_plan_fallback');
+      }
       trace.push('podcast_pipeline=volc_direct');
     } else {
       try {
@@ -566,6 +745,15 @@ export const studioWorkshopPlugin: AppPlugin = {
         ? '基于课堂证据直接生成真实播客音频与双人脚本。'
         : '请继续采集课堂内容后重试。';
     const defaultTitle = mode === 'podcast' ? '课堂播客' : '学习应用结果';
+    const podcastPlanSummary = podcastPlan
+      ? [
+          podcastPlan.opening || '',
+          ...(Array.isArray(podcastPlan.keyTakeaways) ? podcastPlan.keyTakeaways.slice(0, 3) : []),
+        ]
+          .map((item) => sanitizePodcastNarration(String(item || '').trim()))
+          .filter(Boolean)
+          .join(' ')
+      : '';
 
     const cards: AppExecutionResult['cards'] = [
       {
@@ -574,7 +762,8 @@ export const studioWorkshopPlugin: AppPlugin = {
         title: output?.title?.trim() || defaultTitle,
         body:
           output?.summary?.trim() ||
-          tools.summarizeSegments(evidenceSegments, 220) ||
+          podcastPlanSummary ||
+          tools.summarizeSegments(context.input.transcript, 260) ||
           fallbackSummary,
         priority: 'high',
       },
@@ -656,9 +845,11 @@ export const studioWorkshopPlugin: AppPlugin = {
     if (mode === 'podcast') {
       const enabled = isVolcPodcastEnabled();
       trace.push(`podcast_enabled=${enabled ? 'true' : 'false'}`);
+      trace.push(`podcast_plan=${podcastPlan ? 'yes' : 'no'}`);
       if (enabled) {
         try {
-          const podcastInput = buildPodcastInputText(context, output, evidenceSegments, cards);
+          const podcastInput = buildPodcastInputText(context, output, evidenceSegments, cards, podcastPlan);
+          trace.push(`podcast_input_chars=${podcastInput.length}`);
           podcastResult = await generateVolcPodcast({
             inputText: podcastInput,
             timeoutMs: PODCAST_TIMEOUT_MS,
@@ -747,6 +938,7 @@ export const studioWorkshopPlugin: AppPlugin = {
         mode,
         appKey: context.goal.appKey || undefined,
         infographicDraft,
+        podcastPlan: podcastPlan || undefined,
         podcast: podcastResult
           ? {
               inputId: podcastResult.inputId,
