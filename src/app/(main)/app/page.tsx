@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback, useRef, Suspense } from 'react';
+import { useState, useEffect, useCallback, useRef, Suspense, type ChangeEvent, type DragEvent } from 'react';
 import { useSearchParams } from 'next/navigation';
 import Image from 'next/image';
 import { Header } from '@/components/Header';
@@ -32,24 +32,23 @@ import { useResponsive } from '@/hooks/useResponsive';
 import { UIConfig } from '@/lib/config';
 import { toast } from 'sonner';
 
-// SWR 数据 Hooks - 统一管理 API 请求
+// SWR 鏁版嵁 Hooks - 缁熶竴绠＄悊 API 璇锋眰
 import { useTopics, useSummary } from '@/hooks/data';
 
-// WaveformPlayer 使用 forwardRef，需要静态导入以支持 ref
+// WaveformPlayer 浣跨敤 forwardRef锛岄渶瑕侀潤鎬佸鍏ヤ互鏀寔 ref
 import { WaveformPlayer, type WaveformPlayerRef, type WaveformAnchor } from '@/components/WaveformPlayer';
 
-// 开屏动画组件
+// 寮€灞忓姩鐢荤粍浠?
 import { AppLoading } from '@/components/AppLoading';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 
-// 静态导入所有组件 - 解决 Next.js dynamic import chunk 加载失败问题
+// 闈欐€佸鍏ユ墍鏈夌粍浠?- 瑙ｅ喅 Next.js dynamic import chunk 鍔犺浇澶辫触闂
 import { Recorder } from '@/components/Recorder';
 import { TimelineView } from '@/components/TimelineView';
 import { ActionList } from '@/components/ActionList';
 import { ActionSidebar } from '@/components/ActionSidebar';
 import { ActionDrawer } from '@/components/ActionDrawer';
 import { ResizablePanel } from '@/components/layout/ResizablePanel';
-import { AudioUploader } from '@/components/AudioUploader';
 import { VideoLinkImporter } from '@/components/VideoLinkImporter';
 import { VideoReviewPlayer } from '@/components/VideoReviewPlayer';
 import { AITutor } from '@/components/AITutor';
@@ -61,7 +60,7 @@ import type { ConfusionMarker } from '@/components/mobile/PodcastPlayer';
 import type { ConversationHistory } from '@/types/conversation';
 import type { AudioSession } from '@/lib/db';
 
-// 用户引导组件
+// 鐢ㄦ埛寮曞缁勪欢
 import { useOnboarding } from '@/hooks/useOnboarding';
 import { OnboardingGuide, WelcomeModal } from '@/components/OnboardingGuide';
 import { HighlightsPanel } from '@/components/HighlightsPanel';
@@ -73,7 +72,7 @@ import { ConversationList } from '@/components/ConversationHistory/ConversationL
 import { AIChat } from '@/components/AIChat';
 import { SessionHistoryList } from '@/components/SessionHistoryList';
 
-// 演示数据延迟加载
+// 婕旂ず鏁版嵁寤惰繜鍔犺浇
 let DEMO_DATA_CACHE: { DEMO_SEGMENTS: TranscriptSegment[]; DEMO_ANCHORS: Anchor[]; DEMO_AUDIO_URL: string } | null = null;
 const loadDemoData = async () => {
   if (DEMO_DATA_CACHE) return DEMO_DATA_CACHE;
@@ -86,7 +85,7 @@ const loadDemoData = async () => {
   return DEMO_DATA_CACHE;
 };
 
-// 移动端组件导入 - 直接导入避免 barrel file 导致的 tree-shaking 失效
+// 绉诲姩绔粍浠跺鍏?- 鐩存帴瀵煎叆閬垮厤 barrel file 瀵艰嚧鐨?tree-shaking 澶辨晥
 import { MiniPlayer } from '@/components/mobile/MiniPlayer';
 import { MobileTabSwitch } from '@/components/mobile/MobileTabSwitch';
 import { DedaoTimeline, toDedaoEntries } from '@/components/mobile/DedaoTimeline';
@@ -110,21 +109,21 @@ interface WorkspaceTabConfig<T extends WorkspaceTab> {
 }
 
 const SHARED_WORKSPACE_TABS: WorkspaceTabConfig<SharedWorkspaceTab>[] = [
-  { key: 'highlights', label: '精选', icon: '⚡' },
-  { key: 'summary', label: '摘要', icon: '📝' },
-  { key: 'apps', label: '应用矩阵', icon: '🧩', testId: 'review-tab-apps' },
-  { key: 'notes', label: '笔记', icon: '📄' },
+  { key: 'highlights', label: '精选', icon: '精' },
+  { key: 'summary', label: '摘要', icon: '摘' },
+  { key: 'apps', label: '应用矩阵', icon: '矩', testId: 'review-tab-apps' },
+  { key: 'notes', label: '笔记', icon: '记' },
 ];
 
 const VIDEO_WORKSPACE_TABS: WorkspaceTabConfig<VideoWorkspaceTab>[] = [
-  { key: 'chat', label: '对话', icon: '💬' },
-  { key: 'confusion', label: '困惑点', icon: '🎯' },
+  { key: 'chat', label: '对话', icon: '聊' },
+  { key: 'confusion', label: '困惑点', icon: '疑' },
   ...SHARED_WORKSPACE_TABS,
 ];
 
 const REVIEW_WORKSPACE_TABS: WorkspaceTabConfig<ReviewTab>[] = [
-  { key: 'timeline', label: '时间轴', icon: '📋' },
-  { key: 'anchor-detail', label: '困惑点', icon: '🎯' },
+  { key: 'timeline', label: '时间轴', icon: '轴' },
+  { key: 'anchor-detail', label: '困惑点', icon: '疑' },
   ...SHARED_WORKSPACE_TABS,
 ];
 
@@ -148,12 +147,56 @@ interface ActionItem {
   relatedTimestamp?: number;
 }
 
+type SourceIngestType = 'audio' | 'video' | 'document' | 'text';
+
+interface SourceIngestItem {
+  id: string;
+  type: SourceIngestType;
+  title: string;
+  segmentCount: number;
+  addedAt: string;
+}
+
 const VIDEO_INSIGHT_COLORS = ['#B48EFA', '#7FD4B2', '#7FADEB', '#F2AE8F', '#F0CD70', '#90D4DD'];
+
+const AUDIO_FILE_PATTERN = /\.(mp3|wav|webm|ogg|m4a|aac|flac)$/i;
+const DOCUMENT_FILE_PATTERN = /\.(txt|md|markdown|csv|json|html?|pdf|docx)$/i;
+
+function isAudioFile(file: File): boolean {
+  return file.type.startsWith('audio/') || AUDIO_FILE_PATTERN.test(file.name);
+}
+
+function isDocumentFile(file: File): boolean {
+  return DOCUMENT_FILE_PATTERN.test(file.name);
+}
+
+function mapSegmentsForAppend(
+  incoming: TranscriptSegment[],
+  sourceItemId: string,
+  offsetMs: number
+): TranscriptSegment[] {
+  return incoming.map((segment, index) => {
+    const rawStart = Number.isFinite(segment.startMs) ? segment.startMs : 0;
+    const rawEnd = Number.isFinite(segment.endMs) ? segment.endMs : rawStart + 1000;
+    const startMs = Math.max(0, Math.floor(rawStart + offsetMs));
+    const endMs = Math.max(startMs + 300, Math.floor(rawEnd + offsetMs));
+
+    return {
+      ...segment,
+      id: segment.id || `${sourceItemId}-seg-${index + 1}`,
+      sourceItemId,
+      startMs,
+      endMs,
+      confidence: Number.isFinite(segment.confidence) ? segment.confidence : 0.9,
+      isFinal: true,
+    };
+  });
+}
 
 function compactText(value: string, maxLength: number): string {
   const normalized = (value || '').replace(/\s+/g, ' ').trim();
   if (normalized.length <= maxLength) return normalized;
-  return `${normalized.slice(0, maxLength - 1)}…`;
+  return `${normalized.slice(0, maxLength - 1)}...`;
 }
 
 function buildSeedVideoInsights(segments: TranscriptSegment[]): VideoInsightItem[] {
@@ -176,7 +219,7 @@ function buildSeedVideoInsights(segments: TranscriptSegment[]): VideoInsightItem
   return [
     {
       id: 'seed-overview',
-      prompt: '导入完成，时间轴预览',
+      prompt: '导入完成，已生成时间轴预览',
       summary: compactText(valid.slice(0, 3).map((seg) => seg.text).join(' '), 120),
       timestamps: Array.from(new Set(timestamps)).sort((a, b) => a - b),
       color: VIDEO_INSIGHT_COLORS[0],
@@ -184,23 +227,23 @@ function buildSeedVideoInsights(segments: TranscriptSegment[]): VideoInsightItem
   ];
 }
 
-// 包装组件 - 处理 useSearchParams 需要 Suspense 边界的问题
+// 鍖呰缁勪欢 - 澶勭悊 useSearchParams 闇€瑕?Suspense 杈圭晫鐨勯棶棰?
 function StudentAppContent({ isGuestFastEntry }: { isGuestFastEntry: boolean }) {
-  // 开屏动画状态 - 访客快速入口跳过 Splash
+  // 寮€灞忓姩鐢荤姸鎬?- 璁垮蹇€熷叆鍙ｈ烦杩?Splash
   const [showSplash, setShowSplash] = useState(!isGuestFastEntry);
   const [appReady, setAppReady] = useState(false);
-  const [loadingProgress, setLoadingProgress] = useState(isGuestFastEntry ? 50 : 0); // 访客模式从50%开始，感知更快
+  const [loadingProgress, setLoadingProgress] = useState(isGuestFastEntry ? 50 : 0); // 璁垮妯″紡浠?0%寮€濮嬶紝鎰熺煡鏇村揩
   
-  // 获取当前登录用户
+  // 鑾峰彇褰撳墠鐧诲綍鐢ㄦ埛
   const { user, isAuthenticated } = useAuth();
   
-  // 响应式状态
+  // 鍝嶅簲寮忕姸鎬?
   const { isMobile, mounted } = useResponsive();
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isPlaying, setIsPlaying] = useState(false);
   const [selectedConfusion, setSelectedConfusion] = useState<ConfusionMarker | null>(null);
   const [mobileSubPage, setMobileSubPage] = useState<'highlights' | 'summary' | 'notes' | 'tasks' | 'apps' | 'ai-chat' | 'transcript' | null>(null);
-  const [mobileAIQuestion, setMobileAIQuestion] = useState<string>(''); // 移动端AI对话的初始问题
+  const [mobileAIQuestion, setMobileAIQuestion] = useState<string>(''); // 绉诲姩绔疉I瀵硅瘽鐨勫垵濮嬮棶棰?
   
   const [viewMode, setViewMode] = useState<ViewMode>('record');
   const [sessionId, setSessionId] = useState<string>('demo-session');
@@ -219,14 +262,14 @@ function StudentAppContent({ isGuestFastEntry }: { isGuestFastEntry: boolean }) 
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
   const [videoSource, setVideoSource] = useState<ImportedVideoSource | null>(null);
   
-  // 新增状态：精选片段、摘要、笔记
+  // 鏂板鐘舵€侊細绮鹃€夌墖娈点€佹憳瑕併€佺瑪璁?
   const [reviewTab, setReviewTab] = useState<ReviewTab>('timeline');
   const [videoWorkspaceTab, setVideoWorkspaceTab] = useState<VideoWorkspaceTab>('chat');
   const [showTranscriptBar, setShowTranscriptBar] = useState(false);
   const [confusionChatAnchor, setConfusionChatAnchor] = useState<Anchor | null>(null);
   const [videoInsightItems, setVideoInsightItems] = useState<VideoInsightItem[]>([]);
   const [activeVideoInsightId, setActiveVideoInsightId] = useState<string | null>(null);
-  // 使用 SWR Hooks 管理精选片段和摘要 - 自动去重、缓存、重试
+  // 浣跨敤 SWR Hooks 绠＄悊绮鹃€夌墖娈靛拰鎽樿 - 鑷姩鍘婚噸銆佺紦瀛樸€侀噸璇?
   const { 
     topics: highlightTopics, 
     selectedTopic, 
@@ -248,23 +291,43 @@ function StudentAppContent({ isGuestFastEntry }: { isGuestFastEntry: boolean }) 
   const [isPlayingAll, setIsPlayingAll] = useState(false);
   const [playAllIndex, setPlayAllIndex] = useState(0);
   
-  // 历史对话相关状态
+  // 鍘嗗彶瀵硅瘽鐩稿叧鐘舵€?
   const [showConversationHistory, setShowConversationHistory] = useState(false);
   const [selectedHistoryConversation, setSelectedHistoryConversation] = useState<ConversationHistory | null>(null);
   
-  // 录音历史相关状态
+  // 褰曢煶鍘嗗彶鐩稿叧鐘舵€?
   const [showSessionHistory, setShowSessionHistory] = useState(false);
+  const [sourceImportMode, setSourceImportMode] = useState<'files' | 'text'>('files');
+  const [sourceImporting, setSourceImporting] = useState(false);
+  const [sourceImportError, setSourceImportError] = useState('');
+  const [sourceTextInput, setSourceTextInput] = useState('');
+  const [sourceItems, setSourceItems] = useState<SourceIngestItem[]>([]);
   
-  // 行动清单抽屉状态
+  // 琛屽姩娓呭崟鎶藉眽鐘舵€?
   const [isActionDrawerOpen, setIsActionDrawerOpen] = useState(false);
   
-  // 用户引导状态
+  // 鐢ㄦ埛寮曞鐘舵€?
   const [showWelcome, setShowWelcome] = useState(false);
   const onboarding = useOnboarding({ isMobile });
   
   const liveSegmentsRef = useRef<TranscriptSegment[]>([]);
+  const segmentsRef = useRef<TranscriptSegment[]>([]);
+  const anchorsRef = useRef<Anchor[]>([]);
+  const sessionIdRef = useRef<string>(sessionId);
+  const sourceFileInputRef = useRef<HTMLInputElement>(null);
   const waveformRef = useRef<WaveformPlayerRef>(null);
-  const hasRestoredState = useRef(false);  // 是否已恢复状态
+  const hasRestoredState = useRef(false);  // 鏄惁宸叉仮澶嶇姸鎬?
+  useEffect(() => {
+    segmentsRef.current = segments;
+  }, [segments]);
+
+  useEffect(() => {
+    anchorsRef.current = anchors;
+  }, [anchors]);
+
+  useEffect(() => {
+    sessionIdRef.current = sessionId;
+  }, [sessionId]);
 
   const normalizeSeekTime = useCallback((timeMs: number | string): number | null => {
     let numeric: number | null = null;
@@ -297,7 +360,7 @@ function StudentAppContent({ isGuestFastEntry }: { isGuestFastEntry: boolean }) 
     const totalMs = segments.length > 0 ? segments[segments.length - 1].endMs : 0;
     let next = numeric;
 
-    // 兼容少数“秒单位”来源（如 46 表示 46s），统一转换为毫秒
+    // 鍏煎灏戞暟鈥滅鍗曚綅鈥濇潵婧愶紙濡?46 琛ㄧず 46s锛夛紝缁熶竴杞崲涓烘绉?
     if (next > 0 && next < 1000 && totalMs >= 30000) {
       next *= 1000;
     }
@@ -349,11 +412,11 @@ function StudentAppContent({ isGuestFastEntry }: { isGuestFastEntry: boolean }) 
     }
   }, [videoSource]);
   
-  // 引导结束后的清理：关闭引导期间打开的面板
+  // 寮曞缁撴潫鍚庣殑娓呯悊锛氬叧闂紩瀵兼湡闂存墦寮€鐨勯潰鏉?
   useEffect(() => {
-    // 当引导结束时，关闭引导期间打开的面板
+    // 褰撳紩瀵肩粨鏉熸椂锛屽叧闂紩瀵兼湡闂存墦寮€鐨勯潰鏉?
     if (!onboarding.isActive) {
-      // 给用户一点时间看最后的操作结果，然后关闭面板
+      // 缁欑敤鎴蜂竴鐐规椂闂寸湅鏈€鍚庣殑鎿嶄綔缁撴灉锛岀劧鍚庡叧闂潰鏉?
       const timer = setTimeout(() => {
         setIsActionDrawerOpen(false);
       }, 500);
@@ -361,7 +424,7 @@ function StudentAppContent({ isGuestFastEntry }: { isGuestFastEntry: boolean }) 
     }
   }, [onboarding.isActive]);
   
-  // 录音中关闭/刷新页面时警告用户
+  // 褰曢煶涓叧闂?鍒锋柊椤甸潰鏃惰鍛婄敤鎴?
   useEffect(() => {
     if (!isRecording) return;
     const handler = (e: BeforeUnloadEvent) => {
@@ -371,13 +434,13 @@ function StudentAppContent({ isGuestFastEntry }: { isGuestFastEntry: boolean }) 
     return () => window.removeEventListener('beforeunload', handler);
   }, [isRecording]);
 
-  // 获取当前用户的 studentId 和 studentName
+  // 鑾峰彇褰撳墠鐢ㄦ埛鐨?studentId 鍜?studentName
   const studentId = user?.id || 'anonymous';
   const studentName = user?.nickname || user?.username || '匿名用户';
 
   const persistedCurrentTime = Math.max(0, Math.floor(currentTime / 5000) * 5000);
 
-  // 保存应用状态到 IndexedDB（用于刷新恢复）
+  // 淇濆瓨搴旂敤鐘舵€佸埌 IndexedDB锛堢敤浜庡埛鏂版仮澶嶏級
   const saveAppState = useCallback(async () => {
     if (!hasRestoredState.current) return;
 
@@ -412,7 +475,7 @@ function StudentAppContent({ isGuestFastEntry }: { isGuestFastEntry: boolean }) 
     viewMode,
   ]);
 
-  // 当关键状态变化时保存
+  // 褰撳叧閿姸鎬佸彉鍖栨椂淇濆瓨
   useEffect(() => {
     if (!appReady) return;
     void saveAppState();
@@ -560,8 +623,8 @@ function StudentAppContent({ isGuestFastEntry }: { isGuestFastEntry: boolean }) 
     return true;
   }, [clearSummary, clearTopics]);
 
-  // 初始化 - 恢复状态（仅在首次加载时执行）
-  // 优化：使用并行加载和批量操作提升性能
+  // 鍒濆鍖?- 鎭㈠鐘舵€侊紙浠呭湪棣栨鍔犺浇鏃舵墽琛岋級
+  // 浼樺寲锛氫娇鐢ㄥ苟琛屽姞杞藉拰鎵归噺鎿嶄綔鎻愬崌鎬ц兘
   useEffect(() => {
     if (hasRestoredState.current) return;
 
@@ -708,14 +771,14 @@ function StudentAppContent({ isGuestFastEntry }: { isGuestFastEntry: boolean }) 
               db.transcripts.bulkAdd(
                 demoData.DEMO_SEGMENTS.map((segment) => ({
                   sessionId: 'demo-session',
-                  userId: ANONYMOUS_USER_ID, // demo 数据使用匿名用户
+                  userId: ANONYMOUS_USER_ID, // demo 鏁版嵁浣跨敤鍖垮悕鐢ㄦ埛
                   text: segment.text,
                   startMs: segment.startMs,
                   endMs: segment.endMs,
                   confidence: segment.confidence || 1.0,
                   isFinal: true,
                 }))
-              ).catch((error) => console.error('保存演示转录到 IndexedDB 失败:', error));
+              ).catch((error) => console.error('淇濆瓨婕旂ず杞綍鍒?IndexedDB 澶辫触:', error));
             }
           });
         } else {
@@ -757,7 +820,7 @@ function StudentAppContent({ isGuestFastEntry }: { isGuestFastEntry: boolean }) 
     initializeApp();
   }, [isGuestFastEntry]); // eslint-disable-line react-hooks/exhaustive-deps
   
-  // 备用：监听 onboarding 加载完成后检查（只在首次触发，访客模式跳过）
+  // 澶囩敤锛氱洃鍚?onboarding 鍔犺浇瀹屾垚鍚庢鏌ワ紙鍙湪棣栨瑙﹀彂锛岃瀹㈡ā寮忚烦杩囷級
   const hasTriggeredWelcome = useRef(false);
   useEffect(() => {
     if (!isGuestFastEntry && !onboarding.isLoading && appReady && !showSplash && !hasTriggeredWelcome.current && onboarding.shouldShowFlow('welcome')) {
@@ -766,36 +829,40 @@ function StudentAppContent({ isGuestFastEntry }: { isGuestFastEntry: boolean }) 
     }
   }, [isGuestFastEntry, onboarding, appReady, showSplash]);
 
-  // 处理开屏动画完成
+  // 澶勭悊寮€灞忓姩鐢诲畬鎴?
   const handleSplashComplete = useCallback(() => {
     setShowSplash(false);
   }, []);
 
   const handleRecordingStart = useCallback((newSessionId: string) => {
-    // 清除旧会话的所有状态
+    // 娓呴櫎鏃т細璇濈殑鎵€鏈夌姸鎬?
     setSessionId(newSessionId);
     setIsRecording(true);
     setSegments([]);
     setAnchors([]);
-    setSelectedAnchor(null); // 清除选中的困惑点
-    clearTopics(); // 清除精选片段（使用 SWR Hook）
-    clearSummary(); // 清除摘要（使用 SWR Hook）
-    setNotes([]); // 清除笔记
-    setActionItems([]); // 清除行动清单
-    setTimeline(null); // 清除时间轴
+    setSelectedAnchor(null); // 娓呴櫎閫変腑鐨勫洶鎯戠偣
+    clearTopics(); // 娓呴櫎绮鹃€夌墖娈碉紙浣跨敤 SWR Hook锛?
+    clearSummary(); // 娓呴櫎鎽樿锛堜娇鐢?SWR Hook锛?
+    setNotes([]); // 娓呴櫎绗旇
+    setActionItems([]); // 娓呴櫎琛屽姩娓呭崟
+    setTimeline(null); // 娓呴櫎鏃堕棿杞?
     setDataSource('live');
-    setAudioUrl(null); // 清除示例音频URL
-    setAudioBlob(null); // 清除音频 blob
+    setAudioUrl(null); // 娓呴櫎绀轰緥闊抽URL
+    setAudioBlob(null); // 娓呴櫎闊抽 blob
     setVideoSource(null);
     setVideoInsightItems([]);
     setActiveVideoInsightId(null);
+    setSourceItems([]);
+    setSourceImportError('');
+    setSourceTextInput('');
+    setSourceImportMode('files');
     liveSegmentsRef.current = [];
     anchorService.clear(newSessionId);
-    // 清理历史对话相关状态
+    // 娓呯悊鍘嗗彶瀵硅瘽鐩稿叧鐘舵€?
     setShowConversationHistory(false);
     setSelectedHistoryConversation(null);
     
-    // 创建课程会话记录 (供教师端读取)
+    // 鍒涘缓璇剧▼浼氳瘽璁板綍 (渚涙暀甯堢璇诲彇)
     classroomDataService.saveSession({
       id: newSessionId,
       subject: UIConfig.defaultSubject,
@@ -810,7 +877,7 @@ function StudentAppContent({ isGuestFastEntry }: { isGuestFastEntry: boolean }) 
     setIsRecording(false);
     if (blob) setAudioBlob(blob);
     
-    // 使用 liveSegmentsRef 判断是否有实时转录数据
+    // 浣跨敤 liveSegmentsRef 鍒ゆ柇鏄惁鏈夊疄鏃惰浆褰曟暟鎹?
     const currentSegments = liveSegmentsRef.current.length > 0 
       ? liveSegmentsRef.current 
       : segments;
@@ -826,12 +893,12 @@ function StudentAppContent({ isGuestFastEntry }: { isGuestFastEntry: boolean }) 
       setActiveVideoInsightId(null);
     }
     
-    // 计算课程时长
+    // 璁＄畻璇剧▼鏃堕暱
     const duration = finalSegments.length > 0 
       ? finalSegments[finalSegments.length - 1].endMs 
       : 0;
     
-    // 更新课程会话状态
+    // 鏇存柊璇剧▼浼氳瘽鐘舵€?
     classroomDataService.saveSession({
       id: sessionId,
       subject: UIConfig.defaultSubject,
@@ -841,25 +908,25 @@ function StudentAppContent({ isGuestFastEntry }: { isGuestFastEntry: boolean }) 
       duration,
     });
     
-    // 保存音频和转录到 IndexedDB 历史记录
+    // 淇濆瓨闊抽鍜岃浆褰曞埌 IndexedDB 鍘嗗彶璁板綍
     if (blob && hasLiveData) {
       const currentUserId = user?.id || ANONYMOUS_USER_ID;
       
-      // 保存音频
+      // 淇濆瓨闊抽
       saveAudioSession(blob, sessionId, currentUserId, {
         subject: UIConfig.defaultSubject,
         topic: UIConfig.defaultLessonTitle,
         duration,
-      }).catch(err => console.error('保存录音到历史失败:', err));
+      }).catch(err => console.error('淇濆瓨褰曢煶鍒板巻鍙插け璐?', err));
       
-      // 保存转录到 IndexedDB（供历史记录加载）
+      // 淇濆瓨杞綍鍒?IndexedDB锛堜緵鍘嗗彶璁板綍鍔犺浇锛?
       addTranscripts(sessionId, currentUserId, finalSegments.map((seg) => ({
         text: seg.text,
         startMs: seg.startMs,
         endMs: seg.endMs,
         confidence: seg.confidence || 1.0,
         isFinal: true,
-      }))).catch(err => console.error('保存转录到 IndexedDB 失败:', err));
+      }))).catch(err => console.error('淇濆瓨杞綍鍒?IndexedDB 澶辫触:', err));
     }
     
     const tl = memoryService.buildTimeline(
@@ -873,12 +940,12 @@ function StudentAppContent({ isGuestFastEntry }: { isGuestFastEntry: boolean }) 
     setViewMode('review');
   }, [sessionId, anchors, segments, user]);
 
-  // 处理 viewMode 切换，同时清理历史对话相关状态
-  // 如果切换到复习模式且没有数据，自动加载 demo 数据
+  // 澶勭悊 viewMode 鍒囨崲锛屽悓鏃舵竻鐞嗗巻鍙插璇濈浉鍏崇姸鎬?
+  // 濡傛灉鍒囨崲鍒板涔犳ā寮忎笖娌℃湁鏁版嵁锛岃嚜鍔ㄥ姞杞?demo 鏁版嵁
   const handleViewModeChange = useCallback(async (newMode: 'record' | 'review') => {
     setViewMode(newMode);
     setMobileSubPage(null);
-    // 切换模式时清理历史对话面板状态
+    // 鍒囨崲妯″紡鏃舵竻鐞嗗巻鍙插璇濋潰鏉跨姸鎬?
     setShowConversationHistory(false);
     setSelectedHistoryConversation(null);
     setShowSessionHistory(false);
@@ -897,7 +964,7 @@ function StudentAppContent({ isGuestFastEntry }: { isGuestFastEntry: boolean }) 
         setVideoSource(null);
         setDataSource('demo');
         
-        // 构建时间轴
+        // 鏋勫缓鏃堕棿杞?
         const tl = memoryService.buildTimeline(
           sessionId,
           demoData.DEMO_SEGMENTS,
@@ -906,15 +973,15 @@ function StudentAppContent({ isGuestFastEntry }: { isGuestFastEntry: boolean }) 
         );
         setTimeline(tl);
         
-        // 选中第一个未解决的困惑点
+        // 閫変腑绗竴涓湭瑙ｅ喅鐨勫洶鎯戠偣
         const firstUnresolved = demoData.DEMO_ANCHORS.find(a => !a.resolved);
         if (firstUnresolved) {
           setSelectedAnchor(firstUnresolved);
           setCurrentTime(firstUnresolved.timestamp);
         }
         
-        // 首次进入复习模式时触发复习引导（有数据后）
-        // 如果当前没有引导在进行，且 review 流程未完成
+        // 棣栨杩涘叆澶嶄範妯″紡鏃惰Е鍙戝涔犲紩瀵硷紙鏈夋暟鎹悗锛?
+        // 濡傛灉褰撳墠娌℃湁寮曞鍦ㄨ繘琛岋紝涓?review 娴佺▼鏈畬鎴?
         if (!onboarding.isActive && onboarding.shouldShowFlow('review')) {
           setTimeout(() => onboarding.startFlow('review'), 500);
         }
@@ -922,7 +989,7 @@ function StudentAppContent({ isGuestFastEntry }: { isGuestFastEntry: boolean }) 
         console.error('Failed to load demo data:', err);
       }
     } else if (newMode === 'review' && segments.length > 0) {
-      // 已有数据，首次进入复习模式时触发引导
+      // 宸叉湁鏁版嵁锛岄娆¤繘鍏ュ涔犳ā寮忔椂瑙﹀彂寮曞
       if (!onboarding.isActive && onboarding.shouldShowFlow('review')) {
         setTimeout(() => onboarding.startFlow('review'), 300);
       }
@@ -936,7 +1003,7 @@ function StudentAppContent({ isGuestFastEntry }: { isGuestFastEntry: boolean }) 
     return () => clearTimeout(timer);
   }, [viewMode, videoSource, onboarding]);
 
-  // 从历史记录加载会话并进入复习模式
+  // 浠庡巻鍙茶褰曞姞杞戒細璇濆苟杩涘叆澶嶄範妯″紡
   const handleLoadHistorySession = useCallback(async (session: AudioSession) => {
     try {
       const restored = await restoreReviewSession(session.sessionId, {
@@ -948,6 +1015,10 @@ function StudentAppContent({ isGuestFastEntry }: { isGuestFastEntry: boolean }) 
       if (!restored) {
         throw new Error('session-not-restored');
       }
+      setSourceItems([]);
+      setSourceImportError('');
+      setSourceTextInput('');
+      setSourceImportMode('files');
     } catch (err) {
       console.error('加载历史会话失败:', err);
       toast.error('加载历史会话失败，请重试');
@@ -961,179 +1032,14 @@ function StudentAppContent({ isGuestFastEntry }: { isGuestFastEntry: boolean }) 
     setVideoSource(null);
   }, []);
 
-  // 处理转录增强完成后的更新
+  // 澶勭悊杞綍澧炲己瀹屾垚鍚庣殑鏇存柊
   const handleTranscriptEnhanced = useCallback((enhancedSegments: TranscriptSegment[]) => {
     console.log('[Page] Received enhanced transcript:', enhancedSegments.length, 'segments');
     liveSegmentsRef.current = enhancedSegments;
     setSegments(enhancedSegments);
   }, []);
 
-  const handleVideoImportReady = useCallback(async (result: ImportedVideoResult) => {
-    const importedSegments = Array.isArray(result.segments) ? result.segments : [];
-    if (importedSegments.length === 0) {
-      toast.warning('视频已导入，但转录为空，请更换视频或重试。');
-      return;
-    }
-
-    const newSessionId = generateSessionId();
-    setSessionId(newSessionId);
-    setViewMode('review');
-    setDataSource('video');
-    setVideoSource(result.source);
-    setVideoWorkspaceTab('chat');
-    setCurrentTime(0);
-    setVideoSeekNonce(0);
-    setVideoPlayNonce(0);
-
-    setSegments(importedSegments);
-    setAnchors([]);
-    setSelectedAnchor(null);
-    clearTopics();
-    clearSummary();
-    setNotes([]);
-    setActionItems([]);
-    setAudioBlob(null);
-    setAudioUrl(null);
-    setShowConversationHistory(false);
-    setSelectedHistoryConversation(null);
-    liveSegmentsRef.current = importedSegments;
-
-    const duration = importedSegments[importedSegments.length - 1]?.endMs || 0;
-    const seededInsights = buildSeedVideoInsights(importedSegments);
-    setVideoInsightItems(seededInsights);
-    setActiveVideoInsightId(seededInsights[0]?.id || null);
-
-    try {
-      const currentUserId = user?.id || ANONYMOUS_USER_ID;
-      await db.transcripts.bulkAdd(
-        importedSegments.map((seg) => ({
-          sessionId: newSessionId,
-          userId: currentUserId,
-          text: seg.text,
-          startMs: seg.startMs,
-          endMs: seg.endMs,
-          confidence: seg.confidence || 1.0,
-          isFinal: true,
-        }))
-      );
-
-      // 保存到 audioSessions 以便在历史列表中显示
-      await saveAudioSession(null, newSessionId, currentUserId, {
-        subject: UIConfig.defaultSubject,
-        topic: result.source.title || '视频复习',
-        duration,
-        sourceType: 'video-link',
-        videoUrl: result.source.originalUrl,
-        videoEmbedUrl: result.source.embedUrl,
-        videoProvider: result.source.provider,
-        thumbnailUrl: result.source.thumbnailUrl,
-        importSourceMode: result.source.sourceMode as AudioSession['importSourceMode'],
-        importTrace: result.source.importTrace,
-      });
-    } catch (error) {
-      console.error('保存视频转录到 IndexedDB 失败:', error);
-    }
-
-    classroomDataService.saveSession({
-      id: newSessionId,
-      subject: UIConfig.defaultSubject,
-      topic: result.source.title || '视频复习',
-      teacherName: UIConfig.defaultTeacher || 'Teacher',
-      status: 'completed',
-      duration,
-      createdBy: studentId,
-    });
-
-    const nextTimeline = memoryService.buildTimeline(
-      newSessionId,
-      importedSegments,
-      [],
-      {
-        subject: UIConfig.defaultSubject,
-        teacher: UIConfig.defaultTeacher || 'Teacher',
-        date: new Date().toISOString().split('T')[0],
-      }
-    );
-    setTimeline(nextTimeline);
-    memoryService.save(nextTimeline);
-  }, [clearSummary, clearTopics, studentId, user?.id]);
-
-  const handleUploadedTranscriptReady = useCallback(async (newSegments: TranscriptSegment[], blob?: Blob) => {
-    const newSessionId = generateSessionId();
-    // 清除旧会话的所有状态
-    setSessionId(newSessionId);
-    setSegments(newSegments);
-    setAnchors([]); // 清除旧困惑点
-    setSelectedAnchor(null); // 清除选中的困惑点
-    clearTopics(); // 清除精选片段（使用 SWR Hook）
-    clearSummary(); // 清除摘要（使用 SWR Hook）
-    setNotes([]); // 清除笔记
-    setActionItems([]); // 清除行动清单
-    setAudioBlob(blob || null);
-    setAudioUrl(null); // 清除示例音频URL
-    setDataSource('live');
-    setVideoSource(null);
-    setVideoInsightItems([]);
-    setActiveVideoInsightId(null);
-    liveSegmentsRef.current = [];
-    
-    // 将转录数据保存到 IndexedDB（供教师端读取）
-    try {
-      const currentUserId = user?.id || ANONYMOUS_USER_ID;
-      await db.transcripts.bulkAdd(
-        newSegments.map((seg) => ({
-          sessionId: newSessionId,
-          userId: currentUserId,
-          text: seg.text,
-          startMs: seg.startMs,
-          endMs: seg.endMs,
-          confidence: seg.confidence || 1.0,
-          isFinal: true,
-        }))
-      );
-      console.log(`已保存 ${newSegments.length} 条转录到 IndexedDB, sessionId: ${newSessionId}`);
-    } catch (error) {
-      console.error('保存转录到 IndexedDB 失败:', error);
-    }
-    
-    // 更新 classroomDataService 会话信息（供教师端读取）
-    const duration = newSegments.length > 0
-      ? newSegments[newSegments.length - 1].endMs
-      : 0;
-    classroomDataService.saveSession({
-      id: newSessionId,
-      subject: UIConfig.defaultSubject,
-      topic: UIConfig.defaultLessonTitle,
-      teacherName: UIConfig.defaultTeacher || 'Teacher',
-      status: 'completed',
-      duration,
-      createdBy: studentId,
-    });
-    
-    // 保存上传的音频到 IndexedDB 历史记录
-    if (blob) {
-      const currentUserId = user?.id || ANONYMOUS_USER_ID;
-      saveAudioSession(blob, newSessionId, currentUserId, {
-        subject: UIConfig.defaultSubject,
-        topic: UIConfig.defaultLessonTitle,
-        duration,
-      }).catch((err) => console.error('保存上传音频到历史失败:', err));
-    }
-    
-    // 构建时间轴
-    const timelineData = memoryService.buildTimeline(
-      newSessionId,
-      newSegments,
-      [], // 新会话没有困惑点
-      { subject: UIConfig.defaultSubject, teacher: UIConfig.defaultTeacher || 'Teacher', date: new Date().toISOString().split('T')[0] }
-    );
-    setTimeline(timelineData);
-    
-    // 自动切换到复习模式
-    setViewMode('review');
-  }, [clearSummary, clearTopics, studentId, user?.id]);
-
-  const handleVideoAssistantMessage = useCallback((payload: {
+const handleVideoAssistantMessage = useCallback((payload: {
     id: string;
     prompt: string;
     content: string;
@@ -1153,7 +1059,7 @@ function StudentAppContent({ isGuestFastEntry }: { isGuestFastEntry: boolean }) 
       const baseItems = prev.filter((item) => !item.id.startsWith('seed-'));
       const nextItem: VideoInsightItem = {
         id: insightId,
-        prompt: compactText(payload.prompt || '本轮提问', 48),
+        prompt: compactText(payload.prompt || '鏈疆鎻愰棶', 48),
         summary: compactText(payload.content, 120),
         timestamps: insightTimestamps,
         color: VIDEO_INSIGHT_COLORS[baseItems.length % VIDEO_INSIGHT_COLORS.length],
@@ -1194,7 +1100,7 @@ function StudentAppContent({ isGuestFastEntry }: { isGuestFastEntry: boolean }) 
     setTimeline(nextTimeline);
     memoryService.save(nextTimeline);
 
-    // 按 session + 时间范围匹配持久化记录，避免依赖应用层临时 id。
+    // 鎸?session + 鏃堕棿鑼冨洿鍖归厤鎸佷箙鍖栬褰曪紝閬垮厤渚濊禆搴旂敤灞備复鏃?id銆?
     void (async () => {
       try {
         const transcripts = await db.transcripts
@@ -1221,22 +1127,22 @@ function StudentAppContent({ isGuestFastEntry }: { isGuestFastEntry: boolean }) 
   }, [anchors, segments, sessionId, timeline]);
 
   const handleAnchorMark = useCallback((timestamp: number) => {
-    // 修正时间戳：如果 segments 存在，将 anchor 时间戳对齐到最近的 segment
-    // 这是因为前端 elapsedMs 和后端 ASR 时间戳可能存在偏差
+    // 淇鏃堕棿鎴筹細濡傛灉 segments 瀛樺湪锛屽皢 anchor 鏃堕棿鎴冲榻愬埌鏈€杩戠殑 segment
+    // 杩欐槸鍥犱负鍓嶇 elapsedMs 鍜屽悗绔?ASR 鏃堕棿鎴冲彲鑳藉瓨鍦ㄥ亸宸?
     let alignedTimestamp = timestamp;
     if (segments.length > 0) {
-      // 找到最近的 segment（优先找包含该时间点的，否则找最接近的）
+      // 鎵惧埌鏈€杩戠殑 segment锛堜紭鍏堟壘鍖呭惈璇ユ椂闂寸偣鐨勶紝鍚﹀垯鎵炬渶鎺ヨ繎鐨勶級
       let nearestSeg = segments[0];
       let minDistance = Math.abs(timestamp - (nearestSeg.startMs + nearestSeg.endMs) / 2);
       
       for (const seg of segments) {
-        // 如果时间点在 segment 范围内，直接使用
+        // 濡傛灉鏃堕棿鐐瑰湪 segment 鑼冨洿鍐咃紝鐩存帴浣跨敤
         if (timestamp >= seg.startMs && timestamp <= seg.endMs) {
-          alignedTimestamp = timestamp; // 在范围内，保持原值
+          alignedTimestamp = timestamp; // 鍦ㄨ寖鍥村唴锛屼繚鎸佸師鍊?
           nearestSeg = seg;
           break;
         }
-        // 否则找最近的
+        // 鍚﹀垯鎵炬渶杩戠殑
         const segMid = (seg.startMs + seg.endMs) / 2;
         const distance = Math.abs(timestamp - segMid);
         if (distance < minDistance) {
@@ -1245,7 +1151,7 @@ function StudentAppContent({ isGuestFastEntry }: { isGuestFastEntry: boolean }) 
         }
       }
       
-      // 如果原始时间戳超出 segments 范围较多（>5秒），对齐到最近 segment
+      // 濡傛灉鍘熷鏃堕棿鎴宠秴鍑?segments 鑼冨洿杈冨锛?5绉掞級锛屽榻愬埌鏈€杩?segment
       const lastSeg = segments[segments.length - 1];
       if (timestamp > lastSeg.endMs + 5000) {
         alignedTimestamp = lastSeg.endMs;
@@ -1256,17 +1162,17 @@ function StudentAppContent({ isGuestFastEntry }: { isGuestFastEntry: boolean }) 
       }
     }
     
-    // 同时写入旧版 anchor-service (保持兼容) 和新版共享存储
+    // 鍚屾椂鍐欏叆鏃х増 anchor-service (淇濇寔鍏煎) 鍜屾柊鐗堝叡浜瓨鍌?
     const anchor = anchorService.mark(sessionId, studentId, alignedTimestamp, 'confusion');
     setAnchors(prev => [...prev, anchor]);
     
-    // 获取当前时间点附近的转录内容作为上下文
+    // 鑾峰彇褰撳墠鏃堕棿鐐归檮杩戠殑杞綍鍐呭浣滀负涓婁笅鏂?
     const contextSegments = segments.filter(
       s => s.startMs <= alignedTimestamp + 5000 && s.endMs >= alignedTimestamp - 5000
     );
     const transcriptContext = contextSegments.map(s => s.text).join(' ').slice(0, 200);
     
-    // 写入共享存储 (供教师端读取)
+    // 鍐欏叆鍏变韩瀛樺偍 (渚涙暀甯堢璇诲彇)
     classroomDataService.saveStudentAnchor(
       sessionId,
       studentId,
@@ -1281,10 +1187,10 @@ function StudentAppContent({ isGuestFastEntry }: { isGuestFastEntry: boolean }) 
     }
   }, [sessionId, studentId, studentName, timeline, segments]);
 
-  // 回放时添加困惑点标注
+  // 鍥炴斁鏃舵坊鍔犲洶鎯戠偣鏍囨敞
   const handlePlaybackAnchorAdd = useCallback((timestamp: number) => {
-    // 回放时 timestamp 来自波形播放位置，通常与 segments 对齐
-    // 但仍做校验确保在有效范围内
+    // 鍥炴斁鏃?timestamp 鏉ヨ嚜娉㈠舰鎾斁浣嶇疆锛岄€氬父涓?segments 瀵归綈
+    // 浣嗕粛鍋氭牎楠岀‘淇濆湪鏈夋晥鑼冨洿鍐?
     let alignedTimestamp = timestamp;
     if (segments.length > 0) {
       const lastSeg = segments[segments.length - 1];
@@ -1299,13 +1205,13 @@ function StudentAppContent({ isGuestFastEntry }: { isGuestFastEntry: boolean }) 
     setAnchors(prev => [...prev, anchor]);
     setSelectedAnchor(anchor);
     
-    // 获取转录上下文
+    // 鑾峰彇杞綍涓婁笅鏂?
     const contextSegments = segments.filter(
       s => s.startMs <= alignedTimestamp + 5000 && s.endMs >= alignedTimestamp - 5000
     );
     const transcriptContext = contextSegments.map(s => s.text).join(' ').slice(0, 200);
     
-    // 写入共享存储
+    // 鍐欏叆鍏变韩瀛樺偍
     classroomDataService.saveStudentAnchor(
       sessionId,
       studentId,
@@ -1319,14 +1225,14 @@ function StudentAppContent({ isGuestFastEntry }: { isGuestFastEntry: boolean }) 
       setTimeline({ ...timeline, anchors: [...timeline.anchors, anchor] });
     }
     
-    // 自动切换到困惑点详情面板
+    // 鑷姩鍒囨崲鍒板洶鎯戠偣璇︽儏闈㈡澘
     setReviewTab('anchor-detail');
   }, [sessionId, studentId, studentName, timeline, segments]);
 
   const handleAnchorSelect = useCallback((anchor: Anchor) => {
     setSelectedAnchor(anchor);
     setCurrentTime(anchor.timestamp);
-    // 自动切换到困惑点详情面板
+    // 鑷姩鍒囨崲鍒板洶鎯戠偣璇︽儏闈㈡澘
     setReviewTab('anchor-detail');
   }, []);
 
@@ -1335,7 +1241,7 @@ function StudentAppContent({ isGuestFastEntry }: { isGuestFastEntry: boolean }) 
     
     anchorService.resolve(selectedAnchor.id, sessionId);
     
-    // 同步更新共享存储
+    // 鍚屾鏇存柊鍏变韩瀛樺偍
     classroomDataService.resolveAnchor(selectedAnchor.id);
     
     setAnchors(prev => prev.map(a => 
@@ -1383,37 +1289,37 @@ function StudentAppContent({ isGuestFastEntry }: { isGuestFastEntry: boolean }) 
     handleUnifiedSeek(nextTimestamp, true);
   }, [actionItems, selectedAnchor?.timestamp, anchors, currentTime, handleUnifiedSeek]);
 
-  // 生成精选片段 - 使用 SWR Hook（自动请求去重、缓存、重试）
+  // 生成精选片段（使用 SWR Hook，自动去重与重试）
   const handleGenerateTopics = useCallback(async (mode: TopicGenerationMode) => {
     try {
       console.log('[生成精选片段] 开始，模式:', mode, '片段数:', segments.length);
       await generateTopics(mode);
       console.log('[生成精选片段] 完成');
     } catch (error) {
-      console.error('生成精选片段失败:', error);
+      console.error('生成精选片段失败', error);
       alert(`生成失败: ${error instanceof Error ? error.message : '网络错误'}`);
     }
   }, [segments.length, generateTopics]);
 
-  // 按主题重新生成片段 - 使用 SWR Hook
+  // 鎸変富棰橀噸鏂扮敓鎴愮墖娈?- 浣跨敤 SWR Hook
   const handleRegenerateByTheme = useCallback(async (theme: string) => {
     try {
       await regenerateByTheme(theme);
     } catch (error) {
-      console.error('按主题生成失败:', error);
+      console.error('鎸変富棰樼敓鎴愬け璐?', error);
     }
   }, [regenerateByTheme]);
 
-  // 生成课堂摘要 - 使用 SWR Hook
+  // 鐢熸垚璇惧爞鎽樿 - 浣跨敤 SWR Hook
   const handleGenerateSummary = useCallback(async () => {
     try {
       await generateSummary();
     } catch (error) {
-      console.error('生成摘要失败:', error);
+      console.error('鐢熸垚鎽樿澶辫触:', error);
     }
   }, [generateSummary]);
 
-  // 播放精选片段
+  // 鎾斁绮鹃€夌墖娈?
   const handlePlayTopic = useCallback((topic: HighlightTopic) => {
     if (topic.segments.length > 0) {
       const startTime = topic.segments[0].start;
@@ -1425,12 +1331,12 @@ function StudentAppContent({ isGuestFastEntry }: { isGuestFastEntry: boolean }) 
     }
   }, []);
 
-  // 清空精选片段 - 使用 SWR Hook
+  // 娓呯┖绮鹃€夌墖娈?- 浣跨敤 SWR Hook
   const handleClearTopics = useCallback(() => {
     clearTopics();
   }, [clearTopics]);
 
-  // 播放全部片段
+  // 鎾斁鍏ㄩ儴鐗囨
   const handlePlayAll = useCallback(() => {
     if (isPlayingAll) {
       setIsPlayingAll(false);
@@ -1444,7 +1350,7 @@ function StudentAppContent({ isGuestFastEntry }: { isGuestFastEntry: boolean }) 
     }
   }, [isPlayingAll, highlightTopics, handlePlayTopic]);
 
-  // 添加笔记
+  // 娣诲姞绗旇
   const handleAddNote = useCallback((text: string, source: NoteSource = 'custom', metadata?: NoteMetadata) => {
     const newNote: Note = {
       id: crypto.randomUUID(),
@@ -1459,19 +1365,19 @@ function StudentAppContent({ isGuestFastEntry }: { isGuestFastEntry: boolean }) 
     setNotes(prev => [newNote, ...prev]);
   }, [sessionId, studentId]);
 
-  // 更新笔记
+  // 鏇存柊绗旇
   const handleUpdateNote = useCallback((noteId: string, text: string) => {
     setNotes(prev => prev.map(n => 
       n.id === noteId ? { ...n, text, updatedAt: new Date().toISOString() } : n
     ));
   }, []);
 
-  // 删除笔记
+  // 鍒犻櫎绗旇
   const handleDeleteNote = useCallback((noteId: string) => {
     setNotes(prev => prev.filter(n => n.id !== noteId));
   }, []);
 
-  // 处理 AI 家教生成的行动清单
+  // 澶勭悊 AI 瀹舵暀鐢熸垚鐨勮鍔ㄦ竻鍗?
   const handleActionItemsUpdate = useCallback((items: ActionItem[]) => {
     void (async () => {
       try {
@@ -1488,55 +1394,403 @@ function StudentAppContent({ isGuestFastEntry }: { isGuestFastEntry: boolean }) 
     })();
   }, [sessionId]);
 
-  // 计算总时长
-  const totalDuration = segments.length > 0 
-    ? segments[segments.length - 1].endMs 
+  // 璁＄畻鎬绘椂闀?    // 计算总时长
+  const totalDuration = segments.length > 0
+    ? segments[segments.length - 1].endMs
     : 0;
 
-  const renderInputSourceTabs = useCallback((layout: 'mobile' | 'desktop') => {
-    const isMobileLayout = layout === 'mobile';
-    const activeClass = isMobileLayout
-      ? 'border border-amber-200 bg-gradient-to-b from-white to-amber-50 text-amber-700 font-semibold shadow-[0_6px_14px_rgba(214,165,87,0.18)]'
-      : 'bg-white text-navy font-medium shadow-sm';
-    const inactiveClass = isMobileLayout
-      ? 'border border-transparent text-slate-500 hover:text-slate-700 hover:bg-white/70'
-      : 'text-gray-500 hover:text-navy';
-    const buttonBaseClass = isMobileLayout
-      ? 'shrink-0 min-w-[84px] px-2.5 py-2 text-[12px] leading-none rounded-xl transition-all duration-200 whitespace-nowrap flex items-center justify-center gap-1.5'
-      : 'px-4 py-2 text-sm rounded-lg transition-all whitespace-nowrap';
-    const wrapperClass = isMobileLayout
-      ? 'w-full flex items-center gap-1 p-1 rounded-2xl border border-amber-100/80 bg-white/85 backdrop-blur-sm overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden shadow-[0_10px_24px_rgba(214,165,87,0.14)]'
-      : 'flex items-center gap-2 p-1 rounded-xl';
+  const ingestTranscriptSegments = useCallback(async (params: {
+    segments: TranscriptSegment[];
+    sourceType: SourceIngestType;
+    sourceTitle: string;
+    audioBlob?: Blob;
+    videoSource?: ImportedVideoSource;
+  }) => {
+    const incoming = Array.isArray(params.segments) ? params.segments : [];
+    if (incoming.length === 0) {
+      toast.warning('未提取到可用内容，请更换资料后重试');
+      return;
+    }
 
-    const sourceTabs = [
+    const existingSegments = segmentsRef.current;
+    const hasExisting = existingSegments.length > 0;
+    const nextSessionId = hasExisting ? sessionIdRef.current : generateSessionId();
+    const sourceItemId = `${params.sourceType}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    const offsetMs = hasExisting
+      ? Math.max(0, (existingSegments[existingSegments.length - 1]?.endMs || 0) + 1200)
+      : 0;
+    const normalizedSegments = mapSegmentsForAppend(incoming, sourceItemId, offsetMs);
+    const mergedSegments = hasExisting ? [...existingSegments, ...normalizedSegments] : normalizedSegments;
+    const currentUserId = user?.id || ANONYMOUS_USER_ID;
+    const duration = mergedSegments[mergedSegments.length - 1]?.endMs || 0;
+
+    if (!hasExisting) {
+      setSessionId(nextSessionId);
+      sessionIdRef.current = nextSessionId;
+      setAnchors([]);
+      setSelectedAnchor(null);
+      clearTopics();
+      clearSummary();
+      setNotes([]);
+      setActionItems([]);
+      setCurrentTime(0);
+      setVideoSeekNonce(0);
+      setVideoPlayNonce(0);
+      setShowConversationHistory(false);
+      setSelectedHistoryConversation(null);
+    }
+
+    const shouldKeepVideoSource = params.sourceType === 'video' && !!params.videoSource && !hasExisting;
+    if (shouldKeepVideoSource && params.videoSource) {
+      setDataSource('video');
+      setVideoSource(params.videoSource);
+      setVideoWorkspaceTab('chat');
+      const seededInsights = buildSeedVideoInsights(normalizedSegments);
+      setVideoInsightItems(seededInsights);
+      setActiveVideoInsightId(seededInsights[0]?.id || null);
+    } else {
+      setDataSource('demo');
+      setVideoSource(null);
+      setVideoInsightItems([]);
+      setActiveVideoInsightId(null);
+    }
+
+    setSegments(mergedSegments);
+    segmentsRef.current = mergedSegments;
+    liveSegmentsRef.current = mergedSegments;
+    setViewMode('review');
+    setShowSessionHistory(false);
+    setSourceImportError('');
+
+    setSourceItems((prev) => {
+      const item: SourceIngestItem = {
+        id: sourceItemId,
+        type: params.sourceType,
+        title: params.sourceTitle,
+        segmentCount: normalizedSegments.length,
+        addedAt: new Date().toISOString(),
+      };
+      return hasExisting ? [...prev, item] : [item];
+    });
+
+    try {
+      await db.transcripts.bulkAdd(
+        normalizedSegments.map((seg) => ({
+          sessionId: nextSessionId,
+          userId: currentUserId,
+          text: seg.text,
+          startMs: seg.startMs,
+          endMs: seg.endMs,
+          confidence: seg.confidence || 1,
+          isFinal: true,
+        }))
+      );
+    } catch (error) {
+      console.error('Failed to persist imported transcript segments:', error);
+    }
+
+    if (!hasExisting) {
+      if (shouldKeepVideoSource && params.videoSource) {
+        try {
+          await saveAudioSession(null, nextSessionId, currentUserId, {
+            subject: UIConfig.defaultSubject,
+            topic: params.sourceTitle || params.videoSource.title || '视频复习',
+            duration,
+            sourceType: 'video-link',
+            videoUrl: params.videoSource.originalUrl,
+            videoEmbedUrl: params.videoSource.embedUrl,
+            videoProvider: params.videoSource.provider,
+            thumbnailUrl: params.videoSource.thumbnailUrl,
+            importSourceMode: params.videoSource.sourceMode as AudioSession['importSourceMode'],
+            importTrace: params.videoSource.importTrace,
+          });
+        } catch (error) {
+          console.error('Failed to persist imported video session:', error);
+        }
+      } else if (params.audioBlob) {
+        saveAudioSession(params.audioBlob, nextSessionId, currentUserId, {
+          subject: UIConfig.defaultSubject,
+          topic: params.sourceTitle || UIConfig.defaultLessonTitle,
+          duration,
+          sourceType: 'upload',
+        }).catch((error) => {
+          console.error('Failed to persist imported audio session:', error);
+        });
+      }
+    }
+
+    classroomDataService.saveSession({
+      id: nextSessionId,
+      subject: UIConfig.defaultSubject,
+      topic: params.sourceTitle || UIConfig.defaultLessonTitle,
+      teacherName: UIConfig.defaultTeacher || 'Teacher',
+      status: 'completed',
+      duration,
+      createdBy: studentId,
+    });
+
+    const nextTimeline = memoryService.buildTimeline(
+      nextSessionId,
+      mergedSegments,
+      hasExisting ? anchorsRef.current : [],
+      {
+        subject: UIConfig.defaultSubject,
+        teacher: UIConfig.defaultTeacher || 'Teacher',
+        date: new Date().toISOString().split('T')[0],
+      }
+    );
+    setTimeline(nextTimeline);
+    memoryService.save(nextTimeline);
+  }, [clearSummary, clearTopics, studentId, user?.id]);
+
+  const handleVideoImportReady = useCallback(async (result: ImportedVideoResult) => {
+    const importedSegments = Array.isArray(result.segments) ? result.segments : [];
+    if (importedSegments.length === 0) {
+      toast.warning('视频已导入，但转写为空，请更换视频或重试。');
+      return;
+    }
+
+    await ingestTranscriptSegments({
+      segments: importedSegments,
+      sourceType: 'video',
+      sourceTitle: result.source.title || '视频链接',
+      videoSource: result.source,
+    });
+  }, [ingestTranscriptSegments]);
+
+  const transcribeAudioFile = useCallback(async (file: File): Promise<TranscriptSegment[]> => {
+    const formData = new FormData();
+    formData.append('audio', file);
+    const response = await fetch('/api/transcribe-turbo', {
+      method: 'POST',
+      body: formData,
+    });
+    const payload = (await response.json()) as {
+      success?: boolean;
+      error?: string;
+      segments?: TranscriptSegment[];
+      sentences?: Array<{
+        id?: string;
+        text: string;
+        beginTime?: number;
+        endTime?: number;
+      }>;
+    };
+    if (!response.ok || !payload.success) {
+      throw new Error(payload.error || '音频转写失败');
+    }
+
+    const segments = Array.isArray(payload.segments)
+      ? payload.segments
+      : (payload.sentences || []).map((item, index) => ({
+          id: item.id || `seg-${index}`,
+          text: item.text,
+          startMs: item.beginTime || 0,
+          endMs: item.endTime || 0,
+          confidence: 0.95,
+          isFinal: true,
+        }));
+
+    return segments;
+  }, []);
+
+  const parseDocumentFile = useCallback(async (file: File): Promise<{
+    title: string;
+    fileType: string;
+    segments: TranscriptSegment[];
+  }> => {
+    const formData = new FormData();
+    formData.append('file', file);
+    const response = await fetch('/api/sources/ingest', {
+      method: 'POST',
+      body: formData,
+    });
+    const payload = (await response.json()) as {
+      success?: boolean;
+      error?: string;
+      title?: string;
+      fileType?: string;
+      segments?: TranscriptSegment[];
+    };
+    if (!response.ok || !payload.success || !Array.isArray(payload.segments)) {
+      throw new Error(payload.error || '文档导入失败');
+    }
+    return {
+      title: payload.title || file.name,
+      fileType: payload.fileType || 'document',
+      segments: payload.segments,
+    };
+  }, []);
+
+  const handleImportFiles = useCallback(async (files: FileList | File[]) => {
+    const fileList = Array.from(files || []);
+    if (fileList.length === 0) return;
+
+    setSourceImporting(true);
+    setSourceImportError('');
+
+    try {
+      for (const file of fileList) {
+        if (isAudioFile(file)) {
+          const segments = await transcribeAudioFile(file);
+          const audioBlob = new Blob([await file.arrayBuffer()], { type: file.type || 'audio/mpeg' });
+          await ingestTranscriptSegments({
+            segments,
+            sourceType: 'audio',
+            sourceTitle: file.name,
+            audioBlob,
+          });
+          continue;
+        }
+
+        if (isDocumentFile(file)) {
+          const parsed = await parseDocumentFile(file);
+          await ingestTranscriptSegments({
+            segments: parsed.segments,
+            sourceType: parsed.fileType === 'txt' || parsed.fileType === 'md' ? 'text' : 'document',
+            sourceTitle: parsed.title,
+          });
+          continue;
+        }
+
+        throw new Error(`暂不支持文件类型: ${file.name}`);
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      setSourceImportError(message);
+      toast.error(message);
+    } finally {
+      setSourceImporting(false);
+    }
+  }, [ingestTranscriptSegments, parseDocumentFile, transcribeAudioFile]);
+
+  const handleSourceFileButtonClick = useCallback(() => {
+    if (sourceImporting) return;
+    setDataSource('demo');
+    setSourceImportMode('files');
+    setShowSessionHistory(false);
+    sourceFileInputRef.current?.click();
+  }, [sourceImporting]);
+
+  const handleSourceFileInputChange = useCallback((event: ChangeEvent<HTMLInputElement>) => {
+    const files = event.target.files;
+    if (files && files.length > 0) {
+      void handleImportFiles(files);
+    }
+    if (sourceFileInputRef.current) {
+      sourceFileInputRef.current.value = '';
+    }
+  }, [handleImportFiles]);
+
+  const handleSourceFileDrop = useCallback((event: DragEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
+    if (sourceImporting) return;
+    const files = event.dataTransfer.files;
+    if (files && files.length > 0) {
+      setDataSource('demo');
+      setSourceImportMode('files');
+      setShowSessionHistory(false);
+      void handleImportFiles(files);
+    }
+  }, [handleImportFiles, sourceImporting]);
+
+  const handleImportTextSource = useCallback(async () => {
+    const text = sourceTextInput.trim();
+    if (!text) {
+      toast.warning('请先粘贴文本内容');
+      return;
+    }
+
+    setSourceImporting(true);
+    setSourceImportError('');
+
+    try {
+      const response = await fetch('/api/sources/ingest', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          title: `粘贴文本-${new Date().toLocaleTimeString()}`,
+          text,
+        }),
+      });
+      const payload = (await response.json()) as {
+        success?: boolean;
+        error?: string;
+        title?: string;
+        segments?: TranscriptSegment[];
+      };
+      if (!response.ok || !payload.success || !Array.isArray(payload.segments)) {
+        throw new Error(payload.error || '文本导入失败');
+      }
+
+      await ingestTranscriptSegments({
+        segments: payload.segments,
+        sourceType: 'text',
+        sourceTitle: payload.title || '粘贴文本',
+      });
+      setSourceTextInput('');
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      setSourceImportError(message);
+      toast.error(message);
+    } finally {
+      setSourceImporting(false);
+    }
+  }, [ingestTranscriptSegments, sourceTextInput]);
+const renderInputSourceTabs = useCallback((layout: 'mobile' | 'desktop') => {
+    const isMobileLayout = layout === 'mobile';
+    const actionButtonClass = isMobileLayout
+      ? 'shrink-0 min-w-[96px] px-3 py-2 text-[12px] rounded-xl border font-medium transition-all duration-200'
+      : 'px-4 py-2.5 text-sm rounded-xl border font-medium transition-all duration-200';
+    const activeButtonClass = 'border-amber-300 bg-amber-50 text-amber-700 shadow-sm';
+    const inactiveButtonClass = 'border-slate-200 bg-white text-slate-600 hover:border-amber-200 hover:bg-amber-50/40';
+
+    const uploadActive = dataSource === 'demo' && sourceImportMode === 'files' && !showSessionHistory;
+    const textActive = dataSource === 'demo' && sourceImportMode === 'text' && !showSessionHistory;
+
+    const actions = [
       {
         key: 'live',
-        icon: '🎙️',
         label: '实时录音',
         testId: 'source-live-button',
         active: dataSource === 'live' && !showSessionHistory,
-        onClick: () => { setDataSource('live'); setShowSessionHistory(false); },
+        onClick: () => {
+          setDataSource('live');
+          setShowSessionHistory(false);
+        },
       },
       {
-        key: 'demo',
-        icon: '📁',
-        label: '上传音频',
+        key: 'upload',
+        label: '上传文件',
         testId: 'source-upload-button',
-        active: dataSource === 'demo' && !showSessionHistory,
-        onClick: () => { setDataSource('demo'); setShowSessionHistory(false); },
+        active: uploadActive,
+        onClick: handleSourceFileButtonClick,
       },
       {
         key: 'video',
-        icon: '🎬',
         label: '视频链接',
         testId: 'source-video-button',
         active: dataSource === 'video' && !showSessionHistory,
-        onClick: () => { setDataSource('video'); setShowSessionHistory(false); },
+        onClick: () => {
+          setDataSource('video');
+          setShowSessionHistory(false);
+        },
+      },
+      {
+        key: 'text',
+        label: '粘贴文本',
+        testId: 'source-text-button',
+        active: textActive,
+        onClick: () => {
+          setDataSource('demo');
+          setSourceImportMode('text');
+          setShowSessionHistory(false);
+        },
       },
       {
         key: 'history',
-        icon: '📋',
-        label: isMobileLayout ? '历史' : '录音历史',
+        label: isMobileLayout ? '历史记录' : '录音历史',
         testId: 'source-history-button',
         active: showSessionHistory,
         onClick: () => setShowSessionHistory(true),
@@ -1544,39 +1798,91 @@ function StudentAppContent({ isGuestFastEntry }: { isGuestFastEntry: boolean }) 
     ] as const;
 
     return (
-      <div
-        className={wrapperClass}
-        style={isMobileLayout ? undefined : { background: 'var(--edu-bg-soft)' }}
-        data-onboarding="input-methods"
-      >
-        {sourceTabs.map((tab) => (
-          <button
-            key={tab.key}
-            onClick={tab.onClick}
-            data-testid={tab.testId}
-            className={`${buttonBaseClass} ${tab.active ? activeClass : inactiveClass}`}
-          >
-            <span aria-hidden className={isMobileLayout ? 'text-[13px] leading-none' : undefined}>{tab.icon}</span>
-            <span>{tab.label}</span>
-          </button>
-        ))}
+      <div className="space-y-3" data-onboarding="input-methods">
+        <input
+          ref={sourceFileInputRef}
+          type="file"
+          accept="audio/*,.mp3,.wav,.webm,.ogg,.m4a,.aac,.flac,.txt,.md,.markdown,.csv,.json,.html,.htm,.pdf,.docx"
+          multiple
+          onChange={handleSourceFileInputChange}
+          className="hidden"
+        />
+
+        <div
+          className="rounded-2xl border border-dashed border-slate-300 bg-gradient-to-b from-slate-50 to-white px-4 py-4"
+          onDragOver={(event) => {
+            event.preventDefault();
+            event.stopPropagation();
+          }}
+          onDrop={handleSourceFileDrop}
+        >
+          <div className="space-y-1">
+            <p className={`${isMobileLayout ? 'text-sm' : 'text-base'} font-semibold text-slate-800`}>拖拽或选择资料</p>
+            <p className={`${isMobileLayout ? 'text-xs' : 'text-sm'} text-slate-500`}>
+              支持音频、视频链接、文档和粘贴文本，可连续追加多个来源。
+            </p>
+          </div>
+
+          <div className="mt-3 flex flex-wrap gap-2">
+            {actions.map((action) => (
+              <button
+                key={action.key}
+                type="button"
+                data-testid={action.testId}
+                onClick={action.onClick}
+                className={`${actionButtonClass} ${action.active ? activeButtonClass : inactiveButtonClass}`}
+              >
+                {action.label}
+              </button>
+            ))}
+          </div>
+
+          {sourceImporting && (
+            <p className={`${isMobileLayout ? 'text-xs' : 'text-sm'} mt-2 text-amber-700`}>正在导入资料，请稍候...</p>
+          )}
+          {!sourceImporting && sourceImportError && (
+            <p className={`${isMobileLayout ? 'text-xs' : 'text-sm'} mt-2 text-red-600`}>{sourceImportError}</p>
+          )}
+        </div>
+
+        {sourceItems.length > 0 && (
+          <div className="rounded-xl border border-slate-200 bg-white px-3 py-2">
+            <p className="text-xs font-medium text-slate-500">已导入来源（最近）</p>
+            <div className="mt-2 flex flex-wrap gap-2">
+              {sourceItems.slice(-6).map((item) => (
+                <span
+                  key={item.id}
+                  className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs text-slate-600"
+                >
+                  <span>{item.type === 'video' ? '视频' : item.type === 'audio' ? '音频' : item.type === 'document' ? '文档' : '文本'}</span>
+                  <span className="max-w-[160px] truncate">{item.title}</span>
+                  <span className="text-slate-400">{item.segmentCount} 段</span>
+                </span>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
     );
-  }, [dataSource, showSessionHistory]);
+  }, [
+    dataSource,
+    handleSourceFileButtonClick,
+    handleSourceFileDrop,
+    handleSourceFileInputChange,
+    showSessionHistory,
+    sourceImportError,
+    sourceImportMode,
+    sourceImporting,
+    sourceItems,
+  ]);
 
-  const renderInputSecondaryPanels = useCallback((layout: 'mobile' | 'desktop') => {
+    const renderInputSecondaryPanels = useCallback((layout: 'mobile' | 'desktop') => {
     const isMobileLayout = layout === 'mobile';
     const historyMaxHeight = isMobileLayout ? '400px' : '500px';
     const cardPaddingClass = isMobileLayout ? 'p-4' : 'p-6';
     const titleClass = isMobileLayout
-      ? 'text-base font-semibold text-gray-900 mb-3 flex items-center gap-2'
-      : 'text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2';
-    const helperText = isMobileLayout
-      ? '支持 MP3、WAV、WebM 等格式'
-      : '支持 MP3、WAV、WebM 等格式，上传后自动转录并进入复习模式';
-    const helperTextClass = isMobileLayout
-      ? 'mt-3 text-xs text-gray-500 text-center'
-      : 'mt-4 text-sm text-gray-500 text-center';
+      ? 'text-base font-semibold text-gray-900 mb-3'
+      : 'text-lg font-semibold text-gray-900 mb-4';
 
     return (
       <>
@@ -1590,46 +1896,73 @@ function StudentAppContent({ isGuestFastEntry }: { isGuestFastEntry: boolean }) 
             showHeader={false}
           />
         </div>
+
         <div className={`card-edu ${cardPaddingClass}`} style={{ display: dataSource === 'video' && !showSessionHistory ? undefined : 'none' }}>
-          <h3 className={titleClass}>
-            <span>🎬</span>
-            导入视频链接
-          </h3>
+          <h3 className={titleClass}>导入视频链接</h3>
           <VideoLinkImporter
             onImportReady={handleVideoImportReady}
             onError={(error) => {
               console.error('视频导入失败:', error);
               toast.error(String(error));
             }}
-            disabled={isRecording}
+            disabled={isRecording || sourceImporting}
           />
         </div>
-        <div className={`card-edu ${cardPaddingClass}`} style={{ display: dataSource === 'demo' && !showSessionHistory ? undefined : 'none' }}>
-          <h3 className={titleClass}>
-            <span>📁</span>
-            上传课堂录音
-          </h3>
-          <AudioUploader
-            onTranscriptReady={handleUploadedTranscriptReady}
-            onError={(error) => {
-              console.error('上传失败:', error);
-            }}
-            disabled={isRecording}
-          />
-          <p className={helperTextClass}>
-            {helperText}
+
+        <div className={`card-edu ${cardPaddingClass}`} style={{ display: dataSource === 'demo' && sourceImportMode === 'files' && !showSessionHistory ? undefined : 'none' }}>
+          <h3 className={titleClass}>上传资料文件</h3>
+          <p className="text-sm text-gray-600">
+            支持批量上传音频与文档，系统会自动按顺序追加到当前学习会话。
           </p>
+          <div className="mt-4 flex items-center gap-3">
+            <button
+              type="button"
+              onClick={handleSourceFileButtonClick}
+              disabled={sourceImporting || isRecording}
+              className="rounded-xl bg-amber-500 px-4 py-2 text-sm font-medium text-white transition hover:bg-amber-600 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {sourceImporting ? '导入中...' : '选择文件'}
+            </button>
+            <span className="text-xs text-gray-500">音频 / pdf / docx / txt / md / csv / json</span>
+          </div>
+        </div>
+
+        <div className={`card-edu ${cardPaddingClass}`} style={{ display: dataSource === 'demo' && sourceImportMode === 'text' && !showSessionHistory ? undefined : 'none' }}>
+          <h3 className={titleClass}>粘贴文本</h3>
+          <textarea
+            value={sourceTextInput}
+            onChange={(event) => setSourceTextInput(event.target.value)}
+            placeholder="粘贴课堂笔记、文章段落、题目解析等文本..."
+            rows={isMobileLayout ? 5 : 7}
+            disabled={sourceImporting || isRecording}
+            className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm text-slate-700 outline-none transition focus:border-amber-300 focus:ring-2 focus:ring-amber-100"
+          />
+          <div className="mt-3 flex items-center justify-between">
+            <span className="text-xs text-slate-500">建议 200-5000 字，支持多次追加</span>
+            <button
+              type="button"
+              onClick={() => { void handleImportTextSource(); }}
+              disabled={sourceImporting || isRecording || !sourceTextInput.trim()}
+              className="rounded-xl bg-amber-500 px-4 py-2 text-sm font-medium text-white transition hover:bg-amber-600 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {sourceImporting ? '导入中...' : '导入文本'}
+            </button>
+          </div>
         </div>
       </>
     );
   }, [
     dataSource,
+    handleImportTextSource,
     handleLoadHistorySession,
-    handleUploadedTranscriptReady,
+    handleSourceFileButtonClick,
     handleVideoImportReady,
     isRecording,
     sessionId,
     showSessionHistory,
+    sourceImportMode,
+    sourceImporting,
+    sourceTextInput,
     user?.id,
   ]);
 
@@ -1784,18 +2117,18 @@ function StudentAppContent({ isGuestFastEntry }: { isGuestFastEntry: boolean }) 
       }`}
       style={{ height: '100dvh', minHeight: '-webkit-fill-available' }}
     >
-      {/* 移动端隐藏降级横幅 */}
+      {/* 绉诲姩绔殣钘忛檷绾фí骞?*/}
       {!isMobile && <DegradedModeBanner status={serviceStatus} />}
       
-      {/* 桌面端 Header - 移动端隐藏 */}
+      {/* 妗岄潰绔?Header - 绉诲姩绔殣钘?*/}
       {!isMobile && (
         <Header 
-          lessonTitle={viewMode === 'record' ? '课堂录音' : '课堂回顾'}
+          lessonTitle={viewMode === 'record' ? '课堂录音' : '课堂复习'}
           courseName=""
         />
       )}
 
-      {/* 桌面端模式切换栏 - 移动端隐藏，增加 z-index 防止被遮挡 */}
+      {/* 妗岄潰绔ā寮忓垏鎹㈡爮 - 绉诲姩绔殣钘忥紝澧炲姞 z-index 闃叉琚伄鎸?*/}
       {!isMobile && (
         <div className="border-b px-6 py-3 no-print flex-shrink-0 relative z-20" style={{ background: 'var(--edu-bg-secondary)', borderColor: 'var(--edu-border-light)' }}>
           <div className="flex items-center justify-between">
@@ -1809,7 +2142,6 @@ function StudentAppContent({ isGuestFastEntry }: { isGuestFastEntry: boolean }) 
                 data-testid="mode-record-button"
                 className={`mode-tab ${viewMode === 'record' ? 'active' : ''}`}
               >
-                <span className="mr-1.5">🎙️</span>
                 录音
               </button>
               <button
@@ -1817,7 +2149,6 @@ function StudentAppContent({ isGuestFastEntry }: { isGuestFastEntry: boolean }) 
                 data-testid="mode-review-button"
                 className={`mode-tab ${viewMode === 'review' ? 'active' : ''}`}
               >
-                <span className="mr-1.5">📚</span>
                 复习
               </button>
             </div>
@@ -1827,7 +2158,7 @@ function StudentAppContent({ isGuestFastEntry }: { isGuestFastEntry: boolean }) 
               
               <div className="flex items-center gap-3 text-sm min-w-0 flex-wrap">
                 <span className={`badge ${dataSource === 'live' ? 'badge-live' : 'badge-demo'} flex-shrink-0`}>
-                  {dataSource === 'live' ? '🎙️ 实时' : dataSource === 'video' ? '🎬 视频' : '📋 演示'}
+                  {dataSource === 'live' ? '实时' : dataSource === 'video' ? '视频' : '演示'}
                 </span>
                 
                 <div className="flex items-center gap-2 text-gray-500 min-w-0 flex-wrap">
@@ -1846,20 +2177,20 @@ function StudentAppContent({ isGuestFastEntry }: { isGuestFastEntry: boolean }) 
         </div>
       )}
 
-      {/* 主内容区 */}
+      {/* 涓诲唴瀹瑰尯 */}
       {viewMode === 'record' ? (
         <>
-          {/* 移动端录音页面 - 得到风格 */}
+          {/* 绉诲姩绔綍闊抽〉闈?- 寰楀埌椋庢牸 */}
           {isMobile ? (
             <div className="flex-1 min-h-0 flex flex-col overflow-hidden" style={{ background: 'var(--edu-bg-primary)' }}>
-              {/* 极简顶部栏：Logo + Tab + 用户 + 菜单 */}
+              {/* 鏋佺畝椤堕儴鏍忥細Logo + Tab + 鐢ㄦ埛 + 鑿滃崟 */}
               <div className="flex-shrink-0 px-4 py-2.5 flex items-center gap-2 bg-white border-b" style={{ borderColor: 'var(--edu-border-light)' }}>
                 {/* Logo */}
                 <div className="w-8 h-8 bg-gradient-to-br from-amber-400 to-amber-500 rounded-lg flex items-center justify-center flex-shrink-0">
                   <span className="text-white font-bold text-sm">M</span>
                 </div>
                 
-                {/* Tab 切换 */}
+                {/* Tab 鍒囨崲 */}
                 <div className="flex-1 flex items-center justify-center">
                   <MobileTabSwitch
                     activeTab={viewMode}
@@ -1868,7 +2199,7 @@ function StudentAppContent({ isGuestFastEntry }: { isGuestFastEntry: boolean }) 
                   />
                 </div>
                 
-                {/* 用户头像/登录按钮 */}
+                {/* 鐢ㄦ埛澶村儚/鐧诲綍鎸夐挳 */}
                 {isAuthenticated && user ? (
                   <button
                     onClick={() => setIsMenuOpen(true)}
@@ -1878,7 +2209,7 @@ function StudentAppContent({ isGuestFastEntry }: { isGuestFastEntry: boolean }) 
                       {user.avatar ? (
                         <AvatarImage src={user.avatar} alt={user.nickname} className="object-cover" />
                       ) : null}
-                      <AvatarFallback className="bg-transparent text-sm">👤</AvatarFallback>
+                      <AvatarFallback className="bg-transparent text-sm">用户</AvatarFallback>
                     </Avatar>
                   </button>
                 ) : (
@@ -1890,14 +2221,14 @@ function StudentAppContent({ isGuestFastEntry }: { isGuestFastEntry: boolean }) 
                   </a>
                 )}
                 
-                {/* 菜单按钮 */}
+                {/* 鑿滃崟鎸夐挳 */}
                 <DedaoMenuButton onClick={() => setIsMenuOpen(true)} />
               </div>
 
-              {/* 录音内容区 */}
+              {/* 褰曢煶鍐呭鍖?*/}
               <div className="flex-1 flex flex-col p-4 overflow-hidden min-h-0">
                 <div className="w-full max-w-md mx-auto flex flex-col flex-1 min-h-0">
-                  {/* 录音或上传切换 */}
+                  {/* 褰曢煶鎴栦笂浼犲垏鎹?*/}
                   <div className="flex-shrink-0 mb-3">
                     <div className="mb-1.5 flex items-center justify-between">
                       <span className="text-[11px] font-medium tracking-[0.02em] text-slate-500">选择输入方式</span>
@@ -1919,11 +2250,11 @@ function StudentAppContent({ isGuestFastEntry }: { isGuestFastEntry: boolean }) 
 
                   {renderInputSecondaryPanels('mobile')}
                   
-                  {/* 已标记的困惑点 */}
+                  {/* 宸叉爣璁扮殑鍥版儜鐐?*/}
                   {anchors.length > 0 && (
                     <div className="card-edu p-4 animate-slide-up">
                       <h3 className="text-sm font-semibold text-gray-900 mb-3 flex items-center gap-2">
-                        <span>🎯</span>
+                        <span>📍</span>
                         已标记的困惑点
                         <span className="ml-auto text-xs font-normal text-gray-400">{anchors.length} 个</span>
                       </h3>
@@ -1951,7 +2282,7 @@ function StudentAppContent({ isGuestFastEntry }: { isGuestFastEntry: boolean }) 
                 </div>
               </div>
 
-              {/* 右侧菜单 */}
+              {/* 鍙充晶鑿滃崟 */}
               <DedaoMenu
                 isOpen={isMenuOpen}
                 onClose={() => setIsMenuOpen(false)}
@@ -1966,9 +2297,9 @@ function StudentAppContent({ isGuestFastEntry }: { isGuestFastEntry: boolean }) 
               />
             </div>
           ) : (
-            /* 桌面端录音页面 - 教育风格 */
+            /* 妗岄潰绔綍闊抽〉闈?- 鏁欒偛椋庢牸 */
             <div className="flex-1 flex items-center justify-center p-8 page-enter relative overflow-hidden" style={{ background: 'var(--edu-bg-primary)' }}>
-              {/* 背景装饰 */}
+              {/* 鑳屾櫙瑁呴グ */}
               <div className="absolute top-10 right-10 w-48 h-48 opacity-20 pointer-events-none">
                 <Image
                   src="/illustrations/learning.svg"
@@ -1989,15 +2320,15 @@ function StudentAppContent({ isGuestFastEntry }: { isGuestFastEntry: boolean }) 
               </div>
               
               <div className="w-full max-w-2xl mx-auto relative z-10 h-full min-h-0 flex flex-col gap-6">
-                {/* 录音或上传切换 */}
+                {/* 褰曢煶鎴栦笂浼犲垏鎹?*/}
                 <div className="flex-shrink-0 flex items-center justify-center gap-4 mb-4">
                   <span className="text-sm text-gray-500">选择输入方式：</span>
               {renderInputSourceTabs('desktop')}
             </div>
 
-            {/* Recorder 始终挂载，通过 CSS 显示/隐藏，防止切换 tab 时录音状态丢失 */}
+            {/* Recorder 濮嬬粓鎸傝浇锛岄€氳繃 CSS 鏄剧ず/闅愯棌锛岄槻姝㈠垏鎹?tab 鏃跺綍闊崇姸鎬佷涪澶?*/}
             <div className="relative flex-1 min-h-0" style={{ display: dataSource === 'live' && !showSessionHistory ? undefined : 'none' }}>
-              {/* 装饰插画 */}
+              {/* 瑁呴グ鎻掔敾 */}
               <div className="absolute -right-20 -top-10 w-24 h-24 opacity-30 pointer-events-none hidden lg:block">
                 <Image
                   src="/illustrations/recording.svg"
@@ -2018,11 +2349,11 @@ function StudentAppContent({ isGuestFastEntry }: { isGuestFastEntry: boolean }) 
             </div>
             {renderInputSecondaryPanels('desktop')}
             
-                {/* 已标记的困惑点 */}
+                {/* 宸叉爣璁扮殑鍥版儜鐐?*/}
                 {anchors.length > 0 && (
                   <div className="card-edu p-5 animate-slide-up">
                     <h3 className="text-sm font-semibold text-gray-900 mb-4 flex items-center gap-2">
-                      <span>🎯</span>
+                      <span>📍</span>
                       已标记的困惑点
                       <span className="ml-auto text-xs font-normal text-gray-400">{anchors.length} 个</span>
                     </h3>
@@ -2056,7 +2387,7 @@ function StudentAppContent({ isGuestFastEntry }: { isGuestFastEntry: boolean }) 
         </>
       ) : (
         <>
-          {/* 桌面端布局 */}
+          {/* 妗岄潰绔竷灞€ */}
           {!isMobile ? (
             <div
               className={`flex-1 min-h-0 flex page-enter ${videoSource ? 'overflow-visible' : 'overflow-hidden'}`}
@@ -2064,9 +2395,9 @@ function StudentAppContent({ isGuestFastEntry }: { isGuestFastEntry: boolean }) 
             >
               {videoSource ? (
                 <div className="flex-1 min-h-0 flex flex-col lg:flex-row overflow-hidden">
-                  {/* ===== 左侧：视频 + 可折叠字幕 + 时间轴 ===== */}
+                  {/* ===== 宸︿晶锛氳棰?+ 鍙姌鍙犲瓧骞?+ 鏃堕棿杞?===== */}
                   <div className="min-h-0 flex flex-col lg:w-[55%] xl:w-[58%] border-r" style={{ borderColor: 'var(--edu-border-light)' }}>
-                    {/* 视频播放器 */}
+                    {/* 瑙嗛鎾斁鍣?*/}
                     <div className="shrink-0 bg-black">
                       <VideoReviewPlayer
                         source={videoSource}
@@ -2079,7 +2410,7 @@ function StudentAppContent({ isGuestFastEntry }: { isGuestFastEntry: boolean }) 
                       />
                     </div>
 
-                    {/* 可折叠字幕条 */}
+                    {/* 鍙姌鍙犲瓧骞曟潯 */}
                     <div className="shrink-0 border-b" style={{ borderColor: 'var(--edu-border-light)' }}>
                       <button
                         onClick={() => setShowTranscriptBar(prev => !prev)}
@@ -2091,7 +2422,7 @@ function StudentAppContent({ isGuestFastEntry }: { isGuestFastEntry: boolean }) 
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                           </svg>
                           <span className="text-gray-500 font-medium">转录字幕</span>
-                          <span className="text-gray-400">{segments.length} 句</span>
+                          <span className="text-gray-400">{segments.length} 段</span>
                         </div>
                         <svg
                           className={`w-4 h-4 text-gray-400 transition-transform duration-200 ${showTranscriptBar ? 'rotate-180' : ''}`}
@@ -2123,7 +2454,7 @@ function StudentAppContent({ isGuestFastEntry }: { isGuestFastEntry: boolean }) 
                       )}
                     </div>
 
-                    {/* 可视化时间轴 + 高亮片段列表 */}
+                    {/* 鍙鍖栨椂闂磋酱 + 楂樹寒鐗囨鍒楄〃 */}
                     <div className="flex-1 min-h-0 overflow-y-auto" style={{ background: 'var(--edu-bg-primary)' }}>
                       <div className="p-4">
                         <div className="flex items-center justify-between mb-3">
@@ -2148,16 +2479,16 @@ function StudentAppContent({ isGuestFastEntry }: { isGuestFastEntry: boolean }) 
                               </svg>
                             </div>
                             <p className="text-sm text-gray-400 mb-1">暂无高亮</p>
-                            <p className="text-xs text-gray-300">在右侧对话后，高亮点会自动出现在这里</p>
+                            <p className="text-xs text-gray-300">在右侧对话后，高亮内容会出现在这里</p>
                           </div>
                         )}
                       </div>
                     </div>
                   </div>
 
-                  {/* ===== 右侧：5 Tab 工作面板 ===== */}
+                  {/* ===== 鍙充晶锛? Tab 宸ヤ綔闈㈡澘 ===== */}
                   <div className="min-h-0 flex flex-col flex-1 bg-white overflow-hidden">
-                    {/* 标签栏 */}
+                    {/* 鏍囩鏍?*/}
                     <div
                       className="flex items-center gap-0.5 px-3 py-2 border-b shrink-0 overflow-x-auto"
                       style={{ background: 'var(--edu-bg-soft)', borderColor: 'var(--edu-border-light)' }}
@@ -2175,7 +2506,6 @@ function StudentAppContent({ isGuestFastEntry }: { isGuestFastEntry: boolean }) 
                               : 'text-gray-500 hover:text-gray-800 hover:bg-white/60'
                           }`}
                         >
-                          <span>{tab.icon}</span>
                           {tab.label}
                           {tab.key === 'confusion' && anchors.filter(a => !a.resolved).length > 0 && (
                             <span className="ml-0.5 w-1.5 h-1.5 bg-red-400 rounded-full inline-block animate-pulse" />
@@ -2190,9 +2520,9 @@ function StudentAppContent({ isGuestFastEntry }: { isGuestFastEntry: boolean }) 
                       ))}
                     </div>
 
-                    {/* 内容区 */}
+                    {/* 鍐呭鍖?*/}
                     <div className="flex-1 min-h-0 overflow-hidden">
-                      {/* 对话 Tab - 全局 AI 对话（使用 CSS 隐藏保留组件状态） */}
+                      {/* 瀵硅瘽 Tab - 鍏ㄥ眬 AI 瀵硅瘽锛堜娇鐢?CSS 闅愯棌淇濈暀缁勪欢鐘舵€侊級 */}
                       <div className={`h-full min-h-0 ${videoWorkspaceTab === 'chat' ? '' : 'hidden'}`}>
                           <AITutor
                             breakpoint={null}
@@ -2204,17 +2534,17 @@ function StudentAppContent({ isGuestFastEntry }: { isGuestFastEntry: boolean }) 
                           />
                       </div>
 
-                      {/* 困惑点 Tab - 列表 / 独立对话 */}
+                      {/* 鍥版儜鐐?Tab - 鍒楄〃 / 鐙珛瀵硅瘽 */}
                       {videoWorkspaceTab === 'confusion' && (
                         <div className="h-full overflow-hidden flex flex-col">
                           {confusionChatAnchor ? (
                             <>
-                              {/* 困惑点对话头部 */}
+                              {/* 鍥版儜鐐瑰璇濆ご閮?*/}
                               <div className="shrink-0 flex items-center gap-2 px-4 py-2.5 border-b" style={{ background: 'var(--edu-bg-soft)', borderColor: 'var(--edu-border-light)' }}>
                                 <button
                                   onClick={() => setConfusionChatAnchor(null)}
                                   className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-gray-200/60 transition-colors text-gray-500"
-                                  title="返回列表"
+                                  title="杩斿洖鍒楄〃"
                                 >
                                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
@@ -2236,11 +2566,11 @@ function StudentAppContent({ isGuestFastEntry }: { isGuestFastEntry: boolean }) 
                                     }}
                                     className="shrink-0 px-2.5 py-1 text-xs rounded-lg bg-green-50 text-green-600 hover:bg-green-100 transition-colors"
                                   >
-                                    标记已解决
+                                    鏍囪宸茶В鍐?
                                   </button>
                                 )}
                               </div>
-                              {/* 困惑点独立对话 */}
+                              {/* 鍥版儜鐐圭嫭绔嬪璇?*/}
                               <div className="flex-1 min-h-0">
                                 <AITutor
                                   key={`confusion-${confusionChatAnchor.id}`}
@@ -2267,7 +2597,7 @@ function StudentAppContent({ isGuestFastEntry }: { isGuestFastEntry: boolean }) 
                             </>
                           ) : (
                             <div className="h-full overflow-y-auto p-4">
-                              {/* 标记困惑按钮 */}
+                              {/* 鏍囪鍥版儜鎸夐挳 */}
                               <button
                                 onClick={() => {
                                   handleAnchorMark(currentTime);
@@ -2277,15 +2607,15 @@ function StudentAppContent({ isGuestFastEntry }: { isGuestFastEntry: boolean }) 
                                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
                                 </svg>
-                                在当前位置标记困惑 ({formatTime(currentTime)})
+                                鍦ㄥ綋鍓嶄綅缃爣璁板洶鎯?({formatTime(currentTime)})
                               </button>
 
                               {anchors.length > 0 ? (
                                 <div className="space-y-2">
                                   <div className="flex items-center justify-between mb-2">
-                                    <span className="text-xs text-gray-400">{anchors.length} 个困惑点</span>
+                                    <span className="text-xs text-gray-400">{anchors.length} 涓洶鎯戠偣</span>
                                     {anchors.filter(a => !a.resolved).length > 0 && (
-                                      <span className="text-xs text-red-400">{anchors.filter(a => !a.resolved).length} 个未解决</span>
+                                      <span className="text-xs text-red-400">{anchors.filter(a => !a.resolved).length} 涓湭瑙ｅ喅</span>
                                     )}
                                   </div>
                                   {anchors.map((anchor, index) => (
@@ -2305,11 +2635,11 @@ function StudentAppContent({ isGuestFastEntry }: { isGuestFastEntry: boolean }) 
                                       <div className="flex items-center gap-2">
                                         <span className={`w-2 h-2 rounded-full shrink-0 ${anchor.resolved ? 'bg-green-400' : 'bg-amber-400'}`} />
                                         <span className="text-xs font-mono text-gray-400">{formatTime(anchor.timestamp)}</span>
-                                        <span className="text-xs text-gray-500">困惑 #{index + 1}</span>
+                                        <span className="text-xs text-gray-500">鍥版儜 #{index + 1}</span>
                                         {anchor.resolved ? (
                                           <span className="text-xs text-green-500 ml-auto">已解决</span>
                                         ) : (
-                                          <span className="text-xs text-amber-500 ml-auto">点击对话 →</span>
+                                          <span className="text-xs text-amber-500 ml-auto">点击对话</span>
                                         )}
                                       </div>
                                       {anchor.note && (
@@ -2340,7 +2670,7 @@ function StudentAppContent({ isGuestFastEntry }: { isGuestFastEntry: boolean }) 
                 </div>
               ) : (
                 <>
-              {/* 可拖拽左右面板 */}
+              {/* 鍙嫋鎷藉乏鍙抽潰鏉?*/}
               <ResizablePanel
                 className="flex-1"
                 defaultLeftWidth={320}
@@ -2348,9 +2678,9 @@ function StudentAppContent({ isGuestFastEntry }: { isGuestFastEntry: boolean }) 
                 maxLeftWidth={820}
                 storageKey="meetmind-left-panel-width"
                 leftPanel={
-                  /* 左栏 - 多功能面板 */
+                  /* 宸︽爮 - 澶氬姛鑳介潰鏉?*/
                   <div className="h-full flex flex-col bg-white" style={{ borderRight: '1px solid var(--edu-border-light)' }}>
-                    {/* 标签页切换 - 增强可点击性和防遮挡 */}
+                    {/* 鏍囩椤靛垏鎹?- 澧炲己鍙偣鍑绘€у拰闃查伄鎸?*/}
                     <div 
                       className="flex items-center gap-1 px-3 py-2.5 border-b overflow-x-auto flex-shrink-0 relative z-10 tab-buttons-container" 
                       style={{ background: 'var(--edu-bg-soft)', borderColor: 'var(--edu-border-light)' }}
@@ -2367,14 +2697,14 @@ function StudentAppContent({ isGuestFastEntry }: { isGuestFastEntry: boolean }) 
                               : 'text-gray-500 hover:text-navy hover:bg-white/50'
                           }`}
                         >
-                          {tab.icon} {tab.label}
+                          {tab.label}
                           {tab.key === 'anchor-detail' && selectedAnchor && !selectedAnchor.resolved && (
                             <span className="ml-1 w-2 h-2 bg-coral rounded-full inline-block animate-pulse" />
                           )}
                           {tab.key === 'highlights' && highlightTopics.length > 0 && (
                             <span className="ml-1 text-xs text-skyblue-600">({highlightTopics.length})</span>
                           )}
-                          {tab.key === 'summary' && classSummary && <span className="ml-1 text-xs text-mint-600">✓</span>}
+                          {tab.key === 'summary' && classSummary && <span className="ml-1 text-xs text-mint-600">OK</span>}
                           {tab.key === 'notes' && notes.length > 0 && (
                             <span className="ml-1 text-xs text-amber-600">({notes.length})</span>
                           )}
@@ -2382,7 +2712,7 @@ function StudentAppContent({ isGuestFastEntry }: { isGuestFastEntry: boolean }) 
                       ))}
                     </div>
                     
-                    {/* 标签页内容 */}
+                    {/* 鏍囩椤靛唴瀹?*/}
                     <div className="flex-1 min-h-0 overflow-hidden">
                       {reviewTab === 'timeline' && timelineForView && (
                         <TimelineView
@@ -2427,9 +2757,9 @@ function StudentAppContent({ isGuestFastEntry }: { isGuestFastEntry: boolean }) 
                   </div>
                 }
                 rightPanel={
-                  /* 中栏 - AI 对话区（现在是右侧主面板） */
+                  /* 涓爮 - AI 瀵硅瘽鍖猴紙鐜板湪鏄彸渚т富闈㈡澘锛?*/
                   <div className="h-full flex flex-col bg-white ai-chat-container">
-                    {/* 精简波形播放器 - compact 模式，置于顶部 */}
+                    {/* 绮剧畝娉㈠舰鎾斁鍣?- compact 妯″紡锛岀疆浜庨《閮?*/}
                     {(audioBlob || audioUrl) && (
                       <div className="flex-shrink-0 border-b" style={{ background: 'var(--edu-bg-soft)', borderColor: 'var(--edu-border-light)', maxHeight: '120px' }}>
                         <WaveformPlayer
@@ -2455,9 +2785,9 @@ function StudentAppContent({ isGuestFastEntry }: { isGuestFastEntry: boolean }) 
                       </div>
                     )}
                     
-                    {/* AI 家教区 - 确保有足够的显示空间 */}
+                    {/* AI 瀹舵暀鍖?- 纭繚鏈夎冻澶熺殑鏄剧ず绌洪棿 */}
                     <div className="flex-1 min-h-0 flex flex-col" data-onboarding="ai-tutor" style={{ minHeight: 'var(--ai-chat-min-height, 300px)' }}>
-                      {/* AI 对话模式切换栏 */}
+                      {/* AI 瀵硅瘽妯″紡鍒囨崲鏍?*/}
                       {!showConversationHistory && (
                         <div 
                           className="flex-shrink-0 px-3 py-2 flex items-center gap-2 border-b"
@@ -2500,7 +2830,7 @@ function StudentAppContent({ isGuestFastEntry }: { isGuestFastEntry: boolean }) 
                         </div>
                       )}
                       
-                      {/* 内容区 */}
+                      {/* 鍐呭鍖?*/}
                       <div className="flex-1 min-h-0 overflow-hidden">
                         {showConversationHistory ? (
                           selectedHistoryConversation ? (
@@ -2508,7 +2838,7 @@ function StudentAppContent({ isGuestFastEntry }: { isGuestFastEntry: boolean }) 
                               <div className="px-4 py-2 border-b flex items-center justify-between flex-shrink-0" style={{ background: 'var(--edu-bg-soft)', borderColor: 'var(--edu-border-light)' }}>
                                 <span className="text-sm text-gray-600 truncate flex-1 mr-2">{selectedHistoryConversation.title}</span>
                                 <div className="flex items-center gap-1">
-                                  {/* 返回列表 - 使用图标 */}
+                                  {/* 杩斿洖鍒楄〃 - 浣跨敤鍥炬爣 */}
                                   <button
                                     onClick={() => setSelectedHistoryConversation(null)}
                                     className="w-8 h-8 flex items-center justify-center rounded-lg text-gray-500 hover:text-navy hover:bg-gray-100 transition-colors"
@@ -2518,7 +2848,7 @@ function StudentAppContent({ isGuestFastEntry }: { isGuestFastEntry: boolean }) 
                                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 10h16M4 14h16M4 18h16" />
                                     </svg>
                                   </button>
-                                  {/* 新对话 - 使用图标 */}
+                                  {/* 鏂板璇?- 浣跨敤鍥炬爣 */}
                                   <button
                                     onClick={() => {
                                       setShowConversationHistory(false);
@@ -2547,7 +2877,7 @@ function StudentAppContent({ isGuestFastEntry }: { isGuestFastEntry: boolean }) 
                             <div className="h-full flex flex-col">
                               <div className="px-4 py-2 border-b flex items-center justify-between flex-shrink-0" style={{ background: 'var(--edu-bg-soft)', borderColor: 'var(--edu-border-light)' }}>
                                 <span className="text-sm font-medium text-navy">历史对话</span>
-                                {/* 新对话按钮 */}
+                                {/* 鏂板璇濇寜閽?*/}
                                 <button
                                   onClick={() => {
                                     setShowConversationHistory(false);
@@ -2590,7 +2920,7 @@ function StudentAppContent({ isGuestFastEntry }: { isGuestFastEntry: boolean }) 
                 }
               />
 
-              {/* 右侧 - 图标条 */}
+              {/* 鍙充晶 - 鍥炬爣鏉?*/}
               <ActionSidebar
                 actionCount={actionItems.filter(i => !i.completed).length}
                 totalCount={actionItems.length}
@@ -2605,7 +2935,7 @@ function StudentAppContent({ isGuestFastEntry }: { isGuestFastEntry: boolean }) 
                 isHistoryActive={showConversationHistory}
               />
 
-              {/* 行动清单抽屉 */}
+              {/* 琛屽姩娓呭崟鎶藉眽 */}
               <ActionDrawer
                 isOpen={isActionDrawerOpen}
                 onClose={() => setIsActionDrawerOpen(false)}
@@ -2617,16 +2947,16 @@ function StudentAppContent({ isGuestFastEntry }: { isGuestFastEntry: boolean }) 
               )}
             </div>
           ) : (
-            /* 移动端教育风格布局 */
+            /* 绉诲姩绔暀鑲查鏍煎竷灞€ */
             <div className="flex-1 min-h-0 flex flex-col overflow-hidden" style={{ background: 'var(--edu-bg-primary)' }}>
-              {/* 极简顶部栏：Logo + Tab + 用户 + 菜单 */}
+              {/* 鏋佺畝椤堕儴鏍忥細Logo + Tab + 鐢ㄦ埛 + 鑿滃崟 */}
               <div className="flex-shrink-0 px-4 py-2.5 flex items-center gap-2 bg-white border-b" style={{ borderColor: 'var(--edu-border-light)' }}>
                 {/* Logo */}
                 <div className="w-8 h-8 bg-gradient-to-br from-amber-400 to-amber-500 rounded-lg flex items-center justify-center flex-shrink-0">
                   <span className="text-white font-bold text-sm">M</span>
                 </div>
                 
-                {/* Tab 切换 */}
+                {/* Tab 鍒囨崲 */}
                 <div className="flex-1 flex items-center justify-center">
                   <MobileTabSwitch
                     activeTab={viewMode}
@@ -2635,7 +2965,7 @@ function StudentAppContent({ isGuestFastEntry }: { isGuestFastEntry: boolean }) 
                   />
                 </div>
                 
-                {/* 用户头像/登录按钮 */}
+                {/* 鐢ㄦ埛澶村儚/鐧诲綍鎸夐挳 */}
                 {isAuthenticated && user ? (
                   <button
                     onClick={() => setIsMenuOpen(true)}
@@ -2645,7 +2975,7 @@ function StudentAppContent({ isGuestFastEntry }: { isGuestFastEntry: boolean }) 
                       {user.avatar ? (
                         <AvatarImage src={user.avatar} alt={user.nickname} className="object-cover" />
                       ) : null}
-                      <AvatarFallback className="bg-transparent text-sm">👤</AvatarFallback>
+                      <AvatarFallback className="bg-transparent text-sm">用户</AvatarFallback>
                     </Avatar>
                   </button>
                 ) : (
@@ -2657,11 +2987,11 @@ function StudentAppContent({ isGuestFastEntry }: { isGuestFastEntry: boolean }) 
                   </a>
                 )}
                 
-                {/* 菜单按钮 */}
+                {/* 鑿滃崟鎸夐挳 */}
                 <DedaoMenuButton onClick={() => setIsMenuOpen(true)} data-onboarding="menu-button" />
               </div>
 
-              {/* 单行极简播放器 */}
+              {/* 鍗曡鏋佺畝鎾斁鍣?*/}
               {!mobileSubPage && (
                 <MiniPlayer
                   currentTime={currentTime}
@@ -2704,7 +3034,7 @@ function StudentAppContent({ isGuestFastEntry }: { isGuestFastEntry: boolean }) 
                 />
               )}
 
-              {/* 隐藏的波形播放器（用于实际音频播放） */}
+              {/* 闅愯棌鐨勬尝褰㈡挱鏀惧櫒锛堢敤浜庡疄闄呴煶棰戞挱鏀撅級 */}
               {(audioBlob || audioUrl) && (
                 <div className="hidden">
                   <WaveformPlayer
@@ -2731,7 +3061,7 @@ function StudentAppContent({ isGuestFastEntry }: { isGuestFastEntry: boolean }) 
                 </div>
               )}
 
-              {/* 主内容区：根据 mobileSubPage 条件渲染 */}
+              {/* 涓诲唴瀹瑰尯锛氭牴鎹?mobileSubPage 鏉′欢娓叉煋 */}
               {mobileSubPage === null && (
                 <>
                   {videoSource && (
@@ -2747,7 +3077,7 @@ function StudentAppContent({ isGuestFastEntry }: { isGuestFastEntry: boolean }) 
                     </div>
                   )}
 
-                  {/* 时间轴列表（占满剩余空间） */}
+                  {/* 鏃堕棿杞村垪琛紙鍗犳弧鍓╀綑绌洪棿锛?*/}
                   <DedaoTimeline
                     entries={toDedaoEntries(segments, anchors)}
                     currentTime={currentTime}
@@ -2775,7 +3105,7 @@ function StudentAppContent({ isGuestFastEntry }: { isGuestFastEntry: boolean }) 
                     className="flex-1 min-h-0"
                   />
 
-                  {/* 困惑点详情卡片 */}
+                  {/* 鍥版儜鐐硅鎯呭崱鐗?*/}
                   <DedaoConfusionCard
                     isOpen={!!selectedConfusion}
                     onClose={() => setSelectedConfusion(null)}
@@ -2800,10 +3130,10 @@ function StudentAppContent({ isGuestFastEntry }: { isGuestFastEntry: boolean }) 
                     }}
                   />
 
-                  {/* 悬浮 AI 对话按钮 - 进入全局 AI 对话 */}
+                  {/* 鎮诞 AI 瀵硅瘽鎸夐挳 - 杩涘叆鍏ㄥ眬 AI 瀵硅瘽 */}
                   <MobileAIFab
                     onClick={() => {
-                      setSelectedAnchor(null);  // 清除选中的困惑点，进入全局对话模式
+                      setSelectedAnchor(null);  // 娓呴櫎閫変腑鐨勫洶鎯戠偣锛岃繘鍏ュ叏灞€瀵硅瘽妯″紡
                       setMobileAIQuestion('');
                       setMobileSubPage('ai-chat');
                     }}
@@ -2814,10 +3144,10 @@ function StudentAppContent({ isGuestFastEntry }: { isGuestFastEntry: boolean }) 
                 </>
               )}
 
-              {/* 移动端 AI 对话页面 */}
+              {/* 绉诲姩绔?AI 瀵硅瘽椤甸潰 */}
               {mobileSubPage === 'ai-chat' && (
                 <div className="flex-1 min-h-0 flex flex-col bg-white">
-                  {/* 子页面头部 */}
+                  {/* 瀛愰〉闈㈠ご閮?*/}
                   <div className="flex items-center gap-3 px-4 py-3 border-b border-gray-100">
                     <button
                       onClick={() => {
@@ -2834,9 +3164,9 @@ function StudentAppContent({ isGuestFastEntry }: { isGuestFastEntry: boolean }) 
                     </button>
                     <span className="font-medium text-gray-900">AI 助教</span>
                     
-                    {/* 历史记录切换 - ChatGPT 风格图标按钮 */}
+                    {/* 鍘嗗彶璁板綍鍒囨崲 - ChatGPT 椋庢牸鍥炬爣鎸夐挳 */}
                     <div className="ml-auto flex items-center gap-1 bg-gray-100 rounded-lg p-0.5">
-                      {/* 当前对话 */}
+                      {/* 褰撳墠瀵硅瘽 */}
                       <button
                         onClick={() => {
                           setShowConversationHistory(false);
@@ -2853,7 +3183,7 @@ function StudentAppContent({ isGuestFastEntry }: { isGuestFastEntry: boolean }) 
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
                         </svg>
                       </button>
-                      {/* 历史记录 */}
+                      {/* 鍘嗗彶璁板綍 */}
                       <button
                         onClick={() => setShowConversationHistory(true)}
                         className={`w-8 h-8 flex items-center justify-center rounded-md transition-all ${
@@ -2870,7 +3200,7 @@ function StudentAppContent({ isGuestFastEntry }: { isGuestFastEntry: boolean }) 
                     </div>
                   </div>
                   
-                  {/* MiniPlayer 播放进度条 */}
+                  {/* MiniPlayer 鎾斁杩涘害鏉?*/}
                   <MiniPlayer
                     currentTime={currentTime}
                     duration={totalDuration}
@@ -2900,16 +3230,16 @@ function StudentAppContent({ isGuestFastEntry }: { isGuestFastEntry: boolean }) 
                     className="border-b border-gray-100"
                   />
                   
-                  {/* AI 对话区 */}
+                  {/* AI 瀵硅瘽鍖?*/}
                   <div className="flex-1 min-h-0">
                     {showConversationHistory ? (
                       selectedHistoryConversation ? (
-                        // 继续历史对话
+                        // 缁х画鍘嗗彶瀵硅瘽
                         <div className="h-full flex flex-col">
                           <div className="px-3 py-2 bg-gray-50 border-b border-gray-100 flex items-center justify-between">
                             <span className="text-xs text-gray-600 truncate flex-1 mr-2">{selectedHistoryConversation.title}</span>
                             <div className="flex items-center gap-1">
-                              {/* 返回列表 */}
+                              {/* 杩斿洖鍒楄〃 */}
                               <button
                                 onClick={() => setSelectedHistoryConversation(null)}
                                 className="w-7 h-7 flex items-center justify-center rounded-lg text-gray-500 hover:bg-gray-100"
@@ -2919,7 +3249,7 @@ function StudentAppContent({ isGuestFastEntry }: { isGuestFastEntry: boolean }) 
                                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 10h16M4 14h16M4 18h16" />
                                 </svg>
                               </button>
-                              {/* 新对话 */}
+                              {/* 鏂板璇?*/}
                               <button
                                 onClick={() => {
                                   setShowConversationHistory(false);
@@ -2946,7 +3276,7 @@ function StudentAppContent({ isGuestFastEntry }: { isGuestFastEntry: boolean }) 
                           </div>
                         </div>
                       ) : (
-                        // 历史对话列表
+                        // 鍘嗗彶瀵硅瘽鍒楄〃
                         <ConversationList
                           sessionId={sessionId}
                           onSelect={(conv) => setSelectedHistoryConversation(conv)}
@@ -2955,7 +3285,7 @@ function StudentAppContent({ isGuestFastEntry }: { isGuestFastEntry: boolean }) 
                         />
                       )
                     ) : (
-                      // 当前困惑点对话
+                      // 褰撳墠鍥版儜鐐瑰璇?
                       <AITutor
                         breakpoint={selectedBreakpoint}
                         segments={segments}
@@ -2974,7 +3304,7 @@ function StudentAppContent({ isGuestFastEntry }: { isGuestFastEntry: boolean }) 
                 </div>
               )}
 
-              {/* 移动端精选页面 */}
+              {/* 绉诲姩绔簿閫夐〉闈?*/}
               {mobileSubPage === 'highlights' && (
                 <div className="flex-1 min-h-0 flex flex-col bg-white">
                   <div className="flex items-center gap-3 px-4 py-3 border-b border-gray-100">
@@ -3009,7 +3339,7 @@ function StudentAppContent({ isGuestFastEntry }: { isGuestFastEntry: boolean }) 
                 </div>
               )}
 
-              {/* 移动端摘要页面 */}
+              {/* 绉诲姩绔憳瑕侀〉闈?*/}
               {mobileSubPage === 'summary' && (
                 <div className="flex-1 min-h-0 flex flex-col bg-white">
                   <div className="flex items-center gap-3 px-4 py-3 border-b border-gray-100">
@@ -3040,7 +3370,7 @@ function StudentAppContent({ isGuestFastEntry }: { isGuestFastEntry: boolean }) 
                 </div>
               )}
 
-              {/* 移动端笔记页面 */}
+              {/* 绉诲姩绔瑪璁伴〉闈?*/}
               {mobileSubPage === 'notes' && (
                 <div className="flex-1 min-h-0 flex flex-col bg-white">
                   <div className="flex items-center gap-3 px-4 py-3 border-b border-gray-100">
@@ -3066,7 +3396,7 @@ function StudentAppContent({ isGuestFastEntry }: { isGuestFastEntry: boolean }) 
                 </div>
               )}
 
-              {/* 移动端应用矩阵页面 */}
+              {/* 绉诲姩绔簲鐢ㄧ煩闃甸〉闈?*/}
               {mobileSubPage === 'apps' && (
                 <div className="flex-1 min-h-0 flex flex-col bg-white">
                   <div className="flex items-center gap-3 px-4 py-3 border-b border-gray-100">
@@ -3086,7 +3416,7 @@ function StudentAppContent({ isGuestFastEntry }: { isGuestFastEntry: boolean }) 
                 </div>
               )}
 
-              {/* 移动端任务页面 */}
+              {/* 绉诲姩绔换鍔￠〉闈?*/}
               {mobileSubPage === 'tasks' && (
                 <div className="flex-1 min-h-0 flex flex-col bg-white">
                   <div className="flex items-center gap-3 px-4 py-3 border-b border-gray-100">
@@ -3110,7 +3440,7 @@ function StudentAppContent({ isGuestFastEntry }: { isGuestFastEntry: boolean }) 
                 </div>
               )}
 
-              {/* 右侧菜单 */}
+              {/* 鍙充晶鑿滃崟 */}
               <DedaoMenu
                 isOpen={isMenuOpen}
                 onClose={() => setIsMenuOpen(false)}
@@ -3129,12 +3459,12 @@ function StudentAppContent({ isGuestFastEntry }: { isGuestFastEntry: boolean }) 
         </>
       )}
       
-      {/* 用户引导组件 */}
+      {/* 鐢ㄦ埛寮曞缁勪欢 */}
       <WelcomeModal
         isOpen={showWelcome}
         onStart={() => {
           setShowWelcome(false);
-          // 标记 welcome 流程完成，然后启动 recording 引导
+          // 鏍囪 welcome 娴佺▼瀹屾垚锛岀劧鍚庡惎鍔?recording 寮曞
           onboarding.markFlowComplete('welcome');
           setTimeout(() => {
             onboarding.startFlow('recording');
@@ -3142,7 +3472,7 @@ function StudentAppContent({ isGuestFastEntry }: { isGuestFastEntry: boolean }) 
         }}
         onSkip={() => {
           setShowWelcome(false);
-          // 标记 welcome 被跳过
+          // 鏍囪 welcome 琚烦杩?
           onboarding.markFlowSkipped('welcome');
         }}
       />
@@ -3166,14 +3496,14 @@ function formatTime(ms: number): string {
   return `${pad(minutes)}:${pad(seconds % 60)}`;
 }
 
-// 读取 URL 参数的内部组件
+// 璇诲彇 URL 鍙傛暟鐨勫唴閮ㄧ粍浠?
 function SearchParamsReader() {
   const searchParams = useSearchParams();
   const isGuestFastEntry = searchParams.get('guest') === '1';
   return <StudentAppContent isGuestFastEntry={isGuestFastEntry} />;
 }
 
-// 默认导出 - 用 Suspense 包裹 useSearchParams
+// 榛樿瀵煎嚭 - 鐢?Suspense 鍖呰９ useSearchParams
 export default function StudentApp() {
   return (
     <Suspense fallback={<AppLoading message="加载中..." />}>
@@ -3181,3 +3511,6 @@ export default function StudentApp() {
     </Suspense>
   );
 }
+
+
+

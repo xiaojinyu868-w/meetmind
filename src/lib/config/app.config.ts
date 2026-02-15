@@ -7,7 +7,7 @@
 
 // ==================== 类型定义 ====================
 
-export type ModelProvider = 'qwen' | 'gemini' | 'openai';
+export type ModelProvider = 'qwen' | 'volcengine' | 'relay';
 
 export interface ModelConfig {
   id: string;
@@ -20,82 +20,107 @@ export interface ModelConfig {
   enableThinking?: boolean;  // 启用思考模式（qwen3-max-2026-01-23）
 }
 
+function hasValue(value: string | undefined): boolean {
+  return Boolean((value || '').trim());
+}
+
+const hasQwenKey = hasValue(process.env.DASHSCOPE_API_KEY);
+const hasVolcArkKey = hasValue(process.env.VOLCENGINE_ARK_API_KEY);
+const volcArkModelId = (process.env.VOLCENGINE_ARK_MODEL || '').trim();
+const hasRelayKey = hasValue(process.env.RELAY_API_KEY);
+const relayModelId = (process.env.RELAY_MODEL || 'gemini-3-pro-image-preview').trim();
+
+const qwenModels: ModelConfig[] = [
+  {
+    id: 'qwen3-vl-plus-2025-12-19',
+    name: '通义千问 3 VL',
+    provider: 'qwen',
+    description: '多模态视觉模型，支持图片理解',
+    maxTokens: 8192,
+    recommended: true,
+    supportsMultimodal: true,
+  },
+  {
+    id: 'qwen3-max-2026-01-23',
+    name: '通义千问 3 Max',
+    provider: 'qwen',
+    description: '思考模式，支持联网搜索和代码解释器，262K上下文',
+    maxTokens: 32768,
+    supportsMultimodal: false,
+    enableThinking: true,
+  },
+];
+
+const volcModels: ModelConfig[] = hasVolcArkKey && hasValue(volcArkModelId)
+  ? [
+      {
+        id: volcArkModelId,
+        name: '火山方舟模型',
+        provider: 'volcengine',
+        description: '火山引擎 Ark（OpenAI 兼容接口）',
+        maxTokens: 8192,
+        supportsMultimodal: true,
+      },
+    ]
+  : [];
+
+const relayModels: ModelConfig[] = hasRelayKey && hasValue(relayModelId)
+  ? [
+      {
+        id: relayModelId,
+        name: '中转站模型',
+        provider: 'relay',
+        description: '中转站聚合模型（可挂载 Gemini 图像模型）',
+        maxTokens: 8192,
+        supportsMultimodal: true,
+      },
+    ]
+  : [];
+
+const enabledModels: ModelConfig[] = [
+  ...(hasQwenKey ? qwenModels : []),
+  ...volcModels,
+  ...relayModels,
+];
+
+const resolvedModels: ModelConfig[] = enabledModels.length > 0 ? enabledModels : qwenModels;
+const envDefaultModel = process.env.LLM_MODEL || '';
+const resolvedDefaultModel =
+  (envDefaultModel && resolvedModels.some((model) => model.id === envDefaultModel)
+    ? envDefaultModel
+    : undefined) ||
+  resolvedModels.find((model) => model.id === 'qwen3-vl-plus-2025-12-19')?.id ||
+  resolvedModels.find((model) => model.supportsMultimodal)?.id ||
+  resolvedModels[0]?.id ||
+  'qwen3-vl-plus-2025-12-19';
+const resolvedDefaultVisionModel =
+  resolvedModels.find((model) => model.supportsMultimodal)?.id ||
+  resolvedModels[0]?.id ||
+  'qwen3-vl-plus-2025-12-19';
+
 // ==================== LLM 配置 ====================
 
 export const LLMConfig = {
   // 默认模型
-  defaultModel: process.env.LLM_MODEL || 'qwen3-max-2026-01-23',
-  defaultVisionModel: 'qwen3-vl-plus-2025-12-19' as string,
+  defaultModel: resolvedDefaultModel,
+  defaultVisionModel: resolvedDefaultVisionModel,
   
   // API 配置
   qwen: {
     apiKey: process.env.DASHSCOPE_API_KEY || '',
     baseUrl: process.env.LLM_BASE_URL || 'https://dashscope.aliyuncs.com/compatible-mode/v1',
   },
-  gemini: {
-    apiKey: process.env.GOOGLE_API_KEY || '',
+  volcengine: {
+    apiKey: process.env.VOLCENGINE_ARK_API_KEY || '',
+    baseUrl: process.env.VOLCENGINE_ARK_BASE_URL || 'https://ark.cn-beijing.volces.com/api/v3',
   },
-  openai: {
-    apiKey: process.env.OPENAI_API_KEY || '',
+  relay: {
+    apiKey: process.env.RELAY_API_KEY || '',
+    baseUrl: process.env.RELAY_BASE_URL || '',
   },
   
-  // 可用模型列表
-  models: [
-    // 通义千问系列
-    {
-      id: 'qwen3-vl-plus-2025-12-19',
-      name: '通义千问 3 VL',
-      provider: 'qwen' as ModelProvider,
-      description: '多模态视觉模型，支持图片理解',
-      maxTokens: 8192,
-      recommended: true,
-      supportsMultimodal: true,
-    },
-    {
-      id: 'qwen3-max-2026-01-23',
-      name: '通义千问 3 Max',
-      provider: 'qwen' as ModelProvider,
-      description: '思考模式，支持联网搜索和代码解释器，262K上下文',
-      maxTokens: 32768,
-      supportsMultimodal: false,
-      enableThinking: true,  // 启用思考模式
-    },
-    // ========== 以下模型暂时禁用（未配置 API Key）==========
-    // Gemini 系列
-    // {
-    //   id: 'gemini-3-pro',
-    //   name: 'Gemini 3 Pro',
-    //   provider: 'gemini' as ModelProvider,
-    //   description: '最强多模态，100万上下文',
-    //   maxTokens: 8192,
-    //   supportsMultimodal: true,
-    // },
-    // {
-    //   id: 'gemini-3-flash',
-    //   name: 'Gemini 3 Flash',
-    //   provider: 'gemini' as ModelProvider,
-    //   description: '快速响应，多模态能力',
-    //   maxTokens: 8192,
-    //   supportsMultimodal: true,
-    // },
-    // OpenAI 系列
-    // {
-    //   id: 'gpt-5.2',
-    //   name: 'GPT-5.2',
-    //   provider: 'openai' as ModelProvider,
-    //   description: '最新旗舰模型，全能多模态',
-    //   maxTokens: 8192,
-    //   supportsMultimodal: true,
-    // },
-    // {
-    //   id: 'gpt-5-mini',
-    //   name: 'GPT-5 Mini',
-    //   provider: 'openai' as ModelProvider,
-    //   description: '轻量快速，支持多模态',
-    //   maxTokens: 4096,
-    //   supportsMultimodal: true,
-    // },
-  ] as ModelConfig[],
+  // 可用模型列表（按已配置密钥自动启用）
+  models: resolvedModels as ModelConfig[],
   
   // 获取模型配置
   getModel(modelId: string): ModelConfig | undefined {
@@ -173,8 +198,8 @@ export const ASRConfig = {
 export const FeatureConfig = {
   // 精选片段
   highlights: {
-    defaultModel: 'qwen3-max-2026-01-23',
-    fastModel: 'qwen3-max-2026-01-23',
+    defaultModel: LLMConfig.defaultModel,
+    fastModel: LLMConfig.defaultModel,
     maxTopics: 8,
     minTopics: 5,
     chunkMaxCandidates: 2,
@@ -182,7 +207,7 @@ export const FeatureConfig = {
   
   // 摘要生成
   summary: {
-    defaultModel: 'qwen3-max-2026-01-23',
+    defaultModel: LLMConfig.defaultModel,
     minTakeaways: 4,
     maxTakeaways: 6,
   },

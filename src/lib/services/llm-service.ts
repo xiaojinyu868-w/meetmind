@@ -3,8 +3,8 @@
  * 
  * 支持模型：
  * - 通义千问 (qwen3-vl-plus, qwen3-max-2026-01-23)
- * - Gemini (gemini-3-pro, gemini-3-flash)
- * - OpenAI (gpt-5.2, gpt-5.2-mini)
+ * - 火山方舟 (VOLCENGINE_ARK_MODEL)
+ * - 中转站聚合模型 (RELAY_MODEL，例如 gemini-3-pro-image-preview)
  */
 
 import { LLMConfig, type ModelConfig, type ModelProvider } from '@/lib/config';
@@ -82,15 +82,15 @@ function getApiConfig(provider: ModelProvider) {
         baseUrl: process.env.LLM_BASE_URL || 'https://dashscope.aliyuncs.com/compatible-mode/v1',
         apiKey: process.env.DASHSCOPE_API_KEY || '',
       };
-    case 'gemini':
+    case 'volcengine':
       return {
-        baseUrl: 'https://generativelanguage.googleapis.com/v1beta',
-        apiKey: process.env.GOOGLE_API_KEY || process.env.GEMINI_API_KEY || '',
+        baseUrl: process.env.VOLCENGINE_ARK_BASE_URL || 'https://ark.cn-beijing.volces.com/api/v3',
+        apiKey: process.env.VOLCENGINE_ARK_API_KEY || '',
       };
-    case 'openai':
+    case 'relay':
       return {
-        baseUrl: 'https://api.openai.com/v1',
-        apiKey: process.env.OPENAI_API_KEY || '',
+        baseUrl: process.env.RELAY_BASE_URL || '',
+        apiKey: process.env.RELAY_API_KEY || '',
       };
   }
 }
@@ -106,7 +106,7 @@ function contentToText(content: string | MultimodalContent[]): string {
     .join('\n');
 }
 
-/** 构建 OpenAI 兼容格式的消息（用于 Qwen 和 OpenAI） */
+/** 构建 OpenAI 兼容格式的消息（用于 Qwen / 火山 / 中转站） */
 function buildOpenAIMessages(messages: ChatMessage[], supportsMultimodal: boolean) {
   return messages.map(m => ({
     role: m.role,
@@ -197,113 +197,70 @@ async function callQwen(
 }
 
 /**
- * 调用 Gemini API
- * 支持多模态：gemini-3-pro, gemini-3-flash
+ * 调用中转站 API（OpenAI 兼容）
  */
-async function callGemini(
+async function callRelay(
   messages: ChatMessage[],
   modelId: string,
   options?: { temperature?: number; maxTokens?: number }
 ): Promise<LLMResponse> {
-  const config = getApiConfig('gemini');
-  
+  const config = getApiConfig('relay');
+
   if (!config.apiKey) {
-    throw new Error('GOOGLE_API_KEY 未配置');
+    throw new Error('RELAY_API_KEY 未配置');
   }
 
-  // 转换消息格式为 Gemini 格式
-  const contents = messages
-    .filter(m => m.role !== 'system')
-    .map(m => {
-      const parts: Array<{ text?: string; inlineData?: { mimeType: string; data: string } }> = [];
-      
-      if (typeof m.content === 'string') {
-        parts.push({ text: m.content });
-      } else {
-        for (const part of m.content) {
-          if (part.type === 'text') {
-            parts.push({ text: part.text });
-          } else if (part.type === 'image_url') {
-            // 解析 base64 data URL
-            const url = part.image_url.url;
-            if (url.startsWith('data:')) {
-              const matches = url.match(/^data:([^;]+);base64,(.+)$/);
-              if (matches) {
-                parts.push({
-                  inlineData: {
-                    mimeType: matches[1],
-                    data: matches[2],
-                  },
-                });
-              }
-            } else {
-              // 对于 http URL，Gemini 需要使用 fileData，这里简化处理
-              parts.push({ text: `[图片: ${url}]` });
-            }
-          }
-        }
-      }
-      
-      return {
-        role: m.role === 'assistant' ? 'model' : 'user',
-        parts,
-      };
-    });
+  if (!config.baseUrl) {
+    throw new Error('RELAY_BASE_URL 未配置');
+  }
 
-  // 系统消息作为 systemInstruction
-  const systemMessage = messages.find(m => m.role === 'system');
+  const supportsMultimodal = isMultimodalModel(modelId);
+  const formattedMessages = buildOpenAIMessages(messages, supportsMultimodal);
 
-  const response = await fetch(
-    `${config.baseUrl}/models/${modelId}:generateContent?key=${config.apiKey}`,
-    {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        contents,
-        systemInstruction: systemMessage ? {
-          parts: [{ text: contentToText(systemMessage.content) }],
-        } : undefined,
-        generationConfig: {
-          temperature: options?.temperature ?? 0.7,
-          maxOutputTokens: options?.maxTokens ?? 2000,
-        },
-      }),
-    }
-  );
+  const response = await fetch(`${config.baseUrl.replace(/\/$/, '')}/chat/completions`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${config.apiKey}`,
+    },
+    body: JSON.stringify({
+      model: modelId,
+      messages: formattedMessages,
+      temperature: options?.temperature ?? 0.7,
+      max_tokens: options?.maxTokens ?? 2000,
+    }),
+  });
 
   if (!response.ok) {
     const error = await response.text();
-    throw new Error(`Gemini API 错误: ${response.status} - ${error}`);
+    throw new Error(`中转站 API 错误: ${response.status} - ${error}`);
   }
 
   const data = await response.json();
   
   return {
-    content: data.candidates?.[0]?.content?.parts?.[0]?.text || '',
+    content: data.choices[0]?.message?.content || '',
     model: modelId,
-    usage: data.usageMetadata ? {
-      promptTokens: data.usageMetadata.promptTokenCount,
-      completionTokens: data.usageMetadata.candidatesTokenCount,
-      totalTokens: data.usageMetadata.totalTokenCount,
+    usage: data.usage ? {
+      promptTokens: data.usage.prompt_tokens,
+      completionTokens: data.usage.completion_tokens,
+      totalTokens: data.usage.total_tokens,
     } : undefined,
   };
 }
 
 /**
- * 调用 OpenAI API
- * 支持多模态：gpt-5.2, gpt-5.2-mini
+ * 调用火山方舟（OpenAI 兼容接口）
  */
-async function callOpenAI(
+async function callVolcengine(
   messages: ChatMessage[],
   modelId: string,
   options?: { temperature?: number; maxTokens?: number }
 ): Promise<LLMResponse> {
-  const config = getApiConfig('openai');
-  
+  const config = getApiConfig('volcengine');
+
   if (!config.apiKey) {
-    throw new Error('OPENAI_API_KEY 未配置');
+    throw new Error('VOLCENGINE_ARK_API_KEY 未配置');
   }
 
   const supportsMultimodal = isMultimodalModel(modelId);
@@ -319,19 +276,19 @@ async function callOpenAI(
       model: modelId,
       messages: formattedMessages,
       temperature: options?.temperature ?? 0.7,
-      max_completion_tokens: options?.maxTokens ?? 2000,  // GPT-5.2 使用 max_completion_tokens
+      max_tokens: options?.maxTokens ?? 2000,
     }),
   });
 
   if (!response.ok) {
     const error = await response.text();
-    throw new Error(`OpenAI API 错误: ${response.status} - ${error}`);
+    throw new Error(`火山方舟 API 错误: ${response.status} - ${error}`);
   }
 
   const data = await response.json();
-  
+
   return {
-    content: data.choices[0]?.message?.content || '',
+    content: data.choices?.[0]?.message?.content || '',
     model: modelId,
     usage: data.usage ? {
       promptTokens: data.usage.prompt_tokens,
@@ -361,10 +318,10 @@ export async function chat(
   switch (modelConfig.provider) {
     case 'qwen':
       return callQwen(messages, modelId, options);
-    case 'gemini':
-      return callGemini(messages, modelId, options);
-    case 'openai':
-      return callOpenAI(messages, modelId, options);
+    case 'volcengine':
+      return callVolcengine(messages, modelId, options);
+    case 'relay':
+      return callRelay(messages, modelId, options);
     default:
       throw new Error(`不支持的模型提供商: ${modelConfig.provider}`);
   }
@@ -372,7 +329,7 @@ export async function chat(
 
 /**
  * 流式调用 LLM
- * 支持：通义千问、OpenAI
+ * 支持：通义千问、火山方舟、中转站（OpenAI 兼容）
  * 支持思考模式：qwen3 会输出 reasoning_content
  */
 export async function* chatStream(
@@ -386,27 +343,27 @@ export async function* chatStream(
     throw new Error(`未知模型: ${modelId}`);
   }
 
-  // Gemini 暂不支持流式，退化为非流式
-  if (modelConfig.provider === 'gemini') {
-    const response = await chat(messages, modelId, options);
-    // 模拟流式效果：将内容分段输出
-    const content = response.content;
-    const chunkSize = 20; // 每次输出约20个字符
-    for (let i = 0; i < content.length; i += chunkSize) {
-      yield { type: 'content', content: content.slice(i, i + chunkSize) };
-      // 小延迟模拟打字效果
-      await new Promise(resolve => setTimeout(resolve, 30));
-    }
-    return;
-  }
-
-  // 通义千问和 OpenAI 都支持 OpenAI 兼容的流式 API
-  const config = modelConfig.provider === 'qwen' 
-    ? getApiConfig('qwen') 
-    : getApiConfig('openai');
+  // 通义千问 / 火山方舟 / 中转站都支持 OpenAI 兼容的流式 API
+  const config = modelConfig.provider === 'qwen'
+    ? getApiConfig('qwen')
+    : modelConfig.provider === 'volcengine'
+      ? getApiConfig('volcengine')
+      : getApiConfig('relay');
   
   if (!config.apiKey) {
-    throw new Error(`${modelConfig.provider === 'qwen' ? 'DASHSCOPE_API_KEY' : 'OPENAI_API_KEY'} 未配置`);
+    throw new Error(
+      `${
+        modelConfig.provider === 'qwen'
+          ? 'DASHSCOPE_API_KEY'
+          : modelConfig.provider === 'volcengine'
+            ? 'VOLCENGINE_ARK_API_KEY'
+            : 'RELAY_API_KEY'
+      } 未配置`
+    );
+  }
+
+  if (!config.baseUrl) {
+    throw new Error('RELAY_BASE_URL 未配置');
   }
 
   const supportsMultimodal = isMultimodalModel(modelId);
@@ -421,12 +378,7 @@ export async function* chatStream(
     stream: true,
   };
 
-  // OpenAI 使用 max_completion_tokens，Qwen 使用 max_tokens
-  if (modelConfig.provider === 'openai') {
-    requestBody.max_completion_tokens = options?.maxTokens ?? 2000;
-  } else {
-    requestBody.max_tokens = options?.maxTokens ?? (enableThinking ? 32768 : 2000);
-  }
+  requestBody.max_tokens = options?.maxTokens ?? (enableThinking ? 32768 : 2000);
 
   // qwen3-max-2026-01-23 思考模式特殊配置
   if (enableThinking && modelConfig.provider === 'qwen') {
@@ -440,7 +392,7 @@ export async function* chatStream(
     requestBody.search_strategy = 'agent_max';
   }
 
-  const response = await fetch(`${config.baseUrl}/chat/completions`, {
+  const response = await fetch(`${config.baseUrl.replace(/\/$/, '')}/chat/completions`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',

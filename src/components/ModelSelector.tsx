@@ -42,12 +42,16 @@ export function ModelSelector({ value, onChange, onMultimodalChange, className =
   }, [value, models, onMultimodalChange]);
 
   const selectedModel = models.find(m => m.id === value);
+  const providerOrder = ['qwen', 'volcengine', 'relay'];
+  const activeProviders = providerOrder.filter((provider) =>
+    models.some((model) => model.provider === provider)
+  );
 
   const getProviderIcon = (provider: string) => {
     switch (provider) {
       case 'qwen': return '🔮';
-      case 'gemini': return '✨';
-      case 'openai': return '🤖';
+      case 'volcengine': return '🌋';
+      case 'relay': return '🔁';
       default: return '🧠';
     }
   };
@@ -55,9 +59,18 @@ export function ModelSelector({ value, onChange, onMultimodalChange, className =
   const getProviderColor = (provider: string) => {
     switch (provider) {
       case 'qwen': return 'bg-purple-100 text-purple-700 border-purple-200';
-      case 'gemini': return 'bg-blue-100 text-blue-700 border-blue-200';
-      case 'openai': return 'bg-green-100 text-green-700 border-green-200';
+      case 'volcengine': return 'bg-orange-100 text-orange-700 border-orange-200';
+      case 'relay': return 'bg-cyan-100 text-cyan-700 border-cyan-200';
       default: return 'bg-gray-100 text-gray-700 border-gray-200';
+    }
+  };
+
+  const getProviderLabel = (provider: string) => {
+    switch (provider) {
+      case 'qwen': return '通义千问';
+      case 'volcengine': return '火山方舟';
+      case 'relay': return '中转站';
+      default: return provider;
     }
   };
 
@@ -106,15 +119,15 @@ export function ModelSelector({ value, onChange, onMultimodalChange, className =
               <p className="text-xs text-gray-500 px-2">选择 AI 模型</p>
             </div>
             <div className="max-h-80 overflow-y-auto">
-              {/* 按提供商分组 - 目前只启用通义千问 */}
-              {['qwen'].map(provider => {
+              {/* 按提供商分组（仅显示当前已启用的 provider） */}
+              {activeProviders.map(provider => {
                 const providerModels = models.filter(m => m.provider === provider);
                 if (providerModels.length === 0) return null;
                 
                 return (
                   <div key={provider} className="p-2">
                     <p className="text-xs text-gray-400 px-2 mb-1 uppercase">
-                      {provider === 'qwen' ? '通义千问' : provider === 'gemini' ? 'Google Gemini' : 'OpenAI'}
+                      {getProviderLabel(provider)}
                     </p>
                     {providerModels.map(model => (
                       <button

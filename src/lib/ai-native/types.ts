@@ -43,7 +43,7 @@ export interface AppExecutionContext {
 }
 
 export type CardPriority = 'high' | 'medium' | 'low';
-export type AppCardType = 'insight' | 'task' | 'question' | 'timeline';
+export type AppCardType = 'insight' | 'task' | 'question' | 'timeline' | 'flashcard' | 'quiz' | 'mindmap';
 
 export interface AppCardCitation {
   startMs: number;
@@ -66,6 +66,7 @@ export interface AppCard {
   priority?: CardPriority;
   citations?: AppCardCitation[];
   actions?: AppCardAction[];
+  meta?: Record<string, unknown>;
 }
 
 export interface AppTask {
@@ -76,6 +77,25 @@ export interface AppTask {
   relatedTimestamp?: number;
 }
 
+export type AppRenderMode =
+  | 'document'
+  | 'table'
+  | 'script'
+  | 'audio'
+  | 'slides'
+  | 'mindmap'
+  | 'flashcards'
+  | 'quiz'
+  | 'blocks'
+  | 'custom';
+
+export interface AppRenderSpec {
+  mode: AppRenderMode;
+  title?: string;
+  description?: string;
+  payload: unknown;
+}
+
 export interface AppExecutionResult {
   pluginId: string;
   version: string;
@@ -83,6 +103,7 @@ export interface AppExecutionResult {
   cards: AppCard[];
   tasks: AppTask[];
   trace: string[];
+  render?: AppRenderSpec;
   nextSuggestedPlugins?: string[];
   raw?: Record<string, unknown>;
 }

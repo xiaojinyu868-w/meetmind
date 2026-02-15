@@ -30,7 +30,7 @@ export function getConfig(): AppConfig {
   return {
     // LLM
     dashscopeApiKey: process.env.DASHSCOPE_API_KEY || '',
-    llmModel: process.env.LLM_MODEL || 'qwen3-max-2026-01-23',
+    llmModel: process.env.LLM_MODEL || 'qwen3-vl-plus-2025-12-19',
     llmBaseUrl: process.env.LLM_BASE_URL || 'https://dashscope.aliyuncs.com/compatible-mode/v1',
     
     // 外部服务
@@ -66,12 +66,12 @@ export function validateConfig(): ConfigValidation {
   }
 
   // 可选配置警告
-  if (!process.env.GOOGLE_API_KEY && !process.env.GEMINI_API_KEY) {
-    warnings.push('Gemini API Key 未配置，Gemini 模型不可用');
+  if (!process.env.VOLCENGINE_ARK_API_KEY) {
+    warnings.push('VOLCENGINE_ARK_API_KEY 未配置，火山方舟模型不可用');
   }
 
-  if (!process.env.OPENAI_API_KEY) {
-    warnings.push('OpenAI API Key 未配置，OpenAI 模型不可用');
+  if (!process.env.RELAY_API_KEY || !process.env.RELAY_BASE_URL) {
+    warnings.push('RELAY_API_KEY / RELAY_BASE_URL 未配置，中转站模型不可用');
   }
 
   return {

@@ -47,6 +47,8 @@ test_*.ts
 test-*.py
 test-*.js
 test-*.ts
+test-results/
+playwright-report/
 
 # 截图和图片文件（临时）
 screenshots/
