@@ -20,6 +20,7 @@ const UPLOAD_DIR = path.join(process.cwd(), 'public', 'temp-audio');
 const DASHSCOPE_API_BASE = 'https://dashscope.aliyuncs.com/api/v1';
 const ASR_TRANSCRIPTION_URL = `${DASHSCOPE_API_BASE}/services/audio/asr/transcription`;
 const TASK_QUERY_URL = `${DASHSCOPE_API_BASE}/tasks`;
+const MAX_ASR_CONTEXT_CHARS = 4000;
 
 interface ASRSentence {
   text: string;
@@ -38,6 +39,14 @@ interface TaskResult {
     }>;
   };
   error?: string;
+}
+
+function sanitizeASRContext(raw: FormDataEntryValue | null): string {
+  if (typeof raw !== 'string') return '';
+  const normalized = raw.replace(/\s+/g, ' ').trim();
+  if (!normalized) return '';
+  if (normalized.length <= MAX_ASR_CONTEXT_CHARS) return normalized;
+  return `${normalized.slice(0, MAX_ASR_CONTEXT_CHARS - 1)}…`;
 }
 
 function ensureUploadDir() {
@@ -80,7 +89,8 @@ function safeUnlink(filePath: string) {
 async function submitAsyncTask(
   fileUrl: string,
   apiKey: string,
-  language: string
+  language: string,
+  contextHint: string
 ): Promise<{ success: boolean; taskId?: string; error?: string }> {
   const requestBody = {
     model: 'qwen3-asr-flash-filetrans',
@@ -91,6 +101,7 @@ async function submitAsyncTask(
       channel_id: [0],
       language,
       enable_itn: true,
+      ...(contextHint ? { corpus: { text: contextHint } } : {}),
     },
   };
 
@@ -258,6 +269,7 @@ export async function POST(request: NextRequest) {
     const formData = await request.formData();
     const audioFile = formData.get('audio') as File | null;
     const language = (formData.get('language') as string) || 'zh';
+    const contextHint = sanitizeASRContext(formData.get('context'));
 
     if (!audioFile) {
       return NextResponse.json({ error: '未提供音频文件', code: 'ASR_AUDIO_MISSING' }, { status: 400 });
@@ -295,7 +307,7 @@ export async function POST(request: NextRequest) {
 
     const fileUrl = `${publicBase.baseUrl}/temp-audio/${fileName}`;
 
-    const submitted = await submitAsyncTask(fileUrl, apiKey, language);
+    const submitted = await submitAsyncTask(fileUrl, apiKey, language, contextHint);
     if (!submitted.success || !submitted.taskId) {
       safeUnlink(filePath);
       return NextResponse.json(
@@ -347,6 +359,7 @@ export async function POST(request: NextRequest) {
       totalDuration,
       segments,
       language,
+      contextHintUsed: Boolean(contextHint),
     });
   } catch (error) {
     return NextResponse.json(

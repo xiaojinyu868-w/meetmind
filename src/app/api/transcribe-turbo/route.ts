@@ -20,6 +20,7 @@ const SEGMENT_DURATION_SEC = 30;
 const MIN_DURATION_FOR_SPLIT = 40;
 const MAX_RETRIES = 3;
 const BATCH_SIZE = Number.parseInt(process.env.ASR_TURBO_BATCH_SIZE || '8', 10);
+const MAX_ASR_CONTEXT_CHARS = 4000;
 
 interface ASRSentence {
   text: string;
@@ -38,6 +39,14 @@ interface SegmentResult {
   ok: boolean;
   sentence?: ASRSentence;
   error?: string;
+}
+
+function sanitizeASRContext(raw: FormDataEntryValue | null): string {
+  if (typeof raw !== 'string') return '';
+  const normalized = raw.replace(/\s+/g, ' ').trim();
+  if (!normalized) return '';
+  if (normalized.length <= MAX_ASR_CONTEXT_CHARS) return normalized;
+  return `${normalized.slice(0, MAX_ASR_CONTEXT_CHARS - 1)}…`;
 }
 
 function ensureUploadDir(): void {
@@ -204,17 +213,29 @@ async function syncTranscribeSegment(
   fileUrl: string,
   apiKey: string,
   language: string,
-  segmentIndex: number
+  segmentIndex: number,
+  contextHint: string
 ): Promise<SegmentResult> {
+  const messages: Array<{ role: 'system' | 'user'; content: Array<{ audio?: string; text?: string }> }> = [];
+  if (contextHint) {
+    messages.push({
+      role: 'system',
+      content: [
+        {
+          text: `你正在转写课堂音频。以下是课程背景与术语表，请优先按该上下文识别专业词汇：${contextHint}`,
+        },
+      ],
+    });
+  }
+  messages.push({
+    role: 'user',
+    content: [{ audio: fileUrl }],
+  });
+
   const requestBody = {
     model: 'qwen3-asr-flash',
     input: {
-      messages: [
-        {
-          role: 'user',
-          content: [{ audio: fileUrl }],
-        },
-      ],
+      messages,
     },
     parameters: {
       asr_options: {
@@ -309,7 +330,8 @@ async function processSegmentBatch(
   tasks: SegmentTask[],
   apiKey: string,
   language: string,
-  publicBaseUrl: string
+  publicBaseUrl: string,
+  contextHint: string
 ): Promise<{ ok: boolean; sentences: ASRSentence[]; error?: string }> {
   const sorted = [...tasks].sort((a, b) => a.index - b.index);
   const sentences: ASRSentence[] = [];
@@ -325,7 +347,7 @@ async function processSegmentBatch(
       batch.map(async (task) => {
         const fileName = path.basename(task.path);
         const fileUrl = `${publicBaseUrl}/temp-audio/${encodeURIComponent(fileName)}`;
-        const result = await syncTranscribeSegment(fileUrl, apiKey, language, task.index);
+        const result = await syncTranscribeSegment(fileUrl, apiKey, language, task.index, contextHint);
         return { index: task.index, result };
       })
     );
@@ -415,6 +437,7 @@ export async function POST(request: NextRequest) {
     const formData = await request.formData();
     const audioFile = formData.get('audio') as File | null;
     const language = (formData.get('language') as string) || 'zh';
+    const contextHint = sanitizeASRContext(formData.get('context'));
 
     if (!audioFile) {
       return NextResponse.json({ error: '未提供音频文件', code: 'ASR_AUDIO_MISSING' }, { status: 400 });
@@ -442,7 +465,7 @@ export async function POST(request: NextRequest) {
       tempFiles.add(task.path);
     }
 
-    const turboResult = await processSegmentBatch(segmentTasks, apiKey, language, publicBase.baseUrl);
+    const turboResult = await processSegmentBatch(segmentTasks, apiKey, language, publicBase.baseUrl, contextHint);
 
     if (!turboResult.ok) {
       return NextResponse.json(
@@ -481,6 +504,7 @@ export async function POST(request: NextRequest) {
       language,
       mode: 'turbo-sync',
       warning: turboResult.error,
+      contextHintUsed: Boolean(contextHint),
     });
   } catch (error) {
     if (

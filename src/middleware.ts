@@ -34,6 +34,7 @@ const PUBLIC_ROUTES = [
   '/api/transcribe-fast',
   '/api/transcribe-turbo',
   '/api/video/import',
+  '/api/sources/ingest',
   '/api/generate-topics',
   '/api/generate-summary',
   '/api/apps/plugins',

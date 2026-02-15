@@ -226,6 +226,35 @@ function compactText(value: string, maxLength: number): string {
   return `${normalized.slice(0, maxLength - 1)}...`;
 }
 
+function buildASRContextHint(params: {
+  manualHint: string;
+  recentSegments: TranscriptSegment[];
+  importedReferences?: string[];
+  maxChars?: number;
+}): string {
+  const manualHint = compactText(params.manualHint || '', 800);
+  const importedReferences = (params.importedReferences || [])
+    .map((item) => compactText(item, 1000))
+    .filter(Boolean)
+    .slice(0, 3);
+  const recentContext = compactText(
+    params.recentSegments
+      .slice(-30)
+      .map((segment) => segment.text)
+      .join(' '),
+    1400
+  );
+
+  const parts = [
+    manualHint ? `课程主题/术语：${manualHint}` : '',
+    importedReferences.length > 0 ? `参考资料：${importedReferences.join('\n')}` : '',
+    recentContext ? `已识别课堂上下文：${recentContext}` : '',
+  ].filter(Boolean);
+
+  if (parts.length === 0) return '';
+  return compactText(parts.join('\n\n'), params.maxChars ?? 3000);
+}
+
 function buildSeedVideoInsights(segments: TranscriptSegment[]): VideoInsightItem[] {
   if (!Array.isArray(segments) || segments.length === 0) return [];
 
@@ -342,6 +371,7 @@ function StudentAppContent({
   const [sourceImporting, setSourceImporting] = useState(false);
   const [sourceImportError, setSourceImportError] = useState('');
   const [sourceTextInput, setSourceTextInput] = useState('');
+  const [asrContextHint, setAsrContextHint] = useState('');
   const [sourceItems, setSourceItems] = useState<SourceIngestItem[]>([]);
   
   // 琛屽姩娓呭崟鎶藉眽鐘舵€?
@@ -1701,9 +1731,12 @@ const _handleVideoAssistantMessage = useCallback((payload: {
     });
   }, [ingestTranscriptSegments]);
 
-  const transcribeAudioFile = useCallback(async (file: File): Promise<TranscriptSegment[]> => {
+  const transcribeAudioFile = useCallback(async (file: File, contextHint: string): Promise<TranscriptSegment[]> => {
     const formData = new FormData();
     formData.append('audio', file);
+    if (contextHint.trim()) {
+      formData.append('context', contextHint.trim());
+    }
     const response = await fetch('/api/transcribe-turbo', {
       method: 'POST',
       body: formData,
@@ -1773,25 +1806,48 @@ const _handleVideoAssistantMessage = useCallback((payload: {
     setSourceImportError('');
 
     try {
-      for (const file of fileList) {
+      const orderedFiles = [...fileList].sort((a, b) => {
+        const aAudio = isAudioFile(a);
+        const bAudio = isAudioFile(b);
+        if (aAudio === bAudio) return 0;
+        return aAudio ? 1 : -1;
+      });
+      const importedReferenceTexts: string[] = [];
+
+      for (const file of orderedFiles) {
+        if (isDocumentFile(file)) {
+          const parsed = await parseDocumentFile(file);
+          importedReferenceTexts.push(
+            compactText(
+              parsed.segments
+                .slice(0, 20)
+                .map((segment) => segment.text)
+                .join(' '),
+              1200
+            )
+          );
+          await ingestTranscriptSegments({
+            segments: parsed.segments,
+            sourceType: parsed.fileType === 'txt' || parsed.fileType === 'md' ? 'text' : 'document',
+            sourceTitle: parsed.title,
+          });
+          continue;
+        }
+
         if (isAudioFile(file)) {
-          const segments = await transcribeAudioFile(file);
+          const contextHint = buildASRContextHint({
+            manualHint: asrContextHint,
+            recentSegments: segmentsRef.current,
+            importedReferences: importedReferenceTexts,
+            maxChars: 3000,
+          });
+          const segments = await transcribeAudioFile(file, contextHint);
           const audioBlob = new Blob([await file.arrayBuffer()], { type: file.type || 'audio/mpeg' });
           await ingestTranscriptSegments({
             segments,
             sourceType: 'audio',
             sourceTitle: file.name,
             audioBlob,
-          });
-          continue;
-        }
-
-        if (isDocumentFile(file)) {
-          const parsed = await parseDocumentFile(file);
-          await ingestTranscriptSegments({
-            segments: parsed.segments,
-            sourceType: parsed.fileType === 'txt' || parsed.fileType === 'md' ? 'text' : 'document',
-            sourceTitle: parsed.title,
           });
           continue;
         }
@@ -1805,7 +1861,7 @@ const _handleVideoAssistantMessage = useCallback((payload: {
     } finally {
       setSourceImporting(false);
     }
-  }, [ingestTranscriptSegments, parseDocumentFile, transcribeAudioFile]);
+  }, [asrContextHint, ingestTranscriptSegments, parseDocumentFile, transcribeAudioFile]);
 
   const handleSourceFileButtonClick = useCallback(() => {
     if (sourceImporting) return;
@@ -2057,6 +2113,18 @@ const renderInputSourceTabs = useCallback((layout: 'mobile' | 'desktop') => {
           <p className="text-sm text-gray-600">
             支持批量上传音频与文档，系统会自动按顺序追加到当前学习会话。
           </p>
+          <div className="mt-3">
+            <label className="mb-1 block text-xs font-medium text-slate-600">转写增强上下文（可选）</label>
+            <textarea
+              value={asrContextHint}
+              onChange={(event) => setAsrContextHint(event.target.value)}
+              placeholder="例如：本节课讲圆锥曲线离心率，重点术语有离心率、准线、焦点、双曲线、抛物线。"
+              rows={isMobileLayout ? 3 : 4}
+              disabled={sourceImporting || isRecording}
+              className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm text-slate-700 outline-none transition focus:border-amber-300 focus:ring-2 focus:ring-amber-100"
+            />
+            <p className="mt-1 text-xs text-slate-500">会连同已导入文本/PDF片段一起作为 ASR 识别提示，提高专业词识别准确率。</p>
+          </div>
           <div className="mt-4 flex items-center gap-3">
             <button
               type="button"
@@ -2095,6 +2163,7 @@ const renderInputSourceTabs = useCallback((layout: 'mobile' | 'desktop') => {
       </>
     );
   }, [
+    asrContextHint,
     dataSource,
     handleImportTextSource,
     handleLoadHistorySession,

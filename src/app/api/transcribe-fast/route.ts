@@ -20,6 +20,7 @@ const TASK_QUERY_URL = `${DASHSCOPE_API_BASE}/tasks`;
 
 const SEGMENT_DURATION_SEC = 180;
 const MIN_DURATION_FOR_SPLIT = 240;
+const MAX_ASR_CONTEXT_CHARS = 4000;
 
 interface ASRSentence {
   text: string;
@@ -32,6 +33,14 @@ interface TaskResult {
   status: 'PENDING' | 'RUNNING' | 'SUCCEEDED' | 'FAILED' | 'UNKNOWN';
   transcription_url?: string;
   error?: string;
+}
+
+function sanitizeASRContext(raw: FormDataEntryValue | null): string {
+  if (typeof raw !== 'string') return '';
+  const normalized = raw.replace(/\s+/g, ' ').trim();
+  if (!normalized) return '';
+  if (normalized.length <= MAX_ASR_CONTEXT_CHARS) return normalized;
+  return `${normalized.slice(0, MAX_ASR_CONTEXT_CHARS - 1)}…`;
 }
 
 function ensureUploadDir() {
@@ -125,7 +134,8 @@ async function splitAudio(
 async function submitAsyncTask(
   fileUrl: string,
   apiKey: string,
-  language: string = 'zh'
+  language: string = 'zh',
+  contextHint: string = ''
 ): Promise<{ success: boolean; taskId?: string; error?: string }> {
   const requestBody = {
     model: 'qwen3-asr-flash-filetrans',
@@ -134,6 +144,7 @@ async function submitAsyncTask(
       channel_id: [0],
       language,
       enable_itn: true,
+      ...(contextHint ? { corpus: { text: contextHint } } : {}),
     },
   };
 
@@ -251,13 +262,14 @@ async function processParallelTasks(
   segmentDurations: number[],
   apiKey: string,
   language: string,
-  publicBaseUrl: string
+  publicBaseUrl: string,
+  contextHint: string
 ): Promise<{ success: boolean; allSentences: ASRSentence[]; error?: string }> {
   const submitResults = await Promise.all(
     segmentPaths.map(async (segPath) => {
       const fileName = path.basename(segPath);
       const fileUrl = `${publicBaseUrl}/temp-audio/${fileName}`;
-      return submitAsyncTask(fileUrl, apiKey, language);
+      return submitAsyncTask(fileUrl, apiKey, language, contextHint);
     })
   );
 
@@ -340,6 +352,7 @@ export async function POST(request: NextRequest) {
     const formData = await request.formData();
     const audioFile = formData.get('audio') as File | null;
     const language = (formData.get('language') as string) || 'zh';
+    const contextHint = sanitizeASRContext(formData.get('context'));
 
     if (!audioFile) {
       return NextResponse.json({ error: '未提供音频文件', code: 'ASR_AUDIO_MISSING' }, { status: 400 });
@@ -376,7 +389,7 @@ export async function POST(request: NextRequest) {
       tempFiles.add(segPath);
     }
 
-    const result = await processParallelTasks(segments, durations, apiKey, language, publicBase.baseUrl);
+    const result = await processParallelTasks(segments, durations, apiKey, language, publicBase.baseUrl, contextHint);
 
     if (!result.success) {
       return NextResponse.json(
@@ -414,6 +427,7 @@ export async function POST(request: NextRequest) {
       segments: outputSegments,
       language,
       mode: 'parallel',
+      contextHintUsed: Boolean(contextHint),
     });
   } catch (error) {
     if (
