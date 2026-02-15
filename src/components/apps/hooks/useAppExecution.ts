@@ -43,12 +43,12 @@ export function readCachedTaskState(sessionId: string, appKey: string): AppTaskS
   return safeJsonParse<AppTaskState>(window.localStorage.getItem(buildTaskCacheKey(sessionId, appKey)));
 }
 
-function writeCachedResult(sessionId: string, appKey: string, result: AppExecutionResult): void {
+export function writeCachedAppResult(sessionId: string, appKey: string, result: AppExecutionResult): void {
   if (typeof window === 'undefined') return;
   window.localStorage.setItem(buildResultCacheKey(sessionId, appKey), JSON.stringify(result));
 }
 
-function writeTaskState(sessionId: string, appKey: string, state: AppTaskState): void {
+export function writeCachedTaskState(sessionId: string, appKey: string, state: AppTaskState): void {
   if (typeof window === 'undefined') return;
   window.localStorage.setItem(buildTaskCacheKey(sessionId, appKey), JSON.stringify(state));
 }
@@ -117,13 +117,13 @@ export function useAppExecution(params: UseAppExecutionParams): UseAppExecutionR
       if (transcript.length === 0) {
         const emptyState = nowTaskState('error', '当前会话缺少可用课堂内容，请先导入或录制。');
         setTaskState(emptyState);
-        writeTaskState(sessionId, app.key, emptyState);
+        writeCachedTaskState(sessionId, app.key, emptyState);
         return null;
       }
 
       const runningState = nowTaskState('running');
       setTaskState(runningState);
-      writeTaskState(sessionId, app.key, runningState);
+      writeCachedTaskState(sessionId, app.key, runningState);
 
       try {
         const response = await fetch('/api/apps/execute', {
@@ -161,16 +161,16 @@ export function useAppExecution(params: UseAppExecutionParams): UseAppExecutionR
         }
 
         setResult(data.result);
-        writeCachedResult(sessionId, app.key, data.result);
+        writeCachedAppResult(sessionId, app.key, data.result);
         const successState = nowTaskState('success');
         setTaskState(successState);
-        writeTaskState(sessionId, app.key, successState);
+        writeCachedTaskState(sessionId, app.key, successState);
         return data.result;
       } catch (error) {
         const message = error instanceof Error ? error.message : '应用执行失败';
         const failedState = nowTaskState('error', message);
         setTaskState(failedState);
-        writeTaskState(sessionId, app.key, failedState);
+        writeCachedTaskState(sessionId, app.key, failedState);
         return null;
       }
     },
@@ -189,10 +189,10 @@ export function useAppExecution(params: UseAppExecutionParams): UseAppExecutionR
   const updateResult = useCallback(
     (next: AppExecutionResult) => {
       setResult(next);
-      writeCachedResult(sessionId, app.key, next);
+      writeCachedAppResult(sessionId, app.key, next);
       const successState = nowTaskState('success');
       setTaskState(successState);
-      writeTaskState(sessionId, app.key, successState);
+      writeCachedTaskState(sessionId, app.key, successState);
     },
     [app.key, sessionId]
   );

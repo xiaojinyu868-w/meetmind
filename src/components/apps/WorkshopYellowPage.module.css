@@ -35,6 +35,13 @@
   font-size: 15px;
 }
 
+.subStatus {
+  margin: 10px 0 0;
+  text-align: center;
+  color: #334155;
+  font-size: 13px;
+}
+
 .grid {
   margin: 0 auto;
   max-width: 1180px;
@@ -147,6 +154,16 @@
   background: #94a3b8;
 }
 
+.running {
+  border-color: #fcd34d;
+  background: #fffbeb;
+  color: #92400e;
+}
+
+.running::before {
+  background: #f59e0b;
+}
+
 .tags {
   display: flex;
   flex-wrap: wrap;
@@ -173,7 +190,6 @@
 }
 
 .link {
-  margin-top: auto;
   display: inline-flex;
   align-items: center;
   gap: 4px;
@@ -191,6 +207,50 @@
   margin-top: 8px;
   color: #64748b;
   font-size: 12px;
+}
+
+.actionRow {
+  margin-top: auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.generateButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 10px;
+  border: 1px solid #dbeafe;
+  background: #eff6ff;
+  color: #1d4ed8;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1;
+  padding: 9px 12px;
+  cursor: pointer;
+  transition: background-color 0.2s ease, border-color 0.2s ease, color 0.2s ease;
+}
+
+.generateButton:hover {
+  background: #dbeafe;
+  border-color: #93c5fd;
+}
+
+.generateButton:disabled {
+  cursor: not-allowed;
+  opacity: 0.7;
+}
+
+.errorLine {
+  margin: 2px 0 0;
+  color: #b91c1c;
+  font-size: 12px;
+  line-height: 1.4;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 @container (max-width: 1100px) {
@@ -239,5 +299,14 @@
 
   .link {
     font-size: 18px;
+  }
+
+  .actionRow {
+    gap: 10px;
+  }
+
+  .generateButton {
+    font-size: 13px;
+    padding: 8px 10px;
   }
 }

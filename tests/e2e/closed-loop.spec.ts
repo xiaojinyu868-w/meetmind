@@ -185,7 +185,7 @@ async function mockVideoImportApi(page: Page): Promise<void> {
   });
 }
 
-async function mockAppMatrixApi(page: Page): Promise<void> {
+async function mockAppMatrixApi(page: Page, options?: { executeDelayMs?: number }): Promise<void> {
   await page.route('**/api/apps/catalog', async (route) => {
     await route.fulfill({
       status: 200,
@@ -203,6 +203,9 @@ async function mockAppMatrixApi(page: Page): Promise<void> {
   });
 
   await page.route('**/api/apps/execute', async (route) => {
+    if (options?.executeDelayMs) {
+      await new Promise((resolve) => setTimeout(resolve, options.executeDelayMs));
+    }
     await route.fulfill({
       status: 200,
       contentType: 'application/json',
@@ -430,6 +433,24 @@ test.describe('Closed Loop Regression', () => {
 
     await page.reload();
     await expect(page.getByTestId('flashcards-window')).toBeVisible();
+  });
+
+  test('workshop background generation does not block timeline/chat flow', async ({ page }) => {
+    await mockAppMatrixApi(page, { executeDelayMs: 1200 });
+    await openApp(page);
+    await enterReviewMode(page);
+
+    await page.getByTestId('review-tab-apps').click();
+    await expect(page.getByTestId('workshop-card-flashcards')).toBeVisible();
+
+    await page.getByTestId('workshop-bg-generate-flashcards').click();
+    await expect(page.getByTestId('workshop-task-summary')).toContainText('后台任务运行中');
+
+    await page.getByRole('button', { name: '时间轴' }).first().click();
+    await expect(page.getByTestId('review-tab-apps')).toBeVisible();
+
+    await page.getByTestId('review-tab-apps').click();
+    await expect(page.getByTestId('workshop-card-flashcards')).toContainText('已生成');
   });
 
 

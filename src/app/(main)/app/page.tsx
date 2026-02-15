@@ -2039,6 +2039,10 @@ const renderInputSourceTabs = useCallback((layout: 'mobile' | 'desktop') => {
         <WorkshopYellowPage
           sessionId={sessionId}
           dataSource={dataSource}
+          transcript={segments}
+          anchors={anchors}
+          summaryOverview={classSummary?.overview}
+          keyDifficulties={classSummary?.keyDifficulties}
         />
       );
     }
@@ -2053,6 +2057,7 @@ const renderInputSourceTabs = useCallback((layout: 'mobile' | 'desktop') => {
       />
     );
   }, [
+    anchors,
     classSummary,
     currentTime,
     dataSource,
@@ -2073,6 +2078,7 @@ const renderInputSourceTabs = useCallback((layout: 'mobile' | 'desktop') => {
     notes,
     playAllIndex,
     selectedTopic,
+    segments,
     setSelectedTopic,
     sessionId,
     totalDuration,
