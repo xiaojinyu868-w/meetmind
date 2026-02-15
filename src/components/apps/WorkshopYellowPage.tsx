@@ -8,7 +8,7 @@ import { toast } from 'sonner';
 import { DEFAULT_MODEL_ID } from '@/lib/services/llm-service';
 import type { Anchor, TranscriptSegment } from '@/types';
 import type { AppExecutionResult, DataSourceType } from '@/lib/ai-native/types';
-import type { WorkshopAppCatalogItem } from '@/lib/ai-native/app-catalog';
+import type { WorkshopAppCatalogItem, WorkshopAppKey } from '@/lib/ai-native/app-catalog';
 import { WORKSHOP_APP_CATALOG } from '@/lib/ai-native/app-catalog';
 import {
   buildResultCacheKey,
@@ -52,6 +52,7 @@ interface WorkshopYellowPageProps {
   anchors: Anchor[];
   summaryOverview?: string;
   keyDifficulties?: string[];
+  onOpenAppWindow?: (appKey: WorkshopAppKey) => void;
 }
 
 function dockStorageKey(sessionId: string): string {
@@ -107,7 +108,7 @@ function formatClock(timestamp: number): string {
 }
 
 export function WorkshopYellowPage(props: WorkshopYellowPageProps) {
-  const { sessionId, dataSource, transcript, anchors, summaryOverview, keyDifficulties } = props;
+  const { sessionId, dataSource, transcript, anchors, summaryOverview, keyDifficulties, onOpenAppWindow } = props;
   const router = useRouter();
   const searchParams = useSearchParams();
   const abortControllersRef = useRef<Record<string, AbortController>>({});
@@ -423,9 +424,13 @@ export function WorkshopYellowPage(props: WorkshopYellowPageProps) {
     (appKey: string) => {
       const app = appMap[appKey];
       if (!app) return;
+      if (onOpenAppWindow) {
+        onOpenAppWindow(app.key);
+        return;
+      }
       router.push(buildAppHref(app.key));
     },
-    [appMap, buildAppHref, router]
+    [appMap, buildAppHref, onOpenAppWindow, router]
   );
 
   const dockList = useMemo(
@@ -508,7 +513,15 @@ export function WorkshopYellowPage(props: WorkshopYellowPageProps) {
                 >
                   {isRunning ? '后台生成中...' : '后台生成'}
                 </button>
-                <Link href={href} className={styles.link}>
+                <Link
+                  href={href}
+                  className={styles.link}
+                  onClick={(event) => {
+                    if (!onOpenAppWindow) return;
+                    event.preventDefault();
+                    onOpenAppWindow(app.key);
+                  }}
+                >
                   查看应用 <span>›</span>
                 </Link>
               </div>

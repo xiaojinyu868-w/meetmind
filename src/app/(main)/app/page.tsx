@@ -68,9 +68,11 @@ import { SummaryPanel } from '@/components/SummaryPanel';
 import { NotesPanel } from '@/components/NotesPanel';
 import { AnchorDetailPanel } from '@/components/AnchorDetailPanel';
 import { WorkshopYellowPage } from '@/components/apps/WorkshopYellowPage';
+import { WorkshopWindowManager, type FloatingWorkshopWindowState } from '@/components/apps/windows/WorkshopWindowManager';
 import { ConversationList } from '@/components/ConversationHistory/ConversationList';
 import { AIChat } from '@/components/AIChat';
 import { SessionHistoryList } from '@/components/SessionHistoryList';
+import { isWorkshopAppKey, type WorkshopAppKey } from '@/lib/ai-native/app-catalog';
 
 // 婕旂ず鏁版嵁寤惰繜鍔犺浇
 let DEMO_DATA_CACHE: { DEMO_SEGMENTS: TranscriptSegment[]; DEMO_ANCHORS: Anchor[]; DEMO_AUDIO_URL: string } | null = null;
@@ -132,9 +134,34 @@ function isSharedWorkspaceTab(tab: WorkspaceTab): tab is SharedWorkspaceTab {
 }
 
 const ACTION_PROGRESS_KEY_PREFIX = 'action_progress:';
+const WORKSHOP_WINDOW_STATE_PREFIX = 'app_workspace_open_windows:';
+const MAX_ACTIVE_WORKSHOP_WINDOWS = 2;
 
 function getActionProgressKey(sessionId: string): string {
   return `${ACTION_PROGRESS_KEY_PREFIX}${sessionId}`;
+}
+
+function getWorkshopWindowStorageKey(sessionId: string): string {
+  return `${WORKSHOP_WINDOW_STATE_PREFIX}${sessionId}`;
+}
+
+function normalizeWorkshopWindows(windows: FloatingWorkshopWindowState[]): FloatingWorkshopWindowState[] {
+  if (windows.length <= MAX_ACTIVE_WORKSHOP_WINDOWS) return windows;
+
+  const active = windows.filter((windowState) => !windowState.minimized);
+  if (active.length <= MAX_ACTIVE_WORKSHOP_WINDOWS) return windows;
+
+  const activeToMinimize = active
+    .sort((a, b) => a.zIndex - b.zIndex)
+    .slice(0, active.length - MAX_ACTIVE_WORKSHOP_WINDOWS)
+    .map((windowState) => windowState.appKey);
+
+  if (activeToMinimize.length === 0) return windows;
+
+  const minimizeSet = new Set(activeToMinimize);
+  return windows.map((windowState) =>
+    minimizeSet.has(windowState.appKey) ? { ...windowState, minimized: true } : windowState
+  );
 }
 
 interface ActionItem {
@@ -319,6 +346,8 @@ function StudentAppContent({
   
   // 琛屽姩娓呭崟鎶藉眽鐘舵€?
   const [isActionDrawerOpen, setIsActionDrawerOpen] = useState(false);
+  const [workshopWindows, setWorkshopWindows] = useState<FloatingWorkshopWindowState[]>([]);
+  const workshopWindowZRef = useRef(20);
   
   // 鐢ㄦ埛寮曞鐘舵€?
   const [showWelcome, setShowWelcome] = useState(false);
@@ -342,6 +371,91 @@ function StudentAppContent({
   useEffect(() => {
     sessionIdRef.current = sessionId;
   }, [sessionId]);
+
+  useEffect(() => {
+    if (!mounted || !sessionId || typeof window === 'undefined') return;
+    const raw = window.localStorage.getItem(getWorkshopWindowStorageKey(sessionId));
+    if (!raw) {
+      setWorkshopWindows([]);
+      workshopWindowZRef.current = 20;
+      return;
+    }
+    try {
+      const parsed = JSON.parse(raw) as Array<{ appKey?: string; minimized?: boolean; zIndex?: number }>;
+      if (!Array.isArray(parsed)) {
+        setWorkshopWindows([]);
+        workshopWindowZRef.current = 20;
+        return;
+      }
+      const next = parsed
+        .filter((item) => typeof item.appKey === 'string' && isWorkshopAppKey(item.appKey))
+        .map((item, index) => ({
+          appKey: item.appKey as WorkshopAppKey,
+          minimized: Boolean(item.minimized),
+          zIndex: typeof item.zIndex === 'number' && Number.isFinite(item.zIndex) ? item.zIndex : 20 + index,
+        }));
+      setWorkshopWindows(normalizeWorkshopWindows(next));
+      const maxZ = next.reduce((max, item) => Math.max(max, item.zIndex), 20);
+      workshopWindowZRef.current = maxZ;
+    } catch {
+      setWorkshopWindows([]);
+      workshopWindowZRef.current = 20;
+    }
+  }, [mounted, sessionId]);
+
+  useEffect(() => {
+    if (!mounted || !sessionId || typeof window === 'undefined') return;
+    const payload = workshopWindows.map((windowState) => ({
+      appKey: windowState.appKey,
+      minimized: windowState.minimized,
+      zIndex: windowState.zIndex,
+    }));
+    window.localStorage.setItem(getWorkshopWindowStorageKey(sessionId), JSON.stringify(payload));
+  }, [mounted, sessionId, workshopWindows]);
+
+  const focusWorkshopWindow = useCallback((appKey: WorkshopAppKey) => {
+    setWorkshopWindows((prev) => {
+      const current = prev.find((item) => item.appKey === appKey);
+      if (!current) return prev;
+      const nextZ = workshopWindowZRef.current + 1;
+      workshopWindowZRef.current = nextZ;
+      return prev.map((item) => (item.appKey === appKey ? { ...item, zIndex: nextZ } : item));
+    });
+  }, []);
+
+  const openWorkshopWindow = useCallback((appKey: WorkshopAppKey) => {
+    setWorkshopWindows((prev) => {
+      const existing = prev.find((item) => item.appKey === appKey);
+      const nextZ = workshopWindowZRef.current + 1;
+      workshopWindowZRef.current = nextZ;
+
+      if (existing) {
+        return prev.map((item) =>
+          item.appKey === appKey ? { ...item, minimized: false, zIndex: nextZ } : item
+        );
+      }
+
+      const next = [...prev, { appKey, minimized: false, zIndex: nextZ }];
+      return normalizeWorkshopWindows(next);
+    });
+  }, []);
+
+  const closeWorkshopWindow = useCallback((appKey: WorkshopAppKey) => {
+    setWorkshopWindows((prev) => prev.filter((item) => item.appKey !== appKey));
+  }, []);
+
+  const toggleWorkshopWindowMinimize = useCallback((appKey: WorkshopAppKey) => {
+    setWorkshopWindows((prev) => {
+      const current = prev.find((item) => item.appKey === appKey);
+      if (!current) return prev;
+      const nextZ = workshopWindowZRef.current + 1;
+      workshopWindowZRef.current = nextZ;
+      const next = prev.map((item) =>
+        item.appKey === appKey ? { ...item, minimized: !item.minimized, zIndex: nextZ } : item
+      );
+      return normalizeWorkshopWindows(next);
+    });
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -2043,6 +2157,7 @@ const renderInputSourceTabs = useCallback((layout: 'mobile' | 'desktop') => {
           anchors={anchors}
           summaryOverview={classSummary?.overview}
           keyDifficulties={classSummary?.keyDifficulties}
+          onOpenAppWindow={openWorkshopWindow}
         />
       );
     }
@@ -2076,6 +2191,7 @@ const renderInputSourceTabs = useCallback((layout: 'mobile' | 'desktop') => {
     isLoadingTopics,
     isPlayingAll,
     notes,
+    openWorkshopWindow,
     playAllIndex,
     selectedTopic,
     segments,
@@ -3487,6 +3603,22 @@ const renderInputSourceTabs = useCallback((layout: 'mobile' | 'desktop') => {
           )}
         </>
       )}
+
+      <WorkshopWindowManager
+        windows={workshopWindows}
+        sessionId={sessionId}
+        dataSource={dataSource}
+        transcript={segments}
+        anchors={anchors}
+        summaryOverview={classSummary?.overview}
+        keyDifficulties={classSummary?.keyDifficulties}
+        onSeek={(timeMs) => {
+          handleUnifiedSeek(timeMs, true);
+        }}
+        onClose={closeWorkshopWindow}
+        onToggleMinimize={toggleWorkshopWindowMinimize}
+        onFocus={focusWorkshopWindow}
+      />
       
       {/* 鐢ㄦ埛寮曞缁勪欢 */}
       <WelcomeModal

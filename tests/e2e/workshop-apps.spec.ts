@@ -221,19 +221,24 @@ test.describe('Workshop Apps', () => {
     await expect(page.getByTestId('workshop-card-quiz')).toBeVisible();
 
     await page.getByTestId('workshop-card-flashcards').getByRole('link').click();
-    await expect(page).toHaveURL(/\/app\/matrix\/flashcards/);
+    await expect(page).toHaveURL(/\/app/);
+    await expect(page.getByTestId('floating-workshop-window-flashcards')).toBeVisible();
     await expect(page.getByTestId('flashcards-window')).toBeVisible();
 
-    await page.getByTestId('app-window-shell').getByRole('link').first().click();
-    await expect(page.getByTestId('workshop-card-quiz')).toBeVisible();
+    await page.getByTestId('workshop-window-minimize-flashcards').click();
+    await expect(page.getByTestId('workshop-window-restore-flashcards')).toBeVisible();
 
     await page.getByTestId('workshop-card-quiz').getByRole('link').click();
-    await expect(page).toHaveURL(/\/app\/matrix\/quiz/);
+    await expect(page).toHaveURL(/\/app/);
+    await expect(page.getByTestId('floating-workshop-window-quiz')).toBeVisible();
     await expect(page.getByTestId('quiz-window')).toBeVisible();
 
     const isolation = await page.evaluate(() => {
-      const url = new URL(window.location.href);
-      const sessionId = url.searchParams.get('sessionId');
+      const sessionId =
+        window.localStorage.getItem('session_id') ||
+        Object.keys(window.localStorage)
+          .map((key) => key.match(/^app_workspace_result:(.+):(flashcards|quiz)$/)?.[1] || '')
+          .find(Boolean);
       if (!sessionId) return { ok: false, reason: 'missing-session' };
       const flashResult = Boolean(localStorage.getItem(`app_workspace_result:${sessionId}:flashcards`));
       const quizResult = Boolean(localStorage.getItem(`app_workspace_result:${sessionId}:quiz`));

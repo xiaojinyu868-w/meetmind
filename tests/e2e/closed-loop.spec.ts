@@ -426,7 +426,7 @@ test.describe('Closed Loop Regression', () => {
     await expect(page.getByTestId('action-item-task-replay')).toHaveAttribute('data-completed', 'true');
   });
 
-  test('ai workshop opens yellow page and enters independent app window', async ({ page }) => {
+  test('ai workshop opens floating app window without leaving workspace', async ({ page }) => {
     await mockAppMatrixApi(page);
     await openApp(page);
     await enterReviewMode(page);
@@ -435,20 +435,24 @@ test.describe('Closed Loop Regression', () => {
     await expect(page.getByTestId('workshop-card-flashcards')).toBeVisible();
 
     await page.getByTestId('workshop-card-flashcards').getByRole('link').click();
-    await expect(page).toHaveURL(/\/app\/matrix\/flashcards/);
-    await expect(page.getByTestId('app-window-shell')).toBeVisible();
+    await expect(page).toHaveURL(/\/app/);
+    await expect(page.getByTestId('floating-workshop-window-flashcards')).toBeVisible();
     await expect(page.getByTestId('flashcards-window')).toBeVisible();
 
     const cached = await page.evaluate(() => {
-      const url = new URL(window.location.href);
-      const sessionId = url.searchParams.get('sessionId');
+      const sessionId =
+        window.localStorage.getItem('session_id') ||
+        Object.keys(window.localStorage)
+          .map((key) => key.match(/^app_workspace_result:(.+):flashcards$/)?.[1] || '')
+          .find(Boolean);
       if (!sessionId) return false;
       return Boolean(window.localStorage.getItem(`app_workspace_result:${sessionId}:flashcards`));
     });
     expect(cached).toBeTruthy();
 
     await page.reload();
-    await expect(page.getByTestId('flashcards-window')).toBeVisible();
+    await page.getByTestId('mode-review-button').click();
+    await expect(page.getByTestId('floating-workshop-window-flashcards')).toBeVisible();
   });
 
   test('workshop background generation does not block timeline/chat flow', async ({ page }) => {
@@ -499,7 +503,9 @@ test.describe('Closed Loop Regression', () => {
     await expect(page.getByTestId('workshop-dock-task-flashcards')).toContainText('已完成');
 
     await page.getByTestId('workshop-dock-open-flashcards').click();
-    await expect(page).toHaveURL(/\/app\/matrix\/flashcards/);
+    await expect(page).toHaveURL(/\/app/);
+    await expect(page).not.toHaveURL(/\/app\/matrix\/flashcards/);
+    await expect(page.getByTestId('floating-workshop-window-flashcards')).toBeVisible();
     await expect(page.getByTestId('flashcards-window')).toBeVisible();
   });
 

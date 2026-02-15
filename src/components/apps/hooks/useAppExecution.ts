@@ -99,7 +99,7 @@ export function useAppExecution(params: UseAppExecutionParams): UseAppExecutionR
   const [taskState, setTaskState] = useState<AppTaskState>(() => nowTaskState('idle'));
   const [hydrated, setHydrated] = useState(false);
 
-  useEffect(() => {
+  const syncFromCache = useCallback(() => {
     const cachedResult = readCachedAppResult(sessionId, app.key);
     const cachedTask = readCachedTaskState(sessionId, app.key);
     if (cachedResult) {
@@ -108,8 +108,28 @@ export function useAppExecution(params: UseAppExecutionParams): UseAppExecutionR
     if (cachedTask) {
       setTaskState(cachedTask);
     }
-    setHydrated(true);
   }, [app.key, sessionId]);
+
+  useEffect(() => {
+    syncFromCache();
+    setHydrated(true);
+  }, [syncFromCache]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return undefined;
+
+    const resultKey = buildResultCacheKey(sessionId, app.key);
+    const taskKey = buildTaskCacheKey(sessionId, app.key);
+
+    const onStorage = (event: StorageEvent) => {
+      if (!event.key) return;
+      if (event.key !== resultKey && event.key !== taskKey) return;
+      syncFromCache();
+    };
+
+    window.addEventListener('storage', onStorage);
+    return () => window.removeEventListener('storage', onStorage);
+  }, [app.key, sessionId, syncFromCache]);
 
   const executeInternal = useCallback(
     async (force: boolean) => {
@@ -181,8 +201,10 @@ export function useAppExecution(params: UseAppExecutionParams): UseAppExecutionR
     if (!hydrated) return;
     if (!autoRun) return;
     if (result) return;
+    const staleRunningTask = taskState.status === 'running' && Date.now() - taskState.updatedAt > 90 * 1000;
+    if (taskState.status === 'running' && !staleRunningTask) return;
     void executeInternal(false);
-  }, [autoRun, executeInternal, hydrated, result]);
+  }, [autoRun, executeInternal, hydrated, result, taskState.status, taskState.updatedAt]);
 
   const execute = useCallback(() => executeInternal(false), [executeInternal]);
   const rerun = useCallback(() => executeInternal(true), [executeInternal]);
