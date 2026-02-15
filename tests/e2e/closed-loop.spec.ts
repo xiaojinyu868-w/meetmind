@@ -185,7 +185,16 @@ async function mockVideoImportApi(page: Page): Promise<void> {
   });
 }
 
-async function mockAppMatrixApi(page: Page, options?: { executeDelayMs?: number }): Promise<void> {
+type ExecuteMockStep = {
+  status?: number;
+  body?: Record<string, unknown>;
+  delayMs?: number;
+};
+
+async function mockAppMatrixApi(
+  page: Page,
+  options?: { executeDelayMs?: number; executePlan?: ExecuteMockStep[] }
+): Promise<void> {
   await page.route('**/api/apps/catalog', async (route) => {
     await route.fulfill({
       status: 200,
@@ -202,14 +211,21 @@ async function mockAppMatrixApi(page: Page, options?: { executeDelayMs?: number 
     });
   });
 
+  let executeCall = 0;
   await page.route('**/api/apps/execute', async (route) => {
-    if (options?.executeDelayMs) {
-      await new Promise((resolve) => setTimeout(resolve, options.executeDelayMs));
+    const plan = options?.executePlan;
+    const step = plan ? plan[Math.min(executeCall, plan.length - 1)] : undefined;
+    executeCall += 1;
+
+    const delayMs = step?.delayMs ?? options?.executeDelayMs;
+    if (delayMs) {
+      await new Promise((resolve) => setTimeout(resolve, delayMs));
     }
+
     await route.fulfill({
-      status: 200,
+      status: step?.status ?? 200,
       contentType: 'application/json',
-      body: JSON.stringify(MOCK_APP_MATRIX_EXECUTION),
+      body: JSON.stringify(step?.body ?? MOCK_APP_MATRIX_EXECUTION),
     });
   });
 
@@ -451,6 +467,40 @@ test.describe('Closed Loop Regression', () => {
 
     await page.getByTestId('review-tab-apps').click();
     await expect(page.getByTestId('workshop-card-flashcards')).toContainText('已生成');
+  });
+
+  test('workshop dock supports cancel retry and open result', async ({ page }) => {
+    await mockAppMatrixApi(page, {
+      executePlan: [
+        {
+          delayMs: 1800,
+          status: 200,
+          body: MOCK_APP_MATRIX_EXECUTION,
+        },
+        {
+          status: 200,
+          body: MOCK_APP_MATRIX_EXECUTION,
+        },
+      ],
+    });
+    await openApp(page);
+    await enterReviewMode(page);
+
+    await page.getByTestId('review-tab-apps').click();
+    await page.getByTestId('workshop-bg-generate-flashcards').click();
+
+    await page.getByTestId('workshop-dock-toggle').click();
+    await expect(page.getByTestId('workshop-dock-panel')).toBeVisible();
+
+    await page.getByTestId('workshop-dock-cancel-flashcards').click();
+    await expect(page.getByTestId('workshop-dock-task-flashcards')).toContainText('已取消');
+
+    await page.getByTestId('workshop-dock-retry-flashcards').click();
+    await expect(page.getByTestId('workshop-dock-task-flashcards')).toContainText('已完成');
+
+    await page.getByTestId('workshop-dock-open-flashcards').click();
+    await expect(page).toHaveURL(/\/app\/matrix\/flashcards/);
+    await expect(page.getByTestId('flashcards-window')).toBeVisible();
   });
 
 
