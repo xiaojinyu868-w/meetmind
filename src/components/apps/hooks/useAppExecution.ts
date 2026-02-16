@@ -16,6 +16,36 @@ export interface AppTaskState {
 export const APP_RESULT_CACHE_PREFIX = 'app_workspace_result:';
 export const APP_TASK_CACHE_PREFIX = 'app_workspace_task:';
 
+function parseClientTimeoutMs(
+  envValue: string | undefined,
+  fallback: number,
+  min: number,
+  max: number
+): number {
+  const parsed = Number.parseInt(envValue || '', 10);
+  if (!Number.isFinite(parsed)) return fallback;
+  return Math.min(max, Math.max(min, parsed));
+}
+
+const APP_EXEC_TIMEOUT_DEFAULT_MS = parseClientTimeoutMs(
+  process.env.NEXT_PUBLIC_APP_EXEC_TIMEOUT_MS,
+  90 * 1000,
+  30 * 1000,
+  10 * 60 * 1000
+);
+const APP_EXEC_TIMEOUT_PODCAST_MS = parseClientTimeoutMs(
+  process.env.NEXT_PUBLIC_APP_EXEC_PODCAST_TIMEOUT_MS,
+  300 * 1000,
+  60 * 1000,
+  15 * 60 * 1000
+);
+export const APP_RUNNING_TASK_STALE_MS = parseClientTimeoutMs(
+  process.env.NEXT_PUBLIC_APP_RUNNING_STALE_MS,
+  420 * 1000,
+  120 * 1000,
+  20 * 60 * 1000
+);
+
 function safeJsonParse<T>(raw: string | null): T | null {
   if (!raw) return null;
   try {
@@ -40,7 +70,20 @@ export function readCachedAppResult(sessionId: string, appKey: string): AppExecu
 
 export function readCachedTaskState(sessionId: string, appKey: string): AppTaskState | null {
   if (typeof window === 'undefined') return null;
-  return safeJsonParse<AppTaskState>(window.localStorage.getItem(buildTaskCacheKey(sessionId, appKey)));
+  const state = safeJsonParse<AppTaskState>(window.localStorage.getItem(buildTaskCacheKey(sessionId, appKey)));
+  if (!state) return null;
+
+  if (state.status === 'running' && Date.now() - state.updatedAt > APP_RUNNING_TASK_STALE_MS) {
+    const timeoutState: AppTaskState = {
+      status: 'error',
+      updatedAt: Date.now(),
+      error: '后台任务超时，请点击“重试”重新生成。',
+    };
+    window.localStorage.setItem(buildTaskCacheKey(sessionId, appKey), JSON.stringify(timeoutState));
+    return timeoutState;
+  }
+
+  return state;
 }
 
 export function writeCachedAppResult(sessionId: string, appKey: string, result: AppExecutionResult): void {
@@ -59,6 +102,10 @@ function nowTaskState(status: AppTaskStatus, error?: string): AppTaskState {
     updatedAt: Date.now(),
     ...(error ? { error } : {}),
   };
+}
+
+function resolveExecuteTimeoutMs(appKey: string): number {
+  return appKey === 'audio-overview' ? APP_EXEC_TIMEOUT_PODCAST_MS : APP_EXEC_TIMEOUT_DEFAULT_MS;
 }
 
 interface UseAppExecutionParams {
@@ -146,29 +193,39 @@ export function useAppExecution(params: UseAppExecutionParams): UseAppExecutionR
       writeCachedTaskState(sessionId, app.key, runningState);
 
       try {
-        const response = await fetch('/api/apps/execute', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            appKey: app.key,
-            model,
-            goal: {
-              intent: app.intent,
-              expectedOutput: 'mixed',
+        const controller = new AbortController();
+        const timeoutMs = resolveExecuteTimeoutMs(app.key);
+        const timeoutId = window.setTimeout(() => controller.abort(), timeoutMs);
+
+        let response: Response;
+        try {
+          response = await fetch('/api/apps/execute', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            signal: controller.signal,
+            body: JSON.stringify({
               appKey: app.key,
-            },
-            input: {
-              sessionId,
-              dataSource,
-              transcript,
-              anchors,
-            },
-            memory: {
-              summary: summaryOverview,
-              keyDifficulties,
-            },
-          }),
-        });
+              model,
+              goal: {
+                intent: app.intent,
+                expectedOutput: 'mixed',
+                appKey: app.key,
+              },
+              input: {
+                sessionId,
+                dataSource,
+                transcript,
+                anchors,
+              },
+              memory: {
+                summary: summaryOverview,
+                keyDifficulties,
+              },
+            }),
+          });
+        } finally {
+          window.clearTimeout(timeoutId);
+        }
 
         const data = (await response.json().catch(() => null)) as {
           ok?: boolean;
@@ -187,7 +244,12 @@ export function useAppExecution(params: UseAppExecutionParams): UseAppExecutionR
         writeCachedTaskState(sessionId, app.key, successState);
         return data.result;
       } catch (error) {
-        const message = error instanceof Error ? error.message : '应用执行失败';
+        const message =
+          error instanceof DOMException && error.name === 'AbortError'
+            ? `生成超时（${Math.round(resolveExecuteTimeoutMs(app.key) / 1000)}s），请重试或切换模型。`
+            : error instanceof Error
+              ? error.message
+              : '应用执行失败';
         const failedState = nowTaskState('error', message);
         setTaskState(failedState);
         writeCachedTaskState(sessionId, app.key, failedState);
@@ -201,7 +263,8 @@ export function useAppExecution(params: UseAppExecutionParams): UseAppExecutionR
     if (!hydrated) return;
     if (!autoRun) return;
     if (result) return;
-    const staleRunningTask = taskState.status === 'running' && Date.now() - taskState.updatedAt > 90 * 1000;
+    const staleRunningTask =
+      taskState.status === 'running' && Date.now() - taskState.updatedAt > APP_RUNNING_TASK_STALE_MS;
     if (taskState.status === 'running' && !staleRunningTask) return;
     void executeInternal(false);
   }, [autoRun, executeInternal, hydrated, result, taskState.status, taskState.updatedAt]);

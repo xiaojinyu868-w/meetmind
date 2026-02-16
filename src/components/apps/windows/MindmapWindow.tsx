@@ -30,9 +30,9 @@ function normalizeBranches(result: AppExecutionResult | null): { root: string; b
     ? payload.branches
         .map((branch, index) => ({
           id: `payload-branch-${index + 1}`,
-          title: typeof branch.title === 'string' ? branch.title : `分支 ${index + 1}`,
+          title: typeof branch.title === 'string' ? branch.title.trim() : `分支 ${index + 1}`,
           points: Array.isArray(branch.points)
-            ? branch.points.map((point) => (typeof point === 'string' ? point : '')).filter(Boolean)
+            ? branch.points.map((point) => (typeof point === 'string' ? point.trim() : '')).filter(Boolean)
             : [],
           startMs: typeof branch.startMs === 'number' ? branch.startMs : undefined,
         }))
@@ -60,6 +60,16 @@ function normalizeBranches(result: AppExecutionResult | null): { root: string; b
   };
 }
 
+function splitColumns(branches: BranchNode[]): { left: BranchNode[]; right: BranchNode[] } {
+  const left: BranchNode[] = [];
+  const right: BranchNode[] = [];
+  branches.forEach((branch, index) => {
+    if (index % 2 === 0) left.push(branch);
+    else right.push(branch);
+  });
+  return { left, right };
+}
+
 export function MindmapWindow({ result, transcript, onSeek }: MindmapWindowProps) {
   const mapData = useMemo(() => normalizeBranches(result), [result]);
   const [focusedId, setFocusedId] = useState<string | null>(null);
@@ -74,11 +84,12 @@ export function MindmapWindow({ result, transcript, onSeek }: MindmapWindowProps
   }
 
   const visibleBranches = focusedId ? mapData.branches.filter((branch) => branch.id === focusedId) : mapData.branches;
+  const { left, right } = splitColumns(visibleBranches);
 
   return (
     <section className="space-y-4" data-testid="mindmap-window">
-      <div className="rounded-2xl border border-slate-200 bg-white p-4">
-        <p className="text-xs uppercase tracking-wide text-slate-500">Root</p>
+      <header className="rounded-2xl border border-slate-200 bg-white p-4">
+        <p className="text-xs uppercase tracking-wide text-slate-500">Mindmap</p>
         <h2 className="mt-1 text-2xl font-semibold text-slate-900">{mapData.root}</h2>
         <div className="mt-3 flex flex-wrap gap-2">
           <button
@@ -98,60 +109,155 @@ export function MindmapWindow({ result, transcript, onSeek }: MindmapWindowProps
             </button>
           ) : null}
         </div>
-      </div>
+      </header>
 
-      <div className="grid gap-3 md:grid-cols-2">
-        {visibleBranches.map((branch, index) => {
-          const sourceCard = result.cards.find((card) => card.id === branch.id) || result.cards[index];
-          const citation = sourceCard?.citations?.[0];
-          const isExpanded = expanded[branch.id] ?? true;
-          return (
-            <article key={branch.id} className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-              <div className="flex items-start justify-between gap-3">
-                <h3 className="text-base font-semibold text-slate-900">{branch.title}</h3>
-                <div className="flex shrink-0 gap-2">
-                  <button
-                    type="button"
-                    className="rounded-lg border border-slate-300 px-2 py-1 text-xs text-slate-700 hover:bg-slate-50"
-                    onClick={() => setExpanded((prev) => ({ ...prev, [branch.id]: !isExpanded }))}
-                  >
-                    {isExpanded ? '收起' : '展开'}
-                  </button>
-                  <button
-                    type="button"
-                    className="rounded-lg border border-slate-300 px-2 py-1 text-xs text-slate-700 hover:bg-slate-50"
-                    onClick={() => setFocusedId(branch.id)}
-                  >
-                    聚焦
-                  </button>
+      <div className="rounded-2xl border border-slate-200 bg-gradient-to-b from-slate-50 to-white p-4 md:p-6">
+        <div className="mb-5 flex justify-center">
+          <div className="max-w-xl rounded-2xl border border-blue-200 bg-blue-50 px-6 py-4 text-center shadow-sm">
+            <p className="text-xs uppercase tracking-wide text-blue-600">核心主题</p>
+            <p className="mt-1 text-lg font-semibold text-slate-900">{mapData.root}</p>
+          </div>
+        </div>
+
+        <div className="hidden gap-6 md:grid md:grid-cols-[1fr_auto_1fr]">
+          <div className="space-y-4">
+            {left.map((branch, index) => {
+              const sourceCard = result.cards.find((card) => card.id === branch.id) || result.cards[index];
+              const citation = sourceCard?.citations?.[0];
+              const isExpanded = expanded[branch.id] ?? true;
+
+              return (
+                <article key={branch.id} className="relative rounded-xl border border-slate-200 bg-white p-3 shadow-sm">
+                  <span className="absolute -right-5 top-1/2 h-px w-5 -translate-y-1/2 bg-blue-200" />
+                  <div className="flex items-start justify-between gap-2">
+                    <h3 className="text-sm font-semibold text-slate-900">{branch.title}</h3>
+                    <div className="flex shrink-0 gap-1.5">
+                      <button
+                        type="button"
+                        className="rounded-md border border-slate-300 px-2 py-0.5 text-xs text-slate-600 hover:bg-slate-50"
+                        onClick={() => setExpanded((prev) => ({ ...prev, [branch.id]: !isExpanded }))}
+                      >
+                        {isExpanded ? '收起' : '展开'}
+                      </button>
+                      <button
+                        type="button"
+                        className="rounded-md border border-slate-300 px-2 py-0.5 text-xs text-slate-600 hover:bg-slate-50"
+                        onClick={() => setFocusedId(branch.id)}
+                      >
+                        聚焦
+                      </button>
+                    </div>
+                  </div>
+                  {isExpanded ? (
+                    <ul className="mt-2 space-y-1.5 text-sm text-slate-700">
+                      {branch.points.map((point) => (
+                        <li key={`${branch.id}-${point}`} className="rounded-lg bg-slate-50 px-2.5 py-1.5 leading-6">
+                          {point}
+                        </li>
+                      ))}
+                    </ul>
+                  ) : null}
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    {citation ? <EvidenceChip citation={citation} transcript={transcript} onSeek={onSeek} /> : null}
+                  </div>
+                </article>
+              );
+            })}
+          </div>
+
+          <div className="flex items-stretch justify-center">
+            <div className="w-px bg-blue-100" />
+          </div>
+
+          <div className="space-y-4">
+            {right.map((branch, index) => {
+              const sourceCard = result.cards.find((card) => card.id === branch.id) || result.cards[index];
+              const citation = sourceCard?.citations?.[0];
+              const isExpanded = expanded[branch.id] ?? true;
+
+              return (
+                <article key={branch.id} className="relative rounded-xl border border-slate-200 bg-white p-3 shadow-sm">
+                  <span className="absolute -left-5 top-1/2 h-px w-5 -translate-y-1/2 bg-blue-200" />
+                  <div className="flex items-start justify-between gap-2">
+                    <h3 className="text-sm font-semibold text-slate-900">{branch.title}</h3>
+                    <div className="flex shrink-0 gap-1.5">
+                      <button
+                        type="button"
+                        className="rounded-md border border-slate-300 px-2 py-0.5 text-xs text-slate-600 hover:bg-slate-50"
+                        onClick={() => setExpanded((prev) => ({ ...prev, [branch.id]: !isExpanded }))}
+                      >
+                        {isExpanded ? '收起' : '展开'}
+                      </button>
+                      <button
+                        type="button"
+                        className="rounded-md border border-slate-300 px-2 py-0.5 text-xs text-slate-600 hover:bg-slate-50"
+                        onClick={() => setFocusedId(branch.id)}
+                      >
+                        聚焦
+                      </button>
+                    </div>
+                  </div>
+                  {isExpanded ? (
+                    <ul className="mt-2 space-y-1.5 text-sm text-slate-700">
+                      {branch.points.map((point) => (
+                        <li key={`${branch.id}-${point}`} className="rounded-lg bg-slate-50 px-2.5 py-1.5 leading-6">
+                          {point}
+                        </li>
+                      ))}
+                    </ul>
+                  ) : null}
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    {citation ? <EvidenceChip citation={citation} transcript={transcript} onSeek={onSeek} /> : null}
+                  </div>
+                </article>
+              );
+            })}
+          </div>
+        </div>
+
+        <div className="grid gap-3 md:hidden">
+          {visibleBranches.map((branch, index) => {
+            const sourceCard = result.cards.find((card) => card.id === branch.id) || result.cards[index];
+            const citation = sourceCard?.citations?.[0];
+            const isExpanded = expanded[branch.id] ?? true;
+
+            return (
+              <article key={branch.id} className="rounded-xl border border-slate-200 bg-white p-3 shadow-sm">
+                <div className="flex items-start justify-between gap-2">
+                  <h3 className="text-sm font-semibold text-slate-900">{branch.title}</h3>
+                  <div className="flex shrink-0 gap-1.5">
+                    <button
+                      type="button"
+                      className="rounded-md border border-slate-300 px-2 py-0.5 text-xs text-slate-600 hover:bg-slate-50"
+                      onClick={() => setExpanded((prev) => ({ ...prev, [branch.id]: !isExpanded }))}
+                    >
+                      {isExpanded ? '收起' : '展开'}
+                    </button>
+                    <button
+                      type="button"
+                      className="rounded-md border border-slate-300 px-2 py-0.5 text-xs text-slate-600 hover:bg-slate-50"
+                      onClick={() => setFocusedId(branch.id)}
+                    >
+                      聚焦
+                    </button>
+                  </div>
                 </div>
-              </div>
-
-              {isExpanded ? (
-                <ul className="mt-3 space-y-2 text-sm leading-6 text-slate-700">
-                  {branch.points.map((point) => (
-                    <li key={`${branch.id}-${point}`} className="rounded-lg bg-slate-50 px-3 py-2">
-                      {point}
-                    </li>
-                  ))}
-                </ul>
-              ) : null}
-
-              <div className="mt-3 flex flex-wrap gap-2">
-                {citation ? <EvidenceChip citation={citation} transcript={transcript} onSeek={onSeek} /> : null}
-                {typeof branch.startMs === 'number' ? (
-                  <button
-                    type="button"
-                    className="rounded-full border border-slate-300 px-2.5 py-1 text-xs text-slate-700 hover:bg-slate-100"
-                    onClick={() => onSeek?.(branch.startMs as number)}
-                  >
-                    回放分支来源
-                  </button>
+                {isExpanded ? (
+                  <ul className="mt-2 space-y-1.5 text-sm text-slate-700">
+                    {branch.points.map((point) => (
+                      <li key={`${branch.id}-${point}`} className="rounded-lg bg-slate-50 px-2.5 py-1.5 leading-6">
+                        {point}
+                      </li>
+                    ))}
+                  </ul>
                 ) : null}
-              </div>
-            </article>
-          );
-        })}
+                <div className="mt-2 flex flex-wrap gap-2">
+                  {citation ? <EvidenceChip citation={citation} transcript={transcript} onSeek={onSeek} /> : null}
+                </div>
+              </article>
+            );
+          })}
+        </div>
       </div>
     </section>
   );

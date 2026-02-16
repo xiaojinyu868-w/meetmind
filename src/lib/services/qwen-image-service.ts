@@ -15,7 +15,7 @@ const DEFAULT_IMAGE_MODEL = process.env.DASHSCOPE_IMAGE_MODEL?.trim() || 'qwen-i
 const DEFAULT_IMAGE_SIZE = process.env.DASHSCOPE_IMAGE_SIZE?.trim() || '1024*1024';
 const IMAGE_ENDPOINT =
   process.env.DASHSCOPE_IMAGE_ENDPOINT?.trim() ||
-  'https://dashscope.aliyuncs.com/api/v1/services/aigc/text2image/image-synthesis';
+  'https://dashscope.aliyuncs.com/api/v1/services/aigc/multimodal-generation/generation';
 
 function safeTrim(value: string | undefined): string {
   return (value || '').trim();
@@ -27,6 +27,9 @@ function extractImageUrl(payload: unknown): string {
 
   const output = data.output as Record<string, unknown> | undefined;
   const outputResults = output?.results as Array<Record<string, unknown>> | undefined;
+  const outputChoices = output?.choices as Array<Record<string, unknown>> | undefined;
+  const outputMessage = outputChoices?.[0]?.message as Record<string, unknown> | undefined;
+  const outputContent = outputMessage?.content as Array<Record<string, unknown>> | undefined;
   const rootData = data.data as Array<Record<string, unknown>> | undefined;
 
   const candidates: unknown[] = [
@@ -34,17 +37,27 @@ function extractImageUrl(payload: unknown): string {
     data.url,
     output?.image_url,
     output?.url,
+    outputContent?.[0]?.image,
     outputResults?.[0]?.url,
     rootData?.[0]?.url,
   ];
 
   for (const candidate of candidates) {
-    if (typeof candidate === 'string' && /^https?:\/\//.test(candidate)) {
+    if (typeof candidate === 'string' && (/^https?:\/\//.test(candidate) || candidate.startsWith('data:image/'))) {
       return candidate;
     }
   }
 
   return '';
+}
+
+function parsePayloadText(payloadText: string): Record<string, unknown> {
+  try {
+    const parsed = JSON.parse(payloadText) as Record<string, unknown>;
+    return parsed && typeof parsed === 'object' ? parsed : {};
+  } catch {
+    return {};
+  }
 }
 
 export function isQwenImageEnabled(): boolean {
@@ -68,27 +81,35 @@ export async function generateQwenImage(params: GenerateQwenImageParams): Promis
 
   const model = params.model?.trim() || DEFAULT_IMAGE_MODEL;
   const size = params.size?.trim() || DEFAULT_IMAGE_SIZE;
-  const styledPrompt = params.stylePreset ? `${prompt}\n\n风格要求：${params.stylePreset}` : prompt;
+  const styledPrompt = params.stylePreset
+    ? `${prompt}\n\n风格要求：${params.stylePreset.trim()}`
+    : prompt;
 
   const response = await fetch(IMAGE_ENDPOINT, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
       Authorization: `Bearer ${apiKey}`,
-      'X-DashScope-Async': 'false',
     },
     body: JSON.stringify({
       model,
       input: {
-        prompt: styledPrompt,
+        messages: [
+          {
+            role: 'user',
+            content: [{ text: styledPrompt }],
+          },
+        ],
       },
       parameters: {
         size,
+        n: 1,
       },
     }),
   });
 
-  const payload = (await response.json().catch(() => ({}))) as Record<string, unknown>;
+  const payloadText = await response.text();
+  const payload = parsePayloadText(payloadText);
   const requestId =
     response.headers.get('x-request-id') ||
     (typeof payload.request_id === 'string' ? payload.request_id : '') ||
@@ -100,13 +121,20 @@ export async function generateQwenImage(params: GenerateQwenImageParams): Promis
         ? payload.message
         : typeof payload.code === 'string'
           ? payload.code
-          : '文生图接口调用失败';
+          : payloadText || '文生图接口调用失败';
     throw new Error(`${message} (requestId=${requestId})`);
   }
 
   const imageUrl = extractImageUrl(payload);
   if (!imageUrl) {
-    throw new Error(`文生图返回中未找到图片地址 (requestId=${requestId})`);
+    const taskId =
+      typeof (payload.output as { task_id?: unknown } | undefined)?.task_id === 'string'
+        ? (payload.output as { task_id: string }).task_id
+        : '';
+    if (taskId) {
+      throw new Error(`生图任务已创建但未返回图片，请检查异步任务状态 (taskId=${taskId}, requestId=${requestId})`);
+    }
+    throw new Error(`文生图响应中未找到图片地址 (requestId=${requestId})`);
   }
 
   return {

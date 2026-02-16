@@ -45,6 +45,34 @@ interface DockTask {
   message?: string;
 }
 
+function parseClientTimeoutMs(
+  envValue: string | undefined,
+  fallback: number,
+  min: number,
+  max: number
+): number {
+  const parsed = Number.parseInt(envValue || '', 10);
+  if (!Number.isFinite(parsed)) return fallback;
+  return Math.min(max, Math.max(min, parsed));
+}
+
+const WORKSHOP_EXEC_TIMEOUT_DEFAULT_MS = parseClientTimeoutMs(
+  process.env.NEXT_PUBLIC_APP_EXEC_TIMEOUT_MS,
+  90 * 1000,
+  30 * 1000,
+  10 * 60 * 1000
+);
+const WORKSHOP_EXEC_TIMEOUT_PODCAST_MS = parseClientTimeoutMs(
+  process.env.NEXT_PUBLIC_APP_EXEC_PODCAST_TIMEOUT_MS,
+  300 * 1000,
+  60 * 1000,
+  15 * 60 * 1000
+);
+
+function resolveWorkshopTimeoutMs(appKey: string): number {
+  return appKey === 'audio-overview' ? WORKSHOP_EXEC_TIMEOUT_PODCAST_MS : WORKSHOP_EXEC_TIMEOUT_DEFAULT_MS;
+}
+
 interface WorkshopYellowPageProps {
   sessionId: string;
   dataSource: DataSourceType;
@@ -316,31 +344,43 @@ export function WorkshopYellowPage(props: WorkshopYellowPageProps) {
         hasResult: Boolean(generatedMap[app.key]),
       });
 
+      let timeoutTriggered = false;
       try {
-        const response = await fetch('/api/apps/execute', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          signal: controller.signal,
-          body: JSON.stringify({
-            appKey: app.key,
-            model: readPreferredModel(),
-            goal: {
-              intent: app.intent,
-              expectedOutput: 'mixed',
+        const timeoutMs = resolveWorkshopTimeoutMs(app.key);
+        const timeoutId = window.setTimeout(() => {
+          timeoutTriggered = true;
+          controller.abort();
+        }, timeoutMs);
+
+        let response: Response;
+        try {
+          response = await fetch('/api/apps/execute', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            signal: controller.signal,
+            body: JSON.stringify({
               appKey: app.key,
-            },
-            input: {
-              sessionId,
-              dataSource,
-              transcript,
-              anchors,
-            },
-            memory: {
-              summary: summaryOverview,
-              keyDifficulties,
-            },
-          }),
-        });
+              model: readPreferredModel(),
+              goal: {
+                intent: app.intent,
+                expectedOutput: 'mixed',
+                appKey: app.key,
+              },
+              input: {
+                sessionId,
+                dataSource,
+                transcript,
+                anchors,
+              },
+              memory: {
+                summary: summaryOverview,
+                keyDifficulties,
+              },
+            }),
+          });
+        } finally {
+          window.clearTimeout(timeoutId);
+        }
 
         const data = (await response.json().catch(() => ({}))) as ExecuteApiResponse;
         if (!response.ok || !data.ok || !data.result) {
@@ -365,15 +405,24 @@ export function WorkshopYellowPage(props: WorkshopYellowPageProps) {
           (error instanceof Error && error.name === 'AbortError');
 
         if (isAborted) {
-          const cancelled = { status: 'error' as const, updatedAt: Date.now(), error: '任务已取消' };
+          const timeoutMessage = `生成超时（${Math.round(resolveWorkshopTimeoutMs(app.key) / 1000)}s），请重试或切换模型。`;
+          const cancelled = {
+            status: 'error' as const,
+            updatedAt: Date.now(),
+            error: timeoutTriggered ? timeoutMessage : '任务已取消',
+          };
           writeCachedTaskState(sessionId, app.key, cancelled);
           setTaskMap((prev) => ({ ...prev, [app.key]: cancelled }));
           upsertDockTask(app, {
-            status: 'cancelled',
+            status: timeoutTriggered ? 'error' : 'cancelled',
             updatedAt: Date.now(),
-            message: '任务已取消',
+            message: timeoutTriggered ? timeoutMessage : '任务已取消',
           });
-          toast.message(`${app.name} 任务已取消`);
+          if (timeoutTriggered) {
+            toast.error(`${app.name} ${timeoutMessage}`);
+          } else {
+            toast.message(`${app.name} 任务已取消`);
+          }
         } else {
           const message = error instanceof Error ? error.message : '生成失败';
           const failedState: AppTaskState = { status: 'error', updatedAt: Date.now(), error: message };

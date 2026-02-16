@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
 import mammoth from 'mammoth';
-import { PDFParse } from 'pdf-parse';
 import type { TranscriptSegment } from '@/types';
 
 export const runtime = 'nodejs';
@@ -114,6 +113,9 @@ async function extractDocumentText(file: File, extension: string): Promise<strin
   }
 
   if (extension === 'pdf') {
+    // Lazy-load pdf parser to avoid crashing the whole route in dev/runtime
+    // when pdfjs ESM internals are incompatible with non-PDF requests.
+    const { PDFParse } = await import('pdf-parse');
     const parser = new PDFParse({ data: bytes });
     try {
       const parsed = await parser.getText();

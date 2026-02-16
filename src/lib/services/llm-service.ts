@@ -18,6 +18,14 @@ export const AVAILABLE_MODELS: ModelConfig[] = LLMConfig.models;
 // 获取默认模型ID
 export const DEFAULT_MODEL_ID = LLMConfig.defaultVisionModel;
 
+function resolveLlmHttpTimeoutMs(): number {
+  const parsed = Number.parseInt(process.env.LLM_HTTP_TIMEOUT_MS || '', 10);
+  if (!Number.isFinite(parsed)) return 90_000;
+  return Math.min(10 * 60_000, Math.max(30_000, parsed));
+}
+
+const LLM_HTTP_TIMEOUT_MS = resolveLlmHttpTimeoutMs();
+
 // ==================== 消息类型定义 ====================
 
 /** 多模态内容项 - 文本 */
@@ -114,6 +122,28 @@ function buildOpenAIMessages(messages: ChatMessage[], supportsMultimodal: boolea
   }));
 }
 
+async function fetchWithTimeout(
+  url: string,
+  init: RequestInit,
+  timeoutMs: number = LLM_HTTP_TIMEOUT_MS
+): Promise<Response> {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(url, {
+      ...init,
+      signal: controller.signal,
+    });
+  } catch (error) {
+    if (error instanceof DOMException && error.name === 'AbortError') {
+      throw new Error(`模型请求超时（${timeoutMs}ms）`);
+    }
+    throw error;
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
+
 // ==================== API 调用函数 ====================
 
 /**
@@ -159,7 +189,7 @@ async function callQwen(
     requestBody.search_strategy = 'agent_max';
   }
 
-  const response = await fetch(`${config.baseUrl}/chat/completions`, {
+  const response = await fetchWithTimeout(`${config.baseUrl}/chat/completions`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -217,7 +247,7 @@ async function callRelay(
   const supportsMultimodal = isMultimodalModel(modelId);
   const formattedMessages = buildOpenAIMessages(messages, supportsMultimodal);
 
-  const response = await fetch(`${config.baseUrl.replace(/\/$/, '')}/chat/completions`, {
+  const response = await fetchWithTimeout(`${config.baseUrl.replace(/\/$/, '')}/chat/completions`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -266,7 +296,7 @@ async function callVolcengine(
   const supportsMultimodal = isMultimodalModel(modelId);
   const formattedMessages = buildOpenAIMessages(messages, supportsMultimodal);
 
-  const response = await fetch(`${config.baseUrl}/chat/completions`, {
+  const response = await fetchWithTimeout(`${config.baseUrl}/chat/completions`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',

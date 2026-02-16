@@ -24,11 +24,47 @@ interface PodcastPayload {
   lines?: Array<{ speaker?: string; line?: string }>;
 }
 
+const TIMESTAMP_PATTERN = /\b\d{1,2}:\d{2}(?::\d{2})?\b/g;
+const CHINESE_TIME_PATTERN = /\d+点\d+分(?:\d+秒)?|\d+分\d+秒/g;
+const SPEAKER_ID_PATTERN = /^(zh[_-].+|voice[_-].+|.+bigtts.*)$/i;
+
+function sanitizeNarration(text: string): string {
+  return text
+    .replace(TIMESTAMP_PATTERN, ' ')
+    .replace(CHINESE_TIME_PATTERN, ' ')
+    .replace(/\b(startMs|endMs)\s*=\s*\d+\b/gi, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function normalizeSpeaker(raw: string | undefined, index: number, mapping: Map<string, string>): string {
+  const speaker = (raw || '').trim();
+  if (!speaker) return index % 2 === 0 ? '主持人A' : '主持人B';
+  if (mapping.has(speaker)) return mapping.get(speaker) as string;
+  if (SPEAKER_ID_PATTERN.test(speaker)) {
+    const alias = mapping.size % 2 === 0 ? '主持人A' : '主持人B';
+    mapping.set(speaker, alias);
+    return alias;
+  }
+  return speaker;
+}
+
 export function PodcastWindow({ result, transcript, onSeek }: PodcastWindowProps) {
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const payload = (result?.render?.payload || {}) as PodcastPayload;
   const sections = Array.isArray(payload.sections) ? payload.sections : [];
-  const scriptLines = Array.isArray(payload.lines) ? payload.lines : [];
+
+  const scriptLines = useMemo(() => {
+    const lines = Array.isArray(payload.lines) ? payload.lines : [];
+    const speakerMap = new Map<string, string>();
+    return lines
+      .map((line, index) => ({
+        speaker: normalizeSpeaker(line.speaker, index, speakerMap),
+        line: sanitizeNarration(line.line || ''),
+      }))
+      .filter((line) => line.line);
+  }, [payload.lines]);
+
   const chapterCitations = useMemo(
     () => result?.cards.map((card) => card.citations?.[0] || null) || [],
     [result?.cards]
@@ -63,7 +99,7 @@ export function PodcastWindow({ result, transcript, onSeek }: PodcastWindowProps
             return (
               <article key={section.id || `section-${index}`} className="rounded-xl border border-slate-200 bg-slate-50 p-3">
                 <p className="text-sm font-semibold text-slate-900">{section.title || `章节 ${index + 1}`}</p>
-                <p className="mt-1 text-sm leading-6 text-slate-600">{section.body || '暂无章节摘要。'}</p>
+                <p className="mt-1 text-sm leading-6 text-slate-600">{sanitizeNarration(section.body || '') || '暂无章节摘要。'}</p>
                 <div className="mt-2 flex flex-wrap items-center gap-2">
                   {citation ? <EvidenceChip citation={citation} transcript={transcript} onSeek={seekAudio} /> : null}
                   {citation ? (
@@ -89,8 +125,8 @@ export function PodcastWindow({ result, transcript, onSeek }: PodcastWindowProps
             {scriptLines.length > 0 ? (
               scriptLines.map((line, index) => (
                 <div key={`line-${index}`} className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm">
-                  <p className="font-medium text-slate-800">{line.speaker || '角色'}</p>
-                  <p className="mt-1 leading-6 text-slate-600">{line.line || ''}</p>
+                  <p className="font-medium text-slate-800">{line.speaker}</p>
+                  <p className="mt-1 leading-6 text-slate-600">{line.line}</p>
                 </div>
               ))
             ) : (

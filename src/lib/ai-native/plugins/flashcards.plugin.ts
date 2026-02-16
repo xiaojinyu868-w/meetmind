@@ -33,12 +33,27 @@ function formatTimestamp(ms: number): string {
   return `${minutes}:${String(seconds).padStart(2, '0')}`;
 }
 
+function cleanText(value: string): string {
+  return value
+    .replace(/[\u0000-\u001f]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function isFillerOnly(value: string): boolean {
+  const core = cleanText(value).replace(/[，。？！、,.!?：:；;'"“”‘’()（）]/g, '').trim();
+  if (!core) return true;
+  return /^(嗯+|呃+|啊+|这个|那个|然后|就是|所以|好|行|对|是的?)$/i.test(core);
+}
+
 function pickEvidenceSegments(transcript: TranscriptSegment[], count: number): TranscriptSegment[] {
-  if (transcript.length <= count) return transcript;
+  const source = transcript.filter((segment) => cleanText(segment.text || '').length > 0);
+  if (source.length === 0) return transcript.slice(0, count);
+  if (source.length <= count) return source;
   const picked: TranscriptSegment[] = [];
-  const step = (transcript.length - 1) / Math.max(1, count - 1);
+  const step = (source.length - 1) / Math.max(1, count - 1);
   for (let index = 0; index < count; index += 1) {
-    picked.push(transcript[Math.round(index * step)]);
+    picked.push(source[Math.round(index * step)]);
   }
   return picked;
 }
@@ -65,13 +80,13 @@ function toTimestamp(value: unknown, fallback: number): number {
   return fallback;
 }
 
-function fallbackDraft(segment: TranscriptSegment): FlashcardDraft {
-  const cleaned = segment.text.replace(/\s+/g, ' ').trim();
-  const stem = cleaned.length > 38 ? `${cleaned.slice(0, 38)}...` : cleaned;
+function fallbackDraft(segment: TranscriptSegment, tools: AppPluginTools): FlashcardDraft {
+  const summary = cleanText(tools.summarizeSegments([segment], 88) || segment.text || '');
+  const topic = summary.slice(0, 24) || '课堂核心概念';
   return {
-    question: `请复述并解释：${stem}`,
-    answer: cleaned || '请回放该片段并完成复述。',
-    hint: '先说定义，再说课堂例子，最后说应用场景。',
+    question: `请解释“${topic}”，并给出一个课堂中的应用例子。`,
+    answer: cleanText(segment.text || '') || '请回放该证据并完成复述。',
+    hint: '先说概念，再说方法，最后说应用。',
     startMs: segment.startMs,
     endMs: segment.endMs,
     difficulty: 'core',
@@ -89,14 +104,14 @@ async function generateDeckWithLLM(
       {
         role: 'system',
         content:
-          '你是一位认知科学学习教练。请把课堂内容设计成真正能促进理解和迁移的主动回忆闪卡。严格基于课堂证据，输出纯 JSON。',
+          '你是一位认知科学学习教练。请把课堂内容转化为高质量主动回忆闪卡，帮助学生完成理解、复述和迁移。严格基于课堂证据，只输出 JSON。',
       },
       {
         role: 'user',
         content: `学习目标：${context.goal.intent}
-用户画像：刚完成一节课复习，需要通过主动回忆快速定位“懂了”和“没懂”。
+用户画像：刚完成一节课复习，需要通过主动回忆快速定位“真懂/不懂”。
 
-请生成一组高质量闪卡。你可以自行决定题量、难度和组织方式，但要覆盖：核心概念、关键方法、易错点、迁移应用。
+请生成一组高质量闪卡。你可以自主决定题量、难度和组织方式，但应覆盖：核心概念、关键方法、易错点、迁移应用。
 
 最小输出契约（仅字段约束）：
 {
@@ -113,7 +128,8 @@ async function generateDeckWithLLM(
     }
   ]
 }
-说明：startMs/endMs 为可选证据定位字段，不确定可留空。
+
+质量要求：题面应具体可回答，避免“嗯/呃”等口头禅和时间戳表达。
 
 课堂原文：
 ${transcriptContext}
@@ -135,12 +151,14 @@ function buildCards(
 ): AppExecutionResult['cards'] {
   const cards: AppExecutionResult['cards'] = [];
   const overview =
-    llmOutput?.overview?.trim() || tools.summarizeSegments(segments.slice(0, 2), 180) || '先做主动回忆，再查看答案与证据。';
+    cleanText(llmOutput?.overview?.trim() || '') ||
+    cleanText(tools.summarizeSegments(segments.slice(0, 2), 180) || '') ||
+    '先做主动回忆，再看答案与证据。';
 
   cards.push({
     id: 'flashcards-overview',
     type: 'insight',
-    title: llmOutput?.deckTitle?.trim() || '课堂闪卡组',
+    title: cleanText(llmOutput?.deckTitle?.trim() || '') || '课堂闪卡组',
     body: overview,
     priority: 'high',
   });
@@ -148,43 +166,44 @@ function buildCards(
   const draftCards =
     Array.isArray(llmOutput?.cards) && llmOutput.cards.length > 0
       ? llmOutput.cards.slice(0, TARGET_CARD_COUNT)
-      : segments.map((segment) => fallbackDraft(segment));
+      : segments.map((segment) => fallbackDraft(segment, tools));
 
   draftCards.forEach((draftCard, index) => {
-    const segment = segments[index % Math.max(1, segments.length)] || segments[0];
+    const segment =
+      segments[index % Math.max(1, segments.length)] ||
+      ({
+        id: `virtual-${index + 1}`,
+        text: tools.summarizeSegments(segments, 120) || '请根据课堂内容完成复述。',
+        startMs: 0,
+        endMs: 8000,
+        confidence: 1,
+      } as TranscriptSegment);
     const taskId = `flashcard-task-${index + 1}`;
-    const draft =
-      draftCard?.question?.trim() && draftCard?.answer?.trim()
-        ? draftCard
-        : fallbackDraft(
-            segment || {
-              id: `virtual-${index + 1}`,
-              text: tools.summarizeSegments(segments, 120) || '请根据课堂内容完成复述。',
-              startMs: 0,
-              endMs: 8000,
-              confidence: 1,
-            }
-          );
+    const base = fallbackDraft(segment, tools);
+    const front = cleanText(draftCard?.question?.trim() || '');
+    const back = cleanText(draftCard?.answer?.trim() || '');
+    const useFallback = !front || !back || isFillerOnly(front) || isFillerOnly(back);
 
-    const fallbackStart = segment?.startMs ?? 0;
-    const fallbackEnd = segment?.endMs ?? fallbackStart + 8000;
-    const startMs = toTimestamp(draft.startMs, fallbackStart);
-    const endMs = toTimestamp(draft.endMs, fallbackEnd);
-    const front = draft.question?.trim() || `请复述 ${formatTimestamp(segment.startMs)} 的核心内容`;
-    const back = draft.answer?.trim() || segment.text.trim();
-    const hint = draft.hint?.trim() || '回放证据后，先给结论再给依据。';
+    const finalFront = useFallback ? cleanText(base.question || '') : front;
+    const finalBack = useFallback ? cleanText(base.answer || '') : back;
+    const finalHint = cleanText(draftCard?.hint?.trim() || '') || cleanText(base.hint || '');
+
+    const fallbackStart = segment.startMs ?? 0;
+    const fallbackEnd = segment.endMs ?? fallbackStart + 8000;
+    const startMs = toTimestamp(draftCard?.startMs, fallbackStart);
+    const endMs = toTimestamp(draftCard?.endMs, fallbackEnd);
 
     cards.push({
       id: `flashcard-card-${index + 1}`,
       type: 'flashcard',
       title: `闪卡 ${index + 1}`,
-      body: front,
+      body: finalFront || `请复述 ${formatTimestamp(startMs)} 的核心内容`,
       priority: index < 3 ? 'high' : 'medium',
       citations: [
         {
           startMs,
           endMs,
-            snippet: segment.text.slice(0, 120),
+          snippet: cleanText(segment.text || '').slice(0, 120),
         },
       ],
       actions: [
@@ -203,10 +222,10 @@ function buildCards(
       ],
       meta: {
         cardKind: 'flashcard',
-        front,
-        back,
-        hint,
-        difficulty: draft.difficulty || 'core',
+        front: finalFront,
+        back: finalBack,
+        hint: finalHint,
+        difficulty: draftCard?.difficulty || base.difficulty || 'core',
       },
     });
   });
@@ -214,13 +233,14 @@ function buildCards(
   return cards;
 }
 
-function buildTasks(segments: TranscriptSegment[]): AppExecutionResult['tasks'] {
-  return segments.map((segment, index) => ({
+function buildTasks(cards: AppExecutionResult['cards']): AppExecutionResult['tasks'] {
+  const flashcards = cards.filter((card) => card.meta?.cardKind === 'flashcard');
+  return flashcards.map((card, index) => ({
     id: `flashcard-task-${index + 1}`,
     label: `完成闪卡 ${index + 1} 主动回忆`,
-    reason: '先回忆再看答案，记忆保持时间更长。',
+    reason: '先回忆再看答案，记忆保持更稳固。',
     estimatedMinutes: index < 3 ? 4 : 3,
-    relatedTimestamp: segment.startMs,
+    relatedTimestamp: card.citations?.[0]?.startMs ?? 0,
   }));
 }
 
@@ -228,8 +248,8 @@ export const flashcardsPlugin: AppPlugin = {
   manifest: {
     id: 'flashcards-lab',
     name: '闪卡训练',
-    version: '0.1.0',
-    description: '对齐 NotebookLM 的主动回忆体验，基于课堂证据生成可回放闪卡。',
+    version: '0.3.0',
+    description: '基于课堂证据生成可回放的主动回忆闪卡。',
     tags: ['student', 'flashcard', 'memory', 'active-recall'],
     capabilities: ['citation-card', 'seek-action', 'task-writeback'],
     enabledByDefault: true,
@@ -237,14 +257,14 @@ export const flashcardsPlugin: AppPlugin = {
   canHandle(context: AppExecutionContext): boolean {
     if (context.input.transcript.length === 0) return false;
     const intent = context.goal.intent.toLowerCase();
-    return includesKeyword(intent) || context.goal.expectedOutput === 'cards';
+    return includesKeyword(intent) || context.goal.expectedOutput === 'cards' || context.goal.appKey === 'flashcards';
   },
   async run(context: AppExecutionContext, tools: AppPluginTools): Promise<AppExecutionResult> {
     const promptContext = buildPromptTranscriptContext(context.input.transcript, {
-      maxChars: 22_000,
+      maxChars: 24_000,
       includeIndex: true,
       includeTimestamp: false,
-      minCharsPerSegment: 52,
+      minCharsPerSegment: 48,
     });
     const anchorContext = buildPromptAnchorContext(context.input.anchors, 12);
     const evidenceSegments = pickEvidenceSegments(
@@ -261,12 +281,11 @@ export const flashcardsPlugin: AppPlugin = {
     }
 
     const cards = buildCards(tools, evidenceSegments, llmOutput);
-
     const deckCards = cards.filter((card) => card.meta?.cardKind === 'flashcard');
 
     return {
       pluginId: 'flashcards-lab',
-      version: '0.1.0',
+      version: '0.3.0',
       model,
       trace: [
         `intent=${context.goal.intent}`,
@@ -278,30 +297,19 @@ export const flashcardsPlugin: AppPlugin = {
         `llm=${llmOutput ? 'enabled' : 'fallback'}`,
       ],
       cards,
-      tasks: buildTasks(deckCards.map((card, index) => ({
-        id: card.id,
-        text:
-          typeof card.meta?.front === 'string'
-            ? card.meta.front
-            : typeof card.body === 'string'
-              ? card.body
-              : '',
-        startMs: card.citations?.[0]?.startMs ?? evidenceSegments[index % evidenceSegments.length]?.startMs ?? 0,
-        endMs: card.citations?.[0]?.endMs ?? evidenceSegments[index % evidenceSegments.length]?.endMs ?? 8000,
-        confidence: 1,
-      }))),
+      tasks: buildTasks(cards),
       render: {
         mode: 'flashcards',
-        title: llmOutput?.deckTitle?.trim() || '课堂闪卡',
-        description: llmOutput?.overview?.trim() || '先回忆再看答案，配合证据回放。',
+        title: cleanText(llmOutput?.deckTitle?.trim() || '') || '课堂闪卡',
+        description: cleanText(llmOutput?.overview?.trim() || '') || '先回忆再看答案，配合证据回放。',
         payload: {
           cards: deckCards.map((card) => ({
-              id: card.id,
-              title: card.title,
-              front: typeof card.meta?.front === 'string' ? card.meta.front : card.body,
-              back: typeof card.meta?.back === 'string' ? card.meta.back : '',
-              hint: typeof card.meta?.hint === 'string' ? card.meta.hint : '',
-            })),
+            id: card.id,
+            title: card.title,
+            front: typeof card.meta?.front === 'string' ? card.meta.front : card.body,
+            back: typeof card.meta?.back === 'string' ? card.meta.back : '',
+            hint: typeof card.meta?.hint === 'string' ? card.meta.hint : '',
+          })),
         },
       },
       nextSuggestedPlugins: ['quiz-arena', 'knowledge-cards'],

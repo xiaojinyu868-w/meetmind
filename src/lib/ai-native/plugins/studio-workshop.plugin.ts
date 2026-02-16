@@ -66,6 +66,8 @@ interface PodcastPlan {
   keyTakeaways?: string[];
   structure?: Array<{ title?: string; focus?: string }>;
   tone?: string;
+  learnerProfile?: string;
+  script?: Array<{ speaker?: string; text?: string; emotion?: string; beat?: string }>;
 }
 
 interface SlidePage {
@@ -88,10 +90,15 @@ const MODE_HINTS: Record<StudioMode, string> = {
 };
 
 const PODCAST_TIMEOUT_MS = (() => {
-  const raw = Number.parseInt(process.env.VOLCENGINE_PODCAST_TIMEOUT_MS || '45000', 10);
-  if (!Number.isFinite(raw)) return 45000;
-  return Math.min(120000, Math.max(10000, raw));
+  const raw = Number.parseInt(process.env.VOLCENGINE_PODCAST_TIMEOUT_MS || '240000', 10);
+  if (!Number.isFinite(raw)) return 240000;
+  return Math.min(900000, Math.max(30000, raw));
 })();
+
+function resolvePodcastTimeoutMs(inputChars: number): number {
+  const adaptive = 60000 + Math.max(0, inputChars) * 20;
+  return Math.min(900000, Math.max(PODCAST_TIMEOUT_MS, adaptive));
+}
 
 const PODCAST_TIMESTAMP_PATTERN = /\b\d{1,2}:\d{2}(?::\d{2})?\b/g;
 const PODCAST_META_PATTERN = /\b(startMs|endMs)\s*=\s*\d+\b/gi;
@@ -177,6 +184,19 @@ function toDialogue(value: unknown): Array<{ speaker: string; line: string }> {
     .slice(0, 28);
 }
 
+function toPodcastScript(value: unknown, maxLines: number = 40): Array<{ speaker: string; text: string }> {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((item) => (item && typeof item === 'object' ? (item as { speaker?: unknown; text?: unknown }) : null))
+    .filter((item): item is { speaker?: unknown; text?: unknown } => item !== null)
+    .map((item) => ({
+      speaker: typeof item.speaker === 'string' ? item.speaker.trim() : '',
+      text: typeof item.text === 'string' ? item.text.trim() : '',
+    }))
+    .filter((item) => item.speaker && item.text)
+    .slice(0, maxLines);
+}
+
 function modeRole(mode: StudioMode): string {
   if (mode === 'video') return '学习视频编辑';
   if (mode === 'report') return '学习复盘顾问';
@@ -249,7 +269,7 @@ function countTimestampHints(text: string): number {
 function sanitizePodcastNarration(text: string): string {
   const noiseRemoved = stripPodcastMetaNoise(text);
   if (!noiseRemoved) return '';
-  if (countTimestampHints(noiseRemoved) < 2) return noiseRemoved;
+  if (countTimestampHints(noiseRemoved) < 1) return noiseRemoved;
   return noiseRemoved
     .replace(PODCAST_TIMESTAMP_PATTERN, ' ')
     .replace(PODCAST_CHINESE_TIMESTAMP_PATTERN, ' ')
@@ -276,10 +296,10 @@ function buildPodcastTranscriptCorpus(transcript: TranscriptSegment[], maxChars:
 
 function normalizePodcastSpeaker(raw: string | undefined, index: number, mapping: Map<string, string>): string {
   const normalized = raw?.trim() || '';
-  if (!normalized) return index % 2 === 0 ? '主持人A' : '主持人B';
+  if (!normalized) return index % 2 === 0 ? 'Host A' : 'Host B';
   if (mapping.has(normalized)) return mapping.get(normalized)!;
   if (/^zh[_-]/i.test(normalized) || /^voice[_-]/i.test(normalized) || normalized.includes('bigtts')) {
-    const alias = mapping.size % 2 === 0 ? '主持人A' : '主持人B';
+    const alias = mapping.size % 2 === 0 ? 'Host A' : 'Host B';
     mapping.set(normalized, alias);
     return alias;
   }
@@ -302,43 +322,64 @@ function hasTimestampPollution(rounds: VolcPodcastResult['rounds']): boolean {
 }
 
 async function generatePodcastPlan(context: AppExecutionContext, model: string): Promise<PodcastPlan | null> {
-  const corpus = buildPodcastTranscriptCorpus(context.input.transcript, 8500);
+  const corpus = buildPodcastTranscriptCorpus(context.input.transcript, 12000);
   if (!corpus) return null;
   const anchorHints = buildPromptAnchorContext(context.input.anchors, 10);
+  const learnerProfile =
+    (context.input.metadata?.studentName && `Student profile: ${context.input.metadata.studentName}`) ||
+    'Student profile: needs efficient review and wants to capture the class essence, not raw transcript.';
 
   const response = await chat(
     [
       {
         role: 'system',
         content:
-          '你是中文教育播客总编导。请把课堂内容改写成自然、好听、有学习价值的双人播客提纲。严格基于课堂证据，输出纯 JSON。',
+          'You are a humorous but rigorous knowledge curator with strong cognitive-science background. Rewrite class transcript into an engaging two-host learning podcast. Use only evidence from class. Output JSON only.',
       },
       {
         role: 'user',
-        content: `课堂主题：${context.goal.intent}
-
-用户画像：学生想在通勤场景用播客高效复盘课堂，重点是“理解+应用”，不是逐字转写。
-
-最小输出契约：
+        content: `Layer 1 - Render contract (required for frontend):
+Output JSON with this top-level shape:
 {
-  "title": "标题",
-  "opening": "开场句",
-  "keyTakeaways": ["要点1", "要点2"],
-  "structure": [
-    { "title": "章节1", "focus": "讨论焦点" }
-  ],
-  "tone": "语气与节奏建议"
+  "title": "podcast title",
+  "opening": "opening line",
+  "keyTakeaways": ["takeaway1", "takeaway2"],
+  "learnerProfile": "who this learner is",
+  "structure": [{ "title": "segment", "focus": "focus" }],
+  "tone": "tone guidance",
+  "script": [
+    { "speaker": "Host A", "text": "line" },
+    { "speaker": "Host B", "text": "line" }
+  ]
 }
-约束：禁止逐秒报时，禁止输出 startMs/endMs/片段编号；主持人命名只用“主持人A”“主持人B”。
 
-课堂素材：
+Layer 2 - Role and intent:
+Turn this class into an audio-first exam-oriented discussion map.
+Goals:
+1) Reveal hidden but test-relevant logic.
+2) Reduce cognitive friction using vivid analogies.
+3) Keep strong in-class feel based on real evidence.
+
+Audience:
+${learnerProfile}
+
+Hard constraints:
+- Output must be natural Simplified Chinese in script.text.
+- Do NOT output timestamps like 08:25, segment IDs, startMs/endMs.
+- Use only "Host A" and "Host B" as speaker values.
+
+Class topic:
+${sanitizePodcastNarration(context.goal.intent)}
+
+Class evidence:
 ${corpus}
 
-${anchorHints ? `学习者关注点：\n${anchorHints}` : ''}`,
+${anchorHints ? `Learner concerns:
+${anchorHints}` : ''}`,
       },
     ],
     model,
-    { temperature: 0.45, maxTokens: 1200 }
+    { temperature: 0.5, maxTokens: 2600 }
   );
 
   return parseJsonResponse<PodcastPlan>(response.content);
@@ -423,57 +464,74 @@ function buildPodcastInputText(
   podcastPlan: PodcastPlan | null,
   strictNoTimestamp: boolean = false
 ): string {
-  const scriptSeed = extractScriptLines(cards)
-    .map((line) => sanitizePodcastNarration(`${line.speaker}：${line.line}`))
+  const planScript = toPodcastScript(podcastPlan?.script, 42);
+  const speakerMap = new Map<string, string>();
+  const cardScript = extractScriptLines(cards).map((line, index) => ({
+    speaker: normalizePodcastSpeaker(line.speaker, index, speakerMap),
+    text: sanitizePodcastNarration(line.line),
+  }));
+  const scriptSource = planScript.length > 0 ? planScript : cardScript;
+
+  const scriptSection = scriptSource
+    .map((line) => `${line.speaker}: ${sanitizePodcastNarration(line.text)}`)
     .filter(Boolean)
     .join('\n');
+
   const evidenceSeed = evidenceSegments
     .map((segment) => sanitizePodcastNarration(segment.text))
     .filter(Boolean)
+    .slice(0, 10)
     .join('\n');
   const corpus = buildPodcastTranscriptCorpus(context.input.transcript, 9000);
 
   const planSection = podcastPlan
     ? [
-        podcastPlan.title ? `节目标题：${podcastPlan.title}` : '',
-        podcastPlan.opening ? `开场建议：${sanitizePodcastNarration(podcastPlan.opening)}` : '',
+        podcastPlan.title ? `Title: ${sanitizePodcastNarration(podcastPlan.title)}` : '',
+        podcastPlan.opening ? `Opening: ${sanitizePodcastNarration(podcastPlan.opening)}` : '',
         Array.isArray(podcastPlan.keyTakeaways) && podcastPlan.keyTakeaways.length > 0
-          ? `核心要点：${podcastPlan.keyTakeaways.map((item) => sanitizePodcastNarration(item)).join('；')}`
+          ? `Takeaways: ${podcastPlan.keyTakeaways.map((item) => sanitizePodcastNarration(item)).join(' ; ')}`
           : '',
         Array.isArray(podcastPlan.structure) && podcastPlan.structure.length > 0
-          ? `讨论结构：${podcastPlan.structure
+          ? `Structure:\n${podcastPlan.structure
               .slice(0, 6)
               .map((item, index) => {
-                const title = sanitizePodcastNarration(item.title || `章节${index + 1}`);
+                const title = sanitizePodcastNarration(item.title || `Segment ${index + 1}`);
                 const focus = sanitizePodcastNarration(item.focus || '');
                 return `${index + 1}. ${title}${focus ? ` - ${focus}` : ''}`;
               })
               .join('\n')}`
           : '',
-        podcastPlan.tone ? `表达风格：${sanitizePodcastNarration(podcastPlan.tone)}` : '',
+        podcastPlan.tone ? `Tone: ${sanitizePodcastNarration(podcastPlan.tone)}` : '',
       ]
         .filter(Boolean)
         .join('\n')
     : '';
 
+  const learnerProfile =
+    podcastPlan?.learnerProfile?.trim() ||
+    (context.input.metadata?.studentName ? `Student profile: ${context.input.metadata.studentName}` : 'Student profile: efficient review learner');
+
   const text = [
-    `任务目标：把课堂内容做成自然流畅的双人中文学习播客。`,
-    `课堂主题：${sanitizePodcastNarration(context.goal.intent)}`,
-    `口播硬约束：禁止逐秒报时；不要出现任何时间戳（如 08:25、8点25秒）、片段编号、startMs/endMs。`,
-    `主持人约束：只用“主持人A”“主持人B”两位角色对话，不要输出技术语音ID。`,
-    output?.summary ? `学习摘要：${sanitizePodcastNarration(output.summary)}` : '',
-    planSection ? `播客策划提纲：\n${planSection}` : '',
-    scriptSeed ? `已有脚本草案：\n${scriptSeed}` : '',
-    corpus ? `课堂素材（无时间戳清洗版）：\n${corpus}` : '',
-    evidenceSeed ? `关键证据片段（供交叉核验）：\n${evidenceSeed}` : '',
-    `输出预期：围绕知识点讲“是什么-为什么-怎么用”，减少口头禅，语言自然。`,
-    strictNoTimestamp ? `纠偏指令：本次输出若出现任何“分/秒/00:00”样式时间表达，即视为失败，请彻底避免。` : '',
+    'Task: produce an engaging two-host Chinese learning podcast script for speech synthesis.',
+    `Topic: ${sanitizePodcastNarration(context.goal.intent)}`,
+    `Audience: ${sanitizePodcastNarration(learnerProfile)}`,
+    'Requirements:',
+    '- Keep natural back-and-forth conversation, not monologue.',
+    '- Focus on why it matters, how it works, and how to apply it.',
+    '- Output language should be natural Simplified Chinese.',
+    '- Never include timestamps, segment IDs, startMs/endMs.',
+    strictNoTimestamp ? '- Strict correction: if any time expression appears, regenerate without any time mentions.' : '',
+    planSection ? `Podcast plan:\n${planSection}` : '',
+    scriptSection ? `Preferred script draft:\n${scriptSection}` : '',
+    output?.summary ? `Summary:\n${sanitizePodcastNarration(output.summary)}` : '',
+    evidenceSeed ? `Key evidence:\n${evidenceSeed}` : '',
+    corpus ? `Full class evidence:\n${corpus}` : '',
   ]
     .filter(Boolean)
     .join('\n\n')
     .trim();
 
-  return text.length <= 12_000 ? text : text.slice(0, 12_000);
+  return text.length <= 12000 ? text : text.slice(0, 12000);
 }
 
 function buildPodcastRoundCards(
@@ -498,7 +556,7 @@ function buildPodcastRoundCards(
       return {
         id: `studio-podcast-round-${index + 1}`,
         type: 'timeline',
-        title: `第 ${index + 1} 轮 · ${speaker}`,
+        title: `Round ${index + 1} ? ${speaker}`,
         body: line,
         priority: index < 4 ? 'high' : 'medium',
         citations: fallback
@@ -513,7 +571,7 @@ function buildPodcastRoundCards(
         actions: [
           {
             id: `seek-podcast-round-${index + 1}`,
-            label: `回放 ${formatTimestamp(startMs)}`,
+            label: `Seek ${formatTimestamp(startMs)}`,
             kind: 'seek',
             payload: { timestamp: startMs },
           },
@@ -863,10 +921,12 @@ export const studioWorkshopPlugin: AppPlugin = {
       if (enabled) {
         try {
           const podcastInput = buildPodcastInputText(context, output, evidenceSegments, cards, podcastPlan);
+          const podcastTimeoutMs = resolvePodcastTimeoutMs(podcastInput.length);
           trace.push(`podcast_input_chars=${podcastInput.length}`);
+          trace.push(`podcast_timeout_ms=${podcastTimeoutMs}`);
           podcastResult = await generateVolcPodcast({
             inputText: podcastInput,
-            timeoutMs: PODCAST_TIMEOUT_MS,
+            timeoutMs: podcastTimeoutMs,
             format: 'mp3',
             sampleRate: 24000,
             speechRate: 0,
@@ -876,10 +936,12 @@ export const studioWorkshopPlugin: AppPlugin = {
           if (hasTimestampPollution(podcastResult.rounds)) {
             trace.push('podcast_retry=timestamp_pollution_detected');
             const retryInput = buildPodcastInputText(context, output, evidenceSegments, cards, podcastPlan, true);
+            const retryTimeoutMs = resolvePodcastTimeoutMs(retryInput.length);
             trace.push(`podcast_retry_input_chars=${retryInput.length}`);
+            trace.push(`podcast_retry_timeout_ms=${retryTimeoutMs}`);
             podcastResult = await generateVolcPodcast({
               inputText: retryInput,
-              timeoutMs: PODCAST_TIMEOUT_MS,
+              timeoutMs: retryTimeoutMs,
               format: 'mp3',
               sampleRate: 24000,
               speechRate: 0,
