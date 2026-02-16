@@ -49,6 +49,7 @@ interface AITutorProps {
   onSeek?: (timeMs: number) => void;  // 点击时间戳跳转播放
   initialQuestion?: string;  // 移动端传入的初始问题
   isMobile?: boolean;  // 移动端模式，使用简化布局
+  supportContextText?: string;
 }
 
 interface TutorCacheEnvelopeV1 {
@@ -64,6 +65,38 @@ function toTranscriptSignature(segments: Segment[]): string {
   const last = segments[segments.length - 1];
   const textLength = segments.reduce((sum, seg) => sum + (seg.text?.length || 0), 0);
   return `${segments.length}:${first.startMs}:${last.endMs}:${textLength}`;
+}
+
+function normalizeSupportContextText(raw: string, maxChars = 3500): string {
+  const normalized = (raw || '').replace(/\s+/g, ' ').trim();
+  if (!normalized) return '';
+  if (normalized.length <= maxChars) return normalized;
+  return `${normalized.slice(0, maxChars - 3)}...`;
+}
+
+function buildTutorRequestSegments(params: {
+  baseSegments: Segment[];
+  supportContextText: string;
+  focusTimestamp: number;
+  prepend?: boolean;
+}): Segment[] {
+  const normalizedSupport = normalizeSupportContextText(params.supportContextText);
+  if (!normalizedSupport) return params.baseSegments;
+
+  const focusTimestamp = Number.isFinite(params.focusTimestamp)
+    ? Math.max(0, Math.floor(params.focusTimestamp))
+    : 0;
+
+  const supportSegment: Segment = {
+    id: '__support_context__',
+    text: `[Support Materials]\n${normalizedSupport}`,
+    startMs: focusTimestamp,
+    endMs: focusTimestamp + 1,
+  };
+
+  return params.prepend
+    ? [supportSegment, ...params.baseSegments]
+    : [...params.baseSegments, supportSegment];
 }
 
 function unpackTutorCachePayload(raw: string): {
@@ -135,7 +168,18 @@ interface TutorAPIResponse {
   };
 }
 
-export function AITutor({ breakpoint, segments, isLoading: externalLoading, onResolve, onActionItemsUpdate, sessionId = 'default', onSeek, initialQuestion, isMobile = false }: AITutorProps) {
+export function AITutor({
+  breakpoint,
+  segments,
+  isLoading: externalLoading,
+  onResolve,
+  onActionItemsUpdate,
+  sessionId = 'default',
+  onSeek,
+  initialQuestion,
+  isMobile = false,
+  supportContextText = '',
+}: AITutorProps) {
   const { accessToken, user } = useAuth();
   const userId = getEffectiveUserId(user?.id);
   const { trackCoreEvent } = useAnalyticsContext();
@@ -188,7 +232,22 @@ export function AITutor({ breakpoint, segments, isLoading: externalLoading, onRe
   // 多模态相关状态
   const [supportsMultimodal, setSupportsMultimodal] = useState(true);  // 默认模型支持多模态
   const [uploadedImages, setUploadedImages] = useState<UploadedImage[]>([]);
-  const transcriptSignature = useMemo(() => toTranscriptSignature(segments), [segments]);
+  const transcriptSignature = useMemo(() => {
+    const baseSignature = toTranscriptSignature(segments);
+    const supportSignature = normalizeSupportContextText(supportContextText, 400);
+    if (!supportSignature) return baseSignature;
+    return `${baseSignature}|support:${supportSignature.length}:${supportSignature.slice(0, 80)}`;
+  }, [segments, supportContextText]);
+  const buildSegmentsForTutorRequest = useCallback(
+    (focusTimestamp: number, prepend = false): Segment[] =>
+      buildTutorRequestSegments({
+        baseSegments: segments,
+        supportContextText,
+        focusTimestamp,
+        prepend,
+      }),
+    [segments, supportContextText]
+  );
   
   const chatEndRef = useRef<HTMLDivElement>(null);
   
@@ -648,7 +707,7 @@ export function AITutor({ breakpoint, segments, isLoading: externalLoading, onRe
         headers,
         body: JSON.stringify({
           timestamp: breakpoint.timestamp,
-          segments,
+          segments: buildSegmentsForTutorRequest(breakpoint.timestamp),
           model: selectedModel,
           enable_guidance: true,
           enable_web: enableWeb,
@@ -685,7 +744,7 @@ export function AITutor({ breakpoint, segments, isLoading: externalLoading, onRe
     } finally {
       setIsLoading(false);
     }
-  }, [breakpoint, segments, selectedModel, enableWeb, accessToken, onActionItemsUpdate, saveToCache, handleSummaryFromResponse, trackCoreEvent, sessionId]);
+  }, [breakpoint, buildSegmentsForTutorRequest, selectedModel, enableWeb, accessToken, onActionItemsUpdate, saveToCache, handleSummaryFromResponse, trackCoreEvent, sessionId]);
 
   useEffect(() => {
     // 只有在没有缓存数据且不在恢复状态时才自动加载
@@ -725,7 +784,7 @@ export function AITutor({ breakpoint, segments, isLoading: externalLoading, onRe
       
       const result = await breakpointFetchStream('/api/tutor', {
         timestamp: breakpoint.timestamp,
-        segments,
+        segments: buildSegmentsForTutorRequest(breakpoint.timestamp),
         model: selectedModel,
         enable_guidance: true,
         enable_web: enableWeb,
@@ -839,7 +898,7 @@ export function AITutor({ breakpoint, segments, isLoading: externalLoading, onRe
       
       const result = await breakpointFetchStream('/api/tutor', {
         timestamp: breakpoint.timestamp,
-        segments,
+        segments: buildSegmentsForTutorRequest(breakpoint.timestamp),
         model: selectedModel,
         studentQuestion: question,
         messageContent: imagesToSend.length > 0 ? messageContent : undefined,
@@ -937,7 +996,7 @@ export function AITutor({ breakpoint, segments, isLoading: externalLoading, onRe
     // 构建请求体
     const requestBody: Record<string, unknown> = {
       timestamp: 0,
-      segments,
+      segments: buildSegmentsForTutorRequest(0, true),
       model: selectedModel,
       studentQuestion: question,
       globalMode: true,
@@ -1023,7 +1082,7 @@ export function AITutor({ breakpoint, segments, isLoading: externalLoading, onRe
     } finally {
       setGlobalLoading(false);
     }
-  }, [userInput, segments, selectedModel, enableWeb, enableThinkingGuide, supportsMultimodal, uploadedImages, accessToken, userId, sessionId, globalFetchStream, clearGlobalStreamingOnly, trackCoreEvent]);
+  }, [userInput, selectedModel, enableWeb, enableThinkingGuide, supportsMultimodal, uploadedImages, accessToken, userId, sessionId, globalFetchStream, clearGlobalStreamingOnly, trackCoreEvent, buildSegmentsForTutorRequest, segments.length]);
 
   // 全局模式：停止生成
   const stopGlobalGeneration = useCallback(() => {

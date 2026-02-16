@@ -426,6 +426,56 @@ test.describe('Closed Loop Regression', () => {
     await expect(page.getByTestId('action-item-task-replay')).toHaveAttribute('data-completed', 'true');
   });
 
+  test('support materials are injected into tutor requests after import', async ({ page }) => {
+    const tutorPayloads: Array<Record<string, unknown>> = [];
+    await page.route('**/api/tutor', async (route) => {
+      const req = route.request();
+      if (req.method() === 'POST') {
+        const payload = req.postDataJSON();
+        if (payload && typeof payload === 'object') {
+          tutorPayloads.push(payload as Record<string, unknown>);
+        }
+      }
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify(buildTutorResponse()),
+      });
+    });
+
+    await openApp(page);
+    await page.getByTestId('source-support-button').click();
+    await page.getByRole('button', { name: '粘贴文本' }).click();
+    await page.getByPlaceholder('粘贴课堂笔记、重点定义、题目解析等文本...').fill(
+      '资料要点：平台型入口、内容分发引擎、底层数据基建。'
+    );
+    await page.getByRole('button', { name: '导入文本' }).click();
+    await expect(page.getByText('增强文本已加入本会话，将用于后续转写与答疑上下文。')).toBeVisible();
+
+    tutorPayloads.length = 0;
+
+    await enterReviewMode(page);
+
+    const tutorInput = page.getByPlaceholder('告诉我你哪里不懂...').first();
+    await tutorInput.fill('请结合资料总结三大场景');
+    await page.getByRole('button', { name: '发送' }).first().click();
+
+    await expect.poll(() => {
+      const followup = tutorPayloads.find(
+        (payload) => typeof payload.studentQuestion === 'string' && payload.studentQuestion.includes('结合资料')
+      );
+      if (!followup) return '';
+      const segments = Array.isArray(followup.segments) ? followup.segments : [];
+      const supportSegment = segments.find(
+        (segment) =>
+          segment &&
+          typeof segment === 'object' &&
+          (segment as Record<string, unknown>).id === '__support_context__'
+      ) as Record<string, unknown> | undefined;
+      return typeof supportSegment?.text === 'string' ? supportSegment.text : '';
+    }).toContain('平台型入口');
+  });
+
   test('ai workshop opens floating app window without leaving workspace', async ({ page }) => {
     await mockAppMatrixApi(page);
     await openApp(page);

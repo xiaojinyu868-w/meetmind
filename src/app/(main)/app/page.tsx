@@ -288,6 +288,27 @@ function buildASRContextHint(params: {
   return compactText(parts.join('\n\n'), params.maxChars ?? 3000);
 }
 
+function buildTutorSupportContextText(
+  supportReferences: string[],
+  maxChars: number = 5000
+): string {
+  const snippets = (supportReferences || [])
+    .map((item) => compactText(item, 1000))
+    .filter(Boolean)
+    .slice(0, 6);
+
+  if (snippets.length === 0) return '';
+
+  const labeled = snippets
+    .map((item, index) => `[资料${index + 1}] ${item}`)
+    .join('\n\n');
+
+  return compactText(
+    `以下是用户导入的增强资料摘录，请在回答时优先参考；如果与课堂转写冲突，请明确指出冲突。\n\n${labeled}`,
+    maxChars
+  );
+}
+
 function buildSeedVideoInsights(segments: TranscriptSegment[]): VideoInsightItem[] {
   if (!Array.isArray(segments) || segments.length === 0) return [];
 
@@ -409,6 +430,7 @@ function StudentAppContent({
   const [asrContextHint, setAsrContextHint] = useState('');
   const [sourceItems, setSourceItems] = useState<SourceIngestItem[]>([]);
   const [supportReferences, setSupportReferences] = useState<string[]>([]);
+  const tutorSupportContextText = buildTutorSupportContextText(supportReferences);
   
   // NOTE: cleaned corrupted legacy comment.
   const [isActionDrawerOpen, setIsActionDrawerOpen] = useState(false);
@@ -1673,6 +1695,10 @@ const _handleVideoAssistantMessage = useCallback((payload: {
     }
   }, [appendSourceItem]);
 
+  const removeSupportSource = useCallback((id: string) => {
+    setSourceItems((prev) => prev.filter((item) => !(item.id === id && item.role === 'support')));
+  }, []);
+
   const ingestTranscriptSegments = useCallback(async (params: {
     segments: TranscriptSegment[];
     sourceType: SourceIngestType;
@@ -2275,11 +2301,19 @@ const _handleVideoAssistantMessage = useCallback((payload: {
                   {recentSupportItems.map((item) => (
                     <span
                       key={item.id}
-                      className="inline-flex items-center gap-1 rounded-full border border-cyan-100 bg-cyan-50/60 px-2.5 py-1 text-xs font-medium text-cyan-800"
+                      className="group inline-flex items-center gap-1 rounded-full border border-cyan-100 bg-cyan-50/60 px-2.5 py-1 text-xs font-medium text-cyan-800"
                     >
                       <span>{item.type === 'document' ? '文档' : '文本'}</span>
                       <span className="max-w-[160px] truncate">{item.title}</span>
                       <span className="text-cyan-500">{item.segmentCount} 段</span>
+                      <button
+                        type="button"
+                        onClick={() => removeSupportSource(item.id)}
+                        className="ml-0.5 inline-flex h-4 w-4 flex-shrink-0 items-center justify-center rounded-full text-cyan-400 opacity-0 transition hover:bg-cyan-200 hover:text-cyan-700 group-hover:opacity-100"
+                        title="删除"
+                      >
+                        ×
+                      </button>
                     </span>
                   ))}
                 </div>
@@ -2296,6 +2330,7 @@ const _handleVideoAssistantMessage = useCallback((payload: {
     handleSourceFileButtonClick,
     handleSourceFileDrop,
     handleSourceFileInputChange,
+    removeSupportSource,
     showSessionHistory,
     sourceFilePickerMode,
     sourceImportError,
@@ -2413,9 +2448,46 @@ const _handleVideoAssistantMessage = useCallback((payload: {
 
           {sourceImportMode === 'files' ? (
             <div className="mt-4">
-              <div className="rounded-2xl border border-cyan-100 bg-cyan-50/60 px-3 py-2 text-xs text-cyan-700">
-                当前增强资料数量：{sourceItems.filter((item) => item.role === 'support').length}
-              </div>
+              {(() => {
+                const supportList = sourceItems.filter((item) => item.role === 'support');
+                return supportList.length > 0 ? (
+                  <div className="space-y-2">
+                    <div className="rounded-2xl border border-cyan-100 bg-cyan-50/60 px-3 py-2 text-xs text-cyan-700">
+                      当前增强资料数量：{supportList.length}
+                    </div>
+                    <div className="flex flex-col gap-1.5">
+                      {supportList.map((item) => (
+                        <div
+                          key={item.id}
+                          className="group flex items-center justify-between gap-2 rounded-xl border border-slate-150 bg-slate-50/80 px-3 py-2"
+                        >
+                          <div className="flex min-w-0 items-center gap-2 text-xs text-slate-600">
+                            <span className="flex-shrink-0 rounded bg-cyan-100 px-1.5 py-0.5 text-[10px] font-semibold text-cyan-700">
+                              {item.type === 'document' ? '文档' : '文本'}
+                            </span>
+                            <span className="truncate">{item.title}</span>
+                            <span className="flex-shrink-0 text-slate-400">{item.segmentCount} 段</span>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => removeSupportSource(item.id)}
+                            className="flex-shrink-0 rounded-lg p-1 text-slate-300 opacity-0 transition hover:bg-red-50 hover:text-red-500 group-hover:opacity-100"
+                            title="删除此资料"
+                          >
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                              <path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2" />
+                            </svg>
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="rounded-2xl border border-cyan-100 bg-cyan-50/60 px-3 py-2 text-xs text-cyan-700">
+                    当前增强资料数量：0
+                  </div>
+                );
+              })()}
               <div className="mt-3 flex flex-wrap items-center gap-3">
                 <button
                   type="button"
@@ -2464,6 +2536,7 @@ const _handleVideoAssistantMessage = useCallback((payload: {
     handleSourceFileButtonClick,
     handleVideoImportReady,
     isRecording,
+    removeSupportSource,
     sessionId,
     showSessionHistory,
     sourceImportMode,
@@ -3037,6 +3110,7 @@ const _handleVideoAssistantMessage = useCallback((payload: {
                             isLoading={false}
                             onResolve={() => {}}
                             sessionId={sessionId}
+                            supportContextText={tutorSupportContextText}
                             onSeek={(timeMs) => handleUnifiedSeek(timeMs, true)}
                           />
                       </div>
@@ -3098,6 +3172,7 @@ const _handleVideoAssistantMessage = useCallback((payload: {
                                     setConfusionChatAnchor({ ...confusionChatAnchor, resolved: true });
                                   }}
                                   sessionId={sessionId}
+                                  supportContextText={tutorSupportContextText}
                                   onSeek={(timeMs) => handleUnifiedSeek(timeMs, true)}
                                 />
                               </div>
@@ -3374,6 +3449,7 @@ const _handleVideoAssistantMessage = useCallback((payload: {
                                 <AIChat
                                   conversationId={selectedHistoryConversation.conversationId}
                                   sessionId={sessionId}
+                                  contextText={tutorSupportContextText}
                                   onTimestampClick={(timeMs) => {
                                     handleUnifiedSeek(timeMs, true);
                                   }}
@@ -3416,6 +3492,7 @@ const _handleVideoAssistantMessage = useCallback((payload: {
                             onResolve={handleResolveAnchor}
                             onActionItemsUpdate={handleActionItemsUpdate}
                             sessionId={sessionId}
+                            supportContextText={tutorSupportContextText}
                             onSeek={(timeMs) => {
                               handleUnifiedSeek(timeMs, true);
                             }}
@@ -3776,6 +3853,7 @@ const _handleVideoAssistantMessage = useCallback((payload: {
                               conversationId={selectedHistoryConversation.conversationId}
                               sessionId={sessionId}
                               isMobile={true}
+                              contextText={tutorSupportContextText}
                               onTimestampClick={(timeMs) => {
                                 handleUnifiedSeek(timeMs, true);
                               }}
@@ -3800,6 +3878,7 @@ const _handleVideoAssistantMessage = useCallback((payload: {
                         onResolve={handleResolveAnchor}
                         onActionItemsUpdate={handleActionItemsUpdate}
                         sessionId={sessionId}
+                        supportContextText={tutorSupportContextText}
                         initialQuestion={mobileAIQuestion}
                         isMobile={true}
                         onSeek={(timeMs) => {
