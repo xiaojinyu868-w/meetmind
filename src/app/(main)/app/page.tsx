@@ -33,17 +33,17 @@ import { useResponsive } from '@/hooks/useResponsive';
 import { UIConfig } from '@/lib/config';
 import { toast } from 'sonner';
 
-// SWR 鏁版嵁 Hooks - 缁熶竴绠＄悊 API 璇锋眰
+// SWR data hooks for API state management.
 import { useTopics, useSummary } from '@/hooks/data';
 
-// WaveformPlayer 浣跨敤 forwardRef锛岄渶瑕侀潤鎬佸鍏ヤ互鏀寔 ref
+// WaveformPlayer uses forwardRef and needs static import for ref support.
 import { WaveformPlayer, type WaveformPlayerRef, type WaveformAnchor } from '@/components/WaveformPlayer';
 
-// 寮€灞忓姩鐢荤粍浠?
+// NOTE: cleaned corrupted legacy comment.
 import { AppLoading } from '@/components/AppLoading';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 
-// 闈欐€佸鍏ユ墍鏈夌粍浠?- 瑙ｅ喅 Next.js dynamic import chunk 鍔犺浇澶辫触闂
+// NOTE: cleaned corrupted legacy comment.
 import { Recorder } from '@/components/Recorder';
 import { TimelineView } from '@/components/TimelineView';
 import { ActionList } from '@/components/ActionList';
@@ -60,7 +60,7 @@ import type { ConfusionMarker } from '@/components/mobile/PodcastPlayer';
 import type { ConversationHistory } from '@/types/conversation';
 import type { AudioSession } from '@/lib/db';
 
-// 鐢ㄦ埛寮曞缁勪欢
+// Onboarding components.
 import { useOnboarding } from '@/hooks/useOnboarding';
 import { OnboardingGuide, WelcomeModal } from '@/components/OnboardingGuide';
 import { HighlightsPanel } from '@/components/HighlightsPanel';
@@ -68,13 +68,13 @@ import { SummaryPanel } from '@/components/SummaryPanel';
 import { NotesPanel } from '@/components/NotesPanel';
 import { AnchorDetailPanel } from '@/components/AnchorDetailPanel';
 import { WorkshopYellowPage } from '@/components/apps/WorkshopYellowPage';
-import { WorkshopWindowManager, type FloatingWorkshopWindowState } from '@/components/apps/windows/WorkshopWindowManager';
+import { WorkshopWindowManager, type FloatingWorkshopWindowState, getDefaultDisplayMode } from '@/components/apps/windows/WorkshopWindowManager';
 import { ConversationList } from '@/components/ConversationHistory/ConversationList';
 import { AIChat } from '@/components/AIChat';
 import { SessionHistoryList } from '@/components/SessionHistoryList';
 import { isWorkshopAppKey, type WorkshopAppKey } from '@/lib/ai-native/app-catalog';
 
-// 婕旂ず鏁版嵁寤惰繜鍔犺浇
+// Lazy-load demo data.
 let DEMO_DATA_CACHE: { DEMO_SEGMENTS: TranscriptSegment[]; DEMO_ANCHORS: Anchor[]; DEMO_AUDIO_URL: string } | null = null;
 const loadDemoData = async () => {
   if (DEMO_DATA_CACHE) return DEMO_DATA_CACHE;
@@ -87,7 +87,7 @@ const loadDemoData = async () => {
   return DEMO_DATA_CACHE;
 };
 
-// 绉诲姩绔粍浠跺鍏?- 鐩存帴瀵煎叆閬垮厤 barrel file 瀵艰嚧鐨?tree-shaking 澶辨晥
+// NOTE: cleaned corrupted legacy comment.
 import { MiniPlayer } from '@/components/mobile/MiniPlayer';
 import { MobileTabSwitch } from '@/components/mobile/MobileTabSwitch';
 import { DedaoTimeline, toDedaoEntries } from '@/components/mobile/DedaoTimeline';
@@ -175,10 +175,12 @@ interface ActionItem {
 }
 
 type SourceIngestType = 'audio' | 'video' | 'document' | 'text';
+type SourceIngestRole = 'primary' | 'support';
 
 interface SourceIngestItem {
   id: string;
   type: SourceIngestType;
+  role: SourceIngestRole;
   title: string;
   segmentCount: number;
   addedAt: string;
@@ -224,6 +226,26 @@ function compactText(value: string, maxLength: number): string {
   const normalized = (value || '').replace(/\s+/g, ' ').trim();
   if (normalized.length <= maxLength) return normalized;
   return `${normalized.slice(0, maxLength - 1)}...`;
+}
+
+function mergeSupportReferences(
+  previous: string[],
+  incoming: string[],
+  limit: number = 10
+): string[] {
+  const normalized = [...incoming, ...previous]
+    .map((item) => compactText(item, 1200))
+    .filter(Boolean);
+  const unique: string[] = [];
+  const seen = new Set<string>();
+  for (const item of normalized) {
+    const key = item.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    unique.push(item);
+    if (unique.length >= limit) break;
+  }
+  return unique;
 }
 
 async function readJsonApiResponse<T>(response: Response, errorPrefix: string): Promise<T> {
@@ -294,7 +316,7 @@ function buildSeedVideoInsights(segments: TranscriptSegment[]): VideoInsightItem
   ];
 }
 
-// 鍖呰缁勪欢 - 澶勭悊 useSearchParams 闇€瑕?Suspense 杈圭晫鐨勯棶棰?
+// NOTE: cleaned corrupted legacy comment.
 function StudentAppContent({
   isGuestFastEntry,
   forcedWorkspaceTab,
@@ -302,21 +324,21 @@ function StudentAppContent({
   isGuestFastEntry: boolean;
   forcedWorkspaceTab: SharedWorkspaceTab | null;
 }) {
-  // 寮€灞忓姩鐢荤姸鎬?- 璁垮蹇€熷叆鍙ｈ烦杩?Splash
+  // NOTE: cleaned corrupted legacy comment.
   const [showSplash, setShowSplash] = useState(!isGuestFastEntry);
   const [appReady, setAppReady] = useState(false);
-  const [loadingProgress, setLoadingProgress] = useState(isGuestFastEntry ? 50 : 0); // 璁垮妯″紡浠?0%寮€濮嬶紝鎰熺煡鏇村揩
+  const [loadingProgress, setLoadingProgress] = useState(isGuestFastEntry ? 50 : 0); // NOTE: cleaned corrupted legacy comment.
   
   // 鑾峰彇褰撳墠鐧诲綍鐢ㄦ埛
   const { user, isAuthenticated } = useAuth();
   
-  // 鍝嶅簲寮忕姸鎬?
+  // NOTE: cleaned corrupted legacy comment.
   const { isMobile, mounted } = useResponsive();
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isPlaying, setIsPlaying] = useState(false);
   const [selectedConfusion, setSelectedConfusion] = useState<ConfusionMarker | null>(null);
   const [mobileSubPage, setMobileSubPage] = useState<'highlights' | 'summary' | 'notes' | 'tasks' | 'apps' | 'ai-chat' | 'transcript' | null>(null);
-  const [mobileAIQuestion, setMobileAIQuestion] = useState<string>(''); // 绉诲姩绔疉I瀵硅瘽鐨勫垵濮嬮棶棰?
+  const [mobileAIQuestion, setMobileAIQuestion] = useState<string>(''); // NOTE: cleaned corrupted legacy comment.
   
   const [viewMode, setViewMode] = useState<ViewMode>('record');
   const [sessionId, setSessionId] = useState<string>('demo-session');
@@ -335,7 +357,7 @@ function StudentAppContent({
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
   const [videoSource, setVideoSource] = useState<ImportedVideoSource | null>(null);
   
-  // 鏂板鐘舵€侊細绮鹃€夌墖娈点€佹憳瑕併€佺瑪璁?
+  // NOTE: cleaned corrupted legacy comment.
   const [reviewTab, setReviewTab] = useState<ReviewTab>(forcedWorkspaceTab === 'apps' ? 'apps' : 'timeline');
   const [videoWorkspaceTab, setVideoWorkspaceTab] = useState<VideoWorkspaceTab>(forcedWorkspaceTab === 'apps' ? 'apps' : 'chat');
   const forcedWorkspaceAppliedRef = useRef(false);
@@ -350,7 +372,7 @@ function StudentAppContent({
   const [confusionChatAnchor, setConfusionChatAnchor] = useState<Anchor | null>(null);
   const [videoInsightItems, setVideoInsightItems] = useState<VideoInsightItem[]>([]);
   const [activeVideoInsightId, setActiveVideoInsightId] = useState<string | null>(null);
-  // 浣跨敤 SWR Hooks 绠＄悊绮鹃€夌墖娈靛拰鎽樿 - 鑷姩鍘婚噸銆佺紦瀛樸€侀噸璇?
+  // NOTE: cleaned corrupted legacy comment.
   const { 
     topics: highlightTopics, 
     selectedTopic, 
@@ -372,25 +394,28 @@ function StudentAppContent({
   const [isPlayingAll, setIsPlayingAll] = useState(false);
   const [playAllIndex, setPlayAllIndex] = useState(0);
   
-  // 鍘嗗彶瀵硅瘽鐩稿叧鐘舵€?
+  // NOTE: cleaned corrupted legacy comment.
   const [showConversationHistory, setShowConversationHistory] = useState(false);
   const [selectedHistoryConversation, setSelectedHistoryConversation] = useState<ConversationHistory | null>(null);
   
-  // 褰曢煶鍘嗗彶鐩稿叧鐘舵€?
+  // NOTE: cleaned corrupted legacy comment.
   const [showSessionHistory, setShowSessionHistory] = useState(false);
+  const [sourcePanelMode, setSourcePanelMode] = useState<'audio' | 'support'>('audio');
   const [sourceImportMode, setSourceImportMode] = useState<'files' | 'text'>('files');
+  const [sourceFilePickerMode, setSourceFilePickerMode] = useState<'audio' | 'support' | 'all'>('all');
   const [sourceImporting, setSourceImporting] = useState(false);
   const [sourceImportError, setSourceImportError] = useState('');
   const [sourceTextInput, setSourceTextInput] = useState('');
   const [asrContextHint, setAsrContextHint] = useState('');
   const [sourceItems, setSourceItems] = useState<SourceIngestItem[]>([]);
+  const [supportReferences, setSupportReferences] = useState<string[]>([]);
   
-  // 琛屽姩娓呭崟鎶藉眽鐘舵€?
+  // NOTE: cleaned corrupted legacy comment.
   const [isActionDrawerOpen, setIsActionDrawerOpen] = useState(false);
   const [workshopWindows, setWorkshopWindows] = useState<FloatingWorkshopWindowState[]>([]);
   const workshopWindowZRef = useRef(20);
   
-  // 鐢ㄦ埛寮曞鐘舵€?
+  // NOTE: cleaned corrupted legacy comment.
   const [showWelcome, setShowWelcome] = useState(false);
   const onboarding = useOnboarding({ isMobile });
   
@@ -400,7 +425,7 @@ function StudentAppContent({
   const sessionIdRef = useRef<string>(sessionId);
   const sourceFileInputRef = useRef<HTMLInputElement>(null);
   const waveformRef = useRef<WaveformPlayerRef>(null);
-  const hasRestoredState = useRef(false);  // 鏄惁宸叉仮澶嶇姸鎬?
+  const hasRestoredState = useRef(false);  // NOTE: cleaned corrupted legacy comment.
   useEffect(() => {
     segmentsRef.current = segments;
   }, [segments]);
@@ -422,7 +447,7 @@ function StudentAppContent({
       return;
     }
     try {
-      const parsed = JSON.parse(raw) as Array<{ appKey?: string; minimized?: boolean; zIndex?: number }>;
+      const parsed = JSON.parse(raw) as Array<{ appKey?: string; minimized?: boolean; zIndex?: number; displayMode?: string }>;
       if (!Array.isArray(parsed)) {
         setWorkshopWindows([]);
         workshopWindowZRef.current = 20;
@@ -434,6 +459,7 @@ function StudentAppContent({
           appKey: item.appKey as WorkshopAppKey,
           minimized: Boolean(item.minimized),
           zIndex: typeof item.zIndex === 'number' && Number.isFinite(item.zIndex) ? item.zIndex : 20 + index,
+          displayMode: (item.displayMode === 'panel' || item.displayMode === 'fullscreen') ? item.displayMode : getDefaultDisplayMode(item.appKey as WorkshopAppKey),
         }));
       setWorkshopWindows(normalizeWorkshopWindows(next));
       const maxZ = next.reduce((max, item) => Math.max(max, item.zIndex), 20);
@@ -450,6 +476,7 @@ function StudentAppContent({
       appKey: windowState.appKey,
       minimized: windowState.minimized,
       zIndex: windowState.zIndex,
+      displayMode: windowState.displayMode,
     }));
     window.localStorage.setItem(getWorkshopWindowStorageKey(sessionId), JSON.stringify(payload));
   }, [mounted, sessionId, workshopWindows]);
@@ -476,7 +503,7 @@ function StudentAppContent({
         );
       }
 
-      const next = [...prev, { appKey, minimized: false, zIndex: nextZ }];
+      const next = [...prev, { appKey, minimized: false, zIndex: nextZ, displayMode: getDefaultDisplayMode(appKey) }];
       return normalizeWorkshopWindows(next);
     });
   }, []);
@@ -496,6 +523,16 @@ function StudentAppContent({
       );
       return normalizeWorkshopWindows(next);
     });
+  }, []);
+
+  const toggleWorkshopWindowDisplayMode = useCallback((appKey: WorkshopAppKey) => {
+    setWorkshopWindows((prev) =>
+      prev.map((item) =>
+        item.appKey === appKey
+          ? { ...item, displayMode: item.displayMode === 'fullscreen' ? 'panel' : 'fullscreen' }
+          : item
+      )
+    );
   }, []);
 
   useEffect(() => {
@@ -544,7 +581,7 @@ function StudentAppContent({
     const totalMs = segments.length > 0 ? segments[segments.length - 1].endMs : 0;
     let next = numeric;
 
-    // 鍏煎灏戞暟鈥滅鍗曚綅鈥濇潵婧愶紙濡?46 琛ㄧず 46s锛夛紝缁熶竴杞崲涓烘绉?
+    // NOTE: cleaned corrupted legacy comment.
     if (next > 0 && next < 1000 && totalMs >= 30000) {
       next *= 1000;
     }
@@ -596,11 +633,11 @@ function StudentAppContent({
     }
   }, [videoSource]);
   
-  // 寮曞缁撴潫鍚庣殑娓呯悊锛氬叧闂紩瀵兼湡闂存墦寮€鐨勯潰鏉?
+  // NOTE: cleaned corrupted legacy comment.
   useEffect(() => {
-    // 褰撳紩瀵肩粨鏉熸椂锛屽叧闂紩瀵兼湡闂存墦寮€鐨勯潰鏉?
+    // NOTE: cleaned corrupted legacy comment.
     if (!onboarding.isActive) {
-      // 缁欑敤鎴蜂竴鐐规椂闂寸湅鏈€鍚庣殑鎿嶄綔缁撴灉锛岀劧鍚庡叧闂潰鏉?
+      // NOTE: cleaned corrupted legacy comment.
       const timer = setTimeout(() => {
         setIsActionDrawerOpen(false);
       }, 500);
@@ -608,7 +645,7 @@ function StudentAppContent({
     }
   }, [onboarding.isActive]);
   
-  // 褰曢煶涓叧闂?鍒锋柊椤甸潰鏃惰鍛婄敤鎴?
+  // NOTE: cleaned corrupted legacy comment.
   useEffect(() => {
     if (!isRecording) return;
     const handler = (e: BeforeUnloadEvent) => {
@@ -618,13 +655,13 @@ function StudentAppContent({
     return () => window.removeEventListener('beforeunload', handler);
   }, [isRecording]);
 
-  // 鑾峰彇褰撳墠鐢ㄦ埛鐨?studentId 鍜?studentName
+  // NOTE: cleaned corrupted legacy comment.
   const studentId = user?.id || 'anonymous';
   const studentName = user?.nickname || user?.username || '匿名用户';
 
   const persistedCurrentTime = Math.max(0, Math.floor(currentTime / 5000) * 5000);
 
-  // 淇濆瓨搴旂敤鐘舵€佸埌 IndexedDB锛堢敤浜庡埛鏂版仮澶嶏級
+  // Persist workspace state to IndexedDB for refresh restore.
   const saveAppState = useCallback(async () => {
     if (!hasRestoredState.current) return;
 
@@ -659,7 +696,7 @@ function StudentAppContent({
     viewMode,
   ]);
 
-  // 褰撳叧閿姸鎬佸彉鍖栨椂淇濆瓨
+  // Persist key workspace state when dependencies change.
   useEffect(() => {
     if (!appReady) return;
     void saveAppState();
@@ -807,8 +844,8 @@ function StudentAppContent({
     return true;
   }, [clearSummary, clearTopics]);
 
-  // 鍒濆鍖?- 鎭㈠鐘舵€侊紙浠呭湪棣栨鍔犺浇鏃舵墽琛岋級
-  // 浼樺寲锛氫娇鐢ㄥ苟琛屽姞杞藉拰鎵归噺鎿嶄綔鎻愬崌鎬ц兘
+  // NOTE: cleaned corrupted legacy comment.
+  // Optimize init path via parallel loading and batched reads.
   useEffect(() => {
     if (hasRestoredState.current) return;
 
@@ -955,14 +992,14 @@ function StudentAppContent({
               db.transcripts.bulkAdd(
                 demoData.DEMO_SEGMENTS.map((segment) => ({
                   sessionId: 'demo-session',
-                  userId: ANONYMOUS_USER_ID, // demo 鏁版嵁浣跨敤鍖垮悕鐢ㄦ埛
+                  userId: ANONYMOUS_USER_ID, // Use anonymous user for demo data.
                   text: segment.text,
                   startMs: segment.startMs,
                   endMs: segment.endMs,
                   confidence: segment.confidence || 1.0,
                   isFinal: true,
                 }))
-              ).catch((error) => console.error('淇濆瓨婕旂ず杞綍鍒?IndexedDB 澶辫触:', error));
+              ).catch((error) => console.error('Failed to persist demo transcript to IndexedDB:', error));
             }
           });
         } else {
@@ -1004,7 +1041,7 @@ function StudentAppContent({
     initializeApp();
   }, [isGuestFastEntry]); // eslint-disable-line react-hooks/exhaustive-deps
   
-  // 澶囩敤锛氱洃鍚?onboarding 鍔犺浇瀹屾垚鍚庢鏌ワ紙鍙湪棣栨瑙﹀彂锛岃瀹㈡ā寮忚烦杩囷級
+  // NOTE: cleaned corrupted legacy comment.
   const hasTriggeredWelcome = useRef(false);
   useEffect(() => {
     if (!isGuestFastEntry && !onboarding.isLoading && appReady && !showSplash && !hasTriggeredWelcome.current && onboarding.shouldShowFlow('welcome')) {
@@ -1013,23 +1050,23 @@ function StudentAppContent({
     }
   }, [isGuestFastEntry, onboarding, appReady, showSplash]);
 
-  // 澶勭悊寮€灞忓姩鐢诲畬鎴?
+  // NOTE: cleaned corrupted legacy comment.
   const handleSplashComplete = useCallback(() => {
     setShowSplash(false);
   }, []);
 
   const handleRecordingStart = useCallback((newSessionId: string) => {
-    // 娓呴櫎鏃т細璇濈殑鎵€鏈夌姸鎬?
+    // NOTE: cleaned corrupted legacy comment.
     setSessionId(newSessionId);
     setIsRecording(true);
     setSegments([]);
     setAnchors([]);
     setSelectedAnchor(null); // 娓呴櫎閫変腑鐨勫洶鎯戠偣
-    clearTopics(); // 娓呴櫎绮鹃€夌墖娈碉紙浣跨敤 SWR Hook锛?
-    clearSummary(); // 娓呴櫎鎽樿锛堜娇鐢?SWR Hook锛?
+    clearTopics(); // NOTE: cleaned corrupted legacy comment.
+    clearSummary(); // NOTE: cleaned corrupted legacy comment.
     setNotes([]); // 娓呴櫎绗旇
     setActionItems([]); // 娓呴櫎琛屽姩娓呭崟
-    setTimeline(null); // 娓呴櫎鏃堕棿杞?
+    setTimeline(null); // NOTE: cleaned corrupted legacy comment.
     setDataSource('live');
     setAudioUrl(null); // 娓呴櫎绀轰緥闊抽URL
     setAudioBlob(null); // 娓呴櫎闊抽 blob
@@ -1040,9 +1077,12 @@ function StudentAppContent({
     setSourceImportError('');
     setSourceTextInput('');
     setSourceImportMode('files');
+    setSourcePanelMode('audio');
+    setSourceFilePickerMode('all');
+    setSupportReferences([]);
     liveSegmentsRef.current = [];
     anchorService.clear(newSessionId);
-    // 娓呯悊鍘嗗彶瀵硅瘽鐩稿叧鐘舵€?
+    // NOTE: cleaned corrupted legacy comment.
     setShowConversationHistory(false);
     setSelectedHistoryConversation(null);
     
@@ -1061,7 +1101,7 @@ function StudentAppContent({
     setIsRecording(false);
     if (blob) setAudioBlob(blob);
     
-    // 浣跨敤 liveSegmentsRef 鍒ゆ柇鏄惁鏈夊疄鏃惰浆褰曟暟鎹?
+    // NOTE: cleaned corrupted legacy comment.
     const currentSegments = liveSegmentsRef.current.length > 0 
       ? liveSegmentsRef.current 
       : segments;
@@ -1082,7 +1122,7 @@ function StudentAppContent({
       ? finalSegments[finalSegments.length - 1].endMs 
       : 0;
     
-    // 鏇存柊璇剧▼浼氳瘽鐘舵€?
+    // NOTE: cleaned corrupted legacy comment.
     classroomDataService.saveSession({
       id: sessionId,
       subject: UIConfig.defaultSubject,
@@ -1092,25 +1132,25 @@ function StudentAppContent({
       duration,
     });
     
-    // 淇濆瓨闊抽鍜岃浆褰曞埌 IndexedDB 鍘嗗彶璁板綍
+    // Persist audio and transcript to IndexedDB history.
     if (blob && hasLiveData) {
       const currentUserId = user?.id || ANONYMOUS_USER_ID;
       
-      // 淇濆瓨闊抽
+      // Save audio blob first.
       saveAudioSession(blob, sessionId, currentUserId, {
         subject: UIConfig.defaultSubject,
         topic: UIConfig.defaultLessonTitle,
         duration,
-      }).catch(err => console.error('淇濆瓨褰曢煶鍒板巻鍙插け璐?', err));
+      }).catch(err => console.error('Failed to save audio session to history:', err));
       
-      // 淇濆瓨杞綍鍒?IndexedDB锛堜緵鍘嗗彶璁板綍鍔犺浇锛?
+      // NOTE: cleaned corrupted legacy comment.
       addTranscripts(sessionId, currentUserId, finalSegments.map((seg) => ({
         text: seg.text,
         startMs: seg.startMs,
         endMs: seg.endMs,
         confidence: seg.confidence || 1.0,
         isFinal: true,
-      }))).catch(err => console.error('淇濆瓨杞綍鍒?IndexedDB 澶辫触:', err));
+      }))).catch(err => console.error('Failed to persist transcript to IndexedDB:', err));
     }
     
     const tl = memoryService.buildTimeline(
@@ -1124,12 +1164,12 @@ function StudentAppContent({
     setViewMode('review');
   }, [sessionId, anchors, segments, user]);
 
-  // 澶勭悊 viewMode 鍒囨崲锛屽悓鏃舵竻鐞嗗巻鍙插璇濈浉鍏崇姸鎬?
-  // 濡傛灉鍒囨崲鍒板涔犳ā寮忎笖娌℃湁鏁版嵁锛岃嚜鍔ㄥ姞杞?demo 鏁版嵁
+  // NOTE: cleaned corrupted legacy comment.
+  // NOTE: cleaned corrupted legacy comment.
   const handleViewModeChange = useCallback(async (newMode: 'record' | 'review') => {
     setViewMode(newMode);
     setMobileSubPage(null);
-    // 鍒囨崲妯″紡鏃舵竻鐞嗗巻鍙插璇濋潰鏉跨姸鎬?
+    // NOTE: cleaned corrupted legacy comment.
     setShowConversationHistory(false);
     setSelectedHistoryConversation(null);
     setShowSessionHistory(false);
@@ -1148,7 +1188,7 @@ function StudentAppContent({
         setVideoSource(null);
         setDataSource('demo');
         
-        // 鏋勫缓鏃堕棿杞?
+        // NOTE: cleaned corrupted legacy comment.
         const tl = memoryService.buildTimeline(
           sessionId,
           demoData.DEMO_SEGMENTS,
@@ -1164,8 +1204,8 @@ function StudentAppContent({
           setCurrentTime(firstUnresolved.timestamp);
         }
         
-        // 棣栨杩涘叆澶嶄範妯″紡鏃惰Е鍙戝涔犲紩瀵硷紙鏈夋暟鎹悗锛?
-        // 濡傛灉褰撳墠娌℃湁寮曞鍦ㄨ繘琛岋紝涓?review 娴佺▼鏈畬鎴?
+        // NOTE: cleaned corrupted legacy comment.
+        // NOTE: cleaned corrupted legacy comment.
         if (!onboarding.isActive && onboarding.shouldShowFlow('review')) {
           setTimeout(() => onboarding.startFlow('review'), 500);
         }
@@ -1173,7 +1213,7 @@ function StudentAppContent({
         console.error('Failed to load demo data:', err);
       }
     } else if (newMode === 'review' && segments.length > 0) {
-      // 宸叉湁鏁版嵁锛岄娆¤繘鍏ュ涔犳ā寮忔椂瑙﹀彂寮曞
+      // Enter review onboarding when data already exists.
       if (!onboarding.isActive && onboarding.shouldShowFlow('review')) {
         setTimeout(() => onboarding.startFlow('review'), 300);
       }
@@ -1187,7 +1227,7 @@ function StudentAppContent({
     return () => clearTimeout(timer);
   }, [viewMode, videoSource, onboarding]);
 
-  // 浠庡巻鍙茶褰曞姞杞戒細璇濆苟杩涘叆澶嶄範妯″紡
+  // Load a history session and switch to review mode.
   const handleLoadHistorySession = useCallback(async (session: AudioSession) => {
     try {
       const restored = await restoreReviewSession(session.sessionId, {
@@ -1203,6 +1243,9 @@ function StudentAppContent({
       setSourceImportError('');
       setSourceTextInput('');
       setSourceImportMode('files');
+      setSourcePanelMode('audio');
+      setSourceFilePickerMode('all');
+      setSupportReferences([]);
     } catch (err) {
       console.error('加载历史会话失败:', err);
       toast.error('加载历史会话失败，请重试');
@@ -1284,7 +1327,7 @@ const _handleVideoAssistantMessage = useCallback((payload: {
     setTimeline(nextTimeline);
     memoryService.save(nextTimeline);
 
-    // 鎸?session + 鏃堕棿鑼冨洿鍖归厤鎸佷箙鍖栬褰曪紝閬垮厤渚濊禆搴旂敤灞備复鏃?id銆?
+    // NOTE: cleaned corrupted legacy comment.
     void (async () => {
       try {
         const transcripts = await db.transcripts
@@ -1311,18 +1354,18 @@ const _handleVideoAssistantMessage = useCallback((payload: {
   }, [anchors, segments, sessionId, timeline]);
 
   const handleAnchorMark = useCallback((timestamp: number) => {
-    // 淇鏃堕棿鎴筹細濡傛灉 segments 瀛樺湪锛屽皢 anchor 鏃堕棿鎴冲榻愬埌鏈€杩戠殑 segment
-    // 杩欐槸鍥犱负鍓嶇 elapsedMs 鍜屽悗绔?ASR 鏃堕棿鎴冲彲鑳藉瓨鍦ㄥ亸宸?
+    // Align anchor timestamp to nearest transcript segment when possible.
+    // NOTE: cleaned corrupted legacy comment.
     let alignedTimestamp = timestamp;
     if (segments.length > 0) {
-      // 鎵惧埌鏈€杩戠殑 segment锛堜紭鍏堟壘鍖呭惈璇ユ椂闂寸偣鐨勶紝鍚﹀垯鎵炬渶鎺ヨ繎鐨勶級
+      // Prefer containing segment; fallback to nearest segment by distance.
       let nearestSeg = segments[0];
       let minDistance = Math.abs(timestamp - (nearestSeg.startMs + nearestSeg.endMs) / 2);
       
       for (const seg of segments) {
-        // 濡傛灉鏃堕棿鐐瑰湪 segment 鑼冨洿鍐咃紝鐩存帴浣跨敤
+        // If timestamp falls inside this segment, keep it.
         if (timestamp >= seg.startMs && timestamp <= seg.endMs) {
-          alignedTimestamp = timestamp; // 鍦ㄨ寖鍥村唴锛屼繚鎸佸師鍊?
+          alignedTimestamp = timestamp; // NOTE: cleaned corrupted legacy comment.
           nearestSeg = seg;
           break;
         }
@@ -1335,7 +1378,7 @@ const _handleVideoAssistantMessage = useCallback((payload: {
         }
       }
       
-      // 濡傛灉鍘熷鏃堕棿鎴宠秴鍑?segments 鑼冨洿杈冨锛?5绉掞級锛屽榻愬埌鏈€杩?segment
+      // NOTE: cleaned corrupted legacy comment.
       const lastSeg = segments[segments.length - 1];
       if (timestamp > lastSeg.endMs + 5000) {
         alignedTimestamp = lastSeg.endMs;
@@ -1346,11 +1389,11 @@ const _handleVideoAssistantMessage = useCallback((payload: {
       }
     }
     
-    // 鍚屾椂鍐欏叆鏃х増 anchor-service (淇濇寔鍏煎) 鍜屾柊鐗堝叡浜瓨鍌?
+    // NOTE: cleaned corrupted legacy comment.
     const anchor = anchorService.mark(sessionId, studentId, alignedTimestamp, 'confusion');
     setAnchors(prev => [...prev, anchor]);
     
-    // 鑾峰彇褰撳墠鏃堕棿鐐归檮杩戠殑杞綍鍐呭浣滀负涓婁笅鏂?
+    // NOTE: cleaned corrupted legacy comment.
     const contextSegments = segments.filter(
       s => s.startMs <= alignedTimestamp + 5000 && s.endMs >= alignedTimestamp - 5000
     );
@@ -1373,8 +1416,8 @@ const _handleVideoAssistantMessage = useCallback((payload: {
 
   // 鍥炴斁鏃舵坊鍔犲洶鎯戠偣鏍囨敞
   const handlePlaybackAnchorAdd = useCallback((timestamp: number) => {
-    // 鍥炴斁鏃?timestamp 鏉ヨ嚜娉㈠舰鎾斁浣嶇疆锛岄€氬父涓?segments 瀵归綈
-    // 浣嗕粛鍋氭牎楠岀‘淇濆湪鏈夋晥鑼冨洿鍐?
+    // NOTE: cleaned corrupted legacy comment.
+    // NOTE: cleaned corrupted legacy comment.
     let alignedTimestamp = timestamp;
     if (segments.length > 0) {
       const lastSeg = segments[segments.length - 1];
@@ -1389,7 +1432,7 @@ const _handleVideoAssistantMessage = useCallback((payload: {
     setAnchors(prev => [...prev, anchor]);
     setSelectedAnchor(anchor);
     
-    // 鑾峰彇杞綍涓婁笅鏂?
+    // NOTE: cleaned corrupted legacy comment.
     const contextSegments = segments.filter(
       s => s.startMs <= alignedTimestamp + 5000 && s.endMs >= alignedTimestamp - 5000
     );
@@ -1485,7 +1528,7 @@ const _handleVideoAssistantMessage = useCallback((payload: {
     }
   }, [segments.length, generateTopics]);
 
-  // 鎸変富棰橀噸鏂扮敓鎴愮墖娈?- 浣跨敤 SWR Hook
+  // NOTE: cleaned corrupted legacy comment.
   const handleRegenerateByTheme = useCallback(async (theme: string) => {
     try {
       await regenerateByTheme(theme);
@@ -1494,7 +1537,7 @@ const _handleVideoAssistantMessage = useCallback((payload: {
     }
   }, [regenerateByTheme]);
 
-  // 鐢熸垚璇惧爞鎽樿 - 浣跨敤 SWR Hook
+  // Generate class summary via SWR hook.
   const handleGenerateSummary = useCallback(async () => {
     try {
       await generateSummary();
@@ -1503,7 +1546,7 @@ const _handleVideoAssistantMessage = useCallback((payload: {
     }
   }, [generateSummary]);
 
-  // 鎾斁绮鹃€夌墖娈?
+  // NOTE: cleaned corrupted legacy comment.
   const handlePlayTopic = useCallback((topic: HighlightTopic) => {
     if (topic.segments.length > 0) {
       const startTime = topic.segments[0].start;
@@ -1515,7 +1558,7 @@ const _handleVideoAssistantMessage = useCallback((payload: {
     }
   }, []);
 
-  // 娓呯┖绮鹃€夌墖娈?- 浣跨敤 SWR Hook
+  // NOTE: cleaned corrupted legacy comment.
   const handleClearTopics = useCallback(() => {
     clearTopics();
   }, [clearTopics]);
@@ -1561,7 +1604,7 @@ const _handleVideoAssistantMessage = useCallback((payload: {
     setNotes(prev => prev.filter(n => n.id !== noteId));
   }, []);
 
-  // 澶勭悊 AI 瀹舵暀鐢熸垚鐨勮鍔ㄦ竻鍗?
+  // NOTE: cleaned corrupted legacy comment.
   const handleActionItemsUpdate = useCallback((items: ActionItem[]) => {
     void (async () => {
       try {
@@ -1578,10 +1621,57 @@ const _handleVideoAssistantMessage = useCallback((payload: {
     })();
   }, [sessionId]);
 
-  // 璁＄畻鎬绘椂闀?    // 计算总时长
+  // NOTE: cleaned corrupted legacy comment.
   const totalDuration = segments.length > 0
     ? segments[segments.length - 1].endMs
     : 0;
+
+  const appendSourceItem = useCallback((params: {
+    type: SourceIngestType;
+    role: SourceIngestRole;
+    title: string;
+    segmentCount: number;
+    keepPrevious?: boolean;
+  }) => {
+    setSourceItems((prev) => {
+      const item: SourceIngestItem = {
+        id: `${params.type}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+        type: params.type,
+        role: params.role,
+        title: params.title,
+        segmentCount: params.segmentCount,
+        addedAt: new Date().toISOString(),
+      };
+      if (params.keepPrevious === false) {
+        const supportOnly = prev.filter((sourceItem) => sourceItem.role === 'support');
+        return [...supportOnly, item];
+      }
+      return [...prev, item];
+    });
+  }, []);
+
+  const appendSupportSource = useCallback((params: {
+    type: Extract<SourceIngestType, 'document' | 'text'>;
+    title: string;
+    segments: TranscriptSegment[];
+  }) => {
+    const reference = compactText(
+      (params.segments || [])
+        .slice(0, 20)
+        .map((segment) => segment.text)
+        .join(' '),
+      1200
+    );
+    appendSourceItem({
+      type: params.type,
+      role: 'support',
+      title: params.title,
+      segmentCount: params.segments.length,
+    });
+    if (reference) {
+      setSupportReferences((prev) => mergeSupportReferences(prev, [reference]));
+    }
+  }, [appendSourceItem]);
 
   const ingestTranscriptSegments = useCallback(async (params: {
     segments: TranscriptSegment[];
@@ -1646,15 +1736,12 @@ const _handleVideoAssistantMessage = useCallback((payload: {
     setShowSessionHistory(false);
     setSourceImportError('');
 
-    setSourceItems((prev) => {
-      const item: SourceIngestItem = {
-        id: sourceItemId,
-        type: params.sourceType,
-        title: params.sourceTitle,
-        segmentCount: normalizedSegments.length,
-        addedAt: new Date().toISOString(),
-      };
-      return hasExisting ? [...prev, item] : [item];
+    appendSourceItem({
+      type: params.sourceType,
+      role: 'primary',
+      title: params.sourceTitle,
+      segmentCount: normalizedSegments.length,
+      keepPrevious: hasExisting,
     });
 
     try {
@@ -1725,7 +1812,7 @@ const _handleVideoAssistantMessage = useCallback((payload: {
     );
     setTimeline(nextTimeline);
     memoryService.save(nextTimeline);
-  }, [clearSummary, clearTopics, studentId, user?.id]);
+  }, [appendSourceItem, clearSummary, clearTopics, studentId, user?.id]);
 
   const handleVideoImportReady = useCallback(async (result: ImportedVideoResult) => {
     const importedSegments = Array.isArray(result.segments) ? result.segments : [];
@@ -1809,7 +1896,10 @@ const _handleVideoAssistantMessage = useCallback((payload: {
     };
   }, []);
 
-  const handleImportFiles = useCallback(async (files: FileList | File[]) => {
+  const handleImportFiles = useCallback(async (
+    files: FileList | File[],
+    pickerMode: 'audio' | 'support' | 'all' = 'all'
+  ) => {
     const fileList = Array.from(files || []);
     if (fileList.length === 0) return;
 
@@ -1824,10 +1914,20 @@ const _handleVideoAssistantMessage = useCallback((payload: {
         return aAudio ? 1 : -1;
       });
       const importedReferenceTexts: string[] = [];
+      let handledFileCount = 0;
 
       for (const file of orderedFiles) {
         if (isDocumentFile(file)) {
+          if (pickerMode === 'audio') {
+            continue;
+          }
           const parsed = await parseDocumentFile(file);
+          const supportType = parsed.fileType === 'txt' || parsed.fileType === 'md' ? 'text' : 'document';
+          appendSupportSource({
+            type: supportType,
+            title: parsed.title,
+            segments: parsed.segments,
+          });
           importedReferenceTexts.push(
             compactText(
               parsed.segments
@@ -1837,19 +1937,18 @@ const _handleVideoAssistantMessage = useCallback((payload: {
               1200
             )
           );
-          await ingestTranscriptSegments({
-            segments: parsed.segments,
-            sourceType: parsed.fileType === 'txt' || parsed.fileType === 'md' ? 'text' : 'document',
-            sourceTitle: parsed.title,
-          });
+          handledFileCount += 1;
           continue;
         }
 
         if (isAudioFile(file)) {
+          if (pickerMode === 'support') {
+            continue;
+          }
           const contextHint = buildASRContextHint({
             manualHint: asrContextHint,
             recentSegments: segmentsRef.current,
-            importedReferences: importedReferenceTexts,
+            importedReferences: [...supportReferences, ...importedReferenceTexts],
             maxChars: 3000,
           });
           const segments = await transcribeAudioFile(file, contextHint);
@@ -1860,10 +1959,19 @@ const _handleVideoAssistantMessage = useCallback((payload: {
             sourceTitle: file.name,
             audioBlob,
           });
+          handledFileCount += 1;
           continue;
         }
 
         throw new Error(`暂不支持文件类型: ${file.name}`);
+      }
+
+      if (handledFileCount === 0) {
+        throw new Error(pickerMode === 'audio' ? '未选择可用音频文件' : '未选择可用增强资料');
+      }
+
+      if (pickerMode !== 'audio') {
+        toast.success('增强资料已加入本会话，将用于后续转写与答疑上下文。');
       }
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
@@ -1871,13 +1979,23 @@ const _handleVideoAssistantMessage = useCallback((payload: {
       toast.error(message);
     } finally {
       setSourceImporting(false);
+      setSourceFilePickerMode('all');
     }
-  }, [asrContextHint, ingestTranscriptSegments, parseDocumentFile, transcribeAudioFile]);
+  }, [
+    appendSupportSource,
+    asrContextHint,
+    ingestTranscriptSegments,
+    parseDocumentFile,
+    supportReferences,
+    transcribeAudioFile,
+  ]);
 
-  const handleSourceFileButtonClick = useCallback(() => {
+  const handleSourceFileButtonClick = useCallback((mode: 'audio' | 'support') => {
     if (sourceImporting) return;
     setDataSource('demo');
+    setSourcePanelMode(mode === 'audio' ? 'audio' : 'support');
     setSourceImportMode('files');
+    setSourceFilePickerMode(mode);
     setShowSessionHistory(false);
     sourceFileInputRef.current?.click();
   }, [sourceImporting]);
@@ -1885,12 +2003,12 @@ const _handleVideoAssistantMessage = useCallback((payload: {
   const handleSourceFileInputChange = useCallback((event: ChangeEvent<HTMLInputElement>) => {
     const files = event.target.files;
     if (files && files.length > 0) {
-      void handleImportFiles(files);
+      void handleImportFiles(files, sourceFilePickerMode);
     }
     if (sourceFileInputRef.current) {
       sourceFileInputRef.current.value = '';
     }
-  }, [handleImportFiles]);
+  }, [handleImportFiles, sourceFilePickerMode]);
 
   const handleSourceFileDrop = useCallback((event: DragEvent<HTMLDivElement>) => {
     event.preventDefault();
@@ -1899,9 +2017,11 @@ const _handleVideoAssistantMessage = useCallback((payload: {
     const files = event.dataTransfer.files;
     if (files && files.length > 0) {
       setDataSource('demo');
+      setSourcePanelMode('support');
       setSourceImportMode('files');
+      setSourceFilePickerMode('all');
       setShowSessionHistory(false);
-      void handleImportFiles(files);
+      void handleImportFiles(files, 'all');
     }
   }, [handleImportFiles, sourceImporting]);
 
@@ -1934,11 +2054,12 @@ const _handleVideoAssistantMessage = useCallback((payload: {
         throw new Error(payload.error || '文本导入失败');
       }
 
-      await ingestTranscriptSegments({
+      appendSupportSource({
+        type: 'text',
+        title: payload.title || '粘贴文本',
         segments: payload.segments,
-        sourceType: 'text',
-        sourceTitle: payload.title || '粘贴文本',
       });
+      toast.success('增强文本已加入本会话，将用于后续转写与答疑上下文。');
       setSourceTextInput('');
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
@@ -1947,22 +2068,26 @@ const _handleVideoAssistantMessage = useCallback((payload: {
     } finally {
       setSourceImporting(false);
     }
-  }, [ingestTranscriptSegments, sourceTextInput]);
-const renderInputSourceTabs = useCallback((layout: 'mobile' | 'desktop') => {
+  }, [appendSupportSource, sourceTextInput]);
+
+  const renderInputSourceTabs = useCallback((layout: 'mobile' | 'desktop') => {
     const isMobileLayout = layout === 'mobile';
     const actionButtonClass = isMobileLayout
-      ? 'shrink-0 min-w-[96px] px-3 py-2 text-[12px] rounded-xl border font-medium transition-all duration-200'
-      : 'px-4 py-2.5 text-sm rounded-xl border font-medium transition-all duration-200';
-    const activeButtonClass = 'border-amber-300 bg-amber-50 text-amber-700 shadow-sm';
-    const inactiveButtonClass = 'border-slate-200 bg-white text-slate-600 hover:border-amber-200 hover:bg-amber-50/40';
+      ? 'shrink-0 min-w-[92px] rounded-2xl border px-3 py-2 text-[12px] font-semibold transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-300'
+      : 'rounded-2xl border px-4 py-2.5 text-sm font-semibold transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-300';
+    const activeButtonClass =
+      'border-amber-300 bg-gradient-to-r from-amber-50 via-amber-50 to-orange-50 text-amber-700 shadow-[0_4px_14px_rgba(245,158,11,0.18)]';
+    const inactiveButtonClass =
+      'border-slate-200 bg-white/85 text-slate-600 hover:-translate-y-0.5 hover:border-slate-300 hover:bg-white hover:shadow-sm';
 
-    const uploadActive = dataSource === 'demo' && sourceImportMode === 'files' && !showSessionHistory;
-    const textActive = dataSource === 'demo' && sourceImportMode === 'text' && !showSessionHistory;
+    const audioUploadActive = dataSource === 'demo' && sourcePanelMode === 'audio' && !showSessionHistory;
+    const supportActive = dataSource === 'demo' && sourcePanelMode === 'support' && !showSessionHistory;
 
-    const actions = [
+    const primaryActions = [
       {
         key: 'live',
         label: '实时录音',
+        tone: 'bg-emerald-400',
         testId: 'source-live-button',
         active: dataSource === 'live' && !showSessionHistory,
         onClick: () => {
@@ -1971,15 +2096,17 @@ const renderInputSourceTabs = useCallback((layout: 'mobile' | 'desktop') => {
         },
       },
       {
-        key: 'upload',
-        label: '上传文件',
+        key: 'audio-upload',
+        label: '上传音频',
+        tone: 'bg-blue-400',
         testId: 'source-upload-button',
-        active: uploadActive,
-        onClick: handleSourceFileButtonClick,
+        active: audioUploadActive,
+        onClick: () => handleSourceFileButtonClick('audio'),
       },
       {
         key: 'video',
         label: '视频链接',
+        tone: 'bg-fuchsia-400',
         testId: 'source-video-button',
         active: dataSource === 'video' && !showSessionHistory,
         onClick: () => {
@@ -1987,91 +2114,181 @@ const renderInputSourceTabs = useCallback((layout: 'mobile' | 'desktop') => {
           setShowSessionHistory(false);
         },
       },
+    ] as const;
+
+    const secondaryActions = [
       {
-        key: 'text',
-        label: '粘贴文本',
-        testId: 'source-text-button',
-        active: textActive,
+        key: 'support',
+        label: '增强资料',
+        tone: 'bg-cyan-400',
+        testId: 'source-support-button',
+        active: supportActive,
         onClick: () => {
           setDataSource('demo');
-          setSourceImportMode('text');
+          setSourcePanelMode('support');
+          setSourceImportMode('files');
           setShowSessionHistory(false);
         },
       },
       {
         key: 'history',
         label: isMobileLayout ? '历史记录' : '录音历史',
+        tone: 'bg-violet-400',
         testId: 'source-history-button',
         active: showSessionHistory,
         onClick: () => setShowSessionHistory(true),
       },
     ] as const;
 
+    const sourceFileAccept =
+      sourceFilePickerMode === 'audio'
+        ? 'audio/*,.mp3,.wav,.webm,.ogg,.m4a,.aac,.flac'
+        : sourceFilePickerMode === 'support'
+          ? '.txt,.md,.markdown,.csv,.json,.html,.htm,.pdf,.docx'
+          : 'audio/*,.mp3,.wav,.webm,.ogg,.m4a,.aac,.flac,.txt,.md,.markdown,.csv,.json,.html,.htm,.pdf,.docx';
+
+    const recentPrimaryItems = sourceItems.filter((item) => item.role === 'primary').slice(-4);
+    const recentSupportItems = sourceItems.filter((item) => item.role === 'support').slice(-6);
+
     return (
-      <div className="space-y-3" data-onboarding="input-methods">
+      <div className="space-y-4" data-onboarding="input-methods">
         <input
           ref={sourceFileInputRef}
           type="file"
-          accept="audio/*,.mp3,.wav,.webm,.ogg,.m4a,.aac,.flac,.txt,.md,.markdown,.csv,.json,.html,.htm,.pdf,.docx"
+          accept={sourceFileAccept}
           multiple
           onChange={handleSourceFileInputChange}
           className="hidden"
         />
 
         <div
-          className="rounded-2xl border border-dashed border-slate-300 bg-gradient-to-b from-slate-50 to-white px-4 py-4"
+          className="relative overflow-hidden rounded-3xl border border-slate-200/90 bg-[linear-gradient(130deg,#f8fafc_0%,#fff7ed_56%,#eef2ff_100%)] p-4 md:p-5 shadow-[0_16px_40px_rgba(15,23,42,0.06)]"
           onDragOver={(event) => {
             event.preventDefault();
             event.stopPropagation();
           }}
           onDrop={handleSourceFileDrop}
         >
-          <div className="space-y-1">
-            <p className={`${isMobileLayout ? 'text-sm' : 'text-base'} font-semibold text-slate-800`}>拖拽或选择资料</p>
-            <p className={`${isMobileLayout ? 'text-xs' : 'text-sm'} text-slate-500`}>
-              支持音频、视频链接、文档和粘贴文本，可连续追加多个来源。
-            </p>
-          </div>
+          <div className="pointer-events-none absolute -right-12 -top-12 h-36 w-36 rounded-full bg-blue-200/30 blur-3xl" />
+          <div className="pointer-events-none absolute -left-14 -bottom-14 h-36 w-36 rounded-full bg-amber-200/30 blur-3xl" />
+          <div className="relative">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <span className="inline-flex items-center rounded-full border border-slate-200/80 bg-white/80 px-2.5 py-1 text-[11px] font-semibold tracking-[0.08em] text-slate-500">
+                  数据采集入口
+                </span>
+                <p className={`${isMobileLayout ? 'mt-2 text-base' : 'mt-2.5 text-xl'} font-bold text-slate-900`}>拖拽或选择资料</p>
+                <p className={`${isMobileLayout ? 'text-xs' : 'text-sm'} mt-1 max-w-2xl leading-6 text-slate-600`}>
+                  主来源用于生成课堂主转写；增强资料会作为上下文，提升后续音频转写与 AI 理解质量。
+                </p>
+              </div>
+              {!isMobileLayout ? (
+                <div className="rounded-2xl border border-white/80 bg-white/70 px-3 py-2 text-xs text-slate-500 shadow-sm">
+                  支持拖拽上传
+                </div>
+              ) : null}
+            </div>
 
-          <div className="mt-3 flex flex-wrap gap-2">
-            {actions.map((action) => (
-              <button
-                key={action.key}
-                type="button"
-                data-testid={action.testId}
-                onClick={action.onClick}
-                className={`${actionButtonClass} ${action.active ? activeButtonClass : inactiveButtonClass}`}
-              >
-                {action.label}
-              </button>
-            ))}
-          </div>
+            <div className={`mt-4 ${isMobileLayout ? 'space-y-3' : 'grid grid-cols-2 gap-3'}`}>
+              <div className="rounded-2xl border border-white/80 bg-white/80 p-3 shadow-[0_4px_18px_rgba(15,23,42,0.04)]">
+                <p className="text-xs font-semibold tracking-[0.08em] text-slate-500">主学习来源</p>
+                <div className="mt-2 flex flex-wrap gap-2">
+                  {primaryActions.map((action) => (
+                    <button
+                      key={action.key}
+                      type="button"
+                      data-testid={action.testId}
+                      onClick={action.onClick}
+                      className={`${actionButtonClass} ${action.active ? activeButtonClass : inactiveButtonClass}`}
+                    >
+                      <span className="inline-flex items-center gap-2">
+                        <span className={`inline-block h-2 w-2 rounded-full ${action.tone}`} />
+                        {action.label}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              </div>
 
-          {sourceImporting && (
-            <p className={`${isMobileLayout ? 'text-xs' : 'text-sm'} mt-2 text-amber-700`}>正在导入资料，请稍候...</p>
-          )}
-          {!sourceImporting && sourceImportError && (
-            <p className={`${isMobileLayout ? 'text-xs' : 'text-sm'} mt-2 text-red-600`}>{sourceImportError}</p>
-          )}
+              <div className="rounded-2xl border border-white/80 bg-white/80 p-3 shadow-[0_4px_18px_rgba(15,23,42,0.04)]">
+                <p className="text-xs font-semibold tracking-[0.08em] text-slate-500">辅助与管理</p>
+                <div className="mt-2 flex flex-wrap gap-2">
+                  {secondaryActions.map((action) => (
+                    <button
+                      key={action.key}
+                      type="button"
+                      data-testid={action.testId}
+                      onClick={action.onClick}
+                      className={`${actionButtonClass} ${action.active ? activeButtonClass : inactiveButtonClass}`}
+                    >
+                      <span className="inline-flex items-center gap-2">
+                        <span className={`inline-block h-2 w-2 rounded-full ${action.tone}`} />
+                        {action.label}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            {sourceImporting ? (
+              <p className={`${isMobileLayout ? 'text-xs' : 'text-sm'} mt-3 font-medium text-amber-700`}>正在处理导入资料...</p>
+            ) : null}
+            {!sourceImporting && sourceImportError ? (
+              <p className={`${isMobileLayout ? 'text-xs' : 'text-sm'} mt-3 font-medium text-rose-600`}>{sourceImportError}</p>
+            ) : null}
+          </div>
         </div>
 
-        {sourceItems.length > 0 && (
-          <div className="rounded-xl border border-slate-200 bg-white px-3 py-2">
-            <p className="text-xs font-medium text-slate-500">已导入来源（最近）</p>
-            <div className="mt-2 flex flex-wrap gap-2">
-              {sourceItems.slice(-6).map((item) => (
-                <span
-                  key={item.id}
-                  className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs text-slate-600"
-                >
-                  <span>{item.type === 'video' ? '视频' : item.type === 'audio' ? '音频' : item.type === 'document' ? '文档' : '文本'}</span>
-                  <span className="max-w-[160px] truncate">{item.title}</span>
-                  <span className="text-slate-400">{item.segmentCount} 段</span>
-                </span>
-              ))}
+        {sourceItems.length > 0 ? (
+          <div className={`grid gap-3 ${isMobileLayout ? 'grid-cols-1' : 'grid-cols-2'}`}>
+            <div className="rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">
+              <div className="flex items-center justify-between">
+                <p className="text-xs font-semibold tracking-[0.08em] text-slate-500">主来源</p>
+                <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-medium text-slate-500">{recentPrimaryItems.length}</span>
+              </div>
+              {recentPrimaryItems.length > 0 ? (
+                <div className="mt-2 flex flex-wrap gap-2">
+                  {recentPrimaryItems.map((item) => (
+                    <span
+                      key={item.id}
+                      className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs font-medium text-slate-600"
+                    >
+                      <span>{item.type === 'video' ? '视频' : '音频'}</span>
+                      <span className="max-w-[160px] truncate">{item.title}</span>
+                      <span className="text-slate-400">{item.segmentCount} 段</span>
+                    </span>
+                  ))}
+                </div>
+              ) : (
+                <p className="mt-2 text-xs text-slate-400">还没有主来源，请先录音、上传音频或导入视频链接。</p>
+              )}
+            </div>
+
+            <div className="rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">
+              <div className="flex items-center justify-between">
+                <p className="text-xs font-semibold tracking-[0.08em] text-slate-500">增强资料</p>
+                <span className="rounded-full bg-cyan-50 px-2 py-0.5 text-[11px] font-medium text-cyan-700">{recentSupportItems.length}</span>
+              </div>
+              {recentSupportItems.length > 0 ? (
+                <div className="mt-2 flex flex-wrap gap-2">
+                  {recentSupportItems.map((item) => (
+                    <span
+                      key={item.id}
+                      className="inline-flex items-center gap-1 rounded-full border border-cyan-100 bg-cyan-50/60 px-2.5 py-1 text-xs font-medium text-cyan-800"
+                    >
+                      <span>{item.type === 'document' ? '文档' : '文本'}</span>
+                      <span className="max-w-[160px] truncate">{item.title}</span>
+                      <span className="text-cyan-500">{item.segmentCount} 段</span>
+                    </span>
+                  ))}
+                </div>
+              ) : (
+                <p className="mt-2 text-xs text-slate-400">可选上传 PDF/讲义/文本，为后续识别和应用生成提供支撑。</p>
+              )}
             </div>
           </div>
-        )}
+        ) : null}
       </div>
     );
   }, [
@@ -2080,19 +2297,21 @@ const renderInputSourceTabs = useCallback((layout: 'mobile' | 'desktop') => {
     handleSourceFileDrop,
     handleSourceFileInputChange,
     showSessionHistory,
+    sourceFilePickerMode,
     sourceImportError,
-    sourceImportMode,
     sourceImporting,
     sourceItems,
+    sourcePanelMode,
   ]);
 
-    const renderInputSecondaryPanels = useCallback((layout: 'mobile' | 'desktop') => {
+  const renderInputSecondaryPanels = useCallback((layout: 'mobile' | 'desktop') => {
     const isMobileLayout = layout === 'mobile';
     const historyMaxHeight = isMobileLayout ? '400px' : '500px';
     const cardPaddingClass = isMobileLayout ? 'p-4' : 'p-6';
-    const titleClass = isMobileLayout
-      ? 'text-base font-semibold text-gray-900 mb-3'
-      : 'text-lg font-semibold text-gray-900 mb-4';
+    const titleClass = isMobileLayout ? 'mb-2 text-base font-bold text-slate-900' : 'mb-2 text-2xl font-bold text-slate-900';
+    const surfaceClass = `relative overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-[0_14px_34px_rgba(15,23,42,0.06)] ${cardPaddingClass}`;
+    const inputClass =
+      'w-full rounded-2xl border border-slate-200 bg-slate-50/60 px-3 py-2 text-sm text-slate-700 outline-none transition focus:border-amber-300 focus:bg-white focus:ring-2 focus:ring-amber-100';
 
     return (
       <>
@@ -2107,8 +2326,11 @@ const renderInputSourceTabs = useCallback((layout: 'mobile' | 'desktop') => {
           />
         </div>
 
-        <div className={`card-edu ${cardPaddingClass}`} style={{ display: dataSource === 'video' && !showSessionHistory ? undefined : 'none' }}>
-          <h3 className={titleClass}>导入视频链接</h3>
+        <div className={surfaceClass} style={{ display: dataSource === 'video' && !showSessionHistory ? undefined : 'none' }}>
+          <div className="pointer-events-none absolute -right-10 -top-10 h-32 w-32 rounded-full bg-fuchsia-100/45 blur-3xl" />
+          <h3 className={titleClass}>视频链接导入</h3>
+          <p className="mb-4 text-sm leading-6 text-slate-600">导入 B 站视频后自动转写，直接进入课堂复习流。</p>
+          <div className="rounded-2xl border border-slate-200 bg-slate-50/60 p-4">
           <VideoLinkImporter
             onImportReady={handleVideoImportReady}
             onError={(error) => {
@@ -2117,59 +2339,120 @@ const renderInputSourceTabs = useCallback((layout: 'mobile' | 'desktop') => {
             }}
             disabled={isRecording || sourceImporting}
           />
+          </div>
         </div>
 
-        <div className={`card-edu ${cardPaddingClass}`} style={{ display: dataSource === 'demo' && sourceImportMode === 'files' && !showSessionHistory ? undefined : 'none' }}>
-          <h3 className={titleClass}>上传资料文件</h3>
-          <p className="text-sm text-gray-600">
-            支持批量上传音频与文档，系统会自动按顺序追加到当前学习会话。
+        <div
+          className={surfaceClass}
+          style={{ display: dataSource === 'demo' && sourcePanelMode === 'audio' && !showSessionHistory ? undefined : 'none' }}
+        >
+          <div className="pointer-events-none absolute -right-10 -top-10 h-32 w-32 rounded-full bg-blue-100/45 blur-3xl" />
+          <h3 className={titleClass}>上传音频（主来源）</h3>
+          <p className="text-sm leading-6 text-slate-600">
+            支持批量导入课堂录音。可以先补充识别提示，再上传音频。
           </p>
-          <div className="mt-3">
-            <label className="mb-1 block text-xs font-medium text-slate-600">转写增强上下文（可选）</label>
+          <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50/60 p-4">
+            <label className="mb-2 block text-xs font-semibold tracking-[0.08em] text-slate-500">识别增强提示（可选）</label>
             <textarea
               value={asrContextHint}
               onChange={(event) => setAsrContextHint(event.target.value)}
-              placeholder="例如：本节课讲圆锥曲线离心率，重点术语有离心率、准线、焦点、双曲线、抛物线。"
+              placeholder="例如：本节课讲解圆锥曲线离心率，重点是定义、几何意义和高考题型。"
               rows={isMobileLayout ? 3 : 4}
               disabled={sourceImporting || isRecording}
-              className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm text-slate-700 outline-none transition focus:border-amber-300 focus:ring-2 focus:ring-amber-100"
+              className={inputClass}
             />
-            <p className="mt-1 text-xs text-slate-500">会连同已导入文本/PDF片段一起作为 ASR 识别提示，提高专业词识别准确率。</p>
+            <p className="mt-2 text-xs leading-5 text-slate-500">系统会自动融合增强资料中的 PDF/文本，提高 ASR 与后续应用生成质量。</p>
           </div>
-          <div className="mt-4 flex items-center gap-3">
+          <div className="mt-4 flex flex-wrap items-center gap-3">
             <button
               type="button"
-              onClick={handleSourceFileButtonClick}
+              onClick={() => handleSourceFileButtonClick('audio')}
               disabled={sourceImporting || isRecording}
-              className="rounded-xl bg-amber-500 px-4 py-2 text-sm font-medium text-white transition hover:bg-amber-600 disabled:cursor-not-allowed disabled:opacity-60"
+              className="rounded-2xl bg-gradient-to-r from-amber-500 to-orange-500 px-5 py-2.5 text-sm font-semibold text-white shadow-[0_10px_24px_rgba(245,158,11,0.32)] transition hover:brightness-105 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-300 disabled:cursor-not-allowed disabled:opacity-60"
             >
-              {sourceImporting ? '导入中...' : '选择文件'}
+              {sourceImporting ? '处理中...' : '上传音频'}
             </button>
-            <span className="text-xs text-gray-500">音频 / pdf / docx / txt / md / csv / json</span>
+            <span className="text-xs text-slate-500">支持 mp3 / wav / webm / m4a / aac / flac</span>
           </div>
         </div>
 
-        <div className={`card-edu ${cardPaddingClass}`} style={{ display: dataSource === 'demo' && sourceImportMode === 'text' && !showSessionHistory ? undefined : 'none' }}>
-          <h3 className={titleClass}>粘贴文本</h3>
-          <textarea
-            value={sourceTextInput}
-            onChange={(event) => setSourceTextInput(event.target.value)}
-            placeholder="粘贴课堂笔记、文章段落、题目解析等文本..."
-            rows={isMobileLayout ? 5 : 7}
-            disabled={sourceImporting || isRecording}
-            className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm text-slate-700 outline-none transition focus:border-amber-300 focus:ring-2 focus:ring-amber-100"
-          />
-          <div className="mt-3 flex items-center justify-between">
-            <span className="text-xs text-slate-500">建议 200-5000 字，支持多次追加</span>
+        <div
+          className={surfaceClass}
+          style={{ display: dataSource === 'demo' && sourcePanelMode === 'support' && !showSessionHistory ? undefined : 'none' }}
+        >
+          <div className="pointer-events-none absolute -right-10 -top-10 h-32 w-32 rounded-full bg-cyan-100/45 blur-3xl" />
+          <h3 className={titleClass}>增强资料（可选）</h3>
+          <p className="text-sm leading-6 text-slate-600">
+            导入讲义、课件、题解或粘贴文本。它们不会覆盖主转写，只作为上下文增强。
+          </p>
+
+          <div className="mt-4 inline-flex rounded-2xl border border-slate-200 bg-slate-50 p-1">
             <button
               type="button"
-              onClick={() => { void handleImportTextSource(); }}
-              disabled={sourceImporting || isRecording || !sourceTextInput.trim()}
-              className="rounded-xl bg-amber-500 px-4 py-2 text-sm font-medium text-white transition hover:bg-amber-600 disabled:cursor-not-allowed disabled:opacity-60"
+              onClick={() => setSourceImportMode('files')}
+              className={`rounded-xl px-3 py-1.5 text-xs font-semibold transition ${
+                sourceImportMode === 'files'
+                  ? 'bg-white text-slate-900 shadow-sm'
+                  : 'text-slate-500 hover:text-slate-700'
+              }`}
             >
-              {sourceImporting ? '导入中...' : '导入文本'}
+              上传文档
+            </button>
+            <button
+              type="button"
+              onClick={() => setSourceImportMode('text')}
+              className={`rounded-xl px-3 py-1.5 text-xs font-semibold transition ${
+                sourceImportMode === 'text'
+                  ? 'bg-white text-slate-900 shadow-sm'
+                  : 'text-slate-500 hover:text-slate-700'
+              }`}
+            >
+              粘贴文本
             </button>
           </div>
+
+          {sourceImportMode === 'files' ? (
+            <div className="mt-4">
+              <div className="rounded-2xl border border-cyan-100 bg-cyan-50/60 px-3 py-2 text-xs text-cyan-700">
+                当前增强资料数量：{sourceItems.filter((item) => item.role === 'support').length}
+              </div>
+              <div className="mt-3 flex flex-wrap items-center gap-3">
+                <button
+                  type="button"
+                  onClick={() => handleSourceFileButtonClick('support')}
+                  disabled={sourceImporting || isRecording}
+                  className="rounded-2xl bg-gradient-to-r from-cyan-600 to-blue-600 px-5 py-2.5 text-sm font-semibold text-white shadow-[0_10px_24px_rgba(14,116,144,0.28)] transition hover:brightness-105 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {sourceImporting ? '处理中...' : '上传资料'}
+                </button>
+                <span className="text-xs text-slate-500">支持 pdf / docx / txt / md / csv / json / html</span>
+              </div>
+            </div>
+          ) : (
+            <div className="mt-4">
+              <textarea
+                value={sourceTextInput}
+                onChange={(event) => setSourceTextInput(event.target.value)}
+                placeholder="粘贴课堂笔记、重点定义、题目解析等文本..."
+                rows={isMobileLayout ? 5 : 7}
+                disabled={sourceImporting || isRecording}
+                className={inputClass}
+              />
+              <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
+                <span className="text-xs text-slate-500">建议 200-5000 字，可多次追加</span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    void handleImportTextSource();
+                  }}
+                  disabled={sourceImporting || isRecording || !sourceTextInput.trim()}
+                  className="rounded-2xl bg-gradient-to-r from-cyan-600 to-blue-600 px-5 py-2.5 text-sm font-semibold text-white shadow-[0_10px_24px_rgba(14,116,144,0.28)] transition hover:brightness-105 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {sourceImporting ? '处理中...' : '导入文本'}
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       </>
     );
@@ -2185,6 +2468,8 @@ const renderInputSourceTabs = useCallback((layout: 'mobile' | 'desktop') => {
     showSessionHistory,
     sourceImportMode,
     sourceImporting,
+    sourceItems,
+    sourcePanelMode,
     sourceTextInput,
     user?.id,
   ]);
@@ -2333,19 +2618,20 @@ const renderInputSourceTabs = useCallback((layout: 'mobile' | 'desktop') => {
     );
   }
 
-  const shouldAllowPageScroll = !isMobile && viewMode === 'review' && !!videoSource;
+  const shouldAllowPageScroll = !isMobile && (viewMode === 'record' || (viewMode === 'review' && !!videoSource));
+  const useFixedViewportLayout = !(!isMobile && viewMode === 'record');
 
   return (
     <div
-      className={`h-dvh flex flex-col main-content-enter browser-safe-top ${
+      className={`${useFixedViewportLayout ? 'h-dvh' : 'min-h-dvh'} flex flex-col main-content-enter browser-safe-top ${
         shouldAllowPageScroll ? 'overflow-y-auto overflow-x-hidden' : 'overflow-hidden'
       }`}
-      style={{ height: '100dvh', minHeight: '-webkit-fill-available' }}
+      style={useFixedViewportLayout ? { height: '100dvh', minHeight: '-webkit-fill-available' } : { minHeight: '100dvh' }}
     >
-      {/* 绉诲姩绔殣钘忛檷绾фí骞?*/}
+      {/* NOTE: cleaned corrupted legacy comment. */}
       {!isMobile && <DegradedModeBanner status={serviceStatus} />}
       
-      {/* 妗岄潰绔?Header - 绉诲姩绔殣钘?*/}
+      {/* NOTE: cleaned corrupted legacy comment. */}
       {!isMobile && (
         <Header 
           lessonTitle={viewMode === 'record' ? '课堂录音' : '课堂复习'}
@@ -2353,7 +2639,7 @@ const renderInputSourceTabs = useCallback((layout: 'mobile' | 'desktop') => {
         />
       )}
 
-      {/* 妗岄潰绔ā寮忓垏鎹㈡爮 - 绉诲姩绔殣钘忥紝澧炲姞 z-index 闃叉琚伄鎸?*/}
+      {/* NOTE: cleaned corrupted legacy comment. */}
       {!isMobile && (
         <div className="border-b px-6 py-3 no-print flex-shrink-0 relative z-20" style={{ background: 'var(--edu-bg-secondary)', borderColor: 'var(--edu-border-light)' }}>
           <div className="flex items-center justify-between">
@@ -2405,7 +2691,7 @@ const renderInputSourceTabs = useCallback((layout: 'mobile' | 'desktop') => {
       {/* 涓诲唴瀹瑰尯 */}
       {viewMode === 'record' ? (
         <>
-          {/* 绉诲姩绔綍闊抽〉闈?- 寰楀埌椋庢牸 */}
+          {/* NOTE: cleaned corrupted legacy comment. */}
           {isMobile ? (
             <div className="flex-1 min-h-0 flex flex-col overflow-hidden" style={{ background: 'var(--edu-bg-primary)' }}>
               {/* 鏋佺畝椤堕儴鏍忥細Logo + Tab + 鐢ㄦ埛 + 鑿滃崟 */}
@@ -2450,10 +2736,10 @@ const renderInputSourceTabs = useCallback((layout: 'mobile' | 'desktop') => {
                 <DedaoMenuButton onClick={() => setIsMenuOpen(true)} />
               </div>
 
-              {/* 褰曢煶鍐呭鍖?*/}
-              <div className="flex-1 flex flex-col p-4 overflow-hidden min-h-0">
-                <div className="w-full max-w-md mx-auto flex flex-col flex-1 min-h-0">
-                  {/* 褰曢煶鎴栦笂浼犲垏鎹?*/}
+              {/* NOTE: cleaned corrupted legacy comment. */}
+              <div className="flex-1 overflow-y-auto p-4">
+                <div className="w-full max-w-md mx-auto flex flex-col gap-3 pb-6">
+                  {/* NOTE: cleaned corrupted legacy comment. */}
                   <div className="flex-shrink-0 mb-3">
                     <div className="mb-1.5 flex items-center justify-between">
                       <span className="text-[11px] font-medium tracking-[0.02em] text-slate-500">选择输入方式</span>
@@ -2462,7 +2748,7 @@ const renderInputSourceTabs = useCallback((layout: 'mobile' | 'desktop') => {
                     {renderInputSourceTabs('mobile')}
                   </div>
 
-                  <div className="flex-1 min-h-0" style={{ display: dataSource === 'live' && !showSessionHistory ? undefined : 'none' }}>
+                  <div className="min-h-[360px]" style={{ display: dataSource === 'live' && !showSessionHistory ? undefined : 'none' }}>
                     <Recorder
                       onRecordingStart={handleRecordingStart}
                       onRecordingStop={handleRecordingStop}
@@ -2475,7 +2761,7 @@ const renderInputSourceTabs = useCallback((layout: 'mobile' | 'desktop') => {
 
                   {renderInputSecondaryPanels('mobile')}
                   
-                  {/* 宸叉爣璁扮殑鍥版儜鐐?*/}
+                  {/* NOTE: cleaned corrupted legacy comment. */}
                   {anchors.length > 0 && (
                     <div className="card-edu p-4 animate-slide-up">
                       <h3 className="text-sm font-semibold text-gray-900 mb-3 flex items-center gap-2">
@@ -2507,7 +2793,7 @@ const renderInputSourceTabs = useCallback((layout: 'mobile' | 'desktop') => {
                 </div>
               </div>
 
-              {/* 鍙充晶鑿滃崟 */}
+              {/* Right-side drawer menu. */}
               <DedaoMenu
                 isOpen={isMenuOpen}
                 onClose={() => setIsMenuOpen(false)}
@@ -2522,8 +2808,8 @@ const renderInputSourceTabs = useCallback((layout: 'mobile' | 'desktop') => {
               />
             </div>
           ) : (
-            /* 妗岄潰绔綍闊抽〉闈?- 鏁欒偛椋庢牸 */
-            <div className="flex-1 flex items-center justify-center p-8 page-enter relative overflow-hidden" style={{ background: 'var(--edu-bg-primary)' }}>
+            /* NOTE: cleaned corrupted legacy comment. */
+            <div className="flex-1 flex items-start justify-center overflow-visible px-4 py-6 md:px-8 page-enter relative" style={{ background: 'var(--edu-bg-primary)' }}>
               {/* 鑳屾櫙瑁呴グ */}
               <div className="absolute top-10 right-10 w-48 h-48 opacity-20 pointer-events-none">
                 <Image
@@ -2544,15 +2830,11 @@ const renderInputSourceTabs = useCallback((layout: 'mobile' | 'desktop') => {
                 />
               </div>
               
-              <div className="w-full max-w-2xl mx-auto relative z-10 h-full min-h-0 flex flex-col gap-6">
-                {/* 褰曢煶鎴栦笂浼犲垏鎹?*/}
-                <div className="flex-shrink-0 flex items-center justify-center gap-4 mb-4">
-                  <span className="text-sm text-gray-500">选择输入方式：</span>
-              {renderInputSourceTabs('desktop')}
-            </div>
+              <div className="w-full max-w-4xl mx-auto relative z-10 min-h-full flex flex-col gap-6 pb-6">
+                <div className="flex-shrink-0">{renderInputSourceTabs('desktop')}</div>
 
-            {/* Recorder 濮嬬粓鎸傝浇锛岄€氳繃 CSS 鏄剧ず/闅愯棌锛岄槻姝㈠垏鎹?tab 鏃跺綍闊崇姸鎬佷涪澶?*/}
-            <div className="relative flex-1 min-h-0" style={{ display: dataSource === 'live' && !showSessionHistory ? undefined : 'none' }}>
+            {/* NOTE: cleaned corrupted legacy comment. */}
+            <div className="relative min-h-[460px]" style={{ display: dataSource === 'live' && !showSessionHistory ? undefined : 'none' }}>
               {/* 瑁呴グ鎻掔敾 */}
               <div className="absolute -right-20 -top-10 w-24 h-24 opacity-30 pointer-events-none hidden lg:block">
                 <Image
@@ -2574,7 +2856,7 @@ const renderInputSourceTabs = useCallback((layout: 'mobile' | 'desktop') => {
             </div>
             {renderInputSecondaryPanels('desktop')}
             
-                {/* 宸叉爣璁扮殑鍥版儜鐐?*/}
+                {/* NOTE: cleaned corrupted legacy comment. */}
                 {anchors.length > 0 && (
                   <div className="card-edu p-5 animate-slide-up">
                     <h3 className="text-sm font-semibold text-gray-900 mb-4 flex items-center gap-2">
@@ -2620,9 +2902,9 @@ const renderInputSourceTabs = useCallback((layout: 'mobile' | 'desktop') => {
             >
               {videoSource ? (
                 <div className="flex-1 min-h-0 flex flex-col lg:flex-row overflow-hidden">
-                  {/* ===== 宸︿晶锛氳棰?+ 鍙姌鍙犲瓧骞?+ 鏃堕棿杞?===== */}
+                  {/* NOTE: cleaned corrupted legacy comment. */}
                   <div className="min-h-0 flex flex-col lg:w-[55%] xl:w-[58%] border-r" style={{ borderColor: 'var(--edu-border-light)' }}>
-                    {/* 瑙嗛鎾斁鍣?*/}
+                    {/* NOTE: cleaned corrupted legacy comment. */}
                     <div className="shrink-0 bg-black">
                       <VideoReviewPlayer
                         source={videoSource}
@@ -2635,7 +2917,7 @@ const renderInputSourceTabs = useCallback((layout: 'mobile' | 'desktop') => {
                       />
                     </div>
 
-                    {/* 鍙姌鍙犲瓧骞曟潯 */}
+                    {/* Collapsible transcript strip. */}
                     <div className="shrink-0 border-b" style={{ borderColor: 'var(--edu-border-light)' }}>
                       <button
                         onClick={() => setShowTranscriptBar(prev => !prev)}
@@ -2679,7 +2961,7 @@ const renderInputSourceTabs = useCallback((layout: 'mobile' | 'desktop') => {
                       )}
                     </div>
 
-                    {/* 鍙鍖栨椂闂磋酱 + 楂樹寒鐗囨鍒楄〃 */}
+                    {/* Visual timeline and highlighted dialogue rounds. */}
                     <div className="flex-1 min-h-0 overflow-y-auto" style={{ background: 'var(--edu-bg-primary)' }}>
                       <div className="p-4">
                         <div className="flex items-center justify-between mb-3">
@@ -2711,9 +2993,9 @@ const renderInputSourceTabs = useCallback((layout: 'mobile' | 'desktop') => {
                     </div>
                   </div>
 
-                  {/* ===== 鍙充晶锛? Tab 宸ヤ綔闈㈡澘 ===== */}
+                  {/* NOTE: cleaned corrupted legacy comment. */}
                   <div className="min-h-0 flex flex-col flex-1 bg-white overflow-hidden">
-                    {/* 鏍囩鏍?*/}
+                    {/* NOTE: cleaned corrupted legacy comment. */}
                     <div
                       className="flex items-center gap-0.5 px-3 py-2 border-b shrink-0 overflow-x-auto"
                       style={{ background: 'var(--edu-bg-soft)', borderColor: 'var(--edu-border-light)' }}
@@ -2745,9 +3027,9 @@ const renderInputSourceTabs = useCallback((layout: 'mobile' | 'desktop') => {
                       ))}
                     </div>
 
-                    {/* 鍐呭鍖?*/}
+                    {/* NOTE: cleaned corrupted legacy comment. */}
                     <div className="flex-1 min-h-0 overflow-hidden">
-                      {/* 瀵硅瘽 Tab - 鍏ㄥ眬 AI 瀵硅瘽锛堜娇鐢?CSS 闅愯棌淇濈暀缁勪欢鐘舵€侊級 */}
+                      {/* NOTE: cleaned corrupted legacy comment. */}
                       <div className={`h-full min-h-0 ${videoWorkspaceTab === 'chat' ? '' : 'hidden'}`}>
                           <AITutor
                             breakpoint={null}
@@ -2759,12 +3041,12 @@ const renderInputSourceTabs = useCallback((layout: 'mobile' | 'desktop') => {
                           />
                       </div>
 
-                      {/* 鍥版儜鐐?Tab - 鍒楄〃 / 鐙珛瀵硅瘽 */}
+                      {/* NOTE: cleaned corrupted legacy comment. */}
                       {videoWorkspaceTab === 'confusion' && (
                         <div className="h-full overflow-hidden flex flex-col">
                           {confusionChatAnchor ? (
                             <>
-                              {/* 鍥版儜鐐瑰璇濆ご閮?*/}
+                              {/* NOTE: cleaned corrupted legacy comment. */}
                               <div className="shrink-0 flex items-center gap-2 px-4 py-2.5 border-b" style={{ background: 'var(--edu-bg-soft)', borderColor: 'var(--edu-border-light)' }}>
                                 <button
                                   onClick={() => setConfusionChatAnchor(null)}
@@ -2795,7 +3077,7 @@ const renderInputSourceTabs = useCallback((layout: 'mobile' | 'desktop') => {
                                   </button>
                                 )}
                               </div>
-                              {/* 鍥版儜鐐圭嫭绔嬪璇?*/}
+                              {/* NOTE: cleaned corrupted legacy comment. */}
                               <div className="flex-1 min-h-0">
                                 <AITutor
                                   key={`confusion-${confusionChatAnchor.id}`}
@@ -2895,7 +3177,7 @@ const renderInputSourceTabs = useCallback((layout: 'mobile' | 'desktop') => {
                 </div>
               ) : (
                 <>
-              {/* 鍙嫋鎷藉乏鍙抽潰鏉?*/}
+              {/* NOTE: cleaned corrupted legacy comment. */}
               <ResizablePanel
                 className="flex-1"
                 defaultLeftWidth={320}
@@ -2903,9 +3185,9 @@ const renderInputSourceTabs = useCallback((layout: 'mobile' | 'desktop') => {
                 maxLeftWidth={820}
                 storageKey="meetmind-left-panel-width"
                 leftPanel={
-                  /* 宸︽爮 - 澶氬姛鑳介潰鏉?*/
+                  /* NOTE: cleaned corrupted legacy comment. */
                   <div className="h-full flex flex-col bg-white" style={{ borderRight: '1px solid var(--edu-border-light)' }}>
-                    {/* 鏍囩椤靛垏鎹?- 澧炲己鍙偣鍑绘€у拰闃查伄鎸?*/}
+                    {/* NOTE: cleaned corrupted legacy comment. */}
                     <div 
                       className="flex items-center gap-1 px-3 py-2.5 border-b overflow-x-auto flex-shrink-0 relative z-10 tab-buttons-container" 
                       style={{ background: 'var(--edu-bg-soft)', borderColor: 'var(--edu-border-light)' }}
@@ -2937,7 +3219,7 @@ const renderInputSourceTabs = useCallback((layout: 'mobile' | 'desktop') => {
                       ))}
                     </div>
                     
-                    {/* 鏍囩椤靛唴瀹?*/}
+                    {/* NOTE: cleaned corrupted legacy comment. */}
                     <div className="flex-1 min-h-0 overflow-hidden">
                       {reviewTab === 'timeline' && timelineForView && (
                         <TimelineView
@@ -2982,9 +3264,9 @@ const renderInputSourceTabs = useCallback((layout: 'mobile' | 'desktop') => {
                   </div>
                 }
                 rightPanel={
-                  /* 涓爮 - AI 瀵硅瘽鍖猴紙鐜板湪鏄彸渚т富闈㈡澘锛?*/
+                  /* NOTE: cleaned corrupted legacy comment. */
                   <div className="h-full flex flex-col bg-white ai-chat-container">
-                    {/* 绮剧畝娉㈠舰鎾斁鍣?- compact 妯″紡锛岀疆浜庨《閮?*/}
+                    {/* NOTE: cleaned corrupted legacy comment. */}
                     {(audioBlob || audioUrl) && (
                       <div className="flex-shrink-0 border-b" style={{ background: 'var(--edu-bg-soft)', borderColor: 'var(--edu-border-light)', maxHeight: '120px' }}>
                         <WaveformPlayer
@@ -3010,9 +3292,9 @@ const renderInputSourceTabs = useCallback((layout: 'mobile' | 'desktop') => {
                       </div>
                     )}
                     
-                    {/* AI 瀹舵暀鍖?- 纭繚鏈夎冻澶熺殑鏄剧ず绌洪棿 */}
+                    {/* NOTE: cleaned corrupted legacy comment. */}
                     <div className="flex-1 min-h-0 flex flex-col" data-onboarding="ai-tutor" style={{ minHeight: 'var(--ai-chat-min-height, 300px)' }}>
-                      {/* AI 瀵硅瘽妯″紡鍒囨崲鏍?*/}
+                      {/* NOTE: cleaned corrupted legacy comment. */}
                       {!showConversationHistory && (
                         <div 
                           className="flex-shrink-0 px-3 py-2 flex items-center gap-2 border-b"
@@ -3055,7 +3337,7 @@ const renderInputSourceTabs = useCallback((layout: 'mobile' | 'desktop') => {
                         </div>
                       )}
                       
-                      {/* 鍐呭鍖?*/}
+                      {/* NOTE: cleaned corrupted legacy comment. */}
                       <div className="flex-1 min-h-0 overflow-hidden">
                         {showConversationHistory ? (
                           selectedHistoryConversation ? (
@@ -3063,7 +3345,7 @@ const renderInputSourceTabs = useCallback((layout: 'mobile' | 'desktop') => {
                               <div className="px-4 py-2 border-b flex items-center justify-between flex-shrink-0" style={{ background: 'var(--edu-bg-soft)', borderColor: 'var(--edu-border-light)' }}>
                                 <span className="text-sm text-gray-600 truncate flex-1 mr-2">{selectedHistoryConversation.title}</span>
                                 <div className="flex items-center gap-1">
-                                  {/* 杩斿洖鍒楄〃 - 浣跨敤鍥炬爣 */}
+                                  {/* Back to list icon button. */}
                                   <button
                                     onClick={() => setSelectedHistoryConversation(null)}
                                     className="w-8 h-8 flex items-center justify-center rounded-lg text-gray-500 hover:text-navy hover:bg-gray-100 transition-colors"
@@ -3073,7 +3355,7 @@ const renderInputSourceTabs = useCallback((layout: 'mobile' | 'desktop') => {
                                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 10h16M4 14h16M4 18h16" />
                                     </svg>
                                   </button>
-                                  {/* 鏂板璇?- 浣跨敤鍥炬爣 */}
+                                  {/* NOTE: cleaned corrupted legacy comment. */}
                                   <button
                                     onClick={() => {
                                       setShowConversationHistory(false);
@@ -3102,7 +3384,7 @@ const renderInputSourceTabs = useCallback((layout: 'mobile' | 'desktop') => {
                             <div className="h-full flex flex-col">
                               <div className="px-4 py-2 border-b flex items-center justify-between flex-shrink-0" style={{ background: 'var(--edu-bg-soft)', borderColor: 'var(--edu-border-light)' }}>
                                 <span className="text-sm font-medium text-navy">历史对话</span>
-                                {/* 鏂板璇濇寜閽?*/}
+                                {/* NOTE: cleaned corrupted legacy comment. */}
                                 <button
                                   onClick={() => {
                                     setShowConversationHistory(false);
@@ -3145,7 +3427,7 @@ const renderInputSourceTabs = useCallback((layout: 'mobile' | 'desktop') => {
                 }
               />
 
-              {/* 鍙充晶 - 鍥炬爣鏉?*/}
+              {/* NOTE: cleaned corrupted legacy comment. */}
               <ActionSidebar
                 actionCount={actionItems.filter(i => !i.completed).length}
                 totalCount={actionItems.length}
@@ -3216,7 +3498,7 @@ const renderInputSourceTabs = useCallback((layout: 'mobile' | 'desktop') => {
                 <DedaoMenuButton onClick={() => setIsMenuOpen(true)} data-onboarding="menu-button" />
               </div>
 
-              {/* 鍗曡鏋佺畝鎾斁鍣?*/}
+              {/* NOTE: cleaned corrupted legacy comment. */}
               {!mobileSubPage && (
                 <MiniPlayer
                   currentTime={currentTime}
@@ -3259,7 +3541,7 @@ const renderInputSourceTabs = useCallback((layout: 'mobile' | 'desktop') => {
                 />
               )}
 
-              {/* 闅愯棌鐨勬尝褰㈡挱鏀惧櫒锛堢敤浜庡疄闄呴煶棰戞挱鏀撅級 */}
+              {/* Hidden waveform player for actual audio playback control. */}
               {(audioBlob || audioUrl) && (
                 <div className="hidden">
                   <WaveformPlayer
@@ -3286,7 +3568,7 @@ const renderInputSourceTabs = useCallback((layout: 'mobile' | 'desktop') => {
                 </div>
               )}
 
-              {/* 涓诲唴瀹瑰尯锛氭牴鎹?mobileSubPage 鏉′欢娓叉煋 */}
+              {/* NOTE: cleaned corrupted legacy comment. */}
               {mobileSubPage === null && (
                 <>
                   {videoSource && (
@@ -3302,7 +3584,7 @@ const renderInputSourceTabs = useCallback((layout: 'mobile' | 'desktop') => {
                     </div>
                   )}
 
-                  {/* 鏃堕棿杞村垪琛紙鍗犳弧鍓╀綑绌洪棿锛?*/}
+                  {/* NOTE: cleaned corrupted legacy comment. */}
                   <DedaoTimeline
                     entries={toDedaoEntries(segments, anchors)}
                     currentTime={currentTime}
@@ -3330,7 +3612,7 @@ const renderInputSourceTabs = useCallback((layout: 'mobile' | 'desktop') => {
                     className="flex-1 min-h-0"
                   />
 
-                  {/* 鍥版儜鐐硅鎯呭崱鐗?*/}
+                  {/* NOTE: cleaned corrupted legacy comment. */}
                   <DedaoConfusionCard
                     isOpen={!!selectedConfusion}
                     onClose={() => setSelectedConfusion(null)}
@@ -3358,7 +3640,7 @@ const renderInputSourceTabs = useCallback((layout: 'mobile' | 'desktop') => {
                   {/* 鎮诞 AI 瀵硅瘽鎸夐挳 - 杩涘叆鍏ㄥ眬 AI 瀵硅瘽 */}
                   <MobileAIFab
                     onClick={() => {
-                      setSelectedAnchor(null);  // 娓呴櫎閫変腑鐨勫洶鎯戠偣锛岃繘鍏ュ叏灞€瀵硅瘽妯″紡
+                      setSelectedAnchor(null);  // Clear selected anchor before entering global AI chat.
                       setMobileAIQuestion('');
                       setMobileSubPage('ai-chat');
                     }}
@@ -3369,10 +3651,10 @@ const renderInputSourceTabs = useCallback((layout: 'mobile' | 'desktop') => {
                 </>
               )}
 
-              {/* 绉诲姩绔?AI 瀵硅瘽椤甸潰 */}
+              {/* NOTE: cleaned corrupted legacy comment. */}
               {mobileSubPage === 'ai-chat' && (
                 <div className="flex-1 min-h-0 flex flex-col bg-white">
-                  {/* 瀛愰〉闈㈠ご閮?*/}
+                  {/* NOTE: cleaned corrupted legacy comment. */}
                   <div className="flex items-center gap-3 px-4 py-3 border-b border-gray-100">
                     <button
                       onClick={() => {
@@ -3425,7 +3707,7 @@ const renderInputSourceTabs = useCallback((layout: 'mobile' | 'desktop') => {
                     </div>
                   </div>
                   
-                  {/* MiniPlayer 鎾斁杩涘害鏉?*/}
+                  {/* NOTE: cleaned corrupted legacy comment. */}
                   <MiniPlayer
                     currentTime={currentTime}
                     duration={totalDuration}
@@ -3455,7 +3737,7 @@ const renderInputSourceTabs = useCallback((layout: 'mobile' | 'desktop') => {
                     className="border-b border-gray-100"
                   />
                   
-                  {/* AI 瀵硅瘽鍖?*/}
+                  {/* NOTE: cleaned corrupted legacy comment. */}
                   <div className="flex-1 min-h-0">
                     {showConversationHistory ? (
                       selectedHistoryConversation ? (
@@ -3474,7 +3756,7 @@ const renderInputSourceTabs = useCallback((layout: 'mobile' | 'desktop') => {
                                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 10h16M4 14h16M4 18h16" />
                                 </svg>
                               </button>
-                              {/* 鏂板璇?*/}
+                              {/* NOTE: cleaned corrupted legacy comment. */}
                               <button
                                 onClick={() => {
                                   setShowConversationHistory(false);
@@ -3510,7 +3792,7 @@ const renderInputSourceTabs = useCallback((layout: 'mobile' | 'desktop') => {
                         />
                       )
                     ) : (
-                      // 褰撳墠鍥版儜鐐瑰璇?
+                      // NOTE: cleaned corrupted legacy comment.
                       <AITutor
                         breakpoint={selectedBreakpoint}
                         segments={segments}
@@ -3529,7 +3811,7 @@ const renderInputSourceTabs = useCallback((layout: 'mobile' | 'desktop') => {
                 </div>
               )}
 
-              {/* 绉诲姩绔簿閫夐〉闈?*/}
+              {/* NOTE: cleaned corrupted legacy comment. */}
               {mobileSubPage === 'highlights' && (
                 <div className="flex-1 min-h-0 flex flex-col bg-white">
                   <div className="flex items-center gap-3 px-4 py-3 border-b border-gray-100">
@@ -3564,7 +3846,7 @@ const renderInputSourceTabs = useCallback((layout: 'mobile' | 'desktop') => {
                 </div>
               )}
 
-              {/* 绉诲姩绔憳瑕侀〉闈?*/}
+              {/* NOTE: cleaned corrupted legacy comment. */}
               {mobileSubPage === 'summary' && (
                 <div className="flex-1 min-h-0 flex flex-col bg-white">
                   <div className="flex items-center gap-3 px-4 py-3 border-b border-gray-100">
@@ -3595,7 +3877,7 @@ const renderInputSourceTabs = useCallback((layout: 'mobile' | 'desktop') => {
                 </div>
               )}
 
-              {/* 绉诲姩绔瑪璁伴〉闈?*/}
+              {/* NOTE: cleaned corrupted legacy comment. */}
               {mobileSubPage === 'notes' && (
                 <div className="flex-1 min-h-0 flex flex-col bg-white">
                   <div className="flex items-center gap-3 px-4 py-3 border-b border-gray-100">
@@ -3621,7 +3903,7 @@ const renderInputSourceTabs = useCallback((layout: 'mobile' | 'desktop') => {
                 </div>
               )}
 
-              {/* 绉诲姩绔簲鐢ㄧ煩闃甸〉闈?*/}
+              {/* NOTE: cleaned corrupted legacy comment. */}
               {mobileSubPage === 'apps' && (
                 <div className="flex-1 min-h-0 flex flex-col bg-white">
                   <div className="flex items-center gap-3 px-4 py-3 border-b border-gray-100">
@@ -3641,7 +3923,7 @@ const renderInputSourceTabs = useCallback((layout: 'mobile' | 'desktop') => {
                 </div>
               )}
 
-              {/* 绉诲姩绔换鍔￠〉闈?*/}
+              {/* NOTE: cleaned corrupted legacy comment. */}
               {mobileSubPage === 'tasks' && (
                 <div className="flex-1 min-h-0 flex flex-col bg-white">
                   <div className="flex items-center gap-3 px-4 py-3 border-b border-gray-100">
@@ -3665,7 +3947,7 @@ const renderInputSourceTabs = useCallback((layout: 'mobile' | 'desktop') => {
                 </div>
               )}
 
-              {/* 鍙充晶鑿滃崟 */}
+              {/* Right-side drawer menu. */}
               <DedaoMenu
                 isOpen={isMenuOpen}
                 onClose={() => setIsMenuOpen(false)}
@@ -3698,6 +3980,7 @@ const renderInputSourceTabs = useCallback((layout: 'mobile' | 'desktop') => {
         onClose={closeWorkshopWindow}
         onToggleMinimize={toggleWorkshopWindowMinimize}
         onFocus={focusWorkshopWindow}
+        onToggleDisplayMode={toggleWorkshopWindowDisplayMode}
       />
       
       {/* 鐢ㄦ埛寮曞缁勪欢 */}
@@ -3705,7 +3988,7 @@ const renderInputSourceTabs = useCallback((layout: 'mobile' | 'desktop') => {
         isOpen={showWelcome}
         onStart={() => {
           setShowWelcome(false);
-          // 鏍囪 welcome 娴佺▼瀹屾垚锛岀劧鍚庡惎鍔?recording 寮曞
+          // NOTE: cleaned corrupted legacy comment.
           onboarding.markFlowComplete('welcome');
           setTimeout(() => {
             onboarding.startFlow('recording');
@@ -3713,7 +3996,7 @@ const renderInputSourceTabs = useCallback((layout: 'mobile' | 'desktop') => {
         }}
         onSkip={() => {
           setShowWelcome(false);
-          // 鏍囪 welcome 琚烦杩?
+          // NOTE: cleaned corrupted legacy comment.
           onboarding.markFlowSkipped('welcome');
         }}
       />
@@ -3737,7 +4020,7 @@ function formatTime(ms: number): string {
   return `${pad(minutes)}:${pad(seconds % 60)}`;
 }
 
-// 璇诲彇 URL 鍙傛暟鐨勫唴閮ㄧ粍浠?
+// NOTE: cleaned corrupted legacy comment.
 function SearchParamsReader() {
   const searchParams = useSearchParams();
   const isGuestFastEntry = searchParams.get('guest') === '1';
@@ -3745,7 +4028,7 @@ function SearchParamsReader() {
   return <StudentAppContent isGuestFastEntry={isGuestFastEntry} forcedWorkspaceTab={forcedWorkspaceTab} />;
 }
 
-// 榛樿瀵煎嚭 - 鐢?Suspense 鍖呰９ useSearchParams
+// NOTE: cleaned corrupted legacy comment.
 export default function StudentApp() {
   return (
     <Suspense fallback={<AppLoading message="加载中..." />}>

@@ -2,7 +2,7 @@
  * LLM 服务 - 真实 AI 模型调用
  * 
  * 支持模型：
- * - 通义千问 (qwen3-vl-plus, qwen3-max-2026-01-23)
+ * - 通义千问 (qwen3.5-plus, qwen3-vl-plus, qwen3-max-2026-01-23)
  * - 火山方舟 (VOLCENGINE_ARK_MODEL)
  * - 中转站聚合模型 (RELAY_MODEL，例如 gemini-3-pro-image-preview)
  */
@@ -16,11 +16,11 @@ export type { ModelConfig, ModelProvider };
 export const AVAILABLE_MODELS: ModelConfig[] = LLMConfig.models;
 
 // 获取默认模型ID
-export const DEFAULT_MODEL_ID = LLMConfig.defaultVisionModel;
+export const DEFAULT_MODEL_ID = LLMConfig.defaultModel;
 
 function resolveLlmHttpTimeoutMs(): number {
   const parsed = Number.parseInt(process.env.LLM_HTTP_TIMEOUT_MS || '', 10);
-  if (!Number.isFinite(parsed)) return 90_000;
+  if (!Number.isFinite(parsed)) return 180_000;
   return Math.min(10 * 60_000, Math.max(30_000, parsed));
 }
 
@@ -149,7 +149,7 @@ async function fetchWithTimeout(
 /**
  * 调用通义千问 API (OpenAI 兼容格式)
  * 支持多模态：qwen3-vl-plus-2025-12-19
- * 支持思考模式：qwen3-max-2026-01-23
+ * 支持思考模式：qwen3.5-plus, qwen3-max-2026-01-23
  */
 async function callQwen(
   messages: ChatMessage[],
@@ -175,18 +175,19 @@ async function callQwen(
     max_tokens: options?.maxTokens ?? (enableThinking ? 32768 : 2000),
   };
 
-  // qwen3-max-2026-01-23 思考模式特殊配置
+  // 思考模式配置
   if (enableThinking) {
     // 启用思考模式
     requestBody.extra_body = { enable_thinking: true };
-    // 添加内置工具（联网搜索、网页信息提取、代码解释器）
-    requestBody.tools = [
-      { type: 'web_search' },
-      { type: 'web_extractor' },
-      { type: 'code_interpreter' }
-    ];
-    // 使用 agent_max 搜索策略（最佳效果）
-    requestBody.search_strategy = 'agent_max';
+    // 仅 qwen3-max 支持内置工具（联网搜索、网页信息提取、代码解释器）
+    if (modelConfig?.supportsBuiltinTools) {
+      requestBody.tools = [
+        { type: 'web_search' },
+        { type: 'web_extractor' },
+        { type: 'code_interpreter' }
+      ];
+      requestBody.search_strategy = 'agent_max';
+    }
   }
 
   const response = await fetchWithTimeout(`${config.baseUrl}/chat/completions`, {
@@ -410,16 +411,19 @@ export async function* chatStream(
 
   requestBody.max_tokens = options?.maxTokens ?? (enableThinking ? 32768 : 2000);
 
-  // qwen3-max-2026-01-23 思考模式特殊配置
+  // 思考模式配置
   if (enableThinking && modelConfig.provider === 'qwen') {
     // enable_thinking 需要放在请求体根级别
     requestBody.enable_thinking = true;
-    requestBody.tools = [
-      { type: 'web_search' },
-      { type: 'web_extractor' },
-      { type: 'code_interpreter' }
-    ];
-    requestBody.search_strategy = 'agent_max';
+    // 仅 qwen3-max 支持内置工具
+    if (modelConfig.supportsBuiltinTools) {
+      requestBody.tools = [
+        { type: 'web_search' },
+        { type: 'web_extractor' },
+        { type: 'code_interpreter' }
+      ];
+      requestBody.search_strategy = 'agent_max';
+    }
   }
 
   const response = await fetch(`${config.baseUrl.replace(/\/$/, '')}/chat/completions`, {

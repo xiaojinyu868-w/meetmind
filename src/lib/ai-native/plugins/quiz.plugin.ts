@@ -57,7 +57,7 @@ function normalizeOptions(options: unknown): string[] {
   return options
     .map((item) => (typeof item === 'string' ? item.trim() : ''))
     .filter((item) => item.length > 0)
-    .slice(0, 4);
+    .slice(0, 6);
 }
 
 function fallbackDraft(segment: TranscriptSegment): QuizDraft {
@@ -87,41 +87,44 @@ async function generateQuizWithLLM(
     [
       {
         role: 'system',
-        content:
-          '你是一位命题研究员。请设计能区分“真正理解”和“表面记忆”的课堂测验。严格基于课堂证据，输出纯 JSON。',
+        content: `你是一位经验丰富的命题研究员，擅长设计能区分"真懂"和"以为自己懂"的测试题。
+你的目标是帮刚上完课的学生发现知识盲区——好的测验不仅检测记忆，更能暴露理解偏差。
+严格基于课堂内容出题，输出纯 JSON。`,
       },
       {
         role: 'user',
         content: `学习目标：${context.goal.intent}
-用户画像：学生希望快速发现知识盲区，并获得可执行的纠错反馈。
-
-请基于课堂内容设计一组高质量测验。题量、难度与题型由你判断，只要能有效检验理解深度。
-
-最小输出契约（仅字段约束）：
-{
-  "title": "测验标题",
-  "strategy": "作答建议",
-  "questions": [
-    {
-      "stem": "题干",
-      "options": ["A. ...", "B. ...", "C. ...", "D. ..."],
-      "answer": "A",
-      "explanation": "解析",
-      "startMs": 12000,
-      "endMs": 18000
-    }
-  ]
-}
-说明：answer 可返回选项字母或选项原文；startMs/endMs 为可选证据定位字段。
-
+${anchorContext ? `学习者关注点：\n${anchorContext}\n` : ''}
 课堂原文：
 ${transcriptContext}
 
-${anchorContext ? `学习者关注点：\n${anchorContext}` : ''}`,
+请基于以上课堂内容，设计一组高质量测验题。
+
+渲染契约（前端解析用，请严格遵守此 JSON 结构）：
+{
+  "title": "测验标题",
+  "questions": [
+    {
+      "stem": "题干文本",
+      "options": ["A. 选项一", "B. 选项二", "C. 选项三", "D. 选项四"],
+      "answer": "A",
+      "explanation": "解析：为什么正确，以及常见的理解误区"
+    }
+  ]
+}
+
+字段说明：
+- stem：题干
+- options：选项数组（每题至少 2 个选项）
+- answer：正确答案（选项字母或选项原文均可）
+- explanation：解析
+- 其他你认为有价值的字段可以自行添加（如 startMs/endMs 对应课堂时间戳）
+
+题型、题量、难度分布由你根据课堂内容的复杂度和知识点分布自行判断。`,
       },
     ],
     model,
-    { temperature: 0.25, maxTokens: 2400 }
+    { temperature: 0.3, maxTokens: 3200 }
   );
 
   return parseJsonResponse<QuizLLMOutput>(response.content);
@@ -152,10 +155,10 @@ function buildCards(
     const draft = questionDraft?.stem?.trim() ? questionDraft : fallbackDraft(segment);
     const stem = draft.stem?.trim() || `请根据 ${formatTimestamp(segment.startMs)} 片段作答`;
     const options = normalizeOptions(draft.options);
-    const normalizedOptions = options.length === 4
+    const normalizedOptions = options.length >= 2
       ? options
       : fallbackDraft(segment).options || ['A', 'B', 'C', 'D'];
-    const answer = (draft.answer || 'A').trim().toUpperCase().slice(0, 1);
+    const answer = (draft.answer || 'A').trim();
     const explanation = draft.explanation?.trim() || tools.summarizeSegments([segment], 120) || '请回放原片段核对关键概念。';
     const fallbackStart = segment?.startMs ?? 0;
     const fallbackEnd = segment?.endMs ?? fallbackStart + 8000;

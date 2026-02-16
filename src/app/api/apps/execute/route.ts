@@ -15,7 +15,7 @@ function parseServerTimeoutMs(
 
 const APP_EXEC_DEFAULT_TIMEOUT_MS = parseServerTimeoutMs(
   process.env.APP_EXEC_TIMEOUT_MS,
-  90 * 1000,
+  180 * 1000,
   30 * 1000,
   10 * 60 * 1000
 );

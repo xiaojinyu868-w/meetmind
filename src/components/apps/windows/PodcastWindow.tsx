@@ -1,9 +1,10 @@
 'use client';
 
-import { useMemo, useRef } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { AppExecutionResult } from '@/lib/ai-native/types';
 import type { TranscriptSegment } from '@/types';
 import { EvidenceChip } from '@/components/apps/evidence/EvidenceChip';
+import { AppWindowPlaceholder } from '@/components/apps/windows/AppWindowPlaceholder';
 
 interface PodcastWindowProps {
   result: AppExecutionResult | null;
@@ -49,8 +50,18 @@ function normalizeSpeaker(raw: string | undefined, index: number, mapping: Map<s
   return speaker;
 }
 
+function formatDuration(seconds: number): string {
+  const m = Math.floor(seconds / 60);
+  const s = Math.floor(seconds % 60);
+  return `${m}:${String(s).padStart(2, '0')}`;
+}
+
 export function PodcastWindow({ result, transcript, onSeek }: PodcastWindowProps) {
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const scriptContainerRef = useRef<HTMLDivElement>(null);
+  const [activeLineIndex, setActiveLineIndex] = useState(-1);
+  const [audioDuration, setAudioDuration] = useState(0);
+  const [audioTime, setAudioTime] = useState(0);
   const payload = (result?.render?.payload || {}) as PodcastPayload;
   const sections = Array.isArray(payload.sections) ? payload.sections : [];
 
@@ -70,8 +81,40 @@ export function PodcastWindow({ result, transcript, onSeek }: PodcastWindowProps
     [result?.cards]
   );
 
+  // Audio timeupdate → 脚本行高亮联动
+  const handleTimeUpdate = useCallback(() => {
+    if (!audioRef.current) return;
+    const currentTime = audioRef.current.currentTime;
+    setAudioTime(currentTime);
+
+    if (scriptLines.length === 0) return;
+    // 均匀分配每行对应的时间区间
+    const lineCount = scriptLines.length;
+    const duration = audioRef.current.duration || 1;
+    const lineIndex = Math.min(Math.floor((currentTime / duration) * lineCount), lineCount - 1);
+
+    if (lineIndex !== activeLineIndex && lineIndex >= 0) {
+      setActiveLineIndex(lineIndex);
+      // 自动滚动到当前行
+      const lineEl = scriptContainerRef.current?.querySelector(`[data-line-index="${lineIndex}"]`);
+      lineEl?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+  }, [activeLineIndex, scriptLines.length]);
+
+  useEffect(() => {
+    const audio = audioRef.current;
+    if (!audio) return;
+    audio.addEventListener('timeupdate', handleTimeUpdate);
+    const onMeta = () => setAudioDuration(audio.duration || 0);
+    audio.addEventListener('loadedmetadata', onMeta);
+    return () => {
+      audio.removeEventListener('timeupdate', handleTimeUpdate);
+      audio.removeEventListener('loadedmetadata', onMeta);
+    };
+  }, [handleTimeUpdate]);
+
   if (!result) {
-    return <div className="rounded-2xl border border-slate-200 bg-white p-6 text-sm text-slate-500">正在生成课堂播客...</div>;
+    return <AppWindowPlaceholder status="loading" appName="课堂播客" />;
   }
 
   const seekAudio = (startMs: number) => {
@@ -82,17 +125,56 @@ export function PodcastWindow({ result, transcript, onSeek }: PodcastWindowProps
     onSeek?.(startMs);
   };
 
+  const seekToLine = (lineIndex: number) => {
+    if (!audioRef.current || scriptLines.length === 0) return;
+    const duration = audioRef.current.duration || 1;
+    const targetTime = (lineIndex / scriptLines.length) * duration;
+    audioRef.current.currentTime = targetTime;
+    void audioRef.current.play().catch(() => undefined);
+  };
+
   return (
     <section className="grid gap-4 lg:grid-cols-[1.15fr_0.85fr]" data-testid="podcast-window">
+      {/* 左侧：播放器 + 章节 */}
       <div className="rounded-2xl border border-slate-200 bg-white p-4">
-        <p className="mb-3 text-sm font-medium text-slate-600">课堂播客</p>
+        <div className="mb-3 flex items-center justify-between">
+          <p className="text-sm font-medium text-slate-600">课堂播客</p>
+          {audioDuration > 0 ? (
+            <p className="text-xs text-slate-400">
+              {formatDuration(audioTime)} / {formatDuration(audioDuration)}
+            </p>
+          ) : null}
+        </div>
+
         {payload.audioUrl ? (
-          <audio ref={audioRef} controls src={payload.audioUrl} className="w-full" />
+          <audio ref={audioRef} controls src={payload.audioUrl} className="w-full rounded-lg" />
         ) : (
           <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-700">
-            未获得可播放音频。{payload.error ? `原因：${payload.error}` : '请点击“重新生成”重试。'}
+            未获得可播放音频。{payload.error ? `原因：${payload.error}` : '请点击"重新生成"重试。'}
           </p>
         )}
+
+        {/* 章节快速跳转按钮组 */}
+        {sections.length > 0 ? (
+          <div className="mt-3 flex flex-wrap gap-1.5">
+            {sections.map((section, index) => {
+              const citation = chapterCitations[index];
+              return (
+                <button
+                  key={section.id || `ch-${index}`}
+                  type="button"
+                  onClick={() => citation && seekAudio(citation.startMs)}
+                  disabled={!citation}
+                  className="rounded-full border border-lavender-200 bg-lavender-50 px-2.5 py-1 text-xs font-medium text-lavender-700 transition-colors hover:bg-lavender-100 disabled:cursor-default disabled:opacity-50"
+                >
+                  {section.title || `章节 ${index + 1}`}
+                </button>
+              );
+            })}
+          </div>
+        ) : null}
+
+        {/* 章节详情 */}
         <div className="mt-4 grid gap-3">
           {sections.map((section, index) => {
             const citation = chapterCitations[index];
@@ -118,22 +200,44 @@ export function PodcastWindow({ result, transcript, onSeek }: PodcastWindowProps
         </div>
       </div>
 
+      {/* 右侧：脚本面板（默认展开） */}
       <div className="rounded-2xl border border-slate-200 bg-white p-4">
-        <details>
-          <summary className="cursor-pointer text-sm font-medium text-slate-700">查看播客脚本</summary>
-          <div className="mt-3 space-y-2">
-            {scriptLines.length > 0 ? (
-              scriptLines.map((line, index) => (
-                <div key={`line-${index}`} className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm">
-                  <p className="font-medium text-slate-800">{line.speaker}</p>
-                  <p className="mt-1 leading-6 text-slate-600">{line.line}</p>
-                </div>
-              ))
-            ) : (
-              <p className="text-sm text-slate-500">暂无脚本内容。</p>
-            )}
-          </div>
-        </details>
+        <div className="mb-3 flex items-center justify-between">
+          <p className="text-sm font-medium text-slate-700">播客脚本</p>
+          {scriptLines.length > 0 ? (
+            <span className="text-xs text-slate-400">{scriptLines.length} 行</span>
+          ) : null}
+        </div>
+
+        <div ref={scriptContainerRef} className="max-h-[500px] space-y-1.5 overflow-y-auto">
+          {scriptLines.length > 0 ? (
+            scriptLines.map((line, index) => {
+              const isActive = index === activeLineIndex;
+              return (
+                <button
+                  key={`line-${index}`}
+                  type="button"
+                  data-line-index={index}
+                  onClick={() => seekToLine(index)}
+                  className={`w-full rounded-lg border px-3 py-2 text-left text-sm transition-all duration-200 ${
+                    isActive
+                      ? 'border-lavender-300 bg-lavender-50 shadow-sm ring-1 ring-lavender-200'
+                      : 'border-slate-200 bg-slate-50 hover:border-slate-300 hover:bg-white'
+                  }`}
+                >
+                  <p className={`text-xs font-medium ${isActive ? 'text-lavender-700' : 'text-slate-500'}`}>
+                    {line.speaker}
+                  </p>
+                  <p className={`mt-0.5 leading-6 ${isActive ? 'text-slate-900' : 'text-slate-600'}`}>
+                    {line.line}
+                  </p>
+                </button>
+              );
+            })
+          ) : (
+            <p className="text-sm text-slate-500">暂无脚本内容。</p>
+          )}
+        </div>
       </div>
     </section>
   );

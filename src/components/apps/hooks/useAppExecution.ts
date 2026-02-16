@@ -29,7 +29,7 @@ function parseClientTimeoutMs(
 
 const APP_EXEC_TIMEOUT_DEFAULT_MS = parseClientTimeoutMs(
   process.env.NEXT_PUBLIC_APP_EXEC_TIMEOUT_MS,
-  90 * 1000,
+  180 * 1000,
   30 * 1000,
   10 * 60 * 1000
 );

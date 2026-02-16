@@ -64,7 +64,7 @@ interface PodcastPlan {
   title?: string;
   opening?: string;
   keyTakeaways?: string[];
-  structure?: Array<{ title?: string; focus?: string }>;
+  structure?: Array<{ title?: string; focus?: string; startMs?: number; endMs?: number }>;
   tone?: string;
   learnerProfile?: string;
   script?: Array<{ speaker?: string; text?: string; emotion?: string; beat?: string }>;
@@ -345,7 +345,9 @@ Output JSON with this top-level shape:
   "opening": "opening line",
   "keyTakeaways": ["takeaway1", "takeaway2"],
   "learnerProfile": "who this learner is",
-  "structure": [{ "title": "segment", "focus": "focus" }],
+  "structure": [
+    { "title": "chapter title", "focus": "what this chapter covers", "startMs": 0, "endMs": 60000 }
+  ],
   "tone": "tone guidance",
   "script": [
     { "speaker": "Host A", "text": "line" },
@@ -359,14 +361,17 @@ Goals:
 1) Reveal hidden but test-relevant logic.
 2) Reduce cognitive friction using vivid analogies.
 3) Keep strong in-class feel based on real evidence.
+4) Each chapter in "structure" should have clear startMs/endMs (in milliseconds) referencing the original class transcript timestamps. This enables quick chapter navigation in the player.
 
 Audience:
 ${learnerProfile}
 
 Hard constraints:
 - Output must be natural Simplified Chinese in script.text.
-- Do NOT output timestamps like 08:25, segment IDs, startMs/endMs.
+- Do NOT output timestamps like 08:25, segment IDs in script text.
 - Use only "Host A" and "Host B" as speaker values.
+- Each "structure" entry MUST include "startMs" and "endMs" fields (integer milliseconds from the class recording).
+- "structure" should have 3-6 entries covering the full class content.
 
 Class topic:
 ${sanitizePodcastNarration(context.goal.intent)}

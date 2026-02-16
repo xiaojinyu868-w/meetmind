@@ -41,7 +41,7 @@ function cleanText(value: string): string {
 }
 
 function isFillerOnly(value: string): boolean {
-  const core = cleanText(value).replace(/[，。？！、,.!?：:；;'"“”‘’()（）]/g, '').trim();
+  const core = cleanText(value).replace(/[，。？！、,.!?：:；;'"""''()（）]/g, '').trim();
   if (!core) return true;
   return /^(嗯+|呃+|啊+|这个|那个|然后|就是|所以|好|行|对|是的?)$/i.test(core);
 }
@@ -84,7 +84,7 @@ function fallbackDraft(segment: TranscriptSegment, tools: AppPluginTools): Flash
   const summary = cleanText(tools.summarizeSegments([segment], 88) || segment.text || '');
   const topic = summary.slice(0, 24) || '课堂核心概念';
   return {
-    question: `请解释“${topic}”，并给出一个课堂中的应用例子。`,
+    question: `请解释"${topic}"，并给出一个课堂中的应用例子。`,
     answer: cleanText(segment.text || '') || '请回放该证据并完成复述。',
     hint: '先说概念，再说方法，最后说应用。',
     startMs: segment.startMs,
@@ -104,32 +104,52 @@ async function generateDeckWithLLM(
       {
         role: 'system',
         content:
-          '你是一位认知科学学习教练。请把课堂内容转化为高质量主动回忆闪卡，帮助学生完成理解、复述和迁移。严格基于课堂证据，只输出 JSON。',
+          '你是一位认知科学学习教练，擅长间隔重复和主动回忆技术。请把课堂内容转化为高质量主动回忆闪卡，帮助学生完成理解、复述和迁移。严格基于课堂证据，只输出 JSON。',
       },
       {
         role: 'user',
         content: `学习目标：${context.goal.intent}
-用户画像：刚完成一节课复习，需要通过主动回忆快速定位“真懂/不懂”。
+用户画像：刚完成一节课复习，需要通过主动回忆快速定位"真懂/不懂"。
 
-请生成一组高质量闪卡。你可以自主决定题量、难度和组织方式，但应覆盖：核心概念、关键方法、易错点、迁移应用。
+请生成一组高质量闪卡。卡片应涵盖三个难度层级：
+- 基础层（core）：核心概念定义、关键术语，确保"知道是什么"
+- 进阶层（challenge）：方法步骤、原理对比、易错点辨析，检验"理解为什么"
+- 迁移层（transfer）：跨场景应用、变式问题、学科联系，考察"能用来做什么"
+
+题量建议：6-12张，三个层级各覆盖至少1张。
 
 最小输出契约（仅字段约束）：
 {
   "deckTitle": "闪卡标题",
-  "overview": "训练建议",
+  "overview": "训练建议（一句话说明推荐的学习策略）",
   "cards": [
     {
       "question": "正面问题",
       "answer": "背面答案",
       "hint": "提示（可选）",
-      "difficulty": "core|challenge（可选）",
+      "difficulty": "core|challenge|transfer",
       "startMs": 12000,
       "endMs": 21000
     }
   ]
 }
 
-质量要求：题面应具体可回答，避免“嗯/呃”等口头禅和时间戳表达。
+few-shot 示例（仅供格式参考，内容应来自实际课堂）：
+{
+  "deckTitle": "机器学习基础概念闪卡",
+  "overview": "建议先完成基础层，再逐步挑战进阶和迁移层。",
+  "cards": [
+    { "question": "什么是过拟合？用一句话定义。", "answer": "模型在训练集上表现好但在新数据上泛化差的现象，本质是学到了噪声而非规律。", "difficulty": "core", "startMs": 32000, "endMs": 45000 },
+    { "question": "L1 正则化和 L2 正则化在权重收缩效果上有什么区别？", "answer": "L1 倾向产生稀疏权重（部分为0），实现特征选择；L2 倾向均匀缩小所有权重，不产生精确零值。", "hint": "想想它们的惩罚项形状", "difficulty": "challenge", "startMs": 120000, "endMs": 138000 },
+    { "question": "如果你正在训练一个房价预测模型，发现验证集误差远大于训练集误差，你会采取哪些措施？", "answer": "1. 增加训练数据 2. 加入正则化(L1/L2/Dropout) 3. 降低模型复杂度 4. 使用早停法 5. 检查特征工程是否引入噪声", "difficulty": "transfer", "startMs": 200000, "endMs": 220000 }
+  ]
+}
+
+质量要求：
+- 题面必须具体可回答，避免模糊的"是什么"式提问（如"请解释X"→应改为"X和Y的关键区别是什么？"）
+- 答案应简洁精准，一般2-4句话
+- 避免"嗯/呃"等口头禅和时间戳表达
+- 每张卡片应对应课堂中的具体知识点
 
 课堂原文：
 ${transcriptContext}
@@ -138,7 +158,7 @@ ${anchorContext ? `学习者关注点：\n${anchorContext}` : ''}`,
       },
     ],
     model,
-    { temperature: 0.3, maxTokens: 2200 }
+    { temperature: 0.3, maxTokens: 2800 }
   );
 
   return parseJsonResponse<FlashcardLLMOutput>(response.content);

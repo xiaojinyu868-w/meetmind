@@ -2,7 +2,7 @@
 
 > **MeetMind 是清华北大联合团队打造的 AI 学习助手，为每个孩子配备一位"听过课、记得住、讲得清"的智能同桌。**
 >
-> MVP 2.7.4 - 把课堂"变成可回放、可定位、可追溯的时间轴记忆"
+> MVP 2.7.5 - 把课堂"变成可回放、可定位、可追溯的时间轴记忆"
 
 [![Next.js](https://img.shields.io/badge/Next.js-14.2-black?logo=next.js)](https://nextjs.org/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.3-blue?logo=typescript)](https://www.typescriptlang.org/)
@@ -117,6 +117,7 @@ npm run dev:next
 | `npm run build` | 生产构建 |
 | `npm run start` | 生产运行 |
 | `npm run lint` | ESLint 代码检查（非交互，可直接用于 CI） |
+| `npm run e2` | Playwright 端到端测试（`e2e` 别名） |
 
 ### 环境变量配置
 
@@ -125,7 +126,7 @@ npm run dev:next
 DASHSCOPE_API_KEY=sk-your-api-key-here
 
 # LLM 模型配置
-LLM_MODEL=qwen3-vl-plus-2025-12-19
+LLM_MODEL=qwen3.5-plus
 LLM_BASE_URL=https://dashscope.aliyuncs.com/compatible-mode/v1
 
 # 实时语音识别模型配置
@@ -150,6 +151,20 @@ PUBLIC_PROTOCOL=http
 # VOLCENGINE_PODCAST_RESOURCE_ID=volc.service_type.10050
 # 可选：默认 aGjiRDfUWi
 # VOLCENGINE_PODCAST_APP_KEY=aGjiRDfUWi
+
+# ===== 可选：AI 工坊执行超时治理 =====
+# 前端应用执行超时（普通应用，毫秒）
+# NEXT_PUBLIC_APP_EXEC_TIMEOUT_MS=90000
+# 前端播客执行超时（毫秒）
+# NEXT_PUBLIC_APP_EXEC_PODCAST_TIMEOUT_MS=300000
+# 前端运行中任务判定为陈旧状态阈值（毫秒）
+# NEXT_PUBLIC_APP_RUNNING_STALE_MS=420000
+# 服务端应用执行超时（普通应用，毫秒）
+# APP_EXEC_TIMEOUT_MS=90000
+# 服务端播客执行超时（毫秒）
+# APP_EXEC_PODCAST_TIMEOUT_MS=300000
+# LLM HTTP 请求超时（毫秒）
+# LLM_HTTP_TIMEOUT_MS=90000
 
 # ===== 可选：认证配置 =====
 # JWT_SECRET=your-jwt-secret-change-in-production
@@ -368,7 +383,7 @@ meetmind/
 | 学生端 | ✅ | 录音模式 + 复习模式完整流程 |
 | 家长端 | ✅ | 今日概览、困惑列表、陪学脚本 |
 | 教师端 | ✅ | 困惑热点 TOP3、AI 流式生成课后反思、数据同步 |
-| 多模型支持 | ✅ | 通义千问/火山方舟/中转站 可切换 |
+| 多模型支持 | ✅ | 通义千问3.5 Plus/千问3 VL/千问3 Max/火山方舟/中转站 可切换 |
 | 配置管理 | ✅ | 统一配置中心，支持环境变量覆盖 |
 | 类型安全 | ✅ | 完整 TypeScript 类型定义，DB/应用层类型分离 |
 | 新用户引导 | ✅ | 欢迎弹窗 + 交互式引导教程，支持聚光灯高亮 |
@@ -381,6 +396,32 @@ meetmind/
 | **选词解释** | ✅ | 转录文本选词即解释，支持追问、语音、图片 |
 
 ### 最新更新
+
+#### v2.8.0 - 思维导图体验对标 NotebookLM + 窗口系统架构重构（2026-02-16）
+
+| 功能 | 描述 |
+|------|------|
+| **思维导图渐进式展开** | 初始只显示根节点 + 一级子节点，告别信息过载；用户通过 `>` 按钮逐层探索，对标 NotebookLM |
+| **同层同色配色方案** | 废弃按分支索引分色，改为按深度（depth）统一配色：同一层级所有节点颜色一致，视觉层次清晰 |
+| **展开时自动平移聚焦** | 点击展开节点后视口平滑滚动到该区域，只平移不缩放，保持文字可读性（0.45s cubic-bezier 缓动） |
+| **展开/收起快捷操作** | 右下角新增「全部展开」「全部收起」快捷按钮，一键操作 |
+| **窗口系统双模式架构** | 新增 `panel`（面板）/ `fullscreen`（全屏）双显示模式，header 一键切换 |
+| **应用默认布局策略** | 思维导图/信息图默认全屏（空间型内容），闪卡/测验/播客默认面板（可边看视频边操作） |
+| **窗口状态持久化增强** | `displayMode` 持久化到 localStorage，刷新/切页后恢复用户偏好 |
+| **千问 3.5 Plus 模型支持** | 新增 `qwen3.5-plus` 模型注册，百万级上下文（1M tokens），支持思考模式，推理/写作/Agent 能力全面提升 |
+
+#### v2.7.5 - AI 工坊稳定性与可回归能力增强（2026-02-16）
+
+| 功能 | 描述 |
+|------|------|
+| **应用执行超时治理（前后端）** | `apps/execute` 增加服务端超时；前端执行 Hook 与黄页后台生成增加超时与取消控制，普通应用与播客使用不同阈值 |
+| **长任务状态自愈** | 本地缓存中 `running` 状态增加陈旧判定，超过阈值自动转为可重试错误，避免“后台生成中”长期卡死 |
+| **播客链路质量优化** | 播客输入构建支持全量证据语料与计划脚本；按输入长度自适应超时；检测时间戳污染后自动二次重试 |
+| **播客窗口可读性修复** | 播客脚本与章节摘要统一清洗时间戳/元字段，语音 ID 自动归一为主持人角色名 |
+| **文生图接口兼容修复** | 百炼生图切换到 `multimodal-generation` 路径，输入改为 `messages`；扩展图片 URL 解析与错误提示 |
+| **数据采集接口稳定性修复** | 文件导入 API 中 PDF 解析改为 lazy import，降低运行时兼容问题导致的接口崩溃风险 |
+| **自动化测试补齐** | 新增 `tests/e2e/workshop-api.spec.ts` 与 `tests/e2e/source-ingest-api.spec.ts`，覆盖应用矩阵执行契约与采集接口关键分支 |
+| **测试命令统一** | 新增 `npm run e2` 作为 `playwright test` 快捷入口，便于本地与 CI 统一调用 |
 
 #### v2.7.4 - 复习闭环与移动端体验统一（2026-02-13）
 

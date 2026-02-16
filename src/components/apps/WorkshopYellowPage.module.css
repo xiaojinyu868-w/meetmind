@@ -42,6 +42,45 @@
   font-size: 13px;
 }
 
+.headerActions {
+  margin-top: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+}
+
+.generateAllButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 12px;
+  border: none;
+  background: linear-gradient(135deg, #2563eb 0%, #4f46e5 100%);
+  color: #fff;
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 1;
+  padding: 11px 22px;
+  cursor: pointer;
+  box-shadow: 0 4px 14px rgba(37, 99, 235, 0.3);
+  transition: transform 0.15s ease, box-shadow 0.15s ease, opacity 0.15s ease;
+}
+
+.generateAllButton:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 6px 20px rgba(37, 99, 235, 0.4);
+}
+
+.generateAllButton:active {
+  transform: scale(0.97);
+}
+
+.generateAllButton:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
 .grid {
   margin: 0 auto;
   max-width: 1180px;
@@ -72,6 +111,14 @@
   box-shadow:
     0 4px 12px rgba(30, 64, 175, 0.09),
     0 20px 42px rgba(30, 64, 175, 0.14);
+}
+
+.cardGenerated {
+  border-color: #bbf7d0;
+}
+
+.cardGenerated:hover {
+  border-color: #86efac;
 }
 
 .coverWrap {
@@ -253,6 +300,59 @@
   text-overflow: ellipsis;
 }
 
+.previewLine {
+  margin: 0;
+  color: #4f46e5;
+  font-size: 12px;
+  line-height: 1.5;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  padding: 4px 8px;
+  border-radius: 8px;
+  background: #eef2ff;
+  border: 1px solid #e0e7ff;
+}
+
+.elapsed {
+  font-variant-numeric: tabular-nums;
+}
+
+.retryInlineButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  border: 1px solid #fecaca;
+  background: #fef2f2;
+  color: #dc2626;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1;
+  padding: 7px 12px;
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+}
+
+.retryInlineButton:hover {
+  background: #fee2e2;
+}
+
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+
+.pulseIndicator {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #f59e0b;
+  margin-right: 5px;
+  animation: pulse-dot 1.2s ease-in-out infinite;
+}
+
 .dock {
   position: fixed;
   right: 18px;
@@ -289,6 +389,21 @@
   font-size: 12px;
   font-weight: 600;
   padding: 4px 8px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.dockStatRunning {
+  border-color: #fcd34d;
+  background: #fffbeb;
+  color: #92400e;
+}
+
+.dockStatFailed {
+  border-color: #fecaca;
+  background: #fef2f2;
+  color: #b91c1c;
 }
 
 .dockPanel {
@@ -314,6 +429,12 @@
   line-height: 1;
   color: #0f172a;
   font-weight: 700;
+}
+
+.dockHeaderActions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
 }
 
 .dockClose {

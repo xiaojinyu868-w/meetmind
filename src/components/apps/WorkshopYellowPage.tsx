@@ -58,7 +58,7 @@ function parseClientTimeoutMs(
 
 const WORKSHOP_EXEC_TIMEOUT_DEFAULT_MS = parseClientTimeoutMs(
   process.env.NEXT_PUBLIC_APP_EXEC_TIMEOUT_MS,
-  90 * 1000,
+  180 * 1000,
   30 * 1000,
   10 * 60 * 1000
 );
@@ -133,6 +133,39 @@ function formatClock(timestamp: number): string {
   const mm = String(date.getMinutes()).padStart(2, '0');
   const ss = String(date.getSeconds()).padStart(2, '0');
   return `${hh}:${mm}:${ss}`;
+}
+
+function formatElapsed(startMs: number, nowMs: number): string {
+  const diffSec = Math.max(0, Math.floor((nowMs - startMs) / 1000));
+  const m = Math.floor(diffSec / 60);
+  const s = diffSec % 60;
+  if (m > 0) return `${m}分${s}秒`;
+  return `${s}秒`;
+}
+
+function readResultPreview(sessionId: string, appKey: string): string {
+  if (typeof window === 'undefined') return '';
+  try {
+    const raw = window.localStorage.getItem(buildResultCacheKey(sessionId, appKey));
+    if (!raw) return '';
+    const parsed = JSON.parse(raw) as AppExecutionResult;
+    if (parsed.render?.title) return parsed.render.title;
+    if (parsed.cards?.length > 0) {
+      return parsed.cards[0].title || parsed.cards[0].body?.slice(0, 40) || '';
+    }
+    return '';
+  } catch {
+    return '';
+  }
+}
+
+function ElapsedTimer({ startMs }: { startMs: number }) {
+  const [now, setNow] = useState(Date.now());
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => window.clearInterval(timer);
+  }, []);
+  return <span className={styles.elapsed}>{formatElapsed(startMs, now)}</span>;
 }
 
 export function WorkshopYellowPage(props: WorkshopYellowPageProps) {
@@ -482,6 +515,18 @@ export function WorkshopYellowPage(props: WorkshopYellowPageProps) {
     [appMap, buildAppHref, onOpenAppWindow, router]
   );
 
+  const generateAll = useCallback(() => {
+    const pending = visibleApps.filter((app) => !runningMap[app.key] && !generatedMap[app.key]);
+    if (pending.length === 0) {
+      toast.message('所有应用已生成或正在生成中');
+      return;
+    }
+    for (const app of pending) {
+      void runInBackground(app);
+    }
+    toast.success(`已启动 ${pending.length} 个后台任务`);
+  }, [generatedMap, runInBackground, runningMap, visibleApps]);
+
   const dockList = useMemo(
     () =>
       Object.values(dockTasks)
@@ -489,6 +534,26 @@ export function WorkshopYellowPage(props: WorkshopYellowPageProps) {
         .slice(0, 8),
     [dockTasks]
   );
+
+  const retryAllFailed = useCallback(() => {
+    const failed = dockList.filter((t) => t.status === 'error' || t.status === 'cancelled');
+    if (failed.length === 0) return;
+    for (const task of failed) {
+      retryTask(task.appKey);
+    }
+    toast.success(`正在重试 ${failed.length} 个失败任务`);
+  }, [dockList, retryTask]);
+
+  const clearCompleted = useCallback(() => {
+    setDockTasks((prev) => {
+      const next: Record<string, DockTask> = {};
+      for (const [key, task] of Object.entries(prev)) {
+        if (task.status !== 'success') next[key] = task;
+      }
+      return next;
+    });
+    toast.success('已清除完成任务');
+  }, []);
 
   const runningCount = useMemo(
     () =>
@@ -514,6 +579,17 @@ export function WorkshopYellowPage(props: WorkshopYellowPageProps) {
         <p className={styles.subStatus} data-testid="workshop-task-summary">
           {runningCount > 0 ? `后台任务运行中：${runningCount}` : '后台任务空闲，可继续对话、看时间轴和视频。'}
         </p>
+        <div className={styles.headerActions}>
+          <button
+            type="button"
+            className={styles.generateAllButton}
+            onClick={generateAll}
+            disabled={runningCount > 0 && visibleApps.every((a) => runningMap[a.key] || generatedMap[a.key])}
+            data-testid="workshop-generate-all"
+          >
+            一键全部生成
+          </button>
+        </div>
       </header>
 
       <div className={styles.grid}>
@@ -523,9 +599,24 @@ export function WorkshopYellowPage(props: WorkshopYellowPageProps) {
           const isRunning = Boolean(runningMap[app.key]) || taskState?.status === 'running';
           const href = buildAppHref(app.key);
           const label = taskLabel(taskState, generated);
+          const dockTask = dockTasks[app.key];
+          const isFailed = taskState?.status === 'error' && !isRunning;
+          const preview = generated ? readResultPreview(sessionId, app.key) : '';
 
           return (
-            <article key={app.key} className={styles.card} data-testid={`workshop-card-${app.key}`}>
+            <article
+              key={app.key}
+              className={`${styles.card} ${generated ? styles.cardGenerated : ''}`}
+              data-testid={`workshop-card-${app.key}`}
+              onClick={() => {
+                if (onOpenAppWindow) {
+                  onOpenAppWindow(app.key);
+                } else {
+                  router.push(href);
+                }
+              }}
+              style={{ cursor: 'pointer' }}
+            >
               <div className={styles.coverWrap}>
                 <Image src={app.coverImage} alt={app.name} width={1200} height={630} className={styles.cover} />
               </div>
@@ -539,7 +630,11 @@ export function WorkshopYellowPage(props: WorkshopYellowPageProps) {
                     label === '已生成' ? '' : label === '生成中' ? styles.running : styles.notGenerated
                   }`}
                 >
-                  {label}
+                  {isRunning && dockTask ? (
+                    <ElapsedTimer startMs={dockTask.startedAt} />
+                  ) : (
+                    label
+                  )}
                 </span>
               </div>
               <div className={styles.tags}>
@@ -550,22 +645,42 @@ export function WorkshopYellowPage(props: WorkshopYellowPageProps) {
                 ))}
               </div>
               <p className={styles.description}>{app.description}</p>
+              {preview ? (
+                <p className={styles.previewLine} title={preview}>
+                  📋 {preview.length > 50 ? preview.slice(0, 50) + '...' : preview}
+                </p>
+              ) : null}
               <div className={styles.actionRow}>
                 <button
                   type="button"
                   className={styles.generateButton}
                   data-testid={`workshop-bg-generate-${app.key}`}
-                  onClick={() => {
+                  onClick={(e) => {
+                    e.stopPropagation();
                     void runInBackground(app);
                   }}
                   disabled={isRunning}
                 >
-                  {isRunning ? '后台生成中...' : '后台生成'}
+                  {isRunning ? '后台生成中...' : generated ? '重新生成' : '后台生成'}
                 </button>
+                {isFailed ? (
+                  <button
+                    type="button"
+                    className={styles.retryInlineButton}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      retryTask(app.key);
+                    }}
+                    data-testid={`workshop-inline-retry-${app.key}`}
+                  >
+                    重试
+                  </button>
+                ) : null}
                 <Link
                   href={href}
                   className={styles.link}
                   onClick={(event) => {
+                    event.stopPropagation();
                     if (!onOpenAppWindow) return;
                     event.preventDefault();
                     onOpenAppWindow(app.key);
@@ -593,22 +708,45 @@ export function WorkshopYellowPage(props: WorkshopYellowPageProps) {
           data-testid="workshop-dock-toggle"
         >
           <span>任务中心</span>
-          <span className={styles.dockStat}>进行中 {runningCount}</span>
+          {runningCount > 0 ? (
+            <span className={`${styles.dockStat} ${styles.dockStatRunning}`}>
+              <span className={styles.pulseIndicator} />
+              进行中 {runningCount}
+            </span>
+          ) : (
+            <span className={styles.dockStat}>进行中 {runningCount}</span>
+          )}
           <span className={styles.dockStat}>完成 {completedCount}</span>
-          <span className={styles.dockStat}>异常 {failedCount}</span>
+          {failedCount > 0 ? (
+            <span className={`${styles.dockStat} ${styles.dockStatFailed}`}>异常 {failedCount}</span>
+          ) : (
+            <span className={styles.dockStat}>异常 {failedCount}</span>
+          )}
         </button>
 
         {dockOpen ? (
           <aside className={styles.dockPanel} data-testid="workshop-dock-panel">
             <div className={styles.dockPanelHeader}>
               <p className={styles.dockPanelTitle}>后台任务</p>
-              <button type="button" className={styles.dockClose} onClick={() => setDockOpen(false)}>
-                收起
-              </button>
+              <div className={styles.dockHeaderActions}>
+                {failedCount > 0 ? (
+                  <button type="button" className={styles.dockActionSecondary} onClick={retryAllFailed} data-testid="workshop-dock-retry-all">
+                    全部重试
+                  </button>
+                ) : null}
+                {completedCount > 0 ? (
+                  <button type="button" className={styles.dockActionSecondary} onClick={clearCompleted} data-testid="workshop-dock-clear-done">
+                    清除已完成
+                  </button>
+                ) : null}
+                <button type="button" className={styles.dockClose} onClick={() => setDockOpen(false)}>
+                  收起
+                </button>
+              </div>
             </div>
 
             {dockList.length === 0 ? (
-              <p className={styles.dockEmpty}>暂无任务，点击任意应用卡片的“后台生成”即可开始。</p>
+              <p className={styles.dockEmpty}>暂无任务，点击任意应用卡片的&ldquo;后台生成&rdquo;即可开始。</p>
             ) : (
               <div className={styles.dockTaskList}>
                 {dockList.map((task) => {
@@ -620,9 +758,16 @@ export function WorkshopYellowPage(props: WorkshopYellowPageProps) {
                       data-testid={`workshop-dock-task-${task.appKey}`}
                     >
                       <div className={styles.dockTaskTop}>
-                        <p className={styles.dockTaskName}>{task.appName}</p>
+                        <p className={styles.dockTaskName}>
+                          {task.status === 'running' ? <span className={styles.pulseIndicator} /> : null}
+                          {task.appName}
+                        </p>
                         <span className={`${styles.dockTaskStatus} ${styles[`dockStatus${task.status}`]}`}>
-                          {statusText(task.status)}
+                          {task.status === 'running' ? (
+                            <ElapsedTimer startMs={task.startedAt} />
+                          ) : (
+                            statusText(task.status)
+                          )}
                         </span>
                       </div>
                       <p className={styles.dockTaskMeta}>

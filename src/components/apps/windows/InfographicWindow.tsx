@@ -1,9 +1,10 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import Image from 'next/image';
 import { toast } from 'sonner';
 import type { AppExecutionResult } from '@/lib/ai-native/types';
+import { AppWindowPlaceholder } from '@/components/apps/windows/AppWindowPlaceholder';
 
 interface InfographicWindowProps {
   sessionId: string;
@@ -35,6 +36,43 @@ interface ImageConfigResponse {
   model?: string;
 }
 
+function GeneratingProgress({ elapsed }: { elapsed: number }) {
+  const steps = [
+    { label: '理解草案结构', threshold: 0 },
+    { label: '生成视觉元素', threshold: 5 },
+    { label: '合成图像', threshold: 15 },
+    { label: '优化渲染', threshold: 30 },
+  ];
+  const currentStep = steps.filter((s) => elapsed >= s.threshold).length - 1;
+
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center justify-center gap-2">
+        <div className="h-5 w-5 animate-spin rounded-full border-2 border-blue-200 border-t-blue-600" />
+        <span className="text-sm font-medium text-slate-700">正在生成信息图...</span>
+        <span className="text-xs text-slate-400">{elapsed}s</span>
+      </div>
+      <div className="mx-auto max-w-xs space-y-1.5">
+        {steps.map((step, idx) => {
+          const done = idx < currentStep;
+          const active = idx === currentStep;
+          return (
+            <div key={step.label} className="flex items-center gap-2">
+              <div className={`h-2 w-2 rounded-full transition-colors ${
+                done ? 'bg-emerald-500' : active ? 'bg-blue-500 animate-pulse' : 'bg-slate-200'
+              }`} />
+              <span className={`text-xs transition-colors ${
+                done ? 'text-emerald-600' : active ? 'text-blue-700 font-medium' : 'text-slate-400'
+              }`}>{step.label}</span>
+              {done ? <span className="text-xs text-emerald-500">✓</span> : null}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 export function InfographicWindow({ sessionId, result, onResultUpdate }: InfographicWindowProps) {
   const payload = (result?.render?.payload || {}) as RenderPayload;
   const draftFromRaw = (result?.raw?.infographicDraft || null) as DraftPayload | null;
@@ -45,6 +83,7 @@ export function InfographicWindow({ sessionId, result, onResultUpdate }: Infogra
   const [imageModel, setImageModel] = useState('qwen-image-max');
   const [checking, setChecking] = useState(true);
   const [generating, setGenerating] = useState(false);
+  const [genElapsed, setGenElapsed] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
@@ -63,11 +102,37 @@ export function InfographicWindow({ sessionId, result, onResultUpdate }: Infogra
     };
   }, []);
 
+  // 生图计时器
+  useEffect(() => {
+    if (!generating) { setGenElapsed(0); return; }
+    const timer = setInterval(() => setGenElapsed((v) => v + 1), 1000);
+    return () => clearInterval(timer);
+  }, [generating]);
+
   const keyPoints = useMemo(() => (Array.isArray(draft.keyPoints) ? draft.keyPoints.filter(Boolean) : []), [draft.keyPoints]);
   const visualPlan = useMemo(() => (Array.isArray(draft.visualPlan) ? draft.visualPlan.filter(Boolean) : []), [draft.visualPlan]);
 
+  const downloadImage = useCallback(async () => {
+    if (!imageUrl) return;
+    try {
+      const response = await fetch(imageUrl);
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${draft.title || '课堂信息图'}.png`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      toast.success('图片已下载');
+    } catch {
+      toast.error('下载失败，请右键图片另存为');
+    }
+  }, [imageUrl, draft.title]);
+
   if (!result) {
-    return <div className="rounded-2xl border border-slate-200 bg-white p-6 text-sm text-slate-500">正在生成信息图草案...</div>;
+    return <AppWindowPlaceholder status="loading" appName="信息图工坊" />;
   }
 
   const generateImage = async () => {
@@ -157,17 +222,17 @@ export function InfographicWindow({ sessionId, result, onResultUpdate }: Infogra
           <input
             value={stylePreset}
             onChange={(event) => setStylePreset(event.target.value)}
-            className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+            className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-blue-400 focus:outline-none focus:ring-1 focus:ring-blue-300"
           />
         </label>
 
         <button
           type="button"
-          className="mt-4 rounded-lg bg-blue-600 px-3 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-55"
+          className="mt-4 w-full rounded-lg bg-gradient-to-r from-blue-600 to-indigo-600 px-3 py-2.5 text-sm font-medium text-white shadow-sm hover:from-blue-700 hover:to-indigo-700 disabled:cursor-not-allowed disabled:opacity-55 transition"
           onClick={generateImage}
           disabled={!imageEnabled || generating || checking}
         >
-          {generating ? '生图中...' : '步骤 2：确认并生成图片'}
+          {generating ? '生成中...' : imageUrl ? '重新生成图片' : '步骤 2：确认并生成图片'}
         </button>
         {!imageEnabled ? (
           <p className="mt-2 text-xs text-amber-700">
@@ -179,14 +244,36 @@ export function InfographicWindow({ sessionId, result, onResultUpdate }: Infogra
       </div>
 
       <div className="rounded-2xl border border-slate-200 bg-white p-4">
-        <p className="text-sm font-medium text-slate-700">结果预览</p>
-        {imageUrl ? (
+        <div className="flex items-center justify-between">
+          <p className="text-sm font-medium text-slate-700">结果预览</p>
+          {imageUrl ? (
+            <button
+              type="button"
+              onClick={downloadImage}
+              className="flex items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50 transition"
+            >
+              <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+              </svg>
+              下载图片
+            </button>
+          ) : null}
+        </div>
+
+        {generating ? (
+          <div className="mt-3 flex min-h-72 items-center justify-center rounded-xl border border-dashed border-blue-300 bg-blue-50/30">
+            <GeneratingProgress elapsed={genElapsed} />
+          </div>
+        ) : imageUrl ? (
           <div className="mt-3 overflow-hidden rounded-xl border border-slate-200">
             <Image src={imageUrl} alt={draft.title || '课堂信息图'} width={1200} height={1200} className="h-auto w-full object-cover" unoptimized />
           </div>
         ) : (
-          <div className="mt-3 flex min-h-72 items-center justify-center rounded-xl border border-dashed border-slate-300 bg-slate-50 text-sm text-slate-500">
-            还没有图片，先确认草案后生成
+          <div className="mt-3 flex min-h-72 flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-slate-300 bg-slate-50">
+            <svg className="h-10 w-10 text-slate-300" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 15.75l5.159-5.159a2.25 2.25 0 013.182 0l5.159 5.159m-1.5-1.5l1.409-1.409a2.25 2.25 0 013.182 0l2.909 2.909M3.75 21h16.5A2.25 2.25 0 0022.5 18.75V5.25A2.25 2.25 0 0020.25 3H3.75A2.25 2.25 0 001.5 5.25v13.5A2.25 2.25 0 003.75 21z" />
+            </svg>
+            <p className="text-sm text-slate-500">确认草案后点击生成</p>
           </div>
         )}
       </div>

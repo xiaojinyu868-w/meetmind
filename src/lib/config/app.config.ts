@@ -17,7 +17,8 @@ export interface ModelConfig {
   maxTokens: number;
   recommended?: boolean;
   supportsMultimodal?: boolean;
-  enableThinking?: boolean;  // 启用思考模式（qwen3-max-2026-01-23）
+  enableThinking?: boolean;  // 启用思考模式
+  supportsBuiltinTools?: boolean;  // 支持内置工具（web_search/code_interpreter，仅 qwen3-max）
 }
 
 function hasValue(value: string | undefined): boolean {
@@ -32,12 +33,21 @@ const relayModelId = (process.env.RELAY_MODEL || 'gemini-3-pro-image-preview').t
 
 const qwenModels: ModelConfig[] = [
   {
+    id: 'qwen3.5-plus',
+    name: '通义千问 3.5 Plus',
+    provider: 'qwen',
+    description: '千问3.5系列，百万级上下文(1M tokens)，推理/写作/Agent能力全面提升',
+    maxTokens: 8192,
+    recommended: true,
+    supportsMultimodal: false,
+    enableThinking: false,
+  },
+  {
     id: 'qwen3-vl-plus-2025-12-19',
     name: '通义千问 3 VL',
     provider: 'qwen',
     description: '多模态视觉模型，支持图片理解',
     maxTokens: 8192,
-    recommended: true,
     supportsMultimodal: true,
   },
   {
@@ -48,6 +58,7 @@ const qwenModels: ModelConfig[] = [
     maxTokens: 32768,
     supportsMultimodal: false,
     enableThinking: true,
+    supportsBuiltinTools: true,
   },
 ];
 
@@ -89,10 +100,11 @@ const resolvedDefaultModel =
   (envDefaultModel && resolvedModels.some((model) => model.id === envDefaultModel)
     ? envDefaultModel
     : undefined) ||
+  resolvedModels.find((model) => model.id === 'qwen3.5-plus')?.id ||
   resolvedModels.find((model) => model.id === 'qwen3-vl-plus-2025-12-19')?.id ||
   resolvedModels.find((model) => model.supportsMultimodal)?.id ||
   resolvedModels[0]?.id ||
-  'qwen3-vl-plus-2025-12-19';
+  'qwen3.5-plus';
 const resolvedDefaultVisionModel =
   resolvedModels.find((model) => model.supportsMultimodal)?.id ||
   resolvedModels[0]?.id ||
