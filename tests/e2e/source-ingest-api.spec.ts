@@ -1,4 +1,6 @@
 import { expect, test } from '@playwright/test';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 
 test.describe('Source Ingest API', () => {
   test('accepts pasted text JSON and returns transcript segments', async ({ request }) => {
@@ -56,6 +58,33 @@ test.describe('Source Ingest API', () => {
     expect(body.title).toBe('lesson-notes');
     expect(Array.isArray(body.segments)).toBeTruthy();
     expect((body.segments || []).length).toBeGreaterThan(0);
+  });
+
+  test('accepts valid docx upload and returns parsed segments', async ({ request }) => {
+    const fixturePath = join(process.cwd(), 'tests', 'fixtures', 'minimal.docx');
+    const response = await request.post('/api/sources/ingest', {
+      multipart: {
+        file: {
+          name: 'minimal.docx',
+          mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+          buffer: readFileSync(fixturePath),
+        },
+      },
+    });
+
+    expect(response.ok()).toBeTruthy();
+    const body = (await response.json()) as {
+      success?: boolean;
+      fileType?: string;
+      segments?: Array<{ text?: string }>;
+    };
+
+    expect(body.success).toBeTruthy();
+    expect(body.fileType).toBe('docx');
+    expect(Array.isArray(body.segments)).toBeTruthy();
+    expect((body.segments || []).length).toBeGreaterThan(0);
+    const merged = (body.segments || []).map((item) => item.text || '').join(' ');
+    expect(merged.length).toBeGreaterThan(5);
   });
 
   test('returns FILE_UNSUPPORTED for unsupported extension', async ({ request }) => {
