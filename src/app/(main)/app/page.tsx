@@ -654,6 +654,99 @@ function StudentAppContent({
       setVideoPlayNonce(0);
     }
   }, [videoSource]);
+
+  useEffect(() => {
+    if (!onboarding.isActive || !onboarding.currentStep) return;
+
+    const stepId = onboarding.currentStep.id;
+    const isRecordFlowStep =
+      stepId === 'record-button' ||
+      stepId === 'video-import' ||
+      stepId === 'support-source' ||
+      stepId === 'mode-switch';
+    const isDesktopWorkshopStep =
+      !isMobile &&
+      (stepId === 'review-apps-tab' || stepId === 'workshop-generate-all' || stepId === 'workshop-dock-toggle');
+
+    if (isRecordFlowStep && viewMode !== 'record') {
+      setViewMode('record');
+      return;
+    }
+
+    if (isDesktopWorkshopStep) {
+      if (viewMode !== 'review') {
+        setViewMode('review');
+        return;
+      }
+      if (videoSource) {
+        if (videoWorkspaceTab !== 'apps') {
+          setVideoWorkspaceTab('apps');
+          return;
+        }
+      } else if (reviewTab !== 'apps') {
+        setReviewTab('apps');
+        return;
+      }
+    }
+
+    if (stepId === 'timeline' && viewMode === 'review' && reviewTab !== 'timeline') {
+      setReviewTab('timeline');
+      return;
+    }
+
+    if (stepId === 'ai-tutor' && showConversationHistory) {
+      setShowConversationHistory(false);
+      setSelectedHistoryConversation(null);
+      return;
+    }
+
+    if (stepId === 'action-list' && !isActionDrawerOpen) {
+      setIsActionDrawerOpen(true);
+      return;
+    }
+
+    if (isMobile && stepId === 'ai-fab' && mobileSubPage) {
+      setMobileSubPage(null);
+      return;
+    }
+
+    if (isMobile && stepId === 'menu-button-workshop' && isMenuOpen) {
+      setIsMenuOpen(false);
+      return;
+    }
+
+    if (isMobile && stepId === 'menu-apps-item' && !isMenuOpen) {
+      setIsMenuOpen(true);
+      return;
+    }
+
+    if (isMobile && stepId === 'mobile-workshop-panel') {
+      if (isMenuOpen) {
+        setIsMenuOpen(false);
+        return;
+      }
+      if (mobileSubPage !== 'apps') {
+        setMobileSubPage('apps');
+        return;
+      }
+    }
+
+    if (isMobile && stepId === 'menu-button' && isMenuOpen) {
+      setIsMenuOpen(false);
+    }
+  }, [
+    onboarding.isActive,
+    onboarding.currentStep,
+    viewMode,
+    reviewTab,
+    videoSource,
+    videoWorkspaceTab,
+    showConversationHistory,
+    isActionDrawerOpen,
+    isMobile,
+    mobileSubPage,
+    isMenuOpen,
+  ]);
   
   // NOTE: cleaned corrupted legacy comment.
   useEffect(() => {
@@ -1228,7 +1321,7 @@ function StudentAppContent({
         
         // NOTE: cleaned corrupted legacy comment.
         // NOTE: cleaned corrupted legacy comment.
-        if (!onboarding.isActive && onboarding.shouldShowFlow('review')) {
+        if (!isGuestFastEntry && !onboarding.isActive && onboarding.shouldShowFlow('review')) {
           setTimeout(() => onboarding.startFlow('review'), 500);
         }
       } catch (err) {
@@ -1236,18 +1329,34 @@ function StudentAppContent({
       }
     } else if (newMode === 'review' && segments.length > 0) {
       // Enter review onboarding when data already exists.
-      if (!onboarding.isActive && onboarding.shouldShowFlow('review')) {
+      if (!isGuestFastEntry && !onboarding.isActive && onboarding.shouldShowFlow('review')) {
         setTimeout(() => onboarding.startFlow('review'), 300);
       }
     }
-  }, [segments.length, sessionId, onboarding]);
+  }, [segments.length, sessionId, onboarding, isGuestFastEntry]);
 
   useEffect(() => {
+    if (isGuestFastEntry) return;
     if (viewMode !== 'review' || !videoSource) return;
     if (onboarding.isActive || !onboarding.shouldShowFlow('video-review')) return;
     const timer = setTimeout(() => onboarding.startFlow('video-review'), 300);
     return () => clearTimeout(timer);
-  }, [viewMode, videoSource, onboarding]);
+  }, [viewMode, videoSource, onboarding, isGuestFastEntry]);
+
+  useEffect(() => {
+    if (isGuestFastEntry) return;
+    if (onboarding.isActive || !onboarding.shouldShowFlow('workshop')) return;
+
+    const inDesktopWorkshop = !isMobile &&
+      viewMode === 'review' &&
+      ((videoSource && videoWorkspaceTab === 'apps') || (!videoSource && reviewTab === 'apps'));
+    const inMobileWorkshop = isMobile && mobileSubPage === 'apps';
+
+    if (!inDesktopWorkshop && !inMobileWorkshop) return;
+
+    const timer = setTimeout(() => onboarding.startFlow('workshop'), 300);
+    return () => clearTimeout(timer);
+  }, [isMobile, mobileSubPage, onboarding, reviewTab, videoSource, videoWorkspaceTab, viewMode, isGuestFastEntry]);
 
   // Load a history session and switch to review mode.
   const handleLoadHistorySession = useCallback(async (session: AudioSession) => {
@@ -3076,6 +3185,7 @@ const _handleVideoAssistantMessage = useCallback((payload: {
                       {VIDEO_WORKSPACE_TABS.map((tab) => (
                         <button
                           key={tab.key}
+                          data-onboarding={tab.key === 'apps' ? 'review-apps-tab' : undefined}
                           onClick={() => {
                             setVideoWorkspaceTab(tab.key);
                             if (tab.key !== 'confusion') setConfusionChatAnchor(null);
@@ -3270,7 +3380,7 @@ const _handleVideoAssistantMessage = useCallback((payload: {
                       {REVIEW_WORKSPACE_TABS.map((tab) => (
                         <button
                           key={tab.key}
-                          data-onboarding={tab.key === 'timeline' ? 'timeline' : undefined}
+                          data-onboarding={tab.key === 'timeline' ? 'timeline' : tab.key === 'apps' ? 'review-apps-tab' : undefined}
                           data-testid={tab.testId}
                           onClick={() => setReviewTab(tab.key)}
                           className={`px-3 py-2 text-sm rounded-lg transition-all whitespace-nowrap tab-button ${
@@ -3984,7 +4094,7 @@ const _handleVideoAssistantMessage = useCallback((payload: {
 
               {/* NOTE: cleaned corrupted legacy comment. */}
               {mobileSubPage === 'apps' && (
-                <div className="flex-1 min-h-0 flex flex-col bg-white">
+                <div className="flex-1 min-h-0 flex flex-col bg-white" data-onboarding="mobile-workshop-panel">
                   <div className="flex items-center gap-3 px-4 py-3 border-b border-gray-100">
                     <button
                       onClick={() => setMobileSubPage(null)}

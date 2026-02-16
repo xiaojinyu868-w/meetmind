@@ -259,6 +259,7 @@ export function DedaoMenu({
           {menuItems.map((item) => (
             <button
               key={item.id}
+              data-onboarding={item.id === 'apps' ? 'menu-apps' : undefined}
               onClick={() => {
                 onNavigate(item.id);
                 onClose();

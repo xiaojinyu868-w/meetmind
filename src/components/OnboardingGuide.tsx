@@ -46,9 +46,7 @@ export function OnboardingGuide({
 
     targetElementRef.current = target;
 
-    const handleTargetClick = (e: Event) => {
-      // 阻止事件冒泡，避免触发遮罩的点击事件
-      e.stopPropagation();
+    const handleTargetClick = () => {
       // 延迟一点执行下一步，让用户能看到点击效果
       setTimeout(() => {
         onNext();
@@ -160,16 +158,35 @@ export function OnboardingGuide({
       setTimeout(updatePosition, 300),
     ];
 
-    // 如果目标选择器存在但元素始终找不到，1.5s 后自动跳到下一步
-    let skipTimer: ReturnType<typeof setTimeout> | null = null;
+    // 目标元素可能晚于引导出现（懒加载 / 面板切换），用短轮询等待再决定是否跳过
+    let waitTargetInterval: ReturnType<typeof setInterval> | null = null;
     if (step.targetSelector) {
-      skipTimer = setTimeout(() => {
+      const retryIntervalMs = 200;
+      const maxWaitMs = Math.max(2000, step.delay ?? 6000);
+      const maxRetryCount = Math.ceil(maxWaitMs / retryIntervalMs);
+      let retryCount = 0;
+
+      waitTargetInterval = setInterval(() => {
         const el = document.querySelector(step.targetSelector!);
-        if (!el) {
-          console.warn(`[OnboardingGuide] Target "${step.targetSelector}" not found, auto-skipping`);
+        if (el) {
+          updatePosition();
+          if (waitTargetInterval) {
+            clearInterval(waitTargetInterval);
+            waitTargetInterval = null;
+          }
+          return;
+        }
+
+        retryCount += 1;
+        if (retryCount >= maxRetryCount) {
+          console.warn(`[OnboardingGuide] Target "${step.targetSelector}" not found after ${maxWaitMs}ms, auto-skipping`);
+          if (waitTargetInterval) {
+            clearInterval(waitTargetInterval);
+            waitTargetInterval = null;
+          }
           onNext();
         }
-      }, 1500);
+      }, retryIntervalMs);
     }
 
     window.addEventListener('resize', updatePosition);
@@ -177,7 +194,7 @@ export function OnboardingGuide({
 
     return () => {
       timers.forEach(clearTimeout);
-      if (skipTimer) clearTimeout(skipTimer);
+      if (waitTargetInterval) clearInterval(waitTargetInterval);
       window.removeEventListener('resize', updatePosition);
       window.removeEventListener('scroll', updatePosition, true);
     };
@@ -353,21 +370,19 @@ export function OnboardingGuide({
             >
               跳过引导
             </button>
-            {/* 交互式模式：显示"点击试试"提示；非交互式：显示下一步按钮 */}
-            {isInteractive && targetRect ? (
-              <span className="px-3 sm:px-5 py-1.5 sm:py-2 text-rose-500 text-xs sm:text-sm font-medium flex items-center gap-1">
-                <span className="animate-bounce">👆</span>
-                点击试试
-              </span>
-            ) : (
-              <button
-                onClick={onNext}
-                className="px-3 sm:px-5 py-1.5 sm:py-2 bg-rose-500 hover:bg-rose-600 text-white text-xs sm:text-sm font-medium rounded-full transition-colors shadow-lg"
-              >
-                {stepIndex === totalSteps - 1 ? '开始使用' : '下一步'}
-              </button>
-            )}
+            <button
+              onClick={onNext}
+              className="px-3 sm:px-5 py-1.5 sm:py-2 bg-rose-500 hover:bg-rose-600 text-white text-xs sm:text-sm font-medium rounded-full transition-colors shadow-lg"
+            >
+              {stepIndex === totalSteps - 1 ? '开始使用' : '下一步'}
+            </button>
           </div>
+          {isInteractive && targetRect ? (
+            <p className="text-[11px] sm:text-xs text-rose-500 flex items-center gap-1">
+              <span className="animate-bounce">👆</span>
+              也可以直接点击高亮区域继续
+            </p>
+          ) : null}
         </div>
       </div>
     </div>

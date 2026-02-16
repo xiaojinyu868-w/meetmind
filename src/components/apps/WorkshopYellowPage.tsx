@@ -181,6 +181,53 @@ export function WorkshopYellowPage(props: WorkshopYellowPageProps) {
   const [dockTasks, setDockTasks] = useState<Record<string, DockTask>>({});
   const [dockOpen, setDockOpen] = useState(false);
 
+  /* ── 任务中心拖拽 ── */
+  const dockRef = useRef<HTMLDivElement>(null);
+  const [dockPos, setDockPos] = useState<{ x: number; y: number } | null>(null);
+  const dragState = useRef<{ startX: number; startY: number; originX: number; originY: number; dragging: boolean } | null>(null);
+
+  const handleDockPointerDown = useCallback((e: React.PointerEvent) => {
+    const el = dockRef.current;
+    if (!el) return;
+    const rect = el.getBoundingClientRect();
+    dragState.current = {
+      startX: e.clientX,
+      startY: e.clientY,
+      originX: rect.left,
+      originY: rect.top,
+      dragging: false,
+    };
+    (e.target as HTMLElement).setPointerCapture(e.pointerId);
+  }, []);
+
+  const handleDockPointerMove = useCallback((e: React.PointerEvent) => {
+    const ds = dragState.current;
+    if (!ds) return;
+    const dx = e.clientX - ds.startX;
+    const dy = e.clientY - ds.startY;
+    if (!ds.dragging && Math.abs(dx) + Math.abs(dy) < 5) return; // 防止误触
+    ds.dragging = true;
+    // 限制不超出视口
+    const el = dockRef.current;
+    if (!el) return;
+    const w = el.offsetWidth;
+    const h = el.offsetHeight;
+    const nx = Math.max(0, Math.min(window.innerWidth - w, ds.originX + dx));
+    const ny = Math.max(0, Math.min(window.innerHeight - h, ds.originY + dy));
+    setDockPos({ x: nx, y: ny });
+  }, []);
+
+  const handleDockPointerUp = useCallback((e: React.PointerEvent) => {
+    const ds = dragState.current;
+    const wasDrag = ds?.dragging ?? false;
+    dragState.current = null;
+    if (!wasDrag) {
+      // 如果不是拖拽，则当作点击处理
+      setDockOpen((prev) => !prev);
+    }
+    (e.target as HTMLElement).releasePointerCapture(e.pointerId);
+  }, []);
+
   useEffect(() => {
     let cancelled = false;
     const run = async () => {
@@ -572,7 +619,7 @@ export function WorkshopYellowPage(props: WorkshopYellowPageProps) {
   const completedCount = useMemo(() => dockList.filter((task) => task.status === 'success').length, [dockList]);
 
   return (
-    <section className={styles.page}>
+    <section className={styles.page} data-onboarding="workshop-panel">
       <header className={styles.header}>
         <h2 className={styles.title}>多样的智能体应用</h2>
         <p className={styles.subTitle}>AI工坊只负责发现与进入，应用可后台并行生成，不打断主学习流。</p>
@@ -586,6 +633,7 @@ export function WorkshopYellowPage(props: WorkshopYellowPageProps) {
             onClick={generateAll}
             disabled={runningCount > 0 && visibleApps.every((a) => runningMap[a.key] || generatedMap[a.key])}
             data-testid="workshop-generate-all"
+            data-onboarding="workshop-generate-all"
           >
             一键全部生成
           </button>
@@ -700,12 +748,19 @@ export function WorkshopYellowPage(props: WorkshopYellowPageProps) {
         })}
       </div>
 
-      <div className={styles.dock}>
-        <button
-          type="button"
+      <div
+        ref={dockRef}
+        className={styles.dock}
+        style={dockPos ? { left: dockPos.x, top: dockPos.y, right: 'auto', bottom: 'auto' } : undefined}
+      >
+        <div
           className={styles.dockToggle}
-          onClick={() => setDockOpen((prev) => !prev)}
+          onPointerDown={handleDockPointerDown}
+          onPointerMove={handleDockPointerMove}
+          onPointerUp={handleDockPointerUp}
+          style={{ touchAction: 'none', cursor: 'grab' }}
           data-testid="workshop-dock-toggle"
+          data-onboarding="workshop-dock-toggle"
         >
           <span>任务中心</span>
           {runningCount > 0 ? (
@@ -722,7 +777,7 @@ export function WorkshopYellowPage(props: WorkshopYellowPageProps) {
           ) : (
             <span className={styles.dockStat}>异常 {failedCount}</span>
           )}
-        </button>
+        </div>
 
         {dockOpen ? (
           <aside className={styles.dockPanel} data-testid="workshop-dock-panel">
