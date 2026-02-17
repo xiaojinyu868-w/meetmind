@@ -5,7 +5,7 @@ import Image from 'next/image';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { toast } from 'sonner';
-import { DEFAULT_MODEL_ID } from '@/lib/services/llm-service';
+import { DEFAULT_WORKSHOP_MODEL_ID } from '@/lib/services/llm-service';
 import type { Anchor, TranscriptSegment } from '@/types';
 import type { AppExecutionResult, DataSourceType } from '@/lib/ai-native/types';
 import type { WorkshopAppCatalogItem, WorkshopAppKey } from '@/lib/ai-native/app-catalog';
@@ -115,9 +115,9 @@ function taskLabel(state: AppTaskState | undefined, generated: boolean): string 
 }
 
 function readPreferredModel(): string {
-  if (typeof window === 'undefined') return DEFAULT_MODEL_ID;
+  if (typeof window === 'undefined') return DEFAULT_WORKSHOP_MODEL_ID;
   const model = window.localStorage.getItem(WORKSHOP_MODEL_PREFERENCE)?.trim();
-  return model || DEFAULT_MODEL_ID;
+  return model || DEFAULT_WORKSHOP_MODEL_ID;
 }
 
 function statusText(status: DockTaskStatus): string {
@@ -478,7 +478,11 @@ export function WorkshopYellowPage(props: WorkshopYellowPageProps) {
           hasResult: true,
           message: undefined,
         });
-        toast.success(`${app.name} 已在后台生成完成`);
+        toast.success(`${app.name} 已生成完成`, {
+          action: onOpenAppWindow
+            ? { label: '打开结果', onClick: () => onOpenAppWindow(app.key) }
+            : undefined,
+        });
       } catch (error) {
         const isAborted =
           (error instanceof DOMException && error.name === 'AbortError') ||
@@ -526,6 +530,7 @@ export function WorkshopYellowPage(props: WorkshopYellowPageProps) {
       dockTasks,
       generatedMap,
       keyDifficulties,
+      onOpenAppWindow,
       runningMap,
       sessionId,
       summaryOverview,
@@ -748,6 +753,7 @@ export function WorkshopYellowPage(props: WorkshopYellowPageProps) {
         })}
       </div>
 
+      {(runningCount > 0 || failedCount > 0) ? (
       <div
         ref={dockRef}
         className={styles.dock}
@@ -869,6 +875,7 @@ export function WorkshopYellowPage(props: WorkshopYellowPageProps) {
           </aside>
         ) : null}
       </div>
+      ) : null}
     </section>
   );
 }

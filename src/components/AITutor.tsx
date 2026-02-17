@@ -6,7 +6,6 @@ import { formatTimestamp } from '@/lib/services/longcut-utils';
 import { notebookService, localSearch, type SearchResult } from '@/lib/services/notebook-service';
 import { ModelSelector } from './ModelSelector';
 import { GuidanceQuestion, GuidanceQuestionSkeleton } from './GuidanceQuestion';
-import { Citations } from './Citations';
 import { ImageUpload, useImagePaste, type UploadedImage } from './ImageUpload';
 import { useAuth } from '@/lib/hooks/useAuth';
 import { useAnalyticsContext } from '@/components/AnalyticsProvider';
@@ -68,7 +67,11 @@ function toTranscriptSignature(segments: Segment[]): string {
 }
 
 function normalizeSupportContextText(raw: string, maxChars = 3500): string {
-  const normalized = (raw || '').replace(/\s+/g, ' ').trim();
+  const normalized = (raw || '')
+    .replace(/\r\n/g, '\n')
+    .replace(/[ \t]{2,}/g, ' ')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
   if (!normalized) return '';
   if (normalized.length <= maxChars) return normalized;
   return `${normalized.slice(0, maxChars - 3)}...`;
@@ -89,7 +92,7 @@ function buildTutorRequestSegments(params: {
 
   const supportSegment: Segment = {
     id: '__support_context__',
-    text: `[Support Materials]\n${normalizedSupport}`,
+    text: `【增强资料】\n${normalizedSupport}\n\n【使用规则】\n- 回答引用资料时必须标注 [资料N]\n- 若资料无证据，请明确说明“资料中未找到相关证据”`,
     startMs: focusTimestamp,
     endMs: focusTimestamp + 1,
   };
@@ -168,6 +171,31 @@ interface TutorAPIResponse {
   };
 }
 
+interface TutorChatMessage {
+  role: 'user' | 'assistant';
+  content: string;
+  citations?: Citation[];
+}
+
+function normalizeCitations(raw: unknown): Citation[] | undefined {
+  if (!Array.isArray(raw)) return undefined;
+  const parsed = raw.filter(Boolean) as Citation[];
+  return parsed.length > 0 ? parsed : undefined;
+}
+
+function normalizeChatHistory(raw: unknown): TutorChatMessage[] {
+  if (!Array.isArray(raw)) return [];
+
+  return raw
+    .filter((item): item is Record<string, unknown> => !!item && typeof item === 'object')
+    .map((item): TutorChatMessage => ({
+      role: item.role === 'assistant' ? 'assistant' : 'user',
+      content: typeof item.content === 'string' ? item.content : '',
+      citations: normalizeCitations(item.citations),
+    }))
+    .filter((item) => item.content.length > 0);
+}
+
 export function AITutor({
   breakpoint,
   segments,
@@ -184,12 +212,13 @@ export function AITutor({
   const userId = getEffectiveUserId(user?.id);
   const { trackCoreEvent } = useAnalyticsContext();
   const [userInput, setUserInput] = useState('');
-  const [chatHistory, setChatHistory] = useState<Array<{ role: 'user' | 'assistant'; content: string }>>([]);
+  const [chatHistory, setChatHistory] = useState<TutorChatMessage[]>([]);
   const [selectedModel, setSelectedModel] = useState(DEFAULT_MODEL_ID);
   const [response, setResponse] = useState<TutorAPIResponse | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
+  const [breakpointStreamingCitations, setBreakpointStreamingCitations] = useState<Citation[]>([]);
   
   // 缓存相关状态
   const [isFromCache, setIsFromCache] = useState(false);
@@ -529,7 +558,7 @@ export function AITutor({
             return false;
           }
 
-          const cachedHistory = JSON.parse(cached.chatHistory) as Array<{ role: 'user' | 'assistant'; content: string }>;
+          const cachedHistory = normalizeChatHistory(JSON.parse(cached.chatHistory));
           
           setResponse(cachedResponse);
           setChatHistory(cachedHistory);
@@ -582,7 +611,7 @@ export function AITutor({
   // 保存到缓存
   const saveToCache = useCallback(async (
     resp: TutorAPIResponse,
-    history: Array<{ role: 'user' | 'assistant'; content: string }>,
+    history: TutorChatMessage[],
     convId?: string
   ) => {
     if (!breakpoint) return;
@@ -616,7 +645,7 @@ export function AITutor({
   // 同步到对话历史系统
   const syncToConversationHistory = useCallback(async (
     resp: TutorAPIResponse,
-    history: Array<{ role: 'user' | 'assistant'; content: string }>
+    history: TutorChatMessage[]
   ) => {
     if (!breakpoint) return;
     
@@ -759,6 +788,7 @@ export function AITutor({
     
     setSelectedOptionId(optionId);
     setIsGuidanceLoading(true);
+    setBreakpointStreamingCitations([]);
     
     // 添加用户消息
     const userMessage = `我选择了：${option.text}`;
@@ -767,6 +797,7 @@ export function AITutor({
     // 用于接收元数据
     let newGuidanceQuestion: GuidanceQuestionType | undefined;
     let newConversationId: string | undefined;
+    let collectedCitations: Citation[] = [];
     
     try {
       trackCoreEvent('tutor_chat_start', {
@@ -803,6 +834,11 @@ export function AITutor({
           if (metadata.guidance_question) {
             newGuidanceQuestion = metadata.guidance_question as GuidanceQuestionType;
           }
+          const nextCitations = normalizeCitations(metadata.citations);
+          if (nextCitations?.length) {
+            collectedCitations = nextCitations;
+            setBreakpointStreamingCitations(nextCitations);
+          }
         },
       });
 
@@ -810,10 +846,15 @@ export function AITutor({
       const newHistory = [
         ...chatHistory,
         { role: 'user' as const, content: userMessage },
-        { role: 'assistant' as const, content: result.content || '让我针对你的选择进一步解释...' },
+        {
+          role: 'assistant' as const,
+          content: result.content || '让我针对你的选择进一步解释...',
+          citations: collectedCitations.length ? collectedCitations : undefined,
+        },
       ];
       setChatHistory(newHistory);
       clearBreakpointStreamingOnly();  // 只清空流式内容，保留思考内容
+      setBreakpointStreamingCitations([]);
       
       if (newConversationId) {
         setConversationId(newConversationId);
@@ -843,6 +884,7 @@ export function AITutor({
         content: `抱歉，出现错误：${err instanceof Error ? err.message : '未知错误'}` 
       }]);
       clearBreakpointStreamingOnly();  // 只清空流式内容，保留思考内容
+      setBreakpointStreamingCitations([]);
     } finally {
       setIsGuidanceLoading(false);
     }
@@ -862,6 +904,8 @@ export function AITutor({
       : question;
     
     setChatHistory(prev => [...prev, { role: 'user', content: userDisplayContent }]);
+    setBreakpointStreamingCitations([]);
+    let collectedCitations: Citation[] = [];
     
     try {
       trackCoreEvent('tutor_chat_start', {
@@ -914,8 +958,11 @@ export function AITutor({
           if (metadata.conversation_id) {
             setConversationId(metadata.conversation_id as string);
           }
-          if ((metadata.citations as Citation[] | undefined)?.length) {
-            setResponse(prev => prev ? { ...prev, citations: metadata.citations as Citation[] } : null);
+          const nextCitations = normalizeCitations(metadata.citations);
+          if (nextCitations?.length) {
+            collectedCitations = nextCitations;
+            setBreakpointStreamingCitations(nextCitations);
+            setResponse(prev => (prev ? { ...prev, citations: nextCitations } : null));
           }
         },
       });
@@ -924,10 +971,15 @@ export function AITutor({
       const newHistory = [
         ...chatHistory,
         { role: 'user' as const, content: userDisplayContent },
-        { role: 'assistant' as const, content: result.content || '抱歉，我没有理解你的问题' },
+        {
+          role: 'assistant' as const,
+          content: result.content || '抱歉，我没有理解你的问题',
+          citations: collectedCitations.length ? collectedCitations : undefined,
+        },
       ];
       setChatHistory(newHistory);
       clearBreakpointStreamingOnly();  // 只清空流式内容，保留思考内容
+      setBreakpointStreamingCitations([]);
       
       // 更新缓存
       if (response) {
@@ -948,6 +1000,7 @@ export function AITutor({
         content: `抱歉，出现错误：${err instanceof Error ? err.message : '未知错误'}` 
       }]);
       clearBreakpointStreamingOnly();  // 只清空流式内容，保留思考内容
+      setBreakpointStreamingCitations([]);
     }
   };
 
@@ -957,8 +1010,9 @@ export function AITutor({
   const isGlobalMode = !breakpoint;
 
   // 全局模式下的对话历史
-  const [globalChatHistory, setGlobalChatHistory] = useState<Array<{ role: 'user' | 'assistant'; content: string }>>([]);
+  const [globalChatHistory, setGlobalChatHistory] = useState<TutorChatMessage[]>([]);
   const [globalLoading, setGlobalLoading] = useState(false);
+  const [globalStreamingCitations, setGlobalStreamingCitations] = useState<Citation[]>([]);
   
   // 全局模式的流式输出 - 使用统一的 SSE Hook
   const {
@@ -986,6 +1040,8 @@ export function AITutor({
     
     // 添加用户消息
     setGlobalChatHistory(prev => [...prev, { role: 'user', content: question }]);
+    setGlobalStreamingCitations([]);
+    let collectedCitations: Citation[] = [];
     setGlobalLoading(true);
     trackCoreEvent('tutor_chat_start', {
       mode: 'global-chat',
@@ -1028,15 +1084,26 @@ export function AITutor({
       // 记录思考开始时间
       setGlobalThinkingStartTime(Date.now());
 
-      const result = await globalFetchStream('/api/tutor', requestBody, { headers });
+      const result = await globalFetchStream('/api/tutor', requestBody, {
+        headers,
+        onMetadata: (metadata: SSEEvent) => {
+          const nextCitations = normalizeCitations(metadata.citations);
+          if (nextCitations?.length) {
+            collectedCitations = nextCitations;
+            setGlobalStreamingCitations(nextCitations);
+          }
+        },
+      });
 
 
       // 流式完成，将完整内容添加到历史
       setGlobalChatHistory(prev => [...prev, { 
         role: 'assistant', 
-        content: result.content || '抱歉，我没有理解你的问题，能换个方式问吗？'
+        content: result.content || '抱歉，我没有理解你的问题，能换个方式问吗？',
+        citations: collectedCitations.length ? collectedCitations : undefined,
       }]);
       clearGlobalStreamingOnly();  // 只清空流式内容，保留思考内容
+      setGlobalStreamingCitations([]);
 
       // 保存到对话历史
       if (!conversationIdRef.current) {
@@ -1079,6 +1146,7 @@ export function AITutor({
         content: `抱歉，出现错误：${err instanceof Error ? err.message : '未知错误'}` 
       }]);
       clearGlobalStreamingOnly();  // 只清空流式内容，保留思考内容
+      setGlobalStreamingCitations([]);
     } finally {
       setGlobalLoading(false);
     }
@@ -1092,11 +1160,13 @@ export function AITutor({
     if (streamingContent) {
       setGlobalChatHistory(prev => [...prev, { 
         role: 'assistant', 
-        content: streamingContent + '\n\n[生成已停止]'
+        content: streamingContent + '\n\n[生成已停止]',
+        citations: globalStreamingCitations.length ? globalStreamingCitations : undefined,
       }]);
       clearGlobalStreamingOnly();  // 只清空流式内容，保留思考内容
     }
-  }, [streamingContent, globalStopStream, clearGlobalStreamingOnly]);
+    setGlobalStreamingCitations([]);
+  }, [streamingContent, globalStopStream, clearGlobalStreamingOnly, globalStreamingCitations]);
 
   // 困惑点模式：停止生成
   const stopBreakpointGeneration = useCallback(() => {
@@ -1106,11 +1176,13 @@ export function AITutor({
     if (breakpointStreamingContent) {
       setChatHistory(prev => [...prev, { 
         role: 'assistant', 
-        content: breakpointStreamingContent + '\n\n[生成已停止]'
+        content: breakpointStreamingContent + '\n\n[生成已停止]',
+        citations: breakpointStreamingCitations.length ? breakpointStreamingCitations : undefined,
       }]);
       clearBreakpointStreamingOnly();  // 只清空流式内容，保留思考内容
     }
-  }, [breakpointStreamingContent, breakpointStopStream, clearBreakpointStreamingOnly]);
+    setBreakpointStreamingCitations([]);
+  }, [breakpointStreamingContent, breakpointStopStream, clearBreakpointStreamingOnly, breakpointStreamingCitations]);
 
   // 全局模式：处理初始问题（handleGlobalSend 已在上方定义）
   useEffect(() => {
@@ -1251,6 +1323,7 @@ export function AITutor({
                         <ThinkingGuideRenderer
                           content={msg.content}
                           onTimestampClick={handleTimestampClick}
+                          citations={msg.citations}
                           isMobile={isMobile}
                           className={`leading-relaxed ${isMobile ? 'text-xs' : 'text-sm'}`}
                         />
@@ -1258,6 +1331,7 @@ export function AITutor({
                         <StreamingMarkdown
                           content={msg.content}
                           onTimestampClick={handleTimestampClick}
+                          citations={msg.citations}
                           className={`leading-relaxed ${isMobile ? 'text-xs' : 'text-sm'}`}
                         />
                       )
@@ -1297,6 +1371,7 @@ export function AITutor({
                         content={streamingContent}
                         isStreaming={true}
                         onTimestampClick={handleTimestampClick}
+                        citations={globalStreamingCitations}
                         isMobile={isMobile}
                         className={`leading-relaxed ${isMobile ? 'text-xs' : 'text-sm'}`}
                       />
@@ -1305,6 +1380,7 @@ export function AITutor({
                         content={streamingContent}
                         isStreaming={true}
                         onTimestampClick={handleTimestampClick}
+                        citations={globalStreamingCitations}
                         className={`leading-relaxed ${isMobile ? 'text-xs' : 'text-sm'}`}
                       />
                     )}
@@ -1327,7 +1403,7 @@ export function AITutor({
                   </div>
                 </div>
               )}
-              
+
               <div ref={chatEndRef} />
             </div>
           )}
@@ -1638,13 +1714,6 @@ export function AITutor({
               )}
             </Section>
 
-            {/* 联网搜索结果 */}
-            {enableWeb && response.citations && response.citations.length > 0 && (
-              <Section icon="🌐" title="联网搜索结果" badge="实时检索">
-                <Citations citations={response.citations} />
-              </Section>
-            )}
-
             {/* 知识库搜索 */}
             {notebookAvailable && (
               <Section icon="🔍" title="知识库搜索" badge="Open Notebook">
@@ -1705,6 +1774,7 @@ export function AITutor({
                         <ThinkingGuideRenderer
                           content={msg.content}
                           onTimestampClick={handleTimestampClick}
+                          citations={msg.citations}
                           isMobile={isMobile}
                           className="text-sm"
                         />
@@ -1712,6 +1782,7 @@ export function AITutor({
                         <StreamingMarkdown
                           content={msg.content}
                           onTimestampClick={handleTimestampClick}
+                          citations={msg.citations}
                           className="text-sm"
                         />
                       )
@@ -1747,6 +1818,7 @@ export function AITutor({
                         content={breakpointStreamingContent}
                         isStreaming={true}
                         onTimestampClick={handleTimestampClick}
+                        citations={breakpointStreamingCitations}
                         isMobile={isMobile}
                         className="text-sm"
                       />
@@ -1755,6 +1827,7 @@ export function AITutor({
                         content={breakpointStreamingContent}
                         isStreaming={true}
                         onTimestampClick={handleTimestampClick}
+                        citations={breakpointStreamingCitations}
                         className="text-sm"
                       />
                     )}

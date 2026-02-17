@@ -36,10 +36,10 @@ const qwenModels: ModelConfig[] = [
     id: 'qwen3.5-plus',
     name: '通义千问 3.5 Plus',
     provider: 'qwen',
-    description: '千问3.5系列，百万级上下文(1M tokens)，推理/写作/Agent能力全面提升',
+    description: '千问3.5系列，百万级上下文(1M tokens)，支持图文输入，推理/写作/Agent能力全面提升',
     maxTokens: 8192,
     recommended: true,
-    supportsMultimodal: false,
+    supportsMultimodal: true,
     enableThinking: false,
   },
   {

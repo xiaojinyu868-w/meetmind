@@ -186,6 +186,12 @@ interface SourceIngestItem {
   addedAt: string;
 }
 
+interface SupportReferenceItem {
+  id: string;
+  title: string;
+  snippet: string;
+}
+
 const VIDEO_INSIGHT_COLORS = ['#B48EFA', '#7FD4B2', '#7FADEB', '#F2AE8F', '#F0CD70', '#90D4DD'];
 
 const AUDIO_FILE_PATTERN = /\.(mp3|wav|webm|ogg|m4a|aac|flac)$/i;
@@ -228,18 +234,56 @@ function compactText(value: string, maxLength: number): string {
   return `${normalized.slice(0, maxLength - 1)}...`;
 }
 
+function compactMultilineText(value: string, maxLength: number): string {
+  const normalized = (value || '')
+    .replace(/\r\n/g, '\n')
+    .replace(/[ \t]{2,}/g, ' ')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+  if (normalized.length <= maxLength) return normalized;
+  return `${normalized.slice(0, maxLength - 1)}...`;
+}
+
+function buildSupportReferenceSnippet(
+  segments: TranscriptSegment[],
+  maxLength: number = 2800
+): string {
+  const chunks = (segments || [])
+    .map((segment) => compactText(segment.text || '', 240))
+    .filter((item) => item.length > 0);
+
+  if (chunks.length === 0) return '';
+
+  const full = compactText(chunks.join(' '), maxLength);
+  if (full.length < maxLength * 0.95 || chunks.length <= 24) {
+    return full;
+  }
+
+  // 覆盖文档头部、主体和尾部，避免只截取前几段导致问答命中率低。
+  const head = chunks.slice(0, 10);
+  const tail = chunks.slice(Math.max(chunks.length - 6, 10));
+  const middleStart = Math.max(10, Math.floor(chunks.length * 0.45));
+  const middle = chunks.slice(middleStart, Math.min(middleStart + 8, chunks.length - 6));
+
+  return compactText([...head, ...middle, ...tail].join(' '), maxLength);
+}
+
 function mergeSupportReferences(
-  previous: string[],
-  incoming: string[],
+  previous: SupportReferenceItem[],
+  incoming: SupportReferenceItem[],
   limit: number = 10
-): string[] {
+): SupportReferenceItem[] {
   const normalized = [...incoming, ...previous]
-    .map((item) => compactText(item, 1200))
-    .filter(Boolean);
-  const unique: string[] = [];
+    .map((item) => ({
+      id: item.id,
+      title: compactText(item.title || '增强资料', 80),
+      snippet: compactText(item.snippet || '', 2800),
+    }))
+    .filter((item) => item.snippet.length > 0);
+  const unique: SupportReferenceItem[] = [];
   const seen = new Set<string>();
   for (const item of normalized) {
-    const key = item.toLowerCase();
+    const key = `${item.title.toLowerCase()}::${item.snippet.toLowerCase()}`;
     if (seen.has(key)) continue;
     seen.add(key);
     unique.push(item);
@@ -289,22 +333,25 @@ function buildASRContextHint(params: {
 }
 
 function buildTutorSupportContextText(
-  supportReferences: string[],
-  maxChars: number = 5000
+  supportReferences: SupportReferenceItem[],
+  maxChars: number = 6500
 ): string {
-  const snippets = (supportReferences || [])
-    .map((item) => compactText(item, 1000))
-    .filter(Boolean)
+  const references = (supportReferences || [])
+    .map((item) => ({
+      title: compactText(item.title, 80),
+      snippet: compactText(item.snippet, 1400),
+    }))
+    .filter((item) => item.snippet.length > 0)
     .slice(0, 6);
 
-  if (snippets.length === 0) return '';
+  if (references.length === 0) return '';
 
-  const labeled = snippets
-    .map((item, index) => `[资料${index + 1}] ${item}`)
+  const labeled = references
+    .map((item, index) => `[资料${index + 1}] 标题：${item.title}\n摘录：${item.snippet}`)
     .join('\n\n');
 
-  return compactText(
-    `以下是用户导入的增强资料摘录，请在回答时优先参考；如果与课堂转写冲突，请明确指出冲突。\n\n${labeled}`,
+  return compactMultilineText(
+    `以下是用户导入的增强资料，请在回答时优先参考；若使用了资料内容，请在对应句子后加 [资料N]（例如 [资料1]）。如果与课堂转写冲突，请明确指出冲突。\n\n${labeled}`,
     maxChars
   );
 }
@@ -429,7 +476,7 @@ function StudentAppContent({
   const [sourceTextInput, setSourceTextInput] = useState('');
   const [asrContextHint, setAsrContextHint] = useState('');
   const [sourceItems, setSourceItems] = useState<SourceIngestItem[]>([]);
-  const [supportReferences, setSupportReferences] = useState<string[]>([]);
+  const [supportReferences, setSupportReferences] = useState<SupportReferenceItem[]>([]);
   const tutorSupportContextText = buildTutorSupportContextText(supportReferences);
   
   // NOTE: cleaned corrupted legacy comment.
@@ -1758,6 +1805,7 @@ const _handleVideoAssistantMessage = useCallback((payload: {
     : 0;
 
   const appendSourceItem = useCallback((params: {
+    id?: string;
     type: SourceIngestType;
     role: SourceIngestRole;
     title: string;
@@ -1766,7 +1814,7 @@ const _handleVideoAssistantMessage = useCallback((payload: {
   }) => {
     setSourceItems((prev) => {
       const item: SourceIngestItem = {
-        id: `${params.type}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+        id: params.id || `${params.type}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
         type: params.type,
         role: params.role,
         title: params.title,
@@ -1786,26 +1834,27 @@ const _handleVideoAssistantMessage = useCallback((payload: {
     title: string;
     segments: TranscriptSegment[];
   }) => {
-    const reference = compactText(
-      (params.segments || [])
-        .slice(0, 20)
-        .map((segment) => segment.text)
-        .join(' '),
-      1200
-    );
+    const supportId = `${params.type}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    const reference = buildSupportReferenceSnippet(params.segments, 2800);
     appendSourceItem({
+      id: supportId,
       type: params.type,
       role: 'support',
       title: params.title,
       segmentCount: params.segments.length,
     });
     if (reference) {
-      setSupportReferences((prev) => mergeSupportReferences(prev, [reference]));
+      setSupportReferences((prev) => mergeSupportReferences(prev, [{
+        id: supportId,
+        title: params.title,
+        snippet: reference,
+      }]));
     }
   }, [appendSourceItem]);
 
   const removeSupportSource = useCallback((id: string) => {
     setSourceItems((prev) => prev.filter((item) => !(item.id === id && item.role === 'support')));
+    setSupportReferences((prev) => prev.filter((item) => item.id !== id));
   }, []);
 
   const ingestTranscriptSegments = useCallback(async (params: {
@@ -2083,7 +2132,10 @@ const _handleVideoAssistantMessage = useCallback((payload: {
           const contextHint = buildASRContextHint({
             manualHint: asrContextHint,
             recentSegments: segmentsRef.current,
-            importedReferences: [...supportReferences, ...importedReferenceTexts],
+            importedReferences: [
+              ...supportReferences.map((item) => item.snippet),
+              ...importedReferenceTexts,
+            ],
             maxChars: 3000,
           });
           const segments = await transcribeAudioFile(file, contextHint);

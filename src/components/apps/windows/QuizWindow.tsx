@@ -205,7 +205,7 @@ export function QuizWindow({ result }: QuizWindowProps) {
     const grade = accuracy >= 90 ? 'A' : accuracy >= 80 ? 'B' : accuracy >= 70 ? 'C' : accuracy >= 60 ? 'D' : 'F';
     const gradeColor = accuracy >= 80 ? '#10b981' : accuracy >= 60 ? '#f59e0b' : '#ef4444';
     return (
-      <div className="flex h-full min-h-[420px] flex-col items-center justify-center p-6">
+      <div className="flex h-full min-h-[420px] flex-col items-center justify-center p-6 bg-[#0d1117]">
         {/* Ambient glow */}
         <div className="absolute inset-0 overflow-hidden pointer-events-none">
           <div className="absolute top-1/4 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[500px] rounded-full opacity-20"
@@ -313,7 +313,7 @@ export function QuizWindow({ result }: QuizWindowProps) {
 
   return (
     <div
-      className="relative flex h-full min-h-[420px] flex-col select-none overflow-hidden"
+      className="relative flex h-full min-h-[420px] flex-col select-none overflow-hidden bg-[#0d1117]"
       onTouchStart={handleTouchStart}
       onTouchEnd={handleTouchEnd}
       data-testid="quiz-window"

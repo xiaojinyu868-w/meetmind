@@ -51,6 +51,233 @@ function setSummaryCache(sessionId: string, data: { overview: string; takeaways:
   summaryCache.set(sessionId, { ...data, createdAt: Date.now() });
 }
 
+interface SupportReference {
+  index: number;
+  title: string;
+  snippet: string;
+}
+
+function normalizeCitationText(value: string, maxLength: number): string {
+  const normalized = (value || '').replace(/\s+/g, ' ').trim();
+  if (!normalized) return '';
+  if (normalized.length <= maxLength) return normalized;
+  return `${normalized.slice(0, maxLength - 1)}...`;
+}
+
+function extractSupportReferences(segments: Segment[]): SupportReference[] {
+  const referencesByIndex = new Map<number, SupportReference>();
+
+  for (const segment of segments || []) {
+    const text = typeof segment?.text === 'string' ? segment.text : '';
+    if (!text || !/\[资料\s*\d+\]/.test(text)) continue;
+
+    const structuredMatches = Array.from(
+      text.matchAll(/\[资料\s*(\d+)\]\s*(?:标题[:：]\s*([^\n]+)\s*)?(?:摘录[:：]\s*)?([\s\S]*?)(?=(?:\n{2,}\[资料\s*\d+\])|$)/g)
+    );
+
+    if (structuredMatches.length > 0) {
+      for (const match of structuredMatches) {
+        const index = Number.parseInt(match[1] || '', 10);
+        if (!Number.isFinite(index) || index <= 0) continue;
+
+        const title = normalizeCitationText(match[2] || `导入资料 ${index}`, 80) || `导入资料 ${index}`;
+        const snippet = normalizeCitationText(match[3] || '', 480);
+        if (!snippet) continue;
+
+        if (!referencesByIndex.has(index)) {
+          referencesByIndex.set(index, { index, title, snippet });
+        }
+      }
+      continue;
+    }
+
+    const lineMatches = Array.from(text.matchAll(/\[资料\s*(\d+)\]\s*([^\n]+)/g));
+    for (const match of lineMatches) {
+      const index = Number.parseInt(match[1] || '', 10);
+      if (!Number.isFinite(index) || index <= 0) continue;
+      const snippet = normalizeCitationText(match[2] || '', 480);
+      if (!snippet) continue;
+      if (!referencesByIndex.has(index)) {
+        referencesByIndex.set(index, {
+          index,
+          title: `导入资料 ${index}`,
+          snippet,
+        });
+      }
+    }
+  }
+
+  return Array.from(referencesByIndex.values()).sort((a, b) => a.index - b.index);
+}
+
+function extractSupportCitationIndices(content: string): number[] {
+  const indices = new Set<number>();
+  for (const match of content.matchAll(/\[资料\s*(\d+)\]/g)) {
+    const index = Number.parseInt(match[1] || '', 10);
+    if (Number.isFinite(index) && index > 0) {
+      indices.add(index);
+    }
+  }
+  return Array.from(indices).sort((a, b) => a - b);
+}
+
+function buildSupportCitationsFromContent(content: string, supportReferences: SupportReference[]): Citation[] {
+  if (!content || supportReferences.length === 0) return [];
+
+  const referencedIndices = extractSupportCitationIndices(content);
+  if (referencedIndices.length === 0) return [];
+
+  const supportByIndex = new Map<number, SupportReference>(
+    supportReferences.map((item) => [item.index, item])
+  );
+
+  const citations: Citation[] = [];
+  for (const index of referencedIndices) {
+    const support = supportByIndex.get(index);
+    if (!support) continue;
+    citations.push({
+      id: `support-${index}`,
+      title: support.title || `导入资料 ${index}`,
+      url: `about:blank#support-${index}`,
+      snippet: support.snippet,
+      source_type: 'knowledge_base',
+    });
+  }
+  return citations;
+}
+
+function mergeCitationResults(primary?: Citation[], secondary?: Citation[]): Citation[] | undefined {
+  const merged: Citation[] = [];
+  const seen = new Set<string>();
+
+  const append = (items?: Citation[]) => {
+    for (const item of items || []) {
+      if (!item) continue;
+      const key = `${item.source_type}:${item.title}:${item.url}`.toLowerCase();
+      if (seen.has(key)) continue;
+      seen.add(key);
+      merged.push(item);
+    }
+  };
+
+  append(primary);
+  append(secondary);
+  return merged.length > 0 ? merged : undefined;
+}
+
+function buildSupportUsagePrompt(supportReferences: SupportReference[]): string {
+  if (!supportReferences.length) return '';
+
+  const referenceList = supportReferences
+    .slice(0, 6)
+    .map((item) => `[资料${item.index}] ${item.title}：${normalizeCitationText(item.snippet, 260)}`)
+    .join('\n');
+
+  return [
+    '【增强资料优先规则】',
+    `当前会话已导入 ${supportReferences.length} 份增强资料，请优先基于这些资料回答：`,
+    referenceList,
+    '只要引用增强资料内容，必须在对应句末标注 [资料N]（禁止编造编号）。',
+    '如果用户追问“有没有参考我的文档/资料”，必须明确指出参考了哪些 [资料N]。',
+    '仅当资料里确实找不到证据时，才可回复“资料中未找到相关证据”，不要说“没有额外文档”。',
+  ].join('\n');
+}
+
+function buildAutomaticSupportPolicyPrompt(supportReferences: SupportReference[]): string {
+  if (!supportReferences.length) return '';
+
+  return [
+    '【Support Auto-Use Policy】',
+    'For every user question, first evaluate whether imported support materials can help.',
+    'If support material is relevant, integrate it directly without asking user to explicitly request it.',
+    'When using support material, cite with existing markers like [资料N].',
+    'If support material is not relevant, do not force citations. Briefly explain why and answer from transcript context.',
+  ].join('\n');
+}
+
+function isDocumentReferenceQuestion(question: string): boolean {
+  if (!question) return false;
+  return /(文档|资料|讲义|课件|pdf|docx|导入|上传|参考|引用|source|document|material)/i.test(question);
+}
+
+function extractSemanticKeywords(text: string): string[] {
+  const normalized = (text || '').toLowerCase().trim();
+  if (!normalized) return [];
+
+  const englishTokens = Array.from(normalized.matchAll(/[a-z0-9]{3,}/g)).map((match) => match[0]);
+  const cjkChunks = Array.from(normalized.matchAll(/[\u4e00-\u9fff]{2,}/g)).map((match) => match[0]);
+  const cjkTokens = cjkChunks.flatMap((chunk) => {
+    if (chunk.length <= 4) return [chunk];
+    const grams: string[] = [];
+    for (let index = 0; index < chunk.length - 1; index += 1) {
+      grams.push(chunk.slice(index, index + 2));
+    }
+    return grams;
+  });
+
+  return Array.from(new Set([...englishTokens, ...cjkTokens])).slice(0, 32);
+}
+
+function shouldAttachSupportFallback(questionHint: string, supportReferences: SupportReference[]): boolean {
+  const normalizedQuestion = (questionHint || '').trim();
+  if (!normalizedQuestion || supportReferences.length === 0) return false;
+
+  // Explicit document/source intent should always preserve source visibility.
+  if (isDocumentReferenceQuestion(normalizedQuestion)) return true;
+
+  // Otherwise require semantic overlap, so we don't force irrelevant citations.
+  const keywords = extractSemanticKeywords(normalizedQuestion);
+  if (keywords.length === 0) return false;
+
+  const supportCorpus = supportReferences
+    .map((item) => `${item.title} ${item.snippet}`.toLowerCase())
+    .join('\n');
+
+  let matchedCount = 0;
+  let strongestMatchLength = 0;
+
+  for (const keyword of keywords) {
+    if (!keyword || keyword.length < 2) continue;
+    if (!supportCorpus.includes(keyword)) continue;
+
+    matchedCount += 1;
+    strongestMatchLength = Math.max(strongestMatchLength, keyword.length);
+
+    if (matchedCount >= 3) break;
+  }
+
+  if (matchedCount >= 2) return true;
+  if (matchedCount >= 1 && strongestMatchLength >= 6) return true;
+  return false;
+}
+
+function buildFallbackSupportCitations(supportReferences: SupportReference[], limit = 2): Citation[] {
+  return supportReferences.slice(0, limit).map((item) => ({
+    id: `support-${item.index}`,
+    title: item.title || `导入资料 ${item.index}`,
+    url: `about:blank#support-${item.index}`,
+    snippet: normalizeCitationText(item.snippet, 220),
+    source_type: 'knowledge_base',
+  }));
+}
+
+function ensureSupportCitations(params: {
+  mergedCitations?: Citation[];
+  supportReferences: SupportReference[];
+  questionHint: string;
+}): Citation[] | undefined {
+  const { mergedCitations, supportReferences, questionHint } = params;
+  if (supportReferences.length === 0) return mergedCitations;
+
+  const hasKnowledgeCitation = (mergedCitations || []).some(
+    (item) => item.source_type === 'knowledge_base'
+  );
+  if (hasKnowledgeCitation) return mergedCitations;
+  if (!shouldAttachSupportFallback(questionHint, supportReferences)) return mergedCitations;
+
+  return mergeCitationResults(mergedCitations, buildFallbackSupportCitations(supportReferences));
+}
+
 // AI 家教系统提示词（初次解释用）
 const TUTOR_SYSTEM_PROMPT = `你是一位"课堂对齐"的 AI 家教。你的任务是帮助学生补懂课堂上没听懂的内容。
 
@@ -65,12 +292,14 @@ const TUTOR_SYSTEM_PROMPT = `你是一位"课堂对齐"的 AI 家教。你的任
 3. 【说话者识别】准确识别说话者，区分老师讲解和学生回答
 4. 【追问定位】先复述课堂内容，再追问学生具体卡在哪一步
 5. 【行动清单】最后给出 ≤3 个今晚可执行的任务（总计约20分钟）
+6. 【资料引用】如果使用了 [资料N] 的内容，必须在对应句末标注 [资料N]
 
 时间戳引用规则：
 - 如果引用学生在 00:30 说的话，必须写 [引用 00:30]
 - 如果引用老师在 00:25-00:28 的讲解，必须写 [引用 00:25-00:28]
 - 绝对不要使用转录中没有出现的时间戳
 - 每个引用都要对应转录中的具体内容
+- 如果引用增强资料，必须使用已有编号 [资料N]，不得编造编号
 
 输出格式（严格遵循）：
 ## 课堂回顾
@@ -102,6 +331,8 @@ const FOLLOWUP_SYSTEM_PROMPT = `你是一位亲切的 AI 家教，正在和学�
 - 当回答涉及课堂内容时，必须引用对应的时间戳，格式：[MM:SS] 或 [MM:SS-MM:SS]
 - 例如："老师在 [00:58] 提到了氢能源的应用"
 - 时间戳会被渲染为可点击的链接，帮助学生快速定位录音
+- 如果回答使用了增强资料（[资料N]），必须在对应句末加 [资料N]
+- 资料编号只能用上下文中已有的编号，禁止编造
 
 禁止事项（非常重要）：
 ❌ 禁止使用 ## 标题
@@ -128,6 +359,8 @@ const GLOBAL_CHAT_SYSTEM_PROMPT = `你是一位专业的 AI 家教，正在帮�
 - 当回答涉及课堂内容时，必须引用对应的时间戳，格式：[MM:SS] 或 [MM:SS-MM:SS]
 - 例如："老师在 [02:30] 讲解了这个概念"
 - 时间戳会被渲染为可点击的链接，帮助学生快速定位录音
+- 如果回答使用了增强资料（[资料N]），必须在对应句末加 [资料N]
+- 资料编号只能用上下文中已有的编号，禁止编造
 
 【回答风格】
 - 自然，像家教辅导一样
@@ -203,6 +436,16 @@ export async function POST(request: NextRequest) {
       sessionId,           // 会话ID
       stream = false,      // 流式输出（默认关闭，保持向后兼容）
     } = body;
+    const questionHint = [
+      typeof studentQuestion === 'string' ? studentQuestion : '',
+      ...(Array.isArray(messageContent)
+        ? messageContent
+            .filter((item) => item?.type === 'text' && typeof item.text === 'string')
+            .map((item) => item.text as string)
+        : []),
+    ]
+      .join(' ')
+      .trim();
 
     if (!segments || !Array.isArray(segments)) {
       return NextResponse.json(
@@ -336,6 +579,9 @@ ${cachedSummary.keyDifficulties.map(d => `- ${d}`).join('\n')}
     const contextText = summaryContext 
       ? `${summaryContext}\n【困惑点附近的详细内容 ${formatTimestamp(timestamp - 90000)} ~ ${formatTimestamp(timestamp + 60000)}】\n${localContextText}`
       : localContextText;
+    const supportReferences = extractSupportReferences(segments as Segment[]);
+    const supportUsagePrompt = buildSupportUsagePrompt(supportReferences);
+    const supportAutoPolicyPrompt = buildAutomaticSupportPolicyPrompt(supportReferences);
 
     // 【调试日志】输出发送给大模型的原始数据
     console.log('\n========== [Tutor API] 发送给大模型的内容 ==========');
@@ -343,6 +589,7 @@ ${cachedSummary.keyDifficulties.map(d => `- ${d}`).join('\n')}
     console.log('[输入参数] segments数量:', segments.length);
     console.log('[上下文范围] contextSegments数量:', contextSegments.length);
     console.log('[摘要状态]', summaryContext ? (summaryGenerated ? '新生成' : '使用缓存') : '无摘要');
+    console.log('[增强资料数量]', supportReferences.length);
     console.log('\n[完整上下文]:');
     console.log(contextText);
     console.log('\n====================================================\n');
@@ -416,6 +663,12 @@ ${cachedSummary.keyDifficulties.map(d => `- ${d}`).join('\n')}
       if (enable_thinking_guide) {
         systemPrompt += THINKING_GUIDE_PROMPT;
       }
+      if (supportAutoPolicyPrompt) {
+        systemPrompt += `\n\n${supportAutoPolicyPrompt}`;
+      }
+      if (supportUsagePrompt) {
+        systemPrompt += `\n\n${supportUsagePrompt}`;
+      }
       
       messages.push({ role: 'system', content: systemPrompt });
       
@@ -475,7 +728,10 @@ ${studentQuestion}`;
       }
     } else {
       // 初次解释模式 - 使用结构化提示词
-      messages.push({ role: 'system', content: TUTOR_SYSTEM_PROMPT });
+      messages.push({
+        role: 'system',
+        content: [TUTOR_SYSTEM_PROMPT, supportAutoPolicyPrompt, supportUsagePrompt].filter(Boolean).join('\n\n'),
+      });
       messages.push({
         role: 'user',
         content: `【课堂转录】
@@ -500,6 +756,7 @@ ${contextText}
     // ===== 流式响应模式 =====
     if (stream && (studentQuestion || messageContent || globalMode)) {
       const encoder = new TextEncoder();
+      const initialCitations = citations?.length ? citations : undefined;
       
       const readable = new ReadableStream({
         async start(controller) {
@@ -508,16 +765,39 @@ ${contextText}
             const metadata = {
               type: 'metadata',
               guidance_question: guidanceQuestion,
-              citations: citations?.length ? citations : undefined,
+              citations: initialCitations,
               conversation_id: difyConversationId,
               summary_generated: summaryGenerated,
             };
             controller.enqueue(encoder.encode(`data: ${JSON.stringify(metadata)}\n\n`));
             
+            let streamedContent = '';
             // 流式输出 LLM 内容（支持思考模式）
             for await (const chunk of chatStream(messages, model, { temperature: 0.7, maxTokens: 2000 })) {
+              if (chunk.type === 'content' && chunk.content) {
+                streamedContent += chunk.content;
+              }
               // chunk 现在是 { type: 'thinking' | 'content', content: string }
               controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: chunk.type, content: chunk.content })}\n\n`));
+            }
+
+            const supportCitations = buildSupportCitationsFromContent(streamedContent, supportReferences);
+            const mergedCitations = ensureSupportCitations({
+              mergedCitations: mergeCitationResults(initialCitations, supportCitations),
+              supportReferences,
+              questionHint,
+            });
+            if (mergedCitations) {
+              controller.enqueue(
+                encoder.encode(
+                  `data: ${JSON.stringify({
+                    type: 'metadata',
+                    citations: mergedCitations,
+                    conversation_id: difyConversationId,
+                    summary_generated: summaryGenerated,
+                  })}\n\n`
+                )
+              );
             }
             
             // 发送完成信号
@@ -559,6 +839,12 @@ ${contextText}
 
       // 【重要】修正追问模式下的时间戳错误
       rawContent = correctTimestampsInResponse(rawContent, mergedSegments, studentQuestion || '');
+      const supportCitations = buildSupportCitationsFromContent(rawContent, supportReferences);
+      const mergedCitations = ensureSupportCitations({
+        mergedCitations: mergeCitationResults(citations, supportCitations),
+        supportReferences,
+        questionHint,
+      });
 
       const result: ExtendedTutorResponse = {
         explanation: {
@@ -574,7 +860,7 @@ ${contextText}
         // 新增字段
         guidance_question: guidanceQuestion,
         option_followup: optionFollowup,
-        citations: citations?.length ? citations : undefined,
+        citations: mergedCitations,
         conversation_id: difyConversationId,
         // 摘要信息（如果新生成的话）
         summary_generated: summaryGenerated,
@@ -604,6 +890,12 @@ ${contextText}
         );
       }
     }
+    const supportCitations = buildSupportCitationsFromContent(correctedRawContent, supportReferences);
+    const mergedCitations = ensureSupportCitations({
+      mergedCitations: mergeCitationResults(citations, supportCitations),
+      supportReferences,
+      questionHint,
+    });
 
     const result: ExtendedTutorResponse = {
       ...correctedParsed,
@@ -612,7 +904,7 @@ ${contextText}
       usage: response.usage,
       // 新增字段
       guidance_question: guidanceQuestion,
-      citations: citations?.length ? citations : undefined,
+      citations: mergedCitations,
       conversation_id: difyConversationId,
       // 摘要信息（如果新生成的话）
       summary_generated: summaryGenerated,

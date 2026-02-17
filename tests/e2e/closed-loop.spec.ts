@@ -165,6 +165,42 @@ function buildTutorResponse(actionItems = DEFAULT_ACTION_ITEMS) {
   };
 }
 
+function buildTutorSSEStream(params: {
+  content?: string;
+  citations?: Array<{
+    id: string;
+    title: string;
+    url: string;
+    snippet: string;
+    source_type: 'knowledge_base' | 'web' | 'transcript';
+  }>;
+}) {
+  const events: string[] = [];
+  if (params.citations && params.citations.length > 0) {
+    events.push(
+      `data: ${JSON.stringify({
+        type: 'metadata',
+        citations: params.citations,
+      })}`
+    );
+    events.push('');
+  }
+
+  if (params.content) {
+    events.push(
+      `data: ${JSON.stringify({
+        type: 'content',
+        content: params.content,
+      })}`
+    );
+    events.push('');
+  }
+
+  events.push('data: [DONE]');
+  events.push('');
+  return events.join('\n');
+}
+
 async function mockTutorApi(page: Page, actionItems = DEFAULT_ACTION_ITEMS): Promise<void> {
   await page.route('**/api/tutor', async (route) => {
     await route.fulfill({
@@ -460,6 +496,7 @@ test.describe('Closed Loop Regression', () => {
     await tutorInput.fill('请结合资料总结三大场景');
     await page.getByRole('button', { name: '发送' }).first().click();
 
+    let supportText = '';
     await expect.poll(() => {
       const followup = tutorPayloads.find(
         (payload) => typeof payload.studentQuestion === 'string' && payload.studentQuestion.includes('结合资料')
@@ -472,8 +509,86 @@ test.describe('Closed Loop Regression', () => {
           typeof segment === 'object' &&
           (segment as Record<string, unknown>).id === '__support_context__'
       ) as Record<string, unknown> | undefined;
-      return typeof supportSegment?.text === 'string' ? supportSegment.text : '';
+      supportText = typeof supportSegment?.text === 'string' ? supportSegment.text : '';
+      return supportText;
     }).toContain('平台型入口');
+
+    expect(supportText).toContain('【增强资料】');
+    expect(supportText).toContain('[资料1] 标题');
+    expect(supportText).toContain('必须标注 [资料N]');
+  });
+
+  test('tutor shows knowledge-base citations when response includes support references', async ({ page }) => {
+    await page.route('**/api/tutor', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          ...buildTutorResponse(),
+          citations: [
+            {
+              id: 'support-1',
+              title: '导入资料 1',
+              url: 'about:blank#support-1',
+              snippet: '平台型入口、内容分发引擎、底层数据基建。',
+              source_type: 'knowledge_base',
+            },
+          ],
+        }),
+      });
+    });
+
+    await openApp(page);
+    await enterReviewMode(page);
+
+    await expect(page.getByText('资料引用')).toBeVisible();
+    await expect(page.getByText('导入资料 1')).toBeVisible();
+    await expect(page.getByText('平台型入口、内容分发引擎、底层数据基建。')).toBeVisible();
+  });
+
+  test('tutor follow-up renders knowledge-base citations from streaming metadata', async ({ page }) => {
+    await page.route('**/api/tutor', async (route) => {
+      const req = route.request();
+      const payload = req.method() === 'POST' ? req.postDataJSON() as Record<string, unknown> : null;
+      const isStream = Boolean(payload && payload.stream === true);
+
+      if (isStream) {
+        await route.fulfill({
+          status: 200,
+          contentType: 'text/event-stream',
+          body: buildTutorSSEStream({
+            citations: [
+              {
+                id: 'support-1',
+                title: '导入资料 1',
+                url: 'about:blank#support-1',
+                snippet: '平台型入口、内容分发引擎、底层数据基建。',
+                source_type: 'knowledge_base',
+              },
+            ],
+            content: '我参考了导入资料，课堂框架可归纳为三部分 [资料1]。',
+          }),
+        });
+        return;
+      }
+
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify(buildTutorResponse()),
+      });
+    });
+
+    await openApp(page);
+    await enterReviewMode(page);
+
+    const tutorInput = page.getByPlaceholder('告诉我你哪里不懂...').first();
+    await tutorInput.fill('请结合我上传的资料回答');
+    await page.getByRole('button', { name: '发送' }).first().click();
+
+    await expect(page.getByText('资料引用')).toBeVisible();
+    await expect(page.getByText('导入资料 1')).toBeVisible();
+    await expect(page.getByText('平台型入口、内容分发引擎、底层数据基建。')).toBeVisible();
   });
 
   test('ai workshop opens floating app window without leaving workspace', async ({ page }) => {

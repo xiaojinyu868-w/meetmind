@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ModelSelector } from '@/components/ModelSelector';
-import { DEFAULT_MODEL_ID } from '@/lib/services/llm-service';
+import { DEFAULT_WORKSHOP_MODEL_ID } from '@/lib/services/llm-service';
 import type { Anchor, TranscriptSegment } from '@/types';
 import type { DataSourceType } from '@/lib/ai-native/types';
 import { getWorkshopAppByKey, type WorkshopAppKey } from '@/lib/ai-native/app-catalog';
@@ -458,7 +458,7 @@ export function WorkshopWindowManager(props: WorkshopWindowManagerProps) {
     onToggleDisplayMode,
   } = props;
 
-  const [model, setModel] = useState(DEFAULT_MODEL_ID);
+  const [model, setModel] = useState(DEFAULT_WORKSHOP_MODEL_ID);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;

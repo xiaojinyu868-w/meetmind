@@ -7,6 +7,15 @@ import remarkMath from 'remark-math';
 import rehypeKatex from 'rehype-katex';
 import 'katex/dist/katex.min.css';
 import type { Components } from 'react-markdown';
+import type { Citation } from '@/types/dify';
+
+const SUPPORT_CITATION_ID_REGEX = /^support-(\d+)$/i;
+const SUPPORT_CITATION_TITLE_REGEX = /(?:导入资料|资料)\s*(\d+)/;
+
+function normalizeTooltipText(value?: string, fallback = ''): string {
+  const normalized = (value || '').replace(/\s+/g, ' ').trim();
+  return normalized || fallback;
+}
 
 interface StreamingMarkdownProps {
   content: string;
@@ -14,6 +23,7 @@ interface StreamingMarkdownProps {
   onTimestampClick?: (timestampMs: number) => void;
   currentTime?: number;
   className?: string;
+  citations?: Citation[];
 }
 
 /**
@@ -29,7 +39,47 @@ export function StreamingMarkdown({
   onTimestampClick,
   currentTime = 0,
   className = '',
+  citations,
 }: StreamingMarkdownProps) {
+  const citationTooltipByIndex = useMemo(() => {
+    const tooltipByIndex = new Map<number, string>();
+    if (!citations?.length) return tooltipByIndex;
+
+    citations.forEach((citation, listIndex) => {
+      if (!citation) return;
+
+      const fallbackSnippet = normalizeTooltipText(citation.snippet);
+      const titleText = normalizeTooltipText(
+        citation.title,
+        fallbackSnippet || `资料来源 ${listIndex + 1}`
+      );
+
+      const idMatch = citation.id?.match(SUPPORT_CITATION_ID_REGEX);
+      if (idMatch) {
+        const parsedIndex = Number.parseInt(idMatch[1], 10);
+        if (Number.isFinite(parsedIndex) && parsedIndex > 0) {
+          tooltipByIndex.set(parsedIndex, titleText);
+          return;
+        }
+      }
+
+      const titleMatch = citation.title?.match(SUPPORT_CITATION_TITLE_REGEX);
+      if (titleMatch) {
+        const parsedIndex = Number.parseInt(titleMatch[1], 10);
+        if (Number.isFinite(parsedIndex) && parsedIndex > 0 && !tooltipByIndex.has(parsedIndex)) {
+          tooltipByIndex.set(parsedIndex, titleText);
+          return;
+        }
+      }
+
+      const fallbackIndex = listIndex + 1;
+      if (!tooltipByIndex.has(fallbackIndex)) {
+        tooltipByIndex.set(fallbackIndex, titleText);
+      }
+    });
+
+    return tooltipByIndex;
+  }, [citations]);
   
   // 解析时间戳为毫秒
   const parseTimeToMs = useCallback((time: string): number | null => {
@@ -61,51 +111,86 @@ export function StreamingMarkdown({
     return null;
   }, []);
 
-  // 渲染包含时间戳的文本
+  // 渲染包含时间戳与资料引用的文本
   const renderTextWithTimestamps = useCallback((text: string): React.ReactNode => {
-    // 匹配时间戳格式：[MM:SS] 或 [MM:SS-MM:SS] 或 [引用 MM:SS]
-    const timestampRegex = /\[(?:引用\s*)?((\d{1,2}:\d{2})(?:-(\d{1,2}:\d{2}))?)\]/g;
+    // 匹配两类标记：
+    // 1) 时间戳 [MM:SS] / [MM:SS-MM:SS] / [引用 MM:SS]
+    // 2) 资料引用 [资料N]
+    const tokenRegex = /\[(?:引用\s*)?((\d{1,2}:\d{2})(?:-(\d{1,2}:\d{2}))?)\]|\[资料\s*(\d+)\]/g;
     const parts: React.ReactNode[] = [];
     let lastIndex = 0;
     let match;
     let keyIndex = 0;
 
-    while ((match = timestampRegex.exec(text)) !== null) {
+    while ((match = tokenRegex.exec(text)) !== null) {
       // 添加时间戳前的文本
       if (match.index > lastIndex) {
         parts.push(text.slice(lastIndex, match.index));
       }
 
-      const [, fullTime, startTime] = match;
-      const startMs = parseTimeToMs(startTime);
-      if (startMs === null) {
-        parts.push(match[0]);
-        lastIndex = match.index + match[0].length;
-        continue;
-      }
-      const isActive = currentTime >= startMs && currentTime <= startMs + 5000;
+      const fullTime = match[1];
+      const startTime = match[2];
+      const citationIndex = match[4];
 
-      parts.push(
-        <button
-          key={`ts-${keyIndex++}`}
-          onClick={(e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            onTimestampClick?.(startMs);
-          }}
-          className={`
-            inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-xs font-mono mx-0.5
-            transition-all duration-200 border cursor-pointer
-            ${isActive 
-              ? 'bg-gradient-to-r from-amber-500 to-amber-600 text-white border-amber-500 shadow-md scale-105' 
-              : 'bg-gradient-to-r from-amber-100 to-amber-50 text-amber-700 border-amber-200 hover:border-amber-300 hover:shadow-sm'
-            }
-          `}
-        >
-          <span className={isActive ? 'animate-pulse' : ''}>▶</span>
-          {fullTime}
-        </button>
-      );
+      if (fullTime && startTime) {
+        const startMs = parseTimeToMs(startTime);
+        if (startMs === null) {
+          parts.push(match[0]);
+          lastIndex = match.index + match[0].length;
+          continue;
+        }
+        const isActive = currentTime >= startMs && currentTime <= startMs + 5000;
+
+        parts.push(
+          <button
+            key={`ts-${keyIndex++}`}
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              onTimestampClick?.(startMs);
+            }}
+            className={`
+              inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-xs font-mono mx-0.5
+              transition-all duration-200 border cursor-pointer
+              ${isActive 
+                ? 'bg-gradient-to-r from-amber-500 to-amber-600 text-white border-amber-500 shadow-md scale-105' 
+                : 'bg-gradient-to-r from-amber-100 to-amber-50 text-amber-700 border-amber-200 hover:border-amber-300 hover:shadow-sm'
+              }
+            `}
+          >
+            <span className={isActive ? 'animate-pulse' : ''}>▶</span>
+            {fullTime}
+          </button>
+        );
+      } else if (citationIndex) {
+        const citationNumber = Number.parseInt(citationIndex, 10);
+        const citationHint = Number.isFinite(citationNumber)
+          ? citationTooltipByIndex.get(citationNumber)
+          : undefined;
+        const tooltipText = citationHint
+          ? `资料${citationIndex}：${citationHint}`
+          : `资料来源 ${citationIndex}`;
+        const citationKey = keyIndex++;
+
+        parts.push(
+          <span key={`cite-wrap-${citationKey}`} className="relative inline-flex align-super ml-0.5 group/cite">
+            <span
+              className="inline-flex items-center rounded-md border border-slate-300 bg-slate-100 px-1.5 py-0.5 text-[10px] font-medium text-slate-700"
+              title={tooltipText}
+              aria-label={tooltipText}
+            >
+              [{citationIndex}]
+            </span>
+            {citationHint && (
+              <span className="pointer-events-none absolute left-1/2 top-full z-20 mt-1 w-max max-w-56 -translate-x-1/2 whitespace-nowrap overflow-hidden text-ellipsis rounded-md border border-slate-200 bg-white px-2 py-1 text-[10px] font-normal leading-tight text-slate-600 opacity-0 shadow-sm transition-opacity duration-150 group-hover/cite:opacity-100">
+                {citationHint}
+              </span>
+            )}
+          </span>
+        );
+      } else {
+        parts.push(match[0]);
+      }
 
       lastIndex = match.index + match[0].length;
     }
@@ -116,7 +201,7 @@ export function StreamingMarkdown({
     }
 
     return parts.length > 0 ? parts : text;
-  }, [currentTime, onTimestampClick, parseTimeToMs]);
+  }, [citationTooltipByIndex, currentTime, onTimestampClick, parseTimeToMs]);
 
   // 递归处理 children，将字符串中的时间戳转换为按钮
   // 跳过 KaTeX 渲染的数学公式元素，避免破坏其 DOM 结构

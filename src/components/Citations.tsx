@@ -67,6 +67,7 @@ export function Citations({
  */
 function CitationItem({ citation }: { citation: Citation }) {
   const [isHovered, setIsHovered] = useState(false);
+  const isWebSource = citation.source_type === 'web';
 
   const sourceIcons: Record<Citation['source_type'], string> = {
     web: '🌐',
@@ -83,6 +84,62 @@ function CitationItem({ citation }: { citation: Citation }) {
     }
   };
 
+  const itemContent = (
+    <div className="flex items-start gap-3">
+      {/* 来源图标 */}
+      <span className="text-lg flex-shrink-0">
+        {sourceIcons[citation.source_type]}
+      </span>
+
+      <div className="flex-1 min-w-0">
+        {/* 标题 */}
+        <h4 className={`
+          text-sm font-medium truncate
+          ${isHovered ? 'text-amber-700' : 'text-gray-900'}
+        `}>
+          {citation.title}
+        </h4>
+
+        {/* 摘要 */}
+        <p className="text-xs text-gray-500 mt-1 line-clamp-2">
+          {citation.snippet}
+        </p>
+
+        {/* 域名/类型 */}
+        <div className="flex items-center gap-2 mt-1">
+          <span className="text-xs text-gray-400">
+            {isWebSource ? getDomain(citation.url) : '导入资料'}
+          </span>
+        </div>
+      </div>
+
+      {/* 外链图标 */}
+      {isWebSource && (
+        <span className={`
+          text-gray-400 transition-colors flex-shrink-0
+          ${isHovered ? 'text-amber-500' : ''}
+        `}>
+          ↗
+        </span>
+      )}
+    </div>
+  );
+
+  if (!isWebSource) {
+    return (
+      <div
+        className={`
+          block p-3 transition-colors
+          ${isHovered ? 'bg-amber-50' : 'hover:bg-gray-50'}
+        `}
+        onMouseEnter={() => setIsHovered(true)}
+        onMouseLeave={() => setIsHovered(false)}
+      >
+        {itemContent}
+      </div>
+    );
+  }
+
   return (
     <a
       href={citation.url}
@@ -95,42 +152,7 @@ function CitationItem({ citation }: { citation: Citation }) {
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
     >
-      <div className="flex items-start gap-3">
-        {/* 来源图标 */}
-        <span className="text-lg flex-shrink-0">
-          {sourceIcons[citation.source_type]}
-        </span>
-
-        <div className="flex-1 min-w-0">
-          {/* 标题 */}
-          <h4 className={`
-            text-sm font-medium truncate
-            ${isHovered ? 'text-amber-700' : 'text-gray-900'}
-          `}>
-            {citation.title}
-          </h4>
-
-          {/* 摘要 */}
-          <p className="text-xs text-gray-500 mt-1 line-clamp-2">
-            {citation.snippet}
-          </p>
-
-          {/* 域名 */}
-          <div className="flex items-center gap-2 mt-1">
-            <span className="text-xs text-gray-400">
-              {getDomain(citation.url)}
-            </span>
-          </div>
-        </div>
-
-        {/* 外链图标 */}
-        <span className={`
-          text-gray-400 transition-colors flex-shrink-0
-          ${isHovered ? 'text-amber-500' : ''}
-        `}>
-          ↗
-        </span>
-      </div>
+      {itemContent}
     </a>
   );
 }

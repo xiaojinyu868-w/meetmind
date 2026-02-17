@@ -359,6 +359,7 @@
   bottom: 18px;
   z-index: 40;
   width: min(420px, calc(100vw - 24px));
+  user-select: none;
 }
 
 .dockToggle {
@@ -374,11 +375,15 @@
     0 8px 24px rgba(15, 23, 42, 0.1),
     0 18px 36px rgba(30, 64, 175, 0.14);
   padding: 10px 12px;
-  cursor: pointer;
+  cursor: grab;
   color: #0f172a;
   font-size: 14px;
   font-weight: 700;
   backdrop-filter: blur(10px);
+}
+
+.dockToggle:active {
+  cursor: grabbing;
 }
 
 .dockStat {

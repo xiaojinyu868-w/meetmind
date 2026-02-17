@@ -2,6 +2,7 @@
 
 import React, { useMemo, memo } from 'react';
 import { StreamingMarkdown } from './StreamingMarkdown';
+import type { Citation } from '@/types/dify';
 
 /**
  * 思维步骤
@@ -28,6 +29,7 @@ interface ThinkingGuideRendererProps {
   onTimestampClick?: (timestampMs: number) => void;
   isMobile?: boolean;
   className?: string;
+  citations?: Citation[];
 }
 
 /**
@@ -130,12 +132,14 @@ const StepCard = memo(function StepCard({
   total,
   onTimestampClick,
   isMobile,
+  citations,
 }: {
   step: ThinkingStep;
   index: number;
   total: number;
   onTimestampClick?: (ms: number) => void;
   isMobile?: boolean;
+  citations?: Citation[];
 }) {
   const icon = getStepIcon(step.title);
   const isLast = index === total - 1;
@@ -164,6 +168,7 @@ const StepCard = memo(function StepCard({
             content={step.content}
             isStreaming={false}
             onTimestampClick={onTimestampClick}
+            citations={citations}
           />
         </div>
 
@@ -176,6 +181,7 @@ const StepCard = memo(function StepCard({
                 content={step.tip}
                 isStreaming={false}
                 onTimestampClick={onTimestampClick}
+                citations={citations}
               />
             </div>
           </div>
@@ -194,6 +200,7 @@ export const ThinkingGuideRenderer = memo(function ThinkingGuideRenderer({
   onTimestampClick,
   isMobile = false,
   className = '',
+  citations,
 }: ThinkingGuideRendererProps) {
 
   const parsed = useMemo(() => parseGuide(content), [content]);
@@ -206,6 +213,7 @@ export const ThinkingGuideRenderer = memo(function ThinkingGuideRenderer({
         isStreaming={isStreaming}
         onTimestampClick={onTimestampClick}
         className={className}
+        citations={citations}
       />
     );
   }
@@ -232,6 +240,7 @@ export const ThinkingGuideRenderer = memo(function ThinkingGuideRenderer({
               total={parsed.steps.length}
               onTimestampClick={onTimestampClick}
               isMobile={isMobile}
+              citations={citations}
             />
           ))}
         </div>
@@ -246,6 +255,7 @@ export const ThinkingGuideRenderer = memo(function ThinkingGuideRenderer({
                 content={parsed.methods}
                 isStreaming={false}
                 onTimestampClick={onTimestampClick}
+                citations={citations}
               />
             </p>
           </div>
@@ -269,6 +279,7 @@ export const ThinkingGuideRenderer = memo(function ThinkingGuideRenderer({
               content={parsed.formalAnswer}
               isStreaming={false}
               onTimestampClick={onTimestampClick}
+              citations={citations}
             />
           </div>
         </div>

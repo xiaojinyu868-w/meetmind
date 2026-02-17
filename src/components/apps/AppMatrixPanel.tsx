@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import Image from 'next/image';
 import { toast } from 'sonner';
 import { ModelSelector } from '@/components/ModelSelector';
-import { DEFAULT_MODEL_ID } from '@/lib/services/llm-service';
+import { DEFAULT_WORKSHOP_MODEL_ID } from '@/lib/services/llm-service';
 import { getPreference, setPreference } from '@/lib/db';
 import type { Anchor, TranscriptSegment } from '@/types';
 import type {
@@ -354,7 +354,7 @@ export function AppMatrixPanel({
 }: AppMatrixPanelProps) {
   const [plugins, setPlugins] = useState<AppPluginManifest[]>([]);
   const [selectedAppKey, setSelectedAppKey] = useState('flashcards');
-  const [selectedModel, setSelectedModel] = useState(DEFAULT_MODEL_ID);
+  const [selectedModel, setSelectedModel] = useState(DEFAULT_WORKSHOP_MODEL_ID);
   const [isRunning, setIsRunning] = useState(false);
   const [result, setResult] = useState<AppExecutionResult | null>(null);
   const [taskState, setTaskState] = useState<Record<string, boolean>>({});

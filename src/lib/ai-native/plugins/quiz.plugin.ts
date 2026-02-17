@@ -61,17 +61,23 @@ function normalizeOptions(options: unknown): string[] {
 }
 
 function fallbackDraft(segment: TranscriptSegment): QuizDraft {
-  const summary = segment.text.replace(/\s+/g, ' ').trim();
+  const text = segment.text.replace(/\s+/g, ' ').trim();
+  const ts = formatTimestamp(segment.startMs);
+  // 从原文中提取一个关键短语用于构造有辨识度的干扰项
+  const phrases = text.split(/[，。；！？,.\s]+/).filter((p) => p.length >= 4 && p.length <= 20);
+  const keyPhrase = phrases[0] || text.slice(0, 20);
+  const altPhrase = phrases[1] || phrases[0] || text.slice(0, 15);
+
   return {
-    stem: `以下哪项最符合 ${formatTimestamp(segment.startMs)} 片段的核心内容？`,
+    stem: `关于 ${ts} 附近讲述的内容，以下哪种理解最准确？`,
     options: [
-      summary.slice(0, 30) || '课堂核心概念',
-      '与课堂无关的背景信息',
-      '只需记结论不必理解过程',
-      '跳过证据直接作答',
+      `该片段主要讨论了"${keyPhrase}"相关内容`,
+      `该片段的重点是对"${altPhrase}"的否定`,
+      `该片段跳过了这个话题，没有展开说明`,
+      `该片段仅做了简单引用，未做实质分析`,
     ],
     answer: 'A',
-    explanation: '正确选项直接对应课堂片段，其余选项与原文不一致。',
+    explanation: `回放 ${ts} 附近的课堂录音可以确认，该片段确实围绕"${keyPhrase}"展开。建议重新听一遍加深理解。`,
     startMs: segment.startMs,
     endMs: segment.endMs,
   };
@@ -88,7 +94,7 @@ async function generateQuizWithLLM(
       {
         role: 'system',
         content: `你是一位经验丰富的命题研究员，擅长设计能区分"真懂"和"以为自己懂"的测试题。
-你的目标是帮刚上完课的学生发现知识盲区——好的测验不仅检测记忆，更能暴露理解偏差。
+你的学生刚上完一堂课，想检验自己是否真正理解了课堂内容。好的测验能暴露理解偏差，而不仅仅检测记忆。
 严格基于课堂内容出题，输出纯 JSON。`,
       },
       {

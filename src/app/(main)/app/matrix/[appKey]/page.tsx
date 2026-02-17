@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
 import { useParams, useSearchParams } from 'next/navigation';
 import { toast } from 'sonner';
-import { DEFAULT_MODEL_ID } from '@/lib/services/llm-service';
+import { DEFAULT_WORKSHOP_MODEL_ID } from '@/lib/services/llm-service';
 import { db, getPreference, setPreference, getSessionSummary } from '@/lib/db';
 import { classroomDataService } from '@/lib/services/classroom-data-service';
 import { runMemoryMigration } from '@/lib/services/memory-migration';
@@ -106,7 +106,7 @@ export default function AppMatrixWindowPage() {
   const [anchors, setAnchors] = useState<Anchor[]>([]);
   const [summaryOverview, setSummaryOverview] = useState('');
   const [keyDifficulties, setKeyDifficulties] = useState<string[]>([]);
-  const [model, setModel] = useState(DEFAULT_MODEL_ID);
+  const [model, setModel] = useState(DEFAULT_WORKSHOP_MODEL_ID);
 
   const rawAppKey = params?.appKey;
   const appKey = Array.isArray(rawAppKey) ? rawAppKey[0] : rawAppKey || '';
@@ -119,9 +119,11 @@ export default function AppMatrixWindowPage() {
   useEffect(() => {
     let cancelled = false;
     const run = async () => {
-      const preferredModel = await getPreference<string>(WORKSHOP_MODEL_PREFERENCE, DEFAULT_MODEL_ID).catch(() => DEFAULT_MODEL_ID);
+      const preferredModel = await getPreference<string>(WORKSHOP_MODEL_PREFERENCE, DEFAULT_WORKSHOP_MODEL_ID).catch(
+        () => DEFAULT_WORKSHOP_MODEL_ID
+      );
       if (cancelled) return;
-      setModel(preferredModel || DEFAULT_MODEL_ID);
+      setModel(preferredModel || DEFAULT_WORKSHOP_MODEL_ID);
     };
     void run();
     return () => {

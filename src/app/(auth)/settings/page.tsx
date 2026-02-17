@@ -180,6 +180,7 @@ export default function SettingsPage() {
                   className="px-3 py-2 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-400 focus:border-transparent"
                 >
                   <option value="auto">自动选择</option>
+                  <option value="qwen3.5-plus">通义千问 3.5 Plus（推荐）</option>
                   <option value="qwen3-vl-plus-2025-12-19">通义千问 3 VL（多模态）</option>
                   <option value="qwen3-max-2026-01-23">通义千问 3 Max（思考模式）</option>
                 </select>

@@ -1,5 +1,7 @@
 import type { Anchor, TranscriptSegment } from '@/types';
 import type { AppExecuteRequest, AppExecutionContext, ApplicationGoal, DataSourceType, MemoryLayerSnapshot } from './types';
+import { DEFAULT_WORKSHOP_MODEL_ID } from '@/lib/services/llm-service';
+import { isWorkshopAppKey } from './app-catalog';
 
 function normalizeGoal(goal: ApplicationGoal | string, appKey?: string): ApplicationGoal {
   if (typeof goal === 'string') {
@@ -52,13 +54,27 @@ function buildTimelineMemory(transcript: TranscriptSegment[], anchors: Anchor[])
   };
 }
 
+function resolveAppKey(payload: AppExecuteRequest): string | undefined {
+  const direct = payload.appKey?.trim();
+  if (direct) return direct;
+
+  if (typeof payload.goal === 'string') return undefined;
+
+  const fromGoal = payload.goal.appKey?.trim();
+  if (fromGoal) return fromGoal;
+
+  return undefined;
+}
+
 export function buildExecutionContext(payload: AppExecuteRequest): AppExecutionContext {
   const transcript = normalizeTranscript(payload.input?.transcript);
   const anchors = normalizeAnchors(payload.input?.anchors);
   const sessionId = payload.input?.sessionId?.trim() || `session-${Date.now()}`;
   const dataSource: DataSourceType = payload.input?.dataSource ?? 'unknown';
   const model = payload.model?.trim();
-  const appKey = payload.appKey?.trim();
+  const appKey = resolveAppKey(payload);
+  const resolvedModel =
+    model || (appKey && isWorkshopAppKey(appKey) ? DEFAULT_WORKSHOP_MODEL_ID : undefined);
 
   const memory: MemoryLayerSnapshot = {
     ...payload.memory,
@@ -75,6 +91,6 @@ export function buildExecutionContext(payload: AppExecuteRequest): AppExecutionC
     },
     memory,
     goal: normalizeGoal(payload.goal, appKey),
-    model: model || undefined,
+    model: resolvedModel,
   };
 }

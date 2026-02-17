@@ -17,6 +17,10 @@ export const AVAILABLE_MODELS: ModelConfig[] = LLMConfig.models;
 
 // 获取默认模型ID
 export const DEFAULT_MODEL_ID = LLMConfig.defaultModel;
+export const WORKSHOP_PREFERRED_MODEL_ID = 'qwen3.5-plus';
+export const DEFAULT_WORKSHOP_MODEL_ID = AVAILABLE_MODELS.some((model) => model.id === WORKSHOP_PREFERRED_MODEL_ID)
+  ? WORKSHOP_PREFERRED_MODEL_ID
+  : DEFAULT_MODEL_ID;
 
 function resolveLlmHttpTimeoutMs(): number {
   const parsed = Number.parseInt(process.env.LLM_HTTP_TIMEOUT_MS || '', 10);
@@ -174,6 +178,9 @@ async function callQwen(
     temperature: options?.temperature ?? 0.7,
     max_tokens: options?.maxTokens ?? (enableThinking ? 32768 : 2000),
   };
+
+  // Qwen 默认思考行为会影响首包时延，这里显式声明开关，避免服务端默认值漂移。
+  requestBody.enable_thinking = enableThinking;
 
   // 思考模式配置
   if (enableThinking) {
@@ -411,10 +418,13 @@ export async function* chatStream(
 
   requestBody.max_tokens = options?.maxTokens ?? (enableThinking ? 32768 : 2000);
 
+  if (modelConfig.provider === 'qwen') {
+    // 显式传递开关，避免服务端默认开启思考导致首包变慢。
+    requestBody.enable_thinking = enableThinking;
+  }
+
   // 思考模式配置
   if (enableThinking && modelConfig.provider === 'qwen') {
-    // enable_thinking 需要放在请求体根级别
-    requestBody.enable_thinking = true;
     // 仅 qwen3-max 支持内置工具
     if (modelConfig.supportsBuiltinTools) {
       requestBody.tools = [
