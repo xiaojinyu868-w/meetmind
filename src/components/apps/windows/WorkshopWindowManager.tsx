@@ -21,8 +21,8 @@ const DEFAULT_DISPLAY_MODES: Partial<Record<WorkshopAppKey, 'panel' | 'fullscree
   mindmap: 'fullscreen',
   infographic: 'fullscreen',
   'audio-overview': 'panel',
-  flashcards: 'panel',
-  quiz: 'panel',
+  flashcards: 'fullscreen',
+  quiz: 'fullscreen',
 };
 
 /** 需要沉浸式全屏体验的应用（深色背景、精简header） */

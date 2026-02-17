@@ -107,23 +107,27 @@ export function ModelSelector({
     setIsOpen(false);
   };
 
+  const compactLabel = selectedModel?.name?.split(' ')[0] || '模型';
+
   return (
-    <div className={`relative ${className}`}>
+    <div className={`relative min-w-0 ${className}`}>
       <button
         onClick={() => setIsOpen(!isOpen)}
-        className={`flex items-center gap-1.5 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors ${
+        className={`flex max-w-full items-center gap-1.5 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors ${
           compact ? 'px-2 py-1 text-xs' : 'px-3 py-1.5 text-sm'
         }`}
       >
-        <span className={compact ? 'text-sm' : ''}>{getProviderIcon(selectedModel?.provider || 'qwen')}</span>
-        <span className="font-medium">{compact ? (selectedModel?.name?.split(' ')[0] || '模型') : (selectedModel?.name || '选择模型')}</span>
+        <span className={`shrink-0 ${compact ? 'text-sm' : ''}`}>{getProviderIcon(selectedModel?.provider || 'qwen')}</span>
+        <span className={`font-medium min-w-0 truncate ${compact ? 'max-w-[6.5rem]' : 'max-w-[13rem]'}`}>
+          {compact ? compactLabel : (selectedModel?.name || '选择模型')}
+        </span>
         {!compact && selectedModel?.supportsMultimodal && (
-          <span className="text-xs px-1 py-0.5 bg-blue-100 text-blue-600 rounded" title="支持图片">
+          <span className="shrink-0 text-xs px-1 py-0.5 bg-blue-100 text-blue-600 rounded" title="支持图片">
             📷
           </span>
         )}
         <svg 
-          className={`transition-transform ${compact ? 'w-3 h-3' : 'w-4 h-4'} ${isOpen ? 'rotate-180' : ''}`} 
+          className={`shrink-0 transition-transform ${compact ? 'w-3 h-3' : 'w-4 h-4'} ${isOpen ? 'rotate-180' : ''}`}
           fill="none" 
           stroke="currentColor" 
           viewBox="0 0 24 24"
@@ -138,7 +142,13 @@ export function ModelSelector({
             className="fixed inset-0 z-10" 
             onClick={() => setIsOpen(false)} 
           />
-          <div className="absolute top-full left-0 mt-1 w-80 bg-white border border-gray-200 rounded-lg shadow-lg z-20 overflow-hidden">
+          <div
+            className={`absolute top-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg z-20 overflow-hidden ${
+              compact
+                ? 'right-0 left-auto w-[min(92vw,22rem)]'
+                : 'left-0 right-auto w-80 max-w-[calc(100vw-1.5rem)]'
+            }`}
+          >
             <div className="p-2 border-b border-gray-100">
               <p className="text-xs text-gray-500 px-2">选择 AI 模型</p>
             </div>
@@ -157,28 +167,32 @@ export function ModelSelector({
                       <button
                         key={model.id}
                         onClick={() => handleModelChange(model.id)}
-                        className={`w-full flex items-start gap-3 p-2 rounded-lg text-left transition-colors ${
+                        className={`w-full flex items-start gap-2.5 p-2 rounded-lg text-left transition-colors ${
                           value === model.id 
                             ? getProviderColor(model.provider)
                             : 'hover:bg-gray-50'
                         }`}
                       >
-                        <span className="text-lg">{getProviderIcon(model.provider)}</span>
+                        <span className="shrink-0 text-lg leading-none mt-0.5">{getProviderIcon(model.provider)}</span>
                         <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <span className="font-medium text-sm">{model.name}</span>
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <span className="font-medium text-[13px] leading-5 text-gray-800 break-words">
+                              {model.name}
+                            </span>
                             {model.recommended && (
-                              <span className="text-xs px-1.5 py-0.5 bg-amber-100 text-amber-700 rounded">
+                              <span className="text-[10px] px-1.5 py-0.5 bg-amber-100 text-amber-700 rounded whitespace-nowrap">
                                 推荐
                               </span>
                             )}
                             {model.supportsMultimodal && (
-                              <span className="text-xs px-1.5 py-0.5 bg-blue-100 text-blue-600 rounded" title="支持图片上传">
+                              <span className="text-[10px] px-1.5 py-0.5 bg-blue-100 text-blue-600 rounded whitespace-nowrap" title="支持图片上传">
                                 📷 多模态
                               </span>
                             )}
                           </div>
-                          <p className="text-xs text-gray-500 truncate">{model.description}</p>
+                          <p className="mt-0.5 text-[11px] leading-[1.35] text-gray-500 overflow-hidden [display:-webkit-box] [-webkit-line-clamp:2] [-webkit-box-orient:vertical]">
+                            {model.description}
+                          </p>
                         </div>
                         {value === model.id && (
                           <svg className="w-4 h-4 text-current flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">

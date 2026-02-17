@@ -292,53 +292,61 @@ function IframeSyncBar({
         />
       )}
 
-      <div className="flex items-center gap-2 px-3 py-2">
-        <span className="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium bg-rose-400/15 text-rose-300 border border-rose-300/30">
-          学习时间轴
-        </span>
-        <span className="text-[11px] text-white/60 truncate">
-          点击即播；主视频按需同步
-        </span>
-        <div className="flex-1" />
-        {onSyncMainVideo && (
+      <div className="px-3 py-2">
+        <div className="flex items-center gap-2">
+          <span className="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium bg-rose-400/15 text-rose-300 border border-rose-300/30 whitespace-nowrap">
+            学习时间轴
+          </span>
+          <span className="hidden sm:inline text-[11px] text-white/60 truncate">
+            点击即播；主视频按需同步
+          </span>
+        </div>
+
+        <div className="mt-2 flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2 min-w-0">
+            {onSyncMainVideo && (
+              <button
+                type="button"
+                onClick={() => onSyncMainVideo(simTimeRef.current, playing)}
+                className="rounded-md border border-white/15 bg-white/5 px-2 py-1 text-[11px] text-white/75 hover:bg-white/10 transition-colors whitespace-nowrap"
+                title="把主视频同步到当前学习时间轴位置（会重载主视频）"
+              >
+                <span className="sm:hidden">同步</span>
+                <span className="hidden sm:inline">同步主视频</span>
+              </button>
+            )}
+            <button
+              onClick={togglePlay}
+              className="flex items-center justify-center w-7 h-7 rounded-full bg-rose-300/20 hover:bg-rose-300/30 transition-colors"
+              title={hasAudio ? '播放或暂停音轨回放' : '开始或暂停字幕同步'}
+            >
+              {playing ? (
+                <svg className="w-3.5 h-3.5 text-rose-200" fill="currentColor" viewBox="0 0 24 24">
+                  <rect x="6" y="4" width="4" height="16" rx="1" />
+                  <rect x="14" y="4" width="4" height="16" rx="1" />
+                </svg>
+              ) : (
+                <svg className="w-3.5 h-3.5 text-rose-200 ml-0.5" fill="currentColor" viewBox="0 0 24 24">
+                  <path d="M8 5v14l11-7z" />
+                </svg>
+              )}
+            </button>
+            <span className="text-[11px] font-mono text-white/75 tabular-nums whitespace-nowrap">
+              {fmtTime(simTime)} / {fmtTime(duration)}
+            </span>
+          </div>
+
           <button
             type="button"
-            onClick={() => onSyncMainVideo(simTimeRef.current, playing)}
-            className="rounded-md border border-white/15 bg-white/5 px-2 py-1 text-[11px] text-white/75 hover:bg-white/10 transition-colors"
-            title="把主视频同步到当前学习时间轴位置（会重载主视频）"
+            data-testid="learning-track-toggle"
+            data-onboarding="learning-track"
+            onClick={() => setExpanded((prev) => !prev)}
+            className="rounded-md border border-white/15 bg-white/5 px-2 py-1 text-[11px] text-white/75 hover:bg-white/10 transition-colors whitespace-nowrap"
+            title={expanded ? '收起学习时间轴' : '展开学习时间轴'}
           >
-            同步主视频
+            {expanded ? '收起' : '展开'}
           </button>
-        )}
-        <button
-          onClick={togglePlay}
-          className="flex items-center justify-center w-7 h-7 rounded-full bg-rose-300/20 hover:bg-rose-300/30 transition-colors"
-          title={hasAudio ? '播放或暂停音轨回放' : '开始或暂停字幕同步'}
-        >
-          {playing ? (
-            <svg className="w-3.5 h-3.5 text-rose-200" fill="currentColor" viewBox="0 0 24 24">
-              <rect x="6" y="4" width="4" height="16" rx="1" />
-              <rect x="14" y="4" width="4" height="16" rx="1" />
-            </svg>
-          ) : (
-            <svg className="w-3.5 h-3.5 text-rose-200 ml-0.5" fill="currentColor" viewBox="0 0 24 24">
-              <path d="M8 5v14l11-7z" />
-            </svg>
-          )}
-        </button>
-        <span className="text-[11px] font-mono text-white/75 tabular-nums min-w-[5.5rem] text-right">
-          {fmtTime(simTime)} / {fmtTime(duration)}
-        </span>
-        <button
-          type="button"
-          data-testid="learning-track-toggle"
-          data-onboarding="learning-track"
-          onClick={() => setExpanded((prev) => !prev)}
-          className="rounded-md border border-white/15 bg-white/5 px-2 py-1 text-[11px] text-white/75 hover:bg-white/10 transition-colors"
-          title={expanded ? '收起学习时间轴' : '展开学习时间轴'}
-        >
-          {expanded ? '收起' : '展开'}
-        </button>
+        </div>
       </div>
 
       {expanded && (
@@ -372,7 +380,7 @@ function IframeSyncBar({
                 playing
                   ? 'bg-rose-300/20 text-rose-200'
                   : 'bg-white/5 text-white/40'
-              }`}
+              } whitespace-nowrap`}
             >
               {statusText}
             </span>
