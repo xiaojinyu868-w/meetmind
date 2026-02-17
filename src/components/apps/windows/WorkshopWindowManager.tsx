@@ -14,6 +14,19 @@ import { QuizWindow } from '@/components/apps/windows/QuizWindow';
 import { MindmapWindow } from '@/components/apps/windows/MindmapWindow';
 import { InfographicWindow } from '@/components/apps/windows/InfographicWindow';
 
+function useIsMobile(breakpoint = 768) {
+  const [isMobile, setIsMobile] = useState(false);
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const mql = window.matchMedia(`(max-width: ${breakpoint - 1}px)`);
+    setIsMobile(mql.matches);
+    const handler = (e: MediaQueryListEvent) => setIsMobile(e.matches);
+    mql.addEventListener('change', handler);
+    return () => mql.removeEventListener('change', handler);
+  }, [breakpoint]);
+  return isMobile;
+}
+
 const WORKSHOP_MODEL_PREFERENCE = 'ai_workshop_model';
 
 /** 应用的默认展示模式 */
@@ -211,6 +224,7 @@ function WindowCard(props: WindowCardProps) {
   } = props;
   const app = getWorkshopAppByKey(windowState.appKey);
   const resolvedApp = app ?? getWorkshopAppByKey('audio-overview')!;
+  const isMobile = useIsMobile();
 
   const execution = useAppExecution({
     app: resolvedApp,
@@ -228,8 +242,9 @@ function WindowCard(props: WindowCardProps) {
     dataSource
   )}`;
 
-  const isFullscreen = windowState.displayMode === 'fullscreen';
   const isImmersive = IMMERSIVE_APPS.has(windowState.appKey);
+  // 沉浸式应用在移动端强制全屏
+  const isFullscreen = windowState.displayMode === 'fullscreen' || (isMobile && isImmersive);
 
   const baseRight = 16 + stackOffset;
   const baseBottom = 20 + stackOffset;
@@ -370,7 +385,7 @@ function WindowCard(props: WindowCardProps) {
       onMouseDown={() => onFocus(app.key)}
     >
       <header
-        className="flex cursor-grab items-center gap-2 border-b border-slate-200 bg-white/95 px-3 py-2 backdrop-blur active:cursor-grabbing select-none"
+        className="flex cursor-grab items-center gap-1.5 border-b border-slate-200 bg-white/95 px-3 py-2 backdrop-blur active:cursor-grabbing select-none md:gap-2"
         onPointerDown={drag.onPointerDown}
         onPointerMove={drag.onPointerMove}
         onPointerUp={drag.onPointerUp}
@@ -386,17 +401,19 @@ function WindowCard(props: WindowCardProps) {
         </button>
         <div className="min-w-0 flex-1">
           <p className="truncate text-sm font-semibold text-slate-900">{app.name}</p>
-          <p className="truncate text-xs text-slate-500">
+          <p className="hidden truncate text-xs text-slate-500 md:block">
             会话 {sessionId.slice(0, 6)}…{sessionId.slice(-4)} · {formatDataSource(dataSource)}
           </p>
         </div>
-        <span className={`rounded-full border px-2 py-1 text-xs font-medium ${taskTone(execution.taskState)}`}>
+        <span className={`shrink-0 rounded-full border px-2 py-1 text-xs font-medium ${taskTone(execution.taskState)}`}>
           {taskLabel(execution.taskState)}
         </span>
-        <ModelSelector value={model} onChange={onModelChange} compact allowedProviders={['qwen', 'volcengine']} />
+        <div className="hidden md:block">
+          <ModelSelector value={model} onChange={onModelChange} compact allowedProviders={['qwen', 'volcengine']} />
+        </div>
         <button
           type="button"
-          className="rounded-lg border border-slate-300 px-2 py-1 text-xs font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+          className="shrink-0 rounded-lg border border-slate-300 px-2 py-1 text-xs font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50"
           onClick={() => void execution.rerun()}
           disabled={execution.taskState.status === 'running'}
           data-testid={`workshop-window-rerun-${app.key}`}
@@ -405,13 +422,15 @@ function WindowCard(props: WindowCardProps) {
         </button>
         <Link
           href={standaloneHref}
-          className="rounded-lg border border-blue-300 bg-blue-50 px-2 py-1 text-xs font-medium text-blue-700 hover:bg-blue-100"
+          className="hidden rounded-lg border border-blue-300 bg-blue-50 px-2 py-1 text-xs font-medium text-blue-700 hover:bg-blue-100 md:inline-flex"
           target="_blank"
           rel="noreferrer"
         >
           独立页
         </Link>
-        <DisplayModeToggle mode="panel" onToggle={() => onToggleDisplayMode(app.key)} />
+        <div className="hidden md:block">
+          <DisplayModeToggle mode="panel" onToggle={() => onToggleDisplayMode(app.key)} />
+        </div>
         <button
           type="button"
           className="rounded-md px-2 py-1 text-slate-500 hover:bg-slate-100"
