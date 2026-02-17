@@ -95,7 +95,7 @@ async function generateQuizWithLLM(
         role: 'system',
         content: `你是一位经验丰富的命题研究员，擅长设计能区分"真懂"和"以为自己懂"的测试题。
 你的学生刚上完一堂课，想检验自己是否真正理解了课堂内容。好的测验能暴露理解偏差，而不仅仅检测记忆。
-严格基于课堂内容出题，输出纯 JSON。`,
+严格基于课堂内容出题，输出纯 JSON，不要输出任何其他文字。`,
       },
       {
         role: 'user',
@@ -130,10 +130,15 @@ ${transcriptContext}
       },
     ],
     model,
-    { temperature: 0.3, maxTokens: 3200 }
+    { temperature: 0.3, maxTokens: 8192, responseFormat: 'json_object' }
   );
 
-  return parseJsonResponse<QuizLLMOutput>(response.content);
+  console.log('[quiz-plugin] LLM raw response length:', response.content.length, 'model:', response.model);
+  const parsed = parseJsonResponse<QuizLLMOutput>(response.content);
+  if (!parsed) {
+    console.error('[quiz-plugin] parseJsonResponse failed, first 500 chars:', response.content.slice(0, 500));
+  }
+  return parsed;
 }
 
 function buildCards(
@@ -237,7 +242,15 @@ export const quizPlugin: AppPlugin = {
     let llmOutput: QuizLLMOutput | null = null;
     try {
       llmOutput = await generateQuizWithLLM(context, model, promptContext.text, anchorContext);
-    } catch {
+      if (!llmOutput) {
+        console.warn('[quiz-plugin] LLM returned null (JSON parse failed). model=', model, 'transcript_chars=', promptContext.text.length);
+      } else if (!Array.isArray(llmOutput.questions) || llmOutput.questions.length === 0) {
+        console.warn('[quiz-plugin] LLM returned empty questions. model=', model, 'raw keys=', Object.keys(llmOutput));
+      } else {
+        console.log('[quiz-plugin] LLM generated', llmOutput.questions.length, 'questions. model=', model);
+      }
+    } catch (err) {
+      console.error('[quiz-plugin] generateQuizWithLLM failed:', err instanceof Error ? err.message : err);
       llmOutput = null;
     }
 

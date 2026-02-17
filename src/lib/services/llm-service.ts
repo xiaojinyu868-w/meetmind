@@ -158,7 +158,7 @@ async function fetchWithTimeout(
 async function callQwen(
   messages: ChatMessage[],
   modelId: string,
-  options?: { temperature?: number; maxTokens?: number }
+  options?: { temperature?: number; maxTokens?: number; responseFormat?: 'json_object' | 'text' }
 ): Promise<LLMResponse> {
   const config = getApiConfig('qwen');
   const modelConfig = getModelConfig(modelId);
@@ -178,6 +178,11 @@ async function callQwen(
     temperature: options?.temperature ?? 0.7,
     max_tokens: options?.maxTokens ?? (enableThinking ? 32768 : 2000),
   };
+
+  // JSON 模式：让 API 保证输出合法 JSON
+  if (options?.responseFormat === 'json_object') {
+    requestBody.response_format = { type: 'json_object' };
+  }
 
   // Qwen 默认思考行为会影响首包时延，这里显式声明开关，避免服务端默认值漂移。
   requestBody.enable_thinking = enableThinking;
@@ -212,6 +217,11 @@ async function callQwen(
   }
 
   const data = await response.json();
+
+  const finishReason = data.choices?.[0]?.finish_reason;
+  if (finishReason && finishReason !== 'stop') {
+    console.warn(`[LLM] finish_reason=${finishReason}, model=${modelId}, requested max_tokens=${requestBody.max_tokens}`);
+  }
   
   // 思考模式可能返回 reasoning_content，需要处理
   const responseContent = data.choices[0]?.message?.content || '';
@@ -345,7 +355,7 @@ async function callVolcengine(
 export async function chat(
   messages: ChatMessage[],
   modelId: string = DEFAULT_MODEL_ID,
-  options?: { temperature?: number; maxTokens?: number }
+  options?: { temperature?: number; maxTokens?: number; responseFormat?: 'json_object' | 'text' }
 ): Promise<LLMResponse> {
   const modelConfig = getModelConfig(modelId);
   
