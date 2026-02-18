@@ -4,6 +4,10 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { AppExecutionResult } from '@/lib/ai-native/types';
 import type { TranscriptSegment } from '@/types';
 import { EvidenceChip } from '@/components/apps/evidence/EvidenceChip';
+import ReactMarkdown from 'react-markdown';
+import remarkMath from 'remark-math';
+import rehypeKatex from 'rehype-katex';
+import 'katex/dist/katex.min.css';
 import {
   treeToMarkdown,
   markdownToTree,
@@ -43,6 +47,59 @@ const PALETTE = {
   textMuted: '#6c6f8a',
   accent: '#7c6ef0',
 };
+
+const MATH_SYNTAX_REGEX = /(?:\$[^$\n]+\$|\\\([^)\n]+\\\)|\\\[[^\]\n]+\\\])/;
+
+function hasMathSyntax(text: string): boolean {
+  return MATH_SYNTAX_REGEX.test(text || '');
+}
+
+function MathLabel({
+  content,
+  align,
+  color,
+  fontSize,
+  fontWeight,
+}: {
+  content: string;
+  align: 'left' | 'center';
+  color: string;
+  fontSize: number | string;
+  fontWeight: number | string;
+}) {
+  return (
+    <div
+      style={{
+        width: '100%',
+        height: '100%',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: align === 'center' ? 'center' : 'flex-start',
+        color,
+        fontSize,
+        fontWeight,
+        lineHeight: 1.2,
+        textAlign: align,
+        whiteSpace: 'nowrap',
+        overflow: 'hidden',
+        textOverflow: 'ellipsis',
+        userSelect: 'none',
+      }}
+    >
+      <ReactMarkdown
+        remarkPlugins={[remarkMath]}
+        rehypePlugins={[rehypeKatex]}
+        components={{
+          p: ({ children }) => <span>{children}</span>,
+          strong: ({ children }) => <strong>{children}</strong>,
+          em: ({ children }) => <em>{children}</em>,
+        }}
+      >
+        {content}
+      </ReactMarkdown>
+    </div>
+  );
+}
 
 /**
  * 层级色板 — 同一 depth 的所有节点使用同一颜色
@@ -509,6 +566,12 @@ function CustomMindmapRenderer({
             const fontWeight = isRoot ? 700 : node.depth === 1 ? 600 : 500;
             const textColor = isRoot ? '#ffffff' : PALETTE.textPrimary;
             const rx = isRoot ? 14 : 10;
+            const nodeContainsMath = hasMathSyntax(node.title);
+            const expandBtnOffset = node.hasChildren ? 32 : 0;
+            const textAreaX = node.x + NODE_PAD_X;
+            const textAreaY = node.y + 2;
+            const textAreaWidth = Math.max(8, node.width - NODE_PAD_X * 2 - expandBtnOffset);
+            const textAreaHeight = Math.max(8, node.height - 4);
 
             return (
               <g key={node.id}>
@@ -541,20 +604,38 @@ function CustomMindmapRenderer({
                   />
                 )}
 
-                {/* 文字 */}
-                <text
-                  x={node.x + (isRoot ? (node.width - (node.hasChildren ? 32 : 0)) / 2 : NODE_PAD_X)}
-                  y={node.y + node.height / 2}
-                  fontSize={fontSize}
-                  fontWeight={fontWeight}
-                  fontFamily="-apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif"
-                  fill={textColor}
-                  dominantBaseline="central"
-                  textAnchor={isRoot ? 'middle' : 'start'}
-                  style={{ userSelect: 'none' }}
-                >
-                  {node.title}
-                </text>
+                {/* 文字（含公式时启用 KaTeX 渲染） */}
+                {nodeContainsMath ? (
+                  <foreignObject
+                    x={textAreaX}
+                    y={textAreaY}
+                    width={textAreaWidth}
+                    height={textAreaHeight}
+                    style={{ pointerEvents: 'none' }}
+                  >
+                    <MathLabel
+                      content={node.title}
+                      align={isRoot ? 'center' : 'left'}
+                      color={textColor}
+                      fontSize={fontSize}
+                      fontWeight={fontWeight}
+                    />
+                  </foreignObject>
+                ) : (
+                  <text
+                    x={node.x + (isRoot ? (node.width - (node.hasChildren ? 32 : 0)) / 2 : NODE_PAD_X)}
+                    y={node.y + node.height / 2}
+                    fontSize={fontSize}
+                    fontWeight={fontWeight}
+                    fontFamily="-apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif"
+                    fill={textColor}
+                    dominantBaseline="central"
+                    textAnchor={isRoot ? 'middle' : 'start'}
+                    style={{ userSelect: 'none' }}
+                  >
+                    {node.title}
+                  </text>
+                )}
 
                 {/* ★ 展开/收起按钮 — 对标 NotebookLM: 圆角方块 + > 箭头 */}
                 {node.hasChildren && (
@@ -676,6 +757,7 @@ function OutlineNode({
   const fontWeights = ['600', '500', '500', '400', '400'];
   const fontSize = fontSizes[Math.min(depth, fontSizes.length - 1)];
   const fontWeight = fontWeights[Math.min(depth, fontWeights.length - 1)];
+  const nodeContainsMath = hasMathSyntax(node.title);
 
   return (
     <div style={{ marginLeft: depth > 0 ? 20 : 0 }}>
@@ -696,7 +778,19 @@ function OutlineNode({
         ) : (
           <span className="mt-2 flex h-2 w-2 shrink-0"><span className="block h-1.5 w-1.5 rounded-full" style={{ background: hue.node, opacity: 0.6 }} /></span>
         )}
-        <span className="flex-1 leading-relaxed" style={{ color: depth === 0 ? PALETTE.textPrimary : PALETTE.textSecondary, fontSize, fontWeight }}>{node.title}</span>
+        <span className="flex-1 leading-relaxed" style={{ color: depth === 0 ? PALETTE.textPrimary : PALETTE.textSecondary, fontSize, fontWeight }}>
+          {nodeContainsMath ? (
+            <MathLabel
+              content={node.title}
+              align="left"
+              color={depth === 0 ? PALETTE.textPrimary : PALETTE.textSecondary}
+              fontSize={fontSize}
+              fontWeight={fontWeight}
+            />
+          ) : (
+            node.title
+          )}
+        </span>
         {citation ? (
           <span className="shrink-0 opacity-0 transition-opacity group-hover:opacity-100">
             <EvidenceChip citation={citation} transcript={transcript} onSeek={onSeek} />
@@ -831,7 +925,13 @@ export function MindmapWindow({ result, transcript, onSeek }: MindmapWindowProps
             <span className="flex h-8 w-8 items-center justify-center rounded-lg" style={{ background: `${PALETTE.accent}18` }}>
               <svg className="h-4 w-4" style={{ color: PALETTE.accent }} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M7.5 3.75H6A2.25 2.25 0 003.75 6v1.5M16.5 3.75H18A2.25 2.25 0 0120.25 6v1.5m0 9V18A2.25 2.25 0 0118 20.25h-1.5m-9 0H6A2.25 2.25 0 013.75 18v-1.5" /></svg>
             </span>
-            <h2 className="text-lg font-semibold" style={{ color: PALETTE.textPrimary }}>{root}</h2>
+            <h2 className="text-lg font-semibold" style={{ color: PALETTE.textPrimary }}>
+              {hasMathSyntax(root) ? (
+                <MathLabel content={root} align="left" color={PALETTE.textPrimary} fontSize={18} fontWeight={600} />
+              ) : (
+                root
+              )}
+            </h2>
           </div>
           <div className="space-y-0.5">
             {children.map((child, index) => (

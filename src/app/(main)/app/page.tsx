@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, useRef, Suspense, type ChangeEvent, type DragEvent } from 'react';
 import { useSearchParams } from 'next/navigation';
 import Image from 'next/image';
+import dynamic from 'next/dynamic';
 import { Header } from '@/components/Header';
 import { ServiceStatus, DegradedModeBanner } from '@/components/ServiceStatus';
 import { anchorService, type Anchor } from '@/lib/services/anchor-service';
@@ -51,10 +52,7 @@ import { ActionSidebar } from '@/components/ActionSidebar';
 import { ActionDrawer } from '@/components/ActionDrawer';
 import { ResizablePanel } from '@/components/layout/ResizablePanel';
 import { VideoLinkImporter } from '@/components/VideoLinkImporter';
-import { VideoReviewPlayer } from '@/components/VideoReviewPlayer';
-import { AITutor } from '@/components/AITutor';
-import { TranscriptFlowView } from '@/components/TranscriptFlowView';
-import { VideoInsightTimeline, type VideoInsightItem } from '@/components/VideoInsightTimeline';
+import type { VideoInsightItem } from '@/components/VideoInsightTimeline';
 
 import type { ConfusionMarker } from '@/components/mobile/PodcastPlayer';
 import type { ConversationHistory } from '@/types/conversation';
@@ -67,10 +65,7 @@ import { HighlightsPanel } from '@/components/HighlightsPanel';
 import { SummaryPanel } from '@/components/SummaryPanel';
 import { NotesPanel } from '@/components/NotesPanel';
 import { AnchorDetailPanel } from '@/components/AnchorDetailPanel';
-import { WorkshopYellowPage } from '@/components/apps/WorkshopYellowPage';
 import { WorkshopWindowManager, type FloatingWorkshopWindowState, getDefaultDisplayMode } from '@/components/apps/windows/WorkshopWindowManager';
-import { ConversationList } from '@/components/ConversationHistory/ConversationList';
-import { AIChat } from '@/components/AIChat';
 import { SessionHistoryList } from '@/components/SessionHistoryList';
 import { isWorkshopAppKey, type WorkshopAppKey } from '@/lib/ai-native/app-catalog';
 
@@ -94,6 +89,33 @@ import { DedaoTimeline, toDedaoEntries } from '@/components/mobile/DedaoTimeline
 import { DedaoConfusionCard } from '@/components/mobile/DedaoConfusionCard';
 import { DedaoMenu, DedaoMenuButton } from '@/components/mobile/DedaoMenu';
 import { MobileAIFab } from '@/components/mobile/MobileAIFab';
+
+const VideoReviewPlayer = dynamic(
+  () => import('@/components/VideoReviewPlayer').then((module) => module.VideoReviewPlayer),
+  { ssr: false }
+);
+const AITutor = dynamic(() => import('@/components/AITutor').then((module) => module.AITutor), {
+  ssr: false,
+});
+const TranscriptFlowView = dynamic(
+  () => import('@/components/TranscriptFlowView').then((module) => module.TranscriptFlowView),
+  { ssr: false }
+);
+const VideoInsightTimeline = dynamic(
+  () => import('@/components/VideoInsightTimeline').then((module) => module.VideoInsightTimeline),
+  { ssr: false }
+);
+const WorkshopYellowPage = dynamic(
+  () => import('@/components/apps/WorkshopYellowPage').then((module) => module.WorkshopYellowPage),
+  { ssr: false }
+);
+const ConversationList = dynamic(
+  () => import('@/components/ConversationHistory/ConversationList').then((module) => module.ConversationList),
+  { ssr: false }
+);
+const AIChat = dynamic(() => import('@/components/AIChat').then((module) => module.AIChat), {
+  ssr: false,
+});
 
 type ViewMode = 'record' | 'review';
 type DataSource = 'live' | 'demo' | 'video';
@@ -397,7 +419,7 @@ function StudentAppContent({
   const [appReady, setAppReady] = useState(false);
   const [loadingProgress, setLoadingProgress] = useState(isGuestFastEntry ? 50 : 0); // NOTE: cleaned corrupted legacy comment.
   
-  // 鑾峰彇褰撳墠鐧诲綍鐢ㄦ埛
+  // 获取当前登录用户
   const { user, isAuthenticated } = useAuth();
   
   // NOTE: cleaned corrupted legacy comment.
@@ -674,6 +696,7 @@ function StudentAppContent({
     setVideoSeekNonce((prev) => prev + 1);
     if (autoPlay) {
       setVideoPlayNonce((prev) => prev + 1);
+      setIsPlaying(true);
     }
   }, [normalizeSeekTime]);
 
@@ -694,6 +717,23 @@ function StudentAppContent({
       setIsPlaying(true);
     }
   }, [handleVideoSeek, normalizeSeekTime, videoSource]);
+
+  const handleUnifiedPlayPause = useCallback(() => {
+    if (videoSource) {
+      // 视频模式下由视频播放器控件接管播放，避免隐藏音轨误触发。
+      handleVideoSeek(currentTime, true);
+      return;
+    }
+
+    if (isPlaying) {
+      waveformRef.current?.pause();
+      setIsPlaying(false);
+      return;
+    }
+
+    waveformRef.current?.play();
+    setIsPlaying(true);
+  }, [currentTime, handleVideoSeek, isPlaying, videoSource]);
 
   useEffect(() => {
     if (!videoSource) {
@@ -996,7 +1036,7 @@ function StudentAppContent({
       anchorsWithResolved,
       {
         subject: session.subject || UIConfig.defaultSubject,
-        teacher: UIConfig.defaultTeacher || 'Teacher',
+        teacher: UIConfig.defaultTeacher || '老师',
         date: sessionDate.toISOString().split('T')[0],
       }
     );
@@ -1098,7 +1138,7 @@ function StudentAppContent({
             'demo-session',
             demoData.DEMO_SEGMENTS,
             demoData.DEMO_ANCHORS,
-            { subject: UIConfig.defaultSubject, teacher: 'Demo Teacher', date: new Date().toISOString().split('T')[0] }
+            { subject: UIConfig.defaultSubject, teacher: '示例老师', date: new Date().toISOString().split('T')[0] }
           );
           setTimeline(tl);
 
@@ -1130,7 +1170,7 @@ function StudentAppContent({
               id: 'demo-session',
               subject: UIConfig.defaultSubject,
               topic: 'Australia\'s Moving Experience',
-              teacherName: 'Demo Teacher',
+              teacherName: '示例老师',
               duration: demoData.DEMO_SEGMENTS.length > 0 ? demoData.DEMO_SEGMENTS[demoData.DEMO_SEGMENTS.length - 1].endMs : 0,
               status: 'completed',
               createdBy: studentId,
@@ -1223,15 +1263,15 @@ function StudentAppContent({
     setIsRecording(true);
     setSegments([]);
     setAnchors([]);
-    setSelectedAnchor(null); // 娓呴櫎閫変腑鐨勫洶鎯戠偣
+    setSelectedAnchor(null); // 清除选中的困惑点
     clearTopics(); // NOTE: cleaned corrupted legacy comment.
     clearSummary(); // NOTE: cleaned corrupted legacy comment.
-    setNotes([]); // 娓呴櫎绗旇
-    setActionItems([]); // 娓呴櫎琛屽姩娓呭崟
+    setNotes([]); // 清除笔记
+    setActionItems([]); // 清除行动清单
     setTimeline(null); // NOTE: cleaned corrupted legacy comment.
     setDataSource('live');
-    setAudioUrl(null); // 娓呴櫎绀轰緥闊抽URL
-    setAudioBlob(null); // 娓呴櫎闊抽 blob
+    setAudioUrl(null); // 清除示例音频 URL
+    setAudioBlob(null); // 清除音频 blob
     setVideoSource(null);
     setVideoInsightItems([]);
     setActiveVideoInsightId(null);
@@ -1248,7 +1288,7 @@ function StudentAppContent({
     setShowConversationHistory(false);
     setSelectedHistoryConversation(null);
     
-    // 鍒涘缓璇剧▼浼氳瘽璁板綍 (渚涙暀甯堢璇诲彇)
+    // 创建课堂会话记录（供教师端读取）
     classroomDataService.saveSession({
       id: newSessionId,
       subject: UIConfig.defaultSubject,
@@ -1279,7 +1319,7 @@ function StudentAppContent({
       setActiveVideoInsightId(null);
     }
     
-    // 璁＄畻璇剧▼鏃堕暱
+    // 计算课堂时长
     const duration = finalSegments.length > 0 
       ? finalSegments[finalSegments.length - 1].endMs 
       : 0;
@@ -1289,7 +1329,7 @@ function StudentAppContent({
       id: sessionId,
       subject: UIConfig.defaultSubject,
       topic: UIConfig.defaultLessonTitle,
-      teacherName: UIConfig.defaultTeacher || 'Teacher',
+      teacherName: UIConfig.defaultTeacher || '老师',
       status: 'completed',
       duration,
     });
@@ -1319,7 +1359,7 @@ function StudentAppContent({
       sessionId,
       finalSegments,
       anchors,
-      { subject: UIConfig.defaultSubject, teacher: UIConfig.defaultTeacher || 'Teacher', date: new Date().toISOString().split('T')[0] }
+      { subject: UIConfig.defaultSubject, teacher: UIConfig.defaultTeacher || '老师', date: new Date().toISOString().split('T')[0] }
     );
     setTimeline(tl);
     memoryService.save(tl);
@@ -1355,11 +1395,11 @@ function StudentAppContent({
           sessionId,
           demoData.DEMO_SEGMENTS,
           demoData.DEMO_ANCHORS,
-          { subject: UIConfig.defaultSubject, teacher: 'Demo Teacher', date: new Date().toISOString().split('T')[0] }
+          { subject: UIConfig.defaultSubject, teacher: '示例老师', date: new Date().toISOString().split('T')[0] }
         );
         setTimeline(tl);
         
-        // 閫変腑绗竴涓湭瑙ｅ喅鐨勫洶鎯戠偣
+        // 选中第一个未解决的困惑点
         const firstUnresolved = demoData.DEMO_ANCHORS.find(a => !a.resolved);
         if (firstUnresolved) {
           setSelectedAnchor(firstUnresolved);
@@ -1437,9 +1477,8 @@ function StudentAppContent({
     setVideoSource(null);
   }, []);
 
-  // 澶勭悊杞綍澧炲己瀹屾垚鍚庣殑鏇存柊
+  // 处理转录增强完成后的更新
   const handleTranscriptEnhanced = useCallback((enhancedSegments: TranscriptSegment[]) => {
-    console.log('[Page] Received enhanced transcript:', enhancedSegments.length, 'segments');
     liveSegmentsRef.current = enhancedSegments;
     setSegments(enhancedSegments);
   }, []);
@@ -1492,7 +1531,7 @@ const _handleVideoAssistantMessage = useCallback((payload: {
       ? { subject: timeline.subject, teacher: timeline.teacher, date: timeline.date }
       : {
           subject: UIConfig.defaultSubject,
-          teacher: UIConfig.defaultTeacher || 'Teacher',
+          teacher: UIConfig.defaultTeacher || '老师',
           date: new Date().toISOString().split('T')[0],
         };
 
@@ -1560,10 +1599,8 @@ const _handleVideoAssistantMessage = useCallback((payload: {
       const lastSeg = segments[segments.length - 1];
       if (timestamp > lastSeg.endMs + 5000) {
         alignedTimestamp = lastSeg.endMs;
-        console.log('[AnchorMark] Timestamp aligned:', timestamp, '->', alignedTimestamp, '(was beyond segments range)');
       } else if (timestamp < segments[0].startMs - 5000) {
         alignedTimestamp = segments[0].startMs;
-        console.log('[AnchorMark] Timestamp aligned:', timestamp, '->', alignedTimestamp, '(was before segments range)');
       }
     }
     
@@ -1577,7 +1614,7 @@ const _handleVideoAssistantMessage = useCallback((payload: {
     );
     const transcriptContext = contextSegments.map(s => s.text).join(' ').slice(0, 200);
     
-    // 鍐欏叆鍏变韩瀛樺偍 (渚涙暀甯堢璇诲彇)
+    // 写入共享存储（供教师端读取）
     classroomDataService.saveStudentAnchor(
       sessionId,
       studentId,
@@ -1592,7 +1629,7 @@ const _handleVideoAssistantMessage = useCallback((payload: {
     }
   }, [sessionId, studentId, studentName, timeline, segments]);
 
-  // 鍥炴斁鏃舵坊鍔犲洶鎯戠偣鏍囨敞
+  // 回放时添加困惑点标注
   const handlePlaybackAnchorAdd = useCallback((timestamp: number) => {
     // NOTE: cleaned corrupted legacy comment.
     // NOTE: cleaned corrupted legacy comment.
@@ -1616,7 +1653,7 @@ const _handleVideoAssistantMessage = useCallback((payload: {
     );
     const transcriptContext = contextSegments.map(s => s.text).join(' ').slice(0, 200);
     
-    // 鍐欏叆鍏变韩瀛樺偍
+    // 写入共享存储
     classroomDataService.saveStudentAnchor(
       sessionId,
       studentId,
@@ -1630,14 +1667,14 @@ const _handleVideoAssistantMessage = useCallback((payload: {
       setTimeline({ ...timeline, anchors: [...timeline.anchors, anchor] });
     }
     
-    // 鑷姩鍒囨崲鍒板洶鎯戠偣璇︽儏闈㈡澘
+    // 自动切换到困惑点详情面板
     setReviewTab('anchor-detail');
   }, [sessionId, studentId, studentName, timeline, segments]);
 
   const handleAnchorSelect = useCallback((anchor: Anchor) => {
     setSelectedAnchor(anchor);
     setCurrentTime(anchor.timestamp);
-    // 鑷姩鍒囨崲鍒板洶鎯戠偣璇︽儏闈㈡澘
+    // 自动切换到困惑点详情面板
     setReviewTab('anchor-detail');
   }, []);
 
@@ -1646,7 +1683,7 @@ const _handleVideoAssistantMessage = useCallback((payload: {
     
     anchorService.resolve(selectedAnchor.id, sessionId);
     
-    // 鍚屾鏇存柊鍏变韩瀛樺偍
+    // 同步更新共享存储
     classroomDataService.resolveAnchor(selectedAnchor.id);
     
     setAnchors(prev => prev.map(a => 
@@ -1665,9 +1702,8 @@ const _handleVideoAssistantMessage = useCallback((payload: {
   }, [selectedAnchor, sessionId, timeline]);
 
   const handleTimelineClick = useCallback((timeMs: number) => {
-    setCurrentTime(timeMs);
-    waveformRef.current?.seekTo(timeMs);
-  }, []);
+    handleUnifiedSeek(timeMs);
+  }, [handleUnifiedSeek]);
 
   const handleActionComplete = useCallback((actionId: string) => {
     setActionItems(prev => {
@@ -1697,21 +1733,19 @@ const _handleVideoAssistantMessage = useCallback((payload: {
   // 生成精选片段（使用 SWR Hook，自动去重与重试）
   const handleGenerateTopics = useCallback(async (mode: TopicGenerationMode) => {
     try {
-      console.log('[生成精选片段] 开始，模式:', mode, '片段数:', segments.length);
       await generateTopics(mode);
-      console.log('[生成精选片段] 完成');
     } catch (error) {
       console.error('生成精选片段失败', error);
       alert(`生成失败: ${error instanceof Error ? error.message : '网络错误'}`);
     }
-  }, [segments.length, generateTopics]);
+  }, [generateTopics]);
 
   // NOTE: cleaned corrupted legacy comment.
   const handleRegenerateByTheme = useCallback(async (theme: string) => {
     try {
       await regenerateByTheme(theme);
     } catch (error) {
-      console.error('鎸変富棰樼敓鎴愬け璐?', error);
+      console.error('按主题生成失败:', error);
     }
   }, [regenerateByTheme]);
 
@@ -1720,7 +1754,7 @@ const _handleVideoAssistantMessage = useCallback((payload: {
     try {
       await generateSummary();
     } catch (error) {
-      console.error('鐢熸垚鎽樿澶辫触:', error);
+      console.error('生成摘要失败:', error);
     }
   }, [generateSummary]);
 
@@ -1728,13 +1762,9 @@ const _handleVideoAssistantMessage = useCallback((payload: {
   const handlePlayTopic = useCallback((topic: HighlightTopic) => {
     if (topic.segments.length > 0) {
       const startTime = topic.segments[0].start;
-      setCurrentTime(startTime);
-      if (waveformRef.current) {
-        waveformRef.current.seekTo(startTime);
-        waveformRef.current.play();
-      }
+      handleUnifiedSeek(startTime, true);
     }
-  }, []);
+  }, [handleUnifiedSeek]);
 
   // NOTE: cleaned corrupted legacy comment.
   const handleClearTopics = useCallback(() => {
@@ -1978,7 +2008,7 @@ const _handleVideoAssistantMessage = useCallback((payload: {
       id: nextSessionId,
       subject: UIConfig.defaultSubject,
       topic: params.sourceTitle || UIConfig.defaultLessonTitle,
-      teacherName: UIConfig.defaultTeacher || 'Teacher',
+      teacherName: UIConfig.defaultTeacher || '老师',
       status: 'completed',
       duration,
       createdBy: studentId,
@@ -1990,7 +2020,7 @@ const _handleVideoAssistantMessage = useCallback((payload: {
       hasExisting ? anchorsRef.current : [],
       {
         subject: UIConfig.defaultSubject,
-        teacher: UIConfig.defaultTeacher || 'Teacher',
+        teacher: UIConfig.defaultTeacher || '老师',
         date: new Date().toISOString().split('T')[0],
       }
     );
@@ -2585,6 +2615,7 @@ const _handleVideoAssistantMessage = useCallback((payload: {
           <div className="mt-4 inline-flex rounded-2xl border border-slate-200 bg-slate-50 p-1">
             <button
               type="button"
+              data-testid="support-import-tab-files"
               onClick={() => setSourceImportMode('files')}
               className={`rounded-xl px-3 py-1.5 text-xs font-semibold transition ${
                 sourceImportMode === 'files'
@@ -2596,6 +2627,7 @@ const _handleVideoAssistantMessage = useCallback((payload: {
             </button>
             <button
               type="button"
+              data-testid="support-import-tab-text"
               onClick={() => setSourceImportMode('text')}
               className={`rounded-xl px-3 py-1.5 text-xs font-semibold transition ${
                 sourceImportMode === 'text'
@@ -2614,7 +2646,9 @@ const _handleVideoAssistantMessage = useCallback((payload: {
                 return supportList.length > 0 ? (
                   <div className="space-y-2">
                     <div className="rounded-2xl border border-cyan-100 bg-cyan-50/60 px-3 py-2 text-xs text-cyan-700">
+                      <span data-testid="support-source-count">
                       当前增强资料数量：{supportList.length}
+                      </span>
                     </div>
                     <div className="flex flex-col gap-1.5">
                       {supportList.map((item) => (
@@ -2645,7 +2679,7 @@ const _handleVideoAssistantMessage = useCallback((payload: {
                   </div>
                 ) : (
                   <div className="rounded-2xl border border-cyan-100 bg-cyan-50/60 px-3 py-2 text-xs text-cyan-700">
-                    当前增强资料数量：0
+                    <span data-testid="support-source-count">当前增强资料数量：0</span>
                   </div>
                 );
               })()}
@@ -2664,6 +2698,7 @@ const _handleVideoAssistantMessage = useCallback((payload: {
           ) : (
             <div className="mt-4">
               <textarea
+                data-testid="support-textarea"
                 value={sourceTextInput}
                 onChange={(event) => setSourceTextInput(event.target.value)}
                 placeholder="粘贴课堂笔记、重点定义、题目解析等文本..."
@@ -2675,6 +2710,7 @@ const _handleVideoAssistantMessage = useCallback((payload: {
                 <span className="text-xs text-slate-500">建议 200-5000 字，可多次追加</span>
                 <button
                   type="button"
+                  data-testid="support-import-text-submit"
                   onClick={() => {
                     void handleImportTextSource();
                   }}
@@ -2922,20 +2958,20 @@ const _handleVideoAssistantMessage = useCallback((payload: {
         </div>
       )}
 
-      {/* 涓诲唴瀹瑰尯 */}
+      {/* 主内容区 */}
       {viewMode === 'record' ? (
         <>
           {/* NOTE: cleaned corrupted legacy comment. */}
           {isMobile ? (
             <div className="flex-1 min-h-0 flex flex-col overflow-hidden" style={{ background: 'var(--edu-bg-primary)' }}>
-              {/* 鏋佺畝椤堕儴鏍忥細Logo + Tab + 鐢ㄦ埛 + 鑿滃崟 */}
+              {/* 极简顶部栏：Logo + Tab + 用户 + 菜单 */}
               <div className="flex-shrink-0 px-4 py-2.5 flex items-center gap-2 bg-white border-b" style={{ borderColor: 'var(--edu-border-light)' }}>
                 {/* Logo */}
                 <div className="w-8 h-8 bg-gradient-to-br from-amber-400 to-amber-500 rounded-lg flex items-center justify-center flex-shrink-0">
                   <span className="text-white font-bold text-sm">M</span>
                 </div>
                 
-                {/* Tab 鍒囨崲 */}
+                {/* Tab 切换 */}
                 <div className="flex-1 flex items-center justify-center">
                   <MobileTabSwitch
                     activeTab={viewMode}
@@ -2944,7 +2980,7 @@ const _handleVideoAssistantMessage = useCallback((payload: {
                   />
                 </div>
                 
-                {/* 鐢ㄦ埛澶村儚/鐧诲綍鎸夐挳 */}
+                {/* 用户头像/登录按钮 */}
                 {isAuthenticated && user ? (
                   <button
                     onClick={() => setIsMenuOpen(true)}
@@ -2966,7 +3002,7 @@ const _handleVideoAssistantMessage = useCallback((payload: {
                   </a>
                 )}
                 
-                {/* 鑿滃崟鎸夐挳 */}
+                {/* 菜单按钮 */}
                 <DedaoMenuButton onClick={() => setIsMenuOpen(true)} />
               </div>
 
@@ -3341,7 +3377,7 @@ const _handleVideoAssistantMessage = useCallback((payload: {
                             </>
                           ) : (
                             <div className="h-full overflow-y-auto p-4">
-                              {/* 鏍囪鍥版儜鎸夐挳 */}
+                              {/* 标记困惑按钮 */}
                               <button
                                 onClick={() => {
                                   handleAnchorMark(currentTime);
@@ -3482,8 +3518,7 @@ const _handleVideoAssistantMessage = useCallback((payload: {
                             handleUnifiedSeek(timeMs);
                           }}
                           onPlay={(startMs) => {
-                            waveformRef.current?.seekTo(startMs);
-                            waveformRef.current?.play();
+                            handleUnifiedSeek(startMs, true);
                           }}
                           onResolve={handleResolveAnchor}
                           onAddNote={(text, anchorId) => {
@@ -3504,7 +3539,7 @@ const _handleVideoAssistantMessage = useCallback((payload: {
                   /* NOTE: cleaned corrupted legacy comment. */
                   <div className="h-full flex flex-col bg-white ai-chat-container">
                     {/* NOTE: cleaned corrupted legacy comment. */}
-                    {(audioBlob || audioUrl) && (
+                    {(audioBlob || audioUrl) && !videoSource && (
                       <div className="flex-shrink-0 border-b" style={{ background: 'var(--edu-bg-soft)', borderColor: 'var(--edu-border-light)', maxHeight: '120px' }}>
                         <WaveformPlayer
                           ref={waveformRef}
@@ -3693,16 +3728,16 @@ const _handleVideoAssistantMessage = useCallback((payload: {
               )}
             </div>
           ) : (
-            /* 绉诲姩绔暀鑲查鏍煎竷灞€ */
+            /* 移动端教育风格布局 */
             <div className="flex-1 min-h-0 flex flex-col overflow-hidden" style={{ background: 'var(--edu-bg-primary)' }}>
-              {/* 鏋佺畝椤堕儴鏍忥細Logo + Tab + 鐢ㄦ埛 + 鑿滃崟 */}
+              {/* 极简顶部栏：Logo + Tab + 用户 + 菜单 */}
               <div className="flex-shrink-0 px-4 py-2.5 flex items-center gap-2 bg-white border-b" style={{ borderColor: 'var(--edu-border-light)' }}>
                 {/* Logo */}
                 <div className="w-8 h-8 bg-gradient-to-br from-amber-400 to-amber-500 rounded-lg flex items-center justify-center flex-shrink-0">
                   <span className="text-white font-bold text-sm">M</span>
                 </div>
                 
-                {/* Tab 鍒囨崲 */}
+                {/* Tab 切换 */}
                 <div className="flex-1 flex items-center justify-center">
                   <MobileTabSwitch
                     activeTab={viewMode}
@@ -3711,7 +3746,7 @@ const _handleVideoAssistantMessage = useCallback((payload: {
                   />
                 </div>
                 
-                {/* 鐢ㄦ埛澶村儚/鐧诲綍鎸夐挳 */}
+                {/* 用户头像/登录按钮 */}
                 {isAuthenticated && user ? (
                   <button
                     onClick={() => setIsMenuOpen(true)}
@@ -3733,12 +3768,12 @@ const _handleVideoAssistantMessage = useCallback((payload: {
                   </a>
                 )}
                 
-                {/* 鑿滃崟鎸夐挳 */}
+                {/* 菜单按钮 */}
                 <DedaoMenuButton onClick={() => setIsMenuOpen(true)} data-onboarding="menu-button" />
               </div>
 
               {/* NOTE: cleaned corrupted legacy comment. */}
-              {!mobileSubPage && (
+              {!mobileSubPage && !videoSource && (
                 <MiniPlayer
                   currentTime={currentTime}
                   duration={totalDuration}
@@ -3752,12 +3787,7 @@ const _handleVideoAssistantMessage = useCallback((payload: {
                     handleUnifiedSeek(timeMs);
                   }}
                   onPlayPause={() => {
-                    if (isPlaying) {
-                      waveformRef.current?.pause();
-                    } else {
-                      waveformRef.current?.play();
-                    }
-                    setIsPlaying(!isPlaying);
+                    handleUnifiedPlayPause();
                   }}
                   onMarkerClick={(marker) => {
                     const anchor = anchors.find(a => a.id === marker.id);
@@ -3781,7 +3811,7 @@ const _handleVideoAssistantMessage = useCallback((payload: {
               )}
 
               {/* Hidden waveform player for actual audio playback control. */}
-              {(audioBlob || audioUrl) && (
+              {(audioBlob || audioUrl) && !videoSource && (
                 <div className="hidden">
                   <WaveformPlayer
                     ref={waveformRef}
@@ -3876,7 +3906,7 @@ const _handleVideoAssistantMessage = useCallback((payload: {
                     }}
                   />
 
-                  {/* 鎮诞 AI 瀵硅瘽鎸夐挳 - 杩涘叆鍏ㄥ眬 AI 瀵硅瘽 */}
+                  {/* 悬浮 AI 对话按钮 - 进入全局 AI 对话 */}
                   <MobileAIFab
                     onClick={() => {
                       setSelectedAnchor(null);  // Clear selected anchor before entering global AI chat.
@@ -3910,9 +3940,9 @@ const _handleVideoAssistantMessage = useCallback((payload: {
                     </button>
                     <span className="font-medium text-gray-900">AI 助教</span>
                     
-                    {/* 鍘嗗彶璁板綍鍒囨崲 - ChatGPT 椋庢牸鍥炬爣鎸夐挳 */}
+                    {/* 历史记录切换 - ChatGPT 风格图标按钮 */}
                     <div className="ml-auto flex items-center gap-1 bg-gray-100 rounded-lg p-0.5">
-                      {/* 褰撳墠瀵硅瘽 */}
+                      {/* 当前对话 */}
                       <button
                         onClick={() => {
                           setShowConversationHistory(false);
@@ -3947,45 +3977,42 @@ const _handleVideoAssistantMessage = useCallback((payload: {
                   </div>
                   
                   {/* NOTE: cleaned corrupted legacy comment. */}
-                  <MiniPlayer
-                    currentTime={currentTime}
-                    duration={totalDuration}
-                    isPlaying={isPlaying}
-                    markers={anchors.map(a => ({
-                      id: a.id,
-                      timestamp: a.timestamp,
-                      resolved: a.resolved,
-                    }))}
-                    onSeek={(timeMs) => {
-                      handleUnifiedSeek(timeMs);
-                    }}
-                    onPlayPause={() => {
-                      if (isPlaying) {
-                        waveformRef.current?.pause();
-                      } else {
-                        waveformRef.current?.play();
-                      }
-                      setIsPlaying(!isPlaying);
-                    }}
-                    onMarkerClick={(marker) => {
-                      const anchor = anchors.find(a => a.id === marker.id);
-                      if (anchor) {
-                        setSelectedAnchor(anchor);
-                      }
-                    }}
-                    className="border-b border-gray-100"
-                  />
+                  {!videoSource && (
+                    <MiniPlayer
+                      currentTime={currentTime}
+                      duration={totalDuration}
+                      isPlaying={isPlaying}
+                      markers={anchors.map(a => ({
+                        id: a.id,
+                        timestamp: a.timestamp,
+                        resolved: a.resolved,
+                      }))}
+                      onSeek={(timeMs) => {
+                        handleUnifiedSeek(timeMs);
+                      }}
+                      onPlayPause={() => {
+                        handleUnifiedPlayPause();
+                      }}
+                      onMarkerClick={(marker) => {
+                        const anchor = anchors.find(a => a.id === marker.id);
+                        if (anchor) {
+                          setSelectedAnchor(anchor);
+                        }
+                      }}
+                      className="border-b border-gray-100"
+                    />
+                  )}
                   
                   {/* NOTE: cleaned corrupted legacy comment. */}
                   <div className="flex-1 min-h-0">
                     {showConversationHistory ? (
                       selectedHistoryConversation ? (
-                        // 缁х画鍘嗗彶瀵硅瘽
+                        // 继续历史对话
                         <div className="h-full flex flex-col">
                           <div className="px-3 py-2 bg-gray-50 border-b border-gray-100 flex items-center justify-between">
                             <span className="text-xs text-gray-600 truncate flex-1 mr-2">{selectedHistoryConversation.title}</span>
                             <div className="flex items-center gap-1">
-                              {/* 杩斿洖鍒楄〃 */}
+                              {/* 返回列表 */}
                               <button
                                 onClick={() => setSelectedHistoryConversation(null)}
                                 className="w-7 h-7 flex items-center justify-center rounded-lg text-gray-500 hover:bg-gray-100"
@@ -4023,7 +4050,7 @@ const _handleVideoAssistantMessage = useCallback((payload: {
                           </div>
                         </div>
                       ) : (
-                        // 鍘嗗彶瀵硅瘽鍒楄〃
+                        // 历史对话列表
                         <ConversationList
                           sessionId={sessionId}
                           onSelect={(conv) => setSelectedHistoryConversation(conv)}
@@ -4224,7 +4251,7 @@ const _handleVideoAssistantMessage = useCallback((payload: {
         onToggleDisplayMode={toggleWorkshopWindowDisplayMode}
       />
       
-      {/* 鐢ㄦ埛寮曞缁勪欢 */}
+      {/* 用户引导组件 */}
       <WelcomeModal
         isOpen={showWelcome}
         onStart={() => {

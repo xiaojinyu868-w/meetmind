@@ -80,6 +80,11 @@ export function StreamingMarkdown({
 
     return tooltipByIndex;
   }, [citations]);
+
+  const shouldProcessInlineTokens = useMemo(() => {
+    if (!content.includes('[')) return false;
+    return /\[\d{1,2}:\d{2}/.test(content) || /\[资料\s*\d+\]/.test(content) || /\[引用\s*\d{1,2}:\d{2}/.test(content);
+  }, [content]);
   
   // 解析时间戳为毫秒
   const parseTimeToMs = useCallback((time: string): number | null => {
@@ -206,8 +211,11 @@ export function StreamingMarkdown({
   // 递归处理 children，将字符串中的时间戳转换为按钮
   // 跳过 KaTeX 渲染的数学公式元素，避免破坏其 DOM 结构
   const processChildren = useCallback((children: React.ReactNode): React.ReactNode => {
+    if (!shouldProcessInlineTokens) return children;
+
     return React.Children.map(children, (child) => {
       if (typeof child === 'string') {
+        if (!child.includes('[')) return child;
         return renderTextWithTimestamps(child);
       }
       
@@ -230,7 +238,7 @@ export function StreamingMarkdown({
       
       return child;
     });
-  }, [renderTextWithTimestamps]);
+  }, [renderTextWithTimestamps, shouldProcessInlineTokens]);
 
   // 自定义渲染器
   const components: Components = useMemo(() => ({

@@ -159,13 +159,8 @@ function readResultPreview(sessionId: string, appKey: string): string {
   }
 }
 
-function ElapsedTimer({ startMs }: { startMs: number }) {
-  const [now, setNow] = useState(Date.now());
-  useEffect(() => {
-    const timer = window.setInterval(() => setNow(Date.now()), 1000);
-    return () => window.clearInterval(timer);
-  }, []);
-  return <span className={styles.elapsed}>{formatElapsed(startMs, now)}</span>;
+function ElapsedTimer({ startMs, nowMs }: { startMs: number; nowMs: number }) {
+  return <span className={styles.elapsed}>{formatElapsed(startMs, nowMs)}</span>;
 }
 
 export function WorkshopYellowPage(props: WorkshopYellowPageProps) {
@@ -180,11 +175,27 @@ export function WorkshopYellowPage(props: WorkshopYellowPageProps) {
   const [runningMap, setRunningMap] = useState<Record<string, boolean>>({});
   const [dockTasks, setDockTasks] = useState<Record<string, DockTask>>({});
   const [dockOpen, setDockOpen] = useState(false);
+  const [nowTick, setNowTick] = useState(() => Date.now());
+  const runningMapRef = useRef<Record<string, boolean>>({});
+  const taskMapRef = useRef<Record<string, AppTaskState>>({});
 
   /* ── 任务中心拖拽 ── */
   const dockRef = useRef<HTMLDivElement>(null);
   const [dockPos, setDockPos] = useState<{ x: number; y: number } | null>(null);
   const dragState = useRef<{ startX: number; startY: number; originX: number; originY: number; dragging: boolean } | null>(null);
+
+  useEffect(() => {
+    runningMapRef.current = runningMap;
+  }, [runningMap]);
+
+  useEffect(() => {
+    taskMapRef.current = taskMap;
+  }, [taskMap]);
+
+  useEffect(() => {
+    const timer = window.setInterval(() => setNowTick(Date.now()), 1000);
+    return () => window.clearInterval(timer);
+  }, []);
 
   const handleDockPointerDown = useCallback((e: React.PointerEvent) => {
     const el = dockRef.current;
@@ -353,18 +364,61 @@ export function WorkshopYellowPage(props: WorkshopYellowPageProps) {
       }
     };
 
-    const timer = window.setInterval(refreshState, 1500);
+    let timerId: number | null = null;
+    const scheduleNextRefresh = () => {
+      const hasRunningTask =
+        Object.values(runningMapRef.current).some(Boolean) ||
+        Object.values(taskMapRef.current).some((state) => state?.status === 'running');
+      const nextIntervalMs = hasRunningTask ? 1500 : 5000;
+      timerId = window.setTimeout(() => {
+        refreshState();
+        scheduleNextRefresh();
+      }, nextIntervalMs);
+    };
+
+    refreshState();
+    scheduleNextRefresh();
     window.addEventListener('storage', onStorage);
     return () => {
-      window.clearInterval(timer);
+      if (timerId !== null) {
+        window.clearTimeout(timerId);
+      }
       window.removeEventListener('storage', onStorage);
     };
   }, [refreshState, sessionId]);
 
   useEffect(() => {
-    for (const app of visibleApps) {
-      router.prefetch(`/app/matrix/${app.key}`);
+    const topApps = visibleApps.slice(0, 3);
+    if (topApps.length === 0) return undefined;
+
+    let cancelled = false;
+    const prefetchTopApps = () => {
+      if (cancelled) return;
+      for (const app of topApps) {
+        router.prefetch(`/app/matrix/${app.key}`);
+      }
+    };
+
+    const win = window as Window & {
+      requestIdleCallback?: (callback: IdleRequestCallback) => number;
+      cancelIdleCallback?: (id: number) => void;
+    };
+
+    if (typeof win.requestIdleCallback === 'function' && typeof win.cancelIdleCallback === 'function') {
+      const requestIdle = win.requestIdleCallback;
+      const cancelIdle = win.cancelIdleCallback;
+      const idleId = requestIdle(() => prefetchTopApps());
+      return () => {
+        cancelled = true;
+        cancelIdle(idleId);
+      };
     }
+
+    const timerId = window.setTimeout(() => prefetchTopApps(), 300);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timerId);
+    };
   }, [router, visibleApps]);
 
   const upsertDockTask = useCallback((app: WorkshopAppCatalogItem, patch: Partial<DockTask>) => {
@@ -387,7 +441,7 @@ export function WorkshopYellowPage(props: WorkshopYellowPageProps) {
   const runInBackground = useCallback(
     async (app: WorkshopAppCatalogItem) => {
       if (!sessionId) return;
-      if (runningMap[app.key]) return;
+      if (runningMapRef.current[app.key]) return;
 
       if (transcript.length === 0) {
         const errorMessage = '当前会话暂无可用课堂内容，请先录音或导入。';
@@ -531,7 +585,6 @@ export function WorkshopYellowPage(props: WorkshopYellowPageProps) {
       generatedMap,
       keyDifficulties,
       onOpenAppWindow,
-      runningMap,
       sessionId,
       summaryOverview,
       transcript,
@@ -573,9 +626,16 @@ export function WorkshopYellowPage(props: WorkshopYellowPageProps) {
       toast.message('所有应用已生成或正在生成中');
       return;
     }
-    for (const app of pending) {
-      void runInBackground(app);
-    }
+    const concurrency = Math.min(2, pending.length);
+    const queue = [...pending];
+    const runWorker = async () => {
+      while (queue.length > 0) {
+        const next = queue.shift();
+        if (!next) return;
+        await runInBackground(next);
+      }
+    };
+    void Promise.all(Array.from({ length: concurrency }, () => runWorker()));
     toast.success(`已启动 ${pending.length} 个后台任务`);
   }, [generatedMap, runInBackground, runningMap, visibleApps]);
 
@@ -684,7 +744,7 @@ export function WorkshopYellowPage(props: WorkshopYellowPageProps) {
                   }`}
                 >
                   {isRunning && dockTask ? (
-                    <ElapsedTimer startMs={dockTask.startedAt} />
+                    <ElapsedTimer startMs={dockTask.startedAt} nowMs={nowTick} />
                   ) : (
                     label
                   )}
@@ -825,7 +885,7 @@ export function WorkshopYellowPage(props: WorkshopYellowPageProps) {
                         </p>
                         <span className={`${styles.dockTaskStatus} ${styles[`dockStatus${task.status}`]}`}>
                           {task.status === 'running' ? (
-                            <ElapsedTimer startMs={task.startedAt} />
+                            <ElapsedTimer startMs={task.startedAt} nowMs={nowTick} />
                           ) : (
                             statusText(task.status)
                           )}

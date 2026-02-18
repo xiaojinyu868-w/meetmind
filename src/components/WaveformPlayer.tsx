@@ -59,6 +59,8 @@ interface WaveformPlayerProps {
   selectedAnchorId?: string | number;
   /** 紧凑模式 - 高度减半，隐藏图例 */
   compact?: boolean;
+  /** 是否允许交互后直接控制音频（视频模式可关闭，避免双音轨） */
+  interactiveAudio?: boolean;
 }
 
 export const WaveformPlayer = forwardRef<WaveformPlayerRef, WaveformPlayerProps>(({
@@ -76,6 +78,7 @@ export const WaveformPlayer = forwardRef<WaveformPlayerRef, WaveformPlayerProps>
   allowAddAnchor = false,
   selectedAnchorId,
   compact = false,
+  interactiveAudio = true,
 }, ref) => {
   // 紧凑模式下高度减半
   const height = heightProp ?? (compact ? 40 : 80);
@@ -180,8 +183,9 @@ export const WaveformPlayer = forwardRef<WaveformPlayerRef, WaveformPlayerProps>
       onPlayStateChange?.(false);
     });
 
-    // 点击波形跳转并播放
+    // 点击波形跳转并播放（可按需关闭，避免与视频主轨冲突）
     ws.on('interaction', () => {
+      if (!interactiveAudio) return;
       ws.play();
     });
 
@@ -244,7 +248,7 @@ export const WaveformPlayer = forwardRef<WaveformPlayerRef, WaveformPlayerProps>
         }, 50);
       }
     };
-  }, [waveColor, progressColor, height, onReady, onTimeUpdate, onPlayStateChange]);
+  }, [waveColor, progressColor, height, onReady, onTimeUpdate, onPlayStateChange, interactiveAudio]);
 
   // 加载音频
   useEffect(() => {

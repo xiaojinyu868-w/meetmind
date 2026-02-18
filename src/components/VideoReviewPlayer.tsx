@@ -107,6 +107,7 @@ function IframeSyncBar({
   const audioRef = useRef<HTMLAudioElement>(null);
   const seekNonceRef = useRef<number>(seekNonce);
   const playNonceRef = useRef<number>(playNonce);
+  const pendingSeekMsRef = useRef<number | null>(null);
 
   simTimeRef.current = simTime;
 
@@ -114,6 +115,23 @@ function IframeSyncBar({
   const duration = totalDurationMs > 0 ? totalDurationMs : 1;
   const progress = Math.min(1, Math.max(0, simTime / duration));
   const normalizedSeekMs = Number.isFinite(seekToMs) ? Math.max(0, seekToMs) : 0;
+
+  const seekAudioTo = useCallback((targetMs: number) => {
+    const audio = audioRef.current;
+    if (!audio) return;
+    const targetSec = Math.max(0, targetMs) / 1000;
+    // Metadata is required before setting currentTime in many browsers.
+    if (audio.readyState < 1) {
+      pendingSeekMsRef.current = Math.max(0, targetMs);
+      return;
+    }
+    try {
+      audio.currentTime = targetSec;
+      pendingSeekMsRef.current = null;
+    } catch {
+      pendingSeekMsRef.current = Math.max(0, targetMs);
+    }
+  }, []);
 
   useEffect(() => {
     if (audioRef.current) {
@@ -130,37 +148,22 @@ function IframeSyncBar({
     simTimeRef.current = next;
 
     if (hasAudio && audioRef.current) {
-      try {
-        audioRef.current.currentTime = next / 1000;
-      } catch {
-        // ignore seek errors before metadata is ready
-      }
+      seekAudioTo(next);
     }
-  }, [hasAudio, normalizedSeekMs, seekNonce]);
+  }, [hasAudio, normalizedSeekMs, seekAudioTo, seekNonce]);
 
   useEffect(() => {
     if (playNonceRef.current === playNonce) return;
     playNonceRef.current = playNonce;
 
+    // External autoplay request is for main video.
+    // Keep this sync track aligned, but do not auto-start to avoid dual audio.
     if (hasAudio && audioRef.current) {
-      const audio = audioRef.current;
-      try {
-        if (Math.abs(audio.currentTime - normalizedSeekMs / 1000) > 0.2) {
-          audio.currentTime = normalizedSeekMs / 1000;
-        }
-      } catch {
-        // ignore seek errors before metadata is ready
-      }
-      void audio.play().then(() => {
-        setPlaying(true);
-      }).catch(() => {
-        setPlaying(false);
-      });
-      return;
+      seekAudioTo(normalizedSeekMs);
+      audioRef.current.pause();
     }
-
-    setPlaying(true);
-  }, [hasAudio, normalizedSeekMs, playNonce]);
+    setPlaying(false);
+  }, [hasAudio, normalizedSeekMs, playNonce, seekAudioTo]);
 
   useEffect(() => {
     if (intervalRef.current) {
@@ -194,9 +197,9 @@ function IframeSyncBar({
     onTimeUpdate?.(next);
 
     if (hasAudio && audioRef.current) {
-      audioRef.current.currentTime = next / 1000;
+      seekAudioTo(next);
     }
-  }, [duration, hasAudio, onTimeUpdate]);
+  }, [duration, hasAudio, onTimeUpdate, seekAudioTo]);
 
   const togglePlay = useCallback(async () => {
     if (!hasAudio) {
@@ -278,12 +281,8 @@ function IframeSyncBar({
           src={audioUrl}
           preload="metadata"
           onLoadedMetadata={() => {
-            if (!audioRef.current) return;
-            try {
-              audioRef.current.currentTime = normalizedSeekMs / 1000;
-            } catch {
-              // ignore
-            }
+            const target = pendingSeekMsRef.current ?? normalizedSeekMs;
+            seekAudioTo(target);
           }}
           onTimeUpdate={handleAudioTimeUpdate}
           onEnded={() => setPlaying(false)}
@@ -480,7 +479,7 @@ function VideoReviewPlayerComponent({
         <div className="relative aspect-video w-full overflow-hidden bg-black">
           <iframe
             src={iframeSrc}
-            title={source.title || 'video'}
+            title={source.title || '视频'}
             className="absolute inset-0 h-full w-full"
             allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
             allowFullScreen

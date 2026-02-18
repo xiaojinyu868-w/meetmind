@@ -773,7 +773,7 @@ export function AITutor({
     } finally {
       setIsLoading(false);
     }
-  }, [breakpoint, buildSegmentsForTutorRequest, selectedModel, enableWeb, accessToken, onActionItemsUpdate, saveToCache, handleSummaryFromResponse, trackCoreEvent, sessionId]);
+  }, [breakpoint, buildSegmentsForTutorRequest, selectedModel, enableWeb, accessToken, onActionItemsUpdate, saveToCache, handleSummaryFromResponse, trackCoreEvent, sessionId, segments.length]);
 
   useEffect(() => {
     // 只有在没有缓存数据且不在恢复状态时才自动加载

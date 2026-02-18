@@ -148,6 +148,7 @@ export function VideoLinkImporter({ onImportReady, onError, disabled }: VideoLin
   const [status, setStatus] = useState<ImportStatus>('idle');
   const [errorMessage, setErrorMessage] = useState('');
   const [processingMessage, setProcessingMessage] = useState('');
+  const [progressPercent, setProgressPercent] = useState(0);
   const [lastSource, setLastSource] = useState<ImportedVideoSource | null>(null);
 
   // B 站 Cookie 内联配置
@@ -220,10 +221,7 @@ export function VideoLinkImporter({ onImportReady, onError, disabled }: VideoLin
     setStatus('processing');
     setErrorMessage('');
     setProcessingMessage('正在解析视频...');
-
-    const timers: NodeJS.Timeout[] = [];
-    timers.push(setTimeout(() => setProcessingMessage('正在提取音频...'), 800));
-    timers.push(setTimeout(() => setProcessingMessage('正在转写...'), 2200));
+    setProgressPercent(5);
 
     try {
       // 如果是 B 站链接，从本地 IndexedDB 读取用户 Cookie 一并发送
@@ -243,37 +241,108 @@ export function VideoLinkImporter({ onImportReady, onError, disabled }: VideoLin
         body: JSON.stringify({ url: trimmed, mode, language: 'zh', ...(biliCookie ? { biliCookie } : {}) }),
       });
 
-      const text = await response.text();
-      const data = (text ? JSON.parse(text) : {}) as ImportApiResponse;
+      if (!response.body) {
+        throw new Error('服务器响应异常');
+      }
 
-      if (!response.ok || !data?.success) {
-        const primaryCode = pickPrimaryErrorCode(data);
-        const message = mapImportError(primaryCode, data?.error || `请求失败 (${response.status})`);
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+      let resultData: ImportApiResponse | null = null;
+      let streamError: string | null = null;
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop() || '';
+
+        for (const line of lines) {
+          const trimmedLine = line.trim();
+          if (!trimmedLine) continue;
+
+          try {
+            const event = JSON.parse(trimmedLine) as {
+              type: 'progress' | 'result' | 'error';
+              step?: string;
+              message?: string;
+              percent?: number;
+              error?: string;
+              code?: string;
+              detail?: string;
+              [key: string]: unknown;
+            };
+
+            if (event.type === 'progress') {
+              setProcessingMessage(event.message || '处理中...');
+              if (typeof event.percent === 'number') {
+                setProgressPercent(event.percent);
+              }
+            } else if (event.type === 'result') {
+              resultData = event as unknown as ImportApiResponse;
+            } else if (event.type === 'error') {
+              const primaryCode = event.code;
+              streamError = mapImportError(primaryCode, event.error || '视频导入失败');
+            }
+          } catch {
+            // skip malformed lines
+          }
+        }
+      }
+
+      // 处理 buffer 中可能残留的最后一行
+      if (buffer.trim()) {
+        try {
+          const event = JSON.parse(buffer.trim()) as {
+            type: 'progress' | 'result' | 'error';
+            [key: string]: unknown;
+          };
+          if (event.type === 'result') {
+            resultData = event as unknown as ImportApiResponse;
+          } else if (event.type === 'error') {
+            const errorEvent = event as { code?: string; error?: string };
+            streamError = mapImportError(errorEvent.code, errorEvent.error || '视频导入失败');
+          }
+        } catch {
+          // ignore
+        }
+      }
+
+      if (streamError) {
+        throw new Error(streamError);
+      }
+
+      if (!resultData || !resultData.success) {
+        const primaryCode = pickPrimaryErrorCode(resultData || {});
+        const message = mapImportError(primaryCode, resultData?.error || '视频导入失败');
         throw new Error(message);
       }
 
-      const segments = mapSegments(data);
-      const sourceMode = data.sourceMode;
-      const trace = data.trace || [];
+      const segments = mapSegments(resultData);
+      const sourceMode = resultData.sourceMode;
+      const trace = resultData.trace || [];
 
       const source: ImportedVideoSource = {
-        provider: data.source?.provider || parsedPreview?.provider || 'generic',
-        providerLabel: data.source?.providerLabel || parsedPreview?.providerLabel || 'Web Video',
-        originalUrl: data.source?.originalUrl || trimmed,
-        resolvedUrl: data.source?.resolvedUrl,
-        embedUrl: data.source?.embedUrl,
-        playableUrl: data.source?.playableUrl || trimmed,
-        title: data.source?.title,
-        durationSec: data.source?.durationSec,
-        thumbnailUrl: data.source?.thumbnailUrl,
-        audioUrl: data.source?.audioUrl,
-        sourceMode: sourceMode || data.source?.sourceMode,
-        bvid: data.source?.bvid,
-        cid: data.source?.cid,
+        provider: resultData.source?.provider || parsedPreview?.provider || 'generic',
+        providerLabel: resultData.source?.providerLabel || parsedPreview?.providerLabel || 'Web Video',
+        originalUrl: resultData.source?.originalUrl || trimmed,
+        resolvedUrl: resultData.source?.resolvedUrl,
+        embedUrl: resultData.source?.embedUrl,
+        playableUrl: resultData.source?.playableUrl || trimmed,
+        title: resultData.source?.title,
+        durationSec: resultData.source?.durationSec,
+        thumbnailUrl: resultData.source?.thumbnailUrl,
+        audioUrl: resultData.source?.audioUrl,
+        sourceMode: sourceMode || resultData.source?.sourceMode,
+        bvid: resultData.source?.bvid,
+        cid: resultData.source?.cid,
         importTrace: trace,
       };
 
       setProcessingMessage('导入完成');
+      setProgressPercent(100);
       setLastSource(source);
       setStatus('success');
 
@@ -287,9 +356,8 @@ export function VideoLinkImporter({ onImportReady, onError, disabled }: VideoLin
       const message = error instanceof Error ? error.message : '视频导入失败，请稍后再试。';
       setStatus('error');
       setErrorMessage(message);
+      setProgressPercent(0);
       onError?.(message);
-    } finally {
-      timers.forEach((timer) => clearTimeout(timer));
     }
   }
 
@@ -448,8 +516,17 @@ export function VideoLinkImporter({ onImportReady, onError, disabled }: VideoLin
       </button>
 
       {status === 'processing' && (
-        <div className="rounded-xl border border-amber-100 bg-amber-50 px-3 py-2 text-sm text-amber-700">
-          {processingMessage}
+        <div className="rounded-xl border border-amber-100 bg-amber-50 px-3 py-3 space-y-2">
+          <div className="flex items-center justify-between">
+            <span className="text-sm font-medium text-amber-700">{processingMessage}</span>
+            <span className="text-xs tabular-nums text-amber-600">{progressPercent}%</span>
+          </div>
+          <div className="h-2 w-full overflow-hidden rounded-full bg-amber-200/60">
+            <div
+              className="h-full rounded-full bg-gradient-to-r from-amber-400 to-orange-500 transition-all duration-700 ease-out"
+              style={{ width: `${progressPercent}%` }}
+            />
+          </div>
         </div>
       )}
 

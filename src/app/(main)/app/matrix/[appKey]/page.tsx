@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
 import { useParams, useSearchParams } from 'next/navigation';
+import dynamic from 'next/dynamic';
 import { toast } from 'sonner';
 import { DEFAULT_WORKSHOP_MODEL_ID } from '@/lib/services/llm-service';
 import { db, getPreference, setPreference, getSessionSummary } from '@/lib/db';
@@ -13,11 +14,27 @@ import type { DataSourceType } from '@/lib/ai-native/types';
 import { getWorkshopAppByKey, isWorkshopAppKey, type WorkshopAppKey } from '@/lib/ai-native/app-catalog';
 import { useAppExecution } from '@/components/apps/hooks/useAppExecution';
 import { AppWindowShell } from '@/components/apps/windows/AppWindowShell';
-import { PodcastWindow } from '@/components/apps/windows/PodcastWindow';
-import { FlashcardsWindow } from '@/components/apps/windows/FlashcardsWindow';
-import { QuizWindow } from '@/components/apps/windows/QuizWindow';
-import { MindmapWindow } from '@/components/apps/windows/MindmapWindow';
-import { InfographicWindow } from '@/components/apps/windows/InfographicWindow';
+
+const PodcastWindow = dynamic(
+  () => import('@/components/apps/windows/PodcastWindow').then((module) => module.PodcastWindow),
+  { ssr: false }
+);
+const FlashcardsWindow = dynamic(
+  () => import('@/components/apps/windows/FlashcardsWindow').then((module) => module.FlashcardsWindow),
+  { ssr: false }
+);
+const QuizWindow = dynamic(
+  () => import('@/components/apps/windows/QuizWindow').then((module) => module.QuizWindow),
+  { ssr: false }
+);
+const MindmapWindow = dynamic(
+  () => import('@/components/apps/windows/MindmapWindow').then((module) => module.MindmapWindow),
+  { ssr: false }
+);
+const InfographicWindow = dynamic(
+  () => import('@/components/apps/windows/InfographicWindow').then((module) => module.InfographicWindow),
+  { ssr: false }
+);
 
 const WORKSHOP_MODEL_PREFERENCE = 'ai_workshop_model';
 

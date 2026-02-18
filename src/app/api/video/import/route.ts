@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
 import * as fs from 'fs';
 import * as fsp from 'fs/promises';
 import * as path from 'path';
@@ -38,6 +38,12 @@ const CLEANUP_MIN_INTERVAL_MS = Number.parseInt(process.env.VIDEO_IMPORT_CLEANUP
 const CLEANUP_EVERY_N_REQUESTS = Number.parseInt(process.env.VIDEO_IMPORT_CLEANUP_EVERY_N || '10', 10);
 const YTDLP_AVAILABILITY_TTL_MS = Number.parseInt(process.env.VIDEO_IMPORT_YTDLP_CACHE_MS || '300000', 10);
 const DIRECT_DOWNLOAD_TIMEOUT_MS = Number.parseInt(process.env.VIDEO_DIRECT_DOWNLOAD_TIMEOUT_MS || '120000', 10);
+const VIDEO_IMPORT_DEBUG = process.env.VIDEO_IMPORT_DEBUG === '1';
+
+function debugVideoImport(...args: unknown[]) {
+  if (!VIDEO_IMPORT_DEBUG) return;
+  console.log(...args);
+}
 const DIRECT_DOWNLOAD_MAX_BYTES = Number.parseInt(process.env.VIDEO_DIRECT_DOWNLOAD_MAX_BYTES || `${300 * 1024 * 1024}`, 10);
 const MIN_DURATION_FOR_COMPLETENESS_CHECK_SEC = 60;
 const MIN_TEXT_CHARS_PER_SEC = 1;
@@ -515,7 +521,7 @@ async function transcribeWithFallback(
 
   // Log the audio file size being sent to ASR
   const audioFileSize = await getFileSizeBytes(audioFilePath);
-  console.log(`[video-import] transcribeWithFallback: file=${fileName}, size=${audioFileSize} bytes (${(audioFileSize / 1024).toFixed(1)} KB), modes=${buildModeOrder(requestedMode).join(',')}, expectedDuration=${expectedDurationSec ?? 'unknown'}s`);
+  debugVideoImport(`[video-import] transcribeWithFallback: file=${fileName}, size=${audioFileSize} bytes (${(audioFileSize / 1024).toFixed(1)} KB), modes=${buildModeOrder(requestedMode).join(',')}, expectedDuration=${expectedDurationSec ?? 'unknown'}s`);
 
   const openAsBlob = (fsp as unknown as { openAsBlob?: (path: string, options?: { type?: string }) => Promise<Blob> }).openAsBlob;
   const audioBlob = openAsBlob
@@ -527,7 +533,7 @@ async function transcribeWithFallback(
 
   for (const mode of buildModeOrder(requestedMode)) {
     const endpoint = `${origin}${getTranscribeApiPath(mode)}`;
-    console.log(`[video-import] trying ASR mode=${mode}, endpoint=${endpoint}`);
+    debugVideoImport(`[video-import] trying ASR mode=${mode}, endpoint=${endpoint}`);
     const formData = new FormData();
     formData.append('audio', new File([audioBlob], fileName, { type: 'audio/mpeg' }));
     formData.append('language', language);
@@ -556,7 +562,7 @@ async function transcribeWithFallback(
           ? Math.round((expectedDurationSec as number) * 1000)
           : 0;
       const timelineCoverage = expectedDurationMs > 0 && lastEndMs > 0 ? lastEndMs / expectedDurationMs : null;
-      console.log(
+      debugVideoImport(
         `[video-import] ASR mode=${mode} success: ${segCount} segments, ${textLen} chars, lastEndMs=${lastEndMs}, timelineCoverage=${timelineCoverage === null ? 'n/a' : timelineCoverage.toFixed(2)}`
       );
 
@@ -661,25 +667,6 @@ function toPipelineError(error: unknown): ImportPipelineError {
   }
 
   return new ImportPipelineError('VIDEO_IMPORT_FAILED', '视频导入失败');
-}
-
-function statusFromCode(code: string): number {
-  if (
-    code === 'INVALID_VIDEO_URL' ||
-    code === 'MISSING_VIDEO_URL' ||
-    code === 'VIDEO_URL_UNSAFE' ||
-    code === 'BILI_URL_PARSE_FAILED' ||
-    code === 'DIRECT_MEDIA_TOO_LARGE'
-  ) {
-    return 400;
-  }
-  if (code === 'BILI_COOKIE_EXPIRED') {
-    return 403;
-  }
-  if (code === 'DIRECT_MEDIA_TIMEOUT') {
-    return 504;
-  }
-  return 500;
 }
 
 function buildStageOrder(
@@ -798,7 +785,7 @@ async function executeBiliNativeStage(videoUrl: string, baseName: string, userCo
       subtitleCoverage >= minCoverage;
 
     if (subtitleResult?.segments?.length && subtitleUsable) {
-      console.log(
+      debugVideoImport(
         `[video-import] bili subtitle accepted: count=${subtitleCount}, min=${durationBasedMin}, coverage=${subtitleCoverage.toFixed(2)}`
       );
       return {
@@ -816,7 +803,7 @@ async function executeBiliNativeStage(videoUrl: string, baseName: string, userCo
       };
     }
     if (subtitleResult?.segments?.length) {
-      console.log(
+      debugVideoImport(
         `[video-import] bili subtitle rejected: count=${subtitleCount} (need >=${durationBasedMin}), coverage=${subtitleCoverage.toFixed(2)} (need >=${minCoverage}) for ${viewMeta.durationSec}s video, falling back to audio`
       );
     }
@@ -833,7 +820,7 @@ async function executeBiliNativeStage(videoUrl: string, baseName: string, userCo
 
     // 检查原始下载文件的大小
     const rawSize = await getFileSizeBytes(rawPath);
-    console.log(`[video-import] bili audio downloaded: ${rawSize} bytes (${(rawSize / 1024).toFixed(1)} KB), mode=${audioResult.mode}`);
+    debugVideoImport(`[video-import] bili audio downloaded: ${rawSize} bytes (${(rawSize / 1024).toFixed(1)} KB), mode=${audioResult.mode}`);
     if (rawSize < BILI_MIN_AUDIO_BYTES) {
       throw new ImportPipelineError(
         'BILI_AUDIO_INCOMPLETE',
@@ -847,14 +834,14 @@ async function executeBiliNativeStage(videoUrl: string, baseName: string, userCo
     // 检查转码后 mp3 的时长是否合理
     const mp3Size = await getFileSizeBytes(mp3Path);
     const mp3Duration = await getAudioDurationSec(mp3Path);
-    console.log(`[video-import] bili mp3 ready: ${mp3Size} bytes (${(mp3Size / 1024).toFixed(1)} KB), duration=${mp3Duration.toFixed(1)}s, declared video duration=${viewMeta.durationSec}s`);
+    debugVideoImport(`[video-import] bili mp3 ready: ${mp3Size} bytes (${(mp3Size / 1024).toFixed(1)} KB), duration=${mp3Duration.toFixed(1)}s, declared video duration=${viewMeta.durationSec}s`);
 
     if (viewMeta.durationSec && viewMeta.durationSec > 30 && mp3Duration > 0) {
       const ratio = mp3Duration / viewMeta.durationSec;
       if (ratio < BILI_MIN_AUDIO_DURATION_RATIO) {
         // 长视频部分下载：如果已下载音频 >= 60s，则允许部分转录而不报错
         if (mp3Duration >= BILI_MIN_PARTIAL_AUDIO_SEC) {
-          console.log(
+          debugVideoImport(
             `[video-import] bili audio partial: ${mp3Duration.toFixed(1)}s / ${viewMeta.durationSec}s (${(ratio * 100).toFixed(0)}%), allowing partial transcription`
           );
         } else {
@@ -1510,253 +1497,314 @@ function normalizeImportedSegments(
   return segments.map((segment, index) => ({ ...segment, id: `seg-${index}` }));
 }
 
+type ProgressEmitter = (step: string, message: string, percent: number) => void;
+
 export async function POST(request: NextRequest) {
   // 视频导入不再使用 transcribe 限流，避免自测/正常使用被误拦
 
   const trace: ImportTraceEntry[] = [];
+  const encoder = new TextEncoder();
 
-  try {
-    ensureUploadDir();
-    scheduleCleanupOldFiles();
+  const stream = new ReadableStream({
+    async start(controller) {
+      const emit: ProgressEmitter = (step, message, percent) => {
+        try {
+          const line = JSON.stringify({ type: 'progress', step, message, percent }) + '\n';
+          controller.enqueue(encoder.encode(line));
+        } catch {
+          // stream may be closed
+        }
+      };
 
-    const body = (await request.json()) as ImportRequestBody;
-    const videoUrl = body.url?.trim() || '';
-    const mode = normalizeMode(body.mode);
-    const language = normalizeLanguage(body.language);
-    // 用户可通过「设置 → 视频导入」配置自己的 B 站 Cookie
-    const userBiliCookie = body.biliCookie?.trim() || '';
+      const emitResult = (data: Record<string, unknown>) => {
+        try {
+          const line = JSON.stringify({ type: 'result', ...data }) + '\n';
+          controller.enqueue(encoder.encode(line));
+        } catch {
+          // stream may be closed
+        }
+      };
 
-    if (!videoUrl) {
-      throw new ImportPipelineError('MISSING_VIDEO_URL', '缺少视频链接');
-    }
+      const emitError = (code: string, message: string, detail?: string) => {
+        try {
+          const line = JSON.stringify({ type: 'error', error: message, code, detail, trace }) + '\n';
+          controller.enqueue(encoder.encode(line));
+        } catch {
+          // stream may be closed
+        }
+      };
 
-    if (isUnsafeVideoUrl(videoUrl)) {
-      throw new ImportPipelineError('VIDEO_URL_UNSAFE', '不允许访问该视频地址');
-    }
-
-    const parsed = parseVideoLink(videoUrl);
-    if (!parsed) {
-      throw new ImportPipelineError('INVALID_VIDEO_URL', '无法识别的视频链接');
-    }
-
-    // 目前仅支持 B站视频导入
-    if (parsed.provider !== 'bilibili') {
-      throw new ImportPipelineError('UNSUPPORTED_PLATFORM', '目前仅支持 B站视频链接，其他平台即将支持');
-    }
-
-    const strategy = process.env.VIDEO_IMPORT_STRATEGY === 'yt-dlp-first' ? 'yt-dlp-first' : 'bili-native-first';
-    const enableYtDlpFallback = process.env.VIDEO_IMPORT_ENABLE_YTDLP_FALLBACK !== 'false';
-    const stageOrder = buildStageOrder(parsed.provider, videoUrl, strategy, enableYtDlpFallback);
-
-    const baseName = `video_import_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
-    let stageResult: StageResult | null = null;
-    let lastError: ImportPipelineError | null = null;
-    const stageFailures: StageFailure[] = [];
-
-    for (const stage of stageOrder) {
       try {
-        if (stage === 'bili-native') {
-          stageResult = await executeBiliNativeStage(videoUrl, baseName, userBiliCookie);
-        } else if (stage === 'yt-dlp-fallback') {
-          stageResult = await executeYtDlpStage(videoUrl, baseName, parsed.provider);
-        } else {
-          stageResult = await executeDirectStage(videoUrl, baseName);
+        ensureUploadDir();
+        scheduleCleanupOldFiles();
+
+        emit('parse', '正在解析视频链接...', 5);
+
+        const body = (await request.json()) as ImportRequestBody;
+        const videoUrl = body.url?.trim() || '';
+        const mode = normalizeMode(body.mode);
+        const language = normalizeLanguage(body.language);
+        const userBiliCookie = body.biliCookie?.trim() || '';
+
+        if (!videoUrl) {
+          throw new ImportPipelineError('MISSING_VIDEO_URL', '缺少视频链接');
         }
 
-        trace.push({ stage, ok: true });
-        break;
-      } catch (error) {
-        const stageError = toPipelineError(error);
-        lastError = stageError;
-        stageFailures.push({ stage, error: stageError });
-        trace.push({
-          stage,
-          ok: false,
-          code: stageError.code,
-          detail: stageError.detail || stageError.message,
-        });
-      }
-    }
+        if (isUnsafeVideoUrl(videoUrl)) {
+          throw new ImportPipelineError('VIDEO_URL_UNSAFE', '不允许访问该视频地址');
+        }
 
-    if (!stageResult) {
-      throw (
-        pickMostInformativeStageError(stageFailures) ||
-        lastError ||
-        new ImportPipelineError('VIDEO_IMPORT_FAILED', '视频导入失败')
-      );
-    }
+        const parsed = parseVideoLink(videoUrl);
+        if (!parsed) {
+          throw new ImportPipelineError('INVALID_VIDEO_URL', '无法识别的视频链接');
+        }
 
-    stageResult.meta = normalizeVideoMeta(stageResult.meta);
-    if (
-      (!stageResult.meta.durationSec || stageResult.meta.durationSec <= 0) &&
-      stageResult.audioFilePath
-    ) {
-      const fallbackDurationSec = await getAudioDurationSec(stageResult.audioFilePath);
-      if (fallbackDurationSec > 0) {
-        stageResult.meta.durationSec = fallbackDurationSec;
-        trace.push({
-          stage: 'duration-ffprobe',
-          ok: true,
-          detail: `resolved ${fallbackDurationSec.toFixed(2)}s from audio`,
-        });
-      }
-    }
-    const resolvedParsed = parseVideoLink(stageResult.meta.resolvedUrl || videoUrl) || parsed;
-    const source = {
-      provider: resolvedParsed.provider,
-      providerLabel: resolvedParsed.providerLabel,
-      originalUrl: videoUrl,
-      resolvedUrl: stageResult.meta.resolvedUrl || videoUrl,
-      embedUrl: stageResult.meta.embedUrl || resolvedParsed.embedUrl,
-      playableUrl: resolvedParsed.playableUrl || stageResult.meta.resolvedUrl || videoUrl,
-      title: stageResult.meta.title,
-      durationSec: stageResult.meta.durationSec,
-      thumbnailUrl: stageResult.meta.thumbnailUrl,
-      bvid: stageResult.meta.bvid,
-      cid: stageResult.meta.cid,
-      sourceMode: stageResult.sourceMode,
-    };
+        if (parsed.provider !== 'bilibili') {
+          throw new ImportPipelineError('UNSUPPORTED_PLATFORM', '目前仅支持 B站视频链接，其他平台即将支持');
+        }
 
-    if (stageResult.subtitleSegments?.length) {
-      const mappedSegments = mapSubtitleSegmentsToApiSegments(stageResult.subtitleSegments);
-      const totalDuration = mappedSegments.length > 0 ? mappedSegments[mappedSegments.length - 1].endMs : 0;
-      const text = normalizePossibleMojibake(mappedSegments.map((item) => item.text).join(''));
+        emit('resolve', '正在获取视频信息...', 10);
 
-      return NextResponse.json({
-        success: true,
-        mode: 'subtitle',
-        requestedMode: mode,
-        language,
-        sourceMode: stageResult.sourceMode,
-        source,
-        text,
-        totalDuration,
-        segments: mappedSegments,
-        sentences: mappedSegments.map((item) => ({
-          id: item.id,
-          text: item.text,
-          beginTime: item.startMs,
-          endTime: item.endMs,
-          confidence: item.confidence,
-        })),
-        trace,
-      });
-    }
+        const strategy = process.env.VIDEO_IMPORT_STRATEGY === 'yt-dlp-first' ? 'yt-dlp-first' : 'bili-native-first';
+        const enableYtDlpFallback = process.env.VIDEO_IMPORT_ENABLE_YTDLP_FALLBACK !== 'false';
+        const stageOrder = buildStageOrder(parsed.provider, videoUrl, strategy, enableYtDlpFallback);
 
-    if (!stageResult.audioFilePath) {
-      throw new ImportPipelineError('VIDEO_IMPORT_FAILED', '未生成可用音频文件');
-    }
+        const baseName = `video_import_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+        let stageResult: StageResult | null = null;
+        let lastError: ImportPipelineError | null = null;
+        const stageFailures: StageFailure[] = [];
 
-    let transcribed: { data: Record<string, unknown>; usedMode: TranscribeMode };
+        for (const stage of stageOrder) {
+          try {
+            if (stage === 'bili-native') {
+              emit('download', '正在提取音频...', 20);
+              stageResult = await executeBiliNativeStage(videoUrl, baseName, userBiliCookie);
+            } else if (stage === 'yt-dlp-fallback') {
+              emit('download', '正在下载音频（备用通道）...', 20);
+              stageResult = await executeYtDlpStage(videoUrl, baseName, parsed.provider);
+            } else {
+              emit('download', '正在下载媒体文件...', 20);
+              stageResult = await executeDirectStage(videoUrl, baseName);
+            }
 
-    try {
-      transcribed = await transcribeWithFallback(request, stageResult.audioFilePath, mode, language, trace, stageResult.meta.durationSec);
-    } catch (error) {
-      const importError = toPipelineError(error);
-      // 从异常中提取 partialResult（transcribeWithFallback 在结果不足时附带）
-      const partialResult = (error as { partialResult?: { data: Record<string, unknown>; usedMode: TranscribeMode } })?.partialResult;
-      const enableWsFallback = process.env.VIDEO_IMPORT_ENABLE_WS_FALLBACK !== 'false';
-      const shouldTryWsFallback = enableWsFallback && importError.code === 'ASR_TRANSCRIBE_FAILED';
-      const allowPartialResult = process.env.VIDEO_IMPORT_ALLOW_PARTIAL_RESULT === 'true';
-
-      if (!shouldTryWsFallback) {
-        if (partialResult && allowPartialResult) {
-          console.warn(`[video-import] cannot try WS fallback, using partial result due to VIDEO_IMPORT_ALLOW_PARTIAL_RESULT=true (mode=${partialResult.usedMode})`);
-          trace.push({ stage: `asr-${partialResult.usedMode}-partial`, ok: true, detail: 'using partial result (no ws fallback, explicitly allowed)' });
-          transcribed = partialResult;
-        } else {
-          if (partialResult) {
+            trace.push({ stage, ok: true });
+            break;
+          } catch (error) {
+            const stageError = toPipelineError(error);
+            lastError = stageError;
+            stageFailures.push({ stage, error: stageError });
             trace.push({
-              stage: `asr-${partialResult.usedMode}-partial`,
+              stage,
               ok: false,
-              code: 'ASR_PARTIAL_REJECTED',
-              detail: 'partial result rejected (ws fallback unavailable)',
+              code: stageError.code,
+              detail: stageError.detail || stageError.message,
             });
           }
-          throw importError;
         }
-      } else {
-        try {
-          const wsData = await transcribeWithWsProxy(request, stageResult.audioFilePath);
-          trace.push({ stage: 'asr-ws-fallback', ok: true });
-          transcribed = { data: wsData, usedMode: mode };
-        } catch (wsError) {
-          const wsPipelineError = toPipelineError(wsError);
-          trace.push({
-            stage: 'asr-ws-fallback',
-            ok: false,
-            code: wsPipelineError.code,
-            detail: wsPipelineError.detail || wsPipelineError.message,
-          });
 
-          if (partialResult && allowPartialResult) {
-            console.warn(`[video-import] WS fallback failed, using partial result due to VIDEO_IMPORT_ALLOW_PARTIAL_RESULT=true (mode=${partialResult.usedMode})`);
-            trace.push({ stage: `asr-${partialResult.usedMode}-partial`, ok: true, detail: 'using partial result after ws fallback failed (explicitly allowed)' });
-            transcribed = partialResult;
-          } else {
-            if (partialResult) {
-              trace.push({
-                stage: `asr-${partialResult.usedMode}-partial`,
-                ok: false,
-                code: 'ASR_PARTIAL_REJECTED',
-                detail: 'partial result rejected after ws fallback failure',
-              });
-            }
-            throw new ImportPipelineError(
-              importError.code,
-              importError.message,
-              [importError.detail || importError.message, `ws fallback: ${wsPipelineError.detail || wsPipelineError.message}`]
-                .filter(Boolean)
-                .join(' | ')
-            );
+        if (!stageResult) {
+          throw (
+            pickMostInformativeStageError(stageFailures) ||
+            lastError ||
+            new ImportPipelineError('VIDEO_IMPORT_FAILED', '视频导入失败')
+          );
+        }
+
+        emit('audio-ready', '音频提取完成，准备转写...', 45);
+
+        stageResult.meta = normalizeVideoMeta(stageResult.meta);
+        if (
+          (!stageResult.meta.durationSec || stageResult.meta.durationSec <= 0) &&
+          stageResult.audioFilePath
+        ) {
+          const fallbackDurationSec = await getAudioDurationSec(stageResult.audioFilePath);
+          if (fallbackDurationSec > 0) {
+            stageResult.meta.durationSec = fallbackDurationSec;
+            trace.push({
+              stage: 'duration-ffprobe',
+              ok: true,
+              detail: `resolved ${fallbackDurationSec.toFixed(2)}s from audio`,
+            });
           }
         }
+        const resolvedParsed = parseVideoLink(stageResult.meta.resolvedUrl || videoUrl) || parsed;
+        const source = {
+          provider: resolvedParsed.provider,
+          providerLabel: resolvedParsed.providerLabel,
+          originalUrl: videoUrl,
+          resolvedUrl: stageResult.meta.resolvedUrl || videoUrl,
+          embedUrl: stageResult.meta.embedUrl || resolvedParsed.embedUrl,
+          playableUrl: resolvedParsed.playableUrl || stageResult.meta.resolvedUrl || videoUrl,
+          title: stageResult.meta.title,
+          durationSec: stageResult.meta.durationSec,
+          thumbnailUrl: stageResult.meta.thumbnailUrl,
+          bvid: stageResult.meta.bvid,
+          cid: stageResult.meta.cid,
+          sourceMode: stageResult.sourceMode,
+        };
+
+        // 如果有视频标题，推送给前端展示
+        if (stageResult.meta.title) {
+          emit('audio-ready', `已获取「${stageResult.meta.title}」，准备转写...`, 48);
+        }
+
+        if (stageResult.subtitleSegments?.length) {
+          emit('transcribe', '正在处理字幕数据...', 80);
+          const mappedSegments = mapSubtitleSegmentsToApiSegments(stageResult.subtitleSegments);
+          const totalDuration = mappedSegments.length > 0 ? mappedSegments[mappedSegments.length - 1].endMs : 0;
+          const text = normalizePossibleMojibake(mappedSegments.map((item) => item.text).join(''));
+
+          emit('done', '导入完成', 100);
+          emitResult({
+            success: true,
+            mode: 'subtitle',
+            requestedMode: mode,
+            language,
+            sourceMode: stageResult.sourceMode,
+            source,
+            text,
+            totalDuration,
+            segments: mappedSegments,
+            sentences: mappedSegments.map((item) => ({
+              id: item.id,
+              text: item.text,
+              beginTime: item.startMs,
+              endTime: item.endMs,
+              confidence: item.confidence,
+            })),
+            trace,
+          });
+          controller.close();
+          return;
+        }
+
+        if (!stageResult.audioFilePath) {
+          throw new ImportPipelineError('VIDEO_IMPORT_FAILED', '未生成可用音频文件');
+        }
+
+        emit('transcribe', '正在转写音频，请耐心等待...', 55);
+
+        let transcribed: { data: Record<string, unknown>; usedMode: TranscribeMode };
+
+        try {
+          transcribed = await transcribeWithFallback(request, stageResult.audioFilePath, mode, language, trace, stageResult.meta.durationSec);
+        } catch (error) {
+          const importError = toPipelineError(error);
+          const partialResult = (error as { partialResult?: { data: Record<string, unknown>; usedMode: TranscribeMode } })?.partialResult;
+          const enableWsFallback = process.env.VIDEO_IMPORT_ENABLE_WS_FALLBACK !== 'false';
+          const shouldTryWsFallback = enableWsFallback && importError.code === 'ASR_TRANSCRIBE_FAILED';
+          const allowPartialResult = process.env.VIDEO_IMPORT_ALLOW_PARTIAL_RESULT === 'true';
+
+          if (!shouldTryWsFallback) {
+            if (partialResult && allowPartialResult) {
+              console.warn(`[video-import] cannot try WS fallback, using partial result due to VIDEO_IMPORT_ALLOW_PARTIAL_RESULT=true (mode=${partialResult.usedMode})`);
+              trace.push({ stage: `asr-${partialResult.usedMode}-partial`, ok: true, detail: 'using partial result (no ws fallback, explicitly allowed)' });
+              transcribed = partialResult;
+            } else {
+              if (partialResult) {
+                trace.push({
+                  stage: `asr-${partialResult.usedMode}-partial`,
+                  ok: false,
+                  code: 'ASR_PARTIAL_REJECTED',
+                  detail: 'partial result rejected (ws fallback unavailable)',
+                });
+              }
+              throw importError;
+            }
+          } else {
+            emit('transcribe', '转写模式切换中，尝试备用通道...', 65);
+            try {
+              const wsData = await transcribeWithWsProxy(request, stageResult.audioFilePath);
+              trace.push({ stage: 'asr-ws-fallback', ok: true });
+              transcribed = { data: wsData, usedMode: mode };
+            } catch (wsError) {
+              const wsPipelineError = toPipelineError(wsError);
+              trace.push({
+                stage: 'asr-ws-fallback',
+                ok: false,
+                code: wsPipelineError.code,
+                detail: wsPipelineError.detail || wsPipelineError.message,
+              });
+
+              if (partialResult && allowPartialResult) {
+                console.warn(`[video-import] WS fallback failed, using partial result due to VIDEO_IMPORT_ALLOW_PARTIAL_RESULT=true (mode=${partialResult.usedMode})`);
+                trace.push({ stage: `asr-${partialResult.usedMode}-partial`, ok: true, detail: 'using partial result after ws fallback failed (explicitly allowed)' });
+                transcribed = partialResult;
+              } else {
+                if (partialResult) {
+                  trace.push({
+                    stage: `asr-${partialResult.usedMode}-partial`,
+                    ok: false,
+                    code: 'ASR_PARTIAL_REJECTED',
+                    detail: 'partial result rejected after ws fallback failure',
+                  });
+                }
+                throw new ImportPipelineError(
+                  importError.code,
+                  importError.message,
+                  [importError.detail || importError.message, `ws fallback: ${wsPipelineError.detail || wsPipelineError.message}`]
+                    .filter(Boolean)
+                    .join(' | ')
+                );
+              }
+            }
+          }
+        }
+
+        emit('finalize', '正在整理转写结果...', 90);
+
+        const mergedSource = {
+          ...source,
+          audioUrl: getPublicAudioUrl(request, stageResult.audioFilePath),
+          title: source.title ? normalizePossibleMojibake(source.title) : source.title,
+        };
+        const normalizedTranscribedData = normalizeTranscribePayload(transcribed.data);
+        const normalizedSegments = normalizeImportedSegments(normalizedTranscribedData, stageResult.meta.durationSec);
+        if (normalizedSegments.length === 0) {
+          throw new ImportPipelineError('ASR_TRANSCRIBE_FAILED', '音频转写失败', 'transcribe returned no valid segments');
+        }
+        const normalizedText = normalizedSegments.map((segment) => segment.text).join('');
+        const normalizedTotalDuration = normalizedSegments[normalizedSegments.length - 1].endMs;
+
+        emit('done', '导入完成', 100);
+        emitResult({
+          ...normalizedTranscribedData,
+          success: true,
+          mode: transcribed.usedMode,
+          requestedMode: mode,
+          language,
+          sourceMode: stageResult.sourceMode,
+          source: mergedSource,
+          text: normalizedText,
+          totalDuration: normalizedTotalDuration,
+          segments: normalizedSegments,
+          sentences: normalizedSegments.map((segment) => ({
+            id: segment.id,
+            text: segment.text,
+            beginTime: segment.startMs,
+            endTime: segment.endMs,
+            confidence: segment.confidence,
+          })),
+          trace,
+        });
+      } catch (error) {
+        const importError = toPipelineError(error);
+        emitError(importError.code, importError.message, importError.detail);
+      } finally {
+        try {
+          controller.close();
+        } catch {
+          // already closed
+        }
       }
-    }
+    },
+  });
 
-    const mergedSource = {
-      ...source,
-      audioUrl: getPublicAudioUrl(request, stageResult.audioFilePath),
-      title: source.title ? normalizePossibleMojibake(source.title) : source.title,
-    };
-    const normalizedTranscribedData = normalizeTranscribePayload(transcribed.data);
-    const normalizedSegments = normalizeImportedSegments(normalizedTranscribedData, stageResult.meta.durationSec);
-    if (normalizedSegments.length === 0) {
-      throw new ImportPipelineError('ASR_TRANSCRIBE_FAILED', '音频转写失败', 'transcribe returned no valid segments');
-    }
-    const normalizedText = normalizedSegments.map((segment) => segment.text).join('');
-    const normalizedTotalDuration = normalizedSegments[normalizedSegments.length - 1].endMs;
-
-    return NextResponse.json({
-      ...normalizedTranscribedData,
-      success: true,
-      mode: transcribed.usedMode,
-      requestedMode: mode,
-      language,
-      sourceMode: stageResult.sourceMode,
-      source: mergedSource,
-      text: normalizedText,
-      totalDuration: normalizedTotalDuration,
-      segments: normalizedSegments,
-      sentences: normalizedSegments.map((segment) => ({
-        id: segment.id,
-        text: segment.text,
-        beginTime: segment.startMs,
-        endTime: segment.endMs,
-        confidence: segment.confidence,
-      })),
-      trace,
-    });
-  } catch (error) {
-    const importError = toPipelineError(error);
-    return NextResponse.json(
-      {
-        error: importError.message,
-        code: importError.code,
-        detail: importError.detail,
-        trace,
-      },
-      { status: statusFromCode(importError.code) }
-    );
-  }
+  return new Response(stream, {
+    headers: {
+      'Content-Type': 'text/plain; charset=utf-8',
+      'Cache-Control': 'no-cache, no-transform',
+      'X-Content-Type-Options': 'nosniff',
+    },
+  });
 }
