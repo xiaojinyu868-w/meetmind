@@ -933,3 +933,68 @@ p, span, div, h1, h2, h3, h4, h5, h6, li, td, th, label {
     transform: scale(1);
   }
 }
+
+/* 气泡弹入动画（一级意图） */
+@keyframes bubble-pop-in {
+  0% {
+    opacity: 0;
+    transform: scale(0.5) translateY(8px);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.1) translateY(-2px);
+  }
+  100% {
+    transform: scale(1) translateY(0);
+  }
+}
+
+.bubble-pop-in {
+  animation: bubble-pop-in 0.35s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+
+/* 二级裂变展开动画 */
+@keyframes bubble-expand-in {
+  0% {
+    opacity: 0;
+    transform: scaleY(0.3) translateY(-12px);
+    transform-origin: top center;
+  }
+  60% {
+    opacity: 1;
+    transform: scaleY(1.03) translateY(0);
+  }
+  100% {
+    transform: scaleY(1) translateY(0);
+  }
+}
+
+.bubble-expand-in {
+  animation: bubble-expand-in 0.3s cubic-bezier(0.34, 1.4, 0.64, 1) both;
+}
+
+/* 子方向弹入动画 */
+@keyframes bubble-sub-pop-in {
+  0% {
+    opacity: 0;
+    transform: translateX(-10px) scale(0.95);
+  }
+  100% {
+    opacity: 1;
+    transform: translateX(0) scale(1);
+  }
+}
+
+.bubble-sub-pop-in {
+  animation: bubble-sub-pop-in 0.25s ease-out both;
+}
+
+/* 底部弹层滑入 */
+@keyframes slideUp {
+  0% {
+    transform: translateY(100%);
+  }
+  100% {
+    transform: translateY(0);
+  }
+}

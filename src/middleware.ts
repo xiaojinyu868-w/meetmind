@@ -28,6 +28,7 @@ const PUBLIC_ROUTES = [
   '/api/auth/wechat/callback',
   // 核心能力 API（开发阶段允许公开访问）
   '/api/tutor',
+  '/api/tutor/intent-probe',
   '/api/chat',
   '/api/asr-config',
   '/api/transcribe',

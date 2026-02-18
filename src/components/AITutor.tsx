@@ -10,6 +10,7 @@ import { ImageUpload, useImagePaste, type UploadedImage } from './ImageUpload';
 import { useAuth } from '@/lib/hooks/useAuth';
 import { useAnalyticsContext } from '@/components/AnalyticsProvider';
 import { useSimpleSSEStream, type SSEEvent } from '@/lib/hooks/useSSEStream';
+import IntentBubbleExplorer from './IntentBubbleExplorer';
 import { saveTutorResponseCache, getTutorResponseCache, deleteTutorResponseCache, setPreference, saveClassSummary, getSessionSummary } from '@/lib/db';
 import { conversationService, getEffectiveUserId } from '@/lib/services/conversation-service';
 import type { GuidanceQuestion as GuidanceQuestionType, GuidanceOption, Citation } from '@/types/dify';
@@ -1268,40 +1269,11 @@ export function AITutor({
               <p className="text-sm text-gray-500">请先录制课堂或上传录音</p>
             </div>
           ) : globalChatHistory.length === 0 ? (
-            // 欢迎界面
-            <div className="h-full flex flex-col items-center justify-center text-center">
-              <div className="w-20 h-20 bg-gradient-to-br from-amber-100 to-amber-200 rounded-full flex items-center justify-center mb-4">
-                <span className="text-4xl">🎓</span>
-              </div>
-              <h3 className="text-lg font-medium text-gray-800 mb-2">
-                有什么问题想问？
-              </h3>
-              <p className="text-sm text-gray-500 mb-6 max-w-xs">
-                我已经学习了这节课的内容，可以帮你解答疑惑、总结要点
-              </p>
-              
-              {/* 快捷问题 */}
-              <div className="flex flex-wrap justify-center gap-2 max-w-sm">
-                <button
-                  onClick={() => handleGlobalSend('这节课讲了什么？')}
-                  className="px-4 py-2 bg-gradient-to-r from-amber-50 to-amber-100 text-amber-700 rounded-full text-sm hover:from-amber-100 hover:to-amber-200 transition-colors border border-amber-200"
-                >
-                  这节课讲了什么？
-                </button>
-                <button
-                  onClick={() => handleGlobalSend('帮我总结这节课的重点')}
-                  className="px-4 py-2 bg-gradient-to-r from-amber-50 to-amber-100 text-amber-700 rounded-full text-sm hover:from-amber-100 hover:to-amber-200 transition-colors border border-amber-200"
-                >
-                  帮我总结重点
-                </button>
-                <button
-                  onClick={() => handleGlobalSend('这节课有哪些需要注意的地方？')}
-                  className="px-4 py-2 bg-gradient-to-r from-amber-50 to-amber-100 text-amber-700 rounded-full text-sm hover:from-amber-100 hover:to-amber-200 transition-colors border border-amber-200"
-                >
-                  有哪些需要注意的？
-                </button>
-              </div>
-            </div>
+            // 角色+意图气泡（纯规则零延迟）
+            <IntentBubbleExplorer
+              transcriptText={segments.map(s => s.text).join(' ')}
+              onSend={(prompt) => handleGlobalSend(prompt)}
+            />
           ) : (
             // 对话内容
             <div className="space-y-4">
