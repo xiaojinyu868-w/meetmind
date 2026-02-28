@@ -73,8 +73,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     accessToken: null,
   });
   
-  // 标记是否正在检查认证状态（用于需要等待认证结果的场景）
-  const [isCheckingAuth, setIsCheckingAuth] = useState(true);
+  // Performance: Synchronously check token presence to avoid unnecessary async work.
+  // If no token and no wechat session param, mark auth check complete immediately.
+  const [isCheckingAuth, setIsCheckingAuth] = useState(() => {
+    if (typeof window === 'undefined') return true;
+    const hasSession = new URLSearchParams(window.location.search).has('session');
+    const hasToken = !!localStorage.getItem(TOKEN_KEY);
+    return hasSession || hasToken;
+  });
 
   // 处理微信登录回调的临时会话
   const handleWechatSession = async (sessionToken: string): Promise<boolean> => {
@@ -119,7 +125,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   // 初始化 - 检查登录状态（非阻塞）
+  // Performance: Skip entirely when isCheckingAuth was already set to false synchronously.
   useEffect(() => {
+    if (!isCheckingAuth) return; // No token & no session → nothing to check
+
     const initAuth = async () => {
       // 检查 URL 中是否有微信登录的临时会话 token
       if (typeof window !== 'undefined') {
@@ -182,7 +191,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
     
     initAuth();
-  }, []);
+  }, [isCheckingAuth]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // 刷新令牌
   const refreshTokenInternal = async (): Promise<boolean> => {

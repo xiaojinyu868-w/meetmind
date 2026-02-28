@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ModelSelector } from '@/components/ModelSelector';
 import { DEFAULT_WORKSHOP_MODEL_ID } from '@/lib/services/llm-service';
 import type { Anchor, TranscriptSegment } from '@/types';
@@ -13,6 +13,63 @@ import { FlashcardsWindow } from '@/components/apps/windows/FlashcardsWindow';
 import { QuizWindow } from '@/components/apps/windows/QuizWindow';
 import { MindmapWindow } from '@/components/apps/windows/MindmapWindow';
 import { InfographicWindow } from '@/components/apps/windows/InfographicWindow';
+
+/* ================================================================ */
+/*  窗口级 ErrorBoundary — 单窗口崩溃不影响其他窗口和主页面            */
+/* ================================================================ */
+
+interface WindowErrorBoundaryProps {
+  appName: string;
+  onRetry?: () => void;
+  children: React.ReactNode;
+}
+interface WindowErrorBoundaryState {
+  hasError: boolean;
+  error?: Error;
+}
+
+class WindowErrorBoundary extends React.Component<WindowErrorBoundaryProps, WindowErrorBoundaryState> {
+  constructor(props: WindowErrorBoundaryProps) {
+    super(props);
+    this.state = { hasError: false };
+  }
+
+  static getDerivedStateFromError(error: Error): WindowErrorBoundaryState {
+    return { hasError: true, error };
+  }
+
+  componentDidCatch(error: Error, info: React.ErrorInfo) {
+    console.error(`[WindowErrorBoundary] ${this.props.appName} crashed:`, error, info.componentStack);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="flex h-full flex-col items-center justify-center gap-3 p-6 text-center">
+          <div className="rounded-full bg-rose-100 p-3">
+            <svg className="h-6 w-6 text-rose-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
+            </svg>
+          </div>
+          <p className="text-sm font-medium text-slate-700">{this.props.appName} 渲染出错</p>
+          <p className="max-w-xs text-xs text-slate-500">{this.state.error?.message || '未知错误'}</p>
+          <button
+            type="button"
+            className="rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50"
+            onClick={() => {
+              this.setState({ hasError: false, error: undefined });
+              this.props.onRetry?.();
+            }}
+          >
+            重试
+          </button>
+        </div>
+      );
+    }
+
+    return this.props.children;
+  }
+}
 
 function useIsMobile(breakpoint = 768) {
   const [isMobile, setIsMobile] = useState(false);
@@ -62,6 +119,7 @@ interface WorkshopWindowManagerProps {
   anchors: Anchor[];
   summaryOverview?: string;
   keyDifficulties?: string[];
+  terminologyHint?: string;
   onSeek?: (startMs: number) => void;
   onClose: (appKey: WorkshopAppKey) => void;
   onToggleMinimize: (appKey: WorkshopAppKey) => void;
@@ -77,6 +135,7 @@ interface WindowCardProps {
   anchors: Anchor[];
   summaryOverview?: string;
   keyDifficulties?: string[];
+  terminologyHint?: string;
   model: string;
   onModelChange: (modelId: string) => void;
   onSeek?: (startMs: number) => void;
@@ -213,6 +272,7 @@ function WindowCard(props: WindowCardProps) {
     anchors,
     summaryOverview,
     keyDifficulties,
+    terminologyHint,
     model,
     onModelChange,
     onSeek,
@@ -234,6 +294,7 @@ function WindowCard(props: WindowCardProps) {
     anchors,
     summaryOverview,
     keyDifficulties,
+    terminologyHint,
     model,
     autoRun: true,
   });
@@ -295,12 +356,14 @@ function WindowCard(props: WindowCardProps) {
 
         {/* 沉浸式内容区 — 无内边距，组件自己控制 */}
         <div className="flex-1 overflow-auto">
-          {app.key === 'flashcards' ? (
-            <FlashcardsWindow result={execution.result} transcript={transcript} onSeek={onSeek} />
-          ) : null}
-          {app.key === 'quiz' ? (
-            <QuizWindow result={execution.result} transcript={transcript} onSeek={onSeek} />
-          ) : null}
+          <WindowErrorBoundary appName={app.name} onRetry={() => void execution.rerun()}>
+            {app.key === 'flashcards' ? (
+              <FlashcardsWindow result={execution.result} transcript={transcript} onSeek={onSeek} />
+            ) : null}
+            {app.key === 'quiz' ? (
+              <QuizWindow result={execution.result} transcript={transcript} onSeek={onSeek} />
+            ) : null}
+          </WindowErrorBoundary>
         </div>
       </section>
     );
@@ -355,19 +418,21 @@ function WindowCard(props: WindowCardProps) {
 
         {/* 全屏内容区 */}
         <div className="flex-1 overflow-auto bg-[radial-gradient(900px_360px_at_15%_-10%,#dbeafe,transparent_60%),radial-gradient(900px_360px_at_100%_-35%,#fde68a,transparent_60%),#f8fafc] p-4">
-          {app.key === 'audio-overview' ? (
-            <PodcastWindow result={execution.result} transcript={transcript} onSeek={onSeek} />
-          ) : null}
-          {app.key === 'flashcards' ? (
-            <FlashcardsWindow result={execution.result} transcript={transcript} onSeek={onSeek} />
-          ) : null}
-          {app.key === 'quiz' ? <QuizWindow result={execution.result} transcript={transcript} onSeek={onSeek} /> : null}
-          {app.key === 'mindmap' ? (
-            <MindmapWindow result={execution.result} transcript={transcript} onSeek={onSeek} />
-          ) : null}
-          {app.key === 'infographic' ? (
-            <InfographicWindow sessionId={sessionId} result={execution.result} onResultUpdate={execution.updateResult} />
-          ) : null}
+          <WindowErrorBoundary appName={app.name} onRetry={() => void execution.rerun()}>
+            {app.key === 'audio-overview' ? (
+              <PodcastWindow result={execution.result} transcript={transcript} onSeek={onSeek} />
+            ) : null}
+            {app.key === 'flashcards' ? (
+              <FlashcardsWindow result={execution.result} transcript={transcript} onSeek={onSeek} />
+            ) : null}
+            {app.key === 'quiz' ? <QuizWindow result={execution.result} transcript={transcript} onSeek={onSeek} /> : null}
+            {app.key === 'mindmap' ? (
+              <MindmapWindow result={execution.result} transcript={transcript} onSeek={onSeek} />
+            ) : null}
+            {app.key === 'infographic' ? (
+              <InfographicWindow sessionId={sessionId} result={execution.result} onResultUpdate={execution.updateResult} />
+            ) : null}
+          </WindowErrorBoundary>
         </div>
       </section>
     );
@@ -443,19 +508,21 @@ function WindowCard(props: WindowCardProps) {
       </header>
 
       <div className="flex-1 overflow-auto bg-[radial-gradient(900px_360px_at_15%_-10%,#dbeafe,transparent_60%),radial-gradient(900px_360px_at_100%_-35%,#fde68a,transparent_60%),#f8fafc] p-3">
-        {app.key === 'audio-overview' ? (
-          <PodcastWindow result={execution.result} transcript={transcript} onSeek={onSeek} />
-        ) : null}
-        {app.key === 'flashcards' ? (
-          <FlashcardsWindow result={execution.result} transcript={transcript} onSeek={onSeek} />
-        ) : null}
-        {app.key === 'quiz' ? <QuizWindow result={execution.result} transcript={transcript} onSeek={onSeek} /> : null}
-        {app.key === 'mindmap' ? (
-          <MindmapWindow result={execution.result} transcript={transcript} onSeek={onSeek} />
-        ) : null}
-        {app.key === 'infographic' ? (
-          <InfographicWindow sessionId={sessionId} result={execution.result} onResultUpdate={execution.updateResult} />
-        ) : null}
+        <WindowErrorBoundary appName={app.name} onRetry={() => void execution.rerun()}>
+          {app.key === 'audio-overview' ? (
+            <PodcastWindow result={execution.result} transcript={transcript} onSeek={onSeek} />
+          ) : null}
+          {app.key === 'flashcards' ? (
+            <FlashcardsWindow result={execution.result} transcript={transcript} onSeek={onSeek} />
+          ) : null}
+          {app.key === 'quiz' ? <QuizWindow result={execution.result} transcript={transcript} onSeek={onSeek} /> : null}
+          {app.key === 'mindmap' ? (
+            <MindmapWindow result={execution.result} transcript={transcript} onSeek={onSeek} />
+          ) : null}
+          {app.key === 'infographic' ? (
+            <InfographicWindow sessionId={sessionId} result={execution.result} onResultUpdate={execution.updateResult} />
+          ) : null}
+        </WindowErrorBoundary>
       </div>
     </section>
   );
@@ -470,6 +537,7 @@ export function WorkshopWindowManager(props: WorkshopWindowManagerProps) {
     anchors,
     summaryOverview,
     keyDifficulties,
+    terminologyHint,
     onSeek,
     onClose,
     onToggleMinimize,
@@ -514,6 +582,7 @@ export function WorkshopWindowManager(props: WorkshopWindowManagerProps) {
           anchors={anchors}
           summaryOverview={summaryOverview}
           keyDifficulties={keyDifficulties}
+          terminologyHint={terminologyHint}
           model={model}
           onModelChange={setModel}
           onSeek={onSeek}

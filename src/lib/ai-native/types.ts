@@ -21,6 +21,8 @@ export interface MemoryLayerSnapshot {
   summary?: string;
   notes?: string[];
   keyDifficulties?: string[];
+  /** Auto-discovered terminology hint (from term-discovery pipeline). Injected into AI prompts. */
+  terminologyHint?: string;
   timeline?: {
     durationMs: number;
     segmentCount: number;

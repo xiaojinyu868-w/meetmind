@@ -2,7 +2,7 @@ import type { TranscriptSegment } from '@/types';
 import { parseJsonResponse } from '@/lib/utils/json-utils';
 import { chat, DEFAULT_MODEL_ID } from '@/lib/services/llm-service';
 import type { AppExecutionContext, AppExecutionResult, AppPlugin, AppPluginTools } from '../types';
-import { buildPromptAnchorContext, buildPromptTranscriptContext } from '../prompt-context';
+import { buildPromptAnchorContext, buildPromptTranscriptContext, buildTerminologyHintBlock } from '../prompt-context';
 
 const KEYWORDS = ['闪卡', '记忆', '背诵', '复习卡', '知识卡', 'flashcard'];
 const TARGET_CARD_COUNT = 10;
@@ -154,7 +154,7 @@ few-shot 示例（仅供格式参考，内容应来自实际课堂）：
 课堂原文：
 ${transcriptContext}
 
-${anchorContext ? `学习者关注点：\n${anchorContext}` : ''}`,
+${anchorContext ? `学习者关注点：\n${anchorContext}` : ''}${buildTerminologyHintBlock(context.memory.terminologyHint)}`,
       },
     ],
     model,

@@ -313,6 +313,39 @@ export class DashScopeASRClient {
     }
   }
 
+  /**
+   * Send initial context hint (hot words, course topic, references) to server
+   * before audio starts flowing. The server injects this into DashScope session.
+   */
+  sendContextHint(contextHint: string): void {
+    if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return;
+    if (!contextHint.trim()) return;
+
+    this.ws.send(
+      JSON.stringify({
+        type: 'context-hint',
+        contextHint: contextHint.trim(),
+      })
+    );
+  }
+
+  /**
+   * Dynamically update context with recently confirmed transcript text.
+   * Called periodically after N final segments to help ASR maintain
+   * consistency for names and terms.
+   */
+  sendContextUpdate(recentText: string): void {
+    if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return;
+    if (!recentText.trim()) return;
+
+    this.ws.send(
+      JSON.stringify({
+        type: 'context-update',
+        recentText: recentText.trim(),
+      })
+    );
+  }
+
   sendVADTimestamp(startMs: number, endMs: number): void {
     if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
       return;

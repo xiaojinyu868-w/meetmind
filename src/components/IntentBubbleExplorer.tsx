@@ -128,22 +128,20 @@ export default function IntentBubbleExplorer({
           {ROLE_INTENT_MATRIX.map((role, i) => {
             const offset = BUBBLE_OFFSETS[i % BUBBLE_OFFSETS.length];
             return (
-              <button
-                key={role.label}
-                onClick={() => handleRoleClick(role)}
-                className="flex flex-col items-center gap-1.5 group bubble-pop-in"
-                style={{
-                  animationDelay: `${i * 80}ms`,
-                  transform: `translate(${offset.x}px, ${offset.y}px)`,
-                }}
-              >
-                <div className="w-16 h-16 rounded-full bg-gradient-to-br from-amber-50 to-amber-100 border-2 border-amber-200/60 flex items-center justify-center group-hover:border-amber-400 group-hover:shadow-lg group-hover:shadow-amber-100 transition-all group-hover:scale-110 group-active:scale-95">
-                  <span className="text-2xl">{role.emoji}</span>
-                </div>
-                <span className="text-xs text-gray-600 group-hover:text-amber-700 transition-colors font-medium">
-                  {role.label}
-                </span>
-              </button>
+              <div key={role.label} style={{ transform: `translate(${offset.x}px, ${offset.y}px)` }}>
+                <button
+                  onClick={() => handleRoleClick(role)}
+                  className="flex flex-col items-center gap-1.5 group bubble-pop-in"
+                  style={{ animationDelay: `${i * 80}ms` }}
+                >
+                  <div className="w-16 h-16 rounded-full bg-gradient-to-br from-amber-50 to-amber-100 border-2 border-amber-200/60 flex items-center justify-center group-hover:border-amber-400 group-hover:shadow-lg group-hover:shadow-amber-100 transition-all group-hover:scale-110 group-active:scale-95">
+                    <span className="text-2xl">{role.emoji}</span>
+                  </div>
+                  <span className="text-xs text-gray-600 group-hover:text-amber-700 transition-colors font-medium">
+                    {role.label}
+                  </span>
+                </button>
+              </div>
             );
           })}
         </div>
@@ -181,18 +179,16 @@ export default function IntentBubbleExplorer({
         {selectedRole.intents.map((intent, i) => {
           const offset = INTENT_OFFSETS[i % INTENT_OFFSETS.length];
           return (
-            <button
-              key={intent.label}
-              onClick={() => handleIntentClick(intent)}
-              className="flex items-center gap-1.5 px-4 py-2.5 rounded-full text-sm font-medium bg-white border border-gray-200 text-gray-700 hover:border-amber-300 hover:bg-amber-50 hover:text-amber-800 hover:shadow-md transition-all active:scale-95 bubble-sub-pop-in"
-              style={{
-                animationDelay: `${i * 100}ms`,
-                transform: `translate(${offset.x}px, ${offset.y}px)`,
-              }}
-            >
-              <span>{intent.emoji}</span>
-              {intent.label}
-            </button>
+            <div key={intent.label} style={{ transform: `translate(${offset.x}px, ${offset.y}px)` }}>
+              <button
+                onClick={() => handleIntentClick(intent)}
+                className="flex items-center gap-1.5 px-4 py-2.5 rounded-full text-sm font-medium bg-white border border-gray-200 text-gray-700 hover:border-amber-300 hover:bg-amber-50 hover:text-amber-800 hover:shadow-md transition-all active:scale-95 bubble-sub-pop-in"
+                style={{ animationDelay: `${i * 100}ms` }}
+              >
+                <span>{intent.emoji}</span>
+                {intent.label}
+              </button>
+            </div>
           );
         })}
       </div>

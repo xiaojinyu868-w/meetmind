@@ -92,7 +92,7 @@ function normalizePayload(result: AppExecutionResult | null): {
     return { root, children: payload.children, markdown: md };
   }
   if (Array.isArray(payload.branches) && payload.branches.length > 0) {
-    const root = payload.root?.trim() || result.render?.title || '课堂知识结构';
+    const rootLabel = payload.root?.trim() || result.render?.title || '课堂知识结构';
     const children: MindmapNode[] = payload.branches
       .filter((b) => b.title)
       .map((b) => ({
@@ -100,8 +100,8 @@ function normalizePayload(result: AppExecutionResult | null): {
         startMs: b.startMs,
         children: Array.isArray(b.points) ? b.points.filter(Boolean).map((p) => ({ title: p })) : [],
       }));
-    const md = treeToMarkdown(root, children);
-    return { root, children, markdown: md };
+    const md = treeToMarkdown(rootLabel, children);
+    return { root: rootLabel, children, markdown: md };
   }
   const mindmapCard = result.cards.find((c) => c.type === 'mindmap');
   if (mindmapCard?.body) {

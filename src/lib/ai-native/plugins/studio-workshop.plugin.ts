@@ -13,7 +13,7 @@ import type {
   AppPluginTools,
   AppRenderMode,
 } from '../types';
-import { buildPromptAnchorContext, buildPromptTranscriptContext } from '../prompt-context';
+import { buildPromptAnchorContext, buildPromptTranscriptContext, buildTerminologyHintBlock } from '../prompt-context';
 
 type StudioMode = 'podcast' | 'video' | 'report' | 'infographic' | 'slides' | 'table' | 'general';
 
@@ -421,7 +421,7 @@ ${modeContract(mode)}
 课堂原文：
 ${transcriptContext}
 
-${anchorContext ? `学习者关注点：\n${anchorContext}` : ''}`,
+${anchorContext ? `学习者关注点：\n${anchorContext}` : ''}${buildTerminologyHintBlock(context.memory.terminologyHint)}`,
       },
     ],
     model,

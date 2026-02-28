@@ -74,9 +74,9 @@ function GeneratingProgress({ elapsed }: { elapsed: number }) {
 }
 
 export function InfographicWindow({ sessionId, result, onResultUpdate }: InfographicWindowProps) {
-  const payload = (result?.render?.payload || {}) as RenderPayload;
+  const payload = useMemo(() => (result?.render?.payload || {}) as RenderPayload, [result?.render?.payload]);
   const draftFromRaw = (result?.raw?.infographicDraft || null) as DraftPayload | null;
-  const draft = payload.draft || draftFromRaw || {};
+  const draft = useMemo(() => payload.draft || draftFromRaw || ({} as DraftPayload), [payload.draft, draftFromRaw]);
   const imageUrl = payload.image?.imageUrl || (result?.raw?.infographicImageUrl as string | undefined) || '';
   const [stylePreset, setStylePreset] = useState(draft.stylePreset || '教育学习海报，清爽明亮，信息层级明确');
   const [imageEnabled, setImageEnabled] = useState(false);
@@ -131,11 +131,8 @@ export function InfographicWindow({ sessionId, result, onResultUpdate }: Infogra
     }
   }, [imageUrl, draft.title]);
 
-  if (!result) {
-    return <AppWindowPlaceholder status="loading" appName="信息图工坊" />;
-  }
-
-  const generateImage = async () => {
+  const generateImage = useCallback(async () => {
+    if (!result) return;
     if (!draft.imagePrompt?.trim()) {
       toast.error('草案中缺少生图提示词，请重新生成草案。');
       return;
@@ -193,7 +190,11 @@ export function InfographicWindow({ sessionId, result, onResultUpdate }: Infogra
     } finally {
       setGenerating(false);
     }
-  };
+  }, [result, draft, sessionId, stylePreset, payload, imageModel, onResultUpdate]);
+
+  if (!result) {
+    return <AppWindowPlaceholder status="loading" appName="信息图工坊" />;
+  }
 
   return (
     <section className="grid gap-4 lg:grid-cols-[0.95fr_1.05fr]" data-testid="infographic-window">

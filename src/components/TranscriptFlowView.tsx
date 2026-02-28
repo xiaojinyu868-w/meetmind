@@ -127,22 +127,35 @@ function groupIntoParagraphs(
 ): Paragraph[] {
   if (segments.length === 0) return [];
 
+  // Max characters per paragraph — prevents wall-of-text for streaming mode
+  const MAX_CHARS_PER_PARAGRAPH = 200;
+  const MAX_SEGMENTS_PER_PARAGRAPH = 12;
+
   const paragraphs: Paragraph[] = [];
   let current: Paragraph = {
     startMs: segments[0].startMs,
     segments: [segments[0]],
   };
+  let currentChars = segments[0].text.length;
 
   for (let i = 1; i < segments.length; i++) {
     const seg = segments[i];
     const lastSeg = current.segments[current.segments.length - 1];
     const gap = seg.startMs - lastSeg.endMs;
 
-    if (gap > gapMs || (seg.startMs - current.startMs) > gapMs) {
+    const shouldSplit =
+      gap > gapMs ||
+      (seg.startMs - current.startMs) > gapMs ||
+      currentChars >= MAX_CHARS_PER_PARAGRAPH ||
+      current.segments.length >= MAX_SEGMENTS_PER_PARAGRAPH;
+
+    if (shouldSplit) {
       paragraphs.push(current);
       current = { startMs: seg.startMs, segments: [seg] };
+      currentChars = seg.text.length;
     } else {
       current.segments.push(seg);
+      currentChars += seg.text.length;
     }
   }
 

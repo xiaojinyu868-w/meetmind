@@ -56,7 +56,7 @@ export function ImageUpload({
     const remainingSlots = maxImages - images.length;
     
     if (remainingSlots <= 0) {
-      alert(`最多只能上传 ${maxImages} 张图片`);
+      toast.warning(`最多只能上传 ${maxImages} 张图片`);
       return;
     }
 

@@ -86,14 +86,84 @@ export function readCachedTaskState(sessionId: string, appKey: string): AppTaskS
   return state;
 }
 
+/** Max number of cached app results to keep (LRU eviction). */
+const MAX_CACHED_RESULTS = 30;
+const CACHE_INDEX_KEY = 'app_workspace_cache_index';
+
+/** Read LRU index: ordered list of cache keys (oldest first). */
+function readCacheIndex(): string[] {
+  try {
+    const raw = window.localStorage.getItem(CACHE_INDEX_KEY);
+    return raw ? (JSON.parse(raw) as string[]) : [];
+  } catch {
+    return [];
+  }
+}
+
+/** Persist LRU index. */
+function writeCacheIndex(index: string[]): void {
+  try {
+    window.localStorage.setItem(CACHE_INDEX_KEY, JSON.stringify(index));
+  } catch { /* ignore */ }
+}
+
+/** Touch a key in the LRU index (move to end = most recent). Evict oldest if over limit. */
+function touchCacheKey(key: string): void {
+  const index = readCacheIndex().filter((k) => k !== key);
+  index.push(key);
+
+  // Evict oldest entries if over limit
+  while (index.length > MAX_CACHED_RESULTS) {
+    const evicted = index.shift();
+    if (evicted) {
+      try {
+        window.localStorage.removeItem(evicted);
+        // Also remove the corresponding task state
+        const taskKey = evicted.replace(APP_RESULT_CACHE_PREFIX, APP_TASK_CACHE_PREFIX);
+        window.localStorage.removeItem(taskKey);
+      } catch { /* ignore */ }
+    }
+  }
+
+  writeCacheIndex(index);
+}
+
+/** Safe localStorage.setItem with QuotaExceeded fallback (evict oldest, retry). */
+function safeSetItem(key: string, value: string): void {
+  try {
+    window.localStorage.setItem(key, value);
+  } catch (err) {
+    if (err instanceof DOMException && (err.name === 'QuotaExceededError' || err.code === 22)) {
+      // Emergency eviction: remove the 5 oldest cached results
+      const index = readCacheIndex();
+      for (let i = 0; i < 5 && index.length > 0; i++) {
+        const evicted = index.shift();
+        if (evicted) {
+          try {
+            window.localStorage.removeItem(evicted);
+            const taskKey = evicted.replace(APP_RESULT_CACHE_PREFIX, APP_TASK_CACHE_PREFIX);
+            window.localStorage.removeItem(taskKey);
+          } catch { /* ignore */ }
+        }
+      }
+      writeCacheIndex(index);
+      try {
+        window.localStorage.setItem(key, value);
+      } catch { /* give up silently */ }
+    }
+  }
+}
+
 export function writeCachedAppResult(sessionId: string, appKey: string, result: AppExecutionResult): void {
   if (typeof window === 'undefined') return;
-  window.localStorage.setItem(buildResultCacheKey(sessionId, appKey), JSON.stringify(result));
+  const key = buildResultCacheKey(sessionId, appKey);
+  safeSetItem(key, JSON.stringify(result));
+  touchCacheKey(key);
 }
 
 export function writeCachedTaskState(sessionId: string, appKey: string, state: AppTaskState): void {
   if (typeof window === 'undefined') return;
-  window.localStorage.setItem(buildTaskCacheKey(sessionId, appKey), JSON.stringify(state));
+  safeSetItem(buildTaskCacheKey(sessionId, appKey), JSON.stringify(state));
 }
 
 function nowTaskState(status: AppTaskStatus, error?: string): AppTaskState {
@@ -108,6 +178,21 @@ function resolveExecuteTimeoutMs(appKey: string): number {
   return appKey === 'audio-overview' ? APP_EXEC_TIMEOUT_PODCAST_MS : APP_EXEC_TIMEOUT_DEFAULT_MS;
 }
 
+/**
+ * Strip transcript segments to only essential fields for the API request,
+ * reducing HTTP payload size significantly for long sessions.
+ */
+function slimTranscript(
+  segments: TranscriptSegment[]
+): Array<Pick<TranscriptSegment, 'id' | 'text' | 'startMs' | 'endMs'>> {
+  return segments.map((s) => ({
+    id: s.id,
+    text: s.text,
+    startMs: s.startMs,
+    endMs: s.endMs,
+  }));
+}
+
 interface UseAppExecutionParams {
   app: WorkshopAppCatalogItem;
   sessionId: string;
@@ -116,6 +201,7 @@ interface UseAppExecutionParams {
   anchors: Anchor[];
   summaryOverview?: string;
   keyDifficulties?: string[];
+  terminologyHint?: string;
   model?: string;
   autoRun?: boolean;
 }
@@ -139,6 +225,7 @@ export function useAppExecution(params: UseAppExecutionParams): UseAppExecutionR
     anchors,
     summaryOverview,
     keyDifficulties,
+    terminologyHint,
     model,
     autoRun = true,
   } = params;
@@ -214,12 +301,13 @@ export function useAppExecution(params: UseAppExecutionParams): UseAppExecutionR
               input: {
                 sessionId,
                 dataSource,
-                transcript,
+                transcript: slimTranscript(transcript),
                 anchors,
               },
               memory: {
                 summary: summaryOverview,
                 keyDifficulties,
+                terminologyHint: terminologyHint || undefined,
               },
             }),
           });
@@ -256,7 +344,7 @@ export function useAppExecution(params: UseAppExecutionParams): UseAppExecutionR
         return null;
       }
     },
-    [anchors, app.intent, app.key, dataSource, keyDifficulties, model, result, sessionId, summaryOverview, transcript]
+    [anchors, app.intent, app.key, dataSource, keyDifficulties, model, result, sessionId, summaryOverview, terminologyHint, transcript]
   );
 
   useEffect(() => {

@@ -1,7 +1,8 @@
 'use client';
 
-import { useState, useEffect, useCallback, useRef, Suspense, type ChangeEvent, type DragEvent } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo, Suspense, type ChangeEvent, type DragEvent } from 'react';
 import { useSearchParams } from 'next/navigation';
+import dynamic from 'next/dynamic';
 import Image from 'next/image';
 import { Header } from '@/components/Header';
 import { ServiceStatus, DegradedModeBanner } from '@/components/ServiceStatus';
@@ -39,39 +40,43 @@ import { useTopics, useSummary } from '@/hooks/data';
 // WaveformPlayer uses forwardRef and needs static import for ref support.
 import { WaveformPlayer, type WaveformPlayerRef, type WaveformAnchor } from '@/components/WaveformPlayer';
 
-// NOTE: cleaned corrupted legacy comment.
 import { AppLoading } from '@/components/AppLoading';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 
-// NOTE: cleaned corrupted legacy comment.
-import { Recorder } from '@/components/Recorder';
-import { TimelineView } from '@/components/TimelineView';
-import { ActionList } from '@/components/ActionList';
-import { ActionSidebar } from '@/components/ActionSidebar';
-import { ActionDrawer } from '@/components/ActionDrawer';
+// --- Performance: Dynamic imports for heavy components (code-split) ---
+// These components are not needed for initial render and are lazy-loaded
+// to drastically reduce the main JS bundle size.
+const Recorder = dynamic(() => import('@/components/Recorder').then(m => ({ default: m.Recorder })), { ssr: false });
+const TimelineView = dynamic(() => import('@/components/TimelineView').then(m => ({ default: m.TimelineView })), { ssr: false });
+const ActionList = dynamic(() => import('@/components/ActionList').then(m => ({ default: m.ActionList })), { ssr: false });
+const ActionSidebar = dynamic(() => import('@/components/ActionSidebar').then(m => ({ default: m.ActionSidebar })), { ssr: false });
+const ActionDrawer = dynamic(() => import('@/components/ActionDrawer').then(m => ({ default: m.ActionDrawer })), { ssr: false });
 import { ResizablePanel } from '@/components/layout/ResizablePanel';
-import { VideoLinkImporter } from '@/components/VideoLinkImporter';
-import { VideoReviewPlayer } from '@/components/VideoReviewPlayer';
-import { AITutor } from '@/components/AITutor';
-import { TranscriptFlowView } from '@/components/TranscriptFlowView';
-import { VideoInsightTimeline, type VideoInsightItem } from '@/components/VideoInsightTimeline';
+const VideoLinkImporter = dynamic(() => import('@/components/VideoLinkImporter').then(m => ({ default: m.VideoLinkImporter })), { ssr: false });
+const VideoReviewPlayer = dynamic(() => import('@/components/VideoReviewPlayer').then(m => ({ default: m.VideoReviewPlayer })), { ssr: false });
+const AITutor = dynamic(() => import('@/components/AITutor').then(m => ({ default: m.AITutor })), { ssr: false });
+const TranscriptFlowView = dynamic(() => import('@/components/TranscriptFlowView').then(m => ({ default: m.TranscriptFlowView })), { ssr: false });
+const VideoInsightTimeline = dynamic(() => import('@/components/VideoInsightTimeline').then(m => ({ default: m.VideoInsightTimeline })), { ssr: false });
 
+import type { VideoInsightItem } from '@/components/VideoInsightTimeline';
 import type { ConfusionMarker } from '@/components/mobile/PodcastPlayer';
 import type { ConversationHistory } from '@/types/conversation';
 import type { AudioSession } from '@/lib/db';
 
-// Onboarding components.
+// Onboarding & workspace components - dynamic loaded
 import { useOnboarding } from '@/hooks/useOnboarding';
-import { OnboardingGuide, WelcomeModal } from '@/components/OnboardingGuide';
-import { HighlightsPanel } from '@/components/HighlightsPanel';
-import { SummaryPanel } from '@/components/SummaryPanel';
-import { NotesPanel } from '@/components/NotesPanel';
-import { AnchorDetailPanel } from '@/components/AnchorDetailPanel';
-import { WorkshopYellowPage } from '@/components/apps/WorkshopYellowPage';
-import { WorkshopWindowManager, type FloatingWorkshopWindowState, getDefaultDisplayMode } from '@/components/apps/windows/WorkshopWindowManager';
-import { ConversationList } from '@/components/ConversationHistory/ConversationList';
-import { AIChat } from '@/components/AIChat';
-import { SessionHistoryList } from '@/components/SessionHistoryList';
+const OnboardingGuide = dynamic(() => import('@/components/OnboardingGuide').then(m => ({ default: m.OnboardingGuide })), { ssr: false });
+const WelcomeModal = dynamic(() => import('@/components/OnboardingGuide').then(m => ({ default: m.WelcomeModal })), { ssr: false });
+const HighlightsPanel = dynamic(() => import('@/components/HighlightsPanel').then(m => ({ default: m.HighlightsPanel })), { ssr: false });
+const SummaryPanel = dynamic(() => import('@/components/SummaryPanel').then(m => ({ default: m.SummaryPanel })), { ssr: false });
+const NotesPanel = dynamic(() => import('@/components/NotesPanel').then(m => ({ default: m.NotesPanel })), { ssr: false });
+const AnchorDetailPanel = dynamic(() => import('@/components/AnchorDetailPanel').then(m => ({ default: m.AnchorDetailPanel })), { ssr: false });
+const WorkshopYellowPage = dynamic(() => import('@/components/apps/WorkshopYellowPage').then(m => ({ default: m.WorkshopYellowPage })), { ssr: false });
+import { type FloatingWorkshopWindowState, getDefaultDisplayMode } from '@/components/apps/windows/WorkshopWindowManager';
+const WorkshopWindowManager = dynamic(() => import('@/components/apps/windows/WorkshopWindowManager').then(m => ({ default: m.WorkshopWindowManager })), { ssr: false });
+const ConversationList = dynamic(() => import('@/components/ConversationHistory/ConversationList').then(m => ({ default: m.ConversationList })), { ssr: false });
+const AIChat = dynamic(() => import('@/components/AIChat').then(m => ({ default: m.AIChat })), { ssr: false });
+const SessionHistoryList = dynamic(() => import('@/components/SessionHistoryList').then(m => ({ default: m.SessionHistoryList })), { ssr: false });
 import { isWorkshopAppKey, type WorkshopAppKey } from '@/lib/ai-native/app-catalog';
 
 // Lazy-load demo data.
@@ -87,13 +92,15 @@ const loadDemoData = async () => {
   return DEMO_DATA_CACHE;
 };
 
-// NOTE: cleaned corrupted legacy comment.
-import { MiniPlayer } from '@/components/mobile/MiniPlayer';
-import { MobileTabSwitch } from '@/components/mobile/MobileTabSwitch';
-import { DedaoTimeline, toDedaoEntries } from '@/components/mobile/DedaoTimeline';
-import { DedaoConfusionCard } from '@/components/mobile/DedaoConfusionCard';
-import { DedaoMenu, DedaoMenuButton } from '@/components/mobile/DedaoMenu';
-import { MobileAIFab } from '@/components/mobile/MobileAIFab';
+// Mobile components - dynamic loaded (only needed on mobile)
+const MiniPlayer = dynamic(() => import('@/components/mobile/MiniPlayer').then(m => ({ default: m.MiniPlayer })), { ssr: false });
+const MobileTabSwitch = dynamic(() => import('@/components/mobile/MobileTabSwitch').then(m => ({ default: m.MobileTabSwitch })), { ssr: false });
+const DedaoTimeline = dynamic(() => import('@/components/mobile/DedaoTimeline').then(m => ({ default: m.DedaoTimeline })), { ssr: false });
+import { toDedaoEntries } from '@/components/mobile/DedaoTimeline';
+const DedaoConfusionCard = dynamic(() => import('@/components/mobile/DedaoConfusionCard').then(m => ({ default: m.DedaoConfusionCard })), { ssr: false });
+const DedaoMenu = dynamic(() => import('@/components/mobile/DedaoMenu').then(m => ({ default: m.DedaoMenu })), { ssr: false });
+const DedaoMenuButton = dynamic(() => import('@/components/mobile/DedaoMenu').then(m => ({ default: m.DedaoMenuButton })), { ssr: false });
+const MobileAIFab = dynamic(() => import('@/components/mobile/MobileAIFab').then(m => ({ default: m.MobileAIFab })), { ssr: false });
 
 type ViewMode = 'record' | 'review';
 type DataSource = 'live' | 'demo' | 'video';
@@ -392,12 +399,11 @@ function StudentAppContent({
   isGuestFastEntry: boolean;
   forcedWorkspaceTab: SharedWorkspaceTab | null;
 }) {
-  // NOTE: cleaned corrupted legacy comment.
+  // Performance: Guest mode skips splash entirely for instant entry.
   const [showSplash, setShowSplash] = useState(!isGuestFastEntry);
-  const [appReady, setAppReady] = useState(false);
-  const [loadingProgress, setLoadingProgress] = useState(isGuestFastEntry ? 50 : 0); // NOTE: cleaned corrupted legacy comment.
+  const [appReady, setAppReady] = useState(isGuestFastEntry);
+  const [loadingProgress, setLoadingProgress] = useState(isGuestFastEntry ? 100 : 0);
   
-  // 鑾峰彇褰撳墠鐧诲綍鐢ㄦ埛
   const { user, isAuthenticated } = useAuth();
   
   // NOTE: cleaned corrupted legacy comment.
@@ -490,6 +496,67 @@ function StudentAppContent({
   
   const liveSegmentsRef = useRef<TranscriptSegment[]>([]);
   const segmentsRef = useRef<TranscriptSegment[]>([]);
+
+  // Auto-extract terms from user-provided context (course topic + reference materials)
+  const [extractedTermsHint, setExtractedTermsHint] = useState('');
+  const extractTermsTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    // Debounce: wait 2s after last change before calling the API
+    if (extractTermsTimerRef.current) {
+      clearTimeout(extractTermsTimerRef.current);
+    }
+
+    const topic = asrContextHint.trim();
+    const refs = supportReferences.map((item) => item.snippet).filter(Boolean);
+
+    // Only call if there's something to extract from
+    if (!topic && refs.length === 0) {
+      setExtractedTermsHint('');
+      return;
+    }
+
+    extractTermsTimerRef.current = setTimeout(async () => {
+      try {
+        const response = await fetch('/api/extract-terms', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            topic,
+            referenceTexts: refs.slice(0, 3),
+          }),
+        });
+        if (response.ok) {
+          const data = await response.json();
+          if (data.success && data.contextHint) {
+            setExtractedTermsHint(data.contextHint);
+            console.log('[App] Auto-extracted terms hint, length:', data.contextHint.length, 'terms:', data.terms?.length);
+          }
+        }
+      } catch (err) {
+        console.warn('[App] Failed to extract terms:', err);
+      }
+    }, 2000);
+
+    return () => {
+      if (extractTermsTimerRef.current) {
+        clearTimeout(extractTermsTimerRef.current);
+      }
+    };
+  }, [asrContextHint, supportReferences]);
+
+  // Build live context hint for real-time ASR (hot-word injection)
+  // Combines: user manual hint + reference snippets + auto-extracted terms
+  const liveASRContextHint = useMemo(() => {
+    const baseHint = buildASRContextHint({
+      manualHint: asrContextHint,
+      recentSegments: [],
+      importedReferences: supportReferences.map((item) => item.snippet),
+      maxChars: 2000,
+    });
+    if (!extractedTermsHint) return baseHint;
+    return [baseHint, extractedTermsHint].filter(Boolean).join('\n\n').slice(0, 3000);
+  }, [asrContextHint, supportReferences, extractedTermsHint]);
   const anchorsRef = useRef<Anchor[]>([]);
   const sessionIdRef = useRef<string>(sessionId);
   const sourceFileInputRef = useRef<HTMLInputElement>(null);
@@ -1008,11 +1075,24 @@ function StudentAppContent({
 
   // NOTE: cleaned corrupted legacy comment.
   // Optimize init path via parallel loading and batched reads.
+  // Performance: Guest fast-entry skips splash and marks app ready immediately;
+  // background init runs without blocking UI.
   useEffect(() => {
     if (hasRestoredState.current) return;
 
+    // Guest fast-entry: mark ready immediately, run init in background
+    if (isGuestFastEntry) {
+      hasRestoredState.current = true;
+      // Background init: non-blocking service checks & data loads
+      requestAnimationFrame(() => {
+        checkServices().then(setServiceStatus).catch(() => {});
+      });
+      return;
+    }
+
     const initializeApp = async () => {
-      const baseProgress = isGuestFastEntry ? 30 : 10;
+     try {
+      const baseProgress = 10;
       setLoadingProgress(baseProgress);
 
       const [, rawSavedAppState, savedOnboardingState] = await Promise.all([
@@ -1021,9 +1101,9 @@ function StudentAppContent({
         getPreference<{ completedFlows?: string[]; skippedFlows?: string[] } | null>('onboarding_state', null).catch(() => null),
       ]);
 
-      setLoadingProgress(isGuestFastEntry ? 60 : 40);
+      setLoadingProgress(40);
 
-      const isFirstVisit = isGuestFastEntry || !savedOnboardingState ||
+      const isFirstVisit = !savedOnboardingState ||
         (!savedOnboardingState.completedFlows?.includes('welcome') &&
          !savedOnboardingState.skippedFlows?.includes('welcome'));
 
@@ -1036,7 +1116,7 @@ function StudentAppContent({
         ? 'record'
         : (savedAppState?.viewMode || 'record');
 
-      setLoadingProgress(isGuestFastEntry ? 75 : 50);
+      setLoadingProgress(50);
 
       if (savedAppState?.sessionId) {
         setSessionId(savedAppState.sessionId);
@@ -1195,9 +1275,17 @@ function StudentAppContent({
       setAppReady(true);
       hasRestoredState.current = true;
 
-      if (isFirstVisit && !savedAppState && !isGuestFastEntry) {
+      if (isFirstVisit && !savedAppState) {
         setTimeout(() => setShowWelcome(true), 800);
       }
+     } catch (err) {
+      console.error('[initializeApp] Fatal error during init:', err);
+      // 即使初始化出错也让用户进入应用，避免永久卡在加载页
+      setLoadingProgress(100);
+      setAppReady(true);
+      hasRestoredState.current = true;
+      toast.error('应用初始化遇到问题，部分数据可能未加载');
+     }
     };
 
     initializeApp();
@@ -1702,7 +1790,7 @@ const _handleVideoAssistantMessage = useCallback((payload: {
       console.log('[生成精选片段] 完成');
     } catch (error) {
       console.error('生成精选片段失败', error);
-      alert(`生成失败: ${error instanceof Error ? error.message : '网络错误'}`);
+      toast.error(`生成失败: ${error instanceof Error ? error.message : '网络错误'}`);
     }
   }, [segments.length, generateTopics]);
 
@@ -2922,7 +3010,7 @@ const _handleVideoAssistantMessage = useCallback((payload: {
         </div>
       )}
 
-      {/* 涓诲唴瀹瑰尯 */}
+      {/* 主内容区 */}
       {viewMode === 'record' ? (
         <>
           {/* NOTE: cleaned corrupted legacy comment. */}
@@ -2990,6 +3078,7 @@ const _handleVideoAssistantMessage = useCallback((payload: {
                       onTranscriptTextUpdate={handleTranscriptTextUpdate}
                       onTranscriptEnhanced={handleTranscriptEnhanced}
                       onAnchorMark={handleAnchorMark}
+                      contextHint={liveASRContextHint}
                     />
                   </div>
 
@@ -3086,6 +3175,7 @@ const _handleVideoAssistantMessage = useCallback((payload: {
                 onTranscriptTextUpdate={handleTranscriptTextUpdate}
                 onTranscriptEnhanced={handleTranscriptEnhanced}
                 onAnchorMark={handleAnchorMark}
+                contextHint={liveASRContextHint}
               />
             </div>
             {renderInputSecondaryPanels('desktop')}
@@ -4215,6 +4305,7 @@ const _handleVideoAssistantMessage = useCallback((payload: {
         anchors={anchors}
         summaryOverview={classSummary?.overview}
         keyDifficulties={classSummary?.keyDifficulties}
+        terminologyHint={extractedTermsHint || undefined}
         onSeek={(timeMs) => {
           handleUnifiedSeek(timeMs, true);
         }}

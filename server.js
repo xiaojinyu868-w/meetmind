@@ -94,17 +94,17 @@ function splitLongTranscript(text, beginTime, endTime) {
   const normalized = String(text || '').trim();
   if (!normalized) return [];
 
-  if (normalized.length <= 48) {
+  if (normalized.length <= 80) {
     return [{ text: normalized, beginTime, endTime }];
   }
 
   const chunks = [];
   let current = '';
-  const punctuation = /[。！？!?；;，,]/;
+  const punctuation = /[。！？!?；;]/;
 
   for (const ch of normalized) {
     current += ch;
-    if (punctuation.test(ch) || current.length >= 36) {
+    if ((punctuation.test(ch) && current.length >= 20) || current.length >= 60) {
       if (current.trim()) chunks.push(current.trim());
       current = '';
     }
@@ -323,10 +323,10 @@ app.prepare().then(() => {
     const model = process.env.DASHSCOPE_ASR_WS_MODEL || 'qwen3-asr-flash-realtime';
     const sampleRate = parseInt(process.env.DASHSCOPE_ASR_WS_SR || '16000', 10);
     const turnSilenceMs = clampNumber(
-      parseInt(process.env.DASHSCOPE_ASR_WS_VAD_SILENCE_MS || '500', 10),
+      parseInt(process.env.DASHSCOPE_ASR_WS_VAD_SILENCE_MS || '800', 10),
       200,
-      2000,
-      500
+      3000,
+      800
     );
     const draftFlushMs = clampNumber(
       parseInt(process.env.ASR_DRAFT_FLUSH_MS || '800', 10),
@@ -373,6 +373,11 @@ app.prepare().then(() => {
     let receivedBinaryBytes = 0;
     let appendedChunks = 0;
 
+    let contextHint = '';
+    let recentFinalTexts = [];
+    const CONTEXT_UPDATE_INTERVAL = 5; // update DashScope context every N final segments
+    let finalSegmentCountSinceUpdate = 0;
+
     const vadTimestampQueue = [];
     const interimByItemId = new Map();
     let activeInterimItemId = null;
@@ -381,6 +386,48 @@ app.prepare().then(() => {
     function sendClientEvent(payload) {
       if (clientWs.readyState !== WebSocket.OPEN) return;
       clientWs.send(JSON.stringify(payload));
+    }
+
+    function buildASRPrompt() {
+      const parts = [];
+      if (contextHint) {
+        parts.push(contextHint);
+      }
+      if (recentFinalTexts.length > 0) {
+        const recentContext = recentFinalTexts.slice(-15).join('');
+        parts.push(`已识别文本：${recentContext}`);
+      }
+      return parts.join('\n\n').slice(0, 3000) || '';
+    }
+
+    function sendSessionUpdate(extraLog) {
+      if (!dashscopeWs || dashscopeWs.readyState !== WebSocket.OPEN) return;
+
+      const prompt = buildASRPrompt();
+      const sessionConfig = {
+        input_audio_format: 'pcm',
+        sample_rate: sampleRate,
+        input_audio_transcription: {
+          language: 'zh',
+          semantic_punctuation_enabled: true,
+          ...(prompt ? { prompt } : {}),
+        },
+        turn_detection: {
+          type: 'server_vad',
+          threshold: 0.2,
+          silence_duration_ms: turnSilenceMs,
+        },
+      };
+
+      dashscopeWs.send(JSON.stringify({
+        event_id: generateEventId(),
+        type: 'session.update',
+        session: sessionConfig,
+      }));
+
+      if (extraLog) {
+        console.log(`[ASR-Proxy] Session updated (${extraLog}), prompt length: ${prompt.length}`);
+      }
     }
 
     function scheduleDashscopeClose(reason, delayMs = 200) {
@@ -561,6 +608,19 @@ app.prepare().then(() => {
       });
 
       lastFinalSegment = nextFinal;
+
+      // Track recent final texts for dynamic context updates
+      recentFinalTexts.push(segment.text);
+      if (recentFinalTexts.length > 30) {
+        recentFinalTexts = recentFinalTexts.slice(-20);
+      }
+
+      // Periodically re-inject context into DashScope session
+      finalSegmentCountSinceUpdate++;
+      if (finalSegmentCountSinceUpdate >= CONTEXT_UPDATE_INTERVAL) {
+        finalSegmentCountSinceUpdate = 0;
+        sendSessionUpdate('dynamic context refresh');
+      }
     }
 
     try {
@@ -572,23 +632,7 @@ app.prepare().then(() => {
       });
 
       dashscopeWs.on('open', () => {
-        dashscopeWs.send(JSON.stringify({
-          event_id: generateEventId(),
-          type: 'session.update',
-          session: {
-            input_audio_format: 'pcm',
-            sample_rate: sampleRate,
-            input_audio_transcription: {
-              language: 'zh',
-              semantic_punctuation_enabled: true,
-            },
-            turn_detection: {
-              type: 'server_vad',
-              threshold: 0.2,
-              silence_duration_ms: turnSilenceMs,
-            },
-          },
-        }));
+        sendSessionUpdate('initial');
       });
 
       dashscopeWs.on('message', (data, isBinary) => {
@@ -775,6 +819,31 @@ app.prepare().then(() => {
             startMs: msg.startMs,
             endMs: msg.endMs,
           });
+          return;
+        }
+
+        if (msg.type === 'context-hint') {
+          const hint = typeof msg.contextHint === 'string' ? msg.contextHint.trim() : '';
+          if (hint) {
+            contextHint = hint.slice(0, 3000);
+            console.log('[ASR-Proxy] Received context hint, length:', contextHint.length);
+            // Re-send session update with context if session is ready
+            if (isSessionReady) {
+              sendSessionUpdate('context-hint received');
+            }
+          }
+          return;
+        }
+
+        if (msg.type === 'context-update') {
+          const text = typeof msg.recentText === 'string' ? msg.recentText.trim() : '';
+          if (text) {
+            // Merge client-provided recent text with our tracked texts
+            recentFinalTexts.push(text);
+            if (recentFinalTexts.length > 30) {
+              recentFinalTexts = recentFinalTexts.slice(-20);
+            }
+          }
           return;
         }
 

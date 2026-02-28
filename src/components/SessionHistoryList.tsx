@@ -370,7 +370,7 @@ export function SessionHistoryList({
       setDeleteTarget(null);
     } catch (err) {
       console.error('删除会话失败:', err);
-      alert('删除失败，请重试');
+      toast.error('删除失败，请重试');
     }
   }, [deleteTarget]);
 

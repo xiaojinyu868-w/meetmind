@@ -32,6 +32,10 @@ interface EnhanceRequestBody {
   isFinal?: boolean;
   lexiconTerms?: LexiconTerm[];
   enableModelCorrection?: boolean;
+  /** Course topic / hot-word context for better LLM correction */
+  contextHint?: string;
+  /** Recent confirmed transcript text — LLM uses this to infer course topic & terminology */
+  recentContext?: string;
 }
 
 const DEFAULT_MODEL = process.env.TRANSCRIPT_LIGHT_MODEL || 'qwen-turbo';
@@ -39,9 +43,55 @@ const DEFAULT_FALLBACK_MODEL = process.env.TRANSCRIPT_FALLBACK_MODEL || 'qwen-pl
 const ENABLE_MAX_FALLBACK = String(process.env.TRANSCRIPT_ENABLE_MAX_FALLBACK || 'false').toLowerCase() === 'true';
 const modelAvailability = new Map<string, 'available' | 'unavailable'>();
 
-const SYSTEM_PROMPT = `你是课堂转录纠错助手。\n只在必要时最小修改，保留原意。\n你必须只输出 JSON 数组，不要输出额外解释。`;
+const SYSTEM_PROMPT = `你是课堂转录纠错助手，专门修正 ASR 语音识别的错误。
+只在必要时最小修改，保留原意。
+你必须只输出 JSON 数组，不要输出额外解释。`;
 
-const USER_PROMPT_PREFIX = `任务：修正以下 ASR 文本。\n规则：\n1. 删除口头禅和明显重复。\n2. 修正常见同音或拼写错误。\n3. 保持术语、专有名词和语气。\n4. 只返回 JSON 数组，每项包含 id 和 text。\n输入：\n`;
+const USER_PROMPT_PREFIX = `任务：修正以下 ASR 语音识别文本。
+规则：
+1. 删除口头禅（嗯、呃）和明显重复。
+2. 修正常见同音或拼写错误。
+3.【重要】根据"上下文参考"推断课程学科和主题，将被 ASR 错误音译为中文的英文术语还原为正确写法。
+4.【关键】ASR 经常把一个术语错误识别为另一个**看起来合法但与当前课程语境不符**的术语。你必须根据上下文判断并纠正。识别方法：
+  - 关键判断标准：**这个词在当前上下文中讲不讲得通？** 即使一个术语本身是合法的、只出现了一次，如果它和当前讨论的学科/话题完全无关，它很可能是 ASR 对某个发音相近的本课术语的误识别。
+  - 判断时结合发音：如果某个语境不符的词发音接近某个本课核心术语，大概率就是对它的误识别。
+  - ASR 常见错误模式：英文术语被音译为无意义的中文谐音、被识别为另一个发音相似的合法术语、英文字母被逐个拆开识别、术语部分正确部分错误。
+5.【重要】只修改你有把握的。不确定时保持原样，不要猜测。
+6. 保持术语、专有名词和语气。
+7. 只返回 JSON 数组，每项包含 id 和 text。`;
+
+function buildEnhanceSystemPrompt(contextHint?: string, lexiconTerms?: LexiconTerm[], recentContext?: string): string {
+  const parts = [SYSTEM_PROMPT];
+
+  if (recentContext?.trim()) {
+    parts.push(`\n上下文参考（前几批已纠错的转录文本，帮助你理解课程内容和学科领域）：\n${recentContext.trim().slice(0, 2500)}`);
+  }
+
+  if (contextHint?.trim()) {
+    parts.push(`\n用户提供的课堂背景与术语提示：\n${contextHint.trim().slice(0, 2000)}`);
+  }
+
+  if (lexiconTerms && lexiconTerms.length > 0) {
+    const activeTerms = lexiconTerms
+      .filter((t) => t.status !== 'disabled' && t.canonical)
+      .slice(0, 50);
+    if (activeTerms.length > 0) {
+      const termList = activeTerms
+        .map((t) => {
+          const aliases = t.aliases?.length ? `（常见误识别：${t.aliases.join('、')}）` : '';
+          return `- ${t.canonical}${aliases}`;
+        })
+        .join('\n');
+      parts.push(`\n已知术语/人名词典（请优先使用这些正确写法）：\n${termList}`);
+    }
+  }
+
+  return parts.join('');
+}
+
+function buildEnhanceUserPrompt(inputJSON: string): string {
+  return `${USER_PROMPT_PREFIX}\n输入：\n${inputJSON}`;
+}
 
 function markModelAvailability(model: string, next: 'available' | 'unavailable'): void {
   const prev = modelAvailability.get(model);
@@ -94,6 +144,19 @@ function applyRuleLayer(text: string): { text: string; changed: boolean } {
     .replace(/\bqustions\b/gi, 'questions')
     .replace(/\bsugguest\b/gi, 'suggest')
     .replace(/\btakeawayy?\b/gi, 'takeaway');
+
+  // Universal ASR phonetic corrections (cross-discipline, not domain-specific).
+  // Greek letters commonly mistranslated by Chinese ASR.
+  next = next
+    .replace(/西塔\s*k/gi, 'θ_k')
+    .replace(/西塔/g, 'θ')
+    .replace(/c\s*塔/gi, 'θ')
+    .replace(/阿尔法/g, 'α')
+    .replace(/贝塔/g, 'β')
+    .replace(/伽[马玛]/g, 'γ')
+    .replace(/德尔塔/g, 'δ')
+    .replace(/拉姆达/g, 'λ')
+    .replace(/西格玛/g, 'σ');
 
   return {
     text: next,
@@ -148,13 +211,16 @@ function applyLexiconLayer(text: string, lexiconTerms: LexiconTerm[]): { text: s
 
 function shouldUseModelCorrection(segment: TranscriptSegment, text: string, hasLexiconConflict: boolean): boolean {
   if (hasLexiconConflict) return true;
-  if ((segment.confidence ?? 1) < 0.85) return true;
+  if ((segment.confidence ?? 1) < 0.92) return true;
 
   const normalized = normalizeText(text);
   if (!normalized) return false;
 
+  // Always send to LLM if text is non-trivial length — most ASR output benefits from correction
+  if (normalized.length >= 15) return true;
+
   const hasPunctuation = /[，。！？,.!?;；]/.test(normalized);
-  if (!hasPunctuation && normalized.length >= 30) return true;
+  if (!hasPunctuation && normalized.length >= 10) return true;
   if (/(.{2,})\1{1,}/.test(normalized)) return true;
   if (/\b(qustions|sugguest|takeawayy?)\b/i.test(normalized)) return true;
 
@@ -197,6 +263,9 @@ function parseEnhanceOutput(output: string): Map<string, string> {
 async function runModelCorrection(
   segments: TranscriptSegment[],
   model: string,
+  contextHint?: string,
+  lexiconTerms?: LexiconTerm[],
+  recentContext?: string,
 ): Promise<{ texts: Map<string, string>; model: string; usage?: unknown }> {
   if (modelAvailability.get(model) === 'unavailable') {
     throw new Error(`Model ${model} marked unavailable in runtime cache`);
@@ -207,10 +276,13 @@ async function runModelCorrection(
     text: seg.text,
   }));
 
+  const systemPrompt = buildEnhanceSystemPrompt(contextHint, lexiconTerms, recentContext);
+  const userPrompt = buildEnhanceUserPrompt(JSON.stringify(inputItems));
+
   const response = await chat(
       [
-        { role: 'system', content: SYSTEM_PROMPT },
-        { role: 'user', content: USER_PROMPT_PREFIX + JSON.stringify(inputItems) },
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: userPrompt },
       ],
       model,
       {
@@ -247,6 +319,8 @@ export async function POST(request: NextRequest) {
       strategy = (process.env.TRANSCRIPT_CORRECTION_MODE as CorrectionStrategy) || 'layered',
       lexiconTerms = [],
       enableModelCorrection = true,
+      contextHint = '',
+      recentContext = '',
     } = body;
 
     if (!segments || !Array.isArray(segments) || segments.length === 0) {
@@ -295,7 +369,7 @@ export async function POST(request: NextRequest) {
       let modelTexts = new Map<string, string>();
 
       try {
-        const primary = await runModelCorrection(modelInput, model);
+        const primary = await runModelCorrection(modelInput, model, contextHint, lexiconTerms, recentContext);
         modelTexts = primary.texts;
         modelUsed = primary.model;
         modelUsage = primary.usage;
@@ -303,7 +377,7 @@ export async function POST(request: NextRequest) {
         console.warn('[TranscriptEnhance API] Primary model failed:', primaryError);
 
         try {
-          const fallback = await runModelCorrection(modelInput, fallbackModel);
+          const fallback = await runModelCorrection(modelInput, fallbackModel, contextHint, lexiconTerms, recentContext);
           modelTexts = fallback.texts;
           modelUsed = fallback.model;
           modelFallbackUsed = fallbackModel;
@@ -313,7 +387,7 @@ export async function POST(request: NextRequest) {
 
           if (ENABLE_MAX_FALLBACK && fallbackModel !== 'qwen3-max-2026-01-23') {
             try {
-              const maxFallback = await runModelCorrection(modelInput, 'qwen3-max-2026-01-23');
+              const maxFallback = await runModelCorrection(modelInput, 'qwen3-max-2026-01-23', contextHint, lexiconTerms, recentContext);
               modelTexts = maxFallback.texts;
               modelUsed = maxFallback.model;
               modelFallbackUsed = 'qwen3-max-2026-01-23';

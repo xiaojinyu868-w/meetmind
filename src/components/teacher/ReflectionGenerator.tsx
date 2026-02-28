@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useRef } from 'react';
+import { toast } from 'sonner';
 import { useSimpleSSEStream } from '@/lib/hooks/useSSEStream';
 
 interface ReflectionGeneratorProps {
@@ -121,9 +122,10 @@ ${hotspotsText}
     if (streamedText) {
       try {
         await navigator.clipboard.writeText(streamedText);
-        // 可以添加一个 toast 提示
+        toast.success('已复制到剪贴板');
       } catch (err) {
         console.error('复制失败:', err);
+        toast.error('复制失败，请手动复制');
       }
     }
   };

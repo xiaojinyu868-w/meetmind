@@ -4,6 +4,7 @@
 // 支持流式输出、思维引导、思考过程可视化、对话历史持久化、模型选择、图片上传
 
 import { useState, useRef, useEffect, useCallback } from 'react';
+import { toast } from 'sonner';
 import { formatTimestampMs } from '@/lib/longcut';
 import { useAuth } from '@/lib/hooks/useAuth';
 import { conversationService, getEffectiveUserId } from '@/lib/services/conversation-service';
@@ -192,6 +193,7 @@ export function AIChat({
           }
         } catch (err) {
           console.error('Failed to load conversation:', err);
+          toast.error('加载对话历史失败');
         } finally {
           setIsInitializing(false);
         }
@@ -237,6 +239,7 @@ export function AIChat({
       return conv;
     } catch (err) {
       console.error('Failed to create conversation:', err);
+      toast.error('创建对话失败');
       return null;
     }
   }, [userId, sessionId, anchorId, anchorTimestamp, onConversationChange, persistKey]);

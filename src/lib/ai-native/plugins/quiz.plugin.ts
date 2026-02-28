@@ -2,7 +2,7 @@ import type { TranscriptSegment } from '@/types';
 import { parseJsonResponse } from '@/lib/utils/json-utils';
 import { chat, DEFAULT_MODEL_ID } from '@/lib/services/llm-service';
 import type { AppExecutionContext, AppExecutionResult, AppPlugin, AppPluginTools } from '../types';
-import { buildPromptAnchorContext, buildPromptTranscriptContext } from '../prompt-context';
+import { buildPromptAnchorContext, buildPromptTranscriptContext, buildTerminologyHintBlock } from '../prompt-context';
 
 const KEYWORDS = ['测验', '自测', 'quiz', '测试', '练习题', '题目'];
 const TARGET_QUESTION_COUNT = 8;
@@ -126,7 +126,7 @@ ${transcriptContext}
 - explanation：解析
 - 其他你认为有价值的字段可以自行添加（如 startMs/endMs 对应课堂时间戳）
 
-题型、题量、难度分布由你根据课堂内容的复杂度和知识点分布自行判断。`,
+题型、题量、难度分布由你根据课堂内容的复杂度和知识点分布自行判断。${buildTerminologyHintBlock(context.memory.terminologyHint)}`,
       },
     ],
     model,

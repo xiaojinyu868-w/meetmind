@@ -1,7 +1,7 @@
 import type { TranscriptSegment } from '@/types';
 import { chat, DEFAULT_MODEL_ID } from '@/lib/services/llm-service';
 import type { AppExecutionContext, AppExecutionResult, AppPlugin, AppPluginTools } from '../types';
-import { buildPromptAnchorContext, buildPromptTranscriptContext } from '../prompt-context';
+import { buildPromptAnchorContext, buildPromptTranscriptContext, buildTerminologyHintBlock } from '../prompt-context';
 
 const KEYWORDS = ['导图', '思维导图', '结构', '知识图谱', 'mindmap'];
 
@@ -135,6 +135,7 @@ function normalizeDraftNodes(drafts: MindmapNodeDraft[] | undefined): MindmapNod
 }
 
 /** 从旧版扁平 branches 格式兼容转换为树形结构 */
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 function _legacyBranchesToTree(
   branches: Array<{ title?: string; points?: string[]; startMs?: number }>
 ): MindmapNode[] {
@@ -206,7 +207,7 @@ async function generateMindMap(
 课堂原文：
 ${transcriptContext}
 
-${anchorContext ? `学习者关注点：\n${anchorContext}` : ''}`,
+${anchorContext ? `学习者关注点：\n${anchorContext}` : ''}${buildTerminologyHintBlock(context.memory.terminologyHint)}`,
       },
     ],
     model,

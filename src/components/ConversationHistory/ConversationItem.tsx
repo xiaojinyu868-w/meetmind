@@ -4,6 +4,7 @@
  * 对话历史列表项组件
  */
 
+import { useState } from 'react';
 import { formatDistanceToNow } from 'date-fns';
 import { zhCN } from 'date-fns/locale';
 import type { ConversationHistory } from '@/types/conversation';
@@ -21,11 +22,22 @@ export function ConversationItem({
   onSelect,
   onDelete,
 }: ConversationItemProps) {
-  const handleDelete = (e: React.MouseEvent) => {
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+
+  const handleDeleteClick = (e: React.MouseEvent) => {
     e.stopPropagation();
-    if (onDelete && window.confirm('确定要删除这个对话吗？')) {
-      onDelete(conversation.conversationId);
-    }
+    setShowDeleteConfirm(true);
+  };
+
+  const handleDeleteConfirm = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setShowDeleteConfirm(false);
+    onDelete?.(conversation.conversationId);
+  };
+
+  const handleDeleteCancel = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setShowDeleteConfirm(false);
   };
 
   const timeAgo = formatDistanceToNow(new Date(conversation.updatedAt), {
@@ -80,10 +92,10 @@ export function ConversationItem({
           </div>
         </div>
         
-        {/* 删除按钮 */}
-        {onDelete && (
+        {/* 删除按钮 / 确认 */}
+        {onDelete && !showDeleteConfirm && (
           <button
-            onClick={handleDelete}
+            onClick={handleDeleteClick}
             className={`
               p-1.5 rounded-md transition-all duration-200
               opacity-0 group-hover:opacity-100
@@ -95,6 +107,22 @@ export function ConversationItem({
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
             </svg>
           </button>
+        )}
+        {showDeleteConfirm && (
+          <div className="flex items-center gap-1 animate-in fade-in duration-150" onClick={e => e.stopPropagation()}>
+            <button
+              onClick={handleDeleteConfirm}
+              className="px-2 py-1 text-xs font-medium text-white bg-red-500 rounded-md hover:bg-red-600 transition-colors"
+            >
+              删除
+            </button>
+            <button
+              onClick={handleDeleteCancel}
+              className="px-2 py-1 text-xs font-medium text-gray-500 bg-gray-100 rounded-md hover:bg-gray-200 transition-colors"
+            >
+              取消
+            </button>
+          </div>
         )}
       </div>
     </div>

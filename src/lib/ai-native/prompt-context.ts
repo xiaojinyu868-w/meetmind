@@ -107,3 +107,12 @@ export function buildPromptAnchorContext(anchors: Anchor[], maxItems: number = 1
   return list.join('\n');
 }
 
+/**
+ * Build a compact terminology hint block for injection into AI prompts.
+ * Returns empty string if no hint is available.
+ */
+export function buildTerminologyHintBlock(terminologyHint: string | undefined): string {
+  if (!terminologyHint?.trim()) return '';
+  return `\n关键术语表（请在输出中使用正规写法，避免 ASR 误识别变体）：\n${terminologyHint.trim()}`;
+}
+

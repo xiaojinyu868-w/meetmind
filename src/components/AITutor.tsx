@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import { toast } from 'sonner';
 import type { Breakpoint } from '@/lib/services/meetmind-service';
 import { formatTimestamp } from '@/lib/services/longcut-utils';
 import { notebookService, localSearch, type SearchResult } from '@/lib/services/notebook-service';
@@ -280,6 +281,7 @@ export function AITutor({
   );
   
   const chatEndRef = useRef<HTMLDivElement>(null);
+  const explainAbortRef = useRef<AbortController | null>(null);
   
   // 监听粘贴事件
   useImagePaste(
@@ -706,6 +708,7 @@ export function AITutor({
       setSearchResults(results);
     } catch (err) {
       console.error('Search failed:', err);
+      toast.error('搜索失败，请重试');
     } finally {
       setIsSearching(false);
     }
@@ -714,6 +717,11 @@ export function AITutor({
   const explainBreakpoint = useCallback(async () => {
     if (!breakpoint || segments.length === 0) return;
     
+    // 取消上一个请求，防止竞态
+    explainAbortRef.current?.abort();
+    const abortController = new AbortController();
+    explainAbortRef.current = abortController;
+
     setIsLoading(true);
     setError(null);
     setResponse(null);
@@ -735,6 +743,7 @@ export function AITutor({
       const res = await fetch('/api/tutor', {
         method: 'POST',
         headers,
+        signal: abortController.signal,
         body: JSON.stringify({
           timestamp: breakpoint.timestamp,
           segments: buildSegmentsForTutorRequest(breakpoint.timestamp),
@@ -770,18 +779,29 @@ export function AITutor({
         sessionId,
       });
     } catch (err) {
+      // 被 abort 的请求不算错误（用户切换了困惑点）
+      if (err instanceof DOMException && err.name === 'AbortError') return;
       setError(err instanceof Error ? err.message : '未知错误');
     } finally {
-      setIsLoading(false);
+      if (!abortController.signal.aborted) {
+        setIsLoading(false);
+      }
     }
-  }, [breakpoint, buildSegmentsForTutorRequest, selectedModel, enableWeb, accessToken, onActionItemsUpdate, saveToCache, handleSummaryFromResponse, trackCoreEvent, sessionId]);
+  }, [breakpoint, buildSegmentsForTutorRequest, selectedModel, enableWeb, accessToken, onActionItemsUpdate, saveToCache, handleSummaryFromResponse, trackCoreEvent, sessionId, segments.length]);
 
   useEffect(() => {
-    // 只有在没有缓存数据且不在恢复状态时才自动加载
-    if (breakpoint && !response && !isFromCache && !isRestoring && hasInitialized.current) {
-      explainBreakpoint();
+    // 切换困惑点或切换模型时自动加载（有缓存数据则跳过）
+    if (breakpoint && !isRestoring && hasInitialized.current) {
+      // 切换模型时强制重新生成（清除旧响应）
+      if (!response && !isFromCache) {
+        explainBreakpoint();
+      }
     }
-  }, [breakpoint?.id, selectedModel, isRestoring]); // eslint-disable-line react-hooks/exhaustive-deps
+    return () => {
+      // 组件卸载或依赖变化时取消进行中的请求
+      explainAbortRef.current?.abort();
+    };
+  }, [breakpoint?.id, selectedModel, isRestoring, explainBreakpoint]); // eslint-disable-line react-hooks/exhaustive-deps
 
 
   const handleGuidanceSelect = async (optionId: string, option: GuidanceOption) => {

@@ -82,11 +82,18 @@ export const RATE_LIMITS = {
     perDay: 500,
     cost: 'medium',
   },
-  // 转录增强 - 每分钟10次，每小时100次，每天500次
+  // 转录增强 - 每分钟15次，每小时150次，每天800次
   transcriptEnhance: {
-    perMinute: 10,
-    perHour: 100,
-    perDay: 500,
+    perMinute: 15,
+    perHour: 150,
+    perDay: 800,
+    cost: 'medium',
+  },
+  // 术语提取 - 每分钟5次，每小时30次，每天100次
+  extractTerms: {
+    perMinute: 5,
+    perHour: 30,
+    perDay: 100,
     cost: 'medium',
   },
   // 发送验证码 - 每分钟1次，每小时10次，每天20次

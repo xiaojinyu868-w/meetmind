@@ -18,6 +18,8 @@ interface RecorderProps {
   onAnchorMark?: (timestamp: number) => void;
   onTranscribing?: (isTranscribing: boolean) => void;
   disabled?: boolean;
+  /** Optional context hint (course topic, terms, references) for ASR hot-word injection */
+  contextHint?: string;
 }
 
 type RecorderStatus = 'idle' | 'recording' | 'paused' | 'stopped' | 'transcribing';
@@ -62,6 +64,7 @@ export function Recorder({
   onAnchorMark,
   onTranscribing,
   disabled = false,
+  contextHint = '',
 }: RecorderProps) {
   const [status, setStatus] = useState<RecorderStatus>('idle');
   const [elapsedMs, setElapsedMs] = useState(0);
@@ -71,6 +74,7 @@ export function Recorder({
   const [error, setError] = useState<string | null>(null);
   const [serviceStatus, setServiceStatus] = useState<ServiceStatus>('checking');
   const [transcribeProgress, setTranscribeProgress] = useState<string>('');
+  const [showRestartConfirm, setShowRestartConfirm] = useState(false);
   const [transcribeMode, setTranscribeMode] = useState<TranscribeMode>('streaming');
   const [streamingAvailable, setStreamingAvailable] = useState(true);
   const [apiKey, setApiKey] = useState<string>('');
@@ -81,6 +85,7 @@ export function Recorder({
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
   const analyserRef = useRef<AnalyserNode | null>(null);
+  const sourceNodeRef = useRef<MediaStreamAudioSourceNode | null>(null);
   const animationIdRef = useRef<number | null>(null);
   const startTimeRef = useRef<number>(0);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
@@ -95,6 +100,10 @@ export function Recorder({
   const manuallyEditedSegmentIdsRef = useRef<Set<string>>(new Set());
   const interimItemIdRef = useRef<string | null>(null);
   const noiseFloorRef = useRef(0.02);
+  const contextUpdateCountRef = useRef(0);
+  const CONTEXT_UPDATE_EVERY_N_SEGMENTS = 8;
+  const [asrReconnecting, setAsrReconnecting] = useState(false);
+  const pauseTimestampRef = useRef<number>(0);
   
 
   const enhanceManagerRef = useRef<TranscriptEnhanceManager | null>(null);
@@ -113,8 +122,8 @@ export function Recorder({
     baseEnergyThreshold: 0.05,
     noiseMargin: 0.035,
     speakingNoiseMargin: 0.02,
-    silenceDuration: 600,
-    minSpeechDuration: 200,
+    silenceDuration: 1200,
+    minSpeechDuration: 300,
   };
 
 
@@ -207,6 +216,14 @@ export function Recorder({
         fallbackModel: CORRECTION_FALLBACK_MODEL,
         strategy: 'layered',
         lexiconScope: 'classroom',
+        contextHint: contextHint || '',
+        onTermsDiscovered: (termsHint) => {
+          // When auto-discovered terms become available, also push them to ASR
+          if (asrClientRef.current?.isConnected() && termsHint.trim()) {
+            asrClientRef.current.sendContextHint(termsHint.trim());
+            console.log('[Recorder] Auto-discovered terms sent to ASR, length:', termsHint.trim().length);
+          }
+        },
         onEnhanced: (segments) => {
 
           console.log('[Recorder] Enhanced callback received:', segments.length, 'segments');
@@ -233,6 +250,9 @@ export function Recorder({
 
             console.log('[Recorder] Notifying parent of enhanced transcript:', enhancedTranscript.length, 'segments');
             onTranscriptEnhanced?.(enhancedTranscript);
+
+            // Update transcriptRef so that sendContextUpdate sends corrected text to ASR
+            transcriptRef.current = enhancedTranscript;
             
             return newMap;
           });
@@ -259,6 +279,7 @@ export function Recorder({
       audioContext = new AudioContext();
       audioContextRef.current = audioContext;
       const source = audioContext.createMediaStreamSource(stream);
+      sourceNodeRef.current = source;
       const actualSampleRate = audioContext.sampleRate;
       console.log('[Recorder] AudioContext sampleRate:', actualSampleRate);
       analyserRef.current = audioContext.createAnalyser();
@@ -432,6 +453,20 @@ export function Recorder({
               enhanceManagerRef.current.addSegment(segment);
               setEnhanceStats((prev) => ({ ...prev, total: prev.total + 1 }));
             }
+
+            // Periodically send context update with recent transcript for better ASR consistency
+            contextUpdateCountRef.current++;
+            if (
+              contextUpdateCountRef.current >= CONTEXT_UPDATE_EVERY_N_SEGMENTS &&
+              asrClientRef.current?.isConnected()
+            ) {
+              contextUpdateCountRef.current = 0;
+              const recentText = nextTranscript
+                .slice(-15)
+                .map((s) => s.text)
+                .join('');
+              asrClientRef.current.sendContextUpdate(recentText);
+            }
           },
           onInterim: (interim) => {
             if (interim.itemId) {
@@ -469,6 +504,13 @@ export function Recorder({
         if (!started) {
           asrClientRef.current = null;
         } else {
+          // Send context hint for hot-word injection
+          if (contextHint.trim()) {
+            asrClientRef.current.sendContextHint(contextHint.trim());
+            console.log('[Recorder] Sent context hint to ASR, length:', contextHint.trim().length);
+          }
+          contextUpdateCountRef.current = 0;
+
           const bufferSize = 4096;
           pcmProcessorRef.current = audioContext.createScriptProcessor(bufferSize, 1, 1);
           
@@ -557,7 +599,13 @@ export function Recorder({
         clearInterval(timerRef.current);
         timerRef.current = null;
       }
-      setError(err instanceof Error ? err.message : '录音启动失败');
+      setError(
+        err instanceof DOMException && err.name === 'NotAllowedError'
+          ? '请允许麦克风权限后重试'
+          : err instanceof DOMException && err.name === 'NotFoundError'
+          ? '未检测到麦克风设备'
+          : err instanceof Error ? err.message : '录音启动失败'
+      );
     } finally {
       isStartingRecordingRef.current = false;
       setIsStartingRecording(false);
@@ -571,32 +619,228 @@ export function Recorder({
       // 挂起 AudioContext，停止 ScriptProcessor 向 ASR 发送音频
       audioContextRef.current?.suspend();
       if (timerRef.current) clearInterval(timerRef.current);
+      pauseTimestampRef.current = Date.now();
       setStatus('paused');
     }
   };
 
+  /** Rebuild the PCM→ASR pipeline after ASR reconnection */
+  const rebuildPcmPipeline = useCallback(() => {
+    const audioContext = audioContextRef.current;
+    const source = sourceNodeRef.current;
+    if (!audioContext || !source || !asrClientRef.current?.isConnected()) return;
 
-  const resumeRecording = () => {
-    if (mediaRecorderRef.current?.state === 'paused') {
-      mediaRecorderRef.current.resume();
-      // 恢复 AudioContext，重新开始向 ASR 发送音频
-      audioContextRef.current?.resume();
-      const pausedTime = elapsedMs;
-      startTimeRef.current = Date.now() - pausedTime;
-      timerRef.current = setInterval(() => {
-        setElapsedMs(Date.now() - startTimeRef.current);
-      }, 100);
-      
-
-      vadStateRef.current = {
-        isSpeaking: false,
-        speechStartMs: 0,
-        silenceStartMs: 0,
-      };
-      noiseFloorRef.current = 0.02;
-      
-      setStatus('recording');
+    // Disconnect old processor
+    if (pcmProcessorRef.current) {
+      pcmProcessorRef.current.disconnect();
+      pcmProcessorRef.current.onaudioprocess = null;
+      pcmProcessorRef.current = null;
     }
+
+    const actualSampleRate = audioContext.sampleRate;
+    const bufferSize = 4096;
+    pcmProcessorRef.current = audioContext.createScriptProcessor(bufferSize, 1, 1);
+
+    const resample = (inputData: Float32Array, fromRate: number, toRate: number): Float32Array => {
+      if (fromRate === toRate) return inputData;
+      const ratio = fromRate / toRate;
+      const newLength = Math.round(inputData.length / ratio);
+      const result = new Float32Array(newLength);
+      for (let i = 0; i < newLength; i++) {
+        const srcIndex = i * ratio;
+        const srcIndexFloor = Math.floor(srcIndex);
+        const srcIndexCeil = Math.min(srcIndexFloor + 1, inputData.length - 1);
+        const t = srcIndex - srcIndexFloor;
+        result[i] = inputData[srcIndexFloor] * (1 - t) + inputData[srcIndexCeil] * t;
+      }
+      return result;
+    };
+
+    pcmProcessorRef.current.onaudioprocess = (e) => {
+      if (asrClientRef.current?.isConnected()) {
+        const inputData = e.inputBuffer.getChannelData(0);
+        const resampledData = resample(inputData, actualSampleRate, wsSampleRate);
+        const pcmData = new Int16Array(resampledData.length);
+        for (let i = 0; i < resampledData.length; i++) {
+          pcmData[i] = Math.max(-32768, Math.min(32767, Math.floor(resampledData[i] * 32768)));
+        }
+        asrClientRef.current.sendAudio(pcmData.buffer);
+      }
+    };
+
+    source.connect(pcmProcessorRef.current);
+    pcmProcessorRef.current.connect(audioContext.destination);
+    console.log('[Recorder] PCM→ASR pipeline rebuilt after reconnection');
+  }, [wsSampleRate]);
+
+
+  const resumeRecording = async () => {
+    if (mediaRecorderRef.current?.state !== 'paused') return;
+
+    mediaRecorderRef.current.resume();
+
+    // Check if ASR WebSocket is still alive
+    const asrAlive = asrClientRef.current?.isConnected();
+    const pauseDurationMs = Date.now() - pauseTimestampRef.current;
+
+    if (!asrAlive && transcribeMode === 'streaming' && streamingAvailable && apiKey) {
+      console.warn(`[Recorder] ASR disconnected during pause (${(pauseDurationMs / 1000).toFixed(1)}s). Reconnecting...`);
+      setAsrReconnecting(true);
+      setError(null);
+
+      // Stop old client gracefully
+      if (asrClientRef.current) {
+        try { await asrClientRef.current.stop(); } catch { /* ignore */ }
+        asrClientRef.current = null;
+      }
+
+      // Create new ASR client with same callbacks
+      asrClientRef.current = new DashScopeASRClient(apiKey, {
+        onSentence: (sentence) => {
+          const segment: TranscriptSegment = {
+            id: sentence.id,
+            text: sentence.text,
+            startMs: sentence.beginTime,
+            endMs: sentence.endTime || sentence.beginTime,
+            confidence: sentence.confidence ?? 0.95,
+            isFinal: true,
+            provisional: false,
+            sourceItemId: sentence.itemId,
+          };
+
+          if (sentence.itemId && interimItemIdRef.current === sentence.itemId) {
+            interimItemIdRef.current = null;
+            setInterimText('');
+          } else {
+            setInterimText((prev) => {
+              if (!prev) return prev;
+              const prevKey = normalizeCompareText(prev);
+              const finalKey = normalizeCompareText(sentence.text);
+              return prevKey && prevKey === finalKey ? '' : prev;
+            });
+          }
+
+          const nextTranscript = [...transcriptRef.current];
+          let replaced = false;
+
+          if (sentence.replaces?.length) {
+            for (const replaceId of sentence.replaces) {
+              const replaceIndex = nextTranscript.findIndex((seg) => seg.id === replaceId);
+              if (replaceIndex >= 0) {
+                nextTranscript[replaceIndex] = segment;
+                replaced = true;
+                break;
+              }
+            }
+          }
+
+          if (!replaced && nextTranscript.length > 0) {
+            const last = nextTranscript[nextTranscript.length - 1];
+            if (shouldReplaceLastSegment(last, segment)) {
+              nextTranscript[nextTranscript.length - 1] = segment;
+              replaced = true;
+            }
+          }
+
+          if (!replaced) {
+            nextTranscript.push(segment);
+          }
+
+          transcriptRef.current = nextTranscript;
+          setTranscript(nextTranscript);
+          onTranscriptUpdate?.(nextTranscript);
+
+          if (enhanceManagerRef.current && !sentence.provisional && !replaced) {
+            enhanceManagerRef.current.addSegment(segment);
+            setEnhanceStats((prev) => ({ ...prev, total: prev.total + 1 }));
+          }
+
+          contextUpdateCountRef.current++;
+          if (
+            contextUpdateCountRef.current >= CONTEXT_UPDATE_EVERY_N_SEGMENTS &&
+            asrClientRef.current?.isConnected()
+          ) {
+            contextUpdateCountRef.current = 0;
+            const recentText = nextTranscript
+              .slice(-15)
+              .map((s) => s.text)
+              .join('');
+            asrClientRef.current.sendContextUpdate(recentText);
+          }
+        },
+        onInterim: (interim) => {
+          if (interim.itemId) {
+            interimItemIdRef.current = interim.itemId;
+          }
+          const nextText = (interim.text || '').trim();
+          if (!nextText) {
+            if (!interim.itemId || interim.itemId === interimItemIdRef.current) {
+              interimItemIdRef.current = null;
+              setInterimText('');
+            }
+          } else {
+            const lastFinal = transcriptRef.current[transcriptRef.current.length - 1];
+            const interimKey = normalizeCompareText(nextText);
+            const lastKey = normalizeCompareText(lastFinal?.text || '');
+            setInterimText(interimKey && interimKey === lastKey ? '' : nextText);
+          }
+          if (enhanceManagerRef.current) {
+            enhanceManagerRef.current.updateActivity();
+          }
+        },
+        onError: (err) => setError(err),
+        onStatusChange: (newStatus) => {
+          if (newStatus === 'transcribing') setServiceStatus('available');
+        },
+      }, {
+        model: wsModel,
+        sampleRate: wsSampleRate,
+        format: 'pcm',
+      });
+
+      const started = await asrClientRef.current.start();
+      if (started) {
+        // Send context hint + recent transcript to new session
+        if (contextHint.trim()) {
+          asrClientRef.current.sendContextHint(contextHint.trim());
+        }
+        const recentText = transcriptRef.current
+          .slice(-15)
+          .map((s) => s.text)
+          .join('');
+        if (recentText) {
+          asrClientRef.current.sendContextUpdate(recentText);
+        }
+        contextUpdateCountRef.current = 0;
+
+        // Rebuild PCM pipeline
+        rebuildPcmPipeline();
+        console.log('[Recorder] ASR reconnected successfully after pause');
+      } else {
+        console.error('[Recorder] ASR reconnect failed — recording continues without live transcription');
+        setError('实时转录重连失败，录音仍在继续（音频不会丢失）');
+        asrClientRef.current = null;
+      }
+      setAsrReconnecting(false);
+    }
+
+    // 恢复 AudioContext（如果 ASR 没断，这一步已足够恢复数据流）
+    await audioContextRef.current?.resume();
+
+    const pausedTime = elapsedMs;
+    startTimeRef.current = Date.now() - pausedTime;
+    timerRef.current = setInterval(() => {
+      setElapsedMs(Date.now() - startTimeRef.current);
+    }, 100);
+
+    vadStateRef.current = {
+      isSpeaking: false,
+      speechStartMs: 0,
+      silenceStartMs: 0,
+    };
+    noiseFloorRef.current = 0.02;
+
+    setStatus('recording');
   };
 
 
@@ -610,6 +854,7 @@ export function Recorder({
 
     if (pcmProcessorRef.current) {
       pcmProcessorRef.current.disconnect();
+      pcmProcessorRef.current.onaudioprocess = null;
       pcmProcessorRef.current = null;
     }
 
@@ -629,9 +874,10 @@ export function Recorder({
     }
 
     if (audioContextRef.current) {
-      audioContextRef.current.close();
+      await audioContextRef.current.close().catch(() => {});
       audioContextRef.current = null;
     }
+    sourceNodeRef.current = null;
 
     const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
 
@@ -668,6 +914,71 @@ export function Recorder({
       setStatus('stopped');
       onRecordingStop?.(audioBlob);
     }
+  };
+
+
+  /** Stop current recording, clean up all state, and immediately start a fresh recording session. */
+  const restartRecording = async () => {
+    setShowRestartConfirm(false);
+
+    // 1. Tear down current recording infrastructure
+    if (asrClientRef.current) {
+      try { await asrClientRef.current.stop(); } catch { /* ignore */ }
+      asrClientRef.current = null;
+    }
+    if (pcmProcessorRef.current) {
+      pcmProcessorRef.current.disconnect();
+      pcmProcessorRef.current.onaudioprocess = null;
+      pcmProcessorRef.current = null;
+    }
+    if (animationIdRef.current) {
+      cancelAnimationFrame(animationIdRef.current);
+      animationIdRef.current = null;
+    }
+    if (timerRef.current) {
+      clearInterval(timerRef.current);
+      timerRef.current = null;
+    }
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+      mediaRecorderRef.current.stop();
+      mediaRecorderRef.current.stream.getTracks().forEach(track => track.stop());
+    }
+    mediaRecorderRef.current = null;
+    if (audioContextRef.current) {
+      await audioContextRef.current.close().catch(() => {});
+      audioContextRef.current = null;
+    }
+    sourceNodeRef.current = null;
+    analyserRef.current = null;
+    if (enhanceManagerRef.current) {
+      enhanceManagerRef.current.dispose();
+      enhanceManagerRef.current = null;
+    }
+
+    // 2. Reset all state
+    setLevel(0);
+    setElapsedMs(0);
+    setTranscript([]);
+    transcriptRef.current = [];
+    setInterimText('');
+    interimItemIdRef.current = null;
+    setTranscribeProgress('');
+    setAnchorCount(0);
+    setEnhancedSegments(new Map());
+    setEnhanceStats({ enhanced: 0, total: 0, isEnhancing: false });
+    manuallyEditedSegmentIdsRef.current.clear();
+    audioChunksRef.current = [];
+    setError(null);
+    setAsrReconnecting(false);
+
+    // 3. Notify parent that old recording is discarded
+    onRecordingStop?.();
+
+    // 4. Go to idle, then immediately trigger new recording
+    setStatus('idle');
+    // Use microtask to let React flush the idle state, then start
+    await new Promise(resolve => setTimeout(resolve, 50));
+    await startRecording();
   };
 
 
@@ -801,12 +1112,16 @@ export function Recorder({
     return () => {
       if (animationIdRef.current) cancelAnimationFrame(animationIdRef.current);
       if (timerRef.current) clearInterval(timerRef.current);
-      if (pcmProcessorRef.current) pcmProcessorRef.current.disconnect();
+      if (pcmProcessorRef.current) {
+        pcmProcessorRef.current.disconnect();
+        pcmProcessorRef.current.onaudioprocess = null;
+      }
       if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
         mediaRecorderRef.current.stop();
         mediaRecorderRef.current.stream.getTracks().forEach(track => track.stop());
       }
-      if (audioContextRef.current) audioContextRef.current.close();
+      if (audioContextRef.current) audioContextRef.current.close().catch(() => {});
+      sourceNodeRef.current = null;
       if (asrClientRef.current) asrClientRef.current.stop();
       if (enhanceManagerRef.current) enhanceManagerRef.current.dispose();
     };
@@ -1030,14 +1345,16 @@ export function Recorder({
   return (
     <div className="flex flex-col h-full min-h-0 bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden animate-fade-in">
       {/* */}
-      <div className="flex-shrink-0 h-[84px] sm:h-[60px] px-4 flex items-center justify-between border-b border-gray-100 bg-gradient-to-r from-gray-50 to-white">
+      <div className={`flex-shrink-0 h-[84px] sm:h-[60px] px-4 flex items-center justify-between border-b border-gray-100 ${
+        isRecording ? 'bg-gradient-to-r from-gray-50 to-white' : 'bg-gradient-to-r from-amber-50/60 to-white'
+      }`}>
         {/* */}
         <div className="flex items-center gap-3 sm:gap-3">
           {/* */}
           <div className="flex items-center gap-2 sm:gap-2">
-            <div className={`w-3.5 h-3.5 sm:w-2.5 sm:h-2.5 rounded-full ${isRecording ? 'bg-coral animate-pulse' : 'bg-sunflower-500'}`} />
+            <div className={`w-3.5 h-3.5 sm:w-2.5 sm:h-2.5 rounded-full ${isRecording ? 'bg-coral animate-pulse' : 'bg-sunflower-500 animate-[pulse_2s_ease-in-out_infinite]'}`} />
             <span className={`text-lg sm:text-sm font-medium ${isRecording ? 'text-coral' : 'text-sunflower-600'}`}>
-              {isRecording ? '录音中' : '已暂停'}
+              {isRecording ? '录音中' : (asrReconnecting ? '重连中...' : '已暂停')}
             </span>
           </div>
           
@@ -1087,12 +1404,21 @@ export function Recorder({
             ) : (
               <button
                 onClick={resumeRecording}
-                className="w-[72px] h-[72px] sm:w-[48px] sm:h-[48px] rounded-full bg-mint-100 text-mint-700 flex items-center justify-center hover:bg-mint-200 transition-all active:scale-95 shadow-sm"
+                disabled={asrReconnecting}
+                className={`w-[72px] h-[72px] sm:w-[48px] sm:h-[48px] rounded-full flex items-center justify-center transition-all active:scale-95 shadow-sm ${
+                  asrReconnecting
+                    ? 'bg-gray-100 text-gray-400 cursor-wait'
+                    : 'bg-mint-100 text-mint-700 hover:bg-mint-200'
+                }`}
                 aria-label="继续"
               >
-                <svg className="w-9 h-9 sm:w-6 sm:h-6" fill="currentColor" viewBox="0 0 24 24">
-                  <path d="M8 5v14l11-7z" />
-                </svg>
+                {asrReconnecting ? (
+                  <div className="w-6 h-6 sm:w-5 sm:h-5 border-2 border-amber-400 border-t-transparent rounded-full animate-spin" />
+                ) : (
+                  <svg className="w-9 h-9 sm:w-6 sm:h-6" fill="currentColor" viewBox="0 0 24 24">
+                    <path d="M8 5v14l11-7z" />
+                  </svg>
+                )}
               </button>
             )}
             <button
@@ -1102,6 +1428,16 @@ export function Recorder({
             >
               <svg className="w-9 h-9 sm:w-6 sm:h-6" fill="currentColor" viewBox="0 0 24 24">
                 <rect x="6" y="6" width="12" height="12" rx="2" />
+              </svg>
+            </button>
+            <button
+              onClick={() => setShowRestartConfirm(true)}
+              className="w-[48px] h-[48px] sm:w-[36px] sm:h-[36px] rounded-full bg-white border border-gray-200 text-gray-400 flex items-center justify-center hover:bg-coral-50 hover:text-coral-500 hover:border-coral-200 transition-all active:scale-95"
+              aria-label="重新开始"
+              title="清空并重新录音"
+            >
+              <svg className="w-5 h-5 sm:w-4 sm:h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
               </svg>
             </button>
           </div>
@@ -1114,6 +1450,39 @@ export function Recorder({
           <div className="flex items-center gap-2">
             <span>⚠️</span>
             <span>{error}</span>
+          </div>
+        </div>
+      )}
+
+      {/* ASR 重连提示 */}
+      {asrReconnecting && (
+        <div className="flex-shrink-0 mx-4 mt-2 p-2.5 bg-amber-50 border border-amber-200 rounded-xl text-amber-700 text-xs animate-slide-up">
+          <div className="flex items-center gap-2">
+            <div className="w-3 h-3 border-2 border-amber-500 border-t-transparent rounded-full animate-spin" />
+            <span>正在重连实时转录...</span>
+          </div>
+        </div>
+      )}
+
+      {/* 重新开始确认弹窗 */}
+      {showRestartConfirm && (
+        <div className="flex-shrink-0 mx-4 mt-3 p-4 bg-white border border-coral-200 rounded-xl shadow-lg animate-scale-in">
+          <p className="text-sm text-gray-700 mb-3">
+            确定要清空当前录音并重新开始吗？已录制的内容将不会保存。
+          </p>
+          <div className="flex items-center justify-end gap-2">
+            <button
+              onClick={() => setShowRestartConfirm(false)}
+              className="px-4 py-1.5 text-xs font-medium text-gray-600 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
+            >
+              取消
+            </button>
+            <button
+              onClick={restartRecording}
+              className="px-4 py-1.5 text-xs font-medium text-white bg-coral-500 rounded-lg hover:bg-coral-600 transition-colors"
+            >
+              确定重录
+            </button>
           </div>
         </div>
       )}
@@ -1148,6 +1517,7 @@ export function Recorder({
           defaultExpanded={true}
           showHeader={true}
           enableWordExplainer={true}
+          paragraphGapMs={5000}
         />
       </div>
 
