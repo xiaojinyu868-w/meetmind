@@ -13,6 +13,30 @@ const nextConfig = {
   // 静态资源缓存配置
   async headers() {
     return [
+      // Service Worker：不缓存，每次检查更新
+      {
+        source: '/sw.js',
+        headers: [
+          {
+            key: 'Cache-Control',
+            value: 'no-cache, no-store, must-revalidate',
+          },
+          {
+            key: 'Content-Type',
+            value: 'application/javascript; charset=utf-8',
+          },
+        ],
+      },
+      // Web App Manifest
+      {
+        source: '/manifest.json',
+        headers: [
+          {
+            key: 'Content-Type',
+            value: 'application/manifest+json; charset=utf-8',
+          },
+        ],
+      },
       // 视频文件长期缓存（登录页背景等）
       {
         source: '/:path*.mp4',

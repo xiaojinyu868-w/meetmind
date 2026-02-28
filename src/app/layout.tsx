@@ -6,6 +6,7 @@ import { SWRProvider } from '@/lib/swr';
 import { AnalyticsProvider } from '@/components/AnalyticsProvider';
 import { NetworkStatusBanner } from '@/components/NetworkStatusBanner';
 import { Toaster } from 'sonner';
+import { ServiceWorkerRegister } from '@/components/ServiceWorkerRegister';
 
 // 优化字体加载：display: swap 避免阻塞渲染
 const inter = Inter({ 
@@ -17,6 +18,12 @@ const inter = Inter({
 export const metadata: Metadata = {
   title: 'MeetMind - 课堂对齐的 AI 家教',
   description: '把课堂变成可回放、可定位、可追溯的时间轴记忆',
+  manifest: '/manifest.json',
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: 'default',
+    title: 'MeetMind',
+  },
 };
 
 // 优化移动端视口配置
@@ -46,12 +53,15 @@ export default function RootLayout({
           as="image"
           type="image/jpeg"
         />
+        {/* PWA: Apple Touch Icon */}
+        <link rel="apple-touch-icon" href="/icons/icon-192x192.svg" />
       </head>
       <body className={inter.className}>
         <AuthProvider>
           <SWRProvider>
             <AnalyticsProvider>
               <NetworkStatusBanner />
+              <ServiceWorkerRegister />
               {children}
               <Toaster position="top-center" richColors closeButton />
             </AnalyticsProvider>
