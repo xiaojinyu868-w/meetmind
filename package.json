@@ -11,7 +11,7 @@
     "prisma:generate": "prisma generate",
     "prebuild": "node scripts/prebuild.js",
     "build": "next build",
-    "start": "set NODE_ENV=production&& node server.js",
+    "start": "NODE_ENV=production node server.js",
     "start:next": "next start -p 3001",
     "lint": "next lint",
     "verify:podcast": "node scripts/verify-volc-podcast.js",
