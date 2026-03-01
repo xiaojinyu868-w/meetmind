@@ -2,6 +2,21 @@
 
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { toast } from 'sonner';
+import {
+  MessageCircle,
+  Globe,
+  Brain,
+  AlertTriangle,
+  BookOpen,
+  Target,
+  Search,
+  RefreshCw,
+  CheckCircle2,
+  AlertCircle,
+  ClipboardList,
+  MessageSquare,
+  Check,
+} from 'lucide-react';
 import type { Breakpoint } from '@/lib/services/meetmind-service';
 import { formatTimestamp } from '@/lib/services/longcut-utils';
 import { notebookService, localSearch, type SearchResult } from '@/lib/services/notebook-service';
@@ -1232,7 +1247,7 @@ export function AITutor({
         <div className={`border-b border-gray-100 bg-gradient-to-r from-lilac-100/50 to-white flex-shrink-0 ${isMobile ? 'p-3' : 'px-4 py-3'}`}>
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <span className="text-lg">💬</span>
+              <MessageCircle size={20} strokeWidth={1.75} className="text-lilac-500" />
               <div>
                 <h3 className={`font-medium text-gray-800 ${isMobile ? 'text-sm' : 'text-base'}`}>
                   AI 课堂助手
@@ -1262,7 +1277,10 @@ export function AITutor({
                   onChange={(e) => setEnableWeb(e.target.checked)}
                   className="w-4 h-4 rounded border-gray-300 text-amber-500 focus:ring-amber-400"
                 />
-                <span className="group-hover:text-gray-900 transition-colors">🌐 联网搜索</span>
+                <span className="flex items-center gap-1 group-hover:text-gray-900 transition-colors">
+                  <Globe size={13} strokeWidth={1.75} />
+                  联网搜索
+                </span>
               </label>
               <label className="flex items-center gap-2 text-xs text-gray-600 cursor-pointer group">
                 <input
@@ -1271,7 +1289,10 @@ export function AITutor({
                   onChange={(e) => setEnableThinkingGuide(e.target.checked)}
                   className="w-4 h-4 rounded border-gray-300 text-violet-500 focus:ring-violet-400"
                 />
-                <span className="group-hover:text-gray-900 transition-colors">🧠 思维引导</span>
+                <span className="flex items-center gap-1 group-hover:text-gray-900 transition-colors">
+                  <Brain size={13} strokeWidth={1.75} />
+                  思维引导
+                </span>
               </label>
             </div>
           )}
@@ -1283,7 +1304,7 @@ export function AITutor({
             // 无转录内容
             <div className="h-full flex flex-col items-center justify-center text-center">
               <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mb-4">
-                <span className="text-3xl">💬</span>
+                <MessageCircle size={28} strokeWidth={1.5} className="text-gray-400" />
               </div>
               <h3 className="text-lg font-medium text-gray-700 mb-2">暂无课堂内容</h3>
               <p className="text-sm text-gray-500">请先录制课堂或上传录音</p>
@@ -1494,10 +1515,10 @@ export function AITutor({
               <span className="text-sm font-medium text-navy truncate">
                 {formatTimestamp(breakpoint.timestamp)} 的困惑点
               </span>
-              <span className="text-xs text-gray-500 flex-shrink-0">
-                {breakpoint.resolved ? '✅' : '🔴'}
+              <span className="text-xs flex-shrink-0">
+                {breakpoint.resolved ? <CheckCircle2 size={14} strokeWidth={1.75} className="text-mint" /> : <AlertCircle size={14} strokeWidth={1.75} className="text-coral" />}
               </span>
-              {isFromCache && <span className="text-xs text-skyblue flex-shrink-0">📋</span>}
+              {isFromCache && <ClipboardList size={14} strokeWidth={1.75} className="text-skyblue flex-shrink-0" />}
             </div>
             {/* 第二行：模型选择器 + 操作按钮 */}
             <div className="flex items-center justify-between gap-2">
@@ -1518,19 +1539,20 @@ export function AITutor({
                       setResponse(null);
                       explainBreakpoint();
                     }}
-                    className="px-2 py-1 text-xs text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded transition-colors"
+                    className="px-2 py-1 text-xs text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded transition-colors flex items-center gap-1"
                     title="重新生成"
                   >
-                    🔄
+                    <RefreshCw size={13} strokeWidth={1.75} />
                   </button>
                 )}
                 {!breakpoint.resolved && (
                   <button
                     data-testid="tutor-resolve-button"
                     onClick={onResolve}
-                    className="btn btn-primary px-3 py-1.5 text-xs"
+                    className="btn btn-primary px-3 py-1.5 text-xs flex items-center gap-1"
                   >
-                    ✓ 我懂了
+                    <Check size={13} strokeWidth={2} />
+                    我懂了
                   </button>
                 )}
               </div>
@@ -1547,7 +1569,10 @@ export function AITutor({
                   onChange={(e) => setEnableWeb(e.target.checked)}
                   className="w-4 h-4 rounded border-gray-300 text-amber-500 focus:ring-amber-400"
                 />
-                <span className="group-hover:text-gray-900 transition-colors">🌐 联网搜索</span>
+                <span className="flex items-center gap-1 group-hover:text-gray-900 transition-colors">
+                  <Globe size={13} strokeWidth={1.75} />
+                  联网搜索
+                </span>
               </label>
               <label className="flex items-center gap-2 text-xs text-gray-600 cursor-pointer group">
                 <input
@@ -1556,7 +1581,10 @@ export function AITutor({
                   onChange={(e) => setEnableThinkingGuide(e.target.checked)}
                   className="w-4 h-4 rounded border-gray-300 text-violet-500 focus:ring-violet-400"
                 />
-                <span className="group-hover:text-gray-900 transition-colors">🧠 思维引导</span>
+                <span className="flex items-center gap-1 group-hover:text-gray-900 transition-colors">
+                  <Brain size={13} strokeWidth={1.75} />
+                  思维引导
+                </span>
               </label>
               {response?.usage && (
                 <span className="text-xs text-gray-400">
@@ -1575,10 +1603,11 @@ export function AITutor({
                     setResponse(null);
                     explainBreakpoint();
                   }}
-                  className="px-2 py-1 text-xs text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded transition-colors"
+                  className="px-2 py-1 text-xs text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded transition-colors flex items-center gap-1"
                   title="重新生成"
                 >
-                  🔄 刷新
+                  <RefreshCw size={13} strokeWidth={1.75} />
+                  刷新
                 </button>
               )}
               <ModelSelector 
@@ -1590,9 +1619,10 @@ export function AITutor({
                 <button
                   data-testid="tutor-resolve-button"
                   onClick={onResolve}
-                  className="btn btn-primary px-3 py-1.5 text-sm"
+                  className="btn btn-primary px-3 py-1.5 text-sm flex items-center gap-1"
                 >
-                  ✓ 我懂了
+                  <Check size={14} strokeWidth={2} />
+                  我懂了
                 </button>
               )}
             </div>
@@ -1606,7 +1636,7 @@ export function AITutor({
           <div className="flex items-center justify-center h-full animate-fade-in">
             <div className="text-center">
               <div className="w-16 h-16 mx-auto mb-4 bg-red-100 rounded-full flex items-center justify-center">
-                <span className="text-3xl">⚠️</span>
+                <AlertTriangle size={28} strokeWidth={1.5} className="text-red-500" />
               </div>
               <p className="text-red-600 mb-4">{error}</p>
               <button
@@ -1632,7 +1662,7 @@ export function AITutor({
         ) : response ? (
           <div className="space-y-6 animate-slide-up">
             {/* 老师原话 - 扩展上下文 */}
-            <Section icon="📚" title="课堂回顾">
+            <Section icon={<BookOpen size={16} strokeWidth={1.75} />} title="课堂回顾">
               <div className="bg-sunflower-50 border border-sunflower-200 rounded-xl p-4">
                 {/* 显示完整上下文，每段可点击跳转 */}
                 <div className="text-sm text-gray-700 leading-relaxed space-y-1 max-h-48 overflow-y-auto">
@@ -1687,7 +1717,7 @@ export function AITutor({
             </Section>
 
             {/* 引导问题 - 选择题模式定位困惑点 */}
-            <Section icon="🎯" title="帮我定位你的困惑" badge="精准诊断">
+            <Section icon={<Target size={16} strokeWidth={1.75} />} title="帮我定位你的困惑" badge="精准诊断">
               {isLoading ? (
                 <GuidanceQuestionSkeleton />
               ) : response.guidance_question ? (
@@ -1708,7 +1738,7 @@ export function AITutor({
 
             {/* 知识库搜索 */}
             {notebookAvailable && (
-              <Section icon="🔍" title="知识库搜索" badge="Open Notebook">
+              <Section icon={<Search size={16} strokeWidth={1.75} />} title="知识库搜索" badge="Open Notebook">
                 <div className="flex gap-2 mb-3">
                   <input
                     type="text"
@@ -1753,7 +1783,7 @@ export function AITutor({
             {(chatHistory.length > 0 || isBreakpointStreaming) && (
               <div className="space-y-3 pt-4 border-t border-gray-100">
                 <h3 className="text-sm font-semibold text-gray-900 flex items-center gap-2">
-                  <span>💬</span>
+                  <MessageSquare size={16} strokeWidth={1.75} className="text-gray-500" />
                   对话记录
                 </h3>
                 {chatHistory.map((msg, i) => (
@@ -1928,7 +1958,7 @@ function Section({
   badge, 
   children 
 }: { 
-  icon: string; 
+  icon: React.ReactNode; 
   title: string; 
   badge?: string; 
   children: React.ReactNode;
@@ -1936,7 +1966,7 @@ function Section({
   return (
     <section>
       <h3 className="text-sm font-semibold text-gray-900 mb-3 flex items-center gap-2">
-        <span>{icon}</span>
+        <span className="flex items-center text-gray-500">{icon}</span>
         <span>{title}</span>
         {badge && (
           <span className="text-xs font-normal text-coral bg-coral-50 px-2 py-0.5 rounded-full">

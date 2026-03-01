@@ -5,14 +5,31 @@ import { useRouter } from 'next/navigation';
 import { useState, useTransition, useEffect, useCallback } from 'react';
 import { useAuth } from '@/lib/hooks/useAuth';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import {
+  GraduationCap,
+  User,
+  Users,
+  School,
+  UserCircle,
+  Settings,
+  HelpCircle,
+  MessageSquare,
+  LogOut,
+  Mic,
+  BookOpen,
+} from 'lucide-react';
+
+const ICON_SM = 16;
+const ICON_STROKE = 1.75;
 
 interface HeaderProps {
   lessonTitle: string;
   courseName: string;
   userRole?: 'student' | 'parent' | 'teacher';
+  viewMode?: 'record' | 'review';
 }
 
-export function Header({ lessonTitle, courseName, userRole = 'student' }: HeaderProps) {
+export function Header({ lessonTitle, courseName, userRole = 'student', viewMode = 'record' }: HeaderProps) {
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [loadingRole, setLoadingRole] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
@@ -82,7 +99,7 @@ export function Header({ lessonTitle, courseName, userRole = 'student' }: Header
         {/* Logo */}
         <Link href="/" className="flex items-center gap-2.5 group flex-shrink-0">
           <div className="w-9 h-9 bg-gradient-to-br from-amber-400 to-amber-500 rounded-xl flex items-center justify-center shadow-md group-hover:shadow-lg group-hover:scale-105 transition-all">
-            <span className="text-white font-bold text-lg">M</span>
+            <GraduationCap size={20} strokeWidth={2} className="text-white" />
           </div>
           <span className="font-semibold text-navy text-lg whitespace-nowrap">MeetMind</span>
         </Link>
@@ -95,7 +112,14 @@ export function Header({ lessonTitle, courseName, userRole = 'student' }: Header
           <span className="px-2.5 py-1 bg-sunflower-100 text-sunflower-800 rounded-lg text-xs font-medium whitespace-nowrap flex-shrink-0">
             {courseName}
           </span>
-          <h1 className="text-sm font-medium text-navy truncate min-w-0">{lessonTitle}</h1>
+          <div className="flex items-center gap-1.5 min-w-0">
+            {viewMode === 'record' ? (
+              <Mic size={ICON_SM} strokeWidth={ICON_STROKE} className="text-amber-500 flex-shrink-0" />
+            ) : (
+              <BookOpen size={ICON_SM} strokeWidth={ICON_STROKE} className="text-amber-500 flex-shrink-0" />
+            )}
+            <h1 className="text-sm font-medium text-navy truncate min-w-0">{lessonTitle}</h1>
+          </div>
         </div>
       </div>
 
@@ -105,7 +129,7 @@ export function Header({ lessonTitle, courseName, userRole = 'student' }: Header
         <nav className="flex items-center gap-1 p-1 rounded-xl" style={{ background: 'var(--edu-bg-soft)' }}>
           <RoleTab 
             label="学生" 
-            icon="👤" 
+            icon={<User size={14} strokeWidth={ICON_STROKE} />} 
             active={userRole === 'student'} 
             loading={loadingRole === 'student'}
             onClick={() => handleRoleChange('/', 'student')}
@@ -113,7 +137,7 @@ export function Header({ lessonTitle, courseName, userRole = 'student' }: Header
           />
           <RoleTab 
             label="家长" 
-            icon="👨‍👩‍👧" 
+            icon={<Users size={14} strokeWidth={ICON_STROKE} />} 
             active={userRole === 'parent'}
             loading={loadingRole === 'parent'}
             onClick={() => handleRoleChange('/parent', 'parent')}
@@ -121,7 +145,7 @@ export function Header({ lessonTitle, courseName, userRole = 'student' }: Header
           />
           <RoleTab 
             label="教师" 
-            icon="👨‍🏫" 
+            icon={<School size={14} strokeWidth={ICON_STROKE} />} 
             active={userRole === 'teacher'}
             loading={loadingRole === 'teacher'}
             onClick={() => handleRoleChange('/teacher', 'teacher')}
@@ -142,7 +166,7 @@ export function Header({ lessonTitle, courseName, userRole = 'student' }: Header
                     <AvatarImage src={user.avatar} alt={user.nickname} className="object-cover" />
                   ) : null}
                   <AvatarFallback className="bg-transparent text-base">
-                    {user.role === 'parent' ? '👨‍👩‍👧' : user.role === 'teacher' ? '👨‍🏫' : '👤'}
+                    <User size={18} strokeWidth={ICON_STROKE} className="text-lilac-600" />
                   </AvatarFallback>
                 </Avatar>
               </button>
@@ -156,35 +180,40 @@ export function Header({ lessonTitle, courseName, userRole = 'student' }: Header
                   <Link
                     href="/profile"
                     onClick={() => setShowUserMenu(false)}
-                    className="block w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-lilac-50 transition-colors"
+                    className="flex items-center gap-2.5 w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-lilac-50 transition-colors"
                   >
+                    <UserCircle size={ICON_SM} strokeWidth={ICON_STROKE} className="text-gray-400" />
                     个人资料
                   </Link>
                   <Link
                     href="/settings"
                     onClick={() => setShowUserMenu(false)}
-                    className="block w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-lilac-50 transition-colors"
+                    className="flex items-center gap-2.5 w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-lilac-50 transition-colors"
                   >
+                    <Settings size={ICON_SM} strokeWidth={ICON_STROKE} className="text-gray-400" />
                     设置
                   </Link>
                   <Link
                     href="/help"
                     onClick={() => setShowUserMenu(false)}
-                    className="block w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-lilac-50 transition-colors"
+                    className="flex items-center gap-2.5 w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-lilac-50 transition-colors"
                   >
+                    <HelpCircle size={ICON_SM} strokeWidth={ICON_STROKE} className="text-gray-400" />
                     帮助
                   </Link>
                   <Link
                     href="/feedback"
                     onClick={() => setShowUserMenu(false)}
-                    className="block w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-lilac-50 transition-colors"
+                    className="flex items-center gap-2.5 w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-lilac-50 transition-colors"
                   >
+                    <MessageSquare size={ICON_SM} strokeWidth={ICON_STROKE} className="text-gray-400" />
                     意见反馈
                   </Link>
                   <button
                     onClick={handleLogout}
-                    className="w-full px-4 py-2 text-left text-sm text-coral-600 hover:bg-coral-50 transition-colors"
+                    className="flex items-center gap-2.5 w-full px-4 py-2 text-left text-sm text-coral-600 hover:bg-coral-50 transition-colors"
                   >
+                    <LogOut size={ICON_SM} strokeWidth={ICON_STROKE} />
                     退出登录
                   </button>
                 </div>
@@ -213,7 +242,7 @@ function RoleTab({
   onHover,
 }: { 
   label: string; 
-  icon: string; 
+  icon: React.ReactNode; 
   active: boolean;
   loading?: boolean;
   onClick?: () => void;
@@ -239,7 +268,7 @@ function RoleTab({
           <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
         </svg>
       ) : (
-        <span className="text-xs">{icon}</span>
+        <span className="flex items-center">{icon}</span>
       )}
       <span className="hide-mobile">{label}</span>
     </button>

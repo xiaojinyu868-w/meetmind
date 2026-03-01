@@ -42,6 +42,19 @@ import { WaveformPlayer, type WaveformPlayerRef, type WaveformAnchor } from '@/c
 
 import { AppLoading } from '@/components/AppLoading';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import {
+  Mic,
+  BookOpen,
+  Star,
+  FileText,
+  Boxes,
+  StickyNote,
+  MessageCircle,
+  CircleHelp,
+  Clock,
+  AlertCircle,
+  GraduationCap,
+} from 'lucide-react';
 
 // --- Performance: Dynamic imports for heavy components (code-split) ---
 // These components are not needed for initial render and are lazy-loaded
@@ -114,25 +127,29 @@ interface WorkspaceTabConfig<T extends WorkspaceTab> {
   key: T;
   label: string;
   icon: string;
+  LucideIcon?: React.ComponentType<{ size?: number; strokeWidth?: number; className?: string }>;
   testId?: string;
 }
 
+const ICON_TAB = 14;
+const ICON_TAB_STROKE = 1.75;
+
 const SHARED_WORKSPACE_TABS: WorkspaceTabConfig<SharedWorkspaceTab>[] = [
-  { key: 'highlights', label: '精选', icon: '精' },
-  { key: 'summary', label: '摘要', icon: '摘' },
-  { key: 'apps', label: 'AI工坊', icon: '坊', testId: 'review-tab-apps' },
-  { key: 'notes', label: '笔记', icon: '记' },
+  { key: 'highlights', label: '精选', icon: '精', LucideIcon: Star },
+  { key: 'summary', label: '摘要', icon: '摘', LucideIcon: FileText },
+  { key: 'apps', label: 'AI工坊', icon: '坊', LucideIcon: Boxes, testId: 'review-tab-apps' },
+  { key: 'notes', label: '笔记', icon: '记', LucideIcon: StickyNote },
 ];
 
 const VIDEO_WORKSPACE_TABS: WorkspaceTabConfig<VideoWorkspaceTab>[] = [
-  { key: 'chat', label: '对话', icon: '聊' },
-  { key: 'confusion', label: '困惑点', icon: '疑' },
+  { key: 'chat', label: '对话', icon: '聊', LucideIcon: MessageCircle },
+  { key: 'confusion', label: '困惑点', icon: '疑', LucideIcon: CircleHelp },
   ...SHARED_WORKSPACE_TABS,
 ];
 
 const REVIEW_WORKSPACE_TABS: WorkspaceTabConfig<ReviewTab>[] = [
-  { key: 'timeline', label: '时间轴', icon: '轴' },
-  { key: 'anchor-detail', label: '困惑点', icon: '疑' },
+  { key: 'timeline', label: '时间轴', icon: '轴', LucideIcon: Clock },
+  { key: 'anchor-detail', label: '困惑点', icon: '疑', LucideIcon: AlertCircle },
   ...SHARED_WORKSPACE_TABS,
 ];
 
@@ -2958,6 +2975,7 @@ const _handleVideoAssistantMessage = useCallback((payload: {
         <Header 
           lessonTitle={viewMode === 'record' ? '课堂录音' : '课堂复习'}
           courseName=""
+          viewMode={viewMode}
         />
       )}
 
@@ -2973,15 +2991,17 @@ const _handleVideoAssistantMessage = useCallback((payload: {
               <button
                 onClick={() => handleViewModeChange('record')}
                 data-testid="mode-record-button"
-                className={`mode-tab ${viewMode === 'record' ? 'active' : ''}`}
+                className={`mode-tab flex items-center gap-1.5 ${viewMode === 'record' ? 'active' : ''}`}
               >
+                <Mic size={14} strokeWidth={ICON_TAB_STROKE} />
                 录音
               </button>
               <button
                 onClick={() => handleViewModeChange('review')}
                 data-testid="mode-review-button"
-                className={`mode-tab ${viewMode === 'review' ? 'active' : ''}`}
+                className={`mode-tab flex items-center gap-1.5 ${viewMode === 'review' ? 'active' : ''}`}
               >
+                <BookOpen size={14} strokeWidth={ICON_TAB_STROKE} />
                 复习
               </button>
             </div>
@@ -3020,7 +3040,7 @@ const _handleVideoAssistantMessage = useCallback((payload: {
               <div className="flex-shrink-0 px-4 py-2.5 flex items-center gap-2 bg-white border-b" style={{ borderColor: 'var(--edu-border-light)' }}>
                 {/* Logo */}
                 <div className="w-8 h-8 bg-gradient-to-br from-amber-400 to-amber-500 rounded-lg flex items-center justify-center flex-shrink-0">
-                  <span className="text-white font-bold text-sm">M</span>
+                  <GraduationCap size={18} strokeWidth={2} className="text-white" />
                 </div>
                 
                 {/* Tab 鍒囨崲 */}
@@ -3338,6 +3358,7 @@ const _handleVideoAssistantMessage = useCallback((payload: {
                               : 'text-gray-500 hover:text-gray-800 hover:bg-white/60'
                           }`}
                         >
+                          {tab.LucideIcon && <tab.LucideIcon size={ICON_TAB} strokeWidth={ICON_TAB_STROKE} />}
                           {tab.label}
                           {tab.key === 'confusion' && anchors.filter(a => !a.resolved).length > 0 && (
                             <span className="ml-0.5 w-1.5 h-1.5 bg-red-400 rounded-full inline-block animate-pulse" />
@@ -3525,12 +3546,13 @@ const _handleVideoAssistantMessage = useCallback((payload: {
                           data-onboarding={tab.key === 'timeline' ? 'timeline' : tab.key === 'apps' ? 'review-apps-tab' : undefined}
                           data-testid={tab.testId}
                           onClick={() => setReviewTab(tab.key)}
-                          className={`px-3 py-2 text-sm rounded-lg transition-all whitespace-nowrap tab-button ${
+                          className={`flex items-center gap-1 px-3 py-2 text-sm rounded-lg transition-all whitespace-nowrap tab-button ${
                             reviewTab === tab.key
                               ? 'bg-white text-amber-600 font-medium shadow-sm'
                               : 'text-gray-500 hover:text-navy hover:bg-white/50'
                           }`}
                         >
+                          {tab.LucideIcon && <tab.LucideIcon size={ICON_TAB} strokeWidth={ICON_TAB_STROKE} />}
                           {tab.label}
                           {tab.key === 'anchor-detail' && selectedAnchor && !selectedAnchor.resolved && (
                             <span className="ml-1 w-2 h-2 bg-coral rounded-full inline-block animate-pulse" />
@@ -3789,7 +3811,7 @@ const _handleVideoAssistantMessage = useCallback((payload: {
               <div className="flex-shrink-0 px-4 py-2.5 flex items-center gap-2 bg-white border-b" style={{ borderColor: 'var(--edu-border-light)' }}>
                 {/* Logo */}
                 <div className="w-8 h-8 bg-gradient-to-br from-amber-400 to-amber-500 rounded-lg flex items-center justify-center flex-shrink-0">
-                  <span className="text-white font-bold text-sm">M</span>
+                  <GraduationCap size={18} strokeWidth={2} className="text-white" />
                 </div>
                 
                 {/* Tab 鍒囨崲 */}

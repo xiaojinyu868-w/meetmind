@@ -5,6 +5,15 @@ import Image from 'next/image';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { toast } from 'sonner';
+import {
+  Zap,
+  RotateCw,
+  ExternalLink,
+  ClipboardList,
+  Play,
+  RotateCcw,
+  ListTodo,
+} from 'lucide-react';
 import { DEFAULT_WORKSHOP_MODEL_ID } from '@/lib/services/llm-service';
 import type { Anchor, TranscriptSegment } from '@/types';
 import type { AppExecutionResult, DataSourceType } from '@/lib/ai-native/types';
@@ -640,6 +649,7 @@ export function WorkshopYellowPage(props: WorkshopYellowPageProps) {
             data-testid="workshop-generate-all"
             data-onboarding="workshop-generate-all"
           >
+            <Zap size={14} strokeWidth={1.75} className="inline mr-1" />
             一键全部生成
           </button>
         </div>
@@ -700,7 +710,8 @@ export function WorkshopYellowPage(props: WorkshopYellowPageProps) {
               <p className={styles.description}>{app.description}</p>
               {preview ? (
                 <p className={styles.previewLine} title={preview}>
-                  📋 {preview.length > 50 ? preview.slice(0, 50) + '...' : preview}
+                  <ClipboardList size={12} strokeWidth={1.75} className="inline mr-1 align-text-bottom" />
+                  {preview.length > 50 ? preview.slice(0, 50) + '...' : preview}
                 </p>
               ) : null}
               <div className={styles.actionRow}>
@@ -714,7 +725,11 @@ export function WorkshopYellowPage(props: WorkshopYellowPageProps) {
                   }}
                   disabled={isRunning}
                 >
-                  {isRunning ? '后台生成中...' : generated ? '重新生成' : '后台生成'}
+                  {isRunning ? '后台生成中...' : generated ? (
+                    <><RotateCw size={12} strokeWidth={1.75} className="inline mr-0.5" />重新生成</>
+                  ) : (
+                    <><Play size={12} strokeWidth={1.75} className="inline mr-0.5" />后台生成</>
+                  )}
                 </button>
                 {isFailed ? (
                   <button
@@ -726,6 +741,7 @@ export function WorkshopYellowPage(props: WorkshopYellowPageProps) {
                     }}
                     data-testid={`workshop-inline-retry-${app.key}`}
                   >
+                    <RotateCcw size={12} strokeWidth={1.75} className="inline mr-0.5" />
                     重试
                   </button>
                 ) : null}
@@ -739,7 +755,8 @@ export function WorkshopYellowPage(props: WorkshopYellowPageProps) {
                     onOpenAppWindow(app.key);
                   }}
                 >
-                  查看应用 <span>›</span>
+                  <ExternalLink size={12} strokeWidth={1.75} className="inline mr-0.5" />
+                  {app.key === 'infographic' ? '定制信息图' : '查看应用'}
                 </Link>
               </div>
               <p className={styles.metaLine}>输出形态：{app.outputType}</p>
@@ -768,7 +785,7 @@ export function WorkshopYellowPage(props: WorkshopYellowPageProps) {
           data-testid="workshop-dock-toggle"
           data-onboarding="workshop-dock-toggle"
         >
-          <span>任务中心</span>
+          <span className="flex items-center gap-1"><ListTodo size={14} strokeWidth={1.75} />任务中心</span>
           {runningCount > 0 ? (
             <span className={`${styles.dockStat} ${styles.dockStatRunning}`}>
               <span className={styles.pulseIndicator} />

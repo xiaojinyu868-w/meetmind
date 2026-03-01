@@ -3,6 +3,18 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import Image from 'next/image';
 import { toast } from 'sonner';
+import {
+  Podcast,
+  Video,
+  GitBranch,
+  FileBarChart,
+  Layers,
+  ClipboardCheck,
+  ImageIcon,
+  Presentation,
+  Table2,
+  type LucideIcon,
+} from 'lucide-react';
 import { ModelSelector } from '@/components/ModelSelector';
 import { DEFAULT_WORKSHOP_MODEL_ID } from '@/lib/services/llm-service';
 import { getPreference, setPreference } from '@/lib/db';
@@ -42,6 +54,7 @@ interface StudioAppDefinition {
   key: string;
   name: string;
   icon: string;
+  LucideIcon?: LucideIcon;
   pluginId: string;
   intent: string;
   description: string;
@@ -53,6 +66,7 @@ const STUDIO_APP_PRESETS: StudioAppDefinition[] = [
     key: 'audio-overview',
     name: '课堂播客',
     icon: '声',
+    LucideIcon: Podcast,
     pluginId: 'studio-workshop',
     intent: '生成双人课堂播客，输出可播放音频。',
     description: '适合课后复盘和通勤收听，重点是用对话节奏快速重建课堂脉络。',
@@ -62,6 +76,7 @@ const STUDIO_APP_PRESETS: StudioAppDefinition[] = [
     key: 'video-overview',
     name: '视频总览',
     icon: '影',
+    LucideIcon: Video,
     pluginId: 'studio-workshop',
     intent: '生成视频总览，按时间轴输出章节、核心观点和回看提示。',
     description: '适合视频导入场景，突出分段理解和回放定位。',
@@ -71,6 +86,7 @@ const STUDIO_APP_PRESETS: StudioAppDefinition[] = [
     key: 'mindmap',
     name: '思维导图',
     icon: '图',
+    LucideIcon: GitBranch,
     pluginId: 'mindmap-outline',
     intent: '生成课堂思维导图，输出主干、分支和支撑证据。',
     description: '适合梳理结构化知识，便于演讲、讲题和二次输出。',
@@ -80,6 +96,7 @@ const STUDIO_APP_PRESETS: StudioAppDefinition[] = [
     key: 'report',
     name: '学习报告',
     icon: '报',
+    LucideIcon: FileBarChart,
     pluginId: 'studio-workshop',
     intent: '生成学习报告，覆盖亮点、风险点和下一步行动。',
     description: '适合课后复盘与跟进计划，强调可执行建议。',
@@ -89,6 +106,7 @@ const STUDIO_APP_PRESETS: StudioAppDefinition[] = [
     key: 'flashcards',
     name: '闪卡训练',
     icon: '卡',
+    LucideIcon: Layers,
     pluginId: 'flashcards-lab',
     intent: '生成课堂闪卡，覆盖定义、方法、易错点和迁移应用。',
     description: '以主动回忆为核心，支持翻面查看答案和证据回放。',
@@ -98,6 +116,7 @@ const STUDIO_APP_PRESETS: StudioAppDefinition[] = [
     key: 'quiz',
     name: '测验工坊',
     icon: '测',
+    LucideIcon: ClipboardCheck,
     pluginId: 'quiz-arena',
     intent: '生成课堂测验，输出选择题、答案和解析。',
     description: '先测后讲，快速识别理解偏差并回放证据。',
@@ -107,6 +126,7 @@ const STUDIO_APP_PRESETS: StudioAppDefinition[] = [
     key: 'infographic',
     name: '信息图稿',
     icon: '信',
+    LucideIcon: ImageIcon,
     pluginId: 'studio-workshop',
     intent: '生成信息图文案，提炼高密度、可视化表达的关键内容。',
     description: '适合海报、社媒图文和课堂总结图。',
@@ -116,6 +136,7 @@ const STUDIO_APP_PRESETS: StudioAppDefinition[] = [
     key: 'slide-deck',
     name: '幻灯片提纲',
     icon: '片',
+    LucideIcon: Presentation,
     pluginId: 'studio-workshop',
     intent: '生成幻灯片提纲，按页输出标题与要点。',
     description: '适合复述、分享与讲解，按页浏览并附带讲解备注。',
@@ -125,6 +146,7 @@ const STUDIO_APP_PRESETS: StudioAppDefinition[] = [
     key: 'data-table',
     name: '数据对照表',
     icon: '表',
+    LucideIcon: Table2,
     pluginId: 'studio-workshop',
     intent: '生成数据对照表，按维度输出可比较条目。',
     description: '适合知识点对比、方案比较和考试前速览。',
@@ -372,6 +394,7 @@ export function AppMatrixPanel({
       key: plugin.id,
       name: plugin.name,
       icon: '用',
+      LucideIcon: undefined as LucideIcon | undefined,
       pluginId: plugin.id,
       intent: `生成${plugin.name}`,
       description: plugin.description,
@@ -1332,7 +1355,9 @@ export function AppMatrixPanel({
                 className={`${styles.appTile} ${selectedAppKey === app.key ? styles.appTileActive : ''}`}
                 onClick={() => setSelectedAppKey(app.key)}
               >
-                <span className={styles.appTileIcon}>{app.icon}</span>
+                <span className={styles.appTileIcon}>
+                  {app.LucideIcon ? <app.LucideIcon size={20} strokeWidth={1.75} /> : app.icon}
+                </span>
                 <span className={styles.appTileName}>{app.name}</span>
               </button>
             ))}

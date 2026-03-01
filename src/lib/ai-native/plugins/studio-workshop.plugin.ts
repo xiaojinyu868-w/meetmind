@@ -57,6 +57,9 @@ interface StudioOutput {
     visualPlan?: string[];
     imagePrompt?: string;
     stylePreset?: string;
+    suggestedScene?: string;
+    suggestedOrientation?: 'landscape' | 'portrait' | 'square';
+    suggestedDetailLevel?: 'concise' | 'standard' | 'detailed';
   };
 }
 
@@ -216,12 +219,27 @@ function modeContract(mode: StudioMode): string {
   "infographic": {
     "title": "信息图标题",
     "subtitle": "副标题",
-    "keyPoints": ["关键点"],
-    "visualPlan": ["版式建议"],
-    "imagePrompt": "文生图提示词",
-    "stylePreset": "风格描述"
+    "keyPoints": ["关键点1", "关键点2", ...],
+    "visualPlan": ["版式/布局建议"],
+    "imagePrompt": "详细的文生图提示词，描述图片内容、布局、色彩",
+    "stylePreset": "风格描述（如：现代扁平、学术专业、活泼插画等）",
+    "suggestedScene": "推荐场景类型：infographic|knowledge-card|timeline|comparison|flowchart|mind-map|review-poster|data-viz",
+    "suggestedOrientation": "推荐方向：landscape|portrait|square",
+    "suggestedDetailLevel": "推荐详细度：concise|standard|detailed"
   }
-}`;
+}
+
+suggestedScene 选择依据：
+- infographic: 多维度知识总结、课堂回顾
+- knowledge-card: 单个概念深度讲解
+- timeline: 历史演变、步骤流程
+- comparison: 两种方案/概念对比
+- flowchart: 方法论、决策流程
+- mind-map: 知识框架、概念关系
+- review-poster: 考前复习、重点提炼
+- data-viz: 数据分析、统计结果
+
+请根据课堂内容特征自动推荐最合适的场景、方向和详细度。`;
   }
 
   if (mode === 'slides') {
@@ -665,6 +683,10 @@ function buildInfographicDraft(output: StudioOutput | null, cards: AppExecutionR
       .filter(Boolean)
       .join('\n');
 
+  const suggestedScene = output?.infographic?.suggestedScene?.trim() || 'infographic';
+  const suggestedOrientation = output?.infographic?.suggestedOrientation || 'landscape';
+  const suggestedDetailLevel = output?.infographic?.suggestedDetailLevel || 'standard';
+
   return {
     title: output?.infographic?.title?.trim() || output?.title?.trim() || '课堂信息图草案',
     subtitle: output?.infographic?.subtitle?.trim() || output?.summary?.trim() || '',
@@ -672,6 +694,9 @@ function buildInfographicDraft(output: StudioOutput | null, cards: AppExecutionR
     visualPlan,
     imagePrompt,
     stylePreset: output?.infographic?.stylePreset?.trim() || '教育学习海报，清爽明亮，信息层级明确',
+    suggestedScene,
+    suggestedOrientation,
+    suggestedDetailLevel,
   };
 }
 
