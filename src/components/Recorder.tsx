@@ -959,20 +959,59 @@ export const Recorder = forwardRef<RecorderHandle, RecorderProps>(function Recor
     onTranscribing?.(true);
 
     try {
-      const formData = new FormData();
-      formData.append('audio', audioBlob, 'recording.webm');
+      const createFormData = () => {
+        const formData = new FormData();
+        formData.append('audio', audioBlob, 'recording.webm');
+        if (contextHint.trim()) {
+          formData.append('context', contextHint.trim());
+        }
+        return formData;
+      };
 
-      const response = await fetch('/api/transcribe', {
+      let response = await fetch('/api/transcribe', {
         method: 'POST',
-        body: formData,
+        body: createFormData(),
       });
 
+      let data: {
+        success?: boolean;
+        segments?: Array<{
+          id: string;
+          text: string;
+          startMs: number;
+          endMs: number;
+          confidence?: number;
+        }>;
+        error?: string;
+        code?: string;
+        sentences?: Array<{
+          id?: string;
+          text: string;
+          beginTime?: number;
+          endTime?: number;
+        }>;
+      } = {};
+
       if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || '转录失败');
+        const errorData = (await response.json().catch(() => ({}))) as { error?: string; code?: string };
+
+        if (errorData.code === 'ASR_PUBLIC_HOST_MISSING') {
+          setTranscribeProgress('本地先用极速转写接住这段原声...');
+          response = await fetch('/api/transcribe-turbo', {
+            method: 'POST',
+            body: createFormData(),
+          });
+          data = (await response.json().catch(() => ({}))) as typeof data;
+        } else {
+          throw new Error(errorData.error || '转录失败');
+        }
+      } else {
+        data = (await response.json()) as typeof data;
       }
 
-      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.error || '转录失败');
+      }
 
       if (data.success && data.segments) {
         const segments: TranscriptSegment[] = data.segments.map((seg: {
@@ -1090,7 +1129,7 @@ export const Recorder = forwardRef<RecorderHandle, RecorderProps>(function Recor
         });
       }
     }
-  }, [activeSessionId, continueCurrentSession, elapsedMs, onRecordingStop, onTranscriptEnhanced, onTranscriptUpdate, onTranscribing, onTranscriptionError]);
+  }, [activeSessionId, continueCurrentSession, contextHint, elapsedMs, onRecordingStop, onTranscriptEnhanced, onTranscriptUpdate, onTranscribing, onTranscriptionError]);
 
   const stopRecording = useCallback(async () => {
 

@@ -47,17 +47,14 @@ function dedupeSessionsBySessionId(list: AudioSession[]): AudioSession[] {
 }
 
 function formatDuration(ms: number): string {
-  if (!ms || ms <= 0) {
-    return '0:00';
-  }
-
+  if (!ms || ms <= 0) return '0:00';
   const totalSeconds = Math.floor(ms / 1000);
   const minutes = Math.floor(totalSeconds / 60);
   const seconds = totalSeconds % 60;
   return `${minutes}:${seconds.toString().padStart(2, '0')}`;
 }
 
-function buildSessionTitle(session: AudioSession) {
+function buildSessionTitle(session: AudioSession): string {
   return (
     session.topic ||
     session.subject ||
@@ -70,11 +67,11 @@ function buildSessionTitle(session: AudioSession) {
   );
 }
 
-function buildCaptureHint(session: AudioSession) {
+function buildCaptureHint(session: AudioSession): string {
   if (session.sourceType === 'video-link') {
-    return '这节视频已经收进来了，随时可以接着复习。';
+    return '这条视频已经收进来了，随时可以接着学。';
   }
-  return '这段内容已经收进来了，随时可以接着复习。';
+  return '这段内容已经收进来了，随时可以接着学。';
 }
 
 function ConfirmDialog({
@@ -96,9 +93,7 @@ function ConfirmDialog({
   onCancel: () => void;
   variant?: 'danger' | 'warning';
 }) {
-  if (!isOpen) {
-    return null;
-  }
+  if (!isOpen) return null;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 backdrop-blur-sm">
@@ -172,16 +167,12 @@ function RenameInput({
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    if (!isOpen) {
-      return;
-    }
+    if (!isOpen) return;
     setValue(currentName);
     window.setTimeout(() => inputRef.current?.focus(), 80);
   }, [currentName, isOpen]);
 
-  if (!isOpen) {
-    return null;
-  }
+  if (!isOpen) return null;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 backdrop-blur-sm">
@@ -197,15 +188,13 @@ function RenameInput({
               />
             </svg>
           </div>
-          <h3 className="text-lg font-semibold text-slate-900">重命名记录</h3>
+          <h3 className="text-lg font-semibold text-slate-900">重命名这条记录</h3>
         </div>
 
         <form
           onSubmit={(event) => {
             event.preventDefault();
-            if (value.trim()) {
-              onConfirm(value.trim());
-            }
+            if (value.trim()) onConfirm(value.trim());
           }}
         >
           <input
@@ -409,11 +398,11 @@ export function SessionHistoryList({
   const [renameTarget, setRenameTarget] = useState<AudioSession | null>(null);
 
   const headerTitle = variant === 'capture' ? '历史收集' : '录音历史';
-  const emptyStateIcon = variant === 'capture' ? '🗂️' : '🎙️';
-  const emptyTitle = variant === 'capture' ? '还没有历史收集' : '暂无录音记录';
+  const emptyStateIcon = variant === 'capture' ? '收' : '录';
+  const emptyTitle = variant === 'capture' ? '还没有历史收集' : '暂时还没有录音';
   const emptyHint =
     variant === 'capture'
-      ? '先收一点进来，后面就能从这里接着学。'
+      ? '先收一点进来，后面就能从这里继续接着学。'
       : '录音或上传音频后，会自动保存在这里。';
 
   const loadSessions = useCallback(async () => {
@@ -436,17 +425,12 @@ export function SessionHistoryList({
   }, [loadSessions]);
 
   const footerText = useMemo(() => {
-    if (sessions.length === 0) {
-      return '';
-    }
-    return `共 ${sessions.length} 条录音记录`;
+    if (sessions.length === 0) return '';
+    return `共 ${sessions.length} 条记录`;
   }, [sessions.length]);
 
   const handleDelete = useCallback(async () => {
-    if (!deleteTarget) {
-      return;
-    }
-
+    if (!deleteTarget) return;
     try {
       await deleteSession(deleteTarget.sessionId);
       setSessions((prev) => prev.filter((session) => session.sessionId !== deleteTarget.sessionId));
@@ -459,17 +443,12 @@ export function SessionHistoryList({
 
   const handleRename = useCallback(
     async (newName: string) => {
-      if (!renameTarget) {
-        return;
-      }
-
+      if (!renameTarget) return;
       try {
         await updateSessionTopic(renameTarget.sessionId, newName);
         setSessions((prev) =>
           prev.map((session) =>
-            session.sessionId === renameTarget.sessionId
-              ? { ...session, topic: newName }
-              : session
+            session.sessionId === renameTarget.sessionId ? { ...session, topic: newName } : session
           )
         );
         setRenameTarget(null);
@@ -513,13 +492,17 @@ export function SessionHistoryList({
         ) : error ? (
           <div className="py-8 text-center">
             <p className="mb-2 text-sm text-red-600">{error}</p>
-            <button type="button" onClick={() => void loadSessions()} className="text-sm text-amber-600 hover:text-amber-700">
+            <button
+              type="button"
+              onClick={() => void loadSessions()}
+              className="text-sm text-amber-600 hover:text-amber-700"
+            >
               重试
             </button>
           </div>
         ) : sessions.length === 0 ? (
           <div className="py-8 text-center">
-            <div className="mb-2 text-3xl">{emptyStateIcon}</div>
+            <div className="mb-2 text-2xl font-semibold text-slate-300">{emptyStateIcon}</div>
             <p className="text-sm text-slate-500">{emptyTitle}</p>
             <p className="mt-1 text-xs text-slate-400">{emptyHint}</p>
           </div>
@@ -540,32 +523,27 @@ export function SessionHistoryList({
         )}
       </div>
 
-      {!isLoading && sessions.length > 0 && variant === 'default' ? (
-        <div className="border-t border-slate-100 p-2 text-center">
-          <span className="text-xs text-slate-400">{footerText}</span>
-        </div>
+      {footerText ? (
+        <div className="border-t border-slate-100 px-3 py-2 text-[11px] text-slate-400">{footerText}</div>
       ) : null}
 
-      {variant === 'default' ? (
-        <>
-          <ConfirmDialog
-            isOpen={!!deleteTarget}
-            title="删除录音记录"
-            message="确定要删除这条录音记录吗？相关的转录和笔记也会一起删除，这个操作无法撤销。"
-            confirmText="删除"
-            cancelText="取消"
-            onConfirm={handleDelete}
-            onCancel={() => setDeleteTarget(null)}
-            variant="danger"
-          />
-          <RenameInput
-            isOpen={!!renameTarget}
-            currentName={renameTarget?.topic || renameTarget?.subject || ''}
-            onConfirm={handleRename}
-            onCancel={() => setRenameTarget(null)}
-          />
-        </>
-      ) : null}
+      <ConfirmDialog
+        isOpen={Boolean(deleteTarget)}
+        title="删除这条记录？"
+        message="删除后无法恢复。如果你只是暂时不用它，更建议保留在历史里。"
+        confirmText="删除"
+        onConfirm={() => void handleDelete()}
+        onCancel={() => setDeleteTarget(null)}
+      />
+
+      <RenameInput
+        isOpen={Boolean(renameTarget)}
+        currentName={renameTarget ? buildSessionTitle(renameTarget) : ''}
+        onConfirm={(nextName) => void handleRename(nextName)}
+        onCancel={() => setRenameTarget(null)}
+      />
     </div>
   );
 }
+
+export default SessionHistoryList;

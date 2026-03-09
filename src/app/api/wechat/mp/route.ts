@@ -110,7 +110,7 @@ export async function POST(request: NextRequest) {
           buildWechatTextReply(
             openId,
             developerId,
-            buildAckText(existing.replyText || normalized.replyText || '已经收到。', captureUrl)
+            buildAckText(existing.replyText || normalized.replyText || '已经收到了。', captureUrl)
           )
         );
       }

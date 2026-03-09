@@ -20,10 +20,7 @@ export async function GET(request: NextRequest) {
     const payload = getAuthPayload(request);
 
     if (!payload) {
-      return NextResponse.json(
-        { success: false, error: '未授权' },
-        { status: 401 }
-      );
+      return NextResponse.json({ success: false, error: '未授权' }, { status: 401 });
     }
 
     const context = await workspaceContextService.getCurrentWorkspaceContext(payload.sub);

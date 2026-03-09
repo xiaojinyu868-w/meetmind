@@ -20,13 +20,10 @@ export async function POST(request: NextRequest) {
     const payload = getAuthPayload(request);
 
     if (!payload) {
-      return NextResponse.json(
-        { success: false, error: '未授权' },
-        { status: 401 }
-      );
+      return NextResponse.json({ success: false, error: '未授权' }, { status: 401 });
     }
 
-    const body = await request.json() as {
+    const body = (await request.json()) as {
       sourceType: string;
       sourceKey: string;
       role: string;
@@ -67,10 +64,7 @@ export async function POST(request: NextRequest) {
       success: true,
       workspace: result.workspace,
       echo: result.echo,
-      capture: {
-        id: result.capture.id,
-        sourceKey: result.capture.sourceKey,
-      },
+      capture: result.capture,
     });
   } catch (error) {
     console.error('workspace capture upsert error:', error);

@@ -187,7 +187,9 @@ export const workspaceService = {
     return this.ensureDefaultWorkspace(userId);
   },
 
-  async resolveWechatWorkspace(openId: string): Promise<{
+  async resolveWechatWorkspace(
+    openId: string
+  ): Promise<{
     userId: string;
     workspace: WorkspaceSummary;
   } | null> {

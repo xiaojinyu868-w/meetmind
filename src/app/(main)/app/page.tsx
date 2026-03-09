@@ -31,7 +31,6 @@ import {
   isVideoReachFile,
   type ContextReachDetection,
 } from '@/lib/context-reach';
-import { cn } from '@/lib/utils';
 import type {
   TranscriptSegment,
   HighlightTopic,
@@ -69,7 +68,6 @@ import {
   GraduationCap,
   ChevronRight,
   Plus,
-  ArrowUp,
   Link2,
   History,
   Menu,
@@ -114,6 +112,7 @@ const WorkshopWindowManager = dynamic(() => import('@/components/apps/windows/Wo
 const ConversationList = dynamic(() => import('@/components/ConversationHistory/ConversationList').then(m => ({ default: m.ConversationList })), { ssr: false });
 const AIChat = dynamic(() => import('@/components/AIChat').then(m => ({ default: m.AIChat })), { ssr: false });
 const SessionHistoryList = dynamic(() => import('@/components/SessionHistoryList').then(m => ({ default: m.SessionHistoryList })), { ssr: false });
+const WorkspaceCaptureList = dynamic(() => import('@/components/WorkspaceCaptureList').then(m => ({ default: m.WorkspaceCaptureList })), { ssr: false });
 import { isWorkshopAppKey, type WorkshopAppKey } from '@/lib/ai-native/app-catalog';
 
 // Lazy-load demo data.
@@ -306,6 +305,7 @@ interface WechatCaptureMessage {
 interface WorkspaceCaptureMessage {
   id: string;
   sourceKey: string;
+  sourceType: string;
   role: string;
   contentType: string;
   title: string;
@@ -316,6 +316,7 @@ interface WorkspaceCaptureMessage {
   tutorContext?: string | null;
   occurredAt?: string | null;
   createdAt: string;
+  metadata?: Record<string, unknown> | null;
 }
 
 interface WorkspaceEchoMessage {
@@ -439,6 +440,33 @@ function mergeWorkspaceEchoes(
     if (unique.length >= limit) break;
   }
   return unique;
+}
+
+function mergeWorkspaceCaptures(
+  previous: WorkspaceCaptureMessage[],
+  incoming: WorkspaceCaptureMessage[],
+  limit: number = 80
+): WorkspaceCaptureMessage[] {
+  const normalized = [...incoming, ...previous]
+    .filter((item) => item && item.id && item.title)
+    .map((item) => ({
+      ...item,
+      title: compactText(item.title, 80),
+      previewText: compactText(item.previewText || item.title, 220),
+    }));
+
+  const unique: WorkspaceCaptureMessage[] = [];
+  const seen = new Set<string>();
+  for (const item of normalized) {
+    if (seen.has(item.id)) continue;
+    seen.add(item.id);
+    unique.push(item);
+    if (unique.length >= limit) break;
+  }
+  return unique.sort(
+    (a, b) =>
+      new Date(b.occurredAt || b.createdAt).getTime() - new Date(a.occurredAt || a.createdAt).getTime()
+  );
 }
 
 function resolvePendingAudioFailureStatus(message: string): string {
@@ -654,6 +682,36 @@ function getSegmentBatchDurationMs(segments: TranscriptSegment[]): number {
   return Math.max(0, endMs - startMs);
 }
 
+async function getLocalMediaDurationMs(file: Blob): Promise<number> {
+  if (typeof window === 'undefined') return 0;
+
+  const objectUrl = URL.createObjectURL(file);
+  const element = document.createElement(file.type.startsWith('video/') ? 'video' : 'audio');
+  element.preload = 'metadata';
+  element.src = objectUrl;
+
+  return await new Promise<number>((resolve) => {
+    const cleanup = () => {
+      element.removeAttribute('src');
+      element.load();
+      URL.revokeObjectURL(objectUrl);
+    };
+
+    const finalize = (durationSec: number) => {
+      cleanup();
+      if (!Number.isFinite(durationSec) || durationSec <= 0) {
+        resolve(0);
+        return;
+      }
+      resolve(Math.round(durationSec * 1000));
+    };
+
+    element.onloadedmetadata = () => finalize(element.duration);
+    element.onerror = () => finalize(0);
+    element.load();
+  });
+}
+
 function formatVoiceDurationCompact(ms?: number): string {
   if (!ms || ms <= 0) return '';
   const totalSeconds = Math.max(1, Math.round(ms / 1000));
@@ -741,6 +799,7 @@ function StudentAppContent({
   const [serviceStatus, setServiceStatus] = useState<ServiceStatusType | null>(null);
   const [audioBlob, setAudioBlob] = useState<Blob | null>(null);
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
+  const [sessionMediaDurationMs, setSessionMediaDurationMs] = useState(0);
   const [videoSource, setVideoSource] = useState<ImportedVideoSource | null>(null);
   
   // NOTE: cleaned corrupted legacy comment.
@@ -791,6 +850,7 @@ function StudentAppContent({
   const [collectionComposerText, setCollectionComposerText] = useState('');
   const [showCollectionPulsePreview, setShowCollectionPulsePreview] = useState(false);
   const [captureDrivenPulse, setCaptureDrivenPulse] = useState<CollectionPulseState | null>(null);
+  const [workspaceCaptures, setWorkspaceCaptures] = useState<WorkspaceCaptureMessage[]>([]);
   const [workspaceEchoes, setWorkspaceEchoes] = useState<WorkspaceEchoMessage[]>([]);
   const [selectedEchoChip, setSelectedEchoChip] = useState<string>('全部');
   const collectionComposerRef = useRef<HTMLTextAreaElement | null>(null);
@@ -994,6 +1054,16 @@ function StudentAppContent({
 
       audio.onloadedmetadata = () => {
         const duration = Number.isFinite(audio.duration) ? audio.duration : 0;
+        if (duration > 0) {
+          const durationMs = Math.round(duration * 1000);
+          if (!item.durationMs || Math.abs(item.durationMs - durationMs) > 400) {
+            setSourceItems((prev) =>
+              prev.map((currentItem) =>
+                currentItem.id === item.id ? { ...currentItem, durationMs } : currentItem
+              )
+            );
+          }
+        }
         setAudioPlaybackState({
           id: item.id,
           progress: 0,
@@ -1138,7 +1208,7 @@ function StudentAppContent({
       const migration = await runMemoryMigration();
       if (cancelled) return;
       if (!migration.ok) {
-        toast.warning('历史数据迁移未完全完成，可以继续使用，但部分历史数据可能缺失。');
+        console.warn('[memory.migration.partial]', migration);
       }
     };
     void run();
@@ -1454,6 +1524,7 @@ function StudentAppContent({
     clearSummary();
     setNotes([]);
     liveSegmentsRef.current = loadedSegments;
+    setSessionMediaDurationMs(session.duration || 0);
 
     const isVideoSession = session.sourceType === 'video-link' && !!session.videoUrl;
     if (isVideoSession) {
@@ -1494,10 +1565,14 @@ function StudentAppContent({
       setReviewTab(options?.reviewTab || 'timeline');
       if (session.blob) {
         setAudioBlob(session.blob);
+        setAudioUrl(null);
+      } else if (session.mediaUrl) {
+        setAudioBlob(null);
+        setAudioUrl(session.mediaUrl);
       } else {
         setAudioBlob(null);
+        setAudioUrl(null);
       }
-      setAudioUrl(null);
     }
 
     const restoredAnchor = options?.selectedAnchorId
@@ -1745,7 +1820,7 @@ function StudentAppContent({
       setLoadingProgress(100);
       setAppReady(true);
       hasRestoredState.current = true;
-      toast.error('应用初始化遇到问题，部分数据可能未加载。');
+      setSourceImportError('刚刚没完全打开，稍后再试一次。');
      }
     };
 
@@ -1802,12 +1877,17 @@ function StudentAppContent({
 
       const payload = await readJsonApiResponse<{
         success: boolean;
+        capture?: WorkspaceCaptureMessage;
         echo?: WorkspaceEchoMessage;
         error?: string;
       }>(response, '写入工作区收集失败');
 
       if (!response.ok || !payload.success) {
         throw new Error(payload.error || '写入工作区收集失败');
+      }
+
+      if (payload.capture) {
+        setWorkspaceCaptures((prev) => mergeWorkspaceCaptures(prev, [payload.capture!]));
       }
 
       const echo = payload.echo;
@@ -1861,6 +1941,7 @@ function StudentAppContent({
     setDataSource('live');
     setAudioUrl(null); // 清空当前音频链接
     setAudioBlob(null); // 清空当前音频数据
+    setSessionMediaDurationMs(0);
     setVideoSource(null);
     setVideoInsightItems([]);
     setActiveVideoInsightId(null);
@@ -1916,6 +1997,7 @@ function StudentAppContent({
       : finalSegments.length > 0 
       ? finalSegments[finalSegments.length - 1].endMs 
       : 0;
+    setSessionMediaDurationMs(duration);
     
     // NOTE: cleaned corrupted legacy comment.
     classroomDataService.saveSession({
@@ -2093,10 +2175,19 @@ function StudentAppContent({
       }
     }
 
+    if (item.type === 'audio') {
+      if (!audioBlob && item.mediaUrl) {
+        setAudioUrl(item.mediaUrl);
+      }
+      if (item.durationMs) {
+        setSessionMediaDurationMs(item.durationMs);
+      }
+    }
+
     await handleViewModeChange('review');
     setReviewTab('timeline');
     setVideoWorkspaceTab(item.type === 'video' ? 'chat' : 'chat');
-  }, [handleViewModeChange, restoreReviewSession, sessionId]);
+  }, [audioBlob, handleViewModeChange, restoreReviewSession, sessionId]);
 
   useEffect(() => {
     if (isGuestFastEntry) return;
@@ -2142,7 +2233,33 @@ function StudentAppContent({
       setSupportReferences([]);
     } catch (err) {
       console.error('加载历史会话失败:', err);
-      toast.error('加载历史会话失败，请重试');
+      setSourceImportError('这条历史暂时还没打开，请稍后再试。');
+    }
+  }, [restoreReviewSession]);
+
+  const handleOpenWorkspaceCaptureReview = useCallback(async (capture: WorkspaceCaptureMessage) => {
+    const sessionIdFromCapture =
+      capture.metadata && typeof capture.metadata.sessionId === 'string'
+        ? capture.metadata.sessionId
+        : null;
+
+    if (!sessionIdFromCapture) return;
+
+    setMobileCollectionSheet(null);
+    setShowSessionHistory(false);
+    setShowMobileRecorder(false);
+    setShowCollectionPulsePreview(false);
+
+    try {
+      const restored = await restoreReviewSession(sessionIdFromCapture, {
+        reviewTab: 'timeline',
+        videoWorkspaceTab: capture.contentType === 'video' ? 'chat' : 'chat',
+        currentTime: 0,
+        showTranscriptBar: false,
+      });
+      if (restored) return;
+    } catch (error) {
+      console.error('从工作区收集进入复习失败:', error);
     }
   }, [restoreReviewSession]);
 
@@ -2162,6 +2279,7 @@ function StudentAppContent({
         confidence: seg.confidence || 1.0,
         isFinal: true,
       }))).catch((err) => console.error('Failed to persist batch transcript to IndexedDB:', err));
+      setSessionMediaDurationMs((prev) => Math.max(prev, pendingAudio.durationMs));
       setSourceItems((prev) =>
         prev.map((item) =>
           item.id === pendingAudio.itemId
@@ -2584,9 +2702,10 @@ const _handleVideoAssistantMessage = useCallback((payload: {
   }, [sessionId]);
 
   // NOTE: cleaned corrupted legacy comment.
-  const totalDuration = segments.length > 0
-    ? segments[segments.length - 1].endMs
-    : 0;
+  const totalDuration = Math.max(
+    segments.length > 0 ? segments[segments.length - 1].endMs : 0,
+    sessionMediaDurationMs
+  );
 
   const appendSourceItem = useCallback((params: {
     id?: string;
@@ -2686,6 +2805,8 @@ const _handleVideoAssistantMessage = useCallback((payload: {
     sourceType: SourceIngestType;
     sourceTitle: string;
     audioBlob?: Blob;
+    mediaUrl?: string;
+    mediaDurationMs?: number;
     videoSource?: ImportedVideoSource;
     sourceItemId?: string;
   }) => {
@@ -2707,6 +2828,13 @@ const _handleVideoAssistantMessage = useCallback((payload: {
     const currentUserId = user?.id || ANONYMOUS_USER_ID;
     const duration = mergedSegments[mergedSegments.length - 1]?.endMs || 0;
     const batchDurationMs = getSegmentBatchDurationMs(normalizedSegments);
+    const sourceDurationMs =
+      typeof params.mediaDurationMs === 'number' && params.mediaDurationMs > 0
+        ? params.mediaDurationMs
+        : batchDurationMs;
+    const persistedDuration = hasExisting
+      ? duration
+      : Math.max(duration, sourceDurationMs || 0);
 
     if (!hasExisting) {
       setSessionId(nextSessionId);
@@ -2757,7 +2885,7 @@ const _handleVideoAssistantMessage = useCallback((payload: {
         statusText: undefined,
         origin: 'user',
         sessionId: nextSessionId,
-        durationMs: batchDurationMs,
+        durationMs: sourceDurationMs,
         reviewable: params.sourceType === 'audio' || params.sourceType === 'video',
       });
     } else {
@@ -2773,7 +2901,7 @@ const _handleVideoAssistantMessage = useCallback((payload: {
         status: 'ready',
         statusText: undefined,
         sessionId: nextSessionId,
-        durationMs: batchDurationMs,
+        durationMs: sourceDurationMs,
         reviewable: params.sourceType === 'audio' || params.sourceType === 'video',
       });
     }
@@ -2789,12 +2917,13 @@ const _handleVideoAssistantMessage = useCallback((payload: {
       sourceUrl: params.videoSource?.originalUrl,
       tutorContext: buildSupportReferenceSnippet(normalizedSegments, 2800),
       occurredAt: new Date().toISOString(),
-      metadata: {
-        from: 'transcript-ingest',
-        sessionId: nextSessionId,
-        segmentCount: normalizedSegments.length,
-      },
-    });
+        metadata: {
+          from: 'transcript-ingest',
+          sessionId: nextSessionId,
+          segmentCount: normalizedSegments.length,
+          duration: sourceDurationMs || persistedDuration,
+        },
+      });
 
     try {
       await db.transcripts.bulkAdd(
@@ -2818,7 +2947,7 @@ const _handleVideoAssistantMessage = useCallback((payload: {
           await saveAudioSession(null, nextSessionId, currentUserId, {
             subject: UIConfig.defaultSubject,
             topic: params.sourceTitle || params.videoSource.title || '视频复习',
-            duration,
+            duration: persistedDuration,
             sourceType: 'video-link',
             videoUrl: params.videoSource.originalUrl,
             videoEmbedUrl: params.videoSource.embedUrl,
@@ -2834,11 +2963,18 @@ const _handleVideoAssistantMessage = useCallback((payload: {
         saveAudioSession(params.audioBlob, nextSessionId, currentUserId, {
           subject: UIConfig.defaultSubject,
           topic: params.sourceTitle || UIConfig.defaultLessonTitle,
-          duration,
+          duration: persistedDuration,
           sourceType: 'upload',
+          mediaUrl: params.mediaUrl,
         }).catch((error) => {
           console.error('Failed to persist imported audio session:', error);
         });
+
+        if (!hasExisting && params.sourceType === 'audio') {
+          setAudioBlob(params.audioBlob);
+          setAudioUrl(params.mediaUrl || null);
+          setSessionMediaDurationMs(sourceDurationMs || persistedDuration);
+        }
       }
     }
 
@@ -2848,7 +2984,7 @@ const _handleVideoAssistantMessage = useCallback((payload: {
       topic: params.sourceTitle || UIConfig.defaultLessonTitle,
       teacherName: UIConfig.defaultTeacher || 'Teacher',
       status: 'completed',
-      duration,
+      duration: persistedDuration,
       createdBy: studentId,
     });
 
@@ -2987,7 +3123,7 @@ const _handleVideoAssistantMessage = useCallback((payload: {
     setSourceImportError('');
 
     try {
-      const queuedFiles = fileList.map((file) => {
+      const queuedFiles = await Promise.all(fileList.map(async (file) => {
         const isAudio = isAudioReachFile(file);
         const isVideo = isVideoReachFile(file);
         const isImage = isImageReachFile(file);
@@ -2995,6 +3131,7 @@ const _handleVideoAssistantMessage = useCallback((payload: {
         const mediaUrl = isAudio || isVideo ? objectUrl : undefined;
         const previewUrl = isImage ? objectUrl : undefined;
         const attachmentUrl = !isAudio && !isVideo ? objectUrl : undefined;
+        const durationMs = isAudio || isVideo ? await getLocalMediaDurationMs(file) : undefined;
         if (objectUrl) {
           previewObjectUrlsRef.current.push(objectUrl);
         }
@@ -3007,13 +3144,14 @@ const _handleVideoAssistantMessage = useCallback((payload: {
           mediaUrl,
           previewUrl,
           attachmentUrl,
+          durationMs,
         };
-      });
+      }));
       const importedReferenceTexts: string[] = [];
       let handledFileCount = 0;
       const errorMessages: string[] = [];
 
-      queuedFiles.forEach(({ id, file, isAudio, isVideo, isImage, mediaUrl, previewUrl, attachmentUrl }) => {
+      queuedFiles.forEach(({ id, file, isAudio, isVideo, isImage, mediaUrl, previewUrl, attachmentUrl, durationMs }) => {
         appendSourceItem({
           id,
           type: isAudio ? 'audio' : isVideo ? 'video' : isImage ? 'image' : 'document',
@@ -3028,15 +3166,12 @@ const _handleVideoAssistantMessage = useCallback((payload: {
           status: isAudio || isVideo ? 'transcribing' : 'parsing',
           statusText: isAudio
             ? '转写稍后完成'
-            : isVideo
-              ? '后台整理中'
-              : isImage
-                ? '后台识别中'
-                : '后台整理中',
+            : undefined,
+          durationMs,
         });
       });
 
-      for (const { id, file, isAudio, isVideo, isImage, mediaUrl, previewUrl, attachmentUrl } of queuedFiles) {
+      for (const { id, file, isAudio, isVideo, isImage, mediaUrl, previewUrl, attachmentUrl, durationMs } of queuedFiles) {
         const fileReach = detectReachFromFile(file);
         try {
           if (isImage) {
@@ -3179,10 +3314,12 @@ const _handleVideoAssistantMessage = useCallback((payload: {
               sourceType: isVideo ? 'video' : 'audio',
               sourceTitle: file.name,
               audioBlob: mediaBlob,
+              mediaUrl,
+              mediaDurationMs: durationMs,
               sourceItemId: id,
             });
             if (mediaUrl) {
-              updateSourceItem(id, { mediaUrl });
+              updateSourceItem(id, { mediaUrl, durationMs });
             }
             handledFileCount += 1;
             continue;
@@ -3235,6 +3372,7 @@ const _handleVideoAssistantMessage = useCallback((payload: {
   ]);
 
   const handleSourceFileButtonClick = useCallback((mode: 'audio' | 'support' | 'all' = 'all') => {
+    setSourceImportError('');
     setSourceFilePickerMode(mode);
     setShowSessionHistory(false);
     setShowMobileRecorder(false);
@@ -3277,7 +3415,8 @@ const _handleVideoAssistantMessage = useCallback((payload: {
   const handleImportTextSource = useCallback(async () => {
     const text = sourceTextInput.trim();
     if (!text) {
-      toast.warning('请先粘贴文本内容');
+      setSourceImportError('先贴一段文字再发。');
+      collectionComposerRef.current?.focus();
       return;
     }
 
@@ -3329,7 +3468,6 @@ const _handleVideoAssistantMessage = useCallback((payload: {
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       setSourceImportError(message);
-      toast.error(message);
     } finally {
       setActiveSourceImportCount((count) => Math.max(0, count - 1));
     }
@@ -3418,16 +3556,17 @@ const _handleVideoAssistantMessage = useCallback((payload: {
   } = useVoiceInput({
     onTranscript: appendToCollectionComposer,
     onError: (message) => {
-      toast.error(message || '语音听写失败，请稍后再试。');
+      setSourceImportError(message || '语音听写暂时没接住，请稍后再试。');
     },
   });
 
   const toggleComposerDictation = useCallback(async () => {
     if (showMobileRecorder || isRecording) {
-      toast.info('请先结束当前原声录音，再开始语音听写。');
+      setSourceImportError('先结束原声，再开始听写。');
       return;
     }
 
+    setSourceImportError('');
     setMobileCollectionSheet(null);
     collectionComposerRef.current?.focus();
     await toggleComposerVoiceInput();
@@ -3470,6 +3609,27 @@ const _handleVideoAssistantMessage = useCallback((payload: {
         );
         const addedAt = message.messageAt || new Date().toISOString();
 
+        setWorkspaceCaptures((prev) =>
+          mergeWorkspaceCaptures(prev, [
+            {
+              id: `wechat-capture-${message.linkToken}`,
+              sourceKey: `wechat:${message.linkToken}`,
+              sourceType: 'wechat',
+              role,
+              contentType: sourceType === 'document' ? 'link' : sourceType,
+              title,
+              previewText: preview,
+              normalizedText: message.normalizedText || null,
+              sourceUrl: message.sourceUrl || null,
+              mediaUrl: message.mediaUrl || null,
+              tutorContext: message.tutorContext || null,
+              occurredAt: addedAt,
+              createdAt: addedAt,
+              metadata: null,
+            },
+          ])
+        );
+
         setSourceItems((prev) => {
           if (prev.some((item) => item.id === sourceItemId)) return prev;
           return [
@@ -3497,7 +3657,7 @@ const _handleVideoAssistantMessage = useCallback((payload: {
 
         const messageEchoTitle = message.echoTitle;
         const messageEchoBody = message.echoBody;
-        if (messageEchoTitle && messageEchoBody) {
+      if (messageEchoTitle && messageEchoBody) {
           setWorkspaceEchoes((prev) => mergeWorkspaceEchoes(prev, [{
             id: `wechat-echo-${message.linkToken}`,
             sourceKey: `wechat:${message.linkToken}`,
@@ -3523,6 +3683,7 @@ const _handleVideoAssistantMessage = useCallback((payload: {
         }
 
         importedWechatCaptureTokensRef.current.add(wechatCaptureToken);
+        setSourceImportError('');
         if (typeof window !== 'undefined') {
           window.sessionStorage.setItem(sessionStorageKey, '1');
           const url = new URL(window.location.href);
@@ -3530,15 +3691,10 @@ const _handleVideoAssistantMessage = useCallback((payload: {
           window.history.replaceState({}, '', url.toString());
         }
 
-        toast.success(
-          message.workspace?.name
-            ? `这条微信收集已经接进 ${message.workspace.name}。`
-            : '这条微信收集已经接进当前页面。'
-        );
       } catch (error) {
         if (cancelled) return;
         const message = error instanceof Error ? error.message : String(error);
-        toast.error(message);
+        setSourceImportError(message || '这条微信收集还没接进来，请稍后再试。');
       }
     })();
 
@@ -3577,6 +3733,10 @@ const _handleVideoAssistantMessage = useCallback((payload: {
 
         const captures = Array.isArray(payload.captures) ? payload.captures : [];
         const echoes = Array.isArray(payload.echoes) ? payload.echoes : [];
+
+        if (captures.length > 0) {
+          setWorkspaceCaptures((prev) => mergeWorkspaceCaptures(prev, captures));
+        }
 
         if (captures.length > 0) {
           setSourceItems((prev) => {
@@ -3990,7 +4150,6 @@ const _handleVideoAssistantMessage = useCallback((payload: {
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       setSourceImportError(message);
-      toast.error(message);
     } finally {
       setActiveSourceImportCount((count) => Math.max(0, count - 1));
     }
@@ -4003,6 +4162,7 @@ const _handleVideoAssistantMessage = useCallback((payload: {
       void stopComposerVoiceInput();
     }
 
+    setSourceImportError('');
     setMobileCollectionSheet(null);
     setRecorderAutoStartSignal(0);
     flushSync(() => {
@@ -4212,358 +4372,6 @@ const _handleVideoAssistantMessage = useCallback((payload: {
     [activeSourceImportCount, isRecording]
   );
 
-  const _renderLegacyMobileRecordView = () => (
-    <div className="relative flex-1 min-h-0 overflow-hidden" style={{ background: 'var(--edu-bg-primary)' }}>
-      {renderMobileTopBar()}
-
-      <div className="flex-1 overflow-y-auto px-4 pb-[180px] pt-4">
-        <div className="mx-auto flex w-full max-w-md flex-col gap-3">
-          <input
-            ref={sourceFileInputRef}
-            type="file"
-            accept={sourceFileAccept}
-            multiple
-            onChange={handleSourceFileInputChange}
-            className="hidden"
-          />
-
-          <section className="rounded-[28px] border border-amber-200/80 bg-[linear-gradient(145deg,#fffdf7_0%,#fff6e8_100%)] p-5 shadow-[0_16px_40px_rgba(15,23,42,0.05)]">
-            <div className="flex items-start gap-3">
-              <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-white shadow-sm">
-                <Star size={18} className="text-amber-500" />
-              </div>
-              <div className="min-w-0 flex-1">
-                <p className="text-xs font-semibold tracking-[0.06em] text-slate-500">今日发酵</p>
-                <h2 className="mt-2 text-[28px] font-semibold leading-tight tracking-[-0.02em] text-slate-900">
-                  {isRecording
-                    ? '这节课正在长进你的上下文里'
-                    : collectionFeedItems.length > 0
-                      ? '你刚加进来的东西，会继续在这里长'
-                      : '先随手加一点进来，不用一次讲完整'}
-                </h2>
-                <p className="mt-2 text-sm leading-7 text-slate-600">
-                  {isRecording
-                    ? '先自然说下去。系统会一边收，一边把课堂现场和你的疑惑一起织进去。'
-                    : collectionFeedItems.length > 0
-                      ? '不用整理成笔记。录音、讲义、截图和一句困惑，都会慢慢被放进同一条学习脉络。'
-                      : '录一小段、记一句、贴一份材料都可以。这里应该像聊天一样轻，而不是像提交表单。'}
-                </p>
-                <div className="mt-4 flex flex-wrap gap-2">
-                  <span className="rounded-full bg-white/80 px-3 py-1 text-xs font-medium text-slate-600">一句困惑</span>
-                  <span className="rounded-full bg-white/80 px-3 py-1 text-xs font-medium text-slate-600">一段语音</span>
-                  <span className="rounded-full bg-white/80 px-3 py-1 text-xs font-medium text-slate-600">一份讲义</span>
-                </div>
-              </div>
-            </div>
-          </section>
-
-          {sourceImportError ? (
-            <div className="rounded-[24px] border border-rose-200 bg-rose-50/90 px-4 py-3 text-sm text-rose-700 shadow-sm">
-              {sourceImportError}
-            </div>
-          ) : null}
-
-          <section className="rounded-[28px] border border-slate-200 bg-white p-4 shadow-[0_16px_34px_rgba(15,23,42,0.05)]">
-            <div className="mb-3 flex items-center justify-between">
-              <div>
-                <p className="text-xs font-semibold tracking-[0.06em] text-slate-500">收集流</p>
-                <h3 className="mt-1 text-lg font-semibold text-slate-900">你刚刚加进来的东西，会继续在这里长</h3>
-              </div>
-              <div className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-500">
-                {collectionFeedItems.length + (showMobileRecorder ? 1 : 0)} 条
-              </div>
-            </div>
-
-            <div className="space-y-3">
-              {showMobileRecorder ? (
-                <div className="mr-10 rounded-[24px] border border-amber-200 bg-[linear-gradient(145deg,#fffaf0_0%,#fff2db_100%)] px-4 py-3 shadow-sm">
-                  <div className="flex items-center gap-2 text-[11px] font-medium text-amber-700">
-                    <span className="inline-flex h-2 w-2 rounded-full bg-coral animate-pulse" />
-                    {isRecording ? '正在收一段语音' : '刚刚收下一段语音'}
-                  </div>
-                  <p className="mt-2 text-sm leading-7 text-slate-700">
-                    {currentLivePreview || '先说下去，停下后这段内容会自动接进收集流。'}
-                  </p>
-                </div>
-              ) : null}
-
-              {collectionFeedItems.length === 0 ? (
-                <div className="rounded-[24px] border border-dashed border-slate-200 bg-slate-50/70 px-4 py-5 text-sm leading-7 text-slate-500">
-                  这里还没有长出内容。先录一小段、贴一张讲义，或者记一句你现在卡住的地方就够了。
-                </div>
-              ) : (
-                collectionFeedItems.map((item) => {
-                  const isPrimary = item.role === 'primary';
-                  const typeLabel =
-                    item.type === 'audio'
-                      ? '录音'
-                      : item.type === 'video'
-                        ? '视频'
-                        : item.type === 'document'
-                        ? '材料'
-                        : '文字';
-                  const bubbleText = item.preview?.trim() || item.title;
-                  const detailLabel = item.preview?.trim() && item.preview?.trim() !== item.title ? item.title : '';
-
-                  return (
-                    <div
-                      key={item.id}
-                      className={`rounded-[24px] border px-4 py-3 shadow-sm ${
-                        isPrimary
-                          ? 'mr-10 border-amber-200 bg-[linear-gradient(145deg,#fffdf8_0%,#fff4e3_100%)]'
-                          : 'ml-10 border-slate-200 bg-slate-50/90'
-                      }`}
-                    >
-                      <div className="flex items-center justify-between gap-2 text-[11px] font-medium">
-                        <div className="flex items-center gap-2 text-slate-500">
-                          <span className={`rounded-full px-2 py-0.5 ${
-                            isPrimary ? 'bg-amber-100 text-amber-700' : 'bg-slate-200 text-slate-600'
-                          }`}>
-                            {typeLabel}
-                          </span>
-                          <span>{formatRelativeCollectionTime(item.addedAt)}</span>
-                        </div>
-                        <span className="text-slate-400">{item.segmentCount} 段</span>
-                      </div>
-                      <p className="mt-2 text-sm leading-6 text-slate-900">{bubbleText}</p>
-                      {detailLabel ? (
-                        <p className="mt-2 text-[11px] leading-5 text-slate-400">{detailLabel}</p>
-                      ) : null}
-                      <p className="mt-2 text-xs leading-6 text-slate-500">
-                        {isPrimary ? '这会成为当前学习主线的一部分。' : '它会作为补充上下文，参与后续理解和回答。'}
-                      </p>
-                    </div>
-                  );
-                })
-              )}
-            </div>
-          </section>
-        </div>
-      </div>
-
-      {mobileCollectionSheet ? (
-        <div
-          className={`${isDesktopMobilePreview ? 'absolute inset-x-0' : 'fixed inset-x-0'} z-30 px-3`}
-          style={{ bottom: '116px' }}
-        >
-          <div className="mx-auto w-full max-w-md rounded-[30px] border border-slate-200 bg-white shadow-[0_28px_60px_rgba(15,23,42,0.18)]">
-            <div className="flex items-center justify-between border-b border-slate-100 px-4 py-3">
-              <div>
-                <p className="text-sm font-semibold text-slate-900">
-                  {mobileCollectionSheet === 'attachments'
-                    ? '继续往这次学习里加东西'
-                    : mobileCollectionSheet === 'video'
-                      ? '导入一个视频链接'
-                      : '打开历史收集'}
-                </p>
-                <p className="text-xs text-slate-500">
-                  {mobileCollectionSheet === 'attachments'
-                    ? '像聊天发附件一样，不要先想分类。'
-                    : mobileCollectionSheet === 'video'
-                      ? '导入后会自动转写并进入复习。'
-                      : '从历史里捞回一段，继续接着学。'}
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={() => {
-                  setMobileCollectionSheet(null);
-                  setShowSessionHistory(false);
-                }}
-                className="flex h-9 w-9 items-center justify-center rounded-full bg-slate-100 text-slate-500"
-              >
-                <X size={16} />
-              </button>
-            </div>
-
-            {mobileCollectionSheet === 'attachments' ? (
-              <div className="space-y-2 p-3">
-                {[
-                  {
-                    key: 'audio',
-                    icon: <Mic size={16} className="text-amber-500" />,
-                    title: '上传音频',
-                    description: '把一段课堂录音、讨论片段或回放扔进来。',
-                    onClick: () => {
-                      setMobileCollectionSheet(null);
-                      handleSourceFileButtonClick('audio');
-                    },
-                  },
-                  {
-                    key: 'support',
-                    icon: <FileText size={16} className="text-cyan-600" />,
-                    title: '补充材料',
-                    description: 'PDF、讲义、截图文字都可以，系统会拿它做上下文。',
-                    onClick: () => {
-                      setMobileCollectionSheet(null);
-                      handleSourceFileButtonClick('support');
-                    },
-                  },
-                  {
-                    key: 'video',
-                    icon: <Link2 size={16} className="text-fuchsia-600" />,
-                    title: '视频链接',
-                    description: '导入一段课、讲座或回放链接。',
-                    onClick: () => {
-                      setShowSessionHistory(false);
-                      setMobileCollectionSheet('video');
-                    },
-                  },
-                  {
-                    key: 'history',
-                    icon: <History size={16} className="text-slate-600" />,
-                    title: '历史收集',
-                    description: '从以前的录音和整理里，捞回一段继续学。',
-                    onClick: () => {
-                      setShowSessionHistory(false);
-                      setMobileCollectionSheet('history');
-                    },
-                  },
-                ].map((action) => (
-                  <button
-                    key={action.key}
-                    type="button"
-                    onClick={action.onClick}
-                    className="flex w-full items-start gap-3 rounded-[22px] border border-slate-200 bg-slate-50/80 px-4 py-3 text-left transition hover:border-slate-300 hover:bg-white"
-                  >
-                    <div className="mt-0.5 flex h-9 w-9 items-center justify-center rounded-2xl bg-white shadow-sm">
-                      {action.icon}
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center justify-between gap-2">
-                        <span className="text-sm font-semibold text-slate-900">{action.title}</span>
-                        <ChevronRight size={16} className="text-slate-300" />
-                      </div>
-                      <p className="mt-1 text-xs leading-6 text-slate-500">{action.description}</p>
-                    </div>
-                  </button>
-                ))}
-              </div>
-            ) : null}
-
-            {mobileCollectionSheet === 'video' ? (
-              <div className="p-4">
-                  <VideoLinkImporter
-                    onImportReady={(result) => {
-                      setMobileCollectionSheet(null);
-                      handleVideoImportReady(result);
-                    }}
-                    onError={(error) => {
-                      console.error('视频导入失败:', error);
-                      toast.error(String(error));
-                    }}
-                    disabled={isRecording}
-                  />
-              </div>
-            ) : null}
-
-            {mobileCollectionSheet === 'history' ? (
-              <div className="max-h-[52vh] overflow-hidden rounded-b-[30px]">
-                <SessionHistoryList
-                  userId={user?.id}
-                  onSessionSelect={(session) => {
-                    setMobileCollectionSheet(null);
-                    void handleLoadHistorySession(session);
-                  }}
-                  onClose={() => setMobileCollectionSheet(null)}
-                  activeSessionId={sessionId}
-                  maxHeight="52vh"
-                  showHeader={false}
-                  variant="capture"
-                />
-              </div>
-            ) : null}
-          </div>
-        </div>
-      ) : null}
-
-      {showMobileRecorder ? (
-        <div
-          className={`${isDesktopMobilePreview ? 'absolute inset-x-0 bottom-0' : 'fixed inset-x-0 bottom-0'} z-40 px-3 pb-[max(env(safe-area-inset-bottom),12px)]`}
-        >
-          <div className="mx-auto w-full max-w-md rounded-[30px] border border-slate-200 bg-white/96 p-3 shadow-[0_28px_60px_rgba(15,23,42,0.22)] backdrop-blur">
-            <Recorder
-              ref={recorderRef}
-              activeSessionId={sessionId}
-              continueCurrentSession={collectionFeedItems.length > 0 || segments.length > 0}
-              autoStartSignal={recorderAutoStartSignal}
-              compactMode
-              onRecordingStart={handleRecordingStart}
-              onRecordingStop={handleRecordingStop}
-              onTranscriptionError={handleRecordingTranscriptionError}
-              onTranscriptUpdate={handleTranscriptUpdate}
-              onTranscriptTextUpdate={handleTranscriptTextUpdate}
-              onTranscriptEnhanced={handleTranscriptEnhanced}
-              onAnchorMark={handleAnchorMark}
-              contextHint={liveASRContextHint}
-            />
-          </div>
-        </div>
-      ) : (
-        <div
-          className={`${isDesktopMobilePreview ? 'absolute inset-x-0 bottom-0' : 'fixed inset-x-0 bottom-0'} z-20 px-3 pb-[max(env(safe-area-inset-bottom),12px)]`}
-        >
-          <div className="mx-auto w-full max-w-md rounded-[30px] border border-slate-200 bg-white/96 p-3 shadow-[0_24px_50px_rgba(15,23,42,0.16)] backdrop-blur">
-            <div className="mb-2 flex items-center justify-between">
-              <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-semibold text-slate-600">轻收集</span>
-              <span className="text-[11px] text-slate-400">想到什么先记一句</span>
-            </div>
-
-            <textarea
-              value={collectionComposerText}
-              onChange={(event) => setCollectionComposerText(event.target.value)}
-              placeholder="想到什么就先记一句，或者继续把这次学习的材料扔进来"
-              rows={2}
-              className="min-h-[84px] w-full resize-none border-0 bg-transparent px-1 py-2 text-sm leading-7 text-slate-700 outline-none placeholder:text-slate-400"
-            />
-
-            <div className="mt-2 flex items-center gap-2">
-              <button
-                type="button"
-                onClick={() => handleSourceFileButtonClick('all')}
-                className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-600 shadow-sm"
-              >
-                <Plus size={16} />
-                添加
-              </button>
-              <button
-                type="button"
-                onClick={openLiveRecorder}
-                className="inline-flex items-center gap-1.5 rounded-full border border-amber-300 bg-amber-50 px-3 py-2 text-sm font-medium text-amber-700 shadow-sm"
-              >
-                <AudioLines size={18} strokeWidth={2} />
-                录一段
-              </button>
-              <div className="ml-auto">
-                <button
-                  type="button"
-                  onClick={handleCollectionComposerSubmit}
-                  disabled={!collectionComposerText.trim()}
-                  className="flex h-11 w-11 items-center justify-center rounded-full bg-slate-900 text-white shadow-sm transition disabled:bg-slate-200 disabled:text-slate-400"
-                >
-                  <ArrowUp size={18} />
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      <DedaoMenu
-        isOpen={isMenuOpen}
-        onClose={() => setIsMenuOpen(false)}
-        onNavigate={(page) => setMobileSubPage(page)}
-        showApps={false}
-        userRole="student"
-        badges={{
-          highlights: highlightTopics.length,
-          notes: notes.length,
-          tasks: actionItems.filter(i => !i.completed).length,
-        }}
-      />
-    </div>
-  );
-
   const renderMobileRecordView = ({ desktopShell = false }: { desktopShell?: boolean } = {}) => {
     const shellWidthClass = desktopShell ? 'max-w-3xl' : 'max-w-md';
     const messageBubbleWidthClass = desktopShell ? 'max-w-[74%]' : 'max-w-[88%]';
@@ -4603,30 +4411,19 @@ const _handleVideoAssistantMessage = useCallback((payload: {
           ) : null}
 
           {collectionFeedItems.length === 0 ? (
-            <div className="mx-auto w-full max-w-[92%] rounded-[24px] border border-slate-200 bg-white px-4 py-4 shadow-sm">
-              <p className="text-[11px] text-slate-400">
-                {new Date().toLocaleString('zh-CN', {
-                  month: '2-digit',
-                  day: '2-digit',
-                  hour: '2-digit',
-                  minute: '2-digit',
-                })}
-              </p>
-              <div className="mt-2 space-y-2 text-slate-900">
-                <p className="text-base font-semibold">先把今天这节课发进来</p>
-                <p className="text-sm leading-7 text-slate-600">
-                  一句困惑、一张图、一份讲义、一段原声都可以。先收进来，后面再慢慢长成复习和 Tutor。
+            <div className="flex justify-start">
+              <div className="w-full max-w-[92%] rounded-[24px] border border-slate-200 bg-white px-4 py-3 shadow-sm">
+                <p className="text-[11px] text-slate-400">
+                  {new Date().toLocaleString('zh-CN', {
+                    month: '2-digit',
+                    day: '2-digit',
+                    hour: '2-digit',
+                    minute: '2-digit',
+                  })}
                 </p>
-              </div>
-              <div className="mt-3 flex flex-wrap gap-2">
-                {['一句困惑', '一张图', '一份讲义', '一段原声'].map((chip) => (
-                  <span
-                    key={chip}
-                    className="rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-medium text-slate-500"
-                  >
-                    {chip}
-                  </span>
-                ))}
+                <p className="mt-2 text-sm leading-7 text-slate-700">
+                  今天先收一点：一句困惑、一张图、一份讲义或一段原声都行。先发进来，后面再接着学。
+                </p>
               </div>
             </div>
           ) : (
@@ -4684,13 +4481,13 @@ const _handleVideoAssistantMessage = useCallback((payload: {
                 const fileExtensionBadge = getFileExtensionBadge(item.title);
                 const canOpenReview = Boolean(item.reviewable && item.sessionId && item.status !== 'failed');
                 const showInlineStatus = Boolean(
-                  item.status &&
-                  item.status !== 'ready' &&
+                  item.status === 'failed' &&
+                  item.statusText &&
                   item.type !== 'audio' &&
                   item.type !== 'video'
                 );
                 const showAudioStatusText = Boolean(item.statusText) && item.status !== 'ready';
-                const showVideoStatusText = Boolean(item.statusText) && item.status !== 'ready';
+                const showVideoStatusText = Boolean(item.statusText) && item.status === 'failed';
                 const statusTone =
                   item.status === 'failed'
                     ? 'bg-rose-50 text-rose-600'
@@ -4782,7 +4579,7 @@ const _handleVideoAssistantMessage = useCallback((payload: {
                                       isPrimary ? 'text-[#2f6f1f] hover:text-[#245818]' : 'text-slate-600 hover:text-slate-800'
                                     }`}
                                   >
-                                    {isAudioTranscriptOpen ? '收起文字' : '文字'}
+                                    {isAudioTranscriptOpen ? '收起文字' : '看文字'}
                                   </button>
                                 </>
                               ) : null}
@@ -4800,7 +4597,7 @@ const _handleVideoAssistantMessage = useCallback((payload: {
                                       isPrimary ? 'text-[#2f6f1f] hover:text-[#245818]' : 'text-slate-600 hover:text-slate-800'
                                     }`}
                                   >
-                                    复习
+                                    去复习
                                   </button>
                                 </>
                               ) : null}
@@ -4864,11 +4661,12 @@ const _handleVideoAssistantMessage = useCallback((payload: {
                                   </span>
                                   <div className="min-w-0 flex-1">
                                     <p className="truncate text-sm font-medium text-slate-900">{item.title}</p>
-                                    {fileExtensionBadge ? (
-                                      <p className="text-[11px] text-slate-500">{fileExtensionBadge}</p>
-                                    ) : null}
                                   </div>
-                                  <ChevronRight size={15} className="shrink-0 text-slate-300" />
+                                  {fileExtensionBadge ? (
+                                    <span className="shrink-0 rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-medium text-slate-500">
+                                      {fileExtensionBadge}
+                                    </span>
+                                  ) : null}
                                 </div>
                               </a>
                             ) : (
@@ -4880,9 +4678,7 @@ const _handleVideoAssistantMessage = useCallback((payload: {
                                 </span>
                                 <div className="min-w-0">
                                   <p className="truncate text-sm font-medium text-slate-900">{item.title}</p>
-                                  {fileExtensionBadge ? (
-                                    <p className="text-[11px] text-slate-500">{fileExtensionBadge}</p>
-                                  ) : null}
+                                  {fileExtensionBadge ? <p className="text-[11px] text-slate-500">{fileExtensionBadge}</p> : null}
                                 </div>
                               </div>
                             )}
@@ -4899,7 +4695,7 @@ const _handleVideoAssistantMessage = useCallback((payload: {
                                     isPrimary ? 'text-[#2f6f1f] hover:text-[#245818]' : 'text-slate-600 hover:text-slate-800'
                                   }`}
                                 >
-                                  复习
+                                  去复习
                                 </button>
                               ) : null}
                             </div>
@@ -4965,7 +4761,7 @@ const _handleVideoAssistantMessage = useCallback((payload: {
                                     isPrimary ? 'text-white hover:text-white/80' : 'text-slate-600 hover:text-slate-800'
                                   }`}
                                 >
-                                  复习
+                                  去复习
                                 </button>
                               ) : null}
                             </div>
@@ -5009,8 +4805,11 @@ const _handleVideoAssistantMessage = useCallback((payload: {
             <div className="border-b border-slate-100 px-5 pb-4 pt-[max(env(safe-area-inset-top),20px)]">
               <div className="flex items-center justify-between gap-3">
                 <div>
-                  <p className="text-[11px] font-medium tracking-[0.08em] text-slate-400">Capture First</p>
-                  <p className="mt-1 text-2xl font-semibold tracking-[-0.02em] text-slate-900">收集</p>
+                  <p className="text-2xl font-semibold tracking-[-0.02em] text-slate-900">收集</p>
+                  <p className="mt-1 text-xs text-slate-500">
+                    已收 {captureActivitySummary.totalCount} 条 · 活跃 {captureActivitySummary.activeDays} 天 · 回声{' '}
+                    {workspaceEchoes.length} 条
+                  </p>
                 </div>
                 <button
                   type="button"
@@ -5023,56 +4822,22 @@ const _handleVideoAssistantMessage = useCallback((payload: {
                     <X size={16} />
                   </button>
                 </div>
-                <div className="mt-4 grid grid-cols-3 gap-2">
-                  <div className="rounded-[18px] bg-slate-50 px-3 py-3">
-                    <p className="text-[11px] font-medium text-slate-500">已收</p>
-                    <p className="mt-1 text-2xl font-semibold text-slate-900">{captureActivitySummary.totalCount}</p>
-                  </div>
-                  <div className="rounded-[18px] bg-slate-50 px-3 py-3">
-                    <p className="text-[11px] font-medium text-slate-500">活跃天</p>
-                    <p className="mt-1 text-2xl font-semibold text-slate-900">{captureActivitySummary.activeDays}</p>
-                  </div>
-                  <div className="rounded-[18px] bg-slate-50 px-3 py-3">
-                    <p className="text-[11px] font-medium text-slate-500">回声</p>
-                    <p className="mt-1 text-2xl font-semibold text-slate-900">{workspaceEchoes.length}</p>
-                  </div>
-                </div>
-                <div className="mt-4 rounded-[20px] bg-slate-50 px-3 py-3">
-                  <div className="flex items-center justify-between gap-3">
-                    <div>
-                      <p className="text-[11px] font-medium tracking-[0.06em] text-slate-500">最近 4 周</p>
-                      <p className="mt-1 text-sm font-semibold text-slate-900">
-                        {captureActivitySummary.streak > 0
-                          ? `已经连续 ${captureActivitySummary.streak} 天在收`
-                          : '先从今天收一点开始'}
-                      </p>
-                    </div>
-                    {captureActivitySummary.topKinds.length > 0 ? (
-                      <span className="rounded-full bg-white px-2.5 py-1 text-[11px] font-medium text-slate-500">
-                        {captureActivitySummary.topKinds.join(' · ')}
-                      </span>
-                    ) : null}
-                  </div>
-                  <div className="mt-3 grid grid-cols-7 gap-1.5">
-                    {captureActivitySummary.tiles.map((tile) => (
-                      <span
-                        key={tile.key}
-                        className={cn(
-                          'h-6 rounded-[7px] border',
-                          tile.count > 0
-                            ? tile.count >= 3
-                              ? 'border-emerald-300 bg-emerald-300/85'
-                              : 'border-emerald-200 bg-emerald-100'
-                            : 'border-slate-200 bg-white'
-                        )}
-                        title={`${tile.key} · ${tile.count} 条`}
-                      />
-                    ))}
-                  </div>
-                </div>
               </div>
 
               <div className="flex-1 space-y-2 overflow-y-auto p-3">
+                <div className="rounded-[18px] bg-slate-50 px-4 py-3 text-left">
+                  <p className="text-sm font-semibold text-slate-900">
+                    {captureActivitySummary.streak > 0
+                      ? `已经连续 ${captureActivitySummary.streak} 天在收`
+                      : '先从今天收一点开始'}
+                  </p>
+                  <p className="mt-1 text-xs leading-5 text-slate-500">
+                    {captureActivitySummary.topKinds.length > 0
+                      ? `最近收得最多的是：${captureActivitySummary.topKinds.join(' · ')}`
+                      : '一句困惑、一张图、一份讲义或一段原声，都可以先发进来。'}
+                  </p>
+                </div>
+
                 <button
                   type="button"
                   onClick={() => setMobileCollectionSheet('history')}
@@ -5314,18 +5079,28 @@ const _handleVideoAssistantMessage = useCallback((payload: {
 
               {mobileCollectionSheet === 'history' ? (
                 <div className="max-h-[52vh] overflow-hidden rounded-b-[30px]">
-                  <SessionHistoryList
-                    userId={user?.id}
-                    onSessionSelect={(session) => {
-                      setMobileCollectionSheet(null);
-                      void handleLoadHistorySession(session);
-                    }}
-                    onClose={() => setMobileCollectionSheet(null)}
-                    activeSessionId={sessionId}
-                    maxHeight="52vh"
-                    showHeader={false}
-                    variant="capture"
-                  />
+                  {workspaceCaptures.length > 0 ? (
+                    <WorkspaceCaptureList
+                      captures={workspaceCaptures}
+                      onClose={() => setMobileCollectionSheet(null)}
+                      onOpenReview={handleOpenWorkspaceCaptureReview}
+                      maxHeight="52vh"
+                      showHeader={false}
+                    />
+                  ) : (
+                    <SessionHistoryList
+                      userId={user?.id}
+                      onSessionSelect={(session) => {
+                        setMobileCollectionSheet(null);
+                        void handleLoadHistorySession(session);
+                      }}
+                      onClose={() => setMobileCollectionSheet(null)}
+                      activeSessionId={sessionId}
+                      maxHeight="52vh"
+                      showHeader={false}
+                      variant="capture"
+                    />
+                  )}
                 </div>
               ) : null}
             </div>
@@ -5390,7 +5165,10 @@ const _handleVideoAssistantMessage = useCallback((payload: {
                 <textarea
                   ref={collectionComposerRef}
                   value={collectionComposerText}
-                  onChange={(event) => setCollectionComposerText(event.target.value)}
+                  onChange={(event) => {
+                    setSourceImportError('');
+                    setCollectionComposerText(event.target.value);
+                  }}
                   onPaste={handleCollectionComposerPaste}
                   placeholder="发一句想法，贴个链接，或者先把这节课丢进来"
                   rows={composerRows}
@@ -5418,14 +5196,20 @@ const _handleVideoAssistantMessage = useCallback((payload: {
                   <span>
                     {sourceImporting
                       ? activeSourceImportCount > 1
-                        ? `${activeSourceImportCount} 个文件正在后台解析，你可以继续发`
-                        : '这个文件正在后台解析，你可以继续发'
+                        ? `${activeSourceImportCount} 个文件已收下，稍后慢慢整理`
+                        : '这个文件已收下，稍后慢慢整理'
                       : composerVoiceStatus === 'connecting'
                         ? '正在打开语音听写'
                         : isComposerVoiceRecording
-                          ? compactText(composerVoiceInterimText || '正在把语音追加到输入框', 28)
-                          : '发送后会自动解析这个链接'}
+                          ? compactText(composerVoiceInterimText || '正在听你说', 28)
+                          : '发出去后会自动接进来'}
                   </span>
+                </div>
+              ) : null}
+              {!sourceImporting && sourceImportError ? (
+                <div className="mt-1.5 flex items-center gap-2 text-[11px] text-rose-500">
+                  <span className="inline-flex h-1.5 w-1.5 rounded-full bg-rose-400" />
+                  <span>{compactText(sourceImportError, 40)}</span>
                 </div>
               ) : null}
             </div>
@@ -5719,16 +5503,26 @@ const _handleVideoAssistantMessage = useCallback((payload: {
 
     return (
       <>
-        <div className="card-edu p-0 overflow-hidden" style={{ maxHeight: historyMaxHeight, display: showSessionHistory ? undefined : 'none' }}>
-          <SessionHistoryList
-            userId={user?.id}
-            onSessionSelect={handleLoadHistorySession}
-            onClose={() => setShowSessionHistory(false)}
-            activeSessionId={sessionId}
-            maxHeight={historyMaxHeight}
-            showHeader={false}
-            variant="capture"
-          />
+        <div className="card-edu overflow-hidden p-0" style={{ maxHeight: historyMaxHeight, display: showSessionHistory ? undefined : 'none' }}>
+          {workspaceCaptures.length > 0 ? (
+            <WorkspaceCaptureList
+              captures={workspaceCaptures}
+              onClose={() => setShowSessionHistory(false)}
+              onOpenReview={handleOpenWorkspaceCaptureReview}
+              maxHeight={historyMaxHeight}
+              showHeader={false}
+            />
+          ) : (
+            <SessionHistoryList
+              userId={user?.id}
+              onSessionSelect={handleLoadHistorySession}
+              onClose={() => setShowSessionHistory(false)}
+              activeSessionId={sessionId}
+              maxHeight={historyMaxHeight}
+              showHeader={false}
+              variant="capture"
+            />
+          )}
         </div>
 
         <div className={surfaceClass} style={{ display: dataSource === 'video' && !showSessionHistory ? undefined : 'none' }}>
@@ -5903,6 +5697,7 @@ const _handleVideoAssistantMessage = useCallback((payload: {
     dataSource,
     handleImportTextSource,
     handleLoadHistorySession,
+    handleOpenWorkspaceCaptureReview,
     handleSourceFileButtonClick,
     handleVideoImportReady,
     isRecording,
@@ -5915,6 +5710,7 @@ const _handleVideoAssistantMessage = useCallback((payload: {
     sourcePanelMode,
     sourceTextInput,
     user?.id,
+    workspaceCaptures,
   ]);
 
   const renderSharedWorkspacePanel = useCallback((tab: SharedWorkspaceTab) => {
@@ -6183,11 +5979,11 @@ const _handleVideoAssistantMessage = useCallback((payload: {
                     href="/login"
                     className="px-2.5 py-1.5 text-xs font-medium text-white bg-gradient-to-r from-amber-400 to-amber-500 rounded-lg flex-shrink-0"
                   >
-                    鐧诲綍
+                    登录
                   </a>
                 )}
-                
-                {/* 閼挎粌宕熼幐澶愭尦 */}
+
+                {/* 菜单按钮 */}
                 <DedaoMenuButton onClick={() => setIsMenuOpen(true)} />
               </div>
 
@@ -6498,7 +6294,7 @@ const _handleVideoAssistantMessage = useCallback((payload: {
                                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
                                 </svg>
-                                鍦ㄥ綋鍓嶄綅缃爣璁板洶鎯?({formatTime(currentTime)})
+                                在当前位置标记困惑 ({formatTime(currentTime)})
                               </button>
 
                               {anchors.length > 0 ? (
@@ -6769,7 +6565,7 @@ const _handleVideoAssistantMessage = useCallback((payload: {
                           ) : (
                             <div className="h-full flex flex-col">
                               <div className="px-4 py-2 border-b flex items-center justify-between flex-shrink-0" style={{ background: 'var(--edu-bg-soft)', borderColor: 'var(--edu-border-light)' }}>
-                                <span className="text-sm font-medium text-navy">鍘嗗彶瀵硅瘽</span>
+                                <span className="text-sm font-medium text-navy">历史对话</span>
                                 {/* NOTE: cleaned corrupted legacy comment. */}
                                 <button
                                   onClick={() => {
@@ -6829,7 +6625,7 @@ const _handleVideoAssistantMessage = useCallback((payload: {
                 isHistoryActive={showConversationHistory}
               />
 
-              {/* 鐞涘苯濮╁〒鍛礋閹惰棄鐪?*/}
+              {/* 动作抽屉 */}
               <ActionDrawer
                 isOpen={isActionDrawerOpen}
                 onClose={() => setIsActionDrawerOpen(false)}
@@ -6877,11 +6673,11 @@ const _handleVideoAssistantMessage = useCallback((payload: {
                     href="/login"
                     className="px-2.5 py-1.5 text-xs font-medium text-white bg-gradient-to-r from-amber-400 to-amber-500 rounded-lg flex-shrink-0"
                   >
-                    鐧诲綍
+                    登录
                   </a>
                 )}
-                
-                {/* 閼挎粌宕熼幐澶愭尦 */}
+
+                {/* 菜单按钮 */}
                 <DedaoMenuButton onClick={() => setIsMenuOpen(true)} data-onboarding="menu-button" />
               </div>
 
@@ -7085,7 +6881,7 @@ const _handleVideoAssistantMessage = useCallback((payload: {
                             ? 'bg-white text-amber-600 shadow-sm'
                             : 'text-gray-400 hover:text-gray-600'
                         }`}
-                        title="鍘嗗彶瀵硅瘽"
+                        title="历史对话"
                       >
                         <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />

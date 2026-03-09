@@ -4,8 +4,8 @@
  * PATCH /api/auth/me
  *
  * 兼容跨服务环境：
- * 当用户通过同一套 Token 访问新的部署环境时，
- * 如果当前数据库里还没有该用户，会自动补注册。
+ * 如果用户拿着同一份 Token 访问新的部署环境，
+ * 而当前数据库里还没有这个用户，会自动补注册。
  */
 
 import { NextRequest, NextResponse } from 'next/server';
@@ -88,10 +88,7 @@ export async function GET(request: NextRequest) {
     const payload = getAuthPayload(request);
 
     if (!payload) {
-      return NextResponse.json(
-        { success: false, error: '未授权' },
-        { status: 401 }
-      );
+      return NextResponse.json({ success: false, error: '未授权' }, { status: 401 });
     }
 
     let user = await authService.getUserById(payload.sub);
@@ -136,10 +133,7 @@ export async function PATCH(request: NextRequest) {
     const payload = getAuthPayload(request);
 
     if (!payload) {
-      return NextResponse.json(
-        { success: false, error: '未授权' },
-        { status: 401 }
-      );
+      return NextResponse.json({ success: false, error: '未授权' }, { status: 401 });
     }
 
     const body: UpdateProfileRequest = await request.json();

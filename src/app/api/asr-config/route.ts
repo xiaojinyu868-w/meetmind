@@ -5,7 +5,7 @@ export async function GET() {
 
   if (!apiKey) {
     return NextResponse.json(
-      { error: 'DASHSCOPE_API_KEY 未配置' },
+      { error: '服务端未配置 DASHSCOPE_API_KEY' },
       { status: 500 }
     );
   }

@@ -4,6 +4,7 @@ import workspaceService, { type WorkspaceSummary } from '@/lib/services/workspac
 export interface WorkspaceCaptureSummary {
   id: string;
   sourceKey: string;
+  sourceType: string;
   role: string;
   contentType: string;
   title: string;
@@ -14,6 +15,7 @@ export interface WorkspaceCaptureSummary {
   tutorContext?: string | null;
   occurredAt?: string | null;
   createdAt: string;
+  metadata?: Record<string, unknown> | null;
 }
 
 export interface WorkspaceEchoSummary {
@@ -59,7 +61,19 @@ function parseJsonArray(value?: string | null): string[] {
   }
 }
 
-function contentTypeLabel(message: {
+function parseJsonObject(value?: string | null): Record<string, unknown> | null {
+  if (!value) return null;
+
+  try {
+    const parsed = JSON.parse(value) as unknown;
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return null;
+    return parsed as Record<string, unknown>;
+  } catch {
+    return null;
+  }
+}
+
+function inferWechatContentType(message: {
   msgType: string;
   reachChannel?: string | null;
 }): string {
@@ -90,18 +104,18 @@ function buildEchoFromCapture(input: UpsertWorkspaceCaptureInput): {
 
   if (input.contentType === 'audio') {
     return {
-      title: '这段原声已经留在当前学习上下文里',
+      title: '这段原声已经留下来了',
       body: normalizedText
-        ? '这段原声不只是临时记录，后面的 Tutor 和回声都会把它当作这次学习的原始上下文继续使用。'
-        : '这段原声已经收进学习空间了。后面再补一句当时没懂的地方，系统会更容易看出线索。',
+        ? '它后面会继续参与回声和 Tutor，不只是临时记一嘴。'
+        : '这段原声已经收进学习空间，后面补一句卡住的点会更有抓手。',
       chips: chips.slice(0, 3),
     };
   }
 
   if (input.contentType === 'document' || input.contentType === 'video' || input.contentType === 'link') {
     return {
-      title: '这份材料已经接进当前学习上下文里',
-      body: '它现在不只是一个附件，而是后面的回声和 Tutor 都能继续引用的一条上下文线索。',
+      title: '这份材料已经接进当前上下文',
+      body: '它现在不只是一个附件，后面的回声和 Tutor 都能继续引用它。',
       chips: chips.slice(0, 3),
     };
   }
@@ -109,13 +123,13 @@ function buildEchoFromCapture(input: UpsertWorkspaceCaptureInput): {
   return {
     title: '这条记录已经留在你的学习脉络里',
     body: normalizedText
-      ? '你刚记下来的内容会继续影响后面的回声和 Tutor，而不只是停留在这一刻。'
+      ? '你刚刚记下来的内容会继续影响后面的回声和 Tutor，而不只是停在这一刻。'
       : '这条内容已经进入学习空间了，后面再补一点上下文会更有抓手。',
     chips: chips.slice(0, 3),
   };
 }
 
-function captureTitle(message: {
+function buildWechatCaptureTitle(message: {
   title?: string | null;
   msgType: string;
 }): string {
@@ -123,8 +137,60 @@ function captureTitle(message: {
   if (message.msgType === 'voice') return '微信语音';
   if (message.msgType === 'image') return '微信图片';
   if (message.msgType === 'link') return '微信链接';
-  if (message.msgType === 'event') return '微信服务号动态';
+  if (message.msgType === 'event') return '微信服务号';
   return '微信随手记';
+}
+
+function toCaptureSummary(item: {
+  id: string;
+  sourceKey: string;
+  sourceType: string;
+  role: string;
+  contentType: string;
+  title: string;
+  previewText: string | null;
+  normalizedText: string | null;
+  sourceUrl: string | null;
+  mediaUrl: string | null;
+  tutorContext: string | null;
+  occurredAt: Date | null;
+  createdAt: Date;
+  metadataJson: string | null;
+}): WorkspaceCaptureSummary {
+  return {
+    id: item.id,
+    sourceKey: item.sourceKey,
+    sourceType: item.sourceType,
+    role: item.role,
+    contentType: item.contentType,
+    title: item.title,
+    previewText: item.previewText || item.title,
+    normalizedText: item.normalizedText,
+    sourceUrl: item.sourceUrl,
+    mediaUrl: item.mediaUrl,
+    tutorContext: item.tutorContext,
+    occurredAt: item.occurredAt?.toISOString() || null,
+    createdAt: item.createdAt.toISOString(),
+    metadata: parseJsonObject(item.metadataJson),
+  };
+}
+
+function toEchoSummary(item: {
+  id: string;
+  sourceKey: string;
+  title: string;
+  body: string;
+  chipsJson: string | null;
+  createdAt: Date;
+}): WorkspaceEchoSummary {
+  return {
+    id: item.id,
+    sourceKey: item.sourceKey,
+    title: item.title,
+    body: item.body,
+    chips: parseJsonArray(item.chipsJson).slice(0, 4),
+    createdAt: item.createdAt.toISOString(),
+  };
 }
 
 export const workspaceContextService = {
@@ -133,6 +199,9 @@ export const workspaceContextService = {
     if (!workspace) {
       throw new Error('未找到当前工作区');
     }
+
+    const previewText = compactText(input.previewText || input.normalizedText || input.title, 180);
+    const metadataJson = input.metadata ? JSON.stringify(input.metadata) : null;
 
     const capture = await prisma.workspaceCapture.upsert({
       where: { sourceKey: input.sourceKey },
@@ -143,11 +212,11 @@ export const workspaceContextService = {
         role: input.role,
         contentType: input.contentType,
         title: compactText(input.title, 80),
-        previewText: compactText(input.previewText || input.normalizedText || input.title, 180),
+        previewText,
         normalizedText: input.normalizedText,
         sourceUrl: input.sourceUrl,
         mediaUrl: input.mediaUrl,
-        metadataJson: input.metadata ? JSON.stringify(input.metadata) : null,
+        metadataJson,
         tutorContext: input.tutorContext,
         occurredAt: input.occurredAt ? new Date(input.occurredAt) : null,
       },
@@ -159,11 +228,11 @@ export const workspaceContextService = {
         role: input.role,
         contentType: input.contentType,
         title: compactText(input.title, 80),
-        previewText: compactText(input.previewText || input.normalizedText || input.title, 180),
+        previewText,
         normalizedText: input.normalizedText,
         sourceUrl: input.sourceUrl,
         mediaUrl: input.mediaUrl,
-        metadataJson: input.metadata ? JSON.stringify(input.metadata) : null,
+        metadataJson,
         tutorContext: input.tutorContext,
         occurredAt: input.occurredAt ? new Date(input.occurredAt) : null,
       },
@@ -194,15 +263,8 @@ export const workspaceContextService = {
 
     return {
       workspace,
-      capture,
-      echo: {
-        id: echo.id,
-        sourceKey: echo.sourceKey,
-        title: echo.title,
-        body: echo.body,
-        chips: parseJsonArray(echo.chipsJson).slice(0, 4),
-        createdAt: echo.createdAt.toISOString(),
-      },
+      capture: toCaptureSummary(capture),
+      echo: toEchoSummary(echo),
     };
   },
 
@@ -214,26 +276,30 @@ export const workspaceContextService = {
     if (!message || !message.workspaceId) return null;
 
     const sourceKey = `wechat:${message.linkToken}`;
+    const title = buildWechatCaptureTitle(message);
+    const previewText = compactText(message.previewText || message.normalizedText || title, 180);
+    const metadataJson = JSON.stringify({
+      openId: message.openId,
+      msgType: message.msgType,
+      eventType: message.eventType,
+      reachKind: message.reachKind,
+      reachChannel: message.reachChannel,
+      mediaId: message.mediaId,
+    });
+
     const capture = await prisma.workspaceCapture.upsert({
       where: { sourceKey },
       update: {
         userId: message.userId,
         workspaceId: message.workspaceId,
         role: message.collectionRole || 'support',
-        contentType: contentTypeLabel(message),
-        title: captureTitle(message),
-        previewText: compactText(message.previewText || message.normalizedText || captureTitle(message), 180),
+        contentType: inferWechatContentType(message),
+        title,
+        previewText,
         normalizedText: message.normalizedText,
         sourceUrl: message.sourceUrl,
         mediaUrl: message.mediaUrl,
-        metadataJson: JSON.stringify({
-          openId: message.openId,
-          msgType: message.msgType,
-          eventType: message.eventType,
-          reachKind: message.reachKind,
-          reachChannel: message.reachChannel,
-          mediaId: message.mediaId,
-        }),
+        metadataJson,
         tutorContext: message.tutorContext,
         occurredAt: message.messageAt,
       },
@@ -243,20 +309,13 @@ export const workspaceContextService = {
         sourceType: 'wechat',
         sourceKey,
         role: message.collectionRole || 'support',
-        contentType: contentTypeLabel(message),
-        title: captureTitle(message),
-        previewText: compactText(message.previewText || message.normalizedText || captureTitle(message), 180),
+        contentType: inferWechatContentType(message),
+        title,
+        previewText,
         normalizedText: message.normalizedText,
         sourceUrl: message.sourceUrl,
         mediaUrl: message.mediaUrl,
-        metadataJson: JSON.stringify({
-          openId: message.openId,
-          msgType: message.msgType,
-          eventType: message.eventType,
-          reachKind: message.reachKind,
-          reachChannel: message.reachChannel,
-          mediaId: message.mediaId,
-        }),
+        metadataJson,
         tutorContext: message.tutorContext,
         occurredAt: message.messageAt,
       },
@@ -323,39 +382,19 @@ export const workspaceContextService = {
       prisma.workspaceCapture.findMany({
         where: { workspaceId: workspace.id },
         orderBy: [{ occurredAt: 'desc' }, { createdAt: 'desc' }],
-        take: 24,
+        take: 40,
       }),
       prisma.workspaceEcho.findMany({
         where: { workspaceId: workspace.id, status: 'active' },
         orderBy: { createdAt: 'desc' },
-        take: 12,
+        take: 16,
       }),
     ]);
 
     return {
       workspace,
-      captures: captures.map((item) => ({
-        id: item.id,
-        sourceKey: item.sourceKey,
-        role: item.role,
-        contentType: item.contentType,
-        title: item.title,
-        previewText: item.previewText || item.title,
-        normalizedText: item.normalizedText,
-        sourceUrl: item.sourceUrl,
-        mediaUrl: item.mediaUrl,
-        tutorContext: item.tutorContext,
-        occurredAt: item.occurredAt?.toISOString() || null,
-        createdAt: item.createdAt.toISOString(),
-      })),
-      echoes: echoes.map((item) => ({
-        id: item.id,
-        sourceKey: item.sourceKey,
-        title: item.title,
-        body: item.body,
-        chips: parseJsonArray(item.chipsJson).slice(0, 4),
-        createdAt: item.createdAt.toISOString(),
-      })),
+      captures: captures.map(toCaptureSummary),
+      echoes: echoes.map(toEchoSummary),
     };
   },
 };

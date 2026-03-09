@@ -7,7 +7,6 @@ import {
   isToolNotFoundError,
   resolveFfmpegPath,
   resolveFfprobePath,
-  resolvePublicBaseUrl,
   runCommand,
   safeUnlink,
 } from '@/lib/services/media-tooling';
@@ -39,6 +38,32 @@ interface SegmentResult {
   ok: boolean;
   sentence?: ASRSentence;
   error?: string;
+}
+
+function getMimeTypeForAudioPath(filePath: string): string {
+  const ext = path.extname(filePath).toLowerCase();
+  switch (ext) {
+    case '.mp3':
+      return 'audio/mpeg';
+    case '.wav':
+      return 'audio/wav';
+    case '.m4a':
+      return 'audio/mp4';
+    case '.ogg':
+      return 'audio/ogg';
+    case '.webm':
+      return 'audio/webm';
+    case '.flac':
+      return 'audio/flac';
+    default:
+      return 'audio/mpeg';
+  }
+}
+
+function buildAudioDataUri(filePath: string): string {
+  const mimeType = getMimeTypeForAudioPath(filePath);
+  const base64 = fs.readFileSync(filePath).toString('base64');
+  return `data:${mimeType};base64,${base64}`;
 }
 
 function sanitizeASRContext(raw: FormDataEntryValue | null): string {
@@ -330,7 +355,6 @@ async function processSegmentBatch(
   tasks: SegmentTask[],
   apiKey: string,
   language: string,
-  publicBaseUrl: string,
   contextHint: string
 ): Promise<{ ok: boolean; sentences: ASRSentence[]; error?: string }> {
   const sorted = [...tasks].sort((a, b) => a.index - b.index);
@@ -345,9 +369,8 @@ async function processSegmentBatch(
 
     const batchResults = await Promise.all(
       batch.map(async (task) => {
-        const fileName = path.basename(task.path);
-        const fileUrl = `${publicBaseUrl}/temp-audio/${encodeURIComponent(fileName)}`;
-        const result = await syncTranscribeSegment(fileUrl, apiKey, language, task.index, contextHint);
+        const audioInput = buildAudioDataUri(task.path);
+        const result = await syncTranscribeSegment(audioInput, apiKey, language, task.index, contextHint);
         return { index: task.index, result };
       })
     );
@@ -419,18 +442,6 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: '服务未配置转写密钥', code: 'ASR_API_KEY_MISSING' }, { status: 500 });
     }
 
-    const publicBase = resolvePublicBaseUrl();
-    if (!publicBase.ok || !publicBase.baseUrl) {
-      return NextResponse.json(
-        {
-          error: '服务端未配置可访问的公网地址，暂时无法转写',
-          code: 'ASR_PUBLIC_HOST_MISSING',
-          detail: publicBase.error,
-        },
-        { status: 500 }
-      );
-    }
-
     ensureUploadDir();
     cleanupOldFiles();
 
@@ -465,7 +476,7 @@ export async function POST(request: NextRequest) {
       tempFiles.add(task.path);
     }
 
-    const turboResult = await processSegmentBatch(segmentTasks, apiKey, language, publicBase.baseUrl, contextHint);
+    const turboResult = await processSegmentBatch(segmentTasks, apiKey, language, contextHint);
 
     if (!turboResult.ok) {
       return NextResponse.json(
