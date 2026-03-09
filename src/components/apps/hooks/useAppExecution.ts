@@ -89,6 +89,32 @@ export function readCachedTaskState(sessionId: string, appKey: string): AppTaskS
 /** Max number of cached app results to keep (LRU eviction). */
 const MAX_CACHED_RESULTS = 30;
 const CACHE_INDEX_KEY = 'app_workspace_cache_index';
+const MAX_CACHED_RESULT_CHARS = 1_000_000;
+const LARGE_DATA_URL_CHARS = 120_000;
+
+function isLargeInlineDataUrl(value: string): boolean {
+  return value.length >= LARGE_DATA_URL_CHARS && value.startsWith('data:') && value.includes(';base64,');
+}
+
+function stripLargeInlineData<T>(value: T): T {
+  if (typeof value === 'string') {
+    return (isLargeInlineDataUrl(value) ? '' : value) as T;
+  }
+
+  if (Array.isArray(value)) {
+    return value.map((item) => stripLargeInlineData(item)) as T;
+  }
+
+  if (value && typeof value === 'object') {
+    const next: Record<string, unknown> = {};
+    for (const [key, child] of Object.entries(value as Record<string, unknown>)) {
+      next[key] = stripLargeInlineData(child);
+    }
+    return next as T;
+  }
+
+  return value;
+}
 
 /** Read LRU index: ordered list of cache keys (oldest first). */
 function readCacheIndex(): string[] {
@@ -128,6 +154,16 @@ function touchCacheKey(key: string): void {
   writeCacheIndex(index);
 }
 
+function removeCacheEntry(key: string): void {
+  try {
+    window.localStorage.removeItem(key);
+  } catch {
+    // ignore
+  }
+  const index = readCacheIndex().filter((k) => k !== key);
+  writeCacheIndex(index);
+}
+
 /** Safe localStorage.setItem with QuotaExceeded fallback (evict oldest, retry). */
 function safeSetItem(key: string, value: string): void {
   try {
@@ -157,8 +193,22 @@ function safeSetItem(key: string, value: string): void {
 export function writeCachedAppResult(sessionId: string, appKey: string, result: AppExecutionResult): void {
   if (typeof window === 'undefined') return;
   const key = buildResultCacheKey(sessionId, appKey);
-  safeSetItem(key, JSON.stringify(result));
-  touchCacheKey(key);
+
+  try {
+    const sanitized = stripLargeInlineData(result);
+    const serialized = JSON.stringify(sanitized);
+
+    // Guard against giant payloads (e.g. base64 images) blocking localStorage writes.
+    if (serialized.length > MAX_CACHED_RESULT_CHARS) {
+      removeCacheEntry(key);
+      return;
+    }
+
+    safeSetItem(key, serialized);
+    touchCacheKey(key);
+  } catch {
+    removeCacheEntry(key);
+  }
 }
 
 export function writeCachedTaskState(sessionId: string, appKey: string, state: AppTaskState): void {

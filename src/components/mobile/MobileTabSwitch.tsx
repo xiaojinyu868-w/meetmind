@@ -57,7 +57,7 @@ export function MobileTabSwitch({
         }}
       />
 
-      {/* 录音 Tab */}
+      {/* 收集 Tab */}
       <button
         onClick={() => onTabChange('record')}
         className={cn(
@@ -68,7 +68,7 @@ export function MobileTabSwitch({
             : 'text-[var(--dedao-text-muted)]'
         )}
       >
-        录音
+        收集
       </button>
 
       {/* 复习 Tab */}

@@ -40,14 +40,6 @@ const MAX_RETRIES = 3;
 const RETRY_BASE_MS = 1500;
 const REQUEST_TIMEOUT_MS = 90_000;
 
-/* ---------- orientation → image size mapping ---------- */
-
-const ORIENTATION_SIZE: Record<string, string> = {
-  landscape: '1536x1024',
-  portrait: '1024x1536',
-  square: '1024x1024',
-};
-
 /* ---------- scene presets for education products ---------- */
 
 export const SCENE_PRESETS: Record<
@@ -274,8 +266,6 @@ export async function generateGeminiImage(
   const url = buildUrl();
   const headers = buildHeaders();
   const fullPrompt = buildPrompt(params);
-  const orientation = params.orientation || 'landscape';
-  const imageSize = ORIENTATION_SIZE[orientation] || '1024x1024';
 
   const body = JSON.stringify({
     contents: [
@@ -296,28 +286,32 @@ export async function generateGeminiImage(
 
   for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
     try {
-      const response = await fetch(url, {
-        method: 'POST',
-        headers,
-        body,
-      });
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+
+      let response: Response;
+      try {
+        response = await fetch(url, {
+          method: 'POST',
+          headers,
+          body,
+          signal: controller.signal,
+        });
+      } finally {
+        clearTimeout(timeoutId);
+      }
 
       const responseText = await response.text();
 
-      // Check for HTML response (proxy misconfiguration)
       if (responseText.trim().startsWith('<')) {
-        throw new Error(
-          `代理返回 HTML 而非 JSON，请检查 IMAGE_GEN_BASE_URL 配置。(attempt=${attempt + 1})`
-        );
+        throw new Error(`代理返回 HTML 而非 JSON，请检查 IMAGE_GEN_BASE_URL 配置。(attempt=${attempt + 1})`);
       }
 
       let payload: GeminiResponse;
       try {
         payload = JSON.parse(responseText) as GeminiResponse;
       } catch {
-        throw new Error(
-          `JSON 解析失败 (attempt=${attempt + 1}): ${responseText.slice(0, 200)}`
-        );
+        throw new Error(`JSON 解析失败 (attempt=${attempt + 1}): ${responseText.slice(0, 200)}`);
       }
 
       if (!response.ok) {
@@ -325,24 +319,16 @@ export async function generateGeminiImage(
           (payload as unknown as { error?: { message?: string } })?.error?.message ||
           responseText.slice(0, 200);
 
-        // Retry on 429 / 503
-        if ((response.status === 429 || response.status === 503) && attempt < MAX_RETRIES - 1) {
-          lastError = new Error(`${response.status}: ${errMsg}`);
-          await sleep(RETRY_BASE_MS * Math.pow(2, attempt));
-          continue;
+        if (isRetryableStatus(response.status)) {
+          throw new RetryableGeminiError(`${response.status}: ${errMsg}`);
         }
+
         throw new Error(`图片生成 API 错误 (${response.status}): ${errMsg}`);
       }
 
       const { base64, mimeType } = extractBase64(payload);
       if (!base64) {
-        // Sometimes the model returns text instead of image, retry
-        if (attempt < MAX_RETRIES - 1) {
-          lastError = new Error('响应中未包含图片数据，重试中...');
-          await sleep(RETRY_BASE_MS * Math.pow(2, attempt));
-          continue;
-        }
-        throw new Error('图片生成响应中未找到图片数据，可能被安全过滤或模型未返回图片。');
+        throw new RetryableGeminiError('响应中未包含图片数据');
       }
 
       return {
@@ -353,12 +339,22 @@ export async function generateGeminiImage(
       };
     } catch (error) {
       lastError = error instanceof Error ? error : new Error(String(error));
-      if (attempt < MAX_RETRIES - 1) {
+
+      const shouldRetry =
+        attempt < MAX_RETRIES - 1 && (
+          error instanceof RetryableGeminiError ||
+          (error instanceof DOMException && error.name === 'AbortError') ||
+          error instanceof TypeError
+        );
+
+      if (shouldRetry) {
         await sleep(RETRY_BASE_MS * Math.pow(2, attempt));
         continue;
       }
+
+      break;
     }
   }
 
-  throw lastError || new Error('图片生成失败（已达最大重试次数）');
+  throw lastError || new Error('图片生成失败（已达到最大重试次数）');
 }

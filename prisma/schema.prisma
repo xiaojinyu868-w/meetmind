@@ -21,18 +21,25 @@ model User {
   status       String   @default("active")  // active, inactive, suspended, pending
   passwordHash String?
   salt         String?
+  defaultWorkspaceId String?
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
   lastLoginAt  DateTime?
 
   // 关联
+  defaultWorkspace Workspace? @relation("DefaultWorkspaceSelection", fields: [defaultWorkspaceId], references: [id], onDelete: SetNull, onUpdate: Cascade)
   authProviders AuthProvider[]
   sessions      Session[]
   refreshTokens RefreshToken[]
+  ownedWorkspaces Workspace[] @relation("WorkspaceOwner")
+  workspaceMemberships WorkspaceMembership[]
+  workspaceCaptures WorkspaceCapture[]
+  wechatInboxMessages WechatInboxMessage[]
 
   @@index([username])
   @@index([email])
   @@index([phone])
+  @@index([defaultWorkspaceId])
 }
 
 // 第三方登录关联表
@@ -54,6 +61,97 @@ model AuthProvider {
 }
 
 // 用户会话表
+model Workspace {
+  id        String   @id @default(cuid())
+  name      String
+  slug      String?  @unique
+  kind      String   @default("personal")
+  status    String   @default("active")
+  ownerId   String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  owner User @relation("WorkspaceOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  defaultForUsers User[] @relation("DefaultWorkspaceSelection")
+  members WorkspaceMembership[]
+  captures WorkspaceCapture[]
+  echoes WorkspaceEcho[]
+  wechatInboxMessages WechatInboxMessage[]
+
+  @@index([ownerId])
+  @@index([kind])
+  @@index([status])
+}
+
+model WorkspaceMembership {
+  id          String   @id @default(cuid())
+  workspaceId String
+  userId      String
+  role        String   @default("owner")
+  status      String   @default("active")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([workspaceId, userId])
+  @@index([userId])
+  @@index([workspaceId])
+  @@index([role])
+}
+
+model WorkspaceCapture {
+  id             String   @id @default(cuid())
+  workspaceId    String
+  userId         String?
+  sourceType     String
+  sourceKey      String   @unique
+  role           String   @default("support")
+  contentType    String
+  title          String
+  previewText    String?
+  normalizedText String?
+  sourceUrl      String?
+  mediaUrl       String?
+  metadataJson   String?
+  tutorContext   String?
+  occurredAt     DateTime?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  user      User?     @relation(fields: [userId], references: [id], onDelete: SetNull)
+  echoes    WorkspaceEcho[]
+
+  @@index([workspaceId])
+  @@index([userId])
+  @@index([role])
+  @@index([contentType])
+  @@index([createdAt])
+}
+
+model WorkspaceEcho {
+  id          String   @id @default(cuid())
+  workspaceId String
+  captureId   String?
+  sourceKey   String   @unique
+  title       String
+  body        String
+  chipsJson   String?
+  status      String   @default("active")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  workspace Workspace        @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  capture   WorkspaceCapture? @relation(fields: [captureId], references: [id], onDelete: SetNull)
+
+  @@index([workspaceId])
+  @@index([captureId])
+  @@index([status])
+  @@index([createdAt])
+}
+
 model Session {
   id        String   @id @default(cuid())
   userId    String
@@ -215,5 +313,51 @@ model EventTrack {
   @@index([analyticsId])
   @@index([eventName])
   @@index([eventCategory])
+  @@index([createdAt])
+}
+
+model WechatInboxMessage {
+  id             String   @id @default(cuid())
+  linkToken      String   @unique
+  openId         String
+  userId         String?
+  workspaceId    String?
+  developerId    String?
+  msgType        String
+  eventType      String?
+  messageId      String?  @unique
+  messageAt      DateTime?
+  rawXml         String
+  payloadJson    String
+  normalizedText String?
+  previewText    String?
+  sourceUrl      String?
+  mediaId        String?
+  mediaUrl       String?
+  title          String?
+  reachKind      String?
+  reachChannel   String?
+  collectionRole String?
+  bindingStatus  String   @default("unresolved")
+  echoTitle      String?
+  echoBody       String?
+  echoChipsJson  String?
+  tutorContext   String?
+  replyText      String?
+  processedAt    DateTime?
+  status         String   @default("received")
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  user      User?      @relation(fields: [userId], references: [id], onDelete: SetNull)
+  workspace Workspace? @relation(fields: [workspaceId], references: [id], onDelete: SetNull)
+
+  @@index([openId])
+  @@index([userId])
+  @@index([workspaceId])
+  @@index([msgType])
+  @@index([eventType])
+  @@index([bindingStatus])
+  @@index([reachChannel])
   @@index([createdAt])
 }

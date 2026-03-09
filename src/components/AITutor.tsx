@@ -278,6 +278,10 @@ export function AITutor({
   // 多模态相关状态
   const [supportsMultimodal, setSupportsMultimodal] = useState(true);  // 默认模型支持多模态
   const [uploadedImages, setUploadedImages] = useState<UploadedImage[]>([]);
+  const hasTutorContext = useMemo(
+    () => segments.length > 0 || normalizeSupportContextText(supportContextText).length > 0,
+    [segments.length, supportContextText]
+  );
   const transcriptSignature = useMemo(() => {
     const baseSignature = toTranscriptSignature(segments);
     const supportSignature = normalizeSupportContextText(supportContextText, 400);
@@ -827,7 +831,10 @@ export function AITutor({
     setBreakpointStreamingCitations([]);
     
     // 添加用户消息
-    const userMessage = `我选择了：${option.text}`;
+    const currentQuestion = response?.guidance_question?.question?.trim();
+    const userMessage = currentQuestion
+      ? `关于“${currentQuestion}”，我更想顺着这个方向继续：${option.text}`
+      : `我更想顺着这个方向继续：${option.text}`;
     setChatHistory(prev => [...prev, { role: 'user', content: userMessage }]);
     
     // 用于接收元数据
@@ -1068,7 +1075,7 @@ export function AITutor({
   // 全局模式：发送消息（必须在 useEffect 之前定义）
   const handleGlobalSend = useCallback(async (questionOverride?: string) => {
     const question = questionOverride || userInput.trim();
-    if (!question || segments.length === 0) return;
+    if (!question || !hasTutorContext) return;
     
     if (!questionOverride) {
       setUserInput('');
@@ -1186,7 +1193,7 @@ export function AITutor({
     } finally {
       setGlobalLoading(false);
     }
-  }, [userInput, selectedModel, enableWeb, enableThinkingGuide, supportsMultimodal, uploadedImages, accessToken, userId, sessionId, globalFetchStream, clearGlobalStreamingOnly, trackCoreEvent, buildSegmentsForTutorRequest, segments.length]);
+  }, [userInput, selectedModel, enableWeb, enableThinkingGuide, supportsMultimodal, uploadedImages, accessToken, userId, sessionId, globalFetchStream, clearGlobalStreamingOnly, trackCoreEvent, buildSegmentsForTutorRequest, hasTutorContext]);
 
   // 全局模式：停止生成
   const stopGlobalGeneration = useCallback(() => {
@@ -1222,13 +1229,13 @@ export function AITutor({
 
   // 全局模式：处理初始问题（handleGlobalSend 已在上方定义）
   useEffect(() => {
-    if (isGlobalMode && initialQuestion && !hasProcessedInitialQuestion.current && segments.length > 0) {
+    if (isGlobalMode && initialQuestion && !hasProcessedInitialQuestion.current && hasTutorContext) {
       hasProcessedInitialQuestion.current = true;
       setTimeout(() => {
         handleGlobalSend(initialQuestion);
       }, 300);
     }
-  }, [isGlobalMode, initialQuestion, segments.length, handleGlobalSend]);
+  }, [hasTutorContext, isGlobalMode, initialQuestion, handleGlobalSend]);
 
   // 重置 sessionId 变化时的全局对话状态
   useEffect(() => {
@@ -1300,19 +1307,19 @@ export function AITutor({
 
         {/* 对话区域 - 优化空间利用 */}
         <div className={`flex-1 overflow-y-auto chat-messages ${isMobile ? 'p-3' : 'p-4'}`} style={{ minHeight: 0 }}>
-          {segments.length === 0 ? (
-            // 无转录内容
+          {!hasTutorContext ? (
+            // 无可用上下文
             <div className="h-full flex flex-col items-center justify-center text-center">
               <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mb-4">
                 <MessageCircle size={28} strokeWidth={1.5} className="text-gray-400" />
               </div>
-              <h3 className="text-lg font-medium text-gray-700 mb-2">暂无课堂内容</h3>
-              <p className="text-sm text-gray-500">请先录制课堂或上传录音</p>
+              <h3 className="text-lg font-medium text-gray-700 mb-2">还没有可用的学习上下文</h3>
+              <p className="text-sm text-gray-500">先录一段、贴一份材料，或者从微信发一句给我都可以。</p>
             </div>
           ) : globalChatHistory.length === 0 ? (
             // 角色+意图气泡（纯规则零延迟）
             <IntentBubbleExplorer
-              transcriptText={segments.map(s => s.text).join(' ')}
+              transcriptText={segments.map(s => s.text).join(' ') || normalizeSupportContextText(supportContextText, 2400)}
               onSend={(prompt) => handleGlobalSend(prompt)}
             />
           ) : (
@@ -1457,11 +1464,11 @@ export function AITutor({
               onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && !isStreaming && handleGlobalSend()}
               placeholder="问我任何关于这节课的问题..."
               className={`input flex-1 ${isMobile ? 'text-sm' : ''}`}
-              disabled={globalLoading || segments.length === 0}
+              disabled={globalLoading || !hasTutorContext}
             />
             <VoiceMicButton
               onTranscript={(text) => setUserInput(prev => prev + text)}
-              disabled={globalLoading || segments.length === 0}
+              disabled={globalLoading || !hasTutorContext}
               size={isMobile ? 'sm' : 'md'}
             />
             {isStreaming ? (
@@ -1479,7 +1486,7 @@ export function AITutor({
             ) : (
               <button
                 onClick={() => handleGlobalSend()}
-                disabled={(!userInput.trim() && uploadedImages.length === 0) || globalLoading || segments.length === 0}
+                disabled={(!userInput.trim() && uploadedImages.length === 0) || globalLoading || !hasTutorContext}
                 className={`btn btn-primary disabled:opacity-50 ${isMobile ? 'px-4' : 'px-6'}`}
               >
                 发送
@@ -1716,8 +1723,8 @@ export function AITutor({
               </div>
             </Section>
 
-            {/* 引导问题 - 选择题模式定位困惑点 */}
-            <Section icon={<Target size={16} strokeWidth={1.75} />} title="帮我定位你的困惑" badge="精准诊断">
+            {/* 意图澄清 - 用更轻的方式收窄问题范围 */}
+            <Section icon={<Target size={16} strokeWidth={1.75} />} title="一起缩小问题范围" badge="意图澄清">
               {isLoading ? (
                 <GuidanceQuestionSkeleton />
               ) : response.guidance_question ? (
@@ -1730,8 +1737,8 @@ export function AITutor({
                 />
               ) : (
                 <div className="bg-gray-50 rounded-xl p-4 text-center text-sm text-gray-500">
-                  <p>引导问题生成中...</p>
-                  <p className="text-xs mt-1 text-gray-400">正在分析录音内容</p>
+                  <p>正在准备更合适的追问...</p>
+                  <p className="text-xs mt-1 text-gray-400">会先帮你收窄到最接近的问题方向</p>
                 </div>
               )}
             </Section>

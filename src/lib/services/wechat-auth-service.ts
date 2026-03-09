@@ -17,6 +17,8 @@ import type {
   AuthResponse,
 } from '@/types/user';
 import { authService } from './auth-service';
+import workspaceContextService from './workspace-context-service';
+import workspaceService from './workspace-service';
 
 // ==================== 配置 ====================
 
@@ -288,6 +290,8 @@ export const wechatAuthService = {
           headimgurl: wechatUser.headimgurl,
         },
       });
+      await workspaceService.resolveWechatWorkspace(wechatUser.openid);
+      await workspaceContextService.syncWechatInboxArtifactsForOpenId(wechatUser.openid);
       
       // 生成本地令牌
       return authService.login({
@@ -321,6 +325,8 @@ export const wechatAuthService = {
         headimgurl: wechatUser.headimgurl,
       },
     });
+    await workspaceService.resolveWechatWorkspace(wechatUser.openid);
+    await workspaceContextService.syncWechatInboxArtifactsForOpenId(wechatUser.openid);
     
     // 更新头像
     if (wechatUser.headimgurl) {
@@ -377,6 +383,8 @@ export const wechatAuthService = {
       return { success: false, error: '绑定失败' };
     }
     
+    await workspaceService.resolveWechatWorkspace(wechatUser.openid);
+    await workspaceContextService.syncWechatInboxArtifactsForOpenId(wechatUser.openid);
     return { success: true };
   },
 };

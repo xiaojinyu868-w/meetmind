@@ -12,7 +12,6 @@ import {
   Download,
   GitCompareArrows,
   ImageIcon,
-  LayoutGrid,
   Loader2,
   Network,
   PenLine,
@@ -23,6 +22,7 @@ import {
   Sparkles,
   TrendingUp,
   Workflow,
+  type LucideIcon,
 } from 'lucide-react';
 import type { AppExecutionResult } from '@/lib/ai-native/types';
 import { AppWindowPlaceholder } from '@/components/apps/windows/AppWindowPlaceholder';
@@ -79,7 +79,7 @@ const ICON_STROKE = 1.75;
 interface SceneItem {
   key: string;
   label: string;
-  Icon: React.ComponentType<{ size?: number; strokeWidth?: number; className?: string }>;
+  Icon: LucideIcon;
 }
 
 const SCENE_ITEMS: SceneItem[] = [
@@ -108,7 +108,7 @@ const LANGUAGES = [
 const ORIENTATIONS: Array<{
   value: 'landscape' | 'portrait' | 'square';
   label: string;
-  Icon: React.ComponentType<{ size?: number; strokeWidth?: number; className?: string }>;
+  Icon: LucideIcon;
 }> = [
   { value: 'landscape', label: '横版', Icon: RectangleHorizontal },
   { value: 'portrait', label: '竖版', Icon: RectangleVertical },

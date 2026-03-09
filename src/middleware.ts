@@ -1,16 +1,6 @@
-/**
- * Next.js 中间件
- *
- * 职责：
- * 1. 路由级鉴权与权限控制
- * 2. 公共路由放行
- * 3. API 令牌校验
- */
-
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 
-// 公共路由（无需登录）
 const PUBLIC_ROUTES = [
   '/',
   '/login',
@@ -26,7 +16,8 @@ const PUBLIC_ROUTES = [
   '/api/auth/refresh',
   '/api/auth/wechat',
   '/api/auth/wechat/callback',
-  // 核心能力 API（开发阶段允许公开访问）
+  '/api/wechat/mp',
+  '/api/wechat/capture/*',
   '/api/tutor',
   '/api/tutor/intent-probe',
   '/api/chat',
@@ -36,6 +27,7 @@ const PUBLIC_ROUTES = [
   '/api/transcribe-turbo',
   '/api/video/import',
   '/api/sources/ingest',
+  '/api/sources/ingest-image',
   '/api/generate-topics',
   '/api/generate-summary',
   '/api/apps/plugins',
@@ -48,7 +40,6 @@ const PUBLIC_ROUTES = [
   '/api/health',
 ];
 
-// 静态资源路径
 const STATIC_PATHS = [
   '/_next',
   '/favicon.ico',
@@ -72,9 +63,6 @@ type TokenPayload = {
   role?: string;
 };
 
-/**
- * 轻量 JWT 校验：检查结构与过期时间
- */
 function verifyToken(token: string): { valid: boolean; payload?: TokenPayload } {
   try {
     const parts = token.split('.');
@@ -110,7 +98,7 @@ export function middleware(request: NextRequest) {
     if (!authHeader?.startsWith('Bearer ')) {
       return NextResponse.json(
         { success: false, error: '未授权' },
-        { status: 401 }
+        { status: 401 },
       );
     }
 
@@ -120,7 +108,7 @@ export function middleware(request: NextRequest) {
     if (!valid) {
       return NextResponse.json(
         { success: false, error: '令牌无效或已过期' },
-        { status: 401 }
+        { status: 401 },
       );
     }
 
@@ -140,7 +128,6 @@ export function middleware(request: NextRequest) {
 
 export const config = {
   matcher: [
-    // 匹配除静态资源外的所有路径
     '/((?!_next/static|_next/image|favicon.ico).*)',
   ],
 };

@@ -1,9 +1,9 @@
-'use client';
+﻿'use client';
 
-import { useState, useEffect, useCallback, useRef, useMemo, Suspense, type ChangeEvent, type DragEvent } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo, Suspense, type ChangeEvent, type ClipboardEvent, type DragEvent } from 'react';
+import { flushSync } from 'react-dom';
 import { useSearchParams } from 'next/navigation';
 import dynamic from 'next/dynamic';
-import Image from 'next/image';
 import { Header } from '@/components/Header';
 import { ServiceStatus, DegradedModeBanner } from '@/components/ServiceStatus';
 import { anchorService, type Anchor } from '@/lib/services/anchor-service';
@@ -20,6 +20,18 @@ import {
 import { useAuth } from '@/lib/hooks/useAuth';
 import { classroomDataService } from '@/lib/services/classroom-data-service';
 import { runMemoryMigration } from '@/lib/services/memory-migration';
+import { parseVideoLink } from '@/lib/utils/video-link';
+import { useVoiceInput } from '@/hooks/useVoiceInput';
+import {
+  detectReachFromText,
+  detectReachFromFile,
+  isAudioReachFile,
+  isDocumentReachFile,
+  isImageReachFile,
+  isVideoReachFile,
+  type ContextReachDetection,
+} from '@/lib/context-reach';
+import { cn } from '@/lib/utils';
 import type {
   TranscriptSegment,
   HighlightTopic,
@@ -39,6 +51,7 @@ import { useTopics, useSummary } from '@/hooks/data';
 
 // WaveformPlayer uses forwardRef and needs static import for ref support.
 import { WaveformPlayer, type WaveformPlayerRef, type WaveformAnchor } from '@/components/WaveformPlayer';
+import { Recorder, type RecorderHandle } from '@/components/Recorder';
 
 import { AppLoading } from '@/components/AppLoading';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -46,20 +59,31 @@ import {
   Mic,
   BookOpen,
   Star,
+  Sparkles,
   FileText,
   Boxes,
   StickyNote,
   MessageCircle,
-  CircleHelp,
   Clock,
   AlertCircle,
   GraduationCap,
+  ChevronRight,
+  Plus,
+  ArrowUp,
+  Link2,
+  History,
+  Menu,
+  X,
+  Image as ImageIcon,
+  AudioLines,
+  Play,
+  Pause,
+  type LucideIcon as LucideIconType,
 } from 'lucide-react';
 
 // --- Performance: Dynamic imports for heavy components (code-split) ---
 // These components are not needed for initial render and are lazy-loaded
 // to drastically reduce the main JS bundle size.
-const Recorder = dynamic(() => import('@/components/Recorder').then(m => ({ default: m.Recorder })), { ssr: false });
 const TimelineView = dynamic(() => import('@/components/TimelineView').then(m => ({ default: m.TimelineView })), { ssr: false });
 const ActionList = dynamic(() => import('@/components/ActionList').then(m => ({ default: m.ActionList })), { ssr: false });
 const ActionSidebar = dynamic(() => import('@/components/ActionSidebar').then(m => ({ default: m.ActionSidebar })), { ssr: false });
@@ -127,7 +151,7 @@ interface WorkspaceTabConfig<T extends WorkspaceTab> {
   key: T;
   label: string;
   icon: string;
-  LucideIcon?: React.ComponentType<{ size?: number; strokeWidth?: number; className?: string }>;
+  LucideIcon?: LucideIconType;
   testId?: string;
 }
 
@@ -143,7 +167,7 @@ const SHARED_WORKSPACE_TABS: WorkspaceTabConfig<SharedWorkspaceTab>[] = [
 
 const VIDEO_WORKSPACE_TABS: WorkspaceTabConfig<VideoWorkspaceTab>[] = [
   { key: 'chat', label: '对话', icon: '聊', LucideIcon: MessageCircle },
-  { key: 'confusion', label: '困惑点', icon: '疑', LucideIcon: CircleHelp },
+  { key: 'confusion', label: '困惑点', icon: '疑', LucideIcon: AlertCircle },
   ...SHARED_WORKSPACE_TABS,
 ];
 
@@ -198,16 +222,28 @@ interface ActionItem {
   relatedTimestamp?: number;
 }
 
-type SourceIngestType = 'audio' | 'video' | 'document' | 'text';
+type SourceIngestType = 'audio' | 'video' | 'image' | 'document' | 'text';
 type SourceIngestRole = 'primary' | 'support';
+type MobileCollectionSheet = null | 'attachments' | 'video' | 'history' | 'echo' | 'more';
 
 interface SourceIngestItem {
   id: string;
   type: SourceIngestType;
   role: SourceIngestRole;
   title: string;
+  preview?: string;
+  previewUrl?: string;
+  mediaUrl?: string;
+  attachmentUrl?: string;
+  fullText?: string;
   segmentCount: number;
   addedAt: string;
+  origin?: 'user' | 'system';
+  status?: 'sending' | 'transcribing' | 'parsing' | 'ready' | 'failed';
+  statusText?: string;
+  sessionId?: string;
+  durationMs?: number;
+  reviewable?: boolean;
 }
 
 interface SupportReferenceItem {
@@ -216,18 +252,82 @@ interface SupportReferenceItem {
   snippet: string;
 }
 
+function _VoiceWaveGlyph({ className = '' }: { className?: string }) {
+  return (
+    <span className={`inline-flex items-end gap-[2px] ${className}`}>
+      {[10, 15, 20, 14, 9].map((height, index) => (
+        <span
+          key={`${height}-${index}`}
+          className="w-[2.5px] rounded-full bg-current"
+          style={{ height: `${height}px` }}
+        />
+      ))}
+    </span>
+  );
+}
+
+interface CollectionPulseState {
+  title: string;
+  body: string;
+  chips: string[];
+  actions: Array<{ key: string; label: string }>;
+}
+
+interface WechatCaptureMessage {
+  linkToken: string;
+  msgType: string;
+  eventType?: string | null;
+  normalizedText?: string | null;
+  previewText?: string | null;
+  sourceUrl?: string | null;
+  mediaId?: string | null;
+  mediaUrl?: string | null;
+  title?: string | null;
+  reachKind?: string | null;
+  reachChannel?: string | null;
+  messageAt?: string | null;
+  replyText?: string | null;
+  userId?: string | null;
+  workspaceId?: string | null;
+  workspace?: {
+    id: string;
+    name: string;
+    kind: string;
+    status: string;
+  } | null;
+  bindingStatus?: string | null;
+  collectionRole?: string | null;
+  echoTitle?: string | null;
+  echoBody?: string | null;
+  echoChips?: string[] | null;
+  tutorContext?: string | null;
+}
+
+interface WorkspaceCaptureMessage {
+  id: string;
+  sourceKey: string;
+  role: string;
+  contentType: string;
+  title: string;
+  previewText: string;
+  normalizedText?: string | null;
+  sourceUrl?: string | null;
+  mediaUrl?: string | null;
+  tutorContext?: string | null;
+  occurredAt?: string | null;
+  createdAt: string;
+}
+
+interface WorkspaceEchoMessage {
+  id: string;
+  sourceKey: string;
+  title: string;
+  body: string;
+  chips: string[];
+  createdAt: string;
+}
+
 const VIDEO_INSIGHT_COLORS = ['#B48EFA', '#7FD4B2', '#7FADEB', '#F2AE8F', '#F0CD70', '#90D4DD'];
-
-const AUDIO_FILE_PATTERN = /\.(mp3|wav|webm|ogg|m4a|aac|flac)$/i;
-const DOCUMENT_FILE_PATTERN = /\.(txt|md|markdown|csv|json|html?|pdf|docx)$/i;
-
-function isAudioFile(file: File): boolean {
-  return file.type.startsWith('audio/') || AUDIO_FILE_PATTERN.test(file.name);
-}
-
-function isDocumentFile(file: File): boolean {
-  return DOCUMENT_FILE_PATTERN.test(file.name);
-}
 
 function mapSegmentsForAppend(
   incoming: TranscriptSegment[],
@@ -283,7 +383,7 @@ function buildSupportReferenceSnippet(
     return full;
   }
 
-  // 覆盖文档头部、主体和尾部，避免只截取前几段导致问答命中率低。
+  // 覆盖文档头部、主体和尾部，避免只截取前几段导致问答命中率偏低。
   const head = chunks.slice(0, 10);
   const tail = chunks.slice(Math.max(chunks.length - 6, 10));
   const middleStart = Math.max(10, Math.floor(chunks.length * 0.45));
@@ -300,7 +400,7 @@ function mergeSupportReferences(
   const normalized = [...incoming, ...previous]
     .map((item) => ({
       id: item.id,
-      title: compactText(item.title || '增强资料', 80),
+      title: compactText(item.title || '补充材料', 80),
       snippet: compactText(item.snippet || '', 2800),
     }))
     .filter((item) => item.snippet.length > 0);
@@ -316,14 +416,100 @@ function mergeSupportReferences(
   return unique;
 }
 
+function mergeWorkspaceEchoes(
+  previous: WorkspaceEchoMessage[],
+  incoming: WorkspaceEchoMessage[],
+  limit: number = 16
+): WorkspaceEchoMessage[] {
+  const normalized = [...incoming, ...previous]
+    .filter((item) => item && item.id && item.title && item.body)
+    .map((item) => ({
+      ...item,
+      title: compactText(item.title, 80),
+      body: compactText(item.body, 220),
+      chips: Array.isArray(item.chips) ? item.chips.filter(Boolean).slice(0, 4) : [],
+    }));
+
+  const unique: WorkspaceEchoMessage[] = [];
+  const seen = new Set<string>();
+  for (const item of normalized) {
+    if (seen.has(item.id)) continue;
+    seen.add(item.id);
+    unique.push(item);
+    if (unique.length >= limit) break;
+  }
+  return unique;
+}
+
+function resolvePendingAudioFailureStatus(message: string): string {
+  const text = (message || '').trim();
+  if (!text) return '原声已保留';
+  if (/公网地址|PUBLIC_DOMAIN|PUBLIC_HOST|可访问的公网地址/i.test(text)) {
+    return '本地暂不转写';
+  }
+  if (/没有转出可用文字|没有获取到文本/i.test(text)) {
+    return '还没转出文字';
+  }
+  return '原声已保留';
+}
+
+function resolveSourceFailureStatus(params: {
+  isAudio?: boolean;
+  isVideo?: boolean;
+  isImage?: boolean;
+}): string {
+  if (params.isAudio) return '原声已保留';
+  if (params.isVideo) return '视频已保留';
+  if (params.isImage) return '图片已保留';
+  return '文件已保留';
+}
+
+function inferWechatCaptureSourceType(message: WechatCaptureMessage): SourceIngestType {
+  if (message.msgType === 'voice') return 'audio';
+  if (message.msgType === 'image') return 'image';
+  if (message.reachChannel === 'video-link') return 'video';
+  if (message.msgType === 'link') return 'document';
+  return 'text';
+}
+
+function inferWechatCaptureRole(message: WechatCaptureMessage): SourceIngestRole {
+  if (message.collectionRole === 'primary' || message.collectionRole === 'support') {
+    return message.collectionRole;
+  }
+  if (message.msgType === 'text' || message.msgType === 'voice') return 'primary';
+  return 'support';
+}
+
+function inferWechatCaptureTitle(message: WechatCaptureMessage): string {
+  if (message.title?.trim()) return compactText(message.title.trim(), 60);
+  if (message.msgType === 'voice') return '微信语音';
+  if (message.msgType === 'image') return '微信图片';
+  if (message.msgType === 'link') return '微信链接';
+  if (message.msgType === 'event') return '微信服务号';
+  return '微信随手记';
+}
+
+function inferWorkspaceCaptureSourceType(item: WorkspaceCaptureMessage): SourceIngestType {
+  if (item.contentType === 'audio') return 'audio';
+  if (item.contentType === 'video') return 'video';
+  if (item.contentType === 'image') return 'image';
+  if (item.contentType === 'link' || item.contentType === 'document') return 'document';
+  return 'text';
+}
+
+function inferWorkspaceCaptureRole(item: WorkspaceCaptureMessage): SourceIngestRole {
+  if (item.role === 'primary' || item.role === 'support') return item.role;
+  return item.contentType === 'audio' ? 'primary' : 'support';
+}
+
 async function readJsonApiResponse<T>(response: Response, errorPrefix: string): Promise<T> {
   const raw = await response.text();
   try {
     return JSON.parse(raw) as T;
   } catch {
     const snippet = compactText(raw.replace(/\s+/g, ' ').trim(), 200);
-    const detail = snippet ? `：${snippet}` : '';
-    throw new Error(`${errorPrefix}（接口返回非 JSON，HTTP ${response.status}）${detail}`);
+    const _detail = snippet ? `：${snippet}` : '';
+    throw new Error(`${errorPrefix}（接口返回非 JSON，HTTP ${response.status}）${_detail}`);
   }
 }
 
@@ -358,6 +544,7 @@ function buildASRContextHint(params: {
 
 function buildTutorSupportContextText(
   supportReferences: SupportReferenceItem[],
+  workspaceEchoes: WorkspaceEchoMessage[] = [],
   maxChars: number = 6500
 ): string {
   const references = (supportReferences || [])
@@ -368,16 +555,118 @@ function buildTutorSupportContextText(
     .filter((item) => item.snippet.length > 0)
     .slice(0, 6);
 
-  if (references.length === 0) return '';
+  const echoes = (workspaceEchoes || [])
+    .map((item) => ({
+      title: compactText(item.title, 80),
+      body: compactText(item.body, 220),
+      chips: Array.isArray(item.chips) ? item.chips.filter(Boolean).slice(0, 3) : [],
+    }))
+    .filter((item) => item.body.length > 0)
+    .slice(0, 4);
 
-  const labeled = references
-    .map((item, index) => `[资料${index + 1}] 标题：${item.title}\n摘录：${item.snippet}`)
-    .join('\n\n');
+  if (references.length === 0 && echoes.length === 0) return '';
+
+  const sections: string[] = [];
+
+  if (references.length > 0) {
+    const labeledReferences = references
+      .map((item, index) => `[资料${index + 1}] 标题：${item.title}\n摘录：${item.snippet}`)
+      .join('\n\n');
+
+    sections.push(
+      [
+        '以下是用户主动加入的补充材料，请在回答时优先参考。',
+        '如果引用了这些材料，请在对应句子后标注 [资料N]。',
+        '如果材料与课堂转录冲突，请明确指出冲突。',
+        '',
+        labeledReferences,
+      ].join('\n')
+    );
+  }
+
+  if (echoes.length > 0) {
+    const labeledEchoes = echoes
+      .map((item, index) => {
+        const chips = item.chips.length > 0 ? `\n标签：${item.chips.join(' / ')}` : '';
+        return `[回声${index + 1}] 标题：${item.title}\n内容：${item.body}${chips}`;
+      })
+      .join('\n\n');
+
+    sections.push(
+      [
+        '以下是系统基于近期学习上下文生成的回声，可用于理解用户最近更在意什么、卡在什么层次、适合怎样的解释方式。',
+        '这些回声是理解线索，不是硬事实；不要生硬复述，要把它们用在更贴近用户状态的表达里。',
+        '',
+        labeledEchoes,
+      ].join('\n')
+    );
+  }
+
+  return compactMultilineText(sections.join('\n\n'), maxChars);
+}
+
+function buildTutorQuestionFromEcho(
+  params: {
+  title: string;
+  body: string;
+  chips?: string[];
+},
+  mode: 'explore' | 'review' = 'explore'
+): string {
+  const chipsLine = params.chips && params.chips.length > 0
+    ? `\n我现在更想顺着这些线索展开：${params.chips.join('、')}`
+    : '';
+
+  if (mode === 'review') {
+    return compactMultilineText(
+      `基于这条回声，帮我把它整理成一份可执行的复习清单：\n${params.title}\n${params.body}${chipsLine}\n请按“先理解什么 / 先复习什么 / 接下来怎么练”来组织。`,
+      320
+    );
+  }
 
   return compactMultilineText(
-    `以下是用户导入的增强资料，请在回答时优先参考；若使用了资料内容，请在对应句子后加 [资料N]（例如 [资料1]）。如果与课堂转写冲突，请明确指出冲突。\n\n${labeled}`,
-    maxChars
+    `顺着这条回声继续带我学：\n${params.title}\n${params.body}${chipsLine}`,
+    280
   );
+}
+
+function resolveEchoTimeBucket(createdAt: string): 'today' | 'week' | 'earlier' {
+  const created = new Date(createdAt);
+  const now = new Date();
+  const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+  const diff = now.getTime() - created.getTime();
+
+  if (created.getTime() >= startOfToday) return 'today';
+  if (diff <= 7 * 24 * 60 * 60 * 1000) return 'week';
+  return 'earlier';
+}
+
+function getEchoBucketLabel(bucket: 'today' | 'week' | 'earlier'): string {
+  if (bucket === 'today') return '今天';
+  if (bucket === 'week') return '最近 7 天';
+  return '更早';
+}
+
+function getSegmentBatchDurationMs(segments: TranscriptSegment[]): number {
+  if (!Array.isArray(segments) || segments.length === 0) return 0;
+  const startMs = segments[0]?.startMs || 0;
+  const endMs = segments[segments.length - 1]?.endMs || 0;
+  return Math.max(0, endMs - startMs);
+}
+
+function formatVoiceDurationCompact(ms?: number): string {
+  if (!ms || ms <= 0) return '';
+  const totalSeconds = Math.max(1, Math.round(ms / 1000));
+  if (totalSeconds < 60) return `${totalSeconds}"`;
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  return `${minutes}'${seconds.toString().padStart(2, '0')}"`;
+}
+
+function getFileExtensionBadge(title: string): string | null {
+  const index = title.lastIndexOf('.');
+  if (index <= 0 || index >= title.length - 1) return null;
+  return compactText(title.slice(index + 1).trim().toUpperCase(), 8) || null;
 }
 
 function buildSeedVideoInsights(segments: TranscriptSegment[]): VideoInsightItem[] {
@@ -412,19 +701,25 @@ function buildSeedVideoInsights(segments: TranscriptSegment[]): VideoInsightItem
 function StudentAppContent({
   isGuestFastEntry,
   forcedWorkspaceTab,
+  forceMobilePreview = false,
+  wechatCaptureToken = null,
 }: {
   isGuestFastEntry: boolean;
   forcedWorkspaceTab: SharedWorkspaceTab | null;
+  forceMobilePreview?: boolean;
+  wechatCaptureToken?: string | null;
 }) {
   // Performance: Guest mode skips splash entirely for instant entry.
   const [showSplash, setShowSplash] = useState(!isGuestFastEntry);
   const [appReady, setAppReady] = useState(isGuestFastEntry);
   const [loadingProgress, setLoadingProgress] = useState(isGuestFastEntry ? 100 : 0);
   
-  const { user, isAuthenticated } = useAuth();
+  const { user, isAuthenticated, accessToken } = useAuth();
   
   // NOTE: cleaned corrupted legacy comment.
-  const { isMobile, mounted } = useResponsive();
+  const { isMobile: detectedIsMobile, mounted } = useResponsive();
+  const isMobile = detectedIsMobile || forceMobilePreview;
+  const isDesktopMobilePreview = forceMobilePreview && !detectedIsMobile;
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isPlaying, setIsPlaying] = useState(false);
   const [selectedConfusion, setSelectedConfusion] = useState<ConfusionMarker | null>(null);
@@ -491,16 +786,40 @@ function StudentAppContent({
   
   // NOTE: cleaned corrupted legacy comment.
   const [showSessionHistory, setShowSessionHistory] = useState(false);
+  const [mobileCollectionSheet, setMobileCollectionSheet] = useState<MobileCollectionSheet>(null);
+  const [showMobileRecorder, setShowMobileRecorder] = useState(false);
+  const [collectionComposerText, setCollectionComposerText] = useState('');
+  const [showCollectionPulsePreview, setShowCollectionPulsePreview] = useState(false);
+  const [captureDrivenPulse, setCaptureDrivenPulse] = useState<CollectionPulseState | null>(null);
+  const [workspaceEchoes, setWorkspaceEchoes] = useState<WorkspaceEchoMessage[]>([]);
+  const [selectedEchoChip, setSelectedEchoChip] = useState<string>('全部');
+  const collectionComposerRef = useRef<HTMLTextAreaElement | null>(null);
   const [sourcePanelMode, setSourcePanelMode] = useState<'audio' | 'support'>('audio');
   const [sourceImportMode, setSourceImportMode] = useState<'files' | 'text'>('files');
   const [sourceFilePickerMode, setSourceFilePickerMode] = useState<'audio' | 'support' | 'all'>('all');
-  const [sourceImporting, setSourceImporting] = useState(false);
+  const [activeSourceImportCount, setActiveSourceImportCount] = useState(0);
   const [sourceImportError, setSourceImportError] = useState('');
+  const [playingAudioMessageId, setPlayingAudioMessageId] = useState<string | null>(null);
+  const [audioPlaybackState, setAudioPlaybackState] = useState<{
+    id: string;
+    progress: number;
+    currentTime: number;
+    duration: number;
+  } | null>(null);
+  const [expandedAudioTranscriptId, setExpandedAudioTranscriptId] = useState<string | null>(null);
   const [sourceTextInput, setSourceTextInput] = useState('');
   const [asrContextHint, setAsrContextHint] = useState('');
   const [sourceItems, setSourceItems] = useState<SourceIngestItem[]>([]);
   const [supportReferences, setSupportReferences] = useState<SupportReferenceItem[]>([]);
-  const tutorSupportContextText = buildTutorSupportContextText(supportReferences);
+  const sourceImporting = activeSourceImportCount > 0;
+  const tutorSupportContextText = useMemo(
+    () => buildTutorSupportContextText(supportReferences, workspaceEchoes),
+    [supportReferences, workspaceEchoes]
+  );
+  const hasCollectionContext = useMemo(
+    () => segments.length > 0 || sourceItems.length > 0 || supportReferences.length > 0 || workspaceEchoes.length > 0,
+    [segments.length, sourceItems.length, supportReferences.length, workspaceEchoes.length]
+  );
   
   // NOTE: cleaned corrupted legacy comment.
   const [isActionDrawerOpen, setIsActionDrawerOpen] = useState(false);
@@ -513,6 +832,9 @@ function StudentAppContent({
   
   const liveSegmentsRef = useRef<TranscriptSegment[]>([]);
   const segmentsRef = useRef<TranscriptSegment[]>([]);
+  const lastCollectionPulseSignatureRef = useRef('');
+  const importedWechatCaptureTokensRef = useRef(new Set<string>());
+  const hydratedWorkspaceUserRef = useRef<string | null>(null);
 
   // Auto-extract terms from user-provided context (course topic + reference materials)
   const [extractedTermsHint, setExtractedTermsHint] = useState('');
@@ -576,8 +898,22 @@ function StudentAppContent({
   }, [asrContextHint, supportReferences, extractedTermsHint]);
   const anchorsRef = useRef<Anchor[]>([]);
   const sessionIdRef = useRef<string>(sessionId);
+  const sourceItemsRef = useRef<SourceIngestItem[]>([]);
+  const supportReferencesRef = useRef<SupportReferenceItem[]>([]);
+  const previewObjectUrlsRef = useRef<string[]>([]);
+  const audioPlaybackRef = useRef<HTMLAudioElement | null>(null);
   const sourceFileInputRef = useRef<HTMLInputElement>(null);
   const waveformRef = useRef<WaveformPlayerRef>(null);
+  const recorderRef = useRef<RecorderHandle | null>(null);
+  const pendingRecordedAudioRef = useRef<{
+    itemId: string;
+    sessionId: string;
+    title: string;
+    mediaUrl: string;
+    durationMs: number;
+    blob: Blob;
+  } | null>(null);
+  const [recorderAutoStartSignal, setRecorderAutoStartSignal] = useState(0);
   const hasRestoredState = useRef(false);  // NOTE: cleaned corrupted legacy comment.
   useEffect(() => {
     segmentsRef.current = segments;
@@ -590,6 +926,114 @@ function StudentAppContent({
   useEffect(() => {
     sessionIdRef.current = sessionId;
   }, [sessionId]);
+
+  useEffect(() => {
+    sourceItemsRef.current = sourceItems;
+  }, [sourceItems]);
+
+  useEffect(() => {
+    supportReferencesRef.current = supportReferences;
+  }, [supportReferences]);
+
+  useEffect(() => {
+    return () => {
+      previewObjectUrlsRef.current.forEach((url) => {
+        try {
+          URL.revokeObjectURL(url);
+        } catch {
+          // ignore object URL cleanup errors
+        }
+      });
+      previewObjectUrlsRef.current = [];
+    };
+  }, []);
+
+  const stopAudioMessagePlayback = useCallback(() => {
+    if (audioPlaybackRef.current) {
+      audioPlaybackRef.current.pause();
+      audioPlaybackRef.current.src = '';
+      audioPlaybackRef.current = null;
+    }
+    setPlayingAudioMessageId(null);
+    setAudioPlaybackState(null);
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (audioPlaybackRef.current) {
+        audioPlaybackRef.current.pause();
+        audioPlaybackRef.current.src = '';
+        audioPlaybackRef.current = null;
+      }
+    };
+  }, []);
+
+  const toggleAudioMessagePlayback = useCallback(async (item: SourceIngestItem) => {
+    if (!item.mediaUrl) return;
+
+    if (playingAudioMessageId === item.id && audioPlaybackRef.current) {
+      if (audioPlaybackRef.current.paused) {
+        try {
+          await audioPlaybackRef.current.play();
+          setPlayingAudioMessageId(item.id);
+        } catch (error) {
+          console.error('[audio.playback.resume]', error);
+        }
+      } else {
+        audioPlaybackRef.current.pause();
+        setPlayingAudioMessageId(null);
+      }
+      return;
+    }
+
+    stopAudioMessagePlayback();
+
+    try {
+      const audio = new Audio(item.mediaUrl);
+      audioPlaybackRef.current = audio;
+
+      audio.onloadedmetadata = () => {
+        const duration = Number.isFinite(audio.duration) ? audio.duration : 0;
+        setAudioPlaybackState({
+          id: item.id,
+          progress: 0,
+          currentTime: 0,
+          duration,
+        });
+      };
+
+      audio.ontimeupdate = () => {
+        const duration = Number.isFinite(audio.duration) && audio.duration > 0 ? audio.duration : item.durationMs ? item.durationMs / 1000 : 0;
+        const currentTime = audio.currentTime || 0;
+        setAudioPlaybackState({
+          id: item.id,
+          progress: duration > 0 ? Math.min(1, currentTime / duration) : 0,
+          currentTime,
+          duration,
+        });
+      };
+
+      audio.onended = () => {
+        setPlayingAudioMessageId(null);
+        setAudioPlaybackState((prev) =>
+          prev?.id === item.id
+            ? {
+                ...prev,
+                progress: 0,
+                currentTime: 0,
+              }
+            : prev
+        );
+      };
+
+      await audio.play();
+      setPlayingAudioMessageId(item.id);
+    } catch (error) {
+      console.error('[audio.playback.start]', error);
+      stopAudioMessagePlayback();
+      toast.error('这段原声暂时无法播放，请稍后再试。');
+    }
+  }, [playingAudioMessageId, stopAudioMessagePlayback]);
 
   useEffect(() => {
     if (!mounted || !sessionId || typeof window === 'undefined') return;
@@ -694,7 +1138,7 @@ function StudentAppContent({
       const migration = await runMemoryMigration();
       if (cancelled) return;
       if (!migration.ok) {
-        toast.warning('历史数据迁移未完全完成，可继续使用，部分历史数据可能缺失。');
+        toast.warning('历史数据迁移未完全完成，可以继续使用，但部分历史数据可能缺失。');
       }
     };
     void run();
@@ -1292,51 +1736,131 @@ function StudentAppContent({
       setAppReady(true);
       hasRestoredState.current = true;
 
-      if (isFirstVisit && !savedAppState) {
+      if (!forceMobilePreview && isFirstVisit && !savedAppState) {
         setTimeout(() => setShowWelcome(true), 800);
       }
      } catch (err) {
       console.error('[initializeApp] Fatal error during init:', err);
-      // 即使初始化出错也让用户进入应用，避免永久卡在加载页
+      // 即使初始化出错，也允许用户进入应用，避免长时间卡在加载态。
       setLoadingProgress(100);
       setAppReady(true);
       hasRestoredState.current = true;
-      toast.error('应用初始化遇到问题，部分数据可能未加载');
+      toast.error('应用初始化遇到问题，部分数据可能未加载。');
      }
     };
 
     initializeApp();
-  }, [isGuestFastEntry]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [forceMobilePreview, isGuestFastEntry]); // eslint-disable-line react-hooks/exhaustive-deps
   
   // NOTE: cleaned corrupted legacy comment.
   const hasTriggeredWelcome = useRef(false);
   useEffect(() => {
-    if (!isGuestFastEntry && !onboarding.isLoading && appReady && !showSplash && !hasTriggeredWelcome.current && onboarding.shouldShowFlow('welcome')) {
+    if (
+      !forceMobilePreview &&
+      !isGuestFastEntry &&
+      !onboarding.isLoading &&
+      appReady &&
+      !showSplash &&
+      !hasTriggeredWelcome.current &&
+      onboarding.shouldShowFlow('welcome')
+    ) {
       hasTriggeredWelcome.current = true;
       setShowWelcome(true);
     }
-  }, [isGuestFastEntry, onboarding, appReady, showSplash]);
+  }, [forceMobilePreview, isGuestFastEntry, onboarding, appReady, showSplash]);
 
   // NOTE: cleaned corrupted legacy comment.
   const handleSplashComplete = useCallback(() => {
     setShowSplash(false);
   }, []);
 
+  const persistCaptureToWorkspace = useCallback(async (params: {
+    sourceType: string;
+    sourceKey: string;
+    role: string;
+    contentType: string;
+    title: string;
+    previewText?: string;
+    normalizedText?: string;
+    sourceUrl?: string;
+    mediaUrl?: string;
+    tutorContext?: string;
+    occurredAt?: string;
+    metadata?: Record<string, unknown>;
+  }) => {
+    if (!isAuthenticated || !user?.id || !accessToken) return;
+
+    try {
+      const response = await fetch('/api/workspace/captures', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${accessToken}`,
+        },
+        body: JSON.stringify(params),
+      });
+
+      const payload = await readJsonApiResponse<{
+        success: boolean;
+        echo?: WorkspaceEchoMessage;
+        error?: string;
+      }>(response, '写入工作区收集失败');
+
+      if (!response.ok || !payload.success) {
+        throw new Error(payload.error || '写入工作区收集失败');
+      }
+
+      const echo = payload.echo;
+      if (echo) {
+        setWorkspaceEchoes((prev) => mergeWorkspaceEchoes(prev, [echo]));
+        setCaptureDrivenPulse({
+          title: echo.title,
+          body: echo.body,
+          chips: (echo.chips || []).slice(0, 3),
+          actions: params.role === 'primary'
+            ? [
+                { key: 'capture-confusion', label: '补一句困惑' },
+                { key: 'add-material', label: '贴一份材料' },
+              ]
+            : [
+                { key: 'continue-voice', label: '再录一段' },
+                { key: 'capture-confusion', label: '写一句想法' },
+              ],
+        });
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      console.error('[workspace.capture]', message);
+    }
+  }, [accessToken, isAuthenticated, user?.id]);
+
   const handleRecordingStart = useCallback((newSessionId: string) => {
+    const hasExistingCollectionContext =
+      segmentsRef.current.length > 0 ||
+      sourceItemsRef.current.length > 0 ||
+      supportReferencesRef.current.length > 0;
+    const isContinuingCurrentSession =
+      newSessionId === sessionIdRef.current && hasExistingCollectionContext;
+
     // NOTE: cleaned corrupted legacy comment.
     setSessionId(newSessionId);
     setIsRecording(true);
+    setShowMobileRecorder(true);
+    setMobileCollectionSheet(null);
+    setSourceImportError('');
+    setDataSource('live');
+    if (!isContinuingCurrentSession && !hasExistingCollectionContext) {
     setSegments([]);
     setAnchors([]);
-    setSelectedAnchor(null); // 娓呴櫎閫変腑鐨勫洶鎯戠偣
+    setSelectedAnchor(null); // 清空当前选中的困惑点
     clearTopics(); // NOTE: cleaned corrupted legacy comment.
     clearSummary(); // NOTE: cleaned corrupted legacy comment.
-    setNotes([]); // 娓呴櫎绗旇
-    setActionItems([]); // 娓呴櫎琛屽姩娓呭崟
+    setNotes([]); // 清空当前课堂笔记
+    setActionItems([]); // 清空待办任务
     setTimeline(null); // NOTE: cleaned corrupted legacy comment.
     setDataSource('live');
-    setAudioUrl(null); // 娓呴櫎绀轰緥闊抽URL
-    setAudioBlob(null); // 娓呴櫎闊抽 blob
+    setAudioUrl(null); // 清空当前音频链接
+    setAudioBlob(null); // 清空当前音频数据
     setVideoSource(null);
     setVideoInsightItems([]);
     setActiveVideoInsightId(null);
@@ -1349,11 +1873,12 @@ function StudentAppContent({
     setSupportReferences([]);
     liveSegmentsRef.current = [];
     anchorService.clear(newSessionId);
+    }
     // NOTE: cleaned corrupted legacy comment.
     setShowConversationHistory(false);
     setSelectedHistoryConversation(null);
     
-    // 鍒涘缓璇剧▼浼氳瘽璁板綍 (渚涙暀甯堢璇诲彇)
+    // 同步保存当前会话，方便后续继续补充和回看。
     classroomDataService.saveSession({
       id: newSessionId,
       subject: UIConfig.defaultSubject,
@@ -1364,8 +1889,9 @@ function StudentAppContent({
     });
   }, [studentId, clearTopics, clearSummary]);
 
-  const handleRecordingStop = useCallback((blob?: Blob) => {
+  const handleRecordingStop = useCallback((blob?: Blob, meta?: { sessionId?: string; isContinuation?: boolean; durationMs?: number }) => {
     setIsRecording(false);
+    setShowMobileRecorder(false);
     if (blob) setAudioBlob(blob);
     
     // NOTE: cleaned corrupted legacy comment.
@@ -1374,24 +1900,26 @@ function StudentAppContent({
       : segments;
     
     const hasLiveData = liveSegmentsRef.current.length > 0;
-    const finalSegments = currentSegments;
+    const finalSegments = hasLiveData ? currentSegments : [];
     
-    setSegments(finalSegments);
-    setDataSource(hasLiveData ? 'live' : 'demo');
+    setSegments(currentSegments);
+    setDataSource(blob || hasLiveData ? 'live' : 'demo');
     if (hasLiveData) {
       setVideoSource(null);
       setVideoInsightItems([]);
       setActiveVideoInsightId(null);
     }
     
-    // 璁＄畻璇剧▼鏃堕暱
-    const duration = finalSegments.length > 0 
+    const effectiveSessionId = meta?.sessionId || sessionId;
+    const duration = typeof meta?.durationMs === 'number' && meta.durationMs > 0
+      ? meta.durationMs
+      : finalSegments.length > 0 
       ? finalSegments[finalSegments.length - 1].endMs 
       : 0;
     
     // NOTE: cleaned corrupted legacy comment.
     classroomDataService.saveSession({
-      id: sessionId,
+      id: effectiveSessionId,
       subject: UIConfig.defaultSubject,
       topic: UIConfig.defaultLessonTitle,
       teacherName: UIConfig.defaultTeacher || 'Teacher',
@@ -1400,42 +1928,98 @@ function StudentAppContent({
     });
     
     // Persist audio and transcript to IndexedDB history.
-    if (blob && hasLiveData) {
+    if (blob) {
       const currentUserId = user?.id || ANONYMOUS_USER_ID;
+      const liveMediaUrl = URL.createObjectURL(blob);
+      previewObjectUrlsRef.current.push(liveMediaUrl);
       
       // Save audio blob first.
-      saveAudioSession(blob, sessionId, currentUserId, {
+      saveAudioSession(blob, effectiveSessionId, currentUserId, {
         subject: UIConfig.defaultSubject,
         topic: UIConfig.defaultLessonTitle,
         duration,
       }).catch(err => console.error('Failed to save audio session to history:', err));
       
       // NOTE: cleaned corrupted legacy comment.
-      addTranscripts(sessionId, currentUserId, finalSegments.map((seg) => ({
-        text: seg.text,
-        startMs: seg.startMs,
-        endMs: seg.endMs,
-        confidence: seg.confidence || 1.0,
-        isFinal: true,
-      }))).catch(err => console.error('Failed to persist transcript to IndexedDB:', err));
+      if (finalSegments.length > 0) {
+        addTranscripts(effectiveSessionId, currentUserId, finalSegments.map((seg) => ({
+          text: seg.text,
+          startMs: seg.startMs,
+          endMs: seg.endMs,
+          confidence: seg.confidence || 1.0,
+          isFinal: true,
+        }))).catch(err => console.error('Failed to persist transcript to IndexedDB:', err));
+      }
+
+      const audioCaptureId = `audio-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+      setSourceItems((prev) => [
+        ...prev,
+        {
+          id: audioCaptureId,
+          type: 'audio',
+          role: 'primary',
+          title: `录音 ${new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })}`,
+          preview: buildSourcePreviewText(finalSegments, 180),
+          mediaUrl: liveMediaUrl,
+          segmentCount: finalSegments.length,
+          addedAt: new Date().toISOString(),
+          origin: 'user',
+          status: finalSegments.length > 0 ? 'ready' : 'transcribing',
+          statusText: finalSegments.length > 0 ? '' : '转写稍后回来',
+          sessionId: effectiveSessionId,
+          durationMs: duration,
+          reviewable: finalSegments.length > 0,
+        },
+      ]);
+      if (finalSegments.length > 0) {
+        void persistCaptureToWorkspace({
+          sourceType: 'live-audio',
+          sourceKey: `live:${audioCaptureId}`,
+          role: 'primary',
+          contentType: 'audio',
+          title: `录音 ${new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })}`,
+          previewText: buildSourcePreviewText(finalSegments, 180),
+          normalizedText: buildSupportReferenceSnippet(finalSegments, 2800),
+          tutorContext: buildSupportReferenceSnippet(finalSegments, 2800),
+          mediaUrl: liveMediaUrl,
+          occurredAt: new Date().toISOString(),
+          metadata: {
+            from: 'live-recording',
+            sessionId: effectiveSessionId,
+            duration,
+            segmentCount: finalSegments.length,
+          },
+        });
+      } else {
+        pendingRecordedAudioRef.current = {
+          itemId: audioCaptureId,
+          sessionId: effectiveSessionId,
+          title: `录音 ${new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })}`,
+          mediaUrl: liveMediaUrl,
+          durationMs: duration,
+          blob,
+        };
+      }
     }
     
     const tl = memoryService.buildTimeline(
-      sessionId,
+      effectiveSessionId,
       finalSegments,
       anchors,
       { subject: UIConfig.defaultSubject, teacher: UIConfig.defaultTeacher || 'Teacher', date: new Date().toISOString().split('T')[0] }
     );
     setTimeline(tl);
     memoryService.save(tl);
-    setViewMode('review');
-  }, [sessionId, anchors, segments, user]);
+    setViewMode('record');
+  }, [anchors, persistCaptureToWorkspace, segments, sessionId, user]);
 
   // NOTE: cleaned corrupted legacy comment.
   // NOTE: cleaned corrupted legacy comment.
   const handleViewModeChange = useCallback(async (newMode: 'record' | 'review') => {
     setViewMode(newMode);
     setMobileSubPage(null);
+    setShowMobileRecorder(false);
+    setMobileCollectionSheet(null);
     // NOTE: cleaned corrupted legacy comment.
     setShowConversationHistory(false);
     setSelectedHistoryConversation(null);
@@ -1446,7 +2030,7 @@ function StudentAppContent({
       setActiveVideoInsightId(null);
       setVideoWorkspaceTab('chat');
     }
-    if (newMode === 'review' && segments.length === 0) {
+    if (newMode === 'review' && segments.length === 0 && !hasCollectionContext) {
       try {
         const demoData = await loadDemoData();
         setSegments(demoData.DEMO_SEGMENTS);
@@ -1464,7 +2048,7 @@ function StudentAppContent({
         );
         setTimeline(tl);
         
-        // 閫変腑绗竴涓湭瑙ｅ喅鐨勫洶鎯戠偣
+        // 自动定位到第一个未解决的困惑点
         const firstUnresolved = demoData.DEMO_ANCHORS.find(a => !a.resolved);
         if (firstUnresolved) {
           setSelectedAnchor(firstUnresolved);
@@ -1479,13 +2063,40 @@ function StudentAppContent({
       } catch (err) {
         console.error('Failed to load demo data:', err);
       }
-    } else if (newMode === 'review' && segments.length > 0) {
+    } else if (newMode === 'review' && (segments.length > 0 || hasCollectionContext)) {
       // Enter review onboarding when data already exists.
       if (!isGuestFastEntry && !onboarding.isActive && onboarding.shouldShowFlow('review')) {
         setTimeout(() => onboarding.startFlow('review'), 300);
       }
     }
-  }, [segments.length, sessionId, onboarding, isGuestFastEntry]);
+  }, [hasCollectionContext, segments.length, sessionId, onboarding, isGuestFastEntry]);
+
+  const openReviewFromCollection = useCallback(async (item?: SourceIngestItem | null) => {
+    if (!item) return;
+    setMobileCollectionSheet(null);
+    setShowMobileRecorder(false);
+    setShowCollectionPulsePreview(false);
+
+    if (item.sessionId && item.sessionId !== sessionId && item.reviewable) {
+      try {
+        const restored = await restoreReviewSession(item.sessionId, {
+          reviewTab: 'timeline',
+          videoWorkspaceTab: item.type === 'video' ? 'chat' : 'chat',
+          currentTime: 0,
+          showTranscriptBar: false,
+        });
+        if (restored) {
+          return;
+        }
+      } catch (error) {
+        console.error('从收集流进入复习失败:', error);
+      }
+    }
+
+    await handleViewModeChange('review');
+    setReviewTab('timeline');
+    setVideoWorkspaceTab(item.type === 'video' ? 'chat' : 'chat');
+  }, [handleViewModeChange, restoreReviewSession, sessionId]);
 
   useEffect(() => {
     if (isGuestFastEntry) return;
@@ -1540,9 +2151,77 @@ function StudentAppContent({
     setSegments(newSegments);
     setDataSource('live');
     setVideoSource(null);
+    const pendingAudio = pendingRecordedAudioRef.current;
+    if (pendingAudio) {
+      const previewText = buildSourcePreviewText(newSegments, 180);
+      const currentUserId = user?.id || ANONYMOUS_USER_ID;
+      void addTranscripts(pendingAudio.sessionId, currentUserId, newSegments.map((seg) => ({
+        text: seg.text,
+        startMs: seg.startMs,
+        endMs: seg.endMs,
+        confidence: seg.confidence || 1.0,
+        isFinal: true,
+      }))).catch((err) => console.error('Failed to persist batch transcript to IndexedDB:', err));
+      setSourceItems((prev) =>
+        prev.map((item) =>
+          item.id === pendingAudio.itemId
+            ? {
+                ...item,
+                preview: previewText,
+                fullText: buildSupportReferenceSnippet(newSegments, 2800),
+                segmentCount: newSegments.length,
+                durationMs: pendingAudio.durationMs,
+                reviewable: true,
+                sessionId: pendingAudio.sessionId,
+                status: 'ready',
+                statusText: undefined,
+              }
+            : item
+        )
+      );
+      void persistCaptureToWorkspace({
+        sourceType: 'live-audio',
+        sourceKey: `live:${pendingAudio.itemId}`,
+        role: 'primary',
+        contentType: 'audio',
+        title: pendingAudio.title,
+        previewText,
+        normalizedText: buildSupportReferenceSnippet(newSegments, 2800),
+        tutorContext: buildSupportReferenceSnippet(newSegments, 2800),
+        mediaUrl: pendingAudio.mediaUrl,
+        occurredAt: new Date().toISOString(),
+        metadata: {
+          from: 'live-recording',
+          sessionId: pendingAudio.sessionId,
+          duration: pendingAudio.durationMs,
+          segmentCount: newSegments.length,
+        },
+      });
+      pendingRecordedAudioRef.current = null;
+    }
+  }, [persistCaptureToWorkspace, user?.id]);
+
+  const handleRecordingTranscriptionError = useCallback((message: string) => {
+    const pendingAudio = pendingRecordedAudioRef.current;
+    if (!pendingAudio) return;
+
+    setSourceItems((prev) =>
+      prev.map((item) =>
+        item.id === pendingAudio.itemId
+          ? {
+              ...item,
+              reviewable: false,
+              status: 'failed',
+              statusText: resolvePendingAudioFailureStatus(message),
+            }
+          : item
+      )
+    );
+
+    pendingRecordedAudioRef.current = null;
   }, []);
 
-  // 澶勭悊杞綍澧炲己瀹屾垚鍚庣殑鏇存柊
+  // 接收转写增强结果，并更新当前课堂内容
   const handleTranscriptEnhanced = useCallback((enhancedSegments: TranscriptSegment[]) => {
     console.log('[Page] Received enhanced transcript:', enhancedSegments.length, 'segments');
     liveSegmentsRef.current = enhancedSegments;
@@ -1569,7 +2248,7 @@ const _handleVideoAssistantMessage = useCallback((payload: {
       const baseItems = prev.filter((item) => !item.id.startsWith('seed-'));
       const nextItem: VideoInsightItem = {
         id: insightId,
-        prompt: compactText(payload.prompt || '鏈疆鎻愰棶', 48),
+        prompt: compactText(payload.prompt || '閺堫剝鐤嗛幓鎰版６', 48),
         summary: compactText(payload.content, 120),
         timestamps: insightTimestamps,
         color: VIDEO_INSIGHT_COLORS[baseItems.length % VIDEO_INSIGHT_COLORS.length],
@@ -1652,7 +2331,7 @@ const _handleVideoAssistantMessage = useCallback((payload: {
           nearestSeg = seg;
           break;
         }
-        // 鍚﹀垯鎵炬渶杩戠殑
+        // 继续找离当前时间最近的片段。
         const segMid = (seg.startMs + seg.endMs) / 2;
         const distance = Math.abs(timestamp - segMid);
         if (distance < minDistance) {
@@ -1682,7 +2361,7 @@ const _handleVideoAssistantMessage = useCallback((payload: {
     );
     const transcriptContext = contextSegments.map(s => s.text).join(' ').slice(0, 200);
     
-    // 鍐欏叆鍏变韩瀛樺偍 (渚涙暀甯堢璇诲彇)
+    // 把学生标记的困惑同步到课堂数据里。
     classroomDataService.saveStudentAnchor(
       sessionId,
       studentId,
@@ -1697,7 +2376,7 @@ const _handleVideoAssistantMessage = useCallback((payload: {
     }
   }, [sessionId, studentId, studentName, timeline, segments]);
 
-  // 鍥炴斁鏃舵坊鍔犲洶鎯戠偣鏍囨敞
+  // 在回放时新增时间锚点，便于后面追问和复盘。
   const handlePlaybackAnchorAdd = useCallback((timestamp: number) => {
     // NOTE: cleaned corrupted legacy comment.
     // NOTE: cleaned corrupted legacy comment.
@@ -1721,7 +2400,7 @@ const _handleVideoAssistantMessage = useCallback((payload: {
     );
     const transcriptContext = contextSegments.map(s => s.text).join(' ').slice(0, 200);
     
-    // 鍐欏叆鍏变韩瀛樺偍
+    // 将困惑点写入学生侧共享数据
     classroomDataService.saveStudentAnchor(
       sessionId,
       studentId,
@@ -1735,14 +2414,14 @@ const _handleVideoAssistantMessage = useCallback((payload: {
       setTimeline({ ...timeline, anchors: [...timeline.anchors, anchor] });
     }
     
-    // 鑷姩鍒囨崲鍒板洶鎯戠偣璇︽儏闈㈡澘
+    // 标记后直接切到困惑点详情
     setReviewTab('anchor-detail');
   }, [sessionId, studentId, studentName, timeline, segments]);
 
   const handleAnchorSelect = useCallback((anchor: Anchor) => {
     setSelectedAnchor(anchor);
     setCurrentTime(anchor.timestamp);
-    // 鑷姩鍒囨崲鍒板洶鎯戠偣璇︽儏闈㈡澘
+    // 选中困惑点后切到详情
     setReviewTab('anchor-detail');
   }, []);
 
@@ -1751,7 +2430,7 @@ const _handleVideoAssistantMessage = useCallback((payload: {
     
     anchorService.resolve(selectedAnchor.id, sessionId);
     
-    // 鍚屾鏇存柊鍏变韩瀛樺偍
+    // 同步更新本地和课堂数据里的锚点状态。
     classroomDataService.resolveAnchor(selectedAnchor.id);
     
     setAnchors(prev => prev.map(a => 
@@ -1799,14 +2478,14 @@ const _handleVideoAssistantMessage = useCallback((payload: {
     handleUnifiedSeek(nextTimestamp, true);
   }, [actionItems, selectedAnchor?.timestamp, anchors, currentTime, handleUnifiedSeek]);
 
-  // 生成精选片段（使用 SWR Hook，自动去重与重试）
+  // 生成精选片段（使用 SWR Hook 自动去重与重试）
   const handleGenerateTopics = useCallback(async (mode: TopicGenerationMode) => {
     try {
       console.log('[生成精选片段] 开始，模式:', mode, '片段数:', segments.length);
       await generateTopics(mode);
       console.log('[生成精选片段] 完成');
     } catch (error) {
-      console.error('生成精选片段失败', error);
+      console.error('生成精选片段失败:', error);
       toast.error(`生成失败: ${error instanceof Error ? error.message : '网络错误'}`);
     }
   }, [segments.length, generateTopics]);
@@ -1816,7 +2495,7 @@ const _handleVideoAssistantMessage = useCallback((payload: {
     try {
       await regenerateByTheme(theme);
     } catch (error) {
-      console.error('鎸変富棰樼敓鎴愬け璐?', error);
+      console.error('閹稿瀵屾０妯兼晸閹存劕銇戠拹?', error);
     }
   }, [regenerateByTheme]);
 
@@ -1825,7 +2504,7 @@ const _handleVideoAssistantMessage = useCallback((payload: {
     try {
       await generateSummary();
     } catch (error) {
-      console.error('鐢熸垚鎽樿澶辫触:', error);
+      console.error('生成摘要失败:', error);
     }
   }, [generateSummary]);
 
@@ -1846,7 +2525,7 @@ const _handleVideoAssistantMessage = useCallback((payload: {
     clearTopics();
   }, [clearTopics]);
 
-  // 鎾斁鍏ㄩ儴鐗囨
+  // 閹绢厽鏂侀崗銊╁劥閻楀洦顔?
   const handlePlayAll = useCallback(() => {
     if (isPlayingAll) {
       setIsPlayingAll(false);
@@ -1860,7 +2539,7 @@ const _handleVideoAssistantMessage = useCallback((payload: {
     }
   }, [isPlayingAll, highlightTopics, handlePlayTopic]);
 
-  // 娣诲姞绗旇
+  // 添加一条笔记
   const handleAddNote = useCallback((text: string, source: NoteSource = 'custom', metadata?: NoteMetadata) => {
     const newNote: Note = {
       id: crypto.randomUUID(),
@@ -1875,14 +2554,14 @@ const _handleVideoAssistantMessage = useCallback((payload: {
     setNotes(prev => [newNote, ...prev]);
   }, [sessionId, studentId]);
 
-  // 鏇存柊绗旇
+  // 更新已有笔记
   const handleUpdateNote = useCallback((noteId: string, text: string) => {
     setNotes(prev => prev.map(n => 
       n.id === noteId ? { ...n, text, updatedAt: new Date().toISOString() } : n
     ));
   }, []);
 
-  // 鍒犻櫎绗旇
+  // 删除一条笔记
   const handleDeleteNote = useCallback((noteId: string) => {
     setNotes(prev => prev.filter(n => n.id !== noteId));
   }, []);
@@ -1914,8 +2593,19 @@ const _handleVideoAssistantMessage = useCallback((payload: {
     type: SourceIngestType;
     role: SourceIngestRole;
     title: string;
+    preview?: string;
+    previewUrl?: string;
+    mediaUrl?: string;
+    attachmentUrl?: string;
+    fullText?: string;
     segmentCount: number;
     keepPrevious?: boolean;
+    origin?: 'user' | 'system';
+    status?: SourceIngestItem['status'];
+    statusText?: string;
+    sessionId?: string;
+    durationMs?: number;
+    reviewable?: boolean;
   }) => {
     setSourceItems((prev) => {
       const item: SourceIngestItem = {
@@ -1923,8 +2613,19 @@ const _handleVideoAssistantMessage = useCallback((payload: {
         type: params.type,
         role: params.role,
         title: params.title,
+        preview: params.preview,
+        previewUrl: params.previewUrl,
+        mediaUrl: params.mediaUrl,
+        attachmentUrl: params.attachmentUrl,
+        fullText: params.fullText,
         segmentCount: params.segmentCount,
         addedAt: new Date().toISOString(),
+        origin: params.origin || 'user',
+        status: params.status || 'ready',
+        statusText: params.statusText,
+        sessionId: params.sessionId,
+        durationMs: params.durationMs,
+        reviewable: params.reviewable,
       };
       if (params.keepPrevious === false) {
         const supportOnly = prev.filter((sourceItem) => sourceItem.role === 'support');
@@ -1934,20 +2635,34 @@ const _handleVideoAssistantMessage = useCallback((payload: {
     });
   }, []);
 
+  const updateSourceItem = useCallback((id: string, patch: Partial<SourceIngestItem>) => {
+    setSourceItems((prev) =>
+      prev.map((item) => (item.id === id ? { ...item, ...patch } : item))
+    );
+  }, []);
+
   const appendSupportSource = useCallback((params: {
+    id?: string;
     type: Extract<SourceIngestType, 'document' | 'text'>;
     title: string;
     segments: TranscriptSegment[];
+    appendItem?: boolean;
   }) => {
-    const supportId = `${params.type}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    const supportId = params.id || `${params.type}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
     const reference = buildSupportReferenceSnippet(params.segments, 2800);
-    appendSourceItem({
-      id: supportId,
-      type: params.type,
-      role: 'support',
-      title: params.title,
-      segmentCount: params.segments.length,
-    });
+    if (params.appendItem !== false) {
+      appendSourceItem({
+        id: supportId,
+        type: params.type,
+        role: 'support',
+        title: params.title,
+        preview: buildSourcePreviewText(params.segments, 180),
+        segmentCount: params.segments.length,
+        origin: 'user',
+        status: 'ready',
+        statusText: undefined,
+      });
+    }
     if (reference) {
       setSupportReferences((prev) => mergeSupportReferences(prev, [{
         id: supportId,
@@ -1955,6 +2670,10 @@ const _handleVideoAssistantMessage = useCallback((payload: {
         snippet: reference,
       }]));
     }
+    return {
+      supportId,
+      reference,
+    };
   }, [appendSourceItem]);
 
   const removeSupportSource = useCallback((id: string) => {
@@ -1968,17 +2687,18 @@ const _handleVideoAssistantMessage = useCallback((payload: {
     sourceTitle: string;
     audioBlob?: Blob;
     videoSource?: ImportedVideoSource;
+    sourceItemId?: string;
   }) => {
     const incoming = Array.isArray(params.segments) ? params.segments : [];
     if (incoming.length === 0) {
-      toast.warning('未提取到可用内容，请更换资料后重试');
+      toast.warning('未提取到可用内容，请更换资料后重试。');
       return;
     }
 
     const existingSegments = segmentsRef.current;
     const hasExisting = existingSegments.length > 0;
     const nextSessionId = hasExisting ? sessionIdRef.current : generateSessionId();
-    const sourceItemId = `${params.sourceType}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    const sourceItemId = params.sourceItemId || `${params.sourceType}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
     const offsetMs = hasExisting
       ? Math.max(0, (existingSegments[existingSegments.length - 1]?.endMs || 0) + 1200)
       : 0;
@@ -1986,6 +2706,7 @@ const _handleVideoAssistantMessage = useCallback((payload: {
     const mergedSegments = hasExisting ? [...existingSegments, ...normalizedSegments] : normalizedSegments;
     const currentUserId = user?.id || ANONYMOUS_USER_ID;
     const duration = mergedSegments[mergedSegments.length - 1]?.endMs || 0;
+    const batchDurationMs = getSegmentBatchDurationMs(normalizedSegments);
 
     if (!hasExisting) {
       setSessionId(nextSessionId);
@@ -2021,16 +2742,58 @@ const _handleVideoAssistantMessage = useCallback((payload: {
     setSegments(mergedSegments);
     segmentsRef.current = mergedSegments;
     liveSegmentsRef.current = mergedSegments;
-    setViewMode('review');
+    setViewMode(shouldKeepVideoSource ? 'review' : 'record');
     setShowSessionHistory(false);
     setSourceImportError('');
 
-    appendSourceItem({
-      type: params.sourceType,
+    if (params.sourceItemId) {
+      updateSourceItem(sourceItemId, {
+        type: params.sourceType,
+        role: 'primary',
+        title: params.sourceTitle,
+        preview: buildSourcePreviewText(normalizedSegments, 180),
+        segmentCount: normalizedSegments.length,
+        status: 'ready',
+        statusText: undefined,
+        origin: 'user',
+        sessionId: nextSessionId,
+        durationMs: batchDurationMs,
+        reviewable: params.sourceType === 'audio' || params.sourceType === 'video',
+      });
+    } else {
+      appendSourceItem({
+        id: sourceItemId,
+        type: params.sourceType,
+        role: 'primary',
+        title: params.sourceTitle,
+        preview: buildSourcePreviewText(normalizedSegments, 180),
+        segmentCount: normalizedSegments.length,
+        keepPrevious: hasExisting,
+        origin: 'user',
+        status: 'ready',
+        statusText: undefined,
+        sessionId: nextSessionId,
+        durationMs: batchDurationMs,
+        reviewable: params.sourceType === 'audio' || params.sourceType === 'video',
+      });
+    }
+
+    void persistCaptureToWorkspace({
+      sourceType: params.sourceType,
+      sourceKey: `ingest:${sourceItemId}`,
       role: 'primary',
+      contentType: params.sourceType === 'audio' ? 'audio' : params.sourceType === 'video' ? 'video' : 'text',
       title: params.sourceTitle,
-      segmentCount: normalizedSegments.length,
-      keepPrevious: hasExisting,
+      previewText: buildSourcePreviewText(normalizedSegments, 180),
+      normalizedText: buildSupportReferenceSnippet(normalizedSegments, 2800),
+      sourceUrl: params.videoSource?.originalUrl,
+      tutorContext: buildSupportReferenceSnippet(normalizedSegments, 2800),
+      occurredAt: new Date().toISOString(),
+      metadata: {
+        from: 'transcript-ingest',
+        sessionId: nextSessionId,
+        segmentCount: normalizedSegments.length,
+      },
     });
 
     try {
@@ -2101,7 +2864,7 @@ const _handleVideoAssistantMessage = useCallback((payload: {
     );
     setTimeline(nextTimeline);
     memoryService.save(nextTimeline);
-  }, [appendSourceItem, clearSummary, clearTopics, studentId, user?.id]);
+  }, [appendSourceItem, clearSummary, clearTopics, persistCaptureToWorkspace, studentId, updateSourceItem, user?.id]);
 
   const handleVideoImportReady = useCallback(async (result: ImportedVideoResult) => {
     const importedSegments = Array.isArray(result.segments) ? result.segments : [];
@@ -2185,6 +2948,34 @@ const _handleVideoAssistantMessage = useCallback((payload: {
     };
   }, []);
 
+  const parseImageFile = useCallback(async (file: File): Promise<{
+    title: string;
+    fileType: string;
+    segments: TranscriptSegment[];
+  }> => {
+    const formData = new FormData();
+    formData.append('file', file);
+    const response = await fetch('/api/sources/ingest-image', {
+      method: 'POST',
+      body: formData,
+    });
+    const payload = await readJsonApiResponse<{
+      success?: boolean;
+      error?: string;
+      title?: string;
+      fileType?: string;
+      segments?: TranscriptSegment[];
+    }>(response, '图片解析失败');
+    if (!response.ok || !payload.success || !Array.isArray(payload.segments)) {
+      throw new Error(payload.error || '图片解析失败');
+    }
+    return {
+      title: payload.title || file.name,
+      fileType: payload.fileType || 'image',
+      segments: payload.segments,
+    };
+  }, []);
+
   const handleImportFiles = useCallback(async (
     files: FileList | File[],
     pickerMode: 'audio' | 'support' | 'all' = 'all'
@@ -2192,105 +2983,273 @@ const _handleVideoAssistantMessage = useCallback((payload: {
     const fileList = Array.from(files || []);
     if (fileList.length === 0) return;
 
-    setSourceImporting(true);
+    setActiveSourceImportCount((count) => count + 1);
     setSourceImportError('');
 
     try {
-      const orderedFiles = [...fileList].sort((a, b) => {
-        const aAudio = isAudioFile(a);
-        const bAudio = isAudioFile(b);
-        if (aAudio === bAudio) return 0;
-        return aAudio ? 1 : -1;
+      const queuedFiles = fileList.map((file) => {
+        const isAudio = isAudioReachFile(file);
+        const isVideo = isVideoReachFile(file);
+        const isImage = isImageReachFile(file);
+        const objectUrl = URL.createObjectURL(file);
+        const mediaUrl = isAudio || isVideo ? objectUrl : undefined;
+        const previewUrl = isImage ? objectUrl : undefined;
+        const attachmentUrl = !isAudio && !isVideo ? objectUrl : undefined;
+        if (objectUrl) {
+          previewObjectUrlsRef.current.push(objectUrl);
+        }
+        return {
+          id: `${isAudio ? 'audio' : isVideo ? 'video' : isImage ? 'image' : 'support'}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+          file,
+          isAudio,
+          isVideo,
+          isImage,
+          mediaUrl,
+          previewUrl,
+          attachmentUrl,
+        };
       });
       const importedReferenceTexts: string[] = [];
       let handledFileCount = 0;
+      const errorMessages: string[] = [];
 
-      for (const file of orderedFiles) {
-        if (isDocumentFile(file)) {
-          if (pickerMode === 'audio') {
+      queuedFiles.forEach(({ id, file, isAudio, isVideo, isImage, mediaUrl, previewUrl, attachmentUrl }) => {
+        appendSourceItem({
+          id,
+          type: isAudio ? 'audio' : isVideo ? 'video' : isImage ? 'image' : 'document',
+          role: isAudio || isVideo ? 'primary' : 'support',
+          title: file.name,
+          preview: isAudio || isVideo ? '' : file.name,
+          mediaUrl,
+          previewUrl,
+          attachmentUrl,
+          segmentCount: 0,
+          origin: 'user',
+          status: isAudio || isVideo ? 'transcribing' : 'parsing',
+          statusText: isAudio
+            ? '转写稍后完成'
+            : isVideo
+              ? '后台整理中'
+              : isImage
+                ? '后台识别中'
+                : '后台整理中',
+        });
+      });
+
+      for (const { id, file, isAudio, isVideo, isImage, mediaUrl, previewUrl, attachmentUrl } of queuedFiles) {
+        const fileReach = detectReachFromFile(file);
+        try {
+          if (isImage) {
+            if (pickerMode === 'audio') {
+              updateSourceItem(id, {
+                status: 'failed',
+                statusText: '这次只接收音频文件',
+              });
+              continue;
+            }
+            const parsed = await parseImageFile(file);
+            const appended = appendSupportSource({
+              id,
+              type: 'document',
+              title: parsed.title,
+              segments: parsed.segments,
+              appendItem: false,
+            });
+            updateSourceItem(id, {
+              type: 'image',
+              role: 'support',
+              title: parsed.title,
+              preview: buildSourcePreviewText(parsed.segments, 220),
+              previewUrl,
+              attachmentUrl,
+              fullText: appended.reference,
+              segmentCount: parsed.segments.length,
+              status: 'ready',
+              statusText: undefined,
+              origin: 'user',
+            });
+            void persistCaptureToWorkspace({
+              sourceType: 'support-import',
+              sourceKey: `support:${id}`,
+              role: 'support',
+              contentType: 'image',
+              title: parsed.title,
+              previewText: buildSourcePreviewText(parsed.segments, 180),
+              normalizedText: appended.reference,
+              tutorContext: appended.reference,
+              occurredAt: new Date().toISOString(),
+              metadata: {
+                from: 'file-import',
+                fileType: parsed.fileType,
+                fileName: file.name,
+              },
+            });
+            importedReferenceTexts.push(
+              compactText(
+                parsed.segments
+                  .slice(0, 20)
+                  .map((segment) => segment.text)
+                  .join(' '),
+                1200
+              )
+            );
+            handledFileCount += 1;
             continue;
           }
-          const parsed = await parseDocumentFile(file);
-          const supportType = parsed.fileType === 'txt' || parsed.fileType === 'md' ? 'text' : 'document';
-          appendSupportSource({
-            type: supportType,
-            title: parsed.title,
-            segments: parsed.segments,
-          });
-          importedReferenceTexts.push(
-            compactText(
-              parsed.segments
-                .slice(0, 20)
-                .map((segment) => segment.text)
-                .join(' '),
-              1200
-            )
-          );
-          handledFileCount += 1;
-          continue;
-        }
 
-        if (isAudioFile(file)) {
-          if (pickerMode === 'support') {
+          if (isDocumentReachFile(file)) {
+            if (pickerMode === 'audio') {
+              updateSourceItem(id, {
+                status: 'failed',
+                statusText: '这次只接收音频文件',
+              });
+              continue;
+            }
+            const parsed = await parseDocumentFile(file);
+            const supportType = parsed.fileType === 'txt' || parsed.fileType === 'md' ? 'text' : 'document';
+            const appended = appendSupportSource({
+              id,
+              type: supportType,
+              title: parsed.title,
+              segments: parsed.segments,
+              appendItem: false,
+            });
+            updateSourceItem(id, {
+              type: supportType,
+              role: 'support',
+              title: parsed.title,
+              preview: buildSourcePreviewText(parsed.segments, 180) || parsed.title,
+              attachmentUrl,
+              fullText: appended.reference,
+              segmentCount: parsed.segments.length,
+              status: 'ready',
+              statusText: undefined,
+              origin: 'user',
+            });
+            void persistCaptureToWorkspace({
+              sourceType: 'support-import',
+              sourceKey: `support:${id}`,
+              role: 'support',
+              contentType: 'document',
+              title: parsed.title,
+              previewText: buildSourcePreviewText(parsed.segments, 180),
+              normalizedText: appended.reference,
+              tutorContext: appended.reference,
+              occurredAt: new Date().toISOString(),
+              metadata: {
+                from: 'file-import',
+                fileType: parsed.fileType,
+                fileName: file.name,
+              },
+            });
+            importedReferenceTexts.push(
+              compactText(
+                parsed.segments
+                  .slice(0, 20)
+                  .map((segment) => segment.text)
+                  .join(' '),
+                1200
+              )
+            );
+            handledFileCount += 1;
             continue;
           }
-          const contextHint = buildASRContextHint({
-            manualHint: asrContextHint,
-            recentSegments: segmentsRef.current,
-            importedReferences: [
-              ...supportReferences.map((item) => item.snippet),
-              ...importedReferenceTexts,
-            ],
-            maxChars: 3000,
-          });
-          const segments = await transcribeAudioFile(file, contextHint);
-          const audioBlob = new Blob([await file.arrayBuffer()], { type: file.type || 'audio/mpeg' });
-          await ingestTranscriptSegments({
-            segments,
-            sourceType: 'audio',
-            sourceTitle: file.name,
-            audioBlob,
-          });
-          handledFileCount += 1;
-          continue;
-        }
 
-        throw new Error(`暂不支持文件类型: ${file.name}`);
+          if (isAudio || isVideo || isAudioReachFile(file) || isVideoReachFile(file)) {
+            if (pickerMode === 'support') {
+              updateSourceItem(id, {
+                status: 'failed',
+                statusText: '这次只接收资料文件',
+              });
+              continue;
+            }
+            const contextHint = buildASRContextHint({
+              manualHint: asrContextHint,
+              recentSegments: segmentsRef.current,
+              importedReferences: [
+                ...supportReferences.map((item) => item.snippet),
+                ...importedReferenceTexts,
+              ],
+              maxChars: 3000,
+            });
+            const segments = await transcribeAudioFile(file, contextHint);
+            const mediaBlob = new Blob([await file.arrayBuffer()], { type: file.type || (isVideo ? 'video/mp4' : 'audio/mpeg') });
+            await ingestTranscriptSegments({
+              segments,
+              sourceType: isVideo ? 'video' : 'audio',
+              sourceTitle: file.name,
+              audioBlob: mediaBlob,
+              sourceItemId: id,
+            });
+            if (mediaUrl) {
+              updateSourceItem(id, { mediaUrl });
+            }
+            handledFileCount += 1;
+            continue;
+          }
+
+          throw new Error(`${fileReach.label} 暂时还不能自动接入：${file.name}`);
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error);
+          const isUserInputIssue = /只接收|没有识别到|暂时还不能自动接入/i.test(message);
+          if (isUserInputIssue) {
+            errorMessages.push(message);
+          }
+          updateSourceItem(id, {
+            status: 'failed',
+            statusText: resolveSourceFailureStatus({ isAudio, isVideo, isImage }),
+            preview: isAudio || isVideo ? '' : file.name,
+            origin: 'user',
+          });
+        }
       }
 
       if (handledFileCount === 0) {
-        throw new Error(pickerMode === 'audio' ? '未选择可用音频文件' : '未选择可用增强资料');
+        if (errorMessages.length > 0) {
+          setSourceImportError(errorMessages[0]);
+        }
+        return;
       }
 
-      if (pickerMode !== 'audio') {
-        toast.success('增强资料已加入本会话，将用于后续转写与答疑上下文。');
+      if (errorMessages.length > 0) {
+        setSourceImportError(errorMessages[0]);
       }
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       setSourceImportError(message);
-      toast.error(message);
     } finally {
-      setSourceImporting(false);
+      setActiveSourceImportCount((count) => Math.max(0, count - 1));
       setSourceFilePickerMode('all');
     }
   }, [
+    appendSourceItem,
     appendSupportSource,
     asrContextHint,
     ingestTranscriptSegments,
+    parseImageFile,
     parseDocumentFile,
+    persistCaptureToWorkspace,
     supportReferences,
     transcribeAudioFile,
+    updateSourceItem,
   ]);
 
-  const handleSourceFileButtonClick = useCallback((mode: 'audio' | 'support') => {
-    if (sourceImporting) return;
-    setDataSource('demo');
-    setSourcePanelMode(mode === 'audio' ? 'audio' : 'support');
-    setSourceImportMode('files');
+  const handleSourceFileButtonClick = useCallback((mode: 'audio' | 'support' | 'all' = 'all') => {
     setSourceFilePickerMode(mode);
     setShowSessionHistory(false);
+    setShowMobileRecorder(false);
+    setMobileCollectionSheet(null);
+
+    // Unified picker is the new default for the chat-style collection flow.
+    // Keep legacy panel switching only for the old desktop import surfaces.
+    if (mode !== 'all') {
+      setDataSource('demo');
+      setSourcePanelMode(mode === 'audio' ? 'audio' : 'support');
+      setSourceImportMode('files');
+    }
+
     sourceFileInputRef.current?.click();
-  }, [sourceImporting]);
+  }, []);
 
   const handleSourceFileInputChange = useCallback((event: ChangeEvent<HTMLInputElement>) => {
     const files = event.target.files;
@@ -2305,17 +3264,15 @@ const _handleVideoAssistantMessage = useCallback((payload: {
   const handleSourceFileDrop = useCallback((event: DragEvent<HTMLDivElement>) => {
     event.preventDefault();
     event.stopPropagation();
-    if (sourceImporting) return;
     const files = event.dataTransfer.files;
     if (files && files.length > 0) {
-      setDataSource('demo');
-      setSourcePanelMode('support');
-      setSourceImportMode('files');
       setSourceFilePickerMode('all');
       setShowSessionHistory(false);
+      setShowMobileRecorder(false);
+      setMobileCollectionSheet(null);
       void handleImportFiles(files, 'all');
     }
-  }, [handleImportFiles, sourceImporting]);
+  }, [handleImportFiles]);
 
   const handleImportTextSource = useCallback(async () => {
     const text = sourceTextInput.trim();
@@ -2324,7 +3281,7 @@ const _handleVideoAssistantMessage = useCallback((payload: {
       return;
     }
 
-    setSourceImporting(true);
+    setActiveSourceImportCount((count) => count + 1);
     setSourceImportError('');
 
     try {
@@ -2346,21 +3303,2167 @@ const _handleVideoAssistantMessage = useCallback((payload: {
         throw new Error(payload.error || '文本导入失败');
       }
 
-      appendSupportSource({
+      const importId = `pasted-text-${Date.now()}`;
+      const importTitle = payload.title || '粘贴文本';
+      const appended = appendSupportSource({
+        id: importId,
         type: 'text',
-        title: payload.title || '粘贴文本',
+        title: importTitle,
         segments: payload.segments,
       });
-      toast.success('增强文本已加入本会话，将用于后续转写与答疑上下文。');
+      void persistCaptureToWorkspace({
+        sourceType: 'manual-import',
+        sourceKey: `import:${importId}`,
+        role: 'support',
+        contentType: 'text',
+        title: importTitle,
+        previewText: buildSourcePreviewText(payload.segments, 180),
+        normalizedText: appended.reference || text,
+        tutorContext: appended.reference || text,
+        occurredAt: new Date().toISOString(),
+        metadata: {
+          from: 'text-import',
+        },
+      });
       setSourceTextInput('');
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       setSourceImportError(message);
       toast.error(message);
     } finally {
-      setSourceImporting(false);
+      setActiveSourceImportCount((count) => Math.max(0, count - 1));
     }
-  }, [appendSupportSource, sourceTextInput]);
+  }, [appendSupportSource, persistCaptureToWorkspace, sourceTextInput]);
+
+  const sourceFileAccept =
+    sourceFilePickerMode === 'audio'
+      ? 'audio/*,.mp3,.wav,.webm,.ogg,.m4a,.aac,.flac'
+    : sourceFilePickerMode === 'support'
+        ? 'image/*,.png,.jpg,.jpeg,.webp,.gif,.bmp,.heic,.heif,.txt,.md,.markdown,.csv,.json,.html,.htm,.pdf,.docx,.ppt,.pptx'
+        : 'audio/*,video/*,image/*,.mp3,.wav,.webm,.ogg,.m4a,.aac,.flac,.mp4,.mov,.m4v,.avi,.mkv,.png,.jpg,.jpeg,.webp,.gif,.bmp,.heic,.heif,.txt,.md,.markdown,.csv,.json,.html,.htm,.pdf,.docx,.ppt,.pptx';
+
+  const collectionFeedItems = useMemo(
+    () =>
+      [...sourceItems].sort(
+        (a, b) => new Date(a.addedAt).getTime() - new Date(b.addedAt).getTime()
+      ),
+    [sourceItems]
+  );
+
+  const currentLivePreview = useMemo(
+    () =>
+      compactText(
+        segments
+          .slice(-4)
+          .map((segment) => segment.text)
+          .join(' '),
+        160
+      ),
+    [segments]
+  );
+
+  const composerReach = useMemo<ContextReachDetection>(
+    () => detectReachFromText(collectionComposerText),
+    [collectionComposerText]
+  );
+
+  const composerDetectedUrl = composerReach.url || null;
+  const composerLinkPreview = useMemo(
+    () => (composerDetectedUrl ? parseVideoLink(composerDetectedUrl) : null),
+    [composerDetectedUrl]
+  );
+
+  const composerCanAutoImportLink = composerReach.channel === 'video-link' && composerReach.shouldAutoIngest;
+
+  const nudgeComposer = useCallback((draft: string) => {
+    setMobileCollectionSheet(null);
+    setShowMobileRecorder(false);
+    setCollectionComposerText(draft);
+    if (typeof window !== 'undefined') {
+      window.requestAnimationFrame(() => {
+        collectionComposerRef.current?.focus();
+        collectionComposerRef.current?.setSelectionRange(draft.length, draft.length);
+      });
+    }
+  }, []);
+
+  const appendToCollectionComposer = useCallback((incomingText: string) => {
+    const normalized = incomingText.replace(/\s+/g, ' ').trim();
+    if (!normalized) return;
+
+    setCollectionComposerText((previous) => {
+      const base = previous.trimEnd();
+      if (!base) return normalized;
+      const joiner = /[。！？.!?；;，,：:]$/.test(base) ? '' : ' ';
+      return `${base}${joiner}${normalized}`;
+    });
+
+    if (typeof window !== 'undefined') {
+      window.requestAnimationFrame(() => {
+        const textarea = collectionComposerRef.current;
+        if (!textarea) return;
+        textarea.focus();
+        const length = textarea.value.length;
+        textarea.setSelectionRange(length, length);
+      });
+    }
+  }, []);
+
+  const {
+    status: composerVoiceStatus,
+    isRecording: isComposerVoiceRecording,
+    interimText: composerVoiceInterimText,
+    stopRecording: stopComposerVoiceInput,
+    toggleRecording: toggleComposerVoiceInput,
+  } = useVoiceInput({
+    onTranscript: appendToCollectionComposer,
+    onError: (message) => {
+      toast.error(message || '语音听写失败，请稍后再试。');
+    },
+  });
+
+  const toggleComposerDictation = useCallback(async () => {
+    if (showMobileRecorder || isRecording) {
+      toast.info('请先结束当前原声录音，再开始语音听写。');
+      return;
+    }
+
+    setMobileCollectionSheet(null);
+    collectionComposerRef.current?.focus();
+    await toggleComposerVoiceInput();
+  }, [isRecording, showMobileRecorder, toggleComposerVoiceInput]);
+
+  useEffect(() => {
+    if (!wechatCaptureToken) return;
+    if (importedWechatCaptureTokensRef.current.has(wechatCaptureToken)) return;
+
+    const sessionStorageKey = `wechat-capture:${wechatCaptureToken}`;
+    if (typeof window !== 'undefined' && window.sessionStorage.getItem(sessionStorageKey) === '1') {
+      importedWechatCaptureTokensRef.current.add(wechatCaptureToken);
+      return;
+    }
+
+    let cancelled = false;
+
+    (async () => {
+      try {
+        const response = await fetch(`/api/wechat/capture/${encodeURIComponent(wechatCaptureToken)}`);
+        const payload = await readJsonApiResponse<{ success: boolean; message?: WechatCaptureMessage; error?: string }>(
+          response,
+          '读取微信收集失败'
+        );
+
+        if (!response.ok || !payload.success || !payload.message) {
+          throw new Error(payload.error || '读取微信收集失败');
+        }
+
+        if (cancelled) return;
+
+        const message = payload.message;
+        const sourceItemId = `wechat-${message.linkToken}`;
+        const sourceType = inferWechatCaptureSourceType(message);
+        const role = inferWechatCaptureRole(message);
+        const title = inferWechatCaptureTitle(message);
+        const preview = compactText(
+          message.normalizedText?.trim() || message.previewText?.trim() || title,
+          180
+        );
+        const addedAt = message.messageAt || new Date().toISOString();
+
+        setSourceItems((prev) => {
+          if (prev.some((item) => item.id === sourceItemId)) return prev;
+          return [
+            ...prev,
+            {
+              id: sourceItemId,
+              type: sourceType,
+              role,
+              title,
+              preview,
+              segmentCount: 1,
+              addedAt,
+            },
+          ];
+        });
+
+        const tutorSnippet = (message.tutorContext || message.normalizedText || '').trim();
+        if (tutorSnippet) {
+          setSupportReferences((prev) => mergeSupportReferences(prev, [{
+            id: sourceItemId,
+            title,
+            snippet: compactText(tutorSnippet, 2800),
+          }]));
+        }
+
+        const messageEchoTitle = message.echoTitle;
+        const messageEchoBody = message.echoBody;
+        if (messageEchoTitle && messageEchoBody) {
+          setWorkspaceEchoes((prev) => mergeWorkspaceEchoes(prev, [{
+            id: `wechat-echo-${message.linkToken}`,
+            sourceKey: `wechat:${message.linkToken}`,
+            title: messageEchoTitle,
+            body: messageEchoBody,
+            chips: Array.isArray(message.echoChips) ? message.echoChips.filter(Boolean).slice(0, 4) : [],
+            createdAt: addedAt,
+          }]));
+          setCaptureDrivenPulse({
+            title: messageEchoTitle,
+            body: messageEchoBody,
+            chips: Array.isArray(message.echoChips) ? message.echoChips.filter(Boolean).slice(0, 3) : [],
+            actions: role === 'primary'
+              ? [
+                  { key: 'capture-confusion', label: '补一句困惑' },
+                  { key: 'add-material', label: '贴一份材料' },
+                ]
+              : [
+                  { key: 'continue-voice', label: '再录一段' },
+                  { key: 'capture-confusion', label: '写一句想法' },
+                ],
+          });
+        }
+
+        importedWechatCaptureTokensRef.current.add(wechatCaptureToken);
+        if (typeof window !== 'undefined') {
+          window.sessionStorage.setItem(sessionStorageKey, '1');
+          const url = new URL(window.location.href);
+          url.searchParams.delete('wechat_capture');
+          window.history.replaceState({}, '', url.toString());
+        }
+
+        toast.success(
+          message.workspace?.name
+            ? `这条微信收集已经接进 ${message.workspace.name}。`
+            : '这条微信收集已经接进当前页面。'
+        );
+      } catch (error) {
+        if (cancelled) return;
+        const message = error instanceof Error ? error.message : String(error);
+        toast.error(message);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [wechatCaptureToken]);
+
+  useEffect(() => {
+    if (!isAuthenticated || !user?.id || !accessToken) return;
+    if (hydratedWorkspaceUserRef.current === user.id) return;
+
+    let cancelled = false;
+
+    (async () => {
+      try {
+        const response = await fetch('/api/workspace/current', {
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+          },
+        });
+
+        const payload = await readJsonApiResponse<{
+          success: boolean;
+          workspace?: { id: string; name: string };
+          captures?: WorkspaceCaptureMessage[];
+          echoes?: WorkspaceEchoMessage[];
+          error?: string;
+        }>(response, '读取当前工作区失败');
+
+        if (!response.ok || !payload.success) {
+          throw new Error(payload.error || '读取当前工作区失败');
+        }
+
+        if (cancelled) return;
+
+        const captures = Array.isArray(payload.captures) ? payload.captures : [];
+        const echoes = Array.isArray(payload.echoes) ? payload.echoes : [];
+
+        if (captures.length > 0) {
+          setSourceItems((prev) => {
+            const existingIds = new Set(prev.map((item) => item.id));
+            const next = [...prev];
+            for (const item of captures) {
+              const id = `workspace-${item.id}`;
+              if (existingIds.has(id)) continue;
+              next.push({
+                id,
+                type: inferWorkspaceCaptureSourceType(item),
+                role: inferWorkspaceCaptureRole(item),
+                title: item.title,
+                preview: compactText(item.previewText || item.title, 180),
+                segmentCount: 1,
+                addedAt: item.occurredAt || item.createdAt,
+              });
+            }
+            return next;
+          });
+
+          const incomingReferences = captures
+            .map((item) => {
+              const snippet = (item.tutorContext || item.normalizedText || '').trim();
+              if (!snippet) return null;
+              return {
+                id: `workspace-${item.id}`,
+                title: item.title,
+                snippet: compactText(snippet, 2800),
+              };
+            })
+            .filter((item): item is SupportReferenceItem => Boolean(item));
+
+          if (incomingReferences.length > 0) {
+            setSupportReferences((prev) => mergeSupportReferences(prev, incomingReferences));
+          }
+        }
+
+        if (echoes.length > 0) {
+          setWorkspaceEchoes((prev) => mergeWorkspaceEchoes(prev, echoes));
+        }
+
+        if (!captureDrivenPulse && echoes.length > 0) {
+          const latestEcho = echoes[0];
+          setCaptureDrivenPulse({
+            title: latestEcho.title,
+            body: latestEcho.body,
+            chips: (latestEcho.chips || []).slice(0, 3),
+            actions: [
+              { key: 'continue-voice', label: '再录一段' },
+              { key: 'capture-confusion', label: '写一句想法' },
+            ],
+          });
+        }
+
+        hydratedWorkspaceUserRef.current = user.id;
+      } catch (error) {
+        if (cancelled) return;
+        const message = error instanceof Error ? error.message : String(error);
+        console.error('[workspace.current]', message);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [accessToken, captureDrivenPulse, isAuthenticated, user?.id]);
+
+  useEffect(() => {
+    if (!captureDrivenPulse) return;
+
+    const timer = window.setTimeout(() => {
+      setCaptureDrivenPulse(null);
+    }, 12000);
+
+    return () => window.clearTimeout(timer);
+  }, [captureDrivenPulse]);
+
+  const collectionPulse = useMemo<CollectionPulseState | null>(() => {
+    if (captureDrivenPulse) {
+      return captureDrivenPulse;
+    }
+
+    if (collectionFeedItems.length === 0) return null;
+
+    const latestItem = collectionFeedItems[collectionFeedItems.length - 1];
+    const primaryCount = collectionFeedItems.filter((item) => item.role === 'primary').length;
+    const supportCount = collectionFeedItems.filter((item) => item.role === 'support').length;
+    const audioCount = collectionFeedItems.filter((item) => item.type === 'audio').length;
+    const textCount = collectionFeedItems.filter((item) => item.type === 'text').length;
+    const documentCount = collectionFeedItems.filter((item) => item.type === 'document').length;
+    const imageCount = collectionFeedItems.filter((item) => item.type === 'image').length;
+    const videoCount = collectionFeedItems.filter((item) => item.type === 'video').length;
+
+    const chips: string[] = [];
+    if (audioCount > 0) chips.push(`${audioCount} 段课堂原话`);
+    if (documentCount > 0) chips.push(`${documentCount} 份材料`);
+    if (imageCount > 0) chips.push(`${imageCount} 张图片材料`);
+    if (textCount > 0) chips.push(`${textCount} 条你的想法`);
+    if (videoCount > 0) chips.push(`${videoCount} 个视频来源`);
+
+    if (showMobileRecorder || isRecording) {
+      return {
+        title: '正在发酵',
+        body: '这段语音正在和前面的内容一起长进同一条学习线索里，你不用先整理它。',
+        chips: chips.slice(0, 3),
+        actions: [],
+      };
+    }
+
+    if (primaryCount > 0 && supportCount > 0) {
+      return {
+        title: '发酵回声',
+        body: '你已经把课堂原话和补充材料放进了同一条线索。后面不需要总结，继续轻轻往里加就行。',
+        chips: chips.slice(0, 3),
+        actions: [
+          { key: 'continue-voice', label: '再录一段' },
+          { key: 'capture-confusion', label: '补一句困惑' },
+        ],
+      };
+    }
+
+    if (audioCount >= 2) {
+      return {
+        title: '发酵回声',
+        body: '你已经连续留下了几段课堂原话，这节课的主线开始显出来了。',
+        chips: chips.slice(0, 3),
+        actions: [
+          { key: 'capture-confusion', label: '记下没懂的点' },
+          { key: 'add-material', label: '贴一份讲义' },
+        ],
+      };
+    }
+
+    if (audioCount > 0 && textCount > 0) {
+      return {
+        title: '发酵回声',
+        body: '你不只是在收课堂内容，也已经留下了自己的理解或困惑，这会让后面的 Tutor 更有抓手。',
+        chips: chips.slice(0, 3),
+        actions: [
+          { key: 'continue-voice', label: '继续录音' },
+          { key: 'add-material', label: '补充材料' },
+        ],
+      };
+    }
+
+    if (latestItem.type === 'document' || latestItem.type === 'image' || latestItem.type === 'video') {
+      return {
+        title: '发酵回声',
+        body: '这份材料已经接进来了。后面再补一句当时没懂的地方，系统会更容易看出联系。',
+        chips: chips.slice(0, 3),
+        actions: [
+          { key: 'capture-confusion', label: '记下没懂的点' },
+          { key: 'continue-voice', label: '录一段原话' },
+        ],
+      };
+    }
+
+    if (latestItem.type === 'audio') {
+      return {
+        title: '发酵回声',
+        body: '这段原话已经留下来了。先别急着整理，继续往里丢材料或困惑，会更有价值。',
+        chips: chips.slice(0, 3),
+        actions: [
+          { key: 'capture-confusion', label: '补一句困惑' },
+          { key: 'add-material', label: '贴一份材料' },
+        ],
+      };
+    }
+
+    return {
+      title: '发酵回声',
+      body: '这条收集流已经开始有自己的形状了。继续轻轻追加，不用一次说完整。',
+      chips: chips.slice(0, 3),
+      actions: [
+        { key: 'continue-voice', label: '继续录音' },
+        { key: 'capture-confusion', label: '写一句想法' },
+      ],
+    };
+  }, [captureDrivenPulse, collectionFeedItems, isRecording, showMobileRecorder]);
+
+  const collectionPulseSignature = useMemo(() => {
+    if (!collectionPulse) return '';
+    return [
+      collectionPulse.title,
+      collectionPulse.body,
+      collectionPulse.chips.join('|'),
+      (collectionPulse.actions || []).map((action) => action.key).join('|'),
+    ].join('::');
+  }, [collectionPulse]);
+
+  const echoFilterOptions = useMemo(() => {
+    const counts = new Map<string, number>();
+    workspaceEchoes.forEach((echo) => {
+      echo.chips.forEach((chip) => {
+        if (!chip) return;
+        counts.set(chip, (counts.get(chip) || 0) + 1);
+      });
+    });
+
+    return [
+      '全部',
+      ...Array.from(counts.entries())
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 5)
+        .map(([chip]) => chip),
+    ];
+  }, [workspaceEchoes]);
+
+  const filteredWorkspaceEchoes = useMemo(() => {
+    if (selectedEchoChip === '全部') return workspaceEchoes;
+    return workspaceEchoes.filter((echo) => echo.chips.includes(selectedEchoChip));
+  }, [selectedEchoChip, workspaceEchoes]);
+
+  const groupedWorkspaceEchoes = useMemo(() => {
+    const groups: Record<'today' | 'week' | 'earlier', WorkspaceEchoMessage[]> = {
+      today: [],
+      week: [],
+      earlier: [],
+    };
+
+    filteredWorkspaceEchoes.forEach((echo) => {
+      groups[resolveEchoTimeBucket(echo.createdAt)].push(echo);
+    });
+
+    return groups;
+  }, [filteredWorkspaceEchoes]);
+
+  const echoHistorySections = useMemo(
+    () =>
+      (['today', 'week', 'earlier'] as const)
+        .map((bucket) => ({
+          key: bucket,
+          label: getEchoBucketLabel(bucket),
+          items: groupedWorkspaceEchoes[bucket],
+        }))
+        .filter((section) => section.items.length > 0),
+    [groupedWorkspaceEchoes]
+  );
+
+  const latestEchoForCenter = useMemo(() => {
+    if (collectionPulse) {
+      return {
+        title: collectionPulse.title,
+        body: collectionPulse.body,
+        chips: collectionPulse.chips,
+      };
+    }
+
+    if (workspaceEchoes.length === 0) return null;
+
+    const latest = workspaceEchoes[0];
+    return {
+      title: latest.title,
+      body: latest.body,
+      chips: latest.chips,
+    };
+  }, [collectionPulse, workspaceEchoes]);
+
+  const captureActivitySummary = useMemo(() => {
+    const now = new Date();
+    const dayKeys = new Map<string, number>();
+
+    collectionFeedItems.forEach((item) => {
+      const date = new Date(item.addedAt);
+      if (Number.isNaN(date.getTime())) {
+        return;
+      }
+      const key = date.toISOString().slice(0, 10);
+      dayKeys.set(key, (dayKeys.get(key) || 0) + 1);
+    });
+
+    const tiles = Array.from({ length: 28 }, (_, index) => {
+      const date = new Date(now);
+      date.setHours(0, 0, 0, 0);
+      date.setDate(now.getDate() - (27 - index));
+      const key = date.toISOString().slice(0, 10);
+      const count = dayKeys.get(key) || 0;
+      return {
+        key,
+        count,
+      };
+    });
+
+    const activeDays = tiles.filter((tile) => tile.count > 0).length;
+
+    let streak = 0;
+    for (let index = tiles.length - 1; index >= 0; index -= 1) {
+      if (tiles[index].count > 0) {
+        streak += 1;
+      } else {
+        break;
+      }
+    }
+
+    const kindCounts = collectionFeedItems.reduce<Record<string, number>>((acc, item) => {
+      acc[item.type] = (acc[item.type] || 0) + 1;
+      return acc;
+    }, {});
+
+    const typeLabelMap: Record<string, string> = {
+      audio: '录音',
+      video: '视频',
+      image: '图片',
+      document: '材料',
+      text: '想法',
+    };
+
+    const topKinds = Object.entries(kindCounts)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 3)
+      .map(([type]) => typeLabelMap[type] || type);
+
+    return {
+      totalCount: collectionFeedItems.length,
+      activeDays,
+      streak,
+      tiles,
+      topKinds,
+    };
+  }, [collectionFeedItems]);
+
+  useEffect(() => {
+    if (!collectionPulseSignature || isRecording || showMobileRecorder) {
+      setShowCollectionPulsePreview(false);
+      return;
+    }
+
+    if (lastCollectionPulseSignatureRef.current === collectionPulseSignature) {
+      return;
+    }
+
+    lastCollectionPulseSignatureRef.current = collectionPulseSignature;
+    setShowCollectionPulsePreview(true);
+    const timer = window.setTimeout(() => {
+      setShowCollectionPulsePreview(false);
+    }, 3600);
+
+    return () => window.clearTimeout(timer);
+  }, [collectionPulseSignature, isRecording, showMobileRecorder]);
+
+  useEffect(() => {
+    if (!echoFilterOptions.includes(selectedEchoChip)) {
+      setSelectedEchoChip('全部');
+    }
+  }, [echoFilterOptions, selectedEchoChip]);
+
+  const importComposerVideoLink = useCallback(async (url: string) => {
+    const detected = parseVideoLink(url);
+    setActiveSourceImportCount((count) => count + 1);
+    setSourceImportError('');
+
+    try {
+      const response = await fetch('/api/video/import', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          url,
+          mode: 'turbo',
+          language: 'zh',
+        }),
+      });
+
+      const payload = await readJsonApiResponse<{
+        success?: boolean;
+        error?: string;
+        sourceMode?: ImportedVideoResult['sourceMode'];
+        trace?: ImportedVideoSource['importTrace'];
+        source?: Partial<ImportedVideoSource>;
+        segments?: TranscriptSegment[];
+        sentences?: Array<{
+          id?: string;
+          text?: string;
+          beginTime?: number;
+          endTime?: number;
+          confidence?: number;
+        }>;
+      }>(response, '链接解析失败');
+
+      if (!response.ok || !payload.success) {
+        throw new Error(payload.error || '链接解析失败');
+      }
+
+      const segments = normalizeImportedVideoSegments(payload);
+      if (segments.length === 0) {
+        throw new Error('链接已识别，但暂时没有解析出内容。');
+      }
+
+      await handleVideoImportReady({
+        segments,
+        source: {
+          provider: payload.source?.provider || detected?.provider || 'generic',
+          providerLabel: payload.source?.providerLabel || detected?.providerLabel || 'Web Video',
+          originalUrl: payload.source?.originalUrl || url,
+          resolvedUrl: payload.source?.resolvedUrl,
+          embedUrl: payload.source?.embedUrl || detected?.embedUrl,
+          playableUrl: payload.source?.playableUrl || detected?.playableUrl || url,
+          title: payload.source?.title,
+          durationSec: payload.source?.durationSec,
+          thumbnailUrl: payload.source?.thumbnailUrl,
+          audioUrl: payload.source?.audioUrl,
+          sourceMode: payload.source?.sourceMode || payload.sourceMode,
+          bvid: payload.source?.bvid,
+          cid: payload.source?.cid,
+          importTrace: payload.source?.importTrace || payload.trace,
+        },
+        sourceMode: payload.sourceMode,
+        trace: payload.trace,
+      });
+
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      setSourceImportError(message);
+      toast.error(message);
+    } finally {
+      setActiveSourceImportCount((count) => Math.max(0, count - 1));
+    }
+  }, [handleVideoImportReady]);
+
+  const openLiveRecorder = useCallback(() => {
+    if (isRecording) return;
+
+    if (isComposerVoiceRecording) {
+      void stopComposerVoiceInput();
+    }
+
+    setMobileCollectionSheet(null);
+    setRecorderAutoStartSignal(0);
+    flushSync(() => {
+      setShowSessionHistory(false);
+      setDataSource('live');
+      setShowMobileRecorder(true);
+    });
+
+    const startRecordingNow = () => {
+      if (recorderRef.current) {
+        void recorderRef.current.startRecording();
+      } else {
+        setRecorderAutoStartSignal(Date.now());
+      }
+    };
+
+    if (typeof window !== 'undefined') {
+      window.requestAnimationFrame(startRecordingNow);
+    } else {
+      startRecordingNow();
+    }
+  }, [isComposerVoiceRecording, isRecording, stopComposerVoiceInput]);
+
+  const handleCollectionComposerSubmit = useCallback(async () => {
+    const text = collectionComposerText.trim();
+    if (!text) return;
+
+    const inlineUrl = composerDetectedUrl;
+    const canAutoImportLink = Boolean(inlineUrl && composerCanAutoImportLink);
+    const noteText = canAutoImportLink && inlineUrl
+      ? text.replace(inlineUrl, '').replace(/\s+/g, ' ').trim()
+      : text;
+
+    if (noteText) {
+      const nextStartMs =
+        segmentsRef.current.length > 0
+          ? (segmentsRef.current[segmentsRef.current.length - 1]?.endMs || 0) + 1200
+          : 0;
+
+      const draftId = `quick-note-${Date.now()}`;
+      const draftTitle = `随手记录 ${new Date().toLocaleTimeString('zh-CN', {
+        hour: '2-digit',
+        minute: '2-digit',
+      })}`;
+      const appended = appendSupportSource({
+        id: draftId,
+        type: 'text',
+        title: draftTitle,
+        segments: [
+          {
+            id: `${draftId}-seg-1`,
+            text: noteText,
+            startMs: nextStartMs,
+            endMs: nextStartMs + 2400,
+            confidence: 1,
+            isFinal: true,
+          },
+        ],
+      });
+
+      void persistCaptureToWorkspace({
+        sourceType: 'manual-note',
+        sourceKey: `manual:${draftId}`,
+        role: 'support',
+        contentType: inlineUrl && !canAutoImportLink ? 'link' : 'text',
+        title: draftTitle,
+        previewText: compactText(noteText, 180),
+        normalizedText: appended.reference || noteText,
+        sourceUrl: inlineUrl && !canAutoImportLink ? inlineUrl : undefined,
+        tutorContext: noteText,
+        occurredAt: new Date().toISOString(),
+        metadata: {
+          from: 'collection-composer',
+        },
+      });
+    }
+
+    setCollectionComposerText('');
+    setSourceImportError('');
+
+    if (canAutoImportLink && inlineUrl) {
+      void importComposerVideoLink(inlineUrl);
+      return;
+    }
+  }, [
+    appendSupportSource,
+    collectionComposerText,
+    composerCanAutoImportLink,
+    composerDetectedUrl,
+    importComposerVideoLink,
+    persistCaptureToWorkspace,
+  ]);
+
+  const handleCollectionComposerPaste = useCallback((event: ClipboardEvent<HTMLTextAreaElement>) => {
+    const items = Array.from(event.clipboardData?.items || []);
+    if (items.length === 0) return;
+
+    const pastedFiles = items
+      .map((item) => (item.kind === 'file' ? item.getAsFile() : null))
+      .filter((file): file is File => Boolean(file));
+
+    if (pastedFiles.length === 0) return;
+
+    event.preventDefault();
+    setSourceImportError('');
+    void handleImportFiles(pastedFiles, 'all');
+
+  }, [handleImportFiles]);
+
+  const handleCollectionPulseAction = useCallback((actionKey: string) => {
+    switch (actionKey) {
+      case 'continue-voice':
+        openLiveRecorder();
+        return;
+      case 'capture-confusion':
+        nudgeComposer('我现在没懂的是：');
+        return;
+      case 'add-material':
+        handleSourceFileButtonClick('all');
+        return;
+      default:
+        return;
+    }
+  }, [handleSourceFileButtonClick, nudgeComposer, openLiveRecorder]);
+
+  const openTutorFromCollection = useCallback((initialPrompt?: string) => {
+    setMobileCollectionSheet(null);
+    setShowCollectionPulsePreview(false);
+    setShowConversationHistory(false);
+    setSelectedHistoryConversation(null);
+    setShowMobileRecorder(false);
+    setShowSessionHistory(false);
+    setSelectedAnchor(null);
+    setMobileAIQuestion(initialPrompt || '');
+    setViewMode('review');
+    if (videoSource) {
+      setVideoWorkspaceTab('chat');
+    }
+    if (isMobile) {
+      setMobileSubPage('ai-chat');
+    }
+  }, [isMobile, videoSource]);
+
+  useEffect(() => {
+    if ((viewMode !== 'record' || showMobileRecorder) && isComposerVoiceRecording) {
+      void stopComposerVoiceInput();
+    }
+  }, [isComposerVoiceRecording, showMobileRecorder, stopComposerVoiceInput, viewMode]);
+
+  useEffect(() => {
+    if (showMobileRecorder || viewMode !== 'record') {
+      stopAudioMessagePlayback();
+    }
+  }, [showMobileRecorder, stopAudioMessagePlayback, viewMode]);
+
+  const renderMobileTopBar = useCallback(
+    (menuOnboarding?: string) => {
+      const topBarStatus = isRecording
+        ? '正在收一段原声'
+        : activeSourceImportCount > 0
+          ? `正在收进 ${activeSourceImportCount} 个文件`
+          : '';
+
+      return (
+        <div
+          className="flex-shrink-0 border-b border-[#e5e5e5] bg-[#ededed]/98 px-3 pb-2 pt-[max(env(safe-area-inset-top),9px)] backdrop-blur-xl"
+        >
+          <div className="mx-auto flex w-full max-w-md items-center justify-between gap-3">
+            <button
+              type="button"
+              onClick={() => {
+                setShowMobileRecorder(false);
+                setMobileCollectionSheet('more');
+              }}
+              className="flex h-9 w-9 items-center justify-center rounded-full bg-white text-slate-500 shadow-sm"
+              aria-label="打开收集菜单"
+              data-onboarding={menuOnboarding}
+            >
+              <Menu size={18} />
+            </button>
+            <div className="min-w-0 flex-1 text-center">
+              <p className="truncate text-[17px] font-semibold text-slate-900">收集</p>
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                setShowMobileRecorder(false);
+                setMobileCollectionSheet('history');
+              }}
+              className="relative flex h-9 w-9 items-center justify-center rounded-full bg-white text-slate-500 shadow-sm"
+              aria-label="打开历史收集"
+            >
+              <History size={17} />
+            </button>
+          </div>
+          {topBarStatus ? (
+            <div className="mx-auto mt-2 w-full max-w-md">
+              <div className="inline-flex items-center gap-2 rounded-full bg-white px-3 py-1 text-[11px] font-medium text-slate-500 shadow-sm">
+                <span className="inline-flex h-1.5 w-1.5 rounded-full bg-[#07c160]" />
+                <span>{topBarStatus}</span>
+              </div>
+            </div>
+          ) : null}
+        </div>
+      );
+    },
+    [activeSourceImportCount, isRecording]
+  );
+
+  const _renderLegacyMobileRecordView = () => (
+    <div className="relative flex-1 min-h-0 overflow-hidden" style={{ background: 'var(--edu-bg-primary)' }}>
+      {renderMobileTopBar()}
+
+      <div className="flex-1 overflow-y-auto px-4 pb-[180px] pt-4">
+        <div className="mx-auto flex w-full max-w-md flex-col gap-3">
+          <input
+            ref={sourceFileInputRef}
+            type="file"
+            accept={sourceFileAccept}
+            multiple
+            onChange={handleSourceFileInputChange}
+            className="hidden"
+          />
+
+          <section className="rounded-[28px] border border-amber-200/80 bg-[linear-gradient(145deg,#fffdf7_0%,#fff6e8_100%)] p-5 shadow-[0_16px_40px_rgba(15,23,42,0.05)]">
+            <div className="flex items-start gap-3">
+              <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-white shadow-sm">
+                <Star size={18} className="text-amber-500" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="text-xs font-semibold tracking-[0.06em] text-slate-500">今日发酵</p>
+                <h2 className="mt-2 text-[28px] font-semibold leading-tight tracking-[-0.02em] text-slate-900">
+                  {isRecording
+                    ? '这节课正在长进你的上下文里'
+                    : collectionFeedItems.length > 0
+                      ? '你刚加进来的东西，会继续在这里长'
+                      : '先随手加一点进来，不用一次讲完整'}
+                </h2>
+                <p className="mt-2 text-sm leading-7 text-slate-600">
+                  {isRecording
+                    ? '先自然说下去。系统会一边收，一边把课堂现场和你的疑惑一起织进去。'
+                    : collectionFeedItems.length > 0
+                      ? '不用整理成笔记。录音、讲义、截图和一句困惑，都会慢慢被放进同一条学习脉络。'
+                      : '录一小段、记一句、贴一份材料都可以。这里应该像聊天一样轻，而不是像提交表单。'}
+                </p>
+                <div className="mt-4 flex flex-wrap gap-2">
+                  <span className="rounded-full bg-white/80 px-3 py-1 text-xs font-medium text-slate-600">一句困惑</span>
+                  <span className="rounded-full bg-white/80 px-3 py-1 text-xs font-medium text-slate-600">一段语音</span>
+                  <span className="rounded-full bg-white/80 px-3 py-1 text-xs font-medium text-slate-600">一份讲义</span>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          {sourceImportError ? (
+            <div className="rounded-[24px] border border-rose-200 bg-rose-50/90 px-4 py-3 text-sm text-rose-700 shadow-sm">
+              {sourceImportError}
+            </div>
+          ) : null}
+
+          <section className="rounded-[28px] border border-slate-200 bg-white p-4 shadow-[0_16px_34px_rgba(15,23,42,0.05)]">
+            <div className="mb-3 flex items-center justify-between">
+              <div>
+                <p className="text-xs font-semibold tracking-[0.06em] text-slate-500">收集流</p>
+                <h3 className="mt-1 text-lg font-semibold text-slate-900">你刚刚加进来的东西，会继续在这里长</h3>
+              </div>
+              <div className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-500">
+                {collectionFeedItems.length + (showMobileRecorder ? 1 : 0)} 条
+              </div>
+            </div>
+
+            <div className="space-y-3">
+              {showMobileRecorder ? (
+                <div className="mr-10 rounded-[24px] border border-amber-200 bg-[linear-gradient(145deg,#fffaf0_0%,#fff2db_100%)] px-4 py-3 shadow-sm">
+                  <div className="flex items-center gap-2 text-[11px] font-medium text-amber-700">
+                    <span className="inline-flex h-2 w-2 rounded-full bg-coral animate-pulse" />
+                    {isRecording ? '正在收一段语音' : '刚刚收下一段语音'}
+                  </div>
+                  <p className="mt-2 text-sm leading-7 text-slate-700">
+                    {currentLivePreview || '先说下去，停下后这段内容会自动接进收集流。'}
+                  </p>
+                </div>
+              ) : null}
+
+              {collectionFeedItems.length === 0 ? (
+                <div className="rounded-[24px] border border-dashed border-slate-200 bg-slate-50/70 px-4 py-5 text-sm leading-7 text-slate-500">
+                  这里还没有长出内容。先录一小段、贴一张讲义，或者记一句你现在卡住的地方就够了。
+                </div>
+              ) : (
+                collectionFeedItems.map((item) => {
+                  const isPrimary = item.role === 'primary';
+                  const typeLabel =
+                    item.type === 'audio'
+                      ? '录音'
+                      : item.type === 'video'
+                        ? '视频'
+                        : item.type === 'document'
+                        ? '材料'
+                        : '文字';
+                  const bubbleText = item.preview?.trim() || item.title;
+                  const detailLabel = item.preview?.trim() && item.preview?.trim() !== item.title ? item.title : '';
+
+                  return (
+                    <div
+                      key={item.id}
+                      className={`rounded-[24px] border px-4 py-3 shadow-sm ${
+                        isPrimary
+                          ? 'mr-10 border-amber-200 bg-[linear-gradient(145deg,#fffdf8_0%,#fff4e3_100%)]'
+                          : 'ml-10 border-slate-200 bg-slate-50/90'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between gap-2 text-[11px] font-medium">
+                        <div className="flex items-center gap-2 text-slate-500">
+                          <span className={`rounded-full px-2 py-0.5 ${
+                            isPrimary ? 'bg-amber-100 text-amber-700' : 'bg-slate-200 text-slate-600'
+                          }`}>
+                            {typeLabel}
+                          </span>
+                          <span>{formatRelativeCollectionTime(item.addedAt)}</span>
+                        </div>
+                        <span className="text-slate-400">{item.segmentCount} 段</span>
+                      </div>
+                      <p className="mt-2 text-sm leading-6 text-slate-900">{bubbleText}</p>
+                      {detailLabel ? (
+                        <p className="mt-2 text-[11px] leading-5 text-slate-400">{detailLabel}</p>
+                      ) : null}
+                      <p className="mt-2 text-xs leading-6 text-slate-500">
+                        {isPrimary ? '这会成为当前学习主线的一部分。' : '它会作为补充上下文，参与后续理解和回答。'}
+                      </p>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+          </section>
+        </div>
+      </div>
+
+      {mobileCollectionSheet ? (
+        <div
+          className={`${isDesktopMobilePreview ? 'absolute inset-x-0' : 'fixed inset-x-0'} z-30 px-3`}
+          style={{ bottom: '116px' }}
+        >
+          <div className="mx-auto w-full max-w-md rounded-[30px] border border-slate-200 bg-white shadow-[0_28px_60px_rgba(15,23,42,0.18)]">
+            <div className="flex items-center justify-between border-b border-slate-100 px-4 py-3">
+              <div>
+                <p className="text-sm font-semibold text-slate-900">
+                  {mobileCollectionSheet === 'attachments'
+                    ? '继续往这次学习里加东西'
+                    : mobileCollectionSheet === 'video'
+                      ? '导入一个视频链接'
+                      : '打开历史收集'}
+                </p>
+                <p className="text-xs text-slate-500">
+                  {mobileCollectionSheet === 'attachments'
+                    ? '像聊天发附件一样，不要先想分类。'
+                    : mobileCollectionSheet === 'video'
+                      ? '导入后会自动转写并进入复习。'
+                      : '从历史里捞回一段，继续接着学。'}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setMobileCollectionSheet(null);
+                  setShowSessionHistory(false);
+                }}
+                className="flex h-9 w-9 items-center justify-center rounded-full bg-slate-100 text-slate-500"
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            {mobileCollectionSheet === 'attachments' ? (
+              <div className="space-y-2 p-3">
+                {[
+                  {
+                    key: 'audio',
+                    icon: <Mic size={16} className="text-amber-500" />,
+                    title: '上传音频',
+                    description: '把一段课堂录音、讨论片段或回放扔进来。',
+                    onClick: () => {
+                      setMobileCollectionSheet(null);
+                      handleSourceFileButtonClick('audio');
+                    },
+                  },
+                  {
+                    key: 'support',
+                    icon: <FileText size={16} className="text-cyan-600" />,
+                    title: '补充材料',
+                    description: 'PDF、讲义、截图文字都可以，系统会拿它做上下文。',
+                    onClick: () => {
+                      setMobileCollectionSheet(null);
+                      handleSourceFileButtonClick('support');
+                    },
+                  },
+                  {
+                    key: 'video',
+                    icon: <Link2 size={16} className="text-fuchsia-600" />,
+                    title: '视频链接',
+                    description: '导入一段课、讲座或回放链接。',
+                    onClick: () => {
+                      setShowSessionHistory(false);
+                      setMobileCollectionSheet('video');
+                    },
+                  },
+                  {
+                    key: 'history',
+                    icon: <History size={16} className="text-slate-600" />,
+                    title: '历史收集',
+                    description: '从以前的录音和整理里，捞回一段继续学。',
+                    onClick: () => {
+                      setShowSessionHistory(false);
+                      setMobileCollectionSheet('history');
+                    },
+                  },
+                ].map((action) => (
+                  <button
+                    key={action.key}
+                    type="button"
+                    onClick={action.onClick}
+                    className="flex w-full items-start gap-3 rounded-[22px] border border-slate-200 bg-slate-50/80 px-4 py-3 text-left transition hover:border-slate-300 hover:bg-white"
+                  >
+                    <div className="mt-0.5 flex h-9 w-9 items-center justify-center rounded-2xl bg-white shadow-sm">
+                      {action.icon}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-sm font-semibold text-slate-900">{action.title}</span>
+                        <ChevronRight size={16} className="text-slate-300" />
+                      </div>
+                      <p className="mt-1 text-xs leading-6 text-slate-500">{action.description}</p>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            ) : null}
+
+            {mobileCollectionSheet === 'video' ? (
+              <div className="p-4">
+                  <VideoLinkImporter
+                    onImportReady={(result) => {
+                      setMobileCollectionSheet(null);
+                      handleVideoImportReady(result);
+                    }}
+                    onError={(error) => {
+                      console.error('视频导入失败:', error);
+                      toast.error(String(error));
+                    }}
+                    disabled={isRecording}
+                  />
+              </div>
+            ) : null}
+
+            {mobileCollectionSheet === 'history' ? (
+              <div className="max-h-[52vh] overflow-hidden rounded-b-[30px]">
+                <SessionHistoryList
+                  userId={user?.id}
+                  onSessionSelect={(session) => {
+                    setMobileCollectionSheet(null);
+                    void handleLoadHistorySession(session);
+                  }}
+                  onClose={() => setMobileCollectionSheet(null)}
+                  activeSessionId={sessionId}
+                  maxHeight="52vh"
+                  showHeader={false}
+                  variant="capture"
+                />
+              </div>
+            ) : null}
+          </div>
+        </div>
+      ) : null}
+
+      {showMobileRecorder ? (
+        <div
+          className={`${isDesktopMobilePreview ? 'absolute inset-x-0 bottom-0' : 'fixed inset-x-0 bottom-0'} z-40 px-3 pb-[max(env(safe-area-inset-bottom),12px)]`}
+        >
+          <div className="mx-auto w-full max-w-md rounded-[30px] border border-slate-200 bg-white/96 p-3 shadow-[0_28px_60px_rgba(15,23,42,0.22)] backdrop-blur">
+            <Recorder
+              ref={recorderRef}
+              activeSessionId={sessionId}
+              continueCurrentSession={collectionFeedItems.length > 0 || segments.length > 0}
+              autoStartSignal={recorderAutoStartSignal}
+              compactMode
+              onRecordingStart={handleRecordingStart}
+              onRecordingStop={handleRecordingStop}
+              onTranscriptionError={handleRecordingTranscriptionError}
+              onTranscriptUpdate={handleTranscriptUpdate}
+              onTranscriptTextUpdate={handleTranscriptTextUpdate}
+              onTranscriptEnhanced={handleTranscriptEnhanced}
+              onAnchorMark={handleAnchorMark}
+              contextHint={liveASRContextHint}
+            />
+          </div>
+        </div>
+      ) : (
+        <div
+          className={`${isDesktopMobilePreview ? 'absolute inset-x-0 bottom-0' : 'fixed inset-x-0 bottom-0'} z-20 px-3 pb-[max(env(safe-area-inset-bottom),12px)]`}
+        >
+          <div className="mx-auto w-full max-w-md rounded-[30px] border border-slate-200 bg-white/96 p-3 shadow-[0_24px_50px_rgba(15,23,42,0.16)] backdrop-blur">
+            <div className="mb-2 flex items-center justify-between">
+              <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-semibold text-slate-600">轻收集</span>
+              <span className="text-[11px] text-slate-400">想到什么先记一句</span>
+            </div>
+
+            <textarea
+              value={collectionComposerText}
+              onChange={(event) => setCollectionComposerText(event.target.value)}
+              placeholder="想到什么就先记一句，或者继续把这次学习的材料扔进来"
+              rows={2}
+              className="min-h-[84px] w-full resize-none border-0 bg-transparent px-1 py-2 text-sm leading-7 text-slate-700 outline-none placeholder:text-slate-400"
+            />
+
+            <div className="mt-2 flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => handleSourceFileButtonClick('all')}
+                className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-600 shadow-sm"
+              >
+                <Plus size={16} />
+                添加
+              </button>
+              <button
+                type="button"
+                onClick={openLiveRecorder}
+                className="inline-flex items-center gap-1.5 rounded-full border border-amber-300 bg-amber-50 px-3 py-2 text-sm font-medium text-amber-700 shadow-sm"
+              >
+                <AudioLines size={18} strokeWidth={2} />
+                录一段
+              </button>
+              <div className="ml-auto">
+                <button
+                  type="button"
+                  onClick={handleCollectionComposerSubmit}
+                  disabled={!collectionComposerText.trim()}
+                  className="flex h-11 w-11 items-center justify-center rounded-full bg-slate-900 text-white shadow-sm transition disabled:bg-slate-200 disabled:text-slate-400"
+                >
+                  <ArrowUp size={18} />
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <DedaoMenu
+        isOpen={isMenuOpen}
+        onClose={() => setIsMenuOpen(false)}
+        onNavigate={(page) => setMobileSubPage(page)}
+        showApps={false}
+        userRole="student"
+        badges={{
+          highlights: highlightTopics.length,
+          notes: notes.length,
+          tasks: actionItems.filter(i => !i.completed).length,
+        }}
+      />
+    </div>
+  );
+
+  const renderMobileRecordView = ({ desktopShell = false }: { desktopShell?: boolean } = {}) => {
+    const shellWidthClass = desktopShell ? 'max-w-3xl' : 'max-w-md';
+    const messageBubbleWidthClass = desktopShell ? 'max-w-[74%]' : 'max-w-[88%]';
+    const collectionChromeContained = desktopShell || isDesktopMobilePreview;
+    const sheetWidthClass = desktopShell ? 'max-w-2xl' : 'max-w-md';
+    const backdropPositionClass = collectionChromeContained ? 'absolute inset-0' : 'fixed inset-0';
+    const dockWidthClass = desktopShell ? 'max-w-3xl' : 'max-w-md';
+    const dockPaddingClass = desktopShell ? 'px-6 pb-6 pt-3' : 'px-3 pb-[max(env(safe-area-inset-bottom),12px)] pt-2';
+    const sheetBottomOffset = desktopShell ? (showMobileRecorder ? 168 : 118) : (showMobileRecorder ? 150 : 96);
+    const scrollPadding = desktopShell ? 28 : 18;
+    const composerRows = desktopShell ? (collectionComposerText.trim() ? 4 : 3) : (collectionComposerText.trim() ? 3 : 2);
+
+    return (
+    <div className="relative flex h-full min-h-0 flex-col overflow-hidden" style={{ background: 'var(--edu-bg-primary)' }}>
+      {!desktopShell ? renderMobileTopBar() : null}
+
+      <input
+        ref={sourceFileInputRef}
+        type="file"
+        accept={sourceFileAccept}
+        multiple
+        onChange={handleSourceFileInputChange}
+        className="hidden"
+      />
+
+      <div
+        className={desktopShell ? 'flex-1 overflow-y-auto px-6 pt-6' : 'flex-1 overflow-y-auto px-4 pt-3'}
+        style={{ paddingBottom: `${scrollPadding}px` }}
+      >
+        <div className={`mx-auto flex w-full ${shellWidthClass} flex-col gap-3`}>
+          {collectionFeedItems.length > 0 ? (
+            <div className="flex items-center justify-center">
+              <div className="rounded-full bg-slate-100/90 px-3 py-1 text-[11px] font-medium text-slate-400">
+                今天
+              </div>
+            </div>
+          ) : null}
+
+          {collectionFeedItems.length === 0 ? (
+            <div className="mx-auto w-full max-w-[92%] rounded-[24px] border border-slate-200 bg-white px-4 py-4 shadow-sm">
+              <p className="text-[11px] text-slate-400">
+                {new Date().toLocaleString('zh-CN', {
+                  month: '2-digit',
+                  day: '2-digit',
+                  hour: '2-digit',
+                  minute: '2-digit',
+                })}
+              </p>
+              <div className="mt-2 space-y-2 text-slate-900">
+                <p className="text-base font-semibold">先把今天这节课发进来</p>
+                <p className="text-sm leading-7 text-slate-600">
+                  一句困惑、一张图、一份讲义、一段原声都可以。先收进来，后面再慢慢长成复习和 Tutor。
+                </p>
+              </div>
+              <div className="mt-3 flex flex-wrap gap-2">
+                {['一句困惑', '一张图', '一份讲义', '一段原声'].map((chip) => (
+                  <span
+                    key={chip}
+                    className="rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-medium text-slate-500"
+                  >
+                    {chip}
+                  </span>
+                ))}
+              </div>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {showMobileRecorder ? (
+                <div className="flex justify-end">
+                  <div className={`${messageBubbleWidthClass} rounded-[22px] rounded-br-[8px] border border-[#b8e7a6] bg-[#d9fdd3] px-4 py-3 shadow-sm`}>
+                    <div className="flex justify-end">
+                      <div className="inline-flex items-center gap-3 rounded-full bg-white/72 px-3 py-2 text-[#2f6f1f]">
+                        <span className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-[#07c160] text-white">
+                          <Mic size={14} />
+                        </span>
+                        <span className="flex items-end gap-[3px] text-[#62a542]">
+                          {[8, 12, 16, 11, 15, 9, 13].map((height, index) => (
+                            <span
+                              key={`live-wave-${height}-${index}`}
+                              className="w-[3px] rounded-full bg-current"
+                              style={{ height: `${height}px`, opacity: 0.95 }}
+                            />
+                          ))}
+                        </span>
+                        <span className="text-[11px] font-semibold">原声录制中</span>
+                      </div>
+                    </div>
+                    <p className="mt-2 text-sm leading-6 text-slate-900">
+                      {currentLivePreview || '继续说下去，停下后这段语音会直接留在这里。'}
+                    </p>
+                    <div className="mt-2 flex items-center justify-end text-[11px] text-[#5b7f49]">
+                      {formatRelativeCollectionTime(new Date().toISOString())}
+                    </div>
+                  </div>
+                </div>
+              ) : null}
+
+              {collectionFeedItems.map((item) => {
+                const isPrimary = (item.origin || 'user') === 'user';
+                const typeLabel =
+                  item.type === 'audio'
+                    ? '录音'
+                    : item.type === 'video'
+                      ? '视频'
+                      : item.type === 'image'
+                        ? '图片'
+                        : item.type === 'document'
+                          ? '材料'
+                          : '文字';
+
+                const bubbleText = item.preview?.trim() || item.title;
+                const audioProgress =
+                  audioPlaybackState?.id === item.id
+                    ? Math.max(0, Math.min(1, audioPlaybackState.progress))
+                    : 0;
+                const isAudioPlaying = playingAudioMessageId === item.id;
+                const isAudioTranscriptOpen = expandedAudioTranscriptId === item.id;
+                const fileExtensionBadge = getFileExtensionBadge(item.title);
+                const canOpenReview = Boolean(item.reviewable && item.sessionId && item.status !== 'failed');
+                const showInlineStatus = Boolean(
+                  item.status &&
+                  item.status !== 'ready' &&
+                  item.type !== 'audio' &&
+                  item.type !== 'video'
+                );
+                const showAudioStatusText = Boolean(item.statusText) && item.status !== 'ready';
+                const showVideoStatusText = Boolean(item.statusText) && item.status !== 'ready';
+                const statusTone =
+                  item.status === 'failed'
+                    ? 'bg-rose-50 text-rose-600'
+                    : item.status === 'ready'
+                      ? 'bg-white/70 text-[#4f7a36]'
+                      : 'bg-white/70 text-[#3d7d1f]';
+                const isAttachmentMessage =
+                  Boolean(item.attachmentUrl) && (item.type === 'document' || item.type === 'text');
+
+                return (
+                  <div key={item.id} className={`flex ${isPrimary ? 'justify-end' : 'justify-start'}`}>
+                    <div className={`${messageBubbleWidthClass} ${isPrimary ? '' : 'pl-8'}`}>
+                      <div
+                        className={`rounded-[24px] border px-4 py-3 shadow-sm ${
+                          isPrimary
+                            ? 'rounded-br-[8px] border-[#b8e7a6] bg-[#d9fdd3]'
+                            : 'rounded-bl-[8px] border-slate-200 bg-white'
+                        }`}
+                      >
+                        {item.type === 'audio' ? (
+                          <div className="space-y-2">
+                            <div className={`flex ${isPrimary ? 'justify-end' : 'justify-start'}`}>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  void toggleAudioMessagePlayback(item);
+                                }}
+                                disabled={!item.mediaUrl}
+                                className={`inline-flex max-w-full items-center gap-3 rounded-full px-3 py-2 transition ${
+                                  isPrimary
+                                    ? 'bg-white/72 text-[#2f6f1f]'
+                                    : 'bg-slate-100 text-slate-700'
+                                } disabled:cursor-default disabled:opacity-80`}
+                              >
+                                <span className={`inline-flex h-7 w-7 items-center justify-center rounded-full ${
+                                  isPrimary ? 'bg-[#07c160] text-white' : 'bg-white text-slate-500'
+                                }`}>
+                                  {isAudioPlaying ? <Pause size={14} /> : <Play size={14} className="ml-0.5" />}
+                                </span>
+                                <span className="relative flex h-5 w-[88px] items-center">
+                                  <span
+                                    className={`absolute left-0 top-1/2 h-[2px] -translate-y-1/2 rounded-full ${
+                                      isPrimary ? 'bg-[#c5ebb7]' : 'bg-slate-200'
+                                    }`}
+                                    style={{ width: '100%' }}
+                                  />
+                                  <span
+                                    className="absolute left-0 top-1/2 h-[2px] -translate-y-1/2 rounded-full bg-[#07c160] transition-all"
+                                    style={{ width: `${Math.max(8, audioProgress * 100)}%` }}
+                                  />
+                                  <span className="relative z-10 flex w-full items-end justify-between px-1">
+                                    {[8, 12, 16, 11, 15, 9, 13, 10].map((height, index) => (
+                                      <span
+                                        key={`${item.id}-wave-${index}`}
+                                        className={`w-[3px] rounded-full ${
+                                          isPrimary ? 'bg-[#5fa73d]' : 'bg-slate-400'
+                                        }`}
+                                        style={{ height: `${height}px`, opacity: index / 8 < audioProgress ? 0.95 : 0.45 }}
+                                      />
+                                    ))}
+                                  </span>
+                                </span>
+                                <span className="text-[11px] font-semibold">
+                                  {formatVoiceDurationCompact(
+                                    audioPlaybackState?.id === item.id && audioPlaybackState.duration > 0
+                                      ? audioPlaybackState.duration * 1000
+                                      : item.durationMs
+                                  )}
+                                </span>
+                              </button>
+                            </div>
+                            <div className={`flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] ${
+                              isPrimary ? 'justify-end text-[#4f7a36]' : 'justify-start text-slate-500'
+                            }`}>
+                              {showAudioStatusText ? (
+                                <span className="font-medium">{item.statusText}</span>
+                              ) : null}
+                              {item.segmentCount > 0 && item.preview?.trim() ? (
+                                <>
+                                  {showAudioStatusText ? (
+                                    <span aria-hidden="true" className="opacity-40">·</span>
+                                  ) : null}
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      setExpandedAudioTranscriptId((prev) => (prev === item.id ? null : item.id))
+                                    }
+                                    className={`font-medium transition ${
+                                      isPrimary ? 'text-[#2f6f1f] hover:text-[#245818]' : 'text-slate-600 hover:text-slate-800'
+                                    }`}
+                                  >
+                                    {isAudioTranscriptOpen ? '收起文字' : '文字'}
+                                  </button>
+                                </>
+                              ) : null}
+                              {canOpenReview ? (
+                                <>
+                                  {showAudioStatusText || (item.segmentCount > 0 && item.preview?.trim()) ? (
+                                    <span aria-hidden="true" className="opacity-40">·</span>
+                                  ) : null}
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      void openReviewFromCollection(item);
+                                    }}
+                                    className={`font-medium transition ${
+                                      isPrimary ? 'text-[#2f6f1f] hover:text-[#245818]' : 'text-slate-600 hover:text-slate-800'
+                                    }`}
+                                  >
+                                    复习
+                                  </button>
+                                </>
+                              ) : null}
+                            </div>
+                            {isAudioTranscriptOpen && item.segmentCount > 0 && item.preview?.trim() ? (
+                              <div className={`rounded-[16px] px-3 py-2 text-sm leading-6 ${
+                                isPrimary ? 'bg-white/65 text-slate-900' : 'bg-slate-50 text-slate-700'
+                              }`}>
+                                {bubbleText}
+                              </div>
+                            ) : null}
+                          </div>
+                        ) : item.type === 'image' ? (
+                          <div className="space-y-2">
+                            {item.previewUrl ? (
+                              <a
+                                href={item.attachmentUrl || item.previewUrl}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="block overflow-hidden rounded-[18px]"
+                                aria-label={`查看原图：${item.title}`}
+                              >
+                                {/* eslint-disable-next-line @next/next/no-img-element */}
+                                <img
+                                  src={item.previewUrl}
+                                  alt={item.title}
+                                  className="max-h-60 w-full object-cover"
+                                />
+                              </a>
+                            ) : (
+                              <div className={`flex items-center gap-2 ${isPrimary ? 'justify-end' : 'justify-start'}`}>
+                                <span className={`inline-flex h-8 w-8 items-center justify-center rounded-full ${
+                                  isPrimary ? 'bg-white/70 text-[#8b5cf6]' : 'bg-slate-100 text-slate-500'
+                                }`}>
+                                  <ImageIcon size={15} />
+                                </span>
+                                <div className="min-w-0">
+                                  <p className="truncate text-sm font-medium text-slate-900">{item.title}</p>
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        ) : item.type === 'document' || isAttachmentMessage ? (
+                          <div className="space-y-2">
+                            {item.attachmentUrl ? (
+                              <a
+                                href={item.attachmentUrl}
+                                target="_blank"
+                                rel="noreferrer"
+                                className={`block rounded-[18px] border px-3 py-2.5 transition ${
+                                  isPrimary
+                                    ? 'border-white/70 bg-white/62 hover:bg-white/75'
+                                    : 'border-slate-200 bg-slate-50 hover:bg-white'
+                                }`}
+                              >
+                                <div className={`flex items-center gap-2 ${isPrimary ? 'justify-end' : 'justify-start'}`}>
+                                  <span className={`inline-flex h-8 w-8 items-center justify-center rounded-full ${
+                                    isPrimary ? 'bg-white text-[#2563eb]' : 'bg-white text-slate-500'
+                                  }`}>
+                                    <FileText size={15} />
+                                  </span>
+                                  <div className="min-w-0 flex-1">
+                                    <p className="truncate text-sm font-medium text-slate-900">{item.title}</p>
+                                    {fileExtensionBadge ? (
+                                      <p className="text-[11px] text-slate-500">{fileExtensionBadge}</p>
+                                    ) : null}
+                                  </div>
+                                  <ChevronRight size={15} className="shrink-0 text-slate-300" />
+                                </div>
+                              </a>
+                            ) : (
+                              <div className={`flex items-center gap-2 ${isPrimary ? 'justify-end' : 'justify-start'}`}>
+                                <span className={`inline-flex h-8 w-8 items-center justify-center rounded-full ${
+                                  isPrimary ? 'bg-white/70 text-[#2563eb]' : 'bg-slate-100 text-slate-500'
+                                }`}>
+                                  <FileText size={15} />
+                                </span>
+                                <div className="min-w-0">
+                                  <p className="truncate text-sm font-medium text-slate-900">{item.title}</p>
+                                  {fileExtensionBadge ? (
+                                    <p className="text-[11px] text-slate-500">{fileExtensionBadge}</p>
+                                  ) : null}
+                                </div>
+                              </div>
+                            )}
+                            <div className={`flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] ${
+                              isPrimary ? 'justify-end text-[#4f7a36]' : 'justify-start text-slate-500'
+                            }`}>
+                              {canOpenReview ? (
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    void openReviewFromCollection(item);
+                                  }}
+                                  className={`font-medium transition ${
+                                    isPrimary ? 'text-[#2f6f1f] hover:text-[#245818]' : 'text-slate-600 hover:text-slate-800'
+                                  }`}
+                                >
+                                  复习
+                                </button>
+                              ) : null}
+                            </div>
+                          </div>
+                        ) : item.type === 'video' ? (
+                          <div className="space-y-2">
+                            {item.mediaUrl ? (
+                              <a
+                                href={item.mediaUrl}
+                                target="_blank"
+                                rel="noreferrer"
+                                className={`block overflow-hidden rounded-[18px] transition ${
+                                  isPrimary ? 'bg-[#1f2937] hover:bg-[#111827]' : 'bg-slate-900 hover:bg-slate-800'
+                                }`}
+                              >
+                                <div className="flex min-h-[140px] items-center justify-center px-4 py-6">
+                                  <span className="inline-flex h-11 w-11 items-center justify-center rounded-full bg-white text-slate-900 shadow-sm">
+                                    <Play size={18} className="ml-0.5" />
+                                  </span>
+                                </div>
+                                <div className="border-t border-white/10 bg-black/18 px-3 py-2.5 text-white">
+                                  <p className="truncate text-sm font-medium">
+                                    {item.title}
+                                  </p>
+                                  {item.durationMs ? (
+                                    <p className="mt-0.5 text-[11px] text-white/70">
+                                      {formatVoiceDurationCompact(item.durationMs)}
+                                    </p>
+                                  ) : null}
+                                </div>
+                              </a>
+                            ) : (
+                              <div className={`flex items-center gap-2 ${isPrimary ? 'justify-end' : 'justify-start'}`}>
+                                <span className={`inline-flex h-8 w-8 items-center justify-center rounded-full ${
+                                  isPrimary ? 'bg-white/70 text-fuchsia-600' : 'bg-slate-100 text-slate-500'
+                                }`}>
+                                  <Link2 size={15} />
+                                </span>
+                                <div className="min-w-0">
+                                  <p className="truncate text-sm font-medium text-slate-900">
+                                    {item.title}
+                                    {item.durationMs ? ` · ${formatVoiceDurationCompact(item.durationMs)}` : ''}
+                                  </p>
+                                </div>
+                              </div>
+                            )}
+                            <div className={`flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] ${
+                              isPrimary ? 'justify-end text-white/75' : 'justify-start text-slate-500'
+                            }`}>
+                              {showVideoStatusText ? (
+                                <span className="font-medium">{item.statusText}</span>
+                              ) : null}
+                              {showVideoStatusText && canOpenReview ? (
+                                <span aria-hidden="true" className="opacity-40">·</span>
+                              ) : null}
+                              {canOpenReview ? (
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    void openReviewFromCollection(item);
+                                  }}
+                                  className={`font-medium transition ${
+                                    isPrimary ? 'text-white hover:text-white/80' : 'text-slate-600 hover:text-slate-800'
+                                  }`}
+                                >
+                                  复习
+                                </button>
+                              ) : null}
+                            </div>
+                          </div>
+                        ) : (
+                          <p className="text-sm leading-6 text-slate-900">{bubbleText}</p>
+                        )}
+                        <div className={`mt-2 flex items-center ${isPrimary ? 'justify-end' : 'justify-start'} gap-2 text-[11px] text-slate-400`}>
+                          <span>{formatRelativeCollectionTime(item.addedAt)}</span>
+                          {showInlineStatus ? (
+                            <span className={`rounded-full px-2 py-0.5 ${statusTone}`}>
+                              {item.statusText || typeLabel}
+                            </span>
+                          ) : null}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {mobileCollectionSheet === 'more' ? (
+        <>
+          <button
+            type="button"
+            aria-label="关闭收集菜单"
+            onClick={() => {
+              setMobileCollectionSheet(null);
+              setShowSessionHistory(false);
+            }}
+            className={`${backdropPositionClass} z-20 bg-slate-900/18 backdrop-blur-[1px]`}
+          />
+        <div
+          className={`${collectionChromeContained ? 'absolute inset-y-0 left-0' : 'fixed inset-y-0 left-0'} z-30 w-[86vw] max-w-[360px]`}
+        >
+          <div className="flex h-full flex-col overflow-hidden rounded-r-[28px] border-r border-slate-200 bg-white shadow-[0_24px_48px_rgba(15,23,42,0.16)]">
+            <div className="border-b border-slate-100 px-5 pb-4 pt-[max(env(safe-area-inset-top),20px)]">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <p className="text-[11px] font-medium tracking-[0.08em] text-slate-400">Capture First</p>
+                  <p className="mt-1 text-2xl font-semibold tracking-[-0.02em] text-slate-900">收集</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMobileCollectionSheet(null);
+                      setShowSessionHistory(false);
+                    }}
+                    className="flex h-9 w-9 items-center justify-center rounded-full bg-slate-100 text-slate-500"
+                  >
+                    <X size={16} />
+                  </button>
+                </div>
+                <div className="mt-4 grid grid-cols-3 gap-2">
+                  <div className="rounded-[18px] bg-slate-50 px-3 py-3">
+                    <p className="text-[11px] font-medium text-slate-500">已收</p>
+                    <p className="mt-1 text-2xl font-semibold text-slate-900">{captureActivitySummary.totalCount}</p>
+                  </div>
+                  <div className="rounded-[18px] bg-slate-50 px-3 py-3">
+                    <p className="text-[11px] font-medium text-slate-500">活跃天</p>
+                    <p className="mt-1 text-2xl font-semibold text-slate-900">{captureActivitySummary.activeDays}</p>
+                  </div>
+                  <div className="rounded-[18px] bg-slate-50 px-3 py-3">
+                    <p className="text-[11px] font-medium text-slate-500">回声</p>
+                    <p className="mt-1 text-2xl font-semibold text-slate-900">{workspaceEchoes.length}</p>
+                  </div>
+                </div>
+                <div className="mt-4 rounded-[20px] bg-slate-50 px-3 py-3">
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <p className="text-[11px] font-medium tracking-[0.06em] text-slate-500">最近 4 周</p>
+                      <p className="mt-1 text-sm font-semibold text-slate-900">
+                        {captureActivitySummary.streak > 0
+                          ? `已经连续 ${captureActivitySummary.streak} 天在收`
+                          : '先从今天收一点开始'}
+                      </p>
+                    </div>
+                    {captureActivitySummary.topKinds.length > 0 ? (
+                      <span className="rounded-full bg-white px-2.5 py-1 text-[11px] font-medium text-slate-500">
+                        {captureActivitySummary.topKinds.join(' · ')}
+                      </span>
+                    ) : null}
+                  </div>
+                  <div className="mt-3 grid grid-cols-7 gap-1.5">
+                    {captureActivitySummary.tiles.map((tile) => (
+                      <span
+                        key={tile.key}
+                        className={cn(
+                          'h-6 rounded-[7px] border',
+                          tile.count > 0
+                            ? tile.count >= 3
+                              ? 'border-emerald-300 bg-emerald-300/85'
+                              : 'border-emerald-200 bg-emerald-100'
+                            : 'border-slate-200 bg-white'
+                        )}
+                        title={`${tile.key} · ${tile.count} 条`}
+                      />
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex-1 space-y-2 overflow-y-auto p-3">
+                <button
+                  type="button"
+                  onClick={() => setMobileCollectionSheet('history')}
+                  className="flex w-full items-center gap-3 rounded-[18px] bg-[#07c160] px-4 py-3 text-left text-white shadow-[0_14px_30px_rgba(7,193,96,0.18)] transition hover:bg-[#06b458]"
+                >
+                  <span className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-white/18 text-white">
+                    <Boxes size={16} />
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-semibold">全部收集</p>
+                    <p className="mt-0.5 text-xs leading-5 text-white/85">从以前收进来的课、图和材料里继续接着学。</p>
+                  </div>
+                  <ChevronRight size={16} className="text-white/80" />
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setMobileCollectionSheet('echo')}
+                  className="flex w-full items-center gap-3 rounded-[18px] border border-slate-200 bg-slate-50/80 px-4 py-3 text-left transition hover:border-slate-300 hover:bg-white"
+                >
+                  <span className="relative inline-flex h-9 w-9 items-center justify-center rounded-full bg-white text-emerald-600 shadow-sm">
+                    <Sparkles size={16} />
+                    {showCollectionPulsePreview && collectionPulse ? (
+                      <span className="absolute right-1.5 top-1.5 inline-flex h-2 w-2 rounded-full bg-[#07c160]" />
+                    ) : null}
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-semibold text-slate-900">回声</p>
+                    <p className="mt-0.5 text-xs leading-5 text-slate-500">
+                      {latestEchoForCenter ? '晚点再看系统听到了什么。' : '先继续收，线索会慢慢沉下来。'}
+                    </p>
+                  </div>
+                  <ChevronRight size={16} className="text-slate-300" />
+                </button>
+              </div>
+            </div>
+          </div>
+        </>
+      ) : mobileCollectionSheet ? (
+        <>
+          <button
+            type="button"
+            aria-label="关闭收集附加层"
+            onClick={() => {
+              setMobileCollectionSheet(null);
+              setShowSessionHistory(false);
+            }}
+            className={`${backdropPositionClass} z-20 bg-slate-900/18 backdrop-blur-[1px]`}
+          />
+          <div
+            className={`${collectionChromeContained ? 'absolute inset-x-0' : 'fixed inset-x-0'} z-30 ${dockPaddingClass}`}
+            style={{ bottom: `${sheetBottomOffset}px` }}
+          >
+            <div className={`mx-auto w-full ${sheetWidthClass} overflow-hidden rounded-[28px] border border-slate-200 bg-white shadow-[0_24px_48px_rgba(15,23,42,0.16)]`}>
+              <div className="flex items-center justify-between border-b border-slate-100 px-4 py-3">
+                <div>
+                  <p className="text-sm font-semibold text-slate-900">
+                    {mobileCollectionSheet === 'echo'
+                      ? '回声中心'
+                      : mobileCollectionSheet === 'history'
+                        ? '历史收集'
+                        : '收集菜单'}
+                  </p>
+                  {mobileCollectionSheet === 'echo' ? (
+                    <p className="text-xs text-slate-500">回头再看，不打断你现在发消息。</p>
+                  ) : null}
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMobileCollectionSheet(null);
+                    setShowSessionHistory(false);
+                  }}
+                  className="flex h-9 w-9 items-center justify-center rounded-full bg-slate-100 text-slate-500"
+                >
+                  <X size={16} />
+                </button>
+              </div>
+
+              {mobileCollectionSheet === 'echo' ? (
+                <div className="space-y-3 p-4">
+                  {latestEchoForCenter ? (
+                    <div className="rounded-[24px] border border-emerald-100 bg-[linear-gradient(145deg,#ffffff_0%,#effcf6_100%)] px-4 py-4 shadow-sm">
+                      <div className="mb-2 flex items-center gap-2 text-[12px] font-medium text-emerald-700">
+                        <span className="inline-flex h-8 w-8 items-center justify-center rounded-2xl bg-emerald-50 text-emerald-600">
+                          <Sparkles size={13} />
+                        </span>
+                        <span>最新回声</span>
+                      </div>
+                      <p className="mb-1 text-sm font-semibold leading-6 text-slate-900">{latestEchoForCenter.title}</p>
+                      <p className="text-sm leading-7 text-slate-900">{latestEchoForCenter.body}</p>
+                      {latestEchoForCenter.chips.length > 0 ? (
+                        <div className="mt-3 flex flex-wrap gap-2">
+                          {latestEchoForCenter.chips.map((chip) => (
+                            <span
+                              key={chip}
+                              className="rounded-full border border-emerald-100 bg-white px-3 py-1 text-[11px] font-medium text-emerald-700"
+                            >
+                              {chip}
+                            </span>
+                          ))}
+                        </div>
+                      ) : null}
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        <button
+                          type="button"
+                          onClick={() => openTutorFromCollection(buildTutorQuestionFromEcho(latestEchoForCenter, 'explore'))}
+                          className="rounded-full border border-emerald-200 bg-white px-3 py-2 text-xs font-semibold text-emerald-700 transition hover:border-emerald-300 hover:bg-emerald-50"
+                        >
+                          问问 Tutor
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => openTutorFromCollection(buildTutorQuestionFromEcho(latestEchoForCenter, 'review'))}
+                          className="rounded-full border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 transition hover:border-slate-300 hover:bg-slate-50"
+                        >
+                          做成复习清单
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="rounded-[24px] border border-dashed border-slate-200 bg-slate-50/80 px-4 py-5 text-sm leading-7 text-slate-500 shadow-sm">
+                      先继续收集，系统听到的线索会慢慢沉到这里。
+                    </div>
+                  )}
+
+                  {workspaceEchoes.length > 0 ? (
+                    <div className="rounded-[24px] border border-slate-200 bg-slate-50/80 p-3 shadow-sm">
+                      <div className="mb-3 flex items-center justify-between gap-3">
+                        <div>
+                          <p className="text-xs font-semibold tracking-[0.06em] text-slate-500">回声历史</p>
+                        </div>
+                        <span className="rounded-full bg-white px-2 py-1 text-[11px] font-medium text-slate-500">
+                          {workspaceEchoes.length} 条
+                        </span>
+                      </div>
+
+                      {echoFilterOptions.length > 1 ? (
+                        <div className="mb-3 flex flex-wrap gap-2">
+                          {echoFilterOptions.map((chip) => (
+                            <button
+                              key={chip}
+                              type="button"
+                              onClick={() => setSelectedEchoChip(chip)}
+                              className={`rounded-full border px-3 py-1 text-[11px] font-medium transition ${
+                                selectedEchoChip === chip
+                                  ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
+                                  : 'border-slate-200 bg-white text-slate-500'
+                              }`}
+                            >
+                              {chip}
+                            </button>
+                          ))}
+                        </div>
+                      ) : null}
+
+                      {echoHistorySections.length > 0 ? (
+                        <div className="space-y-4">
+                          {echoHistorySections.map((section) => (
+                            <div key={section.key} className="space-y-2">
+                              <div className="flex items-center gap-2">
+                                <span className="rounded-full bg-white px-2 py-1 text-[11px] font-semibold text-slate-500">
+                                  {section.label}
+                                </span>
+                                <span className="text-[11px] text-slate-400">{section.items.length} 条</span>
+                              </div>
+                              {section.items.map((echo) => (
+                                <div
+                                  key={echo.id}
+                                  className="rounded-[18px] border border-slate-200 bg-white px-3 py-3"
+                                >
+                                  <div className="flex items-center justify-between gap-3">
+                                    <p className="text-sm font-semibold text-slate-900">{echo.title}</p>
+                                    <span className="text-[11px] text-slate-400">
+                                      {formatRelativeCollectionTime(echo.createdAt)}
+                                    </span>
+                                  </div>
+                                  <p className="mt-1 text-sm leading-6 text-slate-600">{echo.body}</p>
+                                  {echo.chips.length > 0 ? (
+                                    <div className="mt-2 flex flex-wrap gap-2">
+                                      {echo.chips.map((chip) => (
+                                        <span
+                                          key={`${echo.id}-${chip}`}
+                                          className="rounded-full bg-slate-50 px-2.5 py-1 text-[11px] font-medium text-slate-500"
+                                        >
+                                          {chip}
+                                        </span>
+                                      ))}
+                                    </div>
+                                  ) : null}
+                                  <div className="mt-3 flex flex-wrap justify-end gap-2">
+                                    <button
+                                      type="button"
+                                      onClick={() => openTutorFromCollection(buildTutorQuestionFromEcho(echo, 'review'))}
+                                      className="rounded-full border border-slate-200 bg-slate-50 px-3 py-2 text-[11px] font-semibold text-slate-700 transition hover:border-slate-300 hover:bg-slate-100"
+                                    >
+                                      做成复习清单
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => openTutorFromCollection(buildTutorQuestionFromEcho(echo, 'explore'))}
+                                      className="rounded-full border border-slate-200 bg-slate-50 px-3 py-2 text-[11px] font-semibold text-slate-700 transition hover:border-emerald-200 hover:bg-emerald-50 hover:text-emerald-700"
+                                    >
+                                      顺着这条问 Tutor
+                                    </button>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <div className="rounded-[18px] border border-dashed border-slate-200 bg-white px-3 py-4 text-sm leading-6 text-slate-500">
+                          当前筛选下还没有回声，换一个标签看看，或者继续收集更多上下文。
+                        </div>
+                      )}
+                    </div>
+                  ) : null}
+
+                  {collectionPulse?.actions?.length ? (
+                    <div className="flex flex-wrap gap-2">
+                      {collectionPulse.actions.map((action) => (
+                        <button
+                          key={action.key}
+                          type="button"
+                          onClick={() => {
+                            setMobileCollectionSheet(null);
+                            handleCollectionPulseAction(action.key);
+                          }}
+                          className="rounded-full border border-emerald-100 bg-white px-3 py-2 text-xs font-medium text-emerald-700 transition hover:border-emerald-200 hover:bg-emerald-50"
+                        >
+                          {action.label}
+                        </button>
+                      ))}
+                    </div>
+                  ) : null}
+                </div>
+              ) : null}
+
+              {mobileCollectionSheet === 'history' ? (
+                <div className="max-h-[52vh] overflow-hidden rounded-b-[30px]">
+                  <SessionHistoryList
+                    userId={user?.id}
+                    onSessionSelect={(session) => {
+                      setMobileCollectionSheet(null);
+                      void handleLoadHistorySession(session);
+                    }}
+                    onClose={() => setMobileCollectionSheet(null)}
+                    activeSessionId={sessionId}
+                    maxHeight="52vh"
+                    showHeader={false}
+                    variant="capture"
+                  />
+                </div>
+              ) : null}
+            </div>
+          </div>
+        </>
+      ) : null}
+
+      {showMobileRecorder ? (
+        <div className={`relative z-30 flex-shrink-0 ${dockPaddingClass}`}>
+          <div className={`mx-auto w-full ${dockWidthClass} rounded-[24px] border border-slate-200/90 bg-white/98 p-1.5 shadow-[0_20px_42px_rgba(15,23,42,0.14)] backdrop-blur`}>
+            <Recorder
+              ref={recorderRef}
+              activeSessionId={sessionId}
+              continueCurrentSession={collectionFeedItems.length > 0 || segments.length > 0}
+              autoStartSignal={recorderAutoStartSignal}
+              compactMode
+              onRecordingStart={handleRecordingStart}
+              onRecordingStop={handleRecordingStop}
+              onTranscriptionError={handleRecordingTranscriptionError}
+              onTranscriptUpdate={handleTranscriptUpdate}
+              onTranscriptTextUpdate={handleTranscriptTextUpdate}
+              onTranscriptEnhanced={handleTranscriptEnhanced}
+              onAnchorMark={handleAnchorMark}
+              contextHint={liveASRContextHint}
+            />
+          </div>
+        </div>
+      ) : (
+        <div className={`relative z-20 flex-shrink-0 ${dockPaddingClass}`}>
+          <div className={`mx-auto flex w-full ${dockWidthClass} items-end gap-2 border-t border-[#d8d8d8] bg-[#f7f7f7]/98 px-3 py-2 backdrop-blur`}>
+            <button
+              type="button"
+              onClick={openLiveRecorder}
+              disabled={isComposerVoiceRecording || composerVoiceStatus === 'connecting'}
+              className={`flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-full border bg-white transition ${
+                showMobileRecorder
+                  ? 'border-[#f1b24a] text-[#c88719]'
+                  : 'border-[#d9d9d9] text-[#1f2329]'
+              } disabled:border-[#e7e7e7] disabled:text-slate-300`}
+              aria-label="录制原声"
+            >
+              <AudioLines size={18} strokeWidth={2} />
+            </button>
+
+            <div className="min-w-0 flex-1 rounded-[8px] border border-[#d9d9d9] bg-white px-3 py-2">
+              {composerLinkPreview ? (
+                <div className="mb-2 flex items-center gap-2 rounded-[10px] border border-[#ece4ff] bg-[#faf7ff] px-3 py-2 text-[11px] text-slate-500">
+                  <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-white text-fuchsia-600">
+                    <Link2 size={12} />
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate font-medium text-slate-700">
+                      识别到 {composerLinkPreview.providerLabel} 链接
+                    </p>
+                    <p className="truncate text-slate-400">
+                      {composerCanAutoImportLink ? '发送后会自动解析进收集流' : '会先作为一条链接笔记留在这里'}
+                    </p>
+                  </div>
+                </div>
+              ) : null}
+              <div className="flex items-end gap-2">
+                <textarea
+                  ref={collectionComposerRef}
+                  value={collectionComposerText}
+                  onChange={(event) => setCollectionComposerText(event.target.value)}
+                  onPaste={handleCollectionComposerPaste}
+                  placeholder="发一句想法，贴个链接，或者先把这节课丢进来"
+                  rows={composerRows}
+                  className="max-h-24 min-h-[38px] flex-1 resize-none border-0 bg-transparent px-0 py-0.5 text-sm leading-6 text-slate-700 outline-none placeholder:text-slate-400"
+                />
+                <button
+                  type="button"
+                  onClick={() => {
+                    void toggleComposerDictation();
+                  }}
+                  disabled={showMobileRecorder || isRecording}
+                  className={`mb-0.5 flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full transition ${
+                    composerVoiceStatus === 'connecting' || isComposerVoiceRecording
+                      ? 'bg-[#07c160] text-white shadow-[0_10px_24px_rgba(7,193,96,0.22)]'
+                      : 'bg-[#e8f9ef] text-[#07c160]'
+                  } disabled:bg-slate-100 disabled:text-slate-400`}
+                  aria-label={isComposerVoiceRecording || composerVoiceStatus === 'connecting' ? '停止语音听写' : '语音转文字'}
+                >
+                  <Mic size={15} />
+                </button>
+              </div>
+              {sourceImporting || composerVoiceStatus === 'connecting' || isComposerVoiceRecording || composerCanAutoImportLink ? (
+                <div className="mt-1.5 flex items-center gap-2 text-[11px] text-slate-400">
+                  <span className="inline-flex h-1.5 w-1.5 rounded-full bg-[#07c160]" />
+                  <span>
+                    {sourceImporting
+                      ? activeSourceImportCount > 1
+                        ? `${activeSourceImportCount} 个文件正在后台解析，你可以继续发`
+                        : '这个文件正在后台解析，你可以继续发'
+                      : composerVoiceStatus === 'connecting'
+                        ? '正在打开语音听写'
+                        : isComposerVoiceRecording
+                          ? compactText(composerVoiceInterimText || '正在把语音追加到输入框', 28)
+                          : '发送后会自动解析这个链接'}
+                  </span>
+                </div>
+              ) : null}
+            </div>
+
+            <button
+              type="button"
+              onClick={() => handleSourceFileButtonClick('all')}
+              className={`flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-full border bg-white transition ${
+                sourceImporting
+                  ? 'border-[#07c160] text-[#07c160]'
+                  : 'border-[#d9d9d9] text-[#1f2329]'
+              }`}
+              aria-label="上传文件"
+            >
+              <Plus size={17} />
+            </button>
+
+            <button
+              type="button"
+              onClick={handleCollectionComposerSubmit}
+              className={`inline-flex h-11 min-w-[64px] flex-shrink-0 items-center justify-center rounded-[10px] px-4 text-sm font-semibold text-white transition ${
+                isComposerVoiceRecording || composerVoiceStatus === 'connecting'
+                  ? 'bg-[#07c160]/70'
+                  : collectionComposerText.trim()
+                    ? 'bg-[#07c160]'
+                    : 'bg-[#07c160]/85'
+              }`}
+              aria-label="发送到收集流"
+            >
+              发送
+            </button>
+          </div>
+        </div>
+      )}
+
+    </div>
+  );
+  };
 
   const renderInputSourceTabs = useCallback((layout: 'mobile' | 'desktop') => {
     const isMobileLayout = layout === 'mobile';
@@ -2436,8 +5539,8 @@ const _handleVideoAssistantMessage = useCallback((payload: {
       sourceFilePickerMode === 'audio'
         ? 'audio/*,.mp3,.wav,.webm,.ogg,.m4a,.aac,.flac'
         : sourceFilePickerMode === 'support'
-          ? '.txt,.md,.markdown,.csv,.json,.html,.htm,.pdf,.docx'
-          : 'audio/*,.mp3,.wav,.webm,.ogg,.m4a,.aac,.flac,.txt,.md,.markdown,.csv,.json,.html,.htm,.pdf,.docx';
+          ? '.txt,.md,.markdown,.csv,.json,.html,.htm,.pdf,.docx,.ppt,.pptx'
+          : 'audio/*,.mp3,.wav,.webm,.ogg,.m4a,.aac,.flac,.txt,.md,.markdown,.csv,.json,.html,.htm,.pdf,.docx,.ppt,.pptx';
 
     const recentPrimaryItems = sourceItems.filter((item) => item.role === 'primary').slice(-4);
     const recentSupportItems = sourceItems.filter((item) => item.role === 'support').slice(-6);
@@ -2467,7 +5570,7 @@ const _handleVideoAssistantMessage = useCallback((payload: {
             <div className="flex items-start justify-between gap-3">
               <div>
                 <span className="inline-flex items-center rounded-full border border-slate-200/80 bg-white/80 px-2.5 py-1 text-[11px] font-semibold tracking-[0.08em] text-slate-500">
-                  数据采集入口
+                  数据收集入口
                 </span>
                 <p className={`${isMobileLayout ? 'mt-2 text-base' : 'mt-2.5 text-xl'} font-bold text-slate-900`}>拖拽或选择资料</p>
                 <p className={`${isMobileLayout ? 'text-xs' : 'text-sm'} mt-1 max-w-2xl leading-6 text-slate-600`}>
@@ -2553,7 +5656,7 @@ const _handleVideoAssistantMessage = useCallback((payload: {
                   ))}
                 </div>
               ) : (
-                <p className="mt-2 text-xs text-slate-400">还没有主来源，请先录音、上传音频或导入视频链接。</p>
+                 <p className="mt-2 text-xs text-slate-400">还没有主来源，请先录音、上传音频或导入视频链接。</p>
               )}
             </div>
 
@@ -2578,13 +5681,13 @@ const _handleVideoAssistantMessage = useCallback((payload: {
                         className="ml-0.5 inline-flex h-4 w-4 flex-shrink-0 items-center justify-center rounded-full text-cyan-400 opacity-0 transition hover:bg-cyan-200 hover:text-cyan-700 group-hover:opacity-100"
                         title="删除"
                       >
-                        ×
+                         ×
                       </button>
                     </span>
                   ))}
                 </div>
               ) : (
-                <p className="mt-2 text-xs text-slate-400">可选上传 PDF/讲义/文本，为后续识别和应用生成提供支撑。</p>
+                 <p className="mt-2 text-xs text-slate-400">可选上传 PDF、讲义或文本，为后续识别和应用生成提供支持。</p>
               )}
             </div>
           </div>
@@ -2624,6 +5727,7 @@ const _handleVideoAssistantMessage = useCallback((payload: {
             activeSessionId={sessionId}
             maxHeight={historyMaxHeight}
             showHeader={false}
+            variant="capture"
           />
         </div>
 
@@ -2662,7 +5766,7 @@ const _handleVideoAssistantMessage = useCallback((payload: {
               disabled={sourceImporting || isRecording}
               className={inputClass}
             />
-            <p className="mt-2 text-xs leading-5 text-slate-500">系统会自动融合增强资料中的 PDF/文本，提高 ASR 与后续应用生成质量。</p>
+            <p className="mt-2 text-xs leading-5 text-slate-500">系统会自动融合补充材料里的 PDF 和文本，提升 ASR 与后续应用生成质量。</p>
           </div>
           <div className="mt-4 flex flex-wrap items-center gap-3">
             <button
@@ -2719,7 +5823,7 @@ const _handleVideoAssistantMessage = useCallback((payload: {
                 return supportList.length > 0 ? (
                   <div className="space-y-2">
                     <div className="rounded-2xl border border-cyan-100 bg-cyan-50/60 px-3 py-2 text-xs text-cyan-700">
-                      当前增强资料数量：{supportList.length}
+                      当前补充材料数量：{supportList.length}
                     </div>
                     <div className="flex flex-col gap-1.5">
                       {supportList.map((item) => (
@@ -2738,7 +5842,7 @@ const _handleVideoAssistantMessage = useCallback((payload: {
                             type="button"
                             onClick={() => removeSupportSource(item.id)}
                             className="flex-shrink-0 rounded-lg p-1 text-slate-300 opacity-0 transition hover:bg-red-50 hover:text-red-500 group-hover:opacity-100"
-                            title="删除此资料"
+                            title="删除这份资料"
                           >
                             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                               <path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2" />
@@ -2750,7 +5854,7 @@ const _handleVideoAssistantMessage = useCallback((payload: {
                   </div>
                 ) : (
                   <div className="rounded-2xl border border-cyan-100 bg-cyan-50/60 px-3 py-2 text-xs text-cyan-700">
-                    当前增强资料数量：0
+                    当前补充材料数量：0
                   </div>
                 );
               })()}
@@ -2763,7 +5867,7 @@ const _handleVideoAssistantMessage = useCallback((payload: {
                 >
                   {sourceImporting ? '处理中...' : '上传资料'}
                 </button>
-                <span className="text-xs text-slate-500">支持 pdf / docx / txt / md / csv / json / html</span>
+                <span className="text-xs text-slate-500">支持 pdf / docx / ppt / pptx / txt / md / csv / json / html</span>
               </div>
             </div>
           ) : (
@@ -2941,17 +6045,15 @@ const _handleVideoAssistantMessage = useCallback((payload: {
 
   const unresolvedCount = anchors.filter(a => !a.resolved).length;
 
-  // 客户端未挂载时显示加载状态，避免 Hydration 错误
   if (!mounted) {
-    return <AppLoading message="准备学习环境" />;
+    return <AppLoading message="正在准备学习空间" />;
   }
 
-  // 显示开屏动画（等待应用准备就绪）
   if (showSplash) {
     return (
       <AppLoading 
         progress={loadingProgress}
-        message={loadingProgress >= 100 ? "即将进入" : undefined}
+        message={loadingProgress >= 100 ? '即将进入' : undefined}
         onComplete={loadingProgress >= 100 ? handleSplashComplete : undefined}
       />
     );
@@ -2959,13 +6061,21 @@ const _handleVideoAssistantMessage = useCallback((payload: {
 
   const shouldAllowPageScroll = !isMobile && (viewMode === 'record' || (viewMode === 'review' && !!videoSource));
   const useFixedViewportLayout = !(!isMobile && viewMode === 'record');
+  const rootClassName = isDesktopMobilePreview
+    ? 'relative flex h-full min-h-0 flex-col overflow-hidden'
+    : `${useFixedViewportLayout ? 'h-dvh' : 'min-h-dvh'} flex flex-col main-content-enter browser-safe-top ${
+        shouldAllowPageScroll ? 'overflow-y-auto overflow-x-hidden' : 'overflow-hidden'
+      }`;
+  const rootStyle = isDesktopMobilePreview
+    ? { height: '100%' as const }
+    : useFixedViewportLayout
+      ? { height: '100dvh', minHeight: '-webkit-fill-available' }
+      : { minHeight: '100dvh' };
 
   return (
     <div
-      className={`${useFixedViewportLayout ? 'h-dvh' : 'min-h-dvh'} flex flex-col main-content-enter browser-safe-top ${
-        shouldAllowPageScroll ? 'overflow-y-auto overflow-x-hidden' : 'overflow-hidden'
-      }`}
-      style={useFixedViewportLayout ? { height: '100dvh', minHeight: '-webkit-fill-available' } : { minHeight: '100dvh' }}
+      className={rootClassName}
+      style={rootStyle}
     >
       {/* NOTE: cleaned corrupted legacy comment. */}
       {!isMobile && <DegradedModeBanner status={serviceStatus} />}
@@ -2973,7 +6083,7 @@ const _handleVideoAssistantMessage = useCallback((payload: {
       {/* NOTE: cleaned corrupted legacy comment. */}
       {!isMobile && (
         <Header 
-          lessonTitle={viewMode === 'record' ? '课堂录音' : '课堂复习'}
+          lessonTitle={viewMode === 'record' ? '课堂收集' : '课堂复习'}
           courseName=""
           viewMode={viewMode}
         />
@@ -2994,7 +6104,7 @@ const _handleVideoAssistantMessage = useCallback((payload: {
                 className={`mode-tab flex items-center gap-1.5 ${viewMode === 'record' ? 'active' : ''}`}
               >
                 <Mic size={14} strokeWidth={ICON_TAB_STROKE} />
-                录音
+                收集
               </button>
               <button
                 onClick={() => handleViewModeChange('review')}
@@ -3019,7 +6129,7 @@ const _handleVideoAssistantMessage = useCallback((payload: {
                   <span className="font-semibold text-navy">{anchors.length}</span>
                     {unresolvedCount > 0 && (
                       <>
-                        <span>·</span>
+                        <span aria-hidden="true">·</span>
                         <span data-testid="unresolved-count" data-count={unresolvedCount} className="text-coral-500 font-semibold whitespace-nowrap">{unresolvedCount} 待解决</span>
                       </>
                     )}
@@ -3035,15 +6145,18 @@ const _handleVideoAssistantMessage = useCallback((payload: {
         <>
           {/* NOTE: cleaned corrupted legacy comment. */}
           {isMobile ? (
+            <>
+              {renderMobileRecordView()}
+              {false && (
             <div className="flex-1 min-h-0 flex flex-col overflow-hidden" style={{ background: 'var(--edu-bg-primary)' }}>
-              {/* 鏋佺畝椤堕儴鏍忥細Logo + Tab + 鐢ㄦ埛 + 鑿滃崟 */}
+              {/* 顶部品牌区：Logo、模式切换和菜单入口 */}
               <div className="flex-shrink-0 px-4 py-2.5 flex items-center gap-2 bg-white border-b" style={{ borderColor: 'var(--edu-border-light)' }}>
                 {/* Logo */}
                 <div className="w-8 h-8 bg-gradient-to-br from-amber-400 to-amber-500 rounded-lg flex items-center justify-center flex-shrink-0">
                   <GraduationCap size={18} strokeWidth={2} className="text-white" />
                 </div>
                 
-                {/* Tab 鍒囨崲 */}
+                {/* Tab 切换区 */}
                 <div className="flex-1 flex items-center justify-center">
                   <MobileTabSwitch
                     activeTab={viewMode}
@@ -3052,15 +6165,15 @@ const _handleVideoAssistantMessage = useCallback((payload: {
                   />
                 </div>
                 
-                {/* 鐢ㄦ埛澶村儚/鐧诲綍鎸夐挳 */}
+                {/* 菜单入口 / 用户头像 */}
                 {isAuthenticated && user ? (
                   <button
                     onClick={() => setIsMenuOpen(true)}
                     className="w-8 h-8 bg-gradient-to-br from-lilac-200 to-lilac-300 rounded-full flex items-center justify-center overflow-hidden flex-shrink-0"
                   >
                     <Avatar className="w-full h-full">
-                      {user.avatar ? (
-                        <AvatarImage src={user.avatar} alt={user.nickname} className="object-cover" />
+                      {user?.avatar ? (
+                        <AvatarImage src={user?.avatar ?? undefined} alt={user?.nickname || '用户'} className="object-cover" />
                       ) : null}
                       <AvatarFallback className="bg-transparent text-sm">用户</AvatarFallback>
                     </Avatar>
@@ -3070,11 +6183,11 @@ const _handleVideoAssistantMessage = useCallback((payload: {
                     href="/login"
                     className="px-2.5 py-1.5 text-xs font-medium text-white bg-gradient-to-r from-amber-400 to-amber-500 rounded-lg flex-shrink-0"
                   >
-                    登录
+                    鐧诲綍
                   </a>
                 )}
                 
-                {/* 鑿滃崟鎸夐挳 */}
+                {/* 閼挎粌宕熼幐澶愭尦 */}
                 <DedaoMenuButton onClick={() => setIsMenuOpen(true)} />
               </div>
 
@@ -3085,7 +6198,7 @@ const _handleVideoAssistantMessage = useCallback((payload: {
                   <div className="flex-shrink-0 mb-3">
                     <div className="mb-1.5 flex items-center justify-between">
                       <span className="text-[11px] font-medium tracking-[0.02em] text-slate-500">选择输入方式</span>
-                      <span className="text-[10px] text-slate-400">课堂采集入口</span>
+                      <span className="text-[10px] text-slate-400">课堂收集入口</span>
                     </div>
                     {renderInputSourceTabs('mobile')}
                   </div>
@@ -3094,6 +6207,7 @@ const _handleVideoAssistantMessage = useCallback((payload: {
                     <Recorder
                       onRecordingStart={handleRecordingStart}
                       onRecordingStop={handleRecordingStop}
+                      onTranscriptionError={handleRecordingTranscriptionError}
                       onTranscriptUpdate={handleTranscriptUpdate}
                       onTranscriptTextUpdate={handleTranscriptTextUpdate}
                       onTranscriptEnhanced={handleTranscriptEnhanced}
@@ -3108,7 +6222,7 @@ const _handleVideoAssistantMessage = useCallback((payload: {
                   {anchors.length > 0 && (
                     <div className="card-edu p-4 animate-slide-up">
                       <h3 className="text-sm font-semibold text-gray-900 mb-3 flex items-center gap-2">
-                        <span>📍</span>
+                        <span>!</span>
                         已标记的困惑点
                         <span className="ml-auto text-xs font-normal text-gray-400">{anchors.length} 个</span>
                       </h3>
@@ -3150,95 +6264,17 @@ const _handleVideoAssistantMessage = useCallback((payload: {
                 }}
               />
             </div>
+              )}
+            </>
           ) : (
-            /* NOTE: cleaned corrupted legacy comment. */
-            <div className="flex-1 flex items-start justify-center overflow-visible px-4 py-6 md:px-8 page-enter relative" style={{ background: 'var(--edu-bg-primary)' }}>
-              {/* 鑳屾櫙瑁呴グ */}
-              <div className="absolute top-10 right-10 w-48 h-48 opacity-20 pointer-events-none">
-                <Image
-                  src="/illustrations/learning.svg"
-                  alt=""
-                  fill
-                  sizes="192px"
-                  className="w-full h-full"
-                />
-              </div>
-              <div className="absolute bottom-10 left-10 w-32 h-32 opacity-15 pointer-events-none">
-                <Image
-                  src="/illustrations/ai-tutor.svg"
-                  alt=""
-                  fill
-                  sizes="128px"
-                  className="w-full h-full"
-                />
-              </div>
-              
-              <div className="w-full max-w-4xl mx-auto relative z-10 min-h-full flex flex-col gap-6 pb-6">
-                <div className="flex-shrink-0">{renderInputSourceTabs('desktop')}</div>
-
-            {/* NOTE: cleaned corrupted legacy comment. */}
-            <div className="relative min-h-[460px]" style={{ display: dataSource === 'live' && !showSessionHistory ? undefined : 'none' }}>
-              {/* 瑁呴グ鎻掔敾 */}
-              <div className="absolute -right-20 -top-10 w-24 h-24 opacity-30 pointer-events-none hidden lg:block">
-                <Image
-                  src="/illustrations/recording.svg"
-                  alt=""
-                  fill
-                  sizes="96px"
-                  className="w-full h-full"
-                />
-              </div>
-              <Recorder
-                onRecordingStart={handleRecordingStart}
-                onRecordingStop={handleRecordingStop}
-                onTranscriptUpdate={handleTranscriptUpdate}
-                onTranscriptTextUpdate={handleTranscriptTextUpdate}
-                onTranscriptEnhanced={handleTranscriptEnhanced}
-                onAnchorMark={handleAnchorMark}
-                contextHint={liveASRContextHint}
-              />
-            </div>
-            {renderInputSecondaryPanels('desktop')}
-            
-                {/* NOTE: cleaned corrupted legacy comment. */}
-                {anchors.length > 0 && (
-                  <div className="card-edu p-5 animate-slide-up">
-                    <h3 className="text-sm font-semibold text-gray-900 mb-4 flex items-center gap-2">
-                      <span>📍</span>
-                      已标记的困惑点
-                      <span className="ml-auto text-xs font-normal text-gray-400">{anchors.length} 个</span>
-                    </h3>
-                    <div className="space-y-2 max-h-48 overflow-y-auto">
-                      {anchors.map((anchor, index) => (
-                          <div
-                            key={anchor.id}
-                            className="flex items-center gap-3 p-3 rounded-xl transition-colors"
-                            style={{ background: 'var(--edu-bg-soft)' }}
-                          >
-                            <div className={`w-2.5 h-2.5 rounded-full ${
-                              anchor.resolved ? 'bg-mint' : 'bg-coral'
-                            }`} />
-                            <span className="text-sm font-mono text-gray-600">
-                              {formatTime(anchor.timestamp)}
-                            </span>
-                            <span className="text-sm text-gray-500">
-                              困惑点 #{index + 1}
-                            </span>
-                            {anchor.resolved && (
-                              <span className="ml-auto text-xs text-mint-600">已解决</span>
-                            )}
-                          </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </div>
+            <div className="flex-1 min-h-0 page-enter" style={{ background: 'var(--edu-bg-primary)' }}>
+              {renderMobileRecordView({ desktopShell: true })}
             </div>
           )}
         </>
       ) : (
         <>
-          {/* 妗岄潰绔竷灞€ */}
+          {/* 濡楀矂娼扮粩顖氱鐏炩偓 */}
           {!isMobile ? (
             <div
               className={`flex-1 min-h-0 flex page-enter ${videoSource ? 'overflow-visible' : 'overflow-hidden'}`}
@@ -3311,7 +6347,7 @@ const _handleVideoAssistantMessage = useCallback((payload: {
                         <div className="flex items-center justify-between mb-3">
                           <div className="flex items-center gap-2">
                             <span className="text-sm font-semibold text-gray-800">高亮时间轴</span>
-                            <span className="text-xs text-gray-400">{videoInsightItems.filter(i => !i.id.startsWith('seed-')).length} 轮对话</span>
+                            <span className="text-xs text-gray-400">{videoInsightItems.filter(i => !i.id.startsWith('seed-')).length} 条片段</span>
                           </div>
                         </div>
                         <VideoInsightTimeline
@@ -3329,8 +6365,8 @@ const _handleVideoAssistantMessage = useCallback((payload: {
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
                               </svg>
                             </div>
-                            <p className="text-sm text-gray-400 mb-1">暂无高亮</p>
-                            <p className="text-xs text-gray-300">在右侧对话后，高亮内容会出现在这里</p>
+                            <p className="text-sm text-gray-400 mb-1">暂时还没有高亮</p>
+                            <p className="text-xs text-gray-300">当右侧开始对话或标记重点后，这里会慢慢长出时间线。</p>
                           </div>
                         )}
                       </div>
@@ -3452,7 +6488,7 @@ const _handleVideoAssistantMessage = useCallback((payload: {
                             </>
                           ) : (
                             <div className="h-full overflow-y-auto p-4">
-                              {/* 鏍囪鍥版儜鎸夐挳 */}
+                              {/* 閺嶅洩顔囬崶鐗堝劀閹稿鎸?*/}
                               <button
                                 onClick={() => {
                                   handleAnchorMark(currentTime);
@@ -3462,7 +6498,7 @@ const _handleVideoAssistantMessage = useCallback((payload: {
                                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
                                 </svg>
-                                在当前位置标记困惑 ({formatTime(currentTime)})
+                                鍦ㄥ綋鍓嶄綅缃爣璁板洶鎯?({formatTime(currentTime)})
                               </button>
 
                               {anchors.length > 0 ? (
@@ -3494,7 +6530,7 @@ const _handleVideoAssistantMessage = useCallback((payload: {
                                         {anchor.resolved ? (
                                           <span className="text-xs text-green-500 ml-auto">已解决</span>
                                         ) : (
-                                          <span className="text-xs text-amber-500 ml-auto">点击对话</span>
+                                        <span className="ml-auto text-xs text-amber-500">点击对话</span>
                                         )}
                                       </div>
                                       {anchor.note && (
@@ -3510,8 +6546,8 @@ const _handleVideoAssistantMessage = useCallback((payload: {
                                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                                     </svg>
                                   </div>
-                                  <p className="text-sm text-gray-400 mb-1">暂无困惑点</p>
-                                  <p className="text-xs text-gray-300">点击上方按钮标记你不理解的地方</p>
+                                  <p className="mb-1 text-sm text-gray-400">暂时还没有困惑点</p>
+                                  <p className="text-xs text-gray-300">点击上方按钮，标记你没听懂的地方。</p>
                                 </div>
                               )}
                             </div>
@@ -3658,7 +6694,7 @@ const _handleVideoAssistantMessage = useCallback((payload: {
                             }`}
                             title="基于整节课内容与 AI 对话"
                           >
-                            <span>💬</span>
+                            <span>对话</span>
                             整节课对话
                           </button>
                           {selectedAnchor && (
@@ -3733,7 +6769,7 @@ const _handleVideoAssistantMessage = useCallback((payload: {
                           ) : (
                             <div className="h-full flex flex-col">
                               <div className="px-4 py-2 border-b flex items-center justify-between flex-shrink-0" style={{ background: 'var(--edu-bg-soft)', borderColor: 'var(--edu-border-light)' }}>
-                                <span className="text-sm font-medium text-navy">历史对话</span>
+                                <span className="text-sm font-medium text-navy">鍘嗗彶瀵硅瘽</span>
                                 {/* NOTE: cleaned corrupted legacy comment. */}
                                 <button
                                   onClick={() => {
@@ -3793,7 +6829,7 @@ const _handleVideoAssistantMessage = useCallback((payload: {
                 isHistoryActive={showConversationHistory}
               />
 
-              {/* 琛屽姩娓呭崟鎶藉眽 */}
+              {/* 鐞涘苯濮╁〒鍛礋閹惰棄鐪?*/}
               <ActionDrawer
                 isOpen={isActionDrawerOpen}
                 onClose={() => setIsActionDrawerOpen(false)}
@@ -3805,16 +6841,16 @@ const _handleVideoAssistantMessage = useCallback((payload: {
               )}
             </div>
           ) : (
-            /* 绉诲姩绔暀鑲查鏍煎竷灞€ */
+            /* 手机端主内容区 */
             <div className="flex-1 min-h-0 flex flex-col overflow-hidden" style={{ background: 'var(--edu-bg-primary)' }}>
-              {/* 鏋佺畝椤堕儴鏍忥細Logo + Tab + 鐢ㄦ埛 + 鑿滃崟 */}
+              {/* Logo + 顶部 Tab + 菜单入口 */}
               <div className="flex-shrink-0 px-4 py-2.5 flex items-center gap-2 bg-white border-b" style={{ borderColor: 'var(--edu-border-light)' }}>
                 {/* Logo */}
                 <div className="w-8 h-8 bg-gradient-to-br from-amber-400 to-amber-500 rounded-lg flex items-center justify-center flex-shrink-0">
                   <GraduationCap size={18} strokeWidth={2} className="text-white" />
                 </div>
                 
-                {/* Tab 鍒囨崲 */}
+                {/* Tab 切换区 */}
                 <div className="flex-1 flex items-center justify-center">
                   <MobileTabSwitch
                     activeTab={viewMode}
@@ -3823,7 +6859,7 @@ const _handleVideoAssistantMessage = useCallback((payload: {
                   />
                 </div>
                 
-                {/* 鐢ㄦ埛澶村儚/鐧诲綍鎸夐挳 */}
+                {/* 菜单入口 / 用户头像 */}
                 {isAuthenticated && user ? (
                   <button
                     onClick={() => setIsMenuOpen(true)}
@@ -3841,11 +6877,11 @@ const _handleVideoAssistantMessage = useCallback((payload: {
                     href="/login"
                     className="px-2.5 py-1.5 text-xs font-medium text-white bg-gradient-to-r from-amber-400 to-amber-500 rounded-lg flex-shrink-0"
                   >
-                    登录
+                    鐧诲綍
                   </a>
                 )}
                 
-                {/* 鑿滃崟鎸夐挳 */}
+                {/* 閼挎粌宕熼幐澶愭尦 */}
                 <DedaoMenuButton onClick={() => setIsMenuOpen(true)} data-onboarding="menu-button" />
               </div>
 
@@ -3988,7 +7024,7 @@ const _handleVideoAssistantMessage = useCallback((payload: {
                     }}
                   />
 
-                  {/* 鎮诞 AI 瀵硅瘽鎸夐挳 - 杩涘叆鍏ㄥ眬 AI 瀵硅瘽 */}
+                  {/* 全局 AI 入口，适合基于当前课堂继续追问。 */}
                   <MobileAIFab
                     onClick={() => {
                       setSelectedAnchor(null);  // Clear selected anchor before entering global AI chat.
@@ -4022,9 +7058,9 @@ const _handleVideoAssistantMessage = useCallback((payload: {
                     </button>
                     <span className="font-medium text-gray-900">AI 助教</span>
                     
-                    {/* 鍘嗗彶璁板綍鍒囨崲 - ChatGPT 椋庢牸鍥炬爣鎸夐挳 */}
+                    {/* 当前对话 / 历史对话切换 */}
                     <div className="ml-auto flex items-center gap-1 bg-gray-100 rounded-lg p-0.5">
-                      {/* 褰撳墠瀵硅瘽 */}
+                      {/* 当前对话 */}
                       <button
                         onClick={() => {
                           setShowConversationHistory(false);
@@ -4041,7 +7077,7 @@ const _handleVideoAssistantMessage = useCallback((payload: {
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
                         </svg>
                       </button>
-                      {/* 鍘嗗彶璁板綍 */}
+                      {/* 历史对话 */}
                       <button
                         onClick={() => setShowConversationHistory(true)}
                         className={`w-8 h-8 flex items-center justify-center rounded-md transition-all ${
@@ -4049,7 +7085,7 @@ const _handleVideoAssistantMessage = useCallback((payload: {
                             ? 'bg-white text-amber-600 shadow-sm'
                             : 'text-gray-400 hover:text-gray-600'
                         }`}
-                        title="历史对话"
+                        title="鍘嗗彶瀵硅瘽"
                       >
                         <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
@@ -4092,12 +7128,12 @@ const _handleVideoAssistantMessage = useCallback((payload: {
                   <div className="flex-1 min-h-0">
                     {showConversationHistory ? (
                       selectedHistoryConversation ? (
-                        // 缁х画鍘嗗彶瀵硅瘽
+                        // 历史对话详情
                         <div className="h-full flex flex-col">
                           <div className="px-3 py-2 bg-gray-50 border-b border-gray-100 flex items-center justify-between">
                             <span className="text-xs text-gray-600 truncate flex-1 mr-2">{selectedHistoryConversation.title}</span>
                             <div className="flex items-center gap-1">
-                              {/* 杩斿洖鍒楄〃 */}
+                              {/* 返回列表 */}
                               <button
                                 onClick={() => setSelectedHistoryConversation(null)}
                                 className="w-7 h-7 flex items-center justify-center rounded-lg text-gray-500 hover:bg-gray-100"
@@ -4135,7 +7171,7 @@ const _handleVideoAssistantMessage = useCallback((payload: {
                           </div>
                         </div>
                       ) : (
-                        // 鍘嗗彶瀵硅瘽鍒楄〃
+                        // 历史对话列表
                         <ConversationList
                           sessionId={sessionId}
                           onSelect={(conv) => setSelectedHistoryConversation(conv)}
@@ -4337,7 +7373,7 @@ const _handleVideoAssistantMessage = useCallback((payload: {
         onToggleDisplayMode={toggleWorkshopWindowDisplayMode}
       />
       
-      {/* 鐢ㄦ埛寮曞缁勪欢 */}
+      {/* 主要内容区域 */}
       <WelcomeModal
         isOpen={showWelcome}
         onStart={() => {
@@ -4374,22 +7410,110 @@ function formatTime(ms: number): string {
   return `${pad(minutes)}:${pad(seconds % 60)}`;
 }
 
+function formatRelativeCollectionTime(isoString?: string): string {
+  if (!isoString) return '刚刚';
+  const timestamp = new Date(isoString).getTime();
+  if (!Number.isFinite(timestamp)) return '刚刚';
+  const diffMs = Date.now() - timestamp;
+  const diffMinutes = Math.max(0, Math.floor(diffMs / 60000));
+
+  if (diffMinutes < 1) return '刚刚';
+  if (diffMinutes < 60) return `${diffMinutes} 分钟前`;
+
+  const diffHours = Math.floor(diffMinutes / 60);
+  if (diffHours < 24) return `${diffHours} 小时前`;
+
+  const diffDays = Math.floor(diffHours / 24);
+  if (diffDays < 7) return `${diffDays} 天前`;
+
+  return new Date(timestamp).toLocaleDateString('zh-CN', {
+    month: 'numeric',
+    day: 'numeric',
+  });
+}
+
+function buildSourcePreviewText(segments: TranscriptSegment[], maxLength = 160): string {
+  return compactText(
+    (segments || [])
+      .map((segment) => segment.text || '')
+      .join(' ')
+      .replace(/\s+/g, ' ')
+      .trim(),
+    maxLength
+  );
+}
+
+function normalizeImportedVideoSegments(payload: {
+  segments?: TranscriptSegment[];
+  sentences?: Array<{
+    id?: string;
+    text?: string;
+    beginTime?: number;
+    endTime?: number;
+    confidence?: number;
+  }>;
+}): TranscriptSegment[] {
+  if (Array.isArray(payload.segments) && payload.segments.length > 0) {
+    return payload.segments;
+  }
+
+  return (payload.sentences || []).map((item, index) => ({
+    id: item.id || `video-seg-${index}`,
+    text: String(item.text || ''),
+    startMs: Number(item.beginTime || 0),
+    endMs: Number(item.endTime || 0),
+    confidence: Number(item.confidence || 0.95),
+    isFinal: true,
+  }));
+}
+
 // NOTE: cleaned corrupted legacy comment.
 function SearchParamsReader() {
   const searchParams = useSearchParams();
   const isGuestFastEntry = searchParams.get('guest') === '1';
   const forcedWorkspaceTab = searchParams.get('workspace') === 'apps' ? 'apps' : null;
-  return <StudentAppContent isGuestFastEntry={isGuestFastEntry} forcedWorkspaceTab={forcedWorkspaceTab} />;
+  const forceMobilePreview = searchParams.get('mobile') === '1';
+  const wechatCaptureToken = searchParams.get('wechat_capture');
+
+  if (forceMobilePreview) {
+    return (
+      <div className="min-h-dvh bg-[linear-gradient(180deg,#e9edf5_0%,#dfe5ef_100%)]">
+        <div className="flex items-start justify-center px-5 pb-10 pt-6">
+          <div className="relative h-[860px] w-[400px] rounded-[44px] bg-[#0b1220] p-[10px] shadow-[0_35px_80px_rgba(15,23,42,0.32)]">
+            <div className="absolute left-1/2 top-[18px] z-20 h-7 w-32 -translate-x-1/2 rounded-full bg-[#0b1220]" />
+            <div className="relative h-full overflow-hidden rounded-[34px] bg-[#f7f3ec]">
+              <StudentAppContent
+                isGuestFastEntry={isGuestFastEntry}
+                forcedWorkspaceTab={forcedWorkspaceTab}
+                forceMobilePreview
+                wechatCaptureToken={wechatCaptureToken}
+              />
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <StudentAppContent
+      isGuestFastEntry={isGuestFastEntry}
+      forcedWorkspaceTab={forcedWorkspaceTab}
+      wechatCaptureToken={wechatCaptureToken}
+    />
+  );
 }
 
 // NOTE: cleaned corrupted legacy comment.
 export default function StudentApp() {
   return (
-    <Suspense fallback={<AppLoading message="加载中..." />}>
+    <Suspense fallback={<AppLoading message="正在加载..." />}>
       <SearchParamsReader />
     </Suspense>
   );
 }
+
+
 
 
 

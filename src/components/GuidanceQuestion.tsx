@@ -1,26 +1,34 @@
 'use client';
 
-/**
- * 引导问题组件
- * 
- * 用于展示 Dify 返回的引导问题，让学生选择选项
- * 帮助诊断学生卡点（概念/步骤/审题/计算/图像理解等）
- */
-
-import { useState } from 'react';
-import type { GuidanceQuestion as GuidanceQuestionType, GuidanceOption } from '@/types/dify';
+import type { GuidanceOption, GuidanceQuestion as GuidanceQuestionType } from '@/types/dify';
 
 interface GuidanceQuestionProps {
-  /** 引导问题数据 */
   question: GuidanceQuestionType;
-  /** 选择回调 */
   onSelect: (optionId: string, option: GuidanceOption) => void;
-  /** 是否正在加载（选择后等待响应） */
   isLoading?: boolean;
-  /** 是否禁用（已选择过） */
   disabled?: boolean;
-  /** 已选择的选项 ID */
   selectedOptionId?: string;
+}
+
+function getOptionTone(category: GuidanceOption['category'], selected: boolean) {
+  if (selected) {
+    return 'border-slate-900 bg-slate-900 text-white shadow-sm shadow-slate-900/10';
+  }
+
+  switch (category) {
+    case 'concept':
+      return 'border-sky-200 bg-sky-50 text-sky-700 hover:border-sky-300 hover:bg-sky-100';
+    case 'procedure':
+      return 'border-emerald-200 bg-emerald-50 text-emerald-700 hover:border-emerald-300 hover:bg-emerald-100';
+    case 'calculation':
+      return 'border-amber-200 bg-amber-50 text-amber-700 hover:border-amber-300 hover:bg-amber-100';
+    case 'comprehension':
+      return 'border-violet-200 bg-violet-50 text-violet-700 hover:border-violet-300 hover:bg-violet-100';
+    case 'application':
+      return 'border-rose-200 bg-rose-50 text-rose-700 hover:border-rose-300 hover:bg-rose-100';
+    default:
+      return 'border-slate-200 bg-slate-50 text-slate-700 hover:border-slate-300 hover:bg-slate-100';
+  }
 }
 
 export function GuidanceQuestion({
@@ -30,150 +38,96 @@ export function GuidanceQuestion({
   disabled = false,
   selectedOptionId,
 }: GuidanceQuestionProps) {
-  const [hoveredId, setHoveredId] = useState<string | null>(null);
-
-  // 选项分类对应的颜色（使用内联样式）- 教育暖色调
-  const categoryStyles: Record<GuidanceOption['category'], { bg: string; border: string; hoverBorder: string }> = {
-    concept: { bg: '#EBF6FF', border: '#AFDBFF', hoverBorder: '#74C0FC' },      // 天空蓝
-    procedure: { bg: '#F0FDF7', border: '#BBF7D3', hoverBorder: '#A8E6CF' },    // 薄荷绿
-    calculation: { bg: '#FFFBEB', border: '#FEEFAD', hoverBorder: '#FFD93D' },  // 向日葵黄
-    comprehension: { bg: '#FFF5E6', border: '#F5E6D3', hoverBorder: '#D4A574' }, // 暖米色（教育风格）
-    application: { bg: '#FFF7ED', border: '#FFDFB3', hoverBorder: '#FFAB5E' },  // 暖橙色
-  };
-
-  const categoryLabels: Record<GuidanceOption['category'], string> = {
-    concept: '概念理解',
-    procedure: '步骤方法',
-    calculation: '计算过程',
-    comprehension: '审题理解',
-    application: '实际应用',
-  };
+  const isLocked = disabled || isLoading;
 
   return (
-    <div 
-      className="rounded-xl p-4 border"
-      style={{
-        background: 'linear-gradient(to right, #FFF5E6 0%, #FFFBF7 100%)',
-        borderColor: '#F5E6D3'
-      }}
-    >
-      {/* 问题标题 */}
-      <div className="flex items-start gap-3 mb-4">
-        <div 
-          className="flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center"
-          style={{ background: '#D4A574' }}
-        >
-          <span className="text-white text-sm">🤔</span>
+    <div className="rounded-2xl border border-slate-200 bg-white px-4 py-4 shadow-[0_18px_40px_-32px_rgba(15,23,42,0.35)]">
+      <div className="flex items-start gap-3">
+        <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-2xl border border-slate-200 bg-slate-50 text-xs font-semibold tracking-[0.18em] text-slate-500">
+          AI
         </div>
-        <div className="flex-1">
-          <p className="text-gray-900 font-medium leading-relaxed">
-            {question.question}
-          </p>
-          {question.hint && (
-            <p className="text-sm text-gray-500 mt-1">{question.hint}</p>
-          )}
+
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-[11px] font-medium uppercase tracking-[0.18em] text-slate-500">
+              方向
+            </span>
+            <span className="text-[11px] text-slate-400">选一个最接近你现在目标的方向</span>
+          </div>
+
+          <p className="mt-2 text-sm font-medium leading-6 text-slate-900">{question.question}</p>
+
+          {question.hint ? (
+            <p className="mt-1 text-xs leading-5 text-slate-500">{question.hint}</p>
+          ) : null}
         </div>
-        <span 
-          className="text-xs px-2 py-1 rounded-full"
-          style={{ color: '#8B7355', background: '#FFF5E6' }}
-        >
-          单选
-        </span>
       </div>
 
-      {/* 选项列表 */}
-      <div className="space-y-2">
-        {question.options.map((option, index) => {
+      <div className="mt-4 flex flex-wrap gap-2">
+        {question.options.map((option) => {
           const isSelected = selectedOptionId === option.id;
-          const isHovered = hoveredId === option.id;
-          const styles = categoryStyles[option.category];
-          
+
           return (
             <button
               key={option.id}
-              onClick={() => !disabled && !isLoading && onSelect(option.id, option)}
-              onMouseEnter={() => setHoveredId(option.id)}
-              onMouseLeave={() => setHoveredId(null)}
-              disabled={disabled || isLoading}
-              className={`
-                w-full text-left p-3 rounded-lg border-2 transition-all duration-200
-                ${disabled || isLoading ? 'opacity-60 cursor-not-allowed' : 'cursor-pointer'}
-                ${isHovered && !disabled && !isLoading ? 'transform scale-[1.01] shadow-sm' : ''}
-              `}
-              style={{
-                background: isSelected ? '#FFF5E6' : styles.bg,
-                borderColor: isSelected ? '#D4A574' : (isHovered ? styles.hoverBorder : styles.border),
-                boxShadow: isSelected ? '0 0 0 2px rgba(212, 165, 116, 0.2)' : undefined
+              type="button"
+              onClick={() => {
+                if (!isLocked) {
+                  onSelect(option.id, option);
+                }
               }}
+              disabled={isLocked}
+              aria-pressed={isSelected}
+              className={[
+                'min-h-11 rounded-full border px-4 py-2 text-sm font-medium transition-all duration-200',
+                'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-300 focus-visible:ring-offset-2',
+                isLocked ? 'cursor-not-allowed opacity-60' : 'cursor-pointer',
+                getOptionTone(option.category, isSelected),
+              ].join(' ')}
             >
-              <div className="flex items-center gap-3">
-                {/* 选项序号/选中状态 */}
-                <div 
-                  className="w-6 h-6 rounded-full flex items-center justify-center text-sm font-medium"
-                  style={{
-                    background: isSelected ? '#D4A574' : '#FFFFFF',
-                    border: isSelected ? 'none' : '1px solid #D1D5DB',
-                    color: isSelected ? '#FFFFFF' : '#4B5563'
-                  }}
-                >
-                  {isSelected ? '✓' : String.fromCharCode(65 + index)}
-                </div>
-                
-                {/* 选项文本 */}
-                <span 
-                  className="flex-1"
-                  style={{ 
-                    color: isSelected ? '#5C4A3D' : '#374151',
-                    fontWeight: isSelected ? 500 : 400 
-                  }}
-                >
-                  {option.text}
-                </span>
-
-                {/* 分类标签（悬停时显示） */}
-                {isHovered && !isSelected && (
-                  <span className="text-xs text-gray-400 bg-white px-2 py-0.5 rounded">
-                    {categoryLabels[option.category]}
-                  </span>
-                )}
-              </div>
+              {option.text}
             </button>
           );
         })}
       </div>
 
-      {/* 加载状态 */}
-      {isLoading && (
-        <div className="mt-4 flex items-center justify-center gap-2" style={{ color: '#8B7355' }}>
-          <div 
-            className="animate-spin w-4 h-4 border-2 rounded-full"
-            style={{ borderColor: '#D4A574', borderTopColor: 'transparent' }}
-          />
-          <span className="text-sm">正在分析你的选择...</span>
-        </div>
-      )}
+      <div className="mt-4 flex flex-wrap items-center justify-between gap-2 border-t border-slate-100 pt-3">
+        <p className="text-xs text-slate-500">
+          {selectedOptionId
+            ? '已锁定这个方向，正在继续细化你的问题。'
+            : '如果都不完全贴合，先点最接近的一项，后面还能继续修正。'}
+        </p>
+
+        {isLoading ? (
+          <div className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs text-slate-600">
+            <span className="h-2 w-2 animate-pulse rounded-full bg-slate-500" />
+            正在顺着这个方向继续分析
+          </div>
+        ) : null}
+      </div>
     </div>
   );
 }
 
-/**
- * 引导问题骨架屏
- */
 export function GuidanceQuestionSkeleton() {
   return (
-    <div className="bg-gray-50 rounded-xl p-4 border border-gray-200 animate-pulse">
-      <div className="flex items-start gap-3 mb-4">
-        <div className="w-8 h-8 bg-gray-200 rounded-full" />
+    <div className="rounded-2xl border border-slate-200 bg-white px-4 py-4 shadow-[0_18px_40px_-32px_rgba(15,23,42,0.35)] animate-pulse">
+      <div className="flex items-start gap-3">
+        <div className="h-10 w-10 rounded-2xl bg-slate-100" />
         <div className="flex-1 space-y-2">
-          <div className="h-4 bg-gray-200 rounded w-3/4" />
-          <div className="h-4 bg-gray-200 rounded w-1/2" />
+          <div className="h-3 w-24 rounded-full bg-slate-100" />
+          <div className="h-4 w-3/4 rounded-full bg-slate-100" />
+          <div className="h-3 w-1/2 rounded-full bg-slate-100" />
         </div>
       </div>
-      <div className="space-y-2">
-        {[1, 2, 3].map((i) => (
-          <div key={i} className="h-12 bg-gray-200 rounded-lg" />
+
+      <div className="mt-4 flex flex-wrap gap-2">
+        {[0, 1, 2].map((index) => (
+          <div key={index} className="h-11 w-32 rounded-full bg-slate-100" />
         ))}
       </div>
+
+      <div className="mt-4 h-3 w-2/3 rounded-full bg-slate-100" />
     </div>
   );
 }

@@ -1,35 +1,29 @@
 /**
- * 获取当前用户信息 API
+ * 获取当前用户信息
  * GET /api/auth/me
- * PATCH /api/auth/me - 更新用户资料
- * 
- * 支持跨服务器自动注册：当用户在新服务器（如香港服务器）不存在时，
- * 自动根据 Token 信息创建用户，实现无缝切换
+ * PATCH /api/auth/me
+ *
+ * 兼容跨服务环境：
+ * 当用户通过同一套 Token 访问新的部署环境时，
+ * 如果当前数据库里还没有该用户，会自动补注册。
  */
 
 import { NextRequest, NextResponse } from 'next/server';
 import { authService } from '@/lib/services/auth-service';
 import prisma from '@/lib/prisma';
+import workspaceService from '@/lib/services/workspace-service';
 import type { UpdateProfileRequest, User, UserRole, UserStatus } from '@/types/user';
 
-/**
- * 从请求头获取并验证令牌
- */
 function getAuthPayload(request: NextRequest) {
   const authHeader = request.headers.get('Authorization');
   if (!authHeader?.startsWith('Bearer ')) {
     return null;
   }
-  
+
   const token = authHeader.slice(7);
   return authService.verifyToken(token);
 }
 
-/**
- * 自动注册跨服务器用户
- * 当用户从其他服务器（如深圳）切换到新服务器（如香港）时，
- * 根据 Token 信息自动创建用户账号
- */
 async function autoRegisterUser(payload: {
   sub: string;
   username?: string;
@@ -39,7 +33,6 @@ async function autoRegisterUser(payload: {
   role?: string;
 }): Promise<User | null> {
   try {
-    // 从 payload 提取用户信息
     const userId = payload.sub;
     const username = payload.username || `user_${userId.slice(0, 8)}`;
     const nickname = payload.nickname || username;
@@ -52,28 +45,25 @@ async function autoRegisterUser(payload: {
       payload.role === 'admin'
         ? payload.role
         : 'student';
-    
+
     console.log('[AutoRegister] 自动创建用户:', { userId, username, nickname });
-    
-    // 创建用户（无密码，通过 Token 登录）
+
     const newUser = await prisma.user.create({
       data: {
-        id: userId,        // 保持相同 ID，确保跨服务器一致性
+        id: userId,
         username,
         nickname,
         email,
         phone,
         role,
         status: 'active',
-        // 不设置密码，用户只能通过 Token 登录
         passwordHash: null,
         salt: null,
       },
     });
-    
+
     console.log('[AutoRegister] 用户创建成功:', newUser.id);
-    
-    // 转换为 API 返回格式
+
     return {
       id: newUser.id,
       username: newUser.username,
@@ -93,44 +83,42 @@ async function autoRegisterUser(payload: {
   }
 }
 
-/**
- * 获取当前用户信息
- * 支持跨服务器自动注册
- */
 export async function GET(request: NextRequest) {
   try {
     const payload = getAuthPayload(request);
-    
+
     if (!payload) {
       return NextResponse.json(
         { success: false, error: '未授权' },
         { status: 401 }
       );
     }
-    
+
     let user = await authService.getUserById(payload.sub);
-    
-    // 用户不存在？尝试自动注册（跨服务器场景）
+
     if (!user) {
       console.log('[Auth/Me] 用户不存在，尝试自动注册:', payload.sub);
       user = await autoRegisterUser(payload);
-      
+
       if (!user) {
         return NextResponse.json(
-          { success: false, error: '用户不存在且自动注册失败' },
+          { success: false, error: '用户不存在，且自动注册失败' },
           { status: 404 }
         );
       }
     }
-    
-    // 判断是否为自动注册的用户（1分钟内创建的）
-    const autoRegistered = typeof user.createdAt === 'string' 
-      ? new Date(user.createdAt).getTime() > Date.now() - 60000
-      : false;
-    
+
+    const autoRegistered =
+      typeof user.createdAt === 'string'
+        ? new Date(user.createdAt).getTime() > Date.now() - 60000
+        : false;
+
+    const workspace = await workspaceService.getDefaultWorkspace(user.id);
+
     return NextResponse.json({
       success: true,
       user,
+      workspace,
       permissions: payload.permissions,
       autoRegistered,
     });
@@ -143,31 +131,28 @@ export async function GET(request: NextRequest) {
   }
 }
 
-/**
- * 更新用户资料
- */
 export async function PATCH(request: NextRequest) {
   try {
     const payload = getAuthPayload(request);
-    
+
     if (!payload) {
       return NextResponse.json(
         { success: false, error: '未授权' },
         { status: 401 }
       );
     }
-    
+
     const body: UpdateProfileRequest = await request.json();
-    
+
     const user = await authService.updateProfile(payload.sub, body);
-    
+
     if (!user) {
       return NextResponse.json(
         { success: false, error: '更新失败' },
         { status: 400 }
       );
     }
-    
+
     return NextResponse.json({
       success: true,
       user,

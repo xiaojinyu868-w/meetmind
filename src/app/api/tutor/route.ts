@@ -14,7 +14,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { chat, chatStream, DEFAULT_MODEL_ID, type ChatMessage, type MultimodalContent } from '@/lib/services/llm-service';
 import { formatTimeRange, formatTimestamp, getSegmentsInRange, type Segment } from '@/lib/services/longcut-utils';
 import { getDifyService, isDifyEnabled, type DifyWorkflowInput } from '@/lib/services/dify-service';
-import type { ExtendedTutorRequest, ExtendedTutorResponse, GuidanceQuestion, Citation } from '@/types/dify';
+import type { ExtendedTutorRequest, ExtendedTutorResponse, GuidanceOption, GuidanceQuestion, Citation } from '@/types/dify';
 import { applyRateLimit } from '@/lib/utils/rate-limit';
 import { summaryService } from '@/lib/services/summary-service';
 import { webSearch } from '@/lib/services/web-search-service';
@@ -197,7 +197,7 @@ function buildAutomaticSupportPolicyPrompt(supportReferences: SupportReference[]
 
 function isDocumentReferenceQuestion(question: string): boolean {
   if (!question) return false;
-  return /(文档|资料|讲义|课件|pdf|docx|导入|上传|参考|引用|source|document|material)/i.test(question);
+  return /(文档|资料|讲义|课件|pdf|docx|ppt|pptx|导入|上传|参考|引用|source|document|material)/i.test(question);
 }
 
 function extractSemanticKeywords(text: string): string[] {
@@ -634,8 +634,13 @@ ${cachedSummary.keyDifficulties.map(d => `- ${d}`).join('\n')}
     
     // ===== Mock 模式：Dify 未配置时生成模拟数据 =====
     // 引导问题始终生成（核心交互方式）
-    if (!guidanceQuestion) {
-      guidanceQuestion = generateMockGuidanceQuestion(contextText);
+    if (!guidanceQuestion && !globalMode) {
+      guidanceQuestion = await generateGuidanceQuestion({
+        context: contextText,
+        modelId: model,
+        studentQuestion,
+        selectedOptionId: selected_option_id,
+      });
     }
     
     // 联网搜索：使用真正的搜索服务
@@ -1101,11 +1106,209 @@ function parseTimeToMsInternal(time: string): number {
   return 0;
 }
 
+type GuidanceGenerationInput = {
+  context: string;
+  modelId: string;
+  studentQuestion?: string;
+  selectedOptionId?: string;
+};
+
+type GuidanceDraft = {
+  id?: unknown;
+  question?: unknown;
+  hint?: unknown;
+  options?: Array<{
+    id?: unknown;
+    text?: unknown;
+    category?: unknown;
+  }>;
+};
+
+const GUIDANCE_CATEGORIES: GuidanceOption['category'][] = [
+  'concept',
+  'procedure',
+  'calculation',
+  'comprehension',
+  'application',
+];
+
+async function generateGuidanceQuestion({
+  context,
+  modelId,
+  studentQuestion,
+  selectedOptionId,
+}: GuidanceGenerationInput): Promise<GuidanceQuestion> {
+  try {
+    const llmQuestion = await generateLlmGuidanceQuestion({
+      context,
+      modelId,
+      studentQuestion,
+      selectedOptionId,
+    });
+
+    if (llmQuestion) {
+      return llmQuestion;
+    }
+  } catch (error) {
+    console.error('[Tutor API] Guidance generation fallback:', error);
+  }
+
+  return generateRuleBasedGuidanceQuestion(context, studentQuestion);
+}
+
+async function generateLlmGuidanceQuestion({
+  context,
+  modelId,
+  studentQuestion,
+  selectedOptionId,
+}: GuidanceGenerationInput): Promise<GuidanceQuestion | null> {
+  const contextSnippet = buildGuidanceContextSnippet(context);
+  const userSignal = (studentQuestion || '').trim();
+  const isFollowup = Boolean(selectedOptionId || userSignal);
+
+  const response = await chat(
+    [
+      {
+        role: 'system',
+        content: `你是学习场景里的“意图澄清器”，你的任务不是回答问题，而是把学生当前模糊的诉求压缩成一个下一步最有价值的澄清问题。
+
+请严格输出 JSON，不要输出 markdown，不要解释。
+
+要求：
+1. 只生成 1 个问题和 2-4 个可点击选项。
+2. 问题必须自然、简短、像助教在继续追问，不要做成考试或问卷。
+3. 选项必须短、明确、互相区分，适合做按钮，避免“其他”“都可以”这类空话。
+4. 如果已经有学生输入或已选方向，就继续往那个方向细化，不要重复第一轮分类。
+5. 如果任务更像在选择讲解方式，就可以给“先讲直觉 / 先推公式 / 先看例子 / 先讲应用”这类选项。
+6. category 只能是：concept、procedure、calculation、comprehension、application。
+
+输出格式：
+{
+  "id": "guidance-xxx",
+  "question": "一句追问",
+  "hint": "可选，一句很短的提示",
+  "options": [
+    { "id": "opt-1", "text": "按钮文案", "category": "concept" }
+  ]
+}`,
+      },
+      {
+        role: 'user',
+        content: `【课堂上下文】
+${contextSnippet}
+
+【学生当前输入】
+${userSignal || '（暂时还没有额外输入）'}
+
+【当前阶段】
+${isFollowup ? '继续细化，已经有学生方向或追问' : '第一轮澄清，先缩小问题范围'}
+
+请输出最适合当前场景的一轮意图澄清题。`,
+      },
+    ],
+    modelId,
+    {
+      temperature: 0.25,
+      maxTokens: 480,
+      responseFormat: 'json_object',
+    }
+  );
+
+  return normalizeGuidanceQuestion(parseJsonObject(response.content));
+}
+
+function buildGuidanceContextSnippet(context: string): string {
+  const compact = context
+    .split('\n')
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .join('\n');
+
+  if (compact.length <= 2200) return compact;
+  return `${compact.slice(0, 900)}\n...\n${compact.slice(-1200)}`;
+}
+
+function parseJsonObject(content: string): unknown {
+  try {
+    return JSON.parse(content);
+  } catch {
+    const objectMatch = content.match(/\{[\s\S]*\}$/);
+    if (!objectMatch) return null;
+    try {
+      return JSON.parse(objectMatch[0]);
+    } catch {
+      return null;
+    }
+  }
+}
+
+function normalizeGuidanceQuestion(payload: unknown): GuidanceQuestion | null {
+  if (!payload || typeof payload !== 'object') return null;
+
+  const draft = payload as GuidanceDraft;
+  const question = sanitizeGuidanceText(draft.question, 60);
+  const hint = sanitizeGuidanceText(draft.hint, 48);
+  const rawOptions = Array.isArray(draft.options) ? draft.options : [];
+
+  const seenTexts = new Set<string>();
+  const options = rawOptions
+    .map((option, index) => {
+      const text = sanitizeGuidanceText(option?.text, 28);
+      if (!text) return null;
+
+      const normalizedKey = text.toLowerCase();
+      if (seenTexts.has(normalizedKey)) return null;
+      seenTexts.add(normalizedKey);
+
+      return {
+        id: sanitizeGuidanceText(option?.id, 24) || `opt-${index + 1}`,
+        text,
+        category: normalizeGuidanceCategory(option?.category, text),
+      } satisfies GuidanceOption;
+    })
+    .filter((option): option is GuidanceOption => Boolean(option))
+    .slice(0, 4);
+
+  if (!question || options.length < 2) return null;
+
+  return {
+    id: sanitizeGuidanceText(draft.id, 32) || 'guidance-clarify',
+    question,
+    type: 'single_choice',
+    options,
+    hint: hint || undefined,
+  };
+}
+
+function sanitizeGuidanceText(value: unknown, maxLength: number): string {
+  if (typeof value !== 'string') return '';
+  const normalized = value
+    .replace(/[\r\n]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .replace(/^["'“”‘’]+|["'“”‘’]+$/g, '')
+    .trim();
+
+  if (!normalized) return '';
+  if (normalized.length <= maxLength) return normalized;
+  return `${normalized.slice(0, maxLength - 1).trim()}…`;
+}
+
+function normalizeGuidanceCategory(value: unknown, optionText: string): GuidanceOption['category'] {
+  if (typeof value === 'string' && GUIDANCE_CATEGORIES.includes(value as GuidanceOption['category'])) {
+    return value as GuidanceOption['category'];
+  }
+
+  if (/计算|代入|求值|算|公式/.test(optionText)) return 'calculation';
+  if (/步骤|推导|过程|怎么做|拆开/.test(optionText)) return 'procedure';
+  if (/应用|例子|场景|对比|未来|实际/.test(optionText)) return 'application';
+  if (/听不清|读不懂|跟不上|框架|脉络|回顾/.test(optionText)) return 'comprehension';
+  return 'concept';
+}
+
 /**
- * 生成模拟的引导问题（Dify 未配置时使用）
- * 根据具体的困惑点录音内容自动生成精准选项
+ * 规则回退的引导问题
  */
-function generateMockGuidanceQuestion(context: string): GuidanceQuestion {
+function generateRuleBasedGuidanceQuestion(context: string, studentQuestion?: string): GuidanceQuestion {
   // 分析上下文内容，提取关键信息
   const lines = context.split('\n').filter(l => l.trim());
   
@@ -1288,6 +1491,32 @@ function generateMockGuidanceQuestion(context: string): GuidanceQuestion {
     };
   }
   
+  if (studentQuestion?.trim()) {
+    return {
+      id: 'guidance-followup-default',
+      question: '你更希望我顺着哪个角度继续帮你？',
+      type: 'single_choice',
+      options: [
+        {
+          id: 'opt-1',
+          text: '先把核心概念讲透',
+          category: 'concept',
+        },
+        {
+          id: 'opt-2',
+          text: '先按步骤带我推一遍',
+          category: 'procedure',
+        },
+        {
+          id: 'opt-3',
+          text: '先用例子或应用解释',
+          category: 'application',
+        },
+      ],
+      hint: '选一个最接近你想继续展开的方向',
+    };
+  }
+
   // 默认场景：通用引导问题
   // 尝试从上下文中提取关键词来生成更相关的问题
   const keywords = extractKeywords(fullText);

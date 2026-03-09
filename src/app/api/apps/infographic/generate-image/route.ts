@@ -76,6 +76,7 @@ export async function POST(request: NextRequest) {
       sessionId,
       appKey,
       requestId: result.requestId,
+      model: result.model,
       imageUrl,
     });
   } catch (error) {

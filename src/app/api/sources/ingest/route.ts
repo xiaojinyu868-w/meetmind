@@ -19,6 +19,8 @@ const SUPPORTED_EXTENSIONS = new Set([
   'htm',
   'pdf',
   'docx',
+  'ppt',
+  'pptx',
 ]);
 
 type SourceKind = 'text' | 'document';
@@ -463,7 +465,7 @@ async function extractDocumentText(file: File, extension: string): Promise<strin
     return extractPlainText(file);
   }
 
-  if (extension === 'pdf' || extension === 'docx') {
+  if (extension === 'pdf' || extension === 'docx' || extension === 'ppt' || extension === 'pptx') {
     try {
       return await parseDocumentWithDashScope(file);
     } catch (error) {
@@ -532,7 +534,7 @@ export async function POST(request: NextRequest) {
 
     const extension = getExtension(file.name);
     if (!extension || !SUPPORTED_EXTENSIONS.has(extension)) {
-      return jsonError('暂不支持该文档类型，请使用 txt/md/csv/json/html/pdf/docx', 400, 'FILE_UNSUPPORTED');
+      return jsonError('暂不支持该文档类型，请使用 txt/md/csv/json/html/pdf/docx/ppt/pptx', 400, 'FILE_UNSUPPORTED');
     }
 
     const text = await extractDocumentText(file, extension);
