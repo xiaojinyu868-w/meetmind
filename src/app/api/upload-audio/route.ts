@@ -156,8 +156,7 @@ export async function POST(request: NextRequest) {
     console.log('[Upload API] Saved file:', finalFilePath, 'size:', stats.size);
     
     // 构建可访问的 URL
-    // 注意：这是本地开发 URL，生产环境需要使用公网 URL
-    const host = request.headers.get('host') || 'localhost:3001';
+    const host = request.headers.get('x-forwarded-host') || request.headers.get('host') || 'localhost:3001';
     const protocol = request.headers.get('x-forwarded-proto') || 'http';
     const fileUrl = `${protocol}://${host}/temp-audio/${finalFileName}`;
     

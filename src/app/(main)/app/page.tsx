@@ -3741,10 +3741,17 @@ const _handleVideoAssistantMessage = useCallback((payload: {
         if (captures.length > 0) {
           setSourceItems((prev) => {
             const existingIds = new Set(prev.map((item) => item.id));
+            // 也按 sourceKey 去重，防止 wechat_capture 导入的消息和全量加载重复
+            const existingSourceKeys = new Set(
+              prev
+                .filter((item) => item.id.startsWith('wechat-'))
+                .map((item) => `wechat:${item.id.replace('wechat-', '')}`)
+            );
             const next = [...prev];
             for (const item of captures) {
               const id = `workspace-${item.id}`;
               if (existingIds.has(id)) continue;
+              if (item.sourceKey && existingSourceKeys.has(item.sourceKey)) continue;
               next.push({
                 id,
                 type: inferWorkspaceCaptureSourceType(item),

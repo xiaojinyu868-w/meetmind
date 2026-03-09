@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { deriveWechatInboxIntelligence } from '@/lib/services/wechat-inbox-service';
 import workspaceContextService from '@/lib/services/workspace-context-service';
+import { downloadWechatImage, downloadWechatMedia } from '@/lib/services/wechat-media-service';
 import {
   buildWechatTextReply,
   isWechatMpConfigured,
@@ -57,8 +58,11 @@ function getWechatH5BaseUrl(request: NextRequest): string {
   return `${protocol}://${host}`;
 }
 
-function buildAckText(baseReply: string, captureUrl: string): string {
-  return `${baseReply}\n查看这条收集：${captureUrl}\n如果要补 PDF、课件或更多材料，点进去继续。`;
+function buildAckText(baseReply: string, captureUrl: string, isBound: boolean): string {
+  if (isBound) {
+    return `${baseReply}\n查看：${captureUrl}`;
+  }
+  return `${baseReply}\n查看这条收集：${captureUrl}\n首次使用？点上面的链接绑定你的账号，以后发的内容都会自动进入收集流。`;
 }
 
 export async function GET(request: NextRequest) {
@@ -110,7 +114,7 @@ export async function POST(request: NextRequest) {
           buildWechatTextReply(
             openId,
             developerId,
-            buildAckText(existing.replyText || normalized.replyText || '已经收到了。', captureUrl)
+            buildAckText(existing.replyText || normalized.replyText || '已经收到了。', captureUrl, existing.bindingStatus === 'bound')
           )
         );
       }
@@ -153,9 +157,42 @@ export async function POST(request: NextRequest) {
       await workspaceContextService.syncWechatInboxMessageArtifacts(linkToken);
     }
 
+    // 异步下载媒体文件到本地持久化（不阻塞回复）
+    void (async () => {
+      try {
+        let localMediaUrl: string | null = null;
+
+        if (normalized.msgType === 'image' && normalized.mediaUrl) {
+          // 图片：直接下载 PicUrl（无需 access_token）
+          localMediaUrl = await downloadWechatImage(normalized.mediaUrl, linkToken);
+        } else if (normalized.msgType === 'voice' && normalized.mediaId) {
+          // 语音：需要 access_token（认证后可用）
+          localMediaUrl = await downloadWechatMedia(normalized.mediaId, linkToken, 'voice');
+        }
+
+        if (localMediaUrl) {
+          // 更新 DB 中的 mediaUrl 为本地持久化路径
+          await prisma.wechatInboxMessage.update({
+            where: { linkToken },
+            data: { mediaUrl: localMediaUrl },
+          });
+
+          // 同步更新 WorkspaceCapture 的 mediaUrl
+          if (intelligence.workspaceId) {
+            await prisma.workspaceCapture.updateMany({
+              where: { sourceKey: `wechat:${linkToken}` },
+              data: { mediaUrl: `${baseUrl}${localMediaUrl}` },
+            });
+          }
+        }
+      } catch (err) {
+        console.error('[wechat-mp] async media download failed:', err);
+      }
+    })();
+
     const captureUrl = `${baseUrl}/wechat/capture/${linkToken}`;
     return xmlResponse(
-      buildWechatTextReply(openId, developerId, buildAckText(normalized.replyText, captureUrl))
+      buildWechatTextReply(openId, developerId, buildAckText(normalized.replyText, captureUrl, intelligence.bindingStatus === 'bound'))
     );
   } catch (error) {
     console.error('wechat mp ingest failed:', error);

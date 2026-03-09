@@ -7,6 +7,20 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { wechatAuthService } from '@/lib/services/wechat-auth-service';
 
+function resolveWechatRedirectUri(request: NextRequest, explicitRedirectUri?: string | null): string | undefined {
+  const fromQuery = explicitRedirectUri?.trim();
+  if (fromQuery) return fromQuery;
+
+  const fromEnv = process.env.WECHAT_REDIRECT_URI?.trim();
+  if (fromEnv) return fromEnv;
+
+  const host = request.headers.get('x-forwarded-host') || request.headers.get('host');
+  if (!host) return undefined;
+
+  const protocol = request.headers.get('x-forwarded-proto') || 'http';
+  return `${protocol}://${host}/api/auth/wechat/callback`;
+}
+
 /**
  * 获取微信授权 URL
  */
@@ -21,7 +35,7 @@ export async function GET(request: NextRequest) {
     }
     
     const { searchParams } = new URL(request.url);
-    const redirectUri = searchParams.get('redirect_uri') || undefined;
+    const redirectUri = resolveWechatRedirectUri(request, searchParams.get('redirect_uri'));
     const type = searchParams.get('type') || 'qrconnect'; // qrconnect 或 oauth
     
     let authUrl: string;
