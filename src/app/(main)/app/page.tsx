@@ -537,6 +537,11 @@ function resolveSourceItemSourceKey(item: SourceIngestItem): string | null {
 
 function buildWorkspaceCaptureSourceItem(item: WorkspaceCaptureMessage): SourceIngestItem {
   const type = inferWorkspaceCaptureSourceType(item);
+  const metadata = item.metadata && typeof item.metadata === 'object' ? item.metadata as Record<string, unknown> : null;
+  const thumbnailUrl =
+    typeof metadata?.thumbnailUrl === 'string' && metadata.thumbnailUrl.trim()
+      ? metadata.thumbnailUrl.trim()
+      : undefined;
 
   return {
     id: `workspace-${item.id}`,
@@ -545,12 +550,26 @@ function buildWorkspaceCaptureSourceItem(item: WorkspaceCaptureMessage): SourceI
     role: inferWorkspaceCaptureRole(item),
     title: item.title,
     preview: compactText(item.previewText || item.title, 180),
-    previewUrl: type === 'image' ? item.mediaUrl || undefined : undefined,
+    previewUrl:
+      type === 'image'
+        ? item.mediaUrl || undefined
+        : type === 'video'
+          ? thumbnailUrl
+          : undefined,
     mediaUrl: type === 'audio' || type === 'video' ? item.mediaUrl || undefined : undefined,
     attachmentUrl: item.sourceUrl || undefined,
     segmentCount: 1,
     addedAt: item.occurredAt || item.createdAt,
     origin: 'user',
+    sessionId:
+      metadata && typeof metadata.sessionId === 'string'
+        ? metadata.sessionId
+        : undefined,
+    durationMs:
+      metadata && typeof metadata.duration === 'number'
+        ? metadata.duration
+        : undefined,
+    reviewable: type === 'audio' || type === 'video',
   };
 }
 
@@ -1668,6 +1687,114 @@ function StudentAppContent({
     return true;
   }, [clearSummary, clearTopics]);
 
+  const restoreReviewFromCollectionFallback = useCallback(async (
+    item: SourceIngestItem
+  ): Promise<boolean> => {
+    if (!item.sessionId) return false;
+
+    const transcripts = await db.transcripts
+      .where('sessionId')
+      .equals(item.sessionId)
+      .toArray();
+    if (!transcripts.length) return false;
+
+    const sortedTranscripts = transcripts.sort((a, b) => a.startMs - b.startMs);
+    const loadedSegments: TranscriptSegment[] = sortedTranscripts.map((entry, index) => ({
+      id: `fallback-${entry.startMs}-${index}`,
+      text: entry.text,
+      startMs: entry.startMs,
+      endMs: entry.endMs,
+      confidence: entry.confidence,
+      isFinal: entry.isFinal,
+    }));
+
+    const loadedAnchors = await db.anchors.where('sessionId').equals(item.sessionId).toArray();
+    const anchorsWithResolved: Anchor[] = loadedAnchors.map((anchor) => ({
+      id: anchor.id?.toString() || '',
+      sessionId: anchor.sessionId,
+      studentId: '',
+      timestamp: anchor.timestamp,
+      type: anchor.type,
+      resolved: anchor.status === 'resolved',
+      cancelled: false,
+      note: anchor.note,
+      aiExplanation: anchor.aiExplanation,
+      createdAt: anchor.createdAt.toISOString(),
+    }));
+
+    setSessionId(item.sessionId);
+    sessionIdRef.current = item.sessionId;
+    setViewMode('review');
+    setSegments(loadedSegments);
+    segmentsRef.current = loadedSegments;
+    liveSegmentsRef.current = loadedSegments;
+    setAnchors(anchorsWithResolved);
+    setSelectedAnchor(null);
+    setShowSessionHistory(false);
+    setShowConversationHistory(false);
+    setSelectedHistoryConversation(null);
+    setActionItems([]);
+    clearTopics();
+    clearSummary();
+    setNotes([]);
+    setCurrentTime(0);
+
+    const inferredDuration = Math.max(
+      item.durationMs || 0,
+      loadedSegments[loadedSegments.length - 1]?.endMs || 0
+    );
+    setSessionMediaDurationMs(inferredDuration);
+
+    if (item.type === 'video') {
+      const detected = item.attachmentUrl ? parseVideoLink(item.attachmentUrl) : null;
+      const restoredSource: ImportedVideoSource = {
+        provider: detected?.provider || 'generic',
+        providerLabel: detected?.providerLabel || 'Web Video',
+        originalUrl: item.attachmentUrl || item.mediaUrl || '',
+        embedUrl: detected?.embedUrl,
+        playableUrl: item.mediaUrl || item.attachmentUrl || undefined,
+        thumbnailUrl: item.previewUrl,
+        title: item.title,
+        durationSec: inferredDuration > 0 ? inferredDuration / 1000 : undefined,
+      };
+      setVideoSource(restoredSource);
+      setDataSource('video');
+      setVideoWorkspaceTab('chat');
+      setVideoInsightItems(buildSeedVideoInsights(loadedSegments));
+      setActiveVideoInsightId(buildSeedVideoInsights(loadedSegments)[0]?.id || null);
+      setAudioBlob(null);
+      setAudioUrl(null);
+    } else {
+      setVideoSource(null);
+      setDataSource('live');
+      setVideoWorkspaceTab('chat');
+      setVideoInsightItems([]);
+      setActiveVideoInsightId(null);
+      setAudioBlob(null);
+      setAudioUrl(item.mediaUrl || null);
+    }
+
+    setReviewTab('timeline');
+    setShowTranscriptBar(false);
+    setVideoSeekNonce(0);
+    setVideoPlayNonce(0);
+
+    const fallbackTimeline = memoryService.buildTimeline(
+      item.sessionId,
+      loadedSegments,
+      anchorsWithResolved,
+      {
+        subject: UIConfig.defaultSubject,
+        teacher: UIConfig.defaultTeacher || 'Teacher',
+        date: new Date().toISOString().split('T')[0],
+      }
+    );
+    setTimeline(fallbackTimeline);
+    memoryService.save(fallbackTimeline);
+
+    return true;
+  }, [clearSummary, clearTopics]);
+
   // NOTE: cleaned corrupted legacy comment.
   // Optimize init path via parallel loading and batched reads.
   // Performance: Guest fast-entry skips splash and marks app ready immediately;
@@ -2218,7 +2345,7 @@ function StudentAppContent({
     setShowMobileRecorder(false);
     setShowCollectionPulsePreview(false);
 
-    if (item.sessionId && item.sessionId !== sessionId && item.reviewable) {
+    if (item.sessionId && item.reviewable) {
       try {
         const restored = await restoreReviewSession(item.sessionId, {
           reviewTab: 'timeline',
@@ -2230,7 +2357,16 @@ function StudentAppContent({
           return;
         }
       } catch (error) {
-        console.error('从收集流进入复习失败:', error);
+        console.error('从收集流恢复复习态失败，将尝试回退恢复:', error);
+      }
+
+      try {
+        const restoredFromFallback = await restoreReviewFromCollectionFallback(item);
+        if (restoredFromFallback) {
+          return;
+        }
+      } catch (fallbackError) {
+        console.error('从收集流回退恢复复习态失败:', fallbackError);
       }
     }
 
@@ -2243,10 +2379,15 @@ function StudentAppContent({
       }
     }
 
+    if (item.reviewable) {
+      setSourceImportError('这条内容还没准备好进入复习，稍后再试一次。');
+      return;
+    }
+
     await handleViewModeChange('review');
     setReviewTab('timeline');
     setVideoWorkspaceTab(item.type === 'video' ? 'chat' : 'chat');
-  }, [audioBlob, handleViewModeChange, restoreReviewSession, sessionId]);
+  }, [audioBlob, handleViewModeChange, restoreReviewFromCollectionFallback, restoreReviewSession]);
 
   useEffect(() => {
     if (isGuestFastEntry) return;
@@ -2939,6 +3080,11 @@ const _handleVideoAssistantMessage = useCallback((payload: {
         role: 'primary',
         title: params.sourceTitle,
         preview: buildSourcePreviewText(normalizedSegments, 180),
+        previewUrl: params.sourceType === 'video' ? params.videoSource?.thumbnailUrl : undefined,
+        mediaUrl: params.sourceType === 'video'
+          ? params.videoSource?.playableUrl || params.videoSource?.originalUrl
+          : params.mediaUrl,
+        attachmentUrl: params.sourceType === 'video' ? params.videoSource?.originalUrl : undefined,
         segmentCount: normalizedSegments.length,
         status: 'ready',
         statusText: undefined,
@@ -2954,6 +3100,11 @@ const _handleVideoAssistantMessage = useCallback((payload: {
         role: 'primary',
         title: params.sourceTitle,
         preview: buildSourcePreviewText(normalizedSegments, 180),
+        previewUrl: params.sourceType === 'video' ? params.videoSource?.thumbnailUrl : undefined,
+        mediaUrl: params.sourceType === 'video'
+          ? params.videoSource?.playableUrl || params.videoSource?.originalUrl
+          : params.mediaUrl,
+        attachmentUrl: params.sourceType === 'video' ? params.videoSource?.originalUrl : undefined,
         segmentCount: normalizedSegments.length,
         keepPrevious: hasExisting,
         origin: 'user',
@@ -2981,6 +3132,13 @@ const _handleVideoAssistantMessage = useCallback((payload: {
           sessionId: nextSessionId,
           segmentCount: normalizedSegments.length,
           duration: sourceDurationMs || persistedDuration,
+          provider: params.videoSource?.provider,
+          providerLabel: params.videoSource?.providerLabel,
+          originalUrl: params.videoSource?.originalUrl,
+          embedUrl: params.videoSource?.embedUrl,
+          playableUrl: params.videoSource?.playableUrl,
+          thumbnailUrl: params.videoSource?.thumbnailUrl,
+          sourceMode: params.videoSource?.sourceMode,
         },
       });
 
@@ -3061,7 +3219,10 @@ const _handleVideoAssistantMessage = useCallback((payload: {
     memoryService.save(nextTimeline);
   }, [appendSourceItem, clearSummary, clearTopics, persistCaptureToWorkspace, studentId, updateSourceItem, user?.id]);
 
-  const handleVideoImportReady = useCallback(async (result: ImportedVideoResult) => {
+  const handleVideoImportReady = useCallback(async (
+    result: ImportedVideoResult,
+    options?: { sourceItemId?: string }
+  ) => {
     const importedSegments = Array.isArray(result.segments) ? result.segments : [];
     if (importedSegments.length === 0) {
       toast.warning('视频已导入，但转写为空，请更换视频或重试。');
@@ -3073,22 +3234,29 @@ const _handleVideoAssistantMessage = useCallback((payload: {
       sourceType: 'video',
       sourceTitle: result.source.title || '视频链接',
       videoSource: result.source,
+      sourceItemId: options?.sourceItemId,
     });
   }, [ingestTranscriptSegments]);
 
   const transcribeAudioFile = useCallback(async (file: File, contextHint: string): Promise<TranscriptSegment[]> => {
-    const formData = new FormData();
-    formData.append('audio', file);
-    if (contextHint.trim()) {
-      formData.append('context', contextHint.trim());
-    }
-    const response = await fetch('/api/transcribe-turbo', {
+    const createFormData = () => {
+      const formData = new FormData();
+      formData.append('audio', file);
+      if (contextHint.trim()) {
+        formData.append('context', contextHint.trim());
+      }
+      return formData;
+    };
+
+    let response = await fetch('/api/transcribe', {
       method: 'POST',
-      body: formData,
+      body: createFormData(),
     });
-    const payload = await readJsonApiResponse<{
+
+    let payload = await readJsonApiResponse<{
       success?: boolean;
       error?: string;
+      code?: string;
       segments?: TranscriptSegment[];
       sentences?: Array<{
         id?: string;
@@ -3097,6 +3265,26 @@ const _handleVideoAssistantMessage = useCallback((payload: {
         endTime?: number;
       }>;
     }>(response, '音频转写失败');
+
+    if (!response.ok && payload.code === 'ASR_PUBLIC_HOST_MISSING') {
+      response = await fetch('/api/transcribe-turbo', {
+        method: 'POST',
+        body: createFormData(),
+      });
+      payload = await readJsonApiResponse<{
+        success?: boolean;
+        error?: string;
+        code?: string;
+        segments?: TranscriptSegment[];
+        sentences?: Array<{
+          id?: string;
+          text: string;
+          beginTime?: number;
+          endTime?: number;
+        }>;
+      }>(response, '音频转写失败');
+    }
+
     if (!response.ok || !payload.success) {
       throw new Error(payload.error || '音频转写失败');
     }
@@ -4156,6 +4344,34 @@ const _handleVideoAssistantMessage = useCallback((payload: {
 
   const importComposerVideoLink = useCallback(async (url: string) => {
     const detected = parseVideoLink(url);
+    const optimisticSourceId = `video-link-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    const optimisticTitle = (() => {
+      try {
+        const hostname = new URL(url).hostname.replace(/^www\./i, '');
+        if (detected?.providerLabel) {
+          return `${detected.providerLabel} 链接`;
+        }
+        return hostname || '视频链接';
+      } catch {
+        return detected?.providerLabel ? `${detected.providerLabel} 链接` : '视频链接';
+      }
+    })();
+
+    appendSourceItem({
+      id: optimisticSourceId,
+      type: 'video',
+      role: 'primary',
+      title: optimisticTitle,
+      preview: compactText(url, 120),
+      mediaUrl: detected?.playableUrl || url,
+      attachmentUrl: url,
+      segmentCount: 0,
+      origin: 'user',
+      status: 'parsing',
+      statusText: undefined,
+      reviewable: false,
+    });
+
     setActiveSourceImportCount((count) => count + 1);
     setSourceImportError('');
 
@@ -4192,7 +4408,15 @@ const _handleVideoAssistantMessage = useCallback((payload: {
 
       const segments = normalizeImportedVideoSegments(payload);
       if (segments.length === 0) {
-        throw new Error('链接已识别，但暂时没有解析出内容。');
+        updateSourceItem(optimisticSourceId, {
+          title: payload.source?.title || optimisticTitle,
+          previewUrl: payload.source?.thumbnailUrl,
+          mediaUrl: payload.source?.playableUrl || detected?.playableUrl || url,
+          attachmentUrl: payload.source?.originalUrl || url,
+          status: 'failed',
+          statusText: '这条链接先收下了，稍后再试试',
+        });
+        return;
       }
 
       await handleVideoImportReady({
@@ -4215,15 +4439,19 @@ const _handleVideoAssistantMessage = useCallback((payload: {
         },
         sourceMode: payload.sourceMode,
         trace: payload.trace,
+      }, {
+        sourceItemId: optimisticSourceId,
       });
 
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      setSourceImportError(message);
+    } catch {
+      updateSourceItem(optimisticSourceId, {
+        status: 'failed',
+        statusText: '这条链接先收下了，稍后再试试',
+      });
     } finally {
       setActiveSourceImportCount((count) => Math.max(0, count - 1));
     }
-  }, [handleVideoImportReady]);
+  }, [appendSourceItem, handleVideoImportReady, updateSourceItem]);
 
   const openLiveRecorder = useCallback(() => {
     if (isRecording) return;
@@ -4645,8 +4873,10 @@ const _handleVideoAssistantMessage = useCallback((payload: {
                                     onClick={() =>
                                       setExpandedAudioTranscriptId((prev) => (prev === item.id ? null : item.id))
                                     }
-                                    className={`font-medium transition ${
-                                      isPrimary ? 'text-[#2f6f1f] hover:text-[#245818]' : 'text-slate-600 hover:text-slate-800'
+                                    className={`rounded-full px-2.5 py-1 font-medium transition ${
+                                      isPrimary
+                                        ? 'bg-white/80 text-[#245818] hover:bg-white'
+                                        : 'bg-slate-100 text-slate-600 hover:bg-slate-200 hover:text-slate-800'
                                     }`}
                                   >
                                     {isAudioTranscriptOpen ? '收起文字' : '看文字'}
@@ -4663,8 +4893,10 @@ const _handleVideoAssistantMessage = useCallback((payload: {
                                     onClick={() => {
                                       void openReviewFromCollection(item);
                                     }}
-                                    className={`font-medium transition ${
-                                      isPrimary ? 'text-[#2f6f1f] hover:text-[#245818]' : 'text-slate-600 hover:text-slate-800'
+                                    className={`rounded-full px-2.5 py-1 font-medium transition ${
+                                      isPrimary
+                                        ? 'bg-white/80 text-[#245818] hover:bg-white'
+                                        : 'bg-slate-100 text-slate-600 hover:bg-slate-200 hover:text-slate-800'
                                     }`}
                                   >
                                     去复习
@@ -4761,8 +4993,10 @@ const _handleVideoAssistantMessage = useCallback((payload: {
                                   onClick={() => {
                                     void openReviewFromCollection(item);
                                   }}
-                                  className={`font-medium transition ${
-                                    isPrimary ? 'text-[#2f6f1f] hover:text-[#245818]' : 'text-slate-600 hover:text-slate-800'
+                                  className={`rounded-full px-2.5 py-1 font-medium transition ${
+                                    isPrimary
+                                      ? 'bg-white/80 text-[#245818] hover:bg-white'
+                                      : 'bg-slate-100 text-slate-600 hover:bg-slate-200 hover:text-slate-800'
                                   }`}
                                 >
                                   去复习
@@ -4822,17 +5056,19 @@ const _handleVideoAssistantMessage = useCallback((payload: {
                                 <span aria-hidden="true" className="opacity-40">·</span>
                               ) : null}
                               {canOpenReview ? (
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    void openReviewFromCollection(item);
-                                  }}
-                                  className={`font-medium transition ${
-                                    isPrimary ? 'text-white hover:text-white/80' : 'text-slate-600 hover:text-slate-800'
-                                  }`}
-                                >
-                                  去复习
-                                </button>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  void openReviewFromCollection(item);
+                                }}
+                                className={`rounded-full px-2.5 py-1 font-medium transition ${
+                                  isPrimary
+                                    ? 'bg-white/88 text-slate-900 hover:bg-white'
+                                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200 hover:text-slate-800'
+                                }`}
+                              >
+                                去复习
+                              </button>
                               ) : null}
                             </div>
                           </div>

@@ -91,7 +91,7 @@ function buildEchoFromCapture(input: UpsertWorkspaceCaptureInput): {
 } {
   const chips: string[] = [];
 
-  if (input.contentType === 'audio') chips.push('课堂原话');
+  if (input.contentType === 'audio') chips.push('课堂原声');
   if (input.contentType === 'video') chips.push('视频材料');
   if (input.contentType === 'document') chips.push('文档材料');
   if (input.contentType === 'image') chips.push('图片线索');
@@ -104,10 +104,10 @@ function buildEchoFromCapture(input: UpsertWorkspaceCaptureInput): {
 
   if (input.contentType === 'audio') {
     return {
-      title: '这段原声已经留下来了',
+      title: '这段原声已经收下了',
       body: normalizedText
-        ? '它后面会继续参与回声和 Tutor，不只是临时记一嘴。'
-        : '这段原声已经收进学习空间，后面补一句卡住的点会更有抓手。',
+        ? '它后面会继续参与回声和 Tutor，不会只停在这一刻。'
+        : '这段原声已经进入学习空间了，后面再补一句卡住的点会更有抓手。',
       chips: chips.slice(0, 3),
     };
   }
@@ -123,7 +123,7 @@ function buildEchoFromCapture(input: UpsertWorkspaceCaptureInput): {
   return {
     title: '这条记录已经留在你的学习脉络里',
     body: normalizedText
-      ? '你刚刚记下来的内容会继续影响后面的回声和 Tutor，而不只是停在这一刻。'
+      ? '你刚刚记下来的内容，会继续影响后面的回声和 Tutor。'
       : '这条内容已经进入学习空间了，后面再补一点上下文会更有抓手。',
     chips: chips.slice(0, 3),
   };
@@ -137,7 +137,7 @@ function buildWechatCaptureTitle(message: {
   if (message.msgType === 'voice') return '微信语音';
   if (message.msgType === 'image') return '微信图片';
   if (message.msgType === 'link') return '微信链接';
-  if (message.msgType === 'event') return '微信服务号';
+  if (message.msgType === 'event') return '微信服务号消息';
   return '微信随手记';
 }
 

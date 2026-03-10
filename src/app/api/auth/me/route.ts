@@ -5,7 +5,7 @@
  *
  * 兼容跨服务环境：
  * 如果用户拿着同一份 Token 访问新的部署环境，
- * 而当前数据库里还没有这个用户，会自动补注册。
+ * 但当前数据库里还没有这个用户，会自动补注册。
  */
 
 import { NextRequest, NextResponse } from 'next/server';
@@ -78,7 +78,7 @@ async function autoRegisterUser(payload: {
       lastLoginAt: newUser.lastLoginAt?.toISOString(),
     };
   } catch (error) {
-    console.error('[AutoRegister] 自动注册失败:', error);
+    console.error('[AutoRegister] 自动补注册失败:', error);
     return null;
   }
 }
@@ -94,12 +94,12 @@ export async function GET(request: NextRequest) {
     let user = await authService.getUserById(payload.sub);
 
     if (!user) {
-      console.log('[Auth/Me] 用户不存在，尝试自动注册:', payload.sub);
+      console.log('[Auth/Me] 用户不存在，尝试自动补注册:', payload.sub);
       user = await autoRegisterUser(payload);
 
       if (!user) {
         return NextResponse.json(
-          { success: false, error: '用户不存在，且自动注册失败' },
+          { success: false, error: '用户不存在，且自动补注册失败' },
           { status: 404 }
         );
       }
