@@ -25,8 +25,8 @@ function compactText(value: string, limit: number): string {
 }
 
 function inferCollectionRole(message: NormalizedWechatMessage): CollectionRole {
-  if (message.msgType === 'voice') return 'primary';
-  return 'support';
+  if (message.msgType === 'event') return 'support';
+  return 'primary';
 }
 
 function buildEchoTitle(message: NormalizedWechatMessage): string {

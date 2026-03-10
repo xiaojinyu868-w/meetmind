@@ -665,6 +665,41 @@ export const authService = {
   },
 
   /**
+   * 直接为指定用户创建一组新的会话令牌
+   */
+  async createSessionForUserId(userId: string): Promise<AuthResponse> {
+    const user = await prisma.user.findUnique({
+      where: { id: userId }
+    });
+
+    if (!user || user.status !== 'active') {
+      return { success: false, error: '用户不存在或已被禁用' };
+    }
+
+    const updatedUser = await prisma.user.update({
+      where: { id: userId },
+      data: { lastLoginAt: new Date() }
+    });
+
+    const permissions = getRolePermissions(updatedUser.role as UserRole);
+    const accessToken = generateJWT({
+      sub: updatedUser.id,
+      username: updatedUser.username,
+      role: updatedUser.role as UserRole,
+      permissions,
+    });
+    const refreshToken = await generateRefreshTokenDb(updatedUser.id);
+
+    return {
+      success: true,
+      user: dbUserToUser(updatedUser),
+      accessToken,
+      refreshToken,
+      expiresIn: JWT_EXPIRES_IN,
+    };
+  },
+
+  /**
    * 更新用户资料
    */
   async updateProfile(userId: string, profile: Partial<UserProfile>): Promise<User | null> {

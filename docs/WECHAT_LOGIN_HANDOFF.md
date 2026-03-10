@@ -1,6 +1,6 @@
 # 微信服务号登录 — 开发交接文档
 
-更新日期：2026-03-09
+更新日期：2026-03-10
 作者：Agent（与产品负责人结对开发）
 
 ---
@@ -15,7 +15,9 @@ MeetMind 的 Capture V1 要做到像 flomo 一样的体验：用户关注微信�
 
 ## 已完成的工作
 
-### 1. 微信消息推送（已上线，可用）
+### 阶段一：基础消息推送与绑定（03-09 完成）
+
+#### 1. 微信消息推送（已上线，可用）
 
 | 文件 | 说明 |
 |------|------|
@@ -29,62 +31,22 @@ MeetMind 的 Capture V1 要做到像 flomo 一样的体验：用户关注微信�
 - 消息加密方式: 明文模式
 - 已通过验证并启用
 
-### 2. H5 Capture 页面（已上线，可用）
+#### 2. H5 Capture 页面（已上线，可用）
 
 | 文件 | 说明 |
 |------|------|
 | `src/app/wechat/capture/[token]/page.tsx` | Server Component，查询消息详情，根据绑定状态显示不同 UI |
 | `src/app/wechat/capture/[token]/WechatCaptureClient.tsx` | Client Component，处理绑定交互、OAuth session 回调检测 |
 
-页面逻辑：
-- **未绑定**：标题"先绑定 MeetMind 账号"，显示绑定表单
-- **已绑定**：标题"这条内容已经进入你的收集流"，显示"打开收集流"按钮
-
-### 3. 微信登录按钮 + OAuth 回调（代码已写好，等认证启用）
+#### 3. 微信登录按钮 + OAuth 回调（代码已写好，等认证启用）
 
 | 文件 | 说明 |
 |------|------|
 | `src/components/WechatBindForm.tsx` | 绑定表单组件，包含三种登录方式 |
 | `src/app/api/wechat/bind/route.ts` | 绑定 API，支持密码模式和验证码模式 |
-| `src/app/api/wechat/bind/callback/route.ts` | **新建** — 微信 OAuth 回调专用路由 |
+| `src/app/api/wechat/bind/callback/route.ts` | 微信 OAuth 回调专用路由 |
 
-**WechatBindForm 的三种登录方式（优先级从高到低）：**
-
-1. **使用微信登录**（绿色大按钮） — 调用 `/api/wechat/bind/callback?action=authorize&linkToken=xxx` 获取授权 URL → 跳转微信授权 → 回调自动注册+绑定。**需要认证后才可用。**
-2. **邮箱验证码**（折叠在"其他登录方式"里） — 没有账号自动注册，已可用。
-3. **密码登录**（可切换） — 已有账号的老用户，已可用。
-
-### 4. OAuth 回调完整流程（`/api/wechat/bind/callback`）
-
-```
-用户点"使用微信登录"
-  ↓
-GET /api/wechat/bind/callback?action=authorize&linkToken=xxx
-  → 生成微信授权 URL（snsapi_userinfo）
-  → 存储 state → linkToken 映射
-  → 返回 { authUrl }
-  ↓
-前端跳转 authUrl（微信授权页）
-  ↓
-用户同意授权，微信回调
-GET /api/wechat/bind/callback?code=xxx&state=xxx
-  → 用 code 换 access_token + openId
-  → 获取微信用户信息（nickname, headimgurl）
-  → 查找 AuthProvider 是否已绑定
-  → 已绑定 → 直接登录
-  → 未绑定 → 自动注册新用户（wx_xxx_xxx）+ 绑定 openId
-  → 同步 workspace + 收集流
-  → 生成临时 session token
-  → 重定向回 /wechat/capture/[linkToken]?session=xxx
-  ↓
-前端检测 ?session=xxx
-  → POST /api/wechat/bind/callback { sessionToken }
-  → 换取 accessToken + refreshToken
-  → 存入 localStorage
-  → 显示"绑定成功"
-```
-
-### 5. 已有的微信 OAuth 基础设施（之前就存在）
+#### 4. 已有的微信 OAuth 基础设施
 
 | 文件 | 说明 |
 |------|------|
@@ -92,22 +54,141 @@ GET /api/wechat/bind/callback?code=xxx&state=xxx
 | `src/app/api/auth/wechat/route.ts` | 通用微信登录 API（PC 扫码 + 微信内授权） |
 | `src/app/api/auth/wechat/callback/route.ts` | 通用微信回调（重定向到 /login） |
 
-### 6. Middleware 公开路由
+---
 
-以下路由已添加到 `src/middleware.ts` 的 `PUBLIC_ROUTES`，不需要 Bearer token：
+### 阶段二：收集流连续性 + 直接打开（03-10 完成，分支 `feature/wechat-capture-stream-continuity`）
+
+**产品意图**：用户在微信连续发多条消息后，打开 app/web 应该在主聊天流里按时间顺序看到所有消息，而不是一条在主流、一条在"历史收集"抽屉里。已绑定用户点微信回复链接应直接进入主流，不需要二级跳转。
+
+#### 5. 收集流连续性改造
+
+##### 5a. 微信消息角色统一（`wechat-inbox-service.ts`）
+
+**改动**：`inferCollectionRole` 从"只有 voice 是 primary"改为"只有 event 是 support，其他都是 primary"
+
+```typescript
+function inferCollectionRole(message: NormalizedWechatMessage): CollectionRole {
+  if (message.msgType === 'event') return 'support';
+  return 'primary';
+}
+```
+
+**影响**：所有微信发来的文字/图片/语音/链接消息都会作为主流消息（primary），不再被当作辅助材料。
+
+##### 5b. 前端 sourceKey 去重 + 兜底同步（`app/page.tsx`）
+
+**改动**：
+- `SourceIngestItem` 增加 `sourceKey` 字段（格式 `wechat:{linkToken}`）
+- `inferWechatCaptureRole` / `inferWorkspaceCaptureRole` 统一微信消息为 primary
+- 新增 `resolveSourceItemSourceKey`、`buildWorkspaceCaptureSourceItem`、`mergeWechatWorkspaceCapturesIntoSourceItems` 辅助函数
+- `wechat_capture` 单条导入时补齐 `sourceKey`、媒体信息、`origin`
+- `workspaceContextRequestKeyRef` 改为 `${user.id}:${wechatCaptureToken}` 组合键（支持多次微信入口）
+- 兜底 useEffect：把 `workspaceCaptures` 中的微信 capture 自动补回 `sourceItems`
+
+#### 6. 共享微信 Web 会话服务（新建）
+
+| 文件 | 说明 |
+|------|------|
+| `src/lib/services/wechat-web-session-service.ts` | **新建** — 统一的短期 session 创建/消费，替代各路由各自维护的 Map |
+
+提供 `createWechatWebSession()` 和 `consumeWechatWebSession()` 两个函数，内部维护带 TTL（2分钟）的 Map。所有需要安全传递认证信息的微信入口统一使用。
+
+**消费方**：
+- `src/app/api/auth/wechat/callback/route.ts` — 已改用共享服务
+- `src/app/api/wechat/bind/callback/route.ts` — 已改用共享服务
+- `src/app/wechat/open/[token]/route.ts` — 新路由直接使用
+
+#### 7. 已绑定用户直接打开入口（新建）
+
+| 文件 | 说明 |
+|------|------|
+| `src/app/wechat/open/[token]/route.ts` | **新建** — 已绑定用户的微信直接打开入口，跳过 H5 承接页 |
+
+**流程**：
+```
+微信回复链接（已绑定用户）
+  → GET /wechat/open/{linkToken}
+  → 查询消息绑定状态
+  → 绑定 → authService.createSessionForUserId() 签发 JWT
+  → createWechatWebSession() 创建临时会话
+  → 302 重定向到 /app?mobile=1&wechat_capture={token}&session={sessionToken}
+  → 未绑定 → fallback 到 /wechat/capture/{token}（H5 承接页）
+```
+
+**注意**：重定向 URL 使用 `x-forwarded-host` + `x-forwarded-proto` 构建，因为 nginx 反代后 `request.url` 的 host 是 `localhost:3002`。
+
+#### 8. auth-service 新增方法
+
+`src/lib/services/auth-service.ts` 新增 `createSessionForUserId(userId)` 方法：按 userId 直接签发 JWT + refreshToken，无需密码或验证码。供 `/wechat/open/[token]` 路由使用。
+
+#### 9. 微信回复链接按绑定状态分流
+
+`src/app/api/wechat/mp/route.ts` 新增 `buildWechatEntryUrl()` 函数：
+- **已绑定**用户 → 链接指向 `/wechat/open/{token}`（直接进主流）
+- **未绑定**用户 → 链接指向 `/wechat/capture/{token}`（H5 承接页）
+
+#### 10. 绑定回调完成后直接跳主流
+
+`src/app/api/wechat/bind/callback/route.ts` 改动：
+- 移除旧的 `bindSessions` Map，改用共享 `wechat-web-session-service`
+- 绑定完成后重定向目标从 `/wechat/capture/{token}` 改为 `/app?mobile=1&wechat_capture={token}&session={sessionToken}`
+
+#### 11. Middleware 公开路由更新
+
+`src/middleware.ts` 的 `PUBLIC_ROUTES` 新增：
+- `/wechat/open/*` — 已绑定用户直接打开入口
+
+完整公开路由列表：
 - `/api/wechat/mp` — 消息推送
 - `/api/wechat/bind` — 绑定 API
 - `/api/wechat/bind/callback` — OAuth 回调
 - `/api/wechat/capture/*` — capture 数据 API
+- `/wechat/open/*` — **新增** 直接打开入口
 - `/api/auth/send-code` — 发送验证码
 
 ---
 
-## 认证完成后需要做的事
+## 当前状态
 
-### 第一步：配置环境变量
+- **分支**：`feature/wechat-capture-stream-continuity`
+- **构建**：`npm run build` 通过（52 个页面全部编译成功）
+- **服务器**：需要重启以加载新构建（见下方部署步骤）
 
-编辑 `/mnt/meetmind-capture-v1-server-handoff/.env`，找到底部被注释的三行，取消注释并填写：
+---
+
+## 待完成 / 后续需要做的事
+
+### 立即需要做的
+
+#### 1. 重启服务器（加载新构建）
+
+```bash
+cd /mnt/meetmind-capture-v1-server-handoff
+pkill -f 'node server.js'
+sleep 2
+NODE_ENV=production nohup node server.js > /tmp/meetmind-server.log 2>&1 &
+```
+
+#### 2. 端到端验证（微信连续消息 → 直接进入主流）
+
+测试步骤：
+1. 在微信服务号连续发 2-3 条消息
+2. 点击**最后一条**消息的回复链接
+3. 预期：已绑定用户 → 直接跳到 `/app` 主流（不经过 H5 承接页）
+4. 预期：主流中按时间顺序显示所有连续发的消息
+5. 检查"历史收集"抽屉中也能看到这些消息（双写）
+
+#### 3. `useAuth` 兼容性确认
+
+当前 `useAuth` 的 `handleWechatSession` 调用 `POST /api/auth/wechat/callback` 交换 session token。新的 `/wechat/open/[token]` 创建的 session 存在共享服务中，需要确认：
+- `POST /api/auth/wechat/callback` 的 `consumeWechatWebSession` 能正确消费这些 session ✅（已验证代码逻辑兼容）
+- URL 中的 `session` 参数能被 `useAuth` 正确检测和消费 ✅（已验证 initAuth 逻辑）
+
+### 认证完成后需要做的
+
+#### 4. 配置环境变量
+
+编辑 `.env`，取消注释并填写：
 
 ```env
 NEXT_PUBLIC_ENABLE_WECHAT_LOGIN=true
@@ -115,50 +196,34 @@ WECHAT_APP_ID=wxd6dcbe4b80089742
 WECHAT_APP_SECRET=<从微信公众平台获取的 AppSecret>
 ```
 
-获取 AppSecret 的路径：微信公众平台 → 设置与开发 → 基本配置 → AppSecret → 重置（首次需要扫码验证）
+#### 5. 配置微信公众平台
 
-### 第二步：配置网页授权域名
+- **网页授权域名**：设置与开发 → 公众号设置 → 功能设置 → `capture.meetmind.online`
+- **JS 安全域名**：同上 → `capture.meetmind.online`
+- 需要下载验证文件放到 `public/` 目录下
 
-在微信公众平台设置网页授权回调域名：
-- 路径：设置与开发 → 公众号设置 → 功能设置 → 网页授权域名
-- 填写：`capture.meetmind.online`
-- 需要下载验证文件放到网站根目录（`public/` 目录下）
-
-### 第三步：配置 JS 安全域名
-
-- 路径：设置与开发 → 公众号设置 → 功能设置 → JS 接口安全域名
-- 填写：`capture.meetmind.online`
-
-### 第四步：重新构建部署
+#### 6. 重新构建部署
 
 ```bash
 cd /mnt/meetmind-capture-v1-server-handoff
-fuser -k 3002/tcp
+pkill -f 'node server.js'
 NODE_OPTIONS="--max-old-space-size=1024" npm run build
-NODE_ENV=production nohup node server.js > /tmp/meetmind-capture.log 2>&1 &
+NODE_ENV=production nohup node server.js > /tmp/meetmind-server.log 2>&1 &
 ```
-
-### 第五步：端到端测试
-
-1. 用微信关注服务号"原点新途创新科技"
-2. 发一条文字消息（如"测试微积分"）
-3. 收到自动回复，包含 capture 链接
-4. 点开链接，应看到绿色"使用微信登录"按钮
-5. 点击 → 微信授权弹窗 → 同意
-6. 自动跳回 capture 页面，显示"绑定成功"
-7. 再发一条消息，直接收到"已进入收集流"的回复（不再要求绑定）
 
 ---
 
 ## 已知问题和注意事项
 
-1. **state 和 session 存在内存 Map 中**：代码里有多处标注 `// 生产环境应使用 Redis`。当前单进程部署没问题，但如果未来多实例部署需要迁移到 Redis。
+1. **session 存在内存 Map 中**：`wechat-web-session-service.ts` 使用内存 Map + TTL 清理。单进程部署没问题，多实例需要迁移到 Redis。
 
-2. **wechat-auth-service.ts 第 297-299 行的潜在 bug**：已绑定用户重新登录时调用 `authService.login({ password: '' })`，密码验证会失败。新的 `/api/wechat/bind/callback` 路由已用 `loginWithCode` 方式绕过此问题，但原来的 `/api/auth/wechat/callback` 仍有此 bug。
+2. **wechat-auth-service.ts 的潜在 bug**：已绑定用户重新登录时调用 `authService.login({ password: '' })`，密码验证会失败。新的 `/api/wechat/bind/callback` 和 `/wechat/open/[token]` 已用 `loginWithCode` / `createSessionForUserId` 方式绕过此问题，但原来的 `/api/auth/wechat/callback` 仍有此 bug。
 
 3. **UserAnalytics 表缺失**：日志中会出现 `P2025` 错误（analytics 表缺记录），不影响核心功能。如需修复：`npx prisma db push --accept-data-loss`。
 
 4. **构建内存限制**：服务器只有 3.5GB 内存，构建时需要加 `NODE_OPTIONS="--max-old-space-size=1024"`。
+
+5. **nginx 反代下的 URL 构建**：所有服务端路由中构建重定向 URL 时，必须使用 `x-forwarded-host` + `x-forwarded-proto` 头，不能用 `request.url`（会变成 `localhost:3002`）。
 
 ---
 
@@ -167,33 +232,40 @@ NODE_ENV=production nohup node server.js > /tmp/meetmind-capture.log 2>&1 &
 ```
 src/
 ├── app/
+│   ├── (main)/app/page.tsx               # ★ 主应用页面（收集流渲染，~7300行）
 │   ├── api/
 │   │   ├── auth/
 │   │   │   ├── wechat/
 │   │   │   │   ├── route.ts              # 通用微信登录 API
-│   │   │   │   └── callback/route.ts     # 通用微信回调
+│   │   │   │   └── callback/route.ts     # 通用微信回调（已改用共享 session）
 │   │   │   ├── login-with-code/route.ts  # 验证码登录（自动注册）
 │   │   │   └── send-code/route.ts        # 发送验证码
 │   │   └── wechat/
-│   │       ├── mp/route.ts               # 服务号消息推送入口
+│   │       ├── mp/route.ts               # ★ 服务号消息推送入口（含链接分流）
+│   │       ├── capture/[token]/route.ts  # capture 数据 API
 │   │       └── bind/
 │   │           ├── route.ts              # 绑定 API（密码/验证码模式）
-│   │           └── callback/route.ts     # ★ OAuth 回调（capture 场景）
+│   │           └── callback/route.ts     # ★ OAuth 回调（已改用共享 session + 直跳主流）
 │   └── wechat/
-│       └── capture/[token]/
-│           ├── page.tsx                  # Server Component
-│           └── WechatCaptureClient.tsx   # Client Component（含 session 检测）
+│       ├── capture/[token]/
+│       │   ├── page.tsx                  # H5 承接页 Server Component
+│       │   └── WechatCaptureClient.tsx   # H5 承接页 Client Component
+│       └── open/[token]/
+│           └── route.ts                  # ★ 新建 — 已绑定用户直接打开入口
 ├── components/
-│   └── WechatBindForm.tsx                # ★ 绑定表单（微信登录 + 验证码 + 密码）
+│   └── WechatBindForm.tsx                # 绑定表单（微信登录 + 验证码 + 密码）
 ├── lib/
+│   ├── hooks/
+│   │   └── useAuth.tsx                   # 前端认证（handleWechatSession 消费 session 参数）
 │   └── services/
-│       ├── auth-service.ts               # 认证核心（注册/登录/JWT）
+│       ├── auth-service.ts               # ★ 认证核心（新增 createSessionForUserId）
 │       ├── wechat-auth-service.ts        # 微信 OAuth 核心
 │       ├── wechat-mp-service.ts          # 服务号消息处理
-│       ├── wechat-inbox-service.ts       # 收集流智能处理
+│       ├── wechat-inbox-service.ts       # ★ 收集流智能处理（角色统一为 primary）
+│       ├── wechat-web-session-service.ts # ★ 新建 — 共享 Web 会话服务
 │       ├── workspace-service.ts          # workspace 绑定/同步
 │       └── workspace-context-service.ts  # capture/echo 同步
-└── middleware.ts                         # 路由鉴权（PUBLIC_ROUTES）
+└── middleware.ts                         # ★ 路由鉴权（新增 /wechat/open/*）
 ```
 
 ---
@@ -203,6 +275,6 @@ src/
 - `User` — 用户账户
 - `AuthProvider` — 第三方登录绑定（provider='wechat', providerId=openId）
 - `Workspace` / `WorkspaceMembership` — 用户工作区
-- `WorkspaceCapture` — 收集流条目
+- `WorkspaceCapture` — 收集流条目（sourceType='wechat' 标识微信来源）
 - `WorkspaceEcho` — echo 卡片
-- `WechatInboxMessage` — 微信收到的原始消息（含 bindingStatus, linkToken）
+- `WechatInboxMessage` — 微信收到的原始消息（含 bindingStatus, linkToken, userId）

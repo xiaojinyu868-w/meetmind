@@ -227,6 +227,7 @@ type MobileCollectionSheet = null | 'attachments' | 'video' | 'history' | 'echo'
 
 interface SourceIngestItem {
   id: string;
+  sourceKey?: string;
   type: SourceIngestType;
   role: SourceIngestRole;
   title: string;
@@ -501,11 +502,8 @@ function inferWechatCaptureSourceType(message: WechatCaptureMessage): SourceInge
 }
 
 function inferWechatCaptureRole(message: WechatCaptureMessage): SourceIngestRole {
-  if (message.collectionRole === 'primary' || message.collectionRole === 'support') {
-    return message.collectionRole;
-  }
-  if (message.msgType === 'text' || message.msgType === 'voice') return 'primary';
-  return 'support';
+  if (message.msgType === 'event') return 'support';
+  return 'primary';
 }
 
 function inferWechatCaptureTitle(message: WechatCaptureMessage): string {
@@ -526,8 +524,69 @@ function inferWorkspaceCaptureSourceType(item: WorkspaceCaptureMessage): SourceI
 }
 
 function inferWorkspaceCaptureRole(item: WorkspaceCaptureMessage): SourceIngestRole {
+  if (item.sourceType === 'wechat') return 'primary';
   if (item.role === 'primary' || item.role === 'support') return item.role;
   return item.contentType === 'audio' ? 'primary' : 'support';
+}
+
+function resolveSourceItemSourceKey(item: SourceIngestItem): string | null {
+  if (item.sourceKey?.trim()) return item.sourceKey.trim();
+  if (item.id.startsWith('wechat-')) return `wechat:${item.id.replace('wechat-', '')}`;
+  return null;
+}
+
+function buildWorkspaceCaptureSourceItem(item: WorkspaceCaptureMessage): SourceIngestItem {
+  const type = inferWorkspaceCaptureSourceType(item);
+
+  return {
+    id: `workspace-${item.id}`,
+    sourceKey: item.sourceKey,
+    type,
+    role: inferWorkspaceCaptureRole(item),
+    title: item.title,
+    preview: compactText(item.previewText || item.title, 180),
+    previewUrl: type === 'image' ? item.mediaUrl || undefined : undefined,
+    mediaUrl: type === 'audio' || type === 'video' ? item.mediaUrl || undefined : undefined,
+    attachmentUrl: item.sourceUrl || undefined,
+    segmentCount: 1,
+    addedAt: item.occurredAt || item.createdAt,
+    origin: 'user',
+  };
+}
+
+function mergeWechatWorkspaceCapturesIntoSourceItems(
+  previous: SourceIngestItem[],
+  incoming: WorkspaceCaptureMessage[]
+): SourceIngestItem[] {
+  const wechatCaptures = incoming
+    .filter((item) => item?.sourceType === 'wechat' && item.sourceKey)
+    .sort(
+      (a, b) =>
+        new Date(a.occurredAt || a.createdAt).getTime() - new Date(b.occurredAt || b.createdAt).getTime()
+    );
+
+  if (wechatCaptures.length === 0) return previous;
+
+  const existingIds = new Set(previous.map((item) => item.id));
+  const existingSourceKeys = new Set(
+    previous
+      .map((item) => resolveSourceItemSourceKey(item))
+      .filter((item): item is string => Boolean(item))
+  );
+
+  let changed = false;
+  const next = [...previous];
+
+  for (const item of wechatCaptures) {
+    const id = `workspace-${item.id}`;
+    if (existingIds.has(id) || existingSourceKeys.has(item.sourceKey)) continue;
+    next.push(buildWorkspaceCaptureSourceItem(item));
+    existingIds.add(id);
+    existingSourceKeys.add(item.sourceKey);
+    changed = true;
+  }
+
+  return changed ? next : previous;
 }
 
 async function readJsonApiResponse<T>(response: Response, errorPrefix: string): Promise<T> {
@@ -894,7 +953,7 @@ function StudentAppContent({
   const segmentsRef = useRef<TranscriptSegment[]>([]);
   const lastCollectionPulseSignatureRef = useRef('');
   const importedWechatCaptureTokensRef = useRef(new Set<string>());
-  const hydratedWorkspaceUserRef = useRef<string | null>(null);
+  const workspaceContextRequestKeyRef = useRef<string | null>(null);
 
   // Auto-extract terms from user-provided context (course topic + reference materials)
   const [extractedTermsHint, setExtractedTermsHint] = useState('');
@@ -3636,12 +3695,17 @@ const _handleVideoAssistantMessage = useCallback((payload: {
             ...prev,
             {
               id: sourceItemId,
+              sourceKey: `wechat:${message.linkToken}`,
               type: sourceType,
               role,
               title,
               preview,
+              previewUrl: sourceType === 'image' ? message.mediaUrl || undefined : undefined,
+              mediaUrl: sourceType === 'audio' || sourceType === 'video' ? message.mediaUrl || undefined : undefined,
+              attachmentUrl: message.sourceUrl || undefined,
               segmentCount: 1,
               addedAt,
+              origin: 'user',
             },
           ];
         });
@@ -3705,7 +3769,9 @@ const _handleVideoAssistantMessage = useCallback((payload: {
 
   useEffect(() => {
     if (!isAuthenticated || !user?.id || !accessToken) return;
-    if (hydratedWorkspaceUserRef.current === user.id) return;
+
+    const requestKey = `${user.id}:${wechatCaptureToken || ''}`;
+    if (workspaceContextRequestKeyRef.current === requestKey) return;
 
     let cancelled = false;
 
@@ -3736,32 +3802,26 @@ const _handleVideoAssistantMessage = useCallback((payload: {
 
         if (captures.length > 0) {
           setWorkspaceCaptures((prev) => mergeWorkspaceCaptures(prev, captures));
-        }
-
-        if (captures.length > 0) {
           setSourceItems((prev) => {
             const existingIds = new Set(prev.map((item) => item.id));
-            // 也按 sourceKey 去重，防止 wechat_capture 导入的消息和全量加载重复
             const existingSourceKeys = new Set(
               prev
-                .filter((item) => item.id.startsWith('wechat-'))
-                .map((item) => `wechat:${item.id.replace('wechat-', '')}`)
+                .map((item) => resolveSourceItemSourceKey(item))
+                .filter((item): item is string => Boolean(item))
             );
             const next = [...prev];
+
             for (const item of captures) {
               const id = `workspace-${item.id}`;
               if (existingIds.has(id)) continue;
               if (item.sourceKey && existingSourceKeys.has(item.sourceKey)) continue;
-              next.push({
-                id,
-                type: inferWorkspaceCaptureSourceType(item),
-                role: inferWorkspaceCaptureRole(item),
-                title: item.title,
-                preview: compactText(item.previewText || item.title, 180),
-                segmentCount: 1,
-                addedAt: item.occurredAt || item.createdAt,
-              });
+              next.push(buildWorkspaceCaptureSourceItem(item));
+              existingIds.add(id);
+              if (item.sourceKey) {
+                existingSourceKeys.add(item.sourceKey);
+              }
             }
+
             return next;
           });
 
@@ -3784,11 +3844,8 @@ const _handleVideoAssistantMessage = useCallback((payload: {
 
         if (echoes.length > 0) {
           setWorkspaceEchoes((prev) => mergeWorkspaceEchoes(prev, echoes));
-        }
-
-        if (!captureDrivenPulse && echoes.length > 0) {
           const latestEcho = echoes[0];
-          setCaptureDrivenPulse({
+          setCaptureDrivenPulse((current) => current ?? {
             title: latestEcho.title,
             body: latestEcho.body,
             chips: (latestEcho.chips || []).slice(0, 3),
@@ -3799,7 +3856,7 @@ const _handleVideoAssistantMessage = useCallback((payload: {
           });
         }
 
-        hydratedWorkspaceUserRef.current = user.id;
+        workspaceContextRequestKeyRef.current = requestKey;
       } catch (error) {
         if (cancelled) return;
         const message = error instanceof Error ? error.message : String(error);
@@ -3810,7 +3867,13 @@ const _handleVideoAssistantMessage = useCallback((payload: {
     return () => {
       cancelled = true;
     };
-  }, [accessToken, captureDrivenPulse, isAuthenticated, user?.id]);
+  }, [accessToken, isAuthenticated, user?.id, wechatCaptureToken]);
+
+  useEffect(() => {
+    if (workspaceCaptures.length === 0) return;
+
+    setSourceItems((prev) => mergeWechatWorkspaceCapturesIntoSourceItems(prev, workspaceCaptures));
+  }, [workspaceCaptures]);
 
   useEffect(() => {
     if (!captureDrivenPulse) return;

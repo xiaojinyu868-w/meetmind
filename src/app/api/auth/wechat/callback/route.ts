@@ -8,11 +8,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { wechatAuthService } from '@/lib/services/wechat-auth-service';
-import { randomBytes } from 'crypto';
-
-// 临时会话存储（生产环境应使用 Redis）
-const tempSessions = new Map<string, { accessToken: string; expiresAt: number }>();
-const SESSION_EXPIRES = 60 * 1000; // 1分钟过期
+import { createWechatWebSession, consumeWechatWebSession } from '@/lib/services/wechat-web-session-service';
 
 export async function GET(request: NextRequest) {
   try {
@@ -33,15 +29,12 @@ export async function GET(request: NextRequest) {
       return NextResponse.redirect(new URL(`/login?error=${errorMsg}`, request.url));
     }
     
-    // 登录成功，创建临时会话 token
-    const sessionToken = randomBytes(32).toString('hex');
-    
-    if (result.accessToken) {
-      tempSessions.set(sessionToken, {
-        accessToken: result.accessToken,
-        expiresAt: Date.now() + SESSION_EXPIRES,
-      });
-    }
+    // 登录成功，使用共享 session 服务创建临时会话
+    const sessionToken = createWechatWebSession({
+      accessToken: result.accessToken!,
+      refreshToken: result.refreshToken,
+      nickname: result.user?.nickname || '',
+    });
     
     // 重定向到首页，携带临时会话 token
     const redirectUrl = new URL('/', request.url);
@@ -82,30 +75,20 @@ export async function POST(request: NextRequest) {
       );
     }
     
-    const session = tempSessions.get(sessionToken);
-    
+    const session = consumeWechatWebSession(sessionToken);
+
     if (!session) {
       return NextResponse.json(
         { success: false, error: '会话不存在或已过期' },
         { status: 401 }
       );
     }
-    
-    // 检查过期
-    if (Date.now() > session.expiresAt) {
-      tempSessions.delete(sessionToken);
-      return NextResponse.json(
-        { success: false, error: '会话已过期' },
-        { status: 401 }
-      );
-    }
-    
-    // 一次性使用，立即删除
-    tempSessions.delete(sessionToken);
-    
+
     return NextResponse.json({
       success: true,
       accessToken: session.accessToken,
+      refreshToken: session.refreshToken,
+      nickname: session.nickname,
     });
   } catch (error) {
     console.error('会话交换错误:', error);

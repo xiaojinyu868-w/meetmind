@@ -20,6 +20,7 @@ const PUBLIC_ROUTES = [
   '/api/wechat/bind',
   '/api/wechat/bind/callback',
   '/api/wechat/capture/*',
+  '/wechat/open/*',
   '/api/tutor',
   '/api/tutor/intent-probe',
   '/api/chat',

@@ -58,6 +58,13 @@ function getWechatH5BaseUrl(request: NextRequest): string {
   return `${protocol}://${host}`;
 }
 
+function buildWechatEntryUrl(baseUrl: string, linkToken: string, isBound: boolean): string {
+  if (isBound) {
+    return `${baseUrl}/wechat/open/${linkToken}`;
+  }
+  return `${baseUrl}/wechat/capture/${linkToken}`;
+}
+
 function buildAckText(baseReply: string, captureUrl: string, isBound: boolean): string {
   if (isBound) {
     return `${baseReply}\n查看：${captureUrl}`;
@@ -109,7 +116,7 @@ export async function POST(request: NextRequest) {
       });
 
       if (existing) {
-        const captureUrl = `${baseUrl}/wechat/capture/${existing.linkToken}`;
+        const captureUrl = buildWechatEntryUrl(baseUrl, existing.linkToken, existing.bindingStatus === 'bound');
         return xmlResponse(
           buildWechatTextReply(
             openId,
@@ -190,7 +197,7 @@ export async function POST(request: NextRequest) {
       }
     })();
 
-    const captureUrl = `${baseUrl}/wechat/capture/${linkToken}`;
+    const captureUrl = buildWechatEntryUrl(baseUrl, linkToken, intelligence.bindingStatus === 'bound');
     return xmlResponse(
       buildWechatTextReply(openId, developerId, buildAckText(normalized.replyText, captureUrl, intelligence.bindingStatus === 'bound'))
     );

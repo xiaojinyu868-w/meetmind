@@ -19,10 +19,7 @@ import { wechatAuthService } from '@/lib/services/wechat-auth-service';
 import { authService } from '@/lib/services/auth-service';
 import workspaceService from '@/lib/services/workspace-service';
 import workspaceContextService from '@/lib/services/workspace-context-service';
-
-// 临时会话存储（传递 token 给前端）
-const bindSessions = new Map<string, { accessToken: string; refreshToken?: string; nickname: string; expiresAt: number }>();
-const SESSION_TTL = 2 * 60 * 1000; // 2分钟
+import { createWechatWebSession, consumeWechatWebSession } from '@/lib/services/wechat-web-session-service';
 
 // state → linkToken 映射（传递 capture token 到回调）
 const stateStore = new Map<string, { linkToken: string; expiresAt: number }>();
@@ -32,9 +29,6 @@ const stateStore = new Map<string, { linkToken: string; expiresAt: number }>();
  */
 function cleanExpired() {
   const now = Date.now();
-  for (const [k, v] of bindSessions) {
-    if (v.expiresAt < now) bindSessions.delete(k);
-  }
   for (const [k, v] of stateStore) {
     if (v.expiresAt < now) stateStore.delete(k);
   }
@@ -207,17 +201,15 @@ async function handleCallback(request: NextRequest): Promise<NextResponse> {
     }
 
     // 生成临时 session token，安全传递到前端
-    const sessionToken = randomBytes(32).toString('hex');
-    bindSessions.set(sessionToken, {
-      accessToken: loginResult.accessToken,
+    const sessionToken = createWechatWebSession({
+      accessToken: loginResult.accessToken!,
       refreshToken: loginResult.refreshToken,
       nickname,
-      expiresAt: Date.now() + SESSION_TTL,
     });
 
-    // 重定向回 capture 页面
+    // 绑定完成后直接跳到主流 /app
     const redirectUrl = linkToken
-      ? `${baseUrl}/wechat/capture/${linkToken}?session=${sessionToken}`
+      ? `${baseUrl}/app?mobile=1&wechat_capture=${linkToken}&session=${sessionToken}`
       : `${baseUrl}/app?mobile=1&session=${sessionToken}`;
 
     const response = NextResponse.redirect(redirectUrl);
@@ -257,13 +249,10 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, error: '缺少 session' }, { status: 400 });
     }
 
-    const session = bindSessions.get(sessionToken);
-    if (!session || session.expiresAt < Date.now()) {
-      if (session) bindSessions.delete(sessionToken);
+    const session = consumeWechatWebSession(sessionToken);
+    if (!session) {
       return NextResponse.json({ success: false, error: '会话已过期' }, { status: 401 });
     }
-
-    bindSessions.delete(sessionToken);
 
     return NextResponse.json({
       success: true,
