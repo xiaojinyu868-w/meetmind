@@ -1539,9 +1539,19 @@ export async function POST(request: NextRequest) {
       throw new ImportPipelineError('INVALID_VIDEO_URL', '无法识别的视频链接');
     }
 
-    // 目前仅支持 B站视频导入
+    // 非 B站平台需要外网访问能力（如 yt-dlp 调 YouTube），
+    // 仅在 hk 节点或明确启用时放开。
     if (parsed.provider !== 'bilibili') {
-      throw new ImportPipelineError('UNSUPPORTED_PLATFORM', '目前仅支持 B站视频链接，其他平台即将支持');
+      const host = request.headers.get('x-forwarded-host') || request.headers.get('host') || '';
+      const isHkNode = host.includes('hk.meetmind');
+      const envEnabled = process.env.VIDEO_IMPORT_ENABLE_YOUTUBE === 'true';
+
+      if (!isHkNode && !envEnabled) {
+        throw new ImportPipelineError(
+          'UNSUPPORTED_PLATFORM',
+          '当前节点仅支持 B站视频链接。YouTube 等平台请使用 hk.meetmind.online 访问。'
+        );
+      }
     }
 
     const strategy = process.env.VIDEO_IMPORT_STRATEGY === 'yt-dlp-first' ? 'yt-dlp-first' : 'bili-native-first';

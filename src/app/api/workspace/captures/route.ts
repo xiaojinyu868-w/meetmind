@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { authService } from '@/lib/services/auth-service';
+import { isCommonstackEchoConfigured } from '@/lib/services/commonstack-echo-service';
 import workspaceContextService from '@/lib/services/workspace-context-service';
+import workspaceEchoService from '@/lib/services/workspace-echo-service';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -60,11 +62,15 @@ export async function POST(request: NextRequest) {
       metadata: body.metadata,
     });
 
+    const echoStatus = await workspaceEchoService.getDailyEchoStatusForWorkspace(result.workspace.id);
+
     return NextResponse.json({
       success: true,
       workspace: result.workspace,
-      echo: result.echo,
       capture: result.capture,
+      echoQueued: isCommonstackEchoConfigured() && (echoStatus.status === 'missing' || echoStatus.status === 'failed'),
+      echoPending: echoStatus.status === 'pending',
+      echoAlreadyGeneratedToday: echoStatus.status === 'active',
     });
   } catch (error) {
     console.error('workspace capture upsert error:', error);

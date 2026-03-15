@@ -21,6 +21,15 @@ import { useAuth } from '@/lib/hooks/useAuth';
 import { classroomDataService } from '@/lib/services/classroom-data-service';
 import { runMemoryMigration } from '@/lib/services/memory-migration';
 import { parseVideoLink } from '@/lib/utils/video-link';
+import { appendLiveRecordingSegments, resolveLiveRecordingAppendOffset } from '@/lib/capture/live-recording';
+import { buildStoredVideoSource, isStoredVideoSession } from '@/lib/capture/video-session';
+import {
+  buildCollectionQuoteDraft,
+  buildSelectedCollectionContextText,
+  getCollectionContextDisplayTitle,
+  getCollectionContextTypeLabel,
+  resolveCollectionContextPrimaryId,
+} from '@/lib/capture/collection-context';
 import { useVoiceInput } from '@/hooks/useVoiceInput';
 import {
   detectReachFromText,
@@ -252,6 +261,18 @@ interface SupportReferenceItem {
   snippet: string;
 }
 
+type PendingRecordedAudio = {
+  recordingId: string;
+  itemId: string;
+  sessionId: string;
+  title: string;
+  mediaUrl: string;
+  durationMs: number;
+  blob: Blob;
+  baseSegments: TranscriptSegment[];
+  baseOffsetMs: number;
+};
+
 function _VoiceWaveGlyph({ className = '' }: { className?: string }) {
   return (
     <span className={`inline-flex items-end gap-[2px] ${className}`}>
@@ -323,13 +344,44 @@ interface WorkspaceCaptureMessage {
 interface WorkspaceEchoMessage {
   id: string;
   sourceKey: string;
+  kind?: string | null;
+  generatedDateKey?: string | null;
   title: string;
   body: string;
   chips: string[];
   createdAt: string;
+  updatedAt?: string;
+}
+
+interface DailyEchoRefreshPayload {
+  success: boolean;
+  skipped?: boolean;
+  forced?: boolean;
+  reason?: string;
+  echo?: WorkspaceEchoMessage;
+  debug?: {
+    model?: string;
+    promptVersion?: string;
+    todayCaptureCount?: number;
+    recentCaptureCount?: number;
+    recentEchoCount?: number;
+    similarityToRecent?: number;
+  };
+  error?: string;
+}
+
+type ManualEchoFeedbackTone = 'pending' | 'success' | 'info' | 'error';
+
+interface ManualEchoFeedbackState {
+  tone: ManualEchoFeedbackTone;
+  title: string;
+  body: string;
 }
 
 const VIDEO_INSIGHT_COLORS = ['#B48EFA', '#7FD4B2', '#7FADEB', '#F2AE8F', '#F0CD70', '#90D4DD'];
+const ENABLE_ECHO_MANUAL_TRIGGER =
+  process.env.NODE_ENV !== 'production' ||
+  String(process.env.NEXT_PUBLIC_ENABLE_ECHO_MANUAL_TRIGGER || '').toLowerCase() === 'true';
 
 function mapSegmentsForAppend(
   incoming: TranscriptSegment[],
@@ -430,6 +482,7 @@ function mergeWorkspaceEchoes(
       title: compactText(item.title, 80),
       body: compactText(item.body, 220),
       chips: Array.isArray(item.chips) ? item.chips.filter(Boolean).slice(0, 4) : [],
+      updatedAt: item.updatedAt || item.createdAt,
     }));
 
   const unique: WorkspaceEchoMessage[] = [];
@@ -438,9 +491,149 @@ function mergeWorkspaceEchoes(
     if (seen.has(item.id)) continue;
     seen.add(item.id);
     unique.push(item);
-    if (unique.length >= limit) break;
   }
-  return unique;
+  return unique
+    .sort(
+      (a, b) =>
+        new Date(resolveEchoDisplayTime(b)).getTime() - new Date(resolveEchoDisplayTime(a)).getTime()
+    )
+    .slice(0, limit);
+}
+
+function resolveEchoDisplayTime(item: Pick<WorkspaceEchoMessage, 'createdAt' | 'updatedAt'>): string {
+  return item.updatedAt || item.createdAt;
+}
+
+function getEchoDebugReasonLabel(reason?: string): string {
+  switch (reason) {
+    case 'active':
+      return '今天这条回声已经生成好了';
+    case 'pending':
+      return '今日回声还在生成中';
+    case 'context-too-thin':
+      return '当前上下文还太薄，先多收一点';
+    case 'too-short':
+      return '这次结果太短，先保留当前版本';
+    case 'too-similar':
+      return '这次和最近回声太像，先保留当前版本';
+    case 'low-signal':
+      return '这次结果不够聚焦，先保留当前版本';
+    case 'workspace-missing':
+      return '当前工作区不可用';
+    case 'config-missing':
+      return '回声服务还没配置好';
+    default:
+      return reason || '已跳过';
+  }
+}
+
+function buildManualEchoFeedbackFromPayload(payload: DailyEchoRefreshPayload): ManualEchoFeedbackState {
+  if (payload.echo && !payload.skipped) {
+    return {
+      tone: 'success',
+      title: '测试生成完成',
+      body: '上面已经换成新版本。',
+    };
+  }
+
+  switch (payload.reason) {
+    case 'active':
+      return {
+        tone: 'info',
+        title: '今天这条已经有了',
+        body: '先看上面的版本，不必重复生成。',
+      };
+    case 'pending':
+      return {
+        tone: 'pending',
+        title: '已经发出测试请求',
+        body: '再等几秒，今天这条就会回来。',
+      };
+    case 'context-too-thin':
+      return {
+        tone: 'info',
+        title: '线索还不够',
+        body: '先再补一句，结果会更像样。',
+      };
+    case 'too-short':
+      return {
+        tone: 'info',
+        title: '这次结果太空了',
+        body: '先保留当前版本。',
+      };
+    case 'too-similar':
+      return {
+        tone: 'info',
+        title: '这次没有更好',
+        body: '和当前版本太像了，先不覆盖。',
+      };
+    case 'low-signal':
+      return {
+        tone: 'info',
+        title: '这次没抓住线索',
+        body: '先保留当前版本，晚点再试。',
+      };
+    case 'config-missing':
+      return {
+        tone: 'error',
+        title: '回声服务还没接好',
+        body: '先检查 CommonStack 配置。',
+      };
+    default:
+      return {
+        tone: 'info',
+        title: '这次没有生成出新回声',
+        body: '可以稍后再试。',
+      };
+  }
+}
+
+function buildManualEchoErrorFeedback(message: string): ManualEchoFeedbackState {
+  return {
+    tone: 'error',
+    title: '这次生成没成功',
+    body: message || '这次没拿到可用结果。',
+  };
+}
+
+function buildManualEchoUnavailableFeedback(params: {
+  isGuestFastEntry: boolean;
+  isCheckingAuth: boolean;
+}): ManualEchoFeedbackState {
+  if (params.isCheckingAuth) {
+    return {
+      tone: 'pending',
+      title: '正在确认账号状态',
+      body: '确认完登录状态后再试。',
+    };
+  }
+
+  if (params.isGuestFastEntry) {
+    return {
+      tone: 'info',
+      title: '游客模式下不能直接测回声',
+      body: '先登录，再在工作区里触发。',
+    };
+  }
+
+  return {
+    tone: 'info',
+    title: '登录后才能测试回声',
+    body: '先登录，再回来试这一条。',
+  };
+}
+
+function getManualEchoFeedbackClasses(tone: ManualEchoFeedbackTone) {
+  switch (tone) {
+    case 'pending':
+      return 'border-amber-200/80 bg-amber-50/70 text-amber-800';
+    case 'success':
+      return 'border-emerald-200/80 bg-emerald-50/70 text-emerald-800';
+    case 'error':
+      return 'border-rose-200/80 bg-rose-50/70 text-rose-800';
+    default:
+      return 'border-slate-200 bg-white/80 text-slate-700';
+  }
 }
 
 function mergeWorkspaceCaptures(
@@ -535,6 +728,20 @@ function resolveSourceItemSourceKey(item: SourceIngestItem): string | null {
   return null;
 }
 
+function resolveCaptureSourceFullText(params: {
+  type: SourceIngestType;
+  normalizedText?: string | null;
+  previewText?: string | null;
+  title: string;
+}): string | undefined {
+  const transcriptOnly = params.type === 'audio' || params.type === 'video';
+  const raw = transcriptOnly
+    ? params.normalizedText || ''
+    : params.normalizedText || params.previewText || params.title;
+  const resolved = compactMultilineText(raw, 3200);
+  return resolved || undefined;
+}
+
 function buildWorkspaceCaptureSourceItem(item: WorkspaceCaptureMessage): SourceIngestItem {
   const type = inferWorkspaceCaptureSourceType(item);
   const metadata = item.metadata && typeof item.metadata === 'object' ? item.metadata as Record<string, unknown> : null;
@@ -542,13 +749,23 @@ function buildWorkspaceCaptureSourceItem(item: WorkspaceCaptureMessage): SourceI
     typeof metadata?.thumbnailUrl === 'string' && metadata.thumbnailUrl.trim()
       ? metadata.thumbnailUrl.trim()
       : undefined;
+  const resolvedText = resolveCaptureSourceFullText({
+    type,
+    normalizedText: item.normalizedText,
+    previewText: item.previewText,
+    title: item.title,
+  });
+  const displayTitle =
+    type === 'text'
+      ? compactText(item.previewText || item.normalizedText || item.title, 48) || item.title
+      : item.title;
 
   return {
     id: `workspace-${item.id}`,
     sourceKey: item.sourceKey,
     type,
     role: inferWorkspaceCaptureRole(item),
-    title: item.title,
+    title: displayTitle,
     preview: compactText(item.previewText || item.title, 180),
     previewUrl:
       type === 'image'
@@ -558,7 +775,8 @@ function buildWorkspaceCaptureSourceItem(item: WorkspaceCaptureMessage): SourceI
           : undefined,
     mediaUrl: type === 'audio' || type === 'video' ? item.mediaUrl || undefined : undefined,
     attachmentUrl: item.sourceUrl || undefined,
-    segmentCount: 1,
+    fullText: resolvedText,
+    segmentCount: resolvedText ? 1 : 0,
     addedAt: item.occurredAt || item.createdAt,
     origin: 'user',
     sessionId:
@@ -570,6 +788,38 @@ function buildWorkspaceCaptureSourceItem(item: WorkspaceCaptureMessage): SourceI
         ? metadata.duration
         : undefined,
     reviewable: type === 'audio' || type === 'video',
+  };
+}
+
+function buildWechatCaptureSourceItem(message: WechatCaptureMessage): SourceIngestItem {
+  const sourceType = inferWechatCaptureSourceType(message);
+  const title = inferWechatCaptureTitle(message);
+  const preview = compactText(
+    message.normalizedText?.trim() || message.previewText?.trim() || title,
+    180
+  );
+  const fullText = resolveCaptureSourceFullText({
+    type: sourceType,
+    normalizedText: message.normalizedText,
+    previewText: message.previewText,
+    title,
+  });
+  const addedAt = message.messageAt || new Date().toISOString();
+
+  return {
+    id: `wechat-${message.linkToken}`,
+    sourceKey: `wechat:${message.linkToken}`,
+    type: sourceType,
+    role: inferWechatCaptureRole(message),
+    title,
+    preview,
+    previewUrl: sourceType === 'image' ? message.mediaUrl || undefined : undefined,
+    mediaUrl: sourceType === 'audio' || sourceType === 'video' ? message.mediaUrl || undefined : undefined,
+    attachmentUrl: message.sourceUrl || undefined,
+    fullText,
+    segmentCount: fullText ? 1 : 0,
+    addedAt,
+    origin: 'user',
   };
 }
 
@@ -586,22 +836,31 @@ function mergeWechatWorkspaceCapturesIntoSourceItems(
 
   if (wechatCaptures.length === 0) return previous;
 
-  const existingIds = new Set(previous.map((item) => item.id));
-  const existingSourceKeys = new Set(
-    previous
-      .map((item) => resolveSourceItemSourceKey(item))
-      .filter((item): item is string => Boolean(item))
-  );
-
   let changed = false;
   const next = [...previous];
 
   for (const item of wechatCaptures) {
-    const id = `workspace-${item.id}`;
-    if (existingIds.has(id) || existingSourceKeys.has(item.sourceKey)) continue;
-    next.push(buildWorkspaceCaptureSourceItem(item));
-    existingIds.add(id);
-    existingSourceKeys.add(item.sourceKey);
+    const built = buildWorkspaceCaptureSourceItem(item);
+    const matchIndex = next.findIndex(
+      (existing) => existing.id === built.id || resolveSourceItemSourceKey(existing) === item.sourceKey
+    );
+
+    if (matchIndex >= 0) {
+      const current = next[matchIndex];
+      const merged: SourceIngestItem = {
+        ...current,
+        ...built,
+        id: current.id.startsWith('wechat-') ? current.id : built.id,
+      };
+
+      if (JSON.stringify(current) !== JSON.stringify(merged)) {
+        next[matchIndex] = merged;
+        changed = true;
+      }
+      continue;
+    }
+
+    next.push(built);
     changed = true;
   }
 
@@ -850,7 +1109,7 @@ function StudentAppContent({
   const [appReady, setAppReady] = useState(isGuestFastEntry);
   const [loadingProgress, setLoadingProgress] = useState(isGuestFastEntry ? 100 : 0);
   
-  const { user, isAuthenticated, accessToken } = useAuth();
+  const { user, isAuthenticated, accessToken, isCheckingAuth } = useAuth();
   
   // NOTE: cleaned corrupted legacy comment.
   const { isMobile: detectedIsMobile, mounted } = useResponsive();
@@ -861,6 +1120,10 @@ function StudentAppContent({
   const [selectedConfusion, setSelectedConfusion] = useState<ConfusionMarker | null>(null);
   const [mobileSubPage, setMobileSubPage] = useState<'highlights' | 'summary' | 'notes' | 'tasks' | 'apps' | 'ai-chat' | 'transcript' | null>(null);
   const [mobileAIQuestion, setMobileAIQuestion] = useState<string>(''); // NOTE: cleaned corrupted legacy comment.
+  const [mobileAIQuestionNonce, setMobileAIQuestionNonce] = useState(0);
+  const [mobileAIConsumedQuestionNonce, setMobileAIConsumedQuestionNonce] = useState<number | null>(null);
+  const [mobileAIPreferSelectedContext, setMobileAIPreferSelectedContext] = useState(false);
+  const [mobileAILaunchTarget, setMobileAILaunchTarget] = useState<'review-panel' | 'video-chat' | 'mobile-ai-chat' | null>(null);
   
   const [viewMode, setViewMode] = useState<ViewMode>('record');
   const [sessionId, setSessionId] = useState<string>('demo-session');
@@ -931,6 +1194,9 @@ function StudentAppContent({
   const [workspaceCaptures, setWorkspaceCaptures] = useState<WorkspaceCaptureMessage[]>([]);
   const [workspaceEchoes, setWorkspaceEchoes] = useState<WorkspaceEchoMessage[]>([]);
   const [selectedEchoChip, setSelectedEchoChip] = useState<string>('全部');
+  const [isManualEchoRefreshing, setIsManualEchoRefreshing] = useState(false);
+  const [manualEchoDebugNote, setManualEchoDebugNote] = useState('');
+  const [manualEchoFeedback, setManualEchoFeedback] = useState<ManualEchoFeedbackState | null>(null);
   const collectionComposerRef = useRef<HTMLTextAreaElement | null>(null);
   const [sourcePanelMode, setSourcePanelMode] = useState<'audio' | 'support'>('audio');
   const [sourceImportMode, setSourceImportMode] = useState<'files' | 'text'>('files');
@@ -949,11 +1215,10 @@ function StudentAppContent({
   const [asrContextHint, setAsrContextHint] = useState('');
   const [sourceItems, setSourceItems] = useState<SourceIngestItem[]>([]);
   const [supportReferences, setSupportReferences] = useState<SupportReferenceItem[]>([]);
+  const [isCollectionContextSelectionMode, setIsCollectionContextSelectionMode] = useState(false);
+  const [selectedCollectionContextIds, setSelectedCollectionContextIds] = useState<string[]>([]);
+  const [selectedCollectionPrimaryId, setSelectedCollectionPrimaryId] = useState<string | null>(null);
   const sourceImporting = activeSourceImportCount > 0;
-  const tutorSupportContextText = useMemo(
-    () => buildTutorSupportContextText(supportReferences, workspaceEchoes),
-    [supportReferences, workspaceEchoes]
-  );
   const hasCollectionContext = useMemo(
     () => segments.length > 0 || sourceItems.length > 0 || supportReferences.length > 0 || workspaceEchoes.length > 0,
     [segments.length, sourceItems.length, supportReferences.length, workspaceEchoes.length]
@@ -973,6 +1238,7 @@ function StudentAppContent({
   const lastCollectionPulseSignatureRef = useRef('');
   const importedWechatCaptureTokensRef = useRef(new Set<string>());
   const workspaceContextRequestKeyRef = useRef<string | null>(null);
+  const autoEchoRefreshPromiseRef = useRef<Promise<DailyEchoRefreshPayload | null> | null>(null);
 
   // Auto-extract terms from user-provided context (course topic + reference materials)
   const [extractedTermsHint, setExtractedTermsHint] = useState('');
@@ -982,6 +1248,11 @@ function StudentAppContent({
     // Debounce: wait 2s after last change before calling the API
     if (extractTermsTimerRef.current) {
       clearTimeout(extractTermsTimerRef.current);
+    }
+
+    if (isGuestFastEntry) {
+      setExtractedTermsHint('');
+      return;
     }
 
     const topic = asrContextHint.trim();
@@ -1020,7 +1291,7 @@ function StudentAppContent({
         clearTimeout(extractTermsTimerRef.current);
       }
     };
-  }, [asrContextHint, supportReferences]);
+  }, [asrContextHint, isGuestFastEntry, supportReferences]);
 
   // Build live context hint for real-time ASR (hot-word injection)
   // Combines: user manual hint + reference snippets + auto-extracted terms
@@ -1043,14 +1314,7 @@ function StudentAppContent({
   const sourceFileInputRef = useRef<HTMLInputElement>(null);
   const waveformRef = useRef<WaveformPlayerRef>(null);
   const recorderRef = useRef<RecorderHandle | null>(null);
-  const pendingRecordedAudioRef = useRef<{
-    itemId: string;
-    sessionId: string;
-    title: string;
-    mediaUrl: string;
-    durationMs: number;
-    blob: Blob;
-  } | null>(null);
+  const pendingRecordedAudiosRef = useRef<Map<string, PendingRecordedAudio>>(new Map());
   const [recorderAutoStartSignal, setRecorderAutoStartSignal] = useState(0);
   const hasRestoredState = useRef(false);  // NOTE: cleaned corrupted legacy comment.
   useEffect(() => {
@@ -1064,6 +1328,32 @@ function StudentAppContent({
   useEffect(() => {
     sessionIdRef.current = sessionId;
   }, [sessionId]);
+
+  const resolvePendingRecordedAudio = useCallback((recordingId?: string) => {
+    if (recordingId && pendingRecordedAudiosRef.current.has(recordingId)) {
+      return pendingRecordedAudiosRef.current.get(recordingId) || null;
+    }
+
+    if (pendingRecordedAudiosRef.current.size === 1) {
+      return Array.from(pendingRecordedAudiosRef.current.values())[0] || null;
+    }
+
+    return null;
+  }, []);
+
+  const clearPendingRecordedAudio = useCallback((recordingId?: string) => {
+    if (recordingId && pendingRecordedAudiosRef.current.has(recordingId)) {
+      pendingRecordedAudiosRef.current.delete(recordingId);
+      return;
+    }
+
+    if (pendingRecordedAudiosRef.current.size === 1) {
+      const onlyKey = pendingRecordedAudiosRef.current.keys().next().value;
+      if (onlyKey) {
+        pendingRecordedAudiosRef.current.delete(onlyKey);
+      }
+    }
+  }, []);
 
   useEffect(() => {
     sourceItemsRef.current = sourceItems;
@@ -1604,21 +1894,19 @@ function StudentAppContent({
     liveSegmentsRef.current = loadedSegments;
     setSessionMediaDurationMs(session.duration || 0);
 
-    const isVideoSession = session.sourceType === 'video-link' && !!session.videoUrl;
+    const isVideoSession = isStoredVideoSession(session);
     if (isVideoSession) {
-      const provider = session.videoProvider || 'bilibili';
-      const restoredSource: ImportedVideoSource = {
-        provider,
-        providerLabel: provider === 'bilibili' ? 'Bilibili' : provider,
-        originalUrl: session.videoUrl || '',
-        embedUrl: session.videoEmbedUrl,
-        thumbnailUrl: session.thumbnailUrl,
-        title: session.topic,
-        durationSec: session.duration ? session.duration / 1000 : undefined,
-        sourceMode: session.importSourceMode as ImportedVideoSource['sourceMode'],
-        importTrace: session.importTrace as ImportedVideoSource['importTrace'],
-        bvid: session.videoUrl?.match(/BV[a-zA-Z0-9]+/)?.[0],
-      };
+      let playableUrl = '';
+      if (session.blob) {
+        playableUrl = URL.createObjectURL(session.blob);
+        previewObjectUrlsRef.current.push(playableUrl);
+      } else if (session.mediaUrl) {
+        playableUrl = session.mediaUrl;
+      }
+      const restoredSource = buildStoredVideoSource(session, { playableUrl });
+      if (!restoredSource) {
+        return false;
+      }
       setVideoSource(restoredSource);
       setDataSource('video');
       setVideoWorkspaceTab(options?.videoWorkspaceTab || 'chat');
@@ -2035,6 +2323,114 @@ function StudentAppContent({
     setShowSplash(false);
   }, []);
 
+  const refreshDailyEcho = useCallback(async (options?: { force?: boolean }) => {
+    const force = Boolean(options?.force);
+    if (!isAuthenticated || !user?.id || !accessToken) {
+      if (force) {
+        const feedback = buildManualEchoUnavailableFeedback({
+          isGuestFastEntry,
+          isCheckingAuth,
+        });
+        setManualEchoFeedback(feedback);
+        setManualEchoDebugNote(
+          isGuestFastEntry ? '游客模式下不会发起回声请求' : isCheckingAuth ? '正在确认登录状态' : '当前未登录'
+        );
+        if (!isCheckingAuth) {
+          toast.message(feedback.title);
+        }
+      }
+      return null;
+    }
+
+    if (!force && autoEchoRefreshPromiseRef.current) {
+      return autoEchoRefreshPromiseRef.current;
+    }
+
+    const requestPromise = (async (): Promise<DailyEchoRefreshPayload | null> => {
+      if (force) {
+        setIsManualEchoRefreshing(true);
+        setManualEchoDebugNote('');
+        setManualEchoFeedback({
+          tone: 'pending',
+          title: '正在生成今日回声',
+          body: '测试请求已发出，你可以继续收集。',
+        });
+      }
+
+      try {
+        const response = await fetch('/api/workspace/echoes/daily-refresh', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${accessToken}`,
+          },
+          body: JSON.stringify({
+            force,
+          }),
+        });
+
+        const payload = await readJsonApiResponse<DailyEchoRefreshPayload>(
+          response,
+          force ? '手动生成回声失败' : '刷新今日回声失败'
+        );
+
+        if (!response.ok || !payload.success) {
+          throw new Error(payload.error || payload.reason || (force ? '手动生成回声失败' : '刷新今日回声失败'));
+        }
+
+        if (payload.echo) {
+          setWorkspaceEchoes((prev) => mergeWorkspaceEchoes(prev, [payload.echo!]));
+        }
+
+        if (force) {
+          setManualEchoFeedback(buildManualEchoFeedbackFromPayload(payload));
+          const debug = payload.debug;
+          const note = debug
+            ? [
+                debug.model ? `模型：${debug.model}` : '',
+                debug.promptVersion ? `Prompt：${debug.promptVersion}` : '',
+                typeof debug.todayCaptureCount === 'number' ? `今天线索：${debug.todayCaptureCount}` : '',
+                typeof debug.recentCaptureCount === 'number' ? `补充上下文：${debug.recentCaptureCount}` : '',
+                typeof debug.similarityToRecent === 'number' ? `重复度：${debug.similarityToRecent.toFixed(2)}` : '',
+            ].filter(Boolean).join(' · ')
+          : '';
+          setManualEchoDebugNote(note || (payload.skipped ? `本次未更新：${getEchoDebugReasonLabel(payload.reason)}` : '回声已刷新'));
+          if (payload.echo && !payload.skipped) {
+            toast.success('回声已刷新');
+          }
+        }
+
+        return payload;
+      } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      if (force) {
+        setManualEchoFeedback(buildManualEchoErrorFeedback(message));
+        setManualEchoDebugNote(message);
+        toast.error(message);
+      } else {
+          console.error('[workspace.echo]', message);
+        }
+        return null;
+      } finally {
+        if (force) {
+          setIsManualEchoRefreshing(false);
+        }
+      }
+    })();
+
+    if (!force) {
+      autoEchoRefreshPromiseRef.current = requestPromise;
+    }
+
+    try {
+      return await requestPromise;
+    } finally {
+      if (!force && autoEchoRefreshPromiseRef.current === requestPromise) {
+        autoEchoRefreshPromiseRef.current = null;
+      }
+    }
+  }, [accessToken, isAuthenticated, isCheckingAuth, isGuestFastEntry, user?.id]);
+
   const persistCaptureToWorkspace = useCallback(async (params: {
     sourceType: string;
     sourceKey: string;
@@ -2064,7 +2460,9 @@ function StudentAppContent({
       const payload = await readJsonApiResponse<{
         success: boolean;
         capture?: WorkspaceCaptureMessage;
-        echo?: WorkspaceEchoMessage;
+        echoQueued?: boolean;
+        echoPending?: boolean;
+        echoAlreadyGeneratedToday?: boolean;
         error?: string;
       }>(response, '写入工作区收集失败');
 
@@ -2076,29 +2474,14 @@ function StudentAppContent({
         setWorkspaceCaptures((prev) => mergeWorkspaceCaptures(prev, [payload.capture!]));
       }
 
-      const echo = payload.echo;
-      if (echo) {
-        setWorkspaceEchoes((prev) => mergeWorkspaceEchoes(prev, [echo]));
-        setCaptureDrivenPulse({
-          title: echo.title,
-          body: echo.body,
-          chips: (echo.chips || []).slice(0, 3),
-          actions: params.role === 'primary'
-            ? [
-                { key: 'capture-confusion', label: '补一句困惑' },
-                { key: 'add-material', label: '贴一份材料' },
-              ]
-            : [
-                { key: 'continue-voice', label: '再录一段' },
-                { key: 'capture-confusion', label: '写一句想法' },
-              ],
-        });
+      if (payload.echoQueued || payload.echoAlreadyGeneratedToday) {
+        void refreshDailyEcho();
       }
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       console.error('[workspace.capture]', message);
     }
-  }, [accessToken, isAuthenticated, user?.id]);
+  }, [accessToken, isAuthenticated, refreshDailyEcho, user?.id]);
 
   const handleRecordingStart = useCallback((newSessionId: string) => {
     const hasExistingCollectionContext =
@@ -2156,15 +2539,15 @@ function StudentAppContent({
     });
   }, [studentId, clearTopics, clearSummary]);
 
-  const handleRecordingStop = useCallback((blob?: Blob, meta?: { sessionId?: string; isContinuation?: boolean; durationMs?: number }) => {
+  const handleRecordingStop = useCallback((blob?: Blob, meta?: { recordingId?: string; sessionId?: string; isContinuation?: boolean; durationMs?: number }) => {
     setIsRecording(false);
     setShowMobileRecorder(false);
     if (blob) setAudioBlob(blob);
     
     // NOTE: cleaned corrupted legacy comment.
-    const currentSegments = liveSegmentsRef.current.length > 0 
-      ? liveSegmentsRef.current 
-      : segments;
+    const currentSegments = liveSegmentsRef.current.length > 0
+      ? liveSegmentsRef.current
+      : segmentsRef.current;
     
     const hasLiveData = liveSegmentsRef.current.length > 0;
     const finalSegments = hasLiveData ? currentSegments : [];
@@ -2220,13 +2603,19 @@ function StudentAppContent({
       }
 
       const audioCaptureId = `audio-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+      const recordingId = meta?.recordingId || audioCaptureId;
+      const recordingTitle = `录音 ${new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })}`;
+      const pendingBaseSegments = meta?.isContinuation ? [...segmentsRef.current] : [];
+      const pendingBaseOffsetMs = meta?.isContinuation
+        ? resolveLiveRecordingAppendOffset(pendingBaseSegments, sessionMediaDurationMs)
+        : 0;
       setSourceItems((prev) => [
         ...prev,
         {
           id: audioCaptureId,
           type: 'audio',
           role: 'primary',
-          title: `录音 ${new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })}`,
+          title: recordingTitle,
           preview: buildSourcePreviewText(finalSegments, 180),
           mediaUrl: liveMediaUrl,
           segmentCount: finalSegments.length,
@@ -2245,7 +2634,7 @@ function StudentAppContent({
           sourceKey: `live:${audioCaptureId}`,
           role: 'primary',
           contentType: 'audio',
-          title: `录音 ${new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })}`,
+          title: recordingTitle,
           previewText: buildSourcePreviewText(finalSegments, 180),
           normalizedText: buildSupportReferenceSnippet(finalSegments, 2800),
           tutorContext: buildSupportReferenceSnippet(finalSegments, 2800),
@@ -2259,14 +2648,17 @@ function StudentAppContent({
           },
         });
       } else {
-        pendingRecordedAudioRef.current = {
+        pendingRecordedAudiosRef.current.set(recordingId, {
+          recordingId,
           itemId: audioCaptureId,
           sessionId: effectiveSessionId,
-          title: `录音 ${new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })}`,
+          title: recordingTitle,
           mediaUrl: liveMediaUrl,
           durationMs: duration,
           blob,
-        };
+          baseSegments: pendingBaseSegments,
+          baseOffsetMs: pendingBaseOffsetMs,
+        });
       }
     }
     
@@ -2279,7 +2671,7 @@ function StudentAppContent({
     setTimeline(tl);
     memoryService.save(tl);
     setViewMode('record');
-  }, [anchors, persistCaptureToWorkspace, segments, sessionId, user]);
+  }, [anchors, persistCaptureToWorkspace, sessionId, sessionMediaDurationMs, user]);
 
   // NOTE: cleaned corrupted legacy comment.
   // NOTE: cleaned corrupted legacy comment.
@@ -2463,31 +2855,42 @@ function StudentAppContent({
     }
   }, [restoreReviewSession]);
 
-  const handleTranscriptUpdate = useCallback((newSegments: TranscriptSegment[]) => {
-    liveSegmentsRef.current = newSegments;
-    setSegments(newSegments);
-    setDataSource('live');
-    setVideoSource(null);
-    const pendingAudio = pendingRecordedAudioRef.current;
+  const handleTranscriptUpdate = useCallback((newSegments: TranscriptSegment[], meta?: { recordingId?: string }) => {
+    const pendingAudio = resolvePendingRecordedAudio(meta?.recordingId);
+    let effectiveSegments = newSegments;
+
     if (pendingAudio) {
-      const previewText = buildSourcePreviewText(newSegments, 180);
+      const { appendedSegments, mergedSegments, totalDurationMs } = appendLiveRecordingSegments({
+        existingSegments: pendingAudio.baseSegments,
+        incomingSegments: newSegments,
+        sourceItemId: pendingAudio.itemId,
+        offsetMs: pendingAudio.baseOffsetMs,
+      });
+      const previewText = buildSourcePreviewText(appendedSegments, 180);
+      const normalizedText = buildSupportReferenceSnippet(appendedSegments, 2800);
       const currentUserId = user?.id || ANONYMOUS_USER_ID;
-      void addTranscripts(pendingAudio.sessionId, currentUserId, newSegments.map((seg) => ({
+      const mergedDurationMs = Math.max(
+        totalDurationMs,
+        pendingAudio.baseOffsetMs + pendingAudio.durationMs
+      );
+
+      effectiveSegments = mergedSegments;
+      void addTranscripts(pendingAudio.sessionId, currentUserId, appendedSegments.map((seg) => ({
         text: seg.text,
         startMs: seg.startMs,
         endMs: seg.endMs,
         confidence: seg.confidence || 1.0,
         isFinal: true,
       }))).catch((err) => console.error('Failed to persist batch transcript to IndexedDB:', err));
-      setSessionMediaDurationMs((prev) => Math.max(prev, pendingAudio.durationMs));
+      setSessionMediaDurationMs((prev) => Math.max(prev, mergedDurationMs));
       setSourceItems((prev) =>
         prev.map((item) =>
           item.id === pendingAudio.itemId
             ? {
                 ...item,
                 preview: previewText,
-                fullText: buildSupportReferenceSnippet(newSegments, 2800),
-                segmentCount: newSegments.length,
+                fullText: normalizedText,
+                segmentCount: appendedSegments.length,
                 durationMs: pendingAudio.durationMs,
                 reviewable: true,
                 sessionId: pendingAudio.sessionId,
@@ -2504,23 +2907,51 @@ function StudentAppContent({
         contentType: 'audio',
         title: pendingAudio.title,
         previewText,
-        normalizedText: buildSupportReferenceSnippet(newSegments, 2800),
-        tutorContext: buildSupportReferenceSnippet(newSegments, 2800),
+        normalizedText,
+        tutorContext: normalizedText,
         mediaUrl: pendingAudio.mediaUrl,
         occurredAt: new Date().toISOString(),
         metadata: {
           from: 'live-recording',
           sessionId: pendingAudio.sessionId,
           duration: pendingAudio.durationMs,
-          segmentCount: newSegments.length,
+          segmentCount: appendedSegments.length,
         },
       });
-      pendingRecordedAudioRef.current = null;
-    }
-  }, [persistCaptureToWorkspace, user?.id]);
 
-  const handleRecordingTranscriptionError = useCallback((message: string) => {
-    const pendingAudio = pendingRecordedAudioRef.current;
+      classroomDataService.saveSession({
+        id: pendingAudio.sessionId,
+        subject: UIConfig.defaultSubject,
+        topic: UIConfig.defaultLessonTitle,
+        teacherName: UIConfig.defaultTeacher || 'Teacher',
+        status: 'completed',
+        duration: mergedDurationMs,
+      });
+
+      const nextTimeline = memoryService.buildTimeline(
+        pendingAudio.sessionId,
+        mergedSegments,
+        anchorsRef.current,
+        {
+          subject: UIConfig.defaultSubject,
+          teacher: UIConfig.defaultTeacher || 'Teacher',
+          date: new Date().toISOString().split('T')[0],
+        }
+      );
+      setTimeline(nextTimeline);
+      memoryService.save(nextTimeline);
+      clearPendingRecordedAudio(meta?.recordingId);
+    }
+
+    liveSegmentsRef.current = effectiveSegments;
+    segmentsRef.current = effectiveSegments;
+    setSegments(effectiveSegments);
+    setDataSource('live');
+    setVideoSource(null);
+  }, [clearPendingRecordedAudio, persistCaptureToWorkspace, resolvePendingRecordedAudio, user?.id]);
+
+  const handleRecordingTranscriptionError = useCallback((message: string, meta?: { recordingId?: string }) => {
+    const pendingAudio = resolvePendingRecordedAudio(meta?.recordingId);
     if (!pendingAudio) return;
 
     setSourceItems((prev) =>
@@ -2533,11 +2964,11 @@ function StudentAppContent({
               statusText: resolvePendingAudioFailureStatus(message),
             }
           : item
-      )
+        )
     );
 
-    pendingRecordedAudioRef.current = null;
-  }, []);
+    clearPendingRecordedAudio(meta?.recordingId);
+  }, [clearPendingRecordedAudio, resolvePendingRecordedAudio]);
 
   // 接收转写增强结果，并更新当前课堂内容
   const handleTranscriptEnhanced = useCallback((enhancedSegments: TranscriptSegment[]) => {
@@ -2843,7 +3274,7 @@ const _handleVideoAssistantMessage = useCallback((payload: {
     clearTopics();
   }, [clearTopics]);
 
-  // 閹绢厽鏂侀崗銊╁劥閻楀洦顔?
+  // Play through all highlight topics in order.
   const handlePlayAll = useCallback(() => {
     if (isPlayingAll) {
       setIsPlayingAll(false);
@@ -3181,8 +3612,9 @@ const _handleVideoAssistantMessage = useCallback((payload: {
           subject: UIConfig.defaultSubject,
           topic: params.sourceTitle || UIConfig.defaultLessonTitle,
           duration: persistedDuration,
-          sourceType: 'upload',
+          sourceType: params.sourceType === 'video' ? 'video-file' : 'upload',
           mediaUrl: params.mediaUrl,
+          mimeType: params.audioBlob.type || (params.sourceType === 'video' ? 'video/mp4' : 'audio/webm'),
         }).catch((error) => {
           console.error('Failed to persist imported audio session:', error);
         });
@@ -3735,6 +4167,66 @@ const _handleVideoAssistantMessage = useCallback((payload: {
     [sourceItems]
   );
 
+  const selectedCollectionContextItems = useMemo(
+    () => collectionFeedItems.filter((item) => selectedCollectionContextIds.includes(item.id)),
+    [collectionFeedItems, selectedCollectionContextIds]
+  );
+
+  const selectedWorkspaceCaptureIds = useMemo(
+    () =>
+      selectedCollectionContextIds
+        .filter((id) => id.startsWith('workspace-'))
+        .map((id) => id.replace(/^workspace-/, '')),
+    [selectedCollectionContextIds]
+  );
+
+  useEffect(() => {
+    if (selectedCollectionContextIds.length === 0) {
+      if (selectedCollectionPrimaryId) {
+        setSelectedCollectionPrimaryId(null);
+      }
+      if (isCollectionContextSelectionMode && collectionFeedItems.length === 0) {
+        setIsCollectionContextSelectionMode(false);
+      }
+      return;
+    }
+
+    const validIds = new Set(collectionFeedItems.map((item) => item.id));
+    const nextIds = selectedCollectionContextIds.filter((id) => validIds.has(id));
+    if (nextIds.length !== selectedCollectionContextIds.length) {
+      setSelectedCollectionContextIds(nextIds);
+      return;
+    }
+
+    const nextPrimaryId = resolveCollectionContextPrimaryId(selectedCollectionContextItems, selectedCollectionPrimaryId);
+    if (nextPrimaryId !== selectedCollectionPrimaryId) {
+      setSelectedCollectionPrimaryId(nextPrimaryId);
+    }
+  }, [
+    collectionFeedItems,
+    isCollectionContextSelectionMode,
+    selectedCollectionContextIds,
+    selectedCollectionContextItems,
+    selectedCollectionPrimaryId,
+  ]);
+
+  const selectedCollectionContextText = useMemo(
+    () =>
+      buildSelectedCollectionContextText({
+        items: selectedCollectionContextItems,
+        primaryId: selectedCollectionPrimaryId,
+      }),
+    [selectedCollectionContextItems, selectedCollectionPrimaryId]
+  );
+
+  const tutorSupportContextText = useMemo(() => {
+    const base = buildTutorSupportContextText(supportReferences, workspaceEchoes);
+    return compactMultilineText(
+      [selectedCollectionContextText, base].filter(Boolean).join('\n\n'),
+      8500
+    );
+  }, [selectedCollectionContextText, supportReferences, workspaceEchoes]);
+
   const currentLivePreview = useMemo(
     () =>
       compactText(
@@ -3759,6 +4251,16 @@ const _handleVideoAssistantMessage = useCallback((payload: {
   );
 
   const composerCanAutoImportLink = composerReach.channel === 'video-link' && composerReach.shouldAutoIngest;
+  const consumeMobileAIQuestion = useCallback(() => {
+    setMobileAIConsumedQuestionNonce(mobileAIQuestionNonce);
+  }, [mobileAIQuestionNonce]);
+
+  const clearMobileAILaunchState = useCallback(() => {
+    setMobileAIQuestion('');
+    setMobileAIConsumedQuestionNonce(null);
+    setMobileAIPreferSelectedContext(false);
+    setMobileAILaunchTarget(null);
+  }, []);
 
   const nudgeComposer = useCallback((draft: string) => {
     setMobileCollectionSheet(null);
@@ -3793,6 +4295,130 @@ const _handleVideoAssistantMessage = useCallback((payload: {
       });
     }
   }, []);
+
+  const appendCollectionDraftToComposer = useCallback((draft: string) => {
+    setMobileCollectionSheet(null);
+    setShowMobileRecorder(false);
+    setCollectionComposerText((prev) => (prev.trim() ? `${prev.trimEnd()}\n${draft}` : draft));
+    if (typeof window !== 'undefined') {
+      window.requestAnimationFrame(() => {
+        const textarea = collectionComposerRef.current;
+        if (!textarea) return;
+        textarea.focus();
+        const length = textarea.value.length;
+        textarea.setSelectionRange(length, length);
+      });
+    }
+  }, []);
+
+  const ensureWorkspaceCaptureSourceItem = useCallback((capture: WorkspaceCaptureMessage): SourceIngestItem => {
+    const sourceItem = buildWorkspaceCaptureSourceItem(capture);
+
+    setSourceItems((prev) => {
+      if (prev.some((item) => item.id === sourceItem.id)) {
+        return prev;
+      }
+
+      if (sourceItem.sourceKey && prev.some((item) => resolveSourceItemSourceKey(item) === sourceItem.sourceKey)) {
+        return prev;
+      }
+
+      return [...prev, sourceItem];
+    });
+
+    const snippet = compactText((capture.tutorContext || capture.normalizedText || '').trim(), 2800);
+    if (snippet) {
+      setSupportReferences((prev) =>
+        mergeSupportReferences(prev, [
+          {
+            id: sourceItem.id,
+            title: sourceItem.title,
+            snippet,
+          },
+        ])
+      );
+    }
+
+    return sourceItem;
+  }, []);
+
+  const clearCollectionContextSelection = useCallback(() => {
+    setSelectedCollectionContextIds([]);
+    setSelectedCollectionPrimaryId(null);
+    setIsCollectionContextSelectionMode(false);
+  }, []);
+
+  const toggleCollectionContextSelectionMode = useCallback(() => {
+    setIsCollectionContextSelectionMode((prev) => {
+      const next = !prev;
+      if (!next) {
+        setSelectedCollectionContextIds([]);
+        setSelectedCollectionPrimaryId(null);
+      }
+      return next;
+    });
+  }, []);
+
+  const toggleCollectionContextItem = useCallback((item: SourceIngestItem) => {
+    setSelectedCollectionContextIds((prev) => {
+      const exists = prev.includes(item.id);
+      const nextIds = exists ? prev.filter((id) => id !== item.id) : [...prev, item.id];
+      const selectedItems = collectionFeedItems
+        .filter((current) => nextIds.includes(current.id))
+        .concat(nextIds.includes(item.id) && !collectionFeedItems.some((current) => current.id === item.id) ? [item] : []);
+      const nextPrimaryId = resolveCollectionContextPrimaryId(
+        selectedItems,
+        exists
+          ? selectedCollectionPrimaryId === item.id
+            ? null
+            : selectedCollectionPrimaryId
+          : item.id
+      );
+      setSelectedCollectionPrimaryId(nextPrimaryId);
+      if (nextIds.length === 0) {
+        setIsCollectionContextSelectionMode(false);
+      } else if (!isCollectionContextSelectionMode) {
+        setIsCollectionContextSelectionMode(true);
+      }
+      return nextIds;
+    });
+  }, [collectionFeedItems, isCollectionContextSelectionMode, selectedCollectionPrimaryId]);
+
+  const quoteSelectedCollectionContextToComposer = useCallback(() => {
+    const draft = buildCollectionQuoteDraft({
+      items: selectedCollectionContextItems,
+      primaryId: selectedCollectionPrimaryId,
+    });
+    if (!draft) return;
+
+    setIsCollectionContextSelectionMode(false);
+    appendCollectionDraftToComposer(draft);
+  }, [appendCollectionDraftToComposer, selectedCollectionContextItems, selectedCollectionPrimaryId]);
+
+  const quoteCollectionItemToComposer = useCallback((item: SourceIngestItem) => {
+    const draft = buildCollectionQuoteDraft({
+      items: [item],
+      primaryId: item.id,
+    });
+    if (!draft) return;
+
+    setSelectedCollectionContextIds([item.id]);
+    setSelectedCollectionPrimaryId(item.id);
+    setIsCollectionContextSelectionMode(false);
+    appendCollectionDraftToComposer(draft);
+  }, [appendCollectionDraftToComposer]);
+
+  const quoteWorkspaceCaptureToComposer = useCallback((capture: WorkspaceCaptureMessage) => {
+    const sourceItem = ensureWorkspaceCaptureSourceItem(capture);
+    quoteCollectionItemToComposer(sourceItem);
+    setMobileCollectionSheet(null);
+    setShowSessionHistory(false);
+  }, [ensureWorkspaceCaptureSourceItem, quoteCollectionItemToComposer]);
+
+  const toggleWorkspaceCaptureContextSelection = useCallback((capture: WorkspaceCaptureMessage) => {
+    const sourceItem = ensureWorkspaceCaptureSourceItem(capture);
+    toggleCollectionContextItem(sourceItem);
+  }, [ensureWorkspaceCaptureSourceItem, toggleCollectionContextItem]);
 
   const {
     status: composerVoiceStatus,
@@ -3878,24 +4504,21 @@ const _handleVideoAssistantMessage = useCallback((payload: {
         );
 
         setSourceItems((prev) => {
-          if (prev.some((item) => item.id === sourceItemId)) return prev;
-          return [
-            ...prev,
-            {
-              id: sourceItemId,
-              sourceKey: `wechat:${message.linkToken}`,
-              type: sourceType,
-              role,
-              title,
-              preview,
-              previewUrl: sourceType === 'image' ? message.mediaUrl || undefined : undefined,
-              mediaUrl: sourceType === 'audio' || sourceType === 'video' ? message.mediaUrl || undefined : undefined,
-              attachmentUrl: message.sourceUrl || undefined,
-              segmentCount: 1,
-              addedAt,
-              origin: 'user',
-            },
-          ];
+          const nextItem = buildWechatCaptureSourceItem(message);
+          const index = prev.findIndex(
+            (item) => item.id === nextItem.id || resolveSourceItemSourceKey(item) === nextItem.sourceKey
+          );
+
+          if (index < 0) {
+            return [...prev, nextItem];
+          }
+
+          const next = [...prev];
+          next[index] = {
+            ...prev[index],
+            ...nextItem,
+          };
+          return next;
         });
 
         const tutorSnippet = (message.tutorContext || message.normalizedText || '').trim();
@@ -3909,15 +4532,7 @@ const _handleVideoAssistantMessage = useCallback((payload: {
 
         const messageEchoTitle = message.echoTitle;
         const messageEchoBody = message.echoBody;
-      if (messageEchoTitle && messageEchoBody) {
-          setWorkspaceEchoes((prev) => mergeWorkspaceEchoes(prev, [{
-            id: `wechat-echo-${message.linkToken}`,
-            sourceKey: `wechat:${message.linkToken}`,
-            title: messageEchoTitle,
-            body: messageEchoBody,
-            chips: Array.isArray(message.echoChips) ? message.echoChips.filter(Boolean).slice(0, 4) : [],
-            createdAt: addedAt,
-          }]));
+        if (messageEchoTitle && messageEchoBody) {
           setCaptureDrivenPulse({
             title: messageEchoTitle,
             body: messageEchoBody,
@@ -3932,6 +4547,10 @@ const _handleVideoAssistantMessage = useCallback((payload: {
                   { key: 'capture-confusion', label: '写一句想法' },
                 ],
           });
+        }
+
+        if (isAuthenticated && user?.id && accessToken) {
+          void refreshDailyEcho();
         }
 
         importedWechatCaptureTokensRef.current.add(wechatCaptureToken);
@@ -3953,7 +4572,7 @@ const _handleVideoAssistantMessage = useCallback((payload: {
     return () => {
       cancelled = true;
     };
-  }, [wechatCaptureToken]);
+  }, [accessToken, isAuthenticated, refreshDailyEcho, user?.id, wechatCaptureToken]);
 
   useEffect(() => {
     if (!isAuthenticated || !user?.id || !accessToken) return;
@@ -4032,16 +4651,6 @@ const _handleVideoAssistantMessage = useCallback((payload: {
 
         if (echoes.length > 0) {
           setWorkspaceEchoes((prev) => mergeWorkspaceEchoes(prev, echoes));
-          const latestEcho = echoes[0];
-          setCaptureDrivenPulse((current) => current ?? {
-            title: latestEcho.title,
-            body: latestEcho.body,
-            chips: (latestEcho.chips || []).slice(0, 3),
-            actions: [
-              { key: 'continue-voice', label: '再录一段' },
-              { key: 'capture-confusion', label: '写一句想法' },
-            ],
-          });
         }
 
         workspaceContextRequestKeyRef.current = requestKey;
@@ -4209,6 +4818,13 @@ const _handleVideoAssistantMessage = useCallback((payload: {
     return workspaceEchoes.filter((echo) => echo.chips.includes(selectedEchoChip));
   }, [selectedEchoChip, workspaceEchoes]);
 
+  const latestWorkspaceEchoId = workspaceEchoes[0]?.id || null;
+
+  const historyWorkspaceEchoes = useMemo(() => {
+    if (!latestWorkspaceEchoId) return filteredWorkspaceEchoes;
+    return filteredWorkspaceEchoes.filter((echo) => echo.id !== latestWorkspaceEchoId);
+  }, [filteredWorkspaceEchoes, latestWorkspaceEchoId]);
+
   const groupedWorkspaceEchoes = useMemo(() => {
     const groups: Record<'today' | 'week' | 'earlier', WorkspaceEchoMessage[]> = {
       today: [],
@@ -4216,12 +4832,12 @@ const _handleVideoAssistantMessage = useCallback((payload: {
       earlier: [],
     };
 
-    filteredWorkspaceEchoes.forEach((echo) => {
-      groups[resolveEchoTimeBucket(echo.createdAt)].push(echo);
+    historyWorkspaceEchoes.forEach((echo) => {
+      groups[resolveEchoTimeBucket(resolveEchoDisplayTime(echo))].push(echo);
     });
 
     return groups;
-  }, [filteredWorkspaceEchoes]);
+  }, [historyWorkspaceEchoes]);
 
   const echoHistorySections = useMemo(
     () =>
@@ -4236,14 +4852,6 @@ const _handleVideoAssistantMessage = useCallback((payload: {
   );
 
   const latestEchoForCenter = useMemo(() => {
-    if (collectionPulse) {
-      return {
-        title: collectionPulse.title,
-        body: collectionPulse.body,
-        chips: collectionPulse.chips,
-      };
-    }
-
     if (workspaceEchoes.length === 0) return null;
 
     const latest = workspaceEchoes[0];
@@ -4251,8 +4859,93 @@ const _handleVideoAssistantMessage = useCallback((payload: {
       title: latest.title,
       body: latest.body,
       chips: latest.chips,
+      updatedAt: resolveEchoDisplayTime(latest),
     };
-  }, [collectionPulse, workspaceEchoes]);
+  }, [workspaceEchoes]);
+
+  const latestEchoIsToday = useMemo(() => {
+    if (!latestEchoForCenter?.updatedAt) return false;
+    return resolveEchoTimeBucket(latestEchoForCenter.updatedAt) === 'today';
+  }, [latestEchoForCenter]);
+
+  const canRequestManualEcho = Boolean(isAuthenticated && user?.id && accessToken);
+
+  const manualEchoButtonLabel = useMemo(() => {
+    if (isManualEchoRefreshing) return '生成中...';
+    if (isCheckingAuth) return '确认中...';
+    if (!canRequestManualEcho) {
+      return isGuestFastEntry ? '登录后测试' : '登录后生成';
+    }
+    return '测试生成';
+  }, [canRequestManualEcho, isCheckingAuth, isGuestFastEntry, isManualEchoRefreshing]);
+
+  const renderManualEchoTriggerButton = useCallback(
+    (className: string) => {
+      if (!ENABLE_ECHO_MANUAL_TRIGGER) return null;
+
+      return (
+        <button
+          type="button"
+          disabled={isManualEchoRefreshing}
+          onClick={() => {
+            void refreshDailyEcho({ force: true });
+          }}
+          className={className}
+        >
+          <span className="inline-flex items-center gap-2">
+            {isManualEchoRefreshing ? (
+              <span
+                aria-hidden="true"
+                className="h-3.5 w-3.5 rounded-full border-2 border-current border-t-transparent animate-spin"
+              />
+            ) : null}
+            <span>{manualEchoButtonLabel}</span>
+          </span>
+        </button>
+      );
+    },
+    [isManualEchoRefreshing, manualEchoButtonLabel, refreshDailyEcho]
+  );
+
+  const manualEchoFeedbackView =
+    ENABLE_ECHO_MANUAL_TRIGGER && manualEchoFeedback ? (
+      <div
+        aria-live="polite"
+        role="status"
+        className={`mt-3 rounded-[16px] border px-3 py-2.5 ${getManualEchoFeedbackClasses(manualEchoFeedback.tone)}`}
+      >
+        <div className="flex items-start gap-2.5">
+          <span className="mt-0.5 inline-flex h-5 w-5 items-center justify-center rounded-full bg-white/70">
+            {manualEchoFeedback.tone === 'pending' ? (
+              <span
+                aria-hidden="true"
+                className="h-3 w-3 rounded-full border-2 border-current border-t-transparent animate-spin"
+              />
+            ) : manualEchoFeedback.tone === 'success' ? (
+              <Sparkles size={12} />
+            ) : manualEchoFeedback.tone === 'error' ? (
+              <AlertCircle size={12} />
+            ) : (
+              <Clock size={12} />
+            )}
+          </span>
+          <div className="min-w-0 flex-1">
+            <p className="text-[12px] font-semibold leading-5">{manualEchoFeedback.title}</p>
+            <p className="text-[11px] leading-5 text-current/75">{manualEchoFeedback.body}</p>
+          </div>
+        </div>
+      </div>
+    ) : null;
+
+  const manualEchoDebugView =
+    ENABLE_ECHO_MANUAL_TRIGGER && manualEchoDebugNote ? (
+      <details className="mt-2 text-[11px] leading-5 text-slate-500">
+        <summary className="list-none cursor-pointer select-none text-slate-400 [&::-webkit-details-marker]:hidden">
+          查看测试信息
+        </summary>
+        <p className="mt-2 rounded-[14px] bg-slate-50 px-3 py-2 text-slate-500">{manualEchoDebugNote}</p>
+      </details>
+    ) : null;
 
   const captureActivitySummary = useMemo(() => {
     const now = new Date();
@@ -4586,15 +5279,48 @@ const _handleVideoAssistantMessage = useCallback((payload: {
     }
   }, [handleSourceFileButtonClick, nudgeComposer, openLiveRecorder]);
 
-  const openTutorFromCollection = useCallback((initialPrompt?: string) => {
+  const buildTutorPromptForCollectionItem = useCallback((item: SourceIngestItem) => {
+    const label = getCollectionContextTypeLabel(item.type);
+    const focus = getCollectionContextDisplayTitle(item, 48);
+    const snippet = compactText((item.fullText || item.preview || item.title || '').trim(), 120);
+    if (item.type === 'text') {
+      return compactMultilineText(
+        `顺着这条${label}继续帮我讲清楚。\n先直接说这段内容最核心在讲什么；如果只看这一条还不完整，也先告诉我现在能确定什么。\n当前内容：${focus}\n摘录：${snippet}`,
+        320
+      );
+    }
+
+    return compactMultilineText(
+      `顺着这条${label}继续带我理解。\n先围绕它现在最关键的一点讲清楚；如果信息还不完整，也先告诉我能确定什么，再给我一个最值得继续追问的问题。\n当前内容：${focus}\n摘录：${snippet}`,
+      320
+    );
+  }, []);
+
+  const buildTutorPromptForCollectionGroup = useCallback((primaryItem: SourceIngestItem) => {
+    const label = getCollectionContextTypeLabel(primaryItem.type);
+    const focus = getCollectionContextDisplayTitle(primaryItem, 48);
+    const snippet = compactText((primaryItem.fullText || primaryItem.preview || primaryItem.title || '').trim(), 140);
+    return compactMultilineText(
+      `我刚圈出这组内容，想顺着它们继续往下问。\n请先围绕这条${label}讲清楚它和其他内容最关键的关系；如果信息还不完整，也先告诉我现在最值得抓住的一点。\n当前重点：${focus}\n核心摘录：${snippet}`,
+      360
+    );
+  }, []);
+
+  const openTutorFromCollection = useCallback((initialPrompt?: string, options?: { preferSelectedContext?: boolean }) => {
     setMobileCollectionSheet(null);
     setShowCollectionPulsePreview(false);
     setShowConversationHistory(false);
     setSelectedHistoryConversation(null);
     setShowMobileRecorder(false);
     setShowSessionHistory(false);
+    setSelectedConfusion(null);
+    setConfusionChatAnchor(null);
     setSelectedAnchor(null);
     setMobileAIQuestion(initialPrompt || '');
+    setMobileAIConsumedQuestionNonce(null);
+    setMobileAIPreferSelectedContext(Boolean(options?.preferSelectedContext));
+    setMobileAIQuestionNonce((prev) => prev + 1);
+    setMobileAILaunchTarget(isMobile ? 'mobile-ai-chat' : videoSource ? 'video-chat' : 'review-panel');
     setViewMode('review');
     if (videoSource) {
       setVideoWorkspaceTab('chat');
@@ -4603,6 +5329,30 @@ const _handleVideoAssistantMessage = useCallback((payload: {
       setMobileSubPage('ai-chat');
     }
   }, [isMobile, videoSource]);
+
+  const openTutorWithSelectedCollectionContext = useCallback(() => {
+    if (selectedCollectionContextItems.length === 0) return;
+
+    const primaryId = resolveCollectionContextPrimaryId(selectedCollectionContextItems, selectedCollectionPrimaryId);
+    const primaryItem = selectedCollectionContextItems.find((item) => item.id === primaryId) || selectedCollectionContextItems[0];
+    const prompt = primaryItem ? buildTutorPromptForCollectionGroup(primaryItem) : undefined;
+    setIsCollectionContextSelectionMode(false);
+    openTutorFromCollection(prompt, { preferSelectedContext: true });
+  }, [buildTutorPromptForCollectionGroup, openTutorFromCollection, selectedCollectionContextItems, selectedCollectionPrimaryId]);
+
+  const openTutorFromCollectionItem = useCallback((item: SourceIngestItem) => {
+    setSelectedCollectionContextIds([item.id]);
+    setSelectedCollectionPrimaryId(item.id);
+    setIsCollectionContextSelectionMode(false);
+    openTutorFromCollection(buildTutorPromptForCollectionItem(item), { preferSelectedContext: true });
+  }, [buildTutorPromptForCollectionItem, openTutorFromCollection]);
+
+  const openTutorFromWorkspaceCapture = useCallback((capture: WorkspaceCaptureMessage) => {
+    const sourceItem = ensureWorkspaceCaptureSourceItem(capture);
+    openTutorFromCollectionItem(sourceItem);
+    setMobileCollectionSheet(null);
+    setShowSessionHistory(false);
+  }, [ensureWorkspaceCaptureSourceItem, openTutorFromCollectionItem]);
 
   useEffect(() => {
     if ((viewMode !== 'record' || showMobileRecorder) && isComposerVoiceRecording) {
@@ -4680,7 +5430,7 @@ const _handleVideoAssistantMessage = useCallback((payload: {
     const dockPaddingClass = desktopShell ? 'px-6 pb-6 pt-3' : 'px-3 pb-[max(env(safe-area-inset-bottom),12px)] pt-2';
     const sheetBottomOffset = desktopShell ? (showMobileRecorder ? 168 : 118) : (showMobileRecorder ? 150 : 96);
     const scrollPadding = desktopShell ? 28 : 18;
-    const composerRows = desktopShell ? (collectionComposerText.trim() ? 4 : 3) : (collectionComposerText.trim() ? 3 : 2);
+    const composerRows = desktopShell ? (collectionComposerText.trim() ? 2 : 1) : (collectionComposerText.trim() ? 2 : 1);
 
     return (
     <div className="relative flex h-full min-h-0 flex-col overflow-hidden" style={{ background: 'var(--edu-bg-primary)' }}>
@@ -4701,10 +5451,66 @@ const _handleVideoAssistantMessage = useCallback((payload: {
       >
         <div className={`mx-auto flex w-full ${shellWidthClass} flex-col gap-3`}>
           {collectionFeedItems.length > 0 ? (
-            <div className="flex items-center justify-center">
-              <div className="rounded-full bg-slate-100/90 px-3 py-1 text-[11px] font-medium text-slate-400">
-                今天
+            <div className="space-y-2">
+              <div className="flex items-center justify-between gap-3">
+                <div className="rounded-full bg-slate-100/90 px-3 py-1 text-[11px] font-medium text-slate-400">
+                  今天
+                </div>
+                <button
+                  type="button"
+                  onClick={toggleCollectionContextSelectionMode}
+                  className={`rounded-full px-3 py-1 text-[11px] font-medium transition ${
+                    isCollectionContextSelectionMode
+                      ? 'bg-emerald-50 text-emerald-700'
+                      : 'bg-white text-slate-500 shadow-sm hover:text-slate-700'
+                  }`}
+                >
+                  {isCollectionContextSelectionMode ? '结束多选' : '多选'}
+                </button>
               </div>
+              {isCollectionContextSelectionMode ? (
+                <div className="rounded-[20px] border border-emerald-100 bg-[linear-gradient(145deg,#ffffff_0%,#f2fcf6_100%)] px-4 py-3 shadow-sm">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="text-[12px] font-semibold text-slate-900">
+                        {selectedCollectionContextItems.length > 0
+                          ? `已选 ${selectedCollectionContextItems.length} 条`
+                          : '选几条要一起带上的内容'}
+                      </p>
+                      <p className="mt-1 text-[11px] leading-5 text-slate-500">
+                        {selectedCollectionContextItems.length > 0
+                          ? '像微信里多选消息一样，一起带去问 Tutor 或接着写。系统会自动抓住重点。'
+                          : '先把这次要一起带上的内容勾出来。'}
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={clearCollectionContextSelection}
+                      className="text-[11px] font-medium text-slate-400 transition hover:text-slate-600"
+                    >
+                      清空
+                    </button>
+                  </div>
+                  {selectedCollectionContextItems.length > 0 ? (
+                    <div className="mt-3 flex flex-wrap items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={openTutorWithSelectedCollectionContext}
+                        className="rounded-full bg-emerald-600 px-3 py-2 text-[11px] font-semibold text-white transition hover:bg-emerald-700"
+                      >
+                        一起问 Tutor
+                      </button>
+                      <button
+                        type="button"
+                        onClick={quoteSelectedCollectionContextToComposer}
+                        className="rounded-full border border-slate-200 bg-white px-3 py-2 text-[11px] font-semibold text-slate-600 transition hover:border-slate-300 hover:text-slate-800"
+                      >
+                        一起引用
+                      </button>
+                    </div>
+                  ) : null}
+                </div>
+              ) : null}
             </div>
           ) : null}
 
@@ -4769,7 +5575,8 @@ const _handleVideoAssistantMessage = useCallback((payload: {
                           ? '材料'
                           : '文字';
 
-                const bubbleText = item.preview?.trim() || item.title;
+                const bubbleText = item.fullText?.trim() || item.preview?.trim() || item.title;
+                const collectionActionTitle = getCollectionContextDisplayTitle(item, 36);
                 const audioProgress =
                   audioPlaybackState?.id === item.id
                     ? Math.max(0, Math.min(1, audioPlaybackState.progress))
@@ -4794,6 +5601,12 @@ const _handleVideoAssistantMessage = useCallback((payload: {
                       : 'bg-white/70 text-[#3d7d1f]';
                 const isAttachmentMessage =
                   Boolean(item.attachmentUrl) && (item.type === 'document' || item.type === 'text');
+                const isSelectedForContext = selectedCollectionContextIds.includes(item.id);
+                const collectionActionClass = `rounded-full px-2.5 py-1 font-medium transition ${
+                  isPrimary
+                    ? 'bg-white/80 text-[#245818] hover:bg-white'
+                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200 hover:text-slate-800'
+                }`;
 
                 return (
                   <div key={item.id} className={`flex ${isPrimary ? 'justify-end' : 'justify-start'}`}>
@@ -4803,8 +5616,31 @@ const _handleVideoAssistantMessage = useCallback((payload: {
                           isPrimary
                             ? 'rounded-br-[8px] border-[#b8e7a6] bg-[#d9fdd3]'
                             : 'rounded-bl-[8px] border-slate-200 bg-white'
-                        }`}
+                        } ${isSelectedForContext ? 'ring-2 ring-emerald-200/80' : ''}`}
                       >
+                        {isCollectionContextSelectionMode ? (
+                          <div className={`mb-2 flex items-center justify-between gap-2 text-[11px] ${
+                            isPrimary ? 'text-[#4f7a36]' : 'text-slate-500'
+                          }`}>
+                            <button
+                              type="button"
+                              onClick={() => toggleCollectionContextItem(item)}
+                              aria-pressed={isSelectedForContext}
+                              className={`rounded-full px-2.5 py-1 font-medium transition ${
+                                isSelectedForContext
+                                  ? isPrimary
+                                    ? 'bg-white/80 text-[#245818]'
+                                    : 'bg-emerald-50 text-emerald-700'
+                                  : isPrimary
+                                    ? 'bg-white/62 text-[#4f7a36]'
+                                    : 'bg-slate-100 text-slate-500'
+                              }`}
+                            >
+                              {isSelectedForContext ? '已选' : '选择'}
+                            </button>
+                            <span className="text-[10px] opacity-70">{getCollectionContextTypeLabel(item.type)}</span>
+                          </div>
+                        ) : null}
                         {item.type === 'audio' ? (
                           <div className="space-y-2">
                             <div className={`flex ${isPrimary ? 'justify-end' : 'justify-start'}`}>
@@ -4863,9 +5699,32 @@ const _handleVideoAssistantMessage = useCallback((payload: {
                               {showAudioStatusText ? (
                                 <span className="font-medium">{item.statusText}</span>
                               ) : null}
-                              {item.segmentCount > 0 && item.preview?.trim() ? (
+                              {!isCollectionContextSelectionMode ? (
                                 <>
                                   {showAudioStatusText ? (
+                                    <span aria-hidden="true" className="opacity-40">·</span>
+                                  ) : null}
+                                  <button
+                                    type="button"
+                                    onClick={() => quoteCollectionItemToComposer(item)}
+                                    aria-label={`引用这条：${collectionActionTitle}`}
+                                    className={collectionActionClass}
+                                  >
+                                    引用
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => openTutorFromCollectionItem(item)}
+                                    aria-label={`顺着这条问 Tutor：${collectionActionTitle}`}
+                                    className={collectionActionClass}
+                                  >
+                                    问 Tutor
+                                  </button>
+                                </>
+                              ) : null}
+                              {item.segmentCount > 0 && item.fullText?.trim() ? (
+                                <>
+                                  {showAudioStatusText || !isCollectionContextSelectionMode ? (
                                     <span aria-hidden="true" className="opacity-40">·</span>
                                   ) : null}
                                   <button
@@ -4873,11 +5732,7 @@ const _handleVideoAssistantMessage = useCallback((payload: {
                                     onClick={() =>
                                       setExpandedAudioTranscriptId((prev) => (prev === item.id ? null : item.id))
                                     }
-                                    className={`rounded-full px-2.5 py-1 font-medium transition ${
-                                      isPrimary
-                                        ? 'bg-white/80 text-[#245818] hover:bg-white'
-                                        : 'bg-slate-100 text-slate-600 hover:bg-slate-200 hover:text-slate-800'
-                                    }`}
+                                    className={collectionActionClass}
                                   >
                                     {isAudioTranscriptOpen ? '收起文字' : '看文字'}
                                   </button>
@@ -4885,7 +5740,7 @@ const _handleVideoAssistantMessage = useCallback((payload: {
                               ) : null}
                               {canOpenReview ? (
                                 <>
-                                  {showAudioStatusText || (item.segmentCount > 0 && item.preview?.trim()) ? (
+                                  {showAudioStatusText || !isCollectionContextSelectionMode || (item.segmentCount > 0 && item.fullText?.trim()) ? (
                                     <span aria-hidden="true" className="opacity-40">·</span>
                                   ) : null}
                                   <button
@@ -4893,18 +5748,14 @@ const _handleVideoAssistantMessage = useCallback((payload: {
                                     onClick={() => {
                                       void openReviewFromCollection(item);
                                     }}
-                                    className={`rounded-full px-2.5 py-1 font-medium transition ${
-                                      isPrimary
-                                        ? 'bg-white/80 text-[#245818] hover:bg-white'
-                                        : 'bg-slate-100 text-slate-600 hover:bg-slate-200 hover:text-slate-800'
-                                    }`}
+                                    className={collectionActionClass}
                                   >
                                     去复习
                                   </button>
                                 </>
                               ) : null}
                             </div>
-                            {isAudioTranscriptOpen && item.segmentCount > 0 && item.preview?.trim() ? (
+                            {isAudioTranscriptOpen && item.segmentCount > 0 && item.fullText?.trim() ? (
                               <div className={`rounded-[16px] px-3 py-2 text-sm leading-6 ${
                                 isPrimary ? 'bg-white/65 text-slate-900' : 'bg-slate-50 text-slate-700'
                               }`}>
@@ -4941,6 +5792,28 @@ const _handleVideoAssistantMessage = useCallback((payload: {
                                 </div>
                               </div>
                             )}
+                            {!isCollectionContextSelectionMode ? (
+                              <div className={`flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] ${
+                                isPrimary ? 'justify-end text-[#4f7a36]' : 'justify-start text-slate-500'
+                              }`}>
+                                <button
+                                  type="button"
+                                  onClick={() => quoteCollectionItemToComposer(item)}
+                                  aria-label={`引用这条：${collectionActionTitle}`}
+                                  className={collectionActionClass}
+                                >
+                                  引用
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => openTutorFromCollectionItem(item)}
+                                  aria-label={`顺着这条问 Tutor：${collectionActionTitle}`}
+                                  className={collectionActionClass}
+                                >
+                                  问 Tutor
+                                </button>
+                              </div>
+                            ) : null}
                           </div>
                         ) : item.type === 'document' || isAttachmentMessage ? (
                           <div className="space-y-2">
@@ -4987,20 +5860,41 @@ const _handleVideoAssistantMessage = useCallback((payload: {
                             <div className={`flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] ${
                               isPrimary ? 'justify-end text-[#4f7a36]' : 'justify-start text-slate-500'
                             }`}>
+                              {!isCollectionContextSelectionMode ? (
+                                <>
+                                  <button
+                                    type="button"
+                                    onClick={() => quoteCollectionItemToComposer(item)}
+                                    aria-label={`引用这条：${collectionActionTitle}`}
+                                    className={collectionActionClass}
+                                  >
+                                    引用
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => openTutorFromCollectionItem(item)}
+                                    aria-label={`顺着这条问 Tutor：${collectionActionTitle}`}
+                                    className={collectionActionClass}
+                                  >
+                                    问 Tutor
+                                  </button>
+                                </>
+                              ) : null}
                               {canOpenReview ? (
+                                <>
+                                  {!isCollectionContextSelectionMode ? (
+                                    <span aria-hidden="true" className="opacity-40">·</span>
+                                  ) : null}
                                 <button
                                   type="button"
                                   onClick={() => {
                                     void openReviewFromCollection(item);
                                   }}
-                                  className={`rounded-full px-2.5 py-1 font-medium transition ${
-                                    isPrimary
-                                      ? 'bg-white/80 text-[#245818] hover:bg-white'
-                                      : 'bg-slate-100 text-slate-600 hover:bg-slate-200 hover:text-slate-800'
-                                  }`}
+                                  className={collectionActionClass}
                                 >
                                   去复习
                                 </button>
+                                </>
                               ) : null}
                             </div>
                           </div>
@@ -5052,28 +5946,73 @@ const _handleVideoAssistantMessage = useCallback((payload: {
                               {showVideoStatusText ? (
                                 <span className="font-medium">{item.statusText}</span>
                               ) : null}
-                              {showVideoStatusText && canOpenReview ? (
-                                <span aria-hidden="true" className="opacity-40">·</span>
+                              {!isCollectionContextSelectionMode ? (
+                                <>
+                                  {showVideoStatusText ? (
+                                    <span aria-hidden="true" className="opacity-40">·</span>
+                                  ) : null}
+                                  <button
+                                    type="button"
+                                    onClick={() => quoteCollectionItemToComposer(item)}
+                                    aria-label={`引用这条：${collectionActionTitle}`}
+                                    className={collectionActionClass}
+                                  >
+                                    引用
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => openTutorFromCollectionItem(item)}
+                                    aria-label={`顺着这条问 Tutor：${collectionActionTitle}`}
+                                    className={collectionActionClass}
+                                  >
+                                    问 Tutor
+                                  </button>
+                                </>
                               ) : null}
                               {canOpenReview ? (
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  void openReviewFromCollection(item);
-                                }}
-                                className={`rounded-full px-2.5 py-1 font-medium transition ${
-                                  isPrimary
-                                    ? 'bg-white/88 text-slate-900 hover:bg-white'
-                                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200 hover:text-slate-800'
-                                }`}
-                              >
-                                去复习
-                              </button>
+                                <>
+                                  {showVideoStatusText || !isCollectionContextSelectionMode ? (
+                                    <span aria-hidden="true" className="opacity-40">·</span>
+                                  ) : null}
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      void openReviewFromCollection(item);
+                                    }}
+                                    className={collectionActionClass}
+                                  >
+                                    去复习
+                                  </button>
+                                </>
                               ) : null}
                             </div>
                           </div>
                         ) : (
-                          <p className="text-sm leading-6 text-slate-900">{bubbleText}</p>
+                          <div className="space-y-2">
+                            <p className="text-sm leading-6 text-slate-900">{bubbleText}</p>
+                            {!isCollectionContextSelectionMode ? (
+                              <div className={`flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] ${
+                                isPrimary ? 'justify-end text-[#4f7a36]' : 'justify-start text-slate-500'
+                              }`}>
+                                <button
+                                  type="button"
+                                  onClick={() => quoteCollectionItemToComposer(item)}
+                                  aria-label={`引用这条：${collectionActionTitle}`}
+                                  className={collectionActionClass}
+                                >
+                                  引用
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => openTutorFromCollectionItem(item)}
+                                  aria-label={`顺着这条问 Tutor：${collectionActionTitle}`}
+                                  className={collectionActionClass}
+                                >
+                                  问 Tutor
+                                </button>
+                              </div>
+                            ) : null}
+                          </div>
                         )}
                         <div className={`mt-2 flex items-center ${isPrimary ? 'justify-end' : 'justify-start'} gap-2 text-[11px] text-slate-400`}>
                           <span>{formatRelativeCollectionTime(item.addedAt)}</span>
@@ -5173,7 +6112,7 @@ const _handleVideoAssistantMessage = useCallback((payload: {
                   <div className="min-w-0 flex-1">
                     <p className="text-sm font-semibold text-slate-900">回声</p>
                     <p className="mt-0.5 text-xs leading-5 text-slate-500">
-                      {latestEchoForCenter ? '晚点再看系统听到了什么。' : '先继续收，线索会慢慢沉下来。'}
+                      {latestEchoForCenter ? '看看今天为什么值得继续收。' : '先继续收，线索会慢慢沉下来。'}
                     </p>
                   </div>
                   <ChevronRight size={16} className="text-slate-300" />
@@ -5227,11 +6166,16 @@ const _handleVideoAssistantMessage = useCallback((payload: {
                 <div className="space-y-3 p-4">
                   {latestEchoForCenter ? (
                     <div className="rounded-[24px] border border-emerald-100 bg-[linear-gradient(145deg,#ffffff_0%,#effcf6_100%)] px-4 py-4 shadow-sm">
-                      <div className="mb-2 flex items-center gap-2 text-[12px] font-medium text-emerald-700">
-                        <span className="inline-flex h-8 w-8 items-center justify-center rounded-2xl bg-emerald-50 text-emerald-600">
-                          <Sparkles size={13} />
-                        </span>
-                        <span>最新回声</span>
+                      <div className="mb-3 flex items-center justify-between gap-3">
+                        <div className="flex items-center gap-2 text-[12px] font-medium text-emerald-700">
+                          <span className="inline-flex h-8 w-8 items-center justify-center rounded-2xl bg-emerald-50 text-emerald-600">
+                            <Sparkles size={13} />
+                          </span>
+                          <span>{latestEchoIsToday ? '今日回声' : '最近回声'}</span>
+                        </div>
+                        {renderManualEchoTriggerButton(
+                          'text-[11px] font-medium text-slate-400 transition hover:text-slate-600 disabled:cursor-not-allowed disabled:opacity-60'
+                        )}
                       </div>
                       <p className="mb-1 text-sm font-semibold leading-6 text-slate-900">{latestEchoForCenter.title}</p>
                       <p className="text-sm leading-7 text-slate-900">{latestEchoForCenter.body}</p>
@@ -5247,37 +6191,62 @@ const _handleVideoAssistantMessage = useCallback((payload: {
                           ))}
                         </div>
                       ) : null}
-                      <div className="mt-3 flex flex-wrap gap-2">
+                      <div className="mt-4">
+                        <button
+                          type="button"
+                          onClick={() => nudgeComposer('我想顺着这条继续记：')}
+                          className="rounded-full bg-emerald-600 px-4 py-2.5 text-xs font-semibold text-white transition hover:bg-emerald-700"
+                        >
+                          继续收这一条
+                        </button>
+                      </div>
+                      <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2 text-xs font-medium">
                         <button
                           type="button"
                           onClick={() => openTutorFromCollection(buildTutorQuestionFromEcho(latestEchoForCenter, 'explore'))}
-                          className="rounded-full border border-emerald-200 bg-white px-3 py-2 text-xs font-semibold text-emerald-700 transition hover:border-emerald-300 hover:bg-emerald-50"
+                          className="text-emerald-700 transition hover:text-emerald-800"
                         >
-                          问问 Tutor
+                          问 Tutor
                         </button>
                         <button
                           type="button"
                           onClick={() => openTutorFromCollection(buildTutorQuestionFromEcho(latestEchoForCenter, 'review'))}
-                          className="rounded-full border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 transition hover:border-slate-300 hover:bg-slate-50"
+                          className="text-slate-500 transition hover:text-slate-700"
                         >
-                          做成复习清单
+                          去复习
                         </button>
                       </div>
+                      {manualEchoFeedbackView}
+                      {manualEchoDebugView}
                     </div>
                   ) : (
                     <div className="rounded-[24px] border border-dashed border-slate-200 bg-slate-50/80 px-4 py-5 text-sm leading-7 text-slate-500 shadow-sm">
-                      先继续收集，系统听到的线索会慢慢沉到这里。
+                      <p>先继续收集，系统听到的线索会慢慢沉到这里。</p>
+                      {!canRequestManualEcho && !isCheckingAuth ? (
+                        <p className="mt-1 text-xs leading-6 text-amber-600">
+                          {isGuestFastEntry ? '你现在在游客模式里，点按钮会先提示你登录。' : '当前还没拿到登录态，点按钮会先提示你登录。'}
+                        </p>
+                      ) : null}
+                      {ENABLE_ECHO_MANUAL_TRIGGER ? (
+                        <div className="mt-3">
+                          {renderManualEchoTriggerButton(
+                            'text-xs font-medium text-slate-500 transition hover:text-slate-700 disabled:cursor-not-allowed disabled:opacity-60'
+                          )}
+                        </div>
+                      ) : null}
+                      {manualEchoFeedbackView}
+                      {manualEchoDebugView}
                     </div>
                   )}
 
-                  {workspaceEchoes.length > 0 ? (
+                  {historyWorkspaceEchoes.length > 0 ? (
                     <div className="rounded-[24px] border border-slate-200 bg-slate-50/80 p-3 shadow-sm">
                       <div className="mb-3 flex items-center justify-between gap-3">
                         <div>
                           <p className="text-xs font-semibold tracking-[0.06em] text-slate-500">回声历史</p>
                         </div>
                         <span className="rounded-full bg-white px-2 py-1 text-[11px] font-medium text-slate-500">
-                          {workspaceEchoes.length} 条
+                          {historyWorkspaceEchoes.length} 条
                         </span>
                       </div>
 
@@ -5318,7 +6287,7 @@ const _handleVideoAssistantMessage = useCallback((payload: {
                                   <div className="flex items-center justify-between gap-3">
                                     <p className="text-sm font-semibold text-slate-900">{echo.title}</p>
                                     <span className="text-[11px] text-slate-400">
-                                      {formatRelativeCollectionTime(echo.createdAt)}
+                                      {formatRelativeCollectionTime(resolveEchoDisplayTime(echo))}
                                     </span>
                                   </div>
                                   <p className="mt-1 text-sm leading-6 text-slate-600">{echo.body}</p>
@@ -5363,7 +6332,7 @@ const _handleVideoAssistantMessage = useCallback((payload: {
                     </div>
                   ) : null}
 
-                  {collectionPulse?.actions?.length ? (
+                  {collectionPulse?.actions?.length && !latestEchoForCenter ? (
                     <div className="flex flex-wrap gap-2">
                       {collectionPulse.actions.map((action) => (
                         <button
@@ -5390,6 +6359,11 @@ const _handleVideoAssistantMessage = useCallback((payload: {
                       captures={workspaceCaptures}
                       onClose={() => setMobileCollectionSheet(null)}
                       onOpenReview={handleOpenWorkspaceCaptureReview}
+                      onQuoteCapture={quoteWorkspaceCaptureToComposer}
+                      onAskTutorAboutCapture={openTutorFromWorkspaceCapture}
+                      onToggleSelectCapture={toggleWorkspaceCaptureContextSelection}
+                      selectedCaptureIds={selectedWorkspaceCaptureIds}
+                      selectionMode={isCollectionContextSelectionMode}
                       maxHeight="52vh"
                       showHeader={false}
                     />
@@ -5478,7 +6452,7 @@ const _handleVideoAssistantMessage = useCallback((payload: {
                   onPaste={handleCollectionComposerPaste}
                   placeholder="发一句想法，贴个链接，或者先把这节课丢进来"
                   rows={composerRows}
-                  className="max-h-24 min-h-[38px] flex-1 resize-none border-0 bg-transparent px-0 py-0.5 text-sm leading-6 text-slate-700 outline-none placeholder:text-slate-400"
+                  className="max-h-24 min-h-[26px] flex-1 resize-none appearance-none border-0 bg-transparent px-0 py-0.5 text-sm leading-6 text-slate-700 outline-none ring-0 shadow-none focus:outline-none focus:ring-0 focus-visible:outline-none focus-visible:ring-0 placeholder:text-slate-400"
                 />
                 <button
                   type="button"
@@ -5513,9 +6487,9 @@ const _handleVideoAssistantMessage = useCallback((payload: {
                 </div>
               ) : null}
               {!sourceImporting && sourceImportError ? (
-                <div className="mt-1.5 flex items-center gap-2 text-[11px] text-rose-500">
-                  <span className="inline-flex h-1.5 w-1.5 rounded-full bg-rose-400" />
-                  <span>{compactText(sourceImportError, 40)}</span>
+                <div className="mt-1.5 inline-flex max-w-full items-center gap-2 rounded-full bg-rose-50 px-2.5 py-1 text-[11px] text-rose-500">
+                  <span className="inline-flex h-1.5 w-1.5 flex-shrink-0 rounded-full bg-rose-400" />
+                  <span className="truncate">{compactText(sourceImportError, 40)}</span>
                 </div>
               ) : null}
             </div>
@@ -5815,6 +6789,11 @@ const _handleVideoAssistantMessage = useCallback((payload: {
               captures={workspaceCaptures}
               onClose={() => setShowSessionHistory(false)}
               onOpenReview={handleOpenWorkspaceCaptureReview}
+              onQuoteCapture={quoteWorkspaceCaptureToComposer}
+              onAskTutorAboutCapture={openTutorFromWorkspaceCapture}
+              onToggleSelectCapture={toggleWorkspaceCaptureContextSelection}
+              selectedCaptureIds={selectedWorkspaceCaptureIds}
+              selectionMode={isCollectionContextSelectionMode}
               maxHeight={historyMaxHeight}
               showHeader={false}
             />
@@ -6006,8 +6985,12 @@ const _handleVideoAssistantMessage = useCallback((payload: {
     handleOpenWorkspaceCaptureReview,
     handleSourceFileButtonClick,
     handleVideoImportReady,
+    isCollectionContextSelectionMode,
     isRecording,
+    openTutorFromWorkspaceCapture,
+    quoteWorkspaceCaptureToComposer,
     removeSupportSource,
+    selectedWorkspaceCaptureIds,
     sessionId,
     showSessionHistory,
     sourceImportMode,
@@ -6015,6 +6998,7 @@ const _handleVideoAssistantMessage = useCallback((payload: {
     sourceItems,
     sourcePanelMode,
     sourceTextInput,
+    toggleWorkspaceCaptureContextSelection,
     user?.id,
     workspaceCaptures,
   ]);
@@ -6522,6 +7506,10 @@ const _handleVideoAssistantMessage = useCallback((payload: {
                             onResolve={() => {}}
                             sessionId={sessionId}
                             supportContextText={tutorSupportContextText}
+                            preferSupportContext={videoWorkspaceTab === 'chat' && mobileAILaunchTarget === 'video-chat' ? mobileAIPreferSelectedContext : false}
+                            launchQuestion={videoWorkspaceTab === 'chat' && mobileAILaunchTarget === 'video-chat' && mobileAIConsumedQuestionNonce !== mobileAIQuestionNonce ? mobileAIQuestion : ''}
+                            launchQuestionNonce={videoWorkspaceTab === 'chat' && mobileAILaunchTarget === 'video-chat' ? mobileAIQuestionNonce : 0}
+                            onLaunchQuestionConsumed={videoWorkspaceTab === 'chat' && mobileAILaunchTarget === 'video-chat' ? consumeMobileAIQuestion : undefined}
                             onSeek={(timeMs) => handleUnifiedSeek(timeMs, true)}
                           />
                       </div>
@@ -6898,13 +7886,17 @@ const _handleVideoAssistantMessage = useCallback((payload: {
                           )
                         ) : (
                           <AITutor
-                            breakpoint={selectedBreakpoint}
+                            breakpoint={mobileAIPreferSelectedContext && mobileAILaunchTarget === 'review-panel' ? null : selectedBreakpoint}
                             segments={segments}
                             isLoading={false}
                             onResolve={handleResolveAnchor}
                             onActionItemsUpdate={handleActionItemsUpdate}
                             sessionId={sessionId}
                             supportContextText={tutorSupportContextText}
+                            preferSupportContext={mobileAILaunchTarget === 'review-panel' ? mobileAIPreferSelectedContext : false}
+                            launchQuestion={mobileAILaunchTarget === 'review-panel' && mobileAIConsumedQuestionNonce !== mobileAIQuestionNonce ? mobileAIQuestion : ''}
+                            launchQuestionNonce={mobileAILaunchTarget === 'review-panel' ? mobileAIQuestionNonce : 0}
+                            onLaunchQuestionConsumed={mobileAILaunchTarget === 'review-panel' ? consumeMobileAIQuestion : undefined}
                             onSeek={(timeMs) => {
                               handleUnifiedSeek(timeMs, true);
                             }}
@@ -7115,6 +8107,10 @@ const _handleVideoAssistantMessage = useCallback((payload: {
                     onAskAI={(question) => {
                       setSelectedConfusion(null);
                       setMobileAIQuestion(question);
+                      setMobileAIConsumedQuestionNonce(null);
+                      setMobileAIPreferSelectedContext(false);
+                      setMobileAIQuestionNonce((prev) => prev + 1);
+                      setMobileAILaunchTarget('mobile-ai-chat');
                       setMobileSubPage('ai-chat');
                     }}
                     onResolve={() => {
@@ -7130,7 +8126,7 @@ const _handleVideoAssistantMessage = useCallback((payload: {
                   <MobileAIFab
                     onClick={() => {
                       setSelectedAnchor(null);  // Clear selected anchor before entering global AI chat.
-                      setMobileAIQuestion('');
+                      clearMobileAILaunchState();
                       setMobileSubPage('ai-chat');
                     }}
                     visible={!selectedConfusion}
@@ -7148,7 +8144,7 @@ const _handleVideoAssistantMessage = useCallback((payload: {
                     <button
                       onClick={() => {
                         setMobileSubPage(null);
-                        setMobileAIQuestion('');
+                        clearMobileAILaunchState();
                         setShowConversationHistory(false);
                         setSelectedHistoryConversation(null);
                       }}
@@ -7284,14 +8280,17 @@ const _handleVideoAssistantMessage = useCallback((payload: {
                     ) : (
                       // NOTE: cleaned corrupted legacy comment.
                       <AITutor
-                        breakpoint={selectedBreakpoint}
+                        breakpoint={mobileAIPreferSelectedContext && mobileAILaunchTarget === 'mobile-ai-chat' ? null : selectedBreakpoint}
                         segments={segments}
                         isLoading={false}
                         onResolve={handleResolveAnchor}
                         onActionItemsUpdate={handleActionItemsUpdate}
                         sessionId={sessionId}
                         supportContextText={tutorSupportContextText}
-                        initialQuestion={mobileAIQuestion}
+                        preferSupportContext={mobileAILaunchTarget === 'mobile-ai-chat' ? mobileAIPreferSelectedContext : false}
+                        launchQuestion={mobileAILaunchTarget === 'mobile-ai-chat' && mobileAIConsumedQuestionNonce !== mobileAIQuestionNonce ? mobileAIQuestion : ''}
+                        launchQuestionNonce={mobileAILaunchTarget === 'mobile-ai-chat' ? mobileAIQuestionNonce : 0}
+                        onLaunchQuestionConsumed={mobileAILaunchTarget === 'mobile-ai-chat' ? consumeMobileAIQuestion : undefined}
                         isMobile={true}
                         onSeek={(timeMs) => {
                           handleUnifiedSeek(timeMs, true);

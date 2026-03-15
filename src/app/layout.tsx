@@ -19,6 +19,11 @@ export const metadata: Metadata = {
   title: 'MeetMind - 课堂对齐的 AI 家教',
   description: '把课堂变成可回放、可定位、可追溯的时间轴记忆',
   manifest: '/manifest.json',
+  icons: {
+    icon: [{ url: '/icons/icon-192x192.svg', type: 'image/svg+xml' }],
+    shortcut: ['/icons/icon-192x192.svg'],
+    apple: [{ url: '/icons/icon-192x192.svg' }],
+  },
   appleWebApp: {
     capable: true,
     statusBarStyle: 'default',
@@ -46,13 +51,9 @@ export default function RootLayout({
   return (
     <html lang="zh-CN">
       <head>
-        {/* 预加载登录页海报图，确保快速显示 */}
-        <link 
-          rel="preload" 
-          href="/videos/poster.jpg" 
-          as="image"
-          type="image/jpeg"
-        />
+        <meta name="mobile-web-app-capable" content="yes" />
+        <link rel="icon" href="/icons/icon-192x192.svg" type="image/svg+xml" />
+        <link rel="shortcut icon" href="/icons/icon-192x192.svg" />
         {/* PWA: Apple Touch Icon */}
         <link rel="apple-touch-icon" href="/icons/icon-192x192.svg" />
       </head>

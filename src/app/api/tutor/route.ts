@@ -368,6 +368,21 @@ const GLOBAL_CHAT_SYSTEM_PROMPT = `你是一位专业的 AI 家教，正在帮�
 - 鼓励学生继续提问
 - 回复控制在 3-5 句话内，除非学生要求详细解释`;
 
+const SELECTED_CONTEXT_CHAT_SYSTEM_PROMPT = `你是一位专业但克制的 AI 家教，正在围绕学生刚刚圈出的几条内容继续往下讲。
+
+【核心原则】
+1. 把这些被圈出的内容当作当前唯一重点，不要再按“整节课总结”去回答
+2. 即使学生的问题比较笼统，也先根据这些内容指出重点、关系或冲突，不要先回“我没理解你的问题”
+3. 如果信息不完整，先明确目前能确定什么，再给一个最值得继续追问的方向
+4. 如果这次给你的是单条笔记、材料、图片说明或圈出的文本，没有完整时间轴也要直接回答，不要要求学生补“整节课背景”后再说
+5. 如果回答使用了增强资料（[资料N]），必须在对应句末加 [资料N]
+
+【回答风格】
+- 像顺着学生当前思路继续带他学，不要像客服
+- 优先围绕刚圈出的内容本身回答
+- 如果上下文里没有明确时间戳，就不要强行补时间戳
+- 回复控制在 3-5 句话内，必要时直接给一个下一步可追问的问题`;
+
 
 
 // 学霸思维引导 Prompt - 结构固定，内容灵活
@@ -418,6 +433,7 @@ export async function POST(request: NextRequest) {
       sessionId?: string;    // 会话ID，用于摘要缓存
       stream?: boolean;      // 是否启用流式输出
       enable_thinking_guide?: boolean;  // 学霸思维引导模式
+      selected_context_mode?: boolean;
     };
     
     const { 
@@ -433,6 +449,7 @@ export async function POST(request: NextRequest) {
       selected_option_id,
       conversation_id,
       globalMode = false,  // 全局对话模式，使用完整课堂上下文
+      selected_context_mode = false,
       sessionId,           // 会话ID
       stream = false,      // 流式输出（默认关闭，保持向后兼容）
     } = body;
@@ -486,10 +503,17 @@ export async function POST(request: NextRequest) {
     // 【修复】不使用合并，直接使用原始segments，避免说话者混淆
     const mergedSegments = contextSegments; // 使用原始数据保持时间戳精确性
     
+    const allowSelectedContextOnly =
+      globalMode &&
+      selected_context_mode &&
+      mergedSegments.some((segment) => segment?.id === '__support_context__');
+
     // 【新增】检查转录内容是否足够
     const totalTextLength = mergedSegments.reduce((sum, s) => sum + (s.text?.length || 0), 0);
-    if (mergedSegments.length < 2 || totalTextLength < 50) {
-      console.log('[Tutor API] 转录内容不足，无法分析');
+    const lacksTimelineTranscript = mergedSegments.length < 2 || totalTextLength < 50;
+    const lacksSelectedContext = totalTextLength < 24;
+    if ((allowSelectedContextOnly && lacksSelectedContext) || (!allowSelectedContextOnly && lacksTimelineTranscript)) {
+      console.log('[Tutor API] 上下文内容不足，无法分析');
       return NextResponse.json({
         explanation: {
           teacherSaid: '',
@@ -498,17 +522,26 @@ export async function POST(request: NextRequest) {
           followUpQuestion: '',
         },
         actionItems: [],
-        rawContent: '📝 当前录音内容较少，无法进行有效分析。\n\n建议：\n- 继续录音，获取更多课堂内容\n- 或者在有更多内容后再标记困惑点',
+        rawContent: allowSelectedContextOnly
+          ? '📝 你刚圈出的这条内容还太短，我先抓不稳重点。可以再补一句背景，或者再圈一条相关内容一起问我。'
+          : '📝 当前录音内容较少，无法进行有效分析。\n\n建议：\n- 继续录音，获取更多课堂内容\n- 或者在有更多内容后再标记困惑点',
         model: model,
         usage: { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 },
       });
     }
     
     // 生成局部上下文（困惑点附近的详细转录）
-    const localContextText = mergedSegments.map(s => {
-      const timeStr = formatTimestamp(s.startMs);
-      return `[${timeStr}] ${s.text}`;
-    }).join('\n');
+    const localContextText = allowSelectedContextOnly
+      ? mergedSegments
+          .map((segment) => (typeof segment?.text === 'string' ? segment.text.trim() : ''))
+          .filter(Boolean)
+          .join('\n\n')
+      : mergedSegments
+          .map((s) => {
+            const timeStr = formatTimestamp(s.startMs);
+            return `[${timeStr}] ${s.text}`;
+          })
+          .join('\n');
 
     // ===== 新增：获取或生成课堂摘要作为全局上下文 =====
     let summaryContext = '';
@@ -662,7 +695,9 @@ ${cachedSummary.keyDifficulties.map(d => `- ${d}`).join('\n')}
     if (studentQuestion || messageContent) {
       // 追问模式 / 全局对话模式
       // 全局模式使用专用提示词，追问模式使用追问提示词
-      let systemPrompt = globalMode ? GLOBAL_CHAT_SYSTEM_PROMPT : FOLLOWUP_SYSTEM_PROMPT;
+      let systemPrompt = globalMode
+        ? (selected_context_mode ? SELECTED_CONTEXT_CHAT_SYSTEM_PROMPT : GLOBAL_CHAT_SYSTEM_PROMPT)
+        : FOLLOWUP_SYSTEM_PROMPT;
       
       // 如果启用学霸思维引导模式，追加格式要求
       if (enable_thinking_guide) {
@@ -685,7 +720,7 @@ ${cachedSummary.keyDifficulties.map(d => `- ${d}`).join('\n')}
           {
             type: 'text',
             text: globalMode 
-              ? `【整节课转录内容】\n${contextText}\n\n【学生提问】`
+              ? `${selected_context_mode ? '【用户刚圈出的上下文】' : '【整节课转录内容】'}\n${contextText}\n\n【学生提问】`
               : `【课堂转录参考】\n${contextText}\n\n【学生说】`,
           },
         ];
@@ -712,7 +747,7 @@ ${cachedSummary.keyDifficulties.map(d => `- ${d}`).join('\n')}
       } else {
         // 纯文本消息
         const userPrompt = globalMode
-          ? `【整节课转录内容】
+          ? `${selected_context_mode ? '【用户刚圈出的上下文】' : '【整节课转录内容】'}
 ${contextText}
 
 【学生提问】

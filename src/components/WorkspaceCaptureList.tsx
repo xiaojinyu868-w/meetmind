@@ -24,6 +24,11 @@ interface WorkspaceCaptureListProps {
   captures: WorkspaceCaptureListItem[];
   onClose?: () => void;
   onOpenReview?: (capture: WorkspaceCaptureListItem) => void;
+  onQuoteCapture?: (capture: WorkspaceCaptureListItem) => void;
+  onAskTutorAboutCapture?: (capture: WorkspaceCaptureListItem) => void;
+  onToggleSelectCapture?: (capture: WorkspaceCaptureListItem) => void;
+  selectedCaptureIds?: string[];
+  selectionMode?: boolean;
   maxHeight?: string;
   showHeader?: boolean;
 }
@@ -57,9 +62,20 @@ function getCaptureIcon(contentType: string) {
 
 function getCaptureTag(item: WorkspaceCaptureListItem): string {
   if (item.contentType === 'audio') return '原声';
-  if (item.contentType === 'video') return '视频';
+  if (item.contentType === 'video') {
+    const videoProvider =
+      typeof item.metadata?.reachChannel === 'string' && item.metadata.reachChannel === 'video-link'
+        ? typeof item.metadata?.providerLabel === 'string'
+          ? item.metadata.providerLabel
+          : null
+        : null;
+    return videoProvider || '视频';
+  }
   if (item.contentType === 'image') return '图片';
-  if (item.contentType === 'link') return '链接';
+  if (item.contentType === 'link') {
+    const providerLabel = typeof item.metadata?.providerLabel === 'string' ? item.metadata.providerLabel : null;
+    return providerLabel && providerLabel !== '网页' ? providerLabel : '链接';
+  }
   if (item.contentType === 'document') return '材料';
   if (item.contentType === 'text') return '记录';
   return '收集';
@@ -68,12 +84,19 @@ function getCaptureTag(item: WorkspaceCaptureListItem): string {
 function getCaptureHint(item: WorkspaceCaptureListItem): string {
   if (item.previewText?.trim()) return item.previewText.trim();
 
-  if (item.contentType === 'audio') return '这段原声已经收下了，后面可以继续转写和复习。';
-  if (item.contentType === 'video') return '这份视频材料已经接进这条学习线索里。';
+  if (item.contentType === 'audio') return '这段原声已经收下来了，后面可以继续转写和复习。';
+  if (item.contentType === 'video') return '这份视频材料已经接进这条学习线索里了。';
   if (item.contentType === 'image') return '这张图已经留在当前上下文里了。';
   if (item.contentType === 'link') return '这条链接已经接进当前收集流里。';
   if (item.contentType === 'document') return '这份材料已经留在这条收集线索里。';
   return '这条记录已经留在当前学习脉络里。';
+}
+
+function getCaptureDisplayTitle(item: WorkspaceCaptureListItem): string {
+  if (item.contentType === 'text' && item.previewText.trim()) {
+    return item.previewText.trim();
+  }
+  return item.title;
 }
 
 function openOriginalCapture(item: WorkspaceCaptureListItem) {
@@ -86,6 +109,11 @@ export function WorkspaceCaptureList({
   captures,
   onClose,
   onOpenReview,
+  onQuoteCapture,
+  onAskTutorAboutCapture,
+  onToggleSelectCapture,
+  selectedCaptureIds = [],
+  selectionMode = false,
   maxHeight = '52vh',
   showHeader = true,
 }: WorkspaceCaptureListProps) {
@@ -137,11 +165,15 @@ export function WorkspaceCaptureList({
                 typeof item.metadata?.sessionId === 'string' ? item.metadata.sessionId : null;
               const canReview = Boolean(reviewSessionId && (item.contentType === 'audio' || item.contentType === 'video'));
               const canOpenOriginal = Boolean(item.mediaUrl || item.sourceUrl);
+              const isSelected = selectedCaptureIds.includes(item.id);
+              const displayTitle = getCaptureDisplayTitle(item);
 
               return (
                 <div
                   key={item.id}
-                  className="rounded-[24px] border border-slate-200 bg-white px-4 py-4 shadow-[0_6px_20px_rgba(15,23,42,0.05)]"
+                  className={`rounded-[24px] border bg-white px-4 py-4 shadow-[0_6px_20px_rgba(15,23,42,0.05)] ${
+                    isSelected ? 'border-emerald-200 ring-2 ring-emerald-100' : 'border-slate-200'
+                  }`}
                 >
                   <div className="flex items-start gap-3">
                     <div className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-full bg-emerald-50 text-emerald-600">
@@ -156,9 +188,47 @@ export function WorkspaceCaptureList({
                           {formatRelativeTime(item.occurredAt || item.createdAt)}
                         </span>
                       </div>
-                      <p className="mt-2 text-sm font-semibold leading-6 text-slate-900">{item.title}</p>
+                      {displayTitle !== item.title ? (
+                        <p className="mt-2 text-sm font-semibold leading-6 text-slate-900">{displayTitle}</p>
+                      ) : (
+                        <p className="mt-2 text-sm font-semibold leading-6 text-slate-900">{item.title}</p>
+                      )}
                       <p className="mt-1 text-sm leading-6 text-slate-500">{getCaptureHint(item)}</p>
                       <div className="mt-3 flex flex-wrap gap-2">
+                        {selectionMode && onToggleSelectCapture ? (
+                          <button
+                            type="button"
+                            onClick={() => onToggleSelectCapture(item)}
+                            className={`rounded-full px-3 py-2 text-xs font-medium transition ${
+                              isSelected
+                                ? 'border border-emerald-200 bg-emerald-50 text-emerald-700'
+                                : 'border border-slate-200 bg-slate-50 text-slate-700 hover:border-slate-300 hover:bg-slate-100'
+                            }`}
+                          >
+                            {isSelected ? '已选' : '选择'}
+                          </button>
+                        ) : (
+                          <>
+                            {onQuoteCapture ? (
+                              <button
+                                type="button"
+                                onClick={() => onQuoteCapture(item)}
+                                className="rounded-full border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-medium text-slate-700 transition hover:border-slate-300 hover:bg-slate-100"
+                              >
+                                引用
+                              </button>
+                            ) : null}
+                            {onAskTutorAboutCapture ? (
+                              <button
+                                type="button"
+                                onClick={() => onAskTutorAboutCapture(item)}
+                                className="rounded-full border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-medium text-slate-700 transition hover:border-slate-300 hover:bg-slate-100"
+                              >
+                                问 Tutor
+                              </button>
+                            ) : null}
+                          </>
+                        )}
                         {canOpenOriginal ? (
                           <button
                             type="button"

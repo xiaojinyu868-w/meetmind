@@ -47,6 +47,8 @@ export interface NormalizedWechatMessage {
   mediaId?: string;
   mediaUrl?: string;
   title?: string;
+  /** 微信卡片转发时自带的 Description 摘要，仅 link 类型有值 */
+  description?: string;
   reach?: ContextReachDetection;
   replyText: string;
 }
@@ -169,7 +171,8 @@ function normalizeImageMessage(payload: WechatMpPayload): NormalizedWechatMessag
 function normalizeLinkMessage(payload: WechatMpPayload): NormalizedWechatMessage {
   const url = (payload.Url || '').trim();
   const title = (payload.Title || '').trim();
-  const description = [title, payload.Description || '', url].filter(Boolean).join('\n');
+  const rawDescription = (payload.Description || '').trim();
+  const description = [title, rawDescription, url].filter(Boolean).join('\n');
   const reach = detectReachFromText(description);
 
   return {
@@ -180,6 +183,7 @@ function normalizeLinkMessage(payload: WechatMpPayload): NormalizedWechatMessage
     previewText: title ? `链接：${compactText(title, 72)}` : '一条链接消息',
     sourceUrl: url || undefined,
     title: title || undefined,
+    description: rawDescription || undefined,
     reach,
     replyText: url
       ? '链接收到，我会把它当作这次学习的外部线索记下来。'

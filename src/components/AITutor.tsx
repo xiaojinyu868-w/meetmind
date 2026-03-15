@@ -66,6 +66,12 @@ interface AITutorProps {
   initialQuestion?: string;  // 移动端传入的初始问题
   isMobile?: boolean;  // 移动端模式，使用简化布局
   supportContextText?: string;
+  initialQuestionNonce?: number;
+  onInitialQuestionConsumed?: () => void;
+  preferSupportContext?: boolean;
+  launchQuestion?: string;
+  launchQuestionNonce?: number;
+  onLaunchQuestionConsumed?: () => void;
 }
 
 interface TutorCacheEnvelopeV1 {
@@ -223,7 +229,11 @@ export function AITutor({
   onSeek,
   initialQuestion,
   isMobile = false,
+  preferSupportContext = false,
   supportContextText = '',
+  launchQuestion = '',
+  launchQuestionNonce = 0,
+  onLaunchQuestionConsumed,
 }: AITutorProps) {
   const { accessToken, user } = useAuth();
   const userId = getEffectiveUserId(user?.id);
@@ -242,12 +252,15 @@ export function AITutor({
   const [isRestoring, setIsRestoring] = useState(false);  // 正在恢复状态
   const previousBreakpointId = useRef<string | null>(null);
   const hasInitialized = useRef(false);  // 是否已完成初始化
+  const lastProcessedInitialQuestionKeyRef = useRef<string | null>(null);
+  const lastGlobalChatSessionIdRef = useRef(sessionId);
   const hasProcessedInitialQuestion = useRef(false);  // 是否已处理初始问题
   const [isSearching, setIsSearching] = useState(false);
   const [notebookAvailable, setNotebookAvailable] = useState(false);
   
   // 对话历史相关
   const conversationIdRef = useRef<string | null>(null);
+  const isGlobalSendInFlightRef = useRef(false);
   
   const [enableWeb, setEnableWeb] = useState(false);  // 联网搜索默认关闭
   const [enableThinkingGuide, setEnableThinkingGuide] = useState(true);  // 学霸思维引导模式默认开启
@@ -297,6 +310,16 @@ export function AITutor({
         prepend,
       }),
     [segments, supportContextText]
+  );
+  const buildGlobalSegmentsForTutorRequest = useCallback(
+    () =>
+      buildTutorRequestSegments({
+        baseSegments: preferSupportContext ? [] : segments,
+        supportContextText,
+        focusTimestamp: 0,
+        prepend: !preferSupportContext,
+      }),
+    [preferSupportContext, segments, supportContextText]
   );
   
   const chatEndRef = useRef<HTMLDivElement>(null);
@@ -1074,12 +1097,12 @@ export function AITutor({
   
   // 全局模式：发送消息（必须在 useEffect 之前定义）
   const handleGlobalSend = useCallback(async (questionOverride?: string) => {
-    const question = questionOverride || userInput.trim();
+    const question = (questionOverride || userInput).trim();
     if (!question || !hasTutorContext) return;
-    
-    if (!questionOverride) {
-      setUserInput('');
-    }
+    if (globalLoading || isStreaming || isGlobalSendInFlightRef.current) return;
+
+    isGlobalSendInFlightRef.current = true;
+    setUserInput('');
     
     // 添加用户消息
     setGlobalChatHistory(prev => [...prev, { role: 'user', content: question }]);
@@ -1095,10 +1118,11 @@ export function AITutor({
     // 构建请求体
     const requestBody: Record<string, unknown> = {
       timestamp: 0,
-      segments: buildSegmentsForTutorRequest(0, true),
+      segments: buildGlobalSegmentsForTutorRequest(),
       model: selectedModel,
       studentQuestion: question,
       globalMode: true,
+      selected_context_mode: preferSupportContext,
       enable_guidance: false,
       enable_web: enableWeb,
       enable_thinking_guide: enableThinkingGuide,
@@ -1191,9 +1215,10 @@ export function AITutor({
       clearGlobalStreamingOnly();  // 只清空流式内容，保留思考内容
       setGlobalStreamingCitations([]);
     } finally {
+      isGlobalSendInFlightRef.current = false;
       setGlobalLoading(false);
     }
-  }, [userInput, selectedModel, enableWeb, enableThinkingGuide, supportsMultimodal, uploadedImages, accessToken, userId, sessionId, globalFetchStream, clearGlobalStreamingOnly, trackCoreEvent, buildSegmentsForTutorRequest, hasTutorContext]);
+  }, [userInput, selectedModel, enableWeb, enableThinkingGuide, supportsMultimodal, uploadedImages, accessToken, userId, sessionId, globalFetchStream, clearGlobalStreamingOnly, trackCoreEvent, buildGlobalSegmentsForTutorRequest, globalLoading, hasTutorContext, isStreaming, preferSupportContext]);
 
   // 全局模式：停止生成
   const stopGlobalGeneration = useCallback(() => {
@@ -1229,22 +1254,32 @@ export function AITutor({
 
   // 全局模式：处理初始问题（handleGlobalSend 已在上方定义）
   useEffect(() => {
-    if (isGlobalMode && initialQuestion && !hasProcessedInitialQuestion.current && hasTutorContext) {
-      hasProcessedInitialQuestion.current = true;
-      setTimeout(() => {
-        handleGlobalSend(initialQuestion);
-      }, 300);
-    }
-  }, [hasTutorContext, isGlobalMode, initialQuestion, handleGlobalSend]);
+    const normalizedQuestion = launchQuestion.trim();
+    if (!isGlobalMode || !normalizedQuestion || !hasTutorContext) return;
+
+    const initialQuestionKey = `${launchQuestionNonce}:${normalizedQuestion}`;
+    if (lastProcessedInitialQuestionKeyRef.current === initialQuestionKey) return;
+
+    lastProcessedInitialQuestionKeyRef.current = initialQuestionKey;
+    onLaunchQuestionConsumed?.();
+    void handleGlobalSend(normalizedQuestion);
+  }, [hasTutorContext, isGlobalMode, handleGlobalSend, launchQuestion, launchQuestionNonce, onLaunchQuestionConsumed]);
 
   // 重置 sessionId 变化时的全局对话状态
   useEffect(() => {
-    if (isGlobalMode) {
+    if (lastGlobalChatSessionIdRef.current === sessionId) return;
+    lastGlobalChatSessionIdRef.current = sessionId;
+    conversationIdRef.current = null;
+    lastProcessedInitialQuestionKeyRef.current = null;
+    const shouldPreserveFreshLaunch =
+      globalLoading ||
+      isStreaming ||
+      (globalChatHistory.length === 1 && globalChatHistory[0]?.role === 'user');
+
+    if (!shouldPreserveFreshLaunch) {
       setGlobalChatHistory([]);
-      conversationIdRef.current = null;
-      hasProcessedInitialQuestion.current = false;
     }
-  }, [sessionId, isGlobalMode]);
+  }, [globalChatHistory, globalLoading, isStreaming, sessionId]);
 
   // ===== 全局对话模式渲染 =====
   if (isGlobalMode) {
@@ -1260,7 +1295,7 @@ export function AITutor({
                   AI 课堂助手
                 </h3>
                 <p className="text-xs text-gray-500">
-                  基于整节课内容回答问题
+                  {preferSupportContext ? '基于你刚圈出的内容继续往下问' : '基于整节课内容回答问题'}
                 </p>
               </div>
             </div>
@@ -1457,15 +1492,15 @@ export function AITutor({
               />
             )}
             
-            <input
-              type="text"
-              value={userInput}
-              onChange={(e) => setUserInput(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && !isStreaming && handleGlobalSend()}
-              placeholder="问我任何关于这节课的问题..."
-              className={`input flex-1 ${isMobile ? 'text-sm' : ''}`}
-              disabled={globalLoading || !hasTutorContext}
-            />
+              <input
+                type="text"
+                value={userInput}
+                onChange={(e) => setUserInput(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && !isStreaming && handleGlobalSend()}
+                placeholder={preferSupportContext ? '继续顺着这几条内容问...' : '问我任何关于这节课的问题...'}
+                className={`input flex-1 ${isMobile ? 'text-sm' : ''}`}
+                disabled={globalLoading || !hasTutorContext}
+              />
             <VoiceMicButton
               onTranscript={(text) => setUserInput(prev => prev + text)}
               disabled={globalLoading || !hasTutorContext}

@@ -9,11 +9,18 @@ import { TranscriptEnhanceManager, type EnhancedTranscriptSegment } from '@/lib/
 import { calculateSimilarity } from '@/lib/utils/transcript-utils';
 import { recordTranscriptEditDiff } from '@/lib/db/lexicon';
 
+export interface RecorderCallbackMeta {
+  recordingId?: string;
+  sessionId?: string;
+  isContinuation?: boolean;
+  durationMs?: number;
+}
+
 interface RecorderProps {
   onRecordingStart?: (sessionId: string, meta?: { isContinuation?: boolean }) => void;
-  onRecordingStop?: (audioBlob?: Blob, meta?: { sessionId?: string; isContinuation?: boolean; durationMs?: number }) => void;
-  onTranscriptionError?: (message: string, meta?: { sessionId?: string; isContinuation?: boolean; durationMs?: number }) => void;
-  onTranscriptUpdate?: (segments: TranscriptSegment[]) => void;
+  onRecordingStop?: (audioBlob?: Blob, meta?: RecorderCallbackMeta) => void;
+  onTranscriptionError?: (message: string, meta?: RecorderCallbackMeta) => void;
+  onTranscriptUpdate?: (segments: TranscriptSegment[], meta?: RecorderCallbackMeta) => void;
   onTranscriptTextUpdate?: (segmentId: string, text: string) => void;
 
   onTranscriptEnhanced?: (segments: TranscriptSegment[]) => void;
@@ -120,6 +127,7 @@ export const Recorder = forwardRef<RecorderHandle, RecorderProps>(function Recor
   const startTimeRef = useRef<number>(0);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
   const sessionIdRef = useRef<string>('');
+  const recordingIdRef = useRef<string>('');
   const lastAnchorTimeRef = useRef<number>(0);
   const audioChunksRef = useRef<Blob[]>([]);
   const asrClientRef = useRef<DashScopeASRClient | null>(null);
@@ -157,6 +165,13 @@ export const Recorder = forwardRef<RecorderHandle, RecorderProps>(function Recor
     silenceDuration: 1200,
     minSpeechDuration: 300,
   };
+
+  const getCallbackMeta = useCallback((): RecorderCallbackMeta => ({
+    recordingId: recordingIdRef.current,
+    sessionId: sessionIdRef.current,
+    isContinuation: Boolean(continueCurrentSession && activeSessionId),
+    durationMs: elapsedMs,
+  }), [activeSessionId, continueCurrentSession, elapsedMs]);
 
 
   useEffect(() => {
@@ -453,6 +468,7 @@ export const Recorder = forwardRef<RecorderHandle, RecorderProps>(function Recor
       sessionIdRef.current = shouldContinueIntoCurrentSession
         ? activeSessionId!
         : `session-${Date.now()}`;
+      recordingIdRef.current = `recording-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 
 
       if (!compactMode && effectiveTranscribeMode === 'streaming' && streamingAvailable && apiKey && audioContext && source) {
@@ -509,7 +525,7 @@ export const Recorder = forwardRef<RecorderHandle, RecorderProps>(function Recor
 
             transcriptRef.current = nextTranscript;
             setTranscript(nextTranscript);
-            onTranscriptUpdate?.(nextTranscript);
+            onTranscriptUpdate?.(nextTranscript, getCallbackMeta());
 
             if (enhanceManagerRef.current && !sentence.provisional && !replaced) {
               enhanceManagerRef.current.addSegment(segment);
@@ -679,6 +695,7 @@ export const Recorder = forwardRef<RecorderHandle, RecorderProps>(function Recor
     apiKey,
     contextHint,
     continueCurrentSession,
+    getCallbackMeta,
     onRecordingStart,
     onTranscriptEnhanced,
     onTranscriptUpdate,
@@ -844,7 +861,7 @@ export const Recorder = forwardRef<RecorderHandle, RecorderProps>(function Recor
 
           transcriptRef.current = nextTranscript;
           setTranscript(nextTranscript);
-          onTranscriptUpdate?.(nextTranscript);
+          onTranscriptUpdate?.(nextTranscript, getCallbackMeta());
 
           if (enhanceManagerRef.current && !sentence.provisional && !replaced) {
             enhanceManagerRef.current.addSegment(segment);
@@ -942,6 +959,7 @@ export const Recorder = forwardRef<RecorderHandle, RecorderProps>(function Recor
     apiKey,
     contextHint,
     elapsedMs,
+    getCallbackMeta,
     onTranscriptUpdate,
     rebuildPcmPipeline,
     streamingAvailable,
@@ -1031,7 +1049,7 @@ export const Recorder = forwardRef<RecorderHandle, RecorderProps>(function Recor
 
         setTranscript(segments);
         transcriptRef.current = segments;
-        onTranscriptUpdate?.(segments);
+        onTranscriptUpdate?.(segments, getCallbackMeta());
         
 
         if (segments.length > 0 && !skipEnhancement) {
@@ -1095,41 +1113,25 @@ export const Recorder = forwardRef<RecorderHandle, RecorderProps>(function Recor
           setTranscribeProgress(`转录完成，共 ${segments.length} 段`);
         } else {
           setTranscribeProgress(`转录完成，共 ${segments.length} 段`);
-          onTranscriptionError?.('这段原声没有转出可用文字。', {
-            sessionId: sessionIdRef.current,
-            isContinuation: Boolean(continueCurrentSession && activeSessionId),
-            durationMs: elapsedMs,
-          });
+          onTranscriptionError?.('这段原声没有转出可用文字。', getCallbackMeta());
         }
       } else {
         setTranscribeProgress('转录完成，但没有获取到文本。');
-        onTranscriptionError?.('这段原声没有转出可用文字。', {
-          sessionId: sessionIdRef.current,
-          isContinuation: Boolean(continueCurrentSession && activeSessionId),
-          durationMs: elapsedMs,
-        });
+        onTranscriptionError?.('这段原声没有转出可用文字。', getCallbackMeta());
       }
     } catch (err) {
       const message = err instanceof Error ? normalizeRecorderErrorMessage(err.message) : '转录失败';
       setError(message);
-      onTranscriptionError?.(message, {
-        sessionId: sessionIdRef.current,
-        isContinuation: Boolean(continueCurrentSession && activeSessionId),
-        durationMs: elapsedMs,
-      });
+      onTranscriptionError?.(message, getCallbackMeta());
       setTranscribeProgress('');
     } finally {
       onTranscribing?.(false);
       setStatus('stopped');
       if (emitStopCallback) {
-        onRecordingStop?.(audioBlob ?? undefined, {
-          sessionId: sessionIdRef.current,
-          isContinuation: Boolean(continueCurrentSession && activeSessionId),
-          durationMs: elapsedMs,
-        });
+        onRecordingStop?.(audioBlob ?? undefined, getCallbackMeta());
       }
     }
-  }, [activeSessionId, continueCurrentSession, contextHint, elapsedMs, onRecordingStop, onTranscriptEnhanced, onTranscriptUpdate, onTranscribing, onTranscriptionError]);
+  }, [contextHint, getCallbackMeta, onRecordingStop, onTranscriptEnhanced, onTranscriptUpdate, onTranscribing, onTranscriptionError]);
 
   const stopRecording = useCallback(async () => {
 
@@ -1182,11 +1184,7 @@ export const Recorder = forwardRef<RecorderHandle, RecorderProps>(function Recor
     }
 
     if (effectiveTranscribeMode === 'batch' && audioBlob && audioBlob.size > 0) {
-      onRecordingStop?.(audioBlob ?? undefined, {
-        sessionId: sessionIdRef.current,
-        isContinuation: Boolean(continueCurrentSession && activeSessionId),
-        durationMs: elapsedMs,
-      });
+      onRecordingStop?.(audioBlob ?? undefined, getCallbackMeta());
       await transcribeWithQwenASR(audioBlob, {
         skipEnhancement: compactMode,
         emitStopCallback: false,
@@ -1197,20 +1195,14 @@ export const Recorder = forwardRef<RecorderHandle, RecorderProps>(function Recor
         const totalCount = transcriptRef.current.length;
         const enhanceInfo = enhancedCount > 0 ? `，已优化 ${enhancedCount} 段` : '';
         setTranscribeProgress(`转录完成，共 ${totalCount} 段${enhanceInfo}`);
-        onTranscriptUpdate?.(transcriptRef.current);
+        onTranscriptUpdate?.(transcriptRef.current, getCallbackMeta());
       }
       setStatus('stopped');
-      onRecordingStop?.(audioBlob ?? undefined, {
-        sessionId: sessionIdRef.current,
-        isContinuation: Boolean(continueCurrentSession && activeSessionId),
-        durationMs: elapsedMs,
-      });
+      onRecordingStop?.(audioBlob ?? undefined, getCallbackMeta());
     }
   }, [
-    activeSessionId,
-    continueCurrentSession,
-    elapsedMs,
     enhanceStats.enhanced,
+    getCallbackMeta,
     onRecordingStop,
     onTranscriptUpdate,
     stopMediaRecorderSafely,
@@ -1342,7 +1334,7 @@ export const Recorder = forwardRef<RecorderHandle, RecorderProps>(function Recor
 
     transcriptRef.current = updatedTranscript;
     setTranscript(updatedTranscript);
-    onTranscriptUpdate?.(updatedTranscript);
+    onTranscriptUpdate?.(updatedTranscript, getCallbackMeta());
 
     manuallyEditedSegmentIdsRef.current.add(segmentId);
     setEnhancedSegments((prev) => {
@@ -1361,7 +1353,7 @@ export const Recorder = forwardRef<RecorderHandle, RecorderProps>(function Recor
     }).catch((error) => {
       console.warn('[Recorder] Failed to record transcript edit diff:', error);
     });
-  }, [onTranscriptTextUpdate, onTranscriptUpdate]);
+  }, [getCallbackMeta, onTranscriptTextUpdate, onTranscriptUpdate]);
 
   const displayTranscript = transcript.map(seg => {
     if (seg.lockedByUser || manuallyEditedSegmentIdsRef.current.has(seg.id)) return seg;

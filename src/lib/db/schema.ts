@@ -9,7 +9,7 @@ export interface AudioSession {
   duration: number;
   subject?: string;
   topic?: string;
-  sourceType?: 'recording' | 'upload' | 'video-link';
+  sourceType?: 'recording' | 'upload' | 'video-link' | 'video-file';
   mediaUrl?: string;
   videoUrl?: string;
   videoEmbedUrl?: string;

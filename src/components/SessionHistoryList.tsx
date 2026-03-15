@@ -11,6 +11,7 @@ import {
   type AudioSession,
   updateSessionTopic,
 } from '@/lib/db';
+import { isStoredVideoSession } from '@/lib/capture/video-session';
 import { cn } from '@/lib/utils';
 
 interface SessionHistoryListProps {
@@ -68,7 +69,7 @@ function buildSessionTitle(session: AudioSession): string {
 }
 
 function buildCaptureHint(session: AudioSession): string {
-  if (session.sourceType === 'video-link') {
+  if (isStoredVideoSession(session)) {
     return '这条视频已经收进来了，随时可以接着学。';
   }
   return '这段内容已经收进来了，随时可以接着学。';
@@ -247,7 +248,7 @@ function SessionItem({
     locale: zhCN,
   });
   const title = buildSessionTitle(session);
-  const isVideoSession = session.sourceType === 'video-link';
+  const isVideoSession = isStoredVideoSession(session);
 
   if (variant === 'capture') {
     return (

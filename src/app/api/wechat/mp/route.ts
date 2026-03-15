@@ -11,6 +11,7 @@ import {
   parseWechatMpXml,
   verifyWechatMpSignature,
 } from '@/lib/services/wechat-mp-service';
+import { enrichLinkContent } from '@/lib/services/jina-reader-service';
 
 export const runtime = 'nodejs';
 
@@ -180,18 +181,22 @@ export async function POST(request: NextRequest) {
             where: { linkToken },
             data: { mediaUrl: localMediaUrl },
           });
+        }
 
-          if (intelligence.workspaceId) {
-            await prisma.workspaceCapture.updateMany({
-              where: { sourceKey: `wechat:${linkToken}` },
-              data: { mediaUrl: `${baseUrl}${localMediaUrl}` },
-            });
-          }
+        if (intelligence.workspaceId) {
+          await workspaceContextService.syncWechatInboxMessageArtifacts(linkToken, {
+            hydrateVoice: normalized.msgType === 'voice',
+          });
         }
       } catch (error) {
         console.error('[wechat-mp] async media download failed:', error);
       }
     })();
+
+    // 异步抓取 web-link 正文（Jina Reader），不阻塞回执。
+    if (normalized.reach?.channel === 'web-link' && normalized.sourceUrl) {
+      void enrichLinkContent(linkToken);
+    }
 
     const captureUrl = buildWechatEntryUrl(baseUrl, linkToken, intelligence.bindingStatus === 'bound');
     return xmlResponse(

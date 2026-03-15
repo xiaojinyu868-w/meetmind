@@ -76,6 +76,8 @@ export function AnalyticsProvider({
   userId: initialUserId,
   enabled = true 
 }: AnalyticsProviderProps) {
+  const analyticsEnabled = enabled && process.env.NODE_ENV === 'production';
+
   // 从 localStorage 获取用户ID（如果有登录状态）
   const [userId, setUserId] = useState<string | undefined>(initialUserId);
   
@@ -125,7 +127,7 @@ export function AnalyticsProvider({
   // 使用分析 Hook
   const { trackEvent, trackPageView, sessionToken } = useAnalytics({
     userId,
-    enabled,
+    enabled: analyticsEnabled,
     heartbeatInterval: 30000, // 30秒心跳
   });
   
@@ -140,7 +142,7 @@ export function AnalyticsProvider({
     trackCoreEvent,
     trackPageView,
     sessionToken,
-    isEnabled: enabled,
+    isEnabled: analyticsEnabled,
   };
   
   return (

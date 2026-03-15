@@ -1,20 +1,15 @@
-/**
- * 微信媒体下载与持久化服务
- *
- * - 图片：直接下载 PicUrl（HTTP 链接，无需 access_token）
- * - 语音/视频：需要 access_token 调用临时素材接口（认证后启用）
- *
- * 文件保存到 public/wechat-media/ 目录，通过 Next.js 静态文件服务对外访问。
- */
-
 import fs from 'fs/promises';
 import path from 'path';
+import { safeUnlink, transcodeToMp3 } from '@/lib/services/media-tooling';
+import {
+  isWechatPlayableAudioUrl,
+  normalizeWechatMediaPublicPath,
+} from '@/lib/services/wechat-voice-utils';
 
 const WECHAT_APP_ID = process.env.WECHAT_APP_ID || '';
 const WECHAT_APP_SECRET = process.env.WECHAT_APP_SECRET || '';
 const MEDIA_DIR = path.join(process.cwd(), 'public', 'wechat-media');
 
-// access_token 缓存（有效期 2 小时，提前 5 分钟刷新）
 let cachedAccessToken: { token: string; expiresAt: number } | null = null;
 
 async function ensureMediaDir(subdir?: string): Promise<string> {
@@ -23,9 +18,15 @@ async function ensureMediaDir(subdir?: string): Promise<string> {
   return dir;
 }
 
-/**
- * 获取微信全局 access_token（服务端调用接口用，不是 OAuth 用的）
- */
+function resolveLocalWechatMediaPath(value?: string | null): string | null {
+  const normalized = normalizeWechatMediaPublicPath(value);
+  if (!normalized) return null;
+
+  const pathname = normalized.split('?')[0] || '';
+  if (!pathname.startsWith('/wechat-media/')) return null;
+  return path.join(process.cwd(), 'public', pathname.replace(/^\//, ''));
+}
+
 export async function getWechatAccessToken(): Promise<string | null> {
   if (!WECHAT_APP_ID || !WECHAT_APP_SECRET) {
     return null;
@@ -48,7 +49,7 @@ export async function getWechatAccessToken(): Promise<string | null> {
 
     cachedAccessToken = {
       token: data.access_token,
-      expiresAt: now + (data.expires_in - 300) * 1000, // 提前 5 分钟过期
+      expiresAt: now + (data.expires_in - 300) * 1000,
     };
 
     return data.access_token;
@@ -58,26 +59,19 @@ export async function getWechatAccessToken(): Promise<string | null> {
   }
 }
 
-/**
- * 下载图片（直接用 PicUrl，不需要 access_token）
- *
- * @returns 本地相对 URL（如 /wechat-media/images/abc123.jpg）或 null
- */
 export async function downloadWechatImage(picUrl: string, linkToken: string): Promise<string | null> {
   if (!picUrl) return null;
 
   try {
     const dir = await ensureMediaDir('images');
-    const ext = '.jpg'; // 微信图片统一 jpg
-    const filename = `${linkToken}${ext}`;
+    const filename = `${linkToken}.jpg`;
     const filepath = path.join(dir, filename);
 
-    // 如果已下载则跳过
     try {
       await fs.access(filepath);
       return `/wechat-media/images/${filename}`;
     } catch {
-      // 文件不存在，继续下载
+      // continue download
     }
 
     const res = await fetch(picUrl);
@@ -97,13 +91,6 @@ export async function downloadWechatImage(picUrl: string, linkToken: string): Pr
   }
 }
 
-/**
- * 通过 MediaId 下载微信临时素材（语音/视频）
- *
- * 需要 access_token（服务号认证后可用）
- *
- * @returns 本地相对 URL 或 null
- */
 export async function downloadWechatMedia(
   mediaId: string,
   linkToken: string,
@@ -113,23 +100,22 @@ export async function downloadWechatMedia(
 
   const accessToken = await getWechatAccessToken();
   if (!accessToken) {
-    console.log('[wechat-media] no access_token, skip media download (need certification)');
+    console.log('[wechat-media] no access_token, skip media download');
     return null;
   }
 
   try {
     const subdir = type === 'voice' ? 'voice' : 'video';
-    const ext = type === 'voice' ? '.amr' : '.mp4';
     const dir = await ensureMediaDir(subdir);
-    const filename = `${linkToken}${ext}`;
-    const filepath = path.join(dir, filename);
+    const publicExt = type === 'voice' ? '.mp3' : '.mp4';
+    const publicFilename = `${linkToken}${publicExt}`;
+    const publicFilepath = path.join(dir, publicFilename);
 
-    // 如果已下载则跳过
     try {
-      await fs.access(filepath);
-      return `/wechat-media/${subdir}/${filename}`;
+      await fs.access(publicFilepath);
+      return `/wechat-media/${subdir}/${publicFilename}`;
     } catch {
-      // 文件不存在，继续下载
+      // continue download
     }
 
     const url = `https://api.weixin.qq.com/cgi-bin/media/get?access_token=${accessToken}&media_id=${mediaId}`;
@@ -140,7 +126,6 @@ export async function downloadWechatMedia(
       return null;
     }
 
-    // 检查是否返回了错误 JSON 而不是二进制文件
     const contentType = res.headers.get('content-type') || '';
     if (contentType.includes('application/json') || contentType.includes('text/plain')) {
       const errorData = await res.json();
@@ -149,18 +134,92 @@ export async function downloadWechatMedia(
     }
 
     const buffer = Buffer.from(await res.arrayBuffer());
-    await fs.writeFile(filepath, buffer);
-    console.log(`[wechat-media] ${type} saved: ${filename} (${buffer.length} bytes)`);
 
-    return `/wechat-media/${subdir}/${filename}`;
+    if (type === 'voice') {
+      const rawFilepath = path.join(dir, `${linkToken}.download`);
+      const fallbackFilepath = path.join(dir, `${linkToken}.amr`);
+
+      try {
+        await fs.writeFile(rawFilepath, buffer);
+        await transcodeToMp3(rawFilepath, publicFilepath);
+        console.log(`[wechat-media] voice transcoded: ${publicFilename} (${buffer.length} bytes source)`);
+        return `/wechat-media/${subdir}/${publicFilename}`;
+      } catch (error) {
+        console.error('[wechat-media] voice transcode failed, fallback to original format:', error);
+        await fs.writeFile(fallbackFilepath, buffer);
+        return `/wechat-media/${subdir}/${linkToken}.amr`;
+      } finally {
+        safeUnlink(rawFilepath);
+      }
+    }
+
+    await fs.writeFile(publicFilepath, buffer);
+    console.log(`[wechat-media] ${type} saved: ${publicFilename} (${buffer.length} bytes)`);
+    return `/wechat-media/${subdir}/${publicFilename}`;
   } catch (error) {
-    console.error(`[wechat-media] downloadWechatMedia error:`, error);
+    console.error('[wechat-media] downloadWechatMedia error:', error);
     return null;
   }
 }
 
-export default {
+export async function ensureWechatVoicePlaybackUrl(params: {
+  linkToken: string;
+  mediaUrl?: string | null;
+  mediaId?: string | null;
+}): Promise<string | null> {
+  const normalized = normalizeWechatMediaPublicPath(params.mediaUrl);
+
+  if (normalized && isWechatPlayableAudioUrl(normalized)) {
+    const localPath = resolveLocalWechatMediaPath(normalized);
+    if (localPath) {
+      try {
+        await fs.access(localPath);
+        return normalized.split('?')[0];
+      } catch {
+        // continue
+      }
+    }
+  }
+
+  const targetDir = await ensureMediaDir('voice');
+  const targetFilename = `${params.linkToken}.mp3`;
+  const targetFilepath = path.join(targetDir, targetFilename);
+
+  try {
+    await fs.access(targetFilepath);
+    return `/wechat-media/voice/${targetFilename}`;
+  } catch {
+    // continue
+  }
+
+  const localSourcePath = resolveLocalWechatMediaPath(normalized);
+  if (localSourcePath) {
+    try {
+      await fs.access(localSourcePath);
+      await transcodeToMp3(localSourcePath, targetFilepath);
+      return `/wechat-media/voice/${targetFilename}`;
+    } catch (error) {
+      console.error('[wechat-media] ensureWechatVoicePlaybackUrl local transcode failed:', error);
+    }
+  }
+
+  if (params.mediaId) {
+    return downloadWechatMedia(params.mediaId, params.linkToken, 'voice');
+  }
+
+  return normalized || null;
+}
+
+export function resolveWechatMediaFilePath(value?: string | null): string | null {
+  return resolveLocalWechatMediaPath(value);
+}
+
+const wechatMediaService = {
   getWechatAccessToken,
   downloadWechatImage,
   downloadWechatMedia,
+  ensureWechatVoicePlaybackUrl,
+  resolveWechatMediaFilePath,
 };
+
+export default wechatMediaService;

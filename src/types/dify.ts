@@ -33,6 +33,8 @@ export interface ExtendedTutorRequest {
   selected_option_id?: string;
   /** Dify 会话 ID（多轮对话） */
   conversation_id?: string;
+  /** 当前问答是否围绕用户刚圈出的上下文展开 */
+  selected_context_mode?: boolean;
 }
 
 // ==================== 响应类型 ====================

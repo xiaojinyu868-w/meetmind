@@ -136,9 +136,14 @@ model WorkspaceEcho {
   workspaceId String
   captureId   String?
   sourceKey   String   @unique
+  kind        String?
+  generatedDateKey String?
+  model       String?
+  promptVersion String?
   title       String
   body        String
   chipsJson   String?
+  metadataJson String?
   status      String   @default("active")
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
@@ -148,7 +153,10 @@ model WorkspaceEcho {
 
   @@index([workspaceId])
   @@index([captureId])
+  @@index([kind])
   @@index([status])
+  @@index([generatedDateKey])
+  @@index([workspaceId, kind, generatedDateKey])
   @@index([createdAt])
 }
 

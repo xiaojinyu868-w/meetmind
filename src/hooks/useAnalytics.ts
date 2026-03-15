@@ -14,6 +14,8 @@ import { useCallback, useEffect, useRef } from 'react';
 
 let analyticsNetworkWarned = false;
 let analyticsBackoffUntil = 0;
+const initializedSessionTokens = new Set<string>();
+const initializedPageViewKeys = new Set<string>();
 
 // 生成唯一会话ID
 function generateSessionToken(): string {
@@ -123,36 +125,48 @@ export function useAnalytics(options: UseAnalyticsOptions = {}): UseAnalyticsRet
     if (!enabled || typeof window === 'undefined') return;
     
     const sessionToken = getSessionToken();
+    const pathname = window.location.pathname;
     sessionTokenRef.current = sessionToken;
     startTimeRef.current = Date.now();
     activeTimeRef.current = 0;
     lastHeartbeatRef.current = Date.now();
-    currentPathRef.current = window.location.pathname;
+    currentPathRef.current = pathname;
     pageStartTimeRef.current = Date.now();
     
     const isNewUser = checkIsNewUser();
     
     // 发送会话开始事件
-    sendAnalytics({
-      action: 'session_start',
-      sessionToken,
-      userId,
-      data: {
-        entryPage: window.location.pathname,
-        isNewUser,
-      },
-    });
+    const initializeAnalytics = async () => {
+      if (!initializedSessionTokens.has(sessionToken)) {
+        initializedSessionTokens.add(sessionToken);
+        await sendAnalytics({
+          action: 'session_start',
+          sessionToken,
+          userId,
+          data: {
+            entryPage: pathname,
+            isNewUser,
+          },
+        });
+      }
     
     // 记录初始页面访问
-    sendAnalytics({
-      action: 'page_view',
-      sessionToken,
-      userId,
-      data: {
-        path: window.location.pathname,
-        referrer: document.referrer || undefined,
-      },
-    });
+      const pageViewKey = `${sessionToken}:${pathname}`;
+      if (!initializedPageViewKeys.has(pageViewKey)) {
+        initializedPageViewKeys.add(pageViewKey);
+        await sendAnalytics({
+          action: 'page_view',
+          sessionToken,
+          userId,
+          data: {
+            path: pathname,
+            referrer: document.referrer || undefined,
+          },
+        });
+      }
+    };
+
+    void initializeAnalytics();
     
   }, [enabled, userId]);
   

@@ -80,11 +80,16 @@ function buildEchoChips(message: NormalizedWechatMessage): string[] {
 function buildTutorContext(message: NormalizedWechatMessage): string {
   const parts: string[] = ['以下内容来自微信服务号的轻收集入口，请把它当作用户主动发进来的真实学习上下文。'];
 
+  const providerLabel = message.reach?.providerLabel;
+  const isKnownPlatform = providerLabel && providerLabel !== '网页';
+
   const typeLabel =
     message.msgType === 'voice'
       ? '语音'
       : message.msgType === 'link'
-        ? '链接'
+        ? isKnownPlatform
+          ? `${providerLabel}内容`
+          : '链接'
         : message.msgType === 'image'
           ? '图片'
           : message.msgType === 'event'
@@ -93,8 +98,16 @@ function buildTutorContext(message: NormalizedWechatMessage): string {
 
   parts.push(`输入类型：${typeLabel}`);
 
+  if (isKnownPlatform) {
+    parts.push(`来源平台：${providerLabel}`);
+  }
+
   if (message.title) {
     parts.push(`标题：${compactText(message.title, 120)}`);
+  }
+
+  if (message.description) {
+    parts.push(`摘要：${compactText(message.description, 300)}`);
   }
 
   if (message.sourceUrl) {
@@ -110,7 +123,10 @@ function buildTutorContext(message: NormalizedWechatMessage): string {
   if (message.msgType === 'voice') {
     parts.push('回答时请优先保留口语化上下文，先帮用户接住，再决定是否展开解释。');
   } else if (message.msgType === 'link') {
-    parts.push('回答时请先解释这条链接为什么值得看，再把它和当前学习主题连接起来。');
+    const platformHint = isKnownPlatform
+      ? `这是一条来自${providerLabel}的内容。`
+      : '';
+    parts.push(`${platformHint}回答时请先解释这条链接为什么值得看，再把它和当前学习主题连接起来。`);
   } else {
     parts.push('回答时请优先沿着这条收集背后的困惑、意图或线索继续，而不是给泛泛总结。');
   }
@@ -159,7 +175,8 @@ export async function ensureWechatInboxMessageHydrated(linkToken: string) {
     }
   }
 
-  await workspaceContextService.syncWechatInboxMessageArtifacts(linkToken);
+  await workspaceContextService.hydrateWechatVoiceMessage(linkToken);
+  await workspaceContextService.syncWechatInboxMessageArtifacts(linkToken, { hydrateVoice: true });
 
   return prisma.wechatInboxMessage.findUnique({
     where: { linkToken },

@@ -2,10 +2,15 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { applyRateLimit } from '@/lib/utils/rate-limit';
-import { resolvePublicBaseUrl } from '@/lib/services/media-tooling';
+import {
+  MediaToolError,
+  isToolNotFoundError,
+  resolvePublicBaseUrl,
+  transcodeToMp3,
+} from '@/lib/services/media-tooling';
 
 const MAX_FILE_SIZE = 500 * 1024 * 1024;
-const SUPPORTED_FORMATS = [
+const SUPPORTED_AUDIO_FORMATS = [
   'audio/mpeg',
   'audio/mp3',
   'audio/x-m4a',
@@ -14,6 +19,14 @@ const SUPPORTED_FORMATS = [
   'audio/webm',
   'audio/ogg',
   'audio/flac',
+];
+const SUPPORTED_VIDEO_FORMATS = [
+  'video/mp4',
+  'video/webm',
+  'video/quicktime',
+  'video/x-m4v',
+  'video/mpeg',
+  'video/ogg',
 ];
 
 const UPLOAD_DIR = path.join(process.cwd(), 'public', 'temp-audio');
@@ -245,6 +258,9 @@ export async function POST(request: NextRequest) {
   const rateLimitResponse = await applyRateLimit(request, 'transcribe');
   if (rateLimitResponse) return rateLimitResponse;
 
+  let originalFilePath = '';
+  let transcribeFilePath = '';
+
   try {
     const apiKey = process.env.DASHSCOPE_API_KEY;
     if (!apiKey) {
@@ -272,15 +288,16 @@ export async function POST(request: NextRequest) {
     const contextHint = sanitizeASRContext(formData.get('context'));
 
     if (!audioFile) {
-      return NextResponse.json({ error: '未提供音频文件', code: 'ASR_AUDIO_MISSING' }, { status: 400 });
+      return NextResponse.json({ error: '未提供音频或视频文件', code: 'ASR_AUDIO_MISSING' }, { status: 400 });
     }
 
-    const isAudio = audioFile.type.startsWith('audio/') || SUPPORTED_FORMATS.includes(audioFile.type);
-    if (!isAudio) {
+    const isAudio = audioFile.type.startsWith('audio/') || SUPPORTED_AUDIO_FORMATS.includes(audioFile.type);
+    const isVideo = audioFile.type.startsWith('video/') || SUPPORTED_VIDEO_FORMATS.includes(audioFile.type);
+    if (!isAudio && !isVideo) {
       return NextResponse.json(
         {
           error: `不支持的文件格式: ${audioFile.type}`,
-          code: 'ASR_AUDIO_FORMAT_UNSUPPORTED',
+          code: 'ASR_MEDIA_FORMAT_UNSUPPORTED',
         },
         { status: 400 }
       );
@@ -298,18 +315,24 @@ export async function POST(request: NextRequest) {
 
     const timestamp = Date.now();
     const randomId = Math.random().toString(36).substring(2, 8);
-    const ext = path.extname(audioFile.name) || '.mp3';
-    const fileName = `audio_${timestamp}_${randomId}${ext}`;
-    const filePath = path.join(UPLOAD_DIR, fileName);
+    const ext = path.extname(audioFile.name) || (isVideo ? '.mp4' : '.mp3');
+    const fileName = `media_${timestamp}_${randomId}${ext}`;
+    originalFilePath = path.join(UPLOAD_DIR, fileName);
 
     const arrayBuffer = await audioFile.arrayBuffer();
-    fs.writeFileSync(filePath, Buffer.from(arrayBuffer));
+    fs.writeFileSync(originalFilePath, Buffer.from(arrayBuffer));
 
-    const fileUrl = `${publicBase.baseUrl}/temp-audio/${fileName}`;
+    if (isVideo) {
+      transcribeFilePath = path.join(UPLOAD_DIR, `media_${timestamp}_${randomId}.mp3`);
+      await transcodeToMp3(originalFilePath, transcribeFilePath);
+    } else {
+      transcribeFilePath = originalFilePath;
+    }
+
+    const fileUrl = `${publicBase.baseUrl}/temp-audio/${path.basename(transcribeFilePath)}`;
 
     const submitted = await submitAsyncTask(fileUrl, apiKey, language, contextHint);
     if (!submitted.success || !submitted.taskId) {
-      safeUnlink(filePath);
       return NextResponse.json(
         {
           error: '提交转写任务失败',
@@ -321,7 +344,6 @@ export async function POST(request: NextRequest) {
     }
 
     const taskResult = await waitForTask(submitted.taskId, apiKey);
-    safeUnlink(filePath);
 
     if (!taskResult.success) {
       return NextResponse.json(
@@ -362,6 +384,20 @@ export async function POST(request: NextRequest) {
       contextHintUsed: Boolean(contextHint),
     });
   } catch (error) {
+    if (
+      error instanceof MediaToolError &&
+      (isToolNotFoundError(error, 'ffmpeg') || isToolNotFoundError(error, 'ffprobe'))
+    ) {
+      return NextResponse.json(
+        {
+          error: '服务端未安装 ffmpeg/ffprobe，暂时无法处理视频文件转写',
+          code: 'FFMPEG_NOT_FOUND',
+          detail: error.detail || error.message,
+        },
+        { status: 500 }
+      );
+    }
+
     return NextResponse.json(
       {
         error: '转写服务异常',
@@ -370,6 +406,13 @@ export async function POST(request: NextRequest) {
       },
       { status: 500 }
     );
+  } finally {
+    if (transcribeFilePath && transcribeFilePath !== originalFilePath) {
+      safeUnlink(transcribeFilePath);
+    }
+    if (originalFilePath) {
+      safeUnlink(originalFilePath);
+    }
   }
 }
 

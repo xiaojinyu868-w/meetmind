@@ -117,16 +117,16 @@ export async function createSession(params: CreateSessionParams) {
   
   try {
     // 检查会话是否已存在
-    const existing = await prisma.userAnalytics.findUnique({
-      where: { sessionToken }
-    });
-    
-    if (existing) {
-      return existing;
-    }
-    
-    const session = await prisma.userAnalytics.create({
-      data: {
+    const session = await prisma.userAnalytics.upsert({
+      where: { sessionToken },
+      update: {
+        userId,
+        ip,
+        userAgent,
+        entryPage,
+        isNewUser: isNewUser ?? undefined,
+      },
+      create: {
         sessionToken,
         userId,
         ip,

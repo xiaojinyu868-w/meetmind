@@ -38,6 +38,7 @@ const PUBLIC_ROUTES = [
   '/api/apps/catalog',
   '/api/apps/execute',
   '/api/apps/infographic/generate-image',
+  '/api/extract-terms',
   '/api/analytics',
   '/api/analytics/stats',
   '/api/feedback',

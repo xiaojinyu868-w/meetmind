@@ -1,4 +1,5 @@
 import { parseVideoLink } from '@/lib/utils/video-link';
+import { detectLinkProvider } from './link-provider';
 
 export type ContextReachKind = 'text' | 'link' | 'file';
 
@@ -91,14 +92,15 @@ export function detectReachFromText(rawText: string): ContextReachDetection {
     };
   }
 
+  const provider = detectLinkProvider(url);
   return {
     kind: 'link',
     channel: 'web-link',
-    label: '网页链接',
+    label: provider.id === 'generic' ? '网页链接' : `${provider.label}`,
     description: '会先作为一条网页线索留在这里，后面再继续解析。',
     shouldAutoIngest: false,
     url,
-    providerLabel: '网页',
+    providerLabel: provider.label,
   };
 }
 

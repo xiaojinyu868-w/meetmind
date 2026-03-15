@@ -1,7 +1,6 @@
-﻿'use client';
+'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { DashScopeASRClient } from '@/lib/services/dashscope-asr-service';
 
 export type VoiceInputStatus = 'idle' | 'connecting' | 'recording' | 'error';
 
@@ -59,6 +58,23 @@ const getSpeechRecognitionConstructor = (): BrowserSpeechRecognitionConstructor 
   return window.SpeechRecognition || window.webkitSpeechRecognition || null;
 };
 
+const getPreferredRecordingMimeType = (): string => {
+  if (typeof MediaRecorder === 'undefined' || typeof MediaRecorder.isTypeSupported !== 'function') {
+    return 'audio/webm';
+  }
+
+  const candidates = ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4', 'audio/ogg;codecs=opus'];
+  const supported = candidates.find((type) => MediaRecorder.isTypeSupported(type));
+  return supported || 'audio/webm';
+};
+
+const getFileExtensionFromMimeType = (mimeType: string): string => {
+  if (mimeType.includes('mp4')) return 'm4a';
+  if (mimeType.includes('ogg')) return 'ogg';
+  if (mimeType.includes('wav')) return 'wav';
+  return 'webm';
+};
+
 export function useVoiceInput({
   onTranscript,
   onInterim,
@@ -67,12 +83,13 @@ export function useVoiceInput({
   const [status, setStatus] = useState<VoiceInputStatus>('idle');
   const [interimText, setInterimText] = useState('');
 
-  const asrClientRef = useRef<DashScopeASRClient | null>(null);
-  const mediaStreamRef = useRef<MediaStream | null>(null);
-  const audioContextRef = useRef<AudioContext | null>(null);
-  const processorRef = useRef<ScriptProcessorNode | null>(null);
   const recognitionRef = useRef<BrowserSpeechRecognition | null>(null);
+  const mediaStreamRef = useRef<MediaStream | null>(null);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const recordedChunksRef = useRef<Blob[]>([]);
+  const bufferedMimeTypeRef = useRef('audio/webm');
   const usingNativeRecognitionRef = useRef(false);
+  const usingBufferedFallbackRef = useRef(false);
   const isRecordingRef = useRef(false);
   const interimTextRef = useRef('');
   const connectTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -93,9 +110,18 @@ export function useVoiceInput({
     }
   }, []);
 
+  const releaseMediaStream = useCallback(() => {
+    if (mediaStreamRef.current) {
+      mediaStreamRef.current.getTracks().forEach((track) => track.stop());
+      mediaStreamRef.current = null;
+    }
+  }, []);
+
   const resetState = useCallback(() => {
     isRecordingRef.current = false;
     usingNativeRecognitionRef.current = false;
+    usingBufferedFallbackRef.current = false;
+    recordedChunksRef.current = [];
     setInterimText('');
     setStatus('idle');
   }, []);
@@ -116,26 +142,24 @@ export function useVoiceInput({
       recognitionRef.current = null;
     }
 
-    if (processorRef.current) {
-      processorRef.current.disconnect();
-      processorRef.current = null;
+    if (mediaRecorderRef.current) {
+      try {
+        if (mediaRecorderRef.current.state !== 'inactive') {
+          mediaRecorderRef.current.stop();
+        }
+      } catch {
+        // ignore cleanup errors
+      }
+      mediaRecorderRef.current.ondataavailable = null;
+      mediaRecorderRef.current.onerror = null;
+      mediaRecorderRef.current.onstart = null;
+      mediaRecorderRef.current.onstop = null;
+      mediaRecorderRef.current = null;
     }
 
-    if (audioContextRef.current) {
-      audioContextRef.current.close().catch(() => {});
-      audioContextRef.current = null;
-    }
-
-    if (mediaStreamRef.current) {
-      mediaStreamRef.current.getTracks().forEach((track) => track.stop());
-      mediaStreamRef.current = null;
-    }
-
-    if (asrClientRef.current) {
-      asrClientRef.current.stop().catch(() => {});
-      asrClientRef.current = null;
-    }
-  }, [clearConnectTimeout]);
+    releaseMediaStream();
+    recordedChunksRef.current = [];
+  }, [clearConnectTimeout, releaseMediaStream]);
 
   useEffect(() => {
     return () => {
@@ -143,19 +167,19 @@ export function useVoiceInput({
     };
   }, [cleanupTransport]);
 
-  const resampleTo16kHz = useCallback((inputBuffer: Float32Array, inputSampleRate: number): Int16Array => {
-    const ratio = inputSampleRate / 16000;
-    const outputLength = Math.round(inputBuffer.length / ratio);
-    const output = new Int16Array(outputLength);
-
-    for (let index = 0; index < outputLength; index += 1) {
-      const sourceIndex = Math.min(Math.round(index * ratio), inputBuffer.length - 1);
-      const sample = Math.max(-1, Math.min(1, inputBuffer[sourceIndex]));
-      output[index] = sample < 0 ? sample * 0x8000 : sample * 0x7fff;
-    }
-
-    return output;
-  }, []);
+  const setTemporaryError = useCallback(
+    (message: string, delayMs = 1800) => {
+      onError?.(message);
+      cleanupTransport();
+      setStatus('error');
+      window.setTimeout(() => {
+        if (statusRef.current === 'error') {
+          resetState();
+        }
+      }, delayMs);
+    },
+    [cleanupTransport, onError, resetState]
+  );
 
   const stopNativeRecognition = useCallback(async () => {
     const recognition = recognitionRef.current;
@@ -222,6 +246,8 @@ export function useVoiceInput({
 
       recognition.onerror = (event) => {
         const errorCode = event.error || '';
+        if (errorCode === 'aborted') return;
+
         const message =
           errorCode === 'not-allowed'
             ? '请先允许麦克风权限，再开始语音听写。'
@@ -229,14 +255,7 @@ export function useVoiceInput({
               ? '没有听到语音，再试一次。'
               : '语音听写暂时不可用，请稍后重试。';
 
-        onError?.(message);
-        cleanupTransport();
-        setStatus('error');
-        window.setTimeout(() => {
-          if (statusRef.current === 'error') {
-            setStatus('idle');
-          }
-        }, 1600);
+        setTemporaryError(message, 1600);
       };
 
       recognition.onend = () => {
@@ -251,14 +270,7 @@ export function useVoiceInput({
 
       connectTimeoutRef.current = setTimeout(() => {
         if (statusRef.current === 'connecting') {
-          onError?.('语音听写启动超时，请再试一次。');
-          cleanupTransport();
-          setStatus('error');
-          window.setTimeout(() => {
-            if (statusRef.current === 'error') {
-              setStatus('idle');
-            }
-          }, 1600);
+          setTemporaryError('语音听写启动超时，请再试一次。', 1600);
         }
       }, 1800);
 
@@ -266,112 +278,166 @@ export function useVoiceInput({
       recognition.start();
       return true;
     } catch (error) {
-      console.warn('[VoiceInput] Native recognition unavailable, fallback to ASR:', error);
+      console.warn('[VoiceInput] Native recognition unavailable, fallback to buffered recording:', error);
       recognitionRef.current = null;
       usingNativeRecognitionRef.current = false;
       clearConnectTimeout();
       return false;
     }
-  }, [cleanupTransport, clearConnectTimeout, onError, onInterim, onTranscript, resetState]);
+  }, [clearConnectTimeout, onInterim, onTranscript, resetState, setTemporaryError]);
 
-  const startDashScopeRecognition = useCallback(async () => {
+  const transcribeBufferedAudio = useCallback(
+    async (audioBlob: Blob) => {
+      if (!audioBlob.size) {
+        throw new Error('没有录到有效语音，请再试一次。');
+      }
+
+      const mimeType = bufferedMimeTypeRef.current || audioBlob.type || 'audio/webm';
+      const extension = getFileExtensionFromMimeType(mimeType);
+      const audioFile = new File([audioBlob], `voice-input.${extension}`, {
+        type: mimeType,
+        lastModified: Date.now(),
+      });
+
+      const formData = new FormData();
+      formData.append('audio', audioFile);
+      formData.append('language', 'zh');
+
+      const response = await fetch('/api/transcribe-turbo', {
+        method: 'POST',
+        body: formData,
+      });
+
+      const payload = (await response.json().catch(() => ({}))) as {
+        error?: string;
+        detail?: string;
+        sentences?: Array<{ text?: string }>;
+      };
+
+      if (!response.ok) {
+        throw new Error(payload.error || payload.detail || '语音听写暂时不可用，请稍后重试。');
+      }
+
+      const transcript = (payload.sentences || [])
+        .map((sentence) => sentence.text?.trim() || '')
+        .filter(Boolean)
+        .join(' ')
+        .trim();
+
+      if (!transcript) {
+        throw new Error('没有听清这段话，再试一次。');
+      }
+
+      onTranscript(transcript);
+    },
+    [onTranscript]
+  );
+
+  const startBufferedRecognition = useCallback(async () => {
+    if (typeof MediaRecorder === 'undefined' || !navigator.mediaDevices?.getUserMedia) {
+      throw new Error('当前设备暂不支持语音听写。');
+    }
+
     setStatus('connecting');
     setInterimText('');
+    onInterim?.('');
 
     const stream = await navigator.mediaDevices.getUserMedia({
       audio: {
-        sampleRate: { ideal: 16000 },
-        channelCount: 1,
         echoCancellation: true,
         noiseSuppression: true,
+        channelCount: 1,
       },
     });
     mediaStreamRef.current = stream;
 
-    const asrClient = new DashScopeASRClient('', {
-      onSentence: (sentence) => {
-        if (sentence.text && sentence.isFinal) {
-          onTranscript(sentence.text);
-          setInterimText('');
-        }
-      },
-      onInterim: (interim) => {
-        const text = interim?.text || '';
-        setInterimText(text);
-        onInterim?.(text);
-      },
-      onError: (error) => {
-        console.error('[VoiceInput] ASR error:', error);
-        onError?.(error);
-        cleanupTransport();
-        setStatus('error');
-        window.setTimeout(() => {
-          if (statusRef.current === 'error') {
-            setStatus('idle');
-          }
-        }, 2000);
-      },
-      onStatusChange: (nextStatus) => {
-        if (nextStatus === 'transcribing') {
-          clearConnectTimeout();
-          setStatus('recording');
-        }
-      },
-    });
-    asrClientRef.current = asrClient;
+    const mimeType = getPreferredRecordingMimeType();
+    bufferedMimeTypeRef.current = mimeType;
+    recordedChunksRef.current = [];
+
+    const recorder = new MediaRecorder(stream, { mimeType });
+    mediaRecorderRef.current = recorder;
+    usingBufferedFallbackRef.current = true;
+
+    recorder.ondataavailable = (event) => {
+      if (event.data && event.data.size > 0) {
+        recordedChunksRef.current.push(event.data);
+      }
+    };
+
+    recorder.onerror = () => {
+      setTemporaryError('语音听写暂时不可用，请稍后重试。');
+    };
+
+    recorder.onstart = () => {
+      clearConnectTimeout();
+      setStatus('recording');
+      setInterimText('正在听你说…');
+      onInterim?.('正在听你说…');
+    };
+
+    recorder.onstop = () => {
+      mediaRecorderRef.current = null;
+      releaseMediaStream();
+    };
 
     connectTimeoutRef.current = setTimeout(() => {
       if (statusRef.current === 'connecting') {
-        onError?.('语音听写连接超时，请检查网络后重试。');
-        cleanupTransport();
-        setStatus('error');
-        window.setTimeout(() => {
-          if (statusRef.current === 'error') {
-            setStatus('idle');
-          }
-        }, 2000);
+        setTemporaryError('语音听写启动超时，请再试一次。', 1600);
       }
-    }, 8000);
-
-    const connected = await asrClient.start();
-    if (!connected) {
-      throw new Error('语音识别连接失败，请重试。');
-    }
-
-    const audioContext = new AudioContext({ sampleRate: 16000 });
-    audioContextRef.current = audioContext;
-    await audioContext.resume().catch(() => {});
-
-    const source = audioContext.createMediaStreamSource(stream);
-    const processor = audioContext.createScriptProcessor(4096, 1, 1);
-    processorRef.current = processor;
-
-    const browserSampleRate = audioContext.sampleRate;
-
-    processor.onaudioprocess = (event) => {
-      if (!isRecordingRef.current) return;
-
-      const inputData = event.inputBuffer.getChannelData(0);
-      let pcm16: Int16Array;
-
-      if (Math.abs(browserSampleRate - 16000) < 100) {
-        pcm16 = new Int16Array(inputData.length);
-        for (let index = 0; index < inputData.length; index += 1) {
-          const sample = Math.max(-1, Math.min(1, inputData[index]));
-          pcm16[index] = sample < 0 ? sample * 0x8000 : sample * 0x7fff;
-        }
-      } else {
-        pcm16 = resampleTo16kHz(inputData, browserSampleRate);
-      }
-
-      asrClient.sendAudio(pcm16.buffer as ArrayBuffer);
-    };
-
-    source.connect(processor);
-    processor.connect(audioContext.destination);
+    }, 2500);
 
     isRecordingRef.current = true;
-  }, [cleanupTransport, clearConnectTimeout, onError, onInterim, onTranscript, resampleTo16kHz]);
+    recorder.start();
+  }, [clearConnectTimeout, onInterim, releaseMediaStream, setTemporaryError]);
+
+  const stopBufferedRecognition = useCallback(async () => {
+    const recorder = mediaRecorderRef.current;
+    if (!recorder) {
+      resetState();
+      return;
+    }
+
+    clearConnectTimeout();
+    isRecordingRef.current = false;
+    setInterimText('');
+    onInterim?.('');
+
+    const stopPromise = new Promise<void>((resolve) => {
+      const handleStop = () => {
+        recorder.removeEventListener('stop', handleStop);
+        resolve();
+      };
+      recorder.addEventListener('stop', handleStop);
+    });
+
+    try {
+      recorder.stop();
+    } catch {
+      cleanupTransport();
+      resetState();
+      throw new Error('语音听写暂时不可用，请稍后重试。');
+    }
+
+    await stopPromise;
+
+    const audioBlob = new Blob(recordedChunksRef.current, { type: bufferedMimeTypeRef.current || 'audio/webm' });
+    recordedChunksRef.current = [];
+    resetState();
+
+    try {
+      await transcribeBufferedAudio(audioBlob);
+    } catch (error) {
+      const message = error instanceof Error && error.message ? error.message : '语音听写暂时不可用，请稍后重试。';
+      onError?.(message);
+      setStatus('error');
+      window.setTimeout(() => {
+        if (statusRef.current === 'error') {
+          resetState();
+        }
+      }, 1800);
+    }
+  }, [clearConnectTimeout, cleanupTransport, onError, onInterim, resetState, transcribeBufferedAudio]);
 
   const startRecording = useCallback(async () => {
     if (isRecordingRef.current || statusRef.current === 'connecting') return;
@@ -380,7 +446,7 @@ export function useVoiceInput({
       const usedNative = await startNativeRecognition();
       if (usedNative) return;
 
-      await startDashScopeRecognition();
+      await startBufferedRecognition();
     } catch (error) {
       console.error('[VoiceInput] Start failed:', error);
       const message =
@@ -390,16 +456,9 @@ export function useVoiceInput({
             ? error.message
             : '启动语音听写失败，请稍后再试。';
 
-      onError?.(message);
-      cleanupTransport();
-      setStatus('error');
-      window.setTimeout(() => {
-        if (statusRef.current === 'error') {
-          setStatus('idle');
-        }
-      }, 2000);
+      setTemporaryError(message);
     }
-  }, [cleanupTransport, onError, startDashScopeRecognition, startNativeRecognition]);
+  }, [setTemporaryError, startBufferedRecognition, startNativeRecognition]);
 
   const stopRecording = useCallback(async () => {
     if (!isRecordingRef.current && statusRef.current !== 'connecting') return;
@@ -409,35 +468,13 @@ export function useVoiceInput({
       return;
     }
 
-    isRecordingRef.current = false;
-
-    if (processorRef.current) {
-      processorRef.current.disconnect();
-      processorRef.current = null;
+    if (usingBufferedFallbackRef.current) {
+      await stopBufferedRecognition();
+      return;
     }
 
-    if (asrClientRef.current) {
-      await asrClientRef.current.stop().catch(() => {});
-      asrClientRef.current = null;
-    }
-
-    if (interimTextRef.current.trim()) {
-      onTranscript(interimTextRef.current.trim());
-    }
-
-    if (mediaStreamRef.current) {
-      mediaStreamRef.current.getTracks().forEach((track) => track.stop());
-      mediaStreamRef.current = null;
-    }
-
-    if (audioContextRef.current) {
-      await audioContextRef.current.close().catch(() => {});
-      audioContextRef.current = null;
-    }
-
-    clearConnectTimeout();
     resetState();
-  }, [clearConnectTimeout, onTranscript, resetState, stopNativeRecognition]);
+  }, [resetState, stopBufferedRecognition, stopNativeRecognition]);
 
   const toggleRecording = useCallback(async () => {
     if (isRecordingRef.current || statusRef.current === 'connecting') {
@@ -459,4 +496,3 @@ export function useVoiceInput({
 }
 
 export default useVoiceInput;
-
