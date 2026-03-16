@@ -24,7 +24,7 @@ async function sendQuickNote(page: Page, text: string) {
 }
 
 test.describe('collection context selection ui', () => {
-  test('supports quoting and asks tutor only once for a single collection item', async ({ page }) => {
+  test('keeps single-item actions minimal and asks tutor only once', async ({ page }) => {
     let lastTutorSupportText = '';
     let tutorRequestCount = 0;
     let selectedContextMode = false;
@@ -52,9 +52,7 @@ test.describe('collection context selection ui', () => {
     await sendQuickNote(page, '第一条：老师讲导数和单调性。');
     await sendQuickNote(page, '第二条：讲义里的定义我没串起来。');
 
-    await page.getByRole('button', { name: '引用这条：第一条：老师讲导数和单调性。' }).click();
-    await expect(page.getByPlaceholder(COLLECTION_PLACEHOLDER)).toHaveValue(/我想顺着这条继续记：/);
-    await expect(page.getByPlaceholder(COLLECTION_PLACEHOLDER)).toHaveValue(/第一条：老师讲导数和单调性。/);
+    await expect(page.getByRole('button', { name: '引用这条：第一条：老师讲导数和单调性。' })).toHaveCount(0);
 
     await page.getByRole('button', { name: '顺着这条问 Tutor：第二条：讲义里的定义我没串起来。' }).click();
     await page.getByPlaceholder(SELECTED_CONTEXT_TUTOR_PLACEHOLDER).waitFor({ state: 'visible' });

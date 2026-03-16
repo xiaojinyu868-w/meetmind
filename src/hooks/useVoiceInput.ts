@@ -58,6 +58,25 @@ const getSpeechRecognitionConstructor = (): BrowserSpeechRecognitionConstructor 
   return window.SpeechRecognition || window.webkitSpeechRecognition || null;
 };
 
+export function shouldPreferBufferedVoiceInput(params?: {
+  userAgent?: string;
+  maxTouchPoints?: number;
+}): boolean {
+  const userAgent = (
+    params?.userAgent ??
+    (typeof navigator !== 'undefined' ? navigator.userAgent : '')
+  ).toLowerCase();
+  const maxTouchPoints =
+    params?.maxTouchPoints ??
+    (typeof navigator !== 'undefined' ? navigator.maxTouchPoints || 0 : 0);
+
+  const isWeChatWebView = /micromessenger/.test(userAgent);
+  const isMobileUserAgent = /android|iphone|ipad|ipod|mobile/.test(userAgent);
+  const isTouchMac = /macintosh/.test(userAgent) && maxTouchPoints > 1;
+
+  return isWeChatWebView || isMobileUserAgent || isTouchMac;
+}
+
 const getPreferredRecordingMimeType = (): string => {
   if (typeof MediaRecorder === 'undefined' || typeof MediaRecorder.isTypeSupported !== 'function') {
     return 'audio/webm';
@@ -443,8 +462,11 @@ export function useVoiceInput({
     if (isRecordingRef.current || statusRef.current === 'connecting') return;
 
     try {
-      const usedNative = await startNativeRecognition();
-      if (usedNative) return;
+      const preferBufferedFallback = shouldPreferBufferedVoiceInput();
+      if (!preferBufferedFallback) {
+        const usedNative = await startNativeRecognition();
+        if (usedNative) return;
+      }
 
       await startBufferedRecognition();
     } catch (error) {

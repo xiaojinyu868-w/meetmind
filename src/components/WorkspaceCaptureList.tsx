@@ -109,7 +109,6 @@ export function WorkspaceCaptureList({
   captures,
   onClose,
   onOpenReview,
-  onQuoteCapture,
   onAskTutorAboutCapture,
   onToggleSelectCapture,
   selectedCaptureIds = [],
@@ -207,28 +206,24 @@ export function WorkspaceCaptureList({
                           >
                             {isSelected ? '已选' : '选择'}
                           </button>
-                        ) : (
-                          <>
-                            {onQuoteCapture ? (
-                              <button
-                                type="button"
-                                onClick={() => onQuoteCapture(item)}
-                                className="rounded-full border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-medium text-slate-700 transition hover:border-slate-300 hover:bg-slate-100"
-                              >
-                                引用
-                              </button>
-                            ) : null}
-                            {onAskTutorAboutCapture ? (
-                              <button
-                                type="button"
-                                onClick={() => onAskTutorAboutCapture(item)}
-                                className="rounded-full border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-medium text-slate-700 transition hover:border-slate-300 hover:bg-slate-100"
-                              >
-                                问 Tutor
-                              </button>
-                            ) : null}
-                          </>
-                        )}
+                        ) : canReview ? (
+                          <button
+                            type="button"
+                            onClick={() => onOpenReview?.(item)}
+                            className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-700 transition hover:border-emerald-300 hover:bg-emerald-100"
+                          >
+                            去复习
+                            <ChevronRight size={12} />
+                          </button>
+                        ) : onAskTutorAboutCapture ? (
+                          <button
+                            type="button"
+                            onClick={() => onAskTutorAboutCapture(item)}
+                            className="rounded-full border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-medium text-slate-700 transition hover:border-slate-300 hover:bg-slate-100"
+                          >
+                            问 Tutor
+                          </button>
+                        ) : null}
                         {canOpenOriginal ? (
                           <button
                             type="button"
@@ -240,16 +235,6 @@ export function WorkspaceCaptureList({
                               : item.contentType === 'video'
                                 ? '打开原视频'
                                 : '打开原件'}
-                          </button>
-                        ) : null}
-                        {canReview ? (
-                          <button
-                            type="button"
-                            onClick={() => onOpenReview?.(item)}
-                            className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-700 transition hover:border-emerald-300 hover:bg-emerald-100"
-                          >
-                            去复习
-                            <ChevronRight size={12} />
                           </button>
                         ) : null}
                       </div>

@@ -99,6 +99,10 @@ export function VoiceMicButton({
     await toggleRecording();
   }, [disabled, toggleRecording]);
 
+  const suppressFocusJump = useCallback((e: React.MouseEvent | React.PointerEvent) => {
+    e.preventDefault();
+  }, []);
+
   // 尺寸
   const sizeClasses = size === 'sm' ? 'w-8 h-8' : 'w-10 h-10';
   const iconSize = size === 'sm' ? 'w-4 h-4' : 'w-5 h-5';
@@ -158,6 +162,8 @@ export function VoiceMicButton({
 
       <button
         type="button"
+        onMouseDown={suppressFocusJump}
+        onPointerDown={suppressFocusJump}
         onClick={handleClick}
         disabled={disabled || status === 'connecting'}
         title={getTitle()}

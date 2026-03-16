@@ -4441,7 +4441,7 @@ const _handleVideoAssistantMessage = useCallback((payload: {
 
     setSourceImportError('');
     setMobileCollectionSheet(null);
-    collectionComposerRef.current?.focus();
+    collectionComposerRef.current?.blur();
     await toggleComposerVoiceInput();
   }, [isRecording, showMobileRecorder, toggleComposerVoiceInput]);
 
@@ -5699,32 +5699,9 @@ const _handleVideoAssistantMessage = useCallback((payload: {
                               {showAudioStatusText ? (
                                 <span className="font-medium">{item.statusText}</span>
                               ) : null}
-                              {!isCollectionContextSelectionMode ? (
-                                <>
-                                  {showAudioStatusText ? (
-                                    <span aria-hidden="true" className="opacity-40">·</span>
-                                  ) : null}
-                                  <button
-                                    type="button"
-                                    onClick={() => quoteCollectionItemToComposer(item)}
-                                    aria-label={`引用这条：${collectionActionTitle}`}
-                                    className={collectionActionClass}
-                                  >
-                                    引用
-                                  </button>
-                                  <button
-                                    type="button"
-                                    onClick={() => openTutorFromCollectionItem(item)}
-                                    aria-label={`顺着这条问 Tutor：${collectionActionTitle}`}
-                                    className={collectionActionClass}
-                                  >
-                                    问 Tutor
-                                  </button>
-                                </>
-                              ) : null}
                               {item.segmentCount > 0 && item.fullText?.trim() ? (
                                 <>
-                                  {showAudioStatusText || !isCollectionContextSelectionMode ? (
+                                  {showAudioStatusText ? (
                                     <span aria-hidden="true" className="opacity-40">·</span>
                                   ) : null}
                                   <button
@@ -5738,19 +5715,24 @@ const _handleVideoAssistantMessage = useCallback((payload: {
                                   </button>
                                 </>
                               ) : null}
-                              {canOpenReview ? (
+                              {!isCollectionContextSelectionMode ? (
                                 <>
-                                  {showAudioStatusText || !isCollectionContextSelectionMode || (item.segmentCount > 0 && item.fullText?.trim()) ? (
+                                  {(showAudioStatusText || (item.segmentCount > 0 && item.fullText?.trim())) ? (
                                     <span aria-hidden="true" className="opacity-40">·</span>
                                   ) : null}
                                   <button
                                     type="button"
                                     onClick={() => {
-                                      void openReviewFromCollection(item);
+                                      if (canOpenReview) {
+                                        void openReviewFromCollection(item);
+                                        return;
+                                      }
+                                      openTutorFromCollectionItem(item);
                                     }}
+                                    aria-label={`${canOpenReview ? '去复习：' : '顺着这条问 Tutor：'}${collectionActionTitle}`}
                                     className={collectionActionClass}
                                   >
-                                    去复习
+                                    {canOpenReview ? '去复习' : '问 Tutor'}
                                   </button>
                                 </>
                               ) : null}
@@ -5796,14 +5778,6 @@ const _handleVideoAssistantMessage = useCallback((payload: {
                               <div className={`flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] ${
                                 isPrimary ? 'justify-end text-[#4f7a36]' : 'justify-start text-slate-500'
                               }`}>
-                                <button
-                                  type="button"
-                                  onClick={() => quoteCollectionItemToComposer(item)}
-                                  aria-label={`引用这条：${collectionActionTitle}`}
-                                  className={collectionActionClass}
-                                >
-                                  引用
-                                </button>
                                 <button
                                   type="button"
                                   onClick={() => openTutorFromCollectionItem(item)}
@@ -5861,40 +5835,20 @@ const _handleVideoAssistantMessage = useCallback((payload: {
                               isPrimary ? 'justify-end text-[#4f7a36]' : 'justify-start text-slate-500'
                             }`}>
                               {!isCollectionContextSelectionMode ? (
-                                <>
-                                  <button
-                                    type="button"
-                                    onClick={() => quoteCollectionItemToComposer(item)}
-                                    aria-label={`引用这条：${collectionActionTitle}`}
-                                    className={collectionActionClass}
-                                  >
-                                    引用
-                                  </button>
-                                  <button
-                                    type="button"
-                                    onClick={() => openTutorFromCollectionItem(item)}
-                                    aria-label={`顺着这条问 Tutor：${collectionActionTitle}`}
-                                    className={collectionActionClass}
-                                  >
-                                    问 Tutor
-                                  </button>
-                                </>
-                              ) : null}
-                              {canOpenReview ? (
-                                <>
-                                  {!isCollectionContextSelectionMode ? (
-                                    <span aria-hidden="true" className="opacity-40">·</span>
-                                  ) : null}
                                 <button
                                   type="button"
                                   onClick={() => {
-                                    void openReviewFromCollection(item);
+                                    if (canOpenReview) {
+                                      void openReviewFromCollection(item);
+                                      return;
+                                    }
+                                    openTutorFromCollectionItem(item);
                                   }}
+                                  aria-label={`${canOpenReview ? '去复习：' : '顺着这条问 Tutor：'}${collectionActionTitle}`}
                                   className={collectionActionClass}
                                 >
-                                  去复习
+                                  {canOpenReview ? '去复习' : '问 Tutor'}
                                 </button>
-                                </>
                               ) : null}
                             </div>
                           </div>
@@ -5953,35 +5907,17 @@ const _handleVideoAssistantMessage = useCallback((payload: {
                                   ) : null}
                                   <button
                                     type="button"
-                                    onClick={() => quoteCollectionItemToComposer(item)}
-                                    aria-label={`引用这条：${collectionActionTitle}`}
-                                    className={collectionActionClass}
-                                  >
-                                    引用
-                                  </button>
-                                  <button
-                                    type="button"
-                                    onClick={() => openTutorFromCollectionItem(item)}
-                                    aria-label={`顺着这条问 Tutor：${collectionActionTitle}`}
-                                    className={collectionActionClass}
-                                  >
-                                    问 Tutor
-                                  </button>
-                                </>
-                              ) : null}
-                              {canOpenReview ? (
-                                <>
-                                  {showVideoStatusText || !isCollectionContextSelectionMode ? (
-                                    <span aria-hidden="true" className="opacity-40">·</span>
-                                  ) : null}
-                                  <button
-                                    type="button"
                                     onClick={() => {
-                                      void openReviewFromCollection(item);
+                                      if (canOpenReview) {
+                                        void openReviewFromCollection(item);
+                                        return;
+                                      }
+                                      openTutorFromCollectionItem(item);
                                     }}
+                                    aria-label={`${canOpenReview ? '去复习：' : '顺着这条问 Tutor：'}${collectionActionTitle}`}
                                     className={collectionActionClass}
                                   >
-                                    去复习
+                                    {canOpenReview ? '去复习' : '问 Tutor'}
                                   </button>
                                 </>
                               ) : null}
@@ -5994,14 +5930,6 @@ const _handleVideoAssistantMessage = useCallback((payload: {
                               <div className={`flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] ${
                                 isPrimary ? 'justify-end text-[#4f7a36]' : 'justify-start text-slate-500'
                               }`}>
-                                <button
-                                  type="button"
-                                  onClick={() => quoteCollectionItemToComposer(item)}
-                                  aria-label={`引用这条：${collectionActionTitle}`}
-                                  className={collectionActionClass}
-                                >
-                                  引用
-                                </button>
                                 <button
                                   type="button"
                                   onClick={() => openTutorFromCollectionItem(item)}
