@@ -2762,6 +2762,21 @@ function StudentAppContent({
       }
     }
 
+    if (item.type === 'video' && item.attachmentUrl && !item.sessionId) {
+      const imported = await importVideoLinkIntoSourceItem(item.attachmentUrl, {
+        sourceItemId: item.id,
+        optimisticTitle: item.title,
+        persistSourceKey: item.sourceKey,
+        persistSourceType: 'wechat',
+        persistRole: item.role,
+        occurredAt: item.addedAt,
+      });
+      if (!imported) {
+        setSourceImportError('这条链接先收下了，但自动导入失败，请稍后再试。');
+      }
+      return;
+    }
+
     if (item.type === 'audio') {
       if (!audioBlob && item.mediaUrl) {
         setAudioUrl(item.mediaUrl);
@@ -2779,7 +2794,7 @@ function StudentAppContent({
     await handleViewModeChange('review');
     setReviewTab('timeline');
     setVideoWorkspaceTab(item.type === 'video' ? 'chat' : 'chat');
-  }, [audioBlob, handleViewModeChange, restoreReviewFromCollectionFallback, restoreReviewSession]);
+  }, [audioBlob, handleViewModeChange, importVideoLinkIntoSourceItem, restoreReviewFromCollectionFallback, restoreReviewSession]);
 
   useEffect(() => {
     if (isGuestFastEntry) return;
@@ -3440,6 +3455,10 @@ const _handleVideoAssistantMessage = useCallback((payload: {
     mediaDurationMs?: number;
     videoSource?: ImportedVideoSource;
     sourceItemId?: string;
+    persistSourceKey?: string;
+    persistSourceType?: string;
+    persistRole?: SourceIngestRole;
+    occurredAt?: string;
   }) => {
     const incoming = Array.isArray(params.segments) ? params.segments : [];
     if (incoming.length === 0) {
@@ -3653,7 +3672,13 @@ const _handleVideoAssistantMessage = useCallback((payload: {
 
   const handleVideoImportReady = useCallback(async (
     result: ImportedVideoResult,
-    options?: { sourceItemId?: string }
+    options?: {
+      sourceItemId?: string;
+      persistSourceKey?: string;
+      persistSourceType?: string;
+      persistRole?: SourceIngestRole;
+      occurredAt?: string;
+    }
   ) => {
     const importedSegments = Array.isArray(result.segments) ? result.segments : [];
     if (importedSegments.length === 0) {
@@ -3667,6 +3692,10 @@ const _handleVideoAssistantMessage = useCallback((payload: {
       sourceTitle: result.source.title || '视频链接',
       videoSource: result.source,
       sourceItemId: options?.sourceItemId,
+      persistSourceKey: options?.persistSourceKey,
+      persistSourceType: options?.persistSourceType,
+      persistRole: options?.persistRole,
+      occurredAt: options?.occurredAt,
     });
   }, [ingestTranscriptSegments]);
 
@@ -5035,10 +5064,20 @@ const _handleVideoAssistantMessage = useCallback((payload: {
     }
   }, [echoFilterOptions, selectedEchoChip]);
 
-  const importComposerVideoLink = useCallback(async (url: string) => {
+  async function importVideoLinkIntoSourceItem(
+    url: string,
+    options?: {
+      sourceItemId?: string;
+      optimisticTitle?: string;
+      persistSourceKey?: string;
+      persistSourceType?: string;
+      persistRole?: SourceIngestRole;
+      occurredAt?: string;
+    }
+  ): Promise<boolean> {
     const detected = parseVideoLink(url);
-    const optimisticSourceId = `video-link-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-    const optimisticTitle = (() => {
+    const targetSourceId = options?.sourceItemId || `video-link-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    const optimisticTitle = options?.optimisticTitle || (() => {
       try {
         const hostname = new URL(url).hostname.replace(/^www\./i, '');
         if (detected?.providerLabel) {
@@ -5050,20 +5089,36 @@ const _handleVideoAssistantMessage = useCallback((payload: {
       }
     })();
 
-    appendSourceItem({
-      id: optimisticSourceId,
-      type: 'video',
-      role: 'primary',
-      title: optimisticTitle,
-      preview: compactText(url, 120),
-      mediaUrl: detected?.playableUrl || url,
-      attachmentUrl: url,
-      segmentCount: 0,
-      origin: 'user',
-      status: 'parsing',
-      statusText: undefined,
-      reviewable: false,
-    });
+    if (options?.sourceItemId) {
+      updateSourceItem(targetSourceId, {
+        type: 'video',
+        role: 'primary',
+        title: optimisticTitle,
+        preview: compactText(url, 120),
+        mediaUrl: detected?.playableUrl || url,
+        attachmentUrl: url,
+        segmentCount: 0,
+        origin: 'user',
+        status: 'parsing',
+        statusText: undefined,
+        reviewable: false,
+      });
+    } else {
+      appendSourceItem({
+        id: targetSourceId,
+        type: 'video',
+        role: 'primary',
+        title: optimisticTitle,
+        preview: compactText(url, 120),
+        mediaUrl: detected?.playableUrl || url,
+        attachmentUrl: url,
+        segmentCount: 0,
+        origin: 'user',
+        status: 'parsing',
+        statusText: undefined,
+        reviewable: false,
+      });
+    }
 
     setActiveSourceImportCount((count) => count + 1);
     setSourceImportError('');
@@ -5101,7 +5156,7 @@ const _handleVideoAssistantMessage = useCallback((payload: {
 
       const segments = normalizeImportedVideoSegments(payload);
       if (segments.length === 0) {
-        updateSourceItem(optimisticSourceId, {
+        updateSourceItem(targetSourceId, {
           title: payload.source?.title || optimisticTitle,
           previewUrl: payload.source?.thumbnailUrl,
           mediaUrl: payload.source?.playableUrl || detected?.playableUrl || url,
@@ -5109,7 +5164,7 @@ const _handleVideoAssistantMessage = useCallback((payload: {
           status: 'failed',
           statusText: '这条链接先收下了，稍后再试试',
         });
-        return;
+        return false;
       }
 
       await handleVideoImportReady({
@@ -5133,18 +5188,28 @@ const _handleVideoAssistantMessage = useCallback((payload: {
         sourceMode: payload.sourceMode,
         trace: payload.trace,
       }, {
-        sourceItemId: optimisticSourceId,
+        sourceItemId: targetSourceId,
+        persistSourceKey: options?.persistSourceKey,
+        persistSourceType: options?.persistSourceType,
+        persistRole: options?.persistRole,
+        occurredAt: options?.occurredAt,
       });
 
+      return true;
     } catch {
-      updateSourceItem(optimisticSourceId, {
+      updateSourceItem(targetSourceId, {
         status: 'failed',
         statusText: '这条链接先收下了，稍后再试试',
       });
+      return false;
     } finally {
       setActiveSourceImportCount((count) => Math.max(0, count - 1));
     }
-  }, [appendSourceItem, handleVideoImportReady, updateSourceItem]);
+  }
+
+  const importComposerVideoLink = useCallback(async (url: string) => {
+    await importVideoLinkIntoSourceItem(url);
+  }, [importVideoLinkIntoSourceItem]);
 
   const openLiveRecorder = useCallback(() => {
     if (isRecording) return;
