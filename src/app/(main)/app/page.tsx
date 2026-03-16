@@ -349,6 +349,15 @@ interface WorkspaceEchoMessage {
   title: string;
   body: string;
   chips: string[];
+  recommendations?: Array<{
+    title: string;
+    body: string;
+  }>;
+  memory?: {
+    sourceCaptureCount: number;
+    todayCaptureCount: number;
+    recentCaptureCount: number;
+  } | null;
   createdAt: string;
   updatedAt?: string;
 }
@@ -480,8 +489,39 @@ function mergeWorkspaceEchoes(
     .map((item) => ({
       ...item,
       title: compactText(item.title, 80),
-      body: compactText(item.body, 220),
+      body: String(item.body || '')
+        .replace(/\r\n/g, '\n')
+        .replace(/[ \t]{2,}/g, ' ')
+        .replace(/\n{3,}/g, '\n\n')
+        .trim(),
       chips: Array.isArray(item.chips) ? item.chips.filter(Boolean).slice(0, 4) : [],
+      recommendations: Array.isArray(item.recommendations)
+        ? item.recommendations
+            .map((recommendation) => ({
+              title: String(recommendation?.title || '')
+                .replace(/\r\n/g, '\n')
+                .replace(/[ \t]{2,}/g, ' ')
+                .replace(/\n{3,}/g, '\n\n')
+                .trim(),
+              body: String(recommendation?.body || '')
+                .replace(/\r\n/g, '\n')
+                .replace(/[ \t]{2,}/g, ' ')
+                .replace(/\n{3,}/g, '\n\n')
+                .trim(),
+            }))
+            .filter((recommendation) => recommendation.title && recommendation.body)
+            .slice(0, 2)
+        : [],
+      memory:
+        item.memory &&
+        Number.isFinite(item.memory.sourceCaptureCount) &&
+        item.memory.sourceCaptureCount > 0
+          ? {
+              sourceCaptureCount: Math.max(0, item.memory.sourceCaptureCount),
+              todayCaptureCount: Math.max(0, item.memory.todayCaptureCount || 0),
+              recentCaptureCount: Math.max(0, item.memory.recentCaptureCount || 0),
+            }
+          : null,
       updatedAt: item.updatedAt || item.createdAt,
     }));
 
@@ -527,8 +567,42 @@ function getEchoDebugReasonLabel(reason?: string): string {
   }
 }
 
+function getEchoQualityWarningLabel(reason?: string): string {
+  switch (reason) {
+    case 'too-short':
+      return '这次结果偏短';
+    case 'too-similar':
+      return '这次和上一版很接近';
+    case 'low-signal':
+      return '这次结果不够聚焦';
+    default:
+      return getEchoDebugReasonLabel(reason);
+  }
+}
+
 function buildManualEchoFeedbackFromPayload(payload: DailyEchoRefreshPayload): ManualEchoFeedbackState {
   if (payload.echo && !payload.skipped) {
+    if (payload.reason === 'too-similar') {
+      return {
+        tone: 'success',
+        title: '测试版已更新',
+        body: '这次和上一版很接近，但上面已经换成新结果了。',
+      };
+    }
+    if (payload.reason === 'low-signal') {
+      return {
+        tone: 'success',
+        title: '测试版已更新',
+        body: '这次结果有点散，但上面已经换成新结果了。',
+      };
+    }
+    if (payload.reason === 'too-short') {
+      return {
+        tone: 'success',
+        title: '测试版已更新',
+        body: '这次结果偏短，但上面已经换成新结果了。',
+      };
+    }
     return {
       tone: 'success',
       title: '测试生成完成',
@@ -2392,7 +2466,8 @@ function StudentAppContent({
                 typeof debug.todayCaptureCount === 'number' ? `今天线索：${debug.todayCaptureCount}` : '',
                 typeof debug.recentCaptureCount === 'number' ? `补充上下文：${debug.recentCaptureCount}` : '',
                 typeof debug.similarityToRecent === 'number' ? `重复度：${debug.similarityToRecent.toFixed(2)}` : '',
-            ].filter(Boolean).join(' · ')
+                payload.reason && !payload.skipped ? `质量提醒：${getEchoQualityWarningLabel(payload.reason)}` : '',
+              ].filter(Boolean).join(' · ')
           : '';
           setManualEchoDebugNote(note || (payload.skipped ? `本次未更新：${getEchoDebugReasonLabel(payload.reason)}` : '回声已刷新'));
           if (payload.echo && !payload.skipped) {
@@ -4885,9 +4960,12 @@ const _handleVideoAssistantMessage = useCallback((payload: {
 
     const latest = workspaceEchoes[0];
     return {
+      id: latest.id,
       title: latest.title,
       body: latest.body,
       chips: latest.chips,
+      recommendations: Array.isArray(latest.recommendations) ? latest.recommendations : [],
+      memory: latest.memory || null,
       updatedAt: resolveEchoDisplayTime(latest),
     };
   }, [workspaceEchoes]);
@@ -5494,6 +5572,13 @@ const _handleVideoAssistantMessage = useCallback((payload: {
     const dockWidthClass = desktopShell ? 'max-w-3xl' : 'max-w-md';
     const dockPaddingClass = desktopShell ? 'px-6 pb-6 pt-3' : 'px-3 pb-[max(env(safe-area-inset-bottom),12px)] pt-2';
     const sheetBottomOffset = desktopShell ? (showMobileRecorder ? 168 : 118) : (showMobileRecorder ? 150 : 96);
+    const mobileSheetMaxHeight = desktopShell
+      ? 'min(72vh, 760px)'
+      : `calc(100dvh - ${sheetBottomOffset}px - max(env(safe-area-inset-top), 14px) - 12px)`;
+    const mobileSheetScrollableStyle = {
+      WebkitOverflowScrolling: 'touch' as const,
+      touchAction: 'pan-y' as const,
+    };
     const scrollPadding = desktopShell ? 28 : 18;
     const composerRows = desktopShell ? (collectionComposerText.trim() ? 2 : 1) : (collectionComposerText.trim() ? 2 : 1);
 
@@ -6129,7 +6214,10 @@ const _handleVideoAssistantMessage = useCallback((payload: {
             className={`${collectionChromeContained ? 'absolute inset-x-0' : 'fixed inset-x-0'} z-30 ${dockPaddingClass}`}
             style={{ bottom: `${sheetBottomOffset}px` }}
           >
-            <div className={`mx-auto w-full ${sheetWidthClass} overflow-hidden rounded-[28px] border border-slate-200 bg-white shadow-[0_24px_48px_rgba(15,23,42,0.16)]`}>
+            <div
+              className={`mx-auto flex w-full ${sheetWidthClass} flex-col overflow-hidden rounded-[28px] border border-slate-200 bg-white shadow-[0_24px_48px_rgba(15,23,42,0.16)]`}
+              style={{ maxHeight: mobileSheetMaxHeight }}
+            >
               <div className="flex items-center justify-between border-b border-slate-100 px-4 py-3">
                 <div>
                   <p className="text-sm font-semibold text-slate-900">
@@ -6156,7 +6244,11 @@ const _handleVideoAssistantMessage = useCallback((payload: {
               </div>
 
               {mobileCollectionSheet === 'echo' ? (
-                <div className="space-y-3 p-4">
+                <div
+                  data-mobile-sheet-scrollable="echo"
+                  className="min-h-0 flex-1 space-y-3 overflow-y-auto overscroll-contain p-4"
+                  style={mobileSheetScrollableStyle}
+                >
                   {latestEchoForCenter ? (
                     <div className="rounded-[24px] border border-emerald-100 bg-[linear-gradient(145deg,#ffffff_0%,#effcf6_100%)] px-4 py-4 shadow-sm">
                       <div className="mb-3 flex items-center justify-between gap-3">
@@ -6172,6 +6264,22 @@ const _handleVideoAssistantMessage = useCallback((payload: {
                       </div>
                       <p className="mb-1 text-sm font-semibold leading-6 text-slate-900">{latestEchoForCenter.title}</p>
                       <p className="text-sm leading-7 text-slate-900">{latestEchoForCenter.body}</p>
+                      {latestEchoForCenter.recommendations.length > 0 ? (
+                        <div className="mt-4 space-y-2">
+                          <p className="text-[11px] font-semibold tracking-[0.08em] text-slate-500">也许可以顺手碰一下</p>
+                          <div className="space-y-2">
+                            {latestEchoForCenter.recommendations.map((recommendation, index) => (
+                              <div
+                                key={`${latestEchoForCenter.id}-recommendation-${index + 1}`}
+                                className="rounded-[18px] border border-emerald-100/80 bg-white/90 px-3 py-2.5"
+                              >
+                                <p className="text-xs font-semibold text-slate-800">{recommendation.title}</p>
+                                <p className="mt-1 text-xs leading-6 text-slate-600">{recommendation.body}</p>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      ) : null}
                       {latestEchoForCenter.chips.length > 0 ? (
                         <div className="mt-3 flex flex-wrap gap-2">
                           {latestEchoForCenter.chips.map((chip) => (
@@ -6183,6 +6291,12 @@ const _handleVideoAssistantMessage = useCallback((payload: {
                             </span>
                           ))}
                         </div>
+                      ) : null}
+                      {latestEchoForCenter.memory ? (
+                        <p className="mt-3 text-[11px] leading-5 text-slate-400">
+                          这条回声沉淀自今天 {latestEchoForCenter.memory.todayCaptureCount} 条、近 7 天共{' '}
+                          {latestEchoForCenter.memory.sourceCaptureCount} 条收集。
+                        </p>
                       ) : null}
                       <div className="mt-4">
                         <button
@@ -6346,7 +6460,7 @@ const _handleVideoAssistantMessage = useCallback((payload: {
               ) : null}
 
               {mobileCollectionSheet === 'history' ? (
-                <div className="max-h-[52vh] overflow-hidden rounded-b-[30px]">
+                <div className="min-h-0 flex-1 overflow-hidden rounded-b-[30px]">
                   {workspaceCaptures.length > 0 ? (
                     <WorkspaceCaptureList
                       captures={workspaceCaptures}
@@ -6357,7 +6471,7 @@ const _handleVideoAssistantMessage = useCallback((payload: {
                       onToggleSelectCapture={toggleWorkspaceCaptureContextSelection}
                       selectedCaptureIds={selectedWorkspaceCaptureIds}
                       selectionMode={isCollectionContextSelectionMode}
-                      maxHeight="52vh"
+                      maxHeight="100%"
                       showHeader={false}
                     />
                   ) : (
@@ -6369,7 +6483,7 @@ const _handleVideoAssistantMessage = useCallback((payload: {
                       }}
                       onClose={() => setMobileCollectionSheet(null)}
                       activeSessionId={sessionId}
-                      maxHeight="52vh"
+                      maxHeight="100%"
                       showHeader={false}
                       variant="capture"
                     />

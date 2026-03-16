@@ -140,6 +140,12 @@ test.describe('workspace daily echo route', () => {
                   content: JSON.stringify({
                     title: '这条单调性线索值得继续',
                     body: '你今天把课堂原话和讲义里卡住的位置放到了一起，现在顺着这一点继续补，会更快看到联系。',
+                    recommendations: [
+                      {
+                        title: '补一眼增减表',
+                        body: '你现在盯着导数符号，顺手补一下增减表，可能更容易把区间变化接起来。',
+                      },
+                    ],
                   }),
                 },
               },
@@ -161,13 +167,22 @@ test.describe('workspace daily echo route', () => {
       const firstBody = (await firstResponse.json()) as {
         success?: boolean;
         skipped?: boolean;
-        echo?: { title?: string; body?: string; sourceKey?: string };
+        echo?: {
+          title?: string;
+          body?: string;
+          sourceKey?: string;
+          recommendations?: Array<{ title?: string }>;
+          memory?: { sourceCaptureCount?: number; todayCaptureCount?: number };
+        };
       };
 
       expect(firstBody.success).toBeTruthy();
       expect(firstBody.skipped).toBeFalsy();
       expect(firstBody.echo?.title).toBe('这条单调性线索值得继续');
       expect(firstBody.echo?.sourceKey).toContain(`daily:${workspaceId}:`);
+      expect(firstBody.echo?.recommendations?.[0]?.title).toBe('补一眼增减表');
+      expect(firstBody.echo?.memory?.sourceCaptureCount).toBe(2);
+      expect(firstBody.echo?.memory?.todayCaptureCount).toBe(2);
 
       const secondResponse = await refreshDailyEchoPost(buildAuthorizedRequest(accessToken, false));
       expect(secondResponse.status).toBe(200);
@@ -338,6 +353,81 @@ test.describe('workspace daily echo route', () => {
       expect(recordedPrompt).toContain('今天的新线索 1');
       expect(recordedPrompt).toContain('今天的新线索 2');
       expect(recordedPrompt).not.toContain('更早的线索 01');
+      expect(recordedPrompt).toContain('生成式推荐');
+    } finally {
+      global.fetch = originalFetch;
+      setEnv('COMMONSTACK_ECHO_API_KEY', originalApiKey);
+      setEnv('COMMONSTACK_ECHO_BASE_URL', originalBaseUrl);
+      setEnv('COMMONSTACK_ECHO_MODEL', originalModel);
+      setEnv('NODE_ENV', originalNodeEnv);
+    }
+  });
+
+  test('forced refresh still writes the test version when quality gate would normally skip it', async () => {
+    const originalFetch = global.fetch;
+    const originalApiKey = process.env.COMMONSTACK_ECHO_API_KEY;
+    const originalBaseUrl = process.env.COMMONSTACK_ECHO_BASE_URL;
+    const originalModel = process.env.COMMONSTACK_ECHO_MODEL;
+    const originalNodeEnv = process.env.NODE_ENV;
+
+    setEnv('COMMONSTACK_ECHO_API_KEY', 'test-key');
+    setEnv('COMMONSTACK_ECHO_BASE_URL', 'https://api.commonstack.ai/v1');
+    setEnv('COMMONSTACK_ECHO_MODEL', 'google/gemini-3-flash');
+    setEnv('NODE_ENV', 'test');
+
+    global.fetch = async (input: string | URL | Request) => {
+      const url = String(typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url);
+      if (url.endsWith('/models')) {
+        return new Response(
+          JSON.stringify({ data: [{ id: 'google/gemini-3-flash' }] }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } }
+        );
+      }
+
+      if (url.endsWith('/chat/completions')) {
+        return new Response(
+          JSON.stringify({
+            id: 'cmpl_echo_force_quality',
+            choices: [
+              {
+                message: {
+                  content: JSON.stringify({
+                    title: '单调性这条线',
+                    body: '本节课主要讲了单调性和导数之间的关系。',
+                    recommendations: [],
+                  }),
+                },
+              },
+            ],
+          }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } }
+        );
+      }
+
+      throw new Error(`Unexpected fetch: ${url}`);
+    };
+
+    try {
+      const { accessToken, workspaceId, userId } = await createUserAndWorkspace();
+      await seedEchoCaptures(workspaceId, userId);
+
+      const response = await refreshDailyEchoPost(buildAuthorizedRequest(accessToken, true));
+      expect(response.status).toBe(200);
+
+      const body = (await response.json()) as {
+        success?: boolean;
+        skipped?: boolean;
+        reason?: string;
+        forced?: boolean;
+        echo?: { title?: string; body?: string };
+      };
+
+      expect(body.success).toBeTruthy();
+      expect(body.forced).toBeTruthy();
+      expect(body.skipped).toBeFalsy();
+      expect(body.reason).toBe('low-signal');
+      expect(body.echo?.title).toBe('单调性这条线');
+      expect(body.echo?.body).toBe('本节课主要讲了单调性和导数之间的关系。');
     } finally {
       global.fetch = originalFetch;
       setEnv('COMMONSTACK_ECHO_API_KEY', originalApiKey);

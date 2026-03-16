@@ -4,7 +4,9 @@ import {
   buildEchoPrompt,
   buildEchoPromptPackage,
   evaluateEchoQuality,
+  getEchoSummaryMetadata,
   getUtc8DateKey,
+  normalizeEchoOutput,
   selectRecentPromptCaptures,
   shouldSkipEchoGeneration,
 } from '../../src/lib/services/workspace-echo-service';
@@ -108,9 +110,12 @@ test.describe('workspace echo utils', () => {
       })
     );
 
-    expect(prompt).toContain('输出纯 JSON：{"title": string, "body": string}');
+    expect(prompt).toContain('输出纯 JSON：{"title": string, "body": string, "recommendations"');
     expect(prompt).toContain('你是一位敏锐但克制的学习回声编辑。');
     expect(prompt).toContain('最近几天的回声');
+    expect(prompt).toContain('生成式推荐');
+    expect(prompt).toContain('激发了继续收集的欲望');
+    expect(prompt).toContain('服务于个人成长和整体意图');
   });
 
   test('detects thin context and repeated outputs', async () => {
@@ -162,5 +167,53 @@ test.describe('workspace echo utils', () => {
     expect(selected[0]?.id).toBe('capture-30');
     expect(selected[selected.length - 1]?.id).toBe('capture-7');
     expect(selected.map((item) => item.id)).not.toContain('capture-1');
+  });
+
+  test('reads recommendations and memory summary from echo metadata', async () => {
+    const metadata = getEchoSummaryMetadata(
+      JSON.stringify({
+        recommendations: [
+          {
+            title: '换个邻近概念看一眼',
+            body: '你一直在盯导数符号，顺手补一下“增减表”也许会把这条线拉直。',
+          },
+        ],
+        memory: {
+          sourceCaptureCount: 5,
+          todayCaptureCount: 2,
+          recentCaptureCount: 3,
+          sourceCaptureIds: ['a', 'b', 'c', 'd', 'e'],
+          sourceKeys: ['1', '2', '3', '4', '5'],
+        },
+      })
+    );
+
+    expect(metadata.recommendations).toHaveLength(1);
+    expect(metadata.recommendations[0]?.title).toBe('换个邻近概念看一眼');
+    expect(metadata.memory).toEqual({
+      sourceCaptureCount: 5,
+      todayCaptureCount: 2,
+      recentCaptureCount: 3,
+    });
+  });
+
+  test('keeps full echo body and recommendation text without appending ellipsis', async () => {
+    const longBody =
+      '你已经从链接解析和卡片接入走到了更深层的认知孪生，这条业务理解线值得完整保留，不应该再被服务端或前端为了展示方便提前截断。';
+    const longRecommendation =
+      '在视频号社区之外的场景里，除了链接解析，还有哪些用户行为最能代表原始信号，这条推荐文本也应该完整保留，方便你判断提示词到底写得对不对。';
+    const normalized = normalizeEchoOutput({
+      title: '从“解析链接”到“理解意图”',
+      body: longBody,
+      recommendations: [
+        {
+          title: '捕捉“意图层”的交互瞬间',
+          body: longRecommendation,
+        },
+      ],
+    });
+
+    expect(normalized.body).toBe(longBody);
+    expect(normalized.recommendations[0]?.body).toBe(longRecommendation);
   });
 });

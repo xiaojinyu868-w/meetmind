@@ -3,6 +3,10 @@ import { parseJsonResponse } from '@/lib/utils';
 export interface CommonstackEchoOutput {
   title: string;
   body: string;
+  recommendations?: Array<{
+    title: string;
+    body: string;
+  }>;
 }
 
 export interface CommonstackEchoRequest {
@@ -25,8 +29,10 @@ interface CommonstackEchoConfig {
 
 let validatedConfigKey = '';
 const ECHO_SYSTEM_PROMPT =
-  '你是一个中文学习回声编辑。只能根据用户给出的学习线索写一条简短的回来理由。' +
-  '不要输出与学习线索无关的话题，不要写摘要，不要讲解知识，只返回 JSON。';
+  '你是一个中文学习回声编辑。你的标准不是把内容写完整，而是给出真正能激发继续收集欲的反馈。' +
+  '你要先理解用户现在真正需要什么，再根据用户给出的学习线索写一条简短的回来理由，' +
+  '并在贴着现有线索的前提下给出一到两条生成式推荐。不要输出与学习线索无关的话题，' +
+  '不要写摘要，不要讲解知识，只返回 JSON。';
 const DEFAULT_ECHO_TEMPERATURE = 0.2;
 
 function parseEchoTemperature(rawValue?: string): number {
@@ -132,6 +138,19 @@ export async function generateCommonstackEcho(
             properties: {
               title: { type: 'string' },
               body: { type: 'string' },
+              recommendations: {
+                type: 'array',
+                maxItems: 2,
+                items: {
+                  type: 'object',
+                  additionalProperties: false,
+                  properties: {
+                    title: { type: 'string' },
+                    body: { type: 'string' },
+                  },
+                  required: ['title', 'body'],
+                },
+              },
             },
             required: ['title', 'body'],
           },
@@ -160,8 +179,22 @@ export async function generateCommonstackEcho(
     throw new Error('CommonStack Echo 返回了无法解析的 JSON 内容');
   }
 
+  const recommendations = Array.isArray(parsed.recommendations)
+    ? parsed.recommendations
+        .map((item) => ({
+          title: String(item?.title || '').trim(),
+          body: String(item?.body || '').trim(),
+        }))
+        .filter((item) => item.title && item.body)
+        .slice(0, 2)
+    : [];
+
   return {
-    content: parsed,
+    content: {
+      title: parsed.title,
+      body: parsed.body,
+      recommendations,
+    },
     model: config.model,
     rawContent,
     responseId: payload.id,

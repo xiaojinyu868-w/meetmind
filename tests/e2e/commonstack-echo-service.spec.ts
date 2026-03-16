@@ -39,6 +39,12 @@ test.describe('commonstack echo service', () => {
                   content: JSON.stringify({
                     title: '顺着这条线继续记',
                     body: '导数和单调性的那条逻辑链已经冒头了，今天回来把它补全更值。',
+                    recommendations: [
+                      {
+                        title: '补一下增减表',
+                        body: '你盯着导数符号时，顺手把增减表也收进来，可能会更容易看见区间变化。',
+                      },
+                    ],
                   }),
                 },
               },
@@ -59,6 +65,8 @@ test.describe('commonstack echo service', () => {
       expect(result.model).toBe('google/gemini-3-flash-preview');
       expect(result.content.title).toBe('顺着这条线继续记');
       expect(result.content.body).toContain('导数和单调性');
+      expect(result.content.recommendations).toHaveLength(1);
+      expect(result.content.recommendations?.[0]?.title).toBe('补一下增减表');
       expect(requestBody).not.toBeNull();
       if (!requestBody) {
         throw new Error('Expected CommonStack request body to be recorded');
@@ -67,6 +75,13 @@ test.describe('commonstack echo service', () => {
         temperature?: number;
         model?: string;
         messages?: Array<{ role?: string; content?: string }>;
+        response_format?: {
+          json_schema?: {
+            schema?: {
+              properties?: Record<string, unknown>;
+            };
+          };
+        };
       };
       expect(body.temperature).toBe(0.2);
       expect(body.model).toBe('google/gemini-3-flash-preview');
@@ -76,8 +91,10 @@ test.describe('commonstack echo service', () => {
       expect(messages).toHaveLength(2);
       expect(messages[0]?.role).toBe('system');
       expect(messages[0]?.content).toContain('中文学习回声编辑');
+      expect(messages[0]?.content).toContain('激发继续收集欲');
       expect(messages[1]?.role).toBe('user');
       expect(messages[1]?.content).toContain('输出纯 JSON');
+      expect(body.response_format?.json_schema?.schema?.properties).toHaveProperty('recommendations');
     } finally {
       global.fetch = originalFetch;
       setEnv('COMMONSTACK_ECHO_API_KEY', originalApiKey);
@@ -121,6 +138,7 @@ test.describe('commonstack echo service', () => {
                   content: JSON.stringify({
                     title: '顺着这条线继续记',
                     body: '导数和单调性的那条逻辑链已经冒头了，今天回来把它补全更值。',
+                    recommendations: [],
                   }),
                 },
               },

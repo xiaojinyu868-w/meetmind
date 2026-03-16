@@ -12,7 +12,12 @@ import {
   buildWechatVoiceTutorContext,
   isWechatPlayableAudioUrl,
 } from '@/lib/services/wechat-voice-utils';
-import { DAILY_ECHO_KIND } from '@/lib/services/workspace-echo-service';
+import {
+  DAILY_ECHO_KIND,
+  getEchoSummaryMetadata,
+  type EchoMemorySummary,
+  type EchoRecommendation,
+} from '@/lib/services/workspace-echo-service';
 import workspaceService, { type WorkspaceSummary } from '@/lib/services/workspace-service';
 
 export interface WorkspaceCaptureSummary {
@@ -40,6 +45,8 @@ export interface WorkspaceEchoSummary {
   title: string;
   body: string;
   chips: string[];
+  recommendations: EchoRecommendation[];
+  memory: EchoMemorySummary | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -189,9 +196,12 @@ function toEchoSummary(item: {
   title: string;
   body: string;
   chipsJson: string | null;
+  metadataJson: string | null;
   createdAt: Date;
   updatedAt: Date;
 }): WorkspaceEchoSummary {
+  const metadata = getEchoSummaryMetadata(item.metadataJson);
+
   return {
     id: item.id,
     sourceKey: item.sourceKey,
@@ -200,6 +210,8 @@ function toEchoSummary(item: {
     title: item.title,
     body: item.body,
     chips: parseJsonArray(item.chipsJson).slice(0, 4),
+    recommendations: metadata.recommendations,
+    memory: metadata.memory,
     createdAt: item.createdAt.toISOString(),
     updatedAt: item.updatedAt.toISOString(),
   };

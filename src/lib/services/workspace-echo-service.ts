@@ -44,6 +44,7 @@ const DAILY_ECHO_SELECT = {
   title: true,
   body: true,
   chipsJson: true,
+  metadataJson: true,
   status: true,
   createdAt: true,
   updatedAt: true,
@@ -77,6 +78,50 @@ export interface EchoPromptPackage {
   };
 }
 
+export interface EchoRecommendation {
+  title: string;
+  body: string;
+}
+
+export interface EchoMemorySummary {
+  sourceCaptureCount: number;
+  todayCaptureCount: number;
+  recentCaptureCount: number;
+}
+
+interface EchoMemorySnapshot extends EchoMemorySummary {
+  snapshotAt: string;
+  sourceCaptureIds: string[];
+  sourceKeys: string[];
+  todayCaptureIds: string[];
+  recentCaptureIds: string[];
+  todayCaptures: EchoPromptCaptureItem[];
+  recentCaptures: EchoPromptCaptureItem[];
+  activityHints: EchoPromptPackage['activityHints'];
+}
+
+interface EchoMetadataPayload {
+  trigger?: string;
+  forced?: boolean;
+  promptVersion?: string;
+  todayCaptureCount?: number;
+  recentCaptureCount?: number;
+  recentEchoCount?: number;
+  similarityToRecent?: number;
+  error?: string;
+  qualityWarning?: string;
+  recommendations?: EchoRecommendation[];
+  memory?: EchoMemorySnapshot;
+  promptPackage?: EchoPromptPackage;
+  prompt?: string;
+  rawResponse?: string;
+  parseResult?: {
+    title: string;
+    body: string;
+    recommendations?: EchoRecommendation[];
+  } | null;
+}
+
 export interface DailyEchoRefreshResult {
   success: boolean;
   skipped?: boolean;
@@ -90,6 +135,8 @@ export interface DailyEchoRefreshResult {
     title: string;
     body: string;
     chips: string[];
+    recommendations: EchoRecommendation[];
+    memory: EchoMemorySummary | null;
     createdAt: string;
     updatedAt: string;
   };
@@ -103,7 +150,7 @@ export interface DailyEchoRefreshResult {
     prompt?: string;
     promptPackage?: EchoPromptPackage;
     rawResponse?: string;
-    parseResult?: { title: string; body: string } | null;
+    parseResult?: { title: string; body: string; recommendations?: EchoRecommendation[] } | null;
   };
 }
 
@@ -346,21 +393,29 @@ export function buildEchoPrompt(promptPackage: EchoPromptPackage): string {
       : '最近几天的回声：\n- 无';
 
   return [
-    '输出纯 JSON：{"title": string, "body": string}',
+    '输出纯 JSON：{"title": string, "body": string, "recommendations": Array<{ "title": string, "body": string }>}',
     '',
     '你是一位敏锐但克制的学习回声编辑。',
     '一个学习者正在用聊天式收集流记录课堂原话、困惑、材料和零碎线索。',
     '你的任务不是总结内容，也不是讲解知识；你要从真实学习痕迹里听出一条正在发酵的线索，把它写成一条轻轻的“回来理由”，让用户今天愿意继续往里加一点。',
+    '你判断输出好坏的标准不是“像不像一段完整文案”，而是：它是否真的激发了继续收集的欲望，是否帮助用户看见自己此刻更需要什么。',
+    '同时，如果有合适的外延方向，请给 1 到 2 条生成式推荐：它们应该贴着当前线索稍微外扩半步，帮助用户看见自己暂时没注意到、但可能真正需要的下一步。',
     '',
     '请把重点放在：',
-    '- 今天最值得继续收下去的那条线索',
-    '- 用户此刻可能在意的理解方向或卡住的感觉',
+    '- 今天最值得继续收下去的那条线索，让用户看见自己正在形成什么理解路径，或反复靠近什么问题',
+    '- 用户此刻可能在意的理解方向、卡住的感觉、真正想推进的意图',
+    '- 推荐必须服务于个人成长和整体意图，不是给更多信息，而是给更值得补收的方向',
+    '- 推荐可以是更进一步的问题、互补视角、反例、邻近领域、现实场景、跳出信息茧房的方向，但都必须贴着当前线索',
     '- 轻、贴近、克制的语气',
     '',
     '避免：',
     '- 把它写成课堂摘要、知识讲解或复习清单',
     '- 系统播报、运营 push、画像判断',
     '- 复述大段原文',
+    '- 推荐完全无关、像信息流推送、热点分发或硬塞资源名',
+    '- 只满足表面主题，不去判断用户现在真正缺什么反馈',
+    '',
+    '如果线索更像科研灵感、内容选题、产品思考或职业观察，不要机械分类；请顺着它的潜在意图，判断用户更需要推进、补全、对比、验证、连接现实，还是跳出原有视角。',
     '',
     activityLine ? `活跃信号：${activityLine}` : '',
     renderCaptureBlock('今天新增的收集：', promptPackage.todayCaptures),
@@ -369,7 +424,7 @@ export function buildEchoPrompt(promptPackage: EchoPromptPackage): string {
     '',
     recentEchoBlock,
     '',
-    '只返回 JSON，不要 markdown，不要额外解释。',
+    '没有合适推荐时，recommendations 返回空数组。只返回 JSON，不要 markdown，不要额外解释。',
   ]
     .filter(Boolean)
     .join('\n');
@@ -392,13 +447,23 @@ export function buildEchoChips(promptPackage: EchoPromptPackage): string[] {
   return Array.from(new Set(chips)).slice(0, 3);
 }
 
-export function normalizeEchoOutput(input: { title: string; body: string }) {
-  const clean = (value: string, limit: number) =>
-    compactText(String(value || '').replace(/^["'“”‘’]+|["'“”‘’]+$/g, '').trim(), limit);
+export function normalizeEchoOutput(input: {
+  title: string;
+  body: string;
+  recommendations?: Array<Partial<EchoRecommendation>>;
+}) {
+  const clean = (value: string) =>
+    String(value || '')
+      .replace(/^["'“”‘’]+|["'“”‘’]+$/g, '')
+      .replace(/\r\n/g, '\n')
+      .replace(/[ \t]{2,}/g, ' ')
+      .replace(/\n{3,}/g, '\n\n')
+      .trim();
 
   return {
-    title: clean(input.title, 28),
-    body: clean(input.body, 110),
+    title: clean(input.title),
+    body: clean(input.body),
+    recommendations: normalizeEchoRecommendations(input.recommendations),
   };
 }
 
@@ -449,6 +514,113 @@ function parseChips(value?: string | null): string[] {
   }
 }
 
+function normalizeEchoRecommendation(item: Partial<EchoRecommendation>): EchoRecommendation | null {
+  const title = String(item.title || '')
+    .replace(/\r\n/g, '\n')
+    .replace(/[ \t]{2,}/g, ' ')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+  const body = String(item.body || '')
+    .replace(/\r\n/g, '\n')
+    .replace(/[ \t]{2,}/g, ' ')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+  if (!title || !body) return null;
+  return { title, body };
+}
+
+function normalizeEchoRecommendations(input?: Array<Partial<EchoRecommendation>> | null): EchoRecommendation[] {
+  if (!Array.isArray(input)) return [];
+
+  const unique: EchoRecommendation[] = [];
+  const seen = new Set<string>();
+  for (const item of input) {
+    const normalized = normalizeEchoRecommendation(item);
+    if (!normalized) continue;
+    const key = `${normalized.title}::${normalized.body}`.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    unique.push(normalized);
+    if (unique.length >= 2) break;
+  }
+  return unique;
+}
+
+function buildEchoMemorySnapshot(promptPackage: EchoPromptPackage): EchoMemorySnapshot {
+  const sourceItems = [...promptPackage.todayCaptures, ...promptPackage.recentCaptures];
+
+  return {
+    sourceCaptureCount: sourceItems.length,
+    todayCaptureCount: promptPackage.todayCaptures.length,
+    recentCaptureCount: promptPackage.recentCaptures.length,
+    snapshotAt: new Date().toISOString(),
+    sourceCaptureIds: sourceItems.map((item) => item.id),
+    sourceKeys: sourceItems.map((item) => item.sourceKey),
+    todayCaptureIds: promptPackage.todayCaptures.map((item) => item.id),
+    recentCaptureIds: promptPackage.recentCaptures.map((item) => item.id),
+    todayCaptures: promptPackage.todayCaptures,
+    recentCaptures: promptPackage.recentCaptures,
+    activityHints: promptPackage.activityHints,
+  };
+}
+
+function normalizeEchoMemorySummary(value?: Partial<EchoMemorySummary> | null): EchoMemorySummary | null {
+  if (!value) return null;
+
+  const sourceCaptureCount = Number(value.sourceCaptureCount);
+  const todayCaptureCount = Number(value.todayCaptureCount);
+  const recentCaptureCount = Number(value.recentCaptureCount);
+
+  if (!Number.isFinite(sourceCaptureCount) || sourceCaptureCount <= 0) {
+    return null;
+  }
+
+  return {
+    sourceCaptureCount,
+    todayCaptureCount: Number.isFinite(todayCaptureCount) ? Math.max(0, todayCaptureCount) : 0,
+    recentCaptureCount: Number.isFinite(recentCaptureCount) ? Math.max(0, recentCaptureCount) : 0,
+  };
+}
+
+export function parseEchoMetadata(value?: string | null): EchoMetadataPayload | null {
+  if (!value) return null;
+
+  try {
+    const parsed = JSON.parse(value) as unknown;
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+      return null;
+    }
+
+    const payload = parsed as EchoMetadataPayload;
+    const normalizedMemory = normalizeEchoMemorySummary(payload.memory);
+    return {
+      ...payload,
+      recommendations: normalizeEchoRecommendations(payload.recommendations),
+      memory: payload.memory && normalizedMemory ? { ...payload.memory, ...normalizedMemory } : undefined,
+      parseResult: payload.parseResult
+        ? {
+            title: String(payload.parseResult.title || ''),
+            body: String(payload.parseResult.body || ''),
+            recommendations: normalizeEchoRecommendations(payload.parseResult.recommendations),
+          }
+        : null,
+    };
+  } catch {
+    return null;
+  }
+}
+
+export function getEchoSummaryMetadata(value?: string | null): {
+  recommendations: EchoRecommendation[];
+  memory: EchoMemorySummary | null;
+} {
+  const metadata = parseEchoMetadata(value);
+  return {
+    recommendations: normalizeEchoRecommendations(metadata?.recommendations),
+    memory: normalizeEchoMemorySummary(metadata?.memory),
+  };
+}
+
 function toEchoSummary(item: {
   id: string;
   sourceKey: string;
@@ -457,9 +629,12 @@ function toEchoSummary(item: {
   title: string;
   body: string;
   chipsJson: string | null;
+  metadataJson: string | null;
   createdAt: Date;
   updatedAt: Date;
 }) {
+  const metadata = getEchoSummaryMetadata(item.metadataJson);
+
   return {
     id: item.id,
     sourceKey: item.sourceKey,
@@ -468,6 +643,8 @@ function toEchoSummary(item: {
     title: item.title,
     body: item.body,
     chips: parseChips(item.chipsJson),
+    recommendations: metadata.recommendations,
+    memory: metadata.memory,
     createdAt: item.createdAt.toISOString(),
     updatedAt: item.updatedAt.toISOString(),
   };
@@ -479,6 +656,8 @@ function buildAutoMetadata(params: {
   promptPackage: EchoPromptPackage;
   similarityToRecent?: number;
   error?: string;
+  qualityWarning?: string;
+  recommendations?: EchoRecommendation[];
 }) {
   return {
     trigger: params.trigger,
@@ -489,6 +668,9 @@ function buildAutoMetadata(params: {
     recentEchoCount: params.promptPackage.recentEchoes.length,
     similarityToRecent: params.similarityToRecent ?? 0,
     error: params.error,
+    qualityWarning: params.qualityWarning,
+    recommendations: normalizeEchoRecommendations(params.recommendations),
+    memory: buildEchoMemorySnapshot(params.promptPackage),
   };
 }
 
@@ -772,19 +954,64 @@ export const workspaceEchoService = {
     try {
       const completion = await generateCommonstackEcho({ prompt });
       const normalized = normalizeEchoOutput(completion.content);
+      const recommendations = normalized.recommendations;
       const quality = evaluateEchoQuality({
         candidate: normalized,
         recentEchoes: promptPackage.recentEchoes,
       });
+      const qualityWarning = quality.valid ? undefined : quality.reason;
 
       if (!quality.valid) {
-        if (force && existing?.status === 'active') {
+        if (!force) {
+          await prisma.workspaceEcho.upsert({
+            where: { sourceKey },
+            update: {
+              workspaceId,
+              kind: DAILY_ECHO_KIND,
+              generatedDateKey,
+              model: completion.model,
+              promptVersion: DAILY_ECHO_PROMPT_VERSION,
+              status: 'failed',
+              metadataJson: JSON.stringify(
+                buildAutoMetadata({
+                  trigger,
+                  forced: force,
+                  promptPackage,
+                  similarityToRecent: quality.maxSimilarity,
+                  error: quality.reason,
+                  recommendations,
+                })
+              ),
+            },
+            create: {
+              workspaceId,
+              sourceKey,
+              kind: DAILY_ECHO_KIND,
+              generatedDateKey,
+              model: completion.model,
+              promptVersion: DAILY_ECHO_PROMPT_VERSION,
+              title: '今日回声',
+              body: '这条线索还在发酵。',
+              chipsJson: JSON.stringify(chips),
+              metadataJson: JSON.stringify(
+                buildAutoMetadata({
+                  trigger,
+                  forced: force,
+                  promptPackage,
+                  similarityToRecent: quality.maxSimilarity,
+                  error: quality.reason,
+                  recommendations,
+                })
+              ),
+              status: 'failed',
+            },
+          });
+
           return {
             success: true,
             skipped: true,
-            forced: true,
+            forced: force,
             reason: quality.reason,
-            echo: toEchoSummary(existing),
             debug: includeDebug
               ? {
                   model: completion.model,
@@ -796,74 +1023,11 @@ export const workspaceEchoService = {
                   prompt,
                   promptPackage,
                   rawResponse: completion.rawContent,
-                  parseResult: normalized,
+                  parseResult: { ...normalized, recommendations },
                 }
               : undefined,
           };
         }
-
-        await prisma.workspaceEcho.upsert({
-          where: { sourceKey },
-          update: {
-            workspaceId,
-            kind: DAILY_ECHO_KIND,
-            generatedDateKey,
-            model: completion.model,
-            promptVersion: DAILY_ECHO_PROMPT_VERSION,
-            status: 'failed',
-            metadataJson: JSON.stringify(
-              buildAutoMetadata({
-                trigger,
-                forced: force,
-                promptPackage,
-                similarityToRecent: quality.maxSimilarity,
-                error: quality.reason,
-              })
-            ),
-          },
-          create: {
-            workspaceId,
-            sourceKey,
-            kind: DAILY_ECHO_KIND,
-            generatedDateKey,
-            model: completion.model,
-            promptVersion: DAILY_ECHO_PROMPT_VERSION,
-            title: '今日回声',
-            body: '这条线索还在发酵。',
-            chipsJson: JSON.stringify(chips),
-            metadataJson: JSON.stringify(
-              buildAutoMetadata({
-                trigger,
-                forced: force,
-                promptPackage,
-                similarityToRecent: quality.maxSimilarity,
-                error: quality.reason,
-              })
-            ),
-            status: 'failed',
-          },
-        });
-
-        return {
-          success: true,
-          skipped: true,
-          forced: force,
-          reason: quality.reason,
-          debug: includeDebug
-            ? {
-                model: completion.model,
-                promptVersion: DAILY_ECHO_PROMPT_VERSION,
-                todayCaptureCount: promptPackage.todayCaptures.length,
-                recentCaptureCount: promptPackage.recentCaptures.length,
-                recentEchoCount: promptPackage.recentEchoes.length,
-                similarityToRecent: quality.maxSimilarity,
-                prompt,
-                promptPackage,
-                rawResponse: completion.rawContent,
-                parseResult: normalized,
-              }
-            : undefined,
-        };
       }
 
       const metadata = includeDebug
@@ -873,17 +1037,21 @@ export const workspaceEchoService = {
               forced: force,
               promptPackage,
               similarityToRecent: quality.maxSimilarity,
+              qualityWarning,
+              recommendations,
             }),
             promptPackage,
             prompt,
             rawResponse: completion.rawContent,
-            parseResult: normalized,
+            parseResult: { ...normalized, recommendations },
           }
         : buildAutoMetadata({
             trigger,
             forced: force,
             promptPackage,
             similarityToRecent: quality.maxSimilarity,
+            qualityWarning,
+            recommendations,
           });
 
       const echo = await prisma.workspaceEcho.upsert({
@@ -919,6 +1087,7 @@ export const workspaceEchoService = {
         success: true,
         skipped: false,
         forced: force,
+        reason: qualityWarning,
         echo: toEchoSummary(echo),
         debug: {
           model: completion.model,
@@ -932,7 +1101,7 @@ export const workspaceEchoService = {
                 prompt,
                 promptPackage,
                 rawResponse: completion.rawContent,
-                parseResult: normalized,
+                parseResult: { ...normalized, recommendations },
               }
             : {}),
         },
@@ -956,6 +1125,7 @@ export const workspaceEchoService = {
                 forced: force,
                 promptPackage,
                 error: message,
+                recommendations: [],
               })
             ),
           },
@@ -975,6 +1145,7 @@ export const workspaceEchoService = {
                 forced: force,
                 promptPackage,
                 error: message,
+                recommendations: [],
               })
             ),
             status: 'failed',

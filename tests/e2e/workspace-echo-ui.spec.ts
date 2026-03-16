@@ -21,9 +21,19 @@ type MockWorkspaceEchoFlowOptions = {
     title: string;
     body: string;
     chips: string[];
+    recommendations?: Array<{
+      title: string;
+      body: string;
+    }>;
+    memory?: {
+      sourceCaptureCount: number;
+      todayCaptureCount: number;
+      recentCaptureCount: number;
+    } | null;
     createdAt: string;
     updatedAt: string;
   }>;
+  refreshReasons?: Array<string | null>;
 };
 
 async function mockWorkspaceEchoFlow(page: Page, options: MockWorkspaceEchoFlowOptions = {}) {
@@ -45,6 +55,17 @@ async function mockWorkspaceEchoFlow(page: Page, options: MockWorkspaceEchoFlowO
       title: '单调性这条线已经冒头了',
       body: '你把课堂原话和卡住的位置放到了一起，顺着这点再补一句，今天就能更快看出它们怎么连上。',
       chips: ['课堂原声', '带着问题'],
+      recommendations: [
+        {
+          title: '顺手补一眼增减表',
+          body: '你现在主要盯着导数符号，再收一张增减表，可能会更快把区间变化接起来。',
+        },
+      ],
+      memory: {
+        sourceCaptureCount: 4,
+        todayCaptureCount: 1,
+        recentCaptureCount: 3,
+      },
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     },
@@ -56,10 +77,22 @@ async function mockWorkspaceEchoFlow(page: Page, options: MockWorkspaceEchoFlowO
       title: '别急着总结，先把转折点收全',
       body: '现在最值钱的不是结论，而是你卡住时那一下转折感，再补一小段，回头会更容易复盘。',
       chips: ['课堂原声', '同一条线索'],
+      recommendations: [
+        {
+          title: '碰一下反例',
+          body: '如果顺手补一个“导数存在但不单调”的反例，这条线会更立体。',
+        },
+      ],
+      memory: {
+        sourceCaptureCount: 5,
+        todayCaptureCount: 2,
+        recentCaptureCount: 3,
+      },
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     },
   ];
+  const refreshReasons = options.refreshReasons || refreshEchoes.map(() => null);
 
   await page.addInitScript(() => {
     window.localStorage.setItem('analytics_visited', String(Date.now()));
@@ -159,6 +192,7 @@ async function mockWorkspaceEchoFlow(page: Page, options: MockWorkspaceEchoFlowO
     const requestBody = JSON.parse(route.request().postData() || '{}');
     const force = Boolean(requestBody.force);
     const echo = refreshEchoes[Math.min(refreshCount - 1, refreshEchoes.length - 1)];
+    const reason = refreshReasons[Math.min(refreshCount - 1, refreshReasons.length - 1)] ?? null;
 
     if (refreshDelayMs > 0) {
       await new Promise((resolve) => setTimeout(resolve, refreshDelayMs));
@@ -171,7 +205,7 @@ async function mockWorkspaceEchoFlow(page: Page, options: MockWorkspaceEchoFlowO
         success: true,
         skipped: false,
         forced: force,
-        reason: null,
+        reason,
         echo,
         debug: force
           ? {
@@ -228,6 +262,9 @@ test.describe('workspace echo ui', () => {
     await expect(page.getByText('今日回声')).toBeVisible();
     await expect(page.getByText('单调性这条线已经冒头了').first()).toBeVisible();
     await expect(page.getByText('你把课堂原话和卡住的位置放到了一起，顺着这点再补一句，今天就能更快看出它们怎么连上。').first()).toBeVisible();
+    await expect(page.getByText('也许可以顺手碰一下')).toBeVisible();
+    await expect(page.getByText('顺手补一眼增减表')).toBeVisible();
+    await expect(page.getByText('这条回声沉淀自今天 1 条、近 7 天共 4 条收集。')).toBeVisible();
     await expect(page.getByText('先继续收集，系统听到的线索会慢慢沉到这里。')).toHaveCount(0);
     await expect(page.getByText('回声历史')).toHaveCount(0);
     await expect(page.getByRole('button', { name: '继续收这一条' }).first()).toBeVisible();
@@ -306,7 +343,9 @@ test.describe('workspace echo ui', () => {
   });
 
   test('manual trigger overwrites the same daily echo and shows debug note', async ({ page }) => {
-    const counters = await mockWorkspaceEchoFlow(page);
+    const counters = await mockWorkspaceEchoFlow(page, {
+      refreshReasons: [null, 'too-similar'],
+    });
 
     await openEchoCenterAfterCapture(page);
 
@@ -314,14 +353,73 @@ test.describe('workspace echo ui', () => {
     await page.getByRole('button', { name: '测试生成' }).click();
 
     await expect(page.getByText('别急着总结，先把转折点收全').first()).toBeVisible();
+    await expect(page.getByText('测试版已更新')).toBeVisible();
+    await expect(page.getByText('这次和上一版很接近，但上面已经换成新结果了。')).toBeVisible();
+    await expect(page.getByText('碰一下反例')).toBeVisible();
     await expect(page.getByText('查看测试信息')).toBeVisible();
     await page.getByText('查看测试信息').click();
     await expect(page.getByText('模型：google/gemini-3-flash')).toBeVisible();
     await expect(page.getByText('Prompt：echo-v1')).toBeVisible();
     await expect(page.getByText('重复度：0.12')).toBeVisible();
+    await expect(page.getByText('质量提醒：这次和上一版很接近')).toBeVisible();
     await expect(page.getByText('回声历史')).toHaveCount(0);
 
     expect(counters.getCaptureCount()).toBe(1);
     expect(counters.getRefreshCount()).toBe(2);
+  });
+
+  test('echo sheet scrolls independently when feedback is long', async ({ page }) => {
+    await mockWorkspaceEchoFlow(page, {
+      refreshEchoes: [
+        {
+          id: 'echo_long',
+          sourceKey: 'daily:workspace_echo_ui:2026-03-14',
+          kind: 'daily_return_reason',
+          generatedDateKey: '2026-03-14',
+          title: '从“解析链接”到“意图理解”的跨越',
+          body: Array.from({ length: 10 }, () =>
+            '你刚才在讨论各种卡片链接、视频号招聘和认知孪生时，其实已经在逼近一个更深的判断：用户真正留下的，不只是表面数据，而是被一次次微小行为暴露出来的意图。'
+          ).join(' '),
+          chips: ['课堂原声', '图片线索'],
+          recommendations: [
+            {
+              title: '捕捉“意图层”的交互瞬间',
+              body: '除了链接解析，再补几条点赞、停留、转发语境的记录，看看你所谓“意图层”到底是怎样从行为里冒出来的。',
+            },
+            {
+              title: '找一个反例来照一照',
+              body: '顺手收一个“数据指标很好但人并不买账”的案例，也许更能帮你看见这条判断真正锋利的地方。',
+            },
+          ],
+          memory: {
+            sourceCaptureCount: 12,
+            todayCaptureCount: 6,
+            recentCaptureCount: 6,
+          },
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        },
+      ],
+    });
+
+    await openEchoCenterAfterCapture(page);
+
+    const scrollable = page.locator('[data-mobile-sheet-scrollable="echo"]');
+    await expect(scrollable).toBeVisible();
+
+    const metrics = await scrollable.evaluate((element) => {
+      const target = element as HTMLDivElement;
+      const before = target.scrollTop;
+      target.scrollTop = 160;
+      return {
+        overflowY: window.getComputedStyle(target).overflowY,
+        canScroll: target.scrollHeight > target.clientHeight,
+        moved: target.scrollTop > before,
+      };
+    });
+
+    expect(metrics.overflowY).toBe('auto');
+    expect(metrics.canScroll).toBeTruthy();
+    expect(metrics.moved).toBeTruthy();
   });
 });
