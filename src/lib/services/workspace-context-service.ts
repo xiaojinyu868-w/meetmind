@@ -1,5 +1,6 @@
 import fs from 'fs/promises';
 import path from 'path';
+import { Prisma } from '@prisma/client';
 import prisma from '@/lib/prisma';
 import { detectLinkProvider } from '@/lib/context-reach/link-provider';
 import { qwenASRService } from '@/lib/services/qwen-asr-service';
@@ -15,15 +16,19 @@ import {
 import {
   DAILY_ECHO_KIND,
   getEchoSummaryMetadata,
+  parseEchoMetadata,
   type EchoMemorySummary,
   type EchoRecommendation,
 } from '@/lib/services/workspace-echo-service';
 import workspaceService, { type WorkspaceSummary } from '@/lib/services/workspace-service';
 
+export type WorkspaceCaptureStatus = 'active' | 'archived' | 'deleted';
+
 export interface WorkspaceCaptureSummary {
   id: string;
   sourceKey: string;
   sourceType: string;
+  status: WorkspaceCaptureStatus;
   role: string;
   contentType: string;
   title: string;
@@ -47,6 +52,8 @@ export interface WorkspaceEchoSummary {
   chips: string[];
   recommendations: EchoRecommendation[];
   memory: EchoMemorySummary | null;
+  sourceCaptureIds: string[];
+  sourceKeys: string[];
   createdAt: string;
   updatedAt: string;
 }
@@ -64,6 +71,11 @@ export interface UpsertWorkspaceCaptureInput {
   tutorContext?: string;
   occurredAt?: string;
   metadata?: Record<string, unknown>;
+}
+
+interface WorkspaceCaptureLookupInput {
+  captureId?: string;
+  sourceKey?: string;
 }
 
 function compactText(value: string, limit: number): string {
@@ -95,6 +107,176 @@ function parseJsonObject(value?: string | null): Record<string, unknown> | null 
   } catch {
     return null;
   }
+}
+
+function normalizeCaptureStatus(value?: string | null): WorkspaceCaptureStatus {
+  if (value === 'archived' || value === 'deleted') return value;
+  return 'active';
+}
+
+function buildWorkspaceCaptureWriteData(params: {
+  workspaceId: string;
+  userId?: string | null;
+  sourceType: string;
+  role: string;
+  contentType: string;
+  title: string;
+  previewText: string;
+  normalizedText?: string | null;
+  sourceUrl?: string | null;
+  mediaUrl?: string | null;
+  metadataJson?: string | null;
+  tutorContext?: string | null;
+  occurredAt?: Date | null;
+}): Omit<Prisma.WorkspaceCaptureUncheckedCreateInput, 'sourceKey' | 'status'> {
+  return {
+    workspaceId: params.workspaceId,
+    userId: params.userId || null,
+    sourceType: params.sourceType,
+    role: params.role,
+    contentType: params.contentType,
+    title: compactText(params.title, 80),
+    previewText: params.previewText,
+    normalizedText: params.normalizedText ?? null,
+    sourceUrl: params.sourceUrl ?? null,
+    mediaUrl: params.mediaUrl ?? null,
+    metadataJson: params.metadataJson ?? null,
+    tutorContext: params.tutorContext ?? null,
+    occurredAt: params.occurredAt ?? null,
+  };
+}
+
+async function upsertWorkspaceCaptureBySourceKey(params: {
+  workspaceId: string;
+  userId?: string | null;
+  sourceType: string;
+  sourceKey: string;
+  role: string;
+  contentType: string;
+  title: string;
+  previewText: string;
+  normalizedText?: string | null;
+  sourceUrl?: string | null;
+  mediaUrl?: string | null;
+  metadataJson?: string | null;
+  tutorContext?: string | null;
+  occurredAt?: Date | null;
+}) {
+  const existing = await prisma.workspaceCapture.findUnique({
+    where: { sourceKey: params.sourceKey },
+    select: {
+      id: true,
+      status: true,
+    },
+  });
+
+  const data = buildWorkspaceCaptureWriteData(params);
+
+  if (existing) {
+    return prisma.workspaceCapture.update({
+      where: { id: existing.id },
+      data: {
+        ...data,
+        status: normalizeCaptureStatus(existing.status),
+      },
+    });
+  }
+
+  return prisma.workspaceCapture.create({
+    data: {
+      ...data,
+      sourceKey: params.sourceKey,
+      status: 'active',
+    },
+  });
+}
+
+function buildWorkspaceCaptureLookupWhere(params: {
+  workspaceId: string;
+  lookup: WorkspaceCaptureLookupInput;
+}): Prisma.WorkspaceCaptureWhereInput | null {
+  const clauses: Prisma.WorkspaceCaptureWhereInput[] = [];
+
+  if (params.lookup.captureId?.trim()) {
+    clauses.push({ id: params.lookup.captureId.trim() });
+  }
+
+  if (params.lookup.sourceKey?.trim()) {
+    clauses.push({ sourceKey: params.lookup.sourceKey.trim() });
+  }
+
+  if (clauses.length === 0) return null;
+
+  return {
+    workspaceId: params.workspaceId,
+    OR: clauses,
+  };
+}
+
+async function retireEchoesForDeletedCapture(params: {
+  workspaceId: string;
+  captureId: string;
+  sourceKey: string;
+}) {
+  const retiredEchoIds: string[] = [];
+
+  const directlyLinked = await prisma.workspaceEcho.findMany({
+    where: {
+      workspaceId: params.workspaceId,
+      captureId: params.captureId,
+      status: 'active',
+    },
+    select: { id: true },
+  });
+
+  if (directlyLinked.length > 0) {
+    await prisma.workspaceEcho.updateMany({
+      where: {
+        id: { in: directlyLinked.map((item) => item.id) },
+      },
+      data: {
+        status: 'failed',
+      },
+    });
+    retiredEchoIds.push(...directlyLinked.map((item) => item.id));
+  }
+
+  const activeDailyEchoes = await prisma.workspaceEcho.findMany({
+    where: {
+      workspaceId: params.workspaceId,
+      kind: DAILY_ECHO_KIND,
+      status: 'active',
+    },
+    select: {
+      id: true,
+      metadataJson: true,
+    },
+  });
+
+  const matchingDailyEchoIds = activeDailyEchoes
+    .filter((item) => {
+      const metadata = parseEchoMetadata(item.metadataJson);
+      const memory = metadata?.memory;
+      const sourceCaptureIds = Array.isArray(memory?.sourceCaptureIds) ? memory.sourceCaptureIds : [];
+      const sourceKeys = Array.isArray(memory?.sourceKeys) ? memory.sourceKeys : [];
+      return sourceCaptureIds.includes(params.captureId) || sourceKeys.includes(params.sourceKey);
+    })
+    .map((item) => item.id);
+
+  const nextRetiredEchoIds = matchingDailyEchoIds.filter((id) => !retiredEchoIds.includes(id));
+  if (nextRetiredEchoIds.length > 0) {
+    await prisma.workspaceEcho.updateMany({
+      where: {
+        id: { in: nextRetiredEchoIds },
+      },
+      data: {
+        status: 'failed',
+      },
+    });
+    retiredEchoIds.push(...nextRetiredEchoIds);
+  }
+
+  return retiredEchoIds;
 }
 
 function inferWechatContentType(message: {
@@ -158,6 +340,7 @@ function toCaptureSummary(item: {
   id: string;
   sourceKey: string;
   sourceType: string;
+  status: string;
   role: string;
   contentType: string;
   title: string;
@@ -174,6 +357,7 @@ function toCaptureSummary(item: {
     id: item.id,
     sourceKey: item.sourceKey,
     sourceType: item.sourceType,
+    status: normalizeCaptureStatus(item.status),
     role: item.role,
     contentType: item.contentType,
     title: item.title,
@@ -200,6 +384,7 @@ function toEchoSummary(item: {
   createdAt: Date;
   updatedAt: Date;
 }): WorkspaceEchoSummary {
+  const parsedMetadata = parseEchoMetadata(item.metadataJson);
   const metadata = getEchoSummaryMetadata(item.metadataJson);
 
   return {
@@ -212,6 +397,12 @@ function toEchoSummary(item: {
     chips: parseJsonArray(item.chipsJson).slice(0, 4),
     recommendations: metadata.recommendations,
     memory: metadata.memory,
+    sourceCaptureIds: Array.isArray(parsedMetadata?.memory?.sourceCaptureIds)
+      ? parsedMetadata!.memory!.sourceCaptureIds.filter((value): value is string => typeof value === 'string' && Boolean(value))
+      : [],
+    sourceKeys: Array.isArray(parsedMetadata?.memory?.sourceKeys)
+      ? parsedMetadata!.memory!.sourceKeys.filter((value): value is string => typeof value === 'string' && Boolean(value))
+      : [],
     createdAt: item.createdAt.toISOString(),
     updatedAt: item.updatedAt.toISOString(),
   };
@@ -227,39 +418,21 @@ export const workspaceContextService = {
     const previewText = compactText(input.previewText || input.normalizedText || input.title, 180);
     const metadataJson = input.metadata ? JSON.stringify(input.metadata) : null;
 
-    const capture = await prisma.workspaceCapture.upsert({
-      where: { sourceKey: input.sourceKey },
-      update: {
-        workspaceId: workspace.id,
-        userId,
-        sourceType: input.sourceType,
-        role: input.role,
-        contentType: input.contentType,
-        title: compactText(input.title, 80),
-        previewText,
-        normalizedText: input.normalizedText,
-        sourceUrl: input.sourceUrl,
-        mediaUrl: input.mediaUrl,
-        metadataJson,
-        tutorContext: input.tutorContext,
-        occurredAt: input.occurredAt ? new Date(input.occurredAt) : null,
-      },
-      create: {
-        workspaceId: workspace.id,
-        userId,
-        sourceType: input.sourceType,
-        sourceKey: input.sourceKey,
-        role: input.role,
-        contentType: input.contentType,
-        title: compactText(input.title, 80),
-        previewText,
-        normalizedText: input.normalizedText,
-        sourceUrl: input.sourceUrl,
-        mediaUrl: input.mediaUrl,
-        metadataJson,
-        tutorContext: input.tutorContext,
-        occurredAt: input.occurredAt ? new Date(input.occurredAt) : null,
-      },
+    const capture = await upsertWorkspaceCaptureBySourceKey({
+      workspaceId: workspace.id,
+      userId,
+      sourceType: input.sourceType,
+      sourceKey: input.sourceKey,
+      role: input.role,
+      contentType: input.contentType,
+      title: input.title,
+      previewText,
+      normalizedText: input.normalizedText,
+      sourceUrl: input.sourceUrl,
+      mediaUrl: input.mediaUrl,
+      metadataJson,
+      tutorContext: input.tutorContext,
+      occurredAt: input.occurredAt ? new Date(input.occurredAt) : null,
     });
 
     return {
@@ -359,6 +532,7 @@ export const workspaceContextService = {
       const existingByUrl = await prisma.workspaceCapture.findFirst({
         where: {
           workspaceId,
+          status: { not: 'deleted' },
           sourceUrl,
           sourceKey: { not: sourceKey },
         },
@@ -405,38 +579,21 @@ export const workspaceContextService = {
       }
     }
 
-    const capture = await prisma.workspaceCapture.upsert({
-      where: { sourceKey },
-      update: {
-        userId: message.userId,
-        workspaceId,
-        role: message.collectionRole || 'support',
-        contentType: inferWechatContentType(message),
-        title,
-        previewText,
-        normalizedText,
-        sourceUrl,
-        mediaUrl,
-        metadataJson,
-        tutorContext,
-        occurredAt: message.messageAt,
-      },
-      create: {
-        workspaceId,
-        userId: message.userId,
-        sourceType: 'wechat',
-        sourceKey,
-        role: message.collectionRole || 'support',
-        contentType: inferWechatContentType(message),
-        title,
-        previewText,
-        normalizedText,
-        sourceUrl,
-        mediaUrl,
-        metadataJson,
-        tutorContext,
-        occurredAt: message.messageAt,
-      },
+    const capture = await upsertWorkspaceCaptureBySourceKey({
+      workspaceId,
+      userId: message.userId,
+      sourceType: 'wechat',
+      sourceKey,
+      role: message.collectionRole || 'support',
+      contentType: inferWechatContentType(message),
+      title,
+      previewText,
+      normalizedText,
+      sourceUrl,
+      mediaUrl,
+      metadataJson,
+      tutorContext,
+      occurredAt: message.messageAt,
     });
 
     if (message.echoTitle && message.echoBody) {
@@ -486,6 +643,67 @@ export const workspaceContextService = {
     return messages.length;
   },
 
+  async updateCaptureStatusForUser(
+    userId: string,
+    params: WorkspaceCaptureLookupInput & { status: WorkspaceCaptureStatus }
+  ): Promise<{
+    workspace: WorkspaceSummary | null;
+    capture: WorkspaceCaptureSummary | null;
+    retiredEchoIds: string[];
+  }> {
+    const workspace = await workspaceService.getDefaultWorkspace(userId);
+    if (!workspace) {
+      return {
+        workspace: null,
+        capture: null,
+        retiredEchoIds: [],
+      };
+    }
+
+    const where = buildWorkspaceCaptureLookupWhere({
+      workspaceId: workspace.id,
+      lookup: params,
+    });
+    if (!where) {
+      throw new Error('缺少要更新的收集标识');
+    }
+
+    const capture = await prisma.workspaceCapture.findFirst({
+      where,
+    });
+
+    if (!capture) {
+      return {
+        workspace,
+        capture: null,
+        retiredEchoIds: [],
+      };
+    }
+
+    const nextStatus = normalizeCaptureStatus(params.status);
+    const updatedCapture = await prisma.workspaceCapture.update({
+      where: { id: capture.id },
+      data: {
+        status: nextStatus,
+      },
+    });
+
+    const retiredEchoIds =
+      nextStatus === 'deleted'
+        ? await retireEchoesForDeletedCapture({
+            workspaceId: workspace.id,
+            captureId: capture.id,
+            sourceKey: capture.sourceKey,
+          })
+        : [];
+
+    return {
+      workspace,
+      capture: toCaptureSummary(updatedCapture),
+      retiredEchoIds,
+    };
+  },
+
   async getCurrentWorkspaceContext(userId: string): Promise<{
     workspace: WorkspaceSummary | null;
     captures: WorkspaceCaptureSummary[];
@@ -521,9 +739,12 @@ export const workspaceContextService = {
       await this.syncWechatInboxMessageArtifacts(item.linkToken, { hydrateVoice: true });
     }
 
-    const [captures, echoes] = await Promise.all([
+    const [captures, echoes, deletedCaptures] = await Promise.all([
       prisma.workspaceCapture.findMany({
-        where: { workspaceId: workspace.id },
+        where: {
+          workspaceId: workspace.id,
+          status: 'active',
+        },
         orderBy: [{ occurredAt: 'desc' }, { createdAt: 'desc' }],
         take: 40,
       }),
@@ -536,12 +757,36 @@ export const workspaceContextService = {
         orderBy: [{ updatedAt: 'desc' }, { createdAt: 'desc' }],
         take: 8,
       }),
+      prisma.workspaceCapture.findMany({
+        where: {
+          workspaceId: workspace.id,
+          status: 'deleted',
+        },
+        select: {
+          id: true,
+          sourceKey: true,
+        },
+      }),
     ]);
+
+    const deletedCaptureIdSet = new Set(deletedCaptures.map((item) => item.id));
+    const deletedCaptureSourceKeySet = new Set(deletedCaptures.map((item) => item.sourceKey));
+    const visibleEchoes = echoes.filter((item) => {
+      const metadata = parseEchoMetadata(item.metadataJson);
+      const memory = metadata?.memory;
+      const sourceCaptureIds = Array.isArray(memory?.sourceCaptureIds) ? memory.sourceCaptureIds : [];
+      const sourceKeys = Array.isArray(memory?.sourceKeys) ? memory.sourceKeys : [];
+
+      return (
+        !sourceCaptureIds.some((id) => deletedCaptureIdSet.has(id)) &&
+        !sourceKeys.some((sourceKey) => deletedCaptureSourceKeySet.has(sourceKey))
+      );
+    });
 
     return {
       workspace,
       captures: captures.map(toCaptureSummary),
-      echoes: echoes.map(toEchoSummary),
+      echoes: visibleEchoes.map(toEchoSummary),
     };
   },
 };

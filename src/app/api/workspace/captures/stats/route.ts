@@ -54,7 +54,10 @@ export async function GET(request: NextRequest) {
     // 按 contentType 分组统计
     const contentTypeGroups = await prisma.workspaceCapture.groupBy({
       by: ['contentType'],
-      where: { workspaceId: workspace.id },
+      where: {
+        workspaceId: workspace.id,
+        status: 'active',
+      },
       _count: { id: true },
       orderBy: { _count: { id: 'desc' } },
     });
@@ -69,6 +72,7 @@ export async function GET(request: NextRequest) {
     const captures = await prisma.workspaceCapture.findMany({
       where: {
         workspaceId: workspace.id,
+        status: 'active',
         metadataJson: { not: null },
       },
       select: {

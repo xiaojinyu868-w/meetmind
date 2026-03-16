@@ -137,6 +137,8 @@ export interface DailyEchoRefreshResult {
     chips: string[];
     recommendations: EchoRecommendation[];
     memory: EchoMemorySummary | null;
+    sourceCaptureIds: string[];
+    sourceKeys: string[];
     createdAt: string;
     updatedAt: string;
   };
@@ -633,6 +635,7 @@ function toEchoSummary(item: {
   createdAt: Date;
   updatedAt: Date;
 }) {
+  const parsedMetadata = parseEchoMetadata(item.metadataJson);
   const metadata = getEchoSummaryMetadata(item.metadataJson);
 
   return {
@@ -645,6 +648,12 @@ function toEchoSummary(item: {
     chips: parseChips(item.chipsJson),
     recommendations: metadata.recommendations,
     memory: metadata.memory,
+    sourceCaptureIds: Array.isArray(parsedMetadata?.memory?.sourceCaptureIds)
+      ? parsedMetadata!.memory!.sourceCaptureIds.filter((value): value is string => typeof value === 'string' && Boolean(value))
+      : [],
+    sourceKeys: Array.isArray(parsedMetadata?.memory?.sourceKeys)
+      ? parsedMetadata!.memory!.sourceKeys.filter((value): value is string => typeof value === 'string' && Boolean(value))
+      : [],
     createdAt: item.createdAt.toISOString(),
     updatedAt: item.updatedAt.toISOString(),
   };
@@ -886,6 +895,7 @@ export const workspaceEchoService = {
     const recentCaptureRows = await prisma.workspaceCapture.findMany({
       where: {
         workspaceId,
+        status: 'active',
         OR: [{ occurredAt: { gte: lookbackStart } }, { occurredAt: null, createdAt: { gte: lookbackStart } }],
       },
       orderBy: [{ createdAt: 'desc' }],

@@ -80,3 +80,91 @@ export async function POST(request: NextRequest) {
     );
   }
 }
+
+export async function PATCH(request: NextRequest) {
+  try {
+    const payload = getAuthPayload(request);
+
+    if (!payload) {
+      return NextResponse.json({ success: false, error: '未授权' }, { status: 401 });
+    }
+
+    const body = (await request.json()) as {
+      captureId?: string;
+      sourceKey?: string;
+      action?: 'archive' | 'restore';
+    };
+
+    const action = body.action || 'archive';
+    if (action !== 'archive' && action !== 'restore') {
+      return NextResponse.json({ success: false, error: '不支持的收集操作' }, { status: 400 });
+    }
+
+    if (!body.captureId && !body.sourceKey) {
+      return NextResponse.json({ success: false, error: '缺少要更新的收集标识' }, { status: 400 });
+    }
+
+    const result = await workspaceContextService.updateCaptureStatusForUser(payload.sub, {
+      captureId: body.captureId,
+      sourceKey: body.sourceKey,
+      status: action === 'restore' ? 'active' : 'archived',
+    });
+
+    if (!result.capture) {
+      return NextResponse.json({ success: false, error: '未找到这条收集' }, { status: 404 });
+    }
+
+    return NextResponse.json({
+      success: true,
+      capture: result.capture,
+      retiredEchoIds: result.retiredEchoIds,
+    });
+  } catch (error) {
+    console.error('workspace capture patch error:', error);
+    return NextResponse.json(
+      { success: false, error: '更新收集状态失败' },
+      { status: 500 }
+    );
+  }
+}
+
+export async function DELETE(request: NextRequest) {
+  try {
+    const payload = getAuthPayload(request);
+
+    if (!payload) {
+      return NextResponse.json({ success: false, error: '未授权' }, { status: 401 });
+    }
+
+    const body = (await request.json()) as {
+      captureId?: string;
+      sourceKey?: string;
+    };
+
+    if (!body.captureId && !body.sourceKey) {
+      return NextResponse.json({ success: false, error: '缺少要删除的收集标识' }, { status: 400 });
+    }
+
+    const result = await workspaceContextService.updateCaptureStatusForUser(payload.sub, {
+      captureId: body.captureId,
+      sourceKey: body.sourceKey,
+      status: 'deleted',
+    });
+
+    if (!result.capture) {
+      return NextResponse.json({ success: false, error: '未找到这条收集' }, { status: 404 });
+    }
+
+    return NextResponse.json({
+      success: true,
+      capture: result.capture,
+      retiredEchoIds: result.retiredEchoIds,
+    });
+  } catch (error) {
+    console.error('workspace capture delete error:', error);
+    return NextResponse.json(
+      { success: false, error: '彻底删除收集失败' },
+      { status: 500 }
+    );
+  }
+}

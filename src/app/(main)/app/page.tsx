@@ -24,7 +24,6 @@ import { parseVideoLink } from '@/lib/utils/video-link';
 import { appendLiveRecordingSegments, resolveLiveRecordingAppendOffset } from '@/lib/capture/live-recording';
 import { buildStoredVideoSource, isStoredVideoSession } from '@/lib/capture/video-session';
 import {
-  buildCollectionQuoteDraft,
   buildSelectedCollectionContextText,
   getCollectionContextDisplayTitle,
   getCollectionContextTypeLabel,
@@ -76,6 +75,7 @@ import {
   AlertCircle,
   GraduationCap,
   ChevronRight,
+  MoreHorizontal,
   Plus,
   Link2,
   History,
@@ -328,6 +328,7 @@ interface WorkspaceCaptureMessage {
   id: string;
   sourceKey: string;
   sourceType: string;
+  status?: 'active' | 'archived' | 'deleted';
   role: string;
   contentType: string;
   title: string;
@@ -358,6 +359,8 @@ interface WorkspaceEchoMessage {
     todayCaptureCount: number;
     recentCaptureCount: number;
   } | null;
+  sourceCaptureIds?: string[];
+  sourceKeys?: string[];
   createdAt: string;
   updatedAt?: string;
 }
@@ -723,9 +726,16 @@ function mergeWorkspaceCaptures(
       previewText: compactText(item.previewText || item.title, 220),
     }));
 
+  const hiddenIds = new Set(
+    normalized
+      .filter((item) => item.status && item.status !== 'active')
+      .map((item) => item.id)
+  );
+
   const unique: WorkspaceCaptureMessage[] = [];
   const seen = new Set<string>();
   for (const item of normalized) {
+    if (hiddenIds.has(item.id)) continue;
     if (seen.has(item.id)) continue;
     seen.add(item.id);
     unique.push(item);
@@ -1292,6 +1302,10 @@ function StudentAppContent({
   const [isCollectionContextSelectionMode, setIsCollectionContextSelectionMode] = useState(false);
   const [selectedCollectionContextIds, setSelectedCollectionContextIds] = useState<string[]>([]);
   const [selectedCollectionPrimaryId, setSelectedCollectionPrimaryId] = useState<string | null>(null);
+  const [quotedCollectionContextIds, setQuotedCollectionContextIds] = useState<string[]>([]);
+  const [quotedCollectionPrimaryId, setQuotedCollectionPrimaryId] = useState<string | null>(null);
+  const [activeCollectionMessageMenuId, setActiveCollectionMessageMenuId] = useState<string | null>(null);
+  const [confirmCollectionDeleteId, setConfirmCollectionDeleteId] = useState<string | null>(null);
   const sourceImporting = activeSourceImportCount > 0;
   const hasCollectionContext = useMemo(
     () => segments.length > 0 || sourceItems.length > 0 || supportReferences.length > 0 || workspaceEchoes.length > 0,
@@ -1383,6 +1397,9 @@ function StudentAppContent({
   const sessionIdRef = useRef<string>(sessionId);
   const sourceItemsRef = useRef<SourceIngestItem[]>([]);
   const supportReferencesRef = useRef<SupportReferenceItem[]>([]);
+  const pendingCaptureStatusBySourceKeyRef = useRef<Map<string, 'archive' | 'delete'>>(new Map());
+  const collectionLongPressTimerRef = useRef<number | null>(null);
+  const collectionLongPressTriggeredRef = useRef(false);
   const previewObjectUrlsRef = useRef<string[]>([]);
   const audioPlaybackRef = useRef<HTMLAudioElement | null>(null);
   const sourceFileInputRef = useRef<HTMLInputElement>(null);
@@ -1439,6 +1456,9 @@ function StudentAppContent({
 
   useEffect(() => {
     return () => {
+      if (collectionLongPressTimerRef.current) {
+        clearTimeout(collectionLongPressTimerRef.current);
+      }
       previewObjectUrlsRef.current.forEach((url) => {
         try {
           URL.revokeObjectURL(url);
@@ -2546,7 +2566,27 @@ function StudentAppContent({
       }
 
       if (payload.capture) {
-        setWorkspaceCaptures((prev) => mergeWorkspaceCaptures(prev, [payload.capture!]));
+        const capture = payload.capture;
+        const pendingStatusAction = pendingCaptureStatusBySourceKeyRef.current.get(capture.sourceKey);
+        if (pendingStatusAction) {
+          pendingCaptureStatusBySourceKeyRef.current.delete(capture.sourceKey);
+          void fetch('/api/workspace/captures', {
+            method: pendingStatusAction === 'delete' ? 'DELETE' : 'PATCH',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${accessToken}`,
+            },
+            body: JSON.stringify(
+              pendingStatusAction === 'delete'
+                ? { captureId: capture.id, sourceKey: capture.sourceKey }
+                : { captureId: capture.id, sourceKey: capture.sourceKey, action: 'archive' }
+            ),
+          }).catch((error) => {
+            console.error('[workspace.capture.pending-status]', error);
+          });
+        } else {
+          setWorkspaceCaptures((prev) => mergeWorkspaceCaptures(prev, [capture]));
+        }
       }
 
       if (payload.echoQueued || payload.echoAlreadyGeneratedToday) {
@@ -3521,6 +3561,147 @@ const _handleVideoAssistantMessage = useCallback((payload: {
     setSupportReferences((prev) => prev.filter((item) => item.id !== id));
   }, []);
 
+  const removeCollectionItemsFromFlow = useCallback((params: {
+    itemId?: string | null;
+    sourceKey?: string | null;
+    workspaceCaptureId?: string | null;
+  }) => {
+    const matchingIds = sourceItemsRef.current
+      .filter((item) => {
+        if (params.itemId && item.id === params.itemId) return true;
+        if (params.sourceKey && resolveSourceItemSourceKey(item) === params.sourceKey) return true;
+        if (params.workspaceCaptureId && item.id === `workspace-${params.workspaceCaptureId}`) return true;
+        return false;
+      })
+      .map((item) => item.id);
+
+    const idsToRemove = new Set<string>(matchingIds);
+    if (params.itemId) idsToRemove.add(params.itemId);
+    if (params.workspaceCaptureId) idsToRemove.add(`workspace-${params.workspaceCaptureId}`);
+
+    if (idsToRemove.size === 0 && !params.sourceKey) {
+      return;
+    }
+
+    setSourceItems((prev) =>
+      prev.filter((item) => {
+        if (idsToRemove.has(item.id)) return false;
+        if (params.sourceKey && resolveSourceItemSourceKey(item) === params.sourceKey) return false;
+        return true;
+      })
+    );
+    setSupportReferences((prev) => prev.filter((item) => !idsToRemove.has(item.id)));
+    setSelectedCollectionContextIds((prev) => prev.filter((itemId) => !idsToRemove.has(itemId)));
+    setQuotedCollectionContextIds((prev) => prev.filter((itemId) => !idsToRemove.has(itemId)));
+    setExpandedAudioTranscriptId((prev) => (prev && idsToRemove.has(prev) ? null : prev));
+    setActiveCollectionMessageMenuId((prev) => (prev && idsToRemove.has(prev) ? null : prev));
+    setConfirmCollectionDeleteId((prev) => (prev && idsToRemove.has(prev) ? null : prev));
+    if (playingAudioMessageId && idsToRemove.has(playingAudioMessageId)) {
+      stopAudioMessagePlayback();
+    }
+  }, [playingAudioMessageId, stopAudioMessagePlayback]);
+
+  const removeWorkspaceCaptureFromState = useCallback((params: {
+    captureId?: string | null;
+    sourceKey?: string | null;
+    itemId?: string | null;
+    retiredEchoIds?: string[];
+  }) => {
+    setWorkspaceCaptures((prev) =>
+      prev.filter((item) => {
+        if (params.captureId && item.id === params.captureId) return false;
+        if (params.sourceKey && item.sourceKey === params.sourceKey) return false;
+        return true;
+      })
+    );
+    if (params.retiredEchoIds && params.retiredEchoIds.length > 0) {
+      const retiredEchoIdSet = new Set(params.retiredEchoIds);
+      setWorkspaceEchoes((prev) => prev.filter((item) => !retiredEchoIdSet.has(item.id)));
+    }
+    removeCollectionItemsFromFlow({
+      itemId: params.itemId,
+      sourceKey: params.sourceKey,
+      workspaceCaptureId: params.captureId,
+    });
+  }, [removeCollectionItemsFromFlow]);
+
+  const updateWorkspaceCaptureStatus = useCallback(async (params: {
+    action: 'archive' | 'delete';
+    captureId?: string | null;
+    sourceKey?: string | null;
+    itemId?: string | null;
+  }) => {
+    const captureId = params.captureId?.trim() || null;
+    const sourceKey = params.sourceKey?.trim() || null;
+
+    if (!captureId && !sourceKey) {
+      removeCollectionItemsFromFlow({
+        itemId: params.itemId,
+      });
+      return true;
+    }
+
+    if (!isAuthenticated || !accessToken || !user?.id) {
+      removeWorkspaceCaptureFromState({
+        captureId,
+        sourceKey,
+        itemId: params.itemId,
+      });
+      return true;
+    }
+
+    try {
+      const response = await fetch('/api/workspace/captures', {
+        method: params.action === 'delete' ? 'DELETE' : 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${accessToken}`,
+        },
+        body: JSON.stringify(
+          params.action === 'delete'
+            ? { captureId, sourceKey }
+            : { captureId, sourceKey, action: 'archive' }
+        ),
+      });
+
+      const payload = await readJsonApiResponse<{
+        success: boolean;
+        capture?: WorkspaceCaptureMessage;
+        retiredEchoIds?: string[];
+        error?: string;
+      }>(response, params.action === 'delete' ? '彻底删除收集失败' : '从当前流移除失败');
+
+      if (response.status === 404 && sourceKey) {
+        pendingCaptureStatusBySourceKeyRef.current.set(sourceKey, params.action);
+        removeWorkspaceCaptureFromState({
+          captureId,
+          sourceKey,
+          itemId: params.itemId,
+        });
+        toast.success(params.action === 'delete' ? '这条收集会在写入完成后彻底删除' : '这条收集会在写入完成后从当前流移除');
+        return true;
+      }
+
+      if (!response.ok || !payload.success) {
+        throw new Error(payload.error || (params.action === 'delete' ? '彻底删除收集失败' : '从当前流移除失败'));
+      }
+
+      removeWorkspaceCaptureFromState({
+        captureId: payload.capture?.id || captureId,
+        sourceKey: payload.capture?.sourceKey || sourceKey,
+        itemId: params.itemId,
+        retiredEchoIds: Array.isArray(payload.retiredEchoIds) ? payload.retiredEchoIds : [],
+      });
+
+      toast.success(params.action === 'delete' ? '这条收集已彻底删除' : '这条收集已从当前流移除');
+      return true;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      toast.error(message);
+      return false;
+    }
+  }, [accessToken, isAuthenticated, removeCollectionItemsFromFlow, removeWorkspaceCaptureFromState, user?.id]);
+
   const ingestTranscriptSegments = useCallback(async (params: {
     segments: TranscriptSegment[];
     sourceType: SourceIngestType;
@@ -4276,6 +4457,11 @@ const _handleVideoAssistantMessage = useCallback((payload: {
     [collectionFeedItems, selectedCollectionContextIds]
   );
 
+  const quotedCollectionContextItems = useMemo(
+    () => collectionFeedItems.filter((item) => quotedCollectionContextIds.includes(item.id)),
+    [collectionFeedItems, quotedCollectionContextIds]
+  );
+
   const selectedWorkspaceCaptureIds = useMemo(
     () =>
       selectedCollectionContextIds
@@ -4313,6 +4499,39 @@ const _handleVideoAssistantMessage = useCallback((payload: {
     selectedCollectionContextItems,
     selectedCollectionPrimaryId,
   ]);
+
+  useEffect(() => {
+    if (quotedCollectionContextIds.length === 0) {
+      if (quotedCollectionPrimaryId) {
+        setQuotedCollectionPrimaryId(null);
+      }
+      return;
+    }
+
+    const validIds = new Set(collectionFeedItems.map((item) => item.id));
+    const nextIds = quotedCollectionContextIds.filter((id) => validIds.has(id));
+    if (nextIds.length !== quotedCollectionContextIds.length) {
+      setQuotedCollectionContextIds(nextIds);
+      return;
+    }
+
+    const nextPrimaryId = resolveCollectionContextPrimaryId(quotedCollectionContextItems, quotedCollectionPrimaryId);
+    if (nextPrimaryId !== quotedCollectionPrimaryId) {
+      setQuotedCollectionPrimaryId(nextPrimaryId);
+    }
+  }, [collectionFeedItems, quotedCollectionContextIds, quotedCollectionContextItems, quotedCollectionPrimaryId]);
+
+  useEffect(() => {
+    if (!activeCollectionMessageMenuId) return;
+    if (collectionFeedItems.some((item) => item.id === activeCollectionMessageMenuId)) return;
+    setActiveCollectionMessageMenuId(null);
+  }, [activeCollectionMessageMenuId, collectionFeedItems]);
+
+  useEffect(() => {
+    if (!confirmCollectionDeleteId) return;
+    if (confirmCollectionDeleteId === activeCollectionMessageMenuId) return;
+    setConfirmCollectionDeleteId(null);
+  }, [activeCollectionMessageMenuId, confirmCollectionDeleteId]);
 
   const selectedCollectionContextText = useMemo(
     () =>
@@ -4378,6 +4597,17 @@ const _handleVideoAssistantMessage = useCallback((payload: {
     }
   }, []);
 
+  const focusCollectionComposer = useCallback(() => {
+    if (typeof window === 'undefined') return;
+    window.requestAnimationFrame(() => {
+      const textarea = collectionComposerRef.current;
+      if (!textarea) return;
+      textarea.focus();
+      const length = textarea.value.length;
+      textarea.setSelectionRange(length, length);
+    });
+  }, []);
+
   const appendToCollectionComposer = useCallback((incomingText: string) => {
     const normalized = incomingText.replace(/\s+/g, ' ').trim();
     if (!normalized) return;
@@ -4389,31 +4619,16 @@ const _handleVideoAssistantMessage = useCallback((payload: {
       return `${base}${joiner}${normalized}`;
     });
 
-    if (typeof window !== 'undefined') {
-      window.requestAnimationFrame(() => {
-        const textarea = collectionComposerRef.current;
-        if (!textarea) return;
-        textarea.focus();
-        const length = textarea.value.length;
-        textarea.setSelectionRange(length, length);
-      });
-    }
-  }, []);
+    focusCollectionComposer();
+  }, [focusCollectionComposer]);
 
-  const appendCollectionDraftToComposer = useCallback((draft: string) => {
+  const setQuotedCollectionContext = useCallback((items: SourceIngestItem[], primaryId?: string | null) => {
     setMobileCollectionSheet(null);
     setShowMobileRecorder(false);
-    setCollectionComposerText((prev) => (prev.trim() ? `${prev.trimEnd()}\n${draft}` : draft));
-    if (typeof window !== 'undefined') {
-      window.requestAnimationFrame(() => {
-        const textarea = collectionComposerRef.current;
-        if (!textarea) return;
-        textarea.focus();
-        const length = textarea.value.length;
-        textarea.setSelectionRange(length, length);
-      });
-    }
-  }, []);
+    setQuotedCollectionContextIds(items.map((item) => item.id));
+    setQuotedCollectionPrimaryId(resolveCollectionContextPrimaryId(items, primaryId));
+    focusCollectionComposer();
+  }, [focusCollectionComposer]);
 
   const ensureWorkspaceCaptureSourceItem = useCallback((capture: WorkspaceCaptureMessage): SourceIngestItem => {
     const sourceItem = buildWorkspaceCaptureSourceItem(capture);
@@ -4452,15 +4667,9 @@ const _handleVideoAssistantMessage = useCallback((payload: {
     setIsCollectionContextSelectionMode(false);
   }, []);
 
-  const toggleCollectionContextSelectionMode = useCallback(() => {
-    setIsCollectionContextSelectionMode((prev) => {
-      const next = !prev;
-      if (!next) {
-        setSelectedCollectionContextIds([]);
-        setSelectedCollectionPrimaryId(null);
-      }
-      return next;
-    });
+  const clearQuotedCollectionContext = useCallback(() => {
+    setQuotedCollectionContextIds([]);
+    setQuotedCollectionPrimaryId(null);
   }, []);
 
   const toggleCollectionContextItem = useCallback((item: SourceIngestItem) => {
@@ -4489,28 +4698,15 @@ const _handleVideoAssistantMessage = useCallback((payload: {
   }, [collectionFeedItems, isCollectionContextSelectionMode, selectedCollectionPrimaryId]);
 
   const quoteSelectedCollectionContextToComposer = useCallback(() => {
-    const draft = buildCollectionQuoteDraft({
-      items: selectedCollectionContextItems,
-      primaryId: selectedCollectionPrimaryId,
-    });
-    if (!draft) return;
-
-    setIsCollectionContextSelectionMode(false);
-    appendCollectionDraftToComposer(draft);
-  }, [appendCollectionDraftToComposer, selectedCollectionContextItems, selectedCollectionPrimaryId]);
+    if (selectedCollectionContextItems.length === 0) return;
+    setQuotedCollectionContext(selectedCollectionContextItems, selectedCollectionPrimaryId);
+    clearCollectionContextSelection();
+  }, [clearCollectionContextSelection, selectedCollectionContextItems, selectedCollectionPrimaryId, setQuotedCollectionContext]);
 
   const quoteCollectionItemToComposer = useCallback((item: SourceIngestItem) => {
-    const draft = buildCollectionQuoteDraft({
-      items: [item],
-      primaryId: item.id,
-    });
-    if (!draft) return;
-
-    setSelectedCollectionContextIds([item.id]);
-    setSelectedCollectionPrimaryId(item.id);
-    setIsCollectionContextSelectionMode(false);
-    appendCollectionDraftToComposer(draft);
-  }, [appendCollectionDraftToComposer]);
+    clearCollectionContextSelection();
+    setQuotedCollectionContext([item], item.id);
+  }, [clearCollectionContextSelection, setQuotedCollectionContext]);
 
   const quoteWorkspaceCaptureToComposer = useCallback((capture: WorkspaceCaptureMessage) => {
     const sourceItem = ensureWorkspaceCaptureSourceItem(capture);
@@ -4523,6 +4719,55 @@ const _handleVideoAssistantMessage = useCallback((payload: {
     const sourceItem = ensureWorkspaceCaptureSourceItem(capture);
     toggleCollectionContextItem(sourceItem);
   }, [ensureWorkspaceCaptureSourceItem, toggleCollectionContextItem]);
+
+  const archiveWorkspaceCaptureFromList = useCallback(async (capture: WorkspaceCaptureMessage) => {
+    setMobileCollectionSheet(null);
+    setShowSessionHistory(false);
+    await updateWorkspaceCaptureStatus({
+      action: 'archive',
+      captureId: capture.id,
+      sourceKey: capture.sourceKey,
+      itemId: `workspace-${capture.id}`,
+    });
+  }, [updateWorkspaceCaptureStatus]);
+
+  const deleteWorkspaceCaptureFromList = useCallback(async (capture: WorkspaceCaptureMessage) => {
+    setMobileCollectionSheet(null);
+    setShowSessionHistory(false);
+    await updateWorkspaceCaptureStatus({
+      action: 'delete',
+      captureId: capture.id,
+      sourceKey: capture.sourceKey,
+      itemId: `workspace-${capture.id}`,
+    });
+  }, [updateWorkspaceCaptureStatus]);
+
+  const openCollectionMessageMenu = useCallback((itemId: string) => {
+    setMobileCollectionSheet(null);
+    setConfirmCollectionDeleteId(null);
+    setActiveCollectionMessageMenuId(itemId);
+  }, []);
+
+  const closeCollectionMessageMenu = useCallback(() => {
+    setActiveCollectionMessageMenuId(null);
+    setConfirmCollectionDeleteId(null);
+  }, []);
+
+  const cancelCollectionMessageLongPress = useCallback(() => {
+    if (collectionLongPressTimerRef.current) {
+      clearTimeout(collectionLongPressTimerRef.current);
+      collectionLongPressTimerRef.current = null;
+    }
+  }, []);
+
+  const beginCollectionMessageLongPress = useCallback((itemId: string) => {
+    cancelCollectionMessageLongPress();
+    collectionLongPressTriggeredRef.current = false;
+    collectionLongPressTimerRef.current = window.setTimeout(() => {
+      collectionLongPressTriggeredRef.current = true;
+      openCollectionMessageMenu(itemId);
+    }, 360);
+  }, [cancelCollectionMessageLongPress, openCollectionMessageMenu]);
 
   const {
     status: composerVoiceStatus,
@@ -5329,6 +5574,12 @@ const _handleVideoAssistantMessage = useCallback((payload: {
     const noteText = canAutoImportLink && inlineUrl
       ? text.replace(inlineUrl, '').replace(/\s+/g, ' ').trim()
       : text;
+    const quotedItems = quotedCollectionContextItems;
+    const quotedPrimaryId = resolveCollectionContextPrimaryId(quotedItems, quotedCollectionPrimaryId);
+    const quotedPrimaryItem = quotedItems.find((item) => item.id === quotedPrimaryId) || quotedItems[0] || null;
+    const quotedSourceKeys = quotedItems
+      .map((item) => resolveSourceItemSourceKey(item))
+      .filter((item): item is string => Boolean(item));
 
     if (noteText) {
       const nextStartMs =
@@ -5370,12 +5621,17 @@ const _handleVideoAssistantMessage = useCallback((payload: {
         occurredAt: new Date().toISOString(),
         metadata: {
           from: 'collection-composer',
+          quotedSourceItemIds: quotedItems.map((item) => item.id),
+          quotedSourceKeys,
+          quotedPrimaryId,
+          quotedPrimaryTitle: quotedPrimaryItem?.title || null,
         },
       });
     }
 
     setCollectionComposerText('');
     setSourceImportError('');
+    clearQuotedCollectionContext();
 
     if (canAutoImportLink && inlineUrl) {
       void importComposerVideoLink(inlineUrl);
@@ -5386,8 +5642,11 @@ const _handleVideoAssistantMessage = useCallback((payload: {
     collectionComposerText,
     composerCanAutoImportLink,
     composerDetectedUrl,
+    clearQuotedCollectionContext,
     importComposerVideoLink,
     persistCaptureToWorkspace,
+    quotedCollectionContextItems,
+    quotedCollectionPrimaryId,
   ]);
 
   const handleCollectionComposerPaste = useCallback((event: ClipboardEvent<HTMLTextAreaElement>) => {
@@ -5479,14 +5738,21 @@ const _handleVideoAssistantMessage = useCallback((payload: {
     const primaryId = resolveCollectionContextPrimaryId(selectedCollectionContextItems, selectedCollectionPrimaryId);
     const primaryItem = selectedCollectionContextItems.find((item) => item.id === primaryId) || selectedCollectionContextItems[0];
     const prompt = primaryItem ? buildTutorPromptForCollectionGroup(primaryItem) : undefined;
-    setIsCollectionContextSelectionMode(false);
+    clearCollectionContextSelection();
     openTutorFromCollection(prompt, { preferSelectedContext: true });
-  }, [buildTutorPromptForCollectionGroup, openTutorFromCollection, selectedCollectionContextItems, selectedCollectionPrimaryId]);
+  }, [
+    buildTutorPromptForCollectionGroup,
+    clearCollectionContextSelection,
+    openTutorFromCollection,
+    selectedCollectionContextItems,
+    selectedCollectionPrimaryId,
+  ]);
 
   const openTutorFromCollectionItem = useCallback((item: SourceIngestItem) => {
     setSelectedCollectionContextIds([item.id]);
     setSelectedCollectionPrimaryId(item.id);
     setIsCollectionContextSelectionMode(false);
+    setActiveCollectionMessageMenuId(null);
     openTutorFromCollection(buildTutorPromptForCollectionItem(item), { preferSelectedContext: true });
   }, [buildTutorPromptForCollectionItem, openTutorFromCollection]);
 
@@ -5508,6 +5774,53 @@ const _handleVideoAssistantMessage = useCallback((payload: {
       stopAudioMessagePlayback();
     }
   }, [showMobileRecorder, stopAudioMessagePlayback, viewMode]);
+
+  const activeCollectionMessageMenuItem = useMemo(
+    () => collectionFeedItems.find((item) => item.id === activeCollectionMessageMenuId) || null,
+    [activeCollectionMessageMenuId, collectionFeedItems]
+  );
+
+  const activeCollectionMessageMenuSourceKey = useMemo(
+    () => (activeCollectionMessageMenuItem ? resolveSourceItemSourceKey(activeCollectionMessageMenuItem) : null),
+    [activeCollectionMessageMenuItem]
+  );
+
+  const canUsePersistentCaptureActions = Boolean(
+    activeCollectionMessageMenuSourceKey && isAuthenticated && accessToken && user?.id
+  );
+
+  const quotedCollectionPrimaryItem = useMemo(() => {
+    if (quotedCollectionContextItems.length === 0) return null;
+    const primaryId = resolveCollectionContextPrimaryId(quotedCollectionContextItems, quotedCollectionPrimaryId);
+    return quotedCollectionContextItems.find((item) => item.id === primaryId) || quotedCollectionContextItems[0];
+  }, [quotedCollectionContextItems, quotedCollectionPrimaryId]);
+
+  const quotedCollectionSummaryText = useMemo(() => {
+    if (quotedCollectionContextItems.length === 0) return '';
+    if (quotedCollectionContextItems.length === 1 && quotedCollectionPrimaryItem) {
+      return getCollectionContextDisplayTitle(quotedCollectionPrimaryItem, 42);
+    }
+    return quotedCollectionContextItems
+      .slice(0, 2)
+      .map((item) => getCollectionContextDisplayTitle(item, 20))
+      .join(' · ');
+  }, [quotedCollectionContextItems, quotedCollectionPrimaryItem]);
+
+  const collectionComposerPlaceholder = useMemo(() => {
+    if (quotedCollectionContextItems.length > 1) {
+      return '继续顺着这几条内容写...';
+    }
+    if (quotedCollectionPrimaryItem) {
+      return `继续顺着这条${getCollectionContextTypeLabel(quotedCollectionPrimaryItem.type)}写...`;
+    }
+    return '发一句想法，贴个链接，或者先把这节课丢进来';
+  }, [quotedCollectionContextItems.length, quotedCollectionPrimaryItem]);
+
+  const openCollectionItemOriginal = useCallback((item: SourceIngestItem) => {
+    const url = item.attachmentUrl || item.mediaUrl || item.previewUrl;
+    if (!url || typeof window === 'undefined') return;
+    window.open(url, '_blank', 'noopener,noreferrer');
+  }, []);
 
   const renderMobileTopBar = useCallback(
     (menuOnboarding?: string) => {
@@ -5606,61 +5919,12 @@ const _handleVideoAssistantMessage = useCallback((payload: {
                 <div className="rounded-full bg-slate-100/90 px-3 py-1 text-[11px] font-medium text-slate-400">
                   今天
                 </div>
-                <button
-                  type="button"
-                  onClick={toggleCollectionContextSelectionMode}
-                  className={`rounded-full px-3 py-1 text-[11px] font-medium transition ${
-                    isCollectionContextSelectionMode
-                      ? 'bg-emerald-50 text-emerald-700'
-                      : 'bg-white text-slate-500 shadow-sm hover:text-slate-700'
-                  }`}
-                >
-                  {isCollectionContextSelectionMode ? '结束多选' : '多选'}
-                </button>
-              </div>
-              {isCollectionContextSelectionMode ? (
-                <div className="rounded-[20px] border border-emerald-100 bg-[linear-gradient(145deg,#ffffff_0%,#f2fcf6_100%)] px-4 py-3 shadow-sm">
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0">
-                      <p className="text-[12px] font-semibold text-slate-900">
-                        {selectedCollectionContextItems.length > 0
-                          ? `已选 ${selectedCollectionContextItems.length} 条`
-                          : '选几条要一起带上的内容'}
-                      </p>
-                      <p className="mt-1 text-[11px] leading-5 text-slate-500">
-                        {selectedCollectionContextItems.length > 0
-                          ? '像微信里多选消息一样，一起带去问 Tutor 或接着写。系统会自动抓住重点。'
-                          : '先把这次要一起带上的内容勾出来。'}
-                      </p>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={clearCollectionContextSelection}
-                      className="text-[11px] font-medium text-slate-400 transition hover:text-slate-600"
-                    >
-                      清空
-                    </button>
+                {isCollectionContextSelectionMode ? (
+                  <div className="rounded-full bg-emerald-50 px-3 py-1 text-[11px] font-medium text-emerald-700">
+                    选择中
                   </div>
-                  {selectedCollectionContextItems.length > 0 ? (
-                    <div className="mt-3 flex flex-wrap items-center gap-2">
-                      <button
-                        type="button"
-                        onClick={openTutorWithSelectedCollectionContext}
-                        className="rounded-full bg-emerald-600 px-3 py-2 text-[11px] font-semibold text-white transition hover:bg-emerald-700"
-                      >
-                        一起问 Tutor
-                      </button>
-                      <button
-                        type="button"
-                        onClick={quoteSelectedCollectionContextToComposer}
-                        className="rounded-full border border-slate-200 bg-white px-3 py-2 text-[11px] font-semibold text-slate-600 transition hover:border-slate-300 hover:text-slate-800"
-                      >
-                        一起引用
-                      </button>
-                    </div>
-                  ) : null}
-                </div>
-              ) : null}
+                ) : null}
+              </div>
             </div>
           ) : null}
 
@@ -5734,7 +5998,6 @@ const _handleVideoAssistantMessage = useCallback((payload: {
                 const isAudioPlaying = playingAudioMessageId === item.id;
                 const isAudioTranscriptOpen = expandedAudioTranscriptId === item.id;
                 const fileExtensionBadge = getFileExtensionBadge(item.title);
-                const canOpenReview = Boolean(item.reviewable && item.sessionId && item.status !== 'failed');
                 const showInlineStatus = Boolean(
                   item.status === 'failed' &&
                   item.statusText &&
@@ -5752,22 +6015,62 @@ const _handleVideoAssistantMessage = useCallback((payload: {
                 const isAttachmentMessage =
                   Boolean(item.attachmentUrl) && (item.type === 'document' || item.type === 'text');
                 const isSelectedForContext = selectedCollectionContextIds.includes(item.id);
-                const collectionActionClass = `rounded-full px-2.5 py-1 font-medium transition ${
-                  isPrimary
-                    ? 'bg-white/80 text-[#245818] hover:bg-white'
-                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200 hover:text-slate-800'
-                }`;
+                const showDesktopMoreButton = desktopShell && !isCollectionContextSelectionMode;
 
                 return (
-                  <div key={item.id} className={`flex ${isPrimary ? 'justify-end' : 'justify-start'}`}>
+                  <div
+                    key={item.id}
+                    className={`group flex ${isPrimary ? 'justify-end' : 'justify-start'}`}
+                    onContextMenu={
+                      desktopShell && !isCollectionContextSelectionMode
+                        ? (event) => {
+                            event.preventDefault();
+                            openCollectionMessageMenu(item.id);
+                          }
+                        : undefined
+                    }
+                    onTouchStart={
+                      !desktopShell && !isCollectionContextSelectionMode
+                        ? () => beginCollectionMessageLongPress(item.id)
+                        : undefined
+                    }
+                    onTouchEnd={!desktopShell ? cancelCollectionMessageLongPress : undefined}
+                    onTouchCancel={!desktopShell ? cancelCollectionMessageLongPress : undefined}
+                    onTouchMove={!desktopShell ? cancelCollectionMessageLongPress : undefined}
+                    onClickCapture={
+                      !desktopShell
+                        ? (event) => {
+                            if (!collectionLongPressTriggeredRef.current) return;
+                            collectionLongPressTriggeredRef.current = false;
+                            event.preventDefault();
+                            event.stopPropagation();
+                          }
+                        : undefined
+                    }
+                  >
                     <div className={`${messageBubbleWidthClass} ${isPrimary ? '' : 'pl-8'}`}>
                       <div
                         className={`rounded-[24px] border px-4 py-3 shadow-sm ${
                           isPrimary
                             ? 'rounded-br-[8px] border-[#b8e7a6] bg-[#d9fdd3]'
-                            : 'rounded-bl-[8px] border-slate-200 bg-white'
+                          : 'rounded-bl-[8px] border-slate-200 bg-white'
                         } ${isSelectedForContext ? 'ring-2 ring-emerald-200/80' : ''}`}
                       >
+                        {showDesktopMoreButton ? (
+                          <div className={`mb-2 flex ${isPrimary ? 'justify-end' : 'justify-start'}`}>
+                            <button
+                              type="button"
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                openCollectionMessageMenu(item.id);
+                              }}
+                              className="opacity-0 transition group-hover:opacity-100 rounded-full bg-white/78 p-1.5 text-slate-500 shadow-sm hover:text-slate-700"
+                              aria-label={`更多操作：${collectionActionTitle}`}
+                            >
+                              <MoreHorizontal size={15} />
+                            </button>
+                          </div>
+                        ) : null}
                         {isCollectionContextSelectionMode ? (
                           <div className={`mb-2 flex items-center justify-between gap-2 text-[11px] ${
                             isPrimary ? 'text-[#4f7a36]' : 'text-slate-500'
@@ -5859,30 +6162,13 @@ const _handleVideoAssistantMessage = useCallback((payload: {
                                     onClick={() =>
                                       setExpandedAudioTranscriptId((prev) => (prev === item.id ? null : item.id))
                                     }
-                                    className={collectionActionClass}
+                                    className={`rounded-full px-2.5 py-1 font-medium transition ${
+                                      isPrimary
+                                        ? 'bg-white/80 text-[#245818] hover:bg-white'
+                                        : 'bg-slate-100 text-slate-600 hover:bg-slate-200 hover:text-slate-800'
+                                    }`}
                                   >
                                     {isAudioTranscriptOpen ? '收起文字' : '看文字'}
-                                  </button>
-                                </>
-                              ) : null}
-                              {!isCollectionContextSelectionMode ? (
-                                <>
-                                  {(showAudioStatusText || (item.segmentCount > 0 && item.fullText?.trim())) ? (
-                                    <span aria-hidden="true" className="opacity-40">·</span>
-                                  ) : null}
-                                  <button
-                                    type="button"
-                                    onClick={() => {
-                                      if (canOpenReview) {
-                                        void openReviewFromCollection(item);
-                                        return;
-                                      }
-                                      openTutorFromCollectionItem(item);
-                                    }}
-                                    aria-label={`${canOpenReview ? '去复习：' : '顺着这条问 Tutor：'}${collectionActionTitle}`}
-                                    className={collectionActionClass}
-                                  >
-                                    {canOpenReview ? '去复习' : '问 Tutor'}
                                   </button>
                                 </>
                               ) : null}
@@ -5924,20 +6210,6 @@ const _handleVideoAssistantMessage = useCallback((payload: {
                                 </div>
                               </div>
                             )}
-                            {!isCollectionContextSelectionMode ? (
-                              <div className={`flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] ${
-                                isPrimary ? 'justify-end text-[#4f7a36]' : 'justify-start text-slate-500'
-                              }`}>
-                                <button
-                                  type="button"
-                                  onClick={() => openTutorFromCollectionItem(item)}
-                                  aria-label={`顺着这条问 Tutor：${collectionActionTitle}`}
-                                  className={collectionActionClass}
-                                >
-                                  问 Tutor
-                                </button>
-                              </div>
-                            ) : null}
                           </div>
                         ) : item.type === 'document' || isAttachmentMessage ? (
                           <div className="space-y-2">
@@ -5981,26 +6253,6 @@ const _handleVideoAssistantMessage = useCallback((payload: {
                                 </div>
                               </div>
                             )}
-                            <div className={`flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] ${
-                              isPrimary ? 'justify-end text-[#4f7a36]' : 'justify-start text-slate-500'
-                            }`}>
-                              {!isCollectionContextSelectionMode ? (
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    if (canOpenReview) {
-                                      void openReviewFromCollection(item);
-                                      return;
-                                    }
-                                    openTutorFromCollectionItem(item);
-                                  }}
-                                  aria-label={`${canOpenReview ? '去复习：' : '顺着这条问 Tutor：'}${collectionActionTitle}`}
-                                  className={collectionActionClass}
-                                >
-                                  {canOpenReview ? '去复习' : '问 Tutor'}
-                                </button>
-                              ) : null}
-                            </div>
                           </div>
                         ) : item.type === 'video' ? (
                           <div className="space-y-2">
@@ -6050,46 +6302,11 @@ const _handleVideoAssistantMessage = useCallback((payload: {
                               {showVideoStatusText ? (
                                 <span className="font-medium">{item.statusText}</span>
                               ) : null}
-                              {!isCollectionContextSelectionMode ? (
-                                <>
-                                  {showVideoStatusText ? (
-                                    <span aria-hidden="true" className="opacity-40">·</span>
-                                  ) : null}
-                                  <button
-                                    type="button"
-                                    onClick={() => {
-                                      if (canOpenReview) {
-                                        void openReviewFromCollection(item);
-                                        return;
-                                      }
-                                      openTutorFromCollectionItem(item);
-                                    }}
-                                    aria-label={`${canOpenReview ? '去复习：' : '顺着这条问 Tutor：'}${collectionActionTitle}`}
-                                    className={collectionActionClass}
-                                  >
-                                    {canOpenReview ? '去复习' : '问 Tutor'}
-                                  </button>
-                                </>
-                              ) : null}
                             </div>
                           </div>
                         ) : (
                           <div className="space-y-2">
                             <p className="text-sm leading-6 text-slate-900">{bubbleText}</p>
-                            {!isCollectionContextSelectionMode ? (
-                              <div className={`flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] ${
-                                isPrimary ? 'justify-end text-[#4f7a36]' : 'justify-start text-slate-500'
-                              }`}>
-                                <button
-                                  type="button"
-                                  onClick={() => openTutorFromCollectionItem(item)}
-                                  aria-label={`顺着这条问 Tutor：${collectionActionTitle}`}
-                                  className={collectionActionClass}
-                                >
-                                  问 Tutor
-                                </button>
-                              </div>
-                            ) : null}
                           </div>
                         )}
                         <div className={`mt-2 flex items-center ${isPrimary ? 'justify-end' : 'justify-start'} gap-2 text-[11px] text-slate-400`}>
@@ -6109,6 +6326,169 @@ const _handleVideoAssistantMessage = useCallback((payload: {
           )}
         </div>
       </div>
+
+      {activeCollectionMessageMenuItem ? (
+        <>
+          <button
+            type="button"
+            aria-label="关闭消息操作菜单"
+            onClick={closeCollectionMessageMenu}
+            className={`${backdropPositionClass} z-20 bg-slate-900/18 backdrop-blur-[1px]`}
+          />
+          <div className={`${collectionChromeContained ? 'absolute inset-x-0 bottom-0' : 'fixed inset-x-0 bottom-0'} z-30 px-3 pb-[max(env(safe-area-inset-bottom),12px)]`}>
+            <div className={`mx-auto w-full ${desktopShell ? 'max-w-sm' : 'max-w-md'} rounded-[24px] border border-slate-200 bg-white p-4 shadow-[0_24px_48px_rgba(15,23,42,0.16)]`}>
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="text-sm font-semibold text-slate-900">{getCollectionContextDisplayTitle(activeCollectionMessageMenuItem, 48)}</p>
+                  <p className="mt-1 text-xs text-slate-500">{getCollectionContextTypeLabel(activeCollectionMessageMenuItem.type)}</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={closeCollectionMessageMenu}
+                  className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-slate-100 text-slate-500"
+                >
+                  <X size={14} />
+                </button>
+              </div>
+
+              <div className="mt-4 space-y-2">
+                {Boolean(activeCollectionMessageMenuItem.reviewable && activeCollectionMessageMenuItem.sessionId && activeCollectionMessageMenuItem.status !== 'failed') ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      closeCollectionMessageMenu();
+                      void openReviewFromCollection(activeCollectionMessageMenuItem);
+                    }}
+                    className="flex w-full items-center justify-between rounded-[16px] bg-emerald-50 px-4 py-3 text-left text-sm font-semibold text-emerald-700 transition hover:bg-emerald-100"
+                  >
+                    <span>去复习</span>
+                    <ChevronRight size={16} />
+                  </button>
+                ) : null}
+                <button
+                  type="button"
+                  onClick={() => {
+                    closeCollectionMessageMenu();
+                    quoteCollectionItemToComposer(activeCollectionMessageMenuItem);
+                  }}
+                  className="flex w-full items-center justify-between rounded-[16px] bg-slate-50 px-4 py-3 text-left text-sm font-medium text-slate-700 transition hover:bg-slate-100"
+                >
+                  <span>引用</span>
+                  <ChevronRight size={16} className="text-slate-300" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    closeCollectionMessageMenu();
+                    openTutorFromCollectionItem(activeCollectionMessageMenuItem);
+                  }}
+                  className="flex w-full items-center justify-between rounded-[16px] bg-slate-50 px-4 py-3 text-left text-sm font-medium text-slate-700 transition hover:bg-slate-100"
+                >
+                  <span>问 Tutor</span>
+                  <ChevronRight size={16} className="text-slate-300" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    closeCollectionMessageMenu();
+                    toggleCollectionContextItem(activeCollectionMessageMenuItem);
+                  }}
+                  className="flex w-full items-center justify-between rounded-[16px] bg-slate-50 px-4 py-3 text-left text-sm font-medium text-slate-700 transition hover:bg-slate-100"
+                >
+                  <span>{selectedCollectionContextIds.includes(activeCollectionMessageMenuItem.id) ? '取消选择' : '选择'}</span>
+                  <ChevronRight size={16} className="text-slate-300" />
+                </button>
+                {Boolean(activeCollectionMessageMenuItem.attachmentUrl || activeCollectionMessageMenuItem.mediaUrl || activeCollectionMessageMenuItem.previewUrl) ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      closeCollectionMessageMenu();
+                      openCollectionItemOriginal(activeCollectionMessageMenuItem);
+                    }}
+                    className="flex w-full items-center justify-between rounded-[16px] bg-slate-50 px-4 py-3 text-left text-sm font-medium text-slate-700 transition hover:bg-slate-100"
+                  >
+                    <span>打开原件</span>
+                    <ChevronRight size={16} className="text-slate-300" />
+                  </button>
+                ) : null}
+                {canUsePersistentCaptureActions ? (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        void updateWorkspaceCaptureStatus({
+                          action: 'archive',
+                          sourceKey: activeCollectionMessageMenuSourceKey,
+                          itemId: activeCollectionMessageMenuItem.id,
+                        }).finally(() => {
+                          closeCollectionMessageMenu();
+                        });
+                      }}
+                      className="flex w-full items-center justify-between rounded-[16px] bg-amber-50 px-4 py-3 text-left text-sm font-medium text-amber-700 transition hover:bg-amber-100"
+                    >
+                      <span>从当前流移除</span>
+                      <ChevronRight size={16} className="text-amber-300" />
+                    </button>
+                    {confirmCollectionDeleteId === activeCollectionMessageMenuItem.id ? (
+                      <div className="rounded-[16px] border border-rose-100 bg-rose-50 px-4 py-3">
+                        <p className="text-sm font-semibold text-rose-700">彻底删除后，这条内容不会再进入 Tutor、回声和后续记忆。</p>
+                        <div className="mt-3 flex items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              void updateWorkspaceCaptureStatus({
+                                action: 'delete',
+                                sourceKey: activeCollectionMessageMenuSourceKey,
+                                itemId: activeCollectionMessageMenuItem.id,
+                              }).finally(() => {
+                                closeCollectionMessageMenu();
+                              });
+                            }}
+                            className="rounded-full bg-rose-600 px-3 py-2 text-xs font-semibold text-white transition hover:bg-rose-700"
+                          >
+                            确认彻底删除
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setConfirmCollectionDeleteId(null)}
+                            className="rounded-full border border-rose-200 bg-white px-3 py-2 text-xs font-medium text-rose-600 transition hover:border-rose-300"
+                          >
+                            取消
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => setConfirmCollectionDeleteId(activeCollectionMessageMenuItem.id)}
+                        className="flex w-full items-center justify-between rounded-[16px] bg-rose-50 px-4 py-3 text-left text-sm font-medium text-rose-700 transition hover:bg-rose-100"
+                      >
+                        <span>彻底删除</span>
+                        <ChevronRight size={16} className="text-rose-300" />
+                      </button>
+                    )}
+                  </>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      removeCollectionItemsFromFlow({
+                        itemId: activeCollectionMessageMenuItem.id,
+                        sourceKey: activeCollectionMessageMenuSourceKey,
+                      });
+                      closeCollectionMessageMenu();
+                    }}
+                    className="flex w-full items-center justify-between rounded-[16px] bg-rose-50 px-4 py-3 text-left text-sm font-medium text-rose-700 transition hover:bg-rose-100"
+                  >
+                    <span>删除这条</span>
+                    <ChevronRight size={16} className="text-rose-300" />
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+        </>
+      ) : null}
 
       {mobileCollectionSheet === 'more' ? (
         <>
@@ -6469,6 +6849,8 @@ const _handleVideoAssistantMessage = useCallback((payload: {
                       onQuoteCapture={quoteWorkspaceCaptureToComposer}
                       onAskTutorAboutCapture={openTutorFromWorkspaceCapture}
                       onToggleSelectCapture={toggleWorkspaceCaptureContextSelection}
+                      onArchiveCapture={archiveWorkspaceCaptureFromList}
+                      onDeleteCapture={deleteWorkspaceCaptureFromList}
                       selectedCaptureIds={selectedWorkspaceCaptureIds}
                       selectionMode={isCollectionContextSelectionMode}
                       maxHeight="100%"
@@ -6493,6 +6875,40 @@ const _handleVideoAssistantMessage = useCallback((payload: {
             </div>
           </div>
         </>
+      ) : null}
+
+      {isCollectionContextSelectionMode && selectedCollectionContextItems.length > 0 ? (
+        <div className={`relative z-20 flex-shrink-0 ${desktopShell ? 'px-6 pb-2 pt-3' : 'px-3 pb-2 pt-2'}`}>
+          <div className={`mx-auto flex w-full ${dockWidthClass} items-center gap-3 rounded-[18px] border border-emerald-100 bg-[linear-gradient(145deg,#ffffff_0%,#f2fcf6_100%)] px-4 py-3 shadow-sm`}>
+            <div className="min-w-0 flex-1">
+              <p className="text-[12px] font-semibold text-slate-900">已选 {selectedCollectionContextItems.length} 条</p>
+              <p className="mt-1 text-[11px] leading-5 text-slate-500">像微信里多选消息一样，一起引用或带去问 Tutor。</p>
+            </div>
+            <div className="flex shrink-0 items-center gap-2">
+              <button
+                type="button"
+                onClick={quoteSelectedCollectionContextToComposer}
+                className="rounded-full border border-slate-200 bg-white px-3 py-2 text-[11px] font-semibold text-slate-600 transition hover:border-slate-300 hover:text-slate-800"
+              >
+                引用
+              </button>
+              <button
+                type="button"
+                onClick={openTutorWithSelectedCollectionContext}
+                className="rounded-full bg-emerald-600 px-3 py-2 text-[11px] font-semibold text-white transition hover:bg-emerald-700"
+              >
+                问 Tutor
+              </button>
+              <button
+                type="button"
+                onClick={clearCollectionContextSelection}
+                className="rounded-full border border-slate-200 bg-white px-3 py-2 text-[11px] font-medium text-slate-500 transition hover:border-slate-300 hover:text-slate-700"
+              >
+                取消
+              </button>
+            </div>
+          </div>
+        </div>
       ) : null}
 
       {showMobileRecorder ? (
@@ -6533,6 +6949,31 @@ const _handleVideoAssistantMessage = useCallback((payload: {
             </button>
 
             <div className="min-w-0 flex-1 rounded-[8px] border border-[#d9d9d9] bg-white px-3 py-2">
+              {quotedCollectionContextItems.length > 0 ? (
+                <div className="mb-2 rounded-[12px] border border-[#dbeef8] bg-[#f5fbff] px-3 py-2 text-[11px] text-slate-500">
+                  <div className="flex items-start gap-2">
+                    <span className="mt-0.5 inline-flex h-6 w-6 items-center justify-center rounded-full bg-white text-[#2563eb]">
+                      <ChevronRight size={12} />
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <p className="font-semibold text-slate-700">
+                        {quotedCollectionContextItems.length > 1
+                          ? `已引用 ${quotedCollectionContextItems.length} 条内容`
+                          : `引用${quotedCollectionPrimaryItem ? getCollectionContextTypeLabel(quotedCollectionPrimaryItem.type) : '内容'}`}
+                      </p>
+                      <p className="mt-0.5 truncate text-slate-500">{quotedCollectionSummaryText}</p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={clearQuotedCollectionContext}
+                      className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-white text-slate-400 transition hover:text-slate-600"
+                      aria-label="取消引用"
+                    >
+                      <X size={13} />
+                    </button>
+                  </div>
+                </div>
+              ) : null}
               {composerLinkPreview ? (
                 <div className="mb-2 flex items-center gap-2 rounded-[10px] border border-[#ece4ff] bg-[#faf7ff] px-3 py-2 text-[11px] text-slate-500">
                   <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-white text-fuchsia-600">
@@ -6557,7 +6998,7 @@ const _handleVideoAssistantMessage = useCallback((payload: {
                     setCollectionComposerText(event.target.value);
                   }}
                   onPaste={handleCollectionComposerPaste}
-                  placeholder="发一句想法，贴个链接，或者先把这节课丢进来"
+                  placeholder={collectionComposerPlaceholder}
                   rows={composerRows}
                   className="max-h-24 min-h-[26px] flex-1 resize-none appearance-none border-0 bg-transparent px-0 py-0.5 text-sm leading-6 text-slate-700 outline-none ring-0 shadow-none focus:outline-none focus:ring-0 focus-visible:outline-none focus-visible:ring-0 placeholder:text-slate-400"
                 />
@@ -6899,6 +7340,8 @@ const _handleVideoAssistantMessage = useCallback((payload: {
               onQuoteCapture={quoteWorkspaceCaptureToComposer}
               onAskTutorAboutCapture={openTutorFromWorkspaceCapture}
               onToggleSelectCapture={toggleWorkspaceCaptureContextSelection}
+              onArchiveCapture={archiveWorkspaceCaptureFromList}
+              onDeleteCapture={deleteWorkspaceCaptureFromList}
               selectedCaptureIds={selectedWorkspaceCaptureIds}
               selectionMode={isCollectionContextSelectionMode}
               maxHeight={historyMaxHeight}
@@ -7087,6 +7530,7 @@ const _handleVideoAssistantMessage = useCallback((payload: {
   }, [
     asrContextHint,
     dataSource,
+    deleteWorkspaceCaptureFromList,
     handleImportTextSource,
     handleLoadHistorySession,
     handleOpenWorkspaceCaptureReview,
@@ -7095,6 +7539,7 @@ const _handleVideoAssistantMessage = useCallback((payload: {
     isCollectionContextSelectionMode,
     isRecording,
     openTutorFromWorkspaceCapture,
+    archiveWorkspaceCaptureFromList,
     quoteWorkspaceCaptureToComposer,
     removeSupportSource,
     selectedWorkspaceCaptureIds,

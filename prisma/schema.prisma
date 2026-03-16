@@ -107,6 +107,7 @@ model WorkspaceCapture {
   userId         String?
   sourceType     String
   sourceKey      String   @unique
+  status         String   @default("active")
   role           String   @default("support")
   contentType    String
   title          String
@@ -125,7 +126,9 @@ model WorkspaceCapture {
   echoes    WorkspaceEcho[]
 
   @@index([workspaceId])
+  @@index([workspaceId, status])
   @@index([userId])
+  @@index([status])
   @@index([role])
   @@index([contentType])
   @@index([createdAt])
