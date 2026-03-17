@@ -88,7 +88,7 @@ export const WORKSHOP_APP_CATALOG: WorkshopAppCatalogItem[] = [
     tags: ['AI 生图', '信息图', '知识卡片', '视觉总结'],
     coverImage: '/images/apps/infographic-cover.svg',
     pluginId: 'studio-workshop',
-    intent: '生成课堂可视化图片，先输出图文结构草案，再通过 AI 生成最终图片。支持多种场景预设。',
+    intent: '生成课堂可视化图片，可一键直接生成，也可先定制参数或让 AI 推荐图文结构后再生成。支持多种场景预设。',
     outputType: '真实图片',
     renderMode: 'custom(image-first)',
     status: 'ready',

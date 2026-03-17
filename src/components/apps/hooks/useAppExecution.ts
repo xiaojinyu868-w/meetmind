@@ -382,12 +382,20 @@ export function useAppExecution(params: UseAppExecutionParams): UseAppExecutionR
         writeCachedTaskState(sessionId, app.key, successState);
         return data.result;
       } catch (error) {
+        const isNetworkFailure =
+          error instanceof TypeError
+            ? /failed to fetch|load failed|networkerror/i.test(error.message)
+            : error instanceof Error
+              ? /failed to fetch|load failed|networkerror/i.test(error.message)
+              : false;
         const message =
           error instanceof DOMException && error.name === 'AbortError'
             ? `生成超时（${Math.round(resolveExecuteTimeoutMs(app.key) / 1000)}s），请重试或切换模型。`
-            : error instanceof Error
-              ? error.message
-              : '应用执行失败';
+            : isNetworkFailure
+              ? '网络请求失败，请确认开发服务正在运行，并在页面稳定后重试。'
+              : error instanceof Error
+                ? error.message
+                : '应用执行失败';
         const failedState = nowTaskState('error', message);
         setTaskState(failedState);
         writeCachedTaskState(sessionId, app.key, failedState);

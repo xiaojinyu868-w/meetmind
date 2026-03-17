@@ -14,39 +14,56 @@
 }
 
 .header {
-  margin: 0 auto 18px;
+  margin: 0 auto 22px;
   max-width: 1180px;
 }
 
-.title {
+.eyebrow {
   margin: 0;
-  text-align: center;
-  font-size: 44px;
-  line-height: 1.15;
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  border: 1px solid #dbeafe;
+  background: rgba(255, 255, 255, 0.78);
+  padding: 6px 10px;
+  color: #2563eb;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
+.title {
+  margin: 12px 0 0;
+  text-align: left;
+  font-size: 36px;
+  line-height: 1.12;
   letter-spacing: -0.02em;
   color: #0f172a;
   font-weight: 800;
 }
 
 .subTitle {
-  margin: 8px 0 0;
-  text-align: center;
+  margin: 10px 0 0;
+  max-width: 760px;
+  text-align: left;
   color: #475569;
   font-size: 15px;
+  line-height: 1.65;
 }
 
 .subStatus {
   margin: 10px 0 0;
-  text-align: center;
+  text-align: left;
   color: #334155;
   font-size: 13px;
+  font-weight: 600;
 }
 
 .headerActions {
   margin-top: 14px;
   display: flex;
   align-items: center;
-  justify-content: center;
+  justify-content: flex-start;
   gap: 10px;
 }
 
@@ -55,30 +72,31 @@
   align-items: center;
   justify-content: center;
   border-radius: 12px;
-  border: none;
-  background: linear-gradient(135deg, #2563eb 0%, #4f46e5 100%);
-  color: #fff;
-  font-size: 15px;
+  border: 1px solid #cbd5e1;
+  background: rgba(255, 255, 255, 0.92);
+  color: #0f172a;
+  font-size: 14px;
   font-weight: 700;
   line-height: 1;
-  padding: 11px 22px;
+  padding: 11px 16px;
   cursor: pointer;
-  box-shadow: 0 4px 14px rgba(37, 99, 235, 0.3);
-  transition: transform 0.15s ease, box-shadow 0.15s ease, opacity 0.15s ease;
+  box-shadow: 0 8px 20px rgba(15, 23, 42, 0.06);
+  transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease, opacity 0.15s ease;
 }
 
 .generateAllButton:hover {
   transform: translateY(-1px);
-  box-shadow: 0 6px 20px rgba(37, 99, 235, 0.4);
+  border-color: #93c5fd;
+  box-shadow: 0 12px 24px rgba(37, 99, 235, 0.12);
 }
 
 .generateAllButton:active {
-  transform: scale(0.97);
+  transform: scale(0.98);
 }
 
 .generateAllButton:disabled {
   cursor: not-allowed;
-  opacity: 0.6;
+  opacity: 0.58;
 }
 
 .grid {
@@ -121,6 +139,14 @@
   border-color: #86efac;
 }
 
+.cardRunning {
+  border-color: #fde68a;
+}
+
+.cardFailed {
+  border-color: #fecaca;
+}
+
 .coverWrap {
   overflow: hidden;
   border-radius: 14px;
@@ -149,23 +175,25 @@
 .category {
   margin: 0;
   color: #2563eb;
-  font-size: 30px;
-  line-height: 1.05;
+  font-size: 12px;
+  line-height: 1;
+  font-weight: 700;
+}
+
+.appName {
+  margin: 6px 0 0;
+  color: #0f172a;
+  font-size: 22px;
+  line-height: 1.25;
   font-weight: 800;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
 }
 
 .headline {
   margin: 4px 0 0;
-  color: #0f172a;
-  font-size: 24px;
-  line-height: 1.28;
-  font-weight: 700;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  color: #475569;
+  font-size: 13px;
+  line-height: 1.45;
+  font-weight: 600;
 }
 
 .generated {
@@ -251,43 +279,74 @@
 }
 
 .metaLine {
-  margin-top: 8px;
+  margin: 0;
   color: #64748b;
   font-size: 12px;
+  line-height: 1.55;
+}
+
+.previewBlock {
+  display: grid;
+  gap: 6px;
+}
+
+.previewLabel {
+  margin: 0;
+  color: #4338ca;
+  font-size: 11px;
+  font-weight: 700;
 }
 
 .actionRow {
   margin-top: auto;
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 12px;
+  flex-wrap: wrap;
+  gap: 10px;
 }
 
-.generateButton {
+.primaryAction,
+.secondaryAction {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   border-radius: 10px;
-  border: 1px solid #dbeafe;
-  background: #eff6ff;
-  color: #1d4ed8;
-  font-size: 14px;
-  font-weight: 600;
+  font-size: 13px;
+  font-weight: 700;
   line-height: 1;
-  padding: 9px 12px;
+  padding: 10px 12px;
   cursor: pointer;
-  transition: background-color 0.2s ease, border-color 0.2s ease, color 0.2s ease;
+  transition: background-color 0.18s ease, border-color 0.18s ease, color 0.18s ease, transform 0.18s ease, opacity 0.18s ease;
 }
 
-.generateButton:hover {
-  background: #dbeafe;
+.primaryAction {
+  border: 0;
+  background: #0f172a;
+  color: #fff;
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.16);
+}
+
+.primaryAction:hover {
+  transform: translateY(-1px);
+  background: #1e293b;
+}
+
+.secondaryAction {
+  border: 1px solid #cbd5e1;
+  background: #fff;
+  color: #334155;
+}
+
+.secondaryAction:hover {
   border-color: #93c5fd;
+  color: #0f172a;
+  background: #f8fbff;
 }
 
-.generateButton:disabled {
+.primaryAction:disabled,
+.secondaryAction:disabled {
   cursor: not-allowed;
-  opacity: 0.7;
+  opacity: 0.62;
 }
 
 .errorLine {
@@ -302,16 +361,17 @@
 
 .previewLine {
   margin: 0;
-  color: #4f46e5;
+  color: #4338ca;
   font-size: 12px;
-  line-height: 1.5;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  padding: 4px 8px;
-  border-radius: 8px;
+  line-height: 1.55;
+  padding: 8px 10px;
+  border-radius: 10px;
   background: #eef2ff;
   border: 1px solid #e0e7ff;
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
 }
 
 .elapsed {
@@ -354,11 +414,11 @@
 }
 
 .dock {
-  position: fixed;
-  right: 18px;
-  bottom: 18px;
-  z-index: 40;
-  width: min(420px, calc(100vw - 24px));
+  position: sticky;
+  bottom: 14px;
+  z-index: 20;
+  margin: 18px auto 0;
+  max-width: 1180px;
   user-select: none;
 }
 
@@ -373,17 +433,13 @@
   background: rgba(255, 255, 255, 0.96);
   box-shadow:
     0 8px 24px rgba(15, 23, 42, 0.1),
-    0 18px 36px rgba(30, 64, 175, 0.14);
+    0 18px 36px rgba(30, 64, 175, 0.12);
   padding: 10px 12px;
-  cursor: grab;
+  cursor: pointer;
   color: #0f172a;
   font-size: 14px;
   font-weight: 700;
   backdrop-filter: blur(10px);
-}
-
-.dockToggle:active {
-  cursor: grabbing;
 }
 
 .dockStat {
@@ -580,15 +636,11 @@
   }
 
   .title {
-    font-size: 38px;
+    font-size: 32px;
   }
 
-  .category {
-    font-size: 26px;
-  }
-
-  .headline {
-    font-size: 21px;
+  .appName {
+    font-size: 20px;
   }
 }
 
@@ -598,7 +650,12 @@
   }
 
   .title {
-    font-size: 32px;
+    font-size: 28px;
+  }
+
+  .subTitle,
+  .subStatus {
+    text-align: left;
   }
 
   .grid {
@@ -610,31 +667,26 @@
     height: 168px;
   }
 
-  .category {
-    font-size: 22px;
+  .appName {
+    font-size: 18px;
   }
 
   .headline {
-    font-size: 18px;
-  }
-
-  .link {
-    font-size: 18px;
+    font-size: 12px;
   }
 
   .actionRow {
-    gap: 10px;
+    gap: 8px;
   }
 
-  .generateButton {
-    font-size: 13px;
-    padding: 8px 10px;
+  .primaryAction,
+  .secondaryAction,
+  .generateAllButton {
+    width: 100%;
   }
 
   .dock {
-    right: 10px;
     bottom: 10px;
-    width: calc(100vw - 20px);
   }
 
   .dockToggle {

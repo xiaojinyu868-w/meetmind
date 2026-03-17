@@ -1698,15 +1698,6 @@ function StudentAppContent({
     });
   }, []);
 
-  const toggleWorkshopWindowDisplayMode = useCallback((appKey: WorkshopAppKey) => {
-    setWorkshopWindows((prev) =>
-      prev.map((item) =>
-        item.appKey === appKey
-          ? { ...item, displayMode: item.displayMode === 'fullscreen' ? 'panel' : 'fullscreen' }
-          : item
-      )
-    );
-  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -8990,7 +8981,6 @@ const _handleVideoAssistantMessage = useCallback((payload: {
         onClose={closeWorkshopWindow}
         onToggleMinimize={toggleWorkshopWindowMinimize}
         onFocus={focusWorkshopWindow}
-        onToggleDisplayMode={toggleWorkshopWindowDisplayMode}
       />
       
       {/* 主要内容区域 */}

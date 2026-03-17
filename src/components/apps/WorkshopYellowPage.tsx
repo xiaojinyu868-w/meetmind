@@ -2,7 +2,6 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Image from 'next/image';
-import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { toast } from 'sonner';
 import {
@@ -168,6 +167,13 @@ function readResultPreview(sessionId: string, appKey: string): string {
   }
 }
 
+function capabilityHint(app: WorkshopAppCatalogItem): string {
+  if (app.renderMode === 'custom(image-first)') {
+    return `输出形态：${app.outputType} · 更适合进入应用后继续定制`;
+  }
+  return `输出形态：${app.outputType} · 也支持直接生成后再进入查看`;
+}
+
 function ElapsedTimer({ startMs }: { startMs: number }) {
   const [now, setNow] = useState(Date.now());
   useEffect(() => {
@@ -189,53 +195,6 @@ export function WorkshopYellowPage(props: WorkshopYellowPageProps) {
   const [runningMap, setRunningMap] = useState<Record<string, boolean>>({});
   const [dockTasks, setDockTasks] = useState<Record<string, DockTask>>({});
   const [dockOpen, setDockOpen] = useState(false);
-
-  /* ── 任务中心拖拽 ── */
-  const dockRef = useRef<HTMLDivElement>(null);
-  const [dockPos, setDockPos] = useState<{ x: number; y: number } | null>(null);
-  const dragState = useRef<{ startX: number; startY: number; originX: number; originY: number; dragging: boolean } | null>(null);
-
-  const handleDockPointerDown = useCallback((e: React.PointerEvent) => {
-    const el = dockRef.current;
-    if (!el) return;
-    const rect = el.getBoundingClientRect();
-    dragState.current = {
-      startX: e.clientX,
-      startY: e.clientY,
-      originX: rect.left,
-      originY: rect.top,
-      dragging: false,
-    };
-    (e.target as HTMLElement).setPointerCapture(e.pointerId);
-  }, []);
-
-  const handleDockPointerMove = useCallback((e: React.PointerEvent) => {
-    const ds = dragState.current;
-    if (!ds) return;
-    const dx = e.clientX - ds.startX;
-    const dy = e.clientY - ds.startY;
-    if (!ds.dragging && Math.abs(dx) + Math.abs(dy) < 5) return; // 防止误触
-    ds.dragging = true;
-    // 限制不超出视口
-    const el = dockRef.current;
-    if (!el) return;
-    const w = el.offsetWidth;
-    const h = el.offsetHeight;
-    const nx = Math.max(0, Math.min(window.innerWidth - w, ds.originX + dx));
-    const ny = Math.max(0, Math.min(window.innerHeight - h, ds.originY + dy));
-    setDockPos({ x: nx, y: ny });
-  }, []);
-
-  const handleDockPointerUp = useCallback((e: React.PointerEvent) => {
-    const ds = dragState.current;
-    const wasDrag = ds?.dragging ?? false;
-    dragState.current = null;
-    if (!wasDrag) {
-      // 如果不是拖拽，则当作点击处理
-      setDockOpen((prev) => !prev);
-    }
-    (e.target as HTMLElement).releasePointerCapture(e.pointerId);
-  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -488,9 +447,19 @@ export function WorkshopYellowPage(props: WorkshopYellowPageProps) {
           message: undefined,
         });
         toast.success(`${app.name} 已生成完成`, {
-          action: onOpenAppWindow
-            ? { label: '打开结果', onClick: () => onOpenAppWindow(app.key) }
-            : undefined,
+          action:
+            onOpenAppWindow || app.key === 'infographic'
+              ? {
+                  label: '打开结果',
+                  onClick: () => {
+                    if (app.key === 'infographic') {
+                      router.push(buildAppHref(app.key));
+                      return;
+                    }
+                    onOpenAppWindow?.(app.key);
+                  },
+                }
+              : undefined,
         });
       } catch (error) {
         const isAborted =
@@ -563,17 +532,28 @@ export function WorkshopYellowPage(props: WorkshopYellowPageProps) {
     [appMap, runInBackground]
   );
 
+  const openAppSurface = useCallback(
+    (appKey: WorkshopAppKey) => {
+      if (onOpenAppWindow) {
+        onOpenAppWindow(appKey);
+        return;
+      }
+      router.push(buildAppHref(appKey));
+    },
+    [buildAppHref, onOpenAppWindow, router]
+  );
+
   const openTaskResult = useCallback(
     (appKey: string) => {
       const app = appMap[appKey];
       if (!app) return;
-      if (onOpenAppWindow) {
-        onOpenAppWindow(app.key);
+      if (app.key === 'infographic') {
+        router.push(buildAppHref(app.key));
         return;
       }
-      router.push(buildAppHref(app.key));
+      openAppSurface(app.key);
     },
-    [appMap, buildAppHref, onOpenAppWindow, router]
+    [appMap, buildAppHref, openAppSurface, router]
   );
 
   const generateAll = useCallback(() => {
@@ -625,32 +605,41 @@ export function WorkshopYellowPage(props: WorkshopYellowPageProps) {
     [runningMap, taskMap, visibleApps]
   );
 
+  const generatedCount = useMemo(
+    () => visibleApps.filter((app) => generatedMap[app.key]).length,
+    [generatedMap, visibleApps]
+  );
+
   const failedCount = useMemo(
     () => dockList.filter((task) => task.status === 'error' || task.status === 'cancelled').length,
     [dockList]
   );
 
   const completedCount = useMemo(() => dockList.filter((task) => task.status === 'success').length, [dockList]);
+  const canBatchGenerate = visibleApps.some((app) => !runningMap[app.key] && !generatedMap[app.key]);
 
   return (
     <section className={styles.page} data-onboarding="workshop-panel">
       <header className={styles.header}>
-        <h2 className={styles.title}>多样的智能体应用</h2>
-        <p className={styles.subTitle}>AI工坊只负责发现与进入，应用可后台并行生成，不打断主学习流。</p>
+        <p className={styles.eyebrow}>能力接口</p>
+        <h2 className={styles.title}>AI 工坊</h2>
+        <p className={styles.subTitle}>
+          这里汇总的是基于当前课堂上下文可直接调用的能力：有的适合直接生成结果，有的更适合先进入应用继续操作。
+        </p>
         <p className={styles.subStatus} data-testid="workshop-task-summary">
-          {runningCount > 0 ? `后台任务运行中：${runningCount}` : '后台任务空闲，可继续对话、看时间轴和视频。'}
+          {`共 ${visibleApps.length} 项能力 · 已生成 ${generatedCount} 项${runningCount > 0 ? ` · 生成中 ${runningCount} 项` : ''}${failedCount > 0 ? ` · 异常 ${failedCount} 项` : ''}`}
         </p>
         <div className={styles.headerActions}>
           <button
             type="button"
             className={styles.generateAllButton}
             onClick={generateAll}
-            disabled={runningCount > 0 && visibleApps.every((a) => runningMap[a.key] || generatedMap[a.key])}
+            disabled={!canBatchGenerate}
             data-testid="workshop-generate-all"
             data-onboarding="workshop-generate-all"
           >
             <Zap size={14} strokeWidth={1.75} className="inline mr-1" />
-            一键全部生成
+            批量生成未产出项
           </button>
         </div>
       </header>
@@ -660,32 +649,28 @@ export function WorkshopYellowPage(props: WorkshopYellowPageProps) {
           const generated = generatedMap[app.key];
           const taskState = taskMap[app.key];
           const isRunning = Boolean(runningMap[app.key]) || taskState?.status === 'running';
-          const href = buildAppHref(app.key);
           const label = taskLabel(taskState, generated);
           const dockTask = dockTasks[app.key];
           const isFailed = taskState?.status === 'error' && !isRunning;
           const preview = generated ? readResultPreview(sessionId, app.key) : '';
+          const cardClassName = [
+            styles.card,
+            generated ? styles.cardGenerated : '',
+            isRunning ? styles.cardRunning : '',
+            isFailed ? styles.cardFailed : '',
+          ]
+            .filter(Boolean)
+            .join(' ');
 
           return (
-            <article
-              key={app.key}
-              className={`${styles.card} ${generated ? styles.cardGenerated : ''}`}
-              data-testid={`workshop-card-${app.key}`}
-              onClick={() => {
-                if (onOpenAppWindow) {
-                  onOpenAppWindow(app.key);
-                } else {
-                  router.push(href);
-                }
-              }}
-              style={{ cursor: 'pointer' }}
-            >
+            <article key={app.key} className={cardClassName} data-testid={`workshop-card-${app.key}`}>
               <div className={styles.coverWrap}>
                 <Image src={app.coverImage} alt={app.name} width={1200} height={630} className={styles.cover} />
               </div>
               <div className={styles.rowTop}>
                 <div className={styles.titleGroup}>
                   <p className={styles.category}>{app.category}</p>
+                  <p className={styles.appName}>{app.name}</p>
                   <p className={styles.headline}>{app.headline}</p>
                 </div>
                 <span
@@ -693,11 +678,7 @@ export function WorkshopYellowPage(props: WorkshopYellowPageProps) {
                     label === '已生成' ? '' : label === '生成中' ? styles.running : styles.notGenerated
                   }`}
                 >
-                  {isRunning && dockTask ? (
-                    <ElapsedTimer startMs={dockTask.startedAt} />
-                  ) : (
-                    label
-                  )}
+                  {isRunning && dockTask ? <ElapsedTimer startMs={dockTask.startedAt} /> : label}
                 </span>
               </div>
               <div className={styles.tags}>
@@ -708,190 +689,210 @@ export function WorkshopYellowPage(props: WorkshopYellowPageProps) {
                 ))}
               </div>
               <p className={styles.description}>{app.description}</p>
+              <p className={styles.metaLine}>{capabilityHint(app)}</p>
               {preview ? (
-                <p className={styles.previewLine} title={preview}>
-                  <ClipboardList size={12} strokeWidth={1.75} className="inline mr-1 align-text-bottom" />
-                  {preview.length > 50 ? preview.slice(0, 50) + '...' : preview}
-                </p>
+                <div className={styles.previewBlock}>
+                  <p className={styles.previewLabel}>最近结果</p>
+                  <p className={styles.previewLine} title={preview}>
+                    <ClipboardList size={12} strokeWidth={1.75} className="inline mr-1 align-text-bottom" />
+                    {preview.length > 50 ? preview.slice(0, 50) + '...' : preview}
+                  </p>
+                </div>
               ) : null}
-              <div className={styles.actionRow}>
-                <button
-                  type="button"
-                  className={styles.generateButton}
-                  data-testid={`workshop-bg-generate-${app.key}`}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    void runInBackground(app);
-                  }}
-                  disabled={isRunning}
-                >
-                  {isRunning ? '后台生成中...' : generated ? (
-                    <><RotateCw size={12} strokeWidth={1.75} className="inline mr-0.5" />重新生成</>
-                  ) : (
-                    <><Play size={12} strokeWidth={1.75} className="inline mr-0.5" />后台生成</>
-                  )}
-                </button>
-                {isFailed ? (
-                  <button
-                    type="button"
-                    className={styles.retryInlineButton}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      retryTask(app.key);
-                    }}
-                    data-testid={`workshop-inline-retry-${app.key}`}
-                  >
-                    <RotateCcw size={12} strokeWidth={1.75} className="inline mr-0.5" />
-                    重试
-                  </button>
-                ) : null}
-                <Link
-                  href={href}
-                  className={styles.link}
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    if (!onOpenAppWindow) return;
-                    event.preventDefault();
-                    onOpenAppWindow(app.key);
-                  }}
-                >
-                  <ExternalLink size={12} strokeWidth={1.75} className="inline mr-0.5" />
-                  {app.key === 'infographic' ? '定制信息图' : '查看应用'}
-                </Link>
-              </div>
-              <p className={styles.metaLine}>输出形态：{app.outputType}</p>
               {taskState?.status === 'error' && taskState.error ? (
                 <p className={styles.errorLine} title={taskState.error}>
                   失败原因：{taskState.error}
                 </p>
               ) : null}
+              <div className={styles.actionRow}>
+                {isRunning ? (
+                  <button
+                    type="button"
+                    className={styles.primaryAction}
+                    onClick={() => setDockOpen(true)}
+                    data-testid={`workshop-inline-progress-${app.key}`}
+                  >
+                    <ListTodo size={12} strokeWidth={1.75} className="inline mr-0.5" />
+                    查看进度
+                  </button>
+                ) : isFailed ? (
+                  <button
+                    type="button"
+                    className={styles.primaryAction}
+                    onClick={() => retryTask(app.key)}
+                    data-testid={`workshop-inline-retry-${app.key}`}
+                  >
+                    <RotateCcw size={12} strokeWidth={1.75} className="inline mr-0.5" />
+                    重新生成
+                  </button>
+                ) : generated ? (
+                  <button
+                    type="button"
+                    className={styles.primaryAction}
+                    onClick={() => openTaskResult(app.key)}
+                    data-testid={`workshop-open-result-${app.key}`}
+                  >
+                    <ExternalLink size={12} strokeWidth={1.75} className="inline mr-0.5" />
+                    {app.key === 'infographic' ? '查看图片' : '打开结果'}
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    className={styles.primaryAction}
+                    onClick={() => openAppSurface(app.key)}
+                    data-testid={`workshop-open-app-${app.key}`}
+                  >
+                    <ExternalLink size={12} strokeWidth={1.75} className="inline mr-0.5" />
+                    打开应用
+                  </button>
+                )}
+
+                {isRunning || isFailed ? (
+                  <button
+                    type="button"
+                    className={styles.secondaryAction}
+                    onClick={() => openAppSurface(app.key)}
+                    data-testid={`workshop-open-surface-${app.key}`}
+                  >
+                    <ExternalLink size={12} strokeWidth={1.75} className="inline mr-0.5" />
+                    打开应用
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    className={styles.secondaryAction}
+                    data-testid={`workshop-bg-generate-${app.key}`}
+                    onClick={() => void runInBackground(app)}
+                    disabled={isRunning}
+                  >
+                    {generated ? (
+                      <>
+                        <RotateCw size={12} strokeWidth={1.75} className="inline mr-0.5" />
+                        重新生成
+                      </>
+                    ) : (
+                      <>
+                        <Play size={12} strokeWidth={1.75} className="inline mr-0.5" />
+                        直接生成
+                      </>
+                    )}
+                  </button>
+                )}
+              </div>
             </article>
           );
         })}
       </div>
 
-      {(runningCount > 0 || failedCount > 0) ? (
-      <div
-        ref={dockRef}
-        className={styles.dock}
-        style={dockPos ? { left: dockPos.x, top: dockPos.y, right: 'auto', bottom: 'auto' } : undefined}
-      >
-        <div
-          className={styles.dockToggle}
-          onPointerDown={handleDockPointerDown}
-          onPointerMove={handleDockPointerMove}
-          onPointerUp={handleDockPointerUp}
-          style={{ touchAction: 'none', cursor: 'grab' }}
-          data-testid="workshop-dock-toggle"
-          data-onboarding="workshop-dock-toggle"
-        >
-          <span className="flex items-center gap-1"><ListTodo size={14} strokeWidth={1.75} />任务中心</span>
-          {runningCount > 0 ? (
-            <span className={`${styles.dockStat} ${styles.dockStatRunning}`}>
-              <span className={styles.pulseIndicator} />
-              进行中 {runningCount}
+      {(runningCount > 0 || failedCount > 0 || completedCount > 0) ? (
+        <div className={styles.dock}>
+          <button
+            type="button"
+            className={styles.dockToggle}
+            onClick={() => setDockOpen((prev) => !prev)}
+            data-testid="workshop-dock-toggle"
+            data-onboarding="workshop-dock-toggle"
+          >
+            <span className="flex items-center gap-1">
+              <ListTodo size={14} strokeWidth={1.75} />
+              生成进度
             </span>
-          ) : (
-            <span className={styles.dockStat}>进行中 {runningCount}</span>
-          )}
-          <span className={styles.dockStat}>完成 {completedCount}</span>
-          {failedCount > 0 ? (
-            <span className={`${styles.dockStat} ${styles.dockStatFailed}`}>异常 {failedCount}</span>
-          ) : (
-            <span className={styles.dockStat}>异常 {failedCount}</span>
-          )}
-        </div>
+            {runningCount > 0 ? (
+              <span className={`${styles.dockStat} ${styles.dockStatRunning}`}>
+                <span className={styles.pulseIndicator} />
+                进行中 {runningCount}
+              </span>
+            ) : null}
+            <span className={styles.dockStat}>已完成 {completedCount}</span>
+            {failedCount > 0 ? <span className={`${styles.dockStat} ${styles.dockStatFailed}`}>异常 {failedCount}</span> : null}
+          </button>
 
-        {dockOpen ? (
-          <aside className={styles.dockPanel} data-testid="workshop-dock-panel">
-            <div className={styles.dockPanelHeader}>
-              <p className={styles.dockPanelTitle}>后台任务</p>
-              <div className={styles.dockHeaderActions}>
-                {failedCount > 0 ? (
-                  <button type="button" className={styles.dockActionSecondary} onClick={retryAllFailed} data-testid="workshop-dock-retry-all">
-                    全部重试
+          {dockOpen ? (
+            <aside className={styles.dockPanel} data-testid="workshop-dock-panel">
+              <div className={styles.dockPanelHeader}>
+                <p className={styles.dockPanelTitle}>生成进度</p>
+                <div className={styles.dockHeaderActions}>
+                  {failedCount > 0 ? (
+                    <button type="button" className={styles.dockActionSecondary} onClick={retryAllFailed} data-testid="workshop-dock-retry-all">
+                      全部重试
+                    </button>
+                  ) : null}
+                  {completedCount > 0 ? (
+                    <button type="button" className={styles.dockActionSecondary} onClick={clearCompleted} data-testid="workshop-dock-clear-done">
+                      清除已完成
+                    </button>
+                  ) : null}
+                  <button type="button" className={styles.dockClose} onClick={() => setDockOpen(false)}>
+                    收起
                   </button>
-                ) : null}
-                {completedCount > 0 ? (
-                  <button type="button" className={styles.dockActionSecondary} onClick={clearCompleted} data-testid="workshop-dock-clear-done">
-                    清除已完成
-                  </button>
-                ) : null}
-                <button type="button" className={styles.dockClose} onClick={() => setDockOpen(false)}>
-                  收起
-                </button>
+                </div>
               </div>
-            </div>
 
-            {dockList.length === 0 ? (
-              <p className={styles.dockEmpty}>暂无任务，点击任意应用卡片的&ldquo;后台生成&rdquo;即可开始。</p>
-            ) : (
-              <div className={styles.dockTaskList}>
-                {dockList.map((task) => {
-                  const canOpen = task.status === 'success' || task.hasResult;
-                  return (
-                    <article
-                      key={task.appKey}
-                      className={styles.dockTaskItem}
-                      data-testid={`workshop-dock-task-${task.appKey}`}
-                    >
-                      <div className={styles.dockTaskTop}>
-                        <p className={styles.dockTaskName}>
-                          {task.status === 'running' ? <span className={styles.pulseIndicator} /> : null}
-                          {task.appName}
+              {dockList.length === 0 ? (
+                <p className={styles.dockEmpty}>暂无进度记录，点击任意能力卡片的“直接生成”即可开始。</p>
+              ) : (
+                <div className={styles.dockTaskList}>
+                  {dockList.map((task) => {
+                    const canOpen = task.status === 'success' || task.hasResult;
+                    return (
+                      <article
+                        key={task.appKey}
+                        className={styles.dockTaskItem}
+                        data-testid={`workshop-dock-task-${task.appKey}`}
+                      >
+                        <div className={styles.dockTaskTop}>
+                          <p className={styles.dockTaskName}>
+                            {task.status === 'running' ? <span className={styles.pulseIndicator} /> : null}
+                            {task.appName}
+                          </p>
+                          <span className={`${styles.dockTaskStatus} ${styles[`dockStatus${task.status}`]}`}>
+                            {task.status === 'running' ? <ElapsedTimer startMs={task.startedAt} /> : statusText(task.status)}
+                          </span>
+                        </div>
+                        <p className={styles.dockTaskMeta}>
+                          第 {task.attempt} 次 · 最近更新 {formatClock(task.updatedAt)}
                         </p>
-                        <span className={`${styles.dockTaskStatus} ${styles[`dockStatus${task.status}`]}`}>
+                        {task.message ? <p className={styles.dockTaskMessage}>{task.message}</p> : null}
+                        <div className={styles.dockTaskActions}>
                           {task.status === 'running' ? (
-                            <ElapsedTimer startMs={task.startedAt} />
-                          ) : (
-                            statusText(task.status)
-                          )}
-                        </span>
-                      </div>
-                      <p className={styles.dockTaskMeta}>
-                        第 {task.attempt} 次 · 最近更新 {formatClock(task.updatedAt)}
-                      </p>
-                      {task.message ? <p className={styles.dockTaskMessage}>{task.message}</p> : null}
-                      <div className={styles.dockTaskActions}>
-                        {task.status === 'running' ? (
-                          <button
-                            type="button"
-                            className={styles.dockActionSecondary}
-                            onClick={() => cancelTask(task.appKey)}
-                            data-testid={`workshop-dock-cancel-${task.appKey}`}
-                          >
-                            取消
-                          </button>
-                        ) : null}
-                        {task.status === 'error' || task.status === 'cancelled' ? (
-                          <button
-                            type="button"
-                            className={styles.dockActionSecondary}
-                            onClick={() => retryTask(task.appKey)}
-                            data-testid={`workshop-dock-retry-${task.appKey}`}
-                          >
-                            重试
-                          </button>
-                        ) : null}
-                        {canOpen ? (
-                          <button
-                            type="button"
-                            className={styles.dockActionPrimary}
-                            onClick={() => openTaskResult(task.appKey)}
-                            data-testid={`workshop-dock-open-${task.appKey}`}
-                          >
-                            打开结果
-                          </button>
-                        ) : null}
-                      </div>
-                    </article>
-                  );
-                })}
-              </div>
-            )}
-          </aside>
-        ) : null}
-      </div>
+                            <button
+                              type="button"
+                              className={styles.dockActionSecondary}
+                              onClick={() => cancelTask(task.appKey)}
+                              data-testid={`workshop-dock-cancel-${task.appKey}`}
+                            >
+                              取消
+                            </button>
+                          ) : null}
+                          {task.status === 'error' || task.status === 'cancelled' ? (
+                            <button
+                              type="button"
+                              className={styles.dockActionSecondary}
+                              onClick={() => retryTask(task.appKey)}
+                              data-testid={`workshop-dock-retry-${task.appKey}`}
+                            >
+                              重试
+                            </button>
+                          ) : null}
+                          {canOpen ? (
+                            <button
+                              type="button"
+                              className={styles.dockActionPrimary}
+                              onClick={() => openTaskResult(task.appKey)}
+                              data-testid={`workshop-dock-open-${task.appKey}`}
+                            >
+                              {task.appKey === 'infographic' ? '查看图片' : '打开结果'}
+                            </button>
+                          ) : null}
+                        </div>
+                      </article>
+                    );
+                  })}
+                </div>
+              )}
+            </aside>
+          ) : null}
+        </div>
       ) : null}
     </section>
   );

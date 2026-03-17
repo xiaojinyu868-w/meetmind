@@ -96,6 +96,16 @@ function mapDemoAnchors(sessionId: string): Anchor[] {
 type LoadState = 'loading' | 'ready' | 'empty' | 'error';
 const LOAD_TIMEOUT_MS = 12000;
 
+function buildInfographicContentContext(summaryOverview: string, transcript: TranscriptSegment[]): string {
+  const normalizedSummary = summaryOverview.trim();
+  if (normalizedSummary) return normalizedSummary;
+  return transcript
+    .map((segment) => segment.text.trim())
+    .filter(Boolean)
+    .join(' ')
+    .slice(0, 1400);
+}
+
 export default function AppMatrixWindowPage() {
   const params = useParams<{ appKey: string }>();
   const searchParams = useSearchParams();
@@ -244,6 +254,11 @@ export default function AppMatrixWindowPage() {
     };
   }, [app, searchParams]);
 
+  const infographicContentContext = useMemo(
+    () => buildInfographicContentContext(summaryOverview, transcript),
+    [summaryOverview, transcript]
+  );
+
   const execution = useAppExecution({
     app: app || getWorkshopAppByKey('audio-overview' as WorkshopAppKey)!,
     sessionId: sessionId || 'empty-session',
@@ -253,7 +268,7 @@ export default function AppMatrixWindowPage() {
     summaryOverview,
     keyDifficulties,
     model,
-    autoRun: loadState === 'ready' && Boolean(app),
+    autoRun: loadState === 'ready' && Boolean(app) && app?.key !== 'infographic',
   });
 
   if (!app) {
@@ -297,6 +312,39 @@ export default function AppMatrixWindowPage() {
     return <div className="flex min-h-screen items-center justify-center bg-slate-50 text-sm text-rose-600">加载失败，请返回 AI工坊重试。</div>;
   }
 
+  if (app.key === 'infographic') {
+    return (
+      <div className="min-h-screen bg-[radial-gradient(1100px_420px_at_15%_-10%,#dbeafe,transparent_58%),radial-gradient(900px_380px_at_100%_0%,#ede9fe,transparent_52%),#f8fafc]">
+        <header className="sticky top-0 z-20 border-b border-slate-200/80 bg-white/90 backdrop-blur">
+          <div className="mx-auto flex max-w-6xl items-center gap-3 px-4 py-3 sm:px-6">
+            <Link
+              href="/app?workspace=apps"
+              className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-sm text-slate-700 hover:bg-slate-50"
+            >
+              <span>←</span>
+              <span>返回 AI工坊</span>
+            </Link>
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-lg font-semibold text-slate-900">信息图结果</p>
+              <p className="truncate text-xs text-slate-500">独立结果页：优先看成品，可直接下载或继续修改。</p>
+            </div>
+          </div>
+        </header>
+        <main className="mx-auto max-w-6xl px-4 py-6 sm:px-6">
+          <InfographicWindow
+            sessionId={sessionId}
+            result={execution.result}
+            taskState={execution.taskState}
+            contentContext={infographicContentContext}
+            onGenerateDraft={() => (execution.hasResult ? execution.rerun() : execution.execute())}
+            onResultUpdate={execution.updateResult}
+            standalone
+          />
+        </main>
+      </div>
+    );
+  }
+
   return (
     <AppWindowShell
       app={app}
@@ -305,12 +353,23 @@ export default function AppMatrixWindowPage() {
       model={model}
       onModelChange={setModel}
       taskState={execution.taskState}
+      primaryActionLabel={app.key === 'audio-overview' ? '重新生成播客' : undefined}
+      showPrimaryAction={app.key !== 'infographic'}
       onRegenerate={() => {
+        if (app.key === 'infographic') {
+          void (execution.hasResult ? execution.rerun() : execution.execute());
+          return;
+        }
         void execution.rerun();
       }}
     >
       {app.key === 'audio-overview' ? (
-        <PodcastWindow result={execution.result} transcript={transcript} />
+        <PodcastWindow
+          result={execution.result}
+          transcript={transcript}
+          taskState={execution.taskState}
+          onRegenerate={() => void execution.rerun()}
+        />
       ) : null}
       {app.key === 'flashcards' ? (
         <FlashcardsWindow result={execution.result} transcript={transcript} />
@@ -320,13 +379,6 @@ export default function AppMatrixWindowPage() {
       ) : null}
       {app.key === 'mindmap' ? (
         <MindmapWindow result={execution.result} transcript={transcript} />
-      ) : null}
-      {app.key === 'infographic' ? (
-        <InfographicWindow
-          sessionId={sessionId}
-          result={execution.result}
-          onResultUpdate={execution.updateResult}
-        />
       ) : null}
     </AppWindowShell>
   );

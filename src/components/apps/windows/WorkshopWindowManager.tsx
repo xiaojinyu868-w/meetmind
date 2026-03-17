@@ -1,6 +1,5 @@
 'use client';
 
-import Link from 'next/link';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ModelSelector } from '@/components/ModelSelector';
 import { DEFAULT_WORKSHOP_MODEL_ID } from '@/lib/services/llm-service';
@@ -124,7 +123,6 @@ interface WorkshopWindowManagerProps {
   onClose: (appKey: WorkshopAppKey) => void;
   onToggleMinimize: (appKey: WorkshopAppKey) => void;
   onFocus: (appKey: WorkshopAppKey) => void;
-  onToggleDisplayMode: (appKey: WorkshopAppKey) => void;
 }
 
 interface WindowCardProps {
@@ -142,7 +140,6 @@ interface WindowCardProps {
   onClose: (appKey: WorkshopAppKey) => void;
   onToggleMinimize: (appKey: WorkshopAppKey) => void;
   onFocus: (appKey: WorkshopAppKey) => void;
-  onToggleDisplayMode: (appKey: WorkshopAppKey) => void;
   stackOffset: number;
 }
 
@@ -151,6 +148,16 @@ function formatDataSource(dataSource: DataSourceType): string {
   if (dataSource === 'video') return '视频导入';
   if (dataSource === 'demo') return '演示数据';
   return '课堂数据';
+}
+
+function buildInfographicContentContext(summaryOverview: string | undefined, transcript: TranscriptSegment[]): string {
+  const normalizedSummary = (summaryOverview || '').trim();
+  if (normalizedSummary) return normalizedSummary;
+  return transcript
+    .map((segment) => segment.text.trim())
+    .filter(Boolean)
+    .join(' ')
+    .slice(0, 1400);
 }
 
 function taskLabel(taskState: AppTaskState): string {
@@ -217,49 +224,6 @@ function useDrag(baseRight: number, baseBottom: number) {
 }
 
 /* ================================================================ */
-/*  全屏/面板切换按钮                                                 */
-/* ================================================================ */
-
-function DisplayModeToggle({
-  mode,
-  onToggle,
-}: {
-  mode: WorkshopDisplayMode;
-  onToggle: () => void;
-}) {
-  const isFullscreen = mode === 'fullscreen';
-  return (
-    <button
-      type="button"
-      onClick={onToggle}
-      className="flex items-center gap-1 rounded-lg border px-2 py-1 text-xs font-medium transition-all duration-200 hover:brightness-110"
-      style={{
-        border: '1px solid ' + (isFullscreen ? '#6366f1' : '#cbd5e1'),
-        background: isFullscreen ? '#6366f120' : 'transparent',
-        color: isFullscreen ? '#6366f1' : '#64748b',
-      }}
-      title={isFullscreen ? '切换到面板模式' : '切换到全屏模式'}
-    >
-      {isFullscreen ? (
-        <>
-          <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M9 9V4.5M9 9H4.5M9 9L3.75 3.75M9 15v4.5M9 15H4.5M9 15l-5.25 5.25M15 9h4.5M15 9V4.5M15 9l5.25-5.25M15 15h4.5M15 15v4.5m0-4.5l5.25 5.25" />
-          </svg>
-          面板
-        </>
-      ) : (
-        <>
-          <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 3.75v4.5m0-4.5h4.5m-4.5 0L9 9M3.75 20.25v-4.5m0 4.5h4.5m-4.5 0L9 15M20.25 3.75h-4.5m4.5 0v4.5m0-4.5L15 9m5.25 11.25h-4.5m4.5 0v-4.5m0 4.5L15 15" />
-          </svg>
-          全屏
-        </>
-      )}
-    </button>
-  );
-}
-
-/* ================================================================ */
 /*  窗口卡片                                                         */
 /* ================================================================ */
 
@@ -279,12 +243,16 @@ function WindowCard(props: WindowCardProps) {
     onClose,
     onToggleMinimize,
     onFocus,
-    onToggleDisplayMode,
     stackOffset,
   } = props;
   const app = getWorkshopAppByKey(windowState.appKey);
   const resolvedApp = app ?? getWorkshopAppByKey('audio-overview')!;
   const isMobile = useIsMobile();
+
+  const infographicContentContext = useMemo(
+    () => buildInfographicContentContext(summaryOverview, transcript),
+    [summaryOverview, transcript]
+  );
 
   const execution = useAppExecution({
     app: resolvedApp,
@@ -296,12 +264,9 @@ function WindowCard(props: WindowCardProps) {
     keyDifficulties,
     terminologyHint,
     model,
-    autoRun: true,
+    autoRun: resolvedApp.key !== 'infographic',
   });
 
-  const standaloneHref = `/app/matrix/${resolvedApp.key}?sessionId=${encodeURIComponent(sessionId)}&dataSource=${encodeURIComponent(
-    dataSource
-  )}`;
 
   const isImmersive = IMMERSIVE_APPS.has(windowState.appKey);
   // 沉浸式应用在移动端强制全屏
@@ -341,16 +306,6 @@ function WindowCard(props: WindowCardProps) {
             {execution.taskState.status === 'running' && (
               <span className="text-xs text-amber-400/80">生成中…</span>
             )}
-            <button
-              type="button"
-              className="rounded-lg p-1.5 text-white/40 hover:text-white hover:bg-white/10 transition-colors"
-              onClick={() => onToggleDisplayMode(app.key)}
-              title="切换到面板模式"
-            >
-              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M9 9V4.5M9 9H4.5M9 9L3.75 3.75M9 15v4.5M9 15H4.5M9 15l-5.25 5.25M15 9h4.5M15 9V4.5M15 9l5.25-5.25M15 15h4.5M15 15v4.5m0-4.5l5.25 5.25" />
-              </svg>
-            </button>
           </div>
         </header>
 
@@ -391,23 +346,6 @@ function WindowCard(props: WindowCardProps) {
           <ModelSelector value={model} onChange={onModelChange} compact allowedProviders={['qwen', 'volcengine']} />
           <button
             type="button"
-            className="rounded-lg border border-slate-300 px-2 py-1 text-xs font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50"
-            onClick={() => void execution.rerun()}
-            disabled={execution.taskState.status === 'running'}
-          >
-            重新生成
-          </button>
-          <Link
-            href={standaloneHref}
-            className="rounded-lg border border-blue-300 bg-blue-50 px-2 py-1 text-xs font-medium text-blue-700 hover:bg-blue-100"
-            target="_blank"
-            rel="noreferrer"
-          >
-            独立页
-          </Link>
-          <DisplayModeToggle mode="fullscreen" onToggle={() => onToggleDisplayMode(app.key)} />
-          <button
-            type="button"
             className="rounded-md px-2 py-1 text-slate-500 hover:bg-slate-100"
             onClick={() => onClose(app.key)}
             aria-label="关闭窗口"
@@ -430,7 +368,14 @@ function WindowCard(props: WindowCardProps) {
               <MindmapWindow result={execution.result} transcript={transcript} onSeek={onSeek} />
             ) : null}
             {app.key === 'infographic' ? (
-              <InfographicWindow sessionId={sessionId} result={execution.result} onResultUpdate={execution.updateResult} />
+              <InfographicWindow
+                sessionId={sessionId}
+                result={execution.result}
+                taskState={execution.taskState}
+                contentContext={infographicContentContext}
+                onGenerateDraft={() => (execution.hasResult ? execution.rerun() : execution.execute())}
+                onResultUpdate={execution.updateResult}
+              />
             ) : null}
           </WindowErrorBoundary>
         </div>
@@ -478,26 +423,6 @@ function WindowCard(props: WindowCardProps) {
         </div>
         <button
           type="button"
-          className="shrink-0 rounded-lg border border-slate-300 px-2 py-1 text-xs font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50"
-          onClick={() => void execution.rerun()}
-          disabled={execution.taskState.status === 'running'}
-          data-testid={`workshop-window-rerun-${app.key}`}
-        >
-          重新生成
-        </button>
-        <Link
-          href={standaloneHref}
-          className="hidden rounded-lg border border-blue-300 bg-blue-50 px-2 py-1 text-xs font-medium text-blue-700 hover:bg-blue-100 md:inline-flex"
-          target="_blank"
-          rel="noreferrer"
-        >
-          独立页
-        </Link>
-        <div className="hidden md:block">
-          <DisplayModeToggle mode="panel" onToggle={() => onToggleDisplayMode(app.key)} />
-        </div>
-        <button
-          type="button"
           className="rounded-md px-2 py-1 text-slate-500 hover:bg-slate-100"
           onClick={() => onClose(app.key)}
           data-testid={`workshop-window-close-${app.key}`}
@@ -510,7 +435,13 @@ function WindowCard(props: WindowCardProps) {
       <div className="flex-1 overflow-auto bg-[radial-gradient(900px_360px_at_15%_-10%,#dbeafe,transparent_60%),radial-gradient(900px_360px_at_100%_-35%,#fde68a,transparent_60%),#f8fafc] p-3">
         <WindowErrorBoundary appName={app.name} onRetry={() => void execution.rerun()}>
           {app.key === 'audio-overview' ? (
-            <PodcastWindow result={execution.result} transcript={transcript} onSeek={onSeek} />
+            <PodcastWindow
+              result={execution.result}
+              transcript={transcript}
+              taskState={execution.taskState}
+              onSeek={onSeek}
+              onRegenerate={() => void execution.rerun()}
+            />
           ) : null}
           {app.key === 'flashcards' ? (
             <FlashcardsWindow result={execution.result} transcript={transcript} onSeek={onSeek} />
@@ -520,7 +451,14 @@ function WindowCard(props: WindowCardProps) {
             <MindmapWindow result={execution.result} transcript={transcript} onSeek={onSeek} />
           ) : null}
           {app.key === 'infographic' ? (
-            <InfographicWindow sessionId={sessionId} result={execution.result} onResultUpdate={execution.updateResult} />
+            <InfographicWindow
+              sessionId={sessionId}
+              result={execution.result}
+              taskState={execution.taskState}
+              contentContext={infographicContentContext}
+              onGenerateDraft={() => (execution.hasResult ? execution.rerun() : execution.execute())}
+              onResultUpdate={execution.updateResult}
+            />
           ) : null}
         </WindowErrorBoundary>
       </div>
@@ -542,7 +480,6 @@ export function WorkshopWindowManager(props: WorkshopWindowManagerProps) {
     onClose,
     onToggleMinimize,
     onFocus,
-    onToggleDisplayMode,
   } = props;
 
   const [model, setModel] = useState(DEFAULT_WORKSHOP_MODEL_ID);
@@ -589,7 +526,6 @@ export function WorkshopWindowManager(props: WorkshopWindowManagerProps) {
           onClose={onClose}
           onToggleMinimize={onToggleMinimize}
           onFocus={onFocus}
-          onToggleDisplayMode={onToggleDisplayMode}
           stackOffset={Math.min(index, 3) * 22}
         />
       ))}

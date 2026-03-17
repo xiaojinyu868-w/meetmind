@@ -34,11 +34,24 @@ interface AppWindowShellProps {
   onModelChange: (modelId: string) => void;
   taskState: AppTaskState;
   onRegenerate: () => void;
+  primaryActionLabel?: string;
+  showPrimaryAction?: boolean;
   children: ReactNode;
 }
 
 export function AppWindowShell(props: AppWindowShellProps) {
-  const { app, sessionId, dataSource, model, onModelChange, taskState, onRegenerate, children } = props;
+  const {
+    app,
+    sessionId,
+    dataSource,
+    model,
+    onModelChange,
+    taskState,
+    onRegenerate,
+    primaryActionLabel,
+    showPrimaryAction = true,
+    children,
+  } = props;
   const statusColor = useMemo(() => {
     if (taskState.status === 'success') return 'bg-emerald-50 text-emerald-700 border-emerald-200';
     if (taskState.status === 'running') return 'bg-amber-50 text-amber-700 border-amber-200';
@@ -70,15 +83,17 @@ export function AppWindowShell(props: AppWindowShellProps) {
             compact
             allowedProviders={['qwen', 'volcengine']}
           />
-          <button
-            type="button"
-            data-testid="app-window-rerun"
-            className="rounded-lg bg-blue-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
-            onClick={onRegenerate}
-            disabled={taskState.status === 'running'}
-          >
-            重新生成
-          </button>
+          {showPrimaryAction ? (
+            <button
+              type="button"
+              data-testid="app-window-rerun"
+              className="rounded-lg bg-blue-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
+              onClick={onRegenerate}
+              disabled={taskState.status === 'running'}
+            >
+              {primaryActionLabel || '重新生成'}
+            </button>
+          ) : null}
         </div>
       </header>
       <main className="mx-auto max-w-7xl px-4 py-5 sm:px-6">{children}</main>
