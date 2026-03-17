@@ -247,17 +247,17 @@ export const ThinkingGuideRenderer = memo(function ThinkingGuideRenderer({
 
         {/* 思维方法总结 - 统一使用左边距 */}
         {parsed.methods && (
-          <div className={`mt-2 flex items-center gap-2 bg-emerald-50 rounded-lg border border-emerald-200 ${isMobile ? 'ml-9 px-2 py-1.5' : 'ml-14 px-3 py-2'}`}>
+          <div className={`mt-2 flex items-start gap-2 bg-emerald-50 rounded-lg border border-emerald-200 ${isMobile ? 'ml-9 px-2 py-1.5' : 'ml-14 px-3 py-2'}`}>
             <span className="text-emerald-500 flex-shrink-0">🌟</span>
-            <p className={`text-emerald-700 ${isMobile ? 'text-[10px]' : 'text-xs'}`}>
-              <span className="font-medium">思维方法：</span>
+            <div className={`min-w-0 text-emerald-700 ${isMobile ? 'text-[10px]' : 'text-xs'}`}>
+              <div className="mb-1 font-medium">思维方法：</div>
               <StreamingMarkdown
                 content={parsed.methods}
                 isStreaming={false}
                 onTimestampClick={onTimestampClick}
                 citations={citations}
               />
-            </p>
+            </div>
           </div>
         )}
       </div>

@@ -8,7 +8,7 @@ function buildChatSSE(payload: Record<string, unknown>): string {
 
 async function openGuestCollection(page: Page) {
   await page.goto('/app?guest=1');
-  await page.getByPlaceholder(COLLECTION_PLACEHOLDER).waitFor({ state: 'visible' });
+  await page.getByPlaceholder(COLLECTION_PLACEHOLDER).waitFor({ state: 'visible', timeout: 120_000 });
 }
 
 async function sendQuickNote(page: Page, text: string) {

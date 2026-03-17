@@ -591,7 +591,8 @@ test.describe('Closed Loop Regression', () => {
     await expect(page.getByText('平台型入口、内容分发引擎、底层数据基建。')).toBeVisible();
   });
 
-  test('ai workshop opens floating app window without leaving workspace', async ({ page }) => {
+  test('ai workshop opens app window without leaving workspace', async ({ page }) => {
+    await mockTutorApi(page);
     await mockAppMatrixApi(page);
     await openApp(page);
     await enterReviewMode(page);
@@ -599,9 +600,9 @@ test.describe('Closed Loop Regression', () => {
     await page.getByTestId('review-tab-apps').click();
     await expect(page.getByTestId('workshop-card-flashcards')).toBeVisible();
 
-    await page.getByTestId('workshop-card-flashcards').getByRole('link').click();
+    await page.getByTestId('workshop-open-app-flashcards').click();
     await expect(page).toHaveURL(/\/app/);
-    await expect(page.getByTestId('floating-workshop-window-flashcards')).toBeVisible();
+    await expect(page.getByTestId('workshop-window-flashcards-fullscreen')).toBeVisible();
     await expect(page.getByTestId('flashcards-window')).toBeVisible();
 
     const cached = await page.evaluate(() => {
@@ -616,11 +617,11 @@ test.describe('Closed Loop Regression', () => {
     expect(cached).toBeTruthy();
 
     await page.reload();
-    await page.getByTestId('mode-review-button').click();
-    await expect(page.getByTestId('floating-workshop-window-flashcards')).toBeVisible();
+    await expect(page.getByTestId('workshop-window-flashcards-fullscreen')).toBeVisible();
   });
 
   test('workshop background generation does not block timeline/chat flow', async ({ page }) => {
+    await mockTutorApi(page);
     await mockAppMatrixApi(page, { executeDelayMs: 1200 });
     await openApp(page);
     await enterReviewMode(page);
@@ -629,7 +630,7 @@ test.describe('Closed Loop Regression', () => {
     await expect(page.getByTestId('workshop-card-flashcards')).toBeVisible();
 
     await page.getByTestId('workshop-bg-generate-flashcards').click();
-    await expect(page.getByTestId('workshop-task-summary')).toContainText('后台任务运行中');
+    await expect(page.getByTestId('workshop-task-summary')).toContainText('生成中 1 项');
 
     await page.getByRole('button', { name: '时间轴' }).first().click();
     await expect(page.getByTestId('review-tab-apps')).toBeVisible();
@@ -670,7 +671,7 @@ test.describe('Closed Loop Regression', () => {
     await page.getByTestId('workshop-dock-open-flashcards').click();
     await expect(page).toHaveURL(/\/app/);
     await expect(page).not.toHaveURL(/\/app\/matrix\/flashcards/);
-    await expect(page.getByTestId('floating-workshop-window-flashcards')).toBeVisible();
+    await expect(page.getByTestId('workshop-window-flashcards-fullscreen')).toBeVisible();
     await expect(page.getByTestId('flashcards-window')).toBeVisible();
   });
 

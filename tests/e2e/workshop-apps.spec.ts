@@ -220,17 +220,19 @@ test.describe('Workshop Apps', () => {
     await expect(page.getByTestId('workshop-card-flashcards')).toBeVisible();
     await expect(page.getByTestId('workshop-card-quiz')).toBeVisible();
 
-    await page.getByTestId('workshop-card-flashcards').getByRole('link').click();
+    await page.getByTestId('workshop-open-app-flashcards').click();
     await expect(page).toHaveURL(/\/app/);
-    await expect(page.getByTestId('floating-workshop-window-flashcards')).toBeVisible();
+    await expect(page.getByTestId('workshop-window-flashcards-fullscreen')).toBeVisible();
     await expect(page.getByTestId('flashcards-window')).toBeVisible();
+    await page
+      .getByTestId('workshop-window-flashcards-fullscreen')
+      .getByRole('button', { name: '关闭窗口' })
+      .click();
+    await expect(page.getByTestId('workshop-window-flashcards-fullscreen')).toHaveCount(0);
 
-    await page.getByTestId('workshop-window-minimize-flashcards').click();
-    await expect(page.getByTestId('workshop-window-restore-flashcards')).toBeVisible();
-
-    await page.getByTestId('workshop-card-quiz').getByRole('link').click();
+    await page.getByTestId('workshop-open-app-quiz').click();
     await expect(page).toHaveURL(/\/app/);
-    await expect(page.getByTestId('floating-workshop-window-quiz')).toBeVisible();
+    await expect(page.getByTestId('workshop-window-quiz-fullscreen')).toBeVisible();
     await expect(page.getByTestId('quiz-window')).toBeVisible();
 
     const isolation = await page.evaluate(() => {
