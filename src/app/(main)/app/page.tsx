@@ -1,6 +1,6 @@
 ﻿'use client';
 
-import { useState, useEffect, useCallback, useRef, useMemo, Suspense, type ChangeEvent, type ClipboardEvent, type DragEvent } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo, Suspense, type ChangeEvent, type ClipboardEvent } from 'react';
 import { flushSync } from 'react-dom';
 import { useSearchParams } from 'next/navigation';
 import dynamic from 'next/dynamic';
@@ -96,7 +96,6 @@ const ActionList = dynamic(() => import('@/components/ActionList').then(m => ({ 
 const ActionSidebar = dynamic(() => import('@/components/ActionSidebar').then(m => ({ default: m.ActionSidebar })), { ssr: false });
 const ActionDrawer = dynamic(() => import('@/components/ActionDrawer').then(m => ({ default: m.ActionDrawer })), { ssr: false });
 import { ResizablePanel } from '@/components/layout/ResizablePanel';
-const VideoLinkImporter = dynamic(() => import('@/components/VideoLinkImporter').then(m => ({ default: m.VideoLinkImporter })), { ssr: false });
 const VideoReviewPlayer = dynamic(() => import('@/components/VideoReviewPlayer').then(m => ({ default: m.VideoReviewPlayer })), { ssr: false });
 const AITutor = dynamic(() => import('@/components/AITutor').then(m => ({ default: m.AITutor })), { ssr: false });
 const TranscriptFlowView = dynamic(() => import('@/components/TranscriptFlowView').then(m => ({ default: m.TranscriptFlowView })), { ssr: false });
@@ -120,8 +119,8 @@ import { type FloatingWorkshopWindowState, getDefaultDisplayMode } from '@/compo
 const WorkshopWindowManager = dynamic(() => import('@/components/apps/windows/WorkshopWindowManager').then(m => ({ default: m.WorkshopWindowManager })), { ssr: false });
 const ConversationList = dynamic(() => import('@/components/ConversationHistory/ConversationList').then(m => ({ default: m.ConversationList })), { ssr: false });
 const AIChat = dynamic(() => import('@/components/AIChat').then(m => ({ default: m.AIChat })), { ssr: false });
-const SessionHistoryList = dynamic(() => import('@/components/SessionHistoryList').then(m => ({ default: m.SessionHistoryList })), { ssr: false });
 const WorkspaceCaptureList = dynamic(() => import('@/components/WorkspaceCaptureList').then(m => ({ default: m.WorkspaceCaptureList })), { ssr: false });
+import type { WorkspaceCaptureListItem } from '@/components/WorkspaceCaptureList';
 import { isWorkshopAppKey, type WorkshopAppKey } from '@/lib/ai-native/app-catalog';
 
 // Lazy-load demo data.
@@ -340,6 +339,13 @@ interface WorkspaceCaptureMessage {
   occurredAt?: string | null;
   createdAt: string;
   metadata?: Record<string, unknown> | null;
+}
+
+type WorkspaceCaptureEditorMode = 'text' | 'transcript' | 'meta';
+
+interface WorkspaceCaptureEditorState {
+  capture: WorkspaceCaptureMessage;
+  mode: WorkspaceCaptureEditorMode;
 }
 
 interface WorkspaceEchoMessage {
@@ -726,16 +732,10 @@ function mergeWorkspaceCaptures(
       previewText: compactText(item.previewText || item.title, 220),
     }));
 
-  const hiddenIds = new Set(
-    normalized
-      .filter((item) => item.status && item.status !== 'active')
-      .map((item) => item.id)
-  );
-
   const unique: WorkspaceCaptureMessage[] = [];
   const seen = new Set<string>();
   for (const item of normalized) {
-    if (hiddenIds.has(item.id)) continue;
+    if (item.status === 'deleted') continue;
     if (seen.has(item.id)) continue;
     seen.add(item.id);
     unique.push(item);
@@ -809,6 +809,12 @@ function inferWorkspaceCaptureRole(item: WorkspaceCaptureMessage): SourceIngestR
 function resolveSourceItemSourceKey(item: SourceIngestItem): string | null {
   if (item.sourceKey?.trim()) return item.sourceKey.trim();
   if (item.id.startsWith('wechat-')) return `wechat:${item.id.replace('wechat-', '')}`;
+  if (item.id.startsWith('quick-note-')) return `manual:${item.id}`;
+  if (item.id.startsWith('pasted-text-')) return `import:${item.id}`;
+  if ((item.type === 'audio' || item.type === 'video') && item.role === 'primary') return `ingest:${item.id}`;
+  if (item.role === 'support' && (item.type === 'document' || item.type === 'image' || item.type === 'text')) {
+    return `support:${item.id}`;
+  }
   return null;
 }
 
@@ -904,6 +910,42 @@ function buildWechatCaptureSourceItem(message: WechatCaptureMessage): SourceInge
     segmentCount: fullText ? 1 : 0,
     addedAt,
     origin: 'user',
+  };
+}
+
+function buildCollectionListItemFromSourceItem(
+  item: SourceIngestItem,
+  status: 'active' | 'archived' = 'active'
+): WorkspaceCaptureListItem {
+  const inferredSourceKey = resolveSourceItemSourceKey(item) || `local:${item.id}`;
+  const normalizedText =
+    compactMultilineText(item.fullText || item.preview || item.title, 3200) || null;
+
+  return {
+    id: item.id,
+    sourceKey: inferredSourceKey,
+    sourceType: 'local-collection',
+    kind: 'local',
+    sourceItemId: item.id,
+    editable: false,
+    status,
+    role: item.role,
+    contentType: item.type,
+    title: item.title,
+    previewText: item.preview || item.title,
+    normalizedText,
+    sourceUrl: item.attachmentUrl || null,
+    mediaUrl: item.mediaUrl || null,
+    tutorContext: normalizedText,
+    occurredAt: item.addedAt,
+    createdAt: item.addedAt,
+    metadata: {
+      sourceItemId: item.id,
+      localOnly: true,
+      sessionId: item.sessionId || null,
+      duration: item.durationMs || null,
+      status: item.status || 'ready',
+    },
   };
 }
 
@@ -1269,7 +1311,6 @@ function StudentAppContent({
   const [selectedHistoryConversation, setSelectedHistoryConversation] = useState<ConversationHistory | null>(null);
   
   // NOTE: cleaned corrupted legacy comment.
-  const [showSessionHistory, setShowSessionHistory] = useState(false);
   const [mobileCollectionSheet, setMobileCollectionSheet] = useState<MobileCollectionSheet>(null);
   const [showMobileRecorder, setShowMobileRecorder] = useState(false);
   const [collectionComposerText, setCollectionComposerText] = useState('');
@@ -1282,8 +1323,6 @@ function StudentAppContent({
   const [manualEchoDebugNote, setManualEchoDebugNote] = useState('');
   const [manualEchoFeedback, setManualEchoFeedback] = useState<ManualEchoFeedbackState | null>(null);
   const collectionComposerRef = useRef<HTMLTextAreaElement | null>(null);
-  const [sourcePanelMode, setSourcePanelMode] = useState<'audio' | 'support'>('audio');
-  const [sourceImportMode, setSourceImportMode] = useState<'files' | 'text'>('files');
   const [sourceFilePickerMode, setSourceFilePickerMode] = useState<'audio' | 'support' | 'all'>('all');
   const [activeSourceImportCount, setActiveSourceImportCount] = useState(0);
   const [sourceImportError, setSourceImportError] = useState('');
@@ -1295,17 +1334,22 @@ function StudentAppContent({
     duration: number;
   } | null>(null);
   const [expandedAudioTranscriptId, setExpandedAudioTranscriptId] = useState<string | null>(null);
-  const [sourceTextInput, setSourceTextInput] = useState('');
-  const [asrContextHint, setAsrContextHint] = useState('');
+  const [asrContextHint] = useState('');
   const [sourceItems, setSourceItems] = useState<SourceIngestItem[]>([]);
+  const [archivedLocalCollectionItems, setArchivedLocalCollectionItems] = useState<SourceIngestItem[]>([]);
   const [supportReferences, setSupportReferences] = useState<SupportReferenceItem[]>([]);
   const [isCollectionContextSelectionMode, setIsCollectionContextSelectionMode] = useState(false);
   const [selectedCollectionContextIds, setSelectedCollectionContextIds] = useState<string[]>([]);
   const [selectedCollectionPrimaryId, setSelectedCollectionPrimaryId] = useState<string | null>(null);
   const [quotedCollectionContextIds, setQuotedCollectionContextIds] = useState<string[]>([]);
   const [quotedCollectionPrimaryId, setQuotedCollectionPrimaryId] = useState<string | null>(null);
+  const [confirmSelectedCollectionDelete, setConfirmSelectedCollectionDelete] = useState(false);
   const [activeCollectionMessageMenuId, setActiveCollectionMessageMenuId] = useState<string | null>(null);
   const [confirmCollectionDeleteId, setConfirmCollectionDeleteId] = useState<string | null>(null);
+  const [workspaceCaptureEditor, setWorkspaceCaptureEditor] = useState<WorkspaceCaptureEditorState | null>(null);
+  const [workspaceCaptureEditorTitle, setWorkspaceCaptureEditorTitle] = useState('');
+  const [workspaceCaptureEditorBody, setWorkspaceCaptureEditorBody] = useState('');
+  const [isSavingWorkspaceCaptureEdit, setIsSavingWorkspaceCaptureEdit] = useState(false);
   const sourceImporting = activeSourceImportCount > 0;
   const hasCollectionContext = useMemo(
     () => segments.length > 0 || sourceItems.length > 0 || supportReferences.length > 0 || workspaceEchoes.length > 0,
@@ -1893,7 +1937,6 @@ function StudentAppContent({
       viewMode,
       sessionId,
       dataSource,
-      showSessionHistory,
       reviewTab,
       videoWorkspaceTab,
       selectedAnchorId: selectedAnchor?.id,
@@ -1912,7 +1955,6 @@ function StudentAppContent({
     reviewTab,
     selectedAnchor?.id,
     sessionId,
-    showSessionHistory,
     showTranscriptBar,
     videoWorkspaceTab,
     viewMode,
@@ -1978,7 +2020,6 @@ function StudentAppContent({
     setSegments(loadedSegments);
     setAnchors(anchorsWithResolved);
     setSelectedAnchor(null);
-    setShowSessionHistory(false);
     setShowConversationHistory(false);
     setSelectedHistoryConversation(null);
     setActionItems([]);
@@ -2112,7 +2153,6 @@ function StudentAppContent({
     liveSegmentsRef.current = loadedSegments;
     setAnchors(anchorsWithResolved);
     setSelectedAnchor(null);
-    setShowSessionHistory(false);
     setShowConversationHistory(false);
     setSelectedHistoryConversation(null);
     setActionItems([]);
@@ -2237,9 +2277,6 @@ function StudentAppContent({
       if (savedAppState?.dataSource) {
         setDataSource(savedAppState.dataSource);
       }
-      if (typeof savedAppState?.showSessionHistory === 'boolean') {
-        setShowSessionHistory(savedAppState.showSessionHistory);
-      }
 
       if (finalViewMode === 'review') {
         let restoredFromSession = false;
@@ -2256,7 +2293,6 @@ function StudentAppContent({
         if (!restoredFromSession) {
           setViewMode('review');
           setSessionId('demo-session');
-          setShowSessionHistory(false);
           setDataSource('demo');
           setVideoSource(null);
           setVideoInsightItems([]);
@@ -2356,7 +2392,6 @@ function StudentAppContent({
         setSelectedAnchor(null);
         if (!savedAppState) {
           setDataSource('live');
-          setShowSessionHistory(false);
           setVideoSource(null);
           setVideoInsightItems([]);
           setActiveVideoInsightId(null);
@@ -2631,9 +2666,6 @@ function StudentAppContent({
     setActiveVideoInsightId(null);
     setSourceItems([]);
     setSourceImportError('');
-    setSourceTextInput('');
-    setSourceImportMode('files');
-    setSourcePanelMode('audio');
     setSourceFilePickerMode('all');
     setSupportReferences([]);
     liveSegmentsRef.current = [];
@@ -2798,7 +2830,6 @@ function StudentAppContent({
     // NOTE: cleaned corrupted legacy comment.
     setShowConversationHistory(false);
     setSelectedHistoryConversation(null);
-    setShowSessionHistory(false);
     if (newMode === 'record') {
       setVideoSource(null);
       setVideoInsightItems([]);
@@ -2933,57 +2964,6 @@ function StudentAppContent({
     const timer = setTimeout(() => onboarding.startFlow('workshop'), 300);
     return () => clearTimeout(timer);
   }, [isMobile, mobileSubPage, onboarding, reviewTab, videoSource, videoWorkspaceTab, viewMode, isGuestFastEntry]);
-
-  // Load a history session and switch to review mode.
-  const handleLoadHistorySession = useCallback(async (session: AudioSession) => {
-    try {
-      const restored = await restoreReviewSession(session.sessionId, {
-        reviewTab: 'timeline',
-        videoWorkspaceTab: 'chat',
-        currentTime: 0,
-        showTranscriptBar: false,
-      });
-      if (!restored) {
-        throw new Error('session-not-restored');
-      }
-      setSourceItems([]);
-      setSourceImportError('');
-      setSourceTextInput('');
-      setSourceImportMode('files');
-      setSourcePanelMode('audio');
-      setSourceFilePickerMode('all');
-      setSupportReferences([]);
-    } catch (err) {
-      console.error('加载历史会话失败:', err);
-      setSourceImportError('这条历史暂时还没打开，请稍后再试。');
-    }
-  }, [restoreReviewSession]);
-
-  const handleOpenWorkspaceCaptureReview = useCallback(async (capture: WorkspaceCaptureMessage) => {
-    const sessionIdFromCapture =
-      capture.metadata && typeof capture.metadata.sessionId === 'string'
-        ? capture.metadata.sessionId
-        : null;
-
-    if (!sessionIdFromCapture) return;
-
-    setMobileCollectionSheet(null);
-    setShowSessionHistory(false);
-    setShowMobileRecorder(false);
-    setShowCollectionPulsePreview(false);
-
-    try {
-      const restored = await restoreReviewSession(sessionIdFromCapture, {
-        reviewTab: 'timeline',
-        videoWorkspaceTab: capture.contentType === 'video' ? 'chat' : 'chat',
-        currentTime: 0,
-        showTranscriptBar: false,
-      });
-      if (restored) return;
-    } catch (error) {
-      console.error('从工作区收集进入复习失败:', error);
-    }
-  }, [restoreReviewSession]);
 
   const handleTranscriptUpdate = useCallback((newSegments: TranscriptSegment[], meta?: { recordingId?: string }) => {
     const pendingAudio = resolvePendingRecordedAudio(meta?.recordingId);
@@ -3470,6 +3450,7 @@ const _handleVideoAssistantMessage = useCallback((payload: {
 
   const appendSourceItem = useCallback((params: {
     id?: string;
+    sourceKey?: string;
     type: SourceIngestType;
     role: SourceIngestRole;
     title: string;
@@ -3490,6 +3471,7 @@ const _handleVideoAssistantMessage = useCallback((payload: {
     setSourceItems((prev) => {
       const item: SourceIngestItem = {
         id: params.id || `${params.type}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+        sourceKey: params.sourceKey,
         type: params.type,
         role: params.role,
         title: params.title,
@@ -3523,6 +3505,7 @@ const _handleVideoAssistantMessage = useCallback((payload: {
 
   const appendSupportSource = useCallback((params: {
     id?: string;
+    sourceKey?: string;
     type: Extract<SourceIngestType, 'document' | 'text'>;
     title: string;
     segments: TranscriptSegment[];
@@ -3533,6 +3516,7 @@ const _handleVideoAssistantMessage = useCallback((payload: {
     if (params.appendItem !== false) {
       appendSourceItem({
         id: supportId,
+        sourceKey: params.sourceKey,
         type: params.type,
         role: 'support',
         title: params.title,
@@ -3555,11 +3539,6 @@ const _handleVideoAssistantMessage = useCallback((payload: {
       reference,
     };
   }, [appendSourceItem]);
-
-  const removeSupportSource = useCallback((id: string) => {
-    setSourceItems((prev) => prev.filter((item) => !(item.id === id && item.role === 'support')));
-    setSupportReferences((prev) => prev.filter((item) => item.id !== id));
-  }, []);
 
   const removeCollectionItemsFromFlow = useCallback((params: {
     itemId?: string | null;
@@ -3601,6 +3580,51 @@ const _handleVideoAssistantMessage = useCallback((payload: {
     }
   }, [playingAudioMessageId, stopAudioMessagePlayback]);
 
+  const archiveLocalCollectionItem = useCallback((item: SourceIngestItem) => {
+    setArchivedLocalCollectionItems((prev) => {
+      const sourceKey = resolveSourceItemSourceKey(item);
+      const next = prev.filter((entry) => {
+        if (entry.id === item.id) return false;
+        if (sourceKey && resolveSourceItemSourceKey(entry) === sourceKey) return false;
+        return true;
+      });
+      return [...next, item];
+    });
+
+    removeCollectionItemsFromFlow({
+      itemId: item.id,
+      sourceKey: resolveSourceItemSourceKey(item),
+    });
+  }, [removeCollectionItemsFromFlow]);
+
+  const restoreLocalCollectionItem = useCallback((item: SourceIngestItem) => {
+    setArchivedLocalCollectionItems((prev) => prev.filter((entry) => entry.id !== item.id));
+    setSourceItems((prev) => {
+      const sourceKey = resolveSourceItemSourceKey(item);
+      if (prev.some((entry) => entry.id === item.id || (sourceKey && resolveSourceItemSourceKey(entry) === sourceKey))) {
+        return prev;
+      }
+      return [...prev, item];
+    });
+
+    const snippet = compactText((item.fullText || item.preview || '').trim(), 2800);
+    if (item.role === 'support' && snippet) {
+      setSupportReferences((prev) => mergeSupportReferences(prev, [{
+        id: item.id,
+        title: item.title,
+        snippet,
+      }]));
+    }
+  }, []);
+
+  const deleteLocalCollectionItem = useCallback((item: SourceIngestItem) => {
+    setArchivedLocalCollectionItems((prev) => prev.filter((entry) => entry.id !== item.id));
+    removeCollectionItemsFromFlow({
+      itemId: item.id,
+      sourceKey: resolveSourceItemSourceKey(item),
+    });
+  }, [removeCollectionItemsFromFlow]);
+
   const removeWorkspaceCaptureFromState = useCallback((params: {
     captureId?: string | null;
     sourceKey?: string | null;
@@ -3625,11 +3649,85 @@ const _handleVideoAssistantMessage = useCallback((payload: {
     });
   }, [removeCollectionItemsFromFlow]);
 
+  const syncWorkspaceCaptureIntoState = useCallback((params: {
+    capture: WorkspaceCaptureMessage;
+    retiredEchoIds?: string[];
+    ensureActiveSourceItem?: boolean;
+  }) => {
+    const capture = params.capture;
+    setWorkspaceCaptures((prev) => mergeWorkspaceCaptures(prev, [capture]));
+
+    if (params.retiredEchoIds && params.retiredEchoIds.length > 0) {
+      const retiredEchoIdSet = new Set(params.retiredEchoIds);
+      setWorkspaceEchoes((prev) => prev.filter((item) => !retiredEchoIdSet.has(item.id)));
+    }
+
+    if (capture.status === 'deleted') {
+      removeWorkspaceCaptureFromState({
+        captureId: capture.id,
+        sourceKey: capture.sourceKey,
+        itemId: `workspace-${capture.id}`,
+        retiredEchoIds: params.retiredEchoIds,
+      });
+      return;
+    }
+
+    if (capture.status === 'archived') {
+      removeCollectionItemsFromFlow({
+        itemId: `workspace-${capture.id}`,
+        sourceKey: capture.sourceKey,
+        workspaceCaptureId: capture.id,
+      });
+      return;
+    }
+
+    const sourceItem = buildWorkspaceCaptureSourceItem(capture);
+    setSourceItems((prev) => {
+      const index = prev.findIndex(
+        (item) => item.id === sourceItem.id || resolveSourceItemSourceKey(item) === capture.sourceKey
+      );
+
+      if (index >= 0) {
+        const current = prev[index];
+        const next = [...prev];
+        next[index] = {
+          ...current,
+          ...sourceItem,
+          id: current.id,
+        };
+        return next;
+      }
+
+      if (!params.ensureActiveSourceItem) {
+        return prev;
+      }
+
+      return [...prev, sourceItem];
+    });
+
+    const snippet = compactText((capture.tutorContext || capture.normalizedText || '').trim(), 2800);
+    setSupportReferences((prev) => {
+      const nextId = sourceItem.id;
+      const next = prev.filter((item) => item.id !== nextId);
+      if (!snippet) {
+        return next.length === prev.length ? prev : next;
+      }
+      return mergeSupportReferences(next, [
+        {
+          id: nextId,
+          title: sourceItem.title,
+          snippet,
+        },
+      ]);
+    });
+  }, [removeCollectionItemsFromFlow, removeWorkspaceCaptureFromState]);
+
   const updateWorkspaceCaptureStatus = useCallback(async (params: {
-    action: 'archive' | 'delete';
+    action: 'archive' | 'restore' | 'delete';
     captureId?: string | null;
     sourceKey?: string | null;
     itemId?: string | null;
+    silent?: boolean;
   }) => {
     const captureId = params.captureId?.trim() || null;
     const sourceKey = params.sourceKey?.trim() || null;
@@ -3642,11 +3740,19 @@ const _handleVideoAssistantMessage = useCallback((payload: {
     }
 
     if (!isAuthenticated || !accessToken || !user?.id) {
-      removeWorkspaceCaptureFromState({
-        captureId,
-        sourceKey,
-        itemId: params.itemId,
-      });
+      if (params.action === 'delete') {
+        removeWorkspaceCaptureFromState({
+          captureId,
+          sourceKey,
+          itemId: params.itemId,
+        });
+      } else {
+        removeCollectionItemsFromFlow({
+          itemId: params.itemId,
+          sourceKey,
+          workspaceCaptureId: captureId,
+        });
+      }
       return true;
     }
 
@@ -3660,7 +3766,7 @@ const _handleVideoAssistantMessage = useCallback((payload: {
         body: JSON.stringify(
           params.action === 'delete'
             ? { captureId, sourceKey }
-            : { captureId, sourceKey, action: 'archive' }
+            : { captureId, sourceKey, action: params.action }
         ),
       });
 
@@ -3669,38 +3775,208 @@ const _handleVideoAssistantMessage = useCallback((payload: {
         capture?: WorkspaceCaptureMessage;
         retiredEchoIds?: string[];
         error?: string;
-      }>(response, params.action === 'delete' ? '彻底删除收集失败' : '从当前流移除失败');
+      }>(
+        response,
+        params.action === 'delete'
+          ? '彻底删除收集失败'
+          : params.action === 'restore'
+            ? '恢复收集失败'
+            : '从当前流移除失败'
+      );
 
-      if (response.status === 404 && sourceKey) {
+      if (response.status === 404 && sourceKey && params.action !== 'restore') {
         pendingCaptureStatusBySourceKeyRef.current.set(sourceKey, params.action);
         removeWorkspaceCaptureFromState({
           captureId,
           sourceKey,
           itemId: params.itemId,
         });
-        toast.success(params.action === 'delete' ? '这条收集会在写入完成后彻底删除' : '这条收集会在写入完成后从当前流移除');
+        if (!params.silent) {
+          toast.success(params.action === 'delete' ? '这条收集会在写入完成后彻底删除' : '这条收集会在写入完成后从当前流移除');
+        }
         return true;
       }
 
       if (!response.ok || !payload.success) {
-        throw new Error(payload.error || (params.action === 'delete' ? '彻底删除收集失败' : '从当前流移除失败'));
+        throw new Error(
+          payload.error ||
+            (params.action === 'delete'
+              ? '彻底删除收集失败'
+              : params.action === 'restore'
+                ? '恢复收集失败'
+                : '从当前流移除失败')
+        );
       }
 
-      removeWorkspaceCaptureFromState({
-        captureId: payload.capture?.id || captureId,
-        sourceKey: payload.capture?.sourceKey || sourceKey,
-        itemId: params.itemId,
-        retiredEchoIds: Array.isArray(payload.retiredEchoIds) ? payload.retiredEchoIds : [],
-      });
+      if (payload.capture) {
+        if (params.action === 'delete') {
+          removeWorkspaceCaptureFromState({
+            captureId: payload.capture.id || captureId,
+            sourceKey: payload.capture.sourceKey || sourceKey,
+            itemId: params.itemId,
+            retiredEchoIds: Array.isArray(payload.retiredEchoIds) ? payload.retiredEchoIds : [],
+          });
+        } else {
+          syncWorkspaceCaptureIntoState({
+            capture: payload.capture,
+            retiredEchoIds: Array.isArray(payload.retiredEchoIds) ? payload.retiredEchoIds : [],
+            ensureActiveSourceItem: params.action === 'restore',
+          });
+        }
+      }
 
-      toast.success(params.action === 'delete' ? '这条收集已彻底删除' : '这条收集已从当前流移除');
+      if (!params.silent) {
+        toast.success(
+          params.action === 'delete'
+            ? '这条收集已彻底删除'
+            : params.action === 'restore'
+              ? '这条收集已恢复到当前流'
+              : '这条收集已从当前流移除'
+        );
+      }
       return true;
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      toast.error(message);
+      if (!params.silent) {
+        toast.error(message);
+      }
       return false;
     }
-  }, [accessToken, isAuthenticated, removeCollectionItemsFromFlow, removeWorkspaceCaptureFromState, user?.id]);
+  }, [accessToken, isAuthenticated, removeCollectionItemsFromFlow, removeWorkspaceCaptureFromState, syncWorkspaceCaptureIntoState, user?.id]);
+
+  const openWorkspaceCaptureEditor = useCallback((capture: WorkspaceCaptureMessage, mode: WorkspaceCaptureEditorMode) => {
+    const normalizedText = (capture.normalizedText || capture.tutorContext || '').trim();
+    const previewText = (capture.previewText || '').trim();
+    const draftBody =
+      mode === 'text'
+        ? normalizedText || previewText || capture.title
+        : mode === 'transcript'
+          ? normalizedText
+          : previewText && previewText !== capture.title
+            ? previewText
+            : '';
+
+    setWorkspaceCaptureEditor({
+      capture,
+      mode,
+    });
+    setWorkspaceCaptureEditorTitle(capture.title || '');
+    setWorkspaceCaptureEditorBody(draftBody);
+    setActiveCollectionMessageMenuId(null);
+    setConfirmCollectionDeleteId(null);
+  }, []);
+
+  const closeWorkspaceCaptureEditor = useCallback(() => {
+    if (isSavingWorkspaceCaptureEdit) return;
+    setWorkspaceCaptureEditor(null);
+    setWorkspaceCaptureEditorTitle('');
+    setWorkspaceCaptureEditorBody('');
+  }, [isSavingWorkspaceCaptureEdit]);
+
+  const saveWorkspaceCaptureEdit = useCallback(async () => {
+    if (!workspaceCaptureEditor || !isAuthenticated || !accessToken) {
+      return;
+    }
+
+    const capture = workspaceCaptureEditor.capture;
+    const trimmedTitle = workspaceCaptureEditorTitle.replace(/\s+/g, ' ').trim();
+    const trimmedBody = workspaceCaptureEditorBody.replace(/\s+/g, ' ').trim();
+
+    let payload: {
+      captureId: string;
+      sourceKey: string;
+      action: 'update';
+      title?: string | null;
+      previewText?: string | null;
+      normalizedText?: string | null;
+      tutorContext?: string | null;
+    } | null = null;
+
+    if (workspaceCaptureEditor.mode === 'text') {
+      if (!trimmedBody) {
+        toast.error('文字内容不能为空');
+        return;
+      }
+
+      payload = {
+        captureId: capture.id,
+        sourceKey: capture.sourceKey,
+        action: 'update',
+        title: compactText(trimmedBody, 80) || capture.title,
+        previewText: trimmedBody,
+        normalizedText: trimmedBody,
+        tutorContext: trimmedBody,
+      };
+    } else if (workspaceCaptureEditor.mode === 'transcript') {
+      if (!trimmedBody) {
+        toast.error('转写文字不能为空');
+        return;
+      }
+
+      payload = {
+        captureId: capture.id,
+        sourceKey: capture.sourceKey,
+        action: 'update',
+        previewText: trimmedBody,
+        normalizedText: trimmedBody,
+        tutorContext: trimmedBody,
+      };
+    } else {
+      if (!trimmedTitle) {
+        toast.error('标题不能为空');
+        return;
+      }
+
+      payload = {
+        captureId: capture.id,
+        sourceKey: capture.sourceKey,
+        action: 'update',
+        title: trimmedTitle,
+        previewText: trimmedBody || null,
+      };
+    }
+
+    setIsSavingWorkspaceCaptureEdit(true);
+    try {
+      const response = await fetch('/api/workspace/captures', {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${accessToken}`,
+        },
+        body: JSON.stringify(payload),
+      });
+
+      const result = await readJsonApiResponse<{
+        success: boolean;
+        capture?: WorkspaceCaptureMessage;
+        error?: string;
+      }>(response, '更新收集失败');
+
+      if (!response.ok || !result.success || !result.capture) {
+        throw new Error(result.error || '更新收集失败');
+      }
+
+      syncWorkspaceCaptureIntoState({
+        capture: result.capture,
+      });
+      toast.success(
+        workspaceCaptureEditor.mode === 'transcript'
+          ? '转写文字已更新'
+          : workspaceCaptureEditor.mode === 'text'
+            ? '文字已更新'
+            : '标题和备注已更新'
+      );
+      setWorkspaceCaptureEditor(null);
+      setWorkspaceCaptureEditorTitle('');
+      setWorkspaceCaptureEditorBody('');
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      toast.error(message);
+    } finally {
+      setIsSavingWorkspaceCaptureEdit(false);
+    }
+  }, [accessToken, isAuthenticated, syncWorkspaceCaptureIntoState, workspaceCaptureEditor, workspaceCaptureEditorBody, workspaceCaptureEditorTitle]);
 
   const ingestTranscriptSegments = useCallback(async (params: {
     segments: TranscriptSegment[];
@@ -3777,11 +4053,11 @@ const _handleVideoAssistantMessage = useCallback((payload: {
     segmentsRef.current = mergedSegments;
     liveSegmentsRef.current = mergedSegments;
     setViewMode(shouldKeepVideoSource ? 'review' : 'record');
-    setShowSessionHistory(false);
     setSourceImportError('');
 
     if (params.sourceItemId) {
       updateSourceItem(sourceItemId, {
+        sourceKey: `ingest:${sourceItemId}`,
         type: params.sourceType,
         role: 'primary',
         title: params.sourceTitle,
@@ -3802,6 +4078,7 @@ const _handleVideoAssistantMessage = useCallback((payload: {
     } else {
       appendSourceItem({
         id: sourceItemId,
+        sourceKey: `ingest:${sourceItemId}`,
         type: params.sourceType,
         role: 'primary',
         title: params.sourceTitle,
@@ -4118,6 +4395,7 @@ const _handleVideoAssistantMessage = useCallback((payload: {
       queuedFiles.forEach(({ id, file, isAudio, isVideo, isImage, mediaUrl, previewUrl, attachmentUrl, durationMs }) => {
         appendSourceItem({
           id,
+          sourceKey: isAudio || isVideo ? `ingest:${id}` : `support:${id}`,
           type: isAudio ? 'audio' : isVideo ? 'video' : isImage ? 'image' : 'document',
           role: isAudio || isVideo ? 'primary' : 'support',
           title: file.name,
@@ -4149,12 +4427,14 @@ const _handleVideoAssistantMessage = useCallback((payload: {
             const parsed = await parseImageFile(file);
             const appended = appendSupportSource({
               id,
+              sourceKey: `support:${id}`,
               type: 'document',
               title: parsed.title,
               segments: parsed.segments,
               appendItem: false,
             });
             updateSourceItem(id, {
+              sourceKey: `support:${id}`,
               type: 'image',
               role: 'support',
               title: parsed.title,
@@ -4208,12 +4488,14 @@ const _handleVideoAssistantMessage = useCallback((payload: {
             const supportType = parsed.fileType === 'txt' || parsed.fileType === 'md' ? 'text' : 'document';
             const appended = appendSupportSource({
               id,
+              sourceKey: `support:${id}`,
               type: supportType,
               title: parsed.title,
               segments: parsed.segments,
               appendItem: false,
             });
             updateSourceItem(id, {
+              sourceKey: `support:${id}`,
               type: supportType,
               role: 'support',
               title: parsed.title,
@@ -4338,16 +4620,12 @@ const _handleVideoAssistantMessage = useCallback((payload: {
   const handleSourceFileButtonClick = useCallback((mode: 'audio' | 'support' | 'all' = 'all') => {
     setSourceImportError('');
     setSourceFilePickerMode(mode);
-    setShowSessionHistory(false);
     setShowMobileRecorder(false);
     setMobileCollectionSheet(null);
 
-    // Unified picker is the new default for the chat-style collection flow.
-    // Keep legacy panel switching only for the old desktop import surfaces.
+    // Unified picker is the default for the chat-style collection flow.
     if (mode !== 'all') {
       setDataSource('demo');
-      setSourcePanelMode(mode === 'audio' ? 'audio' : 'support');
-      setSourceImportMode('files');
     }
 
     sourceFileInputRef.current?.click();
@@ -4362,80 +4640,6 @@ const _handleVideoAssistantMessage = useCallback((payload: {
       sourceFileInputRef.current.value = '';
     }
   }, [handleImportFiles, sourceFilePickerMode]);
-
-  const handleSourceFileDrop = useCallback((event: DragEvent<HTMLDivElement>) => {
-    event.preventDefault();
-    event.stopPropagation();
-    const files = event.dataTransfer.files;
-    if (files && files.length > 0) {
-      setSourceFilePickerMode('all');
-      setShowSessionHistory(false);
-      setShowMobileRecorder(false);
-      setMobileCollectionSheet(null);
-      void handleImportFiles(files, 'all');
-    }
-  }, [handleImportFiles]);
-
-  const handleImportTextSource = useCallback(async () => {
-    const text = sourceTextInput.trim();
-    if (!text) {
-      setSourceImportError('先贴一段文字再发。');
-      collectionComposerRef.current?.focus();
-      return;
-    }
-
-    setActiveSourceImportCount((count) => count + 1);
-    setSourceImportError('');
-
-    try {
-      const response = await fetch('/api/sources/ingest', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          title: `粘贴文本-${new Date().toLocaleTimeString()}`,
-          text,
-        }),
-      });
-      const payload = await readJsonApiResponse<{
-        success?: boolean;
-        error?: string;
-        title?: string;
-        segments?: TranscriptSegment[];
-      }>(response, '文本导入失败');
-      if (!response.ok || !payload.success || !Array.isArray(payload.segments)) {
-        throw new Error(payload.error || '文本导入失败');
-      }
-
-      const importId = `pasted-text-${Date.now()}`;
-      const importTitle = payload.title || '粘贴文本';
-      const appended = appendSupportSource({
-        id: importId,
-        type: 'text',
-        title: importTitle,
-        segments: payload.segments,
-      });
-      void persistCaptureToWorkspace({
-        sourceType: 'manual-import',
-        sourceKey: `import:${importId}`,
-        role: 'support',
-        contentType: 'text',
-        title: importTitle,
-        previewText: buildSourcePreviewText(payload.segments, 180),
-        normalizedText: appended.reference || text,
-        tutorContext: appended.reference || text,
-        occurredAt: new Date().toISOString(),
-        metadata: {
-          from: 'text-import',
-        },
-      });
-      setSourceTextInput('');
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      setSourceImportError(message);
-    } finally {
-      setActiveSourceImportCount((count) => Math.max(0, count - 1));
-    }
-  }, [appendSupportSource, persistCaptureToWorkspace, sourceTextInput]);
 
   const sourceFileAccept =
     sourceFilePickerMode === 'audio'
@@ -4462,13 +4666,47 @@ const _handleVideoAssistantMessage = useCallback((payload: {
     [collectionFeedItems, quotedCollectionContextIds]
   );
 
-  const selectedWorkspaceCaptureIds = useMemo(
+  const selectedCollectionListIds = useMemo(
     () =>
-      selectedCollectionContextIds
-        .filter((id) => id.startsWith('workspace-'))
-        .map((id) => id.replace(/^workspace-/, '')),
+      selectedCollectionContextIds.map((id) =>
+        id.startsWith('workspace-') ? id.replace(/^workspace-/, '') : id
+      ),
     [selectedCollectionContextIds]
   );
+
+  const allCollectionItems = useMemo<WorkspaceCaptureListItem[]>(() => {
+    const workspaceSourceKeys = new Set(
+      workspaceCaptures
+        .map((item) => item.sourceKey)
+        .filter((value): value is string => Boolean(value))
+    );
+
+    const localActiveItems = sourceItems
+      .filter((item) => !item.id.startsWith('workspace-'))
+      .filter((item) => {
+        const sourceKey = resolveSourceItemSourceKey(item);
+        return !sourceKey || !workspaceSourceKeys.has(sourceKey);
+      })
+      .map((item) => buildCollectionListItemFromSourceItem(item, 'active'));
+
+    const localArchivedItems = archivedLocalCollectionItems
+      .filter((item) => {
+        const sourceKey = resolveSourceItemSourceKey(item);
+        return !sourceKey || !workspaceSourceKeys.has(sourceKey);
+      })
+      .map((item) => buildCollectionListItemFromSourceItem(item, 'archived'));
+
+    return [
+      ...workspaceCaptures.map((item) => ({
+        ...item,
+        kind: 'workspace' as const,
+        sourceItemId: `workspace-${item.id}`,
+        editable: true,
+      })),
+      ...localActiveItems,
+      ...localArchivedItems,
+    ];
+  }, [archivedLocalCollectionItems, sourceItems, workspaceCaptures]);
 
   useEffect(() => {
     if (selectedCollectionContextIds.length === 0) {
@@ -4499,6 +4737,10 @@ const _handleVideoAssistantMessage = useCallback((payload: {
     selectedCollectionContextItems,
     selectedCollectionPrimaryId,
   ]);
+
+  useEffect(() => {
+    setConfirmSelectedCollectionDelete(false);
+  }, [isCollectionContextSelectionMode, selectedCollectionContextIds.join('|')]);
 
   useEffect(() => {
     if (quotedCollectionContextIds.length === 0) {
@@ -4665,6 +4907,7 @@ const _handleVideoAssistantMessage = useCallback((payload: {
     setSelectedCollectionContextIds([]);
     setSelectedCollectionPrimaryId(null);
     setIsCollectionContextSelectionMode(false);
+    setConfirmSelectedCollectionDelete(false);
   }, []);
 
   const clearQuotedCollectionContext = useCallback(() => {
@@ -4708,39 +4951,123 @@ const _handleVideoAssistantMessage = useCallback((payload: {
     setQuotedCollectionContext([item], item.id);
   }, [clearCollectionContextSelection, setQuotedCollectionContext]);
 
-  const quoteWorkspaceCaptureToComposer = useCallback((capture: WorkspaceCaptureMessage) => {
-    const sourceItem = ensureWorkspaceCaptureSourceItem(capture);
+  const resolveCollectionListSourceItem = useCallback((capture: WorkspaceCaptureListItem): SourceIngestItem => {
+    const workspaceCapture =
+      capture.kind === 'workspace'
+        ? workspaceCaptures.find((item) => item.id === capture.id || item.sourceKey === capture.sourceKey) || null
+        : null;
+
+    if (workspaceCapture) {
+      return ensureWorkspaceCaptureSourceItem(workspaceCapture);
+    }
+
+    const sourceItemId = capture.sourceItemId || capture.id;
+    const sourceKey = capture.sourceKey || null;
+    const existing =
+      sourceItems.find((item) => item.id === sourceItemId || (sourceKey && resolveSourceItemSourceKey(item) === sourceKey)) ||
+      archivedLocalCollectionItems.find((item) => item.id === sourceItemId || (sourceKey && resolveSourceItemSourceKey(item) === sourceKey));
+
+    if (existing) {
+      return existing;
+    }
+
+    const type = inferWorkspaceCaptureSourceType({
+      contentType: capture.contentType,
+      sourceType: capture.sourceType,
+      metadata: capture.metadata,
+    } as WorkspaceCaptureMessage);
+
+    return {
+      id: sourceItemId,
+      sourceKey: capture.sourceKey,
+      type,
+      role: capture.role === 'primary' ? 'primary' : 'support',
+      title: capture.title,
+      preview: capture.previewText,
+      previewUrl: type === 'image' ? capture.mediaUrl || undefined : undefined,
+      mediaUrl: (type === 'audio' || type === 'video') ? capture.mediaUrl || undefined : undefined,
+      attachmentUrl: capture.sourceUrl || undefined,
+      fullText: compactMultilineText(capture.normalizedText || capture.tutorContext || capture.previewText || capture.title, 3200),
+      segmentCount: capture.normalizedText || capture.tutorContext ? 1 : 0,
+      addedAt: capture.occurredAt || capture.createdAt,
+      origin: 'user',
+      sessionId: typeof capture.metadata?.sessionId === 'string' ? capture.metadata.sessionId : undefined,
+      durationMs: typeof capture.metadata?.duration === 'number' ? capture.metadata.duration : undefined,
+      reviewable: type === 'audio' || type === 'video',
+    };
+  }, [archivedLocalCollectionItems, ensureWorkspaceCaptureSourceItem, sourceItems, workspaceCaptures]);
+
+  const quoteCollectionListItemToComposer = useCallback((capture: WorkspaceCaptureListItem) => {
+    const sourceItem = resolveCollectionListSourceItem(capture);
     quoteCollectionItemToComposer(sourceItem);
     setMobileCollectionSheet(null);
-    setShowSessionHistory(false);
-  }, [ensureWorkspaceCaptureSourceItem, quoteCollectionItemToComposer]);
+  }, [quoteCollectionItemToComposer, resolveCollectionListSourceItem]);
 
-  const toggleWorkspaceCaptureContextSelection = useCallback((capture: WorkspaceCaptureMessage) => {
-    const sourceItem = ensureWorkspaceCaptureSourceItem(capture);
+  const openReviewFromCollectionListItem = useCallback(async (capture: WorkspaceCaptureListItem) => {
+    const sourceItem = resolveCollectionListSourceItem(capture);
+    await openReviewFromCollection(sourceItem);
+    setMobileCollectionSheet(null);
+  }, [openReviewFromCollection, resolveCollectionListSourceItem]);
+
+  const toggleCollectionListItemSelection = useCallback((capture: WorkspaceCaptureListItem) => {
+    const sourceItem = resolveCollectionListSourceItem(capture);
     toggleCollectionContextItem(sourceItem);
-  }, [ensureWorkspaceCaptureSourceItem, toggleCollectionContextItem]);
+  }, [resolveCollectionListSourceItem, toggleCollectionContextItem]);
 
-  const archiveWorkspaceCaptureFromList = useCallback(async (capture: WorkspaceCaptureMessage) => {
-    setMobileCollectionSheet(null);
-    setShowSessionHistory(false);
-    await updateWorkspaceCaptureStatus({
-      action: 'archive',
-      captureId: capture.id,
-      sourceKey: capture.sourceKey,
-      itemId: `workspace-${capture.id}`,
-    });
-  }, [updateWorkspaceCaptureStatus]);
+  const archiveCollectionListItem = useCallback(async (capture: WorkspaceCaptureListItem) => {
+    if (capture.kind === 'workspace') {
+      await updateWorkspaceCaptureStatus({
+        action: 'archive',
+        captureId: capture.id,
+        sourceKey: capture.sourceKey,
+        itemId: capture.sourceItemId || `workspace-${capture.id}`,
+      });
+      return;
+    }
 
-  const deleteWorkspaceCaptureFromList = useCallback(async (capture: WorkspaceCaptureMessage) => {
-    setMobileCollectionSheet(null);
-    setShowSessionHistory(false);
-    await updateWorkspaceCaptureStatus({
-      action: 'delete',
-      captureId: capture.id,
-      sourceKey: capture.sourceKey,
-      itemId: `workspace-${capture.id}`,
-    });
-  }, [updateWorkspaceCaptureStatus]);
+    if (capture.sourceKey) {
+      pendingCaptureStatusBySourceKeyRef.current.set(capture.sourceKey, 'archive');
+    }
+    archiveLocalCollectionItem(resolveCollectionListSourceItem(capture));
+  }, [archiveLocalCollectionItem, resolveCollectionListSourceItem, updateWorkspaceCaptureStatus]);
+
+  const restoreCollectionListItem = useCallback(async (capture: WorkspaceCaptureListItem) => {
+    if (capture.kind === 'workspace') {
+      await updateWorkspaceCaptureStatus({
+        action: 'restore',
+        captureId: capture.id,
+        sourceKey: capture.sourceKey,
+        itemId: capture.sourceItemId || `workspace-${capture.id}`,
+      });
+      return;
+    }
+
+    if (capture.sourceKey) {
+      pendingCaptureStatusBySourceKeyRef.current.delete(capture.sourceKey);
+    }
+    restoreLocalCollectionItem(resolveCollectionListSourceItem(capture));
+  }, [resolveCollectionListSourceItem, restoreLocalCollectionItem, updateWorkspaceCaptureStatus]);
+
+  const deleteCollectionListItem = useCallback(async (capture: WorkspaceCaptureListItem) => {
+    if (capture.kind === 'workspace') {
+      await updateWorkspaceCaptureStatus({
+        action: 'delete',
+        captureId: capture.id,
+        sourceKey: capture.sourceKey,
+        itemId: capture.sourceItemId || `workspace-${capture.id}`,
+      });
+      return;
+    }
+
+    if (capture.sourceKey) {
+      pendingCaptureStatusBySourceKeyRef.current.set(capture.sourceKey, 'delete');
+    }
+    deleteLocalCollectionItem(resolveCollectionListSourceItem(capture));
+  }, [deleteLocalCollectionItem, resolveCollectionListSourceItem, updateWorkspaceCaptureStatus]);
+
+  const editWorkspaceCaptureFromList = useCallback((capture: WorkspaceCaptureMessage, mode: WorkspaceCaptureEditorMode) => {
+    openWorkspaceCaptureEditor(capture, mode);
+  }, [openWorkspaceCaptureEditor]);
 
   const openCollectionMessageMenu = useCallback((itemId: string) => {
     setMobileCollectionSheet(null);
@@ -4933,7 +5260,7 @@ const _handleVideoAssistantMessage = useCallback((payload: {
 
     (async () => {
       try {
-        const response = await fetch('/api/workspace/current', {
+        const response = await fetch('/api/workspace/current?includeArchived=1', {
           headers: {
             Authorization: `Bearer ${accessToken}`,
           },
@@ -4953,12 +5280,13 @@ const _handleVideoAssistantMessage = useCallback((payload: {
 
         if (cancelled) return;
 
-        const captures = Array.isArray(payload.captures) ? payload.captures : [];
-        const echoes = Array.isArray(payload.echoes) ? payload.echoes : [];
+          const captures = Array.isArray(payload.captures) ? payload.captures : [];
+          const activeCaptures = captures.filter((item) => (item.status || 'active') === 'active');
+          const echoes = Array.isArray(payload.echoes) ? payload.echoes : [];
 
-        if (captures.length > 0) {
-          setWorkspaceCaptures((prev) => mergeWorkspaceCaptures(prev, captures));
-          setSourceItems((prev) => {
+          if (captures.length > 0) {
+            setWorkspaceCaptures((prev) => mergeWorkspaceCaptures(prev, captures));
+            setSourceItems((prev) => {
             const existingIds = new Set(prev.map((item) => item.id));
             const existingSourceKeys = new Set(
               prev
@@ -4967,10 +5295,10 @@ const _handleVideoAssistantMessage = useCallback((payload: {
             );
             const next = [...prev];
 
-            for (const item of captures) {
-              const id = `workspace-${item.id}`;
-              if (existingIds.has(id)) continue;
-              if (item.sourceKey && existingSourceKeys.has(item.sourceKey)) continue;
+              for (const item of activeCaptures) {
+                const id = `workspace-${item.id}`;
+                if (existingIds.has(id)) continue;
+                if (item.sourceKey && existingSourceKeys.has(item.sourceKey)) continue;
               next.push(buildWorkspaceCaptureSourceItem(item));
               existingIds.add(id);
               if (item.sourceKey) {
@@ -4981,10 +5309,10 @@ const _handleVideoAssistantMessage = useCallback((payload: {
             return next;
           });
 
-          const incomingReferences = captures
-            .map((item) => {
-              const snippet = (item.tutorContext || item.normalizedText || '').trim();
-              if (!snippet) return null;
+            const incomingReferences = activeCaptures
+              .map((item) => {
+                const snippet = (item.tutorContext || item.normalizedText || '').trim();
+                if (!snippet) return null;
               return {
                 id: `workspace-${item.id}`,
                 title: item.title,
@@ -5018,7 +5346,12 @@ const _handleVideoAssistantMessage = useCallback((payload: {
   useEffect(() => {
     if (workspaceCaptures.length === 0) return;
 
-    setSourceItems((prev) => mergeWechatWorkspaceCapturesIntoSourceItems(prev, workspaceCaptures));
+    setSourceItems((prev) =>
+      mergeWechatWorkspaceCapturesIntoSourceItems(
+        prev,
+        workspaceCaptures.filter((item) => (item.status || 'active') === 'active')
+      )
+    );
   }, [workspaceCaptures]);
 
   useEffect(() => {
@@ -5545,7 +5878,6 @@ const _handleVideoAssistantMessage = useCallback((payload: {
     setMobileCollectionSheet(null);
     setRecorderAutoStartSignal(0);
     flushSync(() => {
-      setShowSessionHistory(false);
       setDataSource('live');
       setShowMobileRecorder(true);
     });
@@ -5594,6 +5926,7 @@ const _handleVideoAssistantMessage = useCallback((payload: {
       })}`;
       const appended = appendSupportSource({
         id: draftId,
+        sourceKey: `manual:${draftId}`,
         type: 'text',
         title: draftTitle,
         segments: [
@@ -5714,7 +6047,6 @@ const _handleVideoAssistantMessage = useCallback((payload: {
     setShowConversationHistory(false);
     setSelectedHistoryConversation(null);
     setShowMobileRecorder(false);
-    setShowSessionHistory(false);
     setSelectedConfusion(null);
     setConfusionChatAnchor(null);
     setSelectedAnchor(null);
@@ -5748,6 +6080,69 @@ const _handleVideoAssistantMessage = useCallback((payload: {
     selectedCollectionPrimaryId,
   ]);
 
+  const applyBatchActionToSelectedCollectionContext = useCallback(async (action: 'archive' | 'delete') => {
+    if (selectedCollectionContextItems.length === 0) return;
+    if (action === 'delete' && !confirmSelectedCollectionDelete) {
+      setConfirmSelectedCollectionDelete(true);
+      return;
+    }
+
+    const items = [...selectedCollectionContextItems];
+    clearCollectionContextSelection();
+
+    let successCount = 0;
+    for (const item of items) {
+      const sourceKey = resolveSourceItemSourceKey(item);
+      const capture =
+        workspaceCaptures.find((entry) => entry.sourceKey === sourceKey) ||
+        (item.id.startsWith('workspace-')
+          ? workspaceCaptures.find((entry) => entry.id === item.id.slice('workspace-'.length))
+          : null);
+
+      if (!capture && !item.id.startsWith('workspace-')) {
+        if (sourceKey) {
+          pendingCaptureStatusBySourceKeyRef.current.set(sourceKey, action);
+        }
+        if (action === 'archive') {
+          archiveLocalCollectionItem(item);
+        } else {
+          deleteLocalCollectionItem(item);
+        }
+        successCount += 1;
+        continue;
+      }
+
+      const ok = await updateWorkspaceCaptureStatus({
+        action,
+        captureId: capture?.id,
+        sourceKey: sourceKey || capture?.sourceKey || null,
+        itemId: item.id,
+        silent: true,
+      });
+      if (ok) {
+        successCount += 1;
+      }
+    }
+
+    if (successCount > 0) {
+      toast.success(
+        action === 'delete'
+          ? `已彻底删除 ${successCount} 条收集`
+          : `已从当前流移除 ${successCount} 条收集`
+      );
+    } else {
+      toast.error(action === 'delete' ? '批量删除失败，请稍后再试' : '批量移除失败，请稍后再试');
+    }
+  }, [
+    clearCollectionContextSelection,
+    confirmSelectedCollectionDelete,
+    archiveLocalCollectionItem,
+    deleteLocalCollectionItem,
+    selectedCollectionContextItems,
+    updateWorkspaceCaptureStatus,
+    workspaceCaptures,
+  ]);
+
   const openTutorFromCollectionItem = useCallback((item: SourceIngestItem) => {
     setSelectedCollectionContextIds([item.id]);
     setSelectedCollectionPrimaryId(item.id);
@@ -5756,12 +6151,11 @@ const _handleVideoAssistantMessage = useCallback((payload: {
     openTutorFromCollection(buildTutorPromptForCollectionItem(item), { preferSelectedContext: true });
   }, [buildTutorPromptForCollectionItem, openTutorFromCollection]);
 
-  const openTutorFromWorkspaceCapture = useCallback((capture: WorkspaceCaptureMessage) => {
-    const sourceItem = ensureWorkspaceCaptureSourceItem(capture);
+  const openTutorFromCollectionListItem = useCallback((capture: WorkspaceCaptureListItem) => {
+    const sourceItem = resolveCollectionListSourceItem(capture);
     openTutorFromCollectionItem(sourceItem);
     setMobileCollectionSheet(null);
-    setShowSessionHistory(false);
-  }, [ensureWorkspaceCaptureSourceItem, openTutorFromCollectionItem]);
+  }, [openTutorFromCollectionItem, resolveCollectionListSourceItem]);
 
   useEffect(() => {
     if ((viewMode !== 'record' || showMobileRecorder) && isComposerVoiceRecording) {
@@ -5784,6 +6178,20 @@ const _handleVideoAssistantMessage = useCallback((payload: {
     () => (activeCollectionMessageMenuItem ? resolveSourceItemSourceKey(activeCollectionMessageMenuItem) : null),
     [activeCollectionMessageMenuItem]
   );
+
+  const activeCollectionMenuWorkspaceCapture = useMemo(() => {
+    if (!activeCollectionMessageMenuItem) return null;
+
+    const directId = activeCollectionMessageMenuItem.id.startsWith('workspace-')
+      ? activeCollectionMessageMenuItem.id.slice('workspace-'.length)
+      : null;
+
+    return workspaceCaptures.find((item) => {
+      if (directId && item.id === directId) return true;
+      if (activeCollectionMessageMenuSourceKey && item.sourceKey === activeCollectionMessageMenuSourceKey) return true;
+      return false;
+    }) || null;
+  }, [activeCollectionMessageMenuItem, activeCollectionMessageMenuSourceKey, workspaceCaptures]);
 
   const canUsePersistentCaptureActions = Boolean(
     activeCollectionMessageMenuSourceKey && isAuthenticated && accessToken && user?.id
@@ -6365,6 +6773,48 @@ const _handleVideoAssistantMessage = useCallback((payload: {
                     <ChevronRight size={16} />
                   </button>
                 ) : null}
+                {activeCollectionMenuWorkspaceCapture?.contentType === 'text' ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      closeCollectionMessageMenu();
+                      openWorkspaceCaptureEditor(activeCollectionMenuWorkspaceCapture, 'text');
+                    }}
+                    className="flex w-full items-center justify-between rounded-[16px] bg-slate-50 px-4 py-3 text-left text-sm font-medium text-slate-700 transition hover:bg-slate-100"
+                  >
+                    <span>编辑文字</span>
+                    <ChevronRight size={16} className="text-slate-300" />
+                  </button>
+                ) : null}
+                {activeCollectionMenuWorkspaceCapture &&
+                (activeCollectionMenuWorkspaceCapture.contentType === 'audio' ||
+                  activeCollectionMenuWorkspaceCapture.contentType === 'video') &&
+                Boolean((activeCollectionMenuWorkspaceCapture.normalizedText || activeCollectionMenuWorkspaceCapture.tutorContext || '').trim()) ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      closeCollectionMessageMenu();
+                      openWorkspaceCaptureEditor(activeCollectionMenuWorkspaceCapture, 'transcript');
+                    }}
+                    className="flex w-full items-center justify-between rounded-[16px] bg-slate-50 px-4 py-3 text-left text-sm font-medium text-slate-700 transition hover:bg-slate-100"
+                  >
+                    <span>校正文字</span>
+                    <ChevronRight size={16} className="text-slate-300" />
+                  </button>
+                ) : null}
+                {activeCollectionMenuWorkspaceCapture && activeCollectionMenuWorkspaceCapture.contentType !== 'text' ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      closeCollectionMessageMenu();
+                      openWorkspaceCaptureEditor(activeCollectionMenuWorkspaceCapture, 'meta');
+                    }}
+                    className="flex w-full items-center justify-between rounded-[16px] bg-slate-50 px-4 py-3 text-left text-sm font-medium text-slate-700 transition hover:bg-slate-100"
+                  >
+                    <span>编辑标题/备注</span>
+                    <ChevronRight size={16} className="text-slate-300" />
+                  </button>
+                ) : null}
                 <button
                   type="button"
                   onClick={() => {
@@ -6497,7 +6947,6 @@ const _handleVideoAssistantMessage = useCallback((payload: {
             aria-label="关闭收集菜单"
             onClick={() => {
               setMobileCollectionSheet(null);
-              setShowSessionHistory(false);
             }}
             className={`${backdropPositionClass} z-20 bg-slate-900/18 backdrop-blur-[1px]`}
           />
@@ -6518,7 +6967,6 @@ const _handleVideoAssistantMessage = useCallback((payload: {
                   type="button"
                   onClick={() => {
                     setMobileCollectionSheet(null);
-                      setShowSessionHistory(false);
                     }}
                     className="flex h-9 w-9 items-center justify-center rounded-full bg-slate-100 text-slate-500"
                   >
@@ -6586,7 +7034,6 @@ const _handleVideoAssistantMessage = useCallback((payload: {
             aria-label="关闭收集附加层"
             onClick={() => {
               setMobileCollectionSheet(null);
-              setShowSessionHistory(false);
             }}
             className={`${backdropPositionClass} z-20 bg-slate-900/18 backdrop-blur-[1px]`}
           />
@@ -6615,7 +7062,6 @@ const _handleVideoAssistantMessage = useCallback((payload: {
                   type="button"
                   onClick={() => {
                     setMobileCollectionSheet(null);
-                    setShowSessionHistory(false);
                   }}
                   className="flex h-9 w-9 items-center justify-center rounded-full bg-slate-100 text-slate-500"
                 >
@@ -6841,35 +7287,22 @@ const _handleVideoAssistantMessage = useCallback((payload: {
 
               {mobileCollectionSheet === 'history' ? (
                 <div className="min-h-0 flex-1 overflow-hidden rounded-b-[30px]">
-                  {workspaceCaptures.length > 0 ? (
-                    <WorkspaceCaptureList
-                      captures={workspaceCaptures}
-                      onClose={() => setMobileCollectionSheet(null)}
-                      onOpenReview={handleOpenWorkspaceCaptureReview}
-                      onQuoteCapture={quoteWorkspaceCaptureToComposer}
-                      onAskTutorAboutCapture={openTutorFromWorkspaceCapture}
-                      onToggleSelectCapture={toggleWorkspaceCaptureContextSelection}
-                      onArchiveCapture={archiveWorkspaceCaptureFromList}
-                      onDeleteCapture={deleteWorkspaceCaptureFromList}
-                      selectedCaptureIds={selectedWorkspaceCaptureIds}
-                      selectionMode={isCollectionContextSelectionMode}
-                      maxHeight="100%"
-                      showHeader={false}
-                    />
-                  ) : (
-                    <SessionHistoryList
-                      userId={user?.id}
-                      onSessionSelect={(session) => {
-                        setMobileCollectionSheet(null);
-                        void handleLoadHistorySession(session);
-                      }}
-                      onClose={() => setMobileCollectionSheet(null)}
-                      activeSessionId={sessionId}
-                      maxHeight="100%"
-                      showHeader={false}
-                      variant="capture"
-                    />
-                  )}
+                  <WorkspaceCaptureList
+                    captures={allCollectionItems}
+                    onClose={() => setMobileCollectionSheet(null)}
+                    onOpenReview={openReviewFromCollectionListItem}
+                    onQuoteCapture={quoteCollectionListItemToComposer}
+                    onAskTutorAboutCapture={openTutorFromCollectionListItem}
+                    onToggleSelectCapture={toggleCollectionListItemSelection}
+                    onArchiveCapture={archiveCollectionListItem}
+                    onRestoreCapture={restoreCollectionListItem}
+                    onDeleteCapture={deleteCollectionListItem}
+                    onEditCapture={editWorkspaceCaptureFromList}
+                    selectedCaptureIds={selectedCollectionListIds}
+                    selectionMode={isCollectionContextSelectionMode}
+                    maxHeight="100%"
+                    showHeader={false}
+                  />
                 </div>
               ) : null}
             </div>
@@ -6882,9 +7315,11 @@ const _handleVideoAssistantMessage = useCallback((payload: {
           <div className={`mx-auto flex w-full ${dockWidthClass} items-center gap-3 rounded-[18px] border border-emerald-100 bg-[linear-gradient(145deg,#ffffff_0%,#f2fcf6_100%)] px-4 py-3 shadow-sm`}>
             <div className="min-w-0 flex-1">
               <p className="text-[12px] font-semibold text-slate-900">已选 {selectedCollectionContextItems.length} 条</p>
-              <p className="mt-1 text-[11px] leading-5 text-slate-500">像微信里多选消息一样，一起引用或带去问 Tutor。</p>
+              <p className="mt-1 text-[11px] leading-5 text-slate-500">
+                {confirmSelectedCollectionDelete ? '再点一次删除，就会把这些内容彻底移出 Tutor、回声和后续记忆。' : '像微信里多选消息一样，一起引用、提问或整理当前流。'}
+              </p>
             </div>
-            <div className="flex shrink-0 items-center gap-2">
+            <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
               <button
                 type="button"
                 onClick={quoteSelectedCollectionContextToComposer}
@@ -6898,6 +7333,28 @@ const _handleVideoAssistantMessage = useCallback((payload: {
                 className="rounded-full bg-emerald-600 px-3 py-2 text-[11px] font-semibold text-white transition hover:bg-emerald-700"
               >
                 问 Tutor
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  void applyBatchActionToSelectedCollectionContext('archive');
+                }}
+                className="rounded-full border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] font-semibold text-amber-700 transition hover:border-amber-300 hover:bg-amber-100"
+              >
+                移除
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  void applyBatchActionToSelectedCollectionContext('delete');
+                }}
+                className={`rounded-full px-3 py-2 text-[11px] font-semibold transition ${
+                  confirmSelectedCollectionDelete
+                    ? 'bg-rose-600 text-white hover:bg-rose-700'
+                    : 'border border-rose-200 bg-rose-50 text-rose-700 hover:border-rose-300 hover:bg-rose-100'
+                }`}
+              >
+                {confirmSelectedCollectionDelete ? '确认删除' : '删除'}
               </button>
               <button
                 type="button"
@@ -7076,484 +7533,6 @@ const _handleVideoAssistantMessage = useCallback((payload: {
     </div>
   );
   };
-
-  const renderInputSourceTabs = useCallback((layout: 'mobile' | 'desktop') => {
-    const isMobileLayout = layout === 'mobile';
-    const actionButtonClass = isMobileLayout
-      ? 'shrink-0 min-w-[92px] rounded-2xl border px-3 py-2 text-[12px] font-semibold transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-300'
-      : 'rounded-2xl border px-4 py-2.5 text-sm font-semibold transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-300';
-    const activeButtonClass =
-      'border-amber-300 bg-gradient-to-r from-amber-50 via-amber-50 to-orange-50 text-amber-700 shadow-[0_4px_14px_rgba(245,158,11,0.18)]';
-    const inactiveButtonClass =
-      'border-slate-200 bg-white/85 text-slate-600 hover:-translate-y-0.5 hover:border-slate-300 hover:bg-white hover:shadow-sm';
-
-    const audioUploadActive = dataSource === 'demo' && sourcePanelMode === 'audio' && !showSessionHistory;
-    const supportActive = dataSource === 'demo' && sourcePanelMode === 'support' && !showSessionHistory;
-
-    const primaryActions = [
-      {
-        key: 'live',
-        label: '实时录音',
-        tone: 'bg-emerald-400',
-        testId: 'source-live-button',
-        active: dataSource === 'live' && !showSessionHistory,
-        onClick: () => {
-          setDataSource('live');
-          setShowSessionHistory(false);
-        },
-      },
-      {
-        key: 'audio-upload',
-        label: '上传音频',
-        tone: 'bg-blue-400',
-        testId: 'source-upload-button',
-        active: audioUploadActive,
-        onClick: () => handleSourceFileButtonClick('audio'),
-      },
-      {
-        key: 'video',
-        label: '视频链接',
-        tone: 'bg-fuchsia-400',
-        testId: 'source-video-button',
-        active: dataSource === 'video' && !showSessionHistory,
-        onClick: () => {
-          setDataSource('video');
-          setShowSessionHistory(false);
-        },
-      },
-    ] as const;
-
-    const secondaryActions = [
-      {
-        key: 'support',
-        label: '增强资料',
-        tone: 'bg-cyan-400',
-        testId: 'source-support-button',
-        active: supportActive,
-        onClick: () => {
-          setDataSource('demo');
-          setSourcePanelMode('support');
-          setSourceImportMode('files');
-          setShowSessionHistory(false);
-        },
-      },
-      {
-        key: 'history',
-        label: isMobileLayout ? '历史记录' : '录音历史',
-        tone: 'bg-violet-400',
-        testId: 'source-history-button',
-        active: showSessionHistory,
-        onClick: () => setShowSessionHistory(true),
-      },
-    ] as const;
-
-    const sourceFileAccept =
-      sourceFilePickerMode === 'audio'
-        ? 'audio/*,.mp3,.wav,.webm,.ogg,.m4a,.aac,.flac'
-        : sourceFilePickerMode === 'support'
-          ? '.txt,.md,.markdown,.csv,.json,.html,.htm,.pdf,.docx,.ppt,.pptx'
-          : 'audio/*,.mp3,.wav,.webm,.ogg,.m4a,.aac,.flac,.txt,.md,.markdown,.csv,.json,.html,.htm,.pdf,.docx,.ppt,.pptx';
-
-    const recentPrimaryItems = sourceItems.filter((item) => item.role === 'primary').slice(-4);
-    const recentSupportItems = sourceItems.filter((item) => item.role === 'support').slice(-6);
-
-    return (
-      <div className="space-y-4" data-onboarding="input-methods">
-        <input
-          ref={sourceFileInputRef}
-          type="file"
-          accept={sourceFileAccept}
-          multiple
-          onChange={handleSourceFileInputChange}
-          className="hidden"
-        />
-
-        <div
-          className="relative overflow-hidden rounded-3xl border border-slate-200/90 bg-[linear-gradient(130deg,#f8fafc_0%,#fff7ed_56%,#eef2ff_100%)] p-4 md:p-5 shadow-[0_16px_40px_rgba(15,23,42,0.06)]"
-          onDragOver={(event) => {
-            event.preventDefault();
-            event.stopPropagation();
-          }}
-          onDrop={handleSourceFileDrop}
-        >
-          <div className="pointer-events-none absolute -right-12 -top-12 h-36 w-36 rounded-full bg-blue-200/30 blur-3xl" />
-          <div className="pointer-events-none absolute -left-14 -bottom-14 h-36 w-36 rounded-full bg-amber-200/30 blur-3xl" />
-          <div className="relative">
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <span className="inline-flex items-center rounded-full border border-slate-200/80 bg-white/80 px-2.5 py-1 text-[11px] font-semibold tracking-[0.08em] text-slate-500">
-                  数据收集入口
-                </span>
-                <p className={`${isMobileLayout ? 'mt-2 text-base' : 'mt-2.5 text-xl'} font-bold text-slate-900`}>拖拽或选择资料</p>
-                <p className={`${isMobileLayout ? 'text-xs' : 'text-sm'} mt-1 max-w-2xl leading-6 text-slate-600`}>
-                  主来源用于生成课堂主转写；增强资料会作为上下文，提升后续音频转写与 AI 理解质量。
-                </p>
-              </div>
-              {!isMobileLayout ? (
-                <div className="rounded-2xl border border-white/80 bg-white/70 px-3 py-2 text-xs text-slate-500 shadow-sm">
-                  支持拖拽上传
-                </div>
-              ) : null}
-            </div>
-
-            <div className={`mt-4 ${isMobileLayout ? 'space-y-3' : 'grid grid-cols-2 gap-3'}`}>
-              <div className="rounded-2xl border border-white/80 bg-white/80 p-3 shadow-[0_4px_18px_rgba(15,23,42,0.04)]">
-                <p className="text-xs font-semibold tracking-[0.08em] text-slate-500">主学习来源</p>
-                <div className="mt-2 flex flex-wrap gap-2">
-                  {primaryActions.map((action) => (
-                    <button
-                      key={action.key}
-                      type="button"
-                      data-testid={action.testId}
-                      onClick={action.onClick}
-                      className={`${actionButtonClass} ${action.active ? activeButtonClass : inactiveButtonClass}`}
-                    >
-                      <span className="inline-flex items-center gap-2">
-                        <span className={`inline-block h-2 w-2 rounded-full ${action.tone}`} />
-                        {action.label}
-                      </span>
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              <div className="rounded-2xl border border-white/80 bg-white/80 p-3 shadow-[0_4px_18px_rgba(15,23,42,0.04)]">
-                <p className="text-xs font-semibold tracking-[0.08em] text-slate-500">辅助与管理</p>
-                <div className="mt-2 flex flex-wrap gap-2">
-                  {secondaryActions.map((action) => (
-                    <button
-                      key={action.key}
-                      type="button"
-                      data-testid={action.testId}
-                      onClick={action.onClick}
-                      className={`${actionButtonClass} ${action.active ? activeButtonClass : inactiveButtonClass}`}
-                    >
-                      <span className="inline-flex items-center gap-2">
-                        <span className={`inline-block h-2 w-2 rounded-full ${action.tone}`} />
-                        {action.label}
-                      </span>
-                    </button>
-                  ))}
-                </div>
-              </div>
-            </div>
-
-            {sourceImporting ? (
-              <p className={`${isMobileLayout ? 'text-xs' : 'text-sm'} mt-3 font-medium text-amber-700`}>正在处理导入资料...</p>
-            ) : null}
-            {!sourceImporting && sourceImportError ? (
-              <p className={`${isMobileLayout ? 'text-xs' : 'text-sm'} mt-3 font-medium text-rose-600`}>{sourceImportError}</p>
-            ) : null}
-          </div>
-        </div>
-
-        {sourceItems.length > 0 ? (
-          <div className={`grid gap-3 ${isMobileLayout ? 'grid-cols-1' : 'grid-cols-2'}`}>
-            <div className="rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">
-              <div className="flex items-center justify-between">
-                <p className="text-xs font-semibold tracking-[0.08em] text-slate-500">主来源</p>
-                <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-medium text-slate-500">{recentPrimaryItems.length}</span>
-              </div>
-              {recentPrimaryItems.length > 0 ? (
-                <div className="mt-2 flex flex-wrap gap-2">
-                  {recentPrimaryItems.map((item) => (
-                    <span
-                      key={item.id}
-                      className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs font-medium text-slate-600"
-                    >
-                      <span>{item.type === 'video' ? '视频' : '音频'}</span>
-                      <span className="max-w-[160px] truncate">{item.title}</span>
-                      <span className="text-slate-400">{item.segmentCount} 段</span>
-                    </span>
-                  ))}
-                </div>
-              ) : (
-                 <p className="mt-2 text-xs text-slate-400">还没有主来源，请先录音、上传音频或导入视频链接。</p>
-              )}
-            </div>
-
-            <div className="rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">
-              <div className="flex items-center justify-between">
-                <p className="text-xs font-semibold tracking-[0.08em] text-slate-500">增强资料</p>
-                <span className="rounded-full bg-cyan-50 px-2 py-0.5 text-[11px] font-medium text-cyan-700">{recentSupportItems.length}</span>
-              </div>
-              {recentSupportItems.length > 0 ? (
-                <div className="mt-2 flex flex-wrap gap-2">
-                  {recentSupportItems.map((item) => (
-                    <span
-                      key={item.id}
-                      className="group inline-flex items-center gap-1 rounded-full border border-cyan-100 bg-cyan-50/60 px-2.5 py-1 text-xs font-medium text-cyan-800"
-                    >
-                      <span>{item.type === 'document' ? '文档' : '文本'}</span>
-                      <span className="max-w-[160px] truncate">{item.title}</span>
-                      <span className="text-cyan-500">{item.segmentCount} 段</span>
-                      <button
-                        type="button"
-                        onClick={() => removeSupportSource(item.id)}
-                        className="ml-0.5 inline-flex h-4 w-4 flex-shrink-0 items-center justify-center rounded-full text-cyan-400 opacity-0 transition hover:bg-cyan-200 hover:text-cyan-700 group-hover:opacity-100"
-                        title="删除"
-                      >
-                         ×
-                      </button>
-                    </span>
-                  ))}
-                </div>
-              ) : (
-                 <p className="mt-2 text-xs text-slate-400">可选上传 PDF、讲义或文本，为后续识别和应用生成提供支持。</p>
-              )}
-            </div>
-          </div>
-        ) : null}
-      </div>
-    );
-  }, [
-    dataSource,
-    handleSourceFileButtonClick,
-    handleSourceFileDrop,
-    handleSourceFileInputChange,
-    removeSupportSource,
-    showSessionHistory,
-    sourceFilePickerMode,
-    sourceImportError,
-    sourceImporting,
-    sourceItems,
-    sourcePanelMode,
-  ]);
-
-  const renderInputSecondaryPanels = useCallback((layout: 'mobile' | 'desktop') => {
-    const isMobileLayout = layout === 'mobile';
-    const historyMaxHeight = isMobileLayout ? '400px' : '500px';
-    const cardPaddingClass = isMobileLayout ? 'p-4' : 'p-6';
-    const titleClass = isMobileLayout ? 'mb-2 text-base font-bold text-slate-900' : 'mb-2 text-2xl font-bold text-slate-900';
-    const surfaceClass = `relative overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-[0_14px_34px_rgba(15,23,42,0.06)] ${cardPaddingClass}`;
-    const inputClass =
-      'w-full rounded-2xl border border-slate-200 bg-slate-50/60 px-3 py-2 text-sm text-slate-700 outline-none transition focus:border-amber-300 focus:bg-white focus:ring-2 focus:ring-amber-100';
-
-    return (
-      <>
-        <div className="card-edu overflow-hidden p-0" style={{ maxHeight: historyMaxHeight, display: showSessionHistory ? undefined : 'none' }}>
-          {workspaceCaptures.length > 0 ? (
-            <WorkspaceCaptureList
-              captures={workspaceCaptures}
-              onClose={() => setShowSessionHistory(false)}
-              onOpenReview={handleOpenWorkspaceCaptureReview}
-              onQuoteCapture={quoteWorkspaceCaptureToComposer}
-              onAskTutorAboutCapture={openTutorFromWorkspaceCapture}
-              onToggleSelectCapture={toggleWorkspaceCaptureContextSelection}
-              onArchiveCapture={archiveWorkspaceCaptureFromList}
-              onDeleteCapture={deleteWorkspaceCaptureFromList}
-              selectedCaptureIds={selectedWorkspaceCaptureIds}
-              selectionMode={isCollectionContextSelectionMode}
-              maxHeight={historyMaxHeight}
-              showHeader={false}
-            />
-          ) : (
-            <SessionHistoryList
-              userId={user?.id}
-              onSessionSelect={handleLoadHistorySession}
-              onClose={() => setShowSessionHistory(false)}
-              activeSessionId={sessionId}
-              maxHeight={historyMaxHeight}
-              showHeader={false}
-              variant="capture"
-            />
-          )}
-        </div>
-
-        <div className={surfaceClass} style={{ display: dataSource === 'video' && !showSessionHistory ? undefined : 'none' }}>
-          <div className="pointer-events-none absolute -right-10 -top-10 h-32 w-32 rounded-full bg-fuchsia-100/45 blur-3xl" />
-          <h3 className={titleClass}>视频链接导入</h3>
-          <p className="mb-4 text-sm leading-6 text-slate-600">导入 B 站视频后自动转写，直接进入课堂复习流。</p>
-          <div className="rounded-2xl border border-slate-200 bg-slate-50/60 p-4">
-          <VideoLinkImporter
-            onImportReady={handleVideoImportReady}
-            onError={(error) => {
-              console.error('视频导入失败:', error);
-              toast.error(String(error));
-            }}
-            disabled={isRecording || sourceImporting}
-          />
-          </div>
-        </div>
-
-        <div
-          className={surfaceClass}
-          style={{ display: dataSource === 'demo' && sourcePanelMode === 'audio' && !showSessionHistory ? undefined : 'none' }}
-        >
-          <div className="pointer-events-none absolute -right-10 -top-10 h-32 w-32 rounded-full bg-blue-100/45 blur-3xl" />
-          <h3 className={titleClass}>上传音频（主来源）</h3>
-          <p className="text-sm leading-6 text-slate-600">
-            支持批量导入课堂录音。可以先补充识别提示，再上传音频。
-          </p>
-          <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50/60 p-4">
-            <label className="mb-2 block text-xs font-semibold tracking-[0.08em] text-slate-500">识别增强提示（可选）</label>
-            <textarea
-              value={asrContextHint}
-              onChange={(event) => setAsrContextHint(event.target.value)}
-              placeholder="例如：本节课讲解圆锥曲线离心率，重点是定义、几何意义和高考题型。"
-              rows={isMobileLayout ? 3 : 4}
-              disabled={sourceImporting || isRecording}
-              className={inputClass}
-            />
-            <p className="mt-2 text-xs leading-5 text-slate-500">系统会自动融合补充材料里的 PDF 和文本，提升 ASR 与后续应用生成质量。</p>
-          </div>
-          <div className="mt-4 flex flex-wrap items-center gap-3">
-            <button
-              type="button"
-              onClick={() => handleSourceFileButtonClick('audio')}
-              disabled={sourceImporting || isRecording}
-              className="rounded-2xl bg-gradient-to-r from-amber-500 to-orange-500 px-5 py-2.5 text-sm font-semibold text-white shadow-[0_10px_24px_rgba(245,158,11,0.32)] transition hover:brightness-105 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-300 disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              {sourceImporting ? '处理中...' : '上传音频'}
-            </button>
-            <span className="text-xs text-slate-500">支持 mp3 / wav / webm / m4a / aac / flac</span>
-          </div>
-        </div>
-
-        <div
-          className={surfaceClass}
-          style={{ display: dataSource === 'demo' && sourcePanelMode === 'support' && !showSessionHistory ? undefined : 'none' }}
-        >
-          <div className="pointer-events-none absolute -right-10 -top-10 h-32 w-32 rounded-full bg-cyan-100/45 blur-3xl" />
-          <h3 className={titleClass}>增强资料（可选）</h3>
-          <p className="text-sm leading-6 text-slate-600">
-            导入讲义、课件、题解或粘贴文本。它们不会覆盖主转写，只作为上下文增强。
-          </p>
-
-          <div className="mt-4 inline-flex rounded-2xl border border-slate-200 bg-slate-50 p-1">
-            <button
-              type="button"
-              onClick={() => setSourceImportMode('files')}
-              className={`rounded-xl px-3 py-1.5 text-xs font-semibold transition ${
-                sourceImportMode === 'files'
-                  ? 'bg-white text-slate-900 shadow-sm'
-                  : 'text-slate-500 hover:text-slate-700'
-              }`}
-            >
-              上传文档
-            </button>
-            <button
-              type="button"
-              onClick={() => setSourceImportMode('text')}
-              className={`rounded-xl px-3 py-1.5 text-xs font-semibold transition ${
-                sourceImportMode === 'text'
-                  ? 'bg-white text-slate-900 shadow-sm'
-                  : 'text-slate-500 hover:text-slate-700'
-              }`}
-            >
-              粘贴文本
-            </button>
-          </div>
-
-          {sourceImportMode === 'files' ? (
-            <div className="mt-4">
-              {(() => {
-                const supportList = sourceItems.filter((item) => item.role === 'support');
-                return supportList.length > 0 ? (
-                  <div className="space-y-2">
-                    <div className="rounded-2xl border border-cyan-100 bg-cyan-50/60 px-3 py-2 text-xs text-cyan-700">
-                      当前补充材料数量：{supportList.length}
-                    </div>
-                    <div className="flex flex-col gap-1.5">
-                      {supportList.map((item) => (
-                        <div
-                          key={item.id}
-                          className="group flex items-center justify-between gap-2 rounded-xl border border-slate-150 bg-slate-50/80 px-3 py-2"
-                        >
-                          <div className="flex min-w-0 items-center gap-2 text-xs text-slate-600">
-                            <span className="flex-shrink-0 rounded bg-cyan-100 px-1.5 py-0.5 text-[10px] font-semibold text-cyan-700">
-                              {item.type === 'document' ? '文档' : '文本'}
-                            </span>
-                            <span className="truncate">{item.title}</span>
-                            <span className="flex-shrink-0 text-slate-400">{item.segmentCount} 段</span>
-                          </div>
-                          <button
-                            type="button"
-                            onClick={() => removeSupportSource(item.id)}
-                            className="flex-shrink-0 rounded-lg p-1 text-slate-300 opacity-0 transition hover:bg-red-50 hover:text-red-500 group-hover:opacity-100"
-                            title="删除这份资料"
-                          >
-                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                              <path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2" />
-                            </svg>
-                          </button>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                ) : (
-                  <div className="rounded-2xl border border-cyan-100 bg-cyan-50/60 px-3 py-2 text-xs text-cyan-700">
-                    当前补充材料数量：0
-                  </div>
-                );
-              })()}
-              <div className="mt-3 flex flex-wrap items-center gap-3">
-                <button
-                  type="button"
-                  onClick={() => handleSourceFileButtonClick('support')}
-                  disabled={sourceImporting || isRecording}
-                  className="rounded-2xl bg-gradient-to-r from-cyan-600 to-blue-600 px-5 py-2.5 text-sm font-semibold text-white shadow-[0_10px_24px_rgba(14,116,144,0.28)] transition hover:brightness-105 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300 disabled:cursor-not-allowed disabled:opacity-60"
-                >
-                  {sourceImporting ? '处理中...' : '上传资料'}
-                </button>
-                <span className="text-xs text-slate-500">支持 pdf / docx / ppt / pptx / txt / md / csv / json / html</span>
-              </div>
-            </div>
-          ) : (
-            <div className="mt-4">
-              <textarea
-                value={sourceTextInput}
-                onChange={(event) => setSourceTextInput(event.target.value)}
-                placeholder="粘贴课堂笔记、重点定义、题目解析等文本..."
-                rows={isMobileLayout ? 5 : 7}
-                disabled={sourceImporting || isRecording}
-                className={inputClass}
-              />
-              <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
-                <span className="text-xs text-slate-500">建议 200-5000 字，可多次追加</span>
-                <button
-                  type="button"
-                  onClick={() => {
-                    void handleImportTextSource();
-                  }}
-                  disabled={sourceImporting || isRecording || !sourceTextInput.trim()}
-                  className="rounded-2xl bg-gradient-to-r from-cyan-600 to-blue-600 px-5 py-2.5 text-sm font-semibold text-white shadow-[0_10px_24px_rgba(14,116,144,0.28)] transition hover:brightness-105 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300 disabled:cursor-not-allowed disabled:opacity-60"
-                >
-                  {sourceImporting ? '处理中...' : '导入文本'}
-                </button>
-              </div>
-            </div>
-          )}
-        </div>
-      </>
-    );
-  }, [
-    asrContextHint,
-    dataSource,
-    deleteWorkspaceCaptureFromList,
-    handleImportTextSource,
-    handleLoadHistorySession,
-    handleOpenWorkspaceCaptureReview,
-    handleSourceFileButtonClick,
-    handleVideoImportReady,
-    isCollectionContextSelectionMode,
-    isRecording,
-    openTutorFromWorkspaceCapture,
-    archiveWorkspaceCaptureFromList,
-    quoteWorkspaceCaptureToComposer,
-    removeSupportSource,
-    selectedWorkspaceCaptureIds,
-    sessionId,
-    showSessionHistory,
-    sourceImportMode,
-    sourceImporting,
-    sourceItems,
-    sourcePanelMode,
-    sourceTextInput,
-    toggleWorkspaceCaptureContextSelection,
-    user?.id,
-    workspaceCaptures,
-  ]);
 
   const renderSharedWorkspacePanel = useCallback((tab: SharedWorkspaceTab) => {
     if (tab === 'highlights') {
@@ -7785,124 +7764,6 @@ const _handleVideoAssistantMessage = useCallback((payload: {
           {isMobile ? (
             <>
               {renderMobileRecordView()}
-              {false && (
-            <div className="flex-1 min-h-0 flex flex-col overflow-hidden" style={{ background: 'var(--edu-bg-primary)' }}>
-              {/* 顶部品牌区：Logo、模式切换和菜单入口 */}
-              <div className="flex-shrink-0 px-4 py-2.5 flex items-center gap-2 bg-white border-b" style={{ borderColor: 'var(--edu-border-light)' }}>
-                {/* Logo */}
-                <div className="w-8 h-8 bg-gradient-to-br from-amber-400 to-amber-500 rounded-lg flex items-center justify-center flex-shrink-0">
-                  <GraduationCap size={18} strokeWidth={2} className="text-white" />
-                </div>
-                
-                {/* Tab 切换区 */}
-                <div className="flex-1 flex items-center justify-center">
-                  <MobileTabSwitch
-                    activeTab={viewMode}
-                    onTabChange={(tab) => handleViewModeChange(tab)}
-                    data-onboarding="mode-switch"
-                  />
-                </div>
-                
-                {/* 菜单入口 / 用户头像 */}
-                {isAuthenticated && user ? (
-                  <button
-                    onClick={() => setIsMenuOpen(true)}
-                    className="w-8 h-8 bg-gradient-to-br from-lilac-200 to-lilac-300 rounded-full flex items-center justify-center overflow-hidden flex-shrink-0"
-                  >
-                    <Avatar className="w-full h-full">
-                      {user?.avatar ? (
-                        <AvatarImage src={user?.avatar ?? undefined} alt={user?.nickname || '用户'} className="object-cover" />
-                      ) : null}
-                      <AvatarFallback className="bg-transparent text-sm">用户</AvatarFallback>
-                    </Avatar>
-                  </button>
-                ) : (
-                  <a
-                    href="/login"
-                    className="px-2.5 py-1.5 text-xs font-medium text-white bg-gradient-to-r from-amber-400 to-amber-500 rounded-lg flex-shrink-0"
-                  >
-                    登录
-                  </a>
-                )}
-
-                {/* 菜单按钮 */}
-                <DedaoMenuButton onClick={() => setIsMenuOpen(true)} />
-              </div>
-
-              {/* NOTE: cleaned corrupted legacy comment. */}
-              <div className="flex-1 overflow-y-auto p-4">
-                <div className="w-full max-w-md mx-auto flex flex-col gap-3 pb-6">
-                  {/* NOTE: cleaned corrupted legacy comment. */}
-                  <div className="flex-shrink-0 mb-3">
-                    <div className="mb-1.5 flex items-center justify-between">
-                      <span className="text-[11px] font-medium tracking-[0.02em] text-slate-500">选择输入方式</span>
-                      <span className="text-[10px] text-slate-400">课堂收集入口</span>
-                    </div>
-                    {renderInputSourceTabs('mobile')}
-                  </div>
-
-                  <div className="min-h-[360px]" style={{ display: dataSource === 'live' && !showSessionHistory ? undefined : 'none' }}>
-                    <Recorder
-                      onRecordingStart={handleRecordingStart}
-                      onRecordingStop={handleRecordingStop}
-                      onTranscriptionError={handleRecordingTranscriptionError}
-                      onTranscriptUpdate={handleTranscriptUpdate}
-                      onTranscriptTextUpdate={handleTranscriptTextUpdate}
-                      onTranscriptEnhanced={handleTranscriptEnhanced}
-                      onAnchorMark={handleAnchorMark}
-                      contextHint={liveASRContextHint}
-                    />
-                  </div>
-
-                  {renderInputSecondaryPanels('mobile')}
-                  
-                  {/* NOTE: cleaned corrupted legacy comment. */}
-                  {anchors.length > 0 && (
-                    <div className="card-edu p-4 animate-slide-up">
-                      <h3 className="text-sm font-semibold text-gray-900 mb-3 flex items-center gap-2">
-                        <span>!</span>
-                        已标记的困惑点
-                        <span className="ml-auto text-xs font-normal text-gray-400">{anchors.length} 个</span>
-                      </h3>
-                      <div className="space-y-2 max-h-32 overflow-y-auto">
-                        {anchors.map((anchor, index) => (
-                                  <div
-                                            key={anchor.id}
-                                            className="flex items-center gap-2 p-2 rounded-lg"
-                                            style={{ background: 'var(--edu-bg-soft)' }}
-                                          >
-                                            <div className={`w-2 h-2 rounded-full ${
-                                              anchor.resolved ? 'bg-mint' : 'bg-coral'
-                                            }`} />
-                            <span className="text-xs font-mono text-gray-600">
-                              {formatTime(anchor.timestamp)}
-                            </span>
-                            <span className="text-xs text-gray-500">
-                              困惑点 #{index + 1}
-                            </span>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              {/* Right-side drawer menu. */}
-              <DedaoMenu
-                isOpen={isMenuOpen}
-                onClose={() => setIsMenuOpen(false)}
-                onNavigate={(page) => setMobileSubPage(page)}
-                showApps={false}
-                userRole="student"
-                badges={{
-                  highlights: highlightTopics.length,
-                  notes: notes.length,
-                  tasks: actionItems.filter(i => !i.completed).length,
-                }}
-              />
-            </div>
-              )}
             </>
           ) : (
             <div className="flex-1 min-h-0 page-enter" style={{ background: 'var(--edu-bg-primary)' }}>
@@ -7912,7 +7773,7 @@ const _handleVideoAssistantMessage = useCallback((payload: {
         </>
       ) : (
         <>
-          {/* 濡楀矂娼扮粩顖氱鐏炩偓 */}
+          {/* Desktop review layout */}
           {!isMobile ? (
             <div
               className={`flex-1 min-h-0 flex page-enter ${videoSource ? 'overflow-visible' : 'overflow-hidden'}`}
@@ -9007,6 +8868,112 @@ const _handleVideoAssistantMessage = useCallback((payload: {
           )}
         </>
       )}
+
+      {workspaceCaptureEditor ? (
+        <div className="fixed inset-0 z-[120] flex items-end justify-center bg-slate-950/28 p-3 backdrop-blur-[2px] md:items-center">
+          <button
+            type="button"
+            aria-label="关闭收集编辑器"
+            className="absolute inset-0"
+            onClick={closeWorkspaceCaptureEditor}
+          />
+          <div className="relative w-full max-w-lg overflow-hidden rounded-[28px] border border-slate-200 bg-white shadow-[0_28px_70px_rgba(15,23,42,0.22)]">
+            <div className="border-b border-slate-100 px-5 py-4">
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <p className="text-base font-semibold text-slate-900">
+                    {workspaceCaptureEditor.mode === 'transcript'
+                      ? '校正文字'
+                      : workspaceCaptureEditor.mode === 'text'
+                        ? '编辑文字'
+                        : '编辑标题/备注'}
+                  </p>
+                  <p className="mt-1 text-sm text-slate-500">
+                    {workspaceCaptureEditor.mode === 'transcript'
+                      ? '把这条转写校正成你真正想保留的版本。'
+                      : workspaceCaptureEditor.mode === 'text'
+                        ? '直接改这条文字收集，改完会同步回当前流。'
+                        : '改一下标题或补一句备注，后面更容易回看。'}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={closeWorkspaceCaptureEditor}
+                  className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-slate-100 text-slate-500 transition hover:bg-slate-200 hover:text-slate-700"
+                  aria-label="关闭编辑器"
+                >
+                  <X size={16} />
+                </button>
+              </div>
+            </div>
+
+            <div className="space-y-4 px-5 py-4">
+              {workspaceCaptureEditor.mode === 'meta' ? (
+                <label className="block">
+                  <span className="mb-2 block text-sm font-medium text-slate-700">标题</span>
+                  <input
+                    value={workspaceCaptureEditorTitle}
+                    onChange={(event) => setWorkspaceCaptureEditorTitle(event.target.value)}
+                    placeholder="给这条收集起个更好找的名字"
+                    aria-label="收集标题"
+                    className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700 outline-none transition focus:border-emerald-300 focus:bg-white focus:ring-2 focus:ring-emerald-100"
+                  />
+                </label>
+              ) : null}
+
+              <label className="block">
+                <span className="mb-2 block text-sm font-medium text-slate-700">
+                  {workspaceCaptureEditor.mode === 'transcript'
+                    ? '文字内容'
+                    : workspaceCaptureEditor.mode === 'text'
+                      ? '正文'
+                      : '备注'}
+                </span>
+                <textarea
+                  value={workspaceCaptureEditorBody}
+                  onChange={(event) => setWorkspaceCaptureEditorBody(event.target.value)}
+                  placeholder={
+                    workspaceCaptureEditor.mode === 'transcript'
+                      ? '把更准确的转写写在这里'
+                      : workspaceCaptureEditor.mode === 'text'
+                        ? '把你真正想保留的文字写在这里'
+                        : '可选，补一句备注方便以后回看'
+                  }
+                  aria-label={
+                    workspaceCaptureEditor.mode === 'transcript'
+                      ? '收集转写文字'
+                      : workspaceCaptureEditor.mode === 'text'
+                        ? '收集正文'
+                        : '收集备注'
+                  }
+                  rows={workspaceCaptureEditor.mode === 'meta' ? 4 : 8}
+                  className="w-full resize-none rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm leading-6 text-slate-700 outline-none transition focus:border-emerald-300 focus:bg-white focus:ring-2 focus:ring-emerald-100"
+                />
+              </label>
+            </div>
+
+            <div className="flex items-center justify-end gap-3 border-t border-slate-100 px-5 py-4">
+              <button
+                type="button"
+                onClick={closeWorkspaceCaptureEditor}
+                className="rounded-full border border-slate-200 bg-white px-4 py-2.5 text-sm font-medium text-slate-600 transition hover:border-slate-300 hover:text-slate-800"
+              >
+                取消
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  void saveWorkspaceCaptureEdit();
+                }}
+                disabled={isSavingWorkspaceCaptureEdit}
+                className="rounded-full bg-emerald-600 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:bg-emerald-300"
+              >
+                {isSavingWorkspaceCaptureEdit ? '保存中...' : '保存'}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       <WorkshopWindowManager
         windows={workshopWindows}

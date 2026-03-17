@@ -1,12 +1,28 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { AudioLines, ChevronRight, FileText, ImageIcon, Link2, MoreHorizontal, PlaySquare, Sparkles } from 'lucide-react';
+import {
+  AudioLines,
+  ChevronRight,
+  FileText,
+  ImageIcon,
+  Link2,
+  MoreHorizontal,
+  PencilLine,
+  PlaySquare,
+  RotateCcw,
+  Search,
+  Sparkles,
+} from 'lucide-react';
 
 export interface WorkspaceCaptureListItem {
   id: string;
   sourceKey: string;
   sourceType: string;
+  kind?: 'workspace' | 'local';
+  sourceItemId?: string | null;
+  editable?: boolean;
+  status?: 'active' | 'archived' | 'deleted';
   role: string;
   contentType: string;
   title: string;
@@ -20,6 +36,11 @@ export interface WorkspaceCaptureListItem {
   metadata?: Record<string, unknown> | null;
 }
 
+type WorkspaceCaptureEditMode = 'text' | 'transcript' | 'meta';
+type WorkspaceCaptureScope = 'active' | 'archived';
+type WorkspaceCaptureFilter = 'all' | 'text' | 'audio' | 'video' | 'image' | 'document' | 'link';
+type WorkspaceCaptureTimeFilter = 'all' | 'today' | 'recent' | 'earlier';
+
 interface WorkspaceCaptureListProps {
   captures: WorkspaceCaptureListItem[];
   onClose?: () => void;
@@ -28,11 +49,38 @@ interface WorkspaceCaptureListProps {
   onAskTutorAboutCapture?: (capture: WorkspaceCaptureListItem) => void;
   onToggleSelectCapture?: (capture: WorkspaceCaptureListItem) => void;
   onArchiveCapture?: (capture: WorkspaceCaptureListItem) => void;
+  onRestoreCapture?: (capture: WorkspaceCaptureListItem) => void;
   onDeleteCapture?: (capture: WorkspaceCaptureListItem) => void;
+  onEditCapture?: (capture: WorkspaceCaptureListItem, mode: WorkspaceCaptureEditMode) => void;
   selectedCaptureIds?: string[];
   selectionMode?: boolean;
   maxHeight?: string;
   showHeader?: boolean;
+}
+
+const FILTER_OPTIONS: Array<{ key: WorkspaceCaptureFilter; label: string }> = [
+  { key: 'all', label: '全部' },
+  { key: 'text', label: '文字' },
+  { key: 'audio', label: '原声' },
+  { key: 'video', label: '视频' },
+  { key: 'image', label: '图片' },
+  { key: 'document', label: '材料' },
+  { key: 'link', label: '链接' },
+];
+
+const TIME_OPTIONS: Array<{ key: WorkspaceCaptureTimeFilter; label: string }> = [
+  { key: 'all', label: '全部时间' },
+  { key: 'today', label: '今天' },
+  { key: 'recent', label: '最近' },
+  { key: 'earlier', label: '更早' },
+];
+
+const RECENT_WINDOW_DAYS = 7;
+
+function getCaptureTimestamp(item: WorkspaceCaptureListItem) {
+  const value = item.occurredAt || item.createdAt;
+  const timestamp = new Date(value).getTime();
+  return Number.isNaN(timestamp) ? 0 : timestamp;
 }
 
 function formatRelativeTime(value?: string | null): string {
@@ -86,25 +134,57 @@ function getCaptureTag(item: WorkspaceCaptureListItem): string {
 function getCaptureHint(item: WorkspaceCaptureListItem): string {
   if (item.previewText?.trim()) return item.previewText.trim();
 
-  if (item.contentType === 'audio') return '这段原声已经收下来了，后面可以继续转写和复习。';
-  if (item.contentType === 'video') return '这份视频材料已经接进这条学习线索里了。';
+  if (item.contentType === 'audio') return '这段原声已经先收下了，后面可以继续校正文字或去复习。';
+  if (item.contentType === 'video') return '这份视频已经接进这条学习线里了。';
   if (item.contentType === 'image') return '这张图已经留在当前上下文里了。';
-  if (item.contentType === 'link') return '这条链接已经接进当前收集流里。';
-  if (item.contentType === 'document') return '这份材料已经留在这条收集线索里。';
-  return '这条记录已经留在当前学习脉络里。';
+  if (item.contentType === 'link') return '这条链接已经接进当前收集流里了。';
+  if (item.contentType === 'document') return '这份材料已经留在当前学习线索里了。';
+  return '这条记录已经留在当前学习脉络里了。';
 }
 
 function getCaptureDisplayTitle(item: WorkspaceCaptureListItem): string {
   if (item.contentType === 'text' && item.previewText.trim()) {
     return item.previewText.trim();
   }
-  return item.title;
+
+  return item.title?.trim() || '未命名收集';
 }
 
 function openOriginalCapture(item: WorkspaceCaptureListItem) {
   const url = item.mediaUrl || item.sourceUrl;
   if (!url || typeof window === 'undefined') return;
   window.open(url, '_blank', 'noopener,noreferrer');
+}
+
+function matchCaptureSearch(item: WorkspaceCaptureListItem, searchQuery: string) {
+  const query = searchQuery.trim().toLowerCase();
+  if (!query) return true;
+
+  return [item.title, item.previewText, item.normalizedText || '', item.tutorContext || '']
+    .join('\n')
+    .toLowerCase()
+    .includes(query);
+}
+
+function matchCaptureTime(item: WorkspaceCaptureListItem, timeFilter: WorkspaceCaptureTimeFilter) {
+  if (timeFilter === 'all') return true;
+
+  const timestamp = getCaptureTimestamp(item);
+  if (!timestamp) return false;
+
+  const now = new Date();
+  const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+  const startOfRecentWindow = startOfToday - (RECENT_WINDOW_DAYS - 1) * 24 * 60 * 60 * 1000;
+
+  if (timeFilter === 'today') {
+    return timestamp >= startOfToday;
+  }
+
+  if (timeFilter === 'recent') {
+    return timestamp < startOfToday && timestamp >= startOfRecentWindow;
+  }
+
+  return timestamp < startOfRecentWindow;
 }
 
 export function WorkspaceCaptureList({
@@ -115,7 +195,9 @@ export function WorkspaceCaptureList({
   onAskTutorAboutCapture,
   onToggleSelectCapture,
   onArchiveCapture,
+  onRestoreCapture,
   onDeleteCapture,
+  onEditCapture,
   selectedCaptureIds = [],
   selectionMode = false,
   maxHeight = '52vh',
@@ -123,6 +205,11 @@ export function WorkspaceCaptureList({
 }: WorkspaceCaptureListProps) {
   const [activeMenuCaptureId, setActiveMenuCaptureId] = useState<string | null>(null);
   const [confirmDeleteCaptureId, setConfirmDeleteCaptureId] = useState<string | null>(null);
+  const [scope, setScope] = useState<WorkspaceCaptureScope>('active');
+  const [filterType, setFilterType] = useState<WorkspaceCaptureFilter>('all');
+  const [timeFilter, setTimeFilter] = useState<WorkspaceCaptureTimeFilter>('all');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [showFilters, setShowFilters] = useState(false);
 
   useEffect(() => {
     if (!confirmDeleteCaptureId) return;
@@ -130,55 +217,217 @@ export function WorkspaceCaptureList({
     setConfirmDeleteCaptureId(null);
   }, [activeMenuCaptureId, confirmDeleteCaptureId]);
 
+  useEffect(() => {
+    setActiveMenuCaptureId(null);
+    setConfirmDeleteCaptureId(null);
+  }, [scope, filterType, timeFilter, searchQuery, selectionMode, showFilters]);
+
   const sortedCaptures = useMemo(
     () =>
-      [...captures].sort(
-        (a, b) =>
-          new Date(b.occurredAt || b.createdAt).getTime() - new Date(a.occurredAt || a.createdAt).getTime()
-      ),
+      [...captures]
+        .filter((item) => item.status !== 'deleted')
+        .sort((a, b) => getCaptureTimestamp(b) - getCaptureTimestamp(a)),
     [captures]
   );
 
+  const activeCount = useMemo(
+    () => sortedCaptures.filter((item) => (item.status || 'active') === 'active').length,
+    [sortedCaptures]
+  );
+  const archivedCount = useMemo(
+    () => sortedCaptures.filter((item) => item.status === 'archived').length,
+    [sortedCaptures]
+  );
+
+  useEffect(() => {
+    if (scope === 'active' && activeCount === 0 && archivedCount > 0) {
+      setScope('archived');
+    }
+    if (scope === 'archived' && archivedCount === 0) {
+      setScope('active');
+    }
+  }, [activeCount, archivedCount, scope]);
+
+  const filteredCaptures = useMemo(
+    () =>
+      sortedCaptures.filter((item) => {
+        const status = item.status || 'active';
+        if (scope === 'active' && status !== 'active') return false;
+        if (scope === 'archived' && status !== 'archived') return false;
+        if (filterType !== 'all' && item.contentType !== filterType) return false;
+        if (!matchCaptureTime(item, timeFilter)) return false;
+        return matchCaptureSearch(item, searchQuery);
+      }),
+    [filterType, scope, searchQuery, sortedCaptures, timeFilter]
+  );
+
+  const isFiltered = Boolean(searchQuery.trim()) || filterType !== 'all' || timeFilter !== 'all';
+
   return (
-    <div className="flex h-full flex-col bg-[#fbf8f2]" style={{ maxHeight }}>
+    <div className="flex h-full flex-col bg-[#fbf8f2]" style={{ maxHeight }} data-testid="workspace-capture-list">
       {showHeader ? (
-        <div className="flex items-center justify-between border-b border-slate-200/80 px-4 py-3">
-          <div>
-            <p className="text-sm font-semibold text-slate-900">全部收集</p>
-            <p className="mt-1 text-xs text-slate-500">原声、图片、材料和链接都会留在这里。</p>
+        <div className="border-b border-slate-200/80 px-4 py-3">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <p className="text-sm font-semibold text-slate-900">全部收集</p>
+              <p className="mt-1 text-xs text-slate-500">原声、图片、材料和链接都会留在这里。</p>
+            </div>
+            {onClose ? (
+              <button
+                type="button"
+                onClick={onClose}
+                className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-500 transition hover:border-slate-300 hover:text-slate-700"
+              >
+                关闭
+              </button>
+            ) : null}
           </div>
-          {onClose ? (
-            <button
-              type="button"
-              onClick={onClose}
-              className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-500 transition hover:border-slate-300 hover:text-slate-700"
-            >
-              关闭
-            </button>
-          ) : null}
         </div>
       ) : null}
 
+      <div className="border-b border-slate-200/80 bg-white/70 px-3 py-3">
+        <div className="relative">
+          <Search size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+          <input
+            value={searchQuery}
+            onChange={(event) => setSearchQuery(event.target.value)}
+            placeholder="搜索收集内容"
+            aria-label="搜索收集内容"
+            className="w-full rounded-2xl border border-slate-200 bg-white py-2 pl-9 pr-3 text-sm text-slate-700 outline-none transition focus:border-emerald-300 focus:ring-2 focus:ring-emerald-100"
+          />
+        </div>
+
+        <div className="mt-3 flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setScope('active')}
+            aria-pressed={scope === 'active'}
+            className={`rounded-full px-3 py-1.5 text-xs font-semibold transition ${
+              scope === 'active'
+                ? 'bg-emerald-600 text-white'
+                : 'border border-slate-200 bg-white text-slate-600 hover:border-slate-300'
+            }`}
+          >
+            当前流 {activeCount > 0 ? `(${activeCount})` : ''}
+          </button>
+          <button
+            type="button"
+            onClick={() => setScope('archived')}
+            aria-pressed={scope === 'archived'}
+            className={`rounded-full px-3 py-1.5 text-xs font-semibold transition ${
+              scope === 'archived'
+                ? 'bg-slate-800 text-white'
+                : 'border border-slate-200 bg-white text-slate-600 hover:border-slate-300'
+            }`}
+          >
+            已移除 {archivedCount > 0 ? `(${archivedCount})` : ''}
+          </button>
+        </div>
+
+        <div className="mt-3 flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={() => setShowFilters((prev) => !prev)}
+            aria-expanded={showFilters}
+            className={`rounded-full px-3 py-1.5 text-[11px] font-medium transition ${
+              showFilters || filterType !== 'all' || timeFilter !== 'all'
+                ? 'bg-slate-900 text-white'
+                : 'border border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:text-slate-800'
+            }`}
+          >
+            {filterType === 'all' && timeFilter === 'all' ? '筛选' : '筛选中'}
+          </button>
+          {(filterType !== 'all' || timeFilter !== 'all') ? (
+            <button
+              type="button"
+              onClick={() => {
+                setFilterType('all');
+                setTimeFilter('all');
+              }}
+              className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-[11px] font-medium text-slate-500 transition hover:border-slate-300 hover:text-slate-700"
+            >
+              清空筛选
+            </button>
+          ) : null}
+        </div>
+
+        {showFilters ? (
+          <div className="mt-3 rounded-2xl border border-slate-200 bg-white/85 p-3">
+            <p className="text-[11px] font-semibold tracking-[0.08em] text-slate-500">内容类型</p>
+            <div className="mt-2 flex flex-wrap gap-2">
+              {FILTER_OPTIONS.map((option) => (
+                <button
+                  key={option.key}
+                  type="button"
+                  onClick={() => setFilterType(option.key)}
+                  aria-pressed={filterType === option.key}
+                  className={`rounded-full px-3 py-1.5 text-[11px] font-medium transition ${
+                    filterType === option.key
+                      ? 'bg-slate-900 text-white'
+                      : 'border border-slate-200 bg-white text-slate-500 hover:border-slate-300 hover:text-slate-700'
+                  }`}
+                >
+                  {option.label}
+                </button>
+              ))}
+            </div>
+
+            <p className="mt-3 text-[11px] font-semibold tracking-[0.08em] text-slate-500">时间范围</p>
+            <div className="mt-2 flex flex-wrap gap-2">
+              {TIME_OPTIONS.map((option) => (
+                <button
+                  key={option.key}
+                  type="button"
+                  onClick={() => setTimeFilter(option.key)}
+                  aria-pressed={timeFilter === option.key}
+                  className={`rounded-full px-3 py-1.5 text-[11px] font-medium transition ${
+                    timeFilter === option.key
+                      ? 'bg-emerald-600 text-white'
+                      : 'border border-slate-200 bg-white text-slate-500 hover:border-slate-300 hover:text-slate-700'
+                  }`}
+                >
+                  {option.label}
+                </button>
+              ))}
+            </div>
+          </div>
+        ) : null}
+      </div>
+
       <div className="min-h-0 flex-1 overflow-y-auto px-3 py-3">
-        {sortedCaptures.length === 0 ? (
+        {filteredCaptures.length === 0 ? (
           <div className="rounded-[24px] border border-dashed border-slate-200 bg-white px-4 py-8 text-center">
             <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-emerald-50 text-emerald-600">
               <Sparkles size={18} />
             </div>
-            <p className="mt-4 text-sm font-semibold text-slate-900">还没有收进内容</p>
+            <p className="mt-4 text-sm font-semibold text-slate-900">
+              {isFiltered ? '没找到匹配的收集' : scope === 'archived' ? '还没有已移除内容' : '还没有收进内容'}
+            </p>
             <p className="mt-2 text-sm leading-6 text-slate-500">
-              先发一句话、一张图、一份讲义或一段原声，后面再继续往里接。
+              {isFiltered
+                ? '换个关键词、类型或时间范围再试试。'
+                : scope === 'archived'
+                  ? '从当前流移除过的内容会留在这里，方便你之后恢复。'
+                  : '先发一句话、一张图、一份讲义或一段原声，后面再继续往里接。'}
             </p>
           </div>
         ) : (
           <div className="space-y-3 pb-2">
-            {sortedCaptures.map((item) => {
+            {filteredCaptures.map((item) => {
               const Icon = getCaptureIcon(item.contentType);
               const reviewSessionId = typeof item.metadata?.sessionId === 'string' ? item.metadata.sessionId : null;
               const canReview = Boolean(reviewSessionId && (item.contentType === 'audio' || item.contentType === 'video'));
               const canOpenOriginal = Boolean(item.mediaUrl || item.sourceUrl);
+              const canEdit = item.editable !== false;
+              const canCorrectTranscript =
+                canEdit &&
+                (item.contentType === 'audio' || item.contentType === 'video') &&
+                Boolean((item.normalizedText || item.tutorContext || '').trim());
+              const canEditText = canEdit && item.contentType === 'text';
+              const canEditMeta = canEdit && item.contentType !== 'text';
               const isSelected = selectedCaptureIds.includes(item.id);
               const isMenuOpen = activeMenuCaptureId === item.id;
+              const isArchived = (item.status || 'active') === 'archived';
               const displayTitle = getCaptureDisplayTitle(item);
 
               return (
@@ -205,16 +454,21 @@ export function WorkspaceCaptureList({
                       <div className="flex items-start justify-between gap-3">
                         <div className="min-w-0 flex-1">
                           <div className="flex items-center justify-between gap-3">
-                            <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-semibold text-slate-500">
-                              {getCaptureTag(item)}
-                            </span>
+                            <div className="flex flex-wrap items-center gap-2">
+                              <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-semibold text-slate-500">
+                                {getCaptureTag(item)}
+                              </span>
+                              {isArchived ? (
+                                <span className="rounded-full bg-amber-50 px-2.5 py-1 text-[11px] font-semibold text-amber-700">
+                                  已移除
+                                </span>
+                              ) : null}
+                            </div>
                             <span className="text-[11px] text-slate-400">
                               {formatRelativeTime(item.occurredAt || item.createdAt)}
                             </span>
                           </div>
-                          <p className="mt-2 text-sm font-semibold leading-6 text-slate-900">
-                            {displayTitle !== item.title ? displayTitle : item.title}
-                          </p>
+                          <p className="mt-2 text-sm font-semibold leading-6 text-slate-900">{displayTitle}</p>
                           <p className="mt-1 text-sm leading-6 text-slate-500">{getCaptureHint(item)}</p>
                         </div>
                         {!selectionMode ? (
@@ -243,7 +497,7 @@ export function WorkspaceCaptureList({
                                 : 'border border-slate-200 bg-slate-50 text-slate-700 hover:border-slate-300 hover:bg-slate-100'
                             }`}
                           >
-                            {isSelected ? '已选' : '选择'}
+                            {isSelected ? '已选择' : '选择'}
                           </button>
                         </div>
                       ) : null}
@@ -261,6 +515,45 @@ export function WorkspaceCaptureList({
                             >
                               <span>去复习</span>
                               <ChevronRight size={14} />
+                            </button>
+                          ) : null}
+                          {canEditText ? (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setActiveMenuCaptureId(null);
+                                onEditCapture?.(item, 'text');
+                              }}
+                              className="flex w-full items-center justify-between rounded-[14px] bg-white px-3 py-2.5 text-left text-xs font-medium text-slate-700 transition hover:bg-slate-100"
+                            >
+                              <span>编辑文字</span>
+                              <PencilLine size={14} className="text-slate-300" />
+                            </button>
+                          ) : null}
+                          {canCorrectTranscript ? (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setActiveMenuCaptureId(null);
+                                onEditCapture?.(item, 'transcript');
+                              }}
+                              className="flex w-full items-center justify-between rounded-[14px] bg-white px-3 py-2.5 text-left text-xs font-medium text-slate-700 transition hover:bg-slate-100"
+                            >
+                              <span>校正文字</span>
+                              <PencilLine size={14} className="text-slate-300" />
+                            </button>
+                          ) : null}
+                          {canEditMeta ? (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setActiveMenuCaptureId(null);
+                                onEditCapture?.(item, 'meta');
+                              }}
+                              className="flex w-full items-center justify-between rounded-[14px] bg-white px-3 py-2.5 text-left text-xs font-medium text-slate-700 transition hover:bg-slate-100"
+                            >
+                              <span>编辑标题/备注</span>
+                              <PencilLine size={14} className="text-slate-300" />
                             </button>
                           ) : null}
                           {onQuoteCapture ? (
@@ -315,7 +608,22 @@ export function WorkspaceCaptureList({
                               <ChevronRight size={14} className="text-slate-300" />
                             </button>
                           ) : null}
-                          {onArchiveCapture ? (
+                          {isArchived ? (
+                            onRestoreCapture ? (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setConfirmDeleteCaptureId(null);
+                                  setActiveMenuCaptureId(null);
+                                  onRestoreCapture(item);
+                                }}
+                                className="flex w-full items-center justify-between rounded-[14px] bg-emerald-50 px-3 py-2.5 text-left text-xs font-medium text-emerald-700 transition hover:bg-emerald-100"
+                              >
+                                <span>恢复到当前流</span>
+                                <RotateCcw size={14} className="text-emerald-400" />
+                              </button>
+                            ) : null
+                          ) : onArchiveCapture ? (
                             <button
                               type="button"
                               onClick={() => {

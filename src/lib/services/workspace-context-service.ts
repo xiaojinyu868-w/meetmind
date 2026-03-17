@@ -73,6 +73,13 @@ export interface UpsertWorkspaceCaptureInput {
   metadata?: Record<string, unknown>;
 }
 
+export interface UpdateWorkspaceCaptureContentInput extends WorkspaceCaptureLookupInput {
+  title?: string | null;
+  previewText?: string | null;
+  normalizedText?: string | null;
+  tutorContext?: string | null;
+}
+
 interface WorkspaceCaptureLookupInput {
   captureId?: string;
   sourceKey?: string;
@@ -112,6 +119,12 @@ function parseJsonObject(value?: string | null): Record<string, unknown> | null 
 function normalizeCaptureStatus(value?: string | null): WorkspaceCaptureStatus {
   if (value === 'archived' || value === 'deleted') return value;
   return 'active';
+}
+
+function normalizeOptionalCaptureText(value: string | null | undefined): string | null | undefined {
+  if (value === undefined) return undefined;
+  const normalized = (value || '').replace(/\s+/g, ' ').trim();
+  return normalized ? normalized : null;
 }
 
 function buildWorkspaceCaptureWriteData(params: {
@@ -704,7 +717,93 @@ export const workspaceContextService = {
     };
   },
 
-  async getCurrentWorkspaceContext(userId: string): Promise<{
+  async updateCaptureContentForUser(
+    userId: string,
+    params: UpdateWorkspaceCaptureContentInput
+  ): Promise<{
+    workspace: WorkspaceSummary | null;
+    capture: WorkspaceCaptureSummary | null;
+  }> {
+    const workspace = await workspaceService.getDefaultWorkspace(userId);
+    if (!workspace) {
+      return {
+        workspace: null,
+        capture: null,
+      };
+    }
+
+    const where = buildWorkspaceCaptureLookupWhere({
+      workspaceId: workspace.id,
+      lookup: params,
+    });
+    if (!where) {
+      throw new Error('缺少要更新的收集标识');
+    }
+
+    const capture = await prisma.workspaceCapture.findFirst({
+      where,
+    });
+
+    if (!capture || normalizeCaptureStatus(capture.status) === 'deleted') {
+      return {
+        workspace,
+        capture: null,
+      };
+    }
+
+    const nextTitle = normalizeOptionalCaptureText(params.title);
+    const nextPreviewText = normalizeOptionalCaptureText(params.previewText);
+    const nextNormalizedText = normalizeOptionalCaptureText(params.normalizedText);
+    const nextTutorContext = normalizeOptionalCaptureText(params.tutorContext);
+
+    if (
+      nextTitle === undefined &&
+      nextPreviewText === undefined &&
+      nextNormalizedText === undefined &&
+      nextTutorContext === undefined
+    ) {
+      return {
+        workspace,
+        capture: toCaptureSummary(capture),
+      };
+    }
+
+    const updatedCapture = await prisma.workspaceCapture.update({
+      where: { id: capture.id },
+      data: {
+        ...(nextTitle !== undefined
+          ? {
+              title: compactText(nextTitle || capture.title, 80),
+            }
+          : {}),
+        ...(nextPreviewText !== undefined
+          ? {
+              previewText: nextPreviewText ? compactText(nextPreviewText, 180) : null,
+            }
+          : {}),
+        ...(nextNormalizedText !== undefined
+          ? {
+              normalizedText: nextNormalizedText,
+            }
+          : {}),
+        ...(nextTutorContext !== undefined
+          ? {
+              tutorContext: nextTutorContext,
+            }
+          : {}),
+      },
+    });
+
+    return {
+      workspace,
+      capture: toCaptureSummary(updatedCapture),
+    };
+  },
+
+  async getCurrentWorkspaceContext(
+    userId: string,
+    options?: { includeArchived?: boolean }
+  ): Promise<{
     workspace: WorkspaceSummary | null;
     captures: WorkspaceCaptureSummary[];
     echoes: WorkspaceEchoSummary[];
@@ -743,10 +842,10 @@ export const workspaceContextService = {
       prisma.workspaceCapture.findMany({
         where: {
           workspaceId: workspace.id,
-          status: 'active',
+          status: options?.includeArchived ? { in: ['active', 'archived'] } : 'active',
         },
         orderBy: [{ occurredAt: 'desc' }, { createdAt: 'desc' }],
-        take: 40,
+        take: options?.includeArchived ? 80 : 40,
       }),
       prisma.workspaceEcho.findMany({
         where: {

@@ -11,8 +11,7 @@ function getAuthPayload(request: NextRequest) {
     return null;
   }
 
-  const token = authHeader.slice(7);
-  return authService.verifyToken(token);
+  return authService.verifyToken(authHeader.slice(7));
 }
 
 export async function GET(request: NextRequest) {
@@ -23,7 +22,13 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ success: false, error: '未授权' }, { status: 401 });
     }
 
-    const context = await workspaceContextService.getCurrentWorkspaceContext(payload.sub);
+    const includeArchived = ['1', 'true', 'yes'].includes(
+      (request.nextUrl.searchParams.get('includeArchived') || '').toLowerCase()
+    );
+
+    const context = await workspaceContextService.getCurrentWorkspaceContext(payload.sub, {
+      includeArchived,
+    });
 
     return NextResponse.json({
       success: true,
@@ -31,9 +36,6 @@ export async function GET(request: NextRequest) {
     });
   } catch (error) {
     console.error('workspace current context error:', error);
-    return NextResponse.json(
-      { success: false, error: '读取当前工作区失败' },
-      { status: 500 }
-    );
+    return NextResponse.json({ success: false, error: '读取当前工作区失败' }, { status: 500 });
   }
 }

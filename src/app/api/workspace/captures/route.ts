@@ -13,16 +13,18 @@ function getAuthPayload(request: NextRequest) {
     return null;
   }
 
-  const token = authHeader.slice(7);
-  return authService.verifyToken(token);
+  return authService.verifyToken(authHeader.slice(7));
+}
+
+function unauthorizedResponse() {
+  return NextResponse.json({ success: false, error: '未授权' }, { status: 401 });
 }
 
 export async function POST(request: NextRequest) {
   try {
     const payload = getAuthPayload(request);
-
     if (!payload) {
-      return NextResponse.json({ success: false, error: '未授权' }, { status: 401 });
+      return unauthorizedResponse();
     }
 
     const body = (await request.json()) as {
@@ -41,10 +43,7 @@ export async function POST(request: NextRequest) {
     };
 
     if (!body.sourceKey || !body.title || !body.sourceType || !body.contentType) {
-      return NextResponse.json(
-        { success: false, error: '缺少必要字段' },
-        { status: 400 }
-      );
+      return NextResponse.json({ success: false, error: '缺少必要字段' }, { status: 400 });
     }
 
     const result = await workspaceContextService.upsertCaptureForUser(payload.sub, {
@@ -74,34 +73,55 @@ export async function POST(request: NextRequest) {
     });
   } catch (error) {
     console.error('workspace capture upsert error:', error);
-    return NextResponse.json(
-      { success: false, error: '写入工作区收集失败' },
-      { status: 500 }
-    );
+    return NextResponse.json({ success: false, error: '写入工作区收集失败' }, { status: 500 });
   }
 }
 
 export async function PATCH(request: NextRequest) {
   try {
     const payload = getAuthPayload(request);
-
     if (!payload) {
-      return NextResponse.json({ success: false, error: '未授权' }, { status: 401 });
+      return unauthorizedResponse();
     }
 
     const body = (await request.json()) as {
       captureId?: string;
       sourceKey?: string;
-      action?: 'archive' | 'restore';
+      action?: 'archive' | 'restore' | 'update';
+      title?: string | null;
+      previewText?: string | null;
+      normalizedText?: string | null;
+      tutorContext?: string | null;
     };
-
-    const action = body.action || 'archive';
-    if (action !== 'archive' && action !== 'restore') {
-      return NextResponse.json({ success: false, error: '不支持的收集操作' }, { status: 400 });
-    }
 
     if (!body.captureId && !body.sourceKey) {
       return NextResponse.json({ success: false, error: '缺少要更新的收集标识' }, { status: 400 });
+    }
+
+    const action = body.action || 'archive';
+
+    if (action === 'update') {
+      const result = await workspaceContextService.updateCaptureContentForUser(payload.sub, {
+        captureId: body.captureId,
+        sourceKey: body.sourceKey,
+        title: body.title,
+        previewText: body.previewText,
+        normalizedText: body.normalizedText,
+        tutorContext: body.tutorContext,
+      });
+
+      if (!result.capture) {
+        return NextResponse.json({ success: false, error: '未找到这条收集' }, { status: 404 });
+      }
+
+      return NextResponse.json({
+        success: true,
+        capture: result.capture,
+      });
+    }
+
+    if (action !== 'archive' && action !== 'restore') {
+      return NextResponse.json({ success: false, error: '不支持的收集操作' }, { status: 400 });
     }
 
     const result = await workspaceContextService.updateCaptureStatusForUser(payload.sub, {
@@ -121,19 +141,15 @@ export async function PATCH(request: NextRequest) {
     });
   } catch (error) {
     console.error('workspace capture patch error:', error);
-    return NextResponse.json(
-      { success: false, error: '更新收集状态失败' },
-      { status: 500 }
-    );
+    return NextResponse.json({ success: false, error: '更新收集失败' }, { status: 500 });
   }
 }
 
 export async function DELETE(request: NextRequest) {
   try {
     const payload = getAuthPayload(request);
-
     if (!payload) {
-      return NextResponse.json({ success: false, error: '未授权' }, { status: 401 });
+      return unauthorizedResponse();
     }
 
     const body = (await request.json()) as {
@@ -162,9 +178,6 @@ export async function DELETE(request: NextRequest) {
     });
   } catch (error) {
     console.error('workspace capture delete error:', error);
-    return NextResponse.json(
-      { success: false, error: '彻底删除收集失败' },
-      { status: 500 }
-    );
+    return NextResponse.json({ success: false, error: '彻底删除收集失败' }, { status: 500 });
   }
 }

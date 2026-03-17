@@ -132,7 +132,7 @@ async function mockWorkspaceEchoFlow(page: Page, options: MockWorkspaceEchoFlowO
     });
   });
 
-  await page.route('**/api/workspace/current', async (route) => {
+  await page.route('**/api/workspace/current*', async (route) => {
     await route.fulfill({
       status: 200,
       contentType: 'application/json',
