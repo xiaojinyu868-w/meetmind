@@ -354,12 +354,7 @@ export default function AppMatrixWindowPage() {
       onModelChange={setModel}
       taskState={execution.taskState}
       primaryActionLabel={app.key === 'audio-overview' ? '重新生成播客' : undefined}
-      showPrimaryAction={app.key !== 'infographic'}
       onRegenerate={() => {
-        if (app.key === 'infographic') {
-          void (execution.hasResult ? execution.rerun() : execution.execute());
-          return;
-        }
         void execution.rerun();
       }}
     >
