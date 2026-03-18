@@ -43,43 +43,40 @@ export function MobileTabSwitch({
       ref={containerRef}
       data-onboarding={dataOnboarding}
       className={cn(
-        'relative inline-flex items-center p-0.5 rounded-full',
-        'bg-[#F0EBE5]',
+        'relative inline-flex items-center rounded-full p-[3px]',
+        'bg-black/[0.05]',
         className
       )}
     >
-      {/* 滑动指示器 */}
       <div
-        className="absolute h-[calc(100%-4px)] rounded-full bg-white shadow-sm transition-all duration-300 ease-out"
+        className="absolute h-[calc(100%-6px)] rounded-full bg-white shadow-[0_1px_3px_rgba(0,0,0,0.08),0_1px_2px_rgba(0,0,0,0.06)] transition-all duration-300 ease-[cubic-bezier(0.4,0,0.2,1)]"
         style={{
           left: indicatorStyle.left,
           width: indicatorStyle.width,
         }}
       />
 
-      {/* 收集 Tab */}
       <button
         onClick={() => onTabChange('record')}
         className={cn(
-          'relative z-10 py-1.5 px-4 rounded-full text-sm font-medium whitespace-nowrap',
-          'transition-colors duration-200',
+          'relative z-10 rounded-full px-5 py-1.5 text-[13px] font-medium whitespace-nowrap',
+          'transition-all duration-200',
           activeTab === 'record'
-            ? 'text-[var(--dedao-text)]'
-            : 'text-[var(--dedao-text-muted)]'
+            ? 'text-slate-900'
+            : 'text-slate-400 hover:text-slate-500'
         )}
       >
         收集
       </button>
 
-      {/* 复习 Tab */}
       <button
         onClick={() => onTabChange('review')}
         className={cn(
-          'relative z-10 py-1.5 px-4 rounded-full text-sm font-medium whitespace-nowrap',
-          'transition-colors duration-200',
+          'relative z-10 rounded-full px-5 py-1.5 text-[13px] font-medium whitespace-nowrap',
+          'transition-all duration-200',
           activeTab === 'review'
-            ? 'text-[var(--dedao-text)]'
-            : 'text-[var(--dedao-text-muted)]'
+            ? 'text-slate-900'
+            : 'text-slate-400 hover:text-slate-500'
         )}
       >
         复习

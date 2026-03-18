@@ -166,7 +166,7 @@ export function BottomPanel({
       {/* 遮罩层 */}
       {showOverlay && panelState !== 'collapsed' && (
         <div
-          className="fixed inset-0 bg-black/20 backdrop-blur-sm z-40 transition-opacity duration-300 opacity-100"
+          className="fixed inset-0 bg-black/20 z-40 transition-opacity duration-300 opacity-100"
           onClick={handleOverlayClick}
         />
       )}

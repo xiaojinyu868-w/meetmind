@@ -167,7 +167,7 @@ export function DedaoMenu({
       <div
         className={cn(
           'fixed top-0 right-0 bottom-0 w-64 z-50',
-          'bg-white shadow-xl',
+          'bg-white',
           'transform transition-transform duration-300 ease-out',
           isOpen ? 'translate-x-0' : 'translate-x-full'
         )}
@@ -177,7 +177,7 @@ export function DedaoMenu({
           <div className="flex items-center justify-between">
             {isAuthenticated && user ? (
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 bg-gradient-to-br from-lilac-200 to-lilac-300 rounded-full flex items-center justify-center overflow-hidden">
+                <div className="w-10 h-10 bg-lilac-200 rounded-full flex items-center justify-center overflow-hidden">
                   <Avatar className="w-full h-full">
                     {user.avatar ? (
                       <AvatarImage src={user.avatar} alt={user.nickname} className="object-cover" />
@@ -198,11 +198,11 @@ export function DedaoMenu({
                 onClick={onClose}
                 className="flex items-center gap-3"
               >
-                <div className="w-10 h-10 bg-gradient-to-br from-amber-100 to-amber-200 rounded-full flex items-center justify-center">
+                <div className="w-10 h-10 bg-[#FDF3C0] rounded-full flex items-center justify-center">
                   <span className="text-lg">👤</span>
                 </div>
                 <div>
-                  <p className="text-sm font-medium text-amber-600">点击登录</p>
+                  <p className="text-sm font-medium text-[#787774]">点击登录</p>
                   <p className="text-xs text-gray-400">登录后数据云端同步</p>
                 </div>
               </Link>
@@ -234,14 +234,14 @@ export function DedaoMenu({
                 className={cn(
                   'flex-1 px-3 py-2 rounded-lg text-sm flex items-center justify-center gap-1.5 transition-all',
                   userRole === role.id
-                    ? 'bg-amber-50 text-amber-600 font-medium border border-amber-200'
+                    ? 'bg-[#FDF3C0]/50 text-[#787774] font-medium border border-[#E9E9E7]'
                     : loadingRole === role.id
                       ? 'bg-gray-50 text-gray-400 cursor-wait'
                       : 'bg-gray-50 text-gray-600 hover:bg-gray-100'
                 )}
               >
                 {loadingRole === role.id ? (
-                  <svg className="animate-spin h-3.5 w-3.5 text-amber-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                  <svg className="animate-spin h-3.5 w-3.5 text-[#787774]" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                     <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                     <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                   </svg>
@@ -268,19 +268,19 @@ export function DedaoMenu({
                 'w-full px-4 py-3 flex items-center gap-3',
                 'text-left hover:bg-[var(--dedao-bg-warm)]',
                 'transition-colors duration-150',
-                'highlight' in item && item.highlight && 'bg-gradient-to-r from-amber-50 to-orange-50'
+                'highlight' in item && item.highlight && 'bg-[#FDF3C0]/50'
               )}
             >
               <span className={cn(
                 'highlight' in item && item.highlight 
-                  ? 'text-amber-500' 
+                  ? 'text-[#787774]' 
                   : 'text-[var(--dedao-gold)]'
               )}>{item.icon}</span>
               <div className="flex-1 min-w-0">
                 <span className={cn(
                   'block text-sm font-medium',
                   'highlight' in item && item.highlight 
-                    ? 'text-amber-700' 
+                    ? 'text-[#232322]' 
                     : 'text-[var(--dedao-text)]'
                 )}>
                   {item.label}
@@ -340,12 +340,12 @@ export function DedaoMenu({
           {isAuthenticated && user && (
             <button
               onClick={handleLogout}
-              className="w-full px-4 py-3 flex items-center gap-3 text-left hover:bg-coral-50 transition-colors"
+              className="w-full px-4 py-3 flex items-center gap-3 text-left hover:bg-[#FADEC9]/30 transition-colors"
             >
-              <svg className="w-5 h-5 text-coral-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+              <svg className="w-5 h-5 text-[#787774]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0013.5 3h-6a2.25 2.25 0 00-2.25 2.25v13.5A2.25 2.25 0 007.5 21h6a2.25 2.25 0 002.25-2.25V15M12 9l-3 3m0 0l3 3m-3-3h12.75" />
               </svg>
-              <span className="text-sm text-coral-600">退出登录</span>
+              <span className="text-sm text-[#787774]">退出登录</span>
             </button>
           )}
         </div>

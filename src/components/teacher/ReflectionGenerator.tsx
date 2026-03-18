@@ -133,12 +133,12 @@ ${hotspotsText}
   const hasContent = streamedText.length > 0;
 
   return (
-    <div className="bg-white/90 backdrop-blur-sm rounded-2xl shadow-xl border border-slate-200/50 overflow-hidden">
+    <div className="bg-white/90 rounded-2xl border border-slate-200/50 overflow-hidden">
       {/* 头部 */}
-      <div className="px-6 py-5 bg-gradient-to-r from-slate-800 via-slate-900 to-indigo-900">
+      <div className="px-6 py-5 bg-[#232322]">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-white/10 backdrop-blur flex items-center justify-center">
+            <div className="w-10 h-10 rounded-xl bg-white/10 flex items-center justify-center">
               <span className="text-xl">📝</span>
             </div>
             <div>
@@ -150,7 +150,7 @@ ${hotspotsText}
           {isGenerating ? (
             <button
               onClick={stopGeneration}
-              className="px-5 py-2.5 rounded-xl font-medium text-sm bg-red-500 text-white shadow-lg shadow-red-500/30 hover:bg-red-600 transition-all"
+              className="px-5 py-2.5 rounded-xl font-medium text-sm bg-red-500 text-white  hover:bg-red-600 transition-all"
             >
               <span className="flex items-center gap-2">
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -162,7 +162,7 @@ ${hotspotsText}
           ) : (
             <button
               onClick={generateReflection}
-              className="px-5 py-2.5 rounded-xl font-medium text-sm bg-gradient-to-r from-amber-400 to-orange-500 text-white shadow-lg shadow-amber-500/30 hover:shadow-amber-500/50 hover:scale-105 active:scale-95 transition-all"
+              className="px-5 py-2.5 rounded-xl font-medium text-sm bg-[#232322] text-white   hover:scale-105 active:scale-95 transition-all"
             >
               <span className="flex items-center gap-2">
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -180,7 +180,7 @@ ${hotspotsText}
         {!hasContent && !isGenerating && !error ? (
           // 空状态
           <div className="text-center py-12">
-            <div className="w-20 h-20 mx-auto mb-4 rounded-2xl bg-gradient-to-br from-slate-100 to-slate-50 flex items-center justify-center">
+            <div className="w-20 h-20 mx-auto mb-4 rounded-2xl bg-[#F7F7F5] flex items-center justify-center">
               <span className="text-4xl opacity-50">🤖</span>
             </div>
             <h4 className="text-lg font-medium text-slate-700 mb-2">准备生成教学反思</h4>
@@ -214,7 +214,7 @@ ${hotspotsText}
               <pre className="whitespace-pre-wrap font-sans text-slate-700 leading-relaxed text-sm bg-transparent p-0 m-0">
                 {streamedText}
                 {isGenerating && (
-                  <span className="inline-block w-0.5 h-4 bg-amber-500 animate-pulse ml-0.5 align-middle" />
+                  <span className="inline-block w-0.5 h-4 bg-[#232322] animate-pulse ml-0.5 align-middle" />
                 )}
               </pre>
             </div>

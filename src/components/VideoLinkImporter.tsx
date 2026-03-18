@@ -295,7 +295,7 @@ export function VideoLinkImporter({ onImportReady, onError, disabled }: VideoLin
 
   return (
     <div className="space-y-4">
-      <section className="rounded-2xl border border-amber-100/80 bg-gradient-to-b from-white to-amber-50/35 px-4 py-4 shadow-[0_16px_36px_rgba(214,165,87,0.12)]">
+      <section className="rounded-2xl border border-[#E9E9E7]/80 bg-white px-4 py-4 shadow-[0_16px_36px_rgba(214,165,87,0.12)]">
         <div className="space-y-2">
           <label className="text-sm font-semibold text-slate-800">视频链接</label>
           <input
@@ -304,27 +304,27 @@ export function VideoLinkImporter({ onImportReady, onError, disabled }: VideoLin
             value={url}
             onChange={(event) => setUrl(event.target.value)}
             placeholder="粘贴 B站视频链接（bilibili.com 或 b23.tv）"
-            className="w-full rounded-2xl border border-slate-200/80 bg-white px-4 py-3 text-sm text-slate-800 outline-none transition placeholder:text-slate-400 focus:border-amber-400 focus:ring-2 focus:ring-amber-100"
+            className="w-full rounded-2xl border border-slate-200/80 bg-white px-4 py-3 text-sm text-slate-800 outline-none transition placeholder:text-slate-400 focus:border-[#E9E9E7] focus:ring-2 focus:ring-[#E9E9E7]"
             disabled={disabled || status === 'processing'}
           />
         </div>
 
         {parsedPreview && (
           <div className="mt-3 inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white/90 px-3 py-1.5 text-xs text-slate-600">
-            <span className="inline-block h-1.5 w-1.5 rounded-full bg-emerald-400" />
+            <span className="inline-block h-1.5 w-1.5 rounded-full bg-[#D1F4E0]" />
             识别平台: {parsedPreview.providerLabel}
           </div>
         )}
       </section>
 
       {isBiliLink && hasBiliCookie === true && !showCookiePanel && (
-        <div className="flex items-center gap-2 rounded-xl border border-emerald-100 bg-emerald-50 px-3 py-2">
-          <span className="inline-block h-2 w-2 shrink-0 rounded-full bg-emerald-400"></span>
-          <span className="text-xs font-medium text-emerald-700">B站 Cookie 已配置</span>
+        <div className="flex items-center gap-2 rounded-xl border border-[#D1F4E0] bg-[#D1F4E0]/30 px-3 py-2">
+          <span className="inline-block h-2 w-2 shrink-0 rounded-full bg-[#D1F4E0]"></span>
+          <span className="text-xs font-medium text-[#232322]">B站 Cookie 已配置</span>
           <button
             type="button"
             onClick={() => setShowCookiePanel(true)}
-            className="ml-auto text-xs text-slate-500 hover:text-amber-700 transition"
+            className="ml-auto text-xs text-slate-500 hover:text-[#232322] transition"
           >
             修改
           </button>
@@ -349,7 +349,7 @@ export function VideoLinkImporter({ onImportReady, onError, disabled }: VideoLin
           </p>
 
           <details className="text-xs text-slate-600">
-            <summary className="cursor-pointer font-medium text-amber-700 hover:text-amber-800">
+            <summary className="cursor-pointer font-medium text-[#232322] hover:text-[#232322]">
               如何获取？
             </summary>
             <ol className="mt-2 ml-4 space-y-1 list-decimal text-slate-600">
@@ -365,7 +365,7 @@ export function VideoLinkImporter({ onImportReady, onError, disabled }: VideoLin
             placeholder="SESSDATA=xxx; bili_jct=xxx; DedeUserID=xxx"
             rows={2}
             disabled={cookieSaving}
-            className="w-full resize-none rounded-xl border border-slate-200 px-3 py-2 text-xs font-mono placeholder:text-slate-400 focus:border-amber-400 focus:ring-2 focus:ring-amber-100"
+            className="w-full resize-none rounded-xl border border-slate-200 px-3 py-2 text-xs font-mono placeholder:text-slate-400 focus:border-[#E9E9E7] focus:ring-2 focus:ring-[#E9E9E7]"
           />
 
           <div className="flex items-center gap-2">
@@ -373,7 +373,7 @@ export function VideoLinkImporter({ onImportReady, onError, disabled }: VideoLin
               type="button"
               onClick={saveBiliCookie}
               disabled={cookieSaving || !cookieInput.trim()}
-              className="px-4 py-1.5 rounded-lg bg-amber-500 text-white text-xs font-medium hover:bg-amber-600 disabled:opacity-50 disabled:cursor-not-allowed transition"
+              className="px-4 py-1.5 rounded-lg bg-[#232322] text-white text-xs font-medium hover:bg-[#FDECC8] disabled:opacity-50 disabled:cursor-not-allowed transition"
             >
               {cookieSaving ? '保存中...' : '保存'}
             </button>
@@ -402,7 +402,7 @@ export function VideoLinkImporter({ onImportReady, onError, disabled }: VideoLin
         <p className="text-[11px] font-semibold tracking-[0.08em] text-slate-500 uppercase">转写模式</p>
         <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-3">
           {([
-            { id: 'turbo' as const, label: '极速模式（推荐）', accent: 'text-emerald-700' },
+            { id: 'turbo' as const, label: '极速模式（推荐）', accent: 'text-[#232322]' },
             { id: 'fast' as const, label: '快速模式', accent: 'text-slate-700' },
             { id: 'standard' as const, label: '标准模式', accent: 'text-slate-700' },
           ]).map((item) => {
@@ -412,8 +412,8 @@ export function VideoLinkImporter({ onImportReady, onError, disabled }: VideoLin
                 key={item.id}
                 className={`flex cursor-pointer items-center gap-2 rounded-xl border px-3 py-2 text-sm transition ${
                   active
-                    ? 'border-amber-200 bg-amber-50/70 shadow-[0_6px_14px_rgba(214,165,87,0.15)]'
-                    : 'border-slate-200 hover:border-amber-100 hover:bg-amber-50/30'
+                    ? 'border-[#E9E9E7] bg-[#FDF3C0]/50/70 shadow-[0_6px_14px_rgba(214,165,87,0.15)]'
+                    : 'border-slate-200 hover:border-[#E9E9E7] hover:bg-[#EFEFEF]/30'
                 }`}
               >
                 <input
@@ -422,7 +422,7 @@ export function VideoLinkImporter({ onImportReady, onError, disabled }: VideoLin
                   checked={active}
                   onChange={() => setMode(item.id)}
                   disabled={disabled || status === 'processing'}
-                  className="h-4 w-4 accent-amber-500"
+                  className="h-4 w-4 accent-[#232322]"
                 />
                 <span className={`whitespace-nowrap text-sm ${item.accent}`}>{item.label}</span>
               </label>
@@ -442,13 +442,13 @@ export function VideoLinkImporter({ onImportReady, onError, disabled }: VideoLin
         data-testid="video-import-button"
         onClick={handleImport}
         disabled={disabled || status === 'processing' || (!!parsedPreview && parsedPreview.provider !== 'bilibili')}
-        className="w-full rounded-2xl bg-gradient-to-r from-amber-500 via-orange-500 to-amber-500 px-4 py-3.5 text-sm font-semibold text-white shadow-[0_12px_28px_rgba(237,133,24,0.34)] transition hover:from-amber-600 hover:via-orange-600 hover:to-amber-600 disabled:cursor-not-allowed disabled:opacity-60"
+        className="w-full rounded-2xl bg-[#232322] px-4 py-3.5 text-sm font-semibold text-white shadow-[0_12px_28px_rgba(237,133,24,0.34)] transition hover:bg-[#111111] disabled:cursor-not-allowed disabled:opacity-60"
       >
         {status === 'processing' ? '处理中...' : '导入并转写'}
       </button>
 
       {status === 'processing' && (
-        <div className="rounded-xl border border-amber-100 bg-amber-50 px-3 py-2 text-sm text-amber-700">
+        <div className="rounded-xl border border-[#E9E9E7] bg-[#FDF3C0]/50 px-3 py-2 text-sm text-[#232322]">
           {processingMessage}
         </div>
       )}
@@ -460,7 +460,7 @@ export function VideoLinkImporter({ onImportReady, onError, disabled }: VideoLin
             <button
               type="button"
               onClick={() => setShowCookiePanel(true)}
-              className="text-xs font-medium text-amber-700 bg-amber-100 hover:bg-amber-200 px-3 py-1.5 rounded-lg transition"
+              className="text-xs font-medium text-[#232322] bg-[#FDF3C0] hover:bg-[#FDF3C0] px-3 py-1.5 rounded-lg transition"
             >
               配置 B 站 Cookie 后重试
             </button>
@@ -469,7 +469,7 @@ export function VideoLinkImporter({ onImportReady, onError, disabled }: VideoLin
       )}
 
       {status === 'success' && lastSource && (
-        <div className="rounded-xl border border-emerald-100 bg-emerald-50 px-3 py-2 text-sm text-emerald-700">
+        <div className="rounded-xl border border-[#D1F4E0] bg-[#D1F4E0]/30 px-3 py-2 text-sm text-[#232322]">
           已导入: {lastSource.title || lastSource.providerLabel}
           {formatDuration(lastSource.durationSec) ? ` | 时长 ${formatDuration(lastSource.durationSec)}` : ''}
         </div>

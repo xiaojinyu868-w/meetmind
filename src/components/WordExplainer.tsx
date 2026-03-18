@@ -324,7 +324,7 @@ export function WordExplainer({
       >
         <button
           onClick={handleExplain}
-          className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-white bg-gradient-to-r from-violet-500 to-purple-600 hover:from-violet-600 hover:to-purple-700 rounded-full shadow-lg shadow-violet-200/50 transition-all hover:scale-105 active:scale-95"
+          className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-white bg-[#232322] hover:from-violet-600 hover:to-purple-700 rounded-full shadow-violet-200/50 transition-all hover:scale-105 active:scale-95"
         >
           <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
@@ -350,7 +350,7 @@ export function WordExplainer({
         {/* 头部 - 可拖拽 */}
         <div
           onMouseDown={handleDragStart}
-          className="flex items-center justify-between px-4 py-2.5 bg-gradient-to-r from-violet-50 to-purple-50 border-b border-violet-100 cursor-move select-none flex-shrink-0"
+          className="flex items-center justify-between px-4 py-2.5 bg-[#D3E4F4]/30 border-b border-violet-100 cursor-move select-none flex-shrink-0"
         >
           <div className="flex items-center gap-2 min-w-0">
             <span className="text-base flex-shrink-0">🔍</span>
@@ -394,7 +394,7 @@ export function WordExplainer({
             <div key={msg.id}>
               {msg.role === 'user' ? (
                 <div className="flex justify-end">
-                  <div className="max-w-[85%] px-3 py-1.5 rounded-2xl bg-gradient-to-r from-violet-500 to-purple-600 text-white text-xs">
+                  <div className="max-w-[85%] px-3 py-1.5 rounded-2xl bg-[#232322] text-white text-xs">
                     {msg.content}
                   </div>
                 </div>

@@ -134,10 +134,10 @@ export default function IntentBubbleExplorer({
                   className="flex flex-col items-center gap-1.5 group bubble-pop-in"
                   style={{ animationDelay: `${i * 80}ms` }}
                 >
-                  <div className="w-16 h-16 rounded-full bg-gradient-to-br from-amber-50 to-amber-100 border-2 border-amber-200/60 flex items-center justify-center group-hover:border-amber-400 group-hover:shadow-lg group-hover:shadow-amber-100 transition-all group-hover:scale-110 group-active:scale-95">
+                  <div className="w-16 h-16 rounded-full bg-[#FDF3C0] border-2 border-[#E9E9E7]/60 flex items-center justify-center group-hover:border-[#E9E9E7] group-hover:group-hover: transition-all group-hover:scale-110 group-active:scale-95">
                     <span className="text-2xl">{role.emoji}</span>
                   </div>
-                  <span className="text-xs text-gray-600 group-hover:text-amber-700 transition-colors font-medium">
+                  <span className="text-xs text-gray-600 group-hover:text-[#232322] transition-colors font-medium">
                     {role.label}
                   </span>
                 </button>
@@ -166,7 +166,7 @@ export default function IntentBubbleExplorer({
         <span>重选角色</span>
       </button>
 
-      <div className="w-14 h-14 rounded-full bg-gradient-to-br from-amber-100 to-amber-200 flex items-center justify-center mb-2 bubble-pop-in">
+      <div className="w-14 h-14 rounded-full bg-[#FDF3C0] flex items-center justify-center mb-2 bubble-pop-in">
         <span className="text-2xl">{selectedRole.emoji}</span>
       </div>
       <h3 className="text-base font-semibold text-gray-800 mb-0.5">
@@ -182,7 +182,7 @@ export default function IntentBubbleExplorer({
             <div key={intent.label} style={{ transform: `translate(${offset.x}px, ${offset.y}px)` }}>
               <button
                 onClick={() => handleIntentClick(intent)}
-                className="flex items-center gap-1.5 px-4 py-2.5 rounded-full text-sm font-medium bg-white border border-gray-200 text-gray-700 hover:border-amber-300 hover:bg-amber-50 hover:text-amber-800 hover:shadow-md transition-all active:scale-95 bubble-sub-pop-in"
+                className="flex items-center gap-1.5 px-4 py-2.5 rounded-full text-sm font-medium bg-white border border-gray-200 text-gray-700 hover:border-[#232322] hover:bg-[#EFEFEF] hover:text-[#232322] hover:transition-all active:scale-95 bubble-sub-pop-in"
                 style={{ animationDelay: `${i * 100}ms` }}
               >
                 <span>{intent.emoji}</span>

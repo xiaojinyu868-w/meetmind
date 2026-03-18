@@ -51,7 +51,7 @@ export function ConversationItem({
       className={`
         group p-3 rounded-lg cursor-pointer transition-all duration-200
         ${isActive 
-          ? 'bg-amber-50 border border-amber-200 shadow-sm' 
+          ? 'bg-[#FDF3C0]/50 border border-[#E9E9E7] shadow-sm' 
           : 'hover:bg-gray-50 border border-transparent'
         }
       `}
@@ -65,7 +65,7 @@ export function ConversationItem({
             </span>
             <h4 className={`
               text-sm font-medium truncate
-              ${isActive ? 'text-amber-900' : 'text-gray-900'}
+              ${isActive ? 'text-[#232322]' : 'text-gray-900'}
             `}>
               {conversation.title}
             </h4>

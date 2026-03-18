@@ -136,7 +136,7 @@ export function TeacherAudioPlayer({
           
           {/* 转录文字 */}
           {confusion.transcriptContext && (
-            <div className="mb-6 p-4 bg-amber-50 rounded-2xl border border-amber-100">
+            <div className="mb-6 p-4 bg-[#FDF3C0]/50 rounded-2xl border border-[#E9E9E7]">
               <p className="text-sm text-gray-700 leading-relaxed">
                 &quot;{confusion.transcriptContext}&quot;
               </p>
@@ -147,7 +147,7 @@ export function TeacherAudioPlayer({
           <div className="mb-4">
             <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden">
               <div
-                className="h-full bg-gradient-to-r from-amber-400 to-orange-400 rounded-full transition-all duration-100"
+                className="h-full bg-[#FDF3C0] rounded-full transition-all duration-100"
                 style={{ width: `${progress}%` }}
               />
             </div>
@@ -176,9 +176,9 @@ export function TeacherAudioPlayer({
               onClick={togglePlay}
               className={cn(
                 'w-16 h-16 rounded-full',
-                'bg-gradient-to-br from-amber-400 to-orange-500',
+                'bg-[#FDF3C0]',
                 'flex items-center justify-center',
-                'shadow-lg hover:shadow-xl',
+                
                 'transition-all duration-200',
                 'active:scale-95'
               )}

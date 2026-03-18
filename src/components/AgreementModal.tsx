@@ -350,13 +350,13 @@ export function AgreementModal({
       className="fixed inset-0 z-50 flex items-center justify-center p-4"
       onClick={onClose}
     >
-      <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" />
+      <div className="absolute inset-0 bg-black/50" />
       
       <div 
         className="relative w-full max-w-2xl max-h-[85vh] bg-white rounded-2xl shadow-2xl overflow-hidden animate-modal-in"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="sticky top-0 z-10 flex items-center justify-between px-6 py-4 bg-gradient-to-r from-rose-500 to-rose-400 text-white">
+        <div className="sticky top-0 z-10 flex items-center justify-between px-6 py-4 bg-[#232322] text-white">
           <div>
             <h2 className="text-lg font-semibold">{title}</h2>
             <p className="text-xs text-white/80 mt-0.5">生效日期：{updateDate}</p>

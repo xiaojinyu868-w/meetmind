@@ -23,19 +23,19 @@ const rarityConfig = {
     bg: "bg-celadon/10",
     border: "border-celadon/30",
     text: "text-celadon",
-    glow: "shadow-lg shadow-celadon/20",
+    glow: "shadow-celadon/20",
   },
   epic: {
     bg: "bg-vermilion/10",
     border: "border-vermilion/30",
     text: "text-vermilion",
-    glow: "shadow-lg shadow-vermilion/20",
+    glow: "shadow-vermilion/20",
   },
   legendary: {
     bg: "bg-gradient-to-br from-gold/20 via-vermilion/10 to-celadon/20",
     border: "border-gold/40",
     text: "text-gold",
-    glow: "shadow-xl shadow-gold/30",
+    glow: "shadow-gold/30",
   },
 }
 

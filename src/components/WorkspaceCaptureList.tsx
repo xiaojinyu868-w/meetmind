@@ -264,9 +264,9 @@ export function WorkspaceCaptureList({
   const isFiltered = Boolean(searchQuery.trim()) || filterType !== 'all' || timeFilter !== 'all';
 
   return (
-    <div className="flex h-full flex-col bg-[#fbf8f2]" style={{ maxHeight }} data-testid="workspace-capture-list">
+    <div className="flex h-full flex-col bg-[#F7F7F5]" style={{ maxHeight }} data-testid="workspace-capture-list">
       {showHeader ? (
-        <div className="border-b border-slate-200/80 px-4 py-3">
+        <div className="border-b border-white/80 px-4 py-3">
           <div className="flex items-center justify-between gap-3">
             <div>
               <p className="text-sm font-semibold text-slate-900">全部收集</p>
@@ -285,7 +285,7 @@ export function WorkspaceCaptureList({
         </div>
       ) : null}
 
-      <div className="border-b border-slate-200/80 bg-white/70 px-3 py-3">
+      <div className="border-b border-white/80 bg-white/58 px-3 py-3">
         <div className="relative">
           <Search size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
           <input
@@ -293,7 +293,7 @@ export function WorkspaceCaptureList({
             onChange={(event) => setSearchQuery(event.target.value)}
             placeholder="搜索收集内容"
             aria-label="搜索收集内容"
-            className="w-full rounded-2xl border border-slate-200 bg-white py-2 pl-9 pr-3 text-sm text-slate-700 outline-none transition focus:border-emerald-300 focus:ring-2 focus:ring-emerald-100"
+            className="w-full rounded-[18px] border border-white/80 bg-white/92 py-2.5 pl-9 pr-3 text-sm text-slate-700 shadow-[0_10px_24px_rgba(148,163,184,0.08)] outline-none transition focus:border-[#D1F4E0] focus:ring-2 focus:ring-[#D1F4E0]"
           />
         </div>
 
@@ -304,11 +304,11 @@ export function WorkspaceCaptureList({
             aria-pressed={scope === 'active'}
             className={`rounded-full px-3 py-1.5 text-xs font-semibold transition ${
               scope === 'active'
-                ? 'bg-emerald-600 text-white'
+                ? 'bg-[#232322] text-white'
                 : 'border border-slate-200 bg-white text-slate-600 hover:border-slate-300'
             }`}
           >
-            当前流 {activeCount > 0 ? `(${activeCount})` : ''}
+            正在看 {activeCount > 0 ? `(${activeCount})` : ''}
           </button>
           <button
             type="button"
@@ -320,7 +320,7 @@ export function WorkspaceCaptureList({
                 : 'border border-slate-200 bg-white text-slate-600 hover:border-slate-300'
             }`}
           >
-            已移除 {archivedCount > 0 ? `(${archivedCount})` : ''}
+            先收起 {archivedCount > 0 ? `(${archivedCount})` : ''}
           </button>
         </div>
 
@@ -382,7 +382,7 @@ export function WorkspaceCaptureList({
                   aria-pressed={timeFilter === option.key}
                   className={`rounded-full px-3 py-1.5 text-[11px] font-medium transition ${
                     timeFilter === option.key
-                      ? 'bg-emerald-600 text-white'
+                      ? 'bg-[#232322] text-white'
                       : 'border border-slate-200 bg-white text-slate-500 hover:border-slate-300 hover:text-slate-700'
                   }`}
                 >
@@ -397,17 +397,17 @@ export function WorkspaceCaptureList({
       <div className="min-h-0 flex-1 overflow-y-auto px-3 py-3">
         {filteredCaptures.length === 0 ? (
           <div className="rounded-[24px] border border-dashed border-slate-200 bg-white px-4 py-8 text-center">
-            <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-emerald-50 text-emerald-600">
+            <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-[#D1F4E0]/30 text-[#232322]">
               <Sparkles size={18} />
             </div>
             <p className="mt-4 text-sm font-semibold text-slate-900">
-              {isFiltered ? '没找到匹配的收集' : scope === 'archived' ? '还没有已移除内容' : '还没有收进内容'}
+              {isFiltered ? '没找到匹配的收集' : scope === 'archived' ? '还没有收起的内容' : '还没有收进内容'}
             </p>
             <p className="mt-2 text-sm leading-6 text-slate-500">
               {isFiltered
                 ? '换个关键词、类型或时间范围再试试。'
                 : scope === 'archived'
-                  ? '从当前流移除过的内容会留在这里，方便你之后恢复。'
+                  ? '先收起的内容会留在这里，之后随时可以放回来。'
                   : '先发一句话、一张图、一份讲义或一段原声，后面再继续往里接。'}
             </p>
           </div>
@@ -433,8 +433,8 @@ export function WorkspaceCaptureList({
               return (
                 <div
                   key={item.id}
-                  className={`rounded-[24px] border bg-white px-4 py-4 shadow-[0_6px_20px_rgba(15,23,42,0.05)] ${
-                    isSelected ? 'border-emerald-200 ring-2 ring-emerald-100' : 'border-slate-200'
+                  className={`rounded-[26px] border bg-white px-4 py-4 shadow-[0_16px_34px_rgba(148,163,184,0.08)] ${
+                    isSelected ? 'border-[#D1F4E0] ring-2 ring-[#D1F4E0]' : 'border-white/80'
                   }`}
                   onContextMenu={
                     !selectionMode
@@ -447,7 +447,7 @@ export function WorkspaceCaptureList({
                   }
                 >
                   <div className="flex items-start gap-3">
-                    <div className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-full bg-emerald-50 text-emerald-600">
+                    <div className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-[16px] bg-[#D1F4E0]/30/90 text-[#232322] shadow-[0_8px_18px_rgba(16,185,129,0.12)]">
                       <Icon size={18} />
                     </div>
                     <div className="min-w-0 flex-1">
@@ -459,8 +459,8 @@ export function WorkspaceCaptureList({
                                 {getCaptureTag(item)}
                               </span>
                               {isArchived ? (
-                                <span className="rounded-full bg-amber-50 px-2.5 py-1 text-[11px] font-semibold text-amber-700">
-                                  已移除
+                                <span className="rounded-full bg-[#FDF3C0]/50 px-2.5 py-1 text-[11px] font-semibold text-[#232322]">
+                                  已收起
                                 </span>
                               ) : null}
                             </div>
@@ -478,7 +478,7 @@ export function WorkspaceCaptureList({
                               setConfirmDeleteCaptureId(null);
                               setActiveMenuCaptureId((prev) => (prev === item.id ? null : item.id));
                             }}
-                            className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-slate-100 text-slate-500 transition hover:bg-slate-200 hover:text-slate-700"
+                            className="inline-flex h-8 w-8 items-center justify-center rounded-[14px] border border-white/80 bg-white/90 text-slate-500 shadow-[0_8px_18px_rgba(148,163,184,0.08)] transition hover:bg-white hover:text-slate-700"
                             aria-label={`更多操作：${displayTitle}`}
                           >
                             <MoreHorizontal size={15} />
@@ -493,7 +493,7 @@ export function WorkspaceCaptureList({
                             onClick={() => onToggleSelectCapture?.(item)}
                             className={`rounded-full px-3 py-2 text-xs font-medium transition ${
                               isSelected
-                                ? 'border border-emerald-200 bg-emerald-50 text-emerald-700'
+                                ? 'border border-[#D1F4E0] bg-[#D1F4E0]/30 text-[#232322]'
                                 : 'border border-slate-200 bg-slate-50 text-slate-700 hover:border-slate-300 hover:bg-slate-100'
                             }`}
                           >
@@ -503,7 +503,7 @@ export function WorkspaceCaptureList({
                       ) : null}
 
                       {isMenuOpen ? (
-                        <div className="mt-3 space-y-2 rounded-[18px] border border-slate-200 bg-slate-50/80 p-2.5">
+                        <div className="mt-3 space-y-2 rounded-[20px] border border-white/80 bg-white p-2.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.95)]">
                           {canReview ? (
                             <button
                               type="button"
@@ -511,7 +511,7 @@ export function WorkspaceCaptureList({
                                 setActiveMenuCaptureId(null);
                                 onOpenReview?.(item);
                               }}
-                              className="flex w-full items-center justify-between rounded-[14px] bg-emerald-50 px-3 py-2.5 text-left text-xs font-semibold text-emerald-700 transition hover:bg-emerald-100"
+                              className="flex w-full items-center justify-between rounded-[14px] bg-[#D1F4E0]/30 px-3 py-2.5 text-left text-xs font-semibold text-[#232322] transition hover:bg-[#D1F4E0]"
                             >
                               <span>去复习</span>
                               <ChevronRight size={14} />
@@ -617,10 +617,10 @@ export function WorkspaceCaptureList({
                                   setActiveMenuCaptureId(null);
                                   onRestoreCapture(item);
                                 }}
-                                className="flex w-full items-center justify-between rounded-[14px] bg-emerald-50 px-3 py-2.5 text-left text-xs font-medium text-emerald-700 transition hover:bg-emerald-100"
+                                className="flex w-full items-center justify-between rounded-[14px] bg-[#D1F4E0]/30 px-3 py-2.5 text-left text-xs font-medium text-[#232322] transition hover:bg-[#D1F4E0]"
                               >
-                                <span>恢复到当前流</span>
-                                <RotateCcw size={14} className="text-emerald-400" />
+                                <span>放回正在看</span>
+                                <RotateCcw size={14} className="text-[#787774]" />
                               </button>
                             ) : null
                           ) : onArchiveCapture ? (
@@ -631,10 +631,10 @@ export function WorkspaceCaptureList({
                                 setActiveMenuCaptureId(null);
                                 onArchiveCapture(item);
                               }}
-                              className="flex w-full items-center justify-between rounded-[14px] bg-amber-50 px-3 py-2.5 text-left text-xs font-medium text-amber-700 transition hover:bg-amber-100"
+                              className="flex w-full items-center justify-between rounded-[14px] bg-[#FDF3C0]/50 px-3 py-2.5 text-left text-xs font-medium text-[#232322] transition hover:bg-[#FDF3C0]"
                             >
-                              <span>从当前流移除</span>
-                              <ChevronRight size={14} className="text-amber-300" />
+                              <span>先收起</span>
+                              <ChevronRight size={14} className="text-[#FDF3C0]" />
                             </button>
                           ) : null}
                           {onDeleteCapture ? (

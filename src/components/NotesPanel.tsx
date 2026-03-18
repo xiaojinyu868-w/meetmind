@@ -65,7 +65,7 @@ function getSourceLabel(source: NoteSource): string {
 function getSourceColor(source: NoteSource): string {
   switch (source) {
     case 'chat':
-      return 'bg-amber-100 text-amber-700';
+      return 'bg-[#FDF3C0] text-[#232322]';
     case 'takeaways':
       return 'bg-mint-100 text-mint-700';
     case 'transcript':
@@ -93,10 +93,10 @@ function NoteEditor({ initialText = '', selectedText, source, onSave, onCancel }
   const [text, setText] = useState(initialText);
   
   return (
-    <div className="bg-white rounded-lg border-2 border-amber-400 p-4 shadow-lg">
+    <div className="bg-white rounded-lg border-2 border-[#E9E9E7] p-4">
       {/* 引用内容 */}
       {selectedText && (
-        <div className="mb-3 p-3 bg-surface-soft rounded-lg border-l-4 border-amber-300">
+        <div className="mb-3 p-3 bg-surface-soft rounded-lg border-l-4 border-[#E9E9E7]">
           <div className="flex items-center gap-2 mb-1">
             {source && (
               <span className={`px-2 py-0.5 text-xs rounded ${getSourceColor(source)}`}>
@@ -114,7 +114,7 @@ function NoteEditor({ initialText = '', selectedText, source, onSave, onCancel }
         value={text}
         onChange={(e) => setText(e.target.value)}
         placeholder="写下你的笔记..."
-        className="w-full h-24 p-3 border rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-amber-400"
+        className="w-full h-24 p-3 border rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-[#232322]"
         autoFocus
       />
       
@@ -122,7 +122,7 @@ function NoteEditor({ initialText = '', selectedText, source, onSave, onCancel }
       <div className="flex items-center justify-end gap-2 mt-3">
         <button
           onClick={onCancel}
-          className="px-4 py-2 text-sm text-gray-600 hover:text-navy hover:bg-amber-50 rounded-lg transition-colors"
+          className="px-4 py-2 text-sm text-gray-600 hover:text-navy hover:bg-[#EFEFEF] rounded-lg transition-colors"
         >
           取消
         </button>
@@ -133,7 +133,7 @@ function NoteEditor({ initialText = '', selectedText, source, onSave, onCancel }
             }
           }}
           disabled={!text.trim()}
-          className="px-4 py-2 text-sm bg-amber-500 hover:bg-amber-600 text-white rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          className="px-4 py-2 text-sm bg-[#232322] hover:bg-[#FDECC8] text-white rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
         >
           保存笔记
         </button>

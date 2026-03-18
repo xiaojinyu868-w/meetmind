@@ -43,7 +43,7 @@ function ParentPageSkeleton() {
       </div>
       
       {/* AI 总结骨架屏 */}
-      <div className="bg-gradient-to-r from-amber-50 to-orange-50 rounded-2xl p-4">
+      <div className="bg-[#FDF3C0]/50 rounded-2xl p-4">
         <div className="flex items-center gap-2 mb-3">
           <Skeleton className="h-6 w-6 rounded-full" />
           <Skeleton className="h-4 w-20" />
@@ -246,12 +246,12 @@ export default function ParentPage() {
         
         {/* 全部解决庆祝 */}
         {allResolved && (
-          <div className="mb-6 p-4 bg-gradient-to-r from-emerald-50 to-green-50 rounded-2xl border border-emerald-100 animate-scale-in">
+          <div className="mb-6 p-4 bg-[#D1F4E0]/30 rounded-2xl border border-[#D1F4E0] animate-scale-in">
             <div className="flex items-center gap-3">
               <span className="text-2xl">🎉</span>
               <div>
-                <p className="font-medium text-emerald-700">太棒了！</p>
-                <p className="text-sm text-emerald-600/70">所有困惑都解决了</p>
+                <p className="font-medium text-[#232322]">太棒了！</p>
+                <p className="text-sm text-[#232322]/70">所有困惑都解决了</p>
               </div>
             </div>
           </div>
@@ -276,7 +276,7 @@ export default function ParentPage() {
   return (
     <div className="min-h-screen bg-[var(--edu-bg-primary)]">
       {/* 顶部导航 */}
-      <header className="sticky top-0 z-30 bg-white/80 backdrop-blur-md border-b border-gray-100">
+      <header className="sticky top-0 z-30 bg-white/80 border-b border-gray-100">
         <div className="max-w-lg mx-auto px-4 py-4">
           <div className="flex items-center justify-between">
             {/* 标题 */}

@@ -640,7 +640,7 @@ function CustomMindmapRenderer({
 
       {/* 底部提示 */}
       <div className="pointer-events-none absolute bottom-3 left-1/2 z-10 -translate-x-1/2">
-        <p className="rounded-full px-3 py-1 text-[11px] backdrop-blur-md" style={{ background: `${PALETTE.bgSurface}cc`, border: `1px solid ${PALETTE.border}`, color: PALETTE.textMuted }}>
+        <p className="rounded-full px-3 py-1 text-[11px]" style={{ background: `${PALETTE.bgSurface}cc`, border: `1px solid ${PALETTE.border}`, color: PALETTE.textMuted }}>
           滚轮缩放 · 拖拽平移 · 点击节点 ▸ 展开下一层
         </p>
       </div>

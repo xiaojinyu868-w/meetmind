@@ -171,11 +171,11 @@ const ThinkingStepCard = memo(function ThinkingStepCard({
     <div className="relative">
       {/* 步骤卡片 */}
       <div 
-        className="bg-white/70 backdrop-blur-sm rounded-xl border border-violet-100 overflow-hidden shadow-sm hover:shadow-md transition-shadow duration-200"
+        className="bg-white/70 rounded-xl border border-violet-100 overflow-hidden shadow-sm hover:transition-shadow duration-200"
         style={{ animationDelay: `${index * 150}ms` }}
       >
         {/* 步骤标题 */}
-        <div className="px-3 py-2 bg-gradient-to-r from-violet-50 to-purple-50 border-b border-violet-100">
+        <div className="px-3 py-2 bg-[#D3E4F4]/30 border-b border-violet-100">
           <div className="flex items-center gap-2">
             <span className="text-base">{icon}</span>
             <span className={`font-medium text-violet-800 ${isMobile ? 'text-xs' : 'text-sm'}`}>
@@ -195,10 +195,10 @@ const ThinkingStepCard = memo(function ThinkingStepCard({
         
         {/* 学霸笔记 */}
         {step.tip && (
-          <div className="px-3 py-2 bg-gradient-to-r from-amber-50 to-yellow-50 border-t border-amber-100">
+          <div className="px-3 py-2 bg-[#FDF3C0]/30 border-t border-[#E9E9E7]">
             <div className="flex items-start gap-2">
-              <span className="text-amber-500 flex-shrink-0">💡</span>
-              <p className={`text-amber-700 ${isMobile ? 'text-[10px]' : 'text-xs'} leading-relaxed`}>
+              <span className="text-[#787774] flex-shrink-0">💡</span>
+              <p className={`text-[#232322] ${isMobile ? 'text-[10px]' : 'text-xs'} leading-relaxed`}>
                 <span className="font-medium">学霸笔记：</span>
                 {step.tip}
               </p>
@@ -210,7 +210,7 @@ const ThinkingStepCard = memo(function ThinkingStepCard({
       {/* 连接线（非最后一个步骤时显示） */}
       {!isLast && (
         <div className="flex justify-center py-1">
-          <div className="w-px h-4 bg-gradient-to-b from-violet-300 to-violet-200" />
+          <div className="w-px h-4 bg-[#D3E4F4]" />
           <svg className="w-3 h-3 text-violet-400 absolute -bottom-1" fill="currentColor" viewBox="0 0 24 24">
             <path d="M12 16l-6-6h12l-6 6z" />
           </svg>
@@ -262,10 +262,10 @@ const StructuredThinking = memo(function StructuredThinking({
       
       {/* 思维方法总结 */}
       {parsed.summary && !isThinking && (
-        <div className="mt-3 p-3 bg-gradient-to-r from-emerald-50 to-teal-50 rounded-xl border border-emerald-200">
+        <div className="mt-3 p-3 bg-[#D1F4E0]/30 rounded-xl border border-[#D1F4E0]">
           <div className="flex items-center gap-2">
-            <span className="text-emerald-500">🌟</span>
-            <p className={`text-emerald-700 ${isMobile ? 'text-[10px]' : 'text-xs'} font-medium`}>
+            <span className="text-[#232322]">🌟</span>
+            <p className={`text-[#232322] ${isMobile ? 'text-[10px]' : 'text-xs'} font-medium`}>
               本次用到的思维方法：
               <span className="font-normal ml-1">{parsed.summary}</span>
             </p>
@@ -344,7 +344,7 @@ export const ThinkingVisualizer = memo(function ThinkingVisualizer({
       <div 
         className={`rounded-2xl border transition-all duration-300 overflow-hidden ${
           isThinking 
-            ? 'bg-gradient-to-r from-violet-50 to-purple-50 border-violet-200 shadow-lg shadow-violet-100/50' 
+            ? 'bg-[#D3E4F4]/30 border-violet-200 shadow-violet-100/50' 
             : 'bg-violet-50/50 border-violet-100'
         }`}
       >

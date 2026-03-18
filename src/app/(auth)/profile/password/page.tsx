@@ -159,7 +159,7 @@ export default function PasswordPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-rose-50 via-white to-blue-50 py-12 px-4">
+    <div className="min-h-screen bg-[#F7F7F5] py-12 px-4">
       <div className="max-w-md mx-auto">
         {/* 返回按钮 */}
         <Link
@@ -172,7 +172,7 @@ export default function PasswordPage() {
           返回个人中心
         </Link>
 
-        <div className="bg-white rounded-2xl shadow-xl p-8">
+        <div className="bg-white rounded-2xl p-8">
           <h1 className="text-xl font-bold text-gray-900 mb-6">
             {hasPassword ? '修改密码' : '设置密码'}
           </h1>

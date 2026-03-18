@@ -37,7 +37,7 @@ export function LearningCard({
   return (
     <Card
       className={cn(
-        "group cursor-pointer transition-all duration-300 hover:shadow-xl hover:shadow-ink/10 hover:-translate-y-1",
+        "group cursor-pointer transition-all duration-300 hover:hover:shadow-ink/10 hover:-translate-y-1",
         className
       )}
       onClick={onClick}

@@ -45,7 +45,7 @@ export function Citations({
         {hasMore && (
           <button
             onClick={() => setIsExpanded(!isExpanded)}
-            className="text-xs text-amber-600 hover:text-amber-800"
+            className="text-xs text-[#787774] hover:text-[#232322]"
           >
             {isExpanded ? '收起' : `展开全部 +${citations.length - maxVisible}`}
           </button>
@@ -95,7 +95,7 @@ function CitationItem({ citation }: { citation: Citation }) {
         {/* 标题 */}
         <h4 className={`
           text-sm font-medium truncate
-          ${isHovered ? 'text-amber-700' : 'text-gray-900'}
+          ${isHovered ? 'text-[#232322]' : 'text-gray-900'}
         `}>
           {citation.title}
         </h4>
@@ -117,7 +117,7 @@ function CitationItem({ citation }: { citation: Citation }) {
       {isWebSource && (
         <span className={`
           text-gray-400 transition-colors flex-shrink-0
-          ${isHovered ? 'text-amber-500' : ''}
+          ${isHovered ? 'text-[#787774]' : ''}
         `}>
           ↗
         </span>
@@ -130,7 +130,7 @@ function CitationItem({ citation }: { citation: Citation }) {
       <div
         className={`
           block p-3 transition-colors
-          ${isHovered ? 'bg-amber-50' : 'hover:bg-gray-50'}
+          ${isHovered ? 'bg-[#FDF3C0]/50' : 'hover:bg-gray-50'}
         `}
         onMouseEnter={() => setIsHovered(true)}
         onMouseLeave={() => setIsHovered(false)}
@@ -147,7 +147,7 @@ function CitationItem({ citation }: { citation: Citation }) {
       rel="noopener noreferrer"
       className={`
         block p-3 transition-colors
-        ${isHovered ? 'bg-amber-50' : 'hover:bg-gray-50'}
+        ${isHovered ? 'bg-[#FDF3C0]/50' : 'hover:bg-gray-50'}
       `}
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
@@ -173,7 +173,7 @@ export function InlineCitation({
   return (
     <button
       onClick={onClick}
-      className="inline-flex items-center justify-center w-5 h-5 text-xs bg-amber-100 text-amber-700 rounded-full hover:bg-amber-200 transition-colors align-super"
+      className="inline-flex items-center justify-center w-5 h-5 text-xs bg-[#FDF3C0] text-[#232322] rounded-full hover:bg-[#FDF3C0] transition-colors align-super"
       title={citation.title}
     >
       {index + 1}

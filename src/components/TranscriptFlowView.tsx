@@ -104,7 +104,7 @@ function highlightText(text: string, query?: string): ReactNode {
   return (
     <>
       {text.slice(0, idx)}
-      <mark className="bg-amber-200 text-amber-900 px-0.5 rounded">
+      <mark className="bg-[#FDF3C0] text-[#232322] px-0.5 rounded">
         {text.slice(idx, idx + lowerQuery.length)}
       </mark>
       {text.slice(idx + lowerQuery.length)}
@@ -225,7 +225,7 @@ function SegmentSpan({
               onCancelEdit?.();
             }
           }}
-          className="w-full min-h-[60px] rounded-lg border border-amber-200 bg-white px-2.5 py-2 text-sm leading-relaxed focus:outline-none focus:ring-2 focus:ring-amber-200"
+          className="w-full min-h-[60px] rounded-lg border border-[#E9E9E7] bg-white px-2.5 py-2 text-sm leading-relaxed focus:outline-none focus:ring-2 focus:ring-[#E9E9E7]"
           autoFocus
         />
       </span>
@@ -253,7 +253,7 @@ function SegmentSpan({
         // 可点击
         isClickable ? 'cursor-pointer' : '',
         // 可编辑
-        editable ? 'hover:bg-amber-50/50' : '',
+        editable ? 'hover:bg-[#EFEFEF]/50' : '',
       ]
         .filter(Boolean)
         .join(' ')}
@@ -271,7 +271,7 @@ function SegmentSpan({
     >
       {/* hover 时显示精确时间 */}
       {showHoverTime && hovered && !isActive && (
-        <span className="absolute -top-5 left-0 text-[10px] font-mono text-amber-500 bg-white/95 border border-amber-100 rounded px-1 py-0.5 shadow-sm whitespace-nowrap z-10 pointer-events-none">
+        <span className="absolute -top-5 left-0 text-[10px] font-mono text-[#787774] bg-white/95 border border-[#E9E9E7] rounded px-1 py-0.5 shadow-sm whitespace-nowrap z-10 pointer-events-none">
           {formatCompactTime(segment.startMs)}
         </span>
       )}
@@ -371,7 +371,7 @@ function ParagraphBlock({
           !isParaActive && isParaPast ? 'text-gray-300' : '',
           // 正常状态
           !isParaActive && !isParaPast && isTimestampClickable
-            ? 'text-amber-500/80 hover:text-amber-600 cursor-pointer'
+            ? 'text-[#787774]/80 hover:text-[#232322] cursor-pointer'
             : '',
           !isParaActive && !isParaPast && !isTimestampClickable ? 'text-gray-400' : '',
           isTimestampClickable ? 'cursor-pointer' : '',
@@ -590,8 +590,8 @@ export function TranscriptFlowView({
     if (variant === 'live') {
       return (
         <div className={`flex flex-col items-center justify-center py-12 text-center ${className}`}>
-          <div className="w-16 h-16 bg-gradient-to-br from-amber-100 to-amber-200 rounded-full flex items-center justify-center mb-4">
-            <svg className="w-8 h-8 text-amber-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <div className="w-16 h-16 bg-[#FDF3C0] rounded-full flex items-center justify-center mb-4">
+            <svg className="w-8 h-8 text-[#787774]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
             </svg>
           </div>
@@ -628,7 +628,7 @@ export function TranscriptFlowView({
             </span>
             <span className="text-xs text-gray-400">{segments.length} 句</span>
             {searchQuery && (
-              <span className="text-xs text-amber-600">
+              <span className="text-xs text-[#787774]">
                 · {filteredSegments.length} 匹配
               </span>
             )}
@@ -639,7 +639,7 @@ export function TranscriptFlowView({
               onClick={() => setShowSearch((p) => !p)}
               className={`p-1 rounded-md transition-colors ${
                 showSearch
-                  ? 'bg-amber-100 text-amber-600'
+                  ? 'bg-[#FDF3C0] text-[#787774]'
                   : 'text-gray-400 hover:text-gray-600 hover:bg-gray-100'
               }`}
               title="搜索"
@@ -652,7 +652,7 @@ export function TranscriptFlowView({
             {variant !== 'live' && variant !== 'context' && paragraphs.length > collapsedParagraphs && (
               <button
                 onClick={() => setIsExpanded((p) => !p)}
-                className="text-xs text-amber-600 hover:text-amber-700 flex items-center gap-0.5 transition-colors"
+                className="text-xs text-[#787774] hover:text-[#232322] flex items-center gap-0.5 transition-colors"
               >
                 {isExpanded ? '收起' : '展开'}
                 <svg
@@ -678,7 +678,7 @@ export function TranscriptFlowView({
               value={internalSearchQuery}
               onChange={(e) => setInternalSearchQuery(e.target.value)}
               placeholder="搜索转录内容..."
-              className="w-full pl-8 pr-7 py-1.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-200 focus:border-amber-400 bg-white"
+              className="w-full pl-8 pr-7 py-1.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#E9E9E7] focus:border-[#E9E9E7] bg-white"
               autoFocus
             />
             <svg className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -708,7 +708,7 @@ export function TranscriptFlowView({
         {hasMore && (
           <button
             onClick={() => setIsExpanded(true)}
-            className="w-full text-xs text-gray-400 hover:text-amber-600 py-1.5 text-center transition-colors"
+            className="w-full text-xs text-gray-400 hover:text-[#232322] py-1.5 text-center transition-colors"
           >
             还有 {hiddenParagraphs} 个段落，点击展开
           </button>
@@ -751,7 +751,7 @@ export function TranscriptFlowView({
               setAutoScrollEnabled(true);
               scrollToBottom();
             }}
-            className="flex items-center gap-1 px-2.5 py-1.5 text-xs text-white bg-amber-500 hover:bg-amber-600 rounded-full shadow-md transition-all animate-bounce"
+            className="flex items-center gap-1 px-2.5 py-1.5 text-xs text-white bg-[#232322] hover:bg-[#FDECC8] rounded-full transition-all animate-bounce"
           >
             <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 14l-7 7m0 0l-7-7m7 7V3" />

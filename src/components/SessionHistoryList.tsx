@@ -97,13 +97,13 @@ function ConfirmDialog({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 backdrop-blur-sm">
-      <div className="w-full max-w-sm rounded-2xl bg-white p-5 shadow-xl">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+      <div className="w-full max-w-sm rounded-2xl bg-white p-5">
         <div className="mb-3 flex items-center gap-3">
           <div
             className={cn(
               'flex h-10 w-10 items-center justify-center rounded-full',
-              variant === 'danger' ? 'bg-red-100 text-red-600' : 'bg-amber-100 text-amber-600'
+              variant === 'danger' ? 'bg-red-100 text-red-600' : 'bg-[#FDF3C0] text-[#787774]'
             )}
           >
             {variant === 'danger' ? (
@@ -142,7 +142,7 @@ function ConfirmDialog({
             onClick={onConfirm}
             className={cn(
               'flex-1 rounded-xl px-4 py-2.5 text-sm font-medium text-white transition',
-              variant === 'danger' ? 'bg-red-600 hover:bg-red-700' : 'bg-amber-600 hover:bg-amber-700'
+              variant === 'danger' ? 'bg-red-600 hover:bg-red-700' : 'bg-[#232322] hover:bg-[#232322]'
             )}
           >
             {confirmText}
@@ -176,10 +176,10 @@ function RenameInput({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 backdrop-blur-sm">
-      <div className="w-full max-w-sm rounded-2xl bg-white p-5 shadow-xl">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+      <div className="w-full max-w-sm rounded-2xl bg-white p-5">
         <div className="mb-4 flex items-center gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-full bg-amber-100 text-amber-600">
+          <div className="flex h-10 w-10 items-center justify-center rounded-full bg-[#FDF3C0] text-[#787774]">
             <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path
                 strokeLinecap="round"
@@ -203,7 +203,7 @@ function RenameInput({
             type="text"
             value={value}
             onChange={(event) => setValue(event.target.value)}
-            className="mb-4 w-full rounded-xl border border-slate-200 px-4 py-3 text-sm text-slate-700 outline-none transition focus:border-amber-400 focus:ring-2 focus:ring-amber-100"
+            className="mb-4 w-full rounded-xl border border-slate-200 px-4 py-3 text-sm text-slate-700 outline-none transition focus:border-[#E9E9E7] focus:ring-2 focus:ring-[#E9E9E7]"
             placeholder="给这条记录起个名字"
           />
           <div className="flex gap-3">
@@ -217,7 +217,7 @@ function RenameInput({
             <button
               type="submit"
               disabled={!value.trim()}
-              className="flex-1 rounded-xl bg-amber-600 px-4 py-2.5 text-sm font-medium text-white transition hover:bg-amber-700 disabled:cursor-not-allowed disabled:opacity-50"
+              className="flex-1 rounded-xl bg-[#232322] px-4 py-2.5 text-sm font-medium text-white transition hover:bg-[#232322] disabled:cursor-not-allowed disabled:opacity-50"
             >
               保存
             </button>
@@ -258,7 +258,7 @@ function SessionItem({
         className={cn(
           'group w-full rounded-[20px] border px-4 py-3 text-left transition-all duration-200',
           isActive
-            ? 'border-emerald-200 bg-emerald-50/80 shadow-sm'
+            ? 'border-[#D1F4E0] bg-[#D1F4E0]/30/80 shadow-sm'
             : 'border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50'
         )}
       >
@@ -266,7 +266,7 @@ function SessionItem({
           <span
             className={cn(
               'mt-0.5 inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-sm font-semibold shadow-sm',
-              isActive ? 'bg-white text-emerald-700' : 'bg-slate-100 text-slate-500'
+              isActive ? 'bg-white text-[#232322]' : 'bg-slate-100 text-slate-500'
             )}
           >
             {isVideoSession ? '视' : '录'}
@@ -308,7 +308,7 @@ function SessionItem({
       onClick={onSelect}
       className={cn(
         'group cursor-pointer rounded-lg border border-transparent p-3 transition-all duration-200',
-        isActive ? 'border-amber-200 bg-amber-50 shadow-sm' : 'hover:bg-slate-50'
+        isActive ? 'border-[#E9E9E7] bg-[#FDF3C0]/50 shadow-sm' : 'hover:bg-slate-50'
       )}
     >
       <div className="flex items-start justify-between gap-2">
@@ -317,7 +317,7 @@ function SessionItem({
             <span className="inline-flex rounded-md bg-slate-100 px-1.5 py-0.5 text-[10px] font-semibold text-slate-600">
               {isVideoSession ? '视频' : '录音'}
             </span>
-            <h4 className={cn('truncate text-sm font-medium', isActive ? 'text-amber-900' : 'text-slate-900')}>
+            <h4 className={cn('truncate text-sm font-medium', isActive ? 'text-[#232322]' : 'text-slate-900')}>
               {title}
             </h4>
           </div>
@@ -336,7 +336,7 @@ function SessionItem({
 
         <div className="flex items-center gap-1">
           {session.status === 'completed' ? (
-            <span className="mr-1 rounded bg-emerald-100 px-1.5 py-0.5 text-[10px] font-medium text-emerald-700">
+            <span className="mr-1 rounded bg-[#D1F4E0] px-1.5 py-0.5 text-[10px] font-medium text-[#232322]">
               已完成
             </span>
           ) : null}
@@ -346,7 +346,7 @@ function SessionItem({
               event.stopPropagation();
               onRename();
             }}
-            className="rounded-md p-1.5 text-slate-400 opacity-0 transition-all duration-200 hover:bg-amber-50 hover:text-amber-600 group-hover:opacity-100"
+            className="rounded-md p-1.5 text-slate-400 opacity-0 transition-all duration-200 hover:bg-[#EFEFEF] hover:text-[#232322] group-hover:opacity-100"
             title="重命名"
           >
             <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -496,7 +496,7 @@ export function SessionHistoryList({
             <button
               type="button"
               onClick={() => void loadSessions()}
-              className="text-sm text-amber-600 hover:text-amber-700"
+              className="text-sm text-[#787774] hover:text-[#232322]"
             >
               重试
             </button>

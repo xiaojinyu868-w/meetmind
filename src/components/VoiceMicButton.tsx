@@ -111,22 +111,22 @@ export function VoiceMicButton({
   // 按钮样式
   const getButtonStyles = () => {
     if (errorFlash) {
-      return 'bg-red-500 text-white shadow-lg shadow-red-500/30';
+      return 'bg-red-500 text-white shadow-red-500/30';
     }
     if (isRecording) {
       return dark
-        ? 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-lg shadow-emerald-500/40'
-        : 'bg-emerald-500 hover:bg-emerald-600 text-white shadow-lg shadow-emerald-500/40';
+        ? 'bg-[#232322] hover:bg-[#111111] text-white '
+        : 'bg-[#232322] hover:bg-[#232322] text-white ';
     }
     if (status === 'connecting') {
       return dark
-        ? 'bg-emerald-700 text-white animate-pulse'
-        : 'bg-emerald-400 text-white animate-pulse';
+        ? 'bg-[#232322] text-white animate-pulse'
+        : 'bg-[#D1F4E0] text-white animate-pulse';
     }
     // idle
     return dark
-      ? 'bg-slate-800 text-emerald-400 hover:bg-emerald-600 hover:text-white border border-slate-700 hover:border-emerald-500'
-      : 'bg-emerald-50 text-emerald-500 hover:bg-emerald-500 hover:text-white border border-emerald-200 hover:border-emerald-500';
+      ? 'bg-slate-800 text-[#787774] hover:bg-[#232322] hover:text-white border border-slate-700 hover:border-[#D1F4E0]'
+      : 'bg-[#D1F4E0]/30 text-[#232322] hover:bg-[#D1F4E0]/300 hover:text-white border border-[#D1F4E0] hover:border-[#D1F4E0]';
   };
 
   const getTitle = () => {
@@ -190,22 +190,22 @@ export function VoiceMicButton({
           className={`
             absolute bottom-full mb-2 left-1/2 -translate-x-1/2
             px-3 py-1.5 rounded-xl text-xs max-w-[220px] truncate
-            shadow-lg pointer-events-none z-50
+            pointer-events-none z-50
             animate-in fade-in slide-in-from-bottom-1 duration-200
             ${dark
-              ? 'bg-slate-800 text-emerald-300 border border-slate-700'
-              : 'bg-white text-gray-700 border border-emerald-100 shadow-emerald-100/50'
+              ? 'bg-slate-800 text-[#D1F4E0] border border-slate-700'
+              : 'bg-white text-gray-700 border border-[#D1F4E0] '
             }
           `}
         >
-          <span className="inline-block w-1.5 h-1.5 rounded-full bg-emerald-500 mr-1.5 animate-pulse" />
+          <span className="inline-block w-1.5 h-1.5 rounded-full bg-[#232322] mr-1.5 animate-pulse" />
           {interimText}
         </div>
       )}
 
       {/* 错误提示 */}
       {errorFlash && (
-        <div className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 px-3 py-1.5 rounded-xl text-xs whitespace-nowrap shadow-lg pointer-events-none z-50 bg-red-50 text-red-600 border border-red-200">
+        <div className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 px-3 py-1.5 rounded-xl text-xs whitespace-nowrap pointer-events-none z-50 bg-red-50 text-red-600 border border-red-200">
           语音识别出错，请重试
         </div>
       )}

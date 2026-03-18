@@ -197,7 +197,7 @@ export function FlashcardsWindow({ result }: FlashcardsWindowProps) {
 
           <div className="flex items-center justify-center gap-10 mb-8">
             <div className="text-center">
-              <div className="text-xl font-bold text-emerald-400">{gotCount}</div>
+              <div className="text-xl font-bold text-[#787774]">{gotCount}</div>
               <div className="text-xs text-white/40 mt-0.5">已掌握</div>
             </div>
             <div className="w-px h-8 bg-white/10" />
@@ -215,7 +215,7 @@ export function FlashcardsWindow({ result }: FlashcardsWindowProps) {
                   const firstMissed = cards.findIndex((c) => scores[c.id] === 'missed');
                   if (firstMissed >= 0) { setIndex(firstMissed); setFlipped(false); setScores({}); }
                 }}
-                className="rounded-full bg-white/10 backdrop-blur-sm border border-white/10 px-8 py-2.5 text-sm font-medium text-white hover:bg-white/15 transition-all"
+                className="rounded-full bg-white/10 border border-white/10 px-8 py-2.5 text-sm font-medium text-white hover:bg-white/15 transition-all"
               >
                 复习薄弱项
               </button>
@@ -316,9 +316,9 @@ export function FlashcardsWindow({ result }: FlashcardsWindowProps) {
                 }}
               >
                 <div className="min-h-[220px] md:min-h-[240px] flex flex-col justify-center items-center text-center">
-                  <div className="inline-flex items-center gap-1.5 rounded-full bg-emerald-500/10 px-3 py-1 mb-4">
-                    <div className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
-                    <span className="text-[11px] font-medium text-emerald-400 tracking-wide uppercase">答案</span>
+                  <div className="inline-flex items-center gap-1.5 rounded-full bg-[#232322]/10 px-3 py-1 mb-4">
+                    <div className="w-1.5 h-1.5 rounded-full bg-[#D1F4E0]" />
+                    <span className="text-[11px] font-medium text-[#787774] tracking-wide uppercase">答案</span>
                   </div>
                   <p className="text-[17px] md:text-xl font-semibold leading-[1.7] text-white/90 tracking-wide">
                     {current.back}
@@ -371,8 +371,8 @@ export function FlashcardsWindow({ result }: FlashcardsWindowProps) {
               onClick={() => handleScore('got')}
               className={`group relative rounded-full px-6 py-2.5 text-sm font-medium transition-all duration-200 active:scale-95 ${
                 currentScore === 'got'
-                  ? 'bg-emerald-500/20 text-emerald-300 ring-1 ring-emerald-500/30'
-                  : 'bg-white/[0.04] text-white/60 hover:bg-white/[0.08] hover:text-emerald-300'
+                  ? 'bg-[#232322]/20 text-[#D1F4E0] ring-1 ring-[#D1F4E0]/30'
+                  : 'bg-white/[0.04] text-white/60 hover:bg-white/[0.08] hover:text-[#D1F4E0]'
               }`}
             >
               掌握了

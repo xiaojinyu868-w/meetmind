@@ -15,7 +15,7 @@ interface ConfusionTimelineProps {
 const subjectColors: Record<string, { bg: string; text: string; border: string }> = {
   '数学': { bg: 'bg-blue-50', text: 'text-blue-600', border: 'border-blue-200' },
   '英语': { bg: 'bg-purple-50', text: 'text-purple-600', border: 'border-purple-200' },
-  '语文': { bg: 'bg-amber-50', text: 'text-amber-600', border: 'border-amber-200' },
+  '语文': { bg: 'bg-[#FDF3C0]/50', text: 'text-[#787774]', border: 'border-[#E9E9E7]' },
   '物理': { bg: 'bg-cyan-50', text: 'text-cyan-600', border: 'border-cyan-200' },
   '化学': { bg: 'bg-pink-50', text: 'text-pink-600', border: 'border-pink-200' },
   '生物': { bg: 'bg-green-50', text: 'text-green-600', border: 'border-green-200' },
@@ -48,7 +48,7 @@ export function ConfusionTimeline({
       {unresolvedConfusions.length > 0 && (
         <div className="space-y-2">
           <h3 className="text-sm font-medium text-gray-500 px-1 flex items-center gap-2">
-            <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse" />
+            <span className="w-2 h-2 rounded-full bg-[#FADEC9] animate-pulse" />
             待解决 ({unresolvedConfusions.length})
           </h3>
           {unresolvedConfusions.map((confusion) => (
@@ -68,7 +68,7 @@ export function ConfusionTimeline({
       {resolvedConfusions.length > 0 && (
         <div className="space-y-2">
           <h3 className="text-sm font-medium text-gray-400 px-1 flex items-center gap-2">
-            <span className="w-2 h-2 rounded-full bg-emerald-400" />
+            <span className="w-2 h-2 rounded-full bg-[#D1F4E0]" />
             已解决 ({resolvedConfusions.length})
           </h3>
           {resolvedConfusions.map((confusion) => (
@@ -139,7 +139,7 @@ function ConfusionCard({
               </span>
               {/* 解决状态 */}
               {isResolved && (
-                <span className="text-emerald-500">✓</span>
+                <span className="text-[#232322]">✓</span>
               )}
             </div>
             {/* 知识点 */}
@@ -188,11 +188,11 @@ function ConfusionCard({
               }}
               className={cn(
                 'flex items-center gap-2 px-4 py-2 rounded-xl',
-                'bg-gradient-to-r from-amber-400 to-orange-400',
+                'bg-[#FDF3C0]',
                 'text-white text-sm font-medium',
-                'hover:from-amber-500 hover:to-orange-500',
+                'hover:from-[#FDF3C0] hover:to-orange-500',
                 'transition-all duration-200',
-                'shadow-sm hover:shadow-md active:scale-[0.98]'
+                'shadow-sm hover:active:scale-[0.98]'
               )}
             >
               <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
@@ -210,9 +210,9 @@ function ConfusionCard({
                 }}
                 className={cn(
                   'flex items-center gap-2 px-4 py-2 rounded-xl',
-                  'bg-white border border-emerald-200',
-                  'text-emerald-600 text-sm font-medium',
-                  'hover:bg-emerald-50',
+                  'bg-white border border-[#D1F4E0]',
+                  'text-[#232322] text-sm font-medium',
+                  'hover:bg-[#D1F4E0]/30',
                   'transition-all duration-200',
                   'active:scale-[0.98]'
                 )}

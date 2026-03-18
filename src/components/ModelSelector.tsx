@@ -146,7 +146,7 @@ export function ModelSelector({
                           {model.name}
                         </span>
                         {model.recommended && (
-                          <span className={`bg-amber-100 text-amber-700 rounded-full whitespace-nowrap ${
+                          <span className={`bg-[#FDF3C0] text-[#232322] rounded-full whitespace-nowrap ${
                             isMobileSheet ? 'text-[10px] px-2 py-0.5' : 'text-[10px] px-1.5 py-0.5'
                           }`}>
                             推荐
@@ -231,7 +231,7 @@ export function ModelSelector({
             </div>
           ) : (
             /* ===== 桌面端：下拉浮层 ===== */
-            <div className="absolute top-full mt-1 left-0 right-auto w-80 max-w-[calc(100vw-1.5rem)] bg-white border border-gray-200 rounded-xl shadow-lg z-50 overflow-hidden">
+            <div className="absolute top-full mt-1 left-0 right-auto w-80 max-w-[calc(100vw-1.5rem)] bg-white border border-gray-200 rounded-xl z-50 overflow-hidden">
               {renderModelList()}
             </div>
           )}

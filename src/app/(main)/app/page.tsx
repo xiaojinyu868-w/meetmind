@@ -83,6 +83,7 @@ import {
   X,
   Image as ImageIcon,
   AudioLines,
+  ArrowUp,
   Play,
   Pause,
   type LucideIcon as LucideIconType,
@@ -709,9 +710,9 @@ function buildManualEchoUnavailableFeedback(params: {
 function getManualEchoFeedbackClasses(tone: ManualEchoFeedbackTone) {
   switch (tone) {
     case 'pending':
-      return 'border-amber-200/80 bg-amber-50/70 text-amber-800';
+      return 'border-[#E9E9E7] bg-[#FDF3C0]/50 text-[#232322]';
     case 'success':
-      return 'border-emerald-200/80 bg-emerald-50/70 text-emerald-800';
+      return 'border-[#E9E9E7] bg-[#D1F4E0]/50 text-[#232322]';
     case 'error':
       return 'border-rose-200/80 bg-rose-50/70 text-rose-800';
     default:
@@ -3772,7 +3773,7 @@ const _handleVideoAssistantMessage = useCallback((payload: {
           ? '彻底删除收集失败'
           : params.action === 'restore'
             ? '恢复收集失败'
-            : '从当前流移除失败'
+            : '收起这条收集失败'
       );
 
       if (response.status === 404 && sourceKey && params.action !== 'restore') {
@@ -3783,7 +3784,7 @@ const _handleVideoAssistantMessage = useCallback((payload: {
           itemId: params.itemId,
         });
         if (!params.silent) {
-          toast.success(params.action === 'delete' ? '这条收集会在写入完成后彻底删除' : '这条收集会在写入完成后从当前流移除');
+          toast.success(params.action === 'delete' ? '这条收集会在写入完成后彻底删除' : '这条收集会在写入完成后先收起');
         }
         return true;
       }
@@ -3795,7 +3796,7 @@ const _handleVideoAssistantMessage = useCallback((payload: {
               ? '彻底删除收集失败'
               : params.action === 'restore'
                 ? '恢复收集失败'
-                : '从当前流移除失败')
+                : '收起这条收集失败')
         );
       }
 
@@ -3821,8 +3822,8 @@ const _handleVideoAssistantMessage = useCallback((payload: {
           params.action === 'delete'
             ? '这条收集已彻底删除'
             : params.action === 'restore'
-              ? '这条收集已恢复到当前流'
-              : '这条收集已从当前流移除'
+              ? '这条收集已放回正在看'
+              : '这条收集已先收起'
         );
       }
       return true;
@@ -6119,10 +6120,10 @@ const _handleVideoAssistantMessage = useCallback((payload: {
       toast.success(
         action === 'delete'
           ? `已彻底删除 ${successCount} 条收集`
-          : `已从当前流移除 ${successCount} 条收集`
+          : `已先收起 ${successCount} 条收集`
       );
     } else {
-      toast.error(action === 'delete' ? '批量删除失败，请稍后再试' : '批量移除失败，请稍后再试');
+      toast.error(action === 'delete' ? '批量删除失败，请稍后再试' : '批量收起失败，请稍后再试');
     }
   }, [
     clearCollectionContextSelection,
@@ -6187,6 +6188,21 @@ const _handleVideoAssistantMessage = useCallback((payload: {
   const canUsePersistentCaptureActions = Boolean(
     activeCollectionMessageMenuSourceKey && isAuthenticated && accessToken && user?.id
   );
+  const activeCollectionMessageMenuTitle = activeCollectionMessageMenuItem
+    ? getCollectionContextDisplayTitle(activeCollectionMessageMenuItem, 48)
+    : '';
+  const activeCollectionMessageMenuPreview = activeCollectionMessageMenuItem
+    ? compactMultilineText(
+        activeCollectionMessageMenuItem.fullText?.trim() ||
+          activeCollectionMessageMenuItem.preview?.trim() ||
+          activeCollectionMessageMenuItem.title ||
+          '',
+        120
+      )
+    : '';
+  const activeCollectionMessageMenuTypeLabel = activeCollectionMessageMenuItem
+    ? getCollectionContextTypeLabel(activeCollectionMessageMenuItem.type)
+    : '';
 
   const quotedCollectionPrimaryItem = useMemo(() => {
     if (quotedCollectionContextItems.length === 0) return null;
@@ -6230,24 +6246,26 @@ const _handleVideoAssistantMessage = useCallback((payload: {
           : '';
 
       return (
-        <div
-          className="flex-shrink-0 border-b border-[#e5e5e5] bg-[#ededed]/98 px-3 pb-2 pt-[max(env(safe-area-inset-top),9px)] backdrop-blur-xl"
-        >
-          <div className="mx-auto flex w-full max-w-md items-center justify-between gap-3">
+        <div className="flex-shrink-0 bg-[#F7F7F5] px-4 pb-2 pt-[max(env(safe-area-inset-top),10px)]">
+          <div className="mx-auto flex w-full max-w-md items-center gap-3">
             <button
               type="button"
               onClick={() => {
                 setShowMobileRecorder(false);
                 setMobileCollectionSheet('more');
               }}
-              className="flex h-9 w-9 items-center justify-center rounded-full bg-white text-slate-500 shadow-sm"
+              className="flex h-9 w-9 items-center justify-center rounded-full text-slate-400 transition hover:bg-black/[0.04] hover:text-slate-600"
               aria-label="打开收集菜单"
               data-onboarding={menuOnboarding}
             >
               <Menu size={18} />
             </button>
-            <div className="min-w-0 flex-1 text-center">
-              <p className="truncate text-[17px] font-semibold text-slate-900">收集</p>
+            <div className="flex min-w-0 flex-1 items-center justify-center">
+              <MobileTabSwitch
+                activeTab={viewMode}
+                onTabChange={(tab) => handleViewModeChange(tab)}
+                data-onboarding="mode-switch"
+              />
             </div>
             <button
               type="button"
@@ -6255,24 +6273,19 @@ const _handleVideoAssistantMessage = useCallback((payload: {
                 setShowMobileRecorder(false);
                 setMobileCollectionSheet('history');
               }}
-              className="relative flex h-9 w-9 items-center justify-center rounded-full bg-white text-slate-500 shadow-sm"
+              className="relative flex h-9 w-9 items-center justify-center rounded-full text-slate-400 transition hover:bg-black/[0.04] hover:text-slate-600"
               aria-label="打开历史收集"
             >
               <History size={17} />
             </button>
           </div>
           {topBarStatus ? (
-            <div className="mx-auto mt-2 w-full max-w-md">
-              <div className="inline-flex items-center gap-2 rounded-full bg-white px-3 py-1 text-[11px] font-medium text-slate-500 shadow-sm">
-                <span className="inline-flex h-1.5 w-1.5 rounded-full bg-[#07c160]" />
-                <span>{topBarStatus}</span>
-              </div>
-            </div>
+            <p className="mt-1.5 text-center text-[11px] font-medium text-[#787774]">{topBarStatus}</p>
           ) : null}
         </div>
       );
     },
-    [activeSourceImportCount, isRecording]
+    [activeSourceImportCount, handleViewModeChange, isRecording, viewMode]
   );
 
   const renderMobileRecordView = ({ desktopShell = false }: { desktopShell?: boolean } = {}) => {
@@ -6292,10 +6305,18 @@ const _handleVideoAssistantMessage = useCallback((payload: {
       touchAction: 'pan-y' as const,
     };
     const scrollPadding = desktopShell ? 28 : 18;
-    const composerRows = desktopShell ? (collectionComposerText.trim() ? 2 : 1) : (collectionComposerText.trim() ? 2 : 1);
+    const composerHasText = collectionComposerText.trim().length > 0;
+    const composerRows = composerHasText ? 2 : 1;
+    const showComposerAssistState =
+      sourceImporting || composerVoiceStatus === 'connecting' || isComposerVoiceRecording || composerCanAutoImportLink;
 
     return (
     <div className="relative flex h-full min-h-0 flex-col overflow-hidden" style={{ background: 'var(--edu-bg-primary)' }}>
+      <div className="pointer-events-none absolute inset-0 overflow-hidden">
+        <div className="absolute left-[-20%] top-[-5%] h-48 w-48 rounded-full bg-[radial-gradient(circle,rgba(200,235,216,0.32)_0%,rgba(200,235,216,0)_72%)]" />
+        <div className="absolute right-[-18%] top-[16%] h-56 w-56 rounded-full bg-[radial-gradient(circle,rgba(91,106,191,0.12)_0%,rgba(91,106,191,0)_72%)]" />
+        <div className="absolute bottom-[-12%] left-[8%] h-52 w-52 rounded-full bg-[radial-gradient(circle,rgba(93,173,226,0.14)_0%,rgba(93,173,226,0)_72%)]" />
+      </div>
       {!desktopShell ? renderMobileTopBar() : null}
 
       <input
@@ -6308,18 +6329,19 @@ const _handleVideoAssistantMessage = useCallback((payload: {
       />
 
       <div
-        className={desktopShell ? 'flex-1 overflow-y-auto px-6 pt-6' : 'flex-1 overflow-y-auto px-4 pt-3'}
+        className={desktopShell ? 'relative z-10 flex-1 overflow-y-auto px-6 pt-6' : 'relative z-10 flex-1 overflow-y-auto px-4 pt-4'}
         style={{ paddingBottom: `${scrollPadding}px` }}
       >
         <div className={`mx-auto flex w-full ${shellWidthClass} flex-col gap-3`}>
           {collectionFeedItems.length > 0 ? (
             <div className="space-y-2">
               <div className="flex items-center justify-between gap-3">
-                <div className="rounded-full bg-slate-100/90 px-3 py-1 text-[11px] font-medium text-slate-400">
-                  今天
+                <div className="inline-flex items-center gap-1.5 text-[11px] font-medium text-slate-400">
+                  <span className="inline-flex h-1.5 w-1.5 rounded-full bg-[#232322]" />
+                  <span>今天</span>
                 </div>
                 {isCollectionContextSelectionMode ? (
-                  <div className="rounded-full bg-emerald-50 px-3 py-1 text-[11px] font-medium text-emerald-700">
+                  <div className="text-[11px] font-medium text-[#232322]">
                     选择中
                   </div>
                 ) : null}
@@ -6328,32 +6350,58 @@ const _handleVideoAssistantMessage = useCallback((payload: {
           ) : null}
 
           {collectionFeedItems.length === 0 ? (
-            <div className="flex justify-start">
-              <div className="w-full max-w-[92%] rounded-[24px] border border-slate-200 bg-white px-4 py-3 shadow-sm">
-                <p className="text-[11px] text-slate-400">
-                  {new Date().toLocaleString('zh-CN', {
-                    month: '2-digit',
-                    day: '2-digit',
-                    hour: '2-digit',
-                    minute: '2-digit',
-                  })}
-                </p>
-                <p className="mt-2 text-sm leading-7 text-slate-700">
-                  今天先收一点：一句困惑、一张图、一份讲义或一段原声都行。先发进来，后面再接着学。
-                </p>
+            <div className="flex flex-col items-center justify-center px-6 py-8">
+              <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-[#D3E4F4]">
+                <Sparkles size={24} className="text-[#232322]" />
+              </div>
+              <p className="mt-4 text-[15px] font-medium text-slate-800">从一条线索开始</p>
+              <p className="mt-1.5 text-center text-[13px] leading-5 text-slate-400">
+                一句困惑、一张图、一份讲义<br />或者一段原声都行
+              </p>
+              <div className="mt-6 flex items-center gap-3">
+                <button
+                  type="button"
+                  onClick={() => handleSourceFileButtonClick('audio')}
+                  className="flex flex-col items-center gap-1.5 rounded-2xl border border-[#E9E9E7] bg-white px-4 py-3 transition hover:bg-[#EFEFEF]"
+                >
+                  <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#FDF3C0] text-[#232322]">
+                    <AudioLines size={16} />
+                  </span>
+                  <span className="text-[11px] text-[#787774]">原声</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleSourceFileButtonClick('all')}
+                  className="flex flex-col items-center gap-1.5 rounded-2xl border border-[#E9E9E7] bg-white px-4 py-3 transition hover:bg-[#EFEFEF]"
+                >
+                  <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#D3E4F4] text-[#232322]">
+                    <ImageIcon size={16} />
+                  </span>
+                  <span className="text-[11px] text-[#787774]">图片</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleSourceFileButtonClick('all')}
+                  className="flex flex-col items-center gap-1.5 rounded-2xl border border-[#E9E9E7] bg-white px-4 py-3 transition hover:bg-[#EFEFEF]"
+                >
+                  <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#FADEC9] text-[#232322]">
+                    <FileText size={16} />
+                  </span>
+                  <span className="text-[11px] text-slate-500">讲义</span>
+                </button>
               </div>
             </div>
           ) : (
             <div className="space-y-3">
               {showMobileRecorder ? (
                 <div className="flex justify-end">
-                  <div className={`${messageBubbleWidthClass} rounded-[22px] rounded-br-[8px] border border-[#b8e7a6] bg-[#d9fdd3] px-4 py-3 shadow-sm`}>
+                  <div className={`${messageBubbleWidthClass} rounded-[22px] rounded-br-[8px] border border-[#E9E9E7] bg-[#D1F4E0] px-4 py-3`}>
                     <div className="flex justify-end">
-                      <div className="inline-flex items-center gap-3 rounded-full bg-white/72 px-3 py-2 text-[#2f6f1f]">
-                        <span className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-[#07c160] text-white">
+                      <div className="inline-flex items-center gap-3 rounded-full bg-white/80 px-3 py-2 text-[#232322]">
+                        <span className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-[#232322] text-white">
                           <Mic size={14} />
                         </span>
-                        <span className="flex items-end gap-[3px] text-[#62a542]">
+                        <span className="flex items-end gap-[3px] text-[#787774]">
                           {[8, 12, 16, 11, 15, 9, 13].map((height, index) => (
                             <span
                               key={`live-wave-${height}-${index}`}
@@ -6368,7 +6416,7 @@ const _handleVideoAssistantMessage = useCallback((payload: {
                     <p className="mt-2 text-sm leading-6 text-slate-900">
                       {currentLivePreview || '继续说下去，停下后这段语音会直接留在这里。'}
                     </p>
-                    <div className="mt-2 flex items-center justify-end text-[11px] text-[#5b7f49]">
+                    <div className="mt-2 flex items-center justify-end text-[11px] text-[#787774]">
                       {formatRelativeCollectionTime(new Date().toISOString())}
                     </div>
                   </div>
@@ -6414,7 +6462,12 @@ const _handleVideoAssistantMessage = useCallback((payload: {
                 const isAttachmentMessage =
                   Boolean(item.attachmentUrl) && (item.type === 'document' || item.type === 'text');
                 const isSelectedForContext = selectedCollectionContextIds.includes(item.id);
-                const showDesktopMoreButton = desktopShell && !isCollectionContextSelectionMode;
+                const showInlineMoreButton = !isCollectionContextSelectionMode;
+                const inlineMoreButtonClass = desktopShell
+                  ? 'rounded-full border border-[#E9E9E7] bg-white p-1.5 text-[#787774] opacity-0 transition hover:bg-[#EFEFEF] hover:text-[#232322] group-hover:opacity-100'
+                  : isPrimary
+                    ? 'rounded-full border border-[#E9E9E7] bg-white p-1.5 text-[#232322] transition hover:bg-[#EFEFEF]'
+                    : 'rounded-full border border-[#E9E9E7] bg-white p-1.5 text-[#787774] transition hover:bg-[#EFEFEF] hover:text-[#232322]';
 
                 return (
                   <div
@@ -6447,50 +6500,49 @@ const _handleVideoAssistantMessage = useCallback((payload: {
                         : undefined
                     }
                   >
-                    <div className={`${messageBubbleWidthClass} ${isPrimary ? '' : 'pl-8'}`}>
+                    <div className={`${messageBubbleWidthClass} ${isPrimary ? '' : 'pl-6'}`}>
                       <div
-                        className={`rounded-[24px] border px-4 py-3 shadow-sm ${
+                        className={`relative overflow-hidden rounded-2xl px-4 py-3 ${
                           isPrimary
-                            ? 'rounded-br-[8px] border-[#b8e7a6] bg-[#d9fdd3]'
-                          : 'rounded-bl-[8px] border-slate-200 bg-white'
-                        } ${isSelectedForContext ? 'ring-2 ring-emerald-200/80' : ''}`}
+                            ? 'rounded-br-md bg-[#F0FAF4]'
+                            : 'rounded-bl-md bg-white border border-slate-100'
+                        } ${isSelectedForContext ? 'ring-2 ring-[#5B6ABF]/30' : ''}`}
                       >
-                        {showDesktopMoreButton ? (
-                          <div className={`mb-2 flex ${isPrimary ? 'justify-end' : 'justify-start'}`}>
-                            <button
-                              type="button"
-                              onClick={(event) => {
-                                event.stopPropagation();
-                                openCollectionMessageMenu(item.id);
-                              }}
-                              className="opacity-0 transition group-hover:opacity-100 rounded-full bg-white/78 p-1.5 text-slate-500 shadow-sm hover:text-slate-700"
-                              aria-label={`更多操作：${collectionActionTitle}`}
-                            >
-                              <MoreHorizontal size={15} />
-                            </button>
+                        {!isCollectionContextSelectionMode ? (
+                          <div className={`mb-2 flex items-center justify-between gap-2 ${isPrimary ? 'text-[#5B6ABF]' : 'text-slate-500'}`}>
+                            <span className="text-[10px] font-medium uppercase tracking-wider opacity-60">
+                              {typeLabel}
+                            </span>
+                            {showInlineMoreButton ? (
+                              <button
+                                type="button"
+                                onClick={(event) => {
+                                  event.stopPropagation();
+                                  openCollectionMessageMenu(item.id);
+                                }}
+                                className="rounded-full p-1 text-slate-400 transition hover:bg-slate-100 hover:text-slate-600"
+                                aria-label={`更多操作：${collectionActionTitle}`}
+                              >
+                                <MoreHorizontal size={14} />
+                              </button>
+                            ) : null}
                           </div>
                         ) : null}
                         {isCollectionContextSelectionMode ? (
-                          <div className={`mb-2 flex items-center justify-between gap-2 text-[11px] ${
-                            isPrimary ? 'text-[#4f7a36]' : 'text-slate-500'
-                          }`}>
+                          <div className="mb-2 flex items-center justify-between gap-2 text-[11px]">
                             <button
                               type="button"
                               onClick={() => toggleCollectionContextItem(item)}
                               aria-pressed={isSelectedForContext}
                               className={`rounded-full px-2.5 py-1 font-medium transition ${
                                 isSelectedForContext
-                                  ? isPrimary
-                                    ? 'bg-white/80 text-[#245818]'
-                                    : 'bg-emerald-50 text-emerald-700'
-                                  : isPrimary
-                                    ? 'bg-white/62 text-[#4f7a36]'
-                                    : 'bg-slate-100 text-slate-500'
+                                  ? 'bg-[#D6DAFA] text-[#424E96]'
+                                  : 'bg-slate-100 text-slate-500'
                               }`}
                             >
                               {isSelectedForContext ? '已选' : '选择'}
                             </button>
-                            <span className="text-[10px] opacity-70">{getCollectionContextTypeLabel(item.type)}</span>
+                            <span className="text-[10px] text-slate-400">{getCollectionContextTypeLabel(item.type)}</span>
                           </div>
                         ) : null}
                         {item.type === 'audio' ? (
@@ -6504,34 +6556,28 @@ const _handleVideoAssistantMessage = useCallback((payload: {
                                 disabled={!item.mediaUrl}
                                 className={`inline-flex max-w-full items-center gap-3 rounded-full px-3 py-2 transition ${
                                   isPrimary
-                                    ? 'bg-white/72 text-[#2f6f1f]'
+                                    ? 'bg-white/60 text-slate-700'
                                     : 'bg-slate-100 text-slate-700'
                                 } disabled:cursor-default disabled:opacity-80`}
                               >
-                                <span className={`inline-flex h-7 w-7 items-center justify-center rounded-full ${
-                                  isPrimary ? 'bg-[#07c160] text-white' : 'bg-white text-slate-500'
-                                }`}>
+                                <span className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-[#232322] text-white">
                                   {isAudioPlaying ? <Pause size={14} /> : <Play size={14} className="ml-0.5" />}
                                 </span>
                                 <span className="relative flex h-5 w-[88px] items-center">
                                   <span
-                                    className={`absolute left-0 top-1/2 h-[2px] -translate-y-1/2 rounded-full ${
-                                      isPrimary ? 'bg-[#c5ebb7]' : 'bg-slate-200'
-                                    }`}
+                                    className="absolute left-0 top-1/2 h-[2px] -translate-y-1/2 rounded-full bg-slate-200"
                                     style={{ width: '100%' }}
                                   />
                                   <span
-                                    className="absolute left-0 top-1/2 h-[2px] -translate-y-1/2 rounded-full bg-[#07c160] transition-all"
+                                    className="absolute left-0 top-1/2 h-[2px] -translate-y-1/2 rounded-full bg-[#5DADE2] transition-all"
                                     style={{ width: `${Math.max(8, audioProgress * 100)}%` }}
                                   />
                                   <span className="relative z-10 flex w-full items-end justify-between px-1">
                                     {[8, 12, 16, 11, 15, 9, 13, 10].map((height, index) => (
                                       <span
                                         key={`${item.id}-wave-${index}`}
-                                        className={`w-[3px] rounded-full ${
-                                          isPrimary ? 'bg-[#5fa73d]' : 'bg-slate-400'
-                                        }`}
-                                        style={{ height: `${height}px`, opacity: index / 8 < audioProgress ? 0.95 : 0.45 }}
+                                        className="w-[3px] rounded-full bg-slate-400"
+                                        style={{ height: `${height}px`, opacity: index / 8 < audioProgress ? 0.95 : 0.35 }}
                                       />
                                     ))}
                                   </span>
@@ -6546,7 +6592,7 @@ const _handleVideoAssistantMessage = useCallback((payload: {
                               </button>
                             </div>
                             <div className={`flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] ${
-                              isPrimary ? 'justify-end text-[#4f7a36]' : 'justify-start text-slate-500'
+                              isPrimary ? 'justify-end text-slate-500' : 'justify-start text-slate-500'
                             }`}>
                               {showAudioStatusText ? (
                                 <span className="font-medium">{item.statusText}</span>
@@ -6561,11 +6607,7 @@ const _handleVideoAssistantMessage = useCallback((payload: {
                                     onClick={() =>
                                       setExpandedAudioTranscriptId((prev) => (prev === item.id ? null : item.id))
                                     }
-                                    className={`rounded-full px-2.5 py-1 font-medium transition ${
-                                      isPrimary
-                                        ? 'bg-white/80 text-[#245818] hover:bg-white'
-                                        : 'bg-slate-100 text-slate-600 hover:bg-slate-200 hover:text-slate-800'
-                                    }`}
+                                    className="rounded-full px-2.5 py-1 font-medium text-slate-500 transition hover:bg-slate-100"
                                   >
                                     {isAudioTranscriptOpen ? '收起文字' : '看文字'}
                                   </button>
@@ -6573,8 +6615,8 @@ const _handleVideoAssistantMessage = useCallback((payload: {
                               ) : null}
                             </div>
                             {isAudioTranscriptOpen && item.segmentCount > 0 && item.fullText?.trim() ? (
-                              <div className={`rounded-[16px] px-3 py-2 text-sm leading-6 ${
-                                isPrimary ? 'bg-white/65 text-slate-900' : 'bg-slate-50 text-slate-700'
+                              <div className={`rounded-xl px-3 py-2 text-sm leading-6 ${
+                                isPrimary ? 'bg-white/50 text-slate-800' : 'bg-slate-50 text-slate-700'
                               }`}>
                                 {bubbleText}
                               </div>
@@ -6600,7 +6642,7 @@ const _handleVideoAssistantMessage = useCallback((payload: {
                             ) : (
                               <div className={`flex items-center gap-2 ${isPrimary ? 'justify-end' : 'justify-start'}`}>
                                 <span className={`inline-flex h-8 w-8 items-center justify-center rounded-full ${
-                                  isPrimary ? 'bg-white/70 text-[#8b5cf6]' : 'bg-slate-100 text-slate-500'
+                                  isPrimary ? 'bg-white/50 text-violet-500' : 'bg-slate-100 text-slate-500'
                                 }`}>
                                   <ImageIcon size={15} />
                                 </span>
@@ -6617,15 +6659,15 @@ const _handleVideoAssistantMessage = useCallback((payload: {
                                 href={item.attachmentUrl}
                                 target="_blank"
                                 rel="noreferrer"
-                                className={`block rounded-[18px] border px-3 py-2.5 transition ${
+                                className={`block rounded-xl border px-3 py-2.5 transition ${
                                   isPrimary
-                                    ? 'border-white/70 bg-white/62 hover:bg-white/75'
-                                    : 'border-slate-200 bg-slate-50 hover:bg-white'
+                                    ? 'border-white/50 bg-white/40 hover:bg-white/60'
+                                    : 'border-slate-100 bg-slate-50 hover:bg-white'
                                 }`}
                               >
                                 <div className={`flex items-center gap-2 ${isPrimary ? 'justify-end' : 'justify-start'}`}>
                                   <span className={`inline-flex h-8 w-8 items-center justify-center rounded-full ${
-                                    isPrimary ? 'bg-white text-[#2563eb]' : 'bg-white text-slate-500'
+                                    isPrimary ? 'bg-white text-blue-500' : 'bg-white text-slate-500'
                                   }`}>
                                     <FileText size={15} />
                                   </span>
@@ -6665,7 +6707,7 @@ const _handleVideoAssistantMessage = useCallback((payload: {
                                 }`}
                               >
                                 <div className="flex min-h-[140px] items-center justify-center px-4 py-6">
-                                  <span className="inline-flex h-11 w-11 items-center justify-center rounded-full bg-white text-slate-900 shadow-sm">
+                                  <span className="inline-flex h-11 w-11 items-center justify-center rounded-full bg-white text-slate-900">
                                     <Play size={18} className="ml-0.5" />
                                   </span>
                                 </div>
@@ -6716,6 +6758,36 @@ const _handleVideoAssistantMessage = useCallback((payload: {
                             </span>
                           ) : null}
                         </div>
+                        {!isCollectionContextSelectionMode ? (
+                          <div className={`mt-3 flex items-center ${isPrimary ? 'justify-end' : 'justify-start'} gap-2.5 border-t pt-3 ${
+                            isPrimary ? 'border-[#E9E9E7]' : 'border-[#E9E9E7]'
+                          }`}>
+                            <button
+                              type="button"
+                              onClick={() => openTutorFromCollectionItem(item)}
+                              className={`inline-flex items-center gap-1.5 rounded-full px-3.5 py-2.5 text-[12px] font-semibold transition ${
+                                isPrimary
+                                  ? 'bg-[#232322] text-white hover:bg-[#111111]'
+                                  : 'bg-[#232322] text-white hover:bg-[#111111]'
+                              }`}
+                            >
+                              <MessageCircle size={14} />
+                              <span>问 Tutor</span>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => quoteCollectionItemToComposer(item)}
+                              className={`inline-flex items-center gap-1.5 rounded-full px-3.5 py-2.5 text-[12px] font-medium transition ${
+                                isPrimary
+                                  ? 'bg-white text-[#232322] hover:bg-[#EFEFEF]'
+                                  : 'bg-[#EFEFEF] text-[#232322] hover:bg-[#E9E9E7]'
+                              }`}
+                            >
+                              <FileText size={14} />
+                              <span>引用</span>
+                            </button>
+                          </div>
+                        ) : null}
                       </div>
                     </div>
                   </div>
@@ -6732,38 +6804,84 @@ const _handleVideoAssistantMessage = useCallback((payload: {
             type="button"
             aria-label="关闭消息操作菜单"
             onClick={closeCollectionMessageMenu}
-            className={`${backdropPositionClass} z-20 bg-slate-900/18 backdrop-blur-[1px]`}
+            className={`${backdropPositionClass} z-20 bg-slate-900/18`}
           />
           <div className={`${collectionChromeContained ? 'absolute inset-x-0 bottom-0' : 'fixed inset-x-0 bottom-0'} z-30 px-3 pb-[max(env(safe-area-inset-bottom),12px)]`}>
-            <div className={`mx-auto w-full ${desktopShell ? 'max-w-sm' : 'max-w-md'} rounded-[24px] border border-slate-200 bg-white p-4 shadow-[0_24px_48px_rgba(15,23,42,0.16)]`}>
+            <div className={`mx-auto w-full ${desktopShell ? 'max-w-sm' : 'max-w-md'} rounded-[32px] border border-[#E9E9E7] bg-white p-4`}>
               <div className="flex items-start justify-between gap-3">
-                <div className="min-w-0">
-                  <p className="text-sm font-semibold text-slate-900">{getCollectionContextDisplayTitle(activeCollectionMessageMenuItem, 48)}</p>
-                  <p className="mt-1 text-xs text-slate-500">{getCollectionContextTypeLabel(activeCollectionMessageMenuItem.type)}</p>
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2">
+                    <span className="rounded-full bg-[#D1F4E0]/30 px-2.5 py-1 text-[11px] font-semibold text-[#232322]">
+                      {activeCollectionMessageMenuTypeLabel}
+                    </span>
+                    {selectedCollectionContextIds.includes(activeCollectionMessageMenuItem.id) ? (
+                      <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-medium text-slate-500">已加入多选</span>
+                    ) : null}
+                  </div>
+                  <p className="mt-3 text-[15px] font-semibold leading-6 text-slate-900">{activeCollectionMessageMenuTitle}</p>
+                  {activeCollectionMessageMenuPreview && activeCollectionMessageMenuPreview !== activeCollectionMessageMenuTitle ? (
+                    <p className="mt-1 text-[13px] leading-6 text-slate-500">{activeCollectionMessageMenuPreview}</p>
+                  ) : null}
                 </div>
                 <button
                   type="button"
                   onClick={closeCollectionMessageMenu}
-                  className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-slate-100 text-slate-500"
+                  className="inline-flex h-10 w-10 items-center justify-center rounded-[16px] border border-[#E9E9E7] bg-white/92 text-slate-500 transition hover:bg-white hover:text-slate-700"
                 >
-                  <X size={14} />
+                  <X size={15} />
                 </button>
               </div>
 
-              <div className="mt-4 space-y-2">
-                {Boolean(activeCollectionMessageMenuItem.reviewable && activeCollectionMessageMenuItem.sessionId && activeCollectionMessageMenuItem.status !== 'failed') ? (
+              <div className="mt-4 rounded-[24px] border border-[#E9E9E7] bg-[#F7F7F5] p-3">
+                <div className="grid grid-cols-2 gap-2">
                   <button
                     type="button"
                     onClick={() => {
                       closeCollectionMessageMenu();
-                      void openReviewFromCollection(activeCollectionMessageMenuItem);
+                      openTutorFromCollectionItem(activeCollectionMessageMenuItem);
                     }}
-                    className="flex w-full items-center justify-between rounded-[16px] bg-emerald-50 px-4 py-3 text-left text-sm font-semibold text-emerald-700 transition hover:bg-emerald-100"
+                    className="flex items-center gap-3 rounded-[18px] bg-[#232322] px-4 py-3 text-left text-sm font-semibold text-white transition hover:bg-[#111111]"
                   >
-                    <span>去复习</span>
-                    <ChevronRight size={16} />
+                    <span className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-white/16 text-white">
+                      <MessageCircle size={16} />
+                    </span>
+                    <span>问 Tutor</span>
                   </button>
-                ) : null}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      closeCollectionMessageMenu();
+                      quoteCollectionItemToComposer(activeCollectionMessageMenuItem);
+                    }}
+                    className="flex items-center gap-3 rounded-[18px] bg-white px-4 py-3 text-left text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+                  >
+                    <span className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-slate-100 text-slate-600">
+                      <FileText size={16} />
+                    </span>
+                    <span>引用</span>
+                  </button>
+                  {Boolean(activeCollectionMessageMenuItem.reviewable && activeCollectionMessageMenuItem.sessionId && activeCollectionMessageMenuItem.status !== 'failed') ? (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        closeCollectionMessageMenu();
+                        void openReviewFromCollection(activeCollectionMessageMenuItem);
+                      }}
+                      className="col-span-2 flex items-center justify-between rounded-[18px] bg-white px-4 py-3 text-left text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+                    >
+                      <span className="inline-flex items-center gap-2">
+                        <span className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-[#D1F4E0] text-[#232322]">
+                          <BookOpen size={16} />
+                        </span>
+                        <span>去复习</span>
+                      </span>
+                      <ChevronRight size={16} className="text-slate-300" />
+                    </button>
+                  ) : null}
+                </div>
+              </div>
+
+              <div className="mt-3 flex flex-wrap gap-2">
                 {activeCollectionMenuWorkspaceCapture?.contentType === 'text' ? (
                   <button
                     type="button"
@@ -6771,10 +6889,9 @@ const _handleVideoAssistantMessage = useCallback((payload: {
                       closeCollectionMessageMenu();
                       openWorkspaceCaptureEditor(activeCollectionMenuWorkspaceCapture, 'text');
                     }}
-                    className="flex w-full items-center justify-between rounded-[16px] bg-slate-50 px-4 py-3 text-left text-sm font-medium text-slate-700 transition hover:bg-slate-100"
+                    className="rounded-full bg-slate-100 px-3 py-2 text-[12px] font-medium text-slate-700 transition hover:bg-slate-200"
                   >
-                    <span>编辑文字</span>
-                    <ChevronRight size={16} className="text-slate-300" />
+                    编辑文字
                   </button>
                 ) : null}
                 {activeCollectionMenuWorkspaceCapture &&
@@ -6787,10 +6904,9 @@ const _handleVideoAssistantMessage = useCallback((payload: {
                       closeCollectionMessageMenu();
                       openWorkspaceCaptureEditor(activeCollectionMenuWorkspaceCapture, 'transcript');
                     }}
-                    className="flex w-full items-center justify-between rounded-[16px] bg-slate-50 px-4 py-3 text-left text-sm font-medium text-slate-700 transition hover:bg-slate-100"
+                    className="rounded-full bg-slate-100 px-3 py-2 text-[12px] font-medium text-slate-700 transition hover:bg-slate-200"
                   >
-                    <span>校正文字</span>
-                    <ChevronRight size={16} className="text-slate-300" />
+                    校正文字
                   </button>
                 ) : null}
                 {activeCollectionMenuWorkspaceCapture && activeCollectionMenuWorkspaceCapture.contentType !== 'text' ? (
@@ -6800,45 +6916,11 @@ const _handleVideoAssistantMessage = useCallback((payload: {
                       closeCollectionMessageMenu();
                       openWorkspaceCaptureEditor(activeCollectionMenuWorkspaceCapture, 'meta');
                     }}
-                    className="flex w-full items-center justify-between rounded-[16px] bg-slate-50 px-4 py-3 text-left text-sm font-medium text-slate-700 transition hover:bg-slate-100"
+                    className="rounded-full bg-slate-100 px-3 py-2 text-[12px] font-medium text-slate-700 transition hover:bg-slate-200"
                   >
-                    <span>编辑标题/备注</span>
-                    <ChevronRight size={16} className="text-slate-300" />
+                    改标题备注
                   </button>
                 ) : null}
-                <button
-                  type="button"
-                  onClick={() => {
-                    closeCollectionMessageMenu();
-                    quoteCollectionItemToComposer(activeCollectionMessageMenuItem);
-                  }}
-                  className="flex w-full items-center justify-between rounded-[16px] bg-slate-50 px-4 py-3 text-left text-sm font-medium text-slate-700 transition hover:bg-slate-100"
-                >
-                  <span>引用</span>
-                  <ChevronRight size={16} className="text-slate-300" />
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    closeCollectionMessageMenu();
-                    openTutorFromCollectionItem(activeCollectionMessageMenuItem);
-                  }}
-                  className="flex w-full items-center justify-between rounded-[16px] bg-slate-50 px-4 py-3 text-left text-sm font-medium text-slate-700 transition hover:bg-slate-100"
-                >
-                  <span>问 Tutor</span>
-                  <ChevronRight size={16} className="text-slate-300" />
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    closeCollectionMessageMenu();
-                    toggleCollectionContextItem(activeCollectionMessageMenuItem);
-                  }}
-                  className="flex w-full items-center justify-between rounded-[16px] bg-slate-50 px-4 py-3 text-left text-sm font-medium text-slate-700 transition hover:bg-slate-100"
-                >
-                  <span>{selectedCollectionContextIds.includes(activeCollectionMessageMenuItem.id) ? '取消选择' : '选择'}</span>
-                  <ChevronRight size={16} className="text-slate-300" />
-                </button>
                 {Boolean(activeCollectionMessageMenuItem.attachmentUrl || activeCollectionMessageMenuItem.mediaUrl || activeCollectionMessageMenuItem.previewUrl) ? (
                   <button
                     type="button"
@@ -6846,14 +6928,28 @@ const _handleVideoAssistantMessage = useCallback((payload: {
                       closeCollectionMessageMenu();
                       openCollectionItemOriginal(activeCollectionMessageMenuItem);
                     }}
-                    className="flex w-full items-center justify-between rounded-[16px] bg-slate-50 px-4 py-3 text-left text-sm font-medium text-slate-700 transition hover:bg-slate-100"
+                    className="inline-flex items-center gap-1.5 rounded-full bg-slate-100 px-3 py-2 text-[12px] font-medium text-slate-700 transition hover:bg-slate-200"
                   >
+                    <Link2 size={14} />
                     <span>打开原件</span>
-                    <ChevronRight size={16} className="text-slate-300" />
                   </button>
                 ) : null}
+                <button
+                  type="button"
+                  onClick={() => {
+                    closeCollectionMessageMenu();
+                    toggleCollectionContextItem(activeCollectionMessageMenuItem);
+                  }}
+                  className="inline-flex items-center gap-1.5 rounded-full bg-slate-100 px-3 py-2 text-[12px] font-medium text-slate-700 transition hover:bg-slate-200"
+                >
+                  <Plus size={14} />
+                  <span>{selectedCollectionContextIds.includes(activeCollectionMessageMenuItem.id) ? '移出多选' : '加入多选'}</span>
+                </button>
+              </div>
+
+              <div className="mt-4 border-t border-slate-100 pt-3">
                 {canUsePersistentCaptureActions ? (
-                  <>
+                  <div className="flex items-center justify-between gap-3">
                     <button
                       type="button"
                       onClick={() => {
@@ -6865,50 +6961,46 @@ const _handleVideoAssistantMessage = useCallback((payload: {
                           closeCollectionMessageMenu();
                         });
                       }}
-                      className="flex w-full items-center justify-between rounded-[16px] bg-amber-50 px-4 py-3 text-left text-sm font-medium text-amber-700 transition hover:bg-amber-100"
+                      className="inline-flex items-center gap-1.5 text-sm font-medium text-slate-500 transition hover:text-[#232322]"
                     >
-                      <span>从当前流移除</span>
-                      <ChevronRight size={16} className="text-amber-300" />
+                      <History size={15} />
+                      <span>先收起</span>
                     </button>
                     {confirmCollectionDeleteId === activeCollectionMessageMenuItem.id ? (
-                      <div className="rounded-[16px] border border-rose-100 bg-rose-50 px-4 py-3">
-                        <p className="text-sm font-semibold text-rose-700">彻底删除后，这条内容不会再进入 Tutor、回声和后续记忆。</p>
-                        <div className="mt-3 flex items-center gap-2">
-                          <button
-                            type="button"
-                            onClick={() => {
-                              void updateWorkspaceCaptureStatus({
-                                action: 'delete',
-                                sourceKey: activeCollectionMessageMenuSourceKey,
-                                itemId: activeCollectionMessageMenuItem.id,
-                              }).finally(() => {
-                                closeCollectionMessageMenu();
-                              });
-                            }}
-                            className="rounded-full bg-rose-600 px-3 py-2 text-xs font-semibold text-white transition hover:bg-rose-700"
-                          >
-                            确认彻底删除
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => setConfirmCollectionDeleteId(null)}
-                            className="rounded-full border border-rose-200 bg-white px-3 py-2 text-xs font-medium text-rose-600 transition hover:border-rose-300"
-                          >
-                            取消
-                          </button>
-                        </div>
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setConfirmCollectionDeleteId(null)}
+                          className="rounded-full bg-slate-100 px-3 py-2 text-[12px] font-medium text-slate-500 transition hover:bg-slate-200 hover:text-slate-700"
+                        >
+                          取消
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            void updateWorkspaceCaptureStatus({
+                              action: 'delete',
+                              sourceKey: activeCollectionMessageMenuSourceKey,
+                              itemId: activeCollectionMessageMenuItem.id,
+                            }).finally(() => {
+                              closeCollectionMessageMenu();
+                            });
+                          }}
+                          className="rounded-full bg-rose-600 px-3 py-2 text-[12px] font-semibold text-white transition hover:bg-rose-700"
+                        >
+                          确认删除
+                        </button>
                       </div>
                     ) : (
                       <button
                         type="button"
                         onClick={() => setConfirmCollectionDeleteId(activeCollectionMessageMenuItem.id)}
-                        className="flex w-full items-center justify-between rounded-[16px] bg-rose-50 px-4 py-3 text-left text-sm font-medium text-rose-700 transition hover:bg-rose-100"
+                        className="text-sm font-medium text-slate-400 transition hover:text-rose-700"
                       >
-                        <span>彻底删除</span>
-                        <ChevronRight size={16} className="text-rose-300" />
+                        删除
                       </button>
                     )}
-                  </>
+                  </div>
                 ) : (
                   <button
                     type="button"
@@ -6919,12 +7011,14 @@ const _handleVideoAssistantMessage = useCallback((payload: {
                       });
                       closeCollectionMessageMenu();
                     }}
-                    className="flex w-full items-center justify-between rounded-[16px] bg-rose-50 px-4 py-3 text-left text-sm font-medium text-rose-700 transition hover:bg-rose-100"
+                    className="text-sm font-medium text-rose-600 transition hover:text-rose-700"
                   >
-                    <span>删除这条</span>
-                    <ChevronRight size={16} className="text-rose-300" />
+                    删除这条
                   </button>
                 )}
+                {confirmCollectionDeleteId === activeCollectionMessageMenuItem.id ? (
+                  <p className="mt-2 text-[11px] font-medium text-rose-600">删除后，这条内容不会再进入 Tutor、回声和后续记忆。</p>
+                ) : null}
               </div>
             </div>
           </div>
@@ -6939,13 +7033,13 @@ const _handleVideoAssistantMessage = useCallback((payload: {
             onClick={() => {
               setMobileCollectionSheet(null);
             }}
-            className={`${backdropPositionClass} z-20 bg-slate-900/18 backdrop-blur-[1px]`}
+            className={`${backdropPositionClass} z-20 bg-slate-900/18`}
           />
         <div
           className={`${collectionChromeContained ? 'absolute inset-y-0 left-0' : 'fixed inset-y-0 left-0'} z-30 w-[86vw] max-w-[360px]`}
         >
-          <div className="flex h-full flex-col overflow-hidden rounded-r-[28px] border-r border-slate-200 bg-white shadow-[0_24px_48px_rgba(15,23,42,0.16)]">
-            <div className="border-b border-slate-100 px-5 pb-4 pt-[max(env(safe-area-inset-top),20px)]">
+          <div className="flex h-full flex-col overflow-hidden rounded-r-[30px] border-r border-[#E9E9E7] bg-white">
+            <div className="border-b border-[#f2ebe4] px-5 pb-4 pt-[max(env(safe-area-inset-top),20px)]">
               <div className="flex items-center justify-between gap-3">
                 <div>
                   <p className="text-2xl font-semibold tracking-[-0.02em] text-slate-900">收集</p>
@@ -6959,7 +7053,7 @@ const _handleVideoAssistantMessage = useCallback((payload: {
                   onClick={() => {
                     setMobileCollectionSheet(null);
                     }}
-                    className="flex h-9 w-9 items-center justify-center rounded-full bg-slate-100 text-slate-500"
+                    className="flex h-10 w-10 items-center justify-center rounded-[16px] border border-[#E9E9E7] bg-white/92 text-slate-500 transition hover:bg-white hover:text-slate-700"
                   >
                     <X size={16} />
                   </button>
@@ -7000,10 +7094,10 @@ const _handleVideoAssistantMessage = useCallback((payload: {
                   onClick={() => setMobileCollectionSheet('echo')}
                   className="flex w-full items-center gap-3 rounded-[18px] border border-slate-200 bg-slate-50/80 px-4 py-3 text-left transition hover:border-slate-300 hover:bg-white"
                 >
-                  <span className="relative inline-flex h-9 w-9 items-center justify-center rounded-full bg-white text-emerald-600 shadow-sm">
+                  <span className="relative inline-flex h-9 w-9 items-center justify-center rounded-full bg-white text-[#232322]">
                     <Sparkles size={16} />
                     {showCollectionPulsePreview && collectionPulse ? (
-                      <span className="absolute right-1.5 top-1.5 inline-flex h-2 w-2 rounded-full bg-[#07c160]" />
+                      <span className="absolute right-1.5 top-1.5 inline-flex h-2 w-2 rounded-full bg-[#232322]" />
                     ) : null}
                   </span>
                   <div className="min-w-0 flex-1">
@@ -7026,17 +7120,17 @@ const _handleVideoAssistantMessage = useCallback((payload: {
             onClick={() => {
               setMobileCollectionSheet(null);
             }}
-            className={`${backdropPositionClass} z-20 bg-slate-900/18 backdrop-blur-[1px]`}
+            className={`${backdropPositionClass} z-20 bg-slate-900/18`}
           />
           <div
             className={`${collectionChromeContained ? 'absolute inset-x-0' : 'fixed inset-x-0'} z-30 ${dockPaddingClass}`}
             style={{ bottom: `${sheetBottomOffset}px` }}
           >
             <div
-              className={`mx-auto flex w-full ${sheetWidthClass} flex-col overflow-hidden rounded-[28px] border border-slate-200 bg-white shadow-[0_24px_48px_rgba(15,23,42,0.16)]`}
+              className={`mx-auto flex w-full ${sheetWidthClass} flex-col overflow-hidden rounded-[30px] border border-[#E9E9E7] bg-white`}
               style={{ maxHeight: mobileSheetMaxHeight }}
             >
-              <div className="flex items-center justify-between border-b border-slate-100 px-4 py-3">
+              <div className="flex items-center justify-between border-b border-[#E9E9E7] px-4 py-3">
                 <div>
                   <p className="text-sm font-semibold text-slate-900">
                     {mobileCollectionSheet === 'echo'
@@ -7049,15 +7143,15 @@ const _handleVideoAssistantMessage = useCallback((payload: {
                     <p className="text-xs text-slate-500">回头再看，不打断你现在发消息。</p>
                   ) : null}
                 </div>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setMobileCollectionSheet(null);
-                  }}
-                  className="flex h-9 w-9 items-center justify-center rounded-full bg-slate-100 text-slate-500"
-                >
-                  <X size={16} />
-                </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setMobileCollectionSheet(null);
+                    }}
+                    className="flex h-10 w-10 items-center justify-center rounded-[16px] border border-[#E9E9E7] bg-white/92 text-slate-500 transition hover:bg-white hover:text-slate-700"
+                  >
+                    <X size={16} />
+                  </button>
               </div>
 
               {mobileCollectionSheet === 'echo' ? (
@@ -7067,10 +7161,10 @@ const _handleVideoAssistantMessage = useCallback((payload: {
                   style={mobileSheetScrollableStyle}
                 >
                   {latestEchoForCenter ? (
-                    <div className="rounded-[24px] border border-emerald-100 bg-[linear-gradient(145deg,#ffffff_0%,#effcf6_100%)] px-4 py-4 shadow-sm">
+                    <div className="rounded-[24px] border border-[#E9E9E7] bg-[#D3E4F4] px-4 py-4">
                       <div className="mb-3 flex items-center justify-between gap-3">
-                        <div className="flex items-center gap-2 text-[12px] font-medium text-emerald-700">
-                          <span className="inline-flex h-8 w-8 items-center justify-center rounded-2xl bg-emerald-50 text-emerald-600">
+                        <div className="flex items-center gap-2 text-[12px] font-medium text-[#232322]">
+                          <span className="inline-flex h-8 w-8 items-center justify-center rounded-2xl bg-[#D3E4F4] text-[#232322]">
                             <Sparkles size={13} />
                           </span>
                           <span>{latestEchoIsToday ? '今日回声' : '最近回声'}</span>
@@ -7088,7 +7182,7 @@ const _handleVideoAssistantMessage = useCallback((payload: {
                             {latestEchoForCenter.recommendations.map((recommendation, index) => (
                               <div
                                 key={`${latestEchoForCenter.id}-recommendation-${index + 1}`}
-                                className="rounded-[18px] border border-emerald-100/80 bg-white/90 px-3 py-2.5"
+                                className="rounded-[18px] border border-[#E9E9E7] bg-white px-3 py-2.5"
                               >
                                 <p className="text-xs font-semibold text-slate-800">{recommendation.title}</p>
                                 <p className="mt-1 text-xs leading-6 text-slate-600">{recommendation.body}</p>
@@ -7102,7 +7196,7 @@ const _handleVideoAssistantMessage = useCallback((payload: {
                           {latestEchoForCenter.chips.map((chip) => (
                             <span
                               key={chip}
-                              className="rounded-full border border-emerald-100 bg-white px-3 py-1 text-[11px] font-medium text-emerald-700"
+                              className="rounded-full border border-[#D1F4E0] bg-white px-3 py-1 text-[11px] font-medium text-[#232322]"
                             >
                               {chip}
                             </span>
@@ -7119,7 +7213,7 @@ const _handleVideoAssistantMessage = useCallback((payload: {
                         <button
                           type="button"
                           onClick={() => nudgeComposer('我想顺着这条继续记：')}
-                          className="rounded-full bg-emerald-600 px-4 py-2.5 text-xs font-semibold text-white transition hover:bg-emerald-700"
+                          className="rounded-full bg-[#232322] px-4 py-2.5 text-xs font-semibold text-white transition hover:bg-[#111111]"
                         >
                           继续收这一条
                         </button>
@@ -7128,7 +7222,7 @@ const _handleVideoAssistantMessage = useCallback((payload: {
                         <button
                           type="button"
                           onClick={() => openTutorFromCollection(buildTutorQuestionFromEcho(latestEchoForCenter, 'explore'))}
-                          className="text-emerald-700 transition hover:text-emerald-800"
+                          className="text-[#232322] transition hover:text-[#111111]"
                         >
                           问 Tutor
                         </button>
@@ -7144,10 +7238,10 @@ const _handleVideoAssistantMessage = useCallback((payload: {
                       {manualEchoDebugView}
                     </div>
                   ) : (
-                    <div className="rounded-[24px] border border-dashed border-slate-200 bg-slate-50/80 px-4 py-5 text-sm leading-7 text-slate-500 shadow-sm">
+                    <div className="rounded-[24px] border border-dashed border-slate-200 bg-slate-50/80 px-4 py-5 text-sm leading-7 text-slate-500">
                       <p>先继续收集，系统听到的线索会慢慢沉到这里。</p>
                       {!canRequestManualEcho && !isCheckingAuth ? (
-                        <p className="mt-1 text-xs leading-6 text-amber-600">
+                        <p className="mt-1 text-xs leading-6 text-[#787774]">
                           {isGuestFastEntry ? '你现在在游客模式里，点按钮会先提示你登录。' : '当前还没拿到登录态，点按钮会先提示你登录。'}
                         </p>
                       ) : null}
@@ -7164,7 +7258,7 @@ const _handleVideoAssistantMessage = useCallback((payload: {
                   )}
 
                   {historyWorkspaceEchoes.length > 0 ? (
-                    <div className="rounded-[24px] border border-slate-200 bg-slate-50/80 p-3 shadow-sm">
+                    <div className="rounded-[24px] border border-slate-200 bg-slate-50/80 p-3">
                       <div className="mb-3 flex items-center justify-between gap-3">
                         <div>
                           <p className="text-xs font-semibold tracking-[0.06em] text-slate-500">回声历史</p>
@@ -7183,7 +7277,7 @@ const _handleVideoAssistantMessage = useCallback((payload: {
                               onClick={() => setSelectedEchoChip(chip)}
                               className={`rounded-full border px-3 py-1 text-[11px] font-medium transition ${
                                 selectedEchoChip === chip
-                                  ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
+                                  ? 'border-[#D1F4E0] bg-[#D1F4E0]/30 text-[#232322]'
                                   : 'border-slate-200 bg-white text-slate-500'
                               }`}
                             >
@@ -7238,7 +7332,7 @@ const _handleVideoAssistantMessage = useCallback((payload: {
                                     <button
                                       type="button"
                                       onClick={() => openTutorFromCollection(buildTutorQuestionFromEcho(echo, 'explore'))}
-                                      className="rounded-full border border-slate-200 bg-slate-50 px-3 py-2 text-[11px] font-semibold text-slate-700 transition hover:border-emerald-200 hover:bg-emerald-50 hover:text-emerald-700"
+                                      className="rounded-full border border-slate-200 bg-slate-50 px-3 py-2 text-[11px] font-semibold text-slate-700 transition hover:border-[#D1F4E0] hover:bg-[#D1F4E0]/30 hover:text-[#232322]"
                                     >
                                       顺着这条问 Tutor
                                     </button>
@@ -7266,7 +7360,7 @@ const _handleVideoAssistantMessage = useCallback((payload: {
                             setMobileCollectionSheet(null);
                             handleCollectionPulseAction(action.key);
                           }}
-                          className="rounded-full border border-emerald-100 bg-white px-3 py-2 text-xs font-medium text-emerald-700 transition hover:border-emerald-200 hover:bg-emerald-50"
+                          className="rounded-full border border-[#D1F4E0] bg-white px-3 py-2 text-xs font-medium text-[#232322] transition hover:border-[#D1F4E0] hover:bg-[#D1F4E0]/30"
                         >
                           {action.label}
                         </button>
@@ -7303,65 +7397,80 @@ const _handleVideoAssistantMessage = useCallback((payload: {
 
       {isCollectionContextSelectionMode && selectedCollectionContextItems.length > 0 ? (
         <div className={`relative z-20 flex-shrink-0 ${desktopShell ? 'px-6 pb-2 pt-3' : 'px-3 pb-2 pt-2'}`}>
-          <div className={`mx-auto flex w-full ${dockWidthClass} items-center gap-3 rounded-[18px] border border-emerald-100 bg-[linear-gradient(145deg,#ffffff_0%,#f2fcf6_100%)] px-4 py-3 shadow-sm`}>
-            <div className="min-w-0 flex-1">
-              <p className="text-[12px] font-semibold text-slate-900">已选 {selectedCollectionContextItems.length} 条</p>
-              <p className="mt-1 text-[11px] leading-5 text-slate-500">
-                {confirmSelectedCollectionDelete ? '再点一次删除，就会把这些内容彻底移出 Tutor、回声和后续记忆。' : '像微信里多选消息一样，一起引用、提问或整理当前流。'}
-              </p>
-            </div>
-            <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
-              <button
-                type="button"
-                onClick={quoteSelectedCollectionContextToComposer}
-                className="rounded-full border border-slate-200 bg-white px-3 py-2 text-[11px] font-semibold text-slate-600 transition hover:border-slate-300 hover:text-slate-800"
-              >
-                引用
-              </button>
-              <button
-                type="button"
-                onClick={openTutorWithSelectedCollectionContext}
-                className="rounded-full bg-emerald-600 px-3 py-2 text-[11px] font-semibold text-white transition hover:bg-emerald-700"
-              >
-                问 Tutor
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  void applyBatchActionToSelectedCollectionContext('archive');
-                }}
-                className="rounded-full border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] font-semibold text-amber-700 transition hover:border-amber-300 hover:bg-amber-100"
-              >
-                移除
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  void applyBatchActionToSelectedCollectionContext('delete');
-                }}
-                className={`rounded-full px-3 py-2 text-[11px] font-semibold transition ${
-                  confirmSelectedCollectionDelete
-                    ? 'bg-rose-600 text-white hover:bg-rose-700'
-                    : 'border border-rose-200 bg-rose-50 text-rose-700 hover:border-rose-300 hover:bg-rose-100'
-                }`}
-              >
-                {confirmSelectedCollectionDelete ? '确认删除' : '删除'}
-              </button>
+          <div
+            className={`mx-auto w-full ${dockWidthClass} rounded-[28px] border border-[#E9E9E7] bg-white px-3.5 py-3`}
+          >
+            <div className="flex items-start gap-3">
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-2">
+                  <span className="inline-flex items-center justify-center rounded-full bg-[#232322] px-2.5 py-1 text-[12px] font-semibold text-white">
+                    {selectedCollectionContextItems.length} 条
+                  </span>
+                  <p className="text-[12px] font-medium text-[#232322]">已加入这次操作</p>
+                </div>
+                <div className="mt-2 flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={openTutorWithSelectedCollectionContext}
+                    className="inline-flex items-center gap-1.5 rounded-full bg-[#232322] px-3.5 py-2.5 text-[11px] font-semibold text-white transition hover:bg-[#111111]"
+                  >
+                    <MessageCircle size={14} />
+                    <span>问 Tutor</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={quoteSelectedCollectionContextToComposer}
+                    className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-white px-3.5 py-2.5 text-[11px] font-semibold text-slate-700 transition hover:border-slate-300 hover:text-slate-900"
+                  >
+                    <FileText size={14} />
+                    <span>引用</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      void applyBatchActionToSelectedCollectionContext('archive');
+                    }}
+                    className="inline-flex items-center gap-1.5 rounded-full border border-[#E9E9E7] bg-[#FDF3C0]/50 px-3 py-2.5 text-[11px] font-medium text-[#232322] transition hover:border-[#E9E9E7] hover:bg-[#FDF3C0]"
+                  >
+                    <History size={14} />
+                    <span>先收起</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      void applyBatchActionToSelectedCollectionContext('delete');
+                    }}
+                    className={`rounded-full px-3 py-2.5 text-[11px] font-medium transition ${
+                      confirmSelectedCollectionDelete
+                        ? 'bg-rose-600 text-white hover:bg-rose-700'
+                        : 'text-slate-400 hover:bg-rose-50 hover:text-rose-700'
+                    }`}
+                  >
+                    {confirmSelectedCollectionDelete ? '确认删除' : '删除'}
+                  </button>
+                </div>
+              </div>
               <button
                 type="button"
                 onClick={clearCollectionContextSelection}
-                className="rounded-full border border-slate-200 bg-white px-3 py-2 text-[11px] font-medium text-slate-500 transition hover:border-slate-300 hover:text-slate-700"
+                className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-[16px] border border-[#E9E9E7] bg-white/86 text-slate-500 transition hover:bg-white hover:text-slate-700"
+                aria-label="退出多选"
               >
-                取消
+                <X size={15} />
               </button>
             </div>
           </div>
+          {confirmSelectedCollectionDelete ? (
+            <p className={`mx-auto mt-2 w-full ${dockWidthClass} px-1 text-[11px] font-medium text-rose-600`}>
+              再点一次删除，就会彻底移除这些内容。
+            </p>
+          ) : null}
         </div>
       ) : null}
 
       {showMobileRecorder ? (
-        <div className={`relative z-30 flex-shrink-0 ${dockPaddingClass}`}>
-          <div className={`mx-auto w-full ${dockWidthClass} rounded-[24px] border border-slate-200/90 bg-white/98 p-1.5 shadow-[0_20px_42px_rgba(15,23,42,0.14)] backdrop-blur`}>
+        <div className={`relative z-30 flex-shrink-0 bg-[#F7F7F7] ${desktopShell ? 'px-4 pb-5 pt-2' : 'px-2 pb-[max(env(safe-area-inset-bottom),6px)] pt-2'}`} style={{ borderTop: '0.5px solid #E0E0E0' }}>
+          <div className={`mx-auto w-full ${dockWidthClass}`}>
             <Recorder
               ref={recorderRef}
               activeSessionId={sessionId}
@@ -7380,64 +7489,46 @@ const _handleVideoAssistantMessage = useCallback((payload: {
           </div>
         </div>
       ) : (
-        <div className={`relative z-20 flex-shrink-0 ${dockPaddingClass}`}>
-          <div className={`mx-auto flex w-full ${dockWidthClass} items-end gap-2 border-t border-[#d8d8d8] bg-[#f7f7f7]/98 px-3 py-2 backdrop-blur`}>
-            <button
-              type="button"
-              onClick={openLiveRecorder}
-              disabled={isComposerVoiceRecording || composerVoiceStatus === 'connecting'}
-              className={`flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-full border bg-white transition ${
-                showMobileRecorder
-                  ? 'border-[#f1b24a] text-[#c88719]'
-                  : 'border-[#d9d9d9] text-[#1f2329]'
-              } disabled:border-[#e7e7e7] disabled:text-slate-300`}
-              aria-label="录制原声"
-            >
-              <AudioLines size={18} strokeWidth={2} />
-            </button>
-
-            <div className="min-w-0 flex-1 rounded-[8px] border border-[#d9d9d9] bg-white px-3 py-2">
-              {quotedCollectionContextItems.length > 0 ? (
-                <div className="mb-2 rounded-[12px] border border-[#dbeef8] bg-[#f5fbff] px-3 py-2 text-[11px] text-slate-500">
-                  <div className="flex items-start gap-2">
-                    <span className="mt-0.5 inline-flex h-6 w-6 items-center justify-center rounded-full bg-white text-[#2563eb]">
-                      <ChevronRight size={12} />
-                    </span>
-                    <div className="min-w-0 flex-1">
-                      <p className="font-semibold text-slate-700">
-                        {quotedCollectionContextItems.length > 1
-                          ? `已引用 ${quotedCollectionContextItems.length} 条内容`
-                          : `引用${quotedCollectionPrimaryItem ? getCollectionContextTypeLabel(quotedCollectionPrimaryItem.type) : '内容'}`}
-                      </p>
-                      <p className="mt-0.5 truncate text-slate-500">{quotedCollectionSummaryText}</p>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={clearQuotedCollectionContext}
-                      className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-white text-slate-400 transition hover:text-slate-600"
-                      aria-label="取消引用"
-                    >
-                      <X size={13} />
-                    </button>
-                  </div>
-                </div>
-              ) : null}
-              {composerLinkPreview ? (
-                <div className="mb-2 flex items-center gap-2 rounded-[10px] border border-[#ece4ff] bg-[#faf7ff] px-3 py-2 text-[11px] text-slate-500">
-                  <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-white text-fuchsia-600">
-                    <Link2 size={12} />
-                  </span>
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate font-medium text-slate-700">
-                      识别到 {composerLinkPreview.providerLabel} 链接
-                    </p>
-                    <p className="truncate text-slate-400">
-                      {composerCanAutoImportLink ? '发送后会自动解析进收集流' : '会先作为一条链接笔记留在这里'}
-                    </p>
-                  </div>
-                </div>
-              ) : null}
-              <div className="flex items-end gap-2">
+        <div className={`relative z-20 flex-shrink-0 bg-[#F7F7F7] ${desktopShell ? 'px-4 pb-5 pt-2' : 'px-2 pb-[max(env(safe-area-inset-bottom),6px)] pt-1.5'}`} style={{ borderTop: '0.5px solid #E0E0E0' }}>
+          <div className={`mx-auto w-full ${dockWidthClass}`}>
+            {quotedCollectionContextItems.length > 0 ? (
+              <div className="mb-1.5 flex items-center gap-2 rounded-lg bg-white px-3 py-2 text-[12px]">
+                <ChevronRight size={12} className="flex-shrink-0 text-slate-400" />
+                <span className="min-w-0 flex-1 truncate text-slate-500">
+                  {quotedCollectionContextItems.length > 1
+                    ? `已引用 ${quotedCollectionContextItems.length} 条内容`
+                    : `引用${quotedCollectionPrimaryItem ? getCollectionContextTypeLabel(quotedCollectionPrimaryItem.type) : '内容'}`}
+                  {quotedCollectionSummaryText ? ` · ${quotedCollectionSummaryText}` : ''}
+                </span>
+                <button
+                  type="button"
+                  onClick={clearQuotedCollectionContext}
+                  className="flex-shrink-0 text-slate-300 hover:text-slate-500"
+                  aria-label="取消引用"
+                >
+                  <X size={14} />
+                </button>
+              </div>
+            ) : null}
+            {composerLinkPreview ? (
+              <div className="mb-1.5 flex items-center gap-2 rounded-lg bg-white px-3 py-2 text-[12px]">
+                <Link2 size={12} className="flex-shrink-0 text-indigo-400" />
+                <span className="min-w-0 flex-1 truncate text-slate-500">
+                  {composerLinkPreview.providerLabel} 链接{composerCanAutoImportLink ? ' · 发送后自动解析' : ''}
+                </span>
+              </div>
+            ) : null}
+            <div className="flex items-end gap-1">
+              <button
+                type="button"
+                onClick={openLiveRecorder}
+                disabled={isComposerVoiceRecording || composerVoiceStatus === 'connecting'}
+                className="flex h-[36px] w-[36px] flex-shrink-0 items-center justify-center text-slate-500 transition hover:text-slate-700 disabled:text-slate-300"
+                aria-label="录制原声"
+              >
+                <AudioLines size={24} strokeWidth={1.5} />
+              </button>
+              <div className="min-w-0 flex-1 rounded-lg bg-white px-3 py-[7px]">
                 <textarea
                   ref={collectionComposerRef}
                   data-testid="collection-composer-input"
@@ -7449,78 +7540,70 @@ const _handleVideoAssistantMessage = useCallback((payload: {
                   onPaste={handleCollectionComposerPaste}
                   placeholder={collectionComposerPlaceholder}
                   rows={composerRows}
-                  className="max-h-24 min-h-[26px] flex-1 resize-none appearance-none border-0 bg-transparent px-0 py-0.5 text-sm leading-6 text-slate-700 outline-none ring-0 shadow-none focus:outline-none focus:ring-0 focus-visible:outline-none focus-visible:ring-0 placeholder:text-slate-400"
+                  className="max-h-28 min-h-[22px] w-full resize-none appearance-none border-0 bg-transparent px-0 py-0 text-[15px] leading-[22px] text-slate-900 outline-none ring-0 shadow-none focus:outline-none focus:ring-0 focus-visible:outline-none focus-visible:ring-0 placeholder:text-slate-400"
                 />
+                {showComposerAssistState ? (
+                  <p className="mt-1 text-[11px] text-slate-400">
+                    {sourceImporting
+                      ? activeSourceImportCount > 1
+                        ? `${activeSourceImportCount} 个文件已收下`
+                        : '文件已收下'
+                      : composerVoiceStatus === 'connecting'
+                        ? '正在打开语音听写...'
+                        : isComposerVoiceRecording
+                          ? compactText(composerVoiceInterimText || '正在听你说...', 28)
+                          : ''}
+                  </p>
+                ) : null}
+                {!sourceImporting && sourceImportError ? (
+                  <p className="mt-1 text-[11px] text-rose-400">{compactText(sourceImportError, 40)}</p>
+                ) : null}
+              </div>
+              {composerHasText ? (
+                <button
+                  type="button"
+                  data-testid="collection-composer-submit"
+                  onClick={handleCollectionComposerSubmit}
+                  disabled={isComposerVoiceRecording || composerVoiceStatus === 'connecting'}
+                  className="flex h-[36px] w-[36px] flex-shrink-0 items-center justify-center rounded-lg bg-indigo-500 text-white transition hover:bg-indigo-600 disabled:opacity-40"
+                  aria-label="发送到收集流"
+                >
+                  <ArrowUp size={18} strokeWidth={2.5} />
+                </button>
+              ) : (
+                <>
                 <button
                   type="button"
                   onClick={() => {
                     void toggleComposerDictation();
                   }}
                   disabled={showMobileRecorder || isRecording}
-                  className={`mb-0.5 flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full transition ${
+                  className={`flex h-[36px] w-[36px] flex-shrink-0 items-center justify-center transition ${
                     composerVoiceStatus === 'connecting' || isComposerVoiceRecording
-                      ? 'bg-[#07c160] text-white shadow-[0_10px_24px_rgba(7,193,96,0.22)]'
-                      : 'bg-[#e8f9ef] text-[#07c160]'
-                  } disabled:bg-slate-100 disabled:text-slate-400`}
+                      ? 'text-indigo-500'
+                      : 'text-slate-500 hover:text-slate-700'
+                  } disabled:text-slate-300`}
                   aria-label={isComposerVoiceRecording || composerVoiceStatus === 'connecting' ? '停止语音听写' : '语音转文字'}
                 >
-                  <Mic size={15} />
+                  <Mic size={24} strokeWidth={1.5} />
                 </button>
-              </div>
-              {sourceImporting || composerVoiceStatus === 'connecting' || isComposerVoiceRecording || composerCanAutoImportLink ? (
-                <div className="mt-1.5 flex items-center gap-2 text-[11px] text-slate-400">
-                  <span className="inline-flex h-1.5 w-1.5 rounded-full bg-[#07c160]" />
-                  <span>
-                    {sourceImporting
-                      ? activeSourceImportCount > 1
-                        ? `${activeSourceImportCount} 个文件已收下，稍后慢慢整理`
-                        : '这个文件已收下，稍后慢慢整理'
-                      : composerVoiceStatus === 'connecting'
-                        ? '正在打开语音听写'
-                        : isComposerVoiceRecording
-                          ? compactText(composerVoiceInterimText || '正在听你说', 28)
-                          : '发出去后会自动接进来'}
-                  </span>
-                </div>
-              ) : null}
-              {!sourceImporting && sourceImportError ? (
-                <div className="mt-1.5 inline-flex max-w-full items-center gap-2 rounded-full bg-rose-50 px-2.5 py-1 text-[11px] text-rose-500">
-                  <span className="inline-flex h-1.5 w-1.5 flex-shrink-0 rounded-full bg-rose-400" />
-                  <span className="truncate">{compactText(sourceImportError, 40)}</span>
-                </div>
-              ) : null}
+                <button
+                  type="button"
+                  data-testid="collection-upload-button"
+                  data-onboarding="collection-upload-button"
+                  onClick={() => handleSourceFileButtonClick('all')}
+                  className={`flex h-[36px] w-[36px] flex-shrink-0 items-center justify-center transition ${
+                    sourceImporting
+                      ? 'text-indigo-500'
+                      : 'text-slate-500 hover:text-slate-700'
+                  }`}
+                  aria-label="上传文件"
+                >
+                  <Plus size={26} strokeWidth={1.5} />
+                </button>
+                </>
+              )}
             </div>
-
-            <button
-              type="button"
-              data-testid="collection-upload-button"
-              data-onboarding="collection-upload-button"
-              onClick={() => handleSourceFileButtonClick('all')}
-              className={`flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-full border bg-white transition ${
-                sourceImporting
-                  ? 'border-[#07c160] text-[#07c160]'
-                  : 'border-[#d9d9d9] text-[#1f2329]'
-              }`}
-              aria-label="上传文件"
-            >
-              <Plus size={17} />
-            </button>
-
-            <button
-              type="button"
-              data-testid="collection-composer-submit"
-              onClick={handleCollectionComposerSubmit}
-              className={`inline-flex h-11 min-w-[64px] flex-shrink-0 items-center justify-center rounded-[10px] px-4 text-sm font-semibold text-white transition ${
-                isComposerVoiceRecording || composerVoiceStatus === 'connecting'
-                  ? 'bg-[#07c160]/70'
-                  : collectionComposerText.trim()
-                    ? 'bg-[#07c160]'
-                    : 'bg-[#07c160]/85'
-              }`}
-              aria-label="发送到收集流"
-            >
-              发送
-            </button>
           </div>
         </div>
       )}
@@ -7742,7 +7825,7 @@ const _handleVideoAssistantMessage = useCallback((payload: {
                     {unresolvedCount > 0 && (
                       <>
                         <span aria-hidden="true">·</span>
-                        <span data-testid="unresolved-count" data-count={unresolvedCount} className="text-coral-500 font-semibold whitespace-nowrap">{unresolvedCount} 待解决</span>
+                        <span data-testid="unresolved-count" data-count={unresolvedCount} className="text-[#FADEC9] font-semibold whitespace-nowrap">{unresolvedCount} 待解决</span>
                       </>
                     )}
                   </div>
@@ -7884,7 +7967,7 @@ const _handleVideoAssistantMessage = useCallback((payload: {
                           }}
                           className={`flex items-center gap-1 px-3 py-1.5 text-sm rounded-lg transition-all whitespace-nowrap ${
                             videoWorkspaceTab === tab.key
-                              ? 'bg-white text-amber-600 font-medium shadow-sm'
+                              ? 'bg-white text-[#787774] font-medium'
                               : 'text-gray-500 hover:text-gray-800 hover:bg-white/60'
                           }`}
                         >
@@ -7939,7 +8022,7 @@ const _handleVideoAssistantMessage = useCallback((payload: {
                                   </svg>
                                 </button>
                                 <div className="flex items-center gap-1.5 flex-1 min-w-0">
-                                  <span className={`w-2 h-2 rounded-full shrink-0 ${confusionChatAnchor.resolved ? 'bg-green-400' : 'bg-amber-400 animate-pulse'}`} />
+                                  <span className={`w-2 h-2 rounded-full shrink-0 ${confusionChatAnchor.resolved ? 'bg-green-400' : 'bg-[#FADEC9] animate-pulse'}`} />
                                   <span className="text-xs font-mono text-gray-500">{formatTime(confusionChatAnchor.timestamp)}</span>
                                   {confusionChatAnchor.note && (
                                     <span className="text-xs text-gray-600 truncate">{confusionChatAnchor.note}</span>
@@ -7991,7 +8074,7 @@ const _handleVideoAssistantMessage = useCallback((payload: {
                                 onClick={() => {
                                   handleAnchorMark(currentTime);
                                 }}
-                                className="w-full mb-4 flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl border-2 border-dashed border-amber-200 text-amber-600 hover:bg-amber-50 hover:border-amber-300 transition-all text-sm font-medium"
+                                className="w-full mb-4 flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl border-2 border-dashed border-[#E9E9E7] text-[#787774] hover:bg-[#EFEFEF] hover:border-[#232322] transition-all text-sm font-medium"
                               >
                                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
@@ -8018,17 +8101,17 @@ const _handleVideoAssistantMessage = useCallback((payload: {
                                       className={`w-full text-left p-3 rounded-xl border transition-all hover:shadow-sm group ${
                                         anchor.resolved
                                           ? 'border-green-100 bg-green-50/50'
-                                          : 'border-amber-100 bg-amber-50/50 hover:border-amber-200'
+                                          : 'border-[#E9E9E7] bg-[#FDF3C0]/20 hover:border-[#E9E9E7]'
                                       }`}
                                     >
                                       <div className="flex items-center gap-2">
-                                        <span className={`w-2 h-2 rounded-full shrink-0 ${anchor.resolved ? 'bg-green-400' : 'bg-amber-400'}`} />
+                                        <span className={`w-2 h-2 rounded-full shrink-0 ${anchor.resolved ? 'bg-green-400' : 'bg-[#FADEC9]'}`} />
                                         <span className="text-xs font-mono text-gray-400">{formatTime(anchor.timestamp)}</span>
                                         <span className="text-xs text-gray-500">困惑点 #{index + 1}</span>
                                         {anchor.resolved ? (
                                           <span className="text-xs text-green-500 ml-auto">已解决</span>
                                         ) : (
-                                        <span className="ml-auto text-xs text-amber-500">点击对话</span>
+                                        <span className="ml-auto text-xs text-[#787774]">点击对话</span>
                                         )}
                                       </div>
                                       {anchor.note && (
@@ -8082,21 +8165,21 @@ const _handleVideoAssistantMessage = useCallback((payload: {
                           onClick={() => setReviewTab(tab.key)}
                           className={`flex items-center gap-1 px-3 py-2 text-sm rounded-lg transition-all whitespace-nowrap tab-button ${
                             reviewTab === tab.key
-                              ? 'bg-white text-amber-600 font-medium shadow-sm'
+                              ? 'bg-white text-[#787774] font-medium'
                               : 'text-gray-500 hover:text-navy hover:bg-white/50'
                           }`}
                         >
                           {tab.LucideIcon && <tab.LucideIcon size={ICON_TAB} strokeWidth={ICON_TAB_STROKE} />}
                           {tab.label}
                           {tab.key === 'anchor-detail' && selectedAnchor && !selectedAnchor.resolved && (
-                            <span className="ml-1 w-2 h-2 bg-coral rounded-full inline-block animate-pulse" />
+                            <span className="ml-1 w-2 h-2 bg-[#FADEC9] rounded-full inline-block animate-pulse" />
                           )}
                           {tab.key === 'highlights' && highlightTopics.length > 0 && (
                             <span className="ml-1 text-xs text-skyblue-600">({highlightTopics.length})</span>
                           )}
                           {tab.key === 'summary' && classSummary && <span className="ml-1 text-xs text-mint-600">OK</span>}
                           {tab.key === 'notes' && notes.length > 0 && (
-                            <span className="ml-1 text-xs text-amber-600">({notes.length})</span>
+                            <span className="ml-1 text-xs text-[#787774]">({notes.length})</span>
                           )}
                         </button>
                       ))}
@@ -8187,8 +8270,8 @@ const _handleVideoAssistantMessage = useCallback((payload: {
                             onClick={() => setSelectedAnchor(null)}
                             className={`px-3 py-1.5 text-xs rounded-lg transition-all flex items-center gap-1.5 ${
                               !selectedAnchor
-                                ? 'bg-gradient-to-r from-amber-500 to-amber-600 text-white shadow-sm'
-                                : 'bg-white text-gray-600 hover:text-amber-600 hover:bg-amber-50 border border-gray-200'
+                                ? 'bg-[#232322] text-white'
+                                : 'bg-white text-gray-600 hover:text-[#787774] hover:bg-[#EFEFEF] border border-gray-200'
                             }`}
                             title="基于整节课内容与 AI 对话"
                           >
@@ -8196,9 +8279,9 @@ const _handleVideoAssistantMessage = useCallback((payload: {
                             整节课对话
                           </button>
                           {selectedAnchor && (
-                            <div className="flex items-center gap-1.5 px-3 py-1.5 bg-white rounded-lg border border-amber-200 text-xs">
-                              <span className={`w-2 h-2 rounded-full ${selectedAnchor.resolved ? 'bg-mint' : 'bg-coral animate-pulse'}`} />
-                              <span className="text-amber-700 font-medium">
+                            <div className="flex items-center gap-1.5 px-3 py-1.5 bg-white rounded-lg border border-[#E9E9E7] text-xs">
+                              <span className={`w-2 h-2 rounded-full ${selectedAnchor.resolved ? 'bg-mint' : 'bg-[#FADEC9] animate-pulse'}`} />
+                              <span className="text-[#232322] font-medium">
                                 困惑点 {formatTime(selectedAnchor.timestamp)}
                               </span>
                               <button
@@ -8244,7 +8327,7 @@ const _handleVideoAssistantMessage = useCallback((payload: {
                                       setShowConversationHistory(false);
                                       setSelectedHistoryConversation(null);
                                     }}
-                                    className="w-8 h-8 flex items-center justify-center rounded-lg text-amber-600 hover:text-amber-700 hover:bg-amber-50 transition-colors"
+                                    className="w-8 h-8 flex items-center justify-center rounded-lg text-[#232322] hover:text-[#232322] hover:bg-[#EFEFEF] transition-colors"
                                     title="新对话"
                                   >
                                     <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -8274,7 +8357,7 @@ const _handleVideoAssistantMessage = useCallback((payload: {
                                     setShowConversationHistory(false);
                                     setSelectedHistoryConversation(null);
                                   }}
-                                  className="w-8 h-8 flex items-center justify-center rounded-lg text-amber-600 hover:text-amber-700 hover:bg-amber-50 transition-colors"
+                                  className="w-8 h-8 flex items-center justify-center rounded-lg text-[#787774] hover:text-[#232322] hover:bg-[#EFEFEF] transition-colors"
                                   title="新对话"
                                 >
                                   <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -8344,47 +8427,46 @@ const _handleVideoAssistantMessage = useCallback((payload: {
             </div>
           ) : (
             /* 手机端主内容区 */
-            <div className="flex-1 min-h-0 flex flex-col overflow-hidden" style={{ background: 'var(--edu-bg-primary)' }}>
-              {/* Logo + 顶部 Tab + 菜单入口 */}
-              <div className="flex-shrink-0 px-4 py-2.5 flex items-center gap-2 bg-white border-b" style={{ borderColor: 'var(--edu-border-light)' }}>
-                {/* Logo */}
-                <div className="w-8 h-8 bg-gradient-to-br from-amber-400 to-amber-500 rounded-lg flex items-center justify-center flex-shrink-0">
-                  <GraduationCap size={18} strokeWidth={2} className="text-white" />
-                </div>
-                
-                {/* Tab 切换区 */}
-                <div className="flex-1 flex items-center justify-center">
-                  <MobileTabSwitch
-                    activeTab={viewMode}
-                    onTabChange={(tab) => handleViewModeChange(tab)}
-                    data-onboarding="mode-switch"
-                  />
-                </div>
-                
-                {/* 菜单入口 / 用户头像 */}
-                {isAuthenticated && user ? (
-                  <button
-                    onClick={() => setIsMenuOpen(true)}
-                    className="w-8 h-8 bg-gradient-to-br from-lilac-200 to-lilac-300 rounded-full flex items-center justify-center overflow-hidden flex-shrink-0"
-                  >
-                    <Avatar className="w-full h-full">
-                      {user.avatar ? (
-                        <AvatarImage src={user.avatar} alt={user.nickname} className="object-cover" />
-                      ) : null}
-                      <AvatarFallback className="bg-transparent text-sm">用户</AvatarFallback>
-                    </Avatar>
-                  </button>
-                ) : (
-                  <a
-                    href="/login"
-                    className="px-2.5 py-1.5 text-xs font-medium text-white bg-gradient-to-r from-amber-400 to-amber-500 rounded-lg flex-shrink-0"
-                  >
-                    登录
-                  </a>
-                )}
+            <div className="flex-1 min-h-0 flex flex-col overflow-hidden bg-white">
+              <div className="flex-shrink-0 bg-[#F7F7F5] px-4 pb-2 pt-[max(env(safe-area-inset-top),10px)]">
+                <div className="mx-auto flex w-full max-w-md items-center gap-3">
+                  <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#5B6ABF] text-white">
+                    <GraduationCap size={16} strokeWidth={2} />
+                  </div>
 
-                {/* 菜单按钮 */}
-                <DedaoMenuButton onClick={() => setIsMenuOpen(true)} data-onboarding="menu-button" />
+                  <div className="flex min-w-0 flex-1 items-center justify-center">
+                    <MobileTabSwitch
+                      activeTab={viewMode}
+                      onTabChange={(tab) => handleViewModeChange(tab)}
+                      data-onboarding="mode-switch"
+                    />
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    {isAuthenticated && user ? (
+                      <button
+                        onClick={() => setIsMenuOpen(true)}
+                        className="h-8 w-8 overflow-hidden rounded-full"
+                      >
+                        <Avatar className="h-full w-full">
+                          {user.avatar ? (
+                            <AvatarImage src={user.avatar} alt={user.nickname} className="object-cover" />
+                          ) : null}
+                          <AvatarFallback className="bg-slate-100 text-xs text-slate-500">用户</AvatarFallback>
+                        </Avatar>
+                      </button>
+                    ) : (
+                      <a
+                        href="/login"
+                        className="inline-flex h-8 items-center justify-center rounded-full bg-[#5B6ABF] px-3 text-xs font-medium text-white"
+                      >
+                        登录
+                      </a>
+                    )}
+
+                    <DedaoMenuButton onClick={() => setIsMenuOpen(true)} data-onboarding="menu-button" />
+                  </div>
+                </div>
               </div>
 
               {/* NOTE: cleaned corrupted legacy comment. */}
@@ -8546,92 +8628,105 @@ const _handleVideoAssistantMessage = useCallback((payload: {
 
               {/* NOTE: cleaned corrupted legacy comment. */}
               {mobileSubPage === 'ai-chat' && (
-                <div className="flex-1 min-h-0 flex flex-col bg-white">
-                  {/* NOTE: cleaned corrupted legacy comment. */}
-                  <div className="flex items-center gap-3 px-4 py-3 border-b border-gray-100">
-                    <button
-                      onClick={() => {
-                        setMobileSubPage(null);
-                        clearMobileAILaunchState();
-                        setShowConversationHistory(false);
-                        setSelectedHistoryConversation(null);
-                      }}
-                      className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-gray-100"
-                    >
-                      <svg className="w-5 h-5 text-gray-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-                      </svg>
-                    </button>
-                    <span className="font-medium text-gray-900">AI 助教</span>
-                    
-                    {/* 当前对话 / 历史对话切换 */}
-                    <div className="ml-auto flex items-center gap-1 bg-gray-100 rounded-lg p-0.5">
-                      {/* 当前对话 */}
-                      <button
-                        onClick={() => {
-                          setShowConversationHistory(false);
-                          setSelectedHistoryConversation(null);
+                <div className="flex-1 min-h-0 flex flex-col bg-[#F7F7F5]">
+                  <div className="flex-shrink-0 px-3 pb-3 pt-3">
+                    <div className="rounded-[28px] border border-[#E9E9E7] bg-white px-3.5 py-3">
+                      <div className="flex items-start gap-3">
+                        <button
+                          onClick={() => {
+                            setMobileSubPage(null);
+                            clearMobileAILaunchState();
+                            setShowConversationHistory(false);
+                            setSelectedHistoryConversation(null);
+                          }}
+                          className="flex h-10 w-10 items-center justify-center rounded-[16px] border border-[#efe5d8] bg-white text-slate-600 shadow-[0_8px_18px_rgba(148,163,184,0.10)] transition hover:-translate-y-0.5 hover:text-slate-900"
+                          aria-label="返回复习"
+                        >
+                          <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                          </svg>
+                        </button>
+                        <div className="min-w-0 flex-1">
+                          <div className="inline-flex items-center gap-2 rounded-full bg-[#f6efe6] px-2.5 py-1 text-[11px] font-semibold text-[#9a6b2f]">
+                            <BookOpen size={12} strokeWidth={2} />
+                            <span>复习中的 AI 助教</span>
+                          </div>
+                          <p className="mt-2 text-[16px] font-semibold tracking-[-0.02em] text-slate-900">继续沿着这节课追问</p>
+                          <p className="mt-1 text-[11px] leading-5 text-slate-500">
+                            {showConversationHistory
+                              ? '回看你之前和这节课的问答，快速接回思路。'
+                              : mobileAIPreferSelectedContext && mobileAILaunchTarget === 'mobile-ai-chat'
+                                ? '会优先沿着你刚选中的内容继续讲，减少来回切换。'
+                                : '这里不是新页面，而是复习流程里的深挖工作台。'}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="mt-3 flex items-center justify-end">
+                        <div className="inline-flex items-center gap-1 rounded-[16px] border border-[#efe5d8] bg-[#f7f2eb] p-1">
+                          <button
+                            onClick={() => {
+                              setShowConversationHistory(false);
+                              setSelectedHistoryConversation(null);
+                            }}
+                            className={`inline-flex items-center gap-1 rounded-[12px] px-3 py-2 text-[12px] font-medium transition-all ${
+                              !showConversationHistory
+                                ? 'bg-white text-[#c57a16] shadow-[0_8px_18px_rgba(148,163,184,0.10)]'
+                                : 'text-slate-400 hover:text-slate-600'
+                            }`}
+                            title="当前对话"
+                          >
+                            <MessageCircle size={14} strokeWidth={1.9} />
+                            <span>当前</span>
+                          </button>
+                          <button
+                            onClick={() => setShowConversationHistory(true)}
+                            className={`inline-flex items-center gap-1 rounded-[12px] px-3 py-2 text-[12px] font-medium transition-all ${
+                              showConversationHistory
+                                ? 'bg-white text-[#c57a16] shadow-[0_8px_18px_rgba(148,163,184,0.10)]'
+                                : 'text-slate-400 hover:text-slate-600'
+                            }`}
+                            title="历史对话"
+                          >
+                            <History size={14} strokeWidth={1.9} />
+                            <span>历史</span>
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="mt-3">
+                      <MiniPlayer
+                        currentTime={currentTime}
+                        duration={totalDuration}
+                        isPlaying={isPlaying}
+                        markers={anchors.map(a => ({
+                          id: a.id,
+                          timestamp: a.timestamp,
+                          resolved: a.resolved,
+                        }))}
+                        onSeek={(timeMs) => {
+                          handleUnifiedSeek(timeMs);
                         }}
-                        className={`w-8 h-8 flex items-center justify-center rounded-md transition-all ${
-                          !showConversationHistory
-                            ? 'bg-white text-amber-600 shadow-sm'
-                            : 'text-gray-400 hover:text-gray-600'
-                        }`}
-                        title="当前对话"
-                      >
-                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
-                        </svg>
-                      </button>
-                      {/* 历史对话 */}
-                      <button
-                        onClick={() => setShowConversationHistory(true)}
-                        className={`w-8 h-8 flex items-center justify-center rounded-md transition-all ${
-                          showConversationHistory
-                            ? 'bg-white text-amber-600 shadow-sm'
-                            : 'text-gray-400 hover:text-gray-600'
-                        }`}
-                        title="历史对话"
-                      >
-                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                        </svg>
-                      </button>
+                        onPlayPause={() => {
+                          if (isPlaying) {
+                            waveformRef.current?.pause();
+                          } else {
+                            waveformRef.current?.play();
+                          }
+                          setIsPlaying(!isPlaying);
+                        }}
+                        onMarkerClick={(marker) => {
+                          const anchor = anchors.find(a => a.id === marker.id);
+                          if (anchor) {
+                            setSelectedAnchor(anchor);
+                          }
+                        }}
+                        className="overflow-hidden rounded-[24px] border border-[#efe5d8] shadow-[0_12px_28px_rgba(148,163,184,0.10)]"
+                      />
                     </div>
                   </div>
-                  
-                  {/* NOTE: cleaned corrupted legacy comment. */}
-                  <MiniPlayer
-                    currentTime={currentTime}
-                    duration={totalDuration}
-                    isPlaying={isPlaying}
-                    markers={anchors.map(a => ({
-                      id: a.id,
-                      timestamp: a.timestamp,
-                      resolved: a.resolved,
-                    }))}
-                    onSeek={(timeMs) => {
-                      handleUnifiedSeek(timeMs);
-                    }}
-                    onPlayPause={() => {
-                      if (isPlaying) {
-                        waveformRef.current?.pause();
-                      } else {
-                        waveformRef.current?.play();
-                      }
-                      setIsPlaying(!isPlaying);
-                    }}
-                    onMarkerClick={(marker) => {
-                      const anchor = anchors.find(a => a.id === marker.id);
-                      if (anchor) {
-                        setSelectedAnchor(anchor);
-                      }
-                    }}
-                    className="border-b border-gray-100"
-                  />
-                  
-                  {/* NOTE: cleaned corrupted legacy comment. */}
-                  <div className="flex-1 min-h-0">
+
+                  <div className="flex-1 min-h-0 overflow-hidden rounded-[28px] border border-[#E9E9E7] bg-white/92 px-3 pb-3 shadow-[0_18px_38px_rgba(148,163,184,0.10)]">
                     {showConversationHistory ? (
                       selectedHistoryConversation ? (
                         // 历史对话详情
@@ -8655,7 +8750,7 @@ const _handleVideoAssistantMessage = useCallback((payload: {
                                   setShowConversationHistory(false);
                                   setSelectedHistoryConversation(null);
                                 }}
-                                className="w-7 h-7 flex items-center justify-center rounded-lg text-amber-600 hover:bg-amber-50"
+                                className="w-7 h-7 flex items-center justify-center rounded-lg text-[#787774] hover:bg-[#EFEFEF]"
                                 title="新对话"
                               >
                                 <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -8865,7 +8960,7 @@ const _handleVideoAssistantMessage = useCallback((payload: {
       )}
 
       {workspaceCaptureEditor ? (
-        <div className="fixed inset-0 z-[120] flex items-end justify-center bg-slate-950/28 p-3 backdrop-blur-[2px] md:items-center">
+        <div className="fixed inset-0 z-[120] flex items-end justify-center bg-slate-950/28 p-3 md:items-center">
           <button
             type="button"
             aria-label="关闭收集编辑器"
@@ -8887,7 +8982,7 @@ const _handleVideoAssistantMessage = useCallback((payload: {
                     {workspaceCaptureEditor.mode === 'transcript'
                       ? '把这条转写校正成你真正想保留的版本。'
                       : workspaceCaptureEditor.mode === 'text'
-                        ? '直接改这条文字收集，改完会同步回当前流。'
+                        ? '直接改这条文字收集，改完会同步回你正在看的收集里。'
                         : '改一下标题或补一句备注，后面更容易回看。'}
                   </p>
                 </div>
@@ -8911,7 +9006,7 @@ const _handleVideoAssistantMessage = useCallback((payload: {
                     onChange={(event) => setWorkspaceCaptureEditorTitle(event.target.value)}
                     placeholder="给这条收集起个更好找的名字"
                     aria-label="收集标题"
-                    className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700 outline-none transition focus:border-emerald-300 focus:bg-white focus:ring-2 focus:ring-emerald-100"
+                    className="w-full rounded-2xl border border-[#E9E9E7] bg-[#F7F7F5] px-4 py-3 text-sm text-[#232322] outline-none transition focus:border-[#232322] focus:bg-white focus:ring-2 focus:ring-[#232322]/10"
                   />
                 </label>
               ) : null}
@@ -8942,7 +9037,7 @@ const _handleVideoAssistantMessage = useCallback((payload: {
                         : '收集备注'
                   }
                   rows={workspaceCaptureEditor.mode === 'meta' ? 4 : 8}
-                  className="w-full resize-none rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm leading-6 text-slate-700 outline-none transition focus:border-emerald-300 focus:bg-white focus:ring-2 focus:ring-emerald-100"
+                  className="w-full resize-none rounded-2xl border border-[#E9E9E7] bg-[#F7F7F5] px-4 py-3 text-sm leading-6 text-[#232322] outline-none transition focus:border-[#232322] focus:bg-white focus:ring-2 focus:ring-[#232322]/10"
                 />
               </label>
             </div>
@@ -8961,7 +9056,7 @@ const _handleVideoAssistantMessage = useCallback((payload: {
                   void saveWorkspaceCaptureEdit();
                 }}
                 disabled={isSavingWorkspaceCaptureEdit}
-                className="rounded-full bg-emerald-600 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:bg-emerald-300"
+                className="rounded-full bg-[#232322] px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-[#111111] disabled:cursor-not-allowed disabled:bg-[#232322]/40"
               >
                 {isSavingWorkspaceCaptureEdit ? '保存中...' : '保存'}
               </button>
@@ -9091,7 +9186,7 @@ function SearchParamsReader() {
 
   if (forceMobilePreview) {
     return (
-      <div className="min-h-dvh bg-[linear-gradient(180deg,#e9edf5_0%,#dfe5ef_100%)]">
+      <div className="min-h-dvh bg-[#F7F7F5]">
         <div className="flex items-start justify-center px-5 pb-10 pt-6">
           <div className="relative h-[860px] w-[400px] rounded-[44px] bg-[#0b1220] p-[10px] shadow-[0_35px_80px_rgba(15,23,42,0.32)]">
             <div className="absolute left-1/2 top-[18px] z-20 h-7 w-32 -translate-x-1/2 rounded-full bg-[#0b1220]" />

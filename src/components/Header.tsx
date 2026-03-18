@@ -98,7 +98,7 @@ export function Header({ lessonTitle, courseName, userRole = 'student', viewMode
       <div className="flex items-center gap-5 min-w-0">
         {/* Logo */}
         <Link href="/" className="flex items-center gap-2.5 group flex-shrink-0">
-          <div className="w-9 h-9 bg-gradient-to-br from-amber-400 to-amber-500 rounded-xl flex items-center justify-center shadow-md group-hover:shadow-lg group-hover:scale-105 transition-all">
+          <div className="w-9 h-9 bg-[#FDF3C0] rounded-xl flex items-center justify-center group-hover:group-hover:scale-105 transition-all">
             <GraduationCap size={20} strokeWidth={2} className="text-white" />
           </div>
           <span className="font-semibold text-navy text-lg whitespace-nowrap">MeetMind</span>
@@ -114,9 +114,9 @@ export function Header({ lessonTitle, courseName, userRole = 'student', viewMode
           </span>
           <div className="flex items-center gap-1.5 min-w-0">
             {viewMode === 'record' ? (
-              <Mic size={ICON_SM} strokeWidth={ICON_STROKE} className="text-amber-500 flex-shrink-0" />
+              <Mic size={ICON_SM} strokeWidth={ICON_STROKE} className="text-[#787774] flex-shrink-0" />
             ) : (
-              <BookOpen size={ICON_SM} strokeWidth={ICON_STROKE} className="text-amber-500 flex-shrink-0" />
+              <BookOpen size={ICON_SM} strokeWidth={ICON_STROKE} className="text-[#787774] flex-shrink-0" />
             )}
             <h1 className="text-sm font-medium text-navy truncate min-w-0">{lessonTitle}</h1>
           </div>
@@ -159,7 +159,7 @@ export function Header({ lessonTitle, courseName, userRole = 'student', viewMode
             <>
               <button
                 onClick={() => setShowUserMenu(!showUserMenu)}
-                className="w-9 h-9 bg-gradient-to-br from-lilac-200 to-lilac-300 rounded-full flex items-center justify-center hover:from-lilac-300 hover:to-lilac-400 transition-all overflow-hidden"
+                className="w-9 h-9 bg-lilac-200 rounded-full flex items-center justify-center hover:from-lilac-300 hover:to-lilac-400 transition-all overflow-hidden"
               >
                 <Avatar className="w-full h-full">
                   {user.avatar ? (
@@ -172,7 +172,7 @@ export function Header({ lessonTitle, courseName, userRole = 'student', viewMode
               </button>
               
               {showUserMenu && (
-                <div className="absolute right-0 top-full mt-2 w-48 bg-white rounded-xl shadow-lg border border-gray-100 py-2 animate-scale-in z-50">
+                <div className="absolute right-0 top-full mt-2 w-48 bg-white rounded-xl border border-gray-100 py-2 animate-scale-in z-50">
                   <div className="px-4 py-2 border-b border-gray-100">
                     <p className="text-sm font-medium text-navy">{user.nickname}</p>
                     <p className="text-xs text-gray-500">{roleLabels[user.role] || user.role}账号</p>
@@ -222,7 +222,7 @@ export function Header({ lessonTitle, courseName, userRole = 'student', viewMode
           ) : (
             <Link
               href="/login"
-              className="px-4 py-2 text-sm font-medium text-white bg-gradient-to-r from-amber-400 to-amber-500 rounded-lg hover:from-amber-500 hover:to-amber-600 transition-all shadow-md"
+              className="px-4 py-2 text-sm font-medium text-white bg-[#FDF3C0] rounded-lg hover:from-[#FDF3C0] hover:to-[#FDECC8] transition-all"
             >
               登录
             </Link>
@@ -256,14 +256,14 @@ function RoleTab({
       disabled={loading}
       className={`px-3 py-1.5 rounded-lg text-sm flex items-center gap-1.5 transition-all duration-200 ${
         active
-          ? 'bg-white text-amber-600 shadow-sm font-medium'
+          ? 'bg-white text-[#787774] shadow-sm font-medium'
           : loading
             ? 'text-gray-400 cursor-wait bg-white/50'
             : 'text-gray-500 hover:text-navy hover:bg-white/50'
       }`}
     >
       {loading ? (
-        <svg className="animate-spin h-3.5 w-3.5 text-amber-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+        <svg className="animate-spin h-3.5 w-3.5 text-[#787774]" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
           <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
           <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
         </svg>

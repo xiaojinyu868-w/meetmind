@@ -53,15 +53,15 @@ export function AppWindowShell(props: AppWindowShellProps) {
     children,
   } = props;
   const statusColor = useMemo(() => {
-    if (taskState.status === 'success') return 'bg-emerald-50 text-emerald-700 border-emerald-200';
-    if (taskState.status === 'running') return 'bg-amber-50 text-amber-700 border-amber-200';
+    if (taskState.status === 'success') return 'bg-[#D1F4E0]/30 text-[#232322] border-[#D1F4E0]';
+    if (taskState.status === 'running') return 'bg-[#FDF3C0]/50 text-[#232322] border-[#E9E9E7]';
     if (taskState.status === 'error') return 'bg-rose-50 text-rose-700 border-rose-200';
     return 'bg-slate-50 text-slate-600 border-slate-200';
   }, [taskState.status]);
 
   return (
     <div className="min-h-screen bg-[radial-gradient(1200px_500px_at_20%_-5%,#dbeafe,transparent_60%),radial-gradient(1200px_500px_at_90%_-20%,#fde68a,transparent_60%),#f8fafc]" data-testid="app-window-shell">
-      <header className="sticky top-0 z-20 border-b border-slate-200/80 bg-white/90 backdrop-blur">
+      <header className="sticky top-0 z-20 border-b border-slate-200/80 bg-white/90">
         <div className="mx-auto flex max-w-7xl items-center gap-3 px-4 py-3 sm:px-6">
           <Link
             href="/app?workspace=apps"

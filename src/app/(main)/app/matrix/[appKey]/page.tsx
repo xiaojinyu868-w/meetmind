@@ -315,7 +315,7 @@ export default function AppMatrixWindowPage() {
   if (app.key === 'infographic') {
     return (
       <div className="min-h-screen bg-[radial-gradient(1100px_420px_at_15%_-10%,#dbeafe,transparent_58%),radial-gradient(900px_380px_at_100%_0%,#ede9fe,transparent_52%),#f8fafc]">
-        <header className="sticky top-0 z-20 border-b border-slate-200/80 bg-white/90 backdrop-blur">
+        <header className="sticky top-0 z-20 border-b border-slate-200/80 bg-white/90">
           <div className="mx-auto flex max-w-6xl items-center gap-3 px-4 py-3 sm:px-6">
             <Link
               href="/app?workspace=apps"

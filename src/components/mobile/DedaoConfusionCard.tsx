@@ -65,7 +65,7 @@ export function DedaoConfusionCard({
         ref={cardRef}
         className={cn(
           'fixed left-4 right-4 bottom-4 z-50',
-          'overflow-hidden rounded-2xl bg-white shadow-xl',
+          'overflow-hidden rounded-2xl bg-white',
           'animate-slide-up'
         )}
         style={{ maxHeight: '60vh' }}

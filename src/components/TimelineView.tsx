@@ -53,16 +53,16 @@ export function TimelineView({
           </div>
           <div className="h-2 bg-gray-100 rounded-full relative overflow-visible">
             <div
-              className="absolute left-0 top-0 h-full bg-gradient-to-r from-amber-400 to-amber-500 rounded-full transition-all duration-100"
+              className="absolute left-0 top-0 h-full bg-[#FDF3C0] rounded-full transition-all duration-100"
               style={{ width: `${progressPercent}%` }}
             />
             {timeline.breakpoints.map((bp) => (
               <button
                 key={bp.id}
                 onClick={() => onBreakpointClick(bp)}
-                className={`absolute top-1/2 -translate-y-1/2 -translate-x-1/2 w-4 h-4 rounded-full border-2 border-white shadow-md transition-all hover:scale-125 z-10 ${
+                className={`absolute top-1/2 -translate-y-1/2 -translate-x-1/2 w-4 h-4 rounded-full border-2 border-white transition-all hover:scale-125 z-10 ${
                   bp.resolved ? 'bg-mint' : 'bg-coral animate-pulse'
-                } ${selectedBreakpoint?.id === bp.id ? 'ring-2 ring-amber-300 scale-125' : ''}`}
+                } ${selectedBreakpoint?.id === bp.id ? 'ring-2 ring-[#E9E9E7] scale-125' : ''}`}
                 style={{ left: `${(bp.timestamp / totalDuration) * 100}%` }}
                 title={`${formatTimestamp(bp.timestamp)} - ${bp.resolved ? '已解决' : '待解决'}`}
               />
@@ -83,8 +83,8 @@ export function TimelineView({
                   onClick={() => onTimeClick(topic.startMs)}
                   className={`text-xs px-2.5 py-1.5 rounded-lg transition-all ${
                     isActive
-                      ? 'bg-amber-100 text-amber-700 font-medium shadow-sm'
-                      : 'bg-gray-50 text-gray-600 hover:bg-amber-50'
+                      ? 'bg-[#FDF3C0] text-[#232322] font-medium shadow-sm'
+                      : 'bg-gray-50 text-gray-600 hover:bg-[#EFEFEF]'
                   }`}
                 >
                   {index + 1}. {topic.title}

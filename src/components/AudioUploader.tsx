@@ -319,7 +319,7 @@ export function AudioUploader({ onTranscriptReady, onError, disabled }: AudioUpl
                   handleClick();
                 }}
                 disabled={disabled || isSelectingFile}
-                className="mt-4 px-6 py-2.5 bg-blue-500 hover:bg-blue-600 text-white font-medium rounded-xl transition-all shadow-lg disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 mx-auto"
+                className="mt-4 px-6 py-2.5 bg-blue-500 hover:bg-blue-600 text-white font-medium rounded-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 mx-auto"
               >
                 {isSelectingFile ? (
                   <>

@@ -153,8 +153,8 @@ export function StreamingMarkdown({
               inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-xs font-mono mx-0.5
               transition-all duration-200 border cursor-pointer
               ${isActive 
-                ? 'bg-gradient-to-r from-amber-500 to-amber-600 text-white border-amber-500 shadow-md scale-105' 
-                : 'bg-gradient-to-r from-amber-100 to-amber-50 text-amber-700 border-amber-200 hover:border-amber-300 hover:shadow-sm'
+                ? 'bg-[#232322] text-white border-[#232322] scale-105' 
+                : 'bg-[#FDF3C0] text-[#232322] border-[#E9E9E7] hover:border-[#232322] hover:shadow-sm'
               }
             `}
           >
@@ -289,7 +289,7 @@ export function StreamingMarkdown({
       const isInline = !codeClassName;
       if (isInline) {
         return (
-          <code {...props} className="px-1.5 py-0.5 bg-gray-100 text-amber-700 rounded text-xs font-mono">
+          <code {...props} className="px-1.5 py-0.5 bg-gray-100 text-[#232322] rounded text-xs font-mono">
             {children}
           </code>
         );
@@ -303,7 +303,7 @@ export function StreamingMarkdown({
     
     // 引用块
     blockquote: ({ children, ...props }) => (
-      <blockquote {...props} className="border-l-4 border-amber-300 pl-3 py-1 my-2 text-gray-600 italic bg-amber-50/50 rounded-r">
+      <blockquote {...props} className="border-l-4 border-[#E9E9E7] pl-3 py-1 my-2 text-gray-600 italic bg-[#FDF3C0]/20 rounded-r">
         {children}
       </blockquote>
     ),
@@ -315,7 +315,7 @@ export function StreamingMarkdown({
         href={href}
         target="_blank"
         rel="noopener noreferrer"
-        className="text-amber-600 hover:text-amber-700 underline decoration-amber-300 hover:decoration-amber-500 transition-colors"
+        className="text-[#787774] hover:text-[#232322] underline decoration-[#FDF3C0] hover:decoration-[#232322] transition-colors"
       >
         {children}
       </a>
@@ -331,7 +331,7 @@ export function StreamingMarkdown({
       <input 
         {...props} 
         disabled 
-        className="mr-2 accent-amber-500"
+        className="mr-2 accent-[#232322]"
       />
     ),
   }), [processChildren]);
@@ -348,7 +348,7 @@ export function StreamingMarkdown({
       
       {/* 流式输出时显示光标 */}
       {isStreaming && (
-        <span className="inline-block w-2 h-4 bg-amber-500 animate-pulse ml-0.5 align-middle rounded-sm" />
+        <span className="inline-block w-2 h-4 bg-[#232322] animate-pulse ml-0.5 align-middle rounded-sm" />
       )}
     </div>
   );

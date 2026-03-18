@@ -82,7 +82,7 @@ export default function SettingsPage() {
   if (authLoading || loading) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-amber-500"></div>
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#232322]"></div>
       </div>
     );
   }
@@ -108,7 +108,7 @@ export default function SettingsPage() {
       <main className="max-w-2xl mx-auto px-4 py-6 space-y-6">
         {/* 保存提示 */}
         {saveMessage && (
-          <div className={`fixed top-20 left-1/2 transform -translate-x-1/2 px-4 py-2 rounded-lg shadow-lg z-50 ${
+          <div className={`fixed top-20 left-1/2 transform -translate-x-1/2 px-4 py-2 rounded-lg z-50 ${
             saveMessage.type === 'success' ? 'bg-green-500 text-white' : 'bg-red-500 text-white'
           }`}>
             {saveMessage.text}
@@ -119,7 +119,7 @@ export default function SettingsPage() {
         {isAuthenticated && user && (
           <section className="bg-white rounded-xl shadow-sm border border-gray-100 p-4">
             <div className="flex items-center gap-4">
-              <div className="w-14 h-14 bg-gradient-to-br from-amber-100 to-amber-200 rounded-full flex items-center justify-center">
+              <div className="w-14 h-14 bg-[#FDF3C0] rounded-full flex items-center justify-center">
                 <Avatar className="w-full h-full">
                   {user.avatar ? (
                     <AvatarImage src={user.avatar} alt={user.nickname} className="object-cover" />
@@ -133,7 +133,7 @@ export default function SettingsPage() {
               </div>
               <Link
                 href="/profile"
-                className="text-sm text-amber-600 hover:text-amber-700"
+                className="text-sm text-[#787774] hover:text-[#232322]"
               >
                 编辑资料
               </Link>
@@ -177,7 +177,7 @@ export default function SettingsPage() {
                   value={settings.modelPreference}
                   onChange={(e) => updateSetting('modelPreference', e.target.value)}
                   disabled={saving}
-                  className="px-3 py-2 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-400 focus:border-transparent"
+                  className="px-3 py-2 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-[#232322] focus:border-transparent"
                 >
                   <option value="auto">自动选择</option>
                   <option value="qwen3.5-plus">通义千问 3.5 Plus（推荐）</option>
@@ -210,12 +210,12 @@ export default function SettingsPage() {
                 placeholder="粘贴你的 B站 Cookie（包含 SESSDATA、bili_jct 等字段）"
                 rows={3}
                 disabled={saving}
-                className="w-full px-3 py-2 text-xs font-mono border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-400 focus:border-transparent resize-none placeholder:text-gray-400"
+                className="w-full px-3 py-2 text-xs font-mono border border-gray-200 rounded-lg focus:ring-2 focus:ring-[#232322] focus:border-transparent resize-none placeholder:text-gray-400"
               />
               <details className="text-xs text-gray-500">
-                <summary className="cursor-pointer hover:text-amber-600 transition-colors">如何获取 Cookie？</summary>
+                <summary className="cursor-pointer hover:text-[#232322] transition-colors">如何获取 Cookie？</summary>
                 <ol className="mt-2 ml-4 space-y-1 list-decimal">
-                  <li>用浏览器登录 <a href="https://www.bilibili.com" target="_blank" rel="noopener noreferrer" className="text-amber-600 underline">bilibili.com</a></li>
+                  <li>用浏览器登录 <a href="https://www.bilibili.com" target="_blank" rel="noopener noreferrer" className="text-[#787774] underline">bilibili.com</a></li>
                   <li>按 F12 打开开发者工具</li>
                   <li>切换到「应用」(Application) 标签</li>
                   <li>左侧找到 Cookie → https://www.bilibili.com</li>
@@ -305,8 +305,8 @@ function SettingToggle({
           disabled={disabled}
           className={`
             relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent
-            transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-amber-400 focus:ring-offset-2
-            ${checked ? 'bg-amber-500' : 'bg-gray-200'}
+            transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-[#232322] focus:ring-offset-2
+            ${checked ? 'bg-[#232322]' : 'bg-gray-200'}
             ${disabled ? 'opacity-50 cursor-not-allowed' : ''}
           `}
         >

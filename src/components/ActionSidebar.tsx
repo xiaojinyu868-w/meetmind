@@ -40,7 +40,7 @@ export function ActionSidebar({
     <div
       data-onboarding="action-sidebar"
       className={cn(
-        'w-12 flex-shrink-0 bg-white/90 backdrop-blur-sm border-l border-gray-100',
+        'w-12 flex-shrink-0 bg-white/90 border-l border-gray-100',
         'flex flex-col items-center py-3 gap-2',
         className
       )}
@@ -53,8 +53,8 @@ export function ActionSidebar({
         className={cn(
           'relative w-9 h-9 flex items-center justify-center rounded-lg transition-all',
           isDrawerOpen
-            ? 'bg-amber-100 text-amber-600'
-            : 'text-gray-500 hover:bg-amber-50 hover:text-amber-600'
+            ? 'bg-[#FDF3C0] text-[#787774]'
+            : 'text-gray-500 hover:bg-[#EFEFEF] hover:text-[#232322]'
         )}
         title="今日任务"
       >
@@ -79,8 +79,8 @@ export function ActionSidebar({
           className={cn(
             'w-9 h-9 flex items-center justify-center rounded-lg transition-all',
             isHistoryActive
-              ? 'bg-amber-100 text-amber-600'
-              : 'text-gray-500 hover:bg-amber-50 hover:text-amber-600'
+              ? 'bg-[#FDF3C0] text-[#787774]'
+              : 'text-gray-500 hover:bg-[#EFEFEF] hover:text-[#232322]'
           )}
           title="对话历史"
         >

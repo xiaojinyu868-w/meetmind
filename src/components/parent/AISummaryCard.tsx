@@ -17,8 +17,8 @@ export function AISummaryCard({
     <div
       className={cn(
         'p-4 rounded-2xl',
-        'bg-gradient-to-r from-amber-50 via-orange-50 to-yellow-50',
-        'border border-amber-100/50',
+        'bg-[#FDF3C0]/30',
+        'border border-[#E9E9E7]/50',
         className
       )}
     >
@@ -26,7 +26,7 @@ export function AISummaryCard({
         {/* AI 图标 */}
         <div className={cn(
           'w-8 h-8 rounded-xl flex-shrink-0',
-          'bg-gradient-to-br from-amber-400 to-orange-500',
+          'bg-[#FDF3C0]',
           'flex items-center justify-center',
           'shadow-sm'
         )}>
@@ -37,15 +37,15 @@ export function AISummaryCard({
         
         {/* 总结内容 */}
         <div className="flex-1 min-w-0">
-          <p className="text-xs text-amber-600/70 mb-1 font-medium">
+          <p className="text-xs text-[#787774]/70 mb-1 font-medium">
             AI 总结
           </p>
           {isLoading ? (
             <div className="flex items-center gap-2">
               <div className="flex gap-1">
-                <span className="w-2 h-2 bg-amber-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
-                <span className="w-2 h-2 bg-amber-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
-                <span className="w-2 h-2 bg-amber-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+                <span className="w-2 h-2 bg-[#FADEC9] rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
+                <span className="w-2 h-2 bg-[#FADEC9] rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
+                <span className="w-2 h-2 bg-[#FADEC9] rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
               </div>
               <span className="text-sm text-gray-400">正在分析...</span>
             </div>

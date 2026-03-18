@@ -90,7 +90,7 @@ export default function WechatCaptureClient({
     return (
       <section className="rounded-[28px] border border-stone-200 bg-white px-5 py-5 shadow-[0_16px_40px_rgba(15,23,42,0.06)]">
         {nickname ? (
-          <div className="mb-4 rounded-2xl bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
+          <div className="mb-4 rounded-2xl bg-[#D1F4E0]/30 px-4 py-3 text-sm text-[#232322]">
             绑定成功{nickname ? `，${nickname}` : ''}。以后发给服务号的内容都会自动进入收集流。
           </div>
         ) : null}

@@ -76,7 +76,7 @@ export function MobileTimeline({
   return (
     <div className={cn("overflow-y-auto", className)}>
       {/* 列表标题 */}
-      <div className="sticky top-0 z-10 px-4 py-2 bg-slate-900/95 backdrop-blur-sm border-b border-slate-800">
+      <div className="sticky top-0 z-10 px-4 py-2 bg-slate-900/95 border-b border-slate-800">
         <h3 className="text-sm font-medium text-slate-300">课堂时间轴</h3>
         <p className="text-xs text-slate-500 mt-0.5">
           共 {entries.length} 段 · {entries.filter(e => e.hasConfusion && !e.confusionResolved).length} 个待解决困惑

@@ -69,7 +69,7 @@ export function PanelLayout({
       {/* 桌面端：三栏布局 */}
       <div className="hidden lg:flex flex-1">
         {leftPanel && (
-          <aside className="w-80 xl:w-96 border-r border-ink/10 flex flex-col bg-paper/50 backdrop-blur-sm">
+          <aside className="w-80 xl:w-96 border-r border-ink/10 flex flex-col bg-paper/50">
             {leftPanel}
           </aside>
         )}
@@ -77,7 +77,7 @@ export function PanelLayout({
           {centerPanel}
         </div>
         {rightPanel && (
-          <aside className="w-72 xl:w-80 border-l border-ink/10 flex flex-col bg-paper/50 backdrop-blur-sm">
+          <aside className="w-72 xl:w-80 border-l border-ink/10 flex flex-col bg-paper/50">
             {rightPanel}
           </aside>
         )}
@@ -94,7 +94,7 @@ export function PanelLayout({
         {/* 移动端面板切换器 */}
         {(leftPanel || rightPanel) && (
           <div className="fixed bottom-20 left-1/2 -translate-x-1/2 z-40">
-            <div className="flex items-center gap-1 p-1 bg-ink/90 backdrop-blur-xl rounded-full shadow-xl shadow-ink/20">
+            <div className="flex items-center gap-1 p-1 bg-ink/90 rounded-full shadow-ink/20">
               {leftPanel && (
                 <button
                   onClick={() => onPanelChange?.('left')}
@@ -176,7 +176,7 @@ export function TabSwitcher({
       tab: (active: boolean) => cn(
         "flex items-center gap-1.5 px-4 py-2 text-sm font-medium rounded-full whitespace-nowrap transition-all flex-shrink-0",
         active
-          ? "bg-ink text-paper shadow-lg shadow-ink/20"
+          ? "bg-ink text-paper shadow-ink/20"
           : "bg-ink/5 text-ink/60 hover:bg-ink/10"
       ),
     },
@@ -236,9 +236,9 @@ export function FloatingActionButton({
   className,
 }: FloatingActionButtonProps) {
   const variants = {
-    primary: "bg-ink text-paper shadow-xl shadow-ink/30 hover:shadow-2xl hover:shadow-ink/40",
-    secondary: "bg-paper text-ink border border-ink/20 shadow-lg hover:shadow-xl",
-    vermilion: "bg-vermilion text-paper shadow-xl shadow-vermilion/30 hover:shadow-2xl hover:shadow-vermilion/40",
+    primary: "bg-ink text-paper shadow-ink/30 hover:shadow-2xl hover:shadow-ink/40",
+    secondary: "bg-paper text-ink border border-ink/20 ",
+    vermilion: "bg-vermilion text-paper shadow-vermilion/30 hover:shadow-2xl hover:shadow-vermilion/40",
   };
 
   const sizes = {

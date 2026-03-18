@@ -26,10 +26,10 @@ export function TodayOverview({
         onClick={() => onStatClick?.('classes')}
         className={cn(
           'flex flex-col items-center p-4 rounded-2xl',
-          'bg-gradient-to-br from-blue-50 to-sky-50',
+          'bg-[#D3E4F4]/30',
           'border border-blue-100/50',
           'transition-all duration-200',
-          'hover:shadow-md hover:scale-[1.02] active:scale-[0.98]'
+          'hover:hover:scale-[1.02] active:scale-[0.98]'
         )}
       >
         <span className="text-3xl font-bold text-sky-600">
@@ -43,17 +43,17 @@ export function TodayOverview({
         onClick={() => onStatClick?.('confusions')}
         className={cn(
           'flex flex-col items-center p-4 rounded-2xl',
-          'bg-gradient-to-br from-amber-50 to-orange-50',
-          'border border-amber-100/50',
+          'bg-[#FDF3C0]/30',
+          'border border-[#E9E9E7]/50',
           'transition-all duration-200',
-          'hover:shadow-md hover:scale-[1.02] active:scale-[0.98]',
-          unresolvedCount > 0 && 'ring-2 ring-amber-200 ring-offset-1'
+          'hover:hover:scale-[1.02] active:scale-[0.98]',
+          unresolvedCount > 0 && 'ring-2 ring-[#E9E9E7] ring-offset-1'
         )}
       >
-        <span className="text-3xl font-bold text-amber-600">
+        <span className="text-3xl font-bold text-[#787774]">
           {totalConfusions}
         </span>
-        <span className="text-xs text-amber-600/70 mt-1">
+        <span className="text-xs text-[#787774]/70 mt-1">
           {unresolvedCount > 0 ? `${unresolvedCount} 待解决` : '个困惑'}
         </span>
       </button>
@@ -63,16 +63,16 @@ export function TodayOverview({
         onClick={() => onStatClick?.('resolved')}
         className={cn(
           'flex flex-col items-center p-4 rounded-2xl',
-          'bg-gradient-to-br from-emerald-50 to-green-50',
-          'border border-emerald-100/50',
+          'bg-[#D1F4E0]/30',
+          'border border-[#D1F4E0]/50',
           'transition-all duration-200',
-          'hover:shadow-md hover:scale-[1.02] active:scale-[0.98]'
+          'hover:hover:scale-[1.02] active:scale-[0.98]'
         )}
       >
-        <span className="text-3xl font-bold text-emerald-600">
+        <span className="text-3xl font-bold text-[#232322]">
           {resolvedCount}
         </span>
-        <span className="text-xs text-emerald-600/70 mt-1">已解决</span>
+        <span className="text-xs text-[#232322]/70 mt-1">已解决</span>
       </button>
     </div>
   );

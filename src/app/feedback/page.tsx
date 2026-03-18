@@ -62,9 +62,9 @@ export default function FeedbackPage() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-rose-50 via-white to-rose-50">
+    <div className="min-h-screen bg-[#F7F7F5]">
       {/* 顶部导航 */}
-      <header className="sticky top-0 z-10 bg-white/80 backdrop-blur-lg border-b border-rose-100">
+      <header className="sticky top-0 z-10 bg-white/80 border-b border-rose-100">
         <div className="max-w-3xl mx-auto px-4 h-14 flex items-center justify-between">
           <Link href="/app" className="flex items-center gap-2 text-gray-600 hover:text-rose-500 transition-colors">
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -178,7 +178,7 @@ export default function FeedbackPage() {
           <button
             type="submit"
             disabled={isSubmitting}
-            className="w-full py-4 bg-gradient-to-r from-rose-500 to-rose-400 text-white font-semibold rounded-xl shadow-lg hover:shadow-xl hover:-translate-y-0.5 transition-all disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:translate-y-0"
+            className="w-full py-4 bg-[#232322] text-white font-semibold rounded-xl hover:hover:-translate-y-0.5 transition-all disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:translate-y-0"
           >
             {isSubmitting ? (
               <span className="flex items-center justify-center gap-2">

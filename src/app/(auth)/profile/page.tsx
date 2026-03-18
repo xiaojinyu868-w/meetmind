@@ -91,7 +91,7 @@ export default function ProfilePage() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-rose-50 via-white to-blue-50 py-12 px-4">
+    <div className="min-h-screen bg-[#F7F7F5] py-12 px-4">
       <div className="max-w-2xl mx-auto">
         {/* 返回按钮 */}
         <Link
@@ -105,14 +105,14 @@ export default function ProfilePage() {
         </Link>
 
         {/* 头部 */}
-        <div className="bg-white rounded-2xl shadow-xl overflow-hidden">
+        <div className="bg-white rounded-2xl overflow-hidden">
           {/* 封面 */}
-          <div className="h-32 bg-gradient-to-r from-rose-400 to-rose-500"></div>
+          <div className="h-32 bg-[#FADEC9]"></div>
           
           {/* 头像和基本信息 */}
           <div className="relative px-8 pb-8">
             <div className="absolute -top-12 left-8">
-              <div className="w-24 h-24 bg-white rounded-2xl shadow-lg flex items-center justify-center text-4xl border-4 border-white">
+              <div className="w-24 h-24 bg-white rounded-2xl flex items-center justify-center text-4xl border-4 border-white">
                 <Avatar className="w-full h-full rounded-xl">
                   {user.avatar ? (
                     <AvatarImage src={user.avatar} alt={user.nickname} className="rounded-xl object-cover" />
@@ -148,7 +148,7 @@ export default function ProfilePage() {
         )}
 
         {/* 个人资料 */}
-        <div className="mt-6 bg-white rounded-2xl shadow-xl p-8">
+        <div className="mt-6 bg-white rounded-2xl p-8">
           <div className="flex items-center justify-between mb-6">
             <h2 className="text-lg font-semibold text-gray-900">个人资料</h2>
             {!isEditing ? (
@@ -240,7 +240,7 @@ export default function ProfilePage() {
         </div>
 
         {/* 账户安全 */}
-        <div className="mt-6 bg-white rounded-2xl shadow-xl p-8">
+        <div className="mt-6 bg-white rounded-2xl p-8">
           <h2 className="text-lg font-semibold text-gray-900 mb-6">账户安全</h2>
           
           <div className="space-y-4">
@@ -276,7 +276,7 @@ export default function ProfilePage() {
         <div className="mt-6">
           <button
             onClick={handleLogout}
-            className="w-full py-3 px-4 bg-white text-red-600 font-medium rounded-xl border border-red-200 hover:bg-red-50 transition-colors shadow-lg"
+            className="w-full py-3 px-4 bg-white text-red-600 font-medium rounded-xl border border-red-200 hover:bg-red-50 transition-colors"
           >
             退出登录
           </button>

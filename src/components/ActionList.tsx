@@ -44,8 +44,8 @@ export function ActionList({ items, onComplete, onStartNext }: ActionListProps) 
             <div
               className={`h-full rounded-full transition-all duration-500 ease-out-expo ${
                 progressPercent === 100 
-                  ? 'bg-gradient-to-r from-mint to-mint-600' 
-                  : 'bg-gradient-to-r from-amber-400 to-amber-500'
+                  ? 'bg-mint' 
+                  : 'bg-[#FDF3C0]'
               }`}
               style={{ width: `${progressPercent}%` }}
             />
@@ -120,14 +120,14 @@ export function ActionList({ items, onComplete, onStartNext }: ActionListProps) 
 
       {/* 完成提示 */}
       {items.length > 0 && completedCount === items.length && (
-        <div className="p-4 bg-gradient-to-r from-emerald-50 to-teal-50 border-t border-emerald-100 animate-scale-in">
+        <div className="p-4 bg-[#D1F4E0]/30 border-t border-[#D1F4E0] animate-scale-in">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-emerald-100 rounded-full flex items-center justify-center">
+            <div className="w-10 h-10 bg-[#D1F4E0] rounded-full flex items-center justify-center">
               <span className="text-xl">🎉</span>
             </div>
             <div>
-              <p className="font-semibold text-emerald-700">太棒了！</p>
-              <p className="text-xs text-emerald-600">今天的任务已全部完成</p>
+              <p className="font-semibold text-[#232322]">太棒了！</p>
+              <p className="text-xs text-[#232322]">今天的任务已全部完成</p>
             </div>
           </div>
         </div>
@@ -152,8 +152,8 @@ export function ActionList({ items, onComplete, onStartNext }: ActionListProps) 
 function TypeBadge({ type }: { type: ActionItem['type'] }) {
   const config = {
     replay: { label: '回放', className: 'bg-blue-100 text-blue-700' },
-    exercise: { label: '练习', className: 'bg-emerald-100 text-emerald-700' },
-    review: { label: '复习', className: 'bg-amber-100 text-amber-700' },
+    exercise: { label: '练习', className: 'bg-[#D1F4E0] text-[#232322]' },
+    review: { label: '复习', className: 'bg-[#FDF3C0] text-[#232322]' },
   };
 
   const { label, className } = config[type];

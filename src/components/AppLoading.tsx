@@ -143,7 +143,7 @@ export function AppLoading({ progress, message, onComplete }: AppLoadingProps) {
         {/* 进度条容器 */}
         <div className="max-w-md mx-auto">
           {/* 进度条 */}
-          <div className="relative h-2 bg-white/20 rounded-full overflow-hidden backdrop-blur-sm">
+          <div className="relative h-2 bg-white/20 rounded-full overflow-hidden">
             {isIndeterminate ? (
               /* Indeterminate 动画 - 双向流动效果 */
               <>
@@ -197,15 +197,15 @@ export function AppLoading({ progress, message, onComplete }: AppLoadingProps) {
               {/* 加载指示点 - 脉冲效果 */}
               <div className="flex gap-1">
                 <span 
-                  className="w-1.5 h-1.5 rounded-full bg-amber-300 animate-pulse-dot"
+                  className="w-1.5 h-1.5 rounded-full bg-[#FDF3C0] animate-pulse-dot"
                   style={{ animationDelay: '0ms' }}
                 />
                 <span 
-                  className="w-1.5 h-1.5 rounded-full bg-amber-200 animate-pulse-dot"
+                  className="w-1.5 h-1.5 rounded-full bg-[#FDF3C0] animate-pulse-dot"
                   style={{ animationDelay: '200ms' }}
                 />
                 <span 
-                  className="w-1.5 h-1.5 rounded-full bg-amber-100 animate-pulse-dot"
+                  className="w-1.5 h-1.5 rounded-full bg-[#FDF3C0] animate-pulse-dot"
                   style={{ animationDelay: '400ms' }}
                 />
               </div>
@@ -218,7 +218,7 @@ export function AppLoading({ progress, message, onComplete }: AppLoadingProps) {
               </span>
             </div>
             {!isIndeterminate && (
-              <span className="text-sm font-semibold text-amber-300 tabular-nums min-w-[3rem] text-right">
+              <span className="text-sm font-semibold text-[#FDF3C0] tabular-nums min-w-[3rem] text-right">
                 {Math.round(displayProgress)}%
               </span>
             )}

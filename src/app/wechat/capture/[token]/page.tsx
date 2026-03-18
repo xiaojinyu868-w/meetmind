@@ -52,7 +52,7 @@ export default async function WechatCapturePage({
       <div className="mx-auto flex min-h-[calc(100vh-3rem)] w-full max-w-md flex-col gap-4">
         <section className="rounded-[28px] border border-stone-200 bg-white px-5 py-5 shadow-[0_18px_50px_rgba(15,23,42,0.08)]">
           <div className="mb-4 flex items-center justify-between">
-            <span className="rounded-full bg-amber-50 px-3 py-1 text-xs font-medium text-amber-700">
+            <span className="rounded-full bg-[#FDF3C0]/50 px-3 py-1 text-xs font-medium text-[#232322]">
               微信收集
             </span>
             <span className="text-xs text-stone-500">{formatMessageTime(message.messageAt)}</span>
@@ -74,11 +74,11 @@ export default async function WechatCapturePage({
               {typeLabel(message.msgType)}
             </span>
             {isBound ? (
-              <span className="inline-flex rounded-full bg-emerald-50 px-3 py-1 text-emerald-700">
+              <span className="inline-flex rounded-full bg-[#D1F4E0]/30 px-3 py-1 text-[#232322]">
                 已接到 {message.workspace!.name}
               </span>
             ) : (
-              <span className="inline-flex rounded-full bg-amber-50 px-3 py-1 text-amber-600">
+              <span className="inline-flex rounded-full bg-[#FDF3C0]/50 px-3 py-1 text-[#787774]">
                 等待绑定
               </span>
             )}
@@ -133,9 +133,9 @@ export default async function WechatCapturePage({
           ) : null}
 
           {message.echoTitle && message.echoBody ? (
-            <div className="mt-4 rounded-[22px] border border-amber-200 bg-amber-50 px-4 py-4">
-              <div className="text-sm font-medium text-amber-900">{message.echoTitle}</div>
-              <p className="mt-2 text-sm leading-6 text-amber-900/80">{message.echoBody}</p>
+            <div className="mt-4 rounded-[22px] border border-[#E9E9E7] bg-[#FDF3C0]/50 px-4 py-4">
+              <div className="text-sm font-medium text-[#232322]">{message.echoTitle}</div>
+              <p className="mt-2 text-sm leading-6 text-[#232322]/80">{message.echoBody}</p>
             </div>
           ) : null}
         </section>

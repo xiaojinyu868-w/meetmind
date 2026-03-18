@@ -372,7 +372,7 @@ export const WaveformPlayer = forwardRef<WaveformPlayerRef, WaveformPlayerProps>
   // 无音频时的占位
   if (!src) {
     return (
-      <div className="bg-gradient-to-br from-gray-50 to-gray-100 rounded-2xl p-8">
+      <div className="bg-[#F7F7F5] rounded-2xl p-8">
         <div className="flex flex-col items-center justify-center gap-3 text-gray-400">
           <div className="w-16 h-16 bg-gray-200 rounded-full flex items-center justify-center">
             <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -394,7 +394,7 @@ export const WaveformPlayer = forwardRef<WaveformPlayerRef, WaveformPlayerProps>
     )}>
       {/* 波形容器 */}
       <div className={cn(
-        "bg-gradient-to-br from-gray-50 to-white relative",
+        "bg-[#F7F7F5] relative",
         compact ? "p-2" : "p-4"
       )}>
         <div 
@@ -431,7 +431,7 @@ export const WaveformPlayer = forwardRef<WaveformPlayerRef, WaveformPlayerProps>
         
         {/* 添加标注成功提示 */}
         {showAddHint && (
-          <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 bg-coral text-white px-4 py-2 rounded-full text-sm font-medium animate-bounce shadow-lg">
+          <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 bg-coral text-white px-4 py-2 rounded-full text-sm font-medium animate-bounce">
             已标记困惑点
           </div>
         )}
@@ -481,7 +481,7 @@ export const WaveformPlayer = forwardRef<WaveformPlayerRef, WaveformPlayerProps>
                 onClick={togglePlay}
                 disabled={!isReady}
                 className={cn(
-                  "text-white disabled:opacity-50 transition-all shadow-lg flex items-center justify-center",
+                  "text-white disabled:opacity-50 transition-all flex items-center justify-center",
                   compact ? "w-9 h-9 rounded-lg" : "w-12 h-12 rounded-xl"
                 )}
                 style={{
@@ -589,7 +589,7 @@ export const WaveformPlayer = forwardRef<WaveformPlayerRef, WaveformPlayerProps>
                   step="0.1"
                   value={isMuted ? 0 : volume}
                   onChange={handleVolumeChange}
-                  className="w-20 h-1.5 bg-gray-200 rounded-full appearance-none cursor-pointer accent-amber-500"
+                  className="w-20 h-1.5 bg-gray-200 rounded-full appearance-none cursor-pointer accent-[#232322]"
                 />
               </div>
             )}
@@ -599,7 +599,7 @@ export const WaveformPlayer = forwardRef<WaveformPlayerRef, WaveformPlayerProps>
 
       {/* 加载状态 - 显示进度 */}
       {!isReady && src && (
-        <div className="absolute inset-0 flex items-center justify-center bg-white/90 backdrop-blur-sm rounded-2xl">
+        <div className="absolute inset-0 flex items-center justify-center bg-white/90 rounded-2xl">
           <div className="flex flex-col items-center gap-3">
             <div className="relative w-12 h-12">
               <div className="absolute inset-0 border-4 rounded-full" style={{ borderColor: '#F5E6D3' }} />

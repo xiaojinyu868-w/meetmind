@@ -55,7 +55,7 @@ function VideoInsightTimelineComponent({
               onClick={() => onSelectItem(item.id)}
               className={`max-w-full rounded-full border px-3 py-1.5 text-xs transition ${
                 selected
-                  ? 'border-amber-300 bg-amber-50 text-amber-700'
+                  ? 'border-[#E9E9E7] bg-[#FDF3C0]/50 text-[#232322]'
                   : 'border-gray-200 bg-white text-gray-600 hover:border-gray-300'
               }`}
               title={item.prompt}
@@ -96,7 +96,7 @@ function VideoInsightTimelineComponent({
             <div
               key={item.id}
               className={`rounded-2xl border px-3 py-2 transition ${
-                selected ? 'border-amber-200 bg-amber-50/50' : 'border-gray-100 bg-white'
+                selected ? 'border-[#E9E9E7] bg-[#FDF3C0]/20' : 'border-gray-100 bg-white'
               }`}
             >
               <div className="flex items-start gap-2">
@@ -115,7 +115,7 @@ function VideoInsightTimelineComponent({
                     key={`${item.id}-chip-${timeMs}-${index}`}
                     type="button"
                     onClick={() => onSeek(timeMs)}
-                    className="rounded-md border border-gray-200 bg-white px-2 py-1 text-xs text-gray-700 transition hover:border-amber-300 hover:text-amber-700"
+                    className="rounded-md border border-gray-200 bg-white px-2 py-1 text-xs text-gray-700 transition hover:border-[#232322] hover:text-[#232322]"
                   >
                     {formatTime(timeMs)}
                   </button>

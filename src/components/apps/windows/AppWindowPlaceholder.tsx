@@ -28,7 +28,7 @@ interface AppWindowPlaceholderProps {
 
 function SkeletonLoading({ appName }: { appName: string }) {
   return (
-    <div className="flex h-full min-h-[320px] flex-col items-center justify-center gap-5 rounded-2xl border border-slate-200 bg-gradient-to-b from-white to-slate-50/80 p-8">
+    <div className="flex h-full min-h-[320px] flex-col items-center justify-center gap-5 rounded-2xl border border-slate-200 bg-white p-8">
       {/* 动态旋转指示器 */}
       <div className="relative">
         <div className="h-14 w-14 animate-spin rounded-full border-[3px] border-lavender-100 border-t-lavender-500" style={{ animationDuration: '1.2s' }} />
@@ -106,7 +106,7 @@ function EmptyGuide({ appName, description, onRetry, onBack }: {
           <button
             type="button"
             onClick={onRetry}
-            className="rounded-lg bg-lavender-500 px-4 py-2 text-sm font-medium text-white shadow-sm transition-all hover:bg-lavender-600 hover:shadow-md active:scale-[0.97]"
+            className="rounded-lg bg-lavender-500 px-4 py-2 text-sm font-medium text-white shadow-sm transition-all hover:bg-lavender-600 hover:active:scale-[0.97]"
           >
             重新生成
           </button>
@@ -136,7 +136,7 @@ function ErrorState({ appName, errorMessage, onRetry, onBack }: {
   onBack?: () => void;
 }) {
   return (
-    <div className="flex h-full min-h-[320px] flex-col items-center justify-center gap-5 rounded-2xl border border-coral-200 bg-gradient-to-b from-coral-50/60 to-white p-8">
+    <div className="flex h-full min-h-[320px] flex-col items-center justify-center gap-5 rounded-2xl border border-coral-200 bg-[#FADEC9]/30 p-8">
       {/* 错误图标 */}
       <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-coral-100">
         <svg className="h-7 w-7 text-coral-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
@@ -164,7 +164,7 @@ function ErrorState({ appName, errorMessage, onRetry, onBack }: {
           <button
             type="button"
             onClick={onRetry}
-            className="rounded-lg bg-lavender-500 px-4 py-2 text-sm font-medium text-white shadow-sm transition-all hover:bg-lavender-600 hover:shadow-md active:scale-[0.97]"
+            className="rounded-lg bg-lavender-500 px-4 py-2 text-sm font-medium text-white shadow-sm transition-all hover:bg-lavender-600 hover:active:scale-[0.97]"
           >
             重试
           </button>

@@ -236,7 +236,7 @@ export function PodcastWindow({ result, transcript, taskState, onSeek, onRegener
             <audio ref={audioRef} controls src={payload.audioUrl} className="w-full rounded-lg" />
           ) : (
             <div className="space-y-3">
-              <p className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm leading-6 text-amber-700">
+              <p className="rounded-xl border border-[#E9E9E7] bg-[#FDF3C0]/50 px-4 py-3 text-sm leading-6 text-[#232322]">
                 这次先拿到了播客脚本，还没有拿到可播放音频。{payload.error ? `原因：${payload.error}` : '你可以直接重试。'}
               </p>
               {onRegenerate ? (

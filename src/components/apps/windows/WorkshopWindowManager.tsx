@@ -168,15 +168,15 @@ function taskLabel(taskState: AppTaskState): string {
 }
 
 function taskTone(taskState: AppTaskState): string {
-  if (taskState.status === 'running') return 'border-amber-200 bg-amber-50 text-amber-700';
-  if (taskState.status === 'success') return 'border-emerald-200 bg-emerald-50 text-emerald-700';
+  if (taskState.status === 'running') return 'border-[#E9E9E7] bg-[#FDF3C0]/50 text-[#232322]';
+  if (taskState.status === 'success') return 'border-[#D1F4E0] bg-[#D1F4E0]/30 text-[#232322]';
   if (taskState.status === 'error') return 'border-rose-200 bg-rose-50 text-rose-700';
   return 'border-slate-200 bg-slate-50 text-slate-600';
 }
 
 function taskDockBadge(taskState: AppTaskState): string {
-  if (taskState.status === 'running') return 'bg-amber-400';
-  if (taskState.status === 'success') return 'bg-emerald-400';
+  if (taskState.status === 'running') return 'bg-[#FADEC9]';
+  if (taskState.status === 'success') return 'bg-[#D1F4E0]';
   if (taskState.status === 'error') return 'bg-rose-400';
   return 'bg-slate-300';
 }
@@ -304,7 +304,7 @@ function WindowCard(props: WindowCardProps) {
           </div>
           <div className="flex items-center gap-1.5">
             {execution.taskState.status === 'running' && (
-              <span className="text-xs text-amber-400/80">生成中…</span>
+              <span className="text-xs text-[#787774]/80">生成中…</span>
             )}
           </div>
         </header>
@@ -333,7 +333,7 @@ function WindowCard(props: WindowCardProps) {
         onMouseDown={() => onFocus(app.key)}
       >
         {/* 全屏 header */}
-        <header className="flex items-center gap-2 border-b border-slate-200 bg-white/95 px-4 py-2.5 backdrop-blur select-none">
+        <header className="flex items-center gap-2 border-b border-slate-200 bg-white/95 px-4 py-2.5 select-none">
           <div className="min-w-0 flex-1">
             <p className="truncate text-sm font-semibold text-slate-900">{app.name}</p>
             <p className="truncate text-xs text-slate-500">
@@ -395,7 +395,7 @@ function WindowCard(props: WindowCardProps) {
       onMouseDown={() => onFocus(app.key)}
     >
       <header
-        className="flex cursor-grab items-center gap-1.5 border-b border-slate-200 bg-white/95 px-3 py-2 backdrop-blur active:cursor-grabbing select-none md:gap-2"
+        className="flex cursor-grab items-center gap-1.5 border-b border-slate-200 bg-white/95 px-3 py-2 active:cursor-grabbing select-none md:gap-2"
         onPointerDown={drag.onPointerDown}
         onPointerMove={drag.onPointerMove}
         onPointerUp={drag.onPointerUp}
@@ -531,7 +531,7 @@ export function WorkshopWindowManager(props: WorkshopWindowManagerProps) {
       ))}
 
       {minimizedWindows.length > 0 ? (
-        <div className="pointer-events-auto fixed bottom-3 left-1/2 z-[90] flex max-w-[calc(100vw-20px)] -translate-x-1/2 items-center gap-2 overflow-x-auto rounded-full border border-slate-200 bg-white/95 px-3 py-2 shadow-xl backdrop-blur">
+        <div className="pointer-events-auto fixed bottom-3 left-1/2 z-[90] flex max-w-[calc(100vw-20px)] -translate-x-1/2 items-center gap-2 overflow-x-auto rounded-full border border-slate-200 bg-white/95 px-3 py-2">
           {minimizedWindows.map((windowState) => {
             const app = getWorkshopAppByKey(windowState.appKey);
             if (!app) return null;

@@ -126,7 +126,7 @@ export function AnchorDetailPanel({
   return (
     <div className="h-full flex flex-col bg-white">
       {/* 头部 */}
-      <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100 bg-gradient-to-r from-red-50 to-rose-50">
+      <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100 bg-[#FADEC9]/30">
         <div className="flex items-center gap-3 min-w-0 flex-1">
           <div className={`w-3 h-3 rounded-full flex-shrink-0 ${anchor.resolved ? 'bg-green-500' : 'bg-red-500'} animate-pulse`} />
           <div className="min-w-0 flex-1">
@@ -239,7 +239,7 @@ export function AnchorDetailPanel({
                   value={noteText}
                   onChange={(e) => setNoteText(e.target.value)}
                   placeholder="记录你对这个困惑点的理解或疑问..."
-                  className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-amber-400/20 focus:border-amber-300"
+                  className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-[#232322]/20 focus:border-[#E9E9E7]"
                   rows={3}
                   autoFocus
                 />
@@ -247,7 +247,7 @@ export function AnchorDetailPanel({
                   <button
                     onClick={handleSubmitNote}
                     disabled={!noteText.trim()}
-                    className="flex-1 px-3 py-2 text-sm font-medium text-white bg-amber-500 rounded-lg hover:bg-amber-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                    className="flex-1 px-3 py-2 text-sm font-medium text-white bg-[#232322] rounded-lg hover:bg-[#FDECC8] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                   >
                     保存笔记
                   </button>
@@ -256,7 +256,7 @@ export function AnchorDetailPanel({
                       setIsAddingNote(false);
                       setNoteText('');
                     }}
-                    className="px-3 py-2 text-sm text-gray-500 hover:text-navy hover:bg-amber-50 rounded-lg transition-colors"
+                    className="px-3 py-2 text-sm text-gray-500 hover:text-navy hover:bg-[#EFEFEF] rounded-lg transition-colors"
                   >
                     取消
                   </button>
@@ -265,7 +265,7 @@ export function AnchorDetailPanel({
             ) : (
               <button
                 onClick={() => setIsAddingNote(true)}
-                className="w-full flex items-center justify-center gap-2 px-4 py-2 text-sm text-gray-600 hover:text-navy border border-gray-200 rounded-xl hover:bg-amber-50 transition-colors"
+                className="w-full flex items-center justify-center gap-2 px-4 py-2 text-sm text-gray-600 hover:text-navy border border-gray-200 rounded-xl hover:bg-[#EFEFEF] transition-colors"
               >
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />

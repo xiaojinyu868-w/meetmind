@@ -70,7 +70,7 @@ export function MobileAIFab({
       {showTooltip && tooltip && (
         <div className={cn(
           'absolute bottom-full mb-2 right-0',
-          'px-3 py-1.5 rounded-lg shadow-lg',
+          'px-3 py-1.5 rounded-lg',
           'bg-gray-900 text-white text-xs whitespace-nowrap',
           'animate-fade-in'
         )}>
@@ -87,8 +87,8 @@ export function MobileAIFab({
         onClick={handleClick}
         data-onboarding="ai-fab"
         className={cn(
-          'relative w-14 h-14 rounded-full shadow-lg',
-          'bg-gradient-to-br from-amber-500 to-amber-600',
+          'relative w-14 h-14 rounded-full',
+          'bg-[#FDF3C0]',
           'flex items-center justify-center',
           'transition-all duration-200',
           'active:scale-95',
@@ -99,8 +99,8 @@ export function MobileAIFab({
         {/* 脉冲环 */}
         {pulse && (
           <>
-            <span className="absolute inset-0 rounded-full bg-amber-400 animate-ping opacity-30" />
-            <span className="absolute inset-0 rounded-full bg-amber-400 animate-ping opacity-20 animation-delay-200" />
+            <span className="absolute inset-0 rounded-full bg-[#FADEC9] animate-ping opacity-30" />
+            <span className="absolute inset-0 rounded-full bg-[#FADEC9] animate-ping opacity-20 animation-delay-200" />
           </>
         )}
 

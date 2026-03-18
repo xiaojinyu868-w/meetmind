@@ -17,7 +17,7 @@ export function MobileNav({ items, activeId, onItemClick, className }: MobileNav
   return (
     <nav
       className={cn(
-        "fixed bottom-0 left-0 right-0 z-50 bg-paper/95 backdrop-blur-xl border-t border-ink/10 safe-area-pb",
+        "fixed bottom-0 left-0 right-0 z-50 bg-paper/95 border-t border-ink/10 safe-area-pb",
         "md:hidden",
         className
       )}

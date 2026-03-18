@@ -109,9 +109,9 @@ export default function HelpPage() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-rose-50 via-white to-rose-50">
+    <div className="min-h-screen bg-[#F7F7F5]">
       {/* 顶部导航 */}
-      <header className="sticky top-0 z-10 bg-white/80 backdrop-blur-lg border-b border-rose-100">
+      <header className="sticky top-0 z-10 bg-white/80 border-b border-rose-100">
         <div className="max-w-4xl mx-auto px-4 h-14 flex items-center justify-between">
           <Link href="/app" className="flex items-center gap-2 text-gray-600 hover:text-rose-500 transition-colors">
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -127,7 +127,7 @@ export default function HelpPage() {
       <main className="max-w-4xl mx-auto px-4 py-8">
         {/* 欢迎区域 */}
         <div className="text-center mb-10">
-          <div className="inline-flex items-center justify-center w-16 h-16 bg-gradient-to-br from-rose-400 to-rose-500 rounded-2xl shadow-lg mb-4">
+          <div className="inline-flex items-center justify-center w-16 h-16 bg-[#FADEC9] rounded-2xl mb-4">
             <svg className="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
             </svg>
@@ -209,7 +209,7 @@ export default function HelpPage() {
         </div>
 
         {/* 联系我们 */}
-        <div className="mt-12 p-6 bg-gradient-to-r from-rose-500 to-rose-400 rounded-2xl text-white">
+        <div className="mt-12 p-6 bg-[#232322] rounded-2xl text-white">
           <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
             <div>
               <h3 className="font-semibold text-lg mb-1">没有找到答案？</h3>

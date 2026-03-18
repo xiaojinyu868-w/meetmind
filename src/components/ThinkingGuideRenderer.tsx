@@ -174,9 +174,9 @@ const StepCard = memo(function StepCard({
 
         {/* 💡心得 */}
         {step.tip && (
-          <div className={`mt-2 flex items-start gap-1.5 bg-amber-50 rounded-lg border border-amber-100 ${isMobile ? 'px-1.5 py-1' : 'px-2 py-1.5'}`}>
-            <span className={`text-amber-500 ${isMobile ? 'text-xs' : 'text-sm'}`}>💡</span>
-            <div className={`text-amber-700 leading-relaxed ${isMobile ? 'text-[10px]' : 'text-xs'}`}>
+          <div className={`mt-2 flex items-start gap-1.5 bg-[#FDF3C0]/50 rounded-lg border border-[#E9E9E7] ${isMobile ? 'px-1.5 py-1' : 'px-2 py-1.5'}`}>
+            <span className={`text-[#787774] ${isMobile ? 'text-xs' : 'text-sm'}`}>💡</span>
+            <div className={`text-[#232322] leading-relaxed ${isMobile ? 'text-[10px]' : 'text-xs'}`}>
               <StreamingMarkdown
                 content={step.tip}
                 isStreaming={false}
@@ -221,7 +221,7 @@ export const ThinkingGuideRenderer = memo(function ThinkingGuideRenderer({
   return (
     <div className={className}>
       {/* ===== 思维演示区 ===== */}
-      <div className={`bg-gradient-to-br from-violet-50 to-purple-50 rounded-xl border border-violet-100 ${isMobile ? 'p-3' : 'p-4'}`}>
+      <div className={`bg-[#D3E4F4]/30 rounded-xl border border-violet-100 ${isMobile ? 'p-3' : 'p-4'}`}>
         {/* 标题 */}
         <div className={`flex items-center gap-2 ${isMobile ? 'mb-3' : 'mb-4'}`}>
           <span className={isMobile ? 'text-base' : 'text-lg'}>🧠</span>
@@ -247,9 +247,9 @@ export const ThinkingGuideRenderer = memo(function ThinkingGuideRenderer({
 
         {/* 思维方法总结 - 统一使用左边距 */}
         {parsed.methods && (
-          <div className={`mt-2 flex items-start gap-2 bg-emerald-50 rounded-lg border border-emerald-200 ${isMobile ? 'ml-9 px-2 py-1.5' : 'ml-14 px-3 py-2'}`}>
-            <span className="text-emerald-500 flex-shrink-0">🌟</span>
-            <div className={`min-w-0 text-emerald-700 ${isMobile ? 'text-[10px]' : 'text-xs'}`}>
+          <div className={`mt-2 flex items-start gap-2 bg-[#D1F4E0]/30 rounded-lg border border-[#D1F4E0] ${isMobile ? 'ml-9 px-2 py-1.5' : 'ml-14 px-3 py-2'}`}>
+            <span className="text-[#232322] flex-shrink-0">🌟</span>
+            <div className={`min-w-0 text-[#232322] ${isMobile ? 'text-[10px]' : 'text-xs'}`}>
               <div className="mb-1 font-medium">思维方法：</div>
               <StreamingMarkdown
                 content={parsed.methods}

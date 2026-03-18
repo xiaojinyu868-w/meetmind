@@ -370,7 +370,7 @@ export default function AllNotesPage() {
                 {/* 笔记卡片 */}
                 <div className="space-y-3">
                   {dateNotes.map(note => (
-                    <div key={note.id} className="bg-white rounded-xl p-4 shadow-sm hover:shadow-md transition-shadow">
+                    <div key={note.id} className="bg-white rounded-xl p-4 shadow-sm hover:transition-shadow">
                       <div className="flex items-start gap-3">
                         {/* 学科标记 */}
                         <div className={`w-1 h-full min-h-[60px] rounded-full ${getSubjectColor(note.session?.subject ?? '')}`} />

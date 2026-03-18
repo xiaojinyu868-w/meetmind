@@ -19,9 +19,9 @@ function getOptionTone(category: GuidanceOption['category'], selected: boolean) 
     case 'concept':
       return 'border-sky-200 bg-sky-50 text-sky-700 hover:border-sky-300 hover:bg-sky-100';
     case 'procedure':
-      return 'border-emerald-200 bg-emerald-50 text-emerald-700 hover:border-emerald-300 hover:bg-emerald-100';
+      return 'border-[#D1F4E0] bg-[#D1F4E0]/30 text-[#232322] hover:border-[#D1F4E0] hover:bg-[#D1F4E0]';
     case 'calculation':
-      return 'border-amber-200 bg-amber-50 text-amber-700 hover:border-amber-300 hover:bg-amber-100';
+      return 'border-[#E9E9E7] bg-[#FDF3C0]/50 text-[#232322] hover:border-[#232322] hover:bg-[#FDF3C0]';
     case 'comprehension':
       return 'border-violet-200 bg-violet-50 text-violet-700 hover:border-violet-300 hover:bg-violet-100';
     case 'application':

@@ -65,8 +65,8 @@ export function ResizablePanel({
       <div
         className={cn(
           'w-1 flex-shrink-0 cursor-col-resize group relative',
-          'bg-transparent hover:bg-amber-200 transition-colors duration-150',
-          isDragging && 'bg-amber-400'
+          'bg-transparent hover:bg-[#FDF3C0] transition-colors duration-150',
+          isDragging && 'bg-[#FADEC9]'
         )}
         onMouseDown={startDragging}
         onTouchStart={startDragging}
@@ -76,7 +76,7 @@ export function ResizablePanel({
         <div
           className={cn(
             'absolute inset-y-0 left-1/2 -translate-x-1/2 w-0.5',
-            'bg-amber-400 opacity-0 group-hover:opacity-100 transition-opacity',
+            'bg-[#FADEC9] opacity-0 group-hover:opacity-100 transition-opacity',
             isDragging && 'opacity-100 w-1'
           )}
         />
@@ -84,9 +84,9 @@ export function ResizablePanel({
         {/* 中间手柄点 */}
         <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity">
           <div className="flex flex-col gap-1">
-            <div className="w-1 h-1 bg-amber-400 rounded-full" />
-            <div className="w-1 h-1 bg-amber-400 rounded-full" />
-            <div className="w-1 h-1 bg-amber-400 rounded-full" />
+            <div className="w-1 h-1 bg-[#FADEC9] rounded-full" />
+            <div className="w-1 h-1 bg-[#FADEC9] rounded-full" />
+            <div className="w-1 h-1 bg-[#FADEC9] rounded-full" />
           </div>
         </div>
       </div>

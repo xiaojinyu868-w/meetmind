@@ -525,8 +525,8 @@ export function AITutor({
             inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-mono mx-0.5
             transition-all duration-300 border
             ${isActive 
-              ? 'bg-gradient-to-r from-amber-500 to-amber-600 text-white border-amber-600 shadow-lg shadow-amber-200 scale-110 animate-pulse' 
-              : 'bg-gradient-to-r from-amber-100 to-amber-50 text-amber-700 border-amber-200 hover:from-amber-200 hover:to-amber-100 hover:shadow-md hover:scale-105'
+              ? 'bg-[#232322] text-white border-[#232322]  scale-110 animate-pulse' 
+              : 'bg-[#FDF3C0] text-[#232322] border-[#E9E9E7] hover:bg-[#232322] hover:hover:scale-105'
             }
           `}
           title={`点击跳转到 ${displayText}`}
@@ -1337,29 +1337,41 @@ export function AITutor({
   // ===== 全局对话模式渲染 =====
   if (isGlobalMode) {
     return (
-      <div className="h-full flex flex-col bg-white ai-chat-container">
+      <div className={`h-full flex flex-col ai-chat-container ${isMobile ? 'bg-transparent' : 'bg-white'}`}>
         {/* 头部 - 紧凑设计 */}
-        <div className={`border-b border-gray-100 bg-gradient-to-r from-lilac-100/50 to-white flex-shrink-0 ${isMobile ? 'p-3' : 'px-4 py-3'}`}>
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <MessageCircle size={20} strokeWidth={1.75} className="text-lilac-500" />
-              <div>
-                <h3 className={`font-medium text-gray-800 ${isMobile ? 'text-sm' : 'text-base'}`}>
-                  AI 课堂助手
-                </h3>
-                <p className="text-xs text-gray-500">
-                  {preferSupportContext ? '基于你刚圈出的内容继续往下问' : '基于整节课内容回答问题'}
-                </p>
+        <div className={`${isMobile ? 'px-3 pt-3' : 'border-b border-gray-100 bg-white px-4 py-3'} flex-shrink-0`}>
+          <div className={`${isMobile ? 'rounded-2xl bg-white/80 px-4 py-3' : ''}`}>
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex items-center gap-2">
+                <div className={`${isMobile ? 'flex h-9 w-9 items-center justify-center rounded-xl bg-violet-50 text-violet-500' : ''}`}>
+                  <MessageCircle size={20} strokeWidth={1.75} className={isMobile ? '' : 'text-lilac-500'} />
+                </div>
+                <div>
+                  <h3 className={`font-medium text-gray-800 ${isMobile ? 'text-[15px]' : 'text-base'}`}>
+                    {isMobile ? (preferSupportContext ? '顺着刚选内容继续追问' : '围绕这节课继续追问') : 'AI 课堂助手'}
+                  </h3>
+                  <p className="text-xs text-gray-500">
+                    {preferSupportContext ? '会优先沿着你刚圈出的内容继续讲解。' : isMobile ? '继续解释、举例，或者帮你把这节课讲透。' : '基于整节课内容回答问题'}
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <ModelSelector
+                  value={selectedModel}
+                  onChange={setSelectedModel}
+                  onMultimodalChange={setSupportsMultimodal}
+                  compact={isMobile}
+                />
               </div>
             </div>
-            <div className="flex items-center gap-2">
-              <ModelSelector
-                value={selectedModel}
-                onChange={setSelectedModel}
-                onMultimodalChange={setSupportsMultimodal}
-                compact={isMobile}
-              />
-            </div>
+            {isMobile ? (
+              hasTutorContext ? null : (
+                <div className="mt-2 flex items-center gap-1.5 text-[11px] text-slate-400">
+                  <AlertCircle size={11} />
+                  <span>先收一条内容</span>
+                </div>
+              )
+            ) : null}
           </div>
           
           {/* 功能开关 - 仅桌面端显示 */}
@@ -1370,7 +1382,7 @@ export function AITutor({
                   type="checkbox"
                   checked={enableWeb}
                   onChange={(e) => setEnableWeb(e.target.checked)}
-                  className="w-4 h-4 rounded border-gray-300 text-amber-500 focus:ring-amber-400"
+                  className="w-4 h-4 rounded border-gray-300 text-[#787774] focus:ring-[#232322]"
                 />
                 <span className="flex items-center gap-1 group-hover:text-gray-900 transition-colors">
                   <Globe size={13} strokeWidth={1.75} />
@@ -1421,7 +1433,7 @@ export function AITutor({
                   <div
                     className={`${isMobile ? 'max-w-[92%]' : 'max-w-[85%]'} rounded-2xl ${isMobile ? 'px-3 py-2' : 'px-4 py-3'} ${
                       msg.role === 'user'
-                        ? 'bg-gradient-to-r from-amber-500 to-amber-600 text-white'
+                        ? 'bg-[#232322] text-white'
                         : 'bg-gray-100 text-gray-800'
                     }`}
                   >
@@ -1520,81 +1532,82 @@ export function AITutor({
           )}
         </div>
 
-        {/* 输入区域 - 紧凑设计 */}
-        <div className="px-4 py-3 border-t border-gray-100 bg-white flex-shrink-0">
-          {/* 图片预览区域 */}
-          {supportsMultimodal && uploadedImages.length > 0 && (
-            <div className="mb-3 p-2 bg-gray-50 rounded-lg">
-              <ImageUpload
-                images={uploadedImages}
-                onImagesChange={setUploadedImages}
-                maxImages={5}
-                disabled={globalLoading}
-              />
-            </div>
-          )}
-          
-          <div className="flex gap-2 items-end">
-            {/* 图片上传按钮 */}
-            {supportsMultimodal && (
-              <ImageUpload
-                images={[]}
-                onImagesChange={(newImages) => {
-                  setUploadedImages(prev => [...prev, ...newImages].slice(0, 5));
-                }}
-                maxImages={5 - uploadedImages.length}
-                disabled={globalLoading || uploadedImages.length >= 5}
-                className="flex-shrink-0"
-              />
+        <div className={`${isMobile ? 'bg-transparent px-3 pb-[max(env(safe-area-inset-bottom),12px)] pt-2' : 'border-t border-gray-100 bg-white px-4 py-3'} flex-shrink-0`}>
+          <div className={`${isMobile ? 'rounded-[24px] border border-slate-200/40 bg-white/95 p-2 shadow-[0_-1px_0_rgba(0,0,0,0.02),0_4px_16px_rgba(148,163,184,0.08)]' : ''}`}>
+            {supportsMultimodal && uploadedImages.length > 0 && (
+              <div className={`mb-3 ${isMobile ? 'rounded-xl bg-slate-50/80 p-2.5' : 'rounded-lg bg-gray-50 p-2'}`}>
+                <ImageUpload
+                  images={uploadedImages}
+                  onImagesChange={setUploadedImages}
+                  maxImages={5}
+                  disabled={globalLoading}
+                />
+              </div>
             )}
-            
-              <input
-                type="text"
-                data-testid="tutor-global-input"
-                value={userInput}
-                onChange={(e) => setUserInput(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && !isStreaming && handleGlobalSend()}
-                placeholder={preferSupportContext ? '继续顺着这几条内容问...' : '问我任何关于这节课的问题...'}
-                className={`input flex-1 ${isMobile ? 'text-sm' : ''}`}
-                disabled={globalLoading || !hasTutorContext}
-              />
-            <VoiceMicButton
-              onTranscript={(text) => setUserInput(prev => prev + text)}
-              disabled={globalLoading || !hasTutorContext}
-              size={isMobile ? 'sm' : 'md'}
-            />
-            {isStreaming ? (
-              <button
-                onClick={stopGlobalGeneration}
-                className={`btn bg-red-500 hover:bg-red-600 text-white ${isMobile ? 'px-4' : 'px-6'}`}
-              >
-                <span className="flex items-center gap-1.5">
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                  </svg>
-                  停止
-                </span>
-              </button>
-            ) : (
-              <button
-                data-testid="tutor-global-send"
-                onClick={() => handleGlobalSend()}
-                disabled={(!userInput.trim() && uploadedImages.length === 0) || globalLoading || !hasTutorContext}
-                className={`btn btn-primary disabled:opacity-50 ${isMobile ? 'px-4' : 'px-6'}`}
-              >
-                发送
-              </button>
+
+            <div className="flex items-end gap-2">
+              {supportsMultimodal && (
+                <ImageUpload
+                  images={[]}
+                  onImagesChange={(newImages) => {
+                    setUploadedImages(prev => [...prev, ...newImages].slice(0, 5));
+                  }}
+                  maxImages={5 - uploadedImages.length}
+                  disabled={globalLoading || uploadedImages.length >= 5}
+                  className="flex-shrink-0"
+                />
+              )}
+
+              <div className={`${isMobile ? 'flex min-w-0 flex-1 items-center gap-2 rounded-[18px] border border-slate-200/50 bg-slate-50/50 px-3 py-2.5' : 'flex min-w-0 flex-1 items-center gap-2'}`}>
+                <input
+                  type="text"
+                  data-testid="tutor-global-input"
+                  value={userInput}
+                  onChange={(e) => setUserInput(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && !isStreaming && handleGlobalSend()}
+                  placeholder={preferSupportContext ? '继续顺着这几条内容问...' : '继续问这节课里没讲透的地方...'}
+                  className={`${isMobile ? 'min-w-0 flex-1 border-0 bg-transparent px-0 py-0 text-sm text-slate-700 outline-none ring-0 placeholder:text-slate-400' : 'input flex-1'}`}
+                  disabled={globalLoading || !hasTutorContext}
+                />
+                <VoiceMicButton
+                  onTranscript={(text) => setUserInput(prev => prev + text)}
+                  disabled={globalLoading || !hasTutorContext}
+                  size={isMobile ? 'sm' : 'md'}
+                />
+              </div>
+
+              {isStreaming ? (
+                <button
+                  onClick={stopGlobalGeneration}
+                  className={`${isMobile ? 'inline-flex h-10 w-10 items-center justify-center rounded-full bg-rose-500 text-white' : 'btn bg-red-500 px-6 text-white hover:bg-red-600'}`}
+                >
+                  <span className="flex items-center gap-1.5">
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                    停止
+                  </span>
+                </button>
+              ) : (
+                <button
+                  data-testid="tutor-global-send"
+                  onClick={() => handleGlobalSend()}
+                  disabled={(!userInput.trim() && uploadedImages.length === 0) || globalLoading || !hasTutorContext}
+                  className={`${isMobile ? 'inline-flex h-10 w-10 items-center justify-center rounded-full bg-[#232322] text-white disabled:opacity-30' : 'btn btn-primary px-6 disabled:opacity-50'}`}
+                >
+                  发送
+                </button>
+              )}
+            </div>
+
+            {globalChatHistory.length > 0 && (
+              <div className="mt-2 flex flex-wrap gap-2">
+                <QuickReply text="再详细说说" onClick={setUserInput} />
+                <QuickReply text="举个例子" onClick={setUserInput} />
+                <QuickReply text="谢谢，我懂了" onClick={setUserInput} />
+              </div>
             )}
           </div>
-          
-          {/* 快捷回复 */}
-          {globalChatHistory.length > 0 && (
-            <div className="flex flex-wrap gap-2 mt-2">
-              <QuickReply text="再详细说说" onClick={setUserInput} />
-              <QuickReply text="举个例子" onClick={setUserInput} />
-              <QuickReply text="谢谢，我懂了" onClick={setUserInput} />
-            </div>
-          )}
         </div>
       </div>
     );
@@ -1605,7 +1618,7 @@ export function AITutor({
   return (
     <div className="h-full flex flex-col ai-chat-container">
       {/* 头部控制栏 - 紧凑设计 */}
-      <div className={`border-b border-gray-100 bg-gradient-to-r from-lilac-100/50 to-white flex-shrink-0 ${isMobile ? 'p-3' : 'px-4 py-2'}`}>
+      <div className={`border-b border-gray-100 bg-white flex-shrink-0 ${isMobile ? 'p-3' : 'px-4 py-2'}`}>
         {isMobile ? (
           // 移动端紧凑布局
           <div className="space-y-2">
@@ -1667,7 +1680,7 @@ export function AITutor({
                   type="checkbox"
                   checked={enableWeb}
                   onChange={(e) => setEnableWeb(e.target.checked)}
-                  className="w-4 h-4 rounded border-gray-300 text-amber-500 focus:ring-amber-400"
+                  className="w-4 h-4 rounded border-gray-300 text-[#787774] focus:ring-[#232322]"
                 />
                 <span className="flex items-center gap-1 group-hover:text-gray-900 transition-colors">
                   <Globe size={13} strokeWidth={1.75} />
@@ -1777,7 +1790,7 @@ export function AITutor({
                           className={`
                             inline cursor-pointer transition-all duration-300
                             ${isActive 
-                              ? 'bg-sunflower px-1 rounded shadow-md scale-105' 
+                              ? 'bg-sunflower px-1 rounded scale-105' 
                               : isNearBreakpoint 
                                 ? 'bg-sunflower-200/60 px-1 rounded hover:bg-sunflower-300/80' 
                                 : 'hover:bg-sunflower-200/80'
@@ -1803,7 +1816,7 @@ export function AITutor({
                     className={`
                       mt-3 inline-flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg transition-all duration-300 border
                       ${seekingTimestamp === response.explanation.citation.startMs
-                        ? 'bg-gradient-to-r from-sunflower to-warmOrange text-navy border-sunflower-600 shadow-lg shadow-sunflower-200 scale-105'
+                        ? 'bg-[#232322] text-navy border-sunflower-600 shadow-sunflower-200 scale-105'
                         : 'text-warmOrange-700 hover:text-warmOrange-800 bg-sunflower-100 hover:bg-sunflower-200 border-sunflower-200 hover:shadow-md'
                       }
                     `}
@@ -2094,7 +2107,7 @@ function QuickReply({ text, onClick }: { text: string; onClick: (text: string) =
   return (
     <button
       onClick={() => onClick(text)}
-      className="text-xs px-3 py-1.5 bg-gray-100 text-gray-600 rounded-full hover:bg-gray-200 transition-colors"
+      className="rounded-full bg-slate-50 px-3 py-1.5 text-xs text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-700"
     >
       {text}
     </button>

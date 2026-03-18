@@ -271,7 +271,7 @@ function IframeSyncBar({
     : (playing ? '字幕同步中' : '仅字幕同步（无音轨）');
 
   return (
-    <div className="bg-slate-950/95 backdrop-blur-sm border-t border-white/10 select-none">
+    <div className="bg-slate-950/95 border-t border-white/10 select-none">
       {hasAudio && (
         <audio
           ref={audioRef}
@@ -361,7 +361,7 @@ function IframeSyncBar({
               style={{ width: `${progress * 100}%` }}
             />
             <div
-              className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 w-3 h-3 bg-rose-300 rounded-full shadow-md opacity-0 group-hover:opacity-100 transition-opacity"
+              className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 w-3 h-3 bg-rose-300 rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
               style={{ left: `${progress * 100}%` }}
             />
           </div>

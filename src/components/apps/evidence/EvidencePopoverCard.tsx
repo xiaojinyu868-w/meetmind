@@ -17,7 +17,7 @@ interface EvidencePopoverCardProps {
 
 export function EvidencePopoverCard({ citation, snippet, onSeek }: EvidencePopoverCardProps) {
   return (
-    <div className="absolute z-20 mt-2 w-80 max-w-[86vw] rounded-2xl border border-slate-200 bg-white p-3 shadow-xl">
+    <div className="absolute z-20 mt-2 w-80 max-w-[86vw] rounded-2xl border border-slate-200 bg-white p-3">
       <div className="mb-2 flex items-center justify-between text-xs text-slate-500">
         <span>证据片段</span>
         <span>

@@ -57,7 +57,7 @@ export function ConfusionCard({
     <>
       {/* 遮罩层 */}
       <div
-        className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 animate-fadeIn"
+        className="fixed inset-0 bg-black/60 z-50 animate-fadeIn"
         onClick={onClose}
       />
 
@@ -85,11 +85,11 @@ export function ConfusionCard({
               <div className={cn(
                 "w-10 h-10 rounded-full flex items-center justify-center",
                 confusion.resolved
-                  ? "bg-emerald-500/20"
+                  ? "bg-[#232322]/20"
                   : "bg-rose-500/20"
               )}>
                 {confusion.resolved ? (
-                  <svg className="w-5 h-5 text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <svg className="w-5 h-5 text-[#787774]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                   </svg>
                 ) : (
@@ -105,7 +105,7 @@ export function ConfusionCard({
                 </h3>
                 <button
                   onClick={() => onSeek?.(confusion.timestamp)}
-                  className="text-xs text-amber-400 hover:text-amber-300 flex items-center gap-1"
+                  className="text-xs text-[#787774] hover:text-[#FDF3C0] flex items-center gap-1"
                 >
                   <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
@@ -162,7 +162,7 @@ export function ConfusionCard({
                   <button
                     key={q}
                     onClick={() => onAskAI(q)}
-                    className="text-xs px-3 py-1.5 rounded-full bg-amber-500/20 text-amber-300 hover:bg-amber-500/30 transition-colors"
+                    className="text-xs px-3 py-1.5 rounded-full bg-[#232322]/20 text-[#FDF3C0] hover:bg-[#EFEFEF]0/30 transition-colors"
                   >
                     {q}
                   </button>
@@ -187,8 +187,8 @@ export function ConfusionCard({
                   className={cn(
                     "flex-1 bg-slate-800 rounded-full px-4 py-2.5",
                     "text-sm text-white placeholder-slate-500",
-                    "border border-slate-700 focus:border-amber-500",
-                    "focus:outline-none focus:ring-1 focus:ring-amber-500/50"
+                    "border border-slate-700 focus:border-[#232322]",
+                    "focus:outline-none focus:ring-1 focus:ring-[#232322]/50"
                   )}
                 />
                 <VoiceMicButton
@@ -200,8 +200,8 @@ export function ConfusionCard({
                   onClick={handleAskAI}
                   className={cn(
                     "w-10 h-10 rounded-full flex items-center justify-center",
-                    "bg-gradient-to-br from-amber-400 to-amber-500",
-                    "text-white shadow-lg shadow-amber-500/20",
+                    "bg-[#FDF3C0]",
+                    "text-white ",
                     "active:scale-95 transition-transform"
                   )}
                 >
@@ -214,7 +214,7 @@ export function ConfusionCard({
               {/* 标记解决按钮 */}
               <button
                 onClick={onResolve}
-                className="w-full py-2.5 rounded-full bg-emerald-500/20 text-emerald-400 text-sm font-medium hover:bg-emerald-500/30 transition-colors"
+                className="w-full py-2.5 rounded-full bg-[#232322]/20 text-[#787774] text-sm font-medium hover:bg-[#D1F4E0]/300/30 transition-colors"
               >
                 标记为已解决
               </button>
@@ -224,9 +224,9 @@ export function ConfusionCard({
               onClick={() => onAskAI()}
               className={cn(
                 "w-full py-3 rounded-full",
-                "bg-gradient-to-r from-amber-400 to-amber-500",
+                "bg-[#FDF3C0]",
                 "text-white text-sm font-medium",
-                "shadow-lg shadow-amber-500/20",
+                "",
                 "active:scale-[0.98] transition-transform"
               )}
             >

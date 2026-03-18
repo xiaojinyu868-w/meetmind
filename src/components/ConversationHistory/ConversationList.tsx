@@ -125,7 +125,7 @@ export function ConversationList({
               onChange={(e) => setSearchKeyword(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
               placeholder="搜索对话..."
-              className="w-full pl-9 pr-8 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-400 focus:border-transparent"
+              className="w-full pl-9 pr-8 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#232322] focus:border-transparent"
             />
             <svg 
               className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400"
@@ -149,7 +149,7 @@ export function ConversationList({
           {searchResults !== null && (
             <div className="mt-2 flex items-center justify-between text-xs text-gray-500">
               <span>找到 {searchResults.length} 个结果</span>
-              <button onClick={clearSearch} className="text-amber-600 hover:text-amber-700">
+              <button onClick={clearSearch} className="text-[#787774] hover:text-[#232322]">
                 清除搜索
               </button>
             </div>
@@ -175,7 +175,7 @@ export function ConversationList({
             <p className="text-sm text-red-600 mb-2">{error}</p>
             <button
               onClick={() => loadConversations()}
-              className="text-sm text-amber-600 hover:text-amber-700"
+              className="text-sm text-[#787774] hover:text-[#232322]"
             >
               重试
             </button>

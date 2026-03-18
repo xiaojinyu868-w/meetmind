@@ -376,7 +376,7 @@ function LoginForm() {
 
           {/* 登录卡片 - 毛玻璃效果 */}
           <div 
-            className="w-full rounded-3xl p-8 backdrop-blur-xl animate-slide-up"
+            className="w-full rounded-3xl p-8 animate-slide-up"
             style={{ 
               backgroundColor: 'rgba(255,255,255,0.6)',
               boxShadow: '0 25px 50px -12px rgba(0,0,0,0.25), 0 8px 32px rgba(255,255,255,0.1) inset',

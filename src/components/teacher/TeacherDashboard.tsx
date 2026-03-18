@@ -273,7 +273,7 @@ export function TeacherDashboard({ sessionId: propSessionId }: TeacherDashboardP
 
   if (isLoading) {
     return (
-      <div className="h-screen overflow-y-auto bg-gradient-to-br from-slate-50 via-slate-100 to-indigo-50 flex items-center justify-center">
+      <div className="h-screen overflow-y-auto bg-[#F7F7F5] flex items-center justify-center">
         <div className="text-center">
           <div className="relative w-20 h-20 mx-auto mb-6">
             <div className="absolute inset-0 rounded-full border-4 border-slate-200" />
@@ -290,7 +290,7 @@ export function TeacherDashboard({ sessionId: propSessionId }: TeacherDashboardP
 
   if (!lesson) {
     return (
-      <div className="h-screen overflow-y-auto bg-gradient-to-br from-slate-50 via-slate-100 to-indigo-50 flex items-center justify-center">
+      <div className="h-screen overflow-y-auto bg-[#F7F7F5] flex items-center justify-center">
         <div className="text-center">
           <span className="text-6xl mb-4 block">📭</span>
           <h2 className="text-xl font-bold text-slate-900 mb-2">暂无课堂数据</h2>
@@ -312,9 +312,9 @@ export function TeacherDashboard({ sessionId: propSessionId }: TeacherDashboardP
   };
 
   return (
-    <div className="h-screen overflow-y-auto bg-gradient-to-br from-slate-50 via-slate-100 to-indigo-50">
+    <div className="h-screen overflow-y-auto bg-[#F7F7F5]">
       {/* 顶部导航 */}
-      <header className="sticky top-0 z-50 bg-white/70 backdrop-blur-xl border-b border-slate-200/50 shadow-sm">
+      <header className="sticky top-0 z-50 bg-white/70 border-b border-slate-200/50 shadow-sm">
         <div className="max-w-6xl mx-auto px-6 py-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-4">
@@ -344,7 +344,7 @@ export function TeacherDashboard({ sessionId: propSessionId }: TeacherDashboardP
               <span className={`px-2 py-1 text-xs rounded-full ${
                 isRealData 
                   ? 'bg-green-100 text-green-700' 
-                  : 'bg-amber-100 text-amber-700'
+                  : 'bg-[#FDF3C0] text-[#232322]'
               }`}>
                 {isRealData ? '📡 实时数据' : '📋 演示数据'}
               </span>
@@ -372,7 +372,7 @@ export function TeacherDashboard({ sessionId: propSessionId }: TeacherDashboardP
               >
                 家长端
               </a>
-              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center shadow-lg shadow-indigo-500/25">
+              <div className="w-10 h-10 rounded-xl bg-[#232322] flex items-center justify-center ">
                 <span className="text-lg">👨‍🏫</span>
               </div>
             </div>
@@ -403,10 +403,10 @@ export function TeacherDashboard({ sessionId: propSessionId }: TeacherDashboardP
         )}
 
         {/* 课程信息卡片 */}
-        <div className="mb-8 p-6 bg-white/80 backdrop-blur-sm rounded-2xl shadow-lg border border-slate-200/50">
+        <div className="mb-8 p-6 bg-white/80 rounded-2xl border border-slate-200/50">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-4">
-              <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center shadow-lg shadow-indigo-500/25">
+              <div className="w-14 h-14 rounded-2xl bg-[#232322] flex items-center justify-center ">
                 <span className="text-2xl">📖</span>
               </div>
               <div>
@@ -436,7 +436,7 @@ export function TeacherDashboard({ sessionId: propSessionId }: TeacherDashboardP
             {/* 统计数据 */}
             <div className="flex items-center gap-6">
               <div className="text-center">
-                <div className="text-3xl font-bold text-amber-600">{lesson.hotspots.length}</div>
+                <div className="text-3xl font-bold text-[#787774]">{lesson.hotspots.length}</div>
                 <div className="text-xs text-slate-500">困惑热点</div>
               </div>
               <div className="w-px h-10 bg-slate-200" />
@@ -454,7 +454,7 @@ export function TeacherDashboard({ sessionId: propSessionId }: TeacherDashboardP
         <section className="mb-8">
           <div className="flex items-center justify-between mb-5">
             <div className="flex items-center gap-3">
-              <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-red-500 to-orange-500 flex items-center justify-center shadow-lg shadow-red-500/25">
+              <div className="w-8 h-8 rounded-lg bg-[#232322] flex items-center justify-center ">
                 <span className="text-sm">🔥</span>
               </div>
               <h2 className="text-lg font-bold text-slate-900">困惑热点 TOP3</h2>
@@ -485,7 +485,7 @@ export function TeacherDashboard({ sessionId: propSessionId }: TeacherDashboardP
         {/* 课后反思生成器 */}
         <section>
           <div className="flex items-center gap-3 mb-5">
-            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center shadow-lg shadow-indigo-500/25">
+            <div className="w-8 h-8 rounded-lg bg-[#232322] flex items-center justify-center ">
               <span className="text-sm">✨</span>
             </div>
             <h2 className="text-lg font-bold text-slate-900">一键生成课后反思</h2>

@@ -372,7 +372,7 @@ export function OnboardingGuide({
             </button>
             <button
               onClick={onNext}
-              className="px-3 sm:px-5 py-1.5 sm:py-2 bg-rose-500 hover:bg-rose-600 text-white text-xs sm:text-sm font-medium rounded-full transition-colors shadow-lg"
+              className="px-3 sm:px-5 py-1.5 sm:py-2 bg-rose-500 hover:bg-rose-600 text-white text-xs sm:text-sm font-medium rounded-full transition-colors"
             >
               {stepIndex === totalSteps - 1 ? '开始使用' : '下一步'}
             </button>
@@ -415,7 +415,7 @@ export function WelcomeModal({
     >
       {/* 遮罩 - 点击关闭 */}
       <div
-        className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+        className="absolute inset-0 bg-black/60"
         onClick={onSkip}
       />
 
@@ -427,11 +427,11 @@ export function WelcomeModal({
         }}
       >
         {/* 顶部装饰 - 移动端高度缩小 */}
-        <div className="h-20 sm:h-28 bg-gradient-to-br from-rose-400 via-rose-500 to-amber-500 relative overflow-hidden flex-shrink-0">
+        <div className="h-20 sm:h-28 bg-[#FADEC9] relative overflow-hidden flex-shrink-0">
           <div className="absolute -top-6 -right-6 sm:-top-8 sm:-right-8 w-24 h-24 sm:w-32 sm:h-32 bg-white/10 rounded-full" />
           <div className="absolute -bottom-3 -left-3 sm:-bottom-4 sm:-left-4 w-16 h-16 sm:w-20 sm:h-20 bg-white/10 rounded-full" />
           <div className="absolute inset-0 flex items-center justify-center">
-            <div className="w-12 h-12 sm:w-16 sm:h-16 bg-white rounded-xl sm:rounded-2xl shadow-lg flex items-center justify-center">
+            <div className="w-12 h-12 sm:w-16 sm:h-16 bg-white rounded-xl sm:rounded-2xl flex items-center justify-center">
               <span className="text-2xl sm:text-3xl font-bold text-rose-500">M</span>
             </div>
           </div>
@@ -450,7 +450,7 @@ export function WelcomeModal({
                 <div className="text-[10px] sm:text-xs text-gray-500">实时转写，不错过重点</div>
               </div>
             </div>
-            <div className="flex items-center gap-2 sm:gap-3 p-2 sm:p-2.5 rounded-lg sm:rounded-xl bg-amber-50">
+            <div className="flex items-center gap-2 sm:gap-3 p-2 sm:p-2.5 rounded-lg sm:rounded-xl bg-[#FDF3C0]/50">
               <span className="text-base sm:text-lg">🎯</span>
               <div>
                 <div className="font-medium text-gray-900 text-xs sm:text-sm">困惑标记</div>
@@ -469,7 +469,7 @@ export function WelcomeModal({
           <div className="space-y-1.5 sm:space-y-2">
             <button
               onClick={onStart}
-              className="w-full py-2 sm:py-2.5 bg-gradient-to-r from-rose-500 to-rose-600 hover:from-rose-600 hover:to-rose-700 text-white text-sm sm:text-base font-medium rounded-lg sm:rounded-xl transition-all shadow-lg shadow-rose-500/25"
+              className="w-full py-2 sm:py-2.5 bg-[#232322] hover:bg-[#111111] text-white text-sm sm:text-base font-medium rounded-lg sm:rounded-xl transition-all shadow-rose-500/25"
             >
               开始体验
             </button>

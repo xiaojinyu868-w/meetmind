@@ -71,7 +71,7 @@ export function ActionDrawer({
       {/* 遮罩层 */}
       <div
         className={cn(
-          'fixed inset-0 bg-black/20 backdrop-blur-sm z-40',
+          'fixed inset-0 bg-black/20 z-40',
           // 动画：尊重 prefers-reduced-motion
           'transition-opacity duration-300 motion-reduce:transition-none',
           isOpen ? 'opacity-100' : 'opacity-0 pointer-events-none'
@@ -97,9 +97,9 @@ export function ActionDrawer({
         )}
       >
         {/* 头部 */}
-        <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100 bg-gradient-to-r from-surface-soft to-white">
+        <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100 bg-white">
           <div className="flex items-center gap-2">
-            <div className="w-8 h-8 bg-gradient-to-br from-mint to-mint-600 rounded-lg flex items-center justify-center shadow-sm">
+            <div className="w-8 h-8 bg-mint rounded-lg flex items-center justify-center shadow-sm">
               <svg className="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-hidden="true">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
               </svg>

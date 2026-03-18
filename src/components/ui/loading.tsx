@@ -117,7 +117,7 @@ interface LoadingOverlayProps {
 export function LoadingOverlay({ message, className }: LoadingOverlayProps) {
   return (
     <div className={cn(
-      "fixed inset-0 z-50 flex flex-col items-center justify-center bg-paper/80 backdrop-blur-sm",
+      "fixed inset-0 z-50 flex flex-col items-center justify-center bg-paper/80",
       className
     )}>
       <LoadingSpinner size="lg" variant="ink" />

@@ -64,7 +64,7 @@ function highlightText(text: string, searchQuery?: string): ReactNode {
   return (
     <>
       {before}
-      <mark className="bg-amber-200 text-amber-900 px-0.5 rounded">{match}</mark>
+      <mark className="bg-[#FDF3C0] text-[#232322] px-0.5 rounded">{match}</mark>
       {after}
     </>
   );
@@ -253,8 +253,8 @@ export function TranscriptPreviewPanel({
     if (immersiveMode) {
       return (
         <div className="flex flex-col items-center justify-center h-full py-16 text-center">
-          <div className="w-20 h-20 bg-gradient-to-br from-amber-100 to-amber-200 rounded-full flex items-center justify-center mb-6">
-            <svg className="w-10 h-10 text-amber-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <div className="w-20 h-20 bg-[#FDF3C0] rounded-full flex items-center justify-center mb-6">
+            <svg className="w-10 h-10 text-[#787774]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
             </svg>
           </div>
@@ -280,14 +280,14 @@ export function TranscriptPreviewPanel({
           <div className="flex items-center gap-2">
             <span className="text-xs font-medium text-gray-500">📝 {transcript.length} 句</span>
             {searchQuery && (
-              <span className="text-xs text-amber-600">· 匹配 {filteredTranscript.length}</span>
+              <span className="text-xs text-[#787774]">· 匹配 {filteredTranscript.length}</span>
             )}
           </div>
           <div className="flex items-center gap-2">
             <button
               onClick={() => setShowSearch((prev) => !prev)}
               className={`p-1.5 rounded-lg transition-colors ${
-                showSearch ? 'bg-amber-100 text-amber-600' : 'text-gray-400 hover:text-gray-600 hover:bg-gray-100'
+                showSearch ? 'bg-[#FDF3C0] text-[#787774]' : 'text-gray-400 hover:text-gray-600 hover:bg-gray-100'
               }`}
               title="搜索转录"
             >
@@ -306,7 +306,7 @@ export function TranscriptPreviewPanel({
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder="搜索转录内容..."
-                className="w-full pl-9 pr-8 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-200 focus:border-amber-400 bg-white"
+                className="w-full pl-9 pr-8 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#E9E9E7] focus:border-[#E9E9E7] bg-white"
                 autoFocus
               />
               <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -362,7 +362,7 @@ export function TranscriptPreviewPanel({
           <div className="absolute bottom-4 right-4">
             <button
               onClick={handleJumpToLatest}
-              className="flex items-center gap-1 px-3 py-2 text-sm text-white bg-amber-500 hover:bg-amber-600 rounded-full shadow-lg transition-all animate-bounce"
+              className="flex items-center gap-1 px-3 py-2 text-sm text-white bg-[#232322] hover:bg-[#FDECC8] rounded-full transition-all animate-bounce"
             >
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 14l-7 7m0 0l-7-7m7 7V3" />
@@ -399,7 +399,7 @@ export function TranscriptPreviewPanel({
             <button
               onClick={() => setShowSearch((prev) => !prev)}
               className={`p-1.5 rounded-lg transition-colors ${
-                showSearch ? 'bg-amber-100 text-amber-600' : 'text-gray-400 hover:text-gray-600 hover:bg-gray-100'
+                showSearch ? 'bg-[#FDF3C0] text-[#787774]' : 'text-gray-400 hover:text-gray-600 hover:bg-gray-100'
               }`}
               title="搜索转录"
             >
@@ -411,7 +411,7 @@ export function TranscriptPreviewPanel({
           <span className="text-xs text-gray-400">{transcript.length} 句</span>
           <button
             onClick={toggleExpanded}
-            className="text-xs text-amber-600 hover:text-amber-700 flex items-center gap-1 transition-colors"
+            className="text-xs text-[#787774] hover:text-[#232322] flex items-center gap-1 transition-colors"
           >
             {isExpanded ? (
               <>
@@ -440,7 +440,7 @@ export function TranscriptPreviewPanel({
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder="搜索转录内容..."
-              className="w-full pl-9 pr-8 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-200 focus:border-amber-400"
+              className="w-full pl-9 pr-8 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#E9E9E7] focus:border-[#E9E9E7]"
             />
             <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
@@ -522,7 +522,7 @@ export function TranscriptPreviewPanel({
         {hasMore ? (
           <button
             onClick={toggleExpanded}
-            className="text-xs text-gray-400 hover:text-amber-600 transition-colors"
+            className="text-xs text-gray-400 hover:text-[#232322] transition-colors"
           >
             还有 {hiddenCount} 条，点击展开查看
           </button>
@@ -533,7 +533,7 @@ export function TranscriptPreviewPanel({
         {isExpanded && isRecording && !autoScrollEnabled && (
           <button
             onClick={handleJumpToLatest}
-            className="flex items-center gap-1 px-2 py-1 text-xs text-white bg-amber-500 hover:bg-amber-600 rounded-full transition-colors animate-bounce"
+            className="flex items-center gap-1 px-2 py-1 text-xs text-white bg-[#232322] hover:bg-[#FDECC8] rounded-full transition-colors animate-bounce"
           >
             <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 14l-7 7m0 0l-7-7m7 7V3" />
@@ -597,7 +597,7 @@ function TranscriptItem({
       <button
         type="button"
         onClick={() => onTimestampClick?.(segment.startMs)}
-        className="text-xs text-gray-400 font-mono shrink-0 mt-0.5 bg-gray-100 px-1.5 py-0.5 rounded whitespace-nowrap hover:bg-amber-50 hover:text-amber-700 transition-colors"
+        className="text-xs text-gray-400 font-mono shrink-0 mt-0.5 bg-gray-100 px-1.5 py-0.5 rounded whitespace-nowrap hover:bg-[#EFEFEF] hover:text-[#232322] transition-colors"
         title="点击跳转并播放到该时间点"
       >
         {formatTime(segment.startMs)} - {formatTime(segment.endMs)}
@@ -609,7 +609,7 @@ function TranscriptItem({
           onChange={(e) => onDraftChange?.(e.target.value)}
           onBlur={onCommitEdit}
           onKeyDown={(e) => handleEditKeyDown(e, onCancelEdit)}
-          className="flex-1 min-h-[84px] rounded-lg border border-amber-200 bg-white px-2.5 py-2 text-sm leading-relaxed focus:outline-none focus:ring-2 focus:ring-amber-200"
+          className="flex-1 min-h-[84px] rounded-lg border border-[#E9E9E7] bg-white px-2.5 py-2 text-sm leading-relaxed focus:outline-none focus:ring-2 focus:ring-[#E9E9E7]"
           autoFocus
         />
       ) : (
@@ -645,7 +645,7 @@ function ImmersiveTranscriptItem({
       <button
         type="button"
         onClick={() => onTimestampClick?.(segment.startMs)}
-        className="text-xs text-gray-400 font-mono shrink-0 pt-1 tabular-nums opacity-60 group-hover:opacity-100 transition-opacity hover:text-amber-700"
+        className="text-xs text-gray-400 font-mono shrink-0 pt-1 tabular-nums opacity-60 group-hover:opacity-100 transition-opacity hover:text-[#232322]"
         title="点击跳转并播放到该时间点"
       >
         {formatTime(segment.startMs)}
@@ -657,7 +657,7 @@ function ImmersiveTranscriptItem({
           onChange={(e) => onDraftChange?.(e.target.value)}
           onBlur={onCommitEdit}
           onKeyDown={(e) => handleEditKeyDown(e, onCancelEdit)}
-          className="flex-1 min-h-[92px] rounded-lg border border-amber-200 bg-white px-2.5 py-2 text-sm leading-relaxed focus:outline-none focus:ring-2 focus:ring-amber-200"
+          className="flex-1 min-h-[92px] rounded-lg border border-[#E9E9E7] bg-white px-2.5 py-2 text-sm leading-relaxed focus:outline-none focus:ring-2 focus:ring-[#E9E9E7]"
           autoFocus
         />
       ) : (

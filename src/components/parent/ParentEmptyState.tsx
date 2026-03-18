@@ -24,13 +24,13 @@ export function ParentEmptyState({
       emoji: '🎉',
       title: '太棒了！',
       description: `${studentName}今天上课没有标记困惑点，状态很好`,
-      bgClass: 'from-emerald-50 to-green-50',
+      bgClass: 'from-[#D1F4E0]/30 to-green-50',
     },
     'all-resolved': {
       emoji: '✨',
       title: '所有困惑都解决了！',
       description: `给${studentName}点个赞，继续加油`,
-      bgClass: 'from-amber-50 to-yellow-50',
+      bgClass: 'from-[#FDF3C0]/50 to-yellow-50',
     },
   };
   

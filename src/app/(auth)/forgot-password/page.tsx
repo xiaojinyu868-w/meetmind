@@ -148,7 +148,7 @@ export default function ForgotPasswordPage() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-rose-50 via-white to-blue-50 flex items-center justify-center px-4">
+    <div className="min-h-screen bg-[#F7F7F5] flex items-center justify-center px-4">
       <div className="w-full max-w-md">
         {/* 返回登录 */}
         <Link
@@ -161,7 +161,7 @@ export default function ForgotPasswordPage() {
           返回登录
         </Link>
 
-        <div className="bg-white rounded-2xl shadow-xl p-8">
+        <div className="bg-white rounded-2xl p-8">
           {/* 步骤1: 输入邮箱/手机号 */}
           {step === 'input' && (
             <>

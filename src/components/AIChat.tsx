@@ -501,7 +501,7 @@ export function AIChat({
             <div
               className={`max-w-[90%] rounded-2xl ${isMobile ? 'px-3 py-2' : 'px-4 py-3'} ${
                 message.role === 'user'
-                  ? 'bg-gradient-to-r from-amber-500 to-amber-600 text-white'
+                  ? 'bg-[#FDF3C0] text-white'
                   : 'bg-gray-50 text-gray-800'
               }`}
             >
@@ -663,7 +663,7 @@ export function AIChat({
             onChange={(e) => setInputValue(e.target.value)}
             disabled={isLoading || isStreaming}
             placeholder="输入你的问题..."
-            className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-400 focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed"
+            className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#232322] focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed"
           />
           <VoiceMicButton
             onTranscript={(text) => setInputValue(prev => prev + text)}
@@ -672,7 +672,7 @@ export function AIChat({
           <button
             type="submit"
             disabled={isLoading || isStreaming || (!inputValue.trim() && uploadedImages.length === 0)}
-            className="px-4 py-2 bg-amber-500 text-white rounded-lg hover:bg-amber-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            className="px-4 py-2 bg-[#232322] text-white rounded-lg hover:bg-[#FDECC8] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
           >
             发送
           </button>

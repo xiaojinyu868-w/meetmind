@@ -242,7 +242,7 @@ export function QuizWindow({ result }: QuizWindowProps) {
           {/* Stats */}
           <div className="flex items-center justify-center gap-10 mb-6">
             <div className="text-center">
-              <div className="text-xl font-bold text-emerald-400">{correctCount}</div>
+              <div className="text-xl font-bold text-[#787774]">{correctCount}</div>
               <div className="text-xs text-white/40 mt-0.5">正确</div>
             </div>
             <div className="w-px h-8 bg-white/10" />
@@ -287,7 +287,7 @@ export function QuizWindow({ result }: QuizWindowProps) {
                   const firstWrong = questions.findIndex((q) => submitted[q.id] && selected[q.id] !== normalizeAnswer(q.answer, q.options));
                   if (firstWrong >= 0) { setIndex(firstWrong); setShowExplanation(true); }
                 }}
-                className="rounded-full bg-white/10 backdrop-blur-sm border border-white/10 px-8 py-2.5 text-sm font-medium text-white hover:bg-white/15 transition-all"
+                className="rounded-full bg-white/10 border border-white/10 px-8 py-2.5 text-sm font-medium text-white hover:bg-white/15 transition-all"
               >
                 复习错题
               </button>
@@ -366,10 +366,10 @@ export function QuizWindow({ result }: QuizWindowProps) {
               {isSubmitted && (
                 <div className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-medium ${
                   isCorrect
-                    ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/20'
+                    ? 'bg-[#232322]/15 text-[#787774] border border-[#D1F4E0]/20'
                     : 'bg-rose-500/15 text-rose-400 border border-rose-500/20'
                 }`}>
-                  <div className={`w-1.5 h-1.5 rounded-full ${isCorrect ? 'bg-emerald-400' : 'bg-rose-400'}`} />
+                  <div className={`w-1.5 h-1.5 rounded-full ${isCorrect ? 'bg-[#D1F4E0]' : 'bg-rose-400'}`} />
                   {isCorrect ? '正确' : '错误'}
                 </div>
               )}
@@ -393,8 +393,8 @@ export function QuizWindow({ result }: QuizWindowProps) {
                 let letterStyle = 'bg-white/10 text-white/60';
 
                 if (optionCorrect) {
-                  optionStyle = 'bg-emerald-500/15 border-emerald-500/30';
-                  letterStyle = 'bg-emerald-500 text-white';
+                  optionStyle = 'bg-[#232322]/15 border-[#D1F4E0]/30';
+                  letterStyle = 'bg-[#232322] text-white';
                 } else if (optionWrong) {
                   optionStyle = 'bg-rose-500/15 border-rose-500/30';
                   letterStyle = 'bg-rose-500 text-white';
@@ -431,13 +431,13 @@ export function QuizWindow({ result }: QuizWindowProps) {
                       {optionLetter}
                     </span>
                     <span className={`text-[14px] md:text-[15px] leading-relaxed ${
-                      optionCorrect ? 'text-emerald-300' : optionWrong ? 'text-rose-300' : 'text-white/80'
+                      optionCorrect ? 'text-[#D1F4E0]' : optionWrong ? 'text-rose-300' : 'text-white/80'
                     }`}>
                       {stripOptionPrefix(option)}
                     </span>
                     {/* Correct/wrong indicator */}
                     {optionCorrect && (
-                      <svg className="ml-auto h-5 w-5 shrink-0 text-emerald-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                      <svg className="ml-auto h-5 w-5 shrink-0 text-[#787774]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                         <polyline points="20 6 9 17 4 12" />
                       </svg>
                     )}
@@ -454,7 +454,7 @@ export function QuizWindow({ result }: QuizWindowProps) {
             {/* Explanation section (slide down after submit) */}
             {isSubmitted && (showExplanation || current.explanation) && (
               <div className={`mt-5 rounded-xl p-4 transition-all duration-300 ${
-                isCorrect ? 'bg-emerald-500/10 border border-emerald-500/15' : 'bg-rose-500/10 border border-rose-500/15'
+                isCorrect ? 'bg-[#232322]/10 border border-[#D1F4E0]/15' : 'bg-rose-500/10 border border-rose-500/15'
               }`}>
                 {!isCorrect && (
                   <p className="text-sm text-rose-400 font-medium mb-1.5">
@@ -547,7 +547,7 @@ export function QuizWindow({ result }: QuizWindowProps) {
               const ok = done && chosen === ans;
               const isCurrent = i === index;
               let dotColor = 'bg-white/10';
-              if (done) dotColor = ok ? 'bg-emerald-500' : 'bg-rose-500';
+              if (done) dotColor = ok ? 'bg-[#232322]' : 'bg-rose-500';
               else if (isCurrent) dotColor = '';
               return (
                 <button

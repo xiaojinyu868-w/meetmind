@@ -28,25 +28,25 @@ export function ConfusionHotspotCard({ hotspot, isTop = false }: ConfusionHotspo
   const getRankStyle = () => {
     if (hotspot.rank === 1) {
       return {
-        badge: 'bg-gradient-to-br from-amber-400 via-yellow-500 to-orange-500 shadow-amber-500/40',
-        border: 'border-amber-200/50',
-        glow: 'shadow-amber-500/10',
-        indicator: 'bg-amber-500',
+        badge: 'bg-[#FDF3C0] ',
+        border: 'border-[#E9E9E7]',
+        glow: '',
+        indicator: 'bg-[#232322]',
       };
     }
     if (hotspot.rank === 2) {
       return {
-        badge: 'bg-gradient-to-br from-slate-300 via-gray-400 to-slate-500 shadow-slate-400/40',
+        badge: 'bg-slate-400 ',
         border: 'border-slate-200/50',
         glow: 'shadow-slate-400/10',
         indicator: 'bg-slate-400',
       };
     }
     return {
-      badge: 'bg-gradient-to-br from-amber-600 via-orange-700 to-amber-800 shadow-amber-700/40',
-      border: 'border-amber-200/30',
-      glow: 'shadow-amber-600/10',
-      indicator: 'bg-amber-700',
+      badge: 'bg-[#232322] ',
+      border: 'border-[#E9E9E7]',
+      glow: '',
+      indicator: 'bg-[#232322]',
     };
   };
 
@@ -59,17 +59,17 @@ export function ConfusionHotspotCard({ hotspot, isTop = false }: ConfusionHotspo
     <div 
       className={`
         group relative overflow-hidden
-        bg-white/80 backdrop-blur-sm
+        bg-white/80
         rounded-2xl border ${style.border}
-        shadow-lg ${style.glow}
+        ${style.glow}
         transition-all duration-500 ease-out
         hover:shadow-2xl hover:scale-[1.02] hover:-translate-y-1
-        ${isTop ? 'ring-2 ring-amber-400/30' : ''}
+        ${isTop ? 'ring-2 ring-[#E9E9E7]' : ''}
       `}
     >
       {/* 背景装饰 */}
-      <div className="absolute inset-0 bg-gradient-to-br from-slate-50/50 to-transparent pointer-events-none" />
-      <div className="absolute -right-8 -top-8 w-32 h-32 bg-gradient-to-br from-indigo-100/30 to-transparent rounded-full blur-2xl pointer-events-none" />
+      <div className="absolute inset-0 bg-transparent pointer-events-none" />
+      <div className="absolute -right-8 -top-8 w-32 h-32 bg-transparent rounded-full blur-2xl pointer-events-none" />
       
       {/* 顶部热度条 */}
       <div className="h-1 bg-gray-100 overflow-hidden">
@@ -87,7 +87,7 @@ export function ConfusionHotspotCard({ hotspot, isTop = false }: ConfusionHotspo
             <div className={`
               w-10 h-10 rounded-xl ${style.badge}
               flex items-center justify-center
-              shadow-lg transform group-hover:rotate-3 transition-transform duration-300
+              transform group-hover:rotate-3 transition-transform duration-300
             `}>
               <span className="text-white font-bold text-lg">{hotspot.rank}</span>
             </div>
@@ -108,7 +108,7 @@ export function ConfusionHotspotCard({ hotspot, isTop = false }: ConfusionHotspo
               {Array.from({ length: Math.min(hotspot.count, 3) }).map((_, i) => (
                 <div 
                   key={i}
-                  className="w-5 h-5 rounded-full bg-gradient-to-br from-red-400 to-rose-500 border-2 border-white flex items-center justify-center"
+                  className="w-5 h-5 rounded-full bg-[#FADEC9] border-2 border-white flex items-center justify-center"
                 >
                   <span className="text-[8px] text-white">👤</span>
                 </div>
