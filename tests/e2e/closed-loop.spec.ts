@@ -201,6 +201,15 @@ function buildTutorSSEStream(params: {
   return events.join('\n');
 }
 
+function safePostDataJSON(request: Request): Record<string, unknown> | null {
+  try {
+    const payload = request.postDataJSON();
+    return payload && typeof payload === 'object' ? (payload as Record<string, unknown>) : null;
+  } catch {
+    return null;
+  }
+}
+
 async function mockTutorApi(page: Page, actionItems = DEFAULT_ACTION_ITEMS): Promise<void> {
   await page.route('**/api/tutor', async (route) => {
     await route.fulfill({
@@ -368,7 +377,35 @@ async function openApp(page: Page): Promise<void> {
 
 async function enterReviewMode(page: Page): Promise<void> {
   await page.getByTestId('mode-review-button').click();
-  await expect(page.getByTestId('waveform-current-time')).toBeVisible();
+  await Promise.any([
+    page.getByTestId('waveform-current-time').waitFor({ state: 'visible', timeout: 15_000 }),
+    page.getByTestId('video-review-player').waitFor({ state: 'visible', timeout: 15_000 }),
+    page.getByTestId('tutor-global-input').waitFor({ state: 'visible', timeout: 15_000 }),
+  ]);
+}
+
+async function submitCollectionComposer(page: Page, text: string): Promise<void> {
+  await page.getByTestId('collection-composer-input').fill(text);
+  await page.getByTestId('collection-composer-submit').click();
+}
+
+async function importVideoFromCollection(page: Page, url: string): Promise<void> {
+  await submitCollectionComposer(page, url);
+  await expect(page.getByTestId('video-review-player')).toBeVisible();
+}
+
+async function fillBreakpointTutorAndWaitReady(page: Page, question: string): Promise<void> {
+  const tutorInput = page.getByTestId('tutor-breakpoint-input');
+  const sendButton = page.getByTestId('tutor-breakpoint-send');
+  await tutorInput.fill(question);
+  await expect(sendButton).toBeEnabled({ timeout: 60_000 });
+}
+
+async function fillGlobalTutorAndWaitReady(page: Page, question: string): Promise<void> {
+  const tutorInput = page.getByTestId('tutor-global-input');
+  const sendButton = page.getByTestId('tutor-global-send');
+  await tutorInput.fill(question);
+  await expect(sendButton).toBeEnabled({ timeout: 60_000 });
 }
 
 function parseClockToMs(text: string | null): number {
@@ -392,11 +429,7 @@ test.describe('Closed Loop Regression', () => {
     await mockVideoImportApi(page);
     await openApp(page);
 
-    await page.getByTestId('source-video-button').click();
-    await page.getByTestId('video-link-input').fill('https://www.bilibili.com/video/BV1xx411c7mD');
-    await page.getByTestId('video-import-button').click();
-
-    await expect(page.getByTestId('video-review-player')).toBeVisible();
+    await importVideoFromCollection(page, 'https://www.bilibili.com/video/BV1xx411c7mD');
     await expect.poll(async () => (await readDbSnapshot(page)).transcripts).toBeGreaterThan(0);
 
     const beforeRefresh = await readDbSnapshot(page);
@@ -414,11 +447,7 @@ test.describe('Closed Loop Regression', () => {
     await mockVideoImportApi(page);
     await openApp(page);
 
-    await page.getByTestId('source-video-button').click();
-    await page.getByTestId('video-link-input').fill('https://www.bilibili.com/video/BV1xx411c7mD');
-    await page.getByTestId('video-import-button').click();
-
-    await expect(page.getByTestId('video-review-player')).toBeVisible();
+    await importVideoFromCollection(page, 'https://www.bilibili.com/video/BV1xx411c7mD');
     const toggle = page.getByTestId('learning-track-toggle');
     await expect(toggle).toBeVisible();
     await expect(page.getByTestId('learning-track-panel')).toHaveCount(0);
@@ -467,9 +496,9 @@ test.describe('Closed Loop Regression', () => {
     await page.route('**/api/tutor', async (route) => {
       const req = route.request();
       if (req.method() === 'POST') {
-        const payload = req.postDataJSON();
-        if (payload && typeof payload === 'object') {
-          tutorPayloads.push(payload as Record<string, unknown>);
+        const payload = safePostDataJSON(req);
+        if (payload) {
+          tutorPayloads.push(payload);
         }
       }
       await route.fulfill({
@@ -480,21 +509,14 @@ test.describe('Closed Loop Regression', () => {
     });
 
     await openApp(page);
-    await page.getByTestId('source-support-button').click();
-    await page.getByRole('button', { name: '粘贴文本' }).click();
-    await page.getByPlaceholder('粘贴课堂笔记、重点定义、题目解析等文本...').fill(
-      '资料要点：平台型入口、内容分发引擎、底层数据基建。'
-    );
-    await page.getByRole('button', { name: '导入文本' }).click();
-    await expect(page.getByText('增强文本已加入本会话，将用于后续转写与答疑上下文。')).toBeVisible();
+    await submitCollectionComposer(page, '资料要点：平台型入口、内容分发引擎、底层数据基建。');
 
     tutorPayloads.length = 0;
 
     await enterReviewMode(page);
 
-    const tutorInput = page.getByPlaceholder('告诉我你哪里不懂...').first();
-    await tutorInput.fill('请结合资料总结三大场景');
-    await page.getByRole('button', { name: '发送' }).first().click();
+    await fillGlobalTutorAndWaitReady(page, '请结合资料总结三大场景');
+    await page.getByTestId('tutor-global-send').click();
 
     let supportText = '';
     await expect.poll(() => {
@@ -519,37 +541,56 @@ test.describe('Closed Loop Regression', () => {
   });
 
   test('tutor shows knowledge-base citations when response includes support references', async ({ page }) => {
+    await mockVideoImportApi(page);
     await page.route('**/api/tutor', async (route) => {
+      const req = route.request();
+      const payload = req.method() === 'POST' ? safePostDataJSON(req) : null;
+      const isStream = Boolean(payload && payload.stream === true);
+
+      if (isStream) {
+        await route.fulfill({
+          status: 200,
+          contentType: 'text/event-stream',
+          body: buildTutorSSEStream({
+            citations: [
+              {
+                id: 'support-1',
+                title: '导入资料 1',
+                url: 'about:blank#support-1',
+                snippet: '平台型入口、内容分发引擎、底层数据基建。',
+                source_type: 'knowledge_base',
+              },
+            ],
+            content: '我参考了导入资料，总结出课堂框架的三部分 [资料1]。',
+          }),
+        });
+        return;
+      }
+
       await route.fulfill({
         status: 200,
         contentType: 'application/json',
-        body: JSON.stringify({
-          ...buildTutorResponse(),
-          citations: [
-            {
-              id: 'support-1',
-              title: '导入资料 1',
-              url: 'about:blank#support-1',
-              snippet: '平台型入口、内容分发引擎、底层数据基建。',
-              source_type: 'knowledge_base',
-            },
-          ],
-        }),
+        body: JSON.stringify(buildTutorResponse()),
       });
     });
 
     await openApp(page);
+    await importVideoFromCollection(page, 'https://www.bilibili.com/video/BV1xx411c7mD');
     await enterReviewMode(page);
 
-    await expect(page.getByText('资料引用')).toBeVisible();
-    await expect(page.getByText('导入资料 1')).toBeVisible();
+    await fillGlobalTutorAndWaitReady(page, '请结合导入资料总结课堂框架');
+    await page.getByTestId('tutor-global-send').click();
+
+    await expect(page.getByTestId('tutor-citation-panel')).toBeVisible({ timeout: 60_000 });
+    await expect(page.getByTestId('tutor-citation-1').getByText('导入资料 1')).toBeVisible();
     await expect(page.getByText('平台型入口、内容分发引擎、底层数据基建。')).toBeVisible();
   });
 
   test('tutor follow-up renders knowledge-base citations from streaming metadata', async ({ page }) => {
+    await mockVideoImportApi(page);
     await page.route('**/api/tutor', async (route) => {
       const req = route.request();
-      const payload = req.method() === 'POST' ? req.postDataJSON() as Record<string, unknown> : null;
+      const payload = req.method() === 'POST' ? safePostDataJSON(req) : null;
       const isStream = Boolean(payload && payload.stream === true);
 
       if (isStream) {
@@ -580,14 +621,14 @@ test.describe('Closed Loop Regression', () => {
     });
 
     await openApp(page);
+    await importVideoFromCollection(page, 'https://www.bilibili.com/video/BV1xx411c7mD');
     await enterReviewMode(page);
 
-    const tutorInput = page.getByPlaceholder('告诉我你哪里不懂...').first();
-    await tutorInput.fill('请结合我上传的资料回答');
-    await page.getByRole('button', { name: '发送' }).first().click();
+    await fillGlobalTutorAndWaitReady(page, '请结合我上传的资料回答');
+    await page.getByTestId('tutor-global-send').click();
 
-    await expect(page.getByText('资料引用')).toBeVisible();
-    await expect(page.getByText('导入资料 1')).toBeVisible();
+    await expect(page.getByTestId('tutor-citation-panel')).toBeVisible({ timeout: 60_000 });
+    await expect(page.getByTestId('tutor-citation-1').getByText('导入资料 1')).toBeVisible();
     await expect(page.getByText('平台型入口、内容分发引擎、底层数据基建。')).toBeVisible();
   });
 

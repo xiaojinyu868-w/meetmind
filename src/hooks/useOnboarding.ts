@@ -57,8 +57,8 @@ export const DESKTOP_ONBOARDING_FLOWS: Record<string, OnboardingFlow> = {
       {
         id: 'video-import',
         title: '2/4 视频导入',
-        description: '支持通过视频链接导入课堂内容，快速进入复习流程。',
-        targetSelector: '[data-testid="source-video-button"]',
+        description: '把视频链接粘贴到输入框后发送，就能快速进入视频复习流程。',
+        targetSelector: '[data-testid="collection-composer-input"]',
         position: 'bottom',
         spotlight: true,
         action: 'click',
@@ -67,8 +67,8 @@ export const DESKTOP_ONBOARDING_FLOWS: Record<string, OnboardingFlow> = {
       {
         id: 'support-source',
         title: '3/4 增强资料',
-        description: '可上传 PDF、DOCX、文本等作为增强上下文，提升答疑与转写效果。',
-        targetSelector: '[data-testid="source-support-button"]',
+        description: '通过上传按钮补充 PDF、DOCX、图片或文本材料，提升答疑与转写效果。',
+        targetSelector: '[data-testid="collection-upload-button"]',
         position: 'bottom',
         spotlight: true,
         action: 'click',
@@ -216,8 +216,8 @@ export const MOBILE_ONBOARDING_FLOWS: Record<string, OnboardingFlow> = {
       {
         id: 'video-import',
         title: '2/4 视频导入',
-        description: '支持通过视频链接导入课堂内容，快速进入复习流程。',
-        targetSelector: '[data-testid="source-video-button"]',
+        description: '把视频链接粘贴到输入框后发送，就能快速进入视频复习流程。',
+        targetSelector: '[data-testid="collection-composer-input"]',
         position: 'bottom',
         spotlight: true,
         action: 'click',
@@ -226,8 +226,8 @@ export const MOBILE_ONBOARDING_FLOWS: Record<string, OnboardingFlow> = {
       {
         id: 'support-source',
         title: '3/4 增强资料',
-        description: '可上传 PDF、DOCX、文本等作为增强上下文，提升答疑与转写效果。',
-        targetSelector: '[data-testid="source-support-button"]',
+        description: '通过上传按钮补充 PDF、DOCX、图片或文本材料，提升答疑与转写效果。',
+        targetSelector: '[data-testid="collection-upload-button"]',
         position: 'bottom',
         spotlight: true,
         action: 'click',

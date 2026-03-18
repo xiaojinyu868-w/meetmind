@@ -427,7 +427,7 @@ export async function POST(request: NextRequest) {
   if (rateLimitResponse) return rateLimitResponse;
 
   try {
-    const body = await request.json() as ExtendedTutorRequest & { 
+    let body: ExtendedTutorRequest & {
       messageContent?: Array<{ type: string; text?: string; image_url?: { url: string } }>;
       globalMode?: boolean;  // 全局对话模式
       sessionId?: string;    // 会话ID，用于摘要缓存
@@ -435,7 +435,20 @@ export async function POST(request: NextRequest) {
       enable_thinking_guide?: boolean;  // 学霸思维引导模式
       selected_context_mode?: boolean;
     };
-    
+
+    try {
+      body = await request.json() as ExtendedTutorRequest & {
+        messageContent?: Array<{ type: string; text?: string; image_url?: { url: string } }>;
+        globalMode?: boolean;
+        sessionId?: string;
+        stream?: boolean;
+        enable_thinking_guide?: boolean;
+        selected_context_mode?: boolean;
+      };
+    } catch {
+      return NextResponse.json({ error: '请求体不能为空或 JSON 无效' }, { status: 400 });
+    }
+
     const { 
       timestamp, 
       segments, 

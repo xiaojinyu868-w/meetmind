@@ -7440,6 +7440,7 @@ const _handleVideoAssistantMessage = useCallback((payload: {
               <div className="flex items-end gap-2">
                 <textarea
                   ref={collectionComposerRef}
+                  data-testid="collection-composer-input"
                   value={collectionComposerText}
                   onChange={(event) => {
                     setSourceImportError('');
@@ -7492,6 +7493,8 @@ const _handleVideoAssistantMessage = useCallback((payload: {
 
             <button
               type="button"
+              data-testid="collection-upload-button"
+              data-onboarding="collection-upload-button"
               onClick={() => handleSourceFileButtonClick('all')}
               className={`flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-full border bg-white transition ${
                 sourceImporting
@@ -7505,6 +7508,7 @@ const _handleVideoAssistantMessage = useCallback((payload: {
 
             <button
               type="button"
+              data-testid="collection-composer-submit"
               onClick={handleCollectionComposerSubmit}
               className={`inline-flex h-11 min-w-[64px] flex-shrink-0 items-center justify-center rounded-[10px] px-4 text-sm font-semibold text-white transition ${
                 isComposerVoiceRecording || composerVoiceStatus === 'connecting'

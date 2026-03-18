@@ -219,6 +219,59 @@ function normalizeChatHistory(raw: unknown): TutorChatMessage[] {
     .filter((item) => item.content.length > 0);
 }
 
+function getCitationSourceLabel(sourceType?: Citation['source_type']): string {
+  switch (sourceType) {
+    case 'knowledge_base':
+      return '增强资料';
+    case 'web':
+      return '网页参考';
+    case 'transcript':
+      return '课堂内容';
+    default:
+      return '资料引用';
+  }
+}
+
+function CitationReferences({
+  citations,
+  showHeading = true,
+  className = '',
+}: {
+  citations?: Citation[];
+  showHeading?: boolean;
+  className?: string;
+}) {
+  const items = (citations || []).filter(Boolean);
+  if (items.length === 0) return null;
+
+  return (
+    <div
+      data-testid="tutor-citation-panel"
+      className={`rounded-xl border border-slate-200 bg-slate-50/90 p-3 text-sm text-slate-700 ${className}`}
+    >
+      {showHeading ? <div className="mb-2 text-xs font-semibold text-slate-600">资料引用</div> : null}
+      <div className="space-y-2">
+        {items.map((citation, index) => (
+          <div
+            key={citation.id || `${citation.title || 'citation'}-${index}`}
+            data-testid={`tutor-citation-${index + 1}`}
+            className="rounded-lg border border-slate-200 bg-white px-3 py-2"
+          >
+            <div className="flex items-center gap-2 text-[11px] text-slate-500">
+              <span className="rounded-full bg-slate-100 px-2 py-0.5 font-medium text-slate-600">
+                资料{index + 1}
+              </span>
+              <span>{getCitationSourceLabel(citation.source_type)}</span>
+            </div>
+            <div className="mt-1 text-sm font-medium text-slate-800">{citation.title || `资料 ${index + 1}`}</div>
+            {citation.snippet ? <div className="mt-1 text-xs leading-5 text-slate-600">{citation.snippet}</div> : null}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export function AITutor({
   breakpoint,
   segments,
@@ -1373,23 +1426,25 @@ export function AITutor({
                     }`}
                   >
                     {msg.role === 'assistant' ? (
-                      // 助手消息：根据是否开启学霸引导选择渲染器
-                      enableThinkingGuide ? (
-                        <ThinkingGuideRenderer
-                          content={msg.content}
-                          onTimestampClick={handleTimestampClick}
-                          citations={msg.citations}
-                          isMobile={isMobile}
-                          className={`leading-relaxed ${isMobile ? 'text-xs' : 'text-sm'}`}
-                        />
-                      ) : (
-                        <StreamingMarkdown
-                          content={msg.content}
-                          onTimestampClick={handleTimestampClick}
-                          citations={msg.citations}
-                          className={`leading-relaxed ${isMobile ? 'text-xs' : 'text-sm'}`}
-                        />
-                      )
+                      <>
+                        {enableThinkingGuide ? (
+                          <ThinkingGuideRenderer
+                            content={msg.content}
+                            onTimestampClick={handleTimestampClick}
+                            citations={msg.citations}
+                            isMobile={isMobile}
+                            className={`leading-relaxed ${isMobile ? 'text-xs' : 'text-sm'}`}
+                          />
+                        ) : (
+                          <StreamingMarkdown
+                            content={msg.content}
+                            onTimestampClick={handleTimestampClick}
+                            citations={msg.citations}
+                            className={`leading-relaxed ${isMobile ? 'text-xs' : 'text-sm'}`}
+                          />
+                        )}
+                        <CitationReferences citations={msg.citations} className="mt-3" />
+                      </>
                     ) : (
                       <div className={`whitespace-pre-wrap leading-relaxed ${isMobile ? 'text-xs' : 'text-sm'}`}>
                         {msg.content}
@@ -1439,6 +1494,7 @@ export function AITutor({
                         className={`leading-relaxed ${isMobile ? 'text-xs' : 'text-sm'}`}
                       />
                     )}
+                    <CitationReferences citations={globalStreamingCitations} className="mt-3" />
                   </div>
                 </div>
               )}
@@ -1494,6 +1550,7 @@ export function AITutor({
             
               <input
                 type="text"
+                data-testid="tutor-global-input"
                 value={userInput}
                 onChange={(e) => setUserInput(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && !isStreaming && handleGlobalSend()}
@@ -1520,6 +1577,7 @@ export function AITutor({
               </button>
             ) : (
               <button
+                data-testid="tutor-global-send"
                 onClick={() => handleGlobalSend()}
                 disabled={(!userInput.trim() && uploadedImages.length === 0) || globalLoading || !hasTutorContext}
                 className={`btn btn-primary disabled:opacity-50 ${isMobile ? 'px-4' : 'px-6'}`}
@@ -1758,6 +1816,12 @@ export function AITutor({
               </div>
             </Section>
 
+            {response.citations?.length ? (
+              <Section icon={<BookOpen size={16} strokeWidth={1.75} />} title="资料引用">
+                <CitationReferences citations={response.citations} showHeading={false} />
+              </Section>
+            ) : null}
+
             {/* 意图澄清 - 用更轻的方式收窄问题范围 */}
             <Section icon={<Target size={16} strokeWidth={1.75} />} title="一起缩小问题范围" badge="意图澄清">
               {isLoading ? (
@@ -1877,24 +1941,27 @@ export function AITutor({
                 {/* 流式输出中的消息 */}
                 {isBreakpointStreaming && breakpointStreamingContent && (
                   <div className="chat-bubble assistant">
-                    {enableThinkingGuide ? (
-                      <ThinkingGuideRenderer
-                        content={breakpointStreamingContent}
-                        isStreaming={true}
-                        onTimestampClick={handleTimestampClick}
-                        citations={breakpointStreamingCitations}
-                        isMobile={isMobile}
-                        className="text-sm"
-                      />
-                    ) : (
-                      <StreamingMarkdown
-                        content={breakpointStreamingContent}
-                        isStreaming={true}
-                        onTimestampClick={handleTimestampClick}
-                        citations={breakpointStreamingCitations}
-                        className="text-sm"
-                      />
-                    )}
+                    <>
+                      {enableThinkingGuide ? (
+                        <ThinkingGuideRenderer
+                          content={breakpointStreamingContent}
+                          isStreaming={true}
+                          onTimestampClick={handleTimestampClick}
+                          citations={breakpointStreamingCitations}
+                          isMobile={isMobile}
+                          className="text-sm"
+                        />
+                      ) : (
+                        <StreamingMarkdown
+                          content={breakpointStreamingContent}
+                          isStreaming={true}
+                          onTimestampClick={handleTimestampClick}
+                          citations={breakpointStreamingCitations}
+                          className="text-sm"
+                        />
+                      )}
+                      <CitationReferences citations={breakpointStreamingCitations} className="mt-3" />
+                    </>
                   </div>
                 )}
                 
@@ -1949,6 +2016,7 @@ export function AITutor({
           
           <input
             type="text"
+            data-testid="tutor-breakpoint-input"
             value={userInput}
             onChange={(e) => setUserInput(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && !isBreakpointStreaming && handleSend()}
@@ -1974,6 +2042,7 @@ export function AITutor({
             </button>
           ) : (
             <button
+              data-testid="tutor-breakpoint-send"
               onClick={handleSend}
               disabled={(!userInput.trim() && uploadedImages.length === 0) || loading}
               className="btn btn-primary px-6 disabled:opacity-50 flex-shrink-0"
