@@ -54,11 +54,11 @@ export const RATE_LIMITS = {
     perDay: 1000,
     cost: 'high',
   },
-  // AI 辅导 - 每分钟10次，每小时100次，每天500次
+  // AI 辅导 - 每分钟20次，每小时200次，每天1000次
   tutor: {
-    perMinute: 10,
-    perHour: 100,
-    perDay: 500,
+    perMinute: 20,
+    perHour: 200,
+    perDay: 1000,
     cost: 'high',
   },
   // 语音转文字 - 每分钟5次，每小时50次，每天200次
@@ -388,16 +388,44 @@ export async function checkRateLimit(
  * 从请求中获取用户标识
  * 优先使用用户ID，否则使用IP
  */
+function normalizeIdentifierSegment(value: string): string {
+  return value
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9:._-]+/g, '-')
+    .replace(/-+/g, '-')
+    .slice(0, 120) || 'unknown';
+}
+
+function getClientIp(request: Request): string {
+  const forwardedFor = request.headers.get('x-forwarded-for');
+  const realIp = request.headers.get('x-real-ip');
+  const cfConnectingIp = request.headers.get('cf-connecting-ip');
+  const forwarded = request.headers.get('forwarded');
+
+  if (cfConnectingIp?.trim()) return cfConnectingIp.trim();
+  if (forwardedFor?.trim()) return forwardedFor.split(',')[0]?.trim() || 'unknown';
+  if (realIp?.trim()) return realIp.trim();
+
+  const forwardedMatch = forwarded?.match(/for=(?:"?\[?)([^;\],"]+)/i);
+  if (forwardedMatch?.[1]) return forwardedMatch[1].trim();
+
+  return 'unknown';
+}
+
 export function getIdentifier(request: Request, userId?: string | null): string {
   if (userId) {
     return `user:${userId}`;
   }
-  
-  // 获取 IP 地址
-  const forwardedFor = request.headers.get('x-forwarded-for');
-  const realIp = request.headers.get('x-real-ip');
-  const ip = forwardedFor?.split(',')[0]?.trim() || realIp || 'unknown';
-  
+
+  const ip = normalizeIdentifierSegment(getClientIp(request));
+  const isProxyLocalIp = ip === 'unknown' || ip === '127.0.0.1' || ip === '::1' || ip === '::ffff:127.0.0.1';
+
+  if (isProxyLocalIp) {
+    const userAgent = normalizeIdentifierSegment(request.headers.get('user-agent') || 'anonymous');
+    return `ip:${ip}:ua:${userAgent}`;
+  }
+
   return `ip:${ip}`;
 }
 

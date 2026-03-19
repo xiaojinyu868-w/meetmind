@@ -937,7 +937,7 @@ export const Recorder = forwardRef<RecorderHandle, RecorderProps>(function Recor
       setAsrReconnecting(false);
     }
 
-    if (!compactMode) {
+    if (effectiveTranscribeMode === 'streaming') {
       await audioContextRef.current?.resume();
     }
 
@@ -986,11 +986,7 @@ export const Recorder = forwardRef<RecorderHandle, RecorderProps>(function Recor
         return formData;
       };
 
-      let response = await fetch('/api/transcribe', {
-        method: 'POST',
-        body: createFormData(),
-      });
-
+      let response: Response | null = null;
       let data: {
         success?: boolean;
         segments?: Array<{
@@ -1009,26 +1005,32 @@ export const Recorder = forwardRef<RecorderHandle, RecorderProps>(function Recor
           endTime?: number;
         }>;
       } = {};
+      let lastErrorMessage = '转录失败';
 
-      if (!response.ok) {
-        const errorData = (await response.json().catch(() => ({}))) as { error?: string; code?: string };
+      const endpoints = ['/api/transcribe-turbo', '/api/transcribe'] as const;
+      for (let index = 0; index < endpoints.length; index += 1) {
+        const endpoint = endpoints[index];
+        setTranscribeProgress(
+          endpoint === '/api/transcribe-turbo'
+            ? '本地先用极速转写接住这段原声...'
+            : '极速转写没接住，切到标准转写再试一次...'
+        );
 
-        if (errorData.code === 'ASR_PUBLIC_HOST_MISSING') {
-          setTranscribeProgress('本地先用极速转写接住这段原声...');
-          response = await fetch('/api/transcribe-turbo', {
-            method: 'POST',
-            body: createFormData(),
-          });
-          data = (await response.json().catch(() => ({}))) as typeof data;
-        } else {
-          throw new Error(errorData.error || '转录失败');
+        response = await fetch(endpoint, {
+          method: 'POST',
+          body: createFormData(),
+        });
+        data = (await response.json().catch(() => ({}))) as typeof data;
+
+        if (response.ok && data.success) {
+          break;
         }
-      } else {
-        data = (await response.json()) as typeof data;
+
+        lastErrorMessage = data.error || lastErrorMessage;
       }
 
-      if (!response.ok) {
-        throw new Error(data.error || '转录失败');
+      if (!response || !response.ok || !data.success) {
+        throw new Error(data.error || lastErrorMessage);
       }
 
       if (data.success && data.segments) {

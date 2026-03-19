@@ -21,6 +21,19 @@ function resolveWechatRedirectUri(request: NextRequest, explicitRedirectUri?: st
   return `${protocol}://${host}/api/auth/wechat/callback`;
 }
 
+function resolveWechatAuthType(request: NextRequest, explicitType?: string | null): 'qrconnect' | 'oauth' {
+  if (explicitType === 'oauth' || explicitType === 'qrconnect') {
+    return explicitType;
+  }
+
+  const userAgent = request.headers.get('user-agent') || '';
+  return /MicroMessenger/i.test(userAgent) ? 'oauth' : 'qrconnect';
+}
+
+function resolveWechatOauthScope(explicitScope?: string | null): 'snsapi_base' | 'snsapi_userinfo' {
+  return explicitScope === 'snsapi_userinfo' ? 'snsapi_userinfo' : 'snsapi_base';
+}
+
 /**
  * 获取微信授权 URL
  */
@@ -36,13 +49,14 @@ export async function GET(request: NextRequest) {
     
     const { searchParams } = new URL(request.url);
     const redirectUri = resolveWechatRedirectUri(request, searchParams.get('redirect_uri'));
-    const type = searchParams.get('type') || 'qrconnect'; // qrconnect 或 oauth
+    const type = resolveWechatAuthType(request, searchParams.get('type')); // qrconnect 或 oauth
+    const scope = resolveWechatOauthScope(searchParams.get('scope'));
     
     let authUrl: string;
     
     if (type === 'oauth') {
       // 微信内置浏览器授权
-      authUrl = wechatAuthService.getAuthUrl(redirectUri);
+      authUrl = wechatAuthService.getAuthUrl(redirectUri, scope);
     } else {
       // PC 扫码登录
       authUrl = wechatAuthService.getQRConnectUrl(redirectUri);

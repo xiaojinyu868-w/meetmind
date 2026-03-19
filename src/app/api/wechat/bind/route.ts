@@ -107,16 +107,29 @@ export async function POST(request: NextRequest) {
       await workspaceContextService.syncWechatInboxMessageArtifacts(linkToken);
     }
 
-    return NextResponse.json({
+    const response = NextResponse.json({
       success: true,
       message: '绑定成功，以后发给服务号的内容会自动进入你的收集流。',
       user: {
         id: loginResult.user.id,
         nickname: loginResult.user.nickname,
       },
+      accessToken: loginResult.accessToken,
       token: loginResult.accessToken,
       refreshToken: loginResult.refreshToken,
     });
+
+    if (loginResult.refreshToken) {
+      response.cookies.set('refreshToken', loginResult.refreshToken, {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: 'lax',
+        maxAge: 60 * 60 * 24 * 7,
+        path: '/',
+      });
+    }
+
+    return response;
   } catch (error) {
     console.error('wechat bind failed:', error);
     return NextResponse.json(

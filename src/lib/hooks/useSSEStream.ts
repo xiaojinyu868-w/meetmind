@@ -277,7 +277,9 @@ export function useSimpleSSEStream() {
       
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.error || `请求失败: ${response.status}`);
+        const retryAfter = response.headers.get('Retry-After');
+        const retryHint = retryAfter ? `，请约 ${retryAfter} 秒后再试` : '';
+        throw new Error(errorData.error ? `${errorData.error}${retryHint}` : `请求失败: ${response.status}${retryHint}`);
       }
       
       const reader = response.body?.getReader();

@@ -57,8 +57,8 @@ function handleAuthorize(request: NextRequest): NextResponse {
   const protocol = request.headers.get('x-forwarded-proto') || 'https';
   const callbackUrl = `${protocol}://${host}/api/wechat/bind/callback`;
 
-  // 生成授权 URL（微信内置浏览器用 oauth 模式）
-  const authUrl = wechatAuthService.getAuthUrl(callbackUrl, 'snsapi_userinfo');
+  // 生成授权 URL（优先走静默授权，确保服务号网页授权可稳定返回 openId）
+  const authUrl = wechatAuthService.getAuthUrl(callbackUrl, 'snsapi_base');
 
   // 从 authUrl 中提取 state 参数
   const authUrlObj = new URL(authUrl.replace('#wechat_redirect', ''));
@@ -110,34 +110,34 @@ async function handleCallback(request: NextRequest): Promise<NextResponse> {
 
     const openId = tokenResponse.openid;
 
-    // 获取微信用户信息
-    const wechatUser = await wechatAuthService.getUserInfo(tokenResponse.access_token, openId);
+    // 仅在具备 snsapi_userinfo 时再拉用户详情，静默授权下直接用 openId 继续绑定/登录
+    const wechatUser = String(tokenResponse.scope || '')
+      .split(',')
+      .map((item) => item.trim())
+      .includes('snsapi_userinfo')
+      ? await wechatAuthService.getUserInfo(tokenResponse.access_token, openId)
+      : null;
     const nickname = wechatUser?.nickname || '微信用户';
 
     // 查找已绑定的用户
-    let user = await authService.findUserByProvider('wechat', openId);
+    const user = await authService.findUserByProvider('wechat', openId);
     let loginResult;
 
     if (user) {
-      // 已绑定，更新 token 然后生成 JWT
+      // 已绑定，更新 token 后直接为原账号签发会话，避免误走验证码登录逻辑
       await authService.linkAuthProvider(user.id, 'wechat', {
         providerId: openId,
         accessToken: tokenResponse.access_token,
         refreshToken: tokenResponse.refresh_token,
         expiresAt: new Date(Date.now() + tokenResponse.expires_in * 1000).toISOString(),
+        metadata: {
+          unionid: wechatUser?.unionid,
+          nickname,
+          headimgurl: wechatUser?.headimgurl,
+        },
       });
 
-      // 用 loginWithCode 的方式生成 JWT（不需要密码）
-      const email = user.email;
-      const phone = user.phone;
-      if (email) {
-        loginResult = await authService.loginWithCode(email, 'email');
-      } else if (phone) {
-        loginResult = await authService.loginWithCode(phone, 'phone');
-      } else {
-        // fallback: 用用户名生成 token
-        loginResult = await authService.loginWithCode(user.username, 'email');
-      }
+      loginResult = await authService.createSessionForUserId(user.id);
     } else {
       // 新用户，自动注册
       const username = `wx_${openId.slice(-8)}_${Date.now().toString(36)}`;
@@ -162,7 +162,7 @@ async function handleCallback(request: NextRequest): Promise<NextResponse> {
         refreshToken: tokenResponse.refresh_token,
         expiresAt: new Date(Date.now() + tokenResponse.expires_in * 1000).toISOString(),
         metadata: {
-          unionid: wechatUser?.unionid,
+          unionid: wechatUser?.unionid || tokenResponse.unionid,
           nickname,
           headimgurl: wechatUser?.headimgurl,
         },
@@ -175,7 +175,7 @@ async function handleCallback(request: NextRequest): Promise<NextResponse> {
         });
       }
 
-      loginResult = registerResult;
+      loginResult = await authService.createSessionForUserId(registerResult.user.id);
     }
 
     if (!loginResult?.success || !loginResult.accessToken) {

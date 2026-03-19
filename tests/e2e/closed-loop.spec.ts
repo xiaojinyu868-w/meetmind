@@ -1,4 +1,4 @@
-import { expect, Page, test } from '@playwright/test';
+import { expect, Page, test, type Request } from '@playwright/test';
 
 type DbSnapshot = {
   transcripts: number;

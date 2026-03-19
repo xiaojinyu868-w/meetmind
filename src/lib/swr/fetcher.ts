@@ -23,10 +23,11 @@ export interface FetcherOptions extends RequestInit {
 // ==================== Token 管理 ====================
 
 const TOKEN_KEY = 'meetmind_access_token';
+const LEGACY_TOKEN_KEY = 'auth_token';
 
 function getStoredToken(): string | null {
   if (typeof window === 'undefined') return null;
-  return localStorage.getItem(TOKEN_KEY);
+  return localStorage.getItem(TOKEN_KEY) || localStorage.getItem(LEGACY_TOKEN_KEY);
 }
 
 // ==================== Fetcher 实现 ====================

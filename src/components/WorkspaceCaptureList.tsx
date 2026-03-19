@@ -143,11 +143,18 @@ function getCaptureHint(item: WorkspaceCaptureListItem): string {
 }
 
 function getCaptureDisplayTitle(item: WorkspaceCaptureListItem): string {
-  if (item.contentType === 'text' && item.previewText.trim()) {
-    return item.previewText.trim();
+  const previewText = item.previewText.trim();
+  if (item.contentType === 'text' && previewText) {
+    return previewText;
   }
 
-  return item.title?.trim() || '未命名收集';
+  const normalizedTitle = (item.title || '').trim();
+  const looksLikeClockLabel = /^(录音|原声|视频)\s*\d{1,2}:\d{2}(?::\d{2})?$/.test(normalizedTitle);
+  if ((item.contentType === 'audio' || item.contentType === 'video') && looksLikeClockLabel) {
+    return previewText || '一段原声';
+  }
+
+  return normalizedTitle || '未命名收集';
 }
 
 function openOriginalCapture(item: WorkspaceCaptureListItem) {

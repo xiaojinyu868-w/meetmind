@@ -98,7 +98,7 @@ const ActionSidebar = dynamic(() => import('@/components/ActionSidebar').then(m 
 const ActionDrawer = dynamic(() => import('@/components/ActionDrawer').then(m => ({ default: m.ActionDrawer })), { ssr: false });
 import { ResizablePanel } from '@/components/layout/ResizablePanel';
 const VideoReviewPlayer = dynamic(() => import('@/components/VideoReviewPlayer').then(m => ({ default: m.VideoReviewPlayer })), { ssr: false });
-const AITutor = dynamic(() => import('@/components/AITutor').then(m => ({ default: m.AITutor })), { ssr: false });
+const AITutor = dynamic(() => import('@/components/SafeAITutor').then(m => ({ default: m.SafeAITutor })), { ssr: false });
 const TranscriptFlowView = dynamic(() => import('@/components/TranscriptFlowView').then(m => ({ default: m.TranscriptFlowView })), { ssr: false });
 const VideoInsightTimeline = dynamic(() => import('@/components/VideoInsightTimeline').then(m => ({ default: m.VideoInsightTimeline })), { ssr: false });
 
@@ -259,6 +259,13 @@ interface SupportReferenceItem {
   id: string;
   title: string;
   snippet: string;
+}
+
+interface TutorLaunchImageAsset {
+  id: string;
+  name: string;
+  url: string;
+  previewUrl?: string;
 }
 
 type PendingRecordedAudio = {
@@ -487,6 +494,10 @@ function mergeSupportReferences(
     if (unique.length >= limit) break;
   }
   return unique;
+}
+
+function getSupportReferenceDisplayTitle(item: Pick<SourceIngestItem, 'type' | 'title' | 'preview' | 'fullText'>): string {
+  return getCollectionContextDisplayTitle(item, 80) || '补充材料';
 }
 
 function mergeWorkspaceEchoes(
@@ -847,9 +858,15 @@ function buildWorkspaceCaptureSourceItem(item: WorkspaceCaptureMessage): SourceI
     title: item.title,
   });
   const displayTitle =
-    type === 'text'
-      ? compactText(item.previewText || item.normalizedText || item.title, 48) || item.title
-      : item.title;
+    getCollectionContextDisplayTitle(
+      {
+        type,
+        title: item.title,
+        preview: item.previewText || resolvedText || item.title,
+        fullText: resolvedText,
+      },
+      48
+    ) || item.title;
 
   return {
     id: `workspace-${item.id}`,
@@ -1247,11 +1264,15 @@ function StudentAppContent({
   const [selectedConfusion, setSelectedConfusion] = useState<ConfusionMarker | null>(null);
   const [mobileSubPage, setMobileSubPage] = useState<'highlights' | 'summary' | 'notes' | 'tasks' | 'apps' | 'ai-chat' | 'transcript' | null>(null);
   const [mobileAIQuestion, setMobileAIQuestion] = useState<string>(''); // NOTE: cleaned corrupted legacy comment.
+  const [mobileAIDisplayQuestion, setMobileAIDisplayQuestion] = useState<string>('');
+  const [mobileAILaunchImages, setMobileAILaunchImages] = useState<TutorLaunchImageAsset[]>([]);
+  const [mobileAILaunchSupportContextText, setMobileAILaunchSupportContextText] = useState<string>('');
   const [mobileAIQuestionNonce, setMobileAIQuestionNonce] = useState(0);
   const [mobileAIConsumedQuestionNonce, setMobileAIConsumedQuestionNonce] = useState<number | null>(null);
   const [mobileAIPreferSelectedContext, setMobileAIPreferSelectedContext] = useState(false);
   const [mobileAILaunchTarget, setMobileAILaunchTarget] = useState<'review-panel' | 'video-chat' | 'mobile-ai-chat' | null>(null);
   
+  const shouldPrioritizeWechatCaptureEntry = Boolean(wechatCaptureToken);
   const [viewMode, setViewMode] = useState<ViewMode>('record');
   const [sessionId, setSessionId] = useState<string>('demo-session');
   const [isRecording, setIsRecording] = useState(false);
@@ -1369,6 +1390,7 @@ function StudentAppContent({
   const liveSegmentsRef = useRef<TranscriptSegment[]>([]);
   const segmentsRef = useRef<TranscriptSegment[]>([]);
   const lastCollectionPulseSignatureRef = useRef('');
+  const suppressNextCollectionPulsePreviewRef = useRef(false);
   const importedWechatCaptureTokensRef = useRef(new Set<string>());
   const workspaceContextRequestKeyRef = useRef<string | null>(null);
   const autoEchoRefreshPromiseRef = useRef<Promise<DailyEchoRefreshPayload | null> | null>(null);
@@ -2248,9 +2270,11 @@ function StudentAppContent({
         : null;
       const hasFreshState = isPersistedAppStateFresh(normalizedSavedState);
       const savedAppState = hasFreshState ? normalizedSavedState : null;
-      const finalViewMode: ViewMode = isFirstVisit && !savedAppState
+      const finalViewMode: ViewMode = shouldPrioritizeWechatCaptureEntry
         ? 'record'
-        : (savedAppState?.viewMode || 'record');
+        : isFirstVisit && !savedAppState
+          ? 'record'
+          : (savedAppState?.viewMode || 'record');
 
       setLoadingProgress(50);
 
@@ -3603,7 +3627,7 @@ const _handleVideoAssistantMessage = useCallback((payload: {
     if (item.role === 'support' && snippet) {
       setSupportReferences((prev) => mergeSupportReferences(prev, [{
         id: item.id,
-        title: item.title,
+        title: getSupportReferenceDisplayTitle(item),
         snippet,
       }]));
     }
@@ -4234,12 +4258,13 @@ const _handleVideoAssistantMessage = useCallback((payload: {
       return formData;
     };
 
-    let response = await fetch('/api/transcribe', {
-      method: 'POST',
-      body: createFormData(),
-    });
+    const preferTurbo = file.size <= 12 * 1024 * 1024;
+    const endpoints = preferTurbo
+      ? ['/api/transcribe-turbo', '/api/transcribe'] as const
+      : ['/api/transcribe', '/api/transcribe-turbo'] as const;
 
-    let payload = await readJsonApiResponse<{
+    let response: Response | null = null;
+    let payload: {
       success?: boolean;
       error?: string;
       code?: string;
@@ -4250,13 +4275,15 @@ const _handleVideoAssistantMessage = useCallback((payload: {
         beginTime?: number;
         endTime?: number;
       }>;
-    }>(response, '音频转写失败');
+    } = {};
+    let lastErrorMessage = '音频转写失败';
 
-    if (!response.ok && payload.code === 'ASR_PUBLIC_HOST_MISSING') {
-      response = await fetch('/api/transcribe-turbo', {
+    for (const endpoint of endpoints) {
+      response = await fetch(endpoint, {
         method: 'POST',
         body: createFormData(),
       });
+
       payload = await readJsonApiResponse<{
         success?: boolean;
         error?: string;
@@ -4269,10 +4296,16 @@ const _handleVideoAssistantMessage = useCallback((payload: {
           endTime?: number;
         }>;
       }>(response, '音频转写失败');
+
+      if (response.ok && payload.success) {
+        break;
+      }
+
+      lastErrorMessage = payload.error || lastErrorMessage;
     }
 
-    if (!response.ok || !payload.success) {
-      throw new Error(payload.error || '音频转写失败');
+    if (!response || !response.ok || !payload.success) {
+      throw new Error(payload.error || lastErrorMessage);
     }
 
     const segments = Array.isArray(payload.segments)
@@ -4778,11 +4811,14 @@ const _handleVideoAssistantMessage = useCallback((payload: {
 
   const tutorSupportContextText = useMemo(() => {
     const base = buildTutorSupportContextText(supportReferences, workspaceEchoes);
+    const activeSelectedContext = mobileAIPreferSelectedContext
+      ? (mobileAILaunchSupportContextText || selectedCollectionContextText)
+      : selectedCollectionContextText;
     return compactMultilineText(
-      [selectedCollectionContextText, base].filter(Boolean).join('\n\n'),
+      [activeSelectedContext, base].filter(Boolean).join('\n\n'),
       8500
     );
-  }, [selectedCollectionContextText, supportReferences, workspaceEchoes]);
+  }, [mobileAILaunchSupportContextText, mobileAIPreferSelectedContext, selectedCollectionContextText, supportReferences, workspaceEchoes]);
 
   const currentLivePreview = useMemo(
     () =>
@@ -4814,6 +4850,9 @@ const _handleVideoAssistantMessage = useCallback((payload: {
 
   const clearMobileAILaunchState = useCallback(() => {
     setMobileAIQuestion('');
+    setMobileAIDisplayQuestion('');
+    setMobileAILaunchImages([]);
+    setMobileAILaunchSupportContextText('');
     setMobileAIConsumedQuestionNonce(null);
     setMobileAIPreferSelectedContext(false);
     setMobileAILaunchTarget(null);
@@ -4885,7 +4924,7 @@ const _handleVideoAssistantMessage = useCallback((payload: {
         mergeSupportReferences(prev, [
           {
             id: sourceItem.id,
-            title: sourceItem.title,
+            title: getSupportReferenceDisplayTitle(sourceItem),
             snippet,
           },
         ])
@@ -5113,6 +5152,47 @@ const _handleVideoAssistantMessage = useCallback((payload: {
     await toggleComposerVoiceInput();
   }, [isRecording, showMobileRecorder, toggleComposerVoiceInput]);
 
+  const settleWechatCaptureEntry = useCallback((nextItem: SourceIngestItem) => {
+    suppressNextCollectionPulsePreviewRef.current = true;
+    setViewMode('record');
+    setMobileSubPage(null);
+    setMobileCollectionSheet(null);
+    setShowConversationHistory(false);
+    setSelectedHistoryConversation(null);
+    setShowMobileRecorder(false);
+    setSelectedConfusion(null);
+    setConfusionChatAnchor(null);
+    setSelectedAnchor(null);
+    setActiveCollectionMessageMenuId(null);
+    setConfirmCollectionDeleteId(null);
+    setIsCollectionContextSelectionMode(false);
+    setConfirmSelectedCollectionDelete(false);
+    setSelectedCollectionContextIds([]);
+    setSelectedCollectionPrimaryId(null);
+    setQuotedCollectionContextIds([nextItem.id]);
+    setQuotedCollectionPrimaryId(nextItem.id);
+    setCaptureDrivenPulse(null);
+    setShowCollectionPulsePreview(false);
+    setMobileAIQuestion('');
+    setMobileAIDisplayQuestion('');
+    setMobileAILaunchImages([]);
+    setMobileAILaunchSupportContextText('');
+    setMobileAIConsumedQuestionNonce(null);
+    setMobileAIPreferSelectedContext(false);
+    setMobileAILaunchTarget(null);
+
+    if (typeof window !== 'undefined') {
+      window.requestAnimationFrame(() => {
+        const textarea = collectionComposerRef.current;
+        if (!textarea) return;
+        textarea.focus();
+        const length = textarea.value.length;
+        textarea.setSelectionRange(length, length);
+        textarea.scrollIntoView({ block: 'nearest' });
+      });
+    }
+  }, []);
+
   useEffect(() => {
     if (!wechatCaptureToken) return;
     if (importedWechatCaptureTokensRef.current.has(wechatCaptureToken)) return;
@@ -5171,8 +5251,8 @@ const _handleVideoAssistantMessage = useCallback((payload: {
           ])
         );
 
+        const nextItem = buildWechatCaptureSourceItem(message);
         setSourceItems((prev) => {
-          const nextItem = buildWechatCaptureSourceItem(message);
           const index = prev.findIndex(
             (item) => item.id === nextItem.id || resolveSourceItemSourceKey(item) === nextItem.sourceKey
           );
@@ -5193,29 +5273,13 @@ const _handleVideoAssistantMessage = useCallback((payload: {
         if (tutorSnippet) {
           setSupportReferences((prev) => mergeSupportReferences(prev, [{
             id: sourceItemId,
-            title,
+            title: getSupportReferenceDisplayTitle(nextItem),
             snippet: compactText(tutorSnippet, 2800),
           }]));
         }
 
-        const messageEchoTitle = message.echoTitle;
-        const messageEchoBody = message.echoBody;
-        if (messageEchoTitle && messageEchoBody) {
-          setCaptureDrivenPulse({
-            title: messageEchoTitle,
-            body: messageEchoBody,
-            chips: Array.isArray(message.echoChips) ? message.echoChips.filter(Boolean).slice(0, 3) : [],
-            actions: role === 'primary'
-              ? [
-                  { key: 'capture-confusion', label: '补一句困惑' },
-                  { key: 'add-material', label: '贴一份材料' },
-                ]
-              : [
-                  { key: 'continue-voice', label: '再录一段' },
-                  { key: 'capture-confusion', label: '写一句想法' },
-                ],
-          });
-        }
+        settleWechatCaptureEntry(nextItem);
+        toast.success(message.echoTitle?.trim() || '这条微信内容已经接进当前收集');
 
         if (isAuthenticated && user?.id && accessToken) {
           void refreshDailyEcho();
@@ -5240,7 +5304,7 @@ const _handleVideoAssistantMessage = useCallback((payload: {
     return () => {
       cancelled = true;
     };
-  }, [accessToken, isAuthenticated, refreshDailyEcho, user?.id, wechatCaptureToken]);
+  }, [accessToken, isAuthenticated, refreshDailyEcho, settleWechatCaptureEntry, user?.id, wechatCaptureToken]);
 
   useEffect(() => {
     if (!isAuthenticated || !user?.id || !accessToken) return;
@@ -5305,12 +5369,13 @@ const _handleVideoAssistantMessage = useCallback((payload: {
               .map((item) => {
                 const snippet = (item.tutorContext || item.normalizedText || '').trim();
                 if (!snippet) return null;
-              return {
-                id: `workspace-${item.id}`,
-                title: item.title,
-                snippet: compactText(snippet, 2800),
-              };
-            })
+                const sourceItem = buildWorkspaceCaptureSourceItem(item);
+                return {
+                  id: `workspace-${item.id}`,
+                  title: getSupportReferenceDisplayTitle(sourceItem),
+                  snippet: compactText(snippet, 2800),
+                };
+              })
             .filter((item): item is SupportReferenceItem => Boolean(item));
 
           if (incomingReferences.length > 0) {
@@ -5693,6 +5758,13 @@ const _handleVideoAssistantMessage = useCallback((payload: {
       return;
     }
 
+    if (suppressNextCollectionPulsePreviewRef.current) {
+      suppressNextCollectionPulsePreviewRef.current = false;
+      lastCollectionPulseSignatureRef.current = collectionPulseSignature;
+      setShowCollectionPulsePreview(false);
+      return;
+    }
+
     if (lastCollectionPulseSignatureRef.current === collectionPulseSignature) {
       return;
     }
@@ -6006,20 +6078,100 @@ const _handleVideoAssistantMessage = useCallback((payload: {
     }
   }, [handleSourceFileButtonClick, nudgeComposer, openLiveRecorder]);
 
+  const blobToDataUrl = useCallback((blob: Blob): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => {
+        if (typeof reader.result === 'string') {
+          resolve(reader.result);
+          return;
+        }
+        reject(new Error('图片读取失败'));
+      };
+      reader.onerror = () => reject(reader.error || new Error('图片读取失败'));
+      reader.readAsDataURL(blob);
+    });
+  }, []);
+
+  const buildTutorLaunchImages = useCallback(async (items: SourceIngestItem[] = []): Promise<TutorLaunchImageAsset[]> => {
+    const imageItems = items.filter((item) => item.type === 'image').slice(0, 4);
+    if (imageItems.length === 0) return [];
+
+    const resolvedImages: Array<TutorLaunchImageAsset | null> = await Promise.all(
+      imageItems.map(async (item) => {
+        const previewUrl = item.previewUrl || item.mediaUrl || item.attachmentUrl || '';
+        const candidates = Array.from(
+          new Set(
+            [item.previewUrl, item.mediaUrl, item.attachmentUrl].filter(
+              (value): value is string => Boolean(value && value.trim())
+            )
+          )
+        );
+
+        for (const candidate of candidates) {
+          const normalized = candidate.trim();
+          if (!normalized) continue;
+
+          if (normalized.startsWith('data:image/')) {
+            return {
+              id: item.id,
+              name: item.title || '图片',
+              url: normalized,
+              previewUrl: item.previewUrl || normalized,
+            } satisfies TutorLaunchImageAsset;
+          }
+
+          try {
+            const response = await fetch(normalized);
+            if (!response.ok) continue;
+            const blob = await response.blob();
+            if (!blob.type.startsWith('image/')) continue;
+            const dataUrl = await blobToDataUrl(blob);
+            return {
+              id: item.id,
+              name: item.title || '图片',
+              url: dataUrl,
+              previewUrl: previewUrl || dataUrl,
+            } satisfies TutorLaunchImageAsset;
+          } catch {
+            if (/^https?:\/\//i.test(normalized)) {
+              return {
+                id: item.id,
+                name: item.title || '图片',
+                url: normalized,
+                previewUrl: previewUrl || normalized,
+              } satisfies TutorLaunchImageAsset;
+            }
+          }
+        }
+
+        return null;
+      })
+    );
+
+    return resolvedImages.filter((item): item is TutorLaunchImageAsset => Boolean(item));
+  }, [blobToDataUrl]);
+
   const buildTutorPromptForCollectionItem = useCallback((item: SourceIngestItem) => {
     const label = getCollectionContextTypeLabel(item.type);
     const focus = getCollectionContextDisplayTitle(item, 48);
     const snippet = compactText((item.fullText || item.preview || item.title || '').trim(), 120);
+    if (item.type === 'image') {
+      return compactMultilineText(
+        `请先看我刚选的这张${label}，直接告诉我图里最值得抓住的关键点；如果信息还不完整，也先说现在能判断什么。\n重点：${focus}\n补充识别：${snippet}`,
+        260
+      );
+    }
     if (item.type === 'text') {
       return compactMultilineText(
-        `顺着这条${label}继续帮我讲清楚。\n先直接说这段内容最核心在讲什么；如果只看这一条还不完整，也先告诉我现在能确定什么。\n当前内容：${focus}\n摘录：${snippet}`,
-        320
+        `顺着这条${label}继续帮我讲清楚，先直接说这段内容最核心在讲什么；如果只看这一条还不完整，也先告诉我现在能确定什么。\n当前内容：${focus}\n摘录：${snippet}`,
+        280
       );
     }
 
     return compactMultilineText(
-      `顺着这条${label}继续带我理解。\n先围绕它现在最关键的一点讲清楚；如果信息还不完整，也先告诉我能确定什么，再给我一个最值得继续追问的问题。\n当前内容：${focus}\n摘录：${snippet}`,
-      320
+      `顺着这条${label}继续带我理解，先围绕它现在最关键的一点讲清楚；如果信息还不完整，也先告诉我能确定什么，再给我一个最值得继续追问的问题。\n当前内容：${focus}\n摘录：${snippet}`,
+      280
     );
   }, []);
 
@@ -6027,13 +6179,27 @@ const _handleVideoAssistantMessage = useCallback((payload: {
     const label = getCollectionContextTypeLabel(primaryItem.type);
     const focus = getCollectionContextDisplayTitle(primaryItem, 48);
     const snippet = compactText((primaryItem.fullText || primaryItem.preview || primaryItem.title || '').trim(), 140);
+    if (primaryItem.type === 'image') {
+      return compactMultilineText(
+        `请结合我刚圈出的这组内容，先看这张${label}里最值得抓住的关键点；如果信息还不完整，也先说现在最可靠的判断。\n重点：${focus}\n补充识别：${snippet}`,
+        260
+      );
+    }
     return compactMultilineText(
-      `我刚圈出这组内容，想顺着它们继续往下问。\n请先围绕这条${label}讲清楚它和其他内容最关键的关系；如果信息还不完整，也先告诉我现在最值得抓住的一点。\n当前重点：${focus}\n核心摘录：${snippet}`,
-      360
+      `请围绕我刚圈出的这组内容继续讲，先抓住这条${label}和其他内容最关键的关系；如果信息还不完整，也先说现在最值得抓住的一点。\n重点：${focus}\n参考：${snippet}`,
+      280
     );
   }, []);
 
-  const openTutorFromCollection = useCallback((initialPrompt?: string, options?: { preferSelectedContext?: boolean }) => {
+  const openTutorFromCollection = useCallback((
+    initialPrompt?: string,
+    options?: {
+      preferSelectedContext?: boolean;
+      displayText?: string;
+      launchImages?: TutorLaunchImageAsset[];
+      supportContextText?: string;
+    }
+  ) => {
     setMobileCollectionSheet(null);
     setShowCollectionPulsePreview(false);
     setShowConversationHistory(false);
@@ -6043,6 +6209,9 @@ const _handleVideoAssistantMessage = useCallback((payload: {
     setConfusionChatAnchor(null);
     setSelectedAnchor(null);
     setMobileAIQuestion(initialPrompt || '');
+    setMobileAIDisplayQuestion(options?.displayText || '');
+    setMobileAILaunchImages(options?.launchImages || []);
+    setMobileAILaunchSupportContextText(options?.supportContextText || '');
     setMobileAIConsumedQuestionNonce(null);
     setMobileAIPreferSelectedContext(Boolean(options?.preferSelectedContext));
     setMobileAIQuestionNonce((prev) => prev + 1);
@@ -6056,15 +6225,25 @@ const _handleVideoAssistantMessage = useCallback((payload: {
     }
   }, [isMobile, videoSource]);
 
-  const openTutorWithSelectedCollectionContext = useCallback(() => {
+  const openTutorWithSelectedCollectionContext = useCallback(async () => {
     if (selectedCollectionContextItems.length === 0) return;
 
     const primaryId = resolveCollectionContextPrimaryId(selectedCollectionContextItems, selectedCollectionPrimaryId);
     const primaryItem = selectedCollectionContextItems.find((item) => item.id === primaryId) || selectedCollectionContextItems[0];
     const prompt = primaryItem ? buildTutorPromptForCollectionGroup(primaryItem) : undefined;
+    const supportContextText = buildSelectedCollectionContextText({
+      items: selectedCollectionContextItems,
+      primaryId,
+    });
+    const launchImages = await buildTutorLaunchImages(selectedCollectionContextItems);
     clearCollectionContextSelection();
-    openTutorFromCollection(prompt, { preferSelectedContext: true });
+    openTutorFromCollection(prompt, {
+      preferSelectedContext: true,
+      launchImages,
+      supportContextText,
+    });
   }, [
+    buildTutorLaunchImages,
     buildTutorPromptForCollectionGroup,
     clearCollectionContextSelection,
     openTutorFromCollection,
@@ -6135,17 +6314,26 @@ const _handleVideoAssistantMessage = useCallback((payload: {
     workspaceCaptures,
   ]);
 
-  const openTutorFromCollectionItem = useCallback((item: SourceIngestItem) => {
+  const openTutorFromCollectionItem = useCallback(async (item: SourceIngestItem) => {
     setSelectedCollectionContextIds([item.id]);
     setSelectedCollectionPrimaryId(item.id);
     setIsCollectionContextSelectionMode(false);
     setActiveCollectionMessageMenuId(null);
-    openTutorFromCollection(buildTutorPromptForCollectionItem(item), { preferSelectedContext: true });
-  }, [buildTutorPromptForCollectionItem, openTutorFromCollection]);
+    const launchImages = await buildTutorLaunchImages([item]);
+    const supportContextText = buildSelectedCollectionContextText({
+      items: [item],
+      primaryId: item.id,
+    });
+    openTutorFromCollection(buildTutorPromptForCollectionItem(item), {
+      preferSelectedContext: true,
+      launchImages,
+      supportContextText,
+    });
+  }, [buildTutorLaunchImages, buildTutorPromptForCollectionItem, openTutorFromCollection]);
 
   const openTutorFromCollectionListItem = useCallback((capture: WorkspaceCaptureListItem) => {
     const sourceItem = resolveCollectionListSourceItem(capture);
-    openTutorFromCollectionItem(sourceItem);
+    void openTutorFromCollectionItem(sourceItem);
     setMobileCollectionSheet(null);
   }, [openTutorFromCollectionItem, resolveCollectionListSourceItem]);
 
@@ -6246,8 +6434,8 @@ const _handleVideoAssistantMessage = useCallback((payload: {
           : '';
 
       return (
-        <div className="flex-shrink-0 bg-[#F7F7F5] px-4 pb-2 pt-[max(env(safe-area-inset-top),10px)]">
-          <div className="mx-auto flex w-full max-w-md items-center gap-3">
+        <div className="flex-shrink-0 bg-[#F7F7F5] px-4 pb-1.5 pt-[max(env(safe-area-inset-top),6px)]">
+          <div className="mx-auto flex w-full max-w-md items-center gap-2.5">
             <button
               type="button"
               onClick={() => {
@@ -6280,7 +6468,7 @@ const _handleVideoAssistantMessage = useCallback((payload: {
             </button>
           </div>
           {topBarStatus ? (
-            <p className="mt-1.5 text-center text-[11px] font-medium text-[#787774]">{topBarStatus}</p>
+            <p className="mt-1 text-center text-[10px] font-medium text-[#787774]">{topBarStatus}</p>
           ) : null}
         </div>
       );
@@ -7497,8 +7685,10 @@ const _handleVideoAssistantMessage = useCallback((payload: {
                 <span className="min-w-0 flex-1 truncate text-slate-500">
                   {quotedCollectionContextItems.length > 1
                     ? `已引用 ${quotedCollectionContextItems.length} 条内容`
-                    : `引用${quotedCollectionPrimaryItem ? getCollectionContextTypeLabel(quotedCollectionPrimaryItem.type) : '内容'}`}
-                  {quotedCollectionSummaryText ? ` · ${quotedCollectionSummaryText}` : ''}
+                    : quotedCollectionPrimaryItem?.type === 'audio'
+                      ? '已引用一段原声'
+                      : `已引用${quotedCollectionPrimaryItem ? getCollectionContextTypeLabel(quotedCollectionPrimaryItem.type) : '内容'}`}
+                  {quotedCollectionSummaryText ? `：${quotedCollectionSummaryText}` : ''}
                 </span>
                 <button
                   type="button"
@@ -7999,6 +8189,8 @@ const _handleVideoAssistantMessage = useCallback((payload: {
                             supportContextText={tutorSupportContextText}
                             preferSupportContext={videoWorkspaceTab === 'chat' && mobileAILaunchTarget === 'video-chat' ? mobileAIPreferSelectedContext : false}
                             launchQuestion={videoWorkspaceTab === 'chat' && mobileAILaunchTarget === 'video-chat' && mobileAIConsumedQuestionNonce !== mobileAIQuestionNonce ? mobileAIQuestion : ''}
+                            launchDisplayText={videoWorkspaceTab === 'chat' && mobileAILaunchTarget === 'video-chat' ? mobileAIDisplayQuestion : ''}
+                            launchImages={videoWorkspaceTab === 'chat' && mobileAILaunchTarget === 'video-chat' ? mobileAILaunchImages : []}
                             launchQuestionNonce={videoWorkspaceTab === 'chat' && mobileAILaunchTarget === 'video-chat' ? mobileAIQuestionNonce : 0}
                             onLaunchQuestionConsumed={videoWorkspaceTab === 'chat' && mobileAILaunchTarget === 'video-chat' ? consumeMobileAIQuestion : undefined}
                             onSeek={(timeMs) => handleUnifiedSeek(timeMs, true)}
@@ -8386,6 +8578,8 @@ const _handleVideoAssistantMessage = useCallback((payload: {
                             supportContextText={tutorSupportContextText}
                             preferSupportContext={mobileAILaunchTarget === 'review-panel' ? mobileAIPreferSelectedContext : false}
                             launchQuestion={mobileAILaunchTarget === 'review-panel' && mobileAIConsumedQuestionNonce !== mobileAIQuestionNonce ? mobileAIQuestion : ''}
+                            launchDisplayText={mobileAILaunchTarget === 'review-panel' ? mobileAIDisplayQuestion : ''}
+                            launchImages={mobileAILaunchTarget === 'review-panel' ? mobileAILaunchImages : []}
                             launchQuestionNonce={mobileAILaunchTarget === 'review-panel' ? mobileAIQuestionNonce : 0}
                             onLaunchQuestionConsumed={mobileAILaunchTarget === 'review-panel' ? consumeMobileAIQuestion : undefined}
                             onSeek={(timeMs) => {
@@ -8458,7 +8652,7 @@ const _handleVideoAssistantMessage = useCallback((payload: {
                     ) : (
                       <a
                         href="/login"
-                        className="inline-flex h-8 items-center justify-center rounded-full bg-[#5B6ABF] px-3 text-xs font-medium text-white"
+                        className="inline-flex h-7 items-center justify-center rounded-full bg-[#5B6ABF] px-2.5 text-[11px] font-medium text-white"
                       >
                         登录
                       </a>
@@ -8596,7 +8790,12 @@ const _handleVideoAssistantMessage = useCallback((payload: {
                     } : null}
                     onAskAI={(question) => {
                       setSelectedConfusion(null);
+                      setShowConversationHistory(false);
+                      setSelectedHistoryConversation(null);
                       setMobileAIQuestion(question);
+                      setMobileAIDisplayQuestion('');
+                      setMobileAILaunchImages([]);
+                      setMobileAILaunchSupportContextText('');
                       setMobileAIConsumedQuestionNonce(null);
                       setMobileAIPreferSelectedContext(false);
                       setMobileAIQuestionNonce((prev) => prev + 1);
@@ -8629,9 +8828,9 @@ const _handleVideoAssistantMessage = useCallback((payload: {
               {/* NOTE: cleaned corrupted legacy comment. */}
               {mobileSubPage === 'ai-chat' && (
                 <div className="flex-1 min-h-0 flex flex-col bg-[#F7F7F5]">
-                  <div className="flex-shrink-0 px-3 pb-3 pt-3">
-                    <div className="rounded-[28px] border border-[#E9E9E7] bg-white px-3.5 py-3">
-                      <div className="flex items-start gap-3">
+                  <div className="flex-shrink-0 px-3 pb-2 pt-2">
+                    <div className="rounded-[24px] border border-[#E9E9E7] bg-white/94 px-3 py-2.5 shadow-[0_12px_24px_rgba(148,163,184,0.08)]">
+                      <div className="flex items-start gap-2.5">
                         <button
                           onClick={() => {
                             setMobileSubPage(null);
@@ -8639,62 +8838,65 @@ const _handleVideoAssistantMessage = useCallback((payload: {
                             setShowConversationHistory(false);
                             setSelectedHistoryConversation(null);
                           }}
-                          className="flex h-10 w-10 items-center justify-center rounded-[16px] border border-[#efe5d8] bg-white text-slate-600 shadow-[0_8px_18px_rgba(148,163,184,0.10)] transition hover:-translate-y-0.5 hover:text-slate-900"
+                          className="flex h-9 w-9 items-center justify-center rounded-[14px] border border-[#efe5d8] bg-white text-slate-600 shadow-[0_6px_14px_rgba(148,163,184,0.08)] transition hover:-translate-y-0.5 hover:text-slate-900"
                           aria-label="返回复习"
                         >
-                          <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <svg className="h-4.5 w-4.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
                           </svg>
                         </button>
                         <div className="min-w-0 flex-1">
-                          <div className="inline-flex items-center gap-2 rounded-full bg-[#f6efe6] px-2.5 py-1 text-[11px] font-semibold text-[#9a6b2f]">
-                            <BookOpen size={12} strokeWidth={2} />
-                            <span>复习中的 AI 助教</span>
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <p className="text-[15px] font-semibold tracking-[-0.03em] text-slate-900">AI 助教</p>
+                            <span className="inline-flex items-center rounded-full bg-[#f6efe6] px-2 py-1 text-[10px] font-semibold text-[#9a6b2f]">
+                              {showConversationHistory
+                                ? '历史对话'
+                                : mobileAIPreferSelectedContext && mobileAILaunchTarget === 'mobile-ai-chat'
+                                  ? '跟随已选内容'
+                                  : '跟随当前课堂'}
+                            </span>
                           </div>
-                          <p className="mt-2 text-[16px] font-semibold tracking-[-0.02em] text-slate-900">继续沿着这节课追问</p>
-                          <p className="mt-1 text-[11px] leading-5 text-slate-500">
+                          <p className="mt-1 text-[11px] leading-4.5 text-slate-500">
                             {showConversationHistory
-                              ? '回看你之前和这节课的问答，快速接回思路。'
+                              ? '回看这节课之前的问答，快速接回思路。'
                               : mobileAIPreferSelectedContext && mobileAILaunchTarget === 'mobile-ai-chat'
-                                ? '会优先沿着你刚选中的内容继续讲，减少来回切换。'
-                                : '这里不是新页面，而是复习流程里的深挖工作台。'}
+                                ? '优先围绕你刚圈出的重点继续，不用来回切换。'
+                                : '不离开复习，直接把这节课继续问下去。'}
                           </p>
                         </div>
-                      </div>
-                      <div className="mt-3 flex items-center justify-end">
-                        <div className="inline-flex items-center gap-1 rounded-[16px] border border-[#efe5d8] bg-[#f7f2eb] p-1">
+                        <div className="inline-flex items-center gap-1 rounded-[14px] border border-[#efe5d8] bg-[#f7f2eb] p-1">
                           <button
                             onClick={() => {
                               setShowConversationHistory(false);
                               setSelectedHistoryConversation(null);
                             }}
-                            className={`inline-flex items-center gap-1 rounded-[12px] px-3 py-2 text-[12px] font-medium transition-all ${
+                            className={`inline-flex h-8 items-center gap-1 rounded-[10px] px-2.5 text-[11px] font-medium transition-all ${
                               !showConversationHistory
-                                ? 'bg-white text-[#c57a16] shadow-[0_8px_18px_rgba(148,163,184,0.10)]'
+                                ? 'bg-white text-[#c57a16] shadow-[0_6px_14px_rgba(148,163,184,0.10)]'
                                 : 'text-slate-400 hover:text-slate-600'
                             }`}
                             title="当前对话"
                           >
-                            <MessageCircle size={14} strokeWidth={1.9} />
+                            <MessageCircle size={13} strokeWidth={1.9} />
                             <span>当前</span>
                           </button>
                           <button
                             onClick={() => setShowConversationHistory(true)}
-                            className={`inline-flex items-center gap-1 rounded-[12px] px-3 py-2 text-[12px] font-medium transition-all ${
+                            className={`inline-flex h-8 items-center gap-1 rounded-[10px] px-2.5 text-[11px] font-medium transition-all ${
                               showConversationHistory
-                                ? 'bg-white text-[#c57a16] shadow-[0_8px_18px_rgba(148,163,184,0.10)]'
+                                ? 'bg-white text-[#c57a16] shadow-[0_6px_14px_rgba(148,163,184,0.10)]'
                                 : 'text-slate-400 hover:text-slate-600'
                             }`}
                             title="历史对话"
                           >
-                            <History size={14} strokeWidth={1.9} />
+                            <History size={13} strokeWidth={1.9} />
                             <span>历史</span>
                           </button>
                         </div>
                       </div>
                     </div>
 
-                    <div className="mt-3">
+                    <div className="mt-2">
                       <MiniPlayer
                         currentTime={currentTime}
                         duration={totalDuration}
@@ -8721,7 +8923,7 @@ const _handleVideoAssistantMessage = useCallback((payload: {
                             setSelectedAnchor(anchor);
                           }
                         }}
-                        className="overflow-hidden rounded-[24px] border border-[#efe5d8] shadow-[0_12px_28px_rgba(148,163,184,0.10)]"
+                        className="overflow-hidden rounded-[20px] border border-[#efe5d8] shadow-[0_10px_24px_rgba(148,163,184,0.08)]"
                       />
                     </div>
                   </div>
@@ -8792,9 +8994,12 @@ const _handleVideoAssistantMessage = useCallback((payload: {
                         supportContextText={tutorSupportContextText}
                         preferSupportContext={mobileAILaunchTarget === 'mobile-ai-chat' ? mobileAIPreferSelectedContext : false}
                         launchQuestion={mobileAILaunchTarget === 'mobile-ai-chat' && mobileAIConsumedQuestionNonce !== mobileAIQuestionNonce ? mobileAIQuestion : ''}
+                        launchDisplayText={mobileAILaunchTarget === 'mobile-ai-chat' ? mobileAIDisplayQuestion : ''}
+                        launchImages={mobileAILaunchTarget === 'mobile-ai-chat' ? mobileAILaunchImages : []}
                         launchQuestionNonce={mobileAILaunchTarget === 'mobile-ai-chat' ? mobileAIQuestionNonce : 0}
                         onLaunchQuestionConsumed={mobileAILaunchTarget === 'mobile-ai-chat' ? consumeMobileAIQuestion : undefined}
                         isMobile={true}
+                        hideMobileHeader={true}
                         onSeek={(timeMs) => {
                           handleUnifiedSeek(timeMs, true);
                         }}

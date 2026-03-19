@@ -10,7 +10,15 @@ import { NextRequest, NextResponse } from 'next/server';
 import { wechatAuthService } from '@/lib/services/wechat-auth-service';
 import { createWechatWebSession, consumeWechatWebSession } from '@/lib/services/wechat-web-session-service';
 
+function resolveBaseUrl(request: NextRequest): string {
+  const protocol = request.headers.get('x-forwarded-proto') || 'https';
+  const host = request.headers.get('x-forwarded-host') || request.headers.get('host') || '';
+  return `${protocol}://${host}`;
+}
+
 export async function GET(request: NextRequest) {
+  const baseUrl = resolveBaseUrl(request);
+
   try {
     const { searchParams } = new URL(request.url);
     const code = searchParams.get('code');
@@ -18,7 +26,7 @@ export async function GET(request: NextRequest) {
     
     // 检查参数
     if (!code || !state) {
-      return NextResponse.redirect(new URL('/login?error=missing_params', request.url));
+      return NextResponse.redirect(`${baseUrl}/login?error=missing_params`);
     }
     
     // 处理微信登录
@@ -26,7 +34,7 @@ export async function GET(request: NextRequest) {
     
     if (!result.success) {
       const errorMsg = encodeURIComponent(result.error || '登录失败');
-      return NextResponse.redirect(new URL(`/login?error=${errorMsg}`, request.url));
+      return NextResponse.redirect(`${baseUrl}/login?error=${errorMsg}`);
     }
     
     // 登录成功，使用共享 session 服务创建临时会话
@@ -36,8 +44,8 @@ export async function GET(request: NextRequest) {
       nickname: result.user?.nickname || '',
     });
     
-    // 重定向到首页，携带临时会话 token
-    const redirectUrl = new URL('/', request.url);
+    // 重定向到登录页，由 useAuth 消费 session 后再进入 /app
+    const redirectUrl = new URL('/login', baseUrl);
     redirectUrl.searchParams.set('session', sessionToken);
     
     const response = NextResponse.redirect(redirectUrl);
@@ -56,7 +64,7 @@ export async function GET(request: NextRequest) {
     return response;
   } catch (error) {
     console.error('微信回调错误:', error);
-    return NextResponse.redirect(new URL('/login?error=server_error', request.url));
+    return NextResponse.redirect(`${baseUrl}/login?error=server_error`);
   }
 }
 

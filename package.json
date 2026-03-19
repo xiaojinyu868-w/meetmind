@@ -7,7 +7,7 @@
     "dev": "node server.js",
     "dev:clean": "npm run clean:next && node server.js",
     "dev:next": "next dev -p 3001",
-    "clean:next": "node -e \"const fs=require('fs');for(const dir of ['.next','.next-dev']){try{fs.rmSync(dir,{recursive:true,force:true});console.log('cleaned',dir)}catch(e){console.log('skip clean',dir,e?.message||e)}}\"",
+    "clean:next": "node -e \"const fs=require('fs');const dirs=['.next',...fs.readdirSync('.').filter((name)=>name==='.next-dev'||name.startsWith('.next-dev-'))];for(const dir of dirs){try{fs.rmSync(dir,{recursive:true,force:true});console.log('cleaned',dir)}catch(e){console.log('skip clean',dir,e?.message||e)}}\"",
     "prisma:generate": "prisma generate",
     "prebuild": "node scripts/prebuild.js",
     "build": "next build",

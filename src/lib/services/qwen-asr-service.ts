@@ -12,6 +12,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
 import { execSync } from 'child_process';
+import { resolveFfmpegPath, resolveFfprobePath } from '@/lib/services/media-tooling';
 
 // API 端点
 const DASHSCOPE_API_BASE = 'https://dashscope.aliyuncs.com/api/v1';
@@ -50,30 +51,9 @@ export interface TranscribeOptions {
  * 获取 ffmpeg 路径
  */
 function getFfmpegPath(): string {
-  const possiblePaths = [
-    path.join(process.cwd(), 'node_modules', 'ffmpeg-static', 'ffmpeg.exe'),
-    path.join(process.cwd(), 'node_modules', 'ffmpeg-static', 'ffmpeg'),
-  ];
-  
-  for (const p of possiblePaths) {
-    if (fs.existsSync(p)) {
-      console.log('[FFmpeg] Found ffmpeg at:', p);
-      return p;
-    }
-  }
-  
-  try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const ffmpegStatic = require('ffmpeg-static');
-    if (ffmpegStatic && fs.existsSync(ffmpegStatic)) {
-      console.log('[FFmpeg] Using ffmpeg-static:', ffmpegStatic);
-      return ffmpegStatic;
-    }
-  } catch (e) {
-    console.log('[FFmpeg] ffmpeg-static require failed:', e);
-  }
-  
-  return 'ffmpeg';
+  const ffmpegPath = resolveFfmpegPath();
+  console.log('[FFmpeg] Using ffmpeg path:', ffmpegPath);
+  return ffmpegPath;
 }
 
 // 单个分块的最大时长（秒），确保 WAV 转换后 base64 不超过 15MB
@@ -125,7 +105,7 @@ function getAudioDuration(inputPath: string): number {
   const ffmpegPath = getFfmpegPath();
   try {
     // 使用 ffprobe 获取时长
-    const ffprobePath = ffmpegPath.replace(/ffmpeg(\.exe)?$/, 'ffprobe$1');
+    const ffprobePath = resolveFfprobePath(ffmpegPath);
     const cmd = `"${ffprobePath}" -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 "${inputPath}"`;
     const output = execSync(cmd, { stdio: 'pipe' }).toString().trim();
     return parseFloat(output) || 0;
@@ -291,6 +271,7 @@ async function queryTaskStatus(
   apiKey: string
 ): Promise<{
   status: 'PENDING' | 'RUNNING' | 'SUCCEEDED' | 'FAILED' | 'UNKNOWN';
+  transcriptionUrl?: string;
   result?: { text?: string; sentences?: Array<{ text: string; start_time: number; end_time: number }> };
   error?: string;
 }> {
@@ -313,16 +294,73 @@ async function queryTaskStatus(
   if (taskStatus === 'SUCCEEDED') {
     return {
       status: 'SUCCEEDED',
+      transcriptionUrl: data.output?.result?.transcription_url,
       result: data.output?.result || data.output,
     };
   } else if (taskStatus === 'FAILED') {
     return {
       status: 'FAILED',
-      error: data.output?.message || '任务失败',
+      error: data.output?.message || data.message || '任务失败',
     };
   }
   
   return { status: taskStatus };
+}
+
+async function fetchAsyncTranscriptionResult(url: string): Promise<ASRResult> {
+  const response = await fetch(url);
+  if (!response.ok) {
+    throw new Error(`fetch result failed: HTTP ${response.status}`);
+  }
+
+  const data = await response.json() as {
+    transcripts?: Array<{
+      text?: string;
+      sentences?: Array<{
+        text?: string;
+        begin_time?: number;
+        beginTime?: number;
+        start_time?: number;
+        end_time?: number;
+        endTime?: number;
+      }>;
+    }>;
+  };
+
+  const sentences: ASRSentence[] = [];
+  const transcripts = Array.isArray(data.transcripts) ? data.transcripts : [];
+
+  for (const transcript of transcripts) {
+    const transcriptSentences = Array.isArray(transcript.sentences) ? transcript.sentences : [];
+    for (let i = 0; i < transcriptSentences.length; i++) {
+      const sentence = transcriptSentences[i];
+      sentences.push({
+        id: `seg-${sentences.length}`,
+        text: sentence.text || '',
+        beginTime: sentence.begin_time ?? sentence.beginTime ?? sentence.start_time ?? 0,
+        endTime: sentence.end_time ?? sentence.endTime ?? 0,
+        confidence: 0.95,
+      });
+    }
+
+    if (transcriptSentences.length === 0 && transcript.text) {
+      sentences.push({
+        id: `seg-${sentences.length}`,
+        text: transcript.text,
+        beginTime: 0,
+        endTime: 0,
+        confidence: 0.95,
+      });
+    }
+  }
+
+  return {
+    success: sentences.length > 0,
+    sentences,
+    totalDuration: sentences[sentences.length - 1]?.endTime || 0,
+    text: sentences.map((sentence) => sentence.text).join(' ').trim(),
+    error: sentences.length > 0 ? undefined : '异步转写结果为空',
+  };
 }
 
 /**
@@ -346,38 +384,51 @@ async function waitForTask(
     const result = await queryTaskStatus(taskId, apiKey);
     console.log('[QwenASR-Async] Poll', pollCount, 'status:', result.status);
     
-    if (result.status === 'SUCCEEDED' && result.result) {
-      // 解析结果
-      const sentences: ASRSentence[] = [];
-      const resultSentences = result.result.sentences || [];
-      
-      for (let i = 0; i < resultSentences.length; i++) {
-        const s = resultSentences[i];
-        sentences.push({
-          id: `seg-${i}`,
-          text: s.text || '',
-          beginTime: s.start_time ?? 0,
-          endTime: s.end_time ?? 0,
-          confidence: 0.95,
-        });
+    if (result.status === 'SUCCEEDED') {
+      if (result.transcriptionUrl) {
+        try {
+          return await fetchAsyncTranscriptionResult(result.transcriptionUrl);
+        } catch (error) {
+          return {
+            success: false,
+            sentences: [],
+            totalDuration: 0,
+            error: error instanceof Error ? error.message : '获取异步转写结果失败',
+          };
+        }
       }
-      
-      // 如果没有 sentences，尝试从 text 创建
-      if (sentences.length === 0 && result.result.text) {
-        sentences.push({
-          id: 'seg-0',
-          text: result.result.text,
-          beginTime: 0,
-          endTime: 0,
-        });
+
+      if (result.result) {
+        const sentences: ASRSentence[] = [];
+        const resultSentences = result.result.sentences || [];
+        
+        for (let i = 0; i < resultSentences.length; i++) {
+          const s = resultSentences[i];
+          sentences.push({
+            id: `seg-${i}`,
+            text: s.text || '',
+            beginTime: s.start_time ?? 0,
+            endTime: s.end_time ?? 0,
+            confidence: 0.95,
+          });
+        }
+        
+        if (sentences.length === 0 && result.result.text) {
+          sentences.push({
+            id: 'seg-0',
+            text: result.result.text,
+            beginTime: 0,
+            endTime: 0,
+          });
+        }
+        
+        return {
+          success: true,
+          sentences,
+          totalDuration: sentences[sentences.length - 1]?.endTime || 0,
+          text: sentences.map(s => s.text).join(' '),
+        };
       }
-      
-      return {
-        success: true,
-        sentences,
-        totalDuration: sentences[sentences.length - 1]?.endTime || 0,
-        text: sentences.map(s => s.text).join(' '),
-      };
     }
     
     if (result.status === 'FAILED') {

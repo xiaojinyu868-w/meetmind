@@ -12,6 +12,7 @@ import {
   buildWechatVoicePreviewText,
   buildWechatVoiceTutorContext,
   isWechatPlayableAudioUrl,
+  normalizeWechatMediaPublicPath,
 } from '@/lib/services/wechat-voice-utils';
 import {
   DAILY_ECHO_KIND,
@@ -328,19 +329,36 @@ function mimeTypeFromFilePath(filePath: string): string {
   return 'application/octet-stream';
 }
 
+function resolveWechatMediaPublicUrl(mediaUrl?: string | null): string | null {
+  const normalized = normalizeWechatMediaPublicPath(mediaUrl) || (mediaUrl || '').trim();
+  if (!normalized) return null;
+
+  if (/^https?:\/\//i.test(normalized)) {
+    return normalized;
+  }
+
+  const baseUrl = (process.env.WECHAT_MP_PUBLIC_BASE_URL || '').trim().replace(/\/+$/, '');
+  if (!baseUrl) return null;
+
+  return normalized.startsWith('/') ? `${baseUrl}${normalized}` : `${baseUrl}/${normalized}`;
+}
+
 async function transcribeWechatVoiceFromMediaUrl(mediaUrl?: string | null): Promise<string | null> {
   const apiKey = process.env.DASHSCOPE_API_KEY?.trim();
   if (!apiKey) return null;
 
   const localPath = resolveWechatMediaFilePath(mediaUrl);
-  if (!localPath) return null;
+  const publicUrl = resolveWechatMediaPublicUrl(mediaUrl);
+  if (!localPath && !publicUrl) return null;
 
   try {
-    const buffer = await fs.readFile(localPath);
-    if (!buffer.length) return null;
-
-    const blob = new Blob([buffer], { type: mimeTypeFromFilePath(localPath) });
-    const result = await qwenASRService.transcribe(blob, apiKey, { language: 'zh' });
+    const buffer = localPath ? await fs.readFile(localPath) : Buffer.alloc(0);
+    const blob = new Blob([buffer], { type: localPath ? mimeTypeFromFilePath(localPath) : 'audio/mpeg' });
+    const result = await qwenASRService.transcribe(blob, apiKey, {
+      language: 'zh',
+      async: Boolean(publicUrl),
+      fileUrl: publicUrl || undefined,
+    });
     const transcript = (result.text || '').replace(/\s+/g, ' ').trim();
     return transcript || null;
   } catch (error) {

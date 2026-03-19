@@ -45,6 +45,7 @@ export class DashScopeASRClient {
   private sentenceIndex = 0;
   private isReady = false;
   private audioQueue: ArrayBuffer[] = [];
+  private static readonly AUDIO_QUEUE_MAX_SIZE = 500;
 
   private sessionStartTime = 0;
 
@@ -77,6 +78,11 @@ export class DashScopeASRClient {
     return this.status === 'stopped' && /error committing input audio buffer/i.test(error);
   }
 
+  private isIgnorableSessionUpdateError(error: string): boolean {
+    if (typeof error !== 'string') return false;
+    return /session already started or finished or failed/i.test(error);
+  }
+
   async start(): Promise<boolean> {
     if (this.ws) {
       console.warn('[DashScopeASR] Already connected');
@@ -93,28 +99,30 @@ export class DashScopeASRClient {
         this.updateStatus('connecting');
 
         const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-        const hostname = window.location.hostname;
-        const defaultPort = window.location.port || (protocol === 'wss:' ? '443' : '80');
-        const portsToTry = protocol === 'wss:' ? ['8443', defaultPort] : [defaultPort];
+        const currentUrl = new URL('/api/asr-stream', window.location.href);
+        const candidateUrls = [currentUrl.toString()];
 
-        const tryConnect = (portIndex: number) => {
-          if (portIndex >= portsToTry.length) {
+        if (protocol === 'wss:' && currentUrl.port !== '8443') {
+          candidateUrls.push(`${protocol}//${window.location.hostname}:8443/api/asr-stream`);
+        }
+
+        const tryConnect = (urlIndex: number) => {
+          if (urlIndex >= candidateUrls.length) {
             this.updateStatus('error');
             this.callbacks.onError?.('所有连接端口均失败');
             resolve(false);
             return;
           }
 
-          const port = portsToTry[portIndex];
-          const wsUrl = `${protocol}//${hostname}:${port}/api/asr-stream`;
+          const wsUrl = candidateUrls[urlIndex];
           this.ws = new WebSocket(wsUrl);
 
           const connectionTimeout: NodeJS.Timeout = setTimeout(() => {
             if (this.ws && this.ws.readyState === WebSocket.CONNECTING) {
               this.ws.close();
-              tryConnect(portIndex + 1);
+              tryConnect(urlIndex + 1);
             }
-          }, 5000);
+          }, 3500);
 
           let resolved = false;
           let connected = false;
@@ -135,9 +143,9 @@ export class DashScopeASRClient {
 
           this.ws.onerror = (error) => {
             clearTimeout(connectionTimeout);
-            console.error(`[DashScopeASR] Port ${port} error:`, error);
-            if (!connected && !resolved && portIndex < portsToTry.length - 1) {
-              tryConnect(portIndex + 1);
+            console.error(`[DashScopeASR] Connection error: ${wsUrl}`, error);
+            if (!connected && !resolved && urlIndex < candidateUrls.length - 1) {
+              tryConnect(urlIndex + 1);
             } else if (!connected && !resolved) {
               this.updateStatus('error');
               this.callbacks.onError?.('WebSocket 连接错误');
@@ -180,6 +188,10 @@ export class DashScopeASRClient {
         const errorMessage = this.normalizeErrorMessage(msg.error);
         if (this.isIgnorableStopError(errorMessage)) {
           console.warn('[DashScopeASR] Ignore stop-time commit error:', errorMessage);
+          return;
+        }
+        if (this.isIgnorableSessionUpdateError(errorMessage)) {
+          console.warn('[DashScopeASR] Ignore session update error (non-fatal):', errorMessage);
           return;
         }
         this.callbacks.onError?.(errorMessage);
@@ -225,6 +237,10 @@ export class DashScopeASRClient {
         case 'error': {
           const errorMessage = this.normalizeErrorMessage(msg.error ?? msg.message);
           if (this.isIgnorableStopError(errorMessage)) {
+            break;
+          }
+          if (this.isIgnorableSessionUpdateError(errorMessage)) {
+            console.warn('[DashScopeASR] Ignore session update error in event:', errorMessage);
             break;
           }
           this.callbacks.onError?.(errorMessage);
@@ -296,6 +312,9 @@ export class DashScopeASRClient {
   private sendAudioBuffer(buffer: ArrayBuffer): void {
     if (!this.isReady) {
       this.audioQueue.push(buffer);
+      if (this.audioQueue.length > DashScopeASRClient.AUDIO_QUEUE_MAX_SIZE) {
+        this.audioQueue.shift();
+      }
       return;
     }
 

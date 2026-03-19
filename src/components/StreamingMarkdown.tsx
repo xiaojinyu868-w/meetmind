@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useMemo, useCallback } from 'react';
+import React, { useMemo, useCallback, useEffect, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import remarkMath from 'remark-math';
@@ -8,14 +8,7 @@ import rehypeKatex from 'rehype-katex';
 import 'katex/dist/katex.min.css';
 import type { Components } from 'react-markdown';
 import type { Citation } from '@/types/dify';
-
-const SUPPORT_CITATION_ID_REGEX = /^support-(\d+)$/i;
-const SUPPORT_CITATION_TITLE_REGEX = /(?:导入资料|资料)\s*(\d+)/;
-
-function normalizeTooltipText(value?: string, fallback = ''): string {
-  const normalized = (value || '').replace(/\s+/g, ' ').trim();
-  return normalized || fallback;
-}
+import { CitationDetailSheet, resolveCitations } from './CitationReferenceSheet';
 
 interface StreamingMarkdownProps {
   content: string;
@@ -31,6 +24,7 @@ interface StreamingMarkdownProps {
  * 支持：
  * - 实时渲染流式内容
  * - 时间戳 [MM:SS] 渲染为可点击按钮
+ * - 资料引用 [资料N] 渲染为可点击数字上标
  * - GFM (表格、删除线、任务列表等)
  */
 export function StreamingMarkdown({
@@ -41,46 +35,37 @@ export function StreamingMarkdown({
   className = '',
   citations,
 }: StreamingMarkdownProps) {
-  const citationTooltipByIndex = useMemo(() => {
-    const tooltipByIndex = new Map<number, string>();
-    if (!citations?.length) return tooltipByIndex;
+  const resolvedCitations = useMemo(() => resolveCitations(citations), [citations]);
+  const citationByIndex = useMemo(
+    () => new Map(resolvedCitations.map((item) => [item.index, item])),
+    [resolvedCitations]
+  );
+  const [activeCitationIndex, setActiveCitationIndex] = useState<number | null>(
+    resolvedCitations[0]?.index ?? null
+  );
+  const [isCitationSheetOpen, setIsCitationSheetOpen] = useState(false);
 
-    citations.forEach((citation, listIndex) => {
-      if (!citation) return;
+  useEffect(() => {
+    if (!resolvedCitations.length) {
+      setActiveCitationIndex(null);
+      setIsCitationSheetOpen(false);
+      return;
+    }
 
-      const fallbackSnippet = normalizeTooltipText(citation.snippet);
-      const titleText = normalizeTooltipText(
-        citation.title,
-        fallbackSnippet || `资料来源 ${listIndex + 1}`
-      );
+    if (activeCitationIndex === null || !citationByIndex.has(activeCitationIndex)) {
+      setActiveCitationIndex(resolvedCitations[0].index);
+    }
+  }, [activeCitationIndex, citationByIndex, resolvedCitations]);
 
-      const idMatch = citation.id?.match(SUPPORT_CITATION_ID_REGEX);
-      if (idMatch) {
-        const parsedIndex = Number.parseInt(idMatch[1], 10);
-        if (Number.isFinite(parsedIndex) && parsedIndex > 0) {
-          tooltipByIndex.set(parsedIndex, titleText);
-          return;
-        }
-      }
+  const openCitation = useCallback(
+    (citationIndex: number) => {
+      if (!citationByIndex.has(citationIndex)) return;
+      setActiveCitationIndex(citationIndex);
+      setIsCitationSheetOpen(true);
+    },
+    [citationByIndex]
+  );
 
-      const titleMatch = citation.title?.match(SUPPORT_CITATION_TITLE_REGEX);
-      if (titleMatch) {
-        const parsedIndex = Number.parseInt(titleMatch[1], 10);
-        if (Number.isFinite(parsedIndex) && parsedIndex > 0 && !tooltipByIndex.has(parsedIndex)) {
-          tooltipByIndex.set(parsedIndex, titleText);
-          return;
-        }
-      }
-
-      const fallbackIndex = listIndex + 1;
-      if (!tooltipByIndex.has(fallbackIndex)) {
-        tooltipByIndex.set(fallbackIndex, titleText);
-      }
-    });
-
-    return tooltipByIndex;
-  }, [citations]);
-  
   // 解析时间戳为毫秒
   const parseTimeToMs = useCallback((time: string): number | null => {
     const parts = time.split(':');
@@ -144,17 +129,17 @@ export function StreamingMarkdown({
         parts.push(
           <button
             key={`ts-${keyIndex++}`}
+            type="button"
             onClick={(e) => {
               e.preventDefault();
               e.stopPropagation();
               onTimestampClick?.(startMs);
             }}
             className={`
-              inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-xs font-mono mx-0.5
-              transition-all duration-200 border cursor-pointer
-              ${isActive 
-                ? 'bg-[#232322] text-white border-[#232322] scale-105' 
-                : 'bg-[#FDF3C0] text-[#232322] border-[#E9E9E7] hover:border-[#232322] hover:shadow-sm'
+              inline-flex items-center gap-1 rounded-lg border px-2 py-0.5 text-xs font-mono transition-all duration-200
+              ${isActive
+                ? 'scale-105 border-[#232322] bg-[#232322] text-white'
+                : 'border-[#E9E9E7] bg-[#FDF3C0] text-[#232322] hover:border-[#232322] hover:shadow-sm'
               }
             `}
           >
@@ -164,30 +149,45 @@ export function StreamingMarkdown({
         );
       } else if (citationIndex) {
         const citationNumber = Number.parseInt(citationIndex, 10);
-        const citationHint = Number.isFinite(citationNumber)
-          ? citationTooltipByIndex.get(citationNumber)
+        const citationItem = Number.isFinite(citationNumber)
+          ? citationByIndex.get(citationNumber)
           : undefined;
-        const tooltipText = citationHint
-          ? `资料${citationIndex}：${citationHint}`
-          : `资料来源 ${citationIndex}`;
-        const citationKey = keyIndex++;
+        const isActive = citationNumber === activeCitationIndex && isCitationSheetOpen;
+        const badgeClasses = [
+          'ml-0.5 inline-flex h-4.5 min-w-[18px] -translate-y-[0.42em] items-center justify-center rounded-full px-1 align-super text-[10px] font-semibold leading-none transition-all',
+          isActive
+            ? 'bg-slate-800 text-white shadow-sm'
+            : 'bg-slate-100 text-slate-500 hover:bg-slate-200 hover:text-slate-700',
+        ].join(' ');
 
-        parts.push(
-          <span key={`cite-wrap-${citationKey}`} className="relative inline-flex align-super ml-0.5 group/cite">
-            <span
-              className="inline-flex items-center rounded-md border border-slate-300 bg-slate-100 px-1.5 py-0.5 text-[10px] font-medium text-slate-700"
-              title={tooltipText}
-              aria-label={tooltipText}
+        if (citationItem) {
+          parts.push(
+            <button
+              key={`cite-${keyIndex++}`}
+              type="button"
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                openCitation(citationNumber);
+              }}
+              className={badgeClasses}
+              title={`资料${citationNumber}：${citationItem.title}`}
+              aria-label={`资料${citationNumber}：${citationItem.title}，点击查看详情`}
             >
-              [{citationIndex}]
+              {citationIndex}
+            </button>
+          );
+        } else {
+          parts.push(
+            <span
+              key={`cite-missing-${keyIndex++}`}
+              className="ml-0.5 inline-flex h-4.5 min-w-[18px] -translate-y-[0.42em] items-center justify-center rounded-full bg-slate-100 px-1 align-super text-[10px] font-semibold leading-none text-slate-400"
+              aria-label={`资料${citationIndex}`}
+            >
+              {citationIndex}
             </span>
-            {citationHint && (
-              <span className="pointer-events-none absolute left-1/2 top-full z-20 mt-1 w-max max-w-56 -translate-x-1/2 whitespace-nowrap overflow-hidden text-ellipsis rounded-md border border-slate-200 bg-white px-2 py-1 text-[10px] font-normal leading-tight text-slate-600 opacity-0 shadow-sm transition-opacity duration-150 group-hover/cite:opacity-100">
-                {citationHint}
-              </span>
-            )}
-          </span>
-        );
+          );
+        }
       } else {
         parts.push(match[0]);
       }
@@ -201,7 +201,7 @@ export function StreamingMarkdown({
     }
 
     return parts.length > 0 ? parts : text;
-  }, [citationTooltipByIndex, currentTime, onTimestampClick, parseTimeToMs]);
+  }, [activeCitationIndex, citationByIndex, currentTime, isCitationSheetOpen, onTimestampClick, openCitation, parseTimeToMs]);
 
   // 递归处理 children，将字符串中的时间戳转换为按钮
   // 跳过 KaTeX 渲染的数学公式元素，避免破坏其 DOM 结构
@@ -210,24 +210,25 @@ export function StreamingMarkdown({
       if (typeof child === 'string') {
         return renderTextWithTimestamps(child);
       }
-      
-      if (React.isValidElement(child)) {
+
+      if (React.isValidElement<{ className?: string; children?: React.ReactNode }>(child)) {
         // 跳过 KaTeX 渲染的元素（span.katex, span.katex-display 等）
         const className = child.props.className;
-        if (typeof className === 'string' && (
-          className.includes('katex') || className.includes('math')
-        )) {
+        if (
+          typeof className === 'string' &&
+          (className.includes('katex') || className.includes('math'))
+        ) {
           return child;
         }
-        
+
         if (child.props.children) {
           return React.cloneElement(child, {
             ...child.props,
             children: processChildren(child.props.children),
-          } as React.Attributes);
+          });
         }
       }
-      
+
       return child;
     });
   }, [renderTextWithTimestamps]);
@@ -240,38 +241,38 @@ export function StreamingMarkdown({
         {processChildren(children)}
       </p>
     ),
-    
+
     // 列表项渲染，处理时间戳
     li: ({ children, ...props }) => (
       <li {...props} className="text-sm leading-relaxed">
         {processChildren(children)}
       </li>
     ),
-    
+
     // 标题样式
     h2: ({ children, ...props }) => (
-      <h2 {...props} className="text-base font-semibold text-gray-800 mt-4 mb-2 first:mt-0">
+      <h2 {...props} className="mb-2 mt-4 text-base font-semibold text-gray-800 first:mt-0">
         {processChildren(children)}
       </h2>
     ),
     h3: ({ children, ...props }) => (
-      <h3 {...props} className="text-sm font-semibold text-gray-700 mt-3 mb-1.5">
+      <h3 {...props} className="mb-1.5 mt-3 text-sm font-semibold text-gray-700">
         {processChildren(children)}
       </h3>
     ),
-    
+
     // 列表样式
     ul: ({ children, ...props }) => (
-      <ul {...props} className="list-disc list-inside space-y-1 mb-3 text-gray-700">
+      <ul {...props} className="mb-3 list-inside list-disc space-y-1 text-gray-700">
         {children}
       </ul>
     ),
     ol: ({ children, ...props }) => (
-      <ol {...props} className="list-decimal list-inside space-y-1 mb-3 text-gray-700">
+      <ol {...props} className="mb-3 list-inside list-decimal space-y-1 text-gray-700">
         {children}
       </ol>
     ),
-    
+
     // 强调样式
     strong: ({ children, ...props }) => (
       <strong {...props} className="font-semibold text-gray-900">
@@ -283,74 +284,84 @@ export function StreamingMarkdown({
         {processChildren(children)}
       </em>
     ),
-    
+
     // 代码块
     code: ({ children, className: codeClassName, ...props }) => {
       const isInline = !codeClassName;
       if (isInline) {
         return (
-          <code {...props} className="px-1.5 py-0.5 bg-gray-100 text-[#232322] rounded text-xs font-mono">
+          <code {...props} className="rounded bg-gray-100 px-1.5 py-0.5 text-xs font-mono text-[#232322]">
             {children}
           </code>
         );
       }
       return (
-        <code {...props} className={`block p-3 bg-gray-50 rounded-lg overflow-x-auto text-xs ${codeClassName}`}>
+        <code {...props} className={`block overflow-x-auto rounded-lg bg-gray-50 p-3 text-xs ${codeClassName}`}>
           {children}
         </code>
       );
     },
-    
+
     // 引用块
     blockquote: ({ children, ...props }) => (
-      <blockquote {...props} className="border-l-4 border-[#E9E9E7] pl-3 py-1 my-2 text-gray-600 italic bg-[#FDF3C0]/20 rounded-r">
+      <blockquote {...props} className="my-2 rounded-r border-l-4 border-[#E9E9E7] bg-[#FDF3C0]/20 py-1 pl-3 text-gray-600 italic">
         {children}
       </blockquote>
     ),
-    
+
     // 链接
     a: ({ children, href, ...props }) => (
-      <a 
-        {...props} 
+      <a
+        {...props}
         href={href}
         target="_blank"
         rel="noopener noreferrer"
-        className="text-[#787774] hover:text-[#232322] underline decoration-[#FDF3C0] hover:decoration-[#232322] transition-colors"
+        className="text-[#787774] underline decoration-[#FDF3C0] transition-colors hover:text-[#232322] hover:decoration-[#232322]"
       >
         {children}
       </a>
     ),
-    
+
     // 分隔线
     hr: ({ ...props }) => (
       <hr {...props} className="my-4 border-gray-200" />
     ),
-    
+
     // 任务列表项
     input: ({ ...props }) => (
-      <input 
-        {...props} 
-        disabled 
+      <input
+        {...props}
+        disabled
         className="mr-2 accent-[#232322]"
       />
     ),
   }), [processChildren]);
 
   return (
-    <div className={`streaming-markdown ${className}`}>
-      <ReactMarkdown
-        remarkPlugins={[remarkGfm, remarkMath]}
-        rehypePlugins={[rehypeKatex]}
-        components={components}
-      >
-        {content}
-      </ReactMarkdown>
-      
-      {/* 流式输出时显示光标 */}
-      {isStreaming && (
-        <span className="inline-block w-2 h-4 bg-[#232322] animate-pulse ml-0.5 align-middle rounded-sm" />
-      )}
-    </div>
+    <>
+      <div className={`streaming-markdown ${className}`}>
+        <ReactMarkdown
+          remarkPlugins={[remarkGfm, remarkMath]}
+          rehypePlugins={[rehypeKatex]}
+          components={components}
+        >
+          {content}
+        </ReactMarkdown>
+
+        {/* 流式输出时显示光标 */}
+        {isStreaming && (
+          <span className="ml-0.5 inline-block h-4 w-2 animate-pulse rounded-sm bg-[#232322] align-middle" />
+        )}
+      </div>
+
+      <CitationDetailSheet
+        citations={citations}
+        activeIndex={activeCitationIndex}
+        open={isCitationSheetOpen}
+        onOpenChange={setIsCitationSheetOpen}
+        onSelectIndex={setActiveCitationIndex}
+      />
+    </>
   );
 }
 

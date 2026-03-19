@@ -45,18 +45,23 @@ const AuthContext = createContext<AuthContextValue | null>(null);
 // ==================== 本地存储 ====================
 
 const TOKEN_KEY = 'meetmind_access_token';
+const LEGACY_TOKEN_KEY = 'auth_token';
+const LEGACY_REFRESH_TOKEN_KEY = 'refresh_token';
 
 function getStoredToken(): string | null {
   if (typeof window === 'undefined') return null;
-  return localStorage.getItem(TOKEN_KEY);
+  return localStorage.getItem(TOKEN_KEY) || localStorage.getItem(LEGACY_TOKEN_KEY);
 }
 
 function setStoredToken(token: string | null): void {
   if (typeof window === 'undefined') return;
   if (token) {
     localStorage.setItem(TOKEN_KEY, token);
+    localStorage.removeItem(LEGACY_TOKEN_KEY);
   } else {
     localStorage.removeItem(TOKEN_KEY);
+    localStorage.removeItem(LEGACY_TOKEN_KEY);
+    localStorage.removeItem(LEGACY_REFRESH_TOKEN_KEY);
   }
 }
 
@@ -78,7 +83,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [isCheckingAuth, setIsCheckingAuth] = useState(() => {
     if (typeof window === 'undefined') return true;
     const hasSession = new URLSearchParams(window.location.search).has('session');
-    const hasToken = !!localStorage.getItem(TOKEN_KEY);
+    const hasToken = !!getStoredToken();
     return hasSession || hasToken;
   });
 
@@ -196,9 +201,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // 刷新令牌
   const refreshTokenInternal = async (): Promise<boolean> => {
     try {
+      const legacyRefreshToken = typeof window === 'undefined'
+        ? null
+        : localStorage.getItem(LEGACY_REFRESH_TOKEN_KEY);
+
       const response = await fetch('/api/auth/refresh', {
         method: 'POST',
         credentials: 'include',
+        headers: legacyRefreshToken ? { 'Content-Type': 'application/json' } : undefined,
+        body: legacyRefreshToken ? JSON.stringify({ refreshToken: legacyRefreshToken }) : undefined,
       });
       
       if (!response.ok) return false;

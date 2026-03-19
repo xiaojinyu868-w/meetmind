@@ -10,6 +10,8 @@ interface WechatBindFormProps {
 
 type FallbackMode = 'code' | 'password';
 
+const TOKEN_KEY = 'meetmind_access_token';
+
 export default function WechatBindForm({ openId, linkToken, onBound }: WechatBindFormProps) {
   const [wechatLoading, setWechatLoading] = useState(false);
   const [showFallback, setShowFallback] = useState(false);
@@ -137,12 +139,12 @@ export default function WechatBindForm({ openId, linkToken, onBound }: WechatBin
         return;
       }
 
-      if (data.token) {
+      const accessToken = data.accessToken || data.token;
+      if (accessToken) {
         try {
-          localStorage.setItem('auth_token', data.token);
-          if (data.refreshToken) {
-            localStorage.setItem('refresh_token', data.refreshToken);
-          }
+          localStorage.setItem(TOKEN_KEY, accessToken);
+          localStorage.removeItem('auth_token');
+          localStorage.removeItem('refresh_token');
         } catch {
           // localStorage not available
         }

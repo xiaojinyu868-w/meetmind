@@ -20,7 +20,6 @@ import {
 import type { Breakpoint } from '@/lib/services/meetmind-service';
 import { formatTimestamp } from '@/lib/services/longcut-utils';
 import { notebookService, localSearch, type SearchResult } from '@/lib/services/notebook-service';
-import { ModelSelector } from './ModelSelector';
 import { GuidanceQuestion, GuidanceQuestionSkeleton } from './GuidanceQuestion';
 import { ImageUpload, useImagePaste, type UploadedImage } from './ImageUpload';
 import { useAuth } from '@/lib/hooks/useAuth';
@@ -30,7 +29,7 @@ import IntentBubbleExplorer from './IntentBubbleExplorer';
 import { saveTutorResponseCache, getTutorResponseCache, deleteTutorResponseCache, setPreference, saveClassSummary, getSessionSummary } from '@/lib/db';
 import { conversationService, getEffectiveUserId } from '@/lib/services/conversation-service';
 import type { GuidanceQuestion as GuidanceQuestionType, GuidanceOption, Citation } from '@/types/dify';
-import { DEFAULT_MODEL_ID } from '@/lib/services/llm-service';
+import { DEFAULT_WORKSHOP_MODEL_ID, isMultimodalModel } from '@/lib/services/llm-service';
 import { StreamingMarkdown } from './StreamingMarkdown';
 import { ThinkingVisualizer } from './ThinkingVisualizer';
 import { ThinkingGuideRenderer } from './ThinkingGuideRenderer';
@@ -38,6 +37,8 @@ import { VoiceMicButton } from './VoiceMicButton';
 
 // 持久化状态的 key
 const TUTOR_STATE_KEY = 'tutor_last_state';
+const FIXED_TUTOR_MODEL_ID = DEFAULT_WORKSHOP_MODEL_ID;
+const FIXED_TUTOR_MODEL_LABEL = 'QWEN 3.5';
 
 interface Segment {
   id: string;
@@ -53,6 +54,19 @@ interface ActionItem {
   description: string;
   estimatedMinutes: number;
   completed: boolean;
+}
+
+interface TutorLaunchImage {
+  id: string;
+  name: string;
+  url: string;
+  previewUrl?: string;
+}
+
+interface TutorMessageImage {
+  id: string;
+  name: string;
+  previewUrl: string;
 }
 
 interface AITutorProps {
@@ -71,7 +85,10 @@ interface AITutorProps {
   preferSupportContext?: boolean;
   launchQuestion?: string;
   launchQuestionNonce?: number;
+  launchDisplayText?: string;
+  launchImages?: TutorLaunchImage[];
   onLaunchQuestionConsumed?: () => void;
+  hideMobileHeader?: boolean;
 }
 
 interface TutorCacheEnvelopeV1 {
@@ -198,6 +215,7 @@ interface TutorChatMessage {
   role: 'user' | 'assistant';
   content: string;
   citations?: Citation[];
+  images?: TutorMessageImage[];
 }
 
 function normalizeCitations(raw: unknown): Citation[] | undefined {
@@ -215,60 +233,69 @@ function normalizeChatHistory(raw: unknown): TutorChatMessage[] {
       role: item.role === 'assistant' ? 'assistant' : 'user',
       content: typeof item.content === 'string' ? item.content : '',
       citations: normalizeCitations(item.citations),
+      images: Array.isArray(item.images)
+        ? item.images.filter(Boolean).map((image, index) => ({
+            id: typeof image?.id === 'string' ? image.id : `restored-image-${index}`,
+            name: typeof image?.name === 'string' ? image.name : '图片',
+            previewUrl: typeof image?.previewUrl === 'string' ? image.previewUrl : '',
+          })).filter((image) => image.previewUrl)
+        : undefined,
     }))
-    .filter((item) => item.content.length > 0);
+    .filter((item) => item.content.length > 0 || (item.images?.length ?? 0) > 0);
 }
 
-function getCitationSourceLabel(sourceType?: Citation['source_type']): string {
-  switch (sourceType) {
-    case 'knowledge_base':
-      return '增强资料';
-    case 'web':
-      return '网页参考';
-    case 'transcript':
-      return '课堂内容';
-    default:
-      return '资料引用';
+function toTutorMessageImages(images: Array<{ id: string; name: string; previewUrl: string }>): TutorMessageImage[] {
+  return images.filter((image) => image.previewUrl).map((image) => ({
+    id: image.id,
+    name: image.name,
+    previewUrl: image.previewUrl,
+  }));
+}
+
+function formatTutorErrorMessage(error: unknown): string {
+  const rawMessage = error instanceof Error ? error.message : String(error || '未知错误');
+  if (/请求过于频繁|稍后再试|rate limit|too many/i.test(rawMessage)) {
+    const retryAfterMatch = rawMessage.match(/(\d+)\s*秒/);
+    const retryHint = retryAfterMatch ? `，大约 ${retryAfterMatch[1]} 秒后再试` : '，稍等十几秒再试一次';
+    return `现在问得有点快了${retryHint}。`;
   }
+  return rawMessage;
 }
 
-function CitationReferences({
-  citations,
-  showHeading = true,
-  className = '',
-}: {
-  citations?: Citation[];
-  showHeading?: boolean;
-  className?: string;
-}) {
-  const items = (citations || []).filter(Boolean);
-  if (items.length === 0) return null;
-
+function FixedModelBadge({ compact = false }: { compact?: boolean }) {
   return (
     <div
-      data-testid="tutor-citation-panel"
-      className={`rounded-xl border border-slate-200 bg-slate-50/90 p-3 text-sm text-slate-700 ${className}`}
+      className={compact
+        ? 'inline-flex items-center gap-1.5 rounded-full border border-violet-200 bg-violet-50 px-2.5 py-1 text-[11px] font-medium text-violet-700'
+        : 'inline-flex items-center gap-2 rounded-full border border-violet-200 bg-violet-50 px-3 py-1.5 text-xs font-medium text-violet-700'}
+      title={`当前固定模型：${FIXED_TUTOR_MODEL_LABEL}`}
     >
-      {showHeading ? <div className="mb-2 text-xs font-semibold text-slate-600">资料引用</div> : null}
-      <div className="space-y-2">
-        {items.map((citation, index) => (
-          <div
-            key={citation.id || `${citation.title || 'citation'}-${index}`}
-            data-testid={`tutor-citation-${index + 1}`}
-            className="rounded-lg border border-slate-200 bg-white px-3 py-2"
-          >
-            <div className="flex items-center gap-2 text-[11px] text-slate-500">
-              <span className="rounded-full bg-slate-100 px-2 py-0.5 font-medium text-slate-600">
-                资料{index + 1}
-              </span>
-              <span>{getCitationSourceLabel(citation.source_type)}</span>
-            </div>
-            <div className="mt-1 text-sm font-medium text-slate-800">{citation.title || `资料 ${index + 1}`}</div>
-            {citation.snippet ? <div className="mt-1 text-xs leading-5 text-slate-600">{citation.snippet}</div> : null}
-          </div>
-        ))}
-      </div>
+      <Brain size={compact ? 12 : 14} strokeWidth={1.8} />
+      <span>{FIXED_TUTOR_MODEL_LABEL}</span>
     </div>
+  );
+}
+
+function StopGenerationButton({
+  onClick,
+  compact = false,
+}: {
+  onClick: () => void;
+  compact?: boolean;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={compact
+        ? 'inline-flex h-10 flex-shrink-0 items-center gap-1.5 rounded-2xl border border-amber-200 bg-amber-50 px-3 text-sm font-medium text-amber-900 shadow-sm transition hover:bg-amber-100'
+        : 'inline-flex h-10 flex-shrink-0 items-center gap-2 rounded-xl border border-amber-200 bg-amber-50 px-4 text-sm font-medium text-amber-900 transition hover:bg-amber-100'}
+    >
+      <svg className="h-4 w-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 8h8v8H8z" />
+      </svg>
+      <span>停止</span>
+    </button>
   );
 }
 
@@ -286,14 +313,18 @@ export function AITutor({
   supportContextText = '',
   launchQuestion = '',
   launchQuestionNonce = 0,
+  launchDisplayText = '',
+  launchImages: launchImagesProp = [],
   onLaunchQuestionConsumed,
+  hideMobileHeader = false,
 }: AITutorProps) {
-  const { accessToken, user } = useAuth();
+  const { accessToken, user, isCheckingAuth } = useAuth();
   const userId = getEffectiveUserId(user?.id);
   const { trackCoreEvent } = useAnalyticsContext();
   const [userInput, setUserInput] = useState('');
   const [chatHistory, setChatHistory] = useState<TutorChatMessage[]>([]);
-  const [selectedModel, setSelectedModel] = useState(DEFAULT_MODEL_ID);
+  const selectedModel = FIXED_TUTOR_MODEL_ID;
+  const supportsMultimodal = isMultimodalModel(FIXED_TUTOR_MODEL_ID);
   const [response, setResponse] = useState<TutorAPIResponse | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -342,7 +373,6 @@ export function AITutor({
   const [isThinkingCollapsed, setIsThinkingCollapsed] = useState(false);
   
   // 多模态相关状态
-  const [supportsMultimodal, setSupportsMultimodal] = useState(true);  // 默认模型支持多模态
   const [uploadedImages, setUploadedImages] = useState<UploadedImage[]>([]);
   const hasTutorContext = useMemo(
     () => segments.length > 0 || normalizeSupportContextText(supportContextText).length > 0,
@@ -1011,18 +1041,28 @@ export function AITutor({
 
   const handleSend = async () => {
     if ((!userInput.trim() && uploadedImages.length === 0) || !breakpoint) return;
-    
+
     const question = userInput.trim();
+    const effectiveQuestion = question || (uploadedImages.length > 0 ? '先帮我看这张图片里最关键的信息。' : '');
     const imagesToSend = [...uploadedImages];
+    const userMessageImages = toTutorMessageImages(
+      imagesToSend.map((image) => ({
+        id: image.id,
+        name: image.name,
+        previewUrl: image.dataUrl,
+      }))
+    );
     setUserInput('');
     setUploadedImages([]);
-    
-    // 构建用户消息显示内容
-    const userDisplayContent = imagesToSend.length > 0
-      ? `${question}${question ? '\n' : ''}[已上传 ${imagesToSend.length} 张图片]`
-      : question;
-    
-    setChatHistory(prev => [...prev, { role: 'user', content: userDisplayContent }]);
+
+    setChatHistory((prev) => [
+      ...prev,
+      {
+        role: 'user',
+        content: question,
+        images: userMessageImages.length ? userMessageImages : undefined,
+      },
+    ]);
     setBreakpointStreamingCitations([]);
     let collectedCitations: Citation[] = [];
     
@@ -1049,10 +1089,10 @@ export function AITutor({
       }
       
       // 添加文本
-      if (question) {
+      if (effectiveQuestion) {
         messageContent.push({
           type: 'text',
-          text: question,
+          text: effectiveQuestion,
         });
       }
       
@@ -1063,7 +1103,7 @@ export function AITutor({
         timestamp: breakpoint.timestamp,
         segments: buildSegmentsForTutorRequest(breakpoint.timestamp),
         model: selectedModel,
-        studentQuestion: question,
+        studentQuestion: effectiveQuestion,
         messageContent: imagesToSend.length > 0 ? messageContent : undefined,
         enable_guidance: true,
         enable_web: enableWeb,
@@ -1089,7 +1129,11 @@ export function AITutor({
       // 流式完成，添加到历史
       const newHistory = [
         ...chatHistory,
-        { role: 'user' as const, content: userDisplayContent },
+        {
+          role: 'user' as const,
+          content: question,
+          images: userMessageImages.length ? userMessageImages : undefined,
+        },
         {
           role: 'assistant' as const,
           content: result.content || '抱歉，我没有理解你的问题',
@@ -1116,7 +1160,7 @@ export function AITutor({
       }
       setChatHistory(prev => [...prev, { 
         role: 'assistant', 
-        content: `抱歉，出现错误：${err instanceof Error ? err.message : '未知错误'}` 
+        content: `抱歉，出现错误：${formatTutorErrorMessage(err)}` 
       }]);
       clearBreakpointStreamingOnly();  // 只清空流式内容，保留思考内容
       setBreakpointStreamingCitations([]);
@@ -1149,16 +1193,49 @@ export function AITutor({
   const [isGlobalThinkingCollapsed, setIsGlobalThinkingCollapsed] = useState(false);
   
   // 全局模式：发送消息（必须在 useEffect 之前定义）
-  const handleGlobalSend = useCallback(async (questionOverride?: string) => {
+  const handleGlobalSend = useCallback(async (
+    questionOverride?: string,
+    options?: {
+      images?: TutorLaunchImage[];
+      displayText?: string;
+      hideUserBubble?: boolean;
+    }
+  ) => {
     const question = (questionOverride || userInput).trim();
-    if (!question || !hasTutorContext) return;
+    const launchImages = (options?.images || []).filter((image) => image.url);
+    const composerImages = uploadedImages.map((image) => ({
+      id: image.id,
+      name: image.name,
+      url: image.dataUrl,
+      previewUrl: image.dataUrl,
+    }));
+    const imagesForRequest = launchImages.length > 0 ? launchImages : composerImages;
+    const effectiveQuestion = question || (imagesForRequest.length > 0 ? '先帮我看这张图片里最关键的信息。' : '');
+    if ((!effectiveQuestion && imagesForRequest.length === 0) || !hasTutorContext) return;
     if (globalLoading || isStreaming || isGlobalSendInFlightRef.current) return;
 
     isGlobalSendInFlightRef.current = true;
     setUserInput('');
-    
-    // 添加用户消息
-    setGlobalChatHistory(prev => [...prev, { role: 'user', content: question }]);
+
+    const userVisibleText = options?.displayText ?? question;
+    const userMessageImages = toTutorMessageImages(
+      imagesForRequest.map((image) => ({
+        id: image.id,
+        name: image.name,
+        previewUrl: image.previewUrl || image.url,
+      }))
+    );
+    const shouldHideUserBubble = Boolean(options?.hideUserBubble) && userVisibleText.length === 0 && userMessageImages.length === 0;
+    if (!shouldHideUserBubble) {
+      setGlobalChatHistory((prev) => [
+        ...prev,
+        {
+          role: 'user',
+          content: userVisibleText,
+          images: userMessageImages.length ? userMessageImages : undefined,
+        },
+      ]);
+    }
     setGlobalStreamingCitations([]);
     let collectedCitations: Citation[] = [];
     setGlobalLoading(true);
@@ -1173,7 +1250,7 @@ export function AITutor({
       timestamp: 0,
       segments: buildGlobalSegmentsForTutorRequest(),
       model: selectedModel,
-      studentQuestion: question,
+      studentQuestion: effectiveQuestion,
       globalMode: true,
       selected_context_mode: preferSupportContext,
       enable_guidance: false,
@@ -1184,15 +1261,19 @@ export function AITutor({
     };
 
     // 支持多模态（图片上传）
-    if (supportsMultimodal && uploadedImages.length > 0) {
+    if (supportsMultimodal && imagesForRequest.length > 0) {
       requestBody.messageContent = [
-        ...uploadedImages.map(img => ({
+        ...imagesForRequest.map((image) => ({
           type: 'image_url',
-          image_url: { url: img.dataUrl },
+          image_url: { url: image.url },
         })),
-        { type: 'text', text: question },
+        ...(effectiveQuestion
+          ? [{ type: 'text', text: effectiveQuestion }]
+          : []),
       ];
-      setUploadedImages([]);
+      if (composerImages.length > 0) {
+        setUploadedImages([]);
+      }
     }
 
     try {
@@ -1231,7 +1312,7 @@ export function AITutor({
           const conv = await conversationService.createConversation({
             userId,
             type: 'global-chat',
-            title: conversationService.generateTitleFromMessage(question),
+            title: conversationService.generateTitleFromMessage(question || userVisibleText || '图片问答'),
             sessionId,
           });
           conversationIdRef.current = conv.conversationId;
@@ -1243,7 +1324,7 @@ export function AITutor({
       if (conversationIdRef.current) {
         try {
           await conversationService.addMessages(conversationIdRef.current, [
-            { role: 'user', content: question },
+            { role: 'user', content: effectiveQuestion || userVisibleText || '图片问答' },
             { role: 'assistant', content: result.content || '' },
           ]);
         } catch (err) {
@@ -1263,7 +1344,7 @@ export function AITutor({
       }
       setGlobalChatHistory(prev => [...prev, { 
         role: 'assistant', 
-        content: `抱歉，出现错误：${err instanceof Error ? err.message : '未知错误'}` 
+        content: `抱歉，出现错误：${formatTutorErrorMessage(err)}` 
       }]);
       clearGlobalStreamingOnly();  // 只清空流式内容，保留思考内容
       setGlobalStreamingCitations([]);
@@ -1308,15 +1389,22 @@ export function AITutor({
   // 全局模式：处理初始问题（handleGlobalSend 已在上方定义）
   useEffect(() => {
     const normalizedQuestion = launchQuestion.trim();
-    if (!isGlobalMode || !normalizedQuestion || !hasTutorContext) return;
+    const launchDisplay = launchDisplayText.trim();
+    const launchImages = launchImagesProp.filter((image) => image.url);
+    const shouldWaitForAuth = isCheckingAuth && !accessToken;
+    if (!isGlobalMode || shouldWaitForAuth || (!normalizedQuestion && launchImages.length === 0) || !hasTutorContext) return;
 
-    const initialQuestionKey = `${launchQuestionNonce}:${normalizedQuestion}`;
+    const initialQuestionKey = `${launchQuestionNonce}:${normalizedQuestion}:${launchImages.map((image) => image.id).join(',')}`;
     if (lastProcessedInitialQuestionKeyRef.current === initialQuestionKey) return;
 
     lastProcessedInitialQuestionKeyRef.current = initialQuestionKey;
     onLaunchQuestionConsumed?.();
-    void handleGlobalSend(normalizedQuestion);
-  }, [hasTutorContext, isGlobalMode, handleGlobalSend, launchQuestion, launchQuestionNonce, onLaunchQuestionConsumed]);
+    void handleGlobalSend(normalizedQuestion, {
+      images: launchImages,
+      displayText: launchDisplay,
+      hideUserBubble: launchDisplay.length === 0,
+    });
+  }, [accessToken, hasTutorContext, isCheckingAuth, isGlobalMode, handleGlobalSend, launchDisplayText, launchImagesProp, launchQuestion, launchQuestionNonce, onLaunchQuestionConsumed]);
 
   // 重置 sessionId 变化时的全局对话状态
   useEffect(() => {
@@ -1335,75 +1423,78 @@ export function AITutor({
   }, [globalChatHistory, globalLoading, isStreaming, sessionId]);
 
   // ===== 全局对话模式渲染 =====
+  const hasLaunchPayload = launchQuestion.trim().length > 0 || launchImagesProp.some((image) => image.url);
+  const shouldShowAutoLaunchState =
+    isGlobalMode &&
+    globalChatHistory.length === 0 &&
+    (hasLaunchPayload || globalLoading || isStreaming || globalThinkingContent.length > 0 || (isCheckingAuth && !accessToken));
+
   if (isGlobalMode) {
     return (
       <div className={`h-full flex flex-col ai-chat-container ${isMobile ? 'bg-transparent' : 'bg-white'}`}>
         {/* 头部 - 紧凑设计 */}
-        <div className={`${isMobile ? 'px-3 pt-3' : 'border-b border-gray-100 bg-white px-4 py-3'} flex-shrink-0`}>
-          <div className={`${isMobile ? 'rounded-2xl bg-white/80 px-4 py-3' : ''}`}>
-            <div className="flex items-center justify-between gap-3">
-              <div className="flex items-center gap-2">
-                <div className={`${isMobile ? 'flex h-9 w-9 items-center justify-center rounded-xl bg-violet-50 text-violet-500' : ''}`}>
-                  <MessageCircle size={20} strokeWidth={1.75} className={isMobile ? '' : 'text-lilac-500'} />
+        {!(isMobile && hideMobileHeader) ? (
+          <div className={`${isMobile ? 'px-3 pt-3' : 'border-b border-gray-100 bg-white px-4 py-3'} flex-shrink-0`}>
+            <div className={`${isMobile ? 'rounded-2xl bg-white/80 px-4 py-3' : ''}`}>
+              <div className="flex items-center justify-between gap-3">
+                <div className="flex items-center gap-2">
+                  <div className={`${isMobile ? 'flex h-9 w-9 items-center justify-center rounded-xl bg-violet-50 text-violet-500' : ''}`}>
+                    <MessageCircle size={20} strokeWidth={1.75} className={isMobile ? '' : 'text-lilac-500'} />
+                  </div>
+                  <div>
+                    <h3 className={`font-medium text-gray-800 ${isMobile ? 'text-[15px]' : 'text-base'}`}>
+                      {isMobile ? (preferSupportContext ? '顺着刚选内容继续追问' : '围绕这节课继续追问') : 'AI 课堂助手'}
+                    </h3>
+                    <p className="text-xs text-gray-500">
+                      {preferSupportContext ? '会优先沿着你刚圈出的内容继续讲解。' : isMobile ? '继续解释、举例，或者帮你把这节课讲透。' : '基于整节课内容回答问题'}
+                    </p>
+                  </div>
                 </div>
-                <div>
-                  <h3 className={`font-medium text-gray-800 ${isMobile ? 'text-[15px]' : 'text-base'}`}>
-                    {isMobile ? (preferSupportContext ? '顺着刚选内容继续追问' : '围绕这节课继续追问') : 'AI 课堂助手'}
-                  </h3>
-                  <p className="text-xs text-gray-500">
-                    {preferSupportContext ? '会优先沿着你刚圈出的内容继续讲解。' : isMobile ? '继续解释、举例，或者帮你把这节课讲透。' : '基于整节课内容回答问题'}
-                  </p>
+                <div className="flex items-center gap-2">
+                  <FixedModelBadge compact={isMobile} />
                 </div>
               </div>
-              <div className="flex items-center gap-2">
-                <ModelSelector
-                  value={selectedModel}
-                  onChange={setSelectedModel}
-                  onMultimodalChange={setSupportsMultimodal}
-                  compact={isMobile}
-                />
-              </div>
+              {isMobile ? (
+                hasTutorContext ? null : (
+                  <div className="mt-2 flex items-center gap-1.5 text-[11px] text-slate-400">
+                    <AlertCircle size={11} />
+                    <span>先收一条内容</span>
+                  </div>
+                )
+              ) : null}
             </div>
-            {isMobile ? (
-              hasTutorContext ? null : (
-                <div className="mt-2 flex items-center gap-1.5 text-[11px] text-slate-400">
-                  <AlertCircle size={11} />
-                  <span>先收一条内容</span>
-                </div>
-              )
-            ) : null}
+
+            {/* 功能开关 - 仅桌面端显示 */}
+            {!isMobile && (
+              <div className="mt-3 flex items-center gap-4">
+                <label className="flex items-center gap-2 text-xs text-gray-600 cursor-pointer group">
+                  <input
+                    type="checkbox"
+                    checked={enableWeb}
+                    onChange={(e) => setEnableWeb(e.target.checked)}
+                    className="w-4 h-4 rounded border-gray-300 text-[#787774] focus:ring-[#232322]"
+                  />
+                  <span className="flex items-center gap-1 group-hover:text-gray-900 transition-colors">
+                    <Globe size={13} strokeWidth={1.75} />
+                    联网搜索
+                  </span>
+                </label>
+                <label className="flex items-center gap-2 text-xs text-gray-600 cursor-pointer group">
+                  <input
+                    type="checkbox"
+                    checked={enableThinkingGuide}
+                    onChange={(e) => setEnableThinkingGuide(e.target.checked)}
+                    className="w-4 h-4 rounded border-gray-300 text-violet-500 focus:ring-violet-400"
+                  />
+                  <span className="flex items-center gap-1 group-hover:text-gray-900 transition-colors">
+                    <Brain size={13} strokeWidth={1.75} />
+                    思维引导
+                  </span>
+                </label>
+              </div>
+            )}
           </div>
-          
-          {/* 功能开关 - 仅桌面端显示 */}
-          {!isMobile && (
-            <div className="mt-3 flex items-center gap-4">
-              <label className="flex items-center gap-2 text-xs text-gray-600 cursor-pointer group">
-                <input
-                  type="checkbox"
-                  checked={enableWeb}
-                  onChange={(e) => setEnableWeb(e.target.checked)}
-                  className="w-4 h-4 rounded border-gray-300 text-[#787774] focus:ring-[#232322]"
-                />
-                <span className="flex items-center gap-1 group-hover:text-gray-900 transition-colors">
-                  <Globe size={13} strokeWidth={1.75} />
-                  联网搜索
-                </span>
-              </label>
-              <label className="flex items-center gap-2 text-xs text-gray-600 cursor-pointer group">
-                <input
-                  type="checkbox"
-                  checked={enableThinkingGuide}
-                  onChange={(e) => setEnableThinkingGuide(e.target.checked)}
-                  className="w-4 h-4 rounded border-gray-300 text-violet-500 focus:ring-violet-400"
-                />
-                <span className="flex items-center gap-1 group-hover:text-gray-900 transition-colors">
-                  <Brain size={13} strokeWidth={1.75} />
-                  思维引导
-                </span>
-              </label>
-            </div>
-          )}
-        </div>
+        ) : null}
 
         {/* 对话区域 - 优化空间利用 */}
         <div className={`flex-1 overflow-y-auto chat-messages ${isMobile ? 'p-3' : 'p-4'}`} style={{ minHeight: 0 }}>
@@ -1416,10 +1507,28 @@ export function AITutor({
               <h3 className="text-lg font-medium text-gray-700 mb-2">还没有可用的学习上下文</h3>
               <p className="text-sm text-gray-500">先录一段、贴一份材料，或者从微信发一句给我都可以。</p>
             </div>
+          ) : shouldShowAutoLaunchState ? (
+            <div className="space-y-4">
+              <div className="flex justify-start">
+                <div className={`${isMobile ? 'max-w-[92%]' : 'max-w-[85%]'} rounded-2xl ${isMobile ? 'px-3 py-2.5' : 'px-4 py-3'} bg-gray-100 text-gray-700`}>
+                  <div className="flex items-center gap-2 text-sm">
+                    <div className="loading-dots">
+                      <span></span>
+                      <span></span>
+                      <span></span>
+                    </div>
+                    <span>
+                      {preferSupportContext ? '正在顺着你刚选的内容继续回答…' : '正在继续理解这节课的上下文…'}
+                    </span>
+                  </div>
+                </div>
+              </div>
+              <div ref={chatEndRef} />
+            </div>
           ) : globalChatHistory.length === 0 ? (
-            // 角色+意图气泡（纯规则零延迟）
             <IntentBubbleExplorer
               transcriptText={segments.map(s => s.text).join(' ') || normalizeSupportContextText(supportContextText, 2400)}
+              preferSupportContext={preferSupportContext}
               onSend={(prompt) => handleGlobalSend(prompt)}
             />
           ) : (
@@ -1455,11 +1564,26 @@ export function AITutor({
                             className={`leading-relaxed ${isMobile ? 'text-xs' : 'text-sm'}`}
                           />
                         )}
-                        <CitationReferences citations={msg.citations} className="mt-3" />
                       </>
                     ) : (
-                      <div className={`whitespace-pre-wrap leading-relaxed ${isMobile ? 'text-xs' : 'text-sm'}`}>
-                        {msg.content}
+                      <div className="space-y-2">
+                        {msg.images?.length ? (
+                          <div className="flex flex-wrap gap-2">
+                            {msg.images.map((image) => (
+                              <img
+                                key={image.id}
+                                src={image.previewUrl}
+                                alt={image.name}
+                                className="h-16 w-16 rounded-2xl object-cover ring-1 ring-white/10"
+                              />
+                            ))}
+                          </div>
+                        ) : null}
+                        {msg.content ? (
+                          <div className={`whitespace-pre-wrap leading-relaxed ${isMobile ? 'text-xs' : 'text-sm'}`}>
+                            {msg.content}
+                          </div>
+                        ) : null}
                       </div>
                     )}
                   </div>
@@ -1506,7 +1630,6 @@ export function AITutor({
                         className={`leading-relaxed ${isMobile ? 'text-xs' : 'text-sm'}`}
                       />
                     )}
-                    <CitationReferences citations={globalStreamingCitations} className="mt-3" />
                   </div>
                 </div>
               )}
@@ -1577,17 +1700,7 @@ export function AITutor({
               </div>
 
               {isStreaming ? (
-                <button
-                  onClick={stopGlobalGeneration}
-                  className={`${isMobile ? 'inline-flex h-10 w-10 items-center justify-center rounded-full bg-rose-500 text-white' : 'btn bg-red-500 px-6 text-white hover:bg-red-600'}`}
-                >
-                  <span className="flex items-center gap-1.5">
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                    </svg>
-                    停止
-                  </span>
-                </button>
+                <StopGenerationButton onClick={stopGlobalGeneration} compact={isMobile} />
               ) : (
                 <button
                   data-testid="tutor-global-send"
@@ -1618,9 +1731,10 @@ export function AITutor({
   return (
     <div className="h-full flex flex-col ai-chat-container">
       {/* 头部控制栏 - 紧凑设计 */}
-      <div className={`border-b border-gray-100 bg-white flex-shrink-0 ${isMobile ? 'p-3' : 'px-4 py-2'}`}>
-        {isMobile ? (
-          // 移动端紧凑布局
+      {!(isMobile && hideMobileHeader) && (
+        <div className={`border-b border-gray-100 bg-white flex-shrink-0 ${isMobile ? 'p-3' : 'px-4 py-2'}`}>
+          {isMobile ? (
+            // 移动端紧凑布局
           <div className="space-y-2">
             {/* 第一行：困惑点信息 + 状态 */}
             <div className="flex items-center gap-2">
@@ -1635,12 +1749,7 @@ export function AITutor({
             </div>
             {/* 第二行：模型选择器 + 操作按钮 */}
             <div className="flex items-center justify-between gap-2">
-              <ModelSelector 
-                value={selectedModel} 
-                onChange={setSelectedModel}
-                onMultimodalChange={setSupportsMultimodal}
-                compact={true}
-              />
+              <FixedModelBadge compact />
               <div className="flex items-center gap-2">
                 {isFromCache && (
                   <button
@@ -1701,7 +1810,7 @@ export function AITutor({
               </label>
               {response?.usage && (
                 <span className="text-xs text-gray-400">
-                  {response.model} · {response.usage.totalTokens} tokens
+                  {FIXED_TUTOR_MODEL_LABEL} · {response.usage.totalTokens} tokens
                 </span>
               )}
             </div>
@@ -1723,11 +1832,7 @@ export function AITutor({
                   刷新
                 </button>
               )}
-              <ModelSelector 
-                value={selectedModel} 
-                onChange={setSelectedModel}
-                onMultimodalChange={setSupportsMultimodal}
-              />
+              <FixedModelBadge />
               {!breakpoint.resolved && (
                 <button
                   data-testid="tutor-resolve-button"
@@ -1742,6 +1847,7 @@ export function AITutor({
           </div>
         )}
       </div>
+      )}
 
       {/* 内容区 - 优化空间利用 */}
       <div className={`flex-1 overflow-y-auto chat-messages ${isMobile ? 'p-3' : 'p-4'}`} style={{ minHeight: 0 }}>
@@ -1769,7 +1875,7 @@ export function AITutor({
                 <span></span>
               </div>
               <p className="text-gray-500">AI 正在分析你的困惑...</p>
-              <p className="text-xs text-gray-400 mt-1">使用 {selectedModel}</p>
+              <p className="mt-1 text-xs text-gray-400">使用 {FIXED_TUTOR_MODEL_LABEL}</p>
             </div>
           </div>
         ) : response ? (
@@ -1828,12 +1934,6 @@ export function AITutor({
                 )}
               </div>
             </Section>
-
-            {response.citations?.length ? (
-              <Section icon={<BookOpen size={16} strokeWidth={1.75} />} title="资料引用">
-                <CitationReferences citations={response.citations} showHeading={false} />
-              </Section>
-            ) : null}
 
             {/* 意图澄清 - 用更轻的方式收窄问题范围 */}
             <Section icon={<Target size={16} strokeWidth={1.75} />} title="一起缩小问题范围" badge="意图澄清">
@@ -1928,8 +2028,24 @@ export function AITutor({
                         />
                       )
                     ) : (
-                      <div className="whitespace-pre-wrap text-sm">
-                        {msg.content}
+                      <div className="space-y-2">
+                        {msg.images?.length ? (
+                          <div className="flex flex-wrap gap-2">
+                            {msg.images.map((image) => (
+                              <img
+                                key={image.id}
+                                src={image.previewUrl}
+                                alt={image.name}
+                                className="h-16 w-16 rounded-2xl object-cover ring-1 ring-black/5"
+                              />
+                            ))}
+                          </div>
+                        ) : null}
+                        {msg.content ? (
+                          <div className="whitespace-pre-wrap text-sm">
+                            {msg.content}
+                          </div>
+                        ) : null}
                       </div>
                     )}
                   </div>
@@ -1973,7 +2089,6 @@ export function AITutor({
                           className="text-sm"
                         />
                       )}
-                      <CitationReferences citations={breakpointStreamingCitations} className="mt-3" />
                     </>
                   </div>
                 )}
@@ -2042,17 +2157,7 @@ export function AITutor({
             disabled={isBreakpointStreaming}
           />
           {isBreakpointStreaming ? (
-            <button
-              onClick={stopBreakpointGeneration}
-              className="btn bg-red-500 hover:bg-red-600 text-white px-6 flex-shrink-0"
-            >
-              <span className="flex items-center gap-1.5">
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
-                停止
-              </span>
-            </button>
+            <StopGenerationButton onClick={stopBreakpointGeneration} compact={isMobile} />
           ) : (
             <button
               data-testid="tutor-breakpoint-send"

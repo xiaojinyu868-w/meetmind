@@ -9,6 +9,7 @@ import { formatTimestampMs } from '@/lib/longcut';
 import { useAuth } from '@/lib/hooks/useAuth';
 import { conversationService, getEffectiveUserId } from '@/lib/services/conversation-service';
 import type { ConversationHistory } from '@/types/conversation';
+import type { Citation } from '@/types/dify';
 import { ModelSelector } from './ModelSelector';
 import { ImageUpload, useImagePaste, type UploadedImage } from './ImageUpload';
 import { DEFAULT_MODEL_ID } from '@/lib/services/llm-service';
@@ -139,6 +140,7 @@ export function AIChat({
   const [thinkingCollapsed, setThinkingCollapsed] = useState(false);
   // 思考开始时间
   const [thinkingStartTime, setThinkingStartTime] = useState<number | undefined>();
+  const [streamingCitations, setStreamingCitations] = useState<Citation[]>([]);
 
   // 流式输出 SSE Hook
   const {
@@ -273,8 +275,11 @@ export function AIChat({
     setIsLoading(true);
     setError(null);
     clearContent();
+    setStreamingCitations([]);
     setThinkingCollapsed(false);
     setThinkingStartTime(Date.now());
+
+    let collectedCitations: Citation[] = [];
 
     try {
       // 如果是首条消息，创建对话
@@ -571,6 +576,7 @@ export function AIChat({
                   <ThinkingGuideRenderer
                     content={streamingContent}
                     onTimestampClick={onTimestampClick}
+                    citations={streamingCitations}
                     isMobile={isMobile}
                     className={`${isMobile ? 'text-xs' : 'text-sm'} leading-relaxed`}
                   />
@@ -579,6 +585,7 @@ export function AIChat({
                     content={streamingContent}
                     isStreaming={isStreaming}
                     onTimestampClick={onTimestampClick}
+                    citations={streamingCitations}
                     className={`${isMobile ? 'text-xs' : 'text-sm'} leading-relaxed`}
                   />
                 )
@@ -601,12 +608,12 @@ export function AIChat({
           <div className="flex justify-center">
             <button
               onClick={handleStopGeneration}
-              className="flex items-center gap-1.5 px-4 py-1.5 text-xs text-red-600 bg-red-50 hover:bg-red-100 border border-red-200 rounded-full transition-colors"
+              className="inline-flex h-9 items-center gap-1.5 rounded-2xl border border-amber-200 bg-amber-50 px-3 text-xs font-medium text-amber-900 shadow-sm transition hover:bg-amber-100"
             >
-              <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 24 24">
+              <svg className="h-3.5 w-3.5" fill="currentColor" viewBox="0 0 24 24">
                 <rect x="6" y="6" width="12" height="12" rx="1" />
               </svg>
-              停止生成
+              停止
             </button>
           </div>
         )}

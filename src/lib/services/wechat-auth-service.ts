@@ -26,6 +26,8 @@ const WECHAT_APP_ID = process.env.WECHAT_APP_ID || '';
 const WECHAT_APP_SECRET = process.env.WECHAT_APP_SECRET || '';
 const WECHAT_REDIRECT_URI = process.env.WECHAT_REDIRECT_URI || 'http://localhost:3001/api/auth/wechat/callback';
 
+type WechatOauthScope = 'snsapi_base' | 'snsapi_userinfo';
+
 // 微信 API 端点
 const WECHAT_AUTH_URL = 'https://open.weixin.qq.com/connect/oauth2/authorize';
 const WECHAT_QRCONNECT_URL = 'https://open.weixin.qq.com/connect/qrconnect';
@@ -41,6 +43,13 @@ const authStates = new Map<string, WechatAuthState>();
 const STATE_EXPIRES_IN = 5 * 60 * 1000;
 
 // ==================== 工具函数 ====================
+
+function canFetchWechatUserInfo(scope?: string | null): boolean {
+  return String(scope || '')
+    .split(',')
+    .map((item) => item.trim())
+    .includes('snsapi_userinfo');
+}
 
 /**
  * 生成随机状态码
@@ -77,7 +86,7 @@ export const wechatAuthService = {
    * @param redirectUri 授权后回调地址
    * @param scope 授权范围：snsapi_base（静默）或 snsapi_userinfo（需用户确认）
    */
-  getAuthUrl(redirectUri?: string, scope: 'snsapi_base' | 'snsapi_userinfo' = 'snsapi_userinfo'): string {
+  getAuthUrl(redirectUri?: string, scope: WechatOauthScope = 'snsapi_base'): string {
     cleanExpiredStates();
     
     const state = generateState();
@@ -266,46 +275,40 @@ export const wechatAuthService = {
     if (!tokenResponse) {
       return { success: false, error: '获取微信授权失败' };
     }
-    
-    // 获取用户信息
-    const wechatUser = await this.getUserInfo(tokenResponse.access_token, tokenResponse.openid);
-    if (!wechatUser) {
-      return { success: false, error: '获取微信用户信息失败' };
-    }
+
+    const openId = tokenResponse.openid;
+    const wechatUser = canFetchWechatUserInfo(tokenResponse.scope)
+      ? await this.getUserInfo(tokenResponse.access_token, openId)
+      : null;
+    const nickname = wechatUser?.nickname || '微信用户';
     
     // 查找是否已绑定用户
-    const existingUser = await authService.findUserByProvider('wechat', wechatUser.openid);
+    const existingUser = await authService.findUserByProvider('wechat', openId);
     
     if (existingUser) {
-      // 已绑定用户，直接登录
-      // 更新微信令牌
+      // 已绑定用户，更新微信令牌后直接为原账号签发新会话
       await authService.linkAuthProvider(existingUser.id, 'wechat', {
-        providerId: wechatUser.openid,
+        providerId: openId,
         accessToken: tokenResponse.access_token,
         refreshToken: tokenResponse.refresh_token,
         expiresAt: new Date(Date.now() + tokenResponse.expires_in * 1000).toISOString(),
         metadata: {
-          unionid: wechatUser.unionid,
-          nickname: wechatUser.nickname,
-          headimgurl: wechatUser.headimgurl,
+          unionid: wechatUser?.unionid || tokenResponse.unionid,
+          nickname,
+          headimgurl: wechatUser?.headimgurl,
         },
       });
-      await workspaceService.resolveWechatWorkspace(wechatUser.openid);
-      await workspaceContextService.syncWechatInboxArtifactsForOpenId(wechatUser.openid);
-      
-      // 生成本地令牌
-      return authService.login({
-        username: existingUser.username,
-        password: '', // 跳过密码验证
-      });
+      await workspaceService.resolveWechatWorkspace(openId);
+      await workspaceContextService.syncWechatInboxArtifactsForOpenId(openId);
+      return authService.createSessionForUserId(existingUser.id);
     }
     
     // 新用户，自动注册
-    const username = `wx_${wechatUser.openid.slice(-8)}`;
+    const username = `wx_${openId.slice(-8)}`;
     const registerResult = await authService.register({
       username,
       password: randomBytes(16).toString('hex'), // 随机密码
-      nickname: wechatUser.nickname || '微信用户',
+      nickname,
       role: 'student',
     });
     
@@ -315,28 +318,28 @@ export const wechatAuthService = {
     
     // 绑定微信
     await authService.linkAuthProvider(registerResult.user.id, 'wechat', {
-      providerId: wechatUser.openid,
+      providerId: openId,
       accessToken: tokenResponse.access_token,
       refreshToken: tokenResponse.refresh_token,
       expiresAt: new Date(Date.now() + tokenResponse.expires_in * 1000).toISOString(),
       metadata: {
-        unionid: wechatUser.unionid,
-        nickname: wechatUser.nickname,
-        headimgurl: wechatUser.headimgurl,
+        unionid: wechatUser?.unionid || tokenResponse.unionid,
+        nickname,
+        headimgurl: wechatUser?.headimgurl,
       },
     });
-    await workspaceService.resolveWechatWorkspace(wechatUser.openid);
-    await workspaceContextService.syncWechatInboxArtifactsForOpenId(wechatUser.openid);
+    await workspaceService.resolveWechatWorkspace(openId);
+    await workspaceContextService.syncWechatInboxArtifactsForOpenId(openId);
     
     // 更新头像
-    if (wechatUser.headimgurl) {
+    if (wechatUser?.headimgurl) {
       await authService.updateProfile(registerResult.user.id, {
         avatar: wechatUser.headimgurl,
-        nickname: wechatUser.nickname,
+        nickname,
       });
     }
     
-    return registerResult;
+    return authService.createSessionForUserId(registerResult.user.id);
   },
 
   /**
@@ -353,29 +356,29 @@ export const wechatAuthService = {
     if (!tokenResponse) {
       return { success: false, error: '获取微信授权失败' };
     }
-    
-    // 获取用户信息
-    const wechatUser = await this.getUserInfo(tokenResponse.access_token, tokenResponse.openid);
-    if (!wechatUser) {
-      return { success: false, error: '获取微信用户信息失败' };
-    }
+
+    const openId = tokenResponse.openid;
+    const wechatUser = canFetchWechatUserInfo(tokenResponse.scope)
+      ? await this.getUserInfo(tokenResponse.access_token, openId)
+      : null;
+    const nickname = wechatUser?.nickname || '微信用户';
     
     // 检查是否已被其他账户绑定
-    const existingUser = await authService.findUserByProvider('wechat', wechatUser.openid);
+    const existingUser = await authService.findUserByProvider('wechat', openId);
     if (existingUser && existingUser.id !== userId) {
       return { success: false, error: '该微信已绑定其他账户' };
     }
     
     // 绑定微信
     const success = await authService.linkAuthProvider(userId, 'wechat', {
-      providerId: wechatUser.openid,
+      providerId: openId,
       accessToken: tokenResponse.access_token,
       refreshToken: tokenResponse.refresh_token,
       expiresAt: new Date(Date.now() + tokenResponse.expires_in * 1000).toISOString(),
       metadata: {
-        unionid: wechatUser.unionid,
-        nickname: wechatUser.nickname,
-        headimgurl: wechatUser.headimgurl,
+        unionid: wechatUser?.unionid || tokenResponse.unionid,
+        nickname,
+        headimgurl: wechatUser?.headimgurl,
       },
     });
     
@@ -383,8 +386,16 @@ export const wechatAuthService = {
       return { success: false, error: '绑定失败' };
     }
     
-    await workspaceService.resolveWechatWorkspace(wechatUser.openid);
-    await workspaceContextService.syncWechatInboxArtifactsForOpenId(wechatUser.openid);
+    await workspaceService.resolveWechatWorkspace(openId);
+    await workspaceContextService.syncWechatInboxArtifactsForOpenId(openId);
+
+    if (wechatUser?.headimgurl || wechatUser?.nickname) {
+      await authService.updateProfile(userId, {
+        ...(wechatUser?.headimgurl ? { avatar: wechatUser.headimgurl } : {}),
+        ...(wechatUser?.nickname ? { nickname } : {}),
+      });
+    }
+
     return { success: true };
   },
 };

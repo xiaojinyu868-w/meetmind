@@ -4,6 +4,8 @@ import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import WechatBindForm from '@/components/WechatBindForm';
 
+const TOKEN_KEY = 'meetmind_access_token';
+
 interface WechatCaptureClientProps {
   token: string;
   isBound: boolean;
@@ -45,12 +47,12 @@ export default function WechatCaptureClient({
       })
         .then((res) => res.json())
         .then((data) => {
-          if (data.success && data.accessToken) {
+          const accessToken = data.accessToken || data.token;
+          if (data.success && accessToken) {
             try {
-              localStorage.setItem('auth_token', data.accessToken);
-              if (data.refreshToken) {
-                localStorage.setItem('refresh_token', data.refreshToken);
-              }
+              localStorage.setItem(TOKEN_KEY, accessToken);
+              localStorage.removeItem('auth_token');
+              localStorage.removeItem('refresh_token');
             } catch {
               // localStorage not available
             }

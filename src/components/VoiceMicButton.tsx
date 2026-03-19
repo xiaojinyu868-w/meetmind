@@ -69,6 +69,7 @@ export function VoiceMicButton({
   dark = false,
 }: VoiceMicButtonProps) {
   const [errorFlash, setErrorFlash] = useState(false);
+  const [errorMessage, setErrorMessage] = useState('语音识别出错，请重试');
 
   const {
     status,
@@ -79,6 +80,7 @@ export function VoiceMicButton({
     onTranscript,
     onError: (err) => {
       console.warn('[VoiceMic]', err);
+      setErrorMessage(err || '语音识别出错，请重试');
       setErrorFlash(true);
     },
   });
@@ -126,7 +128,7 @@ export function VoiceMicButton({
     // idle
     return dark
       ? 'bg-slate-800 text-[#787774] hover:bg-[#232322] hover:text-white border border-slate-700 hover:border-[#D1F4E0]'
-      : 'bg-[#D1F4E0]/30 text-[#232322] hover:bg-[#D1F4E0]/300 hover:text-white border border-[#D1F4E0] hover:border-[#D1F4E0]';
+      : 'bg-[#D1F4E0]/30 text-[#232322] hover:bg-[#D1F4E0] hover:text-[#232322] border border-[#D1F4E0] hover:border-[#D1F4E0]';
   };
 
   const getTitle = () => {
@@ -205,8 +207,8 @@ export function VoiceMicButton({
 
       {/* 错误提示 */}
       {errorFlash && (
-        <div className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 px-3 py-1.5 rounded-xl text-xs whitespace-nowrap pointer-events-none z-50 bg-red-50 text-red-600 border border-red-200">
-          语音识别出错，请重试
+        <div className="absolute bottom-full mb-2 left-1/2 z-50 max-w-[260px] -translate-x-1/2 rounded-xl border border-red-200 bg-red-50 px-3 py-1.5 text-center text-xs leading-5 text-red-600 shadow-sm">
+          {errorMessage}
         </div>
       )}
 

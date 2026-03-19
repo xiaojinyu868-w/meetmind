@@ -1,11 +1,23 @@
 /** @type {import('next').NextConfig} */
 const isProduction = process.env.NODE_ENV === 'production';
 const devDistDir = process.env.NEXT_DEV_DIST_DIR || '.next-dev';
+const ignoreBuildLint = process.env.NEXT_IGNORE_BUILD_LINT === '1';
+const ignoreTypeErrors = process.env.NEXT_IGNORE_TYPE_ERRORS === '1';
+const configuredBuildCpus = Number.parseInt(process.env.NEXT_BUILD_CPUS || (isProduction ? '1' : ''), 10);
 
 const nextConfig = {
   distDir: isProduction ? '.next' : devDistDir,
+  eslint: {
+    ignoreDuringBuilds: ignoreBuildLint,
+  },
+  typescript: {
+    ignoreBuildErrors: ignoreTypeErrors,
+  },
   // 允许上传大文件 (500MB)
   experimental: {
+    ...(Number.isFinite(configuredBuildCpus) && configuredBuildCpus > 0
+      ? { cpus: configuredBuildCpus }
+      : {}),
     serverActions: {
       bodySizeLimit: '500mb',
     },

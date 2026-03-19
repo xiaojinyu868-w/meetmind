@@ -198,6 +198,10 @@ function isIgnorableCommitError(message) {
   return typeof message === 'string' && /error committing input audio buffer/i.test(message);
 }
 
+function isIgnorableSessionUpdateError(message) {
+  return typeof message === 'string' && /session already started or finished or failed/i.test(message);
+}
+
 function isMissingNextChunkError(error) {
   const message = typeof error?.message === 'string' ? error.message : '';
   const stack = typeof error?.stack === 'string' ? error.stack : '';
@@ -231,6 +235,78 @@ function recoverDevBuildCacheIfNeeded(error) {
   return true;
 }
 
+function getRuntimeMediaMimeType(filePath) {
+  const ext = path.extname(filePath).toLowerCase();
+  const mimeTypes = {
+    '.mp3': 'audio/mpeg',
+    '.wav': 'audio/wav',
+    '.ogg': 'audio/ogg',
+    '.webm': 'audio/webm',
+    '.m4a': 'audio/mp4',
+    '.aac': 'audio/aac',
+    '.amr': 'audio/amr',
+    '.flac': 'audio/flac',
+    '.mp4': 'video/mp4',
+    '.jpg': 'image/jpeg',
+    '.jpeg': 'image/jpeg',
+    '.png': 'image/png',
+    '.gif': 'image/gif',
+    '.webp': 'image/webp',
+  };
+  return mimeTypes[ext] || 'application/octet-stream';
+}
+
+function tryServeRuntimePublicFile(pathname, res) {
+  if (!pathname) return false;
+
+  const mappings = [
+    {
+      prefix: '/temp-audio/',
+      baseDir: path.join(process.cwd(), 'public', 'temp-audio'),
+    },
+    {
+      prefix: '/wechat-media/',
+      baseDir: path.join(process.cwd(), 'public', 'wechat-media'),
+    },
+  ];
+
+  for (const mapping of mappings) {
+    if (!pathname.startsWith(mapping.prefix)) {
+      continue;
+    }
+
+    const relativePath = decodeURIComponent(pathname.slice(mapping.prefix.length));
+    const safeRelativePath = path.posix.normalize(relativePath).replace(/^\/+/, '');
+    const resolvedBaseDir = path.resolve(mapping.baseDir);
+    const resolvedFilePath = path.resolve(mapping.baseDir, safeRelativePath);
+
+    if (!safeRelativePath || safeRelativePath.includes('..') || !resolvedFilePath.startsWith(`${resolvedBaseDir}${path.sep}`)) {
+      res.statusCode = 403;
+      res.end('Forbidden');
+      return true;
+    }
+
+    try {
+      if (fs.existsSync(resolvedFilePath)) {
+        const stat = fs.statSync(resolvedFilePath);
+        res.setHeader('Content-Type', getRuntimeMediaMimeType(resolvedFilePath));
+        res.setHeader('Content-Length', stat.size);
+        res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+        fs.createReadStream(resolvedFilePath).pipe(res);
+        return true;
+      }
+    } catch {
+      // fall through to 404
+    }
+
+    res.statusCode = 404;
+    res.end('Not Found');
+    return true;
+  }
+
+  return false;
+}
+
 console.log('[Server] Starting app.prepare()...');
 console.log(`[Server] Environment: ${process.env.NODE_ENV}, distDir: ${activeDistDir}`);
 
@@ -240,30 +316,8 @@ app.prepare().then(() => {
     try {
       const parsedUrl = parse(req.url, true);
 
-      // 处理 temp-audio 静态文件请求（运行时生成的音频文件）
-      if (parsedUrl.pathname && parsedUrl.pathname.startsWith('/temp-audio/')) {
-        const fileName = path.basename(parsedUrl.pathname);
-        const filePath = path.join(process.cwd(), 'public', 'temp-audio', fileName);
-        if (fileName.includes('..')) {
-          res.statusCode = 403;
-          res.end('Forbidden');
-          return;
-        }
-        try {
-          if (fs.existsSync(filePath)) {
-            const stat = fs.statSync(filePath);
-            const ext = path.extname(fileName).toLowerCase();
-            const mimeTypes = { '.mp3': 'audio/mpeg', '.wav': 'audio/wav', '.ogg': 'audio/ogg', '.webm': 'audio/webm', '.m4a': 'audio/mp4' };
-            res.setHeader('Content-Type', mimeTypes[ext] || 'application/octet-stream');
-            res.setHeader('Content-Length', stat.size);
-            fs.createReadStream(filePath).pipe(res);
-            return;
-          }
-        } catch {
-          // fall through to 404
-        }
-        res.statusCode = 404;
-        res.end('Not Found');
+      // 处理运行时生成的媒体文件请求（如 temp-audio / wechat-media）
+      if (tryServeRuntimePublicFile(parsedUrl.pathname, res)) {
         return;
       }
 
@@ -402,6 +456,13 @@ app.prepare().then(() => {
 
     function sendSessionUpdate(extraLog) {
       if (!dashscopeWs || dashscopeWs.readyState !== WebSocket.OPEN) return;
+      if (hasAudioAppended && extraLog !== 'initial') {
+        console.log(`[ASR-Proxy] Skipping session.update (${extraLog}) - audio already streaming`);
+        return;
+      }
+      if (stopRequestedByClient) {
+        return;
+      }
 
       const prompt = buildASRPrompt();
       const sessionConfig = {
@@ -732,6 +793,10 @@ app.prepare().then(() => {
                 if (stopRequestedByClient || hasCommittedAudioBuffer) {
                   scheduleDashscopeClose('Client disconnected', 100);
                 }
+                break;
+              }
+              if (isIgnorableSessionUpdateError(error)) {
+                console.warn('[ASR-Proxy] Ignoring session update error (non-fatal):', error);
                 break;
               }
 

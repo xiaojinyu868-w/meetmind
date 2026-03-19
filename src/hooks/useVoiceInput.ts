@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { DashScopeASRClient } from '@/lib/services/dashscope-asr-service';
 
 export type VoiceInputStatus = 'idle' | 'connecting' | 'recording' | 'error';
 
@@ -19,80 +20,53 @@ interface UseVoiceInputReturn {
   toggleRecording: () => Promise<void>;
 }
 
-interface BrowserSpeechRecognitionResult {
-  isFinal: boolean;
-  0: {
-    transcript: string;
-  };
-}
-
-interface BrowserSpeechRecognitionEvent {
-  resultIndex: number;
-  results: ArrayLike<BrowserSpeechRecognitionResult>;
-}
-
-interface BrowserSpeechRecognition extends EventTarget {
-  lang: string;
-  interimResults: boolean;
-  continuous: boolean;
-  onstart: (() => void) | null;
-  onresult: ((event: BrowserSpeechRecognitionEvent) => void) | null;
-  onerror: ((event: { error?: string; message?: string }) => void) | null;
-  onend: (() => void) | null;
-  start: () => void;
-  stop: () => void;
-  abort?: () => void;
-}
-
-type BrowserSpeechRecognitionConstructor = new () => BrowserSpeechRecognition;
-
-declare global {
-  interface Window {
-    webkitSpeechRecognition?: BrowserSpeechRecognitionConstructor;
-    SpeechRecognition?: BrowserSpeechRecognitionConstructor;
-  }
-}
-
-const getSpeechRecognitionConstructor = (): BrowserSpeechRecognitionConstructor | null => {
-  if (typeof window === 'undefined') return null;
-  return window.SpeechRecognition || window.webkitSpeechRecognition || null;
-};
-
-export function shouldPreferBufferedVoiceInput(params?: {
+export function shouldPreferBufferedVoiceInput(env: {
   userAgent?: string;
   maxTouchPoints?: number;
-}): boolean {
-  const userAgent = (
-    params?.userAgent ??
-    (typeof navigator !== 'undefined' ? navigator.userAgent : '')
-  ).toLowerCase();
-  const maxTouchPoints =
-    params?.maxTouchPoints ??
-    (typeof navigator !== 'undefined' ? navigator.maxTouchPoints || 0 : 0);
-
-  const isWeChatWebView = /micromessenger/.test(userAgent);
-  const isMobileUserAgent = /android|iphone|ipad|ipod|mobile/.test(userAgent);
-  const isTouchMac = /macintosh/.test(userAgent) && maxTouchPoints > 1;
-
-  return isWeChatWebView || isMobileUserAgent || isTouchMac;
+} = {}): boolean {
+  const ua = String(env.userAgent || '').toLowerCase();
+  const maxTouchPoints = Number(env.maxTouchPoints || 0);
+  const isWechat = /micromessenger/.test(ua);
+  const isMobile = /(iphone|ipad|ipod|android|mobile)/.test(ua) || maxTouchPoints > 1;
+  return isWechat || isMobile;
 }
 
-const getPreferredRecordingMimeType = (): string => {
-  if (typeof MediaRecorder === 'undefined' || typeof MediaRecorder.isTypeSupported !== 'function') {
-    return 'audio/webm';
+function normalizeVoiceInputError(error: unknown): string {
+  if (error instanceof DOMException) {
+    if (error.name === 'NotAllowedError') return '请先允许麦克风权限，再开始语音听写。';
+    if (error.name === 'NotFoundError') return '没有检测到可用的麦克风设备。';
+    if (error.name === 'NotReadableError') return '麦克风当前被别的应用占用，请稍后再试。';
   }
 
-  const candidates = ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4', 'audio/ogg;codecs=opus'];
-  const supported = candidates.find((type) => MediaRecorder.isTypeSupported(type));
-  return supported || 'audio/webm';
-};
+  if (error instanceof Error) {
+    const message = (error.message || '').trim();
+    if (!message) return '语音听写暂时不可用，请稍后重试。';
+    if (/所有连接端口均失败|websocket 连接错误|连接失败/i.test(message)) {
+      return '语音听写连接失败，请检查网络后再试。';
+    }
+    if (/连接超时/i.test(message)) {
+      return '语音听写启动超时，请再试一次。';
+    }
+    return message;
+  }
 
-const getFileExtensionFromMimeType = (mimeType: string): string => {
-  if (mimeType.includes('mp4')) return 'm4a';
-  if (mimeType.includes('ogg')) return 'ogg';
-  if (mimeType.includes('wav')) return 'wav';
-  return 'webm';
-};
+  return '语音听写暂时不可用，请稍后重试。';
+}
+
+function resampleTo16kHz(inputBuffer: Float32Array, inputSampleRate: number): Int16Array {
+  const outputSampleRate = 16000;
+  const ratio = inputSampleRate / outputSampleRate;
+  const outputLength = Math.round(inputBuffer.length / ratio);
+  const output = new Int16Array(outputLength);
+
+  for (let i = 0; i < outputLength; i += 1) {
+    const srcIndex = Math.min(Math.round(i * ratio), inputBuffer.length - 1);
+    const sample = Math.max(-1, Math.min(1, inputBuffer[srcIndex]));
+    output[i] = sample < 0 ? sample * 0x8000 : sample * 0x7fff;
+  }
+
+  return output;
+}
 
 export function useVoiceInput({
   onTranscript,
@@ -102,17 +76,16 @@ export function useVoiceInput({
   const [status, setStatus] = useState<VoiceInputStatus>('idle');
   const [interimText, setInterimText] = useState('');
 
-  const recognitionRef = useRef<BrowserSpeechRecognition | null>(null);
+  const asrClientRef = useRef<DashScopeASRClient | null>(null);
   const mediaStreamRef = useRef<MediaStream | null>(null);
-  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
-  const recordedChunksRef = useRef<Blob[]>([]);
-  const bufferedMimeTypeRef = useRef('audio/webm');
-  const usingNativeRecognitionRef = useRef(false);
-  const usingBufferedFallbackRef = useRef(false);
+  const audioContextRef = useRef<AudioContext | null>(null);
+  const processorRef = useRef<ScriptProcessorNode | null>(null);
+  const sourceNodeRef = useRef<MediaStreamAudioSourceNode | null>(null);
   const isRecordingRef = useRef(false);
   const interimTextRef = useRef('');
-  const connectTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const statusRef = useRef<VoiceInputStatus>('idle');
+  const connectTimeoutRef = useRef<number | null>(null);
+  const autoResetErrorTimerRef = useRef<number | null>(null);
 
   useEffect(() => {
     interimTextRef.current = interimText;
@@ -129,374 +102,190 @@ export function useVoiceInput({
     }
   }, []);
 
-  const releaseMediaStream = useCallback(() => {
+  const clearAutoResetErrorTimer = useCallback(() => {
+    if (autoResetErrorTimerRef.current) {
+      clearTimeout(autoResetErrorTimerRef.current);
+      autoResetErrorTimerRef.current = null;
+    }
+  }, []);
+
+  const cleanup = useCallback(async () => {
+    isRecordingRef.current = false;
+    clearConnectTimeout();
+
+    if (processorRef.current) {
+      processorRef.current.disconnect();
+      processorRef.current.onaudioprocess = null;
+      processorRef.current = null;
+    }
+
+    if (sourceNodeRef.current) {
+      sourceNodeRef.current.disconnect();
+      sourceNodeRef.current = null;
+    }
+
+    if (audioContextRef.current) {
+      try {
+        await audioContextRef.current.close();
+      } catch {
+        // noop
+      }
+      audioContextRef.current = null;
+    }
+
     if (mediaStreamRef.current) {
       mediaStreamRef.current.getTracks().forEach((track) => track.stop());
       mediaStreamRef.current = null;
     }
-  }, []);
 
-  const resetState = useCallback(() => {
-    isRecordingRef.current = false;
-    usingNativeRecognitionRef.current = false;
-    usingBufferedFallbackRef.current = false;
-    recordedChunksRef.current = [];
-    setInterimText('');
-    setStatus('idle');
-  }, []);
-
-  const cleanupTransport = useCallback(() => {
-    clearConnectTimeout();
-
-    if (recognitionRef.current) {
+    if (asrClientRef.current) {
       try {
-        recognitionRef.current.onstart = null;
-        recognitionRef.current.onresult = null;
-        recognitionRef.current.onerror = null;
-        recognitionRef.current.onend = null;
-        recognitionRef.current.abort?.();
+        await asrClientRef.current.stop();
       } catch {
-        // ignore cleanup errors
+        // noop
       }
-      recognitionRef.current = null;
+      asrClientRef.current = null;
     }
 
-    if (mediaRecorderRef.current) {
-      try {
-        if (mediaRecorderRef.current.state !== 'inactive') {
-          mediaRecorderRef.current.stop();
-        }
-      } catch {
-        // ignore cleanup errors
-      }
-      mediaRecorderRef.current.ondataavailable = null;
-      mediaRecorderRef.current.onerror = null;
-      mediaRecorderRef.current.onstart = null;
-      mediaRecorderRef.current.onstop = null;
-      mediaRecorderRef.current = null;
-    }
-
-    releaseMediaStream();
-    recordedChunksRef.current = [];
-  }, [clearConnectTimeout, releaseMediaStream]);
-
-  useEffect(() => {
-    return () => {
-      cleanupTransport();
-    };
-  }, [cleanupTransport]);
-
-  const setTemporaryError = useCallback(
-    (message: string, delayMs = 1800) => {
-      onError?.(message);
-      cleanupTransport();
-      setStatus('error');
-      window.setTimeout(() => {
-        if (statusRef.current === 'error') {
-          resetState();
-        }
-      }, delayMs);
-    },
-    [cleanupTransport, onError, resetState]
-  );
-
-  const stopNativeRecognition = useCallback(async () => {
-    const recognition = recognitionRef.current;
-    if (!recognition) return;
-
-    clearConnectTimeout();
-
-    if (interimTextRef.current.trim()) {
-      onTranscript(interimTextRef.current.trim());
-    }
-
-    try {
-      recognition.stop();
-    } catch {
-      recognition.abort?.();
-    }
-
-    recognitionRef.current = null;
-    resetState();
-  }, [clearConnectTimeout, onTranscript, resetState]);
-
-  const startNativeRecognition = useCallback(async (): Promise<boolean> => {
-    const RecognitionCtor = getSpeechRecognitionConstructor();
-    if (!RecognitionCtor) return false;
-
-    try {
-      const recognition = new RecognitionCtor();
-      usingNativeRecognitionRef.current = true;
-      recognitionRef.current = recognition;
-
-      recognition.lang = 'zh-CN';
-      recognition.interimResults = true;
-      recognition.continuous = true;
-
-      recognition.onstart = () => {
-        clearConnectTimeout();
-        setStatus('recording');
-      };
-
-      recognition.onresult = (event) => {
-        let finalText = '';
-        let nextInterim = '';
-
-        for (let index = event.resultIndex; index < event.results.length; index += 1) {
-          const result = event.results[index];
-          const transcript = result?.[0]?.transcript?.trim() || '';
-          if (!transcript) continue;
-
-          if (result.isFinal) {
-            finalText += `${transcript} `;
-          } else {
-            nextInterim += transcript;
-          }
-        }
-
-        if (finalText.trim()) {
-          onTranscript(finalText.trim());
-        }
-
-        const normalizedInterim = nextInterim.trim();
-        setInterimText(normalizedInterim);
-        onInterim?.(normalizedInterim);
-      };
-
-      recognition.onerror = (event) => {
-        const errorCode = event.error || '';
-        if (errorCode === 'aborted') return;
-
-        const message =
-          errorCode === 'not-allowed'
-            ? '请先允许麦克风权限，再开始语音听写。'
-            : errorCode === 'no-speech'
-              ? '没有听到语音，再试一次。'
-              : '语音听写暂时不可用，请稍后重试。';
-
-        setTemporaryError(message, 1600);
-      };
-
-      recognition.onend = () => {
-        recognitionRef.current = null;
-        if (statusRef.current === 'recording' || statusRef.current === 'connecting') {
-          resetState();
-        }
-      };
-
-      setStatus('connecting');
-      setInterimText('');
-
-      connectTimeoutRef.current = setTimeout(() => {
-        if (statusRef.current === 'connecting') {
-          setTemporaryError('语音听写启动超时，请再试一次。', 1600);
-        }
-      }, 1800);
-
-      isRecordingRef.current = true;
-      recognition.start();
-      return true;
-    } catch (error) {
-      console.warn('[VoiceInput] Native recognition unavailable, fallback to buffered recording:', error);
-      recognitionRef.current = null;
-      usingNativeRecognitionRef.current = false;
-      clearConnectTimeout();
-      return false;
-    }
-  }, [clearConnectTimeout, onInterim, onTranscript, resetState, setTemporaryError]);
-
-  const transcribeBufferedAudio = useCallback(
-    async (audioBlob: Blob) => {
-      if (!audioBlob.size) {
-        throw new Error('没有录到有效语音，请再试一次。');
-      }
-
-      const mimeType = bufferedMimeTypeRef.current || audioBlob.type || 'audio/webm';
-      const extension = getFileExtensionFromMimeType(mimeType);
-      const audioFile = new File([audioBlob], `voice-input.${extension}`, {
-        type: mimeType,
-        lastModified: Date.now(),
-      });
-
-      const formData = new FormData();
-      formData.append('audio', audioFile);
-      formData.append('language', 'zh');
-
-      const response = await fetch('/api/transcribe-turbo', {
-        method: 'POST',
-        body: formData,
-      });
-
-      const payload = (await response.json().catch(() => ({}))) as {
-        error?: string;
-        detail?: string;
-        sentences?: Array<{ text?: string }>;
-      };
-
-      if (!response.ok) {
-        throw new Error(payload.error || payload.detail || '语音听写暂时不可用，请稍后重试。');
-      }
-
-      const transcript = (payload.sentences || [])
-        .map((sentence) => sentence.text?.trim() || '')
-        .filter(Boolean)
-        .join(' ')
-        .trim();
-
-      if (!transcript) {
-        throw new Error('没有听清这段话，再试一次。');
-      }
-
-      onTranscript(transcript);
-    },
-    [onTranscript]
-  );
-
-  const startBufferedRecognition = useCallback(async () => {
-    if (typeof MediaRecorder === 'undefined' || !navigator.mediaDevices?.getUserMedia) {
-      throw new Error('当前设备暂不支持语音听写。');
-    }
-
-    setStatus('connecting');
     setInterimText('');
+    interimTextRef.current = '';
     onInterim?.('');
+  }, [clearConnectTimeout, onInterim]);
 
-    const stream = await navigator.mediaDevices.getUserMedia({
-      audio: {
-        echoCancellation: true,
-        noiseSuppression: true,
-        channelCount: 1,
-      },
-    });
-    mediaStreamRef.current = stream;
-
-    const mimeType = getPreferredRecordingMimeType();
-    bufferedMimeTypeRef.current = mimeType;
-    recordedChunksRef.current = [];
-
-    const recorder = new MediaRecorder(stream, { mimeType });
-    mediaRecorderRef.current = recorder;
-    usingBufferedFallbackRef.current = true;
-
-    recorder.ondataavailable = (event) => {
-      if (event.data && event.data.size > 0) {
-        recordedChunksRef.current.push(event.data);
+  const recoverFromError = useCallback((message: string) => {
+    onError?.(message);
+    clearAutoResetErrorTimer();
+    setStatus('error');
+    autoResetErrorTimerRef.current = window.setTimeout(() => {
+      if (statusRef.current === 'error') {
+        setStatus('idle');
       }
-    };
-
-    recorder.onerror = () => {
-      setTemporaryError('语音听写暂时不可用，请稍后重试。');
-    };
-
-    recorder.onstart = () => {
-      clearConnectTimeout();
-      setStatus('recording');
-      setInterimText('正在听你说…');
-      onInterim?.('正在听你说…');
-    };
-
-    recorder.onstop = () => {
-      mediaRecorderRef.current = null;
-      releaseMediaStream();
-    };
-
-    connectTimeoutRef.current = setTimeout(() => {
-      if (statusRef.current === 'connecting') {
-        setTemporaryError('语音听写启动超时，请再试一次。', 1600);
-      }
-    }, 2500);
-
-    isRecordingRef.current = true;
-    recorder.start();
-  }, [clearConnectTimeout, onInterim, releaseMediaStream, setTemporaryError]);
-
-  const stopBufferedRecognition = useCallback(async () => {
-    const recorder = mediaRecorderRef.current;
-    if (!recorder) {
-      resetState();
-      return;
-    }
-
-    clearConnectTimeout();
-    isRecordingRef.current = false;
-    setInterimText('');
-    onInterim?.('');
-
-    const stopPromise = new Promise<void>((resolve) => {
-      const handleStop = () => {
-        recorder.removeEventListener('stop', handleStop);
-        resolve();
-      };
-      recorder.addEventListener('stop', handleStop);
-    });
-
-    try {
-      recorder.stop();
-    } catch {
-      cleanupTransport();
-      resetState();
-      throw new Error('语音听写暂时不可用，请稍后重试。');
-    }
-
-    await stopPromise;
-
-    const audioBlob = new Blob(recordedChunksRef.current, { type: bufferedMimeTypeRef.current || 'audio/webm' });
-    recordedChunksRef.current = [];
-    resetState();
-
-    try {
-      await transcribeBufferedAudio(audioBlob);
-    } catch (error) {
-      const message = error instanceof Error && error.message ? error.message : '语音听写暂时不可用，请稍后重试。';
-      onError?.(message);
-      setStatus('error');
-      window.setTimeout(() => {
-        if (statusRef.current === 'error') {
-          resetState();
-        }
-      }, 1800);
-    }
-  }, [clearConnectTimeout, cleanupTransport, onError, onInterim, resetState, transcribeBufferedAudio]);
+    }, 2200);
+  }, [clearAutoResetErrorTimer, onError]);
 
   const startRecording = useCallback(async () => {
-    if (isRecordingRef.current || statusRef.current === 'connecting') return;
+    if (isRecordingRef.current || statusRef.current === 'connecting') {
+      return;
+    }
+
+    clearAutoResetErrorTimer();
+    setStatus('connecting');
+    setInterimText('');
+    interimTextRef.current = '';
+    onInterim?.('');
 
     try {
-      const preferBufferedFallback = shouldPreferBufferedVoiceInput();
-      if (!preferBufferedFallback) {
-        const usedNative = await startNativeRecognition();
-        if (usedNative) return;
+      if (typeof window === 'undefined' || typeof navigator === 'undefined') {
+        throw new Error('当前环境暂不支持语音听写，请换一个浏览器试试。');
+      }
+      if (typeof navigator.mediaDevices?.getUserMedia !== 'function') {
+        throw new Error('当前环境暂不支持语音听写，请换一个浏览器试试。');
       }
 
-      await startBufferedRecognition();
-    } catch (error) {
-      console.error('[VoiceInput] Start failed:', error);
-      const message =
-        error instanceof DOMException && error.name === 'NotAllowedError'
-          ? '请先允许麦克风权限，再开始语音听写。'
-          : error instanceof Error && error.message
-            ? error.message
-            : '启动语音听写失败，请稍后再试。';
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          sampleRate: { ideal: 16000 },
+          channelCount: 1,
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true,
+        },
+      });
+      mediaStreamRef.current = stream;
 
-      setTemporaryError(message);
+      const asrClient = new DashScopeASRClient('', {
+        onSentence: (sentence) => {
+          if (!sentence.text || !sentence.isFinal) return;
+          onTranscript(sentence.text);
+          setInterimText('');
+          interimTextRef.current = '';
+          onInterim?.('');
+        },
+        onInterim: (interim) => {
+          const text = (interim?.text || '').trim();
+          setInterimText(text);
+          interimTextRef.current = text;
+          onInterim?.(text);
+        },
+        onError: (errorMessage) => {
+          const message = normalizeVoiceInputError(new Error(errorMessage));
+          void cleanup().finally(() => {
+            recoverFromError(message);
+          });
+        },
+        onStatusChange: (nextStatus) => {
+          if (nextStatus === 'transcribing') {
+            clearConnectTimeout();
+            setStatus('recording');
+          }
+        },
+      });
+      asrClientRef.current = asrClient;
+
+      connectTimeoutRef.current = window.setTimeout(() => {
+        if (statusRef.current === 'connecting') {
+          void cleanup().finally(() => {
+            recoverFromError('语音听写启动超时，请再试一次。');
+          });
+        }
+      }, 9000);
+
+      const connected = await asrClient.start();
+      if (!connected) {
+        throw new Error('语音识别连接失败，请重试');
+      }
+
+      const audioContext = new AudioContext({ sampleRate: 16000 });
+      audioContextRef.current = audioContext;
+
+      const source = audioContext.createMediaStreamSource(stream);
+      sourceNodeRef.current = source;
+      const processor = audioContext.createScriptProcessor(4096, 1, 1);
+      processorRef.current = processor;
+
+      const browserSampleRate = audioContext.sampleRate;
+      processor.onaudioprocess = (event) => {
+        if (!isRecordingRef.current) return;
+        const inputData = event.inputBuffer.getChannelData(0);
+        const pcm16 = Math.abs(browserSampleRate - 16000) < 100
+          ? Int16Array.from(inputData, (sample) => {
+              const normalized = Math.max(-1, Math.min(1, sample));
+              return normalized < 0 ? normalized * 0x8000 : normalized * 0x7fff;
+            })
+          : resampleTo16kHz(inputData, browserSampleRate);
+        asrClient.sendAudio(pcm16.buffer as ArrayBuffer);
+      };
+
+      source.connect(processor);
+      processor.connect(audioContext.destination);
+
+      isRecordingRef.current = true;
+      setStatus('recording');
+    } catch (error) {
+      const message = normalizeVoiceInputError(error);
+      await cleanup();
+      recoverFromError(message);
     }
-  }, [setTemporaryError, startBufferedRecognition, startNativeRecognition]);
+  }, [cleanup, clearAutoResetErrorTimer, clearConnectTimeout, onInterim, onTranscript, recoverFromError]);
 
   const stopRecording = useCallback(async () => {
-    if (!isRecordingRef.current && statusRef.current !== 'connecting') return;
-
-    if (usingNativeRecognitionRef.current) {
-      await stopNativeRecognition();
+    if (!isRecordingRef.current && statusRef.current !== 'connecting') {
       return;
     }
 
-    if (usingBufferedFallbackRef.current) {
-      await stopBufferedRecognition();
-      return;
+    isRecordingRef.current = false;
+    clearConnectTimeout();
+
+    const pendingInterim = interimTextRef.current.trim();
+    await cleanup();
+
+    if (pendingInterim) {
+      onTranscript(pendingInterim);
     }
 
-    resetState();
-  }, [resetState, stopBufferedRecognition, stopNativeRecognition]);
+    clearAutoResetErrorTimer();
+    setStatus('idle');
+  }, [cleanup, clearAutoResetErrorTimer, clearConnectTimeout, onTranscript]);
 
   const toggleRecording = useCallback(async () => {
     if (isRecordingRef.current || statusRef.current === 'connecting') {
@@ -507,9 +296,17 @@ export function useVoiceInput({
     await startRecording();
   }, [startRecording, stopRecording]);
 
+  useEffect(() => {
+    return () => {
+      clearConnectTimeout();
+      clearAutoResetErrorTimer();
+      void cleanup();
+    };
+  }, [cleanup, clearAutoResetErrorTimer, clearConnectTimeout]);
+
   return {
     status,
-    isRecording: status === 'recording' || status === 'connecting',
+    isRecording: status === 'recording',
     interimText,
     startRecording,
     stopRecording,

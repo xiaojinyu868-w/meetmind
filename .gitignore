@@ -66,4 +66,14 @@ server.log
 prisma/meetmind.db
 prisma/meetmind.db-journal
 .next-dev/
+.next-dev-*/
 screenlog.0
+
+# 微信媒体缓存（运行时产生）
+public/wechat-media/
+
+# 一次性修复脚本
+scripts/fix_aitutor.py
+
+# CodeBuddy 工作记忆
+.codebuddy/
