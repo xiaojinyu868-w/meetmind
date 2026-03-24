@@ -19,6 +19,9 @@ import type {
 import { authService } from './auth-service';
 import workspaceContextService from './workspace-context-service';
 import workspaceService from './workspace-service';
+import { createLogger } from '@/lib/logger';
+const log = createLogger('wechat-auth');
+
 
 // ==================== 配置 ====================
 
@@ -160,7 +163,7 @@ export const wechatAuthService = {
    */
   async getAccessToken(code: string): Promise<WechatTokenResponse | null> {
     if (!this.isConfigured()) {
-      console.error('微信配置不完整');
+      log.error('微信配置不完整');
       return null;
     }
     
@@ -176,13 +179,13 @@ export const wechatAuthService = {
       const data = await response.json();
       
       if (data.errcode) {
-        console.error('获取微信令牌失败:', data);
+        log.error('获取微信令牌失败:', data);
         return null;
       }
       
       return data as WechatTokenResponse;
     } catch (error) {
-      console.error('获取微信令牌异常:', error);
+      log.error('获取微信令牌异常:', error);
       return null;
     }
   },
@@ -202,13 +205,13 @@ export const wechatAuthService = {
       const data = await response.json();
       
       if (data.errcode) {
-        console.error('刷新微信令牌失败:', data);
+        log.error('刷新微信令牌失败:', data);
         return null;
       }
       
       return data as WechatTokenResponse;
     } catch (error) {
-      console.error('刷新微信令牌异常:', error);
+      log.error('刷新微信令牌异常:', error);
       return null;
     }
   },
@@ -247,13 +250,13 @@ export const wechatAuthService = {
       const data = await response.json();
       
       if (data.errcode) {
-        console.error('获取微信用户信息失败:', data);
+        log.error('获取微信用户信息失败:', data);
         return null;
       }
       
       return data as WechatUserInfo;
     } catch (error) {
-      console.error('获取微信用户信息异常:', error);
+      log.error('获取微信用户信息异常:', error);
       return null;
     }
   },
@@ -267,14 +270,14 @@ export const wechatAuthService = {
   async login(code: string, state: string): Promise<AuthResponse> {
     // 验证状态
     if (!this.validateState(state)) {
-      console.error('[wechat-login] state 验证失败，可能已过期或重复使用');
+      log.error('[wechat-login] state 验证失败，可能已过期或重复使用');
       return { success: false, error: '无效的授权状态' };
     }
     
     // 获取访问令牌
     const tokenResponse = await this.getAccessToken(code);
     if (!tokenResponse) {
-      console.error('[wechat-login] 获取 access_token 失败');
+      log.error('[wechat-login] 获取 access_token 失败');
       return { success: false, error: '获取微信授权失败' };
     }
 
@@ -321,7 +324,7 @@ export const wechatAuthService = {
     });
     
     if (!registerResult.success || !registerResult.user) {
-      console.error(`[wechat-login] 注册失败: ${registerResult.error}`);
+      log.error(`[wechat-login] 注册失败: ${registerResult.error}`);
       return { success: false, error: registerResult.error || '创建用户失败' };
     }
     

@@ -10,6 +10,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { summaryService } from '@/lib/services/summary-service';
 import { applyRateLimit } from '@/lib/utils/rate-limit';
+import { createLogger } from '@/lib/logger';
+const log = createLogger('generate-summary');
+
 
 // 请求体类型
 interface GenerateSummaryRequest {
@@ -125,7 +128,7 @@ export async function POST(request: NextRequest): Promise<NextResponse<GenerateS
     });
     
   } catch (error) {
-    console.error('生成摘要失败:', error);
+    log.error('生成摘要失败:', error);
     
     return NextResponse.json(
       { 

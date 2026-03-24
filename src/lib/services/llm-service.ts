@@ -8,6 +8,9 @@
  */
 
 import { LLMConfig, type ModelConfig, type ModelProvider } from '@/lib/config';
+import { createLogger } from '@/lib/logger';
+const log = createLogger('llm');
+
 
 // 重导出类型和配置
 export type { ModelConfig, ModelProvider };
@@ -220,7 +223,7 @@ async function callQwen(
 
   const finishReason = data.choices?.[0]?.finish_reason;
   if (finishReason && finishReason !== 'stop') {
-    console.warn(`[LLM] finish_reason=${finishReason}, model=${modelId}, requested max_tokens=${requestBody.max_tokens}`);
+    log.warn(`[LLM] finish_reason=${finishReason}, model=${modelId}, requested max_tokens=${requestBody.max_tokens}`);
   }
   
   // 思考模式可能返回 reasoning_content，需要处理

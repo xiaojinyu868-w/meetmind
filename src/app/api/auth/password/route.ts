@@ -6,6 +6,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { authService } from '@/lib/services/auth-service';
 import type { ChangePasswordRequest } from '@/types/user';
+import { createLogger } from '@/lib/logger';
+const log = createLogger('auth/password');
+
 
 /**
  * 从请求头获取并验证令牌
@@ -52,7 +55,7 @@ export async function POST(request: NextRequest) {
     
     return NextResponse.json({ success: true });
   } catch (error) {
-    console.error('修改密码错误:', error);
+    log.error('修改密码错误:', error);
     return NextResponse.json(
       { success: false, error: '服务器错误' },
       { status: 500 }

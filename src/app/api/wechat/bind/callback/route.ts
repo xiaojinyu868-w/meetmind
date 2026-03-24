@@ -20,6 +20,9 @@ import { authService } from '@/lib/services/auth-service';
 import workspaceService from '@/lib/services/workspace-service';
 import workspaceContextService from '@/lib/services/workspace-context-service';
 import { createWechatWebSession, consumeWechatWebSession } from '@/lib/services/wechat-web-session-service';
+import { createLogger } from '@/lib/logger';
+const log = createLogger('wechat/bind/callback');
+
 
 // state → linkToken 映射（传递 capture token 到回调）
 const stateStore = new Map<string, { linkToken: string; expiresAt: number }>();
@@ -231,7 +234,7 @@ async function handleCallback(request: NextRequest): Promise<NextResponse> {
 
     return response;
   } catch (error) {
-    console.error('[wechat bind callback] error:', error);
+    log.error('[wechat bind callback] error:', error);
     const errorUrl = linkToken
       ? `${baseUrl}/wechat/capture/${linkToken}?error=${encodeURIComponent('绑定失败，请重试')}`
       : `${baseUrl}/login?error=server_error`;

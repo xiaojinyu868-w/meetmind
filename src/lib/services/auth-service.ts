@@ -24,6 +24,9 @@ import type {
 } from '@/types/user';
 import { AuthConfig } from '@/lib/config';
 import prisma from '@/lib/prisma';
+import { createLogger } from '@/lib/logger';
+const log = createLogger('auth');
+
 
 // ==================== 配置（从统一配置读取） ====================
 
@@ -56,7 +59,7 @@ interface DbUserRecord {
 
 // 检查配置有效性
 if (!JWT_SECRET) {
-  console.warn('[AuthService] 警告: JWT_SECRET 未配置，请在环境变量中设置');
+  log.warn('[AuthService] 警告: JWT_SECRET 未配置，请在环境变量中设置');
 }
 
 // ==================== 初始化管理员账户 ====================
@@ -88,10 +91,10 @@ async function initializeAdminAccount(): Promise<void> {
         
       }
     } catch (error) {
-      console.error('[AuthService] 初始化管理员账户失败:', error);
+      log.error('[AuthService] 初始化管理员账户失败:', error);
     }
   } else {
-    console.warn('[AuthService] 未配置管理员账户，请设置 ADMIN_USERNAME 和 ADMIN_PASSWORD 环境变量');
+    log.warn('[AuthService] 未配置管理员账户，请设置 ADMIN_USERNAME 和 ADMIN_PASSWORD 环境变量');
   }
 }
 

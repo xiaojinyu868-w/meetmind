@@ -13,6 +13,9 @@ import * as path from 'path';
 import * as os from 'os';
 import { execSync } from 'child_process';
 import { resolveFfmpegPath, resolveFfprobePath } from '@/lib/services/media-tooling';
+import { createLogger } from '@/lib/logger';
+const log = createLogger('qwen-asr');
+
 
 // API 端点
 const DASHSCOPE_API_BASE = 'https://dashscope.aliyuncs.com/api/v1';
@@ -89,7 +92,7 @@ async function _convertToWav(audioBlob: Blob): Promise<Buffer> {
       if (fs.existsSync(inputPath)) fs.unlinkSync(inputPath);
       if (fs.existsSync(outputPath)) fs.unlinkSync(outputPath);
     } catch (e) {
-      console.warn('[FFmpeg] Cleanup error:', e);
+      log.warn('[FFmpeg] Cleanup error:', e);
     }
   }
 }
@@ -106,7 +109,7 @@ function getAudioDuration(inputPath: string): number {
     const output = execSync(cmd, { stdio: 'pipe' }).toString().trim();
     return parseFloat(output) || 0;
   } catch (e) {
-    console.warn('[FFmpeg] Failed to get duration:', e);
+    log.warn('[FFmpeg] Failed to get duration:', e);
     return 0;
   }
 }
@@ -165,7 +168,7 @@ async function splitAudioToWavChunks(audioBlob: Blob): Promise<{ chunks: Buffer[
     try {
       if (fs.existsSync(inputPath)) fs.unlinkSync(inputPath);
     } catch (e) {
-      console.warn('[FFmpeg] Cleanup error:', e);
+      log.warn('[FFmpeg] Cleanup error:', e);
     }
   }
 }
@@ -197,7 +200,7 @@ async function convertToMp3(audioBlob: Blob): Promise<{ buffer: Buffer; path: st
   try {
     if (fs.existsSync(inputPath)) fs.unlinkSync(inputPath);
   } catch (e) {
-    console.warn('[FFmpeg] Cleanup error:', e);
+    log.warn('[FFmpeg] Cleanup error:', e);
   }
   
   return { buffer: mp3Buffer, path: outputPath };
@@ -551,7 +554,7 @@ export async function transcribeAudio(
       chunks = result.chunks;
       durations = result.durations;
     } catch (error) {
-      console.error('[QwenASR] Audio conversion failed:', error);
+      log.error('[QwenASR] Audio conversion failed:', error);
       return {
         success: false,
         sentences: [],
@@ -574,7 +577,7 @@ export async function transcribeAudio(
       const result = await transcribeWavChunk(chunk, apiKey, language);
       
       if (!result.success) {
-        console.error('[QwenASR] Chunk', i + 1, 'failed:', result.error);
+        log.error(`[QwenASR] Chunk ${i + 1} failed`, result.error);
         // 继续处理其他分块，不中断
         timeOffset += chunkDuration;
         continue;
@@ -611,7 +614,7 @@ export async function transcribeAudio(
     };
 
   } catch (error) {
-    console.error('[QwenASR] Error:', error);
+    log.error('[QwenASR] Error:', error);
     return {
       success: false,
       sentences: [],

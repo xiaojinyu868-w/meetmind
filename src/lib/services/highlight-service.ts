@@ -25,6 +25,9 @@ import {
   type TranscriptChunk,
 } from '@/lib/utils';
 import { parseJsonResponse } from '@/lib/utils';
+import { createLogger } from '@/lib/logger';
+const log = createLogger('highlight');
+
 
 // ============ 配置常量（从统一配置读取） ============
 const DEFAULT_MODEL = FeatureConfig.highlights.defaultModel;
@@ -547,7 +550,7 @@ export async function generateHighlightTopics(
       
       rawTopics = parseJsonResponse<RawTopic[]>(response.content) ?? [];
     } catch (llmError) {
-      console.error('[highlightService] LLM 调用失败:', llmError);
+      log.error('[highlightService] LLM 调用失败:', llmError);
       throw llmError;
     }
   } 
@@ -572,7 +575,7 @@ export async function generateHighlightTopics(
             quote: t.quote!
           }));
         } catch (e) {
-          console.error(`[highlightService] 块 ${chunkIdx} 处理失败:`, e);
+          log.error(`[highlightService] 块 ${chunkIdx} 处理失败:`, e);
           return [];
         }
       })

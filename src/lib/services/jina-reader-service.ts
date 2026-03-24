@@ -12,6 +12,9 @@ import prisma from '@/lib/prisma';
 import workspaceContextService from '@/lib/services/workspace-context-service';
 import { detectLinkProvider } from '@/lib/context-reach/link-provider';
 import { chat, WORKSHOP_PREFERRED_MODEL_ID, type ChatMessage } from '@/lib/services/llm-service';
+import { createLogger } from '@/lib/logger';
+const log = createLogger('jina-reader');
+
 
 // 已知强反爬、Jina Reader 大概率失败的平台
 const SKIP_JINA_PROVIDERS = new Set([
@@ -57,7 +60,7 @@ export async function fetchJinaReaderContent(url: string): Promise<string | null
     clearTimeout(timeoutId);
 
     if (!response.ok) {
-      console.warn(`[jina-reader] HTTP ${response.status} for ${url}`);
+      log.warn(`[jina-reader] HTTP ${response.status} for ${url}`);
       return null;
     }
 
@@ -66,7 +69,7 @@ export async function fetchJinaReaderContent(url: string): Promise<string | null
 
     // 太短的内容视为抓取失败（反爬返回的空壳页面通常很短）
     if (trimmed.length < 80) {
-      console.warn(`[jina-reader] content too short (${trimmed.length} chars) for ${url}`);
+      log.warn(`[jina-reader] content too short (${trimmed.length} chars) for ${url}`);
       return null;
     }
 
@@ -78,9 +81,9 @@ export async function fetchJinaReaderContent(url: string): Promise<string | null
     return trimmed;
   } catch (error) {
     if (error instanceof DOMException && error.name === 'AbortError') {
-      console.warn(`[jina-reader] timeout for ${url}`);
+      log.warn(`[jina-reader] timeout for ${url}`);
     } else {
-      console.warn(`[jina-reader] fetch failed for ${url}:`, error);
+      log.warn(`[jina-reader] fetch failed for ${url}:`, error);
     }
     return null;
   }
@@ -127,7 +130,7 @@ async function generateLinkSummary(
       insight: parsed.insight || '',
     };
   } catch (error) {
-    console.warn('[jina-reader] AI summary generation failed:', error);
+    log.warn('[jina-reader] AI summary generation failed:', error);
     return null;
   }
 }
@@ -214,6 +217,6 @@ export async function enrichLinkContent(linkToken: string): Promise<void> {
       }
     }
   } catch (error) {
-    console.error('[jina-reader] enrichLinkContent failed:', error);
+    log.error('[jina-reader] enrichLinkContent failed:', error);
   }
 }

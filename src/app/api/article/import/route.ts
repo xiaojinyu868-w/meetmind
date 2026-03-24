@@ -42,6 +42,9 @@ import {
   extractWebArticle,
   WebArticleExtractError,
 } from '@/lib/services/web-article-extract-service';
+import { createLogger } from '@/lib/logger';
+const log = createLogger('article/import');
+
 
 interface ImportRequestBody {
   url?: string;
@@ -169,7 +172,7 @@ export async function POST(request: NextRequest) {
     });
   } catch (error) {
     if (error instanceof WebArticleExtractError) {
-      console.error(`[article-import] ${error.code}: ${error.message} | ${error.detail}`);
+      log.error(`[article-import] ${error.code}: ${error.message} | ${error.detail}`);
       return NextResponse.json(
         { error: error.message, code: error.code, detail: error.detail },
         { status: 422 }
@@ -177,7 +180,7 @@ export async function POST(request: NextRequest) {
     }
 
     const message = error instanceof Error ? error.message : String(error);
-    console.error(`[article-import] unexpected error: ${message}`);
+    log.error(`[article-import] unexpected error: ${message}`);
     return NextResponse.json(
       { error: '文章导入失败', code: 'ARTICLE_IMPORT_FAILED', detail: message },
       { status: 500 }

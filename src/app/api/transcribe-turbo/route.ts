@@ -10,6 +10,9 @@ import {
   runCommand,
   safeUnlink,
 } from '@/lib/services/media-tooling';
+import { createLogger } from '@/lib/logger';
+const log = createLogger('transcribe-turbo');
+
 
 const MAX_FILE_SIZE = 500 * 1024 * 1024;
 const UPLOAD_DIR = path.join(process.cwd(), 'public', 'temp-audio');
@@ -481,7 +484,7 @@ async function processSegmentBatch(
   // 典型场景：DashScope 无法通过公网 URL 下载分段音频，只有第一个分段偶然成功。
   const successRate = sentences.length / sorted.length;
   if (sorted.length > 1 && successRate < 0.5) {
-    console.warn(
+    log.warn(
       `[transcribe-turbo] low segment success rate: ${sentences.length}/${sorted.length} (${(successRate * 100).toFixed(0)}%), treating as failure`
     );
     return {

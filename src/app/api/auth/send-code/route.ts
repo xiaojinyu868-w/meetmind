@@ -17,6 +17,9 @@ import { NextRequest, NextResponse } from 'next/server';
 import { emailService } from '@/lib/services/email-service';
 import { smsService } from '@/lib/services/sms-service';
 import type { CodePurpose } from '@/lib/services/verification-code-service';
+import { createLogger } from '@/lib/logger';
+const log = createLogger('auth/send-code');
+
 
 export async function POST(request: NextRequest) {
   try {
@@ -67,7 +70,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ success: true });
   } catch (error) {
-    console.error('[API] 发送验证码失败:', error);
+    log.error('[API] 发送验证码失败:', error);
     return NextResponse.json(
       { success: false, error: '服务器错误' },
       { status: 500 }

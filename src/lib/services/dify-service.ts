@@ -10,6 +10,9 @@
  * - 附加模式：新功能以额外字段返回
  */
 
+import { createLogger } from '@/lib/logger';
+const log = createLogger('dify');
+
 // ==================== 类型定义 ====================
 
 /** 引导问题选项 */
@@ -251,7 +254,7 @@ export class DifyService {
           guidanceQuestion = parsedGuidance as GuidanceQuestion;
         }
       } catch {
-        console.warn('Failed to parse guidance_question');
+        log.warn('Failed to parse guidance_question');
       }
     }
 
@@ -266,7 +269,7 @@ export class DifyService {
           citations = parsedCitations as Citation[];
         }
       } catch {
-        console.warn('Failed to parse citations');
+        log.warn('Failed to parse citations');
       }
     }
 
@@ -337,7 +340,7 @@ export function getDifyService(): DifyService {
     };
     
     if (!config.apiKey) {
-      console.warn('DIFY_API_KEY not configured, Dify features will be disabled');
+      log.warn('DIFY_API_KEY not configured, Dify features will be disabled');
     }
     
     difyServiceInstance = new DifyService(config);

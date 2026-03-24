@@ -9,6 +9,9 @@
  */
 
 import prisma from '@/lib/prisma';
+import { createLogger } from '@/lib/logger';
+const log = createLogger('analytics');
+
 
 let analyticsStorageEnabled = true;
 
@@ -28,12 +31,12 @@ function handleAnalyticsError(scope: string, error: unknown) {
   if (isMissingAnalyticsTableError(error)) {
     if (analyticsStorageEnabled) {
       analyticsStorageEnabled = false;
-      console.warn('[Analytics] Analytics tables are missing. Analytics write/query has been disabled for this runtime.');
+      log.warn('[Analytics] Analytics tables are missing. Analytics write/query has been disabled for this runtime.');
     }
     return;
   }
 
-  console.error(`[Analytics] Failed to ${scope}:`, error);
+  log.error(`[Analytics] Failed to ${scope}:`, error);
 }
 
 function canUseAnalyticsStorage() {
@@ -213,7 +216,7 @@ export async function trackPageView(params: PageViewParams) {
     });
     
     if (!session) {
-      console.warn('[Analytics] Session not found for pageView:', sessionToken);
+      log.warn('[Analytics] Session not found for pageView:', sessionToken);
       return null;
     }
     
@@ -266,7 +269,7 @@ export async function trackEvent(params: EventParams) {
     });
     
     if (!session) {
-      console.warn('[Analytics] Session not found for event:', sessionToken);
+      log.warn('[Analytics] Session not found for event:', sessionToken);
       return null;
     }
     
@@ -448,7 +451,7 @@ export async function getStats(_query?: StatsQuery): Promise<AnalyticsStats> {
       })),
     };
   } catch (error) {
-    console.error('[Analytics] Failed to get stats:', error);
+    log.error('[Analytics] Failed to get stats:', error);
     // 返回空统计
     return {
       totalUsers: 0,
@@ -483,7 +486,7 @@ export async function getNewUsersCount(startDate: Date, endDate?: Date) {
       }
     });
   } catch (error) {
-    console.error('[Analytics] Failed to get new users count:', error);
+    log.error('[Analytics] Failed to get new users count:', error);
     return 0;
   }
 }
@@ -505,7 +508,7 @@ export async function getActiveUsersCount(startDate: Date, endDate?: Date) {
     });
     return result.length;
   } catch (error) {
-    console.error('[Analytics] Failed to get active users count:', error);
+    log.error('[Analytics] Failed to get active users count:', error);
     return 0;
   }
 }
@@ -528,7 +531,7 @@ export async function getIpDistribution(limit = 20) {
       count: r._count.ip
     }));
   } catch (error) {
-    console.error('[Analytics] Failed to get IP distribution:', error);
+    log.error('[Analytics] Failed to get IP distribution:', error);
     return [];
   }
 }
@@ -593,7 +596,7 @@ export async function getDailyTrend(days = 30) {
     
     return trend;
   } catch (error) {
-    console.error('[Analytics] Failed to get daily trend:', error);
+    log.error('[Analytics] Failed to get daily trend:', error);
     return [];
   }
 }

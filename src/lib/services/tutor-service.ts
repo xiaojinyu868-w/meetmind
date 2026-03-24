@@ -14,6 +14,9 @@ import {
 import type { TranscriptSegment } from '@/types';
 import { FeatureConfig } from '@/lib/config';
 import { formatTimestamp, getContextAroundTimestamp, formatTranscriptWithTimestamps } from '@/lib/utils';
+import { createLogger } from '@/lib/logger';
+const log = createLogger('tutor');
+
 
 // 匹配结果类型
 interface QuoteMatchResult {
@@ -84,7 +87,7 @@ export class TutorService {
    */
   findQuote(quote: string): QuoteMatchResult | null {
     if (!this.transcriptIndex) {
-      console.warn('Transcript index not built');
+      log.warn('Transcript index not built');
       return null;
     }
 
@@ -135,7 +138,7 @@ export class TutorService {
       const data = await response.json();
       return this.parseResponse(data.content, contextSegments);
     } catch (error) {
-      console.error('TutorService error:', error);
+      log.error('TutorService error:', error);
       return {
         confusionAnalysis: '无法分析困惑点',
         explanation: '抱歉，AI 家教暂时无法回答。请稍后再试。',

@@ -11,6 +11,9 @@ import { NextRequest, NextResponse } from 'next/server';
 import { highlightService } from '@/lib/services/highlight-service';
 import type { TopicGenerationMode } from '@/types';
 import { applyRateLimit } from '@/lib/utils/rate-limit';
+import { createLogger } from '@/lib/logger';
+const log = createLogger('generate-topics');
+
 
 // 请求体类型
 interface GenerateTopicsRequest {
@@ -131,7 +134,7 @@ export async function POST(request: NextRequest): Promise<NextResponse<GenerateT
     
     // 如果没有生成主题，记录警告
     if (result.topics.length === 0) {
-      console.warn('[generate-topics] 警告：未生成任何主题！');
+      log.warn('[generate-topics] 警告：未生成任何主题！');
     }
     
     // 构建响应
@@ -160,7 +163,7 @@ export async function POST(request: NextRequest): Promise<NextResponse<GenerateT
     return NextResponse.json(response);
     
   } catch (error) {
-    console.error('[generate-topics] 错误:', error);
+    log.error('[generate-topics] 错误:', error);
     
     return NextResponse.json(
       { 

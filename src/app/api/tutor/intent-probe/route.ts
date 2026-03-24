@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { chat } from '@/lib/services/llm-service';
+import { createLogger } from '@/lib/logger';
+const log = createLogger('tutor/intent-probe');
+
 
 /**
  * 意图探测 API v2 —— 仅做二级裂变
@@ -77,13 +80,13 @@ export async function POST(request: NextRequest) {
         directions: buildFallbackDirections(intentLabel),
       });
     } catch (llmError) {
-      console.error('[intent-probe] LLM error:', llmError);
+      log.error('[intent-probe] LLM error:', llmError);
       return NextResponse.json({
         directions: buildFallbackDirections(intentLabel),
       });
     }
   } catch (error) {
-    console.error('[intent-probe] Request error:', error);
+    log.error('[intent-probe] Request error:', error);
     return NextResponse.json(
       { error: 'Internal server error' },
       { status: 500 }

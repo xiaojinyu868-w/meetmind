@@ -14,6 +14,9 @@ import { NextRequest, NextResponse } from 'next/server';
 import { authService } from '@/lib/services/auth-service';
 import { emailService } from '@/lib/services/email-service';
 import { smsService } from '@/lib/services/sms-service';
+import { createLogger } from '@/lib/logger';
+const log = createLogger('auth/login-with-code');
+
 
 export async function POST(request: NextRequest) {
   try {
@@ -84,7 +87,7 @@ export async function POST(request: NextRequest) {
 
     return response;
   } catch (error) {
-    console.error('[API] 验证码登录失败:', error);
+    log.error('[API] 验证码登录失败:', error);
     return NextResponse.json(
       { success: false, error: '服务器错误' },
       { status: 500 }

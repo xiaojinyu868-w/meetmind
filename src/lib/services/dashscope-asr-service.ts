@@ -1,3 +1,6 @@
+import { createLogger } from '@/lib/logger';
+const log = createLogger('dashscope-asr');
+
 export interface ASRSentence {
   id: string;
   text: string;
@@ -85,7 +88,7 @@ export class DashScopeASRClient {
 
   async start(): Promise<boolean> {
     if (this.ws) {
-      console.warn('[DashScopeASR] Already connected');
+      log.warn('[DashScopeASR] Already connected');
       return true;
     }
 
@@ -143,7 +146,7 @@ export class DashScopeASRClient {
 
           this.ws.onerror = (error) => {
             clearTimeout(connectionTimeout);
-            console.error(`[DashScopeASR] Connection error: ${wsUrl}`, error);
+            log.error(`[DashScopeASR] Connection error: ${wsUrl}`, error);
             if (!connected && !resolved && urlIndex < candidateUrls.length - 1) {
               tryConnect(urlIndex + 1);
             } else if (!connected && !resolved) {
@@ -171,7 +174,7 @@ export class DashScopeASRClient {
           }
         }, 15000);
       } catch (error) {
-        console.error('[DashScopeASR] Failed to connect:', error);
+        log.error('[DashScopeASR] Failed to connect:', error);
         this.updateStatus('error');
         this.callbacks.onError?.('连接失败');
         resolve(false);
@@ -186,11 +189,11 @@ export class DashScopeASRClient {
       if (msg.error) {
         const errorMessage = this.normalizeErrorMessage(msg.error);
         if (this.isIgnorableStopError(errorMessage)) {
-          console.warn('[DashScopeASR] Ignore stop-time commit error:', errorMessage);
+          log.warn('[DashScopeASR] Ignore stop-time commit error:', errorMessage);
           return;
         }
         if (this.isIgnorableSessionUpdateError(errorMessage)) {
-          console.warn('[DashScopeASR] Ignore session update error (non-fatal):', errorMessage);
+          log.warn('[DashScopeASR] Ignore session update error (non-fatal):', errorMessage);
           return;
         }
         this.callbacks.onError?.(errorMessage);
@@ -239,7 +242,7 @@ export class DashScopeASRClient {
             break;
           }
           if (this.isIgnorableSessionUpdateError(errorMessage)) {
-            console.warn('[DashScopeASR] Ignore session update error in event:', errorMessage);
+            log.warn('[DashScopeASR] Ignore session update error in event:', errorMessage);
             break;
           }
           this.callbacks.onError?.(errorMessage);
@@ -252,7 +255,7 @@ export class DashScopeASRClient {
           break;
       }
     } catch (error) {
-      console.error('[DashScopeASR] Failed to parse message:', error);
+      log.error('[DashScopeASR] Failed to parse message:', error);
     }
   }
 

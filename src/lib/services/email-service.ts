@@ -11,6 +11,9 @@
 
 import nodemailer from 'nodemailer';
 import { verificationCodeService, type CodePurpose } from './verification-code-service';
+import { createLogger } from '@/lib/logger';
+const log = createLogger('email');
+
 
 // 邮箱配置（从环境变量读取 - 使用函数确保运行时读取）
 const getSmtpConfig = () => ({
@@ -28,7 +31,7 @@ function createTransporter(): nodemailer.Transporter {
   const config = getSmtpConfig();
   
   if (!config.user || !config.pass) {
-    console.error('[EmailService] SMTP 配置检查:', {
+    log.error('[EmailService] SMTP 配置检查:', {
       host: config.host,
       user: config.user ? '已配置' : '未配置',
       pass: config.pass ? '已配置' : '未配置',
@@ -158,7 +161,7 @@ async function sendEmailWithRetry(
 
       return; // 发送成功，退出
     } catch (error) {
-      console.error(`[EmailService] 发送邮件失败 [attempt: ${attempt + 1}/${maxRetries + 1}]:`, error);
+      log.error(`[EmailService] 发送邮件失败 [attempt: ${attempt + 1}/${maxRetries + 1}]:`, error);
       
       if (attempt < maxRetries) {
         // 等待后重试
@@ -168,7 +171,7 @@ async function sendEmailWithRetry(
   }
 
   // 所有重试都失败了，记录错误（但不影响用户操作，验证码已入库）
-  console.error(`[EmailService] 发送邮件最终失败: ${email} (${purpose}) - 验证码已入库，用户可尝试重新发送`);
+  log.error(`[EmailService] 发送邮件最终失败: ${email} (${purpose}) - 验证码已入库，用户可尝试重新发送`);
 }
 
 export const emailService = {
@@ -192,7 +195,7 @@ export const emailService = {
 
     // 检查配置
     if (!this.isConfigured()) {
-      console.error('[EmailService] SMTP 未配置');
+      log.error('[EmailService] SMTP 未配置');
       return { success: false, error: '邮箱服务暂不可用' };
     }
 
@@ -222,7 +225,7 @@ export const emailService = {
 
       return { success: true };
     } catch (error) {
-      console.error('[EmailService] 发送邮件失败:', error);
+      log.error('[EmailService] 发送邮件失败:', error);
       return { success: false, error: '发送邮件失败，请稍后重试' };
     }
   },
@@ -248,7 +251,7 @@ export const emailService = {
 
     // 检查配置
     if (!this.isConfigured()) {
-      console.error('[EmailService] SMTP 未配置');
+      log.error('[EmailService] SMTP 未配置');
       return { success: false, error: '邮箱服务暂不可用' };
     }
 
@@ -271,7 +274,7 @@ export const emailService = {
         maxRetries: 2,
         retryDelay: 1000,
       }).catch(err => {
-        console.error('[EmailService] 异步发送邮件出错:', err);
+        log.error('[EmailService] 异步发送邮件出错:', err);
       });
     });
 

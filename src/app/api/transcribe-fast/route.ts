@@ -11,6 +11,9 @@ import {
   runCommand,
   safeUnlink,
 } from '@/lib/services/media-tooling';
+import { createLogger } from '@/lib/logger';
+const log = createLogger('transcribe-fast');
+
 
 const MAX_FILE_SIZE = 500 * 1024 * 1024;
 const UPLOAD_DIR = path.join(process.cwd(), 'public', 'temp-audio');
@@ -281,7 +284,7 @@ async function processParallelTasks(
 
   if (taskIds.every((taskId) => taskId === null)) {
     const firstError = submitResults.find((r) => r.error)?.error || 'unknown';
-    console.error(`[transcribe-fast] all task submits failed, first error: ${firstError}`);
+    log.error(`[transcribe-fast] all task submits failed, first error: ${firstError}`);
     return { success: false, allSentences: [], error: `all task submit failed: ${firstError}` };
   }
 

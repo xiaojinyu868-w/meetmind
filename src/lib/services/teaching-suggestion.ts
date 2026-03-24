@@ -7,6 +7,9 @@
  */
 
 import type { Anchor } from '@/types';
+import { createLogger } from '@/lib/logger';
+const log = createLogger('teaching-suggestion');
+
 
 export interface TeachingSuggestionContext {
   /** 时间段 */
@@ -67,7 +70,7 @@ export async function generateTeachingSuggestion(
     const data = await response.json();
     return parseResponse(data.content);
   } catch (error) {
-    console.error('Teaching suggestion error:', error);
+    log.error('Teaching suggestion error:', error);
     return {
       problemAnalysis: '无法生成分析',
       possibleCauses: ['服务暂时不可用'],

@@ -13,6 +13,9 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { wechatAuthService } from '@/lib/services/wechat-auth-service';
+import { createLogger } from '@/lib/logger';
+const log = createLogger('auth/wechat');
+
 
 // 微信开放平台 AppID（用于 PC 扫码登录），与公众号 AppID 不同
 const WECHAT_OPEN_APP_ID = process.env.WECHAT_OPEN_APP_ID || '';
@@ -82,7 +85,7 @@ export async function GET(request: NextRequest) {
       message: '请在微信中打开此页面完成登录',
     });
   } catch (error) {
-    console.error('获取微信授权URL错误:', error);
+    log.error('获取微信授权URL错误:', error);
     return NextResponse.json(
       { success: false, error: '服务器错误' },
       { status: 500 }
@@ -134,7 +137,7 @@ export async function POST(request: NextRequest) {
     
     return response;
   } catch (error) {
-    console.error('微信登录错误:', error);
+    log.error('微信登录错误:', error);
     return NextResponse.json(
       { success: false, error: '服务器错误' },
       { status: 500 }

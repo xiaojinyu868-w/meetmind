@@ -14,6 +14,9 @@ import {
 import { enrichLinkContent } from '@/lib/services/jina-reader-service';
 import { resolveBilibiliUrl, fetchViewMeta } from '@/lib/services/bilibili-import-service';
 import { parseVideoLink } from '@/lib/utils/video-link';
+import { createLogger } from '@/lib/logger';
+const log = createLogger('wechat/mp');
+
 
 export const runtime = 'nodejs';
 
@@ -131,7 +134,7 @@ async function enrichVideoLinkMeta(linkToken: string, sourceUrl: string, request
     }
     // 后续可以扩展 YouTube、Douyin 等
   } catch (error) {
-    console.error(`[wechat-mp] enrichVideoLinkMeta failed for ${linkToken}:`, error);
+    log.error(`[wechat-mp] enrichVideoLinkMeta failed for ${linkToken}:`, error);
   }
 }
 
@@ -170,7 +173,7 @@ async function triggerVideoImportPipeline(
     const payload = await response.json().catch(() => ({})) as Record<string, unknown>;
 
     if (!response.ok || !payload.success) {
-      console.warn(`[wechat-mp] video import pipeline failed for ${linkToken}:`, payload.error || `HTTP ${response.status}`);
+      log.warn(`[wechat-mp] video import pipeline failed for ${linkToken}:`, payload.error || `HTTP ${response.status}`);
       return;
     }
 
@@ -182,7 +185,7 @@ async function triggerVideoImportPipeline(
     const source = (payload.source || {}) as Record<string, unknown>;
 
     if (!fullText.trim() && segments.length === 0) {
-      console.warn(`[wechat-mp] video import returned empty transcript for ${linkToken}`);
+      log.warn(`[wechat-mp] video import returned empty transcript for ${linkToken}`);
       return;
     }
 
@@ -219,7 +222,7 @@ async function triggerVideoImportPipeline(
     }
   } catch (error) {
     // 静默失败——视频转写是增强能力，不影响基础收集
-    console.error(`[wechat-mp] triggerVideoImportPipeline failed for ${linkToken}:`, error);
+    log.error(`[wechat-mp] triggerVideoImportPipeline failed for ${linkToken}:`, error);
   }
 }
 
@@ -339,7 +342,7 @@ export async function POST(request: NextRequest) {
           });
         }
       } catch (error) {
-        console.error('[wechat-mp] async media download failed:', error);
+        log.error('[wechat-mp] async media download failed:', error);
       }
     })();
 
@@ -358,7 +361,7 @@ export async function POST(request: NextRequest) {
       buildWechatTextReply(openId, developerId, buildAckText(normalized.replyText, captureUrl, intelligence.bindingStatus === 'bound'))
     );
   } catch (error) {
-    console.error('wechat mp ingest failed:', error);
+    log.error('wechat mp ingest failed:', error);
     return textResponse('server error', 500);
   }
 }

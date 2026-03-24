@@ -9,6 +9,9 @@ import { NextRequest, NextResponse } from 'next/server';
 import { authService } from '@/lib/services/auth-service';
 import { emailService } from '@/lib/services/email-service';
 import { smsService } from '@/lib/services/sms-service';
+import { createLogger } from '@/lib/logger';
+const log = createLogger('auth/reset-password');
+
 
 interface ResetPasswordRequest {
   target: string;      // 邮箱或手机号
@@ -55,7 +58,7 @@ export async function POST(request: NextRequest) {
     
     return NextResponse.json({ success: true, message: '密码重置成功' });
   } catch (error) {
-    console.error('重置密码错误:', error);
+    log.error('重置密码错误:', error);
     return NextResponse.json(
       { success: false, error: '服务器错误' },
       { status: 500 }

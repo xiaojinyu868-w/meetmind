@@ -11,6 +11,9 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
 import { execSync } from 'child_process';
+import { createLogger } from '@/lib/logger';
+const log = createLogger('upload-audio');
+
 
 // 最大文件大小 500MB
 const MAX_FILE_SIZE = 500 * 1024 * 1024;
@@ -42,7 +45,7 @@ function cleanupOldFiles() {
       }
     }
   } catch (error) {
-    console.warn('[Upload] Cleanup error:', error);
+    log.warn('[Upload] Cleanup error:', error);
   }
 }
 
@@ -159,7 +162,7 @@ export async function POST(request: NextRequest) {
     });
     
   } catch (error) {
-    console.error('[Upload API] Error:', error);
+    log.error('[Upload API] Error:', error);
     return NextResponse.json(
       { error: error instanceof Error ? error.message : '上传失败' },
       { status: 500 }
@@ -195,7 +198,7 @@ export async function DELETE(request: NextRequest) {
     
     return NextResponse.json({ success: true });
   } catch (error) {
-    console.error('[Upload API] Delete error:', error);
+    log.error('[Upload API] Delete error:', error);
     return NextResponse.json(
       { error: '删除失败' },
       { status: 500 }

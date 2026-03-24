@@ -7,6 +7,9 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { qwenASRService } from '@/lib/services/qwen-asr-service';
+import { createLogger } from '@/lib/logger';
+const log = createLogger('transcribe/status');
+
 
 export async function GET(request: NextRequest) {
   const taskId = request.nextUrl.searchParams.get('taskId');
@@ -67,7 +70,7 @@ export async function GET(request: NextRequest) {
     });
     
   } catch (error) {
-    console.error('[Transcribe Status] Error:', error);
+    log.error('[Transcribe Status] Error:', error);
     return NextResponse.json(
       { error: error instanceof Error ? error.message : '查询失败' },
       { status: 500 }

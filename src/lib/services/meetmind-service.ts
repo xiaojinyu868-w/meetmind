@@ -13,6 +13,9 @@ import {
   getSegmentsInRange,
   type Segment 
 } from './longcut-utils';
+import { createLogger } from '@/lib/logger';
+const log = createLogger('meetmind');
+
 
 // ChatMessage 类型定义
 export interface ChatMessage {
@@ -254,11 +257,11 @@ ${_contextText}
 
     try {
       // 服务不可用时使用 Mock 数据
-      console.warn('Using mock response for tutor');
+      log.warn('Using mock response for tutor');
       return this.getMockTutorResponse(breakpoint, mergedSegments);
     } catch {
       // 如果服务不可用，返回 Mock 数据
-      console.warn('Service unavailable, using mock response');
+      log.warn('Service unavailable, using mock response');
       return this.getMockTutorResponse(breakpoint, mergedSegments);
     }
   },

@@ -22,6 +22,9 @@ import {
   type EchoRecommendation,
 } from '@/lib/services/workspace-echo-service';
 import workspaceService, { type WorkspaceSummary } from '@/lib/services/workspace-service';
+import { createLogger } from '@/lib/logger';
+const log = createLogger('workspace-context');
+
 
 export type WorkspaceCaptureStatus = 'active' | 'archived' | 'deleted';
 
@@ -362,7 +365,7 @@ async function transcribeWechatVoiceFromMediaUrl(mediaUrl?: string | null): Prom
     const transcript = (result.text || '').replace(/\s+/g, ' ').trim();
     return transcript || null;
   } catch (error) {
-    console.error('[workspace-context] transcribeWechatVoiceFromMediaUrl failed:', error);
+    log.error('[workspace-context] transcribeWechatVoiceFromMediaUrl failed:', error);
     return null;
   }
 }

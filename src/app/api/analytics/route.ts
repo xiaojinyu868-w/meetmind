@@ -7,6 +7,9 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import analyticsService from '@/lib/services/analytics-service';
+import { createLogger } from '@/lib/logger';
+const log = createLogger('analytics');
+
 
 // 获取客户端 IP
 function getClientIP(request: NextRequest): string {
@@ -156,7 +159,7 @@ export async function POST(request: NextRequest) {
     
     return NextResponse.json({ success: true, data: result });
   } catch (error) {
-    console.error('[Analytics API] Error:', error);
+    log.error('[Analytics API] Error:', error);
     return NextResponse.json(
       { success: false, error: 'Internal server error' },
       { status: 500 }

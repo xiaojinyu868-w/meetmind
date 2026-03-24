@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { authService } from '@/lib/services/auth-service';
 import workspaceEchoService from '@/lib/services/workspace-echo-service';
+import { createLogger } from '@/lib/logger';
+const log = createLogger('workspace/echoes/daily-refresh');
+
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -60,7 +63,7 @@ export async function POST(request: NextRequest) {
       debug: result.debug,
     });
   } catch (error) {
-    console.error('workspace daily echo refresh error:', error);
+    log.error('workspace daily echo refresh error:', error);
     return NextResponse.json(
       { success: false, error: '刷新今日回声失败' },
       { status: 500 }

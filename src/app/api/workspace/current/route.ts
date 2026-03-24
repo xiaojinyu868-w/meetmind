@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { authService } from '@/lib/services/auth-service';
 import workspaceContextService from '@/lib/services/workspace-context-service';
+import { createLogger } from '@/lib/logger';
+const log = createLogger('workspace/current');
+
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -35,7 +38,7 @@ export async function GET(request: NextRequest) {
       ...context,
     });
   } catch (error) {
-    console.error('workspace current context error:', error);
+    log.error('workspace current context error:', error);
     return NextResponse.json({ success: false, error: '读取当前工作区失败' }, { status: 500 });
   }
 }

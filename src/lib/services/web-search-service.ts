@@ -9,6 +9,9 @@
  */
 
 import type { Citation } from '@/types/dify';
+import { createLogger } from '@/lib/logger';
+const log = createLogger('web-search');
+
 
 // 搜索配置
 const SEARCH_TIMEOUT = 10000; // 10秒超时
@@ -217,7 +220,7 @@ async function duckDuckGoSearch(query: string, options: SearchOptions = {}): Pro
     
     return results;
   } catch (error) {
-    console.warn('DuckDuckGo search failed:', error);
+    log.warn('DuckDuckGo search failed:', error);
     return [];
   }
 }
@@ -342,7 +345,7 @@ export async function webSearch(context: string, options: SearchOptions = {}): P
         break;
       }
     } catch (error) {
-      console.warn(`[WebSearch] ${method.name} failed:`, error);
+      log.warn(`[WebSearch] ${method.name} failed:`, error);
     }
   }
   

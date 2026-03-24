@@ -4,6 +4,9 @@ import {
   seedTranscriptLexicon,
   type TranscriptScope,
 } from '@/lib/db/lexicon';
+import { createLogger } from '@/lib/logger';
+const log = createLogger('transcript-enhancer');
+
 
 export type EnhanceStatus = 'pending' | 'enhancing' | 'enhanced' | 'failed';
 export type CorrectionStrategy = 'layered' | 'rule-only';
@@ -72,7 +75,7 @@ async function loadLexicon(
       status: term.status,
     }));
   } catch (error) {
-    console.warn('[TranscriptEnhancer] Failed to load lexicon:', error);
+    log.warn('[TranscriptEnhancer] Failed to load lexicon:', error);
     return [];
   }
 }
@@ -125,7 +128,7 @@ export async function enhanceTranscript(
       success: true,
     };
   } catch (error) {
-    console.error('[TranscriptEnhancer] Error:', error);
+    log.error('[TranscriptEnhancer] Error:', error);
 
     return {
       success: false,
@@ -407,7 +410,7 @@ export class TranscriptEnhanceManager {
       });
 
       if (!response.ok) {
-        console.warn('[TermDiscovery] API returned', response.status);
+        log.warn('[TermDiscovery] API returned', response.status);
         return;
       }
 
@@ -449,7 +452,7 @@ export class TranscriptEnhanceManager {
       this.lastTermDiscoveryTime = Date.now();
       this.lastTermDiscoveryChars = this.allEnhancedChars;
     } catch (err) {
-      console.warn('[TermDiscovery] Failed:', err);
+      log.warn('[TermDiscovery] Failed:', err);
     } finally {
       this.termDiscoveryInFlight = false;
     }

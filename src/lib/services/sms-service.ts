@@ -7,6 +7,9 @@
 
 import { createHmac, createHash } from 'crypto';
 import { verificationCodeService, type CodePurpose } from './verification-code-service';
+import { createLogger } from '@/lib/logger';
+const log = createLogger('sms');
+
 
 // 腾讯云短信配置（从环境变量读取）
 const SMS_SECRET_ID = process.env.TENCENT_SMS_SECRET_ID || '';
@@ -102,19 +105,19 @@ async function sendSmsRequest(phoneNumber: string, templateParams: string[]): Pr
     const result = await response.json();
 
     if (result.Response?.Error) {
-      console.error('[SmsService] 腾讯云API错误:', result.Response.Error);
+      log.error('[SmsService] 腾讯云API错误:', result.Response.Error);
       return { success: false, error: '短信发送失败' };
     }
 
     const sendStatus = result.Response?.SendStatusSet?.[0];
     if (sendStatus?.Code !== 'Ok') {
-      console.error('[SmsService] 短信发送失败:', sendStatus);
+      log.error('[SmsService] 短信发送失败:', sendStatus);
       return { success: false, error: sendStatus?.Message || '短信发送失败' };
     }
 
     return { success: true };
   } catch (error) {
-    console.error('[SmsService] 请求失败:', error);
+    log.error('[SmsService] 请求失败:', error);
     return { success: false, error: '网络错误，请稍后重试' };
   }
 }
@@ -139,7 +142,7 @@ export const smsService = {
 
     // 检查配置
     if (!this.isConfigured()) {
-      console.error('[SmsService] 腾讯云短信未配置');
+      log.error('[SmsService] 腾讯云短信未配置');
       return { success: false, error: '短信服务暂不可用' };
     }
 

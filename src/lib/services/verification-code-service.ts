@@ -10,6 +10,8 @@
 
 import prisma from '@/lib/prisma';
 import { randomInt } from 'crypto';
+import { createLogger } from '@/lib/logger';
+const log = createLogger('verification-code');
 
 // 验证码配置
 const CODE_LENGTH = 6;
@@ -110,7 +112,7 @@ export const verificationCodeService = {
     });
 
     // 定期清理过期验证码
-    cleanupExpiredCodes().catch(console.error);
+    cleanupExpiredCodes().catch(e => log.error('cleanup failed', e));
 
     return { success: true, code };
   },

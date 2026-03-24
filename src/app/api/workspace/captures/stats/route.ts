@@ -2,6 +2,9 @@ import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { authService } from '@/lib/services/auth-service';
 import workspaceService from '@/lib/services/workspace-service';
+import { createLogger } from '@/lib/logger';
+const log = createLogger('workspace/captures/stats');
+
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -115,7 +118,7 @@ export async function GET(request: NextRequest) {
       byPlatform,
     });
   } catch (error) {
-    console.error('capture stats error:', error);
+    log.error('capture stats error:', error);
     return NextResponse.json(
       { success: false, error: '获取统计信息失败' },
       { status: 500 }

@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { chat } from '@/lib/services/llm-service';
 import { applyRateLimit } from '@/lib/utils/rate-limit';
+import { createLogger } from '@/lib/logger';
+const log = createLogger('extract-terms');
+
 
 /**
  * POST /api/extract-terms
@@ -183,7 +186,7 @@ export async function POST(request: NextRequest) {
       model: response.model || model,
     });
   } catch (error) {
-    console.error('[ExtractTerms API] Error:', error);
+    log.error('[ExtractTerms API] Error:', error);
     const message = error instanceof Error ? error.message : 'Term extraction failed';
     return NextResponse.json({ success: false, error: message, terms: [], contextHint: '' }, { status: 500 });
   }

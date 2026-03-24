@@ -6,6 +6,9 @@ import {
   findTextInTranscript,
   type TranscriptSegment 
 } from '@/lib/longcut';
+import { createLogger } from '@/lib/logger';
+const log = createLogger('search');
+
 
 const NOTEBOOK_API = process.env.NEXT_PUBLIC_NOTEBOOK_API || 'http://localhost:5055';
 const SEARCH_TIMEOUT = 5000;
@@ -125,7 +128,7 @@ export async function search(
       return results;
     }
   } catch (error) {
-    console.warn('Vector search failed, falling back to local search:', error);
+    log.warn('Vector search failed, falling back to local search:', error);
   }
 
   // 降级到本地搜索

@@ -10,6 +10,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { chat, chatStream, AVAILABLE_MODELS, DEFAULT_MODEL_ID, type ChatMessage } from '@/lib/services/llm-service';
 import { applyRateLimit } from '@/lib/utils/rate-limit';
+import { createLogger } from '@/lib/logger';
+const log = createLogger('chat');
+
 
 export async function POST(request: NextRequest) {
   // 应用速率限制
@@ -166,7 +169,7 @@ export async function POST(request: NextRequest) {
       usage: response.usage,
     });
   } catch (error) {
-    console.error('Chat API error:', error);
+    log.error('Chat API error:', error);
     const errorMessage = error instanceof Error ? error.message : '未知错误';
     return NextResponse.json(
       { error: errorMessage },

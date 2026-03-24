@@ -10,6 +10,9 @@
  */
 
 import { Redis } from 'ioredis';
+import { createLogger } from '@/lib/logger';
+const log = createLogger('rate-limit');
+
 
 // Redis 客户端单例
 let redis: Redis | null = null;
@@ -19,7 +22,7 @@ function getRedis(): Redis | null {
   
   const redisUrl = process.env.REDIS_URL;
   if (!redisUrl) {
-    console.warn('[RateLimit] REDIS_URL not configured, using memory storage');
+    log.warn('[RateLimit] REDIS_URL not configured, using memory storage');
     return null;
   }
   
@@ -31,7 +34,7 @@ function getRedis(): Redis | null {
     });
     
     redis.on('error', (err) => {
-      console.error('[RateLimit] Redis error:', err.message);
+      log.error('[RateLimit] Redis error:', err.message);
     });
     
     redis.on('connect', () => {
@@ -39,7 +42,7 @@ function getRedis(): Redis | null {
     
     return redis;
   } catch (err) {
-    console.error('[RateLimit] Failed to create Redis client:', err);
+    log.error('[RateLimit] Failed to create Redis client:', err);
     return null;
   }
 }
@@ -266,7 +269,7 @@ async function checkRateLimitRedis(
       },
     };
   } catch (err) {
-    console.error('[RateLimit] Redis error, falling back to memory:', err);
+    log.error('[RateLimit] Redis error, falling back to memory:', err);
     // Redis 出错时降级到内存存储
     return checkRateLimitMemory(identifier, apiType);
   }
@@ -463,7 +466,7 @@ export async function getUsageStats(identifier: string): Promise<Record<RateLimi
       
       return stats as Record<RateLimitType, { used: number; limit: number }>;
     } catch (err) {
-      console.error('[RateLimit] Failed to get usage stats from Redis:', err);
+      log.error('[RateLimit] Failed to get usage stats from Redis:', err);
     }
   }
   
@@ -508,7 +511,7 @@ export async function resetRateLimit(identifier: string, apiType?: RateLimitType
       }
       return;
     } catch (err) {
-      console.error('[RateLimit] Failed to reset rate limit in Redis:', err);
+      log.error('[RateLimit] Failed to reset rate limit in Redis:', err);
     }
   }
   

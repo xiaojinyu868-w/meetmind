@@ -76,6 +76,9 @@ import {
   safeUnlink,
   transcodeToMp3,
 } from '@/lib/services/media-tooling';
+import { createLogger } from '@/lib/logger';
+const log = createLogger('video/import');
+
 
 export const runtime = 'nodejs';
 export const maxDuration = 900;
@@ -174,13 +177,13 @@ async function transcribeLongAudioDirect(
 ): Promise<{ data: Record<string, unknown>; usedMode: TranscribeMode } | null> {
   const apiKey = process.env.DASHSCOPE_API_KEY;
   if (!apiKey) {
-    console.warn('[video-import] transcribeLongAudioDirect: DASHSCOPE_API_KEY not configured');
+    log.warn('[video-import] transcribeLongAudioDirect: DASHSCOPE_API_KEY not configured');
     return null;
   }
 
   const publicBase = resolvePublicBaseUrl();
   if (!publicBase.ok || !publicBase.baseUrl) {
-    console.warn(`[video-import] transcribeLongAudioDirect: public URL not configured (${publicBase.error})`);
+    log.warn(`[video-import] transcribeLongAudioDirect: public URL not configured (${publicBase.error})`);
     return null;
   }
 
@@ -215,7 +218,7 @@ async function transcribeLongAudioDirect(
 
     if (!submitResponse.ok) {
       const text = await submitResponse.text();
-      console.error(`[video-import] transcribeLongAudioDirect: submit failed HTTP ${submitResponse.status}: ${text.slice(0, 300)}`);
+      log.error(`[video-import] transcribeLongAudioDirect: submit failed HTTP ${submitResponse.status}: ${text.slice(0, 300)}`);
       trace.push({ stage: 'asr-direct-submit', ok: false, code: 'ASR_DIRECT_SUBMIT_FAILED', detail: `HTTP ${submitResponse.status}` });
       return null;
     }
@@ -223,14 +226,14 @@ async function transcribeLongAudioDirect(
     const submitData = (await submitResponse.json()) as { output?: { task_id?: string } };
     taskId = submitData.output?.task_id || '';
     if (!taskId) {
-      console.error('[video-import] transcribeLongAudioDirect: no task_id in response');
+      log.error('[video-import] transcribeLongAudioDirect: no task_id in response');
       trace.push({ stage: 'asr-direct-submit', ok: false, code: 'ASR_DIRECT_SUBMIT_FAILED', detail: 'missing task_id' });
       return null;
     }
     trace.push({ stage: 'asr-direct-submit', ok: true, detail: `taskId=${taskId}` });
   } catch (error) {
     const detail = error instanceof Error ? error.message : String(error);
-    console.error(`[video-import] transcribeLongAudioDirect: submit error: ${detail}`);
+    log.error(`[video-import] transcribeLongAudioDirect: submit error: ${detail}`);
     trace.push({ stage: 'asr-direct-submit', ok: false, code: 'ASR_DIRECT_SUBMIT_FAILED', detail });
     return null;
   }
@@ -334,7 +337,7 @@ async function transcribeLongAudioDirect(
 
       if (status === 'FAILED') {
         const message = queryData.output?.message || 'unknown';
-        console.error(`[video-import] transcribeLongAudioDirect: task FAILED: ${message}`);
+        log.error(`[video-import] transcribeLongAudioDirect: task FAILED: ${message}`);
         trace.push({ stage: 'asr-direct-poll', ok: false, code: 'ASR_DIRECT_TASK_FAILED', detail: message });
         return null;
       }
@@ -345,7 +348,7 @@ async function transcribeLongAudioDirect(
     }
   }
 
-  console.warn(`[video-import] transcribeLongAudioDirect: task timeout after ${maxWaitMs / 1000}s`);
+  log.warn(`[video-import] transcribeLongAudioDirect: task timeout after ${maxWaitMs / 1000}s`);
   trace.push({ stage: 'asr-direct-poll', ok: false, code: 'ASR_DIRECT_TIMEOUT', detail: `exceeded ${maxWaitMs / 1000}s` });
   return null;
 }
@@ -386,7 +389,7 @@ async function transcribeWithFallback(
       });
     } catch (fetchError) {
       const detail = fetchError instanceof Error ? fetchError.message : String(fetchError);
-      console.error(`[video-import] ASR mode=${mode} fetch error: ${detail}`);
+      log.error(`[video-import] ASR mode=${mode} fetch error: ${detail}`);
       trace.push({ stage: `asr-${mode}`, ok: false, code: `ASR_${mode.toUpperCase()}_FETCH_ERROR`, detail });
       lastFailure = `ASR_${mode.toUpperCase()}_FETCH_ERROR: ${detail}`;
       continue;
@@ -425,7 +428,7 @@ async function transcribeWithFallback(
           timelineCoverage === null
             ? 'timelineCoverage=n/a'
             : `timelineCoverage=${timelineCoverage.toFixed(2)} (need >=${minTimelineCoverage})`;
-        console.warn(
+        log.warn(
           `[video-import] ASR mode=${mode} result insufficient: ${textLen} chars for ${expectedDurationSec}s video (expected >=${expectedMin} chars), ${timelineDetail}; trying next mode`
         );
         trace.push({
@@ -448,7 +451,7 @@ async function transcribeWithFallback(
     const code = parseErrorCode(data) || `ASR_${mode.toUpperCase()}_FAILED`;
     const errorMessage = parseErrorMessage(data) || `转写失败 (${response.status})`;
     const detail = parseErrorDetail(data);
-    console.error(`[video-import] ASR mode=${mode} failed: ${code} - ${detail || errorMessage}`);
+    log.error(`[video-import] ASR mode=${mode} failed: ${code} - ${detail || errorMessage}`);
     trace.push({ stage: `asr-${mode}`, ok: false, code, detail: detail || errorMessage });
     lastFailure = `${code}: ${detail || errorMessage}`;
   }
@@ -456,7 +459,7 @@ async function transcribeWithFallback(
   // 所有HTTP模式结果都不足时，抛出异常让调用方有机会尝试 WS fallback
   // 把 bestPartialResult 附到异常上，WS fallback 也失败时可以降级使用
   if (bestPartialResult) {
-    console.warn(`[video-import] all ASR modes produced insufficient results, throwing to trigger WS fallback (best partial mode=${bestPartialResult.usedMode})`);
+    log.warn(`[video-import] all ASR modes produced insufficient results, throwing to trigger WS fallback (best partial mode=${bestPartialResult.usedMode})`);
     const err = new ImportPipelineError('ASR_TRANSCRIBE_FAILED', '音频转写失败', lastFailure);
     (err as ImportPipelineError & { partialResult?: typeof bestPartialResult }).partialResult = bestPartialResult;
     throw err;
@@ -1104,7 +1107,7 @@ export async function POST(request: NextRequest) {
 
       if (!shouldTryWsFallback) {
         if (partialResult && allowPartialResult) {
-          console.warn(`[video-import] cannot try WS fallback, using partial result due to VIDEO_IMPORT_ALLOW_PARTIAL_RESULT=true (mode=${partialResult.usedMode})`);
+          log.warn(`[video-import] cannot try WS fallback, using partial result due to VIDEO_IMPORT_ALLOW_PARTIAL_RESULT=true (mode=${partialResult.usedMode})`);
           trace.push({ stage: `asr-${partialResult.usedMode}-partial`, ok: true, detail: 'using partial result (no ws fallback, explicitly allowed)' });
           transcribed = partialResult;
         } else {
@@ -1133,7 +1136,7 @@ export async function POST(request: NextRequest) {
           });
 
           if (partialResult && allowPartialResult) {
-            console.warn(`[video-import] WS fallback failed, using partial result due to VIDEO_IMPORT_ALLOW_PARTIAL_RESULT=true (mode=${partialResult.usedMode})`);
+            log.warn(`[video-import] WS fallback failed, using partial result due to VIDEO_IMPORT_ALLOW_PARTIAL_RESULT=true (mode=${partialResult.usedMode})`);
             trace.push({ stage: `asr-${partialResult.usedMode}-partial`, ok: true, detail: 'using partial result after ws fallback failed (explicitly allowed)' });
             transcribed = partialResult;
           } else {

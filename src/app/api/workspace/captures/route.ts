@@ -3,6 +3,9 @@ import { authService } from '@/lib/services/auth-service';
 import { isCommonstackEchoConfigured } from '@/lib/services/commonstack-echo-service';
 import workspaceContextService from '@/lib/services/workspace-context-service';
 import workspaceEchoService from '@/lib/services/workspace-echo-service';
+import { createLogger } from '@/lib/logger';
+const log = createLogger('workspace/captures');
+
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -72,7 +75,7 @@ export async function POST(request: NextRequest) {
       echoAlreadyGeneratedToday: echoStatus.status === 'active',
     });
   } catch (error) {
-    console.error('workspace capture upsert error:', error);
+    log.error('workspace capture upsert error:', error);
     return NextResponse.json({ success: false, error: '写入工作区收集失败' }, { status: 500 });
   }
 }
@@ -140,7 +143,7 @@ export async function PATCH(request: NextRequest) {
       retiredEchoIds: result.retiredEchoIds,
     });
   } catch (error) {
-    console.error('workspace capture patch error:', error);
+    log.error('workspace capture patch error:', error);
     return NextResponse.json({ success: false, error: '更新收集失败' }, { status: 500 });
   }
 }
@@ -177,7 +180,7 @@ export async function DELETE(request: NextRequest) {
       retiredEchoIds: result.retiredEchoIds,
     });
   } catch (error) {
-    console.error('workspace capture delete error:', error);
+    log.error('workspace capture delete error:', error);
     return NextResponse.json({ success: false, error: '彻底删除收集失败' }, { status: 500 });
   }
 }

@@ -13,6 +13,9 @@ import { authService } from '@/lib/services/auth-service';
 import prisma from '@/lib/prisma';
 import workspaceService from '@/lib/services/workspace-service';
 import type { UpdateProfileRequest, User, UserRole, UserStatus } from '@/types/user';
+import { createLogger } from '@/lib/logger';
+const log = createLogger('auth/me');
+
 
 function getAuthPayload(request: NextRequest) {
   const authHeader = request.headers.get('Authorization');
@@ -74,7 +77,7 @@ async function autoRegisterUser(payload: {
       lastLoginAt: newUser.lastLoginAt?.toISOString(),
     };
   } catch (error) {
-    console.error('[AutoRegister] 自动补注册失败:', error);
+    log.error('[AutoRegister] 自动补注册失败:', error);
     return null;
   }
 }
@@ -115,7 +118,7 @@ export async function GET(request: NextRequest) {
       autoRegistered,
     });
   } catch (error) {
-    console.error('获取用户信息错误:', error);
+    log.error('获取用户信息错误:', error);
     return NextResponse.json(
       { success: false, error: '服务器错误' },
       { status: 500 }
@@ -147,7 +150,7 @@ export async function PATCH(request: NextRequest) {
       user,
     });
   } catch (error) {
-    console.error('更新用户资料错误:', error);
+    log.error('更新用户资料错误:', error);
     return NextResponse.json(
       { success: false, error: '服务器错误' },
       { status: 500 }

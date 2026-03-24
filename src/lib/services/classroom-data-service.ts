@@ -24,6 +24,9 @@ import {
 import { memoryService } from './memory-service';
 import type { TranscriptSegment, AnchorType, AnchorStatus, StudentAnchor } from '@/types';
 import { DEMO_SEGMENTS, DEMO_ANCHORS, DEMO_SESSION_ID } from '@/fixtures/demo-data';
+import { createLogger } from '@/lib/logger';
+const log = createLogger('classroom-data');
+
 
 // 重导出类型以保持向后兼容
 export type { AnchorType, AnchorStatus, StudentAnchor } from '@/types';
@@ -823,7 +826,7 @@ export const classroomDataService = {
         db.transcripts.where('sessionId').equals(sessionId).delete(),
       ]);
     } catch (error) {
-      console.error('Failed to clear IndexedDB session data:', error);
+      log.error('Failed to clear IndexedDB session data:', error);
     }
   },
 

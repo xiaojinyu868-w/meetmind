@@ -6,6 +6,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { authService } from '@/lib/services/auth-service';
 import type { RegisterRequest } from '@/types/user';
+import { createLogger } from '@/lib/logger';
+const log = createLogger('auth/register');
+
 
 export async function POST(request: NextRequest) {
   try {
@@ -40,7 +43,7 @@ export async function POST(request: NextRequest) {
     
     return response;
   } catch (error) {
-    console.error('注册错误:', error);
+    log.error('注册错误:', error);
     return NextResponse.json(
       { success: false, error: '服务器错误' },
       { status: 500 }

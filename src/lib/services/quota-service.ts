@@ -9,6 +9,9 @@
  */
 
 import { prisma } from '@/lib/prisma';
+import { createLogger } from '@/lib/logger';
+const log = createLogger('quota');
+
 
 // 配额类型
 export type QuotaType = 
@@ -241,7 +244,7 @@ export const quotaService = {
       // 清除缓存
       userQuotaCache.delete(actualUserId);
     } catch (error) {
-      console.error('[QuotaService] 记录使用失败:', error);
+      log.error('[QuotaService] 记录使用失败:', error);
       // 不抛出错误，避免影响主流程
     }
   },
@@ -282,7 +285,7 @@ export const quotaService = {
         monthly: monthlyUsage._sum.count || 0,
       };
     } catch (error) {
-      console.error('[QuotaService] 查询使用记录失败:', error);
+      log.error('[QuotaService] 查询使用记录失败:', error);
       return { daily: 0, monthly: 0 };
     }
   },

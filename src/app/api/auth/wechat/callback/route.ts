@@ -9,6 +9,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { wechatAuthService } from '@/lib/services/wechat-auth-service';
 import { createWechatWebSession, consumeWechatWebSession } from '@/lib/services/wechat-web-session-service';
+import { createLogger } from '@/lib/logger';
+const log = createLogger('auth/wechat/callback');
+
 
 function resolveBaseUrl(request: NextRequest): string {
   const protocol = request.headers.get('x-forwarded-proto') || 'https';
@@ -26,7 +29,7 @@ export async function GET(request: NextRequest) {
     
     // 检查参数
     if (!code || !state) {
-      console.error('[wechat-callback] 缺少 code 或 state 参数');
+      log.error('[wechat-callback] 缺少 code 或 state 参数');
       return NextResponse.redirect(`${baseUrl}/login?error=missing_params`);
     }
     
@@ -34,7 +37,7 @@ export async function GET(request: NextRequest) {
     const result = await wechatAuthService.login(code, state);
     
     if (!result.success) {
-      console.error(`[wechat-callback] 登录失败: ${result.error}`);
+      log.error(`[wechat-callback] 登录失败: ${result.error}`);
       const errorMsg = encodeURIComponent(result.error || '登录失败');
       return NextResponse.redirect(`${baseUrl}/login?error=${errorMsg}`);
     }
@@ -65,7 +68,7 @@ export async function GET(request: NextRequest) {
     
     return response;
   } catch (error) {
-    console.error('微信回调错误:', error);
+    log.error('微信回调错误:', error);
     return NextResponse.redirect(`${baseUrl}/login?error=server_error`);
   }
 }
@@ -101,7 +104,7 @@ export async function POST(request: NextRequest) {
       nickname: session.nickname,
     });
   } catch (error) {
-    console.error('会话交换错误:', error);
+    log.error('会话交换错误:', error);
     return NextResponse.json(
       { success: false, error: '服务器错误' },
       { status: 500 }

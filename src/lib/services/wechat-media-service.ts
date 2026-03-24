@@ -5,6 +5,9 @@ import {
   isWechatPlayableAudioUrl,
   normalizeWechatMediaPublicPath,
 } from '@/lib/services/wechat-voice-utils';
+import { createLogger } from '@/lib/logger';
+const log = createLogger('wechat-media');
+
 
 const WECHAT_APP_ID = process.env.WECHAT_APP_ID || '';
 const WECHAT_APP_SECRET = process.env.WECHAT_APP_SECRET || '';
@@ -43,7 +46,7 @@ export async function getWechatAccessToken(): Promise<string | null> {
     const data = await res.json();
 
     if (data.errcode) {
-      console.error('[wechat-media] getAccessToken failed:', data);
+      log.error('[wechat-media] getAccessToken failed:', data);
       return null;
     }
 
@@ -54,7 +57,7 @@ export async function getWechatAccessToken(): Promise<string | null> {
 
     return data.access_token;
   } catch (error) {
-    console.error('[wechat-media] getAccessToken error:', error);
+    log.error('[wechat-media] getAccessToken error:', error);
     return null;
   }
 }
@@ -76,7 +79,7 @@ export async function downloadWechatImage(picUrl: string, linkToken: string): Pr
 
     const res = await fetch(picUrl);
     if (!res.ok) {
-      console.error(`[wechat-media] download image failed: ${res.status} ${picUrl}`);
+      log.error(`[wechat-media] download image failed: ${res.status} ${picUrl}`);
       return null;
     }
 
@@ -85,7 +88,7 @@ export async function downloadWechatImage(picUrl: string, linkToken: string): Pr
 
     return `/wechat-media/images/${filename}`;
   } catch (error) {
-    console.error('[wechat-media] downloadWechatImage error:', error);
+    log.error('[wechat-media] downloadWechatImage error:', error);
     return null;
   }
 }
@@ -120,14 +123,14 @@ export async function downloadWechatMedia(
     const res = await fetch(url);
 
     if (!res.ok) {
-      console.error(`[wechat-media] download media failed: ${res.status}`);
+      log.error(`[wechat-media] download media failed: ${res.status}`);
       return null;
     }
 
     const contentType = res.headers.get('content-type') || '';
     if (contentType.includes('application/json') || contentType.includes('text/plain')) {
       const errorData = await res.json();
-      console.error('[wechat-media] media API returned error:', errorData);
+      log.error('[wechat-media] media API returned error:', errorData);
       return null;
     }
 
@@ -142,7 +145,7 @@ export async function downloadWechatMedia(
         await transcodeToMp3(rawFilepath, publicFilepath);
         return `/wechat-media/${subdir}/${publicFilename}`;
       } catch (error) {
-        console.error('[wechat-media] voice transcode failed, fallback to original format:', error);
+        log.error('[wechat-media] voice transcode failed, fallback to original format:', error);
         await fs.writeFile(fallbackFilepath, buffer);
         return `/wechat-media/${subdir}/${linkToken}.amr`;
       } finally {
@@ -153,7 +156,7 @@ export async function downloadWechatMedia(
     await fs.writeFile(publicFilepath, buffer);
     return `/wechat-media/${subdir}/${publicFilename}`;
   } catch (error) {
-    console.error('[wechat-media] downloadWechatMedia error:', error);
+    log.error('[wechat-media] downloadWechatMedia error:', error);
     return null;
   }
 }
@@ -195,7 +198,7 @@ export async function ensureWechatVoicePlaybackUrl(params: {
       await transcodeToMp3(localSourcePath, targetFilepath);
       return `/wechat-media/voice/${targetFilename}`;
     } catch (error) {
-      console.error('[wechat-media] ensureWechatVoicePlaybackUrl local transcode failed:', error);
+      log.error('[wechat-media] ensureWechatVoicePlaybackUrl local transcode failed:', error);
     }
   }
 

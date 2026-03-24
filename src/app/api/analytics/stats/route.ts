@@ -8,6 +8,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import analyticsService from '@/lib/services/analytics-service';
 import authService from '@/lib/services/auth-service';
+import { createLogger } from '@/lib/logger';
+const log = createLogger('analytics/stats');
+
 
 export const dynamic = 'force-dynamic';
 
@@ -82,7 +85,7 @@ export async function GET(request: NextRequest) {
       timestamp: new Date().toISOString(),
     });
   } catch (error) {
-    console.error('[Analytics Stats API] Error:', error);
+    log.error('[Analytics Stats API] Error:', error);
     return NextResponse.json(
       { success: false, error: 'Internal server error' },
       { status: 500 }

@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { authService } from '@/lib/services/auth-service';
+import { createLogger } from '@/lib/logger';
+const log = createLogger('feedback');
+
 
 export async function POST(request: NextRequest) {
   try {
@@ -82,7 +85,7 @@ export async function POST(request: NextRequest) {
     });
 
   } catch (error) {
-    console.error('[Feedback] Error:', error);
+    log.error('[Feedback] Error:', error);
     return NextResponse.json(
       { success: false, error: '服务器错误，请稍后重试' },
       { status: 500 }

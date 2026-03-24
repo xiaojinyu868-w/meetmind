@@ -2,6 +2,9 @@ import { NextRequest, NextResponse } from 'next/server';
 import { chat } from '@/lib/services/llm-service';
 import type { TranscriptSegment } from '@/types';
 import { applyRateLimit } from '@/lib/utils/rate-limit';
+import { createLogger } from '@/lib/logger';
+const log = createLogger('transcript-enhance');
+
 
 type EnhanceStatus = 'pending' | 'enhancing' | 'enhanced' | 'failed';
 type CorrectionStrategy = 'layered' | 'rule-only';
@@ -373,7 +376,7 @@ export async function POST(request: NextRequest) {
         modelUsed = primary.model;
         modelUsage = primary.usage;
       } catch (primaryError) {
-        console.warn('[TranscriptEnhance API] Primary model failed:', primaryError);
+        log.warn('[TranscriptEnhance API] Primary model failed:', primaryError);
 
         try {
           const fallback = await runModelCorrection(modelInput, fallbackModel, contextHint, lexiconTerms, recentContext);
@@ -382,7 +385,7 @@ export async function POST(request: NextRequest) {
           modelFallbackUsed = fallbackModel;
           modelUsage = fallback.usage;
         } catch (fallbackError) {
-          console.warn('[TranscriptEnhance API] Fallback model failed:', fallbackError);
+          log.warn('[TranscriptEnhance API] Fallback model failed:', fallbackError);
 
           if (ENABLE_MAX_FALLBACK && fallbackModel !== 'qwen3-max-2026-01-23') {
             try {
@@ -392,7 +395,7 @@ export async function POST(request: NextRequest) {
               modelFallbackUsed = 'qwen3-max-2026-01-23';
               modelUsage = maxFallback.usage;
             } catch (maxError) {
-              console.warn('[TranscriptEnhance API] Max fallback failed:', maxError);
+              log.warn('[TranscriptEnhance API] Max fallback failed:', maxError);
             }
           }
         }
@@ -454,7 +457,7 @@ export async function POST(request: NextRequest) {
       },
     });
   } catch (error) {
-    console.error('[TranscriptEnhance API] Error:', error);
+    log.error('[TranscriptEnhance API] Error:', error);
     const errorMessage = error instanceof Error ? error.message : 'Transcript enhancement failed';
     return NextResponse.json({ success: false, error: errorMessage }, { status: 500 });
   }

@@ -13,6 +13,9 @@
  * - Jina Reader 通过 headless browser 绕过反爬，返回干净的 Markdown
  */
 
+import { createLogger } from '@/lib/logger';
+const log = createLogger('web-article-extract');
+
 export class WebArticleExtractError extends Error {
   code: string;
   detail?: string;
@@ -69,13 +72,13 @@ async function extractViaJina(
     });
 
     if (!response.ok) {
-      console.warn(`[web-article-extract] Jina Reader HTTP ${response.status} for ${url}`);
+      log.warn(`[web-article-extract] Jina Reader HTTP ${response.status} for ${url}`);
       return null;
     }
 
     const text = await response.text();
     if (!text || text.length < 50) {
-      console.warn(`[web-article-extract] Jina Reader returned too short content (${text.length} chars)`);
+      log.warn(`[web-article-extract] Jina Reader returned too short content (${text.length} chars)`);
       return null;
     }
 
@@ -91,16 +94,16 @@ async function extractViaJina(
 
     // 过滤无意义内容
     if (isUselessContent(content)) {
-      console.warn(`[web-article-extract] Jina returned useless content for ${url}`);
+      log.warn(`[web-article-extract] Jina returned useless content for ${url}`);
       return null;
     }
 
     return { title, content, rawMarkdown: text };
   } catch (error) {
     if ((error as { name?: string })?.name === 'AbortError') {
-      console.warn(`[web-article-extract] Jina Reader timeout for ${url}`);
+      log.warn(`[web-article-extract] Jina Reader timeout for ${url}`);
     } else {
-      console.warn(`[web-article-extract] Jina Reader error for ${url}: ${error instanceof Error ? error.message : String(error)}`);
+      log.warn(`[web-article-extract] Jina Reader error for ${url}: ${error instanceof Error ? error.message : String(error)}`);
     }
     return null;
   } finally {

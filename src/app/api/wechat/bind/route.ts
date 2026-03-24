@@ -4,6 +4,9 @@ import { authService } from '@/lib/services/auth-service';
 import { emailService } from '@/lib/services/email-service';
 import workspaceService from '@/lib/services/workspace-service';
 import workspaceContextService from '@/lib/services/workspace-context-service';
+import { createLogger } from '@/lib/logger';
+const log = createLogger('wechat/bind');
+
 
 export const runtime = 'nodejs';
 
@@ -131,7 +134,7 @@ export async function POST(request: NextRequest) {
 
     return response;
   } catch (error) {
-    console.error('wechat bind failed:', error);
+    log.error('wechat bind failed:', error);
     return NextResponse.json(
       { success: false, error: '绑定失败，请稍后重试' },
       { status: 500 }

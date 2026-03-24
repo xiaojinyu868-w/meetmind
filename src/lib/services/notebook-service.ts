@@ -7,6 +7,9 @@
  * - 笔记管理
  */
 
+import { createLogger } from '@/lib/logger';
+const log = createLogger('notebook');
+
 // Open Notebook API 地址
 const NOTEBOOK_API = process.env.NEXT_PUBLIC_NOTEBOOK_API || 'http://localhost:5055';
 
@@ -95,7 +98,7 @@ export const notebookService = {
       });
 
       if (!response.ok) {
-        console.warn('Open Notebook search failed:', response.status);
+        log.warn('Open Notebook search failed:', response.status);
         return [];
       }
 
@@ -114,7 +117,7 @@ export const notebookService = {
         },
       }));
     } catch (error) {
-      console.error('Open Notebook search error:', error);
+      log.error('Open Notebook search error:', error);
       return [];
     }
   },

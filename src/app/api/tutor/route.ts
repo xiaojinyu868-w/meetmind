@@ -18,6 +18,9 @@ import type { ExtendedTutorRequest, ExtendedTutorResponse, GuidanceOption, Guida
 import { applyRateLimit } from '@/lib/utils/rate-limit';
 import { summaryService } from '@/lib/services/summary-service';
 import { webSearch } from '@/lib/services/web-search-service';
+import { createLogger } from '@/lib/logger';
+const log = createLogger('tutor');
+
 
 // 内存缓存摘要（带 TTL 和大小限制，避免内存泄漏）
 const SUMMARY_CACHE_MAX_SIZE = 200;
@@ -609,7 +612,7 @@ ${cachedSummary.keyDifficulties.map(d => `- ${d}`).join('\n')}
 ---
 `;
       } catch (error) {
-        console.error('[Tutor API] 摘要生成失败，使用局部上下文:', error);
+        log.error('[Tutor API] 摘要生成失败，使用局部上下文:', error);
         // 摘要生成失败不影响主流程
       }
     }
@@ -657,7 +660,7 @@ ${cachedSummary.keyDifficulties.map(d => `- ${d}`).join('\n')}
           // 后续会追加到 rawContent
         }
       } catch (error) {
-        console.error('Dify service error:', error);
+        log.error('Dify service error:', error);
         // Dify 失败不影响主流程，继续使用原有逻辑
       }
     }
@@ -679,7 +682,7 @@ ${cachedSummary.keyDifficulties.map(d => `- ${d}`).join('\n')}
         // 异步执行搜索，不阻塞主流程
         citations = await webSearch(contextText, { maxResults: 3 });
       } catch (error) {
-        console.error('[Tutor] Web search failed:', error);
+        log.error('[Tutor] Web search failed:', error);
         // 搜索失败时不返回空，保持用户体验
         citations = [];
       }
@@ -949,7 +952,7 @@ ${contextText}
 
     return NextResponse.json(result);
   } catch (error) {
-    console.error('Tutor API error:', error);
+    log.error('Tutor API error:', error);
     const errorMessage = error instanceof Error ? error.message : '未知错误';
     return NextResponse.json(
       { error: errorMessage },
@@ -1181,7 +1184,7 @@ async function generateGuidanceQuestion({
       return llmQuestion;
     }
   } catch (error) {
-    console.error('[Tutor API] Guidance generation fallback:', error);
+    log.error('[Tutor API] Guidance generation fallback:', error);
   }
 
   return generateRuleBasedGuidanceQuestion(context, studentQuestion);
