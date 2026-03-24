@@ -6,6 +6,8 @@ import { useSearchParams } from 'next/navigation';
 import dynamic from 'next/dynamic';
 import { Header } from '@/components/Header';
 import { ServiceStatus, DegradedModeBanner } from '@/components/ServiceStatus';
+import { EchoCard, type EchoData } from '@/components/EchoCard';
+import { EchoShareCard } from '@/components/EchoShareCard';
 import { anchorService, type Anchor } from '@/lib/services/anchor-service';
 import { memoryService, type ClassTimeline } from '@/lib/services/memory-service';
 import { checkServices, type ServiceStatus as ServiceStatusType } from '@/lib/services/health-check';
@@ -86,6 +88,7 @@ import {
   ArrowUp,
   Play,
   Pause,
+  ChevronsDown,
   type LucideIcon as LucideIconType,
 } from 'lucide-react';
 
@@ -121,6 +124,7 @@ const WorkshopWindowManager = dynamic(() => import('@/components/apps/windows/Wo
 const ConversationList = dynamic(() => import('@/components/ConversationHistory/ConversationList').then(m => ({ default: m.ConversationList })), { ssr: false });
 const AIChat = dynamic(() => import('@/components/AIChat').then(m => ({ default: m.AIChat })), { ssr: false });
 const WorkspaceCaptureList = dynamic(() => import('@/components/WorkspaceCaptureList').then(m => ({ default: m.WorkspaceCaptureList })), { ssr: false });
+const AISearchPanel = dynamic(() => import('@/components/AISearchPanel').then(m => ({ default: m.AISearchPanel })), { ssr: false });
 import type { WorkspaceCaptureListItem } from '@/components/WorkspaceCaptureList';
 import { isWorkshopAppKey, type WorkshopAppKey } from '@/lib/ai-native/app-catalog';
 
@@ -253,6 +257,14 @@ interface SourceIngestItem {
   sessionId?: string;
   durationMs?: number;
   reviewable?: boolean;
+  /** B站等视频嵌入播放地址 */
+  embedUrl?: string;
+  /** 视频来源平台 (bilibili / youtube 等) */
+  videoProvider?: string;
+  /** 服务端视频转录是否已完成 */
+  videoImported?: boolean;
+  /** 服务端写入的转录 segments（来自 metadataJson.transcriptSegments） */
+  serverTranscriptSegments?: Array<{ id?: string; text?: string; startMs?: number; endMs?: number }>;
 }
 
 interface SupportReferenceItem {
@@ -363,6 +375,12 @@ interface WorkspaceEchoMessage {
   generatedDateKey?: string | null;
   title: string;
   body: string;
+  highlights?: Array<{
+    text: string;
+    timestamp?: string;
+    speaker?: string;
+  }>;
+  takeaway?: string;
   chips: string[];
   recommendations?: Array<{
     title: string;
@@ -851,6 +869,21 @@ function buildWorkspaceCaptureSourceItem(item: WorkspaceCaptureMessage): SourceI
     typeof metadata?.thumbnailUrl === 'string' && metadata.thumbnailUrl.trim()
       ? metadata.thumbnailUrl.trim()
       : undefined;
+  const embedUrl =
+    typeof metadata?.embedUrl === 'string' && metadata.embedUrl.trim()
+      ? metadata.embedUrl.trim()
+      : undefined;
+  const videoProvider =
+    typeof metadata?.videoProvider === 'string' && metadata.videoProvider.trim()
+      ? metadata.videoProvider.trim()
+      : undefined;
+  const videoImported = metadata?.videoImported === true;
+  const serverTranscriptSegments =
+    Array.isArray(metadata?.transcriptSegments) && (metadata.transcriptSegments as unknown[]).length > 0
+      ? (metadata.transcriptSegments as Array<{ id?: string; text?: string; startMs?: number; endMs?: number }>)
+      : undefined;
+  const durationSec =
+    typeof metadata?.durationSec === 'number' ? metadata.durationSec : undefined;
   const resolvedText = resolveCaptureSourceFullText({
     type,
     normalizedText: item.normalizedText,
@@ -892,10 +925,16 @@ function buildWorkspaceCaptureSourceItem(item: WorkspaceCaptureMessage): SourceI
         ? metadata.sessionId
         : undefined,
     durationMs:
-      metadata && typeof metadata.duration === 'number'
-        ? metadata.duration
-        : undefined,
+      durationSec != null
+        ? Math.round(durationSec * 1000)
+        : metadata && typeof metadata.duration === 'number'
+          ? metadata.duration
+          : undefined,
     reviewable: type === 'audio' || type === 'video',
+    embedUrl,
+    videoProvider,
+    videoImported,
+    serverTranscriptSegments,
   };
 }
 
@@ -1114,27 +1153,17 @@ function buildTutorSupportContextText(
   return compactMultilineText(sections.join('\n\n'), maxChars);
 }
 
-function buildTutorQuestionFromEcho(
+function _buildTutorQuestionFromEcho(
   params: {
   title: string;
   body: string;
   chips?: string[];
 },
-  mode: 'explore' | 'review' = 'explore'
+  _mode: 'explore' | 'review' = 'explore'
 ): string {
-  const chipsLine = params.chips && params.chips.length > 0
-    ? `\n我现在更想顺着这些线索展开：${params.chips.join('、')}`
-    : '';
-
-  if (mode === 'review') {
-    return compactMultilineText(
-      `基于这条回声，帮我把它整理成一份可执行的复习清单：\n${params.title}\n${params.body}${chipsLine}\n请按“先理解什么 / 先复习什么 / 接下来怎么练”来组织。`,
-      320
-    );
-  }
-
+  // 简化：不再区分 review 模式，统一为轻量探索
   return compactMultilineText(
-    `顺着这条回声继续带我学：\n${params.title}\n${params.body}${chipsLine}`,
+    `顺着这条回声继续带我学：\n${params.body}`,
     280
   );
 }
@@ -1334,6 +1363,7 @@ function StudentAppContent({
   
   // NOTE: cleaned corrupted legacy comment.
   const [mobileCollectionSheet, setMobileCollectionSheet] = useState<MobileCollectionSheet>(null);
+  const [showAISearch, setShowAISearch] = useState(false);
   const [showMobileRecorder, setShowMobileRecorder] = useState(false);
   const [collectionComposerText, setCollectionComposerText] = useState('');
   const [showCollectionPulsePreview, setShowCollectionPulsePreview] = useState(false);
@@ -1344,7 +1374,11 @@ function StudentAppContent({
   const [isManualEchoRefreshing, setIsManualEchoRefreshing] = useState(false);
   const [manualEchoDebugNote, setManualEchoDebugNote] = useState('');
   const [manualEchoFeedback, setManualEchoFeedback] = useState<ManualEchoFeedbackState | null>(null);
+  const [sharingEcho, setSharingEcho] = useState<EchoData | null>(null);
   const collectionComposerRef = useRef<HTMLTextAreaElement | null>(null);
+  const collectionScrollRef = useRef<HTMLDivElement | null>(null);
+  const [showScrollToLatest, setShowScrollToLatest] = useState(false);
+  const collectionScrollNearBottomRef = useRef(true);
   const [sourceFilePickerMode, setSourceFilePickerMode] = useState<'audio' | 'support' | 'all'>('all');
   const [activeSourceImportCount, setActiveSourceImportCount] = useState(0);
   const [sourceImportError, setSourceImportError] = useState('');
@@ -2231,6 +2265,139 @@ function StudentAppContent({
     return true;
   }, [clearSummary, clearTopics]);
 
+  /**
+   * 从服务端写入的 transcriptSegments 恢复复习态。
+   * 用于视频链接由 triggerVideoImportPipeline 完成转录但前端 IndexedDB 中无数据的场景。
+   * 流程：读取 SourceIngestItem.serverTranscriptSegments → 构建 segments → 写入 IndexedDB → 进入 review 模式。
+   */
+  const restoreFromServerTranscript = useCallback(async (
+    item: SourceIngestItem
+  ): Promise<boolean> => {
+    const rawSegments = item.serverTranscriptSegments;
+    if (!rawSegments || rawSegments.length === 0) return false;
+
+    // 使用已有 sessionId 或生成一个
+    const targetSessionId = item.sessionId || `video-server-${item.id}-${Date.now()}`;
+    const currentUserId = user?.id || ANONYMOUS_USER_ID;
+
+    // 构建 TranscriptSegment 数组
+    const loadedSegments: TranscriptSegment[] = rawSegments.map((seg, index) => ({
+      id: seg.id || `server-${seg.startMs ?? 0}-${index}`,
+      text: seg.text || '',
+      startMs: seg.startMs ?? 0,
+      endMs: seg.endMs ?? (seg.startMs ?? 0) + 3000,
+      confidence: 1,
+      isFinal: true,
+    }));
+
+    // 设置 session 状态
+    setSessionId(targetSessionId);
+    sessionIdRef.current = targetSessionId;
+    setViewMode('review');
+    setSegments(loadedSegments);
+    segmentsRef.current = loadedSegments;
+    liveSegmentsRef.current = loadedSegments;
+    setAnchors([]);
+    setSelectedAnchor(null);
+    setShowConversationHistory(false);
+    setSelectedHistoryConversation(null);
+    setActionItems([]);
+    clearTopics();
+    clearSummary();
+    setNotes([]);
+    setCurrentTime(0);
+
+    const inferredDuration = Math.max(
+      item.durationMs || 0,
+      loadedSegments[loadedSegments.length - 1]?.endMs || 0
+    );
+    setSessionMediaDurationMs(inferredDuration);
+
+    // 设置视频源
+    if (item.type === 'video') {
+      const detected = item.attachmentUrl ? parseVideoLink(item.attachmentUrl) : null;
+      const restoredSource: ImportedVideoSource = {
+        provider: detected?.provider || item.videoProvider || 'generic',
+        providerLabel: detected?.providerLabel || 'Web Video',
+        originalUrl: item.attachmentUrl || item.mediaUrl || '',
+        embedUrl: item.embedUrl || detected?.embedUrl,
+        playableUrl: item.mediaUrl || item.attachmentUrl || undefined,
+        thumbnailUrl: item.previewUrl,
+        title: item.title,
+        durationSec: inferredDuration > 0 ? inferredDuration / 1000 : undefined,
+      };
+      setVideoSource(restoredSource);
+      setDataSource('video');
+      setVideoWorkspaceTab('chat');
+      const seededInsights = buildSeedVideoInsights(loadedSegments);
+      setVideoInsightItems(seededInsights);
+      setActiveVideoInsightId(seededInsights[0]?.id || null);
+      setAudioBlob(null);
+      setAudioUrl(null);
+    } else {
+      setVideoSource(null);
+      setDataSource('live');
+      setVideoWorkspaceTab('chat');
+      setVideoInsightItems([]);
+      setActiveVideoInsightId(null);
+      setAudioBlob(null);
+      setAudioUrl(item.mediaUrl || null);
+    }
+
+    setReviewTab('timeline');
+    setShowTranscriptBar(false);
+    setVideoSeekNonce(0);
+    setVideoPlayNonce(0);
+
+    // 构建 timeline
+    const timelineData = memoryService.buildTimeline(
+      targetSessionId,
+      loadedSegments,
+      [],
+      {
+        subject: UIConfig.defaultSubject,
+        teacher: UIConfig.defaultTeacher || 'Teacher',
+        date: new Date().toISOString().split('T')[0],
+      }
+    );
+    setTimeline(timelineData);
+    memoryService.save(timelineData);
+
+    // 异步写入 IndexedDB，供后续恢复
+    try {
+      await db.transcripts.bulkAdd(
+        loadedSegments.map((seg) => ({
+          sessionId: targetSessionId,
+          userId: currentUserId,
+          text: seg.text,
+          startMs: seg.startMs,
+          endMs: seg.endMs,
+          confidence: seg.confidence || 1,
+          isFinal: true,
+        }))
+      );
+      await saveAudioSession(null, targetSessionId, currentUserId, {
+        subject: UIConfig.defaultSubject,
+        topic: item.title || '视频复习',
+        duration: inferredDuration,
+        sourceType: 'video-link',
+        videoUrl: item.attachmentUrl || item.mediaUrl || '',
+        videoEmbedUrl: item.embedUrl,
+        videoProvider: item.videoProvider,
+        thumbnailUrl: item.previewUrl,
+      });
+    } catch (dbError) {
+      console.error('[restoreFromServerTranscript] IndexedDB 写入失败:', dbError);
+    }
+
+    // 同步更新 sourceItem 的 sessionId（如果之前是 undefined）
+    if (!item.sessionId) {
+      updateSourceItem(item.id, { sessionId: targetSessionId });
+    }
+
+    return true;
+  }, [clearSummary, clearTopics, user?.id]);
+
   // NOTE: cleaned corrupted legacy comment.
   // Optimize init path via parallel loading and batched reads.
   // Performance: Guest fast-entry skips splash and marks app ready immediately;
@@ -2270,161 +2437,37 @@ function StudentAppContent({
         : null;
       const hasFreshState = isPersistedAppStateFresh(normalizedSavedState);
       const savedAppState = hasFreshState ? normalizedSavedState : null;
-      const finalViewMode: ViewMode = shouldPrioritizeWechatCaptureEntry
-        ? 'record'
-        : isFirstVisit && !savedAppState
-          ? 'record'
-          : (savedAppState?.viewMode || 'record');
 
       setLoadingProgress(50);
 
+      // 启动时总是从收集页（record 模式）开始。
+      // 用户需要主动点击"去复习"才进入 review 模式，避免"莫名其妙进入时间轴"。
+      // 保留 savedAppState 中的复习数据（sessionId 等），供用户主动点击"去复习"时恢复
       if (savedAppState?.sessionId) {
         setSessionId(savedAppState.sessionId);
       }
-      if (savedAppState?.reviewTab) {
-        setReviewTab(savedAppState.reviewTab);
+
+      // 启动总是进入收集页（record 模式）
+      setViewMode('record');
+      setSelectedAnchor(null);
+      if (!savedAppState) {
+        setDataSource('live');
+        setVideoSource(null);
+        setVideoInsightItems([]);
+        setActiveVideoInsightId(null);
+        setVideoWorkspaceTab('chat');
+        setShowTranscriptBar(false);
+      } else if (savedAppState.dataSource !== 'video') {
+        setVideoSource(null);
+        setVideoInsightItems([]);
+        setActiveVideoInsightId(null);
+        setShowTranscriptBar(false);
+        setVideoWorkspaceTab(savedAppState.videoWorkspaceTab || 'chat');
       }
-      if (savedAppState?.videoWorkspaceTab) {
-        setVideoWorkspaceTab(savedAppState.videoWorkspaceTab);
+      if (typeof savedAppState?.currentTime === 'number' && Number.isFinite(savedAppState.currentTime)) {
+        setCurrentTime(Math.max(0, Math.floor(savedAppState.currentTime)));
       }
-      if (typeof savedAppState?.showTranscriptBar === 'boolean') {
-        setShowTranscriptBar(savedAppState.showTranscriptBar);
-      }
-      if (savedAppState?.dataSource) {
-        setDataSource(savedAppState.dataSource);
-      }
-
-      if (finalViewMode === 'review') {
-        let restoredFromSession = false;
-        if (savedAppState?.sessionId) {
-          restoredFromSession = await restoreReviewSession(savedAppState.sessionId, {
-            selectedAnchorId: savedAppState.selectedAnchorId || null,
-            currentTime: savedAppState.currentTime,
-            reviewTab: savedAppState.reviewTab || null,
-            videoWorkspaceTab: savedAppState.videoWorkspaceTab || null,
-            showTranscriptBar: savedAppState.showTranscriptBar,
-          });
-        }
-
-        if (!restoredFromSession) {
-          setViewMode('review');
-          setSessionId('demo-session');
-          setDataSource('demo');
-          setVideoSource(null);
-          setVideoInsightItems([]);
-          setActiveVideoInsightId(null);
-          setVideoWorkspaceTab('chat');
-          setShowTranscriptBar(false);
-
-          setLoadingProgress(60);
-
-          const [demoData, existingTranscriptCount] = await Promise.all([
-            loadDemoData(),
-            db.transcripts.where('sessionId').equals('demo-session').count().catch(() => 0),
-          ]);
-
-          setLoadingProgress(80);
-
-          setSegments(demoData.DEMO_SEGMENTS);
-          setAudioUrl(demoData.DEMO_AUDIO_URL);
-          setAudioBlob(null);
-          setAnchors(demoData.DEMO_ANCHORS);
-
-          const tl = memoryService.buildTimeline(
-            'demo-session',
-            demoData.DEMO_SEGMENTS,
-            demoData.DEMO_ANCHORS,
-            { subject: UIConfig.defaultSubject, teacher: 'Demo Teacher', date: new Date().toISOString().split('T')[0] }
-          );
-          setTimeline(tl);
-
-          if (savedAppState?.selectedAnchorId) {
-            const restoredAnchor = demoData.DEMO_ANCHORS.find((anchor) => anchor.id === savedAppState.selectedAnchorId);
-            if (restoredAnchor) {
-              setSelectedAnchor(restoredAnchor);
-              setCurrentTime(restoredAnchor.timestamp);
-            }
-          } else if (typeof savedAppState?.currentTime === 'number' && Number.isFinite(savedAppState.currentTime)) {
-            setSelectedAnchor(null);
-            setCurrentTime(Math.max(0, Math.floor(savedAppState.currentTime)));
-          } else {
-            const firstUnresolved = demoData.DEMO_ANCHORS.find((anchor) => !anchor.resolved);
-            if (firstUnresolved) {
-              setSelectedAnchor(firstUnresolved);
-              setCurrentTime(firstUnresolved.timestamp);
-            }
-          }
-
-          if (savedAppState?.reviewTab) {
-            setReviewTab(savedAppState.reviewTab);
-          }
-
-          setLoadingProgress(90);
-
-          queueMicrotask(() => {
-            classroomDataService.saveSession({
-              id: 'demo-session',
-              subject: UIConfig.defaultSubject,
-              topic: 'Australia\'s Moving Experience',
-              teacherName: 'Demo Teacher',
-              duration: demoData.DEMO_SEGMENTS.length > 0 ? demoData.DEMO_SEGMENTS[demoData.DEMO_SEGMENTS.length - 1].endMs : 0,
-              status: 'completed',
-              createdBy: studentId,
-            });
-
-            const anchorsToAdd = demoData.DEMO_ANCHORS.map((anchor) => {
-              const contextSegments = demoData.DEMO_SEGMENTS.filter(
-                (segment) => segment.startMs <= anchor.timestamp + 5000 && segment.endMs >= anchor.timestamp - 5000
-              );
-              const transcriptContext = contextSegments.map((segment) => segment.text).join(' ').slice(0, 200);
-              return {
-                id: anchor.id,
-                timestamp: anchor.timestamp,
-                type: anchor.type,
-                transcriptContext,
-              };
-            });
-            classroomDataService.bulkSaveStudentAnchors('demo-session', studentId, studentName, anchorsToAdd);
-
-            if (existingTranscriptCount === 0) {
-              db.transcripts.bulkAdd(
-                demoData.DEMO_SEGMENTS.map((segment) => ({
-                  sessionId: 'demo-session',
-                  userId: ANONYMOUS_USER_ID, // Use anonymous user for demo data.
-                  text: segment.text,
-                  startMs: segment.startMs,
-                  endMs: segment.endMs,
-                  confidence: segment.confidence || 1.0,
-                  isFinal: true,
-                }))
-              ).catch((error) => console.error('Failed to persist demo transcript to IndexedDB:', error));
-            }
-          });
-        } else {
-          setLoadingProgress(90);
-        }
-      } else {
-        setViewMode('record');
-        setSelectedAnchor(null);
-        if (!savedAppState) {
-          setDataSource('live');
-          setVideoSource(null);
-          setVideoInsightItems([]);
-          setActiveVideoInsightId(null);
-          setVideoWorkspaceTab('chat');
-          setShowTranscriptBar(false);
-        } else if (savedAppState.dataSource !== 'video') {
-          setVideoSource(null);
-          setVideoInsightItems([]);
-          setActiveVideoInsightId(null);
-          setShowTranscriptBar(false);
-          setVideoWorkspaceTab(savedAppState.videoWorkspaceTab || 'chat');
-        }
-        if (typeof savedAppState?.currentTime === 'number' && Number.isFinite(savedAppState.currentTime)) {
-          setCurrentTime(Math.max(0, Math.floor(savedAppState.currentTime)));
-        }
-        setLoadingProgress(85);
-      }
+      setLoadingProgress(85);
 
       setLoadingProgress(100);
       setAppReady(true);
@@ -2899,6 +2942,7 @@ function StudentAppContent({
     setShowMobileRecorder(false);
     setShowCollectionPulsePreview(false);
 
+    // 路径 A：有 sessionId + reviewable → 从 IndexedDB 恢复
     if (item.sessionId && item.reviewable) {
       try {
         const restored = await restoreReviewSession(item.sessionId, {
@@ -2908,6 +2952,9 @@ function StudentAppContent({
           showTranscriptBar: false,
         });
         if (restored) {
+          if (isMobile) {
+            setMobileSubPage('ai-chat');
+          }
           return;
         }
       } catch (error) {
@@ -2917,6 +2964,9 @@ function StudentAppContent({
       try {
         const restoredFromFallback = await restoreReviewFromCollectionFallback(item);
         if (restoredFromFallback) {
+          if (isMobile) {
+            setMobileSubPage('ai-chat');
+          }
           return;
         }
       } catch (fallbackError) {
@@ -2924,6 +2974,22 @@ function StudentAppContent({
       }
     }
 
+    // 路径 B（新）：有服务端 transcriptSegments → 直接从服务端数据恢复（不必重新转写）
+    if (item.reviewable && item.serverTranscriptSegments && item.serverTranscriptSegments.length > 0) {
+      try {
+        const restoredFromServer = await restoreFromServerTranscript(item);
+        if (restoredFromServer) {
+          if (isMobile) {
+            setMobileSubPage('ai-chat');
+          }
+          return;
+        }
+      } catch (serverError) {
+        console.error('从服务端转录数据恢复复习态失败:', serverError);
+      }
+    }
+
+    // 路径 C：video + 有 URL + 无 sessionId + 无服务端数据 → 重新导入
     if (item.type === 'video' && item.attachmentUrl && !item.sessionId) {
       const imported = await importVideoLinkIntoSourceItem(item.attachmentUrl, {
         sourceItemId: item.id,
@@ -2956,7 +3022,11 @@ function StudentAppContent({
     await handleViewModeChange('review');
     setReviewTab('timeline');
     setVideoWorkspaceTab(item.type === 'video' ? 'chat' : 'chat');
-  }, [audioBlob, handleViewModeChange, importVideoLinkIntoSourceItem, restoreReviewFromCollectionFallback, restoreReviewSession]);
+    // 移动端默认进入 AI 对话，而非留在时间轴
+    if (isMobile) {
+      setMobileSubPage('ai-chat');
+    }
+  }, [audioBlob, handleViewModeChange, importVideoLinkIntoSourceItem, isMobile, restoreFromServerTranscript, restoreReviewFromCollectionFallback, restoreReviewSession]);
 
   useEffect(() => {
     if (isGuestFastEntry) return;
@@ -4666,8 +4736,13 @@ const _handleVideoAssistantMessage = useCallback((payload: {
     }
   }, [handleImportFiles, sourceFilePickerMode]);
 
-  const sourceFileAccept =
-    sourceFilePickerMode === 'audio'
+  // 微信内置浏览器对 accept 含 image/*/video/* 时会劫持为拍摄/相册选择器，
+  // 导致无法选择文档等其他文件。检测到微信时使用通配符让系统弹出完整文件管理器。
+  const isWechatBrowser = typeof navigator !== 'undefined' && /MicroMessenger/i.test(navigator.userAgent);
+
+  const sourceFileAccept = isWechatBrowser
+    ? '*/*'
+    : sourceFilePickerMode === 'audio'
       ? 'audio/*,.mp3,.wav,.webm,.ogg,.m4a,.aac,.flac'
     : sourceFilePickerMode === 'support'
         ? 'image/*,.png,.jpg,.jpeg,.webp,.gif,.bmp,.heic,.heif,.txt,.md,.markdown,.csv,.json,.html,.htm,.pdf,.docx,.ppt,.pptx'
@@ -4680,6 +4755,38 @@ const _handleVideoAssistantMessage = useCallback((payload: {
       ),
     [sourceItems]
   );
+
+  // ── 收集页滚动检测 + 自动滚到底部 ──
+  const scrollCollectionToBottom = useCallback((smooth = true) => {
+    const el = collectionScrollRef.current;
+    if (!el) return;
+    el.scrollTo({ top: el.scrollHeight, behavior: smooth ? 'smooth' : 'auto' });
+  }, []);
+
+  // 监听滚动容器，判断是否滚离底部
+  useEffect(() => {
+    const el = collectionScrollRef.current;
+    if (!el) return;
+    const handleScroll = () => {
+      const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
+      const nearBottom = distanceFromBottom < 120;
+      collectionScrollNearBottomRef.current = nearBottom;
+      setShowScrollToLatest(!nearBottom && collectionFeedItems.length > 0);
+    };
+    el.addEventListener('scroll', handleScroll, { passive: true });
+    // 初始检测
+    handleScroll();
+    return () => el.removeEventListener('scroll', handleScroll);
+  }, [collectionFeedItems.length]);
+
+  // 新 item 加入时，如果之前在底部则自动滚到底部
+  const prevCollectionCountRef = useRef(collectionFeedItems.length);
+  useEffect(() => {
+    if (collectionFeedItems.length > prevCollectionCountRef.current && collectionScrollNearBottomRef.current) {
+      requestAnimationFrame(() => scrollCollectionToBottom(true));
+    }
+    prevCollectionCountRef.current = collectionFeedItems.length;
+  }, [collectionFeedItems.length, scrollCollectionToBottom]);
 
   const selectedCollectionContextItems = useMemo(
     () => collectionFeedItems.filter((item) => selectedCollectionContextIds.includes(item.id)),
@@ -4843,7 +4950,7 @@ const _handleVideoAssistantMessage = useCallback((payload: {
     [composerDetectedUrl]
   );
 
-  const composerCanAutoImportLink = composerReach.channel === 'video-link' && composerReach.shouldAutoIngest;
+  const composerCanAutoImportLink = (composerReach.channel === 'video-link' || composerReach.channel === 'article-link') && composerReach.shouldAutoIngest;
   const consumeMobileAIQuestion = useCallback(() => {
     setMobileAIConsumedQuestionNonce(mobileAIQuestionNonce);
   }, [mobileAIQuestionNonce]);
@@ -5578,7 +5685,7 @@ const _handleVideoAssistantMessage = useCallback((payload: {
     return groups;
   }, [historyWorkspaceEchoes]);
 
-  const echoHistorySections = useMemo(
+  const _echoHistorySections = useMemo(
     () =>
       (['today', 'week', 'earlier'] as const)
         .map((bucket) => ({
@@ -5590,7 +5697,7 @@ const _handleVideoAssistantMessage = useCallback((payload: {
     [groupedWorkspaceEchoes]
   );
 
-  const latestEchoForCenter = useMemo(() => {
+  const _latestEchoForCenter = useMemo(() => {
     if (workspaceEchoes.length === 0) return null;
 
     const latest = workspaceEchoes[0];
@@ -5605,10 +5712,10 @@ const _handleVideoAssistantMessage = useCallback((payload: {
     };
   }, [workspaceEchoes]);
 
-  const latestEchoIsToday = useMemo(() => {
-    if (!latestEchoForCenter?.updatedAt) return false;
-    return resolveEchoTimeBucket(latestEchoForCenter.updatedAt) === 'today';
-  }, [latestEchoForCenter]);
+  const _latestEchoIsToday = useMemo(() => {
+    if (!_latestEchoForCenter?.updatedAt) return false;
+    return resolveEchoTimeBucket(_latestEchoForCenter.updatedAt) === 'today';
+  }, [_latestEchoForCenter]);
 
   const canRequestManualEcho = Boolean(isAuthenticated && user?.id && accessToken);
 
@@ -5927,9 +6034,150 @@ const _handleVideoAssistantMessage = useCallback((payload: {
     }
   }
 
+  async function importArticleLinkIntoSourceItem(
+    url: string,
+    options?: {
+      sourceItemId?: string;
+      optimisticTitle?: string;
+      persistSourceKey?: string;
+      persistSourceType?: string;
+      persistRole?: SourceIngestRole;
+      occurredAt?: string;
+    }
+  ): Promise<boolean> {
+    const detected = parseVideoLink(url);
+    const targetSourceId = options?.sourceItemId || `article-link-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    const optimisticTitle = options?.optimisticTitle || (() => {
+      try {
+        if (detected?.providerLabel) {
+          return `${detected.providerLabel} 文章`;
+        }
+        const hostname = new URL(url).hostname.replace(/^www\./i, '');
+        return hostname || '图文链接';
+      } catch {
+        return detected?.providerLabel ? `${detected.providerLabel} 文章` : '图文链接';
+      }
+    })();
+
+    if (options?.sourceItemId) {
+      updateSourceItem(targetSourceId, {
+        type: 'text',
+        role: 'primary',
+        title: optimisticTitle,
+        preview: compactText(url, 120),
+        attachmentUrl: url,
+        segmentCount: 0,
+        origin: 'user',
+        status: 'parsing',
+        statusText: '正在提取文章内容…',
+        reviewable: false,
+      });
+    } else {
+      appendSourceItem({
+        id: targetSourceId,
+        type: 'text',
+        role: 'primary',
+        title: optimisticTitle,
+        preview: compactText(url, 120),
+        attachmentUrl: url,
+        segmentCount: 0,
+        origin: 'user',
+        status: 'parsing',
+        statusText: '正在提取文章内容…',
+        reviewable: false,
+      });
+    }
+
+    setActiveSourceImportCount((count) => count + 1);
+    setSourceImportError('');
+
+    try {
+      const response = await fetch('/api/article/import', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          url,
+          provider: detected?.provider,
+        }),
+      });
+
+      const payload = await readJsonApiResponse<{
+        success?: boolean;
+        error?: string;
+        title?: string;
+        content?: string;
+        text?: string;
+        description?: string;
+        author?: string;
+        wordCount?: number;
+        source?: {
+          provider?: string;
+          providerLabel?: string;
+          originalUrl?: string;
+          extractMethod?: string;
+        };
+        segments?: TranscriptSegment[];
+        sentences?: Array<{
+          id?: string;
+          text?: string;
+          beginTime?: number;
+          endTime?: number;
+          confidence?: number;
+        }>;
+      }>(response, '文章提取失败');
+
+      if (!response.ok || !payload.success) {
+        throw new Error(payload.error || '文章提取失败');
+      }
+
+      const segments = normalizeImportedVideoSegments(payload);
+      if (segments.length === 0) {
+        updateSourceItem(targetSourceId, {
+          title: payload.title || optimisticTitle,
+          attachmentUrl: url,
+          status: 'failed',
+          statusText: '文章内容为空，稍后再试试',
+        });
+        return false;
+      }
+
+      await handleVideoImportReady({
+        segments,
+        source: {
+          provider: payload.source?.provider || detected?.provider || 'generic',
+          providerLabel: payload.source?.providerLabel || detected?.providerLabel || '图文',
+          originalUrl: payload.source?.originalUrl || url,
+          playableUrl: url,
+          title: payload.title,
+        },
+      }, {
+        sourceItemId: targetSourceId,
+        persistSourceKey: options?.persistSourceKey,
+        persistSourceType: options?.persistSourceType,
+        persistRole: options?.persistRole,
+        occurredAt: options?.occurredAt,
+      });
+
+      return true;
+    } catch {
+      updateSourceItem(targetSourceId, {
+        status: 'failed',
+        statusText: '文章提取失败，稍后再试试',
+      });
+      return false;
+    } finally {
+      setActiveSourceImportCount((count) => Math.max(0, count - 1));
+    }
+  }
+
   const importComposerVideoLink = useCallback(async (url: string) => {
-    await importVideoLinkIntoSourceItem(url);
-  }, [importVideoLinkIntoSourceItem]);
+    // 根据 channel 类型分发到对应的 import 函数
+    if (composerReach.channel === 'article-link') {
+      await importArticleLinkIntoSourceItem(url);
+    } else {
+      await importVideoLinkIntoSourceItem(url);
+    }
+  }, [importVideoLinkIntoSourceItem, importArticleLinkIntoSourceItem, composerReach.channel]);
 
   const openLiveRecorder = useCallback(() => {
     if (isRecording) return;
@@ -6319,13 +6567,81 @@ const _handleVideoAssistantMessage = useCallback((payload: {
     setSelectedCollectionPrimaryId(item.id);
     setIsCollectionContextSelectionMode(false);
     setActiveCollectionMessageMenuId(null);
+
+    let didRestoreSegments = false;
+
+    // ── 视频 + 服务端转录 → 恢复 segments + videoSource ──
+    if (item.type === 'video' && item.serverTranscriptSegments && item.serverTranscriptSegments.length > 0) {
+      const sid = item.sessionId || `video-server-${item.id}-${Date.now()}`;
+      const segs: TranscriptSegment[] = item.serverTranscriptSegments.map((s, i) => ({
+        id: s.id || `server-${s.startMs ?? 0}-${i}`,
+        text: s.text || '',
+        startMs: s.startMs ?? 0,
+        endMs: s.endMs ?? (s.startMs ?? 0) + 3000,
+        confidence: 1,
+        isFinal: true,
+      }));
+      setSegments(segs);
+      segmentsRef.current = segs;
+      liveSegmentsRef.current = segs;
+      setSessionId(sid);
+      sessionIdRef.current = sid;
+      // 恢复 videoSource 让播放器工作
+      const det = item.attachmentUrl ? parseVideoLink(item.attachmentUrl) : null;
+      setVideoSource({
+        provider: det?.provider || item.videoProvider || 'generic',
+        providerLabel: det?.providerLabel || 'Web Video',
+        originalUrl: item.attachmentUrl || item.mediaUrl || '',
+        embedUrl: item.embedUrl || det?.embedUrl,
+        playableUrl: item.mediaUrl || item.attachmentUrl || undefined,
+        thumbnailUrl: item.previewUrl,
+        title: item.title,
+        durationSec: segs.length > 0 ? (segs[segs.length - 1].endMs || 0) / 1000 : undefined,
+      });
+      setDataSource('video');
+      if (!item.sessionId) updateSourceItem(item.id, { sessionId: sid });
+      didRestoreSegments = true;
+    }
+
+    // ── 音频/视频 + sessionId → 从 IndexedDB 恢复 segments ──
+    if (!didRestoreSegments && item.sessionId && (item.type === 'audio' || item.type === 'video')) {
+      try {
+        const txs = await db.transcripts.where('sessionId').equals(item.sessionId).toArray();
+        if (txs.length > 0) {
+          const sorted = txs.sort((a, b) => a.startMs - b.startMs);
+          const segs: TranscriptSegment[] = sorted.map((t, i) => ({
+            id: `restored-${t.startMs}-${i}`,
+            text: t.text,
+            startMs: t.startMs,
+            endMs: t.endMs,
+            confidence: t.confidence,
+            isFinal: t.isFinal,
+          }));
+          setSegments(segs);
+          segmentsRef.current = segs;
+          liveSegmentsRef.current = segs;
+          setSessionId(item.sessionId);
+          sessionIdRef.current = item.sessionId;
+          if (item.type === 'audio' && item.mediaUrl) {
+            setAudioBlob(null);
+            setAudioUrl(item.mediaUrl);
+          }
+          if (item.durationMs) setSessionMediaDurationMs(item.durationMs);
+          didRestoreSegments = true;
+        }
+      } catch (e) {
+        console.error('[openTutorFromCollectionItem] IndexedDB restore failed:', e);
+      }
+    }
+
     const launchImages = await buildTutorLaunchImages([item]);
     const supportContextText = buildSelectedCollectionContextText({
       items: [item],
       primaryId: item.id,
     });
+    // 有 segments 时关闭 preferSelectedContext → Tutor 走 [MM:SS] 时间戳格式
     openTutorFromCollection(buildTutorPromptForCollectionItem(item), {
-      preferSelectedContext: true,
+      preferSelectedContext: !didRestoreSegments,
       launchImages,
       supportContextText,
     });
@@ -6517,6 +6833,7 @@ const _handleVideoAssistantMessage = useCallback((payload: {
       />
 
       <div
+        ref={collectionScrollRef}
         className={desktopShell ? 'relative z-10 flex-1 overflow-y-auto px-6 pt-6' : 'relative z-10 flex-1 overflow-y-auto px-4 pt-4'}
         style={{ paddingBottom: `${scrollPadding}px` }}
       >
@@ -6885,51 +7202,109 @@ const _handleVideoAssistantMessage = useCallback((payload: {
                           </div>
                         ) : item.type === 'video' ? (
                           <div className="space-y-2">
-                            {item.mediaUrl ? (
-                              <a
-                                href={item.mediaUrl}
-                                target="_blank"
-                                rel="noreferrer"
-                                className={`block overflow-hidden rounded-[18px] transition ${
-                                  isPrimary ? 'bg-[#1f2937] hover:bg-[#111827]' : 'bg-slate-900 hover:bg-slate-800'
-                                }`}
-                              >
-                                <div className="flex min-h-[140px] items-center justify-center px-4 py-6">
-                                  <span className="inline-flex h-11 w-11 items-center justify-center rounded-full bg-white text-slate-900">
-                                    <Play size={18} className="ml-0.5" />
+                            {(() => {
+                              const videoHref = item.attachmentUrl || item.embedUrl || item.mediaUrl;
+                              const hasThumbnail = !!item.previewUrl;
+                              if (hasThumbnail) {
+                                const inner = (
+                                  <div className={`relative overflow-hidden rounded-[18px] ${
+                                    isPrimary ? 'bg-[#1f2937]' : 'bg-slate-900'
+                                  }`}>
+                                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                                    <img
+                                      src={item.previewUrl}
+                                      alt={item.title}
+                                      className="block w-full aspect-video object-cover"
+                                      loading="lazy"
+                                    />
+                                    <div className="absolute inset-0 flex items-center justify-center bg-black/25">
+                                      <span className="inline-flex h-12 w-12 items-center justify-center rounded-full bg-white/90 text-slate-900 shadow-lg">
+                                        <Play size={20} className="ml-0.5" />
+                                      </span>
+                                    </div>
+                                    {item.durationMs ? (
+                                      <span className="absolute bottom-2 right-2 rounded bg-black/70 px-1.5 py-0.5 text-[11px] font-medium text-white">
+                                        {formatVoiceDurationCompact(item.durationMs)}
+                                      </span>
+                                    ) : null}
+                                    <div className="border-t border-white/10 bg-black/50 px-3 py-2 text-white">
+                                      <p className="truncate text-sm font-medium">{item.title}</p>
+                                      {item.videoProvider ? (
+                                        <p className="mt-0.5 text-[11px] text-white/60">{item.videoProvider}</p>
+                                      ) : null}
+                                    </div>
+                                  </div>
+                                );
+                                return videoHref ? (
+                                  <a href={videoHref} target="_blank" rel="noreferrer" className="block transition hover:opacity-90">{inner}</a>
+                                ) : inner;
+                              }
+                              /* 无缩略图：链接卡片样式 */
+                              if (videoHref) {
+                                return (
+                                  <a
+                                    href={videoHref}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    className={`block overflow-hidden rounded-[18px] transition ${
+                                      isPrimary ? 'bg-[#1f2937] hover:bg-[#111827]' : 'bg-slate-900 hover:bg-slate-800'
+                                    }`}
+                                  >
+                                    <div className="flex min-h-[100px] items-center justify-center px-4 py-5">
+                                      <span className="inline-flex h-11 w-11 items-center justify-center rounded-full bg-white text-slate-900">
+                                        <Play size={18} className="ml-0.5" />
+                                      </span>
+                                    </div>
+                                    <div className="border-t border-white/10 bg-black/18 px-3 py-2.5 text-white">
+                                      <p className="truncate text-sm font-medium">{item.title}</p>
+                                      {item.durationMs ? (
+                                        <p className="mt-0.5 text-[11px] text-white/70">
+                                          {formatVoiceDurationCompact(item.durationMs)}
+                                        </p>
+                                      ) : null}
+                                    </div>
+                                  </a>
+                                );
+                              }
+                              /* 既无缩略图也无链接 */
+                              return (
+                                <div className={`flex items-center gap-2 ${isPrimary ? 'justify-end' : 'justify-start'}`}>
+                                  <span className={`inline-flex h-8 w-8 items-center justify-center rounded-full ${
+                                    isPrimary ? 'bg-white/70 text-fuchsia-600' : 'bg-slate-100 text-slate-500'
+                                  }`}>
+                                    <Link2 size={15} />
                                   </span>
-                                </div>
-                                <div className="border-t border-white/10 bg-black/18 px-3 py-2.5 text-white">
-                                  <p className="truncate text-sm font-medium">
-                                    {item.title}
-                                  </p>
-                                  {item.durationMs ? (
-                                    <p className="mt-0.5 text-[11px] text-white/70">
-                                      {formatVoiceDurationCompact(item.durationMs)}
+                                  <div className="min-w-0">
+                                    <p className="truncate text-sm font-medium text-slate-900">
+                                      {item.title}
+                                      {item.durationMs ? ` · ${formatVoiceDurationCompact(item.durationMs)}` : ''}
                                     </p>
-                                  ) : null}
+                                  </div>
                                 </div>
-                              </a>
-                            ) : (
-                              <div className={`flex items-center gap-2 ${isPrimary ? 'justify-end' : 'justify-start'}`}>
-                                <span className={`inline-flex h-8 w-8 items-center justify-center rounded-full ${
-                                  isPrimary ? 'bg-white/70 text-fuchsia-600' : 'bg-slate-100 text-slate-500'
-                                }`}>
-                                  <Link2 size={15} />
-                                </span>
-                                <div className="min-w-0">
-                                  <p className="truncate text-sm font-medium text-slate-900">
-                                    {item.title}
-                                    {item.durationMs ? ` · ${formatVoiceDurationCompact(item.durationMs)}` : ''}
-                                  </p>
-                                </div>
-                              </div>
-                            )}
+                              );
+                            })()}
                             <div className={`flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] ${
                               isPrimary ? 'justify-end text-white/75' : 'justify-start text-slate-500'
                             }`}>
                               {showVideoStatusText ? (
                                 <span className="font-medium">{item.statusText}</span>
+                              ) : item.videoImported && item.serverTranscriptSegments && item.serverTranscriptSegments.length > 0 ? (
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    void openReviewFromCollection(item);
+                                  }}
+                                  className="inline-flex items-center gap-1 rounded-full bg-[#D1F4E0]/80 px-2.5 py-0.5 text-[11px] font-medium text-[#2d6a3f] transition hover:bg-[#D1F4E0]"
+                                >
+                                  <BookOpen size={11} />
+                                  <span>已解析 · {item.serverTranscriptSegments.length}句 · 去复习</span>
+                                </button>
+                              ) : item.type === 'video' && item.reviewable && !item.videoImported && !item.sessionId && item.status !== 'failed' ? (
+                                <span className="inline-flex items-center gap-1.5 text-[11px] text-amber-600/80">
+                                  <span className="inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-amber-400" />
+                                  <span>解析中…</span>
+                                </span>
                               ) : null}
                             </div>
                           </div>
@@ -6981,10 +7356,42 @@ const _handleVideoAssistantMessage = useCallback((payload: {
                   </div>
                 );
               })}
+
+              {/* ── 回声提示条：系统内设计语言，极轻一行 ── */}
+              {workspaceEchoes.length > 0 && (
+                <div className="px-4 py-2">
+                  <button
+                    type="button"
+                    onClick={() => setMobileCollectionSheet('echo')}
+                    className="flex w-full items-center gap-2.5 px-4 py-3 transition-colors active:bg-[#EFEFEF]"
+                  >
+                    <span className="text-[11px] text-[#A3A39E]">✦</span>
+                    <span className="min-w-0 flex-1 truncate text-left text-[13px] leading-5 text-[#787774]">
+                      {workspaceEchoes.length === 1
+                        ? '同桌留了一条回声'
+                        : `同桌留了 ${workspaceEchoes.length} 条回声`}
+                    </span>
+                    <ChevronRight size={14} className="flex-shrink-0 text-[#A3A39E]" />
+                  </button>
+                </div>
+              )}
             </div>
           )}
         </div>
       </div>
+
+      {/* ── 跳转到最新消息 浮动按钮（仿微信设计） ── */}
+      {showScrollToLatest && (
+        <button
+          type="button"
+          onClick={() => scrollCollectionToBottom(true)}
+          className={`${collectionChromeContained ? 'absolute' : 'fixed'} bottom-28 left-1/2 z-20 -translate-x-1/2 flex items-center gap-1.5 rounded-full border border-[#E9E9E7] bg-[#232322] px-4 py-2 text-[13px] font-medium text-emerald-400 shadow-lg transition-all hover:bg-[#333] active:scale-95`}
+          aria-label="跳转到最新消息"
+        >
+          <ChevronsDown size={16} className="shrink-0" />
+          <span>跳转到最新消息</span>
+        </button>
+      )}
 
       {activeCollectionMessageMenuItem ? (
         <>
@@ -7048,7 +7455,7 @@ const _handleVideoAssistantMessage = useCallback((payload: {
                     </span>
                     <span>引用</span>
                   </button>
-                  {Boolean(activeCollectionMessageMenuItem.reviewable && activeCollectionMessageMenuItem.sessionId && activeCollectionMessageMenuItem.status !== 'failed') ? (
+                  {Boolean(activeCollectionMessageMenuItem.reviewable && (activeCollectionMessageMenuItem.sessionId || activeCollectionMessageMenuItem.videoImported) && activeCollectionMessageMenuItem.status !== 'failed') ? (
                     <button
                       type="button"
                       onClick={() => {
@@ -7291,7 +7698,7 @@ const _handleVideoAssistantMessage = useCallback((payload: {
                   <div className="min-w-0 flex-1">
                     <p className="text-sm font-semibold text-slate-900">回声</p>
                     <p className="mt-0.5 text-xs leading-5 text-slate-500">
-                      {latestEchoForCenter ? '看看今天为什么值得继续收。' : '先继续收，线索会慢慢沉下来。'}
+                      {workspaceEchoes.length > 0 ? '同桌有话想跟你说。' : '先继续收集，回声会安静出现。'}
                     </p>
                   </div>
                   <ChevronRight size={16} className="text-slate-300" />
@@ -7322,13 +7729,13 @@ const _handleVideoAssistantMessage = useCallback((payload: {
                 <div>
                   <p className="text-sm font-semibold text-slate-900">
                     {mobileCollectionSheet === 'echo'
-                      ? '回声中心'
+                      ? '回声'
                       : mobileCollectionSheet === 'history'
                         ? '历史收集'
                         : '收集菜单'}
                   </p>
                   {mobileCollectionSheet === 'echo' ? (
-                    <p className="text-xs text-slate-500">回头再看，不打断你现在发消息。</p>
+                    <p className="text-xs text-slate-500">安静地长出来的东西。</p>
                   ) : null}
                 </div>
                   <button
@@ -7345,98 +7752,50 @@ const _handleVideoAssistantMessage = useCallback((payload: {
               {mobileCollectionSheet === 'echo' ? (
                 <div
                   data-mobile-sheet-scrollable="echo"
-                  className="min-h-0 flex-1 space-y-3 overflow-y-auto overscroll-contain p-4"
+                  className="min-h-0 flex-1 space-y-4 overflow-y-auto overscroll-contain p-4"
                   style={mobileSheetScrollableStyle}
                 >
-                  {latestEchoForCenter ? (
-                    <div className="rounded-[24px] border border-[#E9E9E7] bg-[#D3E4F4] px-4 py-4">
-                      <div className="mb-3 flex items-center justify-between gap-3">
-                        <div className="flex items-center gap-2 text-[12px] font-medium text-[#232322]">
-                          <span className="inline-flex h-8 w-8 items-center justify-center rounded-2xl bg-[#D3E4F4] text-[#232322]">
-                            <Sparkles size={13} />
-                          </span>
-                          <span>{latestEchoIsToday ? '今日回声' : '最近回声'}</span>
-                        </div>
-                        {renderManualEchoTriggerButton(
-                          'text-[11px] font-medium text-slate-400 transition hover:text-slate-600 disabled:cursor-not-allowed disabled:opacity-60'
-                        )}
-                      </div>
-                      <p className="mb-1 text-sm font-semibold leading-6 text-slate-900">{latestEchoForCenter.title}</p>
-                      <p className="text-sm leading-7 text-slate-900">{latestEchoForCenter.body}</p>
-                      {latestEchoForCenter.recommendations.length > 0 ? (
-                        <div className="mt-4 space-y-2">
-                          <p className="text-[11px] font-semibold tracking-[0.08em] text-slate-500">也许可以顺手碰一下</p>
-                          <div className="space-y-2">
-                            {latestEchoForCenter.recommendations.map((recommendation, index) => (
-                              <div
-                                key={`${latestEchoForCenter.id}-recommendation-${index + 1}`}
-                                className="rounded-[18px] border border-[#E9E9E7] bg-white px-3 py-2.5"
-                              >
-                                <p className="text-xs font-semibold text-slate-800">{recommendation.title}</p>
-                                <p className="mt-1 text-xs leading-6 text-slate-600">{recommendation.body}</p>
-                              </div>
-                            ))}
-                          </div>
+                  {workspaceEchoes.length > 0 ? (
+                    <>
+                      {workspaceEchoes.map((echo) => (
+                        <EchoCard
+                          key={echo.id}
+                          echo={{
+                            id: echo.id,
+                            kind: echo.kind,
+                            title: echo.title,
+                            body: echo.body,
+                            highlights: echo.highlights,
+                            takeaway: echo.takeaway,
+                            sourceCaptureIds: echo.sourceCaptureIds,
+                            createdAt: echo.createdAt,
+                            updatedAt: echo.updatedAt,
+                          }}
+                          onShare={(echoData) => {
+                            setSharingEcho(echoData);
+                          }}
+                        />
+                      ))}
+                      {ENABLE_ECHO_MANUAL_TRIGGER ? (
+                        <div className="pt-2">
+                          {renderManualEchoTriggerButton(
+                            'text-[11px] font-medium text-stone-400 transition hover:text-stone-600 disabled:cursor-not-allowed disabled:opacity-60'
+                          )}
                         </div>
                       ) : null}
-                      {latestEchoForCenter.chips.length > 0 ? (
-                        <div className="mt-3 flex flex-wrap gap-2">
-                          {latestEchoForCenter.chips.map((chip) => (
-                            <span
-                              key={chip}
-                              className="rounded-full border border-[#D1F4E0] bg-white px-3 py-1 text-[11px] font-medium text-[#232322]"
-                            >
-                              {chip}
-                            </span>
-                          ))}
-                        </div>
-                      ) : null}
-                      {latestEchoForCenter.memory ? (
-                        <p className="mt-3 text-[11px] leading-5 text-slate-400">
-                          这条回声沉淀自今天 {latestEchoForCenter.memory.todayCaptureCount} 条、近 7 天共{' '}
-                          {latestEchoForCenter.memory.sourceCaptureCount} 条收集。
-                        </p>
-                      ) : null}
-                      <div className="mt-4">
-                        <button
-                          type="button"
-                          onClick={() => nudgeComposer('我想顺着这条继续记：')}
-                          className="rounded-full bg-[#232322] px-4 py-2.5 text-xs font-semibold text-white transition hover:bg-[#111111]"
-                        >
-                          继续收这一条
-                        </button>
-                      </div>
-                      <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2 text-xs font-medium">
-                        <button
-                          type="button"
-                          onClick={() => openTutorFromCollection(buildTutorQuestionFromEcho(latestEchoForCenter, 'explore'))}
-                          className="text-[#232322] transition hover:text-[#111111]"
-                        >
-                          问 Tutor
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => openTutorFromCollection(buildTutorQuestionFromEcho(latestEchoForCenter, 'review'))}
-                          className="text-slate-500 transition hover:text-slate-700"
-                        >
-                          去复习
-                        </button>
-                      </div>
                       {manualEchoFeedbackView}
                       {manualEchoDebugView}
-                    </div>
+                    </>
                   ) : (
-                    <div className="rounded-[24px] border border-dashed border-slate-200 bg-slate-50/80 px-4 py-5 text-sm leading-7 text-slate-500">
-                      <p>先继续收集，系统听到的线索会慢慢沉到这里。</p>
-                      {!canRequestManualEcho && !isCheckingAuth ? (
-                        <p className="mt-1 text-xs leading-6 text-[#787774]">
-                          {isGuestFastEntry ? '你现在在游客模式里，点按钮会先提示你登录。' : '当前还没拿到登录态，点按钮会先提示你登录。'}
-                        </p>
-                      ) : null}
+                    <div className="flex flex-col items-center py-12">
+                      <span className="text-2xl text-[#A3A39E]/40">✦</span>
+                      <p className="mt-3 text-[14px] leading-7 text-[#A3A39E]">
+                        先继续收集，回声会安静地出现。
+                      </p>
                       {ENABLE_ECHO_MANUAL_TRIGGER ? (
-                        <div className="mt-3">
+                        <div className="mt-4">
                           {renderManualEchoTriggerButton(
-                            'text-xs font-medium text-slate-500 transition hover:text-slate-700 disabled:cursor-not-allowed disabled:opacity-60'
+                            'text-xs font-medium text-stone-400 transition hover:text-stone-600 disabled:cursor-not-allowed disabled:opacity-60'
                           )}
                         </div>
                       ) : null}
@@ -7444,117 +7803,6 @@ const _handleVideoAssistantMessage = useCallback((payload: {
                       {manualEchoDebugView}
                     </div>
                   )}
-
-                  {historyWorkspaceEchoes.length > 0 ? (
-                    <div className="rounded-[24px] border border-slate-200 bg-slate-50/80 p-3">
-                      <div className="mb-3 flex items-center justify-between gap-3">
-                        <div>
-                          <p className="text-xs font-semibold tracking-[0.06em] text-slate-500">回声历史</p>
-                        </div>
-                        <span className="rounded-full bg-white px-2 py-1 text-[11px] font-medium text-slate-500">
-                          {historyWorkspaceEchoes.length} 条
-                        </span>
-                      </div>
-
-                      {echoFilterOptions.length > 1 ? (
-                        <div className="mb-3 flex flex-wrap gap-2">
-                          {echoFilterOptions.map((chip) => (
-                            <button
-                              key={chip}
-                              type="button"
-                              onClick={() => setSelectedEchoChip(chip)}
-                              className={`rounded-full border px-3 py-1 text-[11px] font-medium transition ${
-                                selectedEchoChip === chip
-                                  ? 'border-[#D1F4E0] bg-[#D1F4E0]/30 text-[#232322]'
-                                  : 'border-slate-200 bg-white text-slate-500'
-                              }`}
-                            >
-                              {chip}
-                            </button>
-                          ))}
-                        </div>
-                      ) : null}
-
-                      {echoHistorySections.length > 0 ? (
-                        <div className="space-y-4">
-                          {echoHistorySections.map((section) => (
-                            <div key={section.key} className="space-y-2">
-                              <div className="flex items-center gap-2">
-                                <span className="rounded-full bg-white px-2 py-1 text-[11px] font-semibold text-slate-500">
-                                  {section.label}
-                                </span>
-                                <span className="text-[11px] text-slate-400">{section.items.length} 条</span>
-                              </div>
-                              {section.items.map((echo) => (
-                                <div
-                                  key={echo.id}
-                                  className="rounded-[18px] border border-slate-200 bg-white px-3 py-3"
-                                >
-                                  <div className="flex items-center justify-between gap-3">
-                                    <p className="text-sm font-semibold text-slate-900">{echo.title}</p>
-                                    <span className="text-[11px] text-slate-400">
-                                      {formatRelativeCollectionTime(resolveEchoDisplayTime(echo))}
-                                    </span>
-                                  </div>
-                                  <p className="mt-1 text-sm leading-6 text-slate-600">{echo.body}</p>
-                                  {echo.chips.length > 0 ? (
-                                    <div className="mt-2 flex flex-wrap gap-2">
-                                      {echo.chips.map((chip) => (
-                                        <span
-                                          key={`${echo.id}-${chip}`}
-                                          className="rounded-full bg-slate-50 px-2.5 py-1 text-[11px] font-medium text-slate-500"
-                                        >
-                                          {chip}
-                                        </span>
-                                      ))}
-                                    </div>
-                                  ) : null}
-                                  <div className="mt-3 flex flex-wrap justify-end gap-2">
-                                    <button
-                                      type="button"
-                                      onClick={() => openTutorFromCollection(buildTutorQuestionFromEcho(echo, 'review'))}
-                                      className="rounded-full border border-slate-200 bg-slate-50 px-3 py-2 text-[11px] font-semibold text-slate-700 transition hover:border-slate-300 hover:bg-slate-100"
-                                    >
-                                      做成复习清单
-                                    </button>
-                                    <button
-                                      type="button"
-                                      onClick={() => openTutorFromCollection(buildTutorQuestionFromEcho(echo, 'explore'))}
-                                      className="rounded-full border border-slate-200 bg-slate-50 px-3 py-2 text-[11px] font-semibold text-slate-700 transition hover:border-[#D1F4E0] hover:bg-[#D1F4E0]/30 hover:text-[#232322]"
-                                    >
-                                      顺着这条问 Tutor
-                                    </button>
-                                  </div>
-                                </div>
-                              ))}
-                            </div>
-                          ))}
-                        </div>
-                      ) : (
-                        <div className="rounded-[18px] border border-dashed border-slate-200 bg-white px-3 py-4 text-sm leading-6 text-slate-500">
-                          当前筛选下还没有回声，换一个标签看看，或者继续收集更多上下文。
-                        </div>
-                      )}
-                    </div>
-                  ) : null}
-
-                  {collectionPulse?.actions?.length && !latestEchoForCenter ? (
-                    <div className="flex flex-wrap gap-2">
-                      {collectionPulse.actions.map((action) => (
-                        <button
-                          key={action.key}
-                          type="button"
-                          onClick={() => {
-                            setMobileCollectionSheet(null);
-                            handleCollectionPulseAction(action.key);
-                          }}
-                          className="rounded-full border border-[#D1F4E0] bg-white px-3 py-2 text-xs font-medium text-[#232322] transition hover:border-[#D1F4E0] hover:bg-[#D1F4E0]/30"
-                        >
-                          {action.label}
-                        </button>
-                      ))}
-                    </div>
-                  ) : null}
                 </div>
               ) : null}
 
@@ -7571,6 +7819,7 @@ const _handleVideoAssistantMessage = useCallback((payload: {
                     onRestoreCapture={restoreCollectionListItem}
                     onDeleteCapture={deleteCollectionListItem}
                     onEditCapture={editWorkspaceCaptureFromList}
+                    onAISearch={() => setShowAISearch(true)}
                     selectedCaptureIds={selectedCollectionListIds}
                     selectionMode={isCollectionContextSelectionMode}
                     maxHeight="100%"
@@ -8833,13 +9082,20 @@ const _handleVideoAssistantMessage = useCallback((payload: {
                       <div className="flex items-start gap-2.5">
                         <button
                           onClick={() => {
-                            setMobileSubPage(null);
+                            // 如果没有有效的复习内容（无 segments），直接返回收集页
+                            const hasReviewContent = segments.length > 0 && sessionId !== 'demo-session';
+                            if (hasReviewContent) {
+                              setMobileSubPage(null);
+                            } else {
+                              setMobileSubPage(null);
+                              setViewMode('record');
+                            }
                             clearMobileAILaunchState();
                             setShowConversationHistory(false);
                             setSelectedHistoryConversation(null);
                           }}
                           className="flex h-9 w-9 items-center justify-center rounded-[14px] border border-[#efe5d8] bg-white text-slate-600 shadow-[0_6px_14px_rgba(148,163,184,0.08)] transition hover:-translate-y-0.5 hover:text-slate-900"
-                          aria-label="返回复习"
+                          aria-label="返回"
                         >
                           <svg className="h-4.5 w-4.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
@@ -9313,6 +9569,30 @@ const _handleVideoAssistantMessage = useCallback((payload: {
         onSkip={onboarding.skipFlow}
         isActive={onboarding.isActive}
       />
+
+      <AISearchPanel
+        open={showAISearch}
+        onClose={() => setShowAISearch(false)}
+        onNavigateToCapture={(captureId: string) => {
+          const item = allCollectionItems.find((c) => c.id === captureId);
+          if (item) {
+            setShowAISearch(false);
+            setMobileCollectionSheet(null);
+            void openReviewFromCollectionListItem(item);
+          }
+        }}
+        accessToken={accessToken}
+        isMobile={isMobile}
+      />
+
+      {/* ── 回声分享卡弹窗 ── */}
+      {sharingEcho && (
+        <EchoShareCard
+          echo={sharingEcho}
+          open={Boolean(sharingEcho)}
+          onClose={() => setSharingEcho(null)}
+        />
+      )}
     </div>
   );
 }

@@ -40,6 +40,74 @@ interface SegmentResult {
   error?: string;
 }
 
+/**
+ * 将一个大段 ASR 文本按中文/英文标点分句，并按字数比例分配时间戳。
+ * turbo 的 multimodal-generation API 不返回逐句时间戳，
+ * 所以需要在拿到整段文本后做分句，才能给时间轴提供多条 segment。
+ */
+function splitLongSegment(
+  text: string,
+  startMs: number,
+  endMs: number
+): Array<{ text: string; startMs: number; endMs: number }> {
+  const normalized = text.trim();
+  if (!normalized) return [];
+
+  // 短句不拆
+  if (normalized.length <= 40) {
+    return [{ text: normalized, startMs, endMs }];
+  }
+
+  const chunks: string[] = [];
+  let current = '';
+  // 中英文句号/问号/叹号/分号为断句点
+  const sentenceEnd = /[。！？!?；;]/;
+
+  for (const ch of normalized) {
+    current += ch;
+    if (sentenceEnd.test(ch) && current.length >= 8) {
+      if (current.trim()) chunks.push(current.trim());
+      current = '';
+    }
+    // 避免单句过长，逗号也可断句
+    if (current.length >= 50) {
+      const commaPos = Math.max(current.lastIndexOf('，'), current.lastIndexOf(','));
+      if (commaPos >= 10) {
+        const left = current.slice(0, commaPos + 1).trim();
+        const right = current.slice(commaPos + 1).trim();
+        if (left) chunks.push(left);
+        current = right;
+      }
+    }
+  }
+  if (current.trim()) chunks.push(current.trim());
+
+  if (chunks.length <= 1) {
+    return [{ text: normalized, startMs, endMs }];
+  }
+
+  const duration = Math.max(1, endMs - startMs);
+  const totalChars = chunks.reduce((sum, c) => sum + c.length, 0);
+  if (totalChars <= 0) {
+    return [{ text: normalized, startMs, endMs }];
+  }
+
+  let consumed = 0;
+  return chunks.map((chunk, index) => {
+    const segStart = Math.round(startMs + (duration * consumed) / totalChars);
+    consumed += chunk.length;
+    const segEnd =
+      index === chunks.length - 1
+        ? endMs
+        : Math.round(startMs + (duration * consumed) / totalChars);
+    return {
+      text: chunk,
+      startMs: segStart,
+      endMs: Math.max(segEnd, segStart + 100),
+    };
+  });
+}
+
 function getMimeTypeForAudioPath(filePath: string): string {
   const ext = path.extname(filePath).toLowerCase();
   switch (ext) {
@@ -489,7 +557,8 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const segments = turboResult.sentences.map((sentence, index) => ({
+    // turbo 的 multimodal-generation API 不返回逐句时间戳，需要在此对大段文本做标点分句 + 按比例分配时间戳
+    const rawSegments = turboResult.sentences.map((sentence, index) => ({
       id: `seg-${index}`,
       text: sentence.text.trim(),
       startMs: sentence.begin_time ?? sentence.start_time ?? 0,
@@ -497,6 +566,22 @@ export async function POST(request: NextRequest) {
       confidence: 0.95,
       isFinal: true,
     }));
+
+    const segments: typeof rawSegments = [];
+    let globalIndex = 0;
+    for (const seg of rawSegments) {
+      const splits = splitLongSegment(seg.text, seg.startMs, seg.endMs);
+      for (const split of splits) {
+        segments.push({
+          id: `seg-${globalIndex++}`,
+          text: split.text,
+          startMs: split.startMs,
+          endMs: split.endMs,
+          confidence: 0.95,
+          isFinal: true,
+        });
+      }
+    }
 
     const totalDuration = segments.length > 0 ? segments[segments.length - 1].endMs : 0;
     const text = segments.map((segment) => segment.text).join('');

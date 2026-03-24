@@ -6,7 +6,7 @@ function compactText(value: string, limit: number): string {
 }
 
 export function buildWechatVoicePreviewText(transcript?: string | null): string {
-  const text = compactText((transcript || '').trim(), 72);
+  const text = compactText((transcript || '').trim(), 497);
   return text ? `语音：${text}` : '一条语音消息';
 }
 

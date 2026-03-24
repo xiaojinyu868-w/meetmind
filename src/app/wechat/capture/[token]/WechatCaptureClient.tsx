@@ -103,7 +103,7 @@ export default function WechatCaptureClient({
         </h2>
         <div className="mt-4 grid gap-3">
           <Link
-            href={`/app?mobile=1&wechat_capture=${encodeURIComponent(token)}`}
+            href={`/app?wechat_capture=${encodeURIComponent(token)}`}
             className="rounded-[20px] bg-stone-950 px-4 py-4 text-center text-sm font-medium text-white"
           >
             打开收集流

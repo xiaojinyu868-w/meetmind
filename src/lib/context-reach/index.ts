@@ -6,6 +6,7 @@ export type ContextReachKind = 'text' | 'link' | 'file';
 export type ContextReachChannel =
   | 'quick-note'
   | 'video-link'
+  | 'article-link'
   | 'web-link'
   | 'audio-file'
   | 'video-file'
@@ -27,7 +28,17 @@ const AUDIO_FILE_PATTERN = /\.(mp3|wav|webm|ogg|m4a|aac|flac)$/i;
 const VIDEO_FILE_PATTERN = /\.(mp4|mov|m4v|avi|mkv|webm)$/i;
 const IMAGE_FILE_PATTERN = /\.(png|jpg|jpeg|webp|gif|bmp|heic|heif)$/i;
 const DOCUMENT_FILE_PATTERN = /\.(txt|md|markdown|csv|json|html?|pdf|docx|ppt|pptx)$/i;
-const URL_PATTERN = /(https?:\/\/[^\s]+)/i;
+/**
+ * URL 提取正则
+ *
+ * 核心要求：
+ * 1. 从中文混排文本中稳定提取 URL（如手机B站分享 `【标题-哔哩哔哩】 https://b23.tv/xxx`）
+ * 2. 不把尾部中文标点（，。！？、）吃进 URL
+ * 3. 不把尾部中文引号（」】）》）吃进 URL
+ *
+ * [^\s\u4e00-\u9fff，。！？、；：""''【】（）《》] 排除空白和中文字符/标点
+ */
+const URL_PATTERN = /(https?:\/\/[^\s\u4e00-\u9fff\uff0c\u3002\uff01\uff1f\u3001\uff1b\uff1a\u201c\u201d\u2018\u2019\u3010\u3011\uff08\uff09\u300a\u300b]+)/i;
 
 export const CONTEXT_REACH_CHANNELS: Array<{
   id: ContextReachChannel;
@@ -36,6 +47,7 @@ export const CONTEXT_REACH_CHANNELS: Array<{
 }> = [
   { id: 'quick-note', label: '随手记录', description: '一句话、一个想法，先放进收集流。' },
   { id: 'video-link', label: '视频链接', description: '发送后自动解析，并接入当前学习上下文。' },
+  { id: 'article-link', label: '图文链接', description: '发送后自动提取文章内容，并接入当前学习上下文。' },
   { id: 'web-link', label: '网页链接', description: '先作为一条线索留下，后面再继续解析。' },
   { id: 'audio-file', label: '音频文件', description: '转写后接入当前学习主线。' },
   { id: 'video-file', label: '视频文件', description: '提取声音和时间轴后接进复习链路。' },
@@ -81,6 +93,21 @@ export function detectReachFromText(rawText: string): ContextReachDetection {
 
   const parsed = parseVideoLink(url);
   if (parsed && parsed.provider !== 'generic') {
+    // 图文平台走 article-link channel
+    const articleProviders: string[] = ['xiaohongshu', 'wechat-article'];
+    if (articleProviders.includes(parsed.provider)) {
+      return {
+        kind: 'link',
+        channel: 'article-link',
+        label: parsed.providerLabel,
+        description: '发送后会自动提取文章内容，并接进当前收集流。',
+        shouldAutoIngest: true,
+        url,
+        providerLabel: parsed.providerLabel,
+      };
+    }
+
+    // 视频/音频平台走 video-link channel
     return {
       kind: 'link',
       channel: 'video-link',

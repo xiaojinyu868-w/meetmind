@@ -1,11 +1,11 @@
 import { Prisma } from '@prisma/client';
 import { randomUUID } from 'crypto';
 import prisma from '@/lib/prisma';
-import { generateCommonstackEcho, isCommonstackEchoConfigured } from '@/lib/services/commonstack-echo-service';
+import { generateCommonstackEcho, isCommonstackEchoConfigured, type EchoHighlight } from '@/lib/services/commonstack-echo-service';
 import workspaceService from '@/lib/services/workspace-service';
 
 export const DAILY_ECHO_KIND = 'daily_return_reason';
-export const DAILY_ECHO_PROMPT_VERSION = 'echo-v1';
+export const DAILY_ECHO_PROMPT_VERSION = 'echo-v2';
 
 const ECHO_TIMEZONE = 'Asia/Shanghai';
 const LOOKBACK_DAYS = 7;
@@ -110,6 +110,8 @@ interface EchoMetadataPayload {
   similarityToRecent?: number;
   error?: string;
   qualityWarning?: string;
+  highlights?: EchoHighlight[];
+  takeaway?: string;
   recommendations?: EchoRecommendation[];
   memory?: EchoMemorySnapshot;
   promptPackage?: EchoPromptPackage;
@@ -118,6 +120,8 @@ interface EchoMetadataPayload {
   parseResult?: {
     title: string;
     body: string;
+    highlights?: EchoHighlight[];
+    takeaway?: string;
     recommendations?: EchoRecommendation[];
   } | null;
 }
@@ -172,7 +176,7 @@ function normalizeEchoText(value: string): string {
   return String(value || '')
     .normalize('NFKC')
     .toLowerCase()
-    .replace(/[\s，。！？、；：“”"'‘’（）()\[\]{}<>《》\-_.!?;:,/\\|]/g, '');
+    .replace(/[\s，。！？、；："""'''（）()\[\]{}<>《》\-_.!?;:,/\\|]/g, '');
 }
 
 function longestCommonSubstringRatio(left: string, right: string): number {
@@ -373,7 +377,55 @@ function renderCaptureBlock(title: string, captures: EchoPromptCaptureItem[]): s
   ].join('\n');
 }
 
+/**
+ * Echo V3 Prompt —— 有骨架的灵魂
+ *
+ * 给模型清晰的上下文 + 结构化输出引导。
+ * 模型自己决定「这些学习痕迹里最值得回声的是什么」。
+ */
 export function buildEchoPrompt(promptPackage: EchoPromptPackage): string {
+  const recentEchoBlock =
+    promptPackage.recentEchoes.length > 0
+      ? [
+          '你之前说过的话（不要重复类似的角度或措辞）：',
+          ...promptPackage.recentEchoes.map((item) => `- ${item.title}：${item.body}`),
+        ].join('\n')
+      : '';
+
+  const captureIds = [...promptPackage.todayCaptures, ...promptPackage.recentCaptures]
+    .map((item) => item.id);
+
+  return [
+    '这个同学最近的学习痕迹如下。',
+    '',
+    renderCaptureBlock('刚刚新增的收集：', promptPackage.todayCaptures),
+    '',
+    renderCaptureBlock('近几天的上下文：', promptPackage.recentCaptures),
+    '',
+    recentEchoBlock,
+    '',
+    `可用的 captureId 列表：${JSON.stringify(captureIds)}`,
+    '',
+    '输出 JSON：',
+    '{',
+    '  "echo": "你想说的话（2-4句）",',
+    '  "highlights": [{"text": "金句或发现", "timestamp": "12:30", "speaker": "老师"}],',
+    '  "takeaway": "一句话带走——适合截图发朋友圈的那种",',
+    '  "sources": ["相关的captureId"]',
+    '}',
+    '',
+    'highlights 里优先放老师的原话金句（用「」包裹），如果没有明显金句可以留空数组。',
+    'takeaway 要简短有力，让没上这节课的人也想看。如果想不出好的可以留空字符串。',
+    '不要 markdown，不要额外解释。',
+  ]
+    .filter(Boolean)
+    .join('\n');
+}
+
+/**
+ * 旧版 prompt 保留为 fallback（兼容 daily_return_reason）
+ */
+export function buildLegacyEchoPrompt(promptPackage: EchoPromptPackage): string {
   const activityLine = [
     promptPackage.activityHints.streakDays > 0 ? `最近已连续收集 ${promptPackage.activityHints.streakDays} 天` : '',
     promptPackage.activityHints.topContentTypes.length > 0
@@ -395,29 +447,14 @@ export function buildEchoPrompt(promptPackage: EchoPromptPackage): string {
       : '最近几天的回声：\n- 无';
 
   return [
-    '输出纯 JSON：{"title": string, "body": string, "recommendations": Array<{ "title": string, "body": string }>}',
+    '输出纯 JSON：{"echo": string, "sources": string[]}',
     '',
     '你是一位敏锐但克制的学习回声编辑。',
     '一个学习者正在用聊天式收集流记录课堂原话、困惑、材料和零碎线索。',
-    '你的任务不是总结内容，也不是讲解知识；你要从真实学习痕迹里听出一条正在发酵的线索，把它写成一条轻轻的“回来理由”，让用户今天愿意继续往里加一点。',
-    '你判断输出好坏的标准不是“像不像一段完整文案”，而是：它是否真的激发了继续收集的欲望，是否帮助用户看见自己此刻更需要什么。',
-    '同时，如果有合适的外延方向，请给 1 到 2 条生成式推荐：它们应该贴着当前线索稍微外扩半步，帮助用户看见自己暂时没注意到、但可能真正需要的下一步。',
+    '你的任务不是总结内容，也不是讲解知识；你要从真实学习痕迹里听出一条正在发酵的线索，把它写成一条轻轻的"回来理由"。',
+    '轻、贴近、克制。不超过三句话。',
     '',
-    '请把重点放在：',
-    '- 今天最值得继续收下去的那条线索，让用户看见自己正在形成什么理解路径，或反复靠近什么问题',
-    '- 用户此刻可能在意的理解方向、卡住的感觉、真正想推进的意图',
-    '- 推荐必须服务于个人成长和整体意图，不是给更多信息，而是给更值得补收的方向',
-    '- 推荐可以是更进一步的问题、互补视角、反例、邻近领域、现实场景、跳出信息茧房的方向，但都必须贴着当前线索',
-    '- 轻、贴近、克制的语气',
-    '',
-    '避免：',
-    '- 把它写成课堂摘要、知识讲解或复习清单',
-    '- 系统播报、运营 push、画像判断',
-    '- 复述大段原文',
-    '- 推荐完全无关、像信息流推送、热点分发或硬塞资源名',
-    '- 只满足表面主题，不去判断用户现在真正缺什么反馈',
-    '',
-    '如果线索更像科研灵感、内容选题、产品思考或职业观察，不要机械分类；请顺着它的潜在意图，判断用户更需要推进、补全、对比、验证、连接现实，还是跳出原有视角。',
+    '避免：课堂摘要、知识讲解、复习清单、系统播报、大段复述。',
     '',
     activityLine ? `活跃信号：${activityLine}` : '',
     renderCaptureBlock('今天新增的收集：', promptPackage.todayCaptures),
@@ -426,7 +463,7 @@ export function buildEchoPrompt(promptPackage: EchoPromptPackage): string {
     '',
     recentEchoBlock,
     '',
-    '没有合适推荐时，recommendations 返回空数组。只返回 JSON，不要 markdown，不要额外解释。',
+    '只返回 JSON，不要 markdown，不要额外解释。',
   ]
     .filter(Boolean)
     .join('\n');
@@ -450,27 +487,54 @@ export function buildEchoChips(promptPackage: EchoPromptPackage): string[] {
 }
 
 export function normalizeEchoOutput(input: {
-  title: string;
-  body: string;
+  echo?: string;
+  highlights?: Array<Partial<EchoHighlight>>;
+  takeaway?: string;
+  sources?: string[];
+  title?: string;
+  body?: string;
   recommendations?: Array<Partial<EchoRecommendation>>;
 }) {
   const clean = (value: string) =>
     String(value || '')
-      .replace(/^["'“”‘’]+|["'“”‘’]+$/g, '')
+      .replace(/^["'""'']+|["'""'']+$/g, '')
       .replace(/\r\n/g, '\n')
       .replace(/[ \t]{2,}/g, ' ')
       .replace(/\n{3,}/g, '\n\n')
       .trim();
 
+  // 新格式：echo 字段为主体
+  const echoText = clean(input.echo || input.body || '');
+  const title = clean(input.title || '回声');
+  const takeaway = input.takeaway ? clean(input.takeaway) : undefined;
+
+  // 处理 highlights
+  const highlights: EchoHighlight[] = Array.isArray(input.highlights)
+    ? input.highlights
+        .map((item) => ({
+          text: clean(item.text || ''),
+          timestamp: item.timestamp ? String(item.timestamp).trim() : undefined,
+          speaker: item.speaker ? String(item.speaker).trim() : undefined,
+        }))
+        .filter((item) => item.text.length > 0)
+        .slice(0, 3)
+    : [];
+
   return {
-    title: clean(input.title),
-    body: clean(input.body),
+    title,
+    body: echoText,
+    echo: echoText,
+    highlights,
+    takeaway,
+    sources: Array.isArray(input.sources)
+      ? input.sources.map((s) => String(s).trim()).filter(Boolean)
+      : [],
     recommendations: normalizeEchoRecommendations(input.recommendations),
   };
 }
 
 function looksLikeSummary(text: string): boolean {
-  return /(本节课|这节课|主要讲了|围绕|总结来看|概括来说|重点介绍|内容主要)/.test(text);
+  return /(主要讲了|总结来看|概括来说|重点介绍|内容主要)/.test(text);
 }
 
 function looksLikeSystemText(text: string): boolean {
@@ -645,6 +709,10 @@ function toEchoSummary(item: {
     generatedDateKey: item.generatedDateKey,
     title: item.title,
     body: item.body,
+    highlights: Array.isArray(parsedMetadata?.highlights)
+      ? parsedMetadata!.highlights.filter((h): h is EchoHighlight => Boolean(h && h.text))
+      : [],
+    takeaway: parsedMetadata?.takeaway || undefined,
     chips: parseChips(item.chipsJson),
     recommendations: metadata.recommendations,
     memory: metadata.memory,
@@ -666,6 +734,8 @@ function buildAutoMetadata(params: {
   similarityToRecent?: number;
   error?: string;
   qualityWarning?: string;
+  highlights?: EchoHighlight[];
+  takeaway?: string;
   recommendations?: EchoRecommendation[];
 }) {
   return {
@@ -678,6 +748,8 @@ function buildAutoMetadata(params: {
     similarityToRecent: params.similarityToRecent ?? 0,
     error: params.error,
     qualityWarning: params.qualityWarning,
+    highlights: params.highlights,
+    takeaway: params.takeaway,
     recommendations: normalizeEchoRecommendations(params.recommendations),
     memory: buildEchoMemorySnapshot(params.promptPackage),
   };
@@ -1048,6 +1120,8 @@ export const workspaceEchoService = {
               promptPackage,
               similarityToRecent: quality.maxSimilarity,
               qualityWarning,
+              highlights: normalized.highlights,
+              takeaway: normalized.takeaway,
               recommendations,
             }),
             promptPackage,
@@ -1061,6 +1135,8 @@ export const workspaceEchoService = {
             promptPackage,
             similarityToRecent: quality.maxSimilarity,
             qualityWarning,
+            highlights: normalized.highlights,
+            takeaway: normalized.takeaway,
             recommendations,
           });
 

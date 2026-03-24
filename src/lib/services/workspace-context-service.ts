@@ -545,11 +545,23 @@ export const workspaceContextService = {
     const title = buildWechatCaptureTitle(message);
     const previewText = compactText(message.previewText || message.normalizedText || title, 180);
     const providerLabel = message.sourceUrl ? detectLinkProvider(message.sourceUrl).label : undefined;
-    const normalizedText = message.normalizedText || undefined;
+    const msgNormalizedText = message.normalizedText || undefined;
     const sourceUrl = message.sourceUrl || undefined;
     const mediaUrl = message.mediaUrl || undefined;
-    const tutorContext = message.tutorContext || undefined;
+    const msgTutorContext = message.tutorContext || undefined;
+
+    // ── 读取已有 capture 的丰富数据，防止 enrichVideoLinkMeta / triggerVideoImportPipeline 写入的数据被覆盖 ──
+    const existingCapture = await prisma.workspaceCapture.findUnique({
+      where: { sourceKey },
+      select: { metadataJson: true, normalizedText: true, tutorContext: true },
+    });
+    const existingMeta = existingCapture?.metadataJson
+      ? (() => { try { return JSON.parse(existingCapture.metadataJson); } catch { return {}; } })()
+      : {};
+
+    // 基础字段写入，但保留已有的 enriched 字段（bvid, embedUrl, thumbnailUrl, videoImported, transcriptSegments 等）
     const metadataJson = JSON.stringify({
+      ...existingMeta,
       openId: message.openId,
       msgType: message.msgType,
       eventType: message.eventType,
@@ -558,6 +570,14 @@ export const workspaceContextService = {
       mediaId: message.mediaId,
       providerLabel,
     });
+
+    // 如果 pipeline 已写入更丰富的转录文本，保留 pipeline 的结果
+    const normalizedText = (existingCapture?.normalizedText && existingCapture.normalizedText.length > (msgNormalizedText || '').length)
+      ? existingCapture.normalizedText
+      : msgNormalizedText;
+    const tutorContext = (existingCapture?.tutorContext && existingCapture.tutorContext.length > (msgTutorContext || '').length)
+      ? existingCapture.tutorContext
+      : msgTutorContext;
 
     if (sourceUrl && message.msgType === 'link') {
       const existingByUrl = await prisma.workspaceCapture.findFirst({
@@ -570,14 +590,29 @@ export const workspaceContextService = {
       });
 
       if (existingByUrl) {
+        // 同样 merge 已有 metadataJson，防止覆盖 enriched 数据
+        const existingByUrlMeta = existingByUrl.metadataJson
+          ? (() => { try { return JSON.parse(existingByUrl.metadataJson as string); } catch { return {}; } })()
+          : {};
+        const mergedByUrlMetadataJson = JSON.stringify({
+          ...existingByUrlMeta,
+          openId: message.openId,
+          msgType: message.msgType,
+          eventType: message.eventType,
+          reachKind: message.reachKind,
+          reachChannel: message.reachChannel,
+          mediaId: message.mediaId,
+          providerLabel,
+        });
+
         const updatedCapture = await prisma.workspaceCapture.update({
           where: { id: existingByUrl.id },
           data: {
             title,
             previewText,
             normalizedText: normalizedText || existingByUrl.normalizedText || undefined,
-            metadataJson,
-            tutorContext,
+            metadataJson: mergedByUrlMetadataJson,
+            tutorContext: tutorContext || (existingByUrl.tutorContext as string) || undefined,
             occurredAt: message.messageAt,
             mediaUrl,
           },
@@ -796,7 +831,7 @@ export const workspaceContextService = {
           : {}),
         ...(nextPreviewText !== undefined
           ? {
-              previewText: nextPreviewText ? compactText(nextPreviewText, 180) : null,
+              previewText: nextPreviewText ? compactText(nextPreviewText, 500) : null,
             }
           : {}),
         ...(nextNormalizedText !== undefined

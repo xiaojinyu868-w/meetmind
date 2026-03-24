@@ -140,10 +140,13 @@ async function handleCallback(request: NextRequest): Promise<NextResponse> {
       loginResult = await authService.createSessionForUserId(user.id);
     } else {
       // 新用户，自动注册
+      // 生成满足密码强度要求的随机密码（至少含大小写字母和数字）
+      const randomPart = randomBytes(16).toString('hex');
+      const safePassword = `Wx${randomPart}9`;
       const username = `wx_${openId.slice(-8)}_${Date.now().toString(36)}`;
       const registerResult = await authService.register({
         username,
-        password: randomBytes(16).toString('hex'),
+        password: safePassword,
         nickname,
         role: 'student',
       });
@@ -208,9 +211,11 @@ async function handleCallback(request: NextRequest): Promise<NextResponse> {
     });
 
     // 绑定完成后直接跳到主流 /app
+    // 注意：不加 mobile=1，微信内浏览器 useResponsive() 自然检测为移动端，
+    // mobile=1 会在桌面端触发手机模拟外壳，体验很差。
     const redirectUrl = linkToken
-      ? `${baseUrl}/app?mobile=1&wechat_capture=${linkToken}&session=${sessionToken}`
-      : `${baseUrl}/app?mobile=1&session=${sessionToken}`;
+      ? `${baseUrl}/app?wechat_capture=${linkToken}&session=${sessionToken}`
+      : `${baseUrl}/app?session=${sessionToken}`;
 
     const response = NextResponse.redirect(redirectUrl);
 

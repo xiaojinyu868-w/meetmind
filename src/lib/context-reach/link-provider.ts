@@ -23,6 +23,7 @@ const PROVIDER_RULES: Array<{
   label: string;
 }> = [
   { hostPatterns: ['xiaohongshu.com', 'xhslink.com'], id: 'xiaohongshu', label: '小红书' },
+  { hostPatterns: ['xiaoyuzhoufm.com'], id: 'xiaoyuzhou', label: '小宇宙播客' },
   { hostPatterns: ['zhihu.com', 'zhuanlan.zhihu.com'], id: 'zhihu', label: '知乎' },
   { hostPatterns: ['mp.weixin.qq.com'], id: 'wechat-article', label: '微信公众号' },
   { hostPatterns: ['weibo.com', 'm.weibo.cn', 'weibo.cn'], id: 'weibo', label: '微博' },

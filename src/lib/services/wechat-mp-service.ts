@@ -173,7 +173,9 @@ function normalizeLinkMessage(payload: WechatMpPayload): NormalizedWechatMessage
   const title = (payload.Title || '').trim();
   const rawDescription = (payload.Description || '').trim();
   const description = [title, rawDescription, url].filter(Boolean).join('\n');
-  const reach = detectReachFromText(description);
+  // 优先用 payload.Url 做 reach 检测（它是微信明确给出的链接）
+  // 避免从 title/description 拼接文本中误提取到其他 URL
+  const reach = url ? detectReachFromText(url) : detectReachFromText(description);
 
   return {
     msgType: 'link',
@@ -185,9 +187,12 @@ function normalizeLinkMessage(payload: WechatMpPayload): NormalizedWechatMessage
     title: title || undefined,
     description: rawDescription || undefined,
     reach,
-    replyText: url
-      ? '链接收到，我会把它当作这次学习的外部线索记下来。'
-      : '这条链接消息我已经接住了。',
+    replyText:
+      reach.channel === 'video-link'
+        ? '视频链接收到，稍后会把它接进你的收集流。'
+        : url
+          ? '链接收到，我会把它当作这次学习的外部线索记下来。'
+          : '这条链接消息我已经接住了。',
   };
 }
 

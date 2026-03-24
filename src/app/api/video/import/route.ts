@@ -18,12 +18,18 @@ import {
   BilibiliImportError,
 } from '@/lib/services/bilibili-import-service';
 import {
+  fetchXiaoyuzhouEpisode,
+  downloadXiaoyuzhouAudio,
+  XiaoyuzhouImportError,
+} from '@/lib/services/xiaoyuzhou-import-service';
+import {
   MediaToolError,
   extFromContentType,
   isToolNotFoundError,
   resolveFfmpegPath,
   resolveFfprobePath,
   resolveOutputPath,
+  resolvePublicBaseUrl,
   runCommand,
   safeUnlink,
   transcodeToMp3,
@@ -53,8 +59,8 @@ const WS_CHUNK_PCM_BYTES = Number.parseInt(
 );
 
 type TranscribeMode = 'turbo' | 'fast' | 'standard';
-type VideoSourceMode = 'bili-native' | 'bili-subtitle' | 'yt-dlp' | 'direct';
-type StageName = 'bili-native' | 'yt-dlp-fallback' | 'direct-media';
+type VideoSourceMode = 'bili-native' | 'bili-subtitle' | 'yt-dlp' | 'direct' | 'xiaoyuzhou';
+type StageName = 'bili-native' | 'yt-dlp-fallback' | 'direct-media' | 'xiaoyuzhou';
 
 interface ImportTraceEntry {
   stage: string;
@@ -502,6 +508,200 @@ function summarizeAsrResult(data: Record<string, unknown>): { segCount: number; 
   };
 }
 
+/**
+ * 长音频直接转写：绕过 HTTP 回环，直接调 DashScope 异步 filetrans API。
+ *
+ * 适用场景：播客、长讲座等 > 10 分钟的音频。
+ * DashScope qwen3-asr-flash-filetrans 支持最长 12 小时音频。
+ * 不切分——整个文件提交一个异步任务，避免内存压力。
+ */
+async function transcribeLongAudioDirect(
+  audioFilePath: string,
+  language: string,
+  trace: ImportTraceEntry[],
+  expectedDurationSec?: number
+): Promise<{ data: Record<string, unknown>; usedMode: TranscribeMode } | null> {
+  const apiKey = process.env.DASHSCOPE_API_KEY;
+  if (!apiKey) {
+    console.warn('[video-import] transcribeLongAudioDirect: DASHSCOPE_API_KEY not configured');
+    return null;
+  }
+
+  const publicBase = resolvePublicBaseUrl();
+  if (!publicBase.ok || !publicBase.baseUrl) {
+    console.warn(`[video-import] transcribeLongAudioDirect: public URL not configured (${publicBase.error})`);
+    return null;
+  }
+
+  const fileName = path.basename(audioFilePath);
+  const fileUrl = `${publicBase.baseUrl}/temp-audio/${encodeURIComponent(fileName)}`;
+  console.log(`[video-import] transcribeLongAudioDirect: submitting ${fileUrl} (expectedDuration=${expectedDurationSec ?? 'unknown'}s)`);
+
+  // 1. 提交异步任务
+  const submitBody = {
+    model: 'qwen3-asr-flash-filetrans',
+    input: { file_url: fileUrl },
+    parameters: {
+      channel_id: [0],
+      language,
+      enable_itn: true,
+    },
+  };
+
+  let taskId: string;
+  try {
+    const submitResponse = await fetch(
+      'https://dashscope.aliyuncs.com/api/v1/services/audio/asr/transcription',
+      {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+          'Content-Type': 'application/json',
+          'X-DashScope-Async': 'enable',
+        },
+        body: JSON.stringify(submitBody),
+      }
+    );
+
+    if (!submitResponse.ok) {
+      const text = await submitResponse.text();
+      console.error(`[video-import] transcribeLongAudioDirect: submit failed HTTP ${submitResponse.status}: ${text.slice(0, 300)}`);
+      trace.push({ stage: 'asr-direct-submit', ok: false, code: 'ASR_DIRECT_SUBMIT_FAILED', detail: `HTTP ${submitResponse.status}` });
+      return null;
+    }
+
+    const submitData = (await submitResponse.json()) as { output?: { task_id?: string } };
+    taskId = submitData.output?.task_id || '';
+    if (!taskId) {
+      console.error('[video-import] transcribeLongAudioDirect: no task_id in response');
+      trace.push({ stage: 'asr-direct-submit', ok: false, code: 'ASR_DIRECT_SUBMIT_FAILED', detail: 'missing task_id' });
+      return null;
+    }
+    console.log(`[video-import] transcribeLongAudioDirect: task submitted, taskId=${taskId}`);
+    trace.push({ stage: 'asr-direct-submit', ok: true, detail: `taskId=${taskId}` });
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : String(error);
+    console.error(`[video-import] transcribeLongAudioDirect: submit error: ${detail}`);
+    trace.push({ stage: 'asr-direct-submit', ok: false, code: 'ASR_DIRECT_SUBMIT_FAILED', detail });
+    return null;
+  }
+
+  // 2. 轮询等待结果
+  // 预估等待时间：DashScope 处理速度约为实际时长的 1/10-1/5，
+  // 165 分钟音频大约需要 1-3 分钟。设最大等待 10 分钟。
+  const maxWaitMs = 600000; // 10 minutes
+  const startTime = Date.now();
+  let pollInterval = 3000;
+  const maxInterval = 8000;
+
+  while (Date.now() - startTime < maxWaitMs) {
+    await new Promise((resolve) => setTimeout(resolve, pollInterval));
+    pollInterval = Math.min(Math.floor(pollInterval * 1.3), maxInterval);
+
+    try {
+      const queryResponse = await fetch(
+        `https://dashscope.aliyuncs.com/api/v1/tasks/${taskId}`,
+        { headers: { Authorization: `Bearer ${apiKey}` } }
+      );
+
+      if (!queryResponse.ok) continue;
+
+      const queryData = (await queryResponse.json()) as {
+        output?: {
+          task_status?: string;
+          result?: { transcription_url?: string };
+          message?: string;
+        };
+      };
+
+      const status = queryData.output?.task_status;
+      if (status === 'SUCCEEDED') {
+        const transcriptionUrl = queryData.output?.result?.transcription_url;
+        if (!transcriptionUrl) {
+          trace.push({ stage: 'asr-direct-poll', ok: false, code: 'ASR_DIRECT_NO_URL', detail: 'SUCCEEDED but no transcription_url' });
+          return null;
+        }
+
+        // 3. 获取转录结果
+        const resultResponse = await fetch(transcriptionUrl);
+        if (!resultResponse.ok) {
+          trace.push({ stage: 'asr-direct-result', ok: false, code: 'ASR_DIRECT_RESULT_FAILED', detail: `HTTP ${resultResponse.status}` });
+          return null;
+        }
+
+        const resultData = (await resultResponse.json()) as {
+          transcripts?: Array<{ sentences?: Array<{ text: string; begin_time?: number; end_time?: number }> }>;
+        };
+
+        const allSentences: Array<{ text: string; beginTime: number; endTime: number }> = [];
+        for (const transcript of resultData.transcripts || []) {
+          for (const sentence of transcript.sentences || []) {
+            if (sentence.text?.trim()) {
+              allSentences.push({
+                text: sentence.text.trim(),
+                beginTime: sentence.begin_time ?? 0,
+                endTime: sentence.end_time ?? 0,
+              });
+            }
+          }
+        }
+
+        if (allSentences.length === 0) {
+          trace.push({ stage: 'asr-direct-result', ok: false, code: 'ASR_DIRECT_EMPTY', detail: 'no sentences in transcript' });
+          return null;
+        }
+
+        const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
+        console.log(`[video-import] transcribeLongAudioDirect: success! ${allSentences.length} sentences in ${elapsed}s`);
+        trace.push({ stage: 'asr-direct', ok: true, detail: `${allSentences.length} sentences, ${elapsed}s` });
+
+        const text = allSentences.map((s) => s.text).join('');
+        const segments = allSentences.map((s, i) => ({
+          id: `seg-${i}`,
+          text: s.text,
+          startMs: s.beginTime,
+          endMs: s.endTime,
+          confidence: 0.95,
+          isFinal: true,
+        }));
+        const totalDuration = segments.length > 0 ? segments[segments.length - 1].endMs : 0;
+
+        return {
+          data: {
+            success: true,
+            text,
+            totalDuration,
+            segments,
+            sentences: allSentences.map((s, i) => ({
+              id: `seg-${i}`,
+              text: s.text,
+              beginTime: s.beginTime,
+              endTime: s.endTime,
+              confidence: 0.95,
+            })),
+          },
+          usedMode: 'fast',
+        };
+      }
+
+      if (status === 'FAILED') {
+        const message = queryData.output?.message || 'unknown';
+        console.error(`[video-import] transcribeLongAudioDirect: task FAILED: ${message}`);
+        trace.push({ stage: 'asr-direct-poll', ok: false, code: 'ASR_DIRECT_TASK_FAILED', detail: message });
+        return null;
+      }
+
+      // PENDING / RUNNING → continue polling
+    } catch {
+      // 轮询网络错误，继续重试
+    }
+  }
+
+  console.warn(`[video-import] transcribeLongAudioDirect: task timeout after ${maxWaitMs / 1000}s`);
+  trace.push({ stage: 'asr-direct-poll', ok: false, code: 'ASR_DIRECT_TIMEOUT', detail: `exceeded ${maxWaitMs / 1000}s` });
+  return null;
+}
+
 async function transcribeWithFallback(
   request: NextRequest,
   audioFilePath: string,
@@ -642,6 +842,10 @@ function toPipelineError(error: unknown): ImportPipelineError {
     return new ImportPipelineError(error.code, error.message, error.detail);
   }
 
+  if (error instanceof XiaoyuzhouImportError) {
+    return new ImportPipelineError(error.code, error.message, error.detail);
+  }
+
   if (error instanceof MediaToolError) {
     if (isToolNotFoundError(error, 'ffmpeg') || isToolNotFoundError(error, 'ffprobe')) {
       return new ImportPipelineError('FFMPEG_NOT_FOUND', '音频处理工具未安装', error.detail || error.message);
@@ -698,6 +902,12 @@ function buildStageOrder(
       stages.push('bili-native');
       if (enableYtDlpFallback) stages.push('yt-dlp-fallback');
     }
+    return stages;
+  }
+
+  if (provider === 'xiaoyuzhou') {
+    // 小宇宙有自己的原生管线（页面解析 + 直链音频下载），不需要 yt-dlp
+    stages.push('xiaoyuzhou');
     return stages;
   }
 
@@ -918,6 +1128,58 @@ async function executeDirectStage(videoUrl: string, baseName: string): Promise<S
       resolvedUrl: videoUrl,
     },
   };
+}
+
+async function executeXiaoyuzhouStage(videoUrl: string, baseName: string): Promise<StageResult> {
+  const episode = await fetchXiaoyuzhouEpisode(videoUrl);
+
+  const rawPath = resolveOutputPath(UPLOAD_DIR, `${baseName}_xyз_raw`, '.m4a');
+  const mp3Path = resolveOutputPath(UPLOAD_DIR, baseName, '.mp3');
+
+  try {
+    await downloadXiaoyuzhouAudio(episode.audioUrl, rawPath);
+
+    const rawSize = await getFileSizeBytes(rawPath);
+    console.log(
+      `[video-import] xiaoyuzhou audio downloaded: ${rawSize} bytes (${(rawSize / 1024).toFixed(1)} KB), title="${episode.title}"`
+    );
+
+    if (rawSize < 10 * 1024) {
+      throw new ImportPipelineError(
+        'XIAOYUZHOU_AUDIO_INCOMPLETE',
+        '小宇宙音频下载不完整',
+        `downloaded ${rawSize} bytes`
+      );
+    }
+
+    await transcodeToMp3(rawPath, mp3Path);
+
+    const mp3Duration = await getAudioDurationSec(mp3Path);
+    console.log(
+      `[video-import] xiaoyuzhou mp3 ready: duration=${mp3Duration.toFixed(1)}s, declared=${episode.durationSec}s`
+    );
+
+    // 构建显示用标题：播客名 - 单集名
+    const displayTitle = episode.podcastTitle
+      ? `${episode.podcastTitle} - ${episode.title}`
+      : episode.title;
+
+    return {
+      sourceMode: 'xiaoyuzhou',
+      audioFilePath: mp3Path,
+      meta: {
+        title: displayTitle,
+        durationSec: episode.durationSec || mp3Duration || undefined,
+        thumbnailUrl: episode.coverUrl,
+        resolvedUrl: episode.episodeUrl,
+      },
+    };
+  } catch (error) {
+    safeUnlink(mp3Path);
+    throw error;
+  } finally {
+    safeUnlink(rawPath);
+  }
 }
 
 function mapSubtitleSegmentsToApiSegments(
@@ -1539,9 +1801,11 @@ export async function POST(request: NextRequest) {
       throw new ImportPipelineError('INVALID_VIDEO_URL', '无法识别的视频链接');
     }
 
-    // 非 B站平台需要外网访问能力（如 yt-dlp 调 YouTube），
+    // 非 B站/小宇宙等国内平台需要外网访问能力（如 yt-dlp 调 YouTube），
     // 仅在 hk 节点或明确启用时放开。
-    if (parsed.provider !== 'bilibili') {
+    // 国内平台白名单：bilibili、xiaoyuzhou、douyin 不需要外网节点
+    const domesticProviders = ['bilibili', 'xiaoyuzhou', 'douyin'];
+    if (!domesticProviders.includes(parsed.provider)) {
       const host = request.headers.get('x-forwarded-host') || request.headers.get('host') || '';
       const isHkNode = host.includes('hk.meetmind');
       const envEnabled = process.env.VIDEO_IMPORT_ENABLE_YOUTUBE === 'true';
@@ -1549,7 +1813,7 @@ export async function POST(request: NextRequest) {
       if (!isHkNode && !envEnabled) {
         throw new ImportPipelineError(
           'UNSUPPORTED_PLATFORM',
-          '当前节点仅支持 B站视频链接。YouTube 等平台请使用 hk.meetmind.online 访问。'
+          '当前节点仅支持 B站/抖音视频链接。YouTube 等平台请使用 hk.meetmind.online 访问。'
         );
       }
     }
@@ -1567,6 +1831,8 @@ export async function POST(request: NextRequest) {
       try {
         if (stage === 'bili-native') {
           stageResult = await executeBiliNativeStage(videoUrl, baseName, userBiliCookie);
+        } else if (stage === 'xiaoyuzhou') {
+          stageResult = await executeXiaoyuzhouStage(videoUrl, baseName);
         } else if (stage === 'yt-dlp-fallback') {
           stageResult = await executeYtDlpStage(videoUrl, baseName, parsed.provider);
         } else {
@@ -1657,10 +1923,41 @@ export async function POST(request: NextRequest) {
       throw new ImportPipelineError('VIDEO_IMPORT_FAILED', '未生成可用音频文件');
     }
 
-    let transcribed: { data: Record<string, unknown>; usedMode: TranscribeMode };
+    let transcribed: { data: Record<string, unknown>; usedMode: TranscribeMode } | undefined;
 
-    try {
-      transcribed = await transcribeWithFallback(request, stageResult.audioFilePath, mode, language, trace, stageResult.meta.durationSec);
+    // 长音频智能模式选择：
+    // turbo 每 30s 切一段同步处理，165 分钟 = 330 段，10 分钟 route 超时大概率不够。
+    // fast 每 180s 切一段异步并行，165 分钟 = 55 段，效率高且 DashScope filetrans 支持 12h。
+    // 阈值 10 分钟：超过此时长优先 fast，低于此时长保持用户指定模式（turbo 更快）。
+    const LONG_AUDIO_THRESHOLD_SEC = 600;
+    const effectiveMode =
+      mode === 'turbo' &&
+      stageResult.meta.durationSec &&
+      stageResult.meta.durationSec > LONG_AUDIO_THRESHOLD_SEC
+        ? 'fast'
+        : mode;
+    if (effectiveMode !== mode) {
+      console.log(
+        `[video-import] long audio detected (${stageResult.meta.durationSec}s > ${LONG_AUDIO_THRESHOLD_SEC}s), switching from ${mode} to ${effectiveMode}`
+      );
+    }
+
+    // 长音频优先直接调 DashScope 异步 API，绕过 HTTP 回环（避免 OOM）
+    if (effectiveMode !== 'turbo') {
+      const directResult = await transcribeLongAudioDirect(
+        stageResult.audioFilePath,
+        language,
+        trace,
+        stageResult.meta.durationSec
+      );
+      if (directResult) {
+        console.log(`[video-import] transcribeLongAudioDirect succeeded, skipping transcribeWithFallback`);
+        transcribed = directResult;
+      }
+    }
+
+    if (!transcribed) try {
+      transcribed = await transcribeWithFallback(request, stageResult.audioFilePath, effectiveMode, language, trace, stageResult.meta.durationSec);
     } catch (error) {
       const importError = toPipelineError(error);
       // 从异常中提取 partialResult（transcribeWithFallback 在结果不足时附带）
@@ -1722,6 +2019,10 @@ export async function POST(request: NextRequest) {
           }
         }
       }
+    }
+
+    if (!transcribed) {
+      throw new ImportPipelineError('ASR_TRANSCRIBE_FAILED', '音频转写失败', 'all transcription paths exhausted');
     }
 
     const mergedSource = {

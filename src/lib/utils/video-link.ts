@@ -17,6 +17,9 @@ export type VideoProvider =
   | 'youtube'
   | 'bilibili'
   | 'douyin'
+  | 'xiaoyuzhou'
+  | 'xiaohongshu'
+  | 'wechat-article'
   | 'direct-file'
   | 'generic';
 
@@ -67,6 +70,12 @@ function extractYouTubeVideoId(url: URL): string | null {
 
 function extractBilibiliVideoId(url: URL): string | null {
   const match = url.pathname.match(/\/video\/(BV[0-9A-Za-z]+)/);
+  return match?.[1] || null;
+}
+
+function extractXiaoyuzhouEpisodeId(url: URL): string | null {
+  // 小宇宙链接格式：https://www.xiaoyuzhoufm.com/episode/xxxxx
+  const match = url.pathname.match(/\/episode\/([a-zA-Z0-9]+)/);
   return match?.[1] || null;
 }
 
@@ -123,10 +132,41 @@ export function parseVideoLink(rawUrl: string): ParsedVideoLink | null {
     };
   }
 
-  if (host.endsWith('douyin.com')) {
+  if (host.endsWith('douyin.com') || host === 'iesdouyin.com' || host.endsWith('.iesdouyin.com')) {
     return {
       provider: 'douyin',
-      providerLabel: 'Douyin',
+      providerLabel: '抖音',
+      originalUrl: trimmed,
+      playableUrl: trimmed,
+    };
+  }
+
+  if (host.endsWith('xiaoyuzhoufm.com')) {
+    const episodeId = extractXiaoyuzhouEpisodeId(url);
+    return {
+      provider: 'xiaoyuzhou',
+      providerLabel: '小宇宙播客',
+      originalUrl: trimmed,
+      videoId: episodeId || undefined,
+      playableUrl: trimmed,
+    };
+  }
+
+  // 小红书：图文/视频笔记都走内容提取管线
+  if (host.endsWith('xiaohongshu.com') || host === 'xhslink.com' || host.endsWith('.xhslink.com')) {
+    return {
+      provider: 'xiaohongshu',
+      providerLabel: '小红书',
+      originalUrl: trimmed,
+      playableUrl: trimmed,
+    };
+  }
+
+  // 微信公众号文章
+  if (host === 'mp.weixin.qq.com') {
+    return {
+      provider: 'wechat-article',
+      providerLabel: '微信公众号',
       originalUrl: trimmed,
       playableUrl: trimmed,
     };

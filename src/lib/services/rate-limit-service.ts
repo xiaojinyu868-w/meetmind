@@ -96,6 +96,13 @@ export const RATE_LIMITS = {
     perDay: 100,
     cost: 'medium',
   },
+  // AI 全局检索 - 每分钟10次，每小时60次，每天200次
+  search: {
+    perMinute: 10,
+    perHour: 60,
+    perDay: 200,
+    cost: 'high',
+  },
   // 发送验证码 - 每分钟1次，每小时10次，每天20次
   sendCode: {
     perMinute: 1,

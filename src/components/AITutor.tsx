@@ -1424,10 +1424,12 @@ export function AITutor({
 
   // ===== 全局对话模式渲染 =====
   const hasLaunchPayload = launchQuestion.trim().length > 0 || launchImagesProp.some((image) => image.url);
+  const hasStreamOutput = Boolean(streamingContent) || Boolean(globalThinkingContent);
   const shouldShowAutoLaunchState =
     isGlobalMode &&
     globalChatHistory.length === 0 &&
-    (hasLaunchPayload || globalLoading || isStreaming || globalThinkingContent.length > 0 || (isCheckingAuth && !accessToken));
+    !hasStreamOutput &&
+    (hasLaunchPayload || globalLoading || isStreaming || (isCheckingAuth && !accessToken));
 
   if (isGlobalMode) {
     return (
@@ -1525,7 +1527,7 @@ export function AITutor({
               </div>
               <div ref={chatEndRef} />
             </div>
-          ) : globalChatHistory.length === 0 ? (
+          ) : globalChatHistory.length === 0 && !hasStreamOutput ? (
             <IntentBubbleExplorer
               transcriptText={segments.map(s => s.text).join(' ') || normalizeSupportContextText(supportContextText, 2400)}
               preferSupportContext={preferSupportContext}
