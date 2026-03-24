@@ -86,7 +86,6 @@ components/
 | 文件 | 行数 | 职责 |
 |------|------|------|
 | `Header.tsx` | ~280 | 顶部导航栏 |
-| `OnboardingGuide.tsx` | ~480 | 新手引导 |
 | `ModelSelector.tsx` | ~260 | AI 模型选择器 |
 | `WechatBindForm.tsx` | ~280 | 微信绑定表单 |
 | `AgreementModal.tsx` | ~600 | 用户协议弹窗 |

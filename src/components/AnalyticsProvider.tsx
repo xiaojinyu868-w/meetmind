@@ -20,8 +20,6 @@ export type CoreEventName =
   | 'anchor_resolve'       // 解决困惑点
   | 'tutor_chat_start'     // 开始 AI 对话
   | 'tutor_chat_complete'  // 完成 AI 对话
-  | 'onboarding_start'     // 开始新手引导
-  | 'onboarding_complete'  // 完成新手引导
   | 'login'                // 用户登录
   | 'logout'               // 用户登出
   | 'register';            // 用户注册
@@ -61,8 +59,6 @@ const coreEventCategories: Record<CoreEventName, EventCategory> = {
   anchor_resolve: 'learning',
   tutor_chat_start: 'ai',
   tutor_chat_complete: 'ai',
-  onboarding_start: 'navigation',
-  onboarding_complete: 'navigation',
   login: 'auth',
   logout: 'auth',
   register: 'auth',

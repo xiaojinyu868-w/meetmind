@@ -1418,7 +1418,6 @@ export const Recorder = forwardRef<RecorderHandle, RecorderProps>(function Recor
                   disabled={disabled || isStartingRecording}
                   className="flex h-16 w-16 items-center justify-center rounded-full bg-[#232322] text-white transition hover:bg-[#3a3a39] active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-60"
                   aria-label="开始录音"
-                  data-onboarding="record-button"
                 >
                   <svg className="h-7 w-7" fill="currentColor" viewBox="0 0 24 24">
                     <circle cx="12" cy="12" r="6" />
@@ -1756,7 +1755,6 @@ export const Recorder = forwardRef<RecorderHandle, RecorderProps>(function Recor
                   ? 'bg-[#FADEC9] text-[#232322] hover:bg-[#FADEC9]/80'
                   : 'bg-slate-100 text-slate-400 cursor-not-allowed'
               }`}
-              data-onboarding="confusion-button"
             >
               <span className="text-sm">!</span>
               <span>卡住了</span>
@@ -1787,7 +1785,6 @@ export const Recorder = forwardRef<RecorderHandle, RecorderProps>(function Recor
                 ? 'bg-[#232322] text-white hover:bg-[#3a3a39] active:scale-[0.99]' 
                 : 'bg-[#EFEFEF] text-[#787774] cursor-not-allowed'
             }`}
-            data-onboarding="confusion-button"
           >
             <span className="text-xl">!</span>
             <span className="font-medium">没听懂？点这里！</span>

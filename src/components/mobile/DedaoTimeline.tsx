@@ -22,7 +22,6 @@ export interface DedaoTimelineProps {
   onConfusionClick?: (entry: DedaoTimelineEntry) => void;
   onEntryTextUpdate?: (entry: DedaoTimelineEntry, text: string) => void;
   className?: string;
-  'data-onboarding'?: string;
 }
 
 export function toDedaoEntries(
@@ -52,7 +51,6 @@ export function DedaoTimeline({
   onConfusionClick: _onConfusionClick,
   onEntryTextUpdate,
   className,
-  'data-onboarding': dataOnboarding,
 }: DedaoTimelineProps) {
   // Convert entries back to TranscriptSegment format for TranscriptFlowView
   const segments: TranscriptSegment[] = entries.map((entry) => ({
@@ -72,7 +70,6 @@ export function DedaoTimeline({
 
   return (
     <div
-      data-onboarding={dataOnboarding}
       className={cn(
         'overflow-y-auto overflow-x-hidden',
         'bg-[var(--dedao-bg)]',

@@ -85,7 +85,6 @@ export function MobileAIFab({
       <button
         ref={fabRef}
         onClick={handleClick}
-        data-onboarding="ai-fab"
         className={cn(
           'relative w-14 h-14 rounded-full',
           'bg-[#FDF3C0]',

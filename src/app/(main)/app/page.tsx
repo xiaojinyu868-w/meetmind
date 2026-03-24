@@ -193,10 +193,7 @@ import type { ConfusionMarker } from '@/components/mobile/PodcastPlayer';
 import type { ConversationHistory } from '@/types/conversation';
 import type { AudioSession } from '@/lib/db';
 
-// Onboarding & workspace components - dynamic loaded
-import { useOnboarding } from '@/hooks/useOnboarding';
-const OnboardingGuide = dynamic(() => import('@/components/OnboardingGuide').then(m => ({ default: m.OnboardingGuide })), { ssr: false });
-const WelcomeModal = dynamic(() => import('@/components/OnboardingGuide').then(m => ({ default: m.WelcomeModal })), { ssr: false });
+// Workspace components - dynamic loaded
 const HighlightsPanel = dynamic(() => import('@/components/HighlightsPanel').then(m => ({ default: m.HighlightsPanel })), { ssr: false });
 const SummaryPanel = dynamic(() => import('@/components/SummaryPanel').then(m => ({ default: m.SummaryPanel })), { ssr: false });
 const NotesPanel = dynamic(() => import('@/components/NotesPanel').then(m => ({ default: m.NotesPanel })), { ssr: false });
@@ -435,8 +432,6 @@ function StudentAppContent({
   } = useWorkshopWindows({ mounted, sessionId });
   
   // NOTE: cleaned corrupted legacy comment.
-  const [showWelcome, setShowWelcome] = useState(false);
-  const onboarding = useOnboarding({ isMobile });
   
   const liveSegmentsRef = useRef<TranscriptSegment[]>([]);
   const segmentsRef = useRef<TranscriptSegment[]>([]);
@@ -783,111 +778,6 @@ function StudentAppContent({
     }
   }, [videoSource]);
 
-  useEffect(() => {
-    if (!onboarding.isActive || !onboarding.currentStep) return;
-
-    const stepId = onboarding.currentStep.id;
-    const isRecordFlowStep =
-      stepId === 'record-button' ||
-      stepId === 'video-import' ||
-      stepId === 'support-source' ||
-      stepId === 'mode-switch';
-    const isDesktopWorkshopStep =
-      !isMobile &&
-      (stepId === 'review-apps-tab' || stepId === 'workshop-generate-all' || stepId === 'workshop-dock-toggle');
-
-    if (isRecordFlowStep && viewMode !== 'record') {
-      setViewMode('record');
-      return;
-    }
-
-    if (isDesktopWorkshopStep) {
-      if (viewMode !== 'review') {
-        setViewMode('review');
-        return;
-      }
-      if (videoSource) {
-        if (videoWorkspaceTab !== 'apps') {
-          setVideoWorkspaceTab('apps');
-          return;
-        }
-      } else if (reviewTab !== 'apps') {
-        setReviewTab('apps');
-        return;
-      }
-    }
-
-    if (stepId === 'timeline' && viewMode === 'review' && reviewTab !== 'timeline') {
-      setReviewTab('timeline');
-      return;
-    }
-
-    if (stepId === 'ai-tutor' && showConversationHistory) {
-      setShowConversationHistory(false);
-      setSelectedHistoryConversation(null);
-      return;
-    }
-
-    if (stepId === 'action-list' && !isActionDrawerOpen) {
-      setIsActionDrawerOpen(true);
-      return;
-    }
-
-    if (isMobile && stepId === 'ai-fab' && mobileSubPage) {
-      setMobileSubPage(null);
-      return;
-    }
-
-    if (isMobile && stepId === 'menu-button-workshop' && isMenuOpen) {
-      setIsMenuOpen(false);
-      return;
-    }
-
-    if (isMobile && stepId === 'menu-apps-item' && !isMenuOpen) {
-      setIsMenuOpen(true);
-      return;
-    }
-
-    if (isMobile && stepId === 'mobile-workshop-panel') {
-      if (isMenuOpen) {
-        setIsMenuOpen(false);
-        return;
-      }
-      if (mobileSubPage !== 'apps') {
-        setMobileSubPage('apps');
-        return;
-      }
-    }
-
-    if (isMobile && stepId === 'menu-button' && isMenuOpen) {
-      setIsMenuOpen(false);
-    }
-  }, [
-    onboarding.isActive,
-    onboarding.currentStep,
-    viewMode,
-    reviewTab,
-    videoSource,
-    videoWorkspaceTab,
-    showConversationHistory,
-    isActionDrawerOpen,
-    isMobile,
-    mobileSubPage,
-    isMenuOpen,
-  ]);
-  
-  // NOTE: cleaned corrupted legacy comment.
-  useEffect(() => {
-    // NOTE: cleaned corrupted legacy comment.
-    if (!onboarding.isActive) {
-      // NOTE: cleaned corrupted legacy comment.
-      const timer = setTimeout(() => {
-        setIsActionDrawerOpen(false);
-      }, 500);
-      return () => clearTimeout(timer);
-    }
-  }, [onboarding.isActive]);
-  
   // NOTE: cleaned corrupted legacy comment.
   useEffect(() => {
     if (!isRecording) return;
@@ -1349,17 +1239,12 @@ function StudentAppContent({
       const baseProgress = 10;
       setLoadingProgress(baseProgress);
 
-      const [, rawSavedAppState, savedOnboardingState] = await Promise.all([
+      const [, rawSavedAppState] = await Promise.all([
         checkServices().then(setServiceStatus),
         getPersistedAppState(),
-        getPreference<{ completedFlows?: string[]; skippedFlows?: string[] } | null>('onboarding_state', null).catch(() => null),
       ]);
 
       setLoadingProgress(40);
-
-      const isFirstVisit = !savedOnboardingState ||
-        (!savedOnboardingState.completedFlows?.includes('welcome') &&
-         !savedOnboardingState.skippedFlows?.includes('welcome'));
 
       const normalizedSavedState = rawSavedAppState && typeof rawSavedAppState === 'object'
         ? rawSavedAppState
@@ -1401,10 +1286,6 @@ function StudentAppContent({
       setLoadingProgress(100);
       setAppReady(true);
       hasRestoredState.current = true;
-
-      if (!forceMobilePreview && isFirstVisit && !savedAppState) {
-        setTimeout(() => setShowWelcome(true), 800);
-      }
      } catch (err) {
       console.error('[initializeApp] Fatal error during init:', err);
       // 即使初始化出错，也允许用户进入应用，避免长时间卡在加载态。
@@ -1418,23 +1299,6 @@ function StudentAppContent({
     initializeApp();
   }, [forceMobilePreview, isGuestFastEntry]); // eslint-disable-line react-hooks/exhaustive-deps
   
-  // NOTE: cleaned corrupted legacy comment.
-  const hasTriggeredWelcome = useRef(false);
-  useEffect(() => {
-    if (
-      !forceMobilePreview &&
-      !isGuestFastEntry &&
-      !onboarding.isLoading &&
-      appReady &&
-      !showSplash &&
-      !hasTriggeredWelcome.current &&
-      onboarding.shouldShowFlow('welcome')
-    ) {
-      hasTriggeredWelcome.current = true;
-      setShowWelcome(true);
-    }
-  }, [forceMobilePreview, isGuestFastEntry, onboarding, appReady, showSplash]);
-
   // NOTE: cleaned corrupted legacy comment.
   const handleSplashComplete = useCallback(() => {
     setShowSplash(false);
@@ -1848,22 +1712,11 @@ function StudentAppContent({
           setSelectedAnchor(firstUnresolved);
           setCurrentTime(firstUnresolved.timestamp);
         }
-        
-        // NOTE: cleaned corrupted legacy comment.
-        // NOTE: cleaned corrupted legacy comment.
-        if (!isGuestFastEntry && !onboarding.isActive && onboarding.shouldShowFlow('review')) {
-          setTimeout(() => onboarding.startFlow('review'), 500);
-        }
       } catch (err) {
         console.error('Failed to load demo data:', err);
       }
-    } else if (newMode === 'review' && (segments.length > 0 || hasCollectionContext)) {
-      // Enter review onboarding when data already exists.
-      if (!isGuestFastEntry && !onboarding.isActive && onboarding.shouldShowFlow('review')) {
-        setTimeout(() => onboarding.startFlow('review'), 300);
-      }
     }
-  }, [hasCollectionContext, segments.length, sessionId, onboarding, isGuestFastEntry]);
+  }, [hasCollectionContext, segments.length, sessionId, isGuestFastEntry]);
 
   const openReviewFromCollection = useCallback(async (item?: SourceIngestItem | null) => {
     if (!item) return;
@@ -1956,29 +1809,6 @@ function StudentAppContent({
       setMobileSubPage('ai-chat');
     }
   }, [audioBlob, handleViewModeChange, importVideoLinkIntoSourceItem, isMobile, restoreFromServerTranscript, restoreReviewFromCollectionFallback, restoreReviewSession]);
-
-  useEffect(() => {
-    if (isGuestFastEntry) return;
-    if (viewMode !== 'review' || !videoSource) return;
-    if (onboarding.isActive || !onboarding.shouldShowFlow('video-review')) return;
-    const timer = setTimeout(() => onboarding.startFlow('video-review'), 300);
-    return () => clearTimeout(timer);
-  }, [viewMode, videoSource, onboarding, isGuestFastEntry]);
-
-  useEffect(() => {
-    if (isGuestFastEntry) return;
-    if (onboarding.isActive || !onboarding.shouldShowFlow('workshop')) return;
-
-    const inDesktopWorkshop = !isMobile &&
-      viewMode === 'review' &&
-      ((videoSource && videoWorkspaceTab === 'apps') || (!videoSource && reviewTab === 'apps'));
-    const inMobileWorkshop = isMobile && mobileSubPage === 'apps';
-
-    if (!inDesktopWorkshop && !inMobileWorkshop) return;
-
-    const timer = setTimeout(() => onboarding.startFlow('workshop'), 300);
-    return () => clearTimeout(timer);
-  }, [isMobile, mobileSubPage, onboarding, reviewTab, videoSource, videoWorkspaceTab, viewMode, isGuestFastEntry]);
 
   const handleTranscriptUpdate = useCallback((newSegments: TranscriptSegment[], meta?: { recordingId?: string }) => {
     const pendingAudio = resolvePendingRecordedAudio(meta?.recordingId);
@@ -5533,7 +5363,7 @@ const _handleVideoAssistantMessage = useCallback((payload: {
   }, []);
 
   const renderMobileTopBar = useCallback(
-    (menuOnboarding?: string) => {
+    () => {
       const topBarStatus = isRecording
         ? '正在收一段原声'
         : activeSourceImportCount > 0
@@ -5551,7 +5381,6 @@ const _handleVideoAssistantMessage = useCallback((payload: {
               }}
               className="flex h-9 w-9 items-center justify-center rounded-full text-slate-400 transition hover:bg-black/[0.04] hover:text-slate-600"
               aria-label="打开收集菜单"
-              data-onboarding={menuOnboarding}
             >
               <Menu size={18} />
             </button>
@@ -5559,7 +5388,6 @@ const _handleVideoAssistantMessage = useCallback((payload: {
               <MobileTabSwitch
                 activeTab={viewMode}
                 onTabChange={(tab) => handleViewModeChange(tab)}
-                data-onboarding="mode-switch"
               />
             </div>
             <button
@@ -6820,7 +6648,6 @@ const _handleVideoAssistantMessage = useCallback((payload: {
                 <button
                   type="button"
                   data-testid="collection-upload-button"
-                  data-onboarding="collection-upload-button"
                   onClick={() => handleSourceFileButtonClick('all')}
                   className={`flex h-[36px] w-[36px] flex-shrink-0 items-center justify-center transition ${
                     sourceImporting
@@ -7021,7 +6848,6 @@ const _handleVideoAssistantMessage = useCallback((payload: {
             <div 
               className="flex items-center gap-2 p-1 rounded-xl" 
               style={{ background: 'var(--edu-bg-soft)' }}
-              data-onboarding="mode-switch"
             >
               <button
                 onClick={() => handleViewModeChange('record')}
@@ -7190,7 +7016,6 @@ const _handleVideoAssistantMessage = useCallback((payload: {
                       {VIDEO_WORKSPACE_TABS.map((tab) => (
                         <button
                           key={tab.key}
-                          data-onboarding={tab.key === 'apps' ? 'review-apps-tab' : undefined}
                           onClick={() => {
                             setVideoWorkspaceTab(tab.key);
                             if (tab.key !== 'confusion') setConfusionChatAnchor(null);
@@ -7392,7 +7217,6 @@ const _handleVideoAssistantMessage = useCallback((payload: {
                       {REVIEW_WORKSPACE_TABS.map((tab) => (
                         <button
                           key={tab.key}
-                          data-onboarding={tab.key === 'timeline' ? 'timeline' : tab.key === 'apps' ? 'review-apps-tab' : undefined}
                           data-testid={tab.testId}
                           onClick={() => setReviewTab(tab.key)}
                           className={`flex items-center gap-1 px-3 py-2 text-sm rounded-lg transition-all whitespace-nowrap tab-button ${
@@ -7491,7 +7315,7 @@ const _handleVideoAssistantMessage = useCallback((payload: {
                     )}
                     
                     {/* NOTE: cleaned corrupted legacy comment. */}
-                    <div className="flex-1 min-h-0 flex flex-col" data-onboarding="ai-tutor" style={{ minHeight: 'var(--ai-chat-min-height, 300px)' }}>
+                    <div className="flex-1 min-h-0 flex flex-col" style={{ minHeight: 'var(--ai-chat-min-height, 300px)' }}>
                       {/* NOTE: cleaned corrupted legacy comment. */}
                       {!showConversationHistory && (
                         <div 
@@ -7672,7 +7496,6 @@ const _handleVideoAssistantMessage = useCallback((payload: {
                     <MobileTabSwitch
                       activeTab={viewMode}
                       onTabChange={(tab) => handleViewModeChange(tab)}
-                      data-onboarding="mode-switch"
                     />
                   </div>
 
@@ -7698,7 +7521,7 @@ const _handleVideoAssistantMessage = useCallback((payload: {
                       </a>
                     )}
 
-                    <DedaoMenuButton onClick={() => setIsMenuOpen(true)} data-onboarding="menu-button" />
+                    <DedaoMenuButton onClick={() => setIsMenuOpen(true)} />
                   </div>
                 </div>
               </div>
@@ -8150,7 +7973,7 @@ const _handleVideoAssistantMessage = useCallback((payload: {
 
               {/* NOTE: cleaned corrupted legacy comment. */}
               {mobileSubPage === 'apps' && (
-                <div className="flex-1 min-h-0 flex flex-col bg-white" data-onboarding="mobile-workshop-panel">
+                <div className="flex-1 min-h-0 flex flex-col bg-white">
                   <div className="flex items-center gap-3 px-4 py-3 border-b border-gray-100">
                     <button
                       onClick={() => setMobileSubPage(null)}
@@ -8335,32 +8158,6 @@ const _handleVideoAssistantMessage = useCallback((payload: {
       />
       
       {/* 主要内容区域 */}
-      <WelcomeModal
-        isOpen={showWelcome}
-        onStart={() => {
-          setShowWelcome(false);
-          // NOTE: cleaned corrupted legacy comment.
-          onboarding.markFlowComplete('welcome');
-          setTimeout(() => {
-            onboarding.startFlow('recording');
-          }, 100);
-        }}
-        onSkip={() => {
-          setShowWelcome(false);
-          // NOTE: cleaned corrupted legacy comment.
-          onboarding.markFlowSkipped('welcome');
-        }}
-      />
-      
-      <OnboardingGuide
-        step={onboarding.currentStep}
-        stepIndex={onboarding.currentStepIndex}
-        totalSteps={onboarding.totalSteps}
-        onNext={onboarding.nextStep}
-        onSkip={onboarding.skipFlow}
-        isActive={onboarding.isActive}
-      />
-
       <AISearchPanel
         open={showAISearch}
         onClose={() => setShowAISearch(false)}

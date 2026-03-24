@@ -23,7 +23,6 @@ export async function deletePreference(key: string): Promise<void> {
 
 /** 清除所有引导和页面状态（用于调试/重置） */
 export async function resetAppState(): Promise<void> {
-  await db.preferences.delete('onboarding_state');
   await db.preferences.delete('app_last_state');
   await db.preferences.delete('tutor_last_state');
 }

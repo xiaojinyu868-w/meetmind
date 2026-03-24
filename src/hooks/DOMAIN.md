@@ -26,7 +26,6 @@ hooks → stores + types + lib/db + lib/utils
 | `useConversationHistory.ts` | 385 | 对话历史管理（CRUD + 分页 + 消息级操作） |
 | `useDragGesture.ts` | 143 | 拖拽手势（用于浮窗拖动） |
 | `useNetworkStatus.ts` | 26 | 网络在线状态监听 |
-| `useOnboarding.ts` | 545 | 新手引导流程定义 + 状态机 |
 | `useRecording.ts` | 70 | 录音控制（start/stop/pause） |
 | `useResizable.ts` | 145 | 面板大小调整（拖拽调整宽度） |
 | `useResponsive.ts` | 113 | 响应式断点检测（mobile/tablet/desktop） |
@@ -47,4 +46,4 @@ hooks → stores + types + lib/db + lib/utils
 
 ## ⚠️ 超标文件
 
-- `useOnboarding.ts` (545) — 引导流程定义占据大部分行数
+（无）

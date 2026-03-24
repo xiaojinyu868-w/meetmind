@@ -619,7 +619,7 @@ export function WorkshopYellowPage(props: WorkshopYellowPageProps) {
   const canBatchGenerate = visibleApps.some((app) => !runningMap[app.key] && !generatedMap[app.key]);
 
   return (
-    <section className={styles.page} data-onboarding="workshop-panel">
+    <section className={styles.page}>
       <header className={styles.header}>
         <p className={styles.eyebrow}>能力接口</p>
         <h2 className={styles.title}>AI 工坊</h2>
@@ -636,7 +636,6 @@ export function WorkshopYellowPage(props: WorkshopYellowPageProps) {
             onClick={generateAll}
             disabled={!canBatchGenerate}
             data-testid="workshop-generate-all"
-            data-onboarding="workshop-generate-all"
           >
             <Zap size={14} strokeWidth={1.75} className="inline mr-1" />
             批量生成未产出项
@@ -791,7 +790,6 @@ export function WorkshopYellowPage(props: WorkshopYellowPageProps) {
             className={styles.dockToggle}
             onClick={() => setDockOpen((prev) => !prev)}
             data-testid="workshop-dock-toggle"
-            data-onboarding="workshop-dock-toggle"
           >
             <span className="flex items-center gap-1">
               <ListTodo size={14} strokeWidth={1.75} />

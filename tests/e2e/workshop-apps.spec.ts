@@ -49,39 +49,8 @@ async function openDbInBrowser(page: Page): Promise<void> {
   });
 }
 
-async function seedOnboardingDone(page: Page): Promise<void> {
-  await openDbInBrowser(page);
-  await page.evaluate(async () => {
-    await new Promise<void>((resolve, reject) => {
-      const request = indexedDB.open('MeetMindDB');
-      request.onerror = () => reject(request.error);
-      request.onsuccess = () => {
-        const db = request.result;
-        const tx = db.transaction('preferences', 'readwrite');
-        tx.onerror = () => reject(tx.error);
-        tx.oncomplete = () => {
-          db.close();
-          resolve();
-        };
-        tx.objectStore('preferences').put({
-          key: 'onboarding_state',
-          value: {
-            completedFlows: ['welcome', 'recording', 'review', 'video-review'],
-            skippedFlows: [],
-            currentFlow: null,
-            currentStepIndex: 0,
-            lastUpdated: Date.now(),
-          },
-        });
-      };
-    });
-  });
-}
-
 async function openApp(page: Page): Promise<void> {
   await page.goto('/app?guest=1');
-  await seedOnboardingDone(page);
-  await page.reload();
   await expect(page.getByTestId('mode-review-button')).toBeVisible();
 }
 

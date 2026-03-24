@@ -259,7 +259,6 @@ export function DedaoMenu({
           {menuItems.map((item) => (
             <button
               key={item.id}
-              data-onboarding={item.id === 'apps' ? 'menu-apps' : undefined}
               onClick={() => {
                 onNavigate(item.id);
                 onClose();
@@ -357,15 +356,12 @@ export function DedaoMenu({
 // 汉堡菜单按钮（得到风格）
 export function DedaoMenuButton({ 
   onClick, 
-  'data-onboarding': dataOnboarding 
 }: { 
   onClick: () => void;
-  'data-onboarding'?: string;
 }) {
   return (
     <button
       onClick={onClick}
-      data-onboarding={dataOnboarding}
       className={cn(
         'w-8 h-8 flex items-center justify-center rounded-full',
         'hover:bg-[var(--dedao-bg-warm)]',

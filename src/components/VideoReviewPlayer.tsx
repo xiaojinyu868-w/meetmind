@@ -339,7 +339,6 @@ function IframeSyncBar({
           <button
             type="button"
             data-testid="learning-track-toggle"
-            data-onboarding="learning-track"
             onClick={() => setExpanded((prev) => !prev)}
             className="rounded-md border border-white/15 bg-white/5 px-2 py-1 text-[11px] text-white/75 hover:bg-white/10 transition-colors whitespace-nowrap"
             title={expanded ? '收起学习时间轴' : '展开学习时间轴'}
