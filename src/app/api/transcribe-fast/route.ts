@@ -278,7 +278,6 @@ async function processParallelTasks(
   );
 
   const submittedCount = taskIds.filter(Boolean).length;
-  console.log(`[transcribe-fast] submitted ${submittedCount}/${segmentPaths.length} async tasks`);
 
   if (taskIds.every((taskId) => taskId === null)) {
     const firstError = submitResults.find((r) => r.error)?.error || 'unknown';
@@ -311,8 +310,6 @@ async function processParallelTasks(
 
     timeOffset += segmentDurations[index] || 0;
   }
-
-  console.log(`[transcribe-fast] processParallelTasks result: ${allSentences.length} sentences from ${segmentPaths.length} segments`);
 
   return {
     success: allSentences.length > 0,

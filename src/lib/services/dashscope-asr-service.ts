@@ -155,7 +155,6 @@ export class DashScopeASRClient {
 
           this.ws.onclose = (event) => {
             clearTimeout(connectionTimeout);
-            console.log('[DashScopeASR] WebSocket closed:', event.code, event.reason);
             if (this.status !== 'stopped') {
               this.updateStatus('stopped');
             }
@@ -458,4 +457,3 @@ export const dashScopeASRService = {
 };
 
 export default dashScopeASRService;
-

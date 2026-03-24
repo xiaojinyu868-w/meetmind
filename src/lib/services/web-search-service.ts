@@ -324,9 +324,6 @@ export async function webSearch(context: string, options: SearchOptions = {}): P
   const keywords = extractSearchKeywords(context);
   const query = buildSearchQuery(context, keywords);
   
-  console.log('[WebSearch] Query:', query);
-  console.log('[WebSearch] Keywords:', keywords);
-  
   let results: RawSearchResult[] = [];
   
   // 按优先级尝试不同的搜索后端
@@ -340,10 +337,8 @@ export async function webSearch(context: string, options: SearchOptions = {}): P
     if (!method.available) continue;
     
     try {
-      console.log(`[WebSearch] Trying ${method.name}...`);
       results = await method.fn();
       if (results.length > 0) {
-        console.log(`[WebSearch] ${method.name} returned ${results.length} results`);
         break;
       }
     } catch (error) {
@@ -353,7 +348,6 @@ export async function webSearch(context: string, options: SearchOptions = {}): P
   
   // 如果所有搜索都失败，返回教育资源推荐
   if (results.length === 0) {
-    console.log('[WebSearch] All search methods failed, returning educational resources');
     return getEducationalResources(context, keywords);
   }
   

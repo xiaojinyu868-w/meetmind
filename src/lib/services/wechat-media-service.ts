@@ -82,7 +82,6 @@ export async function downloadWechatImage(picUrl: string, linkToken: string): Pr
 
     const buffer = Buffer.from(await res.arrayBuffer());
     await fs.writeFile(filepath, buffer);
-    console.log(`[wechat-media] image saved: ${filename} (${buffer.length} bytes)`);
 
     return `/wechat-media/images/${filename}`;
   } catch (error) {
@@ -100,7 +99,6 @@ export async function downloadWechatMedia(
 
   const accessToken = await getWechatAccessToken();
   if (!accessToken) {
-    console.log('[wechat-media] no access_token, skip media download');
     return null;
   }
 
@@ -142,7 +140,6 @@ export async function downloadWechatMedia(
       try {
         await fs.writeFile(rawFilepath, buffer);
         await transcodeToMp3(rawFilepath, publicFilepath);
-        console.log(`[wechat-media] voice transcoded: ${publicFilename} (${buffer.length} bytes source)`);
         return `/wechat-media/${subdir}/${publicFilename}`;
       } catch (error) {
         console.error('[wechat-media] voice transcode failed, fallback to original format:', error);
@@ -154,7 +151,6 @@ export async function downloadWechatMedia(
     }
 
     await fs.writeFile(publicFilepath, buffer);
-    console.log(`[wechat-media] ${type} saved: ${publicFilename} (${buffer.length} bytes)`);
     return `/wechat-media/${subdir}/${publicFilename}`;
   } catch (error) {
     console.error('[wechat-media] downloadWechatMedia error:', error);

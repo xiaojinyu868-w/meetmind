@@ -39,7 +39,6 @@ function cleanupOldFiles() {
       const stats = fs.statSync(filePath);
       if (now - stats.mtimeMs > maxAge) {
         fs.unlinkSync(filePath);
-        console.log('[Upload] Cleaned up old file:', file);
       }
     }
   } catch (error) {
@@ -74,7 +73,6 @@ function getFfmpegPath(): string {
 }
 
 export async function POST(request: NextRequest) {
-  console.log('[Upload API] ===== Request received =====');
   
   try {
     ensureUploadDir();
@@ -99,12 +97,6 @@ export async function POST(request: NextRequest) {
         { status: 400 }
       );
     }
-    
-    console.log('[Upload API] Received audio:', {
-      name: audioFile.name,
-      type: audioFile.type,
-      size: audioFile.size,
-    });
     
     // 生成唯一文件名
     const timestamp = Date.now();
@@ -131,11 +123,9 @@ export async function POST(request: NextRequest) {
       // 使用 ffmpeg 转换
       const ffmpegPath = getFfmpegPath();
       const cmd = `"${ffmpegPath}" -y -i "${tempInputPath}" -ar 16000 -ac 1 -b:a 64k "${finalFilePath}"`;
-      console.log('[Upload API] Converting to MP3:', cmd);
       
       try {
         execSync(cmd, { stdio: 'pipe' });
-        console.log('[Upload API] Conversion successful');
       } finally {
         // 清理临时文件
         try {
@@ -153,14 +143,11 @@ export async function POST(request: NextRequest) {
     
     // 获取文件大小
     const stats = fs.statSync(finalFilePath);
-    console.log('[Upload API] Saved file:', finalFilePath, 'size:', stats.size);
     
     // 构建可访问的 URL
     const host = request.headers.get('x-forwarded-host') || request.headers.get('host') || 'localhost:3001';
     const protocol = request.headers.get('x-forwarded-proto') || 'http';
     const fileUrl = `${protocol}://${host}/temp-audio/${finalFileName}`;
-    
-    console.log('[Upload API] File URL:', fileUrl);
     
     return NextResponse.json({
       success: true,
@@ -204,7 +191,6 @@ export async function DELETE(request: NextRequest) {
   try {
     if (fs.existsSync(filePath)) {
       fs.unlinkSync(filePath);
-      console.log('[Upload API] Deleted file:', fileName);
     }
     
     return NextResponse.json({ success: true });

@@ -466,7 +466,6 @@ export function AITutor({
             keyDifficulties: data.cached_summary.keyDifficulties,
             structure: [], // 结构暂时为空
           });
-          console.log('[AITutor] 摘要已自动保存到 IndexedDB');
         }
       } catch (err) {
         console.error('[AITutor] 保存摘要失败:', err);
@@ -515,7 +514,6 @@ export function AITutor({
     onSeek?.(timeMs);
     
     // 调试信息：确保时间戳同步
-    console.log(`[Timestamp Click] Seeking to: ${formatTime(timeMs)} (${timeMs}ms)`);
     
     // 1.5秒后清除高亮状态
     setTimeout(() => setSeekingTimestamp(null), 1500);
@@ -928,7 +926,6 @@ export function AITutor({
     };
   }, [breakpoint?.id, selectedModel, isRestoring, explainBreakpoint]); // eslint-disable-line react-hooks/exhaustive-deps
 
-
   const handleGuidanceSelect = async (optionId: string, option: GuidanceOption) => {
     if (!breakpoint) return;
     
@@ -1167,7 +1164,6 @@ export function AITutor({
     }
   };
 
-
   // ===== 全局对话模式（无困惑点时）=====
   // 当没有选中困惑点时，进入全局对话模式，可以针对整节课提问
   const isGlobalMode = !breakpoint;
@@ -1244,7 +1240,6 @@ export function AITutor({
       sessionId,
     });
 
-
     // 构建请求体
     const requestBody: Record<string, unknown> = {
       timestamp: 0,
@@ -1295,7 +1290,6 @@ export function AITutor({
           }
         },
       });
-
 
       // 流式完成，将完整内容添加到历史
       setGlobalChatHistory(prev => [...prev, { 

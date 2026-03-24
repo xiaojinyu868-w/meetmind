@@ -167,7 +167,6 @@ export function TeacherDashboard({ sessionId: propSessionId }: TeacherDashboardP
       
       // 如果没有任何数据，使用演示数据
       if (!session && anchors.length === 0 && transcripts.length === 0) {
-        console.log('未找到真实数据，使用演示数据');
         setLesson(DEMO_LESSON);
         setIsRealData(false);
         setIsLoading(false);
@@ -253,7 +252,6 @@ export function TeacherDashboard({ sessionId: propSessionId }: TeacherDashboardP
     const cleanup = classroomDataService.onAnchorUpdate((action, anchor) => {
       // 如果是当前课程的更新，刷新数据
       if (anchor.sessionId === selectedSessionId) {
-        console.log('收到困惑点更新:', action, anchor);
         loadClassroomData(selectedSessionId);
       }
     });

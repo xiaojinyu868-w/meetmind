@@ -26,12 +26,8 @@ export async function GET(request: NextRequest) {
     );
   }
   
-  console.log('[Transcribe Status] Querying task:', taskId);
-  
   try {
     const result = await qwenASRService.queryTask(taskId, apiKey);
-    
-    console.log('[Transcribe Status] Task status:', result.status);
     
     if (result.status === 'SUCCEEDED' && result.result) {
       // 解析结果

@@ -96,7 +96,6 @@ function buildEnhanceUserPrompt(inputJSON: string): string {
 function markModelAvailability(model: string, next: 'available' | 'unavailable'): void {
   const prev = modelAvailability.get(model);
   if (prev !== next) {
-    console.log(`[TranscriptEnhance API] Model ${model} is ${next}`);
   }
   modelAvailability.set(model, next);
 }
@@ -460,4 +459,3 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ success: false, error: errorMessage }, { status: 500 });
   }
 }
-

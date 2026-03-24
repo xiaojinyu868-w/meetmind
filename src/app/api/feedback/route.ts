@@ -75,8 +75,6 @@ export async function POST(request: NextRequest) {
       },
     });
 
-    console.log(`[Feedback] New feedback received: ${feedback.id}, type: ${type}, title: ${title}`);
-
     return NextResponse.json({
       success: true,
       message: '反馈提交成功',

@@ -126,8 +126,6 @@ async function enrichVideoLinkMeta(linkToken: string, sourceUrl: string, request
         });
       }
 
-      console.log(`[wechat-mp] enriched bilibili meta for ${linkToken}: ${meta.title || resolved.bvid}`);
-
       // ── 阶段 2：触发完整视频转写管线 ──
       await triggerVideoImportPipeline(linkToken, resolved.resolvedUrl, sourceKey, request);
     }
@@ -149,7 +147,6 @@ async function triggerVideoImportPipeline(
   request?: NextRequest
 ): Promise<void> {
   try {
-    console.log(`[wechat-mp] starting video import pipeline for ${linkToken}: ${videoUrl}`);
 
     // 构造内部请求调用 /api/video/import
     const baseUrl = request
@@ -219,10 +216,6 @@ async function triggerVideoImportPipeline(
         },
       });
 
-      console.log(
-        `[wechat-mp] video import pipeline completed for ${linkToken}: ` +
-        `${segments.length} segments, ${fullText.length} chars, mode=${payload.mode}`
-      );
     }
   } catch (error) {
     // 静默失败——视频转写是增强能力，不影响基础收集

@@ -46,8 +46,6 @@ async function autoRegisterUser(payload: {
         ? payload.role
         : 'student';
 
-    console.log('[AutoRegister] 自动创建用户:', { userId, username, nickname });
-
     const newUser = await prisma.user.create({
       data: {
         id: userId,
@@ -61,8 +59,6 @@ async function autoRegisterUser(payload: {
         salt: null,
       },
     });
-
-    console.log('[AutoRegister] 用户创建成功:', newUser.id);
 
     return {
       id: newUser.id,
@@ -94,7 +90,6 @@ export async function GET(request: NextRequest) {
     let user = await authService.getUserById(payload.sub);
 
     if (!user) {
-      console.log('[Auth/Me] 用户不存在，尝试自动补注册:', payload.sub);
       user = await autoRegisterUser(payload);
 
       if (!user) {

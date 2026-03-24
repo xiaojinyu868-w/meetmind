@@ -279,22 +279,18 @@ export const wechatAuthService = {
     }
 
     const openId = tokenResponse.openid;
-    console.log(`[wechat-login] openId=${openId.slice(0, 6)}..., scope=${tokenResponse.scope}`);
     const wechatUser = canFetchWechatUserInfo(tokenResponse.scope)
       ? await this.getUserInfo(tokenResponse.access_token, openId)
       : null;
     const nickname = wechatUser?.nickname || '微信用户';
     if (wechatUser) {
-      console.log(`[wechat-login] 获取到用户信息: nickname=${nickname}`);
     } else {
-      console.log(`[wechat-login] scope 不含 snsapi_userinfo，跳过用户信息获取`);
     }
     
     // 查找是否已绑定用户
     const existingUser = await authService.findUserByProvider('wechat', openId);
     
     if (existingUser) {
-      console.log(`[wechat-login] 已有用户: userId=${existingUser.id}, username=${existingUser.username}`);
       // 已绑定用户，更新微信令牌后直接为原账号签发新会话
       await authService.linkAuthProvider(existingUser.id, 'wechat', {
         providerId: openId,
@@ -317,7 +313,6 @@ export const wechatAuthService = {
     const randomPart = randomBytes(16).toString('hex');
     const safePassword = `Wx${randomPart}9`;
     const username = `wx_${openId.slice(-8)}`;
-    console.log(`[wechat-login] 新用户注册: username=${username}`);
     const registerResult = await authService.register({
       username,
       password: safePassword,
@@ -329,7 +324,6 @@ export const wechatAuthService = {
       console.error(`[wechat-login] 注册失败: ${registerResult.error}`);
       return { success: false, error: registerResult.error || '创建用户失败' };
     }
-    console.log(`[wechat-login] 注册成功: userId=${registerResult.user.id}`);
     
     // 绑定微信
     await authService.linkAuthProvider(registerResult.user.id, 'wechat', {

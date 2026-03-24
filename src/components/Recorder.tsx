@@ -144,19 +144,16 @@ export const Recorder = forwardRef<RecorderHandle, RecorderProps>(function Recor
   const [asrReconnecting, setAsrReconnecting] = useState(false);
   const pauseTimestampRef = useRef<number>(0);
   
-
   const enhanceManagerRef = useRef<TranscriptEnhanceManager | null>(null);
   const [enhancedSegments, setEnhancedSegments] = useState<Map<string, EnhancedTranscriptSegment>>(new Map());
   const [enhanceStats, setEnhanceStats] = useState({ enhanced: 0, total: 0, isEnhancing: false });
   const effectiveTranscribeMode: TranscribeMode = compactMode ? 'batch' : transcribeMode;
-
 
   const vadStateRef = useRef({
     isSpeaking: false,
     speechStartMs: 0,
     silenceStartMs: 0,
   });
-
 
   const VAD_CONFIG = {
     baseEnergyThreshold: 0.05,
@@ -172,7 +169,6 @@ export const Recorder = forwardRef<RecorderHandle, RecorderProps>(function Recor
     isContinuation: Boolean(continueCurrentSession && activeSessionId),
     durationMs: elapsedMs,
   }), [activeSessionId, continueCurrentSession, elapsedMs]);
-
 
   useEffect(() => {
     const fetchConfig = async () => {
@@ -196,7 +192,6 @@ export const Recorder = forwardRef<RecorderHandle, RecorderProps>(function Recor
     };
     fetchConfig();
   }, []);
-
 
   const formatTime = (ms: number) => {
     const seconds = Math.floor(ms / 1000);
@@ -241,7 +236,6 @@ export const Recorder = forwardRef<RecorderHandle, RecorderProps>(function Recor
     }
   }, []);
 
-
   const startRecording = useCallback(async () => {
     if (isStartingRecordingRef.current || status !== 'idle') return;
 
@@ -281,7 +275,6 @@ export const Recorder = forwardRef<RecorderHandle, RecorderProps>(function Recor
       interimItemIdRef.current = null;
       setAnchorCount(0);
 
-
       setEnhancedSegments(new Map());
       setEnhanceStats({ enhanced: 0, total: 0, isEnhancing: false });
       enhanceManagerRef.current = new TranscriptEnhanceManager({
@@ -296,13 +289,10 @@ export const Recorder = forwardRef<RecorderHandle, RecorderProps>(function Recor
           // When auto-discovered terms become available, also push them to ASR
           if (asrClientRef.current?.isConnected() && termsHint.trim()) {
             asrClientRef.current.sendContextHint(termsHint.trim());
-            console.log('[Recorder] Auto-discovered terms sent to ASR, length:', termsHint.trim().length);
           }
         },
         onEnhanced: (segments) => {
 
-          console.log('[Recorder] Enhanced callback received:', segments.length, 'segments');
-          console.log('[Recorder] Enhanced segments:', segments.map(s => ({ id: s.id, status: s.enhanceStatus, text: s.text?.slice(0, 30) })));
           setEnhancedSegments(prev => {
             const newMap = new Map(prev);
             for (const seg of segments) {
@@ -310,8 +300,6 @@ export const Recorder = forwardRef<RecorderHandle, RecorderProps>(function Recor
               newMap.set(seg.id, seg);
             }
             
-
-
             const currentTranscript = transcriptRef.current;
             const enhancedTranscript = currentTranscript.map(seg => {
               if (manuallyEditedSegmentIdsRef.current.has(seg.id)) return seg;
@@ -322,8 +310,6 @@ export const Recorder = forwardRef<RecorderHandle, RecorderProps>(function Recor
               return seg;
             });
             
-
-            console.log('[Recorder] Notifying parent of enhanced transcript:', enhancedTranscript.length, 'segments');
             onTranscriptEnhanced?.(enhancedTranscript);
 
             // Update transcriptRef so that sendContextUpdate sends corrected text to ASR
@@ -338,7 +324,6 @@ export const Recorder = forwardRef<RecorderHandle, RecorderProps>(function Recor
           }));
         },
       });
-      console.log('[Recorder] TranscriptEnhanceManager initialized');
 
       stream = await navigator.mediaDevices.getUserMedia({
         audio: {
@@ -349,11 +334,8 @@ export const Recorder = forwardRef<RecorderHandle, RecorderProps>(function Recor
         },
       });
 
-
-
       startTimeRef.current = Date.now();
       
-
       vadStateRef.current = {
         isSpeaking: false,
         speechStartMs: 0,
@@ -376,7 +358,6 @@ export const Recorder = forwardRef<RecorderHandle, RecorderProps>(function Recor
         source = audioContext.createMediaStreamSource(stream);
         sourceNodeRef.current = source;
         actualSampleRate = audioContext.sampleRate;
-        console.log('[Recorder] AudioContext sampleRate:', actualSampleRate);
         analyserRef.current = audioContext.createAnalyser();
         analyserRef.current.fftSize = 256;
         source.connect(analyserRef.current);
@@ -409,16 +390,6 @@ export const Recorder = forwardRef<RecorderHandle, RecorderProps>(function Recor
                 vadState.isSpeaking = true;
                 vadState.speechStartMs = currentElapsedMs;
                 vadState.silenceStartMs = 0;
-                console.log(
-                  '[VAD] Speech started at',
-                  vadState.speechStartMs,
-                  'ms, level:',
-                  normalizedLevel.toFixed(3),
-                  'noiseFloor:',
-                  noiseFloorRef.current.toFixed(3),
-                  'threshold:',
-                  dynamicThreshold.toFixed(3)
-                );
 
                 if (asrClientRef.current?.isConnected()) {
                   asrClientRef.current.sendVADEvent('start', vadState.speechStartMs);
@@ -434,15 +405,6 @@ export const Recorder = forwardRef<RecorderHandle, RecorderProps>(function Recor
                 if (silenceDuration >= VAD_CONFIG.silenceDuration) {
                   const speechDuration = vadState.silenceStartMs - vadState.speechStartMs;
                   if (speechDuration >= VAD_CONFIG.minSpeechDuration) {
-                    console.log(
-                      '[VAD] Speech ended:',
-                      vadState.speechStartMs,
-                      '-',
-                      vadState.silenceStartMs,
-                      'ms, duration:',
-                      speechDuration,
-                      'ms'
-                    );
                     if (asrClientRef.current?.isConnected()) {
                       asrClientRef.current.sendVADEvent('end', vadState.silenceStartMs);
                     }
@@ -469,7 +431,6 @@ export const Recorder = forwardRef<RecorderHandle, RecorderProps>(function Recor
         ? activeSessionId!
         : `session-${Date.now()}`;
       recordingIdRef.current = `recording-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-
 
       if (!compactMode && effectiveTranscribeMode === 'streaming' && streamingAvailable && apiKey && audioContext && source) {
         asrClientRef.current = new DashScopeASRClient(apiKey, {
@@ -585,14 +546,12 @@ export const Recorder = forwardRef<RecorderHandle, RecorderProps>(function Recor
           // Send context hint for hot-word injection
           if (contextHint.trim()) {
             asrClientRef.current.sendContextHint(contextHint.trim());
-            console.log('[Recorder] Sent context hint to ASR, length:', contextHint.trim().length);
           }
           contextUpdateCountRef.current = 0;
 
           const bufferSize = 4096;
           pcmProcessorRef.current = audioContext.createScriptProcessor(bufferSize, 1, 1);
           
-
           const resample = (inputData: Float32Array, fromRate: number, toRate: number): Float32Array => {
             if (fromRate === toRate) return inputData;
             const ratio = fromRate / toRate;
@@ -644,7 +603,6 @@ export const Recorder = forwardRef<RecorderHandle, RecorderProps>(function Recor
 
       mediaRecorder.start(1000);
       mediaRecorderRef.current = mediaRecorder;
-
 
       timerRef.current = setInterval(() => {
         setElapsedMs(Date.now() - startTimeRef.current);
@@ -725,7 +683,6 @@ export const Recorder = forwardRef<RecorderHandle, RecorderProps>(function Recor
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [autoStartSignal, disabled, status]);
 
-
   const pauseRecording = useCallback(() => {
     if (mediaRecorderRef.current?.state === 'recording') {
       mediaRecorderRef.current.pause();
@@ -783,9 +740,7 @@ export const Recorder = forwardRef<RecorderHandle, RecorderProps>(function Recor
 
     source.connect(pcmProcessorRef.current);
     pcmProcessorRef.current.connect(audioContext.destination);
-    console.log('[Recorder] PCM->ASR pipeline rebuilt after reconnection');
   }, [wsSampleRate]);
-
 
   const resumeRecording = useCallback(async () => {
     if (mediaRecorderRef.current?.state !== 'paused') return;
@@ -928,7 +883,6 @@ export const Recorder = forwardRef<RecorderHandle, RecorderProps>(function Recor
 
         // Rebuild PCM pipeline
         rebuildPcmPipeline();
-        console.log('[Recorder] ASR reconnected successfully after pause');
       } else {
         console.error('[Recorder] ASR reconnect failed - recording continues without live transcription');
         setError('\u5b9e\u65f6\u8f6c\u5199\u91cd\u8fde\u5931\u8d25\uff0c\u5f55\u97f3\u4ecd\u5728\u7ee7\u7eed\uff0c\u97f3\u9891\u4e0d\u4f1a\u4e22\u5931\u3002');
@@ -1053,12 +1007,10 @@ export const Recorder = forwardRef<RecorderHandle, RecorderProps>(function Recor
         transcriptRef.current = segments;
         onTranscriptUpdate?.(segments, getCallbackMeta());
         
-
         if (segments.length > 0 && !skipEnhancement) {
           setTranscribeProgress('转录完成，正在优化文本...');
           setEnhanceStats(prev => ({ ...prev, total: segments.length, isEnhancing: true }));
           
-
           enhanceManagerRef.current = new TranscriptEnhanceManager({
             minBatchSize: 1,
             silenceThreshold: 0,
@@ -1067,7 +1019,6 @@ export const Recorder = forwardRef<RecorderHandle, RecorderProps>(function Recor
             strategy: 'layered',
             lexiconScope: 'classroom',
             onEnhanced: (enhancedSegs) => {
-              console.log('[Recorder] Batch mode enhanced:', enhancedSegs.length, 'segments');
               setEnhancedSegments(prev => {
                 const newMap = new Map(prev);
                 for (const seg of enhancedSegs) {
@@ -1075,7 +1026,6 @@ export const Recorder = forwardRef<RecorderHandle, RecorderProps>(function Recor
                   newMap.set(seg.id, seg);
                 }
                 
-
                 const enhancedTranscript = segments.map(seg => {
                   if (manuallyEditedSegmentIdsRef.current.has(seg.id)) return seg;
                   const enhanced = newMap.get(seg.id);
@@ -1085,8 +1035,6 @@ export const Recorder = forwardRef<RecorderHandle, RecorderProps>(function Recor
                   return seg;
                 });
                 
-
-                console.log('[Recorder] Notifying parent of batch enhanced transcript:', enhancedTranscript.length, 'segments');
                 onTranscriptEnhanced?.(enhancedTranscript);
                 
                 return newMap;
@@ -1099,12 +1047,10 @@ export const Recorder = forwardRef<RecorderHandle, RecorderProps>(function Recor
             },
           });
           
-
           for (const seg of segments) {
             enhanceManagerRef.current.addSegment(seg);
           }
           
-
           enhanceManagerRef.current.finalize().then(() => {
             const enhancedCount = enhanceManagerRef.current?.getAllEnhanced().filter(s => s.enhanceStatus === 'enhanced').length || 0;
             setTranscribeProgress(`转录完成，共 ${segments.length} 段，已优化 ${enhancedCount} 段`);
@@ -1142,7 +1088,6 @@ export const Recorder = forwardRef<RecorderHandle, RecorderProps>(function Recor
       asrClientRef.current = null;
     }
 
-
     if (pcmProcessorRef.current) {
       pcmProcessorRef.current.disconnect();
       pcmProcessorRef.current.onaudioprocess = null;
@@ -1171,10 +1116,8 @@ export const Recorder = forwardRef<RecorderHandle, RecorderProps>(function Recor
     setInterimText('');
     interimItemIdRef.current = null;
 
-
     if (enhanceManagerRef.current && effectiveTranscribeMode === 'streaming') {
       setEnhanceStats(prev => ({ ...prev, isEnhancing: true }));
-      console.log('[Recorder] Finalizing transcript enhancement...');
       try {
         await enhanceManagerRef.current.finalize();
       } catch (err) {
@@ -1212,7 +1155,6 @@ export const Recorder = forwardRef<RecorderHandle, RecorderProps>(function Recor
     effectiveTranscribeMode,
     transcribeWithQwenASR,
   ]);
-
 
   /** Stop current recording, clean up all state, and immediately start a fresh recording session. */
   const restartRecording = async () => {
@@ -1280,7 +1222,6 @@ export const Recorder = forwardRef<RecorderHandle, RecorderProps>(function Recor
     resumeRecording,
   }), [pauseRecording, resumeRecording, startRecording, stopRecording]);
 
-
   const markAnchor = useCallback(() => {
     if (status !== 'recording') return;
     
@@ -1289,7 +1230,6 @@ export const Recorder = forwardRef<RecorderHandle, RecorderProps>(function Recor
     onAnchorMark?.(timestamp);
     setAnchorCount(prev => prev + 1);
   }, [status, elapsedMs, onAnchorMark]);
-
 
   useEffect(() => {
     return () => {
@@ -1309,7 +1249,6 @@ export const Recorder = forwardRef<RecorderHandle, RecorderProps>(function Recor
       if (enhanceManagerRef.current) enhanceManagerRef.current.dispose();
     };
   }, []);
-
 
   const isRecording = status === 'recording';
   const isTranscribing = status === 'transcribing';
@@ -1386,7 +1325,6 @@ export const Recorder = forwardRef<RecorderHandle, RecorderProps>(function Recor
       ? '正在重连'
       : '录音已暂停';
   const compactStatusTone = isRecording ? 'text-[#232322] font-semibold' : 'text-[#787774]';
-
 
   if (isIdle) {
     if (compactMode) {
@@ -1511,7 +1449,6 @@ export const Recorder = forwardRef<RecorderHandle, RecorderProps>(function Recor
     );
   }
 
-
   if (isTranscribing) {
     return (
       <div className="card p-8 animate-fade-in">
@@ -1525,7 +1462,6 @@ export const Recorder = forwardRef<RecorderHandle, RecorderProps>(function Recor
       </div>
     );
   }
-
 
   if (isStopped) {
     return (
@@ -1587,7 +1523,6 @@ export const Recorder = forwardRef<RecorderHandle, RecorderProps>(function Recor
       </div>
     );
   }
-
 
   return (
     <div
@@ -1869,4 +1804,3 @@ export const Recorder = forwardRef<RecorderHandle, RecorderProps>(function Recor
     </div>
   );
 });
-

@@ -40,7 +40,6 @@ export async function applyRateLimit(
   const result = await checkRateLimit(identifier, apiType);
   
   if (!result.allowed) {
-    console.log(`[RateLimit] ${apiType} blocked for ${identifier}: ${result.error}`);
     return createRateLimitResponse(result);
   }
   

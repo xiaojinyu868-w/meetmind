@@ -79,7 +79,6 @@ export function useSummary({ sessionId, segments }: UseSummaryOptions): UseSumma
             createdAt: existingSummary.createdAt.toISOString(),
             updatedAt: existingSummary.updatedAt.toISOString(),
           });
-          console.log('[useSummary] 从 IndexedDB 加载摘要成功');
         }
       } catch (err) {
         console.error('[useSummary] 从 IndexedDB 加载摘要失败:', err);
@@ -143,7 +142,6 @@ export function useSummary({ sessionId, segments }: UseSummaryOptions): UseSumma
           keyDifficulties: result.summary.keyDifficulties,
           structure: result.summary.structure,
         });
-        console.log('[useSummary] 摘要已保存到 IndexedDB');
       } catch (err) {
         console.error('[useSummary] 保存摘要到 IndexedDB 失败:', err);
       }

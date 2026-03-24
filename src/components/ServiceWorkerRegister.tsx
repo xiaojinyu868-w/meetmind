@@ -20,7 +20,6 @@ export function ServiceWorkerRegister() {
     navigator.serviceWorker
       .register('/sw.js')
       .then((registration) => {
-        console.log('[SW] Registered, scope:', registration.scope);
 
         // 检查更新
         registration.addEventListener('updatefound', () => {
@@ -31,7 +30,6 @@ export function ServiceWorkerRegister() {
                 newWorker.state === 'activated' &&
                 navigator.serviceWorker.controller
               ) {
-                console.log('[SW] New version available');
               }
             });
           }

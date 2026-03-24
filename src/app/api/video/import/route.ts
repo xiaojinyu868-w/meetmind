@@ -2,30 +2,72 @@ import { NextRequest, NextResponse } from 'next/server';
 import * as fs from 'fs';
 import * as fsp from 'fs/promises';
 import * as path from 'path';
-import { Readable, Transform } from 'stream';
-import { pipeline } from 'stream/promises';
-import type { ReadableStream as WebReadableStream } from 'stream/web';
 import { WebSocket } from 'undici';
 import { parseVideoLink, isLikelyDirectMediaUrl } from '@/lib/utils/video-link';
 import {
-  BILIBILI_REFERER,
-  BILIBILI_USER_AGENT,
+  type TranscribeMode,
+  type VideoSourceMode,
+  type StageName,
+  type ImportTraceEntry,
+  type ImportRequestBody,
+  type VideoImportMeta,
+  type StageResult,
+  type StageFailure,
+  type WsResultSentence,
+  type NormalizedSegment,
+  ImportPipelineError,
+  TIMELINE_SCALE_RATIO_MIN,
+  TIMELINE_SCALE_RATIO_MAX,
+  PCM_BYTES_PER_SEC,
+  MIN_DURATION_FOR_COMPLETENESS_CHECK_SEC,
+  MIN_TEXT_CHARS_PER_SEC,
+  MIN_TEXT_COVERAGE_RATIO,
+  MIN_TIMELINE_COVERAGE_SHORT,
+  MIN_TIMELINE_COVERAGE_LONG,
+  normalizeMode,
+  normalizeLanguage,
+  isPipelineError,
+  toPipelineError,
+  statusFromCode,
+  getTranscribeApiPath,
+  buildModeOrder,
+  parseErrorCode,
+  parseErrorMessage,
+  parseErrorDetail,
+  toFiniteNumber,
+  readSegmentEndMs,
+  summarizeAsrResult,
+  isUnsafeVideoUrl,
+  buildStageOrder,
+  pickMostInformativeStageError,
+  estimatePcmDurationMs,
+} from './video-import-types';
+import {
+  normalizePossibleMojibake,
+  normalizeVideoMeta,
+  normalizeTranscribePayload,
+  normalizeImportedSegments,
+  mapSubtitleSegmentsToApiSegments,
+  normalizeWsSegments,
+} from './video-import-segment';
+import {
+  hasYtDlp,
+  downloadAudioByYtDlp,
+  downloadFile,
+  prepareAudioFromDirectUrl,
+} from './video-import-download';
+import {
   downloadBiliAudio,
   fetchPlayerSubtitle,
   fetchPlayurlAudio,
   fetchViewMeta,
   resolveBilibiliUrl,
-  BilibiliImportError,
 } from '@/lib/services/bilibili-import-service';
 import {
   fetchXiaoyuzhouEpisode,
   downloadXiaoyuzhouAudio,
-  XiaoyuzhouImportError,
 } from '@/lib/services/xiaoyuzhou-import-service';
 import {
-  MediaToolError,
-  extFromContentType,
-  isToolNotFoundError,
   resolveFfmpegPath,
   resolveFfprobePath,
   resolveOutputPath,
@@ -42,96 +84,15 @@ const UPLOAD_DIR = path.join(process.cwd(), 'public', 'temp-audio');
 const MAX_AGE_MS = 6 * 60 * 60 * 1000;
 const CLEANUP_MIN_INTERVAL_MS = Number.parseInt(process.env.VIDEO_IMPORT_CLEANUP_INTERVAL_MS || '300000', 10);
 const CLEANUP_EVERY_N_REQUESTS = Number.parseInt(process.env.VIDEO_IMPORT_CLEANUP_EVERY_N || '10', 10);
-const YTDLP_AVAILABILITY_TTL_MS = Number.parseInt(process.env.VIDEO_IMPORT_YTDLP_CACHE_MS || '300000', 10);
-const DIRECT_DOWNLOAD_TIMEOUT_MS = Number.parseInt(process.env.VIDEO_DIRECT_DOWNLOAD_TIMEOUT_MS || '120000', 10);
-const DIRECT_DOWNLOAD_MAX_BYTES = Number.parseInt(process.env.VIDEO_DIRECT_DOWNLOAD_MAX_BYTES || `${300 * 1024 * 1024}`, 10);
-const MIN_DURATION_FOR_COMPLETENESS_CHECK_SEC = 60;
-const MIN_TEXT_CHARS_PER_SEC = 1;
-const MIN_TEXT_COVERAGE_RATIO = 0.45;
-const MIN_TIMELINE_COVERAGE_SHORT = 0.6;
-const MIN_TIMELINE_COVERAGE_LONG = 0.7;
-const TIMELINE_SCALE_RATIO_MIN = 0.65;
-const TIMELINE_SCALE_RATIO_MAX = 1.35;
-const PCM_BYTES_PER_SEC = 16000 * 2;
+
 const WS_CHUNK_PCM_BYTES = Number.parseInt(
   process.env.VIDEO_IMPORT_WS_CHUNK_PCM_BYTES || `${10 * 1024 * 1024}`,
   10
 );
 
-type TranscribeMode = 'turbo' | 'fast' | 'standard';
-type VideoSourceMode = 'bili-native' | 'bili-subtitle' | 'yt-dlp' | 'direct' | 'xiaoyuzhou';
-type StageName = 'bili-native' | 'yt-dlp-fallback' | 'direct-media' | 'xiaoyuzhou';
-
-interface ImportTraceEntry {
-  stage: string;
-  ok: boolean;
-  code?: string;
-  detail?: string;
-}
-
-interface ImportRequestBody {
-  url?: string;
-  mode?: TranscribeMode;
-  language?: string;
-  biliCookie?: string;
-}
-
-interface VideoImportMeta {
-  title?: string;
-  durationSec?: number;
-  thumbnailUrl?: string;
-  resolvedUrl?: string;
-  embedUrl?: string;
-  bvid?: string;
-  cid?: number;
-}
-
-interface StageResult {
-  sourceMode: VideoSourceMode;
-  audioFilePath?: string;
-  subtitleSegments?: Array<{ text: string; startMs: number; endMs: number }>;
-  meta: VideoImportMeta;
-}
-
-interface StageFailure {
-  stage: StageName;
-  error: ImportPipelineError;
-}
-
-interface WsResultSentence {
-  id?: string;
-  text?: string;
-  beginTime?: number;
-  endTime?: number;
-  confidence?: number;
-  isFinal?: boolean;
-}
-
-interface NormalizedSegment {
-  id: string;
-  text: string;
-  startMs: number;
-  endMs: number;
-  confidence: number;
-  isFinal: boolean;
-}
-
 let cleanupRequestCount = 0;
 let lastCleanupAt = 0;
 let cleanupInFlight: Promise<void> | null = null;
-let ytDlpAvailabilityCache: { available: boolean; expiresAt: number } | null = null;
-
-class ImportPipelineError extends Error {
-  code: string;
-  detail?: string;
-
-  constructor(code: string, message: string, detail?: string) {
-    super(message);
-    this.name = 'ImportPipelineError';
-    this.code = code;
-    this.detail = detail;
-  }
-}
 
 function ensureUploadDir() {
   if (!fs.existsSync(UPLOAD_DIR)) {
@@ -198,316 +159,6 @@ function getPublicAudioUrl(request: NextRequest, filePath: string): string {
   return `${getOriginFromRequest(request)}/temp-audio/${encodeURIComponent(fileName)}`;
 }
 
-function isUnsafeVideoUrl(rawUrl: string): boolean {
-  let parsed: URL;
-  try {
-    parsed = new URL(rawUrl);
-  } catch {
-    return true;
-  }
-
-  const host = parsed.hostname.toLowerCase();
-  if (
-    host === 'localhost' ||
-    host === '127.0.0.1' ||
-    host === '::1' ||
-    host.startsWith('10.') ||
-    host.startsWith('192.168.') ||
-    /^172\.(1[6-9]|2\d|3[0-1])\./.test(host)
-  ) {
-    return true;
-  }
-
-  return false;
-}
-
-function getYtDlpCommand(): string {
-  return process.env.YT_DLP_BIN || 'yt-dlp';
-}
-
-async function runYtDlp(args: string[]): Promise<{ stdout: string; stderr: string }> {
-  const result = await runCommand(getYtDlpCommand(), args, { toolName: 'yt-dlp' });
-  return {
-    stdout: result.stdout,
-    stderr: result.stderr,
-  };
-}
-
-async function hasYtDlp(): Promise<boolean> {
-  const now = Date.now();
-  if (ytDlpAvailabilityCache && now < ytDlpAvailabilityCache.expiresAt) {
-    return ytDlpAvailabilityCache.available;
-  }
-
-  let available = false;
-  try {
-    await runYtDlp(['--version']);
-    available = true;
-  } catch {
-    available = false;
-  }
-
-  const ttlMs = Number.isFinite(YTDLP_AVAILABILITY_TTL_MS)
-    ? Math.max(10000, Math.min(30 * 60 * 1000, YTDLP_AVAILABILITY_TTL_MS))
-    : 300000;
-
-  ytDlpAvailabilityCache = {
-    available,
-    expiresAt: now + ttlMs,
-  };
-
-  return available;
-}
-
-function parseYtDlpMetaFromStdout(stdout: string): VideoImportMeta {
-  const lines = (stdout || '')
-    .split(/\r?\n/)
-    .map((line) => line.trim())
-    .filter(Boolean);
-
-  for (let index = lines.length - 1; index >= 0; index -= 1) {
-    const line = lines[index];
-    if (!line.startsWith('{') || !line.endsWith('}')) continue;
-    try {
-      const data = JSON.parse(line) as {
-        title?: string;
-        duration?: number;
-        thumbnail?: string;
-        webpage_url?: string;
-      };
-      return {
-        title: typeof data.title === 'string' ? data.title : undefined,
-        durationSec: Number.isFinite(data.duration) ? Number(data.duration) : undefined,
-        thumbnailUrl: typeof data.thumbnail === 'string' ? data.thumbnail : undefined,
-        resolvedUrl: typeof data.webpage_url === 'string' ? data.webpage_url : undefined,
-      };
-    } catch {
-      // skip invalid json line
-    }
-  }
-
-  return {};
-}
-
-async function findGeneratedAudioFile(baseName: string): Promise<string | null> {
-  const files = await fsp.readdir(UPLOAD_DIR);
-  const matched = files
-    .filter((name) => name.startsWith(baseName))
-    .map((name) => path.join(UPLOAD_DIR, name));
-
-  if (matched.length === 0) return null;
-
-  const withStat = await Promise.all(
-    matched.map(async (filePath) => ({
-      filePath,
-      stat: await fsp.stat(filePath),
-    }))
-  );
-  withStat.sort((a, b) => b.stat.mtimeMs - a.stat.mtimeMs);
-  return withStat[0].filePath;
-}
-
-async function downloadAudioByYtDlp(
-  videoUrl: string,
-  baseName: string,
-  options: { bilibiliHeaders?: boolean } = {}
-): Promise<{ audioPath: string; meta: VideoImportMeta }> {
-  const outputTemplate = path.join(UPLOAD_DIR, `${baseName}.%(ext)s`);
-
-  const args = [
-    '--no-playlist',
-    '--no-warnings',
-    '--print-json',
-    '--extract-audio',
-    '--audio-format',
-    'mp3',
-    '--audio-quality',
-    '0',
-  ];
-
-  if (options.bilibiliHeaders) {
-    args.push('--add-header', `Referer: ${BILIBILI_REFERER}`);
-    args.push('--add-header', `User-Agent: ${BILIBILI_USER_AGENT}`);
-    if (process.env.BILIBILI_COOKIE) {
-      args.push('--add-header', `Cookie: ${process.env.BILIBILI_COOKIE}`);
-    }
-  }
-
-  args.push('--output', outputTemplate, videoUrl);
-
-  const { stdout } = await runYtDlp(args);
-  const meta = parseYtDlpMetaFromStdout(stdout);
-
-  const audioPath = await findGeneratedAudioFile(baseName);
-  if (!audioPath) {
-    throw new ImportPipelineError('YTDLP_DOWNLOAD_FAILED', '已下载但未找到提取后的音频文件');
-  }
-
-  return { audioPath, meta };
-}
-
-async function downloadFile(url: string, targetPath: string): Promise<void> {
-  const timeoutMs = Number.isFinite(DIRECT_DOWNLOAD_TIMEOUT_MS)
-    ? Math.max(10000, Math.min(10 * 60 * 1000, DIRECT_DOWNLOAD_TIMEOUT_MS))
-    : 120000;
-  const maxBytes = Number.isFinite(DIRECT_DOWNLOAD_MAX_BYTES)
-    ? Math.max(10 * 1024 * 1024, DIRECT_DOWNLOAD_MAX_BYTES)
-    : 300 * 1024 * 1024;
-
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
-
-  let response: Response;
-  try {
-    response = await fetch(url, {
-      signal: controller.signal,
-      redirect: 'follow',
-    });
-  } catch (error) {
-    if ((error as { name?: string })?.name === 'AbortError') {
-      throw new ImportPipelineError('DIRECT_MEDIA_TIMEOUT', '直链媒体下载超时');
-    }
-    throw new ImportPipelineError(
-      'DIRECT_MEDIA_DOWNLOAD_FAILED',
-      '直链媒体下载失败',
-      error instanceof Error ? error.message : String(error)
-    );
-  } finally {
-    clearTimeout(timeoutId);
-  }
-
-  if (!response.ok) {
-    throw new ImportPipelineError('DIRECT_MEDIA_DOWNLOAD_FAILED', `下载失败 (${response.status})`);
-  }
-
-  const declaredLength = Number.parseInt(response.headers.get('content-length') || '0', 10);
-  if (Number.isFinite(declaredLength) && declaredLength > maxBytes) {
-    throw new ImportPipelineError(
-      'DIRECT_MEDIA_TOO_LARGE',
-      '直链媒体文件过大',
-      `content-length=${declaredLength}`
-    );
-  }
-
-  if (!response.body) {
-    throw new ImportPipelineError('DIRECT_MEDIA_DOWNLOAD_FAILED', '下载失败：响应体为空');
-  }
-
-  let downloadedBytes = 0;
-  const limiter = new Transform({
-    transform(chunk, _encoding, callback) {
-      downloadedBytes += chunk.length;
-      if (downloadedBytes > maxBytes) {
-        callback(new ImportPipelineError('DIRECT_MEDIA_TOO_LARGE', '直链媒体文件过大'));
-        return;
-      }
-      callback(null, chunk);
-    },
-  });
-
-  await fsp.mkdir(path.dirname(targetPath), { recursive: true });
-  try {
-    await pipeline(
-      Readable.fromWeb(response.body as unknown as WebReadableStream<Uint8Array>),
-      limiter,
-      fs.createWriteStream(targetPath)
-    );
-  } catch (error) {
-    safeUnlink(targetPath);
-    if (error instanceof ImportPipelineError) throw error;
-    throw new ImportPipelineError(
-      'DIRECT_MEDIA_DOWNLOAD_FAILED',
-      '直链媒体下载失败',
-      error instanceof Error ? error.message : String(error)
-    );
-  }
-}
-
-async function prepareAudioFromDirectUrl(videoUrl: string, baseName: string): Promise<string> {
-  const parsed = new URL(videoUrl);
-  const rawExt = extFromContentType(null) || '.bin';
-  const ext = path.extname(parsed.pathname).toLowerCase() || rawExt;
-  const downloadedPath = resolveOutputPath(UPLOAD_DIR, `${baseName}_raw`, ext);
-  const mp3Path = resolveOutputPath(UPLOAD_DIR, baseName, '.mp3');
-
-  try {
-    await downloadFile(videoUrl, downloadedPath);
-    await transcodeToMp3(downloadedPath, mp3Path);
-    return mp3Path;
-  } catch (error) {
-    safeUnlink(mp3Path);
-    throw error;
-  } finally {
-    safeUnlink(downloadedPath);
-  }
-}
-
-function getTranscribeApiPath(mode: TranscribeMode): string {
-  if (mode === 'fast') return '/api/transcribe-fast';
-  if (mode === 'standard') return '/api/transcribe';
-  return '/api/transcribe-turbo';
-}
-
-function buildModeOrder(mode: TranscribeMode): TranscribeMode[] {
-  const all: TranscribeMode[] = ['turbo', 'fast', 'standard'];
-  const unique = [mode, ...all.filter((item) => item !== mode)];
-  return unique;
-}
-
-function parseErrorCode(data: unknown): string | undefined {
-  if (!data || typeof data !== 'object') return undefined;
-  const record = data as Record<string, unknown>;
-  return typeof record.code === 'string' ? record.code : undefined;
-}
-
-function parseErrorMessage(data: unknown): string | undefined {
-  if (!data || typeof data !== 'object') return undefined;
-  const record = data as Record<string, unknown>;
-  if (typeof record.error === 'string') return record.error;
-  return undefined;
-}
-
-function parseErrorDetail(data: unknown): string | undefined {
-  if (!data || typeof data !== 'object') return undefined;
-  const record = data as Record<string, unknown>;
-  if (typeof record.detail === 'string') return record.detail;
-  return undefined;
-}
-
-function toFiniteNumber(value: unknown): number | null {
-  return typeof value === 'number' && Number.isFinite(value) ? value : null;
-}
-
-function readSegmentEndMs(entry: Record<string, unknown>): number {
-  const endCandidates = [entry.endMs, entry.endTime, entry.end_time];
-  for (const value of endCandidates) {
-    const parsed = toFiniteNumber(value);
-    if (parsed !== null) return Math.max(0, Math.round(parsed));
-  }
-  return 0;
-}
-
-function summarizeAsrResult(data: Record<string, unknown>): { segCount: number; textLen: number; lastEndMs: number } {
-  const rawSegments = Array.isArray(data.segments)
-    ? data.segments
-    : Array.isArray(data.sentences)
-      ? data.sentences
-      : [];
-  const segments = rawSegments.filter((item): item is Record<string, unknown> => !!item && typeof item === 'object');
-  const textLenFromData = typeof data.text === 'string' ? (data.text as string).length : 0;
-  const textLenFromSegments = segments.reduce((sum, segment) => {
-    const text = typeof segment.text === 'string' ? segment.text.trim() : '';
-    return sum + text.length;
-  }, 0);
-  const textLen = Math.max(textLenFromData, textLenFromSegments);
-  const lastEndMs = segments.reduce((max, segment) => Math.max(max, readSegmentEndMs(segment)), 0);
-  return {
-    segCount: segments.length,
-    textLen,
-    lastEndMs,
-  };
-}
-
 /**
  * 长音频直接转写：绕过 HTTP 回环，直接调 DashScope 异步 filetrans API。
  *
@@ -535,7 +186,6 @@ async function transcribeLongAudioDirect(
 
   const fileName = path.basename(audioFilePath);
   const fileUrl = `${publicBase.baseUrl}/temp-audio/${encodeURIComponent(fileName)}`;
-  console.log(`[video-import] transcribeLongAudioDirect: submitting ${fileUrl} (expectedDuration=${expectedDurationSec ?? 'unknown'}s)`);
 
   // 1. 提交异步任务
   const submitBody = {
@@ -577,7 +227,6 @@ async function transcribeLongAudioDirect(
       trace.push({ stage: 'asr-direct-submit', ok: false, code: 'ASR_DIRECT_SUBMIT_FAILED', detail: 'missing task_id' });
       return null;
     }
-    console.log(`[video-import] transcribeLongAudioDirect: task submitted, taskId=${taskId}`);
     trace.push({ stage: 'asr-direct-submit', ok: true, detail: `taskId=${taskId}` });
   } catch (error) {
     const detail = error instanceof Error ? error.message : String(error);
@@ -652,7 +301,6 @@ async function transcribeLongAudioDirect(
         }
 
         const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
-        console.log(`[video-import] transcribeLongAudioDirect: success! ${allSentences.length} sentences in ${elapsed}s`);
         trace.push({ stage: 'asr-direct', ok: true, detail: `${allSentences.length} sentences, ${elapsed}s` });
 
         const text = allSentences.map((s) => s.text).join('');
@@ -715,7 +363,6 @@ async function transcribeWithFallback(
 
   // Log the audio file size being sent to ASR
   const audioFileSize = await getFileSizeBytes(audioFilePath);
-  console.log(`[video-import] transcribeWithFallback: file=${fileName}, size=${audioFileSize} bytes (${(audioFileSize / 1024).toFixed(1)} KB), modes=${buildModeOrder(requestedMode).join(',')}, expectedDuration=${expectedDurationSec ?? 'unknown'}s`);
 
   const openAsBlob = (fsp as unknown as { openAsBlob?: (path: string, options?: { type?: string }) => Promise<Blob> }).openAsBlob;
   const audioBlob = openAsBlob
@@ -727,7 +374,6 @@ async function transcribeWithFallback(
 
   for (const mode of buildModeOrder(requestedMode)) {
     const endpoint = `${origin}${getTranscribeApiPath(mode)}`;
-    console.log(`[video-import] trying ASR mode=${mode}, endpoint=${endpoint}`);
     const formData = new FormData();
     formData.append('audio', new File([audioBlob], fileName, { type: 'audio/mpeg' }));
     formData.append('language', language);
@@ -756,9 +402,6 @@ async function transcribeWithFallback(
           ? Math.round((expectedDurationSec as number) * 1000)
           : 0;
       const timelineCoverage = expectedDurationMs > 0 && lastEndMs > 0 ? lastEndMs / expectedDurationMs : null;
-      console.log(
-        `[video-import] ASR mode=${mode} success: ${segCount} segments, ${textLen} chars, lastEndMs=${lastEndMs}, timelineCoverage=${timelineCoverage === null ? 'n/a' : timelineCoverage.toFixed(2)}`
-      );
 
       const minTimelineCoverage =
         expectedDurationSec && expectedDurationSec > 120
@@ -822,136 +465,6 @@ async function transcribeWithFallback(
   throw new ImportPipelineError('ASR_TRANSCRIBE_FAILED', '音频转写失败', lastFailure);
 }
 
-function normalizeMode(mode?: string): TranscribeMode {
-  if (mode === 'fast' || mode === 'standard') return mode;
-  return 'turbo';
-}
-
-function normalizeLanguage(language?: string): string {
-  return language && language.trim() ? language.trim() : 'zh';
-}
-
-function isPipelineError(error: unknown): error is ImportPipelineError {
-  return error instanceof ImportPipelineError;
-}
-
-function toPipelineError(error: unknown): ImportPipelineError {
-  if (isPipelineError(error)) return error;
-
-  if (error instanceof BilibiliImportError) {
-    return new ImportPipelineError(error.code, error.message, error.detail);
-  }
-
-  if (error instanceof XiaoyuzhouImportError) {
-    return new ImportPipelineError(error.code, error.message, error.detail);
-  }
-
-  if (error instanceof MediaToolError) {
-    if (isToolNotFoundError(error, 'ffmpeg') || isToolNotFoundError(error, 'ffprobe')) {
-      return new ImportPipelineError('FFMPEG_NOT_FOUND', '音频处理工具未安装', error.detail || error.message);
-    }
-    if (isToolNotFoundError(error, 'yt-dlp')) {
-      return new ImportPipelineError('YTDLP_UNAVAILABLE', '下载器不可用', error.detail || error.message);
-    }
-    // ffmpeg 被 OOM kill 时 code=null，给出更明确的提示
-    if (error.code === 'FFMPEG_FAILED' && (error.detail || '').includes('code null')) {
-      return new ImportPipelineError(error.code, '音频转码被系统终止（内存不足），请稍后重试', error.detail || error.message);
-    }
-    return new ImportPipelineError(error.code, '媒体处理失败', error.detail || error.message);
-  }
-
-  if (error instanceof Error) {
-    return new ImportPipelineError('VIDEO_IMPORT_FAILED', '视频导入失败', error.message);
-  }
-
-  return new ImportPipelineError('VIDEO_IMPORT_FAILED', '视频导入失败');
-}
-
-function statusFromCode(code: string): number {
-  if (
-    code === 'INVALID_VIDEO_URL' ||
-    code === 'MISSING_VIDEO_URL' ||
-    code === 'VIDEO_URL_UNSAFE' ||
-    code === 'BILI_URL_PARSE_FAILED' ||
-    code === 'DIRECT_MEDIA_TOO_LARGE'
-  ) {
-    return 400;
-  }
-  if (code === 'BILI_COOKIE_EXPIRED') {
-    return 403;
-  }
-  if (code === 'DIRECT_MEDIA_TIMEOUT') {
-    return 504;
-  }
-  return 500;
-}
-
-function buildStageOrder(
-  provider: string,
-  videoUrl: string,
-  strategy: 'bili-native-first' | 'yt-dlp-first',
-  enableYtDlpFallback: boolean
-): StageName[] {
-  const stages: StageName[] = [];
-
-  if (provider === 'bilibili') {
-    if (strategy === 'yt-dlp-first') {
-      if (enableYtDlpFallback) stages.push('yt-dlp-fallback');
-      stages.push('bili-native');
-    } else {
-      stages.push('bili-native');
-      if (enableYtDlpFallback) stages.push('yt-dlp-fallback');
-    }
-    return stages;
-  }
-
-  if (provider === 'xiaoyuzhou') {
-    // 小宇宙有自己的原生管线（页面解析 + 直链音频下载），不需要 yt-dlp
-    stages.push('xiaoyuzhou');
-    return stages;
-  }
-
-  if (isLikelyDirectMediaUrl(videoUrl)) {
-    stages.push('direct-media');
-  }
-
-  if (enableYtDlpFallback || stages.length === 0) {
-    stages.push('yt-dlp-fallback');
-  }
-
-  return stages;
-}
-
-function pickMostInformativeStageError(failures: StageFailure[]): ImportPipelineError | null {
-  if (failures.length === 0) return null;
-
-  const priorityCodes = [
-    'FFMPEG_NOT_FOUND',
-    'ASR_PUBLIC_HOST_MISSING',
-    'ASR_API_KEY_MISSING',
-    'BILI_COOKIE_EXPIRED',
-    'BILI_AUDIO_DOWNLOAD_FORBIDDEN',
-    'BILI_AUDIO_INCOMPLETE',
-    'BILI_PLAYURL_FAILED',
-    'BILI_URL_PARSE_FAILED',
-    'BILI_VIEW_META_FAILED',
-    'BILI_API_ERROR',
-  ];
-
-  for (const code of priorityCodes) {
-    const found = failures.find((item) => item.error.code === code);
-    if (found) return found.error;
-  }
-
-  const nonFallback = failures.find((item) => item.stage !== 'yt-dlp-fallback');
-  if (nonFallback) return nonFallback.error;
-
-  const nonYtDlpOnly = failures.find((item) => item.error.code !== 'YTDLP_UNAVAILABLE');
-  if (nonYtDlpOnly) return nonYtDlpOnly.error;
-
-  return failures[failures.length - 1].error;
-}
-
 async function getFileSizeBytes(filePath: string): Promise<number> {
   try {
     const stat = await fsp.stat(filePath);
@@ -1008,9 +521,6 @@ async function executeBiliNativeStage(videoUrl: string, baseName: string, userCo
       subtitleCoverage >= minCoverage;
 
     if (subtitleResult?.segments?.length && subtitleUsable) {
-      console.log(
-        `[video-import] bili subtitle accepted: count=${subtitleCount}, min=${durationBasedMin}, coverage=${subtitleCoverage.toFixed(2)}`
-      );
       return {
         sourceMode: 'bili-subtitle',
         subtitleSegments: subtitleResult.segments,
@@ -1026,9 +536,6 @@ async function executeBiliNativeStage(videoUrl: string, baseName: string, userCo
       };
     }
     if (subtitleResult?.segments?.length) {
-      console.log(
-        `[video-import] bili subtitle rejected: count=${subtitleCount} (need >=${durationBasedMin}), coverage=${subtitleCoverage.toFixed(2)} (need >=${minCoverage}) for ${viewMeta.durationSec}s video, falling back to audio`
-      );
     }
   } catch {
     // subtitle is optional and should not block import
@@ -1043,7 +550,6 @@ async function executeBiliNativeStage(videoUrl: string, baseName: string, userCo
 
     // 检查原始下载文件的大小
     const rawSize = await getFileSizeBytes(rawPath);
-    console.log(`[video-import] bili audio downloaded: ${rawSize} bytes (${(rawSize / 1024).toFixed(1)} KB), mode=${audioResult.mode}`);
     if (rawSize < BILI_MIN_AUDIO_BYTES) {
       throw new ImportPipelineError(
         'BILI_AUDIO_INCOMPLETE',
@@ -1057,16 +563,12 @@ async function executeBiliNativeStage(videoUrl: string, baseName: string, userCo
     // 检查转码后 mp3 的时长是否合理
     const mp3Size = await getFileSizeBytes(mp3Path);
     const mp3Duration = await getAudioDurationSec(mp3Path);
-    console.log(`[video-import] bili mp3 ready: ${mp3Size} bytes (${(mp3Size / 1024).toFixed(1)} KB), duration=${mp3Duration.toFixed(1)}s, declared video duration=${viewMeta.durationSec}s`);
 
     if (viewMeta.durationSec && viewMeta.durationSec > 30 && mp3Duration > 0) {
       const ratio = mp3Duration / viewMeta.durationSec;
       if (ratio < BILI_MIN_AUDIO_DURATION_RATIO) {
         // 长视频部分下载：如果已下载音频 >= 60s，则允许部分转录而不报错
         if (mp3Duration >= BILI_MIN_PARTIAL_AUDIO_SEC) {
-          console.log(
-            `[video-import] bili audio partial: ${mp3Duration.toFixed(1)}s / ${viewMeta.durationSec}s (${(ratio * 100).toFixed(0)}%), allowing partial transcription`
-          );
         } else {
           throw new ImportPipelineError(
             'BILI_AUDIO_INCOMPLETE',
@@ -1104,7 +606,7 @@ async function executeYtDlpStage(videoUrl: string, baseName: string, provider: s
     throw new ImportPipelineError('YTDLP_UNAVAILABLE', '当前环境未安装 yt-dlp');
   }
 
-  const downloaded = await downloadAudioByYtDlp(videoUrl, baseName, {
+  const downloaded = await downloadAudioByYtDlp(videoUrl, baseName, UPLOAD_DIR, {
     bilibiliHeaders: provider === 'bilibili',
   });
 
@@ -1120,7 +622,7 @@ async function executeDirectStage(videoUrl: string, baseName: string): Promise<S
     throw new ImportPipelineError('DIRECT_MEDIA_NOT_SUPPORTED', '当前链接不是直链媒体地址');
   }
 
-  const audioFilePath = await prepareAudioFromDirectUrl(videoUrl, baseName);
+  const audioFilePath = await prepareAudioFromDirectUrl(videoUrl, baseName, UPLOAD_DIR);
   return {
     sourceMode: 'direct',
     audioFilePath,
@@ -1140,9 +642,6 @@ async function executeXiaoyuzhouStage(videoUrl: string, baseName: string): Promi
     await downloadXiaoyuzhouAudio(episode.audioUrl, rawPath);
 
     const rawSize = await getFileSizeBytes(rawPath);
-    console.log(
-      `[video-import] xiaoyuzhou audio downloaded: ${rawSize} bytes (${(rawSize / 1024).toFixed(1)} KB), title="${episode.title}"`
-    );
 
     if (rawSize < 10 * 1024) {
       throw new ImportPipelineError(
@@ -1155,9 +654,6 @@ async function executeXiaoyuzhouStage(videoUrl: string, baseName: string): Promi
     await transcodeToMp3(rawPath, mp3Path);
 
     const mp3Duration = await getAudioDurationSec(mp3Path);
-    console.log(
-      `[video-import] xiaoyuzhou mp3 ready: duration=${mp3Duration.toFixed(1)}s, declared=${episode.durationSec}s`
-    );
 
     // 构建显示用标题：播客名 - 单集名
     const displayTitle = episode.podcastTitle
@@ -1182,19 +678,6 @@ async function executeXiaoyuzhouStage(videoUrl: string, baseName: string): Promi
   }
 }
 
-function mapSubtitleSegmentsToApiSegments(
-  segments: Array<{ text: string; startMs: number; endMs: number }>
-): Array<{ id: string; text: string; startMs: number; endMs: number; confidence: number; isFinal: boolean }> {
-  return segments.map((item, index) => ({
-    id: `seg-${index}`,
-    text: normalizePossibleMojibake(item.text),
-    startMs: item.startMs,
-    endMs: item.endMs,
-    confidence: 0.99,
-    isFinal: true,
-  }));
-}
-
 function buildWsProxyUrl(request: NextRequest): string {
   const host =
     request.headers.get('x-forwarded-host') ||
@@ -1207,42 +690,6 @@ function buildWsProxyUrl(request: NextRequest): string {
     'http';
   const wsProtocol = protocol === 'https' ? 'wss' : 'ws';
   return `${wsProtocol}://${host}/api/asr-stream`;
-}
-
-function normalizeWsSegments(
-  wsSentences: WsResultSentence[]
-): Array<{ id: string; text: string; startMs: number; endMs: number; confidence: number; isFinal: boolean }> {
-  const ordered = [...wsSentences]
-    .filter((item) => typeof item.text === 'string' && item.text.trim())
-    .sort((a, b) => {
-      const left = Number.isFinite(a.beginTime) ? Number(a.beginTime) : Number.MAX_SAFE_INTEGER;
-      const right = Number.isFinite(b.beginTime) ? Number(b.beginTime) : Number.MAX_SAFE_INTEGER;
-      return left - right;
-    });
-
-  let cursor = 0;
-  return ordered.map((item, index) => {
-    const text = normalizePossibleMojibake(String(item.text || '').trim());
-    const begin = Number.isFinite(item.beginTime) ? Math.max(0, Number(item.beginTime)) : cursor;
-    const fallbackDuration = Math.max(500, Math.min(5000, text.length * 120));
-    let end = Number.isFinite(item.endTime) ? Number(item.endTime) : begin + fallbackDuration;
-    if (end <= begin) end = begin + fallbackDuration;
-    cursor = end;
-
-    return {
-      id: item.id || `seg-${index}`,
-      text,
-      startMs: begin,
-      endMs: end,
-      confidence: Number.isFinite(item.confidence) ? Number(item.confidence) : 0.92,
-      isFinal: item.isFinal !== false,
-    };
-  });
-}
-
-function estimatePcmDurationMs(bytes: number): number {
-  if (!Number.isFinite(bytes) || bytes <= 0) return 0;
-  return Math.round((bytes / PCM_BYTES_PER_SEC) * 1000);
 }
 
 async function transcribeWsChunk(
@@ -1464,313 +911,6 @@ async function transcribeWithWsProxy(
   };
 }
 
-function isLikelyMojibake(text: string): boolean {
-  if (!text) return false;
-  return /(Ã.|Â.|å.|æ.|ç.|ï¼|ð|ñ|Ñ|Ð)/.test(text);
-}
-
-function textScoreForChineseReadability(text: string): number {
-  const cjkCount = (text.match(/[\u4e00-\u9fff]/g) || []).length;
-  const mojibakeCount = (text.match(/[ÃÂåæçï¼ðñÑÐ]/g) || []).length;
-  const replacementCount = (text.match(/\uFFFD/g) || []).length;
-  return cjkCount * 2 - mojibakeCount * 2 - replacementCount * 4;
-}
-
-function normalizePossibleMojibake(input: string): string {
-  if (!input || !isLikelyMojibake(input)) return input;
-  const candidate = Buffer.from(input, 'latin1').toString('utf8');
-  if (!candidate || candidate === input) return input;
-
-  const beforeScore = textScoreForChineseReadability(input);
-  const afterScore = textScoreForChineseReadability(candidate);
-  return afterScore > beforeScore ? candidate : input;
-}
-
-function normalizeVideoMeta(meta: VideoImportMeta): VideoImportMeta {
-  return {
-    ...meta,
-    title: meta.title ? normalizePossibleMojibake(meta.title) : meta.title,
-  };
-}
-
-function normalizeTranscribePayload(data: Record<string, unknown>): Record<string, unknown> {
-  const normalized: Record<string, unknown> = { ...data };
-
-  if (typeof normalized.text === 'string') {
-    normalized.text = normalizePossibleMojibake(normalized.text);
-  }
-
-  if (Array.isArray(normalized.segments)) {
-    normalized.segments = normalized.segments.map((item) => {
-      if (!item || typeof item !== 'object') return item;
-      const entry = { ...(item as Record<string, unknown>) };
-      if (typeof entry.text === 'string') {
-        entry.text = normalizePossibleMojibake(entry.text);
-      }
-      return entry;
-    });
-  }
-
-  if (Array.isArray(normalized.sentences)) {
-    normalized.sentences = normalized.sentences.map((item) => {
-      if (!item || typeof item !== 'object') return item;
-      const entry = { ...(item as Record<string, unknown>) };
-      if (typeof entry.text === 'string') {
-        entry.text = normalizePossibleMojibake(entry.text);
-      }
-      return entry;
-    });
-  }
-
-  return normalized;
-}
-
-function normalizedTextKey(text: string): string {
-  return text
-    .toLowerCase()
-    .replace(/[\s，。！？!?；;：:、“”"'‘’\-—_]/g, '')
-    .trim();
-}
-
-function parseSegmentsFromPayload(data: Record<string, unknown>): NormalizedSegment[] {
-  const rawSegments = Array.isArray(data.segments)
-    ? data.segments
-    : Array.isArray(data.sentences)
-      ? data.sentences
-      : [];
-
-  const parsed: NormalizedSegment[] = [];
-  for (let index = 0; index < rawSegments.length; index += 1) {
-    const item = rawSegments[index];
-    if (!item || typeof item !== 'object') continue;
-    const entry = item as Record<string, unknown>;
-    const text = normalizePossibleMojibake(String(entry.text || '')).trim();
-    if (!text) continue;
-
-    const startCandidates = [entry.startMs, entry.beginTime, entry.start_time];
-    const endCandidates = [entry.endMs, entry.endTime, entry.end_time];
-
-    let startMs = 0;
-    let endMs = 0;
-    for (const value of startCandidates) {
-      if (typeof value === 'number' && Number.isFinite(value)) {
-        startMs = Math.max(0, Math.round(value));
-        break;
-      }
-    }
-    for (const value of endCandidates) {
-      if (typeof value === 'number' && Number.isFinite(value)) {
-        endMs = Math.max(0, Math.round(value));
-        break;
-      }
-    }
-
-    parsed.push({
-      id: typeof entry.id === 'string' ? entry.id : `seg-${index}`,
-      text,
-      startMs,
-      endMs,
-      confidence: typeof entry.confidence === 'number' && Number.isFinite(entry.confidence)
-        ? entry.confidence
-        : 0.92,
-      isFinal: entry.isFinal !== false,
-    });
-  }
-
-  return parsed;
-}
-
-function deduplicateAdjacentSegments(segments: NormalizedSegment[]): NormalizedSegment[] {
-  if (segments.length <= 1) return segments;
-  const deduped: NormalizedSegment[] = [segments[0]];
-
-  for (let index = 1; index < segments.length; index += 1) {
-    const current = segments[index];
-    const prev = deduped[deduped.length - 1];
-    const currentKey = normalizedTextKey(current.text);
-    const prevKey = normalizedTextKey(prev.text);
-
-    const isDup = currentKey.length > 0 && currentKey === prevKey;
-    if (isDup) {
-      prev.endMs = Math.max(prev.endMs, current.endMs);
-      prev.confidence = Math.max(prev.confidence, current.confidence);
-      continue;
-    }
-
-    deduped.push(current);
-  }
-
-  return deduped;
-}
-
-function hasUsableTimeline(segments: NormalizedSegment[]): boolean {
-  if (segments.length === 0) return false;
-  return segments.some((segment) => segment.endMs > segment.startMs && segment.endMs > 0);
-}
-
-function rebuildTimelineByLength(
-  segments: NormalizedSegment[],
-  targetDurationMs: number
-): NormalizedSegment[] {
-  const safeTarget = Math.max(1000, targetDurationMs);
-  const totalWeight = segments.reduce((sum, segment) => sum + Math.max(1, segment.text.length), 0);
-  let cursor = 0;
-
-  return segments.map((segment, index) => {
-    const weight = Math.max(1, segment.text.length);
-    const duration = Math.max(300, Math.round((safeTarget * weight) / Math.max(1, totalWeight)));
-    const startMs = cursor;
-    let endMs = startMs + duration;
-    if (index === segments.length - 1) {
-      endMs = safeTarget;
-    } else if (endMs >= safeTarget) {
-      endMs = Math.max(startMs + 300, safeTarget - (segments.length - index - 1) * 300);
-    }
-
-    cursor = endMs;
-    return {
-      ...segment,
-      startMs,
-      endMs,
-    };
-  });
-}
-
-function scaleTimeline(segments: NormalizedSegment[], targetDurationMs: number): NormalizedSegment[] {
-  const lastEnd = segments[segments.length - 1]?.endMs || 0;
-  if (lastEnd <= 0) return segments;
-  const ratio = targetDurationMs / lastEnd;
-  return segments.map((segment) => ({
-    ...segment,
-    startMs: Math.max(0, Math.round(segment.startMs * ratio)),
-    endMs: Math.max(0, Math.round(segment.endMs * ratio)),
-  }));
-}
-
-/**
- * 将过长的单个 segment 按中文标点分句拆分成多个小段。
- * 典型场景：turbo 同步 API 把 30s 音频的所有文字合成一段返回。
- */
-function splitLongSegments(
-  segments: NormalizedSegment[],
-  maxCharsPerSegment: number = 80
-): NormalizedSegment[] {
-  const result: NormalizedSegment[] = [];
-
-  for (const segment of segments) {
-    if (segment.text.length <= maxCharsPerSegment) {
-      result.push(segment);
-      continue;
-    }
-
-    // 按中文句号、问号、叹号、分号、换行拆分
-    const parts = segment.text
-      .split(/(?<=[。！？；\n])/g)
-      .map((s) => s.trim())
-      .filter(Boolean);
-
-    // 如果按句号拆不出来，尝试按逗号拆
-    let chunks: string[];
-    if (parts.length <= 1) {
-      chunks = segment.text
-        .split(/(?<=[，,、])/g)
-        .map((s) => s.trim())
-        .filter(Boolean);
-    } else {
-      // 合并过短的句子
-      chunks = [];
-      let buf = '';
-      for (const part of parts) {
-        if (buf.length + part.length <= maxCharsPerSegment) {
-          buf += part;
-        } else {
-          if (buf) chunks.push(buf);
-          buf = part;
-        }
-      }
-      if (buf) chunks.push(buf);
-    }
-
-    if (chunks.length <= 1) {
-      // 实在拆不动，按固定长度切
-      chunks = [];
-      for (let i = 0; i < segment.text.length; i += maxCharsPerSegment) {
-        chunks.push(segment.text.slice(i, i + maxCharsPerSegment));
-      }
-    }
-
-    // 按字符比例分配时间
-    const segDuration = segment.endMs - segment.startMs;
-    const totalChars = chunks.reduce((sum, c) => sum + c.length, 0);
-    let cursor = segment.startMs;
-
-    for (const chunk of chunks) {
-      const chunkDuration = Math.max(200, Math.round((segDuration * chunk.length) / Math.max(1, totalChars)));
-      const endMs = Math.min(cursor + chunkDuration, segment.endMs);
-      result.push({
-        ...segment,
-        id: `seg-${result.length}`,
-        text: chunk,
-        startMs: cursor,
-        endMs: Math.max(cursor + 200, endMs),
-        confidence: segment.confidence,
-        isFinal: segment.isFinal,
-      });
-      cursor = endMs;
-    }
-  }
-
-  return result;
-}
-
-function normalizeImportedSegments(
-  data: Record<string, unknown>,
-  sourceDurationSec?: number
-): NormalizedSegment[] {
-  let segments = deduplicateAdjacentSegments(parseSegmentsFromPayload(data));
-  if (segments.length === 0) return [];
-
-  // 拆分过长的单 segment（turbo 同步 API 常返回整段文本合为一句）
-  segments = splitLongSegments(segments);
-
-  const declaredDurationMs =
-    Number.isFinite(sourceDurationSec) && (sourceDurationSec || 0) > 0
-      ? Math.round((sourceDurationSec as number) * 1000)
-      : 0;
-  const rawLastEnd = segments[segments.length - 1]?.endMs || 0;
-
-  if (!hasUsableTimeline(segments)) {
-    const estimatedChars = segments.reduce((sum, segment) => sum + segment.text.length, 0);
-    const target = declaredDurationMs > 0 ? declaredDurationMs : Math.max(5000, estimatedChars * 140);
-    segments = rebuildTimelineByLength(segments, target);
-    return segments.map((segment, index) => ({ ...segment, id: `seg-${index}` }));
-  }
-
-  // 时间轴明显压缩时（典型 WS fallback），按原视频时长拉伸
-  if (declaredDurationMs > 0) {
-    const ratio = rawLastEnd > 0 ? rawLastEnd / declaredDurationMs : 1;
-    const drift = Math.abs(1 - ratio);
-    const canSafelyScale = ratio >= TIMELINE_SCALE_RATIO_MIN && ratio <= TIMELINE_SCALE_RATIO_MAX;
-    if (canSafelyScale && drift > 0.08) {
-      segments = scaleTimeline(segments, declaredDurationMs);
-    }
-  }
-
-  // 二次修正，确保严格递增且 end > start
-  let cursor = 0;
-  segments = segments.map((segment) => {
-    const startMs = Math.max(cursor, segment.startMs);
-    const endMs = Math.max(startMs + 200, segment.endMs);
-    cursor = endMs;
-    return {
-      ...segment,
-      startMs,
-      endMs,
-    };
-  });
-
-  return segments.map((segment, index) => ({ ...segment, id: `seg-${index}` }));
-}
 
 export async function POST(request: NextRequest) {
   // 视频导入不再使用 transcribe 限流，避免自测/正常使用被误拦
@@ -1820,7 +960,7 @@ export async function POST(request: NextRequest) {
 
     const strategy = process.env.VIDEO_IMPORT_STRATEGY === 'yt-dlp-first' ? 'yt-dlp-first' : 'bili-native-first';
     const enableYtDlpFallback = process.env.VIDEO_IMPORT_ENABLE_YTDLP_FALLBACK !== 'false';
-    const stageOrder = buildStageOrder(parsed.provider, videoUrl, strategy, enableYtDlpFallback);
+    const stageOrder = buildStageOrder(parsed.provider, videoUrl, strategy, enableYtDlpFallback, isLikelyDirectMediaUrl);
 
     const baseName = `video_import_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
     let stageResult: StageResult | null = null;
@@ -1937,9 +1077,6 @@ export async function POST(request: NextRequest) {
         ? 'fast'
         : mode;
     if (effectiveMode !== mode) {
-      console.log(
-        `[video-import] long audio detected (${stageResult.meta.durationSec}s > ${LONG_AUDIO_THRESHOLD_SEC}s), switching from ${mode} to ${effectiveMode}`
-      );
     }
 
     // 长音频优先直接调 DashScope 异步 API，绕过 HTTP 回环（避免 OOM）
@@ -1951,7 +1088,6 @@ export async function POST(request: NextRequest) {
         stageResult.meta.durationSec
       );
       if (directResult) {
-        console.log(`[video-import] transcribeLongAudioDirect succeeded, skipping transcribeWithFallback`);
         transcribed = directResult;
       }
     }

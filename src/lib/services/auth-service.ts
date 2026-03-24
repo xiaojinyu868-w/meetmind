@@ -86,7 +86,6 @@ async function initializeAdminAccount(): Promise<void> {
           }
         });
         
-        console.log('[AuthService] 管理员账户已初始化');
       }
     } catch (error) {
       console.error('[AuthService] 初始化管理员账户失败:', error);
@@ -962,7 +961,6 @@ export const authService = {
         }
       });
       
-      console.log(`[AuthService] 验证码登录自动注册: ${target}`);
     }
 
     // 检查账户状态

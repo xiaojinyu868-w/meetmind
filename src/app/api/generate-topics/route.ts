@@ -70,34 +70,21 @@ export async function POST(request: NextRequest): Promise<NextResponse<GenerateT
   const rateLimitResponse = await applyRateLimit(request, 'generateTopics');
   if (rateLimitResponse) return rateLimitResponse as NextResponse<GenerateTopicsResponse>;
 
-  console.log('[generate-topics] ===== 请求开始 =====');
-  
   try {
     const body: GenerateTopicsRequest = await request.json();
     
-    console.log('[generate-topics] 参数:', {
-      sessionId: body.sessionId,
-      transcriptLength: body.transcript?.length,
-      mode: body.mode,
-      theme: body.theme
-    });
-    
     // 打印前3个转录片段的内容，用于调试
     if (body.transcript && body.transcript.length > 0) {
-      console.log('[generate-topics] 前3个转录片段:');
       body.transcript.slice(0, 3).forEach((seg, i) => {
-        console.log(`  [${i}] ${seg.startMs}-${seg.endMs}ms: "${seg.text?.slice(0, 50)}..."`);
       });
       
       // 检查是否有空文本
       const emptyCount = body.transcript.filter(s => !s.text || s.text.trim() === '').length;
       if (emptyCount > 0) {
-        console.log(`[generate-topics] 警告: ${emptyCount}/${body.transcript.length} 个片段文本为空!`);
       }
       
       // 计算总文本长度
       const totalTextLength = body.transcript.reduce((sum, s) => sum + (s.text?.length || 0), 0);
-      console.log(`[generate-topics] 总文本长度: ${totalTextLength} 字符`);
     }
     
     // 验证必填字段
@@ -127,9 +114,6 @@ export async function POST(request: NextRequest): Promise<NextResponse<GenerateT
       isFinal: seg.isFinal ?? true
     }));
     
-    console.log('[generate-topics] 调用 highlightService.generateTopics...');
-    console.log('[generate-topics] 使用模式:', body.mode);
-    
     // 生成精选片段
     const result = await highlightService.generateTopics(
       body.sessionId,
@@ -144,11 +128,6 @@ export async function POST(request: NextRequest): Promise<NextResponse<GenerateT
           : undefined
       }
     );
-    
-    console.log('[generate-topics] 生成完成:', {
-      topicsCount: result.topics.length,
-      modelUsed: result.modelUsed
-    });
     
     // 如果没有生成主题，记录警告
     if (result.topics.length === 0) {

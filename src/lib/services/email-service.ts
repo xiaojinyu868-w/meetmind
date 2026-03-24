@@ -156,7 +156,6 @@ async function sendEmailWithRetry(
         html: template.html(code),
       });
 
-      console.log(`[EmailService] 验证码已发送: ${email} (${purpose}) [attempt: ${attempt + 1}]`);
       return; // 发送成功，退出
     } catch (error) {
       console.error(`[EmailService] 发送邮件失败 [attempt: ${attempt + 1}/${maxRetries + 1}]:`, error);
@@ -221,7 +220,6 @@ export const emailService = {
         html: template.html(code),
       });
 
-      console.log(`[EmailService] 验证码已发送: ${email} (${purpose})`);
       return { success: true };
     } catch (error) {
       console.error('[EmailService] 发送邮件失败:', error);

@@ -175,8 +175,6 @@ export async function enrichLinkContent(linkToken: string): Promise<void> {
       await workspaceContextService.syncWechatInboxMessageArtifacts(linkToken);
     }
 
-    console.log(`[jina-reader] enriched content for ${message.sourceUrl} (${content.length} chars)`);
-
     // 异步生成 AI 摘要（不阻塞正文写入）
     if (message.workspaceId && message.title) {
       const provider = detectLinkProvider(message.sourceUrl);
@@ -212,7 +210,6 @@ export async function enrichLinkContent(linkToken: string): Promise<void> {
             },
           });
 
-          console.log(`[jina-reader] AI summary generated for ${message.sourceUrl}`);
         }
       }
     }

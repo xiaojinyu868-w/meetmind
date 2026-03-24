@@ -210,7 +210,6 @@ export const meetmindService = {
    */
   async resolveBreakpoint(breakpointId: string): Promise<void> {
     // TODO: 更新数据库
-    console.log(`Resolved breakpoint: ${breakpointId}`);
   },
 
   // ========== AI 家教 ==========

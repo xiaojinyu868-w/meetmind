@@ -31,7 +31,6 @@ export async function GET(request: NextRequest) {
     }
     
     // 处理微信登录
-    console.log(`[wechat-callback] 开始处理, code=${code.slice(0, 6)}..., state=${state.slice(0, 8)}...`);
     const result = await wechatAuthService.login(code, state);
     
     if (!result.success) {
@@ -40,7 +39,6 @@ export async function GET(request: NextRequest) {
       return NextResponse.redirect(`${baseUrl}/login?error=${errorMsg}`);
     }
     
-    console.log(`[wechat-callback] 登录成功, userId=${result.user?.id}, nickname=${result.user?.nickname}`);
     // 登录成功，使用共享 session 服务创建临时会话
     const sessionToken = createWechatWebSession({
       accessToken: result.accessToken!,

@@ -133,7 +133,6 @@ ${transcriptContext}
     { temperature: 0.3, maxTokens: 8192, responseFormat: 'json_object' }
   );
 
-  console.log('[quiz-plugin] LLM raw response length:', response.content.length, 'model:', response.model);
   const parsed = parseJsonResponse<QuizLLMOutput>(response.content);
   if (!parsed) {
     console.error('[quiz-plugin] parseJsonResponse failed, first 500 chars:', response.content.slice(0, 500));
@@ -247,7 +246,6 @@ export const quizPlugin: AppPlugin = {
       } else if (!Array.isArray(llmOutput.questions) || llmOutput.questions.length === 0) {
         console.warn('[quiz-plugin] LLM returned empty questions. model=', model, 'raw keys=', Object.keys(llmOutput));
       } else {
-        console.log('[quiz-plugin] LLM generated', llmOutput.questions.length, 'questions. model=', model);
       }
     } catch (err) {
       console.error('[quiz-plugin] generateQuizWithLLM failed:', err instanceof Error ? err.message : err);

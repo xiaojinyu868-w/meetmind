@@ -229,7 +229,6 @@ async function callQwen(
   
   // 如果有思考内容，可以记录日志
   if (thinkingContent) {
-    console.log('[LLM] Thinking content:', thinkingContent.substring(0, 200) + '...');
   }
   
   return {

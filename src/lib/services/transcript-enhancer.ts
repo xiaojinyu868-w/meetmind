@@ -414,7 +414,6 @@ export class TranscriptEnhanceManager {
       const data = await response.json();
       if (data.success && data.contextHint) {
         this.discoveredTermsHint = data.contextHint;
-        console.log('[TermDiscovery] Extracted terms:', data.terms?.length || 0);
 
         // Build deterministic lexicon entries from discovered term→variant mappings.
         // These feed into applyLexiconLayer for 100% reliable replacement
@@ -438,7 +437,6 @@ export class TranscriptEnhanceManager {
             }
           }
           this.discoveredLexiconTerms = lexicon;
-          console.log('[TermDiscovery] Built lexicon entries:', lexicon.length);
         }
 
         // Notify parent (e.g., to update ASR context)
@@ -472,4 +470,3 @@ export class TranscriptEnhanceManager {
 }
 
 export default TranscriptEnhanceManager;
-

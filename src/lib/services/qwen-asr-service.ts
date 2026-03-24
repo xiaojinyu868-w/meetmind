@@ -52,7 +52,6 @@ export interface TranscribeOptions {
  */
 function getFfmpegPath(): string {
   const ffmpegPath = resolveFfmpegPath();
-  console.log('[FFmpeg] Using ffmpeg path:', ffmpegPath);
   return ffmpegPath;
 }
 
@@ -75,16 +74,13 @@ async function _convertToWav(audioBlob: Blob): Promise<Buffer> {
   
   try {
     fs.writeFileSync(inputPath, inputBuffer);
-    console.log('[FFmpeg] Input file written:', inputPath, 'size:', inputBuffer.length);
     
     // 转换为 WAV 格式 (16kHz, 单声道, 16bit)
     const cmd = `"${ffmpegPath}" -y -i "${inputPath}" -ar 16000 -ac 1 -sample_fmt s16 "${outputPath}"`;
-    console.log('[FFmpeg] Running:', cmd);
     
     execSync(cmd, { stdio: 'pipe' });
     
     const wavBuffer = fs.readFileSync(outputPath);
-    console.log('[FFmpeg] Output WAV size:', wavBuffer.length);
     
     return wavBuffer;
     
@@ -129,11 +125,9 @@ async function splitAudioToWavChunks(audioBlob: Blob): Promise<{ chunks: Buffer[
   const inputPath = path.join(tempDir, `input_${timestamp}.webm`);
   
   fs.writeFileSync(inputPath, inputBuffer);
-  console.log('[FFmpeg] Input file written:', inputPath, 'size:', inputBuffer.length);
   
   // 获取总时长
   const totalDuration = getAudioDuration(inputPath);
-  console.log('[FFmpeg] Total duration:', totalDuration, 'seconds');
   
   const chunks: Buffer[] = [];
   const durations: number[] = [];
@@ -150,7 +144,6 @@ async function splitAudioToWavChunks(audioBlob: Blob): Promise<{ chunks: Buffer[
     } else {
       // 长音频，分块处理
       const numChunks = Math.ceil(totalDuration / MAX_CHUNK_DURATION_SEC);
-      console.log('[FFmpeg] Splitting into', numChunks, 'chunks');
       
       for (let i = 0; i < numChunks; i++) {
         const startTime = i * MAX_CHUNK_DURATION_SEC;
@@ -158,7 +151,6 @@ async function splitAudioToWavChunks(audioBlob: Blob): Promise<{ chunks: Buffer[
         const outputPath = path.join(tempDir, `output_${timestamp}_${i}.wav`);
         
         const cmd = `"${ffmpegPath}" -y -ss ${startTime} -t ${chunkDuration} -i "${inputPath}" -ar 16000 -ac 1 -sample_fmt s16 "${outputPath}"`;
-        console.log('[FFmpeg] Chunk', i + 1, '/', numChunks, '- start:', startTime, 'duration:', chunkDuration);
         execSync(cmd, { stdio: 'pipe' });
         
         chunks.push(fs.readFileSync(outputPath));
@@ -193,16 +185,13 @@ async function convertToMp3(audioBlob: Blob): Promise<{ buffer: Buffer; path: st
   const outputPath = path.join(tempDir, `output_${timestamp}.mp3`);
   
   fs.writeFileSync(inputPath, inputBuffer);
-  console.log('[FFmpeg] Input file written:', inputPath, 'size:', inputBuffer.length);
   
   // 转换为 MP3 格式
   const cmd = `"${ffmpegPath}" -y -i "${inputPath}" -ar 16000 -ac 1 -b:a 64k "${outputPath}"`;
-  console.log('[FFmpeg] Running:', cmd);
   
   execSync(cmd, { stdio: 'pipe' });
   
   const mp3Buffer = fs.readFileSync(outputPath);
-  console.log('[FFmpeg] Output MP3 size:', mp3Buffer.length);
   
   // 清理输入文件，保留输出文件（异步任务需要）
   try {
@@ -222,7 +211,6 @@ async function submitAsyncTask(
   apiKey: string,
   language: string = 'zh'
 ): Promise<{ success: boolean; taskId?: string; error?: string }> {
-  console.log('[QwenASR-Async] Submitting task for:', fileUrl);
   
   const requestBody = {
     model: 'qwen3-asr-flash-filetrans',
@@ -247,7 +235,6 @@ async function submitAsyncTask(
   });
   
   const responseText = await response.text();
-  console.log('[QwenASR-Async] Submit response:', responseText.substring(0, 500));
   
   if (!response.ok) {
     return { success: false, error: responseText };
@@ -382,7 +369,6 @@ async function waitForTask(
     onProgress?.(`正在转录... (${elapsed}秒)`, pollCount);
     
     const result = await queryTaskStatus(taskId, apiKey);
-    console.log('[QwenASR-Async] Poll', pollCount, 'status:', result.status);
     
     if (result.status === 'SUCCEEDED') {
       if (result.transcriptionUrl) {
@@ -534,13 +520,8 @@ export async function transcribeAudio(
 ): Promise<ASRResult> {
   const { language = 'zh', async: useAsync = false, fileUrl, onProgress } = options;
 
-  console.log('[QwenASR] Starting transcription...');
-  console.log('[QwenASR] Audio blob:', { size: audioBlob.size, type: audioBlob.type });
-  console.log('[QwenASR] Options:', { useAsync, hasFileUrl: !!fileUrl });
-
   // 如果明确指定异步模式且提供了 fileUrl，使用异步
   if (useAsync && fileUrl) {
-    console.log('[QwenASR] Using async mode with fileUrl');
     onProgress?.('提交转录任务...');
     
     const submitResult = await submitAsyncTask(fileUrl, apiKey, language);
@@ -553,7 +534,6 @@ export async function transcribeAudio(
       };
     }
     
-    console.log('[QwenASR] Task submitted:', submitResult.taskId);
     onProgress?.('任务已提交，等待处理...');
     
     return waitForTask(submitResult.taskId, apiKey, onProgress);
@@ -561,7 +541,6 @@ export async function transcribeAudio(
 
   // 同步模式：使用 qwen3-asr-flash（分块处理长音频）
   try {
-    console.log('[QwenASR] Converting and splitting audio...');
     onProgress?.('转换音频格式...');
     
     let chunks: Buffer[];
@@ -571,7 +550,6 @@ export async function transcribeAudio(
       const result = await splitAudioToWavChunks(audioBlob);
       chunks = result.chunks;
       durations = result.durations;
-      console.log('[QwenASR] Split into', chunks.length, 'chunks');
     } catch (error) {
       console.error('[QwenASR] Audio conversion failed:', error);
       return {
@@ -592,7 +570,6 @@ export async function transcribeAudio(
       const chunkDuration = durations[i] * 1000;  // 转换为毫秒
       
       onProgress?.(`正在转录... (${i + 1}/${chunks.length})`);
-      console.log('[QwenASR] Transcribing chunk', i + 1, '/', chunks.length, 'size:', chunk.length);
 
       const result = await transcribeWavChunk(chunk, apiKey, language);
       

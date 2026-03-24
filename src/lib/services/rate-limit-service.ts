@@ -35,7 +35,6 @@ function getRedis(): Redis | null {
     });
     
     redis.on('connect', () => {
-      console.log('[RateLimit] Redis connected');
     });
     
     return redis;

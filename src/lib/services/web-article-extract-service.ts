@@ -343,14 +343,12 @@ export async function extractWebArticle(
   provider: string,
   providerLabel: string
 ): Promise<ExtractedArticle> {
-  console.log(`[web-article-extract] extracting: ${url} (provider=${provider})`);
 
   // 策略 1: Jina Reader
   const jinaResult = await extractViaJina(url);
   if (jinaResult && jinaResult.content.length > 50) {
     const plainText = markdownToPlainText(jinaResult.content);
     const imageUrls = extractImageUrls(jinaResult.content);
-    console.log(`[web-article-extract] Jina success: title="${jinaResult.title}", ${plainText.length} chars, ${imageUrls.length} images`);
 
     return {
       title: jinaResult.title,
@@ -368,7 +366,6 @@ export async function extractWebArticle(
   // 策略 2: 直接 fetch + 本地解析
   const directResult = await extractViaDirect(url, provider);
   if (directResult && directResult.content.length > 50) {
-    console.log(`[web-article-extract] Direct success: title="${directResult.title}", ${directResult.content.length} chars`);
 
     return {
       title: directResult.title,

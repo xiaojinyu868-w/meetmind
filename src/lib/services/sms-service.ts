@@ -162,7 +162,6 @@ export const smsService = {
       return { success: false, error: sendResult.error };
     }
 
-    console.log(`[SmsService] 验证码已发送: ${phone} (${purpose})`);
     return { success: true };
   },
 

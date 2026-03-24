@@ -383,8 +383,6 @@ const SELECTED_CONTEXT_CHAT_SYSTEM_PROMPT = `你是一位专业但克制的 AI �
 - 如果上下文里没有明确时间戳，就不要强行补时间戳
 - 回复控制在 3-5 句话内，必要时直接给一个下一步可追问的问题`;
 
-
-
 // 学霸思维引导 Prompt - 结构固定，内容灵活
 const THINKING_GUIDE_PROMPT = `
 
@@ -503,7 +501,6 @@ export async function POST(request: NextRequest) {
       }
       
       contextSegments = selectedSegments;
-      console.log(`[Tutor API] 全局模式: 使用 ${contextSegments.length}/${segments.length} 条转录，总字符: ${totalLength}`);
     } else {
       // 困惑点模式：获取断点附近的上下文
       contextSegments = getSegmentsInRange(
@@ -526,7 +523,6 @@ export async function POST(request: NextRequest) {
     const lacksTimelineTranscript = mergedSegments.length < 2 || totalTextLength < 50;
     const lacksSelectedContext = totalTextLength < 24;
     if ((allowSelectedContextOnly && lacksSelectedContext) || (!allowSelectedContextOnly && lacksTimelineTranscript)) {
-      console.log('[Tutor API] 上下文内容不足，无法分析');
       return NextResponse.json({
         explanation: {
           teacherSaid: '',
@@ -567,7 +563,6 @@ export async function POST(request: NextRequest) {
         let cachedSummary = getSummaryCache(sessionId);
         
         if (!cachedSummary) {
-          console.log(`[Tutor API] 为 session ${sessionId} 生成摘要...`);
           
           // 生成摘要
           const summaryResult = await summaryService.generateSummary(
@@ -598,9 +593,7 @@ export async function POST(request: NextRequest) {
           setSummaryCache(sessionId, cachedSummary);
           summaryGenerated = true;
           
-          console.log(`[Tutor API] 摘要已生成并缓存`);
         } else {
-          console.log(`[Tutor API] 使用缓存的摘要`);
         }
         
         // 构建摘要上下文
@@ -630,15 +623,6 @@ ${cachedSummary.keyDifficulties.map(d => `- ${d}`).join('\n')}
     const supportAutoPolicyPrompt = buildAutomaticSupportPolicyPrompt(supportReferences);
 
     // 【调试日志】输出发送给大模型的原始数据
-    console.log('\n========== [Tutor API] 发送给大模型的内容 ==========');
-    console.log('[输入参数] timestamp:', timestamp, 'ms =', formatTimestamp(timestamp));
-    console.log('[输入参数] segments数量:', segments.length);
-    console.log('[上下文范围] contextSegments数量:', contextSegments.length);
-    console.log('[摘要状态]', summaryContext ? (summaryGenerated ? '新生成' : '使用缓存') : '无摘要');
-    console.log('[增强资料数量]', supportReferences.length);
-    console.log('\n[完整上下文]:');
-    console.log(contextText);
-    console.log('\n====================================================\n');
 
     // ===== 新增：Dify 增强功能 =====
     let guidanceQuestion: GuidanceQuestion | undefined;
@@ -694,7 +678,6 @@ ${cachedSummary.keyDifficulties.map(d => `- ${d}`).join('\n')}
       try {
         // 异步执行搜索，不阻塞主流程
         citations = await webSearch(contextText, { maxResults: 3 });
-        console.log('[Tutor] Web search returned', citations?.length || 0, 'results');
       } catch (error) {
         console.error('[Tutor] Web search failed:', error);
         // 搜索失败时不返回空，保持用户体验

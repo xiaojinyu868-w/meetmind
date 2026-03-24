@@ -132,8 +132,6 @@ export async function POST(request: NextRequest) {
     const provider = body.provider || detectedProvider.id;
     const providerLabel = detectedProvider.label;
 
-    console.log(`[article-import] url=${url}, provider=${provider} (${providerLabel})`);
-
     // 提取文章内容
     const article = await extractWebArticle(url, provider, providerLabel);
 

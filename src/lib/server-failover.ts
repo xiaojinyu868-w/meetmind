@@ -57,7 +57,6 @@ export async function getAvailableServer(): Promise<string> {
   for (const result of results) {
     if (result.healthy) {
       cachedServer = { url: result.server.url, timestamp: Date.now() };
-      console.log(`[ServerSwitch] 使用服务器: ${result.server.name}`);
       return result.server.url;
     }
   }

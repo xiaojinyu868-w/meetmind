@@ -306,10 +306,8 @@ function findQuoteInTranscript(
   segments: TranscriptSegment[],
   quote: { timestamp: string; text: string }
 ): HighlightSegment[] {
-  console.log('[findQuoteInTranscript] 查找:', quote.timestamp, quote.text?.slice(0, 30) + '...');
   
   if (!quote.text || quote.text.length < 3) {
-    console.log('[findQuoteInTranscript] 引用文本过短，跳过');
     return [];
   }
   
@@ -320,21 +318,16 @@ function findQuoteInTranscript(
   // Step 1: 筛选候选片段
   let candidates: TranscriptSegment[];
   if (timeRange) {
-    console.log('[findQuoteInTranscript] 时间范围:', timeRange.startMs, '-', timeRange.endMs);
     // 使用时间范围交集筛选
     candidates = segments.filter(seg => hasTimeOverlap(seg, timeRange, TOLERANCE_MS));
     
     // 如果时间范围内没有候选，扩大搜索范围
     if (candidates.length === 0) {
-      console.log('[findQuoteInTranscript] 时间范围内无候选，扩大搜索');
       candidates = segments;
     }
   } else {
-    console.log('[findQuoteInTranscript] 时间戳解析失败，搜索全部片段');
     candidates = segments;
   }
-  
-  console.log('[findQuoteInTranscript] 候选片段数:', candidates.length);
   
   // Step 2: 计算所有可能匹配的相似度（单片段 + 连续组合）
   interface MatchResult {
@@ -411,16 +404,10 @@ function findQuoteInTranscript(
   matches.sort((a, b) => b.similarity - a.similarity);
   
   if (matches.length === 0 || matches[0].similarity < 0.2) {
-    console.log('[findQuoteInTranscript] 无有效匹配，最高相似度:', matches[0]?.similarity?.toFixed(2) || 0);
     return [];
   }
   
   const bestMatch = matches[0];
-  console.log('[findQuoteInTranscript] 最佳匹配:', {
-    segmentCount: bestMatch.segments.length,
-    similarity: bestMatch.similarity.toFixed(2),
-    text: bestMatch.combinedText.slice(0, 50) + '...'
-  });
   
   // Step 4: 基于语速精确定位
   let preciseStartMs: number;
@@ -435,7 +422,6 @@ function findQuoteInTranscript(
     const precise = calculatePreciseTime(seg, position.startIdx, position.endIdx);
     preciseStartMs = precise.startMs;
     preciseEndMs = precise.endMs;
-    console.log('[findQuoteInTranscript] 单片段精确定位:', preciseStartMs, '-', preciseEndMs);
   } else if (position && bestMatch.segments.length > 1) {
     // 多片段：计算跨片段的精确时间
     let charOffset = 0;
@@ -472,19 +458,15 @@ function findQuoteInTranscript(
     
     preciseStartMs = startPrecise.startMs;
     preciseEndMs = endPrecise.endMs;
-    console.log('[findQuoteInTranscript] 多片段精确定位:', preciseStartMs, '-', preciseEndMs);
   } else {
     // 无法精确定位，使用片段边界
     preciseStartMs = bestMatch.segments[0].startMs;
     preciseEndMs = bestMatch.segments[bestMatch.segments.length - 1].endMs;
-    console.log('[findQuoteInTranscript] 使用片段边界:', preciseStartMs, '-', preciseEndMs);
   }
   
   // Step 5: 添加 2 秒播放缓冲
   const finalStartMs = Math.max(0, preciseStartMs - BUFFER_MS);
   const finalEndMs = preciseEndMs;
-  
-  console.log('[findQuoteInTranscript] 最终时间（含缓冲）:', finalStartMs, '-', finalEndMs);
   
   return [{
     start: finalStartMs,
@@ -540,16 +522,8 @@ export async function generateHighlightTopics(
   segments: TranscriptSegment[],
   options: GenerateTopicsOptions = {}
 ): Promise<GenerateTopicsResult> {
-  console.log('[highlightService] 开始生成精选片段');
-  console.log('[highlightService] 参数:', {
-    sessionId,
-    segmentsCount: segments.length,
-    mode: options.mode,
-    theme: options.theme
-  });
   
   if (segments.length === 0) {
-    console.log('[highlightService] 无片段，返回空结果');
     return { topics: [], modelUsed: '' };
   }
   
@@ -560,32 +534,18 @@ export async function generateHighlightTopics(
   const totalDuration = segments[segments.length - 1].endMs;
   const isShortSession = totalDuration <= 30 * 60 * 1000; // 30分钟以内
   
-  console.log('[highlightService] 使用模式:', mode, '模型:', model, '总时长:', totalDuration);
-  
   let rawTopics: RawTopic[] = [];
   let candidates: TopicCandidate[] | undefined;
   
   // Smart 模式或短课程：单次全文处理
   if (mode === 'smart' || isShortSession) {
-    console.log('[highlightService] 使用 Smart 模式（单次全文处理）');
     const prompt = buildSmartPrompt(segments, options);
     const messages: ChatMessage[] = [{ role: 'user', content: prompt }];
     
-    console.log('[highlightService] ========== LLM 请求开始 ==========');
-    console.log('[highlightService] Prompt 长度:', prompt.length);
-    console.log('[highlightService] Prompt 前 500 字符:\n', prompt.slice(0, 500));
-    console.log('[highlightService] Prompt 后 500 字符:\n', prompt.slice(-500));
-    
     try {
       const response = await chat(messages, model, { temperature: 0.3, maxTokens: 4000 });
-      console.log('[highlightService] ========== LLM 响应 ==========');
-      console.log('[highlightService] 响应长度:', response.content.length);
-      console.log('[highlightService] 完整响应内容:\n', response.content);
-      console.log('[highlightService] ========== 响应结束 ==========');
       
       rawTopics = parseJsonResponse<RawTopic[]>(response.content) ?? [];
-      console.log('[highlightService] JSON 解析结果:', JSON.stringify(rawTopics, null, 2));
-      console.log('[highlightService] 解析得到', rawTopics.length, '个原始主题');
     } catch (llmError) {
       console.error('[highlightService] LLM 调用失败:', llmError);
       throw llmError;
@@ -593,9 +553,7 @@ export async function generateHighlightTopics(
   } 
   // Fast 模式：分块处理 + Map-Reduce
   else {
-    console.log('[highlightService] 使用 Fast 模式（分块处理）');
     const chunks = chunkTranscript(segments);
-    console.log('[highlightService] 分成', chunks.length, '个块');
     
     // 并行处理每个块
     const chunkResults = await Promise.all(
@@ -603,17 +561,10 @@ export async function generateHighlightTopics(
         const prompt = buildChunkPrompt(chunk, CHUNK_MAX_CANDIDATES, options.theme);
         const messages: ChatMessage[] = [{ role: 'user', content: prompt }];
         
-        console.log(`[highlightService] ========== 块 ${chunkIdx} LLM 请求 ==========`);
-        console.log(`[highlightService] 块 ${chunkIdx} Prompt 长度:`, prompt.length);
-        
         try {
           const response = await chat(messages, FAST_MODEL, { temperature: 0.3, maxTokens: 1000 });
-          console.log(`[highlightService] ========== 块 ${chunkIdx} LLM 响应 ==========`);
-          console.log(`[highlightService] 块 ${chunkIdx} 响应长度:`, response.content.length);
-          console.log(`[highlightService] 块 ${chunkIdx} 响应内容:\n`, response.content);
           
           const parsed = parseJsonResponse<RawTopic[]>(response.content);
-          console.log(`[highlightService] 块 ${chunkIdx} 解析结果:`, JSON.stringify(parsed, null, 2));
           
           return (parsed ?? []).map(t => ({
             key: `${chunk.chunkIndex}-${t.title.slice(0, 10)}`,
@@ -629,8 +580,6 @@ export async function generateHighlightTopics(
     
     // 去重并合并候选项
     candidates = dedupeCandidates(chunkResults.flat().filter(c => c.quote));
-    console.log('[highlightService] 去重后候选项:', candidates.length);
-    console.log('[highlightService] 候选项详情:', JSON.stringify(candidates, null, 2));
     
     if (candidates.length > maxTopics) {
       // 使用 Reduce 筛选
@@ -662,26 +611,17 @@ export async function generateHighlightTopics(
     }
   }
   
-  console.log('[highlightService] 原始主题数:', rawTopics.length);
-  console.log('[highlightService] 原始主题详情:', JSON.stringify(rawTopics, null, 2));
-  
   // 转换为 HighlightTopic 格式
   const now = new Date().toISOString();
-  
-  console.log('[highlightService] ========== 开始转换主题 ==========');
   
   const topics: HighlightTopic[] = rawTopics
     .filter(t => {
       const hasQuote = !!t.quote;
-      console.log(`[highlightService] 主题 "${t.title}" 有 quote: ${hasQuote}`);
       return hasQuote;
     })
     .map((t, index) => {
-      console.log(`[highlightService] 处理主题 ${index}: "${t.title}"`);
-      console.log(`[highlightService] quote:`, JSON.stringify(t.quote));
       
       const highlightSegments = findQuoteInTranscript(segments, t.quote!);
-      console.log(`[highlightService] 找到 ${highlightSegments.length} 个匹配片段`);
       
       const duration = highlightSegments.length > 0 
         ? highlightSegments[0].end - highlightSegments[0].start 
@@ -701,14 +641,9 @@ export async function generateHighlightTopics(
     })
     .filter(t => {
       const hasSegments = t.segments.length > 0;
-      console.log(`[highlightService] 主题 "${t.title}" 有 segments: ${hasSegments}`);
       return hasSegments;
     })
     .sort((a, b) => (a.segments[0]?.start ?? 0) - (b.segments[0]?.start ?? 0));
-  
-  console.log('[highlightService] ========== 转换完成 ==========');
-  console.log('[highlightService] 最终主题数:', topics.length);
-  console.log('[highlightService] 最终主题:', JSON.stringify(topics.map(t => ({ title: t.title, segmentsCount: t.segments.length })), null, 2));
   
   return {
     topics,
