@@ -73,16 +73,26 @@ MeetMind 是以学习者长期上下文为中心的 AI 学习产品。
 
 ```
 src/
-├── app/api/          # API 路由（薄层 → 调用 services）
-├── app/(main)/       # 页面（page.tsx 是 God File，极度谨慎）
-├── components/       # UI 组件
-├── hooks/            # 客户端 hooks
-├── lib/services/     # 业务逻辑核心（51 个服务）
-├── lib/utils/        # 纯工具函数
-├── lib/logger.ts     # 统一日志（不要用 console.log）
-├── stores/           # Zustand 状态
-└── types/            # 共享类型
+├── DOMAIN.md              # ← 源码总览，从这里开始
+├── app/api/DOMAIN.md      # 45 个 API 路由索引
+├── components/DOMAIN.md   # ~137 个 UI 组件索引
+├── hooks/DOMAIN.md        # 23 个 hooks 索引
+├── stores/DOMAIN.md       # Zustand 状态
+├── types/DOMAIN.md        # 共享类型
+└── lib/
+    ├── DOMAIN.md          # 库代码总览
+    ├── services/DOMAIN.md # 51 个业务服务（按域分组）
+    ├── utils/DOMAIN.md    # 工具函数
+    ├── db/DOMAIN.md       # IndexedDB Schema + CRUD
+    ├── ai-native/DOMAIN.md # 应用插件系统
+    ├── longcut/DOMAIN.md  # 转录算法
+    ├── capture/DOMAIN.md  # 收集逻辑
+    ├── context-reach/DOMAIN.md # 输入分流
+    ├── config/DOMAIN.md   # 配置中心
+    └── logger.ts          # 统一日志（不要用 console.log）
 ```
+
+**读取顺序**：修改某个目录前，先读该目录的 `DOMAIN.md` 了解文件清单和依赖规则。
 
 **依赖方向**：`api → services → utils`，不可反向。详见 `skills/architecture-enforcement/SKILL.md`。
 
@@ -92,11 +102,11 @@ src/
 
 | 文件 | 行数 | 注意 |
 |------|------|------|
-| `src/app/(main)/app/page.tsx` | 9714 | God File，用 `replace_in_file` 精确替换，改前先确认上下文 |
-| `src/app/api/video/import/route.ts` | 2074 | 多平台导入管线，按 stage 组织 |
-| `src/app/api/tutor/route.ts` | 1778 | AI 私教路由 |
-| `src/lib/services/commonstack-echo-service.ts` | 239 | Echo LLM 调用，System Prompt 在此 |
-| `src/lib/services/workspace-echo-service.ts` | 1000 | Echo 数据管线 |
+| `src/app/(main)/app/page.tsx` | 8437 | God File，用 `replace_in_file` 精确替换，改前先读 DOMAIN.md |
+| `src/app/api/video/import/route.ts` | 1209 | 多平台导入管线，已拆分 3 个子模块 |
+| `src/app/api/tutor/route.ts` | 1761 | AI 私教路由 |
+| `src/lib/services/commonstack-echo-service.ts` | 273 | Echo LLM 调用，System Prompt 在此 |
+| `src/lib/services/workspace-echo-service.ts` | 1267 | Echo 数据管线 |
 | `src/components/EchoCard.tsx` | ~180 | 回声卡，必须遵守设计系统 |
 
 ---
