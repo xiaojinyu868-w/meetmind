@@ -94,7 +94,8 @@ components/
 | `AppMatrixPanel.tsx` | 1579 | 应用矩阵主面板 |
 | `WorkshopYellowPage.tsx` | 900 | Workshop 黄页导航 |
 | `windows/WorkshopWindowManager.tsx` | ~580 | 浮窗管理器 |
-| `windows/InfographicWindow.tsx` | ~1100 | 信息图浮窗 |
+| `windows/InfographicWindow.tsx` | ~700 | 信息图浮窗，类型/常量/工具已拆到 `infographic-window-data.ts` |
+| `windows/infographic-window-data.ts` | 305 | 信息图类型/场景预设/风格预设/纯工具函数 |
 | `windows/MindmapWindow.tsx` | ~950 | 思维导图浮窗 |
 | `windows/QuizWindow.tsx` | ~720 | 测验浮窗 |
 | `windows/FlashcardsWindow.tsx` | ~470 | 闪卡浮窗 |

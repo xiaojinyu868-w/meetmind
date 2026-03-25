@@ -6,21 +6,25 @@
  * 2. qwen3-asr-flash-filetrans（异步）- 适合长音频（≤12小时）
  * 
  * 异步模式需要提供公网可访问的音频 URL
+ *
+ * 子模块：
+ *   qwen-asr-audio.ts — 音频格式转换（ffmpeg 交互）
+ *   qwen-asr-tasks.ts — DashScope 异步任务管理 + 单块转录
  */
 
-import * as fs from 'fs';
-import * as path from 'path';
-import * as os from 'os';
-import { execSync } from 'child_process';
-import { resolveFfmpegPath, resolveFfprobePath } from '@/lib/services/media-tooling';
 import { createLogger } from '@/lib/logger';
+
+import { splitAudioToWavChunks, convertToMp3 } from './qwen-asr-audio';
+import {
+  submitAsyncTask,
+  queryTaskStatus,
+  waitForTask,
+  transcribeWavChunk,
+} from './qwen-asr-tasks';
+
 const log = createLogger('qwen-asr');
 
-
-// API 端点
-const DASHSCOPE_API_BASE = 'https://dashscope.aliyuncs.com/api/v1';
-const ASR_TRANSCRIPTION_URL = `${DASHSCOPE_API_BASE}/services/audio/asr/transcription`;
-const TASK_QUERY_URL = `${DASHSCOPE_API_BASE}/tasks`;
+// ============ 类型定义 ============
 
 export interface ASRSentence {
   id: string;
@@ -50,464 +54,7 @@ export interface TranscribeOptions {
   onProgress?: (status: string, progress?: number) => void;
 }
 
-/**
- * 获取 ffmpeg 路径
- */
-function getFfmpegPath(): string {
-  const ffmpegPath = resolveFfmpegPath();
-  return ffmpegPath;
-}
-
-// 单个分块的最大时长（秒），确保 WAV 转换后 base64 不超过 15MB
-const MAX_CHUNK_DURATION_SEC = 180;  // 3分钟
-
-/**
- * 使用 ffmpeg 将音频转换为 WAV 格式
- */
-async function _convertToWav(audioBlob: Blob): Promise<Buffer> {
-  const ffmpegPath = getFfmpegPath();
-  
-  const arrayBuffer = await audioBlob.arrayBuffer();
-  const inputBuffer = Buffer.from(arrayBuffer);
-  
-  const tempDir = os.tmpdir();
-  const timestamp = Date.now();
-  const inputPath = path.join(tempDir, `input_${timestamp}.webm`);
-  const outputPath = path.join(tempDir, `output_${timestamp}.wav`);
-  
-  try {
-    fs.writeFileSync(inputPath, inputBuffer);
-    
-    // 转换为 WAV 格式 (16kHz, 单声道, 16bit)
-    const cmd = `"${ffmpegPath}" -y -i "${inputPath}" -ar 16000 -ac 1 -sample_fmt s16 "${outputPath}"`;
-    
-    execSync(cmd, { stdio: 'pipe' });
-    
-    const wavBuffer = fs.readFileSync(outputPath);
-    
-    return wavBuffer;
-    
-  } finally {
-    try {
-      if (fs.existsSync(inputPath)) fs.unlinkSync(inputPath);
-      if (fs.existsSync(outputPath)) fs.unlinkSync(outputPath);
-    } catch (e) {
-      log.warn('[FFmpeg] Cleanup error:', e);
-    }
-  }
-}
-
-/**
- * 获取音频时长（秒）
- */
-function getAudioDuration(inputPath: string): number {
-  const ffmpegPath = getFfmpegPath();
-  try {
-    // 使用 ffprobe 获取时长
-    const ffprobePath = resolveFfprobePath(ffmpegPath);
-    const cmd = `"${ffprobePath}" -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 "${inputPath}"`;
-    const output = execSync(cmd, { stdio: 'pipe' }).toString().trim();
-    return parseFloat(output) || 0;
-  } catch (e) {
-    log.warn('[FFmpeg] Failed to get duration:', e);
-    return 0;
-  }
-}
-
-/**
- * 将音频分割成多个 WAV 分块
- */
-async function splitAudioToWavChunks(audioBlob: Blob): Promise<{ chunks: Buffer[]; durations: number[] }> {
-  const ffmpegPath = getFfmpegPath();
-  
-  const arrayBuffer = await audioBlob.arrayBuffer();
-  const inputBuffer = Buffer.from(arrayBuffer);
-  
-  const tempDir = os.tmpdir();
-  const timestamp = Date.now();
-  const inputPath = path.join(tempDir, `input_${timestamp}.webm`);
-  
-  fs.writeFileSync(inputPath, inputBuffer);
-  
-  // 获取总时长
-  const totalDuration = getAudioDuration(inputPath);
-  
-  const chunks: Buffer[] = [];
-  const durations: number[] = [];
-  
-  try {
-    if (totalDuration <= MAX_CHUNK_DURATION_SEC) {
-      // 短音频，直接转换
-      const outputPath = path.join(tempDir, `output_${timestamp}.wav`);
-      const cmd = `"${ffmpegPath}" -y -i "${inputPath}" -ar 16000 -ac 1 -sample_fmt s16 "${outputPath}"`;
-      execSync(cmd, { stdio: 'pipe' });
-      chunks.push(fs.readFileSync(outputPath));
-      durations.push(totalDuration);
-      fs.unlinkSync(outputPath);
-    } else {
-      // 长音频，分块处理
-      const numChunks = Math.ceil(totalDuration / MAX_CHUNK_DURATION_SEC);
-      
-      for (let i = 0; i < numChunks; i++) {
-        const startTime = i * MAX_CHUNK_DURATION_SEC;
-        const chunkDuration = Math.min(MAX_CHUNK_DURATION_SEC, totalDuration - startTime);
-        const outputPath = path.join(tempDir, `output_${timestamp}_${i}.wav`);
-        
-        const cmd = `"${ffmpegPath}" -y -ss ${startTime} -t ${chunkDuration} -i "${inputPath}" -ar 16000 -ac 1 -sample_fmt s16 "${outputPath}"`;
-        execSync(cmd, { stdio: 'pipe' });
-        
-        chunks.push(fs.readFileSync(outputPath));
-        durations.push(chunkDuration);
-        fs.unlinkSync(outputPath);
-      }
-    }
-    
-    return { chunks, durations };
-    
-  } finally {
-    try {
-      if (fs.existsSync(inputPath)) fs.unlinkSync(inputPath);
-    } catch (e) {
-      log.warn('[FFmpeg] Cleanup error:', e);
-    }
-  }
-}
-
-/**
- * 将音频转换为 MP3 格式（用于异步任务，更小的文件体积）
- */
-async function convertToMp3(audioBlob: Blob): Promise<{ buffer: Buffer; path: string }> {
-  const ffmpegPath = getFfmpegPath();
-  
-  const arrayBuffer = await audioBlob.arrayBuffer();
-  const inputBuffer = Buffer.from(arrayBuffer);
-  
-  const tempDir = os.tmpdir();
-  const timestamp = Date.now();
-  const inputPath = path.join(tempDir, `input_${timestamp}.webm`);
-  const outputPath = path.join(tempDir, `output_${timestamp}.mp3`);
-  
-  fs.writeFileSync(inputPath, inputBuffer);
-  
-  // 转换为 MP3 格式
-  const cmd = `"${ffmpegPath}" -y -i "${inputPath}" -ar 16000 -ac 1 -b:a 64k "${outputPath}"`;
-  
-  execSync(cmd, { stdio: 'pipe' });
-  
-  const mp3Buffer = fs.readFileSync(outputPath);
-  
-  // 清理输入文件，保留输出文件（异步任务需要）
-  try {
-    if (fs.existsSync(inputPath)) fs.unlinkSync(inputPath);
-  } catch (e) {
-    log.warn('[FFmpeg] Cleanup error:', e);
-  }
-  
-  return { buffer: mp3Buffer, path: outputPath };
-}
-
-/**
- * 提交异步转录任务 (qwen3-asr-flash-filetrans)
- */
-async function submitAsyncTask(
-  fileUrl: string,
-  apiKey: string,
-  language: string = 'zh'
-): Promise<{ success: boolean; taskId?: string; error?: string }> {
-  
-  const requestBody = {
-    model: 'qwen3-asr-flash-filetrans',
-    input: {
-      file_url: fileUrl,
-    },
-    parameters: {
-      channel_id: [0],
-      language: language,
-      enable_itn: true,  // 启用逆文本正则化（数字、日期等）
-    },
-  };
-  
-  const response = await fetch(ASR_TRANSCRIPTION_URL, {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${apiKey}`,
-      'Content-Type': 'application/json',
-      'X-DashScope-Async': 'enable',
-    },
-    body: JSON.stringify(requestBody),
-  });
-  
-  const responseText = await response.text();
-  
-  if (!response.ok) {
-    return { success: false, error: responseText };
-  }
-  
-  const data = JSON.parse(responseText);
-  const taskId = data.output?.task_id;
-  
-  if (!taskId) {
-    return { success: false, error: '未获取到任务 ID' };
-  }
-  
-  return { success: true, taskId };
-}
-
-/**
- * 查询异步任务状态
- */
-async function queryTaskStatus(
-  taskId: string,
-  apiKey: string
-): Promise<{
-  status: 'PENDING' | 'RUNNING' | 'SUCCEEDED' | 'FAILED' | 'UNKNOWN';
-  transcriptionUrl?: string;
-  result?: { text?: string; sentences?: Array<{ text: string; start_time: number; end_time: number }> };
-  error?: string;
-}> {
-  const response = await fetch(`${TASK_QUERY_URL}/${taskId}`, {
-    method: 'GET',
-    headers: {
-      'Authorization': `Bearer ${apiKey}`,
-    },
-  });
-  
-  const responseText = await response.text();
-  
-  if (!response.ok) {
-    return { status: 'UNKNOWN', error: responseText };
-  }
-  
-  const data = JSON.parse(responseText);
-  const taskStatus = data.output?.task_status || 'UNKNOWN';
-  
-  if (taskStatus === 'SUCCEEDED') {
-    return {
-      status: 'SUCCEEDED',
-      transcriptionUrl: data.output?.result?.transcription_url,
-      result: data.output?.result || data.output,
-    };
-  } else if (taskStatus === 'FAILED') {
-    return {
-      status: 'FAILED',
-      error: data.output?.message || data.message || '任务失败',
-    };
-  }
-  
-  return { status: taskStatus };
-}
-
-async function fetchAsyncTranscriptionResult(url: string): Promise<ASRResult> {
-  const response = await fetch(url);
-  if (!response.ok) {
-    throw new Error(`fetch result failed: HTTP ${response.status}`);
-  }
-
-  const data = await response.json() as {
-    transcripts?: Array<{
-      text?: string;
-      sentences?: Array<{
-        text?: string;
-        begin_time?: number;
-        beginTime?: number;
-        start_time?: number;
-        end_time?: number;
-        endTime?: number;
-      }>;
-    }>;
-  };
-
-  const sentences: ASRSentence[] = [];
-  const transcripts = Array.isArray(data.transcripts) ? data.transcripts : [];
-
-  for (const transcript of transcripts) {
-    const transcriptSentences = Array.isArray(transcript.sentences) ? transcript.sentences : [];
-    for (let i = 0; i < transcriptSentences.length; i++) {
-      const sentence = transcriptSentences[i];
-      sentences.push({
-        id: `seg-${sentences.length}`,
-        text: sentence.text || '',
-        beginTime: sentence.begin_time ?? sentence.beginTime ?? sentence.start_time ?? 0,
-        endTime: sentence.end_time ?? sentence.endTime ?? 0,
-        confidence: 0.95,
-      });
-    }
-
-    if (transcriptSentences.length === 0 && transcript.text) {
-      sentences.push({
-        id: `seg-${sentences.length}`,
-        text: transcript.text,
-        beginTime: 0,
-        endTime: 0,
-        confidence: 0.95,
-      });
-    }
-  }
-
-  return {
-    success: sentences.length > 0,
-    sentences,
-    totalDuration: sentences[sentences.length - 1]?.endTime || 0,
-    text: sentences.map((sentence) => sentence.text).join(' ').trim(),
-    error: sentences.length > 0 ? undefined : '异步转写结果为空',
-  };
-}
-
-/**
- * 等待异步任务完成（轮询）
- */
-async function waitForTask(
-  taskId: string,
-  apiKey: string,
-  onProgress?: (status: string, progress?: number) => void,
-  maxWaitMs: number = 600000,  // 最长等待10分钟
-  pollIntervalMs: number = 2000  // 每2秒查询一次
-): Promise<ASRResult> {
-  const startTime = Date.now();
-  let pollCount = 0;
-  
-  while (Date.now() - startTime < maxWaitMs) {
-    pollCount++;
-    const elapsed = Math.floor((Date.now() - startTime) / 1000);
-    onProgress?.(`正在转录... (${elapsed}秒)`, pollCount);
-    
-    const result = await queryTaskStatus(taskId, apiKey);
-    
-    if (result.status === 'SUCCEEDED') {
-      if (result.transcriptionUrl) {
-        try {
-          return await fetchAsyncTranscriptionResult(result.transcriptionUrl);
-        } catch (error) {
-          return {
-            success: false,
-            sentences: [],
-            totalDuration: 0,
-            error: error instanceof Error ? error.message : '获取异步转写结果失败',
-          };
-        }
-      }
-
-      if (result.result) {
-        const sentences: ASRSentence[] = [];
-        const resultSentences = result.result.sentences || [];
-        
-        for (let i = 0; i < resultSentences.length; i++) {
-          const s = resultSentences[i];
-          sentences.push({
-            id: `seg-${i}`,
-            text: s.text || '',
-            beginTime: s.start_time ?? 0,
-            endTime: s.end_time ?? 0,
-            confidence: 0.95,
-          });
-        }
-        
-        if (sentences.length === 0 && result.result.text) {
-          sentences.push({
-            id: 'seg-0',
-            text: result.result.text,
-            beginTime: 0,
-            endTime: 0,
-          });
-        }
-        
-        return {
-          success: true,
-          sentences,
-          totalDuration: sentences[sentences.length - 1]?.endTime || 0,
-          text: sentences.map(s => s.text).join(' '),
-        };
-      }
-    }
-    
-    if (result.status === 'FAILED') {
-      return {
-        success: false,
-        sentences: [],
-        totalDuration: 0,
-        error: result.error || '转录任务失败',
-      };
-    }
-    
-    // 等待后继续轮询
-    await new Promise(resolve => setTimeout(resolve, pollIntervalMs));
-  }
-  
-  return {
-    success: false,
-    sentences: [],
-    totalDuration: 0,
-    error: '转录超时',
-  };
-}
-
-/**
- * 转录单个 WAV 分块
- */
-async function transcribeWavChunk(
-  wavBuffer: Buffer,
-  apiKey: string,
-  language: string
-): Promise<{ success: boolean; sentences: ASRSentence[]; text: string; error?: string }> {
-  const audioBase64 = wavBuffer.toString('base64');
-  
-  const requestBody = {
-    model: 'qwen3-asr-flash',
-    input: {
-      audio: [
-        {
-          format: 'wav',
-          content: audioBase64,
-        },
-      ],
-    },
-    parameters: {
-      language: language,
-      enable_punctuation: true,
-    },
-  };
-
-  const response = await fetch(ASR_TRANSCRIPTION_URL, {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${apiKey}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify(requestBody),
-  });
-
-  const responseText = await response.text();
-
-  if (!response.ok) {
-    return { success: false, sentences: [], text: '', error: responseText };
-  }
-
-  const data = JSON.parse(responseText);
-  const sentences: ASRSentence[] = [];
-  const resultSentences = data.output?.results?.[0]?.sentences || data.sentences || [];
-  const overallText = data.output?.results?.[0]?.text || data.text || '';
-
-  if (Array.isArray(resultSentences) && resultSentences.length > 0) {
-    for (let i = 0; i < resultSentences.length; i++) {
-      const s = resultSentences[i];
-      sentences.push({
-        id: `seg-${i}`,
-        text: s.text || '',
-        beginTime: s.begin_time ?? s.beginTime ?? s.start_time ?? 0,
-        endTime: s.end_time ?? s.endTime ?? 0,
-        confidence: s.confidence ?? 0.95,
-      });
-    }
-  } else if (overallText) {
-    sentences.push({ id: 'seg-0', text: overallText, beginTime: 0, endTime: 0 });
-  }
-
-  return {
-    success: true,
-    sentences,
-    text: sentences.map(s => s.text).join(' '),
-  };
-}
+// ============ 主入口 ============
 
 /**
  * 使用 DashScope ASR 进行转写
@@ -565,12 +112,12 @@ export async function transcribeAudio(
 
     // 逐块转录
     const allSentences: ASRSentence[] = [];
-    let timeOffset = 0;  // 累计时间偏移（毫秒）
+    let timeOffset = 0;
     let sentenceIndex = 0;
 
     for (let i = 0; i < chunks.length; i++) {
       const chunk = chunks[i];
-      const chunkDuration = durations[i] * 1000;  // 转换为毫秒
+      const chunkDuration = durations[i] * 1000;
       
       onProgress?.(`正在转录... (${i + 1}/${chunks.length})`);
 
@@ -578,12 +125,10 @@ export async function transcribeAudio(
       
       if (!result.success) {
         log.error(`[QwenASR] Chunk ${i + 1} failed`, result.error);
-        // 继续处理其他分块，不中断
         timeOffset += chunkDuration;
         continue;
       }
 
-      // 调整时间戳并添加到结果
       for (const s of result.sentences) {
         allSentences.push({
           id: `seg-${sentenceIndex++}`,
@@ -623,6 +168,8 @@ export async function transcribeAudio(
     };
   }
 }
+
+// ============ 工具函数 ============
 
 /**
  * 根据时间戳找到对应的句子
@@ -675,31 +222,25 @@ export function toTranscriptSegments(sentences: ASRSentence[]): Array<{
   }));
 }
 
-/**
- * QwenASR 服务单例
- */
+// ============ 服务单例 ============
+
 export const qwenASRService = {
-  /** 转录音频（自动选择同步/异步模式） */
   async transcribe(audioBlob: Blob, apiKey: string, options?: TranscribeOptions): Promise<ASRResult> {
     return transcribeAudio(audioBlob, apiKey, options);
   },
   
-  /** 提交异步转录任务 */
   async submitAsyncTask(fileUrl: string, apiKey: string, language?: string) {
     return submitAsyncTask(fileUrl, apiKey, language);
   },
   
-  /** 查询异步任务状态 */
   async queryTask(taskId: string, apiKey: string) {
     return queryTaskStatus(taskId, apiKey);
   },
   
-  /** 等待异步任务完成 */
   async waitForTask(taskId: string, apiKey: string, onProgress?: (status: string) => void) {
     return waitForTask(taskId, apiKey, onProgress);
   },
   
-  /** 转换音频为 MP3（用于上传） */
   async convertToMp3(audioBlob: Blob) {
     return convertToMp3(audioBlob);
   },

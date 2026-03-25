@@ -53,7 +53,8 @@ api/route.ts → services → lib/utils, lib/db, lib/config
 | 文件 | 行数 | 职责 |
 |------|------|------|
 | `workspace-service.ts` | 237 | 工作空间基础管理（创建/查询） |
-| `workspace-context-service.ts` | 947 | Capture 收集 + Ingest 处理 + 状态管理 |
+| `workspace-context-service.ts` | 838 | Capture 收集 + Ingest 处理 + 状态管理 |
+| `workspace-context-types.ts` | 161 | 类型定义 + 纯工具函数 + 微信 helper |
 | `workspace-echo-service.ts` | 1267 | 每日回响生成（AI 洞察/金句/推荐） |
 | `workspace-search-service.ts` | 175 | 全局 AI 检索（流式带引用） |
 | `commonstack-echo-service.ts` | 273 | Echo LLM 调用（System Prompt 在此） |
