@@ -17,7 +17,6 @@ import {
   MessageSquare,
   Check,
 } from 'lucide-react';
-import type { Breakpoint } from '@/lib/services/meetmind-service';
 import { formatTimestamp } from '@/lib/services/longcut-utils';
 import { notebookService, localSearch, type SearchResult } from '@/lib/services/notebook-service';
 import { GuidanceQuestion, GuidanceQuestionSkeleton } from './GuidanceQuestion';
@@ -29,275 +28,38 @@ import IntentBubbleExplorer from './IntentBubbleExplorer';
 import { saveTutorResponseCache, getTutorResponseCache, deleteTutorResponseCache, setPreference, saveClassSummary, getSessionSummary } from '@/lib/db';
 import { conversationService, getEffectiveUserId } from '@/lib/services/conversation-service';
 import type { GuidanceQuestion as GuidanceQuestionType, GuidanceOption, Citation } from '@/types/dify';
-import { DEFAULT_WORKSHOP_MODEL_ID, isMultimodalModel } from '@/lib/services/llm-service';
+import { isMultimodalModel } from '@/lib/services/llm-service';
 import { StreamingMarkdown } from './StreamingMarkdown';
 import { ThinkingVisualizer } from './ThinkingVisualizer';
 import { ThinkingGuideRenderer } from './ThinkingGuideRenderer';
 import { VoiceMicButton } from './VoiceMicButton';
 
-// 持久化状态的 key
-const TUTOR_STATE_KEY = 'tutor_last_state';
-const FIXED_TUTOR_MODEL_ID = DEFAULT_WORKSHOP_MODEL_ID;
-const FIXED_TUTOR_MODEL_LABEL = 'QWEN 3.5';
-
-interface Segment {
-  id: string;
-  text: string;
-  startMs: number;
-  endMs: number;
-}
-
-interface ActionItem {
-  id: string;
-  type: 'replay' | 'exercise' | 'review';
-  title: string;
-  description: string;
-  estimatedMinutes: number;
-  completed: boolean;
-}
-
-interface TutorLaunchImage {
-  id: string;
-  name: string;
-  url: string;
-  previewUrl?: string;
-}
-
-interface TutorMessageImage {
-  id: string;
-  name: string;
-  previewUrl: string;
-}
-
-interface AITutorProps {
-  breakpoint: Breakpoint | null;
-  segments: Segment[];
-  isLoading: boolean;
-  onResolve: () => void;
-  onActionItemsUpdate?: (items: ActionItem[], sourceAnchorId?: string) => void;
-  sessionId?: string;  // 用于缓存关联
-  onSeek?: (timeMs: number) => void;  // 点击时间戳跳转播放
-  initialQuestion?: string;  // 移动端传入的初始问题
-  isMobile?: boolean;  // 移动端模式，使用简化布局
-  supportContextText?: string;
-  initialQuestionNonce?: number;
-  onInitialQuestionConsumed?: () => void;
-  preferSupportContext?: boolean;
-  launchQuestion?: string;
-  launchQuestionNonce?: number;
-  launchDisplayText?: string;
-  launchImages?: TutorLaunchImage[];
-  onLaunchQuestionConsumed?: () => void;
-  hideMobileHeader?: boolean;
-}
-
-interface TutorCacheEnvelopeV1 {
-  version: 1;
-  model: string;
-  transcriptSignature: string;
-  response: TutorAPIResponse;
-}
-
-function toTranscriptSignature(segments: Segment[]): string {
-  if (!Array.isArray(segments) || segments.length === 0) return 'empty';
-  const first = segments[0];
-  const last = segments[segments.length - 1];
-  const textLength = segments.reduce((sum, seg) => sum + (seg.text?.length || 0), 0);
-  return `${segments.length}:${first.startMs}:${last.endMs}:${textLength}`;
-}
-
-function normalizeSupportContextText(raw: string, maxChars = 3500): string {
-  const normalized = (raw || '')
-    .replace(/\r\n/g, '\n')
-    .replace(/[ \t]{2,}/g, ' ')
-    .replace(/\n{3,}/g, '\n\n')
-    .trim();
-  if (!normalized) return '';
-  if (normalized.length <= maxChars) return normalized;
-  return `${normalized.slice(0, maxChars - 3)}...`;
-}
-
-function buildTutorRequestSegments(params: {
-  baseSegments: Segment[];
-  supportContextText: string;
-  focusTimestamp: number;
-  prepend?: boolean;
-}): Segment[] {
-  const normalizedSupport = normalizeSupportContextText(params.supportContextText);
-  if (!normalizedSupport) return params.baseSegments;
-
-  const focusTimestamp = Number.isFinite(params.focusTimestamp)
-    ? Math.max(0, Math.floor(params.focusTimestamp))
-    : 0;
-
-  const supportSegment: Segment = {
-    id: '__support_context__',
-    text: `【增强资料】\n${normalizedSupport}\n\n【使用规则】\n- 回答引用资料时必须标注 [资料N]\n- 若资料无证据，请明确说明“资料中未找到相关证据”`,
-    startMs: focusTimestamp,
-    endMs: focusTimestamp + 1,
-  };
-
-  return params.prepend
-    ? [supportSegment, ...params.baseSegments]
-    : [...params.baseSegments, supportSegment];
-}
-
-function unpackTutorCachePayload(raw: string): {
-  envelope: TutorCacheEnvelopeV1 | null;
-  response: TutorAPIResponse | null;
-} {
-  try {
-    const parsed = JSON.parse(raw) as TutorCacheEnvelopeV1 | TutorAPIResponse;
-    if (
-      parsed &&
-      typeof parsed === 'object' &&
-      'version' in parsed &&
-      parsed.version === 1 &&
-      'response' in parsed
-    ) {
-      return {
-        envelope: parsed as TutorCacheEnvelopeV1,
-        response: (parsed as TutorCacheEnvelopeV1).response,
-      };
-    }
-    return {
-      envelope: null,
-      response: parsed as TutorAPIResponse,
-    };
-  } catch {
-    return {
-      envelope: null,
-      response: null,
-    };
-  }
-}
-
-interface TutorAPIResponse {
-  explanation: {
-    teacherSaid: string;
-    citation: {
-      text: string;
-      timeRange: string;
-      startMs: number;
-      endMs: number;
-    };
-    possibleStuckPoints: string[];
-    followUpQuestion: string;
-  };
-  actionItems: Array<{
-    id: string;
-    type: 'replay' | 'exercise' | 'review';
-    title: string;
-    description: string;
-    estimatedMinutes: number;
-    completed: boolean;
-  }>;
-  rawContent: string;
-  model: string;
-  usage?: {
-    promptTokens: number;
-    completionTokens: number;
-    totalTokens: number;
-  };
-  guidance_question?: GuidanceQuestionType;
-  citations?: Citation[];
-  conversation_id?: string;
-  // 摘要相关字段
-  summary_generated?: boolean;
-  cached_summary?: {
-    overview: string;
-    takeaways: string;
-    keyDifficulties: string[];
-  };
-}
-
-interface TutorChatMessage {
-  role: 'user' | 'assistant';
-  content: string;
-  citations?: Citation[];
-  images?: TutorMessageImage[];
-}
-
-function normalizeCitations(raw: unknown): Citation[] | undefined {
-  if (!Array.isArray(raw)) return undefined;
-  const parsed = raw.filter(Boolean) as Citation[];
-  return parsed.length > 0 ? parsed : undefined;
-}
-
-function normalizeChatHistory(raw: unknown): TutorChatMessage[] {
-  if (!Array.isArray(raw)) return [];
-
-  return raw
-    .filter((item): item is Record<string, unknown> => !!item && typeof item === 'object')
-    .map((item): TutorChatMessage => ({
-      role: item.role === 'assistant' ? 'assistant' : 'user',
-      content: typeof item.content === 'string' ? item.content : '',
-      citations: normalizeCitations(item.citations),
-      images: Array.isArray(item.images)
-        ? item.images.filter(Boolean).map((image, index) => ({
-            id: typeof image?.id === 'string' ? image.id : `restored-image-${index}`,
-            name: typeof image?.name === 'string' ? image.name : '图片',
-            previewUrl: typeof image?.previewUrl === 'string' ? image.previewUrl : '',
-          })).filter((image) => image.previewUrl)
-        : undefined,
-    }))
-    .filter((item) => item.content.length > 0 || (item.images?.length ?? 0) > 0);
-}
-
-function toTutorMessageImages(images: Array<{ id: string; name: string; previewUrl: string }>): TutorMessageImage[] {
-  return images.filter((image) => image.previewUrl).map((image) => ({
-    id: image.id,
-    name: image.name,
-    previewUrl: image.previewUrl,
-  }));
-}
-
-function formatTutorErrorMessage(error: unknown): string {
-  const rawMessage = error instanceof Error ? error.message : String(error || '未知错误');
-  if (/请求过于频繁|稍后再试|rate limit|too many/i.test(rawMessage)) {
-    const retryAfterMatch = rawMessage.match(/(\d+)\s*秒/);
-    const retryHint = retryAfterMatch ? `，大约 ${retryAfterMatch[1]} 秒后再试` : '，稍等十几秒再试一次';
-    return `现在问得有点快了${retryHint}。`;
-  }
-  return rawMessage;
-}
-
-function FixedModelBadge({ compact = false }: { compact?: boolean }) {
-  return (
-    <div
-      className={compact
-        ? 'inline-flex items-center gap-1.5 rounded-full border border-violet-200 bg-violet-50 px-2.5 py-1 text-[11px] font-medium text-violet-700'
-        : 'inline-flex items-center gap-2 rounded-full border border-violet-200 bg-violet-50 px-3 py-1.5 text-xs font-medium text-violet-700'}
-      title={`当前固定模型：${FIXED_TUTOR_MODEL_LABEL}`}
-    >
-      <Brain size={compact ? 12 : 14} strokeWidth={1.8} />
-      <span>{FIXED_TUTOR_MODEL_LABEL}</span>
-    </div>
-  );
-}
-
-function StopGenerationButton({
-  onClick,
-  compact = false,
-}: {
-  onClick: () => void;
-  compact?: boolean;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={compact
-        ? 'inline-flex h-10 flex-shrink-0 items-center gap-1.5 rounded-2xl border border-amber-200 bg-amber-50 px-3 text-sm font-medium text-amber-900 shadow-sm transition hover:bg-amber-100'
-        : 'inline-flex h-10 flex-shrink-0 items-center gap-2 rounded-xl border border-amber-200 bg-amber-50 px-4 text-sm font-medium text-amber-900 transition hover:bg-amber-100'}
-    >
-      <svg className="h-4 w-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 8h8v8H8z" />
-      </svg>
-      <span>停止</span>
-    </button>
-  );
-}
+// --- 拆分子模块 ---
+import type {
+  Segment,
+  ActionItem,
+  TutorLaunchImage,
+  AITutorProps,
+  TutorCacheEnvelopeV1,
+  TutorAPIResponse,
+  TutorChatMessage,
+} from './tutor/tutor-types';
+import {
+  TUTOR_STATE_KEY,
+  FIXED_TUTOR_MODEL_ID,
+  FIXED_TUTOR_MODEL_LABEL,
+} from './tutor/tutor-types';
+import {
+  toTranscriptSignature,
+  normalizeSupportContextText,
+  buildTutorRequestSegments,
+  unpackTutorCachePayload,
+  normalizeCitations,
+  normalizeChatHistory,
+  toTutorMessageImages,
+  formatTutorErrorMessage,
+} from './tutor/tutor-utils';
+import { FixedModelBadge, StopGenerationButton, Section, QuickReply } from './tutor/TutorWidgets';
 
 export function AITutor({
   breakpoint,
@@ -936,7 +698,7 @@ export function AITutor({
     // 添加用户消息
     const currentQuestion = response?.guidance_question?.question?.trim();
     const userMessage = currentQuestion
-      ? `关于“${currentQuestion}”，我更想顺着这个方向继续：${option.text}`
+      ? `关于"${currentQuestion}"，我更想顺着这个方向继续：${option.text}`
       : `我更想顺着这个方向继续：${option.text}`;
     setChatHistory(prev => [...prev, { role: 'user', content: userMessage }]);
     
@@ -1909,7 +1671,7 @@ export function AITutor({
                       );
                     })
                   ) : (
-                    <span className="italic">“{response.explanation.teacherSaid}”</span>
+                    <span className="italic">"{response.explanation.teacherSaid}"</span>
                   )}
                 </div>
                 {response.explanation.citation.timeRange !== '00:00-00:00' && (
@@ -2177,40 +1939,4 @@ export function AITutor({
   );
 }
 
-function Section({ 
-  icon, 
-  title, 
-  badge, 
-  children 
-}: { 
-  icon: React.ReactNode; 
-  title: string; 
-  badge?: string; 
-  children: React.ReactNode;
-}) {
-  return (
-    <section>
-      <h3 className="text-sm font-semibold text-gray-900 mb-3 flex items-center gap-2">
-        <span className="flex items-center text-gray-500">{icon}</span>
-        <span>{title}</span>
-        {badge && (
-          <span className="text-xs font-normal text-coral bg-coral-50 px-2 py-0.5 rounded-full">
-            {badge}
-          </span>
-        )}
-      </h3>
-      {children}
-    </section>
-  );
-}
 
-function QuickReply({ text, onClick }: { text: string; onClick: (text: string) => void }) {
-  return (
-    <button
-      onClick={() => onClick(text)}
-      className="rounded-full bg-slate-50 px-3 py-1.5 text-xs text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-700"
-    >
-      {text}
-    </button>
-  );
-}

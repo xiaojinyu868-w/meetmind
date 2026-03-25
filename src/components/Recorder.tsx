@@ -6,86 +6,26 @@ import type { TranscriptSegment } from '@/types';
 import { DashScopeASRClient } from '@/lib/services/dashscope-asr-service';
 import { TranscriptFlowView } from './TranscriptFlowView';
 import { TranscriptEnhanceManager, type EnhancedTranscriptSegment } from '@/lib/services/transcript-enhancer';
-import { calculateSimilarity } from '@/lib/utils/transcript-utils';
 import { recordTranscriptEditDiff } from '@/lib/db/lexicon';
 
-export interface RecorderCallbackMeta {
-  recordingId?: string;
-  sessionId?: string;
-  isContinuation?: boolean;
-  durationMs?: number;
-}
-
-interface RecorderProps {
-  onRecordingStart?: (sessionId: string, meta?: { isContinuation?: boolean }) => void;
-  onRecordingStop?: (audioBlob?: Blob, meta?: RecorderCallbackMeta) => void;
-  onTranscriptionError?: (message: string, meta?: RecorderCallbackMeta) => void;
-  onTranscriptUpdate?: (segments: TranscriptSegment[], meta?: RecorderCallbackMeta) => void;
-  onTranscriptTextUpdate?: (segmentId: string, text: string) => void;
-
-  onTranscriptEnhanced?: (segments: TranscriptSegment[]) => void;
-  onAnchorMark?: (timestamp: number) => void;
-  onTranscribing?: (isTranscribing: boolean) => void;
-  disabled?: boolean;
-  activeSessionId?: string;
-  continueCurrentSession?: boolean;
-  autoStartSignal?: number;
-  compactMode?: boolean;
-  /** Optional context hint (course topic, terms, references) for ASR hot-word injection */
-  contextHint?: string;
-}
-
-export interface RecorderHandle {
-  startRecording: () => Promise<void>;
-  stopRecording: () => Promise<void>;
-  pauseRecording: () => void;
-  resumeRecording: () => Promise<void>;
-}
-
-type RecorderStatus = 'idle' | 'recording' | 'paused' | 'stopped' | 'transcribing';
-type ServiceStatus = 'checking' | 'available' | 'unavailable' | 'asr-ready';
-type TranscribeMode = 'batch' | 'streaming';
-
-const DEDUP_SIMILARITY = Number(process.env.NEXT_PUBLIC_ASR_DEDUP_SIMILARITY || 0.95);
-const DEDUP_GAP_MS = Number(process.env.NEXT_PUBLIC_ASR_DEDUP_GAP_MS || 1500);
-const ENABLE_AUTO_GAIN_CONTROL = String(process.env.NEXT_PUBLIC_ASR_AUTO_GAIN_CONTROL || 'true').toLowerCase() !== 'false';
-const ENABLE_ECHO_CANCELLATION = String(process.env.NEXT_PUBLIC_ASR_ECHO_CANCELLATION || 'false').toLowerCase() !== 'false';
-const ENABLE_NOISE_SUPPRESSION = String(process.env.NEXT_PUBLIC_ASR_NOISE_SUPPRESSION || 'true').toLowerCase() !== 'false';
-const CORRECTION_MODEL = process.env.NEXT_PUBLIC_TRANSCRIPT_LIGHT_MODEL || 'qwen-turbo';
-const CORRECTION_FALLBACK_MODEL = process.env.NEXT_PUBLIC_TRANSCRIPT_FALLBACK_MODEL || 'qwen-plus';
-
-function normalizeCompareText(text: string): string {
-  return (text || '')
-    .normalize('NFKC')
-    .toLowerCase()
-    .replace(/[\s，。！？、,.!?;；:“”"'（）()【】\[\]-]/g, '');
-}
-
-function shouldReplaceLastSegment(last: TranscriptSegment, next: TranscriptSegment): boolean {
-  const gap = Math.max(0, next.startMs - last.endMs);
-  const overlap = next.startMs <= last.endMs;
-  const similarity = calculateSimilarity(last.text, next.text);
-
-  if (similarity >= DEDUP_SIMILARITY && (overlap || gap <= DEDUP_GAP_MS)) {
-    return true;
-  }
-
-  const lastKey = normalizeCompareText(last.text);
-  const nextKey = normalizeCompareText(next.text);
-  return !!lastKey && lastKey === nextKey && (overlap || gap <= DEDUP_GAP_MS);
-}
-
-function normalizeRecorderErrorMessage(message: string): string {
-  const text = (message || '').trim();
-  if (!text) return '\u5f55\u97f3\u51fa\u4e86\u70b9\u95ee\u9898\uff0c\u8bf7\u518d\u8bd5\u4e00\u6b21\u3002';
-  if (/session already started or finished or failed/i.test(text)) {
-    return '\u5b9e\u65f6\u8f6c\u5199\u521a\u521a\u5728\u91cd\u8fde\uff0c\u7a0d\u7b49\u4e00\u79d2\u518d\u7ee7\u7eed\u5f55\u5c31\u597d\u3002';
-  }
-  if (/公网地址|可访问的公网地址|PUBLIC_DOMAIN|PUBLIC_HOST/i.test(text)) {
-    return '当前环境没配公网转写地址，这段原声会先留住，但暂时还转不成文字。';
-  }
-  return text;
-}
+// --- 拆分子模块 ---
+import type { RecorderProps, RecorderHandle, RecorderCallbackMeta, RecorderStatus, ServiceStatus, TranscribeMode } from './recorder/recorder-types';
+export type { RecorderCallbackMeta, RecorderHandle } from './recorder/recorder-types';
+import {
+  ENABLE_AUTO_GAIN_CONTROL,
+  ENABLE_ECHO_CANCELLATION,
+  ENABLE_NOISE_SUPPRESSION,
+  CORRECTION_MODEL,
+  CORRECTION_FALLBACK_MODEL,
+} from './recorder/recorder-types';
+import {
+  normalizeCompareText,
+  shouldReplaceLastSegment,
+  normalizeRecorderErrorMessage,
+  formatRecorderTime,
+  resamplePcm,
+  float32ToInt16,
+} from './recorder/recorder-utils';
 
 export const Recorder = forwardRef<RecorderHandle, RecorderProps>(function Recorder({
   onRecordingStart,
@@ -193,17 +133,7 @@ export const Recorder = forwardRef<RecorderHandle, RecorderProps>(function Recor
     fetchConfig();
   }, []);
 
-  const formatTime = (ms: number) => {
-    const seconds = Math.floor(ms / 1000);
-    const minutes = Math.floor(seconds / 60);
-    const hours = Math.floor(minutes / 60);
-    const pad = (n: number) => n.toString().padStart(2, '0');
-    
-    if (hours > 0) {
-      return `${pad(hours)}:${pad(minutes % 60)}:${pad(seconds % 60)}`;
-    }
-    return `${pad(minutes)}:${pad(seconds % 60)}`;
-  };
+  const formatTime = formatRecorderTime;
 
   const stopMediaRecorderSafely = useCallback(async (): Promise<Blob | null> => {
     const recorder = mediaRecorderRef.current;
@@ -552,32 +482,12 @@ export const Recorder = forwardRef<RecorderHandle, RecorderProps>(function Recor
           const bufferSize = 4096;
           pcmProcessorRef.current = audioContext.createScriptProcessor(bufferSize, 1, 1);
           
-          const resample = (inputData: Float32Array, fromRate: number, toRate: number): Float32Array => {
-            if (fromRate === toRate) return inputData;
-            const ratio = fromRate / toRate;
-            const newLength = Math.round(inputData.length / ratio);
-            const result = new Float32Array(newLength);
-            for (let i = 0; i < newLength; i++) {
-              const srcIndex = i * ratio;
-              const srcIndexFloor = Math.floor(srcIndex);
-              const srcIndexCeil = Math.min(srcIndexFloor + 1, inputData.length - 1);
-              const t = srcIndex - srcIndexFloor;
-
-              result[i] = inputData[srcIndexFloor] * (1 - t) + inputData[srcIndexCeil] * t;
-            }
-            return result;
-          };
-          
           pcmProcessorRef.current.onaudioprocess = (e) => {
             if (asrClientRef.current?.isConnected()) {
               const inputData = e.inputBuffer.getChannelData(0);
-
-              const resampledData = resample(inputData, actualSampleRate, wsSampleRate);
-              const pcmData = new Int16Array(resampledData.length);
-              for (let i = 0; i < resampledData.length; i++) {
-                pcmData[i] = Math.max(-32768, Math.min(32767, Math.floor(resampledData[i] * 32768)));
-              }
-              asrClientRef.current.sendAudio(pcmData.buffer);
+              const resampledData = resamplePcm(inputData, actualSampleRate, wsSampleRate);
+              const pcmData = float32ToInt16(resampledData);
+              asrClientRef.current.sendAudio(pcmData.buffer as ArrayBuffer);
             }
           };
           
@@ -711,30 +621,12 @@ export const Recorder = forwardRef<RecorderHandle, RecorderProps>(function Recor
     const bufferSize = 4096;
     pcmProcessorRef.current = audioContext.createScriptProcessor(bufferSize, 1, 1);
 
-    const resample = (inputData: Float32Array, fromRate: number, toRate: number): Float32Array => {
-      if (fromRate === toRate) return inputData;
-      const ratio = fromRate / toRate;
-      const newLength = Math.round(inputData.length / ratio);
-      const result = new Float32Array(newLength);
-      for (let i = 0; i < newLength; i++) {
-        const srcIndex = i * ratio;
-        const srcIndexFloor = Math.floor(srcIndex);
-        const srcIndexCeil = Math.min(srcIndexFloor + 1, inputData.length - 1);
-        const t = srcIndex - srcIndexFloor;
-        result[i] = inputData[srcIndexFloor] * (1 - t) + inputData[srcIndexCeil] * t;
-      }
-      return result;
-    };
-
     pcmProcessorRef.current.onaudioprocess = (e) => {
       if (asrClientRef.current?.isConnected()) {
         const inputData = e.inputBuffer.getChannelData(0);
-        const resampledData = resample(inputData, actualSampleRate, wsSampleRate);
-        const pcmData = new Int16Array(resampledData.length);
-        for (let i = 0; i < resampledData.length; i++) {
-          pcmData[i] = Math.max(-32768, Math.min(32767, Math.floor(resampledData[i] * 32768)));
-        }
-        asrClientRef.current.sendAudio(pcmData.buffer);
+        const resampledData = resamplePcm(inputData, actualSampleRate, wsSampleRate);
+        const pcmData = float32ToInt16(resampledData);
+        asrClientRef.current.sendAudio(pcmData.buffer as ArrayBuffer);
       }
     };
 
