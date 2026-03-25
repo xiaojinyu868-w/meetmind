@@ -107,6 +107,7 @@ src/
 | `src/components/Recorder.tsx` | 1694 | 录音组件，已拆分 2 个子模块到 `recorder/` |
 | `src/app/api/video/import/route.ts` | 1209 | 多平台导入管线，已拆分 3 个子模块 |
 | `src/app/api/tutor/route.ts` | 708 | AI 私教路由，已拆分 4 个子模块 |
+| `src/lib/utils/page-utils.ts` | 10 | Barrel re-export，实际实现在 `page/` 子目录（5 个模块，共 1107 行） |
 | `src/lib/services/commonstack-echo-service.ts` | 273 | Echo LLM 调用，System Prompt 在此 |
 | `src/lib/services/workspace-echo-service.ts` | 1267 | Echo 数据管线 |
 | `src/components/EchoCard.tsx` | ~180 | 回声卡，必须遵守设计系统 |
