@@ -113,10 +113,8 @@ components/
 - `TranscriptFlowView.tsx` (778) — 转录流
 - `AISearchPanel.tsx` (720) — 搜索面板
 - `AIChat.tsx` (691) — 对话
-- `TranscriptPreviewPanel.tsx` (677) — 预览
 - `WaveformPlayer.tsx` (638) — 波形播放器
 - `WordExplainer.tsx` (562) — 术语解释
-- `SessionHistoryList.tsx` (551) — 会话历史
 - `VideoReviewPlayer.tsx` (529) — 视频复习
 
 ## 设计系统约束

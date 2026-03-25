@@ -103,8 +103,8 @@ route.ts → lib/services/ + lib/utils/rate-limit
 
 ## ⚠️ 超标文件
 
-- `tutor/route.ts` (1761) — AI 家教，逻辑过重，需要拆分到 services
 - `video/import/route.ts` (1209) — 已拆分 3 个模块（types/segment/download），仍偏大
+- `tutor/route.ts` (708) — ✅ 已拆分 4 个模块，从 1763 行降至 708 行
 - `transcribe-turbo/route.ts` (636) — WebSocket 转录
 - `sources/ingest/route.ts` (553) — 通用接入
 
@@ -118,3 +118,15 @@ route.ts → lib/services/ + lib/utils/rate-limit
 | `video-import-types.ts` | 318 | 类型 + 常量 + 纯工具函数 |
 | `video-import-segment.ts` | 369 | 文本标准化 + segment 处理管线 |
 | `video-import-download.ts` | 282 | yt-dlp + 直链下载 |
+
+## tutor/ 子模块
+
+此目录已拆分为 5 个文件：
+
+| 文件 | 行数 | 职责 |
+|------|------|------|
+| `route.ts` | 708 | POST handler + 响应解析 + 时间戳修正 |
+| `tutor-types.ts` | 54 | 缓存类型/常量/操作 + SupportReference |
+| `tutor-citations.ts` | 238 | 引用/资料处理工具函数（14 个） |
+| `tutor-prompts.ts` | 144 | 5 个 System Prompt 常量 |
+| `tutor-guidance.ts` | 396 | 引导问题生成（LLM + 规则回退） |
