@@ -10,15 +10,21 @@ export {
   useUIStore,
   useViewMode,
   useReviewTab,
+  useVideoWorkspaceTab,
   useMobileSubPage,
   useIsMenuOpen,
   useIsActionDrawerOpen,
   useShowConversationHistory,
+  useShowTranscriptBar,
+  useShowAISearch,
+  useShowMobileRecorder,
+  useMobileCollectionSheet,
   useShowSplash,
   useAppReady,
+  useLoadingProgress,
   useUIActions,
 } from './ui-store';
-export type { UIStore, ViewMode, DataSource, ReviewTab, MobileSubPage } from './ui-store';
+export type { UIStore, ViewMode, DataSource, ReviewTab, VideoWorkspaceTab, MobileSubPage, MobileCollectionSheet } from './ui-store';
 
 // Player Store
 export {
@@ -30,3 +36,20 @@ export {
   usePlayerActions,
 } from './player-store';
 export type { PlayerStore } from './player-store';
+
+// Session Store
+export {
+  useSessionStore,
+  useSessionId,
+  useIsRecording,
+  useDataSource,
+  useServiceStatus,
+  useSessionMediaDurationMs,
+  useVideoSeekNonce,
+  useVideoPlayNonce,
+  useSelectedAnchor,
+  useSelectedConfusion,
+  useSelectedHistoryConversation,
+  useSessionActions,
+} from './session-store';
+export type { SessionStore } from './session-store';

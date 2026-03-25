@@ -4,6 +4,9 @@ import { useState, useEffect, useCallback, useRef, useMemo, Suspense, type Chang
 import { flushSync } from 'react-dom';
 import { useSearchParams } from 'next/navigation';
 import dynamic from 'next/dynamic';
+import { useUIActions, useUIStore } from '@/stores/ui-store';
+import { usePlayerActions, usePlayerStore } from '@/stores/player-store';
+import { useSessionStore } from '@/stores/session-store';
 import { Header } from '@/components/Header';
 import { ServiceStatus, DegradedModeBanner } from '@/components/ServiceStatus';
 import { EchoCard, type EchoData } from '@/components/EchoCard';
@@ -286,10 +289,84 @@ function StudentAppContent({
   forceMobilePreview?: boolean;
   wechatCaptureToken?: string | null;
 }) {
-  // Performance: Guest mode skips splash entirely for instant entry.
-  const [showSplash, setShowSplash] = useState(!isGuestFastEntry);
-  const [appReady, setAppReady] = useState(isGuestFastEntry);
-  const [loadingProgress, setLoadingProgress] = useState(isGuestFastEntry ? 100 : 0);
+  // ==================== Zustand Store 订阅 ====================
+  const uiActions = useUIStore((s) => s.actions);
+  const playerActions = usePlayerStore((s) => s.actions);
+  const sessionActions = useSessionStore((s) => s.actions);
+
+  // UI Store — 视图模式 & 应用加载
+  const showSplash = useUIStore((s) => s.showSplash);
+  const appReady = useUIStore((s) => s.appReady);
+  const loadingProgress = useUIStore((s) => s.loadingProgress);
+  const viewMode = useUIStore((s) => s.viewMode);
+  const reviewTab = useUIStore((s) => s.reviewTab);
+  const videoWorkspaceTab = useUIStore((s) => s.videoWorkspaceTab);
+  const mobileSubPage = useUIStore((s) => s.mobileSubPage);
+  const isMenuOpen = useUIStore((s) => s.isMenuOpen);
+  const isActionDrawerOpen = useUIStore((s) => s.isActionDrawerOpen);
+  const showConversationHistory = useUIStore((s) => s.showConversationHistory);
+  const showTranscriptBar = useUIStore((s) => s.showTranscriptBar);
+  const showAISearch = useUIStore((s) => s.showAISearch);
+  const showMobileRecorder = useUIStore((s) => s.showMobileRecorder);
+  const mobileCollectionSheet = useUIStore((s) => s.mobileCollectionSheet);
+
+  // Player Store
+  const isPlaying = usePlayerStore((s) => s.isPlaying);
+  const currentTime = usePlayerStore((s) => s.currentTime);
+  const isPlayingAll = usePlayerStore((s) => s.isPlayingAll);
+  const playAllIndex = usePlayerStore((s) => s.playAllIndex);
+
+  // Session Store — 会话核心
+  const sessionId = useSessionStore((s) => s.sessionId);
+  const isRecording = useSessionStore((s) => s.isRecording);
+  const dataSource = useSessionStore((s) => s.dataSource);
+  const serviceStatus = useSessionStore((s) => s.serviceStatus);
+  const sessionMediaDurationMs = useSessionStore((s) => s.sessionMediaDurationMs);
+  const videoSeekNonce = useSessionStore((s) => s.videoSeekNonce);
+  const videoPlayNonce = useSessionStore((s) => s.videoPlayNonce);
+  const selectedAnchor = useSessionStore((s) => s.selectedAnchor);
+  const selectedConfusion = useSessionStore((s) => s.selectedConfusion);
+  const selectedHistoryConversation = useSessionStore((s) => s.selectedHistoryConversation);
+
+  // Setter aliases — 保持与原 useState setter 相同的函数签名，对下游代码零破坏
+  const setShowSplash = uiActions.setShowSplash;
+  const setAppReady = uiActions.setAppReady;
+  const setLoadingProgress = uiActions.setLoadingProgress;
+  const setViewMode = uiActions.setViewMode;
+  const setReviewTab = uiActions.setReviewTab;
+  const setVideoWorkspaceTab = uiActions.setVideoWorkspaceTab;
+  const setMobileSubPage = uiActions.setMobileSubPage;
+  const setIsMenuOpen = uiActions.setMenuOpen;
+  const setIsActionDrawerOpen = uiActions.setActionDrawerOpen;
+  const setShowConversationHistory = uiActions.setShowConversationHistory;
+  const setShowTranscriptBar = uiActions.setShowTranscriptBar;
+  const setShowAISearch = uiActions.setShowAISearch;
+  const setShowMobileRecorder = uiActions.setShowMobileRecorder;
+  const setMobileCollectionSheet = uiActions.setMobileCollectionSheet;
+  const setIsPlaying = playerActions.setIsPlaying;
+  const setCurrentTime = playerActions.setCurrentTime;
+  const setIsPlayingAll = playerActions.setIsPlayingAll;
+  const setPlayAllIndex = playerActions.setPlayAllIndex;
+  const setSessionId = sessionActions.setSessionId;
+  const setIsRecording = sessionActions.setIsRecording;
+  const setDataSource = sessionActions.setDataSource;
+  const setServiceStatus = sessionActions.setServiceStatus;
+  const setSessionMediaDurationMs = sessionActions.setSessionMediaDurationMs;
+  const setVideoSeekNonce = sessionActions.setVideoSeekNonce;
+  const setVideoPlayNonce = sessionActions.setVideoPlayNonce;
+  const setSelectedAnchor = sessionActions.setSelectedAnchor;
+  const setSelectedConfusion = sessionActions.setSelectedConfusion;
+  const setSelectedHistoryConversation = sessionActions.setSelectedHistoryConversation;
+
+  // Performance: Guest mode — initialize store on mount
+  useEffect(() => {
+    if (isGuestFastEntry) {
+      uiActions.setShowSplash(false);
+      uiActions.setAppReady(true);
+      uiActions.setLoadingProgress(100);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   
   const { user, isAuthenticated, accessToken, isCheckingAuth } = useAuth();
   
@@ -297,10 +374,6 @@ function StudentAppContent({
   const { isMobile: detectedIsMobile, mounted } = useResponsive();
   const isMobile = detectedIsMobile || forceMobilePreview;
   const isDesktopMobilePreview = forceMobilePreview && !detectedIsMobile;
-  const [isMenuOpen, setIsMenuOpen] = useState(false);
-  const [isPlaying, setIsPlaying] = useState(false);
-  const [selectedConfusion, setSelectedConfusion] = useState<ConfusionMarker | null>(null);
-  const [mobileSubPage, setMobileSubPage] = useState<'highlights' | 'summary' | 'notes' | 'tasks' | 'apps' | 'ai-chat' | 'transcript' | null>(null);
   const [mobileAIQuestion, setMobileAIQuestion] = useState<string>(''); // NOTE: cleaned corrupted legacy comment.
   const [mobileAIDisplayQuestion, setMobileAIDisplayQuestion] = useState<string>('');
   const [mobileAILaunchImages, setMobileAILaunchImages] = useState<TutorLaunchImageAsset[]>([]);
@@ -311,27 +384,15 @@ function StudentAppContent({
   const [mobileAILaunchTarget, setMobileAILaunchTarget] = useState<'review-panel' | 'video-chat' | 'mobile-ai-chat' | null>(null);
   
   const shouldPrioritizeWechatCaptureEntry = Boolean(wechatCaptureToken);
-  const [viewMode, setViewMode] = useState<ViewMode>('record');
-  const [sessionId, setSessionId] = useState<string>('demo-session');
-  const [isRecording, setIsRecording] = useState(false);
   const [segments, setSegments] = useState<TranscriptSegment[]>([]);
   const [anchors, setAnchors] = useState<Anchor[]>([]);
   const [timeline, setTimeline] = useState<ClassTimeline | null>(null);
-  const [selectedAnchor, setSelectedAnchor] = useState<Anchor | null>(null);
   const [actionItems, setActionItems] = useState<ActionItem[]>([]);
-  const [currentTime, setCurrentTime] = useState(0);
-  const [videoSeekNonce, setVideoSeekNonce] = useState(0);
-  const [videoPlayNonce, setVideoPlayNonce] = useState(0);
-  const [dataSource, setDataSource] = useState<DataSource>('live');
-  const [serviceStatus, setServiceStatus] = useState<ServiceStatusType | null>(null);
   const [audioBlob, setAudioBlob] = useState<Blob | null>(null);
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
-  const [sessionMediaDurationMs, setSessionMediaDurationMs] = useState(0);
   const [videoSource, setVideoSource] = useState<ImportedVideoSource | null>(null);
   
   // NOTE: cleaned corrupted legacy comment.
-  const [reviewTab, setReviewTab] = useState<ReviewTab>(forcedWorkspaceTab === 'apps' ? 'apps' : 'timeline');
-  const [videoWorkspaceTab, setVideoWorkspaceTab] = useState<VideoWorkspaceTab>(forcedWorkspaceTab === 'apps' ? 'apps' : 'chat');
   const forcedWorkspaceAppliedRef = useRef(false);
   useEffect(() => {
     if (forcedWorkspaceAppliedRef.current) return;
@@ -339,8 +400,7 @@ function StudentAppContent({
     setReviewTab('apps');
     setVideoWorkspaceTab('apps');
     forcedWorkspaceAppliedRef.current = true;
-  }, [forcedWorkspaceTab]);
-  const [showTranscriptBar, setShowTranscriptBar] = useState(false);
+  }, [forcedWorkspaceTab, setReviewTab, setVideoWorkspaceTab]);
   const [confusionChatAnchor, setConfusionChatAnchor] = useState<Anchor | null>(null);
   const [videoInsightItems, setVideoInsightItems] = useState<VideoInsightItem[]>([]);
   const [activeVideoInsightId, setActiveVideoInsightId] = useState<string | null>(null);
@@ -363,17 +423,10 @@ function StudentAppContent({
   } = useSummary({ sessionId, segments });
   
   const [notes, setNotes] = useState<Note[]>([]);
-  const [isPlayingAll, setIsPlayingAll] = useState(false);
-  const [playAllIndex, setPlayAllIndex] = useState(0);
   
   // NOTE: cleaned corrupted legacy comment.
-  const [showConversationHistory, setShowConversationHistory] = useState(false);
-  const [selectedHistoryConversation, setSelectedHistoryConversation] = useState<ConversationHistory | null>(null);
   
   // NOTE: cleaned corrupted legacy comment.
-  const [mobileCollectionSheet, setMobileCollectionSheet] = useState<MobileCollectionSheet>(null);
-  const [showAISearch, setShowAISearch] = useState(false);
-  const [showMobileRecorder, setShowMobileRecorder] = useState(false);
   const [collectionComposerText, setCollectionComposerText] = useState('');
   const [showCollectionPulsePreview, setShowCollectionPulsePreview] = useState(false);
   const [captureDrivenPulse, setCaptureDrivenPulse] = useState<CollectionPulseState | null>(null);
@@ -422,7 +475,6 @@ function StudentAppContent({
   );
   
   // NOTE: cleaned corrupted legacy comment.
-  const [isActionDrawerOpen, setIsActionDrawerOpen] = useState(false);
   const {
     workshopWindows,
     openWorkshopWindow,
@@ -747,9 +799,9 @@ function StudentAppContent({
       return;
     }
     setCurrentTime(safeTime);
-    setVideoSeekNonce((prev) => prev + 1);
+    sessionActions.incrementVideoSeekNonce();
     if (autoPlay) {
-      setVideoPlayNonce((prev) => prev + 1);
+      sessionActions.incrementVideoPlayNonce();
     }
   }, [normalizeSeekTime]);
 
@@ -1837,7 +1889,7 @@ function StudentAppContent({
         confidence: seg.confidence || 1.0,
         isFinal: true,
       }))).catch((err) => console.error('Failed to persist batch transcript to IndexedDB:', err));
-      setSessionMediaDurationMs((prev) => Math.max(prev, mergedDurationMs));
+      setSessionMediaDurationMs(Math.max(useSessionStore.getState().sessionMediaDurationMs, mergedDurationMs));
       setSourceItems((prev) =>
         prev.map((item) =>
           item.id === pendingAudio.itemId
@@ -6933,7 +6985,7 @@ const _handleVideoAssistantMessage = useCallback((payload: {
                     {/* Collapsible transcript strip. */}
                     <div className="shrink-0 border-b" style={{ borderColor: 'var(--edu-border-light)' }}>
                       <button
-                        onClick={() => setShowTranscriptBar(prev => !prev)}
+                        onClick={() => uiActions.toggleTranscriptBar()}
                         className="w-full flex items-center justify-between px-4 py-2 text-xs hover:bg-gray-50 transition-colors"
                         style={{ background: 'var(--edu-bg-soft)' }}
                       >
