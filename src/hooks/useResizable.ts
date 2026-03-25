@@ -111,9 +111,14 @@ export function useResizable({
       }
 
       rafRef.current = requestAnimationFrame(() => {
-        const clientPos = 'touches' in e
-          ? (direction === 'horizontal' ? e.touches[0].clientX : e.touches[0].clientY)
-          : (direction === 'horizontal' ? e.clientX : e.clientY);
+        let clientPos: number;
+        if ('touches' in e) {
+          const touch = (e as TouchEvent).touches[0];
+          if (!touch) return; // 手指已离开，忽略
+          clientPos = direction === 'horizontal' ? touch.clientX : touch.clientY;
+        } else {
+          clientPos = direction === 'horizontal' ? (e as MouseEvent).clientX : (e as MouseEvent).clientY;
+        }
         
         const delta = clientPos - startPosRef.current;
         const newSize = startSizeRef.current + delta;

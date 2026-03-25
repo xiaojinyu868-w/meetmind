@@ -41,8 +41,8 @@ interface EnhanceRequestBody {
   recentContext?: string;
 }
 
-const DEFAULT_MODEL = process.env.TRANSCRIPT_LIGHT_MODEL || 'qwen-turbo';
-const DEFAULT_FALLBACK_MODEL = process.env.TRANSCRIPT_FALLBACK_MODEL || 'qwen-plus';
+const DEFAULT_MODEL = process.env.TRANSCRIPT_LIGHT_MODEL || 'qwen3.5-plus';
+const DEFAULT_FALLBACK_MODEL = process.env.TRANSCRIPT_FALLBACK_MODEL || 'qwen3.5-plus';
 const ENABLE_MAX_FALLBACK = String(process.env.TRANSCRIPT_ENABLE_MAX_FALLBACK || 'false').toLowerCase() === 'true';
 const modelAvailability = new Map<string, 'available' | 'unavailable'>();
 

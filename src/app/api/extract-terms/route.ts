@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { chat } from '@/lib/services/llm-service';
 import { applyRateLimit } from '@/lib/utils/rate-limit';
+import { LLMConfig } from '@/lib/config/app.config';
 import { createLogger } from '@/lib/logger';
 const log = createLogger('extract-terms');
 
@@ -161,7 +162,7 @@ export async function POST(request: NextRequest) {
 
     const userPrompt = buildUserPrompt(topic, referenceTexts, recentTranscript);
 
-    const model = process.env.TRANSCRIPT_LIGHT_MODEL || 'qwen-turbo';
+    const model = process.env.TRANSCRIPT_LIGHT_MODEL || LLMConfig.defaultModel;
 
     const response = await chat(
       [

@@ -25,7 +25,8 @@ module.exports = {
       exec_mode: 'fork',           // WebSocket requires fork mode
       autorestart: true,
       watch: false,                 // Don't watch in production
-      max_memory_restart: '1G',     // Auto-restart if memory exceeds 1GB
+      max_memory_restart: '2G',     // Auto-restart if memory exceeds 2GB
+      node_args: '--max-old-space-size=2048',  // V8 heap limit 2GB
 
       // Logs
       error_file: '/root/.pm2/logs/meetmind-error.log',

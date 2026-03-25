@@ -7,8 +7,10 @@
  * - 分隔线拖拽调整宽度
  * - 双击重置为默认宽度
  * - 拖拽时显示高亮线条
+ * - 内置 ErrorBoundary，拖拽异常不会导致整页崩溃
  */
 
+import React from 'react';
 import { cn } from '@/lib/utils';
 import { useResizable } from '@/hooks/useResizable';
 
@@ -29,7 +31,53 @@ interface ResizablePanelProps {
   className?: string;
 }
 
-export function ResizablePanel({
+// ── ErrorBoundary（组件内部使用，防止拖拽异常传播到页面级） ──
+
+interface ResizableErrorState {
+  hasError: boolean;
+}
+
+class ResizableErrorBoundary extends React.Component<
+  { children: React.ReactNode; fallbackWidth: number },
+  ResizableErrorState
+> {
+  constructor(props: { children: React.ReactNode; fallbackWidth: number }) {
+    super(props);
+    this.state = { hasError: false };
+  }
+
+  static getDerivedStateFromError(): ResizableErrorState {
+    return { hasError: true };
+  }
+
+  componentDidCatch(error: Error, info: React.ErrorInfo) {
+    console.error('[ResizablePanel] layout error caught:', error, info.componentStack);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="flex h-full items-center justify-center bg-white px-6 text-center">
+          <div className="space-y-2">
+            <p className="text-sm text-[#787774]">布局出了一点小问题</p>
+            <button
+              type="button"
+              onClick={() => this.setState({ hasError: false })}
+              className="inline-flex items-center justify-center rounded-full bg-[#232322] px-3 py-1.5 text-xs font-medium text-white transition hover:bg-black"
+            >
+              恢复布局
+            </button>
+          </div>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
+// ── 主组件 ──
+
+function ResizablePanelInner({
   leftPanel,
   rightPanel,
   defaultLeftWidth = 384,
@@ -96,5 +144,13 @@ export function ResizablePanel({
         {rightPanel}
       </div>
     </div>
+  );
+}
+
+export function ResizablePanel(props: ResizablePanelProps) {
+  return (
+    <ResizableErrorBoundary fallbackWidth={props.defaultLeftWidth ?? 384}>
+      <ResizablePanelInner {...props} />
+    </ResizableErrorBoundary>
   );
 }

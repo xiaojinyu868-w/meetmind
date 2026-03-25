@@ -1,4 +1,4 @@
-﻿'use client';
+'use client';
 
 import { useState, useEffect, useCallback, useRef, useMemo, Suspense, type ChangeEvent, type ClipboardEvent } from 'react';
 import { flushSync } from 'react-dom';
@@ -2944,7 +2944,15 @@ const _handleVideoAssistantMessage = useCallback((payload: {
     setSegments(mergedSegments);
     segmentsRef.current = mergedSegments;
     liveSegmentsRef.current = mergedSegments;
-    setViewMode(shouldKeepVideoSource ? 'review' : 'record');
+    // 如果当前已在 review 模式（用户正在复习别的内容），不强制切走
+    const currentViewMode = useUIStore.getState().viewMode;
+    if (currentViewMode !== 'review') {
+      setViewMode(shouldKeepVideoSource ? 'review' : 'record');
+    } else if (shouldKeepVideoSource) {
+      // 已在 review 且本次是视频导入，保持 review
+    } else {
+      // 已在 review 但本次是非视频数据追加（如文档/音频拼接），保持 review 不打断
+    }
     setSourceImportError('');
 
     if (params.sourceItemId) {
@@ -7254,8 +7262,8 @@ const _handleVideoAssistantMessage = useCallback((payload: {
               {/* NOTE: cleaned corrupted legacy comment. */}
               <ResizablePanel
                 className="flex-1"
-                defaultLeftWidth={320}
-                minLeftWidth={260}
+                defaultLeftWidth={480}
+                minLeftWidth={320}
                 maxLeftWidth={820}
                 storageKey="meetmind-left-panel-width"
                 leftPanel={
