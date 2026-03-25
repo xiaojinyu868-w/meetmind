@@ -105,7 +105,6 @@ components/
 
 - `AITutor.tsx` (1940) — 最大组件，子模块已拆到 `tutor/`
 - `Recorder.tsx` (1694) — 录音逻辑 + UI 混合，子模块已拆到 `recorder/`
-- `AppMatrixPanel.tsx` (1579) — 应用矩阵
 - `WorkshopYellowPage.tsx` (900) — 黄页
 - `TranscriptFlowView.tsx` (778) — 转录流
 - `AISearchPanel.tsx` (720) — 搜索面板

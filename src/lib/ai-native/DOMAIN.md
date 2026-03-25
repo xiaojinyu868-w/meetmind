@@ -32,7 +32,10 @@ page.tsx → /api/apps/execute → context-builder → registry → plugin.execu
 
 | 文件 | 行数 | 职责 |
 |------|------|------|
-| `studio-workshop.plugin.ts` | 985 | Studio Workshop（最大，核心应用生成） |
+| `studio-workshop.plugin.ts` | ~340 | Studio Workshop 主文件（manifest + canHandle + run + generateStudioOutput） |
+| `studio-workshop.types.ts` | ~210 | 类型/接口（7个） + MODE_HINTS + 模式检测/解析辅助函数 |
+| `studio-workshop.podcast.ts` | ~290 | 播客管线（plan 生成/文本组装/时间戳污染检测/round cards/叙述清洗） |
+| `studio-workshop.renderers.ts` | ~180 | 渲染负载构建器（slides/infographic/table/audio/script/document） |
 | `mindmap.plugin.ts` | 372 | 思维导图（含 tree↔markdown 转换） |
 | `flashcards.plugin.ts` | 308 | 闪卡 |
 | `quiz.plugin.ts` | 275 | 测验 |
