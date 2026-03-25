@@ -2246,7 +2246,7 @@ const _handleVideoAssistantMessage = useCallback((payload: {
     try {
       await regenerateByTheme(theme);
     } catch (error) {
-      console.error('閹稿瀵屾０妯兼晸閹存劕銇戠拹?', error);
+      console.error('按主题重新生成失败:', error);
     }
   }, [regenerateByTheme]);
 

@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect } from 'react';
 import { cn } from '@/lib/utils';
-import type { ConfusionMoment } from '@/lib/services/parent-service';
+import type { ConfusionMoment } from '@/types';
 
 interface TeacherAudioPlayerProps {
   confusion: ConfusionMoment | null;

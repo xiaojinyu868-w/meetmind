@@ -13,7 +13,7 @@
 import { useEffect, useId } from 'react';
 import { cn } from '@/lib/utils';
 import { ActionList } from './ActionList';
-import type { ActionItem } from '@/lib/services/meetmind-service';
+import type { ActionItem } from '@/types';
 
 export interface ActionDrawerProps {
   /** 是否打开 */

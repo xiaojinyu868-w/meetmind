@@ -12,7 +12,7 @@
  */
 
 import { useState, useCallback, useMemo } from 'react';
-import type { Anchor } from '@/lib/services/anchor-service';
+import type { Anchor } from '@/types';
 import type { TranscriptSegment } from '@/types';
 import { TranscriptFlowView } from './TranscriptFlowView';
 

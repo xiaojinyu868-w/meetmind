@@ -1,6 +1,6 @@
 ﻿'use client';
 
-import type { Timeline, Breakpoint } from '@/lib/services/meetmind-service';
+import type { Timeline, Breakpoint } from '@/types';
 import { formatTimestamp } from '@/lib/services/longcut-utils';
 import { TranscriptFlowView } from './TranscriptFlowView';
 

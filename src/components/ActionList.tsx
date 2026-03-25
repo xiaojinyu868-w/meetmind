@@ -1,6 +1,6 @@
 'use client';
 
-import type { ActionItem } from '@/lib/services/meetmind-service';
+import type { ActionItem } from '@/types';
 
 interface ActionListProps {
   items: ActionItem[];

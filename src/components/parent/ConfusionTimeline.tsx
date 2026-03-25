@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { cn } from '@/lib/utils';
-import type { ConfusionMoment } from '@/lib/services/parent-service';
+import type { ConfusionMoment } from '@/types';
 
 interface ConfusionTimelineProps {
   confusions: ConfusionMoment[];

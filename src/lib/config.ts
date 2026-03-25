@@ -2,6 +2,10 @@
  * 配置管理和验证
  */
 
+import { createLogger } from '@/lib/logger';
+
+const log = createLogger('config');
+
 // 重导出新的配置模块
 export * from './config/app.config';
 
@@ -137,19 +141,13 @@ export async function checkAllServices(): Promise<ServiceStatus[]> {
 export function printConfigStatus(): void {
   const validation = validateConfig();
   
-  console.log('\n=== MeetMind 配置状态 ===');
-  
   if (validation.valid) {
-    console.log('✅ 核心配置完整');
+    log.info('配置状态: 核心配置完整');
   } else {
-    console.log('❌ 缺少必要配置:');
-    validation.missing.forEach(key => console.log(`   - ${key}`));
+    log.warn('配置状态: 缺少必要配置', validation.missing);
   }
   
   if (validation.warnings.length > 0) {
-    console.log('\n⚠️ 警告:');
-    validation.warnings.forEach(w => console.log(`   - ${w}`));
+    log.warn('配置警告', validation.warnings);
   }
-  
-  console.log('========================\n');
 }

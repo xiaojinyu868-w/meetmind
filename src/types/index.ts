@@ -169,6 +169,34 @@ export interface ClassTimeline {
   audioUrl?: string;
 }
 
+export interface Timeline {
+  lessonId: string;
+  segments: Array<Pick<TranscriptSegment, 'id' | 'text' | 'startMs' | 'endMs'> & Partial<TranscriptSegment>>;
+  breakpoints: Breakpoint[];
+  topics: Array<{
+    id: string;
+    title: string;
+    startMs: number;
+    endMs: number;
+  }>;
+}
+
+export interface ConfusionMoment {
+  id: string;
+  timestamp: number;
+  timeDisplay: string;
+  sessionId: string;
+  subject: string;
+  knowledgePoint: string;
+  transcriptContext: string;
+  resolved: boolean;
+  resolvedAt?: string;
+  resolvedBy?: 'ai' | 'parent' | 'self';
+  audioUrl?: string;
+  audioStartMs: number;
+  audioEndMs: number;
+}
+
 export type ModelProvider = 'qwen' | 'gemini' | 'openai';
 
 export interface ModelConfig {

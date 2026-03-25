@@ -18,19 +18,19 @@ components → hooks + stores + types + lib/utils
 ```
 components/
 ├── *.tsx              # 顶层核心组件（~45 个）
-├── tutor/             # AITutor 拆分子模块（类型/工具函数/小组件）
-├── recorder/          # Recorder 拆分子模块（类型/工具函数）
-├── apps/              # 应用系统（矩阵/浮窗/插件执行）
-│   ├── windows/       # 浮窗组件
+├── tutor/DOMAIN.md    # AITutor 拆分子模块（类型/工具函数/小组件）
+├── recorder/DOMAIN.md # Recorder 拆分子模块（类型/工具函数）
+├── apps/DOMAIN.md     # 应用系统（黄页/浮窗/证据标签/执行 hook）
+│   ├── windows/       # 浮窗组件 + 布局引擎
 │   ├── evidence/      # 证据标签
 │   └── hooks/         # 应用执行 hook
-├── mobile/            # 移动端专用组件（13 个）
-├── parent/            # 家长端（5 个）
-├── teacher/           # 教师端（3 个）
-├── business/          # 业务展示组件（5 个）
-├── layout/            # 布局组件（2 个）
+├── mobile/DOMAIN.md   # 移动端专用组件（14 个）
+├── parent/DOMAIN.md   # 家长端（6 个）
+├── teacher/DOMAIN.md  # 教师端（3 个）
+├── business/DOMAIN.md # 业务展示组件（6 个）
+├── layout/DOMAIN.md   # 布局组件（3 个）
 ├── ui/                # shadcn/ui 基础组件（25 个）
-└── ConversationHistory/ # 对话历史（3 个）
+└── ConversationHistory/DOMAIN.md # 对话历史（3 个）
 ```
 
 ## 核心组件
@@ -91,12 +91,12 @@ components/
 
 | 文件 | 行数 | 职责 |
 |------|------|------|
-| `AppMatrixPanel.tsx` | 1579 | 应用矩阵主面板 |
-| `WorkshopYellowPage.tsx` | 900 | Workshop 黄页导航 |
+| `WorkshopYellowPage.tsx` | 897 | Workshop 黄页导航 |
 | `windows/WorkshopWindowManager.tsx` | ~580 | 浮窗管理器 |
 | `windows/InfographicWindow.tsx` | ~700 | 信息图浮窗，类型/常量/工具已拆到 `infographic-window-data.ts` |
 | `windows/infographic-window-data.ts` | 305 | 信息图类型/场景预设/风格预设/纯工具函数 |
-| `windows/MindmapWindow.tsx` | ~950 | 思维导图浮窗 |
+| `windows/MindmapWindow.tsx` | ~691 | 思维导图浮窗，布局引擎已拆到 `mindmap-layout.ts` |
+| `windows/mindmap-layout.ts` | 168 | 思维导图布局引擎（纯函数，有测试） |
 | `windows/QuizWindow.tsx` | ~720 | 测验浮窗 |
 | `windows/FlashcardsWindow.tsx` | ~470 | 闪卡浮窗 |
 | `windows/PodcastWindow.tsx` | ~470 | 播客浮窗 |

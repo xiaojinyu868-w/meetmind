@@ -3,7 +3,7 @@
 import React from 'react';
 import { cn } from '@/lib/utils';
 import type { TranscriptSegment } from '@/types';
-import type { Anchor } from '@/lib/services/anchor-service';
+import type { Anchor } from '@/types';
 import { TranscriptFlowView } from '../TranscriptFlowView';
 
 export interface DedaoTimelineEntry {
