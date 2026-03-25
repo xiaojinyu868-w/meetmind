@@ -21,6 +21,14 @@ deploy: build ## 构建 + 重启 PM2
 
 # === 代码质量 ===
 
+.PHONY: test
+test: ## 运行单元测试
+	npx vitest run
+
+.PHONY: test-watch
+test-watch: ## 运行单元测试（watch 模式）
+	npx vitest
+
 .PHONY: lint
 lint: ## ESLint 检查
 	npx eslint src/ --ext .ts,.tsx --max-warnings 0
