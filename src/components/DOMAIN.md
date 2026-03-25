@@ -18,6 +18,8 @@ components → hooks + stores + types + lib/utils
 ```
 components/
 ├── *.tsx              # 顶层核心组件（~45 个）
+├── tutor/             # AITutor 拆分子模块（类型/工具函数/小组件）
+├── recorder/          # Recorder 拆分子模块（类型/工具函数）
 ├── apps/              # 应用系统（矩阵/浮窗/插件执行）
 │   ├── windows/       # 浮窗组件
 │   ├── evidence/      # 证据标签
@@ -37,19 +39,16 @@ components/
 
 | 文件 | 行数 | 职责 |
 |------|------|------|
-| `Recorder.tsx` | 1807 | 录音主组件（采集/实时转录/暂停/恢复） |
+| `Recorder.tsx` | 1694 | 录音主组件（采集/实时转录/暂停/恢复），子模块在 `recorder/` |
 | `TranscriptFlowView.tsx` | 778 | 转录内容流式视图 |
-| `TranscriptPreviewPanel.tsx` | 677 | 转录预览面板 |
 | `WaveformPlayer.tsx` | 638 | 波形音频播放器 |
-| `AudioPlayer.tsx` | ~300 | 音频播放器 |
-| `AudioUploader.tsx` | ~450 | 音频上传组件 |
 | `VoiceMicButton.tsx` | ~200 | 语音麦克风按钮 |
 
 ### AI 交互
 
 | 文件 | 行数 | 职责 |
 |------|------|------|
-| `AITutor.tsx` | 2217 | AI 家教（解释/追问/引导/联网/思维可视化） |
+| `AITutor.tsx` | 1940 | AI 家教（解释/追问/引导/联网/思维可视化），子模块在 `tutor/` |
 | `AIChat.tsx` | 691 | AI 对话组件 |
 | `AISearchPanel.tsx` | 720 | AI 全局搜索面板 |
 | `WordExplainer.tsx` | 562 | 术语解释器 |
@@ -71,13 +70,11 @@ components/
 | 文件 | 行数 | 职责 |
 |------|------|------|
 | `WorkspaceCaptureList.tsx` | ~900 | 工作空间 capture 列表 |
-| `VideoLinkImporter.tsx` | ~500 | 视频链接导入器 |
 | `VideoReviewPlayer.tsx` | 529 | 视频复习播放器 |
 | `HighlightsPanel.tsx` | ~400 | 精选片段面板 |
 | `NotesPanel.tsx` | ~370 | 笔记面板 |
 | `SummaryPanel.tsx` | ~280 | 摘要面板 |
 | `ImageUpload.tsx` | ~220 | 图片上传 |
-| `SessionHistoryList.tsx` | 551 | 会话历史列表 |
 | `Citations.tsx` | ~140 | 引用标签 |
 | `CitationReferenceSheet.tsx` | ~260 | 引用参考弹窗 |
 
@@ -106,8 +103,8 @@ components/
 
 ## ⚠️ 超标文件（>500 行）
 
-- `AITutor.tsx` (2217) — 最大组件，考虑拆分子组件
-- `Recorder.tsx` (1807) — 录音逻辑 + UI 混合
+- `AITutor.tsx` (1940) — 最大组件，子模块已拆到 `tutor/`
+- `Recorder.tsx` (1694) — 录音逻辑 + UI 混合，子模块已拆到 `recorder/`
 - `AppMatrixPanel.tsx` (1579) — 应用矩阵
 - `WorkshopYellowPage.tsx` (900) — 黄页
 - `TranscriptFlowView.tsx` (778) — 转录流
