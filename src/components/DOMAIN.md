@@ -71,6 +71,7 @@ components/
 |------|------|------|
 | `WorkspaceCaptureList.tsx` | ~900 | 工作空间 capture 列表 |
 | `VideoReviewPlayer.tsx` | 529 | 视频复习播放器 |
+| `SharedWorkspacePanel.tsx` | 140 | shared workspace 统一面板（highlights / summary / notes / apps）— 从 `page.tsx` 抽离 |
 | `HighlightsPanel.tsx` | ~400 | 精选片段面板 |
 | `NotesPanel.tsx` | ~370 | 笔记面板 |
 | `SummaryPanel.tsx` | ~280 | 摘要面板 |

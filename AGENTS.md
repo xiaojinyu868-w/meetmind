@@ -5,7 +5,42 @@
 
 ---
 
-## 0. Golden Commands
+## 0. Agent 阅读路径（最先读这里）
+
+拿到任务后，按以下顺序阅读，效率最高：
+
+```
+第 1 步：本文档（AGENTS.md）→ 第 1-3 节（产品 + Skills + 设计系统）
+第 2 步：skills/making-changes/SKILL.md → 了解 Plan→Execute→Verify→Commit 流程
+第 3 步：根据任务类型选择 ↓
+```
+
+### 按任务类型选择阅读路径
+
+| 任务类型 | 阅读顺序 |
+|---------|---------|
+| **改 UI / 组件** | `src/components/DOMAIN.md` → 对应子目录 DOMAIN.md → 具体组件 |
+| **改页面路由** | `src/app/DOMAIN.md` → 对应 page.tsx |
+| **改 API 接口** | `src/app/api/DOMAIN.md` → 对应子目录 DOMAIN.md → route.ts |
+| **改业务逻辑（service）** | `src/lib/services/DOMAIN.md` → 找到对应 service 文件 |
+| **改状态管理** | `src/stores/DOMAIN.md` → 了解哪些状态已迁移到 store |
+| **改类型定义** | `src/types/DOMAIN.md` → `src/types/index.ts` |
+| **改配置** | `src/lib/config/DOMAIN.md` → `src/lib/config/app.config.ts` |
+| **改工具函数** | `src/lib/utils/DOMAIN.md` → 对应 utils 文件 |
+| **处理 bug** | `skills/debugging/SKILL.md` → 先诊断再动手 |
+| **改 God File (page.tsx)** | `src/DOMAIN.md` → 理解数据流 → 找对应功能区 → `replace_in_file` 精确替换 |
+
+### 铁律
+
+- **每次改完必跑 `make check`**（tsc 类型检查）
+- **只读 DOMAIN.md，不确定的再读源码**
+- **不要发明新脚本，只用 Makefile 里的命令**
+- **如果目录结构、关键文件、依赖边界发生变化，必须同步更新对应的 `DOMAIN.md` / `AGENTS.md`**
+- **新增目录若包含 3 个以上源码文件，或承担独立职责，必须补一个 `DOMAIN.md`**
+
+---
+
+## 1. Golden Commands
 
 ```bash
 make check    # 类型检查（每次改完必跑）
@@ -74,22 +109,43 @@ MeetMind 是以学习者长期上下文为中心的 AI 学习产品。
 ```
 src/
 ├── DOMAIN.md              # ← 源码总览，从这里开始
-├── app/api/DOMAIN.md      # 45 个 API 路由索引
-├── components/DOMAIN.md   # ~137 个 UI 组件索引
-├── hooks/DOMAIN.md        # 23 个 hooks 索引
-├── stores/DOMAIN.md       # Zustand 状态
-├── types/DOMAIN.md        # 共享类型
+├── app/
+│   ├── DOMAIN.md         # 页面路由索引（新增）
+│   └── api/
+│       ├── DOMAIN.md     # 45 个 API 路由总览
+│       ├── auth/DOMAIN.md        # 认证接口组（新增）
+│       ├── workspace/DOMAIN.md    # Workspace 接口组（新增）
+│       ├── sources/DOMAIN.md      # 内容接入接口组（新增）
+│       ├── apps/DOMAIN.md         # AI 应用接口组（新增）
+│       ├── tutor/DOMAIN.md        # AI 家教（已有）
+│       └── video/import/DOMAIN.md # 视频导入管线（已有）
+├── components/
+│   ├── DOMAIN.md         # ~137 个 UI 组件索引
+│   ├── ui/DOMAIN.md      # 原子 UI 组件库（新增）
+│   ├── apps/windows/DOMAIN.md  # Workshop 窗口组件（新增）
+│   ├── tutor/DOMAIN.md   # AI 家教子模块
+│   ├── recorder/DOMAIN.md
+│   ├── mobile/DOMAIN.md
+│   ├── layout/DOMAIN.md
+│   ├── teacher/DOMAIN.md
+│   ├── parent/DOMAIN.md
+│   └── business/DOMAIN.md
+├── hooks/DOMAIN.md       # 23 个 hooks 索引
+├── stores/DOMAIN.md      # Zustand 状态
+├── types/DOMAIN.md       # 共享类型
 └── lib/
-    ├── DOMAIN.md          # 库代码总览
+    ├── DOMAIN.md         # 库代码总览
     ├── services/DOMAIN.md # 51 个业务服务（按域分组）
-    ├── utils/DOMAIN.md    # 工具函数
-    ├── db/DOMAIN.md       # IndexedDB Schema + CRUD
+    ├── utils/DOMAIN.md   # 工具函数
+    ├── utils/page/DOMAIN.md # page-utils 拆分模块
+    ├── db/DOMAIN.md      # IndexedDB Schema + CRUD
     ├── ai-native/DOMAIN.md # 应用插件系统
-    ├── longcut/DOMAIN.md  # 转录算法
-    ├── capture/DOMAIN.md  # 收集逻辑
+    ├── ai-native/plugins/DOMAIN.md # Workshop 插件
+    ├── longcut/DOMAIN.md # 转录算法
+    ├── capture/DOMAIN.md # 收集逻辑
     ├── context-reach/DOMAIN.md # 输入分流
-    ├── config/DOMAIN.md   # 配置中心
-    └── logger.ts          # 统一日志（不要用 console.log）
+    ├── config/DOMAIN.md  # 配置中心
+    └── logger.ts         # 统一日志（不要用 console.log）
 ```
 
 **读取顺序**：修改某个目录前，先读该目录的 `DOMAIN.md` 了解文件清单和依赖规则。

@@ -45,3 +45,5 @@ export type { DedaoConfusionCardProps } from './DedaoConfusionCard';
 
 export { DedaoMenu, DedaoMenuButton } from './DedaoMenu';
 export type { DedaoMenuProps } from './DedaoMenu';
+
+export { MobileCollectionSheet } from './MobileCollectionSheet';

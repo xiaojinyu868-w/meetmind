@@ -29,3 +29,4 @@
 
 - `PodcastPlayer.tsx` 导出的 `ConfusionMarker` 类型被 `session-store` 引用
 - Dedao 系列组件是得到 App 风格的替代 UI 方案
+- `MobileCollectionSheet.tsx` 是 page 拆分模板：适合承接移动端大块条件渲染 UI，但不要把业务逻辑和数据获取塞回组件里
