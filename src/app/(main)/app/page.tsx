@@ -148,7 +148,6 @@ import { WaveformPlayer, type WaveformPlayerRef, type WaveformAnchor } from '@/c
 import { Recorder, type RecorderHandle } from '@/components/Recorder';
 
 import { AppLoading } from '@/components/AppLoading';
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import {
   Mic,
   BookOpen,
@@ -160,13 +159,11 @@ import {
   MessageCircle,
   Clock,
   AlertCircle,
-  GraduationCap,
   ChevronRight,
   MoreHorizontal,
   Plus,
   Link2,
   History,
-  Menu,
   X,
   Image as ImageIcon,
   AudioLines,
@@ -201,6 +198,11 @@ const SummaryPanel = dynamic(() => import('@/components/SummaryPanel').then(m =>
 const NotesPanel = dynamic(() => import('@/components/NotesPanel').then(m => ({ default: m.NotesPanel })), { ssr: false });
 const AnchorDetailPanel = dynamic(() => import('@/components/AnchorDetailPanel').then(m => ({ default: m.AnchorDetailPanel })), { ssr: false });
 const SharedWorkspacePanel = dynamic(() => import('@/components/SharedWorkspacePanel').then(m => ({ default: m.SharedWorkspacePanel })), { ssr: false });
+const ReviewWorkspacePanel = dynamic(() => import('@/components/ReviewWorkspacePanel').then(m => ({ default: m.ReviewWorkspacePanel })), { ssr: false });
+const ReviewTutorPanel = dynamic(() => import('@/components/ReviewTutorPanel').then(m => ({ default: m.ReviewTutorPanel })), { ssr: false });
+const CollectionSelectionBar = dynamic(() => import('@/components/CollectionSelectionBar').then(m => ({ default: m.CollectionSelectionBar })), { ssr: false });
+const CollectionComposerContextPreview = dynamic(() => import('@/components/CollectionComposerContextPreview').then(m => ({ default: m.CollectionComposerContextPreview })), { ssr: false });
+const CollectionComposerBar = dynamic(() => import('@/components/CollectionComposerBar').then(m => ({ default: m.CollectionComposerBar })), { ssr: false });
 import { type FloatingWorkshopWindowState, getDefaultDisplayMode } from '@/components/apps/windows/WorkshopWindowManager';
 const WorkshopWindowManager = dynamic(() => import('@/components/apps/windows/WorkshopWindowManager').then(m => ({ default: m.WorkshopWindowManager })), { ssr: false });
 const ConversationList = dynamic(() => import('@/components/ConversationHistory/ConversationList').then(m => ({ default: m.ConversationList })), { ssr: false });
@@ -224,13 +226,14 @@ const loadDemoData = async () => {
 
 // Mobile components - dynamic loaded (only needed on mobile)
 const MiniPlayer = dynamic(() => import('@/components/mobile/MiniPlayer').then(m => ({ default: m.MiniPlayer })), { ssr: false });
-const MobileTabSwitch = dynamic(() => import('@/components/mobile/MobileTabSwitch').then(m => ({ default: m.MobileTabSwitch })), { ssr: false });
 const DedaoTimeline = dynamic(() => import('@/components/mobile/DedaoTimeline').then(m => ({ default: m.DedaoTimeline })), { ssr: false });
 import { toDedaoEntries } from '@/components/mobile/DedaoTimeline';
 const DedaoConfusionCard = dynamic(() => import('@/components/mobile/DedaoConfusionCard').then(m => ({ default: m.DedaoConfusionCard })), { ssr: false });
 const DedaoMenu = dynamic(() => import('@/components/mobile/DedaoMenu').then(m => ({ default: m.DedaoMenu })), { ssr: false });
-const DedaoMenuButton = dynamic(() => import('@/components/mobile/DedaoMenu').then(m => ({ default: m.DedaoMenuButton })), { ssr: false });
+const MobileTopBar = dynamic(() => import('@/components/mobile/MobileTopBar').then(m => ({ default: m.MobileTopBar })), { ssr: false });
+const MobileRecordTopBar = dynamic(() => import('@/components/mobile/MobileRecordTopBar').then(m => ({ default: m.MobileRecordTopBar })), { ssr: false });
 const MobileAIFab = dynamic(() => import('@/components/mobile/MobileAIFab').then(m => ({ default: m.MobileAIFab })), { ssr: false });
+const MobileAIChatPanel = dynamic(() => import('@/components/mobile/MobileAIChatPanel').then(m => ({ default: m.MobileAIChatPanel })), { ssr: false });
 const MobileCollectionSheet = dynamic(() => import('@/components/mobile/MobileCollectionSheet').then(m => ({ default: m.MobileCollectionSheet })), { ssr: false });
 
 const ICON_TAB = 14;
@@ -5421,55 +5424,6 @@ const _handleVideoAssistantMessage = useCallback((payload: {
     window.open(url, '_blank', 'noopener,noreferrer');
   }, []);
 
-  const renderMobileTopBar = useCallback(
-    () => {
-      const topBarStatus = isRecording
-        ? '正在收一段原声'
-        : activeSourceImportCount > 0
-          ? `正在收进 ${activeSourceImportCount} 个文件`
-          : '';
-
-      return (
-        <div className="flex-shrink-0 bg-[#F7F7F5] px-4 pb-1.5 pt-[max(env(safe-area-inset-top),6px)]">
-          <div className="mx-auto flex w-full max-w-md items-center gap-2.5">
-            <button
-              type="button"
-              onClick={() => {
-                setShowMobileRecorder(false);
-                setMobileCollectionSheet('more');
-              }}
-              className="flex h-9 w-9 items-center justify-center rounded-full text-slate-400 transition hover:bg-black/[0.04] hover:text-slate-600"
-              aria-label="打开收集菜单"
-            >
-              <Menu size={18} />
-            </button>
-            <div className="flex min-w-0 flex-1 items-center justify-center">
-              <MobileTabSwitch
-                activeTab={viewMode}
-                onTabChange={(tab) => handleViewModeChange(tab)}
-              />
-            </div>
-            <button
-              type="button"
-              onClick={() => {
-                setShowMobileRecorder(false);
-                setMobileCollectionSheet('history');
-              }}
-              className="relative flex h-9 w-9 items-center justify-center rounded-full text-slate-400 transition hover:bg-black/[0.04] hover:text-slate-600"
-              aria-label="打开历史收集"
-            >
-              <History size={17} />
-            </button>
-          </div>
-          {topBarStatus ? (
-            <p className="mt-1 text-center text-[10px] font-medium text-[#787774]">{topBarStatus}</p>
-          ) : null}
-        </div>
-      );
-    },
-    [activeSourceImportCount, handleViewModeChange, isRecording, viewMode]
-  );
-
   const renderMobileRecordView = ({ desktopShell = false }: { desktopShell?: boolean } = {}) => {
     const shellWidthClass = desktopShell ? 'max-w-3xl' : 'max-w-md';
     const messageBubbleWidthClass = desktopShell ? 'max-w-[74%]' : 'max-w-[88%]';
@@ -5491,6 +5445,11 @@ const _handleVideoAssistantMessage = useCallback((payload: {
     const composerRows = composerHasText ? 2 : 1;
     const showComposerAssistState =
       sourceImporting || composerVoiceStatus === 'connecting' || isComposerVoiceRecording || composerCanAutoImportLink;
+    const topBarStatus = isRecording
+      ? '正在收一段原声'
+      : activeSourceImportCount > 0
+        ? `正在收进 ${activeSourceImportCount} 个文件`
+        : '';
 
     return (
     <div className="relative flex h-full min-h-0 flex-col overflow-hidden" style={{ background: 'var(--edu-bg-primary)' }}>
@@ -5499,7 +5458,21 @@ const _handleVideoAssistantMessage = useCallback((payload: {
         <div className="absolute right-[-18%] top-[16%] h-56 w-56 rounded-full bg-[radial-gradient(circle,rgba(91,106,191,0.12)_0%,rgba(91,106,191,0)_72%)]" />
         <div className="absolute bottom-[-12%] left-[8%] h-52 w-52 rounded-full bg-[radial-gradient(circle,rgba(93,173,226,0.14)_0%,rgba(93,173,226,0)_72%)]" />
       </div>
-      {!desktopShell ? renderMobileTopBar() : null}
+      {!desktopShell ? (
+        <MobileRecordTopBar
+          viewMode={viewMode}
+          statusText={topBarStatus}
+          onTabChange={handleViewModeChange}
+          onOpenMore={() => {
+            setShowMobileRecorder(false);
+            setMobileCollectionSheet('more');
+          }}
+          onOpenHistory={() => {
+            setShowMobileRecorder(false);
+            setMobileCollectionSheet('history');
+          }}
+        />
+      ) : null}
 
       <input
         ref={sourceFileInputRef}
@@ -6333,76 +6306,21 @@ const _handleVideoAssistantMessage = useCallback((payload: {
       />
 
       {isCollectionContextSelectionMode && selectedCollectionContextItems.length > 0 ? (
-        <div className={`relative z-20 flex-shrink-0 ${desktopShell ? 'px-6 pb-2 pt-3' : 'px-3 pb-2 pt-2'}`}>
-          <div
-            className={`mx-auto w-full ${dockWidthClass} rounded-[28px] border border-[#E9E9E7] bg-white px-3.5 py-3`}
-          >
-            <div className="flex items-start gap-3">
-              <div className="min-w-0 flex-1">
-                <div className="flex items-center gap-2">
-                  <span className="inline-flex items-center justify-center rounded-full bg-[#232322] px-2.5 py-1 text-[12px] font-semibold text-white">
-                    {selectedCollectionContextItems.length} 条
-                  </span>
-                  <p className="text-[12px] font-medium text-[#232322]">已加入这次操作</p>
-                </div>
-                <div className="mt-2 flex flex-wrap items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={openTutorWithSelectedCollectionContext}
-                    className="inline-flex items-center gap-1.5 rounded-full bg-[#232322] px-3.5 py-2.5 text-[11px] font-semibold text-white transition hover:bg-[#111111]"
-                  >
-                    <MessageCircle size={14} />
-                    <span>问 Tutor</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={quoteSelectedCollectionContextToComposer}
-                    className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-white px-3.5 py-2.5 text-[11px] font-semibold text-slate-700 transition hover:border-slate-300 hover:text-slate-900"
-                  >
-                    <FileText size={14} />
-                    <span>引用</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      void applyBatchActionToSelectedCollectionContext('archive');
-                    }}
-                    className="inline-flex items-center gap-1.5 rounded-full border border-[#E9E9E7] bg-[#FDF3C0]/50 px-3 py-2.5 text-[11px] font-medium text-[#232322] transition hover:border-[#E9E9E7] hover:bg-[#FDF3C0]"
-                  >
-                    <History size={14} />
-                    <span>先收起</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      void applyBatchActionToSelectedCollectionContext('delete');
-                    }}
-                    className={`rounded-full px-3 py-2.5 text-[11px] font-medium transition ${
-                      confirmSelectedCollectionDelete
-                        ? 'bg-rose-600 text-white hover:bg-rose-700'
-                        : 'text-slate-400 hover:bg-rose-50 hover:text-rose-700'
-                    }`}
-                  >
-                    {confirmSelectedCollectionDelete ? '确认删除' : '删除'}
-                  </button>
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={clearCollectionContextSelection}
-                className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-[16px] border border-[#E9E9E7] bg-white/86 text-slate-500 transition hover:bg-white hover:text-slate-700"
-                aria-label="退出多选"
-              >
-                <X size={15} />
-              </button>
-            </div>
-          </div>
-          {confirmSelectedCollectionDelete ? (
-            <p className={`mx-auto mt-2 w-full ${dockWidthClass} px-1 text-[11px] font-medium text-rose-600`}>
-              再点一次删除，就会彻底移除这些内容。
-            </p>
-          ) : null}
-        </div>
+        <CollectionSelectionBar
+          desktopShell={desktopShell}
+          dockWidthClass={dockWidthClass}
+          selectedCount={selectedCollectionContextItems.length}
+          confirmDelete={confirmSelectedCollectionDelete}
+          onAskTutor={openTutorWithSelectedCollectionContext}
+          onQuote={quoteSelectedCollectionContextToComposer}
+          onArchive={() => {
+            void applyBatchActionToSelectedCollectionContext('archive');
+          }}
+          onDelete={() => {
+            void applyBatchActionToSelectedCollectionContext('delete');
+          }}
+          onClear={clearCollectionContextSelection}
+        />
       ) : null}
 
       {showMobileRecorder ? (
@@ -6426,124 +6344,37 @@ const _handleVideoAssistantMessage = useCallback((payload: {
           </div>
         </div>
       ) : (
-        <div className={`relative z-20 flex-shrink-0 bg-[#F7F7F7] ${desktopShell ? 'px-4 pb-5 pt-2' : 'px-2 pb-[max(env(safe-area-inset-bottom),6px)] pt-1.5'}`} style={{ borderTop: '0.5px solid #E0E0E0' }}>
-          <div className={`mx-auto w-full ${dockWidthClass}`}>
-            {quotedCollectionContextItems.length > 0 ? (
-              <div className="mb-1.5 flex items-center gap-2 rounded-lg bg-white px-3 py-2 text-[12px]">
-                <ChevronRight size={12} className="flex-shrink-0 text-slate-400" />
-                <span className="min-w-0 flex-1 truncate text-slate-500">
-                  {quotedCollectionContextItems.length > 1
-                    ? `已引用 ${quotedCollectionContextItems.length} 条内容`
-                    : quotedCollectionPrimaryItem?.type === 'audio'
-                      ? '已引用一段原声'
-                      : `已引用${quotedCollectionPrimaryItem ? getCollectionContextTypeLabel(quotedCollectionPrimaryItem.type) : '内容'}`}
-                  {quotedCollectionSummaryText ? `：${quotedCollectionSummaryText}` : ''}
-                </span>
-                <button
-                  type="button"
-                  onClick={clearQuotedCollectionContext}
-                  className="flex-shrink-0 text-slate-300 hover:text-slate-500"
-                  aria-label="取消引用"
-                >
-                  <X size={14} />
-                </button>
-              </div>
-            ) : null}
-            {composerLinkPreview ? (
-              <div className="mb-1.5 flex items-center gap-2 rounded-lg bg-white px-3 py-2 text-[12px]">
-                <Link2 size={12} className="flex-shrink-0 text-indigo-400" />
-                <span className="min-w-0 flex-1 truncate text-slate-500">
-                  {composerLinkPreview.providerLabel} 链接{composerCanAutoImportLink ? ' · 发送后自动解析' : ''}
-                </span>
-              </div>
-            ) : null}
-            <div className="flex items-end gap-1">
-              <button
-                type="button"
-                onClick={openLiveRecorder}
-                disabled={isComposerVoiceRecording || composerVoiceStatus === 'connecting'}
-                className="flex h-[36px] w-[36px] flex-shrink-0 items-center justify-center text-slate-500 transition hover:text-slate-700 disabled:text-slate-300"
-                aria-label="录制原声"
-              >
-                <AudioLines size={24} strokeWidth={1.5} />
-              </button>
-              <div className="min-w-0 flex-1 rounded-lg bg-white px-3 py-[7px]">
-                <textarea
-                  ref={collectionComposerRef}
-                  data-testid="collection-composer-input"
-                  value={collectionComposerText}
-                  onChange={(event) => {
-                    setSourceImportError('');
-                    setCollectionComposerText(event.target.value);
-                  }}
-                  onPaste={handleCollectionComposerPaste}
-                  placeholder={collectionComposerPlaceholder}
-                  rows={composerRows}
-                  className="max-h-28 min-h-[22px] w-full resize-none appearance-none border-0 bg-transparent px-0 py-0 text-[15px] leading-[22px] text-slate-900 outline-none ring-0 shadow-none focus:outline-none focus:ring-0 focus-visible:outline-none focus-visible:ring-0 placeholder:text-slate-400"
-                />
-                {showComposerAssistState ? (
-                  <p className="mt-1 text-[11px] text-slate-400">
-                    {sourceImporting
-                      ? activeSourceImportCount > 1
-                        ? `${activeSourceImportCount} 个文件已收下`
-                        : '文件已收下'
-                      : composerVoiceStatus === 'connecting'
-                        ? '正在打开语音听写...'
-                        : isComposerVoiceRecording
-                          ? compactText(composerVoiceInterimText || '正在听你说...', 28)
-                          : ''}
-                  </p>
-                ) : null}
-                {!sourceImporting && sourceImportError ? (
-                  <p className="mt-1 text-[11px] text-rose-400">{compactText(sourceImportError, 40)}</p>
-                ) : null}
-              </div>
-              {composerHasText ? (
-                <button
-                  type="button"
-                  data-testid="collection-composer-submit"
-                  onClick={handleCollectionComposerSubmit}
-                  disabled={isComposerVoiceRecording || composerVoiceStatus === 'connecting'}
-                  className="flex h-[36px] w-[36px] flex-shrink-0 items-center justify-center rounded-lg bg-indigo-500 text-white transition hover:bg-indigo-600 disabled:opacity-40"
-                  aria-label="发送到收集流"
-                >
-                  <ArrowUp size={18} strokeWidth={2.5} />
-                </button>
-              ) : (
-                <>
-                <button
-                  type="button"
-                  onClick={() => {
-                    void toggleComposerDictation();
-                  }}
-                  disabled={showMobileRecorder || isRecording}
-                  className={`flex h-[36px] w-[36px] flex-shrink-0 items-center justify-center transition ${
-                    composerVoiceStatus === 'connecting' || isComposerVoiceRecording
-                      ? 'text-indigo-500'
-                      : 'text-slate-500 hover:text-slate-700'
-                  } disabled:text-slate-300`}
-                  aria-label={isComposerVoiceRecording || composerVoiceStatus === 'connecting' ? '停止语音听写' : '语音转文字'}
-                >
-                  <Mic size={24} strokeWidth={1.5} />
-                </button>
-                <button
-                  type="button"
-                  data-testid="collection-upload-button"
-                  onClick={() => handleSourceFileButtonClick('all')}
-                  className={`flex h-[36px] w-[36px] flex-shrink-0 items-center justify-center transition ${
-                    sourceImporting
-                      ? 'text-indigo-500'
-                      : 'text-slate-500 hover:text-slate-700'
-                  }`}
-                  aria-label="上传文件"
-                >
-                  <Plus size={26} strokeWidth={1.5} />
-                </button>
-                </>
-              )}
-            </div>
-          </div>
-        </div>
+        <CollectionComposerBar
+          desktopShell={desktopShell}
+          dockWidthClass={dockWidthClass}
+          quotedCount={quotedCollectionContextItems.length}
+          quotedPrimaryTypeLabel={quotedCollectionPrimaryItem ? getCollectionContextTypeLabel(quotedCollectionPrimaryItem.type) : '内容'}
+          quotedSummaryText={quotedCollectionSummaryText}
+          onClearQuoted={clearQuotedCollectionContext}
+          linkPreviewLabel={composerLinkPreview?.providerLabel || ''}
+          autoImportLink={composerCanAutoImportLink}
+          onOpenLiveRecorder={openLiveRecorder}
+          disableLiveRecorder={false}
+          composerRef={collectionComposerRef}
+          value={collectionComposerText}
+          onChangeValue={(value: string) => {
+            setSourceImportError('');
+            setCollectionComposerText(value);
+          }}
+          onPaste={handleCollectionComposerPaste}
+          placeholder={collectionComposerPlaceholder}
+          rows={composerRows}
+          sourceImporting={sourceImporting}
+          activeSourceImportCount={activeSourceImportCount}
+          composerVoiceStatus={composerVoiceStatus}
+          isComposerVoiceRecording={isComposerVoiceRecording}
+          composerVoiceInterimText={composerVoiceInterimText}
+          sourceImportError={sourceImportError}
+          onSubmit={handleCollectionComposerSubmit}
+          onToggleDictation={toggleComposerDictation}
+          disableDictation={showMobileRecorder || isRecording}
+          onUploadAll={() => handleSourceFileButtonClick('all')}
+        />
       )}
 
     </div>
@@ -6684,7 +6515,7 @@ const _handleVideoAssistantMessage = useCallback((payload: {
       {!isMobile && <DegradedModeBanner status={serviceStatus} />}
       
       {/* NOTE: cleaned corrupted legacy comment. */}
-      {!isMobile && (
+      {!isMobile && viewMode !== 'review' && (
         <Header 
           lessonTitle={viewMode === 'record' ? '课堂收集' : '课堂复习'}
           courseName=""
@@ -6694,10 +6525,10 @@ const _handleVideoAssistantMessage = useCallback((payload: {
 
       {/* NOTE: cleaned corrupted legacy comment. */}
       {!isMobile && (
-        <div className="border-b px-6 py-3 no-print flex-shrink-0 relative z-20" style={{ background: 'var(--edu-bg-secondary)', borderColor: 'var(--edu-border-light)' }}>
+        <div className={`border-b no-print flex-shrink-0 relative z-20 ${viewMode === 'review' ? 'px-4 py-2' : 'px-6 py-3'}`} style={{ background: 'var(--edu-bg-secondary)', borderColor: 'var(--edu-border-light)' }}>
           <div className="flex items-center justify-between">
             <div 
-              className="flex items-center gap-2 p-1 rounded-xl" 
+              className={`flex items-center gap-2 rounded-xl ${viewMode === 'review' ? 'p-0.5' : 'p-1'}`}
               style={{ background: 'var(--edu-bg-soft)' }}
             >
               <button
@@ -7058,253 +6889,80 @@ const _handleVideoAssistantMessage = useCallback((payload: {
                 maxLeftWidth={820}
                 storageKey="meetmind-left-panel-width"
                 leftPanel={
-                  /* NOTE: cleaned corrupted legacy comment. */
-                  <div className="h-full flex flex-col bg-white" style={{ borderRight: '1px solid var(--edu-border-light)' }}>
-                    {/* NOTE: cleaned corrupted legacy comment. */}
-                    <div 
-                      className="flex items-center gap-1 px-3 py-2.5 border-b overflow-x-auto flex-shrink-0 relative z-10 tab-buttons-container" 
-                      style={{ background: 'var(--edu-bg-soft)', borderColor: 'var(--edu-border-light)' }}
-                    >
-                      {REVIEW_WORKSPACE_TABS.map((tab) => (
-                        <button
-                          key={tab.key}
-                          data-testid={tab.testId}
-                          onClick={() => setReviewTab(tab.key)}
-                          className={`flex items-center gap-1 px-3 py-2 text-sm rounded-lg transition-all whitespace-nowrap tab-button ${
-                            reviewTab === tab.key
-                              ? 'bg-white text-[#787774] font-medium'
-                              : 'text-gray-500 hover:text-navy hover:bg-white/50'
-                          }`}
-                        >
-                          {tab.LucideIcon && <tab.LucideIcon size={ICON_TAB} strokeWidth={ICON_TAB_STROKE} />}
-                          {tab.label}
-                          {tab.key === 'anchor-detail' && selectedAnchor && !selectedAnchor.resolved && (
-                            <span className="ml-1 w-2 h-2 bg-[#FADEC9] rounded-full inline-block animate-pulse" />
-                          )}
-                          {tab.key === 'highlights' && highlightTopics.length > 0 && (
-                            <span className="ml-1 text-xs text-skyblue-600">({highlightTopics.length})</span>
-                          )}
-                          {tab.key === 'summary' && classSummary && <span className="ml-1 text-xs text-mint-600">OK</span>}
-                          {tab.key === 'notes' && notes.length > 0 && (
-                            <span className="ml-1 text-xs text-[#787774]">({notes.length})</span>
-                          )}
-                        </button>
-                      ))}
-                    </div>
-                    
-                    {/* NOTE: cleaned corrupted legacy comment. */}
-                    <div className="flex-1 min-h-0 overflow-hidden">
-                      {reviewTab === 'timeline' && timelineForView && (
-                        <TimelineView
-                          timeline={timelineForView}
-                          currentTime={currentTime}
-                          selectedBreakpoint={selectedBreakpoint}
-                          onTimeClick={handleTimelineClick}
-                          onBreakpointClick={(bp) => {
-                            const anchor = anchors.find(a => a.id === bp.id);
-                            if (anchor) handleAnchorSelect(anchor);
-                          }}
-                          onSegmentTextUpdate={handleTranscriptTextUpdate}
-                          enableWordExplainer={true}
-                          fullContextText={segments.map(s => `[${formatTime(s.startMs)}] ${s.text}`).join('\n')}
-                        />
-                      )}
-                      
-                      {reviewTab === 'anchor-detail' && (
-                        <AnchorDetailPanel
-                          anchor={selectedAnchor}
-                          segments={segments}
-                          onSeek={(timeMs) => {
-                            handleUnifiedSeek(timeMs);
-                          }}
-                          onPlay={(startMs) => {
-                            waveformRef.current?.seekTo(startMs);
-                            waveformRef.current?.play();
-                          }}
-                          onResolve={handleResolveAnchor}
-                          onAddNote={(text, anchorId) => {
-                            handleAddNote(text, 'anchor', {
-                              anchorId,
-                              timestamp: selectedAnchor?.timestamp,
-                            });
-                          }}
-                          onClose={() => setReviewTab('timeline')}
-                        />
-                      )}
-                      
-                      {isSharedWorkspaceTab(reviewTab) && renderSharedWorkspacePanel(reviewTab)}
-                    </div>
-                  </div>
+                  <ReviewWorkspacePanel
+                    reviewWorkspaceTabs={REVIEW_WORKSPACE_TABS}
+                    reviewTab={reviewTab}
+                    onReviewTabChange={setReviewTab}
+                    selectedAnchor={selectedAnchor}
+                    highlightTopicCount={highlightTopics.length}
+                    hasSummary={Boolean(classSummary)}
+                    notesCount={notes.length}
+                    iconTabSize={ICON_TAB}
+                    iconTabStroke={ICON_TAB_STROKE}
+                    timelineForView={timelineForView}
+                    currentTime={currentTime}
+                    selectedBreakpoint={selectedBreakpoint}
+                    anchors={anchors}
+                    segments={segments}
+                    onTimelineClick={handleTimelineClick}
+                    onBreakpointSelect={handleAnchorSelect}
+                    onSegmentTextUpdate={handleTranscriptTextUpdate}
+                    onSeek={handleUnifiedSeek}
+                    onPlay={(startMs: number) => {
+                      waveformRef.current?.seekTo(startMs);
+                      waveformRef.current?.play();
+                    }}
+                    onResolveAnchor={handleResolveAnchor}
+                    onAddAnchorNote={(text: string, anchorId: string) => {
+                      handleAddNote(text, 'anchor', {
+                        anchorId,
+                        timestamp: selectedAnchor?.timestamp,
+                      });
+                    }}
+                    sharedWorkspaceContent={isSharedWorkspaceTab(reviewTab) ? renderSharedWorkspacePanel(reviewTab) : null}
+                  />
                 }
                 rightPanel={
-                  /* NOTE: cleaned corrupted legacy comment. */
-                  <div className="h-full flex flex-col bg-white ai-chat-container">
-                    {/* NOTE: cleaned corrupted legacy comment. */}
-                    {(audioBlob || audioUrl) && (
-                      <div className="flex-shrink-0 border-b" style={{ background: 'var(--edu-bg-soft)', borderColor: 'var(--edu-border-light)', maxHeight: '120px' }}>
-                        <WaveformPlayer
-                          ref={waveformRef}
-                          src={audioBlob || audioUrl || undefined}
-                          anchors={anchors.map(a => ({
-                            id: a.id,
-                            timestamp: a.timestamp,
-                            resolved: a.resolved,
-                            type: a.type,
-                          } as WaveformAnchor))}
-                          onTimeUpdate={setCurrentTime}
-                          onPlayStateChange={setIsPlaying}
-                          onAnchorClick={(anchor) => {
-                            const found = anchors.find(a => a.id === anchor.id);
-                            if (found) handleAnchorSelect(found);
-                          }}
-                          onAnchorAdd={handlePlaybackAnchorAdd}
-                          allowAddAnchor={true}
-                          selectedAnchorId={selectedAnchor?.id}
-                          compact={true}
-                        />
-                      </div>
-                    )}
-                    
-                    {/* NOTE: cleaned corrupted legacy comment. */}
-                    <div className="flex-1 min-h-0 flex flex-col" style={{ minHeight: 'var(--ai-chat-min-height, 300px)' }}>
-                      {/* NOTE: cleaned corrupted legacy comment. */}
-                      {!showConversationHistory && (
-                        <div 
-                          className="flex-shrink-0 px-3 py-2 flex items-center gap-2 border-b"
-                          style={{ background: 'var(--edu-bg-soft)', borderColor: 'var(--edu-border-light)' }}
-                        >
-                          <button
-                            onClick={() => setSelectedAnchor(null)}
-                            className={`px-3 py-1.5 text-xs rounded-lg transition-all flex items-center gap-1.5 ${
-                              !selectedAnchor
-                                ? 'bg-[#232322] text-white'
-                                : 'bg-white text-gray-600 hover:text-[#787774] hover:bg-[#EFEFEF] border border-gray-200'
-                            }`}
-                            title="基于整节课内容与 AI 对话"
-                          >
-                            <span>对话</span>
-                            整节课对话
-                          </button>
-                          {selectedAnchor && (
-                            <div className="flex items-center gap-1.5 px-3 py-1.5 bg-white rounded-lg border border-[#E9E9E7] text-xs">
-                              <span className={`w-2 h-2 rounded-full ${selectedAnchor.resolved ? 'bg-mint' : 'bg-[#FADEC9] animate-pulse'}`} />
-                              <span className="text-[#232322] font-medium">
-                                困惑点 {formatTime(selectedAnchor.timestamp)}
-                              </span>
-                              <button
-                                onClick={() => setSelectedAnchor(null)}
-                                className="ml-1 text-gray-400 hover:text-gray-600"
-                                title="返回整节课对话"
-                              >
-                                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                                </svg>
-                              </button>
-                            </div>
-                          )}
-                          {!selectedAnchor && anchors.length > 0 && (
-                            <span className="text-xs text-gray-400 ml-auto">
-                              点击左侧困惑点可切换到针对性解答
-                            </span>
-                          )}
-                        </div>
-                      )}
-                      
-                      {/* NOTE: cleaned corrupted legacy comment. */}
-                      <div className="flex-1 min-h-0 overflow-hidden">
-                        {showConversationHistory ? (
-                          selectedHistoryConversation ? (
-                            <div className="h-full flex flex-col">
-                              <div className="px-4 py-2 border-b flex items-center justify-between flex-shrink-0" style={{ background: 'var(--edu-bg-soft)', borderColor: 'var(--edu-border-light)' }}>
-                                <span className="text-sm text-gray-600 truncate flex-1 mr-2">{selectedHistoryConversation.title}</span>
-                                <div className="flex items-center gap-1">
-                                  {/* Back to list icon button. */}
-                                  <button
-                                    onClick={() => setSelectedHistoryConversation(null)}
-                                    className="w-8 h-8 flex items-center justify-center rounded-lg text-gray-500 hover:text-navy hover:bg-gray-100 transition-colors"
-                                    title="返回列表"
-                                  >
-                                    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 10h16M4 14h16M4 18h16" />
-                                    </svg>
-                                  </button>
-                                  {/* NOTE: cleaned corrupted legacy comment. */}
-                                  <button
-                                    onClick={() => {
-                                      setShowConversationHistory(false);
-                                      setSelectedHistoryConversation(null);
-                                    }}
-                                    className="w-8 h-8 flex items-center justify-center rounded-lg text-[#232322] hover:text-[#232322] hover:bg-[#EFEFEF] transition-colors"
-                                    title="新对话"
-                                  >
-                                    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-                                    </svg>
-                                  </button>
-                                </div>
-                              </div>
-                              <div className="flex-1 min-h-0">
-                                <AIChat
-                                  conversationId={selectedHistoryConversation.conversationId}
-                                  sessionId={sessionId}
-                                  contextText={tutorSupportContextText}
-                                  onTimestampClick={(timeMs) => {
-                                    handleUnifiedSeek(timeMs, true);
-                                  }}
-                                />
-                              </div>
-                            </div>
-                          ) : (
-                            <div className="h-full flex flex-col">
-                              <div className="px-4 py-2 border-b flex items-center justify-between flex-shrink-0" style={{ background: 'var(--edu-bg-soft)', borderColor: 'var(--edu-border-light)' }}>
-                                <span className="text-sm font-medium text-navy">历史对话</span>
-                                {/* NOTE: cleaned corrupted legacy comment. */}
-                                <button
-                                  onClick={() => {
-                                    setShowConversationHistory(false);
-                                    setSelectedHistoryConversation(null);
-                                  }}
-                                  className="w-8 h-8 flex items-center justify-center rounded-lg text-[#787774] hover:text-[#232322] hover:bg-[#EFEFEF] transition-colors"
-                                  title="新对话"
-                                >
-                                  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-                                  </svg>
-                                </button>
-                              </div>
-                              <div className="flex-1 min-h-0">
-                                <ConversationList
-                                  sessionId={sessionId}
-                                  onSelect={(conv) => setSelectedHistoryConversation(conv)}
-                                  showSearch={true}
-                                  maxHeight="100%"
-                                />
-                              </div>
-                            </div>
-                          )
-                        ) : (
-                          <AITutor
-                            breakpoint={mobileAIPreferSelectedContext && mobileAILaunchTarget === 'review-panel' ? null : selectedBreakpoint}
-                            segments={segments}
-                            isLoading={false}
-                            onResolve={handleResolveAnchor}
-                            onActionItemsUpdate={handleActionItemsUpdate}
-                            sessionId={sessionId}
-                            supportContextText={tutorSupportContextText}
-                            preferSupportContext={mobileAILaunchTarget === 'review-panel' ? mobileAIPreferSelectedContext : false}
-                            launchQuestion={mobileAILaunchTarget === 'review-panel' && mobileAIConsumedQuestionNonce !== mobileAIQuestionNonce ? mobileAIQuestion : ''}
-                            launchDisplayText={mobileAILaunchTarget === 'review-panel' ? mobileAIDisplayQuestion : ''}
-                            launchImages={mobileAILaunchTarget === 'review-panel' ? mobileAILaunchImages : []}
-                            launchQuestionNonce={mobileAILaunchTarget === 'review-panel' ? mobileAIQuestionNonce : 0}
-                            onLaunchQuestionConsumed={mobileAILaunchTarget === 'review-panel' ? consumeMobileAIQuestion : undefined}
-                            onSeek={(timeMs) => {
-                              handleUnifiedSeek(timeMs, true);
-                            }}
-                          />
-                        )}
-                      </div>
-                    </div>
-                  </div>
+                  <ReviewTutorPanel
+                    audioSrc={audioBlob || audioUrl || undefined}
+                    waveformRef={waveformRef}
+                    waveformAnchors={anchors.map((anchor) => ({
+                      id: anchor.id,
+                      timestamp: anchor.timestamp,
+                      resolved: anchor.resolved,
+                      type: anchor.type,
+                    } as WaveformAnchor))}
+                    anchors={anchors}
+                    selectedAnchor={selectedAnchor}
+                    onTimeUpdate={setCurrentTime}
+                    onPlayStateChange={setIsPlaying}
+                    onAnchorSelect={handleAnchorSelect}
+                    onAnchorAdd={handlePlaybackAnchorAdd}
+                    showConversationHistory={showConversationHistory}
+                    selectedHistoryConversation={selectedHistoryConversation}
+                    onBackToHistoryList={() => setSelectedHistoryConversation(null)}
+                    onCloseHistory={() => {
+                      setShowConversationHistory(false);
+                      setSelectedHistoryConversation(null);
+                    }}
+                    onSelectHistoryConversation={setSelectedHistoryConversation}
+                    onClearSelectedAnchor={() => setSelectedAnchor(null)}
+                    sessionId={sessionId}
+                    tutorSupportContextText={tutorSupportContextText}
+                    onSeek={(timeMs: number) => {
+                      handleUnifiedSeek(timeMs, true);
+                    }}
+                    tutorBreakpoint={mobileAIPreferSelectedContext && mobileAILaunchTarget === 'review-panel' ? null : selectedBreakpoint}
+                    segments={segments}
+                    onResolve={handleResolveAnchor}
+                    onActionItemsUpdate={handleActionItemsUpdate}
+                    preferSupportContext={mobileAILaunchTarget === 'review-panel' ? mobileAIPreferSelectedContext : false}
+                    launchQuestion={mobileAILaunchTarget === 'review-panel' && mobileAIConsumedQuestionNonce !== mobileAIQuestionNonce ? mobileAIQuestion : ''}
+                    launchDisplayText={mobileAILaunchTarget === 'review-panel' ? mobileAIDisplayQuestion : ''}
+                    launchImages={mobileAILaunchTarget === 'review-panel' ? mobileAILaunchImages : []}
+                    launchQuestionNonce={mobileAILaunchTarget === 'review-panel' ? mobileAIQuestionNonce : 0}
+                    onLaunchQuestionConsumed={mobileAILaunchTarget === 'review-panel' ? consumeMobileAIQuestion : undefined}
+                  />
                 }
               />
 
@@ -7337,45 +6995,13 @@ const _handleVideoAssistantMessage = useCallback((payload: {
           ) : (
             /* 手机端主内容区 */
             <div className="flex-1 min-h-0 flex flex-col overflow-hidden bg-white">
-              <div className="flex-shrink-0 bg-[#F7F7F5] px-4 pb-2 pt-[max(env(safe-area-inset-top),10px)]">
-                <div className="mx-auto flex w-full max-w-md items-center gap-3">
-                  <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#5B6ABF] text-white">
-                    <GraduationCap size={16} strokeWidth={2} />
-                  </div>
-
-                  <div className="flex min-w-0 flex-1 items-center justify-center">
-                    <MobileTabSwitch
-                      activeTab={viewMode}
-                      onTabChange={(tab) => handleViewModeChange(tab)}
-                    />
-                  </div>
-
-                  <div className="flex items-center gap-2">
-                    {isAuthenticated && user ? (
-                      <button
-                        onClick={() => setIsMenuOpen(true)}
-                        className="h-8 w-8 overflow-hidden rounded-full"
-                      >
-                        <Avatar className="h-full w-full">
-                          {user.avatar ? (
-                            <AvatarImage src={user.avatar} alt={user.nickname} className="object-cover" />
-                          ) : null}
-                          <AvatarFallback className="bg-slate-100 text-xs text-slate-500">用户</AvatarFallback>
-                        </Avatar>
-                      </button>
-                    ) : (
-                      <a
-                        href="/login"
-                        className="inline-flex h-7 items-center justify-center rounded-full bg-[#5B6ABF] px-2.5 text-[11px] font-medium text-white"
-                      >
-                        登录
-                      </a>
-                    )}
-
-                    <DedaoMenuButton onClick={() => setIsMenuOpen(true)} />
-                  </div>
-                </div>
-              </div>
+              <MobileTopBar
+                viewMode={viewMode}
+                onTabChange={handleViewModeChange}
+                isAuthenticated={isAuthenticated}
+                user={user}
+                onOpenMenu={() => setIsMenuOpen(true)}
+              />
 
               {/* NOTE: cleaned corrupted legacy comment. */}
               {!mobileSubPage && (
@@ -7541,193 +7167,72 @@ const _handleVideoAssistantMessage = useCallback((payload: {
 
               {/* NOTE: cleaned corrupted legacy comment. */}
               {mobileSubPage === 'ai-chat' && (
-                <div className="flex-1 min-h-0 flex flex-col bg-[#F7F7F5]">
-                  <div className="flex-shrink-0 px-3 pb-2 pt-2">
-                    <div className="rounded-[24px] border border-[#E9E9E7] bg-white/94 px-3 py-2.5 shadow-[0_12px_24px_rgba(148,163,184,0.08)]">
-                      <div className="flex items-start gap-2.5">
-                        <button
-                          onClick={() => {
-                            // 如果没有有效的复习内容（无 segments），直接返回收集页
-                            const hasReviewContent = segments.length > 0 && sessionId !== 'demo-session';
-                            if (hasReviewContent) {
-                              setMobileSubPage(null);
-                            } else {
-                              setMobileSubPage(null);
-                              setViewMode('record');
-                            }
-                            clearMobileAILaunchState();
-                            setShowConversationHistory(false);
-                            setSelectedHistoryConversation(null);
-                          }}
-                          className="flex h-9 w-9 items-center justify-center rounded-[14px] border border-[#efe5d8] bg-white text-slate-600 shadow-[0_6px_14px_rgba(148,163,184,0.08)] transition hover:-translate-y-0.5 hover:text-slate-900"
-                          aria-label="返回"
-                        >
-                          <svg className="h-4.5 w-4.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-                          </svg>
-                        </button>
-                        <div className="min-w-0 flex-1">
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <p className="text-[15px] font-semibold tracking-[-0.03em] text-slate-900">AI 助教</p>
-                            <span className="inline-flex items-center rounded-full bg-[#f6efe6] px-2 py-1 text-[10px] font-semibold text-[#9a6b2f]">
-                              {showConversationHistory
-                                ? '历史对话'
-                                : mobileAIPreferSelectedContext && mobileAILaunchTarget === 'mobile-ai-chat'
-                                  ? '跟随已选内容'
-                                  : '跟随当前课堂'}
-                            </span>
-                          </div>
-                          <p className="mt-1 text-[11px] leading-4.5 text-slate-500">
-                            {showConversationHistory
-                              ? '回看这节课之前的问答，快速接回思路。'
-                              : mobileAIPreferSelectedContext && mobileAILaunchTarget === 'mobile-ai-chat'
-                                ? '优先围绕你刚圈出的重点继续，不用来回切换。'
-                                : '不离开复习，直接把这节课继续问下去。'}
-                          </p>
-                        </div>
-                        <div className="inline-flex items-center gap-1 rounded-[14px] border border-[#efe5d8] bg-[#f7f2eb] p-1">
-                          <button
-                            onClick={() => {
-                              setShowConversationHistory(false);
-                              setSelectedHistoryConversation(null);
-                            }}
-                            className={`inline-flex h-8 items-center gap-1 rounded-[10px] px-2.5 text-[11px] font-medium transition-all ${
-                              !showConversationHistory
-                                ? 'bg-white text-[#c57a16] shadow-[0_6px_14px_rgba(148,163,184,0.10)]'
-                                : 'text-slate-400 hover:text-slate-600'
-                            }`}
-                            title="当前对话"
-                          >
-                            <MessageCircle size={13} strokeWidth={1.9} />
-                            <span>当前</span>
-                          </button>
-                          <button
-                            onClick={() => setShowConversationHistory(true)}
-                            className={`inline-flex h-8 items-center gap-1 rounded-[10px] px-2.5 text-[11px] font-medium transition-all ${
-                              showConversationHistory
-                                ? 'bg-white text-[#c57a16] shadow-[0_6px_14px_rgba(148,163,184,0.10)]'
-                                : 'text-slate-400 hover:text-slate-600'
-                            }`}
-                            title="历史对话"
-                          >
-                            <History size={13} strokeWidth={1.9} />
-                            <span>历史</span>
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="mt-2">
-                      <MiniPlayer
-                        currentTime={currentTime}
-                        duration={totalDuration}
-                        isPlaying={isPlaying}
-                        markers={anchors.map(a => ({
-                          id: a.id,
-                          timestamp: a.timestamp,
-                          resolved: a.resolved,
-                        }))}
-                        onSeek={(timeMs) => {
-                          handleUnifiedSeek(timeMs);
-                        }}
-                        onPlayPause={() => {
-                          if (isPlaying) {
-                            waveformRef.current?.pause();
-                          } else {
-                            waveformRef.current?.play();
-                          }
-                          setIsPlaying(!isPlaying);
-                        }}
-                        onMarkerClick={(marker) => {
-                          const anchor = anchors.find(a => a.id === marker.id);
-                          if (anchor) {
-                            setSelectedAnchor(anchor);
-                          }
-                        }}
-                        className="overflow-hidden rounded-[20px] border border-[#efe5d8] shadow-[0_10px_24px_rgba(148,163,184,0.08)]"
-                      />
-                    </div>
-                  </div>
-
-                  <div className="flex-1 min-h-0 overflow-hidden rounded-[28px] border border-[#E9E9E7] bg-white/92 px-3 pb-3 shadow-[0_18px_38px_rgba(148,163,184,0.10)]">
-                    {showConversationHistory ? (
-                      selectedHistoryConversation ? (
-                        // 历史对话详情
-                        <div className="h-full flex flex-col">
-                          <div className="px-3 py-2 bg-gray-50 border-b border-gray-100 flex items-center justify-between">
-                            <span className="text-xs text-gray-600 truncate flex-1 mr-2">{selectedHistoryConversation.title}</span>
-                            <div className="flex items-center gap-1">
-                              {/* 返回列表 */}
-                              <button
-                                onClick={() => setSelectedHistoryConversation(null)}
-                                className="w-7 h-7 flex items-center justify-center rounded-lg text-gray-500 hover:bg-gray-100"
-                                title="返回列表"
-                              >
-                                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 10h16M4 14h16M4 18h16" />
-                                </svg>
-                              </button>
-                              {/* NOTE: cleaned corrupted legacy comment. */}
-                              <button
-                                onClick={() => {
-                                  setShowConversationHistory(false);
-                                  setSelectedHistoryConversation(null);
-                                }}
-                                className="w-7 h-7 flex items-center justify-center rounded-lg text-[#787774] hover:bg-[#EFEFEF]"
-                                title="新对话"
-                              >
-                                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-                                </svg>
-                              </button>
-                            </div>
-                          </div>
-                          <div className="flex-1 min-h-0">
-                            <AIChat
-                              conversationId={selectedHistoryConversation.conversationId}
-                              sessionId={sessionId}
-                              isMobile={true}
-                              contextText={tutorSupportContextText}
-                              onTimestampClick={(timeMs) => {
-                                handleUnifiedSeek(timeMs, true);
-                              }}
-                            />
-                          </div>
-                        </div>
-                      ) : (
-                        // 历史对话列表
-                        <ConversationList
-                          sessionId={sessionId}
-                          onSelect={(conv) => setSelectedHistoryConversation(conv)}
-                          showSearch={true}
-                          maxHeight="100%"
-                        />
-                      )
-                    ) : (
-                      // NOTE: cleaned corrupted legacy comment.
-                      <AITutor
-                        breakpoint={mobileAIPreferSelectedContext && mobileAILaunchTarget === 'mobile-ai-chat' ? null : selectedBreakpoint}
-                        segments={segments}
-                        isLoading={false}
-                        onResolve={handleResolveAnchor}
-                        onActionItemsUpdate={handleActionItemsUpdate}
-                        sessionId={sessionId}
-                        supportContextText={tutorSupportContextText}
-                        preferSupportContext={mobileAILaunchTarget === 'mobile-ai-chat' ? mobileAIPreferSelectedContext : false}
-                        launchQuestion={mobileAILaunchTarget === 'mobile-ai-chat' && mobileAIConsumedQuestionNonce !== mobileAIQuestionNonce ? mobileAIQuestion : ''}
-                        launchDisplayText={mobileAILaunchTarget === 'mobile-ai-chat' ? mobileAIDisplayQuestion : ''}
-                        launchImages={mobileAILaunchTarget === 'mobile-ai-chat' ? mobileAILaunchImages : []}
-                        launchQuestionNonce={mobileAILaunchTarget === 'mobile-ai-chat' ? mobileAIQuestionNonce : 0}
-                        onLaunchQuestionConsumed={mobileAILaunchTarget === 'mobile-ai-chat' ? consumeMobileAIQuestion : undefined}
-                        isMobile={true}
-                        hideMobileHeader={true}
-                        onSeek={(timeMs) => {
-                          handleUnifiedSeek(timeMs, true);
-                        }}
-                      />
-                    )}
-                  </div>
-                </div>
+                <MobileAIChatPanel
+                  showConversationHistory={showConversationHistory}
+                  followsSelectedContext={mobileAIPreferSelectedContext && mobileAILaunchTarget === 'mobile-ai-chat'}
+                  onBack={() => {
+                    const hasReviewContent = segments.length > 0 && sessionId !== 'demo-session';
+                    if (hasReviewContent) {
+                      setMobileSubPage(null);
+                    } else {
+                      setMobileSubPage(null);
+                      setViewMode('record');
+                    }
+                    clearMobileAILaunchState();
+                    setShowConversationHistory(false);
+                    setSelectedHistoryConversation(null);
+                  }}
+                  onShowCurrent={() => {
+                    setShowConversationHistory(false);
+                    setSelectedHistoryConversation(null);
+                  }}
+                  onShowHistory={() => setShowConversationHistory(true)}
+                  currentTime={currentTime}
+                  duration={totalDuration}
+                  isPlaying={isPlaying}
+                  markers={anchors.map((anchor) => ({
+                    id: anchor.id,
+                    timestamp: anchor.timestamp,
+                    resolved: anchor.resolved,
+                  }))}
+                  onPlayerSeek={handleUnifiedSeek}
+                  onPlayPause={() => {
+                    if (isPlaying) {
+                      waveformRef.current?.pause();
+                    } else {
+                      waveformRef.current?.play();
+                    }
+                    setIsPlaying(!isPlaying);
+                  }}
+                  onMarkerClick={(marker: { id: string; timestamp: number; resolved: boolean }) => {
+                    const anchor = anchors.find((item) => item.id === marker.id);
+                    if (anchor) {
+                      setSelectedAnchor(anchor);
+                    }
+                  }}
+                  selectedHistoryConversation={selectedHistoryConversation}
+                  onBackToHistoryList={() => setSelectedHistoryConversation(null)}
+                  onCloseHistory={() => {
+                    setShowConversationHistory(false);
+                    setSelectedHistoryConversation(null);
+                  }}
+                  onSelectHistoryConversation={setSelectedHistoryConversation}
+                  sessionId={sessionId}
+                  tutorSupportContextText={tutorSupportContextText}
+                  tutorBreakpoint={mobileAIPreferSelectedContext && mobileAILaunchTarget === 'mobile-ai-chat' ? null : selectedBreakpoint}
+                  segments={segments}
+                  onResolve={handleResolveAnchor}
+                  onActionItemsUpdate={handleActionItemsUpdate}
+                  preferSupportContext={mobileAILaunchTarget === 'mobile-ai-chat' ? mobileAIPreferSelectedContext : false}
+                  launchQuestion={mobileAILaunchTarget === 'mobile-ai-chat' && mobileAIConsumedQuestionNonce !== mobileAIQuestionNonce ? mobileAIQuestion : ''}
+                  launchDisplayText={mobileAILaunchTarget === 'mobile-ai-chat' ? mobileAIDisplayQuestion : ''}
+                  launchImages={mobileAILaunchTarget === 'mobile-ai-chat' ? mobileAILaunchImages : []}
+                  launchQuestionNonce={mobileAILaunchTarget === 'mobile-ai-chat' ? mobileAIQuestionNonce : 0}
+                  onLaunchQuestionConsumed={mobileAILaunchTarget === 'mobile-ai-chat' ? consumeMobileAIQuestion : undefined}
+                  onTutorSeek={(timeMs: number) => {
+                    handleUnifiedSeek(timeMs, true);
+                  }}
+                />
               )}
 
               {/* NOTE: cleaned corrupted legacy comment. */}

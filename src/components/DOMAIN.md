@@ -24,7 +24,7 @@ components/
 │   ├── windows/       # 浮窗组件 + 布局引擎
 │   ├── evidence/      # 证据标签
 │   └── hooks/         # 应用执行 hook
-├── mobile/DOMAIN.md   # 移动端专用组件（14 个）
+├── mobile/DOMAIN.md   # 移动端专用组件（18 个）
 ├── parent/DOMAIN.md   # 家长端（6 个）
 ├── teacher/DOMAIN.md  # 教师端（3 个）
 ├── business/DOMAIN.md # 业务展示组件（6 个）
@@ -72,6 +72,11 @@ components/
 | `WorkspaceCaptureList.tsx` | ~900 | 工作空间 capture 列表 |
 | `VideoReviewPlayer.tsx` | 529 | 视频复习播放器 |
 | `SharedWorkspacePanel.tsx` | 140 | shared workspace 统一面板（highlights / summary / notes / apps）— 从 `page.tsx` 抽离 |
+| `ReviewWorkspacePanel.tsx` | 127 | desktop review 左侧工作区面板（tabs / timeline / anchor detail / shared workspace slot） |
+| `ReviewTutorPanel.tsx` | 220 | desktop review 右侧 Tutor 面板（波形、历史对话、AIChat、AITutor 容器） |
+| `CollectionSelectionBar.tsx` | 94 | 收集上下文多选操作条（问 Tutor / 引用 / 批量归档删除） |
+| `CollectionComposerContextPreview.tsx` | 62 | composer 上方的引用与链接预览条 |
+| `CollectionComposerBar.tsx` | 168 | collection composer 输入区容器（预览 / textarea / 发送 / 听写 / 上传） |
 | `HighlightsPanel.tsx` | ~400 | 精选片段面板 |
 | `NotesPanel.tsx` | ~370 | 笔记面板 |
 | `SummaryPanel.tsx` | ~280 | 摘要面板 |

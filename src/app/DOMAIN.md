@@ -83,5 +83,5 @@ src/app/
 
 ## 最近的 God File 偿还
 
-- `page.tsx`：`8294 → 8086`，已抽离 `MobileCollectionSheet.tsx`（移动端收集浮层）与 `SharedWorkspacePanel.tsx`（shared workspace 渲染）
-- 下一批适合继续提取的候选：review 左侧工作区面板、移动端顶部条、collection context 选择条
+- `page.tsx`：`8294 → 7590`，已抽离 `MobileCollectionSheet.tsx`（移动端收集浮层）、`SharedWorkspacePanel.tsx`（shared workspace 渲染）、`ReviewWorkspacePanel.tsx`（review 左侧工作区）、`ReviewTutorPanel.tsx`（review 右侧 Tutor / 历史对话）、`MobileTopBar.tsx`（移动端 review 顶部栏）、`CollectionSelectionBar.tsx`（多选操作条）、`CollectionComposerContextPreview.tsx`（引用 / 链接预览条）、`MobileAIChatHeader.tsx`（移动端 AI chat 头部卡片）、`CollectionComposerBar.tsx`（composer 输入区容器）、`MobileRecordTopBar.tsx`（移动端 record 顶部栏）与 `MobileAIChatPanel.tsx`（移动端 AI chat 内容容器）
+- 下一批适合继续提取的候选：移动端 highlights / summary / notes / apps / tasks 共用子页面框架、review 区发射给 Tutor 的启动态组装逻辑、移动端主时间线与困惑卡之间的事件桥接

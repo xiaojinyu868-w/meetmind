@@ -47,7 +47,6 @@ import type {
 import {
   TUTOR_STATE_KEY,
   FIXED_TUTOR_MODEL_ID,
-  FIXED_TUTOR_MODEL_LABEL,
 } from './tutor/tutor-types';
 import {
   toTranscriptSignature,
@@ -1209,7 +1208,7 @@ export function AITutor({
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
-                  <FixedModelBadge compact={isMobile} />
+                  {isMobile ? <FixedModelBadge compact /> : null}
                 </div>
               </div>
               {isMobile ? (
@@ -1505,7 +1504,7 @@ export function AITutor({
               </span>
               {isFromCache && <ClipboardList size={14} strokeWidth={1.75} className="text-skyblue flex-shrink-0" />}
             </div>
-            {/* 第二行：模型选择器 + 操作按钮 */}
+            {/* 第二行：操作按钮 */}
             <div className="flex items-center justify-between gap-2">
               <FixedModelBadge compact />
               <div className="flex items-center gap-2">
@@ -1566,11 +1565,6 @@ export function AITutor({
                   思维引导
                 </span>
               </label>
-              {response?.usage && (
-                <span className="text-xs text-gray-400">
-                  {FIXED_TUTOR_MODEL_LABEL} · {response.usage.totalTokens} tokens
-                </span>
-              )}
             </div>
             <div className="flex items-center gap-2">
               {isFromCache && (
@@ -1590,7 +1584,6 @@ export function AITutor({
                   刷新
                 </button>
               )}
-              <FixedModelBadge />
               {!breakpoint.resolved && (
                 <button
                   data-testid="tutor-resolve-button"
@@ -1633,7 +1626,7 @@ export function AITutor({
                 <span></span>
               </div>
               <p className="text-gray-500">AI 正在分析你的困惑...</p>
-              <p className="mt-1 text-xs text-gray-400">使用 {FIXED_TUTOR_MODEL_LABEL}</p>
+              {isMobile ? <p className="mt-1 text-xs text-gray-400">正在准备回答…</p> : null}
             </div>
           </div>
         ) : response ? (

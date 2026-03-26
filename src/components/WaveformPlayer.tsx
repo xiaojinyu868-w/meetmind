@@ -481,13 +481,15 @@ export const WaveformPlayer = forwardRef<WaveformPlayerRef, WaveformPlayerProps>
                 onClick={togglePlay}
                 disabled={!isReady}
                 className={cn(
-                  "text-white disabled:opacity-50 transition-all flex items-center justify-center",
-                  compact ? "w-9 h-9 rounded-lg" : "w-12 h-12 rounded-xl"
+                  'text-white disabled:opacity-50 transition-all flex items-center justify-center',
+                  compact ? 'w-8 h-8 rounded-lg' : 'w-12 h-12 rounded-xl'
                 )}
-                style={{
-                  background: 'linear-gradient(135deg, #D4A574 0%, #C49A6C 100%)',
-                  boxShadow: '0 4px 12px rgba(212, 165, 116, 0.35)'
-                }}
+                style={compact
+                  ? { background: '#CFA16E' }
+                  : {
+                      background: 'linear-gradient(135deg, #D4A574 0%, #C49A6C 100%)',
+                      boxShadow: '0 4px 12px rgba(212, 165, 116, 0.35)'
+                    }}
               >
                 {isPlayingState ? (
                   <svg className={cn(compact ? "w-4 h-4" : "w-6 h-6")} fill="currentColor" viewBox="0 0 24 24">
@@ -537,13 +539,15 @@ export const WaveformPlayer = forwardRef<WaveformPlayerRef, WaveformPlayerProps>
                 onClick={handleAddAnchor}
                 disabled={!isReady}
                 className={cn(
-                  "flex items-center gap-1.5 text-white font-medium rounded-xl disabled:opacity-50 transition-all active:scale-95",
-                  compact ? "px-2.5 py-1.5 text-xs" : "px-4 py-2 text-sm"
+                  'flex items-center gap-1.5 text-white font-medium rounded-xl disabled:opacity-50 transition-all active:scale-95',
+                  compact ? 'px-2 py-1 text-xs' : 'px-4 py-2 text-sm'
                 )}
-                style={{
-                  background: 'linear-gradient(135deg, #FF8A80 0%, #FF574A 100%)',
-                  boxShadow: '0 4px 12px rgba(255, 138, 128, 0.35)'
-                }}
+                style={compact
+                  ? { background: '#F08E83' }
+                  : {
+                      background: 'linear-gradient(135deg, #FF8A80 0%, #FF574A 100%)',
+                      boxShadow: '0 4px 12px rgba(255, 138, 128, 0.35)'
+                    }}
                 title="标记当前位置为困惑点"
               >
                 <span>🎯</span>

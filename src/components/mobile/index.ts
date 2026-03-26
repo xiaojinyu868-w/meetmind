@@ -47,3 +47,7 @@ export { DedaoMenu, DedaoMenuButton } from './DedaoMenu';
 export type { DedaoMenuProps } from './DedaoMenu';
 
 export { MobileCollectionSheet } from './MobileCollectionSheet';
+export { MobileTopBar } from './MobileTopBar';
+export { MobileRecordTopBar } from './MobileRecordTopBar';
+export { MobileAIChatHeader } from './MobileAIChatHeader';
+export { MobileAIChatPanel } from './MobileAIChatPanel';
