@@ -6077,14 +6077,6 @@ const _handleVideoAssistantMessage = useCallback((payload: {
                   <MessageCircle size={18} strokeWidth={1.6} className="text-[#787774]" />
                   <span>问老师</span>
                 </button>
-                <button
-                  type="button"
-                  onClick={() => { closeCollectionMessageMenu(); quoteCollectionItemToComposer(activeCollectionMessageMenuItem); }}
-                  className="flex w-full items-center gap-3 px-1 py-3 text-left text-[14px] text-[#232322] transition active:bg-[#F7F7F5]"
-                >
-                  <FileText size={18} strokeWidth={1.6} className="text-[#787774]" />
-                  <span>引用</span>
-                </button>
                 {Boolean(activeCollectionMessageMenuItem.reviewable && (activeCollectionMessageMenuItem.sessionId || activeCollectionMessageMenuItem.videoImported) && activeCollectionMessageMenuItem.status !== 'failed') ? (
                   <button
                     type="button"

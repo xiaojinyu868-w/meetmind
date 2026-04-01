@@ -141,6 +141,7 @@ export function AITutor({
   const [isRealtimeAssistantResponding, setIsRealtimeAssistantResponding] = useState(false);
   const realtimeAssistantDraftRef = useRef('');
   const realtimeAssistantFinalizedRef = useRef(false);
+  const justExitedRealtimeCallRef = useRef(false);
   
   // 困惑点模式的流式输出 - 使用统一的 SSE Hook
   const {
@@ -165,6 +166,9 @@ export function AITutor({
   );
   const handleRealtimeTeacherToggle = useCallback(() => {
     const nextEnabled = !enableRealtimeTeacher;
+    if (!nextEnabled) {
+      justExitedRealtimeCallRef.current = true;
+    }
     void (async () => {
       if (nextEnabled) {
         await primeOmniRealtimeCallEntry();
@@ -1237,6 +1241,13 @@ export function AITutor({
 
   // 全局模式：处理初始问题（handleGlobalSend 已在上方定义）
   useEffect(() => {
+    // 刚从通话退出时，不自动触发思维引导——用户只想看到对话记录
+    if (justExitedRealtimeCallRef.current) {
+      justExitedRealtimeCallRef.current = false;
+      onLaunchQuestionConsumed?.();
+      return;
+    }
+
     const normalizedQuestion = launchQuestion.trim();
     const launchDisplay = launchDisplayText.trim();
     const launchImages = launchImagesProp.filter((image) => image.url);
