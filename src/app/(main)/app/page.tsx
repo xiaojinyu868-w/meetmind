@@ -6075,7 +6075,7 @@ const _handleVideoAssistantMessage = useCallback((payload: {
                   className="flex w-full items-center gap-3 px-1 py-3 text-left text-[14px] text-[#232322] transition active:bg-[#F7F7F5]"
                 >
                   <MessageCircle size={18} strokeWidth={1.6} className="text-[#787774]" />
-                  <span>提问</span>
+                  <span>问老师</span>
                 </button>
                 <button
                   type="button"
@@ -6083,7 +6083,7 @@ const _handleVideoAssistantMessage = useCallback((payload: {
                   className="flex w-full items-center gap-3 px-1 py-3 text-left text-[14px] text-[#232322] transition active:bg-[#F7F7F5]"
                 >
                   <FileText size={18} strokeWidth={1.6} className="text-[#787774]" />
-                  <span>引用到输入框</span>
+                  <span>引用</span>
                 </button>
                 {Boolean(activeCollectionMessageMenuItem.reviewable && (activeCollectionMessageMenuItem.sessionId || activeCollectionMessageMenuItem.videoImported) && activeCollectionMessageMenuItem.status !== 'failed') ? (
                   <button
@@ -6092,39 +6092,24 @@ const _handleVideoAssistantMessage = useCallback((payload: {
                     className="flex w-full items-center gap-3 px-1 py-3 text-left text-[14px] text-[#232322] transition active:bg-[#F7F7F5]"
                   >
                     <BookOpen size={18} strokeWidth={1.6} className="text-[#787774]" />
-                    <span>复习</span>
+                    <span>回放</span>
                   </button>
                 ) : null}
-                {activeCollectionMenuWorkspaceCapture?.contentType === 'text' ? (
+                {activeCollectionMenuWorkspaceCapture ? (
                   <button
                     type="button"
-                    onClick={() => { closeCollectionMessageMenu(); openWorkspaceCaptureEditor(activeCollectionMenuWorkspaceCapture, 'text'); }}
+                    onClick={() => {
+                      closeCollectionMessageMenu();
+                      const cap = activeCollectionMenuWorkspaceCapture;
+                      const mode = cap.contentType === 'text' ? 'text'
+                        : (cap.contentType === 'audio' || cap.contentType === 'video') && (cap.normalizedText || cap.tutorContext || '').trim() ? 'transcript'
+                        : 'meta';
+                      openWorkspaceCaptureEditor(cap, mode);
+                    }}
                     className="flex w-full items-center gap-3 px-1 py-3 text-left text-[14px] text-[#232322] transition active:bg-[#F7F7F5]"
                   >
                     <PencilLine size={18} strokeWidth={1.6} className="text-[#787774]" />
                     <span>编辑</span>
-                  </button>
-                ) : null}
-                {activeCollectionMenuWorkspaceCapture &&
-                (activeCollectionMenuWorkspaceCapture.contentType === 'audio' || activeCollectionMenuWorkspaceCapture.contentType === 'video') &&
-                Boolean((activeCollectionMenuWorkspaceCapture.normalizedText || activeCollectionMenuWorkspaceCapture.tutorContext || '').trim()) ? (
-                  <button
-                    type="button"
-                    onClick={() => { closeCollectionMessageMenu(); openWorkspaceCaptureEditor(activeCollectionMenuWorkspaceCapture, 'transcript'); }}
-                    className="flex w-full items-center gap-3 px-1 py-3 text-left text-[14px] text-[#232322] transition active:bg-[#F7F7F5]"
-                  >
-                    <PencilLine size={18} strokeWidth={1.6} className="text-[#787774]" />
-                    <span>校正文字</span>
-                  </button>
-                ) : null}
-                {activeCollectionMenuWorkspaceCapture && activeCollectionMenuWorkspaceCapture.contentType !== 'text' ? (
-                  <button
-                    type="button"
-                    onClick={() => { closeCollectionMessageMenu(); openWorkspaceCaptureEditor(activeCollectionMenuWorkspaceCapture, 'meta'); }}
-                    className="flex w-full items-center gap-3 px-1 py-3 text-left text-[14px] text-[#232322] transition active:bg-[#F7F7F5]"
-                  >
-                    <PencilLine size={18} strokeWidth={1.6} className="text-[#787774]" />
-                    <span>改标题</span>
                   </button>
                 ) : null}
                 {Boolean(activeCollectionMessageMenuItem.attachmentUrl || activeCollectionMessageMenuItem.mediaUrl || activeCollectionMessageMenuItem.previewUrl) ? (
@@ -6137,14 +6122,6 @@ const _handleVideoAssistantMessage = useCallback((payload: {
                     <span>打开原件</span>
                   </button>
                 ) : null}
-                <button
-                  type="button"
-                  onClick={() => { closeCollectionMessageMenu(); toggleCollectionContextItem(activeCollectionMessageMenuItem); }}
-                  className="flex w-full items-center gap-3 px-1 py-3 text-left text-[14px] text-[#232322] transition active:bg-[#F7F7F5]"
-                >
-                  <Plus size={18} strokeWidth={1.6} className="text-[#787774]" />
-                  <span>{selectedCollectionContextIds.includes(activeCollectionMessageMenuItem.id) ? '移出多选' : '多选'}</span>
-                </button>
               </div>
 
               <div className="mt-4 border-t border-slate-100 pt-3">
