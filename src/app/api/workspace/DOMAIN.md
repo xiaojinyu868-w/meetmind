@@ -14,6 +14,7 @@ workspace route.ts ❌ 不能调用 api/ 下其他 routes
 | 路由 | 方法 | 职责 |
 |------|------|------|
 | `/api/workspace/current` | GET | 获取当前用户的工作空间元信息 |
+| `/api/workspace/local-migration` | POST | 把本地 IndexedDB 学习历史归属到当前账号工作区 |
 | `/api/workspace/captures` | GET | 分页获取 captures 列表（支持 filter） |
 | `/api/workspace/captures/stats` | GET | 获取 captures 统计（总数/时长/类型分布） |
 | `/api/workspace/search` | POST | AI 语义检索（SSE 流式返回） |
@@ -24,6 +25,7 @@ workspace route.ts ❌ 不能调用 api/ 下其他 routes
 ```
 src/app/api/workspace/
 ├── current/route.ts              # 45行
+├── local-migration/route.ts      # 本地学习历史 → Workspace 归属迁移
 ├── captures/route.ts             # 187行
 ├── captures/stats/route.ts       # 128行
 ├── search/route.ts               # 117行

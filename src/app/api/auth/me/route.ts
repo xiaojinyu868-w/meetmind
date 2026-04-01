@@ -11,7 +11,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { authService } from '@/lib/services/auth-service';
 import prisma from '@/lib/prisma';
-import workspaceService from '@/lib/services/workspace-service';
+import workspaceAccountService from '@/lib/services/workspace-account-service';
 import type { UpdateProfileRequest, User, UserRole, UserStatus } from '@/types/user';
 import { createLogger } from '@/lib/logger';
 const log = createLogger('auth/me');
@@ -108,12 +108,12 @@ export async function GET(request: NextRequest) {
         ? new Date(user.createdAt).getTime() > Date.now() - 60000
         : false;
 
-    const workspace = await workspaceService.getDefaultWorkspace(user.id);
+    const ownership = await workspaceAccountService.ensureAccountDataOwnership(user.id);
 
     return NextResponse.json({
       success: true,
       user,
-      workspace,
+      workspace: ownership.workspace,
       permissions: payload.permissions,
       autoRegistered,
     });

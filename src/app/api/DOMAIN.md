@@ -80,6 +80,7 @@ route.ts → lib/services/ + lib/utils/rate-limit
 | 路由 | 方法 | 职责 |
 |------|------|------|
 | `/api/workspace/current` | GET | 获取当前工作空间 |
+| `/api/workspace/local-migration` | POST | 把本地 IndexedDB 学习历史迁移到当前账号的 Workspace |
 | `/api/workspace/captures` | GET | captures 列表 |
 | `/api/workspace/captures/stats` | GET | captures 统计 |
 | `/api/workspace/search` | POST | 全局 AI 检索（SSE 流式） |

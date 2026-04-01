@@ -6,8 +6,11 @@
 
 'use client';
 
-import { useState, useEffect, useCallback, createContext, useContext, ReactNode } from 'react';
+import { useState, useEffect, useCallback, useRef, createContext, useContext, ReactNode } from 'react';
+import { db, ANONYMOUS_USER_ID } from '@/lib/db';
+import { runMemoryMigration } from '@/lib/services/memory-migration';
 import type { User, Permission, AuthResponse, LoginRequest, RegisterRequest } from '@/types/user';
+import type { LocalWorkspaceMigrationPayload } from '@/lib/services/workspace-context-types';
 
 // ==================== 类型定义 ====================
 
@@ -65,6 +68,233 @@ function setStoredToken(token: string | null): void {
   }
 }
 
+function normalizeText(value: string | null | undefined, limit?: number): string | undefined {
+  const normalized = (value || '').replace(/\s+/g, ' ').trim();
+  if (!normalized) return undefined;
+  if (typeof limit === 'number' && normalized.length > limit) {
+    return `${normalized.slice(0, Math.max(0, limit - 3))}...`;
+  }
+  return normalized;
+}
+
+function inferLocalCaptureContentType(session: {
+  sourceType?: string;
+  mimeType?: string;
+  videoUrl?: string;
+  videoEmbedUrl?: string;
+  videoProvider?: string;
+}): string {
+  if (session.videoUrl || session.videoEmbedUrl || session.videoProvider) return 'video';
+  if (session.sourceType === 'video-link' || session.sourceType === 'video-file') return 'video';
+  if (session.mimeType?.startsWith('audio/')) return 'audio';
+  if (session.sourceType === 'recording' || session.sourceType === 'upload') return 'audio';
+  return 'text';
+}
+
+function buildLocalSessionTitle(session: {
+  topic?: string;
+  subject?: string;
+  sourceType?: string;
+}): string {
+  return (
+    normalizeText(session.topic, 80) ||
+    normalizeText(session.subject, 80) ||
+    (session.sourceType === 'video-link' || session.sourceType === 'video-file'
+      ? '导入课堂视频'
+      : session.sourceType === 'upload'
+        ? '导入课堂音频'
+        : '课堂录音')
+  );
+}
+
+async function buildLocalWorkspaceMigrationPayload(userId: string): Promise<LocalWorkspaceMigrationPayload | null> {
+  await runMemoryMigration();
+
+  const [allSessions, allTranscripts, allAnchors, allSummaries, allHighlights, allNotes, allConversations] = await Promise.all([
+    db.audioSessions.toArray(),
+    db.transcripts.toArray(),
+    db.anchors.toArray(),
+    db.classSummaries.toArray(),
+    db.highlightTopics.toArray(),
+    db.notes.toArray(),
+    db.conversationHistory.toArray(),
+  ]);
+
+  const sessions = allSessions
+    .filter((item) => !item.userId || item.userId === ANONYMOUS_USER_ID || item.userId === userId)
+    .sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime());
+
+  if (sessions.length === 0) {
+    return null;
+  }
+
+  const sessionIds = new Set(sessions.map((item) => item.sessionId));
+  const transcriptBySession = new Map<string, typeof allTranscripts>();
+  const anchorBySession = new Map<string, typeof allAnchors>();
+  const summaryBySession = new Map<string, (typeof allSummaries)[number]>();
+  const highlightBySession = new Map<string, typeof allHighlights>();
+  const noteBySession = new Map<string, typeof allNotes>();
+  const conversationBySession = new Map<string, typeof allConversations>();
+
+  for (const transcript of allTranscripts) {
+    if (!sessionIds.has(transcript.sessionId)) continue;
+    const bucket = transcriptBySession.get(transcript.sessionId) || [];
+    bucket.push(transcript);
+    transcriptBySession.set(transcript.sessionId, bucket);
+  }
+
+  for (const anchor of allAnchors) {
+    if (!sessionIds.has(anchor.sessionId)) continue;
+    const bucket = anchorBySession.get(anchor.sessionId) || [];
+    bucket.push(anchor);
+    anchorBySession.set(anchor.sessionId, bucket);
+  }
+
+  for (const summary of allSummaries) {
+    if (!sessionIds.has(summary.sessionId)) continue;
+    summaryBySession.set(summary.sessionId, summary);
+  }
+
+  for (const highlight of allHighlights) {
+    if (!sessionIds.has(highlight.sessionId)) continue;
+    const bucket = highlightBySession.get(highlight.sessionId) || [];
+    bucket.push(highlight);
+    highlightBySession.set(highlight.sessionId, bucket);
+  }
+
+  for (const note of allNotes) {
+    if (!sessionIds.has(note.sessionId)) continue;
+    if (note.studentId && note.studentId !== ANONYMOUS_USER_ID && note.studentId !== userId) continue;
+    const bucket = noteBySession.get(note.sessionId) || [];
+    bucket.push(note);
+    noteBySession.set(note.sessionId, bucket);
+  }
+
+  for (const conversation of allConversations) {
+    if (!conversation.sessionId || !sessionIds.has(conversation.sessionId)) continue;
+    if (conversation.userId && conversation.userId !== ANONYMOUS_USER_ID && conversation.userId !== userId) continue;
+    const bucket = conversationBySession.get(conversation.sessionId) || [];
+    bucket.push(conversation);
+    conversationBySession.set(conversation.sessionId, bucket);
+  }
+
+  const migratedSessions = sessions
+    .map((session) => {
+      const transcripts = (transcriptBySession.get(session.sessionId) || []).sort((a, b) => a.startMs - b.startMs);
+      const anchors = (anchorBySession.get(session.sessionId) || []).sort((a, b) => a.timestamp - b.timestamp);
+      const summary = summaryBySession.get(session.sessionId);
+      const highlights = (highlightBySession.get(session.sessionId) || []).sort(
+        (a, b) => b.updatedAt.getTime() - a.updatedAt.getTime(),
+      );
+      const notes = (noteBySession.get(session.sessionId) || []).sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime());
+      const conversations = (conversationBySession.get(session.sessionId) || []).sort(
+        (a, b) => b.updatedAt.getTime() - a.updatedAt.getTime(),
+      );
+
+      const transcriptText = normalizeText(
+        transcripts
+          .map((item) => item.text)
+          .filter(Boolean)
+          .join(' '),
+        8000,
+      );
+      const highlightText = normalizeText(
+        highlights
+          .map((item) => [item.title, item.description, item.quote?.text].filter(Boolean).join('：'))
+          .filter(Boolean)
+          .join('；'),
+        2000,
+      );
+      const noteText = normalizeText(notes.map((item) => item.text).filter(Boolean).join('；'), 2000);
+      const anchorText = normalizeText(
+        anchors
+          .map((item) => item.note || item.aiExplanation)
+          .filter(Boolean)
+          .join('；'),
+        1200,
+      );
+      const conversationText = normalizeText(
+        conversations
+          .map((item) => item.lastMessage || item.title)
+          .filter(Boolean)
+          .join('；'),
+        1000,
+      );
+
+      const summaryTakeaways = summary?.takeaways
+        ?.map((item) => `${item.label}：${item.insight}`)
+        .filter(Boolean)
+        .join('；');
+      const summaryStructure = summary?.structure?.filter(Boolean).join('、');
+      const summaryDifficulty = summary?.keyDifficulties?.filter(Boolean).join('；');
+
+      const tutorContext = normalizeText(
+        [
+          summary?.overview ? `课堂概览：${summary.overview}` : '',
+          summaryTakeaways ? `关键收获：${summaryTakeaways}` : '',
+          summaryDifficulty ? `主要难点：${summaryDifficulty}` : '',
+          summaryStructure ? `课堂结构：${summaryStructure}` : '',
+          highlightText ? `精选片段：${highlightText}` : '',
+          anchorText ? `困惑锚点：${anchorText}` : '',
+          noteText ? `我的笔记：${noteText}` : '',
+          conversationText ? `Tutor 对话：${conversationText}` : '',
+        ]
+          .filter(Boolean)
+          .join('\n\n'),
+        12000,
+      );
+
+      const previewText =
+        normalizeText(summary?.overview, 220) ||
+        noteText ||
+        highlightText ||
+        transcriptText ||
+        anchorText;
+
+      const title = buildLocalSessionTitle(session);
+
+      if (!previewText && !tutorContext && !transcriptText && !session.mediaUrl && !session.videoUrl) {
+        return null;
+      }
+
+      return {
+        sessionId: session.sessionId,
+        title,
+        contentType: inferLocalCaptureContentType(session),
+        role: 'primary',
+        previewText,
+        normalizedText: transcriptText,
+        tutorContext,
+        sourceUrl: session.videoUrl || undefined,
+        mediaUrl: session.mediaUrl || session.videoEmbedUrl || undefined,
+        occurredAt: session.createdAt.toISOString(),
+        metadata: {
+          sourceType: session.sourceType || 'recording',
+          mimeType: session.mimeType,
+          duration: session.duration,
+          topic: session.topic,
+          subject: session.subject,
+          transcriptCount: transcripts.length,
+          anchorCount: anchors.length,
+          highlightCount: highlights.length,
+          noteCount: notes.length,
+          conversationCount: conversations.length,
+          importSourceMode: session.importSourceMode,
+          thumbnailUrl: session.thumbnailUrl,
+        },
+      };
+    })
+    .filter((item): item is NonNullable<typeof item> => Boolean(item));
+
+  if (migratedSessions.length === 0) {
+    return null;
+  }
+
+  return {
+    sessions: migratedSessions,
+  };
+}
+
 // ==================== Provider ====================
 
 export function AuthProvider({ children }: { children: ReactNode }) {
@@ -77,6 +307,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     permissions: [],
     accessToken: null,
   });
+  const localWorkspaceMigrationRef = useRef<string | null>(null);
   
   // Performance: Synchronously check token presence to avoid unnecessary async work.
   // If no token and no wechat session param, mark auth check complete immediately.
@@ -197,6 +428,48 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     
     initAuth();
   }, [isCheckingAuth]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (!state.isAuthenticated || !state.accessToken || !state.user?.id) return;
+
+    const userId = state.user.id;
+    const accessToken = state.accessToken;
+    const migrationKey = userId;
+    if (localWorkspaceMigrationRef.current === migrationKey) return;
+    localWorkspaceMigrationRef.current = migrationKey;
+
+    let cancelled = false;
+
+    void (async () => {
+      try {
+        const payload = await buildLocalWorkspaceMigrationPayload(userId);
+        if (!payload || payload.sessions.length === 0) {
+          return;
+        }
+
+        const response = await fetch('/api/workspace/local-migration', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${accessToken}`,
+          },
+          body: JSON.stringify(payload),
+        });
+
+        if (!response.ok && !cancelled) {
+          localWorkspaceMigrationRef.current = null;
+        }
+      } catch {
+        if (!cancelled) {
+          localWorkspaceMigrationRef.current = null;
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [state.accessToken, state.isAuthenticated, state.user?.id]);
 
   // 刷新令牌
   const refreshTokenInternal = async (): Promise<boolean> => {
@@ -333,6 +606,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
     
     setStoredToken(null);
+    localWorkspaceMigrationRef.current = null;
     setState({
       user: null,
       isLoading: false,

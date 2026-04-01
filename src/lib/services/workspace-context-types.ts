@@ -74,6 +74,32 @@ export interface WorkspaceCaptureLookupInput {
   sourceKey?: string;
 }
 
+export interface LocalWorkspaceSessionMigrationItem {
+  sessionId: string;
+  title: string;
+  contentType: string;
+  role?: string;
+  previewText?: string;
+  normalizedText?: string;
+  tutorContext?: string;
+  sourceUrl?: string;
+  mediaUrl?: string;
+  occurredAt?: string;
+  metadata?: Record<string, unknown>;
+}
+
+export interface LocalWorkspaceMigrationPayload {
+  sessions: LocalWorkspaceSessionMigrationItem[];
+}
+
+export interface LocalWorkspaceMigrationSummary {
+  total: number;
+  created: number;
+  updated: number;
+  skipped: number;
+  repairedWechatMessages: number;
+}
+
 /* ------------------------------------------------------------------ */
 /*  Pure helper functions                                              */
 /* ------------------------------------------------------------------ */

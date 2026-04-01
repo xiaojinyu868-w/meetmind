@@ -24,6 +24,7 @@ import type {
 } from '@/types/user';
 import { AuthConfig } from '@/lib/config';
 import prisma from '@/lib/prisma';
+import workspaceAccountService from '@/lib/services/workspace-account-service';
 import { createLogger } from '@/lib/logger';
 const log = createLogger('auth');
 
@@ -503,6 +504,8 @@ export const authService = {
       }
     });
     
+    await workspaceAccountService.ensureAccountDataOwnership(newUser.id);
+
     // 生成令牌
     const permissions = getRolePermissions(role as UserRole);
     const accessToken = generateJWT({
@@ -579,6 +582,8 @@ export const authService = {
       where: { id: foundUser.id },
       data: { lastLoginAt: new Date() }
     });
+
+    await workspaceAccountService.ensureAccountDataOwnership(updatedUser.id);
     
     // 生成令牌
     const permissions = getRolePermissions(updatedUser.role as UserRole);
@@ -976,6 +981,8 @@ export const authService = {
       where: { id: foundUser.id },
       data: { lastLoginAt: new Date() }
     });
+
+    await workspaceAccountService.ensureAccountDataOwnership(updatedUser.id);
 
     // 生成令牌
     const permissions = getRolePermissions(updatedUser.role as UserRole);

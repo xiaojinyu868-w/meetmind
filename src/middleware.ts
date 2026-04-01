@@ -26,6 +26,7 @@ const PUBLIC_ROUTES = [
   '/api/chat',
   '/api/asr-config',
   '/api/asr-stream',
+  '/api/tutor-call',
   '/api/transcribe',
   '/api/transcribe-fast',
   '/api/transcribe-turbo',

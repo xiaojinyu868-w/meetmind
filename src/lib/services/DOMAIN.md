@@ -53,6 +53,7 @@ api/route.ts → services → lib/utils, lib/db, lib/config
 | 文件 | 行数 | 职责 |
 |------|------|------|
 | `workspace-service.ts` | 237 | 工作空间基础管理（创建/查询） |
+| `workspace-account-service.ts` | ~170 | 账号统一：默认工作区补齐 + 微信旧数据归属修复 + 本地历史迁移 |
 | `workspace-context-service.ts` | 838 | Capture 收集 + Ingest 处理 + 状态管理 |
 | `workspace-context-types.ts` | 161 | 类型定义 + 纯工具函数 + 微信 helper |
 | `workspace-echo-service.ts` | 1267 | 每日回响生成（AI 洞察/金句/推荐） |

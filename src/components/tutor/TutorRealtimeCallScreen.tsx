@@ -27,65 +27,25 @@ function formatCallDuration(elapsedMs: number): string {
 
 function StageMeter({ active }: { active: boolean }) {
   return (
-    <div className="mt-3 flex items-end justify-center gap-1.5">
-      {Array.from({ length: 5 }).map((_, index) => (
+    <div className="flex items-center justify-center gap-[3px] h-[14px]">
+      {Array.from({ length: 4 }).map((_, index) => (
         <span
           key={index}
           className="w-[3px] rounded-full bg-[#232322]"
           style={{
-            height: 10 + (index % 3) * 5,
-            opacity: active ? 1 : 0.14,
-            animation: active ? `callMeter 0.9s ease-in-out ${index * 0.09}s infinite alternate` : 'none',
+            height: active ? '100%' : '30%',
+            opacity: active ? 1 : 0.2,
+            animation: active ? `pulseWave 0.7s ease-in-out ${index * 0.12}s infinite alternate` : 'none',
           }}
         />
       ))}
       <style jsx>{`
-        @keyframes callMeter {
-          0% { transform: scaleY(0.3); opacity: 0.28; }
-          100% { transform: scaleY(1); opacity: 1; }
+        @keyframes pulseWave {
+          0% { height: 30%; opacity: 0.4; }
+          100% { height: 100%; opacity: 1; }
         }
       `}</style>
     </div>
-  );
-}
-
-interface CallActionButtonProps {
-  icon: LucideIcon;
-  label: string;
-  onClick: () => void;
-  muted?: boolean;
-  danger?: boolean;
-  disabled?: boolean;
-}
-
-function CallActionButton({
-  icon: Icon,
-  label,
-  onClick,
-  muted = false,
-  danger = false,
-  disabled = false,
-}: CallActionButtonProps) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      disabled={disabled}
-      className="flex flex-col items-center gap-2 disabled:cursor-not-allowed disabled:opacity-40"
-    >
-      <span
-        className={`inline-flex h-12 w-12 items-center justify-center rounded-full border ${
-          danger
-            ? 'border-[#232322] bg-[#232322] text-white'
-            : muted
-              ? 'border-[#E9E9E7] bg-white text-[#A3A39E]'
-              : 'border-[#E9E9E7] bg-white text-[#232322]'
-        }`}
-      >
-        <Icon size={18} strokeWidth={1.9} />
-      </span>
-      <span className={`text-[11px] ${muted ? 'text-[#A3A39E]' : 'text-[#787774]'}`}>{label}</span>
-    </button>
   );
 }
 
@@ -270,85 +230,116 @@ export function TutorRealtimeCallScreen({
   const primaryLabel = isConnecting ? '拨号中' : isAuthorizing ? '点一下开麦' : isMuted ? '开麦' : '静音';
 
   return (
-    <div className="flex h-full flex-col bg-[#F7F7F5] px-5 pb-[max(env(safe-area-inset-bottom),20px)] pt-6">
-      <div className="flex-1">
-        <div className="flex h-full flex-col items-center justify-between">
-          <div className="flex flex-col items-center pt-6 text-center">
-            <span className="inline-flex items-center rounded-full border border-[#E9E9E7] bg-white px-3 py-1 text-[11px] text-[#787774]">
-              {contextLabel}
-            </span>
+    <div className="flex h-full flex-col bg-[#F7F7F5]">
+      {/* 顶部标签 */}
+      <div className="flex justify-center pt-5 px-6 pb-2">
+        <span className="inline-flex items-center rounded-full border border-[#E9E9E7] bg-white px-3.5 py-1.5 text-[12px] font-medium text-[#787774]">
+          {contextLabel}
+        </span>
+      </div>
 
-            <div className="relative mt-10 flex h-32 w-32 items-center justify-center">
-              {isActive ? <span className="absolute inset-0 rounded-full border border-[#232322] opacity-15 animate-ping" /> : null}
-              <span className={`absolute inset-[10px] rounded-full border ${isActive ? 'border-[#D9D8D3]' : 'border-[#ECEBE6]'}`} />
-              <div className="relative z-10 flex h-24 w-24 items-center justify-center rounded-full border border-[#E9E9E7] bg-white text-[28px] font-semibold text-[#232322]">
-                师
-              </div>
-            </div>
+      {/* 核心视觉区：头像与通话状态 */}
+      <div className="flex-1 flex flex-col items-center justify-center pb-2">
+        <div className="relative flex h-28 w-28 items-center justify-center rounded-full bg-[#232322]">
+          {isActive && (
+            <div 
+              className="absolute inset-0 rounded-full bg-[#232322] animate-ping opacity-10" 
+              style={{ animationDuration: '2s' }} 
+            />
+          )}
+          <span className="text-[34px] font-medium tracking-tight text-white">师</span>
+        </div>
 
-            <p className="mt-8 text-[28px] font-semibold tracking-[-0.05em] text-[#232322]">{title}</p>
-            <div className="mt-3 flex items-center gap-2 text-sm text-[#787774]">
-              <span className={`inline-flex h-2 w-2 rounded-full ${isActive || isConnected ? 'bg-[#232322]' : 'bg-[#C9C8C3]'}`} />
+        <div className="mt-8 flex flex-col items-center gap-2">
+          <h1 className="text-[28px] font-semibold tracking-[-0.03em] text-[#232322]">{title}</h1>
+          <div className="flex items-center gap-2 text-[14px] font-medium text-[#787774]">
+            {isConnected ? (
+              <span className="inline-flex items-center gap-2.5">
+                <span className="relative flex h-2 w-2">
+                  <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75"></span>
+                  <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-500"></span>
+                </span>
+                <span className="text-[#232322] font-semibold tracking-wide">{elapsedLabel}</span>
+              </span>
+            ) : (
               <span>{stageCopy.state}</span>
-              {isConnected ? <span className="font-medium text-[#232322]">{elapsedLabel}</span> : null}
-            </div>
-            <StageMeter active={isListening || isResponding || isThinking} />
-          </div>
-
-          <div className="w-full max-w-sm">
-            <div className="rounded-[28px] border border-[#E9E9E7] bg-white px-4 py-4">
-              <div className="flex items-center gap-2 text-[11px] text-[#A3A39E]">
-                <Volume2 size={13} strokeWidth={1.9} />
-                <span>{stageCopy.badge}</span>
-              </div>
-              <div className="mt-3 rounded-[20px] border border-[#F0EFEB] bg-[#F7F7F5] px-4 py-3">
-                <div className="flex items-center justify-between gap-3 text-[11px] text-[#A3A39E]">
-                  <span>{stageCopy.speaker}</span>
-                  {isResponding ? <span>可直接打断</span> : null}
-                </div>
-                <p className="mt-2 min-h-[64px] text-[15px] leading-7 text-[#232322]">{stageCopy.body}</p>
-              </div>
-            </div>
+            )}
           </div>
         </div>
       </div>
 
-      <div className="mt-8 flex items-end justify-center gap-7">
-        <CallActionButton
-          icon={secondaryAction.icon}
-          label={secondaryAction.label}
-          muted={disabled}
+      {/* 内容信息卡片：呈现对话内容与指示 */}
+      <div className="w-full px-5 pb-8">
+        <div className="relative min-h-[156px] w-full rounded-[32px] border border-[#E9E9E7] bg-white p-6 transition-all duration-300">
+          <div className="mb-4 flex items-center justify-between">
+            <span className="text-[13px] font-medium text-[#A3A39E] tracking-wide">
+              {stageCopy.speaker === '状态' ? '提示' : stageCopy.speaker}
+            </span>
+            {(isListening || isThinking || isResponding) ? (
+              <StageMeter active={true} />
+            ) : (
+              <div className="flex items-center gap-1.5 text-[12px] font-medium text-[#A3A39E]">
+                <Volume2 size={13} strokeWidth={2} />
+                <span>{stageCopy.badge}</span>
+              </div>
+            )}
+          </div>
+          <p className="text-[17px] leading-[1.65] font-medium text-[#232322]">
+            {stageCopy.body}
+          </p>
+        </div>
+      </div>
+
+      {/* 底部操作区 */}
+      <div className="pb-[max(env(safe-area-inset-bottom),32px)] pt-2 px-8 flex items-end justify-center gap-8">
+        <button
+          type="button"
           onClick={secondaryAction.onClick}
           disabled={disabled}
-        />
+          className="flex flex-col items-center gap-3 disabled:opacity-40"
+        >
+          <span className="flex h-[56px] w-[56px] items-center justify-center rounded-full border border-[#E9E9E7] bg-white text-[#232322] transition-transform active:scale-95">
+            <secondaryAction.icon size={22} strokeWidth={1.8} />
+          </span>
+          <span className="text-[12px] font-medium text-[#787774]">{secondaryAction.label}</span>
+        </button>
 
         <button
           type="button"
           onClick={() => void (!primaryDisabled ? toggleRecording() : Promise.resolve())}
           disabled={primaryDisabled}
-          className={`flex flex-col items-center gap-2 disabled:opacity-40 ${
-            primaryDisabled ? 'cursor-not-allowed' : ''
-          }`}
+          className="flex flex-col items-center gap-3 disabled:opacity-40"
         >
-          <span className="inline-flex h-16 w-16 items-center justify-center rounded-full border border-[#232322] bg-[#232322] text-white">
-            {isMuted || isAuthorizing ? <Mic size={24} strokeWidth={2} /> : <MicOff size={24} strokeWidth={2} />}
+          <span 
+            className={`flex h-[76px] w-[76px] items-center justify-center rounded-full transition-all active:scale-95 ${
+              isMuted || isAuthorizing 
+                ? 'border border-[#E9E9E7] bg-white text-[#232322]' 
+                : 'border border-[#232322] bg-[#232322] text-white shadow-sm'
+            }`}
+          >
+            {isMuted || isAuthorizing ? <MicOff size={30} strokeWidth={1.8} /> : <Mic size={30} strokeWidth={1.8} />}
           </span>
-          <span className="text-[11px] text-[#787774]">{primaryLabel}</span>
+          <span className="text-[12px] font-medium text-[#232322]">{primaryLabel}</span>
         </button>
 
-        <CallActionButton
-          icon={PhoneOff}
-          label="结束"
-          danger
-          disabled={disabled}
+        <button
+          type="button"
           onClick={() => void (async () => {
             await disconnectSession();
             onExit();
           })()}
-        />
+          disabled={disabled}
+          className="flex flex-col items-center gap-3 disabled:opacity-40"
+        >
+          <span className="flex h-[56px] w-[56px] items-center justify-center rounded-full bg-[#232322] text-white transition-transform active:scale-95">
+            <PhoneOff size={22} strokeWidth={1.8} />
+          </span>
+          <span className="text-[12px] font-medium text-[#787774]">结束</span>
+        </button>
       </div>
     </div>
   );
 }
 
 export default TutorRealtimeCallScreen;
+

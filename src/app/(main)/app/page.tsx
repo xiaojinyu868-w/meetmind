@@ -7640,6 +7640,7 @@ const _handleVideoAssistantMessage = useCallback((payload: {
 // NOTE: cleaned corrupted legacy comment.
 function SearchParamsReader() {
   const searchParams = useSearchParams();
+  const { isMobile, mounted } = useResponsive();
   const isGuestFastEntry = searchParams.get('guest') === '1';
   const forcedWorkspaceTab = searchParams.get('workspace') === 'apps' ? 'apps' : null;
   const forceMobilePreview = searchParams.get('mobile') === '1';
@@ -7652,7 +7653,8 @@ function SearchParamsReader() {
         ? 'ai-chat'
         : null;
 
-  if (forceMobilePreview) {
+  // 如果请求了移动端预览，但当前在桌面端或者还未挂载（防止 SSR 闪烁），则渲染外壳
+  if (forceMobilePreview && (!mounted || !isMobile)) {
     return (
       <div className="min-h-dvh bg-[#F7F7F5]">
         <div className="flex items-start justify-center px-5 pb-10 pt-6">

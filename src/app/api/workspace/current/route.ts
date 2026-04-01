@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { authService } from '@/lib/services/auth-service';
+import workspaceAccountService from '@/lib/services/workspace-account-service';
 import workspaceContextService from '@/lib/services/workspace-context-service';
 import { createLogger } from '@/lib/logger';
 const log = createLogger('workspace/current');
@@ -28,6 +29,8 @@ export async function GET(request: NextRequest) {
     const includeArchived = ['1', 'true', 'yes'].includes(
       (request.nextUrl.searchParams.get('includeArchived') || '').toLowerCase()
     );
+
+    await workspaceAccountService.ensureAccountDataOwnership(payload.sub);
 
     const context = await workspaceContextService.getCurrentWorkspaceContext(payload.sub, {
       includeArchived,
