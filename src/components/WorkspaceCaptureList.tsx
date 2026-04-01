@@ -248,14 +248,13 @@ export function WorkspaceCaptureList({
     [sortedCaptures]
   );
 
+  // 仅在初始化时：如果 active 为空但 archived 有内容，默认展示 archived
   useEffect(() => {
     if (scope === 'active' && activeCount === 0 && archivedCount > 0) {
       setScope('archived');
     }
-    if (scope === 'archived' && archivedCount === 0) {
-      setScope('active');
-    }
-  }, [activeCount, archivedCount, scope]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const filteredCaptures = useMemo(
     () =>

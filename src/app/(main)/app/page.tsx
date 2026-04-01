@@ -5990,36 +5990,7 @@ const _handleVideoAssistantMessage = useCallback((payload: {
                             </span>
                           ) : null}
                         </div>
-                        {!isCollectionContextSelectionMode ? (
-                          <div className={`mt-3 flex items-center ${isPrimary ? 'justify-end' : 'justify-start'} gap-2.5 border-t pt-3 ${
-                            isPrimary ? 'border-[#E9E9E7]' : 'border-[#E9E9E7]'
-                          }`}>
-                            <button
-                              type="button"
-                              onClick={() => openTutorFromCollectionItem(item)}
-                              className={`inline-flex items-center gap-1.5 rounded-full px-3.5 py-2.5 text-[12px] font-semibold transition ${
-                                isPrimary
-                                  ? 'bg-[#232322] text-white hover:bg-[#111111]'
-                                  : 'bg-[#232322] text-white hover:bg-[#111111]'
-                              }`}
-                            >
-                              <MessageCircle size={14} />
-                              <span>问 Tutor</span>
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => quoteCollectionItemToComposer(item)}
-                              className={`inline-flex items-center gap-1.5 rounded-full px-3.5 py-2.5 text-[12px] font-medium transition ${
-                                isPrimary
-                                  ? 'bg-white text-[#232322] hover:bg-[#EFEFEF]'
-                                  : 'bg-[#EFEFEF] text-[#232322] hover:bg-[#E9E9E7]'
-                              }`}
-                            >
-                              <FileText size={14} />
-                              <span>引用</span>
-                            </button>
-                          </div>
-                        ) : null}
+
                       </div>
                     </div>
                   </div>
