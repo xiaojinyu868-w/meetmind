@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, useRef } from 'react';
 import {
   ChevronDown,
   ChevronUp,
@@ -150,6 +150,43 @@ export function TutorRealtimeCallScreen({
   const isResponding = status === 'responding';
   const isActive = isConnecting || isAuthorizing || isListening || isThinking || isResponding;
 
+  // 顶级体验：极简字幕缓冲机制，避免状态突变时闪烁，实现平滑的话权交接
+  const [displayCaption, setDisplayCaption] = useState<{ text: string; speaker: string; isStale: boolean }>({
+    text: '',
+    speaker: '',
+    isStale: false,
+  });
+  const captionScrollRef = useRef<HTMLDivElement>(null);
+
+  // 顶级体验：抛弃尾部直接截断（line-clamp-2会导致看不见最新字），改为天然打字机：自动将最新行推上来
+  useEffect(() => {
+    if (captionScrollRef.current) {
+      captionScrollRef.current.scrollTop = captionScrollRef.current.scrollHeight;
+    }
+  }, [displayCaption.text]);
+
+  useEffect(() => {
+    if (errorMessage) return;
+
+    if (isResponding) {
+      if (assistantText.trim()) {
+        setDisplayCaption({ text: assistantText.trim(), speaker: '老师正在说', isStale: false });
+      }
+    } else if (isListening) {
+      if (capturedText.trim()) {
+        setDisplayCaption({ text: capturedText.trim(), speaker: '你正在说', isStale: false });
+      } else {
+        // 刚开始倾听，还没出字，保持旧的字幕，但变灰（天然的过渡态）
+        setDisplayCaption((prev) => ({ ...prev, isStale: true }));
+      }
+    } else if (isThinking || (!isListening && !isResponding && isConnected)) {
+      // 思考中，或者通话闲置，保持旧的字幕，但变灰，不立刻消失
+      setDisplayCaption((prev) => ({ ...prev, isStale: true }));
+    } else if (!isConnected) {
+      setDisplayCaption({ text: '', speaker: '', isStale: false });
+    }
+  }, [errorMessage, isResponding, assistantText, isListening, capturedText, isThinking, isConnected]);
+
   useEffect(() => {
     if (!isConnected) {
       setConnectedAt(null);
@@ -298,16 +335,8 @@ export function TutorRealtimeCallScreen({
   const primaryLabel = isConnecting ? '拨号中' : isAuthorizing ? '点一下开麦' : isMuted ? '开麦' : '静音';
   const primaryIcon = isMuted || isAuthorizing ? Mic : MicOff;
 
-  const liveCaption = useMemo(() => {
-    if (errorMessage) return '';
-    if (isResponding && assistantText.trim()) return assistantText.trim();
-    if (isListening && capturedText.trim()) return capturedText.trim();
-    return '';
-  }, [assistantText, capturedText, errorMessage, isListening, isResponding]);
-
-  const captionSpeaker = isResponding ? '老师正在说' : isListening ? '你正在说' : '现在通话中';
-  const showCaptionCard = Boolean(liveCaption);
-  const shouldShowHelperCard = !showCaptionCard && (disabled || Boolean(errorMessage) || isAuthorizing || isThinking || isMuted || !isConnected);
+  const hasCaption = Boolean(displayCaption.text);
+  const showHelper = errorMessage || isAuthorizing || disabled || (!isConnected && !errorMessage) || isMuted;
   const SecondaryIcon = secondaryAction.icon;
 
   return (
@@ -386,38 +415,49 @@ export function TutorRealtimeCallScreen({
       </div>
 
       <div className="mt-auto flex w-full flex-col items-center pb-2">
-        {showCaptionCard || shouldShowHelperCard ? (
-          <div className="relative mb-6 flex h-[84px] w-full flex-col items-center justify-center px-6 text-center">
-            <button 
-              type="button"
-              onClick={() => setShowTranscriptSheet(true)}
-              className="group flex h-full w-full flex-col items-center justify-center gap-2"
-            >
-              {showCaptionCard ? (
-                <>
-                  <div className="flex items-center gap-1.5 opacity-50 transition-opacity group-hover:opacity-100">
-                    <Volume2 size={12} strokeWidth={2} className="text-[#A3A39E]" />
-                    <span className="text-[11px] font-medium text-[#A3A39E]">{captionSpeaker}</span>
-                  </div>
-                  <p className="line-clamp-2 text-[16px] font-medium leading-[1.6] text-[#232322] transition-all">
-                    {liveCaption}
-                  </p>
-                </>
-              ) : (
-                <>
-                  <div className="flex items-center gap-1.5 opacity-40 transition-opacity group-hover:opacity-100">
-                    <span className="text-[11px] font-medium text-[#A3A39E]">{stageCopy.badge}</span>
-                  </div>
-                  <p className="line-clamp-2 text-[14px] leading-[1.6] text-[#A3A39E] transition-all">
-                    {stageCopy.body}
-                  </p>
-                </>
-              )}
-            </button>
-          </div>
-        ) : (
-          <div className="mb-6 h-[84px] w-full" />
-        )}
+        <div className="relative mb-6 flex h-[84px] w-full flex-col items-center justify-center px-6 text-center">
+          <button 
+            type="button"
+            onClick={() => setShowTranscriptSheet(true)}
+            className="group flex h-full w-full flex-col items-center justify-center gap-2"
+          >
+            {showHelper ? (
+              // 强状态覆盖区（错误、等待授权、静音等优先级最高）
+              <>
+                <div className="flex items-center gap-1.5 opacity-40 transition-opacity group-hover:opacity-100">
+                  <span className="text-[11px] font-medium text-[#A3A39E]">{stageCopy.badge}</span>
+                </div>
+                <p className="line-clamp-2 text-[14px] leading-[1.6] text-[#A3A39E] transition-all">
+                  {stageCopy.body}
+                </p>
+              </>
+            ) : hasCaption ? (
+              // 顶级通话字幕区（解决截断问题，滚动打字机）
+              <>
+                <div className={`flex items-center gap-1.5 transition-opacity duration-500 ${displayCaption.isStale ? 'opacity-30' : 'opacity-50 group-hover:opacity-100'}`}>
+                  <Volume2 size={12} strokeWidth={2} className="text-[#A3A39E]" />
+                  <span className="text-[11px] font-medium text-[#A3A39E]">{displayCaption.speaker}</span>
+                </div>
+                <div 
+                  ref={captionScrollRef}
+                  className={`w-full max-h-[50px] overflow-y-hidden scroll-smooth text-[16px] font-medium leading-[25px] text-[#232322] transition-all duration-500 ${displayCaption.isStale ? 'opacity-40' : 'opacity-100'}`}
+                >
+                  {displayCaption.text}
+                </div>
+              </>
+            ) : (
+              // 已接通但双方都没说话兜底提示
+              <>
+                <div className="flex items-center gap-1.5 opacity-40 transition-opacity group-hover:opacity-100">
+                  <span className="text-[11px] font-medium text-[#A3A39E]">{stageCopy.badge}</span>
+                </div>
+                <p className="line-clamp-2 text-[14px] leading-[1.6] text-[#A3A39E] transition-all">
+                  {stageCopy.body}
+                </p>
+              </>
+            )}
+          </button>
+        </div>
 
         <div className="flex w-full items-end justify-center gap-4 px-4 sm:gap-8">
           <CallControlButton

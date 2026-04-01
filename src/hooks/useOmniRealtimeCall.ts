@@ -500,6 +500,7 @@ export function useOmniRealtimeCall({
               if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN && statusRef.current === 'responding') {
                 wsRef.current.send(JSON.stringify({ action: 'cancel' }));
               }
+              setCapturedText('');
               setStatus('listening');
               break;
             case 'speech_stopped':
