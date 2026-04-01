@@ -1333,7 +1333,9 @@ export function AITutor({
 
   const handleRealtimeAssistantDone = useCallback((text: string) => {
     const trimmed = text.trim();
-    if (!trimmed || realtimeAssistantFinalizedRef.current) return;
+    if (!trimmed) return;
+    // 只有尚未 finalize 时才写入，防止同一轮重复写入
+    if (realtimeAssistantFinalizedRef.current) return;
 
     realtimeAssistantFinalizedRef.current = true;
     if (isGlobalMode) {
@@ -1356,6 +1358,7 @@ export function AITutor({
       }
     }
 
+    // 重置标记，为下一轮准备（包括结束通话时的 flush 场景）
     realtimeAssistantFinalizedRef.current = false;
     setRealtimeAssistantDraft('');
     setIsRealtimeAssistantResponding(false);
