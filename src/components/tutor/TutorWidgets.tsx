@@ -6,12 +6,66 @@ export function FixedModelBadge({ compact = false }: { compact?: boolean }) {
   return (
     <div
       className={compact
-        ? 'inline-flex items-center gap-1.5 rounded-full border border-violet-200 bg-violet-50 px-2.5 py-1 text-[11px] font-medium text-violet-700'
-        : 'inline-flex items-center gap-2 rounded-full border border-violet-200 bg-violet-50 px-3 py-1.5 text-xs font-medium text-violet-700'}
+        ? 'inline-flex items-center gap-1.5 rounded-full border border-[#E9E9E7] bg-[#F7F7F5] px-2.5 py-1 text-[11px] font-medium text-[#232322]'
+        : 'inline-flex items-center gap-2 rounded-full border border-[#E9E9E7] bg-[#F7F7F5] px-3 py-1.5 text-xs font-medium text-[#232322]'}
       title={`当前固定模型：${FIXED_TUTOR_MODEL_LABEL}`}
     >
       <Brain size={compact ? 12 : 14} strokeWidth={1.8} />
       <span>{FIXED_TUTOR_MODEL_LABEL}</span>
+    </div>
+  );
+}
+
+export function TutorModeToggle({
+  enabled,
+  available,
+  onClick,
+  compact = false,
+}: {
+  enabled: boolean;
+  available: boolean;
+  onClick: () => void;
+  compact?: boolean;
+}) {
+  if (!available) return null;
+
+  return (
+    <div
+      className={compact
+        ? 'inline-flex items-center gap-1.5 rounded-full border border-[#E9E9E7] bg-white p-1'
+        : 'inline-flex items-center gap-2 rounded-full border border-[#E9E9E7] bg-white p-1'}
+      title="切换辅导方式"
+    >
+      <button
+        type="button"
+        onClick={() => {
+          if (enabled) onClick();
+        }}
+        className={compact
+          ? `rounded-full px-2.5 py-1 text-[11px] font-medium transition-colors ${
+              enabled ? 'text-[#787774]' : 'bg-[#232322] text-white'
+            }`
+          : `rounded-full px-3 py-1.5 text-xs font-medium transition-colors ${
+              enabled ? 'text-[#787774]' : 'bg-[#232322] text-white'
+            }`}
+      >
+        标准
+      </button>
+      <button
+        type="button"
+        onClick={() => {
+          if (!enabled) onClick();
+        }}
+        className={compact
+          ? `rounded-full px-2.5 py-1 text-[11px] font-medium transition-colors ${
+              enabled ? 'bg-[#232322] text-white' : 'text-[#787774]'
+            }`
+          : `rounded-full px-3 py-1.5 text-xs font-medium transition-colors ${
+              enabled ? 'bg-[#232322] text-white' : 'text-[#787774]'
+            }`}
+      >
+        通话
+      </button>
     </div>
   );
 }

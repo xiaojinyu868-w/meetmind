@@ -12,7 +12,8 @@ import type { ConversationHistory } from '@/types/conversation';
 import type { Citation } from '@/types/dify';
 import { ModelSelector } from './ModelSelector';
 import { ImageUpload, useImagePaste, type UploadedImage } from './ImageUpload';
-import { DEFAULT_MODEL_ID } from '@/lib/services/llm-service';
+import { getPreference } from '@/lib/db';
+import { AVAILABLE_MODELS, DEFAULT_MODEL_ID, isMultimodalModel } from '@/lib/services/llm-service';
 import { ThinkingGuideRenderer } from './ThinkingGuideRenderer';
 import { StreamingMarkdown } from './StreamingMarkdown';
 import { ThinkingVisualizer } from './ThinkingVisualizer';
@@ -46,6 +47,10 @@ interface AIChatProps {
   onConversationChange?: (conversation: ConversationHistory) => void;
   /** 是否为移动端 */
   isMobile?: boolean;
+  /** 是否隐藏内置头部 */
+  hideHeader?: boolean;
+  /** 是否作为移动端嵌入面板渲染 */
+  embeddedMobile?: boolean;
   /** 是否强制回答携带时间戳引用 */
   forceTimestampCitations?: boolean;
   /** 助手回答回调（用于外部构建时间轴高亮） */
@@ -73,6 +78,7 @@ const TUTOR_SYSTEM_PROMPT = `你是一位专业的 AI 家教，专门帮助学�
 - 保持耐心和鼓励的态度`;
 
 const STRICT_TIMESTAMP_HINT = `请尽量在回答中给出 2-6 个关键时间点，统一使用 [MM:SS] 格式，并把时间点和对应观点绑定。`;
+const SETTINGS_MODEL_PREFERENCE_KEY = 'settings_model_preference';
 
 function extractTimestampMs(content: string): number[] {
   if (!content) return [];
@@ -107,6 +113,8 @@ export function AIChat({
   conversationId: initialConversationId,
   onConversationChange,
   isMobile = false,
+  hideHeader = false,
+  embeddedMobile = false,
   forceTimestampCitations = false,
   onAssistantMessage,
 }: AIChatProps) {
@@ -121,7 +129,7 @@ export function AIChat({
   
   // 模型选择
   const [selectedModel, setSelectedModel] = useState(DEFAULT_MODEL_ID);
-  const [supportsMultimodal, setSupportsMultimodal] = useState(true);
+  const [supportsMultimodal, setSupportsMultimodal] = useState(isMultimodalModel(DEFAULT_MODEL_ID));
   
   // 图片上传
   const [uploadedImages, setUploadedImages] = useState<UploadedImage[]>([]);
@@ -168,6 +176,27 @@ export function AIChat({
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, streamingContent, thinkingContent]);
+
+  useEffect(() => {
+    const loadPreferredModel = async () => {
+      try {
+        const preferredModel = await getPreference<string>(SETTINGS_MODEL_PREFERENCE_KEY, 'auto');
+        const nextModel =
+          preferredModel !== 'auto' && AVAILABLE_MODELS.some((model) => model.id === preferredModel)
+            ? preferredModel
+            : DEFAULT_MODEL_ID;
+        setSelectedModel(nextModel);
+      } catch {
+        setSelectedModel(DEFAULT_MODEL_ID);
+      }
+    };
+
+    void loadPreferredModel();
+  }, []);
+
+  useEffect(() => {
+    setSupportsMultimodal(isMultimodalModel(selectedModel));
+  }, [selectedModel]);
 
   // 初始化或恢复对话
   useEffect(() => {
@@ -404,7 +433,7 @@ export function AIChat({
 
   if (isInitializing) {
     return (
-      <div className="flex flex-col h-full min-h-0 bg-white rounded-lg border border-gray-200">
+      <div className={`flex h-full min-h-0 flex-col ${embeddedMobile ? 'bg-transparent' : 'rounded-lg border border-gray-200 bg-white'}`}>
         <div className="flex-1 flex items-center justify-center">
           <div className="text-center">
             <div className="flex gap-1 justify-center mb-2">
@@ -419,76 +448,91 @@ export function AIChat({
     );
   }
 
+  const shellClassName = embeddedMobile
+    ? 'flex h-full min-h-0 flex-col bg-transparent'
+    : 'flex h-full min-h-0 flex-col rounded-lg border border-gray-200 bg-white';
+  const messageAreaClassName = embeddedMobile ? 'flex-1 overflow-y-auto p-3 space-y-4' : 'flex-1 overflow-y-auto p-4 space-y-4';
+  const composerClassName = embeddedMobile
+    ? 'flex-shrink-0 bg-transparent px-3 pb-[max(env(safe-area-inset-bottom),12px)] pt-2'
+    : 'border-t border-gray-200 p-4';
+  const composerInnerClassName = embeddedMobile ? 'rounded-[24px] border border-[#E9E9E7] bg-white p-2' : '';
+
   return (
-    <div className="flex flex-col h-full min-h-0 bg-white rounded-lg border border-gray-200">
+    <div className={shellClassName}>
       {/* 头部 */}
-      <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200">
-        <div className="flex items-center gap-2">
-          <span className="text-lg">🎓</span>
-          <span className="font-medium text-gray-900">AI 家教</span>
-          {conversation && (
-            <span className="text-xs text-gray-400 truncate max-w-[120px]" title={conversation.title}>
-              · {conversation.title}
-            </span>
-          )}
-        </div>
-        <div className="flex items-center gap-2">
-          {/* 思维引导开关 */}
-          {!isMobile && (
-            <label className="flex items-center gap-1 cursor-pointer select-none" title="开启后 AI 会展示解题思路引导">
-              <input
-                type="checkbox"
-                checked={enableThinkingGuide}
-                onChange={(e) => setEnableThinkingGuide(e.target.checked)}
-                className="w-3.5 h-3.5 rounded border-gray-300 text-violet-600 focus:ring-violet-500 cursor-pointer"
+      {!hideHeader ? (
+        <div className="flex items-center justify-between border-b border-gray-200 px-4 py-3">
+          <div className="flex items-center gap-2">
+            <span className="text-lg">🎓</span>
+            <span className="font-medium text-gray-900">AI 家教</span>
+            {conversation && (
+              <span className="max-w-[120px] truncate text-xs text-gray-400" title={conversation.title}>
+                · {conversation.title}
+              </span>
+            )}
+          </div>
+          <div className="flex items-center gap-2">
+            {!isMobile && (
+              <label className="flex cursor-pointer select-none items-center gap-1" title="开启后 AI 会展示解题思路引导">
+                <input
+                  type="checkbox"
+                  checked={enableThinkingGuide}
+                  onChange={(e) => setEnableThinkingGuide(e.target.checked)}
+                  className="h-3.5 w-3.5 cursor-pointer rounded border-gray-300 text-violet-600 focus:ring-violet-500"
+                />
+                <span className="text-xs text-gray-500">🧠 思维引导</span>
+              </label>
+            )}
+            {!isMobile ? (
+              <ModelSelector
+                value={selectedModel}
+                onChange={setSelectedModel}
+                onMultimodalChange={setSupportsMultimodal}
+                compact={true}
               />
-              <span className="text-xs text-gray-500">🧠 思维引导</span>
-            </label>
-          )}
-          <ModelSelector
-            value={selectedModel}
-            onChange={setSelectedModel}
-            onMultimodalChange={setSupportsMultimodal}
-            compact={true}
-          />
-          {anchorTimestamp && (
-            <span className="text-xs text-gray-500">
-              困惑点: {formatTimestampMs(anchorTimestamp)}
-            </span>
-          )}
-          {messages.length > 0 && (
-            <button
-              onClick={clearConversation}
-              className="w-7 h-7 flex items-center justify-center rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors"
-              title="新对话"
-            >
-              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-              </svg>
-            </button>
-          )}
+            ) : null}
+            {anchorTimestamp && (
+              <span className="text-xs text-gray-500">
+                困惑点: {formatTimestampMs(anchorTimestamp)}
+              </span>
+            )}
+            {messages.length > 0 && (
+              <button
+                onClick={clearConversation}
+                className="flex h-7 w-7 items-center justify-center rounded-lg text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-600"
+                title="新对话"
+              >
+                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                </svg>
+              </button>
+            )}
+          </div>
         </div>
-      </div>
+      ) : null}
 
       {/* 消息列表 */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-4">
+      <div className={messageAreaClassName}>
         {/* 初始提示 */}
         {messages.length === 0 && (
-          <div className="text-center py-8">
-            <div className="text-4xl mb-3">🤔</div>
-            <h3 className="font-medium text-gray-900 mb-2">有什么不明白的？</h3>
-            <p className="text-sm text-gray-500 mb-4">
-              我会根据老师讲的内容帮你解答
-            </p>
+          <div className={`${embeddedMobile ? 'px-1 pt-1' : 'py-8 text-center'}`}>
+            {!embeddedMobile ? (
+              <>
+                <div className="mb-3 text-4xl">🤔</div>
+                <h3 className="mb-2 font-medium text-gray-900">有什么不明白的？</h3>
+                <p className="mb-4 text-sm text-gray-500">我会根据老师讲的内容帮你解答</p>
+              </>
+            ) : null}
 
-            {/* 快捷问题 */}
-            <div className="flex flex-wrap justify-center gap-2">
+            <div className={`flex flex-wrap gap-2 ${embeddedMobile ? '' : 'justify-center'}`}>
               {quickQuestions.map((q, i) => (
                 <button
                   key={i}
                   onClick={() => sendMessage(q)}
                   disabled={isLoading || isStreaming}
-                  className="px-3 py-1.5 text-sm bg-gray-100 text-gray-700 rounded-full hover:bg-gray-200 transition-colors disabled:opacity-50"
+                  className={`rounded-full border border-[#E9E9E7] bg-white px-4 py-2 text-[13px] text-[#232322] transition-colors hover:bg-[#F7F7F5] disabled:opacity-50 ${
+                    embeddedMobile ? 'font-medium' : ''
+                  }`}
                 >
                   {q}
                 </button>
@@ -506,7 +550,7 @@ export function AIChat({
             <div
               className={`max-w-[90%] rounded-2xl ${isMobile ? 'px-3 py-2' : 'px-4 py-3'} ${
                 message.role === 'user'
-                  ? 'bg-[#FDF3C0] text-white'
+                  ? 'bg-[#232322] text-white'
                   : 'bg-gray-50 text-gray-800'
               }`}
             >
@@ -637,10 +681,11 @@ export function AIChat({
       )}
 
       {/* 输入框 */}
-      <form onSubmit={handleSubmit} className="p-4 border-t border-gray-200">
+      <form onSubmit={handleSubmit} className={composerClassName}>
+        <div className={composerInnerClassName}>
         {/* 图片预览区域 */}
         {supportsMultimodal && uploadedImages.length > 0 && (
-          <div className="mb-3 p-2 bg-gray-50 rounded-lg">
+          <div className="mb-3 rounded-lg bg-gray-50 p-2">
             <ImageUpload
               images={uploadedImages}
               onImagesChange={setUploadedImages}
@@ -650,7 +695,7 @@ export function AIChat({
           </div>
         )}
         
-        <div className="flex gap-2 items-end">
+        <div className="flex items-end gap-2">
           {/* 图片上传按钮 */}
           {supportsMultimodal && (
             <ImageUpload
@@ -670,7 +715,7 @@ export function AIChat({
             onChange={(e) => setInputValue(e.target.value)}
             disabled={isLoading || isStreaming}
             placeholder="输入你的问题..."
-            className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#232322] focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed"
+            className={`flex-1 ${embeddedMobile ? 'rounded-[18px] border border-[#E9E9E7] bg-[#F7F7F5] px-4 py-2.5 text-sm text-[#232322] outline-none placeholder:text-[#A3A39E]' : 'rounded-lg border border-gray-300 px-4 py-2 focus:border-transparent focus:outline-none focus:ring-2 focus:ring-[#232322] disabled:cursor-not-allowed disabled:bg-gray-100'}`}
           />
           <VoiceMicButton
             onTranscript={(text) => setInputValue(prev => prev + text)}
@@ -679,10 +724,11 @@ export function AIChat({
           <button
             type="submit"
             disabled={isLoading || isStreaming || (!inputValue.trim() && uploadedImages.length === 0)}
-            className="px-4 py-2 bg-[#232322] text-white rounded-lg hover:bg-[#FDECC8] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            className={`${embeddedMobile ? 'rounded-full bg-[#232322] px-4 py-2 text-white' : 'rounded-lg bg-[#232322] px-4 py-2 text-white transition-colors hover:bg-[#1a1a1a]'} disabled:cursor-not-allowed disabled:opacity-50`}
           >
             发送
           </button>
+        </div>
         </div>
       </form>
     </div>

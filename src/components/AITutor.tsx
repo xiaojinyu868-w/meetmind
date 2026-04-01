@@ -24,6 +24,7 @@ import { ImageUpload, useImagePaste, type UploadedImage } from './ImageUpload';
 import { useAuth } from '@/lib/hooks/useAuth';
 import { useAnalyticsContext } from '@/components/AnalyticsProvider';
 import { useSimpleSSEStream, type SSEEvent } from '@/lib/hooks/useSSEStream';
+import { primeOmniRealtimeCallEntry } from '@/hooks/useOmniRealtimeCall';
 import IntentBubbleExplorer from './IntentBubbleExplorer';
 import { saveTutorResponseCache, getTutorResponseCache, deleteTutorResponseCache, setPreference, saveClassSummary, getSessionSummary } from '@/lib/db';
 import { conversationService, getEffectiveUserId } from '@/lib/services/conversation-service';
@@ -37,7 +38,6 @@ import { VoiceMicButton } from './VoiceMicButton';
 // --- 拆分子模块 ---
 import type {
   Segment,
-  ActionItem,
   TutorLaunchImage,
   AITutorProps,
   TutorCacheEnvelopeV1,
@@ -47,6 +47,8 @@ import type {
 import {
   TUTOR_STATE_KEY,
   FIXED_TUTOR_MODEL_ID,
+  REALTIME_TEACHER_MODEL_ID,
+  IS_REALTIME_TEACHER_AVAILABLE,
 } from './tutor/tutor-types';
 import {
   toTranscriptSignature,
@@ -58,7 +60,17 @@ import {
   toTutorMessageImages,
   formatTutorErrorMessage,
 } from './tutor/tutor-utils';
-import { FixedModelBadge, StopGenerationButton, Section, QuickReply } from './tutor/TutorWidgets';
+import { FixedModelBadge, TutorModeToggle, StopGenerationButton, Section, QuickReply } from './tutor/TutorWidgets';
+import { TutorCallComposer } from './tutor/TutorCallComposer';
+import { TutorRealtimeCallBar } from './tutor/TutorRealtimeCallBar';
+import { TutorRealtimeCallScreen } from './tutor/TutorRealtimeCallScreen';
+
+type StarterIntentMeta = {
+  role?: string;
+  intent?: string;
+  displayText?: string;
+  hideBubble?: boolean;
+};
 
 export function AITutor({
   breakpoint,
@@ -78,14 +90,22 @@ export function AITutor({
   launchImages: launchImagesProp = [],
   onLaunchQuestionConsumed,
   hideMobileHeader = false,
+  realtimeTeacherEnabled,
+  onRealtimeTeacherEnabledChange,
 }: AITutorProps) {
   const { accessToken, user, isCheckingAuth } = useAuth();
   const userId = getEffectiveUserId(user?.id);
   const { trackCoreEvent } = useAnalyticsContext();
   const [userInput, setUserInput] = useState('');
   const [chatHistory, setChatHistory] = useState<TutorChatMessage[]>([]);
-  const selectedModel = FIXED_TUTOR_MODEL_ID;
-  const supportsMultimodal = isMultimodalModel(FIXED_TUTOR_MODEL_ID);
+  const [localRealtimeTeacherEnabled, setLocalRealtimeTeacherEnabled] = useState(false);
+  const enableRealtimeTeacher = realtimeTeacherEnabled ?? localRealtimeTeacherEnabled;
+  const selectedModel =
+    enableRealtimeTeacher && IS_REALTIME_TEACHER_AVAILABLE
+      ? REALTIME_TEACHER_MODEL_ID
+      : FIXED_TUTOR_MODEL_ID;
+  const isRealtimeTeacherMode = selectedModel === REALTIME_TEACHER_MODEL_ID;
+  const supportsMultimodal = isMultimodalModel(selectedModel);
   const [response, setResponse] = useState<TutorAPIResponse | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -117,6 +137,10 @@ export function AITutor({
   // 思考开始时间（用于计算耗时）
   const [thinkingStartTime, setThinkingStartTime] = useState<number | undefined>();
   const [globalThinkingStartTime, setGlobalThinkingStartTime] = useState<number | undefined>();
+  const [realtimeAssistantDraft, setRealtimeAssistantDraft] = useState('');
+  const [isRealtimeAssistantResponding, setIsRealtimeAssistantResponding] = useState(false);
+  const realtimeAssistantDraftRef = useRef('');
+  const realtimeAssistantFinalizedRef = useRef(false);
   
   // 困惑点模式的流式输出 - 使用统一的 SSE Hook
   const {
@@ -139,6 +163,18 @@ export function AITutor({
     () => segments.length > 0 || normalizeSupportContextText(supportContextText).length > 0,
     [segments.length, supportContextText]
   );
+  const handleRealtimeTeacherToggle = useCallback(() => {
+    const nextEnabled = !enableRealtimeTeacher;
+    void (async () => {
+      if (nextEnabled) {
+        await primeOmniRealtimeCallEntry();
+      }
+      onRealtimeTeacherEnabledChange?.(nextEnabled);
+      if (realtimeTeacherEnabled === undefined) {
+        setLocalRealtimeTeacherEnabled(nextEnabled);
+      }
+    })();
+  }, [enableRealtimeTeacher, onRealtimeTeacherEnabledChange, realtimeTeacherEnabled]);
   const transcriptSignature = useMemo(() => {
     const baseSignature = toTranscriptSignature(segments);
     const supportSignature = normalizeSupportContextText(supportContextText, 400);
@@ -165,9 +201,30 @@ export function AITutor({
       }),
     [preferSupportContext, segments, supportContextText]
   );
+  const realtimeTeacherContext = useMemo(() => {
+    const relevantSegments = breakpoint
+      ? buildSegmentsForTutorRequest(breakpoint.timestamp)
+      : buildGlobalSegmentsForTutorRequest();
+    const mergedText = relevantSegments.map((segment) => segment.text).join(' ');
+    return normalizeSupportContextText(mergedText || supportContextText, 2600);
+  }, [breakpoint, buildGlobalSegmentsForTutorRequest, buildSegmentsForTutorRequest, supportContextText]);
+  const realtimeTeacherInstructions = useMemo(() => {
+    const sceneHint = breakpoint
+      ? '学生刚好卡在课上的一个具体片段，你要顺着这段继续讲。'
+      : '学生正在围绕整节课继续追问，你要像陪学老师一样顺着往下带。';
+
+    return [
+      '你是一位像真人一样在微信里陪学生语音辅导的中文老师。',
+      '学生会一轮一轮地发来语音。',
+      '先自然接住学生刚说的话，再继续解释，一次只推进一点。',
+      '不要写提纲，不要列条目，不要把回答讲成讲义。',
+      '除非学生明确要回放原话，否则不要主动报时间戳。',
+      sceneHint,
+      realtimeTeacherContext ? `这节课的已知上下文：${realtimeTeacherContext}` : '',
+    ].filter(Boolean).join('\n\n');
+  }, [breakpoint, realtimeTeacherContext]);
   
   const chatEndRef = useRef<HTMLDivElement>(null);
-  const explainAbortRef = useRef<AbortController | null>(null);
   
   // 监听粘贴事件
   useImagePaste(
@@ -339,6 +396,12 @@ export function AITutor({
   useEffect(() => {
     notebookService.isAvailable().then(setNotebookAvailable);
   }, []);
+
+  useEffect(() => {
+    if (isRealtimeTeacherMode && enableThinkingGuide) {
+      setEnableThinkingGuide(false);
+    }
+  }, [enableThinkingGuide, isRealtimeTeacherMode]);
 
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -600,11 +663,8 @@ export function AITutor({
 
   const explainBreakpoint = useCallback(async () => {
     if (!breakpoint || segments.length === 0) return;
-    
-    // 取消上一个请求，防止竞态
-    explainAbortRef.current?.abort();
-    const abortController = new AbortController();
-    explainAbortRef.current = abortController;
+
+    breakpointStopStream();
 
     setIsLoading(true);
     setError(null);
@@ -612,6 +672,8 @@ export function AITutor({
     setChatHistory([]);
     setSelectedOptionId(undefined);
     setConversationId(undefined);
+    setIsFromCache(false);
+    setBreakpointStreamingCitations([]);
     trackCoreEvent('tutor_chat_start', {
       mode: 'breakpoint-initial',
       anchorId: breakpoint.id,
@@ -623,69 +685,100 @@ export function AITutor({
       if (accessToken) {
         headers['Authorization'] = `Bearer ${accessToken}`;
       }
-      
-      const res = await fetch('/api/tutor', {
-        method: 'POST',
+
+      setThinkingStartTime(Date.now());
+
+      let parsedResponse: TutorAPIResponse | null = null;
+      let parsedResponseHandledActionItems = false;
+      let nextConversationId: string | undefined;
+      let collectedCitations: Citation[] = [];
+
+      const result = await breakpointFetchStream('/api/tutor', {
+        timestamp: breakpoint.timestamp,
+        segments: buildSegmentsForTutorRequest(breakpoint.timestamp),
+        model: selectedModel,
+        enable_guidance: true,
+        enable_web: enableWeb,
+        sessionId,
+        stream: true,
+      }, {
         headers,
-        signal: abortController.signal,
-        body: JSON.stringify({
-          timestamp: breakpoint.timestamp,
-          segments: buildSegmentsForTutorRequest(breakpoint.timestamp),
-          model: selectedModel,
-          enable_guidance: true,
-          enable_web: enableWeb,
-          sessionId,  // 传递 sessionId 用于摘要缓存
-        }),
+        onMetadata: (metadata: SSEEvent) => {
+          if (metadata.conversation_id) {
+            nextConversationId = metadata.conversation_id as string;
+            setConversationId(nextConversationId);
+          }
+
+          const nextCitations = normalizeCitations(metadata.citations);
+          if (nextCitations?.length) {
+            collectedCitations = nextCitations;
+            setBreakpointStreamingCitations(nextCitations);
+          }
+
+          if (metadata.parsed_response) {
+            parsedResponse = metadata.parsed_response as TutorAPIResponse;
+            if (parsedResponse.citations?.length) {
+              collectedCitations = parsedResponse.citations;
+              setBreakpointStreamingCitations(parsedResponse.citations);
+            }
+            if (parsedResponse.conversation_id) {
+              nextConversationId = parsedResponse.conversation_id;
+              setConversationId(parsedResponse.conversation_id);
+            }
+            if (parsedResponse.actionItems && onActionItemsUpdate) {
+              parsedResponseHandledActionItems = true;
+              onActionItemsUpdate(parsedResponse.actionItems, breakpoint.id);
+            }
+          }
+        },
       });
 
-      if (!res.ok) {
-        const data = await res.json();
-        throw new Error(data.error || '请求失败');
-      }
+      const data = parsedResponse ?? {
+        explanation: {
+          teacherSaid: '',
+          citation: { text: '', timeRange: '00:00-00:00', startMs: 0, endMs: 0 },
+          possibleStuckPoints: [],
+          followUpQuestion: '',
+        },
+        actionItems: [],
+        rawContent: result.content || '我先顺着这段课堂内容想一想。',
+        model: selectedModel,
+        citations: collectedCitations.length ? collectedCitations : undefined,
+        conversation_id: nextConversationId,
+      };
 
-      const data: TutorAPIResponse = await res.json();
       setResponse(data);
       setIsFromCache(false);
       if (data.conversation_id) {
         setConversationId(data.conversation_id);
       }
-      // 通知父组件更新行动清单
-      if (data.actionItems && onActionItemsUpdate) {
+      if (!parsedResponseHandledActionItems && data.actionItems && onActionItemsUpdate) {
         onActionItemsUpdate(data.actionItems, breakpoint.id);
       }
-      // 保存摘要到 IndexedDB（如果是新生成的）
       await handleSummaryFromResponse(data);
-      // 保存到缓存
       await saveToCache(data, [], data.conversation_id);
+      clearBreakpointStreamingOnly();
+      setBreakpointStreamingCitations([]);
       trackCoreEvent('tutor_chat_complete', {
         mode: 'breakpoint-initial',
         anchorId: breakpoint.id,
         sessionId,
       });
     } catch (err) {
-      // 被 abort 的请求不算错误（用户切换了困惑点）
-      if (err instanceof DOMException && err.name === 'AbortError') return;
+      if (err instanceof Error && err.name === 'AbortError') return;
       setError(err instanceof Error ? err.message : '未知错误');
     } finally {
-      if (!abortController.signal.aborted) {
-        setIsLoading(false);
-      }
+      setIsLoading(false);
     }
-  }, [breakpoint, buildSegmentsForTutorRequest, selectedModel, enableWeb, accessToken, onActionItemsUpdate, saveToCache, handleSummaryFromResponse, trackCoreEvent, sessionId, segments.length]);
+  }, [breakpoint, segments.length, breakpointStopStream, breakpointFetchStream, buildSegmentsForTutorRequest, selectedModel, enableWeb, accessToken, onActionItemsUpdate, handleSummaryFromResponse, saveToCache, clearBreakpointStreamingOnly, trackCoreEvent, sessionId]);
 
   useEffect(() => {
-    // 切换困惑点或切换模型时自动加载（有缓存数据则跳过）
-    if (breakpoint && !isRestoring && hasInitialized.current) {
-      // 切换模型时强制重新生成（清除旧响应）
-      if (!response && !isFromCache) {
-        explainBreakpoint();
-      }
-    }
+    setIsLoading(false);
+    breakpointStopStream();
     return () => {
-      // 组件卸载或依赖变化时取消进行中的请求
-      explainAbortRef.current?.abort();
+      breakpointStopStream();
     };
-  }, [breakpoint?.id, selectedModel, isRestoring, explainBreakpoint]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [breakpoint?.id, selectedModel, breakpointStopStream]);
 
   const handleGuidanceSelect = async (optionId: string, option: GuidanceOption) => {
     if (!breakpoint) return;
@@ -797,10 +890,10 @@ export function AITutor({
     }
   };
 
-  const handleSend = async () => {
-    if ((!userInput.trim() && uploadedImages.length === 0) || !breakpoint) return;
+  const handleSend = async (questionOverride?: string) => {
+    if ((!userInput.trim() && !questionOverride?.trim() && uploadedImages.length === 0) || !breakpoint) return;
 
-    const question = userInput.trim();
+    const question = (questionOverride ?? userInput).trim();
     const effectiveQuestion = question || (uploadedImages.length > 0 ? '先帮我看这张图片里最关键的信息。' : '');
     const imagesToSend = [...uploadedImages];
     const userMessageImages = toTutorMessageImages(
@@ -982,7 +1075,7 @@ export function AITutor({
         previewUrl: image.previewUrl || image.url,
       }))
     );
-    const shouldHideUserBubble = Boolean(options?.hideUserBubble) && userVisibleText.length === 0 && userMessageImages.length === 0;
+    const shouldHideUserBubble = Boolean(options?.hideUserBubble);
     if (!shouldHideUserBubble) {
       setGlobalChatHistory((prev) => [
         ...prev,
@@ -1128,6 +1221,7 @@ export function AITutor({
   // 困惑点模式：停止生成
   const stopBreakpointGeneration = useCallback(() => {
     breakpointStopStream();
+    setIsLoading(false);
     setIsGuidanceLoading(false);
     // 如果有部分内容，保存到历史
     if (breakpointStreamingContent) {
@@ -1185,30 +1279,136 @@ export function AITutor({
     globalChatHistory.length === 0 &&
     !hasStreamOutput &&
     (hasLaunchPayload || globalLoading || isStreaming || (isCheckingAuth && !accessToken));
+  const shouldShowRealtimeCallHero =
+    isRealtimeTeacherMode &&
+    !isMobile &&
+    globalChatHistory.length === 0 &&
+    !hasStreamOutput &&
+    !shouldShowAutoLaunchState;
+  const shouldUseMobileRealtimeComposer = isRealtimeTeacherMode && isMobile;
+  const mobileRealtimeContextLabel = breakpoint
+    ? `${formatTimestamp(breakpoint.timestamp)} 附近`
+    : preferSupportContext
+      ? '已选内容'
+      : '整节课';
+
+  useEffect(() => {
+    realtimeAssistantDraftRef.current = realtimeAssistantDraft;
+  }, [realtimeAssistantDraft]);
+
+  const handleRealtimeUserTranscript = useCallback((text: string) => {
+    const trimmed = text.trim();
+    if (!trimmed) return;
+
+    if (isGlobalMode) {
+      setGlobalChatHistory((prev) => [...prev, { role: 'user', content: trimmed }]);
+    } else {
+      setChatHistory((prev) => [...prev, { role: 'user', content: trimmed }]);
+    }
+  }, [isGlobalMode]);
+
+  const handleRealtimeAssistantStart = useCallback(() => {
+    realtimeAssistantFinalizedRef.current = false;
+    setRealtimeAssistantDraft('');
+    setIsRealtimeAssistantResponding(true);
+  }, []);
+
+  const handleRealtimeAssistantChange = useCallback((text: string) => {
+    setRealtimeAssistantDraft(text);
+    if (text.trim()) {
+      setIsRealtimeAssistantResponding(true);
+    }
+  }, []);
+
+  const handleRealtimeAssistantDone = useCallback((text: string) => {
+    const trimmed = text.trim();
+    if (!trimmed || realtimeAssistantFinalizedRef.current) return;
+
+    realtimeAssistantFinalizedRef.current = true;
+    if (isGlobalMode) {
+      setGlobalChatHistory((prev) => [...prev, { role: 'assistant', content: trimmed }]);
+    } else {
+      setChatHistory((prev) => [...prev, { role: 'assistant', content: trimmed }]);
+    }
+    setRealtimeAssistantDraft('');
+  }, [isGlobalMode]);
+
+  const handleRealtimeAssistantEnd = useCallback(() => {
+    if (!realtimeAssistantFinalizedRef.current) {
+      const fallbackText = realtimeAssistantDraftRef.current.trim();
+      if (fallbackText) {
+        if (isGlobalMode) {
+          setGlobalChatHistory((prev) => [...prev, { role: 'assistant', content: fallbackText }]);
+        } else {
+          setChatHistory((prev) => [...prev, { role: 'assistant', content: fallbackText }]);
+        }
+      }
+    }
+
+    realtimeAssistantFinalizedRef.current = false;
+    setRealtimeAssistantDraft('');
+    setIsRealtimeAssistantResponding(false);
+  }, [isGlobalMode]);
 
   if (isGlobalMode) {
+    if (shouldUseMobileRealtimeComposer) {
+      return (
+        <div className="h-full flex flex-col ai-chat-container bg-[#F7F7F5]">
+          <TutorRealtimeCallScreen
+            title="真人老师"
+            contextLabel={mobileRealtimeContextLabel}
+            disabled={!hasTutorContext}
+            instructions={realtimeTeacherInstructions}
+            enableSearch={enableWeb}
+            onExit={handleRealtimeTeacherToggle}
+            onUserTranscript={handleRealtimeUserTranscript}
+            onAssistantTranscriptChange={handleRealtimeAssistantChange}
+            onAssistantTranscriptDone={handleRealtimeAssistantDone}
+            onAssistantResponseStart={handleRealtimeAssistantStart}
+            onAssistantResponseEnd={handleRealtimeAssistantEnd}
+          />
+        </div>
+      );
+    }
+
     return (
       <div className={`h-full flex flex-col ai-chat-container ${isMobile ? 'bg-transparent' : 'bg-white'}`}>
         {/* 头部 - 紧凑设计 */}
         {!(isMobile && hideMobileHeader) ? (
           <div className={`${isMobile ? 'px-3 pt-3' : 'border-b border-gray-100 bg-white px-4 py-3'} flex-shrink-0`}>
-            <div className={`${isMobile ? 'rounded-2xl bg-white/80 px-4 py-3' : ''}`}>
+            <div className={`${isMobile ? 'rounded-[24px] border border-[#E9E9E7] bg-white px-4 py-3' : ''}`}>
               <div className="flex items-center justify-between gap-3">
                 <div className="flex items-center gap-2">
-                  <div className={`${isMobile ? 'flex h-9 w-9 items-center justify-center rounded-xl bg-violet-50 text-violet-500' : ''}`}>
+                  <div className={`${isMobile ? 'flex h-9 w-9 items-center justify-center rounded-xl bg-[#F7F7F5] text-[#232322]' : ''}`}>
                     <MessageCircle size={20} strokeWidth={1.75} className={isMobile ? '' : 'text-lilac-500'} />
                   </div>
                   <div>
-                    <h3 className={`font-medium text-gray-800 ${isMobile ? 'text-[15px]' : 'text-base'}`}>
-                      {isMobile ? (preferSupportContext ? '顺着刚选内容继续追问' : '围绕这节课继续追问') : 'AI 课堂助手'}
+                  <h3 className={`font-medium text-gray-800 ${isMobile ? 'text-[15px]' : 'text-base'}`}>
+                      {isRealtimeTeacherMode
+                        ? (isMobile ? '老师' : '像打电话一样问老师')
+                        : isMobile
+                          ? 'AI 助教'
+                          : 'AI 课堂助手'}
                     </h3>
-                    <p className="text-xs text-gray-500">
-                      {preferSupportContext ? '会优先沿着你刚圈出的内容继续讲解。' : isMobile ? '继续解释、举例，或者帮你把这节课讲透。' : '基于整节课内容回答问题'}
-                    </p>
+                    {!isRealtimeTeacherMode && !isMobile ? (
+                      <p className="text-xs text-gray-500">
+                        {preferSupportContext
+                          ? '会优先沿着你刚圈出的内容继续讲解。'
+                          : isMobile
+                            ? '继续解释、举例，或者帮你把这节课讲透。'
+                            : '基于整节课内容回答问题'}
+                      </p>
+                    ) : null}
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
-                  {isMobile ? <FixedModelBadge compact /> : null}
+                  {isMobile ? <FixedModelBadge compact /> : <FixedModelBadge />}
+                  <TutorModeToggle
+                    enabled={isRealtimeTeacherMode}
+                    available={IS_REALTIME_TEACHER_AVAILABLE}
+                    onClick={handleRealtimeTeacherToggle}
+                    compact={isMobile}
+                  />
                 </div>
               </div>
               {isMobile ? (
@@ -1241,6 +1441,7 @@ export function AITutor({
                     type="checkbox"
                     checked={enableThinkingGuide}
                     onChange={(e) => setEnableThinkingGuide(e.target.checked)}
+                    disabled={isRealtimeTeacherMode}
                     className="w-4 h-4 rounded border-gray-300 text-violet-500 focus:ring-violet-400"
                   />
                   <span className="flex items-center gap-1 group-hover:text-gray-900 transition-colors">
@@ -1275,7 +1476,11 @@ export function AITutor({
                       <span></span>
                     </div>
                     <span>
-                      {preferSupportContext ? '正在顺着你刚选的内容继续回答…' : '正在继续理解这节课的上下文…'}
+                      {isRealtimeTeacherMode
+                        ? (preferSupportContext ? '老师正在顺着你刚选的内容继续往下讲…' : '老师正在顺着这节课继续带你往下走…')
+                        : preferSupportContext
+                          ? '正在顺着你刚选的内容继续回答…'
+                          : '正在继续理解这节课的上下文…'}
                     </span>
                   </div>
                 </div>
@@ -1283,11 +1488,43 @@ export function AITutor({
               <div ref={chatEndRef} />
             </div>
           ) : globalChatHistory.length === 0 && !hasStreamOutput ? (
-            <IntentBubbleExplorer
-              transcriptText={segments.map(s => s.text).join(' ') || normalizeSupportContextText(supportContextText, 2400)}
-              preferSupportContext={preferSupportContext}
-              onSend={(prompt) => handleGlobalSend(prompt)}
-            />
+            isRealtimeTeacherMode ? (
+              shouldShowRealtimeCallHero ? (
+                <div className="flex h-full items-center justify-center">
+                  <div className="w-full max-w-md">
+                    <TutorCallComposer
+                      disabled={globalLoading || !hasTutorContext}
+                      compact={isMobile}
+                      variant="hero"
+                      onSubmitTranscript={(text) => handleGlobalSend(text)}
+                    />
+                  </div>
+                </div>
+              ) : (
+                shouldUseMobileRealtimeComposer ? (
+                  <div className="flex h-full flex-col items-center justify-center text-center">
+                    <div className="flex h-24 w-24 items-center justify-center rounded-full border border-[#E9E9E7] bg-white text-2xl font-semibold text-[#232322]">
+                      师
+                    </div>
+                    <p className="mt-5 text-base font-medium text-[#232322]">真人老师</p>
+                    <p className="mt-2 max-w-[220px] text-xs leading-5 text-[#A3A39E]">
+                      先进入通话页，再像发微信语音一样说一轮。
+                    </p>
+                  </div>
+                ) : (
+                  <div className="h-full" />
+                )
+              )
+            ) : (
+              <IntentBubbleExplorer
+                transcriptText={segments.map(s => s.text).join(' ') || normalizeSupportContextText(supportContextText, 2400)}
+                preferSupportContext={preferSupportContext}
+                onSend={(prompt, meta?: StarterIntentMeta) => handleGlobalSend(prompt, {
+                  displayText: meta?.displayText || '',
+                  hideUserBubble: meta?.hideBubble ?? false,
+                })}
+              />
+            )
           ) : (
             // 对话内容
             <div className="space-y-4">
@@ -1402,10 +1639,34 @@ export function AITutor({
                         <span></span>
                       </div>
                       <span className="text-xs">思考中...</span>
+                      {isRealtimeTeacherMode ? <span className="text-xs text-gray-400">老师正在组织下一句</span> : null}
                     </div>
                   </div>
                 </div>
               )}
+
+              {shouldUseMobileRealtimeComposer && isRealtimeAssistantResponding && realtimeAssistantDraft && (
+                <div className="flex justify-start">
+                  <div className="max-w-[92%] rounded-2xl bg-gray-100 px-3 py-2 text-gray-800">
+                    <div className="whitespace-pre-wrap text-xs leading-relaxed">{realtimeAssistantDraft}</div>
+                  </div>
+                </div>
+              )}
+
+              {shouldUseMobileRealtimeComposer && isRealtimeAssistantResponding && !realtimeAssistantDraft ? (
+                <div className="flex justify-start">
+                  <div className="bg-gray-100 rounded-2xl px-4 py-3">
+                    <div className="flex items-center gap-2 text-gray-500">
+                      <div className="loading-dots">
+                        <span></span>
+                        <span></span>
+                        <span></span>
+                      </div>
+                      <span className="text-xs">老师在回你</span>
+                    </div>
+                  </div>
+                </div>
+              ) : null}
 
               <div ref={chatEndRef} />
             </div>
@@ -1413,8 +1674,32 @@ export function AITutor({
         </div>
 
         <div className={`${isMobile ? 'bg-transparent px-3 pb-[max(env(safe-area-inset-bottom),12px)] pt-2' : 'border-t border-gray-100 bg-white px-4 py-3'} flex-shrink-0`}>
-          <div className={`${isMobile ? 'rounded-[24px] border border-slate-200/40 bg-white/95 p-2 shadow-[0_-1px_0_rgba(0,0,0,0.02),0_4px_16px_rgba(148,163,184,0.08)]' : ''}`}>
-            {supportsMultimodal && uploadedImages.length > 0 && (
+          <div className={`${isMobile ? 'rounded-[24px] border border-[#E9E9E7] bg-white p-2' : ''}`}>
+            {isRealtimeTeacherMode && !shouldShowRealtimeCallHero ? (
+              <div className={shouldUseMobileRealtimeComposer ? '' : 'mb-3'}>
+                {shouldUseMobileRealtimeComposer ? (
+                  <TutorRealtimeCallBar
+                    disabled={!hasTutorContext}
+                    instructions={realtimeTeacherInstructions}
+                    enableSearch={enableWeb}
+                    onUserTranscript={handleRealtimeUserTranscript}
+                    onAssistantTranscriptChange={handleRealtimeAssistantChange}
+                    onAssistantTranscriptDone={handleRealtimeAssistantDone}
+                    onAssistantResponseStart={handleRealtimeAssistantStart}
+                    onAssistantResponseEnd={handleRealtimeAssistantEnd}
+                  />
+                ) : (
+                  <TutorCallComposer
+                    disabled={globalLoading || !hasTutorContext}
+                    compact={isMobile}
+                    variant="dock"
+                    onSubmitTranscript={(text) => handleGlobalSend(text)}
+                  />
+                )}
+              </div>
+            ) : null}
+
+            {!shouldUseMobileRealtimeComposer && supportsMultimodal && uploadedImages.length > 0 && (
               <div className={`mb-3 ${isMobile ? 'rounded-xl bg-slate-50/80 p-2.5' : 'rounded-lg bg-gray-50 p-2'}`}>
                 <ImageUpload
                   images={uploadedImages}
@@ -1425,8 +1710,9 @@ export function AITutor({
               </div>
             )}
 
-            <div className="flex items-end gap-2">
-              {supportsMultimodal && (
+            {!shouldUseMobileRealtimeComposer ? (
+              <div className="flex items-end gap-2">
+                {supportsMultimodal && (
                 <ImageUpload
                   images={[]}
                   onImagesChange={(newImages) => {
@@ -1436,45 +1722,56 @@ export function AITutor({
                   disabled={globalLoading || uploadedImages.length >= 5}
                   className="flex-shrink-0"
                 />
-              )}
+                )}
 
-              <div className={`${isMobile ? 'flex min-w-0 flex-1 items-center gap-2 rounded-[18px] border border-slate-200/50 bg-slate-50/50 px-3 py-2.5' : 'flex min-w-0 flex-1 items-center gap-2'}`}>
-                <input
-                  type="text"
-                  data-testid="tutor-global-input"
-                  value={userInput}
-                  onChange={(e) => setUserInput(e.target.value)}
-                  onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && !isStreaming && handleGlobalSend()}
-                  placeholder={preferSupportContext ? '继续顺着这几条内容问...' : '继续问这节课里没讲透的地方...'}
-                  className={`${isMobile ? 'min-w-0 flex-1 border-0 bg-transparent px-0 py-0 text-sm text-slate-700 outline-none ring-0 placeholder:text-slate-400' : 'input flex-1'}`}
-                  disabled={globalLoading || !hasTutorContext}
-                />
-                <VoiceMicButton
-                  onTranscript={(text) => setUserInput(prev => prev + text)}
-                  disabled={globalLoading || !hasTutorContext}
-                  size={isMobile ? 'sm' : 'md'}
-                />
+                <div className={`${isMobile ? 'flex min-w-0 flex-1 items-center gap-2 rounded-[18px] border border-slate-200/50 bg-slate-50/50 px-3 py-2.5' : 'flex min-w-0 flex-1 items-center gap-2'}`}>
+                  <input
+                    type="text"
+                    data-testid="tutor-global-input"
+                    value={userInput}
+                    onChange={(e) => setUserInput(e.target.value)}
+                    onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && !isStreaming && handleGlobalSend()}
+                    placeholder={isRealtimeTeacherMode
+                      ? '补一句'
+                      : preferSupportContext
+                        ? '继续顺着这几条内容问...'
+                        : '继续问这节课里没讲透的地方...'}
+                    className={`${isMobile ? 'min-w-0 flex-1 border-0 bg-transparent px-0 py-0 text-sm text-slate-700 outline-none ring-0 placeholder:text-slate-400' : 'input flex-1'}`}
+                    disabled={globalLoading || !hasTutorContext}
+                  />
+                  {!isRealtimeTeacherMode ? (
+                    <VoiceMicButton
+                      onTranscript={(text) => setUserInput(prev => prev + text)}
+                      disabled={globalLoading || !hasTutorContext}
+                      size={isMobile ? 'sm' : 'md'}
+                    />
+                  ) : null}
+                </div>
+
+                {isStreaming ? (
+                  <StopGenerationButton onClick={stopGlobalGeneration} compact={isMobile} />
+                ) : (
+                  <button
+                    data-testid="tutor-global-send"
+                    onClick={() => handleGlobalSend()}
+                    disabled={(!userInput.trim() && uploadedImages.length === 0) || globalLoading || !hasTutorContext}
+                    className={`${isMobile ? 'inline-flex h-10 w-10 items-center justify-center rounded-full bg-[#232322] text-white disabled:opacity-30' : 'btn btn-primary px-6 disabled:opacity-50'}`}
+                  >
+                    发送
+                  </button>
+                )}
               </div>
+            ) : null}
 
-              {isStreaming ? (
-                <StopGenerationButton onClick={stopGlobalGeneration} compact={isMobile} />
-              ) : (
-                <button
-                  data-testid="tutor-global-send"
-                  onClick={() => handleGlobalSend()}
-                  disabled={(!userInput.trim() && uploadedImages.length === 0) || globalLoading || !hasTutorContext}
-                  className={`${isMobile ? 'inline-flex h-10 w-10 items-center justify-center rounded-full bg-[#232322] text-white disabled:opacity-30' : 'btn btn-primary px-6 disabled:opacity-50'}`}
-                >
-                  发送
-                </button>
-              )}
-            </div>
-
-            {globalChatHistory.length > 0 && (
+            {!shouldUseMobileRealtimeComposer && globalChatHistory.length > 0 && (
               <div className="mt-2 flex flex-wrap gap-2">
-                <QuickReply text="再详细说说" onClick={setUserInput} />
-                <QuickReply text="举个例子" onClick={setUserInput} />
-                <QuickReply text="谢谢，我懂了" onClick={setUserInput} />
+                {isRealtimeTeacherMode ? null : (
+                  <>
+                    <QuickReply text="再详细说说" onClick={setUserInput} />
+                    <QuickReply text="举个例子" onClick={setUserInput} />
+                    <QuickReply text="谢谢，我懂了" onClick={setUserInput} />
+                  </>
+                )}
               </div>
             )}
           </div>
@@ -1485,11 +1782,31 @@ export function AITutor({
 
   const loading = isLoading || externalLoading;
 
+  if (shouldUseMobileRealtimeComposer) {
+    return (
+      <div className="h-full flex flex-col ai-chat-container bg-[#F7F7F5]">
+        <TutorRealtimeCallScreen
+          title="真人老师"
+          contextLabel={mobileRealtimeContextLabel}
+          disabled={!hasTutorContext}
+          instructions={realtimeTeacherInstructions}
+          enableSearch={enableWeb}
+          onExit={handleRealtimeTeacherToggle}
+          onUserTranscript={handleRealtimeUserTranscript}
+          onAssistantTranscriptChange={handleRealtimeAssistantChange}
+          onAssistantTranscriptDone={handleRealtimeAssistantDone}
+          onAssistantResponseStart={handleRealtimeAssistantStart}
+          onAssistantResponseEnd={handleRealtimeAssistantEnd}
+        />
+      </div>
+    );
+  }
+
   return (
     <div className="h-full flex flex-col ai-chat-container">
       {/* 头部控制栏 - 紧凑设计 */}
       {!(isMobile && hideMobileHeader) && (
-        <div className={`border-b border-gray-100 bg-white flex-shrink-0 ${isMobile ? 'p-3' : 'px-4 py-2'}`}>
+      <div className={`border-b border-gray-100 bg-white flex-shrink-0 ${isMobile ? 'p-3' : 'px-4 py-2'}`}>
           {isMobile ? (
             // 移动端紧凑布局
           <div className="space-y-2">
@@ -1506,7 +1823,15 @@ export function AITutor({
             </div>
             {/* 第二行：操作按钮 */}
             <div className="flex items-center justify-between gap-2">
-              <FixedModelBadge compact />
+              <div className="flex items-center gap-2">
+                <FixedModelBadge compact />
+                <TutorModeToggle
+                  enabled={isRealtimeTeacherMode}
+                  available={IS_REALTIME_TEACHER_AVAILABLE}
+                  onClick={handleRealtimeTeacherToggle}
+                  compact
+                />
+              </div>
               <div className="flex items-center gap-2">
                 {isFromCache && (
                   <button
@@ -1539,8 +1864,15 @@ export function AITutor({
           </div>
         ) : (
           // 桌面端简化布局 - 只保留操作按钮，标题信息由外层切换栏显示
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+              <FixedModelBadge />
+              <TutorModeToggle
+                enabled={isRealtimeTeacherMode}
+                available={IS_REALTIME_TEACHER_AVAILABLE}
+                onClick={handleRealtimeTeacherToggle}
+              />
               <label className="flex items-center gap-2 text-xs text-gray-600 cursor-pointer group">
                 <input
                   type="checkbox"
@@ -1558,6 +1890,7 @@ export function AITutor({
                   type="checkbox"
                   checked={enableThinkingGuide}
                   onChange={(e) => setEnableThinkingGuide(e.target.checked)}
+                  disabled={isRealtimeTeacherMode}
                   className="w-4 h-4 rounded border-gray-300 text-violet-500 focus:ring-violet-400"
                 />
                 <span className="flex items-center gap-1 group-hover:text-gray-900 transition-colors">
@@ -1565,35 +1898,36 @@ export function AITutor({
                   思维引导
                 </span>
               </label>
-            </div>
-            <div className="flex items-center gap-2">
-              {isFromCache && (
-                <button
-                  onClick={async () => {
-                    if (breakpoint) {
-                      await deleteTutorResponseCache(breakpoint.id);
-                    }
-                    setIsFromCache(false);
-                    setResponse(null);
-                    explainBreakpoint();
-                  }}
-                  className="px-2 py-1 text-xs text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded transition-colors flex items-center gap-1"
-                  title="重新生成"
-                >
-                  <RefreshCw size={13} strokeWidth={1.75} />
-                  刷新
-                </button>
-              )}
-              {!breakpoint.resolved && (
-                <button
-                  data-testid="tutor-resolve-button"
-                  onClick={onResolve}
-                  className="btn btn-primary px-3 py-1.5 text-sm flex items-center gap-1"
-                >
-                  <Check size={14} strokeWidth={2} />
-                  我懂了
-                </button>
-              )}
+              </div>
+              <div className="flex items-center gap-2">
+                {isFromCache && (
+                  <button
+                    onClick={async () => {
+                      if (breakpoint) {
+                        await deleteTutorResponseCache(breakpoint.id);
+                      }
+                      setIsFromCache(false);
+                      setResponse(null);
+                      explainBreakpoint();
+                    }}
+                    className="px-2 py-1 text-xs text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded transition-colors flex items-center gap-1"
+                    title="重新生成"
+                  >
+                    <RefreshCw size={13} strokeWidth={1.75} />
+                    刷新
+                  </button>
+                )}
+                {!breakpoint.resolved && (
+                  <button
+                    data-testid="tutor-resolve-button"
+                    onClick={onResolve}
+                    className="btn btn-primary px-3 py-1.5 text-sm flex items-center gap-1"
+                  >
+                    <Check size={14} strokeWidth={2} />
+                    我懂了
+                  </button>
+                )}
+              </div>
             </div>
           </div>
         )}
@@ -1617,148 +1951,142 @@ export function AITutor({
               </button>
             </div>
           </div>
-        ) : loading ? (
-          <div className="flex items-center justify-center h-full animate-fade-in">
-            <div className="text-center">
-              <div className="loading-dots mx-auto mb-4">
-                <span></span>
-                <span></span>
-                <span></span>
-              </div>
-              <p className="text-gray-500">AI 正在分析你的困惑...</p>
-              {isMobile ? <p className="mt-1 text-xs text-gray-400">正在准备回答…</p> : null}
-            </div>
-          </div>
-        ) : response ? (
+        ) : response || chatHistory.length > 0 || isBreakpointStreaming || Boolean(breakpointThinkingContent) || (isRealtimeTeacherMode && isMobile && isRealtimeAssistantResponding) ? (
           <div className="space-y-6 animate-slide-up">
-            {/* 老师原话 - 扩展上下文 */}
-            <Section icon={<BookOpen size={16} strokeWidth={1.75} />} title="课堂回顾">
-              <div className="bg-sunflower-50 border border-sunflower-200 rounded-xl p-4">
-                {/* 显示完整上下文，每段可点击跳转 */}
-                <div className="text-sm text-gray-700 leading-relaxed space-y-1 max-h-48 overflow-y-auto">
-                  {contextSegments.length > 0 ? (
-                    contextSegments.map((seg) => {
-                      const isNearBreakpoint = breakpoint && 
-                        Math.abs(seg.startMs - breakpoint.timestamp) < 10000;
-                      const isActive = seekingTimestamp === seg.startMs;
-                      return (
-                        <span
-                          key={seg.id}
-                          className={`
-                            inline cursor-pointer transition-all duration-300
-                            ${isActive 
-                              ? 'bg-sunflower px-1 rounded scale-105' 
-                              : isNearBreakpoint 
-                                ? 'bg-sunflower-200/60 px-1 rounded hover:bg-sunflower-300/80' 
-                                : 'hover:bg-sunflower-200/80'
-                            }
-                          `}
-                          onClick={() => handleTimestampClick(seg.startMs)}
-                          title={`点击跳转到 ${formatTime(seg.startMs)}`}
-                        >
-                          <span className={`text-xs font-mono mr-1 ${isActive ? 'text-navy' : 'text-warmOrange-700'}`}>
-                            [{formatTime(seg.startMs)}]
-                          </span>
-                          {seg.text}{' '}
-                        </span>
-                      );
-                    })
-                  ) : (
-                    <span className="italic">"{response.explanation.teacherSaid}"</span>
-                  )}
-                </div>
-                {response.explanation.citation.timeRange !== '00:00-00:00' && (
-                  <button 
-                    onClick={() => handleTimestampClick(response.explanation.citation.startMs)}
-                    className={`
-                      mt-3 inline-flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg transition-all duration-300 border
-                      ${seekingTimestamp === response.explanation.citation.startMs
-                        ? 'bg-[#232322] text-navy border-sunflower-600 shadow-sunflower-200 scale-105'
-                        : 'text-warmOrange-700 hover:text-warmOrange-800 bg-sunflower-100 hover:bg-sunflower-200 border-sunflower-200 hover:shadow-md'
-                      }
-                    `}
-                    title="点击跳转播放"
-                  >
-                    <span className={seekingTimestamp === response.explanation.citation.startMs ? 'animate-bounce' : ''}>▶</span>
-                    <span>播放 {response.explanation.citation.timeRange}</span>
-                  </button>
-                )}
-              </div>
-            </Section>
-
-            {/* 意图澄清 - 用更轻的方式收窄问题范围 */}
-            <Section icon={<Target size={16} strokeWidth={1.75} />} title="一起缩小问题范围" badge="意图澄清">
-              {isLoading ? (
-                <GuidanceQuestionSkeleton />
-              ) : response.guidance_question ? (
-                <GuidanceQuestion
-                  question={response.guidance_question}
-                  onSelect={handleGuidanceSelect}
-                  isLoading={isGuidanceLoading}
-                  disabled={!!selectedOptionId}
-                  selectedOptionId={selectedOptionId}
-                />
-              ) : (
-                <div className="bg-gray-50 rounded-xl p-4 text-center text-sm text-gray-500">
-                  <p>正在准备更合适的追问...</p>
-                  <p className="text-xs mt-1 text-gray-400">会先帮你收窄到最接近的问题方向</p>
-                </div>
-              )}
-            </Section>
-
-            {/* 知识库搜索 */}
-            {notebookAvailable && (
-              <Section icon={<Search size={16} strokeWidth={1.75} />} title="知识库搜索" badge="Open Notebook">
-                <div className="flex gap-2 mb-3">
-                  <input
-                    type="text"
-                    placeholder="搜索相关知识..."
-                    className="input text-sm"
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') {
-                        handleSearch((e.target as HTMLInputElement).value);
-                      }
-                    }}
-                  />
-                  <button
-                    onClick={() => {
-                      const input = document.querySelector('input[placeholder="搜索相关知识..."]') as HTMLInputElement;
-                      if (input) handleSearch(input.value);
-                    }}
-                    disabled={isSearching}
-                    className="btn btn-primary px-4 text-sm"
-                  >
-                    {isSearching ? '搜索中...' : '搜索'}
-                  </button>
-                </div>
-                {searchResults.length > 0 && (
-                  <div className="space-y-2 max-h-40 overflow-y-auto">
-                    {searchResults.map((result) => (
-                      <div key={result.id} className="p-3 bg-gray-50 rounded-xl text-sm">
-                        <div className="flex items-center justify-between mb-1">
-                          <span className="text-xs text-gray-500">{result.source}</span>
-                          <span className="text-xs text-coral">
-                            相似度: {Math.round(result.score * 100)}%
-                          </span>
-                        </div>
-                        <p className="text-gray-700 line-clamp-2">{result.content}</p>
-                      </div>
-                    ))}
+            {response ? (
+              <>
+                <Section icon={<BookOpen size={16} strokeWidth={1.75} />} title="课堂回顾">
+                  <div className="bg-sunflower-50 border border-sunflower-200 rounded-xl p-4">
+                    <div className="text-sm text-gray-700 leading-relaxed space-y-1 max-h-48 overflow-y-auto">
+                      {contextSegments.length > 0 ? (
+                        contextSegments.map((seg) => {
+                          const isNearBreakpoint = breakpoint &&
+                            Math.abs(seg.startMs - breakpoint.timestamp) < 10000;
+                          const isActive = seekingTimestamp === seg.startMs;
+                          return (
+                            <span
+                              key={seg.id}
+                              className={`
+                                inline cursor-pointer transition-all duration-300
+                                ${isActive
+                                  ? 'bg-sunflower px-1 rounded scale-105'
+                                  : isNearBreakpoint
+                                    ? 'bg-sunflower-200/60 px-1 rounded hover:bg-sunflower-300/80'
+                                    : 'hover:bg-sunflower-200/80'
+                                }
+                              `}
+                              onClick={() => handleTimestampClick(seg.startMs)}
+                              title={`点击跳转到 ${formatTime(seg.startMs)}`}
+                            >
+                              <span className={`text-xs font-mono mr-1 ${isActive ? 'text-navy' : 'text-warmOrange-700'}`}>
+                                [{formatTime(seg.startMs)}]
+                              </span>
+                              {seg.text}{' '}
+                            </span>
+                          );
+                        })
+                      ) : (
+                        <span className="italic">"{response.explanation.teacherSaid}"</span>
+                      )}
+                    </div>
+                    {response.explanation.citation.timeRange !== '00:00-00:00' && (
+                      <button
+                        onClick={() => handleTimestampClick(response.explanation.citation.startMs)}
+                        className={`
+                          mt-3 inline-flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg transition-all duration-300 border
+                          ${seekingTimestamp === response.explanation.citation.startMs
+                            ? 'bg-[#232322] text-navy border-sunflower-600 shadow-sunflower-200 scale-105'
+                            : 'text-warmOrange-700 hover:text-warmOrange-800 bg-sunflower-100 hover:bg-sunflower-200 border-sunflower-200 hover:shadow-md'
+                          }
+                        `}
+                        title="点击跳转播放"
+                      >
+                        <span className={seekingTimestamp === response.explanation.citation.startMs ? 'animate-bounce' : ''}>▶</span>
+                        <span>播放 {response.explanation.citation.timeRange}</span>
+                      </button>
+                    )}
                   </div>
-                )}
-              </Section>
-            )}
+                </Section>
 
-            {/* 对话历史 */}
-            {(chatHistory.length > 0 || isBreakpointStreaming) && (
-              <div className="space-y-3 pt-4 border-t border-gray-100">
+                <Section icon={<Target size={16} strokeWidth={1.75} />} title="一起缩小问题范围" badge="意图澄清">
+                  {isLoading ? (
+                    <GuidanceQuestionSkeleton />
+                  ) : response.guidance_question ? (
+                    <GuidanceQuestion
+                      question={response.guidance_question}
+                      onSelect={handleGuidanceSelect}
+                      isLoading={isGuidanceLoading}
+                      disabled={!!selectedOptionId}
+                      selectedOptionId={selectedOptionId}
+                    />
+                  ) : (
+                    <div className="bg-gray-50 rounded-xl p-4 text-center text-sm text-gray-500">
+                      <p>正在准备更合适的追问...</p>
+                      <p className="text-xs mt-1 text-gray-400">会先帮你收窄到最接近的问题方向</p>
+                    </div>
+                  )}
+                </Section>
+
+                {notebookAvailable && (
+                  <Section icon={<Search size={16} strokeWidth={1.75} />} title="知识库搜索" badge="Open Notebook">
+                    <div className="flex gap-2 mb-3">
+                      <input
+                        type="text"
+                        placeholder="搜索相关知识..."
+                        className="input text-sm"
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            handleSearch((e.target as HTMLInputElement).value);
+                          }
+                        }}
+                      />
+                      <button
+                        onClick={() => {
+                          const input = document.querySelector('input[placeholder="搜索相关知识..."]') as HTMLInputElement;
+                          if (input) handleSearch(input.value);
+                        }}
+                        disabled={isSearching}
+                        className="btn btn-primary px-4 text-sm"
+                      >
+                        {isSearching ? '搜索中...' : '搜索'}
+                      </button>
+                    </div>
+                    {searchResults.length > 0 && (
+                      <div className="space-y-2 max-h-40 overflow-y-auto">
+                        {searchResults.map((result) => (
+                          <div key={result.id} className="p-3 bg-gray-50 rounded-xl text-sm">
+                            <div className="flex items-center justify-between mb-1">
+                              <span className="text-xs text-gray-500">{result.source}</span>
+                              <span className="text-xs text-coral">
+                                相似度: {Math.round(result.score * 100)}%
+                              </span>
+                            </div>
+                            <p className="text-gray-700 line-clamp-2">{result.content}</p>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </Section>
+                )}
+              </>
+            ) : null}
+
+            {(chatHistory.length > 0 || isBreakpointStreaming || breakpointThinkingContent || (isRealtimeTeacherMode && isMobile && isRealtimeAssistantResponding)) ? (
+              <div className={`space-y-3 ${response ? 'pt-4 border-t border-gray-100' : ''}`}>
                 <h3 className="text-sm font-semibold text-gray-900 flex items-center gap-2">
                   <MessageSquare size={16} strokeWidth={1.75} className="text-gray-500" />
-                  对话记录
+                  {response ? '对话记录' : '分析过程'}
                 </h3>
+
+                {!response ? (
+                  <div className="rounded-2xl border border-[#E9E9E7] bg-[#F7F7F5] px-4 py-3 text-sm text-[#787774]">
+                    这次不会自动开分析。你点了以后，我会边想边把内容往下生成。
+                  </div>
+                ) : null}
+
                 {chatHistory.map((msg, i) => (
-                  <div 
-                    key={i} 
+                  <div
+                    key={i}
                     className={`chat-bubble ${msg.role}`}
                   >
                     {msg.role === 'assistant' ? (
@@ -1801,8 +2129,7 @@ export function AITutor({
                     )}
                   </div>
                 ))}
-                
-                {/* 思考过程展示（困惑点模式） - 仅在非学霸引导模式下显示模型的 thinking */}
+
                 {breakpointThinkingContent && !enableThinkingGuide && (
                   <div className="w-full">
                     <ThinkingVisualizer
@@ -1817,35 +2144,31 @@ export function AITutor({
                     />
                   </div>
                 )}
-                
-                {/* 流式输出中的消息 */}
-                {isBreakpointStreaming && breakpointStreamingContent && (
+
+                {isBreakpointStreaming && breakpointStreamingContent ? (
                   <div className="chat-bubble assistant">
-                    <>
-                      {enableThinkingGuide ? (
-                        <ThinkingGuideRenderer
-                          content={breakpointStreamingContent}
-                          isStreaming={true}
-                          onTimestampClick={handleTimestampClick}
-                          citations={breakpointStreamingCitations}
-                          isMobile={isMobile}
-                          className="text-sm"
-                        />
-                      ) : (
-                        <StreamingMarkdown
-                          content={breakpointStreamingContent}
-                          isStreaming={true}
-                          onTimestampClick={handleTimestampClick}
-                          citations={breakpointStreamingCitations}
-                          className="text-sm"
-                        />
-                      )}
-                    </>
+                    {enableThinkingGuide ? (
+                      <ThinkingGuideRenderer
+                        content={breakpointStreamingContent}
+                        isStreaming={true}
+                        onTimestampClick={handleTimestampClick}
+                        citations={breakpointStreamingCitations}
+                        isMobile={isMobile}
+                        className="text-sm"
+                      />
+                    ) : (
+                      <StreamingMarkdown
+                        content={breakpointStreamingContent}
+                        isStreaming={true}
+                        onTimestampClick={handleTimestampClick}
+                        citations={breakpointStreamingCitations}
+                        className="text-sm"
+                      />
+                    )}
                   </div>
-                )}
-                
-                {/* 等待开始流式输出时显示 loading */}
-                {isBreakpointStreaming && !breakpointStreamingContent && !breakpointThinkingContent && (
+                ) : null}
+
+                {isBreakpointStreaming && !breakpointStreamingContent && !breakpointThinkingContent ? (
                   <div className="chat-bubble assistant">
                     <div className="flex items-center gap-2 text-gray-500">
                       <div className="loading-dots">
@@ -1854,21 +2177,71 @@ export function AITutor({
                         <span></span>
                       </div>
                       <span className="text-xs">思考中...</span>
+                      {isRealtimeTeacherMode ? <span className="text-xs text-gray-400">老师正在组织下一句</span> : null}
                     </div>
                   </div>
-                )}
-                
+                ) : null}
+
+                {isRealtimeTeacherMode && isMobile && isRealtimeAssistantResponding && realtimeAssistantDraft ? (
+                  <div className="chat-bubble assistant">
+                    <div className="whitespace-pre-wrap text-sm">{realtimeAssistantDraft}</div>
+                  </div>
+                ) : null}
+
+                {isRealtimeTeacherMode && isMobile && isRealtimeAssistantResponding && !realtimeAssistantDraft ? (
+                  <div className="chat-bubble assistant">
+                    <div className="flex items-center gap-2 text-gray-500">
+                      <div className="loading-dots">
+                        <span></span>
+                        <span></span>
+                        <span></span>
+                      </div>
+                      <span className="text-xs">老师在回你</span>
+                    </div>
+                  </div>
+                ) : null}
+
                 <div ref={chatEndRef} />
               </div>
-            )}
+            ) : null}
           </div>
-        ) : null}
+        ) : loading ? (
+          <div className="flex items-center justify-center h-full animate-fade-in">
+            <div className="text-center">
+              <div className="loading-dots mx-auto mb-4">
+                <span></span>
+                <span></span>
+                <span></span>
+              </div>
+              <p className="text-gray-500">AI 正在分析你的困惑...</p>
+              {isMobile ? <p className="mt-1 text-xs text-gray-400">{isRealtimeTeacherMode ? '老师正在顺着你的课堂继续想…' : '正在准备回答…'}</p> : null}
+            </div>
+          </div>
+        ) : (
+          <div className="flex items-center justify-center h-full animate-fade-in">
+            <div className="max-w-sm text-center">
+              <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full border border-[#E9E9E7] bg-[#F7F7F5] text-[#232322]">
+                <MessageCircle size={22} strokeWidth={1.75} />
+              </div>
+              <p className="text-base font-medium text-[#232322]">先不自动分析这个困惑点</p>
+              <p className="mt-2 text-sm leading-6 text-[#787774]">
+                你点一下再开始，我会直接流式往下讲。你也可以先在下面输入一句更具体的问题。
+              </p>
+              <button
+                onClick={explainBreakpoint}
+                className="mt-5 inline-flex h-10 items-center justify-center rounded-full bg-[#232322] px-5 text-sm font-medium text-white transition-colors hover:bg-black"
+              >
+                开始分析
+              </button>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* 输入框 - 紧凑设计 */}
       <div className="px-4 py-3 border-t border-gray-100 bg-white flex-shrink-0">
         {/* 图片预览区域 */}
-        {supportsMultimodal && uploadedImages.length > 0 && (
+        {!(isRealtimeTeacherMode && isMobile) && supportsMultimodal && uploadedImages.length > 0 && (
           <div className="mb-3 p-2 bg-gray-50 rounded-lg">
             <ImageUpload
               images={uploadedImages}
@@ -1879,57 +2252,84 @@ export function AITutor({
           </div>
         )}
         
-        <div className="flex gap-2 items-end">
-          {/* 图片上传按钮 */}
-          {supportsMultimodal && (
-            <ImageUpload
-              images={[]}
-              onImagesChange={(newImages) => {
-                setUploadedImages(prev => [...prev, ...newImages].slice(0, 5));
-              }}
-              maxImages={5 - uploadedImages.length}
-              disabled={loading || uploadedImages.length >= 5}
-              className="flex-shrink-0"
-            />
-          )}
-          
-          <input
-            type="text"
-            data-testid="tutor-breakpoint-input"
-            value={userInput}
-            onChange={(e) => setUserInput(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && !isBreakpointStreaming && handleSend()}
-            placeholder="告诉我你哪里不懂..."
-            className="input flex-1"
-            disabled={isBreakpointStreaming}
+        {isRealtimeTeacherMode && isMobile ? (
+          <TutorRealtimeCallBar
+            disabled={false}
+            instructions={realtimeTeacherInstructions}
+            enableSearch={enableWeb}
+            onUserTranscript={handleRealtimeUserTranscript}
+            onAssistantTranscriptChange={handleRealtimeAssistantChange}
+            onAssistantTranscriptDone={handleRealtimeAssistantDone}
+            onAssistantResponseStart={handleRealtimeAssistantStart}
+            onAssistantResponseEnd={handleRealtimeAssistantEnd}
           />
-          <VoiceMicButton
-            onTranscript={(text) => setUserInput(prev => prev + text)}
-            disabled={isBreakpointStreaming}
-          />
-          {isBreakpointStreaming ? (
-            <StopGenerationButton onClick={stopBreakpointGeneration} compact={isMobile} />
-          ) : (
-            <button
-              data-testid="tutor-breakpoint-send"
-              onClick={handleSend}
-              disabled={(!userInput.trim() && uploadedImages.length === 0) || loading}
-              className="btn btn-primary px-6 disabled:opacity-50 flex-shrink-0"
-            >
-              发送
-            </button>
-          )}
-        </div>
+        ) : (
+          <div className="flex gap-2 items-end">
+            {/* 图片上传按钮 */}
+            {supportsMultimodal && (
+              <ImageUpload
+                images={[]}
+                onImagesChange={(newImages) => {
+                  setUploadedImages(prev => [...prev, ...newImages].slice(0, 5));
+                }}
+                maxImages={5 - uploadedImages.length}
+                disabled={loading || uploadedImages.length >= 5}
+                className="flex-shrink-0"
+              />
+            )}
+
+            <div className="flex-1 space-y-2">
+              {isRealtimeTeacherMode ? (
+                <TutorCallComposer
+                  disabled={isBreakpointStreaming}
+                  compact={isMobile}
+                  variant="dock"
+                  onSubmitTranscript={(text) => handleSend(text)}
+                />
+              ) : null}
+              <input
+                type="text"
+                data-testid="tutor-breakpoint-input"
+                value={userInput}
+                onChange={(e) => setUserInput(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && !isBreakpointStreaming && handleSend()}
+                placeholder={isRealtimeTeacherMode ? '补一句' : '告诉我你哪里不懂...'}
+                className="input w-full"
+                disabled={isBreakpointStreaming}
+              />
+            </div>
+            {!isRealtimeTeacherMode ? (
+              <VoiceMicButton
+                onTranscript={(text) => setUserInput(prev => prev + text)}
+                disabled={isBreakpointStreaming}
+              />
+            ) : null}
+            {isBreakpointStreaming ? (
+              <StopGenerationButton onClick={stopBreakpointGeneration} compact={isMobile} />
+            ) : (
+              <button
+                data-testid="tutor-breakpoint-send"
+                onClick={() => handleSend()}
+                disabled={(!userInput.trim() && uploadedImages.length === 0) || loading}
+                className="btn btn-primary px-6 disabled:opacity-50 flex-shrink-0"
+              >
+                发送
+              </button>
+            )}
+          </div>
+        )}
         
         <div className="flex gap-2 mt-2 flex-wrap">
-          <QuickReply text="我不理解这个公式" onClick={setUserInput} />
-          <QuickReply text="能举个例子吗？" onClick={setUserInput} />
-          <QuickReply text="这个和之前学的有什么关系？" onClick={setUserInput} />
-          <QuickReply text="我懂了！" onClick={setUserInput} />
+          {isRealtimeTeacherMode ? null : (
+            <>
+              <QuickReply text="我不理解这个公式" onClick={setUserInput} />
+              <QuickReply text="能举个例子吗？" onClick={setUserInput} />
+              <QuickReply text="这个和之前学的有什么关系？" onClick={setUserInput} />
+              <QuickReply text="我懂了！" onClick={setUserInput} />
+            </>
+          )}
         </div>
       </div>
     </div>
   );
 }
-
-

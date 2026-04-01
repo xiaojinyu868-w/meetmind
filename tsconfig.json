@@ -41,6 +41,9 @@
   "exclude": [
     "node_modules",
     "tmp_*",
-    "tmp_*/**"
+    "tmp_*/**",
+    "**/*.test.ts",
+    "**/*.test.tsx",
+    "vitest.config.ts"
   ]
 }

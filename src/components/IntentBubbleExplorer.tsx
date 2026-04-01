@@ -4,7 +4,7 @@ import React, { useCallback } from 'react';
 
 interface IntentBubbleExplorerProps {
   transcriptText: string;
-  onSend: (prompt: string, meta?: { role: string; intent: string }) => void;
+  onSend: (prompt: string, meta?: { role: string; intent: string; displayText?: string; hideBubble?: boolean }) => void;
   preferSupportContext?: boolean;
 }
 
@@ -56,34 +56,27 @@ export default function IntentBubbleExplorer({
       onSend(intent.prompt(preferSupportContext), {
         role: preferSupportContext ? '已选内容' : '当前课堂',
         intent: intent.label,
+        displayText: intent.label,
+        hideBubble: true,
       });
     },
     [onSend, preferSupportContext]
   );
 
   return (
-    <div className="mx-auto flex w-full max-w-[430px] flex-col gap-2 px-1 py-1.5">
-      <div className="rounded-[20px] border border-slate-200/80 bg-white/88 px-3.5 py-3 shadow-[0_10px_24px_rgba(148,163,184,0.06)]">
-        <div className="flex flex-wrap items-center gap-2">
-          <p className="text-[13px] font-semibold text-slate-900">
-            {preferSupportContext ? '可以顺着刚选内容继续' : '可以直接开始问'}
-          </p>
-          <span className="text-[12px] text-slate-400">可选，不想点也可以直接输入</span>
-        </div>
-
-        <div className="mt-3 flex flex-wrap gap-2">
+    <div className="mx-auto flex w-full max-w-[430px] flex-col gap-2 px-1 py-2">
+      <div className="flex flex-wrap gap-2">
           {STARTER_INTENTS.map((intent) => (
             <button
               key={intent.id}
               type="button"
               disabled={!hasContext}
               onClick={() => handleStart(intent)}
-              className="inline-flex min-h-9 items-center rounded-full border border-slate-200 bg-slate-50 px-3 py-2 text-[12px] font-medium text-slate-600 transition-all hover:border-slate-300 hover:bg-slate-100 hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-50"
+              className="inline-flex min-h-10 items-center rounded-full border border-[#E9E9E7] bg-white px-4 py-2 text-[13px] font-medium text-[#232322] transition-colors hover:bg-[#F7F7F5] disabled:cursor-not-allowed disabled:opacity-50"
             >
               {intent.label}
             </button>
           ))}
-        </div>
       </div>
     </div>
   );

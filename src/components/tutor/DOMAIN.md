@@ -9,6 +9,9 @@
 | `tutor-types.ts` | Tutor 共享类型定义 |
 | `tutor-utils.ts` | Tutor 工具函数（纯函数） |
 | `TutorWidgets.tsx` | Tutor 小组件集合 |
+| `TutorCallComposer.tsx` | 真人老师模式的语音通话入口卡 |
+| `TutorRealtimeCallBar.tsx` | 手机端真人老师模式的 realtime 语音通话条 |
+| `TutorRealtimeCallScreen.tsx` | 手机端真人老师的二级通话页舞台，负责接通、状态反馈与动作区 |
 
 ## 依赖方向
 

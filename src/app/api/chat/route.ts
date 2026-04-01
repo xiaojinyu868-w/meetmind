@@ -8,7 +8,14 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { chat, chatStream, AVAILABLE_MODELS, DEFAULT_MODEL_ID, type ChatMessage } from '@/lib/services/llm-service';
+import {
+  chat,
+  chatStream,
+  AVAILABLE_MODELS,
+  DEFAULT_MODEL_ID,
+  type ChatMessage,
+  type MultimodalContent,
+} from '@/lib/services/llm-service';
 import { applyRateLimit } from '@/lib/utils/rate-limit';
 import { createLogger } from '@/lib/logger';
 const log = createLogger('chat');
@@ -29,6 +36,7 @@ export async function POST(request: NextRequest) {
       temperature = 0.7,
       maxTokens = 2000,
       enable_thinking_guide = false,
+      messageContent,
     } = body as {
       messages: ChatMessage[];
       model?: string;
@@ -37,6 +45,7 @@ export async function POST(request: NextRequest) {
       temperature?: number;
       maxTokens?: number;
       enable_thinking_guide?: boolean;
+      messageContent?: string | MultimodalContent[];
     };
 
     if (!messages || !Array.isArray(messages)) {
@@ -51,6 +60,13 @@ export async function POST(request: NextRequest) {
     if (!modelConfig) {
       return NextResponse.json(
         { error: `不支持的模型: ${model}`, availableModels: AVAILABLE_MODELS.map(m => m.id) },
+        { status: 400 }
+      );
+    }
+
+    if (modelConfig.requiresStreaming && !stream) {
+      return NextResponse.json(
+        { error: `${model} 仅支持流式调用，请设置 stream=true` },
         { status: 400 }
       );
     }
@@ -123,6 +139,25 @@ export async function POST(request: NextRequest) {
           content: `【参考资料】\n${context}`,
         });
       }
+    }
+
+    if (messageContent !== undefined) {
+      const lastUserIndex = [...finalMessages]
+        .map((message, index) => ({ message, index }))
+        .reverse()
+        .find(({ message }) => message.role === 'user')?.index;
+
+      if (lastUserIndex === undefined) {
+        return NextResponse.json(
+          { error: 'messageContent 需要配合至少一条 user message 使用' },
+          { status: 400 }
+        );
+      }
+
+      finalMessages[lastUserIndex] = {
+        ...finalMessages[lastUserIndex],
+        content: messageContent,
+      };
     }
 
     // 流式响应

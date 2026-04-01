@@ -304,18 +304,16 @@ export function DedaoMenu({
 
         {/* 系统菜单 */}
         <div className="py-2 border-t border-gray-100 mt-auto">
-          {isAuthenticated && user && (
-            <Link
-              href="/profile"
-              onClick={onClose}
-              className="w-full px-4 py-3 flex items-center gap-3 text-left hover:bg-gray-50 transition-colors"
-            >
-              <svg className="w-5 h-5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z" />
-              </svg>
-              <span className="text-sm text-gray-600">个人资料</span>
-            </Link>
-          )}
+          <Link
+            href="/settings"
+            onClick={onClose}
+            className="w-full px-4 py-3 flex items-center gap-3 text-left hover:bg-gray-50 transition-colors"
+          >
+            <svg className="w-5 h-5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12a7.5 7.5 0 1115 0 7.5 7.5 0 01-15 0zm7.5-4.125v8.25m4.125-4.125h-8.25" />
+            </svg>
+            <span className="text-sm text-gray-600">设置</span>
+          </Link>
           <Link
             href="/help"
             onClick={onClose}

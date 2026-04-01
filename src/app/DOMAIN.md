@@ -17,7 +17,8 @@ src/app/
 ├── (auth)/                    # 认证页面组
 │   ├── login/page.tsx         # 登录（726行）
 │   ├── forgot-password/       # 忘记密码（348行）
-│   ├── profile/page.tsx       # 个人资料（288行）
+│   ├── settings/page.tsx      # 统一设置（含资料 / 模型 / 导入偏好）
+│   ├── profile/page.tsx       # 兼容入口，现重定向到 settings
 │   └── profile/password/      # 修改密码（268行）
 │
 ├── (main)/                    # 主应用页面组
@@ -67,7 +68,8 @@ src/app/
 |------|------|------|
 | `login/page.tsx` | 726 | 登录（支持验证码登录 + 微信登录） |
 | `forgot-password/page.tsx` | 348 | 忘记密码流程 |
-| `profile/page.tsx` | 288 | 个人资料编辑 |
+| `settings/page.tsx` | — | 统一设置页：游客/登录态共用，包含默认模型、导入偏好与个人资料 |
+| `profile/page.tsx` | — | 兼容重定向到 `settings#account` |
 | `profile/password/page.tsx` | 268 | 修改密码 |
 
 ## 其他页面

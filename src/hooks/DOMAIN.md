@@ -32,6 +32,7 @@ hooks → stores + types + lib/db + lib/utils
 | `useTextSelection.ts` | 97 | 文本选择检测（用于划词解释） |
 | `useTranscript.ts` | 134 | 转录数据管理 |
 | `useVoiceInput.ts` | 270 | 语音输入（含 buffered 模式判断） |
+| `useOmniRealtimeCall.ts` | ~400 | Qwen Omni realtime 语音通话（麦克风上行 + 语音下行） |
 | `useWorkshopWindows.ts` | 122 | Workshop 浮窗状态管理 |
 
 ### data/ — API 数据 hooks

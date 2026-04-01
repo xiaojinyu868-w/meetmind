@@ -15,7 +15,15 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { chat, chatStream, DEFAULT_MODEL_ID, type ChatMessage, type MultimodalContent } from '@/lib/services/llm-service';
+import {
+  chat,
+  chatStream,
+  DEFAULT_MODEL_ID,
+  getModelConfig,
+  type ChatMessage,
+  type LLMResponse,
+  type MultimodalContent,
+} from '@/lib/services/llm-service';
 import { formatTimeRange, formatTimestamp, getSegmentsInRange, type Segment } from '@/lib/services/longcut-utils';
 import { getDifyService, isDifyEnabled, type DifyWorkflowInput } from '@/lib/services/dify-service';
 import type { ExtendedTutorRequest, ExtendedTutorResponse, GuidanceQuestion, Citation } from '@/types/dify';
@@ -39,10 +47,15 @@ import {
   GLOBAL_CHAT_SYSTEM_PROMPT,
   SELECTED_CONTEXT_CHAT_SYSTEM_PROMPT,
   THINKING_GUIDE_PROMPT,
+  REALTIME_TEACHER_STYLE_PROMPT,
+  REALTIME_TEACHER_FOLLOWUP_PROMPT,
+  REALTIME_TEACHER_GLOBAL_CHAT_PROMPT,
+  REALTIME_TEACHER_SELECTED_CONTEXT_CHAT_PROMPT,
 } from './tutor-prompts';
 import { generateGuidanceQuestion } from './tutor-guidance';
 
 const log = createLogger('tutor');
+const REALTIME_TEACHER_MODEL_ID = 'qwen3.5-omni-plus';
 
 // ── POST Handler ──
 
@@ -52,7 +65,12 @@ export async function POST(request: NextRequest) {
 
   try {
     let body: ExtendedTutorRequest & {
-      messageContent?: Array<{ type: string; text?: string; image_url?: { url: string } }>;
+      messageContent?: Array<{
+        type: string;
+        text?: string;
+        image_url?: { url: string };
+        input_audio?: { data: string; format?: string };
+      }>;
       globalMode?: boolean;
       sessionId?: string;
       stream?: boolean;
@@ -258,13 +276,24 @@ export async function POST(request: NextRequest) {
 
     // ── 构建 LLM Messages ──
     const messages: ChatMessage[] = [];
+    const isRealtimeTeacherMode = model === REALTIME_TEACHER_MODEL_ID;
 
     if (studentQuestion || messageContent) {
-      let systemPrompt = globalMode
-        ? selected_context_mode
-          ? SELECTED_CONTEXT_CHAT_SYSTEM_PROMPT
-          : GLOBAL_CHAT_SYSTEM_PROMPT
-        : FOLLOWUP_SYSTEM_PROMPT;
+      let systemPrompt = isRealtimeTeacherMode
+        ? globalMode
+          ? selected_context_mode
+            ? REALTIME_TEACHER_SELECTED_CONTEXT_CHAT_PROMPT
+            : REALTIME_TEACHER_GLOBAL_CHAT_PROMPT
+          : REALTIME_TEACHER_FOLLOWUP_PROMPT
+        : globalMode
+          ? selected_context_mode
+            ? SELECTED_CONTEXT_CHAT_SYSTEM_PROMPT
+            : GLOBAL_CHAT_SYSTEM_PROMPT
+          : FOLLOWUP_SYSTEM_PROMPT;
+
+      if (isRealtimeTeacherMode) {
+        systemPrompt += REALTIME_TEACHER_STYLE_PROMPT;
+      }
 
       if (enable_thinking_guide) {
         systemPrompt += THINKING_GUIDE_PROMPT;
@@ -291,6 +320,14 @@ export async function POST(request: NextRequest) {
         for (const item of messageContent) {
           if (item.type === 'image_url' && item.image_url) {
             userContent.push({ type: 'image_url', image_url: { url: item.image_url.url } });
+          } else if (item.type === 'input_audio' && item.input_audio?.data) {
+            userContent.push({
+              type: 'input_audio',
+              input_audio: {
+                data: item.input_audio.data,
+                format: item.input_audio.format,
+              },
+            });
           } else if (item.type === 'text' && item.text) {
             userContent.push({ type: 'text', text: item.text });
           }
@@ -315,7 +352,7 @@ export async function POST(request: NextRequest) {
     }
 
     // ── 流式响应 ──
-    if (stream && (studentQuestion || messageContent || globalMode)) {
+    if (stream) {
       return buildStreamResponse(messages, model, {
         guidanceQuestion,
         citations,
@@ -323,18 +360,25 @@ export async function POST(request: NextRequest) {
         summaryGenerated,
         supportReferences,
         questionHint,
+        sessionId,
+        timestamp,
+        mergedSegments,
+        initialMode: !(studentQuestion || messageContent || globalMode),
+        optionFollowup,
       });
     }
 
     // ── 非流式响应 ──
-    const response = await chat(messages, model, { temperature: 0.7, maxTokens: 2000 });
+    const response = await completeTutorResponse(messages, model, { temperature: 0.7, maxTokens: 2000 });
 
     if (studentQuestion || messageContent) {
       let rawContent = response.content;
       if (optionFollowup) {
         rawContent += `\n\n${optionFollowup}`;
       }
-      rawContent = correctTimestampsInResponse(rawContent, mergedSegments, studentQuestion || '');
+      if (!isRealtimeTeacherMode) {
+        rawContent = correctTimestampsInResponse(rawContent, mergedSegments, studentQuestion || '');
+      }
 
       const supportCitations = buildSupportCitationsFromContent(rawContent, supportReferences);
       const mergedCitations = ensureSupportCitations({
@@ -365,39 +409,20 @@ export async function POST(request: NextRequest) {
     }
 
     // 初次解释模式
-    const parsed = parseTutorResponse(response.content, mergedSegments);
-    const correctedParsed = validateAndCorrectTimestamp(parsed, mergedSegments, timestamp);
-
-    let correctedRawContent = response.content;
-    if (parsed.explanation?.citation && correctedParsed.explanation?.citation) {
-      const originalTimeRange = parsed.explanation.citation.timeRange;
-      const correctedTimeRange = correctedParsed.explanation.citation.timeRange;
-      if (originalTimeRange !== correctedTimeRange) {
-        correctedRawContent = correctedRawContent.replace(
-          new RegExp(`\\[引用\\s*${originalTimeRange.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\]`, 'g'),
-          `[引用 ${correctedTimeRange}]`
-        );
-      }
-    }
-
-    const supportCitations = buildSupportCitationsFromContent(correctedRawContent, supportReferences);
-    const mergedCitations = ensureSupportCitations({
-      mergedCitations: mergeCitationResults(citations, supportCitations),
-      supportReferences,
-      questionHint,
-    });
-
-    const result: ExtendedTutorResponse = {
-      ...correctedParsed,
-      rawContent: correctedRawContent,
+    const result = buildInitialTutorExplainResult({
+      content: response.content,
+      mergedSegments,
+      timestamp,
       model: response.model,
       usage: response.usage,
       guidance_question: guidanceQuestion,
-      citations: mergedCitations,
+      citations,
       conversation_id: difyConversationId,
       summary_generated: summaryGenerated,
-      cached_summary: summaryGenerated && sessionId ? getSummaryCacheEntry(sessionId) : undefined,
-    };
+      sessionId,
+      supportReferences,
+      questionHint,
+    });
     return NextResponse.json(result);
   } catch (error) {
     log.error('Tutor API error:', error);
@@ -407,6 +432,33 @@ export async function POST(request: NextRequest) {
 }
 
 // ── 流式响应构建 ──
+
+async function completeTutorResponse(
+  messages: ChatMessage[],
+  model: string,
+  options: { temperature: number; maxTokens: number }
+): Promise<LLMResponse> {
+  const modelConfig = getModelConfig(model);
+  if (!modelConfig?.requiresStreaming) {
+    return chat(messages, model, options);
+  }
+
+  let content = '';
+  let thinkingContent = '';
+  for await (const chunk of chatStream(messages, model, options)) {
+    if (chunk.type === 'content') {
+      content += chunk.content;
+    } else if (chunk.type === 'thinking') {
+      thinkingContent += chunk.content;
+    }
+  }
+
+  return {
+    content,
+    model,
+    thinkingContent: thinkingContent || undefined,
+  };
+}
 
 function buildStreamResponse(
   messages: ChatMessage[],
@@ -418,6 +470,11 @@ function buildStreamResponse(
     summaryGenerated: boolean;
     supportReferences: { index: number; title: string; snippet: string }[];
     questionHint: string;
+    sessionId?: string;
+    timestamp: number;
+    mergedSegments: Segment[];
+    initialMode: boolean;
+    optionFollowup?: string;
   }
 ) {
   const encoder = new TextEncoder();
@@ -443,23 +500,63 @@ function buildStreamResponse(
           controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: chunk.type, content: chunk.content })}\n\n`));
         }
 
-        const supportCitations = buildSupportCitationsFromContent(streamedContent, ctx.supportReferences);
-        const mergedCitations = ensureSupportCitations({
-          mergedCitations: mergeCitationResults(initialCitations, supportCitations),
-          supportReferences: ctx.supportReferences,
-          questionHint: ctx.questionHint,
-        });
-        if (mergedCitations) {
+        if (ctx.optionFollowup) {
+          streamedContent += `\n\n${ctx.optionFollowup}`;
+          controller.enqueue(
+            encoder.encode(
+              `data: ${JSON.stringify({
+                type: 'content',
+                content: `\n\n${ctx.optionFollowup}`,
+              })}\n\n`
+            )
+          );
+        }
+
+        if (ctx.initialMode) {
+          const parsedResponse = buildInitialTutorExplainResult({
+            content: streamedContent,
+            mergedSegments: ctx.mergedSegments,
+            timestamp: ctx.timestamp,
+            model,
+            guidance_question: ctx.guidanceQuestion,
+            citations: initialCitations,
+            conversation_id: ctx.difyConversationId,
+            summary_generated: ctx.summaryGenerated,
+            sessionId: ctx.sessionId,
+            supportReferences: ctx.supportReferences,
+            questionHint: ctx.questionHint,
+          });
+
           controller.enqueue(
             encoder.encode(
               `data: ${JSON.stringify({
                 type: 'metadata',
-                citations: mergedCitations,
+                parsed_response: parsedResponse,
+                citations: parsedResponse.citations,
                 conversation_id: ctx.difyConversationId,
                 summary_generated: ctx.summaryGenerated,
               })}\n\n`
             )
           );
+        } else {
+          const supportCitations = buildSupportCitationsFromContent(streamedContent, ctx.supportReferences);
+          const mergedCitations = ensureSupportCitations({
+            mergedCitations: mergeCitationResults(initialCitations, supportCitations),
+            supportReferences: ctx.supportReferences,
+            questionHint: ctx.questionHint,
+          });
+          if (mergedCitations) {
+            controller.enqueue(
+              encoder.encode(
+                `data: ${JSON.stringify({
+                  type: 'metadata',
+                  citations: mergedCitations,
+                  conversation_id: ctx.difyConversationId,
+                  summary_generated: ctx.summaryGenerated,
+                })}\n\n`
+              )
+            );
+          }
         }
 
         controller.enqueue(encoder.encode('data: [DONE]\n\n'));
@@ -482,6 +579,55 @@ function buildStreamResponse(
       'Transfer-Encoding': 'chunked',
     },
   });
+}
+
+function buildInitialTutorExplainResult(params: {
+  content: string;
+  mergedSegments: Segment[];
+  timestamp: number;
+  model: string;
+  usage?: LLMResponse['usage'];
+  guidance_question?: GuidanceQuestion;
+  citations?: Citation[];
+  conversation_id?: string;
+  summary_generated: boolean;
+  sessionId?: string;
+  supportReferences: { index: number; title: string; snippet: string }[];
+  questionHint: string;
+}): ExtendedTutorResponse {
+  const parsed = parseTutorResponse(params.content, params.mergedSegments);
+  const correctedParsed = validateAndCorrectTimestamp(parsed, params.mergedSegments, params.timestamp);
+
+  let correctedRawContent = params.content;
+  if (parsed.explanation?.citation && correctedParsed.explanation?.citation) {
+    const originalTimeRange = parsed.explanation.citation.timeRange;
+    const correctedTimeRange = correctedParsed.explanation.citation.timeRange;
+    if (originalTimeRange !== correctedTimeRange) {
+      correctedRawContent = correctedRawContent.replace(
+        new RegExp(`\\[引用\\s*${originalTimeRange.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\]`, 'g'),
+        `[引用 ${correctedTimeRange}]`
+      );
+    }
+  }
+
+  const supportCitations = buildSupportCitationsFromContent(correctedRawContent, params.supportReferences);
+  const mergedCitations = ensureSupportCitations({
+    mergedCitations: mergeCitationResults(params.citations, supportCitations),
+    supportReferences: params.supportReferences,
+    questionHint: params.questionHint,
+  });
+
+  return {
+    ...correctedParsed,
+    rawContent: correctedRawContent,
+    model: params.model,
+    usage: params.usage,
+    guidance_question: params.guidance_question,
+    citations: mergedCitations,
+    conversation_id: params.conversation_id,
+    summary_generated: params.summary_generated,
+    cached_summary: params.summary_generated && params.sessionId ? getSummaryCacheEntry(params.sessionId) : undefined,
+  };
 }
 
 // ── 响应解析 ──

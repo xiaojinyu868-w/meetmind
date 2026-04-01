@@ -17,8 +17,10 @@ export interface ModelConfig {
   maxTokens: number;
   recommended?: boolean;
   supportsMultimodal?: boolean;
+  supportsAudioInput?: boolean;
   enableThinking?: boolean;  // 启用思考模式
   supportsBuiltinTools?: boolean;  // 支持内置工具（web_search/code_interpreter，仅 qwen3-max）
+  requiresStreaming?: boolean;
 }
 
 function hasValue(value: string | undefined): boolean {
@@ -49,6 +51,16 @@ const qwenModels: ModelConfig[] = [
     description: '多模态视觉模型，支持图片理解',
     maxTokens: 8192,
     supportsMultimodal: true,
+  },
+  {
+    id: 'qwen3.5-omni-plus',
+    name: '通义千问 3.5 Omni',
+    provider: 'qwen',
+    description: '全模态模型，支持文本、图片、音频输入；当前在 MeetMind 里以流式文本输出做内测',
+    maxTokens: 8192,
+    supportsMultimodal: true,
+    supportsAudioInput: true,
+    requiresStreaming: true,
   },
   {
     id: 'qwen3-max-2026-01-23',

@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback, useRef, useMemo, Suspense, type Chang
 import { flushSync } from 'react-dom';
 import { useSearchParams } from 'next/navigation';
 import dynamic from 'next/dynamic';
-import { useUIActions, useUIStore } from '@/stores/ui-store';
+import { useUIActions, useUIStore, type MobileSubPage } from '@/stores/ui-store';
 import { usePlayerActions, usePlayerStore } from '@/stores/player-store';
 import { useSessionStore } from '@/stores/session-store';
 import { Header } from '@/components/Header';
@@ -285,11 +285,13 @@ function StudentAppContent({
   forcedWorkspaceTab,
   forceMobilePreview = false,
   wechatCaptureToken = null,
+  initialMobileSubPage = null,
 }: {
   isGuestFastEntry: boolean;
   forcedWorkspaceTab: SharedWorkspaceTab | null;
   forceMobilePreview?: boolean;
   wechatCaptureToken?: string | null;
+  initialMobileSubPage?: MobileSubPage;
 }) {
   // ==================== Zustand Store 订阅 ====================
   const uiActions = useUIStore((s) => s.actions);
@@ -384,6 +386,7 @@ function StudentAppContent({
   const [mobileAIConsumedQuestionNonce, setMobileAIConsumedQuestionNonce] = useState<number | null>(null);
   const [mobileAIPreferSelectedContext, setMobileAIPreferSelectedContext] = useState(false);
   const [mobileAILaunchTarget, setMobileAILaunchTarget] = useState<'review-panel' | 'video-chat' | 'mobile-ai-chat' | null>(null);
+  const hasAppliedInitialMobileSubPageRef = useRef(false);
   
   const shouldPrioritizeWechatCaptureEntry = Boolean(wechatCaptureToken);
   const [segments, setSegments] = useState<TranscriptSegment[]>([]);
@@ -1771,6 +1774,21 @@ function StudentAppContent({
       }
     }
   }, [hasCollectionContext, segments.length, sessionId, isGuestFastEntry]);
+
+  useEffect(() => {
+    if (!forceMobilePreview || !initialMobileSubPage) return;
+    if (hasAppliedInitialMobileSubPageRef.current) return;
+
+    hasAppliedInitialMobileSubPageRef.current = true;
+
+    void (async () => {
+      if (viewMode !== 'review') {
+        await handleViewModeChange('review');
+      }
+
+      setMobileSubPage(initialMobileSubPage);
+    })();
+  }, [forceMobilePreview, handleViewModeChange, initialMobileSubPage, setMobileSubPage, viewMode]);
 
   const openReviewFromCollection = useCallback(async (item?: SourceIngestItem | null) => {
     if (!item) return;
@@ -7232,6 +7250,82 @@ const _handleVideoAssistantMessage = useCallback((payload: {
                   onTutorSeek={(timeMs: number) => {
                     handleUnifiedSeek(timeMs, true);
                   }}
+                  realtimeTeacherEnabled={false}
+                  onEnterRealtimeTeacher={() => {
+                    setShowConversationHistory(false);
+                    setSelectedHistoryConversation(null);
+                    setMobileSubPage('ai-call');
+                  }}
+                  onExitRealtimeTeacher={() => {
+                    setMobileSubPage('ai-chat');
+                  }}
+                />
+              )}
+
+              {mobileSubPage === 'ai-call' && (
+                <MobileAIChatPanel
+                  showConversationHistory={false}
+                  followsSelectedContext={mobileAIPreferSelectedContext && mobileAILaunchTarget === 'mobile-ai-chat'}
+                  onBack={() => {
+                    setMobileSubPage('ai-chat');
+                  }}
+                  onShowCurrent={() => {
+                    setShowConversationHistory(false);
+                    setSelectedHistoryConversation(null);
+                  }}
+                  onShowHistory={() => setShowConversationHistory(true)}
+                  currentTime={currentTime}
+                  duration={totalDuration}
+                  isPlaying={isPlaying}
+                  markers={anchors.map((anchor) => ({
+                    id: anchor.id,
+                    timestamp: anchor.timestamp,
+                    resolved: anchor.resolved,
+                  }))}
+                  onPlayerSeek={handleUnifiedSeek}
+                  onPlayPause={() => {
+                    if (isPlaying) {
+                      waveformRef.current?.pause();
+                    } else {
+                      waveformRef.current?.play();
+                    }
+                    setIsPlaying(!isPlaying);
+                  }}
+                  onMarkerClick={(marker: { id: string; timestamp: number; resolved: boolean }) => {
+                    const anchor = anchors.find((item) => item.id === marker.id);
+                    if (anchor) {
+                      setSelectedAnchor(anchor);
+                    }
+                  }}
+                  selectedHistoryConversation={selectedHistoryConversation}
+                  onBackToHistoryList={() => setSelectedHistoryConversation(null)}
+                  onCloseHistory={() => {
+                    setShowConversationHistory(false);
+                    setSelectedHistoryConversation(null);
+                  }}
+                  onSelectHistoryConversation={setSelectedHistoryConversation}
+                  sessionId={sessionId}
+                  tutorSupportContextText={tutorSupportContextText}
+                  tutorBreakpoint={mobileAIPreferSelectedContext && mobileAILaunchTarget === 'mobile-ai-chat' ? null : selectedBreakpoint}
+                  segments={segments}
+                  onResolve={handleResolveAnchor}
+                  onActionItemsUpdate={handleActionItemsUpdate}
+                  preferSupportContext={mobileAILaunchTarget === 'mobile-ai-chat' ? mobileAIPreferSelectedContext : false}
+                  launchQuestion={mobileAILaunchTarget === 'mobile-ai-chat' && mobileAIConsumedQuestionNonce !== mobileAIQuestionNonce ? mobileAIQuestion : ''}
+                  launchDisplayText={mobileAILaunchTarget === 'mobile-ai-chat' ? mobileAIDisplayQuestion : ''}
+                  launchImages={mobileAILaunchTarget === 'mobile-ai-chat' ? mobileAILaunchImages : []}
+                  launchQuestionNonce={mobileAILaunchTarget === 'mobile-ai-chat' ? mobileAIQuestionNonce : 0}
+                  onLaunchQuestionConsumed={mobileAILaunchTarget === 'mobile-ai-chat' ? consumeMobileAIQuestion : undefined}
+                  onTutorSeek={(timeMs: number) => {
+                    handleUnifiedSeek(timeMs, true);
+                  }}
+                  realtimeTeacherEnabled={true}
+                  onEnterRealtimeTeacher={() => {
+                    setMobileSubPage('ai-call');
+                  }}
+                  onExitRealtimeTeacher={() => {
+                    setMobileSubPage('ai-chat');
+                  }}
                 />
               )}
 
@@ -7550,6 +7644,13 @@ function SearchParamsReader() {
   const forcedWorkspaceTab = searchParams.get('workspace') === 'apps' ? 'apps' : null;
   const forceMobilePreview = searchParams.get('mobile') === '1';
   const wechatCaptureToken = searchParams.get('wechat_capture');
+  const entryParam = searchParams.get('entry');
+  const initialMobileSubPage: MobileSubPage =
+    entryParam === 'call'
+      ? 'ai-call'
+      : entryParam === 'ai' || entryParam === 'chat'
+        ? 'ai-chat'
+        : null;
 
   if (forceMobilePreview) {
     return (
@@ -7563,6 +7664,7 @@ function SearchParamsReader() {
                 forcedWorkspaceTab={forcedWorkspaceTab}
                 forceMobilePreview
                 wechatCaptureToken={wechatCaptureToken}
+                initialMobileSubPage={initialMobileSubPage}
               />
             </div>
           </div>
@@ -7576,6 +7678,7 @@ function SearchParamsReader() {
       isGuestFastEntry={isGuestFastEntry}
       forcedWorkspaceTab={forcedWorkspaceTab}
       wechatCaptureToken={wechatCaptureToken}
+      initialMobileSubPage={initialMobileSubPage}
     />
   );
 }

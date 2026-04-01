@@ -1,8 +1,10 @@
-import { DEFAULT_WORKSHOP_MODEL_ID } from '@/lib/services/llm-service';
+import { AVAILABLE_MODELS, DEFAULT_WORKSHOP_MODEL_ID } from '@/lib/services/llm-service';
 import type { GuidanceQuestion as GuidanceQuestionType, Citation } from '@/types/dify';
 
 // 持久化状态的 key
 export const TUTOR_STATE_KEY = 'tutor_last_state';
+export const REALTIME_TEACHER_MODEL_ID = 'qwen3.5-omni-plus';
+export const IS_REALTIME_TEACHER_AVAILABLE = AVAILABLE_MODELS.some((model) => model.id === REALTIME_TEACHER_MODEL_ID);
 export const FIXED_TUTOR_MODEL_ID = DEFAULT_WORKSHOP_MODEL_ID;
 export const FIXED_TUTOR_MODEL_LABEL = 'QWEN 3.5';
 
@@ -55,6 +57,8 @@ export interface AITutorProps {
   launchImages?: TutorLaunchImage[];
   onLaunchQuestionConsumed?: () => void;
   hideMobileHeader?: boolean;
+  realtimeTeacherEnabled?: boolean;
+  onRealtimeTeacherEnabledChange?: (enabled: boolean) => void;
 }
 
 export interface TutorCacheEnvelopeV1 {

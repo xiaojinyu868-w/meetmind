@@ -1,38 +1,74 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useAuth } from '@/lib/hooks/useAuth';
 import { getPreference, setPreference } from '@/lib/db';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { AVAILABLE_MODELS, DEFAULT_MODEL_ID } from '@/lib/services/llm-service';
 
-// 设置项的键名
 const SETTINGS_KEYS = {
   AUTO_SAVE: 'settings_auto_save',
   MODEL_PREFERENCE: 'settings_model_preference',
   BILIBILI_COOKIE: 'settings_bilibili_cookie',
 };
 
-interface Settings {
+interface SettingsState {
   autoSave: boolean;
   modelPreference: string;
   bilibiliCookie: string;
 }
 
-const DEFAULT_SETTINGS: Settings = {
+interface ProfileForm {
+  nickname: string;
+  email: string;
+  phone: string;
+}
+
+type BannerMessage = {
+  type: 'success' | 'error';
+  text: string;
+};
+
+const DEFAULT_SETTINGS: SettingsState = {
   autoSave: true,
   modelPreference: 'auto',
   bilibiliCookie: '',
 };
 
-export default function SettingsPage() {
-  const { user, isAuthenticated, isLoading: authLoading } = useAuth();
-  const [settings, setSettings] = useState<Settings>(DEFAULT_SETTINGS);
-  const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
-  const [saveMessage, setSaveMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+const DEFAULT_PROFILE_FORM: ProfileForm = {
+  nickname: '',
+  email: '',
+  phone: '',
+};
 
-  // 加载设置
+const roleLabels: Record<string, string> = {
+  student: '学生',
+  parent: '家长',
+  teacher: '教师',
+  admin: '管理员',
+};
+
+const modelOptions = AVAILABLE_MODELS.map((model) => ({
+  id: model.id,
+  name: model.name,
+  recommended: model.id === DEFAULT_MODEL_ID || Boolean(model.recommended),
+}));
+
+export default function SettingsPage() {
+  const { user, isAuthenticated, isCheckingAuth, updateProfile, logout } = useAuth();
+  const [settings, setSettings] = useState<SettingsState>(DEFAULT_SETTINGS);
+  const [profileForm, setProfileForm] = useState<ProfileForm>(DEFAULT_PROFILE_FORM);
+  const [loading, setLoading] = useState(true);
+  const [savingSetting, setSavingSetting] = useState(false);
+  const [savingProfile, setSavingProfile] = useState(false);
+  const [saveMessage, setSaveMessage] = useState<BannerMessage | null>(null);
+
+  const showMessage = useCallback((type: BannerMessage['type'], text: string) => {
+    setSaveMessage({ type, text });
+    window.setTimeout(() => setSaveMessage(null), 2200);
+  }, []);
+
   useEffect(() => {
     const loadSettings = async () => {
       try {
@@ -47,278 +83,463 @@ export default function SettingsPage() {
           modelPreference,
           bilibiliCookie,
         });
-      } catch (error) {
-        console.error('Failed to load settings:', error);
       } finally {
         setLoading(false);
       }
     };
 
-    loadSettings();
+    void loadSettings();
   }, []);
 
-  // 保存单个设置
-  const updateSetting = async <K extends keyof Settings>(key: K, value: Settings[K]) => {
-    const keyMap: Record<keyof Settings, string> = {
+  useEffect(() => {
+    if (!user) {
+      setProfileForm(DEFAULT_PROFILE_FORM);
+      return;
+    }
+
+    setProfileForm({
+      nickname: user.nickname || '',
+      email: user.email || '',
+      phone: user.phone || '',
+    });
+  }, [user]);
+
+  const updateSetting = async <K extends keyof SettingsState>(key: K, value: SettingsState[K]) => {
+    const keyMap: Record<keyof SettingsState, string> = {
       autoSave: SETTINGS_KEYS.AUTO_SAVE,
       modelPreference: SETTINGS_KEYS.MODEL_PREFERENCE,
       bilibiliCookie: SETTINGS_KEYS.BILIBILI_COOKIE,
     };
 
-    setSaving(true);
+    setSavingSetting(true);
     try {
       await setPreference(keyMap[key], value);
-      setSettings(prev => ({ ...prev, [key]: value }));
-      setSaveMessage({ type: 'success', text: '设置已保存' });
-      setTimeout(() => setSaveMessage(null), 2000);
-    } catch (error) {
-      console.error('Failed to save setting:', error);
-      setSaveMessage({ type: 'error', text: '保存失败，请重试' });
+      setSettings((prev) => ({ ...prev, [key]: value }));
+      showMessage('success', '已保存');
+    } catch {
+      showMessage('error', '保存失败');
     } finally {
-      setSaving(false);
+      setSavingSetting(false);
     }
   };
 
-  if (authLoading || loading) {
+  const handleProfileFieldChange = (field: keyof ProfileForm, value: string) => {
+    setProfileForm((prev) => ({ ...prev, [field]: value }));
+  };
+
+  const handleProfileSave = async () => {
+    if (!isAuthenticated) return;
+
+    setSavingProfile(true);
+    try {
+      const success = await updateProfile({
+        nickname: profileForm.nickname.trim(),
+        email: profileForm.email.trim(),
+        phone: profileForm.phone.trim(),
+      });
+
+      showMessage(success ? 'success' : 'error', success ? '资料已更新' : '资料保存失败');
+    } catch {
+      showMessage('error', '资料保存失败');
+    } finally {
+      setSavingProfile(false);
+    }
+  };
+
+  const handleLogout = async () => {
+    await logout();
+    showMessage('success', '已退出登录');
+  };
+
+  if (isCheckingAuth || loading) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#232322]"></div>
+      <div className="flex min-h-screen items-center justify-center bg-[#F7F7F5]">
+        <div className="loading-dots">
+          <span></span>
+          <span></span>
+          <span></span>
+        </div>
       </div>
     );
   }
 
+  const selectedModelLabel = settings.modelPreference === 'auto'
+    ? '自动选择'
+    : (modelOptions.find((model) => model.id === settings.modelPreference)?.name || '自动选择');
+
   return (
-    <div className="min-h-screen bg-gray-50">
-      {/* 顶部导航 */}
-      <header className="bg-white border-b border-gray-200 sticky top-0 z-10">
-        <div className="max-w-2xl mx-auto px-4 py-4 flex items-center gap-4">
+    <div className="min-h-screen bg-[#F7F7F5]">
+      <header className="sticky top-0 z-10 border-b border-[#E9E9E7] bg-[#F7F7F5]/95 backdrop-blur">
+        <div className="mx-auto flex h-14 w-full max-w-md items-center px-4">
           <Link
             href="/"
-            className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+            className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-[#E9E9E7] bg-white text-[#232322]"
+            aria-label="返回"
           >
-            <svg className="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
             </svg>
           </Link>
-          <h1 className="text-lg font-semibold text-gray-900">设置</h1>
+          <div className="flex-1 text-center text-[17px] font-semibold text-[#232322]">设置</div>
+          <div className="w-9" />
         </div>
       </header>
 
-      {/* 内容区域 */}
-      <main className="max-w-2xl mx-auto px-4 py-6 space-y-6">
-        {/* 保存提示 */}
-        {saveMessage && (
-          <div className={`fixed top-20 left-1/2 transform -translate-x-1/2 px-4 py-2 rounded-lg z-50 ${
-            saveMessage.type === 'success' ? 'bg-green-500 text-white' : 'bg-red-500 text-white'
-          }`}>
+      {saveMessage ? (
+        <div className="pointer-events-none fixed inset-x-0 top-16 z-20 flex justify-center px-4">
+          <div
+            className={`rounded-full border px-4 py-2 text-xs ${
+              saveMessage.type === 'success'
+                ? 'border-[#E9E9E7] bg-white text-[#232322]'
+                : 'border-[#F0D7D1] bg-white text-[#B4513D]'
+            }`}
+          >
             {saveMessage.text}
           </div>
-        )}
+        </div>
+      ) : null}
 
-        {/* 用户信息卡片 */}
-        {isAuthenticated && user && (
-          <section className="bg-white rounded-xl shadow-sm border border-gray-100 p-4">
-            <div className="flex items-center gap-4">
-              <div className="w-14 h-14 bg-[#FDF3C0] rounded-full flex items-center justify-center">
-                <Avatar className="w-full h-full">
-                  {user.avatar ? (
-                    <AvatarImage src={user.avatar} alt={user.nickname} className="object-cover" />
-                  ) : null}
-                  <AvatarFallback className="bg-transparent text-2xl">👤</AvatarFallback>
-                </Avatar>
-              </div>
-              <div className="flex-1">
-                <h3 className="font-medium text-gray-900">{user.nickname}</h3>
-                <p className="text-sm text-gray-500">{user.email || user.phone || '未绑定'}</p>
-              </div>
-              <Link
-                href="/profile"
-                className="text-sm text-[#787774] hover:text-[#232322]"
-              >
-                编辑资料
-              </Link>
-            </div>
-          </section>
-        )}
-
-        {/* 通用设置 */}
-        <section className="bg-white rounded-xl shadow-sm border border-gray-100">
-          <h2 className="px-4 py-3 text-sm font-medium text-gray-500 border-b border-gray-100">
-            通用设置
-          </h2>
-          
-          <div className="divide-y divide-gray-100">
-            {/* 自动保存 */}
-            <SettingToggle
-              label="自动保存"
-              description="自动保存对话记录和学习进度"
-              checked={settings.autoSave}
-              onChange={(checked) => updateSetting('autoSave', checked)}
-              disabled={saving}
-            />
-          </div>
-        </section>
-
-        {/* AI 设置 */}
-        <section className="bg-white rounded-xl shadow-sm border border-gray-100">
-          <h2 className="px-4 py-3 text-sm font-medium text-gray-500 border-b border-gray-100">
-            AI 助手
-          </h2>
-          
-          <div className="divide-y divide-gray-100">
-            {/* 模型偏好 */}
-            <div className="px-4 py-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-gray-900">默认模型</p>
-                  <p className="text-xs text-gray-500 mt-0.5">选择 AI 助手使用的模型</p>
+      <main className="mx-auto flex w-full max-w-md flex-col gap-6 px-3 pb-16 pt-4">
+        <div>
+          <SectionCaption>账户</SectionCaption>
+          <SettingGroup id="account">
+            {isAuthenticated && user ? (
+              <>
+                <div className="flex items-center gap-3 px-4 py-4">
+                  <Avatar className="h-14 w-14 border border-[#E9E9E7] bg-[#F7F7F5]">
+                    {user.avatar ? <AvatarImage src={user.avatar} alt={user.nickname} className="object-cover" /> : null}
+                    <AvatarFallback className="bg-[#F7F7F5] text-[#232322]">
+                      {(user.nickname || user.username || 'U').slice(0, 1).toUpperCase()}
+                    </AvatarFallback>
+                  </Avatar>
+                  <div className="min-w-0 flex-1">
+                    <div className="truncate text-[17px] font-medium text-[#232322]">
+                      {user.nickname || user.username}
+                    </div>
+                    <div className="mt-1 truncate text-[13px] text-[#787774]">
+                      {roleLabels[user.role] || user.role}
+                      {user.email ? ` · ${user.email}` : user.phone ? ` · ${user.phone}` : ''}
+                    </div>
+                  </div>
                 </div>
-                <select
-                  value={settings.modelPreference}
-                  onChange={(e) => updateSetting('modelPreference', e.target.value)}
-                  disabled={saving}
-                  className="px-3 py-2 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-[#232322] focus:border-transparent"
-                >
-                  <option value="auto">自动选择</option>
-                  <option value="qwen3.5-plus">通义千问 3.5 Plus（推荐）</option>
-                  <option value="qwen3-vl-plus-2025-12-19">通义千问 3 VL（多模态）</option>
-                  <option value="qwen3-max-2026-01-23">通义千问 3 Max（思考模式）</option>
-                </select>
-              </div>
-            </div>
-          </div>
-        </section>
 
-        {/* 视频导入设置 */}
-        <section className="bg-white rounded-xl shadow-sm border border-gray-100">
-          <h2 className="px-4 py-3 text-sm font-medium text-gray-500 border-b border-gray-100">
-            视频导入
-          </h2>
-
-          <div className="divide-y divide-gray-100">
-            <div className="px-4 py-4 space-y-3">
-              <div>
-                <p className="text-sm font-medium text-gray-900">B站 Cookie</p>
-                <p className="text-xs text-gray-500 mt-0.5">
-                  配置后可导入更多B站视频。Cookie 仅存储在你的浏览器中，不会上传到服务器保存。
-                </p>
-              </div>
-              <textarea
-                value={settings.bilibiliCookie}
-                onChange={(e) => setSettings(prev => ({ ...prev, bilibiliCookie: e.target.value }))}
-                onBlur={() => updateSetting('bilibiliCookie', settings.bilibiliCookie.trim())}
-                placeholder="粘贴你的 B站 Cookie（包含 SESSDATA、bili_jct 等字段）"
-                rows={3}
-                disabled={saving}
-                className="w-full px-3 py-2 text-xs font-mono border border-gray-200 rounded-lg focus:ring-2 focus:ring-[#232322] focus:border-transparent resize-none placeholder:text-gray-400"
-              />
-              <details className="text-xs text-gray-500">
-                <summary className="cursor-pointer hover:text-[#232322] transition-colors">如何获取 Cookie？</summary>
-                <ol className="mt-2 ml-4 space-y-1 list-decimal">
-                  <li>用浏览器登录 <a href="https://www.bilibili.com" target="_blank" rel="noopener noreferrer" className="text-[#787774] underline">bilibili.com</a></li>
-                  <li>按 F12 打开开发者工具</li>
-                  <li>切换到「应用」(Application) 标签</li>
-                  <li>左侧找到 Cookie → https://www.bilibili.com</li>
-                  <li>复制 SESSDATA、bili_jct、DedeUserID 的值，格式如：<br/><code className="bg-gray-100 px-1 rounded">SESSDATA=xxx; bili_jct=xxx; DedeUserID=xxx</code></li>
-                </ol>
-              </details>
-              {settings.bilibiliCookie && (
-                <div className="flex items-center gap-2">
-                  <span className="inline-block w-2 h-2 rounded-full bg-green-400"></span>
-                  <span className="text-xs text-green-600">Cookie 已配置</span>
+                <GroupDivider />
+                <InputSettingRow
+                  label="昵称"
+                  type="text"
+                  value={profileForm.nickname}
+                  placeholder="未设置"
+                  onChange={(value) => handleProfileFieldChange('nickname', value)}
+                />
+                <GroupDivider />
+                <InputSettingRow
+                  label="邮箱"
+                  type="email"
+                  value={profileForm.email}
+                  placeholder="未设置"
+                  onChange={(value) => handleProfileFieldChange('email', value)}
+                />
+                <GroupDivider />
+                <InputSettingRow
+                  label="手机"
+                  type="tel"
+                  value={profileForm.phone}
+                  placeholder="未设置"
+                  onChange={(value) => handleProfileFieldChange('phone', value)}
+                />
+                <GroupDivider />
+                <div className="p-3">
                   <button
-                    onClick={() => updateSetting('bilibiliCookie', '')}
-                    className="ml-auto text-xs text-red-400 hover:text-red-600 transition-colors"
+                    onClick={handleProfileSave}
+                    disabled={savingProfile}
+                    className="inline-flex h-11 w-full items-center justify-center rounded-[14px] bg-[#232322] text-[15px] font-medium text-white transition-opacity disabled:opacity-50"
                   >
-                    清除
+                    {savingProfile ? '保存中...' : '保存资料'}
                   </button>
                 </div>
-              )}
-            </div>
-          </div>
-        </section>
+                <GroupDivider />
+                <ActionLinkRow href="/profile/password" label="修改密码" />
+                <GroupDivider />
+                <ActionButtonRow label="退出登录" tone="danger" onClick={handleLogout} />
+              </>
+            ) : (
+              <>
+                <StaticRow label="状态" value="未登录" />
+                <GroupDivider />
+                <ActionLinkRow href="/login" label="登录" />
+                <GroupDivider />
+                <ActionLinkRow href="/register" label="注册" />
+              </>
+            )}
+          </SettingGroup>
+        </div>
 
-        {/* 关于 */}
-        <section className="bg-white rounded-xl shadow-sm border border-gray-100">
-          <h2 className="px-4 py-3 text-sm font-medium text-gray-500 border-b border-gray-100">
-            关于
-          </h2>
-          
-          <div className="divide-y divide-gray-100">
-            <Link href="/help" className="block px-4 py-4 hover:bg-gray-50 transition-colors">
-              <div className="flex items-center justify-between">
-                <p className="text-sm font-medium text-gray-900">帮助中心</p>
-                <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                </svg>
-              </div>
-            </Link>
-            
-            <Link href="/feedback" className="block px-4 py-4 hover:bg-gray-50 transition-colors">
-              <div className="flex items-center justify-between">
-                <p className="text-sm font-medium text-gray-900">意见反馈</p>
-                <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                </svg>
-              </div>
-            </Link>
-            
-            <div className="px-4 py-4">
-              <div className="flex items-center justify-between">
-                <p className="text-sm font-medium text-gray-900">版本</p>
-                <p className="text-sm text-gray-500">1.0.0</p>
-              </div>
-            </div>
-          </div>
-        </section>
+        <div>
+          <SectionCaption>偏好</SectionCaption>
+          <SettingGroup>
+            <ToggleRow
+              label="自动保存"
+              checked={settings.autoSave}
+              disabled={savingSetting}
+              onChange={(checked) => updateSetting('autoSave', checked)}
+            />
+          </SettingGroup>
+        </div>
 
-        {/* 底部间距 */}
-        <div className="h-8"></div>
+        <div>
+          <SectionCaption>AI 助手</SectionCaption>
+          <SettingGroup id="ai">
+            <SelectRow
+              label="默认模型"
+              value={settings.modelPreference}
+              displayValue={selectedModelLabel}
+              disabled={savingSetting}
+              onChange={(value) => updateSetting('modelPreference', value)}
+              options={[
+                { value: 'auto', label: '自动选择（推荐）' },
+                ...modelOptions.map((model) => ({
+                  value: model.id,
+                  label: `${model.name}${model.recommended ? '（推荐）' : ''}`,
+                })),
+              ]}
+            />
+          </SettingGroup>
+        </div>
+
+        <div>
+          <SectionCaption>导入</SectionCaption>
+          <SettingGroup>
+            <div className="px-4 pb-4 pt-3">
+              <div className="px-1 pb-3 text-[15px] text-[#232322]">B站 Cookie</div>
+              <textarea
+                value={settings.bilibiliCookie}
+                onChange={(event) => setSettings((prev) => ({ ...prev, bilibiliCookie: event.target.value }))}
+                onBlur={() => updateSetting('bilibiliCookie', settings.bilibiliCookie.trim())}
+                placeholder="粘贴 SESSDATA、bili_jct、DedeUserID"
+                rows={4}
+                disabled={savingSetting}
+                className="w-full resize-none rounded-[16px] border border-[#E9E9E7] bg-[#F7F7F5] px-4 py-4 text-[14px] leading-6 text-[#232322] outline-none placeholder:text-[#A3A39E]"
+              />
+              <div className="px-1 pt-3 text-[12px] text-[#A3A39E]">仅保存在当前浏览器</div>
+            </div>
+
+            {settings.bilibiliCookie ? (
+              <>
+                <GroupDivider />
+                <ActionButtonRow
+                  label="清除 Cookie"
+                  tone="default"
+                  onClick={() => updateSetting('bilibiliCookie', '')}
+                />
+              </>
+            ) : null}
+
+            <GroupDivider />
+            <details className="px-4 py-4">
+              <summary className="cursor-pointer text-[15px] text-[#232322]">如何获取 Cookie</summary>
+              <ol className="mt-3 list-decimal space-y-1.5 pl-4 text-[13px] leading-6 text-[#787774]">
+                <li>登录 bilibili.com</li>
+                <li>按 F12 打开开发者工具</li>
+                <li>切到「应用 / Application」</li>
+                <li>找到 Cookie → https://www.bilibili.com</li>
+                <li>复制 SESSDATA、bili_jct、DedeUserID 并用分号拼接</li>
+              </ol>
+            </details>
+          </SettingGroup>
+        </div>
+
+        <div>
+          <SectionCaption>更多</SectionCaption>
+          <SettingGroup>
+            <ActionLinkRow href="/help" label="帮助中心" />
+            <GroupDivider />
+            <ActionLinkRow href="/feedback" label="意见反馈" />
+            <GroupDivider />
+            <StaticRow label="版本" value="1.0.0" />
+          </SettingGroup>
+        </div>
       </main>
     </div>
   );
 }
 
-// 设置开关组件
-function SettingToggle({
-  label,
-  description,
-  checked,
-  onChange,
-  disabled,
+function SectionCaption({ children }: { children: React.ReactNode }) {
+  return <div className="px-2 pb-2 text-[12px] font-medium text-[#A3A39E]">{children}</div>;
+}
+
+function SettingGroup({
+  children,
+  id,
 }: {
-  label: string;
-  description: string;
-  checked: boolean;
-  onChange: (checked: boolean) => void;
-  disabled?: boolean;
+  children: React.ReactNode;
+  id?: string;
 }) {
   return (
-    <div className="px-4 py-4">
-      <div className="flex items-center justify-between">
-        <div>
-          <p className="text-sm font-medium text-gray-900">{label}</p>
-          <p className="text-xs text-gray-500 mt-0.5">{description}</p>
-        </div>
-        <button
-          onClick={() => onChange(!checked)}
+    <section id={id} className="overflow-hidden rounded-[20px] border border-[#E9E9E7] bg-white">
+      {children}
+    </section>
+  );
+}
+
+function GroupDivider() {
+  return <div className="h-px bg-[#E9E9E7]" />;
+}
+
+function InputSettingRow({
+  label,
+  type,
+  value,
+  placeholder,
+  onChange,
+}: {
+  label: string;
+  type: 'text' | 'email' | 'tel';
+  value: string;
+  placeholder: string;
+  onChange: (value: string) => void;
+}) {
+  return (
+    <label className="flex min-h-[56px] items-center gap-4 px-4">
+      <span className="w-16 flex-shrink-0 text-[15px] text-[#232322]">{label}</span>
+      <input
+        type={type}
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        placeholder={placeholder}
+        className="h-12 min-w-0 flex-1 appearance-none bg-transparent px-0 text-right text-[15px] text-[#232322] outline-none placeholder:text-[#A3A39E]"
+      />
+    </label>
+  );
+}
+
+function ToggleRow({
+  label,
+  checked,
+  disabled,
+  onChange,
+}: {
+  label: string;
+  checked: boolean;
+  disabled?: boolean;
+  onChange: (checked: boolean) => void;
+}) {
+  return (
+    <div className="flex min-h-[56px] items-center gap-4 px-4">
+      <div className="min-w-0 flex-1 text-[15px] text-[#232322]">{label}</div>
+      <button
+        onClick={() => onChange(!checked)}
+        disabled={disabled}
+        className={`relative inline-flex h-8 w-14 flex-shrink-0 rounded-full transition-colors ${
+          checked ? 'bg-[#34C759]' : 'bg-[#D8D8D4]'
+        } ${disabled ? 'cursor-not-allowed opacity-50' : ''}`}
+      >
+        <span
+          className={`mt-[2px] inline-block h-6 w-6 transform rounded-full bg-white transition-transform ${
+            checked ? 'translate-x-6' : 'translate-x-[2px]'
+          }`}
+        />
+      </button>
+    </div>
+  );
+}
+
+function SelectRow({
+  label,
+  value,
+  displayValue,
+  disabled,
+  onChange,
+  options,
+}: {
+  label: string;
+  value: string;
+  displayValue: string;
+  disabled?: boolean;
+  onChange: (value: string) => void;
+  options: Array<{ value: string; label: string }>;
+}) {
+  return (
+    <label className="relative flex min-h-[56px] items-center gap-4 px-4">
+      <span className="w-20 flex-shrink-0 text-[15px] text-[#232322]">{label}</span>
+      <div className="min-w-0 flex-1">
+        <select
+          value={value}
+          onChange={(event) => onChange(event.target.value)}
           disabled={disabled}
-          className={`
-            relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent
-            transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-[#232322] focus:ring-offset-2
-            ${checked ? 'bg-[#232322]' : 'bg-gray-200'}
-            ${disabled ? 'opacity-50 cursor-not-allowed' : ''}
-          `}
+          className="h-12 w-full appearance-none bg-transparent pr-6 text-right text-[15px] text-[#232322] outline-none disabled:opacity-60"
         >
-          <span
-            className={`
-              pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0
-              transition duration-200 ease-in-out
-              ${checked ? 'translate-x-5' : 'translate-x-0'}
-            `}
-          />
-        </button>
+          {options.map((option) => (
+            <option key={option.value} value={option.value}>
+              {option.label}
+            </option>
+          ))}
+        </select>
+        <span className="sr-only">{displayValue}</span>
       </div>
+      <span className="pointer-events-none absolute inset-y-0 right-4 flex items-center text-[#A3A39E]">
+        <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+        </svg>
+      </span>
+    </label>
+  );
+}
+
+function ActionLinkRow({
+  href,
+  label,
+}: {
+  href: string;
+  label: string;
+}) {
+  return (
+    <Link
+      href={href}
+      className="flex min-h-[56px] items-center justify-between px-4 text-[15px] text-[#232322] transition-colors hover:bg-[#F7F7F5]"
+    >
+      <span>{label}</span>
+      <svg className="h-4 w-4 text-[#A3A39E]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+      </svg>
+    </Link>
+  );
+}
+
+function ActionButtonRow({
+  label,
+  tone,
+  onClick,
+}: {
+  label: string;
+  tone: 'default' | 'danger';
+  onClick: () => void;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      className={`flex min-h-[56px] w-full items-center justify-between px-4 text-left text-[15px] transition-colors hover:bg-[#F7F7F5] ${
+        tone === 'danger' ? 'text-[#B4513D]' : 'text-[#232322]'
+      }`}
+    >
+      <span>{label}</span>
+      <svg className="h-4 w-4 text-[#A3A39E]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+      </svg>
+    </button>
+  );
+}
+
+function StaticRow({
+  label,
+  value,
+}: {
+  label: string;
+  value: string;
+}) {
+  return (
+    <div className="flex min-h-[56px] items-center justify-between px-4 text-[15px]">
+      <span className="text-[#232322]">{label}</span>
+      <span className="text-[#787774]">{value}</span>
     </div>
   );
 }

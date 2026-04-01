@@ -342,7 +342,8 @@ app.prepare().then(() => {
     }
   });
 
-  const wss = new WebSocketServer({ noServer: true });
+  const asrWss = new WebSocketServer({ noServer: true });
+  const tutorCallWss = new WebSocketServer({ noServer: true });
   const nextUpgradeHandler = app.getUpgradeHandler();
 
   if ('didWebSocketSetup' in app) {
@@ -356,8 +357,15 @@ app.prepare().then(() => {
     const { pathname } = parse(request.url || '', true);
 
     if (pathname === '/api/asr-stream') {
-      wss.handleUpgrade(request, socket, head, (ws) => {
-        wss.emit('connection', ws, request);
+      asrWss.handleUpgrade(request, socket, head, (ws) => {
+        asrWss.emit('connection', ws, request);
+      });
+      return;
+    }
+
+    if (pathname === '/api/tutor-call') {
+      tutorCallWss.handleUpgrade(request, socket, head, (ws) => {
+        tutorCallWss.emit('connection', ws, request);
       });
       return;
     }
@@ -370,7 +378,7 @@ app.prepare().then(() => {
     }
   });
 
-  wss.on('connection', (clientWs) => {
+  asrWss.on('connection', (clientWs) => {
     console.log('[ASR-Proxy] Client connected');
 
     const apiKey = process.env.DASHSCOPE_API_KEY;
@@ -940,9 +948,295 @@ app.prepare().then(() => {
     });
   });
 
+  tutorCallWss.on('connection', (clientWs) => {
+    console.log('[TutorCall] Client connected');
+
+    const apiKey = process.env.DASHSCOPE_API_KEY;
+    const model = process.env.DASHSCOPE_OMNI_REALTIME_MODEL || 'qwen3.5-omni-plus-realtime';
+    const transcriptionModel = process.env.DASHSCOPE_OMNI_REALTIME_TRANSCRIPT_MODEL || 'gummy-realtime-v1';
+    const defaultVoice = process.env.DASHSCOPE_OMNI_REALTIME_VOICE || 'Tina';
+
+    if (!apiKey) {
+      clientWs.send(JSON.stringify({ event: 'error', error: 'API Key 未配置' }));
+      clientWs.close();
+      return;
+    }
+
+    let dashscopeWs = null;
+    let isSessionReady = false;
+    let hasSentReady = false;
+    let assistantTranscript = '';
+    let sessionConfig = {
+      instructions: '你是一位自然、耐心、会顺着学生刚说的话继续讲下去的中文老师。',
+      voice: defaultVoice,
+      enableSearch: false,
+    };
+
+    function sendClientEvent(payload) {
+      if (clientWs.readyState !== WebSocket.OPEN) return;
+      clientWs.send(JSON.stringify(payload));
+    }
+
+    function buildSessionPayload() {
+      return {
+        modalities: ['text', 'audio'],
+        instructions: sessionConfig.instructions,
+        voice: sessionConfig.voice || defaultVoice,
+        input_audio_format: 'pcm16',
+        output_audio_format: 'pcm16',
+        input_audio_transcription: {
+          model: transcriptionModel,
+        },
+        turn_detection: {
+          type: 'server_vad',
+          threshold: 0.45,
+          silence_duration_ms: 700,
+          prefix_padding_ms: 240,
+          create_response: true,
+          interrupt_response: true,
+        },
+      };
+    }
+
+    function sendSessionUpdate(reason) {
+      if (!dashscopeWs || dashscopeWs.readyState !== WebSocket.OPEN) return;
+
+      dashscopeWs.send(JSON.stringify({
+        event_id: generateEventId(),
+        type: 'session.update',
+        session: buildSessionPayload(),
+      }));
+
+      if (reason) {
+        console.log(`[TutorCall] Session updated (${reason})`);
+      }
+    }
+
+    function markSessionReady(reason) {
+      if (hasSentReady) return;
+      hasSentReady = true;
+      isSessionReady = true;
+      sendClientEvent({ event: 'ready', reason });
+    }
+
+    function appendAudioToDashScope(buffer) {
+      if (!dashscopeWs || dashscopeWs.readyState !== WebSocket.OPEN) return;
+
+      const base64Audio = Buffer.from(buffer).toString('base64');
+      if (!base64Audio) return;
+
+      dashscopeWs.send(JSON.stringify({
+        event_id: generateEventId(),
+        type: 'input_audio_buffer.append',
+        audio: base64Audio,
+      }));
+
+    }
+
+    try {
+      const wsUrl = `${DASHSCOPE_WSS_URL}?model=${encodeURIComponent(model)}`;
+      dashscopeWs = new WebSocket(wsUrl, {
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+        },
+      });
+
+      dashscopeWs.on('open', () => {
+        sendSessionUpdate('initial');
+      });
+
+      dashscopeWs.on('message', (data, isBinary) => {
+        try {
+          if (isBinary) return;
+
+          const msg = JSON.parse(data.toString());
+          const msgType = msg.type;
+
+          switch (msgType) {
+            case 'session.created':
+              markSessionReady('session.created');
+              break;
+            case 'session.updated':
+              markSessionReady('session.updated');
+              break;
+            case 'input_audio_buffer.speech_started':
+              sendClientEvent({
+                event: 'speech_started',
+                audioStartMs: msg.audio_start_ms ?? null,
+              });
+              break;
+            case 'input_audio_buffer.speech_stopped':
+              sendClientEvent({
+                event: 'speech_stopped',
+                audioEndMs: msg.audio_end_ms ?? null,
+              });
+              break;
+            case 'conversation.item.input_audio_transcription.delta': {
+              const payload = extractInterimPayload(msg);
+              if (payload.text) {
+                sendClientEvent({
+                  event: 'user_transcript',
+                  transcript: payload.text,
+                  isFinal: false,
+                });
+              }
+              break;
+            }
+            case 'conversation.item.input_audio_transcription.completed': {
+              const transcript = extractFinalText(msg);
+              if (transcript) {
+                sendClientEvent({
+                  event: 'user_transcript',
+                  transcript,
+                  isFinal: true,
+                });
+              }
+              break;
+            }
+            case 'response.created':
+              assistantTranscript = '';
+              sendClientEvent({ event: 'assistant_response_start' });
+              break;
+            case 'response.audio_transcript.delta':
+              if (typeof msg.delta === 'string' && msg.delta) {
+                assistantTranscript += msg.delta;
+                sendClientEvent({
+                  event: 'assistant_transcript',
+                  text: assistantTranscript,
+                  isFinal: false,
+                });
+              }
+              break;
+            case 'response.audio_transcript.done': {
+              const transcript = typeof msg.transcript === 'string' && msg.transcript.trim()
+                ? msg.transcript.trim()
+                : assistantTranscript.trim();
+
+              if (transcript) {
+                assistantTranscript = transcript;
+                sendClientEvent({
+                  event: 'assistant_transcript',
+                  text: transcript,
+                  isFinal: true,
+                });
+              }
+              break;
+            }
+            case 'response.audio.delta':
+              if (typeof msg.delta === 'string' && msg.delta) {
+                sendClientEvent({
+                  event: 'assistant_audio',
+                  audio: msg.delta,
+                });
+              }
+              break;
+            case 'response.done':
+              sendClientEvent({ event: 'assistant_response_end' });
+              assistantTranscript = '';
+              break;
+            case 'error': {
+              const error = msg.error?.message || msg.message || '语音通话出错了';
+              console.error('[TutorCall] Error:', msg.error || msg);
+              sendClientEvent({ event: 'error', error });
+              break;
+            }
+            default:
+              break;
+          }
+        } catch (error) {
+          console.error('[TutorCall] Parse error:', error);
+        }
+      });
+
+      dashscopeWs.on('error', (error) => {
+        console.error('[TutorCall] DashScope error:', error.message);
+        sendClientEvent({ event: 'error', error: `DashScope 连接错误: ${error.message}` });
+      });
+
+      dashscopeWs.on('close', (code, reason) => {
+        console.log('[TutorCall] DashScope closed:', code, String(reason || ''));
+        isSessionReady = false;
+
+        if (clientWs.readyState === WebSocket.OPEN) {
+          sendClientEvent({ event: 'assistant_response_end' });
+        }
+      });
+    } catch (error) {
+      console.error('[TutorCall] Failed to connect:', error);
+      sendClientEvent({ event: 'error', error: '连接失败' });
+      clientWs.close();
+      return;
+    }
+
+    clientWs.on('message', (data, isBinary) => {
+      if (isBinary) {
+        if (isSessionReady) {
+          appendAudioToDashScope(data);
+        }
+        return;
+      }
+
+      try {
+        const message = JSON.parse(typeof data === 'string' ? data : data.toString('utf8'));
+
+        if (message.type === 'session-config') {
+          sessionConfig = {
+            instructions: typeof message.instructions === 'string' && message.instructions.trim()
+              ? message.instructions.trim()
+              : sessionConfig.instructions,
+            voice: typeof message.voice === 'string' && message.voice.trim()
+              ? message.voice.trim()
+              : defaultVoice,
+            enableSearch: Boolean(message.enableSearch),
+          };
+
+          if (isSessionReady) {
+            sendSessionUpdate('client update');
+          }
+          return;
+        }
+
+        if (message.action === 'cancel') {
+          if (dashscopeWs && dashscopeWs.readyState === WebSocket.OPEN) {
+            dashscopeWs.send(JSON.stringify({
+              event_id: generateEventId(),
+              type: 'response.cancel',
+            }));
+          }
+          assistantTranscript = '';
+          sendClientEvent({ event: 'cancelled' });
+          return;
+        }
+
+        if (message.action === 'clear') {
+          if (dashscopeWs && dashscopeWs.readyState === WebSocket.OPEN) {
+            dashscopeWs.send(JSON.stringify({
+              event_id: generateEventId(),
+              type: 'input_audio_buffer.clear',
+            }));
+          }
+        }
+      } catch {
+        console.warn('[TutorCall] Ignoring malformed client message');
+      }
+    });
+
+    clientWs.on('close', () => {
+      console.log('[TutorCall] Client disconnected');
+      if (dashscopeWs && dashscopeWs.readyState === WebSocket.OPEN) {
+        dashscopeWs.close(1000, 'Client disconnected');
+      }
+    });
+
+    clientWs.on('error', (error) => {
+      console.error('[TutorCall] Client error:', error.message);
+    });
+  });
+
   server.listen(port, () => {
     console.log(`> Ready on http://${hostname}:${port}`);
     console.log(`> WebSocket proxy available at ws://${hostname}:${port}/api/asr-stream`);
+    console.log(`> Tutor call proxy available at ws://${hostname}:${port}/api/tutor-call`);
   });
 
   server.on('error', (error) => {
@@ -956,4 +1250,3 @@ app.prepare().then(() => {
   console.error('[Server] Failed to start:', error);
   process.exit(1);
 });
-

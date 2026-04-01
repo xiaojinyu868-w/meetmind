@@ -130,7 +130,7 @@ src/
 │   ├── teacher/DOMAIN.md
 │   ├── parent/DOMAIN.md
 │   └── business/DOMAIN.md
-├── hooks/DOMAIN.md       # 23 个 hooks 索引
+├── hooks/DOMAIN.md       # hooks 索引（含 Omni realtime 通话）
 ├── stores/DOMAIN.md      # Zustand 状态
 ├── types/DOMAIN.md       # 共享类型
 └── lib/
@@ -159,10 +159,11 @@ src/
 | 文件 | 行数 | 注意 |
 |------|------|------|
 | `src/app/(main)/app/page.tsx` | 8437 | God File，用 `replace_in_file` 精确替换，改前先读 DOMAIN.md |
-| `src/components/AITutor.tsx` | 1940 | AI 家教，已拆分 3 个子模块到 `tutor/` |
+| `src/components/AITutor.tsx` | 2276 | AI 家教，已拆分真人老师通话相关子模块到 `tutor/` |
 | `src/components/Recorder.tsx` | 1694 | 录音组件，已拆分 2 个子模块到 `recorder/` |
 | `src/app/api/video/import/route.ts` | 1209 | 多平台导入管线，已拆分 3 个子模块 |
 | `src/app/api/tutor/route.ts` | 708 | AI 私教路由，已拆分 4 个子模块 |
+| `src/hooks/useOmniRealtimeCall.ts` | 792 | Qwen Omni realtime 语音通话 hook，承接麦克风上行、语音下行与接通状态 |
 | `src/lib/utils/page-utils.ts` | 10 | Barrel re-export，实际实现在 `page/` 子目录（5 个模块，共 1107 行） |
 | `src/lib/ai-native/plugins/studio-workshop.plugin.ts` | ~340 | Studio Workshop 主文件，子模块：types/podcast/renderers |
 | `src/lib/services/commonstack-echo-service.ts` | 273 | Echo LLM 调用，System Prompt 在此 |

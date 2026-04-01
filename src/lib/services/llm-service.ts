@@ -49,8 +49,17 @@ export interface ImageContentPart {
   };
 }
 
+/** 多模态内容项 - 音频 */
+export interface AudioContentPart {
+  type: 'input_audio';
+  input_audio: {
+    data: string; // http(s) URL 或 base64 数据
+    format?: string;
+  };
+}
+
 /** 多模态内容 */
-export type MultimodalContent = TextContentPart | ImageContentPart;
+export type MultimodalContent = TextContentPart | ImageContentPart | AudioContentPart;
 
 /** 聊天消息 - 支持纯文本和多模态 */
 export interface ChatMessage {

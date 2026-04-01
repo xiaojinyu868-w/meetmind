@@ -22,7 +22,7 @@ import type {
 export type { ViewMode, DataSource, ReviewTab, VideoWorkspaceTab, MobileCollectionSheet };
 
 // page.tsx 中 mobileSubPage 实际使用的类型（包含 'apps' + 'transcript'）
-export type MobileSubPage = 'highlights' | 'summary' | 'notes' | 'tasks' | 'apps' | 'ai-chat' | 'transcript' | null;
+export type MobileSubPage = 'highlights' | 'summary' | 'notes' | 'tasks' | 'apps' | 'ai-chat' | 'ai-call' | 'transcript' | null;
 
 // ==================== 类型定义 ====================
 
