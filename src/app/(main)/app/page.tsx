@@ -165,6 +165,7 @@ import {
   Link2,
   History,
   X,
+  PencilLine,
   Image as ImageIcon,
   AudioLines,
   ArrowUp,
@@ -6067,118 +6068,82 @@ const _handleVideoAssistantMessage = useCallback((payload: {
                 </button>
               </div>
 
-              <div className="mt-4 rounded-[24px] border border-[#E9E9E7] bg-[#F7F7F5] p-3">
-                <div className="grid grid-cols-2 gap-2">
+              <div className="mt-4 divide-y divide-[#F2F2F0]">
+                <button
+                  type="button"
+                  onClick={() => { closeCollectionMessageMenu(); openTutorFromCollectionItem(activeCollectionMessageMenuItem); }}
+                  className="flex w-full items-center gap-3 px-1 py-3 text-left text-[14px] text-[#232322] transition active:bg-[#F7F7F5]"
+                >
+                  <MessageCircle size={18} strokeWidth={1.6} className="text-[#787774]" />
+                  <span>提问</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => { closeCollectionMessageMenu(); quoteCollectionItemToComposer(activeCollectionMessageMenuItem); }}
+                  className="flex w-full items-center gap-3 px-1 py-3 text-left text-[14px] text-[#232322] transition active:bg-[#F7F7F5]"
+                >
+                  <FileText size={18} strokeWidth={1.6} className="text-[#787774]" />
+                  <span>引用到输入框</span>
+                </button>
+                {Boolean(activeCollectionMessageMenuItem.reviewable && (activeCollectionMessageMenuItem.sessionId || activeCollectionMessageMenuItem.videoImported) && activeCollectionMessageMenuItem.status !== 'failed') ? (
                   <button
                     type="button"
-                    onClick={() => {
-                      closeCollectionMessageMenu();
-                      openTutorFromCollectionItem(activeCollectionMessageMenuItem);
-                    }}
-                    className="flex items-center gap-3 rounded-[18px] bg-[#232322] px-4 py-3 text-left text-sm font-semibold text-white transition hover:bg-[#111111]"
+                    onClick={() => { closeCollectionMessageMenu(); void openReviewFromCollection(activeCollectionMessageMenuItem); }}
+                    className="flex w-full items-center gap-3 px-1 py-3 text-left text-[14px] text-[#232322] transition active:bg-[#F7F7F5]"
                   >
-                    <span className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-white/16 text-white">
-                      <MessageCircle size={16} />
-                    </span>
-                    <span>问 Tutor</span>
+                    <BookOpen size={18} strokeWidth={1.6} className="text-[#787774]" />
+                    <span>复习</span>
                   </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      closeCollectionMessageMenu();
-                      quoteCollectionItemToComposer(activeCollectionMessageMenuItem);
-                    }}
-                    className="flex items-center gap-3 rounded-[18px] bg-white px-4 py-3 text-left text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
-                  >
-                    <span className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-slate-100 text-slate-600">
-                      <FileText size={16} />
-                    </span>
-                    <span>引用</span>
-                  </button>
-                  {Boolean(activeCollectionMessageMenuItem.reviewable && (activeCollectionMessageMenuItem.sessionId || activeCollectionMessageMenuItem.videoImported) && activeCollectionMessageMenuItem.status !== 'failed') ? (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        closeCollectionMessageMenu();
-                        void openReviewFromCollection(activeCollectionMessageMenuItem);
-                      }}
-                      className="col-span-2 flex items-center justify-between rounded-[18px] bg-white px-4 py-3 text-left text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
-                    >
-                      <span className="inline-flex items-center gap-2">
-                        <span className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-[#D1F4E0] text-[#232322]">
-                          <BookOpen size={16} />
-                        </span>
-                        <span>去复习</span>
-                      </span>
-                      <ChevronRight size={16} className="text-slate-300" />
-                    </button>
-                  ) : null}
-                </div>
-              </div>
-
-              <div className="mt-3 flex flex-wrap gap-2">
+                ) : null}
                 {activeCollectionMenuWorkspaceCapture?.contentType === 'text' ? (
                   <button
                     type="button"
-                    onClick={() => {
-                      closeCollectionMessageMenu();
-                      openWorkspaceCaptureEditor(activeCollectionMenuWorkspaceCapture, 'text');
-                    }}
-                    className="rounded-full bg-slate-100 px-3 py-2 text-[12px] font-medium text-slate-700 transition hover:bg-slate-200"
+                    onClick={() => { closeCollectionMessageMenu(); openWorkspaceCaptureEditor(activeCollectionMenuWorkspaceCapture, 'text'); }}
+                    className="flex w-full items-center gap-3 px-1 py-3 text-left text-[14px] text-[#232322] transition active:bg-[#F7F7F5]"
                   >
-                    编辑文字
+                    <PencilLine size={18} strokeWidth={1.6} className="text-[#787774]" />
+                    <span>编辑</span>
                   </button>
                 ) : null}
                 {activeCollectionMenuWorkspaceCapture &&
-                (activeCollectionMenuWorkspaceCapture.contentType === 'audio' ||
-                  activeCollectionMenuWorkspaceCapture.contentType === 'video') &&
+                (activeCollectionMenuWorkspaceCapture.contentType === 'audio' || activeCollectionMenuWorkspaceCapture.contentType === 'video') &&
                 Boolean((activeCollectionMenuWorkspaceCapture.normalizedText || activeCollectionMenuWorkspaceCapture.tutorContext || '').trim()) ? (
                   <button
                     type="button"
-                    onClick={() => {
-                      closeCollectionMessageMenu();
-                      openWorkspaceCaptureEditor(activeCollectionMenuWorkspaceCapture, 'transcript');
-                    }}
-                    className="rounded-full bg-slate-100 px-3 py-2 text-[12px] font-medium text-slate-700 transition hover:bg-slate-200"
+                    onClick={() => { closeCollectionMessageMenu(); openWorkspaceCaptureEditor(activeCollectionMenuWorkspaceCapture, 'transcript'); }}
+                    className="flex w-full items-center gap-3 px-1 py-3 text-left text-[14px] text-[#232322] transition active:bg-[#F7F7F5]"
                   >
-                    校正文字
+                    <PencilLine size={18} strokeWidth={1.6} className="text-[#787774]" />
+                    <span>校正文字</span>
                   </button>
                 ) : null}
                 {activeCollectionMenuWorkspaceCapture && activeCollectionMenuWorkspaceCapture.contentType !== 'text' ? (
                   <button
                     type="button"
-                    onClick={() => {
-                      closeCollectionMessageMenu();
-                      openWorkspaceCaptureEditor(activeCollectionMenuWorkspaceCapture, 'meta');
-                    }}
-                    className="rounded-full bg-slate-100 px-3 py-2 text-[12px] font-medium text-slate-700 transition hover:bg-slate-200"
+                    onClick={() => { closeCollectionMessageMenu(); openWorkspaceCaptureEditor(activeCollectionMenuWorkspaceCapture, 'meta'); }}
+                    className="flex w-full items-center gap-3 px-1 py-3 text-left text-[14px] text-[#232322] transition active:bg-[#F7F7F5]"
                   >
-                    改标题备注
+                    <PencilLine size={18} strokeWidth={1.6} className="text-[#787774]" />
+                    <span>改标题</span>
                   </button>
                 ) : null}
                 {Boolean(activeCollectionMessageMenuItem.attachmentUrl || activeCollectionMessageMenuItem.mediaUrl || activeCollectionMessageMenuItem.previewUrl) ? (
                   <button
                     type="button"
-                    onClick={() => {
-                      closeCollectionMessageMenu();
-                      openCollectionItemOriginal(activeCollectionMessageMenuItem);
-                    }}
-                    className="inline-flex items-center gap-1.5 rounded-full bg-slate-100 px-3 py-2 text-[12px] font-medium text-slate-700 transition hover:bg-slate-200"
+                    onClick={() => { closeCollectionMessageMenu(); openCollectionItemOriginal(activeCollectionMessageMenuItem); }}
+                    className="flex w-full items-center gap-3 px-1 py-3 text-left text-[14px] text-[#232322] transition active:bg-[#F7F7F5]"
                   >
-                    <Link2 size={14} />
+                    <Link2 size={18} strokeWidth={1.6} className="text-[#787774]" />
                     <span>打开原件</span>
                   </button>
                 ) : null}
                 <button
                   type="button"
-                  onClick={() => {
-                    closeCollectionMessageMenu();
-                    toggleCollectionContextItem(activeCollectionMessageMenuItem);
-                  }}
-                  className="inline-flex items-center gap-1.5 rounded-full bg-slate-100 px-3 py-2 text-[12px] font-medium text-slate-700 transition hover:bg-slate-200"
+                  onClick={() => { closeCollectionMessageMenu(); toggleCollectionContextItem(activeCollectionMessageMenuItem); }}
+                  className="flex w-full items-center gap-3 px-1 py-3 text-left text-[14px] text-[#232322] transition active:bg-[#F7F7F5]"
                 >
-                  <Plus size={14} />
-                  <span>{selectedCollectionContextIds.includes(activeCollectionMessageMenuItem.id) ? '移出多选' : '加入多选'}</span>
+                  <Plus size={18} strokeWidth={1.6} className="text-[#787774]" />
+                  <span>{selectedCollectionContextIds.includes(activeCollectionMessageMenuItem.id) ? '移出多选' : '多选'}</span>
                 </button>
               </div>
 
