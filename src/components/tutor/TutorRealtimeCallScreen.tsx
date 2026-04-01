@@ -363,6 +363,12 @@ export function TutorRealtimeCallScreen({
           icon={PhoneOff}
           label="结束通话"
           onClick={() => void (async () => {
+            // 在断连之前，把当前还未 finalize 的文本 flush 到上层 chatHistory
+            const pendingAssistant = assistantText.trim();
+            if (pendingAssistant) {
+              onAssistantTranscriptDone(pendingAssistant);
+            }
+            onAssistantResponseEnd?.();
             await disconnectSession();
             onExit();
           })()}
