@@ -1,6 +1,6 @@
 'use client';
 
-import { History, PhoneCall } from 'lucide-react';
+import { History, PhoneCall, Plus } from 'lucide-react';
 import { MiniPlayer, type ConfusionMarker as MiniPlayerMarker } from './MiniPlayer';
 
 interface MobileAIChatHeaderProps {
@@ -9,6 +9,8 @@ interface MobileAIChatHeaderProps {
   onBack: () => void;
   onShowCurrent: () => void;
   onShowHistory: () => void;
+  onNewConversation: () => void;
+  hasActiveConversation: boolean;
   currentTime: number;
   duration: number;
   isPlaying: boolean;
@@ -26,6 +28,8 @@ export function MobileAIChatHeader({
   onBack,
   onShowCurrent,
   onShowHistory,
+  onNewConversation,
+  hasActiveConversation,
   currentTime,
   duration,
   isPlaying,
@@ -52,7 +56,7 @@ export function MobileAIChatHeader({
           </button>
 
           <div className="text-center">
-            <p className="text-[17px] font-medium tracking-[-0.03em] text-[#232322]">真人老师</p>
+            <p className="text-[17px] font-medium tracking-[-0.03em] text-[#232322]">语音助教</p>
           </div>
 
           <div className="h-9 w-9" aria-hidden="true" />
@@ -60,6 +64,8 @@ export function MobileAIChatHeader({
       </div>
     );
   }
+
+  const hasDuration = duration > 0;
 
   return (
     <div className="flex-shrink-0 border-b border-[#E9E9E7] bg-white">
@@ -79,15 +85,29 @@ export function MobileAIChatHeader({
           <p className="text-[17px] font-medium tracking-[-0.03em] text-[#232322]">AI 助教</p>
         </div>
 
-        <button
-          type="button"
-          onClick={onToggleRealtimeTeacher}
-          className="inline-flex h-9 w-9 items-center justify-center rounded-full text-[#232322]"
-          title="进入真人老师通话"
-          aria-label="进入真人老师通话"
-        >
-          <PhoneCall size={18} strokeWidth={1.9} />
-        </button>
+        <div className="flex items-center gap-0.5">
+          {/* 开新对话——仅在当前对话模式 + 已有对话内容时显示 */}
+          {!showConversationHistory && hasActiveConversation && (
+            <button
+              type="button"
+              onClick={onNewConversation}
+              className="inline-flex h-9 w-9 items-center justify-center rounded-full text-[#787774] transition-colors active:bg-[#F7F7F5]"
+              title="开新对话"
+              aria-label="开新对话"
+            >
+              <Plus size={18} strokeWidth={1.9} />
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={onToggleRealtimeTeacher}
+            className="inline-flex h-9 w-9 items-center justify-center rounded-full text-[#232322]"
+            title="语音同桌"
+            aria-label="语音同桌"
+          >
+            <PhoneCall size={18} strokeWidth={1.9} />
+          </button>
+        </div>
       </div>
 
       <div className="px-3 pb-2">
@@ -116,18 +136,21 @@ export function MobileAIChatHeader({
         </div>
       </div>
 
-      <div className="px-3 pb-2">
-        <MiniPlayer
-          currentTime={currentTime}
-          duration={duration}
-          isPlaying={isPlaying}
-          markers={markers}
-          onSeek={onSeek}
-          onPlayPause={onPlayPause}
-          onMarkerClick={onMarkerClick}
-          className="overflow-hidden rounded-[18px] border border-[#E9E9E7]"
-        />
-      </div>
+      {/* MiniPlayer 仅在有音频内容时显示，避免空白占位 */}
+      {hasDuration && (
+        <div className="px-3 pb-2">
+          <MiniPlayer
+            currentTime={currentTime}
+            duration={duration}
+            isPlaying={isPlaying}
+            markers={markers}
+            onSeek={onSeek}
+            onPlayPause={onPlayPause}
+            onMarkerClick={onMarkerClick}
+            className="overflow-hidden rounded-[18px] border border-[#E9E9E7]"
+          />
+        </div>
+      )}
     </div>
   );
 }

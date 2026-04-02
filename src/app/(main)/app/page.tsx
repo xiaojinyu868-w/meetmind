@@ -47,9 +47,7 @@ import {
 } from '@/lib/context-reach';
 import type {
   TranscriptSegment,
-  HighlightTopic,
   Note,
-  TopicGenerationMode,
   NoteSource,
   NoteMetadata,
   ImportedVideoResult,
@@ -151,11 +149,9 @@ import { AppLoading } from '@/components/AppLoading';
 import {
   Mic,
   BookOpen,
-  Star,
   Sparkles,
   FileText,
   Boxes,
-  StickyNote,
   MessageCircle,
   Clock,
   AlertCircle,
@@ -194,9 +190,6 @@ import type { ConversationHistory } from '@/types/conversation';
 import type { AudioSession } from '@/lib/db';
 
 // Workspace components - dynamic loaded
-const HighlightsPanel = dynamic(() => import('@/components/HighlightsPanel').then(m => ({ default: m.HighlightsPanel })), { ssr: false });
-const SummaryPanel = dynamic(() => import('@/components/SummaryPanel').then(m => ({ default: m.SummaryPanel })), { ssr: false });
-const NotesPanel = dynamic(() => import('@/components/NotesPanel').then(m => ({ default: m.NotesPanel })), { ssr: false });
 const AnchorDetailPanel = dynamic(() => import('@/components/AnchorDetailPanel').then(m => ({ default: m.AnchorDetailPanel })), { ssr: false });
 const SharedWorkspacePanel = dynamic(() => import('@/components/SharedWorkspacePanel').then(m => ({ default: m.SharedWorkspacePanel })), { ssr: false });
 const ReviewWorkspacePanel = dynamic(() => import('@/components/ReviewWorkspacePanel').then(m => ({ default: m.ReviewWorkspacePanel })), { ssr: false });
@@ -241,10 +234,7 @@ const ICON_TAB = 14;
 const ICON_TAB_STROKE = 1.75;
 
 const SHARED_WORKSPACE_TABS: WorkspaceTabConfig<SharedWorkspaceTab>[] = [
-  { key: 'highlights', label: '精选', icon: '精', LucideIcon: Star },
-  { key: 'summary', label: '摘要', icon: '摘', LucideIcon: FileText },
   { key: 'apps', label: 'AI工坊', icon: '坊', LucideIcon: Boxes, testId: 'review-tab-apps' },
-  { key: 'notes', label: '笔记', icon: '记', LucideIcon: StickyNote },
 ];
 
 const VIDEO_WORKSPACE_TABS: WorkspaceTabConfig<VideoWorkspaceTab>[] = [
@@ -260,7 +250,7 @@ const REVIEW_WORKSPACE_TABS: WorkspaceTabConfig<ReviewTab>[] = [
 ];
 
 function isSharedWorkspaceTab(tab: WorkspaceTab): tab is SharedWorkspaceTab {
-  return tab === 'highlights' || tab === 'summary' || tab === 'notes' || tab === 'apps';
+  return tab === 'apps';
 }
 
 
@@ -318,9 +308,6 @@ function StudentAppContent({
   // Player Store
   const isPlaying = usePlayerStore((s) => s.isPlaying);
   const currentTime = usePlayerStore((s) => s.currentTime);
-  const isPlayingAll = usePlayerStore((s) => s.isPlayingAll);
-  const playAllIndex = usePlayerStore((s) => s.playAllIndex);
-
   // Session Store — 会话核心
   const sessionId = useSessionStore((s) => s.sessionId);
   const isRecording = useSessionStore((s) => s.isRecording);
@@ -350,8 +337,6 @@ function StudentAppContent({
   const setMobileCollectionSheet = uiActions.setMobileCollectionSheet;
   const setIsPlaying = playerActions.setIsPlaying;
   const setCurrentTime = playerActions.setCurrentTime;
-  const setIsPlayingAll = playerActions.setIsPlayingAll;
-  const setPlayAllIndex = playerActions.setPlayAllIndex;
   const setSessionId = sessionActions.setSessionId;
   const setIsRecording = sessionActions.setIsRecording;
   const setDataSource = sessionActions.setDataSource;
@@ -387,6 +372,8 @@ function StudentAppContent({
   const [mobileAIConsumedQuestionNonce, setMobileAIConsumedQuestionNonce] = useState<number | null>(null);
   const [mobileAIPreferSelectedContext, setMobileAIPreferSelectedContext] = useState(false);
   const [mobileAILaunchTarget, setMobileAILaunchTarget] = useState<'review-panel' | 'video-chat' | 'mobile-ai-chat' | null>(null);
+  const [mobileAINewConversationNonce, setMobileAINewConversationNonce] = useState(0);
+  const [mobileAIHasActiveConversation, setMobileAIHasActiveConversation] = useState(false);
   const hasAppliedInitialMobileSubPageRef = useRef(false);
   
   const shouldPrioritizeWechatCaptureEntry = Boolean(wechatCaptureToken);
@@ -410,16 +397,7 @@ function StudentAppContent({
   const [confusionChatAnchor, setConfusionChatAnchor] = useState<Anchor | null>(null);
   const [videoInsightItems, setVideoInsightItems] = useState<VideoInsightItem[]>([]);
   const [activeVideoInsightId, setActiveVideoInsightId] = useState<string | null>(null);
-  // NOTE: cleaned corrupted legacy comment.
-  const { 
-    topics: highlightTopics, 
-    selectedTopic, 
-    isLoading: isLoadingTopics, 
-    generate: generateTopics,
-    regenerateByTheme,
-    setSelectedTopic,
-    clear: clearTopics
-  } = useTopics({ sessionId, segments });
+  const { clear: clearTopics } = useTopics({ sessionId, segments });
   
   const {
     summary: classSummary,
@@ -1558,6 +1536,13 @@ function StudentAppContent({
     setMobileCollectionSheet(null);
     setSourceImportError('');
     setDataSource('live');
+    // 每次新录音开始，无条件清除 liveSegmentsRef。
+    // 它的语义是「当前这次录音产生的实时 segments」，不应跨录音保留。
+    // 历史 segments 已保存在 segments state 和 segmentsRef.current 中。
+    // 这样可防止 handleRecordingStop 误把上一次视频导入 / 会话恢复的旧 segments
+    // 当成本次录音的转录结果（"错版" bug）。
+    liveSegmentsRef.current = [];
+
     if (!isContinuingCurrentSession && !hasExistingCollectionContext) {
     setSegments([]);
     setAnchors([]);
@@ -1578,7 +1563,6 @@ function StudentAppContent({
     setSourceImportError('');
     setSourceFilePickerMode('all');
     setSupportReferences([]);
-    liveSegmentsRef.current = [];
     anchorService.clear(newSessionId);
     }
     // NOTE: cleaned corrupted legacy comment.
@@ -1601,7 +1585,9 @@ function StudentAppContent({
     setShowMobileRecorder(false);
     if (blob) setAudioBlob(blob);
     
-    // NOTE: cleaned corrupted legacy comment.
+    // liveSegmentsRef 在 handleRecordingStart 中已被无条件清除，
+    // 此处的值仅包含本次录音期间 streaming ASR 产生的段落。
+    // batch 模式下（compactMode / 移动端），liveSegmentsRef 始终为空。
     const currentSegments = liveSegmentsRef.current.length > 0
       ? liveSegmentsRef.current
       : segmentsRef.current;
@@ -1797,6 +1783,20 @@ function StudentAppContent({
     setShowMobileRecorder(false);
     setShowCollectionPulsePreview(false);
 
+    // 恢复成功后的统一收尾：确保音频源可播放，然后进入 AI 对话。
+    const finishReviewRestore = (restoredItem: SourceIngestItem) => {
+      // restoreReviewSession / fallback 内部会根据 IndexedDB session 设置 audioBlob。
+      // 但如果 session 中没有 blob（如微信语音、或 blob 存储失败），audioBlob 为 null，
+      // WaveformPlayer 需要 audioUrl 作为 fallback。无条件补设 audioUrl 不会影响
+      // audioBlob 已有值的场景，因为 WaveformPlayer 的 src={audioBlob || audioUrl}。
+      if (restoredItem.mediaUrl) {
+        setAudioUrl(restoredItem.mediaUrl);
+      }
+      if (isMobile) {
+        setMobileSubPage('ai-chat');
+      }
+    };
+
     // 路径 A：有 sessionId + reviewable → 从 IndexedDB 恢复
     if (item.sessionId && item.reviewable) {
       try {
@@ -1807,9 +1807,7 @@ function StudentAppContent({
           showTranscriptBar: false,
         });
         if (restored) {
-          if (isMobile) {
-            setMobileSubPage('ai-chat');
-          }
+          finishReviewRestore(item);
           return;
         }
       } catch (error) {
@@ -1819,9 +1817,7 @@ function StudentAppContent({
       try {
         const restoredFromFallback = await restoreReviewFromCollectionFallback(item);
         if (restoredFromFallback) {
-          if (isMobile) {
-            setMobileSubPage('ai-chat');
-          }
+          finishReviewRestore(item);
           return;
         }
       } catch (fallbackError) {
@@ -1834,9 +1830,7 @@ function StudentAppContent({
       try {
         const restoredFromServer = await restoreFromServerTranscript(item);
         if (restoredFromServer) {
-          if (isMobile) {
-            setMobileSubPage('ai-chat');
-          }
+          finishReviewRestore(item);
           return;
         }
       } catch (serverError) {
@@ -1860,13 +1854,22 @@ function StudentAppContent({
       return;
     }
 
-    if (item.type === 'audio') {
-      if (!audioBlob && item.mediaUrl) {
+    // 路径 D：audio 类型有 mediaUrl（如微信语音、App 内录音），
+    // 即使前面的恢复路径都跳过了，也应该直接进入 review 模式播放。
+    if (item.type === 'audio' && item.mediaUrl) {
+      if (!audioBlob) {
         setAudioUrl(item.mediaUrl);
       }
-      if (item.durationMs) {
-        setSessionMediaDurationMs(item.durationMs);
+      // 先清零，再用 item 携带的时长（如有）；WaveformPlayer onReady 会
+      // 在音频加载完成后用真实时长兜底覆盖。
+      setSessionMediaDurationMs(item.durationMs || 0);
+      await handleViewModeChange('review');
+      setReviewTab('timeline');
+      setVideoWorkspaceTab('chat');
+      if (isMobile) {
+        setMobileSubPage('ai-chat');
       }
+      return;
     }
 
     if (item.reviewable) {
@@ -2252,25 +2255,6 @@ const _handleVideoAssistantMessage = useCallback((payload: {
     handleUnifiedSeek(nextTimestamp, true);
   }, [actionItems, selectedAnchor?.timestamp, anchors, currentTime, handleUnifiedSeek]);
 
-  // 生成精选片段（使用 SWR Hook 自动去重与重试）
-  const handleGenerateTopics = useCallback(async (mode: TopicGenerationMode) => {
-    try {
-      await generateTopics(mode);
-    } catch (error) {
-      console.error('生成精选片段失败:', error);
-      toast.error(`生成失败: ${error instanceof Error ? error.message : '网络错误'}`);
-    }
-  }, [segments.length, generateTopics]);
-
-  // NOTE: cleaned corrupted legacy comment.
-  const handleRegenerateByTheme = useCallback(async (theme: string) => {
-    try {
-      await regenerateByTheme(theme);
-    } catch (error) {
-      console.error('按主题重新生成失败:', error);
-    }
-  }, [regenerateByTheme]);
-
   // Generate class summary via SWR hook.
   const handleGenerateSummary = useCallback(async () => {
     try {
@@ -2279,37 +2263,6 @@ const _handleVideoAssistantMessage = useCallback((payload: {
       console.error('生成摘要失败:', error);
     }
   }, [generateSummary]);
-
-  // NOTE: cleaned corrupted legacy comment.
-  const handlePlayTopic = useCallback((topic: HighlightTopic) => {
-    if (topic.segments.length > 0) {
-      const startTime = topic.segments[0].start;
-      setCurrentTime(startTime);
-      if (waveformRef.current) {
-        waveformRef.current.seekTo(startTime);
-        waveformRef.current.play();
-      }
-    }
-  }, []);
-
-  // NOTE: cleaned corrupted legacy comment.
-  const handleClearTopics = useCallback(() => {
-    clearTopics();
-  }, [clearTopics]);
-
-  // Play through all highlight topics in order.
-  const handlePlayAll = useCallback(() => {
-    if (isPlayingAll) {
-      setIsPlayingAll(false);
-      return;
-    }
-    
-    if (highlightTopics.length > 0) {
-      setIsPlayingAll(true);
-      setPlayAllIndex(0);
-      handlePlayTopic(highlightTopics[0]);
-    }
-  }, [isPlayingAll, highlightTopics, handlePlayTopic]);
 
   // 添加一条笔记
   const handleAddNote = useCallback((text: string, source: NoteSource = 'custom', metadata?: NoteMetadata) => {
@@ -6077,7 +6030,7 @@ const _handleVideoAssistantMessage = useCallback((payload: {
                   <MessageCircle size={18} strokeWidth={1.6} className="text-[#787774]" />
                   <span>问老师</span>
                 </button>
-                {Boolean(activeCollectionMessageMenuItem.reviewable && (activeCollectionMessageMenuItem.sessionId || activeCollectionMessageMenuItem.videoImported) && activeCollectionMessageMenuItem.status !== 'failed') ? (
+                {Boolean(activeCollectionMessageMenuItem.reviewable && (activeCollectionMessageMenuItem.sessionId || activeCollectionMessageMenuItem.videoImported || activeCollectionMessageMenuItem.mediaUrl) && activeCollectionMessageMenuItem.status !== 'failed') ? (
                   <button
                     type="button"
                     onClick={() => { closeCollectionMessageMenu(); void openReviewFromCollection(activeCollectionMessageMenuItem); }}
@@ -6308,27 +6261,8 @@ const _handleVideoAssistantMessage = useCallback((payload: {
     return (
       <SharedWorkspacePanel
         tab={tab}
-        highlightTopics={highlightTopics}
-        selectedTopic={selectedTopic}
-        onTopicSelect={setSelectedTopic}
-        onPlayTopic={handlePlayTopic}
         onSeek={handleUnifiedSeek}
-        onPlayAll={handlePlayAll}
-        isPlayingAll={isPlayingAll}
-        playAllIndex={playAllIndex}
-        currentTime={currentTime}
-        totalDuration={totalDuration}
-        isLoadingTopics={isLoadingTopics}
-        onGenerateTopics={() => handleGenerateTopics('smart')}
-        onRegenerateByTheme={handleRegenerateByTheme}
-        onClearTopics={handleClearTopics}
         classSummary={classSummary}
-        isLoadingSummary={isLoadingSummary}
-        onGenerateSummary={handleGenerateSummary}
-        onAddNote={handleAddNote}
-        notes={notes}
-        onUpdateNote={handleUpdateNote}
-        onDeleteNote={handleDeleteNote}
         sessionId={sessionId}
         dataSource={dataSource}
         segments={segments}
@@ -6339,30 +6273,11 @@ const _handleVideoAssistantMessage = useCallback((payload: {
   }, [
     anchors,
     classSummary,
-    currentTime,
     dataSource,
-    handleAddNote,
-    handleClearTopics,
-    handleDeleteNote,
-    handleGenerateSummary,
-    handleGenerateTopics,
-    handlePlayAll,
-    handlePlayTopic,
-    handleRegenerateByTheme,
     handleUnifiedSeek,
-    handleUpdateNote,
-    highlightTopics,
-    isLoadingSummary,
-    isLoadingTopics,
-    isPlayingAll,
-    notes,
     openWorkshopWindow,
-    playAllIndex,
-    selectedTopic,
     segments,
-    setSelectedTopic,
     sessionId,
-    totalDuration,
   ]);
 
   const timelineForView = timeline ? {
@@ -6636,12 +6551,6 @@ const _handleVideoAssistantMessage = useCallback((payload: {
                           {tab.key === 'confusion' && anchors.filter(a => !a.resolved).length > 0 && (
                             <span className="ml-0.5 w-1.5 h-1.5 bg-red-400 rounded-full inline-block animate-pulse" />
                           )}
-                          {tab.key === 'highlights' && highlightTopics.length > 0 && (
-                            <span className="ml-0.5 text-xs opacity-60">({highlightTopics.length})</span>
-                          )}
-                          {tab.key === 'notes' && notes.length > 0 && (
-                            <span className="ml-0.5 text-xs opacity-60">({notes.length})</span>
-                          )}
                         </button>
                       ))}
                     </div>
@@ -6817,9 +6726,6 @@ const _handleVideoAssistantMessage = useCallback((payload: {
                     reviewTab={reviewTab}
                     onReviewTabChange={setReviewTab}
                     selectedAnchor={selectedAnchor}
-                    highlightTopicCount={highlightTopics.length}
-                    hasSummary={Boolean(classSummary)}
-                    notesCount={notes.length}
                     iconTabSize={ICON_TAB}
                     iconTabStroke={ICON_TAB_STROKE}
                     timelineForView={timelineForView}
@@ -6983,6 +6889,16 @@ const _handleVideoAssistantMessage = useCallback((payload: {
                     } as WaveformAnchor))}
                     onTimeUpdate={setCurrentTime}
                     onPlayStateChange={setIsPlaying}
+                    onReady={(durationMs) => {
+                      // WaveformPlayer 加载完成后用真实时长兜底，
+                      // 仅当真实时长大于当前值时覆盖，避免回退已正确的值。
+                      if (durationMs > 0) {
+                        const current = useSessionStore.getState().sessionMediaDurationMs;
+                        if (current === 0 || Math.abs(current - durationMs) > 1000) {
+                          setSessionMediaDurationMs(durationMs);
+                        }
+                      }
+                    }}
                     onAnchorClick={(anchor) => {
                       const found = anchors.find(a => a.id === anchor.id);
                       if (found) handleAnchorSelect(found);
@@ -7088,12 +7004,16 @@ const _handleVideoAssistantMessage = useCallback((payload: {
                 </>
               )}
 
-              {/* NOTE: cleaned corrupted legacy comment. */}
-              {mobileSubPage === 'ai-chat' && (
+              {/* AI 对话 & 实时通话 — 合并为同一实例，避免 ai-chat ↔ ai-call 切换时 React state 丢失 */}
+              {(mobileSubPage === 'ai-chat' || mobileSubPage === 'ai-call') && (
                 <MobileAIChatPanel
-                  showConversationHistory={showConversationHistory}
+                  showConversationHistory={mobileSubPage === 'ai-call' ? false : showConversationHistory}
                   followsSelectedContext={mobileAIPreferSelectedContext && mobileAILaunchTarget === 'mobile-ai-chat'}
                   onBack={() => {
+                    if (mobileSubPage === 'ai-call') {
+                      setMobileSubPage('ai-chat');
+                      return;
+                    }
                     const hasReviewContent = segments.length > 0 && sessionId !== 'demo-session';
                     if (hasReviewContent) {
                       setMobileSubPage(null);
@@ -7110,6 +7030,14 @@ const _handleVideoAssistantMessage = useCallback((payload: {
                     setSelectedHistoryConversation(null);
                   }}
                   onShowHistory={() => setShowConversationHistory(true)}
+                  onNewConversation={() => {
+                    setMobileAINewConversationNonce((prev) => prev + 1);
+                    setMobileAIHasActiveConversation(false);
+                    clearMobileAILaunchState();
+                  }}
+                  hasActiveConversation={mobileAIHasActiveConversation}
+                  newConversationNonce={mobileAINewConversationNonce}
+                  onConversationActiveChange={setMobileAIHasActiveConversation}
                   currentTime={currentTime}
                   duration={totalDuration}
                   isPlaying={isPlaying}
@@ -7155,7 +7083,7 @@ const _handleVideoAssistantMessage = useCallback((payload: {
                   onTutorSeek={(timeMs: number) => {
                     handleUnifiedSeek(timeMs, true);
                   }}
-                  realtimeTeacherEnabled={false}
+                  realtimeTeacherEnabled={mobileSubPage === 'ai-call'}
                   onEnterRealtimeTeacher={() => {
                     setShowConversationHistory(false);
                     setSelectedHistoryConversation(null);
@@ -7165,165 +7093,6 @@ const _handleVideoAssistantMessage = useCallback((payload: {
                     setMobileSubPage('ai-chat');
                   }}
                 />
-              )}
-
-              {mobileSubPage === 'ai-call' && (
-                <MobileAIChatPanel
-                  showConversationHistory={false}
-                  followsSelectedContext={mobileAIPreferSelectedContext && mobileAILaunchTarget === 'mobile-ai-chat'}
-                  onBack={() => {
-                    setMobileSubPage('ai-chat');
-                  }}
-                  onShowCurrent={() => {
-                    setShowConversationHistory(false);
-                    setSelectedHistoryConversation(null);
-                  }}
-                  onShowHistory={() => setShowConversationHistory(true)}
-                  currentTime={currentTime}
-                  duration={totalDuration}
-                  isPlaying={isPlaying}
-                  markers={anchors.map((anchor) => ({
-                    id: anchor.id,
-                    timestamp: anchor.timestamp,
-                    resolved: anchor.resolved,
-                  }))}
-                  onPlayerSeek={handleUnifiedSeek}
-                  onPlayPause={() => {
-                    if (isPlaying) {
-                      waveformRef.current?.pause();
-                    } else {
-                      waveformRef.current?.play();
-                    }
-                    setIsPlaying(!isPlaying);
-                  }}
-                  onMarkerClick={(marker: { id: string; timestamp: number; resolved: boolean }) => {
-                    const anchor = anchors.find((item) => item.id === marker.id);
-                    if (anchor) {
-                      setSelectedAnchor(anchor);
-                    }
-                  }}
-                  selectedHistoryConversation={selectedHistoryConversation}
-                  onBackToHistoryList={() => setSelectedHistoryConversation(null)}
-                  onCloseHistory={() => {
-                    setShowConversationHistory(false);
-                    setSelectedHistoryConversation(null);
-                  }}
-                  onSelectHistoryConversation={setSelectedHistoryConversation}
-                  sessionId={sessionId}
-                  tutorSupportContextText={tutorSupportContextText}
-                  tutorBreakpoint={mobileAIPreferSelectedContext && mobileAILaunchTarget === 'mobile-ai-chat' ? null : selectedBreakpoint}
-                  segments={segments}
-                  onResolve={handleResolveAnchor}
-                  onActionItemsUpdate={handleActionItemsUpdate}
-                  preferSupportContext={mobileAILaunchTarget === 'mobile-ai-chat' ? mobileAIPreferSelectedContext : false}
-                  launchQuestion={mobileAILaunchTarget === 'mobile-ai-chat' && mobileAIConsumedQuestionNonce !== mobileAIQuestionNonce ? mobileAIQuestion : ''}
-                  launchDisplayText={mobileAILaunchTarget === 'mobile-ai-chat' ? mobileAIDisplayQuestion : ''}
-                  launchImages={mobileAILaunchTarget === 'mobile-ai-chat' ? mobileAILaunchImages : []}
-                  launchQuestionNonce={mobileAILaunchTarget === 'mobile-ai-chat' ? mobileAIQuestionNonce : 0}
-                  onLaunchQuestionConsumed={mobileAILaunchTarget === 'mobile-ai-chat' ? consumeMobileAIQuestion : undefined}
-                  onTutorSeek={(timeMs: number) => {
-                    handleUnifiedSeek(timeMs, true);
-                  }}
-                  realtimeTeacherEnabled={true}
-                  onEnterRealtimeTeacher={() => {
-                    setMobileSubPage('ai-call');
-                  }}
-                  onExitRealtimeTeacher={() => {
-                    setMobileSubPage('ai-chat');
-                  }}
-                />
-              )}
-
-              {/* NOTE: cleaned corrupted legacy comment. */}
-              {mobileSubPage === 'highlights' && (
-                <div className="flex-1 min-h-0 flex flex-col bg-white">
-                  <div className="flex items-center gap-3 px-4 py-3 border-b border-gray-100">
-                    <button
-                      onClick={() => setMobileSubPage(null)}
-                      className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-gray-100"
-                    >
-                      <svg className="w-5 h-5 text-gray-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-                      </svg>
-                    </button>
-                    <span className="font-medium text-gray-900">精选片段</span>
-                  </div>
-                  <div className="flex-1 min-h-0 overflow-hidden">
-                    <HighlightsPanel
-                      topics={highlightTopics}
-                      selectedTopic={selectedTopic}
-                      onTopicSelect={setSelectedTopic}
-                      onPlayTopic={handlePlayTopic}
-                      onSeek={handleUnifiedSeek}
-                      onPlayAll={handlePlayAll}
-                      isPlayingAll={isPlayingAll}
-                      playAllIndex={playAllIndex}
-                      currentTime={currentTime}
-                      totalDuration={totalDuration}
-                      isLoading={isLoadingTopics}
-                      onGenerate={handleGenerateTopics}
-                      onRegenerateByTheme={handleRegenerateByTheme}
-                      onClear={handleClearTopics}
-                    />
-                  </div>
-                </div>
-              )}
-
-              {/* NOTE: cleaned corrupted legacy comment. */}
-              {mobileSubPage === 'summary' && (
-                <div className="flex-1 min-h-0 flex flex-col bg-white">
-                  <div className="flex items-center gap-3 px-4 py-3 border-b border-gray-100">
-                    <button
-                      onClick={() => setMobileSubPage(null)}
-                      className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-gray-100"
-                    >
-                      <svg className="w-5 h-5 text-gray-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-                      </svg>
-                    </button>
-                    <span className="font-medium text-gray-900">课堂摘要</span>
-                  </div>
-                  <div className="flex-1 min-h-0 overflow-hidden">
-                    <SummaryPanel
-                      summary={classSummary}
-                      isLoading={isLoadingSummary}
-                      onGenerate={handleGenerateSummary}
-                      onSeek={handleUnifiedSeek}
-                      onAddNote={(text, takeaway) => {
-                        handleAddNote(text, 'takeaways', {
-                          selectedText: takeaway.label,
-                          extra: { timestamps: takeaway.timestamps }
-                        });
-                      }}
-                    />
-                  </div>
-                </div>
-              )}
-
-              {/* NOTE: cleaned corrupted legacy comment. */}
-              {mobileSubPage === 'notes' && (
-                <div className="flex-1 min-h-0 flex flex-col bg-white">
-                  <div className="flex items-center gap-3 px-4 py-3 border-b border-gray-100">
-                    <button
-                      onClick={() => setMobileSubPage(null)}
-                      className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-gray-100"
-                    >
-                      <svg className="w-5 h-5 text-gray-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-                      </svg>
-                    </button>
-                    <span className="font-medium text-gray-900">我的笔记</span>
-                  </div>
-                  <div className="flex-1 min-h-0 overflow-hidden">
-                    <NotesPanel
-                      notes={notes}
-                      onAddNote={handleAddNote}
-                      onUpdateNote={handleUpdateNote}
-                      onDeleteNote={handleDeleteNote}
-                      onSeek={handleUnifiedSeek}
-                    />
-                  </div>
-                </div>
               )}
 
               {/* NOTE: cleaned corrupted legacy comment. */}
@@ -7376,10 +7145,7 @@ const _handleVideoAssistantMessage = useCallback((payload: {
                 onClose={() => setIsMenuOpen(false)}
                 onNavigate={(page) => setMobileSubPage(page)}
                 showApps={true}
-                userRole="student"
                 badges={{
-                  highlights: highlightTopics.length,
-                  notes: notes.length,
                   apps: segments.length > 0 ? 1 : 0,
                   tasks: actionItems.filter(i => !i.completed).length,
                 }}

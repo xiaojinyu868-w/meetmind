@@ -2,7 +2,7 @@
 export type AnchorType = 'confusion' | 'important' | 'question';
 export type SegmentType = 'lecture' | 'qa' | 'exercise';
 export type SessionStatus = 'recording' | 'paused' | 'completed';
-export type UserRole = 'student' | 'parent' | 'teacher';
+export type UserRole = 'student' | 'admin';
 
 export interface Anchor {
   id: string;
@@ -191,7 +191,7 @@ export interface ConfusionMoment {
   transcriptContext: string;
   resolved: boolean;
   resolvedAt?: string;
-  resolvedBy?: 'ai' | 'parent' | 'self';
+  resolvedBy?: 'ai' | 'self';
   audioUrl?: string;
   audioStartMs: number;
   audioEndMs: number;
@@ -263,38 +263,11 @@ export interface ConfusionPoint {
   audioClipUrl?: string;
 }
 
-export interface ParentDailyReport {
-  date: string;
-  studentName: string;
-  totalLessons: number;
-  totalBreakpoints: number;
-  unresolvedBreakpoints: number;
-  confusionPoints: ConfusionPoint[];
-  actionScript: string;
-  estimatedMinutes: number;
-  completionStatus: Array<{
-    taskId: string;
-    title: string;
-    completed: boolean;
-  }>;
-}
-
 export interface ConfusionHotspot {
   startMs: number;
   endMs: number;
   count: number;
   anchors: Anchor[];
-}
-
-export interface TeacherDailyReport {
-  date: string;
-  className: string;
-  subject: string;
-  totalStudents: number;
-  studentsWithConfusion: number;
-  hotspots: ConfusionHotspot[];
-  aiReflection: string;
-  suggestions: string[];
 }
 
 export interface SearchResult {

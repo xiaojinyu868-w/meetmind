@@ -49,14 +49,6 @@ const QUOTA_CONFIG: Record<string, Record<QuotaType, QuotaConfig>> = {
     ai_tutor: { dailyLimit: 50, monthlyLimit: 500 },
     ai_chat: { dailyLimit: 100, monthlyLimit: 1000 },
   },
-  // 教师
-  teacher: {
-    transcribe: { dailyLimit: 50, monthlyLimit: 500, maxSingleSize: 7200 },
-    ai_summary: { dailyLimit: 100, monthlyLimit: 1000 },
-    ai_topics: { dailyLimit: 100, monthlyLimit: 1000 },
-    ai_tutor: { dailyLimit: 200, monthlyLimit: 2000 },
-    ai_chat: { dailyLimit: 500, monthlyLimit: 5000 },
-  },
   // 管理员 - 不限制
   admin: {
     transcribe: { dailyLimit: -1, monthlyLimit: -1 },

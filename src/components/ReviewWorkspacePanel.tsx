@@ -12,9 +12,6 @@ interface ReviewWorkspacePanelProps {
   reviewTab: ReviewTab;
   onReviewTabChange: (tab: ReviewTab) => void;
   selectedAnchor: Anchor | null;
-  highlightTopicCount: number;
-  hasSummary: boolean;
-  notesCount: number;
   iconTabSize: number;
   iconTabStroke: number;
   timelineForView: Timeline | null;
@@ -37,9 +34,6 @@ export function ReviewWorkspacePanel({
   reviewTab,
   onReviewTabChange,
   selectedAnchor,
-  highlightTopicCount,
-  hasSummary,
-  notesCount,
   iconTabSize,
   iconTabStroke,
   timelineForView,
@@ -77,13 +71,6 @@ export function ReviewWorkspacePanel({
             {tab.label}
             {tab.key === 'anchor-detail' && selectedAnchor && !selectedAnchor.resolved && (
               <span className="ml-1 w-2 h-2 bg-[#FADEC9] rounded-full inline-block animate-pulse" />
-            )}
-            {tab.key === 'highlights' && highlightTopicCount > 0 && (
-              <span className="ml-1 text-xs text-skyblue-600">({highlightTopicCount})</span>
-            )}
-            {tab.key === 'summary' && hasSummary && <span className="ml-1 text-xs text-mint-600">OK</span>}
-            {tab.key === 'notes' && notesCount > 0 && (
-              <span className="ml-1 text-xs text-[#787774]">({notesCount})</span>
             )}
           </button>
         ))}

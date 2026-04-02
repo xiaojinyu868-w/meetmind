@@ -282,6 +282,7 @@ export function buildWechatCaptureSourceItem(message: WechatCaptureMessage): Sou
     segmentCount: fullText ? 1 : 0,
     addedAt,
     origin: 'user',
+    reviewable: sourceType === 'audio' || sourceType === 'video',
   };
 }
 

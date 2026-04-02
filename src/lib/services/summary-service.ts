@@ -240,6 +240,5 @@ export function generateShortSummary(summary: ClassSummary): string {
 
 export const summaryService = {
   generateSummary: generateClassSummary,
-  generateParentSummary,
   generateShortSummary
 };

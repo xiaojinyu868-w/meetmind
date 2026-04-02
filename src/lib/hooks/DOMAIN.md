@@ -8,7 +8,7 @@
 |------|------|
 | `useAuth.tsx` | 认证 Provider + hook（JWT + 刷新） |
 | `useSSEStream.ts` | 通用 SSE 流式请求 hook |
-| `useClassroomData.ts` | 课堂数据加载 hook（学生/教师视角） |
+| `useClassroomData.ts` | 课堂数据加载 hook |
 
 ## 注意
 

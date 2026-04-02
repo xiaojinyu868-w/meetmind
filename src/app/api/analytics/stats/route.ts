@@ -42,9 +42,9 @@ export async function GET(request: NextRequest) {
     // 获取用户信息检查角色
     const user = await authService.getUserById(payload.sub);
     
-    if (!user || (user.role !== 'admin' && user.role !== 'teacher')) {
+    if (!user || user.role !== 'admin') {
       return NextResponse.json(
-        { success: false, error: 'Forbidden: Admin or Teacher role required' },
+        { success: false, error: 'Forbidden: Admin role required' },
         { status: 403 }
       );
     }

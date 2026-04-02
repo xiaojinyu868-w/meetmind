@@ -87,7 +87,6 @@ api/route.ts → services → lib/utils, lib/db, lib/config
 | 文件 | 行数 | 职责 |
 |------|------|------|
 | `classroom-data-service.ts` | 1007 | 课堂数据共享（学生↔教师读写） |
-| `parent-service.ts` | 398 | 家长端（困惑时刻 + AI 摘要） |
 | `meetmind-service.ts` | 436 | 核心业务整合（Open Notebook + LongCut） |
 | `note-service.ts` | 393 | 个人笔记 CRUD |
 | `notebook-service.ts` | 314 | Open Notebook（向量搜索/嵌入/笔记管理） |

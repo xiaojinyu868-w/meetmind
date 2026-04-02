@@ -7,7 +7,7 @@
 /**
  * 用户角色
  */
-export type UserRole = 'student' | 'parent' | 'teacher' | 'admin';
+export type UserRole = 'student' | 'admin';
 
 /**
  * 权限定义
@@ -35,19 +35,6 @@ export const ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
     'anchor:read', 'anchor:write',
     'note:read', 'note:write',
     'report:read',
-  ],
-  parent: [
-    'session:read',
-    'anchor:read',
-    'note:read',
-    'report:read',
-  ],
-  teacher: [
-    'session:read',
-    'anchor:read',
-    'note:read',
-    'report:read', 'report:generate',
-    'user:read',
   ],
   admin: [
     'session:read', 'session:write', 'session:delete',
@@ -296,21 +283,6 @@ export interface ChangePasswordRequest {
 export interface BindWechatRequest {
   code: string;
   state: string;
-}
-
-// ==================== 家长-学生关联 ====================
-
-/**
- * 家长-学生关联
- */
-export interface ParentStudentLink {
-  id: string;
-  parentId: string;
-  studentId: string;
-  relationship: 'father' | 'mother' | 'guardian' | 'other';
-  status: 'pending' | 'active' | 'rejected';
-  createdAt: string;
-  confirmedAt?: string;
 }
 
 /**

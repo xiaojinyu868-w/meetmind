@@ -14,7 +14,7 @@ import type { TranscriptSegment } from '@/types';
 export type ViewMode = 'record' | 'review';
 export type DataSource = 'live' | 'demo' | 'video';
 
-export type SharedWorkspaceTab = 'highlights' | 'summary' | 'notes' | 'apps';
+export type SharedWorkspaceTab = 'apps';
 export type WorkspaceTab = 'timeline' | 'anchor-detail' | 'chat' | 'confusion' | SharedWorkspaceTab;
 export type ReviewTab = Extract<WorkspaceTab, 'timeline' | 'anchor-detail' | SharedWorkspaceTab>;
 export type VideoWorkspaceTab = Extract<WorkspaceTab, 'chat' | 'confusion' | SharedWorkspaceTab>;

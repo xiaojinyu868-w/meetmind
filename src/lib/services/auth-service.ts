@@ -401,19 +401,6 @@ function getRolePermissions(role: UserRole): Permission[] {
       'note:read', 'note:write',
       'report:read',
     ],
-    parent: [
-      'session:read',
-      'anchor:read',
-      'note:read',
-      'report:read',
-    ],
-    teacher: [
-      'session:read',
-      'anchor:read',
-      'note:read',
-      'report:read', 'report:generate',
-      'user:read',
-    ],
     admin: [
       'session:read', 'session:write', 'session:delete',
       'anchor:read', 'anchor:write',

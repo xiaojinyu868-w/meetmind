@@ -159,7 +159,7 @@ src/
 | 文件 | 行数 | 注意 |
 |------|------|------|
 | `src/app/(main)/app/page.tsx` | 8437 | God File，用 `replace_in_file` 精确替换，改前先读 DOMAIN.md |
-| `src/components/AITutor.tsx` | 2276 | AI 家教，已拆分真人老师通话相关子模块到 `tutor/` |
+| `src/components/AITutor.tsx` | 2276 | AI 家教，已拆分语音同桌相关子模块到 `tutor/` |
 | `src/components/Recorder.tsx` | 1694 | 录音组件，已拆分 2 个子模块到 `recorder/` |
 | `src/app/api/video/import/route.ts` | 1209 | 多平台导入管线，已拆分 3 个子模块 |
 | `src/app/api/tutor/route.ts` | 708 | AI 私教路由，已拆分 4 个子模块 |

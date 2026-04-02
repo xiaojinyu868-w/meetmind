@@ -92,6 +92,8 @@ export function AITutor({
   hideMobileHeader = false,
   realtimeTeacherEnabled,
   onRealtimeTeacherEnabledChange,
+  newConversationNonce = 0,
+  onConversationActiveChange,
 }: AITutorProps) {
   const { accessToken, user, isCheckingAuth } = useAuth();
   const userId = getEffectiveUserId(user?.id);
@@ -1282,6 +1284,21 @@ export function AITutor({
     }
   }, [globalChatHistory, globalLoading, isStreaming, sessionId]);
 
+  // 外部触发「开新对话」——递增 nonce 时清空全局对话
+  const lastNewConversationNonceRef = useRef(newConversationNonce);
+  useEffect(() => {
+    if (lastNewConversationNonceRef.current === newConversationNonce) return;
+    lastNewConversationNonceRef.current = newConversationNonce;
+    setGlobalChatHistory([]);
+    conversationIdRef.current = null;
+    lastProcessedInitialQuestionKeyRef.current = null;
+  }, [newConversationNonce]);
+
+  // 通知外层当前对话是否有内容（用于显示「开新对话」按钮）
+  useEffect(() => {
+    onConversationActiveChange?.(globalChatHistory.length > 0);
+  }, [globalChatHistory.length, onConversationActiveChange]);
+
   // ===== 全局对话模式渲染 =====
   const hasLaunchPayload = launchQuestion.trim().length > 0 || launchImagesProp.some((image) => image.url);
   const hasStreamOutput = Boolean(streamingContent) || Boolean(globalThinkingContent);
@@ -1360,7 +1377,7 @@ export function AITutor({
       return (
         <div className="h-full flex flex-col ai-chat-container bg-[#F7F7F5]">
           <TutorRealtimeCallScreen
-            title="真人老师"
+            title="语音同桌"
             contextLabel={mobileRealtimeContextLabel}
             disabled={!hasTutorContext}
             instructions={realtimeTeacherInstructions}
@@ -1511,7 +1528,7 @@ export function AITutor({
                     <div className="flex h-24 w-24 items-center justify-center rounded-full border border-[#E9E9E7] bg-white text-2xl font-semibold text-[#232322]">
                       师
                     </div>
-                    <p className="mt-5 text-base font-medium text-[#232322]">真人老师</p>
+                    <p className="mt-5 text-base font-medium text-[#232322]">语音同桌</p>
                     <p className="mt-2 max-w-[220px] text-xs leading-5 text-[#A3A39E]">
                       先进入通话页，再像发微信语音一样说一轮。
                     </p>
@@ -1791,7 +1808,7 @@ export function AITutor({
     return (
       <div className="h-full flex flex-col ai-chat-container bg-[#F7F7F5]">
         <TutorRealtimeCallScreen
-          title="真人老师"
+          title="语音同桌"
           contextLabel={mobileRealtimeContextLabel}
           disabled={!hasTutorContext}
           instructions={realtimeTeacherInstructions}

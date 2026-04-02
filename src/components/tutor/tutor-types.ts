@@ -6,7 +6,7 @@ export const TUTOR_STATE_KEY = 'tutor_last_state';
 export const REALTIME_TEACHER_MODEL_ID = 'qwen3.5-omni-plus';
 export const IS_REALTIME_TEACHER_AVAILABLE = AVAILABLE_MODELS.some((model) => model.id === REALTIME_TEACHER_MODEL_ID);
 export const FIXED_TUTOR_MODEL_ID = DEFAULT_WORKSHOP_MODEL_ID;
-export const FIXED_TUTOR_MODEL_LABEL = 'QWEN 3.5';
+export const FIXED_TUTOR_MODEL_LABEL = 'QWEN 3.6';
 
 export interface Segment {
   id: string;
@@ -59,6 +59,10 @@ export interface AITutorProps {
   hideMobileHeader?: boolean;
   realtimeTeacherEnabled?: boolean;
   onRealtimeTeacherEnabledChange?: (enabled: boolean) => void;
+  /** 递增此值触发全局对话清空（开新对话） */
+  newConversationNonce?: number;
+  /** 当全局对话内容有/无变化时通知外层 */
+  onConversationActiveChange?: (hasMessages: boolean) => void;
 }
 
 export interface TutorCacheEnvelopeV1 {

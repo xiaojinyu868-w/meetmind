@@ -30,7 +30,6 @@ interface GenerateSummaryRequest {
     topic?: string;
     teacher?: string;
   };
-  format?: 'structured' | 'parent';  // structured: 结构化JSON, parent: 家长友好文本
 }
 
 // 结构化响应
@@ -93,21 +92,6 @@ export async function POST(request: NextRequest): Promise<NextResponse<GenerateS
       confidence: seg.confidence ?? 1.0,
       isFinal: seg.isFinal ?? true
     }));
-    
-    const format = body.format ?? 'structured';
-    
-    // 家长友好格式
-    if (format === 'parent') {
-      const content = await summaryService.generateParentSummary(
-        segments,
-        { sessionInfo: body.sessionInfo }
-      );
-      
-      return NextResponse.json({
-        success: true,
-        content
-      });
-    }
     
     // 结构化格式
     const summary = await summaryService.generateSummary(

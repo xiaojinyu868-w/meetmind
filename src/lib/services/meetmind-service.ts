@@ -399,40 +399,4 @@ ${_contextText}
     };
   },
 
-  // ========== 家长端 ==========
-
-  /**
-   * 生成家长日报
-   */
-  async generateParentReport(studentId: string, date: string) {
-    const lessons = await this.getTodayLessons(studentId);
-    const allBreakpoints: Breakpoint[] = [];
-
-    for (const lesson of lessons) {
-      const timeline = await this.getLessonTimeline(lesson.id);
-      allBreakpoints.push(...timeline.breakpoints);
-    }
-
-    const unresolvedCount = allBreakpoints.filter(b => !b.resolved).length;
-
-    return {
-      date,
-      studentName: '小明',
-      totalBreakpoints: allBreakpoints.length,
-      unresolvedBreakpoints: unresolvedCount,
-      estimatedMinutes: unresolvedCount * 7,  // 每个断点约 7 分钟
-      breakpoints: allBreakpoints.slice(0, 3).map(bp => ({
-        id: bp.id,
-        course: lessons.find(l => l.id === bp.lessonId)?.courseName || '未知',
-        timestamp: bp.timestamp,
-        resolved: bp.resolved,
-      })),
-      script: `今晚大约需要 ${unresolvedCount * 7} 分钟陪孩子复习。
-
-1. 先问问孩子今天课上有没有不懂的地方
-2. 一起看看 MeetMind 标记的 ${unresolvedCount} 个困惑点
-3. 让孩子完成行动清单上的任务
-4. 完成后在 App 上打勾确认`,
-    };
-  },
 };

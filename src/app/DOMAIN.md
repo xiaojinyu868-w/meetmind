@@ -26,8 +26,6 @@ src/app/
 │   ├── app/matrix/[appKey]/  # AI 应用矩阵（381行）
 │   └── loading.tsx            # 加载态
 │
-├── parent/page.tsx            # 家长端（350行）
-├── teacher/page.tsx           # 教师端（8行，仅重定向）
 ├── feedback/page.tsx          # 反馈页（216行）
 ├── help/page.tsx             # 帮助页（244行）
 ├── all-notes/page.tsx         # 笔记聚合（441行）
@@ -54,7 +52,7 @@ src/app/
 
 **最近拆分**：
 - `MobileCollectionSheet.tsx`（296行）— 移动端收集浮层
-- `SharedWorkspacePanel.tsx`（140行）— shared workspace 分支渲染
+- `SharedWorkspacePanel.tsx`（46行）— shared workspace 面板（仅 apps）
 
 **修改策略**：任何改动前，先用 `replace_in_file`，一次只改一个精确区块（10-30行），改完立刻 `make check`。
 
@@ -76,8 +74,6 @@ src/app/
 
 | 文件 | 行数 | 职责 |
 |------|------|------|
-| `parent/page.tsx` | 350 | 家长端：孩子学习报告视图 |
-| `teacher/page.tsx` | 8 | 教师端：仅做 OAuth 鉴权后重定向 |
 | `feedback/page.tsx` | 216 | 用户反馈表单 |
 | `help/page.tsx` | 244 | 帮助文档页面 |
 | `all-notes/page.tsx` | 441 | 跨 session 的笔记聚合页 |

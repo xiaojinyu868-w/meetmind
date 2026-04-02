@@ -17,6 +17,7 @@ interface MobileAIChatPanelProps {
   onBack: () => void;
   onShowCurrent: () => void;
   onShowHistory: () => void;
+  onNewConversation: () => void;
   currentTime: number;
   duration: number;
   isPlaying: boolean;
@@ -44,6 +45,12 @@ interface MobileAIChatPanelProps {
   realtimeTeacherEnabled?: boolean;
   onEnterRealtimeTeacher?: () => void;
   onExitRealtimeTeacher?: () => void;
+  /** AITutor 内部对话是否非空，用于 Header 显示「开新对话」按钮 */
+  hasActiveConversation?: boolean;
+  /** 递增触发开新对话 */
+  newConversationNonce?: number;
+  /** AITutor 内部对话状态变化通知 */
+  onConversationActiveChange?: (hasMessages: boolean) => void;
 }
 
 export function MobileAIChatPanel({
@@ -52,6 +59,7 @@ export function MobileAIChatPanel({
   onBack,
   onShowCurrent,
   onShowHistory,
+  onNewConversation,
   currentTime,
   duration,
   isPlaying,
@@ -79,10 +87,17 @@ export function MobileAIChatPanel({
   realtimeTeacherEnabled = false,
   onEnterRealtimeTeacher,
   onExitRealtimeTeacher,
+  hasActiveConversation = false,
+  newConversationNonce = 0,
+  onConversationActiveChange,
 }: MobileAIChatPanelProps) {
-  const panelClassName = realtimeTeacherEnabled
+  const tutorPanelClassName = realtimeTeacherEnabled
     ? 'flex-1 min-h-0 overflow-hidden rounded-[28px] border border-[#E9E9E7] bg-[#F7F7F5]'
     : 'flex-1 min-h-0 overflow-hidden rounded-[28px] border border-[#E9E9E7] bg-white px-3 pb-3';
+  const historyPanelClassName = 'flex-1 min-h-0 overflow-hidden rounded-[28px] border border-[#E9E9E7] bg-white px-3 pb-3';
+
+  // 是否显示历史覆盖层（非通话模式 + showConversationHistory）
+  const showHistoryOverlay = !realtimeTeacherEnabled && showConversationHistory;
 
   const handleEnterRealtimeTeacher = () => {
     void (async () => {
@@ -99,6 +114,8 @@ export function MobileAIChatPanel({
         onBack={onBack}
         onShowCurrent={onShowCurrent}
         onShowHistory={onShowHistory}
+        onNewConversation={onNewConversation}
+        hasActiveConversation={hasActiveConversation}
         currentTime={currentTime}
         duration={duration}
         isPlaying={isPlaying}
@@ -116,36 +133,10 @@ export function MobileAIChatPanel({
         }}
       />
 
-      <div className={panelClassName}>
-        {realtimeTeacherEnabled ? (
-          <AITutor
-            breakpoint={tutorBreakpoint}
-            segments={segments}
-            isLoading={false}
-            onResolve={onResolve}
-            onActionItemsUpdate={onActionItemsUpdate}
-            sessionId={sessionId}
-            supportContextText={tutorSupportContextText}
-            preferSupportContext={preferSupportContext}
-            launchQuestion={launchQuestion}
-            launchDisplayText={launchDisplayText}
-            launchImages={launchImages}
-            launchQuestionNonce={launchQuestionNonce}
-            onLaunchQuestionConsumed={onLaunchQuestionConsumed}
-            isMobile={true}
-            hideMobileHeader={true}
-            onSeek={onTutorSeek}
-            realtimeTeacherEnabled={realtimeTeacherEnabled}
-            onRealtimeTeacherEnabledChange={(enabled) => {
-              if (enabled) {
-                onEnterRealtimeTeacher?.();
-              } else {
-                onExitRealtimeTeacher?.();
-              }
-            }}
-          />
-        ) : showConversationHistory ? (
-          selectedHistoryConversation ? (
+      {/* 历史覆盖层——条件渲染，不影响 AITutor 挂载 */}
+      {showHistoryOverlay && (
+        <div className={historyPanelClassName}>
+          {selectedHistoryConversation ? (
             <div className="h-full flex flex-col">
               <div className="flex items-center justify-between border-b border-[#E9E9E7] px-3 py-3">
                 <span className="mr-2 flex-1 truncate text-[14px] text-[#232322]">{selectedHistoryConversation.title}</span>
@@ -189,35 +180,40 @@ export function MobileAIChatPanel({
               showSearch={true}
               maxHeight="100%"
             />
-          )
-        ) : (
-          <AITutor
-            breakpoint={tutorBreakpoint}
-            segments={segments}
-            isLoading={false}
-            onResolve={onResolve}
-            onActionItemsUpdate={onActionItemsUpdate}
-            sessionId={sessionId}
-            supportContextText={tutorSupportContextText}
-            preferSupportContext={preferSupportContext}
-            launchQuestion={launchQuestion}
-            launchDisplayText={launchDisplayText}
-            launchImages={launchImages}
-            launchQuestionNonce={launchQuestionNonce}
-            onLaunchQuestionConsumed={onLaunchQuestionConsumed}
-            isMobile={true}
-            hideMobileHeader={true}
-            onSeek={onTutorSeek}
-            realtimeTeacherEnabled={realtimeTeacherEnabled}
-            onRealtimeTeacherEnabledChange={(enabled) => {
-              if (enabled) {
-                onEnterRealtimeTeacher?.();
-              } else {
-                onExitRealtimeTeacher?.();
-              }
-            }}
-          />
-        )}
+          )}
+        </div>
+      )}
+
+      {/* AITutor 始终挂载，通过 hidden 控制可见性，确保对话状态跨历史切换保持 */}
+      <div className={tutorPanelClassName} hidden={showHistoryOverlay}>
+        <AITutor
+          breakpoint={tutorBreakpoint}
+          segments={segments}
+          isLoading={false}
+          onResolve={onResolve}
+          onActionItemsUpdate={onActionItemsUpdate}
+          sessionId={sessionId}
+          supportContextText={tutorSupportContextText}
+          preferSupportContext={preferSupportContext}
+          launchQuestion={launchQuestion}
+          launchDisplayText={launchDisplayText}
+          launchImages={launchImages}
+          launchQuestionNonce={launchQuestionNonce}
+          onLaunchQuestionConsumed={onLaunchQuestionConsumed}
+          isMobile={true}
+          hideMobileHeader={true}
+          onSeek={onTutorSeek}
+          realtimeTeacherEnabled={realtimeTeacherEnabled}
+          onRealtimeTeacherEnabledChange={(enabled) => {
+            if (enabled) {
+              onEnterRealtimeTeacher?.();
+            } else {
+              onExitRealtimeTeacher?.();
+            }
+          }}
+          newConversationNonce={newConversationNonce}
+          onConversationActiveChange={onConversationActiveChange}
+        />
       </div>
     </div>
   );

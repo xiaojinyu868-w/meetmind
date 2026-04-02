@@ -35,12 +35,21 @@ const relayModelId = (process.env.RELAY_MODEL || 'gemini-3-pro-image-preview').t
 
 const qwenModels: ModelConfig[] = [
   {
+    id: 'qwen3.6-plus',
+    name: '通义千问 3.6 Plus',
+    provider: 'qwen',
+    description: '千问3.6系列，百万级上下文(1M tokens)，混合架构，推理能力与Agent行为全面升级',
+    maxTokens: 8192,
+    recommended: true,
+    supportsMultimodal: true,
+    enableThinking: false,
+  },
+  {
     id: 'qwen3.5-plus',
     name: '通义千问 3.5 Plus',
     provider: 'qwen',
     description: '千问3.5系列，百万级上下文(1M tokens)，支持图文输入，推理/写作/Agent能力全面提升',
     maxTokens: 8192,
-    recommended: true,
     supportsMultimodal: true,
     enableThinking: false,
   },
@@ -112,11 +121,12 @@ const resolvedDefaultModel =
   (envDefaultModel && resolvedModels.some((model) => model.id === envDefaultModel)
     ? envDefaultModel
     : undefined) ||
+  resolvedModels.find((model) => model.id === 'qwen3.6-plus')?.id ||
   resolvedModels.find((model) => model.id === 'qwen3.5-plus')?.id ||
   resolvedModels.find((model) => model.id === 'qwen3-vl-plus-2025-12-19')?.id ||
   resolvedModels.find((model) => model.supportsMultimodal)?.id ||
   resolvedModels[0]?.id ||
-  'qwen3.5-plus';
+  'qwen3.6-plus';
 const resolvedDefaultVisionModel =
   resolvedModels.find((model) => model.supportsMultimodal)?.id ||
   resolvedModels[0]?.id ||
@@ -234,11 +244,6 @@ export const FeatureConfig = {
     defaultModel: LLMConfig.defaultModel,
     minTakeaways: 4,
     maxTakeaways: 6,
-  },
-  
-  // 家长端
-  parent: {
-    confusionEstimateMinutes: 7, // 每个困惑点预估时间
   },
   
   // AI 家教

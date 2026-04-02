@@ -44,8 +44,6 @@ const DEFAULT_PROFILE_FORM: ProfileForm = {
 
 const roleLabels: Record<string, string> = {
   student: '学生',
-  parent: '家长',
-  teacher: '教师',
   admin: '管理员',
 };
 

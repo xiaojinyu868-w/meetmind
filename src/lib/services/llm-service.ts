@@ -2,7 +2,7 @@
  * LLM 服务 - 真实 AI 模型调用
  * 
  * 支持模型：
- * - 通义千问 (qwen3.5-plus, qwen3-vl-plus, qwen3-max-2026-01-23)
+ * - 通义千问 (qwen3.6-plus, qwen3.5-plus, qwen3-vl-plus, qwen3-max-2026-01-23)
  * - 火山方舟 (VOLCENGINE_ARK_MODEL)
  * - 中转站聚合模型 (RELAY_MODEL，例如 gemini-3-pro-image-preview)
  */
@@ -20,7 +20,7 @@ export const AVAILABLE_MODELS: ModelConfig[] = LLMConfig.models;
 
 // 获取默认模型ID
 export const DEFAULT_MODEL_ID = LLMConfig.defaultModel;
-export const WORKSHOP_PREFERRED_MODEL_ID = 'qwen3.5-plus';
+export const WORKSHOP_PREFERRED_MODEL_ID = 'qwen3.6-plus';
 export const DEFAULT_WORKSHOP_MODEL_ID = AVAILABLE_MODELS.some((model) => model.id === WORKSHOP_PREFERRED_MODEL_ID)
   ? WORKSHOP_PREFERRED_MODEL_ID
   : DEFAULT_MODEL_ID;

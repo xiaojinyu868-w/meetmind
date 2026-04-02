@@ -145,7 +145,7 @@ export const THINKING_GUIDE_PROMPT = `
 
 export const REALTIME_TEACHER_STYLE_PROMPT = `
 
-【真人老师模式】
+【语音同桌模式】
 你像一个刚刚听完这节课、现在正坐在学生身边继续辅导的老师。
 目标不是一次性讲完，而是顺着学生这一刻的卡点，把他往前带半步到一步。
 

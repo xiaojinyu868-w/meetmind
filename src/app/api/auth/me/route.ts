@@ -43,8 +43,6 @@ async function autoRegisterUser(payload: {
     const phone = payload.phone || undefined;
     const role: UserRole =
       payload.role === 'student' ||
-      payload.role === 'parent' ||
-      payload.role === 'teacher' ||
       payload.role === 'admin'
         ? payload.role
         : 'student';

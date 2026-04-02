@@ -157,7 +157,7 @@ function CallControlButton({
 /* ─── Main Screen ─── */
 
 export function TutorRealtimeCallScreen({
-  title = '真人老师',
+  title = '语音同桌',
   contextLabel = '整节课',
   disabled = false,
   instructions,

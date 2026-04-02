@@ -29,5 +29,5 @@
 
 - `PodcastPlayer.tsx` 导出的 `ConfusionMarker` 类型被 `session-store` 引用
 - Dedao 系列组件是得到 App 风格的替代 UI 方案
-- `MobileCollectionSheet.tsx`、`MobileTopBar.tsx`、`MobileRecordTopBar.tsx`、`MobileAIChatHeader.tsx`、`MobileAIChatPanel.tsx` 是 page 拆分模板：适合承接移动端大块条件渲染 UI；其中 AI Chat 头部与面板现在同时承担“聊天页 → 真人老师二级通话页”的动线切换，但不要把业务逻辑和数据获取塞回组件里
-- `DedaoMenu.tsx` 现在承担移动端统一“设置”入口：游客和登录用户都能进 `settings`，个人资料不再单独挂在菜单里
+- `MobileCollectionSheet.tsx`、`MobileTopBar.tsx`、`MobileRecordTopBar.tsx`、`MobileAIChatHeader.tsx`、`MobileAIChatPanel.tsx` 是 page 拆分模板：适合承接移动端大块条件渲染 UI；其中 AI Chat 头部与面板现在同时承担"聊天页 → 语音同桌二级通话页"的动线切换，但不要把业务逻辑和数据获取塞回组件里
+- `DedaoMenu.tsx` 现在承担移动端统一"设置"入口：游客和登录用户都能进 `settings`，个人资料不再单独挂在菜单里

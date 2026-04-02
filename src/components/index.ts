@@ -15,10 +15,6 @@ export { ConversationList, ConversationItem } from './ConversationHistory';
 export { GuidanceQuestion, GuidanceQuestionSkeleton } from './GuidanceQuestion';
 export { Citations, InlineCitation, CitationsSkeleton } from './Citations';
 
-// 精选片段与摘要组件
-export { HighlightsPanel } from './HighlightsPanel';
-export { SummaryPanel } from './SummaryPanel';
-export { NotesPanel, type EditingNote } from './NotesPanel';
 
 // 状态组件
 export { ServiceStatus, DegradedModeBanner } from './ServiceStatus';

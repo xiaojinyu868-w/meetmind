@@ -40,8 +40,8 @@ hooks → stores + types + lib/db + lib/utils
 | 文件 | 行数 | 职责 |
 |------|------|------|
 | `useSession.ts` | 140 | 会话 CRUD（IndexedDB） |
-| `useSummary.ts` | 155 | 课堂摘要生成（调用 API） |
-| `useTopics.ts` | 129 | 精选片段生成（调用 API） |
+| `useSummary.ts` | 155 | 课堂摘要生成（调用 API）— classSummary 仍被 AITutor / WorkshopYellowPage 消费 |
+| `useTopics.ts` | 129 | 精选片段生成（调用 API）— ⚠️ UI 入口已移除，仅后台数据能力保留 |
 | `useTranscript.ts` | 121 | 转录数据请求（调用 API） |
 | `useTutor.ts` | 164 | AI 家教交互（调用 API） |
 
