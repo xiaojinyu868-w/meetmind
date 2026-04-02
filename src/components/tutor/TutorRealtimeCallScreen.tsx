@@ -363,18 +363,14 @@ export function TutorRealtimeCallScreen({
           icon={PhoneOff}
           label="结束通话"
           onClick={() => void (async () => {
-            console.log('[call-exit] capturedText:', capturedText.trim().slice(0, 50), 'assistantText:', assistantText.trim().slice(0, 50));
-            // 先结束当前响应轮次（重置 finalize 标记），再 flush 最终文本
             onAssistantResponseEnd?.();
 
             const pendingUser = capturedText.trim();
             if (pendingUser) {
-              console.log('[call-exit] flushing user:', pendingUser.slice(0, 50));
               onUserTranscript(pendingUser);
             }
             const pendingAssistant = assistantText.trim();
             if (pendingAssistant) {
-              console.log('[call-exit] flushing assistant:', pendingAssistant.slice(0, 50));
               onAssistantTranscriptDone(pendingAssistant);
             }
 

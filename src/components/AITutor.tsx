@@ -1311,13 +1311,10 @@ export function AITutor({
     const trimmed = text.trim();
     if (!trimmed) return;
 
-    console.log('[realtime-flush] userTranscript:', trimmed.slice(0, 50), 'isGlobalMode:', isGlobalMode);
-    if (isGlobalMode) {
-      setGlobalChatHistory((prev) => [...prev, { role: 'user', content: trimmed }]);
-    } else {
-      setChatHistory((prev) => { const next = [...prev, { role: 'user' as const, content: trimmed }]; console.log('[realtime-flush] chatHistory length after user:', next.length); return next; });
-    }
-  }, [isGlobalMode]);
+    // 通话记录同时写入两个 history，确保无论退出后在哪个视图都能看到
+    setGlobalChatHistory((prev) => [...prev, { role: 'user', content: trimmed }]);
+    setChatHistory((prev) => [...prev, { role: 'user', content: trimmed }]);
+  }, []);
 
   const handleRealtimeAssistantStart = useCallback(() => {
     realtimeAssistantFinalizedRef.current = false;
@@ -1335,29 +1332,20 @@ export function AITutor({
   const handleRealtimeAssistantDone = useCallback((text: string) => {
     const trimmed = text.trim();
     if (!trimmed) return;
-    console.log('[realtime-flush] assistantDone:', trimmed.slice(0, 50), 'finalized:', realtimeAssistantFinalizedRef.current, 'isGlobalMode:', isGlobalMode);
     if (realtimeAssistantFinalizedRef.current) return;
 
     realtimeAssistantFinalizedRef.current = true;
-    if (isGlobalMode) {
-      setGlobalChatHistory((prev) => [...prev, { role: 'assistant', content: trimmed }]);
-    } else {
-      setChatHistory((prev) => { const next = [...prev, { role: 'assistant' as const, content: trimmed }]; console.log('[realtime-flush] chatHistory length after assistant:', next.length); return next; });
-    }
+    setGlobalChatHistory((prev) => [...prev, { role: 'assistant', content: trimmed }]);
+    setChatHistory((prev) => [...prev, { role: 'assistant', content: trimmed }]);
     setRealtimeAssistantDraft('');
-  }, [isGlobalMode]);
+  }, []);
 
   const handleRealtimeAssistantEnd = useCallback(() => {
-    console.log('[realtime-flush] assistantEnd, finalized:', realtimeAssistantFinalizedRef.current, 'draftLen:', realtimeAssistantDraftRef.current.length);
     if (!realtimeAssistantFinalizedRef.current) {
       const fallbackText = realtimeAssistantDraftRef.current.trim();
       if (fallbackText) {
-        console.log('[realtime-flush] fallback write:', fallbackText.slice(0, 50));
-        if (isGlobalMode) {
-          setGlobalChatHistory((prev) => [...prev, { role: 'assistant', content: fallbackText }]);
-        } else {
-          setChatHistory((prev) => [...prev, { role: 'assistant', content: fallbackText }]);
-        }
+        setGlobalChatHistory((prev) => [...prev, { role: 'assistant', content: fallbackText }]);
+        setChatHistory((prev) => [...prev, { role: 'assistant', content: fallbackText }]);
       }
     }
 
