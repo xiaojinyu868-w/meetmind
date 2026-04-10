@@ -68,6 +68,8 @@ components/
 | 文件 | 行数 | 职责 |
 |------|------|------|
 | `WorkspaceCaptureList.tsx` | ~900 | 工作空间 capture 列表 |
+| `DesktopVideoReviewLayout.tsx` | ~540 | 桌面端复习布局（视频/音频两种分支），从 page.tsx 提取，内部读 5 个 Zustand store |
+| `WorkspaceCaptureEditorModal.tsx` | ~105 | 工作空间 capture 编辑弹窗，从 page.tsx 提取 |
 | `VideoReviewPlayer.tsx` | 529 | 视频复习播放器 |
 | `SharedWorkspacePanel.tsx` | 46 | shared workspace 统一面板（仅 apps）— 从 `page.tsx` 抽离，已移除 highlights / summary / notes |
 | `ReviewWorkspacePanel.tsx` | 127 | desktop review 左侧工作区面板（tabs / timeline / anchor detail / shared workspace slot） |
@@ -75,6 +77,9 @@ components/
 | `CollectionSelectionBar.tsx` | 94 | 收集上下文多选操作条（问 Tutor / 引用 / 批量归档删除） |
 | `CollectionComposerContextPreview.tsx` | 62 | composer 上方的引用与链接预览条 |
 | `CollectionComposerBar.tsx` | 168 | collection composer 输入区容器（预览 / textarea / 发送 / 听写 / 上传） |
+| `CollectionMessageActionSheet.tsx` | ~283 | 收集消息操作底部菜单（复习/编辑/打开原件/归档/删除），从 page.tsx 提取 |
+| `CollectionFeedMessageBubble.tsx` | ~340 | 收集 Feed 单条消息气泡（audio/video/image/document/text 五种类型），从 page.tsx 提取 |
+| `CollectionEmptyState.tsx` | ~82 | 收集为空时引导页（原声/图片/讲义快捷入口），从 page.tsx 提取 |
 | `ImageUpload.tsx` | ~220 | 图片上传 |
 | `Citations.tsx` | ~140 | 引用标签 |
 | `CitationReferenceSheet.tsx` | ~260 | 引用参考弹窗 |

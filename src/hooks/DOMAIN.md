@@ -10,8 +10,8 @@ hooks → stores + types + lib/db + lib/utils
 
 - ✅ hooks 可以调用 `stores/`, `types/`, `lib/db/`, `lib/utils/`
 - ✅ hooks 可以调用其他 hooks
+- ✅ 从 page.tsx 提取的 hooks 可调用 `lib/services/`（classroomDataService, memoryService, anchorService 等客户端本地服务）
 - ❌ hooks 不能 import `components/`（hooks 被组件调用，不能反向）
-- ❌ hooks 不能 import `lib/services/`（服务端）
 
 ## 文件索引
 
@@ -34,6 +34,29 @@ hooks → stores + types + lib/db + lib/utils
 | `useVoiceInput.ts` | 270 | 语音输入（含 buffered 模式判断） |
 | `useOmniRealtimeCall.ts` | ~400 | Qwen Omni realtime 语音通话（麦克风上行 + 语音下行） |
 | `useWorkshopWindows.ts` | 122 | Workshop 浮窗状态管理 |
+| `useClassCheck.ts` | ~300 | 课堂签到检测（Class Check overlay 逻辑） |
+| `useReviewSession.ts` | 506 | 复习会话恢复（IndexedDB / 服务端转录 → 播放态），从 page.tsx 提取 |
+| `useEchoActions.tsx` | 412 | 回声操作（refreshDailyEcho + 筛选 memo + 手动触发 UI），从 page.tsx 提取 |
+| `useWorkspaceCaptureActions.ts` | ~430 | 工作空间 capture CRUD 操作（新建/编辑/保存/归档/删除等 10 个函数），从 page.tsx 提取 |
+| `useSourceImport.ts` | ~863 | 文件/链接导入管线（handleImportFiles + importVideoLink + importArticleLink + handleVideoImportReady + handleSourceFile* + importComposerVideoLink），从 page.tsx 提取 |
+| `useCollectionComposer.ts` | ~689 | 收集 Composer 完整逻辑（输入/提交/上下文选择/引用/滚动/菜单操作/语音听写），从 page.tsx 提取（Phase 3） |
+| `useCollectionPulse.ts` | ~250 | 收集发酵脉搏（collectionPulse 状态计算 + captureActivitySummary + 自动显隐 effect），从 page.tsx 提取（Phase 3） |
+| `useTutorLauncher.ts` | ~340 | AI 家教启动逻辑（blobToDataUrl + buildTutorLaunchImages + buildTutorPrompt* + openTutor* + applyBatchAction），从 page.tsx 提取（Phase 4） |
+| `useTranscriptIngest.ts` | ~275 | 转录摄入管线（ingestTranscriptSegments 巨型函数：段落合并 + 会话创建 + 视频源设置 + DB 持久化 + 时间线构建），从 page.tsx 提取（Phase 4） |
+| `useRecordingLifecycle.ts` | ~300 | 录音生命周期（persistCaptureToWorkspace + handleRecordingStart + handleRecordingStop），从 page.tsx 提取（Phase 4） |
+| `useTranscriptHandlers.ts` | ~335 | 转录处理器（handleTranscriptUpdate + handleRecordingTranscriptionError + handleTranscriptEnhanced + handleVideoAssistantMessage + handleTranscriptTextUpdate），从 page.tsx 提取（Phase 4） |
+| `useAudioMessagePlayback.ts` | ~130 | 收集流音频播放（stopAudioMessagePlayback + toggleAudioMessagePlayback + cleanup effect），从 page.tsx 提取（Phase 4） |
+| `useCollectionListActions.ts` | ~268 | 收集列表操作适配层（ensureWorkspaceCaptureSourceItem + resolveCollectionListSourceItem + quote/review/toggle/archive/restore/delete/edit/askTutor），从 page.tsx 提取（Phase 5） |
+| `useWechatCaptureImport.ts` | ~243 | 微信收集导入（settleWechatCaptureEntry + wechat fetch effect），从 page.tsx 提取（Phase 5） |
+| `useWorkspaceContextLoader.ts` | ~183 | 工作区上下文加载 + 同步（API 加载 + captures 合并 + captureDrivenPulse 自动过期），从 page.tsx 提取（Phase 5） |
+| `useAnchorActions.ts` | ~175 | 困惑点/锚点 CRUD（handleAnchorMark + handlePlaybackAnchorAdd + handleAnchorSelect + handleResolveAnchor），从 page.tsx 提取（Phase 5） |
+| `useSeekController.ts` | ~125 | 播放跳转 + 时间归一化（normalizeSeekTime + handleVideoSeek + handleUnifiedSeek），从 page.tsx 提取（Phase 5） |
+| `useAppStateRestore.ts` | ~195 | 应用初始化 + 状态持久化（saveAppState + persist effect + init effect），从 page.tsx 提取（Phase 5） |
+| `usePendingRecordedAudio.ts` | ~55 | 待处理录音音频管理（pendingRecordedAudiosRef + resolve/clear），从 page.tsx 提取（Phase 6） |
+| `useNoteActions.ts` | ~65 | 笔记 CRUD（handleAddNote + handleUpdateNote + handleDeleteNote），从 page.tsx 提取（Phase 6） |
+| `useActionItems.ts` | ~105 | 行动项管理（handleActionComplete + handleStartNextAction + handleGenerateSummary + handleActionItemsUpdate），从 page.tsx 提取（Phase 6） |
+| `useExtractTerms.ts` | ~105 | ASR 热词提取 + 实时上下文提示（extractTerms effect + liveASRContextHint memo），从 page.tsx 提取（Phase 6） |
+| `useSourceItemManagement.ts` | ~120 | 源项 CRUD（appendSourceItem + updateSourceItem + appendSupportSource），从 page.tsx 提取（Phase 6） |
 
 ### data/ — API 数据 hooks
 

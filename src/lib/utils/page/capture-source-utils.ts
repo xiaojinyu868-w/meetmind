@@ -199,6 +199,20 @@ export function buildWorkspaceCaptureSourceItem(item: WorkspaceCaptureMessage): 
       : undefined;
   const durationSec =
     typeof metadata?.durationSec === 'number' ? metadata.durationSec : undefined;
+  const bvid =
+    typeof metadata?.bvid === 'string' && metadata.bvid.trim()
+      ? metadata.bvid.trim()
+      : undefined;
+  const cid =
+    typeof metadata?.cid === 'number' ? metadata.cid : undefined;
+  const audioUrl =
+    typeof metadata?.audioUrl === 'string' && metadata.audioUrl.trim()
+      ? metadata.audioUrl.trim()
+      : undefined;
+  const sourceMode =
+    typeof metadata?.sourceMode === 'string' && metadata.sourceMode.trim()
+      ? metadata.sourceMode.trim()
+      : undefined;
   const resolvedText = resolveCaptureSourceFullText({
     type,
     normalizedText: item.normalizedText,
@@ -250,6 +264,10 @@ export function buildWorkspaceCaptureSourceItem(item: WorkspaceCaptureMessage): 
     videoProvider,
     videoImported,
     serverTranscriptSegments,
+    bvid,
+    cid,
+    audioUrl,
+    sourceMode,
   };
 }
 

@@ -39,7 +39,7 @@ export function buildStoredVideoSource(
       originalUrl: session.videoUrl,
       resolvedUrl: session.videoUrl,
       embedUrl: session.videoEmbedUrl,
-      thumbnailUrl: session.thumbnailUrl,
+      thumbnailUrl: session.thumbnailUrl?.replace(/^http:\/\//i, 'https://'),
       title: session.topic,
       durationSec: session.duration ? session.duration / 1000 : undefined,
       sourceMode: session.importSourceMode as ImportedVideoSource['sourceMode'],

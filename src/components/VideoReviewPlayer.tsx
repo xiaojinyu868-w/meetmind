@@ -21,374 +21,218 @@ function isBilibili(source: ImportedVideoSource): boolean {
   return source.provider === 'bilibili';
 }
 
-function buildBilibiliEmbedBaseUrl(source: ImportedVideoSource): string {
-  if (source.embedUrl) {
-    try {
-      const parsed = new URL(source.embedUrl);
-      // 保留后端解析出的 page/cid 参数，并补齐播放器体验参数。
-      const page = parsed.searchParams.get('page');
-      if (page && !parsed.searchParams.get('p')) {
-        parsed.searchParams.set('p', page);
-      }
-      if (source.cid && !parsed.searchParams.get('cid')) {
-        parsed.searchParams.set('cid', String(source.cid));
-      }
-      if (source.bvid && !parsed.searchParams.get('bvid')) {
-        parsed.searchParams.set('bvid', source.bvid);
-      }
-      parsed.searchParams.set('high_quality', '1');
-      parsed.searchParams.set('danmaku', '0');
-      parsed.searchParams.set('autoplay', '0');
-      return parsed.toString();
-    } catch {
-      // ignore and fallback below
-    }
-  }
-
-  const bvid = source.bvid || '';
-  const cidPart = source.cid ? `&cid=${encodeURIComponent(String(source.cid))}` : '';
-  if (bvid) {
-    return `https://player.bilibili.com/player.html?bvid=${encodeURIComponent(bvid)}&p=1${cidPart}&high_quality=1&danmaku=0&autoplay=0`;
-  }
-  return source.embedUrl || '';
+/**
+ * 构建 B站音频代理 URL（通过我们自己的 /api/video/proxy 代理）
+ */
+function buildBiliProxyAudioUrl(source: ImportedVideoSource): string | null {
+  const bvid = source.bvid;
+  if (!bvid) return null;
+  const params = new URLSearchParams({ bvid, type: 'audio' });
+  if (source.cid) params.set('cid', String(source.cid));
+  return `/api/video/proxy?${params.toString()}`;
 }
 
-function withStartTime(url: string, seekToMs: number, seekNonce: number, autoplay: boolean = false): string {
-  try {
-    const safeMs = Math.max(0, Math.floor(seekToMs));
-    const safeSec = Math.floor(safeMs / 1000);
-    const parsed = new URL(url);
-    // Write multiple start parameters for bilibili embed compatibility.
-    parsed.searchParams.set('t', String(safeSec));
-    parsed.searchParams.set('start', String(safeSec));
-    parsed.searchParams.set('start_progress', String(safeMs));
-    parsed.searchParams.set('seek_nonce', String(seekNonce));
-    parsed.searchParams.set('autoplay', autoplay ? '1' : '0');
-    return parsed.toString();
-  } catch {
-    return url;
-  }
+/**
+ * 构建 B站视频代理 URL（Dash 视频流，720p）
+ */
+function buildBiliProxyVideoUrl(source: ImportedVideoSource): string | null {
+  const bvid = source.bvid;
+  if (!bvid) return null;
+  const params = new URLSearchParams({ bvid, type: 'video' });
+  if (source.cid) params.set('cid', String(source.cid));
+  return `/api/video/proxy?${params.toString()}`;
 }
 
 function fmtTime(ms: number): string {
   const seconds = Math.max(0, Math.floor(ms / 1000));
-  return `${Math.floor(seconds / 60)}:${(seconds % 60).toString().padStart(2, '0')}`;
+  const h = Math.floor(seconds / 3600);
+  const m = Math.floor((seconds % 3600) / 60);
+  const s = seconds % 60;
+  if (h > 0) {
+    return `${h}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+  }
+  return `${m}:${s.toString().padStart(2, '0')}`;
+}
+
+function fmtSpeed(speed: number): string {
+  return Number.isInteger(speed) ? `${speed}.0x` : `${speed}x`;
 }
 
 const SPEED_OPTIONS = [0.5, 0.75, 1, 1.25, 1.5, 2] as const;
 
-interface IframeSyncBarProps {
-  seekToMs: number;
-  seekNonce: number;
-  playNonce: number;
+// ─── 原生播放器控制栏 ─────────────────────────────────────────
+
+interface NativePlayerBarProps {
+  playing: boolean;
+  currentTimeMs: number;
   totalDurationMs: number;
-  onTimeUpdate?: (ms: number) => void;
-  audioUrl?: string;
-  onSyncMainVideo?: (timeMs: number, autoPlay?: boolean) => void;
+  speed: number;
+  buffered: number; // 0-1
+  onTogglePlay: () => void;
+  onSeek: (timeMs: number) => void;
+  onSpeedChange: () => void;
+  onToggleFullscreen?: () => void;
+  hasVideo?: boolean;
+  title?: string;
 }
 
-function IframeSyncBar({
-  seekToMs,
-  seekNonce,
-  playNonce,
+function NativePlayerBar({
+  playing,
+  currentTimeMs,
   totalDurationMs,
-  onTimeUpdate,
-  audioUrl,
-  onSyncMainVideo,
-}: IframeSyncBarProps) {
-  const [playing, setPlaying] = useState(false);
-  const [expanded, setExpanded] = useState(false);
-  const [simTime, setSimTime] = useState(seekToMs);
-  const [speed, setSpeed] = useState(1);
-  const [dragging, setDragging] = useState(false);
-  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const simTimeRef = useRef(simTime);
+  speed,
+  buffered,
+  onTogglePlay,
+  onSeek,
+  onSpeedChange,
+  onToggleFullscreen,
+  hasVideo,
+  title,
+}: NativePlayerBarProps) {
   const barRef = useRef<HTMLDivElement>(null);
-  const audioRef = useRef<HTMLAudioElement>(null);
-  const seekNonceRef = useRef<number>(seekNonce);
-  const playNonceRef = useRef<number>(playNonce);
+  const [dragging, setDragging] = useState(false);
+  const dragTimeRef = useRef(currentTimeMs);
 
-  simTimeRef.current = simTime;
-
-  const hasAudio = Boolean(audioUrl);
   const duration = totalDurationMs > 0 ? totalDurationMs : 1;
-  const progress = Math.min(1, Math.max(0, simTime / duration));
-  const normalizedSeekMs = Number.isFinite(seekToMs) ? Math.max(0, seekToMs) : 0;
+  const displayTime = dragging ? dragTimeRef.current : currentTimeMs;
+  const progress = Math.min(1, Math.max(0, displayTime / duration));
 
-  useEffect(() => {
-    if (audioRef.current) {
-      audioRef.current.playbackRate = speed;
-    }
-  }, [speed]);
-
-  useEffect(() => {
-    if (seekNonceRef.current === seekNonce) return;
-    seekNonceRef.current = seekNonce;
-
-    const next = normalizedSeekMs;
-    setSimTime(next);
-    simTimeRef.current = next;
-
-    if (hasAudio && audioRef.current) {
-      try {
-        audioRef.current.currentTime = next / 1000;
-      } catch {
-        // ignore seek errors before metadata is ready
-      }
-    }
-  }, [hasAudio, normalizedSeekMs, seekNonce]);
-
-  useEffect(() => {
-    if (playNonceRef.current === playNonce) return;
-    playNonceRef.current = playNonce;
-
-    if (hasAudio && audioRef.current) {
-      const audio = audioRef.current;
-      try {
-        if (Math.abs(audio.currentTime - normalizedSeekMs / 1000) > 0.2) {
-          audio.currentTime = normalizedSeekMs / 1000;
-        }
-      } catch {
-        // ignore seek errors before metadata is ready
-      }
-      void audio.play().then(() => {
-        setPlaying(true);
-      }).catch(() => {
-        setPlaying(false);
-      });
-      return;
-    }
-
-    setPlaying(true);
-  }, [hasAudio, normalizedSeekMs, playNonce]);
-
-  useEffect(() => {
-    if (intervalRef.current) {
-      clearInterval(intervalRef.current);
-      intervalRef.current = null;
-    }
-
-    if (!hasAudio && playing && !dragging) {
-      const tickMs = 200;
-      intervalRef.current = setInterval(() => {
-        const next = Math.min(simTimeRef.current + tickMs * speed, duration);
-        setSimTime(next);
-        onTimeUpdate?.(next);
-        if (next >= duration) {
-          setPlaying(false);
-        }
-      }, tickMs);
-    }
-
-    return () => {
-      if (intervalRef.current) {
-        clearInterval(intervalRef.current);
-      }
-    };
-  }, [hasAudio, playing, dragging, speed, duration, onTimeUpdate]);
-
-  const seekBarTime = useCallback((nextMs: number) => {
-    const next = Math.max(0, Math.min(nextMs, duration));
-    setSimTime(next);
-    simTimeRef.current = next;
-    onTimeUpdate?.(next);
-
-    if (hasAudio && audioRef.current) {
-      audioRef.current.currentTime = next / 1000;
-    }
-  }, [duration, hasAudio, onTimeUpdate]);
-
-  const togglePlay = useCallback(async () => {
-    if (!hasAudio) {
-      setPlaying((prev) => {
-        if (!prev && simTimeRef.current >= duration) {
-          seekBarTime(0);
-        }
-        return !prev;
-      });
-      return;
-    }
-
-    const audio = audioRef.current;
-    if (!audio) return;
-
-    if (audio.paused) {
-      if (audio.currentTime * 1000 >= duration) {
-        seekBarTime(0);
-      }
-      try {
-        await audio.play();
-        setPlaying(true);
-      } catch {
-        setPlaying(false);
-      }
-    } else {
-      audio.pause();
-      setPlaying(false);
-    }
-  }, [hasAudio, duration, seekBarTime]);
-
-  const cycleSpeed = useCallback(() => {
-    setSpeed((prev) => {
-      const index = SPEED_OPTIONS.indexOf(prev as (typeof SPEED_OPTIONS)[number]);
-      return SPEED_OPTIONS[(index + 1) % SPEED_OPTIONS.length];
-    });
-  }, []);
-
-  const handleBarInteraction = useCallback((clientX: number) => {
+  const seekFromClientX = useCallback((clientX: number) => {
     if (!barRef.current) return;
     const rect = barRef.current.getBoundingClientRect();
     const ratio = Math.min(1, Math.max(0, (clientX - rect.left) / rect.width));
-    seekBarTime(ratio * duration);
-  }, [duration, seekBarTime]);
+    const timeMs = ratio * duration;
+    dragTimeRef.current = timeMs;
+    onSeek(timeMs);
+  }, [duration, onSeek]);
 
-  const handleMouseDown = useCallback((event: React.MouseEvent) => {
-    event.preventDefault();
+  const handleMouseDown = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
     setDragging(true);
-    handleBarInteraction(event.clientX);
+    seekFromClientX(e.clientX);
 
-    const onMove = (moveEvent: MouseEvent) => handleBarInteraction(moveEvent.clientX);
+    const onMove = (ev: MouseEvent) => seekFromClientX(ev.clientX);
     const onUp = () => {
       setDragging(false);
-      // Sync main video after explicit seek to avoid frequent iframe reloads while dragging.
-      onSyncMainVideo?.(simTimeRef.current, playing);
       window.removeEventListener('mousemove', onMove);
       window.removeEventListener('mouseup', onUp);
     };
     window.addEventListener('mousemove', onMove);
     window.addEventListener('mouseup', onUp);
-  }, [handleBarInteraction, onSyncMainVideo, playing]);
+  }, [seekFromClientX]);
 
-  const handleAudioTimeUpdate = useCallback(() => {
-    if (!audioRef.current) return;
-    const nowMs = audioRef.current.currentTime * 1000;
-    setSimTime(nowMs);
-    onTimeUpdate?.(nowMs);
-  }, [onTimeUpdate]);
+  const handleTouchStart = useCallback((e: React.TouchEvent) => {
+    setDragging(true);
+    seekFromClientX(e.touches[0].clientX);
+  }, [seekFromClientX]);
 
-  const statusText = hasAudio
-    ? (playing ? '音轨同步中' : '可播放音轨回放')
-    : (playing ? '字幕同步中' : '仅字幕同步（无音轨）');
+  const handleTouchMove = useCallback((e: React.TouchEvent) => {
+    if (dragging) {
+      seekFromClientX(e.touches[0].clientX);
+    }
+  }, [dragging, seekFromClientX]);
+
+  const handleTouchEnd = useCallback(() => {
+    setDragging(false);
+  }, []);
 
   return (
-    <div className="bg-slate-950/95 border-t border-white/10 select-none">
-      {hasAudio && (
-        <audio
-          ref={audioRef}
-          src={audioUrl}
-          preload="metadata"
-          onLoadedMetadata={() => {
-            if (!audioRef.current) return;
-            try {
-              audioRef.current.currentTime = normalizedSeekMs / 1000;
-            } catch {
-              // ignore
-            }
-          }}
-          onTimeUpdate={handleAudioTimeUpdate}
-          onEnded={() => setPlaying(false)}
-          onPause={() => setPlaying(false)}
-          onPlay={() => setPlaying(true)}
-        />
-      )}
-
-      <div className="px-3 py-2">
-        <div className="flex items-center gap-2">
-          <span className="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium bg-rose-400/15 text-rose-300 border border-rose-300/30 whitespace-nowrap">
-            学习时间轴
-          </span>
-          <span className="hidden sm:inline text-[11px] text-white/60 truncate">
-            点击即播；主视频按需同步
-          </span>
-        </div>
-
-        <div className="mt-2 flex items-center justify-between gap-2">
-          <div className="flex items-center gap-2 min-w-0">
-            {onSyncMainVideo && (
-              <button
-                type="button"
-                onClick={() => onSyncMainVideo(simTimeRef.current, playing)}
-                className="rounded-md border border-white/15 bg-white/5 px-2 py-1 text-[11px] text-white/75 hover:bg-white/10 transition-colors whitespace-nowrap"
-                title="把主视频同步到当前学习时间轴位置（会重载主视频）"
-              >
-                <span className="sm:hidden">同步</span>
-                <span className="hidden sm:inline">同步主视频</span>
-              </button>
-            )}
-            <button
-              onClick={togglePlay}
-              className="flex items-center justify-center w-7 h-7 rounded-full bg-rose-300/20 hover:bg-rose-300/30 transition-colors"
-              title={hasAudio ? '播放或暂停音轨回放' : '开始或暂停字幕同步'}
-            >
-              {playing ? (
-                <svg className="w-3.5 h-3.5 text-rose-200" fill="currentColor" viewBox="0 0 24 24">
-                  <rect x="6" y="4" width="4" height="16" rx="1" />
-                  <rect x="14" y="4" width="4" height="16" rx="1" />
-                </svg>
-              ) : (
-                <svg className="w-3.5 h-3.5 text-rose-200 ml-0.5" fill="currentColor" viewBox="0 0 24 24">
-                  <path d="M8 5v14l11-7z" />
-                </svg>
-              )}
-            </button>
-            <span className="text-[11px] font-mono text-white/75 tabular-nums whitespace-nowrap">
-              {fmtTime(simTime)} / {fmtTime(duration)}
-            </span>
-          </div>
-
-          <button
-            type="button"
-            data-testid="learning-track-toggle"
-            onClick={() => setExpanded((prev) => !prev)}
-            className="rounded-md border border-white/15 bg-white/5 px-2 py-1 text-[11px] text-white/75 hover:bg-white/10 transition-colors whitespace-nowrap"
-            title={expanded ? '收起学习时间轴' : '展开学习时间轴'}
-          >
-            {expanded ? '收起' : '展开'}
-          </button>
+    <div className="select-none bg-black/95">
+      {/* 进度条区域 — 整个宽度可点击/拖动 */}
+      <div
+        ref={barRef}
+        className="relative h-9 cursor-pointer group flex items-center px-3"
+        onMouseDown={handleMouseDown}
+        onTouchStart={handleTouchStart}
+        onTouchMove={handleTouchMove}
+        onTouchEnd={handleTouchEnd}
+      >
+        {/* 轨道容器 — 与 px-3 对齐 */}
+        <div className="relative w-full h-1 bg-white/15 group-hover:h-1.5 transition-all rounded-full">
+          {/* 缓冲进度 */}
+          <div
+            className="absolute left-0 top-0 h-full bg-white/20 rounded-full"
+            style={{ width: `${buffered * 100}%` }}
+          />
+          {/* 已播放进度 */}
+          <div
+            className="absolute left-0 top-0 h-full bg-white rounded-full transition-[width] duration-75"
+            style={{ width: `${progress * 100}%` }}
+          />
+          {/* 拖动头 — 始终可见（移动端没有 hover） */}
+          <div
+            className={`absolute top-1/2 -translate-y-1/2 -translate-x-1/2 rounded-full bg-white transition-all ${
+              dragging ? 'w-4 h-4' : 'w-3 h-3'
+            }`}
+            style={{ left: `${progress * 100}%` }}
+          />
         </div>
       </div>
 
-      {expanded && (
-        <div className="px-3 pb-2" data-testid="learning-track-panel">
-          <div
-            ref={barRef}
-            className="relative h-1.5 bg-white/10 rounded-full cursor-pointer group mb-2"
-            onMouseDown={handleMouseDown}
-          >
-            <div
-              className="absolute left-0 top-0 h-full bg-rose-300 rounded-full transition-[width] duration-100"
-              style={{ width: `${progress * 100}%` }}
-            />
-            <div
-              className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 w-3 h-3 bg-rose-300 rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
-              style={{ left: `${progress * 100}%` }}
-            />
-          </div>
+      {/* 控制按钮行 */}
+      <div className="flex items-center gap-2.5 px-3 pb-2.5 pt-0">
+        {/* 播放/暂停 */}
+        <button
+          type="button"
+          onClick={onTogglePlay}
+          className="flex items-center justify-center w-8 h-8 rounded-full hover:bg-white/10 active:bg-white/15 transition-colors"
+          title={playing ? '暂停' : '播放'}
+        >
+          {playing ? (
+            <svg className="w-4 h-4 text-white" fill="currentColor" viewBox="0 0 24 24">
+              <rect x="6" y="4" width="4" height="16" rx="1" />
+              <rect x="14" y="4" width="4" height="16" rx="1" />
+            </svg>
+          ) : (
+            <svg className="w-4 h-4 text-white ml-0.5" fill="currentColor" viewBox="0 0 24 24">
+              <path d="M8 5v14l11-7z" />
+            </svg>
+          )}
+        </button>
 
-          <div className="flex items-center gap-2">
-            <button
-              onClick={cycleSpeed}
-              className="px-1.5 py-0.5 text-[11px] font-mono rounded bg-white/10 hover:bg-white/20 text-white/70 hover:text-white transition-colors tabular-nums"
-              title="切换播放倍速"
-            >
-              {speed}x
-            </button>
-            <div className="flex-1" />
-            <span
-              className={`text-[10px] px-1.5 py-0.5 rounded-full ${
-                playing
-                  ? 'bg-rose-300/20 text-rose-200'
-                  : 'bg-white/5 text-white/40'
-              } whitespace-nowrap`}
-            >
-              {statusText}
-            </span>
-          </div>
-        </div>
-      )}
+        {/* 时间 */}
+        <span className="text-[12px] font-mono text-white/80 tabular-nums whitespace-nowrap">
+          {fmtTime(displayTime)} / {fmtTime(duration)}
+        </span>
+
+        {/* 标题（中间填充，仅桌面端） */}
+        {title && (
+          <span className="flex-1 min-w-0 text-[12px] text-white/50 truncate hidden sm:block">
+            {title}
+          </span>
+        )}
+
+        <div className="flex-1 sm:hidden" />
+
+        {/* 倍速 */}
+        <button
+          type="button"
+          onClick={onSpeedChange}
+          className="px-2 py-1 text-[12px] font-mono rounded bg-white/10 hover:bg-white/20 active:bg-white/25 text-white/70 hover:text-white transition-colors tabular-nums"
+          title="切换播放倍速"
+        >
+          {fmtSpeed(speed)}
+        </button>
+
+        {/* 全屏 */}
+        {hasVideo && onToggleFullscreen && (
+          <button
+            type="button"
+            onClick={onToggleFullscreen}
+            className="flex items-center justify-center w-8 h-8 rounded hover:bg-white/10 active:bg-white/15 transition-colors"
+            title="全屏"
+          >
+            <svg className="w-4 h-4 text-white/70" fill="none" stroke="currentColor" strokeWidth={1.8} viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 3.75v4.5m0-4.5h4.5m-4.5 0L9 9M3.75 20.25v-4.5m0 4.5h4.5m-4.5 0L9 15M20.25 3.75h-4.5m4.5 0v4.5m0-4.5L15 9m5.25 11.25h-4.5m4.5 0v-4.5m0 4.5L15 15" />
+            </svg>
+          </button>
+        )}
+      </div>
     </div>
   );
 }
+
+// ─── 主播放器组件 ─────────────────────────────────────────
 
 function VideoReviewPlayerComponent({
   source,
@@ -399,112 +243,410 @@ function VideoReviewPlayerComponent({
   onTimeUpdate,
   totalDurationMs = 0,
 }: VideoReviewPlayerProps) {
+  const audioRef = useRef<HTMLAudioElement | null>(null);
   const videoRef = useRef<HTMLVideoElement | null>(null);
-  const [iframeError, setIframeError] = useState(false);
-  const [iframeSrc, setIframeSrc] = useState('');
+  const containerRef = useRef<HTMLDivElement | null>(null);
   const seekNonceRef = useRef(seekNonce);
   const playNonceRef = useRef(playNonce);
 
-  const baseEmbedSrc = useMemo(() => {
-    if (!source) return '';
-    if (isBilibili(source)) return buildBilibiliEmbedBaseUrl(source);
-    return source.embedUrl || '';
+  const [playing, setPlaying] = useState(false);
+  const [currentTimeMs, setCurrentTimeMs] = useState(0);
+  const [speed, setSpeed] = useState(1);
+  const [buffered, setBuffered] = useState(0);
+  const [proxyError, setProxyError] = useState(false);
+  const [audioLoading, setAudioLoading] = useState(false);
+  const [showOverlayControls, setShowOverlayControls] = useState(false);
+  const overlayTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const loadTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // 解析出播放源 URL
+  const { audioSrc, videoSrc, thumbnailUrl } = useMemo(() => {
+    if (!source) return { audioSrc: null, videoSrc: null, thumbnailUrl: null };
+
+    if (isDirectVideo(source)) {
+      return {
+        audioSrc: null,
+        videoSrc: source.playableUrl || null,
+        thumbnailUrl: source.thumbnailUrl || null,
+      };
+    }
+
+    if (isBilibili(source)) {
+      const importedAudio = source.audioUrl || null;
+      const proxyAudio = !importedAudio ? buildBiliProxyAudioUrl(source) : null;
+      const proxyVideo = buildBiliProxyVideoUrl(source);
+
+      return {
+        audioSrc: importedAudio || proxyAudio,
+        videoSrc: proxyVideo,
+        thumbnailUrl: source.thumbnailUrl || null,
+      };
+    }
+
+    return { audioSrc: null, videoSrc: null, thumbnailUrl: source.thumbnailUrl || null };
   }, [source]);
 
-  useEffect(() => {
-    if (!source || isDirectVideo(source)) {
-      setIframeSrc('');
-      setIframeError(false);
-      return;
-    }
-    setIframeError(false);
-    setIframeSrc(withStartTime(baseEmbedSrc, seekToMs, 0));
-  }, [source, baseEmbedSrc]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  useEffect(() => {
-    if (source && isDirectVideo(source) && videoRef.current && seekToMs >= 0) {
-      videoRef.current.currentTime = seekToMs / 1000;
-    }
-  }, [source, seekToMs, seekNonce]);
-
-  useEffect(() => {
-    // Embedded bilibili player cannot be seeked directly; update URL on explicit seek/autoplay requests.
-    if (!source || isDirectVideo(source) || !baseEmbedSrc) {
-      seekNonceRef.current = seekNonce;
-      playNonceRef.current = playNonce;
-      return;
-    }
-    const seekChanged = seekNonceRef.current !== seekNonce;
-    const playChanged = playNonceRef.current !== playNonce;
-    seekNonceRef.current = seekNonce;
-    playNonceRef.current = playNonce;
-    if (!seekChanged && !playChanged) return;
-    setIframeError(false);
-    setIframeSrc(withStartTime(baseEmbedSrc, seekToMs, Date.now(), playChanged));
-  }, [baseEmbedSrc, playNonce, seekNonce, seekToMs, source]);
-
-  const syncMainVideo = useCallback((timeMs: number, autoPlay: boolean = false) => {
-    if (!source || isDirectVideo(source)) return;
-    if (!baseEmbedSrc) return;
-    setIframeSrc(withStartTime(baseEmbedSrc, timeMs, Date.now(), autoPlay));
-  }, [baseEmbedSrc, source]);
-
-  const isEmbed = !!source && !isDirectVideo(source) && !!iframeSrc && !iframeError;
   const effectiveDuration = totalDurationMs > 0
     ? totalDurationMs
     : (source?.durationSec ? source.durationSec * 1000 : 0);
+
+  // B 站 Dash 双轨模式：video（muted 画面）+ audio（声音/进度）同时存在
+  const isDualTrack = isBilibili(source!) && !!videoSrc && !!audioSrc;
+
+  // 主控制媒体：双轨模式下 audio 是进度主源；单轨模式下取 video 或 audio
+  const getMedia = useCallback((): HTMLMediaElement | null => {
+    if (isDualTrack) return audioRef.current;
+    return videoRef.current || audioRef.current;
+  }, [isDualTrack]);
+
+  // 辅助：同时操作 video 和 audio（双轨同步）
+  const forEachMedia = useCallback((fn: (media: HTMLMediaElement) => void) => {
+    if (audioRef.current) fn(audioRef.current);
+    if (isDualTrack && videoRef.current) fn(videoRef.current);
+  }, [isDualTrack]);
+
+  // ── Seek ──
+  useEffect(() => {
+    if (seekNonceRef.current === seekNonce) return;
+    seekNonceRef.current = seekNonce;
+    const timeSec = Math.max(0, seekToMs) / 1000;
+    forEachMedia((media) => {
+      try { media.currentTime = timeSec; } catch { /* ignore */ }
+    });
+    setCurrentTimeMs(Math.max(0, seekToMs));
+  }, [seekToMs, seekNonce, forEachMedia]);
+
+  // ── Play ──
+  useEffect(() => {
+    if (playNonceRef.current === playNonce) return;
+    playNonceRef.current = playNonce;
+    const timeSec = seekToMs / 1000;
+    const media = getMedia();
+    if (media) {
+      try {
+        if (Math.abs(media.currentTime - timeSec) > 0.2) {
+          forEachMedia((m) => { try { m.currentTime = timeSec; } catch { /* ignore */ } });
+        }
+      } catch { /* ignore */ }
+      // 双轨模式：同时播放 video 和 audio
+      if (isDualTrack && videoRef.current) {
+        void videoRef.current.play().catch(() => { /* video 播放失败不影响功能 */ });
+      }
+      void media.play().then(() => setPlaying(true)).catch(() => setPlaying(false));
+    }
+  }, [playNonce, seekToMs, getMedia, forEachMedia, isDualTrack]);
+
+  // ── Speed sync ──
+  useEffect(() => {
+    forEachMedia((media) => { media.playbackRate = speed; });
+  }, [speed, forEachMedia]);
+
+  const togglePlay = useCallback(async () => {
+    const media = getMedia();
+    if (!media) return;
+    if (media.paused) {
+      // 双轨模式：同时播放视频画面
+      if (isDualTrack && videoRef.current) {
+        void videoRef.current.play().catch(() => { /* ignore */ });
+      }
+      try { await media.play(); setPlaying(true); } catch { setPlaying(false); }
+    } else {
+      forEachMedia((m) => m.pause());
+      setPlaying(false);
+    }
+  }, [getMedia, isDualTrack, forEachMedia]);
+
+  const handleSeek = useCallback((timeMs: number) => {
+    const timeSec = Math.max(0, timeMs) / 1000;
+    forEachMedia((media) => { media.currentTime = timeSec; });
+    setCurrentTimeMs(timeMs);
+    onTimeUpdate?.(timeMs);
+  }, [forEachMedia, onTimeUpdate]);
+
+  const cycleSpeed = useCallback(() => {
+    setSpeed((prev) => {
+      const idx = SPEED_OPTIONS.indexOf(prev as (typeof SPEED_OPTIONS)[number]);
+      return SPEED_OPTIONS[(idx + 1) % SPEED_OPTIONS.length];
+    });
+  }, []);
+
+  const toggleFullscreen = useCallback(() => {
+    const container = containerRef.current;
+    if (!container) return;
+    if (document.fullscreenElement) {
+      void document.exitFullscreen();
+    } else {
+      const video = videoRef.current;
+      if (video) {
+        const videoEl = video as HTMLVideoElement & { webkitEnterFullscreen?: () => void };
+        if (videoEl.webkitEnterFullscreen) { videoEl.webkitEnterFullscreen(); return; }
+      }
+      void container.requestFullscreen?.();
+    }
+  }, []);
+
+  // ── 封面区点击：播放/暂停 + 短暂显示控制 overlay ──
+  const handleCoverClick = useCallback(() => {
+    void togglePlay();
+    // 播放后短暂显示暂停指示，2 秒后自动消失
+    setShowOverlayControls(true);
+    if (overlayTimerRef.current) clearTimeout(overlayTimerRef.current);
+    overlayTimerRef.current = setTimeout(() => setShowOverlayControls(false), 1500);
+  }, [togglePlay]);
+
+  // ── Media 事件 ──
+  const handleTimeUpdate = useCallback(() => {
+    const media = getMedia();
+    if (!media) return;
+    const nowMs = media.currentTime * 1000;
+    setCurrentTimeMs(nowMs);
+    onTimeUpdate?.(nowMs);
+    // 双轨同步：以 audio 的时间为准，纠正 video 的漂移（>0.3s 时校准）
+    if (isDualTrack && videoRef.current) {
+      const drift = Math.abs(videoRef.current.currentTime - media.currentTime);
+      if (drift > 0.3) {
+        videoRef.current.currentTime = media.currentTime;
+      }
+    }
+  }, [getMedia, onTimeUpdate, isDualTrack]);
+
+  const handleProgress = useCallback(() => {
+    const media = getMedia();
+    if (!media || !media.buffered.length) return;
+    const dur = media.duration || 1;
+    setBuffered(media.buffered.end(media.buffered.length - 1) / dur);
+  }, [getMedia]);
+
+  const handleEnded = useCallback(() => {
+    forEachMedia((m) => m.pause());
+    setPlaying(false);
+  }, [forEachMedia]);
+  const handlePlay = useCallback(() => setPlaying(true), []);
+  const handlePause = useCallback(() => setPlaying(false), []);
+  const handleAudioError = useCallback(() => {
+    if (loadTimeoutRef.current) { clearTimeout(loadTimeoutRef.current); loadTimeoutRef.current = null; }
+    setAudioLoading(false);
+    setProxyError(true);
+  }, []);
+  const handleAudioCanPlay = useCallback(() => {
+    if (loadTimeoutRef.current) { clearTimeout(loadTimeoutRef.current); loadTimeoutRef.current = null; }
+    setAudioLoading(false);
+  }, []);
+
+  // 音频加载超时保护：src 变更时启动 20 秒计时器
+  useEffect(() => {
+    if (loadTimeoutRef.current) { clearTimeout(loadTimeoutRef.current); loadTimeoutRef.current = null; }
+    if (!audioSrc) { setAudioLoading(false); return; }
+    setAudioLoading(true);
+    loadTimeoutRef.current = setTimeout(() => {
+      setAudioLoading(false);
+      setProxyError(true);
+    }, 20_000);
+    return () => { if (loadTimeoutRef.current) { clearTimeout(loadTimeoutRef.current); loadTimeoutRef.current = null; } };
+  }, [audioSrc]);
 
   if (!source) return null;
 
   const originalUrl = source.resolvedUrl || source.originalUrl;
 
-  if (isDirectVideo(source)) {
+  // ── 直播放视频文件 ──
+  if (isDirectVideo(source) && videoSrc) {
     return (
-      <div className={className} data-testid="video-review-player">
-        <video
-          ref={videoRef}
-          src={source.playableUrl}
-          controls
-          preload="metadata"
-          className="aspect-video w-full bg-black"
-          onTimeUpdate={onTimeUpdate ? (event) => onTimeUpdate((event.target as HTMLVideoElement).currentTime * 1000) : undefined}
-        />
-      </div>
-    );
-  }
-
-  if (isEmbed) {
-    return (
-      <div className={className} data-testid="video-review-player">
-        <div className="relative aspect-video w-full overflow-hidden bg-black">
-          <iframe
-            src={iframeSrc}
-            title={source.title || 'video'}
-            className="absolute inset-0 h-full w-full"
-            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-            allowFullScreen
-            sandbox="allow-scripts allow-same-origin allow-popups allow-forms allow-top-navigation"
-            onError={() => setIframeError(true)}
+      <div ref={containerRef} className={className} data-testid="video-review-player">
+        <div className="relative bg-black rounded-xl overflow-hidden">
+          <video
+            ref={videoRef}
+            src={videoSrc}
+            preload="metadata"
+            playsInline
+            className="aspect-video w-full bg-black"
+            poster={thumbnailUrl || undefined}
+            onTimeUpdate={handleTimeUpdate}
+            onProgress={handleProgress}
+            onEnded={handleEnded}
+            onPlay={handlePlay}
+            onPause={handlePause}
+          />
+          <NativePlayerBar
+            playing={playing}
+            currentTimeMs={currentTimeMs}
+            totalDurationMs={effectiveDuration}
+            speed={speed}
+            buffered={buffered}
+            onTogglePlay={togglePlay}
+            onSeek={handleSeek}
+            onSpeedChange={cycleSpeed}
+            onToggleFullscreen={toggleFullscreen}
+            hasVideo
+            title={source.title}
           />
         </div>
-        {onTimeUpdate && effectiveDuration > 0 && (
-          <IframeSyncBar
-            seekToMs={seekToMs}
-            seekNonce={seekNonce}
-            playNonce={playNonce}
-            totalDurationMs={effectiveDuration}
-            onTimeUpdate={onTimeUpdate}
-            audioUrl={source.audioUrl}
-            onSyncMainVideo={syncMainVideo}
-          />
-        )}
       </div>
     );
   }
 
+  // ── B站视频：原生 <video> + <audio> 双轨 Dash 播放 ──
+  // B站 Dash 格式视频和音频是分离的流，需要同步播放。
+  // 用 <video> 播画面（muted），<audio> 播声音，通过 audio 的 timeupdate 驱动进度。
+  if (isBilibili(source)) {
+    if (videoSrc && audioSrc && !proxyError) {
+      return (
+        <div ref={containerRef} className={className} data-testid="video-review-player">
+          <div className="relative bg-black rounded-xl overflow-hidden">
+            {/* 视频画面：静音播放，由 audio 驱动同步 */}
+            <video
+              ref={videoRef}
+              src={videoSrc}
+              preload="metadata"
+              playsInline
+              muted
+              className="aspect-video w-full bg-black"
+              poster={thumbnailUrl || undefined}
+            />
+
+            {/* 音频：真正的声音源 + 进度源 */}
+            <audio
+              ref={audioRef}
+              src={audioSrc}
+              preload="metadata"
+              onTimeUpdate={handleTimeUpdate}
+              onProgress={handleProgress}
+              onEnded={handleEnded}
+              onPlay={handlePlay}
+              onPause={handlePause}
+              onError={handleAudioError}
+              onCanPlay={handleAudioCanPlay}
+            />
+
+            {audioLoading && (
+              <div className="absolute inset-0 z-40 flex items-center justify-center bg-black/60">
+                <div className="flex flex-col items-center gap-2">
+                  <div className="w-6 h-6 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                  <p className="text-[13px] text-white/70">加载视频中…</p>
+                </div>
+              </div>
+            )}
+
+            <NativePlayerBar
+              playing={playing}
+              currentTimeMs={currentTimeMs}
+              totalDurationMs={effectiveDuration}
+              speed={speed}
+              buffered={buffered}
+              onTogglePlay={togglePlay}
+              onSeek={handleSeek}
+              onSpeedChange={cycleSpeed}
+              onToggleFullscreen={toggleFullscreen}
+              hasVideo
+              title={source.title}
+            />
+          </div>
+        </div>
+      );
+    }
+
+    // fallback：没有代理视频但有音频 → 音频+封面模式
+    if (audioSrc && !proxyError) {
+      return (
+        <div ref={containerRef} className={className} data-testid="video-review-player">
+          <div className="relative bg-black rounded-xl overflow-hidden">
+            <button
+              type="button"
+              onClick={handleCoverClick}
+              className="relative aspect-video w-full bg-black flex items-center justify-center overflow-hidden cursor-pointer border-0 p-0 text-left"
+              aria-label={playing ? '暂停' : '播放'}
+            >
+              {thumbnailUrl ? (
+                <>
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={thumbnailUrl}
+                    alt={source.title || ''}
+                    className="absolute inset-0 w-full h-full object-cover opacity-40 blur-sm"
+                    referrerPolicy="no-referrer"
+                  />
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={thumbnailUrl}
+                    alt={source.title || ''}
+                    className="relative z-10 max-h-full max-w-full object-contain"
+                    referrerPolicy="no-referrer"
+                  />
+                </>
+              ) : (
+                <div className="flex flex-col items-center gap-3">
+                  <div className="flex h-16 w-16 items-center justify-center rounded-full bg-white/10">
+                    <svg className="h-8 w-8 text-white/60" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3" />
+                    </svg>
+                  </div>
+                  <p className="text-[13px] text-white/40">音频回放模式</p>
+                </div>
+              )}
+
+              <div
+                className={`absolute inset-0 z-30 flex items-center justify-center transition-opacity duration-300 ${
+                  !playing || showOverlayControls ? 'opacity-100' : 'opacity-0 pointer-events-none'
+                }`}
+              >
+                <div className="flex h-14 w-14 items-center justify-center rounded-full bg-black/40">
+                  {playing ? (
+                    <svg className="h-7 w-7 text-white" fill="currentColor" viewBox="0 0 24 24">
+                      <rect x="6" y="4" width="4" height="16" rx="1" />
+                      <rect x="14" y="4" width="4" height="16" rx="1" />
+                    </svg>
+                  ) : (
+                    <svg className="h-7 w-7 text-white ml-0.5" fill="currentColor" viewBox="0 0 24 24">
+                      <path d="M8 5v14l11-7z" />
+                    </svg>
+                  )}
+                </div>
+              </div>
+            </button>
+
+            <audio
+              ref={audioRef}
+              src={audioSrc}
+              preload="metadata"
+              onTimeUpdate={handleTimeUpdate}
+              onProgress={handleProgress}
+              onEnded={handleEnded}
+              onPlay={handlePlay}
+              onPause={handlePause}
+              onError={handleAudioError}
+              onCanPlay={handleAudioCanPlay}
+            />
+
+            {audioLoading && (
+              <div className="absolute inset-0 z-40 flex items-center justify-center bg-black/60">
+                <div className="flex flex-col items-center gap-2">
+                  <div className="w-6 h-6 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                  <p className="text-[13px] text-white/70">加载音频中…</p>
+                </div>
+              </div>
+            )}
+
+            <NativePlayerBar
+              playing={playing}
+              currentTimeMs={currentTimeMs}
+              totalDurationMs={effectiveDuration}
+              speed={speed}
+              buffered={buffered}
+              onTogglePlay={togglePlay}
+              onSeek={handleSeek}
+              onSpeedChange={cycleSpeed}
+              title={source.title}
+            />
+          </div>
+        </div>
+      );
+    }
+  }
+
+  // ── 回退：外链打开 ──
   return (
     <div className={className} data-testid="video-review-player">
-      <div className="flex aspect-video w-full flex-col items-center justify-center gap-3 bg-gray-900">
+      <div className="flex aspect-video w-full flex-col items-center justify-center gap-3 rounded-xl bg-black/90">
         <div className="flex h-14 w-14 items-center justify-center rounded-full bg-white/10">
           <svg className="h-7 w-7 text-white/60" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
@@ -523,5 +665,3 @@ function VideoReviewPlayerComponent({
 }
 
 export const VideoReviewPlayer = memo(VideoReviewPlayerComponent);
-
-

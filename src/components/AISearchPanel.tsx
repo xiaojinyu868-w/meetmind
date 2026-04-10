@@ -22,6 +22,7 @@ import {
   ChevronRight,
   RotateCcw,
 } from 'lucide-react';
+import useAuth from '@/lib/hooks/useAuth';
 
 // ─── 类型 ─────────────────────────────────────────────────
 
@@ -38,7 +39,6 @@ interface AISearchPanelProps {
   open: boolean;
   onClose: () => void;
   onNavigateToCapture?: (captureId: string) => void;
-  accessToken: string | null;
   isMobile?: boolean;
 }
 
@@ -181,9 +181,9 @@ export function AISearchPanel({
   open,
   onClose,
   onNavigateToCapture,
-  accessToken,
   isMobile = false,
 }: AISearchPanelProps) {
+  const { accessToken, refreshToken } = useAuth();
   const [query, setQuery] = useState('');
   const [isSearching, setIsSearching] = useState(false);
   const [answer, setAnswer] = useState('');
@@ -248,16 +248,39 @@ export function AISearchPanel({
     const abort = new AbortController();
     abortRef.current = abort;
 
-    try {
-      const response = await fetch('/api/workspace/search', {
+    // 内部函数：执行搜索请求
+    const doSearch = async (token: string): Promise<Response> => {
+      return fetch('/api/workspace/search', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${accessToken}`,
+          Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({ query: trimmedQuery }),
         signal: abort.signal,
       });
+    };
+
+    try {
+      let response = await doSearch(accessToken);
+
+      // 如果 401，尝试刷新 token 后重试一次
+      if (response.status === 401) {
+        const refreshed = await refreshToken();
+        if (!refreshed) {
+          throw new Error('登录已过期，请重新登录');
+        }
+        // refreshToken 成功后 useAuth 会更新 accessToken，
+        // 但由于闭包捕获的是旧值，需要从 localStorage 读取最新的
+        const newToken =
+          typeof window !== 'undefined'
+            ? localStorage.getItem('meetmind_access_token') || localStorage.getItem('auth_token')
+            : null;
+        if (!newToken) {
+          throw new Error('登录已过期，请重新登录');
+        }
+        response = await doSearch(newToken);
+      }
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => null);
@@ -305,7 +328,7 @@ export function AISearchPanel({
     } finally {
       setIsSearching(false);
     }
-  }, [query, accessToken, isSearching]);
+  }, [query, accessToken, isSearching, refreshToken]);
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {

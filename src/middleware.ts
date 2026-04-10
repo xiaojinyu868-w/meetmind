@@ -31,6 +31,7 @@ const PUBLIC_ROUTES = [
   '/api/transcribe-fast',
   '/api/transcribe-turbo',
   '/api/video/import',
+  '/api/video/proxy',
   '/api/sources/ingest',
   '/api/sources/ingest-image',
   '/api/generate-topics',
@@ -38,12 +39,14 @@ const PUBLIC_ROUTES = [
   '/api/apps/plugins',
   '/api/apps/catalog',
   '/api/apps/execute',
+  '/api/class-check/plan',
   '/api/apps/infographic/generate-image',
   '/api/extract-terms',
   '/api/analytics',
   '/api/analytics/stats',
   '/api/feedback',
   '/api/health',
+  '/api/workspace/search',
 ];
 
 const STATIC_PATHS = [

@@ -6,6 +6,7 @@ import { mindmapPlugin } from './mindmap.plugin';
 import { knowledgeCardsPlugin } from './knowledge-cards.plugin';
 import { confusionDrillPlugin } from './confusion-drill.plugin';
 import { reviewPlanPlugin } from './review-plan.plugin';
+import { classCheckPlugin } from './class-check.plugin';
 import { fallbackPlugin } from './fallback.plugin';
 
 export const defaultPlugins: AppPlugin[] = [
@@ -16,6 +17,7 @@ export const defaultPlugins: AppPlugin[] = [
   knowledgeCardsPlugin,
   confusionDrillPlugin,
   reviewPlanPlugin,
+  classCheckPlugin,
   fallbackPlugin,
 ];
 
@@ -27,5 +29,6 @@ export {
   knowledgeCardsPlugin,
   confusionDrillPlugin,
   reviewPlanPlugin,
+  classCheckPlugin,
   fallbackPlugin,
 };

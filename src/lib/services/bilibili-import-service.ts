@@ -243,12 +243,13 @@ export async function resolveBilibiliUrl(rawUrl: string): Promise<BilibiliResolv
 }
 
 export async function fetchViewMeta(bvid: string, page: number): Promise<BilibiliViewMeta> {
+  type PageItem = { page: number; cid: number; duration?: number; part?: string };
   type ViewData = {
     title?: string;
     duration?: number;
     pic?: string;
     cid?: number;
-    pages?: Array<{ page: number; cid: number }>;
+    pages?: PageItem[];
   };
 
   const data = await fetchBiliJson<ViewData>(
@@ -263,13 +264,27 @@ export async function fetchViewMeta(bvid: string, page: number): Promise<Bilibil
     throw new BilibiliImportError('BILI_VIEW_META_FAILED', 'B站视频缺少可用 cid');
   }
 
+  // 多分 P 视频：优先使用分 P 自身的 duration，合集 data.duration 是所有分 P 之和
+  const pageDuration = pageItem?.duration;
+  const effectiveDuration = Number.isFinite(pageDuration) && pageDuration! > 0
+    ? pageDuration!
+    : (Number.isFinite(data.duration) ? Number(data.duration) : undefined);
+
+  // 多分 P 视频：标题拼接 — "合集名 - 分 P 名"
+  const baseTitle = typeof data.title === 'string' ? data.title : undefined;
+  const partName = pageItem?.part && typeof pageItem.part === 'string' ? pageItem.part : undefined;
+  const isMultiPage = pages.length > 1;
+  const title = isMultiPage && baseTitle && partName
+    ? `${baseTitle} - ${partName}`
+    : baseTitle;
+
   return {
     bvid,
     cid,
     page,
-    title: typeof data.title === 'string' ? data.title : undefined,
-    durationSec: Number.isFinite(data.duration) ? Number(data.duration) : undefined,
-    thumbnailUrl: typeof data.pic === 'string' ? data.pic : undefined,
+    title,
+    durationSec: effectiveDuration,
+    thumbnailUrl: typeof data.pic === 'string' ? data.pic.replace(/^http:\/\//i, 'https://') : undefined,
     resolvedUrl: `https://www.bilibili.com/video/${bvid}?p=${page}`,
     embedUrl: `https://player.bilibili.com/player.html?bvid=${encodeURIComponent(bvid)}&page=${page}`,
   };

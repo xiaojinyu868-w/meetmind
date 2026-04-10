@@ -130,8 +130,8 @@ src/
 │   ├── teacher/DOMAIN.md
 │   ├── parent/DOMAIN.md
 │   └── business/DOMAIN.md
-├── hooks/DOMAIN.md       # hooks 索引（含 Omni realtime 通话）
-├── stores/DOMAIN.md      # Zustand 状态
+├── hooks/DOMAIN.md       # hooks 索引（含 Omni realtime 通话 + sourceImport）
+├── stores/DOMAIN.md      # Zustand 状态（7 stores，~89 状态已迁移）
 ├── types/DOMAIN.md       # 共享类型
 └── lib/
     ├── DOMAIN.md         # 库代码总览
@@ -158,7 +158,7 @@ src/
 
 | 文件 | 行数 | 注意 |
 |------|------|------|
-| `src/app/(main)/app/page.tsx` | 8437 | God File，用 `replace_in_file` 精确替换，改前先读 DOMAIN.md |
+| `src/app/(main)/app/page.tsx` | ~2287 | God File（Phase 1: 7 Zustand store + 4 hooks + 4 JSX 组件；Phase 2: useSourceImport -603 行；Phase 3: useCollectionComposer + useCollectionPulse -613 行；Phase 4: useTutorLauncher + useTranscriptIngest + useRecordingLifecycle + useTranscriptHandlers + useAudioMessagePlayback -729 行；Phase 5: useCollectionListActions + useWechatCaptureImport + useWorkspaceContextLoader + useAnchorActions + useSeekController + useAppStateRestore -581 行；Phase 6: useSeekController 消费 + usePendingRecordedAudio + useNoteActions + useActionItems + useExtractTerms + useSourceItemManagement -289 行），用 `replace_in_file` 精确替换，改前先读 DOMAIN.md |
 | `src/components/AITutor.tsx` | 2276 | AI 家教，已拆分语音同桌相关子模块到 `tutor/` |
 | `src/components/Recorder.tsx` | 1694 | 录音组件，已拆分 2 个子模块到 `recorder/` |
 | `src/app/api/video/import/route.ts` | 1209 | 多平台导入管线，已拆分 3 个子模块 |

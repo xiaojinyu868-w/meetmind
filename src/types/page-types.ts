@@ -72,6 +72,14 @@ export interface SourceIngestItem {
   videoImported?: boolean;
   /** 服务端写入的转录 segments（来自 metadataJson.transcriptSegments） */
   serverTranscriptSegments?: Array<{ id?: string; text?: string; startMs?: number; endMs?: number }>;
+  /** B站视频 BV 号（跨端恢复播放用） */
+  bvid?: string;
+  /** B站视频 cid（跨端恢复播放用） */
+  cid?: number;
+  /** 音频播放 URL（跨端恢复播放用，可能来自代理或 CDN） */
+  audioUrl?: string;
+  /** 导入模式（bili-native / yt-dlp / direct 等） */
+  sourceMode?: string;
 }
 
 export interface SupportReferenceItem {

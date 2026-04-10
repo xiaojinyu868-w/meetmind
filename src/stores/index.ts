@@ -53,3 +53,77 @@ export {
   useSessionActions,
 } from './session-store';
 export type { SessionStore } from './session-store';
+
+// Collection Store
+export {
+  useCollectionStore,
+  useSourceItems,
+  useArchivedLocalCollectionItems,
+  useSupportReferences,
+  useCollectionComposerText,
+  useShowCollectionPulsePreview,
+  useCaptureDrivenPulse,
+  useShowScrollToLatest,
+  useIsCollectionContextSelectionMode,
+  useSelectedCollectionContextIds,
+  useSelectedCollectionPrimaryId,
+  useSourceImportError,
+  usePlayingAudioMessageId,
+  useAudioPlaybackState,
+  useWorkspaceCaptureEditor,
+  useIsSavingWorkspaceCaptureEdit,
+  useCollectionActions,
+  useSourceImporting,
+} from './collection-store';
+export type { CollectionStore, AudioPlaybackState } from './collection-store';
+
+// Echo Store
+export {
+  useEchoStore,
+  useWorkspaceEchoes,
+  useWorkspaceCaptures,
+  useSelectedEchoChip,
+  useIsManualEchoRefreshing,
+  useManualEchoDebugNote,
+  useManualEchoFeedback,
+  useSharingEcho,
+  useEchoActions,
+} from './echo-store';
+export type { EchoStore } from './echo-store';
+
+// Mobile AI Store
+export {
+  useMobileAIStore,
+  useMobileAIQuestion,
+  useMobileAIDisplayQuestion,
+  useMobileAILaunchImages,
+  useMobileAILaunchSupportContextText,
+  useMobileAIQuestionNonce,
+  useMobileAIConsumedQuestionNonce,
+  useMobileAIPreferSelectedContext,
+  useMobileAILaunchTarget,
+  useMobileAINewConversationNonce,
+  useMobileAIHasActiveConversation,
+  useMobileAIActions,
+} from './mobile-ai-store';
+export type { MobileAIStore, MobileAILaunchTarget } from './mobile-ai-store';
+
+// Capture Editor Store
+export {
+  useCaptureEditorStore,
+  useSegments,
+  useAnchors,
+  useTimeline,
+  useActionItems,
+  useAudioBlob,
+  useAudioUrl,
+  useVideoSource,
+  useNotes,
+  useConfusionChatAnchor,
+  useVideoInsightItems,
+  useActiveVideoInsightId,
+  useExtractedTermsHint,
+  useRecorderAutoStartSignal,
+  useCaptureEditorActions,
+} from './capture-editor-store';
+export type { CaptureEditorStore } from './capture-editor-store';

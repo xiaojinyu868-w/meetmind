@@ -7,11 +7,11 @@
 ```
 src/
 ├── app/                    # Next.js App Router
-│   ├── (main)/app/         # 主页面（page.tsx 8437 行，God File）
+│   ├── (main)/app/         # 主页面（page.tsx ~4183 行，God File 分解 Phase 3 完成）
 │   └── api/                # 45 个 API 路由 → 见 app/api/DOMAIN.md
 ├── components/             # ~137 个 UI 组件 → 见 components/DOMAIN.md
-├── hooks/                  # 23 个客户端 hooks → 见 hooks/DOMAIN.md
-├── stores/                 # Zustand 状态管理（3 文件） → 见 stores/DOMAIN.md
+├── hooks/                  # 24 个客户端 hooks → 见 hooks/DOMAIN.md
+├── stores/                 # Zustand 状态管理（7 文件，~89 状态） → 见 stores/DOMAIN.md
 ├── types/                  # 共享类型定义（5 文件） → 见 types/DOMAIN.md
 └── lib/                    # 库代码
     ├── services/           # 51 个业务服务 → 见 services/DOMAIN.md

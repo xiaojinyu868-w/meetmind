@@ -27,6 +27,8 @@ interface ReviewWorkspacePanelProps {
   onResolveAnchor: () => void;
   onAddAnchorNote: (text: string, anchorId: string) => void;
   sharedWorkspaceContent: ReactNode;
+  /** 当侧栏已提供 tab 导航时，隐藏面板内的 tab 栏 */
+  hideTabBar?: boolean;
 }
 
 export function ReviewWorkspacePanel({
@@ -49,9 +51,11 @@ export function ReviewWorkspacePanel({
   onResolveAnchor,
   onAddAnchorNote,
   sharedWorkspaceContent,
+  hideTabBar = false,
 }: ReviewWorkspacePanelProps) {
   return (
     <div className="h-full flex flex-col bg-white" style={{ borderRight: '1px solid var(--edu-border-light)' }}>
+      {!hideTabBar && (
       <div
         className="flex items-center gap-1 px-3 py-2.5 border-b overflow-x-auto flex-shrink-0 relative z-10 tab-buttons-container"
         style={{ background: 'var(--edu-bg-soft)', borderColor: 'var(--edu-border-light)' }}
@@ -75,6 +79,7 @@ export function ReviewWorkspacePanel({
           </button>
         ))}
       </div>
+      )}
 
       <div className="flex-1 min-h-0 overflow-hidden">
         {reviewTab === 'timeline' && timelineForView && (
@@ -91,6 +96,28 @@ export function ReviewWorkspacePanel({
             enableWordExplainer={true}
             fullContextText={segments.map((segment) => `[${formatTime(segment.startMs)}] ${segment.text}`).join('\n')}
           />
+        )}
+
+        {reviewTab === 'timeline' && !timelineForView && (
+          <div className="flex h-full flex-col items-center justify-center px-6">
+            <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-[#F7F7F5]">
+              <svg className="h-6 w-6 text-[#A3A39E]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+            </div>
+            <p className="mb-1 text-[13px] font-medium text-[#787774]">这条内容没有时间轴</p>
+            <p className="text-center text-[12px] leading-relaxed text-[#A3A39E]">
+              音频和视频类的内容才会生成时间轴。<br />
+              试试 AI工坊 来和这条内容互动吧。
+            </p>
+            <button
+              type="button"
+              onClick={() => onReviewTabChange('apps')}
+              className="mt-4 rounded-lg bg-[#232322] px-4 py-2 text-[13px] font-medium text-white transition-all hover:bg-[#111111]"
+            >
+              进入 AI工坊
+            </button>
+          </div>
         )}
 
         {reviewTab === 'anchor-detail' && (

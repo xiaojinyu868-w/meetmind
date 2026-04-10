@@ -11,12 +11,14 @@ const SETTINGS_KEYS = {
   AUTO_SAVE: 'settings_auto_save',
   MODEL_PREFERENCE: 'settings_model_preference',
   BILIBILI_COOKIE: 'settings_bilibili_cookie',
+  CLASS_CHECK_ENABLED: 'settings_class_check_enabled',
 };
 
 interface SettingsState {
   autoSave: boolean;
   modelPreference: string;
   bilibiliCookie: string;
+  classCheckEnabled: boolean;
 }
 
 interface ProfileForm {
@@ -34,6 +36,7 @@ const DEFAULT_SETTINGS: SettingsState = {
   autoSave: true,
   modelPreference: 'auto',
   bilibiliCookie: '',
+  classCheckEnabled: false,
 };
 
 const DEFAULT_PROFILE_FORM: ProfileForm = {
@@ -70,16 +73,18 @@ export default function SettingsPage() {
   useEffect(() => {
     const loadSettings = async () => {
       try {
-        const [autoSave, modelPreference, bilibiliCookie] = await Promise.all([
+        const [autoSave, modelPreference, bilibiliCookie, classCheckEnabled] = await Promise.all([
           getPreference(SETTINGS_KEYS.AUTO_SAVE, DEFAULT_SETTINGS.autoSave),
           getPreference(SETTINGS_KEYS.MODEL_PREFERENCE, DEFAULT_SETTINGS.modelPreference),
           getPreference(SETTINGS_KEYS.BILIBILI_COOKIE, DEFAULT_SETTINGS.bilibiliCookie),
+          getPreference(SETTINGS_KEYS.CLASS_CHECK_ENABLED, DEFAULT_SETTINGS.classCheckEnabled),
         ]);
 
         setSettings({
           autoSave,
           modelPreference,
           bilibiliCookie,
+          classCheckEnabled,
         });
       } finally {
         setLoading(false);
@@ -107,6 +112,7 @@ export default function SettingsPage() {
       autoSave: SETTINGS_KEYS.AUTO_SAVE,
       modelPreference: SETTINGS_KEYS.MODEL_PREFERENCE,
       bilibiliCookie: SETTINGS_KEYS.BILIBILI_COOKIE,
+      classCheckEnabled: SETTINGS_KEYS.CLASS_CHECK_ENABLED,
     };
 
     setSavingSetting(true);
@@ -281,6 +287,16 @@ export default function SettingsPage() {
               disabled={savingSetting}
               onChange={(checked) => updateSetting('autoSave', checked)}
             />
+            <GroupDivider />
+            <ToggleRow
+              label="随堂检验"
+              checked={settings.classCheckEnabled}
+              disabled={savingSetting}
+              onChange={(checked) => updateSetting('classCheckEnabled', checked)}
+            />
+            <div className="px-4 pb-3 text-[12px] text-[#A3A39E]">
+              开启后，播放视频或音频时 AI 会在合适的节点自动暂停并出题，检验是否真正听懂
+            </div>
           </SettingGroup>
         </div>
 
