@@ -31,6 +31,8 @@ interface VideoInsightTimelineProps {
   onTriggerCheckpoint?: (checkpointIndex: number) => void;
   /** 当前播放进度（ms），用于显示进度指针 */
   currentTimeMs?: number;
+  /** LLM plan 正在加载中 */
+  isPlanLoading?: boolean;
 }
 
 function clampPct(value: number): number {
@@ -80,6 +82,50 @@ function StatusBadge({ status }: { status: string }) {
 /** 测验检查点颜色 — 区别于高光片段的紫/绿/蓝色调 */
 const CHECKPOINT_COLOR = '#E67E22';
 
+// ── Shimmer 骨架屏动画 ──
+function InsightSkeleton() {
+  return (
+    <div className="animate-pulse">
+      {/* 时间轴骨架 */}
+      <div className="py-2">
+        <div className="relative" style={{ height: 40 }}>
+          <div className="absolute inset-x-0 top-1/2 -translate-y-1/2 h-[6px] rounded-full bg-[#F0F0EE]" />
+          {[18, 38, 62, 80].map((left) => (
+            <div
+              key={left}
+              className="absolute top-1/2 -translate-y-1/2 rounded-full"
+              style={{
+                left: `${left}%`,
+                width: '8%',
+                height: 8,
+                backgroundColor: '#E9E9E7',
+                opacity: 0.6,
+              }}
+            />
+          ))}
+        </div>
+        <div className="flex items-center justify-between mt-1">
+          <div className="h-3 w-8 rounded bg-[#F0F0EE]" />
+          <div className="h-3 w-8 rounded bg-[#F0F0EE]" />
+        </div>
+      </div>
+      {/* 章节行骨架 */}
+      <div className="pt-1 space-y-0.5">
+        {[0, 1, 2, 3, 4].map((i) => (
+          <div key={i} className="flex items-center gap-3 px-1 py-2">
+            <div className="w-2.5 h-2.5 rounded-full bg-[#E9E9E7]" />
+            <div className="flex-1 h-3.5 rounded bg-[#F0F0EE]" style={{ width: `${60 + i * 6}%` }} />
+            <div className="h-3 w-10 rounded bg-[#F7F7F5]" />
+          </div>
+        ))}
+      </div>
+      <p className="text-center text-[12px] text-[#A3A39E] pt-2">
+        AI 正在分析课堂内容…
+      </p>
+    </div>
+  );
+}
+
 function VideoInsightTimelineComponent({
   items,
   activeItemId,
@@ -89,10 +135,17 @@ function VideoInsightTimelineComponent({
   onSeek,
   onTriggerCheckpoint,
   currentTimeMs = 0,
+  isPlanLoading = false,
 }: VideoInsightTimelineProps) {
   // 分类
   const highlights = useMemo(() => items.filter((i) => i.kind !== 'checkpoint'), [items]);
   const checkpoints = useMemo(() => items.filter((i) => i.kind === 'checkpoint'), [items]);
+
+  // 只有 seed 项（或空）且正在加载 → 展示骨架屏
+  const hasRealItems = items.some((i) => !i.id.startsWith('seed-'));
+  if (!hasRealItems && isPlanLoading) {
+    return <InsightSkeleton />;
+  }
 
   if (items.length === 0) {
     return (
@@ -115,11 +168,11 @@ function VideoInsightTimelineComponent({
   const progressPct = clampPct((currentTimeMs / dur) * 100);
 
   return (
-    <div className="space-y-3">
+    <div>
       {/* ── 可视化时间轴 ── */}
-      <div className="rounded-2xl border border-[#E9E9E7] bg-white p-4">
+      <div className="py-3">
         {/* 时间轴 track */}
-        <div className="relative" style={{ height: 40 }}>
+        <div className="relative" style={{ height: 44 }}>
           {/* 底部背景轨道 */}
           <div className="absolute inset-x-0 top-1/2 -translate-y-1/2 h-[6px] rounded-full bg-[#F0F0EE]" />
 
@@ -226,19 +279,54 @@ function VideoInsightTimelineComponent({
         </div>
 
         {/* 时间刻度 */}
-        <div className="flex items-center justify-between mt-1 text-[11px] text-[#A3A39E] tabular-nums select-none">
+        <div className="flex items-center justify-between mt-2 text-[11px] text-[#A3A39E] tabular-nums select-none">
           <span>00:00</span>
           <span>{formatTime(dur)}</span>
         </div>
       </div>
 
-      {/* ── 检查点卡片（优先显示） ── */}
+      {/* ── 紧凑章节列表（Longcut 风格） ── */}
+      {/* 高光片段 */}
+      {highlights.filter(h => !h.id.startsWith('seed-')).length > 0 && (
+        <div className="pt-2">
+          {highlights.filter(h => !h.id.startsWith('seed-')).map((item) => {
+            const isActive = item.id === activeItem?.id;
+            const startMs = item.timestamps[0] ?? 0;
+            const hasRange = typeof item.endMs === 'number' && item.endMs > startMs;
+
+            return (
+              <button
+                key={item.id}
+                type="button"
+                onClick={() => { onSelectItem(item.id); onSeek(startMs); }}
+                className={`group w-full flex items-center gap-3 px-2 py-2.5 text-left transition-colors rounded-lg ${
+                  isActive ? 'bg-[#F7F7F5]' : 'hover:bg-[#F7F7F5]/60'
+                }`}
+              >
+                <span
+                  className="w-2.5 h-2.5 rounded-full shrink-0"
+                  style={{ backgroundColor: item.color, opacity: isActive ? 1 : 0.5 }}
+                />
+                <span className={`flex-1 min-w-0 text-[13px] leading-snug truncate ${
+                  isActive ? 'text-[#232322] font-medium' : 'text-[#787774]'
+                }`}>
+                  {item.prompt}
+                </span>
+                <span className="shrink-0 text-[12px] tabular-nums text-[#A3A39E]">
+                  {hasRange ? `${formatTime(startMs)}` : formatTime(startMs)}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      )}
+
+      {/* 测验检查点 */}
       {checkpoints.length > 0 && (
-        <div className="space-y-1.5">
-          <div className="flex items-center gap-1.5 px-1">
-            <CheckpointFlag color={CHECKPOINT_COLOR} size={13} />
-            <span className="text-[12px] font-medium text-[#787774]">知识检查点</span>
-            <span className="text-[11px] text-[#A3A39E]">{checkpoints.length} 个</span>
+        <div className={`${highlights.filter(h => !h.id.startsWith('seed-')).length > 0 ? 'border-t border-[#E9E9E7] mt-2 pt-2' : 'pt-2'}`}>
+          <div className="flex items-center gap-1.5 px-2 py-2">
+            <CheckpointFlag color={CHECKPOINT_COLOR} size={12} />
+            <span className="text-[11px] font-medium text-[#A3A39E] uppercase tracking-wide">检查点</span>
           </div>
           {checkpoints.map((cp) => {
             const isActive = cp.id === activeItem?.id;
@@ -255,31 +343,27 @@ function VideoInsightTimelineComponent({
                   onSelectItem(cp.id);
                   if (canTrigger) {
                     onTriggerCheckpoint!(cp.checkpointIndex!);
+                  } else {
+                    onSeek(triggerMs);
                   }
                 }}
-                className={`group w-full text-left rounded-2xl transition-colors overflow-hidden ${
-                  isActive
-                    ? 'bg-amber-50/80 border border-amber-200'
-                    : 'bg-white border border-[#E9E9E7] hover:border-amber-300 hover:bg-amber-50/30'
+                className={`group w-full flex items-center gap-3 px-2 py-2.5 text-left transition-colors rounded-lg ${
+                  isActive ? 'bg-[#F7F7F5]' : 'hover:bg-[#F7F7F5]/60'
                 }`}
               >
-                <div className="px-3.5 py-3">
-                  <div className="flex items-center gap-2">
-                    <CheckpointFlag color={CHECKPOINT_COLOR} size={15} completed={isCompleted} />
-                    <span className="text-[13px] font-medium text-[#232322] leading-snug truncate flex-1">{cp.prompt}</span>
-                    <StatusBadge status={cp.checkpointStatus || 'pending'} />
-                  </div>
-                  {cp.summary && (
-                    <p className="mt-1.5 text-xs text-[#787774] line-clamp-1 leading-relaxed pl-[23px]">{cp.summary}</p>
+                <CheckpointFlag color={CHECKPOINT_COLOR} size={13} completed={isCompleted} />
+                <span className={`flex-1 min-w-0 text-[13px] leading-snug truncate ${
+                  isActive ? 'text-[#232322] font-medium' : 'text-[#787774]'
+                }`}>
+                  {cp.prompt}
+                </span>
+                <div className="shrink-0 flex items-center gap-2">
+                  {canTrigger && (
+                    <span className="text-[11px] text-amber-600 opacity-0 group-hover:opacity-100 transition-opacity">
+                      检验 →
+                    </span>
                   )}
-                  <div className="mt-1.5 pl-[23px] flex items-center gap-2">
-                    <span className="text-[11px] tabular-nums text-[#A3A39E]">{formatTime(triggerMs)}</span>
-                    {canTrigger && (
-                      <span className="text-[11px] font-medium text-amber-600 group-hover:text-amber-700">
-                        点击检验 →
-                      </span>
-                    )}
-                  </div>
+                  <StatusBadge status={cp.checkpointStatus || 'pending'} />
                 </div>
               </button>
             );
@@ -287,79 +371,11 @@ function VideoInsightTimelineComponent({
         </div>
       )}
 
-      {/* ── 高光片段卡片 ── */}
-      {highlights.length > 0 && highlights.some(h => !h.id.startsWith('seed-')) && (
-        <div className="space-y-1.5">
-          {checkpoints.length > 0 && (
-            <div className="flex items-center gap-1.5 px-1 mt-1">
-              <span className="h-2.5 w-2.5 rounded-sm" style={{ backgroundColor: highlights[0]?.color || '#B48EFA' }} />
-              <span className="text-[12px] font-medium text-[#787774]">精选片段</span>
-              <span className="text-[11px] text-[#A3A39E]">{highlights.filter(h => !h.id.startsWith('seed-')).length} 个</span>
-            </div>
-          )}
-          {highlights.filter(h => !h.id.startsWith('seed-')).map((item, index) => {
-            const isActive = item.id === activeItem?.id;
-            const hasRange = typeof item.endMs === 'number' && item.endMs > (item.timestamps[0] ?? 0);
-            const startMs = item.timestamps[0] ?? 0;
-
-            return (
-              <button
-                key={item.id}
-                type="button"
-                onClick={() => { onSelectItem(item.id); onSeek(startMs); }}
-                className={`group w-full text-left rounded-2xl transition-colors overflow-hidden ${
-                  isActive ? 'bg-[#F7F7F5]' : 'bg-white hover:bg-[#F7F7F5]/60'
-                }`}
-              >
-                <div className="flex">
-                  <div
-                    className="w-1 shrink-0 rounded-l-2xl"
-                    style={{ backgroundColor: item.color, opacity: isActive ? 1 : 0.4 }}
-                  />
-                  <div className="flex-1 min-w-0 px-3 py-2.5">
-                    <div className="flex items-center gap-2">
-                      <span
-                        className="flex h-[18px] min-w-[18px] shrink-0 items-center justify-center rounded-[5px] px-1 text-[10px] font-bold text-white leading-none"
-                        style={{ backgroundColor: item.color }}
-                      >
-                        {index + 1}
-                      </span>
-                      <span className="text-[13px] font-medium text-[#232322] leading-snug truncate">{item.prompt}</span>
-                    </div>
-                    {item.summary && (
-                      <p className="mt-1 text-xs text-[#787774] line-clamp-2 leading-relaxed pl-[26px]">{item.summary}</p>
-                    )}
-                    <div className="mt-1.5 pl-[26px] flex flex-wrap gap-1.5">
-                      {hasRange ? (
-                        <span
-                          onClick={(e) => { e.stopPropagation(); onSeek(startMs); }}
-                          className="inline-flex items-center gap-1 rounded-lg border border-[#E9E9E7] bg-white px-2 py-[3px] text-[11px] tabular-nums text-[#787774] transition-colors hover:border-[#232322] hover:text-[#232322] cursor-pointer select-none"
-                        >
-                          <svg width="10" height="10" viewBox="0 0 16 16" fill="currentColor" className="shrink-0 opacity-50">
-                            <polygon points="4,2 14,8 4,14" />
-                          </svg>
-                          {formatTime(startMs)}
-                          <span className="text-[#A3A39E]">–</span>
-                          {formatTime(item.endMs!)}
-                        </span>
-                      ) : (
-                        item.timestamps.map((timeMs, tIndex) => (
-                          <span
-                            key={`${item.id}-chip-${timeMs}-${tIndex}`}
-                            onClick={(e) => { e.stopPropagation(); onSeek(timeMs); }}
-                            className="inline-flex items-center gap-1 rounded-lg border border-[#E9E9E7] bg-white px-2 py-[3px] text-[11px] tabular-nums text-[#787774] transition-colors hover:border-[#232322] hover:text-[#232322] cursor-pointer select-none"
-                          >
-                            {formatTime(timeMs)}
-                          </span>
-                        ))
-                      )}
-                    </div>
-                  </div>
-                </div>
-              </button>
-            );
-          })}
-        </div>
+      {/* 加载中提示 */}
+      {isPlanLoading && !hasRealItems && (
+        <p className="text-center text-[12px] text-[#A3A39E] py-3">
+          AI 正在分析课堂内容…
+        </p>
       )}
     </div>
   );

@@ -9,7 +9,11 @@ interface VideoReviewPlayerProps {
   seekToMs?: number;
   seekNonce?: number;
   playNonce?: number;
+  /** 递增此值命令播放器暂停（与 playNonce 对称） */
+  pauseNonce?: number;
   onTimeUpdate?: (currentTimeMs: number) => void;
+  /** 播放/暂停状态变化回调 — 同步给父组件以驱动 classCheck 等依赖 isPlaying 的逻辑 */
+  onPlayingChange?: (isPlaying: boolean) => void;
   totalDurationMs?: number;
 }
 
@@ -232,6 +236,34 @@ function NativePlayerBar({
   );
 }
 
+// ─── 点击画面时的播放/暂停动画指示器（像 YouTube/B站） ────────
+
+function PlayPauseIndicator({ action }: { action: 'play' | 'pause' | null }) {
+  if (!action) return null;
+  return (
+    <div
+      key={action + Date.now()}
+      className="absolute inset-0 z-30 flex items-center justify-center pointer-events-none"
+      style={{ animation: 'vp-indicator 0.45s ease-out forwards' }}
+    >
+      <div className="flex h-16 w-16 items-center justify-center rounded-full bg-black/50">
+        {action === 'pause' ? (
+          <svg className="h-8 w-8 text-white" fill="currentColor" viewBox="0 0 24 24">
+            <rect x="6" y="4" width="4" height="16" rx="1" />
+            <rect x="14" y="4" width="4" height="16" rx="1" />
+          </svg>
+        ) : (
+          <svg className="h-8 w-8 text-white ml-1" fill="currentColor" viewBox="0 0 24 24">
+            <path d="M8 5v14l11-7z" />
+          </svg>
+        )}
+      </div>
+    </div>
+  );
+}
+
+const INDICATOR_CSS = `@keyframes vp-indicator { 0% { opacity:0.9; transform:scale(0.85); } 100% { opacity:0; transform:scale(1.15); } }`;
+
 // ─── 主播放器组件 ─────────────────────────────────────────
 
 function VideoReviewPlayerComponent({
@@ -240,7 +272,9 @@ function VideoReviewPlayerComponent({
   seekToMs = 0,
   seekNonce = 0,
   playNonce = 0,
+  pauseNonce = 0,
   onTimeUpdate,
+  onPlayingChange,
   totalDurationMs = 0,
 }: VideoReviewPlayerProps) {
   const audioRef = useRef<HTMLAudioElement | null>(null);
@@ -248,6 +282,7 @@ function VideoReviewPlayerComponent({
   const containerRef = useRef<HTMLDivElement | null>(null);
   const seekNonceRef = useRef(seekNonce);
   const playNonceRef = useRef(playNonce);
+  const pauseNonceRef = useRef(pauseNonce);
 
   const [playing, setPlaying] = useState(false);
   const [currentTimeMs, setCurrentTimeMs] = useState(0);
@@ -256,8 +291,24 @@ function VideoReviewPlayerComponent({
   const [proxyError, setProxyError] = useState(false);
   const [audioLoading, setAudioLoading] = useState(false);
   const [showOverlayControls, setShowOverlayControls] = useState(false);
+  const [isBuffering, setIsBuffering] = useState(false);
   const overlayTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const loadTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  /** 用于检测隐性卡顿（playing=true 但 currentTime 不动） */
+  const stallCheckRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const lastProgressTimeRef = useRef(0);
+
+  // 点击画面时的瞬态指示器
+  const [indicator, setIndicator] = useState<{ action: 'play' | 'pause'; key: number } | null>(null);
+  const indicatorTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // 倍速 ref（用于 visibilitychange 恢复）
+  const speedRef = useRef(speed);
+  speedRef.current = speed;
+
+  // playing ref（用于 keyboard handler 等闭包场景）
+  const playingRef = useRef(playing);
+  playingRef.current = playing;
 
   // 解析出播放源 URL
   const { audioSrc, videoSrc, thumbnailUrl } = useMemo(() => {
@@ -283,7 +334,15 @@ function VideoReviewPlayerComponent({
       };
     }
 
-    return { audioSrc: null, videoSrc: null, thumbnailUrl: source.thumbnailUrl || null };
+    // 通用 provider（youtube / douyin / generic 等）：
+    // 尝试用 playableUrl 作为 video 源，audioUrl 作为 audio 源
+    const genericVideo = source.playableUrl || null;
+    const genericAudio = source.audioUrl || null;
+    return {
+      audioSrc: genericAudio,
+      videoSrc: genericVideo,
+      thumbnailUrl: source.thumbnailUrl || null,
+    };
   }, [source]);
 
   const effectiveDuration = totalDurationMs > 0
@@ -304,6 +363,14 @@ function VideoReviewPlayerComponent({
     if (audioRef.current) fn(audioRef.current);
     if (isDualTrack && videoRef.current) fn(videoRef.current);
   }, [isDualTrack]);
+
+  // ── Pause（外部命令式暂停，与 playNonce 对称） ──
+  useEffect(() => {
+    if (pauseNonceRef.current === pauseNonce) return;
+    pauseNonceRef.current = pauseNonce;
+    forEachMedia((m) => m.pause());
+    setPlaying(false);
+  }, [pauseNonce, forEachMedia]);
 
   // ── Seek ──
   useEffect(() => {
@@ -340,6 +407,62 @@ function VideoReviewPlayerComponent({
   useEffect(() => {
     forEachMedia((media) => { media.playbackRate = speed; });
   }, [speed, forEachMedia]);
+
+  // ── visibilitychange：页面回来后强制恢复播放状态 ──
+  // 浏览器会在页面切到后台时节流/暂停媒体播放，回到前台时内部状态可能不一致
+  // （paused=false 但实际已停滞、playbackRate 被重置、双轨脱节）。
+  // 策略：回到前台时如果之前在播放，执行 pause→play 硬恢复循环。
+  useEffect(() => {
+    const handleVisibility = () => {
+      if (document.visibilityState !== 'visible') return;
+      const wasPlaying = playingRef.current;
+      const targetSpeed = speedRef.current;
+
+      // 延迟让浏览器完成页面恢复
+      setTimeout(() => {
+        if (!wasPlaying) {
+          // 之前就是暂停的，只需恢复倍速
+          forEachMedia((m) => {
+            if (Math.abs(m.playbackRate - targetSpeed) > 0.01) {
+              m.playbackRate = targetSpeed;
+            }
+          });
+          return;
+        }
+
+        // 之前在播放 → 硬恢复：pause → 同步时间 → 恢复倍速 → play
+        forEachMedia((m) => m.pause());
+
+        setTimeout(() => {
+          // 双轨模式：以 audio 为基准同步 video
+          if (isDualTrack && videoRef.current && audioRef.current) {
+            videoRef.current.currentTime = audioRef.current.currentTime;
+          }
+
+          // 恢复倍速
+          forEachMedia((m) => {
+            m.playbackRate = targetSpeed;
+          });
+
+          // 重新播放
+          const media = isDualTrack ? audioRef.current : (videoRef.current || audioRef.current);
+          if (!media) return;
+
+          if (isDualTrack && videoRef.current) {
+            void videoRef.current.play().catch(() => { /* ignore */ });
+          }
+          void media.play().then(() => {
+            setPlaying(true);
+          }).catch(() => {
+            // 自动播放被拒绝（罕见，通常用户交互过就不会）
+            setPlaying(false);
+          });
+        }, 50);
+      }, 150);
+    };
+    document.addEventListener('visibilitychange', handleVisibility);
+    return () => document.removeEventListener('visibilitychange', handleVisibility);
+  }, [forEachMedia, isDualTrack]);
 
   const togglePlay = useCallback(async () => {
     const media = getMedia();
@@ -385,14 +508,65 @@ function VideoReviewPlayerComponent({
     }
   }, []);
 
+  // ── 点击视频画面：暂停/播放 + 瞬态指示器（像 YouTube/B站） ──
+  const handleVideoAreaClick = useCallback(() => {
+    const wasPaused = getMedia()?.paused ?? true;
+    void togglePlay();
+    // 显示瞬态播放/暂停指示器
+    setIndicator({ action: wasPaused ? 'play' : 'pause', key: Date.now() });
+    if (indicatorTimerRef.current) clearTimeout(indicatorTimerRef.current);
+    indicatorTimerRef.current = setTimeout(() => setIndicator(null), 500);
+  }, [getMedia, togglePlay]);
+
   // ── 封面区点击：播放/暂停 + 短暂显示控制 overlay ──
   const handleCoverClick = useCallback(() => {
     void togglePlay();
-    // 播放后短暂显示暂停指示，2 秒后自动消失
     setShowOverlayControls(true);
     if (overlayTimerRef.current) clearTimeout(overlayTimerRef.current);
     overlayTimerRef.current = setTimeout(() => setShowOverlayControls(false), 1500);
   }, [togglePlay]);
+
+  // ── 键盘快捷键 ──
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // 仅在播放器容器内或 body focus 时响应，避免干扰输入框
+      const tag = (e.target as HTMLElement)?.tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || (e.target as HTMLElement)?.isContentEditable) return;
+
+      switch (e.key) {
+        case ' ':
+        case 'k': // YouTube 风格
+          e.preventDefault();
+          void togglePlay();
+          break;
+        case 'ArrowLeft': {
+          e.preventDefault();
+          const media = getMedia();
+          if (media) {
+            const newTime = Math.max(0, (media.currentTime - 5)) * 1000;
+            handleSeek(newTime);
+          }
+          break;
+        }
+        case 'ArrowRight': {
+          e.preventDefault();
+          const media = getMedia();
+          if (media) {
+            const dur = media.duration || Infinity;
+            const newTime = Math.min(dur, media.currentTime + 5) * 1000;
+            handleSeek(newTime);
+          }
+          break;
+        }
+        case 'f':
+          e.preventDefault();
+          toggleFullscreen();
+          break;
+      }
+    };
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [togglePlay, getMedia, handleSeek, toggleFullscreen]);
 
   // ── Media 事件 ──
   const handleTimeUpdate = useCallback(() => {
@@ -401,6 +575,8 @@ function VideoReviewPlayerComponent({
     const nowMs = media.currentTime * 1000;
     setCurrentTimeMs(nowMs);
     onTimeUpdate?.(nowMs);
+    // 更新最后进度时间戳（用于隐性卡顿检测）
+    lastProgressTimeRef.current = Date.now();
     // 双轨同步：以 audio 的时间为准，纠正 video 的漂移（>0.3s 时校准）
     if (isDualTrack && videoRef.current) {
       const drift = Math.abs(videoRef.current.currentTime - media.currentTime);
@@ -421,8 +597,105 @@ function VideoReviewPlayerComponent({
     forEachMedia((m) => m.pause());
     setPlaying(false);
   }, [forEachMedia]);
-  const handlePlay = useCallback(() => setPlaying(true), []);
-  const handlePause = useCallback(() => setPlaying(false), []);
+  const handlePlay = useCallback(() => { setPlaying(true); onPlayingChange?.(true); }, [onPlayingChange]);
+  const handlePause = useCallback(() => { setPlaying(false); onPlayingChange?.(false); }, [onPlayingChange]);
+
+  // ── 缓冲/卡顿处理 ──────────────────────────────────────
+  // 浏览器在缓冲不足时会触发 'waiting' 事件，缓冲恢复后触发 'playing'。
+  // 双轨模式下 audio stall 时要协调暂停 video，恢复后同步重启。
+
+  const handleWaiting = useCallback(() => {
+    setIsBuffering(true);
+    // 双轨模式：audio 卡住时暂停 video，避免画面和声音脱节
+    if (isDualTrack && videoRef.current && !videoRef.current.paused) {
+      videoRef.current.pause();
+    }
+  }, [isDualTrack]);
+
+  const handlePlaying = useCallback(() => {
+    setIsBuffering(false);
+    // 缓冲恢复后确保倍速正确（某些浏览器 stall 后会重置 playbackRate）
+    const targetSpeed = speedRef.current;
+    forEachMedia((m) => {
+      if (Math.abs(m.playbackRate - targetSpeed) > 0.01) {
+        m.playbackRate = targetSpeed;
+      }
+    });
+    // 双轨模式：audio 恢复后重启 video 并同步时间
+    if (isDualTrack && videoRef.current && audioRef.current) {
+      const drift = Math.abs(videoRef.current.currentTime - audioRef.current.currentTime);
+      if (drift > 0.3) {
+        videoRef.current.currentTime = audioRef.current.currentTime;
+      }
+      if (videoRef.current.paused) {
+        void videoRef.current.play().catch(() => { /* ignore */ });
+      }
+    }
+  }, [isDualTrack, forEachMedia]);
+
+  // ── 隐性卡顿检测 ──────────────────────────────────────
+  // 有时浏览器不触发 'waiting' 但播放实际停滞（currentTime 不前进）。
+  // 每 2 秒检查一次，如果 playing=true 但时间停了 >3 秒，尝试恢复。
+  useEffect(() => {
+    if (stallCheckRef.current) {
+      clearInterval(stallCheckRef.current);
+      stallCheckRef.current = null;
+    }
+    if (!playing) return;
+
+    lastProgressTimeRef.current = Date.now();
+
+    stallCheckRef.current = setInterval(() => {
+      const media = getMedia();
+      if (!media || media.paused) return;
+
+      // 检查 currentTime 是否在前进
+      const now = media.currentTime;
+      const lastKnown = lastProgressTimeRef.current;
+      // 如果 timeupdate 事件正常触发，lastProgressTimeRef 会被更新
+      // 这里检查的是"距离上次 timeupdate 过了多久"
+      const elapsed = Date.now() - lastKnown;
+      if (elapsed > 3000) {
+        // 可能是隐性卡顿 — 尝试恢复
+        // 策略：暂停再播放，强制浏览器重新评估缓冲状态
+        media.pause();
+        const targetSpeed = speedRef.current;
+        setTimeout(() => {
+          if (media.readyState >= 3) { // HAVE_FUTURE_DATA
+            media.playbackRate = targetSpeed;
+            void media.play().catch(() => { /* ignore */ });
+            // 双轨模式：同步恢复 video
+            if (isDualTrack && videoRef.current) {
+              videoRef.current.currentTime = media.currentTime;
+              videoRef.current.playbackRate = targetSpeed;
+              void videoRef.current.play().catch(() => { /* ignore */ });
+            }
+          } else {
+            // 还没缓冲好，等 canplay 事件再恢复
+            const onCanPlay = () => {
+              media.removeEventListener('canplay', onCanPlay);
+              media.playbackRate = targetSpeed;
+              void media.play().catch(() => { /* ignore */ });
+              if (isDualTrack && videoRef.current) {
+                videoRef.current.currentTime = media.currentTime;
+                videoRef.current.playbackRate = targetSpeed;
+                void videoRef.current.play().catch(() => { /* ignore */ });
+              }
+            };
+            media.addEventListener('canplay', onCanPlay, { once: true });
+          }
+        }, 100);
+      }
+    }, 2000);
+
+    return () => {
+      if (stallCheckRef.current) {
+        clearInterval(stallCheckRef.current);
+        stallCheckRef.current = null;
+      }
+    };
+  }, [playing, getMedia, isDualTrack]);
+
   const handleAudioError = useCallback(() => {
     if (loadTimeoutRef.current) { clearTimeout(loadTimeoutRef.current); loadTimeoutRef.current = null; }
     setAudioLoading(false);
@@ -433,7 +706,7 @@ function VideoReviewPlayerComponent({
     setAudioLoading(false);
   }, []);
 
-  // 音频加载超时保护：src 变更时启动 20 秒计时器
+  // 音频加载超时保护：src 变更时启动 40 秒计时器
   useEffect(() => {
     if (loadTimeoutRef.current) { clearTimeout(loadTimeoutRef.current); loadTimeoutRef.current = null; }
     if (!audioSrc) { setAudioLoading(false); return; }
@@ -441,7 +714,7 @@ function VideoReviewPlayerComponent({
     loadTimeoutRef.current = setTimeout(() => {
       setAudioLoading(false);
       setProxyError(true);
-    }, 20_000);
+    }, 40_000);
     return () => { if (loadTimeoutRef.current) { clearTimeout(loadTimeoutRef.current); loadTimeoutRef.current = null; } };
   }, [audioSrc]);
 
@@ -454,19 +727,35 @@ function VideoReviewPlayerComponent({
     return (
       <div ref={containerRef} className={className} data-testid="video-review-player">
         <div className="relative bg-black rounded-xl overflow-hidden">
-          <video
-            ref={videoRef}
-            src={videoSrc}
-            preload="metadata"
-            playsInline
-            className="aspect-video w-full bg-black"
-            poster={thumbnailUrl || undefined}
-            onTimeUpdate={handleTimeUpdate}
-            onProgress={handleProgress}
-            onEnded={handleEnded}
-            onPlay={handlePlay}
-            onPause={handlePause}
-          />
+          {/* 可点击视频画面区域 */}
+          <button
+            type="button"
+            onClick={handleVideoAreaClick}
+            className="relative block w-full border-0 p-0 bg-transparent cursor-pointer"
+            aria-label={playing ? '暂停' : '播放'}
+          >
+            <video
+              ref={videoRef}
+              src={videoSrc}
+              preload="metadata"
+              playsInline
+              className="aspect-video w-full bg-black pointer-events-none"
+              poster={thumbnailUrl || undefined}
+              onTimeUpdate={handleTimeUpdate}
+              onProgress={handleProgress}
+              onEnded={handleEnded}
+              onPlay={handlePlay}
+              onPause={handlePause}
+              onWaiting={handleWaiting}
+              onPlaying={handlePlaying}
+            />
+            <PlayPauseIndicator action={indicator?.action ?? null} key={indicator?.key} />
+          </button>
+          {isBuffering && (
+            <div className="absolute inset-0 z-20 flex items-center justify-center pointer-events-none">
+              <div className="w-10 h-10 border-3 border-white/20 border-t-white rounded-full animate-spin" />
+            </div>
+          )}
           <NativePlayerBar
             playing={playing}
             currentTimeMs={currentTimeMs}
@@ -481,6 +770,7 @@ function VideoReviewPlayerComponent({
             title={source.title}
           />
         </div>
+        <style>{INDICATOR_CSS}</style>
       </div>
     );
   }
@@ -493,16 +783,31 @@ function VideoReviewPlayerComponent({
       return (
         <div ref={containerRef} className={className} data-testid="video-review-player">
           <div className="relative bg-black rounded-xl overflow-hidden">
-            {/* 视频画面：静音播放，由 audio 驱动同步 */}
-            <video
-              ref={videoRef}
-              src={videoSrc}
-              preload="metadata"
-              playsInline
-              muted
-              className="aspect-video w-full bg-black"
-              poster={thumbnailUrl || undefined}
-            />
+            {/* 可点击视频画面区域 — 整个画面可暂停/播放 */}
+            <button
+              type="button"
+              onClick={handleVideoAreaClick}
+              className="relative block w-full border-0 p-0 bg-transparent cursor-pointer"
+              aria-label={playing ? '暂停' : '播放'}
+            >
+              {/* 视频画面：静音播放，由 audio 驱动同步 */}
+              <video
+                ref={videoRef}
+                src={videoSrc}
+                preload="metadata"
+                playsInline
+                muted
+                className="aspect-video w-full bg-black pointer-events-none"
+                poster={thumbnailUrl || undefined}
+              />
+              <PlayPauseIndicator action={indicator?.action ?? null} key={indicator?.key} />
+            </button>
+
+            {isBuffering && (
+              <div className="absolute inset-0 z-20 flex items-center justify-center pointer-events-none">
+                <div className="w-10 h-10 border-3 border-white/20 border-t-white rounded-full animate-spin" />
+              </div>
+            )}
 
             {/* 音频：真正的声音源 + 进度源 */}
             <audio
@@ -516,6 +821,8 @@ function VideoReviewPlayerComponent({
               onPause={handlePause}
               onError={handleAudioError}
               onCanPlay={handleAudioCanPlay}
+              onWaiting={handleWaiting}
+              onPlaying={handlePlaying}
             />
 
             {audioLoading && (
@@ -541,6 +848,7 @@ function VideoReviewPlayerComponent({
               title={source.title}
             />
           </div>
+          <style>{INDICATOR_CSS}</style>
         </div>
       );
     }
@@ -615,6 +923,8 @@ function VideoReviewPlayerComponent({
               onPause={handlePause}
               onError={handleAudioError}
               onCanPlay={handleAudioCanPlay}
+              onWaiting={handleWaiting}
+              onPlaying={handlePlaying}
             />
 
             {audioLoading && (
@@ -643,7 +953,148 @@ function VideoReviewPlayerComponent({
     }
   }
 
-  // ── 回退：外链打开 ──
+  // ── 通用 provider（youtube / douyin / generic 等）──
+  // 有 videoSrc：用 <video> 单轨播放
+  if (videoSrc) {
+    return (
+      <div ref={containerRef} className={className} data-testid="video-review-player">
+        <div className="relative bg-black rounded-xl overflow-hidden">
+          <button
+            type="button"
+            onClick={handleVideoAreaClick}
+            className="relative block w-full border-0 p-0 bg-transparent cursor-pointer"
+            aria-label={playing ? '暂停' : '播放'}
+          >
+            <video
+              ref={videoRef}
+              src={videoSrc}
+              preload="metadata"
+              playsInline
+              className="aspect-video w-full bg-black pointer-events-none"
+              poster={thumbnailUrl || undefined}
+              onTimeUpdate={handleTimeUpdate}
+              onProgress={handleProgress}
+              onEnded={handleEnded}
+              onPlay={handlePlay}
+              onPause={handlePause}
+              onWaiting={handleWaiting}
+              onPlaying={handlePlaying}
+            />
+            <PlayPauseIndicator action={indicator?.action ?? null} key={indicator?.key} />
+          </button>
+          {isBuffering && (
+            <div className="absolute inset-0 z-20 flex items-center justify-center pointer-events-none">
+              <div className="w-10 h-10 border-3 border-white/20 border-t-white rounded-full animate-spin" />
+            </div>
+          )}
+          <NativePlayerBar
+            playing={playing}
+            currentTimeMs={currentTimeMs}
+            totalDurationMs={effectiveDuration}
+            speed={speed}
+            buffered={buffered}
+            onTogglePlay={togglePlay}
+            onSeek={handleSeek}
+            onSpeedChange={cycleSpeed}
+            onToggleFullscreen={toggleFullscreen}
+            hasVideo
+            title={source.title}
+          />
+        </div>
+        <style>{INDICATOR_CSS}</style>
+      </div>
+    );
+  }
+
+  // 只有 audioSrc：用 <audio> + 封面图模式
+  if (audioSrc) {
+    return (
+      <div ref={containerRef} className={className} data-testid="video-review-player">
+        <div className="relative bg-black rounded-xl overflow-hidden">
+          <button
+            type="button"
+            onClick={handleCoverClick}
+            className="relative aspect-video w-full bg-black flex items-center justify-center overflow-hidden cursor-pointer border-0 p-0 text-left"
+            aria-label={playing ? '暂停' : '播放'}
+          >
+            {thumbnailUrl ? (
+              <>
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={thumbnailUrl}
+                  alt={source.title || ''}
+                  className="absolute inset-0 w-full h-full object-cover opacity-40 blur-sm"
+                  referrerPolicy="no-referrer"
+                />
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={thumbnailUrl}
+                  alt={source.title || ''}
+                  className="relative z-10 max-h-full max-w-full object-contain"
+                  referrerPolicy="no-referrer"
+                />
+              </>
+            ) : (
+              <div className="flex flex-col items-center gap-3">
+                <div className="flex h-16 w-16 items-center justify-center rounded-full bg-white/10">
+                  <svg className="h-8 w-8 text-white/60" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3" />
+                  </svg>
+                </div>
+                <p className="text-[13px] text-white/40">音频回放模式</p>
+              </div>
+            )}
+
+            <div
+              className={`absolute inset-0 z-30 flex items-center justify-center transition-opacity duration-300 ${
+                !playing || showOverlayControls ? 'opacity-100' : 'opacity-0 pointer-events-none'
+              }`}
+            >
+              <div className="flex h-14 w-14 items-center justify-center rounded-full bg-black/40">
+                {playing ? (
+                  <svg className="h-7 w-7 text-white" fill="currentColor" viewBox="0 0 24 24">
+                    <rect x="6" y="4" width="4" height="16" rx="1" />
+                    <rect x="14" y="4" width="4" height="16" rx="1" />
+                  </svg>
+                ) : (
+                  <svg className="h-7 w-7 text-white ml-0.5" fill="currentColor" viewBox="0 0 24 24">
+                    <path d="M8 5v14l11-7z" />
+                  </svg>
+                )}
+              </div>
+            </div>
+          </button>
+
+          <audio
+            ref={audioRef}
+            src={audioSrc}
+            preload="metadata"
+            onTimeUpdate={handleTimeUpdate}
+            onProgress={handleProgress}
+            onEnded={handleEnded}
+            onPlay={handlePlay}
+            onPause={handlePause}
+            onWaiting={handleWaiting}
+            onPlaying={handlePlaying}
+          />
+
+          <NativePlayerBar
+            playing={playing}
+            currentTimeMs={currentTimeMs}
+            totalDurationMs={effectiveDuration}
+            speed={speed}
+            buffered={buffered}
+            onTogglePlay={togglePlay}
+            onSeek={handleSeek}
+            onSpeedChange={cycleSpeed}
+            title={source.title}
+          />
+        </div>
+      </div>
+    );
+  }
+
+  // ── 回退：外链打开 + 重试 ──
   return (
     <div className={className} data-testid="video-review-player">
       <div className="flex aspect-video w-full flex-col items-center justify-center gap-3 rounded-xl bg-black/90">
@@ -652,13 +1103,20 @@ function VideoReviewPlayerComponent({
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
           </svg>
         </div>
-        <p className="text-sm text-white/50">无法内嵌播放</p>
-        <a
-          href={originalUrl}
-          target="_blank"
-          rel="noreferrer"
-          className="rounded-lg bg-white/10 px-4 py-1.5 text-sm text-white transition hover:bg-white/20"
-        >在新窗口打开</a>
+        <p className="text-sm text-white/50">视频加载失败</p>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => { setProxyError(false); setAudioLoading(true); }}
+            className="rounded-lg bg-white/10 px-4 py-1.5 text-sm text-white transition hover:bg-white/20"
+          >重试</button>
+          <a
+            href={originalUrl}
+            target="_blank"
+            rel="noreferrer"
+            className="rounded-lg bg-white/10 px-4 py-1.5 text-sm text-white transition hover:bg-white/20"
+          >在新窗口打开</a>
+        </div>
       </div>
     </div>
   );

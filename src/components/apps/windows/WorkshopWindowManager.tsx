@@ -12,6 +12,10 @@ import { FlashcardsWindow } from '@/components/apps/windows/FlashcardsWindow';
 import { QuizWindow } from '@/components/apps/windows/QuizWindow';
 import { MindmapWindow } from '@/components/apps/windows/MindmapWindow';
 import { InfographicWindow } from '@/components/apps/windows/InfographicWindow';
+import { StudyReportWindow } from '@/components/apps/windows/StudyReportWindow';
+
+import type { ClassCheckRound } from '@/hooks/useClassCheck';
+import type { ClassCheckPlan } from '@/app/api/class-check/plan/route';
 
 /* ================================================================ */
 /*  窗口级 ErrorBoundary — 单窗口崩溃不影响其他窗口和主页面            */
@@ -119,6 +123,8 @@ interface WorkshopWindowManagerProps {
   summaryOverview?: string;
   keyDifficulties?: string[];
   terminologyHint?: string;
+  classCheckRounds?: ClassCheckRound[];
+  classCheckPlan?: ClassCheckPlan | null;
   onSeek?: (startMs: number) => void;
   onClose: (appKey: WorkshopAppKey) => void;
   onToggleMinimize: (appKey: WorkshopAppKey) => void;
@@ -134,6 +140,8 @@ interface WindowCardProps {
   summaryOverview?: string;
   keyDifficulties?: string[];
   terminologyHint?: string;
+  classCheckRounds?: ClassCheckRound[];
+  classCheckPlan?: ClassCheckPlan | null;
   model: string;
   onModelChange: (modelId: string) => void;
   onSeek?: (startMs: number) => void;
@@ -237,6 +245,8 @@ function WindowCard(props: WindowCardProps) {
     summaryOverview,
     keyDifficulties,
     terminologyHint,
+    classCheckRounds,
+    classCheckPlan,
     model,
     onModelChange,
     onSeek,
@@ -264,7 +274,7 @@ function WindowCard(props: WindowCardProps) {
     keyDifficulties,
     terminologyHint,
     model,
-    autoRun: resolvedApp.key !== 'infographic',
+    autoRun: resolvedApp.key !== 'infographic' && resolvedApp.key !== 'study-report',
   });
 
 
@@ -377,6 +387,9 @@ function WindowCard(props: WindowCardProps) {
                 onResultUpdate={execution.updateResult}
               />
             ) : null}
+            {app.key === 'study-report' ? (
+              <StudyReportWindow rounds={classCheckRounds} plan={classCheckPlan} transcript={transcript} />
+            ) : null}
           </WindowErrorBoundary>
         </div>
       </section>
@@ -460,6 +473,9 @@ function WindowCard(props: WindowCardProps) {
               onResultUpdate={execution.updateResult}
             />
           ) : null}
+          {app.key === 'study-report' ? (
+            <StudyReportWindow rounds={classCheckRounds} plan={classCheckPlan} transcript={transcript} />
+          ) : null}
         </WindowErrorBoundary>
       </div>
     </section>
@@ -476,6 +492,8 @@ export function WorkshopWindowManager(props: WorkshopWindowManagerProps) {
     summaryOverview,
     keyDifficulties,
     terminologyHint,
+    classCheckRounds,
+    classCheckPlan,
     onSeek,
     onClose,
     onToggleMinimize,
@@ -520,6 +538,8 @@ export function WorkshopWindowManager(props: WorkshopWindowManagerProps) {
           summaryOverview={summaryOverview}
           keyDifficulties={keyDifficulties}
           terminologyHint={terminologyHint}
+          classCheckRounds={classCheckRounds}
+          classCheckPlan={classCheckPlan}
           model={model}
           onModelChange={setModel}
           onSeek={onSeek}

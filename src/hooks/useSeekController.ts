@@ -95,6 +95,7 @@ export function useSeekController(
     useSessionStore.getState().actions.incrementVideoSeekNonce();
     if (autoPlay) {
       useSessionStore.getState().actions.incrementVideoPlayNonce();
+      usePlayerStore.getState().actions.setIsPlaying(true);
     }
   }, [normalizeSeekTime]);
 

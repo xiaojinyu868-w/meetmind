@@ -7,6 +7,7 @@ import { knowledgeCardsPlugin } from './knowledge-cards.plugin';
 import { confusionDrillPlugin } from './confusion-drill.plugin';
 import { reviewPlanPlugin } from './review-plan.plugin';
 import { classCheckPlugin } from './class-check.plugin';
+import { studyReportPlugin } from './study-report.plugin';
 import { fallbackPlugin } from './fallback.plugin';
 
 export const defaultPlugins: AppPlugin[] = [
@@ -18,6 +19,7 @@ export const defaultPlugins: AppPlugin[] = [
   confusionDrillPlugin,
   reviewPlanPlugin,
   classCheckPlugin,
+  studyReportPlugin,
   fallbackPlugin,
 ];
 
@@ -30,5 +32,6 @@ export {
   confusionDrillPlugin,
   reviewPlanPlugin,
   classCheckPlugin,
+  studyReportPlugin,
   fallbackPlugin,
 };

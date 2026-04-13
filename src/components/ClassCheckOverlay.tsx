@@ -11,7 +11,7 @@
  * - 符合 MeetMind 设计系统：零渐变、零阴影装饰、纯平涂
  */
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { type ReactNode, useCallback, useEffect, useMemo, useState } from 'react';
 
 export interface ClassCheckQuestion {
   id: string;
@@ -81,6 +81,29 @@ const ACCENT = '#E67E22';
 const ACCENT_LIGHT = '#FDF2E9';
 const ACCENT_BORDER = '#FADBD8';
 
+// ── 通用遮罩容器（提取到顶层，避免父组件 re-render 导致卸载/重建） ──
+function Backdrop({ children }: { children: ReactNode }) {
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => {
+    const raf = requestAnimationFrame(() => setMounted(true));
+    return () => cancelAnimationFrame(raf);
+  }, []);
+  return (
+    <div
+      className="fixed inset-0 z-[300] flex items-center justify-center px-4 py-6"
+      style={{
+        backgroundColor: 'rgba(35,35,34,0.45)',
+        backdropFilter: 'blur(8px)',
+        WebkitBackdropFilter: 'blur(8px)',
+        opacity: mounted ? 1 : 0,
+        transition: 'opacity 0.25s ease-out',
+      }}
+    >
+      {children}
+    </div>
+  );
+}
+
 export function ClassCheckOverlay({
   questions,
   roundIndex,
@@ -135,29 +158,6 @@ export function ClassCheckOverlay({
   }, [correctCount, onComplete, questions, roundIndex, selected]);
 
   if (questions.length === 0) return null;
-
-  // ── 通用遮罩容器（带淡入动画） ──
-  const Backdrop = ({ children }: { children: React.ReactNode }) => {
-    const [mounted, setMounted] = useState(false);
-    useEffect(() => {
-      const raf = requestAnimationFrame(() => setMounted(true));
-      return () => cancelAnimationFrame(raf);
-    }, []);
-    return (
-      <div
-        className="fixed inset-0 z-[300] flex items-center justify-center px-4 py-6"
-        style={{
-          backgroundColor: 'rgba(35,35,34,0.45)',
-          backdropFilter: 'blur(8px)',
-          WebkitBackdropFilter: 'blur(8px)',
-          opacity: mounted ? 1 : 0,
-          transition: 'opacity 0.25s ease-out',
-        }}
-      >
-        {children}
-      </div>
-    );
-  };
 
   // ── Greeting 阶段 ──
   if (phase === 'greeting') {

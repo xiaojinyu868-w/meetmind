@@ -5,7 +5,8 @@ export type WorkshopAppKey =
   | 'flashcards'
   | 'quiz'
   | 'mindmap'
-  | 'infographic';
+  | 'infographic'
+  | 'study-report';
 
 export interface WorkshopAppCatalogItem {
   key: WorkshopAppKey;
@@ -91,6 +92,20 @@ export const WORKSHOP_APP_CATALOG: WorkshopAppCatalogItem[] = [
     intent: '生成课堂可视化图片，可一键直接生成，也可先定制参数或让 AI 推荐图文结构后再生成。支持多种场景预设。',
     outputType: '真实图片',
     renderMode: 'custom(image-first)',
+    status: 'ready',
+  },
+  {
+    key: 'study-report',
+    name: '学习报告',
+    category: '学习分析',
+    headline: '随堂检验结果分析',
+    description: '基于随堂检验的答题数据，查看各知识点掌握情况和需要巩固的内容。',
+    tags: ['学习报告', '随堂检验', '掌握度'],
+    coverImage: '/images/apps/study-report-cover.svg',
+    pluginId: 'study-report',
+    intent: '查看随堂检验结果和学习报告。',
+    outputType: '结构化报告',
+    renderMode: 'document',
     status: 'ready',
   },
 ];

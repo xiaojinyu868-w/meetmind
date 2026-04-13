@@ -11,6 +11,7 @@ src/components/apps/windows/
 ├── MindmapWindowLayout.ts      # 思维导图布局引擎（168行）
 ├── InfographicWindow.tsx       # 信息图窗口（699行，已拆分）
 ├── InfographicWindowData.ts    # 信息图数据处理（305行）
+├── StudyReportWindow.tsx       # 听课报告窗口（家长视角专注度+掌握度报告）
 ├── EvidenceLabel.tsx           # 证据标签组件
 └── index.ts                    # barrel 导出
 ```

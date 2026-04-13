@@ -32,6 +32,7 @@ interface SessionState {
   sessionMediaDurationMs: number;
   videoSeekNonce: number;
   videoPlayNonce: number;
+  videoPauseNonce: number;
 
   // 选中状态
   selectedAnchor: Anchor | null;
@@ -50,6 +51,7 @@ interface SessionActions {
   setVideoPlayNonce: (nonce: number) => void;
   incrementVideoSeekNonce: () => void;
   incrementVideoPlayNonce: () => void;
+  incrementVideoPauseNonce: () => void;
 
   setSelectedAnchor: (anchor: Anchor | null) => void;
   setSelectedConfusion: (confusion: ConfusionMarker | null) => void;
@@ -71,6 +73,7 @@ const initialState: SessionState = {
   sessionMediaDurationMs: 0,
   videoSeekNonce: 0,
   videoPlayNonce: 0,
+  videoPauseNonce: 0,
   selectedAnchor: null,
   selectedConfusion: null,
   selectedHistoryConversation: null,
@@ -94,6 +97,7 @@ export const useSessionStore = create<SessionStore>()(
         setVideoPlayNonce: (nonce) => set({ videoPlayNonce: nonce }, false, 'setVideoPlayNonce'),
         incrementVideoSeekNonce: () => set((s) => ({ videoSeekNonce: s.videoSeekNonce + 1 }), false, 'incrementVideoSeekNonce'),
         incrementVideoPlayNonce: () => set((s) => ({ videoPlayNonce: s.videoPlayNonce + 1 }), false, 'incrementVideoPlayNonce'),
+        incrementVideoPauseNonce: () => set((s) => ({ videoPauseNonce: s.videoPauseNonce + 1 }), false, 'incrementVideoPauseNonce'),
 
         setSelectedAnchor: (anchor) => set({ selectedAnchor: anchor }, false, 'setSelectedAnchor'),
         setSelectedConfusion: (confusion) => set({ selectedConfusion: confusion }, false, 'setSelectedConfusion'),
@@ -106,6 +110,7 @@ export const useSessionStore = create<SessionStore>()(
           selectedHistoryConversation: null,
           videoSeekNonce: 0,
           videoPlayNonce: 0,
+          videoPauseNonce: 0,
         }, false, 'resetSessionState'),
       },
     }),

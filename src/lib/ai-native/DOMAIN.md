@@ -42,6 +42,8 @@ page.tsx → /api/apps/execute → context-builder → registry → plugin.execu
 | `knowledge-cards.plugin.ts` | 188 | 知识卡片 |
 | `confusion-drill.plugin.ts` | 128 | 困惑点训练 |
 | `review-plan.plugin.ts` | 78 | 复习计划 |
+| `class-check.plugin.ts` | 264 | 随堂检验（智能版，基于知识点结构） |
+| `study-report.plugin.ts` | 220 | 听课报告（家长视角，专注度+掌握度） |
 | `fallback.plugin.ts` | 43 | 兜底 |
 | `index.ts` | 29 | 插件注册 |
 

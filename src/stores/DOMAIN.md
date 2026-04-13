@@ -20,7 +20,7 @@ components/hooks → stores → types
 |------|------|------|------------|-----------|
 | `ui-store.ts` | ~160 | 全局 UI 状态 | `useUIStore`, `useViewMode`, `useReviewTab`, `useVideoWorkspaceTab`, `useMobileSubPage`, `useMobileCollectionSheet`, `useUIActions` | 16 |
 | `player-store.ts` | 67 | 音频播放器状态 | `usePlayerStore`, `useIsPlaying`, `useCurrentTime`, `usePlayerActions` | 4 |
-| `session-store.ts` | ~140 | 课堂会话核心 | `useSessionStore`, `useSessionId`, `useIsRecording`, `useDataSource`, `useSelectedAnchor`, `useSessionActions` | 10 |
+| `session-store.ts` | ~140 | 课堂会话核心 | `useSessionStore`, `useSessionId`, `useIsRecording`, `useDataSource`, `useSelectedAnchor`, `useSessionActions` | 11 |
 | `collection-store.ts` | ~240 | 收集流状态 | `useCollectionStore`, `useSourceItems`, `useCollectionActions`, `useSourceImporting` | 28 |
 | `echo-store.ts` | ~105 | 回声状态 | `useEchoStore`, `useWorkspaceEchoes`, `useEchoActions` | 7 |
 | `mobile-ai-store.ts` | ~125 | 移动端 AI 状态 | `useMobileAIStore`, `useMobileAIActions`, `MobileAILaunchTarget` | 10 |
@@ -32,7 +32,7 @@ components/hooks → stores → types
 **总计已迁移 ~89 个状态**（Phase 1 完成后）
 
 ### ui-store（16 个）
-`showSplash`, `appReady`, `loadingProgress`, `viewMode`, `reviewTab`, `videoWorkspaceTab`, `mobileSubPage`, `isMenuOpen`, `isActionDrawerOpen`, `showConversationHistory`, `showTranscriptBar`, `showAISearch`, `showMobileRecorder`, `mobileCollectionSheet`
+`showSplash`, `appReady`, `loadingProgress`, `viewMode`, `reviewTab`, `videoWorkspaceTab`（默认 `'transcript'`）, `mobileSubPage`, `isMenuOpen`, `isActionDrawerOpen`, `showConversationHistory`, `showTranscriptBar`, `showAISearch`, `showMobileRecorder`, `mobileCollectionSheet`
 
 ### player-store（4 个）
 `isPlaying`, `currentTime`, `isPlayingAll`, `playAllIndex`

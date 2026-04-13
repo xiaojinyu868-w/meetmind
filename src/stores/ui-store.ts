@@ -86,7 +86,7 @@ export type UIStore = UIState & { actions: UIActions };
 const initialState: UIState = {
   viewMode: 'record',
   reviewTab: 'timeline',
-  videoWorkspaceTab: 'chat',
+  videoWorkspaceTab: 'transcript',
   mobileSubPage: null,
   isMenuOpen: false,
   isActionDrawerOpen: false,
@@ -130,7 +130,7 @@ export const useUIStore = create<UIStore>()(
         
         resetUIState: () => set({
           reviewTab: 'timeline',
-          videoWorkspaceTab: 'chat',
+          videoWorkspaceTab: 'transcript',
           mobileSubPage: null,
           isMenuOpen: false,
           isActionDrawerOpen: false,

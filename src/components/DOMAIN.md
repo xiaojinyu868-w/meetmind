@@ -68,9 +68,10 @@ components/
 | 文件 | 行数 | 职责 |
 |------|------|------|
 | `WorkspaceCaptureList.tsx` | ~900 | 工作空间 capture 列表 |
-| `DesktopVideoReviewLayout.tsx` | ~540 | 桌面端复习布局（视频/音频两种分支），从 page.tsx 提取，内部读 5 个 Zustand store |
+| `DesktopVideoReviewLayout.tsx` | ~537 | 桌面端复习布局（Longcut 风格：左列=视频+时间轴+章节列表，右列=Transcript/Chat/困惑点/AI工坊 tabs），从 page.tsx 提取，支持 onVideoTimeUpdate 受控回调 |
 | `WorkspaceCaptureEditorModal.tsx` | ~105 | 工作空间 capture 编辑弹窗，从 page.tsx 提取 |
-| `VideoReviewPlayer.tsx` | 529 | 视频复习播放器 |
+| `VideoReviewPlayer.tsx` | 823 | 视频复习播放器（pauseNonce/playNonce/seekNonce 命令式控制，点击画面暂停/播放+指示器动画，visibilitychange 倍速恢复，空格/箭头键盘快捷键，B站 Dash 双轨同步） |
+| `ClassCheckOverlay.tsx` | 430 | 随堂检验弹窗（greeting → quiz → result 三阶段，Backdrop 已提取为独立组件避免闪烁） |
 | `SharedWorkspacePanel.tsx` | 46 | shared workspace 统一面板（仅 apps）— 从 `page.tsx` 抽离，已移除 highlights / summary / notes |
 | `ReviewWorkspacePanel.tsx` | 127 | desktop review 左侧工作区面板（tabs / timeline / anchor detail / shared workspace slot） |
 | `ReviewTutorPanel.tsx` | 220 | desktop review 右侧 Tutor 面板（波形、历史对话、AIChat、AITutor 容器） |
@@ -106,6 +107,7 @@ components/
 | `windows/QuizWindow.tsx` | ~720 | 测验浮窗 |
 | `windows/FlashcardsWindow.tsx` | ~470 | 闪卡浮窗 |
 | `windows/PodcastWindow.tsx` | ~470 | 播客浮窗 |
+| `windows/StudyReportWindow.tsx` | ~270 | 听课报告浮窗（家长视角） |
 | `hooks/useAppExecution.ts` | ~370 | 应用执行 hook |
 
 ## ⚠️ 超标文件（>500 行）
@@ -115,10 +117,11 @@ components/
 - `WorkshopYellowPage.tsx` (900) — 黄页
 - `TranscriptFlowView.tsx` (778) — 转录流
 - `AISearchPanel.tsx` (720) — 搜索面板
+- `VideoReviewPlayer.tsx` (823) — 视频复习（点击画面控制 + visibilitychange 倍速恢复 + 键盘快捷键）
 - `AIChat.tsx` (691) — 对话
 - `WaveformPlayer.tsx` (638) — 波形播放器
 - `WordExplainer.tsx` (562) — 术语解释
-- `VideoReviewPlayer.tsx` (529) — 视频复习
+- `DesktopVideoReviewLayout.tsx` (537) — 桌面端复习布局
 
 ## 设计系统约束
 

@@ -118,7 +118,7 @@ export function parseVideoLink(rawUrl: string): ParsedVideoLink | null {
     };
   }
 
-  if (host.endsWith('bilibili.com') || host === 'b23.tv') {
+  if (host === 'bilibili.com' || host.endsWith('.bilibili.com') || host === 'b23.tv') {
     const bvid = extractBilibiliVideoId(url);
     return {
       provider: 'bilibili',
@@ -132,7 +132,7 @@ export function parseVideoLink(rawUrl: string): ParsedVideoLink | null {
     };
   }
 
-  if (host.endsWith('douyin.com') || host === 'iesdouyin.com' || host.endsWith('.iesdouyin.com')) {
+  if (host === 'douyin.com' || host.endsWith('.douyin.com') || host === 'iesdouyin.com' || host.endsWith('.iesdouyin.com')) {
     return {
       provider: 'douyin',
       providerLabel: '抖音',
@@ -141,7 +141,7 @@ export function parseVideoLink(rawUrl: string): ParsedVideoLink | null {
     };
   }
 
-  if (host.endsWith('xiaoyuzhoufm.com')) {
+  if (host === 'xiaoyuzhoufm.com' || host.endsWith('.xiaoyuzhoufm.com')) {
     const episodeId = extractXiaoyuzhouEpisodeId(url);
     return {
       provider: 'xiaoyuzhou',
@@ -153,7 +153,7 @@ export function parseVideoLink(rawUrl: string): ParsedVideoLink | null {
   }
 
   // 小红书：图文/视频笔记都走内容提取管线
-  if (host.endsWith('xiaohongshu.com') || host === 'xhslink.com' || host.endsWith('.xhslink.com')) {
+  if (host === 'xiaohongshu.com' || host.endsWith('.xiaohongshu.com') || host === 'xhslink.com' || host.endsWith('.xhslink.com')) {
     return {
       provider: 'xiaohongshu',
       providerLabel: '小红书',

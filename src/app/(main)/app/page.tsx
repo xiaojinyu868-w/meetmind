@@ -189,6 +189,7 @@ function StudentAppContent({
   const sessionMediaDurationMs = useSessionStore((s) => s.sessionMediaDurationMs);
   const videoSeekNonce = useSessionStore((s) => s.videoSeekNonce);
   const videoPlayNonce = useSessionStore((s) => s.videoPlayNonce);
+  const videoPauseNonce = useSessionStore((s) => s.videoPauseNonce);
   const selectedAnchor = useSessionStore((s) => s.selectedAnchor);
   const selectedConfusion = useSessionStore((s) => s.selectedConfusion);
   const selectedHistoryConversation = useSessionStore((s) => s.selectedHistoryConversation);
@@ -504,7 +505,8 @@ function StudentAppContent({
     dataSource,
     pausePlayer: useCallback(() => {
       if (videoSource) {
-        // video 模式：无直接 pause，通过不 increment playNonce 保持暂停
+        // video 模式：递增 pauseNonce 命令 VideoReviewPlayer 暂停底层 media
+        sessionActions.incrementVideoPauseNonce();
         setIsPlaying(false);
       } else {
         waveformRef.current?.pause();
@@ -556,6 +558,17 @@ function StudentAppContent({
       return [...highlightItems, ...checkpointItems];
     });
   }, [classCheck.plan, classCheck.checkpointStatuses, setVideoInsightItems]);
+
+  // isCheckActive 的 ref 镜像，用于 onTimeUpdate 回调中读取最新值（避免闭包陈旧）
+  const isCheckActiveRef = useRef(false);
+  isCheckActiveRef.current = classCheck.isCheckActive;
+
+  // 受控的 onTimeUpdate：在随堂检验弹窗激活时屏蔽更新，
+  // 避免 media 暂停瞬间残余的 timeupdate 事件触发 re-render 导致弹窗闪烁。
+  const handleVideoTimeUpdate = useCallback((timeMs: number) => {
+    if (isCheckActiveRef.current) return;
+    setCurrentTime(timeMs);
+  }, [setCurrentTime]);
 
   useEffect(() => {
     if (!videoSource) {
@@ -1491,6 +1504,24 @@ function StudentAppContent({
   );
   };
 
+  // 包装 openWorkshopWindow：如果随堂检验正在进行，先关掉弹窗
+  const safeOpenWorkshopWindow = useCallback((appKey: Parameters<typeof openWorkshopWindow>[0]) => {
+    if (classCheck.isCheckActive) {
+      // 跳过当前检验轮次，恢复播放，然后打开窗口
+      classCheck.handleCheckComplete({
+        roundIndex: classCheck.currentRoundIndex,
+        questions: classCheck.currentQuestions,
+        answers: {},
+        correctCount: 0,
+        totalCount: classCheck.currentQuestions.length,
+      });
+    }
+    if (classCheck.pendingCheckpoint) {
+      classCheck.dismissPendingCheckpoint();
+    }
+    openWorkshopWindow(appKey);
+  }, [classCheck, openWorkshopWindow]);
+
   const renderSharedWorkspacePanel = useCallback((tab: SharedWorkspaceTab) => {
     return (
       <SharedWorkspacePanel
@@ -1501,7 +1532,7 @@ function StudentAppContent({
         dataSource={dataSource}
         segments={segments}
         anchors={anchors}
-        onOpenAppWindow={openWorkshopWindow}
+        onOpenAppWindow={safeOpenWorkshopWindow}
       />
     );
   }, [
@@ -1509,7 +1540,7 @@ function StudentAppContent({
     classSummary,
     dataSource,
     handleUnifiedSeek,
-    openWorkshopWindow,
+    safeOpenWorkshopWindow,
     segments,
     sessionId,
   ]);
@@ -1653,6 +1684,9 @@ function StudentAppContent({
               renderSharedWorkspacePanel={renderSharedWorkspacePanel}
               consumeMobileAIQuestion={consumeMobileAIQuestion}
               onTriggerCheckpoint={classCheck.triggerCheckpointManually}
+              isPlanLoading={classCheck.isPlanLoading}
+              onVideoTimeUpdate={handleVideoTimeUpdate}
+              onPlayingChange={setIsPlaying}
             />
           ) : (
             /* 手机端主内容区 */
@@ -1753,7 +1787,9 @@ function StudentAppContent({
                         seekToMs={currentTime}
                         seekNonce={videoSeekNonce}
                         playNonce={videoPlayNonce}
-                        onTimeUpdate={setCurrentTime}
+                        pauseNonce={videoPauseNonce}
+                        onTimeUpdate={handleVideoTimeUpdate}
+                        onPlayingChange={setIsPlaying}
                         totalDurationMs={totalDuration}
                       />
                     </div>
@@ -1999,6 +2035,8 @@ function StudentAppContent({
         summaryOverview={classSummary?.overview}
         keyDifficulties={classSummary?.keyDifficulties}
         terminologyHint={extractedTermsHint || undefined}
+        classCheckRounds={classCheck.rounds}
+        classCheckPlan={classCheck.plan}
         onSeek={(timeMs) => {
           handleUnifiedSeek(timeMs, true);
         }}

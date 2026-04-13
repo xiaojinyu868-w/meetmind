@@ -13,7 +13,7 @@
 |------|------|------|----------|
 | `index.ts` | 363 | 核心领域类型 | `AnchorType`, `TranscriptSegment`, `SessionStatus`, `HighlightTopic`, `ClassSummary`, `Note`, `TutorResponse`, `ActionItem`, `ImportedVideoSource` |
 | `user.ts` | 295 | 用户/认证类型 | `UserRole`, `Permission`, `User`, `AuthProviderLink`, `JWTPayload`, `RegisterRequest`, `LoginRequest`, `AuthResponse` |
-| `page-types.ts` | 200 | 页面级类型（page.tsx 域） | `ViewMode`, `DataSource`, `WorkspaceTab`, `SourceIngestItem`, `WechatCaptureMessage`, `WorkspaceEchoMessage` |
+| `page-types.ts` | 200 | 页面级类型（page.tsx 域） | `ViewMode`, `DataSource`, `WorkspaceTab`（含 `transcript`）, `SourceIngestItem`, `WechatCaptureMessage`, `WorkspaceEchoMessage` |
 | `dify.ts` | 203 | Dify 集成类型 | `ExtendedTutorRequest`, `GuidanceQuestion`, `Citation`, `WebSearchResult` |
 | `conversation.ts` | 121 | 对话历史类型 | `ConversationType`, `MessageRole`, `ConversationHistory`, `ConversationMessage` |
 

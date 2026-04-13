@@ -30,8 +30,6 @@ import {
   PanelLeftOpen,
   Boxes,
   Sparkles,
-  Clock,
-  AlertCircle,
 } from 'lucide-react';
 
 const ICON_SM = 15;
@@ -254,107 +252,7 @@ export function DesktopSidebar({
                 </div>
               )}
 
-              {/* ── 复习模式的子导航：按内容类型智能显示 ── */}
-              {key === 'review' && isActive && !collapsed && onReviewTabChange && (
-                <div className="ml-[18px] mt-0.5 flex flex-col gap-0.5 border-l border-[#E9E9E7]/80 pl-2.5">
-                  {hasTimeline && (
-                    <button
-                      type="button"
-                      onClick={() => onReviewTabChange('timeline')}
-                      className={`flex items-center gap-2 rounded-md px-2 py-[5px] text-[12.5px] transition-all ${
-                        reviewTab === 'timeline'
-                          ? 'bg-white text-[#232322] ring-[0.5px] ring-[#232322]/[0.06] font-medium'
-                          : 'text-[#787774] hover:bg-[#EFEFEF] hover:text-[#232322]'
-                      }`}
-                    >
-                      <Clock size={13} strokeWidth={1.6} className="flex-shrink-0" />
-                      <span>时间轴</span>
-                    </button>
-                  )}
-                  {hasTimeline && (
-                    <button
-                      type="button"
-                      onClick={() => onReviewTabChange('anchor-detail')}
-                      className={`flex items-center gap-2 rounded-md px-2 py-[5px] text-[12.5px] transition-all ${
-                        reviewTab === 'anchor-detail'
-                          ? 'bg-white text-[#232322] ring-[0.5px] ring-[#232322]/[0.06] font-medium'
-                          : 'text-[#787774] hover:bg-[#EFEFEF] hover:text-[#232322]'
-                      }`}
-                    >
-                      <AlertCircle size={13} strokeWidth={1.6} className="flex-shrink-0" />
-                      <span>困惑点</span>
-                      {unresolvedAnchorCount > 0 && (
-                        <span className="inline-flex h-[16px] min-w-[16px] items-center justify-center rounded-full bg-[#FADEC9] px-1 text-[9px] font-semibold leading-none text-[#232322]">
-                          {unresolvedAnchorCount}
-                        </span>
-                      )}
-                    </button>
-                  )}
-                  <button
-                    type="button"
-                    onClick={() => onReviewTabChange('apps')}
-                    className={`flex items-center gap-2 rounded-md px-2 py-[5px] text-[12.5px] transition-all ${
-                      reviewTab === 'apps'
-                        ? 'bg-white text-[#232322] ring-[0.5px] ring-[#232322]/[0.06] font-medium'
-                        : 'text-[#787774] hover:bg-[#EFEFEF] hover:text-[#232322]'
-                    }`}
-                  >
-                    <Boxes size={13} strokeWidth={1.6} className="flex-shrink-0" />
-                    <span>AI工坊</span>
-                  </button>
-                </div>
-              )}
-
-              {/* ── 折叠态下复习模式的子导航图标 ── */}
-              {key === 'review' && isActive && collapsed && onReviewTabChange && (
-                <div className="mt-0.5 flex flex-col gap-0.5">
-                  {hasTimeline && (
-                    <button
-                      type="button"
-                      onClick={() => onReviewTabChange('timeline')}
-                      className={`flex h-8 items-center justify-center rounded-lg transition-all ${
-                        reviewTab === 'timeline'
-                          ? 'bg-white text-[#232322] ring-[0.5px] ring-[#232322]/[0.06]'
-                          : 'text-[#A3A39E] hover:bg-[#EFEFEF] hover:text-[#787774]'
-                      }`}
-                      title="时间轴"
-                    >
-                      <Clock size={15} strokeWidth={1.6} />
-                    </button>
-                  )}
-                  {hasTimeline && (
-                    <button
-                      type="button"
-                      onClick={() => onReviewTabChange('anchor-detail')}
-                      className={`relative flex h-8 items-center justify-center rounded-lg transition-all ${
-                        reviewTab === 'anchor-detail'
-                          ? 'bg-white text-[#232322] ring-[0.5px] ring-[#232322]/[0.06]'
-                          : 'text-[#A3A39E] hover:bg-[#EFEFEF] hover:text-[#787774]'
-                      }`}
-                      title="困惑点"
-                    >
-                      <AlertCircle size={15} strokeWidth={1.6} />
-                      {unresolvedAnchorCount > 0 && (
-                        <span className="absolute -right-0.5 -top-0.5 inline-flex h-[14px] min-w-[14px] items-center justify-center rounded-full bg-[#FADEC9] px-0.5 text-[8px] font-bold leading-none text-[#232322]">
-                          {unresolvedAnchorCount}
-                        </span>
-                      )}
-                    </button>
-                  )}
-                  <button
-                    type="button"
-                    onClick={() => onReviewTabChange('apps')}
-                    className={`flex h-8 items-center justify-center rounded-lg transition-all ${
-                      reviewTab === 'apps'
-                        ? 'bg-white text-[#232322] ring-[0.5px] ring-[#232322]/[0.06]'
-                        : 'text-[#A3A39E] hover:bg-[#EFEFEF] hover:text-[#787774]'
-                    }`}
-                    title="AI工坊"
-                  >
-                    <Boxes size={15} strokeWidth={1.6} />
-                  </button>
-                </div>
-              )}
+              {/* 复习模式：不再展开子导航，tab 切换由内容区自己管 */}
             </div>
           );
         })}

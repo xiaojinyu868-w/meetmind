@@ -2,7 +2,7 @@
 
 import { type RefObject } from 'react';
 import dynamic from 'next/dynamic';
-import { MessageCircle, AlertCircle, Clock, Boxes } from 'lucide-react';
+import { MessageCircle, AlertCircle, Clock, Boxes, FileText } from 'lucide-react';
 import { useUIStore, useUIActions } from '@/stores/ui-store';
 import { usePlayerStore, usePlayerActions } from '@/stores/player-store';
 import { useSessionStore } from '@/stores/session-store';
@@ -41,7 +41,8 @@ const SHARED_WORKSPACE_TABS: WorkspaceTabConfig<SharedWorkspaceTab>[] = [
 ];
 
 const VIDEO_WORKSPACE_TABS: WorkspaceTabConfig<VideoWorkspaceTab>[] = [
-  { key: 'chat', label: '对话', icon: '聊', LucideIcon: MessageCircle },
+  { key: 'transcript', label: '转录原文', icon: '录', LucideIcon: FileText },
+  { key: 'chat', label: 'AI同桌', icon: '聊', LucideIcon: MessageCircle },
   { key: 'confusion', label: '困惑点', icon: '疑', LucideIcon: AlertCircle },
   ...SHARED_WORKSPACE_TABS,
 ];
@@ -88,6 +89,12 @@ export interface DesktopVideoReviewLayoutProps {
   consumeMobileAIQuestion: () => void;
   /** 手动触发检查点测验（从时间轴点击） */
   onTriggerCheckpoint?: (checkpointIndex: number) => void;
+  /** LLM plan 正在加载中（用于骨架屏） */
+  isPlanLoading?: boolean;
+  /** 受控的 onTimeUpdate 回调（外部可在随堂测验激活时屏蔽更新） */
+  onVideoTimeUpdate?: (timeMs: number) => void;
+  /** 播放/暂停状态变化回调 — 同步给父组件 */
+  onPlayingChange?: (isPlaying: boolean) => void;
 }
 
 // ── Component ──────────────────────────────────────────────────
@@ -114,11 +121,13 @@ export function DesktopVideoReviewLayout(props: DesktopVideoReviewLayoutProps) {
     renderSharedWorkspacePanel,
     consumeMobileAIQuestion,
     onTriggerCheckpoint,
+    isPlanLoading,
+    onVideoTimeUpdate,
+    onPlayingChange,
   } = props;
 
   // ── Store reads ──
   const uiActions = useUIActions();
-  const showTranscriptBar = useUIStore((s) => s.showTranscriptBar);
   const videoWorkspaceTab = useUIStore((s) => s.videoWorkspaceTab);
   const reviewTab = useUIStore((s) => s.reviewTab);
   const isActionDrawerOpen = useUIStore((s) => s.isActionDrawerOpen);
@@ -132,6 +141,7 @@ export function DesktopVideoReviewLayout(props: DesktopVideoReviewLayoutProps) {
   const sessionId = useSessionStore((s) => s.sessionId);
   const videoSeekNonce = useSessionStore((s) => s.videoSeekNonce);
   const videoPlayNonce = useSessionStore((s) => s.videoPlayNonce);
+  const videoPauseNonce = useSessionStore((s) => s.videoPauseNonce);
   const selectedAnchor = useSessionStore((s) => s.selectedAnchor);
   const selectedHistoryConversation = useSessionStore((s) => s.selectedHistoryConversation);
 
@@ -172,50 +182,82 @@ export function DesktopVideoReviewLayout(props: DesktopVideoReviewLayoutProps) {
   return (
     <div
       className={`flex-1 min-h-0 flex page-enter ${videoSource ? 'overflow-visible' : 'overflow-hidden'}`}
-      style={{ background: 'var(--edu-bg-primary)' }}
+      style={{ background: '#FFFFFF' }}
     >
       {videoSource ? (
         <div className="flex-1 min-h-0 flex flex-col lg:flex-row overflow-hidden">
-          {/* Left column: video + transcript + insight timeline */}
-          <div className="min-h-0 flex flex-col lg:w-[55%] xl:w-[58%] border-r bg-[#F7F7F5]" style={{ borderColor: 'var(--edu-border-light)' }}>
-            {/* 视频播放器 — 有呼吸空间的容器 */}
-            <div className="shrink-0 p-3 pb-0">
-              <div className="overflow-hidden rounded-xl bg-black">
+          {/* ── 左列：视频 + 时间轴 + 章节列表 ── */}
+          <div className="min-h-0 flex flex-col lg:w-[55%] xl:w-[58%] bg-white">
+            {/* 视频播放器 — 圆角容器 + 充分留白 */}
+            <div className="shrink-0 p-5 pb-0">
+              <div className="overflow-hidden rounded-2xl bg-[#0F0F0F]">
                 <VideoReviewPlayer
                   source={videoSource}
                   className="w-full"
                   seekToMs={currentTime}
                   seekNonce={videoSeekNonce}
                   playNonce={videoPlayNonce}
-                  onTimeUpdate={setCurrentTime}
+                  pauseNonce={videoPauseNonce}
+                  onTimeUpdate={onVideoTimeUpdate || setCurrentTime}
+                  onPlayingChange={onPlayingChange}
                   totalDurationMs={totalDuration}
                 />
               </div>
             </div>
 
-            {/* Collapsible transcript strip */}
-            <div className="shrink-0 mx-3 mt-2">
-              <div className="rounded-lg border border-[#E9E9E7] bg-white overflow-hidden">
+            {/* 视频下方：时间轴 + 章节列表 */}
+            <div className="flex-1 min-h-0 overflow-y-auto">
+              <div className="px-5 pt-4 pb-5">
+                <VideoInsightTimeline
+                  items={videoInsightItems}
+                  activeItemId={activeVideoInsightId}
+                  totalDuration={totalDuration}
+                  formatTime={formatTime}
+                  onSelectItem={setActiveVideoInsightId}
+                  onSeek={(timeMs) => handleUnifiedSeek(timeMs, true)}
+                  onTriggerCheckpoint={onTriggerCheckpoint}
+                  currentTimeMs={currentTime}
+                  isPlanLoading={isPlanLoading}
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* ── 右列：Transcript / Chat / 困惑点 / AI工坊 ── */}
+          <div className="min-h-0 flex flex-col flex-1 bg-white border-l border-[#E9E9E7] overflow-hidden">
+            {/* 下划线风格 tab 栏（Longcut 风格） */}
+            <div className="shrink-0 px-5 pt-4 flex items-center gap-5 overflow-x-auto">
+              {VIDEO_WORKSPACE_TABS.map((tab) => (
                 <button
-                  onClick={() => uiActions.toggleTranscriptBar()}
-                  className="w-full flex items-center justify-between px-3.5 py-2 text-xs hover:bg-[#F7F7F5] transition-colors"
+                  key={tab.key}
+                  onClick={() => {
+                    setVideoWorkspaceTab(tab.key);
+                    if (tab.key !== 'confusion') setConfusionChatAnchor(null);
+                  }}
+                  className={`relative flex items-center gap-1.5 pb-3 text-[13px] transition-colors whitespace-nowrap ${
+                    videoWorkspaceTab === tab.key
+                      ? 'text-[#232322] font-medium'
+                      : 'text-[#A3A39E] hover:text-[#787774]'
+                  }`}
                 >
-                <div className="flex items-center gap-1.5">
-                  <svg className="w-3.5 h-3.5 text-[#A3A39E]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                  </svg>
-                  <span className="text-[#787774] font-medium">转录字幕</span>
-                  <span className="text-[#A3A39E]">{segments.length} 段</span>
-                </div>
-                <svg
-                  className={`w-4 h-4 text-[#A3A39E] transition-transform duration-200 ${showTranscriptBar ? 'rotate-180' : ''}`}
-                  fill="none" stroke="currentColor" viewBox="0 0 24 24"
-                >
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                </svg>
-              </button>
-              {showTranscriptBar && (
-                <div className="max-h-[300px] overflow-y-auto border-t border-[#E9E9E7] px-3.5 py-3 bg-white">
+                  {tab.LucideIcon && <tab.LucideIcon size={ICON_TAB} strokeWidth={ICON_TAB_STROKE} />}
+                  {tab.label}
+                  {tab.key === 'confusion' && anchors.filter(a => !a.resolved).length > 0 && (
+                    <span className="ml-0.5 w-1.5 h-1.5 bg-[#FADEC9] rounded-full inline-block animate-pulse" />
+                  )}
+                  {/* 下划线指示器 */}
+                  {videoWorkspaceTab === tab.key && (
+                    <span className="absolute bottom-0 left-0 right-0 h-[2px] bg-[#232322] rounded-full" />
+                  )}
+                </button>
+              ))}
+            </div>
+            <div className="mx-5 h-px bg-[#E9E9E7]" />
+
+            <div className="flex-1 min-h-0 overflow-hidden">
+              {/* Transcript tab */}
+              {videoWorkspaceTab === 'transcript' && (
+                <div className="h-full overflow-y-auto">
                   <TranscriptFlowView
                     segments={segments}
                     variant="video"
@@ -230,72 +272,11 @@ export function DesktopVideoReviewLayout(props: DesktopVideoReviewLayoutProps) {
                     }}
                     confusionTimestamps={anchors.map(a => ({ timestamp: a.timestamp, resolved: a.resolved }))}
                     defaultExpanded={true}
-                    showHeader={true}
-                    headerTitle="视频内容"
+                    showHeader={false}
                   />
                 </div>
               )}
-              </div>{/* end 卡片容器 */}
-            </div>{/* end mx-3 外层 */}
 
-            {/* Visual timeline and highlighted dialogue rounds */}
-            <div className="flex-1 min-h-0 overflow-y-auto">
-              <div className="px-3 py-2.5">
-                <div className="rounded-lg border border-[#E9E9E7] bg-white p-3.5">
-                  <div className="flex items-center justify-between mb-3">
-                    <div className="flex items-center gap-2">
-                      <span className="text-sm font-semibold text-[#232322]">课堂洞察</span>
-                      {videoInsightItems.filter(i => !i.id.startsWith('seed-')).length > 0 && (
-                        <span className="inline-flex items-center rounded-full bg-[#F7F7F5] border border-[#E9E9E7] px-2 py-0.5 text-[11px] tabular-nums text-[#787774]">
-                          {videoInsightItems.filter(i => !i.id.startsWith('seed-')).length} 条
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                  <VideoInsightTimeline
-                  items={videoInsightItems}
-                  activeItemId={activeVideoInsightId}
-                  totalDuration={totalDuration}
-                  formatTime={formatTime}
-                  onSelectItem={setActiveVideoInsightId}
-                  onSeek={(timeMs) => handleUnifiedSeek(timeMs, true)}
-                  onTriggerCheckpoint={onTriggerCheckpoint}
-                  currentTimeMs={currentTime}
-                />
-                </div>{/* end 课堂洞察卡片 */}
-              </div>
-            </div>
-          </div>
-
-          {/* Right column: tabs (chat / confusion / apps) */}
-          <div className="min-h-0 flex flex-col flex-1 bg-white overflow-hidden">
-            <div
-              className="flex items-center gap-0.5 px-3 py-2.5 border-b shrink-0 overflow-x-auto bg-[#F7F7F5]"
-              style={{ borderColor: '#E9E9E7' }}
-            >
-              {VIDEO_WORKSPACE_TABS.map((tab) => (
-                <button
-                  key={tab.key}
-                  onClick={() => {
-                    setVideoWorkspaceTab(tab.key);
-                    if (tab.key !== 'confusion') setConfusionChatAnchor(null);
-                  }}
-                  className={`flex items-center gap-1 px-3 py-1.5 text-sm rounded-lg transition-all whitespace-nowrap ${
-                    videoWorkspaceTab === tab.key
-                      ? 'bg-white text-[#787774] font-medium'
-                      : 'text-gray-500 hover:text-gray-800 hover:bg-white/60'
-                  }`}
-                >
-                  {tab.LucideIcon && <tab.LucideIcon size={ICON_TAB} strokeWidth={ICON_TAB_STROKE} />}
-                  {tab.label}
-                  {tab.key === 'confusion' && anchors.filter(a => !a.resolved).length > 0 && (
-                    <span className="ml-0.5 w-1.5 h-1.5 bg-red-400 rounded-full inline-block animate-pulse" />
-                  )}
-                </button>
-              ))}
-            </div>
-
-            <div className="flex-1 min-h-0 overflow-hidden">
               {/* Chat tab */}
               <div className={`h-full min-h-0 ${videoWorkspaceTab === 'chat' ? '' : 'hidden'}`}>
                   <AITutor
@@ -320,10 +301,10 @@ export function DesktopVideoReviewLayout(props: DesktopVideoReviewLayoutProps) {
                 <div className="h-full overflow-hidden flex flex-col">
                   {confusionChatAnchor ? (
                     <>
-                      <div className="shrink-0 flex items-center gap-2 px-4 py-2.5 border-b" style={{ background: 'var(--edu-bg-soft)', borderColor: 'var(--edu-border-light)' }}>
+                      <div className="shrink-0 flex items-center gap-2 px-4 py-2.5 border-b border-[#E9E9E7] bg-[#F7F7F5]">
                         <button
                           onClick={() => setConfusionChatAnchor(null)}
-                          className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-gray-200/60 transition-colors text-gray-500"
+                          className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-[#E9E9E7] transition-colors text-[#787774]"
                           title="返回列表"
                         >
                           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -392,9 +373,9 @@ export function DesktopVideoReviewLayout(props: DesktopVideoReviewLayoutProps) {
                       {anchors.length > 0 ? (
                         <div className="space-y-2">
                           <div className="flex items-center justify-between mb-2">
-                            <span className="text-xs text-gray-400">{anchors.length} 个困惑点</span>
+                            <span className="text-xs text-[#A3A39E]">{anchors.length} 个困惑点</span>
                             {anchors.filter(a => !a.resolved).length > 0 && (
-                              <span className="text-xs text-red-400">{anchors.filter(a => !a.resolved).length} 个待解决</span>
+                              <span className="text-xs text-[#787774]">{anchors.filter(a => !a.resolved).length} 个待解决</span>
                             )}
                           </div>
                           {anchors.map((anchor, index) => (
@@ -405,37 +386,37 @@ export function DesktopVideoReviewLayout(props: DesktopVideoReviewLayoutProps) {
                                 setSelectedAnchor(anchor);
                                 handleUnifiedSeek(anchor.timestamp, true);
                               }}
-                              className={`w-full text-left p-3 rounded-xl border transition-all hover:shadow-sm group ${
+                              className={`w-full text-left p-3 rounded-lg border transition-all group ${
                                 anchor.resolved
-                                  ? 'border-green-100 bg-green-50/50'
-                                  : 'border-[#E9E9E7] bg-[#FDF3C0]/20 hover:border-[#E9E9E7]'
+                                  ? 'border-[#E9E9E7] bg-[#F7F7F5]/50'
+                                  : 'border-[#E9E9E7] bg-[#FDF3C0]/10 hover:bg-[#FDF3C0]/20'
                               }`}
                             >
                               <div className="flex items-center gap-2">
-                                <span className={`w-2 h-2 rounded-full shrink-0 ${anchor.resolved ? 'bg-green-400' : 'bg-[#FADEC9]'}`} />
-                                <span className="text-xs font-mono text-gray-400">{formatTime(anchor.timestamp)}</span>
-                                <span className="text-xs text-gray-500">困惑点 #{index + 1}</span>
+                                <span className={`w-2 h-2 rounded-full shrink-0 ${anchor.resolved ? 'bg-[#A3A39E]' : 'bg-[#FADEC9]'}`} />
+                                <span className="text-xs font-mono text-[#A3A39E]">{formatTime(anchor.timestamp)}</span>
+                                <span className="text-xs text-[#787774]">困惑点 #{index + 1}</span>
                                 {anchor.resolved ? (
-                                  <span className="text-xs text-green-500 ml-auto">已解决</span>
+                                  <span className="text-xs text-[#A3A39E] ml-auto">已解决</span>
                                 ) : (
                                 <span className="ml-auto text-xs text-[#787774]">点击对话</span>
                                 )}
                               </div>
                               {anchor.note && (
-                                <p className="mt-1.5 text-sm text-gray-600 line-clamp-2 pl-4">{anchor.note}</p>
+                                <p className="mt-1.5 text-[13px] text-[#787774] line-clamp-2 pl-4">{anchor.note}</p>
                               )}
                             </button>
                           ))}
                         </div>
                       ) : (
                         <div className="py-10 text-center">
-                          <div className="w-14 h-14 mx-auto mb-3 rounded-full flex items-center justify-center bg-gray-50">
-                            <svg className="w-7 h-7 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <div className="w-14 h-14 mx-auto mb-3 rounded-full flex items-center justify-center bg-[#F7F7F5]">
+                            <svg className="w-7 h-7 text-[#A3A39E]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                             </svg>
                           </div>
-                          <p className="mb-1 text-sm text-gray-400">暂时还没有困惑点</p>
-                          <p className="text-xs text-gray-300">点击上方按钮，标记你没听懂的地方。</p>
+                          <p className="mb-1 text-[13px] text-[#787774]">暂时还没有困惑点</p>
+                          <p className="text-[12px] text-[#A3A39E]">点击上方按钮，标记你没听懂的地方。</p>
                         </div>
                       )}
                     </div>

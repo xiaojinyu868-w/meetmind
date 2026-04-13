@@ -495,6 +495,13 @@ export function useReviewSession(
     memoryService.save(timelineData);
 
     // 异步写入 IndexedDB，供后续恢复
+    // 先清理旧数据（同一 sessionId 下可能残留上次的 transcripts + session），避免内容杂糅
+    try {
+      await db.transcripts.where('sessionId').equals(targetSessionId).delete();
+      await db.audioSessions.where('sessionId').equals(targetSessionId).delete();
+    } catch {
+      // 清理失败不影响后续写入
+    }
     try {
       await db.transcripts.bulkAdd(
         loadedSegments.map((seg) => ({
@@ -507,12 +514,17 @@ export function useReviewSession(
           isFinal: true,
         }))
       );
+      // videoUrl 必须包含真实 URL（带 BV 号），否则恢复时 buildStoredVideoSource 无法提取 bvid
+      const resolvedVideoUrl = item.attachmentUrl
+        || item.mediaUrl
+        || item.embedUrl
+        || (item.bvid ? `https://www.bilibili.com/video/${item.bvid}` : `video://${item.id}`);
       await saveAudioSession(null, targetSessionId, currentUserId, {
         subject: UIConfig.defaultSubject,
         topic: item.title || '视频复习',
         duration: inferredDuration,
         sourceType: 'video-link',
-        videoUrl: item.attachmentUrl || item.mediaUrl || '',
+        videoUrl: resolvedVideoUrl,
         videoEmbedUrl: item.embedUrl,
         videoProvider: item.videoProvider,
         thumbnailUrl: item.previewUrl,

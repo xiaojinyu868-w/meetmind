@@ -18,6 +18,7 @@ import { FlashcardsWindow } from '@/components/apps/windows/FlashcardsWindow';
 import { QuizWindow } from '@/components/apps/windows/QuizWindow';
 import { MindmapWindow } from '@/components/apps/windows/MindmapWindow';
 import { InfographicWindow } from '@/components/apps/windows/InfographicWindow';
+import { StudyReportWindow } from '@/components/apps/windows/StudyReportWindow';
 
 const WORKSHOP_MODEL_PREFERENCE = 'ai_workshop_model';
 
@@ -374,6 +375,9 @@ export default function AppMatrixWindowPage() {
       ) : null}
       {app.key === 'mindmap' ? (
         <MindmapWindow result={execution.result} transcript={transcript} />
+      ) : null}
+      {app.key === 'study-report' ? (
+        <StudyReportWindow rounds={[]} plan={null} transcript={transcript} />
       ) : null}
     </AppWindowShell>
   );

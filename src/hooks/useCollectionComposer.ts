@@ -113,6 +113,7 @@ export function useCollectionComposer(
 
   // ── Store selectors ──────────────────────────────────────────────────
   const collectionActions = useCollectionStore((s) => s.actions);
+  const viewMode = useUIStore((s) => s.viewMode);
   const sourceItems = useCollectionStore((s) => s.sourceItems);
   const collectionComposerText = useCollectionStore((s) => s.collectionComposerText);
   const isCollectionContextSelectionMode = useCollectionStore((s) => s.isCollectionContextSelectionMode);
@@ -231,8 +232,10 @@ export function useCollectionComposer(
     el.scrollTo({ top: el.scrollHeight, behavior: smooth ? 'smooth' : 'auto' });
   }, [collectionScrollRef]);
 
-  // Scroll detection effect
+  // Scroll detection effect — also re-registers when viewMode changes
+  // because the scroll container is conditionally rendered (viewMode === 'record')
   useEffect(() => {
+    if (viewMode !== 'record') return;
     const el = collectionScrollRef.current;
     if (!el) return;
     const handleScroll = () => {
@@ -241,26 +244,54 @@ export function useCollectionComposer(
       (collectionScrollNearBottomRef as React.MutableRefObject<boolean>).current = nearBottom;
       setShowScrollToLatest(!nearBottom && collectionFeedItems.length > 0);
     };
+    // Evaluate immediately on mount — covers the case where auto-scroll-to-bottom
+    // failed and user sees the feed from the top (button should appear right away)
+    handleScroll();
     el.addEventListener('scroll', handleScroll, { passive: true });
     return () => el.removeEventListener('scroll', handleScroll);
-  }, [collectionFeedItems.length, collectionScrollRef, collectionScrollNearBottomRef]);
+  }, [viewMode, collectionFeedItems.length, collectionScrollRef, collectionScrollNearBottomRef]);
 
   // Initial mount: scroll to bottom when items first load (like WeChat chat)
+  // Also re-scroll when navigating back to 'record' viewMode
   const hasInitialScrolledRef = useRef(false);
-  useEffect(() => {
-    if (!hasInitialScrolledRef.current && collectionFeedItems.length > 0) {
-      hasInitialScrolledRef.current = true;
-      const el = collectionScrollRef.current;
-      if (!el) return;
 
-      // Strategy: Use MutationObserver to detect when DOM children are actually
-      // rendered (not just when React state updates). This covers the race where
-      // collectionFeedItems arrives before React commits the DOM tree.
-      let settled = false;
-      let settleTimer: ReturnType<typeof setTimeout> | null = null;
+  // Reset scroll flag when leaving record viewMode
+  // so returning to record re-triggers scroll-to-bottom
+  useEffect(() => {
+    if (viewMode !== 'record') {
+      hasInitialScrolledRef.current = false;
+    }
+  }, [viewMode]);
+
+  useEffect(() => {
+    if (viewMode !== 'record') return;
+    if (hasInitialScrolledRef.current) return;
+    if (collectionFeedItems.length === 0) return;
+
+    // Strategy: Use MutationObserver to detect when DOM children are actually
+    // rendered (not just when React state updates). This covers the race where
+    // collectionFeedItems arrives before React commits the DOM tree.
+
+    // Helper: wait for scrollRef to become available (may not be mounted yet
+    // when viewMode just changed to 'record' — React commits DOM after state batch)
+    let cancelled = false;
+    let settled = false;
+    let settleTimer: ReturnType<typeof setTimeout> | null = null;
+    let observer: MutationObserver | null = null;
+    let hardTimeout: ReturnType<typeof setTimeout> | null = null;
+
+    const setup = () => {
+      if (cancelled) return;
+      const el = collectionScrollRef.current;
+      if (!el) {
+        // DOM not mounted yet — retry next frame
+        requestAnimationFrame(setup);
+        return;
+      }
+
+      hasInitialScrolledRef.current = true;
 
       const doScroll = () => {
-        if (!el) return;
         el.scrollTo({ top: el.scrollHeight, behavior: 'auto' });
       };
 
@@ -268,13 +299,13 @@ export function useCollectionComposer(
       requestAnimationFrame(doScroll);
 
       // MutationObserver: re-scroll whenever child list changes (items rendering in)
-      const observer = new MutationObserver(() => {
+      observer = new MutationObserver(() => {
         doScroll();
         // Reset settle timer — wait for DOM to "settle" (no more mutations for 300ms)
         if (settleTimer) clearTimeout(settleTimer);
         settleTimer = setTimeout(() => {
           settled = true;
-          observer.disconnect();
+          observer?.disconnect();
           // Final scroll after settling
           doScroll();
         }, 300);
@@ -283,20 +314,23 @@ export function useCollectionComposer(
       observer.observe(el, { childList: true, subtree: true });
 
       // Hard timeout: give up after 3s regardless
-      const hardTimeout = setTimeout(() => {
+      hardTimeout = setTimeout(() => {
         if (!settled) {
-          observer.disconnect();
+          observer?.disconnect();
           doScroll();
         }
       }, 3000);
+    };
 
-      return () => {
-        observer.disconnect();
-        if (settleTimer) clearTimeout(settleTimer);
-        clearTimeout(hardTimeout);
-      };
-    }
-  }, [collectionFeedItems.length, collectionScrollRef]);
+    setup();
+
+    return () => {
+      cancelled = true;
+      observer?.disconnect();
+      if (settleTimer) clearTimeout(settleTimer);
+      if (hardTimeout) clearTimeout(hardTimeout);
+    };
+  }, [viewMode, collectionFeedItems.length, collectionScrollRef]);
 
   // Auto-scroll to bottom on new items
   useEffect(() => {

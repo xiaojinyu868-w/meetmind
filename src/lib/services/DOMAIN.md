@@ -98,7 +98,7 @@ api/route.ts → services → lib/utils, lib/db, lib/config
 | 文件 | 行数 | 职责 |
 |------|------|------|
 | `health-check.ts` | 86 | 浏览器 API 可用性检查 |
-| `app-workspace-state.ts` | 38 | 持久化视图状态（24h TTL） |
+| `app-workspace-state.ts` | 38 | 持久化视图状态（24h TTL），含 `PersistedVideoWorkspaceTab`（chat/confusion/transcript/apps） |
 | `anchor-service.ts` | 165 | 困惑锚点 IndexedDB CRUD |
 | `conversation-service.ts` | 314 | 对话历史 CRUD |
 | `memory-service.ts` | 157 | 课堂时间线本地持久化 |

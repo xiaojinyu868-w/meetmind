@@ -15,9 +15,9 @@ export type ViewMode = 'record' | 'review';
 export type DataSource = 'live' | 'demo' | 'video';
 
 export type SharedWorkspaceTab = 'apps';
-export type WorkspaceTab = 'timeline' | 'anchor-detail' | 'chat' | 'confusion' | SharedWorkspaceTab;
+export type WorkspaceTab = 'timeline' | 'anchor-detail' | 'chat' | 'confusion' | 'transcript' | SharedWorkspaceTab;
 export type ReviewTab = Extract<WorkspaceTab, 'timeline' | 'anchor-detail' | SharedWorkspaceTab>;
-export type VideoWorkspaceTab = Extract<WorkspaceTab, 'chat' | 'confusion' | SharedWorkspaceTab>;
+export type VideoWorkspaceTab = Extract<WorkspaceTab, 'chat' | 'confusion' | 'transcript' | SharedWorkspaceTab>;
 
 export interface WorkspaceTabConfig<T extends WorkspaceTab> {
   key: T;

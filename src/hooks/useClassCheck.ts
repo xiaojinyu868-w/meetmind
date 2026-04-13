@@ -21,6 +21,31 @@ import type { ClassCheckPlan, ClassCheckCheckpoint, ClassCheckHighlight } from '
 
 const CLASS_CHECK_ENABLED_KEY = 'settings_class_check_enabled';
 const SEEK_THRESHOLD_MS = 5000;
+/** seek 后保留 checkpoint 的宽容区间：如果 triggerMs 在 [seekTarget - GRACE, seekTarget + GRACE] 内，不 skip */
+const CHECKPOINT_GRACE_MS = 8000;
+const PLAN_CACHE_PREFIX = 'class-check-plan:';
+const PLAN_CACHE_TTL_MS = 24 * 60 * 60 * 1000; // 24 小时
+
+function readCachedPlan(sessionId: string, segmentCount: number): ClassCheckPlan | null {
+  if (typeof window === 'undefined') return null;
+  try {
+    const raw = window.localStorage.getItem(`${PLAN_CACHE_PREFIX}${sessionId}`);
+    if (!raw) return null;
+    const cached = JSON.parse(raw) as { plan: ClassCheckPlan; segmentCount: number; ts: number };
+    if (!cached.plan || cached.segmentCount !== segmentCount) return null;
+    if (Date.now() - cached.ts > PLAN_CACHE_TTL_MS) return null;
+    return cached.plan;
+  } catch { return null; }
+}
+
+function writeCachedPlan(sessionId: string, segmentCount: number, plan: ClassCheckPlan): void {
+  if (typeof window === 'undefined') return;
+  try {
+    window.localStorage.setItem(`${PLAN_CACHE_PREFIX}${sessionId}`, JSON.stringify({
+      plan, segmentCount, ts: Date.now(),
+    }));
+  } catch { /* quota exceeded — ignore */ }
+}
 
 export interface ClassCheckRound {
   roundIndex: number;
@@ -139,6 +164,20 @@ export function useClassCheck({
     if (planSessionRef.current === planKey) return;
     planSessionRef.current = planKey;
 
+    // 先检查 localStorage 缓存
+    const cached = readCachedPlan(sessionId, segments.length);
+    if (cached) {
+      console.log('[class-check] plan loaded from cache, sessionId=%s, %d checkpoints, %d highlights',
+        sessionId, cached.checkpoints.length, cached.highlights?.length || 0);
+      setPlan(cached);
+      setCheckpointStatuses(cached.checkpoints.map(() => 'pending'));
+      if (cached.highlights && cached.highlights.length > 0 && onHighlightsReady) {
+        onHighlightsReady(cached.highlights);
+      }
+      setIsPlanLoading(false);
+      return;
+    }
+
     console.log('[class-check] requesting plan, sessionId=%s, segments=%d', sessionId, segments.length);
 
     setIsPlanLoading(true);
@@ -170,13 +209,13 @@ export function useClassCheck({
         if (data.ok && data.plan) {
           console.log('[class-check] plan received: %d checkpoints (with questions), %d highlights',
             data.plan.checkpoints.length, data.plan.highlights?.length || 0);
-          // 日志：打印每个 checkpoint 的题目数
           data.plan.checkpoints.forEach((cp, i) => {
             console.log('[class-check]   checkpoint %d: "%s" at %dms, %d questions',
               i, cp.topic, cp.triggerMs, cp.questions.length);
           });
           setPlan(data.plan);
           setCheckpointStatuses(data.plan.checkpoints.map(() => 'pending'));
+          writeCachedPlan(sessionId, segments.length, data.plan);
           if (data.plan.highlights && data.plan.highlights.length > 0 && onHighlightsReady) {
             onHighlightsReady(data.plan.highlights);
           }
@@ -206,16 +245,22 @@ export function useClassCheck({
     // 检测快进/跳进
     const delta = currentTimeMs - prevTime;
     if (prevTime > 0 && (Math.abs(delta) > SEEK_THRESHOLD_MS || delta < -1000)) {
+      // Seek detected — only skip checkpoints that were truly "jumped over":
+      // those whose triggerMs is well before the seek target (beyond the grace zone).
+      // Checkpoints near the landing point are preserved so normal playback can trigger them.
       setCheckpointStatuses((prev) => {
         const next = [...prev];
         for (let i = 0; i < plan.checkpoints.length; i++) {
-          if (next[i] === 'pending' && plan.checkpoints[i].triggerMs < currentTimeMs) {
+          if (next[i] !== 'pending') continue;
+          const triggerMs = plan.checkpoints[i].triggerMs;
+          // Only skip if triggerMs is far below the seek target (outside grace zone)
+          if (triggerMs < currentTimeMs - CHECKPOINT_GRACE_MS) {
             next[i] = 'skipped';
           }
         }
         return next;
       });
-      return;
+      // Don't return — fall through to check if a checkpoint is now reachable
     }
 
     // 找到下一个应该触发的 checkpoint
@@ -225,13 +270,40 @@ export function useClassCheck({
 
     if (nextIdx < 0) return;
 
-    // 不暂停、不弹题，只设置 pendingCheckpoint → 触发 toast 邀请
+    // 到达触发点 → 直接暂停 + 弹题
     const checkpoint = plan.checkpoints[nextIdx];
-    console.log('[class-check] checkpoint %d "%s" reached at %dms, showing invite toast',
+    if (!checkpoint || checkpoint.questions.length === 0) return;
+
+    console.log('[class-check] checkpoint %d "%s" reached at %dms, pausing + showing quiz',
       nextIdx, checkpoint.topic, currentTimeMs);
 
-    setPendingCheckpointIdx(nextIdx);
-  }, [currentTimeMs, enabled, isPlaying, isCheckActive, plan, checkpointStatuses, pendingCheckpointIdx]);
+    triggerLockRef.current = true;
+    activeCheckpointIndexRef.current = nextIdx;
+    setCheckpointStatuses((prev) => {
+      const next = [...prev];
+      next[nextIdx] = 'active';
+      return next;
+    });
+
+    pausePlayer();
+
+    const questions: ClassCheckQuestion[] = checkpoint.questions.map((q, i) => ({
+      id: `cc-${nextIdx}-${i}`,
+      stem: q.stem,
+      options: q.options,
+      answer: q.answer,
+      explanation: q.explanation || undefined,
+    }));
+
+    setCurrentQuestions(questions);
+    setCurrentGreeting(checkpoint.greeting);
+    setCurrentEncouragement(checkpoint.encouragement);
+    setCurrentTopic(checkpoint.topic);
+    const nextCp = plan.checkpoints[nextIdx + 1];
+    setCurrentNextPreview(nextCp ? `接下来：${nextCp.topic}` : '');
+    setIsCheckActive(true);
+    triggerLockRef.current = false;
+  }, [currentTimeMs, enabled, isPlaying, isCheckActive, plan, checkpointStatuses]);
 
   const handleCheckComplete = useCallback(
     (result: ClassCheckResult) => {
@@ -250,9 +322,11 @@ export function useClassCheck({
       setCurrentQuestions([]);
       activeCheckpointIndexRef.current = -1;
       triggerLockRef.current = false;
+      // 重置 prevTimeRef，避免恢复播放后第一次 timeUpdate 被误判为 seek
+      prevTimeRef.current = currentTimeMs;
       resumePlayer();
     },
-    [resumePlayer]
+    [currentTimeMs, resumePlayer]
   );
 
   // 用户接受 toast 邀请 → 暂停播放、加载题目、进入答题
@@ -323,6 +397,10 @@ export function useClassCheck({
 
       triggerLockRef.current = true;
       activeCheckpointIndexRef.current = checkpointIndex;
+
+      // 重置 prevTimeRef 为当前时间，避免恢复播放后被误判为 seek/跳转
+      prevTimeRef.current = currentTimeMs;
+
       setCheckpointStatuses((prev) => {
         const next = [...prev];
         next[checkpointIndex] = 'active';
@@ -348,7 +426,7 @@ export function useClassCheck({
       setIsCheckActive(true);
       triggerLockRef.current = false;
     },
-    [checkpointStatuses, enabled, isCheckActive, plan, pausePlayer]
+    [checkpointStatuses, currentTimeMs, enabled, isCheckActive, plan, pausePlayer]
   );
 
   const totalCorrect = rounds.reduce((sum, r) => sum + r.result.correctCount, 0);
