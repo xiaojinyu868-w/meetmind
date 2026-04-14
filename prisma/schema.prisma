@@ -22,6 +22,8 @@ model User {
   passwordHash String?
   salt         String?
   defaultWorkspaceId String?
+  learnerProfileJson String?    // JSON — 学习者画像（身份阶段+专业+年级等）
+  onboardingCompletedAt DateTime? // null = 未完成 onboarding
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
   lastLoginAt  DateTime?

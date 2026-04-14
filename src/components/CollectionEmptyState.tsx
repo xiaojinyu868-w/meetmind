@@ -1,24 +1,20 @@
 /**
- * CollectionEmptyState — 收集为空时的引导页 v2
+ * CollectionEmptyState — 收集为空时的引导页 v3
  *
- * 设计升级：
- * - 更克制的引导文案，呼吸感更强
- * - 入口按钮卡片化，统一 whisper border + hover 加深
- * - 图标容器更柔和的圆角（squircle 感）
+ * 核心改动：录音是第一动作。
+ * 一个大的录音按钮居中，其他入口（上传音频/图片/讲义）收到底部小字链接。
+ *
+ * 设计系统：零渐变、零阴影、纯平涂
  */
 
 'use client';
 
-import {
-  Sparkles,
-  Image as ImageIcon,
-  FileText,
-  AudioLines,
-} from 'lucide-react';
+import { Mic } from 'lucide-react';
 
 // ==================== 类型定义 ====================
 
 export interface CollectionEmptyStateProps {
+  onStartRecording: () => void;
   onUploadAudio: () => void;
   onUploadImage: () => void;
   onUploadDocument: () => void;
@@ -27,56 +23,44 @@ export interface CollectionEmptyStateProps {
 // ==================== 组件实现 ====================
 
 export function CollectionEmptyState({
+  onStartRecording,
   onUploadAudio,
   onUploadImage,
   onUploadDocument,
 }: CollectionEmptyStateProps) {
   return (
-    <div className="flex flex-col items-center justify-center px-6 py-16">
-      {/* 图标 */}
-      <div className="flex h-16 w-16 items-center justify-center rounded-[20px] bg-[#D3E4F4]/50">
-        <Sparkles size={26} strokeWidth={1.5} className="text-[#5B8DBF]" />
-      </div>
+    <div className="flex flex-col items-center justify-center px-6 py-20">
+      {/* 录音按钮——视觉焦点 */}
+      <button
+        type="button"
+        onClick={onStartRecording}
+        className="group flex h-24 w-24 items-center justify-center rounded-full bg-[#232322] text-white transition-transform active:scale-95"
+        aria-label="开始录音"
+      >
+        <Mic size={32} strokeWidth={1.5} className="transition-transform group-hover:scale-110" />
+      </button>
 
-      {/* 文案 */}
-      <p className="mt-5 text-[16px] font-medium tracking-tight text-[#232322]">
-        从一条线索开始
+      {/* 主文案 */}
+      <p className="mt-6 text-[17px] font-medium tracking-tight text-[#232322]">
+        录一节课试试
       </p>
       <p className="mt-2 text-center text-[13px] leading-[1.6] text-[#A3A39E]">
-        一句困惑、一张图、一份讲义<br />或者一段原声都行
+        点一下开始录，MeetMind 会帮你听懂这节课
       </p>
 
-      {/* 快捷入口 */}
-      <div className="mt-8 flex items-center gap-3">
-        <button
-          type="button"
-          onClick={onUploadAudio}
-          className="flex flex-col items-center gap-2 rounded-2xl bg-white px-5 py-4 ring-[0.5px] ring-[#232322]/[0.06] transition-all hover:ring-[#232322]/[0.12] hover:bg-[#FAFAF9]"
-        >
-          <span className="flex h-10 w-10 items-center justify-center rounded-[12px] bg-[#FDF3C0]/70 text-[#8B6914]">
-            <AudioLines size={18} strokeWidth={1.5} />
-          </span>
-          <span className="text-[12px] font-medium text-[#787774]">原声</span>
+      {/* 次要入口——小字链接 */}
+      <div className="mt-10 flex items-center gap-1 text-[12px] text-[#A3A39E]">
+        <span>也可以</span>
+        <button type="button" onClick={onUploadAudio} className="underline underline-offset-2 transition-colors hover:text-[#787774]">
+          传音频
         </button>
-        <button
-          type="button"
-          onClick={onUploadImage}
-          className="flex flex-col items-center gap-2 rounded-2xl bg-white px-5 py-4 ring-[0.5px] ring-[#232322]/[0.06] transition-all hover:ring-[#232322]/[0.12] hover:bg-[#FAFAF9]"
-        >
-          <span className="flex h-10 w-10 items-center justify-center rounded-[12px] bg-[#D3E4F4]/60 text-[#1E5F8A]">
-            <ImageIcon size={18} strokeWidth={1.5} />
-          </span>
-          <span className="text-[12px] font-medium text-[#787774]">图片</span>
+        <span>·</span>
+        <button type="button" onClick={onUploadImage} className="underline underline-offset-2 transition-colors hover:text-[#787774]">
+          拍讲义
         </button>
-        <button
-          type="button"
-          onClick={onUploadDocument}
-          className="flex flex-col items-center gap-2 rounded-2xl bg-white px-5 py-4 ring-[0.5px] ring-[#232322]/[0.06] transition-all hover:ring-[#232322]/[0.12] hover:bg-[#FAFAF9]"
-        >
-          <span className="flex h-10 w-10 items-center justify-center rounded-[12px] bg-[#FADEC9]/60 text-[#9A4A12]">
-            <FileText size={18} strokeWidth={1.5} />
-          </span>
-          <span className="text-[12px] font-medium text-[#787774]">讲义</span>
+        <span>·</span>
+        <button type="button" onClick={onUploadDocument} className="underline underline-offset-2 transition-colors hover:text-[#787774]">
+          传文件
         </button>
       </div>
     </div>

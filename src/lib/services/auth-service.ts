@@ -53,6 +53,8 @@ interface DbUserRecord {
   avatar: string | null;
   role: string;
   status: string;
+  learnerProfileJson: string | null;
+  onboardingCompletedAt: Date | null;
   createdAt: Date;
   updatedAt: Date;
   lastLoginAt: Date | null;
@@ -417,6 +419,10 @@ function getRolePermissions(role: UserRole): Permission[] {
  * 将数据库用户转换为应用用户类型
  */
 function dbUserToUser(dbUser: DbUserRecord): User {
+  let learnerProfile: User['learnerProfile'];
+  if (dbUser.learnerProfileJson) {
+    try { learnerProfile = JSON.parse(dbUser.learnerProfileJson); } catch { /* ignore */ }
+  }
   return {
     id: dbUser.id,
     username: dbUser.username,
@@ -426,6 +432,8 @@ function dbUserToUser(dbUser: DbUserRecord): User {
     avatar: dbUser.avatar || undefined,
     role: dbUser.role as UserRole,
     status: dbUser.status as UserStatus,
+    learnerProfile,
+    onboardingCompletedAt: dbUser.onboardingCompletedAt?.toISOString(),
     createdAt: dbUser.createdAt.toISOString(),
     updatedAt: dbUser.updatedAt.toISOString(),
     lastLoginAt: dbUser.lastLoginAt?.toISOString(),
@@ -714,6 +722,35 @@ export const authService = {
     });
     
     return dbUserToUser(updatedUser);
+  },
+
+  /**
+   * 保存学习者画像（Onboarding / Settings 调用）
+   */
+  async saveLearnerProfile(userId: string, profile: Record<string, unknown>): Promise<User | null> {
+    const user = await prisma.user.findUnique({ where: { id: userId } });
+    if (!user) return null;
+
+    const updatedUser = await prisma.user.update({
+      where: { id: userId },
+      data: {
+        learnerProfileJson: JSON.stringify(profile),
+        onboardingCompletedAt: new Date(),
+      }
+    });
+
+    return dbUserToUser(updatedUser);
+  },
+
+  /**
+   * 获取学习者画像 JSON（供 API 路由调用，返回原始 JSON 字符串）
+   */
+  async getLearnerProfileJson(userId: string): Promise<string | null> {
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { learnerProfileJson: true }
+    });
+    return user?.learnerProfileJson ?? null;
   },
 
   /**

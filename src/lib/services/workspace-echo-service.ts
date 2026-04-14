@@ -1006,7 +1006,7 @@ export const workspaceEchoService = {
       };
     }
 
-    const prompt = buildEchoPrompt(promptPackage);
+    let prompt = buildEchoPrompt(promptPackage);
     const chips = buildEchoChips(promptPackage);
     const model = process.env.COMMONSTACK_ECHO_MODEL || null;
 
@@ -1034,6 +1034,37 @@ export const workspaceEchoService = {
     }
 
     try {
+      // 获取 workspace owner 的学习者画像，用于个性化 Echo
+      try {
+        const workspace = await prisma.workspace.findUnique({
+          where: { id: workspaceId },
+          select: { ownerId: true },
+        });
+        if (workspace?.ownerId) {
+          const owner = await prisma.user.findUnique({
+            where: { id: workspace.ownerId },
+            select: { learnerProfileJson: true },
+          });
+          if (owner?.learnerProfileJson) {
+            try {
+              const p = JSON.parse(owner.learnerProfileJson) as Record<string, unknown>;
+              const parts: string[] = [];
+              switch (p.stage) {
+                case 'k12': parts.push(`这个学生是${p.gradeLevel || '中小学生'}`); break;
+                case 'university': parts.push(`这个学生是${p.year || '大学'} ${p.major || ''}专业的`); break;
+                case 'graduate': parts.push(`这个学生是研究生，主方向是${p.field || '未知'}`); break;
+                case 'working': parts.push(`这个学生是在职学习者，行业是${p.industry || '未知'}`); break;
+              }
+              if (p.otherInterests) parts.push(`也在学${p.otherInterests}`);
+              if (parts.length > 0) {
+                const ctx = parts.join('，') + '。';
+                prompt = `${ctx}\n生成回声时可以联系他的背景和兴趣，但以实际学习内容为准。\n\n${prompt}`;
+              }
+            } catch { /* ignore parse errors */ }
+          }
+        }
+      } catch { /* 不影响正常 Echo 生成 */ }
+
       const completion = await generateCommonstackEcho({ prompt });
       const normalized = normalizeEchoOutput(completion.content);
       const recommendations = normalized.recommendations;

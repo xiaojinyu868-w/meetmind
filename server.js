@@ -954,7 +954,7 @@ app.prepare().then(() => {
     const apiKey = process.env.DASHSCOPE_API_KEY;
     const model = process.env.DASHSCOPE_OMNI_REALTIME_MODEL || 'qwen3.5-omni-plus-realtime';
     const transcriptionModel = process.env.DASHSCOPE_OMNI_REALTIME_TRANSCRIPT_MODEL || 'gummy-realtime-v1';
-    const defaultVoice = process.env.DASHSCOPE_OMNI_REALTIME_VOICE || 'Tina';
+    const defaultVoice = process.env.DASHSCOPE_OMNI_REALTIME_VOICE || 'Ethan';
 
     if (!apiKey) {
       clientWs.send(JSON.stringify({ event: 'error', error: 'API Key 未配置' }));
@@ -989,9 +989,9 @@ app.prepare().then(() => {
         },
         turn_detection: {
           type: 'server_vad',
-          threshold: 0.45,
-          silence_duration_ms: 700,
-          prefix_padding_ms: 240,
+          threshold: 0.5,
+          silence_duration_ms: 1100,
+          prefix_padding_ms: 300,
           create_response: true,
           interrupt_response: true,
         },

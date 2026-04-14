@@ -9,7 +9,7 @@
 import { useState, useEffect, useCallback, useRef, createContext, useContext, ReactNode } from 'react';
 import { db, ANONYMOUS_USER_ID } from '@/lib/db';
 import { runMemoryMigration } from '@/lib/services/memory-migration';
-import type { User, Permission, AuthResponse, LoginRequest, RegisterRequest } from '@/types/user';
+import type { User, Permission, AuthResponse, LoginRequest, RegisterRequest, LearnerProfile } from '@/types/user';
 import type { LocalWorkspaceMigrationPayload } from '@/lib/services/workspace-context-types';
 
 // ==================== 类型定义 ====================
@@ -36,9 +36,11 @@ interface AuthContextValue extends AuthState {
   logout: () => Promise<void>;
   refreshToken: () => Promise<boolean>;
   updateProfile: (data: Partial<User>) => Promise<boolean>;
+  saveLearnerProfile: (profile: LearnerProfile) => Promise<boolean>;
   hasPermission: (permission: Permission) => boolean;
   getWechatAuthUrl: () => Promise<string | null>;
-  isCheckingAuth: boolean; // 新增：是否正在检查认证状态
+  onboardingCompleted: boolean;
+  isCheckingAuth: boolean;
 }
 
 // ==================== Context ====================
@@ -664,6 +666,35 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
+  // 保存学习者画像
+  const saveLearnerProfile = useCallback(async (profile: LearnerProfile): Promise<boolean> => {
+    if (!state.accessToken) return false;
+
+    try {
+      const response = await fetch('/api/auth/learner-profile', {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${state.accessToken}`,
+        },
+        body: JSON.stringify(profile),
+      });
+
+      const result = await response.json();
+
+      if (result.success && result.user) {
+        setState(prev => ({ ...prev, user: result.user }));
+        return true;
+      }
+
+      return false;
+    } catch {
+      return false;
+    }
+  }, [state.accessToken]);
+
+  const onboardingCompleted = !!state.user?.onboardingCompletedAt;
+
   const value: AuthContextValue = {
     ...state,
     login,
@@ -672,8 +703,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     logout,
     refreshToken,
     updateProfile,
+    saveLearnerProfile,
     hasPermission,
     getWechatAuthUrl,
+    onboardingCompleted,
     isCheckingAuth,
   };
 

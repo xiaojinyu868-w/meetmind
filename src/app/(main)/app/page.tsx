@@ -83,6 +83,7 @@ import type { ClassCheckHighlight } from '@/app/api/class-check/plan/route';
 import type { VideoInsightItem } from '@/components/VideoInsightTimeline';
 const ClassCheckOverlay = dynamic(() => import('@/components/ClassCheckOverlay').then(m => ({ default: m.ClassCheckOverlay })), { ssr: false });
 const ClassCheckToast = dynamic(() => import('@/components/ClassCheckToast').then(m => ({ default: m.ClassCheckToast })), { ssr: false });
+const LearnerOnboarding = dynamic(() => import('@/components/LearnerOnboarding'), { ssr: false });
 
 import { AppLoading } from '@/components/AppLoading';
 import { CollectionMessageActionSheet } from '@/components/CollectionMessageActionSheet';
@@ -314,7 +315,7 @@ function StudentAppContent({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   
-  const { user, isAuthenticated, accessToken, isCheckingAuth } = useAuth();
+  const { user, isAuthenticated, accessToken, isCheckingAuth, saveLearnerProfile, onboardingCompleted } = useAuth();
   
 
   const { isMobile: detectedIsMobile, mounted } = useResponsive();
@@ -613,6 +614,19 @@ function StudentAppContent({
 
   const handleSplashComplete = useCallback(() => {
     setShowSplash(false);
+  }, []);
+
+  // ── Learner Onboarding ──────
+  const [onboardingDismissed, setOnboardingDismissed] = useState(false);
+  const showOnboarding = isAuthenticated && !onboardingCompleted && !onboardingDismissed && !isGuestFastEntry;
+
+  const handleOnboardingComplete = useCallback(async (profile: import('@/types/user').LearnerProfile) => {
+    await saveLearnerProfile(profile);
+    setOnboardingDismissed(true);
+  }, [saveLearnerProfile]);
+
+  const handleOnboardingSkip = useCallback(() => {
+    setOnboardingDismissed(true);
   }, []);
 
   // NOTE: refreshDailyEcho 已提取到 useEchoActions hook（见上方 hook 调用）。
@@ -1280,6 +1294,7 @@ function StudentAppContent({
 
           {collectionFeedItems.length === 0 ? (
             <CollectionEmptyState
+              onStartRecording={openLiveRecorder}
               onUploadAudio={() => handleSourceFileButtonClick('audio')}
               onUploadImage={() => handleSourceFileButtonClick('all')}
               onUploadDocument={() => handleSourceFileButtonClick('all')}
@@ -1592,6 +1607,15 @@ function StudentAppContent({
         progress={loadingProgress}
         message={loadingProgress >= 100 ? '即将进入' : undefined}
         onComplete={loadingProgress >= 100 ? handleSplashComplete : undefined}
+      />
+    );
+  }
+
+  if (showOnboarding) {
+    return (
+      <LearnerOnboarding
+        onComplete={handleOnboardingComplete}
+        onSkip={handleOnboardingSkip}
       />
     );
   }

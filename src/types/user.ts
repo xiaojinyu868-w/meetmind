@@ -70,6 +70,8 @@ export interface User {
   avatar?: string;
   role: UserRole;
   status: UserStatus;
+  learnerProfile?: LearnerProfile;
+  onboardingCompletedAt?: string;
   createdAt: string;
   updatedAt: string;
   lastLoginAt?: string;
@@ -125,6 +127,53 @@ export interface UserPreferences {
   aiModel?: string;
   autoSave?: boolean;
 }
+
+// ==================== 学习者画像 ====================
+
+/** 身份阶段 */
+export type LearnerStage = 'k12' | 'university' | 'graduate' | 'working';
+
+export const LEARNER_STAGE_LABELS: Record<LearnerStage, string> = {
+  k12: '中小学生',
+  university: '大学生',
+  graduate: '研究生',
+  working: '在职学习',
+};
+
+interface LearnerProfileBase {
+  stage: LearnerStage;
+  goal?: string; // "期末不挂科" / "考研" / "转行"
+  otherInterests?: string; // "英语、出国准备" — 和主方向无关的学习线
+}
+
+export interface K12Profile extends LearnerProfileBase {
+  stage: 'k12';
+  gradeLevel: string;        // "高一" / "初三"
+  textbookEdition?: string;  // "人教版" / "北师大版"
+  weakSubjects?: string[];   // ["数学", "物理"]
+}
+
+export interface UniversityProfile extends LearnerProfileBase {
+  stage: 'university';
+  major: string;             // "计算机科学"
+  year: string;              // "大二"
+  currentCourses?: string[]; // ["数据结构", "线性代数"]
+}
+
+export interface GraduateProfile extends LearnerProfileBase {
+  stage: 'graduate';
+  field: string;             // "NLP" / "量化金融"
+  advisor?: string;          // 导师
+  researchTopic?: string;    // "大模型幻觉检测"
+}
+
+export interface WorkingProfile extends LearnerProfileBase {
+  stage: 'working';
+  industry: string;          // "互联网" / "金融"
+  learningGoal: string;      // "转行产品经理" / "CPA考证"
+}
+
+export type LearnerProfile = K12Profile | UniversityProfile | GraduateProfile | WorkingProfile;
 
 // ==================== 微信登录相关 ====================
 

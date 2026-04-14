@@ -186,7 +186,7 @@ export async function primeOmniRealtimeCallEntry(): Promise<boolean> {
 
 export function useOmniRealtimeCall({
   instructions,
-  voice = 'Tina',
+  voice = 'Ethan',
   enableSearch = false,
   connectOnMount = false,
   onUserTranscript,

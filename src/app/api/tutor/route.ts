@@ -51,8 +51,10 @@ import {
   REALTIME_TEACHER_FOLLOWUP_PROMPT,
   REALTIME_TEACHER_GLOBAL_CHAT_PROMPT,
   REALTIME_TEACHER_SELECTED_CONTEXT_CHAT_PROMPT,
+  formatLearnerContext,
 } from './tutor-prompts';
 import { generateGuidanceQuestion } from './tutor-guidance';
+import { authService } from '@/lib/services/auth-service';
 
 const log = createLogger('tutor');
 const REALTIME_TEACHER_MODEL_ID = 'qwen3.5-omni-plus';
@@ -274,6 +276,21 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    // ── 获取学习者画像（用于个性化 prompt）──
+    let learnerContextPrompt = '';
+    try {
+      const authHeader = request.headers.get('Authorization');
+      if (authHeader?.startsWith('Bearer ')) {
+        const payload = authService.verifyToken(authHeader.slice(7));
+        if (payload?.sub) {
+          const profileJson = await authService.getLearnerProfileJson(payload.sub);
+          learnerContextPrompt = formatLearnerContext(profileJson);
+        }
+      }
+    } catch {
+      // 获取失败不影响正常功能
+    }
+
     // ── 构建 LLM Messages ──
     const messages: ChatMessage[] = [];
     const isRealtimeTeacherMode = model === REALTIME_TEACHER_MODEL_ID;
@@ -303,6 +320,9 @@ export async function POST(request: NextRequest) {
       }
       if (supportUsagePrompt) {
         systemPrompt += `\n\n${supportUsagePrompt}`;
+      }
+      if (learnerContextPrompt) {
+        systemPrompt += learnerContextPrompt;
       }
 
       messages.push({ role: 'system', content: systemPrompt });
@@ -343,7 +363,7 @@ export async function POST(request: NextRequest) {
     } else {
       messages.push({
         role: 'system',
-        content: [TUTOR_SYSTEM_PROMPT, supportAutoPolicyPrompt, supportUsagePrompt].filter(Boolean).join('\n\n'),
+        content: [TUTOR_SYSTEM_PROMPT, supportAutoPolicyPrompt, supportUsagePrompt, learnerContextPrompt].filter(Boolean).join('\n\n'),
       });
       messages.push({
         role: 'user',

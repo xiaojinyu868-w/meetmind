@@ -2,10 +2,14 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
+import dynamic from 'next/dynamic';
 import { useAuth } from '@/lib/hooks/useAuth';
 import { getPreference, setPreference } from '@/lib/db';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { AVAILABLE_MODELS, DEFAULT_MODEL_ID } from '@/lib/services/llm-service';
+import { LEARNER_STAGE_LABELS, type LearnerProfile, type LearnerStage } from '@/types/user';
+
+const LearnerOnboardingComponent = dynamic(() => import('@/components/LearnerOnboarding'), { ssr: false });
 
 const SETTINGS_KEYS = {
   AUTO_SAVE: 'settings_auto_save',
@@ -57,13 +61,14 @@ const modelOptions = AVAILABLE_MODELS.map((model) => ({
 }));
 
 export default function SettingsPage() {
-  const { user, isAuthenticated, isCheckingAuth, updateProfile, logout } = useAuth();
+  const { user, isAuthenticated, isCheckingAuth, updateProfile, logout, saveLearnerProfile, onboardingCompleted } = useAuth();
   const [settings, setSettings] = useState<SettingsState>(DEFAULT_SETTINGS);
   const [profileForm, setProfileForm] = useState<ProfileForm>(DEFAULT_PROFILE_FORM);
   const [loading, setLoading] = useState(true);
   const [savingSetting, setSavingSetting] = useState(false);
   const [savingProfile, setSavingProfile] = useState(false);
   const [saveMessage, setSaveMessage] = useState<BannerMessage | null>(null);
+  const [showLearnerEdit, setShowLearnerEdit] = useState(false);
 
   const showMessage = useCallback((type: BannerMessage['type'], text: string) => {
     setSaveMessage({ type, text });
@@ -277,6 +282,75 @@ export default function SettingsPage() {
             )}
           </SettingGroup>
         </div>
+
+        {isAuthenticated && (
+          <div>
+            <SectionCaption>学习档案</SectionCaption>
+            <SettingGroup>
+              {user?.learnerProfile ? (
+                <>
+                  <StaticRow
+                    label="身份"
+                    value={LEARNER_STAGE_LABELS[user.learnerProfile.stage as LearnerStage] || user.learnerProfile.stage}
+                  />
+                  <GroupDivider />
+                  {user.learnerProfile.stage === 'k12' && (
+                    <StaticRow label="年级" value={(user.learnerProfile as { gradeLevel?: string }).gradeLevel || '未设置'} />
+                  )}
+                  {user.learnerProfile.stage === 'university' && (
+                    <>
+                      <StaticRow label="专业" value={(user.learnerProfile as { major?: string }).major || '未设置'} />
+                      <GroupDivider />
+                      <StaticRow label="年级" value={(user.learnerProfile as { year?: string }).year || '未设置'} />
+                    </>
+                  )}
+                  {user.learnerProfile.stage === 'graduate' && (
+                    <StaticRow label="方向" value={(user.learnerProfile as { field?: string }).field || '未设置'} />
+                  )}
+                  {user.learnerProfile.stage === 'working' && (
+                    <>
+                      <StaticRow label="行业" value={(user.learnerProfile as { industry?: string }).industry || '未设置'} />
+                      <GroupDivider />
+                      <StaticRow label="目标" value={(user.learnerProfile as { learningGoal?: string }).learningGoal || '未设置'} />
+                    </>
+                  )}
+                  {(user.learnerProfile as { otherInterests?: string }).otherInterests && (
+                    <>
+                      <GroupDivider />
+                      <StaticRow label="也在学" value={(user.learnerProfile as { otherInterests?: string }).otherInterests!} />
+                    </>
+                  )}
+                  <GroupDivider />
+                  <ActionButtonRow label="重新填写" tone="default" onClick={() => setShowLearnerEdit(true)} />
+                </>
+              ) : (
+                <>
+                  <div className="px-4 py-4 text-[14px] text-[#787774]">
+                    完善学习档案，让 AI 更懂你
+                  </div>
+                  <GroupDivider />
+                  <ActionButtonRow label="填写学习档案" tone="default" onClick={() => setShowLearnerEdit(true)} />
+                </>
+              )}
+            </SettingGroup>
+          </div>
+        )}
+
+        {showLearnerEdit && (
+          <LearnerOnboardingModal
+            currentProfile={user?.learnerProfile ?? null}
+            onSave={async (profile) => {
+              const success = await saveLearnerProfile(profile);
+              if (success) {
+                setShowLearnerEdit(false);
+                showMessage('success', '学习档案已更新');
+              } else {
+                showMessage('error', '保存失败');
+              }
+            }}
+            onClose={() => setShowLearnerEdit(false)}
+          />
+        )}
 
         <div>
           <SectionCaption>偏好</SectionCaption>
@@ -555,5 +629,21 @@ function StaticRow({
       <span className="text-[#232322]">{label}</span>
       <span className="text-[#787774]">{value}</span>
     </div>
+  );
+}
+
+function LearnerOnboardingModal({
+  onSave,
+  onClose,
+}: {
+  currentProfile: LearnerProfile | null;
+  onSave: (profile: LearnerProfile) => Promise<void>;
+  onClose: () => void;
+}) {
+  return (
+    <LearnerOnboardingComponent
+      onComplete={onSave}
+      onSkip={onClose}
+    />
   );
 }

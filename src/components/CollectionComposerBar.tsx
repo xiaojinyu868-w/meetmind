@@ -92,10 +92,10 @@ export function CollectionComposerBar({
               type="button"
               onClick={onOpenLiveRecorder}
               disabled={isComposerVoiceRecording || composerVoiceStatus === 'connecting' || disableLiveRecorder}
-              className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl text-[#A3A39E] transition hover:text-[#787774] hover:bg-[#F7F7F5] disabled:text-[#E9E9E7]"
+              className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl bg-[#FDF3C0]/70 text-[#8B6914] transition hover:bg-[#FDF3C0] disabled:opacity-40"
               aria-label="录制原声"
             >
-              <AudioLines size={20} strokeWidth={1.5} />
+              <AudioLines size={18} strokeWidth={1.5} />
             </button>
 
             {/* 输入框 */}
