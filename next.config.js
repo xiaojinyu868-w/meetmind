@@ -15,12 +15,6 @@ const nextConfig = {
   },
   // 允许上传大文件 (500MB)
   experimental: {
-    // Pi Agent 框架使用 node: 前缀的 ESM 模块，不能被 webpack bundle
-    serverComponentsExternalPackages: [
-      '@mariozechner/pi-ai',
-      '@mariozechner/pi-agent-core',
-      '@sinclair/typebox',
-    ],
     ...(Number.isFinite(configuredBuildCpus) && configuredBuildCpus > 0
       ? { cpus: configuredBuildCpus }
       : {}),

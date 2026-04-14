@@ -34,7 +34,6 @@ import { StreamingMarkdown } from './StreamingMarkdown';
 import { ThinkingVisualizer } from './ThinkingVisualizer';
 import { ThinkingGuideRenderer } from './ThinkingGuideRenderer';
 import { VoiceMicButton } from './VoiceMicButton';
-import { AgenticTutorPanel } from './tutor/AgenticTutorPanel';
 
 // --- 拆分子模块 ---
 import type {
