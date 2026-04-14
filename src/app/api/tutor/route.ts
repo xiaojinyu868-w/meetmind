@@ -137,10 +137,18 @@ export async function POST(request: NextRequest) {
 
     const mergedSegments = contextSegments;
 
+    // 当 globalMode 下没有时间轴转录、但有 support context 时，自动升级为 selected context 模式
+    // 这解决了复习页打开纯文本笔记后提问时 AI 无法回答的问题
+    const hasSupportSegment = mergedSegments.some((segment) => segment?.id === '__support_context__');
+    const hasOnlySupportContext =
+      globalMode &&
+      hasSupportSegment &&
+      mergedSegments.filter((segment) => segment?.id !== '__support_context__').length === 0;
+
     const allowSelectedContextOnly =
       globalMode &&
-      selected_context_mode &&
-      mergedSegments.some((segment) => segment?.id === '__support_context__');
+      (selected_context_mode || hasOnlySupportContext) &&
+      hasSupportSegment;
 
     // ── 检查转录内容是否足够 ──
     const totalTextLength = mergedSegments.reduce((sum, s) => sum + (s.text?.length || 0), 0);
@@ -295,15 +303,19 @@ export async function POST(request: NextRequest) {
     const messages: ChatMessage[] = [];
     const isRealtimeTeacherMode = model === REALTIME_TEACHER_MODEL_ID;
 
+    // 使用 allowSelectedContextOnly 决定 prompt（比前端传入的 selected_context_mode 更准确，
+    // 因为后端可能在"只有 support context、无时间轴"时自动升级）
+    const useSelectedContextPrompt = allowSelectedContextOnly || selected_context_mode;
+
     if (studentQuestion || messageContent) {
       let systemPrompt = isRealtimeTeacherMode
         ? globalMode
-          ? selected_context_mode
+          ? useSelectedContextPrompt
             ? REALTIME_TEACHER_SELECTED_CONTEXT_CHAT_PROMPT
             : REALTIME_TEACHER_GLOBAL_CHAT_PROMPT
           : REALTIME_TEACHER_FOLLOWUP_PROMPT
         : globalMode
-          ? selected_context_mode
+          ? useSelectedContextPrompt
             ? SELECTED_CONTEXT_CHAT_SYSTEM_PROMPT
             : GLOBAL_CHAT_SYSTEM_PROMPT
           : FOLLOWUP_SYSTEM_PROMPT;
@@ -332,7 +344,7 @@ export async function POST(request: NextRequest) {
           {
             type: 'text',
             text: globalMode
-              ? `${selected_context_mode ? '【用户刚圈出的上下文】' : '【整节课转录内容】'}\n${contextText}\n\n【学生提问】`
+              ? `${useSelectedContextPrompt ? '【用户刚圈出的上下文】' : '【整节课转录内容】'}\n${contextText}\n\n【学生提问】`
               : `【课堂转录参考】\n${contextText}\n\n【学生说】`,
           },
         ];
@@ -356,7 +368,7 @@ export async function POST(request: NextRequest) {
         messages.push({ role: 'user', content: userContent });
       } else {
         const userPrompt = globalMode
-          ? `${selected_context_mode ? '【用户刚圈出的上下文】' : '【整节课转录内容】'}\n${contextText}\n\n【学生提问】\n${studentQuestion}`
+          ? `${useSelectedContextPrompt ? '【用户刚圈出的上下文】' : '【整节课转录内容】'}\n${contextText}\n\n【学生提问】\n${studentQuestion}`
           : `【课堂转录参考】\n${contextText}\n\n【学生说】\n${studentQuestion}`;
         messages.push({ role: 'user', content: userPrompt });
       }

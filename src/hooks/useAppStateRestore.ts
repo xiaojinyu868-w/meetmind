@@ -177,13 +177,10 @@ export function useAppStateRestore(
       }
       uiActions.setLoadingProgress(85);
 
-      // 恢复 viewMode：如果之前在复习页且有 sessionId，刷新后回到复习页
-      if (savedAppState?.viewMode === 'review' && savedAppState.sessionId) {
-        uiActions.setViewMode('review');
-        if (savedAppState.reviewTab) {
-          uiActions.setReviewTab(savedAppState.reviewTab);
-        }
-      }
+      // NOTE: 不恢复 viewMode='review'。
+      // 原因：恢复 review 模式需要从 IndexedDB 加载 segments/timeline/anchors（通过 restoreReviewSession），
+      // 但 useAppStateRestore 没有访问该函数的能力。只恢复 viewMode 不恢复数据会导致空壳复习页。
+      // 用户刷新后回到收集页，可以重新点击内容进入复习——这比看到"没有时间轴"好。
 
       uiActions.setLoadingProgress(100);
       uiActions.setAppReady(true);
