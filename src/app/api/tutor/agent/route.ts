@@ -68,12 +68,7 @@ function getAuthPayload(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const payload = getAuthPayload(request);
-    if (!payload) {
-      return new Response(JSON.stringify({ error: '未授权' }), {
-        status: 401,
-        headers: { 'Content-Type': 'application/json' },
-      });
-    }
+    // 不再强制 401——未登录用户也能用 Agent（基于当前课堂内容）
 
     const body = await request.json();
     const { message, history = [], segments = [], anchorTimestamp, enableThinkingGuide = false } = body as {
@@ -91,20 +86,18 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    // 获取用户的 workspace
-    const user = await prisma.user.findUnique({
-      where: { id: payload.sub },
-      select: { defaultWorkspaceId: true, learnerProfileJson: true },
-    });
+    // 获取用户 workspace 和学习者画像（未登录时为空）
+    let workspaceId = '';
+    let learnerContextPrompt = '';
 
-    if (!user?.defaultWorkspaceId) {
-      return new Response(JSON.stringify({ error: '未找到学习空间' }), {
-        status: 404,
-        headers: { 'Content-Type': 'application/json' },
+    if (payload?.sub) {
+      const user = await prisma.user.findUnique({
+        where: { id: payload.sub },
+        select: { defaultWorkspaceId: true, learnerProfileJson: true },
       });
+      workspaceId = user?.defaultWorkspaceId || '';
+      learnerContextPrompt = formatLearnerContext(user?.learnerProfileJson);
     }
-
-    const learnerContextPrompt = formatLearnerContext(user.learnerProfileJson);
 
     // 构建当前课堂上下文（如果有 segments，说明用户正在一节课的复习页面）
     let currentLessonContext = '';
@@ -132,7 +125,7 @@ export async function POST(request: NextRequest) {
         };
 
         void runTutorAgent({
-          workspaceId: user.defaultWorkspaceId!,
+          workspaceId,
           userMessage: message.trim(),
           systemPrompt: AGENT_SYSTEM_PROMPT
             + (enableThinkingGuide ? THINKING_GUIDE_PROMPT : '')
