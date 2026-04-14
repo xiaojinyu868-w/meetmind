@@ -53,8 +53,16 @@ const AGENT_SYSTEM_PROMPT = `你是学生的 AI 同桌。你有能力检索学�
 
 function getAuthPayload(request: NextRequest) {
   const authHeader = request.headers.get('Authorization');
-  if (!authHeader?.startsWith('Bearer ')) return null;
-  return authService.verifyToken(authHeader.slice(7));
+  if (!authHeader?.startsWith('Bearer ')) {
+    log.warn('[auth] No Authorization header');
+    return null;
+  }
+  try {
+    return authService.verifyToken(authHeader.slice(7));
+  } catch (err) {
+    log.warn('[auth] Token verification failed:', err instanceof Error ? err.message : err);
+    return null;
+  }
 }
 
 export async function POST(request: NextRequest) {

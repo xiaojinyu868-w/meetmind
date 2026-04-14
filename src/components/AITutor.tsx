@@ -1163,7 +1163,13 @@ export function AITutor({
           }),
         });
 
-        if (!agentResponse.ok) throw new Error(`Agent error: ${agentResponse.status}`);
+        if (!agentResponse.ok) {
+          // 401 时尝试刷新页面（token 可能过期）
+          if (agentResponse.status === 401) {
+            throw new Error('登录已过期，请刷新页面重试');
+          }
+          throw new Error(`Agent error: ${agentResponse.status}`);
+        }
         const reader = agentResponse.body?.getReader();
         if (!reader) throw new Error('No response body');
 
