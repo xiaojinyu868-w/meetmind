@@ -1135,6 +1135,69 @@ export function AITutor({
     }
 
     try {
+      // ── Agent 模式：走 /api/tutor/agent SSE 路由 ──
+      if (enableAgentMode) {
+        const agentSteps: import('./tutor/tutor-types').AgentStepInfo[] = [];
+        setGlobalThinkingStartTime(Date.now());
+
+        const agentHistory = globalChatHistory.map(m => ({ role: m.role, content: m.content }));
+        const agentResponse = await fetch('/api/tutor/agent', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+          },
+          body: JSON.stringify({ message: effectiveQuestion, history: agentHistory }),
+        });
+
+        if (!agentResponse.ok) throw new Error(`Agent error: ${agentResponse.status}`);
+        const reader = agentResponse.body?.getReader();
+        if (!reader) throw new Error('No response body');
+
+        const decoder = new TextDecoder();
+        let buffer = '';
+        let agentContent = '';
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split('\n');
+          buffer = lines.pop() || '';
+
+          for (const line of lines) {
+            if (!line.startsWith('data: ')) continue;
+            const raw = line.slice(6).trim();
+            if (raw === '[DONE]') continue;
+            try {
+              const evt = JSON.parse(raw);
+              if (evt.type === 'thinking') {
+                agentSteps.push({ label: evt.message || '思考中...', done: false });
+              } else if (evt.type === 'tool_start') {
+                agentSteps.push({ label: evt.description || evt.toolName, toolName: evt.toolName, done: false });
+              } else if (evt.type === 'tool_result') {
+                const last = agentSteps[agentSteps.length - 1];
+                if (last) last.done = true;
+              } else if (evt.type === 'content_done') {
+                agentContent = evt.content || '';
+              }
+            } catch { /* ignore */ }
+          }
+        }
+
+        setGlobalChatHistory(prev => [...prev, {
+          role: 'assistant',
+          content: agentContent || '抱歉，我没有找到相关的学习记录来回答这个问题。',
+          agentSteps: agentSteps.length > 0 ? agentSteps : undefined,
+        }]);
+        clearGlobalStreamingOnly();
+
+        isGlobalSendInFlightRef.current = false;
+        setGlobalLoading(false);
+        return;
+      }
+
+      // ── 普通模式：走 /api/tutor ──
       const headers: Record<string, string> = {};
       if (accessToken) {
         headers['Authorization'] = `Bearer ${accessToken}`;
@@ -1209,7 +1272,7 @@ export function AITutor({
       isGlobalSendInFlightRef.current = false;
       setGlobalLoading(false);
     }
-  }, [userInput, selectedModel, enableWeb, enableThinkingGuide, supportsMultimodal, uploadedImages, accessToken, userId, sessionId, globalFetchStream, clearGlobalStreamingOnly, trackCoreEvent, buildGlobalSegmentsForTutorRequest, globalLoading, hasTutorContext, isStreaming, preferSupportContext]);
+  }, [userInput, selectedModel, enableWeb, enableThinkingGuide, enableAgentMode, supportsMultimodal, uploadedImages, accessToken, userId, sessionId, globalFetchStream, clearGlobalStreamingOnly, trackCoreEvent, buildGlobalSegmentsForTutorRequest, globalLoading, hasTutorContext, isStreaming, preferSupportContext, globalChatHistory]);
 
   // 全局模式：停止生成
   const stopGlobalGeneration = useCallback(() => {
@@ -1497,13 +1560,6 @@ export function AITutor({
           </div>
         ) : null}
 
-        {/* Agent 模式：覆盖在对话+输入区域之上 */}
-        {enableAgentMode && !isRealtimeTeacherMode && (
-          <div className="absolute inset-0 z-30 flex flex-col" style={{ top: 0 }}>
-            <AgenticTutorPanel />
-          </div>
-        )}
-
         {/* 对话区域 - 优化空间利用 */}
         <div className={`flex-1 overflow-y-auto chat-messages ${isMobile ? 'p-3' : 'p-4'}`} style={{ minHeight: 0 }}>
           {!hasTutorContext ? (
@@ -1592,6 +1648,29 @@ export function AITutor({
                   >
                     {msg.role === 'assistant' ? (
                       <>
+                        {msg.agentSteps && msg.agentSteps.length > 0 && (
+                          <details className="mb-2 text-[11px]">
+                            <summary className="cursor-pointer text-[#A3A39E] hover:text-[#787774] transition-colors">
+                              思考了 {msg.agentSteps.length} 步
+                            </summary>
+                            <div className="mt-1.5 flex flex-col gap-1 pl-1">
+                              {msg.agentSteps.map((step, si) => (
+                                <div key={si} className="flex items-center gap-1.5">
+                                  {step.done ? (
+                                    <span className="flex h-3.5 w-3.5 items-center justify-center rounded text-[#1A7F43]">
+                                      <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12" /></svg>
+                                    </span>
+                                  ) : (
+                                    <span className="flex h-3.5 w-3.5 items-center justify-center rounded text-[#A3A39E]">
+                                      <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10" /></svg>
+                                    </span>
+                                  )}
+                                  <span className="text-[#787774]">{step.label}</span>
+                                </div>
+                              ))}
+                            </div>
+                          </details>
+                        )}
                         {enableThinkingGuide ? (
                           <ThinkingGuideRenderer
                             content={msg.content}
