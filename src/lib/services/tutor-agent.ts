@@ -116,6 +116,8 @@ export async function runTutorAgent(options: AgentRunOptions): Promise<string> {
   ].filter(Boolean).join('\n');
 
   // 创建 Pi Agent
+  const t0 = Date.now();
+  log.info(`[perf] Agent setup: ${Date.now() - t0}ms`);
   const agent = new Agent({
     initialState: {
       systemPrompt: fullSystemPrompt,
@@ -136,8 +138,10 @@ export async function runTutorAgent(options: AgentRunOptions): Promise<string> {
 
   // 订阅 Pi Agent 事件 → 转换为前端 SSE 事件
   agent.subscribe((event: PiAgentEvent) => {
+    const elapsed = Date.now() - t0;
     switch (event.type) {
       case 'tool_execution_start':
+        log.info(`[perf] +${elapsed}ms tool_start: ${event.toolName}`);
         toolCallsInProgress = true;
         onEvent({
           type: 'tool_start',
@@ -159,6 +163,7 @@ export async function runTutorAgent(options: AgentRunOptions): Promise<string> {
         break;
 
       case 'message_start':
+        log.info(`[perf] +${elapsed}ms message_start (role=${event.message.role})`);
         // 新的 message 开始——如果不是 tool call 轮次，重置追踪
         lastPushedLength = 0;
         toolCallsInProgress = false;
@@ -174,6 +179,9 @@ export async function runTutorAgent(options: AgentRunOptions): Promise<string> {
           const fullText = textBlocks.map(b => b.text).join('');
 
           if (fullText.length > lastPushedLength) {
+            if (lastPushedLength === 0) {
+              log.info(`[perf] +${elapsed}ms first_content_delta`);
+            }
             const delta = fullText.slice(lastPushedLength);
             lastPushedLength = fullText.length;
             onEvent({ type: 'content_delta', delta });
@@ -200,6 +208,7 @@ export async function runTutorAgent(options: AgentRunOptions): Promise<string> {
         break;
 
       case 'agent_end':
+        log.info(`[perf] +${elapsed}ms agent_end, content_length=${finalContent.length}`);
         onEvent({
           type: 'content_done',
           content: finalContent || '我查看了你的学习记录，但需要更多信息才能回答这个问题。你能说得更具体一些吗？',
