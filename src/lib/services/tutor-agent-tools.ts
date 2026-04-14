@@ -1,15 +1,17 @@
 /**
- * Tutor Agent Tools — 学习上下文渐进式检索工具
+ * Tutor Agent Tools — 学习上下文渐进式检索 + 联网搜索
  *
- * 4 个层级化工具，供 Agent 自主决定调用顺序和深度：
- * 1. list_subjects    → 目录级：有哪些科目
- * 2. list_captures    → 摘要级：某科目下有哪些课
+ * 5 个工具，供 Agent 自主决定调用顺序和深度：
+ * 1. list_subjects        → 目录级：有哪些科目
+ * 2. list_captures        → 摘要级：某科目下有哪些课
  * 3. get_personal_context → 个人级：某节课的个人学习痕迹
- * 4. read_transcript  → 全文级：某节课的转录内容
+ * 4. read_transcript      → 全文级：某节课的转录内容
+ * 5. web_search           → 联网搜索：查找课堂内容之外的知识
  */
 
 import prisma from '@/lib/prisma';
 import { createLogger } from '@/lib/logger';
+import { webSearch as executeWebSearch } from '@/lib/services/web-search-service';
 
 const log = createLogger('tutor-agent-tools');
 
@@ -87,6 +89,23 @@ export const TUTOR_AGENT_TOOLS = [
       },
     },
   },
+  {
+    type: 'function' as const,
+    function: {
+      name: 'web_search',
+      description: '联网搜索——当学生的问题超出已有课堂内容的范围，或者需要查找最新资料、公式推导、术语解释、扩展知识时使用。传入搜索关键词，返回网页摘要和链接。',
+      parameters: {
+        type: 'object',
+        properties: {
+          query: {
+            type: 'string',
+            description: '搜索关键词或问题（中英文均可）',
+          },
+        },
+        required: ['query'],
+      },
+    },
+  },
 ];
 
 // ── 工具执行函数 ──
@@ -110,6 +129,8 @@ export async function executeTool(
           typeof args.startMs === 'number' ? args.startMs : undefined,
           typeof args.endMs === 'number' ? args.endMs : undefined,
         );
+      case 'web_search':
+        return await searchWeb(String(args.query || ''));
       default:
         return `未知工具: ${toolName}`;
     }
@@ -261,4 +282,26 @@ async function readTranscript(
   }
 
   return `"${capture.title}" 的转录内容：\n\n${text}`;
+}
+
+async function searchWeb(query: string): Promise<string> {
+  try {
+    const citations = await executeWebSearch(query, { maxResults: 5 });
+
+    if (citations.length === 0) {
+      return `联网搜索"${query}"没有找到相关结果。`;
+    }
+
+    const lines: string[] = [`搜索"${query}"找到 ${citations.length} 条结果：`];
+    for (const c of citations) {
+      lines.push(`\n[${c.title}]`);
+      if (c.url) lines.push(`  链接: ${c.url}`);
+      if (c.snippet) lines.push(`  摘要: ${c.snippet}`);
+    }
+
+    return lines.join('\n');
+  } catch (error) {
+    log.error('Web search tool error:', error);
+    return `联网搜索出错: ${error instanceof Error ? error.message : '未知错误'}`;
+  }
 }

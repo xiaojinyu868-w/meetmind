@@ -93,9 +93,11 @@ export async function runTutorAgent(options: AgentRunOptions): Promise<string> {
         '2. 根据问题定位到相关科目，调用 list_captures 看具体有哪些课',
         '3. 调用 get_personal_context 了解学生在相关课上的个人学习痕迹（锚点、对话、检验）',
         '4. 只在需要引用课堂原话时才调用 read_transcript',
+        '5. 当问题超出课堂内容范围、需要额外知识/公式/最新资料时，调用 web_search 联网搜索',
         '',
         '不要一次调用所有工具。像人一样渐进式探索——先看目录，再看摘要，按需深入。',
         '如果学生的问题很明确且你已有足够信息，可以不调用任何工具直接回答。',
+        '联网搜索到的内容记得在回答中标注来源。',
       ].filter(Boolean).join('\n'),
     },
   ];
@@ -265,6 +267,8 @@ function getToolDescription(toolName: string, args: Record<string, unknown>): st
       return '查看这节课的学习痕迹';
     case 'read_transcript':
       return '阅读课堂转录';
+    case 'web_search':
+      return `联网搜索「${args.query || ''}」`;
     default:
       return toolName;
   }

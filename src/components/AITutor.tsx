@@ -1526,11 +1526,12 @@ export function AITutor({
                     type="checkbox"
                     checked={enableWeb}
                     onChange={(e) => setEnableWeb(e.target.checked)}
+                    disabled={enableAgentMode}
                     className="w-4 h-4 rounded border-gray-300 text-[#787774] focus:ring-[#232322]"
                   />
-                  <span className="flex items-center gap-1 group-hover:text-gray-900 transition-colors">
+                  <span className={`flex items-center gap-1 group-hover:text-gray-900 transition-colors ${enableAgentMode ? 'opacity-40' : ''}`}>
                     <Globe size={13} strokeWidth={1.75} />
-                    联网搜索
+                    联网搜索{enableAgentMode ? '(Agent 内置)' : ''}
                   </span>
                 </label>
                 <label className="flex items-center gap-2 text-xs text-gray-600 cursor-pointer group">
@@ -2050,11 +2051,12 @@ export function AITutor({
                   type="checkbox"
                   checked={enableWeb}
                   onChange={(e) => setEnableWeb(e.target.checked)}
+                  disabled={enableAgentMode}
                   className="w-4 h-4 rounded border-gray-300 text-[#787774] focus:ring-[#232322]"
                 />
-                <span className="flex items-center gap-1 group-hover:text-gray-900 transition-colors">
+                <span className={`flex items-center gap-1 group-hover:text-gray-900 transition-colors ${enableAgentMode ? 'opacity-40' : ''}`}>
                   <Globe size={13} strokeWidth={1.75} />
-                  联网搜索
+                  联网搜索{enableAgentMode ? '(Agent 内置)' : ''}
                 </span>
               </label>
               <label className="flex items-center gap-2 text-xs text-gray-600 cursor-pointer group">
