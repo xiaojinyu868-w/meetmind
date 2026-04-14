@@ -99,7 +99,7 @@ export async function POST(request: NextRequest) {
       learnerContextPrompt = formatLearnerContext(user?.learnerProfileJson);
     }
 
-    // 构建当前课堂上下文（如果有 segments，说明用户正在一节课的复习页面）
+    // 构建当前课堂上下文
     let currentLessonContext = '';
     if (segments.length > 0) {
       const maxLen = 6000;
@@ -115,13 +115,18 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    // 策略：有课堂内容时优先直接回答（1 次 LLM 调用），减少 tool call 轮次
+    const hasCurrentLesson = currentLessonContext.length > 100;
+
     // SSE 流
     const encoder = new TextEncoder();
     const stream = new ReadableStream({
       start(controller) {
         const sendEvent = (event: TutorAgentSSEEvent) => {
-          const data = JSON.stringify(event);
-          controller.enqueue(encoder.encode(`data: ${data}\n\n`));
+          try {
+            const data = JSON.stringify(event);
+            controller.enqueue(encoder.encode(`data: ${data}\n\n`));
+          } catch { /* controller may be closed */ }
         };
 
         void runTutorAgent({
@@ -129,9 +134,15 @@ export async function POST(request: NextRequest) {
           userMessage: message.trim(),
           systemPrompt: AGENT_SYSTEM_PROMPT
             + (enableThinkingGuide ? THINKING_GUIDE_PROMPT : '')
-            + currentLessonContext,
+            + currentLessonContext
+            + (hasCurrentLesson
+              ? '\n\n【重要】当前课堂转录已经提供在上面了。请直接基于这些内容回答学生的问题，不需要调用工具检索。只有当学生的问题明确超出当前课堂内容范围（比如问其他课的内容、需要联网搜索最新资料），才使用工具。'
+              : ''),
           conversationHistory: history,
           learnerContextPrompt,
+          // 有课堂内容时不传 workspaceId（禁用 DB 工具，只保留 web_search）
+          // 这样 Agent 不会浪费时间去 list_subjects → list_captures
+          skipDbTools: hasCurrentLesson,
           onEvent: sendEvent,
           signal: request.signal,
         }).then(() => {
