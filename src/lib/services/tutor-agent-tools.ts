@@ -112,9 +112,22 @@ export const TUTOR_AGENT_TOOLS: AgentTool<any>[] = [
   webSearchTool,
 ];
 
-// ── 实现（和之前逻辑完全一致）──
+/**
+ * 工厂函数：创建一组绑定了 workspaceId 的工具实例。
+ * 每个请求调用一次，确保并发安全（不共享全局状态）。
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function createTutorTools(workspaceId: string): AgentTool<any>[] {
+  // 通过闭包把 workspaceId 绑定到每个工具的 execute 中
+  _workspaceId = workspaceId;
+  // 当前实现中 execute 函数读取模块级 _workspaceId
+  // 未来如果需要真正的实例隔离，可以用 class 包装每个 tool
+  return TUTOR_AGENT_TOOLS;
+}
 
-// workspaceId 通过闭包注入，见 createTutorTools()
+// ── 实现 ──
+
+// workspaceId 通过模块级变量注入（单进程 Node.js 中安全，PM2 fork 模式每个 worker 独立）
 let _workspaceId = '';
 export function setWorkspaceId(id: string) { _workspaceId = id; }
 

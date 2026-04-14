@@ -11,7 +11,7 @@
 import { Agent } from '@mariozechner/pi-agent-core';
 import type { AgentEvent as PiAgentEvent, AgentTool } from '@mariozechner/pi-agent-core';
 import type { Model } from '@mariozechner/pi-ai';
-import { TUTOR_AGENT_TOOLS, setWorkspaceId } from './tutor-agent-tools';
+import { createTutorTools } from './tutor-agent-tools';
 import { createLogger } from '@/lib/logger';
 
 const log = createLogger('tutor-agent');
@@ -85,10 +85,10 @@ export async function runTutorAgent(options: AgentRunOptions): Promise<string> {
     signal,
   } = options;
 
-  // 设置工具层的 workspaceId（通过模块级闭包）
-  setWorkspaceId(workspaceId);
+  // 创建绑定了 workspaceId 的工具实例
+  const tools = createTutorTools(workspaceId);
 
-  // 将对话历史拼入 system prompt（避免 Pi AssistantMessage 复杂类型要求）
+  // 创建 Pi Agent
   let historyContext = '';
   if (conversationHistory.length > 0) {
     const recentHistory = conversationHistory.slice(-10);
@@ -127,7 +127,7 @@ export async function runTutorAgent(options: AgentRunOptions): Promise<string> {
   });
 
   // 设置工具
-  agent.state.tools = TUTOR_AGENT_TOOLS as AgentTool[];
+  agent.state.tools = tools as AgentTool[];
 
   // 收集最终回答
   let finalContent = '';
