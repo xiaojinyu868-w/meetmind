@@ -24,7 +24,7 @@
  */
 
 import { NextRequest } from 'next/server';
-import { runTutorAgent, type AgentEvent } from '@/lib/services/tutor-agent';
+import { runTutorAgent, type TutorAgentSSEEvent } from '@/lib/services/tutor-agent';
 import { authService } from '@/lib/services/auth-service';
 import { formatLearnerContext } from '@/app/api/tutor/tutor-prompts';
 import prisma from '@/lib/prisma';
@@ -93,8 +93,8 @@ export async function POST(request: NextRequest) {
     const encoder = new TextEncoder();
     const stream = new ReadableStream({
       start(controller) {
-        const sendEvent = (event: AgentEvent) => {
-          const data = JSON.stringify({ type: event.type, ...event.data });
+        const sendEvent = (event: TutorAgentSSEEvent) => {
+          const data = JSON.stringify(event);
           controller.enqueue(encoder.encode(`data: ${data}\n\n`));
         };
 
@@ -111,7 +111,7 @@ export async function POST(request: NextRequest) {
           controller.close();
         }).catch((error) => {
           log.error('Agent run error:', error);
-          sendEvent({ type: 'error', data: { message: '服务出错了' } });
+          sendEvent({ type: 'error', message: '服务出错了' });
           controller.enqueue(encoder.encode('data: [DONE]\n\n'));
           controller.close();
         });
