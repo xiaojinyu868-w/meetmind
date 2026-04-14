@@ -26,7 +26,7 @@
 import { NextRequest } from 'next/server';
 import { runTutorAgent, type TutorAgentSSEEvent } from '@/lib/services/tutor-agent';
 import { authService } from '@/lib/services/auth-service';
-import { formatLearnerContext } from '@/app/api/tutor/tutor-prompts';
+import { formatLearnerContext, THINKING_GUIDE_PROMPT } from '@/app/api/tutor/tutor-prompts';
 import prisma from '@/lib/prisma';
 import { createLogger } from '@/lib/logger';
 
@@ -68,11 +68,12 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { message, history = [], segments = [], anchorTimestamp } = body as {
+    const { message, history = [], segments = [], anchorTimestamp, enableThinkingGuide = false } = body as {
       message: string;
       history?: Array<{ role: string; content: string }>;
       segments?: Array<{ text: string; startMs: number; endMs: number }>;
-      anchorTimestamp?: number; // 用户点击的锚点/困惑标记位置（毫秒）
+      anchorTimestamp?: number;
+      enableThinkingGuide?: boolean;
     };
 
     if (!message?.trim()) {
@@ -125,7 +126,9 @@ export async function POST(request: NextRequest) {
         void runTutorAgent({
           workspaceId: user.defaultWorkspaceId!,
           userMessage: message.trim(),
-          systemPrompt: AGENT_SYSTEM_PROMPT + currentLessonContext,
+          systemPrompt: AGENT_SYSTEM_PROMPT
+            + (enableThinkingGuide ? THINKING_GUIDE_PROMPT : '')
+            + currentLessonContext,
           conversationHistory: history,
           learnerContextPrompt,
           onEvent: sendEvent,

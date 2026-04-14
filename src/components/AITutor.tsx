@@ -1159,6 +1159,7 @@ export function AITutor({
             message: effectiveQuestion,
             history: agentHistory,
             segments: agentSegments,
+            enableThinkingGuide,
           }),
         });
 

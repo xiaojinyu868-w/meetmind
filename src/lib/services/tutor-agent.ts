@@ -131,12 +131,14 @@ export async function runTutorAgent(options: AgentRunOptions): Promise<string> {
 
   // 收集最终回答
   let finalContent = '';
-  let lastPushedLength = 0; // 已推送给前端的文本长度（用于增量推送）
+  let lastPushedLength = 0;
+  let toolCallsInProgress = false; // 标记当前轮次是否有 tool call
 
   // 订阅 Pi Agent 事件 → 转换为前端 SSE 事件
   agent.subscribe((event: PiAgentEvent) => {
     switch (event.type) {
       case 'tool_execution_start':
+        toolCallsInProgress = true;
         onEvent({
           type: 'tool_start',
           toolName: event.toolName,
@@ -156,21 +158,22 @@ export async function runTutorAgent(options: AgentRunOptions): Promise<string> {
         });
         break;
 
+      case 'message_start':
+        // 新的 message 开始——如果不是 tool call 轮次，重置追踪
+        lastPushedLength = 0;
+        toolCallsInProgress = false;
+        break;
+
       case 'message_update': {
-        // 流式推送：每收到一个 token，推送增量内容
+        // 流式推送——只在非 tool-call 轮次推送
+        if (toolCallsInProgress) break;
         if (event.message.role === 'assistant') {
           const textBlocks = event.message.content.filter(
             (b: { type: string }) => b.type === 'text'
           ) as Array<{ type: 'text'; text: string }>;
           const fullText = textBlocks.map(b => b.text).join('');
 
-          // 检查这个 message 是否包含 tool_calls（中间轮次）
-          const hasToolCalls = event.message.content.some(
-            (b: { type: string }) => b.type === 'toolCall'
-          );
-
-          // 只推送最终回答的 delta（无 tool_calls 的 assistant 消息）
-          if (!hasToolCalls && fullText.length > lastPushedLength) {
+          if (fullText.length > lastPushedLength) {
             const delta = fullText.slice(lastPushedLength);
             lastPushedLength = fullText.length;
             onEvent({ type: 'content_delta', delta });
@@ -185,14 +188,13 @@ export async function runTutorAgent(options: AgentRunOptions): Promise<string> {
             (b: { type: string }) => b.type === 'text'
           ) as Array<{ type: 'text'; text: string }>;
           const text = textBlocks.map(b => b.text).join('');
-          if (text) {
+          if (text && !toolCallsInProgress) {
             finalContent = text;
-            // 推送可能遗漏的最后一段 delta
+            // 推送遗漏的最后一段
             if (text.length > lastPushedLength) {
               onEvent({ type: 'content_delta', delta: text.slice(lastPushedLength) });
             }
           }
-          // 重置，下一轮 tool call 后的新 message 从 0 开始
           lastPushedLength = 0;
         }
         break;
