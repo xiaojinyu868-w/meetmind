@@ -6,6 +6,7 @@ import {
   MessageCircle,
   Globe,
   Brain,
+  Zap,
   AlertTriangle,
   BookOpen,
   Target,
@@ -34,6 +35,7 @@ import { StreamingMarkdown } from './StreamingMarkdown';
 import { ThinkingVisualizer } from './ThinkingVisualizer';
 import { ThinkingGuideRenderer } from './ThinkingGuideRenderer';
 import { VoiceMicButton } from './VoiceMicButton';
+import { AgenticTutorPanel } from './tutor/AgenticTutorPanel';
 
 // --- 拆分子模块 ---
 import type {
@@ -131,6 +133,7 @@ export function AITutor({
   
   const [enableWeb, setEnableWeb] = useState(false);  // 联网搜索默认关闭
   const [enableThinkingGuide, setEnableThinkingGuide] = useState(true);  // 学霸思维引导模式默认开启
+  const [enableAgentMode, setEnableAgentMode] = useState(false);  // Agent 模式默认关闭
   const [selectedOptionId, setSelectedOptionId] = useState<string | undefined>();
   const [conversationId, setConversationId] = useState<string | undefined>();
   const [isGuidanceLoading, setIsGuidanceLoading] = useState(false);
@@ -1394,7 +1397,7 @@ export function AITutor({
     }
 
     return (
-      <div className={`h-full flex flex-col ai-chat-container ${isMobile ? 'bg-transparent' : 'bg-white'}`}>
+      <div className={`relative h-full flex flex-col ai-chat-container ${isMobile ? 'bg-transparent' : 'bg-white'}`}>
         {/* 头部 - 紧凑设计 */}
         {!(isMobile && hideMobileHeader) ? (
           <div className={`${isMobile ? 'px-3 pt-3' : 'border-b border-gray-100 bg-white px-4 py-3'} flex-shrink-0`}>
@@ -1463,7 +1466,7 @@ export function AITutor({
                     type="checkbox"
                     checked={enableThinkingGuide}
                     onChange={(e) => setEnableThinkingGuide(e.target.checked)}
-                    disabled={isRealtimeTeacherMode}
+                    disabled={isRealtimeTeacherMode || enableAgentMode}
                     className="w-4 h-4 rounded border-gray-300 text-violet-500 focus:ring-violet-400"
                   />
                   <span className="flex items-center gap-1 group-hover:text-gray-900 transition-colors">
@@ -1471,10 +1474,35 @@ export function AITutor({
                     思维引导
                   </span>
                 </label>
+                <label className="flex items-center gap-2 text-xs text-gray-600 cursor-pointer group">
+                  <input
+                    type="checkbox"
+                    checked={enableAgentMode}
+                    onChange={(e) => {
+                      setEnableAgentMode(e.target.checked);
+                      if (e.target.checked) {
+                        setEnableThinkingGuide(false);
+                      }
+                    }}
+                    disabled={isRealtimeTeacherMode}
+                    className="w-4 h-4 rounded border-gray-300 text-[#1E5F8A] focus:ring-[#5B8DBF]"
+                  />
+                  <span className="flex items-center gap-1 group-hover:text-gray-900 transition-colors">
+                    <Zap size={13} strokeWidth={1.75} />
+                    Agent
+                  </span>
+                </label>
               </div>
             )}
           </div>
         ) : null}
+
+        {/* Agent 模式：覆盖在对话+输入区域之上 */}
+        {enableAgentMode && !isRealtimeTeacherMode && (
+          <div className="absolute inset-0 z-30 flex flex-col" style={{ top: 0 }}>
+            <AgenticTutorPanel />
+          </div>
+        )}
 
         {/* 对话区域 - 优化空间利用 */}
         <div className={`flex-1 overflow-y-auto chat-messages ${isMobile ? 'p-3' : 'p-4'}`} style={{ minHeight: 0 }}>
@@ -1825,7 +1853,7 @@ export function AITutor({
   }
 
   return (
-    <div className="h-full flex flex-col ai-chat-container">
+    <div className="relative h-full flex flex-col ai-chat-container">
       {/* 头部控制栏 - 紧凑设计 */}
       {!(isMobile && hideMobileHeader) && (
       <div className={`border-b border-gray-100 bg-white flex-shrink-0 ${isMobile ? 'p-3' : 'px-4 py-2'}`}>
