@@ -134,6 +134,8 @@ export function AITutor({
   const [enableWeb, setEnableWeb] = useState(false);  // 联网搜索默认关闭
   const [enableThinkingGuide, setEnableThinkingGuide] = useState(true);  // 学霸思维引导模式默认开启
   const [enableAgentMode, setEnableAgentMode] = useState(false);  // Agent 模式默认关闭
+  const [agentLiveSteps, setAgentLiveSteps] = useState<import('./tutor/tutor-types').AgentStepInfo[]>([]);  // Agent 实时思考步骤
+  const [agentPhase, setAgentPhase] = useState<'idle' | 'searching' | 'reading' | 'writing'>('idle');
   const [selectedOptionId, setSelectedOptionId] = useState<string | undefined>();
   const [conversationId, setConversationId] = useState<string | undefined>();
   const [isGuidanceLoading, setIsGuidanceLoading] = useState(false);
@@ -1137,8 +1139,10 @@ export function AITutor({
     try {
       // ── Agent 模式：走 /api/tutor/agent SSE 路由 ──
       if (enableAgentMode) {
-        const agentSteps: import('./tutor/tutor-types').AgentStepInfo[] = [];
+        const collectedSteps: import('./tutor/tutor-types').AgentStepInfo[] = [];
         setGlobalThinkingStartTime(Date.now());
+        setAgentLiveSteps([]);
+        setAgentPhase('searching');
 
         const agentHistory = globalChatHistory.map(m => ({ role: m.role, content: m.content }));
         const agentResponse = await fetch('/api/tutor/agent', {
@@ -1171,24 +1175,29 @@ export function AITutor({
             if (raw === '[DONE]') continue;
             try {
               const evt = JSON.parse(raw);
-              if (evt.type === 'thinking') {
-                agentSteps.push({ label: evt.message || '思考中...', done: false });
-              } else if (evt.type === 'tool_start') {
-                agentSteps.push({ label: evt.description || evt.toolName, toolName: evt.toolName, done: false });
+              if (evt.type === 'tool_start') {
+                const step = { label: evt.description || evt.toolName, toolName: evt.toolName, done: false };
+                collectedSteps.push(step);
+                setAgentLiveSteps([...collectedSteps]);
+                setAgentPhase('reading');
               } else if (evt.type === 'tool_result') {
-                const last = agentSteps[agentSteps.length - 1];
+                const last = collectedSteps[collectedSteps.length - 1];
                 if (last) last.done = true;
+                setAgentLiveSteps([...collectedSteps]);
               } else if (evt.type === 'content_done') {
                 agentContent = evt.content || '';
+                setAgentPhase('writing');
               }
             } catch { /* ignore */ }
           }
         }
 
+        setAgentPhase('idle');
+        setAgentLiveSteps([]);
         setGlobalChatHistory(prev => [...prev, {
           role: 'assistant',
           content: agentContent || '抱歉，我没有找到相关的学习记录来回答这个问题。',
-          agentSteps: agentSteps.length > 0 ? agentSteps : undefined,
+          agentSteps: collectedSteps.length > 0 ? collectedSteps : undefined,
         }]);
         clearGlobalStreamingOnly();
 
@@ -1649,22 +1658,18 @@ export function AITutor({
                     {msg.role === 'assistant' ? (
                       <>
                         {msg.agentSteps && msg.agentSteps.length > 0 && (
-                          <details className="mb-2 text-[11px]">
-                            <summary className="cursor-pointer text-[#A3A39E] hover:text-[#787774] transition-colors">
-                              思考了 {msg.agentSteps.length} 步
+                          <details className="mb-3 group">
+                            <summary className="cursor-pointer select-none flex items-center gap-2 text-[11px] text-[#A3A39E] hover:text-[#787774] transition-colors">
+                              <div className="flex h-4 w-4 items-center justify-center rounded-full bg-[#D3E4F4]/50">
+                                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#5B8DBF" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12" /></svg>
+                              </div>
+                              <span>检索了 {msg.agentSteps.filter(s => s.done).length} 处学习记录</span>
+                              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="transition-transform group-open:rotate-90"><polyline points="9 18 15 12 9 6" /></svg>
                             </summary>
-                            <div className="mt-1.5 flex flex-col gap-1 pl-1">
+                            <div className="mt-1.5 ml-2 border-l border-[#E9E9E7] pl-3 flex flex-col gap-0.5">
                               {msg.agentSteps.map((step, si) => (
-                                <div key={si} className="flex items-center gap-1.5">
-                                  {step.done ? (
-                                    <span className="flex h-3.5 w-3.5 items-center justify-center rounded text-[#1A7F43]">
-                                      <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12" /></svg>
-                                    </span>
-                                  ) : (
-                                    <span className="flex h-3.5 w-3.5 items-center justify-center rounded text-[#A3A39E]">
-                                      <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10" /></svg>
-                                    </span>
-                                  )}
+                                <div key={si} className="flex items-center gap-2 py-0.5 text-[11px]">
+                                  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#34C759" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="flex-shrink-0"><polyline points="20 6 9 17 4 12" /></svg>
                                   <span className="text-[#787774]">{step.label}</span>
                                 </div>
                               ))}
@@ -1757,19 +1762,57 @@ export function AITutor({
                 </div>
               )}
               
-              {/* 等待开始流式输出时显示 loading */}
+              {/* 等待开始流式输出时显示 loading / Agent 实时思考步骤 */}
               {globalLoading && !streamingContent && !globalThinkingContent && (
                 <div className="flex justify-start">
-                  <div className="bg-gray-100 rounded-2xl px-4 py-3">
-                    <div className="flex items-center gap-2 text-gray-500">
-                      <div className="loading-dots">
-                        <span></span>
-                        <span></span>
-                        <span></span>
+                  <div className={`${isMobile ? 'max-w-[92%]' : 'max-w-[85%]'} rounded-2xl ${isMobile ? 'px-3 py-2.5' : 'px-4 py-3'} bg-gray-100 text-gray-800`}>
+                    {enableAgentMode && agentPhase !== 'idle' ? (
+                      <div className="flex flex-col gap-2">
+                        {/* Agent 阶段指示器 */}
+                        <div className="flex items-center gap-2">
+                          <div className="relative flex h-5 w-5 items-center justify-center">
+                            <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-[#5B8DBF]/30" />
+                            <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-[#5B8DBF]" />
+                          </div>
+                          <span className="text-xs font-medium text-[#3D7EAA]">
+                            {agentPhase === 'searching' && '正在理解你的问题…'}
+                            {agentPhase === 'reading' && '正在检索学习记录…'}
+                            {agentPhase === 'writing' && '正在组织回答…'}
+                          </span>
+                        </div>
+                        {/* 实时步骤时间线 */}
+                        {agentLiveSteps.length > 0 && (
+                          <div className="ml-2.5 border-l border-[#D3E4F4] pl-3 flex flex-col gap-1">
+                            {agentLiveSteps.map((step, si) => (
+                              <div
+                                key={si}
+                                className="flex items-center gap-2 text-[11px] animate-[fadeSlideIn_0.3s_ease-out]"
+                                style={{ animationFillMode: 'backwards', animationDelay: `${si * 80}ms` }}
+                              >
+                                {step.done ? (
+                                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#34C759" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="flex-shrink-0"><polyline points="20 6 9 17 4 12" /></svg>
+                                ) : (
+                                  <div className="flex h-3 w-3 items-center justify-center flex-shrink-0">
+                                    <span className="block h-1.5 w-1.5 rounded-full bg-[#5B8DBF] animate-pulse" />
+                                  </div>
+                                )}
+                                <span className={step.done ? 'text-[#787774]' : 'text-[#3D7EAA] font-medium'}>{step.label}</span>
+                              </div>
+                            ))}
+                          </div>
+                        )}
                       </div>
-                      <span className="text-xs">思考中...</span>
-                      {isRealtimeTeacherMode ? <span className="text-xs text-gray-400">老师正在组织下一句</span> : null}
-                    </div>
+                    ) : (
+                      <div className="flex items-center gap-2 text-gray-500">
+                        <div className="loading-dots">
+                          <span></span>
+                          <span></span>
+                          <span></span>
+                        </div>
+                        <span className="text-xs">思考中...</span>
+                        {isRealtimeTeacherMode ? <span className="text-xs text-gray-400">老师正在组织下一句</span> : null}
+                      </div>
+                    )}
                   </div>
                 </div>
               )}

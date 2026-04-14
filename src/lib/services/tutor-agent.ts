@@ -111,9 +111,6 @@ export async function runTutorAgent(options: AgentRunOptions): Promise<string> {
   // 加入当前用户消息
   messages.push({ role: 'user', content: userMessage });
 
-  // 通知前端：Agent 开始思考
-  onEvent({ type: 'thinking', data: { message: '正在理解你的问题...' } });
-
   let finalContent = '';
   let round = 0;
 
@@ -197,12 +194,6 @@ export async function runTutorAgent(options: AgentRunOptions): Promise<string> {
         name: toolName,
       });
     }
-
-    // 通知前端：正在基于检索结果思考
-    onEvent({
-      type: 'thinking',
-      data: { message: round === 1 ? '正在查看学习记录...' : '正在深入分析...' },
-    });
   }
 
   if (!finalContent && round >= MAX_TOOL_ROUNDS) {
