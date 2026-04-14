@@ -131,10 +131,6 @@ export function AITutor({
   
   const [enableWeb, setEnableWeb] = useState(false);  // 联网搜索默认关闭
   const [enableThinkingGuide, setEnableThinkingGuide] = useState(true);  // 学霸思维引导模式默认开启
-  const enableAgentMode = true; // Agent 原生：全局对话永远走 Agent
-  const [agentLiveSteps, setAgentLiveSteps] = useState<import('./tutor/tutor-types').AgentStepInfo[]>([]);  // Agent 实时思考步骤
-  const [agentPhase, setAgentPhase] = useState<'idle' | 'searching' | 'reading' | 'writing'>('idle');
-  const [agentStreamingContent, setAgentStreamingContent] = useState('');  // Agent 流式回答内容
   const [selectedOptionId, setSelectedOptionId] = useState<string | undefined>();
   const [conversationId, setConversationId] = useState<string | undefined>();
   const [isGuidanceLoading, setIsGuidanceLoading] = useState(false);
@@ -1136,97 +1132,6 @@ export function AITutor({
     }
 
     try {
-      // ── Agent 模式：走 /api/tutor/agent SSE 路由 ──
-      if (enableAgentMode) {
-        const collectedSteps: import('./tutor/tutor-types').AgentStepInfo[] = [];
-        setGlobalThinkingStartTime(Date.now());
-        setAgentLiveSteps([]);
-        setAgentPhase('searching');
-        setAgentStreamingContent('');
-
-        const agentHistory = globalChatHistory.map(m => ({ role: m.role, content: m.content }));
-        const agentSegments = buildGlobalSegmentsForTutorRequest().map(s => ({
-          text: s.text, startMs: s.startMs, endMs: s.endMs,
-        }));
-        const agentResponse = await fetch('/api/tutor/agent', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
-          },
-          body: JSON.stringify({
-            message: effectiveQuestion,
-            history: agentHistory,
-            segments: agentSegments,
-            enableThinkingGuide,
-          }),
-        });
-
-        if (!agentResponse.ok) {
-          // 401 时尝试刷新页面（token 可能过期）
-          if (agentResponse.status === 401) {
-            throw new Error('登录已过期，请刷新页面重试');
-          }
-          throw new Error(`Agent error: ${agentResponse.status}`);
-        }
-        const reader = agentResponse.body?.getReader();
-        if (!reader) throw new Error('No response body');
-
-        const decoder = new TextDecoder();
-        let buffer = '';
-        let agentContent = '';
-
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
-          buffer += decoder.decode(value, { stream: true });
-          const lines = buffer.split('\n');
-          buffer = lines.pop() || '';
-
-          for (const line of lines) {
-            if (!line.startsWith('data: ')) continue;
-            const raw = line.slice(6).trim();
-            if (raw === '[DONE]') continue;
-            try {
-              const evt = JSON.parse(raw);
-              if (evt.type === 'tool_start') {
-                const step = { label: evt.description || evt.toolName, toolName: evt.toolName, done: false };
-                collectedSteps.push(step);
-                setAgentLiveSteps([...collectedSteps]);
-                setAgentPhase('reading');
-              } else if (evt.type === 'tool_result') {
-                const last = collectedSteps[collectedSteps.length - 1];
-                if (last) last.done = true;
-                setAgentLiveSteps([...collectedSteps]);
-              } else if (evt.type === 'content_delta') {
-                // 流式回答——逐字追加
-                setAgentPhase('writing');
-                agentContent += (evt.delta as string) || '';
-                setAgentStreamingContent(agentContent);
-              } else if (evt.type === 'content_done') {
-                agentContent = evt.content as string || agentContent;
-                setAgentPhase('writing');
-              }
-            } catch { /* ignore */ }
-          }
-        }
-
-        setAgentPhase('idle');
-        setAgentLiveSteps([]);
-        setAgentStreamingContent('');
-        setGlobalChatHistory(prev => [...prev, {
-          role: 'assistant',
-          content: agentContent || '抱歉，我没有找到相关的学习记录来回答这个问题。',
-          agentSteps: collectedSteps.length > 0 ? collectedSteps : undefined,
-        }]);
-        clearGlobalStreamingOnly();
-
-        isGlobalSendInFlightRef.current = false;
-        setGlobalLoading(false);
-        return;
-      }
-
-      // ── 普通模式：走 /api/tutor ──
       const headers: Record<string, string> = {};
       if (accessToken) {
         headers['Authorization'] = `Bearer ${accessToken}`;
@@ -1301,7 +1206,7 @@ export function AITutor({
       isGlobalSendInFlightRef.current = false;
       setGlobalLoading(false);
     }
-  }, [userInput, selectedModel, enableWeb, enableThinkingGuide, enableAgentMode, supportsMultimodal, uploadedImages, accessToken, userId, sessionId, globalFetchStream, clearGlobalStreamingOnly, trackCoreEvent, buildGlobalSegmentsForTutorRequest, globalLoading, hasTutorContext, isStreaming, preferSupportContext, globalChatHistory]);
+  }, [userInput, selectedModel, enableWeb, enableThinkingGuide, supportsMultimodal, uploadedImages, accessToken, userId, sessionId, globalFetchStream, clearGlobalStreamingOnly, trackCoreEvent, buildGlobalSegmentsForTutorRequest, globalLoading, hasTutorContext, isStreaming, preferSupportContext]);
 
   // 全局模式：停止生成
   const stopGlobalGeneration = useCallback(() => {
@@ -1489,7 +1394,7 @@ export function AITutor({
     }
 
     return (
-      <div className={`relative h-full flex flex-col ai-chat-container ${isMobile ? 'bg-transparent' : 'bg-white'}`}>
+      <div className={`h-full flex flex-col ai-chat-container ${isMobile ? 'bg-transparent' : 'bg-white'}`}>
         {/* 头部 - 紧凑设计 */}
         {!(isMobile && hideMobileHeader) ? (
           <div className={`${isMobile ? 'px-3 pt-3' : 'border-b border-gray-100 bg-white px-4 py-3'} flex-shrink-0`}>
@@ -1546,12 +1451,11 @@ export function AITutor({
                     type="checkbox"
                     checked={enableWeb}
                     onChange={(e) => setEnableWeb(e.target.checked)}
-                    disabled={enableAgentMode}
                     className="w-4 h-4 rounded border-gray-300 text-[#787774] focus:ring-[#232322]"
                   />
-                  <span className={`flex items-center gap-1 group-hover:text-gray-900 transition-colors ${enableAgentMode ? 'opacity-40' : ''}`}>
+                  <span className="flex items-center gap-1 group-hover:text-gray-900 transition-colors">
                     <Globe size={13} strokeWidth={1.75} />
-                    联网搜索{enableAgentMode ? '(Agent 内置)' : ''}
+                    联网搜索
                   </span>
                 </label>
                 <label className="flex items-center gap-2 text-xs text-gray-600 cursor-pointer group">
@@ -1587,54 +1491,20 @@ export function AITutor({
             <div className="space-y-4">
               <div className="flex justify-start">
                 <div className={`${isMobile ? 'max-w-[92%]' : 'max-w-[85%]'} rounded-2xl ${isMobile ? 'px-3 py-2.5' : 'px-4 py-3'} bg-gray-100 text-gray-700`}>
-                  {agentPhase !== 'idle' ? (
-                    <div className="flex flex-col gap-2">
-                      <div className="flex items-center gap-2">
-                        <div className="relative flex h-5 w-5 items-center justify-center">
-                          <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-[#5B8DBF]/30" />
-                          <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-[#5B8DBF]" />
-                        </div>
-                        <span className="text-xs font-medium text-[#3D7EAA]">
-                          {agentPhase === 'searching' && '正在理解你的问题…'}
-                          {agentPhase === 'reading' && '正在检索学习记录…'}
-                          {agentPhase === 'writing' && '正在组织回答…'}
-                        </span>
-                      </div>
-                      {agentLiveSteps.length > 0 && (
-                        <div className="ml-2.5 border-l border-[#D3E4F4] pl-3 flex flex-col gap-1">
-                          {agentLiveSteps.map((step, si) => (
-                            <div
-                              key={si}
-                              className="flex items-center gap-2 text-[11px] animate-[fadeSlideIn_0.3s_ease-out]"
-                              style={{ animationFillMode: 'backwards', animationDelay: `${si * 80}ms` }}
-                            >
-                              {step.done ? (
-                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#34C759" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="flex-shrink-0"><polyline points="20 6 9 17 4 12" /></svg>
-                              ) : (
-                                <div className="flex h-3 w-3 items-center justify-center flex-shrink-0">
-                                  <span className="block h-1.5 w-1.5 rounded-full bg-[#5B8DBF] animate-pulse" />
-                                </div>
-                              )}
-                              <span className={step.done ? 'text-[#787774]' : 'text-[#3D7EAA] font-medium'}>{step.label}</span>
-                            </div>
-                          ))}
-                        </div>
-                      )}
+                  <div className="flex items-center gap-2 text-sm">
+                    <div className="loading-dots">
+                      <span></span>
+                      <span></span>
+                      <span></span>
                     </div>
-                  ) : (
-                    <div className="flex items-center gap-2 text-sm">
-                      <div className="loading-dots">
-                        <span></span>
-                        <span></span>
-                        <span></span>
-                      </div>
-                      <span>
-                        {isRealtimeTeacherMode
-                          ? (preferSupportContext ? '老师正在顺着你刚选的内容继续往下讲…' : '老师正在顺着这节课继续带你往下走…')
-                          : '正在准备…'}
-                      </span>
-                    </div>
-                  )}
+                    <span>
+                      {isRealtimeTeacherMode
+                        ? (preferSupportContext ? '老师正在顺着你刚选的内容继续往下讲…' : '老师正在顺着这节课继续带你往下走…')
+                        : preferSupportContext
+                          ? '正在顺着你刚选的内容继续回答…'
+                          : '正在继续理解这节课的上下文…'}
+                    </span>
+                  </div>
                 </div>
               </div>
               <div ref={chatEndRef} />
@@ -1694,25 +1564,6 @@ export function AITutor({
                   >
                     {msg.role === 'assistant' ? (
                       <>
-                        {msg.agentSteps && msg.agentSteps.length > 0 && (
-                          <details className="mb-3 group">
-                            <summary className="cursor-pointer select-none flex items-center gap-2 text-[11px] text-[#A3A39E] hover:text-[#787774] transition-colors">
-                              <div className="flex h-4 w-4 items-center justify-center rounded-full bg-[#D3E4F4]/50">
-                                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#5B8DBF" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12" /></svg>
-                              </div>
-                              <span>检索了 {msg.agentSteps.filter(s => s.done).length} 处学习记录</span>
-                              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="transition-transform group-open:rotate-90"><polyline points="9 18 15 12 9 6" /></svg>
-                            </summary>
-                            <div className="mt-1.5 ml-2 border-l border-[#E9E9E7] pl-3 flex flex-col gap-0.5">
-                              {msg.agentSteps.map((step, si) => (
-                                <div key={si} className="flex items-center gap-2 py-0.5 text-[11px]">
-                                  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#34C759" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="flex-shrink-0"><polyline points="20 6 9 17 4 12" /></svg>
-                                  <span className="text-[#787774]">{step.label}</span>
-                                </div>
-                              ))}
-                            </div>
-                          </details>
-                        )}
                         {enableThinkingGuide ? (
                           <ThinkingGuideRenderer
                             content={msg.content}
@@ -1799,101 +1650,19 @@ export function AITutor({
                 </div>
               )}
               
-              {/* 等待开始流式输出时显示 loading / Agent 实时思考步骤 */}
-              {globalLoading && !streamingContent && !globalThinkingContent && !agentStreamingContent && (
+              {/* 等待开始流式输出时显示 loading */}
+              {globalLoading && !streamingContent && !globalThinkingContent && (
                 <div className="flex justify-start">
-                  <div className={`${isMobile ? 'max-w-[92%]' : 'max-w-[85%]'} rounded-2xl ${isMobile ? 'px-3 py-2.5' : 'px-4 py-3'} bg-gray-100 text-gray-800`}>
-                    {enableAgentMode && agentPhase !== 'idle' ? (
-                      <div className="flex flex-col gap-2">
-                        {/* Agent 阶段指示器 */}
-                        <div className="flex items-center gap-2">
-                          <div className="relative flex h-5 w-5 items-center justify-center">
-                            <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-[#5B8DBF]/30" />
-                            <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-[#5B8DBF]" />
-                          </div>
-                          <span className="text-xs font-medium text-[#3D7EAA]">
-                            {agentPhase === 'searching' && '正在理解你的问题…'}
-                            {agentPhase === 'reading' && '正在检索学习记录…'}
-                            {agentPhase === 'writing' && '正在组织回答…'}
-                          </span>
-                        </div>
-                        {/* 实时步骤时间线 */}
-                        {agentLiveSteps.length > 0 && (
-                          <div className="ml-2.5 border-l border-[#D3E4F4] pl-3 flex flex-col gap-1">
-                            {agentLiveSteps.map((step, si) => (
-                              <div
-                                key={si}
-                                className="flex items-center gap-2 text-[11px] animate-[fadeSlideIn_0.3s_ease-out]"
-                                style={{ animationFillMode: 'backwards', animationDelay: `${si * 80}ms` }}
-                              >
-                                {step.done ? (
-                                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#34C759" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="flex-shrink-0"><polyline points="20 6 9 17 4 12" /></svg>
-                                ) : (
-                                  <div className="flex h-3 w-3 items-center justify-center flex-shrink-0">
-                                    <span className="block h-1.5 w-1.5 rounded-full bg-[#5B8DBF] animate-pulse" />
-                                  </div>
-                                )}
-                                <span className={step.done ? 'text-[#787774]' : 'text-[#3D7EAA] font-medium'}>{step.label}</span>
-                              </div>
-                            ))}
-                          </div>
-                        )}
+                  <div className="bg-gray-100 rounded-2xl px-4 py-3">
+                    <div className="flex items-center gap-2 text-gray-500">
+                      <div className="loading-dots">
+                        <span></span>
+                        <span></span>
+                        <span></span>
                       </div>
-                    ) : (
-                      <div className="flex items-center gap-2 text-gray-500">
-                        <div className="loading-dots">
-                          <span></span>
-                          <span></span>
-                          <span></span>
-                        </div>
-                        <span className="text-xs">思考中...</span>
-                        {isRealtimeTeacherMode ? <span className="text-xs text-gray-400">老师正在组织下一句</span> : null}
-                      </div>
-                    )}
-                  </div>
-                </div>
-              )}
-
-              {/* Agent 流式回答输出 */}
-              {agentPhase === 'writing' && agentStreamingContent && (
-                <div className="flex justify-start">
-                  <div className={`${isMobile ? 'max-w-[92%]' : 'max-w-[85%]'} rounded-2xl ${isMobile ? 'px-3 py-2' : 'px-4 py-3'} bg-gray-100 text-gray-800`}>
-                    {/* 折叠的 Agent 步骤 */}
-                    {agentLiveSteps.length > 0 && (
-                      <details className="mb-3 group">
-                        <summary className="cursor-pointer select-none flex items-center gap-2 text-[11px] text-[#A3A39E] hover:text-[#787774] transition-colors">
-                          <div className="flex h-4 w-4 items-center justify-center rounded-full bg-[#D3E4F4]/50">
-                            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#5B8DBF" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12" /></svg>
-                          </div>
-                          <span>检索了 {agentLiveSteps.filter(s => s.done).length} 处学习记录</span>
-                          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="transition-transform group-open:rotate-90"><polyline points="9 18 15 12 9 6" /></svg>
-                        </summary>
-                        <div className="mt-1.5 ml-2 border-l border-[#E9E9E7] pl-3 flex flex-col gap-0.5">
-                          {agentLiveSteps.map((step, si) => (
-                            <div key={si} className="flex items-center gap-2 py-0.5 text-[11px]">
-                              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#34C759" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="flex-shrink-0"><polyline points="20 6 9 17 4 12" /></svg>
-                              <span className="text-[#787774]">{step.label}</span>
-                            </div>
-                          ))}
-                        </div>
-                      </details>
-                    )}
-                    {enableThinkingGuide ? (
-                      <ThinkingGuideRenderer
-                        content={agentStreamingContent}
-                        isStreaming={true}
-                        onTimestampClick={handleTimestampClick}
-                        isMobile={isMobile}
-                        className={`leading-relaxed ${isMobile ? 'text-xs' : 'text-sm'}`}
-                      />
-                    ) : (
-                      <StreamingMarkdown
-                        content={agentStreamingContent}
-                        isStreaming={true}
-                        onTimestampClick={handleTimestampClick}
-                        className={`leading-relaxed ${isMobile ? 'text-xs' : 'text-sm'}`}
-                      />
-                    )}
+                      <span className="text-xs">思考中...</span>
+                      {isRealtimeTeacherMode ? <span className="text-xs text-gray-400">老师正在组织下一句</span> : null}
+                    </div>
                   </div>
                 </div>
               )}
@@ -2056,7 +1825,7 @@ export function AITutor({
   }
 
   return (
-    <div className="relative h-full flex flex-col ai-chat-container">
+    <div className="h-full flex flex-col ai-chat-container">
       {/* 头部控制栏 - 紧凑设计 */}
       {!(isMobile && hideMobileHeader) && (
       <div className={`border-b border-gray-100 bg-white flex-shrink-0 ${isMobile ? 'p-3' : 'px-4 py-2'}`}>
@@ -2131,12 +1900,11 @@ export function AITutor({
                   type="checkbox"
                   checked={enableWeb}
                   onChange={(e) => setEnableWeb(e.target.checked)}
-                  disabled={enableAgentMode}
                   className="w-4 h-4 rounded border-gray-300 text-[#787774] focus:ring-[#232322]"
                 />
-                <span className={`flex items-center gap-1 group-hover:text-gray-900 transition-colors ${enableAgentMode ? 'opacity-40' : ''}`}>
+                <span className="flex items-center gap-1 group-hover:text-gray-900 transition-colors">
                   <Globe size={13} strokeWidth={1.75} />
-                  联网搜索{enableAgentMode ? '(Agent 内置)' : ''}
+                  联网搜索
                 </span>
               </label>
               <label className="flex items-center gap-2 text-xs text-gray-600 cursor-pointer group">

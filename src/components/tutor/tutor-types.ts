@@ -111,16 +111,9 @@ export interface TutorAPIResponse {
   };
 }
 
-export interface AgentStepInfo {
-  label: string;
-  toolName?: string;
-  done: boolean;
-}
-
 export interface TutorChatMessage {
   role: 'user' | 'assistant';
   content: string;
   citations?: Citation[];
   images?: TutorMessageImage[];
-  agentSteps?: AgentStepInfo[];
 }
