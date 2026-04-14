@@ -32,6 +32,12 @@ import { createLogger } from '@/lib/logger';
 
 const log = createLogger('tutor/agent');
 
+function formatMs(ms: number): string {
+  const s = Math.floor(ms / 1000);
+  const m = Math.floor(s / 60);
+  return `${String(m).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`;
+}
+
 const AGENT_SYSTEM_PROMPT = `你是学生的 AI 同桌。你有能力检索学生的全部学习记录，包括课堂转录、个人困惑标记、历史对话。
 
 你的任务：
@@ -62,9 +68,11 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { message, history = [] } = body as {
+    const { message, history = [], segments = [], anchorTimestamp } = body as {
       message: string;
       history?: Array<{ role: string; content: string }>;
+      segments?: Array<{ text: string; startMs: number; endMs: number }>;
+      anchorTimestamp?: number; // 用户点击的锚点/困惑标记位置（毫秒）
     };
 
     if (!message?.trim()) {
@@ -89,6 +97,22 @@ export async function POST(request: NextRequest) {
 
     const learnerContextPrompt = formatLearnerContext(user.learnerProfileJson);
 
+    // 构建当前课堂上下文（如果有 segments，说明用户正在一节课的复习页面）
+    let currentLessonContext = '';
+    if (segments.length > 0) {
+      const maxLen = 6000;
+      let text = '';
+      for (const seg of segments) {
+        const line = `[${formatMs(seg.startMs)}] ${seg.text}\n`;
+        if (text.length + line.length > maxLen) break;
+        text += line;
+      }
+      currentLessonContext = `\n\n【当前正在学的课堂转录】\n${text}`;
+      if (anchorTimestamp !== undefined) {
+        currentLessonContext += `\n\n学生在 ${formatMs(anchorTimestamp)} 附近标记了困惑。`;
+      }
+    }
+
     // SSE 流
     const encoder = new TextEncoder();
     const stream = new ReadableStream({
@@ -101,7 +125,7 @@ export async function POST(request: NextRequest) {
         void runTutorAgent({
           workspaceId: user.defaultWorkspaceId!,
           userMessage: message.trim(),
-          systemPrompt: AGENT_SYSTEM_PROMPT,
+          systemPrompt: AGENT_SYSTEM_PROMPT + currentLessonContext,
           conversationHistory: history,
           learnerContextPrompt,
           onEvent: sendEvent,

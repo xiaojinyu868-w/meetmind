@@ -6,7 +6,6 @@ import {
   MessageCircle,
   Globe,
   Brain,
-  Zap,
   AlertTriangle,
   BookOpen,
   Target,
@@ -133,7 +132,7 @@ export function AITutor({
   
   const [enableWeb, setEnableWeb] = useState(false);  // 联网搜索默认关闭
   const [enableThinkingGuide, setEnableThinkingGuide] = useState(true);  // 学霸思维引导模式默认开启
-  const [enableAgentMode, setEnableAgentMode] = useState(false);  // Agent 模式默认关闭
+  const enableAgentMode = true; // Agent 原生：全局对话永远走 Agent
   const [agentLiveSteps, setAgentLiveSteps] = useState<import('./tutor/tutor-types').AgentStepInfo[]>([]);  // Agent 实时思考步骤
   const [agentPhase, setAgentPhase] = useState<'idle' | 'searching' | 'reading' | 'writing'>('idle');
   const [selectedOptionId, setSelectedOptionId] = useState<string | undefined>();
@@ -1145,13 +1144,20 @@ export function AITutor({
         setAgentPhase('searching');
 
         const agentHistory = globalChatHistory.map(m => ({ role: m.role, content: m.content }));
+        const agentSegments = buildGlobalSegmentsForTutorRequest().map(s => ({
+          text: s.text, startMs: s.startMs, endMs: s.endMs,
+        }));
         const agentResponse = await fetch('/api/tutor/agent', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
             ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
           },
-          body: JSON.stringify({ message: effectiveQuestion, history: agentHistory }),
+          body: JSON.stringify({
+            message: effectiveQuestion,
+            history: agentHistory,
+            segments: agentSegments,
+          }),
         });
 
         if (!agentResponse.ok) throw new Error(`Agent error: ${agentResponse.status}`);
@@ -1545,24 +1551,6 @@ export function AITutor({
                   <span className="flex items-center gap-1 group-hover:text-gray-900 transition-colors">
                     <Brain size={13} strokeWidth={1.75} />
                     思维引导
-                  </span>
-                </label>
-                <label className="flex items-center gap-2 text-xs text-gray-600 cursor-pointer group">
-                  <input
-                    type="checkbox"
-                    checked={enableAgentMode}
-                    onChange={(e) => {
-                      setEnableAgentMode(e.target.checked);
-                      if (e.target.checked) {
-                        setEnableThinkingGuide(false);
-                      }
-                    }}
-                    disabled={isRealtimeTeacherMode}
-                    className="w-4 h-4 rounded border-gray-300 text-[#1E5F8A] focus:ring-[#5B8DBF]"
-                  />
-                  <span className="flex items-center gap-1 group-hover:text-gray-900 transition-colors">
-                    <Zap size={13} strokeWidth={1.75} />
-                    Agent
                   </span>
                 </label>
               </div>
