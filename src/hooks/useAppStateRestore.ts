@@ -177,6 +177,14 @@ export function useAppStateRestore(
       }
       uiActions.setLoadingProgress(85);
 
+      // 恢复 viewMode：如果之前在复习页且有 sessionId，刷新后回到复习页
+      if (savedAppState?.viewMode === 'review' && savedAppState.sessionId) {
+        uiActions.setViewMode('review');
+        if (savedAppState.reviewTab) {
+          uiActions.setReviewTab(savedAppState.reviewTab);
+        }
+      }
+
       uiActions.setLoadingProgress(100);
       uiActions.setAppReady(true);
       hasRestoredState.current = true;
