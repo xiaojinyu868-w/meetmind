@@ -1553,7 +1553,7 @@ export function AITutor({
                     type="checkbox"
                     checked={enableThinkingGuide}
                     onChange={(e) => setEnableThinkingGuide(e.target.checked)}
-                    disabled={isRealtimeTeacherMode || enableAgentMode}
+                    disabled={isRealtimeTeacherMode}
                     className="w-4 h-4 rounded border-gray-300 text-violet-500 focus:ring-violet-400"
                   />
                   <span className="flex items-center gap-1 group-hover:text-gray-900 transition-colors">
@@ -1818,12 +1818,42 @@ export function AITutor({
               {agentPhase === 'writing' && agentStreamingContent && (
                 <div className="flex justify-start">
                   <div className={`${isMobile ? 'max-w-[92%]' : 'max-w-[85%]'} rounded-2xl ${isMobile ? 'px-3 py-2' : 'px-4 py-3'} bg-gray-100 text-gray-800`}>
-                    <StreamingMarkdown
-                      content={agentStreamingContent}
-                      isStreaming={true}
-                      onTimestampClick={handleTimestampClick}
-                      className={`leading-relaxed ${isMobile ? 'text-xs' : 'text-sm'}`}
-                    />
+                    {/* 折叠的 Agent 步骤 */}
+                    {agentLiveSteps.length > 0 && (
+                      <details className="mb-3 group">
+                        <summary className="cursor-pointer select-none flex items-center gap-2 text-[11px] text-[#A3A39E] hover:text-[#787774] transition-colors">
+                          <div className="flex h-4 w-4 items-center justify-center rounded-full bg-[#D3E4F4]/50">
+                            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#5B8DBF" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12" /></svg>
+                          </div>
+                          <span>检索了 {agentLiveSteps.filter(s => s.done).length} 处学习记录</span>
+                          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="transition-transform group-open:rotate-90"><polyline points="9 18 15 12 9 6" /></svg>
+                        </summary>
+                        <div className="mt-1.5 ml-2 border-l border-[#E9E9E7] pl-3 flex flex-col gap-0.5">
+                          {agentLiveSteps.map((step, si) => (
+                            <div key={si} className="flex items-center gap-2 py-0.5 text-[11px]">
+                              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#34C759" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="flex-shrink-0"><polyline points="20 6 9 17 4 12" /></svg>
+                              <span className="text-[#787774]">{step.label}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </details>
+                    )}
+                    {enableThinkingGuide ? (
+                      <ThinkingGuideRenderer
+                        content={agentStreamingContent}
+                        isStreaming={true}
+                        onTimestampClick={handleTimestampClick}
+                        isMobile={isMobile}
+                        className={`leading-relaxed ${isMobile ? 'text-xs' : 'text-sm'}`}
+                      />
+                    ) : (
+                      <StreamingMarkdown
+                        content={agentStreamingContent}
+                        isStreaming={true}
+                        onTimestampClick={handleTimestampClick}
+                        className={`leading-relaxed ${isMobile ? 'text-xs' : 'text-sm'}`}
+                      />
+                    )}
                   </div>
                 </div>
               )}
