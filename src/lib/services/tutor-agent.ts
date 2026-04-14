@@ -131,6 +131,7 @@ export async function runTutorAgent(options: AgentRunOptions): Promise<string> {
 
   // 收集最终回答
   let finalContent = '';
+  let lastPushedLength = 0; // 已推送给前端的文本长度（用于增量推送）
 
   // 订阅 Pi Agent 事件 → 转换为前端 SSE 事件
   agent.subscribe((event: PiAgentEvent) => {
@@ -155,8 +156,30 @@ export async function runTutorAgent(options: AgentRunOptions): Promise<string> {
         });
         break;
 
+      case 'message_update': {
+        // 流式推送：每收到一个 token，推送增量内容
+        if (event.message.role === 'assistant') {
+          const textBlocks = event.message.content.filter(
+            (b: { type: string }) => b.type === 'text'
+          ) as Array<{ type: 'text'; text: string }>;
+          const fullText = textBlocks.map(b => b.text).join('');
+
+          // 检查这个 message 是否包含 tool_calls（中间轮次）
+          const hasToolCalls = event.message.content.some(
+            (b: { type: string }) => b.type === 'toolCall'
+          );
+
+          // 只推送最终回答的 delta（无 tool_calls 的 assistant 消息）
+          if (!hasToolCalls && fullText.length > lastPushedLength) {
+            const delta = fullText.slice(lastPushedLength);
+            lastPushedLength = fullText.length;
+            onEvent({ type: 'content_delta', delta });
+          }
+        }
+        break;
+      }
+
       case 'message_end':
-        // 检查是否是最终的 assistant 消息（无 tool calls）
         if (event.message.role === 'assistant') {
           const textBlocks = event.message.content.filter(
             (b: { type: string }) => b.type === 'text'
@@ -164,20 +187,21 @@ export async function runTutorAgent(options: AgentRunOptions): Promise<string> {
           const text = textBlocks.map(b => b.text).join('');
           if (text) {
             finalContent = text;
+            // 推送可能遗漏的最后一段 delta
+            if (text.length > lastPushedLength) {
+              onEvent({ type: 'content_delta', delta: text.slice(lastPushedLength) });
+            }
           }
+          // 重置，下一轮 tool call 后的新 message 从 0 开始
+          lastPushedLength = 0;
         }
         break;
 
       case 'agent_end':
-        // Agent 运行结束，推送最终内容
-        if (finalContent) {
-          onEvent({ type: 'content_done', content: finalContent });
-        } else {
-          onEvent({
-            type: 'content_done',
-            content: '我查看了你的学习记录，但需要更多信息才能回答这个问题。你能说得更具体一些吗？',
-          });
-        }
+        onEvent({
+          type: 'content_done',
+          content: finalContent || '我查看了你的学习记录，但需要更多信息才能回答这个问题。你能说得更具体一些吗？',
+        });
         break;
     }
   });

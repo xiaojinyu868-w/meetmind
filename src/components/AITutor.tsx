@@ -135,6 +135,7 @@ export function AITutor({
   const enableAgentMode = true; // Agent 原生：全局对话永远走 Agent
   const [agentLiveSteps, setAgentLiveSteps] = useState<import('./tutor/tutor-types').AgentStepInfo[]>([]);  // Agent 实时思考步骤
   const [agentPhase, setAgentPhase] = useState<'idle' | 'searching' | 'reading' | 'writing'>('idle');
+  const [agentStreamingContent, setAgentStreamingContent] = useState('');  // Agent 流式回答内容
   const [selectedOptionId, setSelectedOptionId] = useState<string | undefined>();
   const [conversationId, setConversationId] = useState<string | undefined>();
   const [isGuidanceLoading, setIsGuidanceLoading] = useState(false);
@@ -1142,6 +1143,7 @@ export function AITutor({
         setGlobalThinkingStartTime(Date.now());
         setAgentLiveSteps([]);
         setAgentPhase('searching');
+        setAgentStreamingContent('');
 
         const agentHistory = globalChatHistory.map(m => ({ role: m.role, content: m.content }));
         const agentSegments = buildGlobalSegmentsForTutorRequest().map(s => ({
@@ -1190,8 +1192,13 @@ export function AITutor({
                 const last = collectedSteps[collectedSteps.length - 1];
                 if (last) last.done = true;
                 setAgentLiveSteps([...collectedSteps]);
+              } else if (evt.type === 'content_delta') {
+                // 流式回答——逐字追加
+                setAgentPhase('writing');
+                agentContent += (evt.delta as string) || '';
+                setAgentStreamingContent(agentContent);
               } else if (evt.type === 'content_done') {
-                agentContent = evt.content || '';
+                agentContent = evt.content as string || agentContent;
                 setAgentPhase('writing');
               }
             } catch { /* ignore */ }
@@ -1200,6 +1207,7 @@ export function AITutor({
 
         setAgentPhase('idle');
         setAgentLiveSteps([]);
+        setAgentStreamingContent('');
         setGlobalChatHistory(prev => [...prev, {
           role: 'assistant',
           content: agentContent || '抱歉，我没有找到相关的学习记录来回答这个问题。',
@@ -1752,7 +1760,7 @@ export function AITutor({
               )}
               
               {/* 等待开始流式输出时显示 loading / Agent 实时思考步骤 */}
-              {globalLoading && !streamingContent && !globalThinkingContent && (
+              {globalLoading && !streamingContent && !globalThinkingContent && !agentStreamingContent && (
                 <div className="flex justify-start">
                   <div className={`${isMobile ? 'max-w-[92%]' : 'max-w-[85%]'} rounded-2xl ${isMobile ? 'px-3 py-2.5' : 'px-4 py-3'} bg-gray-100 text-gray-800`}>
                     {enableAgentMode && agentPhase !== 'idle' ? (
@@ -1802,6 +1810,20 @@ export function AITutor({
                         {isRealtimeTeacherMode ? <span className="text-xs text-gray-400">老师正在组织下一句</span> : null}
                       </div>
                     )}
+                  </div>
+                </div>
+              )}
+
+              {/* Agent 流式回答输出 */}
+              {agentPhase === 'writing' && agentStreamingContent && (
+                <div className="flex justify-start">
+                  <div className={`${isMobile ? 'max-w-[92%]' : 'max-w-[85%]'} rounded-2xl ${isMobile ? 'px-3 py-2' : 'px-4 py-3'} bg-gray-100 text-gray-800`}>
+                    <StreamingMarkdown
+                      content={agentStreamingContent}
+                      isStreaming={true}
+                      onTimestampClick={handleTimestampClick}
+                      className={`leading-relaxed ${isMobile ? 'text-xs' : 'text-sm'}`}
+                    />
                   </div>
                 </div>
               )}
