@@ -1581,20 +1581,54 @@ export function AITutor({
             <div className="space-y-4">
               <div className="flex justify-start">
                 <div className={`${isMobile ? 'max-w-[92%]' : 'max-w-[85%]'} rounded-2xl ${isMobile ? 'px-3 py-2.5' : 'px-4 py-3'} bg-gray-100 text-gray-700`}>
-                  <div className="flex items-center gap-2 text-sm">
-                    <div className="loading-dots">
-                      <span></span>
-                      <span></span>
-                      <span></span>
+                  {agentPhase !== 'idle' ? (
+                    <div className="flex flex-col gap-2">
+                      <div className="flex items-center gap-2">
+                        <div className="relative flex h-5 w-5 items-center justify-center">
+                          <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-[#5B8DBF]/30" />
+                          <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-[#5B8DBF]" />
+                        </div>
+                        <span className="text-xs font-medium text-[#3D7EAA]">
+                          {agentPhase === 'searching' && '正在理解你的问题…'}
+                          {agentPhase === 'reading' && '正在检索学习记录…'}
+                          {agentPhase === 'writing' && '正在组织回答…'}
+                        </span>
+                      </div>
+                      {agentLiveSteps.length > 0 && (
+                        <div className="ml-2.5 border-l border-[#D3E4F4] pl-3 flex flex-col gap-1">
+                          {agentLiveSteps.map((step, si) => (
+                            <div
+                              key={si}
+                              className="flex items-center gap-2 text-[11px] animate-[fadeSlideIn_0.3s_ease-out]"
+                              style={{ animationFillMode: 'backwards', animationDelay: `${si * 80}ms` }}
+                            >
+                              {step.done ? (
+                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#34C759" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="flex-shrink-0"><polyline points="20 6 9 17 4 12" /></svg>
+                              ) : (
+                                <div className="flex h-3 w-3 items-center justify-center flex-shrink-0">
+                                  <span className="block h-1.5 w-1.5 rounded-full bg-[#5B8DBF] animate-pulse" />
+                                </div>
+                              )}
+                              <span className={step.done ? 'text-[#787774]' : 'text-[#3D7EAA] font-medium'}>{step.label}</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
                     </div>
-                    <span>
-                      {isRealtimeTeacherMode
-                        ? (preferSupportContext ? '老师正在顺着你刚选的内容继续往下讲…' : '老师正在顺着这节课继续带你往下走…')
-                        : preferSupportContext
-                          ? '正在顺着你刚选的内容继续回答…'
-                          : '正在继续理解这节课的上下文…'}
-                    </span>
-                  </div>
+                  ) : (
+                    <div className="flex items-center gap-2 text-sm">
+                      <div className="loading-dots">
+                        <span></span>
+                        <span></span>
+                        <span></span>
+                      </div>
+                      <span>
+                        {isRealtimeTeacherMode
+                          ? (preferSupportContext ? '老师正在顺着你刚选的内容继续往下讲…' : '老师正在顺着这节课继续带你往下走…')
+                          : '正在准备…'}
+                      </span>
+                    </div>
+                  )}
                 </div>
               </div>
               <div ref={chatEndRef} />
