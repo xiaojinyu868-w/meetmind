@@ -42,6 +42,8 @@ const PUBLIC_ROUTES = [
   '/api/class-check/plan',
   '/api/apps/infographic/generate-image',
   '/api/extract-terms',
+  '/api/transcript-enhance',
+  '/api/classroom/*',
   '/api/analytics',
   '/api/analytics/stats',
   '/api/feedback',
