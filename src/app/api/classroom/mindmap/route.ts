@@ -85,6 +85,10 @@ export async function POST(request: NextRequest) {
 
     const text = transcriptText.trim();
 
+    log.info(
+      `[mindmap] hit elapsedMs=${elapsedMs} textLen=${text.length} priorNodes=${priorTree?.nodes?.length ?? 0}`,
+    );
+
     // 预热期：直接返回中心占位节点
     if (elapsedMs < MIN_ELAPSED_MS || text.length < MIN_CHARS) {
       const rootId = 'root-placeholder';
@@ -164,6 +168,9 @@ ${trimmed}`;
 
       const parsed = JSON.parse(response.content);
       const tree = sanitizeTree(parsed, elapsedMs);
+      log.info(
+        `[mindmap] tree built nodes=${tree.nodes.length} title="${tree.title.slice(0, 20)}"`,
+      );
 
       return NextResponse.json({ tree });
     } catch (llmError) {

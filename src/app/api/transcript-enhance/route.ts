@@ -61,7 +61,7 @@ const USER_PROMPT_PREFIX = `任务：修正以下 ASR 语音识别文本。
   - ASR 常见错误模式：英文术语被音译为无意义的中文谐音、被识别为另一个发音相似的合法术语、英文字母被逐个拆开识别、术语部分正确部分错误。
 5.【重要】只修改你有把握的。不确定时保持原样，不要猜测。
 6. 保持术语、专有名词和语气。
-7. 只返回 JSON 数组，每项包含 id 和 text。`;
+7. 严格按 JSON 对象返回，格式：{"items":[{"id":"...","text":"..."}, ...]}。不要返回裸数组，不要包 markdown 代码块，不要有任何额外解释。`;
 
 function buildEnhanceSystemPrompt(contextHint?: string, lexiconTerms?: LexiconTerm[], recentContext?: string): string {
   const parts = [SYSTEM_PROMPT];
@@ -239,17 +239,39 @@ function parseEnhanceOutput(output: string): Map<string, string> {
   const fenced = output.match(/```(?:json)?\s*([\s\S]*?)```/i);
   if (fenced?.[1]) candidates.push(fenced[1].trim());
 
+  // 兜底：如果模型输出里混了 prose，尝试抽出 {...} 对象块或 [...] 数组块
+  const objectBlock = output.match(/\{[\s\S]*\}/);
+  if (objectBlock?.[0]) candidates.push(objectBlock[0].trim());
+
   const bracketBlock = output.match(/\[[\s\S]*\]/);
   if (bracketBlock?.[0]) candidates.push(bracketBlock[0].trim());
 
   for (const candidate of candidates) {
     try {
-      const parsed = JSON.parse(candidate);
-      if (!Array.isArray(parsed)) continue;
+      const parsed: unknown = JSON.parse(candidate);
 
-      for (const item of parsed) {
-        if (item && typeof item.id === 'string' && typeof item.text === 'string') {
-          result.set(item.id, item.text.trim());
+      // 1) 顶层数组
+      let arr: unknown[] | null = null;
+      if (Array.isArray(parsed)) {
+        arr = parsed;
+      } else if (parsed && typeof parsed === 'object') {
+        // 2) {items: [...]} / {segments: [...]} / {data: [...]} / {result: [...]}
+        const obj = parsed as Record<string, unknown>;
+        for (const key of ['items', 'segments', 'data', 'result', 'results', 'list']) {
+          if (Array.isArray(obj[key])) {
+            arr = obj[key] as unknown[];
+            break;
+          }
+        }
+      }
+      if (!arr) continue;
+
+      for (const item of arr) {
+        if (item && typeof item === 'object') {
+          const it = item as Record<string, unknown>;
+          if (typeof it.id === 'string' && typeof it.text === 'string') {
+            result.set(it.id, it.text.trim());
+          }
         }
       }
 
@@ -269,6 +291,9 @@ async function runModelCorrection(
   lexiconTerms?: LexiconTerm[],
   recentContext?: string,
 ): Promise<{ texts: Map<string, string>; model: string; usage?: unknown }> {
+  // 注意：这里的"黑名单"只在 provider 明确返回"模型不存在"类硬错误时才会被打上。
+  // 单次解析失败（non-JSON / empty）不再拉黑模型，否则会把整个路由封到进程重启为止，
+  // 尤其 primary 和 fallback 是同一个 ID 时——一次偶发的 finish_reason=length 就能废掉所有后续调用。
   if (modelAvailability.get(model) === 'unavailable') {
     throw new Error(`Model ${model} marked unavailable in runtime cache`);
   }
@@ -281,6 +306,8 @@ async function runModelCorrection(
   const systemPrompt = buildEnhanceSystemPrompt(contextHint, lexiconTerms, recentContext);
   const userPrompt = buildEnhanceUserPrompt(JSON.stringify(inputItems));
 
+  // 要求严格 JSON（数组包裹在 {items:[...]} 里——provider 的 json_object 模式要求顶层是对象）。
+  // 见 parseEnhanceOutput：对数组和 {items:[]} 都兼容。
   const response = await chat(
       [
         { role: 'system', content: systemPrompt },
@@ -289,13 +316,16 @@ async function runModelCorrection(
       model,
       {
         temperature: 0.2,
-        maxTokens: 2000,
+        // 原来 2000 在 50 段一批时很容易被截断，finish_reason=length → 非法 JSON。
+        // 给足空间 + 后续在路由层把批量分片。
+        maxTokens: 6000,
+        responseFormat: 'json_object',
       }
     );
 
   const parsed = parseEnhanceOutput(response.content || '');
   if (parsed.size === 0) {
-    markModelAvailability(model, 'unavailable');
+    // 单次解析失败：不再拉黑模型，留给上层按 segment 维度降级到 pending。
     throw new Error(`Model ${model} returned non-JSON or empty payload`);
   }
 
