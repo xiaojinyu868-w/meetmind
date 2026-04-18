@@ -57,6 +57,9 @@ hooks → stores + types + lib/db + lib/utils
 | `useActionItems.ts` | ~105 | 行动项管理（handleActionComplete + handleStartNextAction + handleGenerateSummary + handleActionItemsUpdate），从 page.tsx 提取（Phase 6） |
 | `useExtractTerms.ts` | ~105 | ASR 热词提取 + 实时上下文提示（extractTerms effect + liveASRContextHint memo），从 page.tsx 提取（Phase 6） |
 | `useSourceItemManagement.ts` | ~120 | 源项 CRUD（appendSourceItem + updateSourceItem + appendSupportSource），从 page.tsx 提取（Phase 6） |
+| `useClassroomLessons.ts` | ~130 | 课堂列表数据适配（audioSessions + transcripts + highlightTopics + workspaceEchoes/Captures + preferences + sourceItems → Lesson[] + markReviewed），响应式 |
+| `useClassroomCompanion.ts` | ~260 | 课堂 AI 同桌对话（/api/tutor 流式 + 动态开场白 + 历史持久化 + 错误降级 + short-circuit），为 ClassroomView 专属 |
+| `useLiveConcepts.ts` | ~100 | 录课中关键概念启发式抽取（订阅 captureEditorStore.segments，零 API），ClassroomRecordingView 消费 |
 
 ### data/ — API 数据 hooks
 

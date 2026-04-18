@@ -3,13 +3,19 @@
 import React, { useRef, useEffect, useState } from 'react';
 import { cn } from '@/lib/utils';
 
-export type TabId = 'record' | 'review';
+export type TabId = 'record' | 'review' | 'classroom';
 
 export interface MobileTabSwitchProps {
   activeTab: TabId;
   onTabChange: (tab: TabId) => void;
   className?: string;
 }
+
+const TABS: Array<{ id: TabId; label: string }> = [
+  { id: 'classroom', label: '课堂' },
+  { id: 'record', label: '收集' },
+  { id: 'review', label: '复习' },
+];
 
 export function MobileTabSwitch({
   activeTab,
@@ -19,15 +25,14 @@ export function MobileTabSwitch({
   const containerRef = useRef<HTMLDivElement>(null);
   const [indicatorStyle, setIndicatorStyle] = useState({ left: 0, width: 0 });
 
-  // 更新指示器位置
   useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
 
     const buttons = container.querySelectorAll('button');
-    const activeIndex = activeTab === 'record' ? 0 : 1;
+    const activeIndex = TABS.findIndex((t) => t.id === activeTab);
     const activeButton = buttons[activeIndex];
-    
+
     if (activeButton) {
       setIndicatorStyle({
         left: activeButton.offsetLeft,
@@ -53,31 +58,21 @@ export function MobileTabSwitch({
         }}
       />
 
-      <button
-        onClick={() => onTabChange('record')}
-        className={cn(
-          'relative z-10 rounded-full px-5 py-1.5 text-[13px] font-medium whitespace-nowrap',
-          'transition-all duration-200',
-          activeTab === 'record'
-            ? 'text-slate-900'
-            : 'text-slate-400 hover:text-slate-500'
-        )}
-      >
-        收集
-      </button>
-
-      <button
-        onClick={() => onTabChange('review')}
-        className={cn(
-          'relative z-10 rounded-full px-5 py-1.5 text-[13px] font-medium whitespace-nowrap',
-          'transition-all duration-200',
-          activeTab === 'review'
-            ? 'text-slate-900'
-            : 'text-slate-400 hover:text-slate-500'
-        )}
-      >
-        复习
-      </button>
+      {TABS.map((tab) => (
+        <button
+          key={tab.id}
+          onClick={() => onTabChange(tab.id)}
+          className={cn(
+            'relative z-10 rounded-full px-4 py-1.5 text-[13px] font-medium whitespace-nowrap',
+            'transition-all duration-200',
+            activeTab === tab.id
+              ? 'text-slate-900'
+              : 'text-slate-400 hover:text-slate-500'
+          )}
+        >
+          {tab.label}
+        </button>
+      ))}
     </div>
   );
 }

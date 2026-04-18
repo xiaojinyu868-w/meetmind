@@ -4,7 +4,7 @@ export const APP_STATE_KEY = 'app_last_state';
 export const APP_STATE_TTL_MS = 24 * 60 * 60 * 1000;
 export const APP_STATE_VERSION = 2;
 
-export type PersistedViewMode = 'record' | 'review';
+export type PersistedViewMode = 'record' | 'review' | 'classroom';
 export type PersistedDataSource = 'live' | 'demo' | 'video';
 export type PersistedReviewTab = 'timeline' | 'anchor-detail' | 'apps';
 export type PersistedVideoWorkspaceTab = 'chat' | 'confusion' | 'transcript' | 'apps';

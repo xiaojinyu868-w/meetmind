@@ -48,8 +48,8 @@ function getInitialCollapsed(): boolean {
 }
 
 interface DesktopSidebarProps {
-  viewMode: 'record' | 'review';
-  onViewModeChange: (mode: 'record' | 'review') => void;
+  viewMode: 'record' | 'review' | 'classroom';
+  onViewModeChange: (mode: 'record' | 'review' | 'classroom') => void;
   onOpenAISearch: () => void;
   /** 打开"全部收集"面板 */
   onOpenHistory: () => void;
@@ -104,8 +104,8 @@ export function DesktopSidebar({
 
   // 导航项配置
   const navItems = [
+    { key: 'classroom' as const, label: '课堂', Icon: BookOpen },
     { key: 'record' as const, label: '收集', Icon: Mic },
-    { key: 'review' as const, label: '复习', Icon: BookOpen },
   ];
 
   return (
@@ -173,7 +173,8 @@ export function DesktopSidebar({
       {/* ── 核心导航 ── */}
       <nav className={`flex flex-col gap-0.5 ${collapsed ? 'px-1.5' : 'px-2.5'} pt-0.5`}>
         {navItems.map(({ key, label, Icon }) => {
-          const isActive = viewMode === key;
+          // review 状态下高亮课堂 tab（复习是课堂的下钻状态）
+          const isActive = viewMode === key || (key === 'classroom' && viewMode === 'review');
           return (
             <div key={key}>
               <button

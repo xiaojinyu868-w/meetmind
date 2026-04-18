@@ -11,7 +11,7 @@ import type { TranscriptSegment } from '@/types';
 
 // ── View / Tab types ──────────────────────────────────────────────
 
-export type ViewMode = 'record' | 'review';
+export type ViewMode = 'record' | 'review' | 'classroom';
 export type DataSource = 'live' | 'demo' | 'video';
 
 export type SharedWorkspaceTab = 'apps';

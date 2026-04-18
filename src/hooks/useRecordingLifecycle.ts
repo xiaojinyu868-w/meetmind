@@ -373,7 +373,11 @@ export function useRecordingLifecycle(
     );
     editorAct.setTimeline(tl);
     memoryService.save(tl);
-    uiAct.setViewMode('record');
+    // 录完后只在"不在课堂 tab"时切回 record。课堂 tab 自己管显示态。
+    const currentViewMode = useUIStore.getState().viewMode;
+    if (currentViewMode !== 'classroom') {
+      uiAct.setViewMode('record');
+    }
   }, [anchors, persistCaptureToWorkspace, sessionId, sessionMediaDurationMs, user]);
 
   return {

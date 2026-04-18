@@ -90,6 +90,7 @@ import { CollectionMessageActionSheet } from '@/components/CollectionMessageActi
 import { CollectionCard } from '@/components/CollectionCard';
 import { CollectionEmptyState } from '@/components/CollectionEmptyState';
 import { DesktopCollectionLayout } from '@/components/DesktopCollectionLayout';
+const ClassroomView = dynamic(() => import('@/components/ClassroomView').then(m => ({ default: m.ClassroomView })), { ssr: false });
 import {
   Mic,
   ChevronRight,
@@ -661,7 +662,7 @@ function StudentAppContent({
     },
   );
 
-  const handleViewModeChange = useCallback(async (newMode: 'record' | 'review') => {
+  const handleViewModeChange = useCallback(async (newMode: 'record' | 'review' | 'classroom') => {
     setViewMode(newMode);
     setMobileSubPage(null);
     setShowMobileRecorder(false);
@@ -1669,7 +1670,61 @@ function StudentAppContent({
       {!isMobile && <DegradedModeBanner status={serviceStatus} />}
 
       {/* 主内容区 */}
-      {viewMode === 'record' ? (
+      {viewMode === 'classroom' ? (
+        <div className="flex flex-1 min-h-0 flex-col page-enter">
+          <div className="flex-1 min-h-0">
+            <ClassroomView
+              isRecording={isRecording}
+              onStartRecording={() => {
+                // 留在课堂 tab！优先通过 ref 直接调，失败才退回 autoStart signal
+                setShowMobileRecorder(true);
+                if (recorderRef.current) {
+                  void recorderRef.current.startRecording();
+                } else {
+                  // Recorder 还没挂载时用 signal 触发
+                  captureEditorActions.setRecorderAutoStartSignal(Date.now());
+                }
+              }}
+              onStopRecording={() => {
+                // 通过 ref 调 Recorder.stopRecording()
+                void recorderRef.current?.stopRecording();
+              }}
+              onOpenLesson={async (lessonId) => {
+                // 真实 sessionId → 复用复习态
+                const ok = await restoreReviewSession(lessonId, {
+                  reviewTab: 'timeline',
+                  videoWorkspaceTab: 'chat',
+                  currentTime: 0,
+                  showTranscriptBar: false,
+                });
+                if (!ok) {
+                  console.warn('[classroom] open lesson failed (incomplete data):', lessonId);
+                }
+              }}
+            />
+          </div>
+          {/* ── 课堂 tab 下的 Recorder 挂载点：视觉隐藏，只作为录音引擎 ── */}
+          {/* 这里挂载 = 录音发生在课堂 tab 内，不跳走 */}
+          {/* 注意：不传 compactMode！compactMode 会强制 batch 模式，阻止流式 ASR 初始化。
+             课堂 tab 需要实时转录，所以走 streaming 模式。UI 已被 sr-only 隐藏，样式无所谓。 */}
+          <div className="sr-only" aria-hidden>
+            <Recorder
+              ref={recorderRef}
+              activeSessionId={sessionId}
+              continueCurrentSession={collectionFeedItems.length > 0 || segments.length > 0}
+              autoStartSignal={recorderAutoStartSignal}
+              onRecordingStart={handleRecordingStart}
+              onRecordingStop={handleRecordingStop}
+              onTranscriptionError={handleRecordingTranscriptionError}
+              onTranscriptUpdate={handleTranscriptUpdate}
+              onTranscriptTextUpdate={handleTranscriptTextUpdate}
+              onTranscriptEnhanced={handleTranscriptEnhanced}
+              onAnchorMark={handleAnchorMark}
+              contextHint={liveASRContextHint}
+            />
+          </div>
+        </div>
+      ) : viewMode === 'record' ? (
         <>
           {isMobile ? (
             <>
