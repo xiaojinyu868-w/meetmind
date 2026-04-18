@@ -299,6 +299,23 @@ module.exports = {
           from: { transform: 'scale(0)', opacity: '1' },
           to: { transform: 'scale(1)', opacity: '0' },
         },
+        // 思维导图：新节点生长（scale + fade）
+        mindGrow: {
+          '0%': { opacity: '0', transform: 'scale(0.86)' },
+          '60%': { opacity: '1', transform: 'scale(1.02)' },
+          '100%': { opacity: '1', transform: 'scale(1)' },
+        },
+        // 思维导图：新节点外圈柔和呼吸，1.4s 一次后归零
+        mindPulse: {
+          '0%': { opacity: '0.9', transform: 'scale(0.96)' },
+          '70%': { opacity: '0.35', transform: 'scale(1.05)' },
+          '100%': { opacity: '0', transform: 'scale(1.08)' },
+        },
+        // 预热态三圈呼吸
+        mindBreath: {
+          '0%, 100%': { opacity: '0.5', transform: 'scale(1)' },
+          '50%': { opacity: '1', transform: 'scale(1.08)' },
+        },
       },
       borderRadius: {
         '2xl': '1rem',

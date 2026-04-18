@@ -1,45 +1,53 @@
 'use client';
 
 /**
- * ClassroomRecordingView — 录课中视图
+ * ClassroomRecordingView — 录课中视图（v6 · 生长中的思维导图）
  *
- * 设计意图（核心）：
- *   录课中的屏幕是"留白"。MeetMind 不在你上课的时候刷屏幕给你看。
- *   它只做两件事：1) 让你知道它在听；2) 偶尔递上一张"我刚听到一个关键概念"的小卡。
+ * 设计变更相对 v5：
+ *   - 主画面不再是"一条理解卡片流 + 一条刚才讲到流"——那是"零散气泡"，信息密度低
+ *     且互相重复。
+ *   - 换成一棵真正的思维导图（MindMap 组件）：中心节点是本段主题，一级分支是老师讲
+ *     到的主要概念，叶子是要点。每 ~45s 或命中主题切换词时由 LLM 整理一次。
+ *   - 顶部保留极薄状态条（正在听课 + 计时 + 跟读），不刷屏。
+ *   - 底部"刚才讲到"卡片区砍掉，换成单行"当前句"——屏幕真正的主角是导图。
+ *   - 完整转录原文依然可点击展开查看。
  *
- *   这不是"实时转录界面"——那是录音笔的形态。
- *   这是"AI 同桌在做笔记"的形态——你上课，它在旁边默默记。
- *
- * 区块：
- *   顶部：录音计时器（极简，红点+时间）
- *   中部：关键概念气泡流（AI 刚听到的概念，2-5 秒浮现一张）
- *   底部：可折叠的"查看实时转录原文"（默认收起）
- *   固定：停止录音按钮（独立一行，明确但不抢戏）
- *
- * 接入点：
- *   后续用 Recorder 组件的 transcript 驱动 concepts；现在用占位。
- *
- * 设计系统：零渐变、零阴影、纯平涂
+ * 老的 concepts 字段向后兼容但已不展示——通过 tree 传入结构化数据。
  */
 
-import React, { useMemo, useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Square, ChevronDown, ChevronUp } from 'lucide-react';
+import { MindMap } from './MindMap';
+import type { MindMapTree } from '@/hooks/useClassroomMindMap';
 
 export interface LiveConcept {
   id: string;
   term: string;
   quote: string;
-  /** 在这节课里出现的秒数 */
+  /** 在这节课里出现的时间戳（相对录音开始的毫秒数） */
   at: number;
 }
 
 export interface ClassroomRecordingViewProps {
   seconds: number;
-  concepts: LiveConcept[];
+  /** 保留用于向后兼容（不再直接展示） */
+  concepts?: LiveConcept[];
   onStop: () => void;
   /** 真实转录文本（整段拼接） */
   transcriptText?: string;
+  /** 正在流式进来但未落定的「跟读」片段（interim） */
+  interimText?: string;
+  /** 最近已落定的 N 句（仍在 ClassroomView 里用于其他逻辑，这里只取最后一条做单行展示） */
+  recentLines?: Array<{ id: string; text: string; startMs: number }>;
+  /** 思维导图树（由 useClassroomMindMap 提供） */
+  mindMapTree?: MindMapTree;
+  /** 最近一轮新增的节点 id */
+  mindMapNewIds?: Set<string>;
+  /** 点击节点时间戳 → 跳转录音位置（可选） */
+  onAnchorClick?: (ms: number) => void;
 }
+
+// ── 时间工具 ──────────────────────────────────────────────────────────
 
 function formatTime(totalSec: number): string {
   const m = Math.floor(totalSec / 60).toString().padStart(2, '0');
@@ -47,126 +55,116 @@ function formatTime(totalSec: number): string {
   return `${m}:${s}`;
 }
 
-function formatAt(sec: number): string {
-  const m = Math.floor(sec / 60);
-  const s = Math.floor(sec % 60).toString().padStart(2, '0');
-  return `${m}:${s}`;
-}
+// ── 顶部状态条 ────────────────────────────────────────────────────────
 
-/** 顶部录音状态条 */
-function StatusBar({ seconds }: { seconds: number }) {
-  return (
-    <div className="flex items-center gap-3 px-6 pt-8 pb-2">
-      <span className="relative flex h-2 w-2">
-        <span className="absolute inline-flex h-full w-full rounded-full bg-[#D96B6B] opacity-75 animate-ping" />
-        <span className="relative inline-flex h-2 w-2 rounded-full bg-[#D96B6B]" />
-      </span>
-      <span className="text-[13px] font-medium text-ink">正在听课</span>
-      <span className="text-[12px] tabular-nums text-ink-muted">
-        {formatTime(seconds)}
-      </span>
-    </div>
-  );
-}
-
-/** 关键概念气泡 */
-function ConceptBubble({ concept, isLatest }: { concept: LiveConcept; isLatest: boolean }) {
-  return (
-    <div
-      className={`relative flex gap-3 rounded-xl px-4 py-3 transition-colors ${
-        isLatest
-          ? 'bg-[#FDF3C0]/30 before:absolute before:left-0 before:top-3 before:bottom-3 before:w-0.5 before:rounded-full before:bg-[#FDF3C0]'
-          : ''
-      }`}
-    >
-      <span className="mt-1.5 inline-flex h-1 w-1 flex-shrink-0 rounded-full bg-ink-muted/60" />
-      <div className="min-w-0 flex-1">
-        <p className="text-[14px] font-medium text-ink leading-snug">
-          {concept.term}
-        </p>
-        <p className="mt-1 text-[12.5px] leading-relaxed text-ink-muted">
-          「{concept.quote}」
-        </p>
-        <p className="mt-1 text-[11px] text-ink-muted/60 tabular-nums">
-          {formatAt(concept.at)}
-        </p>
-      </div>
-    </div>
-  );
-}
-
-/** 主体：关键概念流 */
-function ConceptStream({ concepts }: { concepts: LiveConcept[] }) {
-  if (concepts.length === 0) {
-    return (
-      <div className="flex flex-1 flex-col items-center justify-center px-10 pb-10 text-center">
-        <p className="text-[14px] text-ink-muted">
-          我在听，等老师讲到关键的地方，我会记下来。
-        </p>
-        <p className="mt-1.5 text-[12px] text-ink-muted/60">
-          你专心听就好，不用盯着屏幕。
-        </p>
-      </div>
-    );
-  }
-
-  // 最新的放顶上
-  const ordered = [...concepts].reverse();
+/**
+ * 极薄状态条：红点 + 正在听课 + 计时 + 跟读 / 当前句
+ * - 有 interim 时显示 interim（正在识别但未落定）
+ * - 无 interim 时如果有 lastFinalLine 显示它
+ * - 都没有时显示 "在听……"
+ */
+function StatusHeader({
+  seconds,
+  interimText,
+  lastFinalLine,
+}: {
+  seconds: number;
+  interimText?: string;
+  lastFinalLine?: string;
+}) {
+  const showInterim = Boolean(interimText && interimText.trim().length > 0);
+  const hasFinal = Boolean(lastFinalLine && lastFinalLine.trim().length > 0);
 
   return (
-    <div className="flex-1 overflow-y-auto px-6 pb-6">
-      <div className="mx-auto w-full max-w-2xl">
-        <div className="mb-3 flex items-center gap-2 px-1 pt-2 text-[11px] font-medium tracking-wide text-ink-muted">
-          <span className="inline-flex h-1 w-1 rounded-full bg-ink-muted/60" />
-          <span>正在听到的</span>
+    <div className="flex-shrink-0 bg-canvas px-8 pt-7 pb-4 lg:px-12">
+      <div className="mx-auto w-full max-w-3xl">
+        <div className="flex items-baseline gap-3">
+          <span className="relative flex h-2 w-2">
+            <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-[#D96B6B] opacity-60" />
+            <span className="relative inline-flex h-2 w-2 rounded-full bg-[#D96B6B]" />
+          </span>
+          <span className="text-[13px] font-medium tracking-[-0.005em] text-ink">
+            正在听课
+          </span>
+          <span className="font-mono text-[13px] tabular-nums tracking-tight text-ink-muted">
+            {formatTime(seconds)}
+          </span>
         </div>
-        <div className="flex flex-col gap-1.5">
-          {ordered.map((c, i) => (
-            <ConceptBubble key={c.id} concept={c} isLatest={i === 0} />
-          ))}
+        <div className="mt-2.5 min-h-[20px]">
+          {showInterim ? (
+            <p className="truncate text-[13px] leading-relaxed text-ink-secondary italic">
+              {interimText}
+              <span className="ml-0.5 inline-block h-[12px] w-[2px] translate-y-[1px] bg-ink-secondary/60 animate-pulse" />
+            </p>
+          ) : hasFinal ? (
+            <p className="truncate text-[12.5px] leading-relaxed text-ink-muted">
+              {lastFinalLine}
+            </p>
+          ) : (
+            <p className="text-[12px] leading-relaxed text-ink-muted/70">
+              {seconds < 3 ? '准备好了——说话吧。' : '在听……'}
+            </p>
+          )}
         </div>
       </div>
     </div>
   );
 }
 
-/** 可折叠的转录原文 */
-function TranscriptToggle({ expanded, onToggle }: { expanded: boolean; onToggle: () => void }) {
+// ── 折叠区：完整转录原文 ──────────────────────────────────────────────
+
+function TranscriptToggle({
+  expanded,
+  onToggle,
+}: {
+  expanded: boolean;
+  onToggle: () => void;
+}) {
   return (
     <button
       type="button"
       onClick={onToggle}
-      className="flex items-center gap-1 px-6 py-2 text-[12px] text-ink-muted/70 transition-colors hover:text-ink-muted"
+      className="flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[11.5px] font-medium text-ink-muted/80 hover:bg-[#EFEFED] hover:text-ink-secondary transition"
     >
-      {expanded ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
+      {expanded ? <ChevronDown size={11} /> : <ChevronUp size={11} />}
       {expanded ? '收起实时转录原文' : '查看实时转录原文'}
     </button>
   );
 }
 
-/** 底部：停止录音 */
+// ── 底部：结束录课 ────────────────────────────────────────────────────
+
 function StopBar({ onStop }: { onStop: () => void }) {
   return (
-    <div className="flex-shrink-0 border-t border-[#E9E9E7]/60 bg-canvas px-5 pb-5 pt-3">
-      <div className="mx-auto w-full max-w-2xl">
+    <div className="flex-shrink-0 border-t border-[#E9E9E7]/70 bg-canvas px-8 pb-[max(env(safe-area-inset-bottom),1.25rem)] pt-4 lg:px-12">
+      <div className="mx-auto w-full max-w-3xl">
         <button
           type="button"
           onClick={onStop}
-          className="group flex w-full items-center justify-center gap-2 rounded-2xl bg-white py-3.5 text-[14px] font-medium text-ink ring-[0.5px] ring-[#232322]/[0.06] transition-all hover:ring-[#232322]/[0.14] active:scale-[0.995]"
+          className="group flex w-full items-center justify-center gap-2.5 rounded-full bg-ink py-3.5 text-[13.5px] font-medium text-white transition hover:bg-[#1a1a19] active:scale-[0.995]"
         >
-          <Square size={14} strokeWidth={1.8} fill="currentColor" className="text-[#D96B6B]" />
-          结束录课
+          <Square size={11} strokeWidth={2} fill="currentColor" />
+          结束这节课
         </button>
       </div>
     </div>
   );
 }
 
+// ── 主组件 ────────────────────────────────────────────────────────────
+
+const EMPTY_TREE: MindMapTree = { title: '', nodes: [] };
+const EMPTY_NEW_IDS: Set<string> = new Set();
+
 export function ClassroomRecordingView({
   seconds,
-  concepts,
   onStop,
   transcriptText,
+  interimText,
+  recentLines = [],
+  mindMapTree = EMPTY_TREE,
+  mindMapNewIds = EMPTY_NEW_IDS,
+  onAnchorClick,
 }: ClassroomRecordingViewProps) {
   const [expanded, setExpanded] = useState(false);
   const transcriptScrollRef = useRef<HTMLDivElement | null>(null);
@@ -180,37 +178,50 @@ export function ClassroomRecordingView({
   }, [transcriptText, expanded]);
 
   const hasTranscript = Boolean(transcriptText && transcriptText.trim().length > 0);
-
-  const transcriptArea = useMemo(() => {
-    if (!expanded) return null;
-    return (
-      <div className="mx-6 mb-3 rounded-xl bg-white/60 px-4 py-3 ring-[0.5px] ring-[#232322]/[0.04]">
-        <div
-          ref={transcriptScrollRef}
-          className="max-h-[28vh] overflow-y-auto"
-        >
-          {hasTranscript ? (
-            <p className="whitespace-pre-wrap text-[12.5px] leading-relaxed text-ink">
-              {transcriptText}
-            </p>
-          ) : (
-            <p className="text-[12.5px] leading-relaxed text-ink-muted/80">
-              还没听到内容……等老师说话我就开始记。
-            </p>
-          )}
-        </div>
-      </div>
-    );
-  }, [expanded, transcriptText, hasTranscript]);
+  const lastFinalLine = recentLines.length > 0 ? recentLines[recentLines.length - 1]?.text : undefined;
 
   return (
     <div className="flex h-full flex-col">
-      <StatusBar seconds={seconds} />
-      <ConceptStream concepts={concepts} />
-      {transcriptArea}
-      <div className="flex justify-center pb-1">
+      <StatusHeader
+        seconds={seconds}
+        interimText={interimText}
+        lastFinalLine={lastFinalLine}
+      />
+
+      {/* 主画面：思维导图 */}
+      <MindMap
+        tree={mindMapTree}
+        newNodeIds={mindMapNewIds}
+        elapsedMs={seconds * 1000}
+        onAnchorClick={onAnchorClick}
+      />
+
+      {/* 展开态：完整原文抽屉 */}
+      {expanded && (
+        <div className="flex-shrink-0 border-t border-[#E9E9E7]/70 bg-white/40 px-8 py-4 lg:px-12">
+          <div className="mx-auto w-full max-w-3xl">
+            <div
+              ref={transcriptScrollRef}
+              className="max-h-[28vh] overflow-y-auto rounded-xl bg-white px-4 py-3 ring-[0.5px] ring-[#232322]/[0.05]"
+            >
+              {hasTranscript ? (
+                <p className="whitespace-pre-wrap text-[12.5px] leading-relaxed text-ink">
+                  {transcriptText}
+                </p>
+              ) : (
+                <p className="text-[12.5px] leading-relaxed text-ink-muted/80">
+                  还没听到内容……等老师说话我就开始记。
+                </p>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      <div className="flex flex-shrink-0 justify-center border-t border-[#E9E9E7]/40 bg-canvas pt-2 pb-1">
         <TranscriptToggle expanded={expanded} onToggle={() => setExpanded((v) => !v)} />
       </div>
+
       <StopBar onStop={onStop} />
     </div>
   );

@@ -26,6 +26,7 @@ import {
   type AppTaskState,
 } from '@/components/apps/hooks/useAppExecution';
 import styles from './WorkshopYellowPage.module.css';
+import { useAuth } from '@/lib/hooks/useAuth';
 
 const WORKSHOP_MODEL_PREFERENCE = 'ai_workshop_model';
 const DOCK_STORAGE_PREFIX = 'app_workspace_dock:';
@@ -187,6 +188,7 @@ export function WorkshopYellowPage(props: WorkshopYellowPageProps) {
   const { sessionId, dataSource, transcript, anchors, summaryOverview, keyDifficulties, onOpenAppWindow } = props;
   const router = useRouter();
   const searchParams = useSearchParams();
+  const { accessToken } = useAuth();
   const abortControllersRef = useRef<Record<string, AbortController>>({});
 
   const [apps, setApps] = useState<Array<WorkshopAppCatalogItem & { enabled?: boolean }>>([]);
@@ -402,9 +404,13 @@ export function WorkshopYellowPage(props: WorkshopYellowPageProps) {
 
         let response: Response;
         try {
+          const yhHeaders: Record<string, string> = { 'Content-Type': 'application/json' };
+          if (accessToken) {
+            yhHeaders['Authorization'] = `Bearer ${accessToken}`;
+          }
           response = await fetch('/api/apps/execute', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: yhHeaders,
             signal: controller.signal,
             body: JSON.stringify({
               appKey: app.key,

@@ -1676,8 +1676,11 @@ function StudentAppContent({
             <ClassroomView
               isRecording={isRecording}
               onStartRecording={() => {
-                // 留在课堂 tab！优先通过 ref 直接调，失败才退回 autoStart signal
-                setShowMobileRecorder(true);
+                // 课堂 tab 的 Recorder 是 sr-only 挂载点（不带 compactMode，走 streaming）。
+                // 绝对不要打开 showMobileRecorder —— 否则会同时渲染两个 Recorder：
+                //   1) showMobileRecorder 挂载点：compactMode=true，强制 batch、无流式 ASR
+                //   2) sr-only 挂载点：streaming
+                // 它们会互相抢 recorderRef 和麦克风权限，导致用户拿到的实际是 batch 模式。
                 if (recorderRef.current) {
                   void recorderRef.current.startRecording();
                 } else {

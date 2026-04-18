@@ -457,12 +457,18 @@ export function useSourceImport(
         } catch (error) {
           const message = error instanceof Error ? error.message : String(error);
           const isUserInputIssue = /只接收|没有识别到|暂时还不能自动接入/i.test(message);
+          const isTranscribeIssue = isAudio || isVideo;
           if (isUserInputIssue) {
+            errorMessages.push(message);
+          } else if (isTranscribeIssue) {
+            // 转录失败：把真实错误暴露出来，而不是静默保留
             errorMessages.push(message);
           }
           updateSourceItem(id, {
             status: 'failed',
-            statusText: resolveSourceFailureStatus({ isAudio, isVideo, isImage }),
+            statusText: isTranscribeIssue && !isUserInputIssue
+              ? `转写未完成：${message.length > 40 ? message.slice(0, 40) + '…' : message}`
+              : resolveSourceFailureStatus({ isAudio, isVideo, isImage }),
             preview: isAudio || isVideo ? '' : file.name,
             origin: 'user',
           });

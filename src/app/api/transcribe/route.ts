@@ -2,12 +2,15 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { applyRateLimit } from '@/lib/utils/rate-limit';
+import { createLogger } from '@/lib/logger';
 import {
   MediaToolError,
   isToolNotFoundError,
   resolvePublicBaseUrl,
   transcodeToMp3,
 } from '@/lib/services/media-tooling';
+
+const log = createLogger('transcribe');
 
 const MAX_FILE_SIZE = 500 * 1024 * 1024;
 const SUPPORTED_AUDIO_FORMATS = [
@@ -220,18 +223,33 @@ async function fetchTranscriptionResult(url: string): Promise<ASRSentence[]> {
 async function waitForTask(
   taskId: string,
   apiKey: string,
-  maxWaitMs: number = 600000,
-  pollIntervalMs: number = 3000
-): Promise<{ success: boolean; sentences: ASRSentence[]; error?: string }> {
+  maxWaitMs: number = 50 * 60 * 1000,
+  pollIntervalMs: number = 5000
+): Promise<{ success: boolean; sentences: ASRSentence[]; error?: string; elapsedMs?: number }> {
   const start = Date.now();
+  let lastStatus: TaskResult['status'] | 'UNKNOWN' = 'UNKNOWN';
+  let pollCount = 0;
 
   while (Date.now() - start < maxWaitMs) {
     const status = await queryTaskStatus(taskId, apiKey);
+    pollCount += 1;
+
+    if (status.status !== lastStatus) {
+      log.info('[transcribe] task status changed', {
+        taskId,
+        from: lastStatus,
+        to: status.status,
+        elapsedSec: Math.round((Date.now() - start) / 1000),
+        pollCount,
+      });
+      lastStatus = status.status;
+    }
 
     if (status.status === 'SUCCEEDED') {
+      const elapsedMs = Date.now() - start;
       if (status.transcription_url) {
         const sentences = await fetchTranscriptionResult(status.transcription_url);
-        return { success: true, sentences };
+        return { success: true, sentences, elapsedMs };
       }
 
       const directSentences: ASRSentence[] = [];
@@ -241,22 +259,28 @@ async function waitForTask(
           directSentences.push(...transcript.sentences);
         }
       }
-      return { success: true, sentences: directSentences };
+      return { success: true, sentences: directSentences, elapsedMs };
     }
 
     if (status.status === 'FAILED') {
-      return { success: false, sentences: [], error: status.error || 'task failed' };
+      return { success: false, sentences: [], error: status.error || 'task failed', elapsedMs: Date.now() - start };
     }
 
     await new Promise((resolve) => setTimeout(resolve, pollIntervalMs));
   }
 
-  return { success: false, sentences: [], error: 'task timeout' };
+  return { success: false, sentences: [], error: `task timeout after ${Math.round((Date.now() - start) / 1000)}s`, elapsedMs: Date.now() - start };
 }
 
 export async function POST(request: NextRequest) {
+  const startedAt = Date.now();
+  log.info('[transcribe] POST received');
+
   const rateLimitResponse = await applyRateLimit(request, 'transcribe');
-  if (rateLimitResponse) return rateLimitResponse;
+  if (rateLimitResponse) {
+    log.warn('[transcribe] rate limited');
+    return rateLimitResponse;
+  }
 
   let originalFilePath = '';
   let transcribeFilePath = '';
@@ -264,11 +288,13 @@ export async function POST(request: NextRequest) {
   try {
     const apiKey = process.env.DASHSCOPE_API_KEY;
     if (!apiKey) {
+      log.error('[transcribe] DASHSCOPE_API_KEY missing');
       return NextResponse.json({ error: '服务未配置转写密钥', code: 'ASR_API_KEY_MISSING' }, { status: 500 });
     }
 
     const publicBase = resolvePublicBaseUrl();
     if (!publicBase.ok || !publicBase.baseUrl) {
+      log.error('[transcribe] public base url missing', { detail: publicBase.error });
       return NextResponse.json(
         {
           error: '服务端未配置可访问的公网地址，暂时无法转写',
@@ -288,12 +314,21 @@ export async function POST(request: NextRequest) {
     const contextHint = sanitizeASRContext(formData.get('context'));
 
     if (!audioFile) {
+      log.warn('[transcribe] no audio in formData');
       return NextResponse.json({ error: '未提供音频或视频文件', code: 'ASR_AUDIO_MISSING' }, { status: 400 });
     }
+
+    log.info('[transcribe] file received', {
+      name: audioFile.name,
+      type: audioFile.type,
+      sizeMB: (audioFile.size / 1024 / 1024).toFixed(1),
+      hasContext: Boolean(contextHint),
+    });
 
     const isAudio = audioFile.type.startsWith('audio/') || SUPPORTED_AUDIO_FORMATS.includes(audioFile.type);
     const isVideo = audioFile.type.startsWith('video/') || SUPPORTED_VIDEO_FORMATS.includes(audioFile.type);
     if (!isAudio && !isVideo) {
+      log.warn('[transcribe] unsupported format', { type: audioFile.type });
       return NextResponse.json(
         {
           error: `不支持的文件格式: ${audioFile.type}`,
@@ -304,6 +339,7 @@ export async function POST(request: NextRequest) {
     }
 
     if (audioFile.size > MAX_FILE_SIZE) {
+      log.warn('[transcribe] file too large', { sizeMB: (audioFile.size / 1024 / 1024).toFixed(1) });
       return NextResponse.json(
         {
           error: `文件过大 (${(audioFile.size / 1024 / 1024).toFixed(1)}MB)，最大支持 500MB`,
@@ -321,18 +357,22 @@ export async function POST(request: NextRequest) {
 
     const arrayBuffer = await audioFile.arrayBuffer();
     fs.writeFileSync(originalFilePath, Buffer.from(arrayBuffer));
+    log.info('[transcribe] file persisted', { path: originalFilePath });
 
     if (isVideo) {
       transcribeFilePath = path.join(UPLOAD_DIR, `media_${timestamp}_${randomId}.mp3`);
+      log.info('[transcribe] transcoding video to mp3');
       await transcodeToMp3(originalFilePath, transcribeFilePath);
     } else {
       transcribeFilePath = originalFilePath;
     }
 
     const fileUrl = `${publicBase.baseUrl}/temp-audio/${path.basename(transcribeFilePath)}`;
+    log.info('[transcribe] submitting DashScope async task', { fileUrl });
 
     const submitted = await submitAsyncTask(fileUrl, apiKey, language, contextHint);
     if (!submitted.success || !submitted.taskId) {
+      log.error('[transcribe] submit failed', { detail: submitted.error });
       return NextResponse.json(
         {
           error: '提交转写任务失败',
@@ -343,9 +383,15 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    log.info('[transcribe] task submitted, start polling', { taskId: submitted.taskId });
     const taskResult = await waitForTask(submitted.taskId, apiKey);
 
     if (!taskResult.success) {
+      log.error('[transcribe] task failed', {
+        taskId: submitted.taskId,
+        error: taskResult.error,
+        elapsedSec: taskResult.elapsedMs ? Math.round(taskResult.elapsedMs / 1000) : undefined,
+      });
       return NextResponse.json(
         {
           error: '转写失败',
@@ -368,6 +414,14 @@ export async function POST(request: NextRequest) {
     const totalDuration = segments.length > 0 ? segments[segments.length - 1].endMs : 0;
     const text = segments.map((segment) => segment.text).join('');
 
+    log.info('[transcribe] task succeeded', {
+      taskId: submitted.taskId,
+      segmentCount: segments.length,
+      totalDurationSec: Math.round(totalDuration / 1000),
+      elapsedSec: taskResult.elapsedMs ? Math.round(taskResult.elapsedMs / 1000) : undefined,
+      totalElapsedSec: Math.round((Date.now() - startedAt) / 1000),
+    });
+
     return NextResponse.json({
       success: true,
       text,
@@ -388,6 +442,7 @@ export async function POST(request: NextRequest) {
       error instanceof MediaToolError &&
       (isToolNotFoundError(error, 'ffmpeg') || isToolNotFoundError(error, 'ffprobe'))
     ) {
+      log.error('[transcribe] ffmpeg/ffprobe missing', error);
       return NextResponse.json(
         {
           error: '服务端未安装 ffmpeg/ffprobe，暂时无法处理视频文件转写',
@@ -398,6 +453,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    log.error('[transcribe] internal error', error);
     return NextResponse.json(
       {
         error: '转写服务异常',
@@ -416,4 +472,4 @@ export async function POST(request: NextRequest) {
   }
 }
 
-export const maxDuration = 600;
+export const maxDuration = 3600;

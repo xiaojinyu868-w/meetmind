@@ -45,6 +45,19 @@ interface CaptureEditorState {
   activeVideoInsightId: string | null;
   extractedTermsHint: string;
   recorderAutoStartSignal: number;
+  /**
+   * 流式 ASR 中，当前还未落定为 final segment 的「跟读」文本。
+   * 由 Recorder 的 onInterim 写入，课堂录课视图订阅后显示在顶部，
+   * 让用户感知到"AI 真的在听"，体验上抹平批量转写的割裂感。
+   */
+  liveInterimText: string;
+  /**
+   * 课堂场景的 ASR 热词/上下文提示。
+   * 由 ClassroomView 根据当天的预习材料标题等聚合后写入，
+   * page.tsx 的 liveASRContextHint 合入后传给 Recorder 的 contextHint，
+   * 专门解决课堂录课时 ASR 拿不到课程专名的问题。
+   */
+  classroomASRContextHint: string;
 }
 
 interface CaptureEditorActions {
@@ -61,6 +74,8 @@ interface CaptureEditorActions {
   setActiveVideoInsightId: (id: string | null) => void;
   setExtractedTermsHint: (hint: string) => void;
   setRecorderAutoStartSignal: (signal: number) => void;
+  setLiveInterimText: (text: string) => void;
+  setClassroomASRContextHint: (hint: string) => void;
 
   /** 重置全部课堂内容数据（新会话时调用） */
   resetCaptureEditorState: () => void;
@@ -84,6 +99,8 @@ const initialState: CaptureEditorState = {
   activeVideoInsightId: null,
   extractedTermsHint: '',
   recorderAutoStartSignal: 0,
+  liveInterimText: '',
+  classroomASRContextHint: '',
 };
 
 // ==================== 辅助函数 ====================
@@ -113,6 +130,8 @@ export const useCaptureEditorStore = create<CaptureEditorStore>()(
         setActiveVideoInsightId: (id) => set({ activeVideoInsightId: id }, false, 'setActiveVideoInsightId'),
         setExtractedTermsHint: (hint) => set({ extractedTermsHint: hint }, false, 'setExtractedTermsHint'),
         setRecorderAutoStartSignal: (signal) => set({ recorderAutoStartSignal: signal }, false, 'setRecorderAutoStartSignal'),
+        setLiveInterimText: (text) => set({ liveInterimText: text }, false, 'setLiveInterimText'),
+        setClassroomASRContextHint: (hint) => set({ classroomASRContextHint: hint }, false, 'setClassroomASRContextHint'),
 
         resetCaptureEditorState: () => set(initialState, false, 'resetCaptureEditorState'),
       },
@@ -136,6 +155,8 @@ export const useVideoInsightItems = () => useCaptureEditorStore((s) => s.videoIn
 export const useActiveVideoInsightId = () => useCaptureEditorStore((s) => s.activeVideoInsightId);
 export const useExtractedTermsHint = () => useCaptureEditorStore((s) => s.extractedTermsHint);
 export const useRecorderAutoStartSignal = () => useCaptureEditorStore((s) => s.recorderAutoStartSignal);
+export const useLiveInterimText = () => useCaptureEditorStore((s) => s.liveInterimText);
+export const useClassroomASRContextHint = () => useCaptureEditorStore((s) => s.classroomASRContextHint);
 export const useCaptureEditorActions = () => useCaptureEditorStore((s) => s.actions);
 
 export default useCaptureEditorStore;

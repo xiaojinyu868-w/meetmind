@@ -7,6 +7,7 @@ export { ClassroomLeftPanel } from './ClassroomLeftPanel';
 export { ClassroomCompanionPanel } from './ClassroomCompanionPanel';
 export { ClassroomLessonCard } from './ClassroomLessonCard';
 export { ClassroomRecordingView } from './ClassroomRecordingView';
+export { MindMap } from './MindMap';
 export type {
   Lesson,
   LessonStatus,
@@ -15,7 +16,7 @@ export type {
   CompanionMessageRole,
   CompanionCard,
 } from './types';
-export type { CompanionMode } from './ClassroomCompanionPanel';
+export type { CompanionMode, ForesightBubble } from './ClassroomCompanionPanel';
 export type { LiveConcept } from './ClassroomRecordingView';
 export { DEMO_LESSONS, DEMO_COMPANION_MESSAGES } from './demoData';
 export { composeFirstHello } from './composeFirstHello';

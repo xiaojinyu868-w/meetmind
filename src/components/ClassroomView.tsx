@@ -31,8 +31,12 @@ import type {
 import type { CompanionMode } from './classroom';
 import { useClassroomLessons } from '@/hooks/useClassroomLessons';
 import { useClassroomCompanion } from '@/hooks/useClassroomCompanion';
+import { useClassroomForesight } from '@/hooks/useClassroomForesight';
+import { useClassroomMindMap } from '@/hooks/useClassroomMindMap';
 import { useLiveConcepts } from '@/hooks/useLiveConcepts';
 import { useCaptureEditorStore } from '@/stores/capture-editor-store';
+import { useCollectionStore } from '@/stores/collection-store';
+import type { ForesightBubble } from './classroom/ClassroomCompanionPanel';
 
 export interface ClassroomViewProps {
   /** 点击"开始录一节课"——由 page.tsx 转发到 useRecording.startRecording */
@@ -100,6 +104,7 @@ export function ClassroomView({
 
   // ── 录课中实时转录：订阅 segments，只在录课态订阅 + 拼接 ──
   const segments = useCaptureEditorStore((s) => s.segments);
+  const liveInterimText = useCaptureEditorStore((s) => s.liveInterimText);
   const liveTranscriptText = useMemo(() => {
     if (paneState !== 'recording') return undefined;
     if (segments.length === 0) return '';
@@ -110,14 +115,29 @@ export function ClassroomView({
       .trim();
   }, [paneState, segments]);
 
+  // 最近 N 句已落定句子（用于 UnderstandingCanvas 的"刚才讲到"区）。
+  // 只保留最近 4 条，避免干扰焦点。
+  const recentLines = useMemo(() => {
+    if (paneState !== 'recording') return [];
+    const lastFew = segments.slice(-4).filter((s) => s.isFinal && s.text?.trim());
+    return lastFew.map((s) => ({
+      id: String(s.id ?? `${s.startMs}-${s.text.slice(0, 6)}`),
+      text: s.text,
+      startMs: s.startMs,
+    }));
+  }, [paneState, segments]);
+
   // ── 录课计时：isRecording 变 true 时开始，true→false 时停止。每秒 tick。 ──
   const [localRecordingSeconds, setLocalRecordingSeconds] = useState(0);
+  const [recordingStartAt, setRecordingStartAt] = useState<number | null>(null);
   useEffect(() => {
     if (paneState !== 'recording') {
       setLocalRecordingSeconds(0);
+      setRecordingStartAt(null);
       return;
     }
     const startAt = Date.now();
+    setRecordingStartAt(startAt);
     setLocalRecordingSeconds(0);
     const t = setInterval(() => {
       setLocalRecordingSeconds(Math.floor((Date.now() - startAt) / 1000));
@@ -146,6 +166,77 @@ export function ClassroomView({
       markListening();
     }
   }, [paneState, markListening]);
+
+  // Store 订阅：预习材料列表 + classroom ASR 热词 action（供下方多个 effect 使用）
+  const sourceItems = useCollectionStore((s) => s.sourceItems);
+  const setClassroomASRContextHint = useCaptureEditorStore(
+    (s) => s.actions.setClassroomASRContextHint,
+  );
+
+  // ── 预知气泡：AI 同桌的"主动性"，只在录课中工作 ──
+  const { foresights, dismiss: dismissForesight } = useClassroomForesight({
+    enabled: paneState === 'recording',
+    recentText: liveTranscriptText,
+  });
+
+  // ── 思维导图：生长中的理解结构（主画面的核心）──
+  //   - 每 ~45s 拉一次，或命中"接下来/那/下一个"等主题切换词时提前拉。
+  //   - 预热 60-90s（hook + 后端双保险），避免开场寒暄污染节点。
+  //   - 课前预习材料标题作为 importedHints，帮模型识别专名。
+  const mindMapImportedHints = useMemo(() => {
+    const todayDate = new Date().toISOString().split('T')[0];
+    return sourceItems
+      .filter((item) => (item.addedAt || '').startsWith(todayDate))
+      .map((item) => item.title || '')
+      .filter((t) => t.length > 1 && t.length < 60)
+      .slice(0, 12);
+  }, [sourceItems]);
+
+  const { tree: mindMapTree, newNodeIds: mindMapNewIds } = useClassroomMindMap({
+    enabled: paneState === 'recording',
+    transcriptText: liveTranscriptText,
+    interimText: paneState === 'recording' ? liveInterimText : undefined,
+    recordingStartAt,
+    importedHints: mindMapImportedHints,
+  });
+
+  // ── ASR 热词注入：课堂场景下，从预习材料 + 课程标题聚合专名 ──
+  // ASR 专名识别差的根源是 page.tsx 里 asrContextHint 恒为 ''。
+  // 课堂场景能拿到的确定信号：
+  //   1) 当天（今天）的 sourceItems 标题 —— 用户课前丢进"收集"的链接/文件/笔记
+  //   2) 最近三节课的 title —— 跨课程的重复术语
+  // 写进 capture-editor-store.classroomASRContextHint，page.tsx 的 liveASRContextHint
+  // 会把它合入最终传给 Recorder 的 contextHint。
+  useEffect(() => {
+    const todayDate = new Date().toISOString().split('T')[0];
+    const todaysTitles = sourceItems
+      .filter((item) => (item.addedAt || '').startsWith(todayDate))
+      .map((item) => item.title || '')
+      .filter((t) => t && t.length > 1 && t.length < 80);
+
+    const recentLessonTitles = lessons
+      .slice(0, 6)
+      .map((l) => l.title)
+      .filter((t): t is string => typeof t === 'string' && t.length > 1 && t.length < 60);
+
+    const uniq = Array.from(new Set([...todaysTitles, ...recentLessonTitles])).slice(0, 20);
+    const hint = uniq.length > 0 ? `课堂相关主题与材料：${uniq.join('，')}` : '';
+    setClassroomASRContextHint(hint);
+
+    return () => {
+      // 离开课堂页/组件卸载时清空，避免污染别的 tab 的录音
+      setClassroomASRContextHint('');
+    };
+  }, [sourceItems, lessons, setClassroomASRContextHint]);
+
+  // 用户点"就这个·问下去"——把预感 text 当作问题发给 tutor，并本地划掉气泡
+  const handleForesightAccept = useCallback(
+    (f: ForesightBubble) => {
+      dismissForesight(f.id);
+      void sendToTutor(f.text);
+    },
+    [dismissForesight, sendToTutor],
+  );
 
   const handleOpenLesson = useCallback((id: string) => {
     const lesson = lessons.find((l) => l.id === id);
@@ -186,10 +277,14 @@ export function ClassroomView({
         recordingSeconds={effectiveRecordingSeconds}
         liveConcepts={liveConcepts}
         transcriptText={liveTranscriptText}
+        interimText={paneState === 'recording' ? liveInterimText : undefined}
+        recentLines={recentLines}
+        mindMapTree={mindMapTree}
+        mindMapNewIds={mindMapNewIds}
         onFocusRecording={() => setLocalPaneState('recording')}
       />
     ),
-    [paneState, lessons, handleOpenLesson, handleStartRecording, handleStopRecording, effectiveRecordingSeconds, liveConcepts, liveTranscriptText],
+    [paneState, lessons, handleOpenLesson, handleStartRecording, handleStopRecording, effectiveRecordingSeconds, liveConcepts, liveTranscriptText, liveInterimText, recentLines, mindMapTree, mindMapNewIds],
   );
 
   const rightPanel = useMemo(
@@ -200,9 +295,12 @@ export function ClassroomView({
         streamingMessage={streamingMessage}
         isThinking={isThinking}
         onSend={handleSend}
+        foresights={foresights}
+        onForesightAccept={handleForesightAccept}
+        onForesightDismiss={dismissForesight}
       />
     ),
-    [companionMode, messages, streamingMessage, isThinking, handleSend],
+    [companionMode, messages, streamingMessage, isThinking, handleSend, foresights, handleForesightAccept, dismissForesight],
   );
 
   return (

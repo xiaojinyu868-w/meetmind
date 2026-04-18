@@ -16,13 +16,17 @@ const log = createLogger('rate-limit');
 
 // Redis 客户端单例
 let redis: Redis | null = null;
+let redisUrlMissingWarned = false;
 
 function getRedis(): Redis | null {
   if (redis) return redis;
   
   const redisUrl = process.env.REDIS_URL;
   if (!redisUrl) {
-    log.warn('[RateLimit] REDIS_URL not configured, using memory storage');
+    if (!redisUrlMissingWarned) {
+      log.warn('[RateLimit] REDIS_URL not configured, using memory storage');
+      redisUrlMissingWarned = true;
+    }
     return null;
   }
   
@@ -112,11 +116,19 @@ export const RATE_LIMITS = {
     perDay: 20,
     cost: 'low',
   },
-  // 通用API（未分类）- 每分钟60次，每小时600次
+  // Workshop 应用执行（闪卡/播客/信息图等） - 每分钟30次，每小时200次
+  // 单次调用后端会走大模型，耗时较长；但并发生成多个应用时需要同时通过
+  appsExecute: {
+    perMinute: 30,
+    perHour: 200,
+    perDay: 800,
+    cost: 'high',
+  },
+  // 通用API（未分类）- 每分钟120次，每小时1200次
   default: {
-    perMinute: 60,
-    perHour: 600,
-    perDay: 3000,
+    perMinute: 120,
+    perHour: 1200,
+    perDay: 6000,
     cost: 'low',
   },
 } as const;
@@ -386,11 +398,18 @@ export async function checkRateLimit(
 ): Promise<RateLimitResult> {
   const redisClient = getRedis();
   
-  if (redisClient) {
-    return checkRateLimitRedis(redisClient, identifier, apiType);
+  const result = redisClient
+    ? await checkRateLimitRedis(redisClient, identifier, apiType)
+    : checkRateLimitMemory(identifier, apiType);
+
+  if (!result.allowed) {
+    const limits = RATE_LIMITS[apiType];
+    log.warn(
+      `[RateLimit] DENY identifier="${identifier}" apiType=${apiType} limits=${limits.perMinute}/min,${limits.perHour}/h,${limits.perDay}/d remaining=${result.remaining.perMinute}/${result.remaining.perHour}/${result.remaining.perDay} resetInSec=${result.resetIn.minute}/${result.resetIn.hour}/${result.resetIn.day} reason="${result.error}"`
+    );
   }
-  
-  return checkRateLimitMemory(identifier, apiType);
+
+  return result;
 }
 
 /**

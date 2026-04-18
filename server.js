@@ -464,6 +464,13 @@ app.prepare().then(() => {
 
     function sendSessionUpdate(extraLog) {
       if (!dashscopeWs || dashscopeWs.readyState !== WebSocket.OPEN) return;
+      // DashScope qwen3-asr-flash-realtime 不允许 session.updated 之后再发第二次 session.update，
+      // 否则会触发 "session already started or finished or failed" 错误并以 1007 断开连接。
+      // 因此 session 一旦 ready，后续的 context-hint / dynamic refresh 只更新内存，不再发 update。
+      if (isSessionReady && extraLog !== 'initial') {
+        console.log(`[ASR-Proxy] Skipping session.update (${extraLog}) - session already started`);
+        return;
+      }
       if (hasAudioAppended && extraLog !== 'initial') {
         console.log(`[ASR-Proxy] Skipping session.update (${extraLog}) - audio already streaming`);
         return;
@@ -900,9 +907,12 @@ app.prepare().then(() => {
           if (hint) {
             contextHint = hint.slice(0, 3000);
             console.log('[ASR-Proxy] Received context hint, length:', contextHint.length);
-            // Re-send session update with context if session is ready
-            if (isSessionReady) {
-              sendSessionUpdate('context-hint received');
+            // 只有在 DashScope 还没 session.updated 之前才重发 session.update；
+            // session 已建立则只更新内存变量（DashScope 不允许二次 session.update）。
+            if (!isSessionReady) {
+              sendSessionUpdate('context-hint received (pre-ready)');
+            } else {
+              console.log('[ASR-Proxy] Context hint received AFTER session ready - stored for next session only');
             }
           }
           return;

@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { Anchor, TranscriptSegment } from '@/types';
 import type { AppExecutionResult, DataSourceType } from '@/lib/ai-native/types';
 import type { WorkshopAppCatalogItem } from '@/lib/ai-native/app-catalog';
+import { useAuth } from '@/lib/hooks/useAuth';
 
 export type AppTaskStatus = 'idle' | 'running' | 'success' | 'error';
 
@@ -279,6 +280,7 @@ export function useAppExecution(params: UseAppExecutionParams): UseAppExecutionR
     model,
     autoRun = true,
   } = params;
+  const { accessToken } = useAuth();
   const [result, setResult] = useState<AppExecutionResult | null>(null);
   const [taskState, setTaskState] = useState<AppTaskState>(() => nowTaskState('idle'));
   const [hydrated, setHydrated] = useState(false);
@@ -336,9 +338,13 @@ export function useAppExecution(params: UseAppExecutionParams): UseAppExecutionR
 
         let response: Response;
         try {
+          const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+          if (accessToken) {
+            headers['Authorization'] = `Bearer ${accessToken}`;
+          }
           response = await fetch('/api/apps/execute', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers,
             signal: controller.signal,
             body: JSON.stringify({
               appKey: app.key,
@@ -372,6 +378,10 @@ export function useAppExecution(params: UseAppExecutionParams): UseAppExecutionR
         } | null;
 
         if (!response.ok || !data?.ok || !data.result) {
+          // 429 限流友好提示
+          if (response.status === 429) {
+            throw new Error(data?.error || '生成请求过于频繁，请稍等片刻再点重试');
+          }
           throw new Error(data?.error || '应用执行失败');
         }
 
@@ -402,13 +412,15 @@ export function useAppExecution(params: UseAppExecutionParams): UseAppExecutionR
         return null;
       }
     },
-    [anchors, app.intent, app.key, dataSource, keyDifficulties, model, result, sessionId, summaryOverview, terminologyHint, transcript]
+    [accessToken, anchors, app.intent, app.key, dataSource, keyDifficulties, model, result, sessionId, summaryOverview, terminologyHint, transcript]
   );
 
   useEffect(() => {
     if (!hydrated) return;
     if (!autoRun) return;
     if (result) return;
+    // 失败后不自动重跑，避免限流/失败循环。用户需要主动点"重试"。
+    if (taskState.status === 'error') return;
     const staleRunningTask =
       taskState.status === 'running' && Date.now() - taskState.updatedAt > APP_RUNNING_TASK_STALE_MS;
     if (taskState.status === 'running' && !staleRunningTask) return;

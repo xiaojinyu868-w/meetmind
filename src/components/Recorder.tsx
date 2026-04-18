@@ -4,6 +4,7 @@ import { forwardRef, useState, useRef, useCallback, useEffect, useImperativeHand
 import { Mic } from 'lucide-react';
 import type { TranscriptSegment } from '@/types';
 import { DashScopeASRClient } from '@/lib/services/dashscope-asr-service';
+import { useCaptureEditorStore } from '@/stores/capture-editor-store';
 import { TranscriptFlowView } from './TranscriptFlowView';
 import { TranscriptEnhanceManager, type EnhancedTranscriptSegment } from '@/lib/services/transcript-enhancer';
 import { recordTranscriptEditDiff } from '@/lib/db/lexicon';
@@ -52,6 +53,22 @@ export const Recorder = forwardRef<RecorderHandle, RecorderProps>(function Recor
   const [serviceStatus, setServiceStatus] = useState<ServiceStatus>('checking');
   const [transcribeProgress, setTranscribeProgress] = useState<string>('');
   const [showRestartConfirm, setShowRestartConfirm] = useState(false);
+
+  // 把 interim 实时同步到全局 store，供课堂录课视图订阅「正在跟读」那一行。
+  // 组件卸载或录音停止时，interimText 会被清空，这里跟着清。
+  useEffect(() => {
+    useCaptureEditorStore.getState().actions.setLiveInterimText(interimText);
+    return () => {
+      // 这个 effect 每次 interimText 变都 cleanup，不做清空；只在最外层组件卸载时清
+    };
+  }, [interimText]);
+
+  useEffect(() => {
+    return () => {
+      // 组件卸载时清空，避免残留
+      useCaptureEditorStore.getState().actions.setLiveInterimText('');
+    };
+  }, []);
   const [transcribeMode, setTranscribeMode] = useState<TranscribeMode>('streaming');
   const [streamingAvailable, setStreamingAvailable] = useState(true);
   const [apiKey, setApiKey] = useState<string>('');

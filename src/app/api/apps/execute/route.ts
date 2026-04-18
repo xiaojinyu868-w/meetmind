@@ -46,7 +46,7 @@ async function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T
 }
 
 export async function POST(request: NextRequest) {
-  const rateLimitResponse = await applyRateLimit(request, 'default');
+  const rateLimitResponse = await applyRateLimit(request, 'appsExecute');
   if (rateLimitResponse) return rateLimitResponse;
 
   try {

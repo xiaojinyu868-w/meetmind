@@ -24,7 +24,7 @@ export async function GET() {
 }
 
 export async function POST(request: NextRequest) {
-  const rateLimitResponse = await applyRateLimit(request, 'default');
+  const rateLimitResponse = await applyRateLimit(request, 'appsExecute');
   if (rateLimitResponse) return rateLimitResponse;
 
   try {

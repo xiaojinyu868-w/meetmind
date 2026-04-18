@@ -87,6 +87,9 @@ export function useExtractTerms(deps: UseExtractTermsDeps) {
 
   // Build live context hint for real-time ASR (hot-word injection)
   // Combines: user manual hint + reference snippets + auto-extracted terms
+  //         + classroomASRContextHint（课堂场景注入：当天材料标题 + 最近课程标题）
+  const classroomASRContextHint = useCaptureEditorStore((s) => s.classroomASRContextHint);
+
   const liveASRContextHint = useMemo(() => {
     const baseHint = buildASRContextHint({
       manualHint: asrContextHint,
@@ -94,9 +97,10 @@ export function useExtractTerms(deps: UseExtractTermsDeps) {
       importedReferences: supportReferences.map((item) => item.snippet),
       maxChars: 2000,
     });
-    if (!extractedTermsHint) return baseHint;
-    return [baseHint, extractedTermsHint].filter(Boolean).join('\n\n').slice(0, 3000);
-  }, [asrContextHint, supportReferences, extractedTermsHint]);
+    const parts = [baseHint, extractedTermsHint, classroomASRContextHint].filter(Boolean);
+    if (parts.length === 0) return '';
+    return parts.join('\n\n').slice(0, 3000);
+  }, [asrContextHint, supportReferences, extractedTermsHint, classroomASRContextHint]);
 
   return {
     liveASRContextHint,
