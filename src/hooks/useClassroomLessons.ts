@@ -17,7 +17,7 @@
 
 import { useMemo, useEffect, useState, useCallback } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
-import { db, getPreference, setPreference } from '@/lib/db';
+import { db, getPreference, setPreference, dedupeAudioSessions } from '@/lib/db';
 import { useEchoStore } from '@/stores/echo-store';
 import { useCollectionStore } from '@/stores/collection-store';
 import { audioSessionToLesson } from '@/components/classroom/lessonAdapter';
@@ -26,6 +26,12 @@ import type { Lesson } from '@/components/classroom/types';
 /** preferences 表里存"已复习的 sessionId 列表"的 key */
 const REVIEWED_SESSIONS_KEY = 'classroom_reviewed_sessions';
 
+/**
+ * 本次 page load 是否已经跑过一次 audioSessions 去重。
+ * 幂等且没必要跑多遍——一次 session 改一次就够。
+ */
+let hasDedupedInThisSession = false;
+
 export interface UseClassroomLessonsResult {
   lessons: Lesson[];
   /** 把一节课标记为已复习（会自动持久化） */
@@ -33,6 +39,28 @@ export interface UseClassroomLessonsResult {
 }
 
 export function useClassroomLessons(): UseClassroomLessonsResult {
+  // ── 0. 挂载时跑一次 dedupe（修复历史脏数据） ──
+  // 背景：旧版本 saveAudioSession 走 add、加上 classroomDataService 录音开始时的
+  // 空壳 add，历史数据里同一 sessionId 可能有 2-3 行。现在 saveAudioSession 已改为
+  // upsert，但老用户本地 IndexedDB 还有残留。挂载时合并一次，UI 就不会再出现
+  // "同一节课两张卡 / 点进去串台"的问题。
+  useEffect(() => {
+    if (hasDedupedInThisSession) return;
+    hasDedupedInThisSession = true;
+    dedupeAudioSessions()
+      .then(({ scanned, merged, deleted }) => {
+        if (merged > 0 || deleted > 0) {
+          // 只在真的有脏数据时打日志，正常启动时静默
+          // eslint-disable-next-line no-console
+          console.info('[classroom] dedupe audioSessions:', { scanned, merged, deleted });
+        }
+      })
+      .catch((err) => {
+        // eslint-disable-next-line no-console
+        console.warn('[classroom] dedupe audioSessions failed:', err);
+      });
+  }, []);
+
   // ── 1. audioSessions（主表） ──
   const sessions = useLiveQuery(
     () => db.audioSessions.orderBy('createdAt').reverse().toArray(),
@@ -117,8 +145,19 @@ export function useClassroomLessons(): UseClassroomLessonsResult {
   }, [sourceItems]);
 
   // ── 7. 组装 Lesson[] ──
+  // 额外做一次 **按 sessionId 去重的 UI 兜底**：即使后台 dedupe 还没跑完、
+  // 或者异步期间又来了新的重复行，这里也不会让用户看到重复卡片。
+  // 保留第一条（sessions 已按 createdAt desc 排过，第一条就是最新那条）。
   const lessons = useMemo(() => {
-    return sessions.map((s) => {
+    const seen = new Set<string>();
+    const uniqSessions = [] as typeof sessions;
+    for (const s of sessions) {
+      if (!s.sessionId) continue;
+      if (seen.has(s.sessionId)) continue;
+      seen.add(s.sessionId);
+      uniqSessions.push(s);
+    }
+    return uniqSessions.map((s) => {
       const lesson = audioSessionToLesson(s, {
         hasTranscript: transcriptSessionIds.has(s.sessionId),
         highlightCount: highlightCountBySession.get(s.sessionId),

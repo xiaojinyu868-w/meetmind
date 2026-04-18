@@ -22,6 +22,7 @@ export {
   updateSessionTopic,
   getTodaySessions,
   cleanOldData,
+  dedupeAudioSessions,
   getStorageUsage,
   getAllSessions,
   getSessionById,

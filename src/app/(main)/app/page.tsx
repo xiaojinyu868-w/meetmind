@@ -670,7 +670,10 @@ function StudentAppContent({
   
     setShowConversationHistory(false);
     setSelectedHistoryConversation(null);
-    if (newMode === 'record') {
+    // 切到 record 或 classroom tab 时，清理上一次 review 的视频残留。
+    // 避免"刚看完一个 B 站视频复习 → 切到课堂 tab → 点一节音频课 → 界面却还是视频"
+    // 这类 state 串台（因为 DesktopVideoReviewLayout 只看 videoSource 是否有值）。
+    if (newMode === 'record' || newMode === 'classroom') {
       setVideoSource(null);
       setVideoInsightItems([]);
       setActiveVideoInsightId(null);
