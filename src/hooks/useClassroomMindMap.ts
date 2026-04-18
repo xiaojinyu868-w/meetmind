@@ -60,8 +60,8 @@ export interface UseClassroomMindMapReturn {
 const MIN_INTERVAL_MS = 45 * 1000;
 /** 切换词触发后的最小间隔 */
 const MIN_INTERVAL_BOOSTED_MS = 15 * 1000;
-/** 第一次请求前的预热（后端也有，前端再兜一次） */
-const MIN_ELAPSED_MS = 60 * 1000;
+/** 第一次请求前的预热（后端也有，前端再兜一次）——30s 就开始，让用户早点看到东西 */
+const MIN_ELAPSED_MS = 30 * 1000;
 /** 主题切换词（命中即触发 boost） */
 const TOPIC_SHIFT_WORDS = [
   '接下来',
@@ -132,7 +132,7 @@ export function useClassroomMindMap({
   useEffect(() => {
     if (!enabled) return;
     if (!recordingStartAt) return;
-    if (!transcriptText || transcriptText.trim().length < 120) return;
+    if (!transcriptText || transcriptText.trim().length < 80) return;
 
     const elapsedMs = Date.now() - recordingStartAt;
     if (elapsedMs < MIN_ELAPSED_MS) return;

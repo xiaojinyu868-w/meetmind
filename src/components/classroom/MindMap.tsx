@@ -152,9 +152,11 @@ function Dormant({ elapsedMs }: { elapsedMs: number }) {
         我在听这节课
       </p>
       <p className="mt-2 max-w-[22rem] text-[12.5px] leading-relaxed text-ink-muted">
-        {sec < 90
-          ? '等老师讲到正题，我会从这里长出一棵小树。'
-          : '正在整理第一段理解……'}
+        {sec < 30
+          ? '再等一会儿——老师进入正题我就开始画这节课的小树。'
+          : sec < 60
+            ? '正在整理第一段理解……'
+            : '还在等一段能理出结构的内容，别急，马上就来。'}
       </p>
     </div>
   );

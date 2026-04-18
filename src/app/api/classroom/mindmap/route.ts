@@ -65,10 +65,10 @@ interface RequestBody {
   importedHints?: string[];
 }
 
-/** 最少录音 90s 才开始画树（避免开场寒暄污染） */
-const MIN_ELAPSED_MS = 90 * 1000;
+/** 最少录音 40s 才开始画树（避免开场寒暄污染） */
+const MIN_ELAPSED_MS = 40 * 1000;
 /** 转录至少这么长才调 LLM */
-const MIN_CHARS = 120;
+const MIN_CHARS = 80;
 /** 传给 LLM 的转录最大长度 */
 const MAX_INPUT_CHARS = 4000;
 

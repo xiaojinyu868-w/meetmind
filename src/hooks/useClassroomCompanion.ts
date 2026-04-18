@@ -108,8 +108,16 @@ export function useClassroomCompanion(
   const [isHydrated, setIsHydrated] = useState(false);
 
   // ── 1. 启动时从 preferences 读持久化的消息 ──
+  //   但如果本次组件挂载时就已经在录课（isRecording=true），说明是"新课开始"场景，
+  //   不要把历史水合到界面上——界面保持一张白纸。
   useEffect(() => {
     let alive = true;
+    if (isRecording) {
+      // 录课中挂载：跳过历史注入，直接标记已水合
+      setIsHydrated(true);
+      hasHelloInjectedRef.current = true;
+      return () => { alive = false; };
+    }
     getPreference<CompanionMessage[]>(COMPANION_MESSAGES_KEY, []).then((persisted) => {
       if (!alive) return;
       if (persisted.length > 0) {
@@ -122,12 +130,17 @@ export function useClassroomCompanion(
       if (alive) setIsHydrated(true);
     });
     return () => { alive = false; };
+    // 只在挂载时跑一次 —— isRecording 的后续变化由单独的 effect 处理
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // ── 2. messages 变化时 debounced 写回 preferences ──
+  //   护栏：messages 为空时不覆盖持久化历史——新课清空的是"可见消息"，
+  //   但 preferences 里的对话记忆要保留给未来的长记忆系统。
   const persistTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => {
     if (!isHydrated) return; // 未水合前不写
+    if (messages.length === 0) return; // 空数组不写回，保护已有历史
     if (persistTimerRef.current) clearTimeout(persistTimerRef.current);
     persistTimerRef.current = setTimeout(() => {
       // 只保留最近 MAX 条
@@ -178,6 +191,24 @@ export function useClassroomCompanion(
       return [...prev, { ...AUTO_LISTENING_MSG, createdAt: Date.now() }];
     });
   }, []);
+
+  // ── 新课清爽：isRecording 从 false → true 时清空可见对话 ──
+  //   过去的对话留在 preferences 里作为后续长记忆的素材，不删；
+  //   但录新课时界面必须是"一张白纸"——否则用户看到还贴着上节课的对话，
+  //   体验上像"AI 记混了"，违反安静和 new-session-clean 的直觉。
+  const prevRecordingRef = useRef<boolean>(false);
+  useEffect(() => {
+    const was = prevRecordingRef.current;
+    prevRecordingRef.current = isRecording;
+    if (!was && isRecording) {
+      // 只清内存 messages，不清 preferences
+      setMessages([]);
+      setStreamingMessage(null);
+      hasListeningGreetedRef.current = false;
+      // 新课不再走首次 hello 注入
+      hasHelloInjectedRef.current = true;
+    }
+  }, [isRecording]);
 
   const send = useCallback(async (text: string) => {
     const trimmed = text.trim();
