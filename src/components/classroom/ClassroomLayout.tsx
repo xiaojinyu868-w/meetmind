@@ -96,24 +96,25 @@ export function ClassroomLayout({
             </div>
           </div>
         ) : (
-          /* 折叠态：一个垂直的唤起按钮，干净、克制 */
+          /* 折叠态：极简竖条——只有一条垂直小字 + 悬停出小箭头 */
           <button
             type="button"
             onClick={() => setOpen(true)}
-            className="group flex h-full w-full flex-col items-center justify-start gap-3 pt-6 hover:bg-[#F0F0ED] transition-colors"
+            className="group relative flex h-full w-full items-center justify-center hover:bg-[#F0F0ED] transition-colors"
             aria-label="展开 AI 同桌"
             title="AI 同桌"
           >
-            <ChevronLeft size={14} strokeWidth={1.8} className="text-ink-muted group-hover:text-ink-secondary" />
-            <span className="flex h-8 w-8 items-center justify-center rounded-full bg-white ring-[0.5px] ring-[#232322]/[0.08] text-[#8B6914] group-hover:ring-[#232322]/[0.18] transition">
-              <MessageCircle size={14} strokeWidth={1.8} />
-            </span>
             <span
-              className="mt-2 text-[11px] tracking-[0.3em] text-ink-muted group-hover:text-ink-secondary"
+              className="text-[10.5px] font-medium uppercase tracking-[0.32em] text-ink-muted group-hover:text-ink-secondary transition-colors"
               style={{ writingMode: 'vertical-rl', textOrientation: 'mixed' }}
             >
-              同桌
+              COMPANION
             </span>
+            <ChevronLeft
+              size={12}
+              strokeWidth={1.8}
+              className="absolute left-1.5 top-1/2 -translate-y-1/2 text-ink-muted opacity-0 group-hover:opacity-100 transition-opacity"
+            />
           </button>
         )}
       </aside>
