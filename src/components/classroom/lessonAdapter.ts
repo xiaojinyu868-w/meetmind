@@ -43,10 +43,38 @@ function formatTime(d: Date): string {
   return `${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
 }
 
+/**
+ * 判断一条 session 是否是"真的正在录音"还是"stale"（历史卡住的 recording 态）。
+ *
+ * 历史遗留问题：早期版本在录音结束时没有正确把 session.status 翻到 'completed'，
+ * 或者浏览器被异常关闭导致状态卡在 recording。这些 stale session 会在 UI 上
+ * 假装"正在录音"，但实际进程根本没在录——这会误导用户也误导同桌 AI。
+ *
+ * 防御策略：recording 态如果创建时间距今超过阈值（默认 2 小时），
+ * 就认定为 stale，降级为 processing（酿造中）。
+ *
+ * 注意：这是 UI 层的"软修复"——只影响显示，不改底层数据。
+ * 真正的数据清理可以通过复习界面或后台 job 完成。
+ */
+const STALE_RECORDING_AFTER_MS = 2 * 60 * 60 * 1000; // 2 小时
+
+function isStaleRecording(session: AudioSession): boolean {
+  if (session.status !== 'recording') return false;
+  const createdAt = session.createdAt instanceof Date
+    ? session.createdAt
+    : new Date(session.createdAt);
+  const ageMs = Date.now() - createdAt.getTime();
+  return ageMs > STALE_RECORDING_AFTER_MS;
+}
+
 function deriveStatus(
   session: AudioSession,
   hasTranscript: boolean,
 ): LessonStatus {
+  // 防御：recording 但创建时间很久以前 → 视为 stale，降级为 processing
+  if (session.status === 'recording' && isStaleRecording(session)) {
+    return hasTranscript ? 'ready' : 'processing';
+  }
   if (session.status === 'recording') return 'recording';
   // 录完了但还没有转录段 → 酿造中
   if (!hasTranscript) return 'processing';
