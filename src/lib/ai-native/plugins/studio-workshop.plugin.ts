@@ -15,6 +15,10 @@ import {
   isVolcPodcastEnabled,
   type VolcPodcastResult,
 } from '@/lib/services/volc-podcast';
+import {
+  generateGeminiImage,
+  isGeminiImageEnabled,
+} from '@/lib/services/gemini-image-service';
 import type {
   AppExecutionContext,
   AppExecutionResult,
@@ -337,6 +341,40 @@ export const studioWorkshopPlugin: AppPlugin = {
     const renderMode = resolveRenderMode(mode);
     const infographicDraft = mode === 'infographic' ? buildInfographicDraft(output, cards) : undefined;
 
+    // 一键生成 = 真的出图。draft 出来后直接串一次图片生成，失败静默降级为仅 draft。
+    let infographicImage:
+      | { imageUrl: string; requestId: string; model: string }
+      | undefined;
+    let infographicImageError = '';
+    if (mode === 'infographic' && infographicDraft) {
+      if (isGeminiImageEnabled()) {
+        try {
+          const imgStart = Date.now();
+          const imgResult = await generateGeminiImage({
+            prompt: infographicDraft.imagePrompt,
+            stylePreset: infographicDraft.stylePreset,
+            orientation: infographicDraft.suggestedOrientation,
+            detailLevel: infographicDraft.suggestedDetailLevel,
+            scenePreset: infographicDraft.suggestedScene,
+          });
+          infographicImage = {
+            imageUrl: `data:${imgResult.mimeType};base64,${imgResult.base64}`,
+            requestId: imgResult.requestId,
+            model: imgResult.model,
+          };
+          trace.push(`infographic_image=ok`);
+          trace.push(`infographic_image_ms=${Date.now() - imgStart}`);
+        } catch (error) {
+          infographicImageError =
+            error instanceof Error ? error.message : '图片生成失败';
+          trace.push(`infographic_image=error`);
+          trace.push(`infographic_image_error=${infographicImageError.slice(0, 120)}`);
+        }
+      } else {
+        trace.push('infographic_image=skipped_no_key');
+      }
+    }
+
     return {
       pluginId: 'studio-workshop',
       version: '0.2.0',
@@ -356,6 +394,7 @@ export const studioWorkshopPlugin: AppPlugin = {
           podcastResult,
           podcastError,
           mode,
+          infographicImage,
         }),
       },
       raw: {
@@ -363,6 +402,10 @@ export const studioWorkshopPlugin: AppPlugin = {
         mode,
         appKey: context.goal.appKey || undefined,
         infographicDraft,
+        infographicImageUrl: infographicImage?.imageUrl,
+        infographicImageRequestId: infographicImage?.requestId,
+        infographicImageModel: infographicImage?.model,
+        infographicImageError: infographicImageError || undefined,
         podcastPlan: podcastPlan || undefined,
         podcast: podcastResult
           ? {

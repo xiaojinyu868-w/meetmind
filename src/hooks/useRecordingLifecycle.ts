@@ -176,12 +176,21 @@ export function useRecordingLifecycle(
   // ── handleRecordingStart ───────────────────────────────────────
 
   const handleRecordingStart = useCallback((newSessionId: string) => {
-    const hasExistingCollectionContext =
-      segmentsRef.current.length > 0 ||
-      sourceItemsRef.current.length > 0 ||
-      supportReferencesRef.current.length > 0;
-    const isContinuingCurrentSession =
-      newSessionId === sessionIdRef.current && hasExistingCollectionContext;
+    // ── 核心判定：是不是"同一节课续录" ──
+    //
+    // 语义：只有 newSessionId 和当前挂着的 sessionId 完全相同，
+    // 才认为是"续录"（比如暂停后继续）。此时必须保留 segments / sourceItems / anchors，
+    // 否则用户感觉"我才停 1 秒，历史就没了"。
+    //
+    // 反之：只要 sessionId 不同，无论 store 里有没有遗留内容，都是"开新课"——
+    // 这时必须把上一节课的所有 UI 状态清掉，否则用户点"开始上课"会看到
+    // 上一节课的转录、思维导图、实时段落（即"小猪佩奇泄漏"bug）。
+    //
+    // 历史教训：之前的判定多加了一个 `hasExistingCollectionContext` 守卫，
+    // 目的是"有内容就别清"——这反而让新课开头残留了旧课的 segments，
+    // 用户体感是"AI 还没听到我说话，怎么就显示了一堆别的内容"。严重破坏
+    // "每节课一张卡"的产品承诺。
+    const isContinuingCurrentSession = newSessionId === sessionIdRef.current;
 
     // Store actions (pure writers)
     const uiAct = useUIStore.getState().actions;
@@ -199,8 +208,10 @@ export function useRecordingLifecycle(
     // 它的语义是「当前这次录音产生的实时 segments」，不应跨录音保留。
     liveSegmentsRef.current = [];
 
-    if (!isContinuingCurrentSession && !hasExistingCollectionContext) {
+    if (!isContinuingCurrentSession) {
+      // 开一节新课：清空所有上一节课残留的 UI 状态。
       editorAct.setSegments([]);
+      editorAct.setLiveInterimText('');
       editorAct.setAnchors([]);
       sessionAct.setSelectedAnchor(null);
       clearTopics();
@@ -248,6 +259,18 @@ export function useRecordingLifecycle(
     uiAct.setShowMobileRecorder(false);
     if (blob) editorAct.setAudioBlob(blob);
 
+    // 诊断日志：一眼看清楚"停止"这一刻到底拿到了什么。
+    // 如果用户反馈"结束了但没卡片"，打开 Console 搜 [classroom-stop] 就能定位断点。
+    // eslint-disable-next-line no-console
+    console.info('[classroom-stop] fire', {
+      hasBlob: !!blob,
+      blobSize: blob?.size ?? 0,
+      metaSessionId: meta?.sessionId || null,
+      depsSessionId: sessionId || null,
+      liveSegments: liveSegmentsRef.current.length,
+      editorSegments: segmentsRef.current.length,
+    });
+
     // liveSegmentsRef 在 handleRecordingStart 中已被无条件清除，
     // 此处的值仅包含本次录音期间 streaming ASR 产生的段落。
     const currentSegments = liveSegmentsRef.current.length > 0
@@ -289,10 +312,23 @@ export function useRecordingLifecycle(
       previewObjectUrlsRef.current.push(liveMediaUrl);
 
       // Save audio blob first.
+      // 场景注记（2026-04-20）：
+      // 用户可能在"开着系统内录 + 看 B 站视频"的场景下录音——这时同一个
+      // sessionId 在 audioSessions 表里往往已经被视频导入先写了一行
+      // `sourceType='video-link'` + `videoUrl`。saveAudioSession 的 upsert
+      // 不会动没传的字段，但**这次是录音**，必须显式把 sourceType 改成
+      // 'recording'，否则下游（比如 isStoredVideoSession）会误认为这是
+      // 一条纯视频记录，点开就跳 B 站 iframe，而不是放用户刚录的那段音。
+      // videoUrl 保留不动——它是这节课的视频原件，是有意保留的。
+      // mediaUrl 同步写上，方便无 blob 环境（如历史修复后）也能回放。
       saveAudioSession(blob, effectiveSessionId, currentUserId, {
         subject: UIConfig.defaultSubject,
-        topic: UIConfig.defaultLessonTitle,
+        // 注意：不传 topic——如果视频导入已经写过真实标题（如"一口气搞懂
+        // 强化学习"），别让默认占位"课堂录音"把它盖掉。saveAudioSession
+        // 自己会兜底（没有旧 topic 时新建）。
         duration,
+        sourceType: 'recording',
+        mediaUrl: liveMediaUrl,
       }).catch(err => console.error('Failed to save audio session to history:', err));
 
       if (finalSegments.length > 0) {
@@ -362,6 +398,39 @@ export function useRecordingLifecycle(
           baseSegments: pendingBaseSegments,
           baseOffsetMs: pendingBaseOffsetMs,
         });
+      }
+    } else {
+      // ── 保底落盘：没有 blob 也要把这节课写进 db.audioSessions ──
+      //
+      // 背景：课堂 tab 的卡片列表来自 useLiveQuery(db.audioSessions)。
+      // 如果 Recorder 因为任何原因（mediaRecorder 未正确挂载、audioChunks 为空、
+      // system audio 权限被取消、isRecording 态漂移等）停止时没交出 blob，
+      // 那么按原逻辑 saveAudioSession 这一步会被跳过 —— 用户体感就是
+      // 「我点了结束这节课，什么都没出现」。
+      //
+      // 这里不假装一切正常：落一条 duration 兜底、没 blob 的空壳 session，
+      // 至少让课堂列表里有这节课的存在感，用户可以删除它或者之后补内容。
+      // 比静默吞掉要诚实得多。
+      const currentUserId = user?.id || ANONYMOUS_USER_ID;
+      // eslint-disable-next-line no-console
+      console.warn('[classroom-stop] no blob — writing empty session as fallback', {
+        sessionId: effectiveSessionId,
+        segments: finalSegments.length,
+      });
+      saveAudioSession(null, effectiveSessionId, currentUserId, {
+        subject: UIConfig.defaultSubject,
+        // 同上：不传 topic，让已有的具体标题（如视频标题）保留
+        duration,
+        sourceType: 'recording',
+      }).catch((err) => console.error('[classroom-stop] fallback saveAudioSession failed:', err));
+      if (finalSegments.length > 0) {
+        addTranscripts(effectiveSessionId, currentUserId, finalSegments.map((seg) => ({
+          text: seg.text,
+          startMs: seg.startMs,
+          endMs: seg.endMs,
+          confidence: seg.confidence || 1.0,
+          isFinal: true,
+        }))).catch((err) => console.error('[classroom-stop] fallback addTranscripts failed:', err));
       }
     }
 

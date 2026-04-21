@@ -24,12 +24,12 @@ components/hooks → stores → types
 | `collection-store.ts` | ~240 | 收集流状态 | `useCollectionStore`, `useSourceItems`, `useCollectionActions`, `useSourceImporting` | 28 |
 | `echo-store.ts` | ~105 | 回声状态 | `useEchoStore`, `useWorkspaceEchoes`, `useEchoActions` | 7 |
 | `mobile-ai-store.ts` | ~125 | 移动端 AI 状态 | `useMobileAIStore`, `useMobileAIActions`, `MobileAILaunchTarget` | 10 |
-| `capture-editor-store.ts` | ~140 | 课堂内容核心数据 | `useCaptureEditorStore`, `useSegments`, `useAnchors`, `useCaptureEditorActions` | 14 |
+| `capture-editor-store.ts` | ~185 | 课堂内容核心数据 | `useCaptureEditorStore`, `useSegments`, `useAnchors`, `useRecorderAudioSource`, `useCaptureEditorActions`, `RecorderAudioSource` (type) | 15 |
 | `index.ts` | ~130 | barrel 导出 | re-export 全部 | — |
 
 ## 迁移状态（page.tsx → Zustand）
 
-**总计已迁移 ~89 个状态**（Phase 1 完成后）
+**总计已迁移 ~90 个状态**（Phase 1 完成后）
 
 ### ui-store（16 个）
 `showSplash`, `appReady`, `loadingProgress`, `viewMode`, `reviewTab`, `videoWorkspaceTab`（默认 `'transcript'`）, `mobileSubPage`, `isMenuOpen`, `isActionDrawerOpen`, `showConversationHistory`, `showTranscriptBar`, `showAISearch`, `showMobileRecorder`, `mobileCollectionSheet`
@@ -53,8 +53,8 @@ components/hooks → stores → types
 
 额外 action: `clearLaunchState`（批量清除启动状态）
 
-### capture-editor-store（14 个）— Phase 1 新增
-`segments`, `anchors`, `timeline`, `actionItems`, `audioBlob`, `audioUrl`, `videoSource`, `notes`, `confusionChatAnchor`, `videoInsightItems`, `activeVideoInsightId`, `extractedTermsHint`, `recorderAutoStartSignal`
+### capture-editor-store（15 个）— Phase 1 新增
+`segments`, `anchors`, `timeline`, `actionItems`, `audioBlob`, `audioUrl`, `videoSource`, `notes`, `confusionChatAnchor`, `videoInsightItems`, `activeVideoInsightId`, `extractedTermsHint`, `recorderAutoStartSignal`, `recorderAudioSource`（类型 `RecorderAudioSource = 'mic' | 'system' | 'mixed'`，默认 `'mic'`；课堂页订阅并透传给 `Recorder`，收集页不订阅永远走默认）
 
 ### 仍在 page.tsx 中的局部状态
 

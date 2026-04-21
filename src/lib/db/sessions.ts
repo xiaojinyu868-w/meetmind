@@ -9,6 +9,29 @@ import { db, type AudioSession } from './schema';
 export const ANONYMOUS_USER_ID = 'anonymous';
 
 /**
+ * 已知的默认占位 topic。
+ *
+ * 背景：早期代码里所有录音路径都会传 `topic: '课堂录音'`（UIConfig.defaultLessonTitle），
+ * 而视频导入路径则会写入真实视频标题（如"一口气搞懂强化学习"）。当用户
+ * 在视频上继续录音，upsert 就会把真实标题覆盖成占位，导致卡片看起来都
+ * 一样。这里用一个小黑名单防守：遇到已知占位值就不盖已有具体内容。
+ *
+ * 这个列表保持小而精——只列真正的"默认占位"，不列用户可能合法输入的词。
+ */
+const PLACEHOLDER_TOPICS = new Set<string>([
+  '课堂录音',
+  '课堂回顾',
+  '视频复习',
+]);
+
+function isPlaceholderTopic(topic: string | undefined | null): boolean {
+  if (!topic) return true;
+  const trimmed = topic.trim();
+  if (trimmed === '') return true;
+  return PLACEHOLDER_TOPICS.has(trimmed);
+}
+
+/**
  * 保存音频会话（upsert 语义）
  *
  * ⚠️ 修复 2026-04-18：原实现总是走 db.audioSessions.add(...)，加上 classroomDataService
@@ -63,7 +86,46 @@ export async function saveAudioSession(
     }
     if (options.duration != null && options.duration > 0) patch.duration = options.duration;
     if (options.subject !== undefined) patch.subject = options.subject;
-    if (options.topic !== undefined && options.topic !== '') patch.topic = options.topic;
+    // ── 身份冲突判定（2026-04-20）──
+    //
+    // 铁律：一条 audioSessions row 只承载一个身份。
+    //
+    // 场景：用户先导入了一条 B 站视频（"小猪佩奇"），sessionId=S1，写进来
+    // sourceType='video-link', topic='小猪佩奇', videoUrl=pig.bili, thumbnailUrl=pig.jpg。
+    // 然后用户在同一个 S1 上系统内录了一段"强化学习"，upsert 带 blob + sourceType='recording'
+    // 进来。旧逻辑只改 sourceType，videoUrl/topic/thumbnailUrl 全部保留——结果卡片
+    // 标题和封面还是小猪佩奇，但放的音是强化学习，用户体感"点强化学习卡片跳到
+    // 小猪佩奇"。
+    //
+    // 解法：识别到"录音夺舍"（新身份是 recording，旧身份是 video-link），
+    // 就在这一刻把视频身份字段全部清掉——此时用户的意图已经是"为这节课留录音"，
+    // 视频链接只是当时的参考资料，不该再占用这节课的身份。
+    //
+    // 判定条件（三个都满足才触发夺舍）：
+    //   1. 本次带 blob 进来（确认是录音路径）
+    //   2. 本次显式标了 sourceType='recording'（确认是录音路径）
+    //   3. 旧行是视频身份（sourceType === 'video-link' 或者有 videoUrl 但没 blob）
+    const isRecordingTakeover =
+      !!blob
+      && options.sourceType === 'recording'
+      && (existing.sourceType === 'video-link' || (!!existing.videoUrl && !existing.blob));
+
+    // topic 覆盖策略：
+    //   - 非空才覆盖（避免把已有标题清空）
+    //   - 如果旧值已经是具体内容（不是我们已知的几个默认占位字符串），
+    //     且新值正好是默认占位，就**别盖**——保护视频导入写入的真实标题
+    //     在后续录音 upsert 时被"课堂录音"这种占位覆盖。
+    //   - 但"录音夺舍"场景例外：旧 topic 是视频标题、不再代表这节课，
+    //     主动清掉（置空 → undefined），让下游 adapter 兜底到"X 月 X 日的课"。
+    if (isRecordingTakeover) {
+      patch.topic = undefined;
+    } else if (options.topic !== undefined && options.topic !== '') {
+      const incomingIsPlaceholder = isPlaceholderTopic(options.topic);
+      const existingIsMeaningful = !!existing.topic && !isPlaceholderTopic(existing.topic);
+      if (!(incomingIsPlaceholder && existingIsMeaningful)) {
+        patch.topic = options.topic;
+      }
+    }
     if (options.sourceType) patch.sourceType = options.sourceType;
     if (options.mediaUrl !== undefined) patch.mediaUrl = options.mediaUrl;
     if (options.videoUrl !== undefined) patch.videoUrl = options.videoUrl;
@@ -72,6 +134,17 @@ export async function saveAudioSession(
     if (options.thumbnailUrl !== undefined) patch.thumbnailUrl = options.thumbnailUrl;
     if (options.importSourceMode !== undefined) patch.importSourceMode = options.importSourceMode;
     if (options.importTrace !== undefined) patch.importTrace = options.importTrace;
+
+    // 录音夺舍：本次未显式传视频字段时，把旧行的视频身份字段清空，避免串台
+    if (isRecordingTakeover) {
+      if (options.videoUrl === undefined) patch.videoUrl = undefined;
+      if (options.videoEmbedUrl === undefined) patch.videoEmbedUrl = undefined;
+      if (options.videoProvider === undefined) patch.videoProvider = undefined;
+      if (options.thumbnailUrl === undefined) patch.thumbnailUrl = undefined;
+      if (options.importSourceMode === undefined) patch.importSourceMode = undefined;
+      if (options.importTrace === undefined) patch.importTrace = undefined;
+    }
+
     // 录音进行中写进来的通常是 'recording'，结束时这里写 'completed' 才对
     // —— 由 saveAudioSession 的语义保证：本函数只在"有内容要落"的时刻被调用
     patch.status = 'completed';
@@ -134,6 +207,68 @@ export async function getTodaySessions(userId: string): Promise<AudioSession[]> 
     .equals(userId || ANONYMOUS_USER_ID)
     .and(session => session.createdAt >= today)
     .toArray();
+}
+
+/**
+ * 历史数据修复：把"有 blob 但身份被视频占据"的行彻底修回录音身份。
+ *
+ * 背景（2026-04-20）：
+ *   (1) 早期录音路径在 `useRecordingLifecycle` 里调用 `saveAudioSession` 时
+ *       没有显式传 `sourceType`，于是 upsert 时保留了视频导入先写进去的
+ *       `sourceType='video-link'`。
+ *   (2) 即便 sourceType 被刀 1 改回了 'recording'，旧行里残留的
+ *       videoUrl / videoEmbedUrl / thumbnailUrl / topic（= 视频标题）
+ *       依然存在——列表渲染/封面/标题读的就是这些字段，
+ *       用户点"强化学习"的卡片看到的还是"小猪佩奇"。
+ *
+ * 识别依据：`audioSessions.blob` 存在 → 说明用户真的录了音，这条 row
+ * 就不该承载视频身份。修正规则：
+ *   - 有 blob 的行，无论 sourceType 原来是什么，都强制 'recording'
+ *   - 有 blob 且带视频字段（videoUrl / videoEmbedUrl / thumbnailUrl / videoProvider /
+ *     importSourceMode / importTrace）→ 一律清空（视频原件的归视频，录音的归录音）
+ *   - 有 blob 且 topic 是典型视频标题（非空、非默认占位）→ 也清空，让下游 adapter
+ *     用"X 月 X 日的课"兜底。因为我们没法区分"用户自己写的课题"和"残留的视频标题"，
+ *     但结合"sourceType 曾是 video-link 或带 videoUrl"这个前提，大概率是后者。
+ *     宁可兜底，也不要让用户看到"小猪佩奇"卡片里放的是强化学习的声音。
+ *
+ * 幂等：修好之后 sourceType='recording' 且无视频字段，重跑无命中。
+ *
+ * 返回修正数量。仅在课堂列表挂载时调一次即可。
+ */
+export async function repairMisflaggedVideoLinkRecordings(): Promise<number> {
+  const all = await db.audioSessions.toArray();
+
+  // 识别需要修复的行：有 blob，且（sourceType 是 video-link，或残留了视频身份字段）
+  const needsFix = all.filter((row) => {
+    if (!row.blob) return false;
+    if (row.sourceType === 'video-link') return true;
+    if (row.videoUrl || row.videoEmbedUrl || row.thumbnailUrl || row.videoProvider) return true;
+    return false;
+  });
+  if (needsFix.length === 0) return 0;
+
+  await Promise.all(
+    needsFix.map((row) =>
+      row.id != null
+        ? db.audioSessions.update(row.id, {
+            sourceType: 'recording',
+            // 彻底清除视频身份字段——此行已经被录音占用
+            videoUrl: undefined,
+            videoEmbedUrl: undefined,
+            videoProvider: undefined,
+            thumbnailUrl: undefined,
+            importSourceMode: undefined,
+            importTrace: undefined,
+            // topic 若非空且非默认占位，大概率是残留的视频标题，一并清空
+            // （adapter 的 deriveTitle 会兜底到"X 月 X 日的课"）
+            ...(row.topic && !isPlaceholderTopic(row.topic) ? { topic: undefined } : {}),
+            updatedAt: new Date(),
+          })
+        : Promise.resolve(),
+    ),
+  );
+
+  return needsFix.length;
 }
 
 /**

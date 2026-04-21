@@ -54,31 +54,36 @@ export function ReviewWorkspacePanel({
   hideTabBar = false,
 }: ReviewWorkspacePanelProps) {
   return (
-    <div className="h-full flex flex-col bg-white" style={{ borderRight: '1px solid var(--edu-border-light)' }}>
+    <div className="h-full flex flex-col bg-white border-r border-[#E9E9E7]">
       {!hideTabBar && (
-      <div
-        className="flex items-center gap-1 px-3 py-2.5 border-b overflow-x-auto flex-shrink-0 relative z-10 tab-buttons-container"
-        style={{ background: 'var(--edu-bg-soft)', borderColor: 'var(--edu-border-light)' }}
-      >
-        {reviewWorkspaceTabs.map((tab) => (
-          <button
-            key={tab.key}
-            data-testid={tab.testId}
-            onClick={() => onReviewTabChange(tab.key)}
-            className={`flex items-center gap-1 px-3 py-2 text-sm rounded-lg transition-all whitespace-nowrap tab-button ${
-              reviewTab === tab.key
-                ? 'bg-white text-[#787774] font-medium'
-                : 'text-gray-500 hover:text-navy hover:bg-white/50'
-            }`}
-          >
-            {tab.LucideIcon && <tab.LucideIcon size={iconTabSize} strokeWidth={iconTabStroke} />}
-            {tab.label}
-            {tab.key === 'anchor-detail' && selectedAnchor && !selectedAnchor.resolved && (
-              <span className="ml-1 w-2 h-2 bg-[#FADEC9] rounded-full inline-block animate-pulse" />
-            )}
-          </button>
-        ))}
-      </div>
+      <>
+        {/* 下划线风格 tab 栏——与 DesktopVideoReviewLayout 的视频态 tab 保持一致。
+            零渐变、零阴影、纯平涂，只靠字重和下划线表达激活态。 */}
+        <div className="shrink-0 px-5 pt-4 flex items-center gap-5 overflow-x-auto relative z-10">
+          {reviewWorkspaceTabs.map((tab) => (
+            <button
+              key={tab.key}
+              data-testid={tab.testId}
+              onClick={() => onReviewTabChange(tab.key)}
+              className={`relative flex items-center gap-1.5 pb-3 text-[13px] transition-colors whitespace-nowrap ${
+                reviewTab === tab.key
+                  ? 'text-[#232322] font-medium'
+                  : 'text-[#A3A39E] hover:text-[#787774]'
+              }`}
+            >
+              {tab.LucideIcon && <tab.LucideIcon size={iconTabSize} strokeWidth={iconTabStroke} />}
+              {tab.label}
+              {tab.key === 'anchor-detail' && selectedAnchor && !selectedAnchor.resolved && (
+                <span className="ml-0.5 w-1.5 h-1.5 bg-[#FADEC9] rounded-full inline-block animate-pulse" />
+              )}
+              {reviewTab === tab.key && (
+                <span className="absolute bottom-0 left-0 right-0 h-[2px] bg-[#232322] rounded-full" />
+              )}
+            </button>
+          ))}
+        </div>
+        <div className="mx-5 h-px bg-[#E9E9E7]" />
+      </>
       )}
 
       <div className="flex-1 min-h-0 overflow-hidden">

@@ -18,11 +18,39 @@
  */
 
 import React, { useMemo } from 'react';
-import { Mic, Square } from 'lucide-react';
+import { Mic, Square, Monitor, Headphones } from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
 import type { Lesson, ClassroomPaneState } from './types';
 import { ClassroomLessonCard } from './ClassroomLessonCard';
 import { ClassroomRecordingView } from './ClassroomRecordingView';
 import type { MindMapTree } from '@/hooks/useClassroomMindMap';
+import type { RecorderAudioSource } from '@/stores/capture-editor-store';
+
+/**
+ * canCaptureSystemAudio — 浏览器是否能拿到电脑扬声器发出的声音
+ *
+ * 判据：
+ *   - 必须存在 navigator.mediaDevices.getDisplayMedia（iOS Safari 直接没有）
+ *   - UA 命中 iOS / Android → 即使 API 存在，浏览器也不会返回 audio track
+ *     （Android Chrome 至今不给 system audio，iPadOS Safari 同样）
+ *
+ * 本函数只在客户端调用，SSR 时返回 false（picker 组件里已用 mounted 兜底）。
+ */
+function canCaptureSystemAudio(): boolean {
+  if (typeof window === 'undefined') return false;
+  if (typeof navigator === 'undefined') return false;
+  if (!navigator.mediaDevices || typeof navigator.mediaDevices.getDisplayMedia !== 'function') {
+    return false;
+  }
+  const ua = navigator.userAgent || '';
+  // iOS（含 iPadOS 13+ 会伪装成 Mac，但 touch events + maxTouchPoints 可以识别）
+  const isIOS =
+    /iPhone|iPad|iPod/i.test(ua) ||
+    (/Macintosh/i.test(ua) && typeof navigator.maxTouchPoints === 'number' && navigator.maxTouchPoints > 1);
+  const isAndroid = /Android/i.test(ua);
+  if (isIOS || isAndroid) return false;
+  return true;
+}
 
 export interface ClassroomLeftPanelProps {
   state: ClassroomPaneState;
@@ -31,8 +59,8 @@ export interface ClassroomLeftPanelProps {
   onOpenLesson: (id: string) => void;
   /** 点击"开始录一节课" */
   onStartRecording: () => void;
-  /** 录课中：停止录音 */
-  onStopRecording: () => void;
+  /** 录课中：停止录音。lessonId 传入对应 pill 的课堂 id，便于调用方判断这是真停还是幽灵清理。 */
+  onStopRecording: (lessonId?: string) => void;
   /** 录课中：当前计时（秒） */
   recordingSeconds?: number;
   /** 录课中：AI 抓取的关键概念（占位；后续接 Recorder transcript） */
@@ -51,6 +79,13 @@ export interface ClassroomLeftPanelProps {
   onMindMapAnchorClick?: (ms: number) => void;
   /** 点击活动条 → 进入录课态全屏视图 */
   onFocusRecording?: () => void;
+  /**
+   * 当前选择的录音来源（仅课堂页有意义；收集页一律麦克风）。
+   * 由 page.tsx 从 capture-editor-store 注入。
+   */
+  audioSource?: RecorderAudioSource;
+  /** 切换录音来源 */
+  onChangeAudioSource?: (source: RecorderAudioSource) => void;
 }
 
 function groupLessons(lessons: Lesson[]): Array<{ label: string; items: Lesson[] }> {
@@ -220,6 +255,8 @@ function ListView({
   onStart,
   onFocusRecording,
   onStop,
+  audioSource,
+  onChangeAudioSource,
 }: {
   activeLesson: Lesson | null;
   activeSeconds: number;
@@ -227,7 +264,9 @@ function ListView({
   onOpen: (id: string) => void;
   onStart: () => void;
   onFocusRecording: () => void;
-  onStop: () => void;
+  onStop: (lessonId?: string) => void;
+  audioSource?: RecorderAudioSource;
+  onChangeAudioSource?: (source: RecorderAudioSource) => void;
 }) {
   const isTrulyEmpty = !activeLesson && groups.length === 0;
 
@@ -236,7 +275,11 @@ function ListView({
       <>
         <PageHeader />
         <EmptyState onStart={onStart} />
-        <StickyStartBar onStart={onStart} />
+        <StickyStartBar
+          onStart={onStart}
+          audioSource={audioSource}
+          onChangeAudioSource={onChangeAudioSource}
+        />
       </>
     );
   }
@@ -253,7 +296,7 @@ function ListView({
               lesson={activeLesson}
               seconds={activeSeconds}
               onFocus={onFocusRecording}
-              onStop={onStop}
+              onStop={() => onStop(activeLesson.id)}
             />
           )}
 
@@ -283,7 +326,12 @@ function ListView({
       </div>
 
       {/* 底部常驻"开始录课"按钮 */}
-      <StickyStartBar onStart={onStart} disabled={!!activeLesson} />
+      <StickyStartBar
+        onStart={onStart}
+        disabled={!!activeLesson}
+        audioSource={audioSource}
+        onChangeAudioSource={onChangeAudioSource}
+      />
     </>
   );
 }
@@ -292,13 +340,21 @@ function ListView({
  * StickyStartBar — 底部常驻的主 CTA（v4 · 黑色主按钮 + 黄点）。
  * Linear / Things 级别的"高级感"来自于黑 + 一点有特征的颜色。
  * 不再用大片暖黄填充。
+ *
+ * v5（本次改动）：在主按钮上方插入一排「录音来源选择」——
+ * 真实场景里同时有「线下讲堂」「在家看网课」两种情况，录音源必须先选对，
+ * 否则再好的 ASR/降噪也没法救"麦克风根本没收到课"这种物理问题。
  */
 function StickyStartBar({
   onStart,
   disabled = false,
+  audioSource = 'mic',
+  onChangeAudioSource,
 }: {
   onStart: () => void;
   disabled?: boolean;
+  audioSource?: RecorderAudioSource;
+  onChangeAudioSource?: (source: RecorderAudioSource) => void;
 }) {
   return (
     <div className="flex-shrink-0 bg-canvas px-8 pb-[max(env(safe-area-inset-bottom),1.25rem)] pt-4 lg:px-12">
@@ -309,20 +365,152 @@ function StickyStartBar({
             <span>正在录一节课</span>
           </div>
         ) : (
-          <button
-            type="button"
-            onClick={onStart}
-            className="group flex w-full items-center justify-center gap-2.5 rounded-full bg-ink py-4 text-[14px] font-medium text-white transition hover:bg-[#1a1a19] active:scale-[0.995]"
-          >
-            <span className="relative flex h-2 w-2">
-              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-[#E8C547] opacity-50 group-hover:opacity-70" />
-              <span className="relative inline-flex h-2 w-2 rounded-full bg-[#E8C547]" />
-            </span>
-            <Mic size={14} strokeWidth={2} />
-            <span>开始录一节课</span>
-          </button>
+          <>
+            {onChangeAudioSource ? (
+              <AudioSourcePicker value={audioSource} onChange={onChangeAudioSource} />
+            ) : null}
+            <button
+              type="button"
+              onClick={onStart}
+              className="group flex w-full items-center justify-center gap-2.5 rounded-full bg-ink py-4 text-[14px] font-medium text-white transition hover:bg-[#1a1a19] active:scale-[0.995]"
+            >
+              <span className="relative flex h-2 w-2">
+                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-[#E8C547] opacity-50 group-hover:opacity-70" />
+                <span className="relative inline-flex h-2 w-2 rounded-full bg-[#E8C547]" />
+              </span>
+              <Mic size={14} strokeWidth={2} />
+              <span>开始录一节课</span>
+            </button>
+          </>
         )}
       </div>
+    </div>
+  );
+}
+
+/**
+ * AudioSourcePicker — 三选一的录音来源。
+ *
+ * 放在"开始录一节课"按钮上方，分段式 segmented control 风格。
+ * 默认高亮「两路都录」——因为这是最鲁棒的缺省（线上课 + 用户提问都能兜住）。
+ *
+ * 设计：
+ *   - 用 hairline 分隔，不用阴影/渐变
+ *   - 选中态仅用黑底白字表达，没有色块炫技
+ *   - 每个选项下有一行极小的提示，告诉用户"这按钮对应什么物理场景"
+ *
+ * 为什么不做成下拉菜单：
+ *   选项只有 3 个，信息密度允许平铺；
+ *   下拉隐藏选项会让用户第一次用时发现不了"哦原来还能录电脑声音"。
+ *   这个能力此刻是"救命稻草"，必须长在第一眼看得到的位置。
+ */
+function AudioSourcePicker({
+  value,
+  onChange,
+}: {
+  value: RecorderAudioSource;
+  onChange: (source: RecorderAudioSource) => void;
+}) {
+  // ── 能力检测：手机浏览器（iOS/Android）拿不到电脑扬声器的声音 ──
+  // 只在客户端首次挂载后计算一次——SSR 阶段默认"可以"，避免闪动。
+  const [canSystem, setCanSystem] = React.useState(true);
+  React.useEffect(() => {
+    setCanSystem(canCaptureSystemAudio());
+  }, []);
+
+  // 如果当前持久化的 value 在此设备上不可用（比如用户在 PC 上选了 system 然后在手机上打开），
+  // 自动把它拉回 mic。不做静默——在 render 里再给一行小字说明。
+  React.useEffect(() => {
+    if (!canSystem && value !== 'mic') {
+      onChange('mic');
+    }
+  }, [canSystem, value, onChange]);
+
+  const options: Array<{
+    key: RecorderAudioSource;
+    label: string;
+    icon: LucideIcon;
+    hint: string;
+  }> = [
+    {
+      key: 'mic',
+      label: '麦克风',
+      icon: Mic,
+      hint: '线下课',
+    },
+    {
+      key: 'system',
+      label: '电脑声音',
+      icon: Monitor,
+      hint: '在家听网课',
+    },
+    {
+      key: 'mixed',
+      label: '两路都录',
+      icon: Headphones,
+      hint: '网课＋自己提问',
+    },
+  ];
+
+  // ── 手机端：只留麦克风，隐藏另外两档 ──
+  //
+  // taste：不要给用户看用不了的按钮。
+  // 把"为什么只有这一档"的理由放在一行小字里说透，不装作一切正常，也不大喊大叫。
+  if (!canSystem) {
+    return (
+      <div className="mb-3">
+        <div className="flex items-center gap-2 rounded-2xl bg-white px-3 py-2.5 ring-[0.5px] ring-[#232322]/[0.08]">
+          <Mic size={14} strokeWidth={2} className="text-ink" />
+          <span className="text-[12.5px] font-medium text-ink">麦克风</span>
+          <span className="text-[11px] text-ink-muted">· 手机端只支持这一档</span>
+        </div>
+        <p className="mt-2 px-1 text-[11px] leading-4 text-ink-muted">
+          手机浏览器拿不到系统里其他 App 的声音。听网课时把手机靠近扬声器录就行。
+        </p>
+      </div>
+    );
+  }
+
+  // ── 桌面端：segmented 三选一 ──
+  return (
+    <div className="mb-3">
+      <div className="grid grid-cols-3 overflow-hidden rounded-2xl bg-white ring-[0.5px] ring-[#232322]/[0.08]">
+        {options.map((opt) => {
+          const active = value === opt.key;
+          const Icon = opt.icon;
+          return (
+            <button
+              key={opt.key}
+              type="button"
+              onClick={() => onChange(opt.key)}
+              className={`flex flex-col items-center justify-center gap-1 px-2 py-2.5 text-[12px] transition ${
+                active
+                  ? 'bg-ink text-white'
+                  : 'text-ink hover:bg-[#F7F7F5]'
+              }`}
+              aria-pressed={active}
+            >
+              <span className="flex items-center gap-1.5 font-medium">
+                <Icon size={13} strokeWidth={2} />
+                {opt.label}
+              </span>
+              <span
+                className={`text-[10.5px] ${
+                  active ? 'text-white/70' : 'text-ink-muted'
+                }`}
+              >
+                {opt.hint}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+      {/* 极轻的一行文字说明当前这档意味着什么——默认留白不喊话，只在电脑声音档位亮出提示 */}
+      {value !== 'mic' ? (
+        <p className="mt-2 px-1 text-[11px] leading-4 text-ink-muted">
+          点"开始"后会弹出系统窗口，请勾选「分享系统音频」或「分享标签页音频」。
+        </p>
+      ) : null}
     </div>
   );
 }
@@ -342,6 +530,8 @@ export function ClassroomLeftPanel({
   mindMapNewIds,
   onMindMapAnchorClick,
   onFocusRecording,
+  audioSource,
+  onChangeAudioSource,
 }: ClassroomLeftPanelProps) {
   const { activeLesson, restLessons } = useMemo(() => {
     let active: Lesson | null = null;
@@ -373,6 +563,8 @@ export function ClassroomLeftPanel({
             onStart={onStartRecording}
             onFocusRecording={onFocusRecording ?? (() => { /* noop */ })}
             onStop={onStopRecording}
+            audioSource={audioSource}
+            onChangeAudioSource={onChangeAudioSource}
           />
         ) : (
           <ClassroomRecordingView

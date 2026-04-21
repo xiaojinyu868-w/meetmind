@@ -1,23 +1,35 @@
 'use client';
 
 /**
- * useClassCheck — 随堂检验控制器（简化版）
+ * useClassCheck — 随堂检验控制器（v2 分阶段加载版）
  *
  * 工作流：
- * 1. 开关开启 + 进入复习页时，调用 /api/class-check/plan
- * 2. LLM 一次性返回 checkpoints（含题目）+ highlights
- * 3. highlights 通过 onHighlightsReady 回调填充到 VideoInsightTimeline
- * 4. 播放时追踪进度，到达 checkpoint 时暂停，直接弹已有题目
- * 5. 跳过的 checkpoint 标记为 skipped，不出题
+ * 1. 开关开启 + 进入复习页时，调用 /api/class-check/plan（轻量，15-30s）
+ * 2. plan 返回后：
+ *    - highlights 立刻通过 onHighlightsReady 填到时间轴
+ *    - checkpoints 骨架立刻可见（带题目状态 ready/loading/failed）
+ *    - 并发调用 /api/class-check/question 为每个 checkpoint 生成题目
+ * 3. 播放时追踪进度，到达 checkpoint 时：
+ *    - 题目已就绪 → 立刻弹
+ *    - 题目仍在加载 → 等 promise 解决后再弹（通常已完成）
+ * 4. 单个 checkpoint 题目失败不影响其他 checkpoint
  *
- * 没有第二次 API 调用，没有反馈机制，干净简单。
+ * 相比 v1：
+ * - 单次 LLM 输出 tokens 从 ~8000 降到 ~1500（骨架）+ 每题 ~800
+ * - 首屏延迟从 60-180s 降到 15-30s
+ * - 504 概率接近 0，单点失败不影响整体
  */
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { getPreference } from '@/lib/db/preferences';
 import type { TranscriptSegment } from '@/types';
 import type { ClassCheckQuestion, ClassCheckResult } from '@/components/ClassCheckOverlay';
-import type { ClassCheckPlan, ClassCheckCheckpoint, ClassCheckHighlight } from '@/app/api/class-check/plan/route';
+import type {
+  ClassCheckPlan,
+  ClassCheckCheckpoint,
+  ClassCheckHighlight,
+  ClassCheckQuestionData,
+} from '@/app/api/class-check/plan/route';
 
 const CLASS_CHECK_ENABLED_KEY = 'settings_class_check_enabled';
 const SEEK_THRESHOLD_MS = 5000;
@@ -25,6 +37,10 @@ const SEEK_THRESHOLD_MS = 5000;
 const CHECKPOINT_GRACE_MS = 8000;
 const PLAN_CACHE_PREFIX = 'class-check-plan:';
 const PLAN_CACHE_TTL_MS = 24 * 60 * 60 * 1000; // 24 小时
+const QUESTION_CONCURRENCY = 3; // 并发生成题目的最大并发度
+
+/** 题目加载状态 */
+export type CheckpointQuestionState = 'loading' | 'ready' | 'failed';
 
 function readCachedPlan(sessionId: string, segmentCount: number): ClassCheckPlan | null {
   if (typeof window === 'undefined') return null;
@@ -84,6 +100,8 @@ interface UseClassCheckReturn {
   plan: ClassCheckPlan | null;
   /** 每个 checkpoint 的状态，与 plan.checkpoints 一一对应 */
   checkpointStatuses: CheckpointStatus[];
+  /** 每个 checkpoint 的题目加载状态（loading/ready/failed） */
+  checkpointQuestionStates: CheckpointQuestionState[];
   handleCheckComplete: (result: ClassCheckResult) => void;
   /** 手动触发某个 checkpoint 的测验（从时间轴点击） */
   triggerCheckpointManually: (checkpointIndex: number) => void;
@@ -95,6 +113,63 @@ interface UseClassCheckReturn {
   acceptPendingCheckpoint: () => void;
   /** 用户忽略 toast，标记跳过，继续播放 */
   dismissPendingCheckpoint: () => void;
+}
+
+/** 把 checkpoint 的题目转成 Overlay 用的格式 */
+function toOverlayQuestions(
+  checkpointIndex: number,
+  questions: ClassCheckQuestionData[]
+): ClassCheckQuestion[] {
+  return questions.map((q, i) => ({
+    id: `cc-${checkpointIndex}-${i}`,
+    stem: q.stem,
+    options: q.options,
+    answer: q.answer,
+    explanation: q.explanation || undefined,
+  }));
+}
+
+/** 调用题目生成接口，返回题目数组；失败抛错 */
+async function fetchCheckpointQuestions(
+  transcript: TranscriptSegment[],
+  checkpoint: ClassCheckCheckpoint,
+  signal: AbortSignal
+): Promise<ClassCheckQuestionData[]> {
+  const response = await fetch('/api/class-check/question', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    signal,
+    body: JSON.stringify({
+      transcript: transcript.map((s) => ({
+        id: s.id,
+        text: s.text,
+        startMs: s.startMs,
+        endMs: s.endMs,
+      })),
+      checkpoint: {
+        topic: checkpoint.topic,
+        difficulty: checkpoint.difficulty,
+        startMs: checkpoint.startMs,
+        endMs: checkpoint.endMs,
+      },
+    }),
+  });
+  if (!response.ok) {
+    throw new Error(`question API ${response.status} ${response.statusText}`);
+  }
+  const contentType = response.headers.get('content-type') || '';
+  if (!contentType.includes('application/json')) {
+    throw new Error(`question API returned non-JSON: ${contentType}`);
+  }
+  const data = (await response.json()) as {
+    ok?: boolean;
+    questions?: ClassCheckQuestionData[];
+    error?: string;
+  };
+  if (!data.ok || !Array.isArray(data.questions) || data.questions.length === 0) {
+    throw new Error(data.error || 'question API returned empty');
+  }
+  return data.questions;
 }
 
 export function useClassCheck({
@@ -118,12 +193,20 @@ export function useClassCheck({
   const [currentTopic, setCurrentTopic] = useState('');
   const [rounds, setRounds] = useState<ClassCheckRound[]>([]);
   const [checkpointStatuses, setCheckpointStatuses] = useState<CheckpointStatus[]>([]);
+  const [checkpointQuestionStates, setCheckpointQuestionStates] = useState<CheckpointQuestionState[]>([]);
   const [pendingCheckpointIdx, setPendingCheckpointIdx] = useState(-1);
 
   const prevTimeRef = useRef(0);
   const activeCheckpointIndexRef = useRef(-1);
   const triggerLockRef = useRef(false);
   const planSessionRef = useRef('');
+  /** 正在进行中的题目请求 promise（按 checkpointIndex 索引） */
+  const questionPromisesRef = useRef<Array<Promise<void> | null>>([]);
+  /** 当前 session 的 AbortController，用于 session 切换时取消悬挂请求 */
+  const abortRef = useRef<AbortController | null>(null);
+  /** 最新 segments 引用，异步回调里读最新值 */
+  const segmentsRef = useRef<TranscriptSegment[]>([]);
+  segmentsRef.current = segments;
 
   // 加载开关 — 初始化 + 页面可见时重新读取
   useEffect(() => {
@@ -147,7 +230,116 @@ export function useClassCheck({
     };
   }, []);
 
-  // 会话切换或转录变化时请求 plan（一次性拿到所有题目 + 高光片段）
+  /**
+   * 给某个 checkpoint 生成题目，结果写回 plan state + 缓存。
+   * 同一 checkpoint 重复调用会复用 in-flight promise。
+   */
+  const ensureCheckpointQuestions = useCallback((checkpointIndex: number): Promise<void> => {
+    const existing = questionPromisesRef.current[checkpointIndex];
+    if (existing) return existing;
+
+    const controller = abortRef.current;
+    if (!controller) return Promise.resolve();
+
+    const promise = (async () => {
+      try {
+        setCheckpointQuestionStates((prev) => {
+          const next = [...prev];
+          next[checkpointIndex] = 'loading';
+          return next;
+        });
+
+        // 从 plan state 里读最新 checkpoint（不依赖 hook 闭包里的旧 plan）
+        const snapshot = planRef.current;
+        if (!snapshot) return;
+        const checkpoint = snapshot.checkpoints[checkpointIndex];
+        if (!checkpoint) return;
+        if (checkpoint.questions.length > 0) {
+          // 已有（来自缓存），直接标 ready
+          setCheckpointQuestionStates((prev) => {
+            const next = [...prev];
+            next[checkpointIndex] = 'ready';
+            return next;
+          });
+          return;
+        }
+
+        const questions = await fetchCheckpointQuestions(
+          segmentsRef.current,
+          checkpoint,
+          controller.signal
+        );
+
+        // 写回 plan
+        setPlan((prev) => {
+          if (!prev) return prev;
+          const nextCheckpoints = prev.checkpoints.map((cp, i) =>
+            i === checkpointIndex ? { ...cp, questions } : cp
+          );
+          const nextPlan = { ...prev, checkpoints: nextCheckpoints };
+          // 缓存同步更新
+          writeCachedPlan(sessionId, segmentsRef.current.length, nextPlan);
+          return nextPlan;
+        });
+
+        setCheckpointQuestionStates((prev) => {
+          const next = [...prev];
+          next[checkpointIndex] = 'ready';
+          return next;
+        });
+
+        console.log('[class-check] checkpoint %d "%s" questions ready (%d)',
+          checkpointIndex, checkpoint.topic, questions.length);
+      } catch (err) {
+        if ((err as { name?: string }).name === 'AbortError') return;
+        console.warn('[class-check] checkpoint %d question fetch failed:', checkpointIndex, err);
+        setCheckpointQuestionStates((prev) => {
+          const next = [...prev];
+          next[checkpointIndex] = 'failed';
+          return next;
+        });
+        // 失败后清掉 promise，允许重试（用户手动点击时会再试一次）
+        questionPromisesRef.current[checkpointIndex] = null;
+      }
+    })();
+
+    questionPromisesRef.current[checkpointIndex] = promise;
+    return promise;
+  }, [sessionId]);
+
+  /** 总是指向最新的 plan，供异步回调读取，不因闭包旧值丢失题目 */
+  const planRef = useRef<ClassCheckPlan | null>(null);
+  planRef.current = plan;
+
+  /** 并发预热所有 checkpoint 的题目（限流 QUESTION_CONCURRENCY） */
+  const preheatAllQuestions = useCallback(async (checkpointCount: number) => {
+    const queue: number[] = [];
+    for (let i = 0; i < checkpointCount; i++) {
+      const snapshot = planRef.current;
+      if (snapshot && snapshot.checkpoints[i]?.questions.length > 0) continue; // 已就绪（缓存命中）
+      queue.push(i);
+    }
+    if (queue.length === 0) return;
+
+    console.log('[class-check] preheating %d checkpoints questions (concurrency=%d)',
+      queue.length, QUESTION_CONCURRENCY);
+
+    let cursor = 0;
+    const worker = async () => {
+      while (cursor < queue.length) {
+        const idx = queue[cursor++];
+        try {
+          await ensureCheckpointQuestions(idx);
+        } catch { /* 已在 ensure 内部处理 */ }
+      }
+    };
+
+    await Promise.all(
+      Array.from({ length: Math.min(QUESTION_CONCURRENCY, queue.length) }, () => worker())
+    );
+  }, [ensureCheckpointQuestions]);
+
+  // 会话切换或转录变化时请求 plan（骨架）+ 并发预热题目
   // Plan 请求不受 enabled 开关控制——高光片段和检查点标记始终展示。
   // enabled 开关只控制播放时是否自动弹出测验题。
   useEffect(() => {
@@ -164,26 +356,47 @@ export function useClassCheck({
     if (planSessionRef.current === planKey) return;
     planSessionRef.current = planKey;
 
+    // 取消旧 session 的题目请求
+    abortRef.current?.abort();
+    const controller = new AbortController();
+    abortRef.current = controller;
+    questionPromisesRef.current = [];
+
+    // 初始化状态
+    const applyPlan = (incomingPlan: ClassCheckPlan, fromCache: boolean) => {
+      setPlan(incomingPlan);
+      setCheckpointStatuses(incomingPlan.checkpoints.map(() => 'pending'));
+      setCheckpointQuestionStates(
+        incomingPlan.checkpoints.map((cp) => (cp.questions.length > 0 ? 'ready' : 'loading'))
+      );
+      if (incomingPlan.highlights && incomingPlan.highlights.length > 0 && onHighlightsReady) {
+        onHighlightsReady(incomingPlan.highlights);
+      }
+      if (!fromCache) {
+        writeCachedPlan(sessionId, segmentsRef.current.length, incomingPlan);
+      }
+      // 并发预热缺失的题目
+      void preheatAllQuestions(incomingPlan.checkpoints.length);
+    };
+
     // 先检查 localStorage 缓存
     const cached = readCachedPlan(sessionId, segments.length);
     if (cached) {
       console.log('[class-check] plan loaded from cache, sessionId=%s, %d checkpoints, %d highlights',
         sessionId, cached.checkpoints.length, cached.highlights?.length || 0);
-      setPlan(cached);
-      setCheckpointStatuses(cached.checkpoints.map(() => 'pending'));
-      if (cached.highlights && cached.highlights.length > 0 && onHighlightsReady) {
-        onHighlightsReady(cached.highlights);
-      }
       setIsPlanLoading(false);
+      applyPlan(cached, true);
       return;
     }
 
-    console.log('[class-check] requesting plan, sessionId=%s, segments=%d', sessionId, segments.length);
+    console.log('[class-check] requesting plan skeleton, sessionId=%s, segments=%d',
+      sessionId, segments.length);
 
     setIsPlanLoading(true);
     setPlan(null);
     setRounds([]);
     setCheckpointStatuses([]);
+    setCheckpointQuestionStates([]);
     setIsCheckActive(false);
     setCurrentQuestions([]);
     setPendingCheckpointIdx(-1);
@@ -196,6 +409,7 @@ export function useClassCheck({
         const response = await fetch('/api/class-check/plan', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
+          signal: controller.signal,
           body: JSON.stringify({
             transcript: segments.map((s) => ({
               id: s.id,
@@ -205,34 +419,70 @@ export function useClassCheck({
             })),
           }),
         });
+        if (!response.ok) {
+          console.warn('[class-check] plan API non-OK status:', response.status, response.statusText);
+          return;
+        }
+        const contentType = response.headers.get('content-type') || '';
+        if (!contentType.includes('application/json')) {
+          console.warn('[class-check] plan API returned non-JSON (likely gateway timeout):', contentType);
+          return;
+        }
         const data = await response.json() as { ok?: boolean; plan?: ClassCheckPlan; error?: string };
         if (data.ok && data.plan) {
-          console.log('[class-check] plan received: %d checkpoints (with questions), %d highlights',
+          console.log('[class-check] plan skeleton received: %d checkpoints, %d highlights',
             data.plan.checkpoints.length, data.plan.highlights?.length || 0);
           data.plan.checkpoints.forEach((cp, i) => {
-            console.log('[class-check]   checkpoint %d: "%s" at %dms, %d questions',
-              i, cp.topic, cp.triggerMs, cp.questions.length);
+            console.log('[class-check]   checkpoint %d: "%s" at %dms', i, cp.topic, cp.triggerMs);
           });
-          setPlan(data.plan);
-          setCheckpointStatuses(data.plan.checkpoints.map(() => 'pending'));
-          writeCachedPlan(sessionId, segments.length, data.plan);
-          if (data.plan.highlights && data.plan.highlights.length > 0 && onHighlightsReady) {
-            onHighlightsReady(data.plan.highlights);
-          }
+          applyPlan(data.plan, false);
         } else {
           console.warn('[class-check] plan API failed:', data.error || 'unknown');
         }
       } catch (err) {
+        if ((err as { name?: string }).name === 'AbortError') return;
         console.warn('[class-check] plan API error:', err);
       } finally {
         setIsPlanLoading(false);
       }
     })();
-  }, [sessionId, segments.length, dataSource, segments]);
+
+    return () => {
+      controller.abort();
+    };
+  }, [sessionId, segments.length, dataSource, segments, onHighlightsReady, preheatAllQuestions]);
+
+  /**
+   * 把一个 checkpoint 的题目装到当前 overlay 状态。
+   * 调用前应保证 checkpoint.questions 非空。
+   */
+  const enterCheckActive = useCallback((checkpointIndex: number) => {
+    const snapshot = planRef.current;
+    if (!snapshot) return;
+    const checkpoint = snapshot.checkpoints[checkpointIndex];
+    if (!checkpoint || checkpoint.questions.length === 0) return;
+
+    triggerLockRef.current = true;
+    activeCheckpointIndexRef.current = checkpointIndex;
+    setCheckpointStatuses((prev) => {
+      const next = [...prev];
+      next[checkpointIndex] = 'active';
+      return next;
+    });
+
+    pausePlayer();
+
+    setCurrentQuestions(toOverlayQuestions(checkpointIndex, checkpoint.questions));
+    setCurrentGreeting(checkpoint.greeting);
+    setCurrentEncouragement(checkpoint.encouragement);
+    setCurrentTopic(checkpoint.topic);
+    const nextCp = snapshot.checkpoints[checkpointIndex + 1];
+    setCurrentNextPreview(nextCp ? `接下来：${nextCp.topic}` : '');
+    setIsCheckActive(true);
+    triggerLockRef.current = false;
+  }, [pausePlayer]);
 
   // 核心：播放进度推进时检查 checkpoint
-  // 到达 checkpoint 时不暂停、不弹题，而是设置 pendingCheckpoint 触发邀请 toast。
-  // 用户主动选择后才进入答题流程。
   useEffect(() => {
     if (!enabled || !isPlaying || isCheckActive || triggerLockRef.current) return;
     if (!plan || plan.checkpoints.length === 0) return;
@@ -245,22 +495,17 @@ export function useClassCheck({
     // 检测快进/跳进
     const delta = currentTimeMs - prevTime;
     if (prevTime > 0 && (Math.abs(delta) > SEEK_THRESHOLD_MS || delta < -1000)) {
-      // Seek detected — only skip checkpoints that were truly "jumped over":
-      // those whose triggerMs is well before the seek target (beyond the grace zone).
-      // Checkpoints near the landing point are preserved so normal playback can trigger them.
       setCheckpointStatuses((prev) => {
         const next = [...prev];
         for (let i = 0; i < plan.checkpoints.length; i++) {
           if (next[i] !== 'pending') continue;
           const triggerMs = plan.checkpoints[i].triggerMs;
-          // Only skip if triggerMs is far below the seek target (outside grace zone)
           if (triggerMs < currentTimeMs - CHECKPOINT_GRACE_MS) {
             next[i] = 'skipped';
           }
         }
         return next;
       });
-      // Don't return — fall through to check if a checkpoint is now reachable
     }
 
     // 找到下一个应该触发的 checkpoint
@@ -270,40 +515,36 @@ export function useClassCheck({
 
     if (nextIdx < 0) return;
 
-    // 到达触发点 → 直接暂停 + 弹题
     const checkpoint = plan.checkpoints[nextIdx];
-    if (!checkpoint || checkpoint.questions.length === 0) return;
+    if (!checkpoint) return;
 
+    // 题目尚未就绪 —— 等一下，通常预热已完成
+    if (checkpoint.questions.length === 0) {
+      console.log('[class-check] checkpoint %d reached but questions not ready, waiting...', nextIdx);
+      triggerLockRef.current = true;
+      void (async () => {
+        try {
+          await ensureCheckpointQuestions(nextIdx);
+        } finally {
+          triggerLockRef.current = false;
+        }
+        // 等待完成后，如果题目到位且本轮尚未被其他路径消费，主动进入答题
+        const snapshot = planRef.current;
+        const cp = snapshot?.checkpoints[nextIdx];
+        if (cp && cp.questions.length > 0 && !isCheckActive &&
+            checkpointStatuses[nextIdx] === 'pending') {
+          enterCheckActive(nextIdx);
+        }
+      })();
+      return;
+    }
+
+    // 到达触发点 → 直接暂停 + 弹题
     console.log('[class-check] checkpoint %d "%s" reached at %dms, pausing + showing quiz',
       nextIdx, checkpoint.topic, currentTimeMs);
 
-    triggerLockRef.current = true;
-    activeCheckpointIndexRef.current = nextIdx;
-    setCheckpointStatuses((prev) => {
-      const next = [...prev];
-      next[nextIdx] = 'active';
-      return next;
-    });
-
-    pausePlayer();
-
-    const questions: ClassCheckQuestion[] = checkpoint.questions.map((q, i) => ({
-      id: `cc-${nextIdx}-${i}`,
-      stem: q.stem,
-      options: q.options,
-      answer: q.answer,
-      explanation: q.explanation || undefined,
-    }));
-
-    setCurrentQuestions(questions);
-    setCurrentGreeting(checkpoint.greeting);
-    setCurrentEncouragement(checkpoint.encouragement);
-    setCurrentTopic(checkpoint.topic);
-    const nextCp = plan.checkpoints[nextIdx + 1];
-    setCurrentNextPreview(nextCp ? `接下来：${nextCp.topic}` : '');
-    setIsCheckActive(true);
-    triggerLockRef.current = false;
-  }, [currentTimeMs, enabled, isPlaying, isCheckActive, plan, checkpointStatuses]);
+    enterCheckActive(nextIdx);
+  }, [currentTimeMs, enabled, isPlaying, isCheckActive, plan, checkpointStatuses, pendingCheckpointIdx, ensureCheckpointQuestions, enterCheckActive]);
 
   const handleCheckComplete = useCallback(
     (result: ClassCheckResult) => {
@@ -333,43 +574,33 @@ export function useClassCheck({
   const acceptPendingCheckpoint = useCallback(() => {
     if (pendingCheckpointIdx < 0 || !plan) return;
 
-    const checkpoint = plan.checkpoints[pendingCheckpointIdx];
-    if (!checkpoint || checkpoint.questions.length === 0) {
-      // 没有题目，直接清除
+    const idx = pendingCheckpointIdx;
+    const checkpoint = plan.checkpoints[idx];
+    if (!checkpoint) {
       setPendingCheckpointIdx(-1);
       return;
     }
 
-    console.log('[class-check] user accepted checkpoint %d "%s"', pendingCheckpointIdx, checkpoint.topic);
+    console.log('[class-check] user accepted checkpoint %d "%s"', idx, checkpoint.topic);
 
-    triggerLockRef.current = true;
-    activeCheckpointIndexRef.current = pendingCheckpointIdx;
-    setCheckpointStatuses((prev) => {
-      const next = [...prev];
-      next[pendingCheckpointIdx] = 'active';
-      return next;
-    });
+    if (checkpoint.questions.length === 0) {
+      // 题目还没好，等一下再进入
+      setPendingCheckpointIdx(-1);
+      void (async () => {
+        try {
+          await ensureCheckpointQuestions(idx);
+        } catch { /* already logged */ }
+        const snapshot = planRef.current;
+        if (snapshot?.checkpoints[idx]?.questions.length) {
+          enterCheckActive(idx);
+        }
+      })();
+      return;
+    }
 
-    pausePlayer();
-
-    const questions: ClassCheckQuestion[] = checkpoint.questions.map((q, i) => ({
-      id: `cc-${pendingCheckpointIdx}-${i}`,
-      stem: q.stem,
-      options: q.options,
-      answer: q.answer,
-      explanation: q.explanation || undefined,
-    }));
-
-    setCurrentQuestions(questions);
-    setCurrentGreeting(checkpoint.greeting);
-    setCurrentEncouragement(checkpoint.encouragement);
-    setCurrentTopic(checkpoint.topic);
-    const nextCp = plan.checkpoints[pendingCheckpointIdx + 1];
-    setCurrentNextPreview(nextCp ? `接下来：${nextCp.topic}` : '');
-    setIsCheckActive(true);
-    triggerLockRef.current = false;
+    enterCheckActive(idx);
     setPendingCheckpointIdx(-1);
-  }, [pendingCheckpointIdx, plan, pausePlayer]);
+  }, [pendingCheckpointIdx, plan, ensureCheckpointQuestions, enterCheckActive]);
 
   // 用户忽略 toast → 标记为 skipped，清除 pending
   const dismissPendingCheckpoint = useCallback(() => {
@@ -391,42 +622,30 @@ export function useClassCheck({
       if (!plan || !enabled) return;
       if (isCheckActive || triggerLockRef.current) return;
       const checkpoint = plan.checkpoints[checkpointIndex];
-      if (!checkpoint || checkpoint.questions.length === 0) return;
+      if (!checkpoint) return;
       const status = checkpointStatuses[checkpointIndex];
       if (status === 'completed' || status === 'active') return;
-
-      triggerLockRef.current = true;
-      activeCheckpointIndexRef.current = checkpointIndex;
 
       // 重置 prevTimeRef 为当前时间，避免恢复播放后被误判为 seek/跳转
       prevTimeRef.current = currentTimeMs;
 
-      setCheckpointStatuses((prev) => {
-        const next = [...prev];
-        next[checkpointIndex] = 'active';
-        return next;
-      });
+      if (checkpoint.questions.length === 0) {
+        // 题目还没好，先尝试生成再进入；失败就放弃
+        void (async () => {
+          try {
+            await ensureCheckpointQuestions(checkpointIndex);
+          } catch { /* already logged */ }
+          const snapshot = planRef.current;
+          if (snapshot?.checkpoints[checkpointIndex]?.questions.length) {
+            enterCheckActive(checkpointIndex);
+          }
+        })();
+        return;
+      }
 
-      pausePlayer();
-
-      const questions: ClassCheckQuestion[] = checkpoint.questions.map((q, i) => ({
-        id: `cc-${checkpointIndex}-${i}`,
-        stem: q.stem,
-        options: q.options,
-        answer: q.answer,
-        explanation: q.explanation || undefined,
-      }));
-
-      setCurrentQuestions(questions);
-      setCurrentGreeting(checkpoint.greeting);
-      setCurrentEncouragement(checkpoint.encouragement);
-      setCurrentTopic(checkpoint.topic);
-      const nextCp = plan.checkpoints[checkpointIndex + 1];
-      setCurrentNextPreview(nextCp ? `接下来：${nextCp.topic}` : '');
-      setIsCheckActive(true);
-      triggerLockRef.current = false;
+      enterCheckActive(checkpointIndex);
     },
-    [checkpointStatuses, currentTimeMs, enabled, isCheckActive, plan, pausePlayer]
+    [checkpointStatuses, currentTimeMs, enabled, isCheckActive, plan, ensureCheckpointQuestions, enterCheckActive]
   );
 
   const totalCorrect = rounds.reduce((sum, r) => sum + r.result.correctCount, 0);
@@ -451,6 +670,7 @@ export function useClassCheck({
     totalQuestions,
     plan,
     checkpointStatuses,
+    checkpointQuestionStates,
     handleCheckComplete,
     triggerCheckpointManually,
     pendingCheckpointIdx,

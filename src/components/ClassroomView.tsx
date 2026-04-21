@@ -47,8 +47,8 @@ export interface ClassroomViewProps {
   isRecording?: boolean;
   /** 外部真实录音时长（秒） */
   recordingSeconds?: number;
-  /** 停止录音 */
-  onStopRecording?: () => void;
+  /** 停止录音。lessonId 可选——如果传入且 Recorder 实际没在录，说明点的是"幽灵 pill"，需要降级清理。 */
+  onStopRecording?: (lessonId?: string) => void;
 }
 
 export function ClassroomView({
@@ -173,6 +173,15 @@ export function ClassroomView({
     (s) => s.actions.setClassroomASRContextHint,
   );
 
+  // ── 录音来源（麦克风 / 电脑声音 / 两路都录）──
+  // 放在 store 里而不是 ClassroomView 局部 state 的原因：
+  //   Recorder 挂载点在 page.tsx 而不是 ClassroomView，它需要从 store 读同一个值，
+  //   否则 ClassroomView 选的"电脑声音"和实际录音时的 audioSource 会分家。
+  const recorderAudioSource = useCaptureEditorStore((s) => s.recorderAudioSource);
+  const setRecorderAudioSource = useCaptureEditorStore(
+    (s) => s.actions.setRecorderAudioSource,
+  );
+
   // ── 预知气泡：AI 同桌的"主动性"，只在录课中工作 ──
   const { foresights, dismiss: dismissForesight } = useClassroomForesight({
     enabled: paneState === 'recording',
@@ -254,9 +263,9 @@ export function ClassroomView({
     onStartRecording();
   }, [onStartRecording, onStopRecording]);
 
-  const handleStopRecording = useCallback(() => {
+  const handleStopRecording = useCallback((lessonId?: string) => {
     if (onStopRecording) {
-      onStopRecording();
+      onStopRecording(lessonId);
     } else {
       setLocalPaneState('list');
     }
@@ -282,9 +291,11 @@ export function ClassroomView({
         mindMapTree={mindMapTree}
         mindMapNewIds={mindMapNewIds}
         onFocusRecording={() => setLocalPaneState('recording')}
+        audioSource={recorderAudioSource}
+        onChangeAudioSource={setRecorderAudioSource}
       />
     ),
-    [paneState, lessons, handleOpenLesson, handleStartRecording, handleStopRecording, effectiveRecordingSeconds, liveConcepts, liveTranscriptText, liveInterimText, recentLines, mindMapTree, mindMapNewIds],
+    [paneState, lessons, handleOpenLesson, handleStartRecording, handleStopRecording, effectiveRecordingSeconds, liveConcepts, liveTranscriptText, liveInterimText, recentLines, mindMapTree, mindMapNewIds, recorderAudioSource, setRecorderAudioSource],
   );
 
   const rightPanel = useMemo(

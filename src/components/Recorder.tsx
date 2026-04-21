@@ -27,6 +27,7 @@ import {
   resamplePcm,
   float32ToInt16,
 } from './recorder/recorder-utils';
+import { acquireAudioStream } from './recorder/recorder-audio-source';
 
 export const Recorder = forwardRef<RecorderHandle, RecorderProps>(function Recorder({
   onRecordingStart,
@@ -43,6 +44,7 @@ export const Recorder = forwardRef<RecorderHandle, RecorderProps>(function Recor
   autoStartSignal = 0,
   compactMode = false,
   contextHint = '',
+  audioSource = 'mic',
 }: RecorderProps, ref) {
   const [status, setStatus] = useState<RecorderStatus>('idle');
   const [elapsedMs, setElapsedMs] = useState(0);
@@ -80,6 +82,12 @@ export const Recorder = forwardRef<RecorderHandle, RecorderProps>(function Recor
   const audioContextRef = useRef<AudioContext | null>(null);
   const analyserRef = useRef<AnalyserNode | null>(null);
   const sourceNodeRef = useRef<MediaStreamAudioSourceNode | null>(null);
+  /**
+   * 录音源采集的 cleanup 回调（由 acquireAudioStream 返回）。
+   * 负责释放底层的麦克风 track / 系统音频 track / mixed 模式的 AudioContext。
+   * 每次 startRecording 成功后写入；stopRecording / restartRecording / 异常路径必须调用。
+   */
+  const audioCleanupRef = useRef<(() => void) | null>(null);
   const animationIdRef = useRef<number | null>(null);
   const startTimeRef = useRef<number>(0);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
@@ -272,14 +280,24 @@ export const Recorder = forwardRef<RecorderHandle, RecorderProps>(function Recor
         },
       });
 
-      stream = await navigator.mediaDevices.getUserMedia({
-        audio: {
-          channelCount: 1,
+      // 根据 audioSource 决定采集路径——详见 recorder-audio-source.ts。
+      // 'mic'    : 只麦克风（收集页永远走这个；线下课堂默认）
+      // 'system' : 只采电脑发出的声音（在家听网课的场景——课堂来自扬声器，不是麦克风前景）
+      // 'mixed'  : 两路合并到一个 stream，下游 (MediaRecorder / Analyser / PCM pipeline) 不用动
+      //
+      // 失败策略：
+      //   - system 失败 → 抛错（用户点了电脑声音但没勾"分享音频"，需要明确提示）
+      //   - mixed  失败 → acquireAudioStream 内部降级为纯 mic，effectiveSource='mic'
+      const acquired = await acquireAudioStream({
+        source: audioSource,
+        micConstraints: {
           echoCancellation: ENABLE_ECHO_CANCELLATION,
           noiseSuppression: ENABLE_NOISE_SUPPRESSION,
           autoGainControl: ENABLE_AUTO_GAIN_CONTROL,
         },
       });
+      stream = acquired.stream;
+      audioCleanupRef.current = acquired.cleanup;
 
       startTimeRef.current = Date.now();
       
@@ -539,7 +557,12 @@ export const Recorder = forwardRef<RecorderHandle, RecorderProps>(function Recor
       onRecordingStart?.(sessionIdRef.current, { isContinuation: shouldContinueIntoCurrentSession });
 
     } catch (err) {
-      if (stream) {
+      // 有可能 stream 已经通过 acquireAudioStream 拿到并注册了 cleanup；
+      // 也有可能还没走到那一步（比如 enhanceManager 初始化失败）。两边都兜住。
+      if (audioCleanupRef.current) {
+        try { audioCleanupRef.current(); } catch { /* ignore */ }
+        audioCleanupRef.current = null;
+      } else if (stream) {
         stream.getTracks().forEach(track => track.stop());
       }
       if (pcmProcessorRef.current) {
@@ -578,6 +601,7 @@ export const Recorder = forwardRef<RecorderHandle, RecorderProps>(function Recor
   }, [
     activeSessionId,
     apiKey,
+    audioSource,
     contextHint,
     continueCurrentSession,
     getCallbackMeta,
@@ -991,15 +1015,27 @@ export const Recorder = forwardRef<RecorderHandle, RecorderProps>(function Recor
   }, [contextHint, getCallbackMeta, onRecordingStop, onTranscriptEnhanced, onTranscriptUpdate, onTranscribing, onTranscriptionError]);
 
   const stopRecording = useCallback(async () => {
+    // 把每一步清理都 try/catch 包起来：任何一步出错都不能阻止 audioBlob 走到 onRecordingStop，
+    // 否则用户停录后什么都看不到（体感就是"录完没记录也存不下来"）。
 
-    if (asrClientRef.current) {
-      await asrClientRef.current.stop();
+    try {
+      if (asrClientRef.current) {
+        await asrClientRef.current.stop();
+        asrClientRef.current = null;
+      }
+    } catch (err) {
+      console.error('[Recorder] asrClient stop error:', err);
       asrClientRef.current = null;
     }
 
-    if (pcmProcessorRef.current) {
-      pcmProcessorRef.current.disconnect();
-      pcmProcessorRef.current.onaudioprocess = null;
+    try {
+      if (pcmProcessorRef.current) {
+        pcmProcessorRef.current.disconnect();
+        pcmProcessorRef.current.onaudioprocess = null;
+        pcmProcessorRef.current = null;
+      }
+    } catch (err) {
+      console.error('[Recorder] pcmProcessor disconnect error:', err);
       pcmProcessorRef.current = null;
     }
 
@@ -1013,11 +1049,26 @@ export const Recorder = forwardRef<RecorderHandle, RecorderProps>(function Recor
       timerRef.current = null;
     }
 
-    const audioBlob = await stopMediaRecorderSafely();
+    let audioBlob: Blob | null = null;
+    try {
+      audioBlob = await stopMediaRecorderSafely();
+    } catch (err) {
+      console.error('[Recorder] stopMediaRecorderSafely error:', err);
+    }
 
-    if (audioContextRef.current) {
-      await audioContextRef.current.close().catch(() => {});
+    try {
+      if (audioContextRef.current) {
+        await audioContextRef.current.close().catch(() => {});
+        audioContextRef.current = null;
+      }
+    } catch (err) {
+      console.error('[Recorder] audioContext close error:', err);
       audioContextRef.current = null;
+    }
+    // acquireAudioStream 返回的 cleanup：释放底层麦克风/系统音频 track、关闭 mixed 模式下的合并 AudioContext
+    if (audioCleanupRef.current) {
+      try { audioCleanupRef.current(); } catch { /* ignore */ }
+      audioCleanupRef.current = null;
     }
     sourceNodeRef.current = null;
     analyserRef.current = null;
@@ -1033,16 +1084,25 @@ export const Recorder = forwardRef<RecorderHandle, RecorderProps>(function Recor
         console.error('[Recorder] Enhancement finalize error:', err);
       }
 
-      enhanceManagerRef.current.dispose();
+      // await 过程中 ref 可能被别处（990 行 batch 的 .then）异步置 null，裸调会炸
+      try {
+        enhanceManagerRef.current?.dispose();
+      } catch (err) {
+        console.error('[Recorder] enhanceManager dispose error:', err);
+      }
       enhanceManagerRef.current = null;
     }
 
     if (effectiveTranscribeMode === 'batch' && audioBlob && audioBlob.size > 0) {
       onRecordingStop?.(audioBlob ?? undefined, getCallbackMeta());
-      await transcribeWithQwenASR(audioBlob, {
-        skipEnhancement: compactMode,
-        emitStopCallback: false,
-      });
+      try {
+        await transcribeWithQwenASR(audioBlob, {
+          skipEnhancement: compactMode,
+          emitStopCallback: false,
+        });
+      } catch (err) {
+        console.error('[Recorder] transcribeWithQwenASR error:', err);
+      }
     } else {
       if (effectiveTranscribeMode === 'streaming' && transcriptRef.current.length > 0) {
         const enhancedCount = enhanceStats.enhanced;
@@ -1093,6 +1153,10 @@ export const Recorder = forwardRef<RecorderHandle, RecorderProps>(function Recor
     if (audioContextRef.current) {
       await audioContextRef.current.close().catch(() => {});
       audioContextRef.current = null;
+    }
+    if (audioCleanupRef.current) {
+      try { audioCleanupRef.current(); } catch { /* ignore */ }
+      audioCleanupRef.current = null;
     }
     sourceNodeRef.current = null;
     analyserRef.current = null;
@@ -1156,6 +1220,11 @@ export const Recorder = forwardRef<RecorderHandle, RecorderProps>(function Recor
       sourceNodeRef.current = null;
       if (asrClientRef.current) asrClientRef.current.stop();
       if (enhanceManagerRef.current) enhanceManagerRef.current.dispose();
+      // acquireAudioStream cleanup——卸载时兜底释放采集资源
+      if (audioCleanupRef.current) {
+        try { audioCleanupRef.current(); } catch { /* ignore */ }
+        audioCleanupRef.current = null;
+      }
     };
   }, []);
 

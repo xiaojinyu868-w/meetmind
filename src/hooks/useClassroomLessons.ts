@@ -17,7 +17,7 @@
 
 import { useMemo, useEffect, useState, useCallback } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
-import { db, getPreference, setPreference, dedupeAudioSessions } from '@/lib/db';
+import { db, getPreference, setPreference, dedupeAudioSessions, repairMisflaggedVideoLinkRecordings, updateSessionStatus } from '@/lib/db';
 import { useEchoStore } from '@/stores/echo-store';
 import { useCollectionStore } from '@/stores/collection-store';
 import { audioSessionToLesson } from '@/components/classroom/lessonAdapter';
@@ -32,10 +32,30 @@ const REVIEWED_SESSIONS_KEY = 'classroom_reviewed_sessions';
  */
 let hasDedupedInThisSession = false;
 
+/**
+ * 本次 page load 是否已经跑过一次 video-link 录音标记修复。
+ * 同样幂等——修好之后 sourceType 不再是 'video-link'，重跑无命中。
+ */
+let hasRepairedMisflaggedInThisSession = false;
+
+/**
+ * 本次 page load 是否已经清理过孤立的 recording 态会话。
+ * 这是一个 page-lifetime 幂等动作，只在第一次进课堂 tab 时跑。
+ */
+let hasCleanedStaleRecordingsInThisSession = false;
+
 export interface UseClassroomLessonsResult {
   lessons: Lesson[];
   /** 把一节课标记为已复习（会自动持久化） */
   markReviewed: (sessionId: string) => void;
+  /**
+   * 把卡在 status='recording' 的幽灵会话降级为 completed。
+   *
+   * 适用场景：用户点击"正在录音"pill 的停止按钮，但 Recorder 其实
+   * 没有挂着这条 session（比如刷新页面、异常中断、旧版本脏数据）。
+   * 直接真停没反应，得靠这个兜底把 UI 上那颗红点熄掉。
+   */
+  cleanupStaleRecording: (sessionId: string) => Promise<void>;
 }
 
 export function useClassroomLessons(): UseClassroomLessonsResult {
@@ -59,6 +79,63 @@ export function useClassroomLessons(): UseClassroomLessonsResult {
         // eslint-disable-next-line no-console
         console.warn('[classroom] dedupe audioSessions failed:', err);
       });
+  }, []);
+
+  // ── 0a. 挂载时修复"有录音 blob 但被错标为 video-link"的历史数据 ──
+  // 背景（2026-04-20）：用户在"看 B 站视频 + 开系统内录"的场景下，录音
+  // upsert 历史上没显式传 sourceType，导致视频导入先写入的 'video-link'
+  // 被保留——下游 isStoredVideoSession 会误判这些录音卡为"纯视频"，点开
+  // 跳 B 站 iframe 而不是放用户本地录的那段音。
+  // 修复规则：blob 存在即说明真的录过音，不该是 video-link。videoUrl 保留。
+  useEffect(() => {
+    if (hasRepairedMisflaggedInThisSession) return;
+    hasRepairedMisflaggedInThisSession = true;
+    repairMisflaggedVideoLinkRecordings()
+      .then((fixed) => {
+        if (fixed > 0) {
+          // eslint-disable-next-line no-console
+          console.info('[classroom] repaired misflagged video-link recordings:', fixed);
+        }
+      })
+      .catch((err) => {
+        // eslint-disable-next-line no-console
+        console.warn('[classroom] repairMisflaggedVideoLinkRecordings failed:', err);
+      });
+  }, []);
+
+  // ── 0b. 挂载时清理"孤立的 recording"会话 ──
+  // 页面刚加载、没有任何 Recorder 挂着，但 IndexedDB 里如果有 status='recording'
+  // 的会话，一定是异常中断或旧版脏数据留下的"幽灵"——它会以红点脉动的
+  // ActiveLessonPill 霸占列表顶部，而且用户点它的停止按钮不会有反应。
+  //
+  // 页面加载时默认没有真在录音的 session（录音是用户主动触发的），
+  // 所以这里可以安全地把所有 recording 态强制降级为 completed。
+  //
+  // 边界：如果用户刷新页面的瞬间碰巧 Recorder 还没走到 setIsRecording(true)
+  // 那一步，也几乎不会命中这里（因为本 effect 是 mount once，Recorder 的写
+  // 入发生在随后的交互里）。
+  useEffect(() => {
+    if (hasCleanedStaleRecordingsInThisSession) return;
+    hasCleanedStaleRecordingsInThisSession = true;
+    (async () => {
+      try {
+        const stale = await db.audioSessions
+          .where('status')
+          .equals('recording')
+          .toArray();
+        if (stale.length === 0) return;
+        await Promise.all(
+          stale
+            .filter((s) => !!s.sessionId)
+            .map((s) => updateSessionStatus(s.sessionId, 'completed')),
+        );
+        // eslint-disable-next-line no-console
+        console.info('[classroom] cleaned stale recording sessions:', stale.length);
+      } catch (err) {
+        // eslint-disable-next-line no-console
+        console.warn('[classroom] cleanup stale recordings failed:', err);
+      }
+    })();
   }, []);
 
   // ── 1. audioSessions（主表） ──
@@ -102,6 +179,16 @@ export function useClassroomLessons(): UseClassroomLessonsResult {
       void setPreference(REVIEWED_SESSIONS_KEY, Array.from(next)).catch(() => undefined);
       return next;
     });
+  }, []);
+
+  const cleanupStaleRecording = useCallback(async (sessionId: string) => {
+    if (!sessionId) return;
+    try {
+      await updateSessionStatus(sessionId, 'completed');
+    } catch (err) {
+      // eslint-disable-next-line no-console
+      console.warn('[classroom] cleanupStaleRecording failed:', err);
+    }
   }, []);
 
   // ── 5. hasEcho 映射：echo.sourceCaptureIds → capture.metadata.sessionId ──
@@ -172,5 +259,5 @@ export function useClassroomLessons(): UseClassroomLessonsResult {
     });
   }, [sessions, transcriptSessionIds, highlightCountBySession, sessionIdsWithEcho, reviewedSet, materialsCountByDate]);
 
-  return { lessons, markReviewed };
+  return { lessons, markReviewed, cleanupStaleRecording };
 }

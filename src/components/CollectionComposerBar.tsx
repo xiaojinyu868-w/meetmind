@@ -96,6 +96,29 @@ export function CollectionComposerBar({
               value={value}
               onChange={(event) => onChangeValue(event.target.value)}
               onPaste={onPaste}
+              onKeyDown={(event) => {
+                // Enter 发送；Ctrl/Cmd+Enter 换行；IME 输入中不触发（中文输入法 Enter 是选词）
+                if (event.key !== 'Enter' || event.nativeEvent.isComposing) return;
+                if (event.ctrlKey || event.metaKey) {
+                  // Ctrl/Cmd+Enter = 换行（浏览器默认不会在 textarea 里为 Ctrl+Enter 插入换行，这里手动插入）
+                  event.preventDefault();
+                  const textarea = event.currentTarget;
+                  const start = textarea.selectionStart;
+                  const end = textarea.selectionEnd;
+                  const next = value.slice(0, start) + '\n' + value.slice(end);
+                  onChangeValue(next);
+                  // 光标移到换行后的位置
+                  requestAnimationFrame(() => {
+                    textarea.selectionStart = textarea.selectionEnd = start + 1;
+                  });
+                  return;
+                }
+                // 纯 Enter（含 Shift+Enter）= 发送
+                event.preventDefault();
+                if (value.trim().length > 0 && !sourceImporting) {
+                  onSubmit();
+                }
+              }}
               placeholder={placeholder}
               rows={rows}
               className="max-h-36 min-h-[32px] w-full resize-none bg-transparent text-[15px] leading-[26px] text-[#232322] caret-[#232322] placeholder:text-[#A3A39E]"
@@ -134,7 +157,8 @@ export function CollectionComposerBar({
                 onClick={(e) => { e.stopPropagation(); onOpenLiveRecorder(); }}
                 disabled={disableLiveRecorder}
                 className="flex h-8 w-8 items-center justify-center rounded-lg text-[#A3A39E] transition hover:text-[#8B6914] hover:bg-[#FDF3C0]/50 disabled:opacity-40"
-                aria-label="开始录课"
+                aria-label="说一段"
+                title="说一段（备忘录式短录音——完整录一节课请到课堂 Tab）"
               >
                 <Mic size={18} strokeWidth={1.5} />
               </button>
@@ -166,9 +190,10 @@ export function CollectionComposerBar({
               onClick={onOpenLiveRecorder}
               disabled={disableLiveRecorder}
               className="inline-flex items-center gap-1.5 rounded-full border border-[#E9E9E7] bg-white px-3 py-1.5 text-[12px] text-[#787774] transition hover:border-[#D0D0CC] hover:text-[#232322] disabled:opacity-40"
+              title="备忘录式短录音——完整录一节课请到课堂 Tab"
             >
               <Mic size={13} strokeWidth={1.5} />
-              录课
+              说一段
             </button>
             <button
               type="button"

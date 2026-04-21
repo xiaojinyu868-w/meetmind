@@ -117,9 +117,15 @@ export function toTutorMessageImages(images: Array<{ id: string; name: string; p
 
 export function formatTutorErrorMessage(error: unknown): string {
   const rawMessage = error instanceof Error ? error.message : String(error || '未知错误');
-  if (/请求过于频繁|稍后再试|rate limit|too many/i.test(rawMessage)) {
+  // 仅在文案明确是限流关键词时才改写为「问得有点快」，避免把通用 500/网络错误误报为限流
+  if (/请求过于频繁|rate limit|too many requests/i.test(rawMessage)) {
     const retryAfterMatch = rawMessage.match(/(\d+)\s*秒/);
-    const retryHint = retryAfterMatch ? `，大约 ${retryAfterMatch[1]} 秒后再试` : '，稍等十几秒再试一次';
+    const retryAfterSec = retryAfterMatch ? parseInt(retryAfterMatch[1], 10) : NaN;
+    // 0 秒不是有效的 retry-after，降级为通用提示
+    const retryHint =
+      Number.isFinite(retryAfterSec) && retryAfterSec > 0
+        ? `，大约 ${retryAfterSec} 秒后再试`
+        : '，稍等十几秒再试一次';
     return `现在问得有点快了${retryHint}。`;
   }
   return rawMessage;

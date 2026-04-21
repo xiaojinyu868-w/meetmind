@@ -19,6 +19,7 @@ import { memoryService, type ClassTimeline } from '@/lib/services/memory-service
 
 import { useAuth } from '@/lib/hooks/useAuth';
 import { runMemoryMigration } from '@/lib/services/memory-migration';
+import { ANONYMOUS_USER_ID, saveAudioSession, updateSessionStatus } from '@/lib/db';
 
 import { buildSelectedCollectionContextText, getCollectionContextTypeLabel } from '@/lib/capture/collection-context';
 
@@ -66,7 +67,6 @@ import {
   compactMultilineText,
   resolveSourceItemSourceKey,
   buildCollectionListItemFromSourceItem,
-  buildTutorSupportContextText,
   formatRelativeCollectionTime,
 } from '@/lib/utils/page-utils';
 import { useResponsive } from '@/hooks/useResponsive';
@@ -83,6 +83,7 @@ import type { ClassCheckHighlight } from '@/app/api/class-check/plan/route';
 import type { VideoInsightItem } from '@/components/VideoInsightTimeline';
 const ClassCheckOverlay = dynamic(() => import('@/components/ClassCheckOverlay').then(m => ({ default: m.ClassCheckOverlay })), { ssr: false });
 const ClassCheckToast = dynamic(() => import('@/components/ClassCheckToast').then(m => ({ default: m.ClassCheckToast })), { ssr: false });
+const SoftHint = dynamic(() => import('@/components/SoftHint').then(m => ({ default: m.SoftHint })), { ssr: false });
 const LearnerOnboarding = dynamic(() => import('@/components/LearnerOnboarding'), { ssr: false });
 
 import { AppLoading } from '@/components/AppLoading';
@@ -296,6 +297,9 @@ function StudentAppContent({
   const activeVideoInsightId = useCaptureEditorStore((s) => s.activeVideoInsightId);
   const extractedTermsHint = useCaptureEditorStore((s) => s.extractedTermsHint);
   const recorderAutoStartSignal = useCaptureEditorStore((s) => s.recorderAutoStartSignal);
+  // 录音来源（麦克风 / 电脑声音 / 两路都录）——仅传给课堂挂载点的 Recorder，
+  // 收集页永远走默认 'mic'（备忘录场景不需要电脑声采集）。
+  const recorderAudioSource = useCaptureEditorStore((s) => s.recorderAudioSource);
 
   // Capture Editor Store setter aliases
   const setSegments = captureEditorActions.setSegments;
@@ -1083,16 +1087,16 @@ function StudentAppContent({
     [selectedCollectionContextItems, selectedCollectionPrimaryId]
   );
 
+  // 复习 / 移动端 AI 对话的上下文：只保留用户"主动勾选"的收集项。
+  // 不再把 workspaceEchoes + supportReferences 默认塞进去——那会让 AI 在复习
+  // 单节课时，引用到其它课/其它笔记的内容（"杂糅"），违反"有根、不串味"的边界。
+  // 场景上下文（当前这节课）由 segments 承载，支持上下文只认用户的主动选择。
   const tutorSupportContextText = useMemo(() => {
-    const base = buildTutorSupportContextText(supportReferences, workspaceEchoes);
     const activeSelectedContext = mobileAIPreferSelectedContext
       ? (mobileAILaunchSupportContextText || selectedCollectionContextText)
       : selectedCollectionContextText;
-    return compactMultilineText(
-      [activeSelectedContext, base].filter(Boolean).join('\n\n'),
-      8500
-    );
-  }, [mobileAILaunchSupportContextText, mobileAIPreferSelectedContext, selectedCollectionContextText, supportReferences, workspaceEchoes]);
+    return compactMultilineText(activeSelectedContext || '', 8500);
+  }, [mobileAILaunchSupportContextText, mobileAIPreferSelectedContext, selectedCollectionContextText]);
 
   const currentLivePreview = useMemo(
     () =>
@@ -1470,10 +1474,13 @@ function StudentAppContent({
       {showMobileRecorder ? (
         <div className="relative z-30 flex-shrink-0 bg-[#F7F7F5] px-3 pb-[max(env(safe-area-inset-bottom),6px)] pt-2 lg:px-5 lg:pb-5 lg:pt-2">
           <div className="mx-auto w-full max-w-3xl">
+            {/* continueCurrentSession 强制 false：每次点"录课"= 一节新课，
+               必须生成新 sessionId。若沿用旧 sessionId，saveAudioSession
+               的 upsert 会把新录音合并到上一节课的 DB 行，新卡片不会出现。 */}
             <Recorder
               ref={recorderRef}
               activeSessionId={sessionId}
-              continueCurrentSession={collectionFeedItems.length > 0 || segments.length > 0}
+              continueCurrentSession={false}
               autoStartSignal={recorderAutoStartSignal}
               compactMode
               onRecordingStart={handleRecordingStart}
@@ -1523,8 +1530,26 @@ function StudentAppContent({
   );
   };
 
+  // 轻提示：当应用打开条件不满足时，就地给一句话而不开面板
+  const [softHint, setSoftHint] = useState<string | null>(null);
+
   // 包装 openWorkshopWindow：如果随堂检验正在进行，先关掉弹窗
   const safeOpenWorkshopWindow = useCallback((appKey: Parameters<typeof openWorkshopWindow>[0]) => {
+    // 学习报告前置条件：必须有 plan 且全部 checkpoint 都完成才值得打开
+    if (appKey === 'study-report') {
+      const plan = classCheck.plan;
+      const totalCheckpoints = plan?.checkpoints.length || 0;
+      const completedCount = new Set(classCheck.rounds.map(r => r.checkpointIndex)).size;
+      if (!plan || totalCheckpoints === 0) {
+        setSoftHint('开始播放视频再来吧');
+        return;
+      }
+      if (completedCount < totalCheckpoints) {
+        setSoftHint('做完题再来看吧');
+        return;
+      }
+    }
+
     if (classCheck.isCheckActive) {
       // 跳过当前检验轮次，恢复播放，然后打开窗口
       classCheck.handleCheckComplete({
@@ -1691,9 +1716,41 @@ function StudentAppContent({
                   captureEditorActions.setRecorderAutoStartSignal(Date.now());
                 }
               }}
-              onStopRecording={() => {
-                // 通过 ref 调 Recorder.stopRecording()
-                void recorderRef.current?.stopRecording();
+              onStopRecording={(lessonId) => {
+                const effectiveLessonId = lessonId || sessionId;
+
+                // 真在录 → 先立刻退出录课态，并写一张"正在理解"的占位卡，
+                // 再让隐藏的 Recorder 在后台慢慢收尾。
+                //
+                // 用户视角里，"结束这节课"应该是一个确定动作：点一次，
+                // 立刻回到课堂列表，并马上看见这节课已经在酿造。
+                // 不能等 MediaRecorder / ASR / blob flush 全部异步完成后
+                // 才给反馈——那会让人误以为第一次没点上，于是再点第二次。
+                if (isRecording) {
+                  sessionActions.setIsRecording(false);
+
+                  if (effectiveLessonId) {
+                    void saveAudioSession(null, effectiveLessonId, user?.id || ANONYMOUS_USER_ID, {
+                      subject: UIConfig.defaultSubject,
+                      duration: sessionMediaDurationMs,
+                      sourceType: 'recording',
+                    }).catch((err) => {
+                      console.warn('[classroom] pre-stop placeholder save failed:', err);
+                    });
+                  }
+
+                  void recorderRef.current?.stopRecording();
+                  return;
+                }
+                // 不在录但用户点了"正在录音" pill 的停止按钮——
+                // 说明这是一条卡在 status='recording' 的幽灵会话
+                // （旧版脏数据或异常中断）。直接把它标为 completed，
+                // UI 立刻把 pill 去掉。
+                if (effectiveLessonId) {
+                  void updateSessionStatus(effectiveLessonId, 'completed').catch((err) => {
+                    console.warn('[classroom] cleanup stale recording failed:', err);
+                  });
+                }
               }}
               onOpenLesson={async (lessonId) => {
                 // 真实 sessionId → 复用复习态
@@ -1713,11 +1770,14 @@ function StudentAppContent({
           {/* 这里挂载 = 录音发生在课堂 tab 内，不跳走 */}
           {/* 注意：不传 compactMode！compactMode 会强制 batch 模式，阻止流式 ASR 初始化。
              课堂 tab 需要实时转录，所以走 streaming 模式。UI 已被 sr-only 隐藏，样式无所谓。 */}
+          {/* continueCurrentSession 强制 false：课堂场景下"开始录音"= 一节新课，
+             必须生成新 sessionId，否则 saveAudioSession 的 upsert 会把新内容
+             merge 到上一次课的那一行，导致课堂列表看不到新卡片。 */}
           <div className="sr-only" aria-hidden>
             <Recorder
               ref={recorderRef}
               activeSessionId={sessionId}
-              continueCurrentSession={collectionFeedItems.length > 0 || segments.length > 0}
+              continueCurrentSession={false}
               autoStartSignal={recorderAutoStartSignal}
               onRecordingStart={handleRecordingStart}
               onRecordingStop={handleRecordingStop}
@@ -1727,6 +1787,7 @@ function StudentAppContent({
               onTranscriptEnhanced={handleTranscriptEnhanced}
               onAnchorMark={handleAnchorMark}
               contextHint={liveASRContextHint}
+              audioSource={recorderAudioSource}
             />
           </div>
         </div>
@@ -2150,6 +2211,11 @@ function StudentAppContent({
           onAccept={classCheck.acceptPendingCheckpoint}
           onDismiss={classCheck.dismissPendingCheckpoint}
         />
+      ) : null}
+
+      {/* 轻提示：应用打开条件不满足时的就地反馈 */}
+      {softHint ? (
+        <SoftHint text={softHint} onDismiss={() => setSoftHint(null)} />
       ) : null}
 
       {/* 主要内容区域 */}

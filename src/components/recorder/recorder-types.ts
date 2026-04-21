@@ -1,4 +1,7 @@
 import type { TranscriptSegment } from '@/types';
+import type { RecorderAudioSource } from '@/stores/capture-editor-store';
+
+export type { RecorderAudioSource };
 
 export interface RecorderCallbackMeta {
   recordingId?: string;
@@ -24,6 +27,16 @@ export interface RecorderProps {
   compactMode?: boolean;
   /** Optional context hint (course topic, terms, references) for ASR hot-word injection */
   contextHint?: string;
+  /**
+   * 录音来源：
+   * - 'mic'（默认）— 麦克风。收集页永远用这个。
+   * - 'system'    — 电脑发出的声音（通过 getDisplayMedia），适合在家听网课。
+   * - 'mixed'     — 麦克风 + 电脑声音 合并到一路上传 ASR（线上课 + 自己会提问）。
+   *
+   * 注：因浏览器限制，'system' 和 'mixed' 会弹出「选择共享屏幕/标签页」
+   * 对话框，用户必须勾选"分享系统音频/标签页音频"，否则会降级回纯麦克风。
+   */
+  audioSource?: RecorderAudioSource;
 }
 
 export interface RecorderHandle {

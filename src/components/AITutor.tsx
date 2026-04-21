@@ -1307,13 +1307,13 @@ export function AITutor({
     globalChatHistory.length === 0 &&
     !hasStreamOutput &&
     (hasLaunchPayload || globalLoading || isStreaming || (isCheckingAuth && !accessToken));
-  const shouldShowRealtimeCallHero =
-    isRealtimeTeacherMode &&
-    !isMobile &&
-    globalChatHistory.length === 0 &&
-    !hasStreamOutput &&
-    !shouldShowAutoLaunchState;
-  const shouldUseMobileRealtimeComposer = isRealtimeTeacherMode && isMobile;
+  // 进入语音同桌（通话）模式时——不论 PC 还是手机——都切到实时语音舞台。
+  // 桌面端过去会显示"待接通" hero 卡并走文字输出，这与"通话模式 = 实时语音"的预期相悖，已统一为 realtime 舞台。
+  const shouldUseRealtimeCallStage = isRealtimeTeacherMode;
+  // 兼容原有分支判断：hero 卡（原桌面空态）不再使用
+  const shouldShowRealtimeCallHero = false;
+  // 兼容原有分支判断：保留旧变量名以便其它条件继续工作
+  const shouldUseMobileRealtimeComposer = shouldUseRealtimeCallStage;
   const mobileRealtimeContextLabel = breakpoint
     ? `${formatTimestamp(breakpoint.timestamp)} 附近`
     : preferSupportContext

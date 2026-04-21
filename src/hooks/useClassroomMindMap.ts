@@ -120,6 +120,21 @@ export function useClassroomMindMap({
     }
   }, [enabled]);
 
+  // 新一节课开始时也清空：recordingStartAt 每次开新录音都会变，
+  // 这是区分"同一节续录"和"开新课"的最可靠信号。
+  // 如果没这一步，上一节课留下的思维导图会泄漏到新课开头，
+  // 用户体感是"我刚点开始，怎么已经有一张别人的图了"。
+  useEffect(() => {
+    if (!enabled) return;
+    if (!recordingStartAt) return;
+    setTree(EMPTY_TREE);
+    setNewNodeIds(new Set());
+    lastRequestAtRef.current = 0;
+    lastTriggerWasBoostRef.current = false;
+    priorTreeRef.current = EMPTY_TREE;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [recordingStartAt]);
+
   // 主题切换词嗅探（只看 interim + 最后 40 字的 transcript）
   const topicShiftDetected = useMemo(() => {
     if (!enabled) return false;

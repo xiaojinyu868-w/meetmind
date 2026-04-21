@@ -8,14 +8,16 @@ import type { TranscriptSegment } from '@/types';
 /**
  * POST /api/class-check/plan
  *
- * 一次 LLM 调用，同时输出：
- *   1. 知识点 checkpoints（含每个 checkpoint 的题目）
- *   2. 课堂精选片段 highlights
+ * 【v2】轻量版 plan 接口——只产出课堂结构骨架，不再生成题目。
+ *   1. title / summary —— 课堂元信息
+ *   2. checkpoints     —— 知识点断点（不含题目）
+ *   3. highlights      —— 课堂精选片段
  *
- * 前端拿到 plan 后无需再调第二次 API，播放到点直接弹已有题目。
+ * 题目由前端拿到 plan 后按 checkpoint 并发调用 /api/class-check/question 填充。
+ * 这样单次 LLM 调用从 ~8k tokens 降到 ~1.5k tokens，延迟从 60-180s 降到 15-30s。
  *
  * 输入：{ transcript: TranscriptSegment[], model?: string }
- * 输出：{ ok: true, plan: ClassCheckPlan }
+ * 输出：{ ok: true, plan: ClassCheckPlan }（plan.checkpoints[].questions = []）
  */
 
 export interface ClassCheckQuestionData {
@@ -44,7 +46,7 @@ export interface ClassCheckCheckpoint {
   greeting: string;
   /** 答完后的鼓励语 */
   encouragement: string;
-  /** 预生成的题目列表 */
+  /** 题目列表（plan 阶段为空数组，由 /api/class-check/question 按需填充） */
   questions: ClassCheckQuestionData[];
 }
 
@@ -67,20 +69,13 @@ export interface ClassCheckPlan {
   title: string;
   /** 全课概要（一句话） */
   summary: string;
-  /** 知识点检验点列表（按时间排序，含题目） */
+  /** 知识点检验点列表（按时间排序；题目待按需生成） */
   checkpoints: ClassCheckCheckpoint[];
   /** 课堂精选片段 */
   highlights: ClassCheckHighlight[];
 }
 
 // ── LLM 原始输出类型 ──
-
-interface PlanLLMQuestion {
-  stem?: string;
-  options?: string[];
-  answer?: string;
-  explanation?: string;
-}
 
 interface PlanLLMCheckpoint {
   triggerMs?: number;
@@ -90,7 +85,6 @@ interface PlanLLMCheckpoint {
   difficulty?: number;
   greeting?: string;
   encouragement?: string;
-  questions?: PlanLLMQuestion[];
 }
 
 interface PlanLLMHighlight {
@@ -122,27 +116,6 @@ function toInt(value: unknown, fallback: number, min: number, max: number): numb
   return fallback;
 }
 
-function normalizeOptions(options: unknown): string[] {
-  if (!Array.isArray(options)) return [];
-  return options
-    .map((item) => (typeof item === 'string' ? item.trim() : ''))
-    .filter((item) => item.length > 0)
-    .slice(0, 6);
-}
-
-function normalizeQuestion(raw: PlanLLMQuestion): ClassCheckQuestionData | null {
-  const stem = typeof raw.stem === 'string' ? raw.stem.trim() : '';
-  if (!stem) return null;
-  const options = normalizeOptions(raw.options);
-  if (options.length < 2) return null;
-  return {
-    stem,
-    options,
-    answer: typeof raw.answer === 'string' ? raw.answer.trim() : 'A',
-    explanation: typeof raw.explanation === 'string' ? raw.explanation.trim() : '',
-  };
-}
-
 function normalizePlan(raw: PlanLLMOutput | null, segments: TranscriptSegment[]): ClassCheckPlan | null {
   if (!raw || !Array.isArray(raw.checkpoints) || raw.checkpoints.length === 0) return null;
 
@@ -150,27 +123,21 @@ function normalizePlan(raw: PlanLLMOutput | null, segments: TranscriptSegment[])
     ? segments.reduce((max, s) => Math.max(max, s.endMs), 0)
     : 0;
 
-  const checkpoints: ClassCheckCheckpoint[] = raw.checkpoints
-    .filter((cp) => cp.topic && typeof cp.topic === 'string')
-    .map((cp, index) => {
-      // 解析该 checkpoint 的题目
-      const questions: ClassCheckQuestionData[] = (Array.isArray(cp.questions) ? cp.questions : [])
-        .map((q) => normalizeQuestion(q))
-        .filter((q): q is ClassCheckQuestionData => q !== null);
+  const rawCheckpoints = raw.checkpoints;
 
-      return {
-        triggerMs: toMs(cp.triggerMs, toMs(cp.endMs, (index + 1) * 300_000)),
-        startMs: toMs(cp.startMs, index === 0 ? 0 : toMs(raw.checkpoints![index - 1]?.endMs, 0)),
-        endMs: toMs(cp.endMs, toMs(cp.triggerMs, (index + 1) * 300_000)),
-        topic: cp.topic!.trim(),
-        difficulty: toInt(cp.difficulty, 3, 1, 5),
-        greeting: typeof cp.greeting === 'string' ? cp.greeting.trim() : '',
-        encouragement: typeof cp.encouragement === 'string' ? cp.encouragement.trim() : '',
-        questions,
-      };
-    })
-    // 必须有至少 1 道题
-    .filter((cp) => cp.triggerMs > 0 && cp.triggerMs <= totalDurationMs + 60_000 && cp.questions.length > 0)
+  const checkpoints: ClassCheckCheckpoint[] = rawCheckpoints
+    .filter((cp) => cp.topic && typeof cp.topic === 'string')
+    .map((cp, index) => ({
+      triggerMs: toMs(cp.triggerMs, toMs(cp.endMs, (index + 1) * 300_000)),
+      startMs: toMs(cp.startMs, index === 0 ? 0 : toMs(rawCheckpoints[index - 1]?.endMs, 0)),
+      endMs: toMs(cp.endMs, toMs(cp.triggerMs, (index + 1) * 300_000)),
+      topic: cp.topic!.trim(),
+      difficulty: toInt(cp.difficulty, 3, 1, 5),
+      greeting: typeof cp.greeting === 'string' ? cp.greeting.trim() : '',
+      encouragement: typeof cp.encouragement === 'string' ? cp.encouragement.trim() : '',
+      questions: [], // 题目按需生成
+    }))
+    .filter((cp) => cp.triggerMs > 0 && cp.triggerMs <= totalDurationMs + 60_000)
     .sort((a, b) => a.triggerMs - b.triggerMs);
 
   if (checkpoints.length === 0) return null;
@@ -226,16 +193,15 @@ export async function POST(request: NextRequest) {
           role: 'system',
           content: `你是一位坐在学生旁边、和他一起听完整节课的 AI 同桌。
 
-你的任务：分析课堂转录，一次性输出三样东西：
-1. 知识点检验计划（checkpoints）——在哪些时间点暂停
-2. 每个知识点的题目——直接出好，不需要二次生成
-3. 课堂精选片段（highlights）——最有价值的原文片段
+你的任务：快速梳理课堂结构，输出两样东西：
+1. 知识点检验计划（checkpoints）——在哪些时间点可以暂停、主题是什么
+2. 课堂精选片段（highlights）——最有价值的原文片段
 
-你的出题风格：
+注意：不要出题。题目由另一个接口按 checkpoint 单独生成。
+
+你的风格：
 - 像朋友聊天，不是考官审讯
 - greeting 要和刚才的内容相关，让学生觉得你在认真听
-- 题目检验真正理解，不是死记硬背
-- 解析简短，点到为止
 - encouragement 自然，不要套话
 
 严格输出 JSON，不要输出其他文字。`,
@@ -258,15 +224,7 @@ ${transcriptContext.text}
       "topic": "知识点主题",
       "difficulty": 2,
       "greeting": "一句和刚才内容相关的自然开场白",
-      "encouragement": "答完后的一句鼓励或提醒",
-      "questions": [
-        {
-          "stem": "题干",
-          "options": ["A. ...", "B. ...", "C. ...", "D. ..."],
-          "answer": "A",
-          "explanation": "简短解析"
-        }
-      ]
+      "encouragement": "答完后的一句鼓励或提醒"
     }
   ],
   "highlights": [
@@ -282,15 +240,14 @@ ${transcriptContext.text}
 
 要求：
 - checkpoints 3-7 个，找自然断点
-- 每个 checkpoint 出 1-3 道选择题（简单知识点 1 道，难的 2-3 道）
-- 每道题 4 个选项，1 个正确答案
 - highlights 数量 ≥ checkpoints，每个知识点至少一个精选片段
 - triggerMs 必须对应转录中真实的时间点
-- quote 必须是转录原文`,
+- quote 必须是转录原文
+- 不要输出 questions 字段`,
         },
       ],
       model,
-      { temperature: 0.3, maxTokens: 8192, responseFormat: 'json_object' }
+      { temperature: 0.3, maxTokens: 3072, responseFormat: 'json_object' }
     );
 
     const parsed = parseJsonResponse<PlanLLMOutput>(response.content);

@@ -46,11 +46,12 @@ export function ConfusionCard({
     setQuestion('');
   };
 
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
-      handleAskAI();
-    }
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    // 单行输入框：Enter 发送；IME 输入中不触发
+    if (e.key !== 'Enter' || (e.nativeEvent as KeyboardEvent).isComposing) return;
+    if (e.ctrlKey || e.metaKey) return; // 单行 input 无法换行，忽略 Ctrl/Cmd+Enter
+    e.preventDefault();
+    handleAskAI();
   };
 
   return (

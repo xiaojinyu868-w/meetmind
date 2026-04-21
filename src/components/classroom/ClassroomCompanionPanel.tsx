@@ -251,10 +251,23 @@ function CompanionComposer({
   }, [text, canSend, onSend]);
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
+    // Enter 发送；Ctrl/Cmd+Enter 换行；IME 输入中不触发
+    if (e.key !== 'Enter' || e.nativeEvent.isComposing) return;
+    if (e.ctrlKey || e.metaKey) {
+      // Ctrl/Cmd+Enter = 换行（浏览器默认不会在 textarea 里插入，手动处理）
       e.preventDefault();
-      handleSend();
+      const textarea = e.currentTarget;
+      const start = textarea.selectionStart;
+      const end = textarea.selectionEnd;
+      const next = text.slice(0, start) + '\n' + text.slice(end);
+      setText(next);
+      requestAnimationFrame(() => {
+        textarea.selectionStart = textarea.selectionEnd = start + 1;
+      });
+      return;
     }
+    e.preventDefault();
+    handleSend();
   };
 
   return (

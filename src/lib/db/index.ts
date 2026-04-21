@@ -23,6 +23,7 @@ export {
   getTodaySessions,
   cleanOldData,
   dedupeAudioSessions,
+  repairMisflaggedVideoLinkRecordings,
   getStorageUsage,
   getAllSessions,
   getSessionById,

@@ -277,8 +277,13 @@ export function useSimpleSSEStream() {
       
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
-        const retryAfter = response.headers.get('Retry-After');
-        const retryHint = retryAfter ? `，请约 ${retryAfter} 秒后再试` : '';
+        // 仅限流（429）且 Retry-After > 0 时追加 retry hint；避免把非限流错误（如 500）误包装成「请稍后再试」
+        const retryAfterRaw = response.headers.get('Retry-After');
+        const retryAfterSec = retryAfterRaw ? parseInt(retryAfterRaw, 10) : NaN;
+        const retryHint =
+          response.status === 429 && Number.isFinite(retryAfterSec) && retryAfterSec > 0
+            ? `，约 ${retryAfterSec} 秒后再试`
+            : '';
         throw new Error(errorData.error ? `${errorData.error}${retryHint}` : `请求失败: ${response.status}${retryHint}`);
       }
       

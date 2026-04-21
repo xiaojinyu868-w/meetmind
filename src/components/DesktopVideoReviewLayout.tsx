@@ -465,7 +465,6 @@ export function DesktopVideoReviewLayout(props: DesktopVideoReviewLayoutProps) {
                   });
                 }}
                 sharedWorkspaceContent={isSharedWorkspaceTab(reviewTab) ? renderSharedWorkspacePanel(reviewTab) : null}
-                hideTabBar
               />
             }
             rightPanel={

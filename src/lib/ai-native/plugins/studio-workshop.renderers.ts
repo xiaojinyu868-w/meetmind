@@ -118,8 +118,13 @@ export function buildRenderPayload(params: {
   podcastResult: VolcPodcastResult | null;
   podcastError: string;
   mode: StudioMode;
+  infographicImage?: {
+    imageUrl: string;
+    requestId: string;
+    model: string;
+  } | null;
 }) {
-  const { renderMode, cards, output, evidenceSegments, podcastResult, podcastError, mode } = params;
+  const { renderMode, cards, output, evidenceSegments, podcastResult, podcastError, mode, infographicImage } = params;
 
   if (renderMode === 'table') {
     return {
@@ -183,7 +188,7 @@ export function buildRenderPayload(params: {
         },
       ],
       draft,
-      image: null,
+      image: infographicImage || null,
     };
   }
 

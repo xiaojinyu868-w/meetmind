@@ -29,6 +29,16 @@ import type {
 import type { ActionItem } from '@/types/page-types';
 import type { VideoInsightItem } from '@/components/VideoInsightTimeline';
 
+/**
+ * Recorder 音频来源：
+ * - 'mic'      — 只录麦克风（默认，备忘录/线下课堂）
+ * - 'system'   — 只录电脑发出的声音（通过 getDisplayMedia，适合在家听网课）
+ * - 'mixed'    — 麦克风 + 电脑声音 合并成一路（线上课 + 自己会开口提问时）
+ *
+ * 这个字段由课堂页的「录音源选择器」写入，收集页不消费（收集页一律麦克风）。
+ */
+export type RecorderAudioSource = 'mic' | 'system' | 'mixed';
+
 // ==================== 类型定义 ====================
 
 interface CaptureEditorState {
@@ -45,6 +55,12 @@ interface CaptureEditorState {
   activeVideoInsightId: string | null;
   extractedTermsHint: string;
   recorderAutoStartSignal: number;
+  /**
+   * 当前选择的录音来源。默认 'mic'。
+   * 课堂页的 Recorder 会消费它来决定 getUserMedia 还是 getDisplayMedia，
+   * 或者两路合并。收集页不消费（备忘录始终麦克风）。
+   */
+  recorderAudioSource: RecorderAudioSource;
   /**
    * 流式 ASR 中，当前还未落定为 final segment 的「跟读」文本。
    * 由 Recorder 的 onInterim 写入，课堂录课视图订阅后显示在顶部，
@@ -74,6 +90,7 @@ interface CaptureEditorActions {
   setActiveVideoInsightId: (id: string | null) => void;
   setExtractedTermsHint: (hint: string) => void;
   setRecorderAutoStartSignal: (signal: number) => void;
+  setRecorderAudioSource: (source: RecorderAudioSource) => void;
   setLiveInterimText: (text: string) => void;
   setClassroomASRContextHint: (hint: string) => void;
 
@@ -99,6 +116,7 @@ const initialState: CaptureEditorState = {
   activeVideoInsightId: null,
   extractedTermsHint: '',
   recorderAutoStartSignal: 0,
+  recorderAudioSource: 'mic',
   liveInterimText: '',
   classroomASRContextHint: '',
 };
@@ -130,6 +148,7 @@ export const useCaptureEditorStore = create<CaptureEditorStore>()(
         setActiveVideoInsightId: (id) => set({ activeVideoInsightId: id }, false, 'setActiveVideoInsightId'),
         setExtractedTermsHint: (hint) => set({ extractedTermsHint: hint }, false, 'setExtractedTermsHint'),
         setRecorderAutoStartSignal: (signal) => set({ recorderAutoStartSignal: signal }, false, 'setRecorderAutoStartSignal'),
+        setRecorderAudioSource: (source) => set({ recorderAudioSource: source }, false, 'setRecorderAudioSource'),
         setLiveInterimText: (text) => set({ liveInterimText: text }, false, 'setLiveInterimText'),
         setClassroomASRContextHint: (hint) => set({ classroomASRContextHint: hint }, false, 'setClassroomASRContextHint'),
 
@@ -155,6 +174,7 @@ export const useVideoInsightItems = () => useCaptureEditorStore((s) => s.videoIn
 export const useActiveVideoInsightId = () => useCaptureEditorStore((s) => s.activeVideoInsightId);
 export const useExtractedTermsHint = () => useCaptureEditorStore((s) => s.extractedTermsHint);
 export const useRecorderAutoStartSignal = () => useCaptureEditorStore((s) => s.recorderAutoStartSignal);
+export const useRecorderAudioSource = () => useCaptureEditorStore((s) => s.recorderAudioSource);
 export const useLiveInterimText = () => useCaptureEditorStore((s) => s.liveInterimText);
 export const useClassroomASRContextHint = () => useCaptureEditorStore((s) => s.classroomASRContextHint);
 export const useCaptureEditorActions = () => useCaptureEditorStore((s) => s.actions);
