@@ -20,7 +20,7 @@ api/route.ts → services → lib/utils, lib/db, lib/config
 | 文件 | 行数 | 职责 |
 |------|------|------|
 | `qwen-asr-service.ts` | 709 | 通义千问 ASR（同步短音频 + 异步长音频） |
-| `dashscope-asr-service.ts` | 460 | DashScope WebSocket 实时 ASR 客户端 |
+| `dashscope-asr-service.ts` | 460 | DashScope WebSocket 实时 ASR 客户端（`sendContextHint(hint, languageMode)` 支持 'auto'\|'zh'\|'en'，'auto' 为双语混合课堂最佳实践——Qwen 官方推荐混合语种时不传 language） |
 | `transcript-enhancer.ts` | 473 | 转录文本增强（规则→词库→LLM 分层纠错） |
 | `media-tooling.ts` | 244 | ffmpeg/ffprobe 调用、转码、公网 URL 解析 |
 

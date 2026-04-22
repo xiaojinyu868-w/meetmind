@@ -44,6 +44,7 @@ export const Recorder = forwardRef<RecorderHandle, RecorderProps>(function Recor
   autoStartSignal = 0,
   compactMode = false,
   contextHint = '',
+  languageMode = 'auto',
   audioSource = 'mic',
 }: RecorderProps, ref) {
   const [status, setStatus] = useState<RecorderStatus>('idle');
@@ -243,7 +244,7 @@ export const Recorder = forwardRef<RecorderHandle, RecorderProps>(function Recor
         onTermsDiscovered: (termsHint) => {
           // When auto-discovered terms become available, also push them to ASR
           if (asrClientRef.current?.isConnected() && termsHint.trim()) {
-            asrClientRef.current.sendContextHint(termsHint.trim());
+            asrClientRef.current.sendContextHint(termsHint.trim(), languageMode);
           }
         },
         onEnhanced: (segments) => {
@@ -508,10 +509,9 @@ export const Recorder = forwardRef<RecorderHandle, RecorderProps>(function Recor
         if (!started) {
           asrClientRef.current = null;
         } else {
-          // Send context hint for hot-word injection
-          if (contextHint.trim()) {
-            asrClientRef.current.sendContextHint(contextHint.trim());
-          }
+          // Send context hint + languageMode for hot-word injection and language binding
+          // 允许空 hint（学生第一次录课没有热词），languageMode 单独生效
+          asrClientRef.current.sendContextHint(contextHint.trim(), languageMode);
           contextUpdateCountRef.current = 0;
 
           const bufferSize = 4096;
@@ -603,6 +603,7 @@ export const Recorder = forwardRef<RecorderHandle, RecorderProps>(function Recor
     apiKey,
     audioSource,
     contextHint,
+    languageMode,
     continueCurrentSession,
     getCallbackMeta,
     onRecordingStart,
@@ -801,10 +802,8 @@ export const Recorder = forwardRef<RecorderHandle, RecorderProps>(function Recor
 
       const started = await asrClientRef.current.start();
       if (started) {
-        // Send context hint + recent transcript to new session
-        if (contextHint.trim()) {
-          asrClientRef.current.sendContextHint(contextHint.trim());
-        }
+        // Send context hint + languageMode + recent transcript to new session
+        asrClientRef.current.sendContextHint(contextHint.trim(), languageMode);
         const recentText = transcriptRef.current
           .slice(-15)
           .map((s) => s.text)
@@ -845,6 +844,7 @@ export const Recorder = forwardRef<RecorderHandle, RecorderProps>(function Recor
   }, [
     apiKey,
     contextHint,
+    languageMode,
     elapsedMs,
     getCallbackMeta,
     onTranscriptUpdate,

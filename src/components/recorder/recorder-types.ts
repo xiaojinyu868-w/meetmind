@@ -28,6 +28,14 @@ export interface RecorderProps {
   /** Optional context hint (course topic, terms, references) for ASR hot-word injection */
   contextHint?: string;
   /**
+   * 语种模式（Qwen 官方最佳实践）：
+   * - 'auto'（默认）— 不传 language 参数，让模型自动识别。**推荐用于双语混合课堂**（如 CS/商科英文教材中文授课）。
+   * - 'zh'          — 明确中文课。
+   * - 'en'          — 明确英文课。
+   * Qwen 文档明确说明："若音频语种不确定或包含多种语种（中英日韩混合），请勿指定 language 参数"。
+   */
+  languageMode?: 'auto' | 'zh' | 'en';
+  /**
    * 录音来源：
    * - 'mic'（默认）— 麦克风。收集页永远用这个。
    * - 'system'    — 电脑发出的声音（通过 getDisplayMedia），适合在家听网课。

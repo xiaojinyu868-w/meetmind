@@ -337,15 +337,23 @@ export class DashScopeASRClient {
   /**
    * Send initial context hint (hot words, course topic, references) to server
    * before audio starts flowing. The server injects this into DashScope session.
+   *
+   * @param contextHint 热词 / 术语表 / 课程背景
+   * @param languageMode 语种模式：
+   *   - 'auto'（默认）= 不传 language 参数（Qwen 官方推荐：混合语种或不确定时应省略）
+   *   - 'zh' = 明确中文
+   *   - 'en' = 明确英文
    */
-  sendContextHint(contextHint: string): void {
+  sendContextHint(contextHint: string, languageMode: 'auto' | 'zh' | 'en' = 'auto'): void {
     if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return;
-    if (!contextHint.trim()) return;
+    // 允许空 hint 但指定 languageMode 的场景（比如录课一开始没有热词，但用户选了英文课）
+    if (!contextHint.trim() && languageMode === 'auto') return;
 
     this.ws.send(
       JSON.stringify({
         type: 'context-hint',
         contextHint: contextHint.trim(),
+        languageMode,
       })
     );
   }

@@ -437,6 +437,12 @@ app.prepare().then(() => {
 
     let contextHint = '';
     let recentFinalTexts = [];
+    // 语种模式：
+    //   'auto' = 不传 language 参数（Qwen 官方推荐：混合语种或不确定时应省略）
+    //   'zh'   = 明确中文
+    //   'en'   = 明确英文
+    // 默认 'auto'，让模型自动识别中英混合。客户端可通过 'context-hint' 消息携带 languageMode 覆盖。
+    let languageMode = 'auto';
     const CONTEXT_UPDATE_INTERVAL = 5; // update DashScope context every N final segments
     let finalSegmentCountSinceUpdate = 0;
 
@@ -451,15 +457,32 @@ app.prepare().then(() => {
     }
 
     function buildASRPrompt() {
-      const parts = [];
+      // 分节组织：热词区（固定，靠前）+ 最近识别区（滚动）
+      // 目的：避免 30 分钟后 recentContext 把 3000 字配额挤满、热词被截断
+      // 优先级：热词 > 最近识别，各自独立截断
+      const sections = [];
+      const HINT_MAX = 2000;  // 热词最多占 2000 字
+      const RECENT_MAX = 800; // 最近识别最多占 800 字
+
       if (contextHint) {
-        parts.push(contextHint);
+        const hint = contextHint.slice(0, HINT_MAX);
+        sections.push(`[课程术语与专有名词]\n${hint}`);
       }
       if (recentFinalTexts.length > 0) {
-        const recentContext = recentFinalTexts.slice(-15).join('');
-        parts.push(`已识别文本：${recentContext}`);
+        // 从尾部倒序取，直到累计长度超过 RECENT_MAX
+        const reversed = [...recentFinalTexts].reverse();
+        const picked = [];
+        let total = 0;
+        for (const text of reversed) {
+          if (total + text.length > RECENT_MAX) break;
+          picked.unshift(text);
+          total += text.length;
+        }
+        if (picked.length > 0) {
+          sections.push(`[最近已识别内容]\n${picked.join('')}`);
+        }
       }
-      return parts.join('\n\n').slice(0, 3000) || '';
+      return sections.join('\n\n') || '';
     }
 
     function sendSessionUpdate(extraLog) {
@@ -480,14 +503,20 @@ app.prepare().then(() => {
       }
 
       const prompt = buildASRPrompt();
+      // Qwen 官方最佳实践：混合语种或不确定时，不传 language 参数，让模型自动识别。
+      // 只有客户端明确指定 'zh' 或 'en' 时才下发 language。
+      const transcriptionConfig = {
+        semantic_punctuation_enabled: true,
+        ...(prompt ? { prompt } : {}),
+      };
+      if (languageMode === 'zh' || languageMode === 'en') {
+        transcriptionConfig.language = languageMode;
+      }
+
       const sessionConfig = {
         input_audio_format: 'pcm',
         sample_rate: sampleRate,
-        input_audio_transcription: {
-          language: 'zh',
-          semantic_punctuation_enabled: true,
-          ...(prompt ? { prompt } : {}),
-        },
+        input_audio_transcription: transcriptionConfig,
         turn_detection: {
           type: 'server_vad',
           threshold: 0.2,
@@ -502,7 +531,7 @@ app.prepare().then(() => {
       }));
 
       if (extraLog) {
-        console.log(`[ASR-Proxy] Session updated (${extraLog}), prompt length: ${prompt.length}`);
+        console.log(`[ASR-Proxy] Session updated (${extraLog}), lang=${languageMode}, prompt length: ${prompt.length}`);
       }
     }
 
@@ -785,6 +814,34 @@ app.prepare().then(() => {
                 break;
               }
 
+              // 【抗幻觉 · VAD 能量门控】Whisper 类 ASR 最常见的幻觉：
+              //   在静音段或纯噪声段也会"听到"合理的词（"嗯"、"谢谢"、"好"、"for"）。
+              //   Qwen3-ASR-Flash 也有同样问题（你看到的"candidate of prod"后面蹦出"嗯"）。
+              // 启发式过滤策略（工业界抗 Whisper 幻觉的标准做法）：
+              //   1. 音段时长过短（< 300ms）但文本长度 ≥ 3 字 → 物理上不可能说这么多字，丢弃
+              //   2. 常见幻觉短语白名单（"嗯" "好" "谢谢" "啊" 等单字叹词）若整段音频不足 500ms → 丢弃
+              const durationMs = Math.max(0, endTime - beginTime);
+              const isLikelyHallucination = (() => {
+                const trimmedText = finalText.trim();
+                const textLen = trimmedText.length;
+                if (durationMs > 0 && durationMs < 300 && textLen >= 3) {
+                  return true; // 极短音段却有实词，典型幻觉
+                }
+                if (durationMs > 0 && durationMs < 500 && textLen <= 2) {
+                  // 极短音段 + 单字叹词，视为 VAD 触发边界的噪音
+                  const suspiciousSingleTokens = ['嗯', '啊', '哦', '呃', '唉', '哼', '嗯嗯', '好', 'uh', 'um', 'ah'];
+                  if (suspiciousSingleTokens.includes(trimmedText.toLowerCase())) {
+                    return true;
+                  }
+                }
+                return false;
+              })();
+
+              if (isLikelyHallucination) {
+                console.log(`[ASR-Proxy] Dropped likely hallucination: "${finalText}" (duration=${durationMs}ms)`);
+                break;
+              }
+
               const splitSegments = splitLongTranscript(finalText, beginTime, endTime);
               for (const seg of splitSegments) {
                 sendFinalSegment(seg, itemId);
@@ -904,16 +961,28 @@ app.prepare().then(() => {
 
         if (msg.type === 'context-hint') {
           const hint = typeof msg.contextHint === 'string' ? msg.contextHint.trim() : '';
+          let languageModeChanged = false;
+          // 接收客户端声明的语种模式。允许值：'auto' | 'zh' | 'en'。其他值一律落回 'auto'。
+          if (typeof msg.languageMode === 'string') {
+            const mode = msg.languageMode.trim().toLowerCase();
+            if (mode === 'zh' || mode === 'en' || mode === 'auto') {
+              if (languageMode !== mode) {
+                languageMode = mode;
+                languageModeChanged = true;
+                console.log(`[ASR-Proxy] languageMode set to '${mode}'`);
+              }
+            }
+          }
           if (hint) {
             contextHint = hint.slice(0, 3000);
             console.log('[ASR-Proxy] Received context hint, length:', contextHint.length);
-            // 只有在 DashScope 还没 session.updated 之前才重发 session.update；
-            // session 已建立则只更新内存变量（DashScope 不允许二次 session.update）。
-            if (!isSessionReady) {
-              sendSessionUpdate('context-hint received (pre-ready)');
-            } else {
-              console.log('[ASR-Proxy] Context hint received AFTER session ready - stored for next session only');
-            }
+          }
+          // 只要 hint 或 languageMode 有变化，且 session 还没起来，就刷新 session.update。
+          // session 已建立则只更新内存变量（DashScope 不允许二次 session.update）。
+          if ((hint || languageModeChanged) && !isSessionReady) {
+            sendSessionUpdate('context-hint received (pre-ready)');
+          } else if (hint || languageModeChanged) {
+            console.log('[ASR-Proxy] context-hint/languageMode received AFTER session ready - stored for next session only');
           }
           return;
         }

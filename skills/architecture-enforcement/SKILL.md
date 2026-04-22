@@ -13,9 +13,9 @@
 
 | 类型 | 上限 | 当前超标文件 |
 |------|------|-------------|
-| 页面/组件 | 500 行 | `page.tsx`(9714), `AITutor.tsx`(~2100), `Recorder.tsx`(~1800) |
-| API 路由 | 500 行 | `video/import/route.ts`(2074), `tutor/route.ts`(1778) |
-| 服务文件 | 500 行 | `workspace-echo-service.ts`(1000), `classroom-data-service.ts`(946) |
+| 页面/组件 | 500 行 | `page.tsx`(2302), `AITutor.tsx`(~2357), `Recorder.tsx`(~1781) |
+| API 路由 | 500 行 | `video/import/route.ts`(1212), `tutor/route.ts`(886) |
+| 服务文件 | 500 行 | `workspace-echo-service.ts`(1297), `classroom-data-service.ts`(1009) |
 | 工具/类型 | 300 行 | — |
 
 **规则**：
@@ -42,10 +42,8 @@ src/
 
 **依赖方向规则**（单向，不可反向）：
 ```
-app/api → services → utils
-app/pages → components → hooks → stores
-components → types（共享类型）
-services → types（共享类型）
+app/api → lib/services → lib/utils/, lib/db/, lib/config/
+app/pages → components → hooks → stores → types
 ```
 
 **禁止**：
@@ -88,11 +86,11 @@ MeetMind 的业务域：
 
 以下文件是已知超标的遗留债务，不是新增的：
 
-- `page.tsx` (9714行) — 最高优先级拆分目标，按域拆为 hooks + sub-components
-- `video/import/route.ts` (2074行) — 按 stage 拆分（xiaoyuzhou/bilibili/ytdlp 各自独立）
-- `tutor/route.ts` (1778行) — 拆分 intent handling / stream / context building
-- `AITutor.tsx` (~2100行) — 拆分为 chat/input/history sub-components
-- `Recorder.tsx` (~1800行) — 拆分为 recording/playback/upload sub-components
+- `page.tsx` (2302行) — 最高优先级拆分目标，按域拆为 hooks + sub-components
+- `video/import/route.ts` (1212行) — 按 stage 拆分（xiaoyuzhou/bilibili/ytdlp 各自独立）
+- `tutor/route.ts` (886行) — 拆分 intent handling / stream / context building
+- `AITutor.tsx` (~2357行) — 拆分为 chat/input/history sub-components
+- `Recorder.tsx` (~1781行) — 拆分为 recording/playback/upload sub-components
 
 agent 在修改这些文件时**不要企图一次性拆分**，而是：
 1. 先完成当前任务

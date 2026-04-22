@@ -1,0 +1,45 @@
+# Lobster Workflow: 套磁自动化
+
+name: taoci-automation
+version: 1.0.0
+description: 从学生背景出发，自动查找导师 → 生成套磁信 → 推送结果
+
+steps:
+  - id: collect-profile
+    type: prompt
+    message: |
+      收集学生的以下信息：
+      1. 研究方向/兴趣
+      2. 目标地区
+      3. 学历层次（硕士/博士/博后）
+      4. 已有成果（论文/项目）
+      如果信息不完整，基于已有信息推断。
+
+  - id: search-advisors
+    type: skill
+    skill: academic-search
+    input:
+      direction: "{{collect-profile.direction}}"
+      region: "{{collect-profile.region}}"
+      level: "{{collect-profile.level}}"
+
+  - id: generate-letters
+    type: iterate
+    over: "{{search-advisors.results}}"
+    steps:
+      - id: draft-letter
+        type: prompt
+        message: |
+          基于以下信息生成套磁信：
+          - 导师：{{item.name}}，研究方向：{{item.research}}
+          - 导师近期论文：{{item.papers}}
+          - 学生背景：{{collect-profile}}
+          - 学生成果：{{collect-profile.achievements}}
+          要求：个性化，体现读过导师论文，中文或英文根据导师所在地区。
+
+  - id: push-results
+    type: tool
+    tool: meetmind-push-task
+    input:
+      type: taoci-results
+      data: "{{generate-letters}}"

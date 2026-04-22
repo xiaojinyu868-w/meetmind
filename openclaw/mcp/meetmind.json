@@ -1,0 +1,35 @@
+{
+  "mcpServers": {
+    "meetmind": {
+      "type": "http",
+      "url": "http://localhost:3001/api/agent/mcp",
+      "description": "MeetMind API — 学习上下文、课堂录音、AI理解",
+      "tools": [
+        {
+          "name": "get_user_context",
+          "description": "获取用户的学术画像：学习记录、课程、知识点掌握情况",
+          "method": "GET",
+          "path": "/api/agent/context"
+        },
+        {
+          "name": "push_task_result",
+          "description": "将 Agent 任务结果推送回 MeetMind（批注、套磁信等）",
+          "method": "POST",
+          "path": "/api/agent/task"
+        },
+        {
+          "name": "search_sources",
+          "description": "语义搜索用户的学习资料",
+          "method": "POST",
+          "path": "/api/workspace/search"
+        },
+        {
+          "name": "list_captures",
+          "description": "列出用户的课堂录音和素材",
+          "method": "GET",
+          "path": "/api/workspace/captures"
+        }
+      ]
+    }
+  }
+}
