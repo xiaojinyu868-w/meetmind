@@ -262,8 +262,7 @@ src/
 │   ├── recorder/DOMAIN.md
 │   ├── mobile/DOMAIN.md
 │   ├── layout/DOMAIN.md
-│   ├── teacher/DOMAIN.md
-│   ├── parent/DOMAIN.md
+│   ├── classroom/DOMAIN.md
 │   └── business/DOMAIN.md
 ├── hooks/DOMAIN.md       # hooks 索引（含 Omni realtime 通话 + sourceImport）
 ├── stores/DOMAIN.md      # Zustand 状态（7 stores，~89 状态已迁移）
@@ -299,7 +298,7 @@ src/
 | `src/hooks/useOmniRealtimeCall.ts` | 793 | Qwen Omni realtime 语音通话 hook，承接麦克风上行、语音下行与接通状态 |
 | `src/lib/utils/page-utils.ts` | 10 | Barrel re-export，实际实现在 `page/` 子目录（5 个模块，共 1123 行） |
 | `src/lib/ai-native/plugins/studio-workshop.plugin.ts` | ~425 | Studio Workshop 主文件，子模块：types/podcast/renderers |
-| `src/lib/services/commonstack-echo-service.ts` | 272 | Echo LLM 调用，System Prompt 在此 |
+| `src/lib/services/commonstack-echo-service.ts` | ~273 | Echo LLM 调用，System Prompt 在此 |
 | `src/lib/services/workspace-echo-service.ts` | 1297 | Echo 数据管线 |
 | `src/components/EchoCard.tsx` | ~209 | 回声卡，必须遵守设计系统 |
 
