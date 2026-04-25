@@ -1,9 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import mammoth from 'mammoth';
 import type { TranscriptSegment } from '@/types';
+import { createLogger } from '@/lib/logger';
 
 export const runtime = 'nodejs';
 export const maxDuration = 300;
+
+const log = createLogger('sources-ingest');
 
 const MAX_FILE_BYTES = 20 * 1024 * 1024;
 const DEFAULT_DASHSCOPE_BASE_URL = 'https://dashscope.aliyuncs.com/compatible-mode/v1';
@@ -297,6 +300,7 @@ async function uploadFileToDashScope(file: File, config: DashScopeDocConfig): Pr
   form.append('purpose', 'file-extract');
   form.append('file', file, file.name);
 
+  const startedAt = Date.now();
   const response = await fetchWithTimeout(
     `${config.baseUrl}/files`,
     {
@@ -309,19 +313,38 @@ async function uploadFileToDashScope(file: File, config: DashScopeDocConfig): Pr
 
   const payload = await readJsonSafely(response);
   if (!response.ok) {
+    log.warn('dashscope upload failed', {
+      fileName: file.name,
+      size: file.size,
+      httpStatus: response.status,
+      elapsedMs: Date.now() - startedAt,
+      error: getErrorMessage(payload, '未知错误'),
+    });
     throw new Error(`上传文件到 DashScope 失败（HTTP ${response.status}）：${getErrorMessage(payload, '未知错误')}`);
   }
 
   const fileId = (payload as DashScopeFileUploadResponse | null)?.id;
   if (!fileId || typeof fileId !== 'string') {
+    log.warn('dashscope upload returned no file_id', {
+      fileName: file.name,
+      size: file.size,
+      elapsedMs: Date.now() - startedAt,
+    });
     throw new Error('上传文件到 DashScope 失败：未返回 file_id');
   }
 
+  log.info('dashscope upload ok', {
+    fileName: file.name,
+    size: file.size,
+    fileId,
+    elapsedMs: Date.now() - startedAt,
+  });
   return fileId;
 }
 
 async function waitForDashScopeFileReady(fileId: string, config: DashScopeDocConfig): Promise<void> {
   const deadline = Date.now() + config.fileReadyMaxWaitMs;
+  const startedAt = Date.now();
 
   while (Date.now() < deadline) {
     const response = await fetchWithTimeout(
@@ -344,12 +367,22 @@ async function waitForDashScopeFileReady(fileId: string, config: DashScopeDocCon
       return;
     }
     if (['failed', 'error', 'cancelled'].includes(status)) {
+      log.warn('dashscope file processing failed', {
+        fileId,
+        status,
+        elapsedMs: Date.now() - startedAt,
+      });
       throw new Error(`DashScope 文件处理失败，状态：${status}`);
     }
 
     await sleep(config.fileReadyPollIntervalMs);
   }
 
+  log.warn('dashscope file ready timeout', {
+    fileId,
+    waitedMs: Date.now() - startedAt,
+    maxWaitMs: config.fileReadyMaxWaitMs,
+  });
   throw new Error(`等待 DashScope 文件就绪超时（>${config.fileReadyMaxWaitMs}ms）`);
 }
 
@@ -362,6 +395,7 @@ async function parseFileByDashScope(fileId: string, config: DashScopeDocConfig):
     '4. 仅输出 Markdown 正文，不要附加解释。',
   ].join('\n');
 
+  const startedAt = Date.now();
   const response = await fetchWithTimeout(
     `${config.baseUrl}/chat/completions`,
     {
@@ -391,14 +425,32 @@ async function parseFileByDashScope(fileId: string, config: DashScopeDocConfig):
 
   const payload = await readJsonSafely(response);
   if (!response.ok) {
+    log.warn('dashscope chat failed', {
+      fileId,
+      model: config.model,
+      httpStatus: response.status,
+      elapsedMs: Date.now() - startedAt,
+      error: getErrorMessage(payload, '未知错误'),
+    });
     throw new Error(`DashScope 文档解析请求失败（HTTP ${response.status}）：${getErrorMessage(payload, '未知错误')}`);
   }
 
   const content = extractDashScopeCompletionText(payload);
   if (!content.trim()) {
+    log.warn('dashscope chat returned empty content', {
+      fileId,
+      model: config.model,
+      elapsedMs: Date.now() - startedAt,
+    });
     throw new Error('DashScope 文档解析返回为空');
   }
 
+  log.info('dashscope chat ok', {
+    fileId,
+    model: config.model,
+    elapsedMs: Date.now() - startedAt,
+    chars: content.length,
+  });
   return stripMarkdownCodeFence(content);
 }
 
@@ -418,6 +470,10 @@ async function deleteDashScopeFile(fileId: string, config: DashScopeDocConfig): 
 async function parseDocumentWithDashScope(file: File): Promise<string> {
   const config = getDashScopeDocConfig();
   if (!config.apiKey) {
+    log.error('DASHSCOPE_API_KEY missing', {
+      fileName: file.name,
+      size: file.size,
+    });
     throw new Error('未配置 DASHSCOPE_API_KEY，无法使用大模型文档解析');
   }
 
@@ -432,7 +488,16 @@ async function parseDocumentWithDashScope(file: File): Promise<string> {
         return await parseFileByDashScope(fileId, config);
       } catch (error) {
         lastError = error;
-        if (attempt >= config.retryCount || !isRetryableDashScopeError(error)) {
+        const message = error instanceof Error ? error.message : String(error);
+        const retryable = isRetryableDashScopeError(error);
+        log.warn('dashscope chat attempt failed', {
+          fileId,
+          attempt,
+          retryable,
+          willRetry: retryable && attempt < config.retryCount,
+          reason: message,
+        });
+        if (attempt >= config.retryCount || !retryable) {
           throw error;
         }
         const backoffMs = Math.min(5000, 700 * 2 ** attempt);
@@ -461,19 +526,57 @@ async function extractDocxWithMammoth(file: File): Promise<string> {
 }
 
 async function extractDocumentText(file: File, extension: string): Promise<string> {
+  const startedAt = Date.now();
+  log.info('extract start', {
+    fileName: file.name,
+    size: file.size,
+    extension,
+  });
+
   if (isPlainTextExtension(extension)) {
-    return extractPlainText(file);
+    const text = await extractPlainText(file);
+    log.info('extract ok (plain)', {
+      fileName: file.name,
+      extension,
+      chars: text.length,
+      elapsedMs: Date.now() - startedAt,
+    });
+    return text;
   }
 
   if (extension === 'pdf' || extension === 'docx' || extension === 'ppt' || extension === 'pptx') {
     try {
-      return await parseDocumentWithDashScope(file);
+      const text = await parseDocumentWithDashScope(file);
+      log.info('extract ok (dashscope)', {
+        fileName: file.name,
+        extension,
+        chars: text.length,
+        elapsedMs: Date.now() - startedAt,
+      });
+      return text;
     } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      log.error('extract failed (dashscope)', {
+        fileName: file.name,
+        size: file.size,
+        extension,
+        elapsedMs: Date.now() - startedAt,
+        reason: message,
+      });
       if (extension === 'docx') {
         const fallbackText = await extractDocxWithMammoth(file);
         if (normalizeText(fallbackText)) {
+          log.info('extract ok (docx fallback mammoth)', {
+            fileName: file.name,
+            chars: fallbackText.length,
+            elapsedMs: Date.now() - startedAt,
+          });
           return fallbackText;
         }
+        log.warn('docx mammoth fallback produced empty text', {
+          fileName: file.name,
+          elapsedMs: Date.now() - startedAt,
+        });
       }
       throw error;
     }
@@ -494,6 +597,12 @@ function jsonSuccess(params: {
 }) {
   const normalized = normalizeText(params.text);
   if (!normalized) {
+    log.warn('ingest produced empty text', {
+      kind: params.kind,
+      fileType: params.fileType,
+      title: params.title,
+      rawChars: params.text.length,
+    });
     return jsonError('未提取到可用文本内容', 422, 'EMPTY_TEXT');
   }
 
@@ -509,6 +618,7 @@ function jsonSuccess(params: {
 }
 
 export async function POST(request: NextRequest) {
+  const startedAt = Date.now();
   try {
     const contentType = request.headers.get('content-type') || '';
 
@@ -516,26 +626,52 @@ export async function POST(request: NextRequest) {
       const body = (await request.json()) as { text?: unknown; title?: unknown };
       const text = typeof body.text === 'string' ? body.text : '';
       const title = typeof body.title === 'string' && body.title.trim() ? body.title.trim() : '粘贴文本';
+      log.info('ingest request (text)', {
+        title,
+        chars: text.length,
+      });
       return jsonSuccess({ kind: 'text', title, text });
     }
 
     const formData = await request.formData();
     const file = formData.get('file');
     if (!(file instanceof File)) {
+      log.warn('ingest rejected: file missing', { elapsedMs: Date.now() - startedAt });
       return jsonError('未检测到上传文件', 400, 'FILE_MISSING');
     }
 
     if (file.size <= 0) {
+      log.warn('ingest rejected: file empty', {
+        fileName: file.name,
+        elapsedMs: Date.now() - startedAt,
+      });
       return jsonError('上传文件为空', 400, 'FILE_EMPTY');
     }
     if (file.size > MAX_FILE_BYTES) {
+      log.warn('ingest rejected: file too large', {
+        fileName: file.name,
+        size: file.size,
+        limit: MAX_FILE_BYTES,
+        elapsedMs: Date.now() - startedAt,
+      });
       return jsonError('文件过大，最大支持 20MB', 413, 'FILE_TOO_LARGE');
     }
 
     const extension = getExtension(file.name);
     if (!extension || !SUPPORTED_EXTENSIONS.has(extension)) {
+      log.warn('ingest rejected: unsupported extension', {
+        fileName: file.name,
+        extension,
+        elapsedMs: Date.now() - startedAt,
+      });
       return jsonError('暂不支持该文档类型，请使用 txt/md/csv/json/html/pdf/docx/ppt/pptx', 400, 'FILE_UNSUPPORTED');
     }
+
+    log.info('ingest request (file)', {
+      fileName: file.name,
+      size: file.size,
+      extension,
+    });
 
     const text = await extractDocumentText(file, extension);
     const title = file.name.replace(/\.[^.]+$/, '').trim() || '导入文档';
@@ -547,6 +683,12 @@ export async function POST(request: NextRequest) {
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
+    const stack = error instanceof Error ? error.stack : undefined;
+    log.error('ingest failed', {
+      elapsedMs: Date.now() - startedAt,
+      reason: message,
+      stack,
+    });
     return jsonError(`文档导入失败: ${message}`, 500, 'INGEST_INTERNAL_ERROR');
   }
 }

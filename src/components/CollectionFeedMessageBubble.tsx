@@ -127,6 +127,23 @@ export function CollectionFeedMessageBubble({
   const isAttachmentMessage =
     Boolean(item.attachmentUrl) && (item.type === 'document' || item.type === 'text');
   const isSelectedForContext = selectedCollectionContextIds.includes(item.id);
+
+  // 孤儿检测：视频/文档卡在 parsing 超过 10 分钟，判定为异常
+  const STALE_PARSING_THRESHOLD_MS = 10 * 60 * 1000;
+  const addedAtMs = item.addedAt ? new Date(item.addedAt).getTime() : NaN;
+  const isStaleParsing = Boolean(
+    item.status === 'parsing' &&
+    !Number.isNaN(addedAtMs) &&
+    Date.now() - addedAtMs > STALE_PARSING_THRESHOLD_MS &&
+    !item.videoImported &&
+    !item.sessionId
+  );
+  const showDocumentParsing = Boolean(
+    (item.type === 'document' || item.type === 'image' || (item.type === 'text' && isAttachmentMessage)) &&
+    item.status === 'parsing' &&
+    item.statusText &&
+    !isStaleParsing
+  );
   const showInlineMoreButton = !isCollectionContextSelectionMode;
 
   return (
@@ -356,6 +373,17 @@ export function CollectionFeedMessageBubble({
                   </div>
                 </div>
               )}
+              {/* 文档解析中文案 */}
+              {showDocumentParsing ? (
+                <div className={`flex items-center gap-2 text-[11px] ${
+                  isPrimary ? 'justify-end text-white/80' : 'justify-start text-amber-600/80'
+                }`}>
+                  <span className="inline-flex items-center gap-1.5">
+                    <span className="inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-amber-400" />
+                    <span>{item.statusText}</span>
+                  </span>
+                </div>
+              ) : null}
             </div>
           ) : item.type === 'video' ? (
             <div className="space-y-2">
@@ -435,6 +463,11 @@ export function CollectionFeedMessageBubble({
                     <BookOpen size={11} />
                     <span>已解析 · {item.serverTranscriptSegments.length}句 · 去复习</span>
                   </button>
+                ) : item.type === 'video' && isStaleParsing ? (
+                  <span className="inline-flex items-center gap-1.5 text-[11px] text-[#9A4A12]">
+                    <span className="inline-block h-1.5 w-1.5 rounded-full bg-[#C97B3F]" />
+                    <span>解析未完成，换个浏览器再试一次</span>
+                  </span>
                 ) : item.type === 'video' && !item.videoImported && !item.sessionId && item.status !== 'failed' && (item.reviewable || item.status === 'parsing') ? (
                   <span className="inline-flex items-center gap-1.5 text-[11px] text-amber-600/80">
                     <span className="inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-amber-400" />

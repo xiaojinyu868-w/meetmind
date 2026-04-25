@@ -290,6 +290,10 @@ export function useSourceImport(
           status: isAudio || isVideo ? 'transcribing' : 'parsing',
           statusText: isAudio
             ? '转写稍后完成'
+            : isImage
+            ? '正在识别…'
+            : (!isAudio && !isVideo)
+            ? '正在阅读…'
             : undefined,
           durationMs,
         });
@@ -306,7 +310,28 @@ export function useSourceImport(
               });
               continue;
             }
-            const parsed = await parseImageFile(file);
+            // 图片识别也可能 5-15 秒，给递进文案
+            const imgProgressStages = [
+              { delay: 0, text: '正在识别…' },
+              { delay: 6000, text: '正在看清楚…' },
+            ];
+            const imgProgressTimers: ReturnType<typeof setTimeout>[] = [];
+            for (const stage of imgProgressStages) {
+              imgProgressTimers.push(
+                setTimeout(() => {
+                  updateSourceItem(id, { statusText: stage.text });
+                }, stage.delay)
+              );
+            }
+            const clearImgProgressTimers = () => {
+              for (const timer of imgProgressTimers) clearTimeout(timer);
+            };
+            let parsed;
+            try {
+              parsed = await parseImageFile(file);
+            } finally {
+              clearImgProgressTimers();
+            }
             const appended = appendSupportSource({
               id,
               sourceKey: `support:${id}`,
@@ -366,7 +391,30 @@ export function useSourceImport(
               });
               continue;
             }
-            const parsed = await parseDocumentFile(file);
+            // 文档解析可能耗时 30-60 秒（图文 PDF 尤其慢），给用户递进式文案反馈
+            const docProgressStages = [
+              { delay: 0, text: '正在阅读…' },
+              { delay: 5000, text: '正在识别文字…' },
+              { delay: 15000, text: '内容比较多，还在读…' },
+              { delay: 35000, text: '快好了，再等等…' },
+            ];
+            const docProgressTimers: ReturnType<typeof setTimeout>[] = [];
+            for (const stage of docProgressStages) {
+              docProgressTimers.push(
+                setTimeout(() => {
+                  updateSourceItem(id, { statusText: stage.text });
+                }, stage.delay)
+              );
+            }
+            const clearDocProgressTimers = () => {
+              for (const timer of docProgressTimers) clearTimeout(timer);
+            };
+            let parsed;
+            try {
+              parsed = await parseDocumentFile(file);
+            } finally {
+              clearDocProgressTimers();
+            }
             const supportType = parsed.fileType === 'txt' || parsed.fileType === 'md' ? 'text' : 'document';
             const appended = appendSupportSource({
               id,

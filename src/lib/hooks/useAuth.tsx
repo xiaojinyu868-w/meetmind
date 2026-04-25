@@ -449,16 +449,56 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           return;
         }
 
-        const response = await fetch('/api/workspace/local-migration', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${accessToken}`,
-          },
-          body: JSON.stringify(payload),
-        });
+        // 分批推送：避免单次 payload 过大导致 nginx/Node 拒绝（服务端上限 8MB / 50 sessions）
+        // 这里按 session 数切片，每批 20，体积一般稳在 2-4MB 内
+        const BATCH_SIZE = 20;
+        const sessions = payload.sessions;
+        let success = true;
 
-        if (!response.ok && !cancelled) {
+        for (let i = 0; i < sessions.length; i += BATCH_SIZE) {
+          if (cancelled) break;
+          const batch = sessions.slice(i, i + BATCH_SIZE);
+          try {
+            const response = await fetch('/api/workspace/local-migration', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                Authorization: `Bearer ${accessToken}`,
+              },
+              body: JSON.stringify({ sessions: batch }),
+            });
+
+            if (!response.ok) {
+              success = false;
+              // 413（payload 过大）说明单批仍然太大，进一步降级到每批 5
+              if (response.status === 413 && BATCH_SIZE > 5) {
+                for (let j = 0; j < batch.length; j += 5) {
+                  if (cancelled) break;
+                  const smaller = batch.slice(j, j + 5);
+                  try {
+                    await fetch('/api/workspace/local-migration', {
+                      method: 'POST',
+                      headers: {
+                        'Content-Type': 'application/json',
+                        Authorization: `Bearer ${accessToken}`,
+                      },
+                      body: JSON.stringify({ sessions: smaller }),
+                    });
+                  } catch {
+                    // 单批降级也失败，记下后继续，不阻断整体
+                  }
+                }
+              }
+              // 其他错误不中断，继续下一批
+            }
+          } catch {
+            success = false;
+            // 网络错误或进程重启造成的中断，继续下一批，下次登录会重试
+          }
+        }
+
+        if (!success && !cancelled) {
+          // 整体没全部成功，下次登录允许重试
           localWorkspaceMigrationRef.current = null;
         }
       } catch {

@@ -344,11 +344,17 @@ export function useClassCheck({
   // enabled 开关只控制播放时是否自动弹出测验题。
   useEffect(() => {
     if (dataSource !== 'video' && dataSource !== 'live') {
-      console.log('[class-check] dataSource=%s, need video|live, skipping plan', dataSource);
+      // 业务正常分支，仅 dev 时打印
+      if (process.env.NODE_ENV !== 'production') {
+        console.debug('[class-check] dataSource=%s, need video|live, skipping plan', dataSource);
+      }
       return;
     }
     if (segments.length < 6) {
-      console.log('[class-check] segments=%d < 6, skipping plan', segments.length);
+      // 业务正常分支（转录段太少不生成 plan），仅 dev 时打印
+      if (process.env.NODE_ENV !== 'production') {
+        console.debug('[class-check] segments=%d < 6, skipping plan', segments.length);
+      }
       return;
     }
 

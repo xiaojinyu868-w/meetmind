@@ -106,6 +106,24 @@ export function CollectionCard({
   );
   const isAttachmentMessage = Boolean(item.attachmentUrl) && (item.type === 'document' || item.type === 'text');
 
+  // 孤儿检测：视频/文档卡在 parsing 超过 10 分钟，判定为异常（页面关闭导致前端无法收结果）
+  const STALE_PARSING_THRESHOLD_MS = 10 * 60 * 1000;
+  const addedAtMs = item.addedAt ? new Date(item.addedAt).getTime() : NaN;
+  const isStaleParsing = Boolean(
+    item.status === 'parsing' &&
+    !Number.isNaN(addedAtMs) &&
+    Date.now() - addedAtMs > STALE_PARSING_THRESHOLD_MS &&
+    !item.videoImported &&
+    !item.sessionId
+  );
+  // 文档类正在解析
+  const showDocumentParsing = Boolean(
+    (item.type === 'document' || item.type === 'image' || (item.type === 'text' && isAttachmentMessage)) &&
+    item.status === 'parsing' &&
+    item.statusText &&
+    !isStaleParsing
+  );
+
   // 视频有缩略图时，顶部裁切圆角
   const hasVideoThumbnail = item.type === 'video' && item.previewUrl;
 
@@ -306,7 +324,7 @@ export function CollectionCard({
 
         {/* 文档/附件类型 */}
         {(item.type === 'document' || isAttachmentMessage) ? (
-          <div>
+          <div className="space-y-2">
             {item.attachmentUrl ? (
               <a
                 href={item.attachmentUrl}
@@ -336,6 +354,15 @@ export function CollectionCard({
                 </div>
               </div>
             )}
+            {/* 文档解析中文案（PDF/图文 OCR 可能 30-60s） */}
+            {showDocumentParsing ? (
+              <div className="flex items-center gap-2 text-[11px]">
+                <span className="inline-flex items-center gap-1.5 text-[#A3A39E]">
+                  <span className="inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-[#D9A441]" />
+                  <span>{item.statusText}</span>
+                </span>
+              </div>
+            ) : null}
           </div>
         ) : null}
 
@@ -391,6 +418,11 @@ export function CollectionCard({
                   <BookOpen size={11} />
                   <span>已解析 · {item.serverTranscriptSegments.length}句 · 去复习</span>
                 </button>
+              ) : item.type === 'video' && isStaleParsing ? (
+                <span className="inline-flex items-center gap-1.5 text-[#9A4A12]">
+                  <span className="inline-block h-1.5 w-1.5 rounded-full bg-[#C97B3F]" />
+                  <span>解析未完成，换个浏览器再试一次</span>
+                </span>
               ) : item.type === 'video' && !item.videoImported && !item.sessionId && item.status !== 'failed' && (item.reviewable || item.status === 'parsing') ? (
                 <span className="inline-flex items-center gap-1.5 text-[#A3A39E]">
                   <span className="inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-[#D9A441]" />
