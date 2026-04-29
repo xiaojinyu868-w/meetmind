@@ -11,7 +11,7 @@
  */
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import type { ClassCheckCheckpoint } from '@/app/api/class-check/plan/route';
+import type { ClassCheckCheckpoint } from '@/app/api/(meetmind-learning)/class-check/plan/route';
 
 const ACCENT = '#E67E22';
 const AUTO_DISMISS_MS = 8000;

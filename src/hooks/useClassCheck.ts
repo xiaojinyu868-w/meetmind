@@ -29,7 +29,7 @@ import type {
   ClassCheckCheckpoint,
   ClassCheckHighlight,
   ClassCheckQuestionData,
-} from '@/app/api/class-check/plan/route';
+} from '@/app/api/(meetmind-learning)/class-check/plan/route';
 
 const CLASS_CHECK_ENABLED_KEY = 'settings_class_check_enabled';
 const SEEK_THRESHOLD_MS = 5000;

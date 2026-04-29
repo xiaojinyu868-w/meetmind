@@ -16,6 +16,16 @@ route.ts → lib/services/ + lib/utils/rate-limit
 
 ## 路由总览
 
+### 产品线边界
+
+| Track | API 区域 | 说明 |
+|------|----------|------|
+| 原 MeetMind 学习产品 | `(meetmind-learning)/workspace`, `chat`, `tutor`, `wechat`, `apps`, `classroom` | 工作区、Tutor、AI 工坊、微信、课堂 |
+| Agent Native Infra | `(agent-native-infra)/consult`, `console`, `academic` | 学生咨询 agent、机构控制台、Education Service OS 多租户服务 |
+| 共享底座 | `(shared-substrate)/auth`, `analytics`, `feedback`, `sources`, `video`, `article`, `transcribe*` | 账号、统计、导入、ASR、反馈等横向能力 |
+
+原学习产品 API 不应反向依赖 `consult` / `academic` 业务语义。
+
 ### 🎙️ 转录管线
 
 | 路由 | 方法 | 职责 |
@@ -102,12 +112,26 @@ route.ts → lib/services/ + lib/utils/rate-limit
 | `/api/analytics` | POST | 行为数据上报 |
 | `/api/analytics/stats` | GET | 统计数据查询 |
 
+### 🏫 机构 Console / Agent OS
+
+| 路由 | 方法 | 职责 |
+|------|------|------|
+| `/api/consult/chat` | POST | 学生端 consult agent 主循环，负责 tools / skills / generative UI |
+| `/api/consult/upload` | POST | consult 场景文档上传解析 |
+| `/api/consult/lead` | POST | consult 高意向线索提交 |
+| `/api/consult/voice/*` | GET/POST | consult 语音相关入口 |
+| `/api/console/arena` | GET | Agent Arena 自动评测场：从真实 ConsultSession 生成 flagship case scorecard |
+| `/api/console/leads/*` | GET/PATCH/POST | 机构线索列表、详情、icebreaker |
+| `/api/console/skills/*` | GET/POST/PATCH | 机构 skill 上传、审核、启用 |
+| `/api/console/scenarios/*` | GET/POST/PATCH | 机构场景定义与版本化 |
+| `/api/academic/*` | GET/POST/PATCH | Education Service OS 学生/老师/场景服务 API |
+
 ## ⚠️ 超标文件
 
-- `video/import/route.ts` (1209) — 已拆分 3 个模块（types/segment/download），仍偏大
-- `tutor/route.ts` (708) — ✅ 已拆分 4 个模块，从 1763 行降至 708 行
-- `transcribe-turbo/route.ts` (636) — WebSocket 转录
-- `sources/ingest/route.ts` (553) — 通用接入
+- `(shared-substrate)/video/import/route.ts` (1209) — 已拆分 3 个模块（types/segment/download），仍偏大
+- `(meetmind-learning)/tutor/route.ts` (708) — ✅ 已拆分 4 个模块，从 1763 行降至 708 行
+- `(shared-substrate)/transcribe-turbo/route.ts` (636) — WebSocket 转录
+- `(shared-substrate)/sources/ingest/route.ts` (553) — 通用接入
 
 ## video/import/ 子模块
 

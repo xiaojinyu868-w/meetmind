@@ -93,6 +93,15 @@ api/route.ts → services → lib/utils, lib/db, lib/config
 | `search-service.ts` | 153 | 知识库搜索（向量 + LongCut 降级） |
 | `analytics-service.ts` | 626 | 用户行为统计（DAU/会话/事件） |
 
+### 🎓 Consult Agent / To B 学术服务
+
+| 文件 | 行数 | 职责 |
+|------|------|------|
+| `consult-arena-service.ts` | ~90 | Agent Arena scorecard：从真实 ConsultSession 抽取 flagship case 并调用纯评测器 |
+| `consult-profile-service.ts` | ~214 | Consult 学生画像读写，含保守合并和导师候选状态语义 |
+| `consult-search-service.ts` | ~340 | Consult 联网搜索 + 学术导师/项目要求检索 query planner |
+| `consult-session-service.ts` | ~130 | Consult 对话归档与 active/visited scenario 状态 |
+
 ### 🔧 基础设施
 
 | 文件 | 行数 | 职责 |

@@ -58,8 +58,32 @@ export interface AudioContentPart {
   };
 }
 
+/** 多模态内容项 - 视频（OpenAI 兼容：video_url 模式） */
+export interface VideoUrlContentPart {
+  type: 'video_url';
+  video_url: {
+    url: string; // 公网可访问的视频 URL（不支持 base64）
+  };
+  /** 抽帧率 0.1..10（默认 2） */
+  fps?: number;
+}
+
+/** 多模态内容项 - 视频（帧数组模式：预先抽好的图片 URL 列表） */
+export interface VideoFramesContentPart {
+  type: 'video';
+  /** 公网 URL 列表：每个元素是一帧图片 */
+  video: string[];
+  /** 抽帧率 0.1..10（默认 2） */
+  fps?: number;
+}
+
 /** 多模态内容 */
-export type MultimodalContent = TextContentPart | ImageContentPart | AudioContentPart;
+export type MultimodalContent =
+  | TextContentPart
+  | ImageContentPart
+  | AudioContentPart
+  | VideoUrlContentPart
+  | VideoFramesContentPart;
 
 /** 聊天消息 - 支持纯文本和多模态 */
 export interface ChatMessage {

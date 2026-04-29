@@ -15,7 +15,7 @@ import { InfographicWindow } from '@/components/apps/windows/InfographicWindow';
 import { StudyReportWindow } from '@/components/apps/windows/StudyReportWindow';
 
 import type { ClassCheckRound } from '@/hooks/useClassCheck';
-import type { ClassCheckPlan } from '@/app/api/class-check/plan/route';
+import type { ClassCheckPlan } from '@/app/api/(meetmind-learning)/class-check/plan/route';
 
 /* ================================================================ */
 /*  窗口级 ErrorBoundary — 单窗口崩溃不影响其他窗口和主页面            */

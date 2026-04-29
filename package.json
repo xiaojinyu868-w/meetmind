@@ -20,10 +20,13 @@
     "e2": "playwright test",
     "e2e": "playwright test",
     "e2e:headed": "playwright test --headed",
-    "e2e:ui": "playwright test --ui"
+    "e2e:ui": "playwright test --ui",
+    "smoke:consult": "sucrase-node scripts/consult-smoke.ts"
   },
   "dependencies": {
+    "@ai-sdk/openai": "^3.0.53",
     "@ai-sdk/react": "^3.0.11",
+    "@assistant-ui/react": "^0.12.26",
     "@ffmpeg-installer/ffmpeg": "^1.1.0",
     "@nivo/core": "^0.99.0",
     "@nivo/heatmap": "^0.99.0",
@@ -73,6 +76,7 @@
     "next": "^14.2.0",
     "nodemailer": "^7.0.13",
     "openai": "^6.15.0",
+    "pdf-parse": "^1.1.4",
     "prisma": "^7.2.0",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",

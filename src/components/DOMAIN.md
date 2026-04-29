@@ -26,10 +26,23 @@ components/
 │   └── hooks/         # 应用执行 hook
 ├── mobile/DOMAIN.md   # 移动端专用组件（18 个）
 ├── business/DOMAIN.md # 业务展示组件（6 个）
+├── console/DOMAIN.md  # 机构控制台组件（replay / agent 资产）
+├── consult/DOMAIN.md  # Agent Native Infra 学生端生成式 UI blocks
+├── academic/          # Agent Native Infra / console 复用 primitives
 ├── layout/DOMAIN.md   # 布局组件（3 个）
 ├── ui/                # shadcn/ui 基础组件（25 个）
 └── ConversationHistory/DOMAIN.md # 对话历史（3 个）
 ```
+
+## 产品线边界
+
+| Track | 组件区域 | 说明 |
+|------|----------|------|
+| 原 MeetMind 学习产品 | 顶层核心组件、`recorder`, `tutor`, `apps`, `mobile`, `business`, `ConversationHistory` | 收集、录音、Tutor、Echo、AI 工坊 |
+| Agent Native Infra | `consult`, `console`, `academic` | 生成式 UI block、机构 replay、资产面板、机构风 primitives |
+| 共享 UI | `ui`, `layout` | 基础组件和布局 |
+
+原学习产品组件不要 import `components/consult` 或 `components/console`。
 
 ## 核心组件
 

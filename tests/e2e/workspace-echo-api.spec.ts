@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test';
 import { NextRequest } from 'next/server';
-import { POST as refreshDailyEchoPost } from '../../src/app/api/workspace/echoes/daily-refresh/route';
+import { POST as refreshDailyEchoPost } from '../../src/app/api/(meetmind-learning)/workspace/echoes/daily-refresh/route';
 import prisma from '../../src/lib/prisma';
 import { authService } from '../../src/lib/services/auth-service';
 import workspaceService from '../../src/lib/services/workspace-service';

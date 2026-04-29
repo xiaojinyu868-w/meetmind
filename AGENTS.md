@@ -10,10 +10,37 @@
 拿到任务后，按以下顺序阅读，效率最高：
 
 ```
-第 1 步：本文档（AGENTS.md）→ 第 1-5 节（命令 + 产品 + Big Picture + Skills + 设计系统）
-第 2 步：skills/making-changes/SKILL.md → 了解 Plan→Execute→Verify→Commit 流程
-第 3 步：根据任务类型选择 ↓
+第 1 步：本文档（AGENTS.md）→ REPO_MAP.md（确认任务属于哪条产品线）→ 第 1-5 节
+第 2 步：如果任务属于新项目，读 specs/agent-native-infra-spine.md → specs/agent-native-coding-agent-guide.md
+第 3 步：skills/making-changes/SKILL.md → 了解 Plan→Execute→Verify→Commit 流程
+第 4 步：根据任务类型选择 ↓
 ```
+
+### 仓库两条产品线
+
+当前仓库同时承载：
+
+| Track | 定位 | 主要入口 |
+|------|------|----------|
+| 原 MeetMind 学习产品 | 个人学习 / 收集 / Echo / Tutor | `src/app/(meetmind-learning)/app`、`src/app/api/(meetmind-learning)/workspace`、`src/components/Recorder.tsx`、`src/components/AITutor.tsx` |
+| Agent Native Infra | B 端机构数字员工 / Skill / Tool Atom / Artifact / Trace / Eval | `specs/agent-native-infra-spine.md`、`src/app/(agent-native-infra)/consult`、`src/app/(agent-native-infra)/console`、`src/lib/consult`、`src/lib/academic`、`platform-skills` |
+
+详细边界见 `REPO_MAP.md`。不要把新项目写成原 MeetMind 的一个功能页，也不要把原学习产品的 taste 机械套到 B 端 Agent Infra 的所有界面上。
+
+### 新项目优先级
+
+当前交付优先级是 **Agent Native Infra / 机构数字员工**。原 MeetMind 学习产品可以继续作为线上服务维护，但不要让它牵引新项目的架构判断。
+
+新项目可以被当作一个完整项目独立部署：只开放 `/consult`、`/console`、`/teacher`、`/learn` 与对应 API。共仓只是过渡形态，不代表两个产品必须永远同进程、同域名、同数据库运行。
+
+新项目 coding agent 进入前必须读：
+
+```
+specs/agent-native-infra-spine.md
+specs/agent-native-coding-agent-guide.md
+```
+
+判断标准：新功能必须增强 Tool Atom Registry / Skill Contract / Artifact Runtime / Trace System / Eval Agent 之一，否则先不要写代码。
 
 ### 按任务类型选择阅读路径
 
@@ -149,7 +176,7 @@ MeetMind 是以学习者长期上下文为中心的 AI 学习产品。
 
 ### 3.5 God File 提取策略
 
-`src/app/(main)/app/page.tsx` 是已知遗留债务（~2300 行），正在按**域**分阶段提取为 hooks + 子组件：
+`src/app/(meetmind-learning)/app/page.tsx` 是已知遗留债务（~2300 行），正在按**域**分阶段提取为 hooks + 子组件：
 
 | 阶段 | 提取的 hooks | 减少行数 |
 |------|-------------|---------|
@@ -290,11 +317,11 @@ src/
 
 | 文件 | 行数 | 注意 |
 |------|------|------|
-| `src/app/(main)/app/page.tsx` | ~2300 | God File（按域分 6 阶段提取为 hooks + 子组件，详见 §3.5），用 `replace_in_file` 精确替换，改前先读 `src/app/DOMAIN.md` |
+| `src/app/(meetmind-learning)/app/page.tsx` | ~2300 | God File（按域分 6 阶段提取为 hooks + 子组件，详见 §3.5），用 `replace_in_file` 精确替换，改前先读 `src/app/DOMAIN.md` |
 | `src/components/AITutor.tsx` | ~2357 | AI 家教，已拆分语音同桌相关子模块到 `tutor/` |
 | `src/components/Recorder.tsx` | ~1781 | 录音组件，已拆分 3 个子模块到 `recorder/`（含 `recorder-audio-source.ts` 支持 mic/system/mixed 三档音源） |
-| `src/app/api/video/import/route.ts` | 1212 | 多平台导入管线，已拆分 3 个子模块 |
-| `src/app/api/tutor/route.ts` | 886 | AI 私教路由，已拆分 4 个子模块（文本 SSE + 语音 realtime 双模式，详见 §3.6） |
+| `src/app/api/(shared-substrate)/video/import/route.ts` | 1212 | 多平台导入管线，已拆分 3 个子模块 |
+| `src/app/api/(meetmind-learning)/tutor/route.ts` | 886 | AI 私教路由，已拆分 4 个子模块（文本 SSE + 语音 realtime 双模式，详见 §3.6） |
 | `src/hooks/useOmniRealtimeCall.ts` | 793 | Qwen Omni realtime 语音通话 hook，承接麦克风上行、语音下行与接通状态 |
 | `src/lib/utils/page-utils.ts` | 10 | Barrel re-export，实际实现在 `page/` 子目录（5 个模块，共 1123 行） |
 | `src/lib/ai-native/plugins/studio-workshop.plugin.ts` | ~425 | Studio Workshop 主文件，子模块：types/podcast/renderers |

@@ -1,7 +1,7 @@
 import { expect, test } from '@playwright/test';
 import { NextRequest } from 'next/server';
-import { DELETE as deleteCapture, PATCH as patchCapture, POST as createCapture } from '../../src/app/api/workspace/captures/route';
-import { GET as getCurrentWorkspace } from '../../src/app/api/workspace/current/route';
+import { DELETE as deleteCapture, PATCH as patchCapture, POST as createCapture } from '../../src/app/api/(meetmind-learning)/workspace/captures/route';
+import { GET as getCurrentWorkspace } from '../../src/app/api/(meetmind-learning)/workspace/current/route';
 import { authService } from '../../src/lib/services/auth-service';
 import workspaceService from '../../src/lib/services/workspace-service';
 

@@ -11,7 +11,7 @@
 import { useCallback, useMemo, useState } from 'react';
 import type { TranscriptSegment } from '@/types';
 import type { ClassCheckRound } from '@/hooks/useClassCheck';
-import type { ClassCheckPlan } from '@/app/api/class-check/plan/route';
+import type { ClassCheckPlan } from '@/app/api/(meetmind-learning)/class-check/plan/route';
 
 interface StudyReportWindowProps {
   rounds: ClassCheckRound[] | undefined;

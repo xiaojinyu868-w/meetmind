@@ -4,6 +4,8 @@
 
 一个以学习者长期上下文为中心的 AI 学习产品。用户像发微信一样把学习现场的一切发给 MeetMind，MeetMind 先收下，后台慢慢理解，理解成熟后自然长出回声、复习、Tutor。
 
+> 仓库现在同时承载原 MeetMind 学习产品和新的 Agent Native Infra 项目。开始开发前先看 [`REPO_MAP.md`](./REPO_MAP.md) 区分两条产品线和共享底座。
+
 ---
 
 ## 产品哲学
@@ -175,6 +177,8 @@ meetmind/
 
 | 文档 | 内容 |
 |------|------|
+| [`REPO_MAP.md`](./REPO_MAP.md) | 仓库边界地图：原 MeetMind / Agent Native Infra / 共享底座 |
+| [`specs/agent-native-infra-spine.md`](./specs/agent-native-infra-spine.md) | 新项目顶层总纲：Agent Native Infra |
 | [`docs/ECHO_PRODUCT_DEFINITION.md`](./docs/ECHO_PRODUCT_DEFINITION.md) | Echo 产品定义（taste、三层价值、增长引擎） |
 | [`docs/SERVER_AGENT_HANDOFF_CAPTURE_V1.md`](./docs/SERVER_AGENT_HANDOFF_CAPTURE_V1.md) | Capture V1 产品定义、收集原则、验收清单 |
 | [`docs/competition-tech-article-draft.md`](./docs/competition-tech-article-draft.md) | 竞赛技术文章草稿 |

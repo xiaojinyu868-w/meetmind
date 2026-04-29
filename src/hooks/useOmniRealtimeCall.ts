@@ -471,133 +471,154 @@ export function useOmniRealtimeCall({
     const wsUrl = `${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${window.location.host}/api/tutor-call`;
 
     connectPromiseRef.current = new Promise<void>((resolve, reject) => {
-      const ws = new WebSocket(wsUrl);
-      wsRef.current = ws;
-
       let settled = false;
+      let attemptCount = 0;
 
-      ws.onopen = () => {
-        sendSessionConfig();
-      };
+      const openSocket = () => {
+        attemptCount += 1;
+        const ws = new WebSocket(wsUrl);
+        wsRef.current = ws;
+        let attemptFinished = false;
 
-      ws.onmessage = (event) => {
-        try {
-          const payload = JSON.parse(String(event.data || '{}'));
-
-          switch (payload.event) {
-            case 'ready':
-              clearReadyTimeout();
-              wsReadyRef.current = true;
-              setIsConnected(true);
-              setErrorMessage('');
-              if (!settled) {
-                settled = true;
-                resolve();
-              }
-              break;
-            case 'speech_started':
-              clearPlaybackSources();
-              if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN && statusRef.current === 'responding') {
-                wsRef.current.send(JSON.stringify({ action: 'cancel' }));
-              }
-              setCapturedText('');
-              setStatus('listening');
-              break;
-            case 'speech_stopped':
-              if (!isMutedRef.current) {
-                setStatus('thinking');
-              }
-              break;
-            case 'user_transcript':
-              if (typeof payload.transcript === 'string') {
-                setCapturedText(payload.transcript);
-                if (payload.isFinal) {
-                  userTranscriptThisTurnRef.current = payload.transcript;
-                  onUserTranscript?.(payload.transcript);
-                }
-              }
-              break;
-            case 'assistant_response_start':
-              assistantTranscriptRef.current = '';
-              setAssistantText('');
-              setStatus('responding');
-              onAssistantResponseStart?.();
-              break;
-            case 'assistant_transcript':
-              if (typeof payload.text === 'string') {
-                assistantTranscriptRef.current = payload.text;
-                setAssistantText(payload.text);
-                onAssistantTranscriptChange?.(payload.text);
-                if (payload.isFinal) {
-                  onAssistantTranscriptDone?.(payload.text);
-                }
-              }
-              break;
-            case 'assistant_audio':
-              if (typeof payload.audio === 'string') {
-                void enqueueAssistantAudio(payload.audio);
-              }
-              break;
-            case 'assistant_response_end':
-              setStatus(getIdleLikeStatus());
-              onAssistantResponseEnd?.();
-              break;
-            case 'cancelled':
-              assistantTranscriptRef.current = '';
-              setAssistantText('');
-              setStatus(getIdleLikeStatus());
-              break;
-            case 'error':
-              handleSocketError(typeof payload.error === 'string' ? payload.error : '语音通话出错了。');
-              break;
-            default:
-              break;
-          }
-        } catch {
-          handleSocketError('语音通话返回了无法解析的数据。');
-        }
-      };
-
-      ws.onerror = () => {
-        clearReadyTimeout();
-        setIsConnected(false);
-        if (!settled) {
-          settled = true;
-          reject(new Error('语音通话连接失败。'));
-        }
-        handleSocketError('语音通话连接失败。');
-      };
-
-      ws.onclose = () => {
-        clearReadyTimeout();
-        wsReadyRef.current = false;
-        wsRef.current = null;
-        setIsConnected(false);
-        if (isManualDisconnectRef.current) {
-          isManualDisconnectRef.current = false;
-          setStatus('idle');
-          setErrorMessage('');
-          return;
-        }
-        if (!settled) {
-          settled = true;
-          reject(new Error('语音通话连接已关闭。'));
-        }
-      };
-
-      if (typeof window !== 'undefined') {
-        readyTimeoutRef.current = window.setTimeout(() => {
+        const retryOnce = () => {
+          if (attemptFinished) return true;
+          attemptFinished = true;
           clearReadyTimeout();
-          if (settled) return;
-          settled = true;
-          try {
-            ws.close(4000, 'ready timeout');
-          } catch {
-            // noop
+          if (!isManualDisconnectRef.current && attemptCount < 2 && !settled) {
+            window.setTimeout(openSocket, 250);
+            return true;
           }
-          reject(new Error('老师暂时没接上，请点重连再试一次。'));
-        }, 10000);
-      }
+          return false;
+        };
+
+        ws.onopen = () => {
+          sendSessionConfig();
+        };
+
+        ws.onmessage = (event) => {
+          try {
+            const payload = JSON.parse(String(event.data || '{}'));
+
+            switch (payload.event) {
+              case 'ready':
+                attemptFinished = true;
+                clearReadyTimeout();
+                wsReadyRef.current = true;
+                setIsConnected(true);
+                setErrorMessage('');
+                if (!settled) {
+                  settled = true;
+                  resolve();
+                }
+                break;
+              case 'speech_started':
+                clearPlaybackSources();
+                if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN && statusRef.current === 'responding') {
+                  wsRef.current.send(JSON.stringify({ action: 'cancel' }));
+                }
+                setCapturedText('');
+                setStatus('listening');
+                break;
+              case 'speech_stopped':
+                if (!isMutedRef.current) {
+                  setStatus('thinking');
+                }
+                break;
+              case 'user_transcript':
+                if (typeof payload.transcript === 'string') {
+                  setCapturedText(payload.transcript);
+                  if (payload.isFinal) {
+                    userTranscriptThisTurnRef.current = payload.transcript;
+                    onUserTranscript?.(payload.transcript);
+                  }
+                }
+                break;
+              case 'assistant_response_start':
+                assistantTranscriptRef.current = '';
+                setAssistantText('');
+                setStatus('responding');
+                onAssistantResponseStart?.();
+                break;
+              case 'assistant_transcript':
+                if (typeof payload.text === 'string') {
+                  assistantTranscriptRef.current = payload.text;
+                  setAssistantText(payload.text);
+                  onAssistantTranscriptChange?.(payload.text);
+                  if (payload.isFinal) {
+                    onAssistantTranscriptDone?.(payload.text);
+                  }
+                }
+                break;
+              case 'assistant_audio':
+                if (typeof payload.audio === 'string') {
+                  void enqueueAssistantAudio(payload.audio);
+                }
+                break;
+              case 'assistant_response_end':
+                setStatus(getIdleLikeStatus());
+                onAssistantResponseEnd?.();
+                break;
+              case 'cancelled':
+                assistantTranscriptRef.current = '';
+                setAssistantText('');
+                setStatus(getIdleLikeStatus());
+                break;
+              case 'error':
+                handleSocketError(typeof payload.error === 'string' ? payload.error : '语音通话出错了。');
+                break;
+              default:
+                break;
+            }
+          } catch {
+            handleSocketError('语音通话返回了无法解析的数据。');
+          }
+        };
+
+        ws.onerror = () => {
+          setIsConnected(false);
+          if (!settled && retryOnce()) return;
+          if (!settled) {
+            settled = true;
+            reject(new Error('语音通话连接失败。'));
+          }
+          handleSocketError('语音通话连接失败。');
+        };
+
+        ws.onclose = () => {
+          clearReadyTimeout();
+          wsReadyRef.current = false;
+          wsRef.current = null;
+          setIsConnected(false);
+          if (isManualDisconnectRef.current) {
+            isManualDisconnectRef.current = false;
+            setStatus('idle');
+            setErrorMessage('');
+            return;
+          }
+          if (!settled && retryOnce()) return;
+          if (!settled) {
+            settled = true;
+            reject(new Error('语音通话连接已关闭。'));
+          }
+        };
+
+        if (typeof window !== 'undefined') {
+          readyTimeoutRef.current = window.setTimeout(() => {
+            clearReadyTimeout();
+            if (settled) return;
+            try {
+              ws.close(4000, 'ready timeout');
+            } catch {
+              // noop
+            }
+            if (retryOnce()) return;
+            settled = true;
+            reject(new Error('老师暂时没接上，请点重连再试一次。'));
+          }, 10000);
+        }
+      };
+
+      openSocket();
     }).finally(() => {
       connectPromiseRef.current = null;
     });
@@ -766,7 +787,7 @@ export function useOmniRealtimeCall({
       void closeMicrophone();
       clearReadyTimeout();
       clearPlaybackSources();
-      if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+      if (wsRef.current && (wsRef.current.readyState === WebSocket.OPEN || wsRef.current.readyState === WebSocket.CONNECTING)) {
         wsRef.current.close(1000, 'component unmounted');
       }
       wsRef.current = null;

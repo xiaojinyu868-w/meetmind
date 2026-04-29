@@ -1,20 +1,36 @@
 # src/ — 源码根目录
 
 > 这是 MeetMind 的全部源码。阅读顺序：先看这个文件了解全貌，再按需进入子目录的 DOMAIN.md。
+> 仓库产品线边界先看根目录 `REPO_MAP.md`。
+
+## 两条产品线 + 共享底座
+
+| Track | 主要路径 | 说明 |
+|------|----------|------|
+| 原 MeetMind 学习产品 | `app/(meetmind-learning)`, `app/api/(meetmind-learning)`, `components/recorder`, `components/tutor`, `lib/db`, `lib/services/workspace-*` | 个人学习、收集、课堂 Echo、Tutor、AI 工坊 |
+| Agent Native Infra | `app/(agent-native-infra)`, `app/api/(agent-native-infra)`, `components/consult`, `components/console`, `lib/consult`, `lib/academic` | B 端机构数字员工、tool atoms、skills、artifacts、trace、eval |
+| 共享底座 | `app/(auth)`, `app/(shared)`, `app/api/(shared-substrate)`, `lib/services/llm-service.ts`, `web-search-service.ts`, `qwen-asr-service.ts`, `hooks/useOmniRealtimeCall.ts`, `components/ui`, `lib/config`, `lib/utils` | 两条产品线可复用，但不能写入具体业务假设 |
+
+边界原则：原学习产品不要依赖 `lib/consult` / `lib/academic`；共享底座不要引用具体 consult skill 或 academic scenario。
 
 ## 目录结构
 
 ```
 src/
 ├── app/                    # Next.js App Router
-│   ├── (main)/app/         # 主页面（page.tsx ~4183 行，God File 分解 Phase 3 完成）
-│   └── api/                # 45 个 API 路由 → 见 app/api/DOMAIN.md
+│   ├── (meetmind-learning)/ # 原 MeetMind 学习产品页面组
+│   ├── (agent-native-infra)/# Agent Native Infra 页面组
+│   ├── (shared)/           # 帮助、反馈等共享页面组
+│   ├── (auth)/             # 认证页面组
+│   └── api/                # API 路由 → 见 app/api/DOMAIN.md
 ├── components/             # ~137 个 UI 组件 → 见 components/DOMAIN.md
 ├── hooks/                  # 24 个客户端 hooks → 见 hooks/DOMAIN.md
 ├── stores/                 # Zustand 状态管理（7 文件，~89 状态） → 见 stores/DOMAIN.md
 ├── types/                  # 共享类型定义（5 文件） → 见 types/DOMAIN.md
 └── lib/                    # 库代码
     ├── services/           # 51 个业务服务 → 见 services/DOMAIN.md
+    ├── consult/            # Agent tool atom / UI tool / arena / action routing
+    ├── academic/           # Education Service OS 多租户服务域
     ├── utils/              # 纯工具函数 → 见 utils/DOMAIN.md
     ├── db/                 # IndexedDB (Dexie) → 见 db/DOMAIN.md
     ├── ai-native/          # 应用插件系统 → 见 ai-native/DOMAIN.md

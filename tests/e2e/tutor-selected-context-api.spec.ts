@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test';
 import { NextRequest } from 'next/server';
-import { POST as tutorPost } from '../../src/app/api/tutor/route';
+import { POST as tutorPost } from '../../src/app/api/(meetmind-learning)/tutor/route';
 
 function setEnv(name: string, value: string | undefined) {
   (process.env as Record<string, string | undefined>)[name] = value;

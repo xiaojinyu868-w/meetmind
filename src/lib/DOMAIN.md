@@ -7,6 +7,8 @@
 | 目录 | 文件数 | 职责 |
 |------|--------|------|
 | `services/` | 51 | 业务逻辑核心（ASR/AI/导入/认证/微信…） |
+| `consult/` | — | Agent Native Infra：tool atom 注册、UI tool schema、action routing、arena 评测纯函数 |
+| `academic/` | — | Agent Native Infra：机构、多租户、场景、playbook、practice、checkpoint 服务域 |
 | `utils/` | 7 | 纯工具函数（JSON/时间/转录/链接解析） |
 | `db/` | 12 | IndexedDB (Dexie) Schema + CRUD |
 | `ai-native/` | 17 | 应用插件系统（测验/闪卡/思维导图…） |
@@ -30,3 +32,13 @@ services → utils, db, config, longcut, capture, context-reach
 ```
 
 详见各子目录的 DOMAIN.md。
+
+## 产品线边界
+
+| Track | lib 区域 | 说明 |
+|------|----------|------|
+| 原 MeetMind 学习产品 | `services/workspace-*`, `services/commonstack-echo-service.ts`, `services/tutor-service.ts`, `db`, `ai-native`, `capture`, `context-reach`, `longcut` | 学习收集、Echo、Tutor、AI 工坊 |
+| Agent Native Infra | `consult`, `academic`, `services/consult-*` | B 端数字员工、tool atoms、skills、trace、eval |
+| 共享底座 | `services/llm-service.ts`, `services/web-search-service.ts`, `services/qwen-asr-service.ts`, `services/dashscope-asr-service.ts`, `config`, `utils`, `logger.ts` | 两条产品线都可复用 |
+
+共享底座不得 import `consult` 或 `academic`。`consult` / `academic` 可以调用共享底座。

@@ -11,50 +11,56 @@ datasource db {
 
 // 用户表
 model User {
-  id           String   @id @default(cuid())
-  username     String   @unique
-  email        String?  @unique
-  phone        String?  @unique
-  nickname     String
-  avatar       String?
-  role         String   @default("student") // student, parent, teacher, admin
-  status       String   @default("active")  // active, inactive, suspended, pending
-  passwordHash String?
-  salt         String?
-  defaultWorkspaceId String?
-  learnerProfileJson String?    // JSON — 学习者画像（身份阶段+专业+年级等）
+  id                    String    @id @default(cuid())
+  username              String    @unique
+  email                 String?   @unique
+  phone                 String?   @unique
+  nickname              String
+  avatar                String?
+  role                  String    @default("student") // student, parent, teacher, admin
+  status                String    @default("active") // active, inactive, suspended, pending
+  passwordHash          String?
+  salt                  String?
+  defaultWorkspaceId    String?
+  learnerProfileJson    String? // JSON — 学习者画像（身份阶段+专业+年级等）
   onboardingCompletedAt DateTime? // null = 未完成 onboarding
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
-  lastLoginAt  DateTime?
+  activeOrgId           String? // Academic Service: 当前激活的机构 id
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+  lastLoginAt           DateTime?
 
   // 关联
-  defaultWorkspace Workspace? @relation("DefaultWorkspaceSelection", fields: [defaultWorkspaceId], references: [id], onDelete: SetNull, onUpdate: Cascade)
-  authProviders AuthProvider[]
-  sessions      Session[]
-  refreshTokens RefreshToken[]
-  ownedWorkspaces Workspace[] @relation("WorkspaceOwner")
-  workspaceMemberships WorkspaceMembership[]
-  workspaceCaptures WorkspaceCapture[]
-  wechatInboxMessages WechatInboxMessage[]
+  defaultWorkspace        Workspace?            @relation("DefaultWorkspaceSelection", fields: [defaultWorkspaceId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  authProviders           AuthProvider[]
+  sessions                Session[]
+  refreshTokens           RefreshToken[]
+  ownedWorkspaces         Workspace[]           @relation("WorkspaceOwner")
+  workspaceMemberships    WorkspaceMembership[]
+  workspaceCaptures       WorkspaceCapture[]
+  wechatInboxMessages     WechatInboxMessage[]
+  orgMemberships          OrgMember[]
+  academicProfiles        AcademicProfile[]
+  practiceSessions        PracticeSession[]
+  uploadedCoachingSources CoachingSource[]      @relation("CoachingSourceUploader")
 
   @@index([username])
   @@index([email])
   @@index([phone])
   @@index([defaultWorkspaceId])
+  @@index([activeOrgId])
 }
 
 // 第三方登录关联表
 model AuthProvider {
-  id           String   @id @default(cuid())
+  id           String    @id @default(cuid())
   userId       String
-  provider     String   // local, wechat, google, apple
-  providerId   String   // 第三方平台的用户ID
+  provider     String // local, wechat, google, apple
+  providerId   String // 第三方平台的用户ID
   accessToken  String?
   refreshToken String?
   expiresAt    DateTime?
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -73,11 +79,11 @@ model Workspace {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  owner User @relation("WorkspaceOwner", fields: [ownerId], references: [id], onDelete: Cascade)
-  defaultForUsers User[] @relation("DefaultWorkspaceSelection")
-  members WorkspaceMembership[]
-  captures WorkspaceCapture[]
-  echoes WorkspaceEcho[]
+  owner               User                  @relation("WorkspaceOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  defaultForUsers     User[]                @relation("DefaultWorkspaceSelection")
+  members             WorkspaceMembership[]
+  captures            WorkspaceCapture[]
+  echoes              WorkspaceEcho[]
   wechatInboxMessages WechatInboxMessage[]
 
   @@index([ownerId])
@@ -104,13 +110,13 @@ model WorkspaceMembership {
 }
 
 model WorkspaceCapture {
-  id             String   @id @default(cuid())
+  id             String    @id @default(cuid())
   workspaceId    String
   userId         String?
   sourceType     String
-  sourceKey      String   @unique
-  status         String   @default("active")
-  role           String   @default("support")
+  sourceKey      String    @unique
+  status         String    @default("active")
+  role           String    @default("support")
   contentType    String
   title          String
   previewText    String?
@@ -120,11 +126,11 @@ model WorkspaceCapture {
   metadataJson   String?
   tutorContext   String?
   occurredAt     DateTime?
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
 
-  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  user      User?     @relation(fields: [userId], references: [id], onDelete: SetNull)
+  workspace Workspace       @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  user      User?           @relation(fields: [userId], references: [id], onDelete: SetNull)
   echoes    WorkspaceEcho[]
 
   @@index([workspaceId])
@@ -137,23 +143,23 @@ model WorkspaceCapture {
 }
 
 model WorkspaceEcho {
-  id          String   @id @default(cuid())
-  workspaceId String
-  captureId   String?
-  sourceKey   String   @unique
-  kind        String?
+  id               String   @id @default(cuid())
+  workspaceId      String
+  captureId        String?
+  sourceKey        String   @unique
+  kind             String?
   generatedDateKey String?
-  model       String?
-  promptVersion String?
-  title       String
-  body        String
-  chipsJson   String?
-  metadataJson String?
-  status      String   @default("active")
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  model            String?
+  promptVersion    String?
+  title            String
+  body             String
+  chipsJson        String?
+  metadataJson     String?
+  status           String   @default("active")
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
 
-  workspace Workspace        @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  workspace Workspace         @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   capture   WorkspaceCapture? @relation(fields: [captureId], references: [id], onDelete: SetNull)
 
   @@index([workspaceId])
@@ -196,10 +202,10 @@ model RefreshToken {
 
 // 登录限流记录表
 model LoginAttempt {
-  id           String   @id @default(cuid())
-  identifier   String   // 用户名/邮箱/手机号/IP
-  count        Int      @default(1)
-  firstAttempt DateTime @default(now())
+  id           String    @id @default(cuid())
+  identifier   String // 用户名/邮箱/手机号/IP
+  count        Int       @default(1)
+  firstAttempt DateTime  @default(now())
   lockedUntil  DateTime?
 
   @@unique([identifier])
@@ -217,15 +223,15 @@ model CsrfToken {
 
 // 验证码表（邮箱/短信通用）
 model VerificationCode {
-  id         String   @id @default(cuid())
-  target     String   // 邮箱或手机号
-  code       String   // 6位验证码
-  type       String   // email, sms
-  purpose    String   // login, register, reset_password
-  attempts   Int      @default(0) // 验证尝试次数
-  verified   Boolean  @default(false)
-  expiresAt  DateTime
-  createdAt  DateTime @default(now())
+  id        String   @id @default(cuid())
+  target    String // 邮箱或手机号
+  code      String // 6位验证码
+  type      String // email, sms
+  purpose   String // login, register, reset_password
+  attempts  Int      @default(0) // 验证尝试次数
+  verified  Boolean  @default(false)
+  expiresAt DateTime
+  createdAt DateTime @default(now())
 
   @@index([target, type, purpose])
   @@index([code])
@@ -234,15 +240,15 @@ model VerificationCode {
 // 用户反馈表
 model Feedback {
   id        String   @id @default(cuid())
-  type      String   // bug, feature, question, other
+  type      String // bug, feature, question, other
   title     String
   content   String
-  contact   String?  // 用户提供的联系方式
-  userId    String?  // 登录用户的ID（可选）
+  contact   String? // 用户提供的联系方式
+  userId    String? // 登录用户的ID（可选）
   userAgent String?
   ip        String?
   status    String   @default("pending") // pending, processing, resolved, closed
-  adminNote String?  // 管理员备注
+  adminNote String? // 管理员备注
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -256,11 +262,11 @@ model Feedback {
 // API 使用统计表 - 记录用户 API 调用配额
 model ApiUsage {
   id        String   @id @default(cuid())
-  userId    String   // 用户ID（可以是 guest_xxx 表示访客）
-  quotaType String   // 配额类型：transcribe, ai_summary, ai_topics, ai_tutor, ai_chat
+  userId    String // 用户ID（可以是 guest_xxx 表示访客）
+  quotaType String // 配额类型：transcribe, ai_summary, ai_topics, ai_tutor, ai_chat
   date      DateTime // 统计日期（精确到天）
   count     Int      @default(0) // 使用次数
-  metadata  String?  // 额外元数据（JSON）
+  metadata  String? // 额外元数据（JSON）
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -275,12 +281,12 @@ model ApiUsage {
 // 用户分析会话表 - 记录每次用户访问的完整会话
 model UserAnalytics {
   id           String    @id @default(cuid())
-  userId       String?   // 可选，支持匿名用户追踪
+  userId       String? // 可选，支持匿名用户追踪
   sessionToken String    @unique // 客户端生成的会话标识
-  ip           String?   // 用户IP地址
-  userAgent    String?   // 浏览器/设备信息
-  entryPage    String?   // 入口页面
-  exitPage     String?   // 退出页面
+  ip           String? // 用户IP地址
+  userAgent    String? // 浏览器/设备信息
+  entryPage    String? // 入口页面
+  exitPage     String? // 退出页面
   startedAt    DateTime  @default(now()) // 会话开始时间
   endedAt      DateTime? // 会话结束时间
   durationMs   Int       @default(0) // 总时长（毫秒）
@@ -299,11 +305,11 @@ model UserAnalytics {
 // 页面访问记录表 - 记录用户访问的每个页面
 model PageView {
   id          String   @id @default(cuid())
-  analyticsId String   // 关联的会话ID
-  path        String   // 页面路径
+  analyticsId String // 关联的会话ID
+  path        String // 页面路径
   visitedAt   DateTime @default(now()) // 访问时间
   durationMs  Int      @default(0) // 页面停留时长（毫秒）
-  referrer    String?  // 来源页面
+  referrer    String? // 来源页面
 
   analytics UserAnalytics @relation(fields: [analyticsId], references: [id], onDelete: Cascade)
 
@@ -315,10 +321,10 @@ model PageView {
 // 事件追踪表 - 记录用户的关键交互行为
 model EventTrack {
   id            String   @id @default(cuid())
-  analyticsId   String   // 关联的会话ID
-  eventName     String   // 事件名称（如 recording_start, anchor_mark）
-  eventCategory String?  // 事件分类（如 recording, learning, ai）
-  eventData     String?  // 额外数据（JSON格式）
+  analyticsId   String // 关联的会话ID
+  eventName     String // 事件名称（如 recording_start, anchor_mark）
+  eventCategory String? // 事件分类（如 recording, learning, ai）
+  eventData     String? // 额外数据（JSON格式）
   createdAt     DateTime @default(now())
 
   analytics UserAnalytics @relation(fields: [analyticsId], references: [id], onDelete: Cascade)
@@ -330,15 +336,15 @@ model EventTrack {
 }
 
 model WechatInboxMessage {
-  id             String   @id @default(cuid())
-  linkToken      String   @unique
+  id             String    @id @default(cuid())
+  linkToken      String    @unique
   openId         String
   userId         String?
   workspaceId    String?
   developerId    String?
   msgType        String
   eventType      String?
-  messageId      String?  @unique
+  messageId      String?   @unique
   messageAt      DateTime?
   rawXml         String
   payloadJson    String
@@ -351,16 +357,16 @@ model WechatInboxMessage {
   reachKind      String?
   reachChannel   String?
   collectionRole String?
-  bindingStatus  String   @default("unresolved")
+  bindingStatus  String    @default("unresolved")
   echoTitle      String?
   echoBody       String?
   echoChipsJson  String?
   tutorContext   String?
   replyText      String?
   processedAt    DateTime?
-  status         String   @default("received")
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  status         String    @default("received")
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
 
   user      User?      @relation(fields: [userId], references: [id], onDelete: SetNull)
   workspace Workspace? @relation(fields: [workspaceId], references: [id], onDelete: SetNull)
@@ -373,4 +379,403 @@ model WechatInboxMessage {
   @@index([bindingStatus])
   @@index([reachChannel])
   @@index([createdAt])
+}
+
+// ==================== Academic Service OS（多租户） ====================
+// 详见 specs/academic-service-v0/multi-tenant-contract.md
+
+// 机构实体：B 端客户，每个 Organization 对应一个独立的 OpenClaw workspace
+model Organization {
+  id                String   @id @default(cuid())
+  name              String
+  contactEmail      String
+  industry          String // shenbo / baoyan / liuxue / lunwen / jingsai / blank
+  status            String   @default("onboarding") // onboarding / active / suspended
+  openclawWorkspace String? // 物理路径：~/.openclaw/workspaces/<orgId>；Phase 1 允许为空，Phase 2 真接入时填
+  openclawTokenRef  String? // 环境变量名：OPENCLAW_GATEWAY_TOKEN_<orgId>
+  onboardingStep    Int      @default(1) // 1..5，5 = done
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  members          OrgMember[]
+  scenarios        OrgScenario[]
+  playbookSections OrgPlaybookSection[]
+  invites          OrgInvite[]
+  assets           OrgAsset[]
+  academicProfiles AcademicProfile[]
+  coachingSources  CoachingSource[]
+  coachingTwins    CoachingTwin[]
+  practiceSessions PracticeSession[]
+  checkpointPacks  CheckpointPack[]
+  growthAssets     GrowthAsset[]
+  consultStudents  ConsultStudent[]
+  consultLeads     ConsultLead[]
+  consultSessions  ConsultSession[]
+  orgSkills        OrgSkill[]
+
+  @@index([industry])
+  @@index([status])
+}
+
+// 机构成员：User ↔ Organization 多对多，角色分级
+model OrgMember {
+  id        String   @id @default(cuid())
+  orgId     String
+  userId    String
+  role      String // owner / consultant / teacher / student
+  invitedBy String?
+  joinedAt  DateTime @default(now())
+
+  org  Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  user User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([orgId, userId])
+  @@index([userId])
+  @@index([orgId, role])
+}
+
+// 机构邀请链接 / 邮箱邀请
+model OrgInvite {
+  id        String    @id @default(cuid())
+  orgId     String
+  token     String    @unique
+  role      String // teacher / student / consultant
+  email     String? // null = 公开邀请链接
+  invitedBy String
+  expiresAt DateTime?
+  usedAt    DateTime?
+  usedBy    String?
+  createdAt DateTime  @default(now())
+
+  org Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  @@index([orgId])
+  @@index([token])
+  @@index([email])
+}
+
+// 系统预置起点模板：6 个固定种子（shenbo/baoyan/liuxue/lunwen/jingsai/blank）
+model OrgIndustryTemplate {
+  id                   String   @id // shenbo / baoyan / liuxue / lunwen / jingsai / blank
+  displayName          String
+  description          String
+  recommendedScenarios String // JSON: [{name, productKind, personaSeed, studentInputSchema, ...}]
+  seedPlaybook         String // markdown，系统默认 playbook 骨架
+  createdAt            DateTime @default(now())
+}
+
+// 机构自定义场景：结构化字段 + 自由 prompt 补丁
+model OrgScenario {
+  id                  String   @id @default(cuid())
+  orgId               String
+  name                String
+  description         String
+  productKind         String // practice / review / qa / mock-interview / material-polish
+  studentInputSchema  String // JSON
+  personaSeed         String // JSON: {tone, style, feedbackAxes[], forbiddenZones[]}
+  checkpointTriggers  String // JSON
+  coachingSourceRefs  String // JSON string[]
+  playbookSectionRefs String // JSON string[]
+  industryTemplate    String // 起点模板 id
+  promptPatch         String // JSON: {systemAppendix, userKickoff, reviewerRubric}
+  currentVersionId    String?
+  status              String   @default("draft") // draft / published / archived
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  org              Organization         @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  versions         OrgScenarioVersion[]
+  coachingTwins    CoachingTwin[]
+  practiceSessions PracticeSession[]
+
+  @@index([orgId, status])
+}
+
+// 场景版本快照：每次发布固化一份
+model OrgScenarioVersion {
+  id            String   @id @default(cuid())
+  scenarioId    String
+  versionNumber Int
+  snapshot      String // JSON: 当时 OrgScenario 完整字段快照
+  publishedAt   DateTime @default(now())
+
+  scenario         OrgScenario       @relation(fields: [scenarioId], references: [id], onDelete: Cascade)
+  practiceSessions PracticeSession[]
+
+  @@unique([scenarioId, versionNumber])
+}
+
+// 机构 playbook 片段：SOP / 话术 / 案例 / 量表 / 样本
+model OrgPlaybookSection {
+  id            String   @id @default(cuid())
+  orgId         String
+  title         String
+  sectionKind   String // overview / sop / rubric / script / sample / case
+  body          String // markdown
+  tags          String // JSON string[]
+  sourceAssetId String? // 如果由 OrgAsset 自动切分而来，指回源文档
+  orderInSource Int? // 在源文档里的顺序
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  org Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  @@index([orgId, sectionKind])
+  @@index([sourceAssetId])
+}
+
+// 学生目标、背景、研究兴趣、材料状态（机构内隔离）
+model AcademicProfile {
+  id             String   @id @default(cuid())
+  orgId          String
+  userId         String
+  displayName    String?
+  stage          String? // preparation / delivery / growth
+  goalsJson      String? // JSON: 目标/方向/专业
+  backgroundJson String? // JSON: 学术背景
+  materialsJson  String? // JSON: 已提交材料状态
+  notes          String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  org  Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  user User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([orgId, userId])
+  @@index([orgId])
+  @@index([userId])
+}
+
+// 老师辅导视频资产：Phase 2 接入真实段级理解
+model CoachingSource {
+  id           String   @id @default(cuid())
+  orgId        String
+  uploadedBy   String
+  assetId      String? // 关联 OrgAsset；V0 也允许不关联（直接填 mediaUrl）
+  title        String
+  mediaUrl     String?
+  transcript   String? // 全文转录（MeetMind ASR 产出）
+  analysisJson String? // JSON: 段级理解结果（Phase 2 启用）
+  status       String   @default("pending") // pending / transcribing / analyzing / ready / failed
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  org      Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  uploader User         @relation("CoachingSourceUploader", fields: [uploadedBy], references: [id], onDelete: Cascade)
+
+  @@index([orgId])
+  @@index([status])
+  @@index([assetId])
+}
+
+// 某个学生 / 场景下生成的陪练分身
+model CoachingTwin {
+  id                String   @id @default(cuid())
+  orgId             String
+  scenarioId        String
+  academicProfileId String?
+  personaPackJson   String // CoachingPersonaPack 结构
+  memoryRefsJson    String? // Phase 2: OpenClaw memory 句柄
+  status            String   @default("active")
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  org      Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  scenario OrgScenario  @relation(fields: [scenarioId], references: [id], onDelete: Cascade)
+
+  @@index([orgId])
+  @@index([scenarioId])
+}
+
+// 一次练习会话：固化场景版本号 + orgId
+model PracticeSession {
+  id                  String    @id @default(cuid())
+  orgId               String
+  userId              String
+  scenarioId          String
+  scenarioVersionId   String
+  mode                String // text / voice
+  status              String    @default("active") // active / completed / abandoned
+  startedAt           DateTime  @default(now())
+  completedAt         DateTime?
+  messagesJson        String? // 轻量消息历史
+  feedbackJson        String? // 会话结束后生成的反馈
+  nextActionJson      String?
+  triggeredCheckpoint Boolean   @default(false)
+
+  org             Organization       @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  user            User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  scenario        OrgScenario        @relation(fields: [scenarioId], references: [id], onDelete: Cascade)
+  scenarioVersion OrgScenarioVersion @relation(fields: [scenarioVersionId], references: [id], onDelete: Cascade)
+  checkpointPacks CheckpointPack[]
+
+  @@index([orgId])
+  @@index([userId])
+  @@index([scenarioId])
+  @@index([status])
+}
+
+// 给老师看的阶段总结：关键问题 + 材料 diff + 介入建议
+model CheckpointPack {
+  id                String   @id @default(cuid())
+  orgId             String
+  practiceSessionId String
+  assigneeUserId    String? // 指派给哪位老师
+  headline          String
+  summary           String
+  risksJson         String?
+  materialSnapshot  String?
+  status            String   @default("open") // open / in_progress / resolved / dismissed
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  org             Organization    @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  practiceSession PracticeSession @relation(fields: [practiceSessionId], references: [id], onDelete: Cascade)
+
+  @@index([orgId, status])
+  @@index([assigneeUserId, status])
+}
+
+// 服务后长期资产：可复习 / 可问 / 可测
+model GrowthAsset {
+  id        String   @id @default(cuid())
+  orgId     String
+  userId    String
+  assetKind String // replay / feedback-digest / material-version / weakness-map / next-step
+  title     String
+  body      String
+  metadata  String? // JSON
+  createdAt DateTime @default(now())
+
+  org Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  @@index([orgId, userId])
+  @@index([assetKind])
+}
+
+// 机构资产库：文件 / 文档 / 音视频 / URL 的统一容器
+// 机构上传原始素材到这里，后续被 OrgPlaybookSection / CoachingSource 引用
+model OrgAsset {
+  id              String   @id @default(cuid())
+  orgId           String
+  uploadedBy      String // userId
+  kind            String // document / audio / video / image / url
+  title           String
+  filename        String? // 原始文件名
+  mimeType        String?
+  sizeBytes       Int?
+  storagePath     String? // 相对路径：orgs/<orgId>/<assetId>.<ext>（服务端本地）
+  publicUrl       String? // 若有公网 URL（用户填外链）
+  sourceUrl       String? // 若从 url 类型拉取（YouTube 等）
+  status          String   @default("pending") // pending / processing / ready / failed
+  processingStage String? // 当前阶段说明（"正在转录"/"正在切段理解"等）
+  errorMessage    String?
+  metadataJson    String? // 运行期元数据：时长、帧数、抽帧 URL 等
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  org Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  @@index([orgId, kind])
+  @@index([status])
+}
+
+// 匿名学生画像：/consult/[orgSlug] 场景下，跨 session 持续累积
+// studentKey 由前端 localStorage 生成（stu_xxx），真实 userId 可能为空（未登录）
+model ConsultStudent {
+  id          String   @id @default(cuid())
+  orgId       String
+  studentKey  String // 前端 localStorage 匿名 ID
+  userId      String? // 关联到已登录 User.id（可选）
+  // 画像按 student-profile.md 规定的字段合并写入；Json blob 存储避免表频繁迁移
+  profileJson String   @default("{}")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  org   Organization  @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  leads ConsultLead[]
+
+  @@unique([orgId, studentKey])
+  @@index([orgId])
+  @@index([userId])
+}
+
+// CTA 留资线索：学生点"留微信继续聊"后，沉淀到机构线索库
+model ConsultLead {
+  id               String   @id @default(cuid())
+  orgId            String
+  studentKey       String // 冗余存一份便于查询
+  consultStudentId String?
+  scenarioName     String // 产生线索的场景 skill 名（如 "cold-email-draft"）
+  reason           String // LLM 生成的"为什么值得聊"理由（session 特定）
+  headline         String? // CTA headline
+  consultantHint   String? // 建议对接的顾问标签
+  wechat           String? // 学生填的微信号
+  phone            String? // 学生填的手机号
+  profileSnapshot  String   @default("{}") // 触发 CTA 时画像快照（json）
+  status           String   @default("new") // new / contacted / converted / dropped
+  notes            String? // 顾问备注
+  sessionId        String? // 触发 CTA 时对应的 ConsultSession.id（机构可回放）
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  org            Organization    @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  consultStudent ConsultStudent? @relation(fields: [consultStudentId], references: [id], onDelete: SetNull)
+  session        ConsultSession? @relation(fields: [sessionId], references: [id], onDelete: SetNull)
+
+  @@index([orgId, status])
+  @@index([orgId, createdAt])
+  @@index([studentKey])
+  @@index([sessionId])
+}
+
+// 学生端对话归档：每次 /api/consult/chat 流结束后，upsert 一条
+// 作为机构端 /console/leads/[id] 回放上下文的数据源
+//
+// M.8 之后：每个学生在每个机构只有一条 session（去场景化）
+// activeScenarioName 记录 agent 最近一次 useSkill 的剧本名，供机构/icebreaker 引用
+// 学生换场景不换 session，符合"一次真实对话可能跨多个剧本"的现实
+model ConsultSession {
+  id                  String   @id @default(cuid())
+  orgId               String
+  studentKey          String
+  // 最近一次被 useSkill 激活的 skill 名；未调用过则为空
+  activeScenarioName  String?
+  // 历史上被激活过的 skill 名集合（逗号分隔，便于 Sqlite 简单存）
+  visitedScenarios    String   @default("")
+  runtime             String   @default("aisdk")
+  messagesJson        String   @default("[]")
+  messageCount        Int      @default(0)
+  startedAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  org   Organization  @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  leads ConsultLead[]
+
+  @@unique([orgId, studentKey])
+  @@index([orgId, updatedAt])
+  @@index([studentKey])
+}
+
+// 机构上传的 scenario skill
+// 审核通过后：skill 文件落到 orgs/<orgId>/skills/<name>/ 目录，runtime 能读到
+model OrgSkill {
+  id           String    @id @default(cuid())
+  orgId        String
+  name         String // SKILL.md frontmatter.name (lowercase-hyphen)
+  description  String // SKILL.md frontmatter.description
+  status       String    @default("pending") // pending / approved / rejected
+  rejectReason String?
+  bundlePath   String? // 审核通过后 .skill 文件在服务器的相对路径
+  skillDirPath String? // 解压后的目录路径（runtime 读取入口）
+  uploadedById String? // User.id
+  reviewedById String?
+  reviewedAt   DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  org Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  @@unique([orgId, name])
+  @@index([orgId, status])
 }

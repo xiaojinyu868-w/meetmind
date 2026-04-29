@@ -9,6 +9,8 @@ const PUBLIC_ROUTES = [
   '/help',
   '/feedback',
   '/app',
+  '/consult/*',
+  '/api/consult/*',
   '/api/auth/login',
   '/api/auth/login-with-code',
   '/api/auth/send-code',
