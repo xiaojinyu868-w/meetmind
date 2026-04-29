@@ -124,6 +124,13 @@ export const RATE_LIMITS = {
     perDay: 800,
     cost: 'high',
   },
+  // 随堂检验（plan + question）：一次课堂会拆成 1 次 plan + 多个 question，单独成桶避免被 default 污染
+  classCheck: {
+    perMinute: 80,
+    perHour: 500,
+    perDay: 1600,
+    cost: 'medium',
+  },
   // 通用API（未分类）- 每分钟120次，每小时1200次
   default: {
     perMinute: 120,

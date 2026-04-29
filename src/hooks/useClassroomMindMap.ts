@@ -88,6 +88,62 @@ const TOPIC_SHIFT_WORDS = [
 ];
 
 const EMPTY_TREE: MindMapTree = { title: '', nodes: [] };
+const TITLE_CORRECTION_WINDOW_MS = 3 * 60 * 1000;
+
+function isPlaceholderTitle(value: string | undefined): boolean {
+  const text = (value || '').trim();
+  if (!text) return true;
+  return /^(正在|课堂|本节|这一节|这节课|课堂主题|正在识别|正在整理)/.test(text);
+}
+
+function normalizeTitle(value: string | undefined): string {
+  return (value || '')
+    .replace(/[。！？；：,.;!?"'`、]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 20);
+}
+
+export function reconcileMindMapTree(
+  previousTree: MindMapTree,
+  incomingTree: MindMapTree,
+  elapsedMs: number
+): MindMapTree {
+  const incomingRoot = incomingTree.nodes.find((node) => node.parentId === null);
+  if (!incomingRoot) {
+    return previousTree.nodes.length > 0 ? previousTree : incomingTree;
+  }
+
+  const previousRoot = previousTree.nodes.find((node) => node.parentId === null);
+  const candidateTitle = normalizeTitle(incomingTree.title) || normalizeTitle(incomingRoot.label);
+  const previousTitle = normalizeTitle(previousTree.title) || normalizeTitle(previousRoot?.label);
+  const incomingRootLabel = normalizeTitle(incomingRoot.label);
+  const incomingHasStructure = incomingTree.nodes.some((node) => node.parentId === incomingRoot.id);
+  const canCorrectTitle =
+    Boolean(candidateTitle) &&
+    !isPlaceholderTitle(candidateTitle) &&
+    (
+      !previousRoot ||
+      isPlaceholderTitle(previousTitle) ||
+      elapsedMs <= TITLE_CORRECTION_WINDOW_MS ||
+      incomingHasStructure
+    );
+  const finalTitle = canCorrectTitle
+    ? candidateTitle
+    : previousTitle || candidateTitle || incomingRootLabel;
+
+  if (!finalTitle || isPlaceholderTitle(candidateTitle)) {
+    return previousTree.nodes.length > 0 ? previousTree : incomingTree;
+  }
+
+  return {
+    title: finalTitle,
+    nodes: incomingTree.nodes.map((node) => {
+      if (node.id !== incomingRoot.id) return node;
+      return { ...node, label: finalTitle };
+    }),
+  };
+}
 
 export function useClassroomMindMap({
   enabled,
@@ -186,15 +242,17 @@ export function useClassroomMindMap({
         const data = (await res.json()) as { tree?: MindMapTree };
         if (!data.tree || !Array.isArray(data.tree.nodes)) return;
 
+        const reconciledTree = reconcileMindMapTree(priorTreeRef.current, data.tree, elapsedMs);
+
         // diff 出新节点
         const oldIds = new Set(priorTreeRef.current.nodes.map((n) => n.id));
         const newIds = new Set<string>();
-        for (const n of data.tree.nodes) {
+        for (const n of reconciledTree.nodes) {
           if (!oldIds.has(n.id)) newIds.add(n.id);
         }
 
-        priorTreeRef.current = data.tree;
-        setTree(data.tree);
+        priorTreeRef.current = reconciledTree;
+        setTree(reconciledTree);
         setNewNodeIds(newIds);
 
         // 动画窗口：2 秒后清空 newNodeIds，让新节点淡入常态

@@ -145,7 +145,18 @@ function applyRuleLayer(text: string): { text: string; changed: boolean } {
   next = next
     .replace(/\bqustions\b/gi, 'questions')
     .replace(/\bsugguest\b/gi, 'suggest')
-    .replace(/\btakeawayy?\b/gi, 'takeaway');
+    .replace(/\btakeawayy?\b/gi, 'takeaway')
+    .replace(/\bmid\s*journey\b/gi, 'Midjourney')
+    .replace(/\bcursor\b/gi, 'Cursor')
+    .replace(/\bcopilot\b/gi, 'Copilot')
+    .replace(/\bcodex\b/gi, 'Codex')
+    .replace(/\bclaude\s*code\b/gi, 'Claude Code')
+    .replace(/\bcloud\s+code\b/gi, 'Claude Code')
+    .replace(/\bcode\s*buddy\b/gi, 'CodeBuddy')
+    .replace(/\bcowork\b/gi, 'Co-work')
+    .replace(/\bco\s+work\b/gi, 'Co-work')
+    .replace(/\bwork\s*tree\b/gi, 'Worktree')
+    .replace(/\bworktree\b/gi, 'Worktree');
 
   // Universal ASR phonetic corrections (cross-discipline, not domain-specific).
   // Greek letters commonly mistranslated by Chinese ASR.

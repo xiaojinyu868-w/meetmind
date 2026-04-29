@@ -437,6 +437,8 @@ app.prepare().then(() => {
 
     let contextHint = '';
     let recentFinalTexts = [];
+    let initialSessionUpdateTimer = null;
+    let initialSessionUpdateSent = false;
     // 语种模式：
     //   'auto' = 不传 language 参数（Qwen 官方推荐：混合语种或不确定时应省略）
     //   'zh'   = 明确中文
@@ -487,14 +489,19 @@ app.prepare().then(() => {
 
     function sendSessionUpdate(extraLog) {
       if (!dashscopeWs || dashscopeWs.readyState !== WebSocket.OPEN) return;
+      if (initialSessionUpdateSent) return;
+      if (initialSessionUpdateTimer) {
+        clearTimeout(initialSessionUpdateTimer);
+        initialSessionUpdateTimer = null;
+      }
       // DashScope qwen3-asr-flash-realtime 不允许 session.updated 之后再发第二次 session.update，
       // 否则会触发 "session already started or finished or failed" 错误并以 1007 断开连接。
       // 因此 session 一旦 ready，后续的 context-hint / dynamic refresh 只更新内存，不再发 update。
-      if (isSessionReady && extraLog !== 'initial') {
+      if (isSessionReady) {
         console.log(`[ASR-Proxy] Skipping session.update (${extraLog}) - session already started`);
         return;
       }
-      if (hasAudioAppended && extraLog !== 'initial') {
+      if (hasAudioAppended) {
         console.log(`[ASR-Proxy] Skipping session.update (${extraLog}) - audio already streaming`);
         return;
       }
@@ -529,6 +536,7 @@ app.prepare().then(() => {
         type: 'session.update',
         session: sessionConfig,
       }));
+      initialSessionUpdateSent = true;
 
       if (extraLog) {
         console.log(`[ASR-Proxy] Session updated (${extraLog}), lang=${languageMode}, prompt length: ${prompt.length}`);
@@ -737,7 +745,9 @@ app.prepare().then(() => {
       });
 
       dashscopeWs.on('open', () => {
-        sendSessionUpdate('initial');
+        initialSessionUpdateTimer = setTimeout(() => {
+          sendSessionUpdate('initial');
+        }, 120);
       });
 
       dashscopeWs.on('message', (data, isBinary) => {
@@ -979,7 +989,7 @@ app.prepare().then(() => {
           }
           // 只要 hint 或 languageMode 有变化，且 session 还没起来，就刷新 session.update。
           // session 已建立则只更新内存变量（DashScope 不允许二次 session.update）。
-          if ((hint || languageModeChanged) && !isSessionReady) {
+          if ((hint || languageModeChanged) && !isSessionReady && !initialSessionUpdateSent) {
             sendSessionUpdate('context-hint received (pre-ready)');
           } else if (hint || languageModeChanged) {
             console.log('[ASR-Proxy] context-hint/languageMode received AFTER session ready - stored for next session only');

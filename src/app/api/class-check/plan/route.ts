@@ -164,7 +164,7 @@ function normalizePlan(raw: PlanLLMOutput | null, segments: TranscriptSegment[])
 }
 
 export async function POST(request: NextRequest) {
-  const rateLimitResponse = await applyRateLimit(request, 'default');
+  const rateLimitResponse = await applyRateLimit(request, 'classCheck');
   if (rateLimitResponse) return rateLimitResponse;
 
   try {

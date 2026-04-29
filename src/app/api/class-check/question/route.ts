@@ -3,6 +3,7 @@ import { chat, DEFAULT_MODEL_ID } from '@/lib/services/llm-service';
 import { parseJsonResponse } from '@/lib/utils/json-utils';
 import { applyRateLimit } from '@/lib/utils/rate-limit';
 import { buildPromptTranscriptContext } from '@/lib/ai-native/prompt-context';
+import { buildFallbackCheckpointQuestions } from './question-fallback';
 import type { TranscriptSegment } from '@/types';
 import type { ClassCheckQuestionData } from '@/app/api/class-check/plan/route';
 
@@ -93,7 +94,7 @@ function desiredQuestionCount(difficulty: number, override?: number): number {
 }
 
 export async function POST(request: NextRequest) {
-  const rateLimitResponse = await applyRateLimit(request, 'default');
+  const rateLimitResponse = await applyRateLimit(request, 'classCheck');
   if (rateLimitResponse) return rateLimitResponse;
 
   try {
@@ -130,11 +131,14 @@ export async function POST(request: NextRequest) {
       minCharsPerSegment: 20,
     });
 
-    const response = await chat(
-      [
-        {
-          role: 'system',
-          content: `你是一位坐在学生旁边、和他一起听课的 AI 同桌。
+    let questions: ClassCheckQuestionData[] = [];
+
+    try {
+      const response = await chat(
+        [
+          {
+            role: 'system',
+            content: `你是一位坐在学生旁边、和他一起听课的 AI 同桌。
 
 你的任务：针对某个具体知识点，出 ${count} 道选择题。
 
@@ -145,10 +149,10 @@ export async function POST(request: NextRequest) {
 - 解析简短，点到为止
 
 严格输出 JSON，不要输出其他文字。`,
-        },
-        {
-          role: 'user',
-          content: `以下是课堂中关于「${checkpoint.topic}」（难度 ${difficulty}/5）这个知识点的原始转录：
+          },
+          {
+            role: 'user',
+            content: `以下是课堂中关于「${checkpoint.topic}」（难度 ${difficulty}/5）这个知识点的原始转录：
 
 ${transcriptContext.text}
 
@@ -169,21 +173,24 @@ ${transcriptContext.text}
 - 题目聚焦「${checkpoint.topic}」这个知识点本身
 - 答案字段填选项字母（A/B/C/D）
 - 不要编造转录里没有的内容`,
-        },
-      ],
-      model,
-      { temperature: 0.4, maxTokens: 1536, responseFormat: 'json_object' }
-    );
+          },
+        ],
+        model,
+        { temperature: 0.4, maxTokens: 1536, responseFormat: 'json_object' }
+      );
 
-    const parsed = parseJsonResponse<QuestionLLMOutput>(response.content);
-    const questions: ClassCheckQuestionData[] = Array.isArray(parsed?.questions)
-      ? parsed!.questions!
-          .map((q) => normalizeQuestion(q))
-          .filter((q): q is ClassCheckQuestionData => q !== null)
-      : [];
+      const parsed = parseJsonResponse<QuestionLLMOutput>(response.content);
+      questions = Array.isArray(parsed?.questions)
+        ? parsed!.questions!
+            .map((q) => normalizeQuestion(q))
+            .filter((q): q is ClassCheckQuestionData => q !== null)
+        : [];
+    } catch {
+      questions = [];
+    }
 
     if (questions.length === 0) {
-      return NextResponse.json({ ok: false, error: '题目解析失败' }, { status: 500 });
+      questions = buildFallbackCheckpointQuestions({ checkpoint, windowSegments, count });
     }
 
     return NextResponse.json({ ok: true, questions });

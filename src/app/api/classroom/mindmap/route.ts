@@ -133,11 +133,13 @@ export async function POST(request: NextRequest) {
 
 时机感：
 - 如果老师还在开场寒暄/点名，正式内容还没开始，就只给一个中心占位节点，整棵树里只有 root。不要强行编东西。
-- 如果上一轮已经给过一棵 \`priorTree\`，这一轮尽量**增量扩展**：保留已有节点的 id 和 label，只在合适的地方追加新的分支或叶子；除非老师明显切换到了一个大的新主题，否则不要推翻重来。保持 id 稳定，前端好做进出场动画。
+- 如果上一轮已经给过一棵 \`priorTree\`，这一轮尽量**增量扩展**：保留已有分支/叶子的 id，只在合适的地方追加新的分支或叶子。
+- 但中心主题不是不可改的：如果前一轮因为信息太少把 root.label 起偏了，而这一轮能看出更准确的课程主线，请更新 title 和 root.label；不要为了稳定性保留明显错误的标题。
+- 除非老师明显切换到了一个大的新主题，否则不要推翻整棵树。稳定的是结构和节点 id，不是错误标题。
 
 ${titleHint ? titleHint.trim() + '\n\n' : ''}${hintsBlock ? hintsBlock.trim() + '\n\n' : ''}输出 JSON（前端按字段渲染，这部分是硬契约）：
 {
-  "title": "（同 root.label）",
+  "title": "当前最准确的中心主题",
   "nodes": [
     {"id": "root", "parentId": null, "label": "中心主题", "anchorMs": 0, "detail": "可选，本段核心一句话（≤30 字），仅中心节点可带"},
     {"id": "b1", "parentId": "root", "label": "分支标签", "anchorMs": 12000},

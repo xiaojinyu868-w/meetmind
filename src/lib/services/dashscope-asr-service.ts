@@ -37,6 +37,8 @@ export interface DashScopeASROptions {
   sampleRate?: number;
   format?: string;
   language?: string[];
+  initialContextHint?: string;
+  initialLanguageMode?: 'auto' | 'zh' | 'en';
 }
 
 export class DashScopeASRClient {
@@ -134,6 +136,10 @@ export class DashScopeASRClient {
             clearTimeout(connectionTimeout);
             connected = true;
             this.updateStatus('connected');
+            this.sendContextHint(
+              this.options.initialContextHint || '',
+              this.options.initialLanguageMode || 'auto'
+            );
           };
 
           this.ws.onmessage = (event) => {

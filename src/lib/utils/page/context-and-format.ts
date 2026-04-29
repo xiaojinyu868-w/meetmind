@@ -22,6 +22,25 @@ export async function readJsonApiResponse<T>(response: Response, errorPrefix: st
 
 // ── ASR / Tutor context builders ──────────────────────────────────
 
+const DEFAULT_ASR_TECH_TERMS = [
+  'Cursor',
+  'Claude Code',
+  'CodeBuddy',
+  'Codex',
+  'Copilot',
+  'Midjourney',
+  'Co-work',
+  'Git Worktree',
+  'IDE',
+  'Agent',
+  'MCP',
+  'LLM',
+  'prompt',
+  'workflow',
+];
+
+const DEFAULT_ASR_CONTEXT_HINT = `常见中英混合术语：${DEFAULT_ASR_TECH_TERMS.join('、')}。这些词如果出现在课堂里，请优先保留英文或标准产品名写法，不要音译成中文。尤其注意：Cloud Code 多数情况下应识别为 Claude Code，mid journey 应识别为 Midjourney，cowork 应识别为 Co-work。`;
+
 export function buildASRContextHint(params: {
   manualHint: string;
   recentSegments: TranscriptSegment[];
@@ -45,9 +64,9 @@ export function buildASRContextHint(params: {
     manualHint ? `课程主题/术语：${manualHint}` : '',
     importedReferences.length > 0 ? `参考资料：${importedReferences.join('\n')}` : '',
     recentContext ? `已识别课堂上下文：${recentContext}` : '',
+    DEFAULT_ASR_CONTEXT_HINT,
   ].filter(Boolean);
 
-  if (parts.length === 0) return '';
   return compactText(parts.join('\n\n'), params.maxChars ?? 3000);
 }
 

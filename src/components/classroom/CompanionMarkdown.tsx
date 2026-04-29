@@ -23,6 +23,7 @@ import remarkMath from 'remark-math';
 import rehypeKatex from 'rehype-katex';
 import 'katex/dist/katex.min.css';
 import type { Components } from 'react-markdown';
+import { normalizeCompanionMarkdown } from './companion-markdown-utils';
 
 export interface CompanionMarkdownProps {
   content: string;
@@ -36,12 +37,6 @@ export interface CompanionMarkdownProps {
  * 同桌不应该报时间戳，这是复习态的事。
  * 但保留 [资料N] 这种引用痕迹，因为它让"有根"可见。
  */
-function stripTimestamps(text: string): string {
-  // 形如 [MM:SS] 或 [MM:SS-MM:SS] 或 [引用 MM:SS]
-  const tsRegex = /\[(?:引用\s*)?\d{1,2}:\d{2}(?:-\d{1,2}:\d{2})?\]/g;
-  return text.replace(tsRegex, '').replace(/\s{2,}/g, ' ');
-}
-
 const markdownComponents: Components = {
   // 让段落之间更紧凑，与气泡内 padding 和谐
   p: ({ children }) => (
@@ -49,17 +44,16 @@ const markdownComponents: Components = {
       {children}
     </p>
   ),
-  // 列表样式
+  // 列表样式：保留浏览器原生 marker，尤其不能把有序列表渲染成圆点。
   ul: ({ children }) => (
-    <ul className="my-2 space-y-1 pl-0 text-[13.5px] text-ink">{children}</ul>
+    <ul className="my-2 list-disc space-y-1 pl-5 text-[13.5px] leading-relaxed text-ink marker:text-ink-muted/70">{children}</ul>
   ),
   ol: ({ children }) => (
-    <ol className="my-2 list-decimal space-y-1 pl-5 text-[13.5px] text-ink">{children}</ol>
+    <ol className="my-2 list-decimal space-y-1 pl-5 text-[13.5px] leading-relaxed text-ink marker:text-ink-muted/80">{children}</ol>
   ),
   li: ({ children }) => (
-    <li className="flex gap-2 leading-relaxed">
-      <span className="mt-[0.55em] inline-flex h-1 w-1 flex-shrink-0 rounded-full bg-ink-muted/60" />
-      <span className="flex-1">{children}</span>
+    <li className="pl-0.5 leading-relaxed">
+      {children}
     </li>
   ),
   // 标题
@@ -141,7 +135,7 @@ export function CompanionMarkdown({
   isStreaming = false,
   className = '',
 }: CompanionMarkdownProps) {
-  const cleaned = stripTimestamps(content);
+  const cleaned = normalizeCompanionMarkdown(content);
 
   return (
     <div className={`companion-markdown ${className}`}>

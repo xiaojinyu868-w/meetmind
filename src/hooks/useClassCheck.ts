@@ -22,6 +22,12 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { getPreference } from '@/lib/db/preferences';
+import { useAuth } from '@/lib/hooks/useAuth';
+import {
+  buildClassCheckPlanRequestKey,
+  buildClientFallbackCheckpointQuestions,
+  shouldAutoFetchCheckpointQuestions,
+} from './useClassCheckUtils';
 import type { TranscriptSegment } from '@/types';
 import type { ClassCheckQuestion, ClassCheckResult } from '@/components/ClassCheckOverlay';
 import type {
@@ -37,28 +43,29 @@ const SEEK_THRESHOLD_MS = 5000;
 const CHECKPOINT_GRACE_MS = 8000;
 const PLAN_CACHE_PREFIX = 'class-check-plan:';
 const PLAN_CACHE_TTL_MS = 24 * 60 * 60 * 1000; // 24 小时
-const QUESTION_CONCURRENCY = 3; // 并发生成题目的最大并发度
+const QUESTION_CONCURRENCY = 2; // 并发生成题目的最大并发度
+const PLAN_RATE_LIMIT_COOLDOWN_MS = 90 * 1000;
 
 /** 题目加载状态 */
 export type CheckpointQuestionState = 'loading' | 'ready' | 'failed';
 
-function readCachedPlan(sessionId: string, segmentCount: number): ClassCheckPlan | null {
+function readCachedPlan(cacheKey: string): ClassCheckPlan | null {
   if (typeof window === 'undefined') return null;
   try {
-    const raw = window.localStorage.getItem(`${PLAN_CACHE_PREFIX}${sessionId}`);
+    const raw = window.localStorage.getItem(`${PLAN_CACHE_PREFIX}${cacheKey}`);
     if (!raw) return null;
-    const cached = JSON.parse(raw) as { plan: ClassCheckPlan; segmentCount: number; ts: number };
-    if (!cached.plan || cached.segmentCount !== segmentCount) return null;
+    const cached = JSON.parse(raw) as { plan: ClassCheckPlan; ts: number };
+    if (!cached.plan) return null;
     if (Date.now() - cached.ts > PLAN_CACHE_TTL_MS) return null;
     return cached.plan;
   } catch { return null; }
 }
 
-function writeCachedPlan(sessionId: string, segmentCount: number, plan: ClassCheckPlan): void {
-  if (typeof window === 'undefined') return;
+function writeCachedPlan(cacheKey: string, plan: ClassCheckPlan): void {
+  if (typeof window === 'undefined' || !cacheKey) return;
   try {
-    window.localStorage.setItem(`${PLAN_CACHE_PREFIX}${sessionId}`, JSON.stringify({
-      plan, segmentCount, ts: Date.now(),
+    window.localStorage.setItem(`${PLAN_CACHE_PREFIX}${cacheKey}`, JSON.stringify({
+      plan, ts: Date.now(),
     }));
   } catch { /* quota exceeded — ignore */ }
 }
@@ -133,11 +140,15 @@ function toOverlayQuestions(
 async function fetchCheckpointQuestions(
   transcript: TranscriptSegment[],
   checkpoint: ClassCheckCheckpoint,
-  signal: AbortSignal
+  signal: AbortSignal,
+  accessToken?: string | null
 ): Promise<ClassCheckQuestionData[]> {
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+  if (accessToken) headers.Authorization = `Bearer ${accessToken}`;
+
   const response = await fetch('/api/class-check/question', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers,
     signal,
     body: JSON.stringify({
       transcript: transcript.map((s) => ({
@@ -155,6 +166,9 @@ async function fetchCheckpointQuestions(
     }),
   });
   if (!response.ok) {
+    if (response.status === 429) {
+      return buildClientFallbackCheckpointQuestions({ checkpoint, transcript });
+    }
     throw new Error(`question API ${response.status} ${response.statusText}`);
   }
   const contentType = response.headers.get('content-type') || '';
@@ -182,6 +196,7 @@ export function useClassCheck({
   resumePlayer,
   onHighlightsReady,
 }: UseClassCheckParams): UseClassCheckReturn {
+  const { accessToken } = useAuth();
   const [enabled, setEnabled] = useState(false);
   const [plan, setPlan] = useState<ClassCheckPlan | null>(null);
   const [isPlanLoading, setIsPlanLoading] = useState(false);
@@ -200,6 +215,8 @@ export function useClassCheck({
   const activeCheckpointIndexRef = useRef(-1);
   const triggerLockRef = useRef(false);
   const planSessionRef = useRef('');
+  const planCacheKeyRef = useRef('');
+  const planRateLimitedUntilRef = useRef(0);
   /** 正在进行中的题目请求 promise（按 checkpointIndex 索引） */
   const questionPromisesRef = useRef<Array<Promise<void> | null>>([]);
   /** 当前 session 的 AbortController，用于 session 切换时取消悬挂请求 */
@@ -207,6 +224,7 @@ export function useClassCheck({
   /** 最新 segments 引用，异步回调里读最新值 */
   const segmentsRef = useRef<TranscriptSegment[]>([]);
   segmentsRef.current = segments;
+  const planRequestKey = buildClassCheckPlanRequestKey({ sessionId, dataSource, segments });
 
   // 加载开关 — 初始化 + 页面可见时重新读取
   useEffect(() => {
@@ -267,7 +285,8 @@ export function useClassCheck({
         const questions = await fetchCheckpointQuestions(
           segmentsRef.current,
           checkpoint,
-          controller.signal
+          controller.signal,
+          accessToken
         );
 
         // 写回 plan
@@ -278,7 +297,7 @@ export function useClassCheck({
           );
           const nextPlan = { ...prev, checkpoints: nextCheckpoints };
           // 缓存同步更新
-          writeCachedPlan(sessionId, segmentsRef.current.length, nextPlan);
+          writeCachedPlan(planCacheKeyRef.current, nextPlan);
           return nextPlan;
         });
 
@@ -305,7 +324,7 @@ export function useClassCheck({
 
     questionPromisesRef.current[checkpointIndex] = promise;
     return promise;
-  }, [sessionId]);
+  }, [accessToken]);
 
   /** 总是指向最新的 plan，供异步回调读取，不因闭包旧值丢失题目 */
   const planRef = useRef<ClassCheckPlan | null>(null);
@@ -339,30 +358,17 @@ export function useClassCheck({
     );
   }, [ensureCheckpointQuestions]);
 
-  // 会话切换或转录变化时请求 plan（骨架）+ 并发预热题目
-  // Plan 请求不受 enabled 开关控制——高光片段和检查点标记始终展示。
+  // 会话切换或转录跨过粗粒度分桶时请求 plan（骨架）+ 并发预热题目。
+  // 实时转录每新增一段都会触发渲染，但不应该每段都打一次 /api/class-check/plan。
   // enabled 开关只控制播放时是否自动弹出测验题。
   useEffect(() => {
-    if (dataSource !== 'video' && dataSource !== 'live') {
-      // 业务正常分支，仅 dev 时打印
-      if (process.env.NODE_ENV !== 'production') {
-        console.debug('[class-check] dataSource=%s, need video|live, skipping plan', dataSource);
-      }
-      return;
-    }
-    if (segments.length < 6) {
-      // 业务正常分支（转录段太少不生成 plan），仅 dev 时打印
-      if (process.env.NODE_ENV !== 'production') {
-        console.debug('[class-check] segments=%d < 6, skipping plan', segments.length);
-      }
-      return;
-    }
+    if (!planRequestKey) return;
+    if (Date.now() < planRateLimitedUntilRef.current) return;
+    if (planSessionRef.current === planRequestKey) return;
+    planSessionRef.current = planRequestKey;
+    planCacheKeyRef.current = planRequestKey;
 
-    const planKey = `${sessionId}:${segments.length}`;
-    if (planSessionRef.current === planKey) return;
-    planSessionRef.current = planKey;
-
-    // 取消旧 session 的题目请求
+    // 取消旧分桶/旧 session 的题目请求；同一分桶内 transcript 增长不会触发 cleanup。
     abortRef.current?.abort();
     const controller = new AbortController();
     abortRef.current = controller;
@@ -379,24 +385,25 @@ export function useClassCheck({
         onHighlightsReady(incomingPlan.highlights);
       }
       if (!fromCache) {
-        writeCachedPlan(sessionId, segmentsRef.current.length, incomingPlan);
+        writeCachedPlan(planRequestKey, incomingPlan);
       }
       // 并发预热缺失的题目
       void preheatAllQuestions(incomingPlan.checkpoints.length);
     };
 
     // 先检查 localStorage 缓存
-    const cached = readCachedPlan(sessionId, segments.length);
+    const cached = readCachedPlan(planRequestKey);
     if (cached) {
-      console.log('[class-check] plan loaded from cache, sessionId=%s, %d checkpoints, %d highlights',
-        sessionId, cached.checkpoints.length, cached.highlights?.length || 0);
+      console.log('[class-check] plan loaded from cache, key=%s, %d checkpoints, %d highlights',
+        planRequestKey, cached.checkpoints.length, cached.highlights?.length || 0);
       setIsPlanLoading(false);
       applyPlan(cached, true);
       return;
     }
 
-    console.log('[class-check] requesting plan skeleton, sessionId=%s, segments=%d',
-      sessionId, segments.length);
+    const transcriptSnapshot = segmentsRef.current;
+    console.log('[class-check] requesting plan skeleton, key=%s, segments=%d',
+      planRequestKey, transcriptSnapshot.length);
 
     setIsPlanLoading(true);
     setPlan(null);
@@ -412,12 +419,15 @@ export function useClassCheck({
 
     void (async () => {
       try {
+        const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+        if (accessToken) headers.Authorization = `Bearer ${accessToken}`;
+
         const response = await fetch('/api/class-check/plan', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers,
           signal: controller.signal,
           body: JSON.stringify({
-            transcript: segments.map((s) => ({
+            transcript: transcriptSnapshot.map((s) => ({
               id: s.id,
               text: s.text,
               startMs: s.startMs,
@@ -426,7 +436,16 @@ export function useClassCheck({
           }),
         });
         if (!response.ok) {
-          console.warn('[class-check] plan API non-OK status:', response.status, response.statusText);
+          if (response.status === 429) {
+            const retryAfterSec = Number(response.headers.get('Retry-After'));
+            planRateLimitedUntilRef.current = Date.now() + (
+              Number.isFinite(retryAfterSec) && retryAfterSec > 0
+                ? retryAfterSec * 1000
+                : PLAN_RATE_LIMIT_COOLDOWN_MS
+            );
+          } else if (process.env.NODE_ENV !== 'production') {
+            console.warn('[class-check] plan API non-OK status:', response.status, response.statusText);
+          }
           return;
         }
         const contentType = response.headers.get('content-type') || '';
@@ -456,7 +475,7 @@ export function useClassCheck({
     return () => {
       controller.abort();
     };
-  }, [sessionId, segments.length, dataSource, segments, onHighlightsReady, preheatAllQuestions]);
+  }, [accessToken, planRequestKey, onHighlightsReady, preheatAllQuestions]);
 
   /**
    * 把一个 checkpoint 的题目装到当前 overlay 状态。
@@ -524,6 +543,20 @@ export function useClassCheck({
     const checkpoint = plan.checkpoints[nextIdx];
     if (!checkpoint) return;
 
+    const questionState = checkpointQuestionStates[nextIdx];
+    if (!shouldAutoFetchCheckpointQuestions({
+      hasQuestions: checkpoint.questions.length > 0,
+      questionState,
+      checkpointStatus: checkpointStatuses[nextIdx],
+    }) && checkpoint.questions.length === 0) {
+      setCheckpointStatuses((prev) => {
+        const next = [...prev];
+        if (next[nextIdx] === 'pending') next[nextIdx] = 'skipped';
+        return next;
+      });
+      return;
+    }
+
     // 题目尚未就绪 —— 等一下，通常预热已完成
     if (checkpoint.questions.length === 0) {
       console.log('[class-check] checkpoint %d reached but questions not ready, waiting...', nextIdx);
@@ -550,7 +583,7 @@ export function useClassCheck({
       nextIdx, checkpoint.topic, currentTimeMs);
 
     enterCheckActive(nextIdx);
-  }, [currentTimeMs, enabled, isPlaying, isCheckActive, plan, checkpointStatuses, pendingCheckpointIdx, ensureCheckpointQuestions, enterCheckActive]);
+  }, [currentTimeMs, enabled, isPlaying, isCheckActive, plan, checkpointStatuses, checkpointQuestionStates, pendingCheckpointIdx, ensureCheckpointQuestions, enterCheckActive]);
 
   const handleCheckComplete = useCallback(
     (result: ClassCheckResult) => {

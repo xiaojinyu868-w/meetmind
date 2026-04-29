@@ -201,11 +201,19 @@ export function ClassroomView({
       .slice(0, 12);
   }, [sourceItems]);
 
+  const activeRecordingLessonTitle = useMemo(() => {
+    const active = lessons.find((lesson) => lesson.status === 'recording');
+    const title = active?.title?.trim();
+    if (!title || /^正在录|^课堂$|^新课堂/.test(title)) return undefined;
+    return title;
+  }, [lessons]);
+
   const { tree: mindMapTree, newNodeIds: mindMapNewIds } = useClassroomMindMap({
     enabled: paneState === 'recording',
     transcriptText: liveTranscriptText,
     interimText: paneState === 'recording' ? liveInterimText : undefined,
     recordingStartAt,
+    lessonTitle: activeRecordingLessonTitle,
     importedHints: mindMapImportedHints,
   });
 
