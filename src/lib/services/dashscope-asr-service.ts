@@ -178,6 +178,10 @@ export class DashScopeASRClient {
 
           this.ws.onerror = (error) => {
             clearTimeout(connectionTimeout);
+            // M7-fix6: 用户主动停止（StrictMode unmount / destroy()）不是真错误
+            if (this.userStopRequested || resolved) {
+              return;
+            }
             log.error(`[DashScopeASR] Connection error: ${wsUrl}`, error);
             if (!connected && !resolved && urlIndex < candidateUrls.length - 1) {
               tryConnect(urlIndex + 1);

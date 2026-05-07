@@ -101,6 +101,23 @@ const nextConfig = {
       },
     ];
   },
+  // M7-fix6: logger.ts 引了 pino + pino-pretty + async_hooks（Node 专属），
+  // 但被 src/lib/config.ts 间接导入到 client bundle。告诉 webpack 这些是
+  // server-only fallback，client 不要尝试解析。
+  webpack: (config, { isServer }) => {
+    if (!isServer) {
+      config.resolve = config.resolve || {};
+      config.resolve.fallback = {
+        ...(config.resolve.fallback || {}),
+        async_hooks: false,
+        pino: false,
+        'pino-pretty': false,
+        'thread-stream': false,
+        'sonic-boom': false,
+      };
+    }
+    return config;
+  },
 };
 
 module.exports = nextConfig;

@@ -33,6 +33,11 @@ const isBrowser = typeof window !== 'undefined';
 type LogContext = Record<string, unknown>;
 
 // 动态加载 AsyncLocalStorage（只在 Node runtime 可用）
+//
+// 通过间接 require（`eval('require')`）避免 webpack 在 client bundle 里静态
+// 解析 'async_hooks' —— 不然 dev/prod 都会在 browser console 报
+// "Module not found: Can't resolve 'async_hooks'"。
+// 这里的 require 只在 Node runtime 执行，isBrowser 分支已先 return null。
 let alsInstance: unknown = null;
 function getALS(): {
   getStore: () => LogContext | undefined;
@@ -42,7 +47,8 @@ function getALS(): {
   if (alsInstance) return alsInstance as ReturnType<typeof getALS>;
   try {
     // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const { AsyncLocalStorage } = require('async_hooks') as typeof import('async_hooks');
+    const nodeRequire: NodeRequire = eval('require');
+    const { AsyncLocalStorage } = nodeRequire('async_hooks') as typeof import('async_hooks');
     alsInstance = new AsyncLocalStorage<LogContext>();
     return alsInstance as ReturnType<typeof getALS>;
   } catch {
@@ -81,8 +87,10 @@ function getRootPino(): PinoLike | null {
   if (isBrowser) return null;
   if (rootPino) return rootPino;
   try {
+    // 间接 require（见 getALS 注释）——避免 webpack 把 pino / pino-pretty 拖进 client bundle
     // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const pinoModule = require('pino');
+    const nodeRequire: NodeRequire = eval('require');
+    const pinoModule = nodeRequire('pino');
     const pino = pinoModule.default ?? pinoModule;
     const level = process.env.LOG_LEVEL ?? (process.env.NODE_ENV === 'production' ? 'info' : 'debug');
     // Prod: JSON；Dev: pino-pretty 如果可用
@@ -92,7 +100,7 @@ function getRootPino(): PinoLike | null {
         ? (() => {
             try {
               // 检查 pino-pretty 是否可用
-              require.resolve('pino-pretty');
+              nodeRequire.resolve('pino-pretty');
               return { target: 'pino-pretty', options: { colorize: true, translateTime: 'SYS:HH:MM:ss.l', ignore: 'pid,hostname' } };
             } catch {
               return undefined;
