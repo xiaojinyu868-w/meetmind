@@ -1,0 +1,8 @@
+{"id":"tutor-seed-tool-01","question":"能不能把这节课的重点做成闪卡帮我记忆","expectedTool":"makeFlashcards","toolMode":"exact","stubOutput":"好的，我这就给你生成闪卡","stubToolCalls":[{"toolName":"makeFlashcards","args":{"count":8}}]}
+{"id":"tutor-seed-tool-02","question":"给我出道题测试一下","expectedTool":"makeQuiz","toolMode":"exact","stubOutput":"好的","stubToolCalls":[{"toolName":"makeQuiz"}]}
+{"id":"tutor-seed-tool-03","question":"帮我画个思维导图","expectedTool":"makeMindmap","toolMode":"exact","stubOutput":"ok","stubToolCalls":[{"toolName":"makeMindmap"}]}
+{"id":"tutor-seed-tool-none-01","question":"什么是梯度下降?","toolMode":"none","stubOutput":"梯度下降是一种优化算法，通过迭代地朝梯度反方向更新参数来最小化损失函数。","stubToolCalls":[]}
+{"id":"tutor-seed-cite-01","question":"老师第二段讲了什么","expectedWindow":{"start":60,"end":180},"requireCitation":true,"stubOutput":"老师在 [t=02:15] 提到了反向传播的链式法则","stubToolCalls":[]}
+{"id":"tutor-seed-cite-02","question":"开头几分钟讲了啥","expectedWindow":{"start":0,"end":300},"requireCitation":true,"stubOutput":"在 [t=01:10] 和 [t=03:40] 两段都谈到了线性回归的基本形式","stubToolCalls":[]}
+{"id":"tutor-seed-cite-fail-01","question":"老师中间讲的是什么","expectedWindow":{"start":300,"end":600},"requireCitation":true,"stubOutput":"老师在 [t=01:00] 讲了线性代数","stubToolCalls":[]}
+{"id":"tutor-seed-rubric-01","question":"什么是矩阵的秩","rubric":"回答应提及秩等于列向量/行向量的最大线性无关数，或者等于列空间维度","stubOutput":"矩阵的秩等于它列向量的最大线性无关组的数量，也就是列空间的维度。"}

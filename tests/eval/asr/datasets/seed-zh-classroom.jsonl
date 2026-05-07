@@ -1,0 +1,10 @@
+{"id":"seed-clean-01","reference":"机器学习的核心是通过数据训练模型，让模型学会从输入预测输出","hypothesis":"机器学习的核心是通过数据训练模型，让模型学会从输入预测输出","tags":["clean","zh","baseline"]}
+{"id":"seed-clean-02","reference":"梯度下降算法通过计算损失函数的梯度来更新参数","hypothesis":"梯度下降算法通过计算损失函数的梯度来更新参数","tags":["clean","zh","baseline"]}
+{"id":"seed-term-error-01","reference":"卷积神经网络在图像识别中表现出色","hypothesis":"圈积神经网络在图像识别中表现出色","tags":["term-error","zh","regression"]}
+{"id":"seed-code-switch-01","reference":"Python 的 list 和 dict 是最常用的数据结构","hypothesis":"Python 的 list 和 dict 是最常用的数据结构","tags":["code-switch","zh-en","baseline"]}
+{"id":"seed-filler-01","reference":"嗯然后我们看一下这个例子","hypothesis":"嗯然后我们看一下这个例子","tags":["filler","zh","baseline"]}
+{"id":"seed-numeric-01","reference":"课程一共有 12 章 48 节","hypothesis":"课程一共有 12 章 48 节","tags":["numeric","zh","baseline"]}
+{"id":"seed-long-01","reference":"在深度学习领域里,Transformer 架构自 2017 年被提出以来已经成为了自然语言处理的事实标准","hypothesis":"在深度学习领域里Transformer架构自2017年被提出以来已经成为了自然语言处理的事实标准","tags":["long","zh-en","numeric","baseline"]}
+{"id":"seed-homophone-01","reference":"他说的是机率不是奇遇","reference_alt":"他说的是几率不是机遇","hypothesis":"他说的是机率不是奇遇","tags":["homophone","zh"]}
+{"id":"seed-boundary-01","reference":"机器学习就是让机器学习","hypothesis":"机器学习就是让机器学习","tags":["boundary","zh","baseline"]}
+{"id":"seed-noise-drop-01","reference":"今天我们学习二叉树的遍历","hypothesis":"今天我们学二叉树的遍历","tags":["noise","deletion","zh","regression"]}

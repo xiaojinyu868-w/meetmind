@@ -29,6 +29,32 @@ test: ## 运行单元测试
 test-watch: ## 运行单元测试（watch 模式）
 	npx vitest
 
+.PHONY: test-server
+test-server: ## 运行 server/ 下的 ASR 工具函数单测
+	npx vitest run --config vitest.server.config.ts
+
+.PHONY: test-all
+test-all: test test-server eval-unit ## 运行全部单元测试（src/ + server/ + eval/）
+
+# === Eval Harness ===
+# 设计原则：见 tests/eval/README.md
+# 每次改 ASR / Agent 前后必跑，数字变动 = 回归信号
+
+.PHONY: eval
+eval: eval-unit eval-asr eval-tutor ## 跑完整评测套件（单测 + ASR + Tutor）
+
+.PHONY: eval-unit
+eval-unit: ## Eval harness 本身的 grader 单测
+	npx vitest run --config vitest.eval.config.ts
+
+.PHONY: eval-asr
+eval-asr: ## ASR 评测（dry-run，基于 seed 数据集 + 未来真实 Qwen3-ASR 调用）
+	npx tsx tests/eval/asr/runner.ts --dry-run
+
+.PHONY: eval-tutor
+eval-tutor: ## Tutor 评测（含工具选择、时间戳引用、LLM rubric）
+	npx tsx tests/eval/tutor/runner.ts --dry-run
+
 .PHONY: lint
 lint: ## ESLint 检查
 	npx eslint src/ --ext .ts,.tsx --max-warnings 0

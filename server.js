@@ -35,6 +35,25 @@ if (Array.isArray(process.execArgv) && process.execArgv.length > 0) {
 const app = next({ dev, hostname, port, conf: { distDir: activeDistDir } });
 const handle = app.getRequestHandler();
 
+// ============================================================
+// ASR 工具函数从 ./server/asr/text-utils.js 引入（M1 提纯，抽出后带单测）
+// ============================================================
+const {
+  normalizeCompareText: _unusedNormalize, // 保留导出以便日后可能的调试
+  longestCommonSubstringRatio,
+  shouldDedupSegment,
+  splitLongTranscript,
+  extractItemId,
+  extractFinalText,
+  extractServerTimestamp,
+  extractInterimPayload,
+  isIgnorableCommitError,
+  isIgnorableSessionUpdateError,
+  isLikelyHallucination,
+} = require('./server/asr/text-utils');
+void _unusedNormalize;
+void longestCommonSubstringRatio;
+
 const DASHSCOPE_WSS_URL = 'wss://dashscope.aliyuncs.com/api-ws/v1/realtime';
 
 let eventCounter = 0;
@@ -45,161 +64,6 @@ function generateEventId() {
 function clampNumber(value, min, max, fallback) {
   if (!Number.isFinite(value)) return fallback;
   return Math.min(max, Math.max(min, value));
-}
-
-function normalizeCompareText(text) {
-  return String(text || '')
-    .normalize('NFKC')
-    .toLowerCase()
-    .replace(/[\s，。！？、,.!?;；:：'"“”‘’（）()【】\[\]-]/g, '');
-}
-
-function longestCommonSubstringRatio(a, b) {
-  const left = normalizeCompareText(a);
-  const right = normalizeCompareText(b);
-  if (!left || !right) return 0;
-  if (left === right) return 1;
-
-  const shorter = left.length <= right.length ? left : right;
-  const longer = left.length <= right.length ? right : left;
-
-  const dp = new Array(shorter.length + 1).fill(0);
-  let maxLen = 0;
-
-  for (let i = 1; i <= longer.length; i += 1) {
-    for (let j = shorter.length; j >= 1; j -= 1) {
-      if (longer[i - 1] === shorter[j - 1]) {
-        dp[j] = dp[j - 1] + 1;
-        if (dp[j] > maxLen) maxLen = dp[j];
-      } else {
-        dp[j] = 0;
-      }
-    }
-  }
-
-  return maxLen / shorter.length;
-}
-
-function shouldDedupSegment(lastSegment, nextSegment, dedupSimilarity, dedupGapMs) {
-  if (!lastSegment || !nextSegment) return false;
-
-  const similarity = longestCommonSubstringRatio(lastSegment.text, nextSegment.text);
-  const overlap = nextSegment.beginTime <= lastSegment.endTime;
-  const gap = Math.max(0, nextSegment.beginTime - lastSegment.endTime);
-
-  return similarity >= dedupSimilarity && (overlap || gap <= dedupGapMs);
-}
-
-function splitLongTranscript(text, beginTime, endTime) {
-  const normalized = String(text || '').trim();
-  if (!normalized) return [];
-
-  if (normalized.length <= 80) {
-    return [{ text: normalized, beginTime, endTime }];
-  }
-
-  const chunks = [];
-  let current = '';
-  const punctuation = /[。！？!?；;]/;
-
-  for (const ch of normalized) {
-    current += ch;
-    if ((punctuation.test(ch) && current.length >= 20) || current.length >= 60) {
-      if (current.trim()) chunks.push(current.trim());
-      current = '';
-    }
-  }
-
-  if (current.trim()) chunks.push(current.trim());
-
-  if (chunks.length <= 1) {
-    return [{ text: normalized, beginTime, endTime }];
-  }
-
-  const duration = Math.max(1, endTime - beginTime);
-  const totalChars = chunks.reduce((sum, chunk) => sum + chunk.length, 0);
-  if (totalChars <= 0) {
-    return [{ text: normalized, beginTime, endTime }];
-  }
-
-  let consumed = 0;
-  return chunks.map((chunk, index) => {
-    const segBegin = Math.round(beginTime + (duration * consumed) / totalChars);
-    consumed += chunk.length;
-    let segEnd = index === chunks.length - 1
-      ? endTime
-      : Math.round(beginTime + (duration * consumed) / totalChars);
-
-    if (segEnd <= segBegin) {
-      segEnd = Math.min(endTime, segBegin + 200);
-    }
-
-    return {
-      text: chunk,
-      beginTime: segBegin,
-      endTime: segEnd,
-    };
-  });
-}
-
-function extractItemId(msg) {
-  return msg.item_id || msg.item?.id || null;
-}
-
-function extractFinalText(msg) {
-  const candidates = [
-    msg.item?.content?.[0]?.text,
-    msg.transcript,
-    msg.text,
-    msg.item?.text,
-  ];
-
-  for (const candidate of candidates) {
-    if (typeof candidate === 'string' && candidate.trim()) {
-      return candidate.trim();
-    }
-  }
-
-  return '';
-}
-
-function extractServerTimestamp(msg, kind) {
-  const beginFields = ['begin_time', 'start_time', 'beginTime', 'startTime', 'audio_start_ms'];
-  const endFields = ['end_time', 'endTime', 'audio_end_ms'];
-  const fields = kind === 'begin' ? beginFields : endFields;
-
-  for (const field of fields) {
-    if (msg[field] !== undefined) return Number(msg[field]);
-    if (msg.item?.[field] !== undefined) return Number(msg.item[field]);
-  }
-
-  return null;
-}
-
-function extractInterimPayload(msg) {
-  const stableText = typeof msg.text === 'string' ? msg.text : '';
-  const unstableText = typeof msg.stash === 'string'
-    ? msg.stash
-    : (typeof msg.delta === 'string' ? msg.delta : '');
-
-  let composed = `${stableText}${unstableText}`.trim();
-  if (!composed) {
-    composed = stableText || unstableText || '';
-  }
-
-  return {
-    stableText,
-    unstableText,
-    text: composed,
-  };
-}
-
-function isIgnorableCommitError(message) {
-  return typeof message === 'string' && /error committing input audio buffer/i.test(message);
-}
-
-function isIgnorableSessionUpdateError(message) {
-  return typeof message === 'string' && /session already started or finished or failed/i.test(message);
 }
 
 function isMissingNextChunkError(error) {
@@ -824,30 +688,11 @@ app.prepare().then(() => {
                 break;
               }
 
-              // 【抗幻觉 · VAD 能量门控】Whisper 类 ASR 最常见的幻觉：
-              //   在静音段或纯噪声段也会"听到"合理的词（"嗯"、"谢谢"、"好"、"for"）。
-              //   Qwen3-ASR-Flash 也有同样问题（你看到的"candidate of prod"后面蹦出"嗯"）。
-              // 启发式过滤策略（工业界抗 Whisper 幻觉的标准做法）：
-              //   1. 音段时长过短（< 300ms）但文本长度 ≥ 3 字 → 物理上不可能说这么多字，丢弃
-              //   2. 常见幻觉短语白名单（"嗯" "好" "谢谢" "啊" 等单字叹词）若整段音频不足 500ms → 丢弃
+              // 【抗幻觉 · VAD 能量门控】
+              // 详细策略见 ./server/asr/text-utils.js 的 isLikelyHallucination。
+              // M1 抽出后带单测，M2 可无忧改进。
               const durationMs = Math.max(0, endTime - beginTime);
-              const isLikelyHallucination = (() => {
-                const trimmedText = finalText.trim();
-                const textLen = trimmedText.length;
-                if (durationMs > 0 && durationMs < 300 && textLen >= 3) {
-                  return true; // 极短音段却有实词，典型幻觉
-                }
-                if (durationMs > 0 && durationMs < 500 && textLen <= 2) {
-                  // 极短音段 + 单字叹词，视为 VAD 触发边界的噪音
-                  const suspiciousSingleTokens = ['嗯', '啊', '哦', '呃', '唉', '哼', '嗯嗯', '好', 'uh', 'um', 'ah'];
-                  if (suspiciousSingleTokens.includes(trimmedText.toLowerCase())) {
-                    return true;
-                  }
-                }
-                return false;
-              })();
-
-              if (isLikelyHallucination) {
+              if (isLikelyHallucination(finalText, durationMs)) {
                 console.log(`[ASR-Proxy] Dropped likely hallucination: "${finalText}" (duration=${durationMs}ms)`);
                 break;
               }
