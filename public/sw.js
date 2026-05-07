@@ -1,7 +1,11 @@
-// MeetMind Service Worker v1
+// MeetMind Service Worker v2
 // 策略：App Shell 缓存 + 网络优先 + 离线回退
+//
+// v2 (M7-fix8): bump CACHE_NAME 强制老 v1 缓存失效——修复生产看到的老 bundle 问题。
+// 新增：跳过 Range 请求（206）/ 非 basic 响应的 cache.put，避免浏览器
+// "Failed to execute 'put' on 'Cache': Partial response" 报错。
 
-const CACHE_NAME = 'meetmind-v1';
+const CACHE_NAME = 'meetmind-v2';
 const OFFLINE_URL = '/offline.html';
 
 // App Shell：预缓存的核心静态资源
@@ -92,10 +96,21 @@ self.addEventListener('fetch', (event) => {
   event.respondWith(
     fetch(request)
       .then((response) => {
-        if (response.ok) {
+        // M7-fix8: 只缓存可以安全 put 进 Cache 的响应：
+        //   - status=200（不是 206 Partial）
+        //   - type=basic/default（不是 opaque / error）
+        //   - 不是 Range 请求（视频流 Range 返回 206，put 会抛错）
+        const cacheable =
+          response.ok &&
+          response.status === 200 &&
+          (response.type === 'basic' || response.type === 'default') &&
+          !request.headers.has('range');
+        if (cacheable) {
           const responseClone = response.clone();
           caches.open(CACHE_NAME).then((cache) => {
-            cache.put(request, responseClone);
+            cache.put(request, responseClone).catch(() => {
+              /* silent — 某些响应仍然不可缓存，吞掉避免 Promise 泄漏 */
+            });
           });
         }
         return response;
