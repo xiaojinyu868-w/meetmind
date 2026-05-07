@@ -232,6 +232,8 @@ export function CollectionCard({
               type="button"
               onClick={() => void onToggleAudioPlayback(item)}
               disabled={!item.mediaUrl}
+              aria-label={isAudioPlaying ? '暂停音频' : '播放音频'}
+              aria-disabled={!item.mediaUrl}
               className="inline-flex items-center gap-3 rounded-[14px] bg-[#F7F7F5] px-3.5 py-3 transition hover:bg-[#F0F0EE] disabled:opacity-50"
             >
               <span className={`flex h-9 w-9 items-center justify-center rounded-full transition ${
