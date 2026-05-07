@@ -265,6 +265,16 @@ function LoginForm() {
     const target = loginType === 'email' ? email : phone;
     const codeToUse = codeValue || code;
 
+    // M7-fix7: 客户端预校验——避免空手点登录打到服务端才 400
+    if (!target.trim()) {
+      setError(loginType === 'email' ? '请填写邮箱' : '请填写手机号');
+      return false;
+    }
+    if (!codeToUse || codeToUse.length !== 6) {
+      setError('请先输入 6 位验证码');
+      return false;
+    }
+
     const result = await loginWithCode({
       target,
       code: codeToUse,

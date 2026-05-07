@@ -178,14 +178,22 @@ export class DashScopeASRClient {
 
           this.ws.onerror = (error) => {
             clearTimeout(connectionTimeout);
-            // M7-fix6: 用户主动停止（StrictMode unmount / destroy()）不是真错误
-            if (this.userStopRequested || resolved) {
+            // M7-fix7: 三种情况静默——
+            //   1. 用户主动停止（destroy / unmount）
+            //   2. 连接已经 resolve 过（重复 onerror）
+            //   3. 浏览器 page-unload 导致的 CLOSING/CLOSED（真·不是我们的错）
+            const currentWs = this.ws;
+            const browserAborted =
+              currentWs &&
+              (currentWs.readyState === WebSocket.CLOSING ||
+                currentWs.readyState === WebSocket.CLOSED);
+            if (this.userStopRequested || resolved || browserAborted) {
               return;
             }
             log.error(`[DashScopeASR] Connection error: ${wsUrl}`, error);
-            if (!connected && !resolved && urlIndex < candidateUrls.length - 1) {
+            if (!connected && urlIndex < candidateUrls.length - 1) {
               tryConnect(urlIndex + 1);
-            } else if (!connected && !resolved) {
+            } else if (!connected) {
               this.updateStatus('error');
               this.callbacks.onError?.('WebSocket 连接错误');
               resolve(false);
@@ -461,7 +469,21 @@ export class DashScopeASRClient {
     this.isReady = false;
     this.updateStatus('stopped');
 
-    if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
+    if (!this.ws) return;
+
+    // M7-fix7: CONNECTING 状态也要主动 close，否则 WS 留在后台，
+    // 浏览器最终会自己 abort 并报 "closed before established"
+    if (this.ws.readyState === WebSocket.CONNECTING) {
+      try {
+        this.ws.close();
+      } catch {
+        /* ignore */
+      }
+      this.ws = null;
+      return;
+    }
+
+    if (this.ws.readyState !== WebSocket.OPEN) {
       return;
     }
 

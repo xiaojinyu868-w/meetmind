@@ -18,10 +18,14 @@
 
 import http from 'node:http';
 import { WebSocket } from 'ws';
-import { readFileSync, existsSync } from 'node:fs';
+import { readFileSync, existsSync, statSync } from 'node:fs';
 
 const BASE = process.env.SMOKE_BASE || 'http://localhost:3101';
 const LOG_FILE = process.env.SMOKE_LOG || '/tmp/meetmind-dev.log';
+
+// 记录 smoke 启动时 log 文件大小——只 check 在此之后写入的内容，
+// 避免历史错误（例如之前的 500、Prisma P2021）误报。
+const LOG_START_SIZE = existsSync(LOG_FILE) ? statSync(LOG_FILE).size : 0;
 
 interface Check {
   name: string;
@@ -99,11 +103,32 @@ function grepLogFor(pattern: RegExp, expectZero = true): void {
     rec(`log check (${pattern.source})`, false, `log file missing at ${LOG_FILE}`);
     return;
   }
-  const content = readFileSync(LOG_FILE, 'utf-8');
+  // expect-present 扫全文件（例如 "Ready on http://" 是启动标志，不会在 smoke 期间出现）
+  // expect-none  扫 smoke 启动之后写入的 log，避免历史残留误报
+  const fs = require('node:fs');
+  let content: string;
+  if (!expectZero) {
+    content = readFileSync(LOG_FILE, 'utf-8');
+  } else {
+    const currentSize = statSync(LOG_FILE).size;
+    const bytesToRead = Math.max(0, currentSize - LOG_START_SIZE);
+    if (bytesToRead === 0) {
+      content = '';
+    } else {
+      const fd = fs.openSync(LOG_FILE, 'r');
+      try {
+        const buf = Buffer.alloc(bytesToRead);
+        fs.readSync(fd, buf, 0, bytesToRead, LOG_START_SIZE);
+        content = buf.toString('utf-8');
+      } finally {
+        fs.closeSync(fd);
+      }
+    }
+  }
   const hits = content.split('\n').filter((l) => pattern.test(l));
   const ok = expectZero ? hits.length === 0 : hits.length > 0;
   rec(
-    `log: ${pattern.source}${expectZero ? ' (expect none)' : ' (expect present)'}`,
+    `log: ${pattern.source}${expectZero ? ' (expect none since start)' : ' (expect present)'}`,
     ok,
     `${hits.length} hit(s)${hits.length > 0 ? '\n     ' + hits[0].slice(0, 140) : ''}`,
   );
@@ -233,7 +258,27 @@ async function main() {
   grepLogFor(/Module not found.*pino(?!-pretty)/);
   grepLogFor(/Error: ENOENT/);
   grepLogFor(/UnhandledPromiseRejection/);
+  grepLogFor(/TypeError:/);
+  // P2021 (Prisma: table does not exist) — DB 路径不一致的信号
+  grepLogFor(/P2021|TableDoesNotExist/);
+  // 500s on auth routes — never OK for smoke env
+  grepLogFor(/POST \/api\/auth\/\S+ 500/);
   grepLogFor(/Ready on http:\/\//, false); // 这条必须有
+
+  // 6. 登录页防呆检查
+  console.log('\n--- Login form guards ---');
+  // 空 code 的 login-with-code 应在前端就被拦掉——若前端没拦，会打到后端，
+  // smoke 无法直接测 DOM 行为，但可以测 API：空 body 返 400（已测）
+  const emptyCode = await fetch(`${BASE}/api/auth/login-with-code`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ target: 'nobody@example.com', code: '', type: 'email' }),
+  });
+  rec(
+    'POST /api/auth/login-with-code (empty code) → 400',
+    emptyCode.status === 400,
+    `HTTP ${emptyCode.status}`,
+  );
 
   // 6. 总结
   const failed = results.filter((r) => !r.pass);
