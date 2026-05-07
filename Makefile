@@ -51,6 +51,10 @@ eval-unit: ## Eval harness 本身的 grader 单测
 eval-asr: ## ASR 评测（dry-run，基于 seed 数据集 + 未来真实 Qwen3-ASR 调用）
 	npx tsx tests/eval/asr/runner.ts --dry-run
 
+.PHONY: eval-asr-real
+eval-asr-real: ## ASR 评测（真实调用 Qwen3-ASR-Flash，需 DASHSCOPE_API_KEY + 公网 audio URL）
+	npx tsx tests/eval/asr/runner.ts --real
+
 .PHONY: eval-tutor
 eval-tutor: ## Tutor 评测（含工具选择、时间戳引用、LLM rubric）
 	npx tsx tests/eval/tutor/runner.ts --dry-run

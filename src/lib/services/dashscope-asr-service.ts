@@ -1,4 +1,5 @@
-import { createLogger } from '@/lib/logger';
+import { createLogger, track } from '@/lib/logger';
+import { fullJitterDelay } from '@/lib/services/asr/text-utils';
 const log = createLogger('dashscope-asr');
 
 export interface ASRSentence {
@@ -39,6 +40,15 @@ export interface DashScopeASROptions {
   language?: string[];
   initialContextHint?: string;
   initialLanguageMode?: 'auto' | 'zh' | 'en';
+  // M2 T2.2: WebSocket 自动重连配置
+  /** 允许重连的最大次数，默认 5 */
+  maxReconnectAttempts?: number;
+  /** 重连的 base 延迟（ms），Full Jitter 的底数。默认 500 */
+  reconnectBaseMs?: number;
+  /** 重连延迟上限（ms），默认 10000 */
+  reconnectCapMs?: number;
+  /** 重连期间允许保留的音频上限（ms）；超过则丢弃最早的帧。默认 20000 */
+  reconnectAudioBufferMs?: number;
 }
 
 export class DashScopeASRClient {
@@ -53,6 +63,12 @@ export class DashScopeASRClient {
   private static readonly AUDIO_QUEUE_MAX_SIZE = 500;
 
   private sessionStartTime = 0;
+
+  // M2 T2.2: 重连状态
+  private userStopRequested = false;
+  private reconnectAttempts = 0;
+  private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+  private readonly sessionId = `asr-realtime-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 
   constructor(
     _apiKey: string,
@@ -89,15 +105,25 @@ export class DashScopeASRClient {
   }
 
   async start(): Promise<boolean> {
+    return this.startInternal({ isReconnect: false });
+  }
+
+  private async startInternal(opts: { isReconnect: boolean }): Promise<boolean> {
     if (this.ws) {
       log.warn('[DashScopeASR] Already connected');
       return true;
     }
 
-    this.sentenceIndex = 0;
+    if (!opts.isReconnect) {
+      // 首次 start：清全部状态
+      this.userStopRequested = false;
+      this.reconnectAttempts = 0;
+      this.sentenceIndex = 0;
+      this.audioQueue = [];
+      this.sessionStartTime = 0;
+    }
+    // 重连路径：保留 audioQueue / reconnectAttempts / sentenceIndex / sessionStartTime
     this.isReady = false;
-    this.audioQueue = [];
-    this.sessionStartTime = 0;
 
     return new Promise((resolve) => {
       try {
@@ -164,6 +190,19 @@ export class DashScopeASRClient {
 
           this.ws.onclose = (event) => {
             clearTimeout(connectionTimeout);
+
+            const maxAttempts = this.options.maxReconnectAttempts ?? 5;
+            const shouldAttemptReconnect =
+              !this.userStopRequested &&
+              connected &&
+              this.reconnectAttempts < maxAttempts;
+
+            if (shouldAttemptReconnect) {
+              this.scheduleReconnect(event.code, event.reason);
+              this.ws = null;
+              return;
+            }
+
             if (this.status !== 'stopped') {
               this.updateStatus('stopped');
             }
@@ -410,6 +449,11 @@ export class DashScopeASRClient {
   }
 
   async stop(): Promise<void> {
+    this.userStopRequested = true;
+    if (this.reconnectTimer) {
+      clearTimeout(this.reconnectTimer);
+      this.reconnectTimer = null;
+    }
     this.isReady = false;
     this.updateStatus('stopped');
 
@@ -427,6 +471,73 @@ export class DashScopeASRClient {
     await new Promise((resolve) => setTimeout(resolve, 1500));
     if (this.ws && this.ws.readyState === WebSocket.OPEN) {
       this.closeConnection();
+    }
+  }
+
+  // M2 T2.2: 重连机制
+  // 触发条件：WebSocket 非用户主动关闭，且曾经 connected 成功过。
+  // 策略：AWS Full Jitter 退避；在 maxReconnectAttempts 之内反复尝试。
+  // 音频缓冲：audioQueue 在整个重连窗口期保留；重连成功后 flushAudioQueue 一次吐回。
+  private scheduleReconnect(code: number, reason: string): void {
+    this.reconnectAttempts += 1;
+    const delay = fullJitterDelay(
+      this.reconnectAttempts - 1,
+      this.options.reconnectBaseMs ?? 500,
+      this.options.reconnectCapMs ?? 10000,
+    );
+    log.warn(
+      `[DashScopeASR] Unexpected close (code=${code}, reason=${reason || '-'}), reconnecting in ${delay}ms (attempt ${this.reconnectAttempts})`,
+    );
+    // 保持 "connecting" 状态给 UI 一个提示
+    this.updateStatus('connecting');
+
+    if (this.reconnectTimer) clearTimeout(this.reconnectTimer);
+    this.reconnectTimer = setTimeout(() => {
+      this.reconnectTimer = null;
+      void this.doReconnect(code, reason);
+    }, delay);
+  }
+
+  private async doReconnect(lastCloseCode: number, lastCloseReason: string): Promise<void> {
+    if (this.userStopRequested) return;
+
+    try {
+      const attemptsBefore = this.reconnectAttempts;
+      const ok = await this.startInternal({ isReconnect: true });
+      if (ok) {
+        // 重连成功：把断线期缓存的音频重放，transcriber 继续。
+        this.flushAudioQueue();
+        log.info('[DashScopeASR] Reconnected successfully, audio buffer flushed', {
+          attempts: attemptsBefore,
+          bufferedChunks: this.audioQueue.length,
+        });
+        track({
+          kind: 'asr.success',
+          mode: 'realtime-reconnect',
+          sessionId: this.sessionId,
+          durationMs: 0,
+        });
+      } else {
+        // start 失败，保留 attempts（后续 close 事件会再增）
+        track({
+          kind: 'asr.fail',
+          mode: 'realtime-reconnect',
+          sessionId: this.sessionId,
+          durationMs: 0,
+          errorCode: 'RECONNECT_START_FAILED',
+          errorMsg: `lastCloseCode=${lastCloseCode} reason=${lastCloseReason}`,
+        });
+      }
+    } catch (err) {
+      log.error('[DashScopeASR] Reconnect threw', err);
+      track({
+        kind: 'asr.fail',
+        mode: 'realtime-reconnect',
+        sessionId: this.sessionId,
+        durationMs: 0,
+        errorCode: 'RECONNECT_EXCEPTION',
+        errorMsg: (err as Error).message,
+      });
     }
   }
 

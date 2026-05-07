@@ -46,6 +46,14 @@ export function buildASRContextHint(params: {
   recentSegments: TranscriptSegment[];
   importedReferences?: string[];
   maxChars?: number;
+  // M2 T2.5: 飞书妙记式 contextual biasing
+  // Qwen3-ASR-Flash `parameters.context` 最多 10k tokens；把课堂元数据 + 参与者 + 生词表注入
+  courseTitle?: string;
+  courseSubject?: string;
+  participants?: string[]; // 老师/学生/讨论者姓名
+  previousLessonTopics?: string[]; // 上节课的主题关键词（≤10 个）
+  lessonVocabulary?: string[]; // 本节课预期生词（≤30 个）
+  userHotwords?: string[]; // 用户历史纠错沉淀的个人术语（≤20 个）
 }): string {
   const manualHint = compactText(params.manualHint || '', 800);
   const importedReferences = (params.importedReferences || [])
@@ -57,10 +65,36 @@ export function buildASRContextHint(params: {
       .slice(-30)
       .map((segment) => segment.text)
       .join(' '),
-    1400
+    1400,
   );
 
+  // T2.5 新增字段（飞书妙记级 contextual biasing）
+  const courseMeta: string[] = [];
+  if (params.courseTitle) courseMeta.push(`课程：${compactText(params.courseTitle, 100)}`);
+  if (params.courseSubject) courseMeta.push(`学科：${compactText(params.courseSubject, 60)}`);
+  const participants = (params.participants || [])
+    .map((p) => compactText(p, 30))
+    .filter(Boolean)
+    .slice(0, 20);
+  const previousTopics = (params.previousLessonTopics || [])
+    .map((t) => compactText(t, 40))
+    .filter(Boolean)
+    .slice(0, 10);
+  const lessonVocab = (params.lessonVocabulary || [])
+    .map((v) => compactText(v, 40))
+    .filter(Boolean)
+    .slice(0, 30);
+  const userHotwords = (params.userHotwords || [])
+    .map((v) => compactText(v, 40))
+    .filter(Boolean)
+    .slice(0, 20);
+
   const parts = [
+    courseMeta.length > 0 ? courseMeta.join('；') : '',
+    participants.length > 0 ? `参与者姓名（请按标准写法识别）：${participants.join('、')}` : '',
+    lessonVocab.length > 0 ? `本节课预期术语：${lessonVocab.join('、')}` : '',
+    userHotwords.length > 0 ? `个人常用术语（来自历史纠错）：${userHotwords.join('、')}` : '',
+    previousTopics.length > 0 ? `上节课主题：${previousTopics.join('、')}` : '',
     manualHint ? `课程主题/术语：${manualHint}` : '',
     importedReferences.length > 0 ? `参考资料：${importedReferences.join('\n')}` : '',
     recentContext ? `已识别课堂上下文：${recentContext}` : '',

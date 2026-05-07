@@ -143,6 +143,7 @@ export function summarize(results: AsrEvalResult[]): {
 async function main() {
   const argv = process.argv.slice(2);
   const dryRun = argv.includes('--dry-run');
+  const realRun = argv.includes('--real');
   const idIdx = argv.indexOf('--id');
   const filterId = idIdx >= 0 ? argv[idIdx + 1] : undefined;
 
@@ -151,15 +152,24 @@ async function main() {
     runsDir: resolve(__dirname, 'runs'),
     dryRun,
     filterId,
-    model: process.env.ASR_MODEL ?? 'qwen3-asr-flash',
+    model: process.env.ASR_MODEL ?? 'qwen3-asr-flash-filetrans',
   };
 
-  if (!dryRun) {
-    console.warn('[asr-eval] real ASR caller not wired in M1 — defaulting to --dry-run. Use M2 branch for real calls.');
+  let caller: AsrCaller = dryRunCaller;
+
+  if (realRun) {
+    if (!process.env.DASHSCOPE_API_KEY) {
+      console.error('[asr-eval] --real requires DASHSCOPE_API_KEY');
+      process.exit(2);
+    }
+    const { qwenAsyncCaller } = await import('./qwen-caller');
+    caller = qwenAsyncCaller;
+    opts.dryRun = false;
+  } else if (!dryRun) {
+    console.warn('[asr-eval] no mode specified; defaulting to --dry-run. Use --real to call Qwen ASR.');
     opts.dryRun = true;
   }
 
-  const caller = dryRunCaller;
   const started = Date.now();
   const results = await runEval(opts, caller);
   const summary = summarize(results);
@@ -168,7 +178,6 @@ async function main() {
   console.log(
     `[asr-eval] ${summary.count} case(s) | avg_cer=${(summary.avgCer * 100).toFixed(2)}% | p95_cer=${(summary.p95Cer * 100).toFixed(2)}% | failed=${summary.failed} | ${durationMs}ms`,
   );
-  // Non-zero exit code if any case errored out
   if (results.some((r) => r.error)) process.exit(1);
 }
 
