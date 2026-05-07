@@ -16,6 +16,7 @@
     "lint": "next lint",
     "test": "vitest run",
     "test:watch": "vitest",
+    "smoke": "tsx tests/smoke/smoke.ts",
     "verify:podcast": "node scripts/verify-volc-podcast.js",
     "e2": "playwright test",
     "e2e": "playwright test",

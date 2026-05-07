@@ -36,6 +36,10 @@ test-server: ## 运行 server/ 下的 ASR 工具函数单测
 .PHONY: test-all
 test-all: test test-server eval-unit ## 运行全部单元测试（src/ + server/ + eval/）
 
+.PHONY: smoke
+smoke: ## 端到端 smoke：路由/WS/auth/API 全通（需本地 dev server 在 3101 跑）
+	SMOKE_BASE=$${SMOKE_BASE:-http://localhost:3101} npx tsx tests/smoke/smoke.ts
+
 # === Eval Harness ===
 # 设计原则：见 tests/eval/README.md
 # 每次改 ASR / Agent 前后必跑，数字变动 = 回归信号
