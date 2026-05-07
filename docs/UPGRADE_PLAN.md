@@ -29,11 +29,11 @@
 | **ASR 前处理** | Silero VAD (`@ricky0123/vad-web`) + WebRTC 原生 3A（关 AGC） | RNNoise 默认关；AEC 浏览器内置 | RNNoise 会削中文辅音 |
 | **ASR 长音频** | ≤10min 分片 + 2s 重叠 + token-level LCS 缝合 | 无重叠硬切 | Whisper 官方推荐 |
 | **ASR 可靠性** | `reconnecting-websocket` + `p-retry` + timeOffset 单调 | 自写重连 | AWS Full Jitter 退避 |
-| **ASR 后校对** | Qwen3-Max 只打低置信片段 | LLM 校对全部；WeTextProcessing（双重 ITN） | 降 CER 1.5-2.5pp |
+| **ASR 后校对** | qwen3.5-plus 只打低置信片段（性价比 + 效果平衡） | LLM 校对全部；WeTextProcessing（双重 ITN） | 降 CER 1.5-2.5pp |
 | **热词** | Qwen3-ASR-Flash `context` 动态注入课程/名单（最多 10k tokens） | 传统 hotword weight | 飞书妙记 80% 的差距在这里 |
 | **三段式渲染** | interim(灰斜体) / stable(黑) / final(commit) | 单文本跳变 | 感知稳定度 >> 字面准确度 |
 | **评测数据** | AISHELL-1 + WenetSpeech test_meeting + CosyVoice 2 合成 × MUSAN SNR 5/10/15/20 | 光跑真实数据（没有） | 没真实数据的唯一科学绕法 |
-| **评测指标** | 按字切 jiwer-style CER + Qwen3-Max LLM-as-Judge 兜底 | 自己发明指标 | 中文按字不按词 |
+| **评测指标** | 按字切 jiwer-style CER + qwen3.5-plus LLM-as-Judge 兜底 | 自己发明指标 | 中文按字不按词 |
 | **ASR 主引擎** | Qwen3-ASR-Flash | AssemblyAI Universal-2 / Deepgram Nova-3 | 中文 CER 4.2% 目前无对手 |
 | **ASR 兜底** | gpt-4o-transcribe（英文）；Whisper large-v3-turbo（离线） | 新引擎生态负担 | 只在特殊场景触发 |
 | **说话人分离** | 火山引擎流式双声道（MVP）；pyannote 3.1（长期备选） | 自建 pyannote；diart（中文不稳） | MVP DER 8% |

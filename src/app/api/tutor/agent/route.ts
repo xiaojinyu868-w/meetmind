@@ -82,12 +82,13 @@ export async function POST(request: NextRequest) {
     }
 
     // 用 OpenAI provider + DashScope compatible-mode
-    //   (Qwen3-Max 通过 OpenAI-compatible API 走 streamText)
+    //   (默认 qwen3.5-plus 通过 OpenAI-compatible API 走 streamText；
+    //    高精度场景可 env TUTOR_MODEL=qwen-max 覆盖)
     const baseURL =
       process.env.TUTOR_BASE_URL ??
       process.env.LLM_BASE_URL ??
       'https://dashscope.aliyuncs.com/compatible-mode/v1';
-    const modelId = process.env.TUTOR_MODEL ?? 'qwen-max';
+    const modelId = process.env.TUTOR_MODEL ?? 'qwen3.5-plus';
     const openai = createOpenAI({ apiKey, baseURL });
     const model = openai(modelId);
 

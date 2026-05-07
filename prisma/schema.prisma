@@ -11,32 +11,34 @@ datasource db {
 
 // 用户表
 model User {
-  id           String   @id @default(cuid())
-  username     String   @unique
-  email        String?  @unique
-  phone        String?  @unique
-  nickname     String
-  avatar       String?
-  role         String   @default("student") // student, parent, teacher, admin
-  status       String   @default("active")  // active, inactive, suspended, pending
-  passwordHash String?
-  salt         String?
-  defaultWorkspaceId String?
-  learnerProfileJson String?    // JSON — 学习者画像（身份阶段+专业+年级等）
+  id                    String    @id @default(cuid())
+  username              String    @unique
+  email                 String?   @unique
+  phone                 String?   @unique
+  nickname              String
+  avatar                String?
+  role                  String    @default("student") // student, parent, teacher, admin
+  status                String    @default("active") // active, inactive, suspended, pending
+  passwordHash          String?
+  salt                  String?
+  defaultWorkspaceId    String?
+  learnerProfileJson    String? // JSON — 学习者画像（身份阶段+专业+年级等）
   onboardingCompletedAt DateTime? // null = 未完成 onboarding
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
-  lastLoginAt  DateTime?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+  lastLoginAt           DateTime?
 
   // 关联
-  defaultWorkspace Workspace? @relation("DefaultWorkspaceSelection", fields: [defaultWorkspaceId], references: [id], onDelete: SetNull, onUpdate: Cascade)
-  authProviders AuthProvider[]
-  sessions      Session[]
-  refreshTokens RefreshToken[]
-  ownedWorkspaces Workspace[] @relation("WorkspaceOwner")
+  defaultWorkspace     Workspace?            @relation("DefaultWorkspaceSelection", fields: [defaultWorkspaceId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  authProviders        AuthProvider[]
+  sessions             Session[]
+  refreshTokens        RefreshToken[]
+  ownedWorkspaces      Workspace[]           @relation("WorkspaceOwner")
   workspaceMemberships WorkspaceMembership[]
-  workspaceCaptures WorkspaceCapture[]
-  wechatInboxMessages WechatInboxMessage[]
+  workspaceCaptures    WorkspaceCapture[]
+  wechatInboxMessages  WechatInboxMessage[]
+  asrCorrections       AsrCorrection[]
+  asrHotwords          AsrHotword[]
 
   @@index([username])
   @@index([email])
@@ -46,15 +48,15 @@ model User {
 
 // 第三方登录关联表
 model AuthProvider {
-  id           String   @id @default(cuid())
+  id           String    @id @default(cuid())
   userId       String
-  provider     String   // local, wechat, google, apple
-  providerId   String   // 第三方平台的用户ID
+  provider     String // local, wechat, google, apple
+  providerId   String // 第三方平台的用户ID
   accessToken  String?
   refreshToken String?
   expiresAt    DateTime?
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -73,12 +75,14 @@ model Workspace {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  owner User @relation("WorkspaceOwner", fields: [ownerId], references: [id], onDelete: Cascade)
-  defaultForUsers User[] @relation("DefaultWorkspaceSelection")
-  members WorkspaceMembership[]
-  captures WorkspaceCapture[]
-  echoes WorkspaceEcho[]
+  owner               User                  @relation("WorkspaceOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  defaultForUsers     User[]                @relation("DefaultWorkspaceSelection")
+  members             WorkspaceMembership[]
+  captures            WorkspaceCapture[]
+  echoes              WorkspaceEcho[]
   wechatInboxMessages WechatInboxMessage[]
+  asrCorrections      AsrCorrection[]
+  asrHotwords         AsrHotword[]
 
   @@index([ownerId])
   @@index([kind])
@@ -104,13 +108,13 @@ model WorkspaceMembership {
 }
 
 model WorkspaceCapture {
-  id             String   @id @default(cuid())
+  id             String    @id @default(cuid())
   workspaceId    String
   userId         String?
   sourceType     String
-  sourceKey      String   @unique
-  status         String   @default("active")
-  role           String   @default("support")
+  sourceKey      String    @unique
+  status         String    @default("active")
+  role           String    @default("support")
   contentType    String
   title          String
   previewText    String?
@@ -120,11 +124,11 @@ model WorkspaceCapture {
   metadataJson   String?
   tutorContext   String?
   occurredAt     DateTime?
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
 
-  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  user      User?     @relation(fields: [userId], references: [id], onDelete: SetNull)
+  workspace Workspace       @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  user      User?           @relation(fields: [userId], references: [id], onDelete: SetNull)
   echoes    WorkspaceEcho[]
 
   @@index([workspaceId])
@@ -137,23 +141,23 @@ model WorkspaceCapture {
 }
 
 model WorkspaceEcho {
-  id          String   @id @default(cuid())
-  workspaceId String
-  captureId   String?
-  sourceKey   String   @unique
-  kind        String?
+  id               String   @id @default(cuid())
+  workspaceId      String
+  captureId        String?
+  sourceKey        String   @unique
+  kind             String?
   generatedDateKey String?
-  model       String?
-  promptVersion String?
-  title       String
-  body        String
-  chipsJson   String?
-  metadataJson String?
-  status      String   @default("active")
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  model            String?
+  promptVersion    String?
+  title            String
+  body             String
+  chipsJson        String?
+  metadataJson     String?
+  status           String   @default("active")
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
 
-  workspace Workspace        @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  workspace Workspace         @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   capture   WorkspaceCapture? @relation(fields: [captureId], references: [id], onDelete: SetNull)
 
   @@index([workspaceId])
@@ -196,10 +200,10 @@ model RefreshToken {
 
 // 登录限流记录表
 model LoginAttempt {
-  id           String   @id @default(cuid())
-  identifier   String   // 用户名/邮箱/手机号/IP
-  count        Int      @default(1)
-  firstAttempt DateTime @default(now())
+  id           String    @id @default(cuid())
+  identifier   String // 用户名/邮箱/手机号/IP
+  count        Int       @default(1)
+  firstAttempt DateTime  @default(now())
   lockedUntil  DateTime?
 
   @@unique([identifier])
@@ -217,15 +221,15 @@ model CsrfToken {
 
 // 验证码表（邮箱/短信通用）
 model VerificationCode {
-  id         String   @id @default(cuid())
-  target     String   // 邮箱或手机号
-  code       String   // 6位验证码
-  type       String   // email, sms
-  purpose    String   // login, register, reset_password
-  attempts   Int      @default(0) // 验证尝试次数
-  verified   Boolean  @default(false)
-  expiresAt  DateTime
-  createdAt  DateTime @default(now())
+  id        String   @id @default(cuid())
+  target    String // 邮箱或手机号
+  code      String // 6位验证码
+  type      String // email, sms
+  purpose   String // login, register, reset_password
+  attempts  Int      @default(0) // 验证尝试次数
+  verified  Boolean  @default(false)
+  expiresAt DateTime
+  createdAt DateTime @default(now())
 
   @@index([target, type, purpose])
   @@index([code])
@@ -234,15 +238,15 @@ model VerificationCode {
 // 用户反馈表
 model Feedback {
   id        String   @id @default(cuid())
-  type      String   // bug, feature, question, other
+  type      String // bug, feature, question, other
   title     String
   content   String
-  contact   String?  // 用户提供的联系方式
-  userId    String?  // 登录用户的ID（可选）
+  contact   String? // 用户提供的联系方式
+  userId    String? // 登录用户的ID（可选）
   userAgent String?
   ip        String?
   status    String   @default("pending") // pending, processing, resolved, closed
-  adminNote String?  // 管理员备注
+  adminNote String? // 管理员备注
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -256,11 +260,11 @@ model Feedback {
 // API 使用统计表 - 记录用户 API 调用配额
 model ApiUsage {
   id        String   @id @default(cuid())
-  userId    String   // 用户ID（可以是 guest_xxx 表示访客）
-  quotaType String   // 配额类型：transcribe, ai_summary, ai_topics, ai_tutor, ai_chat
+  userId    String // 用户ID（可以是 guest_xxx 表示访客）
+  quotaType String // 配额类型：transcribe, ai_summary, ai_topics, ai_tutor, ai_chat
   date      DateTime // 统计日期（精确到天）
   count     Int      @default(0) // 使用次数
-  metadata  String?  // 额外元数据（JSON）
+  metadata  String? // 额外元数据（JSON）
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -275,12 +279,12 @@ model ApiUsage {
 // 用户分析会话表 - 记录每次用户访问的完整会话
 model UserAnalytics {
   id           String    @id @default(cuid())
-  userId       String?   // 可选，支持匿名用户追踪
+  userId       String? // 可选，支持匿名用户追踪
   sessionToken String    @unique // 客户端生成的会话标识
-  ip           String?   // 用户IP地址
-  userAgent    String?   // 浏览器/设备信息
-  entryPage    String?   // 入口页面
-  exitPage     String?   // 退出页面
+  ip           String? // 用户IP地址
+  userAgent    String? // 浏览器/设备信息
+  entryPage    String? // 入口页面
+  exitPage     String? // 退出页面
   startedAt    DateTime  @default(now()) // 会话开始时间
   endedAt      DateTime? // 会话结束时间
   durationMs   Int       @default(0) // 总时长（毫秒）
@@ -299,11 +303,11 @@ model UserAnalytics {
 // 页面访问记录表 - 记录用户访问的每个页面
 model PageView {
   id          String   @id @default(cuid())
-  analyticsId String   // 关联的会话ID
-  path        String   // 页面路径
+  analyticsId String // 关联的会话ID
+  path        String // 页面路径
   visitedAt   DateTime @default(now()) // 访问时间
   durationMs  Int      @default(0) // 页面停留时长（毫秒）
-  referrer    String?  // 来源页面
+  referrer    String? // 来源页面
 
   analytics UserAnalytics @relation(fields: [analyticsId], references: [id], onDelete: Cascade)
 
@@ -315,10 +319,10 @@ model PageView {
 // 事件追踪表 - 记录用户的关键交互行为
 model EventTrack {
   id            String   @id @default(cuid())
-  analyticsId   String   // 关联的会话ID
-  eventName     String   // 事件名称（如 recording_start, anchor_mark）
-  eventCategory String?  // 事件分类（如 recording, learning, ai）
-  eventData     String?  // 额外数据（JSON格式）
+  analyticsId   String // 关联的会话ID
+  eventName     String // 事件名称（如 recording_start, anchor_mark）
+  eventCategory String? // 事件分类（如 recording, learning, ai）
+  eventData     String? // 额外数据（JSON格式）
   createdAt     DateTime @default(now())
 
   analytics UserAnalytics @relation(fields: [analyticsId], references: [id], onDelete: Cascade)
@@ -330,15 +334,15 @@ model EventTrack {
 }
 
 model WechatInboxMessage {
-  id             String   @id @default(cuid())
-  linkToken      String   @unique
+  id             String    @id @default(cuid())
+  linkToken      String    @unique
   openId         String
   userId         String?
   workspaceId    String?
   developerId    String?
   msgType        String
   eventType      String?
-  messageId      String?  @unique
+  messageId      String?   @unique
   messageAt      DateTime?
   rawXml         String
   payloadJson    String
@@ -351,16 +355,16 @@ model WechatInboxMessage {
   reachKind      String?
   reachChannel   String?
   collectionRole String?
-  bindingStatus  String   @default("unresolved")
+  bindingStatus  String    @default("unresolved")
   echoTitle      String?
   echoBody       String?
   echoChipsJson  String?
   tutorContext   String?
   replyText      String?
   processedAt    DateTime?
-  status         String   @default("received")
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  status         String    @default("received")
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
 
   user      User?      @relation(fields: [userId], references: [id], onDelete: SetNull)
   workspace Workspace? @relation(fields: [workspaceId], references: [id], onDelete: SetNull)
@@ -373,4 +377,66 @@ model WechatInboxMessage {
   @@index([bindingStatus])
   @@index([reachChannel])
   @@index([createdAt])
+}
+
+/// ASR 纠错记录 (M5 T5.1)
+/// 用户在前端修改转写文本后，回写到服务端。
+/// 周度聚合：高频 (wrongText, correctedText) 对 → 进入 userHotwords / workspaceHotwords。
+model AsrCorrection {
+  id            String   @id @default(cuid())
+  userId        String?
+  workspaceId   String?
+  sessionId     String
+  /// ASR 原始识别文本
+  wrongText     String
+  /// 用户修改后的正确文本
+  correctedText String
+  /// 被修改片段的音频时间戳（毫秒），便于回听
+  beginMs       Int?
+  endMs         Int?
+  /// 可选：被修改片段的上下文（前后各 30 字）
+  context       String?
+  /// 来自哪个 ASR 模式：realtime / fast / async
+  asrMode       String   @default("unknown")
+  /// 是否已被周度聚合处理（进入热词字典）
+  aggregated    Boolean  @default(false)
+  createdAt     DateTime @default(now())
+
+  user      User?      @relation(fields: [userId], references: [id], onDelete: SetNull)
+  workspace Workspace? @relation(fields: [workspaceId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+  @@index([workspaceId])
+  @@index([sessionId])
+  @@index([aggregated])
+  @@index([createdAt])
+}
+
+/// 用户级 / Workspace 级个人热词（M5 T5.1）
+/// 从 AsrCorrection 聚合而来。写入 Qwen3-ASR-Flash parameters.context 影响识别。
+model AsrHotword {
+  id          String    @id @default(cuid())
+  /// 持有人：userId 或 workspaceId 二选一
+  userId      String?
+  workspaceId String?
+  /// 正确写法（标准形式）
+  term        String
+  /// 可选：常见错误写法（方便 dedup）
+  aliases     String?
+  /// 权重：出现频次越高越重要
+  weight      Float     @default(1.0)
+  /// 来源：correction / manual / course
+  source      String    @default("correction")
+  lastUsedAt  DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  user      User?      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  workspace Workspace? @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, term])
+  @@unique([workspaceId, term])
+  @@index([userId])
+  @@index([workspaceId])
+  @@index([weight])
 }

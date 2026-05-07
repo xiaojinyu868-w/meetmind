@@ -1,6 +1,7 @@
 // Grader: Learning rubric (LLM-as-judge)
 // 当"答案没有唯一标准"时使用（学习类问答、概念解释、启发引导）。
-// 用 Qwen3-Max 作为 judge，prompt 固定格式，返回 1-5 评分。
+// 用 qwen3.5-plus 作为 judge（项目事实标准，性价比 + 效果平衡）；
+// 可用 env EVAL_JUDGE_MODEL 覆盖（例如设 qwen-max 做高精度阅卷对比）。
 //
 // 离线时自动降级为 "skip"（不算分也不失败），避免 harness 对 LLM 硬依赖。
 // 在 CI 里如果 OPENAI_API_KEY/DASHSCOPE_API_KEY 没配，所有 rubric case 视作跳过。
@@ -55,7 +56,7 @@ export interface JudgeCaller {
 }
 
 /**
- * 默认 judge 实现：走 DashScope qwen-max。
+ * 默认 judge 实现：走 DashScope qwen3.5-plus（性价比 + 效果已验证够用）。
  * 环境变量 DASHSCOPE_API_KEY 不存在时返回 null（跳过）。
  */
 export async function dashscopeQwenMaxJudge(opts: {
@@ -75,7 +76,7 @@ export async function dashscopeQwenMaxJudge(opts: {
           Authorization: `Bearer ${apiKey}`,
         },
         body: JSON.stringify({
-          model: 'qwen-max',
+          model: process.env.EVAL_JUDGE_MODEL ?? 'qwen3.5-plus',
           messages: [
             { role: 'system', content: opts.system },
             { role: 'user', content: opts.user },

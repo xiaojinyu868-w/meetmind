@@ -25,7 +25,7 @@ export async function realTutorCaller(c: TutorCase): Promise<{
     process.env.TUTOR_BASE_URL ??
     process.env.LLM_BASE_URL ??
     'https://dashscope.aliyuncs.com/compatible-mode/v1';
-  const modelId = process.env.TUTOR_MODEL ?? 'qwen-max';
+  const modelId = process.env.TUTOR_MODEL ?? 'qwen3.5-plus';
   const openai = createOpenAI({ apiKey, baseURL });
   const model = openai(modelId);
 

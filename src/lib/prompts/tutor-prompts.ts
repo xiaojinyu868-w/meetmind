@@ -118,4 +118,5 @@ export const PROMPT_VERSIONS = {
   flashcardGen: FLASHCARD_GEN_V1.version,
   quizGen: QUIZ_GEN_V1.version,
   mindmapGen: MINDMAP_GEN_V1.version,
+  asrPostEdit: '2026-05-asr-post-edit-v1',
 } as const;

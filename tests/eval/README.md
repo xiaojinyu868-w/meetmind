@@ -19,7 +19,7 @@ tests/eval/
 │   ├── graders/
 │   │   ├── cer.ts           # 基础 CER（按字切的 Levenshtein）
 │   │   ├── wer.ts           # 英文或分词后 WER
-│   │   └── llm-judge.ts     # Qwen3-Max 对"语义等价但字面不同"兜底打分
+│   │   └── llm-judge.ts     # qwen3.5-plus 对"语义等价但字面不同"兜底打分
 │   ├── fixtures/            # 冻结的音频测试样本（生成脚本 + 元数据）
 │   ├── runs/                # 每次 run 的 JSONL 结果（.gitignore，只存摘要）
 │   └── runner.ts            # 跑全量或单条，输出 results.jsonl

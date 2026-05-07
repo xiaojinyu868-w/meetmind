@@ -59,7 +59,7 @@ Qwen3-ASR-Flash 的 `parameters.context` 允许注入任意文本（up to 10k to
 ### 杠杆 3: ITN + LLM 后编辑并联
 
 - **ITN**：Qwen3-ASR-Flash `parameters.enable_itn: true` 默认开启（"二零二六"→"2026"），不自己接 WeTextProcessing 避免双重 ITN
-- **LLM 后编辑**：待 M5 接入 Qwen-Max 对低置信片段做 post-correction
+- **LLM 后编辑**：M5 接入 `postEditSegments`（`src/lib/services/asr/post-edit.ts`）对低置信片段调 qwen3.5-plus 做 post-correction；失败静默降级。
 
 ### 杠杆 4: 纠错反馈闭环
 
@@ -144,7 +144,7 @@ make eval-asr-real      # 真实调 Qwen3-ASR-Flash async（需 DASHSCOPE_API_KE
 ## 下一步
 
 - [ ] M4.5: 纠错闭环 MVP（T2.9）
-- [ ] M5: Qwen-Max 低置信后编辑（T2.8）
+- [x] M5: qwen3.5-plus 低置信后编辑（T2.8）— `src/lib/services/asr/post-edit.ts`
 - [ ] M5+: 浏览器 VAD（`@ricky0123/vad-web`）减少静音段
 - [ ] M6: 说话人分离（火山引擎流式双声道 MVP）
 - [ ] M6+: 扩 harness dataset（AISHELL-1 + CosyVoice 合成课堂 + MUSAN 混噪）

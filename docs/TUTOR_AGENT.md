@@ -121,7 +121,7 @@ make eval-tutor-real         # 真实调 streamText + tools（需 API key）
 三 grader：
 - `tool-selection`：断言 toolCalls[0] 或 contains 或 none
 - `timestamp-citation`：正则 `[t=MM:SS]` + 时间窗校验
-- `learning-rubric`：Qwen-Max LLM-as-Judge（离线自动跳过）
+- `learning-rubric`：qwen3.5-plus LLM-as-Judge（离线自动跳过；可 env EVAL_JUDGE_MODEL 覆盖）
 
 基线（seed 8 条）：`7/8 passed / tool=100% cite=66.7% rubric=100%`（1 条故意 fail，验证 harness 能检出 citation 出窗）。
 
@@ -144,7 +144,7 @@ make eval-tutor-real         # 真实调 streamText + tools（需 API key）
 | 名称 | 默认 | 说明 |
 |---|---|---|
 | `OPENAI_API_KEY` 或 `DASHSCOPE_API_KEY` | — | LLM 凭证 |
-| `TUTOR_MODEL` | `qwen-max` | 默认模型 |
+| `TUTOR_MODEL` | `qwen3.5-plus` | 默认模型（性价比 + 效果平衡；高精度场景可 override 成 qwen-max） |
 | `TUTOR_BASE_URL` | `dashscope.aliyuncs.com/compatible-mode/v1` | OpenAI-compatible baseURL |
 
 ---

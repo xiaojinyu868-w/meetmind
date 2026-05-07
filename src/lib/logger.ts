@@ -201,6 +201,8 @@ export type TrackEvent =
   | { kind: 'asr.start'; mode: 'realtime' | 'async' | 'fast'; sessionId: string; language?: string }
   | { kind: 'asr.success'; mode: string; sessionId: string; durationMs: number; segments?: number; chars?: number }
   | { kind: 'asr.fail'; mode: string; sessionId: string; durationMs: number; errorCode?: string; errorMsg?: string }
+  | { kind: 'asr.correction.record'; sessionId: string; asrMode: string; correctionId: string }
+  | { kind: 'asr.correction.fail'; sessionId: string; asrMode: string; errorCode?: string; errorMsg?: string }
   | { kind: 'tutor.step'; sessionId: string; step: number; stepType: string; toolCalls?: string[]; usage?: unknown }
   | { kind: 'tutor.fail'; sessionId: string; step?: number; errorCode?: string; errorMsg?: string }
   | { kind: 'echo.start'; sessionId: string; sourceType: string }

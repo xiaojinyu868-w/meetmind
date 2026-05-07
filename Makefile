@@ -63,6 +63,17 @@ eval-tutor: ## Tutor 评测（含工具选择、时间戳引用、LLM rubric）
 eval-tutor-real: ## Tutor 评测（真实调用 LLM + tools，需 OPENAI_API_KEY 或 DASHSCOPE_API_KEY）
 	npx tsx tests/eval/tutor/runner.ts --real
 
+.PHONY: eval-guard
+eval-guard: ## Harness 回归 guard（CI gate；baseline 在 tests/eval/baselines/）
+	npx tsx tests/eval/regression-guard.ts
+
+.PHONY: eval-guard-update
+eval-guard-update: ## 接受当前数字为新 baseline（慎用；确认改动是正收益后才跑）
+	npx tsx tests/eval/regression-guard.ts --update
+
+.PHONY: eval-ci
+eval-ci: eval-unit eval-asr eval-tutor eval-guard ## CI 完整流程：单测 + 跑 harness + guard
+
 .PHONY: lint
 lint: ## ESLint 检查
 	npx eslint src/ --ext .ts,.tsx --max-warnings 0

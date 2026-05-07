@@ -1,0 +1,20 @@
+{"id":"tutor-tool-flash-01","question":"把今天的核心概念做成闪卡","expectedTool":"makeFlashcards","toolMode":"exact","stubOutput":"好的，我来给你做闪卡","stubToolCalls":[{"toolName":"makeFlashcards"}]}
+{"id":"tutor-tool-flash-02","question":"我想用卡片方式复习","expectedTool":"makeFlashcards","toolMode":"contains","stubOutput":"OK","stubToolCalls":[{"toolName":"makeFlashcards"}]}
+{"id":"tutor-tool-quiz-01","question":"考我几道题","expectedTool":"makeQuiz","toolMode":"exact","stubOutput":"来吧","stubToolCalls":[{"toolName":"makeQuiz"}]}
+{"id":"tutor-tool-quiz-02","question":"我想练习一下","expectedTool":"makeQuiz","toolMode":"contains","stubOutput":"好","stubToolCalls":[{"toolName":"makeQuiz"}]}
+{"id":"tutor-tool-mindmap-01","question":"帮我画一张思维导图","expectedTool":"makeMindmap","toolMode":"exact","stubOutput":"好","stubToolCalls":[{"toolName":"makeMindmap"}]}
+{"id":"tutor-tool-mindmap-02","question":"梳理一下这节课的结构","expectedTool":"makeMindmap","toolMode":"contains","stubOutput":"好","stubToolCalls":[{"toolName":"makeMindmap"}]}
+{"id":"tutor-tool-lookup-01","question":"老师什么时候讲到反向传播","expectedTool":"lookupTranscript","toolMode":"exact","stubOutput":"让我看看","stubToolCalls":[{"toolName":"lookupTranscript"}]}
+{"id":"tutor-tool-none-01","question":"什么是梯度下降?","toolMode":"none","stubOutput":"梯度下降是通过迭代朝梯度反方向更新参数来最小化损失函数的优化算法","stubToolCalls":[]}
+{"id":"tutor-tool-none-02","question":"你好啊","toolMode":"none","stubOutput":"嗨，今天想复习什么","stubToolCalls":[]}
+{"id":"tutor-tool-none-03","question":"这个概念能用通俗语言解释吗","toolMode":"none","stubOutput":"当然可以，简单来说就是...","stubToolCalls":[]}
+{"id":"tutor-cite-01","question":"老师第一分钟讲的是啥","expectedWindow":{"start":0,"end":90},"requireCitation":true,"stubOutput":"老师在 [t=00:30] 开场介绍了今天的主题","stubToolCalls":[]}
+{"id":"tutor-cite-02","question":"三到五分钟讲了什么","expectedWindow":{"start":180,"end":300},"requireCitation":true,"stubOutput":"在 [t=03:20] 和 [t=04:45] 都讨论了相关概念","stubToolCalls":[]}
+{"id":"tutor-cite-03","question":"前十分钟的要点","expectedWindow":{"start":0,"end":600},"requireCitation":true,"stubOutput":"开头 [t=01:00] 提到了核心概念，[t=07:30] 给了一个例子","stubToolCalls":[]}
+{"id":"tutor-cite-fail-01","question":"老师中段讲啥","expectedWindow":{"start":300,"end":600},"requireCitation":true,"stubOutput":"老师在 [t=01:00] 讲了开场","stubToolCalls":[]}
+{"id":"tutor-rubric-concept-01","question":"什么是矩阵的秩","rubric":"回答应提到: 列向量/行向量的最大线性无关数 或 列空间维度","referenceAnswer":"矩阵的秩等于它的列空间维度，即最多有多少列向量是线性无关的。","stubOutput":"矩阵的秩是其列向量的最大线性无关组的数量，也等于列空间的维度。"}
+{"id":"tutor-rubric-concept-02","question":"过拟合是什么","rubric":"回答应提到: 模型在训练集表现好但在测试集表现差，或 模型太复杂记住了训练数据的噪声","stubOutput":"过拟合就是模型在训练集上表现很好，但到了新数据上效果差——说明模型把训练数据里的噪声也记住了。"}
+{"id":"tutor-rubric-refuse-01","question":"你会讲 Rust 的所有权吗","rubric":"回答应该承认这不是本节课内容，或者明确说课堂上没讲到","stubOutput":"这节课里没讲 Rust，我没法基于课堂内容回答你这个问题。"}
+{"id":"tutor-rubric-style-01","question":"帮我用一句话总结今天的课","rubric":"回答应该简短（≤30字）且点出课堂核心主题","stubOutput":"今天讲了梯度下降和反向传播是深度学习训练的基础。"}
+{"id":"tutor-composite-01","question":"刚才那段关于反向传播的，能不能帮我做成闪卡","expectedTool":"makeFlashcards","toolMode":"exact","stubOutput":"好，我来做关于反向传播的闪卡","stubToolCalls":[{"toolName":"makeFlashcards","args":{"topic":"反向传播"}}]}
+{"id":"tutor-composite-02","question":"课堂里老师讲了几次 Kubernetes","expectedTool":"lookupTranscript","toolMode":"exact","stubOutput":"我来查一下","stubToolCalls":[{"toolName":"lookupTranscript","args":{"query":"Kubernetes"}}]}
