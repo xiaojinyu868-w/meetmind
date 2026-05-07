@@ -40,6 +40,7 @@ export function SafeAITutor(props: ComponentProps<typeof AITutor>) {
           }))}
           subject={props.supportContextText}
           authToken={authToken}
+          onSeek={props.onSeek}
         />
       </TutorErrorBoundary>
     );

@@ -26,16 +26,98 @@ export function shouldReplaceLastSegment(last: TranscriptSegment, next: Transcri
 }
 
 /** 将内部错误信息转换为用户友好文案 */
-export function normalizeRecorderErrorMessage(message: string): string {
+export interface ErrorHint {
+  message: string;
+  /** 给用户的"下一步该做什么"——不是全部错误都有 */
+  action?: string;
+}
+
+const ERROR_PATTERNS: Array<{ match: RegExp; hint: ErrorHint }> = [
+  {
+    match: /NotAllowedError|Permission denied|拒绝授权|麦克风权限/i,
+    hint: {
+      message: '浏览器挡住了麦克风。',
+      action: '点地址栏左边的锁/权限图标，把麦克风改成"允许"，再回来点一次录音。',
+    },
+  },
+  {
+    match: /NotFoundError|Requested device not found|没有检测到麦克风/i,
+    hint: {
+      message: '没找到可用的麦克风。',
+      action: '插上耳机/麦克风，或检查系统声音设置里的输入设备；选好再点录音。',
+    },
+  },
+  {
+    match: /NotReadableError|device in use|麦克风被占用/i,
+    hint: {
+      message: '麦克风被别的程序占着。',
+      action: '关掉其他正在录音的 App（Zoom / 腾讯会议 / 飞书等），再回来试。',
+    },
+  },
+  {
+    match: /session already started or finished or failed/i,
+    hint: { message: '实时转写刚刚在重连，稍等一秒再继续录就好。' },
+  },
+  {
+    match: /公网地址|可访问的公网地址|PUBLIC_DOMAIN|PUBLIC_HOST|ASR_PUBLIC_HOST_MISSING/i,
+    hint: {
+      message: '当前环境没配公网转写地址，这段原声先留住，但暂时还转不成文字。',
+    },
+  },
+  {
+    match: /ASR_API_KEY_MISSING|API Key|401 Unauthorized|apikey/i,
+    hint: {
+      message: '转写服务密钥没配或失效。',
+      action: '联系管理员检查 DASHSCOPE_API_KEY；原录音不会丢。',
+    },
+  },
+  {
+    match: /429|rate limit|Too Many Requests/i,
+    hint: {
+      message: '转写请求太频繁了。',
+      action: '等 30 秒再试；录音本身还在，不用重录。',
+    },
+  },
+  {
+    match: /NetworkError|Failed to fetch|ECONNRESET|ETIMEDOUT|network/i,
+    hint: {
+      message: '网络抖了一下。',
+      action: '检查一下连接再试；如果还录着，这段原声会保留。',
+    },
+  },
+  {
+    match: /413|too large|文件过大|ASR_AUDIO_TOO_LARGE/i,
+    hint: {
+      message: '录音太长，转写服务吃不下。',
+      action: '当前上限 500MB / ~10 小时；分段或剪短后重试。',
+    },
+  },
+  {
+    match: /FFMPEG_NOT_FOUND|ffprobe/i,
+    hint: {
+      message: '服务端缺 ffmpeg/ffprobe，暂时处理不了音频。',
+      action: '联系管理员装上依赖即可。',
+    },
+  },
+];
+
+/**
+ * 把裸错误文案映射为"看得懂 + 知道怎么办"的双段提示。
+ * UI 侧可选择渲染 message / action 两行，也可以 join 成单段。
+ */
+export function normalizeRecorderErrorDetail(message: string): ErrorHint {
   const text = (message || '').trim();
-  if (!text) return '录音出了点问题，请再试一次。';
-  if (/session already started or finished or failed/i.test(text)) {
-    return '实时转写刚刚在重连，稍等一秒再继续录就好。';
+  if (!text) return { message: '录音出了点问题，请再试一次。' };
+  for (const entry of ERROR_PATTERNS) {
+    if (entry.match.test(text)) return entry.hint;
   }
-  if (/公网地址|可访问的公网地址|PUBLIC_DOMAIN|PUBLIC_HOST/i.test(text)) {
-    return '当前环境没配公网转写地址，这段原声会先留住，但暂时还转不成文字。';
-  }
-  return text;
+  return { message: text };
+}
+
+/** 兼容旧接口——单字符串版本。新组件请用 normalizeRecorderErrorDetail */
+export function normalizeRecorderErrorMessage(message: string): string {
+  const hint = normalizeRecorderErrorDetail(message);
+  return hint.action ? `${hint.message} ${hint.action}` : hint.message;
 }
 
 /** 格式化毫秒为 MM:SS 或 HH:MM:SS */

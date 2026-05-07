@@ -22,6 +22,7 @@ import { useChat } from '@ai-sdk/react';
 import { DefaultChatTransport } from 'ai';
 import { TutorToolCard } from './TutorToolCard';
 import type { TutorToolPartLike } from './tutor-tool-card-utils';
+import { splitByTimestamp } from './timestamp-parsing';
 import { cn } from '@/lib/utils';
 
 export interface TutorAgentPanelTranscriptSegment {
@@ -39,6 +40,51 @@ export interface TutorAgentPanelProps {
   className?: string;
   /** 访客模式不带 JWT；登录模式传 token 用于热词/鉴权 */
   authToken?: string;
+  /** 点击 [t=MM:SS] 时把播放器跳转到该毫秒；父组件接 player.seek */
+  onSeek?: (timeMs: number) => void;
+}
+
+/**
+ * 把一段文本里的 [t=MM:SS] 渲染为可点击按钮。
+ * 这是"能引用课堂时间戳的同桌"—Tutor 核心卖点的最后一公里（M7-fix1）。
+ */
+function RenderTimestampedText({
+  text,
+  onSeek,
+}: {
+  text: string;
+  onSeek?: (ms: number) => void;
+}) {
+  const parts = React.useMemo(() => splitByTimestamp(text), [text]);
+  return (
+    <>
+      {parts.map((p, i) => {
+        if (p.kind === 'text') return <span key={i}>{p.text}</span>;
+        return (
+          <button
+            key={i}
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              onSeek?.(p.startMs);
+            }}
+            disabled={!onSeek}
+            className={cn(
+              'inline-flex items-center gap-1 px-1.5 py-0.5 mx-0.5 rounded-md text-xs font-mono',
+              'border border-slate-300 bg-white text-slate-700',
+              onSeek
+                ? 'hover:bg-slate-900 hover:text-white hover:border-slate-900 cursor-pointer transition-colors'
+                : 'cursor-default opacity-60',
+            )}
+            title={onSeek ? `跳转到 ${p.display}` : p.display}
+          >
+            <span aria-hidden="true">▶</span>
+            {p.display}
+          </button>
+        );
+      })}
+    </>
+  );
 }
 
 export function TutorAgentPanel({
@@ -47,6 +93,7 @@ export function TutorAgentPanel({
   subject,
   className,
   authToken,
+  onSeek,
 }: TutorAgentPanelProps) {
   const [input, setInput] = React.useState('');
 
@@ -120,7 +167,9 @@ export function TutorAgentPanel({
                       const partType = typeof part.type === 'string' ? part.type : '';
                       if (partType === 'text') {
                         const txt = typeof part.text === 'string' ? part.text : '';
-                        return <span key={idx}>{txt}</span>;
+                        return (
+                          <RenderTimestampedText key={idx} text={txt} onSeek={onSeek} />
+                        );
                       }
                       if (partType.startsWith('tool-')) {
                         return (
@@ -134,7 +183,10 @@ export function TutorAgentPanel({
                       return null;
                     })
                   : // 老版本兼容（content 字段）
-                    ((m as unknown as { content?: string }).content ?? '')}
+                    (() => {
+                      const content = (m as unknown as { content?: string }).content ?? '';
+                      return <RenderTimestampedText text={content} onSeek={onSeek} />;
+                    })()}
               </div>
             </div>
           );

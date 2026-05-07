@@ -20,6 +20,7 @@ import {
   normalizeCompareText,
   shouldReplaceLastSegment,
   normalizeRecorderErrorMessage,
+  normalizeRecorderErrorDetail,
   formatRecorderTime,
   resamplePcm,
   float32ToInt16,
@@ -53,7 +54,21 @@ export const Recorder = forwardRef<RecorderHandle, RecorderProps>(function Recor
   const [error, setError] = useState<string | null>(null);
   const [serviceStatus, setServiceStatus] = useState<ServiceStatus>('checking');
   const [transcribeProgress, setTranscribeProgress] = useState<string>('');
+  const [transcribeStartedAt, setTranscribeStartedAt] = useState<number | null>(null);
+  const [transcribeElapsedMs, setTranscribeElapsedMs] = useState(0);
   const [showRestartConfirm, setShowRestartConfirm] = useState(false);
+
+  // M7-fix3: 转写期间显示 elapsed，让用户知道进程没死
+  useEffect(() => {
+    if (transcribeStartedAt === null) {
+      setTranscribeElapsedMs(0);
+      return;
+    }
+    const tick = () => setTranscribeElapsedMs(Date.now() - transcribeStartedAt);
+    tick();
+    const interval = setInterval(tick, 500);
+    return () => clearInterval(interval);
+  }, [transcribeStartedAt]);
 
   // 把 interim 实时同步到全局 store，供课堂录课视图订阅「正在跟读」那一行。
   // 组件卸载或录音停止时，interimText 会被清空，这里跟着清。
@@ -491,7 +506,7 @@ export const Recorder = forwardRef<RecorderHandle, RecorderProps>(function Recor
               enhanceManagerRef.current.updateActivity();
             }
           },
-          onError: (err) => setError(normalizeRecorderErrorMessage(err)),
+        onError: (err) => setError(err),
           onStatusChange: (newStatus) => {
             if (newStatus === 'transcribing') setServiceStatus('available');
           },
@@ -580,15 +595,7 @@ export const Recorder = forwardRef<RecorderHandle, RecorderProps>(function Recor
         clearInterval(timerRef.current);
         timerRef.current = null;
       }
-      setError(
-        err instanceof DOMException && err.name === 'NotAllowedError'
-          ? '\u8bf7\u5141\u8bb8\u9ea6\u514b\u98ce\u6743\u9650\u540e\u518d\u91cd\u8bd5\u3002'
-          : err instanceof DOMException && err.name === 'NotFoundError'
-            ? '\u6ca1\u6709\u68c0\u6d4b\u5230\u53ef\u7528\u7684\u9ea6\u514b\u98ce\u8bbe\u5907\u3002'
-            : err instanceof Error
-              ? normalizeRecorderErrorMessage(err.message)
-              : '\u5f55\u97f3\u542f\u52a8\u5931\u8d25\uff0c\u8bf7\u7a0d\u540e\u518d\u8bd5\u3002'
-      );
+      setError(err instanceof Error ? err.message : '\u5f55\u97f3\u542f\u52a8\u5931\u8d25\uff0c\u8bf7\u7a0d\u540e\u518d\u8bd5\u3002');
     } finally {
       isStartingRecordingRef.current = false;
       setIsStartingRecording(false);
@@ -785,7 +792,7 @@ export const Recorder = forwardRef<RecorderHandle, RecorderProps>(function Recor
             enhanceManagerRef.current.updateActivity();
           }
         },
-        onError: (err) => setError(normalizeRecorderErrorMessage(err)),
+        onError: (err) => setError(err),
         onStatusChange: (newStatus) => {
           if (newStatus === 'transcribing') setServiceStatus('available');
         },
@@ -855,6 +862,7 @@ export const Recorder = forwardRef<RecorderHandle, RecorderProps>(function Recor
     const skipEnhancement = options?.skipEnhancement ?? false;
     const emitStopCallback = options?.emitStopCallback ?? true;
     setStatus('transcribing');
+    setTranscribeStartedAt(Date.now());
     setTranscribeProgress(skipEnhancement ? '正在转录这段原声...' : '正在转录音频...');
     onTranscribing?.(true);
 
@@ -997,13 +1005,15 @@ export const Recorder = forwardRef<RecorderHandle, RecorderProps>(function Recor
         onTranscriptionError?.('这段原声没有转出可用文字。', getCallbackMeta());
       }
     } catch (err) {
-      const message = err instanceof Error ? normalizeRecorderErrorMessage(err.message) : '转录失败';
-      setError(message);
-      onTranscriptionError?.(message, getCallbackMeta());
+      const rawMessage = err instanceof Error ? err.message : '转录失败';
+      setError(rawMessage);
+      // 外部 callback 拿到已标准化的单段文案（保留旧行为）
+      onTranscriptionError?.(normalizeRecorderErrorMessage(rawMessage), getCallbackMeta());
       setTranscribeProgress('');
     } finally {
       onTranscribing?.(false);
       setStatus('stopped');
+      setTranscribeStartedAt(null);
       if (emitStopCallback) {
         onRecordingStop?.(audioBlob ?? undefined, getCallbackMeta());
       }
@@ -1169,6 +1179,7 @@ export const Recorder = forwardRef<RecorderHandle, RecorderProps>(function Recor
     setInterimText('');
     interimItemIdRef.current = null;
     setTranscribeProgress('');
+    setTranscribeStartedAt(null);
     setAnchorCount(0);
     setEnhancedSegments(new Map());
     setEnhanceStats({ enhanced: 0, total: 0, isEnhancing: false });
@@ -1450,6 +1461,9 @@ export const Recorder = forwardRef<RecorderHandle, RecorderProps>(function Recor
   }
 
   if (isTranscribing) {
+    const elapsedSec = Math.floor(transcribeElapsedMs / 1000);
+    // 超过 10s 才显示计时，避免短音频的闪烁
+    const showElapsed = elapsedSec >= 10;
     return (
       <div className="card p-8 animate-fade-in">
         <div className="flex flex-col items-center py-12">
@@ -1457,7 +1471,12 @@ export const Recorder = forwardRef<RecorderHandle, RecorderProps>(function Recor
             <div className="w-8 h-8 border-3 border-[#232322] border-t-transparent rounded-full animate-spin" />
           </div>
           <div className="mb-2 text-lg font-medium text-[#232322]">正在把这段语音整理进收集流</div>
-          <p className="text-sm text-[#787774]">{transcribeProgress || '请稍等...'}</p>
+          <p className="text-sm text-[#787774]">
+            {transcribeProgress || '请稍等...'}
+            {showElapsed ? (
+              <span className="ml-2 font-mono text-[#787774]/80">· 已处理 {elapsedSec}s</span>
+            ) : null}
+          </p>
         </div>
       </div>
     );
@@ -1634,17 +1653,27 @@ export const Recorder = forwardRef<RecorderHandle, RecorderProps>(function Recor
         </div>
       </div>
 
-      {/* */}
-      {error && (
-        <div className={`flex-shrink-0 rounded-xl border border-[#FADEC9] bg-[#FADEC9]/30 text-[#232322] animate-slide-up ${
-          compactMode ? 'mx-2 mt-1.5 px-2.5 py-1.5 text-[11px] leading-5' : 'mx-4 mt-3 p-3 text-sm'
-        }`}>
-          <div className="flex items-center gap-2">
-            <span>!</span>
-            <span>{error}</span>
+      {/* 错误提示：M7-fix2 两段式——先说是什么，再说下一步怎么办 */}
+      {error && (() => {
+        const hint = normalizeRecorderErrorDetail(error);
+        return (
+          <div className={`flex-shrink-0 rounded-xl border border-[#FADEC9] bg-[#FADEC9]/30 text-[#232322] animate-slide-up ${
+            compactMode ? 'mx-2 mt-1.5 px-2.5 py-1.5 text-[11px] leading-5' : 'mx-4 mt-3 p-3 text-sm'
+          }`}>
+            <div className="flex items-start gap-2">
+              <span aria-hidden="true" className="flex-shrink-0">!</span>
+              <div className="flex-1 min-w-0">
+                <div>{hint.message}</div>
+                {hint.action ? (
+                  <div className={compactMode ? 'mt-0.5 text-[10px] opacity-80' : 'mt-1 text-xs opacity-80'}>
+                    {hint.action}
+                  </div>
+                ) : null}
+              </div>
+            </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       {/* ASR 重连提示 */}
       {asrReconnecting && !compactMode && (
