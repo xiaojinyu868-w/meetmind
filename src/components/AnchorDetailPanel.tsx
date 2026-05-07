@@ -219,6 +219,7 @@ export function AnchorDetailPanel({
               defaultExpanded={true}
               showHeader={false}
               paragraphGapMs={15000}
+              enableWordExplainer={true}
             />
           </div>
         ) : (

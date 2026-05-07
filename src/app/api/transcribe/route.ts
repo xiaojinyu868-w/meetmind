@@ -108,6 +108,8 @@ async function submitAsyncTask(
   language: string,
   contextHint: string
 ): Promise<{ success: boolean; taskId?: string; error?: string }> {
+  // Qwen 官方：混合语种或不确定时省略 language 参数（M7.6 修复中英夹杂）
+  const langParam = language === 'auto' ? {} : { language };
   const requestBody = {
     model: 'qwen3-asr-flash-filetrans',
     input: {
@@ -115,7 +117,7 @@ async function submitAsyncTask(
     },
     parameters: {
       channel_id: [0],
-      language,
+      ...langParam,
       enable_itn: true,
       ...(contextHint ? { corpus: { text: contextHint } } : {}),
     },
@@ -310,7 +312,8 @@ export async function POST(request: NextRequest) {
 
     const formData = await request.formData();
     const audioFile = formData.get('audio') as File | null;
-    const language = (formData.get('language') as string) || 'zh';
+    // M7.6: 默认 auto 让 Qwen 自动识别中英夹杂
+    const language = (formData.get('language') as string) || 'auto';
     const contextHint = sanitizeASRContext(formData.get('context'));
 
     if (!audioFile) {

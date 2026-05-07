@@ -97,6 +97,7 @@ export function MobileTimeline({
           confusionTimestamps={confusionTimestamps}
           defaultExpanded={true}
           showHeader={false}
+          enableWordExplainer={true}
         />
       </div>
     </div>

@@ -45,9 +45,79 @@ export interface TutorAgentPanelProps {
 }
 
 /**
- * 把一段文本里的 [t=MM:SS] 渲染为可点击按钮。
- * 这是"能引用课堂时间戳的同桌"—Tutor 核心卖点的最后一公里（M7-fix1）。
+ * 空态下的 skill 启发面板（M7.7，受 Hyperknow 启发）
+ *
+ * Agent 能力别藏在 chat 框里——把它们变成用户一眼就能点的 skill chip。
+ * 每个 chip 点击后把对应的 prompt 预填进 input，让用户微调后再发送。
  */
+interface SkillPrompt {
+  icon: string;
+  label: string;
+  prompt: string;
+}
+
+const DEFAULT_SKILL_PROMPTS: SkillPrompt[] = [
+  {
+    icon: '📋',
+    label: '考试速查表',
+    prompt: '把这节课整理成一页"考试速查表"：核心定义、公式/关键步骤、易错点各一组。',
+  },
+  {
+    icon: '🃏',
+    label: '做闪卡',
+    prompt: '基于这节课做 10 张闪卡（概念题 + 公式题 + 应用题），正反面都给。',
+  },
+  {
+    icon: '✍️',
+    label: '出测验',
+    prompt: '基于这节课出 5 道单选题测验，要有正确答案和解析。',
+  },
+  {
+    icon: '🧠',
+    label: '画思维导图',
+    prompt: '把这节课的主干和分支整理成思维导图结构。',
+  },
+  {
+    icon: '🎯',
+    label: '找薄弱点',
+    prompt: '根据课堂内容，告诉我这节课里哪些地方最容易考但最容易丢分？',
+  },
+  {
+    icon: '💡',
+    label: '再讲一遍',
+    prompt: '用更通俗的方式重新讲解这节课的核心概念，像同学之间聊天那样。',
+  },
+];
+
+function SkillChipRow({
+  onPick,
+  disabled,
+}: {
+  onPick: (prompt: string) => void;
+  disabled?: boolean;
+}) {
+  return (
+    <div className="grid grid-cols-2 gap-2 mt-4 max-w-md mx-auto">
+      {DEFAULT_SKILL_PROMPTS.map((s) => (
+        <button
+          key={s.label}
+          type="button"
+          onClick={() => onPick(s.prompt)}
+          disabled={disabled}
+          className={cn(
+            'flex items-center gap-2 px-3 py-2 text-sm text-left rounded-lg border transition-colors',
+            'border-slate-200 bg-white text-slate-700 hover:bg-slate-50 hover:border-slate-300',
+            'disabled:opacity-50 disabled:cursor-not-allowed',
+          )}
+          title={s.prompt}
+        >
+          <span aria-hidden="true" className="text-base">{s.icon}</span>
+          <span className="truncate">{s.label}</span>
+        </button>
+      ))}
+    </div>
+  );
+}
 function RenderTimestampedText({
   text,
   onSeek,
@@ -127,6 +197,15 @@ export function TutorAgentPanel({
     [input, busy, sendMessage],
   );
 
+  const onPickSkill = React.useCallback(
+    (prompt: string) => {
+      if (busy) return;
+      // 直接发送——减少犹豫，也避免 input 预填后用户误编辑
+      sendMessage({ text: prompt });
+    },
+    [busy, sendMessage],
+  );
+
   return (
     <div
       className={cn(
@@ -139,8 +218,11 @@ export function TutorAgentPanel({
     >
       <div className="flex-1 overflow-y-auto px-4 py-3 space-y-3">
         {messages.length === 0 ? (
-          <div className="text-sm text-slate-400 text-center py-8">
-            向 AI 同桌问点什么——他能帮你做闪卡、出题、画思维导图，或者直接回答课堂上的问题。
+          <div className="pt-6">
+            <div className="text-sm text-slate-500 text-center">
+              AI 同桌在这里。挑一个直接开始，也可以在下方直接问。
+            </div>
+            <SkillChipRow onPick={onPickSkill} disabled={busy} />
           </div>
         ) : null}
 

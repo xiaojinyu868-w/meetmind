@@ -101,6 +101,7 @@ export function DedaoTimeline({
           showHeader={true}
           headerTitle="课堂时间轴"
           className="h-full"
+          enableWordExplainer={true}
         />
 
         {entries.length === 0 && (

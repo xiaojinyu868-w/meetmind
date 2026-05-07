@@ -328,16 +328,16 @@ async function syncTranscribeSegment(
     content: [{ audio: fileUrl }],
   });
 
+  // M7.6: 'auto' 时省略 language 参数让 Qwen 自动识别中英夹杂
+  const asrOptions: Record<string, unknown> = { enable_itn: true };
+  if (language !== 'auto') asrOptions.language = language;
   const requestBody = {
     model: 'qwen3-asr-flash',
     input: {
       messages,
     },
     parameters: {
-      asr_options: {
-        language,
-        enable_itn: true,
-      },
+      asr_options: asrOptions,
     },
   };
 
@@ -518,7 +518,8 @@ export async function POST(request: NextRequest) {
 
     const formData = await request.formData();
     const audioFile = formData.get('audio') as File | null;
-    const language = (formData.get('language') as string) || 'zh';
+    // M7.6: 默认 auto 让 Qwen 自动识别中英夹杂
+    const language = (formData.get('language') as string) || 'auto';
     const contextHint = sanitizeASRContext(formData.get('context'));
 
     if (!audioFile) {
