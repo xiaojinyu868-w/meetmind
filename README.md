@@ -175,6 +175,12 @@ meetmind/
 
 | 文档 | 内容 |
 |------|------|
+| [`docs/UPGRADE_PLAN.md`](./docs/UPGRADE_PLAN.md) | **产品打磨升级路线图（M1-M4）** + 业界最佳实践决策表 |
+| [`CHANGELOG.md`](./CHANGELOG.md) | 各 milestone release notes |
+| [`docs/OBSERVABILITY.md`](./docs/OBSERVABILITY.md) | 可观测底座（pino + Sentry AI + track 埋点） |
+| [`docs/ASR_PIPELINE.md`](./docs/ASR_PIPELINE.md) | ASR 飞书妙记级工艺总图 |
+| [`docs/TUTOR_AGENT.md`](./docs/TUTOR_AGENT.md) | Tutor agent loop（Vercel AI SDK v6 + tools） |
+| [`tests/eval/README.md`](./tests/eval/README.md) | Eval harness（SWE-Bench 风格 + TS grader） |
 | [`docs/ECHO_PRODUCT_DEFINITION.md`](./docs/ECHO_PRODUCT_DEFINITION.md) | Echo 产品定义（taste、三层价值、增长引擎） |
 | [`docs/SERVER_AGENT_HANDOFF_CAPTURE_V1.md`](./docs/SERVER_AGENT_HANDOFF_CAPTURE_V1.md) | Capture V1 产品定义、收集原则、验收清单 |
 | [`docs/competition-tech-article-draft.md`](./docs/competition-tech-article-draft.md) | 竞赛技术文章草稿 |
