@@ -32,27 +32,18 @@ export interface AcquiredAudioStream {
 export interface AcquireOptions {
   source: RecorderAudioSource;
   /**
-   * 浏览器 getUserMedia 的 audio constraint——沿用外层配置。
-   * 为保证电脑声音干净，system / mixed 模式下对"系统音频"那一路
-   * 会强制关闭 echoCancellation / noiseSuppression / autoGainControl。
+   * 浏览器 getUserMedia 的 audio constraint——由 `buildAudioConstraints()`
+   * 中心化生成，外层直接传 MediaTrackConstraints 即可。
+   *
+   * system / mixed 模式下的"系统音频"一路会强制关闭 AEC/NS/AGC（见
+   * acquireSystemAudioStream），本 constraints 只作用于 mic 一路。
    */
-  micConstraints: {
-    echoCancellation: boolean;
-    noiseSuppression: boolean;
-    autoGainControl: boolean;
-  };
+  micConstraints: MediaTrackConstraints;
 }
 
 /** 拿一条麦克风 stream。永远只有一个 audio track。 */
-async function acquireMicStream(opts: AcquireOptions['micConstraints']): Promise<MediaStream> {
-  return navigator.mediaDevices.getUserMedia({
-    audio: {
-      channelCount: 1,
-      echoCancellation: opts.echoCancellation,
-      noiseSuppression: opts.noiseSuppression,
-      autoGainControl: opts.autoGainControl,
-    },
-  });
+async function acquireMicStream(constraints: MediaTrackConstraints): Promise<MediaStream> {
+  return navigator.mediaDevices.getUserMedia({ audio: constraints });
 }
 
 /**

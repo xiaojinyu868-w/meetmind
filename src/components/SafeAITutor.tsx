@@ -3,6 +3,16 @@
 import type { ComponentProps } from 'react';
 import { AITutor } from './AITutor';
 import { TutorErrorBoundary } from './TutorErrorBoundary';
+import { TutorAgentPanel } from './tutor/TutorAgentPanel';
+
+// Feature flag: M6.5 新 agent endpoint 的灰度开关。
+// true  → 用 Vercel AI SDK v6 useChat + /api/tutor/agent（会用工具的同桌）
+// false → 用 AITutor.tsx 老 SSE 路径（breakpoint/guidance/parsedResponse 协议）
+//
+// 两条路径并存，可通过 env 灰度到 100% 后删除老路径。
+const TUTOR_AGENT_ENABLED =
+  typeof process !== 'undefined' &&
+  String(process.env.NEXT_PUBLIC_TUTOR_AGENT_ENABLED || '').toLowerCase() === 'true';
 
 export function SafeAITutor(props: ComponentProps<typeof AITutor>) {
   const resetKeys = [
@@ -11,6 +21,28 @@ export function SafeAITutor(props: ComponentProps<typeof AITutor>) {
     props.launchQuestionNonce ?? 0,
     props.isMobile ? 'mobile' : 'desktop',
   ];
+
+  if (TUTOR_AGENT_ENABLED) {
+    const authToken =
+      typeof window !== 'undefined'
+        ? window.localStorage.getItem('auth_token') ?? undefined
+        : undefined;
+    return (
+      <TutorErrorBoundary panelName="AI 同桌" resetKeys={resetKeys}>
+        <TutorAgentPanel
+          sessionId={props.sessionId ?? 'anon'}
+          transcript={props.segments.map((s) => ({
+            id: s.id,
+            text: s.text,
+            startMs: s.startMs,
+            endMs: s.endMs,
+          }))}
+          subject={props.supportContextText}
+          authToken={authToken}
+        />
+      </TutorErrorBoundary>
+    );
+  }
 
   return (
     <TutorErrorBoundary panelName="AI 助教" resetKeys={resetKeys}>

@@ -14,6 +14,7 @@ import {
 } from '@/lib/services/media-tooling';
 import { createLogger, track } from '@/lib/logger';
 import { stitchSegments, stitchSegmentsWithOverlap, fullJitterDelay } from '@/lib/services/asr/text-utils';
+import { postEditSegments } from '@/lib/services/asr/post-edit';
 const log = createLogger('transcribe-fast');
 
 
@@ -495,11 +496,43 @@ export async function POST(request: NextRequest) {
       isFinal: true,
     }));
 
+    // LLM 后校对（M5 T5.2 → M6 上线）：只对低置信 / 启发式可疑片段跑，默认关
+    // 走 feature flag，稳定后切为默认 on。
+    const postEditEnabled = String(process.env.ASR_POST_EDIT_ENABLED || 'false').toLowerCase() === 'true';
+    let postEditApplied = 0;
+    if (postEditEnabled && outputSegments.length > 0) {
+      try {
+        const edited = await postEditSegments(
+          outputSegments.map((s) => ({ id: s.id, text: s.text, confidence: s.confidence })),
+          {
+            apiKey,
+            hotwords: contextHint ? [contextHint].slice(0, 1) : undefined,
+            batchSize: 10,
+            timeoutMs: 12000,
+          },
+        );
+        const byId = new Map(edited.map((e) => [e.id, e]));
+        for (const seg of outputSegments) {
+          const e = byId.get(seg.id);
+          if (e?.modified) {
+            seg.text = e.text;
+            postEditApplied += 1;
+          }
+        }
+      } catch (err) {
+        // 静默降级：post-edit 失败不拖累主链
+        log.warn('post-edit failed, using raw ASR', { err: (err as Error).message });
+      }
+    }
+
     const totalDuration = outputSegments.length > 0 ? outputSegments[outputSegments.length - 1].endMs : 0;
     const fullText = outputSegments.map((segment) => segment.text).join('');
     const durationMs = Date.now() - startedAt;
 
     track({ kind: 'asr.success', mode: 'fast', sessionId, durationMs, segments: outputSegments.length, chars: fullText.length });
+    if (postEditApplied > 0) {
+      log.info('post-edit applied', { sessionId, applied: postEditApplied, total: outputSegments.length });
+    }
 
     return NextResponse.json({
       success: true,

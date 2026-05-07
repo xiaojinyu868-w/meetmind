@@ -10,7 +10,7 @@
  * 遵循 (deps) 模式。Store 写入通过 getState().actions。
  */
 
-import { useEffect, useMemo, useRef } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useCaptureEditorStore } from '@/stores/capture-editor-store';
 import { buildASRContextHint } from '@/lib/utils/page-utils';
 import type { SupportReferenceItem } from '@/types/page-types';
@@ -88,19 +88,43 @@ export function useExtractTerms(deps: UseExtractTermsDeps) {
   // Build live context hint for real-time ASR (hot-word injection)
   // Combines: user manual hint + reference snippets + auto-extracted terms
   //         + classroomASRContextHint（课堂场景注入：当天材料标题 + 最近课程标题）
+  //         + userHotwords（M5/M6：用户历史纠错沉淀的个人术语）
   const classroomASRContextHint = useCaptureEditorStore((s) => s.classroomASRContextHint);
+
+  // 用户级热词——一次性拉取，Session 期内稳定。失败静默（不影响主链）
+  const [userHotwords, setUserHotwords] = useState<string[]>([]);
+  useEffect(() => {
+    if (isGuestFastEntry) return; // 访客无 userId
+    let cancelled = false;
+    const token = typeof window !== 'undefined' ? window.localStorage.getItem('auth_token') : null;
+    if (!token) return;
+    fetch('/api/asr/corrections?scope=user&limit=20', {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+      .then((r) => (r.ok ? r.json() : { hotwords: [] }))
+      .then((data: { hotwords?: string[] }) => {
+        if (!cancelled && Array.isArray(data.hotwords)) setUserHotwords(data.hotwords);
+      })
+      .catch(() => {
+        /* silent — 热词是增强而非必须 */
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [isGuestFastEntry]);
 
   const liveASRContextHint = useMemo(() => {
     const baseHint = buildASRContextHint({
       manualHint: asrContextHint,
       recentSegments: [],
       importedReferences: supportReferences.map((item) => item.snippet),
+      userHotwords,
       maxChars: 2000,
     });
     const parts = [baseHint, extractedTermsHint, classroomASRContextHint].filter(Boolean);
     if (parts.length === 0) return '';
     return parts.join('\n\n').slice(0, 3000);
-  }, [asrContextHint, supportReferences, extractedTermsHint, classroomASRContextHint]);
+  }, [asrContextHint, supportReferences, extractedTermsHint, classroomASRContextHint, userHotwords]);
 
   return {
     liveASRContextHint,

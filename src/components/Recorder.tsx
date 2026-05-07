@@ -13,9 +13,6 @@ import { recordTranscriptEditDiff } from '@/lib/db/lexicon';
 import type { RecorderProps, RecorderHandle, RecorderCallbackMeta, RecorderStatus, ServiceStatus, TranscribeMode } from './recorder/recorder-types';
 export type { RecorderCallbackMeta, RecorderHandle } from './recorder/recorder-types';
 import {
-  ENABLE_AUTO_GAIN_CONTROL,
-  ENABLE_ECHO_CANCELLATION,
-  ENABLE_NOISE_SUPPRESSION,
   CORRECTION_MODEL,
   CORRECTION_FALLBACK_MODEL,
 } from './recorder/recorder-types';
@@ -28,6 +25,7 @@ import {
   float32ToInt16,
 } from './recorder/recorder-utils';
 import { acquireAudioStream } from './recorder/recorder-audio-source';
+import { buildAudioConstraints } from '@/lib/services/asr/audio-constraints';
 
 export const Recorder = forwardRef<RecorderHandle, RecorderProps>(function Recorder({
   onRecordingStart,
@@ -291,11 +289,9 @@ export const Recorder = forwardRef<RecorderHandle, RecorderProps>(function Recor
       //   - mixed  失败 → acquireAudioStream 内部降级为纯 mic，effectiveSource='mic'
       const acquired = await acquireAudioStream({
         source: audioSource,
-        micConstraints: {
-          echoCancellation: ENABLE_ECHO_CANCELLATION,
-          noiseSuppression: ENABLE_NOISE_SUPPRESSION,
-          autoGainControl: ENABLE_AUTO_GAIN_CONTROL,
-        },
+        // 中心化的 AEC/NS/AGC 约束（src/lib/services/asr/audio-constraints.ts），
+        // 环境变量 NEXT_PUBLIC_ASR_* 覆盖默认值。
+        micConstraints: (buildAudioConstraints().audio as MediaTrackConstraints),
       });
       stream = acquired.stream;
       audioCleanupRef.current = acquired.cleanup;
