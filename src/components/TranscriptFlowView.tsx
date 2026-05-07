@@ -34,6 +34,8 @@ interface FlowSegment {
 }
 import { useTextSelection } from '@/hooks/useTextSelection';
 import { WordExplainer } from './WordExplainer';
+import { useEnToZhTranslation, useEnToZhEnabled } from '@/hooks/useEnToZhTranslation';
+import { extractEnglishRuns } from '@/lib/services/translation/extract-english';
 
 // ─── 类型定义 ───
 
@@ -82,6 +84,8 @@ export interface TranscriptFlowViewProps {
   headerTitle?: string;
   /** 段落分组间隔（ms），默认 30000（30秒） */
   paragraphGapMs?: number;
+  /** 英→中行内翻译气泡（M7.9）。默认 false；由父组件决定 */
+  enableEnToZhTranslation?: boolean;
 }
 
 // ─── 工具函数 ───
@@ -439,6 +443,53 @@ function ParagraphBlock({
 
 // ─── 主组件 ───
 
+/**
+ * 段落英→中翻译气泡包装（M7.9）
+ * 不修改 ParagraphBlock，只在其下方叠一行中译，保持原组件的复杂度不扩张。
+ */
+function ParagraphTranslationWrapper({
+  paragraph,
+  enableTranslation,
+  translation,
+  children,
+}: {
+  paragraph: Paragraph;
+  enableTranslation: boolean;
+  translation: ReturnType<typeof useEnToZhTranslation>;
+  children: React.ReactNode;
+}) {
+  const englishRuns = useMemo(() => {
+    if (!enableTranslation) return [];
+    const text = paragraph.segments.map((s) => s.text).join(' ');
+    return extractEnglishRuns(text);
+  }, [enableTranslation, paragraph.segments]);
+
+  useEffect(() => {
+    if (englishRuns.length > 0) translation.request(englishRuns);
+  }, [englishRuns, translation]);
+
+  const resolvedPairs = englishRuns
+    .map((term) => ({ term, zh: translation.lookup(term) }))
+    .filter((p): p is { term: string; zh: string } => Boolean(p.zh) && p.zh !== p.term);
+
+  if (!enableTranslation || resolvedPairs.length === 0) return <>{children}</>;
+
+  return (
+    <>
+      {children}
+      <div className="mt-0.5 mb-2 ml-8 flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-slate-500">
+        {resolvedPairs.map((p) => (
+          <span key={p.term} className="inline-flex items-baseline gap-1">
+            <span className="font-mono text-slate-400">{p.term}</span>
+            <span aria-hidden="true" className="text-slate-300">→</span>
+            <span>{p.zh}</span>
+          </span>
+        ))}
+      </div>
+    </>
+  );
+}
+
 export function TranscriptFlowView({
   segments,
   variant,
@@ -461,6 +512,7 @@ export function TranscriptFlowView({
   showHeader = true,
   headerTitle,
   paragraphGapMs = 30000,
+  enableEnToZhTranslation = false,
 }: TranscriptFlowViewProps) {
   const [isExpanded, setIsExpanded] = useState(defaultExpanded || variant === 'live' || variant === 'context');
   const [internalSearchQuery, setInternalSearchQuery] = useState('');
@@ -473,6 +525,11 @@ export function TranscriptFlowView({
 
   const searchQuery = externalSearchQuery ?? internalSearchQuery;
   const canEdit = editable && typeof onSegmentTextUpdate === 'function';
+
+  // M7.9 英→中翻译：prop 是能力开关；用户偏好存 LS
+  const [userEnabledTranslation, setUserEnabledTranslation] = useEnToZhEnabled();
+  const translationActive = enableEnToZhTranslation && userEnabledTranslation;
+  const translation = useEnToZhTranslation(translationActive);
 
   // 选词解释
   const containerRef = useRef<HTMLDivElement>(null);
@@ -643,11 +700,28 @@ export function TranscriptFlowView({
                   : 'text-gray-400 hover:text-gray-600 hover:bg-gray-100'
               }`}
               title="搜索"
+              aria-label="搜索"
             >
               <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
               </svg>
             </button>
+            {/* M7.9 英→中翻译开关——只在 prop 开启翻译能力时显示 */}
+            {enableEnToZhTranslation && (
+              <button
+                onClick={() => setUserEnabledTranslation(!userEnabledTranslation)}
+                className={`px-1.5 py-0.5 text-[11px] rounded-md transition-colors ${
+                  userEnabledTranslation
+                    ? 'bg-[#E8F4FF] text-[#1C5A9E]'
+                    : 'text-gray-400 hover:text-gray-600 hover:bg-gray-100'
+                }`}
+                title={userEnabledTranslation ? '点击关闭行内英译中' : '点击开启行内英译中'}
+                aria-pressed={userEnabledTranslation}
+                aria-label="英→中翻译开关"
+              >
+                EN→中
+              </button>
+            )}
             {/* 折叠/展开 */}
             {variant !== 'live' && variant !== 'context' && paragraphs.length > collapsedParagraphs && (
               <button
@@ -715,26 +789,32 @@ export function TranscriptFlowView({
         )}
 
         {displayParagraphs.map((para, pi) => (
-          <ParagraphBlock
+          <ParagraphTranslationWrapper
             key={`p-${para.startMs}`}
-            data-paragraph
             paragraph={para}
-            variant={variant}
-            currentTime={currentTime}
-            searchQuery={searchQuery}
-            onTimestampClick={onTimestampClick}
-            onMarkConfusion={onMarkConfusion}
-            editable={canEdit}
-            editingSegmentId={editingSegmentId}
-            draftText={draftText}
-            onStartEdit={startEditing}
-            onDraftChange={setDraftText}
-            onCommitEdit={commitEditing}
-            onCancelEdit={cancelEditing}
-            confusionTimestamps={confusionTimestamps}
-            confusionAtMs={confusionAtMs}
-            isLastParagraph={pi === displayParagraphs.length - 1}
-          />
+            enableTranslation={translationActive}
+            translation={translation}
+          >
+            <ParagraphBlock
+              data-paragraph
+              paragraph={para}
+              variant={variant}
+              currentTime={currentTime}
+              searchQuery={searchQuery}
+              onTimestampClick={onTimestampClick}
+              onMarkConfusion={onMarkConfusion}
+              editable={canEdit}
+              editingSegmentId={editingSegmentId}
+              draftText={draftText}
+              onStartEdit={startEditing}
+              onDraftChange={setDraftText}
+              onCommitEdit={commitEditing}
+              onCancelEdit={cancelEditing}
+              confusionTimestamps={confusionTimestamps}
+              confusionAtMs={confusionAtMs}
+              isLastParagraph={pi === displayParagraphs.length - 1}
+            />
+          </ParagraphTranslationWrapper>
         ))}
 
         {/* 临时转录文本（live 模式） */}

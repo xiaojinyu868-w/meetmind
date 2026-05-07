@@ -102,6 +102,7 @@ export function DedaoTimeline({
           headerTitle="课堂时间轴"
           className="h-full"
           enableWordExplainer={true}
+          enableEnToZhTranslation={true}
         />
 
         {entries.length === 0 && (

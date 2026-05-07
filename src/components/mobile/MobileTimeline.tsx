@@ -98,6 +98,7 @@ export function MobileTimeline({
           defaultExpanded={true}
           showHeader={false}
           enableWordExplainer={true}
+          enableEnToZhTranslation={true}
         />
       </div>
     </div>

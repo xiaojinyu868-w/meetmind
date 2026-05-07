@@ -265,6 +265,7 @@ export function DesktopVideoReviewLayout(props: DesktopVideoReviewLayoutProps) {
                     editable={true}
                     onSegmentTextUpdate={handleTranscriptTextUpdate}
                     enableWordExplainer={true}
+                    enableEnToZhTranslation={true}
                     fullContextText={segments.map(s => `[${formatTime(s.startMs)}] ${s.text}`).join('\n')}
                     onTimestampClick={(timeMs) => handleUnifiedSeek(timeMs, true)}
                     onMarkConfusion={(timeMs, _segmentId) => {

@@ -1768,6 +1768,7 @@ export const Recorder = forwardRef<RecorderHandle, RecorderProps>(function Recor
             defaultExpanded={!compactMode}
             showHeader={!compactMode}
             enableWordExplainer={true}
+            enableEnToZhTranslation={true}
             paragraphGapMs={5000}
           />
         </div>
