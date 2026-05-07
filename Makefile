@@ -59,6 +59,10 @@ eval-asr-real: ## ASR 评测（真实调用 Qwen3-ASR-Flash，需 DASHSCOPE_API_
 eval-tutor: ## Tutor 评测（含工具选择、时间戳引用、LLM rubric）
 	npx tsx tests/eval/tutor/runner.ts --dry-run
 
+.PHONY: eval-tutor-real
+eval-tutor-real: ## Tutor 评测（真实调用 LLM + tools，需 OPENAI_API_KEY 或 DASHSCOPE_API_KEY）
+	npx tsx tests/eval/tutor/runner.ts --real
+
 .PHONY: lint
 lint: ## ESLint 检查
 	npx eslint src/ --ext .ts,.tsx --max-warnings 0

@@ -186,7 +186,8 @@ export function summarizeTutor(results: TutorRunResult[]) {
 
 async function main() {
   const argv = process.argv.slice(2);
-  const dryRun = argv.includes('--dry-run') || !process.env.OPENAI_API_KEY;
+  const dryRun = argv.includes('--dry-run');
+  const realRun = argv.includes('--real');
   const idIdx = argv.indexOf('--id');
   const filterId = idIdx >= 0 ? argv[idIdx + 1] : undefined;
 
@@ -194,10 +195,18 @@ async function main() {
     datasetDir: resolve(__dirname, 'datasets'),
     runsDir: resolve(__dirname, 'runs'),
     filterId,
+    caller: dryRunTutorCaller as TutorCaller,
   };
 
-  if (!dryRun) {
-    console.warn('[tutor-eval] real Tutor caller will be wired in M3; using --dry-run');
+  if (realRun) {
+    if (!process.env.OPENAI_API_KEY && !process.env.DASHSCOPE_API_KEY) {
+      console.error('[tutor-eval] --real requires OPENAI_API_KEY or DASHSCOPE_API_KEY');
+      process.exit(2);
+    }
+    const { realTutorCaller } = await import('./real-caller');
+    opts.caller = realTutorCaller;
+  } else if (!dryRun) {
+    console.warn('[tutor-eval] no mode specified; defaulting to --dry-run. Use --real to call LLM.');
   }
 
   const started = Date.now();
@@ -212,7 +221,7 @@ async function main() {
       `cite=${fmt(summary.citationPassRate)} ` +
       `rubric=${fmt(summary.rubricPassRate)} | ${durationMs}ms`,
   );
-  if (!dryRun && summary.passRate < 1) process.exit(1);
+  if (realRun && summary.passRate < 1) process.exit(1);
 }
 
 if (process.argv[1] && fileURLToPath(import.meta.url) === resolve(process.argv[1])) {

@@ -124,23 +124,43 @@
 
 ---
 
-### M3 · Tutor 会用工具的同桌
+### M3 · Tutor 会用工具的同桌（已完成 ✓）
 
 **分支**：`milestone/m3-tutor-tool-use`
 
 **交付物**：
-- [ ] **T3.1** `src/lib/prompts/` + `PROMPT_VERSION` 常量；`experimental_telemetry.metadata.promptVersion` 传给 Sentry
-- [ ] **T3.2** `src/lib/tutor/tools/` 把 Workshop 10 个插件包装成 `tool() + zod` schema
-- [ ] **T3.3** `src/app/api/tutor/route.ts` 改造成 `streamText + tools + stopWhen(stepCountIs(6)) + onStepFinish`
-- [ ] **T3.4** UI 层：Tutor 消息流中内嵌 Workshop 产物卡片（闪卡/测验/思维导图）
-- [ ] **T3.5** 工具调用失败的兜底话术（不是"执行失败"而是"要不要换一种方式"）
-- [ ] **T3.6** Tutor 能引用转写时间戳 `[t=MM:SS]`；点击跳转到课堂转写
-- [ ] **T3.7** `tests/eval/tutor/runner.ts` 接入真实 streamText caller；扩 dataset 到 50 条
-- [ ] **T3.8** CI: `make eval-tutor` 作为合并 gate，tool/citation/rubric 三指标综合 pass rate ≥90%
+- [x] **T3.1** `src/lib/prompts/tutor-prompts.ts`：`VersionedPrompt` 类型 + `TUTOR_SYSTEM_V3`（会用工具版）+ `TUTOR_SYSTEM_V2_legacy` + `PROMPT_VERSIONS` 常量。sentry `experimental_telemetry.metadata.promptVersion` 注入。
+- [x] **T3.2** `src/lib/tutor/tutor-tools.ts`：把 4 个 Workshop plugin 包装成 Vercel AI SDK v6 `tool() + zod schema`：
+  - `makeFlashcards` (flashcards.plugin)
+  - `makeQuiz` (quiz.plugin)
+  - `makeMindmap` (mindmap.plugin)
+  - `lookupTranscript`（纯函数，无 LLM 调用）
+- [x] **T3.3** `src/app/api/tutor/agent/route.ts`：新增 endpoint，使用 `streamText + tools + stopWhen(stepCountIs(6)) + onStepFinish`。与旧 `/api/tutor` 并存，灰度友好。
+- [x] **T3.5** 工具失败返回结构化 error（`{ok:false, error}`），LLM 按 system prompt 要求说"暂时没法做，我们用对话讲一下"
+- [x] **T3.6** `lookupTranscript` 返回 `[t=MM:SS]` 标准引用；`TUTOR_SYSTEM_V3` 显式要求使用该格式、不得编造
+- [x] **T3.7** Tutor harness 接入 real caller（`tests/eval/tutor/real-caller.ts`）；`make eval-tutor-real` 可用
+- [ ] T3.4 UI 层内嵌 Workshop 卡片 —— 留给 M4；`toUIMessageStreamResponse` 已原生支持 tool-call/result 流式帧
+- [ ] T3.8 CI gate —— 留给 M4
 
-**M3 结束标准**：
-- Tutor 在 50 条 dataset 上 tool-selection ≥95%、citation ≥90%、rubric ≥80%
-- Sentry 面板能看到每次 Tutor 调用的 agent step 耗时、token、cost、错误
+**新增依赖**：`@ai-sdk/openai@3.0.62`（其他都是 M1/M2 已装）
+
+**M3 交付的关键代码**：
+- `src/lib/prompts/tutor-prompts.ts`：prompt 版本化
+- `src/lib/tutor/tutor-tools.ts` + `.test.ts`（6 测试）：tool() wrapper
+- `src/app/api/tutor/agent/route.ts`：agent loop endpoint
+- `tests/eval/tutor/real-caller.ts`：harness real caller
+
+**测试统计**（M3 交付时）：
+- src tests: 184 → **190 passed** (+6 tutor-tools)
+- server tests: 26 passed
+- eval-unit: 29 passed
+- 0 新类型错误
+- harness baseline 保持（1.46% CER / 7/8 tutor）
+
+**M3 结束标准**（等业主使用）：
+- 接入前端：把 `/api/tutor` 的调用切到 `/api/tutor/agent`（feature flag 灰度）
+- 扩 dataset 到 50 条（当前 8 条 seed）
+- `make eval-tutor-real` 跑真实 LLM；按 rubric 追求 ≥80% 通过
 
 ---
 
