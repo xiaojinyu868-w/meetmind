@@ -11,6 +11,7 @@
 
 import React, { createContext, useContext, useEffect, useState, ReactNode } from 'react';
 import { useAnalytics } from '@/hooks/useAnalytics';
+import { useHotwordAggregateOnExit } from '@/hooks/useHotwordAggregateOnExit';
 
 // 核心事件类型
 export type CoreEventName = 
@@ -140,7 +141,10 @@ export function AnalyticsProvider({
     sessionToken,
     isEnabled: analyticsEnabled,
   };
-  
+
+  // M6.4a: 页面退出 / tab 隐藏时把用户的 ASR 纠错聚合为热词（opportunistic）
+  useHotwordAggregateOnExit();
+
   return (
     <AnalyticsContext.Provider value={contextValue}>
       {children}

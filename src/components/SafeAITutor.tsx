@@ -6,13 +6,14 @@ import { TutorErrorBoundary } from './TutorErrorBoundary';
 import { TutorAgentPanel } from './tutor/TutorAgentPanel';
 
 // Feature flag: M6.5 新 agent endpoint 的灰度开关。
-// true  → 用 Vercel AI SDK v6 useChat + /api/tutor/agent（会用工具的同桌）
-// false → 用 AITutor.tsx 老 SSE 路径（breakpoint/guidance/parsedResponse 协议）
+// 默认 ON（当前无真实用户，dogfood 阶段）。显式设 false 才回退到老路径。
+// true  → Vercel AI SDK v6 useChat + /api/tutor/agent（会用工具的同桌）
+// false → AITutor.tsx 老 SSE 路径（breakpoint/guidance/parsedResponse 协议）
 //
-// 两条路径并存，可通过 env 灰度到 100% 后删除老路径。
+// 两条路径并存，真实流量增长后可根据对话质量 A/B 再定走向。
 const TUTOR_AGENT_ENABLED =
-  typeof process !== 'undefined' &&
-  String(process.env.NEXT_PUBLIC_TUTOR_AGENT_ENABLED || '').toLowerCase() === 'true';
+  typeof process === 'undefined' ||
+  String(process.env.NEXT_PUBLIC_TUTOR_AGENT_ENABLED ?? 'true').toLowerCase() !== 'false';
 
 export function SafeAITutor(props: ComponentProps<typeof AITutor>) {
   const resetKeys = [

@@ -1268,7 +1268,34 @@ export const Recorder = forwardRef<RecorderHandle, RecorderProps>(function Recor
     }).catch((error) => {
       console.warn('[Recorder] Failed to record transcript edit diff:', error);
     });
-  }, [getCallbackMeta, onTranscriptTextUpdate, onTranscriptUpdate]);
+
+    // M6.7: 把纠错同步到服务端（/api/asr/corrections），供 AsrCorrection 聚合为
+    // AsrHotword，下次 ASR 通过 buildASRContextHint.userHotwords 注入。
+    // 本地 IndexedDB + 服务端两条管道并行，互不干扰。
+    if (typeof window !== 'undefined') {
+      const token = window.localStorage.getItem('auth_token');
+      if (token) {
+        void fetch('/api/asr/corrections', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            sessionId: getCallbackMeta().sessionId ?? `recorder-${Date.now()}`,
+            wrongText: target.text,
+            correctedText: normalized,
+            beginMs: target.startMs,
+            endMs: target.endMs,
+            asrMode: effectiveTranscribeMode === 'streaming' ? 'realtime' : 'async',
+          }),
+          keepalive: true,
+        }).catch(() => {
+          /* silent — 本地已记录，服务端 miss 不致命 */
+        });
+      }
+    }
+  }, [effectiveTranscribeMode, getCallbackMeta, onTranscriptTextUpdate, onTranscriptUpdate]);
 
   const displayTranscript = transcript.map(seg => {
     if (seg.lockedByUser || manuallyEditedSegmentIdsRef.current.has(seg.id)) return seg;
