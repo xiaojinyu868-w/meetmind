@@ -78,6 +78,13 @@ export async function POST(request: NextRequest) {
       stream?: boolean;
       enable_thinking_guide?: boolean;
       selected_context_mode?: boolean;
+      /**
+       * M8-D3: Classroom companion auto-attaches "最近 30s 的转录" here so the
+       * LLM treats it as the implicit reference for "这个/那个/刚才" without
+       * requiring the student to quote anything. Optional — absent means no
+       * recent-focus hint should be injected.
+       */
+      recentFocus?: string;
     };
 
     try {
@@ -101,6 +108,7 @@ export async function POST(request: NextRequest) {
       selected_context_mode = false,
       sessionId,
       stream = false,
+      recentFocus,
     } = body;
 
     const questionHint = [
@@ -340,12 +348,17 @@ export async function POST(request: NextRequest) {
       messages.push({ role: 'system', content: systemPrompt });
 
       if (messageContent && messageContent.length > 0) {
+        // M8-D3: 在 multimodal user message 的首个文本块里挂上 recentFocus 上下文
+        const recentFocusLine =
+          typeof recentFocus === 'string' && recentFocus.trim()
+            ? `\n【刚才 30 秒讲到】\n${recentFocus.trim()}\n（当学生说"这个/那个/刚才"时默认指向此段）`
+            : '';
         const userContent: MultimodalContent[] = [
           {
             type: 'text',
             text: globalMode
-              ? `${useSelectedContextPrompt ? '【用户刚圈出的上下文】' : '【整节课转录内容】'}\n${contextText}\n\n【学生提问】`
-              : `【课堂转录参考】\n${contextText}\n\n【学生说】`,
+              ? `${useSelectedContextPrompt ? '【用户刚圈出的上下文】' : '【整节课转录内容】'}\n${contextText}${recentFocusLine}\n\n【学生提问】`
+              : `【课堂转录参考】\n${contextText}${recentFocusLine}\n\n【学生说】`,
           },
         ];
 
@@ -367,9 +380,18 @@ export async function POST(request: NextRequest) {
 
         messages.push({ role: 'user', content: userContent });
       } else {
+        // M8-D3: 当前端传入 recentFocus 时，把"最近 30s 讲了什么"作为
+        // 隐式参照系塞在学生问题之前。用户说"这是啥意思"——模型就知道
+        // 它指向这段刚听到的内容，而不是整节课的平均。
+        // 不做 prompt-injection 防护：recentFocus 和 segments 文本一样都是 ASR 产物，
+        // 不是用户可控输入。
+        const recentFocusBlock =
+          typeof recentFocus === 'string' && recentFocus.trim()
+            ? `\n\n【刚才 30 秒讲到】\n${recentFocus.trim()}\n（当学生说"这个/那个/刚才/这啥意思"时，默认指向上面这段。）`
+            : '';
         const userPrompt = globalMode
-          ? `${useSelectedContextPrompt ? '【用户刚圈出的上下文】' : '【整节课转录内容】'}\n${contextText}\n\n【学生提问】\n${studentQuestion}`
-          : `【课堂转录参考】\n${contextText}\n\n【学生说】\n${studentQuestion}`;
+          ? `${useSelectedContextPrompt ? '【用户刚圈出的上下文】' : '【整节课转录内容】'}\n${contextText}${recentFocusBlock}\n\n【学生提问】\n${studentQuestion}`
+          : `【课堂转录参考】\n${contextText}${recentFocusBlock}\n\n【学生说】\n${studentQuestion}`;
         messages.push({ role: 'user', content: userPrompt });
       }
     } else {

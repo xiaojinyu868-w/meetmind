@@ -81,6 +81,10 @@ function toTutorSegments(segs: TranscriptSegment[]): Array<{
   }));
 }
 
+// M8-D3: extractRecentFocus 提取到 @/lib/services/classroom/recent-focus
+// 以便 node 测试环境直接单测，不需要 mock React/hooks。
+import { extractRecentFocus } from '@/lib/services/classroom/recent-focus';
+
 export function useClassroomCompanion(
   input: UseClassroomCompanionInput = {},
 ): UseClassroomCompanionReturn {
@@ -266,6 +270,10 @@ export function useClassroomCompanion(
         enable_guidance: false,
         enable_web: false,
         sessionId: sessionId || undefined,
+        // M8-D3: 让 backend 知道"用户问话那一刻，最近 30s 讲了什么"——
+        // 不再需要用户手动引用或点"问刚才这段"。字段即使 backend 暂时
+        // 不认识也无害（老 endpoint 会忽略未知字段）。
+        recentFocus: extractRecentFocus(segments) || undefined,
         stream: true,
       }, {
         headers,

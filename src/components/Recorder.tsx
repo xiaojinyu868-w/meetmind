@@ -268,22 +268,31 @@ export const Recorder = forwardRef<RecorderHandle, RecorderProps>(function Recor
               if (manuallyEditedSegmentIdsRef.current.has(seg.id)) continue;
               newMap.set(seg.id, seg);
             }
-            
+
             const currentTranscript = transcriptRef.current;
             const enhancedTranscript = currentTranscript.map(seg => {
               if (manuallyEditedSegmentIdsRef.current.has(seg.id)) return seg;
               const enhanced = newMap.get(seg.id);
               if (enhanced && enhanced.enhanceStatus === 'enhanced' && enhanced.text !== seg.text) {
-                return { ...seg, text: enhanced.text };
+                // M8-A2: silent correction — 把原文塞进 originalText 让 UI
+                // 悬停 600ms 后能展示"机器修过：XXX"。
+                // 后端 enhance 可能已经自己填了 originalText（更权威的 raw ASR），
+                // 优先用后端的；兜底用当前 seg.text 作为原文。
+                return {
+                  ...seg,
+                  text: enhanced.text,
+                  originalText: enhanced.originalText || seg.originalText || seg.text,
+                  correctionLevel: enhanced.correctionLevel,
+                };
               }
               return seg;
             });
-            
+
             onTranscriptEnhanced?.(enhancedTranscript);
 
             // Update transcriptRef so that sendContextUpdate sends corrected text to ASR
             transcriptRef.current = enhancedTranscript;
-            
+
             return newMap;
           });
           setEnhanceStats(prev => ({
@@ -962,18 +971,25 @@ export const Recorder = forwardRef<RecorderHandle, RecorderProps>(function Recor
                   if (manuallyEditedSegmentIdsRef.current.has(seg.id)) continue;
                   newMap.set(seg.id, seg);
                 }
-                
+
                 const enhancedTranscript = segments.map(seg => {
                   if (manuallyEditedSegmentIdsRef.current.has(seg.id)) return seg;
                   const enhanced = newMap.get(seg.id);
                   if (enhanced && enhanced.enhanceStatus === 'enhanced' && enhanced.text !== seg.text) {
-                    return { ...seg, text: enhanced.text };
+                    // M8-A2: silent correction — carry originalText so UI hover
+                    // can reveal "机器修过：XXX" without any in-your-face badge.
+                    return {
+                      ...seg,
+                      text: enhanced.text,
+                      originalText: enhanced.originalText || seg.originalText || seg.text,
+                      correctionLevel: enhanced.correctionLevel,
+                    };
                   }
                   return seg;
                 });
-                
+
                 onTranscriptEnhanced?.(enhancedTranscript);
-                
+
                 return newMap;
               });
               setEnhanceStats(prev => ({

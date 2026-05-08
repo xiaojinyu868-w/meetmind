@@ -31,6 +31,14 @@ interface FlowSegment {
   text: string;
   startMs: number;
   endMs: number;
+  /**
+   * 机器静默修正后的原始文本（M8-A2）。
+   * 管线：enhance manager → /api/transcript-enhance → 3 层 rule/lexicon/llm，
+   * 修过的 segment 把原文存在 originalText，当前文本已是修正版。
+   * UI 默认不暴露；只在用户悬停 ≥ 600ms 时极淡展示"修过：XXX"，
+   * 让好奇的用户能看到，不打扰不想看的用户。
+   */
+  originalText?: string;
 }
 import { useTextSelection } from '@/hooks/useTextSelection';
 import { WordExplainer } from './WordExplainer';
@@ -210,6 +218,38 @@ function SegmentSpan({
   hasConfusion,
 }: SegmentSpanProps) {
   const [hovered, setHovered] = useState(false);
+  // M8-A2: 只有悬停"够久"才亮出"机器修过：XXX → YYY" tooltip。
+  // 默认完全不露面，好奇的人自然发现，不好奇的人永不打扰。
+  const [revealOriginal, setRevealOriginal] = useState(false);
+  const hoverTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const wasCorrected = Boolean(
+    segment.originalText &&
+      segment.originalText.trim() &&
+      segment.originalText !== segment.text,
+  );
+
+  const onEnter = useCallback(() => {
+    setHovered(true);
+    if (!wasCorrected) return;
+    if (hoverTimerRef.current) clearTimeout(hoverTimerRef.current);
+    hoverTimerRef.current = setTimeout(() => setRevealOriginal(true), 600);
+  }, [wasCorrected]);
+
+  const onLeave = useCallback(() => {
+    setHovered(false);
+    setRevealOriginal(false);
+    if (hoverTimerRef.current) {
+      clearTimeout(hoverTimerRef.current);
+      hoverTimerRef.current = null;
+    }
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (hoverTimerRef.current) clearTimeout(hoverTimerRef.current);
+    };
+  }, []);
 
   const highlighted = useMemo(
     () => highlightText(segment.text, searchQuery),
@@ -261,8 +301,8 @@ function SegmentSpan({
       ]
         .filter(Boolean)
         .join(' ')}
-      onMouseEnter={() => setHovered(true)}
-      onMouseLeave={() => setHovered(false)}
+      onMouseEnter={onEnter}
+      onMouseLeave={onLeave}
       onClick={
         isClickable
           ? () => onTimestampClick?.(segment.startMs)
@@ -277,6 +317,25 @@ function SegmentSpan({
       {showHoverTime && hovered && !isActive && (
         <span className="absolute -top-5 left-0 text-[10px] font-mono text-[#787774] bg-white/95 border border-[#E9E9E7] rounded px-1 py-0.5 shadow-sm whitespace-nowrap z-10 pointer-events-none">
           {formatCompactTime(segment.startMs)}
+        </span>
+      )}
+
+      {/*
+        M8-A2: 机器静默修正后的"修过了"提示。
+        - 默认完全看不见（没有 badge / 下划线 / 图标）
+        - 悬停 600ms 后才淡入一行极小字；离开立即消失
+        - 文案刻意朴素："机器修过：XXX"，不是"AI 智能校正"这种噪音词
+        - 不给"撤销"按钮——若用户真想改回去，双击编辑整句（已有能力）
+      */}
+      {wasCorrected && revealOriginal && (
+        <span
+          className="absolute -top-5 left-0 z-10 flex items-center gap-1 whitespace-nowrap rounded-full border border-[#E9E9E7] bg-white/95 px-2 py-0.5 text-[10px] text-[#A3A39E] shadow-sm pointer-events-none"
+          role="note"
+        >
+          <span className="text-[#A3A39E]/80">机器修过：</span>
+          <span className="font-mono text-[#787774] line-through">
+            {segment.originalText}
+          </span>
         </span>
       )}
 

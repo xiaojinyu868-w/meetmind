@@ -305,6 +305,24 @@ export function useRecordingLifecycle(
       duration,
     });
 
+    // M8-A3: 课结束立刻聚合热词，让下一节课的 ASR context 立即拿到增量。
+    // 之前只在 pagehide / visibilitychange 触发，意味着用户录完不关页面就没更新——
+    // 课堂场景下这是常态。现在每次正常停课都跑一次，服务端幂等、失败静默，对 UI 零阻塞。
+    // 条件：登录态 + 本次真有转录内容（避免空录音也发 API）
+    if (isAuthenticated && accessToken && finalSegments.length >= 3) {
+      fetch('/api/asr/corrections/aggregate', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${accessToken}`,
+        },
+        body: JSON.stringify({ scope: 'user', windowDays: 30 }),
+        keepalive: true,
+      }).catch(() => {
+        // silent — 不影响课堂数据持久化路径
+      });
+    }
+
     // Persist audio and transcript to IndexedDB history.
     if (blob) {
       const currentUserId = user?.id || ANONYMOUS_USER_ID;
