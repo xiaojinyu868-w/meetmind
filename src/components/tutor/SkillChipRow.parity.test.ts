@@ -10,7 +10,6 @@ import type { SkillPrompt } from './skill-prompts';
  */
 describe('resolveSkillAction (M8 parity)', () => {
   const skill: SkillPrompt = {
-    icon: '📋',
     label: '考试速查表',
     appKey: 'cheatsheet',
     utterance: '帮我把这节课整理成一页考试速查表。',
@@ -46,7 +45,6 @@ describe('resolveSkillAction (M8 parity)', () => {
 
   it('没 appKey + 只有 onOpenApp → 退回 prompt', () => {
     const chatOnly: SkillPrompt = {
-      icon: '💡',
       label: '再讲一遍',
       utterance: '用更通俗的方式再讲一遍。',
       prompt: '用更通俗的方式讲解。',

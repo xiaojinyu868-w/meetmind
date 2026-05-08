@@ -15,14 +15,27 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
-const LS_KEY = 'meetmind_translate_en_zh_cache_v1';
+export type TranslationMode = 'off' | 'en-zh' | 'zh-en';
+
 const MAX_BATCH = 20;
 const DEBOUNCE_MS = 300;
+const CACHE_KEY_BY_MODE: Record<Exclude<TranslationMode, 'off'>, string> = {
+  'en-zh': 'meetmind_translate_en_zh_cache_v1',
+  'zh-en': 'meetmind_translate_zh_en_cache_v1',
+};
+const ENDPOINT_BY_MODE: Record<Exclude<TranslationMode, 'off'>, string> = {
+  'en-zh': '/api/translate/en-zh',
+  'zh-en': '/api/translate/zh-en',
+};
 
-function loadCache(): Record<string, string> {
+function resolveActiveMode(enabled: boolean, mode: Exclude<TranslationMode, 'off'>): Exclude<TranslationMode, 'off'> | null {
+  return enabled ? mode : null;
+}
+
+function loadCache(mode: Exclude<TranslationMode, 'off'>): Record<string, string> {
   if (typeof window === 'undefined') return {};
   try {
-    const raw = window.localStorage.getItem(LS_KEY);
+    const raw = window.localStorage.getItem(CACHE_KEY_BY_MODE[mode]);
     if (!raw) return {};
     const parsed = JSON.parse(raw);
     return parsed && typeof parsed === 'object' ? parsed : {};
@@ -31,31 +44,38 @@ function loadCache(): Record<string, string> {
   }
 }
 
-function saveCache(cache: Record<string, string>) {
+function saveCache(mode: Exclude<TranslationMode, 'off'>, cache: Record<string, string>) {
   if (typeof window === 'undefined') return;
   try {
-    window.localStorage.setItem(LS_KEY, JSON.stringify(cache));
+    window.localStorage.setItem(CACHE_KEY_BY_MODE[mode], JSON.stringify(cache));
   } catch {
     /* quota exceeded — drop */
   }
 }
 
-export function useEnToZhTranslation(enabled: boolean) {
-  const [translations, setTranslations] = useState<Record<string, string>>(() => loadCache());
+export function useEnToZhTranslation(enabled: boolean, mode: Exclude<TranslationMode, 'off'> = 'en-zh') {
+  const activeMode = resolveActiveMode(enabled, mode);
+  const [translations, setTranslations] = useState<Record<string, string>>(() => loadCache(mode));
   const pendingRef = useRef<Set<string>>(new Set());
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const inflightRef = useRef<Set<string>>(new Set());
 
+  useEffect(() => {
+    setTranslations(loadCache(mode));
+    pendingRef.current.clear();
+    inflightRef.current.clear();
+  }, [mode]);
+
   // Flush 当前 pending 批次
   const flush = useCallback(async () => {
-    if (!enabled) return;
+    if (!activeMode) return;
     const toSend = Array.from(pendingRef.current).slice(0, MAX_BATCH);
     if (toSend.length === 0) return;
     pendingRef.current = new Set(Array.from(pendingRef.current).slice(MAX_BATCH));
     for (const t of toSend) inflightRef.current.add(t);
 
     try {
-      const resp = await fetch('/api/translate/en-zh', {
+      const resp = await fetch(ENDPOINT_BY_MODE[activeMode], {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ terms: toSend }),
@@ -68,7 +88,7 @@ export function useEnToZhTranslation(enabled: boolean) {
         }
       }
       setTranslations(next);
-      saveCache(next);
+      saveCache(activeMode, next);
     } catch {
       /* silent */
     } finally {
@@ -78,11 +98,11 @@ export function useEnToZhTranslation(enabled: boolean) {
         timerRef.current = setTimeout(flush, DEBOUNCE_MS);
       }
     }
-  }, [enabled, translations]);
+  }, [activeMode, translations]);
 
   const request = useCallback(
     (terms: string[]) => {
-      if (!enabled) return;
+      if (!activeMode) return;
       let added = false;
       for (const t of terms) {
         if (!t) continue;
@@ -96,7 +116,7 @@ export function useEnToZhTranslation(enabled: boolean) {
       if (timerRef.current) clearTimeout(timerRef.current);
       timerRef.current = setTimeout(flush, DEBOUNCE_MS);
     },
-    [enabled, translations, flush],
+    [activeMode, translations, flush],
   );
 
   useEffect(() => {
@@ -117,20 +137,31 @@ export function useEnToZhTranslation(enabled: boolean) {
 // 持久化的用户偏好：翻译气泡是否开启
 // ──────────────────────────────────────────────────────────────
 
-const LS_ENABLED_KEY = 'meetmind_translate_en_zh_enabled_v1';
+const LS_MODE_KEY = 'meetmind_translation_mode_v1';
 
-export function useEnToZhEnabled(): [boolean, (next: boolean) => void] {
-  const [enabled, setEnabled] = useState(true); // 默认开启
+function normalizeMode(value: string | null): TranslationMode {
+  return value === 'en-zh' || value === 'zh-en' ? value : 'off';
+}
+
+export function useTranslationMode(): [TranslationMode, (next: TranslationMode) => void] {
+  const [mode, setMode] = useState<TranslationMode>('off');
   useEffect(() => {
     if (typeof window === 'undefined') return;
-    const raw = window.localStorage.getItem(LS_ENABLED_KEY);
-    if (raw !== null) setEnabled(raw === 'true');
+    setMode(normalizeMode(window.localStorage.getItem(LS_MODE_KEY)));
   }, []);
-  const update = useCallback((next: boolean) => {
-    setEnabled(next);
+  const update = useCallback((next: TranslationMode) => {
+    setMode(next);
     if (typeof window !== 'undefined') {
-      window.localStorage.setItem(LS_ENABLED_KEY, String(next));
+      window.localStorage.setItem(LS_MODE_KEY, next);
     }
   }, []);
-  return [enabled, update];
+  return [mode, update];
+}
+
+export function useEnToZhEnabled(): [boolean, (next: boolean) => void] {
+  const [mode, setMode] = useTranslationMode();
+  const update = useCallback((next: boolean) => {
+    setMode(next ? 'en-zh' : 'off');
+  }, [setMode]);
+  return [mode === 'en-zh', update];
 }

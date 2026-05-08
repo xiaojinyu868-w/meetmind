@@ -30,7 +30,6 @@
 import type { WorkshopAppKey } from '@/lib/ai-native/app-catalog';
 
 export interface SkillPrompt {
-  icon: string;
   label: string;
   /**
    * Agent-native 主路径：点击 = 发这条 utterance 给 agent，agent 自行调度工具。
@@ -50,35 +49,30 @@ export interface SkillPrompt {
 
 export const SKILL_PROMPTS: SkillPrompt[] = [
   {
-    icon: '📋',
     label: '考试速查表',
     appKey: 'cheatsheet',
     utterance: '帮我把这节课整理成一页考试速查表。',
     prompt: '把这节课整理成一页"考试速查表"：核心定义、公式/关键步骤、易错点各一组。',
   },
   {
-    icon: '🃏',
     label: '做闪卡',
     appKey: 'flashcards',
     utterance: '基于这节课给我做一组闪卡，我想主动回忆一下。',
     prompt: '基于这节课做 10 张闪卡（概念题 + 公式题 + 应用题），正反面都给。',
   },
   {
-    icon: '✍️',
     label: '出测验',
     appKey: 'quiz',
     utterance: '考我一下，出几道题测测我有没有真懂。',
     prompt: '基于这节课出 5 道单选题测验，要有正确答案和解析。',
   },
   {
-    icon: '🧠',
     label: '画思维导图',
     appKey: 'mindmap',
     utterance: '帮我把这节课的结构画成思维导图。',
     prompt: '把这节课的主干和分支整理成思维导图结构。',
   },
   {
-    icon: '📊',
     label: '学习报告',
     appKey: 'study-report',
     utterance: '生成一份这节课的学习报告，我想知道自己应该关注哪里。',
@@ -86,7 +80,6 @@ export const SKILL_PROMPTS: SkillPrompt[] = [
   },
   {
     // "再讲一遍"天然对话式——agent 不会调 tool，直接流式回答即可。
-    icon: '💡',
     label: '再讲一遍',
     utterance: '把这节课的核心内容用更通俗的方式再讲一遍。',
     prompt: '用更通俗的方式重新讲解这节课的核心概念，像同学之间聊天那样。',

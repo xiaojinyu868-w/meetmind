@@ -8,7 +8,7 @@ describe('SKILL_PROMPTS catalog', () => {
   //
   // 这个测试钉住目录契约：
   //   1. 个数
-  //   2. 每条都有 icon/label/prompt
+  //   2. 每条都有 label/prompt，且不再使用 emoji icon
   //   3. 没有重复标签
   //   4. 核心 5 个 skill 必须走 appKey（结构化插件路径），不能退回 prompt-only
   //      这是 M7-fix10 的架构承诺：结构化技能 = 真实 plugin，不是 /api/tutor 下的纯 markdown
@@ -17,10 +17,9 @@ describe('SKILL_PROMPTS catalog', () => {
     expect(SKILL_PROMPTS).toHaveLength(6);
   });
 
-  it('每个 skill 都有 icon / label / prompt / utterance', () => {
+  it('每个 skill 都有 label / prompt / utterance，且不使用 emoji icon', () => {
     for (const s of SKILL_PROMPTS) {
-      expect(typeof s.icon).toBe('string');
-      expect(s.icon.length).toBeGreaterThan(0);
+      expect('icon' in s).toBe(false);
       expect(typeof s.label).toBe('string');
       expect(s.label.length).toBeGreaterThan(1);
       expect(typeof s.prompt).toBe('string');

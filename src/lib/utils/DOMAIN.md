@@ -18,6 +18,11 @@
 | `transcript-utils.ts` | 166 | 转录工具（格式化/合并/分块/相似度） | `formatTranscriptWithTimestamps`, `mergeTranscriptText`, `chunkTranscript` |
 | `time-utils.ts` | 132 | 时间格式化/解析 | `formatTimestamp`, `parseTimestamp`, `formatDurationMs` |
 | `rate-limit.ts` | 59 | API 速率限制中间件封装 | `applyRateLimit`, `withRateLimit` |
+| `public-routes.ts` | 59 | middleware 公共路由白名单与匹配函数 | `isPublicRoute` |
+| `inline-app-retry.ts` | 23 | 内联应用执行的瞬时失败重试策略 | `shouldRetryInlineAppExecute`, `getInlineAppRetryDelayMs` |
+| `tutor-agent-provider.ts` | 31 | Tutor Agent OpenAI-compatible provider 配置解析 | `resolveTutorAgentProviderConfig` |
+| `video-source.ts` | 35 | 视频播放源标识恢复（B 站 bvid/cid） | `resolveBilibiliVideoIdentifiers` |
+| `companion-quiz-memory.ts` | 45 | AI 同桌内联测验作答结果上下文 | `upsertQuizAttempt`, `buildQuestionWithQuizContext` |
 | `index.ts` | 40 | barrel 导出 | re-export time-utils, json-utils, transcript-utils |
 
 ### `page/` 子目录（从 page-utils.ts 拆分）

@@ -156,11 +156,25 @@ import { extractCitationsFromMarkdown } from '@/components/classroom/companion-m
 import { isWorkshopAppKey, type WorkshopAppKey } from '@/lib/ai-native/app-catalog';
 // M8 Phase 4: 停止录音时仪式感文案从文案中心读
 import { COPY } from '@/lib/ui/copy';
+import {
+  getInlineAppRetryDelayMs,
+  INLINE_APP_MAX_ATTEMPTS,
+  shouldRetryInlineAppExecute,
+} from '@/lib/utils/inline-app-retry';
+import {
+  buildQuestionWithQuizContext,
+  upsertQuizAttempt,
+  type CompanionQuizAttempt,
+} from '@/lib/utils/companion-quiz-memory';
 
 /** 把长句子截成省略号版，塞进"再讲讲那道 xxx..."的追问气泡里 */
 function truncate(s: string, n: number): string {
   const v = (s || '').trim();
   return v.length > n ? `${v.slice(0, n)}…` : v;
+}
+
+function wait(ms: number): Promise<void> {
+  return new Promise((resolve) => window.setTimeout(resolve, ms));
 }
 
 export function useClassroomCompanion(
@@ -177,6 +191,7 @@ export function useClassroomCompanion(
   // messages 的 ref 镜像——inline app 的 retry/interaction 回调需要读到最新值，
   // 但又不能把 messages 放进那些 callback 的依赖里（否则回调身份每次 render 都变）。
   const messagesRef = useRef<CompanionMessage[]>([]);
+  const quizAttemptsRef = useRef<CompanionQuizAttempt[]>([]);
   useEffect(() => {
     messagesRef.current = messages;
   }, [messages]);
@@ -292,6 +307,7 @@ export function useClassroomCompanion(
       // 只清内存 messages，不清 preferences
       setMessages([]);
       setStreamingMessage(null);
+      quizAttemptsRef.current = [];
       hasListeningGreetedRef.current = false;
       // 新课不再走首次 hello 注入
       hasHelloInjectedRef.current = true;
@@ -391,46 +407,47 @@ export function useClassroomCompanion(
         memory: {},
       };
 
-      try {
-        const response = await fetch('/api/apps/execute', {
-          method: 'POST',
-          headers,
-          body: JSON.stringify(body),
-        });
-        const data = (await response.json().catch(() => null)) as
-          | { ok?: boolean; error?: string; result?: { render?: { payload?: unknown } } }
-          | null;
+      let lastError = '生成失败';
+      for (let attempt = 1; attempt <= INLINE_APP_MAX_ATTEMPTS; attempt += 1) {
+        try {
+          const response = await fetch('/api/apps/execute', {
+            method: 'POST',
+            headers,
+            body: JSON.stringify(body),
+          });
+          const data = (await response.json().catch(() => null)) as
+            | { ok?: boolean; error?: string; result?: { render?: { payload?: unknown } } }
+            | null;
 
-        if (!response.ok || !data?.ok || !data.result) {
-          const msg = data?.error || '生成失败';
-          setMessages((prev) =>
-            prev.map((m) =>
-              m.id === messageId
-                ? { ...m, inlineApp: { appKey, status: 'error' as const, error: msg } }
-                : m,
-            ),
-          );
-          return;
+          if (response.ok && data?.ok && data.result) {
+            const payload = data.result.render?.payload;
+            setMessages((prev) =>
+              prev.map((m) =>
+                m.id === messageId
+                  ? { ...m, inlineApp: { appKey, status: 'ready' as const, payload } }
+                  : m,
+              ),
+            );
+            return;
+          }
+
+          lastError = data?.error || '生成失败';
+          if (!shouldRetryInlineAppExecute({ status: response.status, attempt })) break;
+        } catch (err) {
+          lastError = err instanceof Error ? err.message : '网络有点问题';
+          if (!shouldRetryInlineAppExecute({ status: null, attempt })) break;
         }
 
-        const payload = data.result.render?.payload;
-        setMessages((prev) =>
-          prev.map((m) =>
-            m.id === messageId
-              ? { ...m, inlineApp: { appKey, status: 'ready' as const, payload } }
-              : m,
-          ),
-        );
-      } catch (err) {
-        const msg = err instanceof Error ? err.message : '网络有点问题';
-        setMessages((prev) =>
-          prev.map((m) =>
-            m.id === messageId
-              ? { ...m, inlineApp: { appKey, status: 'error' as const, error: msg } }
-              : m,
-          ),
-        );
+        await wait(getInlineAppRetryDelayMs(attempt));
       }
+
+      setMessages((prev) =>
+        prev.map((m) =>
+          m.id === messageId
+            ? { ...m, inlineApp: { appKey, status: 'error' as const, error: lastError } }
+            : m,
+        ),
+      );
     },
     [accessToken, segments, sessionId, slimTranscriptForApp],
   );
@@ -481,13 +498,12 @@ export function useClassroomCompanion(
   /**
    * 用户在内联 app 卡片里做的操作。
    *
-   * 设计原则：把"做题"串进"和同学对话"——每一次有意义的动作
-   * （单题答错、flashcard "再来"、做完一套）都落成一条同学 bubble，
-   * 学生可以顺着那条 bubble 继续问，而不是被动看结果。
+   * 设计原则：把"做题"串进"和同学对话"，但不把每题解析刷进聊天流。
+   * Quiz 的正误和解析留在卡片内部；作答结果写进 quizAttemptsRef，供下一轮
+   * /api/tutor 提问时作为隐藏上下文传给同桌。
    *
-   *   - quiz_submit（答错）   → 追加一条 bubble：正解 + 解析 + [再讲讲] action
-   *   - quiz_submit（答对）   → 静默，不打扰节奏
-   *   - quiz_all_done         → 追加一条总结 bubble（原有行为）
+   *   - quiz_submit           → 只记录作答结果，不追加可见 bubble
+   *   - quiz_all_done         → 静默；总结留给用户主动追问
    *   - flashcard_rate（again）→ 追加一条 bubble：卡片正反面 + [换个讲法] action
    *   - flashcard_rate（其他）→ 静默
    *   - flashcard_all_done    → 追加一条总结 bubble（原有行为）
@@ -499,57 +515,19 @@ export function useClassroomCompanion(
   const handleInlineAppInteraction = useCallback(
     (_messageId: string, event: InlineAppInteraction) => {
       if (event.kind === 'quiz_submit') {
-        if (event.correct) return; // 答对不打扰
-        // 答错——同学给一句"正解 + 解析"，并挂"再讲讲"追问按钮
-        const correctLabel = event.correctText
-          ? `${event.correctAnswer}（${event.correctText}）`
-          : event.correctAnswer;
-        const content = event.explanation
-          ? `正解是 **${correctLabel}**。\n\n${event.explanation}`
-          : `正解是 **${correctLabel}**。想不通的话我可以再讲讲这道题。`;
-        setMessages((prev) => [
-          ...prev,
-          {
-            id: `quiz-wrong-${event.questionId}-${Date.now()}`,
-            role: 'companion',
-            content,
-            actions: [
-              {
-                label: '再讲讲',
-                kind: 'say',
-                payload: `上面那道题（${truncate(event.stem, 40)}）我还是不太懂，再给我讲讲为什么是 ${correctLabel}？`,
-              },
-            ],
-            createdAt: Date.now(),
-          },
-        ]);
+        quizAttemptsRef.current = upsertQuizAttempt(quizAttemptsRef.current, {
+          questionId: event.questionId,
+          stem: event.stem,
+          picked: event.picked,
+          pickedText: event.pickedText,
+          correctAnswer: event.correctAnswer,
+          correctText: event.correctText,
+          explanation: event.explanation,
+          correct: event.correct,
+        });
         return;
       }
       if (event.kind === 'quiz_all_done') {
-        const ratio = event.total > 0 ? event.correct / event.total : 0;
-        let line: string;
-        if (ratio >= 0.9) line = `${event.correct}/${event.total}——基本没问题，这节课你在听。`;
-        else if (ratio >= 0.6) line = `${event.correct}/${event.total}——核心都抓住了，错的那几题回放一下。`;
-        else line = `${event.correct}/${event.total}——有几个点没对上，别急，我可以挑一个最关键的重讲。`;
-        setMessages((prev) => [
-          ...prev,
-          {
-            id: `quiz-feedback-${Date.now()}`,
-            role: 'companion',
-            content: line,
-            actions:
-              ratio < 0.9
-                ? [
-                    {
-                      label: '挑一道最关键的重讲',
-                      kind: 'say',
-                      payload: '刚才那套题里最核心的那道你再给我讲讲。',
-                    },
-                  ]
-                : undefined,
-            createdAt: Date.now(),
-          },
-        ]);
         return;
       }
       if (event.kind === 'flashcard_rate') {
@@ -635,11 +613,12 @@ export function useClassroomCompanion(
     try {
       const headers: Record<string, string> = {};
       if (accessToken) headers['Authorization'] = `Bearer ${accessToken}`;
+      const tutorQuestion = buildQuestionWithQuizContext(trimmed, quizAttemptsRef.current);
 
       const result = await fetchStream('/api/tutor', {
         timestamp: 0,
         segments: toTutorSegments(segments),
-        studentQuestion: trimmed,
+        studentQuestion: tutorQuestion,
         globalMode: true,
         enable_guidance: false,
         enable_web: false,

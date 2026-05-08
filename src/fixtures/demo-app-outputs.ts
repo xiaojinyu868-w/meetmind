@@ -12,7 +12,6 @@
  *
  * 每个 preview 的组成：
  *   - appKey：对应的插件 key
- *   - icon：一个 emoji（首屏不用图片，保持轻）
  *   - title：短标签（2-6 字）
  *   - tagline：一句话描述这张卡片是什么
  *   - sampleLine：缩略图里展示的一行"样品内容"（让用户一眼知道这是什么）
@@ -22,7 +21,6 @@ import type { WorkshopAppKey } from '@/lib/ai-native/app-catalog';
 
 export interface DemoAppPreview {
   appKey: Extract<WorkshopAppKey, 'cheatsheet' | 'flashcards' | 'mindmap' | 'quiz' | 'study-report'>;
-  icon: string;
   title: string;
   tagline: string;
   sampleLine: string;
@@ -31,35 +29,30 @@ export interface DemoAppPreview {
 export const DEMO_APP_PREVIEWS: DemoAppPreview[] = [
   {
     appKey: 'cheatsheet',
-    icon: '📋',
     title: '一页速查表',
     tagline: '核心定义、公式、易错点压成一张可打印的卡',
     sampleLine: '核心定义 · 关键公式 · 易错点',
   },
   {
     appKey: 'flashcards',
-    icon: '🃏',
     title: '闪卡',
     tagline: '课堂里的概念变成主动回忆训练',
     sampleLine: '正面问 · 反面答 · 配证据回放',
   },
   {
     appKey: 'mindmap',
-    icon: '🧠',
     title: '思维导图',
     tagline: '这节课的结构和分支一眼看完',
     sampleLine: '根主题 · 分支 · 节点跳回放',
   },
   {
     appKey: 'quiz',
-    icon: '✍️',
     title: '测验',
     tagline: '检验是真懂还是以为自己懂',
     sampleLine: '题干 · 选项 · 解析',
   },
   {
     appKey: 'study-report',
-    icon: '📊',
     title: '学习报告',
     tagline: '这节课讲了什么，家长视角的内容分析',
     sampleLine: '主题 · 难度 · 可和孩子聊的话题',

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { extractEnglishRuns, hasTranslatableEnglish } from './extract-english';
+import { extractChineseRuns, extractEnglishRuns, hasTranslatableEnglish } from './extract-english';
 
 describe('extractEnglishRuns', () => {
   it('extracts multi-word English', () => {
@@ -36,6 +36,16 @@ describe('extractEnglishRuns', () => {
       '今天讲 back propagation 和 stochastic gradient descent 两个概念',
     );
     expect(out.length).toBeGreaterThanOrEqual(2);
+  });
+});
+
+describe('extractChineseRuns', () => {
+  it('extracts a compact Chinese sentence for zh-en translation', () => {
+    expect(extractChineseRuns('所以你是从小。')).toEqual(['所以你是从小。']);
+  });
+
+  it('ignores text without Chinese characters', () => {
+    expect(extractChineseRuns('DingTalk A One')).toEqual([]);
   });
 });
 

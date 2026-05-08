@@ -6,9 +6,9 @@
  * v2 — M8 agent-native：loading 态升级为"三阶段叙事性骨架"。
  * 过去 60-120 秒的白空只有一个 spinner + 一行静态文字；
  * 现在按时间推进三句"同学在做什么"的描述：
- *   📖 正在读你的课堂…
- *   🎯 正在挑核心…
- *   ✨ 正在排版…
+ *   1 正在读你的课堂…
+ *   2 正在挑核心…
+ *   3 正在排版…
  * 已完成的阶段收成一条 ✓ 灰线，当前阶段有 shimmer 扫光。
  * 结果到了以后整个骨架 200ms 淡出，真实内容 200ms 淡入。
  *
@@ -46,9 +46,9 @@ type Stage = 0 | 1 | 2;
 /** 三阶段文案 + 各阶段目标占比（累积）。
  *  实际大多数 app 在 30-60s 完成；按比例推进即可营造"在做事"的叙事。 */
 const STAGE_ITEMS = [
-  { icon: '📖', label: COPY.stages.reading },
-  { icon: '🎯', label: COPY.stages.selecting },
-  { icon: '✨', label: COPY.stages.composing },
+  { marker: '1', label: COPY.stages.reading },
+  { marker: '2', label: COPY.stages.selecting },
+  { marker: '3', label: COPY.stages.composing },
 ] as const;
 
 // 每个阶段预计停留的毫秒。当真实执行比这快时，阶段会被一起"打勾"。
@@ -108,7 +108,7 @@ function StagedLoading({ appName }: { appName: string }) {
                   )}
                   aria-hidden
                 >
-                  {done ? '✓' : item.icon}
+                  {done ? '✓' : item.marker}
                 </span>
                 <span className="flex-1">
                   {item.label}

@@ -44,6 +44,9 @@ route.ts → lib/services/ + lib/utils/rate-limit
 |------|------|------|
 | `/api/chat` | POST | AI 对话（多模型/流式/速率限制） |
 | `/api/tutor` | POST | AI 家教（解释/追问/引导/联网检索） |
+| `/api/tutor/agent` | POST | AI 同桌 agent-native 工具调用流 |
+| `/api/translate/en-zh` | POST | 课堂英文片段翻译为中文 |
+| `/api/translate/zh-en` | POST | 课堂中文片段翻译为英文 |
 | `/api/generate-summary` | POST | 课堂摘要生成 |
 | `/api/generate-topics` | POST | 精选片段生成（Smart/Fast） |
 | `/api/feedback` | POST | 用户反馈 |

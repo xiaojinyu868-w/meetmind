@@ -30,10 +30,14 @@ export type InlineAppInteraction =
   | {
       kind: 'quiz_submit';
       questionId: string;
+      questionIndex: number;
+      total: number;
       /** 题干，用来让同学在对话里引用 */
       stem: string;
       /** 用户选了哪个（字母或文本） */
       picked: string;
+      /** 用户所选完整文本 */
+      pickedText?: string;
       /** 正解（字母或文本，和 payload 保持一致） */
       correctAnswer: string;
       /** 正解完整文本（option 原文） */
@@ -87,9 +91,9 @@ export function InlineAppCard({ inlineApp, onInteraction, onRetry }: InlineAppCa
 
 const STAGE_DURATIONS_MS = [6000, 14000, 20000];
 const STAGES = [
-  { icon: '📖', label: COPY.stages.reading },
-  { icon: '🎯', label: COPY.stages.selecting },
-  { icon: '✨', label: COPY.stages.composing },
+  { marker: '1', label: COPY.stages.reading },
+  { marker: '2', label: COPY.stages.selecting },
+  { marker: '3', label: COPY.stages.composing },
 ] as const;
 
 function useStageProgression() {
@@ -123,8 +127,8 @@ function InlineLoading({ appKey: _appKey }: { appKey: string }) {
                 done ? 'text-ink-muted/70' : active ? 'text-ink' : 'text-ink-muted/40'
               } ${active ? 'stage-shimmer rounded-md px-1 py-0.5 -mx-1' : ''}`}
             >
-              <span aria-hidden className="w-4 text-center">
-                {done ? '✓' : item.icon}
+              <span aria-hidden className="w-4 text-center font-mono text-[10px]">
+                {done ? '✓' : item.marker}
               </span>
               <span>
                 {item.label}
@@ -184,11 +188,11 @@ function InlineQuiz({
 }) {
   const data = payload as QuizPayload;
   const questions = data?.questions ?? [];
+  const [index, setIndex] = React.useState(0);
   const [picks, setPicks] = React.useState<Record<string, string>>({});
   const [revealed, setRevealed] = React.useState<Record<string, boolean>>({});
 
   const summaryEmittedRef = React.useRef(false);
-  // 全部答完时抛出 "quiz_all_done" 一次
   React.useEffect(() => {
     if (questions.length === 0 || summaryEmittedRef.current) return;
     const doneCount = Object.keys(revealed).length;
@@ -205,104 +209,121 @@ function InlineQuiz({
     return <div className="mt-2 text-[12px] text-ink-muted">（没生成出题目）</div>;
   }
 
+  const q = questions[Math.min(index, questions.length - 1)];
+  const picked = picks[q.id];
+  const isRevealed = revealed[q.id];
+  const isCorrect = picked && normalizeAnswer(picked) === normalizeAnswer(q.answer);
+  const currentAnswerIndex = q.options.findIndex(
+    (opt, oi) => normalizeAnswer(q.answer) === normalizeAnswer(opt) || normalizeAnswer(q.answer) === String.fromCharCode(65 + oi),
+  );
+  const correctText = currentAnswerIndex >= 0
+    ? q.options[currentAnswerIndex].replace(/^[A-D][.。、:：]\s*/, '')
+    : undefined;
+
   return (
-    <div className="mt-2 flex flex-col gap-3">
-      {questions.map((q, qi) => {
-        const picked = picks[q.id];
-        const isRevealed = revealed[q.id];
-        const isCorrect = picked && normalizeAnswer(picked) === normalizeAnswer(q.answer);
-        return (
-          <div
-            key={q.id}
-            className="rounded-2xl bg-white px-3.5 py-3 ring-[0.5px] ring-[#232322]/[0.08]"
+    <div className="mt-2 rounded-2xl bg-white px-3.5 py-3 ring-[0.5px] ring-[#232322]/[0.08]">
+      <div className="flex items-center justify-between gap-2">
+        <p className="text-[12.5px] font-medium text-ink-muted">第 {index + 1} 题 / {questions.length}</p>
+        <div className="flex items-center gap-1">
+          <button
+            type="button"
+            disabled={index === 0}
+            onClick={() => setIndex((v) => Math.max(0, v - 1))}
+            className="rounded-full px-2 py-1 text-[11px] text-ink-muted transition hover:bg-[#F7F7F5] disabled:opacity-30"
           >
-            <p className="text-[12.5px] font-medium text-ink-muted">第 {qi + 1} 题</p>
-            <p className="mt-1 text-[13.5px] leading-relaxed text-ink">{q.stem}</p>
-            <ul className="mt-2.5 flex flex-col gap-1.5">
-              {q.options.map((opt, oi) => {
-                const letter = String.fromCharCode(65 + oi);
-                const isPicked = picked === letter || picked === opt;
-                const isAnswer = normalizeAnswer(q.answer) === normalizeAnswer(letter) ||
-                  normalizeAnswer(q.answer) === normalizeAnswer(opt);
-                let cls = 'border-[#E9E9E7] bg-white text-ink hover:border-[#CECEC8]';
-                if (isRevealed) {
-                  if (isAnswer) cls = 'border-[#2E7D52] bg-[#E8F4EE] text-[#1F5838]';
-                  else if (isPicked && !isCorrect) cls = 'border-[#D96B6B] bg-[#FDEEEE] text-[#8A3333]';
-                  else cls = 'border-[#E9E9E7] bg-white text-ink-muted/70';
-                } else if (isPicked) {
-                  cls = 'border-ink bg-[#F7F7F5] text-ink';
-                }
-                return (
-                  <li key={oi}>
-                    <button
-                      type="button"
-                      disabled={isRevealed}
-                      onClick={() => {
-                        setPicks((p) => ({ ...p, [q.id]: letter }));
-                      }}
-                      className={`w-full rounded-xl border px-3 py-2 text-left text-[12.5px] transition ${cls} ${
-                        isRevealed ? 'cursor-default' : 'cursor-pointer'
-                      }`}
-                    >
-                      <span className="mr-1.5 font-mono text-[11px] text-ink-muted">{letter}.</span>
-                      <span>{opt.replace(/^[A-D][.。、:：]\s*/, '')}</span>
-                    </button>
-                  </li>
-                );
-              })}
-            </ul>
-            <div className="mt-2.5 flex items-center gap-2">
-              {!isRevealed ? (
-                <button
-                  type="button"
-                  disabled={!picked}
-                  onClick={() => {
-                    if (!picked) return;
-                    setRevealed((r) => ({ ...r, [q.id]: true }));
-                    const correct = normalizeAnswer(picked) === normalizeAnswer(q.answer);
-                    // 找到正解对应的 option 原文（方便同学把"B. 选项内容"完整复述）
-                    const correctIdx = q.options.findIndex(
-                      (opt) => normalizeAnswer(opt) === normalizeAnswer(q.answer) ||
-                        String.fromCharCode(65 + q.options.indexOf(opt)) ===
-                          normalizeAnswer(q.answer),
-                    );
-                    const correctText =
-                      correctIdx >= 0
-                        ? q.options[correctIdx].replace(/^[A-D][.。、:：]\s*/, '')
-                        : undefined;
-                    onInteraction?.({
-                      kind: 'quiz_submit',
-                      questionId: q.id,
-                      stem: q.stem,
-                      picked,
-                      correctAnswer: q.answer,
-                      correctText,
-                      explanation: q.explanation,
-                      correct,
-                    });
-                  }}
-                  className={`inline-flex items-center rounded-full px-3 py-1 text-[12px] font-medium transition ${
-                    picked
-                      ? 'bg-ink text-white hover:opacity-85'
-                      : 'bg-[#F0F0ED] text-ink-muted/60 cursor-not-allowed'
-                  }`}
-                >
-                  对答案
-                </button>
-              ) : (
-                <span className={`text-[12px] ${isCorrect ? 'text-[#2E7D52]' : 'text-[#8A3333]'}`}>
-                  {isCorrect ? '✓ 答对了' : '× 再看一下'}
-                </span>
-              )}
-            </div>
-            {isRevealed && q.explanation ? (
-              <p className="mt-2 rounded-lg bg-[#F7F7F5] px-2.5 py-2 text-[12px] leading-relaxed text-ink-secondary">
-                {q.explanation}
-              </p>
-            ) : null}
-          </div>
-        );
-      })}
+            上一题
+          </button>
+          <button
+            type="button"
+            disabled={index >= questions.length - 1}
+            onClick={() => setIndex((v) => Math.min(questions.length - 1, v + 1))}
+            className="rounded-full px-2 py-1 text-[11px] text-ink-muted transition hover:bg-[#F7F7F5] disabled:opacity-30"
+          >
+            下一题
+          </button>
+        </div>
+      </div>
+      <p className="mt-2 text-[13.5px] leading-relaxed text-ink">{q.stem}</p>
+      <ul className="mt-2.5 flex flex-col gap-1.5">
+        {q.options.map((opt, oi) => {
+          const letter = String.fromCharCode(65 + oi);
+          const optionText = opt.replace(/^[A-D][.。、:：]\s*/, '');
+          const isPicked = picked === letter || picked === opt;
+          const isAnswer = normalizeAnswer(q.answer) === normalizeAnswer(letter) ||
+            normalizeAnswer(q.answer) === normalizeAnswer(opt);
+          let cls = 'border-[#E9E9E7] bg-white text-ink hover:border-[#CECEC8]';
+          if (isRevealed) {
+            if (isAnswer) cls = 'border-[#2E7D52] bg-[#E8F4EE] text-[#1F5838]';
+            else if (isPicked && !isCorrect) cls = 'border-[#D96B6B] bg-[#FDEEEE] text-[#8A3333]';
+            else cls = 'border-[#E9E9E7] bg-white text-ink-muted/70';
+          } else if (isPicked) {
+            cls = 'border-ink bg-[#F7F7F5] text-ink';
+          }
+          return (
+            <li key={oi}>
+              <button
+                type="button"
+                disabled={isRevealed}
+                onClick={() => setPicks((p) => ({ ...p, [q.id]: letter }))}
+                className={`w-full rounded-xl border px-3 py-2 text-left text-[12.5px] transition ${cls} ${
+                  isRevealed ? 'cursor-default' : 'cursor-pointer'
+                }`}
+              >
+                <span className="mr-1.5 font-mono text-[11px] text-ink-muted">{letter}.</span>
+                <span>{optionText}</span>
+              </button>
+            </li>
+          );
+        })}
+      </ul>
+      <div className="mt-2.5 flex items-center gap-2">
+        {!isRevealed ? (
+          <button
+            type="button"
+            disabled={!picked}
+            onClick={() => {
+              if (!picked) return;
+              setRevealed((r) => ({ ...r, [q.id]: true }));
+              const pickedIndex = q.options.findIndex((opt, oi) => picked === String.fromCharCode(65 + oi) || picked === opt);
+              const pickedText = pickedIndex >= 0
+                ? q.options[pickedIndex].replace(/^[A-D][.。、:：]\s*/, '')
+                : undefined;
+              onInteraction?.({
+                kind: 'quiz_submit',
+                questionId: q.id,
+                questionIndex: index,
+                total: questions.length,
+                stem: q.stem,
+                picked,
+                pickedText,
+                correctAnswer: q.answer,
+                correctText,
+                explanation: q.explanation,
+                correct: Boolean(isCorrect),
+              });
+            }}
+            className={`inline-flex items-center rounded-full px-3 py-1 text-[12px] font-medium transition ${
+              picked
+                ? 'bg-ink text-white hover:opacity-85'
+                : 'bg-[#F0F0ED] text-ink-muted/60 cursor-not-allowed'
+            }`}
+          >
+            对答案
+          </button>
+        ) : (
+          <span className={`text-[12px] ${isCorrect ? 'text-[#2E7D52]' : 'text-[#8A3333]'}`}>
+            {isCorrect ? '答对了' : '再看一下'}
+          </span>
+        )}
+      </div>
+      {isRevealed ? (
+        <div className="mt-2 rounded-lg bg-[#F7F7F5] px-2.5 py-2 text-[12px] leading-relaxed text-ink-secondary">
+          <p className="font-medium text-ink-secondary">
+            正确答案：{q.answer}{correctText ? `（${correctText}）` : ''}
+          </p>
+          {q.explanation ? <p className="mt-1">解析：{q.explanation}</p> : null}
+        </div>
+      ) : null}
     </div>
   );
 }

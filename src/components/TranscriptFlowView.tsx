@@ -42,8 +42,8 @@ interface FlowSegment {
 }
 import { useTextSelection } from '@/hooks/useTextSelection';
 import { WordExplainer } from './WordExplainer';
-import { useEnToZhTranslation, useEnToZhEnabled } from '@/hooks/useEnToZhTranslation';
-import { extractEnglishRuns } from '@/lib/services/translation/extract-english';
+import { useEnToZhTranslation, useTranslationMode, type TranslationMode } from '@/hooks/useEnToZhTranslation';
+import { extractChineseRuns, extractEnglishRuns } from '@/lib/services/translation/extract-english';
 
 // ─── 类型定义 ───
 
@@ -513,27 +513,29 @@ function ParagraphBlock({
 function ParagraphTranslationWrapper({
   paragraph,
   enableTranslation,
+  translationMode,
   translation,
   children,
 }: {
   paragraph: Paragraph;
   enableTranslation: boolean;
+  translationMode: TranslationMode;
   translation: ReturnType<typeof useEnToZhTranslation>;
   children: React.ReactNode;
 }) {
-  const englishRuns = useMemo(() => {
+  const terms = useMemo(() => {
     if (!enableTranslation) return [];
     const text = paragraph.segments.map((s) => s.text).join(' ');
-    return extractEnglishRuns(text);
-  }, [enableTranslation, paragraph.segments]);
+    return translationMode === 'zh-en' ? extractChineseRuns(text) : extractEnglishRuns(text);
+  }, [enableTranslation, translationMode, paragraph.segments]);
 
   useEffect(() => {
-    if (englishRuns.length > 0) translation.request(englishRuns);
-  }, [englishRuns, translation]);
+    if (terms.length > 0) translation.request(terms);
+  }, [terms, translation]);
 
-  const resolvedPairs = englishRuns
-    .map((term) => ({ term, zh: translation.lookup(term) }))
-    .filter((p): p is { term: string; zh: string } => Boolean(p.zh) && p.zh !== p.term);
+  const resolvedPairs = terms
+    .map((term) => ({ term, translated: translation.lookup(term) }))
+    .filter((p): p is { term: string; translated: string } => Boolean(p.translated) && p.translated !== p.term);
 
   if (!enableTranslation || resolvedPairs.length === 0) return <>{children}</>;
 
@@ -545,7 +547,7 @@ function ParagraphTranslationWrapper({
           <span key={p.term} className="inline-flex items-baseline gap-1">
             <span className="font-mono text-slate-400">{p.term}</span>
             <span aria-hidden="true" className="text-slate-300">→</span>
-            <span>{p.zh}</span>
+            <span>{p.translated}</span>
           </span>
         ))}
       </div>
@@ -589,10 +591,20 @@ export function TranscriptFlowView({
   const searchQuery = externalSearchQuery ?? internalSearchQuery;
   const canEdit = editable && typeof onSegmentTextUpdate === 'function';
 
-  // M7.9 英→中翻译：prop 是能力开关；用户偏好存 LS
-  const [userEnabledTranslation, setUserEnabledTranslation] = useEnToZhEnabled();
-  const translationActive = enableEnToZhTranslation && userEnabledTranslation;
-  const translation = useEnToZhTranslation(translationActive);
+  // M7.9 翻译：prop 是能力开关；用户偏好存 LS，默认关闭。
+  const [translationMode, setTranslationMode] = useTranslationMode();
+  const translationActive = enableEnToZhTranslation && translationMode !== 'off';
+  const activeDirection: Exclude<TranslationMode, 'off'> = translationMode === 'zh-en' ? 'zh-en' : 'en-zh';
+  const translation = useEnToZhTranslation(translationActive, activeDirection);
+  const cycleTranslationMode = () => {
+    setTranslationMode(
+      translationMode === 'off'
+        ? 'en-zh'
+        : translationMode === 'en-zh'
+          ? 'zh-en'
+          : 'off',
+    );
+  };
 
   // 选词解释
   const containerRef = useRef<HTMLDivElement>(null);
@@ -772,17 +784,17 @@ export function TranscriptFlowView({
             {/* M7.9 英→中翻译开关——只在 prop 开启翻译能力时显示 */}
             {enableEnToZhTranslation && (
               <button
-                onClick={() => setUserEnabledTranslation(!userEnabledTranslation)}
+                onClick={cycleTranslationMode}
                 className={`px-1.5 py-0.5 text-[11px] rounded-md transition-colors ${
-                  userEnabledTranslation
+                  translationActive
                     ? 'bg-[#E8F4FF] text-[#1C5A9E]'
                     : 'text-gray-400 hover:text-gray-600 hover:bg-gray-100'
                 }`}
-                title={userEnabledTranslation ? '点击关闭行内英译中' : '点击开启行内英译中'}
-                aria-pressed={userEnabledTranslation}
-                aria-label="英→中翻译开关"
+                title="切换翻译模式：关闭 / EN→中 / 中→EN"
+                aria-pressed={translationActive}
+                aria-label="翻译模式开关"
               >
-                EN→中
+                {translationMode === 'off' ? '翻译关' : translationMode === 'en-zh' ? 'EN→中' : '中→EN'}
               </button>
             )}
             {/* 折叠/展开 */}
@@ -856,6 +868,7 @@ export function TranscriptFlowView({
             key={`p-${para.startMs}`}
             paragraph={para}
             enableTranslation={translationActive}
+            translationMode={translationMode}
             translation={translation}
           >
             <ParagraphBlock

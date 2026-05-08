@@ -2,6 +2,7 @@
 
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { ImportedVideoSource } from '@/types';
+import { resolveBilibiliVideoIdentifiers } from '@/lib/utils/video-source';
 
 interface VideoReviewPlayerProps {
   source: ImportedVideoSource | null;
@@ -29,10 +30,10 @@ function isBilibili(source: ImportedVideoSource): boolean {
  * 构建 B站音频代理 URL（通过我们自己的 /api/video/proxy 代理）
  */
 function buildBiliProxyAudioUrl(source: ImportedVideoSource): string | null {
-  const bvid = source.bvid;
+  const { bvid, cid } = resolveBilibiliVideoIdentifiers(source);
   if (!bvid) return null;
   const params = new URLSearchParams({ bvid, type: 'audio' });
-  if (source.cid) params.set('cid', String(source.cid));
+  if (cid) params.set('cid', String(cid));
   return `/api/video/proxy?${params.toString()}`;
 }
 
@@ -40,10 +41,10 @@ function buildBiliProxyAudioUrl(source: ImportedVideoSource): string | null {
  * 构建 B站视频代理 URL（Dash 视频流，720p）
  */
 function buildBiliProxyVideoUrl(source: ImportedVideoSource): string | null {
-  const bvid = source.bvid;
+  const { bvid, cid } = resolveBilibiliVideoIdentifiers(source);
   if (!bvid) return null;
   const params = new URLSearchParams({ bvid, type: 'video' });
-  if (source.cid) params.set('cid', String(source.cid));
+  if (cid) params.set('cid', String(cid));
   return `/api/video/proxy?${params.toString()}`;
 }
 
@@ -851,6 +852,23 @@ function VideoReviewPlayerComponent({
             />
           </div>
           <style>{INDICATOR_CSS}</style>
+        </div>
+      );
+    }
+
+    // fallback：B 站 iframe 可用时先用嵌入播放器，避免 bvid/cid 或 CDN 代理异常时黑屏。
+    if (source.embedUrl) {
+      return (
+        <div ref={containerRef} className={className} data-testid="video-review-player">
+          <div className="relative overflow-hidden rounded-xl bg-black">
+            <iframe
+              src={source.embedUrl}
+              title={source.title || 'Bilibili 视频'}
+              className="aspect-video w-full border-0 bg-black"
+              allow="autoplay; fullscreen; picture-in-picture"
+              allowFullScreen
+            />
+          </div>
         </div>
       );
     }

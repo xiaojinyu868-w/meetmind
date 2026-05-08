@@ -18,8 +18,8 @@ import { Square, ChevronDown, ChevronUp, Languages } from 'lucide-react';
 import { MindMap } from './MindMap';
 import type { MindMapTree } from '@/hooks/useClassroomMindMap';
 import type { TranscriptSegment } from '@/types';
-import { extractEnglishRuns } from '@/lib/services/translation/extract-english';
-import { useEnToZhEnabled, useEnToZhTranslation } from '@/hooks/useEnToZhTranslation';
+import { extractChineseRuns, extractEnglishRuns } from '@/lib/services/translation/extract-english';
+import { useEnToZhTranslation, useTranslationMode, type TranslationMode } from '@/hooks/useEnToZhTranslation';
 
 // TranscriptFlowView 只在展开态用，且组件较重——code-split 一下，
 // 保持课堂首屏打开时不拉这份 bundle。
@@ -99,32 +99,43 @@ function StatusHeader({
   const hasFinal = Boolean(lastFinalLine && lastFinalLine.trim().length > 0);
   const displayedLine = showInterim ? interimText! : hasFinal ? lastFinalLine! : '';
 
-  // 持久化的 EN→中 开关——复用 TranscriptFlowView 走的那份 LocalStorage 偏好，
-  // 避免课堂 tab 和复习 tab 两个开关各记各的。
-  const [translateEnabled, setTranslateEnabled] = useEnToZhEnabled();
+  // 持久化翻译模式：默认 off；用户显式选择 EN→中 或 中→EN。
+  const [translationMode, setTranslationMode] = useTranslationMode();
+  const activeDirection: Exclude<TranslationMode, 'off'> = translationMode === 'zh-en' ? 'zh-en' : 'en-zh';
+  const translateEnabled = translationMode !== 'off';
 
-  // 从当前显示的这一行里抽出值得翻译的英文 run（≥2 词 + 有实词）
-  const englishRuns = useMemo(
-    () => (translateEnabled && displayedLine ? extractEnglishRuns(displayedLine) : []),
-    [translateEnabled, displayedLine],
-  );
+  const translationTerms = useMemo(() => {
+    if (!translateEnabled || !displayedLine) return [];
+    return translationMode === 'zh-en'
+      ? extractChineseRuns(displayedLine)
+      : extractEnglishRuns(displayedLine);
+  }, [translateEnabled, translationMode, displayedLine]);
 
-  const { request, lookup } = useEnToZhTranslation(translateEnabled);
+  const { request, lookup } = useEnToZhTranslation(translateEnabled, activeDirection);
 
-  // 新 run 出现时异步请求翻译；lookup 命中缓存时直接展示。
-  // 故意用 string join 做依赖——run 集合稳定时不重复触发 fetch。
-  const runsKey = englishRuns.join('|');
+  // 新片段出现时异步请求翻译；lookup 命中缓存时直接展示。
+  // 故意用 string join 做依赖——集合稳定时不重复触发 fetch。
+  const termsKey = translationTerms.join('|');
   useEffect(() => {
-    if (englishRuns.length > 0) request(englishRuns);
-  }, [runsKey, englishRuns, request]);
+    if (translationTerms.length > 0) request(translationTerms);
+  }, [termsKey, translationTerms, request]);
 
-  // 收集已翻译好的 `EN → 中` pair，最多挂 2 条，避免刷屏
   const translated = useMemo(() => {
-    return englishRuns
-      .map((en) => ({ en, zh: lookup(en) }))
-      .filter((p): p is { en: string; zh: string } => Boolean(p.zh))
+    return translationTerms
+      .map((source) => ({ source, translated: lookup(source) }))
+      .filter((p): p is { source: string; translated: string } => Boolean(p.translated))
       .slice(0, 2);
-  }, [englishRuns, lookup]);
+  }, [translationTerms, lookup]);
+
+  const cycleTranslationMode = () => {
+    setTranslationMode(
+      translationMode === 'off'
+        ? 'en-zh'
+        : translationMode === 'en-zh'
+          ? 'zh-en'
+          : 'off',
+    );
+  };
 
   return (
     <div className="flex-shrink-0 bg-canvas px-8 pt-7 pb-4 lg:px-12">
@@ -140,20 +151,20 @@ function StatusHeader({
           <span className="font-mono text-[13px] tabular-nums tracking-tight text-ink-muted">
             {formatTime(seconds)}
           </span>
-          {/* 右侧：EN→中 开关 —— 极小按钮，不抢戏 */}
+          {/* 右侧：翻译模式切换 —— 默认关闭，点击依次 EN→中 / 中→EN / 关闭 */}
           <button
             type="button"
-            onClick={() => setTranslateEnabled(!translateEnabled)}
+            onClick={cycleTranslationMode}
             className={`ml-auto inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10.5px] font-medium tracking-wide transition ${
               translateEnabled
                 ? 'bg-[#232322] text-white'
                 : 'text-ink-muted/70 hover:text-ink-secondary hover:bg-[#EFEFED]'
             }`}
-            title={translateEnabled ? '关闭 EN→中 翻译' : '开启 EN→中 翻译'}
+            title="切换翻译模式：关闭 / EN→中 / 中→EN"
             aria-pressed={translateEnabled}
           >
             <Languages size={10} strokeWidth={2} />
-            <span>EN→中</span>
+            <span>{translationMode === 'off' ? '翻译关' : translationMode === 'en-zh' ? 'EN→中' : '中→EN'}</span>
           </button>
         </div>
         <div className="mt-2.5 min-h-[20px]">
@@ -172,17 +183,17 @@ function StatusHeader({
             </p>
           )}
         </div>
-        {/* EN→中 行内提示：极轻字号，only when something actually got translated */}
+        {/* 行内翻译提示：极轻字号，only when something actually got translated */}
         {translated.length > 0 ? (
           <div className="mt-1 flex flex-wrap gap-x-3 gap-y-0.5">
-            {translated.map(({ en, zh }) => (
+            {translated.map(({ source, translated: target }) => (
               <span
-                key={en}
+                key={source}
                 className="inline-flex items-baseline gap-1.5 text-[11px] leading-snug text-ink-muted/80"
               >
-                <span className="font-medium text-ink-muted">{en}</span>
+                <span className="font-medium text-ink-muted">{source}</span>
                 <span aria-hidden className="text-ink-muted/40">→</span>
-                <span className="text-ink-secondary">{zh}</span>
+                <span className="text-ink-secondary">{target}</span>
               </span>
             ))}
           </div>

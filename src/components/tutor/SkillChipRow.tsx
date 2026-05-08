@@ -102,7 +102,6 @@ export function SkillChipRow({
               title={s.prompt}
               role="listitem"
             >
-              <span aria-hidden="true">{s.icon}</span>
               <span>{s.label}</span>
               {tapped && (
                 <span
@@ -130,7 +129,7 @@ export function SkillChipRow({
             onClick={() => handleClick(s)}
             disabled={disabled}
             className={cn(
-              'relative flex items-center gap-2 rounded-2xl bg-white px-3.5 py-2.5 text-left text-[13px] text-ink',
+              'relative flex items-center rounded-2xl bg-white px-3.5 py-2.5 text-left text-[13px] text-ink',
               'ring-[0.5px] ring-[#232322]/[0.08] transition',
               'hover:ring-[#232322]/[0.22] hover:-translate-y-[1px]',
               'disabled:opacity-50 disabled:cursor-not-allowed',
@@ -138,7 +137,6 @@ export function SkillChipRow({
             )}
             title={s.prompt}
           >
-            <span aria-hidden="true" className="text-[15px] leading-none">{s.icon}</span>
             <span className="truncate font-medium tracking-[-0.005em]">{s.label}</span>
             {tapped && (
               <span

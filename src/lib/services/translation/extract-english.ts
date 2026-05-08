@@ -34,3 +34,14 @@ export function extractEnglishRuns(text: string): string[] {
 export function hasTranslatableEnglish(text: string): boolean {
   return extractEnglishRuns(text).length > 0;
 }
+
+/**
+ * 从转写文本中抽取适合中译英的中文片段。
+ * 这里不做复杂分词：实时课堂顶部只需要把当前短句整体翻译出来。
+ */
+export function extractChineseRuns(text: string): string[] {
+  const normalized = text.replace(/\s+/g, ' ').trim();
+  if (!/[\u4E00-\u9FFF]/.test(normalized)) return [];
+  if (normalized.length < 2) return [];
+  return [normalized.slice(0, 160)];
+}

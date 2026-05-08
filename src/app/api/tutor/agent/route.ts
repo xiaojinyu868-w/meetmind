@@ -25,6 +25,7 @@ import { applyRateLimit } from '@/lib/utils/rate-limit';
 import { createTutorTools } from '@/lib/tutor/tutor-tools';
 import { TUTOR_SYSTEM_CURRENT, PROMPT_VERSIONS } from '@/lib/prompts/tutor-prompts';
 import { createLogger, track } from '@/lib/logger';
+import { resolveTutorAgentProviderConfig } from '@/lib/utils/tutor-agent-provider';
 
 const log = createLogger('tutor-agent');
 
@@ -72,8 +73,8 @@ export async function POST(request: NextRequest) {
     const { messages, transcript, subject } = parsed.data;
     sessionId = parsed.data.sessionId;
 
-    const apiKey = process.env.OPENAI_API_KEY ?? process.env.DASHSCOPE_API_KEY;
-    if (!apiKey) {
+    const provider = resolveTutorAgentProviderConfig(process.env);
+    if (!provider.apiKey) {
       track({ kind: 'tutor.fail', sessionId, errorCode: 'TUTOR_NO_API_KEY' });
       return new Response(JSON.stringify({ error: 'LLM API key not configured' }), {
         status: 500,
@@ -81,14 +82,10 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    // 用 OpenAI provider + DashScope compatible-mode
-    //   (默认 qwen3.5-plus 通过 OpenAI-compatible API 走 streamText；
-    //    高精度场景可 env TUTOR_MODEL=qwen-max 覆盖)
-    const baseURL =
-      process.env.TUTOR_BASE_URL ??
-      process.env.LLM_BASE_URL ??
-      'https://dashscope.aliyuncs.com/compatible-mode/v1';
-    const modelId = process.env.TUTOR_MODEL ?? 'qwen3.5-plus';
+    // 用 OpenAI provider + DashScope compatible-mode。
+    // 注意：DashScope baseURL 必须优先配 DASHSCOPE_API_KEY；如果同时存在
+    // OPENAI_API_KEY，误发给 DashScope 会直接返回 Unauthorized。
+    const { apiKey, baseURL, modelId } = provider;
     const openai = createOpenAI({ apiKey, baseURL });
     const model = openai(modelId);
 

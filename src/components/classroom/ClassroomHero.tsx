@@ -127,9 +127,6 @@ export function ClassroomHero({
                 )}
                 title={preview.tagline}
               >
-                <span className="text-[20px] leading-none" aria-hidden>
-                  {preview.icon}
-                </span>
                 <span className="text-[13px] font-medium tracking-[-0.01em] text-ink">
                   {preview.title}
                 </span>
