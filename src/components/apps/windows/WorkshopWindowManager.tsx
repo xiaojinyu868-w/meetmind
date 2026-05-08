@@ -13,6 +13,7 @@ import { QuizWindow } from '@/components/apps/windows/QuizWindow';
 import { MindmapWindow } from '@/components/apps/windows/MindmapWindow';
 import { InfographicWindow } from '@/components/apps/windows/InfographicWindow';
 import { StudyReportWindow } from '@/components/apps/windows/StudyReportWindow';
+import { CheatsheetWindow } from '@/components/apps/windows/CheatsheetWindow';
 
 import type { ClassCheckRound } from '@/hooks/useClassCheck';
 import type { ClassCheckPlan } from '@/app/api/class-check/plan/route';
@@ -96,6 +97,7 @@ const DEFAULT_DISPLAY_MODES: Partial<Record<WorkshopAppKey, 'panel' | 'fullscree
   'audio-overview': 'panel',
   flashcards: 'fullscreen',
   quiz: 'fullscreen',
+  cheatsheet: 'fullscreen',
 };
 
 /** 需要沉浸式全屏体验的应用（深色背景、精简header） */
@@ -390,6 +392,9 @@ function WindowCard(props: WindowCardProps) {
             {app.key === 'study-report' ? (
               <StudyReportWindow rounds={classCheckRounds} plan={classCheckPlan} transcript={transcript} />
             ) : null}
+            {app.key === 'cheatsheet' ? (
+              <CheatsheetWindow result={execution.result} onSeek={onSeek} />
+            ) : null}
           </WindowErrorBoundary>
         </div>
       </section>
@@ -475,6 +480,9 @@ function WindowCard(props: WindowCardProps) {
           ) : null}
           {app.key === 'study-report' ? (
             <StudyReportWindow rounds={classCheckRounds} plan={classCheckPlan} transcript={transcript} />
+          ) : null}
+          {app.key === 'cheatsheet' ? (
+            <CheatsheetWindow result={execution.result} onSeek={onSeek} />
           ) : null}
         </WindowErrorBoundary>
       </div>

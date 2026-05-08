@@ -8,6 +8,7 @@ import { confusionDrillPlugin } from './confusion-drill.plugin';
 import { reviewPlanPlugin } from './review-plan.plugin';
 import { classCheckPlugin } from './class-check.plugin';
 import { studyReportPlugin } from './study-report.plugin';
+import { cheatsheetPlugin } from './cheatsheet.plugin';
 import { fallbackPlugin } from './fallback.plugin';
 
 export const defaultPlugins: AppPlugin[] = [
@@ -20,6 +21,7 @@ export const defaultPlugins: AppPlugin[] = [
   reviewPlanPlugin,
   classCheckPlugin,
   studyReportPlugin,
+  cheatsheetPlugin,
   fallbackPlugin,
 ];
 
@@ -33,5 +35,6 @@ export {
   reviewPlanPlugin,
   classCheckPlugin,
   studyReportPlugin,
+  cheatsheetPlugin,
   fallbackPlugin,
 };

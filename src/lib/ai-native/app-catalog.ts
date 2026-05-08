@@ -6,7 +6,8 @@ export type WorkshopAppKey =
   | 'quiz'
   | 'mindmap'
   | 'infographic'
-  | 'study-report';
+  | 'study-report'
+  | 'cheatsheet';
 
 export interface WorkshopAppCatalogItem {
   key: WorkshopAppKey;
@@ -24,6 +25,21 @@ export interface WorkshopAppCatalogItem {
 }
 
 export const WORKSHOP_APP_CATALOG: WorkshopAppCatalogItem[] = [
+  {
+    key: 'cheatsheet',
+    name: '考试速查表',
+    category: '应试准备',
+    headline: '一页纸考试速查表',
+    description: '把课堂核心定义、公式、易错点整成可打印的一页卡片，考前最后一刻复习。',
+    tags: ['考试', '速查', '一页纸', '打印'],
+    // 暂时复用 study-report 的封面图——新 SVG 打出来之前别让编译崩
+    coverImage: '/images/apps/study-report-cover.svg',
+    pluginId: 'cheatsheet-gen',
+    intent: '生成考试速查表：核心定义、公式/步骤、易错点各一组，适合一页打印。',
+    outputType: '可打印卡片',
+    renderMode: 'document',
+    status: 'ready',
+  },
   {
     key: 'audio-overview',
     name: '课堂播客',

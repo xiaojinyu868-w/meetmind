@@ -37,6 +37,7 @@ import { useLiveConcepts } from '@/hooks/useLiveConcepts';
 import { useCaptureEditorStore } from '@/stores/capture-editor-store';
 import { useCollectionStore } from '@/stores/collection-store';
 import type { ForesightBubble } from './classroom/ClassroomCompanionPanel';
+import type { WorkshopAppKey } from '@/lib/ai-native/app-catalog';
 
 export interface ClassroomViewProps {
   /** 点击"开始录一节课"——由 page.tsx 转发到 useRecording.startRecording */
@@ -49,6 +50,12 @@ export interface ClassroomViewProps {
   recordingSeconds?: number;
   /** 停止录音。lessonId 可选——如果传入且 Recorder 实际没在录，说明点的是"幽灵 pill"，需要降级清理。 */
   onStopRecording?: (lessonId?: string) => void;
+  /**
+   * 打开 AI 工坊中的一个 App（闪卡 / 测验 / 思维导图 / 学习报告 / 考试速查表）。
+   * 由 page.tsx 的 safeOpenWorkshopWindow 提供——同一个入口既被 AI 工坊应用矩阵使用，
+   * 也被课堂同桌的 skill chip 使用，保证同一套执行链不分家。
+   */
+  onOpenApp?: (appKey: WorkshopAppKey) => void;
 }
 
 export function ClassroomView({
@@ -57,6 +64,7 @@ export function ClassroomView({
   isRecording = false,
   recordingSeconds = 0,
   onStopRecording,
+  onOpenApp,
 }: ClassroomViewProps) {
   // ── 真实数据：Lesson[] + markReviewed ──
   const { lessons, markReviewed } = useClassroomLessons();
@@ -114,6 +122,20 @@ export function ClassroomView({
       .join(' ')
       .trim();
   }, [paneState, segments]);
+
+  // 录课态下真正用来喂 TranscriptFlowView 的 segments——其他时候不传，
+  // 避免 ClassroomRecordingView 在列表态里拿到陈旧的上节课 segments。
+  const recordingSegments = useMemo(
+    () => (paneState === 'recording' ? segments : undefined),
+    [paneState, segments],
+  );
+
+  // MindMap → 转录段落跳转：记住最近一次点击的 ms + 一个自增 nonce，
+  // ClassroomRecordingView 内部用 nonce 决定"要不要重滚"。连续点同一个节点也能生效。
+  const [mindMapScrollTarget, setMindMapScrollTarget] = useState<{ ms: number; nonce: number } | null>(null);
+  const handleMindMapAnchorClick = useCallback((ms: number) => {
+    setMindMapScrollTarget((prev) => ({ ms, nonce: (prev?.nonce ?? 0) + 1 }));
+  }, []);
 
   // 最近 N 句已落定句子（用于 UnderstandingCanvas 的"刚才讲到"区）。
   // 只保留最近 4 条，避免干扰焦点。
@@ -294,16 +316,19 @@ export function ClassroomView({
         recordingSeconds={effectiveRecordingSeconds}
         liveConcepts={liveConcepts}
         transcriptText={liveTranscriptText}
+        segments={recordingSegments}
         interimText={paneState === 'recording' ? liveInterimText : undefined}
         recentLines={recentLines}
         mindMapTree={mindMapTree}
         mindMapNewIds={mindMapNewIds}
+        onMindMapAnchorClick={handleMindMapAnchorClick}
+        scrollTarget={paneState === 'recording' ? mindMapScrollTarget : null}
         onFocusRecording={() => setLocalPaneState('recording')}
         audioSource={recorderAudioSource}
         onChangeAudioSource={setRecorderAudioSource}
       />
     ),
-    [paneState, lessons, handleOpenLesson, handleStartRecording, handleStopRecording, effectiveRecordingSeconds, liveConcepts, liveTranscriptText, liveInterimText, recentLines, mindMapTree, mindMapNewIds, recorderAudioSource, setRecorderAudioSource],
+    [paneState, lessons, handleOpenLesson, handleStartRecording, handleStopRecording, effectiveRecordingSeconds, liveConcepts, liveTranscriptText, recordingSegments, liveInterimText, recentLines, mindMapTree, mindMapNewIds, handleMindMapAnchorClick, mindMapScrollTarget, recorderAudioSource, setRecorderAudioSource],
   );
 
   const rightPanel = useMemo(
@@ -314,12 +339,13 @@ export function ClassroomView({
         streamingMessage={streamingMessage}
         isThinking={isThinking}
         onSend={handleSend}
+        onOpenApp={onOpenApp}
         foresights={foresights}
         onForesightAccept={handleForesightAccept}
         onForesightDismiss={dismissForesight}
       />
     ),
-    [companionMode, messages, streamingMessage, isThinking, handleSend, foresights, handleForesightAccept, dismissForesight],
+    [companionMode, messages, streamingMessage, isThinking, handleSend, onOpenApp, foresights, handleForesightAccept, dismissForesight],
   );
 
   return (

@@ -23,6 +23,7 @@ import { DefaultChatTransport } from 'ai';
 import { TutorToolCard } from './TutorToolCard';
 import type { TutorToolPartLike } from './tutor-tool-card-utils';
 import { splitByTimestamp } from './timestamp-parsing';
+import { SkillChipRow } from './SkillChipRow';
 import { cn } from '@/lib/utils';
 
 export interface TutorAgentPanelTranscriptSegment {
@@ -45,79 +46,10 @@ export interface TutorAgentPanelProps {
 }
 
 /**
- * 空态下的 skill 启发面板（M7.7，受 Hyperknow 启发）
- *
- * Agent 能力别藏在 chat 框里——把它们变成用户一眼就能点的 skill chip。
- * 每个 chip 点击后把对应的 prompt 预填进 input，让用户微调后再发送。
+ * SkillChipRow + SKILL_PROMPTS 已提取到 ./skill-prompts.tsx，
+ * 供 TutorAgentPanel 和 ClassroomCompanionPanel 共用——保证产品任意位置
+ * "速查表 / 闪卡 / 测验 / 思维导图 / 薄弱点 / 再讲一遍" 的语义一致。
  */
-interface SkillPrompt {
-  icon: string;
-  label: string;
-  prompt: string;
-}
-
-const DEFAULT_SKILL_PROMPTS: SkillPrompt[] = [
-  {
-    icon: '📋',
-    label: '考试速查表',
-    prompt: '把这节课整理成一页"考试速查表"：核心定义、公式/关键步骤、易错点各一组。',
-  },
-  {
-    icon: '🃏',
-    label: '做闪卡',
-    prompt: '基于这节课做 10 张闪卡（概念题 + 公式题 + 应用题），正反面都给。',
-  },
-  {
-    icon: '✍️',
-    label: '出测验',
-    prompt: '基于这节课出 5 道单选题测验，要有正确答案和解析。',
-  },
-  {
-    icon: '🧠',
-    label: '画思维导图',
-    prompt: '把这节课的主干和分支整理成思维导图结构。',
-  },
-  {
-    icon: '🎯',
-    label: '找薄弱点',
-    prompt: '根据课堂内容，告诉我这节课里哪些地方最容易考但最容易丢分？',
-  },
-  {
-    icon: '💡',
-    label: '再讲一遍',
-    prompt: '用更通俗的方式重新讲解这节课的核心概念，像同学之间聊天那样。',
-  },
-];
-
-function SkillChipRow({
-  onPick,
-  disabled,
-}: {
-  onPick: (prompt: string) => void;
-  disabled?: boolean;
-}) {
-  return (
-    <div className="grid grid-cols-2 gap-2 mt-4 max-w-md mx-auto">
-      {DEFAULT_SKILL_PROMPTS.map((s) => (
-        <button
-          key={s.label}
-          type="button"
-          onClick={() => onPick(s.prompt)}
-          disabled={disabled}
-          className={cn(
-            'flex items-center gap-2 px-3 py-2 text-sm text-left rounded-lg border transition-colors',
-            'border-slate-200 bg-white text-slate-700 hover:bg-slate-50 hover:border-slate-300',
-            'disabled:opacity-50 disabled:cursor-not-allowed',
-          )}
-          title={s.prompt}
-        >
-          <span aria-hidden="true" className="text-base">{s.icon}</span>
-          <span className="truncate">{s.label}</span>
-        </button>
-      ))}
-    </div>
-  );
-}
 function RenderTimestampedText({
   text,
   onSeek,

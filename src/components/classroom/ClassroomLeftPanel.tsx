@@ -25,6 +25,7 @@ import { ClassroomLessonCard } from './ClassroomLessonCard';
 import { ClassroomRecordingView } from './ClassroomRecordingView';
 import type { MindMapTree } from '@/hooks/useClassroomMindMap';
 import type { RecorderAudioSource } from '@/stores/capture-editor-store';
+import type { TranscriptSegment } from '@/types';
 
 /**
  * canCaptureSystemAudio — 浏览器是否能拿到电脑扬声器发出的声音
@@ -67,6 +68,8 @@ export interface ClassroomLeftPanelProps {
   liveConcepts?: Array<{ id: string; term: string; quote: string; at: number }>;
   /** 录课中：真实转录文本（拼接后整段） */
   transcriptText?: string;
+  /** 录课中：真实转录 segments（用于 TranscriptFlowView 分段展示 + 滚定位） */
+  segments?: TranscriptSegment[];
   /** 录课中：interim（正在跟读但未落定的文本） */
   interimText?: string;
   /** 录课中：最近 N 句已落定句子（用于 UnderstandingCanvas 下方脉络） */
@@ -77,6 +80,8 @@ export interface ClassroomLeftPanelProps {
   mindMapNewIds?: Set<string>;
   /** 录课中：点击节点跳转录音位置 */
   onMindMapAnchorClick?: (ms: number) => void;
+  /** 录课中：由父组件驱动的"把这个 ms 对应段落滚入视野"信号 */
+  scrollTarget?: { ms: number; nonce: number } | null;
   /** 点击活动条 → 进入录课态全屏视图 */
   onFocusRecording?: () => void;
   /**
@@ -524,11 +529,13 @@ export function ClassroomLeftPanel({
   recordingSeconds = 0,
   liveConcepts = [],
   transcriptText,
+  segments,
   interimText,
   recentLines,
   mindMapTree,
   mindMapNewIds,
   onMindMapAnchorClick,
+  scrollTarget,
   onFocusRecording,
   audioSource,
   onChangeAudioSource,
@@ -572,11 +579,13 @@ export function ClassroomLeftPanel({
             concepts={liveConcepts}
             onStop={onStopRecording}
             transcriptText={transcriptText}
+            segments={segments}
             interimText={interimText}
             recentLines={recentLines}
             mindMapTree={mindMapTree}
             mindMapNewIds={mindMapNewIds}
             onAnchorClick={onMindMapAnchorClick}
+            scrollTarget={scrollTarget}
           />
         )}
       </div>

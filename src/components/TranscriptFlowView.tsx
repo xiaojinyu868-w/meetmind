@@ -364,7 +364,11 @@ function ParagraphBlock({
     paragraph.segments.every(seg => seg.endMs <= currentTime);
 
   return (
-    <div className={`relative ${isLastParagraph ? '' : 'mb-3'}`} data-paragraph={dataParagraph || true}>
+    <div
+      className={`relative ${isLastParagraph ? '' : 'mb-3'}`}
+      data-paragraph={dataParagraph || true}
+      data-paragraph-start-ms={paragraph.startMs}
+    >
       {/* 段落时间标签 */}
       <span
         className={[

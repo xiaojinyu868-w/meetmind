@@ -1703,6 +1703,7 @@ function StudentAppContent({
           <div className="flex-1 min-h-0">
             <ClassroomView
               isRecording={isRecording}
+              onOpenApp={safeOpenWorkshopWindow}
               onStartRecording={() => {
                 // 课堂 tab 的 Recorder 是 sr-only 挂载点（不带 compactMode，走 streaming）。
                 // 绝对不要打开 showMobileRecorder —— 否则会同时渲染两个 Recorder：

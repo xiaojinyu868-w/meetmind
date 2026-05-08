@@ -1,24 +1,32 @@
 'use client';
 
 /**
- * ClassroomRecordingView — 录课中视图（v6 · 生长中的思维导图）
+ * ClassroomRecordingView — 录课中视图（v7 · 真的转录，真的可交互）
  *
- * 设计变更相对 v5：
- *   - 主画面不再是"一条理解卡片流 + 一条刚才讲到流"——那是"零散气泡"，信息密度低
- *     且互相重复。
- *   - 换成一棵真正的思维导图（MindMap 组件）：中心节点是本段主题，一级分支是老师讲
- *     到的主要概念，叶子是要点。每 ~45s 或命中主题切换词时由 LLM 整理一次。
- *   - 顶部保留极薄状态条（正在听课 + 计时 + 跟读），不刷屏。
- *   - 底部"刚才讲到"卡片区砍掉，换成单行"当前句"——屏幕真正的主角是导图。
- *   - 完整转录原文依然可点击展开查看。
+ * v7 变更（M7 真接）：
+ *   - 展开态的转录原文从 `<p>{transcriptText}</p>` 升级为 TranscriptFlowView。
+ *     立刻解锁：段落分组、EN→中行内气泡、划词解释（WordExplainer）、搜索。
+ *   - MindMap 节点点击 → 通过 scrollTargetMs 把对应段落滚到视线中央。
+ *   - 保留 v6 的主画面思维导图 + 极薄状态头 + "结束这节课"按钮。
  *
- * 老的 concepts 字段向后兼容但已不展示——通过 tree 传入结构化数据。
+ * 老的 concepts / transcriptText 字段保留向后兼容。
  */
 
-import React, { useState, useEffect, useRef } from 'react';
-import { Square, ChevronDown, ChevronUp } from 'lucide-react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
+import dynamic from 'next/dynamic';
+import { Square, ChevronDown, ChevronUp, Languages } from 'lucide-react';
 import { MindMap } from './MindMap';
 import type { MindMapTree } from '@/hooks/useClassroomMindMap';
+import type { TranscriptSegment } from '@/types';
+import { extractEnglishRuns } from '@/lib/services/translation/extract-english';
+import { useEnToZhEnabled, useEnToZhTranslation } from '@/hooks/useEnToZhTranslation';
+
+// TranscriptFlowView 只在展开态用，且组件较重——code-split 一下，
+// 保持课堂首屏打开时不拉这份 bundle。
+const TranscriptFlowView = dynamic(
+  () => import('@/components/TranscriptFlowView').then((m) => ({ default: m.TranscriptFlowView })),
+  { ssr: false },
+);
 
 export interface LiveConcept {
   id: string;
@@ -35,6 +43,8 @@ export interface ClassroomRecordingViewProps {
   onStop: () => void;
   /** 真实转录文本（整段拼接） */
   transcriptText?: string;
+  /** 真实转录 segments（用于 TranscriptFlowView 分段展示） */
+  segments?: TranscriptSegment[];
   /** 正在流式进来但未落定的「跟读」片段（interim） */
   interimText?: string;
   /** 最近已落定的 N 句（仍在 ClassroomView 里用于其他逻辑，这里只取最后一条做单行展示） */
@@ -45,6 +55,15 @@ export interface ClassroomRecordingViewProps {
   mindMapNewIds?: Set<string>;
   /** 点击节点时间戳 → 跳转录音位置（可选） */
   onAnchorClick?: (ms: number) => void;
+  /**
+   * 当 MindMap 节点被点击时传入：带 `{ ms }` 的 nonce。
+   * 本组件会：
+   *   1. 自动展开转录抽屉（如果还没展开）
+   *   2. 把该 ms 对应的段落滚到抽屉中央
+   * 每次新点击都要带一个新的对象（或 bumped version），才能触发新一次跳转——
+   * 纯数字 ms 不够，因为连续点同一个节点就无法再触发。
+   */
+  scrollTarget?: { ms: number; nonce: number } | null;
 }
 
 // ── 时间工具 ──────────────────────────────────────────────────────────
@@ -62,6 +81,10 @@ function formatTime(totalSec: number): string {
  * - 有 interim 时显示 interim（正在识别但未落定）
  * - 无 interim 时如果有 lastFinalLine 显示它
  * - 都没有时显示 "在听……"
+ *
+ * M7-fix10: 当当前显示的句子里含英文 run 时，额外在下方挂一行极细的 zh 翻译，
+ * 用户不必展开完整转录抽屉就能看到关键术语的中译。整段翻译仍走抽屉 + TranscriptFlowView。
+ * 有一个小 `中/EN` 切换按钮挂在"正在听课"右侧，用户不想看翻译可以关掉（持久化）。
  */
 function StatusHeader({
   seconds,
@@ -74,6 +97,34 @@ function StatusHeader({
 }) {
   const showInterim = Boolean(interimText && interimText.trim().length > 0);
   const hasFinal = Boolean(lastFinalLine && lastFinalLine.trim().length > 0);
+  const displayedLine = showInterim ? interimText! : hasFinal ? lastFinalLine! : '';
+
+  // 持久化的 EN→中 开关——复用 TranscriptFlowView 走的那份 LocalStorage 偏好，
+  // 避免课堂 tab 和复习 tab 两个开关各记各的。
+  const [translateEnabled, setTranslateEnabled] = useEnToZhEnabled();
+
+  // 从当前显示的这一行里抽出值得翻译的英文 run（≥2 词 + 有实词）
+  const englishRuns = useMemo(
+    () => (translateEnabled && displayedLine ? extractEnglishRuns(displayedLine) : []),
+    [translateEnabled, displayedLine],
+  );
+
+  const { request, lookup } = useEnToZhTranslation(translateEnabled);
+
+  // 新 run 出现时异步请求翻译；lookup 命中缓存时直接展示。
+  // 故意用 string join 做依赖——run 集合稳定时不重复触发 fetch。
+  const runsKey = englishRuns.join('|');
+  useEffect(() => {
+    if (englishRuns.length > 0) request(englishRuns);
+  }, [runsKey, englishRuns, request]);
+
+  // 收集已翻译好的 `EN → 中` pair，最多挂 2 条，避免刷屏
+  const translated = useMemo(() => {
+    return englishRuns
+      .map((en) => ({ en, zh: lookup(en) }))
+      .filter((p): p is { en: string; zh: string } => Boolean(p.zh))
+      .slice(0, 2);
+  }, [englishRuns, lookup]);
 
   return (
     <div className="flex-shrink-0 bg-canvas px-8 pt-7 pb-4 lg:px-12">
@@ -89,6 +140,21 @@ function StatusHeader({
           <span className="font-mono text-[13px] tabular-nums tracking-tight text-ink-muted">
             {formatTime(seconds)}
           </span>
+          {/* 右侧：EN→中 开关 —— 极小按钮，不抢戏 */}
+          <button
+            type="button"
+            onClick={() => setTranslateEnabled(!translateEnabled)}
+            className={`ml-auto inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10.5px] font-medium tracking-wide transition ${
+              translateEnabled
+                ? 'bg-[#232322] text-white'
+                : 'text-ink-muted/70 hover:text-ink-secondary hover:bg-[#EFEFED]'
+            }`}
+            title={translateEnabled ? '关闭 EN→中 翻译' : '开启 EN→中 翻译'}
+            aria-pressed={translateEnabled}
+          >
+            <Languages size={10} strokeWidth={2} />
+            <span>EN→中</span>
+          </button>
         </div>
         <div className="mt-2.5 min-h-[20px]">
           {showInterim ? (
@@ -106,6 +172,21 @@ function StatusHeader({
             </p>
           )}
         </div>
+        {/* EN→中 行内提示：极轻字号，only when something actually got translated */}
+        {translated.length > 0 ? (
+          <div className="mt-1 flex flex-wrap gap-x-3 gap-y-0.5">
+            {translated.map(({ en, zh }) => (
+              <span
+                key={en}
+                className="inline-flex items-baseline gap-1.5 text-[11px] leading-snug text-ink-muted/80"
+              >
+                <span className="font-medium text-ink-muted">{en}</span>
+                <span aria-hidden className="text-ink-muted/40">→</span>
+                <span className="text-ink-secondary">{zh}</span>
+              </span>
+            ))}
+          </div>
+        ) : null}
       </div>
     </div>
   );
@@ -160,24 +241,53 @@ export function ClassroomRecordingView({
   seconds,
   onStop,
   transcriptText,
+  segments,
   interimText,
   recentLines = [],
   mindMapTree = EMPTY_TREE,
   mindMapNewIds = EMPTY_NEW_IDS,
   onAnchorClick,
+  scrollTarget = null,
 }: ClassroomRecordingViewProps) {
   const [expanded, setExpanded] = useState(false);
   const transcriptScrollRef = useRef<HTMLDivElement | null>(null);
 
-  // 展开时：文本变化自动滚到底部（跟读效果）
-  useEffect(() => {
-    if (!expanded) return;
-    const el = transcriptScrollRef.current;
-    if (!el) return;
-    el.scrollTop = el.scrollHeight;
-  }, [transcriptText, expanded]);
+  // 有转录原文（从 segments 判定，不再依赖 transcriptText 字符串）
+  const hasTranscriptSegments = Boolean(segments && segments.length > 0);
+  const hasTranscript = hasTranscriptSegments || Boolean(transcriptText && transcriptText.trim().length > 0);
 
-  const hasTranscript = Boolean(transcriptText && transcriptText.trim().length > 0);
+  // scrollTarget 变化时：自动展开抽屉 + 滚动到对应段落
+  // 依赖 TranscriptFlowView 给每个段落挂的 data-paragraph-start-ms 属性，
+  // 找到距离目标 ms 最近且 ≤ 目标的那个段落，scrollIntoView。
+  useEffect(() => {
+    if (!scrollTarget) return;
+    // 展开抽屉——如果用户手动收起过，点节点的意图就是"给我看看这段原话"
+    setExpanded(true);
+    // 等 TranscriptFlowView render + 展开动画结束再滚
+    const timer = setTimeout(() => {
+      const scope = transcriptScrollRef.current;
+      if (!scope) return;
+      const elements = Array.from(
+        scope.querySelectorAll<HTMLElement>('[data-paragraph-start-ms]'),
+      );
+      if (elements.length === 0) return;
+      // 找到 startMs ≤ target 的最后一段（即"包含这个时刻"的段落）
+      let picked: HTMLElement | null = null;
+      for (const el of elements) {
+        const ms = Number(el.dataset.paragraphStartMs || '0');
+        if (ms <= scrollTarget.ms) {
+          picked = el;
+        } else {
+          break;
+        }
+      }
+      const target = picked ?? elements[0];
+      target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }, 180);
+    return () => clearTimeout(timer);
+    // 故意只对 scrollTarget（含 nonce）敏感——同一个 ms 重复点击也要重新滚
+  }, [scrollTarget]);
+
   const lastFinalLine = recentLines.length > 0 ? recentLines[recentLines.length - 1]?.text : undefined;
 
   return (
@@ -188,7 +298,7 @@ export function ClassroomRecordingView({
         lastFinalLine={lastFinalLine}
       />
 
-      {/* 主画面：思维导图 */}
+      {/* 主画面:思维导图 */}
       <MindMap
         tree={mindMapTree}
         newNodeIds={mindMapNewIds}
@@ -202,9 +312,24 @@ export function ClassroomRecordingView({
           <div className="mx-auto w-full max-w-3xl">
             <div
               ref={transcriptScrollRef}
-              className="max-h-[28vh] overflow-y-auto rounded-xl bg-white px-4 py-3 ring-[0.5px] ring-[#232322]/[0.05]"
+              className="max-h-[38vh] overflow-y-auto rounded-xl bg-white px-4 py-3 ring-[0.5px] ring-[#232322]/[0.05]"
             >
-              {hasTranscript ? (
+              {hasTranscriptSegments ? (
+                <TranscriptFlowView
+                  segments={segments!}
+                  variant="live"
+                  isRecording
+                  interimText={interimText}
+                  transcribeMode="streaming"
+                  enableEnToZhTranslation
+                  enableWordExplainer
+                  fullContextText={transcriptText ?? ''}
+                  showHeader={false}
+                  defaultExpanded
+                  paragraphGapMs={30000}
+                />
+              ) : hasTranscript ? (
+                // 没有 segments 但有字符串兜底——极少数老代码路径
                 <p className="whitespace-pre-wrap text-[12.5px] leading-relaxed text-ink">
                   {transcriptText}
                 </p>

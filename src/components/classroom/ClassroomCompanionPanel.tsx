@@ -35,6 +35,8 @@ import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { Sparkles, ArrowUp, Radio, Eye } from 'lucide-react';
 import type { CompanionMessage, CompanionCard } from './types';
 import { CompanionMarkdown } from './CompanionMarkdown';
+import { SkillChipRow } from '@/components/tutor/SkillChipRow';
+import type { WorkshopAppKey } from '@/lib/ai-native/app-catalog';
 
 export type CompanionMode = 'idle' | 'listening' | 'reflecting';
 
@@ -53,6 +55,12 @@ export interface ClassroomCompanionPanelProps {
   messages: CompanionMessage[];
   /** 发送消息（暂时可以是 mock） */
   onSend: (text: string) => void;
+  /**
+   * 打开一个 App 应用（闪卡 / 测验 / 思维导图 / 学习报告 / 考试速查表）。
+   * 由 page.tsx 的 safeOpenWorkshopWindow 承担；没传则 skill chip 自动降级成
+   * 普通的 prompt 对话，保证任何层级都能渲染。
+   */
+  onOpenApp?: (appKey: WorkshopAppKey) => void;
   /** 流式追加中的 AI 消息（content 会随 token 增长）。为 null 表示没在流。 */
   streamingMessage?: CompanionMessage | null;
   /** 是否正在等待 AI 回复（thinking 阶段显示"…"） */
@@ -201,7 +209,15 @@ function ForesightRow({
 }
 
 /** 空态 */
-function EmptyCompanion({ mode }: { mode: CompanionMode }) {
+function EmptyCompanion({
+  mode,
+  onPickSkill,
+  onOpenApp,
+}: {
+  mode: CompanionMode;
+  onPickSkill: (prompt: string) => void;
+  onOpenApp?: (appKey: WorkshopAppKey) => void;
+}) {
   if (mode === 'listening') {
     return (
       <div className="flex flex-1 flex-col items-center justify-center px-8 text-center">
@@ -211,6 +227,10 @@ function EmptyCompanion({ mode }: { mode: CompanionMode }) {
         <p className="mt-1 text-[12px] text-ink-muted/60">
           有时候我会先你一步冒个小预感，点一下就能顺着问。
         </p>
+        <p className="mt-5 text-[11px] font-medium uppercase tracking-[0.18em] text-ink-muted/70">
+          或者让我做点事
+        </p>
+        <SkillChipRow variant="grid" onPick={onPickSkill} onOpenApp={onOpenApp} />
       </div>
     );
   }
@@ -219,6 +239,10 @@ function EmptyCompanion({ mode }: { mode: CompanionMode }) {
       <p className="text-[13px] text-ink-muted">
         把第一节课录下来，我们就认识了。
       </p>
+      <p className="mt-4 text-[11px] font-medium uppercase tracking-[0.18em] text-ink-muted/70">
+        已经有内容？试试
+      </p>
+      <SkillChipRow variant="grid" onPick={onPickSkill} onOpenApp={onOpenApp} />
     </div>
   );
 }
@@ -328,6 +352,7 @@ export function ClassroomCompanionPanel({
   mode,
   messages,
   onSend,
+  onOpenApp,
   streamingMessage = null,
   isThinking = false,
   placeholder,
@@ -350,7 +375,7 @@ export function ClassroomCompanionPanel({
       {/* 消息流 */}
       <div className="flex-1 overflow-y-auto pt-2 pb-4">
         {!hasAnything ? (
-          <EmptyCompanion mode={mode} />
+          <EmptyCompanion mode={mode} onPickSkill={onSend} onOpenApp={onOpenApp} />
         ) : (
           <div className="flex flex-col">
             {messages.map((m) => (
@@ -374,6 +399,15 @@ export function ClassroomCompanionPanel({
           </div>
         )}
       </div>
+
+      {/* 有内容时：在 composer 上方挂一条横向滚动的 skill row——
+         始终一眼看得见"我能让它做什么"，但信息密度低不打扰阅读。
+         空态里 skill 已经用 grid 展示过了，这里就不重复。 */}
+      {hasAnything ? (
+        <div className="flex-shrink-0 border-t border-[#F0F0ED]/60">
+          <SkillChipRow variant="row" onPick={onSend} onOpenApp={onOpenApp} />
+        </div>
+      ) : null}
 
       <CompanionComposer placeholder={effectivePlaceholder} onSend={onSend} />
     </div>
