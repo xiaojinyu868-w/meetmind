@@ -45,6 +45,40 @@ export interface CompanionMessage {
   source?: string;
   /** 可选的附带卡片（比如课前要点） */
   card?: CompanionCard;
+  /**
+   * 可选的时间戳引用——AI 基于课堂原文作答时指出的证据片段。
+   * 由 companion-markdown-utils.extractCitationsFromMarkdown 从 [MM:SS] 标记里抽出。
+   * 当前 UI 不渲染（课堂场景禁止时间戳），但数据留在 message 对象里，
+   * 未来复习态可以拿出来用。
+   */
+  citations?: Array<{ startMs: number; endMs: number; label: string }>;
+  /**
+   * 可选的"内联动作"——让同学气泡自己带一两个 CTA。
+   * 典型：停止录音时的"这节课听完了"气泡 → [整速查表] [看转录]。
+   */
+  actions?: Array<{
+    label: string;
+    kind: 'open_app' | 'focus_transcript' | 'say';
+    /** open_app: appKey; focus_transcript: 无；say: utterance */
+    payload?: string;
+  }>;
+  /**
+   * 可选的"内联应用产物"——chip 点"考我一下"、"做闪卡"、"整速查表"等
+   * 本应该打开 WorkshopWindow 的动作，在课堂 listening 态改为把产物直接
+   * 渲染进对话流。不再弹窗打断用户上课的注意力。
+   *
+   * status=loading：还在生成中，显示三阶段骨架
+   * status=ready  ：生成完毕，payload 就是原插件 render.payload
+   * status=error  ：失败，error 是人话描述
+   */
+  inlineApp?: {
+    appKey: 'quiz' | 'flashcards' | 'cheatsheet' | 'mindmap' | 'study-report';
+    status: 'loading' | 'ready' | 'error';
+    /** 生成完毕时的产物 payload（形态和 WorkshopWindow 用的一致） */
+    payload?: unknown;
+    /** 失败时的人话描述 */
+    error?: string;
+  };
   createdAt: number;
 }
 

@@ -21,9 +21,16 @@ describe('createTutorTools', () => {
     subject: '机器学习',
   });
 
-  it('exposes four named tools', () => {
+  it('exposes all named tools (incl. makeCheatsheet / makeStudyReport)', () => {
     expect(Object.keys(tools).sort()).toEqual(
-      ['lookupTranscript', 'makeFlashcards', 'makeMindmap', 'makeQuiz'].sort(),
+      [
+        'lookupTranscript',
+        'makeCheatsheet',
+        'makeFlashcards',
+        'makeMindmap',
+        'makeQuiz',
+        'makeStudyReport',
+      ].sort(),
     );
   });
 

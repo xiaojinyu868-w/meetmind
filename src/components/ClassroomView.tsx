@@ -76,7 +76,9 @@ export function ClassroomView({
     isThinking,
     send: sendToTutor,
     markListening,
-  } = useClassroomCompanion({ lessons, isRecording });
+    retryInlineApp,
+    handleInlineAppInteraction,
+  } = useClassroomCompanion({ lessons, isRecording, onOpenApp });
 
   // 左侧面板视图态：list ↔ recording
   // - isRecording=true 时优先走 recording
@@ -132,10 +134,51 @@ export function ClassroomView({
 
   // MindMap → 转录段落跳转：记住最近一次点击的 ms + 一个自增 nonce，
   // ClassroomRecordingView 内部用 nonce 决定"要不要重滚"。连续点同一个节点也能生效。
+  //
+  // 同一个 scrollTarget state 现在也被"同学答案下方的 citation chip"复用——
+  // 点击时除了滚转录还要把 paneState 切到 recording（用户可能在 list 态时被 chip 吸引）。
   const [mindMapScrollTarget, setMindMapScrollTarget] = useState<{ ms: number; nonce: number } | null>(null);
   const handleMindMapAnchorClick = useCallback((ms: number) => {
     setMindMapScrollTarget((prev) => ({ ms, nonce: (prev?.nonce ?? 0) + 1 }));
   }, []);
+
+  /**
+   * 用户点 AI 气泡下面的证据 chip（"🎯 01:23"）。
+   * 不只要滚动——如果当前在 list 态，要先切到 recording 态让转录可见；
+   * 然后推一个新的 scrollTarget，让 ClassroomRecordingView 自动展开抽屉并
+   * 在目标段落上放 1.2s 的黄色脉冲高亮（CSS 在 globals.css 里）。
+   */
+  const handleCitationJump = useCallback((ms: number) => {
+    if (paneState !== 'recording') {
+      setLocalPaneState('recording');
+    }
+    setMindMapScrollTarget((prev) => ({ ms, nonce: (prev?.nonce ?? 0) + 1 }));
+  }, [paneState]);
+
+  /**
+   * 用户点 AI 气泡里的内联动作（典型：停止录音那条气泡的 [整速查表] / [看转录]）。
+   * 不同 kind 分别走不同响应：
+   *   open_app → 打开对应 WorkshopWindow
+   *   focus_transcript → 切到 recording 态，让转录抽屉可见
+   *   say → 把文本作为新的用户消息发给同学
+   */
+  const handleInlineAction = useCallback(
+    (action: { kind: string; payload?: string }) => {
+      if (action.kind === 'open_app' && action.payload && onOpenApp) {
+        // payload 是 appKey——WorkshopAppKey 的合法性由下游 open 函数自己 guard
+        onOpenApp(action.payload as WorkshopAppKey);
+        return;
+      }
+      if (action.kind === 'focus_transcript') {
+        if (paneState !== 'recording') setLocalPaneState('recording');
+        return;
+      }
+      if (action.kind === 'say' && action.payload) {
+        void sendToTutor(action.payload);
+      }
+    },
+    [onOpenApp, paneState, sendToTutor],
+  );
 
   // 最近 N 句已落定句子（用于 UnderstandingCanvas 的"刚才讲到"区）。
   // 只保留最近 4 条，避免干扰焦点。
@@ -326,9 +369,10 @@ export function ClassroomView({
         onFocusRecording={() => setLocalPaneState('recording')}
         audioSource={recorderAudioSource}
         onChangeAudioSource={setRecorderAudioSource}
+        onOpenApp={onOpenApp}
       />
     ),
-    [paneState, lessons, handleOpenLesson, handleStartRecording, handleStopRecording, effectiveRecordingSeconds, liveConcepts, liveTranscriptText, recordingSegments, liveInterimText, recentLines, mindMapTree, mindMapNewIds, handleMindMapAnchorClick, mindMapScrollTarget, recorderAudioSource, setRecorderAudioSource],
+    [paneState, lessons, handleOpenLesson, handleStartRecording, handleStopRecording, effectiveRecordingSeconds, liveConcepts, liveTranscriptText, recordingSegments, liveInterimText, recentLines, mindMapTree, mindMapNewIds, handleMindMapAnchorClick, mindMapScrollTarget, recorderAudioSource, setRecorderAudioSource, onOpenApp],
   );
 
   const rightPanel = useMemo(
@@ -343,9 +387,13 @@ export function ClassroomView({
         foresights={foresights}
         onForesightAccept={handleForesightAccept}
         onForesightDismiss={dismissForesight}
+        onCitationJump={handleCitationJump}
+        onInlineAction={handleInlineAction}
+        onInlineAppInteraction={handleInlineAppInteraction}
+        onInlineAppRetry={retryInlineApp}
       />
     ),
-    [companionMode, messages, streamingMessage, isThinking, handleSend, onOpenApp, foresights, handleForesightAccept, dismissForesight],
+    [companionMode, messages, streamingMessage, isThinking, handleSend, onOpenApp, foresights, handleForesightAccept, dismissForesight, handleCitationJump, handleInlineAction, handleInlineAppInteraction, retryInlineApp],
   );
 
   return (

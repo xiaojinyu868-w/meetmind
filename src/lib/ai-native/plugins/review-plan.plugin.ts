@@ -1,11 +1,5 @@
 import type { AppExecutionContext, AppExecutionResult, AppPlugin, AppPluginTools } from '../types';
 
-const KEYWORDS = ['计划', '安排', '路线', '今晚', '复盘', '学习计划'];
-
-function hasPlanningIntent(intent: string): boolean {
-  return KEYWORDS.some((word) => intent.includes(word));
-}
-
 export const reviewPlanPlugin: AppPlugin = {
   manifest: {
     id: 'review-plan',
@@ -17,7 +11,11 @@ export const reviewPlanPlugin: AppPlugin = {
     enabledByDefault: true,
   },
   canHandle(context: AppExecutionContext): boolean {
-    return hasPlanningIntent(context.goal.intent.toLowerCase());
+    // Agent-native 姿态：不再用 KEYWORDS 关键词匹配"猜"用户意图。
+    // 分派权完全交给上游——agent 的 tool-calling 决定调用 makeReviewPlan，
+    // 或前端显式传 appKey='review-plan'。此处只做结构性守卫。
+    if (context.input.transcript.length === 0) return false;
+    return context.goal.appKey === 'review-plan';
   },
   async run(context: AppExecutionContext, tools: AppPluginTools): Promise<AppExecutionResult> {
     const unresolved =

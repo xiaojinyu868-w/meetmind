@@ -1,8 +1,6 @@
 import type { Anchor, TranscriptSegment } from '@/types';
 import type { AppExecutionContext, AppExecutionResult, AppPlugin, AppPluginTools } from '../types';
 
-const KEYWORDS = ['困惑', '不懂', '卡住', '听不懂', '复习', '错题', '练习'];
-
 function getUnresolvedAnchor(anchors: Anchor[]): Anchor | undefined {
   return anchors.find((anchor) => !anchor.cancelled && !anchor.resolved);
 }
@@ -107,10 +105,12 @@ export const confusionDrillPlugin: AppPlugin = {
     enabledByDefault: true,
   },
   canHandle(context: AppExecutionContext): boolean {
-    const intent = context.goal.intent.toLowerCase();
-    if (KEYWORDS.some((word) => intent.includes(word))) {
-      return true;
-    }
+    // Agent-native 姿态：不再用 KEYWORDS 关键词匹配"猜"用户意图。
+    // 分派权完全交给上游——agent 的 tool-calling 决定调用 drillConfusion，
+    // 或前端显式传 appKey='confusion-drill'。此处只做结构性守卫：
+    // 只有当存在未解决锚点时才自然适用（锚点本身是用户明示的困惑信号）。
+    if (context.input.transcript.length === 0) return false;
+    if (context.goal.appKey === 'confusion-drill') return true;
     return context.input.anchors.some((anchor) => !anchor.cancelled && !anchor.resolved);
   },
   async run(context: AppExecutionContext, tools: AppPluginTools): Promise<AppExecutionResult> {

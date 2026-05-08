@@ -113,14 +113,14 @@ export function ReviewWorkspacePanel({
             <p className="mb-1 text-[13px] font-medium text-[#787774]">这条内容没有时间轴</p>
             <p className="text-center text-[12px] leading-relaxed text-[#A3A39E]">
               音频和视频类的内容才会生成时间轴。<br />
-              试试 AI工坊 来和这条内容互动吧。
+              试试「应用」来和这条内容互动吧。
             </p>
             <button
               type="button"
               onClick={() => onReviewTabChange('apps')}
               className="mt-4 rounded-lg bg-[#232322] px-4 py-2 text-[13px] font-medium text-white transition-all hover:bg-[#111111]"
             >
-              进入 AI工坊
+              打开应用
             </button>
           </div>
         )}

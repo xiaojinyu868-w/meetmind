@@ -23,6 +23,10 @@ import type { LucideIcon } from 'lucide-react';
 import type { Lesson, ClassroomPaneState } from './types';
 import { ClassroomLessonCard } from './ClassroomLessonCard';
 import { ClassroomRecordingView } from './ClassroomRecordingView';
+import { ClassroomHero } from './ClassroomHero';
+import { loadDemoLesson } from './DemoLessonLoader';
+import { useCaptureEditorActions } from '@/stores/capture-editor-store';
+import { isWorkshopAppKey, type WorkshopAppKey } from '@/lib/ai-native/app-catalog';
 import type { MindMapTree } from '@/hooks/useClassroomMindMap';
 import type { RecorderAudioSource } from '@/stores/capture-editor-store';
 import type { TranscriptSegment } from '@/types';
@@ -91,6 +95,12 @@ export interface ClassroomLeftPanelProps {
   audioSource?: RecorderAudioSource;
   /** 切换录音来源 */
   onChangeAudioSource?: (source: RecorderAudioSource) => void;
+  /**
+   * 打开一个 App 应用。hero 的能力预览卡被点击时，会先 loadDemoLesson 再
+   * 延迟 320ms 调这个，让用户看到 demo 转录闪进来、再看到窗口冒出来。
+   * 由 ClassroomView 从 onOpenApp 透传下来。
+   */
+  onOpenApp?: (appKey: WorkshopAppKey) => void;
 }
 
 function groupLessons(lessons: Lesson[]): Array<{ label: string; items: Lesson[] }> {
@@ -239,16 +249,21 @@ function SectionLabel({ label, count }: { label: string; count: number }) {
   );
 }
 
-function EmptyState({ onStart: _onStart }: { onStart: () => void }) {
+function EmptyState({
+  onStart,
+  onTryDemo,
+  onCapabilityClick,
+}: {
+  onStart: () => void;
+  onTryDemo: () => void;
+  onCapabilityClick?: (appKey: string) => void;
+}) {
   return (
-    <div className="flex flex-1 flex-col items-center justify-center px-6 pb-20">
-      <p className="text-[17px] font-medium tracking-[-0.01em] text-ink">
-        录下第一节课
-      </p>
-      <p className="mt-2 max-w-[22rem] text-center text-[13.5px] leading-relaxed text-ink-muted">
-        点下面那颗按钮就能录。录完之后，我会帮你整理重点、生成一张回声卡。
-      </p>
-    </div>
+    <ClassroomHero
+      onTryDemo={onTryDemo}
+      onStartRecording={onStart}
+      onCapabilityClick={onCapabilityClick}
+    />
   );
 }
 
@@ -258,6 +273,8 @@ function ListView({
   groups,
   onOpen,
   onStart,
+  onTryDemo,
+  onCapabilityClick,
   onFocusRecording,
   onStop,
   audioSource,
@@ -268,6 +285,8 @@ function ListView({
   groups: Array<{ label: string; items: Lesson[] }>;
   onOpen: (id: string) => void;
   onStart: () => void;
+  onTryDemo: () => void;
+  onCapabilityClick?: (appKey: string) => void;
   onFocusRecording: () => void;
   onStop: (lessonId?: string) => void;
   audioSource?: RecorderAudioSource;
@@ -276,17 +295,9 @@ function ListView({
   const isTrulyEmpty = !activeLesson && groups.length === 0;
 
   if (isTrulyEmpty) {
-    return (
-      <>
-        <PageHeader />
-        <EmptyState onStart={onStart} />
-        <StickyStartBar
-          onStart={onStart}
-          audioSource={audioSource}
-          onChangeAudioSource={onChangeAudioSource}
-        />
-      </>
-    );
+    // 零存量态：hero 独占整个视图，不挂 PageHeader / sticky bar——
+    // hero 自身已经给出了身份 + 两个清晰 CTA + 能力预览，再叠加就是噪音。
+    return <EmptyState onStart={onStart} onTryDemo={onTryDemo} onCapabilityClick={onCapabilityClick} />;
   }
 
   return (
@@ -539,6 +550,7 @@ export function ClassroomLeftPanel({
   onFocusRecording,
   audioSource,
   onChangeAudioSource,
+  onOpenApp,
 }: ClassroomLeftPanelProps) {
   const { activeLesson, restLessons } = useMemo(() => {
     let active: Lesson | null = null;
@@ -554,6 +566,31 @@ export function ClassroomLeftPanel({
   }, [lessons]);
 
   const groups = useMemo(() => groupLessons(restLessons), [restLessons]);
+  const captureActions = useCaptureEditorActions();
+
+  /**
+   * 点 "试听一节 demo 课"：把 fixture 里的 93s 英语听力灌入 capture store，
+   * 然后立刻触发 onFocusRecording，让视图切到课堂详情（里面看到转录已经就绪）。
+   * 这条路径完全不打 LLM，直到用户点了任何一个 chip。
+   */
+  const handleTryDemo = React.useCallback(() => {
+    loadDemoLesson({ actions: captureActions });
+    if (onFocusRecording) onFocusRecording();
+  }, [captureActions, onFocusRecording]);
+
+  /**
+   * 点 hero 里的能力卡（速查表 / 闪卡 / 思维导图 / …）——
+   * 先灌 demo 课堂，切到录课详情，再延迟 320ms 让对应的 app window 冒出来。
+   * 不要立刻开，让用户看到转录先"闪进来"，再看到窗口——这是故事节奏。
+   */
+  const handleCapabilityClick = React.useCallback((appKey: string) => {
+    loadDemoLesson({ actions: captureActions });
+    if (onFocusRecording) onFocusRecording();
+    if (onOpenApp && isWorkshopAppKey(appKey)) {
+      const key: WorkshopAppKey = appKey;
+      window.setTimeout(() => onOpenApp(key), 320);
+    }
+  }, [captureActions, onFocusRecording, onOpenApp]);
 
   return (
     <div className="relative flex h-full flex-col">
@@ -568,6 +605,8 @@ export function ClassroomLeftPanel({
             groups={groups}
             onOpen={onOpenLesson}
             onStart={onStartRecording}
+            onTryDemo={handleTryDemo}
+            onCapabilityClick={handleCapabilityClick}
             onFocusRecording={onFocusRecording ?? (() => { /* noop */ })}
             onStop={onStopRecording}
             audioSource={audioSource}

@@ -68,7 +68,7 @@ export function AppWindowShell(props: AppWindowShellProps) {
             className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-sm text-slate-700 hover:bg-slate-50"
           >
             <span>←</span>
-            <span>返回 AI工坊</span>
+            <span>返回应用</span>
           </Link>
           <div className="min-w-0 flex-1">
             <p className="truncate text-lg font-semibold text-slate-900">{app.name}</p>

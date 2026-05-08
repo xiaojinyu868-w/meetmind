@@ -37,7 +37,7 @@ const ICON_TAB = 14;
 const ICON_TAB_STROKE = 1.75;
 
 const SHARED_WORKSPACE_TABS: WorkspaceTabConfig<SharedWorkspaceTab>[] = [
-  { key: 'apps', label: 'AI工坊', icon: '坊', LucideIcon: Boxes, testId: 'review-tab-apps' },
+  { key: 'apps', label: '应用', icon: '坊', LucideIcon: Boxes, testId: 'review-tab-apps' },
 ];
 
 const VIDEO_WORKSPACE_TABS: WorkspaceTabConfig<VideoWorkspaceTab>[] = [

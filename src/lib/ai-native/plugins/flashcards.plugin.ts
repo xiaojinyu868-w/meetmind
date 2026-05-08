@@ -4,7 +4,6 @@ import { chat, DEFAULT_MODEL_ID } from '@/lib/services/llm-service';
 import type { AppExecutionContext, AppExecutionResult, AppPlugin, AppPluginTools } from '../types';
 import { buildPromptAnchorContext, buildPromptTranscriptContext, buildTerminologyHintBlock } from '../prompt-context';
 
-const KEYWORDS = ['闪卡', '记忆', '背诵', '复习卡', '知识卡', 'flashcard'];
 const TARGET_CARD_COUNT = 10;
 
 interface FlashcardDraft {
@@ -20,10 +19,6 @@ interface FlashcardLLMOutput {
   deckTitle?: string;
   overview?: string;
   cards?: FlashcardDraft[];
-}
-
-function includesKeyword(intent: string): boolean {
-  return KEYWORDS.some((keyword) => intent.includes(keyword));
 }
 
 function formatTimestamp(ms: number): string {
@@ -275,9 +270,11 @@ export const flashcardsPlugin: AppPlugin = {
     enabledByDefault: true,
   },
   canHandle(context: AppExecutionContext): boolean {
+    // Agent-native 姿态：不再用 KEYWORDS 关键词匹配"猜"用户意图。
+    // 分派权完全交给上游——agent 的 tool-calling 决定调用 makeFlashcards，
+    // 或前端显式传 appKey='flashcards'。此处只做结构性守卫。
     if (context.input.transcript.length === 0) return false;
-    const intent = context.goal.intent.toLowerCase();
-    return includesKeyword(intent) || context.goal.expectedOutput === 'cards' || context.goal.appKey === 'flashcards';
+    return context.goal.appKey === 'flashcards' || context.goal.expectedOutput === 'cards';
   },
   async run(context: AppExecutionContext, tools: AppPluginTools): Promise<AppExecutionResult> {
     const promptContext = buildPromptTranscriptContext(context.input.transcript, {

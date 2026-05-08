@@ -3,8 +3,6 @@ import { chat, DEFAULT_MODEL_ID } from '@/lib/services/llm-service';
 import type { AppExecutionContext, AppExecutionResult, AppPlugin, AppPluginTools } from '../types';
 import { buildPromptAnchorContext, buildPromptTranscriptContext, buildTerminologyHintBlock } from '../prompt-context';
 
-const KEYWORDS = ['导图', '思维导图', '结构', '知识图谱', 'mindmap'];
-
 /* ------------------------------------------------------------------ */
 /*  多层嵌套树形结构                                                    */
 /* ------------------------------------------------------------------ */
@@ -32,10 +30,6 @@ interface MindmapNodeDraft {
 /* ------------------------------------------------------------------ */
 /*  工具函数                                                            */
 /* ------------------------------------------------------------------ */
-
-function includesKeyword(intent: string): boolean {
-  return KEYWORDS.some((keyword) => intent.includes(keyword));
-}
 
 function formatTimestamp(ms: number): string {
   const totalSeconds = Math.max(0, Math.floor(ms / 1000));
@@ -277,9 +271,11 @@ export const mindmapPlugin: AppPlugin = {
   },
 
   canHandle(context: AppExecutionContext): boolean {
+    // Agent-native 姿态：不再用 KEYWORDS 关键词匹配"猜"用户意图。
+    // 分派权完全交给上游——agent 的 tool-calling 决定调用 makeMindmap，
+    // 或前端显式传 appKey='mindmap'。此处只做结构性守卫。
     if (context.input.transcript.length === 0) return false;
-    const intent = context.goal.intent.toLowerCase();
-    return includesKeyword(intent);
+    return context.goal.appKey === 'mindmap';
   },
 
   async run(context: AppExecutionContext, tools: AppPluginTools): Promise<AppExecutionResult> {

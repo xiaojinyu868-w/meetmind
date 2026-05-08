@@ -155,9 +155,11 @@ export const classCheckPlugin: AppPlugin = {
     enabledByDefault: true,
   },
   canHandle(context: AppExecutionContext): boolean {
+    // Agent-native 姿态：不再用 intent.includes('随堂') 关键词匹配"猜"用户意图。
+    // 分派权完全交给上游——agent 的 tool-calling 决定调用 classCheck，
+    // 或前端显式传 appKey='class-check'。此处只做结构性守卫。
     if (context.input.transcript.length === 0) return false;
-    const intent = context.goal.intent.toLowerCase();
-    return intent.includes('随堂') || intent.includes('检验') || intent.includes('class-check');
+    return context.goal.appKey === 'class-check';
   },
   async run(context: AppExecutionContext, tools: AppPluginTools): Promise<AppExecutionResult> {
     const meta: ClassCheckMeta = (context.goal as unknown as Record<string, unknown>).classCheckMeta as ClassCheckMeta || {};

@@ -32,11 +32,14 @@
  */
 
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { Sparkles, ArrowUp, Radio, Eye } from 'lucide-react';
+import { ArrowUp, Radio, Eye } from 'lucide-react';
 import type { CompanionMessage, CompanionCard } from './types';
 import { CompanionMarkdown } from './CompanionMarkdown';
+import { CompanionAvatar } from './CompanionAvatar';
+import { InlineAppCard, type InlineAppInteraction } from './InlineAppCard';
 import { SkillChipRow } from '@/components/tutor/SkillChipRow';
 import type { WorkshopAppKey } from '@/lib/ai-native/app-catalog';
+import { COPY } from '@/lib/ui/copy';
 
 export type CompanionMode = 'idle' | 'listening' | 'reflecting';
 
@@ -73,6 +76,25 @@ export interface ClassroomCompanionPanelProps {
   onForesightAccept?: (f: ForesightBubble) => void;
   /** 用户划掉某个预知气泡 */
   onForesightDismiss?: (id: string) => void;
+  /**
+   * 用户点了 AI 消息下面的"证据 chip"——把对应时间戳传上去，
+   * 由父组件（ClassroomView）推 scrollTarget 到转录面板并触发高亮脉冲。
+   */
+  onCitationJump?: (startMs: number) => void;
+  /**
+   * 用户点了 AI 消息里的内联 action（比如停止录音时那条气泡带的
+   * [整速查表] / [看转录]）。不同 kind 对应不同响应：
+   *   open_app         → openWorkshopWindow(payload)
+   *   focus_transcript → 切到 recording 态，让转录抽屉可见
+   *   say              → 把 payload 当作一条用户消息发出去
+   */
+  onInlineAction?: (
+    action: NonNullable<CompanionMessage['actions']>[number],
+  ) => void;
+  /** 用户在内联 app 卡片里做的操作（答题、翻卡、评分）——交给 hook 处理。 */
+  onInlineAppInteraction?: (messageId: string, event: InlineAppInteraction) => void;
+  /** 内联 app 生成失败时点"再试一次"——让 hook 重新触发一次生成。 */
+  onInlineAppRetry?: (messageId: string) => void;
 }
 
 /** 顶部标题栏：不同 mode 不同呈现 */
@@ -80,13 +102,11 @@ function Header({ mode, foresightCount }: { mode: CompanionMode; foresightCount:
   if (mode === 'listening') {
     return (
       <div className="flex flex-shrink-0 items-center justify-between border-b border-[#F0F0ED] px-5 py-3.5">
-        <div className="flex items-center gap-2">
-          <span className="relative flex h-1.5 w-1.5">
-            <span className="absolute inline-flex h-full w-full rounded-full bg-[#D96B6B] opacity-75 animate-ping" />
-            <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-[#D96B6B]" />
-          </span>
-          <span className="text-[13px] font-medium text-ink">AI 同桌</span>
-          <span className="text-[11px] text-ink-muted">· 正在听课</span>
+        <div className="flex items-center gap-2.5 text-ink">
+          {/* 同学 avatar：听见态外环脉冲 */}
+          <CompanionAvatar size="md" state="listening" />
+          <span className="text-[13px] font-medium text-ink">{COPY.identity.name}</span>
+          <span className="text-[11px] text-ink-muted">· {COPY.listening.hearing}</span>
         </div>
         <div className="flex items-center gap-2 text-ink-muted/60">
           {foresightCount > 0 ? (
@@ -101,15 +121,29 @@ function Header({ mode, foresightCount }: { mode: CompanionMode; foresightCount:
     );
   }
   return (
-    <div className="flex flex-shrink-0 items-center gap-2 border-b border-[#F0F0ED] px-5 py-3.5">
-      <Sparkles size={13} className="text-[#8B6914]" strokeWidth={1.6} />
-      <span className="text-[13px] font-medium text-ink">AI 同桌</span>
+    <div className="flex flex-shrink-0 items-center gap-2.5 border-b border-[#F0F0ED] px-5 py-3.5">
+      <CompanionAvatar size="md" state="idle" />
+      <span className="text-[13px] font-medium text-ink">{COPY.identity.name}</span>
     </div>
   );
 }
 
 /** 消息气泡——AI 消息无气泡背景，直接展示，像便签 */
-function CompanionBubble({ message, isStreaming = false }: { message: CompanionMessage; isStreaming?: boolean }) {
+function CompanionBubble({
+  message,
+  isStreaming = false,
+  onActionInvoke,
+  onInlineAppInteraction,
+  onInlineAppRetry,
+}: {
+  message: CompanionMessage;
+  isStreaming?: boolean;
+  /** citation 已废弃，保留参数位但 CompanionBubble 内部不再渲染 */
+  onCitationJump?: (startMs: number) => void;
+  onActionInvoke?: (action: NonNullable<CompanionMessage['actions']>[number]) => void;
+  onInlineAppInteraction?: (messageId: string, event: InlineAppInteraction) => void;
+  onInlineAppRetry?: (messageId: string) => void;
+}) {
   const isUser = message.role === 'user';
 
   if (isUser) {
@@ -124,13 +158,60 @@ function CompanionBubble({ message, isStreaming = false }: { message: CompanionM
 
   return (
     <div className="px-5 pt-1 pb-4">
-      <CompanionMarkdown content={message.content} isStreaming={isStreaming} />
+      {message.content ? (
+        <CompanionMarkdown content={message.content} isStreaming={isStreaming} />
+      ) : null}
+      {/* 内联应用产物（闪卡 / 测验 / 速查表 / 思维导图 / 学习报告）——
+         在 listening 态它是主展示区，替代原来的 WorkshopWindow 弹窗。 */}
+      {message.inlineApp ? (
+        <InlineAppCard
+          inlineApp={message.inlineApp}
+          onInteraction={(e) => onInlineAppInteraction?.(message.id, e)}
+          onRetry={() => onInlineAppRetry?.(message.id)}
+        />
+      ) : null}
+      {/* M8 修正：课堂场景（课中学习）不显示时间戳证据 chip。*/}
+      {message.actions && message.actions.length > 0 && !isStreaming ? (
+        <InlineActionStrip actions={message.actions} onInvoke={onActionInvoke} />
+      ) : null}
       {message.source ? (
         <p className="mt-1 text-[11.5px] text-ink-muted/80 italic">
           {message.source}
         </p>
       ) : null}
       {message.card ? <AttachedCard card={message.card} /> : null}
+    </div>
+  );
+}
+
+/**
+ * InlineActionStrip — 气泡下方的内联动作 chip。
+ * 视觉是实心按钮，但仍然非常克制——黑白两级。
+ * 用户点主 action（第一个）= 黑底白字；次 action = 白底黑字。
+ */
+function InlineActionStrip({
+  actions,
+  onInvoke,
+}: {
+  actions: NonNullable<CompanionMessage['actions']>;
+  onInvoke?: (action: NonNullable<CompanionMessage['actions']>[number]) => void;
+}) {
+  return (
+    <div className="mt-2 flex flex-wrap gap-1.5">
+      {actions.map((a, i) => (
+        <button
+          key={`${a.kind}-${a.payload ?? ''}-${i}`}
+          type="button"
+          onClick={() => onInvoke?.(a)}
+          className={
+            i === 0
+              ? 'inline-flex items-center rounded-full bg-ink px-3 py-1 text-[12px] font-medium text-white transition hover:opacity-85 active:scale-[0.98]'
+              : 'inline-flex items-center rounded-full bg-white px-3 py-1 text-[12px] text-ink ring-[0.5px] ring-[#232322]/[0.12] transition hover:ring-[#232322]/[0.25] active:scale-[0.98]'
+          }
+        >
+          {a.label}
+        </button>
+      ))}
     </div>
   );
 }
@@ -230,7 +311,7 @@ function EmptyCompanion({
         <p className="mt-5 text-[11px] font-medium uppercase tracking-[0.18em] text-ink-muted/70">
           或者让我做点事
         </p>
-        <SkillChipRow variant="grid" onPick={onPickSkill} onOpenApp={onOpenApp} />
+        <SkillChipRow variant="grid" onPick={onPickSkill} onSay={onPickSkill} onOpenApp={onOpenApp} />
       </div>
     );
   }
@@ -242,7 +323,7 @@ function EmptyCompanion({
       <p className="mt-4 text-[11px] font-medium uppercase tracking-[0.18em] text-ink-muted/70">
         已经有内容？试试
       </p>
-      <SkillChipRow variant="grid" onPick={onPickSkill} onOpenApp={onOpenApp} />
+      <SkillChipRow variant="grid" onPick={onPickSkill} onSay={onPickSkill} onOpenApp={onOpenApp} />
     </div>
   );
 }
@@ -265,6 +346,30 @@ function CompanionComposer({
     ta.style.height = 'auto';
     ta.style.height = `${Math.min(ta.scrollHeight, 120)}px`;
   }, [text]);
+
+  // ⌘K / Ctrl+K 全局快捷键：把焦点切到这个 composer。
+  // 用户在阅读转录时能单键唤起同学对话——跨面板焦点管理，是 agent-native 对
+  // 键盘手感的基本尊重。
+  useEffect(() => {
+    const onKeydown = (e: KeyboardEvent) => {
+      // 不在其他输入框里打断用户
+      const tag = (e.target as HTMLElement | null)?.tagName;
+      const activeIsInput = tag === 'INPUT' || tag === 'TEXTAREA';
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
+        // 允许从另一个 input 跳过来，但避免和浏览器默认（地址栏）冲突
+        e.preventDefault();
+        textareaRef.current?.focus();
+        return;
+      }
+      // 当前没焦点在任何输入框时，单字符"/"也聚焦——VSCode / Linear 的约定
+      if (!activeIsInput && e.key === '/' && !e.metaKey && !e.ctrlKey && !e.altKey) {
+        e.preventDefault();
+        textareaRef.current?.focus();
+      }
+    };
+    window.addEventListener('keydown', onKeydown);
+    return () => window.removeEventListener('keydown', onKeydown);
+  }, []);
 
   const canSend = text.trim().length > 0;
 
@@ -359,9 +464,13 @@ export function ClassroomCompanionPanel({
   foresights = [],
   onForesightAccept,
   onForesightDismiss,
+  onCitationJump,
+  onInlineAction,
+  onInlineAppInteraction,
+  onInlineAppRetry,
 }: ClassroomCompanionPanelProps) {
   const effectivePlaceholder = placeholder ?? (
-    mode === 'listening' ? '老师刚说的那个啥意思？' : '问问 AI 同桌…'
+    mode === 'listening' ? COPY.companion.placeholderListening : COPY.companion.placeholderIdle
   );
 
   // 只在 listening 态显示预知气泡——其他态说"预知"没意义
@@ -379,7 +488,14 @@ export function ClassroomCompanionPanel({
         ) : (
           <div className="flex flex-col">
             {messages.map((m) => (
-              <CompanionBubble key={m.id} message={m} />
+              <CompanionBubble
+                key={m.id}
+                message={m}
+                onCitationJump={onCitationJump}
+                onActionInvoke={onInlineAction}
+                onInlineAppInteraction={onInlineAppInteraction}
+                onInlineAppRetry={onInlineAppRetry}
+              />
             ))}
             {streamingMessage ? (
               <StreamingBubble message={streamingMessage} isThinking={isThinking} />
@@ -402,10 +518,12 @@ export function ClassroomCompanionPanel({
 
       {/* 有内容时：在 composer 上方挂一条横向滚动的 skill row——
          始终一眼看得见"我能让它做什么"，但信息密度低不打扰阅读。
-         空态里 skill 已经用 grid 展示过了，这里就不重复。 */}
+         空态里 skill 已经用 grid 展示过了，这里就不重复。
+         onSay={onSend}——agent-native 主路径：chip = 发 utterance 给 AI 同桌，
+         由 AI 侧决定调用哪个工具；onOpenApp 保留作为加速路径。 */}
       {hasAnything ? (
         <div className="flex-shrink-0 border-t border-[#F0F0ED]/60">
-          <SkillChipRow variant="row" onPick={onSend} onOpenApp={onOpenApp} />
+          <SkillChipRow variant="row" onPick={onSend} onSay={onSend} onOpenApp={onOpenApp} />
         </div>
       ) : null}
 

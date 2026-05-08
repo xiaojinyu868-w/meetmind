@@ -2,8 +2,8 @@
  * composeFirstHello — 同桌的第一句话（动态）
  *
  * 设计意图：
- *   用户进课堂的第一眼，同桌说的第一句话必须基于他今天的真实情况。
- *   这就是"收→酿→应"里的"应"：不是 AI 主动推送，而是用户转身时，
+ *   用户进课堂的第一眼，同学说的第一句话必须基于他今天的真实情况。
+ *   这是"收→整理→应"里的"应"：不是 AI 主动推送，而是用户转身时，
  *   AI 已经准备好那句"对的话"。
  *
  * Taste 约束：
@@ -16,7 +16,7 @@
  * 分支优先级（选第一个匹配）：
  *   1. recording：正在录，就不说话（打扰）
  *   2. 完全没数据：新用户 magic moment
- *   3. 有 processing：强调"刚那节还在听"
+ *   3. 有 processing：强调"刚那节还在整理"
  *   4. 今天有 upcoming：预报今天
  *   5. 今天有 ready：今天刚录完
  *   6. 昨天/最近有 ready：召唤复习
@@ -67,10 +67,10 @@ export function composeFirstHello(input: ComposeHelloInput): string | null {
     return '我在这里。等你录第一节课，我就开始陪你。';
   }
 
-  // 3. 有正在酿的课（刚录完）——优先级最高，因为"刚发生"
+  // 3. 有正在整理的课（刚录完）——优先级最高，因为"刚发生"
   const processingLesson = lessons.find((l) => l.status === 'processing');
   if (processingLesson) {
-    return `刚那节《${shortTitle(processingLesson.title)}》我还在听，等下我们一起过。`;
+    return `刚那节《${shortTitle(processingLesson.title)}》我在整理，等下我们一起过。`;
   }
 
   // 4. 今天有 upcoming

@@ -4,7 +4,6 @@ import { chat, DEFAULT_MODEL_ID } from '@/lib/services/llm-service';
 import type { AppExecutionContext, AppExecutionResult, AppPlugin, AppPluginTools } from '../types';
 import { buildPromptAnchorContext, buildPromptTranscriptContext, buildTerminologyHintBlock } from '../prompt-context';
 
-const KEYWORDS = ['测验', '自测', 'quiz', '测试', '练习题', '题目'];
 const TARGET_QUESTION_COUNT = 8;
 
 interface QuizDraft {
@@ -20,10 +19,6 @@ interface QuizLLMOutput {
   title?: string;
   strategy?: string;
   questions?: QuizDraft[];
-}
-
-function includesKeyword(intent: string): boolean {
-  return KEYWORDS.some((keyword) => intent.includes(keyword));
 }
 
 function formatTimestamp(ms: number): string {
@@ -220,9 +215,11 @@ export const quizPlugin: AppPlugin = {
     enabledByDefault: true,
   },
   canHandle(context: AppExecutionContext): boolean {
+    // Agent-native 姿态：不再用 KEYWORDS 关键词匹配"猜"用户意图。
+    // 分派权完全交给上游——agent 的 tool-calling 决定调用 makeQuiz，
+    // 或前端显式传 appKey='quiz'。此处只做结构性守卫。
     if (context.input.transcript.length === 0) return false;
-    const intent = context.goal.intent.toLowerCase();
-    return includesKeyword(intent) || context.goal.expectedOutput === 'cards';
+    return context.goal.appKey === 'quiz' || context.goal.expectedOutput === 'cards';
   },
   async run(context: AppExecutionContext, tools: AppPluginTools): Promise<AppExecutionResult> {
     const promptContext = buildPromptTranscriptContext(context.input.transcript, {

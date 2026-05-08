@@ -22,7 +22,6 @@ const PUBLIC_ROUTES = [
   '/api/wechat/capture/*',
   '/wechat/open/*',
   '/api/tutor',
-  '/api/tutor/intent-probe',
   '/api/chat',
   '/api/asr-config',
   '/api/asr-stream',

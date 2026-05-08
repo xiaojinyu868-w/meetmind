@@ -12,7 +12,12 @@
  *   - makeFlashcards    (对应 flashcards.plugin)
  *   - makeQuiz          (对应 quiz.plugin)
  *   - makeMindmap       (对应 mindmap.plugin)
+ *   - makeCheatsheet    (对应 cheatsheet.plugin)
+ *   - makeStudyReport   (对应 study-report.plugin)
  *   - lookupTranscript  (检索课堂转写片段，纯函数)
+ *
+ * 注意：调用 plugin 时必须显式传 appKey——agent-native 姿态，
+ * 不再靠 intent 的关键词匹配去"猜"插件。
  */
 
 import { tool } from 'ai';
@@ -22,6 +27,8 @@ import type { AppExecutionContext, AppPlugin, AppPluginTools } from '../ai-nativ
 import { flashcardsPlugin } from '../ai-native/plugins/flashcards.plugin';
 import { quizPlugin } from '../ai-native/plugins/quiz.plugin';
 import { mindmapPlugin } from '../ai-native/plugins/mindmap.plugin';
+import { cheatsheetPlugin } from '../ai-native/plugins/cheatsheet.plugin';
+import { studyReportPlugin } from '../ai-native/plugins/study-report.plugin';
 
 // ──────────────────────────────────────────────────────────────
 // Shared plugin tools
@@ -57,6 +64,7 @@ async function invokePlugin(
   plugin: AppPlugin,
   ctx: TutorToolContext,
   intent: string,
+  appKey: string,
 ): Promise<{
   ok: boolean;
   cards?: unknown[];
@@ -74,7 +82,7 @@ async function invokePlugin(
         metadata: ctx.subject ? { subject: ctx.subject } : undefined,
       },
       memory: {},
-      goal: { intent },
+      goal: { intent, appKey },
       model: ctx.model,
     };
     const result = await plugin.run(execCtx, createPluginTools(ctx.transcript));
@@ -107,7 +115,7 @@ export function createTutorTools(ctx: TutorToolContext) {
       }),
       async execute({ topic, count }) {
         const intent = `基于课堂生成 ${count} 张关于"${topic}"的闪卡`;
-        return invokePlugin(flashcardsPlugin, ctx, intent);
+        return invokePlugin(flashcardsPlugin, ctx, intent, 'flashcards');
       },
     }),
 
@@ -122,7 +130,7 @@ export function createTutorTools(ctx: TutorToolContext) {
       }),
       async execute({ topic, count, difficulty }) {
         const intent = `出 ${count} 道 ${difficulty} 难度的题目，围绕"${topic}"`;
-        return invokePlugin(quizPlugin, ctx, intent);
+        return invokePlugin(quizPlugin, ctx, intent, 'quiz');
       },
     }),
 
@@ -139,7 +147,45 @@ export function createTutorTools(ctx: TutorToolContext) {
         const intent = rootTopic
           ? `围绕"${rootTopic}"生成思维导图`
           : `基于课堂主要内容生成思维导图`;
-        return invokePlugin(mindmapPlugin, ctx, intent);
+        return invokePlugin(mindmapPlugin, ctx, intent, 'mindmap');
+      },
+    }),
+
+    makeCheatsheet: tool({
+      description:
+        '基于课堂转写生成"一页纸考试速查表"——把核心定义、关键公式、易错点等压成密集可打印卡片。' +
+        '适合学生说"考前复习 / 速查表 / 考试前翻一翻"的场景。' +
+        '比闪卡更密，比思维导图更聚焦应试。',
+      inputSchema: z.object({
+        topic: z
+          .string()
+          .describe('要覆盖的知识范围；留空则覆盖整节课')
+          .optional(),
+      }),
+      async execute({ topic }) {
+        const intent = topic
+          ? `基于课堂生成关于"${topic}"的考试速查表`
+          : `基于课堂生成一页考试速查表`;
+        return invokePlugin(cheatsheetPlugin, ctx, intent, 'cheatsheet');
+      },
+    }),
+
+    makeStudyReport: tool({
+      description:
+        '基于课堂转写生成给家长看的听课报告——这节课讲了什么、难度大概怎样、家长可以和孩子聊哪些具体话题。' +
+        '不评价孩子掌握度（没有答题数据），只分析课堂内容。' +
+        '适合家长侧"想知道孩子今天学了啥"的场景。',
+      inputSchema: z.object({
+        focus: z
+          .string()
+          .describe('报告的侧重点，如"家长视角 / 复盘重点"；留空则全面覆盖')
+          .optional(),
+      }),
+      async execute({ focus }) {
+        const intent = focus
+          ? `生成听课报告，侧重${focus}`
+          : `基于课堂生成家长视角的听课报告`;
+        return invokePlugin(studyReportPlugin, ctx, intent, 'study-report');
       },
     }),
 

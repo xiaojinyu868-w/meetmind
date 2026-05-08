@@ -154,7 +154,7 @@ export function TutorAgentPanel({
             <div className="text-sm text-slate-500 text-center">
               AI 同桌在这里。挑一个直接开始，也可以在下方直接问。
             </div>
-            <SkillChipRow onPick={onPickSkill} disabled={busy} />
+            <SkillChipRow onPick={onPickSkill} onSay={onPickSkill} disabled={busy} />
           </div>
         ) : null}
 

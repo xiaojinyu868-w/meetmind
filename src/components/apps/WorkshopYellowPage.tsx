@@ -628,9 +628,9 @@ export function WorkshopYellowPage(props: WorkshopYellowPageProps) {
     <section className={styles.page}>
       <header className={styles.header}>
         <p className={styles.eyebrow}>能力接口</p>
-        <h2 className={styles.title}>AI 工坊</h2>
+        <h2 className={styles.title}>应用</h2>
         <p className={styles.subTitle}>
-          这里汇总的是基于当前课堂上下文可直接调用的能力：有的适合直接生成结果，有的更适合先进入应用继续操作。
+          基于当前课堂上下文可直接调用的能力：有的适合直接生成结果，有的更适合先进入应用继续操作。
         </p>
         <p className={styles.subStatus} data-testid="workshop-task-summary">
           {`共 ${visibleApps.length} 项能力 · 已生成 ${generatedCount} 项${runningCount > 0 ? ` · 生成中 ${runningCount} 项` : ''}${failedCount > 0 ? ` · 异常 ${failedCount} 项` : ''}`}

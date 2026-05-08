@@ -16,7 +16,7 @@
 
 | 路径 | 职责 |
 |------|------|
-| `/api/tutor/intent-probe` | 意图探测（判断用户真正想问什么） |
+| `/api/tutor/agent` | Agent loop（多轮 tool calling，用于应用生成与 plugin 调用） |
 
 ## 依赖
 

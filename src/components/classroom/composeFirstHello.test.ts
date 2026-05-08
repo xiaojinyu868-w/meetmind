@@ -4,7 +4,7 @@
  * 覆盖 8 个情境分支：
  *   1. isRecording=true → null
  *   2. 空数组 → 新用户 magic moment
- *   3. 有 processing → 强调"刚那节还在听"
+ *   3. 有 processing → 强调"刚那节在整理"
  *   4. 今天 upcoming → 预报今天
  *   5. 今天 ready → 今天刚录完
  *   6. 昨天 ready → 召唤复习
@@ -47,14 +47,14 @@ describe('composeFirstHello', () => {
     expect(result).toContain('等你录第一节课');
   });
 
-  it('有 processing 时优先强调"刚那节还在听"', () => {
+  it('有 processing 时优先强调"刚那节还在整理"', () => {
     const lessons = [
       lesson({ id: '1', status: 'ready', title: '微积分', date: YESTERDAY }),
       lesson({ id: '2', status: 'processing', title: '线性代数', date: TODAY }),
     ];
     const result = composeFirstHello({ lessons, today: TODAY });
     expect(result).toContain('线性代数');
-    expect(result).toContain('还在听');
+    expect(result).toContain('在整理');
   });
 
   it('今天有 upcoming 时预报时间', () => {

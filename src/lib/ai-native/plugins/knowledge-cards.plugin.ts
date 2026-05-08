@@ -3,12 +3,6 @@ import { parseJsonResponse } from '@/lib/utils/json-utils';
 import { chat, DEFAULT_MODEL_ID } from '@/lib/services/llm-service';
 import type { AppExecutionContext, AppExecutionResult, AppPlugin, AppPluginTools } from '../types';
 
-const KEYWORDS = ['卡片', '复习', '回顾', '记忆', '知识点', '证据', '课堂'];
-
-function includesKeyword(intent: string): boolean {
-  return KEYWORDS.some((keyword) => intent.includes(keyword));
-}
-
 function formatTimestamp(ms: number): string {
   const totalSeconds = Math.max(0, Math.floor(ms / 1000));
   const minutes = Math.floor(totalSeconds / 60);
@@ -171,9 +165,11 @@ export const knowledgeCardsPlugin: AppPlugin = {
     enabledByDefault: true,
   },
   canHandle(context: AppExecutionContext): boolean {
+    // Agent-native 姿态：不再用 KEYWORDS 关键词匹配"猜"用户意图。
+    // 分派权完全交给上游——agent 的 tool-calling 决定调用 makeKnowledgeCards，
+    // 或前端显式传 appKey='knowledge-cards'。此处只做结构性守卫。
     if (context.input.transcript.length === 0) return false;
-    const intent = context.goal.intent.toLowerCase();
-    return includesKeyword(intent) || context.goal.expectedOutput === 'cards';
+    return context.goal.appKey === 'knowledge-cards' || context.goal.expectedOutput === 'cards';
   },
   async run(context: AppExecutionContext, tools: AppPluginTools): Promise<AppExecutionResult> {
     const evidenceSegments = pickEvidenceSegments(context.input.transcript, 3);

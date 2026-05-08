@@ -17,7 +17,7 @@ describe('SKILL_PROMPTS catalog', () => {
     expect(SKILL_PROMPTS).toHaveLength(6);
   });
 
-  it('每个 skill 都有 icon / label / prompt', () => {
+  it('每个 skill 都有 icon / label / prompt / utterance', () => {
     for (const s of SKILL_PROMPTS) {
       expect(typeof s.icon).toBe('string');
       expect(s.icon.length).toBeGreaterThan(0);
@@ -26,6 +26,9 @@ describe('SKILL_PROMPTS catalog', () => {
       expect(typeof s.prompt).toBe('string');
       // prompt 至少 10 个字——不能是占位文案
       expect(s.prompt.length).toBeGreaterThanOrEqual(10);
+      expect(typeof s.utterance).toBe('string');
+      // utterance 必须是自然的一句话——至少 6 个字
+      expect(s.utterance.length).toBeGreaterThanOrEqual(6);
     }
   });
 

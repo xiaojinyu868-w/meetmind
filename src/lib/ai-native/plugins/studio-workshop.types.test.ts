@@ -15,31 +15,31 @@ import {
 // ── detectMode ─────────────────────────────────────────────────────
 
 describe('detectMode', () => {
-  it('appKey 优先级高于 intent', () => {
+  it('appKey 决定 mode（agent-native 姿态）', () => {
     expect(detectMode('随便什么', 'audio-overview')).toBe('podcast');
     expect(detectMode('随便什么', 'infographic')).toBe('infographic');
+    expect(detectMode('随便什么', 'slides')).toBe('slides');
+    expect(detectMode('随便什么', 'table')).toBe('table');
+    expect(detectMode('随便什么', 'video')).toBe('video');
+    expect(detectMode('随便什么', 'report')).toBe('report');
+    expect(detectMode('随便什么', 'podcast')).toBe('podcast');
+  });
+
+  it('未识别 appKey 退化为 general', () => {
     expect(detectMode('随便什么', 'mindmap')).toBe('general');
+    expect(detectMode('随便什么', 'quiz')).toBe('general');
+    expect(detectMode('随便什么', 'flashcards')).toBe('general');
   });
 
-  it('intent 中文关键词检测', () => {
-    expect(detectMode('帮我生成播客')).toBe('podcast');
-    expect(detectMode('视频总览')).toBe('video');
-    expect(detectMode('生成报告')).toBe('report');
-    expect(detectMode('制作信息图')).toBe('infographic');
-    expect(detectMode('做幻灯片')).toBe('slides');
-    expect(detectMode('数据表格')).toBe('table');
-  });
-
-  it('intent 英文关键词检测', () => {
-    expect(detectMode('create audio overview')).toBe('podcast');
-    expect(detectMode('video overview')).toBe('video');
-    expect(detectMode('make a report')).toBe('report');
-    expect(detectMode('generate infographic')).toBe('infographic');
-    expect(detectMode('slide deck')).toBe('slides');
-    expect(detectMode('data table')).toBe('table');
-  });
-
-  it('无匹配返回 general', () => {
+  it('不再用 intent 关键词匹配——全部落到 general', () => {
+    // Agent-native 原则：插件不 "猜" 用户意图，分派权完全在上游 agent
+    expect(detectMode('帮我生成播客')).toBe('general');
+    expect(detectMode('视频总览')).toBe('general');
+    expect(detectMode('生成报告')).toBe('general');
+    expect(detectMode('制作信息图')).toBe('general');
+    expect(detectMode('做幻灯片')).toBe('general');
+    expect(detectMode('数据表格')).toBe('general');
+    expect(detectMode('create audio overview')).toBe('general');
     expect(detectMode('你好世界')).toBe('general');
   });
 });

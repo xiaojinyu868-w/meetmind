@@ -88,20 +88,16 @@ export const MODE_HINTS: Record<StudioMode, string> = {
 // ── Mode helpers ───────────────────────────────────────────────────
 
 export function detectMode(intent: string, appKey?: string): StudioMode {
+  // Agent-native 姿态：模式选择完全由 appKey 决定。intent 关键词匹配已废弃——
+  // 谁做分派（agent 或 UI）谁就显式传 appKey，插件内部不再猜用户意图。
   const normalizedAppKey = (appKey || '').toLowerCase();
   if (normalizedAppKey === 'audio-overview') return 'podcast';
   if (normalizedAppKey === 'infographic') return 'infographic';
-  if (normalizedAppKey === 'mindmap') return 'general';
-  if (normalizedAppKey === 'quiz') return 'general';
-  if (normalizedAppKey === 'flashcards') return 'general';
-
-  const lower = intent.toLowerCase();
-  if (lower.includes('播客') || lower.includes('audio overview')) return 'podcast';
-  if (lower.includes('视频') || lower.includes('video overview')) return 'video';
-  if (lower.includes('报告') || lower.includes('report')) return 'report';
-  if (lower.includes('信息图') || lower.includes('infographic')) return 'infographic';
-  if (lower.includes('幻灯片') || lower.includes('slide')) return 'slides';
-  if (lower.includes('数据表') || lower.includes('table')) return 'table';
+  if (normalizedAppKey === 'slides') return 'slides';
+  if (normalizedAppKey === 'table') return 'table';
+  if (normalizedAppKey === 'video') return 'video';
+  if (normalizedAppKey === 'report') return 'report';
+  if (normalizedAppKey === 'podcast') return 'podcast';
   return 'general';
 }
 

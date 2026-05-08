@@ -21,12 +21,6 @@ import { chat, DEFAULT_MODEL_ID } from '@/lib/services/llm-service';
 import type { AppExecutionContext, AppExecutionResult, AppPlugin, AppPluginTools } from '../types';
 import { buildPromptTranscriptContext, buildPromptAnchorContext, buildTerminologyHintBlock } from '../prompt-context';
 
-const KEYWORDS = ['听课报告', '学习报告', '家长', '认真', '专注', 'study-report', '网课'];
-
-function includesKeyword(intent: string): boolean {
-  return KEYWORDS.some((keyword) => intent.includes(keyword));
-}
-
 /** LLM 输出结构 */
 interface StudyReportLLMOutput {
   /** 课堂主题 */
@@ -133,9 +127,11 @@ export const studyReportPlugin: AppPlugin = {
     enabledByDefault: true,
   },
   canHandle(context: AppExecutionContext): boolean {
+    // Agent-native 姿态：不再用 KEYWORDS 关键词匹配"猜"用户意图。
+    // 分派权完全交给上游——agent 的 tool-calling 决定调用 makeStudyReport，
+    // 或前端显式传 appKey='study-report'。此处只做结构性守卫。
     if (context.input.transcript.length === 0) return false;
-    const intent = context.goal.intent.toLowerCase();
-    return includesKeyword(intent) || context.goal.appKey === 'study-report';
+    return context.goal.appKey === 'study-report';
   },
   async run(context: AppExecutionContext, tools: AppPluginTools): Promise<AppExecutionResult> {
     const promptContext = buildPromptTranscriptContext(context.input.transcript, {

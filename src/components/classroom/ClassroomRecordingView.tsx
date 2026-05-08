@@ -256,9 +256,9 @@ export function ClassroomRecordingView({
   const hasTranscriptSegments = Boolean(segments && segments.length > 0);
   const hasTranscript = hasTranscriptSegments || Boolean(transcriptText && transcriptText.trim().length > 0);
 
-  // scrollTarget 变化时：自动展开抽屉 + 滚动到对应段落
+  // scrollTarget 变化时：自动展开抽屉 + 滚动到对应段落 + 1.2s 黄色脉冲高亮
   // 依赖 TranscriptFlowView 给每个段落挂的 data-paragraph-start-ms 属性，
-  // 找到距离目标 ms 最近且 ≤ 目标的那个段落，scrollIntoView。
+  // 找到距离目标 ms 最近且 ≤ 目标的那个段落，scrollIntoView + 加 class。
   useEffect(() => {
     if (!scrollTarget) return;
     // 展开抽屉——如果用户手动收起过，点节点的意图就是"给我看看这段原话"
@@ -283,6 +283,17 @@ export function ClassroomRecordingView({
       }
       const target = picked ?? elements[0];
       target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      // M8 agent-native: 1.2s 黄色脉冲高亮——让用户一眼知道"就是这段"
+      // 先移除同 class（以防连续点同一段时动画不重播），再重新 add。
+      target.classList.remove('transcript-paragraph-highlight');
+      // 强制 reflow 后再 add，浏览器才会重新播动画
+      void target.offsetWidth;
+      target.classList.add('transcript-paragraph-highlight');
+      // 动画结束后自动移除 class，避免残留影响后续交互
+      const cleanup = window.setTimeout(() => {
+        target.classList.remove('transcript-paragraph-highlight');
+      }, 1400);
+      return () => window.clearTimeout(cleanup);
     }, 180);
     return () => clearTimeout(timer);
     // 故意只对 scrollTarget（含 nonce）敏感——同一个 ms 重复点击也要重新滚
