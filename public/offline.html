@@ -3,14 +3,14 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta name="theme-color" content="#F59E0B">
-  <title>MeetMind - 离线</title>
+  <meta name="theme-color" content="#F7F7F5">
+  <title>MeetMind - 重新连接</title>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body {
       font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
-      background: #FFF9F5;
-      color: #1f2937;
+      background: #F7F7F5;
+      color: #232322;
       display: flex;
       align-items: center;
       justify-content: center;
@@ -18,61 +18,76 @@
       min-height: 100dvh;
       padding: 24px;
     }
-    .container {
-      text-align: center;
-      max-width: 360px;
-    }
+    .container { text-align: center; max-width: 360px; }
     .icon {
-      width: 80px;
-      height: 80px;
+      width: 72px;
+      height: 72px;
       margin: 0 auto 24px;
-      background: linear-gradient(135deg, #F59E0B, #D97706);
+      background: #232322;
       border-radius: 20px;
       display: flex;
       align-items: center;
       justify-content: center;
-      color: white;
-      font-size: 36px;
+      color: #FFFFFF;
+      font-size: 32px;
       font-weight: 700;
+      letter-spacing: -0.04em;
     }
     h1 {
       font-size: 20px;
-      font-weight: 600;
+      font-weight: 650;
       margin-bottom: 12px;
-      color: #111827;
+      color: #232322;
     }
     p {
       font-size: 15px;
-      color: #6b7280;
+      color: #787774;
       line-height: 1.6;
       margin-bottom: 24px;
     }
     .retry-btn {
       display: inline-block;
       padding: 12px 32px;
-      background: linear-gradient(135deg, #F59E0B, #D97706);
-      color: white;
+      background: #232322;
+      color: #FFFFFF;
       border: none;
       border-radius: 12px;
       font-size: 15px;
       font-weight: 600;
       cursor: pointer;
-      transition: transform 0.15s, box-shadow 0.15s;
+      transition: opacity 0.15s, transform 0.15s;
     }
-    .retry-btn:active {
-      transform: scale(0.96);
-    }
-    .retry-btn:hover {
-      box-shadow: 0 4px 14px rgba(245,158,11,0.4);
-    }
+    .retry-btn:active { transform: scale(0.96); }
+    .retry-btn:hover { opacity: 0.88; }
   </style>
 </head>
 <body>
   <div class="container">
     <div class="icon">M</div>
-    <h1>网络已断开</h1>
-    <p>MeetMind 需要网络连接才能正常工作。请检查你的网络设置，然后重试。</p>
-    <button class="retry-btn" onclick="window.location.reload()">重新连接</button>
+    <h1>正在重新连接</h1>
+    <p>如果刚刚看到离线页，可能是旧缓存还在。点击下面按钮会先清理旧缓存，再回到 MeetMind。</p>
+    <button class="retry-btn" onclick="reconnect()">重新连接</button>
   </div>
+  <script>
+    async function reconnect() {
+      try {
+        if ('serviceWorker' in navigator) {
+          const registrations = await navigator.serviceWorker.getRegistrations();
+          await Promise.all(registrations.map((registration) => registration.unregister()));
+        }
+        if ('caches' in window) {
+          const cacheNames = await caches.keys();
+          await Promise.all(
+            cacheNames
+              .filter((name) => name.startsWith('meetmind-'))
+              .map((name) => caches.delete(name))
+          );
+        }
+      } catch (_) {
+        // 清理失败也继续尝试回到在线应用。
+      }
+      window.location.replace('/app');
+    }
+  </script>
 </body>
 </html>

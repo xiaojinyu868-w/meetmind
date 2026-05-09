@@ -23,6 +23,9 @@
 | `tutor-agent-provider.ts` | 31 | Tutor Agent OpenAI-compatible provider 配置解析 | `resolveTutorAgentProviderConfig` |
 | `video-source.ts` | 35 | 视频播放源标识恢复（B 站 bvid/cid） | `resolveBilibiliVideoIdentifiers` |
 | `companion-quiz-memory.ts` | 45 | AI 同桌内联测验作答结果上下文 | `upsertQuizAttempt`, `buildQuestionWithQuizContext` |
+| `live-translation-rows.ts` | 34 | 录课中稳定实时转写/翻译行构建 | `buildLiveTranslationRows` |
+| `translation-retry-policy.ts` | 17 | 翻译接口失败/429 后的前端退避策略 | `getTranslationRetryDelayMs`, `shouldSkipTranslationTerm` |
+| `inline-app-transcript.ts` | 19 | AI 同桌内联应用生成时选择最新可用转录 | `selectInlineAppTranscript`, `hasEnoughInlineAppTranscript` |
 | `index.ts` | 40 | barrel 导出 | re-export time-utils, json-utils, transcript-utils |
 
 ### `page/` 子目录（从 page-utils.ts 拆分）

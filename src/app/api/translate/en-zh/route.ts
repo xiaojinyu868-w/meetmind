@@ -28,7 +28,7 @@ const SYSTEM_PROMPT = `你是课堂转写的英译中助手。输入是一组英
 5. 严格返回 JSON 对象：{ "原文1": "译文1", "原文2": "译文2", ... }，不要任何其他文字。`;
 
 export async function POST(request: NextRequest) {
-  const rl = await applyRateLimit(request, 'tutor');
+  const rl = await applyRateLimit(request, 'translate');
   if (rl) return rl;
 
   try {
@@ -44,13 +44,14 @@ export async function POST(request: NextRequest) {
     const { terms } = parsed.data;
     const userPrompt = `请翻译下列 ${terms.length} 个片段：\n${JSON.stringify(terms)}`;
 
+    const model = process.env.TRANSLATION_MODEL || 'qwen3.5-plus';
     const resp = await chat(
       [
         { role: 'system', content: SYSTEM_PROMPT },
         { role: 'user', content: userPrompt },
       ],
-      'qwen3.5-plus',
-      { temperature: 0, responseFormat: 'json_object' },
+      model,
+      { temperature: 0, responseFormat: 'json_object', maxTokens: 600 },
     );
 
     let translations: Record<string, string> = {};

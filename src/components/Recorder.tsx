@@ -525,6 +525,9 @@ export const Recorder = forwardRef<RecorderHandle, RecorderProps>(function Recor
           format: 'pcm',
           initialContextHint: contextHint.trim(),
           initialLanguageMode: languageMode,
+          maxReconnectAttempts: 30,
+          reconnectBaseMs: 800,
+          reconnectCapMs: 15_000,
         });
         
         const started = await asrClientRef.current.start();
@@ -811,6 +814,9 @@ export const Recorder = forwardRef<RecorderHandle, RecorderProps>(function Recor
         format: 'pcm',
         initialContextHint: contextHint.trim(),
         initialLanguageMode: languageMode,
+        maxReconnectAttempts: 30,
+        reconnectBaseMs: 800,
+        reconnectCapMs: 15_000,
       });
 
       const started = await asrClientRef.current.start();

@@ -12,7 +12,7 @@
  * 老的 concepts / transcriptText 字段保留向后兼容。
  */
 
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import dynamic from 'next/dynamic';
 import { Square, ChevronDown, ChevronUp, Languages } from 'lucide-react';
 import { MindMap } from './MindMap';
@@ -20,6 +20,7 @@ import type { MindMapTree } from '@/hooks/useClassroomMindMap';
 import type { TranscriptSegment } from '@/types';
 import { extractChineseRuns, extractEnglishRuns } from '@/lib/services/translation/extract-english';
 import { useEnToZhTranslation, useTranslationMode, type TranslationMode } from '@/hooks/useEnToZhTranslation';
+import { buildLiveTranslationRows } from '@/lib/utils/live-translation-rows';
 
 // TranscriptFlowView 只在展开态用，且组件较重——code-split 一下，
 // 保持课堂首屏打开时不拉这份 bundle。
@@ -74,132 +75,216 @@ function formatTime(totalSec: number): string {
   return `${m}:${s}`;
 }
 
-// ── 顶部状态条 ────────────────────────────────────────────────────────
-
-/**
- * 极薄状态条：红点 + 正在听课 + 计时 + 跟读 / 当前句
- * - 有 interim 时显示 interim（正在识别但未落定）
- * - 无 interim 时如果有 lastFinalLine 显示它
- * - 都没有时显示 "在听……"
- *
- * M7-fix10: 当当前显示的句子里含英文 run 时，额外在下方挂一行极细的 zh 翻译，
- * 用户不必展开完整转录抽屉就能看到关键术语的中译。整段翻译仍走抽屉 + TranscriptFlowView。
- * 有一个小 `中/EN` 切换按钮挂在"正在听课"右侧，用户不想看翻译可以关掉（持久化）。
- */
-function StatusHeader({
-  seconds,
+function LiveTranscriptPanel({
+  segments,
+  recentLines,
   interimText,
-  lastFinalLine,
+  translationMode,
+  seconds,
+  expanded,
+  onToggleExpanded,
+  onCycleTranslationMode,
+  onStop,
 }: {
-  seconds: number;
+  segments?: TranscriptSegment[];
+  recentLines: Array<{ id: string; text: string; startMs: number }>;
   interimText?: string;
-  lastFinalLine?: string;
+  translationMode: TranslationMode;
+  seconds: number;
+  expanded: boolean;
+  onToggleExpanded: () => void;
+  onCycleTranslationMode: () => void;
+  onStop: () => void;
 }) {
-  const showInterim = Boolean(interimText && interimText.trim().length > 0);
-  const hasFinal = Boolean(lastFinalLine && lastFinalLine.trim().length > 0);
-  const displayedLine = showInterim ? interimText! : hasFinal ? lastFinalLine! : '';
-
-  // 持久化翻译模式：默认 off；用户显式选择 EN→中 或 中→EN。
-  const [translationMode, setTranslationMode] = useTranslationMode();
-  const activeDirection: Exclude<TranslationMode, 'off'> = translationMode === 'zh-en' ? 'zh-en' : 'en-zh';
+  const rows = useMemo(
+    () => buildLiveTranslationRows({ segments, recentLines, maxFinalRows: 10 }),
+    [segments, recentLines],
+  );
   const translateEnabled = translationMode !== 'off';
-
-  const translationTerms = useMemo(() => {
-    if (!translateEnabled || !displayedLine) return [];
-    return translationMode === 'zh-en'
-      ? extractChineseRuns(displayedLine)
-      : extractEnglishRuns(displayedLine);
-  }, [translateEnabled, translationMode, displayedLine]);
-
+  void interimText;
+  const activeDirection: Exclude<TranslationMode, 'off'> = translationMode === 'zh-en' ? 'zh-en' : 'en-zh';
   const { request, lookup } = useEnToZhTranslation(translateEnabled, activeDirection);
+  const listRef = useRef<HTMLDivElement | null>(null);
+  const endRef = useRef<HTMLDivElement | null>(null);
+  const [showJumpToBottom, setShowJumpToBottom] = useState(false);
 
-  // 新片段出现时异步请求翻译；lookup 命中缓存时直接展示。
-  // 故意用 string join 做依赖——集合稳定时不重复触发 fetch。
-  const termsKey = translationTerms.join('|');
+  const termsByRow = useMemo(() => {
+    const next = new Map<string, string[]>();
+    const translatableRows = new Set(rows.slice(-4).map((row) => row.id));
+    for (const row of rows) {
+      if (!translatableRows.has(row.id)) {
+        next.set(row.id, []);
+        continue;
+      }
+      const terms = translationMode === 'zh-en'
+        ? extractChineseRuns(row.text)
+        : extractEnglishRuns(row.text);
+      next.set(row.id, terms.slice(0, 1));
+    }
+    return next;
+  }, [rows, translationMode]);
+
+  const terms = useMemo(
+    () => rows.flatMap((row) => termsByRow.get(row.id) ?? []),
+    [rows, termsByRow],
+  );
+  const termsKey = terms.join('|');
+
   useEffect(() => {
-    if (translationTerms.length > 0) request(translationTerms);
-  }, [termsKey, translationTerms, request]);
+    if (!translateEnabled || terms.length === 0) return;
+    request(terms);
+  }, [request, terms, termsKey, translateEnabled]);
 
-  const translated = useMemo(() => {
-    return translationTerms
-      .map((source) => ({ source, translated: lookup(source) }))
-      .filter((p): p is { source: string; translated: string } => Boolean(p.translated))
-      .slice(0, 2);
-  }, [translationTerms, lookup]);
+  const updateJumpVisibility = useCallback(() => {
+    const el = listRef.current;
+    if (!el) return;
+    const distance = el.scrollHeight - el.scrollTop - el.clientHeight;
+    setShowJumpToBottom(distance > 96);
+  }, []);
 
-  const cycleTranslationMode = () => {
-    setTranslationMode(
-      translationMode === 'off'
-        ? 'en-zh'
-        : translationMode === 'en-zh'
-          ? 'zh-en'
-          : 'off',
-    );
-  };
+  const jumpToBottom = useCallback(() => {
+    endRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
+    setShowJumpToBottom(false);
+  }, []);
+
+  useEffect(() => {
+    updateJumpVisibility();
+  }, [rows.length, updateJumpVisibility]);
 
   return (
-    <div className="flex-shrink-0 bg-canvas px-8 pt-7 pb-4 lg:px-12">
-      <div className="mx-auto w-full max-w-3xl">
-        <div className="flex items-baseline gap-3">
-          <span className="relative flex h-2 w-2">
-            <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-[#D96B6B] opacity-60" />
-            <span className="relative inline-flex h-2 w-2 rounded-full bg-[#D96B6B]" />
-          </span>
-          <span className="text-[13px] font-medium tracking-[-0.005em] text-ink">
-            正在听课
-          </span>
-          <span className="font-mono text-[13px] tabular-nums tracking-tight text-ink-muted">
-            {formatTime(seconds)}
-          </span>
-          {/* 右侧：翻译模式切换 —— 默认关闭，点击依次 EN→中 / 中→EN / 关闭 */}
+    <aside className="relative flex h-full w-full min-w-0 flex-col overflow-hidden rounded-[24px] border border-[#E9E9E7] bg-[#FBFBFA]">
+      <div className="pointer-events-none absolute inset-x-6 top-[72px] h-24 rounded-full bg-gradient-to-r from-ceremony-rose via-ceremony-lilac to-ceremony-sky opacity-30 blur-2xl" />
+      <div className="relative px-4 pb-3 pt-3.5">
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex min-w-0 items-center gap-2">
+            <span className="h-1.5 w-1.5 rounded-full bg-[#2E7D52]" />
+            <span className="truncate text-[12px] font-medium tracking-[-0.005em] text-ink">Recording</span>
+            <span className="text-[10.5px] text-ink-muted">Connected</span>
+          </div>
+          <span className="font-mono text-[11px] tabular-nums text-ink-muted">{formatTime(seconds)}</span>
+        </div>
+
+        <div className="flex flex-col items-center px-2 pb-2 pt-3 text-center">
+          <div className="relative flex h-24 w-24 items-center justify-center">
+            <span className="absolute inset-0 rounded-full bg-gradient-to-br from-ceremony-rose via-ceremony-lilac to-ceremony-sky opacity-75 blur-lg" />
+            <span className="absolute inset-2 rounded-full border border-white/70 bg-white/45" />
+            <span className="absolute inset-0 rounded-full border border-[#8B5CF6]/18 animate-[mindBreath_2600ms_ease-in-out_infinite]" />
+            <button
+              type="button"
+              onClick={onStop}
+              className="relative flex h-12 w-12 items-center justify-center rounded-full bg-[#232322] text-white transition active:scale-95"
+              title="结束这节课"
+            >
+              <Square size={12} strokeWidth={2} fill="currentColor" />
+            </button>
+          </div>
+          <p className="mt-3 text-[12px] font-medium text-ink-secondary">AI is listening</p>
+        </div>
+
+        <div className="flex items-center justify-between gap-2 rounded-2xl bg-white px-2 py-1">
+          <div className="inline-flex rounded-full bg-[#F7F7F5] p-0.5">
+            <span className="rounded-full bg-white px-3 py-1 text-[11px] font-medium text-ink">Transcript</span>
+            <span className="px-3 py-1 text-[11px] font-medium text-ink-muted">Summary</span>
+          </div>
           <button
             type="button"
-            onClick={cycleTranslationMode}
-            className={`ml-auto inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10.5px] font-medium tracking-wide transition ${
-              translateEnabled
-                ? 'bg-[#232322] text-white'
-                : 'text-ink-muted/70 hover:text-ink-secondary hover:bg-[#EFEFED]'
+            onClick={onCycleTranslationMode}
+            className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[10.5px] font-medium transition ${
+              translateEnabled ? 'bg-ink text-white' : 'text-ink-muted hover:bg-[#F7F7F5]'
             }`}
             title="切换翻译模式：关闭 / EN→中 / 中→EN"
-            aria-pressed={translateEnabled}
           >
             <Languages size={10} strokeWidth={2} />
             <span>{translationMode === 'off' ? '翻译关' : translationMode === 'en-zh' ? 'EN→中' : '中→EN'}</span>
           </button>
         </div>
-        <div className="mt-2.5 min-h-[20px]">
-          {showInterim ? (
-            <p className="truncate text-[13px] leading-relaxed text-ink-secondary italic">
-              {interimText}
-              <span className="ml-0.5 inline-block h-[12px] w-[2px] translate-y-[1px] bg-ink-secondary/60 animate-pulse" />
-            </p>
-          ) : hasFinal ? (
-            <p className="truncate text-[12.5px] leading-relaxed text-ink-muted">
-              {lastFinalLine}
-            </p>
-          ) : (
-            <p className="text-[12px] leading-relaxed text-ink-muted/70">
-              {seconds < 3 ? '准备好了——说话吧。' : '在听……'}
-            </p>
-          )}
-        </div>
-        {/* 行内翻译提示：极轻字号，only when something actually got translated */}
-        {translated.length > 0 ? (
-          <div className="mt-1 flex flex-wrap gap-x-3 gap-y-0.5">
-            {translated.map(({ source, translated: target }) => (
-              <span
-                key={source}
-                className="inline-flex items-baseline gap-1.5 text-[11px] leading-snug text-ink-muted/80"
-              >
-                <span className="font-medium text-ink-muted">{source}</span>
-                <span aria-hidden className="text-ink-muted/40">→</span>
-                <span className="text-ink-secondary">{target}</span>
-              </span>
-            ))}
-          </div>
-        ) : null}
       </div>
-    </div>
+
+      <div
+        ref={listRef}
+        onScroll={updateJumpVisibility}
+        className="min-h-0 flex-1 overflow-y-auto px-3 pb-3"
+      >
+        {rows.length === 0 ? (
+          <div className="flex h-full items-center justify-center rounded-2xl bg-white px-4 text-center">
+            <p className="max-w-[13rem] text-[11.5px] leading-relaxed text-ink-muted/80">
+              等老师开口后，这里会开始出现实时转写。
+            </p>
+          </div>
+        ) : (
+          <div className="space-y-2">
+            {rows.map((row, index) => {
+              const sourceTerm = termsByRow.get(row.id)?.[0];
+              const translated = sourceTerm ? lookup(sourceTerm) : undefined;
+              const isLatest = index === rows.length - 1;
+              const waitingForTranslation = translateEnabled && isLatest && Boolean(sourceTerm) && !translated;
+
+              return (
+                <article
+                  key={row.id}
+                  className={`rounded-xl px-3 py-2.5 transition ${
+                    isLatest ? 'bg-white' : 'bg-[#F7F7F5]'
+                  }`}
+                >
+                  <div className="mb-1 flex items-center justify-between gap-2">
+                    <span className="font-mono text-[10px] tabular-nums text-ink-muted">
+                      {formatTime(Math.floor(row.startMs / 1000))}
+                    </span>
+                    {isLatest ? <span className="text-[10px] text-ink-muted">live</span> : null}
+                  </div>
+                  <p className="text-[12.5px] leading-relaxed text-ink-secondary">
+                    {row.text}
+                  </p>
+                  {translateEnabled && (translated || waitingForTranslation) ? (
+                    <div className="mt-1.5 rounded-lg bg-white px-2.5 py-2">
+                      {translated ? (
+                        <p className="text-[12.5px] leading-relaxed text-ink">
+                          {translated}
+                        </p>
+                      ) : (
+                        <p className="text-[12px] leading-relaxed text-ink-muted/70">正在翻译……</p>
+                      )}
+                    </div>
+                  ) : null}
+                </article>
+              );
+            })}
+            <div ref={endRef} />
+          </div>
+        )}
+      </div>
+
+      {showJumpToBottom ? (
+        <button
+          type="button"
+          onClick={jumpToBottom}
+          className="absolute bottom-[92px] right-5 rounded-full bg-white px-3 py-2 text-[11px] font-medium text-ink-secondary transition hover:text-ink"
+        >
+          回到底部
+        </button>
+      ) : null}
+
+      <div className="border-t border-[#E9E9E7] px-4 py-3">
+        <div className="mb-3 flex items-center justify-between font-mono text-[10.5px] tabular-nums text-ink-muted">
+          <span>00:00</span>
+          <span>{formatTime(seconds)}</span>
+        </div>
+        <div className="mb-3 h-1.5 overflow-hidden rounded-full bg-white">
+          <div
+            className="h-full rounded-full bg-ink transition-all"
+            style={{ width: `${Math.min(100, Math.max(6, seconds / 90))}%` }}
+          />
+        </div>
+        <button
+          type="button"
+          onClick={onToggleExpanded}
+          className="flex w-full items-center justify-center gap-1.5 rounded-full bg-white px-3 py-2 text-[11.5px] font-medium text-ink-secondary transition hover:text-ink"
+        >
+          {expanded ? <ChevronDown size={11} /> : <ChevronUp size={11} />}
+          {expanded ? '收起完整原文' : '展开完整原文'}
+        </button>
+      </div>
+    </aside>
   );
 }
 
@@ -228,7 +313,7 @@ function TranscriptToggle({
 
 function StopBar({ onStop }: { onStop: () => void }) {
   return (
-    <div className="flex-shrink-0 border-t border-[#E9E9E7]/70 bg-canvas px-8 pb-[max(env(safe-area-inset-bottom),1.25rem)] pt-4 lg:px-12">
+      <div className="flex-shrink-0 bg-canvas px-8 pb-[max(env(safe-area-inset-bottom),1rem)] pt-2 lg:hidden">
       <div className="mx-auto w-full max-w-3xl">
         <button
           type="button"
@@ -240,6 +325,7 @@ function StopBar({ onStop }: { onStop: () => void }) {
         </button>
       </div>
     </div>
+
   );
 }
 
@@ -310,23 +396,44 @@ export function ClassroomRecordingView({
     // 故意只对 scrollTarget（含 nonce）敏感——同一个 ms 重复点击也要重新滚
   }, [scrollTarget]);
 
-  const lastFinalLine = recentLines.length > 0 ? recentLines[recentLines.length - 1]?.text : undefined;
+  const [translationMode, setTranslationMode] = useTranslationMode();
+  const cycleTranslationMode = () => {
+    setTranslationMode(
+      translationMode === 'off'
+        ? 'en-zh'
+        : translationMode === 'en-zh'
+          ? 'zh-en'
+          : 'off',
+    );
+  };
 
   return (
     <div className="flex h-full flex-col">
-      <StatusHeader
-        seconds={seconds}
-        interimText={interimText}
-        lastFinalLine={lastFinalLine}
-      />
-
-      {/* 主画面:思维导图 */}
-      <MindMap
-        tree={mindMapTree}
-        newNodeIds={mindMapNewIds}
-        elapsedMs={seconds * 1000}
-        onAnchorClick={onAnchorClick}
-      />
+      <div className="min-h-0 flex-1 px-6 py-4 lg:px-8">
+        <div className="mx-auto flex h-full w-full max-w-[1180px] gap-4">
+          <div className="hidden w-[340px] flex-shrink-0 lg:block">
+            <LiveTranscriptPanel
+              segments={segments}
+              recentLines={recentLines}
+              interimText={interimText}
+              translationMode={translationMode}
+              seconds={seconds}
+              expanded={expanded}
+              onToggleExpanded={() => setExpanded((v) => !v)}
+              onCycleTranslationMode={cycleTranslationMode}
+              onStop={onStop}
+            />
+          </div>
+          <div className="min-w-0 flex-1 overflow-hidden rounded-[28px] border border-[#E9E9E7] bg-white">
+            <MindMap
+              tree={mindMapTree}
+              newNodeIds={mindMapNewIds}
+              elapsedMs={seconds * 1000}
+              onAnchorClick={onAnchorClick}
+            />
+          </div>
+        </div>
+      </div>
 
       {/* 展开态：完整原文抽屉 */}
       {expanded && (
@@ -343,7 +450,6 @@ export function ClassroomRecordingView({
                   isRecording
                   interimText={interimText}
                   transcribeMode="streaming"
-                  enableEnToZhTranslation
                   enableWordExplainer
                   fullContextText={transcriptText ?? ''}
                   showHeader={false}
@@ -365,7 +471,7 @@ export function ClassroomRecordingView({
         </div>
       )}
 
-      <div className="flex flex-shrink-0 justify-center border-t border-[#E9E9E7]/40 bg-canvas pt-2 pb-1">
+      <div className="flex flex-shrink-0 justify-center border-t border-[#E9E9E7]/40 bg-canvas pt-2 pb-1 lg:hidden">
         <TranscriptToggle expanded={expanded} onToggle={() => setExpanded((v) => !v)} />
       </div>
 

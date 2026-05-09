@@ -193,7 +193,11 @@ function isIgnorableCommitError(message) {
 
 /** DashScope session.update 二次发送的已知吞没错误 */
 function isIgnorableSessionUpdateError(message) {
-  return typeof message === 'string' && /session already started or finished or failed/i.test(message);
+  if (typeof message !== 'string') return false;
+  return (
+    /session already started or finished or failed/i.test(message) ||
+    /input messages do not contain elements with the role of user/i.test(message)
+  );
 }
 
 /**

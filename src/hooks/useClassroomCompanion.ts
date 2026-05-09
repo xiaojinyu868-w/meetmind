@@ -168,6 +168,10 @@ import {
   upsertQuizAttempt,
   type CompanionQuizAttempt,
 } from '@/lib/utils/companion-quiz-memory';
+import {
+  hasEnoughInlineAppTranscript,
+  selectInlineAppTranscript,
+} from '@/lib/utils/inline-app-transcript';
 
 /** 把长句子截成省略号版，塞进"再讲讲那道 xxx..."的追问气泡里 */
 function truncate(s: string, n: number): string {
@@ -377,8 +381,9 @@ export function useClassroomCompanion(
       messageId: string,
       appKey: NonNullable<CompanionMessage['inlineApp']>['appKey'],
     ): Promise<void> => {
-      const totalLen = segments.reduce((s, seg) => s + (seg.text?.length || 0), 0);
-      if (segments.length < 2 || totalLen < 50) {
+      const latestSegments = useCaptureEditorStore.getState().segments;
+      const appSegments = selectInlineAppTranscript(segments, latestSegments);
+      if (!hasEnoughInlineAppTranscript(appSegments)) {
         setMessages((prev) =>
           prev.map((m) =>
             m.id === messageId
@@ -409,7 +414,7 @@ export function useClassroomCompanion(
         input: {
           sessionId: sessionId || 'inline-classroom',
           dataSource: 'live' as const,
-          transcript: slimTranscriptForApp(segments),
+          transcript: slimTranscriptForApp(appSegments),
           anchors: [],
         },
         memory: {},

@@ -148,6 +148,14 @@ describe('isIgnorableSessionUpdateError', () => {
     expect(isIgnorableSessionUpdateError('session already started or finished or failed')).toBe(true);
     expect(isIgnorableSessionUpdateError('something else')).toBe(false);
   });
+
+  it('treats DashScope empty user-message validation as a non-fatal session update error', () => {
+    expect(
+      isIgnorableSessionUpdateError(
+        '<400> InternalError.Algo.InvalidParameter: The input messages do not contain elements with the role of user',
+      ),
+    ).toBe(true);
+  });
 });
 
 describe('isLikelyHallucination', () => {

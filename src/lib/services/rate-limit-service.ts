@@ -88,6 +88,13 @@ export const RATE_LIMITS = {
     perDay: 500,
     cost: 'medium',
   },
+  // 实时翻译 - 课堂 UI 会按短句批量请求，单独成桶，避免污染 tutor 对话限额
+  translate: {
+    perMinute: 120,
+    perHour: 1200,
+    perDay: 6000,
+    cost: 'medium',
+  },
   // 转录增强 - 每分钟15次，每小时150次，每天800次
   transcriptEnhance: {
     perMinute: 15,

@@ -797,6 +797,11 @@ app.prepare().then(() => {
         const jsonText = typeof data === 'string' ? data : data.toString('utf8');
         const msg = JSON.parse(jsonText);
 
+        if (msg.type === 'ping') {
+          sendClientEvent({ event: 'pong', at: msg.at || Date.now() });
+          return;
+        }
+
         if (msg.type === 'vad-event') {
           if (msg.event === 'start') {
             currentSpeechStartMs = msg.timestampMs;

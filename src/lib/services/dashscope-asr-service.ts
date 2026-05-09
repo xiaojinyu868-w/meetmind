@@ -1,5 +1,6 @@
 import { createLogger, track } from '@/lib/logger';
 import { fullJitterDelay } from '@/lib/services/asr/text-utils';
+import { buildAsrWebSocketCandidates } from '@/lib/services/asr/ws-url';
 const log = createLogger('dashscope-asr');
 
 export interface ASRSentence {
@@ -68,6 +69,7 @@ export class DashScopeASRClient {
   private userStopRequested = false;
   private reconnectAttempts = 0;
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+  private keepAliveTimer: ReturnType<typeof setInterval> | null = null;
   private readonly sessionId = `asr-realtime-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 
   constructor(
@@ -129,13 +131,8 @@ export class DashScopeASRClient {
       try {
         this.updateStatus('connecting');
 
-        const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-        const currentUrl = new URL('/api/asr-stream', window.location.href);
-        const candidateUrls = [currentUrl.toString()];
-
-        if (protocol === 'wss:' && currentUrl.port !== '8443') {
-          candidateUrls.push(`${protocol}//${window.location.hostname}:8443/api/asr-stream`);
-        }
+        const candidateUrls = buildAsrWebSocketCandidates(window.location.href);
+        const maxAttempts = this.options.maxReconnectAttempts ?? 30;
 
         const tryConnect = (urlIndex: number) => {
           if (urlIndex >= candidateUrls.length) {
@@ -146,37 +143,47 @@ export class DashScopeASRClient {
           }
 
           const wsUrl = candidateUrls[urlIndex];
-          this.ws = new WebSocket(wsUrl);
+          const ws = new WebSocket(wsUrl);
+          this.ws = ws;
 
           const connectionTimeout: NodeJS.Timeout = setTimeout(() => {
-            if (this.ws && this.ws.readyState === WebSocket.CONNECTING) {
-              this.ws.close();
+            if (this.ws === ws && ws.readyState === WebSocket.CONNECTING) {
+              ws.close();
+              this.ws = null;
               tryConnect(urlIndex + 1);
             }
-          }, 3500);
+          }, 5000);
 
-          let resolved = false;
+          let settled = false;
           let connected = false;
+          const settle = (ok: boolean) => {
+            if (settled) return;
+            settled = true;
+            resolve(ok);
+          };
 
-          this.ws.onopen = () => {
+          ws.onopen = () => {
+            if (this.ws !== ws) return;
             clearTimeout(connectionTimeout);
             connected = true;
             this.updateStatus('connected');
+            this.startKeepAlive();
             this.sendContextHint(
               this.options.initialContextHint || '',
               this.options.initialLanguageMode || 'auto'
             );
           };
 
-          this.ws.onmessage = (event) => {
+          ws.onmessage = (event) => {
+            if (this.ws !== ws) return;
             this.handleMessage(event.data);
-            if (this.isReady && !resolved) {
-              resolved = true;
-              resolve(true);
+            if (this.isReady && !settled) {
+              settle(true);
             }
           };
 
-          this.ws.onerror = (error) => {
+          ws.onerror = (error) => {
+            if (this.ws !== ws) return;
             clearTimeout(connectionTimeout);
             // M7-fix7: 三种情况静默——
             //   1. 用户主动停止（destroy / unmount）
@@ -187,38 +194,46 @@ export class DashScopeASRClient {
               currentWs &&
               (currentWs.readyState === WebSocket.CLOSING ||
                 currentWs.readyState === WebSocket.CLOSED);
-            if (this.userStopRequested || resolved || browserAborted) {
+            if (this.userStopRequested || settled || browserAborted) {
               return;
             }
             log.error(`[DashScopeASR] Connection error: ${wsUrl}`, error);
             if (!connected && urlIndex < candidateUrls.length - 1) {
+              this.ws = null;
               tryConnect(urlIndex + 1);
-            } else if (!connected) {
-              this.updateStatus('error');
-              this.callbacks.onError?.('WebSocket 连接错误');
-              resolve(false);
             }
           };
 
-          this.ws.onclose = (event) => {
+          ws.onclose = (event) => {
+            if (this.ws !== ws) return;
             clearTimeout(connectionTimeout);
+            this.stopKeepAlive();
+            this.ws = null;
 
-            const maxAttempts = this.options.maxReconnectAttempts ?? 5;
+            if (!connected) {
+              if (urlIndex < candidateUrls.length - 1) {
+                tryConnect(urlIndex + 1);
+                return;
+              }
+              this.updateStatus(opts.isReconnect ? 'connecting' : 'error');
+              if (!opts.isReconnect) this.callbacks.onError?.('WebSocket 连接错误');
+              settle(false);
+              return;
+            }
+
             const shouldAttemptReconnect =
               !this.userStopRequested &&
-              connected &&
               this.reconnectAttempts < maxAttempts;
 
             if (shouldAttemptReconnect) {
               this.scheduleReconnect(event.code, event.reason);
-              this.ws = null;
               return;
             }
 
             if (this.status !== 'stopped') {
               this.updateStatus('stopped');
             }
-            this.ws = null;
+            settle(false);
           };
         };
 
@@ -226,7 +241,7 @@ export class DashScopeASRClient {
 
         setTimeout(() => {
           if (!this.isReady) {
-            this.callbacks.onError?.('连接超时');
+            if (!opts.isReconnect) this.callbacks.onError?.('连接超时');
             resolve(false);
           }
         }, 15000);
@@ -460,12 +475,32 @@ export class DashScopeASRClient {
     );
   }
 
+  private startKeepAlive(): void {
+    this.stopKeepAlive();
+    this.keepAliveTimer = setInterval(() => {
+      if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return;
+      try {
+        this.ws.send(JSON.stringify({ type: 'ping', at: Date.now() }));
+      } catch {
+        /* connection close will trigger reconnect */
+      }
+    }, 15_000);
+  }
+
+  private stopKeepAlive(): void {
+    if (this.keepAliveTimer) {
+      clearInterval(this.keepAliveTimer);
+      this.keepAliveTimer = null;
+    }
+  }
+
   async stop(): Promise<void> {
     this.userStopRequested = true;
     if (this.reconnectTimer) {
       clearTimeout(this.reconnectTimer);
       this.reconnectTimer = null;
     }
+    this.stopKeepAlive();
     this.isReady = false;
     this.updateStatus('stopped');
 
@@ -544,7 +579,6 @@ export class DashScopeASRClient {
           durationMs: 0,
         });
       } else {
-        // start 失败，保留 attempts（后续 close 事件会再增）
         track({
           kind: 'asr.fail',
           mode: 'realtime-reconnect',
@@ -553,6 +587,13 @@ export class DashScopeASRClient {
           errorCode: 'RECONNECT_START_FAILED',
           errorMsg: `lastCloseCode=${lastCloseCode} reason=${lastCloseReason}`,
         });
+        const maxAttempts = this.options.maxReconnectAttempts ?? 30;
+        if (!this.userStopRequested && this.reconnectAttempts < maxAttempts) {
+          this.scheduleReconnect(lastCloseCode, lastCloseReason);
+        } else {
+          this.updateStatus('error');
+          this.callbacks.onError?.('实时转写连接断开，请重新开始录音。');
+        }
       }
     } catch (err) {
       log.error('[DashScopeASR] Reconnect threw', err);
@@ -568,6 +609,7 @@ export class DashScopeASRClient {
   }
 
   private closeConnection(): void {
+    this.stopKeepAlive();
     if (this.ws) {
       this.ws.close();
       this.ws = null;

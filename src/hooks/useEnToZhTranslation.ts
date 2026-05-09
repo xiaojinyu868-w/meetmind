@@ -14,11 +14,12 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { getTranslationRetryDelayMs, shouldSkipTranslationTerm } from '@/lib/utils/translation-retry-policy';
 
 export type TranslationMode = 'off' | 'en-zh' | 'zh-en';
 
-const MAX_BATCH = 20;
-const DEBOUNCE_MS = 300;
+const MAX_BATCH = 6;
+const DEBOUNCE_MS = 80;
 const CACHE_KEY_BY_MODE: Record<Exclude<TranslationMode, 'off'>, string> = {
   'en-zh': 'meetmind_translate_en_zh_cache_v1',
   'zh-en': 'meetmind_translate_zh_en_cache_v1',
@@ -59,11 +60,13 @@ export function useEnToZhTranslation(enabled: boolean, mode: Exclude<Translation
   const pendingRef = useRef<Set<string>>(new Set());
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const inflightRef = useRef<Set<string>>(new Set());
+  const failedUntilRef = useRef<Record<string, number>>({});
 
   useEffect(() => {
     setTranslations(loadCache(mode));
     pendingRef.current.clear();
     inflightRef.current.clear();
+    failedUntilRef.current = {};
   }, [mode]);
 
   // Flush 当前 pending 批次
@@ -80,17 +83,25 @@ export function useEnToZhTranslation(enabled: boolean, mode: Exclude<Translation
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ terms: toSend }),
       });
-      const data = (await resp.json()) as { translations?: Record<string, string> };
-      const next: Record<string, string> = { ...translations };
-      if (data.translations) {
-        for (const [k, v] of Object.entries(data.translations)) {
-          if (typeof v === 'string' && v.trim()) next[k] = v.trim();
-        }
+      if (!resp.ok) {
+        const failedUntil = Date.now() + getTranslationRetryDelayMs(resp.status);
+        for (const term of toSend) failedUntilRef.current[term] = failedUntil;
+        return;
       }
-      setTranslations(next);
-      saveCache(activeMode, next);
+      const data = (await resp.json()) as { translations?: Record<string, string> };
+      if (data.translations) {
+        setTranslations((prev) => {
+          const next: Record<string, string> = { ...prev };
+          for (const [k, v] of Object.entries(data.translations ?? {})) {
+            if (typeof v === 'string' && v.trim()) next[k] = v.trim();
+          }
+          saveCache(activeMode, next);
+          return next;
+        });
+      }
     } catch {
-      /* silent */
+      const failedUntil = Date.now() + getTranslationRetryDelayMs(null);
+      for (const term of toSend) failedUntilRef.current[term] = failedUntil;
     } finally {
       for (const t of toSend) inflightRef.current.delete(t);
       // 如果 pending 还有剩下的，继续下一批
@@ -98,7 +109,7 @@ export function useEnToZhTranslation(enabled: boolean, mode: Exclude<Translation
         timerRef.current = setTimeout(flush, DEBOUNCE_MS);
       }
     }
-  }, [activeMode, translations]);
+  }, [activeMode]);
 
   const request = useCallback(
     (terms: string[]) => {
@@ -107,6 +118,7 @@ export function useEnToZhTranslation(enabled: boolean, mode: Exclude<Translation
       for (const t of terms) {
         if (!t) continue;
         if (translations[t]) continue;
+        if (shouldSkipTranslationTerm(t, failedUntilRef.current)) continue;
         if (inflightRef.current.has(t)) continue;
         if (pendingRef.current.has(t)) continue;
         pendingRef.current.add(t);
