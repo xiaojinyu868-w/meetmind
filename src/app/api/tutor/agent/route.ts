@@ -1,21 +1,31 @@
-// M3 T3.3 — Tutor Agent Loop endpoint (new, side-by-side with /api/tutor)
+// M10 — Tutor Agent Loop endpoint（三个 AI 对话入口的**唯一**后端）
 //
-// 用 Vercel AI SDK v6 的 streamText + tools + stopWhen + onStepFinish 把
-// Tutor 升级成"会用工具的同桌"。
+// 课堂同桌 / 录音复习 / 视频复习三条链路都打到这里。差别由 `mode` + `options`
+// 显式表达，不再靠历史上"哪个路径用哪份 prompt"的偶然分叉。
 //
-// 和 /api/tutor/route.ts 并存，不破坏现有调用路径。前端通过 feature flag
-// 切换。M3 跑稳后可以把旧 endpoint 废弃。
+// 请求契约（新）：
+//   - mode: 'in-class' | 'review'  （必填）
+//   - context: { recentFocus?, fullTranscript?, currentTimestampSec?, supportMaterials?, ... }
+//   - options: { thinkingGuide?, returnTimestamps?, allowInlineApp? }
+//   - transcript: TranscriptSegment[]（supplied for tool execution，不注入 prompt）
+//   - messages: UIMessage[]
+//   - sessionId: string
+//   - subject?: string
 //
-// 设计原则（来自调研 #2）：
+// 响应：沿用 toUIMessageStreamResponse()（AI SDK v6 帧）——前端 useChat 和 classroom
+// 同桌的 UIMessage reader 都能直接消费。
+//
+// 设计原则：
 //   - 单 agent + 工具调用（不引入 LangGraph）
-//   - stopWhen: stepCountIs(6) 防止无限循环
-//   - onStepFinish 打 track() 埋点，Sentry vercelAIIntegration 自动吸收
-//   - 前端用 AI SDK useChat + toUIMessageStreamResponse
-//
-// 注意：这个 endpoint 只是骨架。实际部署需要：
-//   - 配好 OPENAI_API_KEY 或等效（DashScope 走 OpenAI-compatible mode）
-//   - 前端配置 /api/tutor/agent 作为 useChat endpoint
-//   - 灰度：feature flag 里 `tutor.agentLoop: true/false/percentage`
+//   - stopWhen: stepCountIs(6) 防无限循环
+//   - onStepFinish 打 track() 埋点
+//   - prompt 来源：`src/lib/prompts/tutor-prompts.ts` 的 buildTutorSystemPrompt
+//   - 老 `<open_app:KEY/>` marker 路径仍然由前端（extractOpenAppMarker）消费，本
+//     endpoint 不对 marker 做任何处理（透传 model 输出）。
+//   - Inline app 生成：由 options.allowInlineApp 控制 system prompt 里是否注入
+//     marker 合约；marker 出现与否由 model 决定。native tool call 的 4 个工具
+//     依然挂着（makeFlashcards 等），但两条路径都走，避免 session 中途因切换
+//     而丢能力。
 
 import { streamText, stepCountIs, convertToModelMessages, type UIMessage } from 'ai';
 import { createOpenAI } from '@ai-sdk/openai';
@@ -23,7 +33,11 @@ import { NextRequest } from 'next/server';
 import { z } from 'zod';
 import { applyRateLimit } from '@/lib/utils/rate-limit';
 import { createTutorTools } from '@/lib/tutor/tutor-tools';
-import { TUTOR_SYSTEM_CURRENT, PROMPT_VERSIONS } from '@/lib/prompts/tutor-prompts';
+import {
+  buildTutorSystemPrompt,
+  PROMPT_VERSIONS,
+  type TutorMode,
+} from '@/lib/prompts/tutor-prompts';
 import { createLogger, track } from '@/lib/logger';
 import { resolveTutorAgentProviderConfig } from '@/lib/utils/tutor-agent-provider';
 
@@ -40,6 +54,31 @@ const TranscriptSegmentSchema = z.object({
   confidence: z.number().optional().default(0.9),
 });
 
+const SupportMaterialSchema = z.object({
+  title: z.string(),
+  content: z.string(),
+});
+
+const ContextSchema = z
+  .object({
+    courseId: z.string().optional(),
+    lessonId: z.string().optional(),
+    recentFocus: z.string().optional(),
+    fullTranscript: z.string().optional(),
+    currentTimestampSec: z.number().optional(),
+    supportMaterials: z.array(SupportMaterialSchema).optional(),
+    learnerProfile: z.string().optional(),
+  })
+  .default({});
+
+const OptionsSchema = z
+  .object({
+    thinkingGuide: z.boolean().optional(),
+    returnTimestamps: z.boolean().optional(),
+    allowInlineApp: z.boolean().optional(),
+  })
+  .default({});
+
 const BodySchema = z.object({
   messages: z.array(
     z.object({
@@ -50,8 +89,16 @@ const BodySchema = z.object({
     }),
   ),
   sessionId: z.string().default('anon'),
-  transcript: z.array(TranscriptSegmentSchema).default([]),
   subject: z.string().optional(),
+  /**
+   * Tool 执行用的原始 segments（不注入 prompt）。
+   * Prompt 注入用 context.fullTranscript（review）或 context.recentFocus（in-class）。
+   */
+  transcript: z.array(TranscriptSegmentSchema).default([]),
+  /** M10：mode 驱动 prompt 骨架。老客户端没传时 fallback 到 'review'（最宽容） */
+  mode: z.enum(['in-class', 'review']).default('review'),
+  context: ContextSchema,
+  options: OptionsSchema,
 });
 
 export async function POST(request: NextRequest) {
@@ -70,7 +117,7 @@ export async function POST(request: NextRequest) {
         headers: { 'content-type': 'application/json' },
       });
     }
-    const { messages, transcript, subject } = parsed.data;
+    const { messages, transcript, subject, mode, context, options } = parsed.data;
     sessionId = parsed.data.sessionId;
 
     const provider = resolveTutorAgentProviderConfig(process.env);
@@ -82,20 +129,32 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    // 用 OpenAI provider + DashScope compatible-mode。
-    // 注意：DashScope baseURL 必须优先配 DASHSCOPE_API_KEY；如果同时存在
-    // OPENAI_API_KEY，误发给 DashScope 会直接返回 Unauthorized。
     const { apiKey, baseURL, modelId } = provider;
     const openai = createOpenAI({ apiKey, baseURL });
     const model = openai(modelId);
 
     const tools = createTutorTools({ sessionId, transcript, subject, model: modelId });
+    const systemPrompt = buildTutorSystemPrompt(mode as TutorMode, context, options);
 
-    track({ kind: 'tutor.step', sessionId, step: 0, stepType: 'start', toolCalls: [] });
+    track({
+      kind: 'tutor.step',
+      sessionId,
+      step: 0,
+      stepType: 'start',
+      toolCalls: [],
+    });
+    log.debug('start', {
+      sessionId,
+      mode,
+      model: modelId,
+      hasRecentFocus: Boolean(context.recentFocus),
+      hasFullTranscript: Boolean(context.fullTranscript),
+      options,
+    });
 
     const result = streamText({
       model,
-      system: TUTOR_SYSTEM_CURRENT.content,
+      system: systemPrompt,
       messages: await convertToModelMessages(messages as UIMessage[]),
       tools,
       stopWhen: stepCountIs(6),
@@ -105,6 +164,7 @@ export async function POST(request: NextRequest) {
         metadata: {
           promptVersion: PROMPT_VERSIONS.tutorSystem,
           sessionId,
+          mode,
           subject: subject ?? '',
         },
       },
@@ -135,8 +195,6 @@ export async function POST(request: NextRequest) {
       },
     });
 
-    // toUIMessageStreamResponse 会把 streamText 的 step 事件、tool-call、tool-result
-    // 都以 AI SDK v6 协议帧流式发给前端。前端用 useChat 原生消费。
     return result.toUIMessageStreamResponse({
       // 可选：sendReasoning: true 如果模型支持
     });

@@ -1,6 +1,7 @@
 'use client';
 
 import type { MutableRefObject } from 'react';
+import { useState, useCallback } from 'react';
 import { AIChat } from '@/components/AIChat';
 import { AITutor } from '@/components/AITutor';
 import { ConversationList } from '@/components/ConversationHistory/ConversationList';
@@ -71,6 +72,19 @@ export function ReviewTutorPanel({
   launchQuestionNonce,
   onLaunchQuestionConsumed,
 }: ReviewTutorPanelProps) {
+  // M10：把当前播放位置注入给 SafeAITutor（视频/录音复习 AI 同桌会用它做
+  // "此刻在听的那段"锚点，无需用户手动引用时间戳）。
+  // 截流到秒级，避免每 ~100ms 的 onTimeUpdate 触发无意义 re-render。
+  const [currentTimeSec, setCurrentTimeSec] = useState(0);
+  const handleTimeUpdate = useCallback(
+    (timeMs: number) => {
+      const sec = Math.floor(timeMs / 1000);
+      setCurrentTimeSec((prev) => (prev === sec ? prev : sec));
+      onTimeUpdate(timeMs);
+    },
+    [onTimeUpdate],
+  );
+
   return (
     <div className="h-full flex flex-col bg-white ai-chat-container">
       {audioSrc && (
@@ -82,7 +96,7 @@ export function ReviewTutorPanel({
             ref={waveformRef}
             src={audioSrc}
             anchors={waveformAnchors}
-            onTimeUpdate={onTimeUpdate}
+            onTimeUpdate={handleTimeUpdate}
             onPlayStateChange={onPlayStateChange}
             onAnchorClick={(anchor) => {
               const found = anchors.find((item) => item.id === anchor.id);
@@ -214,6 +228,7 @@ export function ReviewTutorPanel({
               launchQuestionNonce={launchQuestionNonce}
               onLaunchQuestionConsumed={onLaunchQuestionConsumed}
               onSeek={onSeek}
+              currentTimeSec={currentTimeSec}
             />
           )}
         </div>

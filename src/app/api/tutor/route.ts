@@ -61,6 +61,32 @@ const REALTIME_TEACHER_MODEL_ID = 'qwen3.5-omni-plus';
 
 // ── POST Handler ──
 
+/**
+ * M10 DEPRECATION NOTICE
+ * ======================
+ * 这条路由在 M10 之后只服务两类请求：
+ *   1. **qwen-omni 语音通话**（model === 'qwen3.5-omni-plus'）—— realtime
+ *      teacher 的 SSE 文本 fallback。这个能力 agent 路径还没接。
+ *   2. **老客户端兼容**——极端情况下前端 flag 回滚时的逃生通道。
+ *
+ * 所有 AI 对话（课堂同桌 / 录音复习 / 视频复习）都应该走 `/api/tutor/agent`。
+ * 下面这个 logger 埋点用来监控是否还有"非语音"流量——清零后这条路由就可以删。
+ */
+function logDeprecationHit(sessionId: string, model: string, isRealtime: boolean) {
+  if (isRealtime) return; // 语音 fallback，不是 deprecation
+  try {
+    // eslint-disable-next-line no-console
+    console.warn('[DEPRECATED-ROUTE] /api/tutor hit by non-realtime request', {
+      sessionId,
+      model,
+      at: new Date().toISOString(),
+      migrateTo: '/api/tutor/agent',
+    });
+  } catch {
+    // logger 失败不阻塞
+  }
+}
+
 export async function POST(request: NextRequest) {
   const rateLimitResponse = await applyRateLimit(request, 'tutor');
   if (rateLimitResponse) return rateLimitResponse;
@@ -310,6 +336,8 @@ export async function POST(request: NextRequest) {
     // ── 构建 LLM Messages ──
     const messages: ChatMessage[] = [];
     const isRealtimeTeacherMode = model === REALTIME_TEACHER_MODEL_ID;
+    // M10：监控非语音流量。清零后这整条 route 可以删掉。
+    logDeprecationHit(body.sessionId || 'anon', model, isRealtimeTeacherMode);
 
     // 使用 allowSelectedContextOnly 决定 prompt（比前端传入的 selected_context_mode 更准确，
     // 因为后端可能在"只有 support context、无时间轴"时自动升级）

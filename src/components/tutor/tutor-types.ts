@@ -63,6 +63,13 @@ export interface AITutorProps {
   newConversationNonce?: number;
   /** 当全局对话内容有/无变化时通知外层 */
   onConversationActiveChange?: (hasMessages: boolean) => void;
+  /**
+   * M10：当前视频/音频播放位置（秒）。
+   * 复习态的 AI 同桌会把这个值注入 system prompt 的 fullTranscript 锚点，
+   * 让 LLM 优先回答"此刻在听的那段"——即使没时间戳也能对齐。
+   * 老 AITutor SSE 路径不消费这个字段（无害）。
+   */
+  currentTimeSec?: number;
 }
 
 export interface TutorCacheEnvelopeV1 {

@@ -43,6 +43,33 @@ export interface TutorAgentPanelProps {
   authToken?: string;
   /** 点击 [t=MM:SS] 时把播放器跳转到该毫秒；父组件接 player.seek */
   onSeek?: (timeMs: number) => void;
+  /**
+   * M10：对话模式。默认 'review'（录音 / 视频复习页都走这个）。
+   * 'in-class' 是课堂同桌专用，目前由 useClassroomCompanion 直接拼 body，
+   * 不走这个 Panel——但接口留着给未来课堂嵌 AITutor 时用。
+   */
+  mode?: 'in-class' | 'review';
+  /**
+   * M10：复习态可选能力（两个默认关）。
+   * - returnTimestamps：回答里附 [MM:SS] chip（点击跳转）
+   * - thinkingGuide：学霸思维引导，回答按"---思维演示--- / ---正式回答---"分段
+   * - allowInlineApp：允许 LLM 吐 <open_app:KEY/> marker（两 mode 默认都开）
+   */
+  options?: {
+    returnTimestamps?: boolean;
+    thinkingGuide?: boolean;
+    allowInlineApp?: boolean;
+  };
+  /**
+   * M10：复习态的完整上下文——整节课转录 + 当前播放位置。
+   * review mode 下会注入到 system prompt 里。
+   */
+  context?: {
+    fullTranscript?: string;
+    currentTimestampSec?: number;
+    supportMaterials?: Array<{ title: string; content: string }>;
+    learnerProfile?: string;
+  };
 }
 
 /**
@@ -96,10 +123,15 @@ export function TutorAgentPanel({
   className,
   authToken,
   onSeek,
+  mode = 'review',
+  options,
+  context,
 }: TutorAgentPanelProps) {
   const [input, setInput] = React.useState('');
 
-  // DefaultChatTransport 允许把非标字段一起发到 body（sessionId / transcript / subject）
+  // DefaultChatTransport 允许把非标字段一起发到 body。
+  // M10：这里把 mode + context + options 全部透传给 /api/tutor/agent，
+  // 让服务端的 buildTutorSystemPrompt 根据请求参数组装正确的 prompt。
   const transport = React.useMemo(
     () =>
       new DefaultChatTransport({
@@ -109,9 +141,12 @@ export function TutorAgentPanel({
           sessionId,
           transcript,
           subject: subject ?? '',
+          mode,
+          context: context ?? {},
+          options: options ?? {},
         }),
       }),
-    [authToken, sessionId, transcript, subject],
+    [authToken, sessionId, transcript, subject, mode, context, options],
   );
 
   const { messages, sendMessage, status, error, stop } = useChat({ transport });

@@ -22,4 +22,14 @@ describe('resolveTutorAgentProviderConfig', () => {
     expect(config.apiKey).toBe('tutor-key');
     expect(config.keySource).toBe('TUTOR_API_KEY');
   });
+
+  it('defaults to qwen3.6-plus — three AI chat surfaces share this model (M10)', () => {
+    const config = resolveTutorAgentProviderConfig({});
+    expect(config.modelId).toBe('qwen3.6-plus');
+  });
+
+  it('TUTOR_MODEL env var overrides default', () => {
+    const config = resolveTutorAgentProviderConfig({ TUTOR_MODEL: 'qwen-max' });
+    expect(config.modelId).toBe('qwen-max');
+  });
 });

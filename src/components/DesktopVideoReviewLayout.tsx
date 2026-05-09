@@ -294,6 +294,7 @@ export function DesktopVideoReviewLayout(props: DesktopVideoReviewLayoutProps) {
                     launchQuestionNonce={videoWorkspaceTab === 'chat' && mobileAILaunchTarget === 'video-chat' ? mobileAIQuestionNonce : 0}
                     onLaunchQuestionConsumed={videoWorkspaceTab === 'chat' && mobileAILaunchTarget === 'video-chat' ? consumeMobileAIQuestion : undefined}
                     onSeek={(timeMs) => handleUnifiedSeek(timeMs, true)}
+                    currentTimeSec={currentTime}
                   />
               </div>
 
@@ -354,6 +355,7 @@ export function DesktopVideoReviewLayout(props: DesktopVideoReviewLayoutProps) {
                           sessionId={sessionId}
                           supportContextText={tutorSupportContextText}
                           onSeek={(timeMs) => handleUnifiedSeek(timeMs, true)}
+                          currentTimeSec={currentTime}
                         />
                       </div>
                     </>

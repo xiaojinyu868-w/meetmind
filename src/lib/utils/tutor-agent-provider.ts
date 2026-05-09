@@ -26,7 +26,7 @@ export function resolveTutorAgentProviderConfig(env: EnvLike): TutorAgentProvide
   return {
     apiKey: selected?.value,
     baseURL,
-    modelId: (env.TUTOR_MODEL || 'qwen3.5-plus').trim(),
+    modelId: (env.TUTOR_MODEL || 'qwen3.6-plus').trim(),
     keySource: selected?.source || 'none',
   };
 }

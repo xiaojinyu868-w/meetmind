@@ -21,7 +21,9 @@
 'use client';
 
 import { useState, useCallback, useRef, useEffect } from 'react';
-import { useSimpleSSEStream, type SSEEvent } from '@/lib/hooks/useSSEStream';
+// M10：classroom 同桌切到 /api/tutor/agent（统一 AI 对话后端）。
+// 消费 AI SDK v6 的 UIMessage stream，而不是老 /api/tutor 的自定义 SSE。
+import { fetchUIMessageStream } from '@/lib/hooks/fetchUIMessageStream';
 import { useAuth } from '@/lib/hooks/useAuth';
 import { useSessionStore } from '@/stores/session-store';
 import { useCaptureEditorStore } from '@/stores/capture-editor-store';
@@ -196,12 +198,18 @@ export function useClassroomCompanion(
     messagesRef.current = messages;
   }, [messages]);
 
-  const {
-    fetchStream,
-    stopStream,
-    isStreaming,
-    isThinking: sseThinking,
-  } = useSimpleSSEStream();
+  // M10：直接管 abort/isStreaming/isThinking，不再依赖 useSimpleSSEStream 的 SSE 协议。
+  // 课堂同桌现在读的是 /api/tutor/agent 的 UIMessage stream（AI SDK v6 帧格式）。
+  const abortRef = useRef<AbortController | null>(null);
+  const [isStreaming, setIsStreaming] = useState(false);
+  // "正在思考"=发起请求后、第一条 text-delta 到达前。到达后就是"正在说话"。
+  const [sseThinking, setSseThinking] = useState(false);
+  const stopStream = useCallback(() => {
+    abortRef.current?.abort();
+    abortRef.current = null;
+    setIsStreaming(false);
+    setSseThinking(false);
+  }, []);
 
   // 防抖：避免在同一次 listening 切换中重复追加 AUTO_LISTENING_MSG
   const hasListeningGreetedRef = useRef(false);
@@ -615,35 +623,79 @@ export function useClassroomCompanion(
       if (accessToken) headers['Authorization'] = `Bearer ${accessToken}`;
       const tutorQuestion = buildQuestionWithQuizContext(trimmed, quizAttemptsRef.current);
 
-      const result = await fetchStream('/api/tutor', {
-        timestamp: 0,
-        segments: toTutorSegments(segments),
-        studentQuestion: tutorQuestion,
-        globalMode: true,
-        enable_guidance: false,
-        enable_web: false,
-        sessionId: sessionId || undefined,
-        // M8-D3: 让 backend 知道"用户问话那一刻，最近 30s 讲了什么"——
-        // 不再需要用户手动引用或点"问刚才这段"。字段即使 backend 暂时
-        // 不认识也无害（老 endpoint 会忽略未知字段）。
-        recentFocus: extractRecentFocus(segments) || undefined,
-        stream: true,
-      }, {
-        headers,
-        onContent: (_chunk, fullContent) => {
-          // 流式渲染时把 <open_app:.../> 标记提前剥掉，避免用户看到半成品标签
-          const { cleaned } = extractOpenAppMarker(fullContent);
-          setStreamingMessage((prev) => prev ? { ...prev, content: cleaned } : prev);
+      // M10：所有 AI 对话都打 /api/tutor/agent。
+      // 课堂同桌的 mode 固定 'in-class'——短回答、recentFocus 注入、允许 open_app marker。
+      // messages 构造：tutor agent 需要 UIMessage[] 形态（role + parts/content），
+      // 我们把本地历史映射过去，并把用户当前 question 追加为最新一条 user 消息。
+      const historyUIMessages = messagesRef.current
+        // 首条 auto-listening 系统消息不发给模型
+        .filter((m) => m.id !== 'auto-listening')
+        .map((m) => ({
+          id: m.id,
+          role: (m.role === 'companion' ? 'assistant' : 'user') as 'user' | 'assistant',
+          parts: [{ type: 'text' as const, text: m.content }],
+        }));
+      const uiMessages = [
+        ...historyUIMessages,
+        {
+          id: userMsg.id,
+          role: 'user' as const,
+          parts: [{ type: 'text' as const, text: tutorQuestion }],
         },
-        onMetadata: (_metadata: SSEEvent) => {
-          // 课堂同桌暂不消费 metadata.citations——citations 是从 content 里
-          // 的 [MM:SS] 标记抽的（见 companion-markdown-utils），不走 metadata。
+      ];
+
+      abortRef.current?.abort();
+      abortRef.current = new AbortController();
+      setIsStreaming(true);
+      setSseThinking(true);
+
+      const streamResult = await fetchUIMessageStream(
+        '/api/tutor/agent',
+        {
+          messages: uiMessages,
+          sessionId: sessionId || 'anon',
+          transcript: toTutorSegments(segments).map((s) => ({
+            id: String(s.id),
+            text: s.text,
+            startMs: s.startMs,
+            endMs: s.endMs,
+            confidence: 0.9,
+          })),
+          mode: 'in-class',
+          context: {
+            // 让 backend 知道"用户问话那一刻，最近 30s 讲了什么"——
+            // 代词消歧（"刚才那个 derivative"）的关键输入。
+            recentFocus: extractRecentFocus(segments) || undefined,
+          },
+          options: {
+            // 课堂同桌允许吐 <open_app:KEY/> marker，前端 extractOpenAppMarker
+            // 会剥掉标签并触发 InlineAppCard 生成。
+            allowInlineApp: true,
+            // 课中不返回 [MM:SS] chip，避免课堂 UI 信息噪声
+            returnTimestamps: false,
+            // 课中没有学霸思维引导（复习态才开）
+            thinkingGuide: false,
+          },
         },
-      });
+        {
+          headers,
+          signal: abortRef.current.signal,
+          onTextStart: () => {
+            // 第一条 text-delta 到达前，thinking 态继续；到达后切回 streaming
+            // 由 onTextDelta 里处理——此处留空，只是标记 start 发生过
+          },
+          onTextDelta: (_chunk, fullContent) => {
+            setSseThinking(false);
+            // 流式渲染时把 <open_app:.../> 标记提前剥掉，避免用户看到半成品标签
+            const { cleaned } = extractOpenAppMarker(fullContent);
+            setStreamingMessage((prev) => prev ? { ...prev, content: cleaned } : prev);
+          },
+        },
+      );
 
       // 3. 流结束，commit
-      const rawFinal = result.content?.trim()
-        ? result.content
+      const rawFinal = streamResult.text?.trim()
+        ? streamResult.text
         : '嗯……我对这节课还没理解到能接这个问题的程度。再给我点时间，或者换个具体点的问法？';
 
       // 先抽出 open_app 标记，再从净化后的文本里抽 citations
@@ -661,6 +713,12 @@ export function useClassroomCompanion(
         },
       ]);
       setStreamingMessage(null);
+      setIsStreaming(false);
+      setSseThinking(false);
+      abortRef.current = null;
+
+      // 用户在流结束前点了停止——aborted=true，但我们已经 commit 了部分文本
+      if (streamResult.aborted) return;
 
       // M8 agent-native chip parity：同学说了"好我来整一张"之后，要把产物
       // 交给用户。两种路径：
@@ -691,6 +749,9 @@ export function useClassroomCompanion(
         }
       }
     } catch (err) {
+      setIsStreaming(false);
+      setSseThinking(false);
+      abortRef.current = null;
       if (err instanceof Error && err.name === 'AbortError') {
         setStreamingMessage((prev) => {
           if (prev && prev.content.trim()) {
@@ -712,7 +773,7 @@ export function useClassroomCompanion(
       ]);
       setStreamingMessage(null);
     }
-  }, [accessToken, segments, sessionId, fetchStream, lessons, onOpenApp]);
+  }, [accessToken, segments, sessionId, lessons, onOpenApp, inlineAppMode, triggerInlineAppGeneration]);
 
   const stop = useCallback(() => {
     stopStream();
