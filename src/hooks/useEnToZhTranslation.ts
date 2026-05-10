@@ -14,7 +14,11 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { getTranslationRetryDelayMs, shouldSkipTranslationTerm } from '@/lib/utils/translation-retry-policy';
+import {
+  getTranslationRetryDelayMs,
+  shouldSkipTranslationRequest,
+  shouldSkipTranslationTerm,
+} from '@/lib/utils/translation-retry-policy';
 
 export type TranslationMode = 'off' | 'en-zh' | 'zh-en';
 
@@ -61,17 +65,30 @@ export function useEnToZhTranslation(enabled: boolean, mode: Exclude<Translation
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const inflightRef = useRef<Set<string>>(new Set());
   const failedUntilRef = useRef<Record<string, number>>({});
+  const globalCooldownUntilRef = useRef(0);
+  const translationsRef = useRef(translations);
 
   useEffect(() => {
-    setTranslations(loadCache(mode));
+    translationsRef.current = translations;
+  }, [translations]);
+
+  useEffect(() => {
+    const next = loadCache(mode);
+    translationsRef.current = next;
+    setTranslations(next);
     pendingRef.current.clear();
     inflightRef.current.clear();
     failedUntilRef.current = {};
+    globalCooldownUntilRef.current = 0;
   }, [mode]);
 
   // Flush 当前 pending 批次
   const flush = useCallback(async () => {
     if (!activeMode) return;
+    if (shouldSkipTranslationRequest(globalCooldownUntilRef.current)) {
+      pendingRef.current.clear();
+      return;
+    }
     const toSend = Array.from(pendingRef.current).slice(0, MAX_BATCH);
     if (toSend.length === 0) return;
     pendingRef.current = new Set(Array.from(pendingRef.current).slice(MAX_BATCH));
@@ -85,6 +102,10 @@ export function useEnToZhTranslation(enabled: boolean, mode: Exclude<Translation
       });
       if (!resp.ok) {
         const failedUntil = Date.now() + getTranslationRetryDelayMs(resp.status);
+        if (resp.status === 429) {
+          globalCooldownUntilRef.current = failedUntil;
+          pendingRef.current.clear();
+        }
         for (const term of toSend) failedUntilRef.current[term] = failedUntil;
         return;
       }
@@ -114,10 +135,12 @@ export function useEnToZhTranslation(enabled: boolean, mode: Exclude<Translation
   const request = useCallback(
     (terms: string[]) => {
       if (!activeMode) return;
+      if (shouldSkipTranslationRequest(globalCooldownUntilRef.current)) return;
+      const currentTranslations = translationsRef.current;
       let added = false;
       for (const t of terms) {
         if (!t) continue;
-        if (translations[t]) continue;
+        if (currentTranslations[t]) continue;
         if (shouldSkipTranslationTerm(t, failedUntilRef.current)) continue;
         if (inflightRef.current.has(t)) continue;
         if (pendingRef.current.has(t)) continue;
@@ -128,7 +151,7 @@ export function useEnToZhTranslation(enabled: boolean, mode: Exclude<Translation
       if (timerRef.current) clearTimeout(timerRef.current);
       timerRef.current = setTimeout(flush, DEBOUNCE_MS);
     },
-    [activeMode, translations, flush],
+    [activeMode, flush],
   );
 
   useEffect(() => {

@@ -106,6 +106,7 @@ function LiveTranscriptPanel({
   const { request, lookup } = useEnToZhTranslation(translateEnabled, activeDirection);
   const listRef = useRef<HTMLDivElement | null>(null);
   const endRef = useRef<HTMLDivElement | null>(null);
+  const lastRequestedTermsKeyRef = useRef('');
   const [showJumpToBottom, setShowJumpToBottom] = useState(false);
 
   const termsByRow = useMemo(() => {
@@ -131,7 +132,9 @@ function LiveTranscriptPanel({
   const termsKey = terms.join('|');
 
   useEffect(() => {
-    if (!translateEnabled || terms.length === 0) return;
+    if (!translateEnabled || terms.length === 0 || !termsKey) return;
+    if (lastRequestedTermsKeyRef.current === termsKey) return;
+    lastRequestedTermsKeyRef.current = termsKey;
     request(terms);
   }, [request, terms, termsKey, translateEnabled]);
 

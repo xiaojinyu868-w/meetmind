@@ -13,3 +13,10 @@ export function shouldSkipTranslationTerm(
   const failedUntil = failedUntilByTerm[term];
   return typeof failedUntil === 'number' && failedUntil > now;
 }
+
+export function shouldSkipTranslationRequest(
+  cooldownUntil: number,
+  now: number = Date.now(),
+): boolean {
+  return cooldownUntil > now;
+}

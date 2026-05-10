@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { getTranslationRetryDelayMs, shouldSkipTranslationTerm } from './translation-retry-policy';
+import {
+  getTranslationRetryDelayMs,
+  shouldSkipTranslationRequest,
+  shouldSkipTranslationTerm,
+} from './translation-retry-policy';
 
 describe('translation retry policy', () => {
   it('backs off longer for 429 rate limit responses', () => {
@@ -15,5 +19,10 @@ describe('translation retry policy', () => {
     expect(shouldSkipTranslationTerm('hello', { hello: 2000 }, 1000)).toBe(true);
     expect(shouldSkipTranslationTerm('hello', { hello: 2000 }, 2500)).toBe(false);
     expect(shouldSkipTranslationTerm('world', { hello: 2000 }, 1000)).toBe(false);
+  });
+
+  it('skips all translation requests during a global cooldown', () => {
+    expect(shouldSkipTranslationRequest(2000, 1000)).toBe(true);
+    expect(shouldSkipTranslationRequest(2000, 2500)).toBe(false);
   });
 });
