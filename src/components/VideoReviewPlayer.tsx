@@ -3,6 +3,7 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { ImportedVideoSource } from '@/types';
 import { resolveBilibiliVideoIdentifiers } from '@/lib/utils/video-source';
+import { resolveVideoThumbnailUrl } from '@/lib/utils/video-thumbnail-url';
 
 interface VideoReviewPlayerProps {
   source: ImportedVideoSource | null;
@@ -347,6 +348,8 @@ function VideoReviewPlayerComponent({
       thumbnailUrl: source.thumbnailUrl || null,
     };
   }, [source]);
+
+  const safeThumbnailUrl = useMemo(() => resolveVideoThumbnailUrl(thumbnailUrl), [thumbnailUrl]);
 
   const effectiveDuration = totalDurationMs > 0
     ? totalDurationMs
@@ -743,7 +746,7 @@ function VideoReviewPlayerComponent({
               preload="metadata"
               playsInline
               className="aspect-video w-full bg-black pointer-events-none"
-              poster={thumbnailUrl || undefined}
+              poster={safeThumbnailUrl || undefined}
               onTimeUpdate={handleTimeUpdate}
               onProgress={handleProgress}
               onEnded={handleEnded}
@@ -801,7 +804,7 @@ function VideoReviewPlayerComponent({
                 playsInline
                 muted
                 className="aspect-video w-full bg-black pointer-events-none"
-                poster={thumbnailUrl || undefined}
+                poster={safeThumbnailUrl || undefined}
               />
               <PlayPauseIndicator action={indicator?.action ?? null} key={indicator?.key} />
             </button>
@@ -884,18 +887,18 @@ function VideoReviewPlayerComponent({
               className="relative aspect-video w-full bg-black flex items-center justify-center overflow-hidden cursor-pointer border-0 p-0 text-left"
               aria-label={playing ? '暂停' : '播放'}
             >
-              {thumbnailUrl ? (
+              {safeThumbnailUrl ? (
                 <>
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img
-                    src={thumbnailUrl}
+                    src={safeThumbnailUrl}
                     alt={source.title || ''}
                     className="absolute inset-0 w-full h-full object-cover opacity-40 blur-sm"
                     referrerPolicy="no-referrer"
                   />
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img
-                    src={thumbnailUrl}
+                    src={safeThumbnailUrl}
                     alt={source.title || ''}
                     className="relative z-10 max-h-full max-w-full object-contain"
                     referrerPolicy="no-referrer"
@@ -991,7 +994,7 @@ function VideoReviewPlayerComponent({
               preload="metadata"
               playsInline
               className="aspect-video w-full bg-black pointer-events-none"
-              poster={thumbnailUrl || undefined}
+              poster={safeThumbnailUrl || undefined}
               onTimeUpdate={handleTimeUpdate}
               onProgress={handleProgress}
               onEnded={handleEnded}
@@ -1037,18 +1040,18 @@ function VideoReviewPlayerComponent({
             className="relative aspect-video w-full bg-black flex items-center justify-center overflow-hidden cursor-pointer border-0 p-0 text-left"
             aria-label={playing ? '暂停' : '播放'}
           >
-            {thumbnailUrl ? (
+            {safeThumbnailUrl ? (
               <>
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
-                  src={thumbnailUrl}
+                  src={safeThumbnailUrl}
                   alt={source.title || ''}
                   className="absolute inset-0 w-full h-full object-cover opacity-40 blur-sm"
                   referrerPolicy="no-referrer"
                 />
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
-                  src={thumbnailUrl}
+                  src={safeThumbnailUrl}
                   alt={source.title || ''}
                   className="relative z-10 max-h-full max-w-full object-contain"
                   referrerPolicy="no-referrer"

@@ -34,6 +34,8 @@ route.ts → lib/services/ + lib/utils/rate-limit
 | 路由 | 方法 | 职责 |
 |------|------|------|
 | `/api/video/import` | POST | 视频导入（B站/YouTube/小宇宙/抖音/直链） |
+| `/api/video/resolve` | GET | 旧前端视频 URL 解析兼容入口（只归一化 URL，不抓取远程媒体） |
+| `/api/video/image` | GET | B 站封面图代理（避免浏览器直连 hdslb 403） |
 | `/api/article/import` | POST | 图文导入（公众号/小红书/知乎等） |
 | `/api/sources/ingest` | POST | 通用数据源接入（文档/文本/音频） |
 | `/api/sources/ingest-image` | POST | 图片接入（OCR + 多模态 LLM） |

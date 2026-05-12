@@ -109,7 +109,12 @@ export function useEnToZhTranslation(enabled: boolean, mode: Exclude<Translation
         for (const term of toSend) failedUntilRef.current[term] = failedUntil;
         return;
       }
-      const data = (await resp.json()) as { translations?: Record<string, string> };
+      const data = (await resp.json()) as { translations?: Record<string, string>; rateLimited?: boolean };
+      if (data.rateLimited) {
+        globalCooldownUntilRef.current = Date.now() + getTranslationRetryDelayMs(429);
+        pendingRef.current.clear();
+        return;
+      }
       if (data.translations) {
         setTranslations((prev) => {
           const next: Record<string, string> = { ...prev };

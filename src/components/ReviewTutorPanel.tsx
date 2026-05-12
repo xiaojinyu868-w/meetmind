@@ -3,7 +3,7 @@
 import type { MutableRefObject } from 'react';
 import { useState, useCallback } from 'react';
 import { AIChat } from '@/components/AIChat';
-import { AITutor } from '@/components/AITutor';
+import { SafeAITutor } from '@/components/SafeAITutor';
 import { ConversationList } from '@/components/ConversationHistory/ConversationList';
 import { WaveformPlayer, type WaveformAnchor, type WaveformPlayerRef } from '@/components/WaveformPlayer';
 import type { Anchor, TranscriptSegment } from '@/types';
@@ -213,7 +213,7 @@ export function ReviewTutorPanel({
               </div>
             )
           ) : (
-            <AITutor
+            <SafeAITutor
               breakpoint={tutorBreakpoint}
               segments={segments}
               isLoading={false}

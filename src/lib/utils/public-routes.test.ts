@@ -10,4 +10,12 @@ describe('isPublicRoute', () => {
     expect(isPublicRoute('/api/translate/en-zh')).toBe(true);
     expect(isPublicRoute('/api/translate/zh-en')).toBe(true);
   });
+
+  it('keeps legacy video resolve public for old review-page bundles', () => {
+    expect(isPublicRoute('/api/video/resolve')).toBe(true);
+  });
+
+  it('keeps video image proxy public for Bilibili thumbnails', () => {
+    expect(isPublicRoute('/api/video/image')).toBe(true);
+  });
 });

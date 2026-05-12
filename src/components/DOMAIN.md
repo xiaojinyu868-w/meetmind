@@ -70,11 +70,11 @@ components/
 | `WorkspaceCaptureList.tsx` | ~900 | 工作空间 capture 列表 |
 | `DesktopVideoReviewLayout.tsx` | ~537 | 桌面端复习布局（Longcut 风格：左列=视频+时间轴+章节列表，右列=Transcript/Chat/困惑点/AI工坊 tabs），从 page.tsx 提取，支持 onVideoTimeUpdate 受控回调 |
 | `WorkspaceCaptureEditorModal.tsx` | ~105 | 工作空间 capture 编辑弹窗，从 page.tsx 提取 |
-| `VideoReviewPlayer.tsx` | 823 | 视频复习播放器（pauseNonce/playNonce/seekNonce 命令式控制，点击画面暂停/播放+指示器动画，visibilitychange 倍速恢复，空格/箭头键盘快捷键，B站 Dash 双轨同步） |
+| `VideoReviewPlayer.tsx` | 823 | 视频复习播放器（pauseNonce/playNonce/seekNonce 命令式控制，点击画面暂停/播放+指示器动画，visibilitychange 倍速恢复，空格/箭头键盘快捷键，B站 Dash 双轨同步，B站封面代理） |
 | `ClassCheckOverlay.tsx` | 430 | 随堂检验弹窗（greeting → quiz → result 三阶段，Backdrop 已提取为独立组件避免闪烁） |
 | `SharedWorkspacePanel.tsx` | 46 | shared workspace 统一面板（仅 apps）— 从 `page.tsx` 抽离，已移除 highlights / summary / notes |
 | `ReviewWorkspacePanel.tsx` | 127 | desktop review 左侧工作区面板（tabs / timeline / anchor detail / shared workspace slot） |
-| `ReviewTutorPanel.tsx` | 220 | desktop review 右侧 Tutor 面板（波形、历史对话、AIChat、AITutor 容器） |
+| `ReviewTutorPanel.tsx` | 220 | desktop review 右侧 Tutor 面板（波形、历史对话、AIChat、SafeAITutor 容器） |
 | `CollectionSelectionBar.tsx` | 94 | 收集上下文多选操作条（问 Tutor / 引用 / 批量归档删除） |
 | `CollectionComposerContextPreview.tsx` | 62 | composer 上方的引用与链接预览条 |
 | `CollectionComposerBar.tsx` | 168 | collection composer 输入区容器（预览 / textarea / 发送 / 听写 / 上传） |

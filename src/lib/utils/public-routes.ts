@@ -29,6 +29,8 @@ const PUBLIC_ROUTES = [
   '/api/transcribe-turbo',
   '/api/video/import',
   '/api/video/proxy',
+  '/api/video/resolve',
+  '/api/video/image',
   '/api/sources/ingest',
   '/api/sources/ingest-image',
   '/api/generate-topics',

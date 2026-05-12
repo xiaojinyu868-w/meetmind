@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { applyRateLimit } from '@/lib/utils/rate-limit';
 import { chat } from '@/lib/services/llm-service';
+import { buildTranslateRateLimitedPayload } from '@/lib/utils/translate-rate-limit-response';
 import { createLogger } from '@/lib/logger';
 
 const log = createLogger('api-translate-zh-en');
@@ -20,7 +21,11 @@ const SYSTEM_PROMPT = `你是课堂转写的中译英助手。输入是一组中
 
 export async function POST(request: NextRequest) {
   const rl = await applyRateLimit(request, 'translate');
-  if (rl) return rl;
+  if (rl) {
+    return NextResponse.json(buildTranslateRateLimitedPayload(), {
+      headers: { 'Cache-Control': 'no-store' },
+    });
+  }
 
   try {
     const raw = await request.json().catch(() => ({}));

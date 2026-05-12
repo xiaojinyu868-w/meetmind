@@ -246,10 +246,19 @@ export function MindMap({
   //   - 中心到分支：中心底部出一根短竖线 → 水平 T 形横梁（只在有 ≥2 个分支时绘制）→ 每个分支头上方一根短竖线
   //   - 分支到叶子：分支底部一根竖线延伸进入叶列，叶列整体左侧一根淡色垂直引导线
   const hasMultiBranch = branches.length >= 2;
+  const focusRows = branches.slice(-4).map((branch) => {
+    const leaves = leavesByBranch.get(branch.id) ?? [];
+    return {
+      id: branch.id,
+      title: branch.label,
+      detail: leaves.slice(-2).map((leaf) => leaf.label).join(' · ') || branch.detail || '正在补充细节',
+      anchorMs: branch.anchorMs,
+    };
+  });
 
   return (
-    <div className="flex-1 overflow-y-auto px-6 pt-12 pb-12 lg:px-10">
-      <div className="mx-auto flex w-full max-w-3xl flex-col items-center">
+    <div className="flex h-full flex-col overflow-y-auto px-6 py-8 lg:px-10">
+      <div className="mx-auto flex w-full max-w-3xl flex-1 flex-col items-center">
         {/* 中心节点 */}
         <NodeChip
           node={root}
@@ -319,6 +328,28 @@ export function MindMap({
               </div>
             );
           })}
+        </div>
+
+        <div className="mt-auto w-full pt-8">
+          <div className="rounded-2xl border border-[#E9E9E7] bg-[#F7F7F5] px-4 py-3">
+            <div className="mb-2 flex items-center justify-between gap-3">
+              <span className="text-[11px] font-medium tracking-[0.08em] text-ink-muted">LIVE THREADS</span>
+              <span className="font-mono text-[10.5px] tabular-nums text-ink-muted">{formatAt(elapsedMs)}</span>
+            </div>
+            <div className="grid gap-2 md:grid-cols-2">
+              {focusRows.map((item) => (
+                <button
+                  key={item.id}
+                  type="button"
+                  onClick={() => item.anchorMs > 0 && onAnchorClick?.(item.anchorMs)}
+                  className="rounded-xl bg-white px-3 py-2 text-left transition hover:bg-[#EFEFED]"
+                >
+                  <p className="truncate text-[12.5px] font-medium text-ink">{item.title}</p>
+                  <p className="mt-1 line-clamp-2 text-[11.5px] leading-relaxed text-ink-muted">{item.detail}</p>
+                </button>
+              ))}
+            </div>
+          </div>
         </div>
       </div>
     </div>

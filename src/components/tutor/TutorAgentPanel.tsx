@@ -24,7 +24,14 @@ import { TutorToolCard } from './TutorToolCard';
 import type { TutorToolPartLike } from './tutor-tool-card-utils';
 import { splitByTimestamp } from './timestamp-parsing';
 import { SkillChipRow } from './SkillChipRow';
+import { InlineAppCard } from '@/components/classroom/InlineAppCard';
 import { cn } from '@/lib/utils';
+import {
+  extractOpenAppMarker,
+  isInlineAppKey,
+  type InlineAppKey,
+} from '@/lib/utils/open-app-marker';
+import { buildInlineAppFallbackPayload } from '@/lib/utils/inline-app-fallback';
 
 export interface TutorAgentPanelTranscriptSegment {
   id: string;
@@ -33,6 +40,21 @@ export interface TutorAgentPanelTranscriptSegment {
   endMs: number;
   confidence?: number;
 }
+
+type ReviewInlineAppState = {
+  appKey: InlineAppKey;
+  status: 'loading' | 'ready' | 'error';
+  payload?: unknown;
+  error?: string;
+};
+
+const DEFAULT_APP_INTENT: Record<InlineAppKey, string> = {
+  quiz: '生成课堂测验，检验理解并输出可回放证据。',
+  flashcards: '生成课堂闪卡训练，帮助学生主动回忆并巩固核心知识。',
+  cheatsheet: '生成考试速查表：核心定义、公式/步骤、易错点各一组，适合一页打印。',
+  mindmap: '生成课堂思维导图，呈现主干、分支与关键证据。',
+  'study-report': '查看随堂检验结果和学习报告。',
+};
 
 export interface TutorAgentPanelProps {
   sessionId: string;
@@ -84,7 +106,9 @@ function RenderTimestampedText({
   text: string;
   onSeek?: (ms: number) => void;
 }) {
-  const parts = React.useMemo(() => splitByTimestamp(text), [text]);
+  const cleanedText = React.useMemo(() => extractOpenAppMarker(text).cleaned, [text]);
+  const parts = React.useMemo(() => splitByTimestamp(cleanedText), [cleanedText]);
+  if (!cleanedText) return null;
   return (
     <>
       {parts.map((p, i) => {
@@ -116,6 +140,16 @@ function RenderTimestampedText({
   );
 }
 
+function collectMessageText(message: { parts?: unknown; content?: string }): string {
+  const parts = Array.isArray(message.parts) ? message.parts as Array<Record<string, unknown>> : [];
+  const fromParts = parts
+    .filter((part) => part.type === 'text' && typeof part.text === 'string')
+    .map((part) => part.text as string)
+    .join('\n');
+  if (fromParts.trim()) return fromParts;
+  return typeof message.content === 'string' ? message.content : '';
+}
+
 export function TutorAgentPanel({
   sessionId,
   transcript,
@@ -128,6 +162,8 @@ export function TutorAgentPanel({
   context,
 }: TutorAgentPanelProps) {
   const [input, setInput] = React.useState('');
+  const [inlineAppsByMessageId, setInlineAppsByMessageId] = React.useState<Record<string, ReviewInlineAppState>>({});
+  const inlineAppStartedRef = React.useRef<Set<string>>(new Set());
 
   // DefaultChatTransport 允许把非标字段一起发到 body。
   // M10：这里把 mode + context + options 全部透传给 /api/tutor/agent，
@@ -152,6 +188,94 @@ export function TutorAgentPanel({
   const { messages, sendMessage, status, error, stop } = useChat({ transport });
 
   const busy = status === 'submitted' || status === 'streaming';
+
+  const runInlineApp = React.useCallback(
+    async (messageId: string, appKey: InlineAppKey) => {
+      setInlineAppsByMessageId((prev) => ({
+        ...prev,
+        [messageId]: { appKey, status: 'loading' },
+      }));
+
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      if (authToken) headers.Authorization = `Bearer ${authToken}`;
+      const appTranscript = transcript
+        .filter((segment) => segment.text?.trim())
+        .slice(0, 180);
+
+      try {
+        const response = await fetch('/api/apps/execute', {
+          method: 'POST',
+          headers,
+          body: JSON.stringify({
+            appKey,
+            goal: {
+              intent: DEFAULT_APP_INTENT[appKey],
+              expectedOutput: 'mixed',
+              appKey,
+            },
+            input: {
+              sessionId,
+              dataSource: 'video',
+              transcript: appTranscript,
+              anchors: [],
+            },
+            memory: {},
+          }),
+        });
+        const data = (await response.json().catch(() => null)) as
+          | { ok?: boolean; error?: string; result?: { render?: { payload?: unknown } } }
+          | null;
+
+        if (response.ok && data?.ok && data.result) {
+          setInlineAppsByMessageId((prev) => ({
+            ...prev,
+            [messageId]: {
+              appKey,
+              status: 'ready',
+              payload: data.result?.render?.payload,
+            },
+          }));
+          return;
+        }
+
+        const fallbackPayload = buildInlineAppFallbackPayload(appKey, appTranscript);
+        setInlineAppsByMessageId((prev) => ({
+          ...prev,
+          [messageId]: fallbackPayload
+            ? { appKey, status: 'ready', payload: fallbackPayload }
+            : {
+                appKey,
+                status: 'error',
+                error: data?.error || `生成失败（${response.status}）`,
+              },
+        }));
+      } catch (err) {
+        const fallbackPayload = buildInlineAppFallbackPayload(appKey, appTranscript);
+        setInlineAppsByMessageId((prev) => ({
+          ...prev,
+          [messageId]: fallbackPayload
+            ? { appKey, status: 'ready', payload: fallbackPayload }
+            : {
+                appKey,
+                status: 'error',
+                error: err instanceof Error ? err.message : '网络有点问题',
+              },
+        }));
+      }
+    },
+    [authToken, sessionId, transcript],
+  );
+
+  React.useEffect(() => {
+    if (busy) return;
+    for (const message of messages) {
+      if (message.role !== 'assistant' || inlineAppStartedRef.current.has(message.id)) continue;
+      const marker = extractOpenAppMarker(collectMessageText(message)).key;
+      if (!isInlineAppKey(marker)) continue;
+      inlineAppStartedRef.current.add(message.id);
+      void runInlineApp(message.id, marker);
+    }
+  }, [busy, messages, runInlineApp]);
 
   const onSubmit = React.useCallback(
     (e: React.FormEvent) => {
@@ -195,47 +319,54 @@ export function TutorAgentPanel({
 
         {messages.map((m) => {
           const parts = (m.parts ?? []) as Array<Record<string, unknown>>;
+          const inlineApp = inlineAppsByMessageId[m.id];
+          const isUser = m.role === 'user';
           return (
             <div
               key={m.id}
-              className={cn(
-                'flex',
-                m.role === 'user' ? 'justify-end' : 'justify-start',
-              )}
+              className={cn('flex', isUser ? 'justify-end' : 'justify-start')}
             >
-              <div
-                className={cn(
-                  'max-w-[85%] rounded-2xl px-3 py-2 text-sm leading-relaxed whitespace-pre-wrap break-words',
-                  m.role === 'user'
-                    ? 'bg-blue-600 text-white rounded-br-md'
-                    : 'bg-slate-100 text-slate-800 rounded-bl-md',
-                )}
-              >
-                {parts.length > 0
-                  ? parts.map((part, idx) => {
-                      const partType = typeof part.type === 'string' ? part.type : '';
-                      if (partType === 'text') {
-                        const txt = typeof part.text === 'string' ? part.text : '';
-                        return (
-                          <RenderTimestampedText key={idx} text={txt} onSeek={onSeek} />
-                        );
-                      }
-                      if (partType.startsWith('tool-')) {
-                        return (
-                          <TutorToolCard
-                            key={idx}
-                            part={part as unknown as TutorToolPartLike}
-                          />
-                        );
-                      }
-                      // reasoning / 其他 part：静默忽略，不干扰对话
-                      return null;
-                    })
-                  : // 老版本兼容（content 字段）
-                    (() => {
-                      const content = (m as unknown as { content?: string }).content ?? '';
-                      return <RenderTimestampedText text={content} onSeek={onSeek} />;
-                    })()}
+              <div className={cn('flex max-w-[88%] flex-col', isUser ? 'items-end' : 'items-start')}>
+                <div
+                  className={cn(
+                    'rounded-2xl px-3 py-2 text-sm leading-relaxed whitespace-pre-wrap break-words',
+                    isUser
+                      ? 'bg-[#2F6BFF] text-white rounded-br-md'
+                      : 'border border-[#E9E9E7] bg-[#F7F7F5] text-ink rounded-bl-md',
+                  )}
+                >
+                  {parts.length > 0
+                    ? parts.map((part, idx) => {
+                        const partType = typeof part.type === 'string' ? part.type : '';
+                        if (partType === 'text') {
+                          const txt = typeof part.text === 'string' ? part.text : '';
+                          return <RenderTimestampedText key={idx} text={txt} onSeek={onSeek} />;
+                        }
+                        if (partType.startsWith('tool-')) {
+                          return (
+                            <TutorToolCard
+                              key={idx}
+                              part={part as unknown as TutorToolPartLike}
+                            />
+                          );
+                        }
+                        // reasoning / 其他 part：静默忽略，不干扰对话
+                        return null;
+                      })
+                    : // 老版本兼容（content 字段）
+                      (() => {
+                        const content = (m as unknown as { content?: string }).content ?? '';
+                        return <RenderTimestampedText text={content} onSeek={onSeek} />;
+                      })()}
+                </div>
+                {!isUser && inlineApp ? (
+                  <div className="w-full min-w-[280px] max-w-[420px]">
+                    <InlineAppCard
+                      inlineApp={inlineApp}
+                      onRetry={() => runInlineApp(m.id, inlineApp.appKey)}
+                    />
+                  </div>
+                ) : null}
               </div>
             </div>
           );

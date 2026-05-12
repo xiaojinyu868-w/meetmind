@@ -172,6 +172,7 @@ import {
   hasEnoughInlineAppTranscript,
   selectInlineAppTranscript,
 } from '@/lib/utils/inline-app-transcript';
+import { buildInlineAppFallbackPayload } from '@/lib/utils/inline-app-fallback';
 
 /** 把长句子截成省略号版，塞进"再讲讲那道 xxx..."的追问气泡里 */
 function truncate(s: string, n: number): string {
@@ -454,10 +455,16 @@ export function useClassroomCompanion(
         await wait(getInlineAppRetryDelayMs(attempt));
       }
 
+      const fallbackPayload = buildInlineAppFallbackPayload(appKey, appSegments);
       setMessages((prev) =>
         prev.map((m) =>
           m.id === messageId
-            ? { ...m, inlineApp: { appKey, status: 'error' as const, error: lastError } }
+            ? fallbackPayload
+              ? {
+                  ...m,
+                  inlineApp: { appKey, status: 'ready' as const, payload: fallbackPayload },
+                }
+              : { ...m, inlineApp: { appKey, status: 'error' as const, error: lastError } }
             : m,
         ),
       );
