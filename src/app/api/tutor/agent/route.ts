@@ -11,8 +11,9 @@
 //   - messages: UIMessage[]
 //   - sessionId: string
 //   - subject?: string
+//   - model?: string（设置页选择；不传则走服务端默认）
 //
-// 响应：沿用 toUIMessageStreamResponse()（AI SDK v6 帧）——前端 useChat 和 classroom
+// 响应：使用 createUIMessageStreamResponse() 输出 AI SDK v6 帧——前端 useChat 和 classroom
 // 同桌的 UIMessage reader 都能直接消费。
 //
 // 设计原则：
@@ -23,11 +24,18 @@
 //   - 老 `<open_app:KEY/>` marker 路径仍然由前端（extractOpenAppMarker）消费，本
 //     endpoint 不对 marker 做任何处理（透传 model 输出）。
 //   - Inline app 生成：由 options.allowInlineApp 控制 system prompt 里是否注入
-//     marker 合约；marker 出现与否由 model 决定。native tool call 的 4 个工具
-//     依然挂着（makeFlashcards 等），但两条路径都走，避免 session 中途因切换
-//     而丢能力。
+//     marker 合约；marker 出现与否由 model 决定。课中不挂 native tools，轻产物
+//     由前端拿 marker 后走 /api/apps/execute，减少首 token 延迟。
 
-import { streamText, stepCountIs, convertToModelMessages, type UIMessage } from 'ai';
+import {
+  createUIMessageStream,
+  createUIMessageStreamResponse,
+  streamText,
+  stepCountIs,
+  convertToModelMessages,
+  type UIMessage,
+  type UIMessageChunk,
+} from 'ai';
 import { createOpenAI } from '@ai-sdk/openai';
 import { NextRequest } from 'next/server';
 import { z } from 'zod';
@@ -39,7 +47,12 @@ import {
   type TutorMode,
 } from '@/lib/prompts/tutor-prompts';
 import { createLogger, track } from '@/lib/logger';
-import { resolveTutorAgentProviderConfig } from '@/lib/utils/tutor-agent-provider';
+import {
+  formatTutorAgentUserError,
+  resolveTutorAgentProviderFallbacks,
+  shouldFallbackTutorAgentError,
+  type TutorAgentProviderConfig,
+} from '@/lib/utils/tutor-agent-provider';
 
 const log = createLogger('tutor-agent');
 
@@ -90,6 +103,7 @@ const BodySchema = z.object({
   ),
   sessionId: z.string().default('anon'),
   subject: z.string().optional(),
+  model: z.string().optional(),
   /**
    * Tool 执行用的原始 segments（不注入 prompt）。
    * Prompt 注入用 context.fullTranscript（review）或 context.recentFocus（in-class）。
@@ -100,6 +114,173 @@ const BodySchema = z.object({
   context: ContextSchema,
   options: OptionsSchema,
 });
+
+type ParsedTutorAgentBody = z.infer<typeof BodySchema>;
+
+function getRawTutorAgentErrorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error || '');
+}
+
+function hasDeliveredAssistantOutput(chunk: UIMessageChunk): boolean {
+  if (chunk.type.startsWith('data-')) return true;
+  return [
+    'text-start',
+    'text-delta',
+    'reasoning-start',
+    'reasoning-delta',
+    'source-url',
+    'source-document',
+    'file',
+    'tool-input-available',
+    'tool-output-available',
+    'tool-output-error',
+  ].includes(chunk.type);
+}
+
+function createTutorAttemptStream({
+  providers,
+  body,
+  systemPrompt,
+  modelMessages,
+}: {
+  providers: TutorAgentProviderConfig[];
+  body: ParsedTutorAgentBody;
+  systemPrompt: string;
+  modelMessages: Awaited<ReturnType<typeof convertToModelMessages>>;
+}) {
+  return createUIMessageStream<UIMessage>({
+    onError: (error) => formatTutorAgentUserError(error),
+    async execute({ writer }) {
+      let attemptedProviderFallback = false;
+
+      for (let attemptIndex = 0; attemptIndex < providers.length; attemptIndex += 1) {
+        const provider = providers[attemptIndex];
+        if (!provider.apiKey) continue;
+
+        const { apiKey, baseURL, modelId } = provider;
+        const openai = createOpenAI({ apiKey, baseURL });
+        const model = openai.chat(modelId);
+        const tools = createTutorTools({
+          sessionId: body.sessionId,
+          transcript: body.transcript,
+          subject: body.subject,
+          model: modelId,
+          mode: body.mode as TutorMode,
+        });
+        let deliveredOutput = false;
+
+        track({
+          kind: 'tutor.step',
+          sessionId: body.sessionId,
+          step: attemptIndex,
+          stepType: attemptIndex === 0 ? 'start' : 'provider-fallback',
+          toolCalls: [],
+        });
+        log.debug('start', {
+          sessionId: body.sessionId,
+          mode: body.mode,
+          model: modelId,
+          providerAttempt: attemptIndex + 1,
+          providerAttempts: providers.length,
+          hasRecentFocus: Boolean(body.context.recentFocus),
+          hasFullTranscript: Boolean(body.context.fullTranscript),
+          options: body.options,
+        });
+
+        const result = streamText({
+          model,
+          system: systemPrompt,
+          messages: modelMessages,
+          tools,
+          stopWhen: stepCountIs(6),
+          experimental_telemetry: {
+            isEnabled: true,
+            functionId: 'tutor.agent',
+            metadata: {
+              promptVersion: PROMPT_VERSIONS.tutorSystem,
+              sessionId: body.sessionId,
+              mode: body.mode,
+              subject: body.subject ?? '',
+              model: modelId,
+              providerAttempt: attemptIndex + 1,
+            },
+          },
+          onStepFinish(step) {
+            const toolCalls = step.toolCalls ?? [];
+            track({
+              kind: 'tutor.step',
+              sessionId: body.sessionId,
+              step: attemptIndex,
+              stepType: toolCalls.length > 0 ? 'tool-call' : 'assistant',
+              toolCalls: toolCalls.map((t) => t.toolName),
+              usage: step.usage,
+            });
+            log.debug('step', {
+              model: modelId,
+              tools: toolCalls.map((t) => t.toolName),
+              tokens: step.usage,
+            });
+          },
+          onError({ error }) {
+            const msg = error instanceof Error ? error.message : String(error);
+            track({
+              kind: 'tutor.fail',
+              sessionId: body.sessionId,
+              errorCode: 'TUTOR_STREAM_ERROR',
+              errorMsg: msg,
+            });
+            log.error('streamText error', { sessionId: body.sessionId, model: modelId, err: msg });
+          },
+        });
+
+        let shouldTryNextProvider = false;
+        const uiStream = result.toUIMessageStream<UIMessage>({
+          sendStart: attemptIndex === 0,
+          onError: getRawTutorAgentErrorMessage,
+        });
+
+        for await (const chunk of uiStream) {
+          if (chunk.type === 'error' && !deliveredOutput && attemptIndex < providers.length - 1) {
+            const rawError = chunk.errorText;
+            if (shouldFallbackTutorAgentError(rawError)) {
+              shouldTryNextProvider = true;
+              attemptedProviderFallback = true;
+              track({
+                kind: 'tutor.fail',
+                sessionId: body.sessionId,
+                errorCode: 'TUTOR_PROVIDER_FALLBACK',
+                errorMsg: rawError,
+              });
+              log.warn('provider fallback', {
+                sessionId: body.sessionId,
+                fromModel: modelId,
+                toModel: providers[attemptIndex + 1]?.modelId,
+                err: rawError,
+              });
+              break;
+            }
+          }
+
+          if (chunk.type === 'error') {
+            writer.write({
+              ...chunk,
+              errorText: formatTutorAgentUserError(chunk.errorText, {
+                attemptedFallback: attemptedProviderFallback,
+              }),
+            });
+          } else {
+            writer.write(chunk);
+          }
+          // 工具调用帧也可能已被前端渲染；一旦有可见输出，就不再切换 provider，避免 UI 状态错乱。
+          deliveredOutput = deliveredOutput || hasDeliveredAssistantOutput(chunk);
+        }
+
+        if (shouldTryNextProvider) continue;
+        return;
+      }
+    },
+  });
+}
 
 export async function POST(request: NextRequest) {
   const rateLimit = await applyRateLimit(request, 'tutor');
@@ -117,11 +298,11 @@ export async function POST(request: NextRequest) {
         headers: { 'content-type': 'application/json' },
       });
     }
-    const { messages, transcript, subject, mode, context, options } = parsed.data;
+    const { messages, mode, context, options } = parsed.data;
     sessionId = parsed.data.sessionId;
 
-    const provider = resolveTutorAgentProviderConfig(process.env);
-    if (!provider.apiKey) {
+    const providers = resolveTutorAgentProviderFallbacks(process.env, { modelId: parsed.data.model });
+    if (providers.length === 0) {
       track({ kind: 'tutor.fail', sessionId, errorCode: 'TUTOR_NO_API_KEY' });
       return new Response(JSON.stringify({ error: 'LLM API key not configured' }), {
         status: 500,
@@ -129,75 +310,15 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    const { apiKey, baseURL, modelId } = provider;
-    const openai = createOpenAI({ apiKey, baseURL });
-    const model = openai(modelId);
-
-    const tools = createTutorTools({ sessionId, transcript, subject, model: modelId });
     const systemPrompt = buildTutorSystemPrompt(mode as TutorMode, context, options);
-
-    track({
-      kind: 'tutor.step',
-      sessionId,
-      step: 0,
-      stepType: 'start',
-      toolCalls: [],
-    });
-    log.debug('start', {
-      sessionId,
-      mode,
-      model: modelId,
-      hasRecentFocus: Boolean(context.recentFocus),
-      hasFullTranscript: Boolean(context.fullTranscript),
-      options,
+    const stream = createTutorAttemptStream({
+      providers,
+      body: parsed.data,
+      systemPrompt,
+      modelMessages: await convertToModelMessages(messages as UIMessage[]),
     });
 
-    const result = streamText({
-      model,
-      system: systemPrompt,
-      messages: await convertToModelMessages(messages as UIMessage[]),
-      tools,
-      stopWhen: stepCountIs(6),
-      experimental_telemetry: {
-        isEnabled: true,
-        functionId: 'tutor.agent',
-        metadata: {
-          promptVersion: PROMPT_VERSIONS.tutorSystem,
-          sessionId,
-          mode,
-          subject: subject ?? '',
-        },
-      },
-      onStepFinish(step) {
-        const toolCalls = step.toolCalls ?? [];
-        track({
-          kind: 'tutor.step',
-          sessionId,
-          step: 0,
-          stepType: toolCalls.length > 0 ? 'tool-call' : 'assistant',
-          toolCalls: toolCalls.map((t) => t.toolName),
-          usage: step.usage,
-        });
-        log.debug('step', {
-          tools: toolCalls.map((t) => t.toolName),
-          tokens: step.usage,
-        });
-      },
-      onError({ error }) {
-        const msg = error instanceof Error ? error.message : String(error);
-        track({
-          kind: 'tutor.fail',
-          sessionId,
-          errorCode: 'TUTOR_STREAM_ERROR',
-          errorMsg: msg,
-        });
-        log.error('streamText error', { sessionId, err: msg });
-      },
-    });
-
-    return result.toUIMessageStreamResponse({
-      // 可选：sendReasoning: true 如果模型支持
-    });
+    return createUIMessageStreamResponse({ stream });
   } catch (err) {
     const durationMs = Date.now() - startedAt;
     const msg = err instanceof Error ? err.message : String(err);

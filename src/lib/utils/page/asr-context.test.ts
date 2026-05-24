@@ -14,6 +14,19 @@ describe('buildASRContextHint', () => {
     expect(hint).toContain('Codex');
     expect(hint).toContain('Copilot');
     expect(hint).toContain('Midjourney');
+    expect(hint).toContain('Kimi');
+    expect(hint).toContain('Kimi Cloud');
+    expect(hint).toContain('Manus');
+    expect(hint).toContain('Genspark');
+    expect(hint).toContain('ChatGPT');
+    expect(hint).toContain('DeepSeek');
+    expect(hint).toContain('Qwen');
+    expect(hint).toContain('豆包');
+    expect(hint).toContain('Perplexity');
+    expect(hint).toContain('Mistral');
+    expect(hint).toContain('百模大战');
+    expect(hint).toContain('Scaling Law');
+    expect(hint).toContain('Jan Spark / Gen Spark 多数情况下应识别为 Genspark');
   });
 
   it('keeps user-provided topic before generic tool terms', () => {

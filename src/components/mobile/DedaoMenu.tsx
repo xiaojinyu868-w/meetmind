@@ -63,8 +63,8 @@ export function DedaoMenu({
   const menuItems = [
     {
       id: 'ai-chat' as const,
-      label: 'AI 助教',
-      description: '有问题随时问',
+      label: '学习同桌',
+      description: '把这节课讲清楚',
       icon: (
         <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
           <path strokeLinecap="round" strokeLinejoin="round" d="M8.625 12a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0H8.25m4.125 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0H12m4.125 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0h-.375M21 12c0 4.556-4.03 8.25-9 8.25a9.764 9.764 0 01-2.555-.337A5.972 5.972 0 015.41 20.97a5.969 5.969 0 01-.474-.065 4.48 4.48 0 00.978-2.025c.09-.457-.133-.901-.467-1.226C3.93 16.178 3 14.189 3 12c0-4.556 4.03-8.25 9-8.25s9 3.694 9 8.25z" />
@@ -76,8 +76,8 @@ export function DedaoMenu({
       ? [
           {
             id: 'apps' as const,
-            label: 'AI工坊',
-            description: '进入 AI 学习应用黄页',
+            label: '学习应用',
+            description: '导图、测验、闪卡都在这里',
             icon: (
               <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6.75A2.25 2.25 0 016 4.5h3a2.25 2.25 0 012.25 2.25v3A2.25 2.25 0 019 12H6a2.25 2.25 0 01-2.25-2.25v-3zM12.75 6.75A2.25 2.25 0 0115 4.5h3a2.25 2.25 0 012.25 2.25v3A2.25 2.25 0 0118 12h-3a2.25 2.25 0 01-2.25-2.25v-3zM3.75 15A2.25 2.25 0 016 12.75h3A2.25 2.25 0 0111.25 15v3A2.25 2.25 0 019 20.25H6A2.25 2.25 0 013.75 18v-3zM12.75 15A2.25 2.25 0 0115 12.75h3A2.25 2.25 0 0120.25 15v3A2.25 2.25 0 0118 20.25h-3A2.25 2.25 0 0112.75 18v-3z" />
@@ -90,7 +90,7 @@ export function DedaoMenu({
     {
       id: 'tasks' as const,
       label: '今日任务',
-      description: 'AI 推荐的复习任务',
+      description: '今天适合先复习这些',
       icon: (
         <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
           <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
@@ -121,23 +121,23 @@ export function DedaoMenu({
         )}
       >
         {/* 头部 - 用户信息或登录入口 */}
-        <div className="px-4 py-4 border-b border-gray-100">
+        <div className="border-b border-divider px-4 py-4">
           <div className="flex items-center justify-between">
             {isAuthenticated && user ? (
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 bg-lilac-200 rounded-full flex items-center justify-center overflow-hidden">
-                  <Avatar className="w-full h-full">
+                <div className="flex h-10 w-10 items-center justify-center overflow-hidden rounded-full bg-canvas">
+                  <Avatar className="h-full w-full">
                     {user.avatar ? (
                       <AvatarImage src={user.avatar} alt={user.nickname} className="object-cover" />
                     ) : null}
-                    <AvatarFallback className="bg-transparent text-lg">
-                      👤
+                    <AvatarFallback className="bg-transparent text-sm font-medium text-ink-muted">
+                      我
                     </AvatarFallback>
                   </Avatar>
                 </div>
                 <div>
-                  <p className="text-sm font-medium text-[var(--dedao-text)]">{user.nickname}</p>
-                  <p className="text-xs text-gray-400">{roleLabels[user.role] || user.role}账号</p>
+                  <p className="text-sm font-medium text-ink">{user.nickname}</p>
+                  <p className="text-xs text-ink-muted">{roleLabels[user.role] || user.role}账号</p>
                 </div>
               </div>
             ) : (
@@ -146,20 +146,20 @@ export function DedaoMenu({
                 onClick={onClose}
                 className="flex items-center gap-3"
               >
-                <div className="w-10 h-10 bg-[#FDF3C0] rounded-full flex items-center justify-center">
-                  <span className="text-lg">👤</span>
+                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-sand">
+                  <span className="text-sm font-medium text-ink">我</span>
                 </div>
                 <div>
-                  <p className="text-sm font-medium text-[#787774]">点击登录</p>
-                  <p className="text-xs text-gray-400">登录后数据云端同步</p>
+                  <p className="text-sm font-medium text-ink-secondary">点击登录</p>
+                  <p className="text-xs text-ink-muted">登录后数据云端同步</p>
                 </div>
               </Link>
             )}
             <button
               onClick={onClose}
-              className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-gray-100"
+              className="flex h-8 w-8 items-center justify-center rounded-full text-ink-muted transition-colors hover:bg-divider-light hover:text-ink-secondary"
             >
-              <svg className="w-5 h-5 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
               </svg>
             </button>
@@ -197,7 +197,7 @@ export function DedaoMenu({
                   {item.label}
                 </span>
                 {'description' in item && item.description && (
-                  <span className="block text-xs text-gray-400 mt-0.5 truncate">
+                  <span className="mt-1 block truncate text-[12px] text-ink-muted">
                     {item.description}
                   </span>
                 )}
@@ -207,7 +207,7 @@ export function DedaoMenu({
                   {item.badge}
                 </span>
               )}
-              <svg className="w-4 h-4 text-gray-400 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <svg className="h-4 w-4 shrink-0 text-ink-muted" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
               </svg>
             </button>
@@ -215,36 +215,36 @@ export function DedaoMenu({
         </div>
 
         {/* 系统菜单 */}
-        <div className="py-2 border-t border-gray-100 mt-auto">
+        <div className="mt-auto border-t border-divider py-2">
           <Link
             href="/settings"
             onClick={onClose}
-            className="w-full px-4 py-3 flex items-center gap-3 text-left hover:bg-gray-50 transition-colors"
+            className="flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-canvas"
           >
-            <svg className="w-5 h-5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+            <svg className="h-5 w-5 text-ink-muted" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12a7.5 7.5 0 1115 0 7.5 7.5 0 01-15 0zm7.5-4.125v8.25m4.125-4.125h-8.25" />
             </svg>
-            <span className="text-sm text-gray-600">设置</span>
+            <span className="text-sm text-ink-secondary">设置</span>
           </Link>
           <Link
             href="/help"
             onClick={onClose}
-            className="w-full px-4 py-3 flex items-center gap-3 text-left hover:bg-gray-50 transition-colors"
+            className="flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-canvas"
           >
-            <svg className="w-5 h-5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+            <svg className="h-5 w-5 text-ink-muted" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M9.879 7.519c1.171-1.025 3.071-1.025 4.242 0 1.172 1.025 1.172 2.687 0 3.712-.203.179-.43.326-.67.442-.745.361-1.45.999-1.45 1.827v.75M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-9 5.25h.008v.008H12v-.008z" />
             </svg>
-            <span className="text-sm text-gray-600">帮助中心</span>
+            <span className="text-sm text-ink-secondary">帮助中心</span>
           </Link>
           <Link
             href="/feedback"
             onClick={onClose}
-            className="w-full px-4 py-3 flex items-center gap-3 text-left hover:bg-gray-50 transition-colors"
+            className="flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-canvas"
           >
-            <svg className="w-5 h-5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+            <svg className="h-5 w-5 text-ink-muted" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M7.5 8.25h9m-9 3H12m-9.75 1.51c0 1.6 1.123 2.994 2.707 3.227 1.129.166 2.27.293 3.423.379.35.026.67.21.865.501L12 21l2.755-4.133a1.14 1.14 0 01.865-.501 48.172 48.172 0 003.423-.379c1.584-.233 2.707-1.626 2.707-3.228V6.741c0-1.602-1.123-2.995-2.707-3.228A48.394 48.394 0 0012 3c-2.392 0-4.744.175-7.043.513C3.373 3.746 2.25 5.14 2.25 6.741v6.018z" />
             </svg>
-            <span className="text-sm text-gray-600">意见反馈</span>
+            <span className="text-sm text-ink-secondary">意见反馈</span>
           </Link>
           {isAuthenticated && user && (
             <button

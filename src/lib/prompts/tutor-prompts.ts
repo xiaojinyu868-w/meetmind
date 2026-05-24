@@ -24,6 +24,18 @@
  */
 
 export type TutorMode = 'in-class' | 'review';
+export type TutorInlineAppKey = 'flashcards' | 'quiz' | 'mindmap' | 'cheatsheet' | 'study-report';
+
+const IN_CLASS_INLINE_APP_KEYS: readonly TutorInlineAppKey[] = ['mindmap', 'cheatsheet'];
+const REVIEW_INLINE_APP_KEYS: readonly TutorInlineAppKey[] = ['flashcards', 'quiz', 'mindmap', 'cheatsheet', 'study-report'];
+
+const INLINE_APP_LABELS: Record<TutorInlineAppKey, string> = {
+  flashcards: '闪卡',
+  quiz: '测验',
+  mindmap: '思维导图',
+  cheatsheet: '考试速查表',
+  'study-report': '学习报告',
+};
 
 export interface TutorSystemContext {
   /** 仅 in-class：最近 30s 转录，用于"这个 / 那个 / 刚才"代词消歧 */
@@ -43,8 +55,10 @@ export interface TutorSystemOptions {
   thinkingGuide?: boolean;
   /** 在回答里附 `[MM:SS]` 时间戳（默认 mode==='review'） */
   returnTimestamps?: boolean;
-  /** 允许吐 `<open_app:KEY/>` marker（默认 true——两 mode 都允许） */
+  /** 允许吐 `<open_app:KEY/>` marker（默认 true——两 mode 都允许，但可用 app 随 mode 收窄） */
   allowInlineApp?: boolean;
+  /** 可选：覆盖当前 mode 的 inline app 白名单 */
+  allowedInlineApps?: readonly TutorInlineAppKey[];
 }
 
 // ──────────────────────────────────────────────────────────────
@@ -59,7 +73,11 @@ const TUTOR_IDENTITY_BASE = `你是这个学生的同桌。他刚上完一节课
 - 他的注意力有限——说太多他就关了
 
 所以你帮他的方式是：
+- 把判断交给模型：结合他说的话、当前课堂上下文、个人上下文，理解他真正想做什么
+- 产品层只给你上下文、工具和渲染契约，不用关键词或固定流程替你做意图判断
 - 顺着他的思路往前带一点，而不是把整节课从头讲一遍
+- 如果他的话有多种可能，先按最自然的理解回应；真的会误解时，再轻轻追问一句
+- 不要为了显得主动而替他安排额外任务；工具是能力，不是流程
 - 真的不懂就说不懂，不要编
 - 拿得出证据就指给他看（课上哪句话、哪份资料里）`;
 
@@ -74,7 +92,8 @@ const MODE_IN_CLASS_SEGMENT = `
 - 回答尽量**一两句话**讲完，课堂节奏快，他没空看长段
 - 他用代词（"这个"、"那个"、"刚才"）的时候，参考下面给你的最近课堂片段去理解他指的是什么
 - 不要在回答里附时间戳 chip——课堂 UI 窄，时间戳反而是噪音
-- 如果他只是想让你帮他产一个"卡 / 题 / 图 / 速查表 / 学习报告"，就直接走那条路径（见下方 open_app 合约）`;
+- 如果他的话自然指向“结构 / 速查表”这类课中辅助产物，就走对应产物路径（见下方 open_app 合约）；报告类总结放到课后复习场景，不在课中打断他；不要用关键词硬匹配，按上下文理解
+- 课中优先帮他跟上老师正在讲的内容，不把复习训练塞进正在上课的节奏里`;
 
 const MODE_REVIEW_SEGMENT = `
 此刻他在复习，这节课已经讲完，他把整节课拎回来问你。他有时间慢慢看、慢慢想。
@@ -84,6 +103,7 @@ const MODE_REVIEW_SEGMENT = `
 - 把那一点和课里别的地方呼应 / 冲突的片段串起来
 
 你可以比课中写得更长、更结构化，但**不要强行凑长**——简洁比堆料更重要。
+复习场景的关键不是主动安排任务，也不是把意图写成硬规则；让模型基于上下文理解他此刻是在求解释、求证据、求结构、求自测，还是只想确认一句话。
 如果转录里没讲到他问的东西，就明确告诉他这节课没讲到，再用你本来就懂的常识简单搭一下桥。不要假装课里讲过。`;
 
 // ──────────────────────────────────────────────────────────────
@@ -127,13 +147,15 @@ function capTimestampsInstruction(): string {
 只在真的有价值（指向一段具体课堂内容）时用，不要每段末尾都塞一个。`;
 }
 
-function capOpenAppContract(): string {
+function capOpenAppContract(appKeys: readonly TutorInlineAppKey[]): string {
+  const labels = appKeys.map((key) => INLINE_APP_LABELS[key]).join(' / ');
+  const keys = appKeys.join(', ');
   return `
 【产物合约】
-如果学生让你做一个"结构化产出"——闪卡 / 测验 / 思维导图 / 考试速查表 / 学习报告——
-先用一两句自然的话回应他（"好，我这就给你整一张"），然后在消息最后**单独一行**写：
+如果你基于上下文理解到学生是在要一个"结构化产出"——${labels}——
+就用一两句自然的话回应他（"好，我这就给你整一张"），然后在消息最后**单独一行**写：
 \`<open_app:KEY/>\`
-KEY 只能从 \`{flashcards, quiz, mindmap, cheatsheet, study-report}\` 里选。
+KEY 只能从 \`{${keys}}\` 里选。
 前端会在你说完那句话后自动打开对应窗口 / 把产物嵌进对话。
 如果学生只是想聊或者解释概念，就不要加这个标记。`;
 }
@@ -205,7 +227,8 @@ export function buildTutorSystemPrompt(
     parts.push(capTimestampsInstruction());
   }
   if (allowInlineApp) {
-    parts.push(capOpenAppContract());
+    const allowedInlineApps = options.allowedInlineApps ?? (mode === 'in-class' ? IN_CLASS_INLINE_APP_KEYS : REVIEW_INLINE_APP_KEYS);
+    parts.push(capOpenAppContract(allowedInlineApps));
   }
   // 思维引导仅在 review 下生效——in-class 就算 flag 为 true 也忽略，避免课堂长回答
   if (thinkingGuide && mode === 'review') {

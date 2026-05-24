@@ -7,13 +7,7 @@ import type { Anchor, TranscriptSegment } from '@/types';
 import type { DataSourceType } from '@/lib/ai-native/types';
 import { getWorkshopAppByKey, type WorkshopAppKey } from '@/lib/ai-native/app-catalog';
 import { useAppExecution, type AppTaskState } from '@/components/apps/hooks/useAppExecution';
-import { PodcastWindow } from '@/components/apps/windows/PodcastWindow';
-import { FlashcardsWindow } from '@/components/apps/windows/FlashcardsWindow';
-import { QuizWindow } from '@/components/apps/windows/QuizWindow';
-import { MindmapWindow } from '@/components/apps/windows/MindmapWindow';
-import { InfographicWindow } from '@/components/apps/windows/InfographicWindow';
-import { StudyReportWindow } from '@/components/apps/windows/StudyReportWindow';
-import { CheatsheetWindow } from '@/components/apps/windows/CheatsheetWindow';
+import { AppRenderSurface } from '@/components/apps/windows/AppRenderSurface';
 
 import type { ClassCheckRound } from '@/hooks/useClassCheck';
 import type { ClassCheckPlan } from '@/app/api/class-check/plan/route';
@@ -50,16 +44,16 @@ class WindowErrorBoundary extends React.Component<WindowErrorBoundaryProps, Wind
     if (this.state.hasError) {
       return (
         <div className="flex h-full flex-col items-center justify-center gap-3 p-6 text-center">
-          <div className="rounded-full bg-rose-100 p-3">
-            <svg className="h-6 w-6 text-rose-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+          <div className="rounded-full bg-[#FBFAF5] p-3">
+            <svg className="h-6 w-6 text-ink-muted" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
             </svg>
           </div>
-          <p className="text-sm font-medium text-slate-700">{this.props.appName} 渲染出错</p>
-          <p className="max-w-xs text-xs text-slate-500">{this.state.error?.message || '未知错误'}</p>
+          <p className="text-sm font-medium text-ink-secondary">{this.props.appName} 渲染出错</p>
+          <p className="max-w-xs text-xs text-ink-muted">{this.state.error?.message || '未知错误'}</p>
           <button
             type="button"
-            className="rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50"
+            className="rounded-lg border border-divider px-3 py-1.5 text-xs font-medium text-ink-secondary hover:bg-[#EFEFED] hover:text-ink"
             onClick={() => {
               this.setState({ hasError: false, error: undefined });
               this.props.onRetry?.();
@@ -178,17 +172,17 @@ function taskLabel(taskState: AppTaskState): string {
 }
 
 function taskTone(taskState: AppTaskState): string {
-  if (taskState.status === 'running') return 'border-[#E9E9E7] bg-[#FDF3C0]/50 text-[#232322]';
-  if (taskState.status === 'success') return 'border-[#D1F4E0] bg-[#D1F4E0]/30 text-[#232322]';
-  if (taskState.status === 'error') return 'border-rose-200 bg-rose-50 text-rose-700';
-  return 'border-slate-200 bg-slate-50 text-slate-600';
+  if (taskState.status === 'running') return 'border-divider bg-[#FDF3C0]/50 text-ink';
+  if (taskState.status === 'success') return 'border-divider bg-white text-ink';
+  if (taskState.status === 'error') return 'border-divider bg-[#FBFAF5] text-ink-secondary';
+  return 'border-divider bg-white text-ink-secondary';
 }
 
 function taskDockBadge(taskState: AppTaskState): string {
   if (taskState.status === 'running') return 'bg-[#FADEC9]';
-  if (taskState.status === 'success') return 'bg-[#D1F4E0]';
-  if (taskState.status === 'error') return 'bg-rose-400';
-  return 'bg-slate-300';
+  if (taskState.status === 'success') return 'bg-ink';
+  if (taskState.status === 'error') return 'bg-[#D96B6B]';
+  return 'bg-ink-muted';
 }
 
 function useDrag(baseRight: number, baseBottom: number) {
@@ -294,7 +288,7 @@ function WindowCard(props: WindowCardProps) {
   if (isFullscreen && isImmersive) {
     return (
       <section
-        className="pointer-events-auto fixed inset-0 z-[200] flex flex-col overflow-hidden bg-[#0f1419]"
+        className="pointer-events-auto fixed inset-0 z-[200] flex flex-col overflow-hidden bg-ink"
         data-testid={`workshop-window-${app.key}-fullscreen`}
         onMouseDown={() => onFocus(app.key)}
       >
@@ -324,12 +318,7 @@ function WindowCard(props: WindowCardProps) {
         {/* 沉浸式内容区 — 无内边距，组件自己控制 */}
         <div className="flex-1 overflow-auto">
           <WindowErrorBoundary appName={app.name} onRetry={() => void execution.rerun()}>
-            {app.key === 'flashcards' ? (
-              <FlashcardsWindow result={execution.result} transcript={transcript} onSeek={onSeek} />
-            ) : null}
-            {app.key === 'quiz' ? (
-              <QuizWindow result={execution.result} transcript={transcript} onSeek={onSeek} />
-            ) : null}
+            <AppRenderSurface appKey={app.key} result={execution.result} transcript={transcript} onSeek={onSeek} />
           </WindowErrorBoundary>
         </div>
       </section>
@@ -345,20 +334,20 @@ function WindowCard(props: WindowCardProps) {
         onMouseDown={() => onFocus(app.key)}
       >
         {/* 全屏 header */}
-        <header className="flex items-center gap-2 border-b border-slate-200 bg-white/95 px-4 py-2.5 select-none">
+        <header className="flex items-center gap-2 border-b border-divider bg-white px-4 py-2.5 select-none">
           <div className="min-w-0 flex-1">
-            <p className="truncate text-sm font-semibold text-slate-900">{app.name}</p>
-            <p className="truncate text-xs text-slate-500">
+            <p className="truncate text-sm font-semibold text-ink">{app.name}</p>
+            <p className="truncate text-xs text-ink-muted">
               会话 {sessionId.slice(0, 6)}…{sessionId.slice(-4)} · {formatDataSource(dataSource)}
             </p>
           </div>
           <span className={`rounded-full border px-2 py-1 text-xs font-medium ${taskTone(execution.taskState)}`}>
             {taskLabel(execution.taskState)}
           </span>
-          <ModelSelector value={model} onChange={onModelChange} compact allowedProviders={['qwen', 'volcengine']} />
+          <ModelSelector value={model} onChange={onModelChange} compact allowedProviders={['deepseek', 'qwen', 'volcengine']} />
           <button
             type="button"
-            className="rounded-md px-2 py-1 text-slate-500 hover:bg-slate-100"
+            className="rounded-md px-2 py-1 text-ink-muted hover:bg-[#EFEFED] hover:text-ink"
             onClick={() => onClose(app.key)}
             aria-label="关闭窗口"
           >
@@ -367,34 +356,22 @@ function WindowCard(props: WindowCardProps) {
         </header>
 
         {/* 全屏内容区 */}
-        <div className="flex-1 overflow-auto bg-[radial-gradient(900px_360px_at_15%_-10%,#dbeafe,transparent_60%),radial-gradient(900px_360px_at_100%_-35%,#fde68a,transparent_60%),#f8fafc] p-4">
+        <div className="flex-1 overflow-auto bg-canvas p-4">
           <WindowErrorBoundary appName={app.name} onRetry={() => void execution.rerun()}>
-            {app.key === 'audio-overview' ? (
-              <PodcastWindow result={execution.result} transcript={transcript} onSeek={onSeek} />
-            ) : null}
-            {app.key === 'flashcards' ? (
-              <FlashcardsWindow result={execution.result} transcript={transcript} onSeek={onSeek} />
-            ) : null}
-            {app.key === 'quiz' ? <QuizWindow result={execution.result} transcript={transcript} onSeek={onSeek} /> : null}
-            {app.key === 'mindmap' ? (
-              <MindmapWindow result={execution.result} transcript={transcript} onSeek={onSeek} />
-            ) : null}
-            {app.key === 'infographic' ? (
-              <InfographicWindow
-                sessionId={sessionId}
-                result={execution.result}
-                taskState={execution.taskState}
-                contentContext={infographicContentContext}
-                onGenerateDraft={() => (execution.hasResult ? execution.rerun() : execution.execute())}
-                onResultUpdate={execution.updateResult}
-              />
-            ) : null}
-            {app.key === 'study-report' ? (
-              <StudyReportWindow rounds={classCheckRounds} plan={classCheckPlan} transcript={transcript} />
-            ) : null}
-            {app.key === 'cheatsheet' ? (
-              <CheatsheetWindow result={execution.result} onSeek={onSeek} />
-            ) : null}
+            <AppRenderSurface
+              appKey={app.key}
+              result={execution.result}
+              transcript={transcript}
+              taskState={execution.taskState}
+              sessionId={sessionId}
+              contentContext={infographicContentContext}
+              classCheckRounds={classCheckRounds}
+              classCheckPlan={classCheckPlan}
+              onSeek={onSeek}
+              onRegenerate={() => void execution.rerun()}
+              onGenerateDraft={() => (execution.hasResult ? execution.rerun() : execution.execute())}
+              onResultUpdate={execution.updateResult}
+            />
           </WindowErrorBoundary>
         </div>
       </section>
@@ -404,7 +381,7 @@ function WindowCard(props: WindowCardProps) {
   // 面板模式（原浮动窗口）
   return (
     <section
-      className="pointer-events-auto fixed flex h-[min(78vh,820px)] w-[min(860px,calc(100vw-24px))] flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-[0_28px_60px_rgba(15,23,42,0.25)] max-md:left-2 max-md:right-2 max-md:top-14 max-md:h-[78vh] max-md:w-auto"
+      className="pointer-events-auto fixed flex h-[min(78vh,820px)] w-[min(860px,calc(100vw-24px))] flex-col overflow-hidden rounded-2xl border border-divider bg-white max-md:left-2 max-md:right-2 max-md:top-14 max-md:h-[78vh] max-md:w-auto"
       data-testid={`floating-workshop-window-${app.key}`}
       style={{
         ...drag.style,
@@ -413,14 +390,14 @@ function WindowCard(props: WindowCardProps) {
       onMouseDown={() => onFocus(app.key)}
     >
       <header
-        className="flex cursor-grab items-center gap-1.5 border-b border-slate-200 bg-white/95 px-3 py-2 active:cursor-grabbing select-none md:gap-2"
+        className="flex cursor-grab items-center gap-1.5 border-b border-divider bg-white px-3 py-2 active:cursor-grabbing select-none md:gap-2"
         onPointerDown={drag.onPointerDown}
         onPointerMove={drag.onPointerMove}
         onPointerUp={drag.onPointerUp}
       >
         <button
           type="button"
-          className="rounded-md px-2 py-1 text-slate-500 hover:bg-slate-100"
+          className="rounded-md px-2 py-1 text-ink-muted hover:bg-[#EFEFED] hover:text-ink"
           onClick={() => onToggleMinimize(app.key)}
           data-testid={`workshop-window-minimize-${app.key}`}
           aria-label="最小化窗口"
@@ -428,8 +405,8 @@ function WindowCard(props: WindowCardProps) {
           —
         </button>
         <div className="min-w-0 flex-1">
-          <p className="truncate text-sm font-semibold text-slate-900">{app.name}</p>
-          <p className="hidden truncate text-xs text-slate-500 md:block">
+          <p className="truncate text-sm font-semibold text-ink">{app.name}</p>
+          <p className="hidden truncate text-xs text-ink-muted md:block">
             会话 {sessionId.slice(0, 6)}…{sessionId.slice(-4)} · {formatDataSource(dataSource)}
           </p>
         </div>
@@ -437,11 +414,11 @@ function WindowCard(props: WindowCardProps) {
           {taskLabel(execution.taskState)}
         </span>
         <div className="hidden md:block">
-          <ModelSelector value={model} onChange={onModelChange} compact allowedProviders={['qwen', 'volcengine']} />
+          <ModelSelector value={model} onChange={onModelChange} compact allowedProviders={['deepseek', 'qwen', 'volcengine']} />
         </div>
         <button
           type="button"
-          className="rounded-md px-2 py-1 text-slate-500 hover:bg-slate-100"
+          className="rounded-md px-2 py-1 text-ink-muted hover:bg-[#EFEFED] hover:text-ink"
           onClick={() => onClose(app.key)}
           data-testid={`workshop-window-close-${app.key}`}
           aria-label="关闭窗口"
@@ -450,40 +427,22 @@ function WindowCard(props: WindowCardProps) {
         </button>
       </header>
 
-      <div className="flex-1 overflow-auto bg-[radial-gradient(900px_360px_at_15%_-10%,#dbeafe,transparent_60%),radial-gradient(900px_360px_at_100%_-35%,#fde68a,transparent_60%),#f8fafc] p-3">
+      <div className="flex-1 overflow-auto bg-canvas p-3">
         <WindowErrorBoundary appName={app.name} onRetry={() => void execution.rerun()}>
-          {app.key === 'audio-overview' ? (
-            <PodcastWindow
-              result={execution.result}
-              transcript={transcript}
-              taskState={execution.taskState}
-              onSeek={onSeek}
-              onRegenerate={() => void execution.rerun()}
-            />
-          ) : null}
-          {app.key === 'flashcards' ? (
-            <FlashcardsWindow result={execution.result} transcript={transcript} onSeek={onSeek} />
-          ) : null}
-          {app.key === 'quiz' ? <QuizWindow result={execution.result} transcript={transcript} onSeek={onSeek} /> : null}
-          {app.key === 'mindmap' ? (
-            <MindmapWindow result={execution.result} transcript={transcript} onSeek={onSeek} />
-          ) : null}
-          {app.key === 'infographic' ? (
-            <InfographicWindow
-              sessionId={sessionId}
-              result={execution.result}
-              taskState={execution.taskState}
-              contentContext={infographicContentContext}
-              onGenerateDraft={() => (execution.hasResult ? execution.rerun() : execution.execute())}
-              onResultUpdate={execution.updateResult}
-            />
-          ) : null}
-          {app.key === 'study-report' ? (
-            <StudyReportWindow rounds={classCheckRounds} plan={classCheckPlan} transcript={transcript} />
-          ) : null}
-          {app.key === 'cheatsheet' ? (
-            <CheatsheetWindow result={execution.result} onSeek={onSeek} />
-          ) : null}
+          <AppRenderSurface
+            appKey={app.key}
+            result={execution.result}
+            transcript={transcript}
+            taskState={execution.taskState}
+            sessionId={sessionId}
+            contentContext={infographicContentContext}
+            classCheckRounds={classCheckRounds}
+            classCheckPlan={classCheckPlan}
+            onSeek={onSeek}
+            onRegenerate={() => void execution.rerun()}
+            onGenerateDraft={() => (execution.hasResult ? execution.rerun() : execution.execute())}
+            onResultUpdate={execution.updateResult}
+          />
         </WindowErrorBoundary>
       </div>
     </section>
@@ -559,16 +518,16 @@ export function WorkshopWindowManager(props: WorkshopWindowManagerProps) {
       ))}
 
       {minimizedWindows.length > 0 ? (
-        <div className="pointer-events-auto fixed bottom-3 left-1/2 z-[90] flex max-w-[calc(100vw-20px)] -translate-x-1/2 items-center gap-2 overflow-x-auto rounded-full border border-slate-200 bg-white/95 px-3 py-2">
+        <div className="pointer-events-auto fixed bottom-3 left-1/2 z-[90] flex max-w-[calc(100vw-20px)] -translate-x-1/2 items-center gap-2 overflow-x-auto rounded-full border border-divider bg-white px-3 py-2">
           {minimizedWindows.map((windowState) => {
             const app = getWorkshopAppByKey(windowState.appKey);
             if (!app) return null;
             return (
-              <div key={windowState.appKey} className="flex items-center gap-1.5 rounded-full border border-slate-200 bg-white px-2.5 py-1.5 transition hover:border-blue-300 hover:bg-blue-50">
+              <div key={windowState.appKey} className="flex items-center gap-1.5 rounded-full border border-divider bg-white px-2.5 py-1.5 transition hover:border-ink-muted">
                 <span className={`inline-block h-2 w-2 rounded-full ${taskDockBadge({ status: 'success', updatedAt: 0 })}`} />
                 <button
                   type="button"
-                  className="truncate text-xs font-medium text-slate-700 hover:text-blue-700"
+                  className="truncate text-xs font-medium text-ink-secondary hover:text-ink"
                   onClick={() => onToggleMinimize(windowState.appKey)}
                   data-testid={`workshop-window-restore-${windowState.appKey}`}
                 >
@@ -576,7 +535,7 @@ export function WorkshopWindowManager(props: WorkshopWindowManagerProps) {
                 </button>
                 <button
                   type="button"
-                  className="rounded-full px-1 text-xs text-slate-400 hover:bg-slate-100 hover:text-slate-700"
+                  className="rounded-full px-1 text-xs text-ink-muted hover:bg-[#EFEFED] hover:text-ink"
                   onClick={() => onClose(windowState.appKey)}
                   aria-label="关闭最小化窗口"
                 >

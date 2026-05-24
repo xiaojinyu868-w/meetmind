@@ -11,6 +11,7 @@ import {
   type LucideIcon,
 } from 'lucide-react';
 import { useOmniRealtimeCall } from '@/hooks/useOmniRealtimeCall';
+import { COPY } from '@/lib/ui/copy';
 
 /* ─── Props ─── */
 
@@ -157,8 +158,8 @@ function CallControlButton({
 /* ─── Main Screen ─── */
 
 export function TutorRealtimeCallScreen({
-  title = '语音同桌',
-  contextLabel = '整节课',
+  title = COPY.realtime.defaultTitle,
+  contextLabel = COPY.realtime.defaultContext,
   disabled = false,
   instructions,
   enableSearch = false,
@@ -232,23 +233,29 @@ export function TutorRealtimeCallScreen({
   /* ── 顶部一句话状态 ── */
 
   const statusLine = useMemo(() => {
-    if (disabled) return '先收一条课堂内容';
-    if (errorMessage) return '没接通，点重连';
-    if (isConnecting) return '正在拨号…';
-    if (isAuthorizing) return '点下面按钮开始';
-    if (isMuted && isConnected) return '已静音 · 老师还在';
-    if (isListening) return '在听你说…';
-    if (isThinking) return '老师在想…';
-    if (isResponding) return '老师在说…';
-    if (isConnected) return '已接通 · 直接说';
-    return '准备中…';
+    if (disabled) return COPY.realtime.disabled;
+    if (errorMessage) return COPY.realtime.reconnect;
+    if (isConnecting) return COPY.realtime.connecting;
+    if (isAuthorizing) return COPY.realtime.authorizing;
+    if (isMuted && isConnected) return COPY.realtime.muted;
+    if (isListening) return COPY.realtime.listening;
+    if (isThinking) return COPY.realtime.thinking;
+    if (isResponding) return COPY.realtime.responding;
+    if (isConnected) return COPY.realtime.connected;
+    return COPY.realtime.preparing;
   }, [disabled, errorMessage, isConnecting, isAuthorizing, isMuted, isConnected, isListening, isThinking, isResponding]);
 
   /* ── 按钮逻辑 ── */
 
   const primaryDisabled = disabled || isConnecting;
   const primaryTone = isMuted || isAuthorizing ? 'default' : 'primary';
-  const primaryLabel = isConnecting ? '拨号中' : isAuthorizing ? '开始' : isMuted ? '开麦' : '静音';
+  const primaryLabel = isConnecting
+    ? COPY.realtime.dialing
+    : isAuthorizing
+      ? COPY.realtime.start
+      : isMuted
+        ? COPY.realtime.unmute
+        : COPY.realtime.mute;
   const primaryIcon = isMuted || isAuthorizing ? Mic : MicOff;
 
   const hasTranscript = Boolean(assistantText.trim() || capturedText.trim());
@@ -259,14 +266,14 @@ export function TutorRealtimeCallScreen({
     if (errorMessage && !isConnected) {
       return {
         icon: RotateCcw,
-        label: '重连',
+        label: COPY.realtime.reconnectAction,
         onClick: () => void connectSession(),
         disabled: false,
       };
     }
     return {
       icon: FileText,
-      label: '查看文字',
+      label: COPY.realtime.showText,
       onClick: () => setShowTranscript(true),
       disabled: !hasTranscript,
     };
@@ -286,31 +293,31 @@ export function TutorRealtimeCallScreen({
           />
           <div className="absolute inset-x-0 bottom-0 z-30 rounded-t-[28px] border border-[#E9E9E7] bg-white px-5 pb-[max(env(safe-area-inset-bottom),18px)] pt-5">
             <div className="flex items-center justify-between">
-              <p className="text-[15px] font-semibold text-[#232322]">本轮对话文字</p>
+              <p className="text-[15px] font-semibold text-[#232322]">{COPY.realtime.transcriptTitle}</p>
               <button
                 type="button"
                 onClick={() => setShowTranscript(false)}
                 className="inline-flex h-9 items-center gap-1 rounded-full border border-[#E9E9E7] bg-[#F7F7F5] px-3 text-[12px] font-medium text-[#787774]"
               >
-                收起
+                {COPY.realtime.collapse}
                 <ChevronDown size={14} strokeWidth={1.8} />
               </button>
             </div>
             <div className="mt-4 max-h-[50vh] space-y-3 overflow-y-auto pb-1">
               {assistantText.trim() ? (
                 <div className="rounded-[20px] border border-[#E9E9E7] bg-[#F7F7F5] px-4 py-3.5">
-                  <p className="text-[11px] font-medium text-[#A3A39E]">老师</p>
+                  <p className="text-[11px] font-medium text-[#A3A39E]">{COPY.realtime.assistantLabel}</p>
                   <p className="mt-1.5 text-[15px] leading-7 text-[#232322]">{assistantText.trim()}</p>
                 </div>
               ) : null}
               {capturedText.trim() ? (
                 <div className="rounded-[20px] border border-[#E9E9E7] bg-white px-4 py-3.5">
-                  <p className="text-[11px] font-medium text-[#A3A39E]">你</p>
+                  <p className="text-[11px] font-medium text-[#A3A39E]">{COPY.realtime.userLabel}</p>
                   <p className="mt-1.5 text-[15px] leading-7 text-[#232322]">{capturedText.trim()}</p>
                 </div>
               ) : null}
               {!assistantText.trim() && !capturedText.trim() ? (
-                <p className="py-8 text-center text-[14px] text-[#A3A39E]">还没有对话内容</p>
+                <p className="py-8 text-center text-[14px] text-[#A3A39E]">{COPY.realtime.emptyTranscript}</p>
               ) : null}
             </div>
           </div>
@@ -361,7 +368,7 @@ export function TutorRealtimeCallScreen({
 
         <CallControlButton
           icon={PhoneOff}
-          label="结束通话"
+          label={COPY.realtime.endCall}
           onClick={() => void (async () => {
             onAssistantResponseEnd?.();
 

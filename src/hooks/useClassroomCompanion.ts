@@ -33,27 +33,8 @@ import type { TranscriptSegment } from '@/types';
 import type { CompanionMessage, Lesson } from '@/components/classroom/types';
 import type { InlineAppInteraction } from '@/components/classroom/InlineAppCard';
 
-/** preferences 里存同桌历史的 key */
-const COMPANION_MESSAGES_KEY = 'classroom_companion_messages';
 /** 最多保留多少条历史（防止无限膨胀） */
 const MAX_PERSISTED_MESSAGES = 50;
-
-/**
- * 每个 inline app 生成时要发给后端的缺省意图——照抄 WORKSHOP_APP_CATALOG
- * 里对应 key 的 intent 字段。复制一份在这里是为了避免 hook 引入整个 catalog
- * 的 UI 依赖（catalog 里会有 icon/image 引用）。
- * 如果后端加新 app，这里必须同步更新。
- */
-const DEFAULT_APP_INTENT: Record<
-  NonNullable<CompanionMessage['inlineApp']>['appKey'],
-  string
-> = {
-  quiz: '生成课堂测验，检验理解并输出可回放证据。',
-  flashcards: '生成课堂闪卡训练，帮助学生主动回忆并巩固核心知识。',
-  cheatsheet: '生成考试速查表：核心定义、公式/步骤、易错点各一组，适合一页打印。',
-  mindmap: '生成课堂思维导图，呈现主干、分支与关键证据。',
-  'study-report': '查看随堂检验结果和学习报告。',
-};
 
 /** 切到录课态时同桌自动说一句。 */
 const AUTO_LISTENING_MSG: CompanionMessage = {
@@ -95,7 +76,7 @@ export interface UseClassroomCompanionInput {
   /**
    * inline 模式（默认 true）：同学回复里的 <open_app:KEY/> 不会开 WorkshopWindow，
    * 而是追加一条带 inlineApp={status:'loading'} 的气泡，调 /api/apps/execute
-   * 拿到结果后把气泡升级为 {status:'ready', payload}。
+   * 拿到结果后把气泡升级为 {status:'ready', result}，直接复用应用矩阵 UI。
    * 关掉的话走旧版"开窗口"行为——留给未来的复习态弹窗通道用。
    */
   inlineAppMode?: boolean;
@@ -155,9 +136,10 @@ import { extractRecentFocus } from '@/lib/services/classroom/recent-focus';
 import { extractCitationsFromMarkdown } from '@/components/classroom/companion-markdown-utils';
 // Agent-native chip parity：AI 消息里如果带 <open_app:KEY/>，用下面的 guard
 // 校验 KEY 是注册过的合法 appKey，再调 onOpenApp；非法 KEY 就忽略。
-import { isWorkshopAppKey, type WorkshopAppKey } from '@/lib/ai-native/app-catalog';
+import { getWorkshopAppByKey, isWorkshopAppKey, type WorkshopAppKey } from '@/lib/ai-native/app-catalog';
 // M8 Phase 4: 停止录音时仪式感文案从文案中心读
 import { COPY } from '@/lib/ui/copy';
+import { getCompanionMessagesPreferenceKey } from '@/lib/utils/classroom-companion-storage';
 import {
   getInlineAppRetryDelayMs,
   INLINE_APP_MAX_ATTEMPTS,
@@ -172,7 +154,14 @@ import {
   hasEnoughInlineAppTranscript,
   selectInlineAppTranscript,
 } from '@/lib/utils/inline-app-transcript';
-import { buildInlineAppFallbackPayload } from '@/lib/utils/inline-app-fallback';
+import { buildInlineAppFallbackResult } from '@/lib/utils/inline-app-fallback';
+import {
+  AI_MODEL_AUTO_VALUE,
+  AI_MODEL_PREFERENCE_KEY,
+  resolveExplicitAiModelPreference,
+} from '@/lib/utils/ai-model-preference';
+import { buildInClassTutorAgentBody } from '@/lib/tutor/classroom-agent-request';
+import { isInClassBlockedInlineAppKey } from '@/lib/utils/open-app-marker';
 
 /** 把长句子截成省略号版，塞进"再讲讲那道 xxx..."的追问气泡里 */
 function truncate(s: string, n: number): string {
@@ -191,8 +180,10 @@ export function useClassroomCompanion(
 
   const { accessToken } = useAuth();
   const sessionId = useSessionStore((s) => s.sessionId);
+  const companionMessagesKey = getCompanionMessagesPreferenceKey(sessionId);
   const segments = useCaptureEditorStore((s) => s.segments);
 
+  const [preferredModel, setPreferredModel] = useState<string | undefined>();
   const [messages, setMessages] = useState<CompanionMessage[]>([]);
   const [streamingMessage, setStreamingMessage] = useState<CompanionMessage | null>(null);
   // messages 的 ref 镜像——inline app 的 retry/interaction 回调需要读到最新值，
@@ -216,44 +207,64 @@ export function useClassroomCompanion(
     setSseThinking(false);
   }, []);
 
+  useEffect(() => {
+    let alive = true;
+    getPreference<string>(AI_MODEL_PREFERENCE_KEY, AI_MODEL_AUTO_VALUE)
+      .then((preference) => {
+        if (alive) setPreferredModel(resolveExplicitAiModelPreference(preference));
+      })
+      .catch(() => {
+        if (alive) setPreferredModel(undefined);
+      });
+    return () => { alive = false; };
+  }, []);
+
   // 防抖：避免在同一次 listening 切换中重复追加 AUTO_LISTENING_MSG
   const hasListeningGreetedRef = useRef(false);
   // 防抖：开场白只注入一次（lessons 后续变化不再改开场白）
   const hasHelloInjectedRef = useRef(false);
   // 是否已从 preferences 水合——未水合前不写回，避免用空数组覆盖持久化的历史
   const [isHydrated, setIsHydrated] = useState(false);
+  const persistTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // ── 1. 启动时从 preferences 读持久化的消息 ──
+  // ── 1. 启动 / 切课时从 preferences 读当前 session 的持久化消息 ──
   //   但如果本次组件挂载时就已经在录课（isRecording=true），说明是"新课开始"场景，
   //   不要把历史水合到界面上——界面保持一张白纸。
   useEffect(() => {
     let alive = true;
+    if (persistTimerRef.current) clearTimeout(persistTimerRef.current);
+    setIsHydrated(false);
+    setStreamingMessage(null);
+    quizAttemptsRef.current = [];
+    hasListeningGreetedRef.current = false;
+    hasHelloInjectedRef.current = false;
+
     if (isRecording) {
-      // 录课中挂载：跳过历史注入，直接标记已水合
+      // 录课中挂载 / 切到新课：跳过历史注入，界面保持一张白纸
+      setMessages([]);
       setIsHydrated(true);
       hasHelloInjectedRef.current = true;
       return () => { alive = false; };
     }
-    getPreference<CompanionMessage[]>(COMPANION_MESSAGES_KEY, []).then((persisted) => {
+
+    getPreference<CompanionMessage[]>(companionMessagesKey, []).then((persisted) => {
       if (!alive) return;
       if (persisted.length > 0) {
         setMessages(persisted);
-        // 既然恢复了历史，就跳过开场白注入
+        // 既然恢复了当前课历史，就跳过开场白注入
         hasHelloInjectedRef.current = true;
+      } else {
+        setMessages([]);
       }
       setIsHydrated(true);
     }).catch(() => {
       if (alive) setIsHydrated(true);
     });
     return () => { alive = false; };
-    // 只在挂载时跑一次 —— isRecording 的后续变化由单独的 effect 处理
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [companionMessagesKey, isRecording]);
 
   // ── 2. messages 变化时 debounced 写回 preferences ──
-  //   护栏：messages 为空时不覆盖持久化历史——新课清空的是"可见消息"，
-  //   但 preferences 里的对话记忆要保留给未来的长记忆系统。
-  const persistTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  //   护栏：messages 为空时不覆盖当前 session 的持久化历史——新课清空的是"可见消息"。
   useEffect(() => {
     if (!isHydrated) return; // 未水合前不写
     if (messages.length === 0) return; // 空数组不写回，保护已有历史
@@ -263,12 +274,12 @@ export function useClassroomCompanion(
       const trimmed = messages.length > MAX_PERSISTED_MESSAGES
         ? messages.slice(-MAX_PERSISTED_MESSAGES)
         : messages;
-      void setPreference(COMPANION_MESSAGES_KEY, trimmed).catch(() => undefined);
+      void setPreference(companionMessagesKey, trimmed).catch(() => undefined);
     }, 500);
     return () => {
       if (persistTimerRef.current) clearTimeout(persistTimerRef.current);
     };
-  }, [messages, isHydrated]);
+  }, [messages, isHydrated, companionMessagesKey]);
 
   // ── 首次进来根据 lessons 注入动态开场白 ──
   // 等 preferences 水合 + lessons 到齐后再决定是否注入。
@@ -366,12 +377,12 @@ export function useClassroomCompanion(
   );
 
   /**
-   * 根据 WorkshopAppKey 异步调 /api/apps/execute，产物写进对应 message 的
-   * inlineApp.payload 字段。不开任何窗口，一切都在对话流里完成。
+   * 根据 WorkshopAppKey 异步调 /api/apps/execute，完整 AppExecutionResult 写进对应 message。
+   * 不开任何窗口，直接用应用矩阵 UI 嵌进对话流。
    *
    * 生命周期：
    *   1. 立即 push 一条 "companion" 消息，inlineApp = {status:'loading'}
-   *   2. 背后 fetch，拿到结果 → updateMessage 改成 {status:'ready', payload}
+   *   2. 背后 fetch，拿到结果 → updateMessage 改成 {status:'ready', result}
    *   3. 失败 → {status:'error', error}
    *   4. 如果 segments 不够（tutor 要求 >=2 段 + >=50 字），返回 error
    *
@@ -405,10 +416,12 @@ export function useClassroomCompanion(
       const headers: Record<string, string> = { 'Content-Type': 'application/json' };
       if (accessToken) headers['Authorization'] = `Bearer ${accessToken}`;
 
+      const appCatalogItem = getWorkshopAppByKey(appKey);
       const body = {
         appKey,
+        ...(preferredModel ? { model: preferredModel } : {}),
         goal: {
-          intent: DEFAULT_APP_INTENT[appKey],
+          intent: appCatalogItem?.intent || `生成${appKey}学习应用`,
           expectedOutput: 'mixed' as const,
           appKey,
         },
@@ -430,15 +443,15 @@ export function useClassroomCompanion(
             body: JSON.stringify(body),
           });
           const data = (await response.json().catch(() => null)) as
-            | { ok?: boolean; error?: string; result?: { render?: { payload?: unknown } } }
+            | { ok?: boolean; error?: string; result?: import('@/lib/ai-native/types').AppExecutionResult }
             | null;
 
           if (response.ok && data?.ok && data.result) {
-            const payload = data.result.render?.payload;
+            const result = data.result;
             setMessages((prev) =>
               prev.map((m) =>
                 m.id === messageId
-                  ? { ...m, inlineApp: { appKey, status: 'ready' as const, payload } }
+                  ? { ...m, inlineApp: { appKey, status: 'ready' as const, result, payload: result.render?.payload } }
                   : m,
               ),
             );
@@ -455,14 +468,14 @@ export function useClassroomCompanion(
         await wait(getInlineAppRetryDelayMs(attempt));
       }
 
-      const fallbackPayload = buildInlineAppFallbackPayload(appKey, appSegments);
+      const fallbackResult = buildInlineAppFallbackResult(appKey, appSegments);
       setMessages((prev) =>
         prev.map((m) =>
           m.id === messageId
-            ? fallbackPayload
+            ? fallbackResult
               ? {
                   ...m,
-                  inlineApp: { appKey, status: 'ready' as const, payload: fallbackPayload },
+                  inlineApp: { appKey, status: 'ready' as const, result: fallbackResult, payload: fallbackResult.render?.payload },
                 }
               : { ...m, inlineApp: { appKey, status: 'error' as const, error: lastError } }
             : m,
@@ -663,32 +676,12 @@ export function useClassroomCompanion(
 
       const streamResult = await fetchUIMessageStream(
         '/api/tutor/agent',
-        {
+        buildInClassTutorAgentBody({
           messages: uiMessages,
-          sessionId: sessionId || 'anon',
-          transcript: toTutorSegments(segments).map((s) => ({
-            id: String(s.id),
-            text: s.text,
-            startMs: s.startMs,
-            endMs: s.endMs,
-            confidence: 0.9,
-          })),
-          mode: 'in-class',
-          context: {
-            // 让 backend 知道"用户问话那一刻，最近 30s 讲了什么"——
-            // 代词消歧（"刚才那个 derivative"）的关键输入。
-            recentFocus: extractRecentFocus(segments) || undefined,
-          },
-          options: {
-            // 课堂同桌允许吐 <open_app:KEY/> marker，前端 extractOpenAppMarker
-            // 会剥掉标签并触发 InlineAppCard 生成。
-            allowInlineApp: true,
-            // 课中不返回 [MM:SS] chip，避免课堂 UI 信息噪声
-            returnTimestamps: false,
-            // 课中没有学霸思维引导（复习态才开）
-            thinkingGuide: false,
-          },
-        },
+          sessionId,
+          segments,
+          model: preferredModel,
+        }),
         {
           headers,
           signal: abortRef.current.signal,
@@ -739,6 +732,10 @@ export function useClassroomCompanion(
       //     渲染在对话流里（InlineAppCard）。
       //   - inlineAppMode=false：延迟 320ms 调 onOpenApp 打开 WorkshopWindow
       //     （旧行为，留给复习态用）。
+      if (openAppKey && isInClassBlockedInlineAppKey(openAppKey)) {
+        return;
+      }
+
       if (openAppKey && isWorkshopAppKey(openAppKey)) {
         const safeKey: WorkshopAppKey = openAppKey;
         // 内联渲染目前只覆盖 5 类结构化知识产物（quiz / flashcards /
@@ -785,7 +782,7 @@ export function useClassroomCompanion(
       ]);
       setStreamingMessage(null);
     }
-  }, [accessToken, segments, sessionId, lessons, onOpenApp, inlineAppMode, triggerInlineAppGeneration]);
+  }, [accessToken, preferredModel, segments, sessionId, lessons, onOpenApp, inlineAppMode, triggerInlineAppGeneration]);
 
   const stop = useCallback(() => {
     stopStream();

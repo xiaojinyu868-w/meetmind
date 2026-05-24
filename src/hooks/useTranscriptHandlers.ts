@@ -8,6 +8,7 @@ import {
   addTranscripts,
   db,
   ANONYMOUS_USER_ID,
+  saveAudioSession,
 } from '@/lib/db';
 import { classroomDataService } from '@/lib/services/classroom-data-service';
 import { memoryService, type ClassTimeline } from '@/lib/services/memory-service';
@@ -228,8 +229,16 @@ export function useTranscriptHandlers(
         )
     );
 
+    void saveAudioSession(pendingAudio.blob, pendingAudio.sessionId, userId || ANONYMOUS_USER_ID, {
+      duration: pendingAudio.durationMs,
+      sourceType: 'recording',
+      mediaUrl: pendingAudio.mediaUrl,
+      transcriptionStatus: 'failed',
+      transcriptionError: message,
+    }).catch((err) => console.error('Failed to mark recording transcription as failed:', err));
+
     clearPendingRecordedAudio(meta?.recordingId);
-  }, [clearPendingRecordedAudio, resolvePendingRecordedAudio]);
+  }, [clearPendingRecordedAudio, resolvePendingRecordedAudio, userId]);
 
   // ── handleTranscriptEnhanced ───────────────────────────────────
 

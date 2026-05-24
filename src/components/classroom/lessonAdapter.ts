@@ -18,6 +18,7 @@
  */
 
 import type { AudioSession } from '@/lib/db/schema';
+import { resolvePendingAudioFailureStatus } from '@/lib/utils/page-utils';
 import type { Lesson, LessonStatus } from './types';
 
 export interface LessonExtras {
@@ -57,6 +58,7 @@ function formatTime(d: Date): string {
  * 真正的数据清理可以通过复习界面或后台 job 完成。
  */
 const STALE_RECORDING_AFTER_MS = 2 * 60 * 60 * 1000; // 2 小时
+const STALE_TRANSCRIPTION_AFTER_MS = 45 * 60 * 1000; // 45 分钟：长音频也不应无限“整理中”
 
 function isStaleRecording(session: AudioSession): boolean {
   if (session.status !== 'recording') return false;
@@ -67,18 +69,45 @@ function isStaleRecording(session: AudioSession): boolean {
   return ageMs > STALE_RECORDING_AFTER_MS;
 }
 
+function getSessionUpdatedAtMs(session: AudioSession): number {
+  const updatedAt = session.updatedAt instanceof Date
+    ? session.updatedAt
+    : new Date(session.updatedAt || session.createdAt);
+  const value = updatedAt.getTime();
+  return Number.isFinite(value) ? value : 0;
+}
+
+function hasRecoverableAudio(session: AudioSession): boolean {
+  return Boolean(session.blob || session.mediaUrl);
+}
+
+function isStaleTranscription(session: AudioSession): boolean {
+  if (session.status !== 'completed') return false;
+  if (!hasRecoverableAudio(session)) return false;
+  if (session.transcriptionStatus === 'pending') return Date.now() - getSessionUpdatedAtMs(session) > STALE_TRANSCRIPTION_AFTER_MS;
+  if (session.transcriptionStatus) return false;
+  return Date.now() - getSessionUpdatedAtMs(session) > STALE_TRANSCRIPTION_AFTER_MS;
+}
+
 function deriveStatus(
   session: AudioSession,
   hasTranscript: boolean,
 ): LessonStatus {
+  if (hasTranscript || session.transcriptionStatus === 'completed') return 'ready';
+  if (session.transcriptionStatus === 'failed') return 'failed';
+  if (isStaleTranscription(session)) return 'failed';
   // 防御：recording 但创建时间很久以前 → 视为 stale，降级为 processing
   if (session.status === 'recording' && isStaleRecording(session)) {
-    return hasTranscript ? 'ready' : 'processing';
+    return 'processing';
   }
   if (session.status === 'recording') return 'recording';
   // 录完了但还没有转录段 → 酿造中
-  if (!hasTranscript) return 'processing';
-  return 'ready';
+  return 'processing';
+}
+
+function deriveStatusText(session: AudioSession, status: LessonStatus): string | undefined {
+  if (status !== 'failed') return undefined;
+  return resolvePendingAudioFailureStatus(session.transcriptionError || '');
 }
 
 function deriveTitle(session: AudioSession): string {
@@ -115,5 +144,6 @@ export function audioSessionToLesson(
     reviewed: false, // TODO: 接 preferences 表持久化
     linkedMaterials: extras.linkedMaterials,
     status,
+    statusText: deriveStatusText(session, status),
   };
 }

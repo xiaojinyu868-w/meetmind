@@ -23,23 +23,89 @@ export async function readJsonApiResponse<T>(response: Response, errorPrefix: st
 // ── ASR / Tutor context builders ──────────────────────────────────
 
 const DEFAULT_ASR_TECH_TERMS = [
+  // 编程/Agent 工具
   'Cursor',
   'Claude Code',
   'CodeBuddy',
   'Codex',
   'Copilot',
-  'Midjourney',
-  'Co-work',
+  'GitHub Copilot',
+  'Windsurf',
+  'Trae',
+  'OpenClaw',
   'Git Worktree',
-  'IDE',
-  'Agent',
   'MCP',
-  'LLM',
+  'IDE',
   'prompt',
   'workflow',
+
+  // 模型与 AI 产品
+  'ChatGPT',
+  'GPT-4',
+  'GPT-5',
+  'OpenAI',
+  'Claude',
+  'Anthropic',
+  'Gemini',
+  'DeepSeek',
+  'Qwen',
+  '通义千问',
+  '豆包',
+  'Kimi',
+  'Kimi Cloud',
+  'Moonshot',
+  'Manus',
+  'Genspark',
+  'Perplexity',
+  'Grok',
+  'Llama',
+  'Mistral',
+  'Midjourney',
+  'Runway',
+  'Sora',
+
+  // 常见课堂概念
+  'Agent',
+  'AI Agent',
+  'LLM',
+  'RAG',
+  'Function Calling',
+  'Tool Calling',
+  'Context Engineering',
+  'Scaling Law',
+  'Transformer',
+  'Attention',
+  'CoT',
+  'Chain of Thought',
+  'Benchmark',
+  'SWE-Bench',
+  'HumanEval',
+  'Open Cloud',
+  'Co-work',
+  'Workflow',
+
+  // 中文行业词
+  '百模大战',
+  '智能体',
+  '上下文工程',
+  '模型能力涌现',
+  '李世石时刻',
+  '注意力机制',
+  '多模态',
+  '具身智能',
 ];
 
-const DEFAULT_ASR_CONTEXT_HINT = `常见中英混合术语：${DEFAULT_ASR_TECH_TERMS.join('、')}。这些词如果出现在课堂里，请优先保留英文或标准产品名写法，不要音译成中文。尤其注意：Cloud Code 多数情况下应识别为 Claude Code，mid journey 应识别为 Midjourney，cowork 应识别为 Co-work。`;
+const DEFAULT_ASR_ALIAS_HINT = [
+  'Cloud Code 多数情况下应识别为 Claude Code',
+  'mid journey 应识别为 Midjourney',
+  'cowork / co work 应识别为 Co-work',
+  'Jan Spark / Gen Spark 多数情况下应识别为 Genspark',
+  '百杀大战多数情况下应识别为百模大战',
+  'Open Claw 可能是 OpenClaw；Open Cloud 也可能是产品名，按上下文保留',
+  'attention is not all you need 请优先保留 Attention / need 等英文关键词',
+];
+
+const DEFAULT_ASR_CONTEXT_HINT = `常见中英混合术语：${DEFAULT_ASR_TECH_TERMS.join('、')}。这些词如果出现在课堂里，请优先保留英文或标准产品名写法，不要音译成中文。常见误识别修正：${DEFAULT_ASR_ALIAS_HINT.join('；')}。`;
 
 export function buildASRContextHint(params: {
   manualHint: string;

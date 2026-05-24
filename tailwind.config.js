@@ -63,6 +63,13 @@ module.exports = {
         // 荧光笔
         highlight: '#FDECC8',
 
+        // 仪式时刻色板：只允许用于录音呼吸球、生成扫光等白名单场景
+        ceremony: {
+          rose: '#FCE7F3',
+          lilac: '#E9D5FF',
+          sky: '#DBEAFE',
+        },
+
         // 兼容旧版色名
         navy: {
           DEFAULT: '#232322',

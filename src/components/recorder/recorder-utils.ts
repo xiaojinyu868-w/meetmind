@@ -2,6 +2,24 @@ import type { TranscriptSegment } from '@/types';
 import { calculateSimilarity } from '@/lib/utils/transcript-utils';
 import { DEDUP_SIMILARITY, DEDUP_GAP_MS } from './recorder-types';
 
+export type BatchTranscribeEndpoint = '/api/transcribe-turbo' | '/api/transcribe-fast' | '/api/transcribe';
+
+const LONG_BATCH_TRANSCRIBE_AFTER_MS = 4 * 60 * 1000;
+const LARGE_BATCH_TRANSCRIBE_AFTER_BYTES = 12 * 1024 * 1024;
+
+export function chooseBatchTranscribeEndpoints(params: {
+  durationMs?: number;
+  sizeBytes?: number;
+}): BatchTranscribeEndpoint[] {
+  const durationMs = Number.isFinite(params.durationMs) ? Math.max(0, params.durationMs || 0) : 0;
+  const sizeBytes = Number.isFinite(params.sizeBytes) ? Math.max(0, params.sizeBytes || 0) : 0;
+  const shouldPreferSplitAsync = durationMs >= LONG_BATCH_TRANSCRIBE_AFTER_MS || sizeBytes > LARGE_BATCH_TRANSCRIBE_AFTER_BYTES;
+
+  return shouldPreferSplitAsync
+    ? ['/api/transcribe-fast', '/api/transcribe', '/api/transcribe-turbo']
+    : ['/api/transcribe-turbo', '/api/transcribe-fast', '/api/transcribe'];
+}
+
 /** 标准化文本用于去重比较：NFKC + 小写 + 去除标点/空白 */
 export function normalizeCompareText(text: string): string {
   return (text || '')
@@ -23,6 +41,87 @@ export function shouldReplaceLastSegment(last: TranscriptSegment, next: Transcri
   const lastKey = normalizeCompareText(last.text);
   const nextKey = normalizeCompareText(next.text);
   return !!lastKey && lastKey === nextKey && (overlap || gap <= DEDUP_GAP_MS);
+}
+
+export type RealtimeTranscriptMergeAction = 'append' | 'replace' | 'ignore';
+
+function estimateSpeechDurationMs(text: string): number {
+  const normalizedLength = normalizeCompareText(text).length;
+  return Math.min(8_000, Math.max(900, normalizedLength * 150));
+}
+
+function repairAppendTiming(last: TranscriptSegment | undefined, next: TranscriptSegment): TranscriptSegment {
+  const safeStart = Number.isFinite(next.startMs) ? Math.max(0, Math.floor(next.startMs)) : 0;
+  const safeEnd = Number.isFinite(next.endMs) ? Math.max(0, Math.floor(next.endMs)) : safeStart;
+  if (!last) {
+    return {
+      ...next,
+      startMs: safeStart,
+      endMs: Math.max(safeStart + 300, safeEnd),
+    };
+  }
+
+  if (safeStart > last.endMs && safeEnd > safeStart) {
+    return { ...next, startMs: safeStart, endMs: safeEnd };
+  }
+
+  const startMs = Math.max(0, Math.floor(last.endMs + 120));
+  const originalDuration = safeEnd > safeStart ? safeEnd - safeStart : 0;
+  const duration = originalDuration > 0 ? originalDuration : estimateSpeechDurationMs(next.text);
+  return {
+    ...next,
+    startMs,
+    endMs: startMs + Math.max(300, duration),
+  };
+}
+
+export function mergeRealtimeTranscriptSegment(
+  existing: TranscriptSegment[],
+  incoming: TranscriptSegment,
+  options: { replaceIds?: string[] } = {},
+): { segments: TranscriptSegment[]; action: RealtimeTranscriptMergeAction } {
+  const nextKey = normalizeCompareText(incoming.text);
+  if (!nextKey) return { segments: existing, action: 'ignore' };
+
+  if (options.replaceIds?.length) {
+    for (const replaceId of options.replaceIds) {
+      const replaceIndex = existing.findIndex((seg) => seg.id === replaceId);
+      if (replaceIndex >= 0) {
+        const segments = [...existing];
+        segments[replaceIndex] = incoming;
+        return { segments, action: 'replace' };
+      }
+    }
+  }
+
+  const last = existing[existing.length - 1];
+  if (last && shouldReplaceLastSegment(last, incoming)) {
+    const segments = [...existing];
+    segments[segments.length - 1] = incoming;
+    return { segments, action: 'replace' };
+  }
+
+  const recent = existing.slice(-12);
+  for (const committed of recent) {
+    const committedKey = normalizeCompareText(committed.text);
+    if (!committedKey) continue;
+    const sameText = committedKey === nextKey;
+    const similarText = calculateSimilarity(committed.text, incoming.text) >= DEDUP_SIMILARITY;
+    const overlaps = incoming.startMs <= committed.endMs && incoming.endMs >= committed.startMs;
+    const closeStart = Math.abs(incoming.startMs - committed.startMs) <= 5_000;
+    if ((sameText || similarText) && (overlaps || closeStart)) {
+      return { segments: existing, action: 'ignore' };
+    }
+  }
+
+  if (last && incoming.startMs < last.startMs - 1_000) {
+    return { segments: existing, action: 'ignore' };
+  }
+
+  return {
+    segments: [...existing, repairAppendTiming(last, incoming)],
+    action: 'append',
+  };
 }
 
 /** 将内部错误信息转换为用户友好文案 */

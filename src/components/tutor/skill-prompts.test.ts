@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { SKILL_PROMPTS } from './skill-prompts';
+import { SKILL_PROMPTS, filterSkillPromptsForSurface } from './skill-prompts';
 
 describe('SKILL_PROMPTS catalog', () => {
   // 这六个 skill 是产品层的"原语"——Hyperknow 的 tell 是把它们放在一眼看得见的位置。
@@ -64,6 +64,24 @@ describe('SKILL_PROMPTS catalog', () => {
     const chatOnly = SKILL_PROMPTS.find((s) => s.label === '再讲一遍');
     expect(chatOnly).toBeDefined();
     expect(chatOnly?.appKey).toBeUndefined();
+  });
+
+  it('课堂 surface 可以过滤课后型技能，但共享目录仍保留它们给复习态', () => {
+    const classroomSkills = filterSkillPromptsForSurface(SKILL_PROMPTS, {
+      excludeAppKeys: ['flashcards', 'quiz', 'study-report'],
+    });
+    const classroomLabels = classroomSkills.map((s) => s.label);
+    const allLabels = SKILL_PROMPTS.map((s) => s.label);
+
+    expect(allLabels).toContain('做闪卡');
+    expect(allLabels).toContain('出测验');
+    expect(allLabels).toContain('学习报告');
+    expect(classroomLabels).not.toContain('做闪卡');
+    expect(classroomLabels).not.toContain('出测验');
+    expect(classroomLabels).not.toContain('学习报告');
+    expect(classroomLabels).toContain('考试速查表');
+    expect(classroomLabels).toContain('画思维导图');
+    expect(classroomLabels).toContain('再讲一遍');
   });
 });
 

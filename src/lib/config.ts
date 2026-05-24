@@ -34,7 +34,7 @@ export function getConfig(): AppConfig {
   return {
     // LLM
     dashscopeApiKey: process.env.DASHSCOPE_API_KEY || '',
-    llmModel: process.env.LLM_MODEL || 'qwen3.5-plus',
+    llmModel: process.env.LLM_MODEL || 'deepseek-v4-flash',
     llmBaseUrl: process.env.LLM_BASE_URL || 'https://dashscope.aliyuncs.com/compatible-mode/v1',
     
     // 外部服务

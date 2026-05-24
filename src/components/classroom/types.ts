@@ -5,10 +5,13 @@
  * 一节课有三种时态：课前（预习）、课中（录音中）、课后（已理解）。
  */
 
+import type { AppExecutionResult } from '@/lib/ai-native/types';
+
 export type LessonStatus =
   | 'upcoming'    // 课前：排在日程里，还没开始
   | 'recording'   // 课中：正在录音
   | 'processing'  // 课后-酿造中：录完了，AI 正在理解
+  | 'failed'      // 课后-转写失败：原声已保留，但没有可用文字
   | 'ready';      // 课后-已理解：可以复习了
 
 export interface Lesson {
@@ -29,6 +32,8 @@ export interface Lesson {
   /** 关联的预习资料数（来自「收集」tab） */
   linkedMaterials?: number;
   status: LessonStatus;
+  /** 转写失败/兜底态的短说明 */
+  statusText?: string;
 }
 
 /** 左侧面板的视图态 */
@@ -68,13 +73,15 @@ export interface CompanionMessage {
    * 渲染进对话流。不再弹窗打断用户上课的注意力。
    *
    * status=loading：还在生成中，显示三阶段骨架
-   * status=ready  ：生成完毕，payload 就是原插件 render.payload
+   * status=ready  ：生成完毕，result 是完整 AppExecutionResult；payload 仅兼容旧缓存
    * status=error  ：失败，error 是人话描述
    */
   inlineApp?: {
     appKey: 'quiz' | 'flashcards' | 'cheatsheet' | 'mindmap' | 'study-report';
     status: 'loading' | 'ready' | 'error';
-    /** 生成完毕时的产物 payload（形态和 WorkshopWindow 用的一致） */
+    /** 生成完毕时的完整应用执行结果，直接交给应用矩阵 UI 渲染 */
+    result?: AppExecutionResult;
+    /** 兼容旧消息：原插件 render.payload */
     payload?: unknown;
     /** 失败时的人话描述 */
     error?: string;

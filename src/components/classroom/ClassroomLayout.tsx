@@ -24,7 +24,9 @@
  */
 
 import React, { type ReactNode, useState, useCallback, useEffect, useRef } from 'react';
-import { MessageCircle, X, ChevronLeft, ChevronRight } from 'lucide-react';
+import { MessageCircle, X, ChevronRight } from 'lucide-react';
+import { COPY } from '@/lib/ui/copy';
+import { OctoBuddyFloatingButton, type OctoBuddyMood } from './OctoBuddy';
 
 export interface ClassroomLayoutProps {
   left: ReactNode;
@@ -33,15 +35,17 @@ export interface ClassroomLayoutProps {
   companionOpen?: boolean;
   /** 用户手动切换时的回调；未传则走内部自管状态 */
   onCompanionOpenChange?: (open: boolean) => void;
+  /** 悬浮球的动作 / 表情状态 */
+  companionMood?: OctoBuddyMood;
 }
 
 /** 宽度约束（px） */
-const MIN_WIDTH = 320;
-const MAX_WIDTH = 720;
-const DEFAULT_WIDTH = 480;
-const WIDTH_STORAGE_KEY = 'classroom-companion-width-px';
+const MIN_WIDTH = 300;
+const MAX_WIDTH = 640;
+const DEFAULT_WIDTH = 400;
+const WIDTH_STORAGE_KEY = 'classroom-companion-width-px:v2';
 // 双击循环三挡
-const SNAP_WIDTHS = [360, 480, 560] as const;
+const SNAP_WIDTHS = [340, 400, 520] as const;
 
 function clampWidth(w: number): number {
   return Math.max(MIN_WIDTH, Math.min(MAX_WIDTH, Math.round(w)));
@@ -74,6 +78,7 @@ export function ClassroomLayout({
   right,
   companionOpen,
   onCompanionOpenChange,
+  companionMood = 'idle',
 }: ClassroomLayoutProps) {
   // 受控 / 非受控：外部传了就跟随，否则内部管
   const [internalOpen, setInternalOpen] = useState(false);
@@ -159,7 +164,7 @@ export function ClassroomLayout({
         className={`hidden lg:flex flex-shrink-0 flex-col bg-canvas ${
           dragging ? '' : 'transition-[width] duration-300 ease-out'
         }`}
-        style={{ width: open ? width : 48 }}
+        style={{ width: open ? width : 0 }}
       >
         {open ? (
           <div className="relative flex h-full flex-col">
@@ -187,51 +192,36 @@ export function ClassroomLayout({
               />
             </div>
 
-            {/* 展开态顶部的小收起按钮 */}
-            <div className="flex-shrink-0 flex items-center justify-end px-2 pt-2">
-              <button
-                type="button"
-                onClick={() => setOpen(false)}
-                className="inline-flex h-7 w-7 items-center justify-center rounded-full text-ink-muted hover:bg-[#EFEFED] active:scale-95 transition"
-                aria-label="收起同学"
-                title="收起"
-              >
-                <ChevronRight size={15} strokeWidth={1.8} />
-              </button>
-            </div>
-            <div className="flex-1 min-h-0 flex flex-col">
+            <button
+              type="button"
+              onClick={() => setOpen(false)}
+              className="absolute right-2 top-2 z-20 inline-flex h-7 w-7 items-center justify-center rounded-full bg-canvas/90 text-ink-muted transition hover:bg-[#EFEFED] active:scale-95"
+              aria-label="收起同学"
+              title="收起"
+            >
+              <ChevronRight size={15} strokeWidth={1.8} />
+            </button>
+            <div className="flex min-h-0 flex-1 flex-col">
               {right}
             </div>
           </div>
-        ) : (
-          /* 折叠态：极简竖条 */
-          <button
-            type="button"
-            onClick={() => setOpen(true)}
-            className="group relative flex h-full w-full items-center justify-center border-l border-[#E9E9E7] hover:bg-[#F0F0ED] transition-colors"
-            aria-label="展开同学"
-            title="同学"
-          >
-            <span
-              className="text-[10.5px] font-medium uppercase tracking-[0.32em] text-ink-muted group-hover:text-ink-secondary transition-colors"
-              style={{ writingMode: 'vertical-rl', textOrientation: 'mixed' }}
-            >
-              COMPANION
-            </span>
-            <ChevronLeft
-              size={12}
-              strokeWidth={1.8}
-              className="absolute left-1.5 top-1/2 -translate-y-1/2 text-ink-muted opacity-0 group-hover:opacity-100 transition-opacity"
-            />
-          </button>
-        )}
+        ) : null}
       </aside>
+
+      {!open ? (
+        <OctoBuddyFloatingButton
+          mood={companionMood}
+          label={COPY.octoBuddy[companionMood]}
+          sublabel={COPY.octoBuddy.openHint}
+          onClick={() => setOpen(true)}
+        />
+      ) : null}
 
       {/* ── 移动端：底部"问同学"悬浮按钮 ── */}
       <button
         type="button"
         onClick={openMobileCompanion}
-        className="lg:hidden fixed bottom-[5.5rem] right-4 z-30 flex items-center gap-1.5 rounded-full bg-ink px-3.5 py-2 text-[12.5px] font-medium text-white ring-[0.5px] ring-[#232322]/20 active:scale-95 transition"
+        className="fixed bottom-[5.5rem] right-4 z-30 flex items-center gap-1.5 rounded-full bg-ink px-3.5 py-2 text-[12.5px] font-medium text-white transition active:scale-95 lg:hidden"
         aria-label="问同学"
       >
         <MessageCircle size={14} strokeWidth={2} />

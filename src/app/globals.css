@@ -170,6 +170,11 @@
   --safe-area-right: env(safe-area-inset-right, 0px);
   --browser-chrome-height: 0px;
   --ai-chat-min-height: 300px;
+
+  /* 阅读节奏：给报告、对话、卡片统一一套更疏朗的默认尺度 */
+  --mm-reading-line-height: 1.78;
+  --mm-reading-measure: 68ch;
+  --mm-section-gap: 1.25rem;
 }
 
 @supports (padding-top: env(safe-area-inset-top)) {
@@ -192,6 +197,9 @@ body {
   font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
   color: var(--mm-ink);
   background: var(--mm-canvas);
+  line-height: 1.55;
+  letter-spacing: -0.005em;
+  text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }

@@ -1,9 +1,9 @@
 'use client';
 
 /**
- * 移动端 AI 对话悬浮按钮 (FAB)
+ * 移动端学习同桌悬浮按钮 (FAB)
  * 
- * 在移动端复习页面底部显示，提供快捷的 AI 对话入口
+ * 在移动端复习页面底部显示，提供快捷的学习同桌入口
  * 支持脉冲动画提示、拖拽移动、智能隐藏
  */
 
@@ -31,7 +31,7 @@ export function MobileAIFab({
   pulse = false,
   position = 'bottom-right',
   hasUnread = false,
-  tooltip = '问 AI',
+  tooltip = '问同学',
 }: MobileAIFabProps) {
   const [isPressed, setIsPressed] = useState(false);
   const [showTooltip, setShowTooltip] = useState(true);
@@ -70,8 +70,8 @@ export function MobileAIFab({
       {showTooltip && tooltip && (
         <div className={cn(
           'absolute bottom-full mb-2 right-0',
-          'px-3 py-1.5 rounded-lg',
-          'bg-gray-900 text-white text-xs whitespace-nowrap',
+          'rounded-lg px-3 py-1.5',
+          'border border-divider bg-white text-[12px] text-ink-secondary whitespace-nowrap',
           'animate-fade-in'
         )}>
           {tooltip}
@@ -105,7 +105,7 @@ export function MobileAIFab({
 
         {/* 图标 */}
         <svg 
-          className="w-6 h-6 text-white" 
+          className="h-6 w-6 text-white" 
           fill="none" 
           viewBox="0 0 24 24" 
           stroke="currentColor" 

@@ -7,11 +7,16 @@
 ```
 src/components/apps/windows/
 ├── WorkshopWindowManager.tsx    # 窗口管理器（多窗口协调）
+├── AppRenderSurface.tsx         # 统一应用渲染面（浮窗 / 对话内联 / 独立页共用）
 ├── MindmapWindow.tsx            # 思维导图窗口（692行，已拆分）
 ├── MindmapWindowLayout.ts      # 思维导图布局引擎（168行）
 ├── InfographicWindow.tsx       # 信息图窗口（699行，已拆分）
 ├── InfographicWindowData.ts    # 信息图数据处理（305行）
-├── StudyReportWindow.tsx       # 听课报告窗口（家长视角专注度+掌握度报告）
+├── StudyReportWindow.tsx       # 学习报告入口（插件报告 / 随堂检验报告分发）
+├── StudyReportDocument.tsx     # 插件学习报告文档排版（疏朗阅读版）
+├── study-report-document-model.ts # 学习报告内容归一化纯 helper（有测试）
+├── FlashcardsWindow.tsx        # 闪卡训练窗口（demo 静态结果显示试听成果分享入口）
+├── flashcards-share-actions.ts # 闪卡试听成果外传文案/文件名 helper
 ├── EvidenceLabel.tsx           # 证据标签组件
 └── index.ts                    # barrel 导出
 ```
@@ -37,6 +42,17 @@ src/components/apps/windows/
 
 - 主文件：`InfographicWindow.tsx`（699行）— 渲染逻辑
 - 数据文件：`InfographicWindowData.ts`（305行）— 场景预设/风格预设/数据转换
+
+## AppRenderSurface
+
+统一承接 `AppExecutionResult` → 具体应用 UI 的分发。`WorkshopWindowManager`、应用矩阵独立页、课堂/复习对话内联应用都必须复用这里，避免同一个 app 维护两套 UI。
+
+## 排版约定
+
+- 应用窗口默认使用 `canvas/card/ink/divider` 平涂体系；测验等练习类应用不再使用持续深色渐变、阴影或光晕。
+- 报告类应用优先复用 `StudyReportDocument` 的疏朗文档排版：大标题、长正文 1.75+ 行高、主内容和建议区分栏。
+- 用户可见应用名称必须避开 `COPY.bannedWords`；`app-catalog.test.ts` 也会额外守住目录里的 `AI / 生图 / 智能生成` 等技术词。
+- 独立应用页和 `AppWindowShell` 不展示内部 sessionId；动作文案使用“再做一版 / 已做好 / 没做好”。
 
 ## WorkshopWindowManager
 

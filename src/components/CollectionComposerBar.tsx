@@ -85,7 +85,7 @@ export function CollectionComposerBar({
 
         {/* 输入卡片——ChatGPT 风格：上文本区 + 下按钮行 */}
         <div
-          className="rounded-2xl bg-white ring-[0.5px] ring-[#232322]/[0.06]"
+          className="rounded-2xl border border-divider bg-white"
           onClick={() => composerRef.current?.focus()}
         >
           {/* 上：文本输入区，撑满卡片宽度 */}
@@ -131,7 +131,7 @@ export function CollectionComposerBar({
               </p>
             ) : null}
             {!sourceImporting && sourceImportError ? (
-              <p className="mt-1 text-[11px] text-rose-500">{compactText(sourceImportError, 40)}</p>
+              <p className="mt-1 text-[12px] text-danger-600">{compactText(sourceImportError, 40)}</p>
             ) : null}
           </div>
 

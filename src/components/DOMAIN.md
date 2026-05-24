@@ -37,7 +37,7 @@ components/
 
 | 文件 | 行数 | 职责 |
 |------|------|------|
-| `Recorder.tsx` | 1694 | 录音主组件（采集/实时转录/暂停/恢复），子模块在 `recorder/` |
+| `Recorder.tsx` | 1694 | 录音主组件（采集/实时转录/暂停/恢复；实时 final 进入 `recorder-utils.mergeRealtimeTranscriptSegment` 去重/修时间戳），子模块在 `recorder/` |
 | `TranscriptFlowView.tsx` | 778 | 转录内容流式视图 |
 | `WaveformPlayer.tsx` | 638 | 波形音频播放器 |
 | `VoiceMicButton.tsx` | ~200 | 语音麦克风按钮 |
@@ -46,11 +46,11 @@ components/
 
 | 文件 | 行数 | 职责 |
 |------|------|------|
-| `AITutor.tsx` | 1940 | AI 家教（解释/追问/引导/联网/思维可视化），子模块在 `tutor/` |
+| `AITutor.tsx` | 1940 | 旧 AI 家教 / legacy fallback（移动端文字和语音主链路已移出），子模块在 `tutor/` |
 | `AIChat.tsx` | 691 | AI 对话组件 |
 | `AISearchPanel.tsx` | 720 | AI 全局搜索面板 |
 | `WordExplainer.tsx` | 562 | 术语解释器 |
-| `StreamingMarkdown.tsx` | ~300 | 流式 Markdown 渲染 |
+| `StreamingMarkdown.tsx` | 391 | 统一流式 Markdown 渲染（GFM 表格 / 数学公式 / [MM:SS] 与 [t=MM:SS] 时间戳 / [资料N]） |
 | `ThinkingVisualizer.tsx` | ~300 | AI 思维过程可视化 |
 | `ThinkingGuideRenderer.tsx` | ~260 | 思维引导渲染 |
 | `GuidanceQuestion.tsx` | ~180 | 引导问题 |
@@ -61,26 +61,28 @@ components/
 | 文件 | 行数 | 职责 |
 |------|------|------|
 | `EchoCard.tsx` | ~180 | 回声卡片（设计系统原住民：无渐变/无阴影） |
-| `EchoShareCard.tsx` | ~300 | 分享图（纯 Canvas 绘制，微信兼容） |
+| `EchoShareCard.tsx` | ~300 | 分享图（纯 Canvas 绘制，微信兼容；提供保存图片 / 系统分享 / 复制文案） |
+| `echo-share-actions.ts` | ~60 | 分享图外传 helper（分享文案、文件名、data URL → File） |
 
 ### 内容管理
 
 | 文件 | 行数 | 职责 |
 |------|------|------|
 | `WorkspaceCaptureList.tsx` | ~900 | 工作空间 capture 列表 |
-| `DesktopVideoReviewLayout.tsx` | ~537 | 桌面端复习布局（Longcut 风格：左列=视频+时间轴+章节列表，右列=Transcript/Chat/困惑点/AI工坊 tabs），从 page.tsx 提取，支持 onVideoTimeUpdate 受控回调 |
+| `DesktopVideoReviewLayout.tsx` | ~537 | 桌面端复习布局（Longcut 风格：左列=视频+时间轴+章节列表，右列=Transcript/Chat/困惑点/AI工坊 tabs），Chat/困惑点统一走 `SafeAITutor`，播放位置需转秒后注入 agent context |
 | `WorkspaceCaptureEditorModal.tsx` | ~105 | 工作空间 capture 编辑弹窗，从 page.tsx 提取 |
 | `VideoReviewPlayer.tsx` | 823 | 视频复习播放器（pauseNonce/playNonce/seekNonce 命令式控制，点击画面暂停/播放+指示器动画，visibilitychange 倍速恢复，空格/箭头键盘快捷键，B站 Dash 双轨同步，B站封面代理） |
 | `ClassCheckOverlay.tsx` | 430 | 随堂检验弹窗（greeting → quiz → result 三阶段，Backdrop 已提取为独立组件避免闪烁） |
+| `ClassroomView.model.ts` | ~10 | 课堂页纯交互模型（demo 录课态停止按钮应退出 demo，不走真实录音/stale DB 清理） |
 | `SharedWorkspacePanel.tsx` | 46 | shared workspace 统一面板（仅 apps）— 从 `page.tsx` 抽离，已移除 highlights / summary / notes |
 | `ReviewWorkspacePanel.tsx` | 127 | desktop review 左侧工作区面板（tabs / timeline / anchor detail / shared workspace slot） |
-| `ReviewTutorPanel.tsx` | 220 | desktop review 右侧 Tutor 面板（波形、历史对话、AIChat、SafeAITutor 容器） |
+| `ReviewTutorPanel.tsx` | 220 | desktop review 右侧 Tutor 面板（波形、历史对话、SafeAITutor / TutorAgentPanel 统一容器） |
 | `CollectionSelectionBar.tsx` | 94 | 收集上下文多选操作条（问 Tutor / 引用 / 批量归档删除） |
 | `CollectionComposerContextPreview.tsx` | 62 | composer 上方的引用与链接预览条 |
 | `CollectionComposerBar.tsx` | 168 | collection composer 输入区容器（预览 / textarea / 发送 / 听写 / 上传） |
 | `CollectionMessageActionSheet.tsx` | ~283 | 收集消息操作底部菜单（复习/编辑/打开原件/归档/删除），从 page.tsx 提取 |
 | `CollectionFeedMessageBubble.tsx` | ~340 | 收集 Feed 单条消息气泡（audio/video/image/document/text 五种类型），从 page.tsx 提取 |
-| `CollectionEmptyState.tsx` | ~82 | 收集为空时引导页（原声/图片/讲义快捷入口），从 page.tsx 提取 |
+| `CollectionEmptyState.tsx` | ~82 | 收集为空时引导页（录音/图片/讲义快捷入口），从 page.tsx 提取 |
 | `ImageUpload.tsx` | ~220 | 图片上传 |
 | `Citations.tsx` | ~140 | 引用标签 |
 | `CitationReferenceSheet.tsx` | ~260 | 引用参考弹窗 |
@@ -90,6 +92,7 @@ components/
 | 文件 | 行数 | 职责 |
 |------|------|------|
 | `Header.tsx` | ~280 | 顶部导航栏 |
+| `DesktopSidebar.tsx` | ~350 | 桌面侧栏（默认 168px，折叠 52px；录课专注态强制 52px，主学习区优先） |
 | `ModelSelector.tsx` | ~260 | AI 模型选择器 |
 | `WechatBindForm.tsx` | ~280 | 微信绑定表单 |
 | `AgreementModal.tsx` | ~600 | 用户协议弹窗 |
@@ -122,6 +125,7 @@ components/
 - `WaveformPlayer.tsx` (638) — 波形播放器
 - `WordExplainer.tsx` (562) — 术语解释
 - `DesktopVideoReviewLayout.tsx` (537) — 桌面端复习布局
+- `desktop-video-review-layout-model.ts` — 桌面视频复习布局纯 helper（播放时间 ms → agent 秒级 context）
 
 ## 设计系统约束
 

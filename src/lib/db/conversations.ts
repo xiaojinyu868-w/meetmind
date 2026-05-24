@@ -74,7 +74,7 @@ export async function getUserConversations(
 export async function searchUserConversations(
   userId: string,
   keyword: string,
-  options: { type?: 'tutor' | 'chat' | 'global-chat'; limit?: number } = {}
+  options: { type?: 'tutor' | 'chat' | 'global-chat'; sessionId?: string; limit?: number } = {}
 ): Promise<ConversationHistoryRecord[]> {
   const lowerKeyword = keyword.toLowerCase();
   
@@ -97,6 +97,10 @@ export async function searchUserConversations(
     (c.lastMessage && c.lastMessage.toLowerCase().includes(lowerKeyword))
   );
   
+  if (options.sessionId) {
+    results = results.filter(c => c.sessionId === options.sessionId);
+  }
+
   // 按更新时间降序
   results.sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime());
   

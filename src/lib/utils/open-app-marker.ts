@@ -8,10 +8,16 @@ const INLINE_APP_KEYS = new Set<InlineAppKey>([
   'study-report',
 ]);
 
+const IN_CLASS_BLOCKED_INLINE_APP_KEYS = new Set<InlineAppKey>(['flashcards', 'quiz', 'study-report']);
+
 const OPEN_APP_MARKER = /<open_app:\s*([a-z0-9_-]+)\s*\/?\s*>/gi;
 
 export function isInlineAppKey(value: string | null | undefined): value is InlineAppKey {
   return Boolean(value && INLINE_APP_KEYS.has(value as InlineAppKey));
+}
+
+export function isInClassBlockedInlineAppKey(value: string | null | undefined): value is Extract<InlineAppKey, 'flashcards' | 'quiz' | 'study-report'> {
+  return Boolean(value && IN_CLASS_BLOCKED_INLINE_APP_KEYS.has(value as InlineAppKey));
 }
 
 export function extractOpenAppMarker(content: string): { key: InlineAppKey | null; cleaned: string } {

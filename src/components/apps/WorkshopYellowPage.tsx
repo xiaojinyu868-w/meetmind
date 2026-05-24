@@ -170,9 +170,9 @@ function readResultPreview(sessionId: string, appKey: string): string {
 
 function capabilityHint(app: WorkshopAppCatalogItem): string {
   if (app.renderMode === 'custom(image-first)') {
-    return `输出形态：${app.outputType} · 更适合进入应用后继续定制`;
+    return `会得到：${app.outputType} · 适合先进去选版式`;
   }
-  return `输出形态：${app.outputType} · 也支持直接生成后再进入查看`;
+  return `会得到：${app.outputType} · 可以先做一版再查看`;
 }
 
 function ElapsedTimer({ startMs }: { startMs: number }) {
@@ -627,13 +627,13 @@ export function WorkshopYellowPage(props: WorkshopYellowPageProps) {
   return (
     <section className={styles.page}>
       <header className={styles.header}>
-        <p className={styles.eyebrow}>能力接口</p>
-        <h2 className={styles.title}>应用</h2>
+        <p className={styles.eyebrow}>这节课能做什么</p>
+        <h2 className={styles.title}>学习应用</h2>
         <p className={styles.subTitle}>
-          基于当前课堂上下文可直接调用的能力：有的适合直接生成结果，有的更适合先进入应用继续操作。
+          把这节课变成练习、导图、播客和复习材料。先做一版，也可以进去慢慢看。
         </p>
         <p className={styles.subStatus} data-testid="workshop-task-summary">
-          {`共 ${visibleApps.length} 项能力 · 已生成 ${generatedCount} 项${runningCount > 0 ? ` · 生成中 ${runningCount} 项` : ''}${failedCount > 0 ? ` · 异常 ${failedCount} 项` : ''}`}
+          {`${visibleApps.length} 个应用 · 已做好 ${generatedCount} 个${runningCount > 0 ? ` · 正在做 ${runningCount} 个` : ''}${failedCount > 0 ? ` · 需要处理 ${failedCount} 个` : ''}`}
         </p>
         <div className={styles.headerActions}>
           <button
@@ -644,7 +644,7 @@ export function WorkshopYellowPage(props: WorkshopYellowPageProps) {
             data-testid="workshop-generate-all"
           >
             <Zap size={14} strokeWidth={1.75} className="inline mr-1" />
-            批量生成未产出项
+            把还没做的都做一版
           </button>
         </div>
       </header>
@@ -706,7 +706,7 @@ export function WorkshopYellowPage(props: WorkshopYellowPageProps) {
               ) : null}
               {taskState?.status === 'error' && taskState.error ? (
                 <p className={styles.errorLine} title={taskState.error}>
-                  失败原因：{taskState.error}
+                  刚才没做好：{taskState.error}
                 </p>
               ) : null}
               <div className={styles.actionRow}>
@@ -728,7 +728,7 @@ export function WorkshopYellowPage(props: WorkshopYellowPageProps) {
                     data-testid={`workshop-inline-retry-${app.key}`}
                   >
                     <RotateCcw size={12} strokeWidth={1.75} className="inline mr-0.5" />
-                    重新生成
+                    再做一版
                   </button>
                 ) : generated ? (
                   <button
@@ -748,7 +748,7 @@ export function WorkshopYellowPage(props: WorkshopYellowPageProps) {
                     data-testid={`workshop-open-app-${app.key}`}
                   >
                     <ExternalLink size={12} strokeWidth={1.75} className="inline mr-0.5" />
-                    打开应用
+                    进去看看
                   </button>
                 )}
 
@@ -760,7 +760,7 @@ export function WorkshopYellowPage(props: WorkshopYellowPageProps) {
                     data-testid={`workshop-open-surface-${app.key}`}
                   >
                     <ExternalLink size={12} strokeWidth={1.75} className="inline mr-0.5" />
-                    打开应用
+                    进去看看
                   </button>
                 ) : (
                   <button
@@ -773,12 +773,12 @@ export function WorkshopYellowPage(props: WorkshopYellowPageProps) {
                     {generated ? (
                       <>
                         <RotateCw size={12} strokeWidth={1.75} className="inline mr-0.5" />
-                        重新生成
+                        再做一版
                       </>
                     ) : (
                       <>
                         <Play size={12} strokeWidth={1.75} className="inline mr-0.5" />
-                        直接生成
+                        先做一版
                       </>
                     )}
                   </button>
@@ -808,7 +808,7 @@ export function WorkshopYellowPage(props: WorkshopYellowPageProps) {
               </span>
             ) : null}
             <span className={styles.dockStat}>已完成 {completedCount}</span>
-            {failedCount > 0 ? <span className={`${styles.dockStat} ${styles.dockStatFailed}`}>异常 {failedCount}</span> : null}
+            {failedCount > 0 ? <span className={`${styles.dockStat} ${styles.dockStatFailed}`}>需要处理 {failedCount}</span> : null}
           </button>
 
           {dockOpen ? (
@@ -833,7 +833,7 @@ export function WorkshopYellowPage(props: WorkshopYellowPageProps) {
               </div>
 
               {dockList.length === 0 ? (
-                <p className={styles.dockEmpty}>暂无进度记录，点击任意能力卡片的“直接生成”即可开始。</p>
+                <p className={styles.dockEmpty}>暂无进度记录，点任意应用的“先做一版”即可开始。</p>
               ) : (
                 <div className={styles.dockTaskList}>
                   {dockList.map((task) => {

@@ -694,3 +694,254 @@
     justify-content: flex-start;
   }
 }
+
+/* MeetMind UI baseline override — 应用矩阵回到暖白、平涂、无阴影 */
+.page {
+  background: #F7F7F5;
+  padding: 32px;
+}
+
+.header {
+  margin-bottom: 28px;
+}
+
+.eyebrow {
+  border-color: #E9E9E7;
+  background: #FFFFFF;
+  color: #787774;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+}
+
+.title {
+  color: #232322;
+  font-size: 34px;
+  font-weight: 700;
+  letter-spacing: -0.035em;
+}
+
+.subTitle {
+  max-width: 640px;
+  color: #787774;
+  font-size: 15px;
+  line-height: 1.75;
+}
+
+.subStatus {
+  color: #A3A39E;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.generateAllButton {
+  border-color: #232322;
+  background: #232322;
+  color: #FFFFFF;
+  box-shadow: none;
+  transition: opacity 0.15s ease, border-color 0.15s ease;
+}
+
+.generateAllButton:hover {
+  transform: none;
+  border-color: #232322;
+  box-shadow: none;
+  opacity: 0.86;
+}
+
+.grid {
+  gap: 20px;
+}
+
+.card {
+  gap: 14px;
+  border-radius: 24px;
+  border-color: #E9E9E7;
+  padding: 18px;
+  box-shadow: none;
+  transition: border-color 0.16s ease, background-color 0.16s ease;
+}
+
+.card:hover {
+  transform: none;
+  border-color: #A3A39E;
+  box-shadow: none;
+}
+
+.cardGenerated {
+  border-color: #D1F4E0;
+}
+
+.cardGenerated:hover {
+  border-color: #B8E4CC;
+}
+
+.cardRunning {
+  border-color: #F5DCA8;
+}
+
+.cardFailed {
+  border-color: #F7B4B4;
+}
+
+.coverWrap {
+  border-radius: 18px;
+  border-color: #E9E9E7;
+  background: #F7F7F5;
+}
+
+.category {
+  color: #A3A39E;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+}
+
+.appName {
+  color: #232322;
+  font-size: 21px;
+  font-weight: 700;
+  letter-spacing: -0.025em;
+}
+
+.headline,
+.description {
+  color: #787774;
+  line-height: 1.68;
+}
+
+.generated,
+.notGenerated,
+.running,
+.tag,
+.dockStat,
+.dockTaskStatus {
+  border-color: #E9E9E7;
+  background: #F7F7F5;
+  color: #787774;
+}
+
+.generated::before,
+.notGenerated::before {
+  background: #A3A39E;
+}
+
+.cardGenerated .generated,
+.dockStatussuccess {
+  border-color: #B8E4CC;
+  background: #F0FBF4;
+  color: #3D8A60;
+}
+
+.cardGenerated .generated::before,
+.dockStatussuccess::before {
+  background: #4DAE6F;
+}
+
+.running,
+.dockStatRunning,
+.dockStatusrunning {
+  border-color: #F5DCA8;
+  background: #FFF8E1;
+  color: #9A7A26;
+}
+
+.cardFailed .generated,
+.dockStatFailed,
+.dockStatuserror {
+  border-color: #F7B4B4;
+  background: #FDECEC;
+  color: #A94545;
+}
+
+.tag {
+  font-size: 12px;
+  padding: 7px 10px;
+}
+
+.metaLine {
+  color: #A3A39E;
+  font-size: 12.5px;
+  line-height: 1.65;
+}
+
+.previewLabel {
+  color: #A3A39E;
+  font-size: 11.5px;
+  letter-spacing: 0.06em;
+}
+
+.previewLine {
+  border-color: #E9E9E7;
+  background: #F7F7F5;
+  color: #787774;
+  font-size: 12.5px;
+}
+
+.primaryAction,
+.secondaryAction,
+.dockActionPrimary,
+.dockActionSecondary {
+  border-radius: 999px;
+  box-shadow: none;
+  transition: opacity 0.15s ease, border-color 0.15s ease, color 0.15s ease, background-color 0.15s ease;
+}
+
+.primaryAction,
+.dockActionPrimary {
+  border: 1px solid #232322;
+  background: #232322;
+  color: #FFFFFF;
+}
+
+.primaryAction:hover,
+.dockActionPrimary:hover {
+  transform: none;
+  background: #232322;
+  opacity: 0.86;
+}
+
+.secondaryAction,
+.dockActionSecondary {
+  border-color: #E9E9E7;
+  background: #FFFFFF;
+  color: #787774;
+}
+
+.secondaryAction:hover,
+.dockActionSecondary:hover {
+  border-color: #A3A39E;
+  background: #FFFFFF;
+  color: #232322;
+}
+
+.errorLine,
+.dockTaskMessage {
+  color: #A94545;
+  font-size: 12.5px;
+}
+
+.dockToggle,
+.dockPanel {
+  border-color: #E9E9E7;
+  background: #FFFFFF;
+  box-shadow: none;
+  backdrop-filter: none;
+  color: #232322;
+}
+
+.dockTaskItem {
+  border-color: #E9E9E7;
+  background: #F7F7F5;
+}
+
+.dockPanelTitle,
+.dockTaskName {
+  color: #232322;
+}
+
+.dockClose,
+.dockEmpty,
+.dockTaskMeta {
+  color: #787774;
+}

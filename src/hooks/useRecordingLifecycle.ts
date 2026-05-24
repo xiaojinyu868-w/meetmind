@@ -440,6 +440,8 @@ export function useRecordingLifecycle(
         // 同上：不传 topic，让已有的具体标题（如视频标题）保留
         duration,
         sourceType: 'recording',
+        transcriptionStatus: finalSegments.length > 0 ? 'completed' : 'failed',
+        transcriptionError: finalSegments.length > 0 ? undefined : '录音结束时没有拿到可转写音频',
       }).catch((err) => console.error('[classroom-stop] fallback saveAudioSession failed:', err));
       if (finalSegments.length > 0) {
         addTranscripts(effectiveSessionId, currentUserId, finalSegments.map((seg) => ({

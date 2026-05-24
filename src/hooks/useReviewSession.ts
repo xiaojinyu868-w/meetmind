@@ -132,7 +132,13 @@ export function useReviewSession(
       .where('sessionId')
       .equals(targetSessionId)
       .toArray();
-    if (!transcripts.length) return false;
+    const updatedAt = session.updatedAt instanceof Date ? session.updatedAt : new Date(session.updatedAt || session.createdAt);
+    const isOldTranscriptFallback = Date.now() - updatedAt.getTime() > 45 * 60 * 1000;
+    const canOpenAudioOnly = Boolean(
+      (session.blob || session.mediaUrl) &&
+      (session.transcriptionStatus === 'failed' || isOldTranscriptFallback)
+    );
+    if (!transcripts.length && !canOpenAudioOnly) return false;
 
     const sortedTranscripts = transcripts.sort((a, b) => a.startMs - b.startMs);
     const loadedSegments: TranscriptSegment[] = sortedTranscripts.map((item, index) => ({

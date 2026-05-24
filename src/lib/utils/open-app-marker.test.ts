@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { extractOpenAppMarker, isInlineAppKey } from './open-app-marker';
+import { extractOpenAppMarker, isInClassBlockedInlineAppKey, isInlineAppKey } from './open-app-marker';
 
 describe('open app marker parsing', () => {
   it('extracts the first valid app marker and removes all markers from visible text', () => {
@@ -12,5 +12,14 @@ describe('open app marker parsing', () => {
     expect(isInlineAppKey('cheatsheet')).toBe(true);
     expect(isInlineAppKey('audio-overview')).toBe(false);
     expect(isInlineAppKey('unknown')).toBe(false);
+  });
+
+  it('marks post-class apps as blocked for in-class companion execution', () => {
+    expect(isInClassBlockedInlineAppKey('flashcards')).toBe(true);
+    expect(isInClassBlockedInlineAppKey('quiz')).toBe(true);
+    expect(isInClassBlockedInlineAppKey('study-report')).toBe(true);
+    expect(isInClassBlockedInlineAppKey('cheatsheet')).toBe(false);
+    expect(isInClassBlockedInlineAppKey('mindmap')).toBe(false);
+    expect(isInClassBlockedInlineAppKey(null)).toBe(false);
   });
 });

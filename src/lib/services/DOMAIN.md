@@ -38,7 +38,7 @@ api/route.ts → services → lib/utils, lib/db, lib/config
 
 | 文件 | 行数 | 职责 |
 |------|------|------|
-| `llm-service.ts` | 514 | 统一 LLM 调用层（通义千问/火山方舟/中转站） |
+| `llm-service.ts` | 603 | 统一 LLM 调用层（DeepSeek / 通义千问 / 火山方舟 / 中转站），默认优先 `deepseek-v4-flash` |
 | `highlight-service.ts` | 675 | AI 精选片段（Smart/Fast 双模式） |
 | `summary-service.ts` | 246 | 课堂摘要生成 |
 | `tutor-service.ts` | 273 | AI 家教：引用匹配 + LLM 解释 |
@@ -121,4 +121,4 @@ api/route.ts → services → lib/utils, lib/db, lib/config
 - `analytics-service.ts` (626) — 数据分析
 - `volc-podcast.ts` (582) — 播客 TTS
 - `rate-limit-service.ts` (550) — 速率限制
-- `llm-service.ts` (514) — LLM 调用
+- `llm-service.ts` (603) — LLM 调用（DeepSeek / DashScope / Ark / Relay）

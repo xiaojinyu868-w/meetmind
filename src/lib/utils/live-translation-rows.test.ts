@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { buildLiveTranslationRows } from './live-translation-rows';
 
 describe('buildLiveTranslationRows', () => {
-  it('keeps recent final transcript rows stable instead of replacing them with interim text', () => {
+  it('keeps recent final transcript rows stable and appends interim text as a draft row', () => {
     const rows = buildLiveTranslationRows({
       segments: [
         { id: 's1', text: 'Hello, hello.', startMs: 18000, endMs: 22000 },
@@ -12,8 +12,12 @@ describe('buildLiveTranslationRows', () => {
       maxFinalRows: 2,
     });
 
-    expect(rows.map((row) => row.text)).toEqual(['Hello, hello.', 'I feel.']);
-    expect(rows.some((row) => row.text.includes('hardest moments'))).toBe(false);
+    expect(rows.map((row) => row.text)).toEqual([
+      'Hello, hello.',
+      'I feel.',
+      'Some of the hardest moments',
+    ]);
+    expect(rows[2]).toMatchObject({ id: 'live-interim', startMs: 32000 });
   });
 
   it('falls back to recentLines when segments are not available', () => {

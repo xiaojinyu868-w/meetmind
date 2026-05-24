@@ -6,6 +6,7 @@ import { streamText, stepCountIs, convertToModelMessages, type UIMessage } from 
 import { createOpenAI } from '@ai-sdk/openai';
 import { createTutorTools } from '@/lib/tutor/tutor-tools';
 import { TUTOR_SYSTEM_CURRENT } from '@/lib/prompts/tutor-prompts';
+import { resolveTutorAgentProviderConfig } from '@/lib/utils/tutor-agent-provider';
 import type { TutorCase } from './runner';
 import type { ToolCall } from './graders/tool-selection';
 import type { TranscriptSegment } from '@/types';
@@ -18,16 +19,11 @@ export async function realTutorCaller(c: TutorCase): Promise<{
   output: string;
   toolCalls: ToolCall[];
 }> {
-  const apiKey = process.env.OPENAI_API_KEY ?? process.env.DASHSCOPE_API_KEY;
-  if (!apiKey) throw new Error('TUTOR caller requires OPENAI_API_KEY or DASHSCOPE_API_KEY');
+  const provider = resolveTutorAgentProviderConfig(process.env);
+  if (!provider.apiKey) throw new Error('TUTOR caller requires DEEPSEEK_API_KEY, OPENAI_API_KEY or DASHSCOPE_API_KEY');
 
-  const baseURL =
-    process.env.TUTOR_BASE_URL ??
-    process.env.LLM_BASE_URL ??
-    'https://dashscope.aliyuncs.com/compatible-mode/v1';
-  const modelId = process.env.TUTOR_MODEL ?? 'qwen3.5-plus';
-  const openai = createOpenAI({ apiKey, baseURL });
-  const model = openai(modelId);
+  const openai = createOpenAI({ apiKey: provider.apiKey, baseURL: provider.baseURL });
+  const model = openai.chat(provider.modelId);
 
   const transcript = DEFAULT_TRANSCRIPT; // TODO M3.5: 按 c.transcriptFixture 加载 JSON
   const tools = createTutorTools({ sessionId: c.id, transcript });

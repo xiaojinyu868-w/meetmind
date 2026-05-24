@@ -184,11 +184,11 @@ def run_test():
 │   ↑ 同一分支 → 组件保持挂载，仅 prop 变化               │
 │                                                          │
 │ MobileAIChatPanel.tsx:                                   │
-│   {!realtime && history ? <History/> : <AITutor          │
-│     realtimeTeacherEnabled={realtimeTeacherEnabled}/>}   │
-│   ↑ 同一实例 → prop 驱动模式切换                         │
+│   <SafeAITutor/> 常驻文字 Agent                           │
+│   {realtime && <RealtimeTutorPanel/>}                    │
+│   ↑ 语音记录写入 global-chat，再用 conversationId 接回    │
 │                                                          │
-│ 结果：globalChatHistory useState 保持，对话记录留存      │
+│ 结果：文字 Agent 不卸载，语音记录进入统一历史            │
 └─────────────────────────────────────────────────────────┘
 
 所有验证项通过 ✅

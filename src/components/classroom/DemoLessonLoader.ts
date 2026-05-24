@@ -11,7 +11,7 @@
  *   - actions 由调用方从 `useCaptureEditorActions()` 拿到后传入
  */
 
-import { DEMO_SEGMENTS, DEMO_AUDIO_URL } from '@/fixtures/demo-data';
+import { DEMO_SEGMENTS, DEMO_AUDIO_URL, DEMO_ANCHORS, createDemoTimeline } from '@/fixtures/demo-data';
 import type { CaptureEditorStore } from '@/stores/capture-editor-store';
 
 export interface LoadDemoLessonOptions {
@@ -28,9 +28,10 @@ export interface LoadDemoLessonOptions {
 export function loadDemoLesson({ actions, onLoaded }: LoadDemoLessonOptions): void {
   actions.resetCaptureEditorState();
   actions.setSegments(DEMO_SEGMENTS);
+  actions.setAnchors(DEMO_ANCHORS);
+  actions.setTimeline(createDemoTimeline());
   actions.setAudioUrl(DEMO_AUDIO_URL);
   // 不设置 audioBlob——demo 不生成可下载的本地音频
-  // 不写 timeline——跳过类型推断，让用户自己玩 chip 看产出
   onLoaded?.();
 }
 
@@ -42,4 +43,9 @@ export function isDemoLessonLoaded(segments: { id: string }[] | null | undefined
   if (!segments || segments.length !== DEMO_SEGMENTS.length) return false;
   // 比对第一段和最后一段 id 即可——demo 的 id 是固定的 s1..s16
   return segments[0]?.id === DEMO_SEGMENTS[0].id && segments[segments.length - 1]?.id === DEMO_SEGMENTS[DEMO_SEGMENTS.length - 1].id;
+}
+
+export function selectDemoLiveSegments(elapsedSeconds: number) {
+  const elapsedMs = Math.max(0, elapsedSeconds * 1000);
+  return DEMO_SEGMENTS.filter((segment) => segment.endMs <= elapsedMs);
 }

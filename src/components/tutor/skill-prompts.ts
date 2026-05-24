@@ -1,4 +1,4 @@
-/**
+  /**
  * SKILL_PROMPTS — 共享的"Skill 原语"数据目录。
  *
  * 这份目录是产品层的单一事实源。TutorAgentPanel / ClassroomCompanionPanel 以及
@@ -31,6 +31,8 @@ import type { WorkshopAppKey } from '@/lib/ai-native/app-catalog';
 
 export interface SkillPrompt {
   label: string;
+  /** 给 chip 展示的轻提示：解释这一步对学习有什么用，而不是解释功能名。 */
+  hint?: string;
   /**
    * Agent-native 主路径：点击 = 发这条 utterance 给 agent，agent 自行调度工具。
    * 文案要像"人会说的话"——是用户意图，不是 prompt engineering。
@@ -47,33 +49,46 @@ export interface SkillPrompt {
   prompt: string;
 }
 
+export function filterSkillPromptsForSurface(
+  skills: readonly SkillPrompt[],
+  options: { excludeAppKeys?: readonly WorkshopAppKey[] } = {},
+): SkillPrompt[] {
+  const excluded = new Set(options.excludeAppKeys ?? []);
+  return skills.filter((skill) => !skill.appKey || !excluded.has(skill.appKey));
+}
+
 export const SKILL_PROMPTS: SkillPrompt[] = [
   {
     label: '考试速查表',
+    hint: '考前一页看完',
     appKey: 'cheatsheet',
     utterance: '帮我把这节课整理成一页考试速查表。',
     prompt: '把这节课整理成一页"考试速查表"：核心定义、公式/关键步骤、易错点各一组。',
   },
   {
     label: '做闪卡',
+    hint: '用来主动回忆',
     appKey: 'flashcards',
     utterance: '基于这节课给我做一组闪卡，我想主动回忆一下。',
     prompt: '基于这节课做 10 张闪卡（概念题 + 公式题 + 应用题），正反面都给。',
   },
   {
     label: '出测验',
+    hint: '测一下真懂没',
     appKey: 'quiz',
     utterance: '考我一下，出几道题测测我有没有真懂。',
     prompt: '基于这节课出 5 道单选题测验，要有正确答案和解析。',
   },
   {
     label: '画思维导图',
+    hint: '把结构串起来',
     appKey: 'mindmap',
     utterance: '帮我把这节课的结构画成思维导图。',
     prompt: '把这节课的主干和分支整理成思维导图结构。',
   },
   {
     label: '学习报告',
+    hint: '知道该补哪里',
     appKey: 'study-report',
     utterance: '生成一份这节课的学习报告，我想知道自己应该关注哪里。',
     prompt: '根据这节课我的答题情况和困惑点，生成一份学习报告，告诉我还需要巩固什么。',
@@ -81,6 +96,7 @@ export const SKILL_PROMPTS: SkillPrompt[] = [
   {
     // "再讲一遍"天然对话式——agent 不会调 tool，直接流式回答即可。
     label: '再讲一遍',
+    hint: '换个说法听',
     utterance: '把这节课的核心内容用更通俗的方式再讲一遍。',
     prompt: '用更通俗的方式重新讲解这节课的核心概念，像同学之间聊天那样。',
   },

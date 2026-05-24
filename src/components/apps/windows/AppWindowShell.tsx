@@ -14,16 +14,11 @@ function formatDataSource(dataSource: DataSourceType): string {
   return '课堂数据';
 }
 
-function shortSessionId(sessionId: string): string {
-  if (!sessionId) return '-';
-  return sessionId.length > 18 ? `${sessionId.slice(0, 8)}...${sessionId.slice(-6)}` : sessionId;
-}
-
 function statusText(task: AppTaskState): string {
-  if (task.status === 'running') return '生成中';
-  if (task.status === 'success') return '已生成';
-  if (task.status === 'error') return '生成失败';
-  return '未生成';
+  if (task.status === 'running') return '正在做';
+  if (task.status === 'success') return '已做好';
+  if (task.status === 'error') return '没做好';
+  return '待开始';
 }
 
 interface AppWindowShellProps {
@@ -42,7 +37,6 @@ interface AppWindowShellProps {
 export function AppWindowShell(props: AppWindowShellProps) {
   const {
     app,
-    sessionId,
     dataSource,
     model,
     onModelChange,
@@ -55,25 +49,25 @@ export function AppWindowShell(props: AppWindowShellProps) {
   const statusColor = useMemo(() => {
     if (taskState.status === 'success') return 'bg-[#D1F4E0]/30 text-[#232322] border-[#D1F4E0]';
     if (taskState.status === 'running') return 'bg-[#FDF3C0]/50 text-[#232322] border-[#E9E9E7]';
-    if (taskState.status === 'error') return 'bg-rose-50 text-rose-700 border-rose-200';
-    return 'bg-slate-50 text-slate-600 border-slate-200';
+    if (taskState.status === 'error') return 'bg-[#FBFAF5] text-ink-secondary border-divider';
+    return 'bg-white text-ink-secondary border-divider';
   }, [taskState.status]);
 
   return (
-    <div className="min-h-screen bg-[radial-gradient(1200px_500px_at_20%_-5%,#dbeafe,transparent_60%),radial-gradient(1200px_500px_at_90%_-20%,#fde68a,transparent_60%),#f8fafc]" data-testid="app-window-shell">
-      <header className="sticky top-0 z-20 border-b border-slate-200/80 bg-white/90">
+    <div className="min-h-screen bg-canvas" data-testid="app-window-shell">
+      <header className="sticky top-0 z-20 border-b border-divider bg-white">
         <div className="mx-auto flex max-w-7xl items-center gap-3 px-4 py-3 sm:px-6">
           <Link
             href="/app?workspace=apps"
-            className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-sm text-slate-700 hover:bg-slate-50"
+            className="inline-flex items-center gap-1 rounded-full border border-divider bg-white px-3 py-1.5 text-sm text-ink-secondary hover:text-ink"
           >
             <span>←</span>
             <span>返回应用</span>
           </Link>
           <div className="min-w-0 flex-1">
-            <p className="truncate text-lg font-semibold text-slate-900">{app.name}</p>
-            <p className="truncate text-xs text-slate-500">
-              会话 {shortSessionId(sessionId)} · {formatDataSource(dataSource)}
+            <p className="truncate text-lg font-semibold text-ink">{app.name}</p>
+            <p className="truncate text-xs text-ink-muted">
+              {formatDataSource(dataSource)}
             </p>
           </div>
           <span className={`rounded-full border px-3 py-1 text-xs font-medium ${statusColor}`}>{statusText(taskState)}</span>
@@ -81,17 +75,17 @@ export function AppWindowShell(props: AppWindowShellProps) {
             value={model}
             onChange={onModelChange}
             compact
-            allowedProviders={['qwen', 'volcengine']}
+            allowedProviders={['deepseek', 'qwen', 'volcengine']}
           />
           {showPrimaryAction ? (
             <button
               type="button"
               data-testid="app-window-rerun"
-              className="rounded-lg bg-blue-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
+              className="rounded-lg bg-ink px-3 py-1.5 text-sm font-medium text-white hover:opacity-85 disabled:cursor-not-allowed disabled:opacity-60"
               onClick={onRegenerate}
               disabled={taskState.status === 'running'}
             >
-              {primaryActionLabel || '重新生成'}
+              {primaryActionLabel || '再做一版'}
             </button>
           ) : null}
         </div>

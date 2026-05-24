@@ -10,6 +10,7 @@ import { useCaptureEditorStore } from '@/stores/capture-editor-store';
 import { useMobileAIStore } from '@/stores/mobile-ai-store';
 import { ResizablePanel } from '@/components/layout/ResizablePanel';
 import { formatTime } from '@/lib/utils/page-utils';
+import { toReviewCurrentTimeSec } from './desktop-video-review-layout-model';
 import type { Anchor } from '@/lib/services/anchor-service';
 import type { TranscriptSegment, ActionItem, Breakpoint, Timeline, NoteSource, NoteMetadata } from '@/types';
 import type {
@@ -21,7 +22,7 @@ import type {
 
 // ── Dynamic imports (match page.tsx) ───────────────────────────
 const VideoReviewPlayer = dynamic(() => import('@/components/VideoReviewPlayer').then(m => ({ default: m.VideoReviewPlayer })), { ssr: false });
-const AITutor = dynamic(() => import('@/components/SafeAITutor').then(m => ({ default: m.SafeAITutor })), { ssr: false });
+const SafeAITutor = dynamic(() => import('@/components/SafeAITutor').then(m => ({ default: m.SafeAITutor })), { ssr: false });
 const TranscriptFlowView = dynamic(() => import('@/components/TranscriptFlowView').then(m => ({ default: m.TranscriptFlowView })), { ssr: false });
 const VideoInsightTimeline = dynamic(() => import('@/components/VideoInsightTimeline').then(m => ({ default: m.VideoInsightTimeline })), { ssr: false });
 const ReviewWorkspacePanel = dynamic(() => import('@/components/ReviewWorkspacePanel').then(m => ({ default: m.ReviewWorkspacePanel })), { ssr: false });
@@ -42,7 +43,7 @@ const SHARED_WORKSPACE_TABS: WorkspaceTabConfig<SharedWorkspaceTab>[] = [
 
 const VIDEO_WORKSPACE_TABS: WorkspaceTabConfig<VideoWorkspaceTab>[] = [
   { key: 'transcript', label: '转录原文', icon: '录', LucideIcon: FileText },
-  { key: 'chat', label: 'AI同桌', icon: '聊', LucideIcon: MessageCircle },
+  { key: 'chat', label: '同桌', icon: '聊', LucideIcon: MessageCircle },
   { key: 'confusion', label: '困惑点', icon: '疑', LucideIcon: AlertCircle },
   ...SHARED_WORKSPACE_TABS,
 ];
@@ -178,6 +179,7 @@ export function DesktopVideoReviewLayout(props: DesktopVideoReviewLayoutProps) {
 
   const setConfusionChatAnchor = captureEditorActions.setConfusionChatAnchor;
   const setActiveVideoInsightId = captureEditorActions.setActiveVideoInsightId;
+  const currentTimeSec = toReviewCurrentTimeSec(currentTime);
 
   return (
     <div
@@ -223,7 +225,7 @@ export function DesktopVideoReviewLayout(props: DesktopVideoReviewLayoutProps) {
             </div>
           </div>
 
-          {/* ── 右列：Transcript / Chat / 困惑点 / AI工坊 ── */}
+          {/* ── 右列：Transcript / Chat / 困惑点 / 应用 ── */}
           <div className="min-h-0 flex flex-col flex-1 bg-white border-l border-[#E9E9E7] overflow-hidden">
             {/* 下划线风格 tab 栏（Longcut 风格） */}
             <div className="shrink-0 px-5 pt-4 flex items-center gap-5 overflow-x-auto">
@@ -280,7 +282,7 @@ export function DesktopVideoReviewLayout(props: DesktopVideoReviewLayoutProps) {
 
               {/* Chat tab */}
               <div className={`h-full min-h-0 ${videoWorkspaceTab === 'chat' ? '' : 'hidden'}`}>
-                  <AITutor
+                  <SafeAITutor
                     breakpoint={null}
                     segments={segments}
                     isLoading={false}
@@ -294,7 +296,7 @@ export function DesktopVideoReviewLayout(props: DesktopVideoReviewLayoutProps) {
                     launchQuestionNonce={videoWorkspaceTab === 'chat' && mobileAILaunchTarget === 'video-chat' ? mobileAIQuestionNonce : 0}
                     onLaunchQuestionConsumed={videoWorkspaceTab === 'chat' && mobileAILaunchTarget === 'video-chat' ? consumeMobileAIQuestion : undefined}
                     onSeek={(timeMs) => handleUnifiedSeek(timeMs, true)}
-                    currentTimeSec={currentTime}
+                    currentTimeSec={currentTimeSec}
                   />
               </div>
 
@@ -334,7 +336,7 @@ export function DesktopVideoReviewLayout(props: DesktopVideoReviewLayoutProps) {
                         )}
                       </div>
                       <div className="flex-1 min-h-0">
-                        <AITutor
+                        <SafeAITutor
                           key={`confusion-${confusionChatAnchor.id}`}
                           breakpoint={{
                             id: confusionChatAnchor.id,
@@ -355,7 +357,7 @@ export function DesktopVideoReviewLayout(props: DesktopVideoReviewLayoutProps) {
                           sessionId={sessionId}
                           supportContextText={tutorSupportContextText}
                           onSeek={(timeMs) => handleUnifiedSeek(timeMs, true)}
-                          currentTimeSec={currentTime}
+                          currentTimeSec={currentTimeSec}
                         />
                       </div>
                     </>
@@ -491,6 +493,10 @@ export function DesktopVideoReviewLayout(props: DesktopVideoReviewLayoutProps) {
                 onBackToHistoryList={() => setSelectedHistoryConversation(null)}
                 onCloseHistory={() => {
                   setShowConversationHistory(false);
+                  setSelectedHistoryConversation(null);
+                }}
+                onShowHistory={() => {
+                  setShowConversationHistory(true);
                   setSelectedHistoryConversation(null);
                 }}
                 onSelectHistoryConversation={setSelectedHistoryConversation}

@@ -7,7 +7,7 @@
 
 // ==================== 类型定义 ====================
 
-export type ModelProvider = 'qwen' | 'volcengine' | 'relay';
+export type ModelProvider = 'deepseek' | 'qwen' | 'volcengine' | 'relay';
 
 export interface ModelConfig {
   id: string;
@@ -27,11 +27,34 @@ function hasValue(value: string | undefined): boolean {
   return Boolean((value || '').trim());
 }
 
+const hasDeepSeekKey = hasValue(process.env.DEEPSEEK_API_KEY);
 const hasQwenKey = hasValue(process.env.DASHSCOPE_API_KEY);
 const hasVolcArkKey = hasValue(process.env.VOLCENGINE_ARK_API_KEY);
 const volcArkModelId = (process.env.VOLCENGINE_ARK_MODEL || '').trim();
 const hasRelayKey = hasValue(process.env.RELAY_API_KEY);
 const relayModelId = (process.env.RELAY_MODEL || 'gemini-3-pro-image-preview').trim();
+
+const deepseekModels: ModelConfig[] = [
+  {
+    id: 'deepseek-v4-flash',
+    name: 'DeepSeek V4 Flash',
+    provider: 'deepseek',
+    description: 'DeepSeek V4 低延迟模型，适合课堂同桌、复习问答和轻量学习应用',
+    maxTokens: 8192,
+    recommended: true,
+    supportsMultimodal: false,
+    enableThinking: false,
+  },
+  {
+    id: 'deepseek-v4-pro',
+    name: 'DeepSeek V4 Pro',
+    provider: 'deepseek',
+    description: 'DeepSeek V4 深度能力模型，适合复杂解释、长上下文整理和结构化学习产物',
+    maxTokens: 32768,
+    supportsMultimodal: false,
+    enableThinking: true,
+  },
+];
 
 const qwenModels: ModelConfig[] = [
   {
@@ -110,6 +133,7 @@ const relayModels: ModelConfig[] = hasRelayKey && hasValue(relayModelId)
   : [];
 
 const enabledModels: ModelConfig[] = [
+  ...(hasDeepSeekKey ? deepseekModels : []),
   ...(hasQwenKey ? qwenModels : []),
   ...volcModels,
   ...relayModels,
@@ -121,6 +145,7 @@ const resolvedDefaultModel =
   (envDefaultModel && resolvedModels.some((model) => model.id === envDefaultModel)
     ? envDefaultModel
     : undefined) ||
+  resolvedModels.find((model) => model.id === 'deepseek-v4-flash')?.id ||
   resolvedModels.find((model) => model.id === 'qwen3.6-plus')?.id ||
   resolvedModels.find((model) => model.id === 'qwen3.5-plus')?.id ||
   resolvedModels.find((model) => model.id === 'qwen3-vl-plus-2025-12-19')?.id ||
@@ -140,6 +165,10 @@ export const LLMConfig = {
   defaultVisionModel: resolvedDefaultVisionModel,
   
   // API 配置
+  deepseek: {
+    apiKey: process.env.DEEPSEEK_API_KEY || '',
+    baseUrl: process.env.DEEPSEEK_BASE_URL || 'https://api.deepseek.com',
+  },
   qwen: {
     apiKey: process.env.DASHSCOPE_API_KEY || '',
     baseUrl: process.env.LLM_BASE_URL || 'https://dashscope.aliyuncs.com/compatible-mode/v1',

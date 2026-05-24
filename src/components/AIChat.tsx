@@ -13,7 +13,12 @@ import type { Citation } from '@/types/dify';
 import { ModelSelector } from './ModelSelector';
 import { ImageUpload, useImagePaste, type UploadedImage } from './ImageUpload';
 import { getPreference } from '@/lib/db';
-import { AVAILABLE_MODELS, DEFAULT_MODEL_ID, isMultimodalModel } from '@/lib/services/llm-service';
+import { DEFAULT_MODEL_ID, isMultimodalModel } from '@/lib/services/llm-service';
+import {
+  AI_MODEL_AUTO_VALUE,
+  AI_MODEL_PREFERENCE_KEY,
+  resolveExplicitAiModelPreference,
+} from '@/lib/utils/ai-model-preference';
 import { ThinkingGuideRenderer } from './ThinkingGuideRenderer';
 import { StreamingMarkdown } from './StreamingMarkdown';
 import { ThinkingVisualizer } from './ThinkingVisualizer';
@@ -78,7 +83,6 @@ const TUTOR_SYSTEM_PROMPT = `你是一位专业的 AI 家教，专门帮助学�
 - 保持耐心和鼓励的态度`;
 
 const STRICT_TIMESTAMP_HINT = `请尽量在回答中给出 2-6 个关键时间点，统一使用 [MM:SS] 格式，并把时间点和对应观点绑定。`;
-const SETTINGS_MODEL_PREFERENCE_KEY = 'settings_model_preference';
 
 function extractTimestampMs(content: string): number[] {
   if (!content) return [];
@@ -180,11 +184,20 @@ export function AIChat({
   useEffect(() => {
     const loadPreferredModel = async () => {
       try {
-        const preferredModel = await getPreference<string>(SETTINGS_MODEL_PREFERENCE_KEY, 'auto');
-        const nextModel =
-          preferredModel !== 'auto' && AVAILABLE_MODELS.some((model) => model.id === preferredModel)
-            ? preferredModel
-            : DEFAULT_MODEL_ID;
+        const [preferredModel, modelResponse] = await Promise.all([
+          getPreference<string>(AI_MODEL_PREFERENCE_KEY, AI_MODEL_AUTO_VALUE),
+          fetch('/api/chat').then((response) => response.json()).catch(() => null),
+        ]);
+        const availableModelIds = new Set(
+          Array.isArray(modelResponse?.models)
+            ? modelResponse.models.map((model: { id?: unknown }) => model.id).filter((id: unknown): id is string => typeof id === 'string')
+            : []
+        );
+        const explicitModel = resolveExplicitAiModelPreference(preferredModel);
+        const serverDefaultModel = typeof modelResponse?.defaultModel === 'string' ? modelResponse.defaultModel : DEFAULT_MODEL_ID;
+        const nextModel = explicitModel && availableModelIds.has(explicitModel)
+          ? explicitModel
+          : serverDefaultModel;
         setSelectedModel(nextModel);
       } catch {
         setSelectedModel(DEFAULT_MODEL_ID);

@@ -25,13 +25,13 @@ export function getCollectionContextDisplayTitle(
   maxLength: number
 ): string {
   const normalizedTitle = String(item.title || '').trim();
-  const looksLikeClockLabel = /^(录音|原声|视频)\s*\d{1,2}:\d{2}(?::\d{2})?$/.test(normalizedTitle);
+  const looksLikeClockLabel = /^(录音|视频)\s*\d{1,2}:\d{2}(?::\d{2})?$/.test(normalizedTitle);
 
   const preferred =
     item.type === 'text'
       ? item.preview || item.fullText || item.title
       : (item.type === 'audio' || item.type === 'video') && looksLikeClockLabel
-        ? item.preview || item.fullText || '一段原声'
+        ? item.preview || item.fullText || '一段录音'
         : item.title || item.preview || item.fullText || '';
 
   return compactText(preferred, maxLength);
@@ -40,7 +40,7 @@ export function getCollectionContextDisplayTitle(
 export function getCollectionContextTypeLabel(type: CollectionContextItemType): string {
   switch (type) {
     case 'audio':
-      return '原声';
+      return '录音';
     case 'video':
       return '视频';
     case 'image':

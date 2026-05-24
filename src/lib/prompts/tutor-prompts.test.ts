@@ -35,6 +35,15 @@ describe('buildTutorSystemPrompt — mode 决定基础骨架', () => {
     expect(inClass).toMatch(/你是这个学生的同桌/);
     expect(review).toMatch(/你是这个学生的同桌/);
   });
+
+  it('两种 mode 都把意图理解交给模型智能，而不是写成硬判断或主动推下一步', () => {
+    const inClass = buildTutorSystemPrompt('in-class');
+    const review = buildTutorSystemPrompt('review');
+    expect(inClass).toMatch(/把判断交给模型/);
+    expect(review).toMatch(/模型基于上下文理解/);
+    expect(inClass).not.toMatch(/只有当.*明确|下一步动作/);
+    expect(review).not.toMatch(/只有当.*明确|下一步动作|轻轻带一个下一步|马上能做/);
+  });
 });
 
 describe('buildTutorSystemPrompt — recentFocus 仅在 in-class 注入', () => {
@@ -142,12 +151,19 @@ describe('buildTutorSystemPrompt — returnTimestamps 开关', () => {
 });
 
 describe('buildTutorSystemPrompt — allowInlineApp 开关（open_app marker 合约）', () => {
-  it('两 mode 默认都开 marker 合约', () => {
+  it('in-class 默认只开放课中适合的产物，不把课后报告/闪卡/测验推到课中', () => {
     const inClass = buildTutorSystemPrompt('in-class');
-    const review = buildTutorSystemPrompt('review');
     expect(inClass).toMatch(/<open_app:KEY\/>/);
+    expect(inClass).not.toMatch(/flashcards|quiz|study-report|闪卡|测验|学习报告/);
+    expect(inClass).toMatch(/mindmap.*cheatsheet/s);
+  });
+
+  it('review 默认保留闪卡和测验等课后复习产物', () => {
+    const review = buildTutorSystemPrompt('review');
     expect(review).toMatch(/<open_app:KEY\/>/);
-    expect(inClass).toMatch(/flashcards.*quiz.*mindmap.*cheatsheet.*study-report/s);
+    expect(review).toMatch(/flashcards.*quiz.*mindmap.*cheatsheet.*study-report/s);
+    expect(review).toMatch(/闪卡/);
+    expect(review).toMatch(/测验/);
   });
 
   it('手动关闭后 marker 合约消失', () => {

@@ -34,8 +34,8 @@ export function CollectionComposerContextPreview({
           <span className="min-w-0 flex-1 truncate text-[#787774]">
             {quotedCount > 1
               ? `已引用 ${quotedCount} 条内容`
-              : quotedPrimaryTypeLabel === '原声'
-                ? '已引用一段原声'
+              : quotedPrimaryTypeLabel === '录音'
+                ? '已引用一段录音'
                 : `已引用${quotedPrimaryTypeLabel || '内容'}`}
             {quotedSummaryText ? `：${quotedSummaryText}` : ''}
           </span>
@@ -50,8 +50,8 @@ export function CollectionComposerContextPreview({
         </div>
       ) : null}
       {hasLinkPreview ? (
-        <div className="mb-2 flex items-center gap-2 rounded-xl bg-[#D3E4F4]/20 px-3 py-2.5 text-[12px]">
-          <Link2 size={12} className="flex-shrink-0 text-[#5B8DBF]" />
+        <div className="mb-2 flex items-center gap-2 rounded-xl border border-divider bg-canvas px-3 py-2.5 text-[12px]">
+          <Link2 size={12} className="flex-shrink-0 text-ink-muted" />
           <span className="min-w-0 flex-1 truncate text-[#787774]">
             {linkPreviewLabel} 链接{autoImportLink ? ' · 发送后自动解析' : ''}
           </span>

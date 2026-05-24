@@ -33,5 +33,6 @@ export async function setPersistedAppState(state: PersistedAppState): Promise<vo
 
 export function isPersistedAppStateFresh(state: PersistedAppState | null, now = Date.now()): boolean {
   if (!state || typeof state.savedAt !== 'number') return false;
+  if (state.version !== APP_STATE_VERSION) return false;
   return now - state.savedAt < APP_STATE_TTL_MS;
 }

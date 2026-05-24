@@ -193,7 +193,7 @@ export function ModelSelector({
         }`}
       >
         <span className={`shrink-0 ${compact ? 'text-sm' : ''}`}>
-          {getProviderIcon(selectedModel?.provider || 'qwen')}
+          {getProviderIcon(selectedModel?.provider || 'deepseek')}
         </span>
         <span className={`font-medium min-w-0 truncate ${compact ? 'max-w-[6.5rem]' : 'max-w-[13rem]'}`}>
           {compact ? compactLabel : (selectedModel?.name || '选择模型')}

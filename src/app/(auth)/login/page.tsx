@@ -18,6 +18,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import dynamic from 'next/dynamic';
 import Link from 'next/link';
 import { useAuth } from '@/lib/hooks/useAuth';
+import { COPY } from '@/lib/ui/copy';
 import { RippleButton } from '@/components/ui/ripple-button';
 
 // Performance: Lazy-load agreement modal (contains ~300 lines of legal text)
@@ -29,81 +30,14 @@ type AgreementType = 'terms' | 'privacy' | null;
 
 const WECHAT_LOGIN_ENABLED = process.env.NEXT_PUBLIC_ENABLE_WECHAT_LOGIN === 'true';
 
-/**
- * 延迟加载视频背景组件
- * 使用 requestIdleCallback 在空闲时加载视频
- */
+/** 登录背景：安静的纸面，不用视频抢走“学习现场”的注意力。 */
 function LazyVideoBackground() {
-  const [shouldLoadVideo, setShouldLoadVideo] = useState(false);
-  const [isVideoReady, setIsVideoReady] = useState(false);
-  const videoRef = useRef<HTMLVideoElement>(null);
-
-  useEffect(() => {
-    // 使用 requestIdleCallback 延迟加载视频，优先保证 UI 响应
-    const loadVideo = () => setShouldLoadVideo(true);
-    
-    if ('requestIdleCallback' in window) {
-      const idleId = requestIdleCallback(loadVideo, { timeout: 2000 });
-      return () => cancelIdleCallback(idleId);
-    } else {
-      // 降级方案：1秒后加载
-      const timer = setTimeout(loadVideo, 1000);
-      return () => clearTimeout(timer);
-    }
-  }, []);
-
-  const handleVideoCanPlay = () => {
-    setIsVideoReady(true);
-  };
-
   return (
     <>
-      {/* 底层背景色 - 防止任何情况下露出空白 */}
-      <div 
-        className="absolute inset-0"
-        style={{ backgroundColor: '#1a1a2e' }}
-      />
-      
-      {/* 海报图背景 - 始终显示，视频就绪后淡出 */}
-      <div 
-        className="absolute transition-opacity duration-1000"
-        style={{ 
-          inset: '-20px', // 扩展边界确保覆盖
-          backgroundImage: 'url(/videos/poster.jpg)',
-          backgroundSize: 'cover',
-          backgroundPosition: 'center',
-          opacity: isVideoReady ? 0 : 1,
-        }}
-      />
-      
-      {/* 视频背景 - 延迟加载，就绪后淡入 */}
-      {shouldLoadVideo && (
-        <video
-          ref={videoRef}
-          autoPlay
-          muted
-          loop
-          playsInline
-          onCanPlay={handleVideoCanPlay}
-          className="absolute inset-0 w-full h-full transition-opacity duration-1000"
-          style={{ 
-            objectFit: 'cover',
-            objectPosition: 'center',
-            transform: 'scale(1.1)', // 放大10%确保完全覆盖
-            opacity: isVideoReady ? 1 : 0,
-          }}
-        >
-          <source src="/videos/video1.mp4" type="video/mp4" />
-        </video>
-      )}
-      
-      {/* 渐变遮罩 - 右侧加深提升可读性 */}
-      <div 
-        className="absolute inset-0 pointer-events-none"
-        style={{ 
-          background: 'linear-gradient(to right, rgba(0,0,0,0.1) 0%, rgba(0,0,0,0.2) 50%, rgba(0,0,0,0.5) 100%)'
-        }} 
-      />
+      <div className="absolute inset-0 bg-canvas" />
+      <div className="absolute left-8 top-8 h-24 w-24 rounded-full border border-divider/70" />
+      <div className="absolute bottom-10 right-10 h-36 w-36 rounded-full border border-divider/70" />
+      <div className="absolute inset-x-0 top-0 h-px bg-divider/70" />
     </>
   );
 }
@@ -317,8 +251,8 @@ function LoginForm() {
   const handleGuestMode = () => {
     // 立即显示加载状态（涟漪效果会提供即时反馈）
     setIsGuestLoading(true);
-    // 使用 replace 避免返回到登录页，添加 guest=1 参数让 /app 页跳过 Splash
-    router.replace('/app?guest=1');
+    // 使用 replace 避免返回到登录页；entry=demo 让试听入口直接进入 demo 课堂现场
+    router.replace('/app?guest=1&entry=demo');
   };
 
   const handleLoginTypeChange = (type: LoginType) => {
@@ -366,53 +300,35 @@ function LoginForm() {
   // isGuestLoading 状态仅用于禁用按钮，防止重复点击
 
   return (
-    <div 
-      className="min-h-screen relative overflow-hidden"
-      style={{
-        backgroundColor: '#1a1a2e',
-      }}
-    >
+    <div className="relative min-h-screen overflow-hidden bg-canvas">
       {/* 延迟加载视频背景 */}
       <LazyVideoBackground />
 
       {/* 主内容区 */}
-      <div className="relative z-10 min-h-screen flex items-center justify-center lg:justify-end px-4 lg:pr-16 xl:pr-24">
-        <div className="w-full max-w-[400px] flex flex-col items-center">
+      <div className="relative z-10 flex min-h-screen items-center justify-center px-4">
+        <div className="flex w-full max-w-[400px] flex-col items-start">
           
           {/* Logo - 卡片上方 */}
           <div className="mb-6 flex items-center gap-3 animate-fade-in">
-            <div 
-              className="w-14 h-14 rounded-2xl flex items-center justify-center shadow-2xl"
-              style={{ 
-                background: 'linear-gradient(135deg, #F43F5E 0%, #FB7185 100%)',
-                boxShadow: '0 10px 40px -10px rgba(244,63,94,0.5)'
-              }}
-            >
-              <span className="text-white font-bold text-3xl">M</span>
+            <div className="flex h-12 w-12 items-center justify-center rounded-2xl border border-divider bg-white">
+              <span className="text-[22px] font-semibold tracking-[-0.04em] text-ink">M</span>
             </div>
             <div>
-              <span className="font-bold text-3xl text-white drop-shadow-lg">MeetMind</span>
-              <p className="text-sm text-white/70">清华北大联合团队打造 - 你的智能同桌</p>
+              <span className="text-[26px] font-semibold tracking-[-0.03em] text-ink">MeetMind</span>
+              <p className="mt-0.5 text-[13px] text-ink-muted">{COPY.login.subtitle}</p>
             </div>
           </div>
 
           {/* 登录卡片 - 毛玻璃效果 */}
-          <div 
-            className="w-full rounded-3xl p-8 animate-slide-up"
-            style={{ 
-              backgroundColor: 'rgba(255,255,255,0.6)',
-              boxShadow: '0 25px 50px -12px rgba(0,0,0,0.25), 0 8px 32px rgba(255,255,255,0.1) inset',
-              border: '1px solid rgba(255,255,255,0.4)'
-            }}
-          >
+          <div className="w-full rounded-3xl border border-divider bg-white p-8 animate-slide-up">
             {/* 登录类型切换 */}
-            <div className="flex items-center gap-6 mb-5 border-b border-rose-200/50 pb-4">
+            <div className="mb-5 flex items-center gap-6 border-b border-divider pb-4">
               <button
                 onClick={() => handleLoginTypeChange('email')}
                 className="text-base pb-1 border-b-2 transition-all font-medium"
                 style={{ 
-                  color: loginType === 'email' ? '#E11D48' : '#6B7280',
-                  borderColor: loginType === 'email' ? '#E11D48' : 'transparent',
+                  color: loginType === 'email' ? '#232322' : '#787774',
+                  borderColor: loginType === 'email' ? '#232322' : 'transparent',
                 }}
               >
                 邮箱登录
@@ -438,9 +354,9 @@ function LoginForm() {
                   onClick={() => setLoginMethod('code')}
                   className="text-sm px-4 py-1.5 rounded-full transition-all"
                   style={{ 
-                    backgroundColor: loginMethod === 'code' ? '#FEE2E2' : 'transparent',
-                    color: loginMethod === 'code' ? '#E11D48' : '#6B7280',
-                    border: loginMethod === 'code' ? '1px solid #FECACA' : '1px solid transparent'
+                    backgroundColor: loginMethod === 'code' ? '#232322' : 'transparent',
+                    color: loginMethod === 'code' ? '#FFFFFF' : '#787774',
+                    border: loginMethod === 'code' ? '1px solid #232322' : '1px solid transparent'
                   }}
                 >
                   验证码登录
@@ -449,9 +365,9 @@ function LoginForm() {
                   onClick={() => setLoginMethod('password')}
                   className="text-sm px-4 py-1.5 rounded-full transition-all"
                   style={{ 
-                    backgroundColor: loginMethod === 'password' ? '#FEE2E2' : 'transparent',
-                    color: loginMethod === 'password' ? '#E11D48' : '#6B7280',
-                    border: loginMethod === 'password' ? '1px solid #FECACA' : '1px solid transparent'
+                    backgroundColor: loginMethod === 'password' ? '#232322' : 'transparent',
+                    color: loginMethod === 'password' ? '#FFFFFF' : '#787774',
+                    border: loginMethod === 'password' ? '1px solid #232322' : '1px solid transparent'
                   }}
                 >
                   密码登录
@@ -478,7 +394,7 @@ function LoginForm() {
                   onChange={(e) => loginType === 'email' ? setEmail(e.target.value) : setPhone(e.target.value)}
                   placeholder={loginType === 'email' ? '请输入邮箱地址' : '请输入手机号码'}
                   required
-                  className="w-full px-4 py-3.5 rounded-xl transition-all focus:outline-none bg-white border-2 border-rose-100 focus:border-rose-400 focus:ring-4 focus:ring-rose-100 text-gray-800 placeholder-gray-400"
+                  className="w-full rounded-xl border border-divider bg-white px-4 py-3.5 text-ink placeholder:text-ink-muted transition focus:border-ink focus:outline-none"
                 />
               </div>
 
@@ -492,7 +408,7 @@ function LoginForm() {
                     onChange={(e) => setPassword(e.target.value)}
                     placeholder="请输入密码"
                     required
-                    className="w-full px-4 py-3.5 rounded-xl transition-all focus:outline-none bg-white border-2 border-rose-100 focus:border-rose-400 focus:ring-4 focus:ring-rose-100 text-gray-800 placeholder-gray-400"
+                    className="w-full rounded-xl border border-divider bg-white px-4 py-3.5 text-ink placeholder:text-ink-muted transition focus:border-ink focus:outline-none"
                   />
                 </div>
               )}
@@ -511,7 +427,7 @@ function LoginForm() {
                       placeholder="请输入6位验证码"
                       required
                       maxLength={6}
-                      className="flex-1 px-4 py-3.5 rounded-xl transition-all focus:outline-none bg-white border-2 border-rose-100 focus:border-rose-400 focus:ring-4 focus:ring-rose-100 text-gray-800 placeholder-gray-400"
+                      className="flex-1 rounded-xl border border-divider bg-white px-4 py-3.5 text-ink placeholder:text-ink-muted transition focus:border-ink focus:outline-none"
                     />
                     <RippleButton
                       type="button"
@@ -534,12 +450,12 @@ function LoginForm() {
                     type="checkbox"
                     checked={rememberMe}
                     onChange={(e) => setRememberMe(e.target.checked)}
-                    className="w-4 h-4 rounded border-rose-300 text-rose-500 focus:ring-rose-400"
+                    className="h-4 w-4 rounded border-divider text-ink focus:ring-ink-muted"
                   />
-                  <span className="text-gray-600">记住登录30天</span>
+                  <span className="text-ink-secondary">记住登录30天</span>
                 </label>
                 {loginMethod === 'password' && (
-                  <Link href="/forgot-password" className="text-rose-500 hover:text-rose-600 hover:underline">
+                  <Link href="/forgot-password" className="text-ink-muted hover:text-ink hover:underline">
                     忘记密码？
                   </Link>
                 )}
@@ -552,18 +468,14 @@ function LoginForm() {
                 size="lg"
                 loading={isSubmitting}
                 loadingText="登录中..."
-                className="w-full"
-                style={{ 
-                  background: 'linear-gradient(135deg, #E11D48 0%, #F43F5E 100%)',
-                  boxShadow: '0 10px 30px -5px rgba(225,29,72,0.4)'
-                }}
+                className="w-full bg-ink text-white hover:bg-[#1a1a19]"
               >
                 {loginMethod === 'code' ? '登录 / 注册' : '登录'}
               </RippleButton>
 
               {/* 验证码登录提示 */}
               {loginMethod === 'code' && (
-                <p className="text-center text-xs text-gray-500">
+                <p className="text-center text-xs text-ink-muted">
                   新用户使用验证码登录将自动创建账户
                 </p>
               )}
@@ -577,13 +489,13 @@ function LoginForm() {
                 loading={isGuestLoading}
                 className="w-full"
               >
-                访客模式体验
+                {COPY.login.guestCta}
               </RippleButton>
             </form>
 
             {/* 微信登录 */}
             {WECHAT_LOGIN_ENABLED && (wechatAuthUrl || wechatOnly) && (
-              <div className="mt-5 pt-5 border-t border-rose-200/50">
+              <div className="mt-5 border-t border-divider pt-5">
                 {wechatAuthUrl ? (
                   <a
                     href={wechatAuthUrl}
@@ -610,12 +522,12 @@ function LoginForm() {
             )}
 
             {/* 协议提示 */}
-            <p className="mt-5 text-center text-xs leading-relaxed text-gray-500">
+            <p className="mt-5 text-center text-xs leading-relaxed text-ink-muted">
               登录即表示您同意{' '}
               <button 
                 type="button"
                 onClick={() => setShowAgreement('terms')} 
-                className="text-rose-500 hover:underline"
+                className="text-ink-secondary hover:text-ink hover:underline"
               >
                 用户协议
               </button>
@@ -623,7 +535,7 @@ function LoginForm() {
               <button 
                 type="button"
                 onClick={() => setShowAgreement('privacy')} 
-                className="text-rose-500 hover:underline"
+                className="text-ink-secondary hover:text-ink hover:underline"
               >
                 隐私政策
               </button>
@@ -639,7 +551,7 @@ function LoginForm() {
       {showWechatGuide && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={() => setShowWechatGuide(false)}>
           <div
-            className="w-full max-w-sm rounded-2xl bg-white p-6 shadow-xl"
+            className="w-full max-w-sm rounded-2xl border border-divider bg-white p-6"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex flex-col items-center text-center">
@@ -713,20 +625,8 @@ function LoginForm() {
 export default function LoginPage() {
   return (
     <Suspense fallback={
-      <div 
-        className="min-h-screen flex items-center justify-center"
-        style={{ 
-          backgroundColor: '#1a1a2e',
-          backgroundImage: 'url(/videos/poster.jpg)',
-          backgroundSize: 'cover',
-          backgroundPosition: 'center',
-        }}
-      >
-        <div className="flex items-center gap-2">
-          <div className="w-3 h-3 rounded-full animate-bounce bg-rose-400" style={{ animationDelay: '0ms' }} />
-          <div className="w-3 h-3 rounded-full animate-bounce bg-rose-300" style={{ animationDelay: '150ms' }} />
-          <div className="w-3 h-3 rounded-full animate-bounce bg-rose-200" style={{ animationDelay: '300ms' }} />
-        </div>
+      <div className="flex min-h-screen items-center justify-center bg-canvas">
+        <div className="h-2.5 w-2.5 rounded-full bg-ink animate-[mindBreath_2600ms_ease-in-out_infinite]" />
       </div>
     }>
       <LoginForm />

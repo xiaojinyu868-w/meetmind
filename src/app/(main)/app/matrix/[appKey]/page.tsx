@@ -13,12 +13,7 @@ import type { DataSourceType } from '@/lib/ai-native/types';
 import { getWorkshopAppByKey, isWorkshopAppKey, type WorkshopAppKey } from '@/lib/ai-native/app-catalog';
 import { useAppExecution } from '@/components/apps/hooks/useAppExecution';
 import { AppWindowShell } from '@/components/apps/windows/AppWindowShell';
-import { PodcastWindow } from '@/components/apps/windows/PodcastWindow';
-import { FlashcardsWindow } from '@/components/apps/windows/FlashcardsWindow';
-import { QuizWindow } from '@/components/apps/windows/QuizWindow';
-import { MindmapWindow } from '@/components/apps/windows/MindmapWindow';
-import { InfographicWindow } from '@/components/apps/windows/InfographicWindow';
-import { StudyReportWindow } from '@/components/apps/windows/StudyReportWindow';
+import { AppRenderSurface } from '@/components/apps/windows/AppRenderSurface';
 
 const WORKSHOP_MODEL_PREFERENCE = 'ai_workshop_model';
 
@@ -156,7 +151,7 @@ export default function AppMatrixWindowPage() {
     const timeout = window.setTimeout(() => {
       if (cancelled) return;
       setLoadState('error');
-      toast.error('应用窗口加载超时，请返回 AI工坊重试。');
+      toast.error('应用窗口加载超时，请返回应用页重试。');
     }, LOAD_TIMEOUT_MS);
     const run = async () => {
       setLoadState('loading');
@@ -245,7 +240,7 @@ export default function AppMatrixWindowPage() {
       if (!cancelled) {
         window.clearTimeout(timeout);
         setLoadState('error');
-        toast.error(error instanceof Error ? error.message : '会话数据加载失败');
+        toast.error(error instanceof Error ? error.message : '这节课内容加载失败');
       }
     });
 
@@ -274,12 +269,12 @@ export default function AppMatrixWindowPage() {
 
   if (!app) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-slate-50 p-6">
-        <div className="max-w-md rounded-2xl border border-slate-200 bg-white p-6">
-          <p className="text-lg font-semibold text-slate-900">应用不存在</p>
-          <p className="mt-2 text-sm text-slate-600">该应用未在首批 AI工坊目录中启用。</p>
-          <Link href="/app?workspace=apps" className="mt-4 inline-flex rounded-lg bg-blue-600 px-3 py-2 text-sm font-medium text-white">
-            返回 AI工坊
+      <div className="flex min-h-screen items-center justify-center bg-canvas p-6">
+        <div className="max-w-md rounded-2xl border border-divider bg-white p-6">
+          <p className="text-lg font-semibold text-ink">应用不存在</p>
+          <p className="mt-2 text-sm text-ink-secondary">该应用暂未启用。</p>
+          <Link href="/app?workspace=apps" className="mt-4 inline-flex rounded-lg bg-ink px-3 py-2 text-sm font-medium text-white">
+            返回应用
           </Link>
         </div>
       </div>
@@ -287,21 +282,21 @@ export default function AppMatrixWindowPage() {
   }
 
   if (loadState === 'loading') {
-    return <div className="flex min-h-screen items-center justify-center bg-slate-50 text-sm text-slate-500">正在加载会话数据...</div>;
+    return <div className="flex min-h-screen items-center justify-center bg-canvas text-sm text-ink-muted">正在整理这节课...</div>;
   }
 
   if (loadState === 'empty') {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-slate-50 p-6">
-        <div className="max-w-lg rounded-2xl border border-slate-200 bg-white p-6">
-          <p className="text-lg font-semibold text-slate-900">暂无可用课堂数据</p>
-          <p className="mt-2 text-sm leading-6 text-slate-600">深链已尝试回退最近会话，但仍未找到可用转录内容。请先录音或导入视频后再进入 AI工坊应用。</p>
+      <div className="flex min-h-screen items-center justify-center bg-canvas p-6">
+        <div className="max-w-lg rounded-2xl border border-divider bg-white p-6">
+          <p className="text-lg font-semibold text-ink">暂无可用课堂数据</p>
+          <p className="mt-2 text-sm leading-6 text-ink-secondary">还没找到能使用的课堂内容。请先录一节课或导入视频后再进入应用。</p>
           <div className="mt-4 flex gap-2">
-            <Link href="/app" className="rounded-lg bg-blue-600 px-3 py-2 text-sm font-medium text-white">
+            <Link href="/app" className="rounded-lg bg-ink px-3 py-2 text-sm font-medium text-white">
               去导入数据
             </Link>
-            <Link href="/app?workspace=apps" className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700">
-              返回 AI工坊
+            <Link href="/app?workspace=apps" className="rounded-lg border border-divider px-3 py-2 text-sm font-medium text-ink-secondary">
+              返回应用
             </Link>
           </div>
         </div>
@@ -310,36 +305,36 @@ export default function AppMatrixWindowPage() {
   }
 
   if (loadState === 'error') {
-    return <div className="flex min-h-screen items-center justify-center bg-slate-50 text-sm text-rose-600">加载失败，请返回 AI工坊重试。</div>;
+    return <div className="flex min-h-screen items-center justify-center bg-canvas text-sm text-danger-600">加载失败，请返回应用页重试。</div>;
   }
 
   if (app.key === 'infographic') {
     return (
-      <div className="min-h-screen bg-[radial-gradient(1100px_420px_at_15%_-10%,#dbeafe,transparent_58%),radial-gradient(900px_380px_at_100%_0%,#ede9fe,transparent_52%),#f8fafc]">
-        <header className="sticky top-0 z-20 border-b border-slate-200/80 bg-white/90">
+      <div className="min-h-screen bg-canvas">
+        <header className="sticky top-0 z-20 border-b border-divider bg-white">
           <div className="mx-auto flex max-w-6xl items-center gap-3 px-4 py-3 sm:px-6">
             <Link
               href="/app?workspace=apps"
-              className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-sm text-slate-700 hover:bg-slate-50"
+              className="inline-flex items-center gap-1 rounded-full border border-divider bg-white px-3 py-1.5 text-sm text-ink-secondary hover:text-ink"
             >
               <span>←</span>
-              <span>返回 AI工坊</span>
+              <span>返回应用</span>
             </Link>
             <div className="min-w-0 flex-1">
-              <p className="truncate text-lg font-semibold text-slate-900">信息图结果</p>
-              <p className="truncate text-xs text-slate-500">独立结果页：优先看成品，可直接下载或继续修改。</p>
+              <p className="truncate text-lg font-semibold text-ink">信息图结果</p>
+              <p className="truncate text-xs text-ink-muted">独立结果页：优先看成品，可直接下载或继续修改。</p>
             </div>
           </div>
         </header>
         <main className="mx-auto max-w-6xl px-4 py-6 sm:px-6">
-          <InfographicWindow
+          <AppRenderSurface
+            appKey="infographic"
             sessionId={sessionId}
             result={execution.result}
             taskState={execution.taskState}
             contentContext={infographicContentContext}
             onGenerateDraft={() => (execution.hasResult ? execution.rerun() : execution.execute())}
             onResultUpdate={execution.updateResult}
-            standalone
           />
         </main>
       </div>
@@ -354,31 +349,22 @@ export default function AppMatrixWindowPage() {
       model={model}
       onModelChange={setModel}
       taskState={execution.taskState}
-      primaryActionLabel={app.key === 'audio-overview' ? '重新生成播客' : undefined}
+      primaryActionLabel={app.key === 'audio-overview' ? '再做一版播客' : undefined}
       onRegenerate={() => {
         void execution.rerun();
       }}
     >
-      {app.key === 'audio-overview' ? (
-        <PodcastWindow
-          result={execution.result}
-          transcript={transcript}
-          taskState={execution.taskState}
-          onRegenerate={() => void execution.rerun()}
-        />
-      ) : null}
-      {app.key === 'flashcards' ? (
-        <FlashcardsWindow result={execution.result} transcript={transcript} />
-      ) : null}
-      {app.key === 'quiz' ? (
-        <QuizWindow result={execution.result} transcript={transcript} />
-      ) : null}
-      {app.key === 'mindmap' ? (
-        <MindmapWindow result={execution.result} transcript={transcript} />
-      ) : null}
-      {app.key === 'study-report' ? (
-        <StudyReportWindow rounds={[]} plan={null} transcript={transcript} />
-      ) : null}
+      <AppRenderSurface
+        appKey={app.key}
+        result={execution.result}
+        transcript={transcript}
+        taskState={execution.taskState}
+        sessionId={sessionId}
+        contentContext={infographicContentContext}
+        onRegenerate={() => void execution.rerun()}
+        onGenerateDraft={() => (execution.hasResult ? execution.rerun() : execution.execute())}
+        onResultUpdate={execution.updateResult}
+      />
     </AppWindowShell>
   );
 }

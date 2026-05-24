@@ -171,6 +171,7 @@ export const conversationService = {
   ): Promise<ConversationHistory[]> {
     const records = await searchUserConversations(getEffectiveUserId(userId), params.keyword, {
       type: params.type,
+      sessionId: params.sessionId,
       limit: params.limit,
     });
     return records.map(recordToHistory);

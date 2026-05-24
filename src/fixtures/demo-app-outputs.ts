@@ -20,7 +20,7 @@
 import type { WorkshopAppKey } from '@/lib/ai-native/app-catalog';
 
 export interface DemoAppPreview {
-  appKey: Extract<WorkshopAppKey, 'cheatsheet' | 'flashcards' | 'mindmap' | 'quiz' | 'study-report'>;
+  appKey: Extract<WorkshopAppKey, 'cheatsheet' | 'mindmap' | 'study-report'>;
   title: string;
   tagline: string;
   sampleLine: string;
@@ -34,27 +34,15 @@ export const DEMO_APP_PREVIEWS: DemoAppPreview[] = [
     sampleLine: '核心定义 · 关键公式 · 易错点',
   },
   {
-    appKey: 'flashcards',
-    title: '闪卡',
-    tagline: '课堂里的概念变成主动回忆训练',
-    sampleLine: '正面问 · 反面答 · 配证据回放',
-  },
-  {
     appKey: 'mindmap',
     title: '思维导图',
     tagline: '这节课的结构和分支一眼看完',
     sampleLine: '根主题 · 分支 · 节点跳回放',
   },
   {
-    appKey: 'quiz',
-    title: '测验',
-    tagline: '检验是真懂还是以为自己懂',
-    sampleLine: '题干 · 选项 · 解析',
-  },
-  {
     appKey: 'study-report',
     title: '学习报告',
-    tagline: '这节课讲了什么，家长视角的内容分析',
-    sampleLine: '主题 · 难度 · 可和孩子聊的话题',
+    tagline: '看清这节课的掌握度、薄弱点和下一步',
+    sampleLine: '已掌握 · 易错点 · 下一步',
   },
 ];

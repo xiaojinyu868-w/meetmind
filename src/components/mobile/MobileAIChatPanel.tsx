@@ -1,7 +1,8 @@
 'use client';
 
-import { AIChat } from '@/components/AIChat';
-import { AITutor } from '@/components/AITutor';
+import { useEffect, useState } from 'react';
+import { SafeAITutor } from '@/components/SafeAITutor';
+import { RealtimeTutorPanel } from '@/components/tutor/RealtimeTutorPanel';
 import { ConversationList } from '@/components/ConversationHistory/ConversationList';
 import { primeOmniRealtimeCallEntry } from '@/hooks/useOmniRealtimeCall';
 import { MobileAIChatHeader } from './MobileAIChatHeader';
@@ -45,11 +46,11 @@ interface MobileAIChatPanelProps {
   realtimeTeacherEnabled?: boolean;
   onEnterRealtimeTeacher?: () => void;
   onExitRealtimeTeacher?: () => void;
-  /** AITutor 内部对话是否非空，用于 Header 显示「开新对话」按钮 */
+  /** 当前 agent 对话是否非空，用于 Header 显示「开新对话」按钮 */
   hasActiveConversation?: boolean;
   /** 递增触发开新对话 */
   newConversationNonce?: number;
-  /** AITutor 内部对话状态变化通知 */
+  /** 当前 agent 对话状态变化通知 */
   onConversationActiveChange?: (hasMessages: boolean) => void;
 }
 
@@ -91,9 +92,19 @@ export function MobileAIChatPanel({
   newConversationNonce = 0,
   onConversationActiveChange,
 }: MobileAIChatPanelProps) {
-  const tutorPanelClassName = realtimeTeacherEnabled
-    ? 'flex-1 min-h-0 overflow-hidden rounded-[28px] border border-[#E9E9E7] bg-[#F7F7F5]'
-    : 'flex-1 min-h-0 overflow-hidden rounded-[28px] border border-[#E9E9E7] bg-white px-3 pb-3';
+  const [realtimeConversationId, setRealtimeConversationId] = useState<string | null>(null);
+
+  useEffect(() => {
+    setRealtimeConversationId(null);
+  }, [sessionId]);
+
+  const handleNewConversation = () => {
+    setRealtimeConversationId(null);
+    onNewConversation();
+  };
+
+  const tutorPanelClassName = 'flex-1 min-h-0 overflow-hidden rounded-[28px] border border-[#E9E9E7] bg-white px-3 pb-3';
+  const realtimePanelClassName = 'flex-1 min-h-0 overflow-hidden rounded-[28px] border border-[#E9E9E7] bg-[#F7F7F5]';
   const historyPanelClassName = 'flex-1 min-h-0 overflow-hidden rounded-[28px] border border-[#E9E9E7] bg-white px-3 pb-3';
 
   // 是否显示历史覆盖层（非通话模式 + showConversationHistory）
@@ -114,7 +125,7 @@ export function MobileAIChatPanel({
         onBack={onBack}
         onShowCurrent={onShowCurrent}
         onShowHistory={onShowHistory}
-        onNewConversation={onNewConversation}
+        onNewConversation={handleNewConversation}
         hasActiveConversation={hasActiveConversation}
         currentTime={currentTime}
         duration={duration}
@@ -133,7 +144,7 @@ export function MobileAIChatPanel({
         }}
       />
 
-      {/* 历史覆盖层——条件渲染，不影响 AITutor 挂载 */}
+      {/* 历史覆盖层——条件渲染，不影响当前 agent 对话挂载 */}
       {showHistoryOverlay && (
         <div className={historyPanelClassName}>
           {selectedHistoryConversation ? (
@@ -162,19 +173,33 @@ export function MobileAIChatPanel({
                 </div>
               </div>
               <div className="flex-1 min-h-0">
-                <AIChat
-                  conversationId={selectedHistoryConversation.conversationId}
+                <SafeAITutor
+                  breakpoint={tutorBreakpoint}
+                  segments={segments}
+                  isLoading={false}
+                  onResolve={onResolve}
+                  onActionItemsUpdate={onActionItemsUpdate}
                   sessionId={sessionId}
+                  supportContextText={tutorSupportContextText}
+                  preferSupportContext={preferSupportContext}
+                  launchQuestion=""
+                  launchDisplayText=""
+                  launchImages={[]}
+                  launchQuestionNonce={0}
                   isMobile={true}
-                  hideHeader={true}
-                  embeddedMobile={true}
-                  contextText={tutorSupportContextText}
-                  onTimestampClick={onTutorSeek}
+                  hideMobileHeader={true}
+                  onSeek={onTutorSeek}
+                  currentTimeSec={Math.floor(currentTime / 1000)}
+                  selectedConversationId={selectedHistoryConversation.conversationId}
+                  selectedConversationTitle={selectedHistoryConversation.title}
+                  onShowHistory={onBackToHistoryList}
+                  onAgentNewConversation={onCloseHistory}
                 />
               </div>
             </div>
           ) : (
             <ConversationList
+              type="global-chat"
               sessionId={sessionId}
               onSelect={onSelectHistoryConversation}
               showSearch={true}
@@ -184,9 +209,9 @@ export function MobileAIChatPanel({
         </div>
       )}
 
-      {/* AITutor 始终挂载，通过 hidden 控制可见性，确保对话状态跨历史切换保持 */}
-      <div className={tutorPanelClassName} hidden={showHistoryOverlay}>
-        <AITutor
+      {/* 文字 AI 始终挂载，通过 hidden 控制可见性，确保对话状态跨历史/通话切换保持 */}
+      <div className={tutorPanelClassName} hidden={showHistoryOverlay || realtimeTeacherEnabled}>
+        <SafeAITutor
           breakpoint={tutorBreakpoint}
           segments={segments}
           isLoading={false}
@@ -203,18 +228,29 @@ export function MobileAIChatPanel({
           isMobile={true}
           hideMobileHeader={true}
           onSeek={onTutorSeek}
-          realtimeTeacherEnabled={realtimeTeacherEnabled}
-          onRealtimeTeacherEnabledChange={(enabled) => {
-            if (enabled) {
-              onEnterRealtimeTeacher?.();
-            } else {
-              onExitRealtimeTeacher?.();
-            }
-          }}
+          currentTimeSec={Math.floor(currentTime / 1000)}
+          selectedConversationId={realtimeConversationId}
+          onShowHistory={onShowHistory}
+          onAgentNewConversation={handleNewConversation}
           newConversationNonce={newConversationNonce}
           onConversationActiveChange={onConversationActiveChange}
         />
       </div>
+
+      {realtimeTeacherEnabled ? (
+        <div className={realtimePanelClassName}>
+          <RealtimeTutorPanel
+            breakpoint={tutorBreakpoint}
+            segments={segments}
+            sessionId={sessionId}
+            supportContextText={tutorSupportContextText}
+            preferSupportContext={preferSupportContext}
+            onExit={() => onExitRealtimeTeacher?.()}
+            onRealtimeConversationSaved={setRealtimeConversationId}
+            onConversationActiveChange={onConversationActiveChange}
+          />
+        </div>
+      ) : null}
     </div>
   );
 }

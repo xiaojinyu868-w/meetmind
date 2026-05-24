@@ -231,7 +231,7 @@ export function ConfusionCard({
                 "active:scale-[0.98] transition-transform"
               )}
             >
-              继续问 AI
+              继续问同学
             </button>
           )}
         </div>

@@ -4,29 +4,118 @@ export interface TutorAgentProviderConfig {
   apiKey: string | undefined;
   baseURL: string;
   modelId: string;
-  keySource: 'TUTOR_API_KEY' | 'DASHSCOPE_API_KEY' | 'OPENAI_API_KEY' | 'none';
+  /** AI SDK v6 的 openai(model) 默认走 Responses API；OpenAI-compatible provider 必须显式走 Chat Completions。 */
+  modelApi: 'chat';
+  keySource: 'TUTOR_API_KEY' | 'DEEPSEEK_API_KEY' | 'DASHSCOPE_API_KEY' | 'OPENAI_API_KEY' | 'none';
+}
+
+export interface TutorAgentProviderOptions {
+  modelId?: string;
 }
 
 const DEFAULT_DASHSCOPE_BASE_URL = 'https://dashscope.aliyuncs.com/compatible-mode/v1';
+const DEFAULT_DEEPSEEK_BASE_URL = 'https://api.deepseek.com';
+const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-flash';
+const DEFAULT_QWEN_MODEL = 'qwen3.6-plus';
 
 function pickKey(source: TutorAgentProviderConfig['keySource'], value: string | undefined) {
   const trimmed = value?.trim();
   return trimmed ? { source, value: trimmed } : null;
 }
 
-export function resolveTutorAgentProviderConfig(env: EnvLike): TutorAgentProviderConfig {
-  const baseURL = (env.TUTOR_BASE_URL || env.LLM_BASE_URL || DEFAULT_DASHSCOPE_BASE_URL).trim();
-  const isDashScope = /dashscope\.aliyuncs\.com/i.test(baseURL);
+function isDeepSeekModel(modelId: string): boolean {
+  return /^deepseek-/i.test(modelId);
+}
+
+function isDashScopeBaseUrl(baseURL: string): boolean {
+  return /dashscope\.aliyuncs\.com/i.test(baseURL);
+}
+
+function isDeepSeekBaseUrl(baseURL: string): boolean {
+  return /api\.deepseek\.com/i.test(baseURL);
+}
+
+function hasKey(value: string | undefined): boolean {
+  return Boolean(value?.trim());
+}
+
+function dedupeProviderConfigs(configs: TutorAgentProviderConfig[]): TutorAgentProviderConfig[] {
+  const seen = new Set<string>();
+  return configs.filter((config) => {
+    const key = `${config.baseURL}::${config.modelId}::${config.keySource}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+export function resolveTutorAgentProviderConfig(
+  env: EnvLike,
+  options: TutorAgentProviderOptions = {},
+): TutorAgentProviderConfig {
+  const requestedModel = options.modelId?.trim();
+  const envModel = (env.TUTOR_MODEL || env.LLM_MODEL || '').trim();
+  const hasDeepSeekKey = hasKey(env.DEEPSEEK_API_KEY);
+  const modelId = requestedModel || envModel || (hasDeepSeekKey ? DEFAULT_DEEPSEEK_MODEL : DEFAULT_QWEN_MODEL);
+  const shouldUseDeepSeek = isDeepSeekModel(modelId);
+  const baseURL = shouldUseDeepSeek
+    ? (env.DEEPSEEK_BASE_URL || DEFAULT_DEEPSEEK_BASE_URL).trim()
+    : (env.TUTOR_BASE_URL || env.LLM_BASE_URL || DEFAULT_DASHSCOPE_BASE_URL).trim();
 
   const explicit = pickKey('TUTOR_API_KEY', env.TUTOR_API_KEY);
+  const deepseek = pickKey('DEEPSEEK_API_KEY', env.DEEPSEEK_API_KEY);
   const dashscope = pickKey('DASHSCOPE_API_KEY', env.DASHSCOPE_API_KEY);
   const openai = pickKey('OPENAI_API_KEY', env.OPENAI_API_KEY);
-  const selected = explicit || (isDashScope ? dashscope || openai : openai || dashscope);
+  const selected = explicit ||
+    (shouldUseDeepSeek || isDeepSeekBaseUrl(baseURL)
+      ? deepseek || openai || dashscope
+      : isDashScopeBaseUrl(baseURL)
+        ? dashscope || openai || deepseek
+        : openai || deepseek || dashscope);
 
   return {
     apiKey: selected?.value,
     baseURL,
-    modelId: (env.TUTOR_MODEL || 'qwen3.6-plus').trim(),
+    modelId,
+    modelApi: 'chat',
     keySource: selected?.source || 'none',
   };
+}
+
+export function resolveTutorAgentProviderFallbacks(
+  env: EnvLike,
+  options: TutorAgentProviderOptions = {},
+): TutorAgentProviderConfig[] {
+  const primary = resolveTutorAgentProviderConfig(env, options);
+  const fallbacks: TutorAgentProviderConfig[] = [primary];
+
+  if (hasKey(env.TUTOR_API_KEY)) return fallbacks;
+
+  const primaryIsDeepSeek = isDeepSeekModel(primary.modelId) || isDeepSeekBaseUrl(primary.baseURL);
+  const primaryIsDashScope = isDashScopeBaseUrl(primary.baseURL) && !isDeepSeekModel(primary.modelId);
+
+  if (primaryIsDeepSeek && hasKey(env.DASHSCOPE_API_KEY)) {
+    fallbacks.push(resolveTutorAgentProviderConfig(env, { modelId: DEFAULT_QWEN_MODEL }));
+  } else if (primaryIsDashScope && hasKey(env.DEEPSEEK_API_KEY)) {
+    fallbacks.push(resolveTutorAgentProviderConfig(env, { modelId: DEFAULT_DEEPSEEK_MODEL }));
+  }
+
+  return dedupeProviderConfigs(fallbacks).filter((config) => Boolean(config.apiKey));
+}
+
+export function shouldFallbackTutorAgentError(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error || '');
+  if (!message.trim()) return false;
+  if (/\b(401|403|unauthorized|forbidden|invalid api key|api key|model not found|no such model|invalid model)\b/i.test(message)) {
+    return false;
+  }
+  return /\b(service is too busy|too busy|overloaded|rate limit|rate limited|429|5\d\d|timeout|timed out|econnreset|etimedout|failed after \d+ attempts)\b/i.test(message);
+}
+
+export function formatTutorAgentUserError(error: unknown, options: { attemptedFallback?: boolean } = {}): string {
+  const message = error instanceof Error ? error.message : String(error || '');
+  if (!shouldFallbackTutorAgentError(message)) return message;
+  return options.attemptedFallback
+    ? '模型服务刚刚有点忙，已尝试切换备用通道但仍未成功，请稍后再试。'
+    : '模型服务刚刚有点忙，请稍后再试。';
 }

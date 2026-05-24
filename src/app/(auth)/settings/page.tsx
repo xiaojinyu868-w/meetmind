@@ -6,14 +6,17 @@ import dynamic from 'next/dynamic';
 import { useAuth } from '@/lib/hooks/useAuth';
 import { getPreference, setPreference } from '@/lib/db';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { AVAILABLE_MODELS, DEFAULT_MODEL_ID } from '@/lib/services/llm-service';
+import {
+  AI_MODEL_AUTO_VALUE,
+  AI_MODEL_PREFERENCE_KEY,
+} from '@/lib/utils/ai-model-preference';
 import { LEARNER_STAGE_LABELS, type LearnerProfile, type LearnerStage } from '@/types/user';
 
 const LearnerOnboardingComponent = dynamic(() => import('@/components/LearnerOnboarding'), { ssr: false });
 
 const SETTINGS_KEYS = {
   AUTO_SAVE: 'settings_auto_save',
-  MODEL_PREFERENCE: 'settings_model_preference',
+  MODEL_PREFERENCE: AI_MODEL_PREFERENCE_KEY,
   BILIBILI_COOKIE: 'settings_bilibili_cookie',
   CLASS_CHECK_ENABLED: 'settings_class_check_enabled',
 };
@@ -36,9 +39,15 @@ type BannerMessage = {
   text: string;
 };
 
+type ModelOption = {
+  id: string;
+  name: string;
+  recommended?: boolean;
+};
+
 const DEFAULT_SETTINGS: SettingsState = {
   autoSave: true,
-  modelPreference: 'auto',
+  modelPreference: AI_MODEL_AUTO_VALUE,
   bilibiliCookie: '',
   classCheckEnabled: false,
 };
@@ -54,15 +63,11 @@ const roleLabels: Record<string, string> = {
   admin: '管理员',
 };
 
-const modelOptions = AVAILABLE_MODELS.map((model) => ({
-  id: model.id,
-  name: model.name,
-  recommended: model.id === DEFAULT_MODEL_ID || Boolean(model.recommended),
-}));
-
 export default function SettingsPage() {
   const { user, isAuthenticated, isCheckingAuth, updateProfile, logout, saveLearnerProfile, onboardingCompleted } = useAuth();
   const [settings, setSettings] = useState<SettingsState>(DEFAULT_SETTINGS);
+  const [modelOptions, setModelOptions] = useState<ModelOption[]>([]);
+  const [defaultModelId, setDefaultModelId] = useState('deepseek-v4-flash');
   const [profileForm, setProfileForm] = useState<ProfileForm>(DEFAULT_PROFILE_FORM);
   const [loading, setLoading] = useState(true);
   const [savingSetting, setSavingSetting] = useState(false);
@@ -97,6 +102,34 @@ export default function SettingsPage() {
     };
 
     void loadSettings();
+  }, []);
+
+  useEffect(() => {
+    let alive = true;
+    const loadModels = async () => {
+      try {
+        const response = await fetch('/api/chat');
+        const data = (await response.json()) as {
+          models?: Array<{ id?: string; name?: string; recommended?: boolean }>;
+          defaultModel?: string;
+        };
+        if (!alive) return;
+        const nextDefaultModel = data.defaultModel?.trim() || 'deepseek-v4-flash';
+        setDefaultModelId(nextDefaultModel);
+        setModelOptions((data.models || [])
+          .filter((model): model is { id: string; name: string; recommended?: boolean } => Boolean(model.id && model.name))
+          .map((model) => ({
+            id: model.id,
+            name: model.name,
+            recommended: model.id === nextDefaultModel || Boolean(model.recommended),
+          })));
+      } catch {
+        if (alive) setModelOptions([]);
+      }
+    };
+
+    void loadModels();
+    return () => { alive = false; };
   }, []);
 
   useEffect(() => {
@@ -172,8 +205,9 @@ export default function SettingsPage() {
     );
   }
 
-  const selectedModelLabel = settings.modelPreference === 'auto'
-    ? '自动选择'
+  const defaultModelName = modelOptions.find((model) => model.id === defaultModelId)?.name;
+  const selectedModelLabel = settings.modelPreference === AI_MODEL_AUTO_VALUE
+    ? defaultModelName ? `自动选择（${defaultModelName}）` : '自动选择'
     : (modelOptions.find((model) => model.id === settings.modelPreference)?.name || '自动选择');
 
   return (
@@ -326,7 +360,7 @@ export default function SettingsPage() {
               ) : (
                 <>
                   <div className="px-4 py-4 text-[14px] text-[#787774]">
-                    完善学习档案，让 AI 更懂你
+                    完善学习档案，让同学更懂你
                   </div>
                   <GroupDivider />
                   <ActionButtonRow label="填写学习档案" tone="default" onClick={() => setShowLearnerEdit(true)} />
@@ -375,16 +409,16 @@ export default function SettingsPage() {
         </div>
 
         <div>
-          <SectionCaption>AI 助手</SectionCaption>
+          <SectionCaption>学习同桌</SectionCaption>
           <SettingGroup id="ai">
             <SelectRow
-              label="默认模型"
+              label="回答方式"
               value={settings.modelPreference}
               displayValue={selectedModelLabel}
               disabled={savingSetting}
               onChange={(value) => updateSetting('modelPreference', value)}
               options={[
-                { value: 'auto', label: '自动选择（推荐）' },
+                { value: AI_MODEL_AUTO_VALUE, label: defaultModelName ? `自动选择（${defaultModelName}）` : '自动选择（推荐）' },
                 ...modelOptions.map((model) => ({
                   value: model.id,
                   label: `${model.name}${model.recommended ? '（推荐）' : ''}`,
@@ -424,7 +458,7 @@ export default function SettingsPage() {
 
             <GroupDivider />
             <details className="px-4 py-4">
-              <summary className="cursor-pointer text-[15px] text-[#232322]">如何获取 Cookie</summary>
+              <summary className="cursor-pointer text-[15px] text-[#232322]">如何获取导入凭证</summary>
               <ol className="mt-3 list-decimal space-y-1.5 pl-4 text-[13px] leading-6 text-[#787774]">
                 <li>登录 bilibili.com</li>
                 <li>按 F12 打开开发者工具</li>

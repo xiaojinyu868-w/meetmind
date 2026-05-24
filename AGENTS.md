@@ -34,6 +34,8 @@
 | **改状态管理** | `src/stores/DOMAIN.md` → 了解哪些状态已迁移到 store |
 | **改类型定义** | `src/types/DOMAIN.md` → `src/types/index.ts` |
 | **改配置** | `src/lib/config/DOMAIN.md` → `src/lib/config/app.config.ts` |
+| **改模型 / LLM provider / API key / 默认模型** | `src/lib/config/DOMAIN.md` → `src/lib/config/app.config.ts` → `src/lib/services/DOMAIN.md` → `src/lib/services/llm-service.ts` → `src/lib/utils/tutor-agent-provider.ts` → `src/app/api/tutor/DOMAIN.md` → `src/app/api/tutor/agent/route.ts` → `docs/TUTOR_AGENT.md` |
+| **改设置项 / 用户偏好** | `src/app/DOMAIN.md` → 设置页 `page.tsx` → `src/lib/utils/DOMAIN.md`（偏好 key / 解析）→ 所有消费该偏好的 hooks / components |
 | **改工具函数** | `src/lib/utils/DOMAIN.md` → 对应 utils 文件 |
 | **处理 bug** | `skills/debugging/SKILL.md` → 先诊断再动手 |
 | **改 God File (page.tsx)** | `src/app/DOMAIN.md` → 理解数据流 → 找对应功能区 → 精确替换 |
@@ -44,7 +46,7 @@
 - **改 ASR / Tutor 前后必跑 `make eval-asr` / `make eval-tutor`**（数字波动 = 回归信号）
 - **只读 DOMAIN.md，不确定的再读源码**
 - **不要发明新脚本，只用 Makefile 里的命令**
-- **如果目录结构、关键文件、依赖边界发生变化，必须同步更新对应的 `DOMAIN.md` / `AGENTS.md`**
+- **代码和文档必须一起交付**：凡是改了配置、模型、路由契约、目录结构、关键文件、依赖边界、默认行为或用户可见流程，必须同步更新对应 `DOMAIN.md` / `AGENTS.md` / `docs/*` / `.env.example`
 - **新增目录若包含 3 个以上源码文件，或承担独立职责，必须补一个 `DOMAIN.md`**
 - **用户面字符串必须 `import { COPY } from '@/lib/ui/copy'`，禁用词：回声卡 / 酿 / 预知气泡 / 工坊 / 研判 / 引擎**
 
@@ -79,7 +81,7 @@ make eval-unit          # grader 自身单测
 make eval-asr           # ASR dry-run（基于 seed 数据集）
 make eval-asr-real      # ASR 真实调用（需 DASHSCOPE_API_KEY + 公网 audio URL）
 make eval-tutor         # Tutor dry-run
-make eval-tutor-real    # Tutor 真实调用（需 OPENAI_API_KEY 或 DASHSCOPE_API_KEY）
+make eval-tutor-real    # Tutor 真实调用（优先 DEEPSEEK_API_KEY；也兼容 OPENAI_API_KEY / DASHSCOPE_API_KEY）
 make eval-guard         # CI gate：baseline 在 tests/eval/baselines/
 make eval-guard-update  # 接受当前数字为新 baseline（慎用）
 make eval-ci            # CI 完整流程：unit + asr + tutor + guard
@@ -93,6 +95,20 @@ make db-studio    # 打开 Prisma Studio
 
 **只用这些命令。不要发明新脚本。**
 
+### 文档同步检查（没有单独命令，必须走人工清单）
+
+每次代码变更后，在 `make check` 之前先做一次文档同步判断：
+
+| 变更类型 | 必须同步 |
+|---------|---------|
+| 新增 / 删除 / 重命名文件、目录、关键职责 | 对应目录 `DOMAIN.md` + 必要时 `AGENTS.md` 架构速查 / 关键文件 |
+| 新增 API 路由、请求体字段、响应契约、stream marker | `src/app/api/**/DOMAIN.md` + 相关 `docs/*` |
+| 新增模型 provider、默认模型、API key、环境变量 | `src/lib/config/DOMAIN.md` + `.env.example` + `docs/TUTOR_AGENT.md` + `AGENTS.md` |
+| 改 Tutor / ASR / AI-Native 主链路 | 对应 `DOMAIN.md` + `docs/TUTOR_AGENT.md` / `docs/ASR_PIPELINE.md` / `src/lib/ai-native/DOMAIN.md` |
+| 改用户面文案或设置项 | `src/lib/ui/copy.ts` 或设置页说明 + 偏好 key 所在 `DOMAIN.md` |
+
+判断方式不是运行新脚本，而是用 `git diff --name-only` 看本次改动，再按上表补齐文档。最终验证仍然只用 Makefile 命令：`make check`，必要时加 `make eval-*` / `make test`。
+
 ---
 
 ## 2. 产品是什么
@@ -101,13 +117,13 @@ MeetMind 是以学习者长期上下文为中心的 AI 学习产品。
 
 **一句话**：用户像发微信一样把学习现场发给 MeetMind，先收下，后台慢慢理解，理解成熟后自然长出**同桌、回声、复习、Tutor**。
 
-**当前聚焦**：课堂场景。一个大学生录了一节课 → MeetMind 当场作为 AI **同桌**陪他听 → 课后帮他听懂这节课、自动产出闪卡 / 测验 / 速查表 / 思维导图 / 学习报告 → 生成一张让他忍不住分享到班级群的回声卡。
+**当前聚焦**：课堂场景。一个大学生录了一节课 → MeetMind 当场作为 AI **同桌**陪他听 → 课后基于用户真实意图帮他解释、定位、复述、验证或生成闪卡 / 测验 / 速查表 / 思维导图 / 学习报告 → 生成一张让他忍不住分享到班级群的回声卡。
 
 **当前里程碑**：M9（agent-native 同学：identity + citations + inline apps in chat）+ M10（mode-driven prompts，三入口收口为 `/api/tutor/agent`）。详见 `docs/UPGRADE_PLAN.md` 和 `CHANGELOG.md`。
 
 ### Taste（任何改动都必须对齐）
 
-**顶层原则：视觉为智能让路。安静是底色，智能是主角，仪式感是点缀。**
+**顶层原则：视觉为智能让路。安静是底色，智能是主角，仪式感是点缀。智能 = 用户意图理解 + 模型能力；遵循 The Bitter Lesson，产品层提供上下文、工具和渲染契约，不用硬规则替模型判断意图。**
 
 | 关键词 | 含义 |
 |--------|------|
@@ -180,7 +196,7 @@ MeetMind 是以学习者长期上下文为中心的 AI 学习产品。
 `src/lib/ai-native/plugins/` 是 Workshop 应用的运行时（17 个 plugin）。每个插件实现统一的 `AppPlugin` 契约：
 
 - `manifest.id` + `canHandle(context)` + `run(context, tools)`
-- 输出 `AppExecutionResult { cards, trace }`，前端按 `appKey` 渲染对应 WorkshopWindow 或 InlineAppCard
+- 输出 `AppExecutionResult { cards, trace, render }`，前端统一交给 `AppRenderSurface` 渲染；WorkshopWindow、独立应用页、InlineAppCard 不得各写一套 UI
 - 主要 plugin：cheatsheet / flashcards / quiz / mindmap / study-report / class-check / confusion-drill / review-plan / knowledge-cards / studio-workshop（播客 + 信息图）/ fallback
 - catalog：`src/lib/ai-native/app-catalog.ts` 是 UI 端的应用矩阵（7 类 ready 应用）
 
@@ -195,8 +211,8 @@ Skill chip / 自然对话 / 内联 app 现在走**严格同链路**：
   → LLM 出 "好，我这就给你整一张<open_app:cheatsheet/>"
   → 前端 extractOpenAppMarker 拦截
   → 走 /api/apps/execute（appKey → pluginId）
-  → 渲染为 InlineAppCard（loading → ready），嵌进对话流
-  → 学生答题/翻卡 → onInteraction → 同学跟一条反馈气泡
+  → InlineAppCard 承载完整 AppExecutionResult，并通过 AppRenderSurface 复用应用矩阵 UI 嵌进对话流
+  → 学生可以在对话里直接操作与课后同款 UI
 ```
 
 **合法 appKey**：`flashcards / quiz / mindmap / cheatsheet / study-report`（合约写在 `tutor-prompts.ts` 的 `capOpenAppContract`）。`audio-overview / infographic` 不适合内联，自动 fallback 到 WorkshopWindow。
@@ -213,7 +229,7 @@ Skill chip / 自然对话 / 内联 app 现在走**严格同链路**：
 | Phase 5 | `useCollectionListActions`, `useWechatCaptureImport`, `useWorkspaceContextLoader`, `useSeekController`, `useAppStateRestore` | -581 |
 | Phase 6 | `useSeekController` 消费, `usePendingRecordedAudio`, `useNoteActions`, `useActionItems`, `useExtractTerms`, `useSourceItemManagement` | -289 |
 
-**agent 修改原则**：不要一次性拆分，只在当前任务中顺手提取≥50 行的独立模块，立即 `tsc --noEmit` 验证。
+**agent 修改原则**：不要一次性拆分，只在当前任务中顺手提取≥50 行的独立模块，立即 `make check` 验证。
 
 ### 3.7 Tutor 后端（M10 mode-driven 收口）
 
@@ -222,11 +238,12 @@ Skill chip / 自然对话 / 内联 app 现在走**严格同链路**：
 | 入口 | 调用方 | 关键参数 |
 |------|--------|---------|
 | 课堂同桌 | `useClassroomCompanion` | `mode: 'in-class'`, `recentFocus` (最近 30s) |
-| 录音/视频复习 | `TutorAgentPanel` / `SafeAITutor` | `mode: 'review'`, `fullTranscript`, `currentTimestampSec`, options.thinkingGuide |
+| 录音/视频复习 | `TutorAgentPanel` / `SafeAITutor` | `mode: 'review'`, `fullTranscript`, `currentTimestampSec`（秒，不是毫秒）, `learnerProfile`（个人画像 + 当前课程近期对话痕迹）, options.thinkingGuide |
 
 ```
 POST /api/tutor/agent
-  body: { mode, context: {...}, options: {...}, transcript, messages, sessionId, subject }
+  body: { mode, context: {...}, options: {...}, transcript, messages, sessionId, subject, model? }
+  → resolveTutorAgentProviderConfig(env, { modelId }) 选择 DeepSeek / DashScope / OpenAI-compatible provider
   → buildTutorSystemPrompt(mode, context, options) 拼 system
   → streamText({ model, tools: [4 个 makeXxx + lookupTranscript],
                  stopWhen: stepCountIs(6), onStepFinish: track('tutor.step') })
@@ -239,7 +256,7 @@ POST /api/tutor/agent
 3. `<open_app:KEY/>` — 学生索要结构化产物时单行 marker，前端拦截后开窗或嵌入
 4. 思维引导：`---思维演示---` / `---正式回答---` / `【步骤名】` / `💡` / `🌟` 分段标记
 
-旧 `/api/tutor` (legacy SSE 路径) 仍存在并被 `SafeAITutor` 在 flag off 时降级使用。`useOmniRealtimeCall` 走独立 WebSocket（qwen-omni realtime），不打这个 endpoint。
+旧 `/api/tutor` (legacy SSE 路径) 仍存在并被 `SafeAITutor` 在 flag off 时降级使用；移动端文字 AI / 历史详情也应走 `SafeAITutor → TutorAgentPanel`。`useOmniRealtimeCall` 走独立 WebSocket（qwen-omni realtime），不打这个 endpoint；移动端语音同桌由 `RealtimeTutorPanel → TutorRealtimeCallScreen` 承接，语音最终转写必须写入 `conversationService` 的 `global-chat` 并把 conversationId 接回文字 agent。
 
 ### 3.8 ASR 飞书妙记级工艺（M2 + M5 + M8）
 
@@ -250,6 +267,7 @@ ASR 链路（`src/lib/services/asr/`）：
 - **稳定性**：`reconnecting-websocket` + `p-retry` Full Jitter 退避，audioQueue 跨重连保留
 - **Contextual biasing**：`buildASRContextHint` 注入 6 字段（courseTitle / courseSubject / participants / previousLessonTopics / lessonVocabulary / userHotwords）
 - **后校对**：`postEditSegments` 用 qwen3.5-plus 只打低置信片段（feature flag `ASR_POST_EDIT_ENABLED`，默认关）
+- **状态兜底**：`audioSessions.transcriptionStatus` 区分 pending/completed/failed；转写失败或超时后课堂卡片显示“原声已保留”，不能永久停在“整理中”
 - **静默校对 + 热词聚合**：`AsrCorrection` 表存用户编辑，`onRecordingStop` 触发 `/api/asr/corrections/aggregate` 生成下节课的 `userHotwords`
 - **AEC/NS/AGC**：`buildAudioConstraints` 是 getUserMedia 的唯一真相源，env 可覆盖
 
@@ -264,7 +282,7 @@ ASR 链路（`src/lib/services/asr/`）：
 | **代码审查** | `skills/code-review/SKILL.md` | 完成变更后自审 |
 | **系统化调试** | `skills/debugging/SKILL.md` | 遇到 bug 时 |
 
-**工作流**：Plan → Execute → Verify → Commit（详见 `skills/making-changes/SKILL.md`）
+**工作流**：Plan → Execute → Document → Verify → Review → Commit（详见 `skills/making-changes/SKILL.md`）。其中 Document 不是可选项：只要代码改变了事实来源、公共契约、默认行为或运维方式，就必须同步文档后再验证。
 
 ---
 
@@ -298,7 +316,7 @@ ASR 链路（`src/lib/services/asr/`）：
 
 | 类型 | 上限 | 当前超标文件（遗留债务） |
 |------|------|------------------------|
-| 页面/组件 | 500 行 | `page.tsx`(~2300), `AITutor.tsx`(~2357), `Recorder.tsx`(~1850), `ClassroomLeftPanel.tsx`(~635), `ClassroomCompanionPanel.tsx`(~535), `InlineAppCard.tsx`(~577) |
+| 页面/组件 | 500 行 | `page.tsx`(~2300), `AITutor.tsx`(~2357), `Recorder.tsx`(~1850), `ClassroomLeftPanel.tsx`(~635), `ClassroomCompanionPanel.tsx`(~535) |
 | API 路由 | 500 行 | `video/import/route.ts`(1212), `tutor/route.ts`(936) |
 | 服务文件 | 500 行 | `workspace-echo-service.ts`(1297), `classroom-data-service.ts`(1009) |
 | 工具/类型 | 300 行 | — |
@@ -385,18 +403,21 @@ src/
 | 文件 | 行数 | 注意 |
 |------|------|------|
 | `src/app/(main)/app/page.tsx` | ~2300 | God File（按域分 6 阶段提取为 hooks + 子组件，详见 §3.6），改前先读 `src/app/DOMAIN.md` |
-| `src/components/AITutor.tsx` | ~2357 | 复习态 Tutor 主视图（legacy）；新路径默认走 `SafeAITutor → TutorAgentPanel`（flag `NEXT_PUBLIC_TUTOR_AGENT_ENABLED`，默认 on） |
-| `src/components/SafeAITutor.tsx` | ~229 | Tutor 入口分发：flag on → `TutorAgentPanel`，flag off → `AITutor` 老 SSE 路径 |
+| `src/components/AITutor.tsx` | ~2357 | 复习态 Tutor legacy fallback；新路径默认走 `SafeAITutor → TutorAgentPanel`，移动端语音走 `RealtimeTutorPanel` |
+| `src/components/SafeAITutor.tsx` | ~229 | Tutor 入口分发：默认 `TutorAgentPanel`；负责把复习页/移动端/视频复习的启动问题、当前时间（秒）、选中资料、个人画像适配到 agent context，flag off 才回退 `AITutor` 老 SSE 路径 |
 | `src/components/Recorder.tsx` | ~1850 | 录音组件（已拆 3 子模块到 `recorder/`，含 mic/system/mixed 三档音源） |
 | `src/components/classroom/ClassroomCompanionPanel.tsx` | ~535 | 课堂右栏同桌面板（header / 气泡 / 流式 / thinking / 输入栏） |
-| `src/components/classroom/InlineAppCard.tsx` | ~577 | 内联 app 卡片（5 类知识产物嵌进对话气泡，含答题反馈） |
+| `src/components/classroom/InlineAppCard.tsx` | ~160 | 内联 app 承载卡（保存完整 AppExecutionResult，复用 AppRenderSurface / 应用矩阵 UI） |
 | `src/components/classroom/ClassroomLeftPanel.tsx` | ~635 | 课堂左侧（list / recording 切换 + ActiveLessonPill + StickyStartBar） |
 | `src/hooks/useClassroomCompanion.ts` | — | 课堂同桌 hook：消费 `[MM:SS]` citations + `<open_app:KEY/>` marker → InlineAppCard 路径 |
 | `src/hooks/useOmniRealtimeCall.ts` | ~793 | Qwen Omni realtime 语音通话 hook（语音同桌入口，独立 WebSocket，不走 /api/tutor） |
-| `src/app/api/tutor/agent/route.ts` | ~211 | **M10 主入口**：mode-driven 单一 endpoint，AI SDK v6 streamText + tools |
+| `src/app/api/tutor/agent/route.ts` | ~212 | **M10 主入口**：mode-driven 单一 endpoint，AI SDK v6 streamText + tools，支持请求体 `model` 覆盖默认模型 |
 | `src/app/api/tutor/route.ts` | 936 | Legacy SSE 路径（flag off 时仍可用，不要在它上面加新功能） |
 | `src/lib/prompts/tutor-prompts.ts` | ~300 | `buildTutorSystemPrompt(mode, context, options)` ── 三入口唯一 prompt 源 |
 | `src/lib/tutor/tutor-tools.ts` | ~225 | 4 个 Vercel AI SDK v6 tool（makeFlashcards / makeQuiz / makeMindmap / lookupTranscript） |
+| `src/lib/services/llm-service.ts` | ~603 | 统一 LLM 调用层（DeepSeek / DashScope / Ark / Relay），默认学习应用模型优先 `deepseek-v4-flash` |
+| `src/lib/utils/tutor-agent-provider.ts` | 69 | Tutor Agent OpenAI-compatible provider 解析：按请求模型 / env 选择 DeepSeek、DashScope 或 OpenAI，并强制 Chat Completions |
+| `src/lib/utils/ai-model-preference.ts` | 19 | 设置页模型偏好的 key 与 `auto` 解析契约 |
 | `src/lib/ui/copy.ts` | ~80 | 用户面文案唯一真相源（COPY 对象 + bannedWords 校验） |
 | `src/lib/ai-native/app-catalog.ts` | ~136 | Workshop 应用矩阵（7 类 ready），`WORKSHOP_APP_CATALOG` + `WorkshopAppKey` |
 | `src/app/api/video/import/route.ts` | 1212 | 多平台导入管线（已拆 3 子模块） |

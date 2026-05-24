@@ -18,6 +18,7 @@ apps/
 │   └── EvidencePopoverCard.tsx # 证据弹窗卡片
 └── windows/
     ├── WorkshopWindowManager.tsx # 浮窗管理器 + ErrorBoundary
+    ├── AppRenderSurface.tsx      # 统一应用渲染面（Workshop / 对话内联共用）
     ├── InfographicWindow.tsx     # 信息图浮窗
     ├── infographic-window-data.ts # 信息图类型/预设/工具函数
     ├── MindmapWindow.tsx         # 思维导图浮窗
@@ -27,6 +28,12 @@ apps/
     ├── PodcastWindow.tsx         # 播客浮窗
     └── AppWindowShell.tsx        # 浮窗外壳
 ```
+
+## 渲染约束
+
+- `AppRenderSurface.tsx` 是 `AppExecutionResult` 到应用 UI 的唯一分发层。
+- Workshop 浮窗、应用矩阵独立页、对话内联应用都应复用它；不要在 `classroom/` 或 `tutor/` 里为同一个 app 重写一套 UI。
+- `WorkshopYellowPage.tsx` + CSS module 是应用矩阵首屏基线：用户文案说“学习应用 / 先做一版”，避免能力接口、输出形态、异常、模型等内部词；视觉默认 `canvas/card/ink/divider`，不使用持续渐变和阴影。
 
 ## 已有测试
 

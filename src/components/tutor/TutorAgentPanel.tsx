@@ -20,18 +20,31 @@
 import * as React from 'react';
 import { useChat } from '@ai-sdk/react';
 import { DefaultChatTransport } from 'ai';
+import type { AppExecutionResult } from '@/lib/ai-native/types';
 import { TutorToolCard } from './TutorToolCard';
+import { StreamingMarkdown } from '@/components/StreamingMarkdown';
+import { conversationMessageToUIMessage, resolveTutorAgentHistoryLabel } from './tutor-agent-history';
+import { formatRecentLearningActivityForTutorAgent, resolveTutorAgentLaunchText } from './tutor-agent-adapter';
+import { resolveTutorMessageRenderPlan } from './tutor-message-rendering';
 import type { TutorToolPartLike } from './tutor-tool-card-utils';
-import { splitByTimestamp } from './timestamp-parsing';
 import { SkillChipRow } from './SkillChipRow';
 import { InlineAppCard } from '@/components/classroom/InlineAppCard';
+import { getWorkshopAppByKey } from '@/lib/ai-native/app-catalog';
+import { useAuth } from '@/lib/hooks/useAuth';
+import { getPreference } from '@/lib/db';
+import { conversationService, getEffectiveUserId } from '@/lib/services/conversation-service';
 import { cn } from '@/lib/utils';
+import {
+  AI_MODEL_AUTO_VALUE,
+  AI_MODEL_PREFERENCE_KEY,
+  resolveExplicitAiModelPreference,
+} from '@/lib/utils/ai-model-preference';
 import {
   extractOpenAppMarker,
   isInlineAppKey,
   type InlineAppKey,
 } from '@/lib/utils/open-app-marker';
-import { buildInlineAppFallbackPayload } from '@/lib/utils/inline-app-fallback';
+import { buildInlineAppFallbackResult } from '@/lib/utils/inline-app-fallback';
 
 export interface TutorAgentPanelTranscriptSegment {
   id: string;
@@ -44,16 +57,9 @@ export interface TutorAgentPanelTranscriptSegment {
 type ReviewInlineAppState = {
   appKey: InlineAppKey;
   status: 'loading' | 'ready' | 'error';
+  result?: AppExecutionResult;
   payload?: unknown;
   error?: string;
-};
-
-const DEFAULT_APP_INTENT: Record<InlineAppKey, string> = {
-  quiz: '生成课堂测验，检验理解并输出可回放证据。',
-  flashcards: '生成课堂闪卡训练，帮助学生主动回忆并巩固核心知识。',
-  cheatsheet: '生成考试速查表：核心定义、公式/步骤、易错点各一组，适合一页打印。',
-  mindmap: '生成课堂思维导图，呈现主干、分支与关键证据。',
-  'study-report': '查看随堂检验结果和学习报告。',
 };
 
 export interface TutorAgentPanelProps {
@@ -92,6 +98,21 @@ export interface TutorAgentPanelProps {
     supportMaterials?: Array<{ title: string; content: string }>;
     learnerProfile?: string;
   };
+  /** 从历史列表点进来时，明确恢复指定对话，而不是自动接最近一条。 */
+  selectedConversationId?: string | null;
+  selectedConversationTitle?: string | null;
+  /** 打开当前课程的历史列表。 */
+  onShowHistory?: () => void;
+  /** 当前对话有无内容变化，供外层显示「开新对话」等入口。 */
+  onConversationActiveChange?: (hasMessages: boolean) => void;
+  /** 外层从时间线/资料/困惑点发起的一次问题。 */
+  launchQuestion?: string;
+  launchDisplayText?: string;
+  launchQuestionNonce?: number;
+  onLaunchQuestionConsumed?: () => void;
+  /** 外层触发开新对话时递增。 */
+  newConversationNonce?: number;
+  onNewConversation?: () => void;
 }
 
 /**
@@ -99,45 +120,30 @@ export interface TutorAgentPanelProps {
  * 供 TutorAgentPanel 和 ClassroomCompanionPanel 共用——保证产品任意位置
  * "速查表 / 闪卡 / 测验 / 思维导图 / 薄弱点 / 再讲一遍" 的语义一致。
  */
-function RenderTimestampedText({
+function TutorMessageText({
+  role,
   text,
   onSeek,
+  isStreaming = false,
 }: {
+  role: string;
   text: string;
   onSeek?: (ms: number) => void;
+  isStreaming?: boolean;
 }) {
-  const cleanedText = React.useMemo(() => extractOpenAppMarker(text).cleaned, [text]);
-  const parts = React.useMemo(() => splitByTimestamp(cleanedText), [cleanedText]);
-  if (!cleanedText) return null;
-  return (
-    <>
-      {parts.map((p, i) => {
-        if (p.kind === 'text') return <span key={i}>{p.text}</span>;
-        return (
-          <button
-            key={i}
-            type="button"
-            onClick={(e) => {
-              e.stopPropagation();
-              onSeek?.(p.startMs);
-            }}
-            disabled={!onSeek}
-            className={cn(
-              'inline-flex items-center gap-1 px-1.5 py-0.5 mx-0.5 rounded-md text-xs font-mono',
-              'border border-slate-300 bg-white text-slate-700',
-              onSeek
-                ? 'hover:bg-slate-900 hover:text-white hover:border-slate-900 cursor-pointer transition-colors'
-                : 'cursor-default opacity-60',
-            )}
-            title={onSeek ? `跳转到 ${p.display}` : p.display}
-          >
-            <span aria-hidden="true">▶</span>
-            {p.display}
-          </button>
-        );
-      })}
-    </>
-  );
+  const plan = React.useMemo(() => resolveTutorMessageRenderPlan({ role, text }), [role, text]);
+  if (!plan.content) return null;
+  if (plan.renderer === 'markdown') {
+    return (
+      <StreamingMarkdown
+        content={plan.content}
+        isStreaming={isStreaming}
+        onTimestampClick={onSeek}
+        className="text-[14.5px] leading-[1.75] text-ink"
+      />
+    );
+  }
+  return <span className="whitespace-pre-wrap">{plan.content}</span>;
 }
 
 function collectMessageText(message: { parts?: unknown; content?: string }): string {
@@ -160,10 +166,50 @@ export function TutorAgentPanel({
   mode = 'review',
   options,
   context,
+  selectedConversationId,
+  selectedConversationTitle,
+  onShowHistory,
+  onConversationActiveChange,
+  launchQuestion,
+  launchDisplayText,
+  launchQuestionNonce = 0,
+  onLaunchQuestionConsumed,
+  newConversationNonce = 0,
+  onNewConversation,
 }: TutorAgentPanelProps) {
+  const { user } = useAuth();
+  const userId = getEffectiveUserId(user?.id);
   const [input, setInput] = React.useState('');
+  const [preferredModel, setPreferredModel] = React.useState<string | undefined>();
   const [inlineAppsByMessageId, setInlineAppsByMessageId] = React.useState<Record<string, ReviewInlineAppState>>({});
+  const [historyHydrated, setHistoryHydrated] = React.useState(false);
+  const [recentLearningActivity, setRecentLearningActivity] = React.useState<string | undefined>();
+  const [restoredConversationTitle, setRestoredConversationTitle] = React.useState<string | null>(null);
   const inlineAppStartedRef = React.useRef<Set<string>>(new Set());
+  const conversationIdRef = React.useRef<string | null>(null);
+  const persistedMessageIdsRef = React.useRef<Set<string>>(new Set());
+  const lastLaunchQuestionNonceRef = React.useRef<number | null>(null);
+  const lastNewConversationNonceRef = React.useRef(newConversationNonce);
+
+  React.useEffect(() => {
+    let alive = true;
+    getPreference<string>(AI_MODEL_PREFERENCE_KEY, AI_MODEL_AUTO_VALUE)
+      .then((preference) => {
+        if (alive) setPreferredModel(resolveExplicitAiModelPreference(preference));
+      })
+      .catch(() => {
+        if (alive) setPreferredModel(undefined);
+      });
+    return () => { alive = false; };
+  }, []);
+
+  const agentContext = React.useMemo(() => {
+    if (!recentLearningActivity) return context;
+    return {
+      ...(context ?? {}),
+      learnerProfile: [context?.learnerProfile, recentLearningActivity].filter(Boolean).join('\n\n') || undefined,
+    };
+  }, [context, recentLearningActivity]);
 
   // DefaultChatTransport 允许把非标字段一起发到 body。
   // M10：这里把 mode + context + options 全部透传给 /api/tutor/agent，
@@ -177,17 +223,165 @@ export function TutorAgentPanel({
           sessionId,
           transcript,
           subject: subject ?? '',
+          ...(preferredModel ? { model: preferredModel } : {}),
           mode,
-          context: context ?? {},
+          context: agentContext ?? {},
           options: options ?? {},
         }),
       }),
-    [authToken, sessionId, transcript, subject, mode, context, options],
+    [authToken, sessionId, transcript, subject, preferredModel, mode, agentContext, options],
   );
 
-  const { messages, sendMessage, status, error, stop } = useChat({ transport });
+  const { messages, setMessages, sendMessage, status, error, stop } = useChat({ transport });
 
   const busy = status === 'submitted' || status === 'streaming';
+
+  React.useEffect(() => {
+    let alive = true;
+    setHistoryHydrated(false);
+    setRecentLearningActivity(undefined);
+    setRestoredConversationTitle(null);
+    conversationIdRef.current = null;
+    persistedMessageIdsRef.current = new Set();
+    inlineAppStartedRef.current = new Set();
+    setInlineAppsByMessageId({});
+    setMessages([]);
+
+    if (mode !== 'review') {
+      setHistoryHydrated(true);
+      return () => { alive = false; };
+    }
+
+    const hydrateConversation = async () => {
+      try {
+        const targetConversation = selectedConversationId
+          ? await conversationService.getConversation(selectedConversationId)
+          : (await conversationService.listConversations(userId, {
+              type: 'global-chat',
+              sessionId,
+              limit: 1,
+            }))[0];
+        if (!alive || !targetConversation) {
+          const recentConversations = await conversationService.listConversations(userId, {
+            type: 'global-chat',
+            sessionId,
+            limit: 5,
+          });
+          if (alive) setRecentLearningActivity(formatRecentLearningActivityForTutorAgent(recentConversations));
+          return;
+        }
+        const historyMessages = await conversationService.getMessages(targetConversation.conversationId);
+        const recentConversations = await conversationService.listConversations(userId, {
+          type: 'global-chat',
+          sessionId,
+          limit: 5,
+        });
+        if (!alive) return;
+        conversationIdRef.current = targetConversation.conversationId;
+        persistedMessageIdsRef.current = new Set(historyMessages.map((message) => message.messageId));
+        setRecentLearningActivity(formatRecentLearningActivityForTutorAgent(recentConversations, targetConversation.conversationId));
+        setRestoredConversationTitle(selectedConversationTitle || targetConversation.title);
+        setMessages(historyMessages.map(conversationMessageToUIMessage));
+      } catch (err) {
+        console.error('[TutorAgentPanel] failed to hydrate conversation history:', err);
+      } finally {
+        if (alive) setHistoryHydrated(true);
+      }
+    };
+
+    void hydrateConversation();
+    return () => { alive = false; };
+  }, [mode, selectedConversationId, selectedConversationTitle, sessionId, setMessages, userId]);
+
+  React.useEffect(() => {
+    if (!historyHydrated || busy || mode !== 'review') return;
+    const persistMessages = async () => {
+      const unsaved = messages.filter((message) => {
+        if (message.role !== 'user' && message.role !== 'assistant') return false;
+        if (persistedMessageIdsRef.current.has(message.id)) return false;
+        return collectMessageText(message).trim().length > 0;
+      });
+      if (unsaved.length === 0) return;
+
+      try {
+        if (!conversationIdRef.current) {
+          const firstUserText = collectMessageText(unsaved.find((message) => message.role === 'user') ?? unsaved[0]).trim();
+          const conversation = await conversationService.createConversation({
+            userId,
+            type: 'global-chat',
+            title: conversationService.generateTitleFromMessage(firstUserText || '复习对话'),
+            sessionId,
+            model: 'tutor-agent',
+          });
+          conversationIdRef.current = conversation.conversationId;
+          setRestoredConversationTitle(conversation.title);
+        }
+
+        const conversationId = conversationIdRef.current;
+        await conversationService.addMessages(
+          conversationId,
+          unsaved.map((message) => ({
+            role: message.role === 'user' ? 'user' : 'assistant',
+            content: collectMessageText(message),
+          })),
+        );
+        unsaved.forEach((message) => persistedMessageIdsRef.current.add(message.id));
+      } catch (err) {
+        console.error('[TutorAgentPanel] failed to persist conversation history:', err);
+      }
+    };
+    void persistMessages();
+  }, [busy, historyHydrated, messages, mode, sessionId, userId]);
+
+  React.useEffect(() => {
+    onConversationActiveChange?.(messages.some((message) => message.role === 'user' || message.role === 'assistant'));
+  }, [messages, onConversationActiveChange]);
+
+  React.useEffect(() => {
+    if (mode !== 'review' || !historyHydrated || busy) return;
+    if (!launchQuestionNonce) return;
+    if (lastLaunchQuestionNonceRef.current === launchQuestionNonce) return;
+
+    lastLaunchQuestionNonceRef.current = launchQuestionNonce;
+    const text = resolveTutorAgentLaunchText({ launchQuestion, launchDisplayText });
+    if (!text) {
+      onLaunchQuestionConsumed?.();
+      return;
+    }
+
+    sendMessage({ text });
+    onLaunchQuestionConsumed?.();
+  }, [
+    busy,
+    historyHydrated,
+    launchDisplayText,
+    launchQuestion,
+    launchQuestionNonce,
+    mode,
+    onLaunchQuestionConsumed,
+    sendMessage,
+  ]);
+
+  const clearCurrentConversation = React.useCallback(() => {
+    stop();
+    conversationIdRef.current = null;
+    persistedMessageIdsRef.current = new Set();
+    inlineAppStartedRef.current = new Set();
+    setInlineAppsByMessageId({});
+    setRestoredConversationTitle(null);
+    setMessages([]);
+  }, [setMessages, stop]);
+
+  React.useEffect(() => {
+    if (lastNewConversationNonceRef.current === newConversationNonce) return;
+    lastNewConversationNonceRef.current = newConversationNonce;
+    clearCurrentConversation();
+  }, [clearCurrentConversation, newConversationNonce]);
+
+  const handleNewConversation = React.useCallback(() => {
+    clearCurrentConversation();
+    onNewConversation?.();
+  }, [clearCurrentConversation, onNewConversation]);
 
   const runInlineApp = React.useCallback(
     async (messageId: string, appKey: InlineAppKey) => {
@@ -203,13 +397,15 @@ export function TutorAgentPanel({
         .slice(0, 180);
 
       try {
+        const appCatalogItem = getWorkshopAppByKey(appKey);
         const response = await fetch('/api/apps/execute', {
           method: 'POST',
           headers,
           body: JSON.stringify({
             appKey,
+            ...(preferredModel ? { model: preferredModel } : {}),
             goal: {
-              intent: DEFAULT_APP_INTENT[appKey],
+              intent: appCatalogItem?.intent || `生成${appKey}学习应用`,
               expectedOutput: 'mixed',
               appKey,
             },
@@ -223,26 +419,28 @@ export function TutorAgentPanel({
           }),
         });
         const data = (await response.json().catch(() => null)) as
-          | { ok?: boolean; error?: string; result?: { render?: { payload?: unknown } } }
+          | { ok?: boolean; error?: string; result?: AppExecutionResult }
           | null;
 
         if (response.ok && data?.ok && data.result) {
+          const result = data.result;
           setInlineAppsByMessageId((prev) => ({
             ...prev,
             [messageId]: {
               appKey,
               status: 'ready',
-              payload: data.result?.render?.payload,
+              result,
+              payload: result.render?.payload,
             },
           }));
           return;
         }
 
-        const fallbackPayload = buildInlineAppFallbackPayload(appKey, appTranscript);
+        const fallbackResult = buildInlineAppFallbackResult(appKey, appTranscript);
         setInlineAppsByMessageId((prev) => ({
           ...prev,
-          [messageId]: fallbackPayload
-            ? { appKey, status: 'ready', payload: fallbackPayload }
+          [messageId]: fallbackResult
+            ? { appKey, status: 'ready', result: fallbackResult, payload: fallbackResult.render?.payload }
             : {
                 appKey,
                 status: 'error',
@@ -250,11 +448,11 @@ export function TutorAgentPanel({
               },
         }));
       } catch (err) {
-        const fallbackPayload = buildInlineAppFallbackPayload(appKey, appTranscript);
+        const fallbackResult = buildInlineAppFallbackResult(appKey, appTranscript);
         setInlineAppsByMessageId((prev) => ({
           ...prev,
-          [messageId]: fallbackPayload
-            ? { appKey, status: 'ready', payload: fallbackPayload }
+          [messageId]: fallbackResult
+            ? { appKey, status: 'ready', result: fallbackResult, payload: fallbackResult.render?.payload }
             : {
                 appKey,
                 status: 'error',
@@ -263,7 +461,7 @@ export function TutorAgentPanel({
         }));
       }
     },
-    [authToken, sessionId, transcript],
+    [authToken, preferredModel, sessionId, transcript],
   );
 
   React.useEffect(() => {
@@ -300,18 +498,48 @@ export function TutorAgentPanel({
   return (
     <div
       className={cn(
-        'flex h-full flex-col bg-white text-slate-900',
+        'flex h-full flex-col bg-white text-ink',
         className,
       )}
       role="log"
       aria-live="polite"
       aria-label="AI 同桌对话"
     >
-      <div className="flex-1 overflow-y-auto px-4 py-3 space-y-3">
+      <div className="flex items-center justify-between gap-3 border-b border-divider bg-canvas px-5 py-3 text-[13px] text-ink-muted">
+        <span className="min-w-0 flex-1 truncate leading-relaxed">
+          {resolveTutorAgentHistoryLabel({
+            hydrated: historyHydrated,
+            title: restoredConversationTitle,
+            selected: Boolean(selectedConversationId),
+          })}
+        </span>
+        <div className="flex shrink-0 items-center gap-2">
+          {onShowHistory ? (
+            <button
+              type="button"
+              onClick={onShowHistory}
+              className="rounded-full border border-divider bg-white px-3 py-1.5 text-[13px] text-ink-secondary transition hover:border-ink-muted hover:text-ink"
+            >
+              历史
+            </button>
+          ) : null}
+          {messages.length > 0 ? (
+            <button
+              type="button"
+              onClick={handleNewConversation}
+              className="rounded-full border border-divider bg-white px-3 py-1.5 text-[13px] text-ink-secondary transition hover:border-ink-muted hover:text-ink"
+            >
+              开新对话
+            </button>
+          ) : null}
+        </div>
+      </div>
+
+      <div className="flex-1 space-y-4 overflow-y-auto bg-white px-6 py-5">
         {messages.length === 0 ? (
-          <div className="pt-6">
-            <div className="text-sm text-slate-500 text-center">
-              AI 同桌在这里。挑一个直接开始，也可以在下方直接问。
+          <div className="pt-10 text-center">
+            <div className="mx-auto max-w-[20rem] text-[15px] leading-[1.75] text-ink-secondary">
+              同学在这里。挑一个直接开始，也可以在下方直接问。
             </div>
             <SkillChipRow onPick={onPickSkill} onSay={onPickSkill} disabled={busy} />
           </div>
@@ -326,13 +554,13 @@ export function TutorAgentPanel({
               key={m.id}
               className={cn('flex', isUser ? 'justify-end' : 'justify-start')}
             >
-              <div className={cn('flex max-w-[88%] flex-col', isUser ? 'items-end' : 'items-start')}>
+              <div className={cn('flex flex-col', inlineApp ? 'w-full max-w-full' : 'max-w-[88%]', isUser ? 'items-end' : 'items-start')}>
                 <div
                   className={cn(
-                    'rounded-2xl px-3 py-2 text-sm leading-relaxed whitespace-pre-wrap break-words',
+                    'rounded-2xl px-4 py-2.5 text-[14.5px] leading-[1.75] break-words',
                     isUser
-                      ? 'bg-[#2F6BFF] text-white rounded-br-md'
-                      : 'border border-[#E9E9E7] bg-[#F7F7F5] text-ink rounded-bl-md',
+                      ? 'rounded-br-md bg-ink text-white whitespace-pre-wrap'
+                      : 'rounded-bl-md border border-divider bg-canvas text-ink',
                   )}
                 >
                   {parts.length > 0
@@ -340,7 +568,7 @@ export function TutorAgentPanel({
                         const partType = typeof part.type === 'string' ? part.type : '';
                         if (partType === 'text') {
                           const txt = typeof part.text === 'string' ? part.text : '';
-                          return <RenderTimestampedText key={idx} text={txt} onSeek={onSeek} />;
+                          return <TutorMessageText key={idx} role={m.role} text={txt} onSeek={onSeek} isStreaming={busy && idx === parts.length - 1} />;
                         }
                         if (partType.startsWith('tool-')) {
                           return (
@@ -356,11 +584,11 @@ export function TutorAgentPanel({
                     : // 老版本兼容（content 字段）
                       (() => {
                         const content = (m as unknown as { content?: string }).content ?? '';
-                        return <RenderTimestampedText text={content} onSeek={onSeek} />;
+                        return <TutorMessageText role={m.role} text={content} onSeek={onSeek} isStreaming={busy} />;
                       })()}
                 </div>
                 {!isUser && inlineApp ? (
-                  <div className="w-full min-w-[280px] max-w-[420px]">
+                  <div className="w-full min-w-[280px]">
                     <InlineAppCard
                       inlineApp={inlineApp}
                       onRetry={() => runInlineApp(m.id, inlineApp.appKey)}
@@ -373,27 +601,27 @@ export function TutorAgentPanel({
         })}
 
         {error ? (
-          <div className="text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-md px-3 py-2">
-            出错了：{error.message ?? '未知错误'}
+          <div className="rounded-2xl border border-divider bg-canvas px-4 py-3 text-[13px] leading-relaxed text-ink-secondary">
+            刚刚没接住：{error.message ?? '未知错误'}
           </div>
         ) : null}
       </div>
 
-      <form onSubmit={onSubmit} className="border-t border-slate-200 p-3 flex gap-2">
+      <form onSubmit={onSubmit} className="flex gap-3 border-t border-divider bg-canvas p-4">
         <input
           type="text"
           value={input}
           onChange={(e) => setInput(e.target.value)}
           disabled={busy}
-          placeholder={busy ? '同桌在想…' : '问点什么…'}
-          className="flex-1 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 disabled:bg-slate-50 disabled:text-slate-400"
+          placeholder={busy ? '同学在想…' : '问点什么…'}
+          className="flex-1 rounded-2xl border border-divider bg-white px-4 py-2.5 text-[14px] text-ink outline-none transition focus:border-ink disabled:bg-divider-light disabled:text-ink-muted"
           aria-label="向 AI 同桌提问"
         />
         {busy ? (
           <button
             type="button"
             onClick={stop}
-            className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-600 hover:bg-slate-50"
+            className="rounded-2xl border border-divider bg-white px-4 py-2.5 text-[14px] text-ink-secondary transition hover:text-ink"
           >
             停
           </button>
@@ -401,7 +629,7 @@ export function TutorAgentPanel({
           <button
             type="submit"
             disabled={!input.trim()}
-            className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:bg-slate-300 disabled:cursor-not-allowed"
+            className="rounded-2xl bg-ink px-5 py-2.5 text-[14px] font-medium text-white transition hover:opacity-85 disabled:cursor-not-allowed disabled:bg-divider"
           >
             发送
           </button>

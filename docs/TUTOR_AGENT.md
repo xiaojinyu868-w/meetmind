@@ -56,25 +56,29 @@ M3 Tutor：
 
 ### `src/app/api/tutor/agent/route.ts`
 
-新 endpoint（和旧 `/api/tutor` 并存，灰度友好）：
+新 endpoint（和旧 `/api/tutor` 并存，灰度友好）。请求体可带 `model`，设置页会把用户选择透传进来；服务端用 `resolveTutorAgentProviderFallbacks(env, { modelId })` 生成 DeepSeek / DashScope / OpenAI-compatible 候选，并始终用 `.chat()` 走 `/chat/completions`。
+
+流式策略：
 
 ```ts
-const result = streamText({
-  model,
-  system: TUTOR_SYSTEM_CURRENT.content,
-  messages: await convertToModelMessages(messages),
-  tools,
-  stopWhen: stepCountIs(6),
-  experimental_telemetry: {
-    isEnabled: true,
-    functionId: 'tutor.agent',
-    metadata: { promptVersion, sessionId, subject },
-  },
-  onStepFinish(step) {
-    track({ kind: 'tutor.step', sessionId, stepType: step.toolCalls.length ? 'tool-call' : 'assistant', toolCalls: step.toolCalls.map(t => t.toolName), usage: step.usage });
+const providers = resolveTutorAgentProviderFallbacks(env, { modelId });
+const stream = createUIMessageStream({
+  async execute({ writer }) {
+    for (const provider of providers) {
+      const openai = createOpenAI({ apiKey: provider.apiKey, baseURL: provider.baseURL });
+      const result = streamText({
+        model: openai.chat(provider.modelId),
+        system: buildTutorSystemPrompt(mode, context, options),
+        messages: await convertToModelMessages(messages),
+        tools,
+        stopWhen: stepCountIs(6),
+      });
+      // 若尚未输出内容且遇到繁忙 / 限流 / 超时，静默切到下一个 provider；
+      // 若已经输出内容或是认证 / 模型配置错误，则不切换，直接把错误交给前端。
+    }
   },
 });
-return result.toUIMessageStreamResponse();
+return createUIMessageStreamResponse({ stream });
 ```
 
 ---
@@ -115,13 +119,13 @@ const endpoint = USE_AGENT ? '/api/tutor/agent' : '/api/tutor';
 
 ```bash
 make eval-tutor              # dry-run，用 case.stubOutput / stubToolCalls
-make eval-tutor-real         # 真实调 streamText + tools（需 API key）
+make eval-tutor-real         # 真实调 streamText + tools（优先当前模型 provider；已配置双 key 时可在 DeepSeek ↔ DashScope 间 fallback）
 ```
 
 三 grader：
 - `tool-selection`：断言 toolCalls[0] 或 contains 或 none
 - `timestamp-citation`：正则 `[t=MM:SS]` + 时间窗校验
-- `learning-rubric`：qwen3.5-plus LLM-as-Judge（离线自动跳过；可 env EVAL_JUDGE_MODEL 覆盖）
+- `learning-rubric`：LLM-as-Judge（离线自动跳过；可 env `EVAL_JUDGE_MODEL` 覆盖）
 
 基线（seed 8 条）：`7/8 passed / tool=100% cite=66.7% rubric=100%`（1 条故意 fail，验证 harness 能检出 citation 出窗）。
 
@@ -143,9 +147,11 @@ make eval-tutor-real         # 真实调 streamText + tools（需 API key）
 
 | 名称 | 默认 | 说明 |
 |---|---|---|
-| `OPENAI_API_KEY` 或 `DASHSCOPE_API_KEY` | — | LLM 凭证 |
-| `TUTOR_MODEL` | `qwen3.5-plus` | 默认模型（性价比 + 效果平衡；高精度场景可 override 成 qwen-max） |
-| `TUTOR_BASE_URL` | `dashscope.aliyuncs.com/compatible-mode/v1` | OpenAI-compatible baseURL |
+| `DEEPSEEK_API_KEY` | — | 默认推荐凭证；设置页默认模型 `deepseek-v4-flash` 走这里 |
+| `DEEPSEEK_BASE_URL` | `https://api.deepseek.com` | DeepSeek OpenAI-compatible baseURL |
+| `OPENAI_API_KEY` 或 `DASHSCOPE_API_KEY` | — | 兼容凭证；当模型 / baseURL 指向对应 provider 时使用；若同时配置 `DEEPSEEK_API_KEY` 和 `DASHSCOPE_API_KEY`，Tutor Agent 会在首个 provider 繁忙/限流/超时且尚未输出内容时自动切到另一路 |
+| `TUTOR_MODEL` | `deepseek-v4-flash` | Tutor 默认模型；可 override 成 `deepseek-v4-pro` 或其他已配置 OpenAI-compatible 模型 |
+| `TUTOR_BASE_URL` | `https://dashscope.aliyuncs.com/compatible-mode/v1` | 非 DeepSeek 模型的 Tutor OpenAI-compatible baseURL；DeepSeek 模型使用 `DEEPSEEK_BASE_URL` |
 
 ---
 

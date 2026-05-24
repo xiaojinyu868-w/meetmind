@@ -14,6 +14,8 @@ import { ServiceStatus, DegradedModeBanner } from '@/components/ServiceStatus';
 import { DesktopSidebar } from '@/components/DesktopSidebar';
 
 import { EchoShareCard } from '@/components/EchoShareCard';
+import { resolveGuestDemoEntry } from '@/components/classroom/guest-demo-entry';
+import type { WorkshopAppKey } from '@/lib/ai-native/app-catalog';
 import { type Anchor } from '@/lib/services/anchor-service';
 import { memoryService, type ClassTimeline } from '@/lib/services/memory-service';
 
@@ -154,12 +156,16 @@ function StudentAppContent({
   forceMobilePreview = false,
   wechatCaptureToken = null,
   initialMobileSubPage = null,
+  autoLoadDemo = false,
+  autoOpenDemoAppKey,
 }: {
   isGuestFastEntry: boolean;
   forcedWorkspaceTab: SharedWorkspaceTab | null;
   forceMobilePreview?: boolean;
   wechatCaptureToken?: string | null;
   initialMobileSubPage?: MobileSubPage;
+  autoLoadDemo?: boolean;
+  autoOpenDemoAppKey?: WorkshopAppKey;
 }) {
   // ==================== Zustand Store 订阅 ====================
   const uiActions = useUIStore((s) => s.actions);
@@ -1172,7 +1178,7 @@ function StudentAppContent({
   // manualEchoFeedbackView, manualEchoDebugView
   // 已提取到 useEchoActions hook（见上方 hook 调用）。
 
-  // ── Tutor Launcher Hook（AI 家教启动全部逻辑）──────
+  // ── Tutor Launcher Hook（学习同桌启动全部逻辑）──────
   const {
     openTutorFromCollection,
     openTutorWithSelectedCollectionContext,
@@ -1248,7 +1254,7 @@ function StudentAppContent({
     const composerHasText = collectionComposerText.trim().length > 0;
     const composerRows = composerHasText ? 2 : 1;
     const topBarStatus = isRecording
-      ? '正在收一段原声'
+      ? '正在收一段语音'
       : activeSourceImportCount > 0
         ? `正在收进 ${activeSourceImportCount} 个文件`
         : '';
@@ -1310,7 +1316,7 @@ function StudentAppContent({
           ) : (
             <div className="flex flex-col gap-2.5">
               {showMobileRecorder ? (
-                <div className="rounded-2xl bg-white ring-[0.5px] ring-[#232322]/[0.06]">
+                <div className="rounded-2xl border border-divider bg-white">
                   <div className="px-5 py-4">
                     <div className="flex items-center gap-3">
                       <div className="inline-flex items-center gap-3 rounded-[14px] bg-[#F7F7F5] px-3.5 py-2.5">
@@ -1326,7 +1332,7 @@ function StudentAppContent({
                             />
                           ))}
                         </span>
-                        <span className="text-[12px] font-medium text-[#787774]">原声录制中</span>
+                        <span className="text-[12px] font-medium text-[#787774]">语音录制中</span>
                       </div>
                     </div>
                     {currentLivePreview ? (
@@ -1370,13 +1376,13 @@ function StudentAppContent({
                 <button
                   type="button"
                   onClick={() => setMobileCollectionSheet('echo')}
-                  className="flex w-full items-center gap-2.5 rounded-2xl bg-white px-5 py-3.5 ring-[0.5px] ring-[#232322]/[0.06] transition-all hover:ring-[#232322]/[0.12] hover:bg-[#FAFAF9]"
+                  className="flex w-full items-center gap-2.5 rounded-2xl border border-divider bg-white px-5 py-3.5 transition-colors hover:border-ink-muted hover:bg-[#FAFAF9]"
                 >
                   <span className="text-[12px] text-[#D3E4F4]">✦</span>
                   <span className="min-w-0 flex-1 truncate text-left text-[13px] leading-5 text-[#787774]">
                     {workspaceEchoes.length === 1
-                      ? '同桌留了一条回声'
-                      : `同桌留了 ${workspaceEchoes.length} 条回声`}
+                      ? '同桌整理了一条笔记总结'
+                      : `同桌整理了 ${workspaceEchoes.length} 条笔记总结`}
                   </span>
                   <ChevronRight size={14} className="flex-shrink-0 text-[#A3A39E]" />
                 </button>
@@ -1690,6 +1696,7 @@ function StudentAppContent({
           onReviewTabChange={(tab) => setReviewTab(tab as typeof reviewTab)}
           unresolvedAnchorCount={unresolvedCount}
           hasTimeline={!!timelineForView}
+          focusMode={viewMode === 'classroom' && isRecording}
         />
       )}
 
@@ -1704,6 +1711,8 @@ function StudentAppContent({
             <ClassroomView
               isRecording={isRecording}
               onOpenApp={safeOpenWorkshopWindow}
+              autoLoadDemo={autoLoadDemo}
+              autoOpenDemoAppKey={autoOpenDemoAppKey}
               onStartRecording={() => {
                 // 课堂 tab 的 Recorder 是 sr-only 挂载点（不带 compactMode，走 streaming）。
                 // 绝对不要打开 showMobileRecorder —— 否则会同时渲染两个 Recorder：
@@ -1735,6 +1744,7 @@ function StudentAppContent({
                       subject: UIConfig.defaultSubject,
                       duration: sessionMediaDurationMs,
                       sourceType: 'recording',
+                      transcriptionStatus: 'pending',
                     }).catch((err) => {
                       console.warn('[classroom] pre-stop placeholder save failed:', err);
                     });
@@ -2011,7 +2021,7 @@ function StudentAppContent({
                     }}
                     visible={!selectedConfusion}
                     pulse={segments.length > 0 && anchors.length === 0}
-                    tooltip="和 AI 聊聊这节课"
+                    tooltip="问问这节课"
                   />
                 </>
               )}
@@ -2108,17 +2118,17 @@ function StudentAppContent({
               )}
 
               {mobileSubPage === 'apps' && (
-                <div className="flex-1 min-h-0 flex flex-col bg-white">
-                  <div className="flex items-center gap-3 px-4 py-3 border-b border-gray-100">
+                <div className="flex min-h-0 flex-1 flex-col bg-white">
+                  <div className="flex items-center gap-3 border-b border-divider px-4 py-3">
                     <button
                       onClick={() => setMobileSubPage(null)}
-                      className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-gray-100"
+                      className="flex h-8 w-8 items-center justify-center rounded-full text-ink-secondary transition-colors hover:bg-divider-light hover:text-ink"
                     >
-                      <svg className="w-5 h-5 text-gray-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
                       </svg>
                     </button>
-                    <span className="font-medium text-gray-900">AI工坊</span>
+                    <span className="font-medium text-ink">学习应用</span>
                   </div>
                   <div className="flex-1 min-h-0 overflow-hidden">
                     {renderSharedWorkspacePanel('apps')}
@@ -2127,17 +2137,17 @@ function StudentAppContent({
               )}
 
               {mobileSubPage === 'tasks' && (
-                <div className="flex-1 min-h-0 flex flex-col bg-white">
-                  <div className="flex items-center gap-3 px-4 py-3 border-b border-gray-100">
+                <div className="flex min-h-0 flex-1 flex-col bg-white">
+                  <div className="flex items-center gap-3 border-b border-divider px-4 py-3">
                     <button
                       onClick={() => setMobileSubPage(null)}
-                      className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-gray-100"
+                      className="flex h-8 w-8 items-center justify-center rounded-full text-ink-secondary transition-colors hover:bg-divider-light hover:text-ink"
                     >
-                      <svg className="w-5 h-5 text-gray-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
                       </svg>
                     </button>
-                    <span className="font-medium text-gray-900">今日任务</span>
+                    <span className="font-medium text-ink">今日任务</span>
                   </div>
                   <div className="flex-1 min-h-0 overflow-hidden">
                     <ActionList
@@ -2261,14 +2271,18 @@ function SearchParamsReader() {
       : entryParam === 'ai' || entryParam === 'chat'
         ? 'ai-chat'
         : null;
+  const guestDemoEntry = resolveGuestDemoEntry({
+    isGuestFastEntry,
+    entry: entryParam,
+  });
 
   // 如果请求了移动端预览，但当前在桌面端或者还未挂载（防止 SSR 闪烁），则渲染外壳
   if (forceMobilePreview && (!mounted || !isMobile)) {
     return (
       <div className="min-h-dvh bg-[#F7F7F5]">
         <div className="flex items-start justify-center px-5 pb-10 pt-6">
-          <div className="relative h-[860px] w-[400px] rounded-[44px] bg-[#0b1220] p-[10px] shadow-[0_35px_80px_rgba(15,23,42,0.32)]">
-            <div className="absolute left-1/2 top-[18px] z-20 h-7 w-32 -translate-x-1/2 rounded-full bg-[#0b1220]" />
+          <div className="relative h-[860px] w-[400px] rounded-[44px] border border-divider bg-white p-[10px]">
+            <div className="absolute left-1/2 top-[18px] z-20 h-7 w-32 -translate-x-1/2 rounded-full bg-ink" />
             <div className="relative h-full overflow-hidden rounded-[34px] bg-[#f7f3ec]">
               <StudentAppContent
                 isGuestFastEntry={isGuestFastEntry}
@@ -2276,6 +2290,8 @@ function SearchParamsReader() {
                 forceMobilePreview
                 wechatCaptureToken={wechatCaptureToken}
                 initialMobileSubPage={initialMobileSubPage}
+                autoLoadDemo={guestDemoEntry.autoLoadDemo}
+                autoOpenDemoAppKey={guestDemoEntry.autoOpenAppKey}
               />
             </div>
           </div>
@@ -2290,6 +2306,8 @@ function SearchParamsReader() {
       forcedWorkspaceTab={forcedWorkspaceTab}
       wechatCaptureToken={wechatCaptureToken}
       initialMobileSubPage={initialMobileSubPage}
+      autoLoadDemo={guestDemoEntry.autoLoadDemo}
+      autoOpenDemoAppKey={guestDemoEntry.autoOpenAppKey}
     />
   );
 }

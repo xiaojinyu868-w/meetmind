@@ -84,7 +84,7 @@ export type UIStore = UIState & { actions: UIActions };
 // ==================== 初始状态 ====================
 
 const initialState: UIState = {
-  viewMode: 'record',
+  viewMode: 'classroom',
   reviewTab: 'timeline',
   videoWorkspaceTab: 'transcript',
   mobileSubPage: null,

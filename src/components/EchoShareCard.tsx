@@ -1,6 +1,13 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { toast } from 'sonner';
+import { COPY } from '@/lib/ui/copy';
+import {
+  buildEchoShareFileName,
+  buildEchoShareText,
+  dataUrlToFile,
+} from './echo-share-actions';
 import type { EchoData } from './EchoCard';
 
 // ── 类型 ──────────────────────────────────────────
@@ -251,13 +258,16 @@ function wrapText(ctx: CanvasRenderingContext2D, text: string, maxWidth: number)
 }
 
 // ── 主组件 ──────────────────────────────────────────
-// 设计原则：打开即生成，长按保存，极简
+// 设计原则：打开即生成，保存/分享动作显性化，极简
 
 export function EchoShareCard({ echo, courseName, open, onClose }: EchoShareCardProps) {
   const [imageUrl, setImageUrl] = useState<string | null>(null);
   const [generating, setGenerating] = useState(false);
   const [error, setError] = useState(false);
+  const [sharing, setSharing] = useState(false);
   const imgRef = useRef<HTMLImageElement>(null);
+  const shareText = useMemo(() => buildEchoShareText(echo, courseName), [echo, courseName]);
+  const fileName = useMemo(() => buildEchoShareFileName(echo, courseName), [echo, courseName]);
 
   useEffect(() => {
     if (!open) {
@@ -299,6 +309,64 @@ export function EchoShareCard({ echo, courseName, open, onClose }: EchoShareCard
     [onClose],
   );
 
+  const copyShareText = useCallback(async () => {
+    try {
+      await navigator.clipboard.writeText(shareText);
+      toast.success(COPY.echoShare.copied);
+    } catch {
+      toast.error(COPY.echoShare.copyFailed);
+    }
+  }, [shareText]);
+
+  const handleSaveImage = useCallback(() => {
+    if (!imageUrl) return;
+    try {
+      const anchor = document.createElement('a');
+      anchor.href = imageUrl;
+      anchor.download = fileName;
+      document.body.appendChild(anchor);
+      anchor.click();
+      document.body.removeChild(anchor);
+      toast.success(COPY.echoShare.saved);
+    } catch {
+      toast.error(COPY.echoShare.saveFallback);
+    }
+  }, [fileName, imageUrl]);
+
+  const handleNativeShare = useCallback(async () => {
+    if (!imageUrl || sharing) return;
+    setSharing(true);
+    try {
+      const nav = navigator as Navigator & {
+        canShare?: (data: ShareData) => boolean;
+        share?: (data: ShareData) => Promise<void>;
+      };
+      const file = await dataUrlToFile(imageUrl, fileName);
+      const shareDataWithFile: ShareData = {
+        title: COPY.echoShare.title,
+        text: shareText,
+        files: [file],
+      };
+
+      if (nav.share && (!nav.canShare || nav.canShare(shareDataWithFile))) {
+        await nav.share(shareDataWithFile);
+        return;
+      }
+
+      if (nav.share) {
+        await nav.share({ title: COPY.echoShare.title, text: shareText });
+        return;
+      }
+
+      await copyShareText();
+    } catch (err) {
+      if (err instanceof DOMException && err.name === 'AbortError') return;
+      await copyShareText();
+    } finally {
+      setSharing(false);
+    }
+  }, [copyShareText, fileName, imageUrl, shareText, sharing]);
+
   if (!open) return null;
 
   return (
@@ -323,19 +391,19 @@ export function EchoShareCard({ echo, courseName, open, onClose }: EchoShareCard
         {generating && (
           <div className="flex flex-col items-center gap-3 py-20">
             <div className="h-5 w-5 animate-spin rounded-full border-2 border-white/20 border-t-white/60" />
-            <p className="text-sm text-white/40">生成中…</p>
+            <p className="text-sm text-white/40">{COPY.echoShare.generating}</p>
           </div>
         )}
 
         {error && (
           <div className="flex flex-col items-center gap-3 py-20">
-            <p className="text-sm text-white/40">生成失败，请重试</p>
+            <p className="text-sm text-white/40">{COPY.echoShare.error}</p>
             <button
               type="button"
               onClick={onClose}
               className="rounded-full bg-white/10 px-4 py-2 text-sm text-white/60"
             >
-              关闭
+              {COPY.echoShare.close}
             </button>
           </div>
         )}
@@ -345,12 +413,36 @@ export function EchoShareCard({ echo, courseName, open, onClose }: EchoShareCard
             <img
               ref={imgRef}
               src={imageUrl}
-              alt="回声分享卡"
+              alt={COPY.echoShare.imageAlt}
               className="w-full rounded-lg"
-              style={{ maxHeight: '70vh', objectFit: 'contain' }}
+              style={{ maxHeight: '62vh', objectFit: 'contain' }}
             />
-            <p className="mt-4 text-center text-xs text-white/30">
-              长按图片保存到相册
+            <div className="mt-4 grid w-full grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={handleSaveImage}
+                className="rounded-full bg-white px-4 py-2.5 text-[13px] font-medium text-[#232322] transition hover:bg-[#F7F7F5] active:scale-[0.99]"
+              >
+                {COPY.echoShare.saveImage}
+              </button>
+              <button
+                type="button"
+                onClick={handleNativeShare}
+                disabled={sharing}
+                className="rounded-full bg-[#232322] px-4 py-2.5 text-[13px] font-medium text-white transition hover:bg-[#111111] active:scale-[0.99] disabled:opacity-60"
+              >
+                {sharing ? COPY.echoShare.sharing : COPY.echoShare.nativeShare}
+              </button>
+              <button
+                type="button"
+                onClick={copyShareText}
+                className="col-span-2 rounded-full border border-white/14 px-4 py-2 text-[12px] font-medium text-white/70 transition hover:border-white/24 hover:text-white"
+              >
+                {COPY.echoShare.copyText}
+              </button>
+            </div>
+            <p className="mt-3 text-center text-xs text-white/30">
+              {COPY.echoShare.hint}
             </p>
           </>
         )}

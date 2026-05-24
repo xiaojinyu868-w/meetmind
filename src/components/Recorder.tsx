@@ -17,8 +17,9 @@ import {
   CORRECTION_FALLBACK_MODEL,
 } from './recorder/recorder-types';
 import {
+  chooseBatchTranscribeEndpoints,
+  mergeRealtimeTranscriptSegment,
   normalizeCompareText,
-  shouldReplaceLastSegment,
   normalizeRecorderErrorMessage,
   normalizeRecorderErrorDetail,
   formatRecorderTime,
@@ -444,37 +445,19 @@ export const Recorder = forwardRef<RecorderHandle, RecorderProps>(function Recor
               });
             }
 
-            const nextTranscript = [...transcriptRef.current];
-            let replaced = false;
+            const mergeResult = mergeRealtimeTranscriptSegment(transcriptRef.current, segment, {
+              replaceIds: sentence.replaces,
+            });
+            if (mergeResult.action === 'ignore') return;
 
-            if (sentence.replaces?.length) {
-              for (const replaceId of sentence.replaces) {
-                const replaceIndex = nextTranscript.findIndex((seg) => seg.id === replaceId);
-                if (replaceIndex >= 0) {
-                  nextTranscript[replaceIndex] = segment;
-                  replaced = true;
-                  break;
-                }
-              }
-            }
-
-            if (!replaced && nextTranscript.length > 0) {
-              const last = nextTranscript[nextTranscript.length - 1];
-              if (shouldReplaceLastSegment(last, segment)) {
-                nextTranscript[nextTranscript.length - 1] = segment;
-                replaced = true;
-              }
-            }
-
-            if (!replaced) {
-              nextTranscript.push(segment);
-            }
+            const nextTranscript = mergeResult.segments;
+            const appended = mergeResult.action === 'append';
 
             transcriptRef.current = nextTranscript;
             setTranscript(nextTranscript);
             onTranscriptUpdate?.(nextTranscript, getCallbackMeta());
 
-            if (enhanceManagerRef.current && !sentence.provisional && !replaced) {
+            if (enhanceManagerRef.current && !sentence.provisional && appended) {
               enhanceManagerRef.current.addSegment(segment);
               setEnhanceStats((prev) => ({ ...prev, total: prev.total + 1 }));
             }
@@ -736,37 +719,19 @@ export const Recorder = forwardRef<RecorderHandle, RecorderProps>(function Recor
             });
           }
 
-          const nextTranscript = [...transcriptRef.current];
-          let replaced = false;
+          const mergeResult = mergeRealtimeTranscriptSegment(transcriptRef.current, segment, {
+            replaceIds: sentence.replaces,
+          });
+          if (mergeResult.action === 'ignore') return;
 
-          if (sentence.replaces?.length) {
-            for (const replaceId of sentence.replaces) {
-              const replaceIndex = nextTranscript.findIndex((seg) => seg.id === replaceId);
-              if (replaceIndex >= 0) {
-                nextTranscript[replaceIndex] = segment;
-                replaced = true;
-                break;
-              }
-            }
-          }
-
-          if (!replaced && nextTranscript.length > 0) {
-            const last = nextTranscript[nextTranscript.length - 1];
-            if (shouldReplaceLastSegment(last, segment)) {
-              nextTranscript[nextTranscript.length - 1] = segment;
-              replaced = true;
-            }
-          }
-
-          if (!replaced) {
-            nextTranscript.push(segment);
-          }
+          const nextTranscript = mergeResult.segments;
+          const appended = mergeResult.action === 'append';
 
           transcriptRef.current = nextTranscript;
           setTranscript(nextTranscript);
           onTranscriptUpdate?.(nextTranscript, getCallbackMeta());
 
-          if (enhanceManagerRef.current && !sentence.provisional && !replaced) {
+          if (enhanceManagerRef.current && !sentence.provisional && appended) {
             enhanceManagerRef.current.addSegment(segment);
             setEnhanceStats((prev) => ({ ...prev, total: prev.total + 1 }));
           }
@@ -880,6 +845,7 @@ export const Recorder = forwardRef<RecorderHandle, RecorderProps>(function Recor
     setTranscribeStartedAt(Date.now());
     setTranscribeProgress(skipEnhancement ? '正在转录这段原声...' : '正在转录音频...');
     onTranscribing?.(true);
+    let deferredTranscriptionError: string | null = null;
 
     try {
       const createFormData = () => {
@@ -888,6 +854,7 @@ export const Recorder = forwardRef<RecorderHandle, RecorderProps>(function Recor
         if (contextHint.trim()) {
           formData.append('context', contextHint.trim());
         }
+        formData.append('language', languageMode);
         return formData;
       };
 
@@ -912,26 +879,41 @@ export const Recorder = forwardRef<RecorderHandle, RecorderProps>(function Recor
       } = {};
       let lastErrorMessage = '转录失败';
 
-      const endpoints = ['/api/transcribe-turbo', '/api/transcribe'] as const;
+      const endpoints = chooseBatchTranscribeEndpoints({
+        durationMs: elapsedMs,
+        sizeBytes: audioBlob.size,
+      });
       for (let index = 0; index < endpoints.length; index += 1) {
         const endpoint = endpoints[index];
         setTranscribeProgress(
           endpoint === '/api/transcribe-turbo'
             ? '本地先用极速转写接住这段原声...'
-            : '极速转写没接住，切到标准转写再试一次...'
+            : endpoint === '/api/transcribe-fast'
+              ? '这段比较长，切成几段稳定转写...'
+              : '前一种转写没接住，切到标准转写再试一次...'
         );
 
-        response = await fetch(endpoint, {
-          method: 'POST',
-          body: createFormData(),
-        });
-        data = (await response.json().catch(() => ({}))) as typeof data;
+        try {
+          response = await fetch(endpoint, {
+            method: 'POST',
+            body: createFormData(),
+          });
+          data = (await response.json().catch(() => ({}))) as typeof data;
 
-        if (response.ok && data.success) {
-          break;
+          if (response.ok && data.success) {
+            break;
+          }
+
+          const detail = typeof (data as { detail?: unknown }).detail === 'string'
+            ? (data as { detail?: string }).detail
+            : '';
+          lastErrorMessage = [data.error, detail].filter(Boolean).join('：') || lastErrorMessage;
+        } catch (endpointError) {
+          lastErrorMessage = endpointError instanceof Error ? endpointError.message : String(endpointError);
+          response = null;
+          data = {};
+          continue;
         }
-
-        lastErrorMessage = data.error || lastErrorMessage;
       }
 
       if (!response || !response.ok || !data.success) {
@@ -1020,17 +1002,17 @@ export const Recorder = forwardRef<RecorderHandle, RecorderProps>(function Recor
           setTranscribeProgress(`转录完成，共 ${segments.length} 段`);
         } else {
           setTranscribeProgress(`转录完成，共 ${segments.length} 段`);
-          onTranscriptionError?.('这段原声没有转出可用文字。', getCallbackMeta());
+          deferredTranscriptionError = '这段原声没有转出可用文字。';
         }
       } else {
         setTranscribeProgress('转录完成，但没有获取到文本。');
-        onTranscriptionError?.('这段原声没有转出可用文字。', getCallbackMeta());
+        deferredTranscriptionError = '这段原声没有转出可用文字。';
       }
     } catch (err) {
       const rawMessage = err instanceof Error ? err.message : '转录失败';
       setError(rawMessage);
-      // 外部 callback 拿到已标准化的单段文案（保留旧行为）
-      onTranscriptionError?.(normalizeRecorderErrorMessage(rawMessage), getCallbackMeta());
+      // 延后到 onRecordingStop 之后派发：外层需要先创建 pending audio，才能把失败态写回卡片和 session。
+      deferredTranscriptionError = normalizeRecorderErrorMessage(rawMessage);
       setTranscribeProgress('');
     } finally {
       onTranscribing?.(false);
@@ -1039,8 +1021,11 @@ export const Recorder = forwardRef<RecorderHandle, RecorderProps>(function Recor
       if (emitStopCallback) {
         onRecordingStop?.(audioBlob ?? undefined, getCallbackMeta());
       }
+      if (deferredTranscriptionError) {
+        onTranscriptionError?.(deferredTranscriptionError, getCallbackMeta());
+      }
     }
-  }, [contextHint, getCallbackMeta, onRecordingStop, onTranscriptEnhanced, onTranscriptUpdate, onTranscribing, onTranscriptionError]);
+  }, [contextHint, elapsedMs, getCallbackMeta, languageMode, onRecordingStop, onTranscriptEnhanced, onTranscriptUpdate, onTranscribing, onTranscriptionError]);
 
   const stopRecording = useCallback(async () => {
     // 把每一步清理都 try/catch 包起来：任何一步出错都不能阻止 audioBlob 走到 onRecordingStop，
@@ -1136,7 +1121,7 @@ export const Recorder = forwardRef<RecorderHandle, RecorderProps>(function Recor
         const enhancedCount = enhanceStats.enhanced;
         const totalCount = transcriptRef.current.length;
         const enhanceInfo = enhancedCount > 0 ? `，已优化 ${enhancedCount} 段` : '';
-        setTranscribeProgress(`转录完成，共 ${totalCount} 段${enhanceInfo}`);
+        setTranscribeProgress(`文字已整理，共 ${totalCount} 段${enhanceInfo}`);
         onTranscriptUpdate?.(transcriptRef.current, getCallbackMeta());
       }
       setStatus('stopped');
@@ -1373,10 +1358,10 @@ export const Recorder = forwardRef<RecorderHandle, RecorderProps>(function Recor
           </div>
           <div className="min-w-0 flex-1">
             <p className="text-sm font-medium text-[#232322]">
-              {isStartingRecording ? '正在打开麦克风...' : '准备开始录原声'}
+              {isStartingRecording ? '正在打开麦克风...' : '准备录一段语音'}
             </p>
-            <p className="mt-0.5 text-xs leading-5 text-[#787774]">
-              这段原声会和转写一起进入当前收集流。
+            <p className="mt-1 text-[12px] leading-5 text-[#787774]">
+              这段录音会和文字一起进入当前收集流。
             </p>
           </div>
         </div>
@@ -1426,8 +1411,8 @@ export const Recorder = forwardRef<RecorderHandle, RecorderProps>(function Recor
                   录完整理
                 </button>
               </div>
-              <span className="text-[10px] text-[#787774]">
-                {effectiveTranscribeMode === 'streaming' ? '适合边听边记' : '适合先录整段再转成文字'}
+              <span className="text-[12px] text-[#787774]">
+                {effectiveTranscribeMode === 'streaming' ? '适合边录边出文字' : '适合先录完再整理'}
               </span>
             </div>
           </div>
@@ -1437,7 +1422,7 @@ export const Recorder = forwardRef<RecorderHandle, RecorderProps>(function Recor
           <div className="rounded-[28px] border border-[#E9E9E7] bg-[#F7F7F5] p-5">
             <div className="flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between">
               <div className="max-w-xl">
-                <span className="inline-flex items-center rounded-full border border-[#E9E9E7] bg-white px-2.5 py-1 text-[11px] font-semibold tracking-[0.08em] text-[#787774]">
+                <span className="inline-flex items-center rounded-full border border-[#E9E9E7] bg-white px-2.5 py-1 text-[12px] font-semibold tracking-[0.08em] text-[#787774]">
                   语音收集
                 </span>
                 <h3 className="mt-2 text-xl font-bold text-[#232322] sm:text-2xl">现在想让 MeetMind 记住什么？</h3>
@@ -1567,8 +1552,8 @@ export const Recorder = forwardRef<RecorderHandle, RecorderProps>(function Recor
 
   return (
     <div
-      className={`flex h-full min-h-0 flex-col overflow-hidden border border-gray-100 bg-white shadow-sm animate-fade-in ${
-        compactMode ? 'rounded-[24px] border-slate-200/90 shadow-[0_18px_36px_rgba(15,23,42,0.10)]' : 'rounded-2xl'
+      className={`flex h-full min-h-0 flex-col overflow-hidden border border-divider bg-white animate-fade-in ${
+        compactMode ? 'rounded-[24px]' : 'rounded-2xl'
       }`}
     >
       {/* */}
@@ -1613,8 +1598,8 @@ export const Recorder = forwardRef<RecorderHandle, RecorderProps>(function Recor
         {/* */}
         <div className={`flex items-center ${compactMode ? 'gap-2' : 'gap-4 sm:gap-4'}`}>
           {/* */}
-          <span className={`text-sm sm:text-xs text-gray-400 ${compactMode ? 'hidden' : 'hidden sm:inline'}`}>
-            {effectiveTranscribeMode === 'streaming' ? '边录边转' : '整段转写'}
+          <span className={`text-sm text-ink-muted ${compactMode ? 'hidden' : 'hidden sm:inline'}`}>
+            {effectiveTranscribeMode === 'streaming' ? '边录边出文字' : '录完再整理'}
           </span>
           
           {/* */}
@@ -1622,7 +1607,7 @@ export const Recorder = forwardRef<RecorderHandle, RecorderProps>(function Recor
             {isRecording ? (
               <button
                 onClick={pauseRecording}
-                className={`${compactMode ? 'h-[34px] w-[34px]' : 'w-[72px] h-[72px] sm:w-[48px] sm:h-[48px]'} rounded-full bg-[#FDF3C0] text-[#232322] flex items-center justify-center hover:bg-[#FDF3C0] transition-all active:scale-95 shadow-sm`}
+                className={`${compactMode ? 'h-[34px] w-[34px]' : 'w-[72px] h-[72px] sm:w-[48px] sm:h-[48px]'} rounded-full bg-[#FDF3C0] text-[#232322] flex items-center justify-center hover:bg-[#FDF3C0] transition-all active:scale-95`}
                 aria-label="暂停"
               >
                 <svg className={`${compactMode ? 'h-5 w-5' : 'w-9 h-9 sm:w-6 sm:h-6'}`} fill="currentColor" viewBox="0 0 24 24">
@@ -1634,9 +1619,9 @@ export const Recorder = forwardRef<RecorderHandle, RecorderProps>(function Recor
               <button
                 onClick={resumeRecording}
                 disabled={asrReconnecting}
-                className={`${compactMode ? 'h-[34px] w-[34px]' : 'w-[72px] h-[72px] sm:w-[48px] sm:h-[48px]'} rounded-full flex items-center justify-center transition-all active:scale-95 shadow-sm ${
+                className={`${compactMode ? 'h-[34px] w-[34px]' : 'w-[72px] h-[72px] sm:w-[48px] sm:h-[48px]'} rounded-full flex items-center justify-center transition-all active:scale-95 ${
                   asrReconnecting
-                    ? 'bg-gray-100 text-gray-400 cursor-wait'
+                    ? 'cursor-wait bg-divider-light text-ink-muted'
                     : 'bg-mint-100 text-mint-700 hover:bg-mint-200'
                 }`}
                 aria-label="继续"
@@ -1680,14 +1665,14 @@ export const Recorder = forwardRef<RecorderHandle, RecorderProps>(function Recor
         const hint = normalizeRecorderErrorDetail(error);
         return (
           <div className={`flex-shrink-0 rounded-xl border border-[#FADEC9] bg-[#FADEC9]/30 text-[#232322] animate-slide-up ${
-            compactMode ? 'mx-2 mt-1.5 px-2.5 py-1.5 text-[11px] leading-5' : 'mx-4 mt-3 p-3 text-sm'
+            compactMode ? 'mx-2 mt-1.5 px-3 py-2 text-[12px] leading-5' : 'mx-4 mt-3 p-3 text-sm'
           }`}>
             <div className="flex items-start gap-2">
               <span aria-hidden="true" className="flex-shrink-0">!</span>
               <div className="flex-1 min-w-0">
                 <div>{hint.message}</div>
                 {hint.action ? (
-                  <div className={compactMode ? 'mt-0.5 text-[10px] opacity-80' : 'mt-1 text-xs opacity-80'}>
+                  <div className={compactMode ? 'mt-1 text-[12px] opacity-80' : 'mt-1 text-xs opacity-80'}>
                     {hint.action}
                   </div>
                 ) : null}
@@ -1700,11 +1685,11 @@ export const Recorder = forwardRef<RecorderHandle, RecorderProps>(function Recor
       {/* ASR 重连提示 */}
       {asrReconnecting && !compactMode && (
         <div className={`flex-shrink-0 rounded-xl border border-[#FDF3C0] bg-[#FDF3C0]/30 text-[#232322] animate-slide-up ${
-          compactMode ? 'mx-2 mt-1.5 px-2.5 py-1.5 text-[11px]' : 'mx-4 mt-2 p-2.5 text-xs'
+          compactMode ? 'mx-2 mt-1.5 px-3 py-2 text-[12px]' : 'mx-4 mt-2 p-2.5 text-xs'
         }`}>
           <div className="flex items-center gap-2">
             <div className="w-3 h-3 border-2 border-[#232322] border-t-transparent rounded-full animate-spin" />
-            <span>正在重连实时转录...</span>
+            <span>正在重新接上文字...</span>
           </div>
         </div>
       )}
@@ -1767,11 +1752,11 @@ export const Recorder = forwardRef<RecorderHandle, RecorderProps>(function Recor
                 ))}
               </div>
               <div className="min-w-0 flex-1">
-                <p className="text-[11px] font-semibold text-[#232322]">
-                  {isRecording ? '原声录制中，停下后会直接发进收集流' : '这条原声已暂停，继续说就接着记'}
+                <p className="text-[12px] font-semibold text-[#232322]">
+                  {isRecording ? '语音录制中，停下后会直接发进收集流' : '这条语音已暂停，继续说就接着记'}
                 </p>
-                <p className="mt-1 text-xs leading-5 text-[#787774]">
-                  {compactPreviewText || (isRecording ? '继续说，我先帮你记住原话。' : '结束后会自动转文字并留在聊天流里。')}
+                <p className="mt-1 text-[12px] leading-5 text-[#787774]">
+                  {compactPreviewText || (isRecording ? '继续说，我先帮你记住这段内容。' : '结束后会自动变成文字并留在收集流里。')}
                 </p>
               </div>
             </div>
@@ -1798,31 +1783,31 @@ export const Recorder = forwardRef<RecorderHandle, RecorderProps>(function Recor
 
       {/* */}
       {compactMode ? (
-        <div className="flex-shrink-0 border-t border-gray-100 bg-white px-2.5 pb-2 pt-1.5">
+        <div className="flex-shrink-0 border-t border-divider bg-white px-2.5 pb-2 pt-1.5">
           <div className="flex items-center gap-2">
             <button
               onClick={markAnchor}
               disabled={!isRecording}
-              className={`inline-flex h-8 items-center justify-center gap-2 rounded-full px-3 text-[11px] font-medium transition ${
+              className={`inline-flex h-8 items-center justify-center gap-2 rounded-full px-3 text-[12px] font-medium transition ${
                 isRecording
                   ? 'bg-[#FADEC9] text-[#232322] hover:bg-[#FADEC9]/80'
-                  : 'bg-slate-100 text-slate-400 cursor-not-allowed'
+                  : 'cursor-not-allowed bg-divider-light text-ink-muted'
               }`}
             >
               <span className="text-sm">!</span>
               <span>卡住了</span>
             </button>
             {anchorCount > 0 ? (
-              <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[11px] text-slate-500">
+              <span className="rounded-full bg-divider-light px-2.5 py-1 text-[12px] text-ink-secondary">
                 已记 {anchorCount} 处卡点
               </span>
             ) : (
-              <span className="text-[11px] text-slate-400">听不懂时点一下</span>
+              <span className="text-[12px] text-ink-muted">听不懂时点一下</span>
             )}
             <button
               type="button"
               onClick={() => setShowRestartConfirm(true)}
-              className="ml-auto inline-flex h-8 items-center rounded-full px-3 text-[11px] text-slate-400 transition hover:bg-slate-100 hover:text-slate-600"
+              className="ml-auto inline-flex h-8 items-center rounded-full px-3 text-[12px] text-ink-muted transition hover:bg-divider-light hover:text-ink-secondary"
             >
               重录
             </button>

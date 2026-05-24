@@ -29,7 +29,7 @@ export function MobileTopBar({
   return (
     <div className="flex-shrink-0 bg-[#F7F7F5] px-4 pb-2 pt-[max(env(safe-area-inset-top),10px)]">
       <div className="mx-auto flex w-full max-w-md items-center gap-3">
-        <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#5B6ABF] text-white">
+        <div className="flex h-8 w-8 items-center justify-center rounded-lg border border-divider bg-white text-ink">
           <GraduationCap size={16} strokeWidth={2} />
         </div>
 
@@ -50,13 +50,13 @@ export function MobileTopBar({
                 {user.avatar ? (
                   <AvatarImage src={user.avatar} alt={user.nickname || '用户'} className="object-cover" />
                 ) : null}
-                <AvatarFallback className="bg-slate-100 text-xs text-slate-500">用户</AvatarFallback>
+                <AvatarFallback className="bg-canvas text-xs text-ink-muted">用户</AvatarFallback>
               </Avatar>
             </button>
           ) : (
             <a
               href="/login"
-              className="inline-flex h-7 items-center justify-center rounded-full bg-[#5B6ABF] px-2.5 text-[11px] font-medium text-white"
+              className="inline-flex h-7 items-center justify-center rounded-full bg-ink px-3 text-[12px] font-medium text-white"
             >
               登录
             </a>

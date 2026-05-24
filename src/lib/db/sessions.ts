@@ -31,6 +31,10 @@ function isPlaceholderTopic(topic: string | undefined | null): boolean {
   return PLACEHOLDER_TOPICS.has(trimmed);
 }
 
+function isValidSessionIdKey(sessionId: unknown): sessionId is string {
+  return typeof sessionId === 'string' && sessionId.trim().length > 0;
+}
+
 /**
  * 保存音频会话（upsert 语义）
  *
@@ -64,6 +68,8 @@ export async function saveAudioSession(
     importSourceMode?: AudioSession['importSourceMode'];
     importTrace?: AudioSession['importTrace'];
     mimeType?: string;
+    transcriptionStatus?: AudioSession['transcriptionStatus'];
+    transcriptionError?: string;
   } = {}
 ): Promise<number> {
   const existing = await db.audioSessions
@@ -134,6 +140,11 @@ export async function saveAudioSession(
     if (options.thumbnailUrl !== undefined) patch.thumbnailUrl = options.thumbnailUrl;
     if (options.importSourceMode !== undefined) patch.importSourceMode = options.importSourceMode;
     if (options.importTrace !== undefined) patch.importTrace = options.importTrace;
+    if (options.transcriptionStatus !== undefined) {
+      patch.transcriptionStatus = options.transcriptionStatus;
+      patch.transcriptionUpdatedAt = new Date();
+    }
+    if (options.transcriptionError !== undefined) patch.transcriptionError = options.transcriptionError;
 
     // 录音夺舍：本次未显式传视频字段时，把旧行的视频身份字段清空，避免串台
     if (isRecordingTakeover) {
@@ -169,6 +180,9 @@ export async function saveAudioSession(
     thumbnailUrl: options.thumbnailUrl,
     importSourceMode: options.importSourceMode,
     importTrace: options.importTrace,
+    transcriptionStatus: options.transcriptionStatus,
+    transcriptionError: options.transcriptionError,
+    transcriptionUpdatedAt: options.transcriptionStatus ? new Date() : undefined,
     status: 'completed',
     createdAt: new Date(),
     updatedAt: new Date()
@@ -180,6 +194,7 @@ export async function updateSessionStatus(
   sessionId: string,
   status: AudioSession['status']
 ): Promise<void> {
+  if (!isValidSessionIdKey(sessionId)) return;
   await db.audioSessions
     .where('sessionId')
     .equals(sessionId)

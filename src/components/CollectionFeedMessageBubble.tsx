@@ -27,6 +27,7 @@ import {
   formatVoiceDurationCompact,
   getFileExtensionBadge,
   formatRelativeCollectionTime,
+  resolvePendingAudioFailureStatus,
 } from '@/lib/utils/page-utils';
 
 // ==================== 类型定义 ====================
@@ -116,7 +117,10 @@ export function CollectionFeedMessageBubble({
     item.type !== 'audio' &&
     item.type !== 'video'
   );
-  const showAudioStatusText = Boolean(item.statusText) && item.status !== 'ready';
+  const audioStatusText = item.type === 'audio' && item.status === 'failed'
+    ? resolvePendingAudioFailureStatus(item.statusText || '')
+    : item.statusText;
+  const showAudioStatusText = Boolean(audioStatusText) && item.status !== 'ready';
   const showVideoStatusText = Boolean(item.statusText) && item.status === 'failed';
   const statusTone =
     item.status === 'failed'
@@ -274,7 +278,7 @@ export function CollectionFeedMessageBubble({
                 isPrimary ? 'justify-end text-slate-500' : 'justify-start text-slate-500'
               }`}>
                 {showAudioStatusText ? (
-                  <span className="font-medium">{item.statusText}</span>
+                  <span className="font-medium">{audioStatusText}</span>
                 ) : null}
                 {item.segmentCount > 0 && item.fullText?.trim() ? (
                   <>

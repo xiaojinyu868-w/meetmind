@@ -49,7 +49,17 @@ export async function addTranscripts(
     isFinal: seg.isFinal ?? true
   }));
   
-  return db.transcripts.bulkAdd(records);
+  const added = await db.transcripts.bulkAdd(records);
+  await db.audioSessions
+    .where('sessionId')
+    .equals(sessionId)
+    .modify({
+      transcriptionStatus: 'completed',
+      transcriptionError: undefined,
+      transcriptionUpdatedAt: new Date(),
+      updatedAt: new Date(),
+    });
+  return added;
 }
 
 /** 获取会话的所有转录 */

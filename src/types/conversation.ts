@@ -102,6 +102,7 @@ export interface ListConversationsParams {
 export interface SearchConversationsParams {
   keyword: string;
   type?: ConversationType;
+  sessionId?: string;
   limit?: number;
 }
 

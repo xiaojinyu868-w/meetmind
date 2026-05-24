@@ -59,10 +59,19 @@ export interface AITutorProps {
   hideMobileHeader?: boolean;
   realtimeTeacherEnabled?: boolean;
   onRealtimeTeacherEnabledChange?: (enabled: boolean) => void;
+  /** 语音同桌转写已落到历史时通知外层，让文字 agent 能接回。 */
+  onRealtimeConversationSaved?: (conversationId: string) => void;
   /** 递增此值触发全局对话清空（开新对话） */
   newConversationNonce?: number;
   /** 当全局对话内容有/无变化时通知外层 */
   onConversationActiveChange?: (hasMessages: boolean) => void;
+  /** 从历史列表点进来的指定对话（M10 agent 路径消费；老路径忽略）。 */
+  selectedConversationId?: string | null;
+  selectedConversationTitle?: string | null;
+  /** 打开当前课程历史列表。 */
+  onShowHistory?: () => void;
+  /** agent 路径内点击开新对话后通知外层清掉历史选择。 */
+  onAgentNewConversation?: () => void;
   /**
    * M10：当前视频/音频播放位置（秒）。
    * 复习态的 AI 同桌会把这个值注入 system prompt 的 fullTranscript 锚点，

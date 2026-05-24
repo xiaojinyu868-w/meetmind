@@ -19,8 +19,10 @@
 import type { ComponentProps } from 'react';
 import * as React from 'react';
 import { AITutor } from './AITutor';
+import { useAuth } from '@/lib/hooks/useAuth';
 import { TutorErrorBoundary } from './TutorErrorBoundary';
 import { TutorAgentPanel } from './tutor/TutorAgentPanel';
+import { buildTutorAgentReviewContext, formatLearnerProfileForTutorAgent } from './tutor/tutor-agent-adapter';
 
 const REVIEW_OPTIONS_LS_KEY = 'meetmind_tutor_review_options_v1';
 
@@ -68,10 +70,12 @@ export function SafeAITutor(props: ComponentProps<typeof AITutor>) {
   const resetKeys = [
     props.sessionId ?? 'default',
     props.breakpoint?.id ?? 'global',
+    props.selectedConversationId ?? 'current',
     props.launchQuestionNonce ?? 0,
     props.isMobile ? 'mobile' : 'desktop',
   ];
 
+  const { accessToken, user } = useAuth();
   const [reviewOpts, setReviewOpts] = React.useState<ReviewOptions>(() => loadReviewOptions());
   const [optionsPanelOpen, setOptionsPanelOpen] = React.useState(false);
 
@@ -83,10 +87,29 @@ export function SafeAITutor(props: ComponentProps<typeof AITutor>) {
     });
   }, []);
 
-  const authToken =
-    typeof window !== 'undefined'
-      ? window.localStorage.getItem('auth_token') ?? undefined
-      : undefined;
+  const learnerProfileContext = React.useMemo(
+    () => formatLearnerProfileForTutorAgent(user?.learnerProfile),
+    [user?.learnerProfile],
+  );
+
+  const reviewContext = React.useMemo(
+    () => buildTutorAgentReviewContext({
+      segments: props.segments,
+      currentTimeSec: props.currentTimeSec,
+      breakpoint: props.breakpoint,
+      supportContextText: props.supportContextText,
+      preferSupportContext: props.preferSupportContext,
+      learnerProfile: learnerProfileContext,
+    }),
+    [
+      props.breakpoint,
+      props.currentTimeSec,
+      props.preferSupportContext,
+      learnerProfileContext,
+      props.segments,
+      props.supportContextText,
+    ],
+  );
 
   // 回滚开关：极端情况下才会触发
   if (LEGACY_AITUTOR_ENABLED) {
@@ -96,13 +119,6 @@ export function SafeAITutor(props: ComponentProps<typeof AITutor>) {
       </TutorErrorBoundary>
     );
   }
-
-  // 把 segments 拼成完整转录文本，作为 review mode 的 context.fullTranscript
-  const fullTranscript = props.segments
-    .map((s) => s.text)
-    .filter(Boolean)
-    .join(' ')
-    .trim();
 
   return (
     <TutorErrorBoundary panelName="AI 同桌" resetKeys={resetKeys}>
@@ -123,16 +139,20 @@ export function SafeAITutor(props: ComponentProps<typeof AITutor>) {
               endMs: s.endMs,
             }))}
             subject={props.supportContextText}
-            authToken={authToken}
+            authToken={accessToken ?? undefined}
             onSeek={props.onSeek}
             mode="review"
-            context={{
-              fullTranscript: fullTranscript || undefined,
-              currentTimestampSec:
-                typeof props.currentTimeSec === 'number' && props.currentTimeSec > 0
-                  ? props.currentTimeSec
-                  : undefined,
-            }}
+            selectedConversationId={props.selectedConversationId}
+            selectedConversationTitle={props.selectedConversationTitle}
+            onShowHistory={props.onShowHistory}
+            onConversationActiveChange={props.onConversationActiveChange}
+            newConversationNonce={props.newConversationNonce}
+            onNewConversation={props.onAgentNewConversation}
+            launchQuestion={props.launchQuestion}
+            launchDisplayText={props.launchDisplayText}
+            launchQuestionNonce={props.launchQuestionNonce}
+            onLaunchQuestionConsumed={props.onLaunchQuestionConsumed}
+            context={reviewContext}
             options={{
               returnTimestamps: reviewOpts.returnTimestamps,
               thinkingGuide: reviewOpts.thinkingGuide,
@@ -167,18 +187,17 @@ function ReviewOptionsBar({
   const activeCount = Number(opts.returnTimestamps) + Number(opts.thinkingGuide);
 
   return (
-    <div className="border-b border-slate-200 bg-white px-3 py-1.5 text-xs">
+    <div className="border-b border-divider bg-white px-3 py-1.5 text-xs">
       <button
         type="button"
         onClick={() => onOpenChange(!open)}
-        className="inline-flex items-center gap-1.5 text-slate-500 hover:text-slate-800 transition"
+        className="inline-flex items-center gap-1.5 text-ink-muted transition hover:text-ink"
         aria-expanded={open}
         aria-controls="review-options-panel"
       >
-        <span aria-hidden>⚙</span>
         <span>回答设置</span>
         {activeCount > 0 ? (
-          <span className="ml-1 inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-slate-800 px-1 text-[10px] font-medium text-white">
+          <span className="ml-1 inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-ink px-1 text-[10px] font-medium text-white">
             {activeCount}
           </span>
         ) : null}
@@ -220,10 +239,10 @@ function OptionToggle({
         type="checkbox"
         checked={checked}
         onChange={(e) => onChange(e.target.checked)}
-        className="h-3.5 w-3.5 rounded border-slate-300 text-slate-800 focus:ring-1 focus:ring-slate-400"
+        className="h-3.5 w-3.5 rounded border-divider text-ink focus:ring-1 focus:ring-ink-muted"
       />
-      <span className="text-slate-700">{label}</span>
-      {hint ? <span className="text-slate-400">· {hint}</span> : null}
+      <span className="text-ink-secondary">{label}</span>
+      {hint ? <span className="text-ink-muted">· {hint}</span> : null}
     </label>
   );
 }

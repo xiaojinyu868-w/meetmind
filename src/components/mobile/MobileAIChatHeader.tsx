@@ -56,7 +56,7 @@ export function MobileAIChatHeader({
           </button>
 
           <div className="text-center">
-            <p className="text-[17px] font-medium tracking-[-0.03em] text-[#232322]">语音助教</p>
+            <p className="text-[17px] font-medium tracking-[-0.03em] text-[#232322]">语音同桌</p>
           </div>
 
           <div className="h-9 w-9" aria-hidden="true" />
@@ -82,7 +82,7 @@ export function MobileAIChatHeader({
         </button>
 
         <div className="text-center">
-          <p className="text-[17px] font-medium tracking-[-0.03em] text-[#232322]">AI 助教</p>
+          <p className="text-[17px] font-medium tracking-[-0.03em] text-[#232322]">学习同桌</p>
         </div>
 
         <div className="flex items-center gap-0.5">

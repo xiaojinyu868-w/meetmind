@@ -7,7 +7,7 @@
 
 | 文件 | 行数 | 职责 |
 |------|------|------|
-| `app.config.ts` | 293 | 配置定义 + 环境变量映射 |
+| `app.config.ts` | 338 | 配置定义 + 环境变量映射（含 DeepSeek / DashScope / Ark / Relay 模型） |
 | `index.ts` | 16 | barrel 导出 |
 
 ## 配置结构
@@ -28,3 +28,4 @@ AppConfig {
 - 所有环境变量在 `.env` 中定义
 - `app.config.ts` 统一读取，不要在其他地方直接 `process.env.XXX`
 - 新增配置项必须在 `app.config.ts` 中注册
+- DeepSeek 默认走 `DEEPSEEK_API_KEY` + `DEEPSEEK_BASE_URL`，全局默认模型优先 `deepseek-v4-flash`

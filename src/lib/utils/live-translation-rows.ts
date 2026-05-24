@@ -15,6 +15,7 @@ interface RecentLine {
 export function buildLiveTranslationRows({
   segments = [],
   recentLines = [],
+  interimText = '',
   maxFinalRows = 2,
 }: {
   segments?: TranscriptSegment[];
@@ -30,7 +31,7 @@ export function buildLiveTranslationRows({
       }))
     : recentLines;
 
-  return source
+  const stableRows = source
     .filter((line) => line.text.trim().length > 0)
     .slice(-Math.max(1, maxFinalRows))
     .map((line) => ({
@@ -38,4 +39,19 @@ export function buildLiveTranslationRows({
       text: line.text.trim(),
       startMs: Math.max(0, line.startMs),
     }));
+
+  const interim = interimText.trim();
+  if (!interim) return stableRows;
+
+  const lastStableText = stableRows[stableRows.length - 1]?.text.trim();
+  if (lastStableText && lastStableText === interim) return stableRows;
+
+  return [
+    ...stableRows,
+    {
+      id: 'live-interim',
+      text: interim,
+      startMs: stableRows[stableRows.length - 1]?.startMs ?? 0,
+    },
+  ];
 }

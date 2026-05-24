@@ -73,63 +73,22 @@ function NodeChip({
     onAnchorClick(node.anchorMs);
   };
 
-  // ── center：纯文字双行，去掉黑胶囊 ────────────────────────────────
+  // ── center：课堂结构的当前核心 ────────────────────────────────
   if (tier === 'center') {
     return (
-      <div className={`group flex flex-col items-center text-center ${anim}`}>
-        <span className="text-[10.5px] font-medium uppercase tracking-[0.14em] text-ink-muted">
+      <div className={`group flex flex-col items-start text-left ${anim}`}>
+        <span className="text-[12px] font-semibold uppercase tracking-[0.14em] text-ink-muted">
           本节主题
         </span>
-        <span className="mt-1.5 text-[17px] font-semibold tracking-[-0.015em] text-ink">
+        <span className="mt-1.5 text-[22px] font-semibold tracking-[-0.04em] text-ink">
           {node.label}
         </span>
         {node.detail && (
-          <span className="mt-1.5 max-w-[26rem] text-[12.5px] leading-[1.55] text-ink-secondary">
+          <span className="mt-2 max-w-[34rem] text-[13px] leading-[1.65] text-ink-secondary">
             {node.detail}
           </span>
         )}
         {/* 未使用字段防 lint */}
-        <span className="hidden" aria-hidden>{elapsedMs}</span>
-      </div>
-    );
-  }
-
-  // ── branch：白底 + 极细边，承载"枝"的结构感 ───────────────────────
-  if (tier === 'branch') {
-    return (
-      <div className={`group relative ${anim}`}>
-        <div
-          onClick={handleClick}
-          role={clickable ? 'button' : undefined}
-          tabIndex={clickable ? 0 : -1}
-          onKeyDown={(e) => {
-            if (!clickable) return;
-            if (e.key === 'Enter' || e.key === ' ') {
-              e.preventDefault();
-              onAnchorClick?.(node.anchorMs);
-            }
-          }}
-          className={[
-            'inline-flex items-center gap-1.5',
-            'px-3.5 py-1.5 rounded-[10px]',
-            'bg-white ring-[0.5px] ring-[#232322]/[0.14]',
-            'text-[13px] font-medium tracking-[-0.005em] text-ink',
-            clickable ? 'cursor-pointer transition hover:ring-[#232322]/[0.28]' : '',
-          ].join(' ')}
-        >
-          <span>{node.label}</span>
-        </div>
-        {showTime && (
-          <span className="absolute -bottom-4 left-1 font-mono text-[10px] tabular-nums text-ink-muted/70 opacity-0 group-hover:opacity-100 transition">
-            {formatAt(node.anchorMs)}
-          </span>
-        )}
-        {isNew && (
-          <span
-            aria-hidden
-            className="pointer-events-none absolute inset-0 rounded-[10px] ring-[1.5px] ring-[#232322]/[0.18] animate-[mindPulse_1400ms_ease-out_forwards]"
-          />
-        )}
         <span className="hidden" aria-hidden>{elapsedMs}</span>
       </div>
     );
@@ -164,14 +123,14 @@ function NodeChip({
         <span>{node.label}</span>
       </div>
       {showTime && (
-        <span className="absolute -bottom-3.5 left-4 font-mono text-[10px] tabular-nums text-ink-muted/60 opacity-0 group-hover:opacity-100 transition">
+        <span className="absolute -bottom-4 left-4 font-mono text-[11px] tabular-nums text-ink-muted/70 opacity-0 transition group-hover:opacity-100">
           {formatAt(node.anchorMs)}
         </span>
       )}
       {isNew && (
         <span
           aria-hidden
-          className="pointer-events-none absolute inset-0 rounded-[6px] ring-[1px] ring-[#232322]/[0.10] animate-[mindPulse_1400ms_ease-out_forwards]"
+          className="pointer-events-none absolute inset-0 rounded-[6px] border border-[#232322]/10 animate-[mindPulse_1400ms_ease-out_forwards]"
         />
       )}
     </div>
@@ -182,23 +141,60 @@ function NodeChip({
 
 function Dormant({ elapsedMs }: { elapsedMs: number }) {
   const sec = Math.floor(elapsedMs / 1000);
+  const phase = sec < 30 ? '听清开场' : sec < 60 ? '抓第一条主线' : '等待稳定结构';
+  const body = sec < 30
+    ? '老师进入正题后，这里会从一句句话里长出结构。'
+    : sec < 60
+      ? '我正在把刚才的内容压成第一层脉络。'
+      : '再等一段更稳定的讲解，就能画出可点击的小树。';
+
   return (
-    <div className="flex flex-1 flex-col items-center justify-center px-10 pb-24 text-center">
-      <div className="relative flex h-12 w-12 items-center justify-center">
-        <span className="absolute h-3 w-3 rounded-full bg-ink" />
-        <span className="absolute h-8 w-8 rounded-full ring-[0.5px] ring-[#232322]/[0.12] animate-[mindBreath_2600ms_ease-in-out_infinite]" />
-        <span className="absolute h-12 w-12 rounded-full ring-[0.5px] ring-[#232322]/[0.06] animate-[mindBreath_3400ms_ease-in-out_infinite]" />
+    <div className="flex h-full flex-col px-6 py-6 text-left lg:px-8">
+      <div className="rounded-[24px] border border-divider bg-[#FBFBFA] px-5 py-5">
+        <div className="flex items-center justify-between gap-4">
+          <div className="min-w-0">
+            <p className="text-[12px] font-semibold uppercase tracking-[0.14em] text-ink-muted">课堂结构</p>
+            <h2 className="mt-2 text-[24px] font-semibold tracking-[-0.04em] text-ink">我在听这节课</h2>
+          </div>
+          <div className="relative flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-full border border-divider bg-white">
+            <span className="absolute h-8 w-8 rounded-full border border-[#232322]/10 animate-[mindBreath_2600ms_ease-in-out_infinite]" />
+            <span className="h-3 w-3 rounded-full bg-ink" />
+          </div>
+        </div>
+        <p className="mt-3 max-w-[32rem] text-[13px] leading-[1.75] text-ink-secondary">
+          {body}
+        </p>
+        <div className="mt-5 grid gap-2 sm:grid-cols-3">
+          {['听清开场', '抓主线', '长成小树'].map((item, index) => {
+            const active = item === phase || (phase === '等待稳定结构' && index === 2);
+            const done = (sec >= 30 && index === 0) || (sec >= 60 && index === 1);
+            return (
+              <div
+                key={item}
+                className={`rounded-2xl border px-3 py-3 ${
+                  active ? 'border-ink bg-white' : done ? 'border-divider bg-white' : 'border-divider bg-canvas'
+                }`}
+              >
+                <div className="flex items-center gap-2">
+                  <span className={`h-1.5 w-1.5 rounded-full ${active ? 'bg-ink' : done ? 'bg-ink-muted' : 'bg-divider'}`} />
+                  <span className="text-[12px] font-medium text-ink-secondary">{item}</span>
+                </div>
+              </div>
+            );
+          })}
+        </div>
       </div>
-      <p className="mt-6 text-[14px] font-medium tracking-[-0.005em] text-ink">
-        我在听这节课
-      </p>
-      <p className="mt-2 max-w-[22rem] text-[12.5px] leading-relaxed text-ink-muted">
-        {sec < 30
-          ? '再等一会儿——老师进入正题我就开始画这节课的小树。'
-          : sec < 60
-            ? '正在整理第一段理解……'
-            : '还在等一段能理出结构的内容，别急，马上就来。'}
-      </p>
+
+      <div className="mt-4 grid flex-1 content-start gap-3 sm:grid-cols-2">
+        <div className="rounded-[20px] border border-dashed border-divider bg-white px-4 py-4">
+          <p className="text-[12px] font-medium text-ink-muted">现在适合</p>
+          <p className="mt-2 text-[14px] leading-[1.7] text-ink-secondary">继续听；哪里没跟上，直接问右边的同学。</p>
+        </div>
+        <div className="rounded-[20px] border border-dashed border-divider bg-white px-4 py-4">
+          <p className="text-[12px] font-medium text-ink-muted">等结构出现后</p>
+          <p className="mt-2 text-[14px] leading-[1.7] text-ink-secondary">点任意节点，就能跳回左边那一句课堂文字。</p>
+        </div>
+      </div>
     </div>
   );
 }
@@ -242,10 +238,6 @@ export function MindMap({
     );
   }
 
-  // 骨架连线用 CSS 实现足够，不引入 SVG：
-  //   - 中心到分支：中心底部出一根短竖线 → 水平 T 形横梁（只在有 ≥2 个分支时绘制）→ 每个分支头上方一根短竖线
-  //   - 分支到叶子：分支底部一根竖线延伸进入叶列，叶列整体左侧一根淡色垂直引导线
-  const hasMultiBranch = branches.length >= 2;
   const focusRows = branches.slice(-4).map((branch) => {
     const leaves = leavesByBranch.get(branch.id) ?? [];
     return {
@@ -257,101 +249,98 @@ export function MindMap({
   });
 
   return (
-    <div className="flex h-full flex-col overflow-y-auto px-6 py-8 lg:px-10">
-      <div className="mx-auto flex w-full max-w-3xl flex-1 flex-col items-center">
-        {/* 中心节点 */}
-        <NodeChip
-          node={root}
-          tier="center"
-          isNew={newNodeIds.has(root.id)}
-          elapsedMs={elapsedMs}
-        />
-
-        {/* 中心 → 分支：竖线 + T 形横梁 */}
-        <div className="mt-5 h-5 w-px bg-divider" aria-hidden />
-        {hasMultiBranch && (
-          <div
-            aria-hidden
-            // 横梁宽度按分支数量 × 最小栏宽粗略估算；用 max-w 兜住上限
-            className="h-px w-full max-w-[560px] bg-divider"
-            style={{
-              width: `${Math.min(branches.length * 140, 560)}px`,
-            }}
-          />
-        )}
-
-        {/* 分支行：横向排布 */}
-        <div className="flex w-full flex-wrap items-start justify-center gap-x-10 gap-y-10">
-          {branches.map((b) => {
-            const leaves = leavesByBranch.get(b.id) ?? [];
-            return (
-              <div
-                key={b.id}
-                className="flex min-w-[120px] max-w-[220px] flex-col items-center"
-              >
-                {/* 横梁 → 分支头 的短竖线（只在多分支时有横梁，单分支时已经有中心下来的主竖线） */}
-                {hasMultiBranch && <div className="h-4 w-px bg-divider" aria-hidden />}
-
-                {/* 分支节点 */}
-                <NodeChip
-                  node={b}
-                  tier="branch"
-                  isNew={newNodeIds.has(b.id)}
-                  onAnchorClick={onAnchorClick}
-                  elapsedMs={elapsedMs}
-                />
-
-                {/* 分支 → 叶子 */}
-                {leaves.length > 0 && (
-                  <>
-                    <div className="mt-3 h-3 w-px bg-divider" aria-hidden />
-                    {/* 叶子列：整体左侧一根淡色垂直引导线，叶子以缩进方式挂在上面 */}
-                    <div className="relative mt-0.5 flex flex-col items-start gap-1.5 pl-4">
-                      <span
-                        aria-hidden
-                        className="pointer-events-none absolute left-0 top-1 bottom-1 w-px bg-[#E9E9E7]/70"
-                      />
-                      {leaves.map((l) => (
-                        <React.Fragment key={l.id}>
-                          <NodeChip
-                            node={l}
-                            tier="leaf"
-                            isNew={newNodeIds.has(l.id)}
-                            onAnchorClick={onAnchorClick}
-                            elapsedMs={elapsedMs}
-                          />
-                        </React.Fragment>
-                      ))}
-                    </div>
-                  </>
-                )}
-              </div>
-            );
-          })}
-        </div>
-
-        <div className="mt-auto w-full pt-8">
-          <div className="rounded-2xl border border-[#E9E9E7] bg-[#F7F7F5] px-4 py-3">
-            <div className="mb-2 flex items-center justify-between gap-3">
-              <span className="text-[11px] font-medium tracking-[0.08em] text-ink-muted">LIVE THREADS</span>
-              <span className="font-mono text-[10.5px] tabular-nums text-ink-muted">{formatAt(elapsedMs)}</span>
-            </div>
-            <div className="grid gap-2 md:grid-cols-2">
-              {focusRows.map((item) => (
-                <button
-                  key={item.id}
-                  type="button"
-                  onClick={() => item.anchorMs > 0 && onAnchorClick?.(item.anchorMs)}
-                  className="rounded-xl bg-white px-3 py-2 text-left transition hover:bg-[#EFEFED]"
-                >
-                  <p className="truncate text-[12.5px] font-medium text-ink">{item.title}</p>
-                  <p className="mt-1 line-clamp-2 text-[11.5px] leading-relaxed text-ink-muted">{item.detail}</p>
-                </button>
-              ))}
-            </div>
+    <div className="flex h-full flex-col overflow-y-auto px-5 py-5 lg:px-6">
+      <div className="rounded-[24px] border border-divider bg-[#FBFBFA] px-5 py-5">
+        <div className="flex items-start justify-between gap-5">
+          <div className="min-w-0 flex-1">
+            <NodeChip
+              node={root}
+              tier="center"
+              isNew={newNodeIds.has(root.id)}
+              elapsedMs={elapsedMs}
+            />
+          </div>
+          <div className="flex flex-shrink-0 flex-col items-end gap-1 text-right">
+            <span className="text-[12px] font-medium text-ink-muted">已形成</span>
+            <span className="font-mono text-[18px] font-medium tabular-nums text-ink">
+              {branches.length}
+            </span>
+            <span className="text-[12px] text-ink-muted">条主线</span>
           </div>
         </div>
       </div>
+
+      <div className="mt-3 grid flex-1 content-start gap-3 [grid-template-columns:repeat(auto-fit,minmax(190px,1fr))]">
+        {branches.map((branch) => {
+          const leaves = leavesByBranch.get(branch.id) ?? [];
+          const clickable = branch.anchorMs > 0 && onAnchorClick !== undefined;
+          return (
+            <section
+              key={branch.id}
+              className={`rounded-[22px] border bg-white px-4 py-4 ${
+                newNodeIds.has(branch.id) ? 'border-ink animate-[mindGrow_520ms_cubic-bezier(0.2,0.8,0.2,1)]' : 'border-divider'
+              }`}
+            >
+              <button
+                type="button"
+                onClick={() => clickable && onAnchorClick?.(branch.anchorMs)}
+                className={`w-full text-left ${clickable ? 'cursor-pointer' : 'cursor-default'}`}
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="truncate text-[15px] font-semibold tracking-[-0.02em] text-ink">{branch.label}</p>
+                    {branch.detail ? (
+                      <p className="mt-1 text-[12.5px] leading-[1.55] text-ink-muted">{branch.detail}</p>
+                    ) : null}
+                  </div>
+                  {branch.anchorMs > 0 ? (
+                    <span className="font-mono text-[11px] tabular-nums text-ink-muted">{formatAt(branch.anchorMs)}</span>
+                  ) : null}
+                </div>
+              </button>
+
+              <div className="mt-3 space-y-1.5 border-t border-divider pt-3">
+                {leaves.length > 0 ? (
+                  leaves.map((leaf) => (
+                    <NodeChip
+                      key={leaf.id}
+                      node={leaf}
+                      tier="leaf"
+                      isNew={newNodeIds.has(leaf.id)}
+                      onAnchorClick={onAnchorClick}
+                      elapsedMs={elapsedMs}
+                    />
+                  ))
+                ) : (
+                  <p className="text-[12.5px] leading-relaxed text-ink-muted">这一条还在补细节。</p>
+                )}
+              </div>
+            </section>
+          );
+        })}
+      </div>
+
+      {focusRows.length > 0 ? (
+        <div className="mt-3 rounded-[20px] border border-divider bg-canvas px-4 py-3">
+          <div className="mb-2 flex items-center justify-between gap-3">
+            <span className="text-[12px] font-medium text-ink-muted">最近主线</span>
+            <span className="font-mono text-[12px] tabular-nums text-ink-muted">{formatAt(elapsedMs)}</span>
+          </div>
+          <div className="grid gap-2 md:grid-cols-2">
+            {focusRows.map((item) => (
+              <button
+                key={item.id}
+                type="button"
+                onClick={() => item.anchorMs > 0 && onAnchorClick?.(item.anchorMs)}
+                className="rounded-xl border border-divider bg-white px-3 py-2 text-left transition hover:border-ink-muted"
+              >
+                <p className="truncate text-[13px] font-medium text-ink">{item.title}</p>
+                <p className="mt-1 line-clamp-2 text-[12px] leading-relaxed text-ink-muted">{item.detail}</p>
+              </button>
+            ))}
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

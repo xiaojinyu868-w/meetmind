@@ -40,6 +40,10 @@ import { InlineAppCard, type InlineAppInteraction } from './InlineAppCard';
 import { SkillChipRow } from '@/components/tutor/SkillChipRow';
 import type { WorkshopAppKey } from '@/lib/ai-native/app-catalog';
 import { COPY } from '@/lib/ui/copy';
+import { IN_CLASS_PENDING_REPLY_LABEL } from '@/lib/utils/classroom-companion-copy';
+import { buildClassroomCompanionPanelModel } from './ClassroomCompanionPanel.model';
+
+const IN_CLASS_EXCLUDED_SKILL_APP_KEYS: readonly WorkshopAppKey[] = ['flashcards', 'quiz', 'study-report'];
 
 export type CompanionMode = 'idle' | 'listening' | 'reflecting';
 
@@ -60,6 +64,7 @@ export interface ClassroomCompanionPanelProps {
   onSend: (text: string) => void;
   /**
    * 打开一个 App 应用（闪卡 / 测验 / 思维导图 / 学习报告 / 考试速查表）。
+   * 课堂 listening 态只展示适合课中的结构和速查类入口；课后型入口会被过滤。
    * 由 page.tsx 的 safeOpenWorkshopWindow 承担；没传则 skill chip 自动降级成
    * 普通的 prompt 对话，保证任何层级都能渲染。
    */
@@ -98,32 +103,47 @@ export interface ClassroomCompanionPanelProps {
 }
 
 /** 顶部标题栏：不同 mode 不同呈现 */
-function Header({ mode, foresightCount }: { mode: CompanionMode; foresightCount: number }) {
+function Header({
+  mode,
+  foresightCount,
+  latestForesight,
+  onForesightAccept,
+}: {
+  mode: CompanionMode;
+  foresightCount: number;
+  latestForesight?: ForesightBubble | null;
+  onForesightAccept?: (f: ForesightBubble) => void;
+}) {
   if (mode === 'listening') {
     return (
-      <div className="flex flex-shrink-0 items-center justify-between border-b border-[#F0F0ED] px-5 py-3.5">
-        <div className="flex items-center gap-2.5 text-ink">
+      <div className="flex flex-shrink-0 items-center justify-between border-b border-divider px-6 py-4 pr-11">
+        <div className="flex items-center gap-3 text-ink">
           {/* 同学 avatar：听见态外环脉冲 */}
           <CompanionAvatar size="md" state="listening" />
-          <span className="text-[13px] font-medium text-ink">{COPY.identity.name}</span>
-          <span className="text-[11px] text-ink-muted">· {COPY.listening.hearing}</span>
+          <span className="text-[14px] font-semibold tracking-[-0.01em] text-ink">{COPY.identity.name}</span>
+          <span className="text-[12px] text-ink-muted">· {COPY.listening.hearing}</span>
         </div>
-        <div className="flex items-center gap-2 text-ink-muted/60">
-          {foresightCount > 0 ? (
-            <span className="flex items-center gap-1 text-[11px] text-ink-muted/80">
-              <Eye size={11} strokeWidth={1.6} />
-              <span>{foresightCount} 个预感</span>
-            </span>
+        <div className="flex items-center gap-2 text-ink-muted/70">
+          {foresightCount > 0 && latestForesight ? (
+            <button
+              type="button"
+              onClick={() => onForesightAccept?.(latestForesight)}
+              className="flex max-w-[8.5rem] items-center gap-1.5 rounded-full border border-divider bg-white px-2.5 py-1 text-[12px] text-ink-muted transition hover:border-ink-muted hover:text-ink"
+              title={latestForesight.text}
+            >
+              <Eye size={12} strokeWidth={1.6} />
+              <span className="truncate">{COPY.companion.foresightCount(foresightCount)}</span>
+            </button>
           ) : null}
-          <Radio size={13} className="" strokeWidth={1.6} />
+          <Radio size={14} strokeWidth={1.6} />
         </div>
       </div>
     );
   }
   return (
-    <div className="flex flex-shrink-0 items-center gap-2.5 border-b border-[#F0F0ED] px-5 py-3.5">
+    <div className="flex flex-shrink-0 items-center gap-3 border-b border-divider px-6 py-4 pr-11">
       <CompanionAvatar size="md" state="idle" />
-      <span className="text-[13px] font-medium text-ink">{COPY.identity.name}</span>
+      <span className="text-[14px] font-semibold tracking-[-0.01em] text-ink">{COPY.identity.name}</span>
     </div>
   );
 }
@@ -148,8 +168,8 @@ function CompanionBubble({
 
   if (isUser) {
     return (
-      <div className="flex justify-end px-5 pt-1 pb-4">
-        <div className="max-w-[82%] whitespace-pre-wrap break-words rounded-2xl rounded-tr-md bg-ink px-3.5 py-2 text-[13px] leading-relaxed text-white">
+      <div className="flex justify-end px-6 pt-2 pb-5">
+        <div className="max-w-[82%] whitespace-pre-wrap break-words rounded-2xl rounded-tr-md bg-ink px-4 py-2.5 text-[14px] leading-[1.75] text-white">
           {message.content}
         </div>
       </div>
@@ -157,12 +177,11 @@ function CompanionBubble({
   }
 
   return (
-    <div className="px-5 pt-1 pb-4">
+    <div className="px-6 pt-2 pb-5">
       {message.content ? (
         <CompanionMarkdown content={message.content} isStreaming={isStreaming} />
       ) : null}
-      {/* 内联应用产物（闪卡 / 测验 / 速查表 / 思维导图 / 学习报告）——
-         在 listening 态它是主展示区，替代原来的 WorkshopWindow 弹窗。 */}
+      {/* 内联应用产物——在 listening 态只保留课中适合的结构/速查类内容。 */}
       {message.inlineApp ? (
         <InlineAppCard
           inlineApp={message.inlineApp}
@@ -175,7 +194,7 @@ function CompanionBubble({
         <InlineActionStrip actions={message.actions} onInvoke={onActionInvoke} />
       ) : null}
       {message.source ? (
-        <p className="mt-1 text-[11.5px] text-ink-muted/80 italic">
+        <p className="mt-2 text-[12px] leading-relaxed text-ink-muted/80 italic">
           {message.source}
         </p>
       ) : null}
@@ -197,7 +216,7 @@ function InlineActionStrip({
   onInvoke?: (action: NonNullable<CompanionMessage['actions']>[number]) => void;
 }) {
   return (
-    <div className="mt-2 flex flex-wrap gap-1.5">
+    <div className="mt-3 flex flex-wrap gap-2">
       {actions.map((a, i) => (
         <button
           key={`${a.kind}-${a.payload ?? ''}-${i}`}
@@ -205,8 +224,8 @@ function InlineActionStrip({
           onClick={() => onInvoke?.(a)}
           className={
             i === 0
-              ? 'inline-flex items-center rounded-full bg-ink px-3 py-1 text-[12px] font-medium text-white transition hover:opacity-85 active:scale-[0.98]'
-              : 'inline-flex items-center rounded-full bg-white px-3 py-1 text-[12px] text-ink ring-[0.5px] ring-[#232322]/[0.12] transition hover:ring-[#232322]/[0.25] active:scale-[0.98]'
+              ? 'inline-flex items-center rounded-full bg-ink px-3.5 py-1.5 text-[13px] font-medium text-white transition hover:opacity-85 active:scale-[0.98]'
+              : 'inline-flex items-center rounded-full border border-divider bg-white px-3.5 py-1.5 text-[13px] text-ink transition hover:border-ink-muted active:scale-[0.98]'
           }
         >
           {a.label}
@@ -219,72 +238,18 @@ function InlineActionStrip({
 /** 附带卡片——课前要点 / 关键概念等 */
 function AttachedCard({ card }: { card: CompanionCard }) {
   return (
-    <div className="mt-2 rounded-xl bg-white px-3.5 py-3 ring-[0.5px] ring-[#232322]/[0.06]">
-      <p className="text-[12px] font-medium text-ink-muted mb-1.5">
+    <div className="mt-3 rounded-2xl border border-divider bg-white px-4 py-4">
+      <p className="mb-2 text-[13px] font-medium text-ink-secondary">
         {card.title}
       </p>
-      <ul className="space-y-1">
+      <ul className="space-y-2">
         {card.lines.map((line, i) => (
-          <li key={i} className="flex gap-2 text-[12.5px] leading-relaxed text-ink">
-            <span className="mt-1.5 inline-flex h-1 w-1 flex-shrink-0 rounded-full bg-ink-muted/60" />
+          <li key={i} className="flex gap-2.5 text-[14px] leading-[1.75] text-ink">
+            <span className="mt-2 inline-flex h-1 w-1 flex-shrink-0 rounded-full bg-ink-muted/60" />
             <span>{line}</span>
           </li>
         ))}
       </ul>
-    </div>
-  );
-}
-
-/**
- * 预知气泡——AI 的"主动性"触点。
- *
- * 设计原则（对齐 Taste）：
- *   - 不弹窗不通知，只在消息流里像便签一样轻轻出现。
- *   - 不喊"AI 提示"、"注意"这类噪音词，直接一句话。
- *   - 可点（把这句话作为问题发出去）、可划掉（不感兴趣）。
- *   - 颜色比正文轻一档，不抢用户注意力。
- */
-function ForesightRow({
-  foresight,
-  onAccept,
-  onDismiss,
-}: {
-  foresight: ForesightBubble;
-  onAccept?: (f: ForesightBubble) => void;
-  onDismiss?: (id: string) => void;
-}) {
-  return (
-    <div className="group relative px-5 pt-1 pb-3">
-      <div className="rounded-xl border border-dashed border-[#E4E4E0] bg-[#FBFAF5]/60 px-3.5 py-2.5">
-        <div className="mb-1 flex items-center justify-between">
-          <span className="flex items-center gap-1.5 text-[11px] font-medium tracking-wide text-[#8B6914]">
-            <Eye size={11} strokeWidth={1.8} />
-            <span>{foresight.label}</span>
-          </span>
-          {onDismiss ? (
-            <button
-              type="button"
-              onClick={() => onDismiss(foresight.id)}
-              className="text-[11px] text-ink-muted/50 opacity-0 transition-opacity hover:text-ink-muted group-hover:opacity-100"
-              aria-label="划掉这条预感"
-            >
-              划掉
-            </button>
-          ) : null}
-        </div>
-        <p className="text-[13px] leading-relaxed text-ink-secondary">
-          {foresight.text}
-        </p>
-        {onAccept ? (
-          <button
-            type="button"
-            onClick={() => onAccept(foresight)}
-            className="mt-1.5 text-[11.5px] text-ink-muted underline decoration-[#E0E0DB] decoration-1 underline-offset-[3px] transition-colors hover:text-ink hover:decoration-ink-muted"
-          >
-            就这个 · 问下去
-          </button>
-        ) : null}
-      </div>
     </div>
   );
 }
@@ -302,28 +267,72 @@ function EmptyCompanion({
   if (mode === 'listening') {
     return (
       <div className="flex flex-1 flex-col items-center justify-center px-8 text-center">
-        <p className="text-[13px] text-ink-muted">
-          我在听，有问题随时问我。
+        <p className="text-[15px] font-medium text-ink-secondary">
+          {COPY.companion.emptyListeningPrimary}
         </p>
-        <p className="mt-1 text-[12px] text-ink-muted/60">
-          有时候我会先你一步冒个小预感，点一下就能顺着问。
+        <p className="mt-2 max-w-[18rem] text-[13px] leading-[1.75] text-ink-muted">
+          {COPY.companion.emptyListeningSecondary}
         </p>
-        <p className="mt-5 text-[11px] font-medium uppercase tracking-[0.18em] text-ink-muted/70">
-          或者让我做点事
+        <p className="mt-6 text-[12px] font-medium uppercase tracking-[0.18em] text-ink-muted/80">
+          {COPY.companion.actionPrompt}
         </p>
-        <SkillChipRow variant="grid" onPick={onPickSkill} onSay={onPickSkill} onOpenApp={onOpenApp} />
+        <SkillChipRow
+          variant="grid"
+          onPick={onPickSkill}
+          onSay={onPickSkill}
+          onOpenApp={onOpenApp}
+          excludeAppKeys={IN_CLASS_EXCLUDED_SKILL_APP_KEYS}
+        />
       </div>
     );
   }
   return (
     <div className="flex flex-1 flex-col items-center justify-center px-8 text-center">
-      <p className="text-[13px] text-ink-muted">
-        把第一节课录下来，我们就认识了。
+      <p className="max-w-[18rem] text-[15px] leading-[1.75] text-ink-secondary">
+        {COPY.companion.emptyIdlePrimary}
       </p>
-      <p className="mt-4 text-[11px] font-medium uppercase tracking-[0.18em] text-ink-muted/70">
-        已经有内容？试试
+      <p className="mt-5 text-[12px] font-medium uppercase tracking-[0.18em] text-ink-muted/80">
+        {COPY.companion.contentPrompt}
       </p>
-      <SkillChipRow variant="grid" onPick={onPickSkill} onSay={onPickSkill} onOpenApp={onOpenApp} />
+      <SkillChipRow
+        variant="grid"
+        onPick={onPickSkill}
+        onSay={onPickSkill}
+        onOpenApp={onOpenApp}
+        excludeAppKeys={IN_CLASS_EXCLUDED_SKILL_APP_KEYS}
+      />
+    </div>
+  );
+}
+
+function ListeningStarterCard({
+  onPickSkill,
+  onOpenApp,
+}: {
+  onPickSkill: (prompt: string) => void;
+  onOpenApp?: (appKey: WorkshopAppKey) => void;
+}) {
+  return (
+    <div className="px-6 pb-5">
+      <div className="rounded-[22px] border border-divider bg-[#FBFBFA] px-4 py-4">
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <p className="text-[13px] font-semibold tracking-[-0.01em] text-ink">这节课可以马上整理</p>
+            <p className="mt-1 text-[12.5px] leading-[1.65] text-ink-muted">
+              不用等下课。想要结构或速查表，直接点一下。
+            </p>
+          </div>
+          <span className="mt-1 h-2 w-2 flex-shrink-0 rounded-full bg-ink" />
+        </div>
+        <SkillChipRow
+          variant="grid"
+          onPick={onPickSkill}
+          onSay={onPickSkill}
+          onOpenApp={onOpenApp}
+          excludeAppKeys={IN_CLASS_EXCLUDED_SKILL_APP_KEYS}
+          className="mt-3 max-w-none grid-cols-2 gap-2"
+        />
+      </div>
     </div>
   );
 }
@@ -332,9 +341,11 @@ function EmptyCompanion({
 function CompanionComposer({
   placeholder,
   onSend,
+  statusLabel,
 }: {
   placeholder: string;
   onSend: (t: string) => void;
+  statusLabel?: string;
 }) {
   const [text, setText] = useState('');
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -400,8 +411,14 @@ function CompanionComposer({
   };
 
   return (
-    <div className="flex-shrink-0 border-t border-[#F0F0ED] px-4 pb-4 pt-3">
-      <div className="rounded-2xl bg-white ring-[0.5px] ring-[#232322]/[0.08] transition-all focus-within:ring-[#232322]/[0.16]">
+    <div className="flex-shrink-0 border-t border-divider px-5 pb-5 pt-4">
+      {statusLabel ? (
+        <div className="mb-2 flex items-center gap-2 px-1 text-[12px] text-ink-muted" role="status" aria-live="polite">
+          <span className="h-1.5 w-1.5 rounded-full bg-ink-muted animate-[fadeIn_900ms_ease-in-out_infinite]" />
+          <span>{statusLabel}</span>
+        </div>
+      ) : null}
+      <div className="rounded-3xl border border-divider bg-white transition-colors focus-within:border-ink-muted">
         <textarea
           ref={textareaRef}
           value={text}
@@ -409,10 +426,10 @@ function CompanionComposer({
           onKeyDown={handleKeyDown}
           placeholder={placeholder}
           rows={1}
-          className="block w-full resize-none bg-transparent px-4 pt-3 pb-1 text-[13.5px] leading-relaxed text-ink placeholder:text-ink-muted/70 focus:outline-none"
+          className="block w-full resize-none bg-transparent px-5 pt-4 pb-1 text-[14px] leading-[1.7] text-ink placeholder:text-ink-muted/70 focus:outline-none"
           style={{ outline: 'none', border: 'none', boxShadow: 'none' }}
         />
-        <div className="flex items-center justify-between px-2 pb-2">
+        <div className="flex items-center justify-between px-3 pb-3">
           <div className="flex items-center gap-1">
             {/* 占位：未来可放 @资料 按钮 */}
           </div>
@@ -420,10 +437,10 @@ function CompanionComposer({
             type="button"
             onClick={handleSend}
             disabled={!canSend}
-            className={`flex h-7 w-7 items-center justify-center rounded-lg transition-all ${
+            className={`flex h-8 w-8 items-center justify-center rounded-xl transition-all ${
               canSend
                 ? 'bg-ink text-white hover:opacity-80 active:scale-95'
-                : 'bg-[#F0F0EE] text-ink-muted/50 cursor-not-allowed'
+                : 'cursor-not-allowed bg-divider-light text-ink-muted/50'
             }`}
             aria-label="发送"
           >
@@ -436,19 +453,12 @@ function CompanionComposer({
 }
 
 /** 流式气泡：正在被 token 填充的 AI 消息。 */
-function StreamingBubble({ message, isThinking }: { message: CompanionMessage; isThinking: boolean }) {
+function StreamingBubble({ message }: { message: CompanionMessage }) {
   const hasContent = message.content.trim().length > 0;
+  if (!hasContent) return null;
   return (
-    <div className="px-5 pb-4">
-      {hasContent ? (
-        <CompanionMarkdown content={message.content} isStreaming />
-      ) : isThinking ? (
-        <p className="flex items-center gap-1 text-[13.5px] leading-relaxed text-ink-muted">
-          <span className="inline-flex h-1 w-1 animate-[fadeIn_600ms_ease-in-out_infinite] rounded-full bg-ink-muted/80" />
-          <span className="inline-flex h-1 w-1 animate-[fadeIn_600ms_ease-in-out_infinite_200ms] rounded-full bg-ink-muted/80" />
-          <span className="inline-flex h-1 w-1 animate-[fadeIn_600ms_ease-in-out_infinite_400ms] rounded-full bg-ink-muted/80" />
-        </p>
-      ) : null}
+    <div className="px-6 pb-5">
+      <CompanionMarkdown content={message.content} isStreaming />
     </div>
   );
 }
@@ -463,7 +473,6 @@ export function ClassroomCompanionPanel({
   placeholder,
   foresights = [],
   onForesightAccept,
-  onForesightDismiss,
   onCitationJump,
   onInlineAction,
   onInlineAppInteraction,
@@ -473,21 +482,39 @@ export function ClassroomCompanionPanel({
     mode === 'listening' ? COPY.companion.placeholderListening : COPY.companion.placeholderIdle
   );
 
-  // 只在 listening 态显示预知气泡——其他态说"预知"没意义
-  const visibleForesights = mode === 'listening' ? foresights : [];
-  const hasAnything = messages.length > 0 || streamingMessage !== null || visibleForesights.length > 0;
+  const panelModel = buildClassroomCompanionPanelModel({
+    mode,
+    messages,
+    streamingMessage,
+    foresights,
+  });
+  const {
+    visibleMessages,
+    visibleForesights,
+    latestForesight,
+    hasMainContent,
+    showListeningStarter,
+  } = panelModel;
+  const pendingReplyLabel = streamingMessage && isThinking && !streamingMessage.content.trim()
+    ? IN_CLASS_PENDING_REPLY_LABEL
+    : undefined;
 
   return (
     <div className="flex h-full flex-col">
-      <Header mode={mode} foresightCount={visibleForesights.length} />
+      <Header
+        mode={mode}
+        foresightCount={visibleForesights.length}
+        latestForesight={latestForesight}
+        onForesightAccept={onForesightAccept}
+      />
 
       {/* 消息流 */}
-      <div className="flex-1 overflow-y-auto pt-2 pb-4">
-        {!hasAnything ? (
+      <div className="flex-1 overflow-y-auto pt-3 pb-5">
+        {!hasMainContent ? (
           <EmptyCompanion mode={mode} onPickSkill={onSend} onOpenApp={onOpenApp} />
         ) : (
           <div className="flex flex-col">
-            {messages.map((m) => (
+            {visibleMessages.map((m) => (
               <CompanionBubble
                 key={m.id}
                 message={m}
@@ -497,20 +524,11 @@ export function ClassroomCompanionPanel({
                 onInlineAppRetry={onInlineAppRetry}
               />
             ))}
-            {streamingMessage ? (
-              <StreamingBubble message={streamingMessage} isThinking={isThinking} />
+            {showListeningStarter ? (
+              <ListeningStarterCard onPickSkill={onSend} onOpenApp={onOpenApp} />
             ) : null}
-            {visibleForesights.length > 0 ? (
-              <div className="mt-1">
-                {visibleForesights.map((f) => (
-                  <ForesightRow
-                    key={f.id}
-                    foresight={f}
-                    onAccept={onForesightAccept}
-                    onDismiss={onForesightDismiss}
-                  />
-                ))}
-              </div>
+            {streamingMessage ? (
+              <StreamingBubble message={streamingMessage} />
             ) : null}
           </div>
         )}
@@ -521,13 +539,19 @@ export function ClassroomCompanionPanel({
          空态里 skill 已经用 grid 展示过了，这里就不重复。
          onSay={onSend}——agent-native 主路径：chip = 发 utterance 给 AI 同桌，
          由 AI 侧决定调用哪个工具；onOpenApp 保留作为加速路径。 */}
-      {hasAnything ? (
-        <div className="flex-shrink-0 border-t border-[#F0F0ED]/60">
-          <SkillChipRow variant="row" onPick={onSend} onSay={onSend} onOpenApp={onOpenApp} />
+      {hasMainContent && !showListeningStarter ? (
+        <div className="flex-shrink-0 border-t border-divider/70">
+          <SkillChipRow
+            variant="row"
+            onPick={onSend}
+            onSay={onSend}
+            onOpenApp={onOpenApp}
+            excludeAppKeys={IN_CLASS_EXCLUDED_SKILL_APP_KEYS}
+          />
         </div>
       ) : null}
 
-      <CompanionComposer placeholder={effectivePlaceholder} onSend={onSend} />
+      <CompanionComposer placeholder={effectivePlaceholder} onSend={onSend} statusLabel={pendingReplyLabel} />
     </div>
   );
 }

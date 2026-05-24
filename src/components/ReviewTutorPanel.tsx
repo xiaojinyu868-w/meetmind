@@ -2,7 +2,6 @@
 
 import type { MutableRefObject } from 'react';
 import { useState, useCallback } from 'react';
-import { AIChat } from '@/components/AIChat';
 import { SafeAITutor } from '@/components/SafeAITutor';
 import { ConversationList } from '@/components/ConversationHistory/ConversationList';
 import { WaveformPlayer, type WaveformAnchor, type WaveformPlayerRef } from '@/components/WaveformPlayer';
@@ -25,6 +24,7 @@ interface ReviewTutorPanelProps {
   selectedHistoryConversation: ConversationHistory | null;
   onBackToHistoryList: () => void;
   onCloseHistory: () => void;
+  onShowHistory: () => void;
   onSelectHistoryConversation: (conversation: ConversationHistory) => void;
   onClearSelectedAnchor: () => void;
   sessionId: string;
@@ -56,6 +56,7 @@ export function ReviewTutorPanel({
   selectedHistoryConversation,
   onBackToHistoryList,
   onCloseHistory,
+  onShowHistory,
   onSelectHistoryConversation,
   onClearSelectedAnchor,
   sessionId,
@@ -180,11 +181,25 @@ export function ReviewTutorPanel({
                   </div>
                 </div>
                 <div className="flex-1 min-h-0">
-                  <AIChat
-                    conversationId={selectedHistoryConversation.conversationId}
+                  <SafeAITutor
+                    breakpoint={tutorBreakpoint}
+                    segments={segments}
+                    isLoading={false}
+                    onResolve={onResolve}
+                    onActionItemsUpdate={onActionItemsUpdate}
                     sessionId={sessionId}
-                    contextText={tutorSupportContextText}
-                    onTimestampClick={onSeek}
+                    supportContextText={tutorSupportContextText}
+                    preferSupportContext={preferSupportContext}
+                    launchQuestion=""
+                    launchDisplayText=""
+                    launchImages={[]}
+                    launchQuestionNonce={0}
+                    onSeek={onSeek}
+                    currentTimeSec={currentTimeSec}
+                    selectedConversationId={selectedHistoryConversation.conversationId}
+                    selectedConversationTitle={selectedHistoryConversation.title}
+                    onShowHistory={onBackToHistoryList}
+                    onAgentNewConversation={onCloseHistory}
                   />
                 </div>
               </div>
@@ -204,6 +219,7 @@ export function ReviewTutorPanel({
                 </div>
                 <div className="flex-1 min-h-0">
                   <ConversationList
+                    type="global-chat"
                     sessionId={sessionId}
                     onSelect={onSelectHistoryConversation}
                     showSearch={true}
@@ -229,6 +245,8 @@ export function ReviewTutorPanel({
               onLaunchQuestionConsumed={onLaunchQuestionConsumed}
               onSeek={onSeek}
               currentTimeSec={currentTimeSec}
+              onShowHistory={onShowHistory}
+              onAgentNewConversation={onCloseHistory}
             />
           )}
         </div>

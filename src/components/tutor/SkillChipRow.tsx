@@ -22,7 +22,7 @@
 import * as React from 'react';
 import { cn } from '@/lib/utils';
 import type { WorkshopAppKey } from '@/lib/ai-native/app-catalog';
-import { SKILL_PROMPTS, type SkillPrompt } from './skill-prompts';
+import { filterSkillPromptsForSurface, SKILL_PROMPTS, type SkillPrompt } from './skill-prompts';
 import { resolveSkillAction } from './skill-chip-action';
 
 export { resolveSkillAction };
@@ -34,6 +34,8 @@ export interface SkillChipRowProps {
   onSay?: (utterance: string) => void;
   /** 加速路径：chip 有 appKey 且父组件提供时，绕过 agent 直接打开 WorkshopWindow */
   onOpenApp?: (appKey: WorkshopAppKey) => void;
+  /** 当前 surface 不适合展示的结构化 app；共享目录不删，只在使用处过滤 */
+  excludeAppKeys?: readonly WorkshopAppKey[];
   disabled?: boolean;
   variant?: 'grid' | 'row';
   className?: string;
@@ -43,6 +45,7 @@ export function SkillChipRow({
   onPick,
   onSay,
   onOpenApp,
+  excludeAppKeys,
   disabled,
   variant = 'grid',
   className,
@@ -51,6 +54,10 @@ export function SkillChipRow({
   const [tappedLabel, setTappedLabel] = React.useState<string | null>(null);
   const tappedNonceRef = React.useRef(0);
   const tapResetTimerRef = React.useRef<number | null>(null);
+  const visibleSkills = React.useMemo(
+    () => filterSkillPromptsForSurface(SKILL_PROMPTS, { excludeAppKeys }),
+    [excludeAppKeys],
+  );
 
   const handleClick = React.useCallback(
     (skill: SkillPrompt) => {
@@ -84,7 +91,7 @@ export function SkillChipRow({
         )}
         role="list"
       >
-        {SKILL_PROMPTS.map((s) => {
+        {visibleSkills.map((s) => {
           const tapped = tappedLabel === s.label;
           return (
             <button
@@ -99,7 +106,7 @@ export function SkillChipRow({
                 'disabled:opacity-50 disabled:cursor-not-allowed',
                 tapped && 'chip-tap-anim',
               )}
-              title={s.prompt}
+              title={s.hint ? `${s.label} · ${s.hint}` : s.prompt}
               role="listitem"
             >
               <span>{s.label}</span>
@@ -120,7 +127,7 @@ export function SkillChipRow({
 
   return (
     <div className={cn('mx-auto mt-4 grid w-full max-w-md grid-cols-2 gap-2', className)}>
-      {SKILL_PROMPTS.map((s) => {
+      {visibleSkills.map((s) => {
         const tapped = tappedLabel === s.label;
         return (
           <button
@@ -129,15 +136,19 @@ export function SkillChipRow({
             onClick={() => handleClick(s)}
             disabled={disabled}
             className={cn(
-              'relative flex items-center rounded-2xl bg-white px-3.5 py-2.5 text-left text-[13px] text-ink',
-              'ring-[0.5px] ring-[#232322]/[0.08] transition',
-              'hover:ring-[#232322]/[0.22] hover:-translate-y-[1px]',
+              'relative flex min-h-[58px] flex-col justify-center rounded-2xl border border-divider bg-white px-3.5 py-2.5 text-left text-[13px] text-ink',
+              'transition hover:border-ink-muted hover:-translate-y-[1px]',
               'disabled:opacity-50 disabled:cursor-not-allowed',
               tapped && 'chip-tap-anim',
             )}
-            title={s.prompt}
+            title={s.hint ? `${s.label} · ${s.hint}` : s.prompt}
           >
             <span className="truncate font-medium tracking-[-0.005em]">{s.label}</span>
+            {s.hint ? (
+              <span className="mt-0.5 truncate text-[11px] font-normal text-ink-muted">
+                {s.hint}
+              </span>
+            ) : null}
             {tapped && (
               <span
                 aria-hidden

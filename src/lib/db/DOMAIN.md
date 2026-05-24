@@ -40,7 +40,7 @@ hooks/services → lib/db → types
 | `lexicon.ts` | 209 | 转录词库管理（种子/CRUD/编辑差分→自动晋升） |
 | `notes.ts` | 87 | 笔记 CRUD |
 | `tutor-cache.ts` | 69 | Tutor 响应缓存 |
-| `transcripts.ts` | 57 | 转录段落 CRUD |
+| `transcripts.ts` | 71 | 转录段落 CRUD；批量落库成功会把对应 audioSession 标记为转录完成 |
 | `highlights.ts` | 43 | 精选片段 CRUD |
 | `summaries.ts` | 40 | 摘要 CRUD |
 | `anchors.ts` | 39 | 锚点 CRUD |

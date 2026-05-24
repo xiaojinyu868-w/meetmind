@@ -1,8 +1,12 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { toast } from 'sonner';
 import type { AppExecutionResult } from '@/lib/ai-native/types';
 import type { TranscriptSegment } from '@/types';
+import { COPY } from '@/lib/ui/copy';
+import { isGuestDemoFlashcardsResult } from '@/components/classroom/guest-demo-entry';
+import { buildFlashcardsTrialShareText } from './flashcards-share-actions';
 import { AppWindowPlaceholder } from '@/components/apps/windows/AppWindowPlaceholder';
 
 interface FlashcardsWindowProps {
@@ -66,6 +70,8 @@ export function FlashcardsWindow({ result }: FlashcardsWindowProps) {
   const [isAnimating, setIsAnimating] = useState(false);
   const [slideDir, setSlideDir] = useState<'none' | 'left' | 'right'>('none');
   const [scores, setScores] = useState<Record<string, MasteryScore>>({});
+  const [sharingTrial, setSharingTrial] = useState(false);
+  const isGuestDemoResult = useMemo(() => isGuestDemoFlashcardsResult(result), [result]);
 
   // Swipe gesture
   const touchStartX = useRef<number | null>(null);
@@ -73,6 +79,34 @@ export function FlashcardsWindow({ result }: FlashcardsWindowProps) {
 
   const missedCount = useMemo(() => Object.values(scores).filter((s) => s === 'missed').length, [scores]);
   const gotCount = useMemo(() => Object.values(scores).filter((s) => s === 'got').length, [scores]);
+  const trialShareText = useMemo(
+    () => buildFlashcardsTrialShareText(cards, { gotCount, total: cards.length }),
+    [cards, gotCount],
+  );
+
+  const handleShareTrialResult = useCallback(async () => {
+    if (!isGuestDemoResult || sharingTrial) return;
+    setSharingTrial(true);
+    try {
+      const nav = navigator as Navigator & { share?: (data: ShareData) => Promise<void> };
+      if (nav.share) {
+        await nav.share({ title: COPY.flashcardsShare.title, text: trialShareText });
+        return;
+      }
+      await navigator.clipboard.writeText(trialShareText);
+      toast.success(COPY.flashcardsShare.copied);
+    } catch (err) {
+      if (err instanceof DOMException && err.name === 'AbortError') return;
+      try {
+        await navigator.clipboard.writeText(trialShareText);
+        toast.success(COPY.flashcardsShare.copied);
+      } catch {
+        toast.error(COPY.flashcardsShare.failed);
+      }
+    } finally {
+      setSharingTrial(false);
+    }
+  }, [isGuestDemoResult, sharingTrial, trialShareText]);
 
   const navigateTo = useCallback((newIndex: number, dir: 'left' | 'right') => {
     if (isAnimating) return;
@@ -115,6 +149,9 @@ export function FlashcardsWindow({ result }: FlashcardsWindowProps) {
   // Keyboard
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement | null;
+      const tag = target?.tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || target?.isContentEditable) return;
       if (e.key === 'ArrowLeft') goToPrev();
       else if (e.key === 'ArrowRight') goToNext();
       else if (e.key === ' ') { e.preventDefault(); handleFlip(); }
@@ -207,6 +244,21 @@ export function FlashcardsWindow({ result }: FlashcardsWindowProps) {
             </div>
           </div>
 
+          {isGuestDemoResult && (
+            <div className="mb-5 w-full max-w-[320px] rounded-[20px] border border-white/10 bg-white/[0.04] p-4 text-left">
+              <p className="text-sm font-semibold text-white/90">{COPY.flashcardsShare.summaryTitle}</p>
+              <p className="mt-1 text-xs leading-5 text-white/45">{COPY.flashcardsShare.summaryBody(cards.length)}</p>
+              <button
+                type="button"
+                onClick={handleShareTrialResult}
+                disabled={sharingTrial}
+                className="mt-3 w-full rounded-full bg-white px-4 py-2.5 text-[13px] font-medium text-[#232322] transition hover:bg-white/90 active:scale-[0.99] disabled:opacity-60"
+              >
+                {sharingTrial ? COPY.flashcardsShare.sharing : COPY.flashcardsShare.open}
+              </button>
+            </div>
+          )}
+
           <div className="flex flex-col gap-3 items-center">
             {missedCount > 0 && (
               <button
@@ -244,6 +296,17 @@ export function FlashcardsWindow({ result }: FlashcardsWindowProps) {
       <div className="absolute inset-0 pointer-events-none transition-all duration-700" style={{
         background: `radial-gradient(ellipse 600px 400px at 50% 40%, ${theme.glow}, transparent 70%)`,
       }} />
+
+      {isGuestDemoResult && (
+        <button
+          type="button"
+          onClick={handleShareTrialResult}
+          disabled={sharingTrial}
+          className="absolute right-4 top-3 z-20 rounded-full border border-white/10 bg-white/[0.06] px-3 py-1.5 text-[12px] font-medium text-white/65 transition hover:bg-white/[0.1] hover:text-white active:scale-[0.99] disabled:opacity-60"
+        >
+          {sharingTrial ? COPY.flashcardsShare.sharing : COPY.flashcardsShare.open}
+        </button>
+      )}
 
       {/* Top: keyboard hint (desktop only) */}
       <div className="relative flex-shrink-0 pt-3 pb-1 text-center hidden md:block">

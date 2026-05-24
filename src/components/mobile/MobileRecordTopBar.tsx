@@ -25,7 +25,7 @@ export function MobileRecordTopBar({
         <button
           type="button"
           onClick={onOpenMore}
-          className="flex h-9 w-9 items-center justify-center rounded-full text-slate-400 transition hover:bg-black/[0.04] hover:text-slate-600"
+          className="flex h-9 w-9 items-center justify-center rounded-full text-ink-muted transition hover:bg-divider-light hover:text-ink-secondary"
           aria-label="打开收集菜单"
         >
           <Menu size={18} />
@@ -39,14 +39,14 @@ export function MobileRecordTopBar({
         <button
           type="button"
           onClick={onOpenHistory}
-          className="relative flex h-9 w-9 items-center justify-center rounded-full text-slate-400 transition hover:bg-black/[0.04] hover:text-slate-600"
+          className="relative flex h-9 w-9 items-center justify-center rounded-full text-ink-muted transition hover:bg-divider-light hover:text-ink-secondary"
           aria-label="打开历史收集"
         >
           <History size={17} />
         </button>
       </div>
       {statusText ? (
-        <p className="mt-1 text-center text-[10px] font-medium text-[#787774]">{statusText}</p>
+        <p className="mt-1.5 text-center text-[11.5px] font-medium text-ink-secondary">{statusText}</p>
       ) : null}
     </div>
   );

@@ -101,7 +101,7 @@ export function StreamingMarkdown({
     // 匹配两类标记：
     // 1) 时间戳 [MM:SS] / [MM:SS-MM:SS] / [引用 MM:SS]
     // 2) 资料引用 [资料N]
-    const tokenRegex = /\[(?:引用\s*)?((\d{1,2}:\d{2})(?:-(\d{1,2}:\d{2}))?)\]|\[资料\s*(\d+)\]/g;
+    const tokenRegex = /\[(?:引用\s*|t=)?((\d{1,2}(?::\d{2}){1,2})(?:-(\d{1,2}(?::\d{2}){1,2}))?)\]|\[资料\s*(\d+)\]/g;
     const parts: React.ReactNode[] = [];
     let lastIndex = 0;
     let match;
@@ -320,6 +320,29 @@ export function StreamingMarkdown({
       >
         {children}
       </a>
+    ),
+
+    table: ({ children, ...props }) => (
+      <div className="my-3 w-full overflow-x-auto rounded-xl border border-divider bg-white">
+        <table {...props} className="min-w-full border-collapse text-left text-[13px] leading-6">
+          {children}
+        </table>
+      </div>
+    ),
+    thead: ({ children, ...props }) => (
+      <thead {...props} className="bg-canvas text-ink-secondary">
+        {children}
+      </thead>
+    ),
+    th: ({ children, ...props }) => (
+      <th {...props} className="border-b border-divider px-3 py-2 font-medium text-ink">
+        {processChildren(children)}
+      </th>
+    ),
+    td: ({ children, ...props }) => (
+      <td {...props} className="border-t border-divider px-3 py-2 align-top text-ink-secondary">
+        {processChildren(children)}
+      </td>
     ),
 
     // 分隔线

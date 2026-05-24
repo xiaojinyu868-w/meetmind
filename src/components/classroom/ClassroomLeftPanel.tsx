@@ -27,6 +27,7 @@ import { ClassroomHero } from './ClassroomHero';
 import { loadDemoLesson } from './DemoLessonLoader';
 import { useCaptureEditorActions } from '@/stores/capture-editor-store';
 import { isWorkshopAppKey, type WorkshopAppKey } from '@/lib/ai-native/app-catalog';
+import { COPY } from '@/lib/ui/copy';
 import type { MindMapTree } from '@/hooks/useClassroomMindMap';
 import type { RecorderAudioSource } from '@/stores/capture-editor-store';
 import type { TranscriptSegment } from '@/types';
@@ -136,6 +137,12 @@ function formatSeconds(s: number): string {
   return `${String(m).padStart(2, '0')}:${String(r).padStart(2, '0')}`;
 }
 
+function audioSourceLabel(source?: RecorderAudioSource): string {
+  if (source === 'system') return COPY.recording.sourceSystem;
+  if (source === 'mixed') return COPY.recording.sourceMixed;
+  return COPY.recording.sourceMic;
+}
+
 /** 获取今天日期的中文展示："4 月 18 日 · 周六" */
 function formatTodayLabel(): string {
   const now = new Date();
@@ -173,11 +180,13 @@ function PageHeader() {
 function ActiveLessonPill({
   lesson,
   seconds,
+  audioSource,
   onFocus,
   onStop,
 }: {
   lesson: Lesson;
   seconds: number;
+  audioSource?: RecorderAudioSource;
   onFocus: () => void;
   onStop: () => void;
 }) {
@@ -209,7 +218,7 @@ function ActiveLessonPill({
               {lesson.title || '正在录一节课'}
             </p>
             <p className="mt-0.5 text-[12px] text-ink-muted">
-              正在听 · 点开看实时转录
+              {COPY.recording.activeStatus(audioSourceLabel(audioSource))}
             </p>
           </button>
 
@@ -311,6 +320,7 @@ function ListView({
             <ActiveLessonPill
               lesson={activeLesson}
               seconds={activeSeconds}
+              audioSource={audioSource}
               onFocus={onFocusRecording}
               onStop={() => onStop(activeLesson.id)}
             />

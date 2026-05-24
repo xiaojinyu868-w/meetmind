@@ -22,6 +22,9 @@ export interface AudioSession {
     code?: string;
     detail?: string;
   }>;
+  transcriptionStatus?: 'pending' | 'completed' | 'failed';
+  transcriptionError?: string;
+  transcriptionUpdatedAt?: Date;
   status: 'recording' | 'completed' | 'archived';
   createdAt: Date;
   updatedAt: Date;

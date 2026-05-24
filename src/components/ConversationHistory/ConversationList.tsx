@@ -72,6 +72,7 @@ export function ConversationList({
       const results = await searchConversations({
         keyword: searchKeyword.trim(),
         type,
+        sessionId,
         limit: 20,
       });
       setSearchResults(results);
@@ -80,7 +81,7 @@ export function ConversationList({
     } finally {
       setIsSearching(false);
     }
-  }, [searchKeyword, type, searchConversations]);
+  }, [searchKeyword, type, sessionId, searchConversations]);
 
   // 清除搜索
   const clearSearch = useCallback(() => {

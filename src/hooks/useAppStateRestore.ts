@@ -156,7 +156,7 @@ export function useAppStateRestore(
         sessionActions.setSessionId(savedAppState.sessionId);
       }
 
-      uiActions.setViewMode('record');
+      uiActions.setViewMode('classroom');
       sessionActions.setSelectedAnchor(null);
       if (!savedAppState) {
         sessionActions.setDataSource('live');

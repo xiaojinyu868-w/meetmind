@@ -2,6 +2,7 @@
  * LLM 服务 - 真实 AI 模型调用
  * 
  * 支持模型：
+ * - DeepSeek (deepseek-v4-flash, deepseek-v4-pro)
  * - 通义千问 (qwen3.6-plus, qwen3.5-plus, qwen3-vl-plus, qwen3-max-2026-01-23)
  * - 火山方舟 (VOLCENGINE_ARK_MODEL)
  * - 中转站聚合模型 (RELAY_MODEL，例如 gemini-3-pro-image-preview)
@@ -20,7 +21,7 @@ export const AVAILABLE_MODELS: ModelConfig[] = LLMConfig.models;
 
 // 获取默认模型ID
 export const DEFAULT_MODEL_ID = LLMConfig.defaultModel;
-export const WORKSHOP_PREFERRED_MODEL_ID = 'qwen3.6-plus';
+export const WORKSHOP_PREFERRED_MODEL_ID = 'deepseek-v4-flash';
 export const DEFAULT_WORKSHOP_MODEL_ID = AVAILABLE_MODELS.some((model) => model.id === WORKSHOP_PREFERRED_MODEL_ID)
   ? WORKSHOP_PREFERRED_MODEL_ID
   : DEFAULT_MODEL_ID;
@@ -101,6 +102,11 @@ export function isMultimodalModel(modelId: string): boolean {
 /** 获取 API 配置 */
 function getApiConfig(provider: ModelProvider) {
   switch (provider) {
+    case 'deepseek':
+      return {
+        baseUrl: process.env.DEEPSEEK_BASE_URL || 'https://api.deepseek.com',
+        apiKey: process.env.DEEPSEEK_API_KEY || '',
+      };
     case 'qwen':
       return {
         baseUrl: process.env.LLM_BASE_URL || 'https://dashscope.aliyuncs.com/compatible-mode/v1',
@@ -161,6 +167,73 @@ async function fetchWithTimeout(
 }
 
 // ==================== API 调用函数 ====================
+
+/**
+ * 调用 DeepSeek API (OpenAI 兼容格式)
+ */
+async function callDeepSeek(
+  messages: ChatMessage[],
+  modelId: string,
+  options?: { temperature?: number; maxTokens?: number; responseFormat?: 'json_object' | 'text' }
+): Promise<LLMResponse> {
+  const config = getApiConfig('deepseek');
+  const modelConfig = getModelConfig(modelId);
+
+  if (!config.apiKey) {
+    throw new Error('DEEPSEEK_API_KEY 未配置');
+  }
+
+  const enableThinking = modelConfig?.enableThinking ?? false;
+  const requestBody: Record<string, unknown> = {
+    model: modelId,
+    messages: buildOpenAIMessages(messages, false),
+    max_tokens: options?.maxTokens ?? (enableThinking ? 32768 : 2000),
+  };
+
+  if (options?.temperature !== undefined) {
+    requestBody.temperature = options.temperature;
+  }
+
+  if (options?.responseFormat === 'json_object') {
+    requestBody.response_format = { type: 'json_object' };
+  }
+
+  if (enableThinking) {
+    requestBody.thinking = { type: 'enabled' };
+    requestBody.reasoning_effort = 'high';
+  }
+
+  const response = await fetchWithTimeout(`${config.baseUrl.replace(/\/$/, '')}/chat/completions`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${config.apiKey}`,
+    },
+    body: JSON.stringify(requestBody),
+  });
+
+  if (!response.ok) {
+    const error = await response.text();
+    throw new Error(`DeepSeek API 错误: ${response.status} - ${error}`);
+  }
+
+  const data = await response.json();
+  const finishReason = data.choices?.[0]?.finish_reason;
+  if (finishReason && finishReason !== 'stop') {
+    log.warn(`[LLM] finish_reason=${finishReason}, model=${modelId}, requested max_tokens=${requestBody.max_tokens}`);
+  }
+
+  return {
+    content: data.choices?.[0]?.message?.content || '',
+    model: modelId,
+    thinkingContent: data.choices?.[0]?.message?.reasoning_content,
+    usage: data.usage ? {
+      promptTokens: data.usage.prompt_tokens,
+      completionTokens: data.usage.completion_tokens,
+      totalTokens: data.usage.total_tokens,
+    } : undefined,
+  };
+}
 
 /**
  * 调用通义千问 API (OpenAI 兼容格式)
@@ -375,6 +448,8 @@ export async function chat(
   }
 
   switch (modelConfig.provider) {
+    case 'deepseek':
+      return callDeepSeek(messages, modelId, options);
     case 'qwen':
       return callQwen(messages, modelId, options);
     case 'volcengine':
@@ -402,27 +477,25 @@ export async function* chatStream(
     throw new Error(`未知模型: ${modelId}`);
   }
 
-  // 通义千问 / 火山方舟 / 中转站都支持 OpenAI 兼容的流式 API
-  const config = modelConfig.provider === 'qwen'
-    ? getApiConfig('qwen')
-    : modelConfig.provider === 'volcengine'
-      ? getApiConfig('volcengine')
-      : getApiConfig('relay');
+  // DeepSeek / 通义千问 / 火山方舟 / 中转站都支持 OpenAI 兼容的流式 API
+  const config = getApiConfig(modelConfig.provider);
   
   if (!config.apiKey) {
     throw new Error(
       `${
-        modelConfig.provider === 'qwen'
-          ? 'DASHSCOPE_API_KEY'
-          : modelConfig.provider === 'volcengine'
-            ? 'VOLCENGINE_ARK_API_KEY'
-            : 'RELAY_API_KEY'
+        modelConfig.provider === 'deepseek'
+          ? 'DEEPSEEK_API_KEY'
+          : modelConfig.provider === 'qwen'
+            ? 'DASHSCOPE_API_KEY'
+            : modelConfig.provider === 'volcengine'
+              ? 'VOLCENGINE_ARK_API_KEY'
+              : 'RELAY_API_KEY'
       } 未配置`
     );
   }
 
   if (!config.baseUrl) {
-    throw new Error('RELAY_BASE_URL 未配置');
+    throw new Error(`${modelConfig.provider === 'relay' ? 'RELAY_BASE_URL' : '模型 Base URL'} 未配置`);
   }
 
   const supportsMultimodal = isMultimodalModel(modelId);
@@ -442,6 +515,11 @@ export async function* chatStream(
   if (modelConfig.provider === 'qwen') {
     // 显式传递开关，避免服务端默认开启思考导致首包变慢。
     requestBody.enable_thinking = enableThinking;
+  }
+
+  if (enableThinking && modelConfig.provider === 'deepseek') {
+    requestBody.thinking = { type: 'enabled' };
+    requestBody.reasoning_effort = 'high';
   }
 
   // 思考模式配置

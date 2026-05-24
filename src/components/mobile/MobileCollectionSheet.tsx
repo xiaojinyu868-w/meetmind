@@ -99,8 +99,8 @@ export function MobileCollectionSheet({
           <div className="flex items-center justify-between gap-3">
             <div>
               <p className="text-2xl font-semibold tracking-[-0.02em] text-[#232322]">收集</p>
-              <p className="mt-1 text-xs text-[#787774]">
-                已收 {captureActivitySummary.totalCount} 条 · 活跃 {captureActivitySummary.activeDays} 天 · 回声{' '}
+              <p className="mt-1 text-[12px] text-[#787774]">
+                已收 {captureActivitySummary.totalCount} 条 · 活跃 {captureActivitySummary.activeDays} 天 · 笔记总结{' '}
                 {workspaceEchoes.length} 条
               </p>
             </div>
@@ -124,7 +124,7 @@ export function MobileCollectionSheet({
             <p className="mt-1 text-xs leading-5 text-[#787774]">
               {captureActivitySummary.topKinds.length > 0
                 ? `最近收得最多的是：${captureActivitySummary.topKinds.join(' · ')}`
-                : '一句困惑、一张图、一份讲义或一段原声，都可以先发进来。'}
+                : '一句困惑、一张图、一份讲义或一段录音，都可以先发进来。'}
             </p>
           </div>
 
@@ -138,7 +138,7 @@ export function MobileCollectionSheet({
             </span>
             <div className="min-w-0 flex-1">
               <p className="text-sm font-semibold">全部收集</p>
-              <p className="mt-0.5 text-xs leading-5 text-white/85">从以前收进来的课、图和材料里继续接着学。</p>
+              <p className="mt-0.5 text-[12px] leading-5 text-white/85">从以前收进来的课、图和材料里继续接着学。</p>
             </div>
             <ChevronRight size={16} className="text-white/80" />
           </button>
@@ -155,9 +155,9 @@ export function MobileCollectionSheet({
               ) : null}
             </span>
             <div className="min-w-0 flex-1">
-              <p className="text-sm font-semibold text-[#232322]">回声</p>
+              <p className="text-sm font-semibold text-[#232322]">笔记总结</p>
               <p className="mt-0.5 text-xs leading-5 text-[#787774]">
-                {workspaceEchoes.length > 0 ? '同桌有话想跟你说。' : '先继续收集，回声会安静出现。'}
+                {workspaceEchoes.length > 0 ? '同桌整理了一些重点。' : '先继续收集，笔记总结会安静出现。'}
               </p>
             </div>
             <ChevronRight size={16} className="text-[#A3A39E]" />
@@ -219,13 +219,13 @@ export function MobileCollectionSheet({
               <div>
                 <p className="text-sm font-semibold text-[#232322]">
                   {mobileCollectionSheet === 'echo'
-                    ? '回声'
+                    ? '笔记总结'
                     : mobileCollectionSheet === 'history'
                       ? '历史收集'
                       : '收集菜单'}
                 </p>
                 {mobileCollectionSheet === 'echo' ? (
-                  <p className="text-xs text-[#787774]">安静地长出来的东西。</p>
+                  <p className="text-[12px] text-[#787774]">安静整理出的重点。</p>
                 ) : null}
               </div>
               <button
@@ -276,7 +276,7 @@ export function MobileCollectionSheet({
                   <div className="flex flex-col items-center py-12">
                     <span className="text-2xl text-[#A3A39E]/40">✦</span>
                     <p className="mt-3 text-[14px] leading-7 text-[#A3A39E]">
-                      先继续收集，回声会安静地出现。
+                      先继续收集，笔记总结会安静地出现。
                     </p>
                     {enableManualEchoTrigger ? (
                       <div className="mt-4">
@@ -328,13 +328,13 @@ export function MobileCollectionSheet({
               <div>
                 <p className="text-[15px] font-semibold text-[#232322]">
                   {mobileCollectionSheet === 'echo'
-                    ? '回声'
+                    ? '笔记总结'
                     : mobileCollectionSheet === 'history'
                       ? '历史收集'
                       : '收集菜单'}
                 </p>
                 {mobileCollectionSheet === 'echo' ? (
-                  <p className="mt-0.5 text-[13px] text-[#787774]">安静地长出来的东西。</p>
+                  <p className="mt-0.5 text-[13px] text-[#787774]">安静整理出的重点。</p>
                 ) : null}
               </div>
               <button
@@ -381,7 +381,7 @@ export function MobileCollectionSheet({
                   <div className="flex flex-col items-center py-16">
                     <span className="text-2xl text-[#A3A39E]/40">✦</span>
                     <p className="mt-3 text-[14px] leading-7 text-[#A3A39E]">
-                      先继续收集，回声会安静地出现。
+                      先继续收集，笔记总结会安静地出现。
                     </p>
                     {enableManualEchoTrigger ? (
                       <div className="mt-4">

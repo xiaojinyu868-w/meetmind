@@ -104,7 +104,7 @@ function formatDate(dateStr: string): string {
 
 function getSourceLabel(source: NoteSource): string {
   switch (source) {
-    case 'chat': return 'AI 对话';
+    case 'chat': return '同学对话';
     case 'takeaways': return '知识点';
     case 'transcript': return '转录';
     case 'custom': return '自定义';
@@ -263,7 +263,7 @@ export default function AllNotesPage() {
           </div>
           <div className="bg-white rounded-xl p-4 shadow-sm">
             <div className="text-2xl font-bold text-purple-600">{stats.bySource.chat}</div>
-            <div className="text-sm text-gray-500">AI 对话笔记</div>
+            <div className="text-sm text-gray-500">同学对话笔记</div>
           </div>
           <div className="bg-white rounded-xl p-4 shadow-sm">
             <div className="text-2xl font-bold text-green-600">{subjects.length}</div>
@@ -296,7 +296,7 @@ export default function AllNotesPage() {
                 className="px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
               >
                 <option value="all">全部来源</option>
-                <option value="chat">AI 对话</option>
+                <option value="chat">同学对话</option>
                 <option value="takeaways">知识点</option>
                 <option value="transcript">转录</option>
                 <option value="custom">自定义</option>

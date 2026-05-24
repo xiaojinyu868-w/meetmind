@@ -219,13 +219,13 @@ export function useConversationHistory(
     }
   }, [options.autoLoad, loadConversations]);
 
-  // 用户切换时重新加载
+  // 用户 / 类型 / session 切换时重新加载，避免历史列表停留在上一节课
   useEffect(() => {
     if (isInitialized.current && options.autoLoad) {
-      loadConversations();
+      void loadConversations();
       clearCurrentConversation();
     }
-  }, [userId]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [userId, options.autoLoad, options.type, options.sessionId, loadConversations, clearCurrentConversation]);
 
   return {
     // 状态

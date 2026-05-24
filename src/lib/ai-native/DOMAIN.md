@@ -21,7 +21,8 @@ page.tsx → /api/apps/execute → context-builder → registry → plugin.execu
 | 文件 | 行数 | 职责 |
 |------|------|------|
 | `types.ts` | 138 | 核心类型（AppPlugin, AppExecutionContext, AppCard 等） |
-| `app-catalog.ts` | 99 | 应用目录定义（6 个应用） |
+| `app-catalog.ts` | 99 | 应用目录定义（6 个应用，用户可见命名需避开 `COPY.bannedWords`） |
+| `app-catalog.test.ts` | — | 应用目录用户面文案护栏 |
 | `context-builder.ts` | 83 | 从请求构建执行上下文 |
 | `registry.ts` | 65 | 插件注册中心 |
 | `prompt-context.ts` | 101 | Prompt 上下文构建（转录 + 锚点 + 术语） |

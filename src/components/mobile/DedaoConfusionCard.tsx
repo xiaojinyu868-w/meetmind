@@ -110,7 +110,7 @@ export function DedaoConfusionCard({
           ) : null}
         </div>
 
-        <div className="flex gap-3 border-t border-gray-100 px-4 py-3">
+        <div className="flex gap-3 border-t border-divider px-4 py-3">
           {!confusion.resolved ? (
             <>
               <button
@@ -120,7 +120,7 @@ export function DedaoConfusionCard({
                   'bg-[var(--dedao-gold)] transition-transform duration-150 active:scale-98'
                 )}
               >
-                问 AI
+                问同学
               </button>
               <button
                 onClick={onResolve}

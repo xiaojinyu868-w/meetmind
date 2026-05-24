@@ -9,13 +9,17 @@
  */
 
 import { useCallback, useMemo, useState } from 'react';
+import type { AppExecutionResult } from '@/lib/ai-native/types';
 import type { TranscriptSegment } from '@/types';
 import type { ClassCheckRound } from '@/hooks/useClassCheck';
 import type { ClassCheckPlan } from '@/app/api/class-check/plan/route';
+import { StudyReportDocument } from './StudyReportDocument';
+import type { StudyReportPayload } from './study-report-document-model';
 
 interface StudyReportWindowProps {
-  rounds: ClassCheckRound[] | undefined;
-  plan: ClassCheckPlan | null | undefined;
+  result?: AppExecutionResult | null;
+  rounds?: ClassCheckRound[] | undefined;
+  plan?: ClassCheckPlan | null | undefined;
   transcript: TranscriptSegment[];
 }
 
@@ -153,8 +157,19 @@ function drawShareImage(title: string, accuracy: number, totalCorrect: number, t
 
 // ── 主组件 ──
 
-export function StudyReportWindow({ rounds, plan }: StudyReportWindowProps) {
-  const safeRounds = rounds || [];
+export function StudyReportWindow({ result, rounds, plan }: StudyReportWindowProps) {
+  const payload = result?.render?.payload as StudyReportPayload | undefined;
+  if (payload && (payload.title || payload.letterToParent || Array.isArray(payload.topics))) {
+    return <StudyReportDocument payload={payload} />;
+  }
+  return <ClassCheckStudyReportView rounds={rounds} plan={plan} />;
+}
+
+function ClassCheckStudyReportView({
+  rounds,
+  plan,
+}: Pick<StudyReportWindowProps, 'rounds' | 'plan'>) {
+  const safeRounds = useMemo(() => rounds || [], [rounds]);
   const [shareOpen, setShareOpen] = useState(false);
   const [shareUrl, setShareUrl] = useState<string | null>(null);
   const [shareGenerating, setShareGenerating] = useState(false);

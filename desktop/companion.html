@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>MeetMind Octo Buddy</title>
+    <link rel="stylesheet" href="./companion.css" />
+  </head>
+  <body>
+    <main id="companion" class="companion" data-expanded="false" data-mood="idle">
+      <button id="buddyButton" class="buddy-button no-drag" type="button" aria-label="Octo Buddy">
+        <span class="presence-aura" aria-hidden="true"></span>
+        <span class="ground-shadow" aria-hidden="true"></span>
+        <span class="signal-ring signal-ring-a" aria-hidden="true"></span>
+        <span class="signal-ring signal-ring-b" aria-hidden="true"></span>
+        <span class="orbit orbit-a" aria-hidden="true"></span>
+        <span class="orbit orbit-b" aria-hidden="true"></span>
+        <img id="buddySprite" class="buddy-sprite" src="../public/images/octo-buddy/idle.png" alt="Octo Buddy" draggable="false" />
+        <span id="buddySpeech" class="speech-bubble" aria-hidden="true"></span>
+        <span id="buddyBurst" class="buddy-burst" aria-hidden="true"><span></span><span></span><span></span><span></span></span>
+        <span id="sleepDust" class="sleep-dust" aria-hidden="true"><span></span><span></span><span></span></span>
+      </button>
+
+      <section class="panel no-drag" aria-label="Octo Buddy 面板">
+        <div class="panel-header drag-surface">
+          <div>
+            <p id="statusTitle" class="title">同学在这</p>
+            <p id="statusText" class="subtitle">我会自己待着，也会陪你听课。</p>
+          </div>
+          <button id="closeButton" class="icon-button no-drag" type="button" aria-label="收起">×</button>
+        </div>
+        <div class="actions">
+          <button id="listenButton" class="action primary" type="button">陪我听课</button>
+          <button id="askButton" class="action" type="button">问同学</button>
+          <button id="gameButton" class="action" type="button">陪我打游戏</button>
+          <button id="openButton" class="action" type="button">打开 MeetMind</button>
+        </div>
+        <p id="behaviorLine" class="behavior">没人理我时，我会发呆、犯困，然后睡着。</p>
+      </section>
+    </main>
+    <script src="./companion.js"></script>
+  </body>
+</html>

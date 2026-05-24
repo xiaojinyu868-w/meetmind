@@ -64,6 +64,11 @@ import { FixedModelBadge, TutorModeToggle, StopGenerationButton, Section, QuickR
 import { TutorCallComposer } from './tutor/TutorCallComposer';
 import { TutorRealtimeCallBar } from './tutor/TutorRealtimeCallBar';
 import { TutorRealtimeCallScreen } from './tutor/TutorRealtimeCallScreen';
+import {
+  buildRealtimeConversationTitle,
+  createRealtimeTranscriptDedupe,
+  type RealtimeTranscriptRole,
+} from './tutor/realtime-conversation-bridge';
 
 type StarterIntentMeta = {
   role?: string;
@@ -92,6 +97,7 @@ export function AITutor({
   hideMobileHeader = false,
   realtimeTeacherEnabled,
   onRealtimeTeacherEnabledChange,
+  onRealtimeConversationSaved,
   newConversationNonce = 0,
   onConversationActiveChange,
 }: AITutorProps) {
@@ -143,6 +149,9 @@ export function AITutor({
   const [isRealtimeAssistantResponding, setIsRealtimeAssistantResponding] = useState(false);
   const realtimeAssistantDraftRef = useRef('');
   const realtimeAssistantFinalizedRef = useRef(false);
+  const realtimeConversationIdRef = useRef<string | null>(null);
+  const realtimeConversationPromiseRef = useRef<Promise<string> | null>(null);
+  const realtimeTranscriptDedupeRef = useRef(createRealtimeTranscriptDedupe());
   const justExitedRealtimeCallRef = useRef(false);
   
   // 困惑点模式的流式输出 - 使用统一的 SSE Hook
@@ -562,6 +571,9 @@ export function AITutor({
     hasInitialized.current = false;
     hasProcessedInitialQuestion.current = false;
     conversationIdRef.current = null;
+    realtimeConversationIdRef.current = null;
+    realtimeConversationPromiseRef.current = null;
+    realtimeTranscriptDedupeRef.current.reset();
   }, [sessionId]);
 
   // 保存到缓存
@@ -1324,14 +1336,51 @@ export function AITutor({
     realtimeAssistantDraftRef.current = realtimeAssistantDraft;
   }, [realtimeAssistantDraft]);
 
-  const handleRealtimeUserTranscript = useCallback((text: string) => {
-    const trimmed = text.trim();
-    if (!trimmed) return;
+  const ensureRealtimeConversation = useCallback((seedText: string): Promise<string> => {
+    if (realtimeConversationIdRef.current) {
+      return Promise.resolve(realtimeConversationIdRef.current);
+    }
 
-    // 通话记录同时写入两个 history，确保无论退出后在哪个视图都能看到
-    setGlobalChatHistory((prev) => [...prev, { role: 'user', content: trimmed }]);
-    setChatHistory((prev) => [...prev, { role: 'user', content: trimmed }]);
-  }, []);
+    if (!realtimeConversationPromiseRef.current) {
+      realtimeConversationPromiseRef.current = conversationService.createConversation({
+        userId,
+        type: 'global-chat',
+        title: buildRealtimeConversationTitle(seedText),
+        sessionId,
+        model: REALTIME_TEACHER_MODEL_ID,
+        metadata: { source: 'realtime-call' },
+      }).then((conversation) => {
+        realtimeConversationIdRef.current = conversation.conversationId;
+        onRealtimeConversationSaved?.(conversation.conversationId);
+        return conversation.conversationId;
+      }).finally(() => {
+        realtimeConversationPromiseRef.current = null;
+      });
+    }
+
+    return realtimeConversationPromiseRef.current;
+  }, [onRealtimeConversationSaved, sessionId, userId]);
+
+  const appendRealtimeTranscript = useCallback(async (role: RealtimeTranscriptRole, text: string) => {
+    const trimmed = text.trim();
+    if (!realtimeTranscriptDedupeRef.current.shouldAccept(role, trimmed)) return;
+
+    const message = { role, content: trimmed };
+    setGlobalChatHistory((prev) => [...prev, message]);
+    setChatHistory((prev) => [...prev, message]);
+    onConversationActiveChange?.(true);
+
+    try {
+      const conversationId = await ensureRealtimeConversation(trimmed);
+      await conversationService.addMessage(conversationId, { role, content: trimmed });
+    } catch (err) {
+      console.error('[AITutor] failed to persist realtime transcript:', err);
+    }
+  }, [ensureRealtimeConversation, onConversationActiveChange]);
+
+  const handleRealtimeUserTranscript = useCallback((text: string) => {
+    void appendRealtimeTranscript('user', text);
+  }, [appendRealtimeTranscript]);
 
   const handleRealtimeAssistantStart = useCallback(() => {
     realtimeAssistantFinalizedRef.current = false;
@@ -1352,17 +1401,16 @@ export function AITutor({
     if (realtimeAssistantFinalizedRef.current) return;
 
     realtimeAssistantFinalizedRef.current = true;
-    setGlobalChatHistory((prev) => [...prev, { role: 'assistant', content: trimmed }]);
-    setChatHistory((prev) => [...prev, { role: 'assistant', content: trimmed }]);
+    void appendRealtimeTranscript('assistant', trimmed);
     setRealtimeAssistantDraft('');
-  }, []);
+  }, [appendRealtimeTranscript]);
 
   const handleRealtimeAssistantEnd = useCallback(() => {
     if (!realtimeAssistantFinalizedRef.current) {
       const fallbackText = realtimeAssistantDraftRef.current.trim();
       if (fallbackText) {
-        setGlobalChatHistory((prev) => [...prev, { role: 'assistant', content: fallbackText }]);
-        setChatHistory((prev) => [...prev, { role: 'assistant', content: fallbackText }]);
+        realtimeAssistantFinalizedRef.current = true;
+        void appendRealtimeTranscript('assistant', fallbackText);
       }
     }
 
@@ -1370,7 +1418,7 @@ export function AITutor({
     realtimeAssistantFinalizedRef.current = false;
     setRealtimeAssistantDraft('');
     setIsRealtimeAssistantResponding(false);
-  }, [isGlobalMode]);
+  }, [appendRealtimeTranscript]);
 
   if (isGlobalMode) {
     if (shouldUseMobileRealtimeComposer) {

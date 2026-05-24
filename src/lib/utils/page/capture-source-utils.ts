@@ -51,6 +51,9 @@ export function resolvePendingAudioFailureStatus(message: string): string {
   if (/公网地址|PUBLIC_DOMAIN|PUBLIC_HOST|可访问的公网地址/i.test(text)) {
     return '本地暂不转写';
   }
+  if (/Failed to fetch|NetworkError|ECONNRESET|ETIMEDOUT|network|网络/i.test(text)) {
+    return '网络不稳，原声已保留';
+  }
   if (/没有转出可用文字|没有获取到文本/i.test(text)) {
     return '还没转出文字';
   }

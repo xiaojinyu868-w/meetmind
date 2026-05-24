@@ -78,6 +78,15 @@ export function ClassroomHero({
           {COPY.identity.subtagline}
         </p>
 
+        <div className="mt-5 grid gap-2 sm:grid-cols-3">
+          {COPY.hero.outcomes.map((item) => (
+            <div key={item.label} className="rounded-2xl border border-divider bg-white px-3.5 py-3">
+              <p className="text-[11px] font-medium text-ink-muted">{item.label}</p>
+              <p className="mt-1 text-[12.5px] leading-snug text-ink-secondary">{item.text}</p>
+            </div>
+          ))}
+        </div>
+
         {/* 两个 CTA：demo 在左（primary 位，心理门槛更低），自录在右 */}
         <div className="mt-7 flex flex-wrap gap-3">
           <button
@@ -95,8 +104,8 @@ export function ClassroomHero({
             type="button"
             onClick={onStartRecording}
             className={cn(
-              'inline-flex items-center gap-2 rounded-full bg-white px-5 py-3 text-[14px] font-medium text-ink ring-[0.5px] ring-[#232322]/[0.10]',
-              'transition hover:ring-[#232322]/[0.22] active:scale-[0.99]',
+              'inline-flex items-center gap-2 rounded-full border border-divider bg-white px-5 py-3 text-[14px] font-medium text-ink',
+              'transition hover:border-ink-muted active:scale-[0.99]',
             )}
           >
             <Mic size={14} strokeWidth={2} />
@@ -115,15 +124,15 @@ export function ClassroomHero({
             </span>
           </div>
 
-          <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
             {DEMO_APP_PREVIEWS.map((preview) => (
               <button
                 key={preview.appKey}
                 type="button"
                 onClick={() => handleCapability(preview.appKey)}
                 className={cn(
-                  'group flex flex-col items-start gap-1.5 rounded-2xl bg-white p-3 text-left ring-[0.5px] ring-[#232322]/[0.08]',
-                  'transition hover:ring-[#232322]/[0.22] hover:-translate-y-[1px]',
+                  'group flex flex-col items-start gap-1.5 rounded-2xl border border-divider bg-white p-3 text-left',
+                  'transition hover:border-ink-muted hover:-translate-y-[1px]',
                 )}
                 title={preview.tagline}
               >

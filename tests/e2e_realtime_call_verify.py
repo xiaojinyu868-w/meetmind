@@ -204,29 +204,29 @@ def run_test():
         assert merged_condition >= 1, "Expected merged condition to exist"
         print(f"  ✅ ai-chat 和 ai-call 共用同一个条件分支")
         
-        # 验证 3: MobileAIChatPanel.tsx 中只有一个 AITutor 实例
+        # 验证 3: MobileAIChatPanel.tsx 不再挂旧 AITutor，语音由 RealtimeTutorPanel 承接
         result3 = subprocess.run(
-            ['grep', '-c', '<AITutor', 
+            ['grep', '-c', '<AITutor',
              'src/components/mobile/MobileAIChatPanel.tsx'],
             cwd='/mnt/meetmind-capture-v1-server-handoff',
             capture_output=True, text=True
         )
-        tutor_count = int(result3.stdout.strip())
-        print(f"  MobileAIChatPanel 中 <AITutor 出现次数: {tutor_count}")
-        assert tutor_count == 1, f"Expected 1 AITutor instance, got {tutor_count}"
-        print(f"  ✅ MobileAIChatPanel 中只有 1 个 AITutor 实例")
-        
-        # 验证 4: realtimeTeacherEnabled 作为 prop 传入（而非条件分支选择器）
+        legacy_tutor_count = int(result3.stdout.strip())
+        print(f"  MobileAIChatPanel 中 <AITutor 出现次数: {legacy_tutor_count}")
+        assert legacy_tutor_count == 0, f"Expected 0 AITutor instance, got {legacy_tutor_count}"
+        print(f"  ✅ MobileAIChatPanel 不再挂旧 AITutor")
+
+        # 验证 4: RealtimeTutorPanel 作为独立语音舞台存在
         result4 = subprocess.run(
-            ['grep', '-n', 'realtimeTeacherEnabled={realtimeTeacherEnabled}',
+            ['grep', '-n', '<RealtimeTutorPanel',
              'src/components/mobile/MobileAIChatPanel.tsx'],
             cwd='/mnt/meetmind-capture-v1-server-handoff',
             capture_output=True, text=True
         )
-        prop_pass = result4.stdout.strip()
-        print(f"  realtimeTeacherEnabled prop 传递: {prop_pass}")
-        assert prop_pass, "Expected realtimeTeacherEnabled to be passed as prop"
-        print(f"  ✅ realtimeTeacherEnabled 作为 prop 传递给 AITutor")
+        realtime_panel_pass = result4.stdout.strip()
+        print(f"  RealtimeTutorPanel 挂载: {realtime_panel_pass}")
+        assert realtime_panel_pass, "Expected RealtimeTutorPanel to be mounted"
+        print(f"  ✅ 语音同桌由独立 RealtimeTutorPanel 承接")
         
         # 验证 5: page.tsx 中 onExitRealtimeTeacher 切换回 ai-chat（不是卸载组件）
         result5 = subprocess.run(
@@ -296,19 +296,19 @@ def run_test():
 ✅ 2. ai-chat 和 ai-call 合并到同一个条件分支
    （条件：mobileSubPage === 'ai-chat' || mobileSubPage === 'ai-call'）
 
-✅ 3. MobileAIChatPanel 中只有 1 个 AITutor 组件
-   （之前：realtimeTeacherEnabled=true/false 分别在不同的三元分支中）
+✅ 3. MobileAIChatPanel 不再挂旧 AITutor
+   （文字 AI 走 SafeAITutor，语音同桌走 RealtimeTutorPanel）
 
-✅ 4. realtimeTeacherEnabled 作为 prop 动态传递
-   （切换通话模式不会导致组件卸载重建）
+✅ 4. RealtimeTutorPanel 作为独立语音舞台挂载
+   （通话模式不再依赖旧 AITutor 实例）
 
 ✅ 5. 退出通话时只改 mobileSubPage 状态，不卸载组件
    （onExitRealtimeTeacher → setMobileSubPage('ai-chat')）
 
 ✅ 6. 无残留的独立 ai-call 条件分支
 
-结论：通话结束后，AITutor 组件保持挂载，globalChatHistory 
-     状态不会丢失，对话记录正确保留。
+结论：通话结束后，语音记录进入 global-chat 历史，
+     文字 Agent 能通过 conversationId 接回这段对话。
 """)
         
         browser.close()

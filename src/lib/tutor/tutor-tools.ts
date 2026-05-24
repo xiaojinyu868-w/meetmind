@@ -20,7 +20,7 @@
  * 不再靠 intent 的关键词匹配去"猜"插件。
  */
 
-import { tool } from 'ai';
+import { tool, type ToolSet } from 'ai';
 import { z } from 'zod';
 import type { TranscriptSegment } from '@/types';
 import type { AppExecutionContext, AppPlugin, AppPluginTools } from '../ai-native/types';
@@ -58,6 +58,8 @@ interface TutorToolContext {
   transcript: TranscriptSegment[];
   subject?: string;
   model?: string;
+  /** in-class 不暴露 native tools，课中轻产物走 open_app marker */
+  mode?: 'in-class' | 'review';
 }
 
 async function invokePlugin(
@@ -101,12 +103,16 @@ async function invokePlugin(
 // Tool factories
 // ──────────────────────────────────────────────────────────────
 
-export function createTutorTools(ctx: TutorToolContext) {
-  return {
+export function createTutorTools(ctx: TutorToolContext): ToolSet {
+  if (ctx.mode === 'in-class') {
+    return {};
+  }
+
+  const postClassTrainingTools: ToolSet = {
     makeFlashcards: tool({
       description:
-        '基于课堂转写生成闪卡，适合"学生想通过卡片方式记忆"或"有很多概念需要记忆"的场景。' +
-        '不要用于简单一句话能回答的问题。',
+        '基于课堂转写生成闪卡。把是否需要闪卡交给模型结合上下文判断：学生可能直接说做闪卡，也可能表达想记住、复习、主动回忆某个知识点。' +
+        '工具只是能力，不是流程；简单一句话能回答的问题直接回答。',
       inputSchema: z.object({
         topic: z
           .string()
@@ -121,8 +127,8 @@ export function createTutorTools(ctx: TutorToolContext) {
 
     makeQuiz: tool({
       description:
-        '基于课堂转写出题测试。适合学生说"考我一下 / 出几道题 / 我想练一练"的场景。' +
-        '单次只出一组题，每组默认 3-5 道。',
+        '基于课堂转写出题测试。把是否需要测验交给模型结合上下文判断：学生可能直接说考我一下，也可能表达想验证自己懂没懂、练一练。' +
+        '工具只是能力，不是流程；单次只出一组题，每组默认 3-5 道。',
       inputSchema: z.object({
         topic: z.string().describe('测试范围'),
         count: z.number().int().min(1).max(10).default(4).describe('题数'),
@@ -133,10 +139,15 @@ export function createTutorTools(ctx: TutorToolContext) {
         return invokePlugin(quizPlugin, ctx, intent, 'quiz');
       },
     }),
+  };
+
+  return {
+    ...postClassTrainingTools,
 
     makeMindmap: tool({
       description:
-        '基于课堂转写生成思维导图。适合学生问"这节课讲了什么 / 帮我梳理结构 / 画个图看看"。',
+        '基于课堂转写生成思维导图。把是否需要导图交给模型结合上下文判断：学生可能直接要画图，也可能是在找结构、主干、概念关系。' +
+        '工具只是能力，不是流程。',
       inputSchema: z.object({
         rootTopic: z
           .string()
@@ -154,8 +165,8 @@ export function createTutorTools(ctx: TutorToolContext) {
     makeCheatsheet: tool({
       description:
         '基于课堂转写生成"一页纸考试速查表"——把核心定义、关键公式、易错点等压成密集可打印卡片。' +
-        '适合学生说"考前复习 / 速查表 / 考试前翻一翻"的场景。' +
-        '比闪卡更密，比思维导图更聚焦应试。',
+        '把是否需要速查表交给模型结合上下文判断：学生可能直接说速查表，也可能表达考前压缩、最后翻一遍、公式易错点汇总。' +
+        '工具只是能力，不是流程；它比闪卡更密，比思维导图更聚焦应试。',
       inputSchema: z.object({
         topic: z
           .string()
@@ -173,8 +184,8 @@ export function createTutorTools(ctx: TutorToolContext) {
     makeStudyReport: tool({
       description:
         '基于课堂转写生成给家长看的听课报告——这节课讲了什么、难度大概怎样、家长可以和孩子聊哪些具体话题。' +
-        '不评价孩子掌握度（没有答题数据），只分析课堂内容。' +
-        '适合家长侧"想知道孩子今天学了啥"的场景。',
+        '把是否需要报告交给模型结合上下文判断：学生或家长可能直接要报告，也可能想知道今天学了什么、怎么和家里解释。' +
+        '工具只是能力，不是流程；没有答题数据时不评价孩子掌握度，只分析课堂内容。',
       inputSchema: z.object({
         focus: z
           .string()

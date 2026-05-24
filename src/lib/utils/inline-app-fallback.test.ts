@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildInlineAppFallbackPayload } from './inline-app-fallback';
+import { buildInlineAppFallbackPayload, buildInlineAppFallbackResult } from './inline-app-fallback';
 
 const transcript = [
   { id: 's1', text: '老师讲到 Z 世代生活在信息密度很高的环境里，注意力容易被短视频和社交媒体切走。', startMs: 0, endMs: 8000 },
@@ -22,5 +22,17 @@ describe('buildInlineAppFallbackPayload', () => {
 
   it('returns null when transcript is too thin', () => {
     expect(buildInlineAppFallbackPayload('flashcards', [])).toBeNull();
+  });
+});
+
+describe('buildInlineAppFallbackResult', () => {
+  it('wraps fallback payload in a full AppExecutionResult for workshop render reuse', () => {
+    const result = buildInlineAppFallbackResult('quiz', transcript);
+    expect(result).toMatchObject({
+      pluginId: 'quiz-arena',
+      render: { mode: 'quiz' },
+    });
+    expect(result?.render?.payload).toHaveProperty('questions');
+    expect(result?.trace).toContain('inline_fallback=client');
   });
 });

@@ -7,7 +7,7 @@
 
 每次开始编写或修改代码时，自动遵循本流程。
 
-## 流程：Plan → Execute → Verify → Commit
+## 流程：Plan → Execute → Document → Verify → Review → Commit
 
 ### 1. Plan（2 分钟规划）
 
@@ -17,6 +17,7 @@
 变更目标：[一句话描述]
 影响文件：[列出要修改的文件路径]
 不动的文件：[明确哪些文件不能碰]
+文档同步：[本次是否需要更新 AGENTS.md / DOMAIN.md / docs/* / .env.example，为什么]
 验证方式：[怎么确认改对了]
 回滚方式：[如果搞砸了怎么恢复]
 ```
@@ -39,12 +40,26 @@
 - 是否引入了新的 `console.log`？用 `logger` 替代
 - 是否使用了设计系统之外的颜色？检查 AGENTS.md §2
 
-### 3. Verify（立即验证）
+### 3. Document（同步事实来源）
+
+代码改完、验证之前，必须检查文档是否需要同步。判断标准：
+
+| 代码变化 | 必须同步 |
+|---------|---------|
+| 新增 / 删除 / 移动文件或改变目录职责 | 对应 `DOMAIN.md`；若是关键路径，再更新 `AGENTS.md` |
+| 新增 API 字段、渲染契约、stream marker、工具调用契约 | 对应 `src/app/api/**/DOMAIN.md` + 相关 `docs/*` |
+| 新增模型 provider、默认模型、API key、环境变量 | `src/lib/config/DOMAIN.md` + `.env.example` + `docs/TUTOR_AGENT.md` + `AGENTS.md` |
+| 改 Tutor / ASR / AI-Native 主链路 | 对应 `DOMAIN.md` + `docs/TUTOR_AGENT.md` / `docs/ASR_PIPELINE.md` / `src/lib/ai-native/DOMAIN.md` |
+| 改用户设置、用户面文案或偏好 key | 设置页相关说明 + `src/lib/utils/DOMAIN.md` / `src/lib/ui/copy.ts` |
+
+没有单独的“更新文档命令”。执行方式是看 `git diff --name-only`，按上表补齐文档；验证方式仍然使用 Makefile 命令。
+
+### 4. Verify（立即验证）
 
 每次修改后：
 
 ```bash
-npx tsc --noEmit          # 零类型错误
+make check                # 零类型错误（等价于项目约定的 tsc 检查）
 ```
 
 如果修改了 UI：
@@ -54,7 +69,15 @@ npx tsc --noEmit          # 零类型错误
 如果修改了 API 路由或服务：
 - 确认导出接口未变（或所有消费方已更新）
 
-### 4. Commit（原子提交）
+### 5. Review（提交前自审）
+
+提交或声明完成前，按 `skills/code-review/SKILL.md` 自审：
+- 目标是否完成，不多不少
+- 文档是否和代码事实一致
+- `make check` / 相关 `make eval-*` / 定向测试是否有新鲜输出
+- 是否误改了不相关文件或泄露密钥
+
+### 6. Commit（原子提交）
 
 **提交格式**：
 ```
@@ -75,17 +98,17 @@ docs(agents): 更新架构边界和域划分说明
 
 **规则**：
 - 一个提交只做一件事（bisectable）
-- 提交前 `tsc --noEmit` 必须通过
+- 提交前 `make check` 必须通过
 - 不要把不相关的改动塞进同一个提交
 
 ## 特殊场景
 
 ### 修改 page.tsx
 
-这是 9714 行的 God File。额外规则：
+这是约 2300 行的 God File。额外规则：
 1. 改动前：`read_file` 确认目标区域的前后 30 行上下文
 2. 改动中：只用 `replace_in_file`，绝不重写大段
-3. 改动后：立即 `tsc --noEmit`
+3. 改动后：立即 `make check`
 4. 如果修改自然产生了可提取的函数（≥50行），顺手提取到独立文件
 
 ### 修改 Echo 相关文件
@@ -102,7 +125,7 @@ docs(agents): 更新架构边界和域划分说明
 3. 导出的类型放在 `src/types/` 中
 4. 如果需要新 API 路由，路由只做请求转换，逻辑放 services/
 5. 如果新增了独立功能目录，同时补充对应 `DOMAIN.md`
-6. 如果新增功能改变了推荐阅读路径或关键文件列表，同时更新 `AGENTS.md`
+6. 如果新增功能改变了推荐阅读路径、关键文件列表、默认行为、配置项或公共契约，同时更新 `AGENTS.md` / 对应 `DOMAIN.md` / `docs/*` / `.env.example`
 
 ## 反模式（绝对不做）
 

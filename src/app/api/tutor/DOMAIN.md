@@ -6,7 +6,7 @@
 
 | 文件 | 行数 | 职责 |
 |------|------|------|
-| `route.ts` | ~708 | 主路由：接收用户消息、调用 LLM、支持“初次困惑点分析 / 后续追问 / 全局对话”三种模式，其中后两者和初次分析现在都可流式返回 |
+| `route.ts` | ~708 | Legacy 主路由：接收用户消息、调用 LLM、支持旧“初次困惑点分析 / 后续追问 / 全局对话”三种模式；M10 后非语音对话应迁移到 `/api/tutor/agent` |
 | `tutor-types.ts` | — | 共享类型定义 |
 | `tutor-prompts.ts` | — | System Prompt 模板 |
 | `tutor-citations.ts` | — | 引用处理（从转录中定位引用） |
@@ -16,7 +16,7 @@
 
 | 路径 | 职责 |
 |------|------|
-| `/api/tutor/agent` | Agent loop（多轮 tool calling，用于应用生成与 plugin 调用） |
+| `/api/tutor/agent` | M10 主入口：mode-driven Agent loop（多轮 tool calling，用于应用生成与 plugin 调用）；支持请求体 `model` 选择 DeepSeek / DashScope / OpenAI-compatible 模型；AI SDK 必须用 `.chat()` 走 `/chat/completions`；当首个 provider 在未输出内容前返回繁忙/限流/超时时，会在已配置的 DeepSeek ↔ DashScope 候选间自动切换 |
 
 ## 依赖
 

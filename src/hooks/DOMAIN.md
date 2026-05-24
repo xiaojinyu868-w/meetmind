@@ -33,6 +33,7 @@ hooks → stores + types + lib/db + lib/utils
 | `useTranscript.ts` | 134 | 转录数据管理 |
 | `useVoiceInput.ts` | 270 | 语音输入（含 buffered 模式判断） |
 | `useOmniRealtimeCall.ts` | ~400 | Qwen Omni realtime 语音通话（麦克风上行 + 语音下行） |
+| `useRealtimeTutorConversationBridge.ts` | ~120 | 语音同桌转写持久化到 `global-chat`，并把 conversationId 回传给文字 agent |
 | `useWorkshopWindows.ts` | 122 | Workshop 浮窗状态管理 |
 | `useClassCheck.ts` | ~455 | 随堂检验控制器（Plan 生成 + 播放追踪 + 自动/手动触发 + checkpoint 状态机），外部通过 videoPlayerRef 真正暂停/恢复媒体 |
 | `useReviewSession.ts` | 506 | 复习会话恢复（IndexedDB / 服务端转录 → 播放态），从 page.tsx 提取 |
@@ -43,8 +44,8 @@ hooks → stores + types + lib/db + lib/utils
 | `useCollectionPulse.ts` | ~250 | 收集发酵脉搏（collectionPulse 状态计算 + captureActivitySummary + 自动显隐 effect），从 page.tsx 提取（Phase 3） |
 | `useTutorLauncher.ts` | ~340 | AI 家教启动逻辑（blobToDataUrl + buildTutorLaunchImages + buildTutorPrompt* + openTutor* + applyBatchAction），从 page.tsx 提取（Phase 4） |
 | `useTranscriptIngest.ts` | ~275 | 转录摄入管线（ingestTranscriptSegments 巨型函数：段落合并 + 会话创建 + 视频源设置 + DB 持久化 + 时间线构建），从 page.tsx 提取（Phase 4） |
-| `useRecordingLifecycle.ts` | ~300 | 录音生命周期（persistCaptureToWorkspace + handleRecordingStart + handleRecordingStop），从 page.tsx 提取（Phase 4） |
-| `useTranscriptHandlers.ts` | ~335 | 转录处理器（handleTranscriptUpdate + handleRecordingTranscriptionError + handleTranscriptEnhanced + handleVideoAssistantMessage + handleTranscriptTextUpdate），从 page.tsx 提取（Phase 4） |
+| `useRecordingLifecycle.ts` | 477 | 录音生命周期（persistCaptureToWorkspace + handleRecordingStart + handleRecordingStop）；写入 `transcriptionStatus` pending/completed/failed |
+| `useTranscriptHandlers.ts` | 349 | 转录处理器（handleTranscriptUpdate + handleRecordingTranscriptionError + handleTranscriptEnhanced + handleVideoAssistantMessage + handleTranscriptTextUpdate）；失败时同步 audioSession 为 failed |
 | `useAudioMessagePlayback.ts` | ~130 | 收集流音频播放（stopAudioMessagePlayback + toggleAudioMessagePlayback + cleanup effect），从 page.tsx 提取（Phase 4） |
 | `useCollectionListActions.ts` | ~268 | 收集列表操作适配层（ensureWorkspaceCaptureSourceItem + resolveCollectionListSourceItem + quote/review/toggle/archive/restore/delete/edit/askTutor），从 page.tsx 提取（Phase 5） |
 | `useWechatCaptureImport.ts` | ~243 | 微信收集导入（settleWechatCaptureEntry + wechat fetch effect），从 page.tsx 提取（Phase 5） |
@@ -58,7 +59,7 @@ hooks → stores + types + lib/db + lib/utils
 | `useExtractTerms.ts` | ~105 | ASR 热词提取 + 实时上下文提示（extractTerms effect + liveASRContextHint memo），从 page.tsx 提取（Phase 6） |
 | `useSourceItemManagement.ts` | ~120 | 源项 CRUD（appendSourceItem + updateSourceItem + appendSupportSource），从 page.tsx 提取（Phase 6） |
 | `useClassroomLessons.ts` | ~130 | 课堂列表数据适配（audioSessions + transcripts + highlightTopics + workspaceEchoes/Captures + preferences + sourceItems → Lesson[] + markReviewed），响应式 |
-| `useClassroomCompanion.ts` | ~260 | 课堂 AI 同桌对话（/api/tutor 流式 + 动态开场白 + 历史持久化 + 错误降级 + short-circuit），为 ClassroomView 专属 |
+| `useClassroomCompanion.ts` | ~260 | 课堂同桌对话（/api/tutor 流式 + 动态开场白 + 按 session 历史持久化 + 错误降级 + short-circuit），为 ClassroomView 专属 |
 | `useLiveConcepts.ts` | ~100 | 录课中关键概念启发式抽取（订阅 captureEditorStore.segments，零 API），ClassroomRecordingView 消费 |
 
 ### data/ — API 数据 hooks

@@ -15,6 +15,7 @@
 
 import React from 'react';
 import { ChevronRight, Sparkles, FileText, Check } from 'lucide-react';
+import { COPY } from '@/lib/ui/copy';
 import type { Lesson } from './types';
 
 export interface ClassroomLessonCardProps {
@@ -29,23 +30,27 @@ function StatusDot({ lesson }: { lesson: Lesson }) {
   switch (lesson.status) {
     case 'recording':
       return (
-        <span className="relative mt-[7px] flex h-2 w-2 flex-shrink-0">
-          <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-[#D96B6B] opacity-60" />
-          <span className="relative inline-flex h-2 w-2 rounded-full bg-[#D96B6B]" />
+        <span className="relative mt-[7px] flex h-2.5 w-2.5 flex-shrink-0">
+          <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-danger-500 opacity-50" />
+          <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-danger-500" />
         </span>
       );
     case 'processing':
       return (
-        <span className="mt-[7px] flex h-2 w-2 flex-shrink-0 animate-pulse-slow rounded-full bg-[#A3A39E]" />
+        <span className="mt-[7px] flex h-2.5 w-2.5 flex-shrink-0 animate-pulse-slow rounded-full bg-ink-muted" />
+      );
+    case 'failed':
+      return (
+        <span className="mt-[7px] flex h-2.5 w-2.5 flex-shrink-0 rounded-full bg-ink-muted" />
       );
     case 'upcoming':
       return (
-        <span className="mt-[7px] flex h-2 w-2 flex-shrink-0 rounded-full bg-[#E8C547]" />
+        <span className="mt-[7px] flex h-2.5 w-2.5 flex-shrink-0 rounded-full bg-sand-dark" />
       );
     case 'ready':
     default:
       return (
-        <span className="mt-[7px] flex h-2 w-2 flex-shrink-0 rounded-full bg-[#D0D0CC]" />
+        <span className="mt-[7px] flex h-2.5 w-2.5 flex-shrink-0 rounded-full bg-divider" />
       );
   }
 }
@@ -64,7 +69,7 @@ function MetaLine({ lesson, featured }: { lesson: Lesson; featured?: boolean }) 
   if (lesson.status === 'upcoming') {
     parts.push(<span key="up">即将开始</span>);
   } else if (lesson.status === 'recording') {
-    parts.push(<span key="r" className="text-[#B78900]">正在录音</span>);
+    parts.push(<span key="r" className="font-medium text-warning-700">正在录音</span>);
   } else if (lesson.status === 'processing') {
     parts.push(<span key="p">正在理解…</span>);
   } else {
@@ -74,7 +79,7 @@ function MetaLine({ lesson, featured }: { lesson: Lesson; featured?: boolean }) 
   }
 
   return (
-    <div className={`flex flex-wrap items-center gap-x-2 gap-y-0.5 text-ink-muted ${featured ? 'text-[12.5px] mt-1.5' : 'text-[12px] mt-0.5'}`}>
+    <div className={`flex flex-wrap items-center gap-x-2.5 gap-y-1 text-ink-muted ${featured ? 'mt-2 text-[13px]' : 'mt-1 text-[12.5px]'}`}>
       {parts.map((p, i) => (
         <React.Fragment key={i}>
           {i > 0 && <span className="text-ink-muted/40">·</span>}
@@ -91,33 +96,33 @@ function TagLine({ lesson }: { lesson: Lesson }) {
 
   if (lesson.status === 'ready' && lesson.hasEcho) {
     tags.push(
-      <span key="echo" className="inline-flex items-center gap-1 text-[11px] text-ink-secondary">
-        <Sparkles size={10.5} strokeWidth={1.8} className="text-[#B78900]" />
-        回声
+      <span key="echo" className="inline-flex items-center gap-1.5 text-[12px] text-ink-secondary">
+        <Sparkles size={12} strokeWidth={1.8} className="text-warning-700" />
+        {COPY.lesson.summaryReady}
       </span>
     );
   }
   if (lesson.status === 'ready' && lesson.keyPoints && lesson.keyPoints > 0) {
     tags.push(
-      <span key="kp" className="inline-flex items-center gap-1 text-[11px] text-ink-secondary">
+      <span key="kp" className="inline-flex items-center gap-1.5 text-[12px] text-ink-secondary">
         <span className="tabular-nums font-medium">{lesson.keyPoints}</span>
-        <span className="text-ink-muted">重点</span>
+        <span className="text-ink-muted">{COPY.lesson.keyPoints}</span>
       </span>
     );
   }
   if (lesson.reviewed) {
     tags.push(
-      <span key="rev" className="inline-flex items-center gap-1 text-[11px] text-ink-secondary">
-        <Check size={11} strokeWidth={2} />
-        已复习
+      <span key="rev" className="inline-flex items-center gap-1.5 text-[12px] text-ink-secondary">
+        <Check size={12} strokeWidth={2} />
+        {COPY.lesson.reviewed}
       </span>
     );
   }
   if (lesson.linkedMaterials && lesson.linkedMaterials > 0) {
     tags.push(
-      <span key="mat" className="inline-flex items-center gap-1 text-[11px] text-ink-secondary">
-        <FileText size={10.5} strokeWidth={1.7} />
-        {lesson.linkedMaterials}
+      <span key="mat" className="inline-flex items-center gap-1.5 text-[12px] text-ink-secondary">
+        <FileText size={12} strokeWidth={1.7} />
+        {COPY.lesson.materials(lesson.linkedMaterials)}
       </span>
     );
   }
@@ -125,26 +130,35 @@ function TagLine({ lesson }: { lesson: Lesson }) {
   if (tags.length === 0) return null;
 
   return (
-    <div className="mt-2 flex flex-wrap items-center gap-x-3.5 gap-y-1">
+    <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1.5">
       {tags}
     </div>
   );
 }
 
+function lessonActionLabel(lesson: Lesson): string {
+  if (lesson.status === 'ready') return lesson.reviewed ? COPY.lesson.actionReviewed : COPY.lesson.actionReady;
+  if (lesson.status === 'failed') return COPY.lesson.actionFailed;
+  if (lesson.status === 'processing') return COPY.lesson.actionProcessing;
+  if (lesson.status === 'upcoming') return COPY.lesson.actionUpcoming;
+  return '';
+}
+
 export function ClassroomLessonCard({ lesson, onClick, featured = false }: ClassroomLessonCardProps) {
   const opacityClass = lesson.status === 'upcoming' ? 'opacity-80' : 'opacity-100';
+  const actionLabel = lessonActionLabel(lesson);
 
   // featured: 更大的垂直内边距 + 更大的标题字号
-  const paddingClass = featured ? 'px-6 py-5' : 'px-6 py-3.5';
+  const paddingClass = featured ? 'px-6 py-5' : 'px-6 py-4';
   const titleClass = featured
-    ? 'text-[17px] font-semibold tracking-[-0.015em] text-ink leading-snug'
-    : 'text-[14.5px] font-medium tracking-[-0.005em] text-ink leading-snug';
+    ? 'text-[18px] font-semibold tracking-[-0.02em] text-ink leading-snug'
+    : 'text-[15px] font-medium tracking-[-0.01em] text-ink leading-snug';
 
   return (
     <button
       type="button"
       onClick={onClick}
-      className={`group relative flex w-full items-start gap-3.5 rounded-xl bg-white text-left ring-[0.5px] ring-[#232322]/[0.06] transition-all duration-150 hover:ring-[#232322]/[0.16] hover:-translate-y-[0.5px] ${paddingClass} ${opacityClass}`}
+      className={`group relative flex w-full items-start gap-4 rounded-2xl border border-divider bg-white text-left transition-colors duration-150 hover:border-ink-muted ${paddingClass} ${opacityClass}`}
     >
       <StatusDot lesson={lesson} />
 
@@ -157,14 +171,16 @@ export function ClassroomLessonCard({ lesson, onClick, featured = false }: Class
         <TagLine lesson={lesson} />
       </div>
 
-      {/* 右：箭头（ready 态才显示） */}
-      {lesson.status === 'ready' ? (
-        <ChevronRight
-          size={15}
-          strokeWidth={1.7}
-          className="mt-[3px] flex-shrink-0 text-[#D0D0CC] transition-all duration-150 group-hover:text-[#787774] group-hover:translate-x-[1px]"
-        />
-      ) : null}
+      <div className="mt-[2px] flex flex-shrink-0 items-center gap-1.5 text-[12.5px] font-medium text-ink-muted transition-colors group-hover:text-ink-secondary">
+        <span>{actionLabel}</span>
+        {lesson.status === 'ready' || lesson.status === 'failed' ? (
+          <ChevronRight
+            size={16}
+            strokeWidth={1.7}
+            className="text-ink-muted transition-colors duration-150 group-hover:text-ink-secondary"
+          />
+        ) : null}
+      </div>
     </button>
   );
 }
