@@ -51,6 +51,7 @@ import {
   formatTutorAgentUserError,
   resolveTutorAgentProviderFallbacks,
   shouldFallbackTutorAgentError,
+  shouldUseNativeTutorTools,
   type TutorAgentProviderConfig,
 } from '@/lib/utils/tutor-agent-provider';
 
@@ -160,13 +161,15 @@ function createTutorAttemptStream({
         const { apiKey, baseURL, modelId } = provider;
         const openai = createOpenAI({ apiKey, baseURL });
         const model = openai.chat(modelId);
-        const tools = createTutorTools({
-          sessionId: body.sessionId,
-          transcript: body.transcript,
-          subject: body.subject,
-          model: modelId,
-          mode: body.mode as TutorMode,
-        });
+        const tools = shouldUseNativeTutorTools(modelId)
+          ? createTutorTools({
+              sessionId: body.sessionId,
+              transcript: body.transcript,
+              subject: body.subject,
+              model: modelId,
+              mode: body.mode as TutorMode,
+            })
+          : {};
         let deliveredOutput = false;
 
         track({
@@ -184,6 +187,7 @@ function createTutorAttemptStream({
           providerAttempts: providers.length,
           hasRecentFocus: Boolean(body.context.recentFocus),
           hasFullTranscript: Boolean(body.context.fullTranscript),
+          nativeToolsEnabled: shouldUseNativeTutorTools(modelId),
           options: body.options,
         });
 

@@ -79,6 +79,10 @@ export interface AITutorProps {
    * 老 AITutor SSE 路径不消费这个字段（无害）。
    */
   currentTimeSec?: number;
+  /** 复习态结构化应用应在中间学习工作区打开，而不是塞进聊天气泡。 */
+  onOpenAppInWorkspace?: (appKey: import('@/lib/ai-native/app-catalog').WorkshopAppKey) => void;
+  /** 当前课后学习黑板快照，供同桌理解中间应用、测验/闪卡进度和最近学习动态。 */
+  learningActivityContext?: string;
 }
 
 export interface TutorCacheEnvelopeV1 {

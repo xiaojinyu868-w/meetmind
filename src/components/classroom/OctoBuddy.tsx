@@ -98,6 +98,7 @@ export function OctoBuddySprite({ mood = 'idle', size = 'md', className }: OctoB
         SIZE_CLASS[size],
         className,
       )}
+      data-mood={mood}
       aria-hidden
     >
       <img
@@ -107,6 +108,47 @@ export function OctoBuddySprite({ mood = 'idle', size = 'md', className }: OctoB
         draggable={false}
         style={{ imageRendering: 'pixelated' }}
       />
+      <style jsx global>{`
+        .octo-buddy-sprite {
+          transform-origin: 50% 76%;
+          animation: octoBreath 3.4s ease-in-out infinite;
+          position: relative;
+        }
+        .octo-buddy-sprite[data-mood="listening"] .octo-buddy-image {
+          animation: octoListenBob 1.7s ease-in-out infinite;
+        }
+        .octo-buddy-sprite[data-mood="happy"] .octo-buddy-image,
+        .octo-buddy-sprite[data-mood="love"] .octo-buddy-image {
+          animation: octoHappyHop 1.2s ease-in-out infinite;
+        }
+        .octo-buddy-sprite[data-mood="thinking"] .octo-buddy-image {
+          animation: octoImageFocus 2.2s ease-in-out infinite;
+        }
+        @keyframes octoBreath {
+          0%, 100% { transform: translateY(0) scale(1); }
+          48% { transform: translateY(-1px) scale(1.012); }
+        }
+        @keyframes octoListenBob {
+          0%, 100% { transform: translateY(0) rotate(0deg); }
+          35% { transform: translateY(-3px) rotate(-1.6deg); }
+          70% { transform: translateY(-1px) rotate(1.2deg); }
+        }
+        @keyframes octoHappyHop {
+          0%, 100% { transform: translateY(0) rotate(0deg); }
+          42% { transform: translateY(-5px) rotate(-3deg); }
+          68% { transform: translateY(-2px) rotate(2deg); }
+        }
+        @keyframes octoImageFocus {
+          0%, 100% { transform: scale(1); filter: saturate(1); }
+          50% { transform: scale(1.018); filter: saturate(1.08); }
+        }
+        @media (prefers-reduced-motion: reduce) {
+          .octo-buddy-sprite,
+          .octo-buddy-sprite .octo-buddy-image {
+            animation: none !important;
+          }
+        }
+      `}</style>
     </span>
   );
 }

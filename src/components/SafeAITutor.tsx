@@ -99,7 +99,9 @@ export function SafeAITutor(props: ComponentProps<typeof AITutor>) {
       breakpoint: props.breakpoint,
       supportContextText: props.supportContextText,
       preferSupportContext: props.preferSupportContext,
-      learnerProfile: learnerProfileContext,
+      learnerProfile: [learnerProfileContext, props.learningActivityContext]
+        .filter(Boolean)
+        .join('\n\n') || undefined,
     }),
     [
       props.breakpoint,
@@ -107,6 +109,7 @@ export function SafeAITutor(props: ComponentProps<typeof AITutor>) {
       props.preferSupportContext,
       learnerProfileContext,
       props.segments,
+      props.learningActivityContext,
       props.supportContextText,
     ],
   );
@@ -158,6 +161,7 @@ export function SafeAITutor(props: ComponentProps<typeof AITutor>) {
               thinkingGuide: reviewOpts.thinkingGuide,
               allowInlineApp: true,
             }}
+            onOpenAppInWorkspace={props.onOpenAppInWorkspace}
           />
         </div>
       </div>

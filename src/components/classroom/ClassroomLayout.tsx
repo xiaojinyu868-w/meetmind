@@ -37,6 +37,8 @@ export interface ClassroomLayoutProps {
   onCompanionOpenChange?: (open: boolean) => void;
   /** 悬浮球的动作 / 表情状态 */
   companionMood?: OctoBuddyMood;
+  /** 是否存在足够课堂上下文来召唤同学；无上下文时不显示右栏/浮标/移动入口 */
+  companionAvailable?: boolean;
 }
 
 /** 宽度约束（px） */
@@ -79,11 +81,13 @@ export function ClassroomLayout({
   companionOpen,
   onCompanionOpenChange,
   companionMood = 'idle',
+  companionAvailable = true,
 }: ClassroomLayoutProps) {
   // 受控 / 非受控：外部传了就跟随，否则内部管
   const [internalOpen, setInternalOpen] = useState(false);
   const isControlled = companionOpen !== undefined;
-  const open = isControlled ? !!companionOpen : internalOpen;
+  const requestedOpen = isControlled ? !!companionOpen : internalOpen;
+  const open = companionAvailable && requestedOpen;
 
   const setOpen = useCallback((next: boolean) => {
     if (!isControlled) setInternalOpen(next);
@@ -92,8 +96,17 @@ export function ClassroomLayout({
 
   // 移动端 sheet 独立管状态
   const [mobileCompanionOpen, setMobileCompanionOpen] = useState(false);
-  const openMobileCompanion = useCallback(() => setMobileCompanionOpen(true), []);
+  const openMobileCompanion = useCallback(() => {
+    if (companionAvailable) setMobileCompanionOpen(true);
+  }, [companionAvailable]);
   const closeMobileCompanion = useCallback(() => setMobileCompanionOpen(false), []);
+
+  useEffect(() => {
+    if (!companionAvailable) {
+      setOpen(false);
+      setMobileCompanionOpen(false);
+    }
+  }, [companionAvailable, setOpen]);
 
   // ── 可拖拽宽度 ──
   const [width, setWidth] = useState<number>(DEFAULT_WIDTH);
@@ -208,7 +221,7 @@ export function ClassroomLayout({
         ) : null}
       </aside>
 
-      {!open ? (
+      {companionAvailable && !open ? (
         <OctoBuddyFloatingButton
           mood={companionMood}
           label={COPY.octoBuddy[companionMood]}
@@ -218,18 +231,20 @@ export function ClassroomLayout({
       ) : null}
 
       {/* ── 移动端：底部"问同学"悬浮按钮 ── */}
-      <button
-        type="button"
-        onClick={openMobileCompanion}
-        className="fixed bottom-[5.5rem] right-4 z-30 flex items-center gap-1.5 rounded-full bg-ink px-3.5 py-2 text-[12.5px] font-medium text-white transition active:scale-95 lg:hidden"
-        aria-label="问同学"
-      >
-        <MessageCircle size={14} strokeWidth={2} />
-        问同学
-      </button>
+      {companionAvailable ? (
+        <button
+          type="button"
+          onClick={openMobileCompanion}
+          className="fixed bottom-[5.5rem] right-4 z-30 flex items-center gap-1.5 rounded-full bg-ink px-3.5 py-2 text-[12.5px] font-medium text-white transition active:scale-95 lg:hidden"
+          aria-label="问同学"
+        >
+          <MessageCircle size={14} strokeWidth={2} />
+          问同学
+        </button>
+      ) : null}
 
       {/* ── 移动端：全屏 Sheet ── */}
-      {mobileCompanionOpen && (
+      {companionAvailable && mobileCompanionOpen && (
         <div className="lg:hidden fixed inset-0 z-40 flex flex-col bg-canvas animate-[fadeIn_200ms_ease-out]">
           <div className="flex-shrink-0 flex items-center justify-end border-b border-[#E9E9E7] bg-canvas px-2 py-2">
             <button

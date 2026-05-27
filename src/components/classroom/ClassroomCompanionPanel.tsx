@@ -35,7 +35,7 @@ import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { ArrowUp, Radio, Eye } from 'lucide-react';
 import type { CompanionMessage, CompanionCard } from './types';
 import { CompanionMarkdown } from './CompanionMarkdown';
-import { CompanionAvatar } from './CompanionAvatar';
+import { OctoBuddySprite } from './OctoBuddy';
 import { InlineAppCard, type InlineAppInteraction } from './InlineAppCard';
 import { SkillChipRow } from '@/components/tutor/SkillChipRow';
 import type { WorkshopAppKey } from '@/lib/ai-native/app-catalog';
@@ -44,6 +44,12 @@ import { IN_CLASS_PENDING_REPLY_LABEL } from '@/lib/utils/classroom-companion-co
 import { buildClassroomCompanionPanelModel } from './ClassroomCompanionPanel.model';
 
 const IN_CLASS_EXCLUDED_SKILL_APP_KEYS: readonly WorkshopAppKey[] = ['flashcards', 'quiz', 'study-report'];
+
+const DEFAULT_LIGHT_PROMPTS = [
+  '刚才那句我没跟上',
+  '这段在讲什么？',
+  '帮我抓一下题眼',
+];
 
 export type CompanionMode = 'idle' | 'listening' | 'reflecting';
 
@@ -100,6 +106,12 @@ export interface ClassroomCompanionPanelProps {
   onInlineAppInteraction?: (messageId: string, event: InlineAppInteraction) => void;
   /** 内联 app 生成失败时点"再试一次"——让 hook 重新触发一次生成。 */
   onInlineAppRetry?: (messageId: string) => void;
+  /** 轻引导问题：不解释能力，只给几句可直接点的自然问题。 */
+  suggestedPrompts?: string[];
+  /** 试听课结束后的课后状态：章鱼要从“在听”切到“带你复习”。 */
+  afterClass?: boolean;
+  /** 试听课结束后，章鱼轻引导用户点击“结束这节课”进入课后复习。 */
+  onAfterClassAction?: () => void;
 }
 
 /** 顶部标题栏：不同 mode 不同呈现 */
@@ -108,20 +120,21 @@ function Header({
   foresightCount,
   latestForesight,
   onForesightAccept,
+  afterClass = false,
 }: {
   mode: CompanionMode;
   foresightCount: number;
   latestForesight?: ForesightBubble | null;
   onForesightAccept?: (f: ForesightBubble) => void;
+  afterClass?: boolean;
 }) {
   if (mode === 'listening') {
     return (
       <div className="flex flex-shrink-0 items-center justify-between border-b border-divider px-6 py-4 pr-11">
         <div className="flex items-center gap-3 text-ink">
-          {/* 同学 avatar：听见态外环脉冲 */}
-          <CompanionAvatar size="md" state="listening" />
+          <OctoBuddySprite mood={afterClass ? 'happy' : 'listening'} size="sm" />
           <span className="text-[14px] font-semibold tracking-[-0.01em] text-ink">{COPY.identity.name}</span>
-          <span className="text-[12px] text-ink-muted">· {COPY.listening.hearing}</span>
+          <span className="text-[12px] text-ink-muted">· {afterClass ? '听完了' : COPY.listening.hearing}</span>
         </div>
         <div className="flex items-center gap-2 text-ink-muted/70">
           {foresightCount > 0 && latestForesight ? (
@@ -142,7 +155,7 @@ function Header({
   }
   return (
     <div className="flex flex-shrink-0 items-center gap-3 border-b border-divider px-6 py-4 pr-11">
-      <CompanionAvatar size="md" state="idle" />
+      <OctoBuddySprite mood="idle" size="sm" />
       <span className="text-[14px] font-semibold tracking-[-0.01em] text-ink">{COPY.identity.name}</span>
     </div>
   );
@@ -307,31 +320,49 @@ function EmptyCompanion({
 
 function ListeningStarterCard({
   onPickSkill,
-  onOpenApp,
+  suggestedPrompts = DEFAULT_LIGHT_PROMPTS,
+  afterClass = false,
+  onAfterClassAction,
 }: {
   onPickSkill: (prompt: string) => void;
   onOpenApp?: (appKey: WorkshopAppKey) => void;
+  suggestedPrompts?: string[];
+  afterClass?: boolean;
+  onAfterClassAction?: () => void;
 }) {
   return (
     <div className="px-6 pb-5">
       <div className="rounded-[22px] border border-divider bg-[#FBFBFA] px-4 py-4">
-        <div className="flex items-start justify-between gap-4">
-          <div>
-            <p className="text-[13px] font-semibold tracking-[-0.01em] text-ink">这节课可以马上整理</p>
-            <p className="mt-1 text-[12.5px] leading-[1.65] text-ink-muted">
-              不用等下课。想要结构或速查表，直接点一下。
+        <div className="flex items-start gap-3">
+          <OctoBuddySprite mood={afterClass ? 'happy' : 'listening'} size="md" className="-ml-1 -mt-1 flex-shrink-0" />
+          <div className="min-w-0 flex-1">
+            <p className="text-[13px] font-medium leading-6 text-ink-secondary">
+              {afterClass ? '听完了，换我带你练一下。' : '卡住就点一句，我接着这段讲。'}
             </p>
+            <div className="mt-3 flex flex-wrap gap-2">
+              {suggestedPrompts.slice(0, 3).map((prompt, index) => (
+                <button
+                  key={prompt}
+                  type="button"
+                  onClick={() => {
+                    if (afterClass && index === 0 && onAfterClassAction) {
+                      onAfterClassAction();
+                      return;
+                    }
+                    onPickSkill(prompt);
+                  }}
+                  className={`rounded-full border px-3 py-1.5 text-[12px] transition active:scale-[0.98] ${
+                    afterClass && index === 0
+                      ? 'border-ink bg-ink text-white hover:bg-[#1a1a19]'
+                      : 'border-divider bg-white text-ink-secondary hover:border-ink-muted hover:text-ink'
+                  }`}
+                >
+                  {prompt}
+                </button>
+              ))}
+            </div>
           </div>
-          <span className="mt-1 h-2 w-2 flex-shrink-0 rounded-full bg-ink" />
         </div>
-        <SkillChipRow
-          variant="grid"
-          onPick={onPickSkill}
-          onSay={onPickSkill}
-          onOpenApp={onOpenApp}
-          excludeAppKeys={IN_CLASS_EXCLUDED_SKILL_APP_KEYS}
-          className="mt-3 max-w-none grid-cols-2 gap-2"
-        />
       </div>
     </div>
   );
@@ -477,6 +508,9 @@ export function ClassroomCompanionPanel({
   onInlineAction,
   onInlineAppInteraction,
   onInlineAppRetry,
+  suggestedPrompts = DEFAULT_LIGHT_PROMPTS,
+  afterClass = false,
+  onAfterClassAction,
 }: ClassroomCompanionPanelProps) {
   const effectivePlaceholder = placeholder ?? (
     mode === 'listening' ? COPY.companion.placeholderListening : COPY.companion.placeholderIdle
@@ -506,6 +540,7 @@ export function ClassroomCompanionPanel({
         foresightCount={visibleForesights.length}
         latestForesight={latestForesight}
         onForesightAccept={onForesightAccept}
+        afterClass={afterClass}
       />
 
       {/* 消息流 */}
@@ -525,7 +560,13 @@ export function ClassroomCompanionPanel({
               />
             ))}
             {showListeningStarter ? (
-              <ListeningStarterCard onPickSkill={onSend} onOpenApp={onOpenApp} />
+              <ListeningStarterCard
+                onPickSkill={onSend}
+                onOpenApp={onOpenApp}
+                suggestedPrompts={suggestedPrompts}
+                afterClass={afterClass}
+                onAfterClassAction={onAfterClassAction}
+              />
             ) : null}
             {streamingMessage ? (
               <StreamingBubble message={streamingMessage} />

@@ -3,7 +3,7 @@
  *
  * 覆盖 8 个情境分支：
  *   1. isRecording=true → null
- *   2. 空数组 → 新用户 magic moment
+ *   2. 空数组 → null（没有课堂上下文时同桌不主动出现）
  *   3. 有 processing → 强调"刚那节在整理"
  *   4. 今天 upcoming → 预报今天
  *   5. 今天 ready → 今天刚录完
@@ -42,9 +42,9 @@ describe('composeFirstHello', () => {
     expect(result).toBeNull();
   });
 
-  it('完全没数据时给新用户问候', () => {
+  it('完全没数据时不主动说话，避免没有上下文也展示同桌', () => {
     const result = composeFirstHello({ lessons: [], today: TODAY });
-    expect(result).toContain('等你录第一节课');
+    expect(result).toBeNull();
   });
 
   it('有 processing 时优先强调"刚那节还在整理"', () => {

@@ -4,11 +4,13 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { AppExecutionResult } from '@/lib/ai-native/types';
 import type { TranscriptSegment } from '@/types';
 import { AppWindowPlaceholder } from '@/components/apps/windows/AppWindowPlaceholder';
+import { formatQuizActivity, formatQuizCompleteActivity } from '@/components/review-learning-activity';
 
 interface QuizWindowProps {
   result: AppExecutionResult | null;
   transcript: TranscriptSegment[];
   onSeek?: (startMs: number) => void;
+  onLearningActivity?: (line: string) => void;
 }
 
 interface QuizQuestion {
@@ -103,7 +105,7 @@ const QUIZ_SUCCESS = '#4DAE6F';
 const QUIZ_WARNING = '#D9A441';
 const QUIZ_DANGER = '#D96B6B';
 
-export function QuizWindow({ result }: QuizWindowProps) {
+export function QuizWindow({ result, onLearningActivity }: QuizWindowProps) {
   const questions = useMemo(() => normalizeQuestions(result), [result]);
   const [index, setIndex] = useState(0);
   const [selected, setSelected] = useState<Record<string, string>>({});
@@ -465,6 +467,14 @@ export function QuizWindow({ result }: QuizWindowProps) {
               onClick={() => {
                 setSubmitted((prev) => ({ ...prev, [current.id]: true }));
                 setShowExplanation(true);
+                onLearningActivity?.(formatQuizActivity({
+                  index: index + 1,
+                  total: questions.length,
+                  stem: current.stem,
+                  picked: selectedOption || '',
+                  answer: normalizedAnswer,
+                  correct: isCorrect,
+                }));
               }}
             >
               确认答案
@@ -482,7 +492,10 @@ export function QuizWindow({ result }: QuizWindowProps) {
               ) : allDone ? (
                 <button
                   type="button"
-                  onClick={() => setShowReport(true)}
+                  onClick={() => {
+                    setShowReport(true);
+                    onLearningActivity?.(formatQuizCompleteActivity({ correct: correctCount, total: questions.length }));
+                  }}
                   className="rounded-full bg-ink px-8 py-2.5 text-sm font-medium text-white transition hover:opacity-85 active:scale-95"
                 >
                   查看成绩

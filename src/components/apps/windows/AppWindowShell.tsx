@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { useMemo, type ReactNode } from 'react';
 import { ModelSelector } from '@/components/ModelSelector';
+import { getAppWindowShellTone } from './app-window-shell-tone';
 import type { DataSourceType } from '@/lib/ai-native/types';
 import type { WorkshopAppCatalogItem } from '@/lib/ai-native/app-catalog';
 import type { AppTaskState } from '@/components/apps/hooks/useAppExecution';
@@ -46,27 +47,35 @@ export function AppWindowShell(props: AppWindowShellProps) {
     showPrimaryAction = true,
     children,
   } = props;
+  const tone = useMemo(() => getAppWindowShellTone(app.key), [app.key]);
+  const isImmersive = app.key === 'flashcards';
   const statusColor = useMemo(() => {
+    if (isImmersive) {
+      if (taskState.status === 'success') return 'bg-[#D1F4E0]/15 text-[#D1F4E0] border-[#D1F4E0]/25';
+      if (taskState.status === 'running') return 'bg-white/[0.06] text-white/72 border-white/[0.10]';
+      if (taskState.status === 'error') return 'bg-rose-500/10 text-rose-200 border-rose-300/20';
+      return 'bg-white/[0.04] text-white/45 border-white/[0.10]';
+    }
     if (taskState.status === 'success') return 'bg-[#D1F4E0]/30 text-[#232322] border-[#D1F4E0]';
     if (taskState.status === 'running') return 'bg-[#FDF3C0]/50 text-[#232322] border-[#E9E9E7]';
     if (taskState.status === 'error') return 'bg-[#FBFAF5] text-ink-secondary border-divider';
     return 'bg-white text-ink-secondary border-divider';
-  }, [taskState.status]);
+  }, [isImmersive, taskState.status]);
 
   return (
-    <div className="min-h-screen bg-canvas" data-testid="app-window-shell">
-      <header className="sticky top-0 z-20 border-b border-divider bg-white">
-        <div className="mx-auto flex max-w-7xl items-center gap-3 px-4 py-3 sm:px-6">
+    <div className={tone.root} data-testid="app-window-shell">
+      <header className={tone.header}>
+        <div className={tone.headerInner}>
           <Link
             href="/app?workspace=apps"
-            className="inline-flex items-center gap-1 rounded-full border border-divider bg-white px-3 py-1.5 text-sm text-ink-secondary hover:text-ink"
+            className={tone.backLink}
           >
             <span>←</span>
             <span>返回应用</span>
           </Link>
           <div className="min-w-0 flex-1">
-            <p className="truncate text-lg font-semibold text-ink">{app.name}</p>
-            <p className="truncate text-xs text-ink-muted">
+            <p className={tone.title}>{app.name}</p>
+            <p className={tone.subtitle}>
               {formatDataSource(dataSource)}
             </p>
           </div>
@@ -81,7 +90,7 @@ export function AppWindowShell(props: AppWindowShellProps) {
             <button
               type="button"
               data-testid="app-window-rerun"
-              className="rounded-lg bg-ink px-3 py-1.5 text-sm font-medium text-white hover:opacity-85 disabled:cursor-not-allowed disabled:opacity-60"
+              className={tone.actionButton}
               onClick={onRegenerate}
               disabled={taskState.status === 'running'}
             >
@@ -90,7 +99,7 @@ export function AppWindowShell(props: AppWindowShellProps) {
           ) : null}
         </div>
       </header>
-      <main className="mx-auto max-w-7xl px-4 py-5 sm:px-6">{children}</main>
+      <main className={tone.main}>{children}</main>
     </div>
   );
 }

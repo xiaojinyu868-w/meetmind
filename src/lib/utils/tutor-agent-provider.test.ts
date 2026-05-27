@@ -4,6 +4,7 @@ import {
   resolveTutorAgentProviderConfig,
   resolveTutorAgentProviderFallbacks,
   shouldFallbackTutorAgentError,
+  shouldUseNativeTutorTools,
 } from './tutor-agent-provider';
 
 describe('resolveTutorAgentProviderConfig', () => {
@@ -119,5 +120,11 @@ describe('resolveTutorAgentProviderConfig', () => {
     expect(formatTutorAgentUserError('Failed after 3 attempts. Last error: Service is too busy.', {
       attemptedFallback: true,
     })).toBe('模型服务刚刚有点忙，已尝试切换备用通道但仍未成功，请稍后再试。');
+  });
+
+  it('disables native tutor tools for DeepSeek thinking models', () => {
+    expect(shouldUseNativeTutorTools('deepseek-v4-flash')).toBe(false);
+    expect(shouldUseNativeTutorTools('deepseek-v4-pro')).toBe(false);
+    expect(shouldUseNativeTutorTools('qwen3.6-plus')).toBe(true);
   });
 });

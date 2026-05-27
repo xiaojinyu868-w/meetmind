@@ -1,17 +1,25 @@
 'use client';
 
-import { type RefObject } from 'react';
+import { useCallback, useMemo, useState, type RefObject } from 'react';
 import dynamic from 'next/dynamic';
-import { MessageCircle, AlertCircle, Clock, Boxes, FileText } from 'lucide-react';
+import { MessageCircle, AlertCircle, Clock, Boxes, FileText, ListChecks } from 'lucide-react';
 import { useUIStore, useUIActions } from '@/stores/ui-store';
 import { usePlayerStore, usePlayerActions } from '@/stores/player-store';
 import { useSessionStore } from '@/stores/session-store';
 import { useCaptureEditorStore } from '@/stores/capture-editor-store';
 import { useMobileAIStore } from '@/stores/mobile-ai-store';
-import { ResizablePanel } from '@/components/layout/ResizablePanel';
+import { ReviewThreePaneLayout } from '@/components/ReviewThreePaneLayout';
 import { formatTime } from '@/lib/utils/page-utils';
 import { toReviewCurrentTimeSec } from './desktop-video-review-layout-model';
+import {
+  appendReviewLearningActivity,
+  closeReviewLearningApp,
+  createReviewLearningBlackboard,
+  formatReviewBlackboardForTutorAgent,
+  openReviewLearningApp,
+} from './review-learning-blackboard';
 import type { Anchor } from '@/lib/services/anchor-service';
+import type { WorkshopAppKey } from '@/lib/ai-native/app-catalog';
 import type { TranscriptSegment, ActionItem, Breakpoint, Timeline, NoteSource, NoteMetadata } from '@/types';
 import type {
   SharedWorkspaceTab,
@@ -27,6 +35,7 @@ const TranscriptFlowView = dynamic(() => import('@/components/TranscriptFlowView
 const VideoInsightTimeline = dynamic(() => import('@/components/VideoInsightTimeline').then(m => ({ default: m.VideoInsightTimeline })), { ssr: false });
 const ReviewWorkspacePanel = dynamic(() => import('@/components/ReviewWorkspacePanel').then(m => ({ default: m.ReviewWorkspacePanel })), { ssr: false });
 const ReviewTutorPanel = dynamic(() => import('@/components/ReviewTutorPanel').then(m => ({ default: m.ReviewTutorPanel })), { ssr: false });
+const WaveformPlayer = dynamic(() => import('@/components/WaveformPlayer').then(m => ({ default: m.WaveformPlayer })), { ssr: false });
 const ActionSidebar = dynamic(() => import('@/components/ActionSidebar').then(m => ({ default: m.ActionSidebar })), { ssr: false });
 const ActionDrawer = dynamic(() => import('@/components/ActionDrawer').then(m => ({ default: m.ActionDrawer })), { ssr: false });
 
@@ -43,7 +52,6 @@ const SHARED_WORKSPACE_TABS: WorkspaceTabConfig<SharedWorkspaceTab>[] = [
 
 const VIDEO_WORKSPACE_TABS: WorkspaceTabConfig<VideoWorkspaceTab>[] = [
   { key: 'transcript', label: '转录原文', icon: '录', LucideIcon: FileText },
-  { key: 'chat', label: '同桌', icon: '聊', LucideIcon: MessageCircle },
   { key: 'confusion', label: '困惑点', icon: '疑', LucideIcon: AlertCircle },
   ...SHARED_WORKSPACE_TABS,
 ];
@@ -86,7 +94,11 @@ export interface DesktopVideoReviewLayoutProps {
   handleTimelineClick: (timeMs: number) => void;
   handlePlaybackAnchorAdd: (timeMs: number) => void;
   handleAddNote: (text: string, source?: NoteSource, metadata?: NoteMetadata) => void;
-  renderSharedWorkspacePanel: (tab: SharedWorkspaceTab) => React.ReactNode;
+  renderSharedWorkspacePanel: (tab: SharedWorkspaceTab, options?: {
+    activeAppKey?: WorkshopAppKey | null;
+    onActiveAppChange?: (appKey: WorkshopAppKey | null) => void;
+    onLearningActivity?: (line: string) => void;
+  }) => React.ReactNode;
   consumeMobileAIQuestion: () => void;
   /** 手动触发检查点测验（从时间轴点击） */
   onTriggerCheckpoint?: (checkpointIndex: number) => void;
@@ -180,16 +192,48 @@ export function DesktopVideoReviewLayout(props: DesktopVideoReviewLayoutProps) {
   const setConfusionChatAnchor = captureEditorActions.setConfusionChatAnchor;
   const setActiveVideoInsightId = captureEditorActions.setActiveVideoInsightId;
   const currentTimeSec = toReviewCurrentTimeSec(currentTime);
+  const effectiveVideoWorkspaceTab = videoWorkspaceTab === 'chat' ? 'transcript' : videoWorkspaceTab;
+  const [reviewBlackboard, setReviewBlackboard] = useState(() => createReviewLearningBlackboard());
+  const activeReviewAppKey = reviewBlackboard.activeAppKey;
+  const learningActivityContext = useMemo(
+    () => formatReviewBlackboardForTutorAgent(reviewBlackboard),
+    [reviewBlackboard],
+  );
+  const setActiveReviewApp = useCallback((appKey: WorkshopAppKey | null) => {
+    setReviewBlackboard((prev) => (
+      appKey ? openReviewLearningApp(prev, appKey, 'workspace') : closeReviewLearningApp(prev)
+    ));
+  }, []);
+  const appendLearningActivity = useCallback((line: string) => {
+    setReviewBlackboard((prev) => appendReviewLearningActivity(prev, line));
+  }, []);
+  const openAppInWorkspace = useCallback((appKey: WorkshopAppKey) => {
+    setReviewBlackboard((prev) => openReviewLearningApp(prev, appKey, 'tutor'));
+    setReviewTab('apps');
+    setVideoWorkspaceTab('apps');
+  }, [setReviewTab, setVideoWorkspaceTab]);
+  const sharedWorkspace = renderSharedWorkspacePanel('apps', {
+    activeAppKey: activeReviewAppKey,
+    onActiveAppChange: setActiveReviewApp,
+    onLearningActivity: appendLearningActivity,
+  });
+  const evidenceTabs = REVIEW_WORKSPACE_TABS.filter((tab) => tab.key !== 'apps');
 
   return (
     <div
-      className={`flex-1 min-h-0 flex page-enter ${videoSource ? 'overflow-visible' : 'overflow-hidden'}`}
+      className="flex-1 min-h-0 flex overflow-hidden page-enter"
       style={{ background: '#FFFFFF' }}
     >
       {videoSource ? (
-        <div className="flex-1 min-h-0 flex flex-col lg:flex-row overflow-hidden">
+        <ReviewThreePaneLayout
+          mode="video"
+          storageKey="meetmind-review-three-pane-video"
+          sourceLabel="课堂证据"
+          workspaceLabel="学习区"
+          tutorLabel="同桌"
+          source={(
+            <div className="min-w-0 min-h-0 flex h-full flex-col bg-white">
           {/* ── 左列：视频 + 时间轴 + 章节列表 ── */}
-          <div className="min-h-0 flex flex-col lg:w-[55%] xl:w-[58%] bg-white">
             {/* 视频播放器 — 圆角容器 + 充分留白 */}
             <div className="shrink-0 p-5 pb-0">
               <div className="overflow-hidden rounded-2xl bg-[#0F0F0F]">
@@ -223,10 +267,11 @@ export function DesktopVideoReviewLayout(props: DesktopVideoReviewLayoutProps) {
                 />
               </div>
             </div>
-          </div>
-
-          {/* ── 右列：Transcript / Chat / 困惑点 / 应用 ── */}
-          <div className="min-h-0 flex flex-col flex-1 bg-white border-l border-[#E9E9E7] overflow-hidden">
+            </div>
+          )}
+          workspace={(
+            <div className="min-w-0 min-h-0 flex h-full flex-col bg-white overflow-hidden">
+          {/* ── 中列：转录 / 困惑点 / 学习应用 ── */}
             {/* 下划线风格 tab 栏（Longcut 风格） */}
             <div className="shrink-0 px-5 pt-4 flex items-center gap-5 overflow-x-auto">
               {VIDEO_WORKSPACE_TABS.map((tab) => (
@@ -237,7 +282,7 @@ export function DesktopVideoReviewLayout(props: DesktopVideoReviewLayoutProps) {
                     if (tab.key !== 'confusion') setConfusionChatAnchor(null);
                   }}
                   className={`relative flex items-center gap-1.5 pb-3 text-[13px] transition-colors whitespace-nowrap ${
-                    videoWorkspaceTab === tab.key
+                    effectiveVideoWorkspaceTab === tab.key
                       ? 'text-[#232322] font-medium'
                       : 'text-[#A3A39E] hover:text-[#787774]'
                   }`}
@@ -248,7 +293,7 @@ export function DesktopVideoReviewLayout(props: DesktopVideoReviewLayoutProps) {
                     <span className="ml-0.5 w-1.5 h-1.5 bg-[#FADEC9] rounded-full inline-block animate-pulse" />
                   )}
                   {/* 下划线指示器 */}
-                  {videoWorkspaceTab === tab.key && (
+                  {effectiveVideoWorkspaceTab === tab.key && (
                     <span className="absolute bottom-0 left-0 right-0 h-[2px] bg-[#232322] rounded-full" />
                   )}
                 </button>
@@ -258,7 +303,7 @@ export function DesktopVideoReviewLayout(props: DesktopVideoReviewLayoutProps) {
 
             <div className="flex-1 min-h-0 overflow-hidden">
               {/* Transcript tab */}
-              {videoWorkspaceTab === 'transcript' && (
+              {effectiveVideoWorkspaceTab === 'transcript' && (
                 <div className="h-full overflow-y-auto">
                   <TranscriptFlowView
                     segments={segments}
@@ -280,28 +325,8 @@ export function DesktopVideoReviewLayout(props: DesktopVideoReviewLayoutProps) {
                 </div>
               )}
 
-              {/* Chat tab */}
-              <div className={`h-full min-h-0 ${videoWorkspaceTab === 'chat' ? '' : 'hidden'}`}>
-                  <SafeAITutor
-                    breakpoint={null}
-                    segments={segments}
-                    isLoading={false}
-                    onResolve={() => {}}
-                    sessionId={sessionId}
-                    supportContextText={tutorSupportContextText}
-                    preferSupportContext={videoWorkspaceTab === 'chat' && mobileAILaunchTarget === 'video-chat' ? mobileAIPreferSelectedContext : false}
-                    launchQuestion={videoWorkspaceTab === 'chat' && mobileAILaunchTarget === 'video-chat' && mobileAIConsumedQuestionNonce !== mobileAIQuestionNonce ? mobileAIQuestion : ''}
-                    launchDisplayText={videoWorkspaceTab === 'chat' && mobileAILaunchTarget === 'video-chat' ? mobileAIDisplayQuestion : ''}
-                    launchImages={videoWorkspaceTab === 'chat' && mobileAILaunchTarget === 'video-chat' ? mobileAILaunchImages : []}
-                    launchQuestionNonce={videoWorkspaceTab === 'chat' && mobileAILaunchTarget === 'video-chat' ? mobileAIQuestionNonce : 0}
-                    onLaunchQuestionConsumed={videoWorkspaceTab === 'chat' && mobileAILaunchTarget === 'video-chat' ? consumeMobileAIQuestion : undefined}
-                    onSeek={(timeMs) => handleUnifiedSeek(timeMs, true)}
-                    currentTimeSec={currentTimeSec}
-                  />
-              </div>
-
               {/* Confusion tab */}
-              {videoWorkspaceTab === 'confusion' && (
+              {effectiveVideoWorkspaceTab === 'confusion' && (
                 <div className="h-full overflow-hidden flex flex-col">
                   {confusionChatAnchor ? (
                     <>
@@ -358,6 +383,8 @@ export function DesktopVideoReviewLayout(props: DesktopVideoReviewLayoutProps) {
                           supportContextText={tutorSupportContextText}
                           onSeek={(timeMs) => handleUnifiedSeek(timeMs, true)}
                           currentTimeSec={currentTimeSec}
+                          onOpenAppInWorkspace={openAppInWorkspace}
+                          learningActivityContext={learningActivityContext}
                         />
                       </div>
                     </>
@@ -429,22 +456,74 @@ export function DesktopVideoReviewLayout(props: DesktopVideoReviewLayoutProps) {
                 </div>
               )}
 
-              {isSharedWorkspaceTab(videoWorkspaceTab) && renderSharedWorkspacePanel(videoWorkspaceTab)}
+              {isSharedWorkspaceTab(effectiveVideoWorkspaceTab) && sharedWorkspace}
             </div>
-          </div>
-        </div>
+            </div>
+          )}
+          tutor={(
+            <div className="min-w-0 min-h-0 flex h-full flex-col bg-white">
+          {/* ── 右列：同桌解释与复盘 ── */}
+            <SafeAITutor
+              breakpoint={null}
+              segments={segments}
+              isLoading={false}
+              onResolve={() => {}}
+              sessionId={sessionId}
+              supportContextText={tutorSupportContextText}
+              preferSupportContext={mobileAILaunchTarget === 'video-chat' ? mobileAIPreferSelectedContext : false}
+              launchQuestion={mobileAILaunchTarget === 'video-chat' && mobileAIConsumedQuestionNonce !== mobileAIQuestionNonce ? mobileAIQuestion : ''}
+              launchDisplayText={mobileAILaunchTarget === 'video-chat' ? mobileAIDisplayQuestion : ''}
+              launchImages={mobileAILaunchTarget === 'video-chat' ? mobileAILaunchImages : []}
+              launchQuestionNonce={mobileAILaunchTarget === 'video-chat' ? mobileAIQuestionNonce : 0}
+              onLaunchQuestionConsumed={mobileAILaunchTarget === 'video-chat' ? consumeMobileAIQuestion : undefined}
+              onSeek={(timeMs) => handleUnifiedSeek(timeMs, true)}
+              currentTimeSec={currentTimeSec}
+              onOpenAppInWorkspace={openAppInWorkspace}
+              learningActivityContext={learningActivityContext}
+            />
+            </div>
+          )}
+        />
       ) : (
         <>
-          <ResizablePanel
-            className="flex-1"
-            defaultLeftWidth={480}
-            minLeftWidth={320}
-            maxLeftWidth={820}
-            storageKey="meetmind-left-panel-width"
-            leftPanel={
+          <ReviewThreePaneLayout
+            mode="audio"
+            storageKey="meetmind-review-three-pane-audio"
+            sourceLabel="课堂证据"
+            workspaceLabel="学习区"
+            tutorLabel="同桌"
+            source={(
+              <section className="min-w-0 min-h-0 flex h-full flex-col bg-white">
+              {(audioBlob || audioUrl) ? (
+                <div className="shrink-0 border-b border-[#E9E9E7] bg-[#FCFBF8] px-3 py-2">
+                  <WaveformPlayer
+                    ref={waveformRef as RefObject<WaveformPlayerRef>}
+                    src={audioBlob || audioUrl || undefined}
+                    anchors={anchors.map((anchor) => ({
+                      id: anchor.id,
+                      timestamp: anchor.timestamp,
+                      resolved: anchor.resolved,
+                      type: anchor.type,
+                    } as WaveformAnchor))}
+                    onTimeUpdate={setCurrentTime}
+                    onPlayStateChange={setIsPlaying}
+                    onAnchorClick={(anchor) => {
+                      const found = anchors.find((item) => item.id === anchor.id);
+                      if (found) handleAnchorSelect(found);
+                    }}
+                    onAnchorAdd={handlePlaybackAnchorAdd}
+                    allowAddAnchor={true}
+                    selectedAnchorId={selectedAnchor?.id}
+                    compact={true}
+                    height={24}
+                    waveColor="#E3D5C4"
+                    progressColor="#F3EADF"
+                  />
+                </div>
+              ) : null}
               <ReviewWorkspacePanel
-                reviewWorkspaceTabs={REVIEW_WORKSPACE_TABS}
-                reviewTab={reviewTab}
+                reviewWorkspaceTabs={evidenceTabs}
+                reviewTab={reviewTab === 'apps' ? 'timeline' : reviewTab}
                 onReviewTabChange={setReviewTab}
                 selectedAnchor={selectedAnchor}
                 iconTabSize={ICON_TAB}
@@ -469,12 +548,27 @@ export function DesktopVideoReviewLayout(props: DesktopVideoReviewLayoutProps) {
                     timestamp: selectedAnchor?.timestamp,
                   });
                 }}
-                sharedWorkspaceContent={isSharedWorkspaceTab(reviewTab) ? renderSharedWorkspacePanel(reviewTab) : null}
+                sharedWorkspaceContent={null}
               />
-            }
-            rightPanel={
+              </section>
+            )}
+            workspace={(
+              <main className="min-w-0 min-h-0 h-full bg-white">
+              <div className="flex h-full min-h-0 flex-col">
+                <header className="flex shrink-0 items-center gap-2 border-b border-[#E9E9E7] bg-white px-4 py-3">
+                  <ListChecks size={15} strokeWidth={1.8} className="text-[#787774]" />
+                  <div className="min-w-0">
+                    <p className="text-[13px] font-semibold tracking-[-0.01em] text-[#232322]">学习工作区</p>
+                    <p className="text-[11.5px] text-[#A3A39E]">闪卡、测验、导图都在这里完成</p>
+                  </div>
+                </header>
+                <div className="min-h-0 flex-1 overflow-hidden">{sharedWorkspace}</div>
+              </div>
+              </main>
+            )}
+            tutor={(
+              <div className="min-w-0 min-h-0 h-full bg-white">
               <ReviewTutorPanel
-                audioSrc={audioBlob || audioUrl || undefined}
                 waveformRef={waveformRef}
                 waveformAnchors={anchors.map((anchor) => ({
                   id: anchor.id,
@@ -516,8 +610,12 @@ export function DesktopVideoReviewLayout(props: DesktopVideoReviewLayoutProps) {
                 launchImages={mobileAILaunchTarget === 'review-panel' ? mobileAILaunchImages : []}
                 launchQuestionNonce={mobileAILaunchTarget === 'review-panel' ? mobileAIQuestionNonce : 0}
                 onLaunchQuestionConsumed={mobileAILaunchTarget === 'review-panel' ? consumeMobileAIQuestion : undefined}
+                currentTimeSecOverride={currentTimeSec}
+                onOpenAppInWorkspace={openAppInWorkspace}
+                learningActivityContext={learningActivityContext}
               />
-            }
+              </div>
+            )}
           />
 
           <ActionSidebar

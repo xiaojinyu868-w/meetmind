@@ -8,11 +8,13 @@ import { COPY } from '@/lib/ui/copy';
 import { isGuestDemoFlashcardsResult } from '@/components/classroom/guest-demo-entry';
 import { buildFlashcardsTrialShareText } from './flashcards-share-actions';
 import { AppWindowPlaceholder } from '@/components/apps/windows/AppWindowPlaceholder';
+import { formatFlashcardActivity, formatFlashcardCompleteActivity } from '@/components/review-learning-activity';
 
 interface FlashcardsWindowProps {
   result: AppExecutionResult | null;
   transcript: TranscriptSegment[];
   onSeek?: (startMs: number) => void;
+  onLearningActivity?: (line: string) => void;
 }
 
 interface FlashcardItem {
@@ -63,7 +65,7 @@ const CARD_THEMES = [
   { bg: 'from-[#2a2520] to-[#0d1117]', accent: '#f59e0b', glow: 'rgba(245,158,11,0.15)' },
 ];
 
-export function FlashcardsWindow({ result }: FlashcardsWindowProps) {
+export function FlashcardsWindow({ result, onLearningActivity }: FlashcardsWindowProps) {
   const cards = useMemo(() => normalizeCards(result), [result]);
   const [index, setIndex] = useState(0);
   const [flipped, setFlipped] = useState(false);
@@ -138,13 +140,24 @@ export function FlashcardsWindow({ result }: FlashcardsWindowProps) {
   const handleScore = useCallback((value: MasteryScore) => {
     const current = cards[Math.min(index, cards.length - 1)];
     if (!current || isAnimating) return;
-    setScores((prev) => ({ ...prev, [current.id]: value }));
+    const nextScores = { ...scores, [current.id]: value };
+    setScores(nextScores);
+    onLearningActivity?.(formatFlashcardActivity({
+      index: index + 1,
+      total: cards.length,
+      front: current.front,
+      rating: value,
+    }));
+    if (Object.keys(nextScores).length === cards.length) {
+      const got = Object.values(nextScores).filter((score) => score === 'got').length;
+      onLearningActivity?.(formatFlashcardCompleteActivity({ got, total: cards.length }));
+    }
     if (index < cards.length - 1) {
       navigateTo(index + 1, 'left');
     } else {
       setFlipped(false);
     }
-  }, [cards, index, isAnimating, navigateTo]);
+  }, [cards, index, isAnimating, navigateTo, onLearningActivity, scores]);
 
   // Keyboard
   useEffect(() => {
@@ -202,7 +215,7 @@ export function FlashcardsWindow({ result }: FlashcardsWindowProps) {
   if (allDone) {
     const accuracy = cards.length > 0 ? Math.round((gotCount / cards.length) * 100) : 0;
     return (
-      <div className="flex h-full min-h-[420px] flex-col items-center justify-center p-6">
+      <div className="relative flex h-full min-h-[420px] flex-col items-center justify-center overflow-hidden bg-[#11110F] p-6">
         {/* Ambient glow */}
         <div className="absolute inset-0 overflow-hidden pointer-events-none">
           <div className="absolute top-1/4 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[500px] rounded-full opacity-20"
@@ -287,15 +300,16 @@ export function FlashcardsWindow({ result }: FlashcardsWindowProps) {
 
   return (
     <div
-      className="relative flex h-full min-h-[420px] flex-col select-none overflow-hidden"
+      className="relative flex h-full min-h-[420px] flex-col select-none overflow-hidden bg-[#11110F]"
       onTouchStart={handleTouchStart}
       onTouchEnd={handleTouchEnd}
       data-testid="flashcards-window"
     >
       {/* Ambient background glow */}
       <div className="absolute inset-0 pointer-events-none transition-all duration-700" style={{
-        background: `radial-gradient(ellipse 600px 400px at 50% 40%, ${theme.glow}, transparent 70%)`,
+        background: `radial-gradient(ellipse 720px 460px at 50% 34%, ${theme.glow}, transparent 72%), linear-gradient(180deg, rgba(255,255,255,0.035), rgba(255,255,255,0) 34%)`,
       }} />
+      <div className="pointer-events-none absolute inset-x-0 bottom-0 h-28 bg-gradient-to-t from-black/30 to-transparent" />
 
       {isGuestDemoResult && (
         <button

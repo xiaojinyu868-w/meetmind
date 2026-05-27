@@ -23,8 +23,17 @@ function pickKey(source: TutorAgentProviderConfig['keySource'], value: string | 
   return trimmed ? { source, value: trimmed } : null;
 }
 
-function isDeepSeekModel(modelId: string): boolean {
+export function isDeepSeekModel(modelId: string): boolean {
   return /^deepseek-/i.test(modelId);
+}
+
+export function shouldUseNativeTutorTools(modelId: string): boolean {
+  // DeepSeek thinking models require provider-specific reasoning_content to be
+  // sent back after tool calls. AI SDK's OpenAI-compatible adapter does not
+  // round-trip that field, so native multi-step tools can fail after the first
+  // tool call. Structured products still work through <open_app:KEY/> +
+  // /api/apps/execute, which avoids the broken tool-call continuation path.
+  return !isDeepSeekModel(modelId);
 }
 
 function isDashScopeBaseUrl(baseURL: string): boolean {

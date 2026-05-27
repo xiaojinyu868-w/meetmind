@@ -9,6 +9,7 @@ import type { Anchor, TranscriptSegment } from '@/types';
 import type { ConversationHistory } from '@/types/conversation';
 import type { ActionItem } from '@/types/page-types';
 import type { TutorLaunchImage } from '@/components/tutor/tutor-types';
+import type { WorkshopAppKey } from '@/lib/ai-native/app-catalog';
 
 interface ReviewTutorPanelProps {
   audioSrc?: string | Blob;
@@ -40,6 +41,9 @@ interface ReviewTutorPanelProps {
   launchImages: TutorLaunchImage[];
   launchQuestionNonce: number;
   onLaunchQuestionConsumed?: () => void;
+  currentTimeSecOverride?: number;
+  onOpenAppInWorkspace?: (appKey: WorkshopAppKey) => void;
+  learningActivityContext?: string;
 }
 
 export function ReviewTutorPanel({
@@ -72,15 +76,19 @@ export function ReviewTutorPanel({
   launchImages,
   launchQuestionNonce,
   onLaunchQuestionConsumed,
+  currentTimeSecOverride,
+  onOpenAppInWorkspace,
+  learningActivityContext,
 }: ReviewTutorPanelProps) {
   // M10：把当前播放位置注入给 SafeAITutor（视频/录音复习 AI 同桌会用它做
   // "此刻在听的那段"锚点，无需用户手动引用时间戳）。
   // 截流到秒级，避免每 ~100ms 的 onTimeUpdate 触发无意义 re-render。
-  const [currentTimeSec, setCurrentTimeSec] = useState(0);
+  const [localCurrentTimeSec, setLocalCurrentTimeSec] = useState(0);
+  const currentTimeSec = currentTimeSecOverride ?? localCurrentTimeSec;
   const handleTimeUpdate = useCallback(
     (timeMs: number) => {
       const sec = Math.floor(timeMs / 1000);
-      setCurrentTimeSec((prev) => (prev === sec ? prev : sec));
+      setLocalCurrentTimeSec((prev) => (prev === sec ? prev : sec));
       onTimeUpdate(timeMs);
     },
     [onTimeUpdate],
@@ -196,6 +204,8 @@ export function ReviewTutorPanel({
                     launchQuestionNonce={0}
                     onSeek={onSeek}
                     currentTimeSec={currentTimeSec}
+                    onOpenAppInWorkspace={onOpenAppInWorkspace}
+                    learningActivityContext={learningActivityContext}
                     selectedConversationId={selectedHistoryConversation.conversationId}
                     selectedConversationTitle={selectedHistoryConversation.title}
                     onShowHistory={onBackToHistoryList}
@@ -245,6 +255,8 @@ export function ReviewTutorPanel({
               onLaunchQuestionConsumed={onLaunchQuestionConsumed}
               onSeek={onSeek}
               currentTimeSec={currentTimeSec}
+              onOpenAppInWorkspace={onOpenAppInWorkspace}
+              learningActivityContext={learningActivityContext}
               onShowHistory={onShowHistory}
               onAgentNewConversation={onCloseHistory}
             />

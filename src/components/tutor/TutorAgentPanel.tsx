@@ -45,6 +45,13 @@ import {
   type InlineAppKey,
 } from '@/lib/utils/open-app-marker';
 import { buildInlineAppFallbackResult } from '@/lib/utils/inline-app-fallback';
+import {
+  readCachedReviewInlineAppState,
+  writeReviewInlineAppError,
+  writeReviewInlineAppRunning,
+  writeReviewInlineAppSuccess,
+  type ReviewInlineAppState,
+} from './tutor-inline-app-cache';
 
 export interface TutorAgentPanelTranscriptSegment {
   id: string;
@@ -53,14 +60,6 @@ export interface TutorAgentPanelTranscriptSegment {
   endMs: number;
   confidence?: number;
 }
-
-type ReviewInlineAppState = {
-  appKey: InlineAppKey;
-  status: 'loading' | 'ready' | 'error';
-  result?: AppExecutionResult;
-  payload?: unknown;
-  error?: string;
-};
 
 export interface TutorAgentPanelProps {
   sessionId: string;
@@ -113,6 +112,8 @@ export interface TutorAgentPanelProps {
   /** 外层触发开新对话时递增。 */
   newConversationNonce?: number;
   onNewConversation?: () => void;
+  /** 复习态结构化应用在中间学习工作区打开，不在聊天流里承载完整应用。 */
+  onOpenAppInWorkspace?: (appKey: InlineAppKey) => void;
 }
 
 /**
@@ -176,6 +177,7 @@ export function TutorAgentPanel({
   onLaunchQuestionConsumed,
   newConversationNonce = 0,
   onNewConversation,
+  onOpenAppInWorkspace,
 }: TutorAgentPanelProps) {
   const { user } = useAuth();
   const userId = getEffectiveUserId(user?.id);
@@ -186,6 +188,7 @@ export function TutorAgentPanel({
   const [recentLearningActivity, setRecentLearningActivity] = React.useState<string | undefined>();
   const [restoredConversationTitle, setRestoredConversationTitle] = React.useState<string | null>(null);
   const inlineAppStartedRef = React.useRef<Set<string>>(new Set());
+  const inlineAppRunPromisesRef = React.useRef<Record<string, Promise<ReviewInlineAppState | null>>>({});
   const conversationIdRef = React.useRef<string | null>(null);
   const persistedMessageIdsRef = React.useRef<Set<string>>(new Set());
   const lastLaunchQuestionNonceRef = React.useRef<number | null>(null);
@@ -244,6 +247,7 @@ export function TutorAgentPanel({
     conversationIdRef.current = null;
     persistedMessageIdsRef.current = new Set();
     inlineAppStartedRef.current = new Set();
+    inlineAppRunPromisesRef.current = {};
     setInlineAppsByMessageId({});
     setMessages([]);
 
@@ -367,6 +371,7 @@ export function TutorAgentPanel({
     conversationIdRef.current = null;
     persistedMessageIdsRef.current = new Set();
     inlineAppStartedRef.current = new Set();
+    inlineAppRunPromisesRef.current = {};
     setInlineAppsByMessageId({});
     setRestoredConversationTitle(null);
     setMessages([]);
@@ -385,81 +390,93 @@ export function TutorAgentPanel({
 
   const runInlineApp = React.useCallback(
     async (messageId: string, appKey: InlineAppKey) => {
+      const cachedState = readCachedReviewInlineAppState(sessionId, appKey);
+      if (cachedState) {
+        setInlineAppsByMessageId((prev) => ({
+          ...prev,
+          [messageId]: cachedState,
+        }));
+        return;
+      }
+
       setInlineAppsByMessageId((prev) => ({
         ...prev,
         [messageId]: { appKey, status: 'loading' },
       }));
 
-      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-      if (authToken) headers.Authorization = `Bearer ${authToken}`;
-      const appTranscript = transcript
-        .filter((segment) => segment.text?.trim())
-        .slice(0, 180);
+      const runKey = `${sessionId}:${appKey}`;
+      let runPromise = inlineAppRunPromisesRef.current[runKey];
+      if (!runPromise) {
+        runPromise = (async (): Promise<ReviewInlineAppState | null> => {
+          const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+          if (authToken) headers.Authorization = `Bearer ${authToken}`;
+          const appTranscript = transcript
+            .filter((segment) => segment.text?.trim())
+            .slice(0, 180);
 
-      try {
-        const appCatalogItem = getWorkshopAppByKey(appKey);
-        const response = await fetch('/api/apps/execute', {
-          method: 'POST',
-          headers,
-          body: JSON.stringify({
-            appKey,
-            ...(preferredModel ? { model: preferredModel } : {}),
-            goal: {
-              intent: appCatalogItem?.intent || `生成${appKey}学习应用`,
-              expectedOutput: 'mixed',
-              appKey,
-            },
-            input: {
-              sessionId,
-              dataSource: 'video',
-              transcript: appTranscript,
-              anchors: [],
-            },
-            memory: {},
-          }),
+          writeReviewInlineAppRunning(sessionId, appKey);
+
+          try {
+            const appCatalogItem = getWorkshopAppByKey(appKey);
+            const response = await fetch('/api/apps/execute', {
+              method: 'POST',
+              headers,
+              body: JSON.stringify({
+                appKey,
+                ...(preferredModel ? { model: preferredModel } : {}),
+                goal: {
+                  intent: appCatalogItem?.intent || `生成${appKey}学习应用`,
+                  expectedOutput: 'mixed',
+                  appKey,
+                },
+                input: {
+                  sessionId,
+                  dataSource: 'video',
+                  transcript: appTranscript,
+                  anchors: [],
+                },
+                memory: {},
+              }),
+            });
+            const data = (await response.json().catch(() => null)) as
+              | { ok?: boolean; error?: string; result?: AppExecutionResult }
+              | null;
+
+            if (response.ok && data?.ok && data.result) {
+              return writeReviewInlineAppSuccess(sessionId, appKey, data.result);
+            }
+
+            const fallbackResult = buildInlineAppFallbackResult(appKey, appTranscript);
+            if (fallbackResult) {
+              return writeReviewInlineAppSuccess(sessionId, appKey, fallbackResult);
+            }
+
+            const error = data?.error || `生成失败（${response.status}）`;
+            writeReviewInlineAppError(sessionId, appKey, error);
+            return { appKey, status: 'error', error };
+          } catch (err) {
+            const fallbackResult = buildInlineAppFallbackResult(appKey, appTranscript);
+            if (fallbackResult) {
+              return writeReviewInlineAppSuccess(sessionId, appKey, fallbackResult);
+            }
+
+            const error = err instanceof Error ? err.message : '网络有点问题';
+            writeReviewInlineAppError(sessionId, appKey, error);
+            return { appKey, status: 'error', error };
+          }
+        })();
+        inlineAppRunPromisesRef.current[runKey] = runPromise;
+        void runPromise.finally(() => {
+          delete inlineAppRunPromisesRef.current[runKey];
         });
-        const data = (await response.json().catch(() => null)) as
-          | { ok?: boolean; error?: string; result?: AppExecutionResult }
-          | null;
-
-        if (response.ok && data?.ok && data.result) {
-          const result = data.result;
-          setInlineAppsByMessageId((prev) => ({
-            ...prev,
-            [messageId]: {
-              appKey,
-              status: 'ready',
-              result,
-              payload: result.render?.payload,
-            },
-          }));
-          return;
-        }
-
-        const fallbackResult = buildInlineAppFallbackResult(appKey, appTranscript);
-        setInlineAppsByMessageId((prev) => ({
-          ...prev,
-          [messageId]: fallbackResult
-            ? { appKey, status: 'ready', result: fallbackResult, payload: fallbackResult.render?.payload }
-            : {
-                appKey,
-                status: 'error',
-                error: data?.error || `生成失败（${response.status}）`,
-              },
-        }));
-      } catch (err) {
-        const fallbackResult = buildInlineAppFallbackResult(appKey, appTranscript);
-        setInlineAppsByMessageId((prev) => ({
-          ...prev,
-          [messageId]: fallbackResult
-            ? { appKey, status: 'ready', result: fallbackResult, payload: fallbackResult.render?.payload }
-            : {
-                appKey,
-                status: 'error',
-                error: err instanceof Error ? err.message : '网络有点问题',
-              },
-        }));
       }
+
+      const nextState = await runPromise;
+      if (!nextState) return;
+      setInlineAppsByMessageId((prev) => ({
+        ...prev,
+        [messageId]: nextState,
+      }));
     },
     [authToken, preferredModel, sessionId, transcript],
   );
@@ -471,9 +488,13 @@ export function TutorAgentPanel({
       const marker = extractOpenAppMarker(collectMessageText(message)).key;
       if (!isInlineAppKey(marker)) continue;
       inlineAppStartedRef.current.add(message.id);
+      if (onOpenAppInWorkspace) {
+        onOpenAppInWorkspace(marker);
+        continue;
+      }
       void runInlineApp(message.id, marker);
     }
-  }, [busy, messages, runInlineApp]);
+  }, [busy, messages, onOpenAppInWorkspace, runInlineApp]);
 
   const onSubmit = React.useCallback(
     (e: React.FormEvent) => {

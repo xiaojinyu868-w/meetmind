@@ -27,6 +27,7 @@ export interface AppRenderSurfaceProps {
   onRegenerate?: () => void;
   onGenerateDraft?: () => Promise<AppExecutionResult | null>;
   onResultUpdate?: (next: AppExecutionResult) => void;
+  onLearningActivity?: (line: string) => void;
 }
 
 export function AppRenderSurface({
@@ -42,17 +43,18 @@ export function AppRenderSurface({
   onRegenerate,
   onGenerateDraft,
   onResultUpdate,
+  onLearningActivity,
 }: AppRenderSurfaceProps) {
   if (appKey === 'audio-overview') {
     return <PodcastWindow result={result} transcript={transcript} taskState={taskState} onSeek={onSeek} onRegenerate={onRegenerate} />;
   }
 
   if (appKey === 'flashcards') {
-    return <FlashcardsWindow result={result} transcript={transcript} onSeek={onSeek} />;
+    return <FlashcardsWindow result={result} transcript={transcript} onSeek={onSeek} onLearningActivity={onLearningActivity} />;
   }
 
   if (appKey === 'quiz') {
-    return <QuizWindow result={result} transcript={transcript} onSeek={onSeek} />;
+    return <QuizWindow result={result} transcript={transcript} onSeek={onSeek} onLearningActivity={onLearningActivity} />;
   }
 
   if (appKey === 'mindmap') {

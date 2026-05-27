@@ -503,10 +503,16 @@ export function normalizeEchoOutput(input: {
       .replace(/\n{3,}/g, '\n\n')
       .trim();
 
-  // 新格式：echo 字段为主体
+  // 新格式：echo 字段为主体。CommonStack json_schema 不返回 title，
+  // 因此标题需要从 takeaway / echo 中兜底生成，避免被质量门误判为 too-short。
   const echoText = clean(input.echo || input.body || '');
-  const title = clean(input.title || '回声');
   const takeaway = input.takeaway ? clean(input.takeaway) : undefined;
+  const title = [
+    clean(input.title || ''),
+    takeaway ? takeaway.slice(0, 18) : '',
+    echoText.slice(0, 18),
+    '今日回声',
+  ].find((value) => value.length >= 4) || '今日回声';
 
   // 处理 highlights
   const highlights: EchoHighlight[] = Array.isArray(input.highlights)

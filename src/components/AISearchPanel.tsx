@@ -474,62 +474,63 @@ export function AISearchPanel({
   const panelContent = (
     <div className="flex h-full flex-col bg-white">
       {/* ── 头部 ── */}
-      <div className="flex items-center justify-between px-5 py-3.5">
-        <div className="flex items-center gap-2.5">
-          <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-gradient-to-br from-emerald-400 to-emerald-600 shadow-sm">
-            <Sparkles size={15} className="text-white" />
+      <div className="flex items-start justify-between gap-4 border-b border-[#E9E9E7] px-6 py-5">
+        <div className="min-w-0">
+          <div className="flex items-center gap-2.5">
+            <div className="flex h-8 w-8 items-center justify-center rounded-xl border border-[#E9E9E7] bg-[#F7F7F5] text-[#232322]">
+              <Search size={15} />
+            </div>
+            <h2 className="text-[15px] font-semibold tracking-[-0.01em] text-[#232322]">搜索笔记</h2>
           </div>
-          <div>
-            <h2 className="text-[15px] font-bold text-slate-900">AI 检索</h2>
-          </div>
+          <p className="mt-2 max-w-[420px] text-[12px] leading-5 text-[#787774]">
+            像问同学一样提问，我会从你收进来的课、讲义和材料里找答案，并保留来源。
+          </p>
         </div>
         <button
           type="button"
           onClick={onClose}
-          className="flex h-8 w-8 items-center justify-center rounded-xl text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600"
+          className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl border border-[#E9E9E7] text-[#787774] transition-colors hover:bg-[#F7F7F5] hover:text-[#232322]"
           aria-label="关闭"
         >
-          <X size={18} />
+          <X size={17} />
         </button>
       </div>
-
-      <div className="mx-5 h-px bg-gradient-to-r from-transparent via-slate-200 to-transparent" />
 
       {/* ── 内容区域 ── */}
       <div ref={answerRef} className="min-h-0 flex-1 overflow-y-auto">
         {!hasSearched ? (
           /* ── 空状态引导 ── */
-          <div className="flex flex-col items-center justify-center px-6 py-16 text-center">
-            <div className="relative mb-5">
-              <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-br from-emerald-50 to-emerald-100 shadow-inner">
-                <Search size={28} className="text-emerald-500" />
+          <div className="flex min-h-full flex-col justify-between px-8 py-8 text-left">
+            <div>
+              <div className="mb-6 flex h-14 w-14 items-center justify-center rounded-2xl border border-[#E9E9E7] bg-[#F7F7F5] text-[#232322]">
+                <Sparkles size={22} />
               </div>
-              <div className="absolute -right-1 -top-1 flex h-6 w-6 items-center justify-center rounded-full bg-emerald-500 shadow-sm">
-                <Sparkles size={11} className="text-white" />
-              </div>
+              <p className="max-w-[460px] text-[22px] font-semibold leading-tight tracking-[-0.03em] text-[#232322]">
+                不用翻列表，直接问这堆材料。
+              </p>
+              <p className="mt-3 max-w-[430px] text-[14px] leading-7 text-[#787774]">
+                适合找某个概念、复盘上节课、或者把几份资料里的说法对齐。结果会带引用，点来源就能回到原件。
+              </p>
             </div>
-            <p className="text-[15px] font-semibold text-slate-800">
-              在你的学习资料中智能检索
-            </p>
-            <p className="mt-2.5 max-w-[280px] text-[13px] leading-6 text-slate-400">
-              输入自然语言问题，AI 会从你收集的所有资料中找到答案并标注来源
-            </p>
-            <div className="mt-6 flex flex-wrap justify-center gap-2">
-              {['强化学习的奖励函数', '上节课讲的公式', '那个产品方法论'].map(
-                (example) => (
-                  <button
-                    key={example}
-                    type="button"
-                    onClick={() => {
-                      setQuery(example);
-                      inputRef.current?.focus();
-                    }}
-                    className="rounded-full border border-slate-150 bg-white px-3.5 py-1.5 text-xs text-slate-500 shadow-sm transition-all hover:border-emerald-200 hover:bg-emerald-50 hover:text-emerald-700 hover:shadow-md"
-                  >
-                    {example}
-                  </button>
-                )
-              )}
+            <div className="mt-8">
+              <p className="mb-2 text-[11px] font-medium uppercase tracking-[0.16em] text-[#A3A39E]">可以这样问</p>
+              <div className="flex flex-wrap gap-2">
+                {['强化学习的奖励函数', '上节课讲的公式', '那个产品方法论'].map(
+                  (example) => (
+                    <button
+                      key={example}
+                      type="button"
+                      onClick={() => {
+                        setQuery(example);
+                        inputRef.current?.focus();
+                      }}
+                      className="rounded-full border border-[#E9E9E7] bg-white px-3.5 py-1.5 text-xs text-[#787774] transition-colors hover:border-[#A3A39E] hover:bg-[#F7F7F5] hover:text-[#232322]"
+                    >
+                      {example}
+                    </button>
+                  )
+                )}
+              </div>
             </div>
           </div>
         ) : error ? (
@@ -571,10 +572,10 @@ export function AISearchPanel({
               <div className="relative">
                 {/* AI 头像 + 标签 */}
                 <div className="mb-3 flex items-center gap-2">
-                  <div className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-emerald-400 to-emerald-600">
-                    <Sparkles size={11} className="text-white" />
+                  <div className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full border border-[#E9E9E7] bg-[#F7F7F5] text-[#232322]">
+                    <Sparkles size={11} />
                   </div>
-                  <span className="text-xs font-semibold text-slate-400">AI 回答</span>
+                  <span className="text-xs font-semibold text-[#787774]">AI 回答</span>
                   {isSearching && !answer ? (
                     <div className="flex items-center gap-1.5 text-slate-400">
                       <Loader2 size={12} className="animate-spin" />
@@ -682,7 +683,7 @@ export function AISearchPanel({
       </div>
 
       {/* ── 搜索输入框 ── */}
-      <div className="border-t border-slate-100 bg-white/80 px-5 py-3 backdrop-blur-sm">
+      <div className="border-t border-[#E9E9E7] bg-white px-6 py-4">
         <div className="relative">
           <input
             ref={inputRef}
@@ -690,15 +691,15 @@ export function AISearchPanel({
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder="输入你想找的内容..."
+            placeholder="问一个想从笔记里找到的问题..."
             disabled={isSearching}
-            className="w-full rounded-2xl border border-slate-200 bg-slate-50/80 py-3 pl-4 pr-12 text-[14px] text-slate-800 outline-none transition-all placeholder:text-slate-400 focus:border-emerald-300 focus:bg-white focus:shadow-[0_0_0_3px_rgba(16,185,129,0.1)] disabled:opacity-50"
+            className="w-full rounded-2xl border border-[#E9E9E7] bg-[#F7F7F5] py-3.5 pl-4 pr-12 text-[14px] text-[#232322] outline-none transition-colors placeholder:text-[#A3A39E] focus:border-[#A3A39E] focus:bg-white disabled:opacity-50"
           />
           <button
             type="button"
             onClick={handleSearch}
             disabled={!query.trim() || isSearching}
-            className="absolute right-2 top-1/2 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-xl bg-emerald-600 text-white shadow-sm transition-all hover:bg-emerald-700 hover:shadow-md disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-400 disabled:shadow-none"
+            className="absolute right-2 top-1/2 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-xl bg-[#232322] text-white transition-colors hover:bg-[#111111] disabled:cursor-not-allowed disabled:bg-[#E9E9E7] disabled:text-[#A3A39E]"
             aria-label="搜索"
           >
             {isSearching ? (
@@ -725,14 +726,11 @@ export function AISearchPanel({
   return (
     <>
       <div
-        className="fixed inset-0 z-40 bg-black/25 backdrop-blur-[3px] animate-in fade-in duration-150"
+        className="fixed inset-0 z-40 bg-[#232322]/12 animate-in fade-in duration-150"
         onClick={onClose}
         aria-hidden
       />
-      <div
-        className="fixed inset-x-4 top-[8vh] z-50 mx-auto max-w-[520px] overflow-hidden rounded-3xl border border-white/80 bg-white shadow-[0_25px_80px_rgba(0,0,0,0.15),0_0_0_1px_rgba(0,0,0,0.05)] animate-in fade-in zoom-in-95 slide-in-from-top-4 duration-200"
-        style={{ maxHeight: '84vh' }}
-      >
+      <div className="fixed bottom-0 right-0 top-0 z-50 w-[min(720px,72vw)] min-w-[560px] overflow-hidden border-l border-[#E9E9E7] bg-white animate-in fade-in slide-in-from-right-6 duration-200">
         {panelContent}
       </div>
     </>

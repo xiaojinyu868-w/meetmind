@@ -1572,7 +1572,11 @@ function StudentAppContent({
     openWorkshopWindow(appKey);
   }, [classCheck, openWorkshopWindow]);
 
-  const renderSharedWorkspacePanel = useCallback((tab: SharedWorkspaceTab) => {
+  const renderSharedWorkspacePanel = useCallback((tab: SharedWorkspaceTab, options?: {
+    activeAppKey?: WorkshopAppKey | null;
+    onActiveAppChange?: (appKey: WorkshopAppKey | null) => void;
+    onLearningActivity?: (line: string) => void;
+  }) => {
     return (
       <SharedWorkspacePanel
         tab={tab}
@@ -1583,12 +1587,17 @@ function StudentAppContent({
         segments={segments}
         anchors={anchors}
         onOpenAppWindow={safeOpenWorkshopWindow}
+        activeAppKey={options?.activeAppKey}
+        onActiveAppChange={options?.onActiveAppChange}
+        terminologyHint={extractedTermsHint || undefined}
+        onLearningActivity={options?.onLearningActivity}
       />
     );
   }, [
     anchors,
     classSummary,
     dataSource,
+    extractedTermsHint,
     handleUnifiedSeek,
     safeOpenWorkshopWindow,
     segments,
@@ -1713,6 +1722,13 @@ function StudentAppContent({
               onOpenApp={safeOpenWorkshopWindow}
               autoLoadDemo={autoLoadDemo}
               autoOpenDemoAppKey={autoOpenDemoAppKey}
+              onOpenDemoReview={() => {
+                setReviewTab('apps');
+                setVideoWorkspaceTab('apps');
+                setMobileSubPage(isMobile ? 'apps' : null);
+                setShowTranscriptBar(false);
+                handleViewModeChange('review');
+              }}
               onStartRecording={() => {
                 // 课堂 tab 的 Recorder 是 sr-only 挂载点（不带 compactMode，走 streaming）。
                 // 绝对不要打开 showMobileRecorder —— 否则会同时渲染两个 Recorder：

@@ -38,10 +38,11 @@ import { useCaptureEditorStore } from '@/stores/capture-editor-store';
 import { useSessionStore } from '@/stores/session-store';
 import { useCollectionStore } from '@/stores/collection-store';
 import { loadDemoLesson, selectDemoLiveSegments } from './classroom/DemoLessonLoader';
-import { shouldExitDemoRecordingOnStop } from './ClassroomView.model';
+import { shouldExitDemoRecordingOnStop, shouldShowClassroomCompanion } from './ClassroomView.model';
 import { buildGuestDemoFlashcardsResult } from './classroom/guest-demo-entry';
 import { writeCachedAppResult, writeCachedTaskState } from '@/components/apps/hooks/useAppExecution';
-import { DEMO_SEGMENTS, DEMO_SESSION_ID } from '@/fixtures/demo-data';
+import { DEMO_AUDIO_URL, DEMO_SEGMENTS, DEMO_SESSION_ID } from '@/fixtures/demo-data';
+import { buildDemoMindMapTree } from './classroom/demo-mindmap';
 import type { ForesightBubble } from './classroom/ClassroomCompanionPanel';
 import type { WorkshopAppKey } from '@/lib/ai-native/app-catalog';
 
@@ -66,6 +67,8 @@ export interface ClassroomViewProps {
   autoLoadDemo?: boolean;
   /** 访客试听入口默认打开的可见应用产物 */
   autoOpenDemoAppKey?: WorkshopAppKey;
+  /** 试听课结束后进入既有课后复习页 / 应用矩阵 */
+  onOpenDemoReview?: () => void;
 }
 
 export function ClassroomView({
@@ -77,6 +80,7 @@ export function ClassroomView({
   onOpenApp,
   autoLoadDemo = false,
   autoOpenDemoAppKey,
+  onOpenDemoReview,
 }: ClassroomViewProps) {
   // ── 真实数据：Lesson[] + markReviewed ──
   const { lessons, markReviewed } = useClassroomLessons();
@@ -115,15 +119,21 @@ export function ClassroomView({
   }, [isRecording]);
 
   // ── AI 同桌的展开策略 ──
-  // 默认收起；录课态自动展开（此时 AI 同桌真的在听课，有存在感）；
-  // 用户在列表态也可手动召唤。
+  // 没有课堂上下文时不展示同桌入口；只有真实录课 / 示例课正在播放时才出现。
   const [companionOpen, setCompanionOpen] = useState(false);
   const hasBootstrappedGuestDemoRef = useRef(false);
+  const companionAvailable = shouldShowClassroomCompanion({
+    paneState,
+    isRecording,
+    autoLoadDemo,
+  });
   useEffect(() => {
-    if (paneState === 'recording') {
+    if (companionAvailable) {
       setCompanionOpen(true);
+    } else {
+      setCompanionOpen(false);
     }
-  }, [paneState]);
+  }, [companionAvailable]);
 
   useEffect(() => {
     if (!autoLoadDemo) return;
@@ -152,11 +162,18 @@ export function ClassroomView({
   // ── 录课中关键概念（客户端启发式） ──
   const liveConcepts = useLiveConcepts({ enabled: paneState === 'recording' });
 
-  // ── 录课计时：进入 recording pane 后开始 tick；demo 也走同一套时间轴 ──
+  const isDemoRecordingPane = autoLoadDemo && paneState === 'recording' && !isRecording;
+
+  // ── 录课计时：真实录音走本地 tick；试听课走 audio.currentTime ──
   const [localRecordingSeconds, setLocalRecordingSeconds] = useState(0);
   const [recordingStartAt, setRecordingStartAt] = useState<number | null>(null);
   useEffect(() => {
     if (paneState !== 'recording') {
+      setLocalRecordingSeconds(0);
+      setRecordingStartAt(null);
+      return;
+    }
+    if (isDemoRecordingPane) {
       setLocalRecordingSeconds(0);
       setRecordingStartAt(null);
       return;
@@ -168,12 +185,82 @@ export function ClassroomView({
       setLocalRecordingSeconds(Math.floor((Date.now() - startAt) / 1000));
     }, 1000);
     return () => clearInterval(t);
-  }, [paneState]);
+  }, [paneState, isDemoRecordingPane]);
 
   // ── 录课中实时转录：订阅 segments，只在录课态订阅 + 拼接 ──
   const segments = useCaptureEditorStore((s) => s.segments);
   const liveInterimText = useCaptureEditorStore((s) => s.liveInterimText);
-  const isDemoRecordingPane = autoLoadDemo && paneState === 'recording' && !isRecording;
+
+  // ── 试听课音频：demo 不是无声假课。自动播放如果被浏览器拦截，UI 会露出“播放声音”。
+  const demoAudioRef = useRef<HTMLAudioElement | null>(null);
+  const demoAutoplayAttemptedRef = useRef(false);
+  const [demoAudioPlaying, setDemoAudioPlaying] = useState(false);
+  const [demoAudioNeedsGesture, setDemoAudioNeedsGesture] = useState(false);
+  const [demoComplete, setDemoComplete] = useState(false);
+
+  const playDemoAudio = useCallback(async () => {
+    const audio = demoAudioRef.current;
+    if (!audio) return;
+    try {
+      await audio.play();
+      setDemoAudioPlaying(true);
+      setDemoAudioNeedsGesture(false);
+    } catch {
+      setDemoAudioPlaying(false);
+      setDemoAudioNeedsGesture(true);
+    }
+  }, []);
+
+  const handleToggleDemoAudio = useCallback(() => {
+    const audio = demoAudioRef.current;
+    if (!audio) return;
+    if (audio.paused) {
+      void playDemoAudio();
+    } else {
+      audio.pause();
+      setDemoAudioPlaying(false);
+    }
+  }, [playDemoAudio]);
+
+  useEffect(() => {
+    if (!isDemoRecordingPane) {
+      demoAutoplayAttemptedRef.current = false;
+      demoAudioRef.current?.pause();
+      setDemoAudioPlaying(false);
+      setDemoAudioNeedsGesture(false);
+      setDemoComplete(false);
+      return;
+    }
+    if (demoAutoplayAttemptedRef.current) return;
+    demoAutoplayAttemptedRef.current = true;
+    if (demoAudioRef.current) {
+      demoAudioRef.current.currentTime = 0;
+      setLocalRecordingSeconds(0);
+      setDemoComplete(false);
+    }
+    const timer = window.setTimeout(() => {
+      void playDemoAudio();
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [isDemoRecordingPane, playDemoAudio]);
+
+  const handleReplayDemo = useCallback(() => {
+    const audio = demoAudioRef.current;
+    if (!audio) return;
+    audio.currentTime = 0;
+    setLocalRecordingSeconds(0);
+    setDemoComplete(false);
+    void playDemoAudio();
+  }, [playDemoAudio]);
+
+  const handleOpenDemoReview = useCallback(() => {
+    writeCachedAppResult(DEMO_SESSION_ID, 'flashcards', buildGuestDemoFlashcardsResult());
+    writeCachedTaskState(DEMO_SESSION_ID, 'flashcards', { status: 'success', updatedAt: Date.now() });
+    demoAudioRef.current?.pause();
+    setDemoAudioPlaying(false);
+    onOpenDemoReview?.();
+  }, [onOpenDemoReview]);
+
   const demoVisibleSegments = useMemo(
     () => (isDemoRecordingPane ? selectDemoLiveSegments(localRecordingSeconds) : []),
     [isDemoRecordingPane, localRecordingSeconds],
@@ -249,13 +336,13 @@ export function ClassroomView({
   // 只保留最近 4 条，避免干扰焦点。
   const recentLines = useMemo(() => {
     if (paneState !== 'recording') return [];
-    const lastFew = segments.slice(-4).filter((s) => s.isFinal && s.text?.trim());
+    const lastFew = activeRecordingSegments.slice(-4).filter((s) => s.text?.trim());
     return lastFew.map((s) => ({
       id: String(s.id ?? `${s.startMs}-${s.text.slice(0, 6)}`),
       text: s.text,
       startMs: s.startMs,
     }));
-  }, [paneState, segments]);
+  }, [paneState, activeRecordingSegments]);
 
   // 优先使用外部传入的秒数；其次 segments 折算；兜底用本地 tick
   const effectiveRecordingSeconds = useMemo(() => {
@@ -328,14 +415,21 @@ export function ClassroomView({
     return title;
   }, [lessons]);
 
-  const { tree: mindMapTree, newNodeIds: mindMapNewIds } = useClassroomMindMap({
-    enabled: paneState === 'recording',
+  const { tree: generatedMindMapTree, newNodeIds: generatedMindMapNewIds } = useClassroomMindMap({
+    enabled: paneState === 'recording' && !isDemoRecordingPane,
     transcriptText: liveTranscriptText,
     interimText: paneState === 'recording' ? liveInterimText : undefined,
     recordingStartAt,
     lessonTitle: activeRecordingLessonTitle,
     importedHints: mindMapImportedHints,
   });
+
+  const demoMindMap = useMemo(
+    () => buildDemoMindMapTree(effectiveRecordingSeconds),
+    [effectiveRecordingSeconds],
+  );
+  const mindMapTree = isDemoRecordingPane ? demoMindMap.tree : generatedMindMapTree;
+  const mindMapNewIds = isDemoRecordingPane ? demoMindMap.newNodeIds : generatedMindMapNewIds;
 
   // ── ASR 热词注入：课堂场景下，从预习材料 + 课程标题聚合专名 ──
   // ASR 专名识别差的根源是 page.tsx 里 asrContextHint 恒为 ''。
@@ -393,6 +487,10 @@ export function ClassroomView({
 
   const handleStopRecording = useCallback((lessonId?: string) => {
     if (shouldExitDemoRecordingOnStop({ autoLoadDemo, isRecording, paneState })) {
+      if (demoComplete) {
+        handleOpenDemoReview();
+        return;
+      }
       setLocalPaneState('list');
       captureActions.resetCaptureEditorState();
       sessionActions.setDataSource('live');
@@ -403,7 +501,7 @@ export function ClassroomView({
     } else {
       setLocalPaneState('list');
     }
-  }, [autoLoadDemo, isRecording, paneState, captureActions, sessionActions, onStopRecording]);
+  }, [autoLoadDemo, isRecording, paneState, demoComplete, handleOpenDemoReview, captureActions, sessionActions, onStopRecording]);
 
   const handleSend = useCallback((text: string) => {
     void sendToTutor(text);
@@ -428,12 +526,35 @@ export function ClassroomView({
         onMindMapAnchorClick={handleMindMapAnchorClick}
         scrollTarget={paneState === 'recording' ? mindMapScrollTarget : null}
         onFocusRecording={() => setLocalPaneState('recording')}
+        isDemoPlayback={isDemoRecordingPane}
+        demoAudioPlaying={demoAudioPlaying}
+        demoAudioNeedsGesture={demoAudioNeedsGesture}
+        onToggleDemoAudio={handleToggleDemoAudio}
+        defaultTranslationMode={isDemoRecordingPane ? 'en-zh' : undefined}
+        isDemoComplete={demoComplete}
+        onReplayDemo={handleReplayDemo}
+        onFinishDemo={handleOpenDemoReview}
         audioSource={recorderAudioSource}
         onChangeAudioSource={setRecorderAudioSource}
         onOpenApp={onOpenApp}
       />
     ),
-    [paneState, lessons, handleOpenLesson, handleStartRecording, handleStopRecording, effectiveRecordingSeconds, liveConcepts, liveTranscriptText, recordingSegments, liveInterimText, recentLines, mindMapTree, mindMapNewIds, handleMindMapAnchorClick, mindMapScrollTarget, recorderAudioSource, setRecorderAudioSource, onOpenApp],
+    [paneState, lessons, handleOpenLesson, handleStartRecording, handleStopRecording, effectiveRecordingSeconds, liveConcepts, liveTranscriptText, recordingSegments, liveInterimText, recentLines, mindMapTree, mindMapNewIds, handleMindMapAnchorClick, mindMapScrollTarget, isDemoRecordingPane, demoAudioPlaying, demoAudioNeedsGesture, handleToggleDemoAudio, demoComplete, handleReplayDemo, handleOpenDemoReview, recorderAudioSource, setRecorderAudioSource, onOpenApp],
+  );
+
+  const demoSuggestedPrompts = useMemo(
+    () => demoComplete
+      ? [
+          '结束这节课，去复习',
+          '课后可以练什么？',
+          '先帮我复盘一下',
+        ]
+      : [
+          'up in the air 是什么意思？',
+          '这段听力在问什么？',
+          '帮我抓答案线索',
+        ],
+    [demoComplete],
   );
 
   const rightPanel = useMemo(
@@ -452,19 +573,46 @@ export function ClassroomView({
         onInlineAction={handleInlineAction}
         onInlineAppInteraction={handleInlineAppInteraction}
         onInlineAppRetry={retryInlineApp}
+        suggestedPrompts={isDemoRecordingPane ? demoSuggestedPrompts : undefined}
+        afterClass={isDemoRecordingPane && demoComplete}
+        onAfterClassAction={handleOpenDemoReview}
       />
     ),
-    [companionMode, messages, streamingMessage, isThinking, handleSend, onOpenApp, foresights, handleForesightAccept, dismissForesight, handleCitationJump, handleInlineAction, handleInlineAppInteraction, retryInlineApp],
+    [companionMode, messages, streamingMessage, isThinking, handleSend, onOpenApp, foresights, handleForesightAccept, dismissForesight, handleCitationJump, handleInlineAction, handleInlineAppInteraction, retryInlineApp, isDemoRecordingPane, demoSuggestedPrompts, demoComplete, handleOpenDemoReview],
   );
 
   return (
-    <ClassroomLayout
-      left={leftPanel}
-      right={rightPanel}
-      companionOpen={companionOpen}
-      onCompanionOpenChange={setCompanionOpen}
-      companionMood={companionMood}
-    />
+    <>
+      {isDemoRecordingPane ? (
+        <audio
+          ref={demoAudioRef}
+          src={DEMO_AUDIO_URL}
+          preload="auto"
+          onPlay={() => {
+            setDemoAudioPlaying(true);
+            setDemoAudioNeedsGesture(false);
+          }}
+          onPause={() => setDemoAudioPlaying(false)}
+          onEnded={(event) => {
+            setDemoAudioPlaying(false);
+            setDemoComplete(true);
+            setCompanionOpen(true);
+            setLocalRecordingSeconds(Math.floor(event.currentTarget.duration || 93));
+          }}
+          onTimeUpdate={(event) => {
+            setLocalRecordingSeconds(Math.floor(event.currentTarget.currentTime));
+          }}
+        />
+      ) : null}
+      <ClassroomLayout
+        left={leftPanel}
+        right={rightPanel}
+        companionOpen={companionOpen}
+        onCompanionOpenChange={setCompanionOpen}
+        companionMood={companionMood}
+        companionAvailable={companionAvailable}
+      />
+    </>
   );
 }
 

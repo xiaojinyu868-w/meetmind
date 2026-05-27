@@ -20,7 +20,7 @@
 | `rate-limit.ts` | 59 | API 速率限制中间件封装 | `applyRateLimit`, `withRateLimit` |
 | `public-routes.ts` | 59 | middleware 公共路由白名单与匹配函数 | `isPublicRoute` |
 | `inline-app-retry.ts` | 23 | 内联应用执行的瞬时失败重试策略 | `shouldRetryInlineAppExecute`, `getInlineAppRetryDelayMs` |
-| `tutor-agent-provider.ts` | 121 | Tutor Agent OpenAI-compatible provider 配置解析（按请求模型 / env 选择 DeepSeek、DashScope 或 OpenAI；强制 Chat Completions；提供 DeepSeek ↔ DashScope fallback 候选、可恢复错误分类与用户错误文案格式化） | `resolveTutorAgentProviderConfig`, `resolveTutorAgentProviderFallbacks`, `shouldFallbackTutorAgentError`, `formatTutorAgentUserError` |
+| `tutor-agent-provider.ts` | 130 | Tutor Agent OpenAI-compatible provider 配置解析（按请求模型 / env 选择 DeepSeek、DashScope 或 OpenAI；强制 Chat Completions；提供 DeepSeek ↔ DashScope fallback 候选、可恢复错误分类与用户错误文案格式化；DeepSeek thinking 模型禁用 native tools，改走 `<open_app:KEY/>` + `/api/apps/execute`） | `resolveTutorAgentProviderConfig`, `resolveTutorAgentProviderFallbacks`, `shouldFallbackTutorAgentError`, `formatTutorAgentUserError`, `shouldUseNativeTutorTools` |
 | `ai-model-preference.ts` | 19 | 设置页 AI 模型偏好 key 与 `auto` 解析 | `AI_MODEL_PREFERENCE_KEY`, `resolveExplicitAiModelPreference` |
 | `video-source.ts` | 35 | 视频播放源标识恢复（B 站 bvid/cid） | `resolveBilibiliVideoIdentifiers` |
 | `video-resolve-url.ts` | 22 | 旧视频 URL 解析接口兼容的安全 URL 归一化 | `resolveLegacyVideoUrl` |
@@ -34,6 +34,7 @@
 | `translation-retry-policy.ts` | 23 | 翻译接口失败/429 后的前端退避策略 | `getTranslationRetryDelayMs`, `shouldSkipTranslationTerm`, `shouldSkipTranslationRequest` |
 | `inline-app-transcript.ts` | 19 | AI 同桌内联应用生成时选择最新可用转录 | `selectInlineAppTranscript`, `hasEnoughInlineAppTranscript` |
 | `inline-app-fallback.ts` | 103 | 内联应用后端生成失败时的本地兜底 payload | `buildInlineAppFallbackPayload` |
+| `app-execution-cache.ts` | 223 | 应用矩阵 / 复习对话共用的 localStorage 产物缓存与 task 状态 key；进入历史对话时必须先读缓存，避免已生成应用重复执行 | `readCachedAppResult`, `writeCachedAppResult`, `readCachedTaskState`, `writeCachedTaskState` |
 | `index.ts` | 40 | barrel 导出 | re-export time-utils, json-utils, transcript-utils |
 
 ### `page/` 子目录（从 page-utils.ts 拆分）

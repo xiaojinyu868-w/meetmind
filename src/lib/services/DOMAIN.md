@@ -57,7 +57,7 @@ api/route.ts → services → lib/utils, lib/db, lib/config
 | `workspace-account-service.ts` | ~170 | 账号统一：默认工作区补齐 + 微信旧数据归属修复 + 本地历史迁移 |
 | `workspace-context-service.ts` | 838 | Capture 收集 + Ingest 处理 + 状态管理 |
 | `workspace-context-types.ts` | 161 | 类型定义 + 纯工具函数 + 微信 helper |
-| `workspace-echo-service.ts` | 1267 | 每日回响生成（AI 洞察/金句/推荐） |
+| `workspace-echo-service.ts` | ~1300 | 每日回响生成（AI 洞察/金句/推荐）；CommonStack 新 schema 不返回 title，需从 takeaway / echo 生成标题后再进质量门 |
 | `workspace-search-service.ts` | 175 | 全局 AI 检索（流式带引用） |
 | `commonstack-echo-service.ts` | 273 | Echo LLM 调用（System Prompt 在此） |
 
@@ -112,7 +112,7 @@ api/route.ts → services → lib/utils, lib/db, lib/config
 
 改动这些文件时必须格外小心，优先考虑能否拆分：
 
-- `workspace-echo-service.ts` (1267) — Echo 数据管线
+- `workspace-echo-service.ts` (1303) — Echo 数据管线
 - `classroom-data-service.ts` (1007) — 课堂数据
 - `auth-service.ts` (998) — 认证
 - `workspace-context-service.ts` (947) — Capture 管线

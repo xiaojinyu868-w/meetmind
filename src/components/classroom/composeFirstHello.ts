@@ -62,9 +62,10 @@ export function composeFirstHello(input: ComposeHelloInput): string | null {
   // 1. 录课中：不说废话（listening 态另有 markListening 接管）
   if (isRecording) return null;
 
-  // 2. 完全没数据：新用户 magic moment
+  // 2. 完全没数据：不主动出现。
+  // 同桌需要课堂上下文才有话可说；零存量态交给 Hero 解释产品和主行动。
   if (lessons.length === 0) {
-    return '我在这里。等你录第一节课，我就开始陪你。';
+    return null;
   }
 
   // 3. 有正在整理的课（刚录完）——优先级最高，因为"刚发生"

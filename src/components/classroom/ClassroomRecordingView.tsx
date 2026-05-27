@@ -14,13 +14,16 @@
 
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import dynamic from 'next/dynamic';
-import { Square, ChevronDown, ChevronUp, Languages } from 'lucide-react';
+import { Square, ChevronDown, ChevronUp, Languages, Play, Pause } from 'lucide-react';
 import { MindMap } from './MindMap';
+import { OctoBuddySprite } from './OctoBuddy';
 import type { MindMapTree } from '@/hooks/useClassroomMindMap';
+
 import type { TranscriptSegment } from '@/types';
 import { extractChineseRuns, extractEnglishRuns } from '@/lib/services/translation/extract-english';
 import { useEnToZhTranslation, useTranslationMode, type TranslationMode } from '@/hooks/useEnToZhTranslation';
 import { buildLiveTranslationRows } from '@/lib/utils/live-translation-rows';
+import { cycleTranslationMode, resolveSessionTranslationMode } from './ClassroomRecordingView.model';
 
 // TranscriptFlowView 只在展开态用，且组件较重——code-split 一下，
 // 保持课堂首屏打开时不拉这份 bundle。
@@ -65,6 +68,17 @@ export interface ClassroomRecordingViewProps {
    * 纯数字 ms 不够，因为连续点同一个节点就无法再触发。
    */
   scrollTarget?: { ms: number; nonce: number } | null;
+  /** 试听课音频播放控制：浏览器自动播放失败时，这个按钮就是用户手势入口 */
+  isDemoPlayback?: boolean;
+  demoAudioPlaying?: boolean;
+  demoAudioNeedsGesture?: boolean;
+  onToggleDemoAudio?: () => void;
+  /** 英文试听课默认开启 EN→中，但不写入用户长期偏好 */
+  defaultTranslationMode?: TranslationMode;
+  /** 试听课听完后的课后引导 */
+  isDemoComplete?: boolean;
+  onReplayDemo?: () => void;
+  onFinishDemo?: () => void;
 }
 
 // ── 时间工具 ──────────────────────────────────────────────────────────
@@ -85,6 +99,10 @@ function LiveTranscriptPanel({
   onToggleExpanded,
   onCycleTranslationMode,
   onStop,
+  isDemoPlayback,
+  demoAudioPlaying,
+  demoAudioNeedsGesture,
+  onToggleDemoAudio,
 }: {
   segments?: TranscriptSegment[];
   recentLines: Array<{ id: string; text: string; startMs: number }>;
@@ -95,6 +113,10 @@ function LiveTranscriptPanel({
   onToggleExpanded: () => void;
   onCycleTranslationMode: () => void;
   onStop: () => void;
+  isDemoPlayback?: boolean;
+  demoAudioPlaying?: boolean;
+  demoAudioNeedsGesture?: boolean;
+  onToggleDemoAudio?: () => void;
 }) {
   const rows = useMemo(
     () => buildLiveTranslationRows({ segments, recentLines, interimText, maxFinalRows: 10 }),
@@ -176,15 +198,33 @@ function LiveTranscriptPanel({
                 </p>
               </div>
             </div>
-            <button
-              type="button"
-              onClick={onStop}
-              className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full bg-ink text-white transition hover:opacity-85 active:scale-95"
-              title="结束这节课"
-              aria-label="结束这节课"
-            >
-              <Square size={11} strokeWidth={2} fill="currentColor" />
-            </button>
+            <div className="flex flex-shrink-0 items-center gap-1.5">
+              {isDemoPlayback && onToggleDemoAudio ? (
+                <button
+                  type="button"
+                  onClick={onToggleDemoAudio}
+                  className={`inline-flex h-9 items-center gap-1.5 rounded-full px-3 text-[12px] font-medium transition active:scale-95 ${
+                    demoAudioPlaying
+                      ? 'bg-canvas text-ink-secondary hover:text-ink'
+                      : 'bg-ink text-white hover:opacity-85'
+                  }`}
+                  title={demoAudioPlaying ? '暂停试听音频' : '播放试听音频'}
+                  aria-label={demoAudioPlaying ? '暂停试听音频' : '播放试听音频'}
+                >
+                  {demoAudioPlaying ? <Pause size={12} strokeWidth={2} /> : <Play size={12} strokeWidth={2} fill="currentColor" />}
+                  <span>{demoAudioPlaying ? '暂停' : demoAudioNeedsGesture ? '播放声音' : '播放'}</span>
+                </button>
+              ) : null}
+              <button
+                type="button"
+                onClick={onStop}
+                className="flex h-9 w-9 items-center justify-center rounded-full bg-ink text-white transition hover:opacity-85 active:scale-95"
+                title="结束这节课"
+                aria-label="结束这节课"
+              >
+                <Square size={11} strokeWidth={2} fill="currentColor" />
+              </button>
+            </div>
           </div>
           <div className="mt-3 flex items-center gap-2">
             <span className="font-mono text-[12px] tabular-nums text-ink-secondary">{formatTime(seconds)}</span>
@@ -320,6 +360,51 @@ function TranscriptToggle({
   );
 }
 
+function DemoAfterClassPanel({
+  onFinish,
+  onReplay,
+}: {
+  onFinish?: () => void;
+  onReplay?: () => void;
+}) {
+  return (
+    <div className="flex h-full flex-col overflow-y-auto px-5 py-5 lg:px-6">
+      <div className="rounded-[24px] border border-divider bg-[#FBFBFA] px-5 py-5">
+        <div className="flex items-start gap-4">
+          <OctoBuddySprite mood="happy" size="lg" className="-ml-2 -mt-3 flex-shrink-0" />
+          <div className="min-w-0 flex-1">
+            <p className="text-[12px] font-semibold uppercase tracking-[0.14em] text-ink-muted">课后</p>
+            <h2 className="mt-2 text-[26px] font-semibold leading-tight tracking-[-0.04em] text-ink">
+              这节试听课听完了。
+            </h2>
+            <p className="mt-3 max-w-[28rem] text-[13px] leading-[1.75] text-ink-secondary">
+              课堂里先停在这里。点“结束这节课”，我带你去课后复习页，那里有完整应用矩阵。
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <div className="mt-3 grid gap-3 md:grid-cols-[minmax(0,1fr)_180px]">
+        <button
+          type="button"
+          onClick={onFinish}
+          className="rounded-[20px] border border-ink bg-ink px-5 py-4 text-left text-white transition hover:bg-[#1a1a19] active:scale-[0.99]"
+        >
+          <p className="text-[15px] font-semibold tracking-[-0.02em]">结束这节课</p>
+          <p className="mt-2 text-[12px] leading-relaxed text-white/70">进入课后复习和应用矩阵</p>
+        </button>
+        <button
+          type="button"
+          onClick={onReplay}
+          className="rounded-[20px] border border-divider bg-canvas px-4 py-4 text-left text-[13px] font-medium text-ink-secondary transition hover:text-ink"
+        >
+          再听一遍
+        </button>
+      </div>
+    </div>
+  );
+}
+
 // ── 底部：结束录课 ────────────────────────────────────────────────────
 
 function StopBar({ onStop }: { onStop: () => void }) {
@@ -356,6 +441,14 @@ export function ClassroomRecordingView({
   mindMapNewIds = EMPTY_NEW_IDS,
   onAnchorClick,
   scrollTarget = null,
+  isDemoPlayback = false,
+  demoAudioPlaying = false,
+  demoAudioNeedsGesture = false,
+  onToggleDemoAudio,
+  defaultTranslationMode,
+  isDemoComplete = false,
+  onReplayDemo,
+  onFinishDemo,
 }: ClassroomRecordingViewProps) {
   const [expanded, setExpanded] = useState(false);
   const transcriptScrollRef = useRef<HTMLDivElement | null>(null);
@@ -407,15 +500,16 @@ export function ClassroomRecordingView({
     // 故意只对 scrollTarget（含 nonce）敏感——同一个 ms 重复点击也要重新滚
   }, [scrollTarget]);
 
-  const [translationMode, setTranslationMode] = useTranslationMode();
-  const cycleTranslationMode = () => {
-    setTranslationMode(
-      translationMode === 'off'
-        ? 'en-zh'
-        : translationMode === 'en-zh'
-          ? 'zh-en'
-          : 'off',
-    );
+  const [userTranslationMode, setUserTranslationMode] = useTranslationMode();
+  const [translationTouched, setTranslationTouched] = useState(false);
+  const translationMode = resolveSessionTranslationMode({
+    userMode: userTranslationMode,
+    sessionDefault: defaultTranslationMode,
+    userTouched: translationTouched,
+  });
+  const cycleTranslationModeHandler = () => {
+    setTranslationTouched(true);
+    setUserTranslationMode(cycleTranslationMode(translationMode));
   };
 
   return (
@@ -431,17 +525,25 @@ export function ClassroomRecordingView({
               seconds={seconds}
               expanded={expanded}
               onToggleExpanded={() => setExpanded((v) => !v)}
-              onCycleTranslationMode={cycleTranslationMode}
+              onCycleTranslationMode={cycleTranslationModeHandler}
               onStop={onStop}
+              isDemoPlayback={isDemoPlayback}
+              demoAudioPlaying={demoAudioPlaying}
+              demoAudioNeedsGesture={demoAudioNeedsGesture}
+              onToggleDemoAudio={onToggleDemoAudio}
             />
           </div>
           <div className="min-w-0 overflow-hidden rounded-[24px] border border-divider bg-white">
-            <MindMap
-              tree={mindMapTree}
-              newNodeIds={mindMapNewIds}
-              elapsedMs={seconds * 1000}
-              onAnchorClick={onAnchorClick}
-            />
+            {isDemoComplete ? (
+              <DemoAfterClassPanel onFinish={onFinishDemo} onReplay={onReplayDemo} />
+            ) : (
+              <MindMap
+                tree={mindMapTree}
+                newNodeIds={mindMapNewIds}
+                elapsedMs={seconds * 1000}
+                onAnchorClick={onAnchorClick}
+              />
+            )}
           </div>
         </div>
       </div>

@@ -134,6 +134,18 @@ MeetMind 是以学习者长期上下文为中心的 AI 学习产品。
 | **有根** | 每句话都能指回真实原件，引用都能跳回 `[MM:SS]` 转录 |
 | **第一印象** | 学生打开 MeetMind，第一反应应该是「这个 AI 真的懂我在学什么」——不是"好看"，不是"安静"，是**智能**。视觉为这个目标服务 |
 
+**桌面上下文动作原则**：搜索笔记、历史收集、笔记总结这类“伸手拿资料”的动作，不用居中小弹窗打断主界面；优先使用右侧上下文 sidecar / 抽屉，让主学习现场仍然在背景里，像打开一页旁注而不是跳出一个 demo 弹框。
+
+**同桌出现原则**：同桌不是无上下文聊天机器人。空课堂 / 未听课时不占右栏、不显示 Octo Buddy、不提供“问同学”入口；只有真实录课或示例课处于听课态时才自动出现。否则它只能拒答，会伤害“这个 AI 真的懂我在学什么”的第一印象。
+
+**首屏录音来源原则**：电脑内录是核心能力，不是帮助文档里的隐藏功能。课堂零存量首屏必须让“麦克风 / 电脑声音 / 两路都录”作为轻量选择直接可见；不要只给一个“开始录课”按钮让用户猜。
+
+**试听课原则**：试听课必须真的能听，不能只是静态转录演示。进入示例课 recording 视图时必须挂载 `/demo-audio.mp3`，用真实音频播放时间驱动转录渐进露出；中间结构树也必须随音频长出来，不能长期停在空态。若浏览器拦截自动播放，必须提供显式“播放声音”入口。英文试听课默认 EN→中，但用户手动切换后要尊重用户选择。音频自然结束后必须留在试听课堂现场，由 Octo Buddy 轻引导用户点“结束这节课”，再进入既有课后复习页 / 应用矩阵；不要在课中页面承载完整课后学习，也不能回到“原声已保留”的失败卡片。
+
+**课中轻引导原则**：同桌右栏可以引导，但必须像旁边同学轻轻递话，不像功能导览。优先用 Octo Buddy 像素章鱼 + 2-3 个自然问题 chip（点了就发送），避免大面积“我能做什么”的说明卡。Octo Buddy 是 IP，不是静态 icon；内嵌在右栏时也要有呼吸 / 听课 / 开心等轻动画。
+
+**课后复习三栏原则**：视频和音频课后复习都必须是“左边有根，中间练习，右边有人陪”。左栏保留原始课堂证据（视频/音频播放器、时间轴、转录锚点），且视频复习默认应给左栏最大权重，保证视频真的可看；中栏承载完整学习工作区（应用矩阵、闪卡、测验、思维导图等）；右栏只做同桌解释与复盘。三栏之间两条边界都可拖拽；左证据栏不自动折叠，学习区和同桌被挤到阈值后折叠成窄 rail，可点击恢复。复习态 `<open_app:KEY/>` 不能把完整应用塞进聊天气泡，必须打开中间学习工作区；测验/闪卡等应用交互动态要先写入课后学习黑板，再由同桌作为上下文读取，避免中间应用和右侧聊天直接耦合。黑板是轻结构自然语言便签，只写学习现场事实，不写“如果/应该/优先/提醒/建议”等面向模型的指令，把判断权留给模型。
+
 ### 仪式时刻白名单（允许破戒的 5 个场景）
 
 日常 95% 的界面**仍然**遵守「平涂、克制」，但以下 5 个关键仪式时刻允许情绪化视觉（渐变/光晕/柔光）：
@@ -245,7 +257,8 @@ POST /api/tutor/agent
   body: { mode, context: {...}, options: {...}, transcript, messages, sessionId, subject, model? }
   → resolveTutorAgentProviderConfig(env, { modelId }) 选择 DeepSeek / DashScope / OpenAI-compatible provider
   → buildTutorSystemPrompt(mode, context, options) 拼 system
-  → streamText({ model, tools: [4 个 makeXxx + lookupTranscript],
+  → streamText({ model, tools: [makeXxx + lookupTranscript],
+                 // DeepSeek thinking 模型不暴露 native tools，结构化产物走 <open_app:KEY/> + /api/apps/execute，避免 reasoning_content tool-call 续写错误
                  stopWhen: stepCountIs(6), onStepFinish: track('tutor.step') })
   → toUIMessageStreamResponse()  // AI SDK v6 帧
 ```
@@ -256,7 +269,7 @@ POST /api/tutor/agent
 3. `<open_app:KEY/>` — 学生索要结构化产物时单行 marker，前端拦截后开窗或嵌入
 4. 思维引导：`---思维演示---` / `---正式回答---` / `【步骤名】` / `💡` / `🌟` 分段标记
 
-旧 `/api/tutor` (legacy SSE 路径) 仍存在并被 `SafeAITutor` 在 flag off 时降级使用；移动端文字 AI / 历史详情也应走 `SafeAITutor → TutorAgentPanel`。`useOmniRealtimeCall` 走独立 WebSocket（qwen-omni realtime），不打这个 endpoint；移动端语音同桌由 `RealtimeTutorPanel → TutorRealtimeCallScreen` 承接，语音最终转写必须写入 `conversationService` 的 `global-chat` 并把 conversationId 接回文字 agent。
+旧 `/api/tutor` (legacy SSE 路径) 仍存在并被 `SafeAITutor` 在 flag off 时降级使用；移动端文字 AI / 历史详情也应走 `SafeAITutor → TutorAgentPanel`。复习态 `open_app` 不是 iframe；桌面端有中间学习工作区时，marker 只负责把应用打开到中栏，完整 `AppRenderSurface` 不再塞进聊天气泡；恢复历史对话时必须先读 `app_workspace_result:{sessionId}:{appKey}` 共享缓存，不能因为历史里有 `<open_app:KEY/>` 就重新并发生成。`useOmniRealtimeCall` 走独立 WebSocket（qwen-omni realtime），不打这个 endpoint；移动端语音同桌由 `RealtimeTutorPanel → TutorRealtimeCallScreen` 承接，语音最终转写必须写入 `conversationService` 的 `global-chat` 并把 conversationId 接回文字 agent。
 
 ### 3.8 ASR 飞书妙记级工艺（M2 + M5 + M8）
 
@@ -404,28 +417,40 @@ src/
 |------|------|------|
 | `src/app/(main)/app/page.tsx` | ~2300 | God File（按域分 6 阶段提取为 hooks + 子组件，详见 §3.6），改前先读 `src/app/DOMAIN.md` |
 | `src/components/AITutor.tsx` | ~2357 | 复习态 Tutor legacy fallback；新路径默认走 `SafeAITutor → TutorAgentPanel`，移动端语音走 `RealtimeTutorPanel` |
-| `src/components/SafeAITutor.tsx` | ~229 | Tutor 入口分发：默认 `TutorAgentPanel`；负责把复习页/移动端/视频复习的启动问题、当前时间（秒）、选中资料、个人画像适配到 agent context，flag off 才回退 `AITutor` 老 SSE 路径 |
+| `src/components/SafeAITutor.tsx` | ~252 | Tutor 入口分发：默认 `TutorAgentPanel`；负责把复习页/移动端/视频复习的启动问题、当前时间（秒）、选中资料、个人画像和应用学习动态适配到 agent context，flag off 才回退 `AITutor` 老 SSE 路径 |
 | `src/components/Recorder.tsx` | ~1850 | 录音组件（已拆 3 子模块到 `recorder/`，含 mic/system/mixed 三档音源） |
 | `src/components/classroom/ClassroomCompanionPanel.tsx` | ~535 | 课堂右栏同桌面板（header / 气泡 / 流式 / thinking / 输入栏） |
 | `src/components/classroom/InlineAppCard.tsx` | ~160 | 内联 app 承载卡（保存完整 AppExecutionResult，复用 AppRenderSurface / 应用矩阵 UI） |
 | `src/components/classroom/ClassroomLeftPanel.tsx` | ~635 | 课堂左侧（list / recording 切换 + ActiveLessonPill + StickyStartBar） |
 | `src/hooks/useClassroomCompanion.ts` | — | 课堂同桌 hook：消费 `[MM:SS]` citations + `<open_app:KEY/>` marker → InlineAppCard 路径 |
 | `src/hooks/useOmniRealtimeCall.ts` | ~793 | Qwen Omni realtime 语音通话 hook（语音同桌入口，独立 WebSocket，不走 /api/tutor） |
-| `src/app/api/tutor/agent/route.ts` | ~212 | **M10 主入口**：mode-driven 单一 endpoint，AI SDK v6 streamText + tools，支持请求体 `model` 覆盖默认模型 |
+| `src/app/api/tutor/agent/route.ts` | ~336 | **M10 主入口**：mode-driven 单一 endpoint，AI SDK v6 streamText；非 DeepSeek 模型可用 native tools，DeepSeek thinking 模型走 `<open_app:KEY/>` 渲染契约避免 `reasoning_content` tool-call 错误 |
 | `src/app/api/tutor/route.ts` | 936 | Legacy SSE 路径（flag off 时仍可用，不要在它上面加新功能） |
 | `src/lib/prompts/tutor-prompts.ts` | ~300 | `buildTutorSystemPrompt(mode, context, options)` ── 三入口唯一 prompt 源 |
 | `src/lib/tutor/tutor-tools.ts` | ~225 | 4 个 Vercel AI SDK v6 tool（makeFlashcards / makeQuiz / makeMindmap / lookupTranscript） |
 | `src/lib/services/llm-service.ts` | ~603 | 统一 LLM 调用层（DeepSeek / DashScope / Ark / Relay），默认学习应用模型优先 `deepseek-v4-flash` |
-| `src/lib/utils/tutor-agent-provider.ts` | 69 | Tutor Agent OpenAI-compatible provider 解析：按请求模型 / env 选择 DeepSeek、DashScope 或 OpenAI，并强制 Chat Completions |
+| `src/lib/utils/tutor-agent-provider.ts` | 130 | Tutor Agent OpenAI-compatible provider 解析：按请求模型 / env 选择 DeepSeek、DashScope 或 OpenAI，并强制 Chat Completions；暴露 `shouldUseNativeTutorTools` 禁用 DeepSeek thinking native tool-call |
 | `src/lib/utils/ai-model-preference.ts` | 19 | 设置页模型偏好的 key 与 `auto` 解析契约 |
 | `src/lib/ui/copy.ts` | ~80 | 用户面文案唯一真相源（COPY 对象 + bannedWords 校验） |
 | `src/lib/ai-native/app-catalog.ts` | ~136 | Workshop 应用矩阵（7 类 ready），`WORKSHOP_APP_CATALOG` + `WorkshopAppKey` |
 | `src/app/api/video/import/route.ts` | 1212 | 多平台导入管线（已拆 3 子模块） |
 | `src/lib/services/commonstack-echo-service.ts` | ~273 | Echo LLM 调用，System Prompt 在此 |
-| `src/lib/services/workspace-echo-service.ts` | 1297 | Echo 数据管线 |
+| `src/lib/services/workspace-echo-service.ts` | 1303 | Echo 数据管线；CommonStack 新 schema 不返回 title，需从 takeaway / echo 生成标题后再进质量门 |
 | `src/lib/services/asr/audio-constraints.ts` | — | getUserMedia constraints 唯一真相源（AEC/NS/AGC），env 可覆盖 |
 | `src/lib/services/asr/post-edit.ts` | — | 低置信片段 LLM 校对（feature-flag `ASR_POST_EDIT_ENABLED`） |
 | `src/lib/services/classroom/recent-focus.ts` | — | 课堂同桌的最近 30s 窗口提取（纯 TS，可单测） |
+| `src/components/classroom/ClassroomLayout.tsx` | ~270 | 课堂分栏；同桌只在真实录课 / 示例课听课态可见，空课堂隐藏右栏、Octo Buddy 和移动端问同学入口 |
+| `src/components/classroom/ClassroomHero.tsx` | ~160 | 课堂零存量 Hero；居中首屏避免右侧空洞，录音来源 rail 直接露出麦克风 / 电脑声音 / 两路都录，示例课只是低门槛预览 |
+| `src/components/classroom/ClassroomRecordingView.tsx` | ~610 | 课中视图；试听课播放 `/demo-audio.mp3`，由音频时间驱动转录渐进露出，结束后只显示总结卡和“结束这节课”入口，由上层切到课后复习页 / 应用矩阵 |
+| `src/components/classroom/demo-mindmap.ts` | ~103 | 试听课静态结构树；随音频秒数生长，避免中间结构画布长期空态 |
+| `src/components/classroom/ClassroomCompanionPanel.tsx` | ~585 | 同桌右栏；课中 / 课后 starter 用会动的 Octo Buddy 像素章鱼 + 轻问题 chip 引导，不做重功能导览 |
+| `src/components/classroom/OctoBuddy.tsx` | ~660 | Octo Buddy 像素 IP；Sprite 自带呼吸 / 听课 / 开心动画，悬浮球和右栏内嵌都复用它 |
+| `src/components/DesktopVideoReviewLayout.tsx` | ~647 | 桌面端课后复习三栏布局：左=视频/音频证据 + 时间轴，中=学习工作区，右=同桌解释与复盘；视频默认放大证据栏，并持有课后学习黑板 |
+| `src/components/ReviewThreePaneLayout.tsx` | ~156 | 课后复习可拖拽三栏容器；两条边界都可拖拽，学习区 / 同桌可折叠成 rail，左证据栏不自动折叠 |
+| `src/components/ReviewLearningWorkspace.tsx` | ~119 | 课后中间学习工作区；承载完整 AppRenderSurface，闪卡切低亮度练习背景，并把测验/闪卡动态写入课后学习黑板 |
+| `src/components/review-learning-blackboard.ts` | ~131 | 课后学习黑板；轻结构自然语言便签，只记录学习现场事实，不写模型指令，解耦中间应用与右侧同桌 |
+| `src/components/AISearchPanel.tsx` | ~740 | 搜索笔记面板；桌面端必须以右侧上下文 sidecar 呈现，移动端全屏 |
+| `src/components/mobile/MobileCollectionSheet.tsx` | ~430 | 收集菜单 / 历史收集 / 笔记总结；桌面端历史与笔记总结走右侧上下文抽屉，移动端保留 sheet |
 | `src/components/EchoCard.tsx` | ~209 | 回声卡，必须遵守设计系统 |
 
 ---

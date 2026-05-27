@@ -184,11 +184,9 @@ export function MobileCollectionSheet({
             </div>
           </div>
         ) : (
-          /* ── 桌面端：居中弹窗 ── */
-          <div
-            className={`${collectionChromeContained ? 'absolute inset-0' : 'fixed inset-0'} z-30 flex items-center justify-center p-6`}
-          >
-            <div className="flex w-full max-w-md flex-col overflow-hidden rounded-2xl border border-[#E9E9E7] bg-white" style={{ maxHeight: 'min(70vh, 520px)' }}>
+          /* ── 桌面端：右侧上下文抽屉 ── */
+          <div className={`${collectionChromeContained ? 'absolute inset-0' : 'fixed inset-0'} z-30 flex justify-end`}>
+            <div className="flex h-full w-[min(520px,calc(100vw-188px))] min-w-[420px] flex-col overflow-hidden border-l border-[#E9E9E7] bg-white animate-in fade-in slide-in-from-right-6 duration-200">
               {moreContent}
             </div>
           </div>
@@ -316,17 +314,12 @@ export function MobileCollectionSheet({
           </div>
         </div>
       ) : (
-        /* ── 桌面端：居中弹窗 ── */
-        <div
-          className={`${collectionChromeContained ? 'absolute inset-0' : 'fixed inset-0'} z-30 flex items-center justify-center p-6`}
-        >
-          <div
-            className="flex w-full max-w-2xl flex-col overflow-hidden rounded-2xl border border-[#E9E9E7] bg-white"
-            style={{ maxHeight: 'min(80vh, 680px)' }}
-          >
-            <div className="flex items-center justify-between border-b border-[#E9E9E7] px-5 py-4">
-              <div>
-                <p className="text-[15px] font-semibold text-[#232322]">
+        /* ── 桌面端：右侧上下文抽屉 ── */
+        <div className={`${collectionChromeContained ? 'absolute inset-0' : 'fixed inset-0'} z-30 flex justify-end`}>
+          <div className="flex h-full w-[min(640px,68vw)] min-w-[520px] flex-col overflow-hidden border-l border-[#E9E9E7] bg-white animate-in fade-in slide-in-from-right-6 duration-200">
+            <div className="flex items-start justify-between gap-4 border-b border-[#E9E9E7] px-6 py-5">
+              <div className="min-w-0">
+                <p className="text-[15px] font-semibold tracking-[-0.01em] text-[#232322]">
                   {mobileCollectionSheet === 'echo'
                     ? '笔记总结'
                     : mobileCollectionSheet === 'history'
@@ -334,20 +327,22 @@ export function MobileCollectionSheet({
                       : '收集菜单'}
                 </p>
                 {mobileCollectionSheet === 'echo' ? (
-                  <p className="mt-0.5 text-[13px] text-[#787774]">安静整理出的重点。</p>
+                  <p className="mt-2 max-w-[420px] text-[13px] leading-6 text-[#787774]">
+                    这些不是弹窗通知，而是同桌从你收集过的内容里安静整理出的重点。
+                  </p>
                 ) : null}
               </div>
               <button
                 type="button"
                 onClick={onClose}
-                className="flex h-9 w-9 items-center justify-center rounded-xl border border-[#E9E9E7] text-[#787774] transition hover:bg-[#F7F7F5] hover:text-[#232322]"
+                className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl border border-[#E9E9E7] text-[#787774] transition hover:bg-[#F7F7F5] hover:text-[#232322]"
               >
                 <X size={15} />
               </button>
             </div>
 
             {mobileCollectionSheet === 'echo' ? (
-              <div className="min-h-0 flex-1 space-y-4 overflow-y-auto p-5">
+              <div className="min-h-0 flex-1 space-y-4 overflow-y-auto bg-[#F7F7F5] p-5">
                 {workspaceEchoes.length > 0 ? (
                   <>
                     {workspaceEchoes.map((echo) => (
@@ -378,13 +373,15 @@ export function MobileCollectionSheet({
                     {manualEchoDebugView}
                   </>
                 ) : (
-                  <div className="flex flex-col items-center py-16">
-                    <span className="text-2xl text-[#A3A39E]/40">✦</span>
-                    <p className="mt-3 text-[14px] leading-7 text-[#A3A39E]">
-                      先继续收集，笔记总结会安静地出现。
+                  <div className="flex min-h-full flex-col justify-center rounded-[24px] border border-[#E9E9E7] bg-white px-8 py-12 text-left">
+                    <p className="max-w-[360px] text-[22px] font-semibold leading-tight tracking-[-0.03em] text-[#232322]">
+                      继续收集，重点会自己浮出来。
+                    </p>
+                    <p className="mt-3 max-w-[380px] text-[14px] leading-7 text-[#787774]">
+                      它不会打断你，也不会急着生成长报告。等上下文够了，这里会出现小而有根的笔记总结。
                     </p>
                     {enableManualEchoTrigger ? (
-                      <div className="mt-4">
+                      <div className="mt-5">
                         {renderManualEchoTriggerButton(
                           'text-xs font-medium text-[#A3A39E] transition hover:text-[#787774] disabled:cursor-not-allowed disabled:opacity-60'
                         )}

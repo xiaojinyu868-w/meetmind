@@ -89,6 +89,17 @@ export interface ClassroomLeftPanelProps {
   scrollTarget?: { ms: number; nonce: number } | null;
   /** 点击活动条 → 进入录课态全屏视图 */
   onFocusRecording?: () => void;
+  /** 试听课音频播放控制 */
+  isDemoPlayback?: boolean;
+  demoAudioPlaying?: boolean;
+  demoAudioNeedsGesture?: boolean;
+  onToggleDemoAudio?: () => void;
+  /** 英文试听课默认开启 EN→中 */
+  defaultTranslationMode?: 'off' | 'en-zh' | 'zh-en';
+  /** 试听课听完后的课后引导 */
+  isDemoComplete?: boolean;
+  onReplayDemo?: () => void;
+  onFinishDemo?: () => void;
   /**
    * 当前选择的录音来源（仅课堂页有意义；收集页一律麦克风）。
    * 由 page.tsx 从 capture-editor-store 注入。
@@ -262,16 +273,22 @@ function EmptyState({
   onStart,
   onTryDemo,
   onCapabilityClick,
+  audioSource,
+  onChangeAudioSource,
 }: {
   onStart: () => void;
   onTryDemo: () => void;
   onCapabilityClick?: (appKey: string) => void;
+  audioSource?: RecorderAudioSource;
+  onChangeAudioSource?: (source: RecorderAudioSource) => void;
 }) {
   return (
     <ClassroomHero
       onTryDemo={onTryDemo}
       onStartRecording={onStart}
       onCapabilityClick={onCapabilityClick}
+      audioSource={audioSource}
+      onChangeAudioSource={onChangeAudioSource}
     />
   );
 }
@@ -304,9 +321,17 @@ function ListView({
   const isTrulyEmpty = !activeLesson && groups.length === 0;
 
   if (isTrulyEmpty) {
-    // 零存量态：hero 独占整个视图，不挂 PageHeader / sticky bar——
-    // hero 自身已经给出了身份 + 两个清晰 CTA + 能力预览，再叠加就是噪音。
-    return <EmptyState onStart={onStart} onTryDemo={onTryDemo} onCapabilityClick={onCapabilityClick} />;
+    // 零存量态：hero 独占整个视图，不挂 PageHeader / sticky bar。
+    // 录音来源必须在首屏可见，否则用户不知道可以录电脑声音。
+    return (
+      <EmptyState
+        onStart={onStart}
+        onTryDemo={onTryDemo}
+        onCapabilityClick={onCapabilityClick}
+        audioSource={audioSource}
+        onChangeAudioSource={onChangeAudioSource}
+      />
+    );
   }
 
   return (
@@ -558,6 +583,14 @@ export function ClassroomLeftPanel({
   onMindMapAnchorClick,
   scrollTarget,
   onFocusRecording,
+  isDemoPlayback,
+  demoAudioPlaying,
+  demoAudioNeedsGesture,
+  onToggleDemoAudio,
+  defaultTranslationMode,
+  isDemoComplete,
+  onReplayDemo,
+  onFinishDemo,
   audioSource,
   onChangeAudioSource,
   onOpenApp,
@@ -635,6 +668,14 @@ export function ClassroomLeftPanel({
             mindMapNewIds={mindMapNewIds}
             onAnchorClick={onMindMapAnchorClick}
             scrollTarget={scrollTarget}
+            isDemoPlayback={isDemoPlayback}
+            demoAudioPlaying={demoAudioPlaying}
+            demoAudioNeedsGesture={demoAudioNeedsGesture}
+            onToggleDemoAudio={onToggleDemoAudio}
+            defaultTranslationMode={defaultTranslationMode}
+            isDemoComplete={isDemoComplete}
+            onReplayDemo={onReplayDemo}
+            onFinishDemo={onFinishDemo}
           />
         )}
       </div>

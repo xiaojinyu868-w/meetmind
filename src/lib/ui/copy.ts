@@ -21,13 +21,13 @@
 export const COPY = {
   identity: {
     name: '同学',
-    tagline: '录一节课，我陪你听。',
-    subtagline: '听不懂的随时问我。',
+    tagline: '今天这节课。',
+    subtagline: '',
   },
 
   cta: {
-    demo: '试听一节 demo 课',
-    record: '录我自己的课',
+    demo: '看一节示例课',
+    record: '开始录课',
     ask: '问同学',
   },
 
@@ -44,13 +44,8 @@ export const COPY = {
   },
 
   hero: {
-    capabilityLabel: '同学能做的事',
-    capabilityHint: '点开任意一张看看',
-    outcomes: [
-      { label: '课中', text: '帮你跟上刚才那句' },
-      { label: '课后', text: '把课堂内容整理成笔记总结' },
-      { label: '复习前', text: '变成闪卡、测验和速查表' },
-    ],
+    /** 主操作下面的次级链接，邀请用户先看示例 —— 用“想先看看”而不是“demo”。 */
+    sideHint: '想先看看？',
   },
 
   lesson: {

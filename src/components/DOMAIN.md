@@ -48,7 +48,7 @@ components/
 |------|------|------|
 | `AITutor.tsx` | 1940 | 旧 AI 家教 / legacy fallback（移动端文字和语音主链路已移出），子模块在 `tutor/` |
 | `AIChat.tsx` | 691 | AI 对话组件 |
-| `AISearchPanel.tsx` | 720 | AI 全局搜索面板 |
+| `AISearchPanel.tsx` | ~740 | AI 全局搜索面板；桌面端以右侧上下文 sidecar 呈现，移动端全屏 |
 | `WordExplainer.tsx` | 562 | 术语解释器 |
 | `StreamingMarkdown.tsx` | 391 | 统一流式 Markdown 渲染（GFM 表格 / 数学公式 / [MM:SS] 与 [t=MM:SS] 时间戳 / [资料N]） |
 | `ThinkingVisualizer.tsx` | ~300 | AI 思维过程可视化 |
@@ -69,18 +69,22 @@ components/
 | 文件 | 行数 | 职责 |
 |------|------|------|
 | `WorkspaceCaptureList.tsx` | ~900 | 工作空间 capture 列表 |
-| `DesktopVideoReviewLayout.tsx` | ~537 | 桌面端复习布局（Longcut 风格：左列=视频+时间轴+章节列表，右列=Transcript/Chat/困惑点/AI工坊 tabs），Chat/困惑点统一走 `SafeAITutor`，播放位置需转秒后注入 agent context |
+| `DesktopVideoReviewLayout.tsx` | ~647 | 桌面端课后复习三栏布局：左=视频/音频证据 + 时间轴，中=转录/困惑点/学习工作区，右=同桌；接入可拖拽三栏，视频默认放大左证据栏，并持有课后学习黑板 |
+| `ReviewThreePaneLayout.tsx` | ~156 | 课后复习可拖拽三栏容器：两条边界都可拖拽；学习区 / 同桌被挤到阈值后折叠成窄 rail；左证据栏不自动折叠 |
+| `ReviewLearningWorkspace.tsx` | ~119 | 课后中间学习工作区：用 `AppRenderSurface` 承载闪卡 / 测验 / 思维导图等完整应用；闪卡切低亮度练习背景，并把测验/闪卡动态写入课后学习黑板 |
+| `review-learning-blackboard.ts` | ~131 | 课后学习黑板：轻结构自然语言便签；只记录当前中间应用和最近学习现场事实，不写“应该/提醒/建议”等模型指令，中间应用和右侧同桌通过它解耦 |
 | `WorkspaceCaptureEditorModal.tsx` | ~105 | 工作空间 capture 编辑弹窗，从 page.tsx 提取 |
 | `VideoReviewPlayer.tsx` | 823 | 视频复习播放器（pauseNonce/playNonce/seekNonce 命令式控制，点击画面暂停/播放+指示器动画，visibilitychange 倍速恢复，空格/箭头键盘快捷键，B站 Dash 双轨同步，B站封面代理） |
 | `ClassCheckOverlay.tsx` | 430 | 随堂检验弹窗（greeting → quiz → result 三阶段，Backdrop 已提取为独立组件避免闪烁） |
 | `ClassroomView.model.ts` | ~10 | 课堂页纯交互模型（demo 录课态停止按钮应退出 demo，不走真实录音/stale DB 清理） |
-| `SharedWorkspacePanel.tsx` | 46 | shared workspace 统一面板（仅 apps）— 从 `page.tsx` 抽离，已移除 highlights / summary / notes |
-| `ReviewWorkspacePanel.tsx` | 127 | desktop review 左侧工作区面板（tabs / timeline / anchor detail / shared workspace slot） |
-| `ReviewTutorPanel.tsx` | 220 | desktop review 右侧 Tutor 面板（波形、历史对话、SafeAITutor / TutorAgentPanel 统一容器） |
+| `SharedWorkspacePanel.tsx` | ~78 | shared workspace 统一面板（仅 apps）；支持在中间工作区打开具体应用而不是只弹浮窗 |
+| `ReviewWorkspacePanel.tsx` | 127 | desktop review 左侧证据面板（timeline / anchor detail） |
+| `ReviewTutorPanel.tsx` | ~268 | desktop review 右侧 Tutor 面板（历史对话、SafeAITutor / TutorAgentPanel 统一容器；音频波形已上移到左证据栏） |
 | `CollectionSelectionBar.tsx` | 94 | 收集上下文多选操作条（问 Tutor / 引用 / 批量归档删除） |
 | `CollectionComposerContextPreview.tsx` | 62 | composer 上方的引用与链接预览条 |
 | `CollectionComposerBar.tsx` | 168 | collection composer 输入区容器（预览 / textarea / 发送 / 听写 / 上传） |
 | `CollectionMessageActionSheet.tsx` | ~283 | 收集消息操作底部菜单（复习/编辑/打开原件/归档/删除），从 page.tsx 提取 |
+| `mobile/MobileCollectionSheet.tsx` | ~430 | 收集菜单 / 历史收集 / 笔记总结面板；移动端底部或侧边 sheet，桌面端历史与笔记总结以右侧上下文抽屉呈现 |
 | `CollectionFeedMessageBubble.tsx` | ~340 | 收集 Feed 单条消息气泡（audio/video/image/document/text 五种类型），从 page.tsx 提取 |
 | `CollectionEmptyState.tsx` | ~82 | 收集为空时引导页（录音/图片/讲义快捷入口），从 page.tsx 提取 |
 | `ImageUpload.tsx` | ~220 | 图片上传 |
