@@ -4,7 +4,7 @@ import { chat, DEFAULT_MODEL_ID } from '@/lib/services/llm-service';
 import type { AppExecutionContext, AppExecutionResult, AppPlugin, AppPluginTools } from '../types';
 import { buildPromptAnchorContext, buildPromptTranscriptContext, buildTerminologyHintBlock } from '../prompt-context';
 
-const TARGET_CARD_COUNT = 10;
+const TARGET_CARD_COUNT = 8;
 
 interface FlashcardDraft {
   question?: string;
@@ -77,11 +77,12 @@ function toTimestamp(value: unknown, fallback: number): number {
 
 function fallbackDraft(segment: TranscriptSegment, tools: AppPluginTools): FlashcardDraft {
   const summary = cleanText(tools.summarizeSegments([segment], 88) || segment.text || '');
-  const topic = summary.slice(0, 24) || '课堂核心概念';
+  // 优先用术语+对比的方式构造题面，避免"请解释 X"那种空白式提问
+  const topic = summary.slice(0, 24) || '本课核心概念';
   return {
-    question: `请解释"${topic}"，并给出一个课堂中的应用例子。`,
+    question: `用一句话区分"${topic}"和你之前学过的相关概念。`,
     answer: cleanText(segment.text || '') || '请回放该证据并完成复述。',
-    hint: '先说概念，再说方法，最后说应用。',
+    hint: '先说定义差异，再说应用差异。',
     startMs: segment.startMs,
     endMs: segment.endMs,
     difficulty: 'core',
@@ -99,7 +100,20 @@ async function generateDeckWithLLM(
       {
         role: 'system',
         content:
-          '你是一位认知科学学习教练，擅长间隔重复和主动回忆技术。请把课堂内容转化为高质量主动回忆闪卡，帮助学生完成理解、复述和迁移。严格基于课堂证据，只输出 JSON。',
+          [
+            '你是一位认知科学学习教练，擅长间隔重复和主动回忆。',
+            '你的产物会被学生在课后立刻使用——他第一次看到这组卡片就要觉得"这真的覆盖了我刚学的内容"。',
+            '',
+            '硬性纪律（违反任意一条都视为失败）：',
+            '1) 严格禁止"什么是 X？/请解释 X"这种空白式提问。每个题面都必须给出可触发回忆的具体情境或对比锚点。',
+            '2) 严格禁止口头禅（嗯/呃/啊/这个/那个）和原录音里的转写噪声进入卡面。',
+            '3) 严格禁止把"老师在 12:30 说了..."这种元层叙述当作答案——答案应该是知识本身，不是对课堂叙述的复述。',
+            '4) 答案 2-4 句、精准。题面 ≤ 30 字。",',
+            '5) 单张卡能被截图分享——题面+答案应当独立成立，不依赖外部上下文。',
+            '6) 若学习者关注点（anchors / 困惑标记）非空，至少 40% 的卡必须直接命中这些点。',
+            '',
+            '严格基于课堂证据，只输出 JSON。',
+          ].join('\n'),
       },
       {
         role: 'user',
@@ -111,7 +125,7 @@ async function generateDeckWithLLM(
 - 进阶层（challenge）：方法步骤、原理对比、易错点辨析，检验"理解为什么"
 - 迁移层（transfer）：跨场景应用、变式问题、学科联系，考察"能用来做什么"
 
-题量建议：6-12张，三个层级各覆盖至少1张。
+题量：5-8 张，三个层级各覆盖至少 1 张；困惑点优先成卡。
 
 最小输出契约（仅字段约束）：
 {
@@ -129,27 +143,48 @@ async function generateDeckWithLLM(
   ]
 }
 
-few-shot 示例（仅供格式参考，内容应来自实际课堂）：
+few-shot 反例（不要这样写）：
+{
+  "question": "什么是过拟合？",        ← 空白式提问，禁止
+  "question": "请解释机器学习",        ← 太宽，没有可回忆锚点
+  "question": "老师在 12:30 说了什么？" ← 元叙述，禁止
+  "answer": "嗯，就是模型表现不好这种"  ← 口头禅 + 模糊
+}
+
+few-shot 正例：
 {
   "deckTitle": "机器学习基础概念闪卡",
   "overview": "建议先完成基础层，再逐步挑战进阶和迁移层。",
   "cards": [
-    { "question": "什么是过拟合？用一句话定义。", "answer": "模型在训练集上表现好但在新数据上泛化差的现象，本质是学到了噪声而非规律。", "difficulty": "core", "startMs": 32000, "endMs": 45000 },
-    { "question": "L1 正则化和 L2 正则化在权重收缩效果上有什么区别？", "answer": "L1 倾向产生稀疏权重（部分为0），实现特征选择；L2 倾向均匀缩小所有权重，不产生精确零值。", "hint": "想想它们的惩罚项形状", "difficulty": "challenge", "startMs": 120000, "endMs": 138000 },
-    { "question": "如果你正在训练一个房价预测模型，发现验证集误差远大于训练集误差，你会采取哪些措施？", "answer": "1. 增加训练数据 2. 加入正则化(L1/L2/Dropout) 3. 降低模型复杂度 4. 使用早停法 5. 检查特征工程是否引入噪声", "difficulty": "transfer", "startMs": 200000, "endMs": 220000 }
+    {
+      "question": "如何用一句话区分'过拟合'和'欠拟合'？",
+      "answer": "过拟合：训练集表现好但泛化差，学到了噪声；欠拟合：训练集本身就差，模型容量不够。两者都看训练-验证误差差距判断。",
+      "difficulty": "core",
+      "startMs": 32000,
+      "endMs": 45000
+    },
+    {
+      "question": "L1 和 L2 正则化在权重收缩效果上有什么区别？为什么 L1 能做特征选择？",
+      "answer": "L1 倾向产生稀疏权重（部分精确为 0），实现特征选择；L2 均匀缩小所有权重不归零。差别来自惩罚项的形状——L1 的菱形约束更容易让最优解落在坐标轴上。",
+      "hint": "想想它们的惩罚项几何形状",
+      "difficulty": "challenge",
+      "startMs": 120000,
+      "endMs": 138000
+    },
+    {
+      "question": "训练房价模型时验证集误差远大于训练集误差，你会按什么顺序排查？",
+      "answer": "1. 先看是不是过拟合（增正则、降复杂度、早停）2. 再查特征工程是否引入泄露 3. 最后看是否数据分布偏移（训练 vs 验证集）。先动假设链最短的。",
+      "difficulty": "transfer",
+      "startMs": 200000,
+      "endMs": 220000
+    }
   ]
 }
-
-质量要求：
-- 题面必须具体可回答，避免模糊的"是什么"式提问（如"请解释X"→应改为"X和Y的关键区别是什么？"）
-- 答案应简洁精准，一般2-4句话
-- 避免"嗯/呃"等口头禅和时间戳表达
-- 每张卡片应对应课堂中的具体知识点
 
 课堂原文：
 ${transcriptContext}
 
-${anchorContext ? `学习者关注点：\n${anchorContext}` : ''}${buildTerminologyHintBlock(context.memory.terminologyHint)}`,
+${anchorContext ? `学习者关注点（包含困惑标记，请优先成卡）：\n${anchorContext}` : ''}${buildTerminologyHintBlock(context.memory.terminologyHint)}`,
       },
     ],
     model,
@@ -263,9 +298,9 @@ export const flashcardsPlugin: AppPlugin = {
   manifest: {
     id: 'flashcards-lab',
     name: '闪卡训练',
-    version: '0.3.0',
-    description: '基于课堂证据生成可回放的主动回忆闪卡。',
-    tags: ['student', 'flashcard', 'memory', 'active-recall'],
+    version: '0.4.0',
+    description: '基于课堂证据生成可回放的主动回忆闪卡，单卡可独立分享。',
+    tags: ['student', 'flashcard', 'memory', 'active-recall', 'shareable'],
     capabilities: ['citation-card', 'seek-action', 'task-writeback'],
     enabledByDefault: true,
   },
@@ -302,7 +337,7 @@ export const flashcardsPlugin: AppPlugin = {
 
     return {
       pluginId: 'flashcards-lab',
-      version: '0.3.0',
+      version: '0.4.0',
       model,
       trace: [
         `intent=${context.goal.intent}`,
