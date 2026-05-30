@@ -147,6 +147,7 @@ const MobileRecordTopBar = dynamic(() => import('@/components/mobile/MobileRecor
 const MobileAIFab = dynamic(() => import('@/components/mobile/MobileAIFab').then(m => ({ default: m.MobileAIFab })), { ssr: false });
 const MobileAIChatPanel = dynamic(() => import('@/components/mobile/MobileAIChatPanel').then(m => ({ default: m.MobileAIChatPanel })), { ssr: false });
 const MobileCollectionSheet = dynamic(() => import('@/components/mobile/MobileCollectionSheet').then(m => ({ default: m.MobileCollectionSheet })), { ssr: false });
+const MobileAppsSubPage = dynamic(() => import('@/components/mobile/MobileAppsSubPage').then(m => ({ default: m.MobileAppsSubPage })), { ssr: false });
 
 // ── Types → @/types/page-types · Utils → @/lib/utils/page-utils ──
 
@@ -2135,28 +2136,12 @@ function StudentAppContent({
               )}
 
               {mobileSubPage === 'apps' && (
-                <div className="flex min-h-0 flex-1 flex-col bg-white">
-                  {/* 手机端 P0：头部加 44×44 触控目标 + 顶部 safe-area + sticky */}
-                  <div
-                    className="sticky top-0 z-10 flex items-center gap-2 border-b border-divider bg-white px-2 py-2"
-                    style={{ paddingTop: 'max(env(safe-area-inset-top), 8px)' }}
-                  >
-                    <button
-                      type="button"
-                      onClick={() => setMobileSubPage(null)}
-                      aria-label="返回"
-                      className="flex h-11 w-11 items-center justify-center rounded-full text-ink-secondary transition-colors active:bg-divider-light active:text-ink"
-                    >
-                      <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-                      </svg>
-                    </button>
-                    <span className="text-base font-semibold text-ink">学习应用</span>
-                  </div>
-                  <div className="flex-1 min-h-0 overflow-hidden">
-                    {renderSharedWorkspacePanel('apps')}
-                  </div>
-                </div>
+                <MobileAppsSubPage
+                  title="学习应用"
+                  onBack={() => setMobileSubPage(null)}
+                >
+                  {renderSharedWorkspacePanel('apps')}
+                </MobileAppsSubPage>
               )}
 
               {mobileSubPage === 'tasks' && (
