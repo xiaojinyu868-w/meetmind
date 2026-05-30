@@ -17,4 +17,17 @@ export type {
   ApplicationGoal,
   InputLayerContext,
   MemoryLayerSnapshot,
+  // Context Pack（PRD v1.1 §2）
+  ContextPack,
+  ContextTier,
+  LessonContext,
+  PersonalAnnotation,
 } from './types';
+export {
+  buildPackFromExecutionContext,
+  buildExecutionContextFromPack,
+  buildPackFromSingleSession,
+  renderTranscriptWithAnnotations,
+  validatePack,
+  isAppSupportedAtTier,
+} from './context-pack';
