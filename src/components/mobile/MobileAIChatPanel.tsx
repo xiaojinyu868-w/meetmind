@@ -163,19 +163,21 @@ export function MobileAIChatPanel({
                 <div className="flex items-center gap-1">
                   <button
                     onClick={onBackToHistoryList}
-                    className="flex h-8 w-8 items-center justify-center rounded-full text-[#787774] hover:bg-[#F7F7F5]"
+                    className="mm-touch-target flex items-center justify-center rounded-full text-[#787774] active:bg-[#F7F7F5]"
                     title="返回列表"
+                    aria-label="返回列表"
                   >
-                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 10h16M4 14h16M4 18h16" />
                     </svg>
                   </button>
                   <button
                     onClick={onCloseHistory}
-                    className="flex h-8 w-8 items-center justify-center rounded-full text-[#787774] hover:bg-[#F7F7F5]"
+                    className="mm-touch-target flex items-center justify-center rounded-full text-[#787774] active:bg-[#F7F7F5]"
                     title="新对话"
+                    aria-label="新对话"
                   >
-                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
                     </svg>
                   </button>

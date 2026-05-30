@@ -157,7 +157,8 @@ export function DedaoMenu({
             )}
             <button
               onClick={onClose}
-              className="flex h-8 w-8 items-center justify-center rounded-full text-ink-muted transition-colors hover:bg-divider-light hover:text-ink-secondary"
+              className="mm-touch-target flex items-center justify-center rounded-full text-ink-muted transition-colors active:bg-divider-light active:text-ink-secondary"
+              aria-label="关闭菜单"
             >
               <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
