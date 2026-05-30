@@ -148,6 +148,7 @@ const MobileAIFab = dynamic(() => import('@/components/mobile/MobileAIFab').then
 const MobileAIChatPanel = dynamic(() => import('@/components/mobile/MobileAIChatPanel').then(m => ({ default: m.MobileAIChatPanel })), { ssr: false });
 const MobileCollectionSheet = dynamic(() => import('@/components/mobile/MobileCollectionSheet').then(m => ({ default: m.MobileCollectionSheet })), { ssr: false });
 const MobileAppsSubPage = dynamic(() => import('@/components/mobile/MobileAppsSubPage').then(m => ({ default: m.MobileAppsSubPage })), { ssr: false });
+const MobileSimpleSubPage = dynamic(() => import('@/components/mobile/MobileAppsSubPage').then(m => ({ default: m.MobileSimpleSubPage })), { ssr: false });
 
 // ── Types → @/types/page-types · Utils → @/lib/utils/page-utils ──
 
@@ -2145,26 +2146,16 @@ function StudentAppContent({
               )}
 
               {mobileSubPage === 'tasks' && (
-                <div className="flex min-h-0 flex-1 flex-col bg-white">
-                  <div className="flex items-center gap-3 border-b border-divider px-4 py-3">
-                    <button
-                      onClick={() => setMobileSubPage(null)}
-                      className="flex h-8 w-8 items-center justify-center rounded-full text-ink-secondary transition-colors hover:bg-divider-light hover:text-ink"
-                    >
-                      <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-                      </svg>
-                    </button>
-                    <span className="font-medium text-ink">今日任务</span>
-                  </div>
-                  <div className="flex-1 min-h-0 overflow-hidden">
-                    <ActionList
-                      items={actionItems}
-                      onComplete={handleActionComplete}
-                      onStartNext={handleStartNextAction}
-                    />
-                  </div>
-                </div>
+                <MobileSimpleSubPage
+                  title="今日任务"
+                  onBack={() => setMobileSubPage(null)}
+                >
+                  <ActionList
+                    items={actionItems}
+                    onComplete={handleActionComplete}
+                    onStartNext={handleStartNextAction}
+                  />
+                </MobileSimpleSubPage>
               )}
 
               {/* Right-side drawer menu. */}
