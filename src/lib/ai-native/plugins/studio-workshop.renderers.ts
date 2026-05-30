@@ -91,7 +91,8 @@ export function buildInfographicDraft(output: StudioOutput | null, cards: AppExe
       .filter(Boolean)
       .join('\n');
 
-  const suggestedScene = output?.infographic?.suggestedScene?.trim() || 'infographic';
+  // PRD v1.1 §5.6：信息图默认产物为"一张图带走这节课"（class-take-away）
+  const suggestedScene = output?.infographic?.suggestedScene?.trim() || 'class-take-away';
   const suggestedOrientation = output?.infographic?.suggestedOrientation || 'landscape';
   const suggestedDetailLevel = output?.infographic?.suggestedDetailLevel || 'standard';
 

@@ -140,7 +140,7 @@ export function InfographicWindow({
   const [detailLevel, setDetailLevel] = useState<'concise' | 'standard' | 'detailed'>(
     aiDraft?.suggestedDetailLevel || 'standard'
   );
-  const [scenePreset, setScenePreset] = useState(aiDraft?.suggestedScene || 'infographic');
+  const [scenePreset, setScenePreset] = useState(aiDraft?.suggestedScene || 'class-take-away');
   const [stylePreset, setStylePreset] = useState(resolveStylePresetKey(aiDraft?.stylePreset));
   const [customDesc, setCustomDesc] = useState('');
   const [showReferenceInfo, setShowReferenceInfo] = useState(false);

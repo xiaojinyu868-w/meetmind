@@ -46,6 +46,23 @@ export const SCENE_PRESETS: Record<
   string,
   { label: string; labelEn: string; promptHint: string; icon: string }
 > = {
+  // PRD v1.1 §5.6：固定产物"一张图带走这节课"。结构干净、零个人化痕迹，
+  // 主分支裂变可直接复用单图分享。这是 catalog 默认场景。
+  'class-take-away': {
+    label: '一张图带走这节课',
+    labelEn: 'Class Take-Away Card',
+    promptHint: [
+      '严格按"上 / 中 / 下"三段固定版式排版：',
+      '上段（约 20% 高度）：课程名 + 老师 + 日期；左对齐，小字克制，深灰色',
+      '中段（约 60% 高度，主体）：3 个核心概念，每个一行 + 图标 + 一句话定义；',
+      '  ─ 概念之间清晰留白，不要堆挤',
+      '  ─ 每个概念下方可挂一句老师金句（带"——老师"署名样式），用斜体或浅色区分',
+      '下段（约 20% 高度）：一句话总结 + MeetMind 品牌 footer（小字，浅色，居中）',
+      '整体风格：暖白底（#F7F7F5）、墨黑主文字（#232322）、低对比辅助色、圆角卡片感、不要花哨装饰；',
+      '中文排版规范：标点全角、段落留白、避免英文混排时的字母过密',
+    ].join('\n'),
+    icon: 'image',
+  },
   infographic: {
     label: '知识信息图',
     labelEn: 'Infographic',
