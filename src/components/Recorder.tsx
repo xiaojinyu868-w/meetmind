@@ -127,7 +127,11 @@ export const Recorder = forwardRef<RecorderHandle, RecorderProps>(function Recor
   const enhanceManagerRef = useRef<TranscriptEnhanceManager | null>(null);
   const [enhancedSegments, setEnhancedSegments] = useState<Map<string, EnhancedTranscriptSegment>>(new Map());
   const [enhanceStats, setEnhanceStats] = useState({ enhanced: 0, total: 0, isEnhancing: false });
-  const effectiveTranscribeMode: TranscribeMode = compactMode ? 'batch' : transcribeMode;
+  // PRD v1.1 / 手机端 P0：解耦 compactMode（UI 紧凑布局）和 transcribeMode（转写模式）。
+  // 旧实现 `compactMode ? 'batch' : transcribeMode` 错误地把 UI 紧凑度耦合到转写模式，
+  // 导致手机端 compactMode={true} 强制 batch、无流式 ASR、用户看不到任何反馈。
+  // compactMode 现在只影响布局尺寸；转写模式由 transcribeMode 状态决定，默认 'streaming'。
+  const effectiveTranscribeMode: TranscribeMode = transcribeMode;
 
   const vadStateRef = useRef({
     isSpeaking: false,
@@ -332,7 +336,12 @@ export const Recorder = forwardRef<RecorderHandle, RecorderProps>(function Recor
       
       let actualSampleRate = wsSampleRate;
       let source: MediaStreamAudioSourceNode | null = null;
-      if (!compactMode) {
+      // 手机端 P0 修复：原本 `if (!compactMode)` 把 AudioContext / VAD / level 整块跳过，
+      // 导致 compactMode 路径无 source / analyser，连 streaming ASR 都没法初始化。
+      // 现在改为：流式转写时 AudioContext+source+analyser 一定要建（VAD 需要 analyser），
+      // 仅当 compact 时跳过 level 显示（meter UI 本身在紧凑布局里也是隐藏的）。
+      const needsAudioPipeline = effectiveTranscribeMode === 'streaming' || !compactMode;
+      if (needsAudioPipeline) {
         audioContext = new AudioContext();
         if (audioContext.state === 'suspended') {
           try {
@@ -419,7 +428,7 @@ export const Recorder = forwardRef<RecorderHandle, RecorderProps>(function Recor
         : `session-${Date.now()}`;
       recordingIdRef.current = `recording-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 
-      if (!compactMode && effectiveTranscribeMode === 'streaming' && streamingAvailable && apiKey && audioContext && source) {
+      if (effectiveTranscribeMode === 'streaming' && streamingAvailable && apiKey && audioContext && source) {
         asrClientRef.current = new DashScopeASRClient(apiKey, {
           onSentence: (sentence) => {
             const segment: TranscriptSegment = {
@@ -682,7 +691,7 @@ export const Recorder = forwardRef<RecorderHandle, RecorderProps>(function Recor
     const asrAlive = asrClientRef.current?.isConnected();
     const pauseDurationMs = Date.now() - pauseTimestampRef.current;
 
-    if (!compactMode && !asrAlive && effectiveTranscribeMode === 'streaming' && streamingAvailable && apiKey) {
+    if (!asrAlive && effectiveTranscribeMode === 'streaming' && streamingAvailable && apiKey) {
       console.warn(`[Recorder] ASR disconnected during pause (${(pauseDurationMs / 1000).toFixed(1)}s). Reconnecting...`);
       setAsrReconnecting(true);
       setError(null);
