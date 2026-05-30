@@ -271,3 +271,105 @@ describe('buildTutorSystemPrompt — 回归：所有必选参数组合都产生�
     }
   }
 });
+
+// ──────────────────────────────────────────────────────────────
+// v3.0 SharedAgent — mode='shared' 隐私铁律 + 行为冻结
+//
+// 这一组测试把分享态的隐私边界冻结成契约：
+//   - 不注入 learnerProfile（访问者画像不能灌给"分享者刻下的同学"）
+//   - 不暴露 inline app marker（场景层产物不能在分享态二次生成）
+//   - 不读 fullTranscript / recentFocus（这些只属于 review / in-class）
+//   - 必须把 sharerNickname + courseTitle 拼进 system prompt
+//   - 必须把 transcriptDigest / artifactDescription / extraContext 注入
+// ──────────────────────────────────────────────────────────────
+
+describe('buildTutorSystemPrompt — shared 模式（v3.0）', () => {
+  const sharedContext: TutorSystemContext = {
+    shared: {
+      sharerNickname: 'Alice',
+      courseTitle: '决策树原理',
+      transcriptDigest: '[00:01] 老师：决策树用基尼系数选切分点',
+      artifactDescription: '一张考试速查表',
+      extraContext: '这是 ML 课的第三章',
+    },
+  };
+
+  it('身份段把分享者昵称和课程标题拼进来', () => {
+    const prompt = buildTutorSystemPrompt('shared', sharedContext);
+    expect(prompt).toMatch(/Alice/);
+    expect(prompt).toMatch(/决策树原理/);
+    expect(prompt).toMatch(/留下的那位同学/);
+  });
+
+  it('注入 transcriptDigest / artifactDescription / extraContext', () => {
+    const prompt = buildTutorSystemPrompt('shared', sharedContext);
+    expect(prompt).toMatch(/基尼系数/);
+    expect(prompt).toMatch(/一张考试速查表/);
+    expect(prompt).toMatch(/ML 课的第三章/);
+  });
+
+  it('隐私铁律：即使传了 learnerProfile 也绝不注入分享态 prompt', () => {
+    const prompt = buildTutorSystemPrompt('shared', {
+      ...sharedContext,
+      learnerProfile: '【这个学生】研一 NLP 方向 · 导师 Alice',
+    });
+    expect(prompt).not.toMatch(/研一 NLP/);
+    expect(prompt).not.toMatch(/【这个学生】/);
+  });
+
+  it('隐私铁律：分享态不读 fullTranscript / recentFocus', () => {
+    const prompt = buildTutorSystemPrompt('shared', {
+      ...sharedContext,
+      fullTranscript: '老师：这是一段不该被注入分享态的复习态转录',
+      recentFocus: '老师：这是一段不该被注入分享态的课中 30s 焦点',
+    });
+    expect(prompt).not.toMatch(/不该被注入分享态/);
+  });
+
+  it('默认禁用 inline app marker（分享态不让访问者持续生成产物）', () => {
+    const prompt = buildTutorSystemPrompt('shared', sharedContext);
+    expect(prompt).not.toMatch(/<open_app:/);
+    expect(prompt).not.toMatch(/产物合约/);
+  });
+
+  it('默认开启时间戳合约（让回答可引用 [MM:SS]）', () => {
+    const prompt = buildTutorSystemPrompt('shared', sharedContext);
+    expect(prompt).toMatch(/\[MM:SS\]/);
+  });
+
+  it('thinkingGuide 在分享态被忽略（仅 review 生效）', () => {
+    const prompt = buildTutorSystemPrompt('shared', sharedContext, { thinkingGuide: true });
+    expect(prompt).not.toMatch(/---思维演示---/);
+  });
+
+  it('沿用 TUTOR_IDENTITY_BASE 同桌身份', () => {
+    const prompt = buildTutorSystemPrompt('shared', sharedContext);
+    expect(prompt).toMatch(/你是这个学生的同桌/);
+  });
+
+  it('缺失 sharerNickname / courseTitle 时安全兜底', () => {
+    const prompt = buildTutorSystemPrompt('shared', {
+      shared: {
+        sharerNickname: '',
+        courseTitle: '',
+        transcriptDigest: '',
+      },
+    });
+    expect(prompt).toMatch(/一个同学/);
+    expect(prompt).toMatch(/这节课/);
+    expect(prompt.length).toBeGreaterThan(200);
+  });
+});
+
+describe('buildTutorSystemPrompt — TutorMode 联合扩展（v3.0）', () => {
+  it('类型上接受 in-class / review / shared 三种值（编译期检查 + 行为非空）', () => {
+    const modes: TutorMode[] = ['in-class', 'review', 'shared'];
+    for (const m of modes) {
+      const ctx: TutorSystemContext = m === 'shared'
+        ? { shared: { sharerNickname: 'A', courseTitle: 'B', transcriptDigest: '[00:00] x' } }
+        : {};
+      const prompt = buildTutorSystemPrompt(m, ctx);
+      expect(prompt.length).toBeGreaterThan(100);
+    }
+  });
+});

@@ -30,6 +30,7 @@
 | **改业务逻辑（service）** | `src/lib/services/DOMAIN.md` → 找到对应 service 文件 |
 | **改 ASR 链路** | `src/lib/services/asr/`（text-utils / render-state-machine / post-edit / audio-constraints） |
 | **改 AI-Native 插件** | `src/lib/ai-native/plugins/DOMAIN.md` → 对应 plugin |
+| **改 SharedAgent / 分享 Agent / 裂变** | `roadmap/v3.0-virality-agent.md`（北极星）→ `src/app/api/share/DOMAIN.md` → `src/app/share/DOMAIN.md` → `src/components/share/DOMAIN.md` → `src/lib/services/share-agent-service.ts` |
 | **改用户面文案** | `src/lib/ui/copy.ts`（**唯一真相源**——不要把字符串散落到组件里） |
 | **改状态管理** | `src/stores/DOMAIN.md` → 了解哪些状态已迁移到 store |
 | **改类型定义** | `src/types/DOMAIN.md` → `src/types/index.ts` |
@@ -119,7 +120,9 @@ MeetMind 是以学习者长期上下文为中心的 AI 学习产品。
 
 **当前聚焦**：课堂场景。一个大学生录了一节课 → MeetMind 当场作为 AI **同桌**陪他听 → 课后基于用户真实意图帮他解释、定位、复述、验证或生成闪卡 / 测验 / 速查表 / 思维导图 / 学习报告 → 生成一张让他忍不住分享到班级群的回声卡。
 
-**当前里程碑**：M9（agent-native 同学：identity + citations + inline apps in chat）+ M10（mode-driven prompts，三入口收口为 `/api/tutor/agent`）。详见 `docs/UPGRADE_PLAN.md` 和 `CHANGELOG.md`。
+**当前里程碑**：M9（agent-native 同学：identity + citations + inline apps in chat）+ M10（mode-driven prompts，三入口收口为 `/api/tutor/agent`）+ **M11（v3.0 SharedAgent：场景上下文 = 可分享的 Agent，班级裂变核心）**。详见 `roadmap/v3.0-virality-agent.md`、`docs/UPGRADE_PLAN.md` 和 `CHANGELOG.md`。
+
+> ⚠️ v3.0 战略转向：MeetMind 从「个人学习收纳产品」升级为「场景上下文可被分享、Agent 是裂变载体」。任何与 v3.0 哲学（"上下文是公共财产、Agent 是分享单元"）冲突的旧设计以 `roadmap/v3.0-virality-agent.md` 为准。
 
 ### Taste（任何改动都必须对齐）
 
@@ -251,11 +254,12 @@ Skill chip / 自然对话 / 内联 app 现在走**严格同链路**：
 |------|--------|---------|
 | 课堂同桌 | `useClassroomCompanion` | `mode: 'in-class'`, `recentFocus` (最近 30s) |
 | 录音/视频复习 | `TutorAgentPanel` / `SafeAITutor` | `mode: 'review'`, `fullTranscript`, `currentTimestampSec`（秒，不是毫秒）, `learnerProfile`（个人画像 + 当前课程近期对话痕迹）, options.thinkingGuide |
+| **分享态对话** (v3.0) | `SharedAgentChat` (落地页 `/share/[token]`) | `mode: 'shared'`, `shareToken`，服务端从 `SharedAgent.snapshotJson` 加载上下文；不读取访问者画像，禁用 native tools，禁用 inline app marker |
 
 ```
 POST /api/tutor/agent
   body: { mode, context: {...}, options: {...}, transcript, messages, sessionId, subject, model? }
-  → resolveTutorAgentProviderConfig(env, { modelId }) 选择 DeepSeek / DashScope / OpenAI-compatible provider
+  → resolveTutorAgentProviderConfig(env, { modelId }) 选择 StepFun / DeepSeek / DashScope / OpenAI-compatible provider（默认 `step-3.7-flash`）
   → buildTutorSystemPrompt(mode, context, options) 拼 system
   → streamText({ model, tools: [makeXxx + lookupTranscript],
                  // DeepSeek thinking 模型不暴露 native tools，结构化产物走 <open_app:KEY/> + /api/apps/execute，避免 reasoning_content tool-call 续写错误
@@ -360,13 +364,15 @@ src/
 ├── DOMAIN.md              # ← 源码总览，从这里开始
 ├── app/
 │   ├── DOMAIN.md         # 页面路由索引
+│   ├── share/DOMAIN.md   # v3.0 SharedAgent 公开落地页（/share/[token]）
 │   └── api/
 │       ├── DOMAIN.md     # 45+ 个 API 路由总览
 │       ├── auth/DOMAIN.md        # 认证接口组
 │       ├── workspace/DOMAIN.md    # Workspace 接口组
 │       ├── sources/DOMAIN.md      # 内容接入接口组
 │       ├── apps/DOMAIN.md         # AI 应用接口组（execute / catalog / plugins / infographic）
-│       ├── tutor/DOMAIN.md        # AI 同桌 + agent loop 子路由（M10 主入口）
+│       ├── tutor/DOMAIN.md        # AI 同桌 + agent loop 子路由（M10 主入口；mode='shared' 走 SharedAgent）
+│       ├── share/DOMAIN.md        # v3.0 SharedAgent 创建 / 公开读 / 领取 / 埋点
 │       └── video/import/DOMAIN.md # 视频导入管线
 ├── components/
 │   ├── DOMAIN.md         # ~140 个 UI 组件索引
@@ -375,6 +381,7 @@ src/
 │   ├── apps/windows/DOMAIN.md  # Workshop 窗口（cheatsheet / flashcards / quiz / mindmap / studyreport / podcast / infographic）
 │   ├── classroom/DOMAIN.md # M9 课堂同桌完整模块（Hero / Layout / CompanionPanel / InlineAppCard ...）
 │   ├── tutor/DOMAIN.md   # 复习态 Tutor + Skill chip + Tool card + Realtime call screen
+│   ├── share/DOMAIN.md   # v3.0 SharedAgent 创建器 + Canvas 长图
 │   ├── recorder/DOMAIN.md
 │   ├── mobile/DOMAIN.md
 │   ├── layout/DOMAIN.md
@@ -428,8 +435,8 @@ src/
 | `src/app/api/tutor/route.ts` | 936 | Legacy SSE 路径（flag off 时仍可用，不要在它上面加新功能） |
 | `src/lib/prompts/tutor-prompts.ts` | ~300 | `buildTutorSystemPrompt(mode, context, options)` ── 三入口唯一 prompt 源 |
 | `src/lib/tutor/tutor-tools.ts` | ~225 | 4 个 Vercel AI SDK v6 tool（makeFlashcards / makeQuiz / makeMindmap / lookupTranscript） |
-| `src/lib/services/llm-service.ts` | ~603 | 统一 LLM 调用层（DeepSeek / DashScope / Ark / Relay），默认学习应用模型优先 `deepseek-v4-flash` |
-| `src/lib/utils/tutor-agent-provider.ts` | 130 | Tutor Agent OpenAI-compatible provider 解析：按请求模型 / env 选择 DeepSeek、DashScope 或 OpenAI，并强制 Chat Completions；暴露 `shouldUseNativeTutorTools` 禁用 DeepSeek thinking native tool-call |
+| `src/lib/services/llm-service.ts` | ~660 | 统一 LLM 调用层（StepFun / DeepSeek / DashScope / Ark / Relay），默认学习应用模型优先 `step-3.7-flash`（阶跃星辰），fallback 链 `step-3.7-flash → deepseek-v4-flash → qwen3.6-plus` |
+| `src/lib/utils/tutor-agent-provider.ts` | ~160 | Tutor Agent OpenAI-compatible provider 解析：按请求模型 / env 选择 StepFun、DeepSeek、DashScope 或 OpenAI，并强制 Chat Completions；暴露 `shouldUseNativeTutorTools` 禁用 DeepSeek thinking native tool-call |
 | `src/lib/utils/ai-model-preference.ts` | 19 | 设置页模型偏好的 key 与 `auto` 解析契约 |
 | `src/lib/ui/copy.ts` | ~80 | 用户面文案唯一真相源（COPY 对象 + bannedWords 校验） |
 | `src/lib/ai-native/app-catalog.ts` | ~136 | Workshop 应用矩阵（7 类 ready），`WORKSHOP_APP_CATALOG` + `WorkshopAppKey` |

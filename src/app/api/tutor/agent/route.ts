@@ -45,6 +45,7 @@ import {
   buildTutorSystemPrompt,
   PROMPT_VERSIONS,
   type TutorMode,
+  type TutorSystemContext,
 } from '@/lib/prompts/tutor-prompts';
 import { createLogger, track } from '@/lib/logger';
 import {
@@ -54,6 +55,12 @@ import {
   shouldUseNativeTutorTools,
   type TutorAgentProviderConfig,
 } from '@/lib/utils/tutor-agent-provider';
+import {
+  getSharedAgentInternal,
+  trackShareInteraction,
+  SharedAgentSnapshotSchema,
+  type SharedAgentSnapshot,
+} from '@/lib/services/share-agent-service';
 
 const log = createLogger('tutor-agent');
 
@@ -110,13 +117,101 @@ const BodySchema = z.object({
    * Prompt 注入用 context.fullTranscript（review）或 context.recentFocus（in-class）。
    */
   transcript: z.array(TranscriptSegmentSchema).default([]),
-  /** M10：mode 驱动 prompt 骨架。老客户端没传时 fallback 到 'review'（最宽容） */
-  mode: z.enum(['in-class', 'review']).default('review'),
+  /**
+   * M10：mode 驱动 prompt 骨架。老客户端没传时 fallback 到 'review'（最宽容）。
+   * v3.0：新增 'shared' —— 走 SharedAgent 公开对话路径，需配合 shareToken。
+   */
+  mode: z.enum(['in-class', 'review', 'shared']).default('review'),
+  /** v3.0 仅 shared 模式：分享 token，从 SharedAgent.snapshotJson 加载上下文 */
+  shareToken: z.string().max(32).optional(),
   context: ContextSchema,
   options: OptionsSchema,
 });
 
+// ────────────────────────────────────────────────────────────────────
+// v3.0 SharedAgent helpers — mode='shared' 时用 snapshot 拼上下文
+// ────────────────────────────────────────────────────────────────────
+
 type ParsedTutorAgentBody = z.infer<typeof BodySchema>;
+
+const ARTIFACT_KIND_LABELS: Record<string, string> = {
+  cheatsheet: '一张考试速查表',
+  mindmap: '一张思维导图',
+  quiz: '一组课堂测验',
+  flashcards: '一组课堂闪卡',
+  infographic: '一张课堂信息图',
+  'audio-overview': '一期课堂播客',
+  notes: '一份课堂笔记',
+  'chat-only': '一段对这节课的对话',
+};
+
+function formatTranscriptDigest(snapshot: SharedAgentSnapshot): string {
+  const segments = snapshot.transcriptDigest?.segments ?? [];
+  if (segments.length === 0) return '';
+  return segments
+    .map((seg) => {
+      const startMin = Math.floor(seg.startSec / 60).toString().padStart(2, '0');
+      const startSec = Math.floor(seg.startSec % 60).toString().padStart(2, '0');
+      const speaker = seg.speaker ? `${seg.speaker}：` : '';
+      return `[${startMin}:${startSec}] ${speaker}${seg.text}`;
+    })
+    .join('\n');
+}
+
+interface SharedContextResolution {
+  ok: true;
+  context: TutorSystemContext;
+  shareId: string;
+}
+
+interface SharedContextError {
+  ok: false;
+  status: number;
+  error: string;
+}
+
+/**
+ * 给 shared 模式注入上下文：根据 shareToken 加载 snapshot，拼成 context.shared。
+ */
+async function resolveSharedContext(
+  shareToken: string | undefined,
+  fallbackContext: TutorSystemContext,
+): Promise<SharedContextResolution | SharedContextError> {
+  if (!shareToken) {
+    return { ok: false, status: 400, error: 'shared 模式需要 shareToken' };
+  }
+  const record = await getSharedAgentInternal(shareToken);
+  if (!record) {
+    return { ok: false, status: 404, error: '分享不存在或已撤销' };
+  }
+  if (!record.conversationEnabled) {
+    return { ok: false, status: 403, error: '该分享禁用了对话' };
+  }
+
+  let snapshot: SharedAgentSnapshot;
+  try {
+    snapshot = SharedAgentSnapshotSchema.parse(JSON.parse(record.snapshotJson));
+  } catch {
+    return { ok: false, status: 500, error: '分享内容损坏' };
+  }
+
+  const transcriptDigest = formatTranscriptDigest(snapshot);
+  const artifactDescription = ARTIFACT_KIND_LABELS[snapshot.artifactKind] ?? '一份分享产物';
+
+  const context: TutorSystemContext = {
+    // 保留客户端传上来的 supportMaterials 等通用字段，但显式抹掉 learnerProfile
+    // —— 隐私铁律：分享态不注入访问者画像
+    supportMaterials: fallbackContext.supportMaterials,
+    shared: {
+      sharerNickname: snapshot.sharerNickname ?? record.sharerNickname ?? '一位同学',
+      courseTitle: snapshot.title || record.title,
+      transcriptDigest,
+      artifactDescription,
+      extraContext: snapshot.conversationContext,
+    },
+  };
+  return { ok: true, context, shareId: record.id };
+}
 
 function getRawTutorAgentErrorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error || '');
@@ -161,15 +256,19 @@ function createTutorAttemptStream({
         const { apiKey, baseURL, modelId } = provider;
         const openai = createOpenAI({ apiKey, baseURL });
         const model = openai.chat(modelId);
-        const tools = shouldUseNativeTutorTools(modelId)
-          ? createTutorTools({
-              sessionId: body.sessionId,
-              transcript: body.transcript,
-              subject: body.subject,
-              model: modelId,
-              mode: body.mode as TutorMode,
-            })
-          : {};
+        // 分享态禁用 native tools —— 工具会去查 transcript / sessionId，
+        // 但分享态学生没有这些，且会泄露原作者上下文。
+        const tools =
+          body.mode !== 'shared' && shouldUseNativeTutorTools(modelId)
+            ? createTutorTools({
+                sessionId: body.sessionId,
+                transcript: body.transcript,
+                subject: body.subject,
+                model: modelId,
+                // 此分支已经排除 'shared'，安全地窄化为 createTutorTools 接受的两种 mode
+                mode: body.mode as 'in-class' | 'review',
+              })
+            : {};
         let deliveredOutput = false;
 
         track({
@@ -302,8 +401,24 @@ export async function POST(request: NextRequest) {
         headers: { 'content-type': 'application/json' },
       });
     }
-    const { messages, mode, context, options } = parsed.data;
+    const { messages, mode, options } = parsed.data;
+    let { context } = parsed.data;
     sessionId = parsed.data.sessionId;
+
+    // v3.0 shared 模式：用 shareToken 加载 SharedAgent.snapshot 替换上下文
+    let sharedShareId: string | null = null;
+    if (mode === 'shared') {
+      const resolved = await resolveSharedContext(parsed.data.shareToken, context);
+      if (!resolved.ok) {
+        track({ kind: 'tutor.fail', sessionId, errorCode: 'TUTOR_SHARED_CONTEXT_FAIL', errorMsg: resolved.error });
+        return new Response(JSON.stringify({ error: resolved.error }), {
+          status: resolved.status,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      context = resolved.context;
+      sharedShareId = resolved.shareId;
+    }
 
     const providers = resolveTutorAgentProviderFallbacks(process.env, { modelId: parsed.data.model });
     if (providers.length === 0) {
@@ -321,6 +436,15 @@ export async function POST(request: NextRequest) {
       systemPrompt,
       modelMessages: await convertToModelMessages(messages as UIMessage[]),
     });
+
+    // 异步：分享态记一次 chat 互动
+    if (sharedShareId && parsed.data.shareToken) {
+      void trackShareInteraction({
+        token: parsed.data.shareToken,
+        visitorUserId: null, // 鉴权信息这层没读出来——后续可在 createTutorAttemptStream 里带
+        eventType: 'chat',
+      }).catch((err) => log.warn('shared chat track failed', { sessionId, err: (err as Error).message }));
+    }
 
     return createUIMessageStreamResponse({ stream });
   } catch (err) {

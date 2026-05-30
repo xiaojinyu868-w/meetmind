@@ -27,6 +27,7 @@ import {
 } from '@/components/apps/hooks/useAppExecution';
 import styles from './WorkshopYellowPage.module.css';
 import { useAuth } from '@/lib/hooks/useAuth';
+import { OctoCrystalDispatcher } from '@/components/share/OctoCrystalDispatcher';
 
 const WORKSHOP_MODEL_PREFERENCE = 'ai_workshop_model';
 const DOCK_STORAGE_PREFIX = 'app_workspace_dock:';
@@ -648,6 +649,16 @@ export function WorkshopYellowPage(props: WorkshopYellowPageProps) {
           </button>
         </div>
       </header>
+
+      {/* v3.0 SharedAgent · 「递结晶」入口
+          仪式时刻：Octo Buddy 抱着今天的结晶出现，让你挑一个递给同学。
+          隐私：只读 cheatsheet/mindmap/quiz/infographic 的本地缓存，不读 flashcards/study-report。
+          详见 roadmap/v3.0-virality-agent.md */}
+      <OctoCrystalDispatcher
+        sessionId={sessionId}
+        transcript={transcript}
+        summary={summaryOverview}
+      />
 
       <div className={styles.grid}>
         {visibleApps.map((app) => {

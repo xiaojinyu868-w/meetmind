@@ -219,7 +219,11 @@ export type TrackEvent =
   | { kind: 'sync.batch.start'; batchId: string; size: number }
   | { kind: 'sync.batch.success'; batchId: string; size: number; durationMs: number }
   | { kind: 'sync.batch.fail'; batchId: string; size: number; durationMs: number; errorCode?: string }
-  | { kind: 'sync.conflict'; batchId: string; detail?: unknown };
+  | { kind: 'sync.conflict'; batchId: string; detail?: unknown }
+  // v3.0 SharedAgent —— 分享 Agent 链路（roadmap/v3.0-virality-agent.md）
+  | { kind: 'share.create'; shareId: string; ownerId: string | null; artifactKind: string }
+  | { kind: 'share.interaction'; shareId: string; eventType: 'view' | 'chat' | 'claim' | 'reshare'; visitorUserId: string | null }
+  | { kind: 'share.fail'; shareId?: string; errorCode?: string; errorMsg?: string };
 
 const trackLog = createLogger('track');
 

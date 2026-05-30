@@ -205,6 +205,82 @@ export const COPY = {
   },
 
   /**
+   * v3.0 SharedAgent —— 分享 Agent 的落地页 / 分享卡 / 创建对话框文案
+   * 见 roadmap/v3.0-virality-agent.md。
+   */
+  share: {
+    landing: {
+      /** 落地页右下角极淡的访问计数 */
+      viewCount: (count: number): string => `已被打开 ${count} 次`,
+      /** 没登录访问者点"领取到我的工作台"时的引导 */
+      claimNeedsLogin: '领取需要先登录，登录后这份内容就在你的工作台里了',
+      claimGo: '去登录',
+      /** 已登录领取按钮 */
+      claimAction: '领取到我的工作台',
+      claiming: '正在领取…',
+      claimDone: '已领取，去工作台看看',
+      claimAlready: '你之前已经领过这一份',
+      /** 也分享给别人 */
+      reshareAction: '也分享给别人',
+      /** 分享态对话输入占位符 */
+      chatPlaceholder: '问问这节课…',
+      /** 已撤销 / 已过期 */
+      notFoundTitle: '这条分享暂时不可用',
+      notFoundBody: '可能已被原作者撤回，或者链接打错了。',
+      /** 头部副标题：基于分享者昵称 */
+      sharedBy: (nickname: string): string => `${nickname} 听完了这节课，留了一份给你`,
+      /** 没有昵称兜底 */
+      sharedByAnon: '一个同学听完了这节课，留了一份给你',
+      /** 转录摘要标题 */
+      digestTitle: '这节课讲了什么',
+      digestEmpty: '没附转录摘要，可以直接问同学这节课的事。',
+      /** 产物预览块标题（按 artifactKind 切换） */
+      artifactTitle: (kind: string): string => {
+        const map: Record<string, string> = {
+          cheatsheet: '考前速查表',
+          mindmap: '思维导图',
+          quiz: '课堂测验',
+          flashcards: '课堂闪卡',
+          infographic: '课堂信息图',
+          'audio-overview': '课堂播客',
+          notes: '同学版笔记',
+          'chat-only': '可以直接聊',
+        };
+        return map[kind] ?? '一份分享';
+      },
+    },
+    creator: {
+      /** 录音结束后 Octo Buddy 弹出的标题 */
+      title: '今天这节课的结晶',
+      subtitle: '挑一个递给同学，也可以丢进班级群',
+      /** 选哪种产物（场景层只显示这一组） */
+      pickKind: '想送什么过去？',
+      pickHint: '挑一个就好。同学会基于这节课在背后陪你回答',
+      /** 创建按钮 */
+      submit: '生成分享',
+      submitting: '正在生成…',
+      doneTitle: '已经做好了',
+      doneCopy: '复制链接',
+      doneCopied: '链接已复制',
+      doneShare: '分享给同学',
+      doneViewLanding: '看看对方会看到什么',
+      /** 仪式入口（应用矩阵 / 录课结束页都会用到的「递结晶」模块） */
+      crystal: {
+        eyebrow: '今天这节课',
+        title: '把这节课递给同学',
+        subtitle: '挑一个产物，做成一份能对话的分享',
+        cta: '递给同学',
+        ctaPreparing: '正在准备…',
+        cardReady: '已整好，递给同学',
+        cardEmpty: '还没整 · 先做一版',
+        cardGenerating: '生成中…',
+        emptyHint: '做完一个应用，这里就会出现',
+        privacyNote: '只带这节课的内容和你挑的这一份，不会带你的私人对话或答题数据',
+      },
+    },
+  },
+
+  /**
    * "被禁用"的词表——供测试脚本 grep 校验，确保面向用户的字符串不退化。
    */
   bannedWords: ['回声卡', '预知气泡', '工坊', '研判', '引擎'] as const,

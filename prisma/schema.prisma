@@ -39,6 +39,9 @@ model User {
   wechatInboxMessages  WechatInboxMessage[]
   asrCorrections       AsrCorrection[]
   asrHotwords          AsrHotword[]
+  sharedAgentsOwned    SharedAgent[]         @relation("SharedAgentOwner")
+  shareClaims          ShareClaim[]          @relation("ShareClaimer")
+  shareInteractions    ShareInteraction[]    @relation("ShareInteractionVisitor")
 
   @@index([username])
   @@index([email])
@@ -83,6 +86,7 @@ model Workspace {
   wechatInboxMessages WechatInboxMessage[]
   asrCorrections      AsrCorrection[]
   asrHotwords         AsrHotword[]
+  sharedAgents        SharedAgent[]         @relation("SharedAgentWorkspace")
 
   @@index([ownerId])
   @@index([kind])
@@ -439,4 +443,107 @@ model AsrHotword {
   @@index([userId])
   @@index([workspaceId])
   @@index([weight])
+}
+
+// ==================== v3.0 SharedAgent — 场景上下文作为分享单元 ====================
+//
+// 设计参见 roadmap/v3.0-virality-agent.md。
+//
+// 一个 SharedAgent = 一个用户在某节课/讨论之后"刻"下来的可分享 Agent。
+// 它持有 share-time snapshot（不可变），任何人凭 token 可访问；
+// 登录用户可与之对话（走 /api/tutor/agent mode='shared'）或领取到自己 workspace。
+//
+// 隐私铁律：
+//   - snapshotJson 永远不包含原作者的对话历史 / 学习者画像 / 个人层应用产物
+//   - 默认只装"场景上下文"：转录摘要 + 选定的产物 (cheatsheet/mindmap/quiz/...) + 课名
+//   - 个人层数据仅在用户分享时显式勾选才进入 snapshot
+
+/// 一个被分享出去的 Agent 快照
+model SharedAgent {
+  id              String  @id @default(cuid())
+  /// 公开访问的短 token（URL 安全，~12 字符）
+  token           String  @unique
+  /// 创建分享的用户和 workspace（用户注销时保留 SharedAgent，因此用 SetNull）
+  ownerId         String?
+  workspaceId     String?
+  /// 来源 IndexedDB sessionId（用于本地引用、不构成跨用户主键）
+  sourceSessionId String?
+  /// 标题（课程名 / 讨论主题）
+  title           String
+  /// 学科 / 上下文
+  subject         String?
+  /// 分享的核心产物类型：
+  ///   cheatsheet | mindmap | quiz | flashcards | infographic | audio-overview | notes | chat-only
+  artifactKind    String
+  /// snapshot 数据：见 SharedAgentSnapshot 类型定义。一次性刻死，不随源更新。
+  snapshotJson    String
+  /// 分享者展示昵称（不带真实姓名，避免社工）
+  sharerNickname  String?
+  /// 隐私 / 可见性：public（任何人持链接可看）/ unlisted（不可被搜索）/ class（保留）
+  visibility      String  @default("public")
+  /// 是否允许对方对话（false = 只读分享图）
+  conversationEnabled Boolean @default(true)
+  /// 浏览次数
+  viewCount       Int     @default(0)
+  /// 领取次数
+  claimCount      Int     @default(0)
+  /// 对话次数
+  chatCount       Int     @default(0)
+  /// 状态：active / revoked
+  status          String  @default("active")
+  expiresAt       DateTime?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  owner        User?              @relation("SharedAgentOwner", fields: [ownerId], references: [id], onDelete: SetNull)
+  workspace    Workspace?         @relation("SharedAgentWorkspace", fields: [workspaceId], references: [id], onDelete: SetNull)
+  interactions ShareInteraction[]
+  claims       ShareClaim[]
+
+  @@index([token])
+  @@index([ownerId])
+  @@index([workspaceId])
+  @@index([artifactKind])
+  @@index([status])
+  @@index([createdAt])
+}
+
+/// 分享 Agent 的访问/对话/转发埋点
+model ShareInteraction {
+  id            String   @id @default(cuid())
+  shareId       String
+  /// 访问者 userId（如果登录）；匿名访问时为 null
+  visitorUserId String?
+  /// 事件类型：view | chat | claim | reshare
+  eventType     String
+  /// 可选携带数据（chat 摘要、user-agent 等）
+  metadataJson  String?
+  createdAt     DateTime @default(now())
+
+  share   SharedAgent @relation(fields: [shareId], references: [id], onDelete: Cascade)
+  visitor User?       @relation("ShareInteractionVisitor", fields: [visitorUserId], references: [id], onDelete: SetNull)
+
+  @@index([shareId])
+  @@index([visitorUserId])
+  @@index([eventType])
+  @@index([createdAt])
+}
+
+/// 把一个 SharedAgent 领取到自己 workspace 的记录（一对一）
+model ShareClaim {
+  id              String   @id @default(cuid())
+  shareId         String
+  claimerUserId   String
+  claimerWorkspaceId String?
+  /// 领取后在 claimer workspace 创建的 capture id（可空，若领取流程没立刻造 capture）
+  capturedItemId  String?
+  createdAt       DateTime @default(now())
+
+  share   SharedAgent @relation(fields: [shareId], references: [id], onDelete: Cascade)
+  claimer User        @relation("ShareClaimer", fields: [claimerUserId], references: [id], onDelete: Cascade)
+
+  @@unique([shareId, claimerUserId])
+  @@index([claimerUserId])
+  @@index([claimerWorkspaceId])
+  @@index([createdAt])
 }

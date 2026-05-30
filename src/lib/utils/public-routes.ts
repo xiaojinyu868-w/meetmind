@@ -51,6 +51,10 @@ const PUBLIC_ROUTES = [
   '/api/feedback',
   '/api/health',
   '/api/workspace/search',
+  // v3.0 SharedAgent —— 落地页和 4 个 share API 都允许匿名打开。
+  // 需要鉴权的（创建、领取）由各自 route handler 内部用 authService.verifyToken 自查。
+  '/share/*',
+  '/api/share/*',
 ] as const;
 
 function matchPath(pathname: string, patterns: readonly string[]): boolean {

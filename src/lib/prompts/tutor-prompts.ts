@@ -23,11 +23,16 @@
  * 版本化：`PROMPT_VERSIONS` 给 Sentry span `experimental_telemetry.metadata` 做切片。
  */
 
-export type TutorMode = 'in-class' | 'review';
+export type TutorMode = 'in-class' | 'review' | 'shared';
 export type TutorInlineAppKey = 'flashcards' | 'quiz' | 'mindmap' | 'cheatsheet' | 'study-report';
 
 const IN_CLASS_INLINE_APP_KEYS: readonly TutorInlineAppKey[] = ['mindmap', 'cheatsheet'];
 const REVIEW_INLINE_APP_KEYS: readonly TutorInlineAppKey[] = ['flashcards', 'quiz', 'mindmap', 'cheatsheet', 'study-report'];
+/**
+ * 分享态默认不允许 inline app —— 访问者不该在别人分享的 Agent 里持续生成新产物
+ * （那是个人层）。如果产品后续要放开（例如让访问者基于分享内容做练习），再调整。
+ */
+const SHARED_INLINE_APP_KEYS: readonly TutorInlineAppKey[] = [];
 
 const INLINE_APP_LABELS: Record<TutorInlineAppKey, string> = {
   flashcards: '闪卡',
@@ -46,8 +51,21 @@ export interface TutorSystemContext {
   currentTimestampSec?: number;
   /** 两 mode 共用：引用材料（课前上传的预习资料） */
   supportMaterials?: Array<{ title: string; content: string }>;
-  /** 可选：学生背景（从 learner profile 解析出来） */
+  /** 可选：学生背景（从 learner profile 解析出来）。分享态绝不注入这一段。 */
   learnerProfile?: string;
+  /** 仅 shared：分享 Agent 的快照内容（v3.0） */
+  shared?: {
+    /** 分享者展示昵称（不带真实姓名） */
+    sharerNickname: string;
+    /** 课程标题 */
+    courseTitle: string;
+    /** 转录摘要（关键段落拼接，已经在 service 层裁切过） */
+    transcriptDigest: string;
+    /** 分享者选定的核心产物（speech-friendly 描述，比如 "一张速查表" / "一张思维导图"） */
+    artifactDescription?: string;
+    /** 分享态 system prompt 注入的额外背景（来自 SharedAgentSnapshot.conversationContext） */
+    extraContext?: string;
+  };
 }
 
 export interface TutorSystemOptions {
@@ -105,6 +123,27 @@ const MODE_REVIEW_SEGMENT = `
 你可以比课中写得更长、更结构化，但**不要强行凑长**——简洁比堆料更重要。
 复习场景的关键不是主动安排任务，也不是把意图写成硬规则；让模型基于上下文理解他此刻是在求解释、求证据、求结构、求自测，还是只想确认一句话。
 如果转录里没讲到他问的东西，就明确告诉他这节课没讲到，再用你本来就懂的常识简单搭一下桥。不要假装课里讲过。`;
+
+/**
+ * 分享态（v3.0 SharedAgent）的 mode segment 是动态的——需要把分享者昵称和课程
+ * 标题拼进去，让"我是 Alice 听完《XXX》留下的同学"这一身份直接植入 system。
+ */
+function buildSharedModeSegment(params: { sharerNickname: string; courseTitle: string }): string {
+  const sharer = params.sharerNickname.trim() || '一个同学';
+  const course = params.courseTitle.trim() || '这节课';
+  return `
+你是${sharer}听完《${course}》之后留下的那位同学。
+现在另一个学生凭一条分享链接进来了——他不一定上过这节课，可能只是被这份内容吸引。
+
+你掌握的素材有限：只有这节课的关键转录片段，加上分享者当时挑出来留给大家的那个产物。
+所以帮他的方式是：
+- 先理解他问的是关于这节课的具体内容、还是更广义的概念问题
+- 基于已有素材老老实实回答；超出这节课范围时直说"这节课里没讲，我可以基于常识简单聊一下"
+- 不要替他做复习规划、不要主动推他登录或注册，就好好答他问的那一句
+- 不要假装认识他本人——你没有他的学习历史，他递给你的就是此刻这条问题
+
+如果他看完想"也带回去学一学"，会有一个明显的领取按钮，你不需要在回复里反复提示他。`;
+}
 
 // ──────────────────────────────────────────────────────────────
 // Capability segments：按 context/options 动态拼
@@ -175,6 +214,27 @@ function capThinkingGuide(): string {
 （这里是最终给他的那个清清爽爽的答案，不要再带草稿感。）`;
 }
 
+function capSharedContext(shared: NonNullable<TutorSystemContext['shared']>): string {
+  const lines: string[] = [`【这节课 · 关键转录摘要（来自分享者刻下的快照）】`];
+  if (shared.transcriptDigest.trim()) {
+    lines.push(shared.transcriptDigest.trim());
+  } else {
+    lines.push('（分享者没有附带转录摘要——只能凭课程标题作答）');
+  }
+  if (shared.artifactDescription?.trim()) {
+    lines.push('');
+    lines.push(`【分享者留下的核心产物】 ${shared.artifactDescription.trim()}`);
+  }
+  if (shared.extraContext?.trim()) {
+    lines.push('');
+    lines.push(`【分享者附带的说明】`);
+    lines.push(shared.extraContext.trim());
+  }
+  lines.push('');
+  lines.push('上面这些是你能依据的全部素材。访问者问到这些素材外的内容时，要诚实地说"这节课里没讲到"。');
+  return '\n' + lines.join('\n');
+}
+
 function capLearnerProfile(profile: string): string {
   return `
 【这个学生】
@@ -202,35 +262,58 @@ export function buildTutorSystemPrompt(
   const parts: string[] = [TUTOR_IDENTITY_BASE];
 
   // Mode segment（必拼一个）
-  parts.push(mode === 'in-class' ? MODE_IN_CLASS_SEGMENT : MODE_REVIEW_SEGMENT);
+  if (mode === 'in-class') {
+    parts.push(MODE_IN_CLASS_SEGMENT);
+  } else if (mode === 'shared') {
+    parts.push(
+      buildSharedModeSegment({
+        sharerNickname: context.shared?.sharerNickname ?? '',
+        courseTitle: context.shared?.courseTitle ?? '',
+      }),
+    );
+  } else {
+    parts.push(MODE_REVIEW_SEGMENT);
+  }
 
-  // Context 注入
+  // Context 注入（按 mode 隔离）
   if (mode === 'in-class' && context.recentFocus?.trim()) {
     parts.push(capRecentFocus(context.recentFocus));
   }
   if (mode === 'review' && context.fullTranscript?.trim()) {
     parts.push(capFullTranscript(context.fullTranscript, context.currentTimestampSec));
   }
+  if (mode === 'shared' && context.shared) {
+    parts.push(capSharedContext(context.shared));
+  }
   if (context.supportMaterials && context.supportMaterials.length > 0) {
     parts.push(capSupportMaterials(context.supportMaterials));
   }
-  if (context.learnerProfile?.trim()) {
+  // 隐私铁律：分享态下不注入 learnerProfile —— 那是访问者本人的，不该灌给"分享者刻下的同学"
+  if (mode !== 'shared' && context.learnerProfile?.trim()) {
     parts.push(capLearnerProfile(context.learnerProfile));
   }
 
   // Options（可选能力段）
-  const returnTimestamps = options.returnTimestamps ?? mode === 'review';
-  const allowInlineApp = options.allowInlineApp ?? true;
+  const returnTimestamps = options.returnTimestamps ?? (mode === 'review' || mode === 'shared');
+  const allowInlineApp = options.allowInlineApp ?? (mode !== 'shared');
   const thinkingGuide = options.thinkingGuide ?? false;
 
   if (returnTimestamps) {
     parts.push(capTimestampsInstruction());
   }
   if (allowInlineApp) {
-    const allowedInlineApps = options.allowedInlineApps ?? (mode === 'in-class' ? IN_CLASS_INLINE_APP_KEYS : REVIEW_INLINE_APP_KEYS);
-    parts.push(capOpenAppContract(allowedInlineApps));
+    const allowedInlineApps =
+      options.allowedInlineApps ??
+      (mode === 'in-class'
+        ? IN_CLASS_INLINE_APP_KEYS
+        : mode === 'shared'
+          ? SHARED_INLINE_APP_KEYS
+          : REVIEW_INLINE_APP_KEYS);
+    if (allowedInlineApps.length > 0) {
+      parts.push(capOpenAppContract(allowedInlineApps));
+    }
   }
-  // 思维引导仅在 review 下生效——in-class 就算 flag 为 true 也忽略，避免课堂长回答
+  // 思维引导仅在 review 下生效——in-class / shared 即使 flag 为 true 也忽略
   if (thinkingGuide && mode === 'review') {
     parts.push(capThinkingGuide());
   }
