@@ -179,33 +179,43 @@ async function generateMindMap(
     [
       {
         role: 'system',
-        content: `你是一位深谙认知科学的知识架构师，擅长将课堂内容重组为层次分明、可复述、可迁移的知识地图。
-
-你的任务是为刚上完课的学生生成一张真正的思维导图——不是简单的列表，而是能揭示知识之间层级关系、因果链、对比关系的多层结构。
-
-输出纯 Markdown 大纲，用缩进层级表示父子关系。你自行决定分支数量和层次深度（通常 3-5 层效果最佳），让导图既有全景俯瞰感，又有细节可钻。
-注意：节点文本必须是干净的知识表述，不要包含段落编号（如"段122"）、时间戳（如"12:30"）或任何课堂原文的元数据标记。`,
+        content: [
+          '你是一位深谙认知科学的知识架构师。',
+          '',
+          '本场景：单节课的"5 秒可扫完"导图（PRD v1.1 §5.4 退化形态）。',
+          '它的真正主舞台是单元层（多课聚合），单课层只承担"扫一眼这节课的结构"。',
+          '所以宁可少而精，不要试图穷尽所有概念。',
+          '',
+          '硬性纪律：',
+          '1) 主干分支 3-5 个，**严格不超过 5 个**——多了 5 秒扫不完',
+          '2) 每个主干分支最多 2-3 个子节点，**严格不超过 3 个**',
+          '3) 总深度 ≤ 3 层（含根）。再深就成大纲不是导图了',
+          '4) 节点文本干净：纯知识表述，不带段落编号 / 时间戳 / 课堂原文元数据标记',
+          '5) 学习者关注点（anchors / 困惑标记）非空时，优先在主干层覆盖这些点',
+          '',
+          '不要写 JSON。直接输出纯 Markdown 大纲：第一行 # 根主题，后续 - 子节点，每级缩进两空格。',
+        ].join('\n'),
       },
       {
         role: 'user',
         content: `目标：${context.goal.intent}
 
-请基于以下课堂内容，输出一份多层级 Markdown 思维导图大纲。
+请基于以下课堂内容，输出一份"扫一眼能看懂这节课结构"的 Markdown 思维导图。
 
-渲染契约（前端用 markmap 渲染，只需 Markdown 层级格式）：
-- 第一行为 # 开头的根主题
-- 后续用 - 缩进表示层级，每级缩进两个空格
-- 你可以自由决定层次深度和分支数量
-- 追求知识结构的完整性和逻辑性
+约束（重申）：
+- 主干 3-5 个分支
+- 每个分支 2-3 个子节点
+- 总深度 ≤ 3 层
+- 节点文字简短（10 字以内更佳）
 
 课堂原文：
 ${transcriptContext}
 
-${anchorContext ? `学习者关注点：\n${anchorContext}` : ''}${buildTerminologyHintBlock(context.memory.terminologyHint)}`,
+${anchorContext ? `学习者关注点（含困惑标记，请优先在主干层覆盖）：\n${anchorContext}` : ''}${buildTerminologyHintBlock(context.memory.terminologyHint)}`,
       },
     ],
     model,
-    { temperature: 0.3, maxTokens: 3200 }
+    { temperature: 0.3, maxTokens: 2400 }
   );
 
   const content = (response.content || '').trim();
@@ -263,9 +273,9 @@ export const mindmapPlugin: AppPlugin = {
   manifest: {
     id: 'mindmap-outline',
     name: '思维导图',
-    version: '0.2.0',
-    description: '将课堂内容结构化为多层级交互式思维导图，支持 markmap 可视化渲染与证据回放。',
-    tags: ['student', 'mindmap', 'structure'],
+    version: '0.3.0',
+    description: '"5 秒扫完"的单课结构图：3-5 主干 × 最多 3 子 × 深度 ≤3。单元层是真正主舞台。',
+    tags: ['student', 'mindmap', 'structure', 'class-tier-degraded'],
     capabilities: ['structure-map', 'seek-action'],
     enabledByDefault: true,
   },
