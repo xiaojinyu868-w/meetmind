@@ -5,6 +5,7 @@ import { SafeAITutor } from '@/components/SafeAITutor';
 import { RealtimeTutorPanel } from '@/components/tutor/RealtimeTutorPanel';
 import { ConversationList } from '@/components/ConversationHistory/ConversationList';
 import { primeOmniRealtimeCallEntry } from '@/hooks/useOmniRealtimeCall';
+import { useVisualViewport } from '@/hooks/useVisualViewport';
 import { MobileAIChatHeader } from './MobileAIChatHeader';
 import type { TutorLaunchImage } from '@/components/tutor/tutor-types';
 import type { TranscriptSegment } from '@/types';
@@ -93,6 +94,7 @@ export function MobileAIChatPanel({
   onConversationActiveChange,
 }: MobileAIChatPanelProps) {
   const [realtimeConversationId, setRealtimeConversationId] = useState<string | null>(null);
+  const vv = useVisualViewport();
 
   useEffect(() => {
     setRealtimeConversationId(null);
@@ -118,7 +120,14 @@ export function MobileAIChatPanel({
   };
 
   return (
-    <div className="flex-1 min-h-0 flex flex-col bg-[#F7F7F5]">
+    <div
+      className="flex-1 min-h-0 flex flex-col bg-[#F7F7F5]"
+      // 手机端 P1 键盘避让（PRD 调查 §3 痛点 #3）：
+      // 软键盘弹起时 window.innerHeight 不变，输入框被遮挡。
+      // visualViewport 给的是真实可见高度——键盘开启时把面板 maxHeight 收到该值，
+      // 让 flex-col 内部的 SafeAITutor 输入区自然落在键盘上方。
+      style={vv.isKeyboardOpen ? { maxHeight: vv.height } : undefined}
+    >
       <MobileAIChatHeader
         showConversationHistory={showConversationHistory}
         followsSelectedContext={followsSelectedContext}
