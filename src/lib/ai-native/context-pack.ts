@@ -144,35 +144,169 @@ export function buildPackFromSingleSession(args: {
 }
 
 // ─────────────────────────────────────────────────────────────────────────
-// Renderer（PR-2 完整化）
+// Renderer（PRD v1.1 §2.2）
+//
+// 把转录段落 + 个人标记合并渲染成 prompt 用的纯文本块。
+//
+// 核心约束：
+//   - 当 pack.personalAnnotations 为 undefined 或空数组 → 退化为纯转录
+//     （分发剥离：主分支分发场景上下文时不传该字段）
+//   - 标记按 targetMs 归属到"包含或最早出现于此之前"的转录段落，附加在该段后
+//   - 单课软上限 ANNOTATION_SOFT_LIMIT 条，超过时按 kind 优先级（note > star >
+//     confusion）取前 N 条，再按时间排序输出
+//   - 注入格式 `[t=MM:SS ⟪...⟫]`，与转录行 `[t=MM:SS] ...` 视觉上明显区分
 // ─────────────────────────────────────────────────────────────────────────
+
+/** 单课内最多保留多少条个人标记，防止 prompt 膨胀 + LLM 失焦。 */
+export const ANNOTATION_SOFT_LIMIT = 20;
+
+/** 标记 kind 在超限时的保留优先级（数字越小越优先）。 */
+const ANNOTATION_PRIORITY: Record<PersonalAnnotation['kind'], number> = {
+  note: 0,     // 用户写过文字的标记，付出成本最高，最该保留
+  star: 1,     // 用户主动星标重点
+  confusion: 2 // 单按困惑按钮，最廉价
+};
+
+/**
+ * 把单条标记格式化为 prompt 文本片段。
+ *
+ * 格式约定（与 §2.2.2 对齐）：
+ *   - confusion：`[t=MM:SS ⟪困惑⟫]`
+ *   - star：`[t=MM:SS ⟪重点⟫]` 或 `[t=MM:SS ⟪重点：text⟫]`
+ *   - note：`[t=MM:SS ⟪用户备注：text⟫]` 或退化 `[t=MM:SS ⟪标记⟫]`
+ */
+export function formatAnnotation(ann: PersonalAnnotation): string {
+  const t = formatMs(ann.targetMs);
+  const text = (ann.text || '').trim();
+  switch (ann.kind) {
+    case 'confusion':
+      return text ? `[t=${t} ⟪困惑：${text}⟫]` : `[t=${t} ⟪困惑⟫]`;
+    case 'star':
+      return text ? `[t=${t} ⟪重点：${text}⟫]` : `[t=${t} ⟪重点⟫]`;
+    case 'note':
+      return text ? `[t=${t} ⟪用户备注：${text}⟫]` : `[t=${t} ⟪标记⟫]`;
+  }
+}
+
+/**
+ * 在标记数超过软上限时，按 kind 优先级筛选保留集合，再按时间排序。
+ *
+ * 当前策略（PR-2）：直接按优先级取前 N。未来可以改为"按 kind 优先级 + 时间临近度
+ * 合并"——例如 30 秒窗口内 ≥2 条压成一条。先简单实现，看真实数据再优化。
+ */
+export function pickAnnotationsForPrompt(
+  annotations: PersonalAnnotation[],
+  sessionId: string,
+  softLimit: number = ANNOTATION_SOFT_LIMIT
+): PersonalAnnotation[] {
+  const filtered = annotations.filter((a) => a.sessionId === sessionId);
+  if (filtered.length <= softLimit) {
+    return [...filtered].sort((a, b) => a.targetMs - b.targetMs);
+  }
+  const sortedByPriority = [...filtered].sort((a, b) => {
+    const p = ANNOTATION_PRIORITY[a.kind] - ANNOTATION_PRIORITY[b.kind];
+    if (p !== 0) return p;
+    return a.targetMs - b.targetMs;
+  });
+  return sortedByPriority.slice(0, softLimit).sort((a, b) => a.targetMs - b.targetMs);
+}
+
+/**
+ * 找到标记归属的转录段落 index。
+ *
+ * 规则：取"startMs <= targetMs"的最后一个段落（即标记落在哪个段落正在播放时）。
+ * 若 targetMs 早于第一个段落（用户在录音开头就标了），返回 -1，渲染时附加在最前。
+ */
+export function findOwningSegmentIndex(
+  targetMs: number,
+  segments: Array<{ startMs: number }>
+): number {
+  let idx = -1;
+  for (let i = 0; i < segments.length; i++) {
+    if (segments[i].startMs <= targetMs) {
+      idx = i;
+    } else {
+      break; // segments 按 startMs 升序，可提前退出
+    }
+  }
+  return idx;
+}
 
 /**
  * 把转录段落 + 个人标记合并渲染成 prompt 用的纯文本块。
  *
- * 当前 PR-1 范围：占位实现——仅渲染原始转录，标记暂不内联。
- * PR-2 将补：
- *   - 按时间合并标记到最近段落后
- *   - 标记格式 `[t=MM:SS ⟪困惑⟫]` / `[t=MM:SS ⟪用户备注：xxx⟫]` / `[t=MM:SS ⟪重点⟫]`
- *   - 单课软上限 20 条，超过按时间临近度合并
- *   - personalAnnotations 为 undefined 时 → 退化为纯转录（分发剥离）
- *   - 完整单元测试
- *
  * 调用约定：
  *   const promptText = renderTranscriptWithAnnotations(pack);
- *   // pack.personalAnnotations 传入 → 注入；为 undefined → 不注入
+ *   // pack.personalAnnotations 传入 → 内联标记
+ *   // 为 undefined / 空数组 → 退化为纯转录（分发自动剥离）
+ *
+ * 多 lesson 场景（unit / exam，本期未落地）：每节课渲染为一个段落块，
+ * 段落间用 `---` 分隔，块头标注 lesson title / occurredAt。
  */
 export function renderTranscriptWithAnnotations(pack: ContextPack): string {
-  // PR-1 占位：仅 join 转录，标记融入留 PR-2 实现
-  const lesson = pack.lessons[0];
-  if (!lesson) return '';
+  if (pack.lessons.length === 0) return '';
 
-  return lesson.transcript
-    .map((seg) => {
-      const tStart = formatMs(seg.startMs);
-      return `[t=${tStart}] ${seg.text}`;
-    })
-    .join('\n');
+  const lessonBlocks: string[] = [];
+  for (const lesson of pack.lessons) {
+    const block = renderSingleLesson(lesson, pack.personalAnnotations);
+    if (lessonBlocks.length > 0 && pack.lessons.length > 1) {
+      lessonBlocks.push('\n---\n');
+    }
+    if (pack.lessons.length > 1) {
+      const header = lesson.title
+        ? `# ${lesson.title}${lesson.occurredAt ? ` (${new Date(lesson.occurredAt).toISOString().slice(0, 10)})` : ''}`
+        : `# session ${lesson.sessionId}`;
+      lessonBlocks.push(header);
+    }
+    lessonBlocks.push(block);
+  }
+
+  return lessonBlocks.join('\n').trim();
+}
+
+function renderSingleLesson(
+  lesson: LessonContext,
+  allAnnotations: PersonalAnnotation[] | undefined
+): string {
+  const segments = lesson.transcript;
+
+  // 无标记 / 标记为空 → 纯转录（分发剥离场景）
+  if (!allAnnotations || allAnnotations.length === 0) {
+    return segments.map((seg) => `[t=${formatMs(seg.startMs)}] ${seg.text}`).join('\n');
+  }
+
+  const lessonAnns = pickAnnotationsForPrompt(allAnnotations, lesson.sessionId);
+  if (lessonAnns.length === 0) {
+    return segments.map((seg) => `[t=${formatMs(seg.startMs)}] ${seg.text}`).join('\n');
+  }
+
+  // 按归属段落分桶；-1 表示在第一个段落之前
+  const byOwnerIdx = new Map<number, PersonalAnnotation[]>();
+  for (const ann of lessonAnns) {
+    const idx = findOwningSegmentIndex(ann.targetMs, segments);
+    const list = byOwnerIdx.get(idx) ?? [];
+    list.push(ann);
+    byOwnerIdx.set(idx, list);
+  }
+
+  const lines: string[] = [];
+
+  // 录音开头就标的标记（在第一段之前）
+  const beforeAll = byOwnerIdx.get(-1);
+  if (beforeAll) {
+    for (const ann of beforeAll) lines.push(formatAnnotation(ann));
+  }
+
+  for (let i = 0; i < segments.length; i++) {
+    const seg = segments[i];
+    lines.push(`[t=${formatMs(seg.startMs)}] ${seg.text}`);
+    const anns = byOwnerIdx.get(i);
+    if (anns) {
+      for (const ann of anns) lines.push(formatAnnotation(ann));
+    }
+  }
+
+  return lines.join('\n');
 }
 
 function formatMs(ms: number): string {
