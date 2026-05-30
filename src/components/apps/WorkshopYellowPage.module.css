@@ -945,3 +945,202 @@
 .dockTaskMeta {
   color: #787774;
 }
+
+/* ───────────────────────────────────────────────────────────────────────
+ * 手机端 P0：viewport-based 媒体查询（容器查询的后盾）
+ *
+ * 调查（docs/MOBILE_INVESTIGATION.md）报告 SharedWorkspacePanel 直接给手机端用
+ * desktop 的 YellowPage，卡片超屏、按钮难点。已有 container query 在某些场景
+ * 不触发（容器自身被强制宽度），所以这里加一组 viewport 查询兜底，确保 < 640px
+ * 屏幕一定按手机原生布局：单列、紧凑、44px tap target、隐藏花哨封面。
+ * ─────────────────────────────────────────────────────────────────────── */
+
+@media (max-width: 640px) {
+  .page {
+    padding: 12px 12px calc(env(safe-area-inset-bottom, 0px) + 80px);
+  }
+
+  .header {
+    margin-bottom: 18px;
+  }
+
+  .eyebrow {
+    font-size: 11px;
+    padding: 5px 9px;
+  }
+
+  .title {
+    font-size: 22px;
+    margin-top: 8px;
+  }
+
+  .subTitle {
+    font-size: 13px;
+    line-height: 1.6;
+    margin-top: 6px;
+  }
+
+  .subStatus {
+    font-size: 12px;
+  }
+
+  .headerActions {
+    margin-top: 10px;
+  }
+
+  .generateAllButton {
+    width: 100%;
+    min-height: 44px;
+    font-size: 14px;
+    padding: 12px 16px;
+    border-radius: 10px;
+  }
+
+  .grid {
+    grid-template-columns: minmax(0, 1fr) !important;
+    gap: 10px;
+  }
+
+  .card {
+    padding: 14px;
+    border-radius: 18px;
+    gap: 10px;
+  }
+
+  /* 手机端不显示大封面图 —— 占据近一半屏幕高度且对单课产物无信息价值 */
+  .coverWrap {
+    display: none;
+  }
+
+  .rowTop {
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 8px;
+    align-items: start;
+  }
+
+  .category {
+    font-size: 11px;
+  }
+
+  .appName {
+    font-size: 17px;
+    margin-top: 2px;
+  }
+
+  .headline {
+    font-size: 12.5px;
+    margin-top: 3px;
+    line-height: 1.5;
+  }
+
+  .generated,
+  .notGenerated,
+  .running {
+    font-size: 11px;
+    padding: 5px 8px;
+  }
+
+  .tags {
+    gap: 6px;
+  }
+
+  .tag {
+    font-size: 11px;
+    padding: 5px 8px;
+  }
+
+  .description {
+    font-size: 13px;
+    line-height: 1.6;
+  }
+
+  .metaLine {
+    font-size: 12px;
+  }
+
+  .actionRow {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 8px;
+  }
+
+  /* 44px 是 iOS HIG / Material guidelines 的最小可点击高度 */
+  .primaryAction,
+  .secondaryAction {
+    width: 100%;
+    min-height: 44px;
+    font-size: 14px;
+    padding: 12px 16px;
+    border-radius: 10px;
+  }
+
+  .previewLine {
+    font-size: 12px;
+    -webkit-line-clamp: 3;
+  }
+
+  .errorLine {
+    white-space: normal;
+  }
+
+  /* dock：贴底但不挡到 mobile sub-page header / safe area */
+  .dock {
+    bottom: calc(env(safe-area-inset-bottom, 0px) + 8px);
+    margin-top: 12px;
+  }
+
+  .dockToggle {
+    flex-wrap: wrap;
+    gap: 8px;
+    padding: 10px 12px;
+    font-size: 13px;
+    border-radius: 12px;
+    min-height: 44px;
+  }
+
+  .dockStat {
+    font-size: 11px;
+  }
+
+  .dockPanel {
+    padding: 10px;
+    border-radius: 12px;
+  }
+
+  .dockPanelTitle {
+    font-size: 14px;
+  }
+
+  .dockTaskItem {
+    padding: 9px;
+    border-radius: 10px;
+  }
+
+  .dockTaskName {
+    font-size: 13px;
+  }
+
+  .dockTaskMeta,
+  .dockTaskMessage {
+    font-size: 11.5px;
+  }
+
+  .dockTaskActions {
+    gap: 6px;
+  }
+
+  .dockActionPrimary,
+  .dockActionSecondary {
+    min-height: 36px;
+    font-size: 12px;
+    padding: 8px 12px;
+  }
+
+  /* hover 在触屏上无意义，且 :hover 残留状态会让卡片看起来"卡住"——禁用 hover 变换 */
+  .card:hover,
+  .generateAllButton:hover,
+  .primaryAction:hover,
+  .secondaryAction:hover {
+    transform: none;
+  }
+}

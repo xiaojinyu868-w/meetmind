@@ -2136,16 +2136,22 @@ function StudentAppContent({
 
               {mobileSubPage === 'apps' && (
                 <div className="flex min-h-0 flex-1 flex-col bg-white">
-                  <div className="flex items-center gap-3 border-b border-divider px-4 py-3">
+                  {/* 手机端 P0：头部加 44×44 触控目标 + 顶部 safe-area + sticky */}
+                  <div
+                    className="sticky top-0 z-10 flex items-center gap-2 border-b border-divider bg-white px-2 py-2"
+                    style={{ paddingTop: 'max(env(safe-area-inset-top), 8px)' }}
+                  >
                     <button
+                      type="button"
                       onClick={() => setMobileSubPage(null)}
-                      className="flex h-8 w-8 items-center justify-center rounded-full text-ink-secondary transition-colors hover:bg-divider-light hover:text-ink"
+                      aria-label="返回"
+                      className="flex h-11 w-11 items-center justify-center rounded-full text-ink-secondary transition-colors active:bg-divider-light active:text-ink"
                     >
                       <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
                       </svg>
                     </button>
-                    <span className="font-medium text-ink">学习应用</span>
+                    <span className="text-base font-semibold text-ink">学习应用</span>
                   </div>
                   <div className="flex-1 min-h-0 overflow-hidden">
                     {renderSharedWorkspacePanel('apps')}
