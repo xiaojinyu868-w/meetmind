@@ -7,7 +7,7 @@
 
 // ==================== 类型定义 ====================
 
-export type ModelProvider = 'deepseek' | 'qwen' | 'volcengine' | 'relay';
+export type ModelProvider = 'stepfun' | 'deepseek' | 'qwen' | 'volcengine' | 'relay';
 
 export interface ModelConfig {
   id: string;
@@ -27,12 +27,26 @@ function hasValue(value: string | undefined): boolean {
   return Boolean((value || '').trim());
 }
 
+const hasStepFunKey = hasValue(process.env.STEPFUN_API_KEY);
 const hasDeepSeekKey = hasValue(process.env.DEEPSEEK_API_KEY);
 const hasQwenKey = hasValue(process.env.DASHSCOPE_API_KEY);
 const hasVolcArkKey = hasValue(process.env.VOLCENGINE_ARK_API_KEY);
 const volcArkModelId = (process.env.VOLCENGINE_ARK_MODEL || '').trim();
 const hasRelayKey = hasValue(process.env.RELAY_API_KEY);
 const relayModelId = (process.env.RELAY_MODEL || 'gemini-3-pro-image-preview').trim();
+
+const stepFunModels: ModelConfig[] = [
+  {
+    id: 'step-3.7-flash',
+    name: '阶跃星辰 Step 3.7 Flash',
+    provider: 'stepfun',
+    description: '阶跃星辰 Step 3.7 Flash，OpenAI 兼容低延迟模型，MeetMind 当前默认 AI（同桌、复习、学习应用）',
+    maxTokens: 8192,
+    recommended: true,
+    supportsMultimodal: false,
+    enableThinking: false,
+  },
+];
 
 const deepseekModels: ModelConfig[] = [
   {
@@ -41,7 +55,6 @@ const deepseekModels: ModelConfig[] = [
     provider: 'deepseek',
     description: 'DeepSeek V4 低延迟模型，适合课堂同桌、复习问答和轻量学习应用',
     maxTokens: 8192,
-    recommended: true,
     supportsMultimodal: false,
     enableThinking: false,
   },
@@ -63,7 +76,6 @@ const qwenModels: ModelConfig[] = [
     provider: 'qwen',
     description: '千问3.6系列，百万级上下文(1M tokens)，混合架构，推理能力与Agent行为全面升级',
     maxTokens: 8192,
-    recommended: true,
     supportsMultimodal: true,
     enableThinking: false,
   },
@@ -133,25 +145,27 @@ const relayModels: ModelConfig[] = hasRelayKey && hasValue(relayModelId)
   : [];
 
 const enabledModels: ModelConfig[] = [
+  ...(hasStepFunKey ? stepFunModels : []),
   ...(hasDeepSeekKey ? deepseekModels : []),
   ...(hasQwenKey ? qwenModels : []),
   ...volcModels,
   ...relayModels,
 ];
 
-const resolvedModels: ModelConfig[] = enabledModels.length > 0 ? enabledModels : qwenModels;
+const resolvedModels: ModelConfig[] = enabledModels.length > 0 ? enabledModels : stepFunModels;
 const envDefaultModel = process.env.LLM_MODEL || '';
 const resolvedDefaultModel =
   (envDefaultModel && resolvedModels.some((model) => model.id === envDefaultModel)
     ? envDefaultModel
     : undefined) ||
+  resolvedModels.find((model) => model.id === 'step-3.7-flash')?.id ||
   resolvedModels.find((model) => model.id === 'deepseek-v4-flash')?.id ||
   resolvedModels.find((model) => model.id === 'qwen3.6-plus')?.id ||
   resolvedModels.find((model) => model.id === 'qwen3.5-plus')?.id ||
   resolvedModels.find((model) => model.id === 'qwen3-vl-plus-2025-12-19')?.id ||
   resolvedModels.find((model) => model.supportsMultimodal)?.id ||
   resolvedModels[0]?.id ||
-  'qwen3.6-plus';
+  'step-3.7-flash';
 const resolvedDefaultVisionModel =
   resolvedModels.find((model) => model.supportsMultimodal)?.id ||
   resolvedModels[0]?.id ||
@@ -165,6 +179,10 @@ export const LLMConfig = {
   defaultVisionModel: resolvedDefaultVisionModel,
   
   // API 配置
+  stepfun: {
+    apiKey: process.env.STEPFUN_API_KEY || '',
+    baseUrl: process.env.STEPFUN_BASE_URL || 'https://api.stepfun.com/v1',
+  },
   deepseek: {
     apiKey: process.env.DEEPSEEK_API_KEY || '',
     baseUrl: process.env.DEEPSEEK_BASE_URL || 'https://api.deepseek.com',

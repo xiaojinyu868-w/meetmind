@@ -7,7 +7,7 @@
 
 | 文件 | 行数 | 职责 |
 |------|------|------|
-| `app.config.ts` | 338 | 配置定义 + 环境变量映射（含 DeepSeek / DashScope / Ark / Relay 模型） |
+| `app.config.ts` | ~360 | 配置定义 + 环境变量映射（含 StepFun / DeepSeek / DashScope / Ark / Relay 模型） |
 | `index.ts` | 16 | barrel 导出 |
 
 ## 配置结构
@@ -28,4 +28,6 @@ AppConfig {
 - 所有环境变量在 `.env` 中定义
 - `app.config.ts` 统一读取，不要在其他地方直接 `process.env.XXX`
 - 新增配置项必须在 `app.config.ts` 中注册
-- DeepSeek 默认走 `DEEPSEEK_API_KEY` + `DEEPSEEK_BASE_URL`，全局默认模型优先 `deepseek-v4-flash`
+- **StepFun 是当前默认 AI**：`STEPFUN_API_KEY` 配置后，所有 AI 调用（同桌 / 复习 / 学习应用 / 速查表 / Tutor agent）默认使用 `step-3.7-flash`，OpenAI 兼容，base URL `https://api.stepfun.com/v1`。文档：https://platform.stepfun.com/docs/zh/quickstart/overview
+- DeepSeek（`DEEPSEEK_API_KEY` + `DEEPSEEK_BASE_URL`）和 DashScope（`DASHSCOPE_API_KEY` + `LLM_BASE_URL`）保留为 fallback；当 StepFun 出现 5xx / 429 / 超时且尚未输出内容时，Tutor agent 会自动切到 DeepSeek，再切到 DashScope。
+- 用户可在设置页（`/settings`）覆盖模型偏好；选择"自动"则使用 `LLMConfig.defaultModel`（即 `step-3.7-flash`）。

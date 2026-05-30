@@ -147,11 +147,13 @@ make eval-tutor-real         # 真实调 streamText + tools（优先当前模型
 
 | 名称 | 默认 | 说明 |
 |---|---|---|
-| `DEEPSEEK_API_KEY` | — | 默认推荐凭证；设置页默认模型 `deepseek-v4-flash` 走这里 |
+| `STEPFUN_API_KEY` | — | **MeetMind 当前默认 AI** 的凭证；设置页和后端默认模型 `step-3.7-flash` 走这里 |
+| `STEPFUN_BASE_URL` | `https://api.stepfun.com/v1` | 阶跃星辰 OpenAI-compatible baseURL（文档：https://platform.stepfun.com/docs/zh/quickstart/overview） |
+| `DEEPSEEK_API_KEY` | — | DeepSeek 凭证；保留作为 step-3.7-flash 不可用时的 fallback |
 | `DEEPSEEK_BASE_URL` | `https://api.deepseek.com` | DeepSeek OpenAI-compatible baseURL |
-| `OPENAI_API_KEY` 或 `DASHSCOPE_API_KEY` | — | 兼容凭证；当模型 / baseURL 指向对应 provider 时使用；若同时配置 `DEEPSEEK_API_KEY` 和 `DASHSCOPE_API_KEY`，Tutor Agent 会在首个 provider 繁忙/限流/超时且尚未输出内容时自动切到另一路 |
-| `TUTOR_MODEL` | `deepseek-v4-flash` | Tutor 默认模型；可 override 成 `deepseek-v4-pro` 或其他已配置 OpenAI-compatible 模型 |
-| `TUTOR_BASE_URL` | `https://dashscope.aliyuncs.com/compatible-mode/v1` | 非 DeepSeek 模型的 Tutor OpenAI-compatible baseURL；DeepSeek 模型使用 `DEEPSEEK_BASE_URL` |
+| `OPENAI_API_KEY` 或 `DASHSCOPE_API_KEY` | — | 兼容凭证；当模型 / baseURL 指向对应 provider 时使用；若同时配置多个 provider key，Tutor Agent 会在首个 provider 繁忙/限流/超时且尚未输出内容时按 StepFun → DeepSeek → DashScope 顺序自动切换 |
+| `TUTOR_MODEL` | `step-3.7-flash` | Tutor 默认模型；可 override 成 `deepseek-v4-flash`、`deepseek-v4-pro` 或其他已配置 OpenAI-compatible 模型 |
+| `TUTOR_BASE_URL` | `https://api.stepfun.com/v1` | 非 DeepSeek/StepFun 模型的 Tutor OpenAI-compatible baseURL；StepFun 模型使用 `STEPFUN_BASE_URL`，DeepSeek 模型使用 `DEEPSEEK_BASE_URL` |
 
 ---
 

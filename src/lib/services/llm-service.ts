@@ -2,6 +2,7 @@
  * LLM 服务 - 真实 AI 模型调用
  * 
  * 支持模型：
+ * - 阶跃星辰 StepFun (step-3.7-flash) — MeetMind 当前默认 AI
  * - DeepSeek (deepseek-v4-flash, deepseek-v4-pro)
  * - 通义千问 (qwen3.6-plus, qwen3.5-plus, qwen3-vl-plus, qwen3-max-2026-01-23)
  * - 火山方舟 (VOLCENGINE_ARK_MODEL)
@@ -21,7 +22,7 @@ export const AVAILABLE_MODELS: ModelConfig[] = LLMConfig.models;
 
 // 获取默认模型ID
 export const DEFAULT_MODEL_ID = LLMConfig.defaultModel;
-export const WORKSHOP_PREFERRED_MODEL_ID = 'deepseek-v4-flash';
+export const WORKSHOP_PREFERRED_MODEL_ID = 'step-3.7-flash';
 export const DEFAULT_WORKSHOP_MODEL_ID = AVAILABLE_MODELS.some((model) => model.id === WORKSHOP_PREFERRED_MODEL_ID)
   ? WORKSHOP_PREFERRED_MODEL_ID
   : DEFAULT_MODEL_ID;
@@ -102,6 +103,11 @@ export function isMultimodalModel(modelId: string): boolean {
 /** 获取 API 配置 */
 function getApiConfig(provider: ModelProvider) {
   switch (provider) {
+    case 'stepfun':
+      return {
+        baseUrl: process.env.STEPFUN_BASE_URL || 'https://api.stepfun.com/v1',
+        apiKey: process.env.STEPFUN_API_KEY || '',
+      };
     case 'deepseek':
       return {
         baseUrl: process.env.DEEPSEEK_BASE_URL || 'https://api.deepseek.com',
@@ -167,6 +173,66 @@ async function fetchWithTimeout(
 }
 
 // ==================== API 调用函数 ====================
+
+/**
+ * 调用阶跃星辰 StepFun API（OpenAI 兼容格式）
+ * 文档：https://platform.stepfun.com/docs/zh/quickstart/overview
+ */
+async function callStepFun(
+  messages: ChatMessage[],
+  modelId: string,
+  options?: { temperature?: number; maxTokens?: number; responseFormat?: 'json_object' | 'text' }
+): Promise<LLMResponse> {
+  const config = getApiConfig('stepfun');
+
+  if (!config.apiKey) {
+    throw new Error('STEPFUN_API_KEY 未配置');
+  }
+
+  const supportsMultimodal = isMultimodalModel(modelId);
+  const formattedMessages = buildOpenAIMessages(messages, supportsMultimodal);
+
+  const requestBody: Record<string, unknown> = {
+    model: modelId,
+    messages: formattedMessages,
+    temperature: options?.temperature ?? 0.7,
+    max_tokens: options?.maxTokens ?? 2000,
+  };
+
+  if (options?.responseFormat === 'json_object') {
+    requestBody.response_format = { type: 'json_object' };
+  }
+
+  const response = await fetchWithTimeout(`${config.baseUrl.replace(/\/$/, '')}/chat/completions`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${config.apiKey}`,
+    },
+    body: JSON.stringify(requestBody),
+  });
+
+  if (!response.ok) {
+    const error = await response.text();
+    throw new Error(`StepFun API 错误: ${response.status} - ${error}`);
+  }
+
+  const data = await response.json();
+  const finishReason = data.choices?.[0]?.finish_reason;
+  if (finishReason && finishReason !== 'stop') {
+    log.warn(`[LLM] finish_reason=${finishReason}, model=${modelId}, requested max_tokens=${requestBody.max_tokens}`);
+  }
+
+  return {
+    content: data.choices?.[0]?.message?.content || '',
+    model: modelId,
+    usage: data.usage ? {
+      promptTokens: data.usage.prompt_tokens,
+      completionTokens: data.usage.completion_tokens,
+      totalTokens: data.usage.total_tokens,
+    } : undefined,
+  };
+}
 
 /**
  * 调用 DeepSeek API (OpenAI 兼容格式)
@@ -448,6 +514,8 @@ export async function chat(
   }
 
   switch (modelConfig.provider) {
+    case 'stepfun':
+      return callStepFun(messages, modelId, options);
     case 'deepseek':
       return callDeepSeek(messages, modelId, options);
     case 'qwen':
@@ -483,13 +551,15 @@ export async function* chatStream(
   if (!config.apiKey) {
     throw new Error(
       `${
-        modelConfig.provider === 'deepseek'
-          ? 'DEEPSEEK_API_KEY'
-          : modelConfig.provider === 'qwen'
-            ? 'DASHSCOPE_API_KEY'
-            : modelConfig.provider === 'volcengine'
-              ? 'VOLCENGINE_ARK_API_KEY'
-              : 'RELAY_API_KEY'
+        modelConfig.provider === 'stepfun'
+          ? 'STEPFUN_API_KEY'
+          : modelConfig.provider === 'deepseek'
+            ? 'DEEPSEEK_API_KEY'
+            : modelConfig.provider === 'qwen'
+              ? 'DASHSCOPE_API_KEY'
+              : modelConfig.provider === 'volcengine'
+                ? 'VOLCENGINE_ARK_API_KEY'
+                : 'RELAY_API_KEY'
       } 未配置`
     );
   }

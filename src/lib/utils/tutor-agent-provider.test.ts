@@ -126,5 +126,50 @@ describe('resolveTutorAgentProviderConfig', () => {
     expect(shouldUseNativeTutorTools('deepseek-v4-flash')).toBe(false);
     expect(shouldUseNativeTutorTools('deepseek-v4-pro')).toBe(false);
     expect(shouldUseNativeTutorTools('qwen3.6-plus')).toBe(true);
+    expect(shouldUseNativeTutorTools('step-3.7-flash')).toBe(true);
+  });
+
+  it('defaults to StepFun step-3.7-flash when STEPFUN_API_KEY is configured', () => {
+    const config = resolveTutorAgentProviderConfig({
+      STEPFUN_API_KEY: 'step-key',
+      DEEPSEEK_API_KEY: 'deepseek-key',
+      DASHSCOPE_API_KEY: 'dashscope-key',
+    });
+
+    expect(config.modelId).toBe('step-3.7-flash');
+    expect(config.baseURL).toBe('https://api.stepfun.com/v1');
+    expect(config.apiKey).toBe('step-key');
+    expect(config.keySource).toBe('STEPFUN_API_KEY');
+    expect(config.modelApi).toBe('chat');
+  });
+
+  it('routes an explicitly requested step-* model to StepFun even when DeepSeek is configured', () => {
+    const config = resolveTutorAgentProviderConfig({
+      STEPFUN_API_KEY: 'step-key',
+      DEEPSEEK_API_KEY: 'deepseek-key',
+      TUTOR_BASE_URL: 'https://api.deepseek.com',
+    }, { modelId: 'step-3.7-flash' });
+
+    expect(config.baseURL).toBe('https://api.stepfun.com/v1');
+    expect(config.keySource).toBe('STEPFUN_API_KEY');
+  });
+
+  it('offers DeepSeek and DashScope as fallbacks when the primary Tutor model is StepFun', () => {
+    const configs = resolveTutorAgentProviderFallbacks({
+      STEPFUN_API_KEY: 'step-key',
+      DEEPSEEK_API_KEY: 'deepseek-key',
+      DASHSCOPE_API_KEY: 'dashscope-key',
+    });
+
+    expect(configs.map((config) => config.modelId)).toEqual([
+      'step-3.7-flash',
+      'deepseek-v4-flash',
+      'qwen3.6-plus',
+    ]);
+    expect(configs.map((config) => config.keySource)).toEqual([
+      'STEPFUN_API_KEY',
+      'DEEPSEEK_API_KEY',
+      'DASHSCOPE_API_KEY',
+    ]);
   });
 });

@@ -16,7 +16,7 @@
 
 | 路径 | 职责 |
 |------|------|
-| `/api/tutor/agent` | M10 主入口：mode-driven Agent loop；支持请求体 `model` 选择 DeepSeek / DashScope / OpenAI-compatible 模型；AI SDK 必须用 `.chat()` 走 `/chat/completions`；当首个 provider 在未输出内容前返回繁忙/限流/超时时，会在已配置的 DeepSeek ↔ DashScope 候选间自动切换；DeepSeek thinking 模型不暴露 native tools，结构化产物走 `<open_app:KEY/>` + 前端 `/api/apps/execute`，避免 `reasoning_content` tool-call 续写错误 |
+| `/api/tutor/agent` | M10 主入口：mode-driven Agent loop；支持请求体 `model` 选择 StepFun / DeepSeek / DashScope / OpenAI-compatible 模型（默认 `step-3.7-flash`）；AI SDK 必须用 `.chat()` 走 `/chat/completions`；当首个 provider 在未输出内容前返回繁忙/限流/超时时，会按 StepFun → DeepSeek → DashScope 顺序自动切到下一已配置 key；DeepSeek thinking 模型不暴露 native tools，结构化产物走 `<open_app:KEY/>` + 前端 `/api/apps/execute`，避免 `reasoning_content` tool-call 续写错误 |
 
 ## 依赖
 

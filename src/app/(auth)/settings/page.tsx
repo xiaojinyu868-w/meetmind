@@ -67,7 +67,7 @@ export default function SettingsPage() {
   const { user, isAuthenticated, isCheckingAuth, updateProfile, logout, saveLearnerProfile, onboardingCompleted } = useAuth();
   const [settings, setSettings] = useState<SettingsState>(DEFAULT_SETTINGS);
   const [modelOptions, setModelOptions] = useState<ModelOption[]>([]);
-  const [defaultModelId, setDefaultModelId] = useState('deepseek-v4-flash');
+  const [defaultModelId, setDefaultModelId] = useState('step-3.7-flash');
   const [profileForm, setProfileForm] = useState<ProfileForm>(DEFAULT_PROFILE_FORM);
   const [loading, setLoading] = useState(true);
   const [savingSetting, setSavingSetting] = useState(false);
@@ -114,7 +114,7 @@ export default function SettingsPage() {
           defaultModel?: string;
         };
         if (!alive) return;
-        const nextDefaultModel = data.defaultModel?.trim() || 'deepseek-v4-flash';
+        const nextDefaultModel = data.defaultModel?.trim() || 'step-3.7-flash';
         setDefaultModelId(nextDefaultModel);
         setModelOptions((data.models || [])
           .filter((model): model is { id: string; name: string; recommended?: boolean } => Boolean(model.id && model.name))

@@ -58,19 +58,19 @@ export function ModelSelector({
   }, [onChange, scopedModels, value]);
 
   const selectedModel = scopedModels.find(m => m.id === value);
-  const providerOrder = ['qwen', 'volcengine', 'relay'];
+  const providerOrder = ['stepfun', 'deepseek', 'qwen', 'volcengine', 'relay'];
   const activeProviders = providerOrder.filter((p) =>
     scopedModels.some((m) => m.provider === p)
   );
 
   const getProviderIcon = (p: string) => {
-    switch (p) { case 'qwen': return '🔮'; case 'volcengine': return '🌋'; case 'relay': return '🔁'; default: return '🧠'; }
+    switch (p) { case 'stepfun': return '🪜'; case 'deepseek': return '🐳'; case 'qwen': return '🔮'; case 'volcengine': return '🌋'; case 'relay': return '🔁'; default: return '🧠'; }
   };
   const getProviderColor = (p: string) => {
-    switch (p) { case 'qwen': return 'bg-purple-50 text-purple-700 border-purple-200'; case 'volcengine': return 'bg-orange-50 text-orange-700 border-orange-200'; case 'relay': return 'bg-cyan-50 text-cyan-700 border-cyan-200'; default: return 'bg-gray-50 text-gray-700 border-gray-200'; }
+    switch (p) { case 'stepfun': return 'bg-emerald-50 text-emerald-700 border-emerald-200'; case 'deepseek': return 'bg-blue-50 text-blue-700 border-blue-200'; case 'qwen': return 'bg-purple-50 text-purple-700 border-purple-200'; case 'volcengine': return 'bg-orange-50 text-orange-700 border-orange-200'; case 'relay': return 'bg-cyan-50 text-cyan-700 border-cyan-200'; default: return 'bg-gray-50 text-gray-700 border-gray-200'; }
   };
   const getProviderLabel = (p: string) => {
-    switch (p) { case 'qwen': return '通义千问'; case 'volcengine': return '火山方舟'; case 'relay': return '中转站'; default: return p; }
+    switch (p) { case 'stepfun': return '阶跃星辰'; case 'deepseek': return 'DeepSeek'; case 'qwen': return '通义千问'; case 'volcengine': return '火山方舟'; case 'relay': return '中转站'; default: return p; }
   };
 
   const handleModelChange = (modelId: string) => {

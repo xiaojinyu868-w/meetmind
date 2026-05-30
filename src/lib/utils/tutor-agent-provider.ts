@@ -6,7 +6,7 @@ export interface TutorAgentProviderConfig {
   modelId: string;
   /** AI SDK v6 的 openai(model) 默认走 Responses API；OpenAI-compatible provider 必须显式走 Chat Completions。 */
   modelApi: 'chat';
-  keySource: 'TUTOR_API_KEY' | 'DEEPSEEK_API_KEY' | 'DASHSCOPE_API_KEY' | 'OPENAI_API_KEY' | 'none';
+  keySource: 'TUTOR_API_KEY' | 'STEPFUN_API_KEY' | 'DEEPSEEK_API_KEY' | 'DASHSCOPE_API_KEY' | 'OPENAI_API_KEY' | 'none';
 }
 
 export interface TutorAgentProviderOptions {
@@ -15,12 +15,18 @@ export interface TutorAgentProviderOptions {
 
 const DEFAULT_DASHSCOPE_BASE_URL = 'https://dashscope.aliyuncs.com/compatible-mode/v1';
 const DEFAULT_DEEPSEEK_BASE_URL = 'https://api.deepseek.com';
+const DEFAULT_STEPFUN_BASE_URL = 'https://api.stepfun.com/v1';
+const DEFAULT_STEPFUN_MODEL = 'step-3.7-flash';
 const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-flash';
 const DEFAULT_QWEN_MODEL = 'qwen3.6-plus';
 
 function pickKey(source: TutorAgentProviderConfig['keySource'], value: string | undefined) {
   const trimmed = value?.trim();
   return trimmed ? { source, value: trimmed } : null;
+}
+
+export function isStepFunModel(modelId: string): boolean {
+  return /^step-/i.test(modelId);
 }
 
 export function isDeepSeekModel(modelId: string): boolean {
@@ -34,6 +40,10 @@ export function shouldUseNativeTutorTools(modelId: string): boolean {
   // tool call. Structured products still work through <open_app:KEY/> +
   // /api/apps/execute, which avoids the broken tool-call continuation path.
   return !isDeepSeekModel(modelId);
+}
+
+function isStepFunBaseUrl(baseURL: string): boolean {
+  return /api\.stepfun\.com/i.test(baseURL);
 }
 
 function isDashScopeBaseUrl(baseURL: string): boolean {
@@ -64,23 +74,35 @@ export function resolveTutorAgentProviderConfig(
 ): TutorAgentProviderConfig {
   const requestedModel = options.modelId?.trim();
   const envModel = (env.TUTOR_MODEL || env.LLM_MODEL || '').trim();
+  const hasStepFunKey = hasKey(env.STEPFUN_API_KEY);
   const hasDeepSeekKey = hasKey(env.DEEPSEEK_API_KEY);
-  const modelId = requestedModel || envModel || (hasDeepSeekKey ? DEFAULT_DEEPSEEK_MODEL : DEFAULT_QWEN_MODEL);
+  const modelId = requestedModel || envModel ||
+    (hasStepFunKey
+      ? DEFAULT_STEPFUN_MODEL
+      : hasDeepSeekKey
+        ? DEFAULT_DEEPSEEK_MODEL
+        : DEFAULT_QWEN_MODEL);
+  const shouldUseStepFun = isStepFunModel(modelId);
   const shouldUseDeepSeek = isDeepSeekModel(modelId);
-  const baseURL = shouldUseDeepSeek
-    ? (env.DEEPSEEK_BASE_URL || DEFAULT_DEEPSEEK_BASE_URL).trim()
-    : (env.TUTOR_BASE_URL || env.LLM_BASE_URL || DEFAULT_DASHSCOPE_BASE_URL).trim();
+  const baseURL = shouldUseStepFun
+    ? (env.STEPFUN_BASE_URL || DEFAULT_STEPFUN_BASE_URL).trim()
+    : shouldUseDeepSeek
+      ? (env.DEEPSEEK_BASE_URL || DEFAULT_DEEPSEEK_BASE_URL).trim()
+      : (env.TUTOR_BASE_URL || env.LLM_BASE_URL || DEFAULT_DASHSCOPE_BASE_URL).trim();
 
   const explicit = pickKey('TUTOR_API_KEY', env.TUTOR_API_KEY);
+  const stepfun = pickKey('STEPFUN_API_KEY', env.STEPFUN_API_KEY);
   const deepseek = pickKey('DEEPSEEK_API_KEY', env.DEEPSEEK_API_KEY);
   const dashscope = pickKey('DASHSCOPE_API_KEY', env.DASHSCOPE_API_KEY);
   const openai = pickKey('OPENAI_API_KEY', env.OPENAI_API_KEY);
   const selected = explicit ||
-    (shouldUseDeepSeek || isDeepSeekBaseUrl(baseURL)
-      ? deepseek || openai || dashscope
-      : isDashScopeBaseUrl(baseURL)
-        ? dashscope || openai || deepseek
-        : openai || deepseek || dashscope);
+    (shouldUseStepFun || isStepFunBaseUrl(baseURL)
+      ? stepfun || openai || deepseek || dashscope
+      : shouldUseDeepSeek || isDeepSeekBaseUrl(baseURL)
+        ? deepseek || openai || dashscope || stepfun
+        : isDashScopeBaseUrl(baseURL)
+          ? dashscope || openai || deepseek || stepfun
+          : openai || stepfun || deepseek || dashscope);
 
   return {
     apiKey: selected?.value,
@@ -100,10 +122,19 @@ export function resolveTutorAgentProviderFallbacks(
 
   if (hasKey(env.TUTOR_API_KEY)) return fallbacks;
 
-  const primaryIsDeepSeek = isDeepSeekModel(primary.modelId) || isDeepSeekBaseUrl(primary.baseURL);
-  const primaryIsDashScope = isDashScopeBaseUrl(primary.baseURL) && !isDeepSeekModel(primary.modelId);
+  const primaryIsStepFun = isStepFunModel(primary.modelId) || isStepFunBaseUrl(primary.baseURL);
+  const primaryIsDeepSeek = !primaryIsStepFun && (isDeepSeekModel(primary.modelId) || isDeepSeekBaseUrl(primary.baseURL));
+  const primaryIsDashScope = !primaryIsStepFun && !primaryIsDeepSeek && isDashScopeBaseUrl(primary.baseURL);
 
-  if (primaryIsDeepSeek && hasKey(env.DASHSCOPE_API_KEY)) {
+  // Fallback chain: primary → DeepSeek → DashScope (if the corresponding key exists).
+  if (primaryIsStepFun) {
+    if (hasKey(env.DEEPSEEK_API_KEY)) {
+      fallbacks.push(resolveTutorAgentProviderConfig(env, { modelId: DEFAULT_DEEPSEEK_MODEL }));
+    }
+    if (hasKey(env.DASHSCOPE_API_KEY)) {
+      fallbacks.push(resolveTutorAgentProviderConfig(env, { modelId: DEFAULT_QWEN_MODEL }));
+    }
+  } else if (primaryIsDeepSeek && hasKey(env.DASHSCOPE_API_KEY)) {
     fallbacks.push(resolveTutorAgentProviderConfig(env, { modelId: DEFAULT_QWEN_MODEL }));
   } else if (primaryIsDashScope && hasKey(env.DEEPSEEK_API_KEY)) {
     fallbacks.push(resolveTutorAgentProviderConfig(env, { modelId: DEFAULT_DEEPSEEK_MODEL }));
