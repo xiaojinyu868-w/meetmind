@@ -102,7 +102,8 @@ export function MobileMenu({
           <h2 className="text-lg font-medium text-white">更多功能</h2>
           <button
             onClick={onClose}
-            className="w-8 h-8 rounded-full bg-slate-800 flex items-center justify-center text-slate-400 hover:text-white transition-colors"
+            className="mm-touch-target rounded-full bg-slate-800 flex items-center justify-center text-slate-400 active:text-white transition-colors"
+            aria-label="关闭"
           >
             <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />

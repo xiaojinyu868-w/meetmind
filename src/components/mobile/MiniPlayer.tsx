@@ -78,7 +78,8 @@ export function MiniPlayer({
         onClick={onPlayPause}
         aria-label={isPlaying ? '暂停' : '播放'}
         className={cn(
-          'flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center',
+          // 手机端 P1：播放按钮原本 w-8 h-8 (32px) 难点，提到 44px
+          'mm-touch-target flex-shrink-0 rounded-full flex items-center justify-center',
           'bg-[var(--dedao-gold)] text-white shadow-sm',
           'active:scale-95 transition-transform duration-150 motion-reduce:transition-none',
           'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--dedao-gold)] focus-visible:ring-offset-2'
