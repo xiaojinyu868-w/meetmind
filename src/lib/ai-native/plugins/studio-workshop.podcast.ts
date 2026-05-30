@@ -175,6 +175,12 @@ Hard constraints:
 - Each "structure" entry MUST include "startMs" and "endMs" fields (integer milliseconds from the class recording).
 - "structure" should have 3-6 entries covering the full class content.
 
+PRD v1.1 §5.5 length constraint (CRITICAL):
+- Target final audio duration: 10-15 minutes.
+- This means total script.text character count across ALL lines should be 1500-2200 Chinese characters (Chinese TTS averages ~150 chars/min).
+- Be selective: skip lower-value content rather than rush through everything.
+- Use vivid analogies and clear pacing instead of trying to summarise the whole class.
+
 Class topic:
 ${sanitizePodcastNarration(context.goal.intent)}
 
