@@ -8,7 +8,7 @@
  * - 中间：文本输入
  * - 右侧：有文字时显示发送，无文字时显示麦克风（开始录课）
  *
- * 设计系统：零渐变、零阴影、纯平涂
+ * 设计系统：v7 设计宪法：95% 克制 + 5% 仪式时刻情绪化（shadow-soft / shadow-card / shadow-ai-glow）
  */
 
 import type { ClipboardEvent, MutableRefObject } from 'react';
@@ -72,7 +72,7 @@ export function CollectionComposerBar({
   const composerHasText = value.trim().length > 0;
 
   return (
-    <div className="relative z-20 flex-shrink-0 bg-[#F7F7F5] px-3 pb-3 pt-2 lg:px-5 lg:pb-4 lg:pt-2.5">
+    <div className="relative z-20 flex-shrink-0 bg-[#FAF7F2] px-3 pb-3 pt-2 lg:px-5 lg:pb-4 lg:pt-2.5">
       <div className="mx-auto w-full max-w-3xl">
         <CollectionComposerContextPreview
           quotedCount={quotedCount}
@@ -121,10 +121,10 @@ export function CollectionComposerBar({
               }}
               placeholder={placeholder}
               rows={rows}
-              className="max-h-36 min-h-[32px] w-full resize-none bg-transparent text-[15px] leading-[26px] text-[#232322] caret-[#232322] placeholder:text-[#A3A39E]"
+              className="max-h-36 min-h-[32px] w-full resize-none bg-transparent text-[15px] leading-[26px] text-[#1C1B19] caret-[#1C1B19] placeholder:text-[#8E8B82]"
             />
             {sourceImporting ? (
-              <p className="mt-1 text-[11px] text-[#A3A39E]">
+              <p className="mt-1 text-[11px] text-[#8E8B82]">
                 {activeSourceImportCount > 1
                   ? `${activeSourceImportCount} 个文件已收下`
                   : '文件已收下'}
@@ -145,8 +145,8 @@ export function CollectionComposerBar({
                 onClick={(e) => { e.stopPropagation(); onUploadAll(); }}
                 className={`flex h-8 w-8 items-center justify-center rounded-lg transition ${
                   sourceImporting
-                    ? 'text-[#232322] bg-[#D3E4F4]/60'
-                    : 'text-[#A3A39E] hover:text-[#787774] hover:bg-[#F7F7F5]'
+                    ? 'text-[#1C1B19] bg-[#D3E4F4]/60'
+                    : 'text-[#8E8B82] hover:text-[#5C5A55] hover:bg-[#FAF7F2]'
                 }`}
                 aria-label="上传文件"
               >
@@ -156,7 +156,7 @@ export function CollectionComposerBar({
                 type="button"
                 onClick={(e) => { e.stopPropagation(); onOpenLiveRecorder(); }}
                 disabled={disableLiveRecorder}
-                className="flex h-8 w-8 items-center justify-center rounded-lg text-[#A3A39E] transition hover:text-[#8B6914] hover:bg-[#FDF3C0]/50 disabled:opacity-40"
+                className="flex h-8 w-8 items-center justify-center rounded-lg text-[#8E8B82] transition hover:text-[#2D4F3E] hover:bg-[#FDF3C0]/50 disabled:opacity-40"
                 aria-label="说一段"
                 title="说一段（备忘录式短录音——完整录一节课请到课堂 Tab）"
               >
@@ -172,8 +172,8 @@ export function CollectionComposerBar({
               disabled={!composerHasText}
               className={`flex h-8 w-8 items-center justify-center rounded-lg transition ${
                 composerHasText
-                  ? 'bg-[#232322] text-white hover:bg-[#111111]'
-                  : 'bg-[#E9E9E7] text-[#A3A39E] cursor-default'
+                  ? 'bg-[#1C1B19] text-white hover:bg-[#111111]'
+                  : 'bg-[#E8E2D5] text-[#8E8B82] cursor-default'
               }`}
               aria-label="发送到收集流"
             >
@@ -189,7 +189,7 @@ export function CollectionComposerBar({
               type="button"
               onClick={onOpenLiveRecorder}
               disabled={disableLiveRecorder}
-              className="inline-flex items-center gap-1.5 rounded-full border border-[#E9E9E7] bg-white px-3 py-1.5 text-[12px] text-[#787774] transition hover:border-[#D0D0CC] hover:text-[#232322] disabled:opacity-40"
+              className="inline-flex items-center gap-1.5 rounded-full border border-[#E8E2D5] bg-white px-3 py-1.5 text-[12px] text-[#5C5A55] transition hover:border-[#D0D0CC] hover:text-[#1C1B19] disabled:opacity-40"
               title="备忘录式短录音——完整录一节课请到课堂 Tab"
             >
               <Mic size={13} strokeWidth={1.5} />
@@ -198,13 +198,13 @@ export function CollectionComposerBar({
             <button
               type="button"
               onClick={onUploadAll}
-              className="inline-flex items-center gap-1.5 rounded-full border border-[#E9E9E7] bg-white px-3 py-1.5 text-[12px] text-[#787774] transition hover:border-[#D0D0CC] hover:text-[#232322]"
+              className="inline-flex items-center gap-1.5 rounded-full border border-[#E8E2D5] bg-white px-3 py-1.5 text-[12px] text-[#5C5A55] transition hover:border-[#D0D0CC] hover:text-[#1C1B19]"
             >
               <Plus size={13} strokeWidth={1.5} />
               传文件
             </button>
             <span
-              className="inline-flex items-center gap-1.5 rounded-full border border-[#E9E9E7] bg-white px-3 py-1.5 text-[12px] text-[#787774]"
+              className="inline-flex items-center gap-1.5 rounded-full border border-[#E8E2D5] bg-white px-3 py-1.5 text-[12px] text-[#5C5A55]"
             >
               🔗 贴链接
             </span>

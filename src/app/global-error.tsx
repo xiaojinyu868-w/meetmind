@@ -1,5 +1,11 @@
 'use client';
 
+/**
+ * v7 全局错误（root layout 都崩了的情况）：
+ * 此处不能用任何 v7 工具类（globals.css 可能没加载），全部 inline style。
+ * 但仍然遵守 v7 配色：米白 + 朱批红 + 墨松绿。
+ */
+
 export default function GlobalError({
   error: _error,
   reset,
@@ -8,92 +14,168 @@ export default function GlobalError({
   reset: () => void;
 }) {
   return (
-    <html>
-      <body>
-        <div style={{
+    <html lang="zh-CN">
+      <body
+        style={{
+          margin: 0,
           minHeight: '100vh',
-          background: 'linear-gradient(135deg, #FFF1F2 0%, #FFFFFF 50%, #FFF1F2 100%)',
+          background: '#FAF7F2',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
           padding: '16px',
-          fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
-        }}>
-          <div style={{ maxWidth: '400px', width: '100%', textAlign: 'center' }}>
-            {/* 错误图标 */}
-            <div style={{
-              width: '96px',
-              height: '96px',
+          fontFamily:
+            '-apple-system, BlinkMacSystemFont, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif',
+          fontFeatureSettings: '"palt"',
+          letterSpacing: '-0.011em',
+          color: '#1C1B19',
+        }}
+      >
+        {/* 极淡光晕 */}
+        <div
+          style={{
+            position: 'absolute',
+            inset: 0,
+            pointerEvents: 'none',
+            background:
+              'radial-gradient(ellipse 50% 40% at 50% 30%, rgba(181,72,60,0.10), transparent 60%)',
+          }}
+          aria-hidden
+        />
+
+        <div style={{ position: 'relative', maxWidth: '440px', width: '100%', textAlign: 'center' }}>
+          {/* Octo · surprised */}
+          <div
+            style={{
+              width: '112px',
+              height: '112px',
               margin: '0 auto 32px',
-              background: 'linear-gradient(135deg, #F43F5E 0%, #E11D48 100%)',
-              borderRadius: '50%',
-              display: 'flex',
+              display: 'grid',
+              placeItems: 'center',
+              position: 'relative',
+            }}
+          >
+            <div
+              style={{
+                position: 'absolute',
+                inset: '-8px',
+                borderRadius: '50%',
+                background:
+                  'radial-gradient(circle, rgba(181,72,60,0.2) 0%, transparent 65%)',
+                animation: 'globe-breath 3.6s ease-in-out infinite',
+              }}
+              aria-hidden
+            />
+            {/* root layout 都崩了的情况，next/image 也可能挂。这里有意保留 raw <img> */}
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src="/images/octo-buddy/surprised.png"
+              alt=""
+              aria-hidden
+              style={{
+                position: 'relative',
+                width: '96px',
+                height: '96px',
+                objectFit: 'contain',
+                filter: 'drop-shadow(0 8px 24px rgba(45,79,62,0.18))',
+              }}
+            />
+          </div>
+
+          {/* 标签 */}
+          <p
+            style={{
+              fontFamily: 'ui-monospace, "SF Mono", Menlo, monospace',
+              fontSize: '11px',
+              fontWeight: 600,
+              letterSpacing: '0.06em',
+              textTransform: 'uppercase',
+              color: '#B5483C',
+              marginBottom: '12px',
+            }}
+          >
+            CRITICAL ERROR · 系统层崩了
+          </p>
+
+          {/* 标题 */}
+          <h1
+            style={{
+              fontSize: '28px',
+              fontWeight: 600,
+              color: '#1C1B19',
+              marginBottom: '14px',
+              letterSpacing: '-0.024em',
+              lineHeight: 1.2,
+            }}
+          >
+            Octo 自己都晕了
+          </h1>
+
+          {/* 描述 */}
+          <p
+            style={{
+              color: '#5C5A55',
+              marginBottom: '32px',
+              lineHeight: 1.7,
+              fontSize: '15px',
+            }}
+          >
+            系统层遇到了严重错误，刷新页面通常能恢复。
+            <br />
+            你的笔记和录音都没丢。
+          </p>
+
+          {/* 重试按钮 */}
+          <button
+            onClick={reset}
+            style={{
+              display: 'inline-flex',
               alignItems: 'center',
               justifyContent: 'center',
-              boxShadow: '0 10px 40px -10px rgba(244,63,94,0.5)',
-            }}>
-              <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2">
-                <circle cx="12" cy="12" r="10" />
-                <line x1="12" y1="8" x2="12" y2="12" />
-                <line x1="12" y1="16" x2="12.01" y2="16" />
-              </svg>
-            </div>
+              gap: '8px',
+              padding: '14px 28px',
+              background: '#1C1B19',
+              color: '#FFFFFF',
+              fontWeight: 500,
+              fontSize: '15px',
+              border: 'none',
+              borderRadius: '10px',
+              cursor: 'pointer',
+              transition: 'all 0.15s cubic-bezier(0.16,1,0.3,1)',
+            }}
+            onMouseOver={(e) => {
+              e.currentTarget.style.background = '#000';
+              e.currentTarget.style.transform = 'translateY(-1px)';
+            }}
+            onMouseOut={(e) => {
+              e.currentTarget.style.background = '#1C1B19';
+              e.currentTarget.style.transform = 'translateY(0)';
+            }}
+          >
+            刷新页面
+          </button>
 
-            {/* 标题 */}
-            <h1 style={{
-              fontSize: '24px',
-              fontWeight: 'bold',
-              color: '#1F2937',
-              marginBottom: '12px',
-            }}>
-              系统错误
-            </h1>
-
-            {/* 描述 */}
-            <p style={{
-              color: '#6B7280',
-              marginBottom: '32px',
-              lineHeight: '1.6',
-            }}>
-              抱歉，系统遇到了严重错误。<br />
-              请刷新页面重试。
-            </p>
-
-            {/* 重试按钮 */}
-            <button
-              onClick={reset}
-              style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: '8px',
-                padding: '14px 28px',
-                background: 'linear-gradient(135deg, #E11D48 0%, #F43F5E 100%)',
-                color: 'white',
-                fontWeight: '500',
-                fontSize: '16px',
-                border: 'none',
-                borderRadius: '12px',
-                cursor: 'pointer',
-                boxShadow: '0 10px 30px -5px rgba(225,29,72,0.4)',
-              }}
-            >
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-              </svg>
-              刷新页面
-            </button>
-
-            {/* 联系方式 */}
-            <p style={{
+          {/* 联系方式 */}
+          <p
+            style={{
               marginTop: '32px',
-              fontSize: '14px',
-              color: '#9CA3AF',
-            }}>
-              如需帮助，请联系 originedu@meetmind.online
-            </p>
-          </div>
+              fontSize: '13px',
+              color: '#8E8B82',
+            }}
+          >
+            如需帮助，请联系{' '}
+            <span style={{ fontFamily: 'ui-monospace, monospace', color: '#2D4F3E' }}>
+              originedu@meetmind.online
+            </span>
+          </p>
         </div>
+
+        <style>{`
+          @keyframes globe-breath {
+            0%, 100% { transform: scale(0.92); opacity: 0.5; }
+            50%      { transform: scale(1.08); opacity: 0.9; }
+          }
+        `}</style>
       </body>
     </html>
   );

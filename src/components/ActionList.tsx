@@ -19,13 +19,13 @@ export function ActionList({ items, onComplete, onStartNext }: ActionListProps) 
   return (
     <div className="h-full flex flex-col">
       {/* 标题 */}
-      <div className="p-4 border-b border-gray-100">
-        <h2 className="font-semibold text-gray-900 flex items-center gap-2">
+      <div className="p-4 border-b border-divider-light">
+        <h2 className="font-semibold text-ink flex items-center gap-2">
           <span className="text-lg">📋</span>
           今晚行动清单
         </h2>
         {items.length > 0 && (
-          <p className="text-xs text-gray-500 mt-1">
+          <p className="text-xs text-ink-muted mt-1">
             约 {totalMinutes} 分钟 · 已完成 {completedCount}/{items.length}
           </p>
         )}
@@ -33,14 +33,14 @@ export function ActionList({ items, onComplete, onStartNext }: ActionListProps) 
 
       {/* 进度条 */}
       {items.length > 0 && (
-        <div className="px-4 py-3 border-b border-gray-100">
+        <div className="px-4 py-3 border-b border-divider-light">
           <div className="flex items-center justify-between text-xs mb-2">
-            <span className="text-gray-500">完成进度</span>
+            <span className="text-ink-muted">完成进度</span>
             <span className={`font-medium ${progressPercent === 100 ? 'text-mint-600' : 'text-navy'}`}>
               {Math.round(progressPercent)}%
             </span>
           </div>
-          <div className="h-2.5 bg-gray-100 rounded-full overflow-hidden">
+          <div className="h-2.5 bg-paper-deep rounded-full overflow-hidden">
             <div
               className={`h-full rounded-full transition-all duration-500 ease-out-expo ${
                 progressPercent === 100 
@@ -51,7 +51,7 @@ export function ActionList({ items, onComplete, onStartNext }: ActionListProps) 
             />
           </div>
           {remainingMinutes > 0 && (
-            <p className="text-xs text-gray-400 mt-2">
+            <p className="text-xs text-ink-muted mt-2">
               还需约 <span className="font-medium text-navy">{remainingMinutes}</span> 分钟
             </p>
           )}
@@ -62,11 +62,11 @@ export function ActionList({ items, onComplete, onStartNext }: ActionListProps) 
       <div className="flex-1 overflow-y-auto p-4">
         {items.length === 0 ? (
           <div className="text-center py-12 animate-fade-in">
-            <div className="w-16 h-16 mx-auto mb-4 bg-gray-100 rounded-full flex items-center justify-center">
+            <div className="w-16 h-16 mx-auto mb-4 bg-paper-deep rounded-full flex items-center justify-center">
               <span className="text-3xl">✨</span>
             </div>
-            <p className="text-sm text-gray-500 mb-1">暂无行动清单</p>
-            <p className="text-xs text-gray-400">选择困惑点后会自动生成</p>
+            <p className="text-sm text-ink-muted mb-1">暂无行动清单</p>
+            <p className="text-xs text-ink-muted">选择困惑点后会自动生成</p>
           </div>
         ) : (
           <div className="space-y-3">
@@ -98,16 +98,16 @@ export function ActionList({ items, onComplete, onStartNext }: ActionListProps) 
                   <div className="flex items-center gap-2 flex-wrap min-w-0">
                     <TypeBadge type={item.type} />
                     <span className={`text-sm font-medium transition-all break-words ${
-                      item.completed ? 'text-gray-400 line-through' : 'text-navy'
+                      item.completed ? 'text-ink-muted line-through' : 'text-navy'
                     }`}>
                       {item.title}
                     </span>
-                    <span className="text-xs text-gray-400 whitespace-nowrap flex-shrink-0">
+                    <span className="text-xs text-ink-muted whitespace-nowrap flex-shrink-0">
                       {item.estimatedMinutes}分钟
                     </span>
                   </div>
                   <p className={`text-xs mt-1.5 transition-colors break-words ${
-                    item.completed ? 'text-gray-300' : 'text-gray-500'
+                    item.completed ? 'text-ink-faint' : 'text-ink-muted'
                   }`}>
                     {item.description}
                   </p>
@@ -126,8 +126,8 @@ export function ActionList({ items, onComplete, onStartNext }: ActionListProps) 
               <span className="text-xl">🎉</span>
             </div>
             <div>
-              <p className="font-semibold text-[#232322]">太棒了！</p>
-              <p className="text-xs text-[#232322]">今天的任务已全部完成</p>
+              <p className="font-semibold text-[#1C1B19]">太棒了！</p>
+              <p className="text-xs text-[#1C1B19]">今天的任务已全部完成</p>
             </div>
           </div>
         </div>
@@ -135,7 +135,7 @@ export function ActionList({ items, onComplete, onStartNext }: ActionListProps) 
 
       {/* 快捷操作 */}
       {items.length > 0 && completedCount < items.length && (
-        <div className="p-4 border-t border-gray-100">
+        <div className="p-4 border-t border-divider-light">
           <button
             data-testid="action-start-next"
             onClick={onStartNext}
@@ -151,9 +151,9 @@ export function ActionList({ items, onComplete, onStartNext }: ActionListProps) 
 
 function TypeBadge({ type }: { type: ActionItem['type'] }) {
   const config = {
-    replay: { label: '回放', className: 'bg-blue-100 text-blue-700' },
-    exercise: { label: '练习', className: 'bg-[#D1F4E0] text-[#232322]' },
-    review: { label: '复习', className: 'bg-[#FDF3C0] text-[#232322]' },
+    replay: { label: '回放', className: 'bg-pine-mist text-pine' },
+    exercise: { label: '练习', className: 'bg-[#D1F4E0] text-[#1C1B19]' },
+    review: { label: '复习', className: 'bg-[#FDF3C0] text-[#1C1B19]' },
   };
 
   const { label, className } = config[type];

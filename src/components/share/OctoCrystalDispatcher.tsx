@@ -68,7 +68,7 @@ const SHAREABLE_APPS: ShareableApp[] = [
     artifactKind: 'cheatsheet',
     label: '考前速查表',
     blurb: '一页纸 · 考前最后看一眼',
-    glow: '#FCE7F3',
+    glow: '#FBF2EF',
     icon: (
       <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6">
         <rect x="5" y="3.5" width="14" height="17" rx="2" />
@@ -82,7 +82,7 @@ const SHAREABLE_APPS: ShareableApp[] = [
     artifactKind: 'mindmap',
     label: '思维导图',
     blurb: '把整节课的脉络拎清',
-    glow: '#E9D5FF',
+    glow: '#E6EDE8',
     icon: (
       <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6">
         <circle cx="12" cy="12" r="2.6" />
@@ -100,7 +100,7 @@ const SHAREABLE_APPS: ShareableApp[] = [
     artifactKind: 'quiz',
     label: '课堂测验',
     blurb: '丢进群里 · 谁先答对',
-    glow: '#DBEAFE',
+    glow: '#FBF2EF',
     icon: (
       <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6">
         <path d="M12 3.5a4.5 4.5 0 014.5 4.5c0 2.4-3 3.6-3 6h-3c0-2.4-3-3.6-3-6A4.5 4.5 0 0112 3.5z" strokeLinecap="round" strokeLinejoin="round" />
@@ -114,7 +114,7 @@ const SHAREABLE_APPS: ShareableApp[] = [
     artifactKind: 'infographic',
     label: '课堂信息图',
     blurb: '一张图看懂这节课',
-    glow: '#FCE7F3',
+    glow: '#FBF2EF',
     icon: (
       <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6">
         <rect x="4" y="4" width="7" height="7" rx="1.4" />
@@ -179,6 +179,38 @@ function buildArtifactSummary(result: AppExecutionResult | null): string {
     return first.title ?? first.body?.slice(0, 80) ?? '';
   }
   return '';
+}
+
+/**
+ * 兜底分享者昵称：
+ * - 用户未设置 nickname 时，注册兜底是 username（手机号 / 邮箱前缀）
+ *   → 看起来像 "1181783314"——电话号当昵称很丑、还泄露隐私
+ * - 这里用启发式判断："看起来像电话号 / 纯数字 / 看起来像 user.id"
+ *   都视为 invalid nickname，让 ShareAgentCard 不渲染 sharer 行
+ */
+function sanitizeNickname(raw: string | null | undefined): string | undefined {
+  if (!raw) return undefined;
+  const trimmed = raw.trim();
+  if (!trimmed) return undefined;
+  // 纯数字 ≥ 6 位（看起来像电话号 / cuid 数字段）
+  if (/^\d{6,}$/.test(trimmed)) return undefined;
+  // cuid / uuid 风格（含字母 + 数字、长度 ≥ 18）
+  if (trimmed.length >= 18 && /^[a-z0-9]+$/i.test(trimmed)) return undefined;
+  // 看起来像邮箱前 @ 段（含 @）
+  if (trimmed.includes('@')) return trimmed.split('@')[0] || undefined;
+  return trimmed;
+}
+
+/**
+ * 兜底课程标题：如果 IndexedDB 拿到的是默认占位（"课堂录音" / 空），
+ * 用 artifact 内 title 或泛化"一节课"——避免大标题写"课堂录音"这种空泛话。
+ */
+const PLACEHOLDER_COURSE_TITLES = new Set(['课堂录音', '未命名课堂', '新课堂']);
+function isPlaceholderCourseTitle(title: string | null | undefined): boolean {
+  if (!title) return true;
+  const t = title.trim();
+  if (!t) return true;
+  return PLACEHOLDER_COURSE_TITLES.has(t);
 }
 
 // ──────────────────────────────────────────────────────────────
@@ -278,24 +310,43 @@ export function OctoCrystalDispatcher({
       try {
         const digest = buildTranscriptDigest(transcript);
         const artifactSummary = buildArtifactSummary(status.result);
-        const hookLine =
-          artifactSummary ||
-          `${user?.nickname || '一位同学'}给你留了一份${app.label}`;
 
+        // nickname 兜底（电话号 / user.id 都过滤掉）
+        const cleanNickname = sanitizeNickname(user?.nickname);
+
+        // 课程标题：占位 / 空 都不要直接放上去
+        const titleClean = !isPlaceholderCourseTitle(resolvedCourseTitle)
+          ? resolvedCourseTitle.trim()
+          : artifactSummary || '一节课';
+
+        const hookLine = artifactSummary || titleClean;
+
+        // 完整 artifact payload 进 snapshot.artifact —— v3.0 修正：
+        //   - 之前只塞 summary 字符串，导致落地页 ArtifactPreview 无法渲染产物
+        //   - artifact 是「场景层产物」按设计本来就要分享出去（不是隐私）
+        //   - 体积：cheatsheet 6 区 ≈ 3-5KB / mindmap ≈ 2KB / quiz ≈ 5-8KB，SQLite 完全 OK
+        const fullPayload = status.result.render?.payload;
         const snapshot: SharedAgentSnapshot = {
-          title: resolvedCourseTitle.trim() || '一节课',
+          title: titleClean || '一节课',
           subject,
           artifactKind: app.artifactKind,
-          sharerNickname: user?.nickname || undefined,
+          sharerNickname: cleanNickname,
           transcriptDigest: digest,
           conversationContext: summary?.trim() || undefined,
-          // artifact 只存简化摘要，避免 snapshot 过大；完整产物在领取后由 claimer 自己生成
-          artifact: artifactSummary
-            ? { summary: artifactSummary }
-            : undefined,
+          artifact:
+            fullPayload && typeof fullPayload === 'object'
+              ? { summary: artifactSummary || undefined, payload: fullPayload }
+              : artifactSummary
+                ? { summary: artifactSummary }
+                : undefined,
         };
 
-        await openCreator(snapshot, { hookLine });
+        await openCreator(snapshot, {
+          hookLine,
+          // ShareAgentCard 仍接受 artifactPayload prop（已经在 snapshot.artifact.payload 里，但
+          // useShareAgentCreator 把它单独提出来交给 Card，避免 Card 二次解 snapshot）
+          artifactPayload: fullPayload,
+        });
       } finally {
         setPickingKey(null);
       }
@@ -307,7 +358,7 @@ export function OctoCrystalDispatcher({
 
   return (
     <section
-      className="relative overflow-hidden rounded-[28px] border border-divider/70 bg-white px-5 py-6 sm:px-7 sm:py-7"
+      className="relative overflow-hidden rounded-[28px] border border-divider/70 bg-white px-5 py-6 sm:px-7 sm:py-7 print:hidden"
       data-testid="octo-crystal-dispatcher"
     >
       {/* 仪式时刻：极淡的渐变光晕（白名单第 4 条「录课结束的收尾动画」）。
@@ -317,7 +368,7 @@ export function OctoCrystalDispatcher({
         className="pointer-events-none absolute inset-0 opacity-[0.55]"
         style={{
           background:
-            'radial-gradient(circle at 12% 0%, #FCE7F3 0%, transparent 38%), radial-gradient(circle at 88% 12%, #DBEAFE 0%, transparent 42%), radial-gradient(circle at 50% 100%, #E9D5FF 0%, transparent 50%)',
+            'radial-gradient(circle at 12% 0%, #FBF2EF 0%, transparent 38%), radial-gradient(circle at 88% 12%, #E6EDE8 0%, transparent 42%), radial-gradient(circle at 50% 100%, #F2F6F3 0%, transparent 50%)',
         }}
       />
 
@@ -354,7 +405,7 @@ export function OctoCrystalDispatcher({
             const tileReady =
               'border-divider bg-white text-ink hover:-translate-y-0.5 hover:border-ink/40';
             const tileMuted =
-              'border-divider/60 bg-[#FBFBFA]/70 text-ink-muted hover:bg-white hover:text-ink-secondary';
+              'border-divider/60 bg-[#F2EDE3]/70 text-ink-muted hover:bg-white hover:text-ink-secondary';
 
             const tileClass = `${tileBase} ${isReady ? tileReady : tileMuted}`;
 

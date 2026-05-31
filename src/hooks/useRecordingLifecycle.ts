@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback } from 'react';
+import { toast } from 'sonner';
 import { useUIStore } from '@/stores/ui-store';
 import { usePlayerStore } from '@/stores/player-store';
 import { useSessionStore } from '@/stores/session-store';
@@ -462,9 +463,26 @@ export function useRecordingLifecycle(
     );
     editorAct.setTimeline(tl);
     memoryService.save(tl);
-    // 录完后只在"不在课堂 tab"时切回 record。课堂 tab 自己管显示态。
-    const currentViewMode = useUIStore.getState().viewMode;
-    if (currentViewMode !== 'classroom') {
+
+    // v3.0 录课结束动线：让"递结晶"成为自然 flow 的一部分。
+    //
+    // 旧逻辑：classroom tab 录完 → 留在课堂 tab 的列表，用户看到卡片要自己
+    // 决定下一步——但 OctoCrystalDispatcher（应用矩阵首屏的递结晶入口）
+    // 在 review apps tab 才出现，用户不会自己摸过去 = K 系数掉一半。
+    //
+    // 新逻辑：
+    //   - classroom tab 录完 → 跳 review apps（dispatcher 第一眼可见）
+    //   - record / 其他 tab 录完 → setViewMode('record')（保持原行为）
+    const uiState = useUIStore.getState();
+    const currentViewMode = uiState.viewMode;
+    if (currentViewMode === 'classroom') {
+      uiAct.setViewMode('review');
+      uiAct.setReviewTab('apps');
+      // 一句温柔提示，让 viewMode 切换不显得突兀，并把"递结晶"那条入口推到用户面前
+      toast.success('这节课结束了 · 应用矩阵已就位', {
+        description: '挑一个产物，可以收着也可以递给同学',
+      });
+    } else {
       uiAct.setViewMode('record');
     }
   }, [anchors, persistCaptureToWorkspace, sessionId, sessionMediaDurationMs, user]);

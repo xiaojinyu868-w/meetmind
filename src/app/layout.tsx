@@ -1,5 +1,5 @@
 import type { Metadata, Viewport } from 'next';
-import { Inter } from 'next/font/google';
+import { Inter, Instrument_Serif, JetBrains_Mono } from 'next/font/google';
 import './globals.css';
 import { AuthProvider } from '@/lib/hooks/useAuth';
 import { SWRProvider } from '@/lib/swr';
@@ -8,11 +8,35 @@ import { NetworkStatusBanner } from '@/components/NetworkStatusBanner';
 import { Toaster } from 'sonner';
 import { ServiceWorkerRegister } from '@/components/ServiceWorkerRegister';
 
-// 优化字体加载：display: swap 避免阻塞渲染
-const inter = Inter({ 
+/**
+ * v7 字体三件套：
+ * - Inter         · 正文（紧排 'palt' 中英混排立刻 +30% 高级感）
+ * - Instrument Serif · 仪式字（标题里偶尔的 italic em，老学院感）
+ * - JetBrains Mono   · 引用资产化（[MM:SS] / [资料 N] 专用）
+ */
+const inter = Inter({
   subsets: ['latin'],
   display: 'swap',
   preload: true,
+  variable: '--font-inter',
+  weight: ['300', '400', '500', '600', '700', '800'],
+});
+
+const instrumentSerif = Instrument_Serif({
+  subsets: ['latin'],
+  display: 'swap',
+  preload: false,
+  variable: '--font-instrument-serif',
+  weight: ['400'],
+  style: ['normal', 'italic'],
+});
+
+const jetBrainsMono = JetBrains_Mono({
+  subsets: ['latin'],
+  display: 'swap',
+  preload: false,
+  variable: '--font-jetbrains-mono',
+  weight: ['400', '500', '600'],
 });
 
 export const metadata: Metadata = {
@@ -39,8 +63,8 @@ export const viewport: Viewport = {
   userScalable: true,
   // 适配 iOS 安全区域
   viewportFit: 'cover',
-  // 主题色
-  themeColor: '#FFF9F5',
+  // 主题色：v7 米白纸感
+  themeColor: '#FAF7F2',
 };
 
 export default function RootLayout({
@@ -49,7 +73,10 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="zh-CN">
+    <html
+      lang="zh-CN"
+      className={`${inter.variable} ${instrumentSerif.variable} ${jetBrainsMono.variable}`}
+    >
       <head>
         <meta name="mobile-web-app-capable" content="yes" />
         <link rel="icon" href="/icons/icon-192x192.svg" type="image/svg+xml" />

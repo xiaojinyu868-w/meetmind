@@ -8,7 +8,7 @@
  * - 三阶段：greeting → quiz → result，自然过渡
  * - 选项卡片化、大触区，适合快速作答
  * - 正确/错误反馈明确但不刺眼
- * - 符合 MeetMind 设计系统：零渐变、零阴影装饰、纯平涂
+ * - 符合 MeetMind v7 设计宪法：95% 克制（米白纸感 + 双签名色 + 极淡 shadow-soft），5% 仪式时刻（pine pulse / vermilion 朱批反馈）
  */
 
 import { type ReactNode, useCallback, useEffect, useMemo, useState } from 'react';
@@ -77,9 +77,9 @@ function stripOptionPrefix(text: string): string {
 type Phase = 'greeting' | 'quiz' | 'result';
 
 /** 主色调 */
-const ACCENT = '#E67E22';
-const ACCENT_LIGHT = '#FDF2E9';
-const ACCENT_BORDER = '#FADBD8';
+const ACCENT = '#B5483C';
+const ACCENT_LIGHT = '#FBF2EF';
+const ACCENT_BORDER = '#F6E6E2';
 
 // ── 通用遮罩容器（提取到顶层，避免父组件 re-render 导致卸载/重建） ──
 function Backdrop({ children }: { children: ReactNode }) {
@@ -178,10 +178,10 @@ export function ClassCheckOverlay({
           </div>
 
           {topic && (
-            <p className="mb-2 text-[11px] font-semibold tracking-widest uppercase text-[#A3A39E]">{topic}</p>
+            <p className="mb-2 text-[11px] font-semibold tracking-widest uppercase text-[#8E8B82]">{topic}</p>
           )}
 
-          <p className="text-[15px] leading-[1.8] text-[#232322]">{greeting}</p>
+          <p className="text-[15px] leading-[1.8] text-[#1C1B19]">{greeting}</p>
 
           <button
             type="button"
@@ -200,8 +200,8 @@ export function ClassCheckOverlay({
   // ── Result 阶段 ──
   if (phase === 'result') {
     const accuracy = Math.round((correctCount / questions.length) * 100);
-    const ringColor = accuracy >= 80 ? '#10b981' : accuracy >= 60 ? '#f59e0b' : '#ef4444';
-    const ringBg = accuracy >= 80 ? '#D1FAE5' : accuracy >= 60 ? '#FEF3C7' : '#FEE2E2';
+    const ringColor = accuracy >= 80 ? '#2D4F3E' : accuracy >= 60 ? '#B8842B' : '#B5483C';
+    const ringBg = accuracy >= 80 ? '#E6EDE8' : accuracy >= 60 ? '#FBF1DC' : '#F6E6E2';
     const dynamicEncouragement = encouragement || (
       accuracy === 100 ? '完全掌握了，继续保持！'
         : accuracy >= 60 ? '大部分理解了，有个别地方可以再巩固。'
@@ -222,28 +222,28 @@ export function ClassCheckOverlay({
               <span className="text-2xl font-bold leading-none" style={{ color: ringColor }}>
                 {correctCount}
               </span>
-              <span className="mt-0.5 text-[11px] text-[#A3A39E]">/ {questions.length}</span>
+              <span className="mt-0.5 text-[11px] text-[#8E8B82]">/ {questions.length}</span>
             </div>
           </div>
 
           {topic && (
-            <p className="mb-1 text-[11px] font-semibold tracking-widest uppercase text-[#A3A39E]">{topic}</p>
+            <p className="mb-1 text-[11px] font-semibold tracking-widest uppercase text-[#8E8B82]">{topic}</p>
           )}
-          <p className="text-[14px] leading-[1.7] text-[#787774]">{dynamicEncouragement}</p>
+          <p className="text-[14px] leading-[1.7] text-[#5C5A55]">{dynamicEncouragement}</p>
 
           {/* 错题简报 */}
           {wrongQuestions.length > 0 && (
             <div className="mt-5 space-y-2 text-left">
-              <p className="text-[11px] font-medium text-[#A3A39E] px-1">需要巩固的题目</p>
+              <p className="text-[11px] font-medium text-[#8E8B82] px-1">需要巩固的题目</p>
               {wrongQuestions.map((q) => (
-                <div key={q.id} className="rounded-2xl border border-[#FEE2E2] bg-[#FEF2F2] px-4 py-3">
-                  <p className="text-[13px] text-[#232322] leading-relaxed line-clamp-2">{q.stem}</p>
+                <div key={q.id} className="rounded-2xl border border-[#F6E6E2] bg-[#FBF2EF] px-4 py-3">
+                  <p className="text-[13px] text-[#1C1B19] leading-relaxed line-clamp-2">{q.stem}</p>
                   <div className="mt-1.5 flex items-start gap-1.5">
-                    <svg className="mt-0.5 h-3.5 w-3.5 shrink-0 text-emerald-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12" /></svg>
-                    <p className="text-[12px] text-emerald-600 leading-relaxed">{stripOptionPrefix(normalizeAnswer(q.answer, q.options))}</p>
+                    <svg className="mt-0.5 h-3.5 w-3.5 shrink-0 text-pine" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12" /></svg>
+                    <p className="text-[12px] text-pine leading-relaxed">{stripOptionPrefix(normalizeAnswer(q.answer, q.options))}</p>
                   </div>
                   {q.explanation && (
-                    <p className="mt-1 text-[11px] text-[#A3A39E] leading-relaxed">{q.explanation}</p>
+                    <p className="mt-1 text-[11px] text-[#8E8B82] leading-relaxed">{q.explanation}</p>
                   )}
                 </div>
               ))}
@@ -252,9 +252,9 @@ export function ClassCheckOverlay({
 
           {/* 下一段预告 */}
           {nextPreview && (
-            <div className="mt-5 rounded-2xl border border-[#E9E9E7] bg-[#F7F7F5] px-4 py-3 text-left">
-              <p className="text-[11px] font-medium text-[#A3A39E] mb-1">接下来注意</p>
-              <p className="text-[13px] leading-[1.7] text-[#787774]">{nextPreview}</p>
+            <div className="mt-5 rounded-2xl border border-[#E8E2D5] bg-[#FAF7F2] px-4 py-3 text-left">
+              <p className="text-[11px] font-medium text-[#8E8B82] mb-1">接下来注意</p>
+              <p className="text-[13px] leading-[1.7] text-[#5C5A55]">{nextPreview}</p>
             </div>
           )}
 
@@ -292,7 +292,7 @@ export function ClassCheckOverlay({
                 <line x1="4" y1="11" x2="4" y2="15" stroke={ACCENT} strokeWidth="1.5" strokeLinecap="round" />
               </svg>
             </div>
-            <span className="text-[12px] font-medium text-[#787774]">{topic || '随堂检验'}</span>
+            <span className="text-[12px] font-medium text-[#5C5A55]">{topic || '随堂检验'}</span>
           </div>
           {/* 进度 pills */}
           <div className="flex items-center gap-1">
@@ -303,8 +303,8 @@ export function ClassCheckOverlay({
                 style={{
                   width: i === currentIndex ? 16 : 6,
                   backgroundColor: i < currentIndex
-                    ? (submitted[questions[i].id] && selected[questions[i].id] === normalizeAnswer(questions[i].answer, questions[i].options) ? '#10b981' : '#ef4444')
-                    : i === currentIndex ? ACCENT : '#E9E9E7',
+                    ? (submitted[questions[i].id] && selected[questions[i].id] === normalizeAnswer(questions[i].answer, questions[i].options) ? '#2D4F3E' : '#B5483C')
+                    : i === currentIndex ? ACCENT : '#E8E2D5',
                 }}
               />
             ))}
@@ -312,11 +312,11 @@ export function ClassCheckOverlay({
         </div>
 
         {/* 分隔线 */}
-        <div className="mx-5 h-px bg-[#E9E9E7]" />
+        <div className="mx-5 h-px bg-[#E8E2D5]" />
 
         {/* 题干区 */}
         <div className="px-5 pt-5 pb-4">
-          <h2 className="text-[15px] font-semibold leading-[1.7] text-[#232322]">
+          <h2 className="text-[15px] font-semibold leading-[1.7] text-[#1C1B19]">
             {current.stem}
           </h2>
         </div>
@@ -331,24 +331,24 @@ export function ClassCheckOverlay({
             const isDisabled = isSubmitted;
 
             // 状态样式
-            let borderColor = '#E9E9E7';
+            let borderColor = '#E8E2D5';
             let bgColor = '#FFFFFF';
-            let letterBg = '#F7F7F5';
-            let letterColor = '#787774';
-            let textColor = '#232322';
+            let letterBg = '#FAF7F2';
+            let letterColor = '#5C5A55';
+            let textColor = '#1C1B19';
 
             if (optionCorrect) {
-              borderColor = '#A7F3D0';
-              bgColor = '#ECFDF5';
-              letterBg = '#10b981';
+              borderColor = '#93B5A4';
+              bgColor = '#E6EDE8';
+              letterBg = '#2D4F3E';
               letterColor = '#FFFFFF';
-              textColor = '#065F46';
+              textColor = '#1A3327';
             } else if (optionWrong) {
-              borderColor = '#FECACA';
-              bgColor = '#FEF2F2';
-              letterBg = '#ef4444';
+              borderColor = '#D17969';
+              bgColor = '#FBF2EF';
+              letterBg = '#B5483C';
               letterColor = '#FFFFFF';
-              textColor = '#991B1B';
+              textColor = '#8E3328';
             } else if (active && !isSubmitted) {
               borderColor = ACCENT;
               bgColor = ACCENT_LIGHT;
@@ -375,10 +375,10 @@ export function ClassCheckOverlay({
                   {stripOptionPrefix(option)}
                 </span>
                 {optionCorrect && (
-                  <svg className="ml-auto h-5 w-5 shrink-0 text-emerald-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12" /></svg>
+                  <svg className="ml-auto h-5 w-5 shrink-0 text-pine" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12" /></svg>
                 )}
                 {optionWrong && (
-                  <svg className="ml-auto h-5 w-5 shrink-0 text-red-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
+                  <svg className="ml-auto h-5 w-5 shrink-0 text-vermilion/65" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
                 )}
               </button>
             );
@@ -388,13 +388,13 @@ export function ClassCheckOverlay({
         {/* 解析区 */}
         {isSubmitted && current.explanation && (
           <div className="mx-5 mb-3">
-            <div className={`rounded-2xl px-4 py-3 ${isCorrect ? 'bg-[#ECFDF5] border border-[#A7F3D0]' : 'bg-[#FEF2F2] border border-[#FECACA]'}`}>
+            <div className={`rounded-2xl px-4 py-3 ${isCorrect ? 'bg-[#E6EDE8] border border-[#93B5A4]' : 'bg-[#FBF2EF] border border-[#D17969]'}`}>
               {!isCorrect && (
-                <p className="text-[12px] font-medium text-emerald-600 mb-1">
+                <p className="text-[12px] font-medium text-pine mb-1">
                   正确答案：{stripOptionPrefix(normalizedAnswer)}
                 </p>
               )}
-              <p className="text-[12px] text-[#787774] leading-relaxed">{current.explanation}</p>
+              <p className="text-[12px] text-[#5C5A55] leading-relaxed">{current.explanation}</p>
             </div>
           </div>
         )}
@@ -415,7 +415,7 @@ export function ClassCheckOverlay({
             <button
               type="button"
               onClick={handleNext}
-              className="w-full rounded-2xl border border-[#E9E9E7] bg-[#F7F7F5] py-3.5 text-[14px] font-semibold text-[#232322] transition-colors hover:bg-[#EFEFEF]"
+              className="w-full rounded-2xl border border-[#E8E2D5] bg-[#FAF7F2] py-3.5 text-[14px] font-semibold text-[#1C1B19] transition-colors hover:bg-[#F2EDE3]"
             >
               {currentIndex < questions.length - 1 ? '下一题' : '查看结果'}
             </button>

@@ -1,0 +1,1004 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="light">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>这节 TCP 课你也能听懂 · MeetMind</title>
+<link rel="stylesheet" href="./tokens.css" />
+<style>
+  /* ============================================================
+     07 · 分享落地页 · v3.0 裂变核心
+     这是 MeetMind 唯一允许"放飞"的页面：
+     - 大胆使用渐变 / 空间感 / 大字号 / 大图
+     - 但仍然在 token 系统内（墨松绿 + 朱批红 + 米白）
+     - 目标：班级群第一眼 = "我想点进去"
+     ============================================================ */
+
+  /* === Hero 区域 === */
+  .hero {
+    position: relative;
+    min-height: 100vh;
+    background: var(--paper);
+    overflow: hidden;
+  }
+  /* 大气场背景 */
+  .hero::before {
+    content: '';
+    position: absolute; inset: 0;
+    background:
+      radial-gradient(ellipse 60% 50% at 25% 30%, rgba(45,79,62,0.18) 0%, transparent 60%),
+      radial-gradient(ellipse 60% 50% at 75% 70%, rgba(181,72,60,0.12) 0%, transparent 60%),
+      radial-gradient(ellipse 80% 100% at 50% 100%, rgba(250,247,242,0) 0%, var(--paper-warm) 100%);
+    pointer-events: none;
+  }
+  /* 极淡纸纹 */
+  .hero::after {
+    content: '';
+    position: absolute; inset: 0;
+    background-image:
+      radial-gradient(circle at 1px 1px, rgba(28,27,25,0.04) 1px, transparent 0);
+    background-size: 40px 40px;
+    opacity: 0.5;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  /* 顶部小导航（克制） */
+  .top-nav {
+    position: relative;
+    z-index: 10;
+    padding: 28px 48px;
+    display: flex; align-items: center; justify-content: space-between;
+  }
+  .top-nav .brand {
+    display: flex; align-items: center; gap: 10px;
+    font-weight: 600; font-size: 15px;
+    color: var(--ink);
+  }
+  .top-nav .brand .dot {
+    width: 8px; height: 8px; border-radius: 50%;
+    background: var(--pine);
+    box-shadow: 0 0 0 3px rgba(45,79,62,0.12);
+  }
+  .top-nav .right { display: flex; gap: 14px; align-items: center; }
+  .top-nav button {
+    height: 36px; padding: 0 18px;
+    border-radius: var(--radius);
+    background: transparent;
+    color: var(--ink-2);
+    border: 1px solid var(--rule);
+    font: inherit; font-size: 13px; font-weight: 500;
+    cursor: pointer;
+    transition: all 0.15s var(--ease-out);
+  }
+  .top-nav button:hover { background: var(--card); color: var(--ink); }
+  .top-nav button.primary {
+    background: var(--ink); color: #fff; border-color: var(--ink);
+  }
+  .top-nav button.primary:hover { background: #000; }
+
+  /* === Hero 主体 === */
+  .hero-body {
+    position: relative;
+    z-index: 1;
+    max-width: 1280px;
+    margin: 0 auto;
+    padding: 40px 48px 80px;
+    display: grid;
+    grid-template-columns: 1fr 540px;
+    gap: 60px;
+    align-items: center;
+  }
+
+  .hero-info {
+    max-width: 640px;
+  }
+  .hero-eyebrow {
+    display: inline-flex; align-items: center; gap: 12px;
+    margin-bottom: 28px;
+    font-size: 12px;
+    font-family: var(--font-mono);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--pine);
+    font-weight: 600;
+    padding: 6px 14px;
+    background: var(--pine-mist);
+    border-radius: 999px;
+  }
+  .hero-eyebrow .dot {
+    width: 6px; height: 6px; border-radius: 50%;
+    background: var(--pine);
+    animation: rec-pulse 2s ease-in-out infinite;
+    box-shadow: 0 0 0 0 rgba(45,79,62,.5);
+  }
+
+  .hero-title {
+    font-size: 76px;
+    font-weight: 600;
+    letter-spacing: -0.034em;
+    line-height: 1.0;
+    color: var(--ink);
+    margin-bottom: 28px;
+  }
+  .hero-title .em {
+    font-family: var(--font-serif);
+    font-style: italic;
+    font-weight: 400;
+    color: var(--vermilion);
+  }
+  .hero-title .pine {
+    color: var(--pine);
+  }
+
+  .hero-lede {
+    font-size: 19px;
+    line-height: 1.65;
+    color: var(--ink-2);
+    margin-bottom: 36px;
+    max-width: 56ch;
+  }
+  .hero-lede .em {
+    font-family: var(--font-serif);
+    font-style: italic;
+    color: var(--ink);
+  }
+
+  /* 创建者信息 */
+  .creator {
+    display: flex; align-items: center; gap: 14px;
+    margin-bottom: 36px;
+  }
+  .creator .avatar {
+    width: 44px; height: 44px;
+    border-radius: 50%;
+    background: var(--paper-warm);
+    border: 1px solid var(--rule);
+    display: grid; place-items: center;
+    font-weight: 600;
+    color: var(--ink);
+    font-size: 16px;
+  }
+  .creator .info .name {
+    font-size: 14.5px; font-weight: 500; color: var(--ink);
+  }
+  .creator .info .meta {
+    font-size: 12.5px; color: var(--ink-3);
+    font-family: var(--font-mono);
+    margin-top: 2px;
+  }
+  .creator .info .meta .pine { color: var(--pine); }
+  .creator .pin {
+    margin-left: 16px; padding: 6px 12px 6px 6px;
+    background: var(--card);
+    border: 1px solid var(--rule);
+    border-radius: 999px;
+    display: flex; align-items: center; gap: 8px;
+    font-size: 12px; color: var(--ink-2);
+  }
+  .creator .pin .ava {
+    width: 22px; height: 22px;
+    border-radius: 50%;
+    background: radial-gradient(circle at 35% 30%, #FFFFFF 0%, var(--paper-warm) 70%);
+    border: 1px solid var(--rule);
+    display: grid; place-items: center;
+    overflow: hidden;
+    position: relative;
+  }
+  .creator .pin .ava img { width: 16px; height: 16px; object-fit: contain; position: relative; z-index: 1; }
+  .creator .pin .ava::after {
+    content: ''; position: absolute; inset: -3px;
+    border-radius: 50%;
+    background: radial-gradient(circle, rgba(45,79,62,0.15) 0%, transparent 65%);
+    animation: octo-breath 3.6s ease-in-out infinite;
+  }
+
+  /* CTA 按钮组 */
+  .cta-group {
+    display: flex; gap: 14px; flex-wrap: wrap;
+  }
+  .cta-primary {
+    display: inline-flex; align-items: center; gap: 10px;
+    height: 56px; padding: 0 28px;
+    background: var(--ink); color: #fff;
+    border: 0; border-radius: var(--radius-lg);
+    font: inherit; font-size: 15.5px; font-weight: 600;
+    letter-spacing: -0.011em;
+    cursor: pointer;
+    transition: all 0.2s var(--ease-out);
+    box-shadow: var(--shadow-card);
+  }
+  .cta-primary:hover {
+    background: #000;
+    transform: translateY(-1px);
+    box-shadow: var(--shadow-float);
+  }
+  .cta-primary .arrow {
+    width: 24px; height: 24px;
+    border-radius: 50%;
+    background: rgba(255,255,255,0.18);
+    display: grid; place-items: center;
+    transition: transform 0.2s;
+  }
+  .cta-primary:hover .arrow { transform: translateX(2px); }
+
+  .cta-secondary {
+    display: inline-flex; align-items: center; gap: 8px;
+    height: 56px; padding: 0 22px;
+    background: transparent; color: var(--ink);
+    border: 1px solid var(--rule);
+    border-radius: var(--radius-lg);
+    font: inherit; font-size: 14.5px; font-weight: 500;
+    cursor: pointer;
+    transition: all 0.15s var(--ease-out);
+  }
+  .cta-secondary:hover { background: var(--card); border-color: var(--ink-4); }
+
+  /* 社会证明 */
+  .social-proof {
+    margin-top: 40px;
+    padding-top: 28px;
+    border-top: 1px solid var(--rule);
+    display: flex; align-items: center; gap: 16px;
+    color: var(--ink-2); font-size: 13px;
+  }
+  .social-proof .stack {
+    display: inline-flex;
+  }
+  .social-proof .stack .a {
+    width: 28px; height: 28px;
+    border-radius: 50%;
+    background: var(--paper-warm);
+    border: 2px solid var(--paper);
+    display: grid; place-items: center;
+    font-size: 11px; font-weight: 600;
+    color: var(--ink);
+    margin-left: -8px;
+  }
+  .social-proof .stack .a:first-child { margin-left: 0; }
+  .social-proof .stack .a.pine { background: var(--pine); color: #fff; border-color: var(--paper); }
+  .social-proof .stack .a.ver { background: var(--vermilion); color: #fff; border-color: var(--paper); }
+
+  /* === Octo 主图 === */
+  .hero-stage {
+    position: relative;
+    aspect-ratio: 1;
+  }
+  .hero-stage::before {
+    /* 后面的大光圈 */
+    content: '';
+    position: absolute; inset: -10%;
+    background: radial-gradient(circle, rgba(45,79,62,0.20) 0%, rgba(181,72,60,0.08) 40%, transparent 70%);
+    border-radius: 50%;
+    animation: octo-breath 5s ease-in-out infinite;
+  }
+  .hero-stage img {
+    position: relative;
+    width: 100%; height: 100%;
+    object-fit: contain;
+    filter: drop-shadow(0 24px 60px rgba(45,79,62,0.25));
+    animation: hero-float 6s ease-in-out infinite;
+  }
+  @keyframes hero-float {
+    0%, 100% { transform: translateY(0) rotate(-1deg); }
+    50%      { transform: translateY(-16px) rotate(1deg); }
+  }
+  /* 浮动 chip 装饰 */
+  .float-chip {
+    position: absolute;
+    background: var(--card);
+    border: 1px solid var(--rule);
+    border-radius: var(--radius-lg);
+    padding: 12px 16px;
+    box-shadow: var(--shadow-card);
+    font-size: 12.5px;
+    color: var(--ink);
+    z-index: 2;
+    animation: chip-bob 4s ease-in-out infinite;
+  }
+  .float-chip .lbl {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    color: var(--pine);
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    margin-bottom: 4px;
+    font-weight: 600;
+  }
+  .float-chip .val {
+    font-size: 22px;
+    font-weight: 600;
+    letter-spacing: -0.02em;
+    color: var(--ink);
+  }
+  .float-chip .val .em {
+    font-family: var(--font-serif); font-style: italic;
+    color: var(--vermilion); font-weight: 400;
+  }
+  .float-chip.fc-1 { top: 8%; left: -10%; animation-delay: 0s; }
+  .float-chip.fc-2 { top: 50%; right: -8%; animation-delay: 1.5s; }
+  .float-chip.fc-3 { bottom: 8%; left: 8%; animation-delay: 3s; }
+  @keyframes chip-bob {
+    0%, 100% { transform: translateY(0); }
+    50%      { transform: translateY(-8px); }
+  }
+
+  /* === Stats 横条 === */
+  .stats {
+    background: var(--ink);
+    color: #fff;
+    padding: 48px 48px;
+    margin: 0 auto;
+    overflow: hidden;
+    position: relative;
+  }
+  .stats-inner {
+    max-width: 1280px;
+    margin: 0 auto;
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 48px;
+    position: relative;
+    z-index: 1;
+  }
+  .stat .lbl {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: rgba(255,255,255,0.55);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    margin-bottom: 12px;
+  }
+  .stat .n {
+    font-size: 56px;
+    font-weight: 600;
+    letter-spacing: -0.028em;
+    line-height: 1;
+    color: #fff;
+    margin-bottom: 6px;
+  }
+  .stat .n.pine { color: var(--pine-light); }
+  .stat .n.ver { color: var(--vermilion-light); }
+  .stat .n .small { font-size: 24px; opacity: 0.7; }
+  .stat .desc {
+    font-size: 13px;
+    color: rgba(255,255,255,0.7);
+    line-height: 1.5;
+  }
+  .stats::before {
+    content: '';
+    position: absolute;
+    right: -100px; top: -100px;
+    width: 300px; height: 300px;
+    background: radial-gradient(circle, rgba(107,144,128,0.15), transparent);
+    border-radius: 50%;
+  }
+
+  /* === 真实产物预览（Cheatsheet）=== */
+  .preview {
+    padding: 80px 48px;
+    max-width: 1280px;
+    margin: 0 auto;
+  }
+  .preview-head {
+    margin-bottom: 40px;
+    text-align: center;
+  }
+  .preview-eyebrow {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--pine);
+    font-weight: 600;
+    margin-bottom: 12px;
+  }
+  .preview-title {
+    font-size: 42px;
+    font-weight: 600;
+    letter-spacing: -0.024em;
+    line-height: 1.15;
+    margin-bottom: 12px;
+    max-width: 22ch;
+    margin-left: auto;
+    margin-right: auto;
+  }
+  .preview-title .em {
+    font-family: var(--font-serif); font-style: italic; font-weight: 400;
+    color: var(--vermilion);
+  }
+  .preview-sub {
+    font-size: 15px;
+    color: var(--ink-2);
+    line-height: 1.6;
+    max-width: 56ch;
+    margin: 0 auto;
+  }
+
+  .artifact {
+    margin-top: 40px;
+    background: var(--card);
+    border: 1px solid var(--rule);
+    border-radius: var(--radius-2xl);
+    box-shadow: var(--shadow-card);
+    overflow: hidden;
+  }
+  .artifact-head {
+    padding: 18px 28px;
+    display: flex; align-items: center; gap: 12px;
+    border-bottom: 1px solid var(--rule-soft);
+    background: var(--paper);
+  }
+  .artifact-head .icon {
+    width: 32px; height: 32px;
+    border-radius: var(--radius);
+    background: #FDF1C8;
+    color: #8E6A14;
+    display: grid; place-items: center;
+    font-size: 14px; font-weight: 600;
+  }
+  .artifact-head h3 {
+    font-size: 15px; font-weight: 600;
+    letter-spacing: -0.014em;
+  }
+  .artifact-head .meta {
+    font-size: 12px; color: var(--ink-3);
+    margin-top: 2px;
+  }
+  .artifact-head .right {
+    margin-left: auto; display: flex; gap: 8px; align-items: center;
+  }
+  .artifact-body {
+    padding: 32px 40px;
+    background: var(--card);
+  }
+  .cheat-rows {
+    display: grid;
+    grid-template-columns: 160px 1fr;
+    gap: 0;
+  }
+  .cheat-rows .key {
+    padding: 16px 20px 16px 0;
+    font-size: 13.5px;
+    font-weight: 500;
+    color: var(--ink-2);
+    border-right: 1px solid var(--rule-soft);
+    border-bottom: 1px solid var(--rule-soft);
+    text-align: right;
+  }
+  .cheat-rows .val {
+    padding: 16px 0 16px 24px;
+    font-size: 15px;
+    line-height: 1.75;
+    color: var(--ink);
+    border-bottom: 1px solid var(--rule-soft);
+  }
+  .cheat-rows .key:last-of-type, .cheat-rows .val:last-of-type {
+    border-bottom: 0;
+  }
+
+  /* === 对话样例 === */
+  .conversation {
+    padding: 80px 48px;
+    background: var(--paper-warm);
+  }
+  .conv-inner {
+    max-width: 920px;
+    margin: 0 auto;
+  }
+  .conv-head {
+    text-align: center;
+    margin-bottom: 48px;
+  }
+  .conv-eyebrow {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--vermilion);
+    font-weight: 600;
+    margin-bottom: 12px;
+  }
+  .conv-title {
+    font-size: 42px;
+    font-weight: 600;
+    letter-spacing: -0.024em;
+    line-height: 1.15;
+    margin-bottom: 12px;
+  }
+  .conv-title .em {
+    font-family: var(--font-serif); font-style: italic; font-weight: 400;
+    color: var(--vermilion);
+  }
+  .conv-sub {
+    font-size: 15px;
+    color: var(--ink-2);
+    line-height: 1.6;
+    max-width: 52ch;
+    margin: 0 auto;
+  }
+
+  .conv-thread {
+    background: var(--card);
+    border: 1px solid var(--rule);
+    border-radius: var(--radius-2xl);
+    overflow: hidden;
+    box-shadow: var(--shadow-card);
+  }
+  .conv-thread .head {
+    padding: 16px 24px;
+    display: flex; align-items: center; gap: 12px;
+    border-bottom: 1px solid var(--rule-soft);
+  }
+  .conv-thread .head .stage {
+    width: 36px; height: 36px;
+    border-radius: 50%;
+    background: radial-gradient(circle at 35% 30%, #FFFFFF 0%, var(--paper-warm) 70%);
+    border: 1px solid var(--rule);
+    display: grid; place-items: center;
+    position: relative;
+  }
+  .conv-thread .head .stage img { width: 26px; height: 26px; object-fit: contain; }
+  .conv-thread .head .stage::before {
+    content: ''; position: absolute; inset: -4px;
+    border-radius: 50%;
+    background: radial-gradient(circle, rgba(45,79,62,0.18) 0%, transparent 65%);
+    animation: octo-breath 3.6s ease-in-out infinite;
+  }
+  .conv-thread .head .info .name { font-size: 13.5px; font-weight: 600; }
+  .conv-thread .head .info .meta {
+    font-size: 11.5px; color: var(--pine);
+    font-family: var(--font-mono);
+  }
+  .conv-thread .body {
+    padding: 28px 32px;
+  }
+  .conv-msg { margin-bottom: 20px; }
+  .conv-msg.user {
+    display: flex; justify-content: flex-end;
+  }
+  .conv-msg.user .bubble {
+    background: var(--ink); color: #fff;
+    padding: 10px 16px;
+    border-radius: 16px 16px 4px 16px;
+    max-width: 80%;
+    font-size: 14px; line-height: 1.6;
+  }
+  .conv-msg.ai .who {
+    font-size: 11.5px; color: var(--ink-3);
+    margin-bottom: 6px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    font-weight: 500;
+    font-family: var(--font-mono);
+  }
+  .conv-msg.ai .text {
+    font-size: 14.5px; line-height: 1.78;
+    color: var(--ink);
+  }
+  .conv-msg.ai .text p { margin-bottom: 8px; }
+
+  .conv-cta {
+    padding: 16px 24px;
+    border-top: 1px solid var(--rule-soft);
+    background: var(--paper);
+    display: flex; align-items: center; gap: 16px;
+  }
+  .conv-cta .input {
+    flex: 1;
+    padding: 10px 14px;
+    background: var(--card);
+    border: 1px solid var(--rule);
+    border-radius: var(--radius);
+    font-size: 13.5px;
+    color: var(--ink-3);
+  }
+  .conv-cta button {
+    height: 38px; padding: 0 18px;
+    background: var(--pine); color: #fff;
+    border: 0; border-radius: var(--radius);
+    font: inherit; font-size: 13px; font-weight: 500;
+    cursor: pointer;
+    transition: background 0.15s;
+  }
+  .conv-cta button:hover { background: var(--pine-deep); }
+
+  /* === 三大特性 === */
+  .features {
+    padding: 80px 48px;
+    max-width: 1280px;
+    margin: 0 auto;
+  }
+  .feat-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 32px;
+  }
+  .feat {
+    padding: 36px 32px;
+    background: var(--card);
+    border: 1px solid var(--rule);
+    border-radius: var(--radius-xl);
+    transition: all 0.3s var(--ease-out);
+  }
+  .feat:hover {
+    transform: translateY(-4px);
+    box-shadow: var(--shadow-card);
+    border-color: var(--pine-light);
+  }
+  .feat .num {
+    font-family: var(--font-mono);
+    font-size: 11.5px;
+    color: var(--ink-3);
+    letter-spacing: 0.08em;
+    margin-bottom: 16px;
+  }
+  .feat h3 {
+    font-size: 22px;
+    font-weight: 600;
+    letter-spacing: -0.018em;
+    line-height: 1.25;
+    margin-bottom: 12px;
+  }
+  .feat h3 .em {
+    font-family: var(--font-serif); font-style: italic; font-weight: 400;
+    color: var(--vermilion);
+  }
+  .feat p {
+    font-size: 14px;
+    color: var(--ink-2);
+    line-height: 1.7;
+  }
+
+  /* === Bottom CTA === */
+  .bottom-cta {
+    padding: 100px 48px 80px;
+    text-align: center;
+    background: var(--paper);
+    position: relative;
+    overflow: hidden;
+  }
+  .bottom-cta::before {
+    content: '';
+    position: absolute; inset: 0;
+    background:
+      radial-gradient(circle at 50% 100%, rgba(45,79,62,0.10) 0%, transparent 60%);
+    pointer-events: none;
+  }
+  .bottom-cta > * { position: relative; z-index: 1; }
+  .bottom-cta h2 {
+    font-size: 64px;
+    font-weight: 600;
+    letter-spacing: -0.028em;
+    line-height: 1.05;
+    margin-bottom: 24px;
+    max-width: 18ch;
+    margin-left: auto;
+    margin-right: auto;
+  }
+  .bottom-cta h2 .em {
+    font-family: var(--font-serif); font-style: italic; font-weight: 400;
+    color: var(--vermilion);
+  }
+  .bottom-cta .lede {
+    font-size: 17px;
+    color: var(--ink-2);
+    line-height: 1.65;
+    max-width: 48ch;
+    margin: 0 auto 36px;
+  }
+
+  /* === Footer === */
+  footer {
+    border-top: 1px solid var(--rule);
+    padding: 32px 48px;
+    max-width: 1280px;
+    margin: 0 auto;
+    color: var(--ink-3);
+    font-size: 12.5px;
+    display: flex; justify-content: space-between; align-items: center;
+  }
+  footer .left { display: flex; gap: 18px; align-items: center; }
+  footer a { color: var(--ink-2); transition: color 0.15s; }
+  footer a:hover { color: var(--pine); }
+
+  /* 主题切换 */
+  .theme-fab {
+    position: fixed;
+    top: 28px; right: 28px;
+    z-index: 100;
+    width: 36px; height: 36px;
+    border-radius: 50%;
+    background: var(--card);
+    border: 1px solid var(--rule);
+    display: grid; place-items: center;
+    cursor: pointer;
+    transition: all 0.2s;
+    box-shadow: var(--shadow-soft);
+  }
+
+  /* 响应式 */
+  @media (max-width: 960px) {
+    .hero-body { grid-template-columns: 1fr; }
+    .hero-title { font-size: 56px; }
+    .stats-inner { grid-template-columns: repeat(2, 1fr); gap: 32px; }
+    .feat-grid { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+
+<!-- ==================== HERO ==================== -->
+<section class="hero">
+
+  <nav class="top-nav">
+    <a class="brand" href="./index.html">
+      <span class="dot"></span>
+      <span>MeetMind</span>
+    </a>
+    <div class="right">
+      <button>下载 App</button>
+      <button class="primary">开始我的第一节</button>
+    </div>
+  </nav>
+
+  <div class="hero-body">
+    <div class="hero-info">
+      <div class="hero-eyebrow">
+        <span class="dot"></span>
+        <span>由陈同学分享 · 一节真实课堂</span>
+      </div>
+
+      <h1 class="hero-title">
+        这节 <span class="em">TCP 课</span><br/>
+        你也能听懂。
+      </h1>
+
+      <p class="hero-lede">
+        陈同学昨天上完计算机网络第 7 讲，让 Octo 帮他<em class="em">陪听了 23 分钟</em>。
+        现在这只小章鱼把这节课的<strong>所有知识、所有引用、所有困惑</strong>都装在自己脑子里了——
+        你点进来，它能用你的话再讲一遍。
+      </p>
+
+      <div class="creator">
+        <div class="avatar">陈</div>
+        <div class="info">
+          <div class="name">陈同学 · 计算机系大二</div>
+          <div class="meta"><span class="pine">76% 听懂率</span> · 5 个引用 · 4 处朱批</div>
+        </div>
+        <div class="pin">
+          <div class="ava"><img src="/public/images/octo-buddy/excited.png" /></div>
+          <span>Octo 共同陪听</span>
+        </div>
+      </div>
+
+      <div class="cta-group">
+        <button class="cta-primary">
+          <span>和这只 Octo 对话</span>
+          <span class="arrow">
+            <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+              <path d="M2 6h8M6 2l4 4-4 4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+          </span>
+        </button>
+        <button class="cta-secondary">先看看这节课</button>
+      </div>
+
+      <div class="social-proof">
+        <div class="stack">
+          <div class="a pine">王</div>
+          <div class="a">李</div>
+          <div class="a ver">刘</div>
+          <div class="a">张</div>
+        </div>
+        <span><strong style="color: var(--ink);">12 位同班同学</strong>已经领取了这只 Octo</span>
+      </div>
+    </div>
+
+    <div class="hero-stage">
+      <img src="/public/images/octo-buddy/original.png" alt="Octo · 陈同学的学习同桌" />
+
+      <div class="float-chip fc-1">
+        <div class="lbl">课时长</div>
+        <div class="val">23 <span class="em">分钟</span></div>
+      </div>
+      <div class="float-chip fc-2">
+        <div class="lbl">朱批重点</div>
+        <div class="val" style="color: var(--vermilion);">4 处</div>
+      </div>
+      <div class="float-chip fc-3">
+        <div class="lbl">引用回原录音</div>
+        <div class="val" style="color: var(--pine);">5 处</div>
+      </div>
+    </div>
+  </div>
+
+</section>
+
+<!-- ==================== STATS ==================== -->
+<section class="stats">
+  <div class="stats-inner">
+    <div class="stat">
+      <div class="lbl">课时长 · DURATION</div>
+      <div class="n">23<span class="small">min</span></div>
+      <div class="desc">完整原录音 · 含视频</div>
+    </div>
+    <div class="stat">
+      <div class="lbl">陈同学的听懂率</div>
+      <div class="n pine">76<span class="small">%</span></div>
+      <div class="desc">由 Octo 实时评估</div>
+    </div>
+    <div class="stat">
+      <div class="lbl">引用回原录音</div>
+      <div class="n">5</div>
+      <div class="desc">每个引用都能跳回 [MM:SS]</div>
+    </div>
+    <div class="stat">
+      <div class="lbl">朱批重点</div>
+      <div class="n ver">4</div>
+      <div class="desc">最容易混的 / 最容易考的</div>
+    </div>
+  </div>
+</section>
+
+<!-- ==================== ARTIFACT PREVIEW ==================== -->
+<section class="preview">
+  <div class="preview-head">
+    <div class="preview-eyebrow">这节课的真实产物</div>
+    <h2 class="preview-title">陈同学已经为你<span class="em">整理好了</span></h2>
+    <p class="preview-sub">不是那种"AI 生成的看起来很 AI"的卡片。是一张能打印出来贴在课本边上、考前最后一刻翻的速查表。</p>
+  </div>
+
+  <div class="artifact">
+    <div class="artifact-head">
+      <span class="icon">速</span>
+      <div>
+        <h3>TCP 可靠传输 · 速查表</h3>
+        <div class="meta">5 个核心知识点 · 4 处定位回原录音</div>
+      </div>
+      <div class="right">
+        <span class="badge dot pine mono">就绪</span>
+        <button class="cta-secondary" style="height: 32px; padding: 0 14px; font-size: 12.5px;">导出 PDF</button>
+      </div>
+    </div>
+    <div class="artifact-body">
+      <div class="cheat-rows">
+        <div class="key">可靠传输</div>
+        <div class="val">数据 <mark class="mk-vermilion">不丢、不重、不乱序</mark>——TCP 的核心承诺。<span class="cite-ts mono" style="margin-left: 6px;">[19:08]</span></div>
+        <div class="key">实现机制</div>
+        <div class="val"><mark class="mk-pine">确认重传 + 序号</mark>。每段数据带序号，接收方回 ACK，超时未收到则重传。<span class="cite-ts mono" style="margin-left: 6px;">[19:34]</span></div>
+        <div class="key">滑动窗口</div>
+        <div class="val">允许同时在飞多个数据段，避免"发一段等一段"的吞吐浪费。<span class="cite-ts mono" style="margin-left: 6px;">[20:01]</span></div>
+        <div class="key">拥塞控制</div>
+        <div class="val">遵循 <mark class="mk-vermilion">AIMD</mark>：慢启动指数涨 → 拥塞避免线性涨 → 丢包窗口砍半。<span class="cite-ts mono" style="margin-left: 6px;">[21:12]</span></div>
+        <div class="key">设计哲学</div>
+        <div class="val">TCP 在<mark class="mk-pine">不停探测网络极限</mark>，发现到极限就退一步——一种自适应的礼让协议。<span class="cite-ts mono" style="margin-left: 6px;">[21:55]</span></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ==================== CONVERSATION ==================== -->
+<section class="conversation">
+  <div class="conv-inner">
+    <div class="conv-head">
+      <div class="conv-eyebrow">最神奇的部分</div>
+      <h2 class="conv-title">和这只 Octo<span class="em">直接对话</span></h2>
+      <p class="conv-sub">它已经听完了整节课。你<em class="serif" style="color: var(--ink);">问什么</em>，它<em class="serif" style="color: var(--ink);">就答什么</em>，每个回答都能跳回原录音的具体一秒。</p>
+    </div>
+
+    <div class="conv-thread">
+      <div class="head">
+        <div class="stage"><img src="/public/images/octo-buddy/excited.png" /></div>
+        <div class="info">
+          <div class="name">Octo · 陈同学的学习同桌</div>
+          <div class="meta">已读完整节课转录</div>
+        </div>
+      </div>
+      <div class="body">
+        <div class="conv-msg user">
+          <div class="bubble">滑动窗口和拥塞控制有啥区别？我也分不清。</div>
+        </div>
+
+        <div class="conv-msg ai">
+          <div class="who">Octo</div>
+          <div class="text">
+            <p>陈同学也问过我这个——<strong>简单说：</strong></p>
+            <p>· <strong>滑动窗口</strong>是接收方告诉发送方"我能吃多少"，目的是<mark class="mk-vermilion">不让接收方被噎着</mark>；<span class="cite-ts mono">[20:01]</span></p>
+            <p>· <strong>拥塞控制</strong>是发送方自己揣测"网络能承载多少"，目的是<mark class="mk-pine">不让中间路由器被淹</mark>。<span class="cite-ts mono">[21:12]</span></p>
+            <p>张老师在 <span class="cite-ts mono">[21:55]</span> 还特别强调"TCP 在不停地探测网络的极限——温柔地"。这一段强烈建议你回去重听 30 秒。</p>
+          </div>
+        </div>
+
+        <div class="conv-msg user">
+          <div class="bubble">那 AIMD 是啥？为啥要"砍半"？</div>
+        </div>
+
+        <div class="conv-msg ai">
+          <div class="who">Octo · typing</div>
+          <div class="text">
+            <p style="color: var(--ink-3); font-style: italic;">想给你打个比喻…</p>
+            <div class="thinking-strip" style="display: inline-flex; margin-top: 4px;">正在对照陈同学的笔记…</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="conv-cta">
+        <div class="input">问 Octo 任何关于这节课的事…</div>
+        <button>开始对话 →</button>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ==================== FEATURES ==================== -->
+<section class="features">
+  <div class="preview-head">
+    <div class="preview-eyebrow">为什么是 MeetMind</div>
+    <h2 class="preview-title">不是另一个 AI <span class="em">聊天框</span></h2>
+    <p class="preview-sub">是一只真的听完了你这节课的<em class="serif" style="color: var(--ink);">同桌</em>——它有上下文、有引用、有温度。</p>
+  </div>
+
+  <div class="feat-grid" style="margin-top: 48px;">
+    <div class="feat">
+      <div class="num">01 / FEATURE</div>
+      <h3>每个回答都<span class="em">能溯源</span></h3>
+      <p>它说的每一句话都来自这节课的真实转录。点击 <span class="cite-ts mono">[20:01]</span> 直接跳回那一秒——不是 AI 编的。</p>
+    </div>
+    <div class="feat">
+      <div class="num">02 / FEATURE</div>
+      <h3>它知道<span class="em">谁会混</span>哪里</h3>
+      <p>陈同学卡在哪、混了哪、问了哪——这只 Octo 都记得。它会主动告诉你"这里 80% 的人都会错"。</p>
+    </div>
+    <div class="feat">
+      <div class="num">03 / FEATURE</div>
+      <h3>速查 / 闪卡 / 测验<span class="em">都已生成</span></h3>
+      <p>不需要你点"生成"。陈同学点开课的那一刻，Octo 就开始酿。你来的时候，所有产物都已经在桌上。</p>
+    </div>
+  </div>
+</section>
+
+<!-- ==================== BOTTOM CTA ==================== -->
+<section class="bottom-cta">
+  <h2>把<span class="em">学习上下文</span><br/>还给学生本人。</h2>
+  <p class="lede">每节课、每段录音、每次问 Octo 的对话——都成为你专属的学习上下文。考前不用从零开始，AI 真的懂你在学什么。</p>
+  <button class="cta-primary">
+    <span>领取这只 Octo · 免费</span>
+    <span class="arrow">
+      <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+        <path d="M2 6h8M6 2l4 4-4 4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+    </span>
+  </button>
+</section>
+
+<footer>
+  <div class="left">
+    <span style="color: var(--ink); font-weight: 500;">MeetMind</span>
+    <span>·</span>
+    <span>把学习上下文还给学生本人</span>
+  </div>
+  <div style="display: flex; gap: 24px;">
+    <a href="#">关于</a>
+    <a href="#">如何工作</a>
+    <a href="#">隐私</a>
+    <a href="#">下载</a>
+  </div>
+</footer>
+
+<button class="theme-fab" id="themeToggle" title="切换主题">
+  <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+    <circle cx="7" cy="7" r="2.5" stroke="currentColor" stroke-width="1.4"/>
+    <path d="M7 1v1.5M7 11.5V13M1 7h1.5M11.5 7H13M2.5 2.5l1 1M10.5 10.5l1 1M2.5 11.5l1-1M10.5 3.5l1-1" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>
+  </svg>
+</button>
+
+<script>
+  document.getElementById('themeToggle').addEventListener('click', () => {
+    const root = document.documentElement;
+    root.setAttribute('data-theme', root.getAttribute('data-theme') === 'dark' ? 'light' : 'dark');
+  });
+</script>
+
+</body>
+</html>

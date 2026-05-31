@@ -30,7 +30,7 @@
 | **改业务逻辑（service）** | `src/lib/services/DOMAIN.md` → 找到对应 service 文件 |
 | **改 ASR 链路** | `src/lib/services/asr/`（text-utils / render-state-machine / post-edit / audio-constraints） |
 | **改 AI-Native 插件** | `src/lib/ai-native/plugins/DOMAIN.md` → 对应 plugin |
-| **改 SharedAgent / 分享 Agent / 裂变** | `roadmap/v3.0-virality-agent.md`（北极星）→ `src/app/api/share/DOMAIN.md` → `src/app/share/DOMAIN.md` → `src/components/share/DOMAIN.md` → `src/lib/services/share-agent-service.ts` |
+| **改 SharedAgent / 分享 Agent / 裂变** | `roadmap/v3.0-virality-agent.md`（北极星）→ `src/app/api/share/DOMAIN.md` → `src/app/share/DOMAIN.md` → `src/app/me/shares/`（A 管理面）→ `src/components/share/DOMAIN.md` → `src/lib/services/share-agent-service.ts`。**v3.0 闭环 5 个支点**：(1) 创建 `OctoCrystalDispatcher` (2) 落地页 `SharedAgentLanding` + `ArtifactRender` 真渲染产物 (3) 分享态对话 `mode='shared'` (4) 领取 `claimSharedAgent` → `WorkspaceCapture(sourceType='shared-agent')` 在 B 工作台点击跳回 `/share/[token]` (5) 管理 `MyShareList` + `DELETE /api/share/[token]`（撤销不影响已领取副本）|
 | **改用户面文案** | `src/lib/ui/copy.ts`（**唯一真相源**——不要把字符串散落到组件里） |
 | **改状态管理** | `src/stores/DOMAIN.md` → 了解哪些状态已迁移到 store |
 | **改类型定义** | `src/types/DOMAIN.md` → `src/types/index.ts` |
@@ -149,17 +149,23 @@ MeetMind 是以学习者长期上下文为中心的 AI 学习产品。
 
 **课后复习三栏原则**：视频和音频课后复习都必须是“左边有根，中间练习，右边有人陪”。左栏保留原始课堂证据（视频/音频播放器、时间轴、转录锚点），且视频复习默认应给左栏最大权重，保证视频真的可看；中栏承载完整学习工作区（应用矩阵、闪卡、测验、思维导图等）；右栏只做同桌解释与复盘。三栏之间两条边界都可拖拽；左证据栏不自动折叠，学习区和同桌被挤到阈值后折叠成窄 rail，可点击恢复。复习态 `<open_app:KEY/>` 不能把完整应用塞进聊天气泡，必须打开中间学习工作区；测验/闪卡等应用交互动态要先写入课后学习黑板，再由同桌作为上下文读取，避免中间应用和右侧聊天直接耦合。黑板是轻结构自然语言便签，只写学习现场事实，不写“如果/应该/优先/提醒/建议”等面向模型的指令，把判断权留给模型。
 
-### 仪式时刻白名单（允许破戒的 5 个场景）
+### 仪式时刻白名单（允许在系统外释放灵魂的 6 个场景）
 
-日常 95% 的界面**仍然**遵守「平涂、克制」，但以下 5 个关键仪式时刻允许情绪化视觉（渐变/光晕/柔光）：
+日常 95% 的界面**仍然**遵守「克制 + 双签名色 + 米白纸感」，但以下 6 个仪式时刻允许情绪化视觉：
 
-1. **录音中的呼吸球**：柔光渐变（粉→紫→蓝低饱和度）+ 高斯模糊光晕 + 呼吸动画。停止即消散。
-2. **AI 正在"酿"的提示**：右栏或卡片边缘一道极淡的彩色气息流过，< 1.5s，不阻塞交互。
-3. **Echo 卡片生成完成的瞬间**：一道柔光扫过卡片。
-4. **录课结束的收尾动画**：屏幕中央极简收束动画，像合上一本笔记。
-5. **Tab 切换 / AI 流式输出**：字符逐个浮现（stagger），让学生**看见** AI 在思考。
+1. **录音中的呼吸球**：仪式色板（rose/lilac/sky 三色低饱和度）+ 高斯模糊光晕 + 呼吸动画。停止即消散。
+2. **AI 正在"酿"的提示**：`thinking-strip` 极淡墨绿/朱批气息流横扫，&lt; 2s，不阻塞交互。
+3. **Echo / 应用卡生成完成的瞬间**：墨绿 check + 一道柔光扫过卡片，< 1.6s。
+4. **录课结束的收尾动画**：屏幕中央极简收束，像合上一本笔记。
+5. **Tab 切换 / AI 流式输出**：字符逐个浮现（`stream` + `typing-caret`），让学生**看见** AI 在思考。
+6. **分享落地页 `/share/[token]`（v3.0 唯一允许整页放飞的页面）**：
+   - 大气场墨绿/朱批 radial gradient 背景 + Octo `original.png` 大图 + `hero-float` 动画
+   - Instrument Serif italic 装饰标题
+   - 这一页的目标是被陌生人在班级群点开——它的视觉权重要承担起裂变的任务
 
-**除此以外，其他任何地方禁止**：`bg-gradient-*`、`shadow-*`、`ring-*` 装饰、非系统 Tailwind 色、emoji 作 UI 元素。
+**除此以外，常规页面允许**：极淡墨绿 1px ring（`surface-ai`）、`shadow-soft/card/float` 极克制投影、双签名色作引用资产 / 状态点 / mark 高亮。
+
+**始终禁止**：饱和色撞脸 ChatGPT 紫 / Stripe 蓝 / 多邻国绿、emoji 作 UI 元素、用渐变填充按钮、用阴影替代结构。
 
 ### 用户面文案（M9 zero-prompt 原则）
 
@@ -262,8 +268,11 @@ POST /api/tutor/agent
   → resolveTutorAgentProviderConfig(env, { modelId }) 选择 StepFun / DeepSeek / DashScope / OpenAI-compatible provider（默认 `step-3.7-flash`）
   → buildTutorSystemPrompt(mode, context, options) 拼 system
   → streamText({ model, tools: [makeXxx + lookupTranscript],
-                 // DeepSeek thinking 模型不暴露 native tools，结构化产物走 <open_app:KEY/> + /api/apps/execute，避免 reasoning_content tool-call 续写错误
-                 stopWhen: stepCountIs(6), onStepFinish: track('tutor.step') })
+                 // DeepSeek 与 StepFun 都不暴露 native tools，结构化产物走 <open_app:KEY/> + /api/apps/execute；
+                 // DeepSeek 是因为 reasoning_content tool-call 续写错误，StepFun 是为降低 TTFT（6 个 tool description ~700 字会拖慢 prefill）
+                 stopWhen: stepCountIs(3),
+                 experimental_transform: smoothStream({ chunking: 'word' }),  // 让前端字节流按词平滑刷出
+                 onStepFinish: track('tutor.step') })
   → toUIMessageStreamResponse()  // AI SDK v6 帧
 ```
 
@@ -303,25 +312,96 @@ ASR 链路（`src/lib/services/asr/`）：
 
 ---
 
-## 5. 设计系统（快速参考）
+## 5. 设计系统 v7（快速参考）
 
-**铁律：95% 平涂极简；5 个仪式时刻允许灵魂迸发（详见第 2 节 Taste 白名单）。**
+> 完整设计宪法 + 可视化 showcase 在 `design-demo/v7/`（9 篇文档：tokens / foundations / AI 视觉 / 组件 / 应用矩阵 / 课中 / 复习 / 分享落地 / 移动端 / 暗色）。
 
-| Token | 色值 | 用途 |
-|-------|------|------|
-| `canvas` | `#F7F7F5` | 全局背景 |
-| `card` | `#FFFFFF` | 卡片 |
-| `ink` | `#232322` | 正文 |
-| `ink-secondary` | `#787774` | 次要文字 |
-| `ink-muted` | `#A3A39E` | 时间、标注 |
-| `divider` | `#E9E9E7` | 分隔线 |
+**核心理念：图书馆台灯 + 朱批红笔。** "色 = 架构"——墨松绿是 AI 沉淀（场景上下文），朱批红是学生此刻（个人上下文 / 引用 / 标注）。
 
-**仪式时刻调色板（仅限白名单场景使用）**：
-- `ceremony-rose` `#FCE7F3`、`ceremony-lilac` `#E9D5FF`、`ceremony-sky` `#DBEAFE`
-- 仅用于呼吸球 / 气息流 / 收尾动画 / 卡片扫光。不得用于常规按钮、卡片、背景。
+### 双签名色（Tailwind class · CSS var）
 
-**日常禁止**：`bg-gradient-*`、`shadow-*`、`ring-*` 装饰、非系统 Tailwind 色、emoji 作 UI 元素。
-**仪式时刻允许**：上述元素仅限白名单中的 5 个场景出现，且必须使用 `ceremony-*` 色板。
+| 角色 | 名称 | 色值 | Tailwind | CSS Var | 语义 |
+|------|------|------|----------|---------|------|
+| **主签名** | 墨松绿 Pine | `#2D4F3E` | `pine` / `pine-mist` / `pine-fog` | `--mm-pine` | AI / 沉淀 / 长期上下文 |
+| **次签名** | 朱批红 Vermilion | `#B5483C` | `vermilion` / `vermilion-mist` / `vermilion-fog` | `--mm-vermilion` | 此刻 / 引用 / 学生标注 |
+
+### 中性色
+
+| Token | 色值 | Tailwind | 用途 |
+|-------|------|----------|------|
+| `paper` | `#FAF7F2` | `bg-paper` | 主底色 · 米白纸感（v7 升级 · 暖于 v6 燕麦灰） |
+| `paper-warm` | `#F2EDE3` | `bg-paper-warm` | hover / 次表面 |
+| `card` | `#FFFFFF` | `bg-card` | 主卡片 |
+| `ink` | `#1C1B19` | `text-ink` | 主文字 / 主按钮 |
+| `ink-secondary` | `#5C5A55` | `text-ink-secondary` | 次文字 |
+| `ink-muted` | `#8E8B82` | `text-ink-muted` | 弱文字 / 标注 |
+| `divider` | `#E8E2D5` | `border-divider` | 边线（偏暖纸感） |
+
+### 字体三件套（已在 `app/layout.tsx` 通过 next/font 加载）
+
+| 字体 | Tailwind | 用途 |
+|------|---------|------|
+| **Inter** | `font-sans`（默认） | 正文 · 'palt' 紧排让中英混排立刻 +30% 高级感 |
+| **Instrument Serif** | `font-serif` 或 `.font-serif-italic` | 仪式字 · 标题里偶尔的 italic em |
+| **JetBrains Mono** | `font-mono` 或 `.font-mono-cite` | 引用资产化 · `[MM:SS]` / `[资料 N]` 专用 |
+
+### 投影系统（v7：必须存在但克制）
+
+| Tailwind | 强度 | 用途 |
+|---------|------|------|
+| `shadow-soft` | 0/4/16 · 0.04 | 日常卡片 |
+| `shadow-card` | 0/8/28 · 0.06 | 主卡片（首选） |
+| `shadow-float` | 0/16/48 · 0.08 | 悬浮元素 |
+| `shadow-modal` | 0/32/80 · 0.12 | 模态 |
+| `shadow-ai-glow` / `shadow-glow` | 1px pine ring + 8/28 pine | **AI 在场专属** |
+
+### v7 工具类（globals.css 直接可用）
+
+```html
+<!-- 引用资产化 -->
+<span class="cite-ts mono">[20:01]</span>     <!-- 朱批时间戳 -->
+<span class="cite-src mono">[资料 3]</span>   <!-- 墨绿资料 -->
+
+<!-- AI 在场卡片 -->
+<div class="surface-ai">…</div>                <!-- 1px pine ring + 缓慢光带 -->
+
+<!-- 高亮笔 -->
+<mark class="mark-pine">不让中间路由器被淹</mark>
+<mark class="mark-vermilion">不让接收方被噎着</mark>
+
+<!-- 流式输出 -->
+<p class="stream"><span style="animation-delay:.04s">字</span>…<span class="typing-caret"></span></p>
+
+<!-- 思考气息流 / 录音呼吸点 / Octo 光环 -->
+<div class="thinking-strip">Octo 正在对照你前面问过的内容…</div>
+<span class="rec-dot"></span>
+<div class="octo-aura"><img … /></div>
+
+<!-- 骨架屏 -->
+<div class="skel h-3 w-2/3"></div>
+```
+
+### v7 原生组件（`@/components/ui`）
+
+| 组件 | 文件 | 用途 |
+|------|------|------|
+| `Button` (variant: `pine` / `vermilion` / `ghost` / `naked` / `link` / `danger`) | `button.tsx` | 升级版按钮，size 加 `xl` |
+| `Card` (variant: `default` / `soft` / `elevated` / `ai`, hoverable) | `card.tsx` | 4 档投影 + AI 在场态 |
+| `Badge` (variant: `pine` / `vermilion` / `sand` / `mute`, dot) | `badge.tsx` | 双签名色胶囊，dot 状态点 |
+| `Skeleton` + `Skeleton.Paragraph` + `Skeleton.AppCard` | `skeleton.tsx` | shimmer 横扫，不再 pulse 明灭 |
+| `Cite` (kind: `ts` / `src`) | `cite.tsx` | **引用资产化**——MeetMind"有根"DNA |
+| `OctoAvatar` (mood: 8 态, size, statusDot) | `octo-avatar.tsx` | 头像 wrapper，呼吸光环 + 状态点 |
+| `ThinkingStrip` / `TypingDots` / `BrewingStrip` | `thinking-strip.tsx` | 三档等待形态：轻 / 中 / 重（"酿"） |
+| `StreamText` | `stream-text.tsx` | 流式输出包装器，stagger 浮现 + caret |
+
+### 暗色模式 first-class
+
+通过 `data-theme="dark"` 切换。底色 `#14110D`（深棕墨黑，温度比纯黑高），墨绿变浅松绿 `#6B9080`，朱批变暖橘红 `#E07A5F`——给凌晨学习的学生眼睛准备的版本。所有 token 自动重映射，组件无需任何改动。
+
+### v6 → v7 兼容映射
+
+旧 class 全部保留并自动映射到 v7 token：`bg-canvas` → 新米白、`text-ink` → 新墨黑、`bg-mint` / `bg-skyblue` 等都映射到 pine 体系，`bg-coral` 映射到 vermilion 体系。**新代码请直接用 v7 class（pine / vermilion / paper / surface-ai / cite-ts / cite-src）**，不要再用 v6 别名。
+
 
 ---
 

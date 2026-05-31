@@ -22,15 +22,15 @@ const rippleButtonVariants = cva(
     variants: {
       variant: {
         primary:
-          'bg-[#232322] text-white hover:hover:-translate-y-0.5 focus-visible:ring-rose-400',
+          'bg-[#1C1B19] text-white hover:hover:-translate-y-0.5 focus-visible:ring-vermilion/50',
         secondary:
-          'bg-white border-2 border-rose-200 text-rose-500 hover:bg-rose-50 hover:border-rose-300 focus-visible:ring-rose-200',
+          'bg-white border-2 border-vermilion/30 text-vermilion hover:bg-vermilion-fog hover:border-vermilion/45 focus-visible:ring-vermilion/30',
         ghost:
-          'bg-transparent hover:bg-rose-50 text-rose-600 focus-visible:ring-rose-200',
+          'bg-transparent hover:bg-vermilion-fog text-vermilion focus-visible:ring-vermilion/30',
         soft:
-          'bg-rose-100 text-rose-600 hover:bg-rose-200 border border-rose-200 focus-visible:ring-rose-200',
+          'bg-vermilion-mist text-vermilion hover:bg-vermilion-mist border border-vermilion/30 focus-visible:ring-vermilion/30',
         amber:
-          'bg-[#FDF3C0] text-white hover:hover:-translate-y-0.5 focus-visible:ring-[#232322]',
+          'bg-[#FDF3C0] text-white hover:hover:-translate-y-0.5 focus-visible:ring-[#1C1B19]',
       },
       size: {
         sm: 'h-9 px-3 text-xs',

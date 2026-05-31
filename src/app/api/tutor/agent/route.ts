@@ -18,7 +18,11 @@
 //
 // 设计原则：
 //   - 单 agent + 工具调用（不引入 LangGraph）
-//   - stopWhen: stepCountIs(6) 防无限循环
+//   - stopWhen: stepCountIs(3) 防无限循环；step-* / deepseek-* 走 marker 链路，
+//     根本不会进入 tool 回调，所以最多 1 步；native tools 模型（qwen 等）最多
+//     1 次工具回调 + 1 次正文，3 步留一档安全余量。
+//   - experimental_transform: smoothStream({ chunking: 'word' }) 让前端流式按词
+//     平滑刷出（fix "字一坨一坨刷"的体感）
 //   - onStepFinish 打 track() 埋点
 //   - prompt 来源：`src/lib/prompts/tutor-prompts.ts` 的 buildTutorSystemPrompt
 //   - 老 `<open_app:KEY/>` marker 路径仍然由前端（extractOpenAppMarker）消费，本
@@ -32,6 +36,7 @@ import {
   createUIMessageStreamResponse,
   streamText,
   stepCountIs,
+  smoothStream,
   convertToModelMessages,
   type UIMessage,
   type UIMessageChunk,
@@ -295,7 +300,13 @@ function createTutorAttemptStream({
           system: systemPrompt,
           messages: modelMessages,
           tools,
-          stopWhen: stepCountIs(6),
+          // 大多数请求是「不调工具，直接答」一步搞定；保留容量到 3 步只是给
+          // native tools 模型（qwen 等）留一次工具回调 + 一次正文的余地。
+          // step-* / deepseek-* 走 marker 链路，根本不会进入 tool 回调，所以一步即可。
+          stopWhen: stepCountIs(3),
+          // 让 token 按"词"为单位平滑流出，前端 UI 字符不再一坨一坨刷出来。
+          // delayInMs 默认 10ms，配合 chunking='word' 中文按符号也能切，体感丝滑。
+          experimental_transform: smoothStream({ chunking: 'word' }),
           experimental_telemetry: {
             isEnabled: true,
             functionId: 'tutor.agent',

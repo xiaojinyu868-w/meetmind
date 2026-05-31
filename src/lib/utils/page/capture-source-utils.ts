@@ -145,7 +145,34 @@ export function inferWorkspaceCaptureSourceType(item: WorkspaceCaptureMessage): 
   if (item.contentType === 'video') return 'video';
   if (item.contentType === 'image') return 'image';
   if (item.contentType === 'link' || item.contentType === 'document') return 'document';
+  // v3.0：shared-agent 是同学分享回来的产物（链接形态）
+  if (item.sourceType === 'shared-agent') return 'document';
   return 'text';
+}
+
+/**
+ * v3.0：根据分享元数据生成 capture 列表里的 preview 文本，
+ * 让 B 一眼看出"这是 X 分享的速查表"，而不是一条 untyped 的 capture。
+ */
+const SHARED_AGENT_KIND_LABEL: Record<string, string> = {
+  cheatsheet: '考前速查表',
+  mindmap: '思维导图',
+  quiz: '课堂测验',
+  flashcards: '课堂闪卡',
+  infographic: '课堂信息图',
+  'audio-overview': '课堂播客',
+  notes: '同学版笔记',
+  'chat-only': '一段对话',
+};
+function buildSharedAgentPreview(params: {
+  sharerNickname?: string;
+  artifactKind?: string;
+  title: string;
+  fallback?: string | null;
+}): string {
+  const sharer = params.sharerNickname?.trim() || '一位同学';
+  const kindLabel = (params.artifactKind && SHARED_AGENT_KIND_LABEL[params.artifactKind]) || '一份分享';
+  return `${sharer}留下的${kindLabel} · 点开继续看 / 跟同学聊`;
 }
 
 export function inferWorkspaceCaptureRole(item: WorkspaceCaptureMessage): SourceIngestRole {
@@ -216,6 +243,20 @@ export function buildWorkspaceCaptureSourceItem(item: WorkspaceCaptureMessage): 
     typeof metadata?.sourceMode === 'string' && metadata.sourceMode.trim()
       ? metadata.sourceMode.trim()
       : undefined;
+  // v3.0：shared-agent capture —— 让点击 attachmentUrl 跳回 /share/[token]
+  // 这样 B 领取后还能继续看完整产物 + 跟同学对话（同一个 token，幂等）
+  const sharedAgentToken =
+    item.sourceType === 'shared-agent' && typeof metadata?.sharedAgentToken === 'string'
+      ? (metadata.sharedAgentToken as string).trim()
+      : undefined;
+  const sharedAgentSharerNickname =
+    typeof metadata?.sharerNickname === 'string'
+      ? (metadata.sharerNickname as string).trim() || undefined
+      : undefined;
+  const sharedAgentArtifactKind =
+    typeof metadata?.artifactKind === 'string'
+      ? (metadata.artifactKind as string).trim() || undefined
+      : undefined;
   const resolvedText = resolveCaptureSourceFullText({
     type,
     normalizedText: item.normalizedText,
@@ -233,13 +274,23 @@ export function buildWorkspaceCaptureSourceItem(item: WorkspaceCaptureMessage): 
       48
     ) || item.title;
 
+  // v3.0：shared-agent capture 的 preview 文本 / attachmentUrl 都要替换
+  const sharedAgentPreview = sharedAgentToken
+    ? buildSharedAgentPreview({
+        sharerNickname: sharedAgentSharerNickname,
+        artifactKind: sharedAgentArtifactKind,
+        title: item.title,
+        fallback: item.previewText,
+      })
+    : undefined;
+
   return {
     id: `workspace-${item.id}`,
     sourceKey: item.sourceKey,
     type,
     role: inferWorkspaceCaptureRole(item),
     title: displayTitle,
-    preview: compactText(item.previewText || item.title, 180),
+    preview: compactText(sharedAgentPreview || item.previewText || item.title, 180),
     previewUrl:
       type === 'image'
         ? item.mediaUrl || undefined
@@ -247,7 +298,8 @@ export function buildWorkspaceCaptureSourceItem(item: WorkspaceCaptureMessage): 
           ? thumbnailUrl
           : undefined,
     mediaUrl: type === 'audio' || type === 'video' ? item.mediaUrl || undefined : undefined,
-    attachmentUrl: item.sourceUrl || undefined,
+    // v3.0：shared-agent capture 的 attachmentUrl 指回分享页（A/B 都能点开看产物 + 对话）
+    attachmentUrl: sharedAgentToken ? `/share/${sharedAgentToken}` : item.sourceUrl || undefined,
     fullText: resolvedText,
     segmentCount: resolvedText ? 1 : 0,
     addedAt: item.occurredAt || item.createdAt,

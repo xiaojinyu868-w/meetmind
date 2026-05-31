@@ -66,7 +66,7 @@ export function ConfusionCard({
       <div
         className={cn(
           "fixed bottom-0 left-0 right-0 z-50",
-          "bg-slate-900 rounded-t-3xl",
+          "bg-ink rounded-t-3xl",
           "max-h-[70vh] overflow-hidden",
           "animate-slideUp",
           "flex flex-col",
@@ -75,26 +75,26 @@ export function ConfusionCard({
       >
         {/* 拖拽指示条 */}
         <div className="flex justify-center pt-3 pb-2">
-          <div className="w-10 h-1 rounded-full bg-slate-700" />
+          <div className="w-10 h-1 rounded-full bg-ink-secondary" />
         </div>
 
         {/* 头部 */}
-        <div className="px-5 pb-4 border-b border-slate-800">
+        <div className="px-5 pb-4 border-b border-ink-secondary/30">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
               {/* 状态指示 */}
               <div className={cn(
                 "w-10 h-10 rounded-full flex items-center justify-center",
                 confusion.resolved
-                  ? "bg-[#232322]/20"
-                  : "bg-rose-500/20"
+                  ? "bg-[#1C1B19]/20"
+                  : "bg-vermilion-fog/20"
               )}>
                 {confusion.resolved ? (
-                  <svg className="w-5 h-5 text-[#787774]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <svg className="w-5 h-5 text-[#5C5A55]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                   </svg>
                 ) : (
-                  <svg className="w-5 h-5 text-rose-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <svg className="w-5 h-5 text-vermilion/65" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                   </svg>
                 )}
@@ -106,7 +106,7 @@ export function ConfusionCard({
                 </h3>
                 <button
                   onClick={() => onSeek?.(confusion.timestamp)}
-                  className="text-xs text-[#787774] hover:text-[#FDF3C0] flex items-center gap-1"
+                  className="text-xs text-[#5C5A55] hover:text-[#FDF3C0] flex items-center gap-1"
                 >
                   <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
@@ -119,7 +119,7 @@ export function ConfusionCard({
             {/* 关闭按钮 */}
             <button
               onClick={onClose}
-              className="w-8 h-8 rounded-full bg-slate-800 flex items-center justify-center text-slate-400 hover:text-white transition-colors"
+              className="w-8 h-8 rounded-full bg-ink flex items-center justify-center text-ink-muted hover:text-white transition-colors"
             >
               <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -133,8 +133,8 @@ export function ConfusionCard({
           {/* 困惑内容 */}
           {confusion.content && (
             <div className="mb-4">
-              <p className="text-xs text-slate-500 mb-1">困惑内容</p>
-              <p className="text-sm text-slate-300 bg-slate-800/50 rounded-lg px-3 py-2">
+              <p className="text-xs text-ink-muted mb-1">困惑内容</p>
+              <p className="text-sm text-ink-faint bg-ink/50 rounded-lg px-3 py-2">
                 {confusion.content}
               </p>
             </div>
@@ -143,8 +143,8 @@ export function ConfusionCard({
           {/* 相关上下文 */}
           {confusion.context && (
             <div className="mb-4">
-              <p className="text-xs text-slate-500 mb-1">相关上下文</p>
-              <p className="text-sm text-slate-400 bg-slate-800/30 rounded-lg px-3 py-2 italic">
+              <p className="text-xs text-ink-muted mb-1">相关上下文</p>
+              <p className="text-sm text-ink-muted bg-ink/30 rounded-lg px-3 py-2 italic">
                 &quot;{confusion.context}&quot;
               </p>
             </div>
@@ -153,7 +153,7 @@ export function ConfusionCard({
           {/* 快捷问题 */}
           {!confusion.resolved && (
             <div className="mb-4">
-              <p className="text-xs text-slate-500 mb-2">快捷提问</p>
+              <p className="text-xs text-ink-muted mb-2">快捷提问</p>
               <div className="flex flex-wrap gap-2">
                 {[
                   '详细解释一下',
@@ -163,7 +163,7 @@ export function ConfusionCard({
                   <button
                     key={q}
                     onClick={() => onAskAI(q)}
-                    className="text-xs px-3 py-1.5 rounded-full bg-[#232322]/20 text-[#FDF3C0] hover:bg-[#EFEFEF]0/30 transition-colors"
+                    className="text-xs px-3 py-1.5 rounded-full bg-[#1C1B19]/20 text-[#FDF3C0] hover:bg-[#F2EDE3]0/30 transition-colors"
                   >
                     {q}
                   </button>
@@ -174,7 +174,7 @@ export function ConfusionCard({
         </div>
 
         {/* 底部操作区 */}
-        <div className="px-5 py-4 border-t border-slate-800 bg-slate-900/95">
+        <div className="px-5 py-4 border-t border-ink-secondary/30 bg-ink/95">
           {!confusion.resolved ? (
             <>
               {/* AI 问答输入框 */}
@@ -186,10 +186,10 @@ export function ConfusionCard({
                   onKeyDown={handleKeyDown}
                   placeholder="输入你的问题..."
                   className={cn(
-                    "flex-1 bg-slate-800 rounded-full px-4 py-2.5",
+                    "flex-1 bg-ink rounded-full px-4 py-2.5",
                     "text-sm text-white placeholder-slate-500",
-                    "border border-slate-700 focus:border-[#232322]",
-                    "focus:outline-none focus:ring-1 focus:ring-[#232322]/50"
+                    "border border-ink-secondary/40 focus:border-[#1C1B19]",
+                    "focus:outline-none focus:ring-1 focus:ring-[#1C1B19]/50"
                   )}
                 />
                 <VoiceMicButton
@@ -215,7 +215,7 @@ export function ConfusionCard({
               {/* 标记解决按钮 */}
               <button
                 onClick={onResolve}
-                className="w-full py-2.5 rounded-full bg-[#232322]/20 text-[#787774] text-sm font-medium hover:bg-[#D1F4E0]/300/30 transition-colors"
+                className="w-full py-2.5 rounded-full bg-[#1C1B19]/20 text-[#5C5A55] text-sm font-medium hover:bg-[#D1F4E0]/300/30 transition-colors"
               >
                 标记为已解决
               </button>

@@ -11,7 +11,7 @@ export const ACTION_PROGRESS_KEY_PREFIX = 'action_progress:';
 export const WORKSHOP_WINDOW_STATE_PREFIX = 'app_workspace_open_windows:';
 export const MAX_ACTIVE_WORKSHOP_WINDOWS = 2;
 
-export const VIDEO_INSIGHT_COLORS = ['#B48EFA', '#7FD4B2', '#7FADEB', '#F2AE8F', '#F0CD70', '#90D4DD'];
+export const VIDEO_INSIGHT_COLORS = ['#2D4F3E', '#B5483C', '#6B9080', '#D17969', '#1A3327', '#8E3328'];
 export const ENABLE_ECHO_MANUAL_TRIGGER =
   process.env.NODE_ENV !== 'production' ||
   String(process.env.NEXT_PUBLIC_ENABLE_ECHO_MANUAL_TRIGGER || '').toLowerCase() === 'true';

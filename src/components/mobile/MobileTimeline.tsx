@@ -63,12 +63,12 @@ export function MobileTimeline({
   if (entries.length === 0) {
     return (
       <div className={cn("flex flex-col items-center justify-center py-12", className)}>
-        <div className="w-16 h-16 rounded-full bg-slate-800 flex items-center justify-center mb-4">
-          <svg className="w-8 h-8 text-slate-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <div className="w-16 h-16 rounded-full bg-ink flex items-center justify-center mb-4">
+          <svg className="w-8 h-8 text-ink-secondary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
           </svg>
         </div>
-        <p className="text-slate-500 text-sm">暂无时间轴内容</p>
+        <p className="text-ink-muted text-sm">暂无时间轴内容</p>
       </div>
     );
   }
@@ -76,9 +76,9 @@ export function MobileTimeline({
   return (
     <div className={cn("overflow-y-auto", className)}>
       {/* 列表标题 */}
-      <div className="sticky top-0 z-10 px-4 py-2 bg-slate-900/95 border-b border-slate-800">
-        <h3 className="text-sm font-medium text-slate-300">课堂时间轴</h3>
-        <p className="text-xs text-slate-500 mt-0.5">
+      <div className="sticky top-0 z-10 px-4 py-2 bg-ink/95 border-b border-ink-secondary/30">
+        <h3 className="text-sm font-medium text-ink-faint">课堂时间轴</h3>
+        <p className="text-xs text-ink-muted mt-0.5">
           共 {entries.length} 段 · {entries.filter(e => e.hasConfusion && !e.confusionResolved).length} 个待解决困惑
         </p>
       </div>

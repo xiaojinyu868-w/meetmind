@@ -6,7 +6,7 @@
  * 设计理念：
  * - 一行字、一次到达、自动消失，不打断用户
  * - 无按钮、无遮罩、无模态（轻提示不该让用户付代价）
- * - 遵循 MeetMind 设计系统：零渐变、零阴影、纯平涂
+ * - 遵循 MeetMind 设计系统：v7 设计宪法：95% 克制 + 5% 仪式时刻情绪化（shadow-soft / shadow-card / shadow-ai-glow）
  *
  * 用法：
  *   {hint ? <SoftHint text={hint} onDismiss={() => setHint(null)} /> : null}
@@ -50,8 +50,8 @@ export function SoftHint({ text, onDismiss, durationMs = AUTO_DISMISS_MS }: Soft
         transition: 'opacity 0.26s ease, transform 0.26s ease',
       }}
     >
-      <div className="rounded-full border border-[#E9E9E7] bg-white px-4 py-2">
-        <p className="text-[13px] leading-none text-[#232322]">{text}</p>
+      <div className="rounded-full border border-[#E8E2D5] bg-white px-4 py-2">
+        <p className="text-[13px] leading-none text-[#1C1B19]">{text}</p>
       </div>
     </div>
   );

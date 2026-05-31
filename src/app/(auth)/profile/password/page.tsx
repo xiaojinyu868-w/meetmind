@@ -148,23 +148,23 @@ export default function PasswordPage() {
 
   if (isLoading || isChecking) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+      <div className="min-h-screen flex items-center justify-center bg-paper-warm">
         <div className="flex items-center gap-2">
-          <div className="w-3 h-3 rounded-full animate-bounce bg-rose-400" style={{ animationDelay: '0ms' }} />
-          <div className="w-3 h-3 rounded-full animate-bounce bg-rose-300" style={{ animationDelay: '150ms' }} />
-          <div className="w-3 h-3 rounded-full animate-bounce bg-rose-200" style={{ animationDelay: '300ms' }} />
+          <div className="w-3 h-3 rounded-full animate-bounce bg-vermilion" style={{ animationDelay: '0ms' }} />
+          <div className="w-3 h-3 rounded-full animate-bounce bg-vermilion-light" style={{ animationDelay: '150ms' }} />
+          <div className="w-3 h-3 rounded-full animate-bounce bg-vermilion/30" style={{ animationDelay: '300ms' }} />
         </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-[#F7F7F5] py-12 px-4">
+    <div className="min-h-screen bg-[#FAF7F2] py-12 px-4">
       <div className="max-w-md mx-auto">
         {/* 返回按钮 */}
         <Link
           href="/profile"
-          className="inline-flex items-center gap-2 text-gray-600 hover:text-gray-900 mb-6 transition-colors"
+          className="inline-flex items-center gap-2 text-ink-secondary hover:text-ink mb-6 transition-colors"
         >
           <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
@@ -173,12 +173,12 @@ export default function PasswordPage() {
         </Link>
 
         <div className="bg-white rounded-2xl p-8">
-          <h1 className="text-xl font-bold text-gray-900 mb-6">
+          <h1 className="text-xl font-bold text-ink mb-6">
             {hasPassword ? '修改密码' : '设置密码'}
           </h1>
           
           {!hasPassword && (
-            <p className="text-sm text-gray-500 mb-6">
+            <p className="text-sm text-ink-muted mb-6">
               您还未设置密码，设置后可使用密码登录
             </p>
           )}
@@ -187,8 +187,8 @@ export default function PasswordPage() {
           {message.text && (
             <div className={`mb-6 p-3 rounded-xl text-sm ${
               message.type === 'success' 
-                ? 'bg-green-50 border border-green-100 text-green-600' 
-                : 'bg-red-50 border border-red-100 text-red-600'
+                ? 'bg-pine-fog border border-pine/15 text-pine' 
+                : 'bg-vermilion-mist/50 border border-vermilion/15 text-vermilion'
             }`}>
               {message.text}
             </div>
@@ -198,21 +198,21 @@ export default function PasswordPage() {
             {/* 原密码（仅修改时显示） */}
             {hasPassword && (
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">原密码</label>
+                <label className="block text-sm font-medium text-ink-secondary mb-2">原密码</label>
                 <input
                   type="password"
                   value={oldPassword}
                   onChange={(e) => setOldPassword(e.target.value)}
                   placeholder="请输入原密码"
                   required
-                  className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-rose-400 focus:ring-4 focus:ring-rose-100 focus:outline-none transition-all"
+                  className="w-full px-4 py-3 rounded-xl border-2 border-divider focus:border-pine focus:ring-4 focus:ring-pine/15 focus:outline-none transition-all"
                 />
               </div>
             )}
             
             {/* 新密码 */}
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
+              <label className="block text-sm font-medium text-ink-secondary mb-2">
                 {hasPassword ? '新密码' : '密码'}
               </label>
               <input
@@ -221,25 +221,25 @@ export default function PasswordPage() {
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="至少8个字符，包含字母和数字"
                 required
-                className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-rose-400 focus:ring-4 focus:ring-rose-100 focus:outline-none transition-all"
+                className="w-full px-4 py-3 rounded-xl border-2 border-divider focus:border-pine focus:ring-4 focus:ring-pine/15 focus:outline-none transition-all"
               />
             </div>
             
             {/* 确认密码 */}
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">确认密码</label>
+              <label className="block text-sm font-medium text-ink-secondary mb-2">确认密码</label>
               <input
                 type="password"
                 value={confirmPassword}
                 onChange={(e) => setConfirmPassword(e.target.value)}
                 placeholder="再次输入密码"
                 required
-                className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-rose-400 focus:ring-4 focus:ring-rose-100 focus:outline-none transition-all"
+                className="w-full px-4 py-3 rounded-xl border-2 border-divider focus:border-pine focus:ring-4 focus:ring-pine/15 focus:outline-none transition-all"
               />
             </div>
 
             {/* 密码强度提示 */}
-            <div className="text-xs text-gray-500 space-y-1">
+            <div className="text-xs text-ink-muted space-y-1">
               <p>密码要求：</p>
               <ul className="list-disc list-inside ml-2 space-y-0.5">
                 <li>至少8个字符</li>

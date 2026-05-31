@@ -182,19 +182,34 @@ function LiveTranscriptPanel({
   }, [rows.length, updateJumpVisibility]);
 
   return (
-    <aside className="relative flex h-full w-full min-w-0 flex-col overflow-hidden rounded-[22px] border border-divider bg-white">
-      <div className="flex-shrink-0 border-b border-divider bg-[#FBFBFA] px-3.5 py-3">
-        <div className="rounded-[18px] border border-divider bg-white px-3.5 py-3">
+    <aside className="relative flex h-full w-full min-w-0 flex-col overflow-hidden rounded-[22px] border border-divider bg-card shadow-soft">
+      <div className="flex-shrink-0 border-b border-divider bg-paper-warm px-3.5 py-3">
+        <div className="rounded-[18px] border border-pine/15 bg-card px-3.5 py-3 shadow-soft">
           <div className="flex items-center justify-between gap-3">
             <div className="flex min-w-0 items-center gap-2.5">
               <span className="relative flex h-2 w-2 flex-shrink-0">
-                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-[#2E7D52] opacity-40" />
-                <span className="relative inline-flex h-2 w-2 rounded-full bg-[#2E7D52]" />
+                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-pine opacity-45" />
+                <span className="relative inline-flex h-2 w-2 rounded-full bg-pine" />
               </span>
               <div className="min-w-0">
-                <p className="truncate text-[13px] font-semibold tracking-[-0.01em] text-ink">课堂文字</p>
+                <div className="flex items-baseline gap-2">
+                  <p className="truncate text-[13px] font-semibold tracking-[-0.01em] text-ink">课堂文字</p>
+                  <span className="font-mono text-[10px] font-semibold uppercase tracking-[0.08em] text-pine/85">
+                    LIVE
+                  </span>
+                </div>
                 <p className="mt-0.5 text-[12px] text-ink-muted">
-                  {hasDraftRow ? '正在听这一句' : stableRowCount > 0 ? `已记 ${stableRowCount} 句` : '等老师开口'}
+                  {hasDraftRow ? (
+                    <span className="font-serif italic text-pine/85">正在听这一句…</span>
+                  ) : stableRowCount > 0 ? (
+                    <span>
+                      已记
+                      <span className="font-mono mx-1 tabular-nums text-pine font-medium">{stableRowCount}</span>
+                      句
+                    </span>
+                  ) : (
+                    <span className="font-serif italic">等老师开口</span>
+                  )}
                 </p>
               </div>
             </div>
@@ -205,8 +220,8 @@ function LiveTranscriptPanel({
                   onClick={onToggleDemoAudio}
                   className={`inline-flex h-9 items-center gap-1.5 rounded-full px-3 text-[12px] font-medium transition active:scale-95 ${
                     demoAudioPlaying
-                      ? 'bg-canvas text-ink-secondary hover:text-ink'
-                      : 'bg-ink text-white hover:opacity-85'
+                      ? 'bg-paper-warm text-ink-secondary hover:text-ink'
+                      : 'bg-ink text-white shadow-soft hover:opacity-90'
                   }`}
                   title={demoAudioPlaying ? '暂停试听音频' : '播放试听音频'}
                   aria-label={demoAudioPlaying ? '暂停试听音频' : '播放试听音频'}
@@ -218,7 +233,7 @@ function LiveTranscriptPanel({
               <button
                 type="button"
                 onClick={onStop}
-                className="flex h-9 w-9 items-center justify-center rounded-full bg-ink text-white transition hover:opacity-85 active:scale-95"
+                className="flex h-9 w-9 items-center justify-center rounded-full bg-ink text-white shadow-soft transition hover:opacity-90 active:scale-95"
                 title="结束这节课"
                 aria-label="结束这节课"
               >
@@ -227,26 +242,26 @@ function LiveTranscriptPanel({
             </div>
           </div>
           <div className="mt-3 flex items-center gap-2">
-            <span className="font-mono text-[12px] tabular-nums text-ink-secondary">{formatTime(seconds)}</span>
-            <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-canvas">
+            <span className="font-mono text-[12px] font-medium tabular-nums text-pine">{formatTime(seconds)}</span>
+            <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-paper-warm">
               <div
-                className="h-full rounded-full bg-ink transition-all"
+                className="h-full rounded-full bg-gradient-to-r from-pine to-pine-deep transition-all"
                 style={{ width: `${Math.min(100, Math.max(6, seconds / 90))}%` }}
               />
             </div>
           </div>
         </div>
 
-        <div className="mt-2 flex items-center justify-between gap-2 rounded-full border border-divider bg-white px-2 py-1.5">
-          <div className="inline-flex rounded-full bg-canvas p-0.5">
-            <span className="rounded-full bg-white px-3 py-1 text-[12px] font-medium text-ink">实时文字</span>
+        <div className="mt-2 flex items-center justify-between gap-2 rounded-full border border-divider bg-card px-2 py-1.5">
+          <div className="inline-flex rounded-full bg-paper-warm p-0.5">
+            <span className="rounded-full bg-card px-3 py-1 text-[12px] font-medium text-ink shadow-soft">实时文字</span>
             <span className="px-3 py-1 text-[12px] font-medium text-ink-muted">结构</span>
           </div>
           <button
             type="button"
             onClick={onCycleTranslationMode}
             className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[12px] font-medium transition ${
-              translateEnabled ? 'bg-ink text-white' : 'text-ink-muted hover:bg-canvas'
+              translateEnabled ? 'bg-ink text-white shadow-soft' : 'text-ink-muted hover:bg-paper-warm'
             }`}
             title="切换翻译模式：关闭 / EN→中 / 中→EN"
           >
@@ -352,7 +367,7 @@ function TranscriptToggle({
     <button
       type="button"
       onClick={onToggle}
-      className="flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[11.5px] font-medium text-ink-muted/80 hover:bg-[#EFEFED] hover:text-ink-secondary transition"
+      className="flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[11.5px] font-medium text-ink-muted/80 hover:bg-[#F2EDE3] hover:text-ink-secondary transition"
     >
       {expanded ? <ChevronDown size={11} /> : <ChevronUp size={11} />}
       {expanded ? '收起实时文字' : '查看实时文字'}
@@ -369,7 +384,7 @@ function DemoAfterClassPanel({
 }) {
   return (
     <div className="flex h-full flex-col overflow-y-auto px-5 py-5 lg:px-6">
-      <div className="rounded-[24px] border border-divider bg-[#FBFBFA] px-5 py-5">
+      <div className="rounded-[24px] border border-divider bg-[#F2EDE3] px-5 py-5">
         <div className="flex items-start gap-4">
           <OctoBuddySprite mood="happy" size="lg" className="-ml-2 -mt-3 flex-shrink-0" />
           <div className="min-w-0 flex-1">
@@ -584,7 +599,7 @@ export function ClassroomRecordingView({
         </div>
       )}
 
-      <div className="flex flex-shrink-0 justify-center border-t border-[#E9E9E7]/40 bg-canvas pt-2 pb-1 lg:hidden">
+      <div className="flex flex-shrink-0 justify-center border-t border-[#E8E2D5]/40 bg-canvas pt-2 pb-1 lg:hidden">
         <TranscriptToggle expanded={expanded} onToggle={() => setExpanded((v) => !v)} />
       </div>
 

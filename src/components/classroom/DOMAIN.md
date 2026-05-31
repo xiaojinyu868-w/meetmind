@@ -41,7 +41,7 @@ classroom/ ← hooks/useClassroomCompanion.ts（对话 hook 消费 composeFirstH
 
 ## 设计铁律
 
-- **零渐变、零阴影、纯平涂**（全局设计系统）
+- **v7 设计宪法：95% 克制 + 5% 仪式时刻情绪化（shadow-soft / shadow-card / shadow-ai-glow）**（全局设计系统）
 - **卡片时态视觉重量不同**：`upcoming` opacity-85 / `recording` 左侧暖黄竖线 / `processing` ink-muted 弱化 / `failed` 稳定灰点 + 原声保留 / `ready` 实心
 - **录课中显示“实时文字”卡，不再用大面积空白等待结构**；转录卡头部保持紧凑，完整文字按需展开；桌面侧栏进入 52px 专注态
 - **同桌消息无气泡背景**（像便签，只有用户消息才是 ink 胶囊）

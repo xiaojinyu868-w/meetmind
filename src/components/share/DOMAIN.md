@@ -12,8 +12,10 @@
 
 | 文件 | 职责 |
 |---|---|
-| `ShareAgentCard.tsx` | 分享创建成功后弹出的 Canvas 长图（可保存 / 调系统分享 / 复制链接） |
+| `ShareAgentCard.tsx` | 分享创建成功后弹出的 Canvas 长图（按 artifactKind 真画产物本身：cheatsheet 6 区色块 / mindmap 树 / quiz 题面） |
+| `ArtifactRender.tsx` | 落地页 / B 工作台用的 React 渲染（与 ShareAgentCard 同源 payload 结构）：`<ArtifactRender artifactKind={...} artifact={snapshot.artifact} />` |
 | `useShareAgentCreator.tsx` | 上层组件用的钩子：`openCreator(snapshot)` 创建分享 + 弹出 ShareAgentCard |
+| `OctoCrystalDispatcher.tsx` | 应用矩阵首屏的「递结晶」入口模块：4 个产物 tile + 仪式光晕 + 自动从 IndexedDB 读 session 标题 + nickname/title sanitizer |
 
 ## 设计原则（沿用 EchoShareCard）
 

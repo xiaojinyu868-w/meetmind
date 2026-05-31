@@ -413,7 +413,8 @@ export function OctoBuddyFloatingButton({
         .octo-buddy-sprite {
           transform-origin: 50% 76%;
           animation: octoBreath 3.4s ease-in-out infinite;
-          filter: drop-shadow(0 16px 18px rgba(30, 27, 54, 0.18));
+          /* v7：投影偏暖纸感，不再是冷紫 */
+          filter: drop-shadow(0 14px 18px rgba(28, 27, 25, 0.16)) drop-shadow(0 2px 4px rgba(45, 79, 62, 0.10));
           position: relative;
           z-index: 3;
         }
@@ -437,7 +438,8 @@ export function OctoBuddyFloatingButton({
           position: absolute;
           inset: 14px;
           border-radius: 999px;
-          background: radial-gradient(circle, rgba(233, 213, 255, 0.28), rgba(219, 234, 254, 0.12) 48%, transparent 72%);
+          /* v7：墨绿主光环 + 朱批暖光，替换 v6 的紫粉调 */
+          background: radial-gradient(circle, rgba(45, 79, 62, 0.18), rgba(181, 72, 60, 0.10) 48%, transparent 72%);
           opacity: 0;
           transform: scale(0.92);
           z-index: 0;
@@ -445,7 +447,8 @@ export function OctoBuddyFloatingButton({
         .octo-buddy-listen-ring {
           position: absolute;
           inset: 9px;
-          border: 1px solid rgba(108, 92, 231, 0.22);
+          /* v7：墨绿 listening 信号环 */
+          border: 1px solid rgba(45, 79, 62, 0.28);
           border-radius: 999px;
           opacity: 0;
           z-index: 1;
@@ -455,13 +458,15 @@ export function OctoBuddyFloatingButton({
           height: 7px;
           width: 7px;
           border-radius: 2px;
-          background: rgba(124, 88, 255, 0.52);
+          /* v7：墨绿主轨 */
+          background: rgba(45, 79, 62, 0.55);
           box-shadow: 0 0 0 1px rgba(255,255,255,0.62);
           opacity: 0;
           z-index: 2;
         }
         .octo-buddy-orbit-a { left: 24px; top: 34px; }
-        .octo-buddy-orbit-b { right: 23px; top: 48px; height: 5px; width: 5px; background: rgba(72, 177, 255, 0.52); }
+        /* v7：副轨用朱批红 = "此刻"信号 */
+        .octo-buddy-orbit-b { right: 23px; top: 48px; height: 5px; width: 5px; background: rgba(181, 72, 60, 0.55); }
         .octo-buddy-speech {
           pointer-events: none;
           position: absolute;
@@ -469,10 +474,12 @@ export function OctoBuddyFloatingButton({
           top: -10px;
           z-index: 5;
           max-width: 118px;
-          border: 1px solid rgba(233, 233, 231, 0.92);
+          /* v7：纸感边线 + 米白卡背景 */
+          border: 1px solid rgba(232, 226, 213, 0.92);
           border-radius: 14px;
-          background: rgba(255, 255, 255, 0.94);
-          color: #232322;
+          background: rgba(255, 255, 255, 0.96);
+          box-shadow: 0 4px 14px rgba(28,27,25,0.06);
+          color: #1C1B19;
           font-size: 11px;
           font-weight: 600;
           line-height: 1.25;
@@ -502,16 +509,18 @@ export function OctoBuddyFloatingButton({
           border-radius: 2px;
           opacity: 0;
         }
-        .octo-buddy-burst span { background: #8B5CF6; }
+        /* v7 burst 粒子：双签名色家族 + 米白调 */
+        .octo-buddy-burst span { background: #2D4F3E; }
         .octo-buddy-burst span:nth-child(1) { left: 30px; top: 30px; }
-        .octo-buddy-burst span:nth-child(2) { right: 28px; top: 28px; background: #60A5FA; }
-        .octo-buddy-burst span:nth-child(3) { left: 26px; bottom: 42px; background: #F0ABFC; }
-        .octo-buddy-burst span:nth-child(4) { right: 30px; bottom: 38px; height: 6px; width: 6px; background: #A78BFA; }
+        .octo-buddy-burst span:nth-child(2) { right: 28px; top: 28px; background: #B5483C; }
+        .octo-buddy-burst span:nth-child(3) { left: 26px; bottom: 42px; background: #6B9080; }
+        .octo-buddy-burst span:nth-child(4) { right: 30px; bottom: 38px; height: 6px; width: 6px; background: #D17969; }
         .octo-buddy-sleep-dust span {
           right: 22px;
           top: 26px;
           border-radius: 999px;
-          background: rgba(124, 88, 255, 0.44);
+          /* v7 睡梦尘埃：极淡墨绿 */
+          background: rgba(45, 79, 62, 0.40);
         }
         .octo-buddy-sleep-dust span:nth-child(2) { right: 12px; top: 12px; transform: scale(0.72); }
         .octo-buddy-sleep-dust span:nth-child(3) { right: 2px; top: 0; transform: scale(0.52); }
@@ -593,8 +602,9 @@ export function OctoBuddyFloatingButton({
           50% { opacity: 0.62; transform: scale(1.04); }
         }
         @keyframes octoTensionAura {
-          0%, 100% { opacity: 0.08; transform: scale(0.94); background: radial-gradient(circle, rgba(252, 231, 243, 0.32), transparent 68%); }
-          50% { opacity: 0.5; transform: scale(1.02); background: radial-gradient(circle, rgba(252, 231, 243, 0.44), transparent 70%); }
+          /* v7 angry/tension：朱批红雾，不再是粉紫 */
+          0%, 100% { opacity: 0.08; transform: scale(0.94); background: radial-gradient(circle, rgba(181, 72, 60, 0.22), transparent 68%); }
+          50% { opacity: 0.5; transform: scale(1.02); background: radial-gradient(circle, rgba(181, 72, 60, 0.34), transparent 70%); }
         }
         @keyframes octoImageFocus {
           0%, 100% { transform: scale(1); filter: saturate(1); }

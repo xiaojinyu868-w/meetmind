@@ -57,8 +57,8 @@ export type InlineAppInteraction =
 type InlineAppKey = NonNullable<import('./types').CompanionMessage['inlineApp']>['appKey'];
 
 const INLINE_SURFACE_CLASS: Record<InlineAppKey, string> = {
-  quiz: 'h-[520px] bg-[#0d1117]',
-  flashcards: 'h-[520px] bg-[#0d1117]',
+  quiz: 'h-[520px] bg-[#14110D]',
+  flashcards: 'h-[520px] bg-[#14110D]',
   mindmap: 'h-[560px] bg-white p-2',
   cheatsheet: 'h-[560px] bg-canvas',
   'study-report': 'max-h-[680px] min-h-[440px] bg-canvas',

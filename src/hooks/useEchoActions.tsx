@@ -375,11 +375,11 @@ export function useEchoActions(deps: UseEchoActionsDeps): UseEchoActionsReturn {
 
   const manualEchoDebugView: ReactNode =
     ENABLE_ECHO_MANUAL_TRIGGER && manualEchoDebugNote ? (
-      <details className="mt-2 text-[11px] leading-5 text-slate-500">
-        <summary className="list-none cursor-pointer select-none text-slate-400 [&::-webkit-details-marker]:hidden">
+      <details className="mt-2 text-[11px] leading-5 text-ink-muted">
+        <summary className="list-none cursor-pointer select-none text-ink-muted [&::-webkit-details-marker]:hidden">
           查看测试信息
         </summary>
-        <p className="mt-2 rounded-[14px] bg-slate-50 px-3 py-2 text-slate-500">{manualEchoDebugNote}</p>
+        <p className="mt-2 rounded-[14px] bg-paper-warm px-3 py-2 text-ink-muted">{manualEchoDebugNote}</p>
       </details>
     ) : null;
 

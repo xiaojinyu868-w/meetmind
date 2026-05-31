@@ -59,11 +59,11 @@ class ResizableErrorBoundary extends React.Component<
       return (
         <div className="flex h-full items-center justify-center bg-white px-6 text-center">
           <div className="space-y-2">
-            <p className="text-sm text-[#787774]">布局出了一点小问题</p>
+            <p className="text-sm text-[#5C5A55]">布局出了一点小问题</p>
             <button
               type="button"
               onClick={() => this.setState({ hasError: false })}
-              className="inline-flex items-center justify-center rounded-full bg-[#232322] px-3 py-1.5 text-xs font-medium text-white transition hover:bg-black"
+              className="inline-flex items-center justify-center rounded-full bg-[#1C1B19] px-3 py-1.5 text-xs font-medium text-white transition hover:bg-black"
             >
               恢复布局
             </button>
@@ -103,7 +103,7 @@ function ResizablePanelInner({
     <div className={cn('flex h-full overflow-hidden', className)}>
       {/* 左侧面板 */}
       <div
-        className="flex-shrink-0 overflow-hidden border-r border-gray-100"
+        className="flex-shrink-0 overflow-hidden border-r border-divider-light"
         style={{ width: leftWidth }}
       >
         {leftPanel}

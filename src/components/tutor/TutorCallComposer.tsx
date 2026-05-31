@@ -32,7 +32,7 @@ function CallMeter({
       {Array.from({ length: compact ? 4 : 5 }).map((_, index) => (
         <span
           key={index}
-          className={`${compact ? 'w-[3px]' : 'w-1'} rounded-full bg-[#232322] transition-opacity duration-200`}
+          className={`${compact ? 'w-[3px]' : 'w-1'} rounded-full bg-[#1C1B19] transition-opacity duration-200`}
           style={{
             height: compact ? 10 + (index % 2) * 4 : 12 + (index % 3) * 5,
             opacity: active ? 1 : 0.16,
@@ -240,17 +240,17 @@ export function TutorCallComposer({
   const isHero = variant === 'hero';
   const isActive = isSubmitting || isRecording || isConnecting;
   const titleToneClass = copy.tone === 'live'
-    ? 'text-[#232322]'
+    ? 'text-[#1C1B19]'
     : copy.tone === 'busy'
-      ? 'text-[#232322]'
-      : 'text-[#787774]';
+      ? 'text-[#1C1B19]'
+      : 'text-[#5C5A55]';
   const buttonClass = isActive
-    ? 'border-[#232322] bg-[#232322] text-white'
-    : 'border-[#D9D8D3] bg-white text-[#232322] hover:border-[#232322]';
+    ? 'border-[#1C1B19] bg-[#1C1B19] text-white'
+    : 'border-[#D9D8D3] bg-white text-[#1C1B19] hover:border-[#1C1B19]';
 
   if (!isHero && compact) {
     return (
-      <div className="rounded-[24px] border border-[#E9E9E7] bg-white p-2">
+      <div className="rounded-[24px] border border-[#E8E2D5] bg-white p-2">
         <div className="flex items-center gap-2">
           <button
             type="button"
@@ -261,7 +261,7 @@ export function TutorCallComposer({
           >
             {isActive ? (
               <>
-                <span className="absolute inset-[-5px] rounded-full border border-[#232322] opacity-20 animate-ping" />
+                <span className="absolute inset-[-5px] rounded-full border border-[#1C1B19] opacity-20 animate-ping" />
                 <PhoneOff size={18} strokeWidth={1.8} />
               </>
             ) : (
@@ -273,13 +273,13 @@ export function TutorCallComposer({
             type="button"
             onClick={() => void handleToggleRecording()}
             disabled={disabled || isSubmitting}
-            className="min-w-0 flex-1 rounded-[18px] border border-[#E9E9E7] bg-[#F7F7F5] px-4 py-2.5 text-left transition-colors disabled:cursor-not-allowed disabled:opacity-40"
+            className="min-w-0 flex-1 rounded-[18px] border border-[#E8E2D5] bg-[#FAF7F2] px-4 py-2.5 text-left transition-colors disabled:cursor-not-allowed disabled:opacity-40"
           >
             <div className="flex items-center justify-between gap-3">
               <span className={`truncate text-[15px] font-medium ${titleToneClass}`}>{copy.title}</span>
               <CallMeter active={isActive} compact />
             </div>
-            <p className="mt-1 truncate text-xs text-[#787774]">
+            <p className="mt-1 truncate text-xs text-[#5C5A55]">
               {copy.body}
             </p>
           </button>
@@ -290,7 +290,7 @@ export function TutorCallComposer({
 
   if (!isHero) {
     return (
-      <div className="rounded-[22px] border border-[#E9E9E7] bg-[#F7F7F5] px-3 py-3">
+      <div className="rounded-[22px] border border-[#E8E2D5] bg-[#FAF7F2] px-3 py-3">
         <div className="flex items-center gap-3">
           <button
             type="button"
@@ -301,7 +301,7 @@ export function TutorCallComposer({
           >
             {isActive ? (
               <>
-                <span className="absolute inset-[-5px] rounded-full border border-[#232322] opacity-20 animate-ping" />
+                <span className="absolute inset-[-5px] rounded-full border border-[#1C1B19] opacity-20 animate-ping" />
                 <PhoneOff size={18} strokeWidth={1.8} />
               </>
             ) : (
@@ -311,28 +311,28 @@ export function TutorCallComposer({
           <div className="min-w-0 flex-1">
             <div className="flex items-center justify-between gap-2">
               <div className="flex items-center gap-2">
-                <span className={`inline-flex h-2 w-2 rounded-full ${isActive ? 'bg-[#232322]' : 'bg-[#C9C8C3]'}`} />
+                <span className={`inline-flex h-2 w-2 rounded-full ${isActive ? 'bg-[#1C1B19]' : 'bg-[#C9C8C3]'}`} />
                 <p className={`truncate text-sm font-medium ${titleToneClass}`}>{copy.title}</p>
               </div>
               <CallMeter active={isActive} compact />
             </div>
-            <p className="mt-1 text-xs leading-5 text-[#787774]">
+            <p className="mt-1 text-xs leading-5 text-[#5C5A55]">
               {copy.body}
             </p>
           </div>
         </div>
         {hint && displayTranscript ? (
-          <p className="mt-2 pl-[60px] text-[11px] leading-5 text-[#A3A39E]">{hint}</p>
+          <p className="mt-2 pl-[60px] text-[11px] leading-5 text-[#8E8B82]">{hint}</p>
         ) : null}
       </div>
     );
   }
 
   return (
-    <div className={`rounded-[28px] border border-[#E9E9E7] bg-[#F7F7F5] ${compact ? 'px-3 py-3' : 'px-5 py-5'}`}>
+    <div className={`rounded-[28px] border border-[#E8E2D5] bg-[#FAF7F2] ${compact ? 'px-3 py-3' : 'px-5 py-5'}`}>
       <div className="flex items-start justify-between gap-3">
         <div className="flex items-center gap-2">
-          <span className={`inline-flex h-2.5 w-2.5 rounded-full ${isActive ? 'bg-[#232322]' : 'bg-[#C9C8C3]'}`} />
+          <span className={`inline-flex h-2.5 w-2.5 rounded-full ${isActive ? 'bg-[#1C1B19]' : 'bg-[#C9C8C3]'}`} />
           <p className={`font-medium ${titleToneClass} ${compact ? 'text-sm' : 'text-[15px]'}`}>{copy.title}</p>
         </div>
         <CallMeter active={isActive} compact={compact} />
@@ -350,8 +350,8 @@ export function TutorCallComposer({
         >
           {isActive ? (
             <>
-              <span className="absolute inset-[-8px] rounded-full border border-[#232322] opacity-15 animate-ping" />
-              <span className="absolute inset-[-16px] rounded-full border border-[#E9E9E7]" />
+              <span className="absolute inset-[-8px] rounded-full border border-[#1C1B19] opacity-15 animate-ping" />
+              <span className="absolute inset-[-16px] rounded-full border border-[#E8E2D5]" />
               <PhoneOff size={compact ? 22 : 26} strokeWidth={1.8} />
             </>
           ) : (
@@ -359,14 +359,14 @@ export function TutorCallComposer({
           )}
         </button>
 
-        <div className="w-full rounded-[22px] border border-[#E9E9E7] bg-white px-4 py-3 text-center">
-          <p className={`min-h-[24px] text-[#232322] ${compact ? 'text-xs leading-5' : 'text-sm leading-6'}`}>
+        <div className="w-full rounded-[22px] border border-[#E8E2D5] bg-white px-4 py-3 text-center">
+          <p className={`min-h-[24px] text-[#1C1B19] ${compact ? 'text-xs leading-5' : 'text-sm leading-6'}`}>
             {copy.body}
           </p>
         </div>
 
         {hint ? (
-          <p className={`text-center text-[#A3A39E] ${compact ? 'text-[10px] leading-4' : 'text-[11px] leading-5'}`}>
+          <p className={`text-center text-[#8E8B82] ${compact ? 'text-[10px] leading-4' : 'text-[11px] leading-5'}`}>
             {hint}
           </p>
         ) : null}

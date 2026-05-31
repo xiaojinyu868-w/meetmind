@@ -189,7 +189,7 @@ export function BottomPanel({
           onClick={handleHeaderClick}
         >
           {/* 拖拽指示条 */}
-          <div className="w-10 h-1 bg-gray-300 rounded-full mb-2" />
+          <div className="w-10 h-1 bg-divider rounded-full mb-2" />
           
           {/* 自定义标题区域 */}
           {header}
@@ -229,12 +229,12 @@ export function BottomPanelHeader({
   return (
     <div className="w-full px-4 flex items-center justify-between">
       <div className="flex items-center gap-2">
-        <h3 className="text-base font-semibold text-gray-900">{title}</h3>
+        <h3 className="text-base font-semibold text-ink">{title}</h3>
         {badge}
       </div>
       <div className="flex items-center gap-2">
         {subtitle && (
-          <span className="text-sm text-gray-500">{subtitle}</span>
+          <span className="text-sm text-ink-muted">{subtitle}</span>
         )}
         {rightContent}
       </div>

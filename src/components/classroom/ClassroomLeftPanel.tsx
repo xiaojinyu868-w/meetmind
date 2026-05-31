@@ -14,7 +14,7 @@
  *   5. 活动条改为 白底 + 左侧暖黄细柱 + 黑色主标——克制但焦点明确
  *   6. 主 CTA 改为 黑色主按钮 + 黄点——高级感（像 Linear）
  *
- * 设计系统：零渐变、零阴影、纯平涂
+ * 设计系统：v7 设计宪法：95% 克制 + 5% 仪式时刻情绪化（shadow-soft / shadow-card / shadow-ai-glow）
  */
 
 import React, { useMemo } from 'react';
@@ -165,19 +165,69 @@ function formatTodayLabel(): string {
 }
 
 /**
- * PageHeader — 页面顶部的大标题锚点。
- * 参考 Things 3 / Craft 的扉页手感：大字 + 小字副文案 + 极细分割线。
+ * PageHeader — v7 Course Hero（课堂页第一眼）
+ *
+ * 设计宪法（v7 第 2、5 节）落地：
+ *   1. mono eyebrow 11px / 0.08em / pine 600 + pine 呼吸点
+ *      —— 让"今日"这件事本身被资产化：JetBrains Mono 是 v7 的引用资产字体
+ *   2. h1 30px / 600 / -0.024em，配 Instrument Serif italic em 点缀朱批红
+ *      —— "课堂" 是中文 Inter 黑色，副词"今日"是西文衬线斜体朱批
+ *      —— 这是 v7 双签名色 + 字体三件套的灵魂呈现
+ *   3. surface-ai 工具类 = shadow-ai-glow + ai-breath shimmer 6s 循环
+ *      —— "AI 在场" 这件事不是装饰，是产品 DNA。课堂第一眼必须有
+ *   4. meta 行：lesson 数 + pine 状态点 rec-pulse
+ *      —— 让"已经积累"这件事被看见
  */
-function PageHeader() {
+function PageHeader({ lessonCount = 0 }: { lessonCount?: number }) {
   return (
     <div className="flex-shrink-0 px-8 pt-10 pb-5 lg:px-12 lg:pt-12">
       <div className="mx-auto w-full max-w-2xl">
-        <p className="text-[11px] font-medium uppercase tracking-[0.22em] text-ink-muted/80">
-          {formatTodayLabel()}
-        </p>
-        <h1 className="mt-2 text-[32px] font-semibold tracking-[-0.025em] text-ink leading-[1.1]">
-          课堂
-        </h1>
+        <div className="surface-ai px-7 py-7 lg:px-9 lg:py-8">
+          {/* eyebrow：mono 字体 + pine 色 + 微小呼吸点 */}
+          <div className="flex items-center gap-2.5">
+            <span
+              className="inline-block h-1.5 w-1.5 rounded-full bg-pine"
+              style={{ boxShadow: '0 0 0 3px rgba(45,79,62,0.12)' }}
+              aria-hidden
+            />
+            <span className="font-mono text-[11px] font-semibold uppercase tracking-[0.08em] text-pine">
+              {formatTodayLabel()}
+            </span>
+          </div>
+
+          {/* h1：Inter 大字 + Instrument Serif italic em 点缀朱批 */}
+          <h1 className="mt-3 text-[30px] font-semibold tracking-[-0.024em] text-ink leading-[1.18]">
+            <span className="font-serif italic font-normal text-vermilion mr-1.5">今日</span>
+            课堂
+          </h1>
+
+          {/* meta：本周已上 N 节课 + pine 呼吸点 */}
+          {lessonCount > 0 ? (
+            <div className="mt-4 flex items-center gap-2 text-[12.5px] text-ink-muted">
+              <span
+                className="inline-block h-1.5 w-1.5 rounded-full bg-pine"
+                style={{
+                  boxShadow: '0 0 0 0 rgba(45,79,62,0.5)',
+                  animation: 'rec-pulse-v7 1.6s ease-in-out infinite',
+                }}
+                aria-hidden
+              />
+              <span className="text-pine font-medium">
+                已积累
+                <span className="font-mono mx-1 tabular-nums text-pine">{lessonCount}</span>
+                节课
+              </span>
+              <span className="text-divider mx-1">·</span>
+              <span className="font-serif italic">慢慢酿，不急</span>
+            </div>
+          ) : (
+            <div className="mt-4 text-[12.5px] text-ink-muted">
+              <span className="font-serif italic text-pine">先发一节给我</span>
+              <span className="text-divider mx-1.5">·</span>
+              我会慢慢理解
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );
@@ -203,16 +253,16 @@ function ActiveLessonPill({
 }) {
   return (
     <div className="mb-8">
-      <div className="relative overflow-hidden rounded-2xl bg-white px-6 py-5 ring-[0.5px] ring-[#232322]/[0.08]">
+      <div className="relative overflow-hidden rounded-2xl bg-white px-6 py-5 ring-[0.5px] ring-[#1C1B19]/[0.08]">
         {/* 左侧强调细柱——只有 3px，但因为足够长，视觉上立刻抓住眼睛 */}
-        <span className="absolute left-0 top-5 bottom-5 w-[3px] rounded-r-full bg-[#E8C547]" />
+        <span className="absolute left-0 top-5 bottom-5 w-[3px] rounded-r-full bg-[#B5483C]" />
 
         <div className="flex items-center gap-5 pl-2">
           {/* 红点脉动 + 计时器——用排版代替装饰 */}
           <div className="flex flex-shrink-0 items-center gap-2.5">
             <span className="relative flex h-2 w-2">
-              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-[#D96B6B] opacity-60" />
-              <span className="relative inline-flex h-2 w-2 rounded-full bg-[#D96B6B]" />
+              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-[#B5483C] opacity-60" />
+              <span className="relative inline-flex h-2 w-2 rounded-full bg-[#B5483C]" />
             </span>
             <span className="font-mono text-[17px] font-medium tabular-nums tracking-tight text-ink">
               {formatSeconds(seconds)}
@@ -256,15 +306,22 @@ function ActiveLessonPill({
  * SectionLabel — 日期分组的"英式小标"。
  * 参考 Linear / Things 的分组风格：uppercase + 大字间距 + 数字徽标。
  */
+/**
+ * SectionLabel — v7 col-head（章节小标）。
+ *
+ * 设计宪法：mono 字体 = 引用资产语言（章节名 / 数字 / 时间戳都属于"被引用"的内容）。
+ * 用 JetBrains Mono + 0.08em letter-spacing 让分组本身被资产化，比 Inter 大写更有层级感。
+ */
 function SectionLabel({ label, count }: { label: string; count: number }) {
   return (
     <div className="flex items-baseline gap-3 px-1 pb-3">
-      <span className="text-[11px] font-semibold uppercase tracking-[0.2em] text-ink-secondary">
+      <span className="font-mono text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-secondary">
         {label}
       </span>
-      <span className="text-[11px] font-medium tabular-nums text-ink-muted/70">
-        {count}
+      <span className="font-mono text-[11px] font-medium tabular-nums text-ink-muted/70">
+        {String(count).padStart(2, '0')}
       </span>
+      <span className="ml-1 h-px flex-1 bg-divider-light" aria-hidden />
     </div>
   );
 }
@@ -336,7 +393,7 @@ function ListView({
 
   return (
     <>
-      <PageHeader />
+      <PageHeader lessonCount={groups.reduce((acc, g) => acc + g.items.length, 0)} />
 
       <div className="flex-1 overflow-y-auto px-8 pt-2 pb-4 lg:px-12">
         <div className="mx-auto w-full max-w-2xl">
@@ -411,8 +468,8 @@ function StickyStartBar({
     <div className="flex-shrink-0 bg-canvas px-8 pb-[max(env(safe-area-inset-bottom),1.25rem)] pt-4 lg:px-12">
       <div className="mx-auto w-full max-w-2xl">
         {disabled ? (
-          <div className="flex w-full items-center justify-center gap-2.5 rounded-full bg-[#F0F0ED] py-3.5 text-[13px] text-ink-muted">
-            <span className="inline-flex h-1.5 w-1.5 rounded-full bg-[#D96B6B] animate-pulse" />
+          <div className="flex w-full items-center justify-center gap-2.5 rounded-full bg-[#F0EBDF] py-3.5 text-[13px] text-ink-muted">
+            <span className="inline-flex h-1.5 w-1.5 rounded-full bg-[#B5483C] animate-pulse" />
             <span>正在录一节课</span>
           </div>
         ) : (
@@ -426,8 +483,8 @@ function StickyStartBar({
               className="group flex w-full items-center justify-center gap-2.5 rounded-full bg-ink py-4 text-[14px] font-medium text-white transition hover:bg-[#1a1a19] active:scale-[0.995]"
             >
               <span className="relative flex h-2 w-2">
-                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-[#E8C547] opacity-50 group-hover:opacity-70" />
-                <span className="relative inline-flex h-2 w-2 rounded-full bg-[#E8C547]" />
+                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-[#B5483C] opacity-50 group-hover:opacity-70" />
+                <span className="relative inline-flex h-2 w-2 rounded-full bg-[#B5483C]" />
               </span>
               <Mic size={14} strokeWidth={2} />
               <span>开始录一节课</span>
@@ -510,7 +567,7 @@ function AudioSourcePicker({
   if (!canSystem) {
     return (
       <div className="mb-3">
-        <div className="flex items-center gap-2 rounded-2xl bg-white px-3 py-2.5 ring-[0.5px] ring-[#232322]/[0.08]">
+        <div className="flex items-center gap-2 rounded-2xl bg-white px-3 py-2.5 ring-[0.5px] ring-[#1C1B19]/[0.08]">
           <Mic size={14} strokeWidth={2} className="text-ink" />
           <span className="text-[12.5px] font-medium text-ink">麦克风</span>
           <span className="text-[11px] text-ink-muted">· 手机端只支持这一档</span>
@@ -525,7 +582,7 @@ function AudioSourcePicker({
   // ── 桌面端：segmented 三选一 ──
   return (
     <div className="mb-3">
-      <div className="grid grid-cols-3 overflow-hidden rounded-2xl bg-white ring-[0.5px] ring-[#232322]/[0.08]">
+      <div className="grid grid-cols-3 overflow-hidden rounded-2xl bg-white ring-[0.5px] ring-[#1C1B19]/[0.08]">
         {options.map((opt) => {
           const active = value === opt.key;
           const Icon = opt.icon;
@@ -537,7 +594,7 @@ function AudioSourcePicker({
               className={`flex flex-col items-center justify-center gap-1 px-2 py-2.5 text-[12px] transition ${
                 active
                   ? 'bg-ink text-white'
-                  : 'text-ink hover:bg-[#F7F7F5]'
+                  : 'text-ink hover:bg-[#FAF7F2]'
               }`}
               aria-pressed={active}
             >

@@ -7,13 +7,13 @@
  * - 从视频区域底部滑入，不遮挡画面
  * - 轻量、不侵入，用户可以选择参与或忽略
  * - 8 秒后自动消失（等同于忽略）
- * - 遵循 MeetMind 设计系统：零渐变、零阴影、纯平涂
+ * - 遵循 MeetMind 设计系统：v7 设计宪法：95% 克制 + 5% 仪式时刻情绪化（shadow-soft / shadow-card / shadow-ai-glow）
  */
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { ClassCheckCheckpoint } from '@/app/api/class-check/plan/route';
 
-const ACCENT = '#E67E22';
+const ACCENT = '#B5483C';
 const AUTO_DISMISS_MS = 8000;
 
 interface ClassCheckToastProps {
@@ -72,13 +72,13 @@ export function ClassCheckToast({ checkpoint, onAccept, onDismiss }: ClassCheckT
       }}
     >
       <div
-        className="flex items-center gap-3 rounded-2xl border border-[#E9E9E7] bg-white px-4 py-3"
+        className="flex items-center gap-3 rounded-2xl border border-[#E8E2D5] bg-white px-4 py-3"
         style={{ minWidth: 280, maxWidth: 420 }}
       >
         {/* 左侧小图标 */}
         <div
           className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl"
-          style={{ backgroundColor: '#FDF2E9' }}
+          style={{ backgroundColor: '#FBF2EF' }}
         >
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
             <rect x="3" y="2" width="18" height="16" rx="3" fill={ACCENT} opacity="0.9" />
@@ -89,10 +89,10 @@ export function ClassCheckToast({ checkpoint, onAccept, onDismiss }: ClassCheckT
 
         {/* 内容 */}
         <div className="flex-1 min-w-0">
-          <p className="text-[13px] font-medium text-[#232322] leading-snug truncate">
+          <p className="text-[13px] font-medium text-[#1C1B19] leading-snug truncate">
             {checkpoint.topic}
           </p>
-          <p className="text-[11px] text-[#A3A39E] mt-0.5">
+          <p className="text-[11px] text-[#8E8B82] mt-0.5">
             {checkpoint.questions.length} 道小题，测测掌握程度
           </p>
         </div>
@@ -110,7 +110,7 @@ export function ClassCheckToast({ checkpoint, onAccept, onDismiss }: ClassCheckT
           <button
             type="button"
             onClick={handleDismiss}
-            className="flex h-7 w-7 items-center justify-center rounded-lg text-[#A3A39E] transition-colors hover:bg-[#F7F7F5] hover:text-[#787774]"
+            className="flex h-7 w-7 items-center justify-center rounded-lg text-[#8E8B82] transition-colors hover:bg-[#FAF7F2] hover:text-[#5C5A55]"
             aria-label="忽略"
           >
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">

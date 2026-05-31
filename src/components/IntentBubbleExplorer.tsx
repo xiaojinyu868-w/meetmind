@@ -72,7 +72,7 @@ export default function IntentBubbleExplorer({
               type="button"
               disabled={!hasContext}
               onClick={() => handleStart(intent)}
-              className="inline-flex min-h-10 items-center rounded-full border border-[#E9E9E7] bg-white px-4 py-2 text-[13px] font-medium text-[#232322] transition-colors hover:bg-[#F7F7F5] disabled:cursor-not-allowed disabled:opacity-50"
+              className="inline-flex min-h-10 items-center rounded-full border border-[#E8E2D5] bg-white px-4 py-2 text-[13px] font-medium text-[#1C1B19] transition-colors hover:bg-[#FAF7F2] disabled:cursor-not-allowed disabled:opacity-50"
             >
               {intent.label}
             </button>

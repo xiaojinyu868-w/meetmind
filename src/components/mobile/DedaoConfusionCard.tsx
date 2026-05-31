@@ -71,13 +71,13 @@ export function DedaoConfusionCard({
         style={{ maxHeight: '60vh' }}
       >
         <div className="flex justify-center pt-3 pb-2">
-          <div className="h-1 w-10 rounded-full bg-gray-200" />
+          <div className="h-1 w-10 rounded-full bg-divider" />
         </div>
 
-        <div className="border-b border-gray-100 px-4 pb-3">
+        <div className="border-b border-divider-light px-4 pb-3">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <span className={cn('h-2 w-2 rounded-full', confusion.resolved ? 'bg-green-500' : 'bg-red-500')} />
+              <span className={cn('h-2 w-2 rounded-full', confusion.resolved ? 'bg-pine' : 'bg-vermilion')} />
               <span className="text-sm font-medium text-[var(--dedao-text)]">
                 {confusion.resolved ? '已解决的困惑' : '待解决的困惑'}
               </span>

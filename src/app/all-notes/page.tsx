@@ -114,22 +114,22 @@ function getSourceLabel(source: NoteSource): string {
 
 function getSourceColor(source: NoteSource): string {
   switch (source) {
-    case 'chat': return 'bg-purple-100 text-purple-700';
-    case 'takeaways': return 'bg-green-100 text-green-700';
-    case 'transcript': return 'bg-blue-100 text-blue-700';
-    case 'custom': return 'bg-gray-100 text-gray-700';
-    default: return 'bg-gray-100 text-gray-700';
+    case 'chat': return 'bg-pine-mist text-pine';
+    case 'takeaways': return 'bg-pine-mist text-pine-deep';
+    case 'transcript': return 'bg-pine-mist text-pine';
+    case 'custom': return 'bg-paper-deep text-ink-secondary';
+    default: return 'bg-paper-deep text-ink-secondary';
   }
 }
 
 function getSubjectColor(subject: string): string {
   switch (subject) {
-    case '数学': return 'bg-blue-500';
-    case '物理': return 'bg-green-500';
+    case '数学': return 'bg-pine-fog0';
+    case '物理': return 'bg-pine';
     case '化学': return 'bg-purple-500';
-    case '语文': return 'bg-orange-500';
+    case '语文': return 'bg-vermilion';
     case '英语': return 'bg-pink-500';
-    default: return 'bg-gray-500';
+    default: return 'bg-paper-warm0';
   }
 }
 
@@ -237,37 +237,37 @@ export default function AllNotesPage() {
   
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+      <div className="min-h-screen bg-paper-warm flex items-center justify-center">
         <div className="text-center">
-          <div className="w-12 h-12 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto mb-4" />
-          <p className="text-gray-600">加载笔记中...</p>
+          <div className="w-12 h-12 border-4 border-pine border-t-transparent rounded-full animate-spin mx-auto mb-4" />
+          <p className="text-ink-secondary">加载笔记中...</p>
         </div>
       </div>
     );
   }
   
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-paper-warm">
       <Header lessonTitle="我的笔记" courseName="跨课程笔记管理" />
       
       <main className="max-w-4xl mx-auto px-4 py-6">
         {/* 统计卡片 */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
           <div className="bg-white rounded-xl p-4 shadow-sm">
-            <div className="text-2xl font-bold text-gray-900">{stats.total}</div>
-            <div className="text-sm text-gray-500">总笔记数</div>
+            <div className="text-2xl font-bold text-ink">{stats.total}</div>
+            <div className="text-sm text-ink-muted">总笔记数</div>
           </div>
           <div className="bg-white rounded-xl p-4 shadow-sm">
-            <div className="text-2xl font-bold text-blue-600">{stats.thisWeek}</div>
-            <div className="text-sm text-gray-500">本周新增</div>
+            <div className="text-2xl font-bold text-pine">{stats.thisWeek}</div>
+            <div className="text-sm text-ink-muted">本周新增</div>
           </div>
           <div className="bg-white rounded-xl p-4 shadow-sm">
-            <div className="text-2xl font-bold text-purple-600">{stats.bySource.chat}</div>
-            <div className="text-sm text-gray-500">同学对话笔记</div>
+            <div className="text-2xl font-bold text-pine">{stats.bySource.chat}</div>
+            <div className="text-sm text-ink-muted">同学对话笔记</div>
           </div>
           <div className="bg-white rounded-xl p-4 shadow-sm">
-            <div className="text-2xl font-bold text-green-600">{subjects.length}</div>
-            <div className="text-sm text-gray-500">涉及学科</div>
+            <div className="text-2xl font-bold text-pine">{subjects.length}</div>
+            <div className="text-sm text-ink-muted">涉及学科</div>
           </div>
         </div>
         
@@ -276,7 +276,7 @@ export default function AllNotesPage() {
           <div className="flex flex-col md:flex-row gap-4">
             {/* 搜索框 */}
             <div className="flex-1 relative">
-              <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-ink-muted" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
               </svg>
               <input
@@ -284,7 +284,7 @@ export default function AllNotesPage() {
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder="搜索笔记内容..."
-                className="w-full pl-10 pr-4 py-2.5 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                className="w-full pl-10 pr-4 py-2.5 border border-divider rounded-lg focus:outline-none focus:ring-2 focus:ring-pine focus:border-transparent"
               />
             </div>
             
@@ -293,7 +293,7 @@ export default function AllNotesPage() {
               <select
                 value={filterSource}
                 onChange={(e) => setFilterSource(e.target.value as NoteSource | 'all')}
-                className="px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                className="px-3 py-2 border border-divider rounded-lg focus:outline-none focus:ring-2 focus:ring-pine text-sm"
               >
                 <option value="all">全部来源</option>
                 <option value="chat">同学对话</option>
@@ -305,7 +305,7 @@ export default function AllNotesPage() {
               <select
                 value={filterSubject}
                 onChange={(e) => setFilterSubject(e.target.value)}
-                className="px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                className="px-3 py-2 border border-divider rounded-lg focus:outline-none focus:ring-2 focus:ring-pine text-sm"
               >
                 <option value="all">全部学科</option>
                 {subjects.map(subject => (
@@ -316,7 +316,7 @@ export default function AllNotesPage() {
               <select
                 value={sortBy}
                 onChange={(e) => setSortBy(e.target.value as 'date' | 'subject')}
-                className="px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                className="px-3 py-2 border border-divider rounded-lg focus:outline-none focus:ring-2 focus:ring-pine text-sm"
               >
                 <option value="date">按时间</option>
                 <option value="subject">按学科</option>
@@ -328,20 +328,20 @@ export default function AllNotesPage() {
         {/* 笔记列表 */}
         {filteredNotes.length === 0 ? (
           <div className="bg-white rounded-xl p-12 shadow-sm text-center">
-            <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
-              <svg className="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <div className="w-16 h-16 bg-paper-deep rounded-full flex items-center justify-center mx-auto mb-4">
+              <svg className="w-8 h-8 text-ink-muted" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
               </svg>
             </div>
-            <h3 className="text-lg font-medium text-gray-900 mb-2">
+            <h3 className="text-lg font-medium text-ink mb-2">
               {searchQuery ? '未找到匹配的笔记' : '暂无笔记'}
             </h3>
-            <p className="text-gray-500 mb-4">
+            <p className="text-ink-muted mb-4">
               {searchQuery ? '尝试使用其他关键词搜索' : '在复习时添加笔记，这里会显示所有课程的笔记'}
             </p>
             <Link
               href="/"
-              className="inline-flex items-center gap-2 px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors"
+              className="inline-flex items-center gap-2 px-4 py-2 bg-pine-fog0 text-white rounded-lg hover:bg-pine transition-colors"
             >
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
@@ -355,7 +355,7 @@ export default function AllNotesPage() {
               <div key={date}>
                 {/* 日期标题 */}
                 <div className="flex items-center gap-3 mb-3">
-                  <div className="text-sm font-medium text-gray-500">
+                  <div className="text-sm font-medium text-ink-muted">
                     {date === new Date().toISOString().split('T')[0] 
                       ? '今天' 
                       : date === new Date(Date.now() - 86400000).toISOString().split('T')[0]
@@ -363,8 +363,8 @@ export default function AllNotesPage() {
                         : new Date(date).toLocaleDateString('zh-CN', { month: 'long', day: 'numeric' })
                     }
                   </div>
-                  <div className="flex-1 h-px bg-gray-200" />
-                  <div className="text-xs text-gray-400">{dateNotes.length} 条</div>
+                  <div className="flex-1 h-px bg-divider" />
+                  <div className="text-xs text-ink-muted">{dateNotes.length} 条</div>
                 </div>
                 
                 {/* 笔记卡片 */}
@@ -383,37 +383,37 @@ export default function AllNotesPage() {
                             </span>
                             {note.session && (
                               <>
-                                <span className="text-xs text-gray-400">·</span>
-                                <span className="text-xs text-gray-500">{note.session.subject}</span>
-                                <span className="text-xs text-gray-400">·</span>
-                                <span className="text-xs text-gray-500 truncate">{note.session.topic}</span>
+                                <span className="text-xs text-ink-muted">·</span>
+                                <span className="text-xs text-ink-muted">{note.session.subject}</span>
+                                <span className="text-xs text-ink-muted">·</span>
+                                <span className="text-xs text-ink-muted truncate">{note.session.topic}</span>
                               </>
                             )}
-                            <span className="ml-auto text-xs text-gray-400">{formatDate(note.createdAt)}</span>
+                            <span className="ml-auto text-xs text-ink-muted">{formatDate(note.createdAt)}</span>
                           </div>
                           
                           {/* 引用内容 */}
                           {note.metadata?.selectedText && (
-                            <div className="mb-2 p-2 bg-gray-50 rounded border-l-2 border-gray-300">
-                              <p className="text-xs text-gray-500 line-clamp-2">{note.metadata.selectedText}</p>
+                            <div className="mb-2 p-2 bg-paper-warm rounded border-l-2 border-divider">
+                              <p className="text-xs text-ink-muted line-clamp-2">{note.metadata.selectedText}</p>
                             </div>
                           )}
                           
                           {/* 笔记内容 */}
-                          <p className="text-gray-800">{note.text}</p>
+                          <p className="text-ink">{note.text}</p>
                           
                           {/* 操作按钮 */}
                           <div className="flex items-center gap-2 mt-3">
                             <Link
                               href={`/?session=${note.sessionId}${note.metadata?.transcript?.start ? `&time=${note.metadata.transcript.start}` : ''}`}
-                              className="text-xs text-blue-600 hover:text-blue-700"
+                              className="text-xs text-pine hover:text-pine"
                             >
                               查看原文
                             </Link>
-                            <span className="text-gray-300">|</span>
+                            <span className="text-ink-faint">|</span>
                             <button
                               onClick={() => handleDeleteNote(note.id)}
-                              className="text-xs text-red-500 hover:text-red-600"
+                              className="text-xs text-vermilion hover:text-vermilion"
                             >
                               删除
                             </button>
@@ -430,7 +430,7 @@ export default function AllNotesPage() {
         
         {/* 底部提示 */}
         <div className="text-center py-8">
-          <p className="text-sm text-gray-400">
+          <p className="text-sm text-ink-muted">
             💡 好记性不如烂笔头，坚持记笔记，学习更高效！
           </p>
         </div>

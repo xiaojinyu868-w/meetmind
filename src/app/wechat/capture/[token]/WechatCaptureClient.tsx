@@ -80,9 +80,9 @@ export default function WechatCaptureClient({
 
   if (sessionLoading) {
     return (
-      <section className="rounded-[28px] border border-stone-200 bg-white px-5 py-5 shadow-[0_16px_40px_rgba(15,23,42,0.06)]">
+      <section className="rounded-[28px] border border-divider bg-white px-5 py-5 shadow-card">
         <div className="flex items-center justify-center py-8">
-          <div className="text-sm text-stone-500">正在完成绑定...</div>
+          <div className="text-sm text-ink-muted">正在完成绑定...</div>
         </div>
       </section>
     );
@@ -90,13 +90,13 @@ export default function WechatCaptureClient({
 
   if (bound) {
     return (
-      <section className="rounded-[28px] border border-stone-200 bg-white px-5 py-5 shadow-[0_16px_40px_rgba(15,23,42,0.06)]">
+      <section className="rounded-[28px] border border-divider bg-white px-5 py-5 shadow-card">
         {nickname ? (
-          <div className="mb-4 rounded-2xl bg-[#D1F4E0]/30 px-4 py-3 text-sm text-[#232322]">
+          <div className="mb-4 rounded-2xl bg-pine-mist px-4 py-3 text-sm text-ink">
             绑定成功{nickname ? `，${nickname}` : ''}。以后发给服务号的内容都会自动进入收集流。
           </div>
         ) : null}
-        <h2 className="text-base font-semibold text-stone-900">
+        <h2 className="text-base font-semibold text-ink">
           {initialWorkspaceName
             ? `已接到「${initialWorkspaceName}」`
             : '下一步'}
@@ -104,11 +104,11 @@ export default function WechatCaptureClient({
         <div className="mt-4 grid gap-3">
           <Link
             href={`/app?wechat_capture=${encodeURIComponent(token)}`}
-            className="rounded-[20px] bg-stone-950 px-4 py-4 text-center text-sm font-medium text-white"
+            className="rounded-[20px] bg-ink px-4 py-4 text-center text-sm font-medium text-white"
           >
             打开收集流
           </Link>
-          <p className="rounded-[20px] bg-stone-50 px-4 py-4 text-sm leading-7 text-stone-600">
+          <p className="rounded-[20px] bg-paper-warm px-4 py-4 text-sm leading-7 text-ink-secondary">
             补 PDF、课件、录音，或者进 Tutor 深挖，都从这里继续。
           </p>
         </div>
@@ -117,14 +117,14 @@ export default function WechatCaptureClient({
   }
 
   return (
-    <section className="rounded-[28px] border border-stone-200 bg-white px-5 py-5 shadow-[0_16px_40px_rgba(15,23,42,0.06)]">
-      <h2 className="text-base font-semibold text-stone-900">绑定你的 MeetMind 账号</h2>
-      <p className="mt-2 text-sm leading-6 text-stone-500">
+    <section className="rounded-[28px] border border-divider bg-white px-5 py-5 shadow-card">
+      <h2 className="text-base font-semibold text-ink">绑定你的 MeetMind 账号</h2>
+      <p className="mt-2 text-sm leading-6 text-ink-muted">
         只需要绑定一次，之后发给服务号的所有内容都会自动出现在你的收集流里。
       </p>
 
       {error ? (
-        <div className="mt-3 rounded-2xl bg-red-50 px-4 py-3 text-sm text-red-600">
+        <div className="mt-3 rounded-2xl bg-vermilion-mist/50 px-4 py-3 text-sm text-vermilion">
           {error}
         </div>
       ) : null}

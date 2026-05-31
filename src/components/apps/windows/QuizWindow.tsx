@@ -101,9 +101,9 @@ function stripOptionPrefix(text: string): string {
 }
 
 /* 测验保持安静平涂：用排版和状态区分，不用题目环境光。 */
-const QUIZ_SUCCESS = '#4DAE6F';
-const QUIZ_WARNING = '#D9A441';
-const QUIZ_DANGER = '#D96B6B';
+const QUIZ_SUCCESS = '#2D6A4F';
+const QUIZ_WARNING = '#B8842B';
+const QUIZ_DANGER = '#B5483C';
 
 export function QuizWindow({ result, onLearningActivity }: QuizWindowProps) {
   const questions = useMemo(() => normalizeQuestions(result), [result]);
@@ -220,7 +220,7 @@ export function QuizWindow({ result, onLearningActivity }: QuizWindowProps) {
           {/* Score ring */}
           <div className="relative inline-flex items-center justify-center w-32 h-32 mb-6">
             <svg className="w-full h-full -rotate-90" viewBox="0 0 100 100">
-              <circle cx="50" cy="50" r="42" fill="none" stroke="#E9E9E7" strokeWidth="6" />
+              <circle cx="50" cy="50" r="42" fill="none" stroke="#E8E2D5" strokeWidth="6" />
               <circle cx="50" cy="50" r="42" fill="none" stroke={gradeColor}
                 strokeWidth="6" strokeLinecap="round"
                 strokeDasharray={`${accuracy * 2.64} 264`}

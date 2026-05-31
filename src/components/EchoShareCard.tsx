@@ -36,7 +36,7 @@ const PAD_BOTTOM = 80;
 
 // 色彩系统 — 只用四个色值
 const COLOR = {
-  bg: '#F7F5F1',       // 暖白，比纯白温暖
+  bg: '#FAF7F2',       // 暖白，比纯白温暖
   ink: '#2C2825',       // 深褐，比纯黑柔和
   secondary: '#8C857A', // 辅助灰褐
   line: '#DDD9D2',      // 分隔线
@@ -421,7 +421,7 @@ export function EchoShareCard({ echo, courseName, open, onClose }: EchoShareCard
               <button
                 type="button"
                 onClick={handleSaveImage}
-                className="rounded-full bg-white px-4 py-2.5 text-[13px] font-medium text-[#232322] transition hover:bg-[#F7F7F5] active:scale-[0.99]"
+                className="rounded-full bg-white px-4 py-2.5 text-[13px] font-medium text-[#1C1B19] transition hover:bg-[#FAF7F2] active:scale-[0.99]"
               >
                 {COPY.echoShare.saveImage}
               </button>
@@ -429,7 +429,7 @@ export function EchoShareCard({ echo, courseName, open, onClose }: EchoShareCard
                 type="button"
                 onClick={handleNativeShare}
                 disabled={sharing}
-                className="rounded-full bg-[#232322] px-4 py-2.5 text-[13px] font-medium text-white transition hover:bg-[#111111] active:scale-[0.99] disabled:opacity-60"
+                className="rounded-full bg-[#1C1B19] px-4 py-2.5 text-[13px] font-medium text-white transition hover:bg-[#111111] active:scale-[0.99] disabled:opacity-60"
               >
                 {sharing ? COPY.echoShare.sharing : COPY.echoShare.nativeShare}
               </button>

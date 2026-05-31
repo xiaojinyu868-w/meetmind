@@ -38,7 +38,7 @@ api/route.ts → services → lib/utils, lib/db, lib/config
 
 | 文件 | 行数 | 职责 |
 |------|------|------|
-| `llm-service.ts` | ~660 | 统一 LLM 调用层（StepFun / DeepSeek / 通义千问 / 火山方舟 / 中转站），默认优先 `step-3.7-flash`（阶跃星辰） |
+| `llm-service.ts` | ~750 | 统一 LLM 调用层（StepFun / DeepSeek / 通义千问 / 火山方舟 / 中转站），默认优先 `step-3.7-flash`（阶跃星辰）；`chatStream` 默认开 word-level smoothing（中文按字 / 英文按词 / 标点独立段，10ms 节流），所有走流式的对话框（/api/chat、/api/workspace/search、legacy /api/tutor）自动按词平滑刷出，可 `options.smooth: 'off'` 关闭 |
 | `highlight-service.ts` | 675 | AI 精选片段（Smart/Fast 双模式） |
 | `summary-service.ts` | 246 | 课堂摘要生成 |
 | `tutor-service.ts` | 273 | AI 家教：引用匹配 + LLM 解释 |

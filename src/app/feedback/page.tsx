@@ -62,17 +62,17 @@ export default function FeedbackPage() {
   };
 
   return (
-    <div className="min-h-screen bg-[#F7F7F5]">
+    <div className="min-h-screen bg-[#FAF7F2]">
       {/* 顶部导航 */}
-      <header className="sticky top-0 z-10 bg-white/80 border-b border-rose-100">
+      <header className="sticky top-0 z-10 bg-white/80 border-b border-vermilion/15">
         <div className="max-w-3xl mx-auto px-4 h-14 flex items-center justify-between">
-          <Link href="/app" className="flex items-center gap-2 text-gray-600 hover:text-rose-500 transition-colors">
+          <Link href="/app" className="flex items-center gap-2 text-ink-secondary hover:text-vermilion transition-colors">
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
             </svg>
             <span>返回</span>
           </Link>
-          <h1 className="text-lg font-semibold text-gray-800">意见反馈</h1>
+          <h1 className="text-lg font-semibold text-ink">意见反馈</h1>
           <div className="w-16" />
         </div>
       </header>
@@ -80,15 +80,15 @@ export default function FeedbackPage() {
       <main className="max-w-3xl mx-auto px-4 py-8">
         {/* 提交成功提示 */}
         {submitResult?.success && (
-          <div className="mb-6 p-4 bg-green-50 border border-green-200 rounded-xl flex items-center gap-3">
-            <div className="w-10 h-10 bg-green-100 rounded-full flex items-center justify-center flex-shrink-0">
-              <svg className="w-5 h-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <div className="mb-6 p-4 bg-pine-fog border border-pine/30 rounded-xl flex items-center gap-3">
+            <div className="w-10 h-10 bg-pine-mist rounded-full flex items-center justify-center flex-shrink-0">
+              <svg className="w-5 h-5 text-pine" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
               </svg>
             </div>
             <div>
-              <p className="font-medium text-green-800">{submitResult.message}</p>
-              <p className="text-sm text-green-600 mt-0.5">我们会尽快处理您的反馈</p>
+              <p className="font-medium text-pine-deep">{submitResult.message}</p>
+              <p className="text-sm text-pine mt-0.5">我们会尽快处理您的反馈</p>
             </div>
           </div>
         )}
@@ -96,7 +96,7 @@ export default function FeedbackPage() {
         <form onSubmit={handleSubmit} className="space-y-6">
           {/* 反馈类型选择 */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-3">反馈类型</label>
+            <label className="block text-sm font-medium text-ink-secondary mb-3">反馈类型</label>
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
               {FEEDBACK_TYPES.map((type) => (
                 <button
@@ -105,17 +105,17 @@ export default function FeedbackPage() {
                   onClick={() => setFeedbackType(type.value)}
                   className={`p-4 rounded-xl border-2 transition-all text-left ${
                     feedbackType === type.value
-                      ? 'border-rose-400 bg-rose-50'
-                      : 'border-gray-200 bg-white hover:border-rose-200'
+                      ? 'border-pine bg-vermilion-fog'
+                      : 'border-divider bg-white hover:border-vermilion/30'
                   }`}
                 >
                   <span className="text-2xl mb-2 block">{type.icon}</span>
                   <span className={`text-sm font-medium block ${
-                    feedbackType === type.value ? 'text-rose-600' : 'text-gray-800'
+                    feedbackType === type.value ? 'text-vermilion' : 'text-ink'
                   }`}>
                     {type.label}
                   </span>
-                  <span className="text-xs text-gray-500 mt-1 block">{type.description}</span>
+                  <span className="text-xs text-ink-muted mt-1 block">{type.description}</span>
                 </button>
               ))}
             </div>
@@ -123,8 +123,8 @@ export default function FeedbackPage() {
 
           {/* 标题 */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              标题 <span className="text-rose-500">*</span>
+            <label className="block text-sm font-medium text-ink-secondary mb-2">
+              标题 <span className="text-vermilion">*</span>
             </label>
             <input
               type="text"
@@ -132,15 +132,15 @@ export default function FeedbackPage() {
               onChange={(e) => setTitle(e.target.value)}
               placeholder="请简要描述您的问题或建议"
               maxLength={100}
-              className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-rose-400 focus:ring-4 focus:ring-rose-100 outline-none transition-all"
+              className="w-full px-4 py-3 rounded-xl border-2 border-divider focus:border-pine focus:ring-4 focus:ring-pine/15 outline-none transition-all"
             />
-            <p className="text-xs text-gray-400 mt-1 text-right">{title.length}/100</p>
+            <p className="text-xs text-ink-muted mt-1 text-right">{title.length}/100</p>
           </div>
 
           {/* 详细描述 */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              详细描述 <span className="text-rose-500">*</span>
+            <label className="block text-sm font-medium text-ink-secondary mb-2">
+              详细描述 <span className="text-vermilion">*</span>
             </label>
             <textarea
               value={content}
@@ -148,28 +148,28 @@ export default function FeedbackPage() {
               placeholder="请详细描述您遇到的问题、期望的功能或其他建议。&#10;&#10;如果是问题反馈，请尽量提供：&#10;- 问题出现的步骤&#10;- 预期的结果&#10;- 实际的结果"
               rows={6}
               maxLength={2000}
-              className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-rose-400 focus:ring-4 focus:ring-rose-100 outline-none transition-all resize-none"
+              className="w-full px-4 py-3 rounded-xl border-2 border-divider focus:border-pine focus:ring-4 focus:ring-pine/15 outline-none transition-all resize-none"
             />
-            <p className="text-xs text-gray-400 mt-1 text-right">{content.length}/2000</p>
+            <p className="text-xs text-ink-muted mt-1 text-right">{content.length}/2000</p>
           </div>
 
           {/* 联系方式 */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              联系方式 <span className="text-gray-400 font-normal">(可选)</span>
+            <label className="block text-sm font-medium text-ink-secondary mb-2">
+              联系方式 <span className="text-ink-muted font-normal">(可选)</span>
             </label>
             <input
               type="text"
               value={contact}
               onChange={(e) => setContact(e.target.value)}
               placeholder="邮箱或手机号，方便我们与您联系"
-              className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-rose-400 focus:ring-4 focus:ring-rose-100 outline-none transition-all"
+              className="w-full px-4 py-3 rounded-xl border-2 border-divider focus:border-pine focus:ring-4 focus:ring-pine/15 outline-none transition-all"
             />
           </div>
 
           {/* 错误提示 */}
           {submitResult && !submitResult.success && (
-            <div className="p-3 bg-red-50 border border-red-200 rounded-xl text-sm text-red-600">
+            <div className="p-3 bg-vermilion-mist/50 border border-vermilion/30 rounded-xl text-sm text-vermilion">
               {submitResult.message}
             </div>
           )}
@@ -178,7 +178,7 @@ export default function FeedbackPage() {
           <button
             type="submit"
             disabled={isSubmitting}
-            className="w-full py-4 bg-[#232322] text-white font-semibold rounded-xl hover:hover:-translate-y-0.5 transition-all disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:translate-y-0"
+            className="w-full py-4 bg-[#1C1B19] text-white font-semibold rounded-xl hover:hover:-translate-y-0.5 transition-all disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:translate-y-0"
           >
             {isSubmitting ? (
               <span className="flex items-center justify-center gap-2">
@@ -193,18 +193,18 @@ export default function FeedbackPage() {
         </form>
 
         {/* 其他联系方式 */}
-        <div className="mt-12 p-6 bg-white rounded-2xl border border-gray-100 shadow-sm">
-          <h3 className="font-semibold text-gray-800 mb-4">其他联系方式</h3>
-          <div className="space-y-3 text-sm text-gray-600">
+        <div className="mt-12 p-6 bg-white rounded-2xl border border-divider-light shadow-sm">
+          <h3 className="font-semibold text-ink mb-4">其他联系方式</h3>
+          <div className="space-y-3 text-sm text-ink-secondary">
             <div className="flex items-center gap-3">
-              <div className="w-8 h-8 bg-rose-100 rounded-lg flex items-center justify-center">
-                <svg className="w-4 h-4 text-rose-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <div className="w-8 h-8 bg-vermilion-mist rounded-lg flex items-center justify-center">
+                <svg className="w-4 h-4 text-vermilion" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
                 </svg>
               </div>
               <span>邮箱：originedu@meetmind.online</span>
             </div>
-            <p className="text-xs text-gray-400 ml-11">
+            <p className="text-xs text-ink-muted ml-11">
               我们通常会在 1-3 个工作日内回复
             </p>
           </div>

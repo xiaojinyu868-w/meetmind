@@ -186,13 +186,13 @@ export function buildManualEchoUnavailableFeedback(params: {
 export function getManualEchoFeedbackClasses(tone: ManualEchoFeedbackTone) {
   switch (tone) {
     case 'pending':
-      return 'border-[#E9E9E7] bg-[#FDF3C0]/50 text-[#232322]';
+      return 'border-[#E8E2D5] bg-[#FDF3C0]/50 text-[#1C1B19]';
     case 'success':
-      return 'border-[#E9E9E7] bg-[#D1F4E0]/50 text-[#232322]';
+      return 'border-[#E8E2D5] bg-[#D1F4E0]/50 text-[#1C1B19]';
     case 'error':
-      return 'border-rose-200/80 bg-rose-50/70 text-rose-800';
+      return 'border-vermilion/30 bg-vermilion-fog/70 text-vermilion-deep';
     default:
-      return 'border-slate-200 bg-white/80 text-slate-700';
+      return 'border-divider bg-white/80 text-ink-secondary';
   }
 }
 

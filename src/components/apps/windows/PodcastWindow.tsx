@@ -210,40 +210,40 @@ export function PodcastWindow({ result, transcript, taskState, onSeek, onRegener
 
   return (
     <section className="space-y-4" data-testid="podcast-window">
-      <div className="rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
+      <div className="rounded-[28px] border border-divider bg-white p-5 shadow-sm sm:p-6">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
           <div className="space-y-3">
-            <div className="inline-flex items-center gap-2 rounded-full bg-blue-50 px-3 py-1 text-xs font-medium text-blue-700">
+            <div className="inline-flex items-center gap-2 rounded-full bg-vermilion-mist/50 px-3 py-1 text-xs font-medium text-vermilion">
               {payload.audioUrl ? '已生成可播放播客' : '已生成脚本草稿'}
             </div>
             <div>
-              <h2 className="text-xl font-bold tracking-tight text-slate-900">先拿到播客结果，再决定要不要继续细看脚本</h2>
-              <p className="mt-2 max-w-3xl text-sm leading-7 text-slate-600">{truncateText(summaryText, 180)}</p>
+              <h2 className="text-xl font-bold tracking-tight text-ink">先拿到播客结果，再决定要不要继续细看脚本</h2>
+              <p className="mt-2 max-w-3xl text-sm leading-7 text-ink-secondary">{truncateText(summaryText, 180)}</p>
             </div>
           </div>
           {audioDuration > 0 ? (
-            <div className="shrink-0 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-right">
-              <p className="text-xs font-medium uppercase tracking-[0.16em] text-slate-400">播放进度</p>
-              <p className="mt-1 text-sm font-semibold text-slate-800">
+            <div className="shrink-0 rounded-2xl border border-divider bg-paper-warm px-4 py-3 text-right">
+              <p className="text-xs font-medium uppercase tracking-[0.16em] text-ink-muted">播放进度</p>
+              <p className="mt-1 text-sm font-semibold text-ink">
                 {formatDuration(audioTime)} / {formatDuration(audioDuration)}
               </p>
             </div>
           ) : null}
         </div>
 
-        <div className="mt-5 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+        <div className="mt-5 rounded-2xl border border-divider bg-paper-warm p-4">
           {payload.audioUrl ? (
             <audio ref={audioRef} controls src={payload.audioUrl} className="w-full rounded-lg" />
           ) : (
             <div className="space-y-3">
-              <p className="rounded-xl border border-[#E9E9E7] bg-[#FDF3C0]/50 px-4 py-3 text-sm leading-6 text-[#232322]">
+              <p className="rounded-xl border border-[#E8E2D5] bg-[#FDF3C0]/50 px-4 py-3 text-sm leading-6 text-[#1C1B19]">
                 这次先拿到了播客脚本，还没有拿到可播放音频。{payload.error ? `原因：${payload.error}` : '你可以直接重试。'}
               </p>
               {onRegenerate ? (
                 <button
                   type="button"
                   onClick={onRegenerate}
-                  className="inline-flex rounded-full bg-blue-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-blue-700"
+                  className="inline-flex rounded-full bg-vermilion px-4 py-2 text-sm font-semibold text-white transition hover:bg-vermilion-deep"
                 >
                   重新生成播客
                 </button>
@@ -257,7 +257,7 @@ export function PodcastWindow({ result, transcript, taskState, onSeek, onRegener
             type="button"
             onClick={() => setActiveView('overview')}
             className={`rounded-full px-4 py-2 text-sm font-medium transition ${
-              activeView === 'overview' ? 'bg-slate-900 text-white' : 'border border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
+              activeView === 'overview' ? 'bg-ink text-white' : 'border border-divider bg-white text-ink-secondary hover:bg-paper-warm'
             }`}
           >
             先听播客
@@ -266,7 +266,7 @@ export function PodcastWindow({ result, transcript, taskState, onSeek, onRegener
             type="button"
             onClick={() => setActiveView('script')}
             className={`rounded-full px-4 py-2 text-sm font-medium transition ${
-              activeView === 'script' ? 'bg-slate-900 text-white' : 'border border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
+              activeView === 'script' ? 'bg-ink text-white' : 'border border-divider bg-white text-ink-secondary hover:bg-paper-warm'
             }`}
           >
             查看脚本
@@ -275,7 +275,7 @@ export function PodcastWindow({ result, transcript, taskState, onSeek, onRegener
             type="button"
             onClick={() => setActiveView('chapters')}
             className={`rounded-full px-4 py-2 text-sm font-medium transition ${
-              activeView === 'chapters' ? 'bg-slate-900 text-white' : 'border border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
+              activeView === 'chapters' ? 'bg-ink text-white' : 'border border-divider bg-white text-ink-secondary hover:bg-paper-warm'
             }`}
           >
             章节定位
@@ -284,7 +284,7 @@ export function PodcastWindow({ result, transcript, taskState, onSeek, onRegener
             <button
               type="button"
               onClick={copyScript}
-              className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50"
+              className="rounded-full border border-divider bg-white px-4 py-2 text-sm font-medium text-ink-secondary hover:bg-paper-warm"
             >
               复制脚本
             </button>
@@ -294,15 +294,15 @@ export function PodcastWindow({ result, transcript, taskState, onSeek, onRegener
 
       {activeView === 'overview' ? (
         <div className="grid gap-4 lg:grid-cols-[1.05fr_0.95fr]">
-          <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">建议用法</p>
-            <div className="mt-3 space-y-3 text-sm leading-7 text-slate-600">
+          <div className="rounded-2xl border border-divider bg-white p-5 shadow-sm">
+            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-ink-muted">建议用法</p>
+            <div className="mt-3 space-y-3 text-sm leading-7 text-ink-secondary">
               <p>如果你只是想快速复盘，这里就够了：先直接播放整段播客，再按章节跳去听你最关心的部分。</p>
-              <p>如果你想细修表达，再切到 <span className="font-medium text-slate-800">查看脚本</span>，逐段确认主持人口播内容。</p>
+              <p>如果你想细修表达，再切到 <span className="font-medium text-ink">查看脚本</span>，逐段确认主持人口播内容。</p>
             </div>
           </div>
-          <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">快速定位</p>
+          <div className="rounded-2xl border border-divider bg-white p-5 shadow-sm">
+            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-ink-muted">快速定位</p>
             <div className="mt-3 flex flex-wrap gap-2">
               {chapterPreview.length > 0 ? (
                 chapterPreview.map((section, index) => {
@@ -313,22 +313,22 @@ export function PodcastWindow({ result, transcript, taskState, onSeek, onRegener
                       type="button"
                       onClick={() => citation && seekAudio(citation.startMs)}
                       disabled={!citation}
-                      className="rounded-full border border-blue-200 bg-blue-50 px-3 py-1.5 text-xs font-medium text-blue-700 transition hover:bg-blue-100 disabled:cursor-default disabled:opacity-50"
+                      className="rounded-full border border-vermilion/25 bg-vermilion-mist/50 px-3 py-1.5 text-xs font-medium text-vermilion transition hover:bg-vermilion-mist disabled:cursor-default disabled:opacity-50"
                     >
                       {section.title || `章节 ${index + 1}`}
                     </button>
                   );
                 })
               ) : (
-                <p className="text-sm text-slate-500">暂无章节信息，建议直接播放整段播客。</p>
+                <p className="text-sm text-ink-muted">暂无章节信息，建议直接播放整段播客。</p>
               )}
             </div>
             {chapterPreview.length > 0 ? (
               <div className="mt-4 space-y-3">
                 {chapterPreview.map((section, index) => (
-                  <div key={section.id || `summary-${index}`} className="rounded-xl bg-slate-50 px-3 py-3">
-                    <p className="text-sm font-semibold text-slate-800">{section.title || `章节 ${index + 1}`}</p>
-                    <p className="mt-1 text-sm leading-6 text-slate-600">{truncateText(section.body || '暂无章节摘要。', 88)}</p>
+                  <div key={section.id || `summary-${index}`} className="rounded-xl bg-paper-warm px-3 py-3">
+                    <p className="text-sm font-semibold text-ink">{section.title || `章节 ${index + 1}`}</p>
+                    <p className="mt-1 text-sm leading-6 text-ink-secondary">{truncateText(section.body || '暂无章节摘要。', 88)}</p>
                   </div>
                 ))}
               </div>
@@ -338,13 +338,13 @@ export function PodcastWindow({ result, transcript, taskState, onSeek, onRegener
       ) : null}
 
       {activeView === 'script' ? (
-        <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+        <div className="rounded-2xl border border-divider bg-white p-5 shadow-sm">
           <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
             <div>
-              <p className="text-sm font-semibold text-slate-900">播客脚本</p>
-              <p className="mt-1 text-sm text-slate-500">默认不打扰你；只有想确认话术时再来看脚本。</p>
+              <p className="text-sm font-semibold text-ink">播客脚本</p>
+              <p className="mt-1 text-sm text-ink-muted">默认不打扰你；只有想确认话术时再来看脚本。</p>
             </div>
-            {scriptLines.length > 0 ? <span className="text-xs text-slate-400">{scriptLines.length} 段</span> : null}
+            {scriptLines.length > 0 ? <span className="text-xs text-ink-muted">{scriptLines.length} 段</span> : null}
           </div>
 
           <div ref={scriptContainerRef} className="max-h-[560px] space-y-2 overflow-y-auto">
@@ -359,29 +359,29 @@ export function PodcastWindow({ result, transcript, taskState, onSeek, onRegener
                     onClick={() => seekToLine(index)}
                     className={`w-full rounded-2xl border px-4 py-3 text-left transition-all ${
                       isActive
-                        ? 'border-blue-300 bg-blue-50 ring-1 ring-blue-200'
-                        : 'border-slate-200 bg-slate-50 hover:border-slate-300 hover:bg-white'
+                        ? 'border-vermilion/40 bg-vermilion-mist/50 ring-1 ring-vermilion/20'
+                        : 'border-divider bg-paper-warm hover:border-divider hover:bg-white'
                     }`}
                   >
-                    <p className={`text-xs font-semibold uppercase tracking-[0.14em] ${isActive ? 'text-blue-700' : 'text-slate-500'}`}>
+                    <p className={`text-xs font-semibold uppercase tracking-[0.14em] ${isActive ? 'text-vermilion' : 'text-ink-muted'}`}>
                       {line.speaker}
                     </p>
-                    <p className={`mt-2 text-sm leading-7 ${isActive ? 'text-slate-900' : 'text-slate-600'}`}>{line.line}</p>
+                    <p className={`mt-2 text-sm leading-7 ${isActive ? 'text-ink' : 'text-ink-secondary'}`}>{line.line}</p>
                   </button>
                 );
               })
             ) : (
-              <p className="text-sm text-slate-500">暂无脚本内容。</p>
+              <p className="text-sm text-ink-muted">暂无脚本内容。</p>
             )}
           </div>
         </div>
       ) : null}
 
       {activeView === 'chapters' ? (
-        <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+        <div className="rounded-2xl border border-divider bg-white p-5 shadow-sm">
           <div className="mb-4">
-            <p className="text-sm font-semibold text-slate-900">章节定位</p>
-            <p className="mt-1 text-sm text-slate-500">只有在你需要回到某段课堂证据时，再看这一层信息。</p>
+            <p className="text-sm font-semibold text-ink">章节定位</p>
+            <p className="mt-1 text-sm text-ink-muted">只有在你需要回到某段课堂证据时，再看这一层信息。</p>
           </div>
 
           <div className="grid gap-3">
@@ -389,16 +389,16 @@ export function PodcastWindow({ result, transcript, taskState, onSeek, onRegener
               sections.map((section, index) => {
                 const citation = chapterCitations[index];
                 return (
-                  <article key={section.id || `section-${index}`} className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                  <article key={section.id || `section-${index}`} className="rounded-2xl border border-divider bg-paper-warm p-4">
                     <div className="flex flex-wrap items-start justify-between gap-3">
                       <div>
-                        <p className="text-sm font-semibold text-slate-900">{section.title || `章节 ${index + 1}`}</p>
-                        <p className="mt-1 text-sm leading-6 text-slate-600">{sanitizeNarration(section.body || '') || '暂无章节摘要。'}</p>
+                        <p className="text-sm font-semibold text-ink">{section.title || `章节 ${index + 1}`}</p>
+                        <p className="mt-1 text-sm leading-6 text-ink-secondary">{sanitizeNarration(section.body || '') || '暂无章节摘要。'}</p>
                       </div>
                       {citation ? (
                         <button
                           type="button"
-                          className="rounded-full border border-slate-300 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50"
+                          className="rounded-full border border-divider bg-white px-3 py-1.5 text-xs font-medium text-ink-secondary hover:bg-paper-warm"
                           onClick={() => seekAudio(citation.startMs)}
                         >
                           跳到本章
@@ -414,7 +414,7 @@ export function PodcastWindow({ result, transcript, taskState, onSeek, onRegener
                 );
               })
             ) : (
-              <p className="text-sm text-slate-500">暂无章节信息。</p>
+              <p className="text-sm text-ink-muted">暂无章节信息。</p>
             )}
           </div>
         </div>

@@ -332,9 +332,18 @@ describe('buildTutorSystemPrompt — shared 模式（v3.0）', () => {
     expect(prompt).not.toMatch(/产物合约/);
   });
 
-  it('默认开启时间戳合约（让回答可引用 [MM:SS]）', () => {
+  it('默认禁用时间戳合约——访客没有原录音，[MM:SS] 点了死链', () => {
     const prompt = buildTutorSystemPrompt('shared', sharedContext);
-    expect(prompt).toMatch(/\[MM:SS\]/);
+    // 不应包含「【时间戳】」段（capTimestampsInstruction 的标签）
+    expect(prompt).not.toMatch(/【时间戳】/);
+    expect(prompt).not.toMatch(/引用课堂原话时在方括号里写时间/);
+    // capSharedContext 会显式告诉模型不要返回时间戳
+    expect(prompt).toMatch(/不要写 \[MM:SS\] 时间戳/);
+  });
+
+  it('用户显式 returnTimestamps:true 时仍可启用——保留对接 review 风格的能力', () => {
+    const prompt = buildTutorSystemPrompt('shared', sharedContext, { returnTimestamps: true });
+    expect(prompt).toMatch(/【时间戳】/);
   });
 
   it('thinkingGuide 在分享态被忽略（仅 review 生效）', () => {

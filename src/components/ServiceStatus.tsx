@@ -46,8 +46,8 @@ export function ServiceStatus({
 
   if (!status) {
     return (
-      <div className="flex items-center gap-2 text-gray-400">
-        <div className="w-2 h-2 rounded-full bg-gray-300 animate-pulse" />
+      <div className="flex items-center gap-2 text-ink-muted">
+        <div className="w-2 h-2 rounded-full bg-divider animate-pulse" />
         <span className="text-xs">检查服务...</span>
       </div>
     );
@@ -58,11 +58,11 @@ export function ServiceStatus({
     return (
       <div className="flex items-center gap-1.5">
         <div 
-          className={`w-2 h-2 rounded-full ${status.webSpeech ? 'bg-green-500' : 'bg-gray-400'}`}
+          className={`w-2 h-2 rounded-full ${status.webSpeech ? 'bg-pine' : 'bg-ink-muted'}`}
           title={status.webSpeech ? '语音识别可用' : '语音识别不可用'}
         />
         <div 
-          className={`w-2 h-2 rounded-full ${status.indexedDB ? 'bg-green-500' : 'bg-gray-400'}`}
+          className={`w-2 h-2 rounded-full ${status.indexedDB ? 'bg-pine' : 'bg-ink-muted'}`}
           title={status.indexedDB ? '本地存储可用' : '本地存储不可用'}
         />
       </div>
@@ -75,10 +75,10 @@ export function ServiceStatus({
       {/* 语音识别状态 */}
       <div className="flex items-center gap-1.5">
         <div className={`w-2 h-2 rounded-full ${
-          isChecking ? 'bg-yellow-500 animate-pulse' :
-          status.webSpeech ? 'bg-green-500' : 'bg-gray-400'
+          isChecking ? 'bg-vermilion animate-pulse' :
+          status.webSpeech ? 'bg-pine' : 'bg-ink-muted'
         }`} />
-        <span className="text-xs text-gray-600">
+        <span className="text-xs text-ink-secondary">
           {status.webSpeech ? '语音识别' : '无语音识别'}
         </span>
       </div>
@@ -86,17 +86,17 @@ export function ServiceStatus({
       {/* 存储状态 */}
       <div className="flex items-center gap-1.5">
         <div className={`w-2 h-2 rounded-full ${
-          isChecking ? 'bg-yellow-500 animate-pulse' :
-          status.indexedDB ? 'bg-green-500' : 'bg-gray-400'
+          isChecking ? 'bg-vermilion animate-pulse' :
+          status.indexedDB ? 'bg-pine' : 'bg-ink-muted'
         }`} />
-        <span className="text-xs text-gray-600">
+        <span className="text-xs text-ink-secondary">
           {status.indexedDB ? '本地存储' : '无本地存储'}
         </span>
       </div>
 
       {/* 详细信息 */}
       {showDetails && (
-        <div className="flex items-center gap-2 text-xs text-gray-400 border-l border-gray-200 pl-3">
+        <div className="flex items-center gap-2 text-xs text-ink-muted border-l border-divider pl-3">
           <span>WebSpeech: {status.webSpeech ? '✓' : '✗'}</span>
           <span>IndexedDB: {status.indexedDB ? '✓' : '✗'}</span>
         </div>
@@ -132,13 +132,13 @@ export function DegradedModeBanner({
   if (messages.length === 0) return null;
 
   return (
-    <div className="bg-[#FDF3C0]/50 border-b border-[#E9E9E7] px-4 py-2">
-      <div className="flex items-center gap-2 text-[#232322] text-sm min-w-0">
+    <div className="bg-[#FDF3C0]/50 border-b border-[#E8E2D5] px-4 py-2">
+      <div className="flex items-center gap-2 text-[#1C1B19] text-sm min-w-0">
         <svg className="w-4 h-4 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
           <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
         </svg>
         <span className="break-words min-w-0 flex-1">{messages.join(' · ')}</span>
-        <span className="text-[#787774] text-xs flex-shrink-0 whitespace-nowrap">
+        <span className="text-[#5C5A55] text-xs flex-shrink-0 whitespace-nowrap">
           建议使用 Chrome 浏览器
         </span>
       </div>

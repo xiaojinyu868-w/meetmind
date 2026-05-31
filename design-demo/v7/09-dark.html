@@ -1,0 +1,549 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="light">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>09 · Dark Mode · MeetMind v7</title>
+<link rel="stylesheet" href="./tokens.css" />
+<style>
+  /* ============================================================
+     09 · 暗色模式 · "深夜书房"
+     不是反色，是另一种气质
+     ============================================================ */
+
+  /* === 局部强制暗色 === */
+  .force-dark {
+    background: #14110D;
+    color: #F2EDE3;
+    --paper: #14110D;
+    --paper-warm: #1F1B16;
+    --paper-deep: #28231C;
+    --card: #1A1612;
+    --ink: #F2EDE3;
+    --ink-2: #B8B0A2;
+    --ink-3: #82796D;
+    --ink-4: #56504A;
+    --rule: #2A241D;
+    --rule-soft: #1F1B16;
+    --pine: #6B9080;
+    --pine-deep: #2D4F3E;
+    --pine-light: #93B5A4;
+    --pine-mist: rgba(107,144,128,0.14);
+    --pine-fog: rgba(107,144,128,0.06);
+    --vermilion: #E07A5F;
+    --vermilion-deep: #B5483C;
+    --vermilion-light: #F09F87;
+    --vermilion-mist: rgba(224,122,95,0.14);
+    --vermilion-fog: rgba(224,122,95,0.06);
+    --mark-pine: linear-gradient(transparent 60%, rgba(107,144,128,0.25) 60%);
+    --mark-vermilion: linear-gradient(transparent 60%, rgba(224,122,95,0.25) 60%);
+    --shadow-card: 0 1px 2px rgba(0,0,0,0.45), 0 8px 28px rgba(0,0,0,0.35);
+    --shadow-soft: 0 1px 2px rgba(0,0,0,0.4), 0 4px 16px rgba(0,0,0,0.3);
+    --shadow-ai-glow: 0 0 0 1px rgba(107,144,128,0.18), 0 8px 28px rgba(107,144,128,0.12);
+  }
+
+  /* === Hero 章节 === */
+  .ds-hero-dark {
+    padding: 80px 48px 100px;
+    color: var(--ink);
+    position: relative;
+    overflow: hidden;
+  }
+  .ds-hero-dark::before {
+    content: '';
+    position: absolute; inset: 0;
+    background:
+      radial-gradient(ellipse 60% 50% at 30% 30%, rgba(107,144,128,0.12) 0%, transparent 60%),
+      radial-gradient(ellipse 60% 50% at 80% 70%, rgba(224,122,95,0.08) 0%, transparent 60%);
+    pointer-events: none;
+  }
+  .ds-hero-dark > * { position: relative; z-index: 1; }
+  .ds-hero-dark .container {
+    max-width: 1200px;
+    margin: 0 auto;
+  }
+  .ds-hero-dark .eyebrow {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--pine);
+    font-weight: 600;
+    margin-bottom: 20px;
+    display: inline-flex; align-items: center; gap: 12px;
+  }
+  .ds-hero-dark .eyebrow::before {
+    content: ''; width: 32px; height: 1px;
+    background: var(--pine);
+  }
+  .ds-hero-dark h1 {
+    font-size: 72px;
+    font-weight: 600;
+    letter-spacing: -0.03em;
+    line-height: 1.05;
+    margin-bottom: 24px;
+    max-width: 18ch;
+  }
+  .ds-hero-dark h1 .em {
+    font-family: var(--font-serif); font-style: italic; font-weight: 400;
+    color: var(--vermilion);
+  }
+  .ds-hero-dark .lede {
+    font-size: 18px;
+    line-height: 1.7;
+    color: var(--ink-2);
+    max-width: 60ch;
+    margin-bottom: 24px;
+  }
+
+  /* 比较容器 */
+  .compare-wall {
+    padding: 80px 48px;
+    max-width: 1400px;
+    margin: 0 auto;
+  }
+  .compare-head {
+    margin-bottom: 36px;
+    padding-bottom: 16px;
+    border-bottom: 1px solid var(--rule);
+    display: flex; justify-content: space-between; align-items: baseline;
+  }
+  .compare-head .num {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    color: var(--ink-3);
+    letter-spacing: 0.06em;
+  }
+  .compare-head h2 {
+    font-size: 28px;
+    font-weight: 600;
+    letter-spacing: -0.018em;
+  }
+  .compare-head .desc {
+    font-size: 13px;
+    color: var(--ink-3);
+    max-width: 36ch;
+    text-align: right;
+  }
+  .pair {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 24px;
+  }
+  .pane {
+    border: 1px solid var(--rule);
+    border-radius: var(--radius-xl);
+    overflow: hidden;
+  }
+  .pane-head {
+    padding: 12px 18px;
+    border-bottom: 1px solid var(--rule-soft);
+    display: flex; justify-content: space-between; align-items: center;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+  }
+  .pane.light { background: var(--paper); }
+  .pane.light .pane-head { color: var(--ink-3); }
+  .pane.dark { background: #14110D; color: #F2EDE3; }
+  .pane.dark .pane-head { color: #82796D; border-color: #2A241D; }
+
+  /* === 通用卡片样本（克制 hero） === */
+  .sample-hero {
+    padding: 28px 32px 24px;
+    background: var(--card);
+    border: 1px solid var(--rule);
+    border-radius: var(--radius-xl);
+    box-shadow: var(--shadow-ai-glow);
+    margin: 24px;
+    position: relative; overflow: hidden;
+  }
+  .sample-hero::after {
+    content: ''; position: absolute; inset: 0;
+    background: var(--shimmer-ai);
+    background-size: 220% 100%;
+    animation: ai-breath 6s ease-in-out infinite;
+    pointer-events: none;
+  }
+  .sample-hero > * { position: relative; z-index: 1; }
+  .sample-hero .eb {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--pine);
+    font-weight: 600;
+  }
+  .sample-hero h1 {
+    margin: 10px 0 8px;
+    font-size: 26px; font-weight: 600;
+    letter-spacing: -0.022em;
+    line-height: 1.2;
+  }
+  .sample-hero h1 .em {
+    font-family: var(--font-serif); font-style: italic; font-weight: 400;
+    color: var(--vermilion);
+  }
+  .sample-hero .meta {
+    font-size: 12px;
+    color: var(--ink-3);
+    margin-top: 16px;
+    font-family: var(--font-mono);
+    letter-spacing: 0.04em;
+  }
+  .sample-hero .meta span + span::before { content: '·'; margin: 0 8px; color: var(--rule); }
+
+  /* Octo + 引用样本（在 light/dark 中出现） */
+  .ds-doc {
+    padding: 28px 32px;
+    font-size: 14.5px;
+    line-height: 1.78;
+  }
+  .ds-doc .who {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--ink-3);
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    margin-bottom: 8px;
+    font-weight: 500;
+  }
+  .ds-doc p { margin-bottom: 8px; color: var(--ink); }
+  .ds-doc .em { font-family: var(--font-serif); font-style: italic; }
+
+  /* === 大段哲学摘要 === */
+  .principle-dark {
+    padding: 40px 48px;
+    background: linear-gradient(135deg, #1F1B16 0%, #14110D 100%);
+    border-left: 4px solid #6B9080;
+    border-radius: 0 var(--radius-xl) var(--radius-xl) 0;
+    color: #F2EDE3;
+    margin: 60px auto;
+    max-width: 1100px;
+  }
+  .principle-dark .quote {
+    font-family: var(--font-serif);
+    font-style: italic;
+    font-size: 26px;
+    line-height: 1.4;
+    max-width: 50ch;
+  }
+  .principle-dark .quote .em { color: #E07A5F; }
+  .principle-dark .meta {
+    margin-top: 14px;
+    font-size: 12px;
+    color: #82796D;
+    font-family: var(--font-mono);
+    letter-spacing: 0.05em;
+  }
+
+  /* === Octo 暗色舞台 === */
+  .octo-dark-stage {
+    padding: 60px 48px;
+    background: linear-gradient(180deg, #14110D 0%, #1A1612 100%);
+    color: #F2EDE3;
+    text-align: center;
+  }
+  .octo-dark-inner { max-width: 800px; margin: 0 auto; }
+  .octo-dark-stage .container {
+    margin: 32px auto;
+    width: 280px; height: 280px;
+    position: relative;
+  }
+  .octo-dark-stage .container::before {
+    content: '';
+    position: absolute; inset: -10%;
+    background: radial-gradient(circle, rgba(107,144,128,0.30) 0%, rgba(224,122,95,0.10) 50%, transparent 75%);
+    border-radius: 50%;
+    animation: octo-breath 4s ease-in-out infinite;
+  }
+  .octo-dark-stage .container img {
+    position: relative;
+    width: 100%; height: 100%;
+    filter: drop-shadow(0 16px 48px rgba(107,144,128,0.4));
+  }
+  .octo-dark-stage h2 {
+    font-size: 38px;
+    font-weight: 600;
+    letter-spacing: -0.024em;
+    line-height: 1.18;
+    margin: 24px 0 12px;
+  }
+  .octo-dark-stage h2 .em {
+    font-family: var(--font-serif); font-style: italic; font-weight: 400;
+    color: #E07A5F;
+  }
+  .octo-dark-stage p {
+    font-size: 16px;
+    color: #B8B0A2;
+    line-height: 1.7;
+    max-width: 56ch;
+    margin: 0 auto;
+  }
+
+  /* === Token comparison table === */
+  .token-table {
+    width: 100%;
+    margin: 24px;
+    border-collapse: collapse;
+    font-size: 13px;
+  }
+  .token-table th {
+    text-align: left;
+    padding: 12px 14px;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    letter-spacing: 0.06em;
+    color: var(--ink-3);
+    text-transform: uppercase;
+    border-bottom: 1px solid var(--rule);
+  }
+  .token-table td {
+    padding: 12px 14px;
+    border-bottom: 1px solid var(--rule-soft);
+    color: var(--ink);
+  }
+  .token-table .swatch {
+    display: inline-block;
+    width: 18px; height: 18px;
+    border-radius: 4px;
+    border: 1px solid var(--rule);
+    margin-right: 8px;
+    vertical-align: middle;
+  }
+  .token-table .name { font-family: var(--font-mono); font-size: 12px; color: var(--ink-2); }
+
+  .ds-back {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 6px 12px;
+    border: 1px solid var(--rule);
+    border-radius: var(--radius);
+    background: var(--card);
+    color: var(--ink-2);
+    font-size: 12.5px;
+    text-decoration: none;
+    margin-bottom: 24px;
+    transition: all 0.15s;
+  }
+  .ds-back:hover { background: var(--paper-warm); color: var(--ink); }
+
+  /* 主题 */
+  .theme-fab {
+    position: fixed;
+    top: 28px; right: 28px;
+    z-index: 100;
+    width: 36px; height: 36px;
+    border-radius: 50%;
+    background: var(--card);
+    border: 1px solid var(--rule);
+    display: grid; place-items: center;
+    cursor: pointer;
+    box-shadow: var(--shadow-soft);
+  }
+</style>
+</head>
+<body>
+
+<!-- ===== Hero · 暗色 ===== -->
+<section class="ds-hero-dark force-dark">
+  <div class="container">
+    <a href="./index.html" class="ds-back">← 回到 Design System 总览</a>
+    <div class="eyebrow">09 · DARK MODE · FIRST-CLASS</div>
+    <h1>不是反色，<br/>是<span class="em">深夜书房</span>。</h1>
+    <p class="lede">
+      MeetMind 的暗色模式从一开始就是 first-class 设计——它不是"把背景改成黑"，
+      而是基于一个清晰的画面：<strong>深夜，台灯，一支温暖的橘色铅笔</strong>。
+      底色是 <span class="mono" style="color: var(--pine-light);">#14110D</span>（深棕墨黑，温度比纯黑高），
+      墨松绿变成更亮的 <span class="mono" style="color: var(--pine-light);">#6B9080</span>，
+      朱批红变成温暖的 <span class="mono" style="color: var(--vermilion);">#E07A5F</span>——一个学生在凌晨学习时眼睛会感谢的版本。
+    </p>
+  </div>
+</section>
+
+<!-- ===== Octo 暗色舞台 ===== -->
+<section class="octo-dark-stage">
+  <div class="octo-dark-inner">
+    <div class="eyebrow" style="font-family: var(--font-mono); font-size: 12px; letter-spacing: 0.12em; text-transform: uppercase; color: #6B9080; font-weight: 600; margin-bottom: 16px;">DEEP NIGHT · 深夜陪学</div>
+    <div class="container">
+      <img src="/public/images/octo-buddy/sleeping.png" alt="Octo 在深夜陪学" />
+    </div>
+    <h2>凌晨两点，<br/>它<span class="em">还在</span>。</h2>
+    <p>暗色模式不是设计的"复制粘贴"。它是给那个真的在熬夜复习的学生准备的——眼睛不刺、AI 还在听、引用还在那里。</p>
+  </div>
+</section>
+
+<!-- ===== Token 对比 ===== -->
+<section class="compare-wall">
+  <div class="compare-head">
+    <div>
+      <div class="num">09.1 · TOKEN</div>
+      <h2>Token 对照</h2>
+    </div>
+    <div class="desc">同一组语义，两套色。结构一样，气质完全不同。</div>
+  </div>
+
+  <div class="pair">
+    <div class="pane light">
+      <div class="pane-head">
+        <span>LIGHT</span>
+        <span class="mono" style="color: var(--ink-3);">data-theme="light"</span>
+      </div>
+      <table class="token-table">
+        <thead>
+          <tr><th>语义</th><th>名称</th><th>色值</th></tr>
+        </thead>
+        <tbody>
+          <tr><td><span class="swatch" style="background: #FAF7F2;"></span>底色</td><td><span class="name">--paper</span></td><td class="mono">#FAF7F2</td></tr>
+          <tr><td><span class="swatch" style="background: #FFFFFF;"></span>卡片</td><td><span class="name">--card</span></td><td class="mono">#FFFFFF</td></tr>
+          <tr><td><span class="swatch" style="background: #1C1B19;"></span>主文字</td><td><span class="name">--ink</span></td><td class="mono">#1C1B19</td></tr>
+          <tr><td><span class="swatch" style="background: #2D4F3E;"></span>主签名</td><td><span class="name">--pine</span></td><td class="mono">#2D4F3E</td></tr>
+          <tr><td><span class="swatch" style="background: #B5483C;"></span>次签名</td><td><span class="name">--vermilion</span></td><td class="mono">#B5483C</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="pane dark">
+      <div class="pane-head" style="background: #14110D;">
+        <span>DARK</span>
+        <span class="mono" style="color: #82796D;">data-theme="dark"</span>
+      </div>
+      <table class="token-table" style="background: #14110D; color: #F2EDE3;">
+        <thead>
+          <tr style="border-color: #2A241D;"><th style="color: #82796D; border-color: #2A241D;">语义</th><th style="color: #82796D; border-color: #2A241D;">名称</th><th style="color: #82796D; border-color: #2A241D;">色值</th></tr>
+        </thead>
+        <tbody>
+          <tr><td style="border-color: #1F1B16; color: #F2EDE3;"><span class="swatch" style="background: #14110D; border-color: #2A241D;"></span>底色</td><td style="border-color: #1F1B16;"><span class="name" style="color: #B8B0A2;">--paper</span></td><td class="mono" style="color: #F2EDE3; border-color: #1F1B16;">#14110D</td></tr>
+          <tr><td style="border-color: #1F1B16; color: #F2EDE3;"><span class="swatch" style="background: #1A1612; border-color: #2A241D;"></span>卡片</td><td style="border-color: #1F1B16;"><span class="name" style="color: #B8B0A2;">--card</span></td><td class="mono" style="color: #F2EDE3; border-color: #1F1B16;">#1A1612</td></tr>
+          <tr><td style="border-color: #1F1B16; color: #F2EDE3;"><span class="swatch" style="background: #F2EDE3;"></span>主文字</td><td style="border-color: #1F1B16;"><span class="name" style="color: #B8B0A2;">--ink</span></td><td class="mono" style="color: #F2EDE3; border-color: #1F1B16;">#F2EDE3</td></tr>
+          <tr><td style="border-color: #1F1B16; color: #F2EDE3;"><span class="swatch" style="background: #6B9080;"></span>主签名</td><td style="border-color: #1F1B16;"><span class="name" style="color: #B8B0A2;">--pine</span></td><td class="mono" style="color: #F2EDE3; border-color: #1F1B16;">#6B9080</td></tr>
+          <tr><td style="color: #F2EDE3;"><span class="swatch" style="background: #E07A5F;"></span>次签名</td><td><span class="name" style="color: #B8B0A2;">--vermilion</span></td><td class="mono" style="color: #F2EDE3;">#E07A5F</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+<!-- ===== Course Hero 对比 ===== -->
+<section class="compare-wall">
+  <div class="compare-head">
+    <div>
+      <div class="num">09.2 · COURSE HERO</div>
+      <h2>课中 · Hero 卡</h2>
+    </div>
+    <div class="desc">主表面对比。光带 / 边框 / 文字层级所有元素同步切换。</div>
+  </div>
+
+  <div class="pair">
+    <div class="pane light">
+      <div class="pane-head"><span>LIGHT</span></div>
+      <div class="sample-hero">
+        <div class="eb">本节正在听 · LIVE</div>
+        <h1>TCP 可靠传输的<span class="em">三道关</span></h1>
+        <div class="meta">
+          <span>第 7 讲</span>
+          <span>张老师</span>
+          <span style="color: var(--pine);">Octo 已理解 76%</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="pane dark">
+      <div class="pane-head"><span>DARK</span></div>
+      <div class="force-dark" style="background: #14110D;">
+        <div class="sample-hero">
+          <div class="eb">本节正在听 · LIVE</div>
+          <h1>TCP 可靠传输的<span class="em">三道关</span></h1>
+          <div class="meta">
+            <span>第 7 讲</span>
+            <span>张老师</span>
+            <span style="color: #6B9080;">Octo 已理解 76%</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ===== Octo 对话对比 ===== -->
+<section class="compare-wall">
+  <div class="compare-head">
+    <div>
+      <div class="num">09.3 · OCTO DIALOG</div>
+      <h2>Octo · 对话引用</h2>
+    </div>
+    <div class="desc">引用胶囊在暗色下用更亮的 <span class="mono">#E07A5F</span>，依然显眼，但不刺眼。</div>
+  </div>
+
+  <div class="pair">
+    <div class="pane light">
+      <div class="pane-head"><span>LIGHT</span></div>
+      <div class="ds-doc">
+        <div class="who">Octo</div>
+        <p>这是个特别好的问题——很多人确实分不清。</p>
+        <p>· <strong>滑动窗口</strong>是接收方告诉发送方"我能吃多少"，目的是<mark class="mk-vermilion">不让接收方被噎着</mark>；<span class="cite-ts mono">[20:01]</span></p>
+        <p>· <strong>拥塞控制</strong>是发送方自己揣测"网络能承载多少"，目的是<mark class="mk-pine">不让中间路由器被淹</mark>。<span class="cite-ts mono">[21:12]</span></p>
+        <p>所以两者的"窗口"看起来像，但一个是<em class="serif">为接收端</em>，一个是<em class="serif">为整个网络</em>。<span class="cite-src mono">[资料 3]</span></p>
+      </div>
+    </div>
+
+    <div class="pane dark">
+      <div class="pane-head"><span>DARK</span></div>
+      <div class="force-dark" style="background: #14110D;">
+        <div class="ds-doc">
+          <div class="who">Octo</div>
+          <p>这是个特别好的问题——很多人确实分不清。</p>
+          <p>· <strong>滑动窗口</strong>是接收方告诉发送方"我能吃多少"，目的是<mark class="mk-vermilion">不让接收方被噎着</mark>；<span class="cite-ts mono">[20:01]</span></p>
+          <p>· <strong>拥塞控制</strong>是发送方自己揣测"网络能承载多少"，目的是<mark class="mk-pine">不让中间路由器被淹</mark>。<span class="cite-ts mono">[21:12]</span></p>
+          <p>所以两者的"窗口"看起来像，但一个是<em class="serif">为接收端</em>，一个是<em class="serif">为整个网络</em>。<span class="cite-src mono">[资料 3]</span></p>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ===== 整页课中预览（暗色专版） ===== -->
+<section class="compare-wall">
+  <div class="compare-head">
+    <div>
+      <div class="num">09.4 · LIVE EXAMPLES</div>
+      <h2>整页对比 · 实时预览</h2>
+    </div>
+    <div class="desc">所有现有页面共享一份 tokens.css，只需切换 data-theme 即可换装。</div>
+  </div>
+
+  <div style="background: var(--card); border: 1px solid var(--rule); border-radius: var(--radius-xl); padding: 24px; text-align: center;">
+    <p style="color: var(--ink-2); font-size: 14px; margin-bottom: 16px; line-height: 1.7;">
+      所有 design system 页面（01-08）<strong>右上角的主题切换按钮</strong>都能即时切换暗色。打开任意一页：
+    </p>
+    <div style="display: flex; gap: 12px; justify-content: center; flex-wrap: wrap;">
+      <a href="./05-classroom.html" class="ds-back" style="margin: 0;">→ 课中三栏（暗色）</a>
+      <a href="./07-share-landing.html" class="ds-back" style="margin: 0;">→ 分享落地页（暗色）</a>
+      <a href="./04-app-matrix.html" class="ds-back" style="margin: 0;">→ 应用矩阵（暗色）</a>
+      <a href="./08-mobile.html" class="ds-back" style="margin: 0;">→ 移动端（暗色）</a>
+    </div>
+  </div>
+</section>
+
+<!-- ===== 哲学锚点（结尾） ===== -->
+<div class="principle-dark">
+  <div class="quote">"<span class="em">深夜两点</span>的 MeetMind，<br/>不应该是你眼睛的<span class="em">敌人</span>。"</div>
+  <div class="meta">— v7 Dark Mode Manifesto · 2026</div>
+</div>
+
+<button class="theme-fab" id="themeToggle" title="切换主题">
+  <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+    <circle cx="7" cy="7" r="2.5" stroke="currentColor" stroke-width="1.4"/>
+    <path d="M7 1v1.5M7 11.5V13M1 7h1.5M11.5 7H13M2.5 2.5l1 1M10.5 10.5l1 1M2.5 11.5l1-1M10.5 3.5l1-1" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>
+  </svg>
+</button>
+
+<script>
+  document.getElementById('themeToggle').addEventListener('click', () => {
+    const root = document.documentElement;
+    root.setAttribute('data-theme', root.getAttribute('data-theme') === 'dark' ? 'light' : 'dark');
+  });
+</script>
+
+</body>
+</html>

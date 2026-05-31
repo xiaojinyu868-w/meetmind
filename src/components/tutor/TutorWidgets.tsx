@@ -6,8 +6,8 @@ export function FixedModelBadge({ compact = false }: { compact?: boolean }) {
   return (
     <div
       className={compact
-        ? 'inline-flex items-center gap-1.5 rounded-full border border-[#E9E9E7] bg-[#F7F7F5] px-2.5 py-1 text-[11px] font-medium text-[#232322]'
-        : 'inline-flex items-center gap-2 rounded-full border border-[#E9E9E7] bg-[#F7F7F5] px-3 py-1.5 text-xs font-medium text-[#232322]'}
+        ? 'inline-flex items-center gap-1.5 rounded-full border border-[#E8E2D5] bg-[#FAF7F2] px-2.5 py-1 text-[11px] font-medium text-[#1C1B19]'
+        : 'inline-flex items-center gap-2 rounded-full border border-[#E8E2D5] bg-[#FAF7F2] px-3 py-1.5 text-xs font-medium text-[#1C1B19]'}
       title={`当前固定模型：${FIXED_TUTOR_MODEL_LABEL}`}
     >
       <Brain size={compact ? 12 : 14} strokeWidth={1.8} />
@@ -32,8 +32,8 @@ export function TutorModeToggle({
   return (
     <div
       className={compact
-        ? 'inline-flex items-center gap-1.5 rounded-full border border-[#E9E9E7] bg-white p-1'
-        : 'inline-flex items-center gap-2 rounded-full border border-[#E9E9E7] bg-white p-1'}
+        ? 'inline-flex items-center gap-1.5 rounded-full border border-[#E8E2D5] bg-white p-1'
+        : 'inline-flex items-center gap-2 rounded-full border border-[#E8E2D5] bg-white p-1'}
       title="切换辅导方式"
     >
       <button
@@ -43,10 +43,10 @@ export function TutorModeToggle({
         }}
         className={compact
           ? `rounded-full px-2.5 py-1 text-[11px] font-medium transition-colors ${
-              enabled ? 'text-[#787774]' : 'bg-[#232322] text-white'
+              enabled ? 'text-[#5C5A55]' : 'bg-[#1C1B19] text-white'
             }`
           : `rounded-full px-3 py-1.5 text-xs font-medium transition-colors ${
-              enabled ? 'text-[#787774]' : 'bg-[#232322] text-white'
+              enabled ? 'text-[#5C5A55]' : 'bg-[#1C1B19] text-white'
             }`}
       >
         标准
@@ -58,10 +58,10 @@ export function TutorModeToggle({
         }}
         className={compact
           ? `rounded-full px-2.5 py-1 text-[11px] font-medium transition-colors ${
-              enabled ? 'bg-[#232322] text-white' : 'text-[#787774]'
+              enabled ? 'bg-[#1C1B19] text-white' : 'text-[#5C5A55]'
             }`
           : `rounded-full px-3 py-1.5 text-xs font-medium transition-colors ${
-              enabled ? 'bg-[#232322] text-white' : 'text-[#787774]'
+              enabled ? 'bg-[#1C1B19] text-white' : 'text-[#5C5A55]'
             }`}
       >
         通话
@@ -83,8 +83,8 @@ export function StopGenerationButton({
       type="button"
       onClick={onClick}
       className={compact
-        ? 'inline-flex h-10 flex-shrink-0 items-center gap-1.5 rounded-2xl border border-amber-200 bg-amber-50 px-3 text-sm font-medium text-amber-900 shadow-sm transition hover:bg-amber-100'
-        : 'inline-flex h-10 flex-shrink-0 items-center gap-2 rounded-xl border border-amber-200 bg-amber-50 px-4 text-sm font-medium text-amber-900 transition hover:bg-amber-100'}
+        ? 'inline-flex h-10 flex-shrink-0 items-center gap-1.5 rounded-2xl border border-vermilion/30 bg-vermilion-mist/40 px-3 text-sm font-medium text-vermilion-deep shadow-sm transition hover:bg-vermilion-mist'
+        : 'inline-flex h-10 flex-shrink-0 items-center gap-2 rounded-xl border border-vermilion/30 bg-vermilion-mist/40 px-4 text-sm font-medium text-vermilion-deep transition hover:bg-vermilion-mist'}
     >
       <svg className="h-4 w-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 8h8v8H8z" />
@@ -108,8 +108,8 @@ export function Section({
 }) {
   return (
     <section>
-      <h3 className="text-sm font-semibold text-gray-900 mb-3 flex items-center gap-2">
-        <span className="flex items-center text-gray-500">{icon}</span>
+      <h3 className="text-sm font-semibold text-ink mb-3 flex items-center gap-2">
+        <span className="flex items-center text-ink-muted">{icon}</span>
         <span>{title}</span>
         {badge && (
           <span className="text-xs font-normal text-coral bg-coral-50 px-2 py-0.5 rounded-full">
@@ -127,7 +127,7 @@ export function QuickReply({ text, onClick }: { text: string; onClick: (text: st
   return (
     <button
       onClick={() => onClick(text)}
-      className="rounded-full bg-slate-50 px-3 py-1.5 text-xs text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-700"
+      className="rounded-full bg-paper-warm px-3 py-1.5 text-xs text-ink-muted transition-colors hover:bg-paper-deep hover:text-ink-secondary"
     >
       {text}
     </button>

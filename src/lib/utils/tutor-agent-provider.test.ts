@@ -122,11 +122,13 @@ describe('resolveTutorAgentProviderConfig', () => {
     })).toBe('模型服务刚刚有点忙，已尝试切换备用通道但仍未成功，请稍后再试。');
   });
 
-  it('disables native tutor tools for DeepSeek thinking models', () => {
+  it('disables native tutor tools for DeepSeek thinking models and StepFun', () => {
     expect(shouldUseNativeTutorTools('deepseek-v4-flash')).toBe(false);
     expect(shouldUseNativeTutorTools('deepseek-v4-pro')).toBe(false);
     expect(shouldUseNativeTutorTools('qwen3.6-plus')).toBe(true);
-    expect(shouldUseNativeTutorTools('step-3.7-flash')).toBe(true);
+    // step-* 走 marker 链路（<open_app:KEY/>），避免 6 个 native tool description
+    // 拖慢首包延迟。
+    expect(shouldUseNativeTutorTools('step-3.7-flash')).toBe(false);
   });
 
   it('defaults to StepFun step-3.7-flash when STEPFUN_API_KEY is configured', () => {

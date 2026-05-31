@@ -146,7 +146,7 @@ export function ModelSelector({
                           {model.name}
                         </span>
                         {model.recommended && (
-                          <span className={`bg-[#FDF3C0] text-[#232322] rounded-full whitespace-nowrap ${
+                          <span className={`bg-[#FDF3C0] text-[#1C1B19] rounded-full whitespace-nowrap ${
                             isMobileSheet ? 'text-[10px] px-2 py-0.5' : 'text-[10px] px-1.5 py-0.5'
                           }`}>
                             推荐

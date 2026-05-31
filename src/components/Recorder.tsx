@@ -1343,24 +1343,24 @@ export const Recorder = forwardRef<RecorderHandle, RecorderProps>(function Recor
     : asrReconnecting
       ? '正在重连'
       : '录音已暂停';
-  const compactStatusTone = isRecording ? 'text-[#232322] font-semibold' : 'text-[#787774]';
+  const compactStatusTone = isRecording ? 'text-[#1C1B19] font-semibold' : 'text-[#5C5A55]';
 
   if (isIdle) {
     if (compactMode) {
       return (
-        <div className="flex items-center gap-3 rounded-[18px] border border-[#E9E9E7] bg-white px-3 py-3 animate-fade-in">
-          <div className="flex h-9 w-9 items-center justify-center rounded-full bg-[#FDF3C0] text-[#232322]">
+        <div className="flex items-center gap-3 rounded-[18px] border border-[#E8E2D5] bg-white px-3 py-3 animate-fade-in">
+          <div className="flex h-9 w-9 items-center justify-center rounded-full bg-[#FDF3C0] text-[#1C1B19]">
             {isStartingRecording ? (
-              <div className="h-4 w-4 rounded-full border-2 border-[#232322] border-t-transparent animate-spin" />
+              <div className="h-4 w-4 rounded-full border-2 border-[#1C1B19] border-t-transparent animate-spin" />
             ) : (
               <Mic size={16} />
             )}
           </div>
           <div className="min-w-0 flex-1">
-            <p className="text-sm font-medium text-[#232322]">
+            <p className="text-sm font-medium text-[#1C1B19]">
               {isStartingRecording ? '正在打开麦克风...' : '准备录一段语音'}
             </p>
-            <p className="mt-1 text-[12px] leading-5 text-[#787774]">
+            <p className="mt-1 text-[12px] leading-5 text-[#5C5A55]">
               这段录音会和文字一起进入当前收集流。
             </p>
           </div>
@@ -1370,15 +1370,15 @@ export const Recorder = forwardRef<RecorderHandle, RecorderProps>(function Recor
 
     return (
       <div className="card p-0 overflow-hidden animate-fade-in">
-        <div className="border-b border-[#E9E9E7] bg-[#F7F7F5] px-5 py-3">
+        <div className="border-b border-[#E8E2D5] bg-[#FAF7F2] px-5 py-3">
           <div className="flex items-center justify-between gap-4">
             <div className="flex items-center gap-2">
               <div className={`w-2 h-2 rounded-full transition-colors ${
                 serviceStatus === 'checking' ? 'bg-[#FDF3C0] animate-pulse' :
                 serviceStatus === 'available' ? 'bg-[#D1F4E0]' :
-                'bg-[#E9E9E7]'
+                'bg-[#E8E2D5]'
               }`} />
-              <span className="text-xs text-[#787774]">
+              <span className="text-xs text-[#5C5A55]">
                 {serviceStatus === 'checking'
                   ? '连接中...'
                   : serviceStatus === 'available'
@@ -1394,8 +1394,8 @@ export const Recorder = forwardRef<RecorderHandle, RecorderProps>(function Recor
                   disabled={!streamingAvailable}
                   className={`px-3 py-1.5 text-xs rounded-lg transition-all ${
                     effectiveTranscribeMode === 'streaming'
-                      ? 'bg-[#FDF3C0] text-[#232322] font-medium'
-                      : 'text-[#787774] hover:text-[#232322]'
+                      ? 'bg-[#FDF3C0] text-[#1C1B19] font-medium'
+                      : 'text-[#5C5A55] hover:text-[#1C1B19]'
                   } ${!streamingAvailable ? 'opacity-50 cursor-not-allowed' : ''}`}
                 >
                   边录边转
@@ -1404,14 +1404,14 @@ export const Recorder = forwardRef<RecorderHandle, RecorderProps>(function Recor
                   onClick={() => setTranscribeMode('batch')}
                   className={`px-3 py-1.5 text-xs rounded-lg transition-all ${
                     transcribeMode === 'batch'
-                      ? 'bg-[#EFEFEF] text-[#232322] font-medium'
-                      : 'text-[#787774] hover:text-[#232322]'
+                      ? 'bg-[#F2EDE3] text-[#1C1B19] font-medium'
+                      : 'text-[#5C5A55] hover:text-[#1C1B19]'
                   }`}
                 >
                   录完整理
                 </button>
               </div>
-              <span className="text-[12px] text-[#787774]">
+              <span className="text-[12px] text-[#5C5A55]">
                 {effectiveTranscribeMode === 'streaming' ? '适合边录边出文字' : '适合先录完再整理'}
               </span>
             </div>
@@ -1419,14 +1419,14 @@ export const Recorder = forwardRef<RecorderHandle, RecorderProps>(function Recor
         </div>
 
         <div className="p-5 sm:p-6">
-          <div className="rounded-[28px] border border-[#E9E9E7] bg-[#F7F7F5] p-5">
+          <div className="rounded-[28px] border border-[#E8E2D5] bg-[#FAF7F2] p-5">
             <div className="flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between">
               <div className="max-w-xl">
-                <span className="inline-flex items-center rounded-full border border-[#E9E9E7] bg-white px-2.5 py-1 text-[12px] font-semibold tracking-[0.08em] text-[#787774]">
+                <span className="inline-flex items-center rounded-full border border-[#E8E2D5] bg-white px-2.5 py-1 text-[12px] font-semibold tracking-[0.08em] text-[#5C5A55]">
                   语音收集
                 </span>
-                <h3 className="mt-2 text-xl font-bold text-[#232322] sm:text-2xl">现在想让 MeetMind 记住什么？</h3>
-                <p className="mt-2 text-sm leading-6 text-[#787774]">
+                <h3 className="mt-2 text-xl font-bold text-[#1C1B19] sm:text-2xl">现在想让 MeetMind 记住什么？</h3>
+                <p className="mt-2 text-sm leading-6 text-[#5C5A55]">
                   点一下就开始录。刚听到的课、突然冒出来的问题、课后的灵感，都可以先扔进来，后面再慢慢整理。
                 </p>
               </div>
@@ -1435,7 +1435,7 @@ export const Recorder = forwardRef<RecorderHandle, RecorderProps>(function Recor
                 <button
                   onClick={startRecording}
                   disabled={disabled || isStartingRecording}
-                  className="flex h-16 w-16 items-center justify-center rounded-full bg-[#232322] text-white transition hover:bg-[#3a3a39] active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-60"
+                  className="flex h-16 w-16 items-center justify-center rounded-full bg-[#1C1B19] text-white transition hover:bg-[#3a3a39] active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-60"
                   aria-label="开始录音"
                 >
                   <svg className="h-7 w-7" fill="currentColor" viewBox="0 0 24 24">
@@ -1443,10 +1443,10 @@ export const Recorder = forwardRef<RecorderHandle, RecorderProps>(function Recor
                   </svg>
                 </button>
                 <div>
-                  <p className="text-sm font-semibold text-[#232322]">
+                  <p className="text-sm font-semibold text-[#1C1B19]">
                     {isStartingRecording ? '正在打开麦克风...' : '开始一段新的语音收集'}
                   </p>
-                  <p className="mt-1 text-xs leading-5 text-[#787774]">
+                  <p className="mt-1 text-xs leading-5 text-[#5C5A55]">
                     停下后它会自动进入这次收集流，你不用立刻切去别的页面。
                   </p>
                 </div>
@@ -1455,7 +1455,7 @@ export const Recorder = forwardRef<RecorderHandle, RecorderProps>(function Recor
           </div>
 
           {error && (
-            <div className="mt-4 rounded-2xl border border-[#FADEC9] bg-[#FADEC9]/30 p-4 text-sm text-[#232322] animate-slide-up">
+            <div className="mt-4 rounded-2xl border border-[#FADEC9] bg-[#FADEC9]/30 p-4 text-sm text-[#1C1B19] animate-slide-up">
               <div className="flex items-center gap-2">
                 <span>⚠</span>
                 <span>{error}</span>
@@ -1475,13 +1475,13 @@ export const Recorder = forwardRef<RecorderHandle, RecorderProps>(function Recor
       <div className="card p-8 animate-fade-in">
         <div className="flex flex-col items-center py-12">
           <div className="w-20 h-20 rounded-full bg-[#FDF3C0] flex items-center justify-center mb-6">
-            <div className="w-8 h-8 border-3 border-[#232322] border-t-transparent rounded-full animate-spin" />
+            <div className="w-8 h-8 border-3 border-[#1C1B19] border-t-transparent rounded-full animate-spin" />
           </div>
-          <div className="mb-2 text-lg font-medium text-[#232322]">正在把这段语音整理进收集流</div>
-          <p className="text-sm text-[#787774]">
+          <div className="mb-2 text-lg font-medium text-[#1C1B19]">正在把这段语音整理进收集流</div>
+          <p className="text-sm text-[#5C5A55]">
             {transcribeProgress || '请稍等...'}
             {showElapsed ? (
-              <span className="ml-2 font-mono text-[#787774]/80">· 已处理 {elapsedSec}s</span>
+              <span className="ml-2 font-mono text-[#5C5A55]/80">· 已处理 {elapsedSec}s</span>
             ) : null}
           </p>
         </div>
@@ -1495,13 +1495,13 @@ export const Recorder = forwardRef<RecorderHandle, RecorderProps>(function Recor
         <div className="border-b border-[#D1F4E0] bg-[#D1F4E0]/30 px-5 py-4">
           <div className="flex items-start justify-between gap-4">
             <div>
-              <p className="text-xs font-semibold tracking-[0.08em] text-[#232322]">已加入收集流</p>
-              <h3 className="mt-1 text-lg font-semibold text-[#232322]">这段语音已经整理好了</h3>
-              <p className="mt-1 text-sm leading-6 text-[#787774]">
+              <p className="text-xs font-semibold tracking-[0.08em] text-[#1C1B19]">已加入收集流</p>
+              <h3 className="mt-1 text-lg font-semibold text-[#1C1B19]">这段语音已经整理好了</h3>
+              <p className="mt-1 text-sm leading-6 text-[#5C5A55]">
                 你可以马上再录一段，也可以继续往当前会话里补充资料、标记问题。
               </p>
             </div>
-            <span className="rounded-full bg-white px-3 py-1 text-xs font-medium text-[#232322]">
+            <span className="rounded-full bg-white px-3 py-1 text-xs font-medium text-[#1C1B19]">
               {displayTranscript.length} 段
             </span>
           </div>
@@ -1509,15 +1509,15 @@ export const Recorder = forwardRef<RecorderHandle, RecorderProps>(function Recor
 
         <div className="p-5">
           {transcribeProgress && (
-            <div className="rounded-2xl border border-[#D1F4E0] bg-[#D1F4E0]/30 px-4 py-3 text-sm text-[#232322]">
+            <div className="rounded-2xl border border-[#D1F4E0] bg-[#D1F4E0]/30 px-4 py-3 text-sm text-[#1C1B19]">
               {transcribeProgress}
             </div>
           )}
 
           {displayTranscript.length > 0 ? (
-            <div className="mt-4 rounded-2xl border border-[#E9E9E7] bg-[#F7F7F5] p-4">
-              <p className="text-xs font-semibold tracking-[0.08em] text-[#787774]">刚刚收进来的内容</p>
-              <p className="mt-2 text-sm leading-7 text-[#232322]">
+            <div className="mt-4 rounded-2xl border border-[#E8E2D5] bg-[#FAF7F2] p-4">
+              <p className="text-xs font-semibold tracking-[0.08em] text-[#5C5A55]">刚刚收进来的内容</p>
+              <p className="mt-2 text-sm leading-7 text-[#1C1B19]">
                 {displayTranscript.slice(0, 4).map((segment) => segment.text).join(' ')}
               </p>
             </div>
@@ -1539,11 +1539,11 @@ export const Recorder = forwardRef<RecorderHandle, RecorderProps>(function Recor
                 manuallyEditedSegmentIdsRef.current.clear();
                 audioChunksRef.current = [];
               }}
-              className="rounded-2xl bg-[#232322] px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-[#3a3a39]"
+              className="rounded-2xl bg-[#1C1B19] px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-[#3a3a39]"
             >
               再录一段
             </button>
-            <span className="text-xs text-[#787774]">不用跳页，继续在当前收集流里追加就行。</span>
+            <span className="text-xs text-[#5C5A55]">不用跳页，继续在当前收集流里追加就行。</span>
           </div>
         </div>
       </div>
@@ -1557,23 +1557,23 @@ export const Recorder = forwardRef<RecorderHandle, RecorderProps>(function Recor
       }`}
     >
       {/* */}
-      <div className={`flex-shrink-0 flex items-center justify-between border-b border-[#E9E9E7] ${
+      <div className={`flex-shrink-0 flex items-center justify-between border-b border-[#E8E2D5] ${
         compactMode ? 'h-[58px] px-3.5' : 'h-[84px] px-4 sm:h-[60px]'
-      } bg-[#F7F7F5]`}>
+      } bg-[#FAF7F2]`}>
       {/* */}
         <div className={`flex items-center ${compactMode ? 'gap-2' : 'gap-3 sm:gap-3'}`}>
           {/* */}
           <div className={`flex items-center ${compactMode ? 'gap-1.5' : 'gap-2 sm:gap-2'}`}>
             <div className={`${compactMode ? 'h-2.5 w-2.5' : 'w-3.5 h-3.5 sm:w-2.5 sm:h-2.5'} rounded-full ${
-              isRecording ? 'bg-[#232322] animate-pulse' : asrReconnecting ? 'bg-[#FDF3C0] animate-pulse' : 'bg-[#E9E9E7]'
+              isRecording ? 'bg-[#1C1B19] animate-pulse' : asrReconnecting ? 'bg-[#FDF3C0] animate-pulse' : 'bg-[#E8E2D5]'
             }`} />
-            <span className={`${compactMode ? 'text-[13px]' : 'text-lg sm:text-sm'} font-medium ${compactMode ? compactStatusTone : isRecording ? 'text-[#232322]' : 'text-[#787774]'}`}>
+            <span className={`${compactMode ? 'text-[13px]' : 'text-lg sm:text-sm'} font-medium ${compactMode ? compactStatusTone : isRecording ? 'text-[#1C1B19]' : 'text-[#5C5A55]'}`}>
               {compactMode ? compactStatusLabel : isRecording ? '正在录音' : (asrReconnecting ? '重连中' : '已暂停')}
             </span>
           </div>
           
           {/* */}
-          <div className={`font-mono font-semibold tabular-nums ${compactMode ? 'text-base' : 'text-4xl sm:text-2xl'} ${isRecording ? 'text-[#232322]' : 'text-[#787774]'}`}>
+          <div className={`font-mono font-semibold tabular-nums ${compactMode ? 'text-base' : 'text-4xl sm:text-2xl'} ${isRecording ? 'text-[#1C1B19]' : 'text-[#5C5A55]'}`}>
             {formatTime(elapsedMs)}
           </div>
           
@@ -1584,7 +1584,7 @@ export const Recorder = forwardRef<RecorderHandle, RecorderProps>(function Recor
                 <div
                   key={i}
                   className={`w-1 rounded-full transition-all duration-75 ${
-                    level * 5 > i ? 'bg-[#D1F4E0]' : 'bg-[#E9E9E7]'
+                    level * 5 > i ? 'bg-[#D1F4E0]' : 'bg-[#E8E2D5]'
                   }`}
                   style={{ 
                     height: `${Math.max(4, Math.min(16, (level * 20) + Math.sin(Date.now() / 200 + i) * 2))}px`
@@ -1607,7 +1607,7 @@ export const Recorder = forwardRef<RecorderHandle, RecorderProps>(function Recor
             {isRecording ? (
               <button
                 onClick={pauseRecording}
-                className={`${compactMode ? 'h-[34px] w-[34px]' : 'w-[72px] h-[72px] sm:w-[48px] sm:h-[48px]'} rounded-full bg-[#FDF3C0] text-[#232322] flex items-center justify-center hover:bg-[#FDF3C0] transition-all active:scale-95`}
+                className={`${compactMode ? 'h-[34px] w-[34px]' : 'w-[72px] h-[72px] sm:w-[48px] sm:h-[48px]'} rounded-full bg-[#FDF3C0] text-[#1C1B19] flex items-center justify-center hover:bg-[#FDF3C0] transition-all active:scale-95`}
                 aria-label="暂停"
               >
                 <svg className={`${compactMode ? 'h-5 w-5' : 'w-9 h-9 sm:w-6 sm:h-6'}`} fill="currentColor" viewBox="0 0 24 24">
@@ -1627,7 +1627,7 @@ export const Recorder = forwardRef<RecorderHandle, RecorderProps>(function Recor
                 aria-label="继续"
               >
                 {asrReconnecting ? (
-                  <div className={`${compactMode ? 'h-4 w-4' : 'w-6 h-6 sm:w-5 sm:h-5'} border-2 border-[#232322] border-t-transparent rounded-full animate-spin`} />
+                  <div className={`${compactMode ? 'h-4 w-4' : 'w-6 h-6 sm:w-5 sm:h-5'} border-2 border-[#1C1B19] border-t-transparent rounded-full animate-spin`} />
                 ) : (
                   <svg className={`${compactMode ? 'h-5 w-5' : 'w-9 h-9 sm:w-6 sm:h-6'}`} fill="currentColor" viewBox="0 0 24 24">
                     <path d="M8 5v14l11-7z" />
@@ -1637,7 +1637,7 @@ export const Recorder = forwardRef<RecorderHandle, RecorderProps>(function Recor
             )}
             <button
               onClick={stopRecording}
-              className={`${compactMode ? 'h-[34px] w-[34px]' : 'w-[72px] h-[72px] sm:w-[48px] sm:h-[48px]'} rounded-full ${compactMode ? 'bg-[#232322] text-white hover:bg-[#3a3a39]' : 'bg-[#EFEFEF] text-[#232322] hover:bg-[#E9E9E7]'} flex items-center justify-center transition-all active:scale-95`}
+              className={`${compactMode ? 'h-[34px] w-[34px]' : 'w-[72px] h-[72px] sm:w-[48px] sm:h-[48px]'} rounded-full ${compactMode ? 'bg-[#1C1B19] text-white hover:bg-[#3a3a39]' : 'bg-[#F2EDE3] text-[#1C1B19] hover:bg-[#E8E2D5]'} flex items-center justify-center transition-all active:scale-95`}
               aria-label="停止"
             >
               <svg className={`${compactMode ? 'h-5 w-5' : 'w-9 h-9 sm:w-6 sm:h-6'}`} fill="currentColor" viewBox="0 0 24 24">
@@ -1647,7 +1647,7 @@ export const Recorder = forwardRef<RecorderHandle, RecorderProps>(function Recor
             {!compactMode ? (
               <button
                 onClick={() => setShowRestartConfirm(true)}
-                className={`${compactMode ? 'h-[34px] w-[34px]' : 'w-[48px] h-[48px] sm:w-[36px] sm:h-[36px]'} rounded-full bg-white border border-[#E9E9E7] text-[#787774] flex items-center justify-center hover:bg-[#FADEC9]/30 hover:text-[#232322] hover:border-[#FADEC9] transition-all active:scale-95`}
+                className={`${compactMode ? 'h-[34px] w-[34px]' : 'w-[48px] h-[48px] sm:w-[36px] sm:h-[36px]'} rounded-full bg-white border border-[#E8E2D5] text-[#5C5A55] flex items-center justify-center hover:bg-[#FADEC9]/30 hover:text-[#1C1B19] hover:border-[#FADEC9] transition-all active:scale-95`}
                 aria-label="重新开始"
                 title="清空并重新录音"
               >
@@ -1664,7 +1664,7 @@ export const Recorder = forwardRef<RecorderHandle, RecorderProps>(function Recor
       {error && (() => {
         const hint = normalizeRecorderErrorDetail(error);
         return (
-          <div className={`flex-shrink-0 rounded-xl border border-[#FADEC9] bg-[#FADEC9]/30 text-[#232322] animate-slide-up ${
+          <div className={`flex-shrink-0 rounded-xl border border-[#FADEC9] bg-[#FADEC9]/30 text-[#1C1B19] animate-slide-up ${
             compactMode ? 'mx-2 mt-1.5 px-3 py-2 text-[12px] leading-5' : 'mx-4 mt-3 p-3 text-sm'
           }`}>
             <div className="flex items-start gap-2">
@@ -1684,11 +1684,11 @@ export const Recorder = forwardRef<RecorderHandle, RecorderProps>(function Recor
 
       {/* ASR 重连提示 */}
       {asrReconnecting && !compactMode && (
-        <div className={`flex-shrink-0 rounded-xl border border-[#FDF3C0] bg-[#FDF3C0]/30 text-[#232322] animate-slide-up ${
+        <div className={`flex-shrink-0 rounded-xl border border-[#FDF3C0] bg-[#FDF3C0]/30 text-[#1C1B19] animate-slide-up ${
           compactMode ? 'mx-2 mt-1.5 px-3 py-2 text-[12px]' : 'mx-4 mt-2 p-2.5 text-xs'
         }`}>
           <div className="flex items-center gap-2">
-            <div className="w-3 h-3 border-2 border-[#232322] border-t-transparent rounded-full animate-spin" />
+            <div className="w-3 h-3 border-2 border-[#1C1B19] border-t-transparent rounded-full animate-spin" />
             <span>正在重新接上文字...</span>
           </div>
         </div>
@@ -1696,20 +1696,20 @@ export const Recorder = forwardRef<RecorderHandle, RecorderProps>(function Recor
 
       {/* 重新开始确认弹窗 */}
       {showRestartConfirm && (
-        <div className="flex-shrink-0 mx-4 mt-3 p-4 bg-white border border-[#E9E9E7] rounded-xl animate-scale-in">
-          <p className="text-sm text-[#232322] mb-3">
+        <div className="flex-shrink-0 mx-4 mt-3 p-4 bg-white border border-[#E8E2D5] rounded-xl animate-scale-in">
+          <p className="text-sm text-[#1C1B19] mb-3">
             确定要清空当前录音并重新开始吗？已经录下的内容不会保留。
           </p>
           <div className="flex items-center justify-end gap-2">
             <button
               onClick={() => setShowRestartConfirm(false)}
-              className="px-4 py-1.5 text-xs font-medium text-[#787774] bg-[#EFEFEF] rounded-lg hover:bg-[#E9E9E7] transition-colors"
+              className="px-4 py-1.5 text-xs font-medium text-[#5C5A55] bg-[#F2EDE3] rounded-lg hover:bg-[#E8E2D5] transition-colors"
             >
               取消
             </button>
             <button
               onClick={restartRecording}
-              className="px-4 py-1.5 text-xs font-medium text-white bg-[#232322] rounded-lg hover:bg-[#3a3a39] transition-colors"
+              className="px-4 py-1.5 text-xs font-medium text-white bg-[#1C1B19] rounded-lg hover:bg-[#3a3a39] transition-colors"
             >
               确定重录
             </button>
@@ -1719,15 +1719,15 @@ export const Recorder = forwardRef<RecorderHandle, RecorderProps>(function Recor
 
       {/* */}
       {effectiveTranscribeMode === 'streaming' && enhanceStats.total > 0 && !compactMode && (
-        <div className="flex-shrink-0 mx-4 mt-2 flex items-center gap-2 text-xs text-[#787774]">
+        <div className="flex-shrink-0 mx-4 mt-2 flex items-center gap-2 text-xs text-[#5C5A55]">
           {enhanceStats.isEnhancing ? (
             <>
-              <div className="w-3 h-3 border-2 border-[#232322] border-t-transparent rounded-full animate-spin" />
+              <div className="w-3 h-3 border-2 border-[#1C1B19] border-t-transparent rounded-full animate-spin" />
               <span>正在优化文本...</span>
             </>
           ) : enhanceStats.enhanced > 0 ? (
             <>
-              <span className="text-[#232322]">OK</span>
+              <span className="text-[#1C1B19]">OK</span>
               <span>已优化 {enhanceStats.enhanced}/{enhanceStats.total} 段</span>
             </>
           ) : null}
@@ -1739,10 +1739,10 @@ export const Recorder = forwardRef<RecorderHandle, RecorderProps>(function Recor
         <div className="px-2.5 pb-2 pt-1.5">
           <div className="rounded-[18px] border border-[#D1F4E0] bg-[#D1F4E0]/20 px-3 py-2.5">
             <div className="flex items-center gap-2.5">
-              <div className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-[#232322] text-white">
+              <div className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-[#1C1B19] text-white">
                 <Mic size={14} />
               </div>
-              <div className="flex items-center gap-1.5 text-[#232322]">
+              <div className="flex items-center gap-1.5 text-[#1C1B19]">
                 {[8, 12, 16, 11, 15, 9].map((height, index) => (
                   <span
                     key={`compact-wave-${height}-${index}`}
@@ -1752,10 +1752,10 @@ export const Recorder = forwardRef<RecorderHandle, RecorderProps>(function Recor
                 ))}
               </div>
               <div className="min-w-0 flex-1">
-                <p className="text-[12px] font-semibold text-[#232322]">
+                <p className="text-[12px] font-semibold text-[#1C1B19]">
                   {isRecording ? '语音录制中，停下后会直接发进收集流' : '这条语音已暂停，继续说就接着记'}
                 </p>
-                <p className="mt-1 text-[12px] leading-5 text-[#787774]">
+                <p className="mt-1 text-[12px] leading-5 text-[#5C5A55]">
                   {compactPreviewText || (isRecording ? '继续说，我先帮你记住这段内容。' : '结束后会自动变成文字并留在收集流里。')}
                 </p>
               </div>
@@ -1790,7 +1790,7 @@ export const Recorder = forwardRef<RecorderHandle, RecorderProps>(function Recor
               disabled={!isRecording}
               className={`inline-flex h-8 items-center justify-center gap-2 rounded-full px-3 text-[12px] font-medium transition ${
                 isRecording
-                  ? 'bg-[#FADEC9] text-[#232322] hover:bg-[#FADEC9]/80'
+                  ? 'bg-[#FADEC9] text-[#1C1B19] hover:bg-[#FADEC9]/80'
                   : 'cursor-not-allowed bg-divider-light text-ink-muted'
               }`}
             >
@@ -1814,21 +1814,21 @@ export const Recorder = forwardRef<RecorderHandle, RecorderProps>(function Recor
           </div>
         </div>
       ) : (
-        <div className="flex-shrink-0 border-t border-[#E9E9E7] bg-[#F7F7F5]">
+        <div className="flex-shrink-0 border-t border-[#E8E2D5] bg-[#FAF7F2]">
           <button
             onClick={markAnchor}
             disabled={!isRecording}
             className={`w-full flex items-center justify-center gap-3 transition-all h-14 ${
               isRecording 
-                ? 'bg-[#232322] text-white hover:bg-[#3a3a39] active:scale-[0.99]' 
-                : 'bg-[#EFEFEF] text-[#787774] cursor-not-allowed'
+                ? 'bg-[#1C1B19] text-white hover:bg-[#3a3a39] active:scale-[0.99]' 
+                : 'bg-[#F2EDE3] text-[#5C5A55] cursor-not-allowed'
             }`}
           >
             <span className="text-xl">!</span>
             <span className="font-medium">没听懂？点这里！</span>
             {anchorCount > 0 && (
               <span className={`ml-2 px-2 py-0.5 rounded-full text-xs ${
-                isRecording ? 'bg-white/20' : 'bg-[#E9E9E7]'
+                isRecording ? 'bg-white/20' : 'bg-[#E8E2D5]'
               }`}>
                 已标记 {anchorCount}
               </span>

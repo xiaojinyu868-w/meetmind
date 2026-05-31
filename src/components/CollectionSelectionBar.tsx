@@ -4,7 +4,7 @@
  * CollectionSelectionBar — 多选操作栏
  *
  * 重构：移除 desktopShell / dockWidthClass，统一 CSS 响应式。
- * 设计系统：零渐变、零阴影、纯平涂。
+ * 设计系统：v7 设计宪法：95% 克制 + 5% 仪式时刻情绪化（shadow-soft / shadow-card / shadow-ai-glow）。
  */
 
 import { FileText, History, MessageCircle, X } from 'lucide-react';
@@ -30,20 +30,20 @@ export function CollectionSelectionBar({
 }: CollectionSelectionBarProps) {
   return (
     <div className="relative z-20 flex-shrink-0 px-3 pb-2 pt-2 lg:px-6 lg:pb-2 lg:pt-3">
-      <div className="mx-auto w-full max-w-3xl rounded-2xl border border-[#E9E9E7] bg-white px-3.5 py-3">
+      <div className="mx-auto w-full max-w-3xl rounded-2xl border border-[#E8E2D5] bg-white px-3.5 py-3">
         <div className="flex items-start gap-3">
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-2">
-              <span className="inline-flex items-center justify-center rounded-full bg-[#232322] px-2.5 py-1 text-[12px] font-semibold text-white">
+              <span className="inline-flex items-center justify-center rounded-full bg-[#1C1B19] px-2.5 py-1 text-[12px] font-semibold text-white">
                 {selectedCount} 条
               </span>
-              <p className="text-[12px] font-medium text-[#232322]">已加入这次操作</p>
+              <p className="text-[12px] font-medium text-[#1C1B19]">已加入这次操作</p>
             </div>
             <div className="mt-2 flex flex-wrap items-center gap-2">
               <button
                 type="button"
                 onClick={onAskTutor}
-                className="inline-flex items-center gap-1.5 rounded-full bg-[#232322] px-3.5 py-2.5 text-[11px] font-semibold text-white transition hover:bg-[#111111]"
+                className="inline-flex items-center gap-1.5 rounded-full bg-[#1C1B19] px-3.5 py-2.5 text-[11px] font-semibold text-white transition hover:bg-[#111111]"
               >
                 <MessageCircle size={14} />
                 <span>问 Tutor</span>
@@ -51,7 +51,7 @@ export function CollectionSelectionBar({
               <button
                 type="button"
                 onClick={onQuote}
-                className="inline-flex items-center gap-1.5 rounded-full border border-[#E9E9E7] bg-white px-3.5 py-2.5 text-[11px] font-semibold text-[#232322] transition hover:border-[#DDDDD9] hover:bg-[#FAFAF9]"
+                className="inline-flex items-center gap-1.5 rounded-full border border-[#E8E2D5] bg-white px-3.5 py-2.5 text-[11px] font-semibold text-[#1C1B19] transition hover:border-[#DDDDD9] hover:bg-[#FAFAF9]"
               >
                 <FileText size={14} />
                 <span>引用</span>
@@ -59,7 +59,7 @@ export function CollectionSelectionBar({
               <button
                 type="button"
                 onClick={onArchive}
-                className="inline-flex items-center gap-1.5 rounded-full border border-[#E9E9E7] bg-[#FDF3C0]/50 px-3 py-2.5 text-[11px] font-medium text-[#232322] transition hover:bg-[#FDF3C0]"
+                className="inline-flex items-center gap-1.5 rounded-full border border-[#E8E2D5] bg-[#FDF3C0]/50 px-3 py-2.5 text-[11px] font-medium text-[#1C1B19] transition hover:bg-[#FDF3C0]"
               >
                 <History size={14} />
                 <span>先收起</span>
@@ -69,8 +69,8 @@ export function CollectionSelectionBar({
                 onClick={onDelete}
                 className={`rounded-full px-3 py-2.5 text-[11px] font-medium transition ${
                   confirmDelete
-                    ? 'bg-rose-600 text-white hover:bg-rose-700'
-                    : 'text-[#A3A39E] hover:bg-rose-50 hover:text-rose-700'
+                    ? 'bg-vermilion text-white hover:bg-vermilion-deep'
+                    : 'text-[#8E8B82] hover:bg-vermilion-fog hover:text-vermilion-deep'
                 }`}
               >
                 {confirmDelete ? '确认删除' : '删除'}
@@ -80,7 +80,7 @@ export function CollectionSelectionBar({
           <button
             type="button"
             onClick={onClear}
-            className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-[#E9E9E7] bg-white text-[#787774] transition hover:bg-[#FAFAF9] hover:text-[#232322]"
+            className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-[#E8E2D5] bg-white text-[#5C5A55] transition hover:bg-[#FAFAF9] hover:text-[#1C1B19]"
             aria-label="退出多选"
           >
             <X size={15} />
@@ -88,7 +88,7 @@ export function CollectionSelectionBar({
         </div>
       </div>
       {confirmDelete ? (
-        <p className="mx-auto mt-2 w-full max-w-3xl px-1 text-[11px] font-medium text-rose-600">
+        <p className="mx-auto mt-2 w-full max-w-3xl px-1 text-[11px] font-medium text-vermilion">
           再点一次删除，就会彻底移除这些内容。
         </p>
       ) : null}

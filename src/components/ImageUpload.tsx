@@ -119,7 +119,7 @@ export function ImageUpload({
       {images.map((img) => (
         <div
           key={img.id}
-          className="relative group w-12 h-12 rounded-lg overflow-hidden border border-gray-200 bg-gray-50 flex-shrink-0"
+          className="relative group w-12 h-12 rounded-lg overflow-hidden border border-divider bg-paper-warm flex-shrink-0"
         >
           {/* data URL 预览使用原生 img，避免 next/image 在 blob/base64 场景下引入额外约束 */}
           {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -131,7 +131,7 @@ export function ImageUpload({
           {/* 删除按钮 */}
           <button
             onClick={() => handleRemove(img.id)}
-            className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 text-white rounded-full flex items-center justify-center text-xs opacity-0 group-hover:opacity-100 transition-opacity shadow-sm hover:bg-red-600"
+            className="absolute -top-1 -right-1 w-5 h-5 bg-vermilion text-white rounded-full flex items-center justify-center text-xs opacity-0 group-hover:opacity-100 transition-opacity shadow-sm hover:bg-vermilion-deep"
             title="删除图片"
           >
             ×
@@ -148,8 +148,8 @@ export function ImageUpload({
             w-10 h-10 rounded-lg border-2 border-dashed flex items-center justify-center
             transition-all flex-shrink-0
             ${disabled 
-              ? 'border-gray-200 text-gray-300 cursor-not-allowed' 
-              : 'border-gray-300 text-gray-400 hover:border-blue-400 hover:text-blue-500 hover:bg-blue-50'
+              ? 'border-divider text-ink-faint cursor-not-allowed' 
+              : 'border-divider text-ink-muted hover:border-pine/40 hover:text-pine hover:bg-pine-fog'
             }
           `}
           title="上传图片"

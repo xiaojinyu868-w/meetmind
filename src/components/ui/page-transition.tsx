@@ -89,10 +89,10 @@ export function LoadingOverlay({
       <div className="flex flex-col items-center gap-3">
         {/* 加载动画 */}
         <div className="relative w-10 h-10">
-          <div className="absolute inset-0 rounded-full border-2 border-rose-200" />
-          <div className="absolute inset-0 rounded-full border-2 border-rose-500 border-t-transparent animate-spin" />
+          <div className="absolute inset-0 rounded-full border-2 border-vermilion/30" />
+          <div className="absolute inset-0 rounded-full border-2 border-vermilion border-t-transparent animate-spin" />
         </div>
-        <span className="text-sm text-gray-600 font-medium">{message}</span>
+        <span className="text-sm text-ink-secondary font-medium">{message}</span>
       </div>
     </div>
   );

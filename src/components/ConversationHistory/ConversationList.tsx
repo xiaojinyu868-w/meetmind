@@ -118,7 +118,7 @@ export function ConversationList({
     <div className="flex flex-col h-full">
       {/* 搜索框 */}
       {showSearch && (
-        <div className="p-3 border-b border-gray-100">
+        <div className="p-3 border-b border-divider-light">
           <div className="relative">
             <input
               type="text"
@@ -126,10 +126,10 @@ export function ConversationList({
               onChange={(e) => setSearchKeyword(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
               placeholder="搜索对话..."
-              className="w-full pl-9 pr-8 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#232322] focus:border-transparent"
+              className="w-full pl-9 pr-8 py-2 text-sm border border-divider rounded-lg focus:outline-none focus:ring-2 focus:ring-[#1C1B19] focus:border-transparent"
             />
             <svg 
-              className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400"
+              className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-ink-muted"
               fill="none" 
               stroke="currentColor" 
               viewBox="0 0 24 24"
@@ -139,7 +139,7 @@ export function ConversationList({
             {searchKeyword && (
               <button
                 onClick={clearSearch}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-ink-muted hover:text-ink-secondary"
               >
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -148,9 +148,9 @@ export function ConversationList({
             )}
           </div>
           {searchResults !== null && (
-            <div className="mt-2 flex items-center justify-between text-xs text-gray-500">
+            <div className="mt-2 flex items-center justify-between text-xs text-ink-muted">
               <span>找到 {searchResults.length} 个结果</span>
-              <button onClick={clearSearch} className="text-[#787774] hover:text-[#232322]">
+              <button onClick={clearSearch} className="text-[#5C5A55] hover:text-[#1C1B19]">
                 清除搜索
               </button>
             </div>
@@ -166,17 +166,17 @@ export function ConversationList({
         {isLoading || isSearching ? (
           <div className="flex items-center justify-center py-8">
             <div className="flex gap-1">
-              <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
-              <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
-              <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+              <div className="w-2 h-2 bg-ink-muted rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
+              <div className="w-2 h-2 bg-ink-muted rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
+              <div className="w-2 h-2 bg-ink-muted rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
             </div>
           </div>
         ) : error ? (
           <div className="text-center py-8">
-            <p className="text-sm text-red-600 mb-2">{error}</p>
+            <p className="text-sm text-vermilion mb-2">{error}</p>
             <button
               onClick={() => loadConversations()}
-              className="text-sm text-[#787774] hover:text-[#232322]"
+              className="text-sm text-[#5C5A55] hover:text-[#1C1B19]"
             >
               重试
             </button>
@@ -185,7 +185,7 @@ export function ConversationList({
           emptyContent || (
             <div className="text-center py-8">
               <div className="text-3xl mb-2">💬</div>
-              <p className="text-sm text-gray-500">
+              <p className="text-sm text-ink-muted">
                 {searchResults !== null ? '没有找到匹配的对话' : '暂无对话记录'}
               </p>
             </div>
@@ -207,8 +207,8 @@ export function ConversationList({
 
       {/* 底部统计 */}
       {!isLoading && displayList.length > 0 && (
-        <div className="p-2 border-t border-gray-100 text-center">
-          <span className="text-xs text-gray-400">
+        <div className="p-2 border-t border-divider-light text-center">
+          <span className="text-xs text-ink-muted">
             共 {conversations.length} 个对话
           </span>
         </div>

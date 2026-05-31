@@ -103,9 +103,9 @@ export function MobileAIChatPanel({
     onNewConversation();
   };
 
-  const tutorPanelClassName = 'flex-1 min-h-0 overflow-hidden rounded-[28px] border border-[#E9E9E7] bg-white px-3 pb-3';
-  const realtimePanelClassName = 'flex-1 min-h-0 overflow-hidden rounded-[28px] border border-[#E9E9E7] bg-[#F7F7F5]';
-  const historyPanelClassName = 'flex-1 min-h-0 overflow-hidden rounded-[28px] border border-[#E9E9E7] bg-white px-3 pb-3';
+  const tutorPanelClassName = 'flex-1 min-h-0 overflow-hidden rounded-[28px] border border-[#E8E2D5] bg-white px-3 pb-3';
+  const realtimePanelClassName = 'flex-1 min-h-0 overflow-hidden rounded-[28px] border border-[#E8E2D5] bg-[#FAF7F2]';
+  const historyPanelClassName = 'flex-1 min-h-0 overflow-hidden rounded-[28px] border border-[#E8E2D5] bg-white px-3 pb-3';
 
   // 是否显示历史覆盖层（非通话模式 + showConversationHistory）
   const showHistoryOverlay = !realtimeTeacherEnabled && showConversationHistory;
@@ -118,7 +118,7 @@ export function MobileAIChatPanel({
   };
 
   return (
-    <div className="flex-1 min-h-0 flex flex-col bg-[#F7F7F5]">
+    <div className="flex-1 min-h-0 flex flex-col bg-[#FAF7F2]">
       <MobileAIChatHeader
         showConversationHistory={showConversationHistory}
         followsSelectedContext={followsSelectedContext}
@@ -149,12 +149,12 @@ export function MobileAIChatPanel({
         <div className={historyPanelClassName}>
           {selectedHistoryConversation ? (
             <div className="h-full flex flex-col">
-              <div className="flex items-center justify-between border-b border-[#E9E9E7] px-3 py-3">
-                <span className="mr-2 flex-1 truncate text-[14px] text-[#232322]">{selectedHistoryConversation.title}</span>
+              <div className="flex items-center justify-between border-b border-[#E8E2D5] px-3 py-3">
+                <span className="mr-2 flex-1 truncate text-[14px] text-[#1C1B19]">{selectedHistoryConversation.title}</span>
                 <div className="flex items-center gap-1">
                   <button
                     onClick={onBackToHistoryList}
-                    className="flex h-8 w-8 items-center justify-center rounded-full text-[#787774] hover:bg-[#F7F7F5]"
+                    className="flex h-8 w-8 items-center justify-center rounded-full text-[#5C5A55] hover:bg-[#FAF7F2]"
                     title="返回列表"
                   >
                     <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -163,7 +163,7 @@ export function MobileAIChatPanel({
                   </button>
                   <button
                     onClick={onCloseHistory}
-                    className="flex h-8 w-8 items-center justify-center rounded-full text-[#787774] hover:bg-[#F7F7F5]"
+                    className="flex h-8 w-8 items-center justify-center rounded-full text-[#5C5A55] hover:bg-[#FAF7F2]"
                     title="新对话"
                   >
                     <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">

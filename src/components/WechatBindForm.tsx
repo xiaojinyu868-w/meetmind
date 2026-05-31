@@ -165,7 +165,7 @@ export default function WechatBindForm({ openId, linkToken, onBound }: WechatBin
         type="button"
         onClick={handleWechatLogin}
         disabled={wechatLoading}
-        className="flex items-center justify-center gap-2 rounded-2xl bg-[#07C160] px-4 py-3.5 text-sm font-medium text-white disabled:opacity-60"
+        className="flex items-center justify-center gap-2 rounded-2xl bg-[#2D6A4F] px-4 py-3.5 text-sm font-medium text-white disabled:opacity-60"
       >
         <svg viewBox="0 0 24 24" className="h-5 w-5 fill-current">
           <path d="M8.691 2.188C3.891 2.188 0 5.476 0 9.53c0 2.212 1.17 4.203 3.002 5.55a.59.59 0 0 1 .213.665l-.39 1.48c-.019.07-.048.141-.048.213 0 .163.13.295.29.295a.326.326 0 0 0 .167-.054l1.903-1.114a.864.864 0 0 1 .717-.098 10.16 10.16 0 0 0 2.837.403c.276 0 .543-.027.811-.05a6.327 6.327 0 0 1-.261-1.789c0-3.723 3.541-6.743 7.91-6.743.267 0 .526.022.789.04C17.085 4.527 13.264 2.188 8.691 2.188zm-2.79 4.408c.558 0 1.01.452 1.01 1.01 0 .558-.452 1.01-1.01 1.01-.558 0-1.01-.452-1.01-1.01 0-.558.452-1.01 1.01-1.01zm5.144 0c.558 0 1.01.452 1.01 1.01 0 .558-.452 1.01-1.01 1.01-.558 0-1.01-.452-1.01-1.01 0-.558.452-1.01 1.01-1.01zm5.105 3.29c-3.837 0-6.95 2.708-6.95 6.048 0 3.34 3.113 6.047 6.95 6.047.77 0 1.505-.132 2.212-.35a.72.72 0 0 1 .588.082l1.578.927a.267.267 0 0 0 .138.045.241.241 0 0 0 .24-.245c0-.06-.023-.12-.039-.176l-.326-1.231a.487.487 0 0 1 .176-.547C20.928 19.6 22 17.857 22 15.934c0-3.34-3.113-6.048-6.95-6.048zm-2.872 3.453c.462 0 .837.375.837.837a.838.838 0 0 1-.837.837.838.838 0 0 1-.837-.837c0-.462.375-.837.837-.837zm4.698 0c.462 0 .837.375.837.837a.838.838 0 0 1-.837.837.838.838 0 0 1-.837-.837c0-.462.375-.837.837-.837z" />
@@ -174,7 +174,7 @@ export default function WechatBindForm({ openId, linkToken, onBound }: WechatBin
       </button>
 
       {error ? (
-        <p className="text-xs text-red-500">{error}</p>
+        <p className="text-xs text-vermilion">{error}</p>
       ) : null}
 
       {/* 分割线 */}

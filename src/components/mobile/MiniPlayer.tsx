@@ -67,7 +67,7 @@ export function MiniPlayer({
     <div 
       className={cn(
         'flex items-center gap-3 px-4 py-2.5',
-        'bg-[var(--dedao-bg-warm)] border-b border-[#E8E4DF]',
+        'bg-[var(--dedao-bg-warm)] border-b border-divider',
         className
       )}
       role="region"
@@ -125,7 +125,7 @@ export function MiniPlayer({
         className="relative flex-1 h-6 flex items-center cursor-pointer group focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--dedao-gold)] focus-visible:ring-offset-2 rounded"
       >
         {/* 进度条轨道 */}
-        <div className="absolute inset-x-0 h-1 bg-[#E0D6CC] rounded-full overflow-hidden">
+        <div className="absolute inset-x-0 h-1 bg-paper-deep rounded-full overflow-hidden">
           {/* 已播放进度 */}
           <div
             className="h-full bg-[var(--dedao-gold)] rounded-full transition-all duration-100 motion-reduce:transition-none"

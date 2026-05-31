@@ -91,18 +91,18 @@ export function MobileMenu({
       <div
         className={cn(
           "fixed top-0 right-0 bottom-0 z-50",
-          "w-72 bg-slate-900",
+          "w-72 bg-ink",
           "animate-slideInRight",
           "flex flex-col",
           className
         )}
       >
         {/* 头部 */}
-        <div className="px-5 py-4 border-b border-slate-800 flex items-center justify-between">
+        <div className="px-5 py-4 border-b border-ink-secondary/30 flex items-center justify-between">
           <h2 className="text-lg font-medium text-white">更多功能</h2>
           <button
             onClick={onClose}
-            className="w-8 h-8 rounded-full bg-slate-800 flex items-center justify-center text-slate-400 hover:text-white transition-colors"
+            className="w-8 h-8 rounded-full bg-ink flex items-center justify-center text-ink-muted hover:text-white transition-colors"
           >
             <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -122,11 +122,11 @@ export function MobileMenu({
                 className={cn(
                   "w-full px-5 py-4 flex items-center gap-4",
                   "text-left transition-colors",
-                  "hover:bg-slate-800/50 active:bg-slate-800"
+                  "hover:bg-ink/50 active:bg-ink"
                 )}
               >
                 {/* 图标 */}
-                <div className="w-10 h-10 rounded-xl bg-[#FDF3C0]/20 flex items-center justify-center text-[#787774]">
+                <div className="w-10 h-10 rounded-xl bg-[#FDF3C0]/20 flex items-center justify-center text-[#5C5A55]">
                   {item.icon}
                 </div>
 
@@ -135,16 +135,16 @@ export function MobileMenu({
                   <div className="flex items-center gap-2">
                     <span className="text-sm font-medium text-white">{item.label}</span>
                     {badge && badge > 0 && (
-                      <span className="px-1.5 py-0.5 text-xs rounded-full bg-[#232322]/20 text-[#FDF3C0]">
+                      <span className="px-1.5 py-0.5 text-xs rounded-full bg-[#1C1B19]/20 text-[#FDF3C0]">
                         {badge}
                       </span>
                     )}
                   </div>
-                  <p className="text-xs text-slate-500 mt-0.5">{item.description}</p>
+                  <p className="text-xs text-ink-muted mt-0.5">{item.description}</p>
                 </div>
 
                 {/* 箭头 */}
-                <svg className="w-4 h-4 text-slate-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <svg className="w-4 h-4 text-ink-secondary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
                 </svg>
               </button>
@@ -153,8 +153,8 @@ export function MobileMenu({
         </div>
 
         {/* 底部信息 */}
-        <div className="px-5 py-4 border-t border-slate-800">
-          <p className="text-xs text-slate-600 text-center">
+        <div className="px-5 py-4 border-t border-ink-secondary/30">
+          <p className="text-xs text-ink-secondary text-center">
             MeetMind · 让学习更高效
           </p>
         </div>
@@ -193,7 +193,7 @@ export function HamburgerMenuButton({
       onClick={onClick}
       className={cn(
         "w-10 h-10 rounded-full flex items-center justify-center",
-        "bg-slate-800/80 text-slate-300 hover:text-white",
+        "bg-ink/80 text-ink-faint hover:text-white",
         "transition-colors",
         className
       )}

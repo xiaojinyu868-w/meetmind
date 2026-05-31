@@ -245,7 +245,13 @@ export function WordExplainer({
       context += `【选中词汇附近的文本】\n${selection.context}\n\n`;
     }
     if (fullContextText) {
-      context += `【完整课堂转录】\n${fullContextText}`;
+      // 完整转录有上限——超长 prompt 会让首包延迟变大（prefill 阶段）。
+      // 8000 字 ≈ 15 分钟课堂；selection.context 已经覆盖了局部上下文，
+      // fullContextText 取尾部（最近 8000 字）即可。
+      const cappedFull = fullContextText.length > 8000
+        ? fullContextText.slice(-8000)
+        : fullContextText;
+      context += `【完整课堂转录】\n${cappedFull}`;
     }
 
     // 构建请求体
@@ -324,7 +330,7 @@ export function WordExplainer({
       >
         <button
           onClick={handleExplain}
-          className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-white bg-[#232322] hover:from-violet-600 hover:to-purple-700 rounded-full shadow-violet-200/50 transition-all hover:scale-105 active:scale-95"
+          className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-white bg-[#1C1B19]  rounded-full shadow-soft transition-all hover:scale-105 active:scale-95"
         >
           <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
@@ -344,17 +350,17 @@ export function WordExplainer({
       style={{ left: currentPos.x, top: currentPos.y }}
     >
       <div
-        className="relative flex flex-col bg-white rounded-2xl shadow-2xl shadow-violet-200/30 border border-violet-100"
+        className="relative flex flex-col bg-white rounded-2xl shadow-2xl shadow-card border border-pine/15"
         style={{ width: size.w, height: size.h }}
       >
         {/* 头部 - 可拖拽 */}
         <div
           onMouseDown={handleDragStart}
-          className="flex items-center justify-between px-4 py-2.5 bg-[#D3E4F4]/30 border-b border-violet-100 cursor-move select-none flex-shrink-0"
+          className="flex items-center justify-between px-4 py-2.5 bg-[#D3E4F4]/30 border-b border-pine/15 cursor-move select-none flex-shrink-0"
         >
           <div className="flex items-center gap-2 min-w-0">
             <span className="text-base flex-shrink-0">🔍</span>
-            <span className="text-sm font-medium text-violet-800 truncate" title={selection.text}>
+            <span className="text-sm font-medium text-pine truncate" title={selection.text}>
               「{selection.text.length > 20 ? selection.text.slice(0, 20) + '...' : selection.text}」
             </span>
           </div>
@@ -368,7 +374,7 @@ export function WordExplainer({
             {isStreaming && (
               <button
                 onClick={() => stopStream()}
-                className="p-1 text-red-400 hover:text-red-600 transition-colors"
+                className="p-1 text-vermilion/65 hover:text-vermilion transition-colors"
                 title="停止生成"
               >
                 <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
@@ -378,7 +384,7 @@ export function WordExplainer({
             )}
             <button
               onClick={onClose}
-              className="p-1 text-gray-400 hover:text-gray-600 transition-colors"
+              className="p-1 text-ink-muted hover:text-ink-secondary transition-colors"
               title="关闭"
             >
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -394,13 +400,13 @@ export function WordExplainer({
             <div key={msg.id}>
               {msg.role === 'user' ? (
                 <div className="flex justify-end">
-                  <div className="max-w-[85%] px-3 py-1.5 rounded-2xl bg-[#232322] text-white text-xs">
+                  <div className="max-w-[85%] px-3 py-1.5 rounded-2xl bg-[#1C1B19] text-white text-xs">
                     {msg.content}
                   </div>
                 </div>
               ) : (
                 <div className="flex justify-start">
-                  <div className="max-w-[95%] text-gray-700">
+                  <div className="max-w-[95%] text-ink-secondary">
                     <StreamingMarkdown
                       content={msg.content}
                       isStreaming={false}
@@ -416,7 +422,7 @@ export function WordExplainer({
           {/* 流式输出中 */}
           {isStreaming && streamingContent && (
             <div className="flex justify-start">
-              <div className="max-w-[95%] text-gray-700">
+              <div className="max-w-[95%] text-ink-secondary">
                 <StreamingMarkdown
                   content={streamingContent}
                   isStreaming={true}
@@ -430,11 +436,11 @@ export function WordExplainer({
           {/* 加载中但还没有内容 */}
           {isStreaming && !streamingContent && (
             <div className="flex justify-start">
-              <div className="flex items-center gap-1.5 text-gray-400">
+              <div className="flex items-center gap-1.5 text-ink-muted">
                 <div className="flex gap-0.5">
-                  <div className="w-1.5 h-1.5 bg-violet-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
-                  <div className="w-1.5 h-1.5 bg-violet-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
-                  <div className="w-1.5 h-1.5 bg-violet-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+                  <div className="w-1.5 h-1.5 bg-pine rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
+                  <div className="w-1.5 h-1.5 bg-pine rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
+                  <div className="w-1.5 h-1.5 bg-pine rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
                 </div>
                 <span className="text-xs">正在分析...</span>
               </div>
@@ -446,7 +452,7 @@ export function WordExplainer({
 
         {/* 图片预览 */}
         {uploadedImages.length > 0 && (
-          <div className="px-3 py-1.5 border-t border-violet-50 bg-violet-25">
+          <div className="px-3 py-1.5 border-t border-pine/12 bg-pine-fog/50">
             <ImageUpload
               images={uploadedImages}
               onImagesChange={setUploadedImages}
@@ -458,13 +464,13 @@ export function WordExplainer({
         )}
 
         {/* 输入区域 */}
-        <form onSubmit={handleFollowUp} className="px-3 py-2 border-t border-violet-100 bg-gray-50/50 flex-shrink-0 rounded-b-2xl">
+        <form onSubmit={handleFollowUp} className="px-3 py-2 border-t border-pine/15 bg-paper-warm/50 flex-shrink-0 rounded-b-2xl">
           <div className="flex items-center gap-1.5">
             {/* 图片上传按钮 */}
             {supportsMultimodal && (
               <label
                 className={`flex-shrink-0 p-1.5 rounded-lg transition-colors cursor-pointer ${
-                  isStreaming ? 'text-gray-300 cursor-not-allowed' : 'text-gray-400 hover:text-violet-500 hover:bg-violet-50'
+                  isStreaming ? 'text-ink-faint cursor-not-allowed' : 'text-ink-muted hover:text-pine hover:bg-pine-fog'
                 }`}
                 title="上传图片"
               >
@@ -504,7 +510,7 @@ export function WordExplainer({
               onChange={(e) => setInputValue(e.target.value)}
               disabled={isStreaming}
               placeholder="继续追问..."
-              className="flex-1 px-3 py-1.5 text-xs border border-gray-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-violet-300 focus:border-violet-300 disabled:bg-gray-100"
+              className="flex-1 px-3 py-1.5 text-xs border border-divider rounded-lg focus:outline-none focus:ring-1 focus:ring-pine focus:border-pine/40 disabled:bg-paper-deep"
             />
 
             {/* 语音输入按钮 */}
@@ -517,7 +523,7 @@ export function WordExplainer({
             <button
               type="submit"
               disabled={isStreaming || (!inputValue.trim() && uploadedImages.length === 0)}
-              className="flex-shrink-0 px-3 py-1.5 text-xs text-white bg-violet-500 hover:bg-violet-600 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              className="flex-shrink-0 px-3 py-1.5 text-xs text-white bg-pine-fog0 hover:bg-pine-deep rounded-lg disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
             >
               发送
             </button>

@@ -236,7 +236,7 @@ export function DesktopVideoReviewLayout(props: DesktopVideoReviewLayoutProps) {
           {/* ── 左列：视频 + 时间轴 + 章节列表 ── */}
             {/* 视频播放器 — 圆角容器 + 充分留白 */}
             <div className="shrink-0 p-5 pb-0">
-              <div className="overflow-hidden rounded-2xl bg-[#0F0F0F]">
+              <div className="overflow-hidden rounded-2xl bg-ink">
                 <VideoReviewPlayer
                   source={videoSource}
                   className="w-full"
@@ -283,8 +283,8 @@ export function DesktopVideoReviewLayout(props: DesktopVideoReviewLayoutProps) {
                   }}
                   className={`relative flex items-center gap-1.5 pb-3 text-[13px] transition-colors whitespace-nowrap ${
                     effectiveVideoWorkspaceTab === tab.key
-                      ? 'text-[#232322] font-medium'
-                      : 'text-[#A3A39E] hover:text-[#787774]'
+                      ? 'text-[#1C1B19] font-medium'
+                      : 'text-[#8E8B82] hover:text-[#5C5A55]'
                   }`}
                 >
                   {tab.LucideIcon && <tab.LucideIcon size={ICON_TAB} strokeWidth={ICON_TAB_STROKE} />}
@@ -294,12 +294,12 @@ export function DesktopVideoReviewLayout(props: DesktopVideoReviewLayoutProps) {
                   )}
                   {/* 下划线指示器 */}
                   {effectiveVideoWorkspaceTab === tab.key && (
-                    <span className="absolute bottom-0 left-0 right-0 h-[2px] bg-[#232322] rounded-full" />
+                    <span className="absolute bottom-0 left-0 right-0 h-[2px] bg-[#1C1B19] rounded-full" />
                   )}
                 </button>
               ))}
             </div>
-            <div className="mx-5 h-px bg-[#E9E9E7]" />
+            <div className="mx-5 h-px bg-[#E8E2D5]" />
 
             <div className="flex-1 min-h-0 overflow-hidden">
               {/* Transcript tab */}
@@ -330,10 +330,10 @@ export function DesktopVideoReviewLayout(props: DesktopVideoReviewLayoutProps) {
                 <div className="h-full overflow-hidden flex flex-col">
                   {confusionChatAnchor ? (
                     <>
-                      <div className="shrink-0 flex items-center gap-2 px-4 py-2.5 border-b border-[#E9E9E7] bg-[#F7F7F5]">
+                      <div className="shrink-0 flex items-center gap-2 px-4 py-2.5 border-b border-[#E8E2D5] bg-[#FAF7F2]">
                         <button
                           onClick={() => setConfusionChatAnchor(null)}
-                          className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-[#E9E9E7] transition-colors text-[#787774]"
+                          className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-[#E8E2D5] transition-colors text-[#5C5A55]"
                           title="返回列表"
                         >
                           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -341,10 +341,10 @@ export function DesktopVideoReviewLayout(props: DesktopVideoReviewLayoutProps) {
                           </svg>
                         </button>
                         <div className="flex items-center gap-1.5 flex-1 min-w-0">
-                          <span className={`w-2 h-2 rounded-full shrink-0 ${confusionChatAnchor.resolved ? 'bg-green-400' : 'bg-[#FADEC9] animate-pulse'}`} />
-                          <span className="text-xs font-mono text-gray-500">{formatTime(confusionChatAnchor.timestamp)}</span>
+                          <span className={`w-2 h-2 rounded-full shrink-0 ${confusionChatAnchor.resolved ? 'bg-pine-light' : 'bg-[#FADEC9] animate-pulse'}`} />
+                          <span className="text-xs font-mono text-ink-muted">{formatTime(confusionChatAnchor.timestamp)}</span>
                           {confusionChatAnchor.note && (
-                            <span className="text-xs text-gray-600 truncate">{confusionChatAnchor.note}</span>
+                            <span className="text-xs text-ink-secondary truncate">{confusionChatAnchor.note}</span>
                           )}
                         </div>
                         {!confusionChatAnchor.resolved && (
@@ -354,7 +354,7 @@ export function DesktopVideoReviewLayout(props: DesktopVideoReviewLayoutProps) {
                               handleResolveAnchor();
                               setConfusionChatAnchor({ ...confusionChatAnchor, resolved: true });
                             }}
-                            className="shrink-0 px-2.5 py-1 text-xs rounded-lg bg-green-50 text-green-600 hover:bg-green-100 transition-colors"
+                            className="shrink-0 px-2.5 py-1 text-xs rounded-lg bg-pine-fog text-pine hover:bg-pine-mist transition-colors"
                           >
                             标记已解决
                           </button>
@@ -394,7 +394,7 @@ export function DesktopVideoReviewLayout(props: DesktopVideoReviewLayoutProps) {
                         onClick={() => {
                           handleAnchorMark(currentTime);
                         }}
-                        className="w-full mb-4 flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl border-2 border-dashed border-[#E9E9E7] text-[#787774] hover:bg-[#EFEFEF] hover:border-[#232322] transition-all text-sm font-medium"
+                        className="w-full mb-4 flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl border-2 border-dashed border-[#E8E2D5] text-[#5C5A55] hover:bg-[#F2EDE3] hover:border-[#1C1B19] transition-all text-sm font-medium"
                       >
                         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
@@ -405,9 +405,9 @@ export function DesktopVideoReviewLayout(props: DesktopVideoReviewLayoutProps) {
                       {anchors.length > 0 ? (
                         <div className="space-y-2">
                           <div className="flex items-center justify-between mb-2">
-                            <span className="text-xs text-[#A3A39E]">{anchors.length} 个困惑点</span>
+                            <span className="text-xs text-[#8E8B82]">{anchors.length} 个困惑点</span>
                             {anchors.filter(a => !a.resolved).length > 0 && (
-                              <span className="text-xs text-[#787774]">{anchors.filter(a => !a.resolved).length} 个待解决</span>
+                              <span className="text-xs text-[#5C5A55]">{anchors.filter(a => !a.resolved).length} 个待解决</span>
                             )}
                           </div>
                           {anchors.map((anchor, index) => (
@@ -420,35 +420,35 @@ export function DesktopVideoReviewLayout(props: DesktopVideoReviewLayoutProps) {
                               }}
                               className={`w-full text-left p-3 rounded-lg border transition-all group ${
                                 anchor.resolved
-                                  ? 'border-[#E9E9E7] bg-[#F7F7F5]/50'
-                                  : 'border-[#E9E9E7] bg-[#FDF3C0]/10 hover:bg-[#FDF3C0]/20'
+                                  ? 'border-[#E8E2D5] bg-[#FAF7F2]/50'
+                                  : 'border-[#E8E2D5] bg-[#FDF3C0]/10 hover:bg-[#FDF3C0]/20'
                               }`}
                             >
                               <div className="flex items-center gap-2">
-                                <span className={`w-2 h-2 rounded-full shrink-0 ${anchor.resolved ? 'bg-[#A3A39E]' : 'bg-[#FADEC9]'}`} />
-                                <span className="text-xs font-mono text-[#A3A39E]">{formatTime(anchor.timestamp)}</span>
-                                <span className="text-xs text-[#787774]">困惑点 #{index + 1}</span>
+                                <span className={`w-2 h-2 rounded-full shrink-0 ${anchor.resolved ? 'bg-[#8E8B82]' : 'bg-[#FADEC9]'}`} />
+                                <span className="text-xs font-mono text-[#8E8B82]">{formatTime(anchor.timestamp)}</span>
+                                <span className="text-xs text-[#5C5A55]">困惑点 #{index + 1}</span>
                                 {anchor.resolved ? (
-                                  <span className="text-xs text-[#A3A39E] ml-auto">已解决</span>
+                                  <span className="text-xs text-[#8E8B82] ml-auto">已解决</span>
                                 ) : (
-                                <span className="ml-auto text-xs text-[#787774]">点击对话</span>
+                                <span className="ml-auto text-xs text-[#5C5A55]">点击对话</span>
                                 )}
                               </div>
                               {anchor.note && (
-                                <p className="mt-1.5 text-[13px] text-[#787774] line-clamp-2 pl-4">{anchor.note}</p>
+                                <p className="mt-1.5 text-[13px] text-[#5C5A55] line-clamp-2 pl-4">{anchor.note}</p>
                               )}
                             </button>
                           ))}
                         </div>
                       ) : (
                         <div className="py-10 text-center">
-                          <div className="w-14 h-14 mx-auto mb-3 rounded-full flex items-center justify-center bg-[#F7F7F5]">
-                            <svg className="w-7 h-7 text-[#A3A39E]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <div className="w-14 h-14 mx-auto mb-3 rounded-full flex items-center justify-center bg-[#FAF7F2]">
+                            <svg className="w-7 h-7 text-[#8E8B82]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                             </svg>
                           </div>
-                          <p className="mb-1 text-[13px] text-[#787774]">暂时还没有困惑点</p>
-                          <p className="text-[12px] text-[#A3A39E]">点击上方按钮，标记你没听懂的地方。</p>
+                          <p className="mb-1 text-[13px] text-[#5C5A55]">暂时还没有困惑点</p>
+                          <p className="text-[12px] text-[#8E8B82]">点击上方按钮，标记你没听懂的地方。</p>
                         </div>
                       )}
                     </div>
@@ -495,7 +495,7 @@ export function DesktopVideoReviewLayout(props: DesktopVideoReviewLayoutProps) {
             source={(
               <section className="min-w-0 min-h-0 flex h-full flex-col bg-white">
               {(audioBlob || audioUrl) ? (
-                <div className="shrink-0 border-b border-[#E9E9E7] bg-[#FCFBF8] px-3 py-2">
+                <div className="shrink-0 border-b border-[#E8E2D5] bg-[#FCFBF8] px-3 py-2">
                   <WaveformPlayer
                     ref={waveformRef as RefObject<WaveformPlayerRef>}
                     src={audioBlob || audioUrl || undefined}
@@ -516,8 +516,8 @@ export function DesktopVideoReviewLayout(props: DesktopVideoReviewLayoutProps) {
                     selectedAnchorId={selectedAnchor?.id}
                     compact={true}
                     height={24}
-                    waveColor="#E3D5C4"
-                    progressColor="#F3EADF"
+                    waveColor="#6B9080"
+                    progressColor="#2D4F3E"
                   />
                 </div>
               ) : null}
@@ -555,11 +555,11 @@ export function DesktopVideoReviewLayout(props: DesktopVideoReviewLayoutProps) {
             workspace={(
               <main className="min-w-0 min-h-0 h-full bg-white">
               <div className="flex h-full min-h-0 flex-col">
-                <header className="flex shrink-0 items-center gap-2 border-b border-[#E9E9E7] bg-white px-4 py-3">
-                  <ListChecks size={15} strokeWidth={1.8} className="text-[#787774]" />
+                <header className="flex shrink-0 items-center gap-2 border-b border-[#E8E2D5] bg-white px-4 py-3">
+                  <ListChecks size={15} strokeWidth={1.8} className="text-[#5C5A55]" />
                   <div className="min-w-0">
-                    <p className="text-[13px] font-semibold tracking-[-0.01em] text-[#232322]">学习工作区</p>
-                    <p className="text-[11.5px] text-[#A3A39E]">闪卡、测验、导图都在这里完成</p>
+                    <p className="text-[13px] font-semibold tracking-[-0.01em] text-[#1C1B19]">学习工作区</p>
+                    <p className="text-[11.5px] text-[#8E8B82]">闪卡、测验、导图都在这里完成</p>
                   </div>
                 </header>
                 <div className="min-h-0 flex-1 overflow-hidden">{sharedWorkspace}</div>

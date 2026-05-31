@@ -16,7 +16,12 @@
  *   - onStartRecording / onStopRecording：交给 page.tsx → useRecording
  *   - 右侧对话：useClassroomCompanion → /api/tutor
  *
- * 设计系统：零渐变、零阴影、纯平涂
+ * 设计系统 (v7)：
+ *   - 95% 克制（米白纸感 + 双签名色 + 极淡 1px ring + shadow-soft/card）
+ *   - 5% 仪式时刻情绪化（Course Hero shadow-ai-glow + ai-breath、录音 RecordingHero、
+ *     Echo 生成柔光扫过、Tab 切换流式字符浮现）
+ *   - "AI 在场"必须可见：不是装饰，是产品 DNA。课中第一眼应该让学生
+ *     感到"这个 AI 真的懂我在学什么"。视觉为这个目标服务。
  */
 
 import React, { useState, useCallback, useMemo, useEffect, useRef } from 'react';

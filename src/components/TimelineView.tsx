@@ -38,7 +38,7 @@ export function TimelineView({
 
   return (
     <div className="h-full flex flex-col overflow-hidden">
-      <div className="px-4 py-3 border-b border-gray-100">
+      <div className="px-4 py-3 border-b border-divider-light">
         <div className="flex items-center justify-between mb-3">
           <h2 className="text-sm font-semibold text-navy">课堂时间轴</h2>
           {unresolvedCount > 0 && (
@@ -47,11 +47,11 @@ export function TimelineView({
         </div>
 
         <div className="relative">
-          <div className="flex items-center justify-between text-xs text-gray-400 mb-1.5">
+          <div className="flex items-center justify-between text-xs text-ink-muted mb-1.5">
             <span className="font-mono">{formatTimestamp(currentTime)}</span>
             <span className="font-mono">{formatTimestamp(totalDuration)}</span>
           </div>
-          <div className="h-2 bg-gray-100 rounded-full relative overflow-visible">
+          <div className="h-2 bg-paper-deep rounded-full relative overflow-visible">
             <div
               className="absolute left-0 top-0 h-full bg-[#FDF3C0] rounded-full transition-all duration-100"
               style={{ width: `${progressPercent}%` }}
@@ -62,7 +62,7 @@ export function TimelineView({
                 onClick={() => onBreakpointClick(bp)}
                 className={`absolute top-1/2 -translate-y-1/2 -translate-x-1/2 w-4 h-4 rounded-full border-2 border-white transition-all hover:scale-125 z-10 ${
                   bp.resolved ? 'bg-mint' : 'bg-coral animate-pulse'
-                } ${selectedBreakpoint?.id === bp.id ? 'ring-2 ring-[#E9E9E7] scale-125' : ''}`}
+                } ${selectedBreakpoint?.id === bp.id ? 'ring-2 ring-[#E8E2D5] scale-125' : ''}`}
                 style={{ left: `${(bp.timestamp / totalDuration) * 100}%` }}
                 title={`${formatTimestamp(bp.timestamp)} - ${bp.resolved ? '已解决' : '待解决'}`}
               />
@@ -72,8 +72,8 @@ export function TimelineView({
       </div>
 
       {timeline.topics.length > 0 && (
-        <div className="px-4 py-3 border-b border-gray-100">
-          <h3 className="text-xs font-medium text-gray-400 uppercase tracking-wider mb-2">知识点</h3>
+        <div className="px-4 py-3 border-b border-divider-light">
+          <h3 className="text-xs font-medium text-ink-muted uppercase tracking-wider mb-2">知识点</h3>
           <div className="flex gap-1.5 flex-wrap">
             {timeline.topics.map((topic, index) => {
               const isActive = currentTime >= topic.startMs && currentTime < topic.endMs;
@@ -83,8 +83,8 @@ export function TimelineView({
                   onClick={() => onTimeClick(topic.startMs)}
                   className={`text-xs px-2.5 py-1.5 rounded-lg transition-all ${
                     isActive
-                      ? 'bg-[#FDF3C0] text-[#232322] font-medium shadow-sm'
-                      : 'bg-gray-50 text-gray-600 hover:bg-[#EFEFEF]'
+                      ? 'bg-[#FDF3C0] text-[#1C1B19] font-medium shadow-sm'
+                      : 'bg-paper-warm text-ink-secondary hover:bg-[#F2EDE3]'
                   }`}
                 >
                   {index + 1}. {topic.title}
@@ -113,7 +113,7 @@ export function TimelineView({
         />
       </div>
 
-      <div className="px-4 py-3 border-t border-gray-100">
+      <div className="px-4 py-3 border-t border-divider-light">
         <div className="flex gap-2">
           <button
             onClick={() => {

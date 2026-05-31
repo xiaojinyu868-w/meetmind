@@ -149,21 +149,21 @@ const StepCard = memo(function StepCard({
     <div className="relative">
       {/* 左侧时间线 - 移动端左移 */}
       <div className={`absolute top-0 bottom-0 flex flex-col items-center ${isMobile ? 'left-1' : 'left-4'}`}>
-        <div className={`rounded-full bg-violet-100 border-2 border-violet-300 flex items-center justify-center z-10 ${isMobile ? 'w-6 h-6 text-xs' : 'w-8 h-8 text-sm'}`}>
+        <div className={`rounded-full bg-pine-mist border-2 border-pine/40 flex items-center justify-center z-10 ${isMobile ? 'w-6 h-6 text-xs' : 'w-8 h-8 text-sm'}`}>
           {icon}
         </div>
-        {!isLast && <div className="flex-1 w-0.5 bg-violet-200 mt-1" />}
+        {!isLast && <div className="flex-1 w-0.5 bg-pine/25 mt-1" />}
       </div>
 
       {/* 内容区域 - 移动端左边距缩小 */}
       <div className={`pb-4 ${isMobile ? 'ml-9' : 'ml-14'}`}>
         {/* 标题 */}
-        <div className={`font-medium text-violet-800 mb-1.5 ${isMobile ? 'text-xs' : 'text-sm'}`}>
+        <div className={`font-medium text-pine mb-1.5 ${isMobile ? 'text-xs' : 'text-sm'}`}>
           {step.title}
         </div>
 
         {/* 内容 */}
-        <div className={`text-gray-700 leading-relaxed bg-white/60 rounded-lg border border-gray-100 ${isMobile ? 'text-xs px-2 py-1.5' : 'text-sm px-3 py-2'}`}>
+        <div className={`text-ink-secondary leading-relaxed bg-white/60 rounded-lg border border-divider-light ${isMobile ? 'text-xs px-2 py-1.5' : 'text-sm px-3 py-2'}`}>
           <StreamingMarkdown
             content={step.content}
             isStreaming={false}
@@ -174,9 +174,9 @@ const StepCard = memo(function StepCard({
 
         {/* 💡心得 */}
         {step.tip && (
-          <div className={`mt-2 flex items-start gap-1.5 bg-[#FDF3C0]/50 rounded-lg border border-[#E9E9E7] ${isMobile ? 'px-1.5 py-1' : 'px-2 py-1.5'}`}>
-            <span className={`text-[#787774] ${isMobile ? 'text-xs' : 'text-sm'}`}>💡</span>
-            <div className={`text-[#232322] leading-relaxed ${isMobile ? 'text-[10px]' : 'text-xs'}`}>
+          <div className={`mt-2 flex items-start gap-1.5 bg-[#FDF3C0]/50 rounded-lg border border-[#E8E2D5] ${isMobile ? 'px-1.5 py-1' : 'px-2 py-1.5'}`}>
+            <span className={`text-[#5C5A55] ${isMobile ? 'text-xs' : 'text-sm'}`}>💡</span>
+            <div className={`text-[#1C1B19] leading-relaxed ${isMobile ? 'text-[10px]' : 'text-xs'}`}>
               <StreamingMarkdown
                 content={step.tip}
                 isStreaming={false}
@@ -221,11 +221,11 @@ export const ThinkingGuideRenderer = memo(function ThinkingGuideRenderer({
   return (
     <div className={className}>
       {/* ===== 思维演示区 ===== */}
-      <div className={`bg-[#D3E4F4]/30 rounded-xl border border-violet-100 ${isMobile ? 'p-3' : 'p-4'}`}>
+      <div className={`bg-[#D3E4F4]/30 rounded-xl border border-pine/15 ${isMobile ? 'p-3' : 'p-4'}`}>
         {/* 标题 */}
         <div className={`flex items-center gap-2 ${isMobile ? 'mb-3' : 'mb-4'}`}>
           <span className={isMobile ? 'text-base' : 'text-lg'}>🧠</span>
-          <span className={`font-semibold text-violet-800 ${isMobile ? 'text-xs' : 'text-base'}`}>
+          <span className={`font-semibold text-pine ${isMobile ? 'text-xs' : 'text-base'}`}>
             跟我一起理清思路
           </span>
         </div>
@@ -248,8 +248,8 @@ export const ThinkingGuideRenderer = memo(function ThinkingGuideRenderer({
         {/* 思维方法总结 - 统一使用左边距 */}
         {parsed.methods && (
           <div className={`mt-2 flex items-start gap-2 bg-[#D1F4E0]/30 rounded-lg border border-[#D1F4E0] ${isMobile ? 'ml-9 px-2 py-1.5' : 'ml-14 px-3 py-2'}`}>
-            <span className="text-[#232322] flex-shrink-0">🌟</span>
-            <div className={`min-w-0 text-[#232322] ${isMobile ? 'text-[10px]' : 'text-xs'}`}>
+            <span className="text-[#1C1B19] flex-shrink-0">🌟</span>
+            <div className={`min-w-0 text-[#1C1B19] ${isMobile ? 'text-[10px]' : 'text-xs'}`}>
               <div className="mb-1 font-medium">思维方法：</div>
               <StreamingMarkdown
                 content={parsed.methods}
@@ -264,17 +264,17 @@ export const ThinkingGuideRenderer = memo(function ThinkingGuideRenderer({
 
       {/* ===== 正式回答区 ===== */}
       {parsed.formalAnswer && (
-        <div className={`mt-3 bg-white rounded-xl border border-blue-100 shadow-sm ${isMobile ? 'p-3' : 'p-4'}`}>
+        <div className={`mt-3 bg-white rounded-xl border border-pine/15 shadow-sm ${isMobile ? 'p-3' : 'p-4'}`}>
           {/* 标题 */}
-          <div className={`flex items-center gap-2 pb-2 border-b border-blue-100 ${isMobile ? 'mb-2' : 'mb-3'}`}>
+          <div className={`flex items-center gap-2 pb-2 border-b border-pine/15 ${isMobile ? 'mb-2' : 'mb-3'}`}>
             <span className={isMobile ? 'text-base' : 'text-lg'}>📝</span>
-            <span className={`font-semibold text-blue-800 ${isMobile ? 'text-xs' : 'text-base'}`}>
+            <span className={`font-semibold text-pine ${isMobile ? 'text-xs' : 'text-base'}`}>
               正式回答
             </span>
           </div>
 
           {/* 回答内容 */}
-          <div className={`${isMobile ? 'text-xs' : 'text-sm'} text-gray-800 leading-relaxed`}>
+          <div className={`${isMobile ? 'text-xs' : 'text-sm'} text-ink leading-relaxed`}>
             <StreamingMarkdown
               content={parsed.formalAnswer}
               isStreaming={false}
@@ -287,7 +287,7 @@ export const ThinkingGuideRenderer = memo(function ThinkingGuideRenderer({
 
       {/* 流式加载提示 */}
       {isStreaming && (
-        <div className="flex items-center justify-center gap-2 py-2 text-violet-500 mt-2">
+        <div className="flex items-center justify-center gap-2 py-2 text-pine mt-2">
           <div className="loading-dots scale-75">
             <span></span><span></span><span></span>
           </div>

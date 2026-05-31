@@ -60,7 +60,7 @@ const PAD_X = 64;
 const PAD_TOP = 72;
 const PAD_BOTTOM = 56;
 const FONT = '-apple-system, "PingFang SC", "Noto Sans SC", "Hiragino Sans GB", sans-serif';
-const C = { bg: '#F7F5F1', ink: '#2C2825', sub: '#8C857A', line: '#DDD9D2', green: '#10b981', amber: '#f59e0b', red: '#ef4444', greenBg: '#E6F7EE', amberBg: '#FEF6E0', redBg: '#FDE8E8' };
+const C = { bg: '#FAF7F2', ink: '#1C1B19', sub: '#5C5A55', line: '#E8E2D5', green: '#2D6A4F', amber: '#B8842B', red: '#B5483C', greenBg: '#E6EDE8', amberBg: '#FBF1DC', redBg: '#F6E6E2' };
 
 function wrapText(ctx: CanvasRenderingContext2D, text: string, maxW: number): string[] {
   const lines: string[] = [];
@@ -127,7 +127,7 @@ function drawShareImage(title: string, accuracy: number, totalCorrect: number, t
         const p = stat.total > 0 ? Math.round((stat.correct / stat.total) * 100) : 0;
         ctx.fillStyle = C.ink; ctx.font = `400 15px ${FONT}`; ctx.fillText(stat.topic, PAD_X, y + 15);
         ctx.fillStyle = pctColor(p); ctx.font = `600 13px ${FONT}`; ctx.textAlign = 'right'; ctx.fillText(`${stat.correct}/${stat.total}`, CARD_W - PAD_X, y + 15); ctx.textAlign = 'left'; y += 24;
-        ctx.fillStyle = '#E8E6E1'; roundedRect(ctx, PAD_X, y, maxW, 6, 3); ctx.fill();
+        ctx.fillStyle = '#E8E2D5'; roundedRect(ctx, PAD_X, y, maxW, 6, 3); ctx.fill();
         const fillW = Math.max((p / 100) * maxW, 6); ctx.fillStyle = pctColor(p); roundedRect(ctx, PAD_X, y, fillW, 6, 3); ctx.fill();
         y += 6 + topicRowH - 30;
       }
@@ -216,15 +216,15 @@ function ClassCheckStudyReportView({
   if (!plan || totalCheckpoints === 0) {
     return (
       <div className="flex h-full min-h-[360px] flex-col items-center justify-center gap-5 p-8">
-        <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-[#F7F7F5]">
-          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#A3A39E" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+        <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-[#FAF7F2]">
+          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#8E8B82" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
             <path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2" />
             <rect x="9" y="3" width="6" height="4" rx="1" /><path d="M9 14l2 2 4-4" />
           </svg>
         </div>
         <div className="text-center max-w-[280px]">
-          <p className="text-[15px] font-semibold text-[#232322]">播放视频开始学习</p>
-          <p className="mt-2 text-[13px] leading-[1.7] text-[#A3A39E]">
+          <p className="text-[15px] font-semibold text-[#1C1B19]">播放视频开始学习</p>
+          <p className="mt-2 text-[13px] leading-[1.7] text-[#8E8B82]">
             AI 会在合适的节点弹出知识点检验，全部完成后自动生成学习报告
           </p>
         </div>
@@ -239,18 +239,18 @@ function ClassCheckStudyReportView({
       <div className="flex h-full min-h-[360px] flex-col items-center justify-center gap-5 p-8">
         <div className="relative" style={{ width: 80, height: 80 }}>
           <svg className="-rotate-90" width={80} height={80} viewBox="0 0 80 80">
-            <circle cx="40" cy="40" r="34" fill="none" stroke="#F0F0EE" strokeWidth="5" />
+            <circle cx="40" cy="40" r="34" fill="none" stroke="#F0EBDF" strokeWidth="5" />
             <circle cx="40" cy="40" r="34" fill="none"
-              stroke="#E67E22" strokeWidth="5" strokeLinecap="round"
+              stroke="#B5483C" strokeWidth="5" strokeLinecap="round"
               strokeDasharray={`${progressPct * 2.136} 213.6`} />
           </svg>
           <div className="absolute inset-0 flex items-center justify-center">
-            <span className="text-[16px] font-bold text-[#E67E22]">{completedCount}/{totalCheckpoints}</span>
+            <span className="text-[16px] font-bold text-vermilion">{completedCount}/{totalCheckpoints}</span>
           </div>
         </div>
         <div className="text-center max-w-[280px]">
-          <p className="text-[15px] font-semibold text-[#232322]">检验进行中</p>
-          <p className="mt-2 text-[13px] leading-[1.7] text-[#A3A39E]">
+          <p className="text-[15px] font-semibold text-[#1C1B19]">检验进行中</p>
+          <p className="mt-2 text-[13px] leading-[1.7] text-[#8E8B82]">
             还有 {totalCheckpoints - completedCount} 个知识点未检验，继续播放视频完成全部检验后生成报告
           </p>
         </div>
@@ -264,9 +264,9 @@ function ClassCheckStudyReportView({
                   {done ? (
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#10b981" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12" /></svg>
                   ) : (
-                    <div className="h-3.5 w-3.5 rounded-full border border-[#E9E9E7]" />
+                    <div className="h-3.5 w-3.5 rounded-full border border-[#E8E2D5]" />
                   )}
-                  <span className={done ? 'text-[#232322]' : 'text-[#A3A39E]'}>{cp.topic}</span>
+                  <span className={done ? 'text-[#1C1B19]' : 'text-[#8E8B82]'}>{cp.topic}</span>
                 </div>
               );
             })}
@@ -280,17 +280,17 @@ function ClassCheckStudyReportView({
   return (
     <>
       <div className="mx-auto max-w-md px-2 pb-8">
-        <div className="rounded-2xl border border-[#E9E9E7] bg-white overflow-hidden">
+        <div className="rounded-2xl border border-[#E8E2D5] bg-white overflow-hidden">
           <div className="px-6 pt-6 pb-5">
             <div className="flex items-start justify-between gap-4">
               <div className="min-w-0 flex-1">
-                <p className="text-[11px] font-medium tracking-wide text-[#A3A39E]">学习报告</p>
-                <p className="mt-1 text-[17px] font-bold text-[#232322] leading-snug">{title}</p>
-                <p className="mt-2 text-[13px] text-[#787774]">{totalCheckpoints} 个知识点 · {totalQuestions} 道题</p>
+                <p className="text-[11px] font-medium tracking-wide text-[#8E8B82]">学习报告</p>
+                <p className="mt-1 text-[17px] font-bold text-[#1C1B19] leading-snug">{title}</p>
+                <p className="mt-2 text-[13px] text-[#5C5A55]">{totalCheckpoints} 个知识点 · {totalQuestions} 道题</p>
               </div>
               <div className="relative shrink-0" style={{ width: 68, height: 68 }}>
                 <svg className="-rotate-90" width={68} height={68} viewBox="0 0 68 68">
-                  <circle cx="34" cy="34" r="28" fill="none" stroke="#F0F0EE" strokeWidth="5" />
+                  <circle cx="34" cy="34" r="28" fill="none" stroke="#F0EBDF" strokeWidth="5" />
                   <circle cx="34" cy="34" r="28" fill="none" stroke={pctColor(accuracy)} strokeWidth="5" strokeLinecap="round"
                     strokeDasharray={`${accuracy * 1.76} 176`} style={{ transition: 'stroke-dasharray 0.6s ease-out' }} />
                 </svg>
@@ -306,7 +306,7 @@ function ClassCheckStudyReportView({
             </div>
           </div>
 
-          <div className="mx-6 h-px bg-[#E9E9E7]" />
+          <div className="mx-6 h-px bg-[#E8E2D5]" />
 
           <div className="px-6 py-5 space-y-3">
             {topicStats.map((stat, i) => {
@@ -314,14 +314,14 @@ function ClassCheckStudyReportView({
               return (
                 <div key={i}>
                   <div className="flex items-center justify-between mb-1.5">
-                    <span className="text-[13px] font-medium text-[#232322]">{stat.topic}</span>
+                    <span className="text-[13px] font-medium text-[#1C1B19]">{stat.topic}</span>
                     <span className="text-[12px] font-semibold tabular-nums" style={{ color: pctColor(p) }}>{stat.correct}/{stat.total}</span>
                   </div>
-                  <div className="h-[6px] rounded-full bg-[#F0F0EE] overflow-hidden">
+                  <div className="h-[6px] rounded-full bg-[#F0EBDF] overflow-hidden">
                     <div className="h-full rounded-full" style={{ width: `${Math.max(p, 4)}%`, backgroundColor: pctColor(p), transition: 'width 0.5s ease-out' }} />
                   </div>
                   {stat.wrongStems.length > 0 && (
-                    <p className="mt-1 text-[11px] text-[#A3A39E]">
+                    <p className="mt-1 text-[11px] text-[#8E8B82]">
                       {stat.wrongStems.length === 1 ? (stat.wrongStems[0].length > 36 ? stat.wrongStems[0].slice(0, 36) + '…' : stat.wrongStems[0]) : `${stat.wrongStems.length} 题需巩固`}
                     </p>
                   )}
@@ -330,11 +330,11 @@ function ClassCheckStudyReportView({
             })}
           </div>
 
-          <div className="mx-6 h-px bg-[#E9E9E7]" />
+          <div className="mx-6 h-px bg-[#E8E2D5]" />
           <div className="px-6 py-4 flex items-center justify-between">
-            <p className="text-[11px] text-[#A3A39E]">MeetMind</p>
+            <p className="text-[11px] text-[#8E8B82]">MeetMind</p>
             <button type="button" onClick={handleShare}
-              className="flex items-center gap-1.5 rounded-xl border border-[#E9E9E7] px-3.5 py-2 text-[12px] font-medium text-[#232322] transition-colors hover:bg-[#F7F7F5] active:bg-[#F0F0EE]">
+              className="flex items-center gap-1.5 rounded-xl border border-[#E8E2D5] px-3.5 py-2 text-[12px] font-medium text-[#1C1B19] transition-colors hover:bg-[#FAF7F2] active:bg-[#F0EBDF]">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8" /><polyline points="16 6 12 2 8 6" /><line x1="12" y1="2" x2="12" y2="15" />
               </svg>

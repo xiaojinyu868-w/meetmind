@@ -48,12 +48,12 @@ const CONTENT_TYPE_META: Record<
   string,
   { icon: typeof FileText; label: string; color: string; bg: string }
 > = {
-  text: { icon: PencilLine, label: '文字', color: 'text-blue-600', bg: 'bg-blue-50' },
-  audio: { icon: AudioLines, label: '录音', color: 'text-orange-600', bg: 'bg-orange-50' },
-  video: { icon: PlaySquare, label: '视频', color: 'text-rose-600', bg: 'bg-rose-50' },
-  image: { icon: ImageIcon, label: '图片', color: 'text-teal-600', bg: 'bg-teal-50' },
-  link: { icon: Link2, label: '链接', color: 'text-violet-600', bg: 'bg-violet-50' },
-  document: { icon: FileText, label: '文档', color: 'text-amber-600', bg: 'bg-amber-50' },
+  text: { icon: PencilLine, label: '文字', color: 'text-pine', bg: 'bg-pine-fog' },
+  audio: { icon: AudioLines, label: '录音', color: 'text-vermilion', bg: 'bg-vermilion-fog' },
+  video: { icon: PlaySquare, label: '视频', color: 'text-vermilion', bg: 'bg-vermilion-fog' },
+  image: { icon: ImageIcon, label: '图片', color: 'text-pine', bg: 'bg-pine-fog' },
+  link: { icon: Link2, label: '链接', color: 'text-pine', bg: 'bg-pine-fog' },
+  document: { icon: FileText, label: '文档', color: 'text-vermilion', bg: 'bg-vermilion-fog' },
 };
 
 function getContentTypeMeta(type: string) {
@@ -61,8 +61,8 @@ function getContentTypeMeta(type: string) {
     CONTENT_TYPE_META[type] || {
       icon: FileText,
       label: type,
-      color: 'text-slate-500',
-      bg: 'bg-slate-50',
+      color: 'text-ink-muted',
+      bg: 'bg-paper-warm',
     }
   );
 }
@@ -94,7 +94,7 @@ function CitationBadge({
 }) {
   if (!source) {
     return (
-      <span className="mx-0.5 inline-flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-slate-100 px-1 align-super text-[10px] font-bold leading-none text-slate-400 -translate-y-[0.35em]">
+      <span className="mx-0.5 inline-flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-paper-deep px-1 align-super text-[10px] font-bold leading-none text-ink-muted -translate-y-[0.35em]">
         {index}
       </span>
     );
@@ -103,7 +103,7 @@ function CitationBadge({
     <button
       type="button"
       onClick={() => onClick?.(source.id)}
-      className="mx-0.5 inline-flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-emerald-100 px-1 align-super text-[10px] font-bold leading-none text-emerald-700 transition-colors hover:bg-emerald-200 -translate-y-[0.35em]"
+      className="mx-0.5 inline-flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-pine-mist px-1 align-super text-[10px] font-bold leading-none text-pine transition-colors hover:bg-pine-mist -translate-y-[0.35em]"
       title={source.title}
     >
       {index}
@@ -361,37 +361,37 @@ export function AISearchPanel({
         </li>
       ),
       h1: ({ children, ...props }) => (
-        <h1 {...props} className="mb-3 mt-5 text-[17px] font-bold text-slate-900 first:mt-0">
+        <h1 {...props} className="mb-3 mt-5 text-[17px] font-bold text-ink first:mt-0">
           {processChildrenForCitations(children, sources, onNavigateToCapture)}
         </h1>
       ),
       h2: ({ children, ...props }) => (
-        <h2 {...props} className="mb-2.5 mt-4 text-[15px] font-bold text-slate-900 first:mt-0">
+        <h2 {...props} className="mb-2.5 mt-4 text-[15px] font-bold text-ink first:mt-0">
           {processChildrenForCitations(children, sources, onNavigateToCapture)}
         </h2>
       ),
       h3: ({ children, ...props }) => (
-        <h3 {...props} className="mb-2 mt-3 text-sm font-bold text-slate-800">
+        <h3 {...props} className="mb-2 mt-3 text-sm font-bold text-ink">
           {processChildrenForCitations(children, sources, onNavigateToCapture)}
         </h3>
       ),
       ul: ({ children, ...props }) => (
-        <ul {...props} className="mb-3 ml-1 list-inside list-disc space-y-1.5 text-slate-700 marker:text-slate-300">
+        <ul {...props} className="mb-3 ml-1 list-inside list-disc space-y-1.5 text-ink-secondary marker:text-ink-faint">
           {children}
         </ul>
       ),
       ol: ({ children, ...props }) => (
-        <ol {...props} className="mb-3 ml-1 list-inside list-decimal space-y-1.5 text-slate-700 marker:text-slate-400">
+        <ol {...props} className="mb-3 ml-1 list-inside list-decimal space-y-1.5 text-ink-secondary marker:text-ink-muted">
           {children}
         </ol>
       ),
       strong: ({ children, ...props }) => (
-        <strong {...props} className="font-semibold text-slate-900">
+        <strong {...props} className="font-semibold text-ink">
           {processChildrenForCitations(children, sources, onNavigateToCapture)}
         </strong>
       ),
       em: ({ children, ...props }) => (
-        <em {...props} className="not-italic text-slate-600 bg-amber-50/60 px-0.5 rounded">
+        <em {...props} className="not-italic text-ink-secondary bg-vermilion-fog/60 px-0.5 rounded">
           {processChildrenForCitations(children, sources, onNavigateToCapture)}
         </em>
       ),
@@ -401,7 +401,7 @@ export function AISearchPanel({
           return (
             <code
               {...props}
-              className="rounded-md bg-slate-100 px-1.5 py-0.5 text-[13px] font-mono text-slate-800"
+              className="rounded-md bg-paper-deep px-1.5 py-0.5 text-[13px] font-mono text-ink"
             >
               {children}
             </code>
@@ -410,21 +410,21 @@ export function AISearchPanel({
         return (
           <code
             {...props}
-            className={`block overflow-x-auto rounded-xl bg-slate-50 p-4 text-[13px] font-mono leading-relaxed ${codeClassName}`}
+            className={`block overflow-x-auto rounded-xl bg-paper-warm p-4 text-[13px] font-mono leading-relaxed ${codeClassName}`}
           >
             {children}
           </code>
         );
       },
       pre: ({ children, ...props }) => (
-        <pre {...props} className="mb-3 overflow-hidden rounded-xl border border-slate-100">
+        <pre {...props} className="mb-3 overflow-hidden rounded-xl border border-divider-light">
           {children}
         </pre>
       ),
       blockquote: ({ children, ...props }) => (
         <blockquote
           {...props}
-          className="my-3 rounded-r-lg border-l-[3px] border-emerald-300 bg-emerald-50/40 py-2 pl-4 pr-3 text-slate-600"
+          className="my-3 rounded-r-lg border-l-[3px] border-pine/40 bg-pine-fog/40 py-2 pl-4 pr-3 text-ink-secondary"
         >
           {children}
         </blockquote>
@@ -435,21 +435,21 @@ export function AISearchPanel({
           href={href}
           target="_blank"
           rel="noopener noreferrer"
-          className="text-emerald-700 underline decoration-emerald-200 underline-offset-2 transition-colors hover:text-emerald-900 hover:decoration-emerald-400"
+          className="text-pine underline decoration-pine/30 underline-offset-2 transition-colors hover:text-pine-deep hover:decoration-pine"
         >
           {children}
         </a>
       ),
-      hr: ({ ...props }) => <hr {...props} className="my-4 border-slate-100" />,
+      hr: ({ ...props }) => <hr {...props} className="my-4 border-divider-light" />,
       table: ({ children, ...props }) => (
-        <div className="mb-3 overflow-x-auto rounded-xl border border-slate-100">
+        <div className="mb-3 overflow-x-auto rounded-xl border border-divider-light">
           <table {...props} className="w-full text-sm">
             {children}
           </table>
         </div>
       ),
       thead: ({ children, ...props }) => (
-        <thead {...props} className="bg-slate-50 text-left text-xs font-semibold text-slate-600">
+        <thead {...props} className="bg-paper-warm text-left text-xs font-semibold text-ink-secondary">
           {children}
         </thead>
       ),
@@ -459,7 +459,7 @@ export function AISearchPanel({
         </th>
       ),
       td: ({ children, ...props }) => (
-        <td {...props} className="border-t border-slate-50 px-3 py-2 text-slate-700">
+        <td {...props} className="border-t border-divider-light px-3 py-2 text-ink-secondary">
           {children}
         </td>
       ),
@@ -474,22 +474,22 @@ export function AISearchPanel({
   const panelContent = (
     <div className="flex h-full flex-col bg-white">
       {/* ── 头部 ── */}
-      <div className="flex items-start justify-between gap-4 border-b border-[#E9E9E7] px-6 py-5">
+      <div className="flex items-start justify-between gap-4 border-b border-[#E8E2D5] px-6 py-5">
         <div className="min-w-0">
           <div className="flex items-center gap-2.5">
-            <div className="flex h-8 w-8 items-center justify-center rounded-xl border border-[#E9E9E7] bg-[#F7F7F5] text-[#232322]">
+            <div className="flex h-8 w-8 items-center justify-center rounded-xl border border-[#E8E2D5] bg-[#FAF7F2] text-[#1C1B19]">
               <Search size={15} />
             </div>
-            <h2 className="text-[15px] font-semibold tracking-[-0.01em] text-[#232322]">搜索笔记</h2>
+            <h2 className="text-[15px] font-semibold tracking-[-0.01em] text-[#1C1B19]">搜索笔记</h2>
           </div>
-          <p className="mt-2 max-w-[420px] text-[12px] leading-5 text-[#787774]">
+          <p className="mt-2 max-w-[420px] text-[12px] leading-5 text-[#5C5A55]">
             像问同学一样提问，我会从你收进来的课、讲义和材料里找答案，并保留来源。
           </p>
         </div>
         <button
           type="button"
           onClick={onClose}
-          className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl border border-[#E9E9E7] text-[#787774] transition-colors hover:bg-[#F7F7F5] hover:text-[#232322]"
+          className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl border border-[#E8E2D5] text-[#5C5A55] transition-colors hover:bg-[#FAF7F2] hover:text-[#1C1B19]"
           aria-label="关闭"
         >
           <X size={17} />
@@ -502,18 +502,18 @@ export function AISearchPanel({
           /* ── 空状态引导 ── */
           <div className="flex min-h-full flex-col justify-between px-8 py-8 text-left">
             <div>
-              <div className="mb-6 flex h-14 w-14 items-center justify-center rounded-2xl border border-[#E9E9E7] bg-[#F7F7F5] text-[#232322]">
+              <div className="mb-6 flex h-14 w-14 items-center justify-center rounded-2xl border border-[#E8E2D5] bg-[#FAF7F2] text-[#1C1B19]">
                 <Sparkles size={22} />
               </div>
-              <p className="max-w-[460px] text-[22px] font-semibold leading-tight tracking-[-0.03em] text-[#232322]">
+              <p className="max-w-[460px] text-[22px] font-semibold leading-tight tracking-[-0.03em] text-[#1C1B19]">
                 不用翻列表，直接问这堆材料。
               </p>
-              <p className="mt-3 max-w-[430px] text-[14px] leading-7 text-[#787774]">
+              <p className="mt-3 max-w-[430px] text-[14px] leading-7 text-[#5C5A55]">
                 适合找某个概念、复盘上节课、或者把几份资料里的说法对齐。结果会带引用，点来源就能回到原件。
               </p>
             </div>
             <div className="mt-8">
-              <p className="mb-2 text-[11px] font-medium uppercase tracking-[0.16em] text-[#A3A39E]">可以这样问</p>
+              <p className="mb-2 text-[11px] font-medium uppercase tracking-[0.16em] text-[#8E8B82]">可以这样问</p>
               <div className="flex flex-wrap gap-2">
                 {['强化学习的奖励函数', '上节课讲的公式', '那个产品方法论'].map(
                   (example) => (
@@ -524,7 +524,7 @@ export function AISearchPanel({
                         setQuery(example);
                         inputRef.current?.focus();
                       }}
-                      className="rounded-full border border-[#E9E9E7] bg-white px-3.5 py-1.5 text-xs text-[#787774] transition-colors hover:border-[#A3A39E] hover:bg-[#F7F7F5] hover:text-[#232322]"
+                      className="rounded-full border border-[#E8E2D5] bg-white px-3.5 py-1.5 text-xs text-[#5C5A55] transition-colors hover:border-[#8E8B82] hover:bg-[#FAF7F2] hover:text-[#1C1B19]"
                     >
                       {example}
                     </button>
@@ -536,17 +536,17 @@ export function AISearchPanel({
         ) : error ? (
           /* ── 错误状态 ── */
           <div className="flex flex-col items-center justify-center px-6 py-16 text-center">
-            <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-red-50">
-              <X size={24} className="text-red-400" />
+            <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-vermilion-mist/50">
+              <X size={24} className="text-vermilion/65" />
             </div>
-            <p className="text-sm font-medium text-red-600">{error}</p>
+            <p className="text-sm font-medium text-vermilion">{error}</p>
             <button
               type="button"
               onClick={() => {
                 setError(null);
                 setHasSearched(false);
               }}
-              className="mt-4 flex items-center gap-1.5 rounded-full border border-slate-200 px-4 py-2 text-xs font-medium text-slate-600 transition-colors hover:border-slate-300 hover:bg-slate-50"
+              className="mt-4 flex items-center gap-1.5 rounded-full border border-divider px-4 py-2 text-xs font-medium text-ink-secondary transition-colors hover:border-divider hover:bg-paper-warm"
             >
               <RotateCcw size={12} />
               重新搜索
@@ -558,10 +558,10 @@ export function AISearchPanel({
             {/* 用户查询回显 */}
             {currentQuery ? (
               <div className="mb-5 flex items-start gap-2.5">
-                <div className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full bg-slate-800 mt-0.5">
+                <div className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full bg-ink mt-0.5">
                   <Search size={11} className="text-white" />
                 </div>
-                <p className="text-[14px] font-medium leading-relaxed text-slate-700 pt-0.5">
+                <p className="text-[14px] font-medium leading-relaxed text-ink-secondary pt-0.5">
                   {currentQuery}
                 </p>
               </div>
@@ -572,12 +572,12 @@ export function AISearchPanel({
               <div className="relative">
                 {/* AI 头像 + 标签 */}
                 <div className="mb-3 flex items-center gap-2">
-                  <div className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full border border-[#E9E9E7] bg-[#F7F7F5] text-[#232322]">
+                  <div className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full border border-[#E8E2D5] bg-[#FAF7F2] text-[#1C1B19]">
                     <Sparkles size={11} />
                   </div>
-                  <span className="text-xs font-semibold text-[#787774]">AI 回答</span>
+                  <span className="text-xs font-semibold text-[#5C5A55]">AI 回答</span>
                   {isSearching && !answer ? (
-                    <div className="flex items-center gap-1.5 text-slate-400">
+                    <div className="flex items-center gap-1.5 text-ink-muted">
                       <Loader2 size={12} className="animate-spin" />
                       <span className="text-[11px]">正在检索...</span>
                     </div>
@@ -586,7 +586,7 @@ export function AISearchPanel({
 
                 {/* Markdown 渲染 */}
                 {answer ? (
-                  <div className="search-answer-markdown ml-8 text-[14px] text-slate-700">
+                  <div className="search-answer-markdown ml-8 text-[14px] text-ink-secondary">
                     <ReactMarkdown
                       remarkPlugins={[remarkGfm, remarkMath]}
                       rehypePlugins={[rehypeKatex]}
@@ -597,7 +597,7 @@ export function AISearchPanel({
 
                     {/* 流式光标 */}
                     {isSearching ? (
-                      <span className="ml-0.5 inline-block h-[18px] w-[3px] animate-pulse rounded-sm bg-emerald-500 align-middle" />
+                      <span className="ml-0.5 inline-block h-[18px] w-[3px] animate-pulse rounded-sm bg-pine-fog0 align-middle" />
                     ) : null}
                   </div>
                 ) : null}
@@ -611,7 +611,7 @@ export function AISearchPanel({
                 <button
                   type="button"
                   onClick={() => setSourcesExpanded((v) => !v)}
-                  className="flex w-full items-center gap-2 rounded-xl px-2 py-1.5 text-left transition-colors hover:bg-slate-50"
+                  className="flex w-full items-center gap-2 rounded-xl px-2 py-1.5 text-left transition-colors hover:bg-paper-warm"
                 >
                   <div className="flex items-center gap-1">
                     {citedSources.slice(0, 4).map((source) => {
@@ -627,17 +627,17 @@ export function AISearchPanel({
                       );
                     })}
                     {citedSources.length > 4 ? (
-                      <span className="flex h-5 items-center px-0.5 text-[10px] text-slate-400">
+                      <span className="flex h-5 items-center px-0.5 text-[10px] text-ink-muted">
                         +{citedSources.length - 4}
                       </span>
                     ) : null}
                   </div>
-                  <span className="text-[11px] text-slate-400">
+                  <span className="text-[11px] text-ink-muted">
                     {citedSources.length} 条引用来源
                   </span>
                   <ChevronRight
                     size={12}
-                    className={`ml-auto flex-shrink-0 text-slate-300 transition-transform ${sourcesExpanded ? 'rotate-90' : ''}`}
+                    className={`ml-auto flex-shrink-0 text-ink-faint transition-transform ${sourcesExpanded ? 'rotate-90' : ''}`}
                   />
                 </button>
 
@@ -653,23 +653,23 @@ export function AISearchPanel({
                           key={source.id}
                           type="button"
                           onClick={() => onNavigateToCapture?.(source.id)}
-                          className="group flex w-full items-center gap-2.5 rounded-xl px-2 py-2 text-left transition-colors hover:bg-emerald-50/40"
+                          className="group flex w-full items-center gap-2.5 rounded-xl px-2 py-2 text-left transition-colors hover:bg-pine-fog/40"
                         >
-                          <span className="flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-emerald-100 text-[10px] font-bold text-emerald-700">
+                          <span className="flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-pine-mist text-[10px] font-bold text-pine">
                             {globalIdx + 1}
                           </span>
                           <div className={`flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-md ${meta.bg} ${meta.color}`}>
                             <Icon size={10} />
                           </div>
-                          <p className="min-w-0 flex-1 truncate text-[12px] text-slate-600">
+                          <p className="min-w-0 flex-1 truncate text-[12px] text-ink-secondary">
                             {source.title}
                           </p>
-                          <span className="flex-shrink-0 text-[10px] text-slate-300">
+                          <span className="flex-shrink-0 text-[10px] text-ink-faint">
                             {formatSourceDate(source.occurredAt || source.createdAt)}
                           </span>
                           <ChevronRight
                             size={12}
-                            className="flex-shrink-0 text-slate-200 transition-colors group-hover:text-emerald-500"
+                            className="flex-shrink-0 text-ink-faint transition-colors group-hover:text-pine"
                           />
                         </button>
                       );
@@ -683,7 +683,7 @@ export function AISearchPanel({
       </div>
 
       {/* ── 搜索输入框 ── */}
-      <div className="border-t border-[#E9E9E7] bg-white px-6 py-4">
+      <div className="border-t border-[#E8E2D5] bg-white px-6 py-4">
         <div className="relative">
           <input
             ref={inputRef}
@@ -693,13 +693,13 @@ export function AISearchPanel({
             onKeyDown={handleKeyDown}
             placeholder="问一个想从笔记里找到的问题..."
             disabled={isSearching}
-            className="w-full rounded-2xl border border-[#E9E9E7] bg-[#F7F7F5] py-3.5 pl-4 pr-12 text-[14px] text-[#232322] outline-none transition-colors placeholder:text-[#A3A39E] focus:border-[#A3A39E] focus:bg-white disabled:opacity-50"
+            className="w-full rounded-2xl border border-[#E8E2D5] bg-[#FAF7F2] py-3.5 pl-4 pr-12 text-[14px] text-[#1C1B19] outline-none transition-colors placeholder:text-[#8E8B82] focus:border-[#8E8B82] focus:bg-white disabled:opacity-50"
           />
           <button
             type="button"
             onClick={handleSearch}
             disabled={!query.trim() || isSearching}
-            className="absolute right-2 top-1/2 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-xl bg-[#232322] text-white transition-colors hover:bg-[#111111] disabled:cursor-not-allowed disabled:bg-[#E9E9E7] disabled:text-[#A3A39E]"
+            className="absolute right-2 top-1/2 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-xl bg-[#1C1B19] text-white transition-colors hover:bg-[#111111] disabled:cursor-not-allowed disabled:bg-[#E8E2D5] disabled:text-[#8E8B82]"
             aria-label="搜索"
           >
             {isSearching ? (
@@ -726,11 +726,11 @@ export function AISearchPanel({
   return (
     <>
       <div
-        className="fixed inset-0 z-40 bg-[#232322]/12 animate-in fade-in duration-150"
+        className="fixed inset-0 z-40 bg-[#1C1B19]/12 animate-in fade-in duration-150"
         onClick={onClose}
         aria-hidden
       />
-      <div className="fixed bottom-0 right-0 top-0 z-50 w-[min(720px,72vw)] min-w-[560px] overflow-hidden border-l border-[#E9E9E7] bg-white animate-in fade-in slide-in-from-right-6 duration-200">
+      <div className="fixed bottom-0 right-0 top-0 z-50 w-[min(720px,72vw)] min-w-[560px] overflow-hidden border-l border-[#E8E2D5] bg-white animate-in fade-in slide-in-from-right-6 duration-200">
         {panelContent}
       </div>
     </>

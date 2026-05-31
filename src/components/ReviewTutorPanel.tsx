@@ -99,7 +99,7 @@ export function ReviewTutorPanel({
       {audioSrc && (
         <div
           className="flex-shrink-0 border-b px-3 py-2"
-          style={{ background: '#FCFBF8', borderColor: 'var(--edu-border-light)' }}
+          style={{ background: '#F2EDE3', borderColor: 'var(--edu-border-light)' }}
         >
           <WaveformPlayer
             ref={waveformRef}
@@ -116,8 +116,8 @@ export function ReviewTutorPanel({
             selectedAnchorId={selectedAnchor?.id}
             compact={true}
             height={24}
-            waveColor="#E3D5C4"
-            progressColor="#F3EADF"
+            waveColor="#6B9080"
+            progressColor="#2D4F3E"
           />
         </div>
       )}
@@ -126,14 +126,14 @@ export function ReviewTutorPanel({
         {!showConversationHistory && (
           <div
             className="flex-shrink-0 px-3 py-1.5 flex items-center gap-2 border-b"
-            style={{ background: '#FCFBF8', borderColor: 'var(--edu-border-light)' }}
+            style={{ background: '#F2EDE3', borderColor: 'var(--edu-border-light)' }}
           >
             <button
               onClick={onClearSelectedAnchor}
               className={`px-3 py-1.5 text-xs rounded-lg transition-all flex items-center gap-1.5 ${
                 !selectedAnchor
-                  ? 'bg-[#232322] text-white'
-                  : 'bg-white text-gray-600 hover:text-[#787774] hover:bg-[#EFEFEF] border border-gray-200'
+                  ? 'bg-[#1C1B19] text-white'
+                  : 'bg-white text-ink-secondary hover:text-[#5C5A55] hover:bg-[#F2EDE3] border border-divider'
               }`}
               title="基于整节课内容与 AI 对话"
             >
@@ -141,12 +141,12 @@ export function ReviewTutorPanel({
               整节课对话
             </button>
             {selectedAnchor && (
-              <div className="flex items-center gap-1.5 px-3 py-1.5 bg-white rounded-lg border border-[#E9E9E7] text-xs">
+              <div className="flex items-center gap-1.5 px-3 py-1.5 bg-white rounded-lg border border-[#E8E2D5] text-xs">
                 <span className={`w-2 h-2 rounded-full ${selectedAnchor.resolved ? 'bg-mint' : 'bg-[#FADEC9] animate-pulse'}`} />
-                <span className="text-[#232322] font-medium">困惑点</span>
+                <span className="text-[#1C1B19] font-medium">困惑点</span>
                 <button
                   onClick={onClearSelectedAnchor}
-                  className="ml-1 text-gray-400 hover:text-gray-600"
+                  className="ml-1 text-ink-muted hover:text-ink-secondary"
                   title="返回整节课对话"
                 >
                   <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -156,7 +156,7 @@ export function ReviewTutorPanel({
               </div>
             )}
             {!selectedAnchor && anchors.length > 0 && (
-              <span className="text-xs text-gray-400 ml-auto">点击左侧困惑点可切换到针对性解答</span>
+              <span className="text-xs text-ink-muted ml-auto">点击左侧困惑点可切换到针对性解答</span>
             )}
           </div>
         )}
@@ -166,11 +166,11 @@ export function ReviewTutorPanel({
             selectedHistoryConversation ? (
               <div className="h-full flex flex-col">
                 <div className="px-4 py-2 border-b flex items-center justify-between flex-shrink-0" style={{ background: 'var(--edu-bg-soft)', borderColor: 'var(--edu-border-light)' }}>
-                  <span className="text-sm text-gray-600 truncate flex-1 mr-2">{selectedHistoryConversation.title}</span>
+                  <span className="text-sm text-ink-secondary truncate flex-1 mr-2">{selectedHistoryConversation.title}</span>
                   <div className="flex items-center gap-1">
                     <button
                       onClick={onBackToHistoryList}
-                      className="w-8 h-8 flex items-center justify-center rounded-lg text-gray-500 hover:text-navy hover:bg-gray-100 transition-colors"
+                      className="w-8 h-8 flex items-center justify-center rounded-lg text-ink-muted hover:text-navy hover:bg-paper-deep transition-colors"
                       title="返回列表"
                     >
                       <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -179,7 +179,7 @@ export function ReviewTutorPanel({
                     </button>
                     <button
                       onClick={onCloseHistory}
-                      className="w-8 h-8 flex items-center justify-center rounded-lg text-[#232322] hover:text-[#232322] hover:bg-[#EFEFEF] transition-colors"
+                      className="w-8 h-8 flex items-center justify-center rounded-lg text-[#1C1B19] hover:text-[#1C1B19] hover:bg-[#F2EDE3] transition-colors"
                       title="新对话"
                     >
                       <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -219,7 +219,7 @@ export function ReviewTutorPanel({
                   <span className="text-sm font-medium text-navy">历史对话</span>
                   <button
                     onClick={onCloseHistory}
-                    className="w-8 h-8 flex items-center justify-center rounded-lg text-[#787774] hover:text-[#232322] hover:bg-[#EFEFEF] transition-colors"
+                    className="w-8 h-8 flex items-center justify-center rounded-lg text-[#5C5A55] hover:text-[#1C1B19] hover:bg-[#F2EDE3] transition-colors"
                     title="新对话"
                   >
                     <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">

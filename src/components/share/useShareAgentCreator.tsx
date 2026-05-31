@@ -28,7 +28,14 @@ export interface UseShareAgentCreatorReturn {
   /** 是否正在调用 /api/share/agent */
   isCreating: boolean;
   /** 触发创建并打开分享卡 */
-  openCreator: (snapshot: SharedAgentSnapshot, options?: { hookLine?: string }) => Promise<void>;
+  openCreator: (
+    snapshot: SharedAgentSnapshot,
+    options?: {
+      hookLine?: string;
+      /** 完整 artifact payload —— 让 ShareAgentCard 能按 artifactKind 画产物本身 */
+      artifactPayload?: unknown;
+    },
+  ) => Promise<void>;
   /** 渲染 modal（在父组件 JSX 末尾插一行 `{modal}`） */
   modal: React.ReactNode;
 }
@@ -71,6 +78,7 @@ export function useShareAgentCreator(): UseShareAgentCreatorReturn {
           artifactKind: snapshot.artifactKind,
           sharerNickname: snapshot.sharerNickname,
           hookLine: options?.hookLine,
+          artifactPayload: options?.artifactPayload,
         });
         toast.success(COPY.share.creator.doneTitle);
       } catch (err) {

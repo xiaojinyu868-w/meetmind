@@ -40,9 +40,9 @@ export function TutorToolCard({ part, onExpand, className }: TutorToolCardProps)
     <div
       className={cn(
         'my-2 rounded-lg border px-3 py-2 text-sm transition-colors',
-        isPending && 'border-slate-200 bg-slate-50 text-slate-600',
-        isOk && 'border-emerald-100 bg-emerald-50/50 text-slate-800',
-        isError && 'border-amber-100 bg-amber-50/50 text-amber-900',
+        isPending && 'border-divider bg-paper-warm text-ink-secondary',
+        isOk && 'border-pine/15 bg-pine-fog text-ink',
+        isError && 'border-vermilion/15 bg-vermilion-mist/40/50 text-vermilion-deep',
         className,
       )}
       role="status"
@@ -50,7 +50,7 @@ export function TutorToolCard({ part, onExpand, className }: TutorToolCardProps)
     >
       <div className="flex items-center justify-between gap-2">
         <div className="flex items-center gap-2">
-          <span className="text-slate-500 text-xs">
+          <span className="text-ink-muted text-xs">
             {isPending && '·'}
             {isOk && '✓'}
             {isError && '!'}
@@ -61,7 +61,7 @@ export function TutorToolCard({ part, onExpand, className }: TutorToolCardProps)
           <button
             type="button"
             onClick={() => onExpand(part)}
-            className="text-xs text-slate-500 hover:text-slate-700 underline-offset-2 hover:underline"
+            className="text-xs text-ink-muted hover:text-ink-secondary underline-offset-2 hover:underline"
           >
             展开
           </button>
@@ -70,13 +70,13 @@ export function TutorToolCard({ part, onExpand, className }: TutorToolCardProps)
 
       {/* lookupTranscript 特殊渲染：直接在气泡内展示 3 条匹配 */}
       {isOk && part.type === 'tool-lookupTranscript' && Array.isArray(part.output?.matches) ? (
-        <ul className="mt-2 space-y-1 text-xs text-slate-600">
+        <ul className="mt-2 space-y-1 text-xs text-ink-secondary">
           {part.output.matches.slice(0, 3).map((m, idx) => {
             const match = m as { text: string; citation?: string };
             return (
               <li key={idx} className="flex gap-2">
                 {match.citation ? (
-                  <span className="shrink-0 text-slate-400">{match.citation}</span>
+                  <span className="shrink-0 text-ink-muted">{match.citation}</span>
                 ) : null}
                 <span>{match.text}</span>
               </li>

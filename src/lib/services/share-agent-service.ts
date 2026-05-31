@@ -386,3 +386,59 @@ export async function revokeSharedAgent(params: {
   log.debug('revoked', { shareId: share.id });
   return true;
 }
+
+// ──────────────────────────────────────────────────────────────
+// "我的分享" —— A 自己的分享列表（v3.0 闭环管理面）
+// ──────────────────────────────────────────────────────────────
+
+export interface MySharedAgentSummary {
+  token: string;
+  title: string;
+  subject?: string;
+  artifactKind: ShareArtifactKind;
+  sharerNickname?: string;
+  status: 'active' | 'revoked';
+  conversationEnabled: boolean;
+  viewCount: number;
+  chatCount: number;
+  claimCount: number;
+  createdAt: string;
+}
+
+/**
+ * 列出指定用户创建的所有 SharedAgent（含已撤销）。
+ * 用于 /me/shares 管理面。
+ */
+export async function listSharedAgentsByOwner(ownerId: string): Promise<MySharedAgentSummary[]> {
+  const records = await prisma.sharedAgent.findMany({
+    where: { ownerId },
+    orderBy: { createdAt: 'desc' },
+    take: 50,
+    select: {
+      token: true,
+      title: true,
+      subject: true,
+      artifactKind: true,
+      sharerNickname: true,
+      status: true,
+      conversationEnabled: true,
+      viewCount: true,
+      chatCount: true,
+      claimCount: true,
+      createdAt: true,
+    },
+  });
+  return records.map((r) => ({
+    token: r.token,
+    title: r.title,
+    subject: r.subject ?? undefined,
+    artifactKind: r.artifactKind as ShareArtifactKind,
+    sharerNickname: r.sharerNickname ?? undefined,
+    status: r.status === 'revoked' ? 'revoked' : 'active',
+    conversationEnabled: r.conversationEnabled,
+    viewCount: r.viewCount,
+    chatCount: r.chatCount,
+    claimCount: r.claimCount,
+    createdAt: r.createdAt.toISOString(),
+  }));
+}

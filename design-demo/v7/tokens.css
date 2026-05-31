@@ -1,0 +1,501 @@
+/* ============================================================
+   MeetMind v7 · Design Tokens
+   单一真相源——所有 showcase / 组件 / 页面共享这一份
+   "图书馆台灯 + 朱批红笔" 设计语言
+   ============================================================ */
+
+/* ---------- 字体加载 ---------- */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Instrument+Serif:ital@0;1&family=JetBrains+Mono:wght@400;500;600&display=swap');
+
+:root {
+  /* ============== 笔墨与底色 ============== */
+  --paper:        #FAF7F2;   /* 米白纸感（主底色） */
+  --paper-warm:   #F2EDE3;   /* 较深米白（hover / 次级表面） */
+  --paper-deep:   #EDE7DA;   /* 更深米白（pressed） */
+  --card:         #FFFFFF;
+  --ink:          #1C1B19;   /* 主文字 / 主按钮 */
+  --ink-2:        #5C5A55;   /* 次文字 */
+  --ink-3:        #8E8B82;   /* 弱文字 / 标注 */
+  --ink-4:        #B8B5AC;   /* 占位 / 分隔 */
+  --rule:         #E8E2D5;
+  --rule-soft:    #F0EBDF;
+
+  /* ============== 双签名色 ============== */
+  --pine:         #2D4F3E;   /* 墨松绿——AI / 沉淀 / 长期上下文 */
+  --pine-deep:    #1A3327;
+  --pine-light:   #6B9080;
+  --pine-mist:    #E6EDE8;
+  --pine-fog:     #F2F6F3;
+
+  --vermilion:    #B5483C;   /* 朱批红——此刻 / 引用 / 学生标注 */
+  --vermilion-deep: #8E3328;
+  --vermilion-light: #D17969;
+  --vermilion-mist: #F6E6E2;
+  --vermilion-fog: #FBF2EF;
+
+  /* ============== 内容标签色（弱化前作功能色） ============== */
+  --tag-sand:     #FDF3C0;   /* 时间轴问答 */
+  --tag-mint:     #D1F4E0;   /* 资料 */
+  --tag-blue:     #D3E4F4;   /* 多源 */
+  --tag-rose:     #FADEC9;   /* 私教 */
+
+  /* ============== 状态色 ============== */
+  --success:      #2D6A4F;
+  --success-bg:   #E8F0EB;
+  --warning:      #B8842B;
+  --warning-bg:   #FBF1DC;
+  --danger:       #B5483C;
+  --danger-bg:    #F6E6E2;
+  --info:         #2D4F3E;
+  --info-bg:      #E6EDE8;
+
+  /* ============== 高亮笔（mark / 重点） ============== */
+  --mark-pine:    linear-gradient(transparent 60%, #DCE8E1 60%);
+  --mark-vermilion: linear-gradient(transparent 60%, #F2DDD7 60%);
+  --mark-sand:    linear-gradient(transparent 60%, #FDF1C8 60%);
+
+  /* ============== 仪式光（AI 时刻） ============== */
+  --shimmer-ai: linear-gradient(110deg,
+    rgba(45,79,62,0) 0%,
+    rgba(45,79,62,0.06) 35%,
+    rgba(181,72,60,0.08) 50%,
+    rgba(45,79,62,0.06) 65%,
+    rgba(45,79,62,0) 100%);
+
+  --shimmer-skeleton: linear-gradient(110deg,
+    var(--paper-warm) 0%,
+    var(--paper-warm) 40%,
+    rgba(255,255,255,0.6) 50%,
+    var(--paper-warm) 60%,
+    var(--paper-warm) 100%);
+
+  /* ============== 投影系统 ============== */
+  /* 关键：投影必须存在，但极克制——"AI 产品有层级感"和"装饰满天飞"是两件事 */
+  --shadow-flat:    none;
+  --shadow-soft:    0 1px 2px rgba(28,27,25,0.04), 0 4px 16px rgba(28,27,25,0.04);
+  --shadow-card:    0 1px 2px rgba(28,27,25,0.05), 0 8px 28px rgba(28,27,25,0.06);
+  --shadow-float:   0 2px 6px rgba(28,27,25,0.06), 0 16px 48px rgba(28,27,25,0.08);
+  --shadow-modal:   0 8px 16px rgba(28,27,25,0.08), 0 32px 80px rgba(28,27,25,0.12);
+
+  /* AI 卡片专属：极淡墨绿 glow（"AI 在场"信号） */
+  --shadow-ai-glow: 0 0 0 1px rgba(45,79,62,0.10), 0 8px 28px rgba(45,79,62,0.08);
+
+  /* ============== 圆角 ============== */
+  --radius-xs:    4px;
+  --radius-sm:    6px;
+  --radius:       8px;
+  --radius-md:    10px;
+  --radius-lg:    12px;
+  --radius-xl:    14px;
+  --radius-2xl:   18px;
+  --radius-3xl:   24px;
+  --radius-full:  999px;
+
+  /* ============== 间距（4px 节奏） ============== */
+  --space-1:  4px;
+  --space-2:  8px;
+  --space-3:  12px;
+  --space-4:  16px;
+  --space-5:  20px;
+  --space-6:  24px;
+  --space-8:  32px;
+  --space-10: 40px;
+  --space-12: 48px;
+  --space-16: 64px;
+  --space-20: 80px;
+
+  /* ============== 字体栈 ============== */
+  --font-sans:    'Inter', -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
+  --font-serif:   'Instrument Serif', 'Songti SC', 'Noto Serif SC', serif;
+  --font-mono:    'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, Monaco, monospace;
+
+  /* ============== 字号阶梯（Major Third 1.25） ============== */
+  --text-xs:    11.5px;
+  --text-sm:    12.5px;
+  --text-base:  14px;
+  --text-md:    15px;
+  --text-lg:    17px;
+  --text-xl:    20px;
+  --text-2xl:   24px;
+  --text-3xl:   30px;
+  --text-4xl:   38px;
+  --text-5xl:   48px;
+  --text-6xl:   64px;
+
+  /* ============== 行高 ============== */
+  --leading-tight:  1.18;
+  --leading-snug:   1.38;
+  --leading-normal: 1.55;
+  --leading-relaxed: 1.7;
+  --leading-loose:  1.85;
+
+  /* ============== 字间距 ============== */
+  --tracking-display: -0.024em;
+  --tracking-h:       -0.018em;
+  --tracking-body:    -0.011em;
+  --tracking-mono:    0;
+  --tracking-caps:    0.06em;
+
+  /* ============== 动效 ============== */
+  --ease-out:     cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-in-out:  cubic-bezier(0.65, 0, 0.35, 1);
+  --ease-spring:  cubic-bezier(0.34, 1.56, 0.64, 1);
+  --duration-fast:   150ms;
+  --duration:        200ms;
+  --duration-slow:   320ms;
+  --duration-slower: 600ms;
+
+  /* ============== Z-index ============== */
+  --z-base:      1;
+  --z-dropdown:  100;
+  --z-sticky:    200;
+  --z-overlay:   400;
+  --z-modal:     600;
+  --z-toast:     800;
+  --z-tooltip:   900;
+}
+
+/* ============================================================
+   Dark Mode：不是简单反色，是另一种气质——深夜书房
+   ============================================================ */
+[data-theme='dark'] {
+  --paper:        #14110D;   /* 深棕墨黑（不是纯黑，温度比 #000 高） */
+  --paper-warm:   #1F1B16;
+  --paper-deep:   #28231C;
+  --card:         #1A1612;
+  --ink:          #F2EDE3;
+  --ink-2:        #B8B0A2;
+  --ink-3:        #82796D;
+  --ink-4:        #56504A;
+  --rule:         #2A241D;
+  --rule-soft:    #1F1B16;
+
+  --pine:         #6B9080;   /* 暗色下用浅松绿（白天的深松绿在暗底上看不见） */
+  --pine-deep:    #2D4F3E;
+  --pine-light:   #93B5A4;
+  --pine-mist:    rgba(107,144,128,0.14);
+  --pine-fog:     rgba(107,144,128,0.06);
+
+  --vermilion:    #E07A5F;   /* 暗色下用暖橘红 */
+  --vermilion-deep: #B5483C;
+  --vermilion-light: #F09F87;
+  --vermilion-mist: rgba(224,122,95,0.14);
+  --vermilion-fog: rgba(224,122,95,0.06);
+
+  --mark-pine:    linear-gradient(transparent 60%, rgba(107,144,128,0.25) 60%);
+  --mark-vermilion: linear-gradient(transparent 60%, rgba(224,122,95,0.25) 60%);
+
+  --shadow-soft:    0 1px 2px rgba(0,0,0,0.4), 0 4px 16px rgba(0,0,0,0.3);
+  --shadow-card:    0 1px 2px rgba(0,0,0,0.45), 0 8px 28px rgba(0,0,0,0.35);
+  --shadow-float:   0 2px 6px rgba(0,0,0,0.5), 0 16px 48px rgba(0,0,0,0.4);
+  --shadow-ai-glow: 0 0 0 1px rgba(107,144,128,0.18), 0 8px 28px rgba(107,144,128,0.12);
+}
+
+/* ============================================================
+   全局 reset + base
+   ============================================================ */
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { height: 100%; }
+html { -webkit-text-size-adjust: 100%; }
+body {
+  font-family: var(--font-sans);
+  font-feature-settings: 'cv11', 'ss01', 'ss03', 'palt', 'kern';
+  font-optical-sizing: auto;
+  letter-spacing: var(--tracking-body);
+  font-size: var(--text-base);
+  line-height: var(--leading-normal);
+  color: var(--ink);
+  background: var(--paper);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+img, svg { display: block; max-width: 100%; }
+button { font: inherit; cursor: pointer; }
+a { color: inherit; text-decoration: none; }
+
+/* ============================================================
+   通用工具类（在 demo 里高频复用）
+   ============================================================ */
+.serif { font-family: var(--font-serif); font-style: italic; letter-spacing: 0; }
+.mono  { font-family: var(--font-mono); }
+.caps  { text-transform: uppercase; letter-spacing: var(--tracking-caps); font-weight: 500; }
+
+/* 引用资产化：时间戳胶囊 */
+.cite-ts {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--vermilion);
+  background: var(--vermilion-mist);
+  padding: 1px 6px;
+  border-radius: var(--radius-xs);
+  cursor: pointer;
+  transition: background var(--duration-fast) var(--ease-out);
+  white-space: nowrap;
+  font-weight: 500;
+}
+.cite-ts:hover { background: #F0D5CD; }
+
+/* 引用资产化：资料胶囊 */
+.cite-src {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--pine);
+  background: var(--pine-mist);
+  padding: 1px 6px;
+  border-radius: var(--radius-xs);
+  cursor: pointer;
+  transition: background var(--duration-fast) var(--ease-out);
+  font-weight: 500;
+}
+.cite-src:hover { background: #D8E3DC; }
+
+/* mark 高亮 */
+mark.mk-pine { background: var(--mark-pine); padding: 0 1px; color: inherit; }
+mark.mk-vermilion { background: var(--mark-vermilion); padding: 0 1px; color: inherit; }
+mark.mk-sand { background: var(--mark-sand); padding: 0 1px; color: inherit; }
+
+/* AI 卡片包裹：可见但克制的"AI 在场"信号 */
+.surface-ai {
+  position: relative;
+  background: var(--card);
+  border: 1px solid var(--rule);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-ai-glow);
+  overflow: hidden;
+}
+.surface-ai::after {
+  content: '';
+  position: absolute; inset: 0;
+  background: var(--shimmer-ai);
+  background-size: 220% 100%;
+  animation: ai-breath 6s ease-in-out infinite;
+  pointer-events: none;
+}
+@keyframes ai-breath {
+  0%, 100% { background-position: 200% 0; }
+  50%      { background-position: -100% 0; }
+}
+
+/* 骨架屏 shimmer */
+.skel {
+  background: var(--shimmer-skeleton);
+  background-size: 220% 100%;
+  border-radius: var(--radius-sm);
+  animation: skel-shimmer 1.4s linear infinite;
+}
+@keyframes skel-shimmer {
+  0%   { background-position: 200% 0; }
+  100% { background-position: -100% 0; }
+}
+
+/* 流式 typing caret */
+.typing-caret {
+  display: inline-block;
+  width: 7px; height: 14px;
+  background: var(--pine);
+  vertical-align: -2px;
+  margin-left: 2px;
+  border-radius: 1px;
+  animation: caret-blink 1s steps(2) infinite;
+}
+@keyframes caret-blink { 50% { opacity: 0; } }
+
+/* 字符 stagger 浮现 */
+.stream span {
+  display: inline-block;
+  opacity: 0;
+  transform: translateY(2px);
+  animation: char-in 0.3s var(--ease-out) forwards;
+}
+@keyframes char-in {
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* 思考气息流 strip */
+.thinking-strip {
+  height: 22px;
+  background: var(--shimmer-ai);
+  background-size: 200% 100%;
+  animation: shimmer-fast 1.6s linear infinite;
+  border-radius: var(--radius-sm);
+  display: inline-flex; align-items: center;
+  padding: 0 10px;
+  font-size: var(--text-xs);
+  color: var(--ink-3);
+}
+@keyframes shimmer-fast {
+  0%   { background-position: 200% 0; }
+  100% { background-position: -100% 0; }
+}
+
+/* 录音呼吸点 */
+.rec-dot {
+  width: 8px; height: 8px; border-radius: 50%;
+  background: var(--vermilion);
+  box-shadow: 0 0 0 0 rgba(181,72,60,.55);
+  animation: rec-pulse 1.6s ease-in-out infinite;
+}
+@keyframes rec-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(181,72,60,.55); }
+  50%      { box-shadow: 0 0 0 8px rgba(181,72,60,0); }
+}
+
+/* Octo 呼吸光环 */
+.octo-aura {
+  position: relative;
+}
+.octo-aura::before {
+  content: ''; position: absolute; inset: -8px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(45,79,62,0.18) 0%, transparent 65%);
+  animation: octo-breath 3.6s ease-in-out infinite;
+  z-index: 0;
+}
+@keyframes octo-breath {
+  0%, 100% { transform: scale(0.92); opacity: .5; }
+  50%      { transform: scale(1.08); opacity: .9; }
+}
+.octo-aura > * { position: relative; z-index: 1; }
+
+/* 滚动条 */
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-thumb { background: rgba(28,27,25,0.12); border-radius: 5px; }
+::-webkit-scrollbar-thumb:hover { background: rgba(28,27,25,0.22); }
+::-webkit-scrollbar-track { background: transparent; }
+[data-theme='dark'] ::-webkit-scrollbar-thumb { background: rgba(242,237,227,0.14); }
+[data-theme='dark'] ::-webkit-scrollbar-thumb:hover { background: rgba(242,237,227,0.24); }
+
+/* 选择高亮：用品牌色而不是默认蓝 */
+::selection { background: var(--vermilion-mist); color: var(--ink); }
+
+/* ============================================================
+   Showcase 专用：每个 demo 文件共用的"页眉"/"小节"样式
+   ============================================================ */
+.ds-page {
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: var(--space-12) var(--space-8);
+}
+.ds-pageheader {
+  margin-bottom: var(--space-12);
+  padding-bottom: var(--space-8);
+  border-bottom: 1px solid var(--rule);
+}
+.ds-eyebrow {
+  font-size: var(--text-xs);
+  letter-spacing: var(--tracking-caps);
+  text-transform: uppercase;
+  color: var(--pine);
+  font-weight: 600;
+  margin-bottom: var(--space-3);
+}
+.ds-title {
+  font-size: var(--text-5xl);
+  font-weight: 600;
+  letter-spacing: var(--tracking-display);
+  line-height: var(--leading-tight);
+  margin-bottom: var(--space-3);
+}
+.ds-title .em {
+  font-family: var(--font-serif);
+  font-style: italic;
+  font-weight: 400;
+  color: var(--vermilion);
+}
+.ds-lede {
+  font-size: var(--text-lg);
+  line-height: var(--leading-relaxed);
+  color: var(--ink-2);
+  max-width: 64ch;
+}
+.ds-section { margin-top: var(--space-16); }
+.ds-section + .ds-section { margin-top: var(--space-20); }
+.ds-section-head {
+  display: flex; align-items: baseline; justify-content: space-between;
+  margin-bottom: var(--space-8);
+  padding-bottom: var(--space-4);
+  border-bottom: 1px solid var(--rule);
+}
+.ds-section-head h2 {
+  font-size: var(--text-2xl);
+  font-weight: 600;
+  letter-spacing: var(--tracking-h);
+}
+.ds-section-head .num {
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  color: var(--ink-3);
+}
+.ds-section-head .desc {
+  font-size: var(--text-sm);
+  color: var(--ink-3);
+  max-width: 42ch;
+  text-align: right;
+}
+.ds-grid {
+  display: grid;
+  gap: var(--space-4);
+}
+.ds-grid.cols-2 { grid-template-columns: repeat(2, 1fr); }
+.ds-grid.cols-3 { grid-template-columns: repeat(3, 1fr); }
+.ds-grid.cols-4 { grid-template-columns: repeat(4, 1fr); }
+.ds-grid.cols-6 { grid-template-columns: repeat(6, 1fr); }
+
+/* Demo 标签 */
+.ds-tag {
+  display: inline-block;
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--ink-3);
+  background: var(--paper-warm);
+  padding: 2px 8px;
+  border-radius: var(--radius-full);
+  margin-left: var(--space-2);
+}
+
+/* Showcase 顶栏（每个文件复用） */
+.ds-topbar {
+  position: sticky; top: 0; z-index: var(--z-sticky);
+  background: rgba(250,247,242,0.85);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border-bottom: 1px solid var(--rule);
+  padding: 12px 24px;
+  display: flex; align-items: center; gap: 16px;
+}
+[data-theme='dark'] .ds-topbar {
+  background: rgba(20,17,13,0.85);
+}
+.ds-topbar .logo {
+  display: flex; align-items: center; gap: 10px;
+  font-weight: 600; font-size: 14px;
+}
+.ds-topbar .logo .dot {
+  width: 8px; height: 8px; border-radius: 50%; background: var(--pine);
+  box-shadow: 0 0 0 3px rgba(45,79,62,0.12);
+}
+.ds-topbar nav {
+  display: flex; gap: 4px;
+  margin-left: 24px;
+}
+.ds-topbar nav a {
+  padding: 6px 12px;
+  border-radius: var(--radius);
+  font-size: 13px;
+  color: var(--ink-2);
+  transition: all var(--duration-fast) var(--ease-out);
+}
+.ds-topbar nav a:hover { background: var(--paper-warm); color: var(--ink); }
+.ds-topbar nav a.active { background: var(--ink); color: #fff; }
+.ds-topbar .right { margin-left: auto; display: flex; gap: 12px; align-items: center; }
+.ds-theme-toggle {
+  width: 32px; height: 32px;
+  display: grid; place-items: center;
+  border: 1px solid var(--rule);
+  border-radius: var(--radius);
+  background: var(--card);
+  color: var(--ink-2);
+  transition: all var(--duration-fast) var(--ease-out);
+}
+.ds-theme-toggle:hover { background: var(--paper-warm); color: var(--ink); }

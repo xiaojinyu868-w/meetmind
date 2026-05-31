@@ -1,0 +1,968 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="light">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>02 · AI Visual Language · MeetMind v7</title>
+<link rel="stylesheet" href="./tokens.css" />
+<style>
+  /* ===== Octo 状态矩阵 ===== */
+  .octo-matrix {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 16px;
+  }
+  .octo-card {
+    padding: 24px 20px;
+    background: var(--card);
+    border: 1px solid var(--rule);
+    border-radius: var(--radius-lg);
+    text-align: center;
+    transition: all var(--duration) var(--ease-out);
+  }
+  .octo-card:hover {
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-card);
+    border-color: var(--pine-light);
+  }
+  .octo-card .stage {
+    height: 110px;
+    display: grid; place-items: center;
+    margin-bottom: 12px;
+    position: relative;
+  }
+  .octo-card .stage img {
+    width: 88px; height: 88px;
+    object-fit: contain;
+    filter: drop-shadow(0 4px 12px rgba(45,79,62,0.12));
+  }
+  .octo-card .name {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--ink);
+    letter-spacing: -0.012em;
+    margin-bottom: 4px;
+  }
+  .octo-card .name .em {
+    font-family: var(--font-serif);
+    font-style: italic;
+    font-weight: 400;
+    color: var(--vermilion);
+  }
+  .octo-card .key {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--ink-3);
+    margin-bottom: 8px;
+  }
+  .octo-card .desc {
+    font-size: 12px;
+    color: var(--ink-2);
+    line-height: 1.5;
+  }
+
+  /* 动画变体 */
+  .octo-anim-breath img { animation: octo-breath-img 3.6s ease-in-out infinite; }
+  .octo-anim-listen img { animation: octo-listen 0.6s ease-in-out infinite alternate; }
+  .octo-anim-think img  { animation: octo-think 2.4s ease-in-out infinite; }
+  .octo-anim-celebrate img { animation: octo-celebrate 0.8s ease-out infinite alternate; }
+  .octo-anim-sleep img { animation: octo-sleep 4s ease-in-out infinite; }
+  @keyframes octo-breath-img {
+    0%, 100% { transform: scale(1); }
+    50%      { transform: scale(1.04); }
+  }
+  @keyframes octo-listen {
+    from { transform: rotate(-2deg) scale(1); }
+    to   { transform: rotate(2deg) scale(1.06); }
+  }
+  @keyframes octo-think {
+    0%, 100% { transform: rotate(0); }
+    25%      { transform: rotate(-3deg); }
+    75%      { transform: rotate(3deg); }
+  }
+  @keyframes octo-celebrate {
+    from { transform: translateY(0) scale(1); }
+    to   { transform: translateY(-6px) scale(1.1); }
+  }
+  @keyframes octo-sleep {
+    0%, 100% { transform: scale(0.98) translateY(2px); }
+    50%      { transform: scale(1.02) translateY(-2px); }
+  }
+
+  /* Octo 大尺寸舞台（hero） */
+  .octo-hero {
+    display: grid;
+    grid-template-columns: 280px 1fr;
+    gap: 40px;
+    padding: 40px 36px;
+    background: var(--card);
+    border: 1px solid var(--rule);
+    border-radius: var(--radius-2xl);
+    box-shadow: var(--shadow-ai-glow);
+    align-items: center;
+    margin-bottom: 32px;
+    position: relative;
+    overflow: hidden;
+  }
+  .octo-hero::after {
+    content: '';
+    position: absolute; inset: 0;
+    background: var(--shimmer-ai);
+    background-size: 200% 100%;
+    animation: ai-breath 6s ease-in-out infinite;
+    pointer-events: none;
+  }
+  .octo-hero > * { position: relative; z-index: 1; }
+  .octo-hero .stage {
+    display: grid; place-items: center;
+    aspect-ratio: 1;
+    background: radial-gradient(circle at 35% 30%, #FFFFFF 0%, var(--paper-warm) 60%, var(--paper-deep) 100%);
+    border-radius: 50%;
+  }
+  .octo-hero .stage img {
+    width: 200px; height: 200px;
+    filter: drop-shadow(0 12px 32px rgba(45,79,62,0.18));
+    animation: octo-breath-img 4s ease-in-out infinite;
+  }
+  .octo-hero .stage::before {
+    content: '';
+    position: absolute;
+    width: 280px; height: 280px;
+    border-radius: 50%;
+    background: radial-gradient(circle, rgba(45,79,62,0.15) 0%, transparent 65%);
+    animation: octo-breath 3.6s ease-in-out infinite;
+  }
+
+  /* ===== 骨架屏组 ===== */
+  .skel-grid {
+    display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px;
+  }
+  .skel-card {
+    padding: 24px;
+    background: var(--card);
+    border: 1px solid var(--rule);
+    border-radius: var(--radius-lg);
+  }
+  .skel-card .lbl {
+    font-size: 11px;
+    color: var(--ink-3);
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    font-weight: 500;
+    margin-bottom: 16px;
+    font-family: var(--font-mono);
+  }
+  .skel-line { height: 12px; }
+  .skel-block { display: flex; flex-direction: column; gap: 10px; }
+
+  /* AI 思考流 demo */
+  .think-demo {
+    padding: 24px 28px;
+    background: var(--card);
+    border: 1px solid var(--rule);
+    border-radius: var(--radius-lg);
+  }
+  .think-step {
+    display: flex; align-items: flex-start; gap: 12px;
+    padding: 12px 0;
+    font-size: 13.5px;
+    line-height: 1.65;
+  }
+  .think-step + .think-step { border-top: 1px solid var(--rule-soft); }
+  .think-step .step-num {
+    width: 24px; height: 24px;
+    border-radius: 50%;
+    background: var(--pine-mist);
+    color: var(--pine);
+    font-family: var(--font-mono);
+    font-size: 11px;
+    font-weight: 600;
+    display: grid; place-items: center;
+    flex-shrink: 0;
+  }
+  .think-step.active .step-num {
+    background: var(--pine);
+    color: #fff;
+  }
+  .think-step.done .step-num { background: var(--success-bg); color: var(--success); }
+  .think-step .step-num.checked::before {
+    content: ''; width: 10px; height: 6px;
+    border-left: 2px solid currentColor; border-bottom: 2px solid currentColor;
+    transform: rotate(-45deg) translate(1px, -1px);
+  }
+  .think-step .step-content { flex: 1; }
+  .think-step .step-title { font-weight: 500; color: var(--ink); margin-bottom: 4px; }
+  .think-step .step-desc { font-size: 12.5px; color: var(--ink-2); }
+  .think-step.active .step-desc { color: var(--ink-2); }
+  .think-step .step-pulse {
+    margin-top: 6px;
+    height: 16px;
+    background: var(--shimmer-ai);
+    background-size: 200% 100%;
+    animation: shimmer-fast 1.6s linear infinite;
+    border-radius: 4px;
+  }
+
+  /* 流式输出 demo */
+  .stream-demo {
+    padding: 24px 28px;
+    background: var(--card);
+    border: 1px solid var(--rule);
+    border-radius: var(--radius-lg);
+    font-size: 14.5px;
+    line-height: 1.78;
+    color: var(--ink);
+  }
+
+  /* 引用资产 demo */
+  .cite-demo {
+    padding: 28px;
+    background: var(--card);
+    border: 1px solid var(--rule);
+    border-radius: var(--radius-lg);
+    line-height: 1.85;
+    font-size: 14.5px;
+    color: var(--ink-2);
+  }
+  .cite-demo strong { color: var(--ink); }
+  .cite-demo p { margin-bottom: 10px; }
+
+  /* 应用生成进度 */
+  .gen-progress {
+    padding: 24px 28px;
+    background: var(--card);
+    border: 1px solid var(--pine-light);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-ai-glow);
+    position: relative;
+    overflow: hidden;
+  }
+  .gen-progress::after {
+    content: '';
+    position: absolute; inset: 0;
+    background: var(--shimmer-ai);
+    background-size: 200% 100%;
+    animation: shimmer-fast 2s linear infinite;
+    pointer-events: none;
+  }
+  .gen-progress > * { position: relative; z-index: 1; }
+  .gen-head {
+    display: flex; align-items: center; gap: 12px;
+    margin-bottom: 14px;
+  }
+  .gen-head .icon {
+    width: 36px; height: 36px;
+    border-radius: var(--radius-sm);
+    background: var(--pine-mist);
+    color: var(--pine);
+    display: grid; place-items: center;
+    font-size: 16px; font-weight: 600;
+  }
+  .gen-head h4 {
+    font-size: 14.5px;
+    font-weight: 600;
+    letter-spacing: -0.012em;
+  }
+  .gen-head .status {
+    margin-left: auto;
+    font-size: 12px;
+    color: var(--pine);
+    display: flex; align-items: center; gap: 6px;
+    font-family: var(--font-mono);
+  }
+  .gen-head .status::before {
+    content: ''; width: 6px; height: 6px; border-radius: 50%;
+    background: var(--pine);
+    animation: rec-pulse 1.6s ease-in-out infinite;
+    box-shadow: 0 0 0 0 rgba(45,79,62,.5);
+  }
+  .gen-bar {
+    height: 4px;
+    background: var(--rule);
+    border-radius: 2px;
+    overflow: hidden;
+    margin: 12px 0 8px;
+  }
+  .gen-bar .fill {
+    height: 100%;
+    background: linear-gradient(90deg, var(--pine), var(--pine-light));
+    border-radius: 2px;
+    width: 0;
+    animation: gen-fill 4s ease-in-out infinite;
+  }
+  @keyframes gen-fill {
+    0% { width: 0; }
+    70% { width: 75%; }
+    100% { width: 75%; }
+  }
+  .gen-eta {
+    font-size: 11.5px;
+    color: var(--ink-3);
+    font-family: var(--font-mono);
+    display: flex; justify-content: space-between;
+  }
+
+  /* 完成庆祝 */
+  .done-card {
+    padding: 24px 28px;
+    background: linear-gradient(135deg, var(--pine-fog), var(--card));
+    border: 1px solid var(--pine-light);
+    border-radius: var(--radius-lg);
+    display: flex; align-items: center; gap: 16px;
+    position: relative; overflow: hidden;
+  }
+  .done-card .check {
+    width: 36px; height: 36px;
+    border-radius: 50%;
+    background: var(--pine);
+    color: #fff;
+    display: grid; place-items: center;
+    flex-shrink: 0;
+    animation: check-pop 0.6s var(--ease-spring) backwards;
+  }
+  @keyframes check-pop {
+    from { transform: scale(0); }
+    to { transform: scale(1); }
+  }
+  .done-card .text h4 {
+    font-size: 14.5px; font-weight: 600; margin-bottom: 4px;
+  }
+  .done-card .text p {
+    font-size: 13px; color: var(--ink-2);
+  }
+  .done-card .scan {
+    position: absolute;
+    top: 0; left: -30%;
+    width: 30%; height: 100%;
+    background: linear-gradient(110deg, transparent, rgba(255,255,255,0.6), transparent);
+    animation: scan 1.6s var(--ease-out) 0.4s 1 backwards;
+  }
+  @keyframes scan {
+    from { left: -30%; }
+    to { left: 130%; }
+  }
+
+  /* "酿"指示器 brewing */
+  .brewing-strip {
+    padding: 12px 16px;
+    background: var(--paper-warm);
+    border-radius: var(--radius);
+    display: flex; align-items: center; gap: 10px;
+    font-size: 13px;
+    color: var(--ink-2);
+  }
+  .brewing-strip .dot {
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    background: var(--pine);
+    animation: brew-dot 2s ease-in-out infinite;
+  }
+  @keyframes brew-dot {
+    0%, 100% { opacity: 0.3; transform: scale(0.8); }
+    50%      { opacity: 1; transform: scale(1.3); }
+  }
+
+  /* 三点 typing indicator */
+  .typing-dots {
+    display: inline-flex; gap: 4px; padding: 8px 12px;
+    background: var(--paper-warm);
+    border-radius: var(--radius-full);
+  }
+  .typing-dots span {
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    background: var(--ink-3);
+    animation: type-bounce 1.4s ease-in-out infinite;
+  }
+  .typing-dots span:nth-child(2) { animation-delay: 0.15s; }
+  .typing-dots span:nth-child(3) { animation-delay: 0.3s; }
+  @keyframes type-bounce {
+    0%, 60%, 100% { transform: translateY(0); opacity: 0.4; }
+    30% { transform: translateY(-4px); opacity: 1; }
+  }
+
+  /* 错误重试态 */
+  .error-card {
+    padding: 16px 20px;
+    background: var(--vermilion-mist);
+    border: 1px solid var(--vermilion-light);
+    border-radius: var(--radius);
+    display: flex; align-items: center; gap: 12px;
+  }
+  .error-card .icon {
+    width: 28px; height: 28px;
+    border-radius: 50%;
+    background: var(--vermilion);
+    color: #fff;
+    display: grid; place-items: center;
+    flex-shrink: 0;
+    font-size: 14px; font-weight: 600;
+  }
+  .error-card .msg { flex: 1; font-size: 13px; color: var(--ink); }
+  .error-card .msg .sub { font-size: 11.5px; color: var(--ink-2); margin-top: 2px; }
+  .error-card button {
+    padding: 6px 14px;
+    border: 1px solid var(--vermilion);
+    background: transparent;
+    border-radius: var(--radius);
+    color: var(--vermilion);
+    font-size: 12px;
+    font-weight: 500;
+    transition: background 0.15s;
+  }
+  .error-card button:hover { background: var(--vermilion); color: #fff; }
+
+  /* 视觉对比框 */
+  .compare-pair {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 20px;
+  }
+  .compare-pair > div {
+    padding: 24px;
+    border: 1px solid var(--rule);
+    border-radius: var(--radius-lg);
+  }
+  .compare-pair .bad {
+    background: var(--card);
+    opacity: 0.85;
+  }
+  .compare-pair .good {
+    background: var(--card);
+    box-shadow: var(--shadow-ai-glow);
+    border-color: var(--pine-light);
+  }
+  .compare-pair .lbl {
+    font-size: 11px;
+    color: var(--ink-3);
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    margin-bottom: 16px;
+    font-weight: 500;
+    font-family: var(--font-mono);
+  }
+  .compare-pair .bad .lbl { color: var(--vermilion); }
+  .compare-pair .good .lbl { color: var(--pine); }
+
+  /* 哲学摘要框 */
+  .principle {
+    padding: 32px 36px;
+    background: var(--paper-warm);
+    border-radius: var(--radius-xl);
+    border-left: 4px solid var(--pine);
+    margin-bottom: 32px;
+  }
+  .principle .quote {
+    font-family: var(--font-serif);
+    font-style: italic;
+    font-size: 22px;
+    line-height: 1.4;
+    color: var(--ink);
+    max-width: 50ch;
+  }
+  .principle .quote .em { color: var(--vermilion); }
+  .principle .meta {
+    margin-top: 12px;
+    font-size: 12px;
+    color: var(--ink-3);
+    font-family: var(--font-mono);
+    letter-spacing: 0.05em;
+  }
+</style>
+</head>
+<body>
+
+<header class="ds-topbar">
+  <a class="logo" href="./index.html">
+    <span class="dot"></span>
+    <span>MeetMind</span>
+    <span class="ds-tag">v7</span>
+  </a>
+  <nav>
+    <a href="./index.html">总览</a>
+    <a href="./01-foundations.html">01 基础</a>
+    <a href="./02-ai-language.html" class="active">02 AI 视觉</a>
+    <a href="./03-components.html">03 组件</a>
+    <a href="./04-app-matrix.html">04 应用矩阵</a>
+  </nav>
+  <div class="right">
+    <button class="ds-theme-toggle" id="themeToggle">
+      <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+        <circle cx="7" cy="7" r="2.5" stroke="currentColor" stroke-width="1.4"/>
+        <path d="M7 1v1.5M7 11.5V13M1 7h1.5M11.5 7H13M2.5 2.5l1 1M10.5 10.5l1 1M2.5 11.5l1-1M10.5 3.5l1-1" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>
+      </svg>
+    </button>
+  </div>
+</header>
+
+<main class="ds-page">
+
+  <header class="ds-pageheader">
+    <div class="ds-eyebrow">02 · AI VISUAL LANGUAGE</div>
+    <h1 class="ds-title">让 AI <span class="em">被肉眼看见</span></h1>
+    <p class="ds-lede">
+      "像 AI 产品"不是堆渐变和紫色。它是：每次 AI 在工作时都有可见的视觉信号；
+      每段引用都成为视觉资产；Octo 在你的产品里活着。这一节把所有这些"AI 时刻"画成可复用的语言。
+    </p>
+  </header>
+
+  <!-- 哲学锚点 -->
+  <div class="principle">
+    <div class="quote">"<span class="em">AI 在工作的每一秒</span>都应该被看见，但永远不应该<span class="em">打断</span>用户。"</div>
+    <div class="meta">— MeetMind v7 · AI Visual Language Manifesto</div>
+  </div>
+
+  <!-- ============== 02.1 Octo 状态矩阵 ============== -->
+  <section class="ds-section">
+    <div class="ds-section-head">
+      <h2><span class="num">02.1</span> &nbsp; Octo 状态矩阵</h2>
+      <p class="desc">8 个表情 × 6 种动效。Octo 不是 icon，是品牌资产。永驻。可状态化。</p>
+    </div>
+
+    <!-- Hero stage -->
+    <div class="octo-hero">
+      <div class="stage">
+        <img src="/public/images/octo-buddy/idle.png" alt="Octo idle" />
+      </div>
+      <div>
+        <div class="ds-eyebrow" style="margin-bottom: 12px;">CORE IDENTITY · 永驻</div>
+        <h2 style="font-size: 38px; font-weight: 600; letter-spacing: -0.024em; line-height: 1.15; margin-bottom: 16px;">
+          这是 <span class="serif" style="color: var(--vermilion);">Octo</span>。<br/>它在你的产品里活着。
+        </h2>
+        <p style="font-size: 15px; line-height: 1.7; color: var(--ink-2); max-width: 48ch;">
+          Octo 不是装饰图标。它有 8 个表情、6 种动效，会在导航栏永驻、在课中 hero、在分享落地页、在错误态出现。
+          它的身体是<strong style="color: var(--pine);">墨松绿</strong>，腮红是<strong style="color: var(--vermilion);">朱批红</strong>——它就是产品哲学的化身。
+        </p>
+      </div>
+    </div>
+
+    <!-- 8 表情矩阵 -->
+    <div class="octo-matrix">
+      <div class="octo-card octo-anim-breath">
+        <div class="stage"><img src="/public/images/octo-buddy/idle.png" /></div>
+        <div class="name">空闲 <span class="em">/ idle</span></div>
+        <div class="key mono">idle.png · breath 3.6s</div>
+        <div class="desc">默认状态。轻微缩放呼吸。</div>
+      </div>
+      <div class="octo-card octo-anim-listen">
+        <div class="stage"><img src="/public/images/octo-buddy/excited.png" /></div>
+        <div class="name">在听 <span class="em">/ listening</span></div>
+        <div class="key mono">excited.png · wiggle</div>
+        <div class="desc">课程录音中。轻微摇摆。</div>
+      </div>
+      <div class="octo-card octo-anim-think">
+        <div class="stage"><img src="/public/images/octo-buddy/thinking.png" /></div>
+        <div class="name">思考 <span class="em">/ thinking</span></div>
+        <div class="key mono">thinking.png · sway</div>
+        <div class="desc">AI 流式中。左右晃动。</div>
+      </div>
+      <div class="octo-card octo-anim-celebrate">
+        <div class="stage"><img src="/public/images/octo-buddy/happy.png" /></div>
+        <div class="name">开心 <span class="em">/ happy</span></div>
+        <div class="key mono">happy.png · bounce</div>
+        <div class="desc">完成任务。上下跳动。</div>
+      </div>
+      <div class="octo-card">
+        <div class="stage"><img src="/public/images/octo-buddy/surprised.png" /></div>
+        <div class="name">惊讶 <span class="em">/ surprised</span></div>
+        <div class="key mono">surprised.png</div>
+        <div class="desc">发现重要信息时。</div>
+      </div>
+      <div class="octo-card">
+        <div class="stage"><img src="/public/images/octo-buddy/love.png" /></div>
+        <div class="name">喜爱 <span class="em">/ love</span></div>
+        <div class="key mono">love.png</div>
+        <div class="desc">用户给好评 / 庆祝时刻。</div>
+      </div>
+      <div class="octo-card octo-anim-sleep">
+        <div class="stage"><img src="/public/images/octo-buddy/sleeping.png" /></div>
+        <div class="name">休眠 <span class="em">/ sleeping</span></div>
+        <div class="key mono">sleeping.png · breathe slow</div>
+        <div class="desc">空课堂 / 长时间无操作。</div>
+      </div>
+      <div class="octo-card">
+        <div class="stage"><img src="/public/images/octo-buddy/original.png" /></div>
+        <div class="name">原版 <span class="em">/ original</span></div>
+        <div class="key mono">original.png</div>
+        <div class="desc">分享落地页 hero / 主视觉。</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============== 02.2 流式输出 ============== -->
+  <section class="ds-section">
+    <div class="ds-section-head">
+      <h2><span class="num">02.2</span> &nbsp; 流式输出</h2>
+      <p class="desc">字符 stagger 浮现 + 墨绿 caret 常驻。这是"AI 在思考"的视觉签名。</p>
+    </div>
+
+    <div class="stream-demo">
+      <div style="font-size: 11px; color: var(--ink-3); margin-bottom: 12px; letter-spacing: 0.06em; text-transform: uppercase;">现场演示 · 重启动画</div>
+      <p class="stream" id="streamA"></p>
+    </div>
+
+    <button id="replayStream" style="margin-top: 12px; padding: 8px 16px; background: var(--ink); color: #fff; border: 0; border-radius: var(--radius); font-size: 13px; cursor: pointer;">
+      重播流式动画
+    </button>
+  </section>
+
+  <!-- ============== 02.3 思考链 ============== -->
+  <section class="ds-section">
+    <div class="ds-section-head">
+      <h2><span class="num">02.3</span> &nbsp; 思考链 · Step-by-step</h2>
+      <p class="desc">复杂任务分步执行时，让每一步可见。学生看到的不是黑盒，是"AI 怎么想到的"。</p>
+    </div>
+
+    <div class="think-demo">
+      <div class="think-step done">
+        <div class="step-num"><svg width="10" height="8" viewBox="0 0 10 8"><path d="M1 4 L4 7 L9 1" stroke="currentColor" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+        <div class="step-content">
+          <div class="step-title">检索本节录音转录</div>
+          <div class="step-desc">命中 6 段相关，覆盖 18:42 - 21:55</div>
+        </div>
+      </div>
+      <div class="think-step done">
+        <div class="step-num"><svg width="10" height="8" viewBox="0 0 10 8"><path d="M1 4 L4 7 L9 1" stroke="currentColor" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+        <div class="step-content">
+          <div class="step-title">对照你过往的提问历史</div>
+          <div class="step-desc">你两周前问过"TCP 三次握手"，知识链上下文已加载</div>
+        </div>
+      </div>
+      <div class="think-step active">
+        <div class="step-num">3</div>
+        <div class="step-content">
+          <div class="step-title">合成两张闪卡</div>
+          <div class="step-desc">区分滑动窗口 vs 拥塞控制——围绕你最容易混的一点</div>
+          <div class="step-pulse"></div>
+        </div>
+      </div>
+      <div class="think-step">
+        <div class="step-num">4</div>
+        <div class="step-content">
+          <div class="step-title">检验闪卡可作答性</div>
+          <div class="step-desc">确保问题和答案都能定位回原录音</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============== 02.4 引用资产化 ============== -->
+  <section class="ds-section">
+    <div class="ds-section-head">
+      <h2><span class="num">02.4</span> &nbsp; 引用资产化</h2>
+      <p class="desc">每一个 [MM:SS] 和 [资料 N] 都是视觉资产，不是配角。这是 MeetMind 的"有根" DNA。</p>
+    </div>
+
+    <div class="cite-demo">
+      <p>
+        <strong>滑动窗口</strong>是接收方告诉发送方"我能吃多少"，目的是
+        <mark class="mk-vermilion">不让接收方被噎着</mark>。<span class="cite-ts mono">[20:01]</span>
+      </p>
+      <p>
+        <strong>拥塞控制</strong>是发送方自己揣测"网络能承载多少"，目的是
+        <mark class="mk-pine">不让中间路由器被淹</mark>。<span class="cite-ts mono">[21:12]</span>
+      </p>
+      <p>
+        所以两者的"窗口"看起来像，但一个是<em class="serif">为接收端</em>，一个是
+        <em class="serif">为整个网络</em>。TCP 实际取两者最小值。
+        <span class="cite-src mono">[资料 3]</span>
+        <span class="cite-src mono">[资料 7]</span>
+      </p>
+    </div>
+
+    <div style="margin-top: 24px; display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
+      <div style="padding: 20px 24px; background: var(--card); border: 1px solid var(--rule); border-radius: var(--radius-lg);">
+        <div class="caps" style="font-size: 11px; color: var(--vermilion); margin-bottom: 10px;">朱批 · 时间戳</div>
+        <div style="display: flex; flex-wrap: wrap; gap: 8px; align-items: center;">
+          <span class="cite-ts mono">[18:42]</span>
+          <span class="cite-ts mono">[20:01]</span>
+          <span class="cite-ts mono">[21:12-21:55]</span>
+          <span class="cite-ts mono">[1:23:04]</span>
+        </div>
+        <div style="font-size: 12px; color: var(--ink-3); margin-top: 12px; line-height: 1.55;">
+          点击跳回原始转录。<code class="mono" style="font-size: 11px; background: var(--paper-warm); padding: 1px 5px; border-radius: 3px;">.cite-ts</code>
+        </div>
+      </div>
+      <div style="padding: 20px 24px; background: var(--card); border: 1px solid var(--rule); border-radius: var(--radius-lg);">
+        <div class="caps" style="font-size: 11px; color: var(--pine); margin-bottom: 10px;">墨绿 · 资料引用</div>
+        <div style="display: flex; flex-wrap: wrap; gap: 8px; align-items: center;">
+          <span class="cite-src mono">[资料 1]</span>
+          <span class="cite-src mono">[资料 3]</span>
+          <span class="cite-src mono">[资料 7]</span>
+          <span class="cite-src mono">[资料 12]</span>
+        </div>
+        <div style="font-size: 12px; color: var(--ink-3); margin-top: 12px; line-height: 1.55;">
+          引用支持材料编号，可悬停展开。<code class="mono" style="font-size: 11px; background: var(--paper-warm); padding: 1px 5px; border-radius: 3px;">.cite-src</code>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============== 02.5 骨架屏 ============== -->
+  <section class="ds-section">
+    <div class="ds-section-head">
+      <h2><span class="num">02.5</span> &nbsp; 骨架屏 · Skeleton</h2>
+      <p class="desc">米白底 + shimmer 1.4s。绝不用通用灰，绝不用纯白闪。</p>
+    </div>
+
+    <div class="skel-grid">
+      <!-- 段落骨架 -->
+      <div class="skel-card">
+        <div class="lbl">PARAGRAPH</div>
+        <div class="skel-block">
+          <div class="skel skel-line" style="width: 60%;"></div>
+          <div class="skel skel-line" style="width: 100%;"></div>
+          <div class="skel skel-line" style="width: 90%;"></div>
+          <div class="skel skel-line" style="width: 95%;"></div>
+          <div class="skel skel-line" style="width: 70%;"></div>
+        </div>
+      </div>
+
+      <!-- 速查表骨架 -->
+      <div class="skel-card">
+        <div class="lbl">CHEATSHEET ROWS</div>
+        <div class="skel-block">
+          <div style="display: grid; grid-template-columns: 80px 1fr; gap: 14px; align-items: start;">
+            <div class="skel" style="height: 14px; width: 60px;"></div>
+            <div style="display: flex; flex-direction: column; gap: 6px;">
+              <div class="skel skel-line"></div>
+              <div class="skel skel-line" style="width: 80%;"></div>
+            </div>
+          </div>
+          <div style="display: grid; grid-template-columns: 80px 1fr; gap: 14px; align-items: start;">
+            <div class="skel" style="height: 14px; width: 50px;"></div>
+            <div style="display: flex; flex-direction: column; gap: 6px;">
+              <div class="skel skel-line"></div>
+              <div class="skel skel-line" style="width: 65%;"></div>
+            </div>
+          </div>
+          <div style="display: grid; grid-template-columns: 80px 1fr; gap: 14px; align-items: start;">
+            <div class="skel" style="height: 14px; width: 70px;"></div>
+            <div style="display: flex; flex-direction: column; gap: 6px;">
+              <div class="skel skel-line"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 闪卡骨架 -->
+      <div class="skel-card">
+        <div class="lbl">FLASHCARD</div>
+        <div class="skel-block">
+          <div class="skel" style="height: 12px; width: 30%;"></div>
+          <div class="skel" style="height: 14px; width: 90%; margin-top: 8px;"></div>
+          <div style="height: 1px; background: var(--rule-soft); margin: 16px 0;"></div>
+          <div class="skel" style="height: 12px; width: 24%;"></div>
+          <div class="skel" style="height: 14px; width: 100%; margin-top: 8px;"></div>
+          <div class="skel" style="height: 14px; width: 78%; margin-top: 6px;"></div>
+          <div style="display: flex; gap: 6px; margin-top: 14px;">
+            <div class="skel" style="height: 26px; width: 56px; border-radius: 999px;"></div>
+            <div class="skel" style="height: 26px; width: 56px; border-radius: 999px;"></div>
+            <div class="skel" style="height: 26px; width: 70px; border-radius: 999px;"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 测验骨架 -->
+      <div class="skel-card">
+        <div class="lbl">QUIZ QUESTION</div>
+        <div class="skel-block">
+          <div class="skel" style="height: 16px; width: 95%;"></div>
+          <div class="skel" style="height: 16px; width: 60%;"></div>
+          <div style="height: 8px;"></div>
+          <div style="display: flex; align-items: center; gap: 10px;">
+            <div class="skel" style="height: 18px; width: 18px; border-radius: 50%;"></div>
+            <div class="skel skel-line" style="flex: 1;"></div>
+          </div>
+          <div style="display: flex; align-items: center; gap: 10px;">
+            <div class="skel" style="height: 18px; width: 18px; border-radius: 50%;"></div>
+            <div class="skel skel-line" style="flex: 1; width: 80%;"></div>
+          </div>
+          <div style="display: flex; align-items: center; gap: 10px;">
+            <div class="skel" style="height: 18px; width: 18px; border-radius: 50%;"></div>
+            <div class="skel skel-line" style="flex: 1; width: 70%;"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 思维导图骨架 -->
+      <div class="skel-card">
+        <div class="lbl">MINDMAP</div>
+        <div style="height: 180px; position: relative; padding: 20px 0;">
+          <div class="skel" style="position: absolute; top: 50%; left: 50%; width: 80px; height: 32px; border-radius: 999px; transform: translate(-50%, -50%);"></div>
+          <div class="skel" style="position: absolute; top: 20%; left: 8%; width: 60px; height: 18px; border-radius: 999px;"></div>
+          <div class="skel" style="position: absolute; top: 70%; left: 12%; width: 56px; height: 18px; border-radius: 999px;"></div>
+          <div class="skel" style="position: absolute; top: 18%; right: 10%; width: 64px; height: 18px; border-radius: 999px;"></div>
+          <div class="skel" style="position: absolute; top: 72%; right: 14%; width: 50px; height: 18px; border-radius: 999px;"></div>
+        </div>
+      </div>
+
+      <!-- 课程列表骨架 -->
+      <div class="skel-card">
+        <div class="lbl">COURSE ROW × 3</div>
+        <div class="skel-block">
+          <div style="display: flex; gap: 12px; align-items: center;">
+            <div class="skel" style="height: 36px; width: 36px; border-radius: 8px;"></div>
+            <div style="flex: 1;">
+              <div class="skel" style="height: 13px; width: 70%;"></div>
+              <div class="skel" style="height: 11px; width: 40%; margin-top: 6px;"></div>
+            </div>
+          </div>
+          <div style="display: flex; gap: 12px; align-items: center;">
+            <div class="skel" style="height: 36px; width: 36px; border-radius: 8px;"></div>
+            <div style="flex: 1;">
+              <div class="skel" style="height: 13px; width: 60%;"></div>
+              <div class="skel" style="height: 11px; width: 35%; margin-top: 6px;"></div>
+            </div>
+          </div>
+          <div style="display: flex; gap: 12px; align-items: center;">
+            <div class="skel" style="height: 36px; width: 36px; border-radius: 8px;"></div>
+            <div style="flex: 1;">
+              <div class="skel" style="height: 13px; width: 80%;"></div>
+              <div class="skel" style="height: 11px; width: 30%; margin-top: 6px;"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============== 02.6 应用生成进度 ============== -->
+  <section class="ds-section">
+    <div class="ds-section-head">
+      <h2><span class="num">02.6</span> &nbsp; 应用生成进度</h2>
+      <p class="desc">"AI 正在为你做应用"——必须比骨架屏更"活"，因为这是被用户主动等待的时刻。</p>
+    </div>
+
+    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
+      <div class="gen-progress">
+        <div class="gen-head">
+          <div class="icon">速</div>
+          <h4>正在为你整这节课的速查表</h4>
+          <div class="status">生成中</div>
+        </div>
+        <p style="font-size: 13px; color: var(--ink-2); line-height: 1.6;">
+          Octo 正在从 142 段录音里挑出核心定义、易错点和公式…
+        </p>
+        <div class="gen-bar"><div class="fill"></div></div>
+        <div class="gen-eta">
+          <span>已分析 78%</span>
+          <span>预计 6 秒</span>
+        </div>
+      </div>
+
+      <div class="done-card">
+        <div class="check">
+          <svg width="16" height="12" viewBox="0 0 16 12" fill="none">
+            <path d="M2 6 L6 10 L14 2" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </div>
+        <div class="text">
+          <h4>速查表已就绪</h4>
+          <p>5 个核心知识点 · 4 处定位回原录音</p>
+        </div>
+        <div class="scan"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============== 02.7 等待与思考微提示 ============== -->
+  <section class="ds-section">
+    <div class="ds-section-head">
+      <h2><span class="num">02.7</span> &nbsp; 等待 · 思考 · "酿"</h2>
+      <p class="desc">从轻到重三档：typing → thinking strip → brewing。决不在用户面前显示"loading"。</p>
+    </div>
+
+    <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px;">
+      <div style="padding: 24px; background: var(--card); border: 1px solid var(--rule); border-radius: var(--radius-lg); display: flex; flex-direction: column; align-items: flex-start; gap: 12px;">
+        <div class="caps" style="font-size: 11px; color: var(--ink-3);">轻 · TYPING</div>
+        <div class="typing-dots"><span></span><span></span><span></span></div>
+        <div style="font-size: 12px; color: var(--ink-2); line-height: 1.55;">Octo 在打字。&lt; 0.5s 出现，对话气泡里。</div>
+      </div>
+
+      <div style="padding: 24px; background: var(--card); border: 1px solid var(--rule); border-radius: var(--radius-lg); display: flex; flex-direction: column; align-items: flex-start; gap: 12px;">
+        <div class="caps" style="font-size: 11px; color: var(--ink-3);">中 · THINKING</div>
+        <div class="thinking-strip" style="display: flex;">Octo 正在对照你前面问过的内容…</div>
+        <div style="font-size: 12px; color: var(--ink-2); line-height: 1.55;">AI 在做检索 / 推理。1-2s。气息流横扫。</div>
+      </div>
+
+      <div style="padding: 24px; background: var(--card); border: 1px solid var(--rule); border-radius: var(--radius-lg); display: flex; flex-direction: column; align-items: flex-start; gap: 12px;">
+        <div class="caps" style="font-size: 11px; color: var(--ink-3);">重 · BREWING（"酿"）</div>
+        <div class="brewing-strip">
+          <span class="dot"></span>
+          <span>这节课还在沉淀，下次见面会更聪明</span>
+        </div>
+        <div style="font-size: 12px; color: var(--ink-2); line-height: 1.55;">后台理解，几分钟到几小时。隐式存在。</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============== 02.8 错误与重试 ============== -->
+  <section class="ds-section">
+    <div class="ds-section-head">
+      <h2><span class="num">02.8</span> &nbsp; 错误 · 重试</h2>
+      <p class="desc">用朱批红，因为它本来就是"提醒"色——和"老师在你卷子上画错号"语义同源。</p>
+    </div>
+    <div class="error-card">
+      <div class="icon">!</div>
+      <div class="msg">
+        网络抖动了一下，Octo 没接住这条
+        <div class="sub">原文已保留，重试通常能成功</div>
+      </div>
+      <button>重试</button>
+    </div>
+  </section>
+
+  <!-- ============== 02.9 AI 卡片：可见但克制 ============== -->
+  <section class="ds-section">
+    <div class="ds-section-head">
+      <h2><span class="num">02.9</span> &nbsp; "AI 在场" 卡片</h2>
+      <p class="desc">和普通卡片的对比——多了一道极淡的墨绿 1px ring + 缓慢光带。</p>
+    </div>
+
+    <div class="compare-pair">
+      <div class="bad">
+        <div class="lbl">普通卡片 · 静态</div>
+        <h3 style="font-size: 17px; font-weight: 600; margin-bottom: 8px;">这节课的速查表</h3>
+        <p style="font-size: 13.5px; color: var(--ink-2); line-height: 1.6;">没人会觉得这是 AI 产出的——它看起来像 Notion 里的一段普通笔记。</p>
+      </div>
+      <div class="good surface-ai" style="padding: 24px;">
+        <div class="lbl" style="position: relative; z-index: 1;">AI 卡片 · 在场</div>
+        <h3 style="font-size: 17px; font-weight: 600; margin-bottom: 8px; position: relative; z-index: 1;">这节课的速查表</h3>
+        <p style="font-size: 13.5px; color: var(--ink-2); line-height: 1.6; position: relative; z-index: 1;">极淡的墨绿光带每 6s 缓慢扫过。1px 墨绿 ring 包边。学生一眼能识别——这是 AI 给我的，不是我自己写的。</p>
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<script>
+  // 主题切换
+  document.getElementById('themeToggle').addEventListener('click', () => {
+    const root = document.documentElement;
+    root.setAttribute('data-theme', root.getAttribute('data-theme') === 'dark' ? 'light' : 'dark');
+  });
+
+  // 流式输出 demo
+  const streamA = document.getElementById('streamA');
+  const streamText = '想让你真的记住这两个的区别，我给你打个比喻：滑动窗口像餐厅服务员控制一桌的上菜节奏——客人吃多快服务员就送多快；拥塞控制更像整条街的红绿灯——如果整条街堵了，每个餐厅都得放慢出菜。';
+
+  function playStream() {
+    streamA.innerHTML = '';
+    [...streamText].forEach((ch, i) => {
+      const span = document.createElement('span');
+      span.textContent = ch;
+      span.style.animationDelay = (i * 0.04) + 's';
+      streamA.appendChild(span);
+    });
+    const caret = document.createElement('span');
+    caret.className = 'typing-caret';
+    caret.style.opacity = '0';
+    caret.style.animationDelay = (streamText.length * 0.04 + 0.2) + 's';
+    caret.style.animation += ', char-in 0.3s ease-out forwards';
+    streamA.appendChild(caret);
+  }
+  playStream();
+  document.getElementById('replayStream').addEventListener('click', playStream);
+</script>
+
+</body>
+</html>

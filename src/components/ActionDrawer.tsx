@@ -97,7 +97,7 @@ export function ActionDrawer({
         )}
       >
         {/* 头部 */}
-        <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100 bg-white">
+        <div className="flex items-center justify-between px-4 py-3 border-b border-divider-light bg-white">
           <div className="flex items-center gap-2">
             <div className="w-8 h-8 bg-mint rounded-lg flex items-center justify-center shadow-sm">
               <svg className="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-hidden="true">
@@ -106,7 +106,7 @@ export function ActionDrawer({
             </div>
             <div>
               <h2 id={titleId} className="text-sm font-semibold text-navy">今晚行动清单</h2>
-              <p className="text-xs text-gray-500">
+              <p className="text-xs text-ink-muted">
                 {items.filter(i => i.completed).length}/{items.length} 已完成
               </p>
             </div>
@@ -114,7 +114,7 @@ export function ActionDrawer({
           <button
             onClick={onClose}
             aria-label="关闭行动清单"
-            className="w-8 h-8 flex items-center justify-center rounded-lg text-gray-400 hover:text-navy hover:bg-lilac-100 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-mint focus-visible:ring-offset-2"
+            className="w-8 h-8 flex items-center justify-center rounded-lg text-ink-muted hover:text-navy hover:bg-lilac-100 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-mint focus-visible:ring-offset-2"
           >
             <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-hidden="true">
               <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
@@ -132,8 +132,8 @@ export function ActionDrawer({
         </div>
 
         {/* 底部提示 */}
-        <div className="px-4 py-3 border-t border-gray-100 bg-surface-soft">
-          <p className="text-xs text-gray-400 text-center">
+        <div className="px-4 py-3 border-t border-divider-light bg-surface-soft">
+          <p className="text-xs text-ink-muted text-center">
             💡 按 ESC 或点击空白处关闭
           </p>
         </div>

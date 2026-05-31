@@ -154,23 +154,23 @@ export function CitationDetailSheet({
         className="w-full max-w-none border-l-0 bg-white p-0 sm:max-w-[420px] sm:border-l sm:rounded-l-[28px]"
       >
         <div className="flex h-full flex-col">
-          <SheetHeader className="border-b border-slate-200 px-5 pb-4 pt-5 text-left">
-            <div className="mb-2 flex items-center gap-2 text-[11px] text-slate-500">
-              <span className="inline-flex h-6 min-w-[28px] items-center justify-center rounded-full border border-slate-200 bg-slate-50 px-2 font-semibold text-slate-700">
+          <SheetHeader className="border-b border-divider px-5 pb-4 pt-5 text-left">
+            <div className="mb-2 flex items-center gap-2 text-[11px] text-ink-muted">
+              <span className="inline-flex h-6 min-w-[28px] items-center justify-center rounded-full border border-divider bg-paper-warm px-2 font-semibold text-ink-secondary">
                 {activeCitation.index}
               </span>
-              <span className="inline-flex items-center gap-1 rounded-full bg-[#f6efe6] px-2.5 py-1 font-medium text-[#9a6b2f]">
+              <span className="inline-flex items-center gap-1 rounded-full bg-vermilion-fog px-2.5 py-1 font-medium text-vermilion-deep">
                 <CitationSourceIcon sourceType={activeCitation.citation.source_type} />
                 {activeCitation.sourceLabel}
               </span>
             </div>
-            <SheetTitle className="pr-8 text-[17px] leading-6 text-slate-900">
+            <SheetTitle className="pr-8 text-[17px] leading-6 text-ink">
               {activeCitation.title}
             </SheetTitle>
           </SheetHeader>
 
           {resolvedCitations.length > 1 ? (
-            <div className="border-b border-slate-200 px-5 py-3">
+            <div className="border-b border-divider px-5 py-3">
               <div className="flex flex-wrap gap-2">
                 {resolvedCitations.map((item) => {
                   const isActive = item.index === activeCitation.index;
@@ -182,8 +182,8 @@ export function CitationDetailSheet({
                       className={[
                         'inline-flex h-8 min-w-[32px] items-center justify-center rounded-full border px-3 text-xs font-semibold transition-all',
                         isActive
-                          ? 'border-slate-900 bg-slate-900 text-white shadow-sm'
-                          : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:text-slate-900',
+                          ? 'border-ink bg-ink text-white shadow-sm'
+                          : 'border-divider bg-white text-ink-secondary hover:border-divider hover:text-ink',
                       ].join(' ')}
                       aria-pressed={isActive}
                       title={item.title}
@@ -197,16 +197,16 @@ export function CitationDetailSheet({
           ) : null}
 
           <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">
-            <div className="rounded-[22px] border border-slate-200 bg-slate-50/80 p-4">
-              <div className="mb-2 text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-400">
+            <div className="rounded-[22px] border border-divider bg-paper-warm/80 p-4">
+              <div className="mb-2 text-[11px] font-semibold uppercase tracking-[0.12em] text-ink-muted">
                 摘要片段
               </div>
               {activeCitation.snippet ? (
-                <p className="whitespace-pre-wrap text-sm leading-6 text-slate-700">
+                <p className="whitespace-pre-wrap text-sm leading-6 text-ink-secondary">
                   {activeCitation.snippet}
                 </p>
               ) : (
-                <p className="text-sm leading-6 text-slate-500">
+                <p className="text-sm leading-6 text-ink-muted">
                   这条引用没有返回摘要片段，但你仍然可以根据标题和来源类型继续定位原文。
                 </p>
               )}
@@ -217,7 +217,7 @@ export function CitationDetailSheet({
                 href={activeCitation.href}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="mt-4 inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3.5 py-2 text-sm font-medium text-slate-700 transition-colors hover:border-slate-300 hover:text-slate-900"
+                className="mt-4 inline-flex items-center gap-2 rounded-full border border-divider bg-white px-3.5 py-2 text-sm font-medium text-ink-secondary transition-colors hover:border-divider hover:text-ink"
               >
                 <ExternalLink size={14} strokeWidth={1.8} />
                 打开原文
@@ -262,7 +262,7 @@ export function CitationQuickAccess({
   return (
     <>
       <div className={`flex flex-wrap items-center gap-2 ${className}`}>
-        <span className="text-[11px] font-medium text-slate-500">{label}</span>
+        <span className="text-[11px] font-medium text-ink-muted">{label}</span>
         <div className="flex flex-wrap items-center gap-1.5">
           {resolvedCitations.map((item) => (
             <button
@@ -272,7 +272,7 @@ export function CitationQuickAccess({
                 setActiveIndex(item.index);
                 setOpen(true);
               }}
-              className="inline-flex h-6 min-w-[24px] items-center justify-center rounded-full border border-slate-200 bg-white px-2 text-[11px] font-semibold text-slate-700 transition-all hover:border-slate-300 hover:text-slate-900"
+              className="inline-flex h-6 min-w-[24px] items-center justify-center rounded-full border border-divider bg-white px-2 text-[11px] font-semibold text-ink-secondary transition-all hover:border-divider hover:text-ink"
               title={item.title}
               aria-label={`资料${item.index}：${item.title}`}
             >
@@ -280,7 +280,7 @@ export function CitationQuickAccess({
             </button>
           ))}
         </div>
-        <span className="text-[11px] text-slate-400">{hint}</span>
+        <span className="text-[11px] text-ink-muted">{hint}</span>
       </div>
 
       <CitationDetailSheet

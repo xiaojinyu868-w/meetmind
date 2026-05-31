@@ -20,6 +20,7 @@ import Link from 'next/link';
 import { useAuth } from '@/lib/hooks/useAuth';
 import { COPY } from '@/lib/ui/copy';
 import { RippleButton } from '@/components/ui/ripple-button';
+import { OctoAvatar } from '@/components/ui/octo-avatar';
 
 // Performance: Lazy-load agreement modal (contains ~300 lines of legal text)
 const AgreementModal = dynamic(() => import('@/components/AgreementModal'), { ssr: false });
@@ -30,14 +31,40 @@ type AgreementType = 'terms' | 'privacy' | null;
 
 const WECHAT_LOGIN_ENABLED = process.env.NEXT_PUBLIC_ENABLE_WECHAT_LOGIN === 'true';
 
-/** 登录背景：安静的纸面，不用视频抢走“学习现场”的注意力。 */
+/** v7 登录背景：米白纸感 + 极淡墨绿/朱批光晕，让"安静"也有智能信号 */
 function LazyVideoBackground() {
   return (
     <>
-      <div className="absolute inset-0 bg-canvas" />
-      <div className="absolute left-8 top-8 h-24 w-24 rounded-full border border-divider/70" />
-      <div className="absolute bottom-10 right-10 h-36 w-36 rounded-full border border-divider/70" />
-      <div className="absolute inset-x-0 top-0 h-px bg-divider/70" />
+      {/* 米白底（v7 paper） */}
+      <div className="absolute inset-0 bg-paper" />
+
+      {/* 极淡墨绿 / 朱批光晕（仅装饰，不抢注意力） */}
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-0"
+        style={{
+          background: `
+            radial-gradient(ellipse 50% 40% at 20% 30%, rgba(45,79,62,0.10) 0%, transparent 60%),
+            radial-gradient(ellipse 50% 40% at 80% 70%, rgba(181,72,60,0.08) 0%, transparent 60%)
+          `,
+        }}
+      />
+
+      {/* 极淡纸纹 */}
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-0 opacity-50"
+        style={{
+          backgroundImage:
+            'radial-gradient(circle at 1px 1px, rgba(28,27,25,0.04) 1px, transparent 0)',
+          backgroundSize: '40px 40px',
+        }}
+      />
+
+      {/* 装饰圈（更弱 + 暖色） */}
+      <div className="absolute left-8 top-8 h-24 w-24 rounded-full border border-divider/60" />
+      <div className="absolute bottom-10 right-10 h-36 w-36 rounded-full border border-divider/60" />
+      <div className="absolute inset-x-0 top-0 h-px bg-divider/60" />
     </>
   );
 }
@@ -72,10 +99,31 @@ function LoginForm() {
     if (errorParam) setError(decodeURIComponent(errorParam));
   }, [searchParams]);
 
+  /**
+   * 计算登录成功后该跳哪。
+   * - 优先走 ?next=... （来自分享页 / 受保护路由的回流），但只允许相对路径，
+   *   防御 open-redirect（攻击者构造 ?next=https://evil.com）
+   * - 否则默认 /app
+   */
+  const resolveRedirect = useCallback((): string => {
+    const next = searchParams.get('next');
+    if (!next) return '/app';
+    try {
+      const decoded = decodeURIComponent(next);
+      // 只接受相对路径（"/" 开头且非 "//"）
+      if (decoded.startsWith('/') && !decoded.startsWith('//')) {
+        return decoded;
+      }
+    } catch {
+      // decode 失败就 fallback
+    }
+    return '/app';
+  }, [searchParams]);
+
   // 已登录用户自动跳转（异步检查，不阻塞渲染）
   useEffect(() => {
-    if (isAuthenticated) router.push('/app');
-  }, [isAuthenticated, router]);
+    if (isAuthenticated) router.push(resolveRedirect());
+  }, [isAuthenticated, resolveRedirect, router]);
 
   // 预加载 /app 页面，提升访客模式跳转速度
   // bundle-preload: Preload on hover/focus for perceived speed
@@ -178,7 +226,7 @@ function LoginForm() {
     const result = await login({ username, password, rememberMe });
     
     if (result.success) {
-      router.replace('/app');
+      router.replace(resolveRedirect());
       return true;
     } else {
       // 检测用户未设置密码的情况，自动切换到验证码登录
@@ -217,7 +265,7 @@ function LoginForm() {
     });
 
     if (result.success) {
-      router.replace('/app');
+      router.replace(resolveRedirect());
       return true;
     } else {
       setError(result.error || '登录失败');
@@ -308,13 +356,11 @@ function LoginForm() {
       <div className="relative z-10 flex min-h-screen items-center justify-center px-4">
         <div className="flex w-full max-w-[400px] flex-col items-start">
           
-          {/* Logo - 卡片上方 */}
+          {/* Logo - 卡片上方 · v7 用 Octo 替代静态字母 */}
           <div className="mb-6 flex items-center gap-3 animate-fade-in">
-            <div className="flex h-12 w-12 items-center justify-center rounded-2xl border border-divider bg-white">
-              <span className="text-[22px] font-semibold tracking-[-0.04em] text-ink">M</span>
-            </div>
+            <OctoAvatar mood="idle" size="md" aura priority className="rounded-2xl" />
             <div>
-              <span className="text-[26px] font-semibold tracking-[-0.03em] text-ink">MeetMind</span>
+              <span className="text-[26px] font-semibold tracking-display text-ink">MeetMind</span>
               <p className="mt-0.5 text-[13px] text-ink-muted">{COPY.login.subtitle}</p>
             </div>
           </div>
@@ -327,8 +373,8 @@ function LoginForm() {
                 onClick={() => handleLoginTypeChange('email')}
                 className="text-base pb-1 border-b-2 transition-all font-medium"
                 style={{ 
-                  color: loginType === 'email' ? '#232322' : '#787774',
-                  borderColor: loginType === 'email' ? '#232322' : 'transparent',
+                  color: loginType === 'email' ? '#1C1B19' : '#5C5A55',
+                  borderColor: loginType === 'email' ? '#1C1B19' : 'transparent',
                 }}
               >
                 邮箱登录
@@ -343,7 +389,7 @@ function LoginForm() {
                 title="即将开放"
               >
                 手机号登录
-                <span className="ml-1 text-xs text-gray-400">(即将开放)</span>
+                <span className="ml-1 text-xs text-ink-muted">(即将开放)</span>
               </button>
             </div>
 
@@ -354,9 +400,9 @@ function LoginForm() {
                   onClick={() => setLoginMethod('code')}
                   className="text-sm px-4 py-1.5 rounded-full transition-all"
                   style={{ 
-                    backgroundColor: loginMethod === 'code' ? '#232322' : 'transparent',
-                    color: loginMethod === 'code' ? '#FFFFFF' : '#787774',
-                    border: loginMethod === 'code' ? '1px solid #232322' : '1px solid transparent'
+                    backgroundColor: loginMethod === 'code' ? '#1C1B19' : 'transparent',
+                    color: loginMethod === 'code' ? '#FFFFFF' : '#5C5A55',
+                    border: loginMethod === 'code' ? '1px solid #1C1B19' : '1px solid transparent'
                   }}
                 >
                   验证码登录
@@ -365,9 +411,9 @@ function LoginForm() {
                   onClick={() => setLoginMethod('password')}
                   className="text-sm px-4 py-1.5 rounded-full transition-all"
                   style={{ 
-                    backgroundColor: loginMethod === 'password' ? '#232322' : 'transparent',
-                    color: loginMethod === 'password' ? '#FFFFFF' : '#787774',
-                    border: loginMethod === 'password' ? '1px solid #232322' : '1px solid transparent'
+                    backgroundColor: loginMethod === 'password' ? '#1C1B19' : 'transparent',
+                    color: loginMethod === 'password' ? '#FFFFFF' : '#5C5A55',
+                    border: loginMethod === 'password' ? '1px solid #1C1B19' : '1px solid transparent'
                   }}
                 >
                   密码登录
@@ -377,7 +423,7 @@ function LoginForm() {
 
             {/* 错误提示 */}
             {error && (
-              <div className="mb-4 p-3 rounded-xl text-sm bg-red-50 border border-red-200 text-red-600">
+              <div className="mb-4 p-3 rounded-xl text-sm bg-vermilion-mist/50 border border-vermilion/30 text-vermilion">
                 {error}
               </div>
             )}
@@ -385,7 +431,7 @@ function LoginForm() {
             <form onSubmit={handleSubmit} className="space-y-4">
               {/* 邮箱/手机号输入 */}
               <div>
-                <label className="block text-sm font-medium mb-2 text-gray-700">
+                <label className="block text-sm font-medium mb-2 text-ink-secondary">
                   {loginType === 'email' ? '邮箱地址' : '手机号码'}
                 </label>
                 <input
@@ -401,7 +447,7 @@ function LoginForm() {
               {/* 密码输入 */}
               {loginMethod === 'password' && loginType === 'email' && (
                 <div>
-                  <label className="block text-sm font-medium mb-2 text-gray-700">密码</label>
+                  <label className="block text-sm font-medium mb-2 text-ink-secondary">密码</label>
                   <input
                     type="password"
                     value={password}
@@ -416,7 +462,7 @@ function LoginForm() {
               {/* 验证码输入 */}
               {(loginMethod === 'code' || loginType === 'phone') && (
                 <div>
-                  <label className="block text-sm font-medium mb-2 text-gray-700">
+                  <label className="block text-sm font-medium mb-2 text-ink-secondary">
                     {loginType === 'email' ? '邮箱验证码' : '短信验证码'}
                   </label>
                   <div className="flex gap-3">
@@ -499,7 +545,7 @@ function LoginForm() {
                 {wechatAuthUrl ? (
                   <a
                     href={wechatAuthUrl}
-                    className="w-full flex items-center justify-center gap-3 py-3 px-4 rounded-xl transition-all bg-[#07C160] hover:bg-[#06AE56] text-white font-medium"
+                    className="w-full flex items-center justify-center gap-3 py-3 px-4 rounded-xl transition-all bg-[#2D6A4F] hover:bg-[#06AE56] text-white font-medium"
                   >
                     <svg className="w-5 h-5" viewBox="0 0 24 24" fill="currentColor">
                       <path d="M8.691 2.188C3.891 2.188 0 5.476 0 9.53c0 2.212 1.17 4.203 3.002 5.55a.59.59 0 01.213.665l-.39 1.48c-.019.07-.048.141-.048.213 0 .163.13.295.29.295a.326.326 0 00.167-.054l1.903-1.114a.864.864 0 01.717-.098 10.16 10.16 0 002.837.403c.276 0 .543-.027.811-.05-.857-2.578.157-4.972 1.932-6.446 1.703-1.415 3.882-1.98 5.853-1.838-.576-3.583-4.196-6.348-8.596-6.348zM5.785 5.991c.642 0 1.162.529 1.162 1.18a1.17 1.17 0 01-1.162 1.178A1.17 1.17 0 014.623 7.17c0-.651.52-1.18 1.162-1.18zm5.813 0c.642 0 1.162.529 1.162 1.18a1.17 1.17 0 01-1.162 1.178 1.17 1.17 0 01-1.162-1.178c0-.651.52-1.18 1.162-1.18zm5.34 2.867c-1.797-.052-3.746.512-5.28 1.786-1.72 1.428-2.687 3.72-1.78 6.22.942 2.453 3.666 4.229 6.884 4.229.826 0 1.622-.12 2.361-.336a.722.722 0 01.598.082l1.584.926a.272.272 0 00.14.045c.134 0 .24-.111.24-.247 0-.06-.023-.12-.038-.177l-.327-1.233a.582.582 0 01-.023-.156.49.49 0 01.201-.398C23.024 18.48 24 16.82 24 14.98c0-3.21-2.931-5.837-6.656-6.088V8.89c-.135-.01-.269-.03-.406-.03zm-2.344 3.356c.535 0 .969.44.969.982a.976.976 0 01-.969.983.976.976 0 01-.969-.983c0-.542.434-.982.97-.982zm4.844 0c.535 0 .969.44.969.982a.976.976 0 01-.969.983.976.976 0 01-.969-.983c0-.542.434-.982.969-.982z"/>
@@ -510,7 +556,7 @@ function LoginForm() {
                   <button
                     type="button"
                     onClick={() => setShowWechatGuide(true)}
-                    className="w-full flex items-center justify-center gap-3 py-3 px-4 rounded-xl transition-all bg-[#07C160] hover:bg-[#06AE56] text-white font-medium"
+                    className="w-full flex items-center justify-center gap-3 py-3 px-4 rounded-xl transition-all bg-[#2D6A4F] hover:bg-[#06AE56] text-white font-medium"
                   >
                     <svg className="w-5 h-5" viewBox="0 0 24 24" fill="currentColor">
                       <path d="M8.691 2.188C3.891 2.188 0 5.476 0 9.53c0 2.212 1.17 4.203 3.002 5.55a.59.59 0 01.213.665l-.39 1.48c-.019.07-.048.141-.048.213 0 .163.13.295.29.295a.326.326 0 00.167-.054l1.903-1.114a.864.864 0 01.717-.098 10.16 10.16 0 002.837.403c.276 0 .543-.027.811-.05-.857-2.578.157-4.972 1.932-6.446 1.703-1.415 3.882-1.98 5.853-1.838-.576-3.583-4.196-6.348-8.596-6.348zM5.785 5.991c.642 0 1.162.529 1.162 1.18a1.17 1.17 0 01-1.162 1.178A1.17 1.17 0 014.623 7.17c0-.651.52-1.18 1.162-1.18zm5.813 0c.642 0 1.162.529 1.162 1.18a1.17 1.17 0 01-1.162 1.178 1.17 1.17 0 01-1.162-1.178c0-.651.52-1.18 1.162-1.18zm5.34 2.867c-1.797-.052-3.746.512-5.28 1.786-1.72 1.428-2.687 3.72-1.78 6.22.942 2.453 3.666 4.229 6.884 4.229.826 0 1.622-.12 2.361-.336a.722.722 0 01.598.082l1.584.926a.272.272 0 00.14.045c.134 0 .24-.111.24-.247 0-.06-.023-.12-.038-.177l-.327-1.233a.582.582 0 01-.023-.156.49.49 0 01.201-.398C23.024 18.48 24 16.82 24 14.98c0-3.21-2.931-5.837-6.656-6.088V8.89c-.135-.01-.269-.03-.406-.03zm-2.344 3.356c.535 0 .969.44.969.982a.976.976 0 01-.969.983.976.976 0 01-.969-.983c0-.542.434-.982.97-.982zm4.844 0c.535 0 .969.44.969.982a.976.976 0 01-.969.983.976.976 0 01-.969-.983c0-.542.434-.982.969-.982z"/>
@@ -555,20 +601,20 @@ function LoginForm() {
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex flex-col items-center text-center">
-              <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-[#07C160]/10">
-                <svg className="h-8 w-8 text-[#07C160]" viewBox="0 0 24 24" fill="currentColor">
+              <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-[#2D6A4F]/10">
+                <svg className="h-8 w-8 text-[#2D6A4F]" viewBox="0 0 24 24" fill="currentColor">
                   <path d="M8.691 2.188C3.891 2.188 0 5.476 0 9.53c0 2.212 1.17 4.203 3.002 5.55a.59.59 0 01.213.665l-.39 1.48c-.019.07-.048.141-.048.213 0 .163.13.295.29.295a.326.326 0 00.167-.054l1.903-1.114a.864.864 0 01.717-.098 10.16 10.16 0 002.837.403c.276 0 .543-.027.811-.05-.857-2.578.157-4.972 1.932-6.446 1.703-1.415 3.882-1.98 5.853-1.838-.576-3.583-4.196-6.348-8.596-6.348zM5.785 5.991c.642 0 1.162.529 1.162 1.18a1.17 1.17 0 01-1.162 1.178A1.17 1.17 0 014.623 7.17c0-.651.52-1.18 1.162-1.18zm5.813 0c.642 0 1.162.529 1.162 1.18a1.17 1.17 0 01-1.162 1.178 1.17 1.17 0 01-1.162-1.178c0-.651.52-1.18 1.162-1.18z"/>
                 </svg>
               </div>
-              <h3 className="mb-2 text-lg font-semibold text-gray-900">请在微信中打开</h3>
-              <p className="mb-1 text-sm text-gray-500">
+              <h3 className="mb-2 text-lg font-semibold text-ink">请在微信中打开</h3>
+              <p className="mb-1 text-sm text-ink-muted">
                 微信登录需要在微信内置浏览器中完成
               </p>
-              <p className="mb-5 text-sm text-gray-500">
+              <p className="mb-5 text-sm text-ink-muted">
                 请复制以下链接，在微信中打开：
               </p>
-              <div className="mb-4 w-full rounded-lg bg-gray-50 px-3 py-2.5">
-                <p className="break-all text-xs text-gray-600 select-all">
+              <div className="mb-4 w-full rounded-lg bg-paper-warm px-3 py-2.5">
+                <p className="break-all text-xs text-ink-secondary select-all">
                   {typeof window !== 'undefined' ? window.location.origin + '/login' : 'https://capture.meetmind.online/login'}
                 </p>
               </div>
@@ -576,7 +622,7 @@ function LoginForm() {
                 <button
                   type="button"
                   onClick={() => setShowWechatGuide(false)}
-                  className="flex-1 rounded-xl border border-gray-200 py-2.5 text-sm font-medium text-gray-600 transition hover:bg-gray-50"
+                  className="flex-1 rounded-xl border border-divider py-2.5 text-sm font-medium text-ink-secondary transition hover:bg-paper-warm"
                 >
                   取消
                 </button>
@@ -591,7 +637,7 @@ function LoginForm() {
                       // clipboard API 不可用时静默失败
                     });
                   }}
-                  className="flex-1 rounded-xl bg-[#07C160] py-2.5 text-sm font-medium text-white transition hover:bg-[#06AE56]"
+                  className="flex-1 rounded-xl bg-[#2D6A4F] py-2.5 text-sm font-medium text-white transition hover:bg-[#06AE56]"
                 >
                   复制链接
                 </button>

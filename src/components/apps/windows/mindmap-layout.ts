@@ -31,27 +31,40 @@ export const FONT_SIZE_L1 = 14;
 export const FONT_SIZE_OTHER = 13;
 
 // ── Theme / palette ────────────────────────────────────────────────
+//
+// v7：思维导图不是七彩气球，是老师在卷子上画的层级标注。
+// 双签名色家族 + 暖纸感深底（不是冷蓝紫），让节点像"知识在被理解"的过程。
+//
 
 export const PALETTE = {
-  bg: '#1b1d2a',
-  bgSurface: '#242638',
-  bgToolbar: '#1e2030',
-  border: '#2e3148',
-  textPrimary: '#eaedf3',
-  textSecondary: '#a0a3bd',
-  textMuted: '#6c6f8a',
-  accent: '#7c6ef0',
+  bg: '#1A1612',           // v7：暗夜书房深棕墨黑（不再是冷蓝紫）
+  bgSurface: '#241F1A',
+  bgToolbar: '#1F1B16',
+  border: '#2A241D',
+  textPrimary: '#F2EDE3',
+  textSecondary: '#B8B0A2',
+  textMuted: '#82796D',
+  accent: '#6B9080',       // v7：浅松绿（暗色态 pine 主签名）
 };
 
+/**
+ * v7 双签名色家族化层级调色板
+ *
+ * 设计原则：
+ *  - 主分支（奇数 depth）= pine 系（沉淀 / 主线）
+ *  - 副分支（偶数 depth）= vermilion 系（标注 / 此刻）
+ *  - 越深越浅：让眼睛能识别"主干 vs 细枝"
+ *  - 颜色家族化（不再彩虹）：知识结构本就是单一主题的细分，色彩应顺应这个语义
+ */
 export const DEPTH_HUES = [
-  { node: '#7c6ef0', nodeBg: 'rgba(124,110,240,0.14)', line: 'rgba(124,110,240,0.50)', expandBtn: '#7c6ef0' },
-  { node: '#59a5f5', nodeBg: 'rgba(89,165,245,0.14)',  line: 'rgba(89,165,245,0.50)',  expandBtn: '#59a5f5' },
-  { node: '#4ecdc4', nodeBg: 'rgba(78,205,196,0.14)',  line: 'rgba(78,205,196,0.50)',  expandBtn: '#4ecdc4' },
-  { node: '#f7b731', nodeBg: 'rgba(247,183,49,0.14)',  line: 'rgba(247,183,49,0.50)',  expandBtn: '#f7b731' },
-  { node: '#fc5c65', nodeBg: 'rgba(252,92,101,0.14)',  line: 'rgba(252,92,101,0.50)',  expandBtn: '#fc5c65' },
-  { node: '#a55eea', nodeBg: 'rgba(165,94,234,0.14)',  line: 'rgba(165,94,234,0.50)',  expandBtn: '#a55eea' },
-  { node: '#26de81', nodeBg: 'rgba(38,222,129,0.14)',  line: 'rgba(38,222,129,0.50)',  expandBtn: '#26de81' },
-  { node: '#fd9644', nodeBg: 'rgba(253,150,68,0.14)',  line: 'rgba(253,150,68,0.50)',  expandBtn: '#fd9644' },
+  { node: '#2D4F3E', nodeBg: 'rgba(45,79,62,0.14)',  line: 'rgba(45,79,62,0.55)',  expandBtn: '#2D4F3E' },  // depth 1: pine 主分支
+  { node: '#B5483C', nodeBg: 'rgba(181,72,60,0.14)', line: 'rgba(181,72,60,0.55)', expandBtn: '#B5483C' },  // depth 2: vermilion 标注
+  { node: '#6B9080', nodeBg: 'rgba(107,144,128,0.14)', line: 'rgba(107,144,128,0.50)', expandBtn: '#6B9080' }, // depth 3: pine-light
+  { node: '#D17969', nodeBg: 'rgba(209,121,105,0.14)', line: 'rgba(209,121,105,0.50)', expandBtn: '#D17969' }, // depth 4: vermilion-light
+  { node: '#1A3327', nodeBg: 'rgba(26,51,39,0.14)',    line: 'rgba(26,51,39,0.50)',    expandBtn: '#1A3327' }, // depth 5: pine-deep
+  { node: '#8E3328', nodeBg: 'rgba(142,51,40,0.14)',   line: 'rgba(142,51,40,0.50)',   expandBtn: '#8E3328' }, // depth 6: vermilion-deep
+  { node: '#5C5A55', nodeBg: 'rgba(92,90,85,0.14)',    line: 'rgba(92,90,85,0.50)',    expandBtn: '#5C5A55' }, // depth 7: ink-secondary（细枝）
+  { node: '#8E8B82', nodeBg: 'rgba(142,139,130,0.14)', line: 'rgba(142,139,130,0.40)', expandBtn: '#8E8B82' }, // depth 8: ink-muted（最末端）
 ];
 
 // ── Pure helpers ───────────────────────────────────────────────────
@@ -59,7 +72,13 @@ export const DEPTH_HUES = [
 /** 根据 depth 获取色调 */
 export function getHueByDepth(depth: number) {
   if (depth === 0) {
-    return { node: PALETTE.accent, nodeBg: 'rgba(124,110,240,0.22)', line: 'rgba(124,110,240,0.55)', expandBtn: PALETTE.accent };
+    // 根节点：pine 主签名色实底
+    return {
+      node: '#2D4F3E',
+      nodeBg: 'rgba(45,79,62,0.22)',
+      line: 'rgba(45,79,62,0.55)',
+      expandBtn: '#2D4F3E',
+    };
   }
   return DEPTH_HUES[(depth - 1) % DEPTH_HUES.length];
 }

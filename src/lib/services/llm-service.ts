@@ -531,16 +531,95 @@ export async function chat(
 
 /**
  * 流式调用 LLM
- * 支持：通义千问、火山方舟、中转站（OpenAI 兼容）
+ * 支持：StepFun / DeepSeek / 通义千问 / 火山方舟 / 中转站（OpenAI 兼容）
  * 支持思考模式：qwen3 会输出 reasoning_content
+ *
+ * 默认开启 word-level smoothing：把 LLM 一次塞过来的大 chunk 打散成"按词"
+ * 平滑输出，前端视觉上字符连续刷出，不再"一坨一坨"。chunk 之间的 sleep 很
+ * 短（10ms），不会显著拖慢总时长，但能显著改善"丝滑感"。
+ *
+ * 与 AI SDK v6 `streamText({ experimental_transform: smoothStream(...) })` 同款
+ * 思路；本仓库的 `chatStream` 走自定义 SSE 协议（type: 'content' | 'thinking'），
+ * 没法直接套 smoothStream Transform，所以自己实现一个最小版。
+ *
+ * 如果调用方需要"一次拿到全部 token、不要平滑"（比如累加成完整字符串再 JSON parse），
+ * 传 `options.smooth: 'off'` 即可关闭。
  */
 export async function* chatStream(
   messages: ChatMessage[],
   modelId: string = DEFAULT_MODEL_ID,
+  options?: { temperature?: number; maxTokens?: number; smooth?: 'word' | 'off' }
+): AsyncGenerator<StreamChunk> {
+  const smoothMode = options?.smooth ?? 'word';
+  const raw = chatStreamRaw(messages, modelId, options);
+  if (smoothMode === 'off') {
+    yield* raw;
+    return;
+  }
+  yield* smoothChunks(raw);
+}
+
+/**
+ * 把 LLM 大 chunk 打散成"按词"流出，词与词之间 sleep ~10ms。
+ * - 中文：以单字为词单位（每个汉字逐个露出）
+ * - 英文/数字：以连续字母数字段为词单位
+ * - 标点 / 空格：作为独立的小段透传
+ */
+async function* smoothChunks(
+  source: AsyncGenerator<StreamChunk>,
+): AsyncGenerator<StreamChunk> {
+  const DELAY_MS = 10;
+  // /^.../ 用 regex 拿到 buf 开头的一个"完整词"，剩下留作下次（防止英文词被截半）
+  const WORD_REGEX = /^([\p{Script=Han}])|^([A-Za-z0-9_]+)|^(\s+)|^([^\p{L}\p{N}\s])/u;
+  let buf = '';
+  let lastFlush = 0;
+  const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
+
+  for await (const chunk of source) {
+    if (chunk.type !== 'content') {
+      // thinking 帧直接透传，不平滑
+      yield chunk;
+      continue;
+    }
+    buf += chunk.content;
+    while (buf.length > 0) {
+      const m = WORD_REGEX.exec(buf);
+      if (!m) {
+        // 没匹配（极少发生，比如出现编码异常字符），就一次性 flush 剩余
+        yield { type: 'content', content: buf };
+        buf = '';
+        break;
+      }
+      const piece = m[0];
+      // 留一点尾巴：英文连续字母可能还没结束（buf 末尾是字母时），等下一个 chunk 拼上再 flush
+      if (
+        buf.length === piece.length &&
+        /[A-Za-z0-9_]$/.test(piece) &&
+        !/^\s/.test(piece)
+      ) {
+        // 整个 buf 都是字母收尾——可能词没完，等下一 chunk
+        break;
+      }
+      buf = buf.slice(piece.length);
+      yield { type: 'content', content: piece };
+      const now = Date.now();
+      if (now - lastFlush >= DELAY_MS) {
+        await sleep(DELAY_MS);
+        lastFlush = Date.now();
+      }
+    }
+  }
+  // 收尾 flush
+  if (buf) yield { type: 'content', content: buf };
+}
+
+async function* chatStreamRaw(
+  messages: ChatMessage[],
+  modelId: string,
   options?: { temperature?: number; maxTokens?: number }
 ): AsyncGenerator<StreamChunk> {
   const modelConfig = getModelConfig(modelId);
-  
+
   if (!modelConfig) {
     throw new Error(`未知模型: ${modelId}`);
   }

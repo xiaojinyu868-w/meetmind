@@ -354,7 +354,12 @@ export function AIChat({
           { role: 'user' as const, content: userMessage.content },
         ],
         model: selectedModel,
-        context: contextText,
+        // 课堂转录注入有上限——超长 prompt 会让首包延迟显著（StepFun / DeepSeek 即使吞吐
+        // 高，prefill 也得算完才能吐第一个 token）。8000 字 ≈ 12–16k input tokens ≈ 15 分钟课堂；
+        // 超出部分模型可以靠 [MM:SS] 引用让用户跳回原段。
+        context: contextText && contextText.length > 8000
+          ? contextText.slice(-8000)
+          : contextText,
         anchorId,
         stream: true,
         enable_thinking_guide: enableThinkingGuide,
@@ -446,15 +451,15 @@ export function AIChat({
 
   if (isInitializing) {
     return (
-      <div className={`flex h-full min-h-0 flex-col ${embeddedMobile ? 'bg-transparent' : 'rounded-lg border border-gray-200 bg-white'}`}>
+      <div className={`flex h-full min-h-0 flex-col ${embeddedMobile ? 'bg-transparent' : 'rounded-lg border border-divider bg-white'}`}>
         <div className="flex-1 flex items-center justify-center">
           <div className="text-center">
             <div className="flex gap-1 justify-center mb-2">
-              <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
-              <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
-              <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+              <div className="w-2 h-2 bg-ink-muted rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
+              <div className="w-2 h-2 bg-ink-muted rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
+              <div className="w-2 h-2 bg-ink-muted rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
             </div>
-            <p className="text-sm text-gray-500">加载对话历史...</p>
+            <p className="text-sm text-ink-muted">加载对话历史...</p>
           </div>
         </div>
       </div>
@@ -463,23 +468,23 @@ export function AIChat({
 
   const shellClassName = embeddedMobile
     ? 'flex h-full min-h-0 flex-col bg-transparent'
-    : 'flex h-full min-h-0 flex-col rounded-lg border border-gray-200 bg-white';
+    : 'flex h-full min-h-0 flex-col rounded-lg border border-divider bg-white';
   const messageAreaClassName = embeddedMobile ? 'flex-1 overflow-y-auto p-3 space-y-4' : 'flex-1 overflow-y-auto p-4 space-y-4';
   const composerClassName = embeddedMobile
     ? 'flex-shrink-0 bg-transparent px-3 pb-[max(env(safe-area-inset-bottom),12px)] pt-2'
-    : 'border-t border-gray-200 p-4';
-  const composerInnerClassName = embeddedMobile ? 'rounded-[24px] border border-[#E9E9E7] bg-white p-2' : '';
+    : 'border-t border-divider p-4';
+  const composerInnerClassName = embeddedMobile ? 'rounded-[24px] border border-[#E8E2D5] bg-white p-2' : '';
 
   return (
     <div className={shellClassName}>
       {/* 头部 */}
       {!hideHeader ? (
-        <div className="flex items-center justify-between border-b border-gray-200 px-4 py-3">
+        <div className="flex items-center justify-between border-b border-divider px-4 py-3">
           <div className="flex items-center gap-2">
             <span className="text-lg">🎓</span>
-            <span className="font-medium text-gray-900">AI 家教</span>
+            <span className="font-medium text-ink">AI 家教</span>
             {conversation && (
-              <span className="max-w-[120px] truncate text-xs text-gray-400" title={conversation.title}>
+              <span className="max-w-[120px] truncate text-xs text-ink-muted" title={conversation.title}>
                 · {conversation.title}
               </span>
             )}
@@ -491,9 +496,9 @@ export function AIChat({
                   type="checkbox"
                   checked={enableThinkingGuide}
                   onChange={(e) => setEnableThinkingGuide(e.target.checked)}
-                  className="h-3.5 w-3.5 cursor-pointer rounded border-gray-300 text-violet-600 focus:ring-violet-500"
+                  className="h-3.5 w-3.5 cursor-pointer rounded border-divider text-pine focus:ring-pine"
                 />
-                <span className="text-xs text-gray-500">🧠 思维引导</span>
+                <span className="text-xs text-ink-muted">🧠 思维引导</span>
               </label>
             )}
             {!isMobile ? (
@@ -505,14 +510,14 @@ export function AIChat({
               />
             ) : null}
             {anchorTimestamp && (
-              <span className="text-xs text-gray-500">
+              <span className="text-xs text-ink-muted">
                 困惑点: {formatTimestampMs(anchorTimestamp)}
               </span>
             )}
             {messages.length > 0 && (
               <button
                 onClick={clearConversation}
-                className="flex h-7 w-7 items-center justify-center rounded-lg text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-600"
+                className="flex h-7 w-7 items-center justify-center rounded-lg text-ink-muted transition-colors hover:bg-paper-deep hover:text-ink-secondary"
                 title="新对话"
               >
                 <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -532,8 +537,8 @@ export function AIChat({
             {!embeddedMobile ? (
               <>
                 <div className="mb-3 text-4xl">🤔</div>
-                <h3 className="mb-2 font-medium text-gray-900">有什么不明白的？</h3>
-                <p className="mb-4 text-sm text-gray-500">我会根据老师讲的内容帮你解答</p>
+                <h3 className="mb-2 font-medium text-ink">有什么不明白的？</h3>
+                <p className="mb-4 text-sm text-ink-muted">我会根据老师讲的内容帮你解答</p>
               </>
             ) : null}
 
@@ -543,7 +548,7 @@ export function AIChat({
                   key={i}
                   onClick={() => sendMessage(q)}
                   disabled={isLoading || isStreaming}
-                  className={`rounded-full border border-[#E9E9E7] bg-white px-4 py-2 text-[13px] text-[#232322] transition-colors hover:bg-[#F7F7F5] disabled:opacity-50 ${
+                  className={`rounded-full border border-[#E8E2D5] bg-white px-4 py-2 text-[13px] text-[#1C1B19] transition-colors hover:bg-[#FAF7F2] disabled:opacity-50 ${
                     embeddedMobile ? 'font-medium' : ''
                   }`}
                 >
@@ -563,8 +568,8 @@ export function AIChat({
             <div
               className={`max-w-[90%] rounded-2xl ${isMobile ? 'px-3 py-2' : 'px-4 py-3'} ${
                 message.role === 'user'
-                  ? 'bg-[#232322] text-white'
-                  : 'bg-gray-50 text-gray-800'
+                  ? 'bg-[#1C1B19] text-white'
+                  : 'bg-paper-warm text-ink'
               }`}
             >
               {message.role === 'assistant' ? (
@@ -611,7 +616,7 @@ export function AIChat({
         {/* 流式输出中的内容 */}
         {(isStreaming || isLoading) && (
           <div className="flex justify-start">
-            <div className={`max-w-[90%] rounded-2xl ${isMobile ? 'px-3 py-2' : 'px-4 py-3'} bg-gray-50 text-gray-800`}>
+            <div className={`max-w-[90%] rounded-2xl ${isMobile ? 'px-3 py-2' : 'px-4 py-3'} bg-paper-warm text-ink`}>
               {/* 思考过程可视化 */}
               {thinkingContent && !enableThinkingGuide && (
                 <div className="mb-2">
@@ -647,11 +652,11 @@ export function AIChat({
                   />
                 )
               ) : (
-                <div className="flex items-center gap-2 text-gray-500">
+                <div className="flex items-center gap-2 text-ink-muted">
                   <div className="flex gap-1">
-                    <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
-                    <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
-                    <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+                    <div className="w-2 h-2 bg-ink-muted rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
+                    <div className="w-2 h-2 bg-ink-muted rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
+                    <div className="w-2 h-2 bg-ink-muted rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
                   </div>
                   <span className="text-sm">{isThinking ? '正在思考...' : '生成中...'}</span>
                 </div>
@@ -665,7 +670,7 @@ export function AIChat({
           <div className="flex justify-center">
             <button
               onClick={handleStopGeneration}
-              className="inline-flex h-9 items-center gap-1.5 rounded-2xl border border-amber-200 bg-amber-50 px-3 text-xs font-medium text-amber-900 shadow-sm transition hover:bg-amber-100"
+              className="inline-flex h-9 items-center gap-1.5 rounded-2xl border border-vermilion/30 bg-vermilion-fog px-3 text-xs font-medium text-vermilion-deep shadow-sm transition hover:bg-vermilion-mist"
             >
               <svg className="h-3.5 w-3.5" fill="currentColor" viewBox="0 0 24 24">
                 <rect x="6" y="6" width="12" height="12" rx="1" />
@@ -680,8 +685,8 @@ export function AIChat({
 
       {/* 错误提示 */}
       {error && (
-        <div className="px-4 py-2 bg-red-50 border-t border-red-200">
-          <div className="flex items-center justify-between text-sm text-red-700">
+        <div className="px-4 py-2 bg-vermilion-mist/50 border-t border-vermilion/30">
+          <div className="flex items-center justify-between text-sm text-vermilion">
             <span>{error}</span>
             <button
               onClick={() => setError(null)}
@@ -698,7 +703,7 @@ export function AIChat({
         <div className={composerInnerClassName}>
         {/* 图片预览区域 */}
         {supportsMultimodal && uploadedImages.length > 0 && (
-          <div className="mb-3 rounded-lg bg-gray-50 p-2">
+          <div className="mb-3 rounded-lg bg-paper-warm p-2">
             <ImageUpload
               images={uploadedImages}
               onImagesChange={setUploadedImages}
@@ -728,7 +733,7 @@ export function AIChat({
             onChange={(e) => setInputValue(e.target.value)}
             disabled={isLoading || isStreaming}
             placeholder="输入你的问题..."
-            className={`flex-1 ${embeddedMobile ? 'rounded-[18px] border border-[#E9E9E7] bg-[#F7F7F5] px-4 py-2.5 text-sm text-[#232322] outline-none placeholder:text-[#A3A39E]' : 'rounded-lg border border-gray-300 px-4 py-2 focus:border-transparent focus:outline-none focus:ring-2 focus:ring-[#232322] disabled:cursor-not-allowed disabled:bg-gray-100'}`}
+            className={`flex-1 ${embeddedMobile ? 'rounded-[18px] border border-[#E8E2D5] bg-[#FAF7F2] px-4 py-2.5 text-sm text-[#1C1B19] outline-none placeholder:text-[#8E8B82]' : 'rounded-lg border border-divider px-4 py-2 focus:border-transparent focus:outline-none focus:ring-2 focus:ring-[#1C1B19] disabled:cursor-not-allowed disabled:bg-paper-deep'}`}
           />
           <VoiceMicButton
             onTranscript={(text) => setInputValue(prev => prev + text)}
@@ -737,7 +742,7 @@ export function AIChat({
           <button
             type="submit"
             disabled={isLoading || isStreaming || (!inputValue.trim() && uploadedImages.length === 0)}
-            className={`${embeddedMobile ? 'rounded-full bg-[#232322] px-4 py-2 text-white' : 'rounded-lg bg-[#232322] px-4 py-2 text-white transition-colors hover:bg-[#1a1a1a]'} disabled:cursor-not-allowed disabled:opacity-50`}
+            className={`${embeddedMobile ? 'rounded-full bg-[#1C1B19] px-4 py-2 text-white' : 'rounded-lg bg-[#1C1B19] px-4 py-2 text-white transition-colors hover:bg-[#1a1a1a]'} disabled:cursor-not-allowed disabled:opacity-50`}
           >
             发送
           </button>

@@ -158,12 +158,40 @@ ${recentFocus.trim()}
 }
 
 function capFullTranscript(fullTranscript: string, currentTimestampSec?: number): string {
+  // 复习态最大注入字符数。
+  // step-3.7-flash 等模型即使吞吐 400tok/s，prefill 阶段（input token 计算）依然
+  // 是首包延迟（TTFT）的主要来源；一节 60 分钟课全量转录 ≈ 25–35k input tokens，
+  // 用户每问一句都要重算一遍——这就是"模型号称很快但感觉一般"的根因。
+  // 8000 字 ≈ 12–16k tokens ≈ 15–20 分钟课堂内容；超出部分模型可以通过
+  // [MM:SS] 时间戳让学生跳回对应转录段落，或者由前端的 lookupTranscript marker 取。
+  const MAX_CHARS = 8000;
+  const trimmed = fullTranscript.trim();
+  const truncated = trimmed.length > MAX_CHARS;
+  // 截断策略：有播放点 → 取播放点附近窗口（前 60% / 后 40%）；
+  // 没播放点 → 留尾部（学生通常对最近内容更敏感，也是默认开始问问题的位置）。
+  let displayed = trimmed;
+  if (truncated) {
+    if (typeof currentTimestampSec === 'number' && currentTimestampSec > 0) {
+      // 估算锚点字符位置（按总时长粗略均分）；实际定位精度交给模型 + [MM:SS] chip。
+      // 这里只是把"最相关的那段"放进上下文。
+      const ratio = Math.min(1, Math.max(0, currentTimestampSec / Math.max(60, currentTimestampSec * 1.2)));
+      const anchorIndex = Math.floor(trimmed.length * ratio);
+      const before = Math.floor(MAX_CHARS * 0.6);
+      const start = Math.max(0, Math.min(trimmed.length - MAX_CHARS, anchorIndex - before));
+      displayed = trimmed.slice(start, start + MAX_CHARS);
+    } else {
+      displayed = trimmed.slice(-MAX_CHARS);
+    }
+  }
   const anchorLine = typeof currentTimestampSec === 'number' && currentTimestampSec > 0
     ? `\n\n他现在播放到 ${formatTimestamp(currentTimestampSec)} 附近——如果他的问题看起来和"此刻在听的那段"有关，优先照这一段答。`
     : '';
+  const truncationNote = truncated
+    ? '\n\n（这一节课较长，上面只是其中一段；遇到学生问的内容不在这段里，就用 [MM:SS] 引用对应时间，让他点击跳回那段重听。）'
+    : '';
   return `
 【整节课的转录】
-${fullTranscript.trim()}${anchorLine}`;
+${displayed}${anchorLine}${truncationNote}`;
 }
 
 function capSupportMaterials(materials: NonNullable<TutorSystemContext['supportMaterials']>): string {
@@ -232,6 +260,10 @@ function capSharedContext(shared: NonNullable<TutorSystemContext['shared']>): st
   }
   lines.push('');
   lines.push('上面这些是你能依据的全部素材。访问者问到这些素材外的内容时，要诚实地说"这节课里没讲到"。');
+  // 分享态访客没有原录音/视频，时间戳点了死链。摘要里 [MM:SS] 只是来源顺序标记，
+  // 你直接用"老师在这节课里讲过 / 课开头说 / 中段提到"这种自然语言就够了，不要把
+  // [MM:SS]、[00:01-00:30] 之类时间戳带进回答。
+  lines.push('回答里不要写 [MM:SS] 时间戳——访客没有原录音可跳。摘要里你看到的 [MM:SS] 只是来源顺序标记。');
   return '\n' + lines.join('\n');
 }
 
@@ -294,7 +326,9 @@ export function buildTutorSystemPrompt(
   }
 
   // Options（可选能力段）
-  const returnTimestamps = options.returnTimestamps ?? (mode === 'review' || mode === 'shared');
+  // 分享态默认不返回时间戳：访客没有原录音/视频，[MM:SS] 点了不响应是"死链"
+  // 体验。只有 review 真的能跳回原文，是默认开启的对象。
+  const returnTimestamps = options.returnTimestamps ?? mode === 'review';
   const allowInlineApp = options.allowInlineApp ?? (mode !== 'shared');
   const thinkingGuide = options.thinkingGuide ?? false;
 

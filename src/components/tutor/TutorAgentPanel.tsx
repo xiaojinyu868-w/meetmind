@@ -32,6 +32,7 @@ import { InlineAppCard } from '@/components/classroom/InlineAppCard';
 import { getWorkshopAppByKey } from '@/lib/ai-native/app-catalog';
 import { useAuth } from '@/lib/hooks/useAuth';
 import { getPreference } from '@/lib/db';
+import { OctoAvatar } from '@/components/ui/octo-avatar';
 import { conversationService, getEffectiveUserId } from '@/lib/services/conversation-service';
 import { cn } from '@/lib/utils';
 import {
@@ -526,20 +527,43 @@ export function TutorAgentPanel({
       aria-live="polite"
       aria-label="AI 同桌对话"
     >
-      <div className="flex items-center justify-between gap-3 border-b border-divider bg-canvas px-5 py-3 text-[13px] text-ink-muted">
-        <span className="min-w-0 flex-1 truncate leading-relaxed">
-          {resolveTutorAgentHistoryLabel({
-            hydrated: historyHydrated,
-            title: restoredConversationTitle,
-            selected: Boolean(selectedConversationId),
-          })}
-        </span>
+      <div className="flex items-center justify-between gap-3 border-b border-divider bg-paper-warm/60 px-5 py-3 text-[13px] text-ink-muted backdrop-blur-sm">
+        <div className="flex min-w-0 flex-1 items-center gap-2.5">
+          {/* v7：Octo 永驻顶栏 · 状态点同步会话 busy */}
+          <span className="relative inline-flex h-6 w-6 items-center justify-center rounded-full border border-divider bg-card shadow-soft">
+            <span
+              aria-hidden
+              className={cn(
+                'absolute inset-0 rounded-full',
+                busy && 'animate-pulse',
+              )}
+              style={{
+                background: busy
+                  ? 'radial-gradient(circle, rgba(45,79,62,0.18), transparent 70%)'
+                  : 'transparent',
+              }}
+            />
+            <span
+              className={cn(
+                'relative h-2 w-2 rounded-full',
+                busy ? 'bg-pine animate-pulse' : 'bg-pine/70',
+              )}
+            />
+          </span>
+          <span className="min-w-0 flex-1 truncate leading-relaxed">
+            {resolveTutorAgentHistoryLabel({
+              hydrated: historyHydrated,
+              title: restoredConversationTitle,
+              selected: Boolean(selectedConversationId),
+            })}
+          </span>
+        </div>
         <div className="flex shrink-0 items-center gap-2">
           {onShowHistory ? (
             <button
               type="button"
               onClick={onShowHistory}
-              className="rounded-full border border-divider bg-white px-3 py-1.5 text-[13px] text-ink-secondary transition hover:border-ink-muted hover:text-ink"
+              className="rounded-full border border-divider bg-card px-3 py-1.5 text-[13px] text-ink-secondary transition hover:border-pine hover:text-pine"
             >
               历史
             </button>
@@ -548,7 +572,7 @@ export function TutorAgentPanel({
             <button
               type="button"
               onClick={handleNewConversation}
-              className="rounded-full border border-divider bg-white px-3 py-1.5 text-[13px] text-ink-secondary transition hover:border-ink-muted hover:text-ink"
+              className="rounded-full border border-divider bg-card px-3 py-1.5 text-[13px] text-ink-secondary transition hover:border-pine hover:text-pine"
             >
               开新对话
             </button>
@@ -556,11 +580,12 @@ export function TutorAgentPanel({
         </div>
       </div>
 
-      <div className="flex-1 space-y-4 overflow-y-auto bg-white px-6 py-5">
+      <div className="flex-1 space-y-4 overflow-y-auto bg-card px-6 py-5">
         {messages.length === 0 ? (
-          <div className="pt-10 text-center">
+          <div className="flex flex-col items-center pt-6 text-center">
+            <OctoAvatar mood="listening" size="lg" aura className="mb-4" />
             <div className="mx-auto max-w-[20rem] text-[15px] leading-[1.75] text-ink-secondary">
-              同学在这里。挑一个直接开始，也可以在下方直接问。
+              <span className="font-serif italic text-pine">同学</span>在这里。挑一个直接开始，也可以在下方直接问。
             </div>
             <SkillChipRow onPick={onPickSkill} onSay={onPickSkill} disabled={busy} />
           </div>

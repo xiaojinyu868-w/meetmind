@@ -1,0 +1,1171 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="light">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>04 · App Matrix · MeetMind v7</title>
+<link rel="stylesheet" href="./tokens.css" />
+<style>
+  /* ============================================================
+     App Matrix · 每个应用都有独立视觉签名
+     Cheatsheet / Flashcards / Quiz / Mindmap / Study-Report / Podcast / Infographic
+     ============================================================ */
+
+  /* App 卡片通用骨架 */
+  .app {
+    background: var(--card);
+    border: 1px solid var(--rule);
+    border-radius: var(--radius-2xl);
+    overflow: hidden;
+    box-shadow: var(--shadow-soft);
+  }
+  .app-head {
+    display: flex; align-items: center; gap: 14px;
+    padding: 20px 28px 18px;
+    border-bottom: 1px solid var(--rule-soft);
+    background: var(--card);
+  }
+  .app-head .icon-wrap {
+    width: 40px; height: 40px;
+    border-radius: var(--radius);
+    display: grid; place-items: center;
+    flex-shrink: 0;
+    font-weight: 600;
+  }
+  .app-head h3 {
+    font-size: 16px; font-weight: 600; letter-spacing: -0.014em;
+  }
+  .app-head .meta {
+    font-size: 12px; color: var(--ink-3);
+    margin-top: 2px;
+  }
+  .app-head .right { margin-left: auto; display: flex; gap: 8px; align-items: center; }
+  .app-body { padding: 28px; }
+
+  /* 颜色编码：每个 app 有"指甲盖"主题色，但仍在 token 系统内 */
+  .app.cheatsheet .icon-wrap { background: #FDF1C8; color: #8E6A14; }
+  .app.flashcards .icon-wrap { background: var(--pine-mist); color: var(--pine); }
+  .app.quiz .icon-wrap { background: var(--vermilion-mist); color: var(--vermilion); }
+  .app.mindmap .icon-wrap { background: #DCE8E1; color: var(--pine-deep); }
+  .app.report .icon-wrap { background: #E5DFD2; color: #5C4F2E; }
+  .app.podcast .icon-wrap { background: #EFCBC1; color: var(--vermilion-deep); }
+  .app.infographic .icon-wrap { background: var(--pine-fog); color: var(--pine); }
+
+  /* Section 头 */
+  .app-section {
+    padding: 60px 0;
+    border-bottom: 1px solid var(--rule);
+  }
+  .app-section:last-child { border: 0; }
+  .app-eyebrow {
+    font-size: 11px;
+    font-family: var(--font-mono);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--ink-3);
+    margin-bottom: 8px;
+  }
+  .app-section h2 {
+    font-size: 32px;
+    font-weight: 600;
+    letter-spacing: -0.024em;
+    line-height: 1.15;
+    margin-bottom: 8px;
+  }
+  .app-section h2 .em {
+    font-family: var(--font-serif);
+    font-style: italic;
+    font-weight: 400;
+    color: var(--vermilion);
+  }
+  .app-section .lede {
+    font-size: 14.5px;
+    color: var(--ink-2);
+    line-height: 1.7;
+    max-width: 56ch;
+    margin-bottom: 32px;
+  }
+
+  /* ===== 1. Cheatsheet · 速查表 ===== */
+  .cheatsheet-grid {
+    display: grid;
+    grid-template-columns: 140px 1fr;
+    gap: 0;
+  }
+  .cheatsheet-row {
+    display: contents;
+  }
+  .cheatsheet-row .key {
+    padding: 16px 20px 16px 0;
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--ink-2);
+    border-right: 1px solid var(--rule-soft);
+    border-bottom: 1px solid var(--rule-soft);
+    text-align: right;
+    align-self: start;
+  }
+  .cheatsheet-row .val {
+    padding: 16px 0 16px 20px;
+    font-size: 14.5px;
+    line-height: 1.75;
+    color: var(--ink);
+    border-bottom: 1px solid var(--rule-soft);
+  }
+  .cheatsheet-row:last-child .key,
+  .cheatsheet-row:last-child .val { border-bottom: 0; }
+  .cheatsheet-watermark {
+    margin-top: 28px;
+    padding-top: 20px;
+    border-top: 1px dashed var(--rule);
+    display: flex; justify-content: space-between; align-items: center;
+    font-size: 11.5px;
+    color: var(--ink-3);
+    font-family: var(--font-mono);
+  }
+
+  /* ===== 2. Flashcards · 闪卡 ===== */
+  .flash-stage {
+    perspective: 1000px;
+    padding: 32px 0;
+  }
+  .flash-card {
+    width: 100%;
+    max-width: 560px;
+    margin: 0 auto;
+    aspect-ratio: 1.55;
+    position: relative;
+    transform-style: preserve-3d;
+    transition: transform 0.6s var(--ease-out);
+    cursor: pointer;
+  }
+  .flash-card.flipped { transform: rotateY(180deg); }
+  .flash-face {
+    position: absolute; inset: 0;
+    background: var(--card);
+    border: 1px solid var(--rule);
+    border-radius: var(--radius-xl);
+    padding: 36px 40px;
+    backface-visibility: hidden;
+    display: flex; flex-direction: column;
+    box-shadow: var(--shadow-card);
+  }
+  .flash-face.back { transform: rotateY(180deg); background: var(--pine-fog); border-color: var(--pine-light); }
+  .flash-face .label {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--ink-3);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    margin-bottom: 16px;
+  }
+  .flash-face.back .label { color: var(--pine); }
+  .flash-face .content {
+    flex: 1;
+    font-size: 22px;
+    line-height: 1.5;
+    font-weight: 500;
+    letter-spacing: -0.014em;
+    color: var(--ink);
+  }
+  .flash-face.back .content {
+    font-size: 17px;
+    font-weight: 400;
+    line-height: 1.65;
+  }
+  .flash-face.back .content strong { font-weight: 600; }
+  .flash-face .footer {
+    display: flex; justify-content: space-between; align-items: center;
+    font-size: 12px;
+    color: var(--ink-3);
+    font-family: var(--font-mono);
+  }
+  .flash-controls {
+    display: flex; justify-content: center; gap: 8px;
+    margin-top: 24px;
+  }
+  .flash-pill {
+    padding: 8px 18px;
+    border: 1px solid var(--rule);
+    background: var(--card);
+    border-radius: var(--radius-full);
+    font-size: 13px;
+    color: var(--ink-2);
+    cursor: pointer;
+    transition: all 0.15s var(--ease-out);
+  }
+  .flash-pill:hover { border-color: var(--pine); color: var(--pine); }
+  .flash-pill.primary { background: var(--pine); color: #fff; border-color: var(--pine); }
+  .flash-pill.primary:hover { background: var(--pine-deep); }
+  .flash-pill.danger { color: var(--vermilion); border-color: var(--vermilion-mist); }
+  .flash-progress {
+    display: flex; justify-content: center; gap: 4px;
+    margin-top: 16px;
+  }
+  .flash-progress span {
+    width: 24px; height: 3px;
+    background: var(--rule);
+    border-radius: 2px;
+  }
+  .flash-progress span.done { background: var(--pine); }
+  .flash-progress span.current { background: var(--vermilion); }
+
+  /* ===== 3. Quiz · 测验 ===== */
+  .quiz-q {
+    margin-bottom: 32px;
+  }
+  .quiz-q .q-num {
+    font-family: var(--font-mono);
+    font-size: 11.5px;
+    color: var(--ink-3);
+    letter-spacing: 0.05em;
+    margin-bottom: 8px;
+  }
+  .quiz-q .q-text {
+    font-size: 18px;
+    font-weight: 600;
+    letter-spacing: -0.014em;
+    line-height: 1.5;
+    margin-bottom: 6px;
+  }
+  .quiz-q .q-meta {
+    font-size: 12px;
+    color: var(--ink-3);
+  }
+  .quiz-options { display: flex; flex-direction: column; gap: 10px; }
+  .quiz-opt {
+    display: grid;
+    grid-template-columns: 32px 1fr auto;
+    align-items: center;
+    gap: 16px;
+    padding: 14px 18px;
+    background: var(--card);
+    border: 1px solid var(--rule);
+    border-radius: var(--radius-lg);
+    cursor: pointer;
+    transition: all var(--duration-fast) var(--ease-out);
+    font-size: 14px;
+  }
+  .quiz-opt:hover { background: var(--paper); border-color: var(--ink-4); }
+  .quiz-opt .letter {
+    width: 28px; height: 28px;
+    border-radius: 50%;
+    border: 1px solid var(--rule);
+    display: grid; place-items: center;
+    font-family: var(--font-mono);
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--ink-2);
+    transition: all var(--duration-fast) var(--ease-out);
+  }
+  .quiz-opt .text { color: var(--ink); }
+  .quiz-opt .badge { display: none; font-size: 11px; }
+  .quiz-opt.selected { border-color: var(--ink); background: var(--paper); }
+  .quiz-opt.selected .letter { background: var(--ink); color: #fff; border-color: var(--ink); }
+  .quiz-opt.correct {
+    border-color: var(--success);
+    background: var(--success-bg);
+  }
+  .quiz-opt.correct .letter { background: var(--success); color: #fff; border-color: var(--success); }
+  .quiz-opt.correct .badge { display: inline; color: var(--success); font-weight: 500; }
+  .quiz-opt.wrong {
+    border-color: var(--vermilion-light);
+    background: var(--vermilion-mist);
+  }
+  .quiz-opt.wrong .letter { background: var(--vermilion); color: #fff; border-color: var(--vermilion); }
+  .quiz-opt.wrong .badge { display: inline; color: var(--vermilion); font-weight: 500; }
+
+  .quiz-explain {
+    margin-top: 20px;
+    padding: 16px 20px;
+    background: var(--pine-fog);
+    border-left: 3px solid var(--pine);
+    border-radius: 0 var(--radius) var(--radius) 0;
+    font-size: 13.5px;
+    line-height: 1.7;
+    color: var(--ink-2);
+  }
+  .quiz-explain strong { color: var(--pine); }
+
+  .quiz-foot {
+    display: flex; justify-content: space-between; align-items: center;
+    margin-top: 24px;
+    padding-top: 20px;
+    border-top: 1px solid var(--rule-soft);
+  }
+  .quiz-progress { display: flex; gap: 4px; }
+  .quiz-progress span {
+    width: 16px; height: 6px;
+    background: var(--rule);
+    border-radius: 3px;
+  }
+  .quiz-progress span.done { background: var(--success); }
+  .quiz-progress span.current { background: var(--ink); }
+  .quiz-progress span.wrong { background: var(--vermilion); }
+
+  /* ===== 4. Mindmap · 思维导图 ===== */
+  .mindmap-canvas {
+    position: relative;
+    height: 380px;
+    background: var(--paper);
+    border-radius: var(--radius-lg);
+    overflow: hidden;
+  }
+  .mindmap-canvas svg {
+    position: absolute; inset: 0;
+    width: 100%; height: 100%;
+    pointer-events: none;
+  }
+  .mind-node {
+    position: absolute;
+    padding: 10px 16px;
+    background: var(--card);
+    border: 1px solid var(--rule);
+    border-radius: var(--radius);
+    font-size: 13px;
+    color: var(--ink);
+    cursor: pointer;
+    transition: all 0.15s var(--ease-out);
+    transform: translate(-50%, -50%);
+    white-space: nowrap;
+    z-index: 2;
+  }
+  .mind-node:hover {
+    border-color: var(--pine);
+    box-shadow: var(--shadow-soft);
+    transform: translate(-50%, -50%) scale(1.05);
+  }
+  .mind-node.root {
+    background: var(--pine);
+    color: #fff;
+    border-color: var(--pine);
+    font-weight: 600;
+    padding: 14px 22px;
+    font-size: 15px;
+  }
+  .mind-node.branch {
+    background: var(--pine-mist);
+    color: var(--pine-deep);
+    border-color: var(--pine-light);
+    font-weight: 500;
+  }
+  .mind-node .ts {
+    margin-left: 8px;
+    color: var(--vermilion);
+    font-family: var(--font-mono);
+    font-size: 11px;
+  }
+
+  /* ===== 5. Study Report · 课后报告 ===== */
+  .report-doc {
+    max-width: 720px;
+    margin: 0 auto;
+    line-height: 1.78;
+    font-size: 15px;
+    color: var(--ink);
+  }
+  .report-eyebrow {
+    font-family: var(--font-mono);
+    font-size: 11.5px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--pine);
+    margin-bottom: 12px;
+  }
+  .report-doc h1 {
+    font-size: 36px;
+    font-weight: 600;
+    letter-spacing: -0.024em;
+    line-height: 1.18;
+    margin-bottom: 12px;
+  }
+  .report-doc h1 .em {
+    font-family: var(--font-serif);
+    font-style: italic;
+    font-weight: 400;
+    color: var(--vermilion);
+  }
+  .report-doc .subtitle {
+    font-size: 15px;
+    color: var(--ink-2);
+    margin-bottom: 28px;
+  }
+  .report-toc {
+    padding: 20px 24px;
+    background: var(--paper-warm);
+    border-radius: var(--radius-lg);
+    margin-bottom: 36px;
+  }
+  .report-toc .lbl {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--ink-3);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    margin-bottom: 10px;
+  }
+  .report-toc ol {
+    list-style: none;
+    counter-reset: toc;
+    padding: 0;
+  }
+  .report-toc li {
+    counter-increment: toc;
+    padding: 6px 0;
+    font-size: 13.5px;
+    color: var(--ink-2);
+    display: flex; gap: 12px;
+    cursor: pointer;
+    transition: color 0.15s;
+  }
+  .report-toc li:hover { color: var(--pine); }
+  .report-toc li::before {
+    content: counter(toc, decimal-leading-zero);
+    font-family: var(--font-mono);
+    color: var(--ink-3);
+    font-size: 11px;
+  }
+  .report-doc h2 {
+    font-size: 24px;
+    font-weight: 600;
+    letter-spacing: -0.018em;
+    margin-top: 40px;
+    margin-bottom: 12px;
+    padding-top: 16px;
+    border-top: 1px solid var(--rule);
+  }
+  .report-doc h3 {
+    font-size: 18px;
+    font-weight: 600;
+    margin-top: 24px;
+    margin-bottom: 8px;
+  }
+  .report-doc p { margin-bottom: 14px; color: var(--ink); }
+  .report-callout {
+    padding: 16px 20px 16px 16px;
+    margin: 20px 0;
+    background: var(--vermilion-fog);
+    border-left: 3px solid var(--vermilion);
+    border-radius: 0 var(--radius) var(--radius) 0;
+    font-size: 14px;
+    line-height: 1.7;
+  }
+  .report-callout .lbl {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--vermilion);
+    letter-spacing: 0.05em;
+    margin-bottom: 6px;
+    font-weight: 600;
+  }
+
+  /* ===== 6. Podcast · 课堂播客 ===== */
+  .podcast-player {
+    padding: 24px 28px;
+    background: var(--card);
+    border: 1px solid var(--rule);
+    border-radius: var(--radius-xl);
+  }
+  .podcast-head {
+    display: flex; align-items: center; gap: 16px;
+    margin-bottom: 20px;
+  }
+  .podcast-cover {
+    width: 64px; height: 64px;
+    border-radius: var(--radius-lg);
+    background: linear-gradient(135deg, var(--vermilion) 0%, var(--vermilion-deep) 100%);
+    display: grid; place-items: center;
+    color: #fff;
+    flex-shrink: 0;
+    position: relative;
+    overflow: hidden;
+  }
+  .podcast-cover::before {
+    content: ''; position: absolute;
+    width: 200%; height: 200%;
+    top: -50%; left: -50%;
+    background: radial-gradient(circle at 30% 30%, rgba(255,255,255,0.2) 0%, transparent 50%);
+  }
+  .podcast-cover svg { position: relative; z-index: 1; }
+  .podcast-info h4 { font-size: 16px; font-weight: 600; margin-bottom: 2px; }
+  .podcast-info .meta { font-size: 12px; color: var(--ink-3); }
+  .podcast-controls {
+    display: flex; align-items: center; gap: 12px;
+    margin-bottom: 16px;
+  }
+  .pp-play {
+    width: 48px; height: 48px;
+    border-radius: 50%;
+    background: var(--ink);
+    color: #fff;
+    border: 0;
+    display: grid; place-items: center;
+    cursor: pointer;
+    flex-shrink: 0;
+  }
+  .pp-skip {
+    width: 32px; height: 32px;
+    border-radius: 50%;
+    background: transparent;
+    color: var(--ink-2);
+    border: 0;
+    display: grid; place-items: center;
+    cursor: pointer;
+  }
+  .pp-skip:hover { background: var(--paper-warm); color: var(--ink); }
+  .pp-progress {
+    flex: 1;
+    display: flex; flex-direction: column; gap: 4px;
+  }
+  .pp-time {
+    display: flex; justify-content: space-between;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--ink-3);
+  }
+  .pp-bar {
+    height: 4px;
+    background: var(--rule);
+    border-radius: 2px;
+    position: relative;
+  }
+  .pp-bar .fill {
+    height: 100%;
+    background: var(--vermilion);
+    border-radius: 2px;
+    width: 32%;
+  }
+  .pp-bar .head {
+    position: absolute;
+    top: 50%; left: 32%;
+    transform: translate(-50%, -50%);
+    width: 12px; height: 12px;
+    border-radius: 50%;
+    background: var(--vermilion);
+    border: 2px solid var(--card);
+    box-shadow: var(--shadow-soft);
+  }
+  .podcast-chapters {
+    margin-top: 20px;
+    border-top: 1px solid var(--rule-soft);
+    padding-top: 16px;
+  }
+  .pp-chapter {
+    display: grid;
+    grid-template-columns: 60px 1fr auto;
+    gap: 12px;
+    align-items: center;
+    padding: 8px 12px;
+    border-radius: var(--radius);
+    cursor: pointer;
+    transition: background 0.15s;
+    font-size: 13px;
+  }
+  .pp-chapter:hover { background: var(--paper); }
+  .pp-chapter.active { background: var(--vermilion-fog); }
+  .pp-chapter.active .pp-ts { color: var(--vermilion); }
+  .pp-chapter .pp-ts {
+    font-family: var(--font-mono);
+    font-size: 11.5px;
+    color: var(--ink-3);
+  }
+  .pp-chapter .pp-title { color: var(--ink); }
+  .pp-chapter .pp-dur {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--ink-3);
+  }
+
+  /* ===== 7. Infographic · 信息图 ===== */
+  .info-canvas {
+    background: linear-gradient(135deg, var(--paper) 0%, var(--paper-warm) 100%);
+    border-radius: var(--radius-xl);
+    padding: 40px;
+    position: relative;
+    overflow: hidden;
+  }
+  .info-canvas::before {
+    content: '';
+    position: absolute; top: -100px; right: -80px;
+    width: 240px; height: 240px;
+    background: radial-gradient(circle, rgba(45,79,62,0.08), transparent);
+    border-radius: 50%;
+  }
+  .info-canvas::after {
+    content: '';
+    position: absolute; bottom: -60px; left: -40px;
+    width: 180px; height: 180px;
+    background: radial-gradient(circle, rgba(181,72,60,0.06), transparent);
+    border-radius: 50%;
+  }
+  .info-canvas > * { position: relative; z-index: 1; }
+  .info-title {
+    font-size: 32px;
+    font-weight: 600;
+    letter-spacing: -0.024em;
+    line-height: 1.18;
+    margin-bottom: 8px;
+    max-width: 18ch;
+  }
+  .info-title .em {
+    font-family: var(--font-serif);
+    font-style: italic;
+    font-weight: 400;
+    color: var(--vermilion);
+  }
+  .info-sub {
+    font-size: 14px;
+    color: var(--ink-2);
+    margin-bottom: 32px;
+  }
+  .info-stats {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 20px;
+    margin-bottom: 32px;
+  }
+  .info-stat {
+    padding: 24px 20px;
+    background: var(--card);
+    border: 1px solid var(--rule);
+    border-radius: var(--radius-lg);
+  }
+  .info-stat .n {
+    font-size: 38px;
+    font-weight: 600;
+    letter-spacing: -0.024em;
+    line-height: 1;
+    color: var(--pine);
+  }
+  .info-stat .lbl {
+    font-size: 12.5px;
+    color: var(--ink-2);
+    margin-top: 8px;
+    line-height: 1.5;
+  }
+  .info-stat.ver .n { color: var(--vermilion); }
+  .info-stat.ink .n { color: var(--ink); }
+  .info-flow {
+    display: flex; align-items: stretch; gap: 0;
+    background: var(--card);
+    border-radius: var(--radius-lg);
+    overflow: hidden;
+    border: 1px solid var(--rule);
+  }
+  .info-flow-step {
+    flex: 1;
+    padding: 20px 22px;
+    position: relative;
+  }
+  .info-flow-step + .info-flow-step::before {
+    content: '';
+    position: absolute;
+    left: 0; top: 16px; bottom: 16px;
+    width: 1px;
+    background: var(--rule);
+  }
+  .info-flow-step .num {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--pine);
+    letter-spacing: 0.05em;
+    margin-bottom: 8px;
+  }
+  .info-flow-step h4 {
+    font-size: 14px; font-weight: 600;
+    margin-bottom: 4px;
+  }
+  .info-flow-step p {
+    font-size: 12.5px;
+    color: var(--ink-2);
+    line-height: 1.55;
+  }
+</style>
+</head>
+<body>
+
+<header class="ds-topbar">
+  <a class="logo" href="./index.html">
+    <span class="dot"></span>
+    <span>MeetMind</span>
+    <span class="ds-tag">v7</span>
+  </a>
+  <nav>
+    <a href="./index.html">总览</a>
+    <a href="./01-foundations.html">01 基础</a>
+    <a href="./02-ai-language.html">02 AI 视觉</a>
+    <a href="./03-components.html">03 组件</a>
+    <a href="./04-app-matrix.html" class="active">04 应用矩阵</a>
+  </nav>
+  <div class="right">
+    <button class="ds-theme-toggle" id="themeToggle">
+      <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+        <circle cx="7" cy="7" r="2.5" stroke="currentColor" stroke-width="1.4"/>
+        <path d="M7 1v1.5M7 11.5V13M1 7h1.5M11.5 7H13M2.5 2.5l1 1M10.5 10.5l1 1M2.5 11.5l1-1M10.5 3.5l1-1" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>
+      </svg>
+    </button>
+  </div>
+</header>
+
+<main class="ds-page">
+
+  <header class="ds-pageheader">
+    <div class="ds-eyebrow">04 · APP MATRIX</div>
+    <h1 class="ds-title">7 个 AI 应用 · <span class="em">7 种学习方式</span></h1>
+    <p class="ds-lede">
+      每一个应用都有独立的视觉签名——速查表是一页纸的纸质感，闪卡是 3D 翻转的专注感，
+      测验是绿/红即时反馈的考场感，思维导图是知识树的空间感。它们共享同一套 token，但讲的是不同的故事。
+    </p>
+  </header>
+
+  <!-- ============== 1. CHEATSHEET ============== -->
+  <section class="app-section">
+    <div class="app-eyebrow">01 · CHEATSHEET</div>
+    <h2>一页纸的<span class="em">速查表</span></h2>
+    <p class="lede">考前最后一刻打开它。Key-Value 双栏布局，左边是定义，右边是解释加引用，整张可打印。</p>
+
+    <div class="app cheatsheet">
+      <div class="app-head">
+        <div class="icon-wrap">速</div>
+        <div>
+          <h3>TCP 可靠传输 · 速查表</h3>
+          <div class="meta">5 个核心知识点 · 已锁定原录音 4 处</div>
+        </div>
+        <div class="right">
+          <span class="badge dot pine">就绪</span>
+          <button class="btn btn-ghost btn-sm">打印</button>
+          <button class="btn btn-ghost btn-sm">导出 PDF</button>
+        </div>
+      </div>
+      <div class="app-body">
+        <div class="cheatsheet-grid">
+          <div class="cheatsheet-row">
+            <div class="key">可靠传输</div>
+            <div class="val">数据 <mark class="mk-vermilion">不丢、不重、不乱序</mark>——TCP 的核心承诺。<span class="cite-ts mono" style="margin-left: 6px;">[19:08]</span></div>
+          </div>
+          <div class="cheatsheet-row">
+            <div class="key">实现机制</div>
+            <div class="val"><mark class="mk-pine">确认重传 + 序号</mark>。每段数据带序号，接收方回 ACK，超时未收到则重传。<span class="cite-ts mono" style="margin-left: 6px;">[19:34]</span></div>
+          </div>
+          <div class="cheatsheet-row">
+            <div class="key">滑动窗口</div>
+            <div class="val">允许同时在飞多个数据段，避免"发一段等一段"的吞吐浪费。<span class="cite-ts mono" style="margin-left: 6px;">[20:01]</span></div>
+          </div>
+          <div class="cheatsheet-row">
+            <div class="key">拥塞控制</div>
+            <div class="val">遵循 <mark class="mk-vermilion">AIMD</mark>：慢启动指数涨 → 拥塞避免线性涨 → 丢包窗口砍半。<span class="cite-ts mono" style="margin-left: 6px;">[21:12]</span></div>
+          </div>
+          <div class="cheatsheet-row">
+            <div class="key">设计哲学</div>
+            <div class="val">TCP 在<mark class="mk-pine">不停探测网络极限</mark>，发现到极限就退一步——一种自适应的礼让协议。<span class="cite-ts mono" style="margin-left: 6px;">[21:55]</span></div>
+          </div>
+        </div>
+        <div class="cheatsheet-watermark">
+          <span>计算机网络 · 第 7 讲 · 张老师</span>
+          <span>MeetMind · 2026.05.31</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============== 2. FLASHCARDS ============== -->
+  <section class="app-section">
+    <div class="app-eyebrow">02 · FLASHCARDS</div>
+    <h2>主动回忆<span class="em">闪卡</span></h2>
+    <p class="lede">3D 翻转 + 自评。点击卡片翻面，自评"忘了 / 模糊 / 记住"驱动间隔复习。</p>
+
+    <div class="app flashcards">
+      <div class="app-head">
+        <div class="icon-wrap">闪</div>
+        <div>
+          <h3>滑动窗口 vs 拥塞控制</h3>
+          <div class="meta">5 / 12 张 · 已掌握 38%</div>
+        </div>
+        <div class="right">
+          <span class="badge dot pine">学习中</span>
+          <button class="btn btn-ghost btn-sm">乱序</button>
+        </div>
+      </div>
+      <div class="app-body" style="padding-top: 16px;">
+        <div class="flash-stage">
+          <div class="flash-card" id="flashCard">
+            <div class="flash-face front">
+              <div class="label">问题 · Q</div>
+              <div class="content">滑动窗口的"窗口"是谁告诉谁的？它本质上做的是什么？</div>
+              <div class="footer">
+                <span>点击卡片翻面 →</span>
+                <span class="cite-ts mono">[20:01]</span>
+              </div>
+            </div>
+            <div class="flash-face back">
+              <div class="label">答案 · A</div>
+              <div class="content">
+                <strong>接收方告诉发送方。</strong> 它表达接收方<mark class="mk-vermilion">当前还能接收多少字节</mark>，本质是 <strong>flow control</strong>——避免接收端被淹。
+                <br/><br/>
+                与拥塞控制的区别：拥塞控制是发送方<mark class="mk-pine">自己揣测网络承载量</mark>。
+              </div>
+              <div class="footer">
+                <span>← 翻回去</span>
+                <span class="cite-src mono">[资料 3]</span>
+              </div>
+            </div>
+          </div>
+          <div class="flash-controls">
+            <button class="flash-pill danger">忘了</button>
+            <button class="flash-pill">模糊</button>
+            <button class="flash-pill primary">记住了 →</button>
+          </div>
+          <div class="flash-progress">
+            <span class="done"></span>
+            <span class="done"></span>
+            <span class="done"></span>
+            <span class="done"></span>
+            <span class="current"></span>
+            <span></span>
+            <span></span>
+            <span></span>
+            <span></span>
+            <span></span>
+            <span></span>
+            <span></span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============== 3. QUIZ ============== -->
+  <section class="app-section">
+    <div class="app-eyebrow">03 · QUIZ</div>
+    <h2>课堂理解<span class="em">测验</span></h2>
+    <p class="lede">即时反馈 + 引用证据。提交后正确选项墨绿，错误朱批，下方给解释 + 时间戳跳转。</p>
+
+    <div class="app quiz">
+      <div class="app-head">
+        <div class="icon-wrap">测</div>
+        <div>
+          <h3>计算机网络 · 第 7 讲 · 课堂测验</h3>
+          <div class="meta">8 题 · 已答 5 题 · 正确 4 题</div>
+        </div>
+        <div class="right">
+          <span class="badge dot ver">作答中</span>
+          <button class="btn btn-ghost btn-sm">提交全部</button>
+        </div>
+      </div>
+      <div class="app-body">
+        <div class="quiz-q">
+          <div class="q-num">问题 06 / 08</div>
+          <div class="q-text">下面关于 TCP 拥塞控制的描述，<u>哪一项是错误的</u>？</div>
+          <div class="q-meta">单选题 · 来自 <span class="cite-ts mono">[21:12-21:55]</span></div>
+        </div>
+
+        <div class="quiz-options">
+          <div class="quiz-opt selected">
+            <div class="letter">A</div>
+            <div class="text">慢启动阶段，拥塞窗口按指数级增长</div>
+            <div class="badge"></div>
+          </div>
+          <div class="quiz-opt correct">
+            <div class="letter">B</div>
+            <div class="text">拥塞避免阶段，拥塞窗口按对数级增长</div>
+            <div class="badge">✓ 正确答案</div>
+          </div>
+          <div class="quiz-opt wrong">
+            <div class="letter">C</div>
+            <div class="text">遇到丢包后，拥塞窗口立即减半</div>
+            <div class="badge">✗ 你选了这个</div>
+          </div>
+          <div class="quiz-opt">
+            <div class="letter">D</div>
+            <div class="text">AIMD 是 Additive Increase Multiplicative Decrease 的缩写</div>
+            <div class="badge"></div>
+          </div>
+        </div>
+
+        <div class="quiz-explain">
+          <strong>📌 解释：</strong>拥塞避免阶段是<strong>线性增长</strong>（每个 RTT 加一个 MSS），不是对数。线性增是为了"温柔地"接近网络极限。
+          可以重听这一段：<span class="cite-ts mono">[21:12-21:55]</span>，张老师在那里特别强调了"温柔"这个词。
+        </div>
+
+        <div class="quiz-foot">
+          <div class="quiz-progress">
+            <span class="done"></span>
+            <span class="done"></span>
+            <span class="done"></span>
+            <span class="wrong"></span>
+            <span class="done"></span>
+            <span class="current"></span>
+            <span></span>
+            <span></span>
+          </div>
+          <div style="display: flex; gap: 8px;">
+            <button class="btn btn-ghost btn-sm">上一题</button>
+            <button class="btn btn-primary btn-sm">下一题 →</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============== 4. MINDMAP ============== -->
+  <section class="app-section">
+    <div class="app-eyebrow">04 · MINDMAP</div>
+    <h2>课堂知识<span class="em">导图</span></h2>
+    <p class="lede">中心节点 + 分支扩展。每个分支节点带时间戳，点击跳回原录音。可拖拽、可折叠。</p>
+
+    <div class="app mindmap">
+      <div class="app-head">
+        <div class="icon-wrap">图</div>
+        <div>
+          <h3>TCP 可靠传输 · 知识导图</h3>
+          <div class="meta">5 个分支 · 12 个叶节点</div>
+        </div>
+        <div class="right">
+          <button class="btn btn-ghost btn-sm">展开全部</button>
+          <button class="btn btn-ghost btn-sm">导出</button>
+        </div>
+      </div>
+      <div class="app-body">
+        <div class="mindmap-canvas">
+          <svg viewBox="0 0 800 380">
+            <!-- 连接线 -->
+            <path d="M 400 190 L 200 80" stroke="#6B9080" stroke-width="1.5" fill="none" />
+            <path d="M 400 190 L 200 190" stroke="#6B9080" stroke-width="1.5" fill="none" />
+            <path d="M 400 190 L 200 300" stroke="#6B9080" stroke-width="1.5" fill="none" />
+            <path d="M 400 190 L 600 80" stroke="#6B9080" stroke-width="1.5" fill="none" />
+            <path d="M 400 190 L 600 190" stroke="#6B9080" stroke-width="1.5" fill="none" />
+            <path d="M 400 190 L 600 300" stroke="#6B9080" stroke-width="1.5" fill="none" />
+            <!-- 二级分支 -->
+            <path d="M 200 80 L 60 50" stroke="#C2D4CA" stroke-width="1" fill="none" stroke-dasharray="3,3" />
+            <path d="M 200 80 L 60 100" stroke="#C2D4CA" stroke-width="1" fill="none" stroke-dasharray="3,3" />
+            <path d="M 600 190 L 740 170" stroke="#C2D4CA" stroke-width="1" fill="none" stroke-dasharray="3,3" />
+            <path d="M 600 190 L 740 220" stroke="#C2D4CA" stroke-width="1" fill="none" stroke-dasharray="3,3" />
+          </svg>
+
+          <div class="mind-node root" style="left: 50%; top: 50%;">TCP 可靠传输</div>
+
+          <div class="mind-node branch" style="left: 25%; top: 21%;">三次握手 <span class="ts">[18:02]</span></div>
+          <div class="mind-node branch" style="left: 25%; top: 50%;">确认 ACK <span class="ts">[19:34]</span></div>
+          <div class="mind-node branch" style="left: 25%; top: 79%;">序号机制 <span class="ts">[19:08]</span></div>
+
+          <div class="mind-node branch" style="left: 75%; top: 21%;">滑动窗口 <span class="ts">[20:01]</span></div>
+          <div class="mind-node branch" style="left: 75%; top: 50%;">拥塞控制 <span class="ts">[21:12]</span></div>
+          <div class="mind-node branch" style="left: 75%; top: 79%;">超时重传</div>
+
+          <!-- 二级 -->
+          <div class="mind-node" style="left: 7%; top: 13%; font-size: 12px; padding: 6px 10px;">SYN/ACK</div>
+          <div class="mind-node" style="left: 7%; top: 26%; font-size: 12px; padding: 6px 10px;">半开连接</div>
+          <div class="mind-node" style="left: 92%; top: 45%; font-size: 12px; padding: 6px 10px;">慢启动</div>
+          <div class="mind-node" style="left: 92%; top: 58%; font-size: 12px; padding: 6px 10px;">AIMD</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============== 5. STUDY REPORT ============== -->
+  <section class="app-section">
+    <div class="app-eyebrow">05 · STUDY REPORT</div>
+    <h2>课后<span class="em">学习报告</span></h2>
+    <p class="lede">长文档形式。封面 + 目录 + 章节，关键洞察用朱批 callout 突出。可分享给老师 / 家长。</p>
+
+    <div class="app report">
+      <div class="app-head">
+        <div class="icon-wrap">报</div>
+        <div>
+          <h3>第 7 讲 · 学习报告</h3>
+          <div class="meta">11 分钟 · 4 个章节 · 含 7 个引用</div>
+        </div>
+        <div class="right">
+          <span class="badge dot pine">已生成</span>
+          <button class="btn btn-ghost btn-sm">分享一节</button>
+          <button class="btn btn-ghost btn-sm">导出 PDF</button>
+        </div>
+      </div>
+      <div class="app-body" style="padding: 48px 28px 40px;">
+        <article class="report-doc">
+          <div class="report-eyebrow">CALCULATING NETWORK · LECTURE 07</div>
+          <h1>TCP 可靠传输的<span class="em">三道关</span></h1>
+          <p class="subtitle">2026 年 5 月 31 日 · 计算机网络 · 张老师 · 共 23 分钟 · 你听懂了 76%</p>
+
+          <div class="report-toc">
+            <div class="lbl">本报告目录</div>
+            <ol>
+              <li>这节课讲了什么</li>
+              <li>三个关键概念你需要分清</li>
+              <li>你最容易混的地方（朱批重点）</li>
+              <li>下一节课之前要做的事</li>
+            </ol>
+          </div>
+
+          <h2>这节课讲了什么</h2>
+          <p>张老师用 23 分钟讲清了 TCP 提供"可靠字节流"承诺的三个机制——<strong>序号确认</strong>、<strong>滑动窗口</strong>、<strong>拥塞控制</strong>。<span class="cite-ts mono">[18:42]</span> 他从一个反问开始：如果每发一个段都要等 ACK，吞吐就废了。这个反问引出了滑动窗口。</p>
+
+          <h3>核心结论</h3>
+          <p>TCP 不是被动地"听话"，它在<mark class="mk-pine">不停地探测网络的极限</mark>。这是一种自适应的礼让协议——加性增、乘性减（AIMD），<mark class="mk-vermilion">遇到拥堵就主动让路</mark>。<span class="cite-ts mono">[21:12]</span></p>
+
+          <div class="report-callout">
+            <div class="lbl">朱批 · 你需要重点记住</div>
+            滑动窗口和拥塞控制看起来都在控制"能发多少"，但目的不同：<strong>滑动窗口为接收端</strong>，<strong>拥塞控制为整个网络</strong>。TCP 实际取两者的<strong>最小值</strong>。
+            <span class="cite-src mono" style="margin-top: 8px; display: inline-block;">[资料 3]</span>
+          </div>
+
+          <h2>下一节课之前要做的事</h2>
+          <p>1. 用闪卡把"滑动窗口 vs 拥塞控制"过 3 遍——预计 8 分钟。<br/>2. 重听 <span class="cite-ts mono">[21:12-21:55]</span> 张老师讲"温柔"那段，那一段考试基本会问到。</p>
+        </article>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============== 6. PODCAST ============== -->
+  <section class="app-section">
+    <div class="app-eyebrow">06 · PODCAST</div>
+    <h2>课堂双人<span class="em">播客</span></h2>
+    <p class="lede">把课堂内容转成 10 分钟通勤可听的播客。带章节定位，可同步看转录。</p>
+
+    <div class="app podcast">
+      <div class="app-head">
+        <div class="icon-wrap">播</div>
+        <div>
+          <h3>计算机网络 · 第 7 讲 · 播客版</h3>
+          <div class="meta">10:23 · 4 个章节</div>
+        </div>
+        <div class="right">
+          <span class="badge dot ver">音频已生成</span>
+          <button class="btn btn-ghost btn-sm">下载</button>
+        </div>
+      </div>
+      <div class="app-body">
+        <div class="podcast-player">
+          <div class="podcast-head">
+            <div class="podcast-cover">
+              <svg width="32" height="32" viewBox="0 0 32 32" fill="none">
+                <path d="M16 4a8 8 0 0 1 8 8v6a8 8 0 1 1-16 0v-6a8 8 0 0 1 8-8z" stroke="currentColor" stroke-width="2"/>
+                <path d="M6 22a10 10 0 0 0 20 0M16 28v-2" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+              </svg>
+            </div>
+            <div class="podcast-info">
+              <h4>TCP 三道关 · 双人对话版</h4>
+              <div class="meta">主播：Octo & Alex · 由本节课生成</div>
+            </div>
+          </div>
+
+          <div class="podcast-controls">
+            <button class="pp-skip" title="-15s">
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M3 4l-2 4 2 4M1 8h7a4 4 0 110 8" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </button>
+            <button class="pp-play" title="播放">
+              <svg width="14" height="14" viewBox="0 0 14 14"><path d="M3 2l9 5-9 5z" fill="currentColor"/></svg>
+            </button>
+            <button class="pp-skip" title="+15s">
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M13 4l2 4-2 4M15 8h-7a4 4 0 100 8" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </button>
+            <div class="pp-progress">
+              <div class="pp-time"><span class="mono">3:18</span><span class="mono">10:23</span></div>
+              <div class="pp-bar"><div class="fill"></div><div class="head"></div></div>
+            </div>
+          </div>
+
+          <div class="podcast-chapters">
+            <div class="pp-chapter">
+              <span class="pp-ts">00:00</span>
+              <span class="pp-title">为什么 TCP 是"可靠"的？</span>
+              <span class="pp-dur mono">2:14</span>
+            </div>
+            <div class="pp-chapter active">
+              <span class="pp-ts">02:14</span>
+              <span class="pp-title">滑动窗口的"为接收端"</span>
+              <span class="pp-dur mono">2:48</span>
+            </div>
+            <div class="pp-chapter">
+              <span class="pp-ts">05:02</span>
+              <span class="pp-title">拥塞控制是给整个网络让路</span>
+              <span class="pp-dur mono">3:12</span>
+            </div>
+            <div class="pp-chapter">
+              <span class="pp-ts">08:14</span>
+              <span class="pp-title">最后一个 takeaway：TCP 在"温柔地"试探</span>
+              <span class="pp-dur mono">2:09</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============== 7. INFOGRAPHIC ============== -->
+  <section class="app-section">
+    <div class="app-eyebrow">07 · INFOGRAPHIC</div>
+    <h2>可分享的<span class="em">信息图</span></h2>
+    <p class="lede">把这节课变成班级群里能传的一张图。极致克制的渐变 + 大号数字。</p>
+
+    <div class="app infographic">
+      <div class="app-head">
+        <div class="icon-wrap">图</div>
+        <div>
+          <h3>第 7 讲 · 信息图</h3>
+          <div class="meta">2400×1200 · 适合分享到班级群</div>
+        </div>
+        <div class="right">
+          <button class="btn btn-ghost btn-sm">下载 PNG</button>
+          <button class="btn btn-pine btn-sm">分享一节</button>
+        </div>
+      </div>
+      <div class="app-body" style="padding: 32px;">
+        <div class="info-canvas">
+          <div style="font-family: var(--font-mono); font-size: 11.5px; color: var(--ink-3); letter-spacing: 0.08em; margin-bottom: 8px;">CALCULATING NETWORK · LECTURE 07</div>
+          <h2 class="info-title">TCP 怎么做到 <span class="em">不丢、不重、不乱序</span></h2>
+          <p class="info-sub">3 个机制 · 23 分钟课堂浓缩 · 一张图复习</p>
+
+          <div class="info-stats">
+            <div class="info-stat">
+              <div class="n">3</div>
+              <div class="lbl">个核心机制<br/>序号 / 窗口 / 拥塞控制</div>
+            </div>
+            <div class="info-stat ver">
+              <div class="n">76<span style="font-size: 22px;">%</span></div>
+              <div class="lbl">你听懂的占比<br/>由 Octo 实时评估</div>
+            </div>
+            <div class="info-stat ink">
+              <div class="n">5</div>
+              <div class="lbl">个引用回到原录音<br/>有根可查</div>
+            </div>
+          </div>
+
+          <div class="info-flow">
+            <div class="info-flow-step">
+              <div class="num">机制 01</div>
+              <h4>序号 + 确认</h4>
+              <p>每段数据带序号，接收方回 ACK，超时即重传</p>
+            </div>
+            <div class="info-flow-step">
+              <div class="num">机制 02</div>
+              <h4>滑动窗口</h4>
+              <p>同时在飞多段，避免"发一段等一段"</p>
+            </div>
+            <div class="info-flow-step">
+              <div class="num">机制 03</div>
+              <h4>拥塞控制 · AIMD</h4>
+              <p>线性涨 + 砍半减，温柔地探网络极限</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<script>
+  document.getElementById('themeToggle').addEventListener('click', () => {
+    const root = document.documentElement;
+    root.setAttribute('data-theme', root.getAttribute('data-theme') === 'dark' ? 'light' : 'dark');
+  });
+
+  // 闪卡翻面
+  document.getElementById('flashCard').addEventListener('click', (e) => {
+    e.currentTarget.classList.toggle('flipped');
+  });
+</script>
+
+</body>
+</html>

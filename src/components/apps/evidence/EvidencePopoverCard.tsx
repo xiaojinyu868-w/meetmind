@@ -17,17 +17,17 @@ interface EvidencePopoverCardProps {
 
 export function EvidencePopoverCard({ citation, snippet, onSeek }: EvidencePopoverCardProps) {
   return (
-    <div className="absolute z-20 mt-2 w-80 max-w-[86vw] rounded-2xl border border-slate-200 bg-white p-3">
-      <div className="mb-2 flex items-center justify-between text-xs text-slate-500">
+    <div className="absolute z-20 mt-2 w-80 max-w-[86vw] rounded-2xl border border-divider bg-white p-3">
+      <div className="mb-2 flex items-center justify-between text-xs text-ink-muted">
         <span>证据片段</span>
         <span>
           {formatTime(citation.startMs)} - {formatTime(citation.endMs)}
         </span>
       </div>
-      <p className="max-h-24 overflow-auto text-sm leading-6 text-slate-700">{snippet || '暂无原文片段。'}</p>
+      <p className="max-h-24 overflow-auto text-sm leading-6 text-ink-secondary">{snippet || '暂无原文片段。'}</p>
       <button
         type="button"
-        className="mt-3 rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700"
+        className="mt-3 rounded-lg bg-pine px-3 py-1.5 text-xs font-medium text-white hover:bg-pine-deep"
         onClick={() => onSeek?.(citation.startMs)}
       >
         回放到这里

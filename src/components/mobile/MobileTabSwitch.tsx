@@ -66,8 +66,8 @@ export function MobileTabSwitch({
             'relative z-10 rounded-full px-4 py-1.5 text-[13px] font-medium whitespace-nowrap',
             'transition-all duration-200',
             activeTab === tab.id
-              ? 'text-slate-900'
-              : 'text-slate-400 hover:text-slate-500'
+              ? 'text-ink'
+              : 'text-ink-muted hover:text-ink-muted'
           )}
         >
           {tab.label}

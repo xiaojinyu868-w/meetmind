@@ -97,11 +97,19 @@ export function buildTutorAgentReviewContext({
   preferSupportContext?: boolean;
   learnerProfile?: string | null;
 }): TutorAgentReviewContext {
-  const fullTranscript = segments
+  // 复习态 prompt 注入的 fullTranscript 上限（与 buildTutorSystemPrompt 内的
+  // capFullTranscript 一致，做双保险）。一节 60 分钟课转录 ~25k 字，
+  // 全量 prefill 会让 step-3.7-flash 等高速模型的首包延迟（TTFT）从 1s 涨到 5–8s。
+  // 8000 字 ≈ 12–16k input tokens ≈ 15–20 分钟课堂内容。
+  const MAX_FULL_TRANSCRIPT_CHARS = 12000;
+  const rawFullTranscript = segments
     .map((segment) => segment.text)
     .filter(Boolean)
     .join(' ')
     .trim();
+  const fullTranscript = rawFullTranscript.length > MAX_FULL_TRANSCRIPT_CHARS
+    ? rawFullTranscript.slice(-MAX_FULL_TRANSCRIPT_CHARS)
+    : rawFullTranscript;
 
   const breakpointSec = typeof breakpoint?.timestamp === 'number' && breakpoint.timestamp > 0
     ? Math.floor(breakpoint.timestamp / 1000)

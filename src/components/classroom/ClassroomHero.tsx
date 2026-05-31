@@ -88,7 +88,7 @@ function AudioSourceRail({
               onClick={() => onChange(option.key)}
               className={cn(
                 'inline-flex min-w-[116px] items-center justify-center gap-1.5 px-4 py-2.5 text-[13px] transition-colors',
-                active ? 'bg-ink text-white' : 'text-ink-secondary hover:bg-[#F7F7F5] hover:text-ink',
+                active ? 'bg-ink text-white' : 'text-ink-secondary hover:bg-[#FAF7F2] hover:text-ink',
               )}
               aria-pressed={active}
             >

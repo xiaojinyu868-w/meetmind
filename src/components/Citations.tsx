@@ -33,19 +33,19 @@ export function Citations({
   const hasMore = citations.length > maxVisible;
 
   return (
-    <div className="bg-gray-50 rounded-lg border border-gray-200 overflow-hidden">
+    <div className="bg-paper-warm rounded-lg border border-divider overflow-hidden">
       {/* 标题栏 */}
-      <div className="flex items-center justify-between px-4 py-2 bg-gray-100 border-b border-gray-200">
+      <div className="flex items-center justify-between px-4 py-2 bg-paper-deep border-b border-divider">
         <div className="flex items-center gap-2">
           <span className="text-sm">🔗</span>
-          <span className="text-sm font-medium text-gray-700">
+          <span className="text-sm font-medium text-ink-secondary">
             参考来源 ({citations.length})
           </span>
         </div>
         {hasMore && (
           <button
             onClick={() => setIsExpanded(!isExpanded)}
-            className="text-xs text-[#787774] hover:text-[#232322]"
+            className="text-xs text-[#5C5A55] hover:text-[#1C1B19]"
           >
             {isExpanded ? '收起' : `展开全部 +${citations.length - maxVisible}`}
           </button>
@@ -95,19 +95,19 @@ function CitationItem({ citation }: { citation: Citation }) {
         {/* 标题 */}
         <h4 className={`
           text-sm font-medium truncate
-          ${isHovered ? 'text-[#232322]' : 'text-gray-900'}
+          ${isHovered ? 'text-[#1C1B19]' : 'text-ink'}
         `}>
           {citation.title}
         </h4>
 
         {/* 摘要 */}
-        <p className="text-xs text-gray-500 mt-1 line-clamp-2">
+        <p className="text-xs text-ink-muted mt-1 line-clamp-2">
           {citation.snippet}
         </p>
 
         {/* 域名/类型 */}
         <div className="flex items-center gap-2 mt-1">
-          <span className="text-xs text-gray-400">
+          <span className="text-xs text-ink-muted">
             {isWebSource ? getDomain(citation.url) : '导入资料'}
           </span>
         </div>
@@ -116,8 +116,8 @@ function CitationItem({ citation }: { citation: Citation }) {
       {/* 外链图标 */}
       {isWebSource && (
         <span className={`
-          text-gray-400 transition-colors flex-shrink-0
-          ${isHovered ? 'text-[#787774]' : ''}
+          text-ink-muted transition-colors flex-shrink-0
+          ${isHovered ? 'text-[#5C5A55]' : ''}
         `}>
           ↗
         </span>
@@ -130,7 +130,7 @@ function CitationItem({ citation }: { citation: Citation }) {
       <div
         className={`
           block p-3 transition-colors
-          ${isHovered ? 'bg-[#FDF3C0]/50' : 'hover:bg-gray-50'}
+          ${isHovered ? 'bg-[#FDF3C0]/50' : 'hover:bg-paper-warm'}
         `}
         onMouseEnter={() => setIsHovered(true)}
         onMouseLeave={() => setIsHovered(false)}
@@ -147,7 +147,7 @@ function CitationItem({ citation }: { citation: Citation }) {
       rel="noopener noreferrer"
       className={`
         block p-3 transition-colors
-        ${isHovered ? 'bg-[#FDF3C0]/50' : 'hover:bg-gray-50'}
+        ${isHovered ? 'bg-[#FDF3C0]/50' : 'hover:bg-paper-warm'}
       `}
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
@@ -173,7 +173,7 @@ export function InlineCitation({
   return (
     <button
       onClick={onClick}
-      className="inline-flex items-center justify-center w-5 h-5 text-xs bg-[#FDF3C0] text-[#232322] rounded-full hover:bg-[#FDF3C0] transition-colors align-super"
+      className="inline-flex items-center justify-center w-5 h-5 text-xs bg-[#FDF3C0] text-[#1C1B19] rounded-full hover:bg-[#FDF3C0] transition-colors align-super"
       title={citation.title}
     >
       {index + 1}
@@ -186,19 +186,19 @@ export function InlineCitation({
  */
 export function CitationsSkeleton() {
   return (
-    <div className="bg-gray-50 rounded-lg border border-gray-200 overflow-hidden animate-pulse">
-      <div className="px-4 py-2 bg-gray-100 border-b border-gray-200">
-        <div className="h-4 bg-gray-200 rounded w-24" />
+    <div className="bg-paper-warm rounded-lg border border-divider overflow-hidden animate-pulse">
+      <div className="px-4 py-2 bg-paper-deep border-b border-divider">
+        <div className="h-4 bg-divider rounded w-24" />
       </div>
       <div className="divide-y divide-gray-100">
         {[1, 2, 3].map((i) => (
           <div key={i} className="p-3">
             <div className="flex items-start gap-3">
-              <div className="w-6 h-6 bg-gray-200 rounded" />
+              <div className="w-6 h-6 bg-divider rounded" />
               <div className="flex-1 space-y-2">
-                <div className="h-4 bg-gray-200 rounded w-3/4" />
-                <div className="h-3 bg-gray-200 rounded w-full" />
-                <div className="h-3 bg-gray-200 rounded w-1/4" />
+                <div className="h-4 bg-divider rounded w-3/4" />
+                <div className="h-3 bg-divider rounded w-full" />
+                <div className="h-3 bg-divider rounded w-1/4" />
               </div>
             </div>
           </div>

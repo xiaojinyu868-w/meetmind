@@ -124,10 +124,10 @@ export function CollectionFeedMessageBubble({
   const showVideoStatusText = Boolean(item.statusText) && item.status === 'failed';
   const statusTone =
     item.status === 'failed'
-      ? 'bg-rose-50 text-rose-600'
+      ? 'bg-vermilion-fog text-vermilion'
       : item.status === 'ready'
-        ? 'bg-white/70 text-[#4f7a36]'
-        : 'bg-white/70 text-[#3d7d1f]';
+        ? 'bg-white/70 text-[#2D4F3E]'
+        : 'bg-white/70 text-[#2D4F3E]';
   const isAttachmentMessage =
     Boolean(item.attachmentUrl) && (item.type === 'document' || item.type === 'text');
   const isSelectedForContext = selectedCollectionContextIds.includes(item.id);
@@ -185,12 +185,12 @@ export function CollectionFeedMessageBubble({
         <div
           className={`relative overflow-hidden rounded-2xl px-4 py-3.5 ${
             isPrimary
-              ? 'rounded-br-md bg-[#F0FAF4]'
-              : 'rounded-bl-md bg-[#F7F7F5]'
-          } ${isSelectedForContext ? 'ring-2 ring-[#5B6ABF]/30' : ''}`}
+              ? 'rounded-br-md bg-[#E6EDE8]'
+              : 'rounded-bl-md bg-[#FAF7F2]'
+          } ${isSelectedForContext ? 'ring-2 ring-[#2D4F3E]/30' : ''}`}
         >
           {!isCollectionContextSelectionMode ? (
-            <div className={`mb-2 flex items-center justify-between gap-2 ${isPrimary ? 'text-[#5B6ABF]' : 'text-slate-500'}`}>
+            <div className={`mb-2 flex items-center justify-between gap-2 ${isPrimary ? 'text-[#2D4F3E]' : 'text-ink-muted'}`}>
               <span className="text-[11px] font-medium uppercase tracking-wider opacity-60">
                 {typeLabel}
               </span>
@@ -201,7 +201,7 @@ export function CollectionFeedMessageBubble({
                     event.stopPropagation();
                     onOpenMessageMenu(item.id);
                   }}
-                  className="rounded-full p-1 text-slate-400 transition hover:bg-slate-100 hover:text-slate-600"
+                  className="rounded-full p-1 text-ink-muted transition hover:bg-paper-deep hover:text-ink-secondary"
                   aria-label={`更多操作：${collectionActionTitle}`}
                 >
                   <MoreHorizontal size={14} />
@@ -217,13 +217,13 @@ export function CollectionFeedMessageBubble({
                 aria-pressed={isSelectedForContext}
                 className={`rounded-full px-2.5 py-1 font-medium transition ${
                   isSelectedForContext
-                    ? 'bg-[#D6DAFA] text-[#424E96]'
-                    : 'bg-slate-100 text-slate-500'
+                    ? 'bg-[#E6EDE8] text-[#2D4F3E]'
+                    : 'bg-paper-deep text-ink-muted'
                 }`}
               >
                 {isSelectedForContext ? '已选' : '选择'}
               </button>
-              <span className="text-[10px] text-slate-400">{getCollectionContextTypeLabel(item.type)}</span>
+              <span className="text-[10px] text-ink-muted">{getCollectionContextTypeLabel(item.type)}</span>
             </div>
           ) : null}
 
@@ -239,27 +239,27 @@ export function CollectionFeedMessageBubble({
                   disabled={!item.mediaUrl}
                   className={`inline-flex max-w-full items-center gap-3 rounded-full px-3 py-2 transition ${
                     isPrimary
-                      ? 'bg-white/60 text-slate-700'
-                      : 'bg-slate-100 text-slate-700'
+                      ? 'bg-white/60 text-ink-secondary'
+                      : 'bg-paper-deep text-ink-secondary'
                   } disabled:cursor-default disabled:opacity-80`}
                 >
-                  <span className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-[#232322] text-white">
+                  <span className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-[#1C1B19] text-white">
                     {isAudioPlaying ? <Pause size={14} /> : <Play size={14} className="ml-0.5" />}
                   </span>
                   <span className="relative flex h-5 w-[88px] items-center">
                     <span
-                      className="absolute left-0 top-1/2 h-[2px] -translate-y-1/2 rounded-full bg-slate-200"
+                      className="absolute left-0 top-1/2 h-[2px] -translate-y-1/2 rounded-full bg-divider"
                       style={{ width: '100%' }}
                     />
                     <span
-                      className="absolute left-0 top-1/2 h-[2px] -translate-y-1/2 rounded-full bg-[#5DADE2] transition-all"
+                      className="absolute left-0 top-1/2 h-[2px] -translate-y-1/2 rounded-full bg-[#6B9080] transition-all"
                       style={{ width: `${Math.max(8, audioProgress * 100)}%` }}
                     />
                     <span className="relative z-10 flex w-full items-end justify-between px-1">
                       {[8, 12, 16, 11, 15, 9, 13, 10].map((height, index) => (
                         <span
                           key={`${item.id}-wave-${index}`}
-                          className="w-[3px] rounded-full bg-slate-400"
+                          className="w-[3px] rounded-full bg-ink-muted"
                           style={{ height: `${height}px`, opacity: index / 8 < audioProgress ? 0.95 : 0.35 }}
                         />
                       ))}
@@ -275,7 +275,7 @@ export function CollectionFeedMessageBubble({
                 </button>
               </div>
               <div className={`flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] ${
-                isPrimary ? 'justify-end text-slate-500' : 'justify-start text-slate-500'
+                isPrimary ? 'justify-end text-ink-muted' : 'justify-start text-ink-muted'
               }`}>
                 {showAudioStatusText ? (
                   <span className="font-medium">{audioStatusText}</span>
@@ -290,7 +290,7 @@ export function CollectionFeedMessageBubble({
                       onClick={() =>
                         onSetExpandedAudioTranscriptId((prev) => (prev === item.id ? null : item.id))
                       }
-                      className="rounded-full px-2.5 py-1 font-medium text-slate-500 transition hover:bg-slate-100"
+                      className="rounded-full px-2.5 py-1 font-medium text-ink-muted transition hover:bg-paper-deep"
                     >
                       {isAudioTranscriptOpen ? '收起文字' : '看文字'}
                     </button>
@@ -299,7 +299,7 @@ export function CollectionFeedMessageBubble({
               </div>
               {isAudioTranscriptOpen && item.segmentCount > 0 && item.fullText?.trim() ? (
                 <div className={`rounded-xl px-3 py-2 text-[15px] leading-7 ${
-                  isPrimary ? 'bg-white/50 text-[#232322]' : 'bg-white text-[#232322]'
+                  isPrimary ? 'bg-white/50 text-[#1C1B19]' : 'bg-white text-[#1C1B19]'
                 }`}>
                   {bubbleText}
                 </div>
@@ -325,12 +325,12 @@ export function CollectionFeedMessageBubble({
               ) : (
                 <div className={`flex items-center gap-2 ${isPrimary ? 'justify-end' : 'justify-start'}`}>
                   <span className={`inline-flex h-8 w-8 items-center justify-center rounded-full ${
-                    isPrimary ? 'bg-white/50 text-violet-500' : 'bg-slate-100 text-slate-500'
+                    isPrimary ? 'bg-white/50 text-pine' : 'bg-paper-deep text-ink-muted'
                   }`}>
                     <ImageIcon size={15} />
                   </span>
                   <div className="min-w-0">
-                    <p className="truncate text-sm font-medium text-slate-900">{item.title}</p>
+                    <p className="truncate text-sm font-medium text-ink">{item.title}</p>
                   </div>
                 </div>
               )}
@@ -345,20 +345,20 @@ export function CollectionFeedMessageBubble({
                   className={`block rounded-xl px-3 py-2.5 transition ${
                     isPrimary
                       ? 'bg-white/40 hover:bg-white/60'
-                      : 'bg-white hover:bg-[#F7F7F5]'
+                      : 'bg-white hover:bg-[#FAF7F2]'
                   }`}
                 >
                   <div className={`flex items-center gap-2 ${isPrimary ? 'justify-end' : 'justify-start'}`}>
                     <span className={`inline-flex h-8 w-8 items-center justify-center rounded-full ${
-                      isPrimary ? 'bg-white text-blue-500' : 'bg-white text-slate-500'
+                      isPrimary ? 'bg-white text-pine' : 'bg-white text-ink-muted'
                     }`}>
                       <FileText size={15} />
                     </span>
                     <div className="min-w-0 flex-1">
-                      <p className="truncate text-sm font-medium text-slate-900">{item.title}</p>
+                      <p className="truncate text-sm font-medium text-ink">{item.title}</p>
                     </div>
                     {fileExtensionBadge ? (
-                      <span className="shrink-0 rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-medium text-slate-500">
+                      <span className="shrink-0 rounded-full bg-paper-deep px-2 py-0.5 text-[10px] font-medium text-ink-muted">
                         {fileExtensionBadge}
                       </span>
                     ) : null}
@@ -367,23 +367,23 @@ export function CollectionFeedMessageBubble({
               ) : (
                 <div className={`flex items-center gap-2 ${isPrimary ? 'justify-end' : 'justify-start'}`}>
                   <span className={`inline-flex h-8 w-8 items-center justify-center rounded-full ${
-                    isPrimary ? 'bg-white/70 text-[#2563eb]' : 'bg-slate-100 text-slate-500'
+                    isPrimary ? 'bg-white/70 text-[#2563eb]' : 'bg-paper-deep text-ink-muted'
                   }`}>
                     <FileText size={15} />
                   </span>
                   <div className="min-w-0">
-                    <p className="truncate text-sm font-medium text-slate-900">{item.title}</p>
-                    {fileExtensionBadge ? <p className="text-[11px] text-slate-500">{fileExtensionBadge}</p> : null}
+                    <p className="truncate text-sm font-medium text-ink">{item.title}</p>
+                    {fileExtensionBadge ? <p className="text-[11px] text-ink-muted">{fileExtensionBadge}</p> : null}
                   </div>
                 </div>
               )}
               {/* 文档解析中文案 */}
               {showDocumentParsing ? (
                 <div className={`flex items-center gap-2 text-[11px] ${
-                  isPrimary ? 'justify-end text-white/80' : 'justify-start text-amber-600/80'
+                  isPrimary ? 'justify-end text-white/80' : 'justify-start text-vermilion/80'
                 }`}>
                   <span className="inline-flex items-center gap-1.5">
-                    <span className="inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-amber-400" />
+                    <span className="inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-vermilion" />
                     <span>{item.statusText}</span>
                   </span>
                 </div>
@@ -412,8 +412,8 @@ export function CollectionFeedMessageBubble({
                         referrerPolicy="no-referrer"
                       />
                       <div className="px-3 py-2">
-                        <p className="truncate text-sm font-medium text-[#232322]">{item.title}</p>
-                        <div className="mt-0.5 flex items-center gap-1.5 text-[11px] text-[#787774]">
+                        <p className="truncate text-sm font-medium text-[#1C1B19]">{item.title}</p>
+                        <div className="mt-0.5 flex items-center gap-1.5 text-[11px] text-[#5C5A55]">
                           {item.videoProvider ? <span>{item.videoProvider}</span> : null}
                           {item.durationMs ? (
                             <span>{item.videoProvider ? ' · ' : ''}{formatVoiceDurationCompact(item.durationMs)}</span>
@@ -434,14 +434,14 @@ export function CollectionFeedMessageBubble({
                   >
                     <div className="flex items-center gap-3 px-3 py-3">
                       <span className={`inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full ${
-                        isPrimary ? 'bg-[#EDE9FE] text-[#7C3AED]' : 'bg-[#F0FAF4] text-[#2d6a3f]'
+                        isPrimary ? 'bg-[#EDE9FE] text-[#7C3AED]' : 'bg-[#E6EDE8] text-[#2d6a3f]'
                       }`}>
                         <Play size={17} className="ml-0.5" />
                       </span>
                       <div className="min-w-0 flex-1">
-                        <p className="truncate text-sm font-medium text-[#232322]">{item.title}</p>
+                        <p className="truncate text-sm font-medium text-[#1C1B19]">{item.title}</p>
                         {item.durationMs ? (
-                          <p className="mt-0.5 text-[11px] text-[#787774]">
+                          <p className="mt-0.5 text-[11px] text-[#5C5A55]">
                             {formatVoiceDurationCompact(item.durationMs)}
                           </p>
                         ) : null}
@@ -451,7 +451,7 @@ export function CollectionFeedMessageBubble({
                 );
               })()}
               <div className={`flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] ${
-                isPrimary ? 'justify-end text-white/75' : 'justify-start text-slate-500'
+                isPrimary ? 'justify-end text-white/75' : 'justify-start text-ink-muted'
               }`}>
                 {showVideoStatusText ? (
                   <span className="font-medium">{item.statusText}</span>
@@ -473,8 +473,8 @@ export function CollectionFeedMessageBubble({
                     <span>解析未完成，换个浏览器再试一次</span>
                   </span>
                 ) : item.type === 'video' && !item.videoImported && !item.sessionId && item.status !== 'failed' && (item.reviewable || item.status === 'parsing') ? (
-                  <span className="inline-flex items-center gap-1.5 text-[11px] text-amber-600/80">
-                    <span className="inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-amber-400" />
+                  <span className="inline-flex items-center gap-1.5 text-[11px] text-vermilion/80">
+                    <span className="inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-vermilion" />
                     <span>{item.statusText || '解析中…'}</span>
                   </span>
                 ) : null}
@@ -482,12 +482,12 @@ export function CollectionFeedMessageBubble({
             </div>
           ) : (
             <div className="space-y-2">
-              <p className="text-[15px] leading-7 text-[#232322]">{bubbleText}</p>
+              <p className="text-[15px] leading-7 text-[#1C1B19]">{bubbleText}</p>
             </div>
           )}
 
           {/* --- 底部时间戳 + 状态 --- */}
-          <div className={`mt-2 flex items-center ${isPrimary ? 'justify-end' : 'justify-start'} gap-2 text-[11px] text-slate-400`}>
+          <div className={`mt-2 flex items-center ${isPrimary ? 'justify-end' : 'justify-start'} gap-2 text-[11px] text-ink-muted`}>
             <span>{formatRelativeCollectionTime(item.addedAt)}</span>
             {showInlineStatus ? (
               <span className={`rounded-full px-2 py-0.5 ${statusTone}`}>

@@ -51,8 +51,8 @@ export function ConversationItem({
       className={`
         group p-3 rounded-lg cursor-pointer transition-all duration-200
         ${isActive 
-          ? 'bg-[#FDF3C0]/50 border border-[#E9E9E7] shadow-sm' 
-          : 'hover:bg-gray-50 border border-transparent'
+          ? 'bg-[#FDF3C0]/50 border border-[#E8E2D5] shadow-sm' 
+          : 'hover:bg-paper-warm border border-transparent'
         }
       `}
     >
@@ -65,7 +65,7 @@ export function ConversationItem({
             </span>
             <h4 className={`
               text-sm font-medium truncate
-              ${isActive ? 'text-[#232322]' : 'text-gray-900'}
+              ${isActive ? 'text-[#1C1B19]' : 'text-ink'}
             `}>
               {conversation.title}
             </h4>
@@ -73,20 +73,20 @@ export function ConversationItem({
           
           {/* 最后消息预览 */}
           {conversation.lastMessage && (
-            <p className="mt-1 text-xs text-gray-500 truncate">
+            <p className="mt-1 text-xs text-ink-muted truncate">
               {conversation.lastMessage}
             </p>
           )}
           
           {/* 元信息 */}
-          <div className="mt-1.5 flex items-center gap-2 text-xs text-gray-400">
+          <div className="mt-1.5 flex items-center gap-2 text-xs text-ink-muted">
             <span>{timeAgo}</span>
             <span>·</span>
             <span>{conversation.messageCount} 条消息</span>
             {conversation.model && (
               <>
                 <span>·</span>
-                <span className="text-gray-300">{conversation.model}</span>
+                <span className="text-ink-faint">{conversation.model}</span>
               </>
             )}
           </div>
@@ -99,7 +99,7 @@ export function ConversationItem({
             className={`
               p-1.5 rounded-md transition-all duration-200
               opacity-0 group-hover:opacity-100
-              text-gray-400 hover:text-red-500 hover:bg-red-50
+              text-ink-muted hover:text-vermilion hover:bg-vermilion-mist/50
             `}
             title="删除对话"
           >
@@ -112,13 +112,13 @@ export function ConversationItem({
           <div className="flex items-center gap-1 animate-in fade-in duration-150" onClick={e => e.stopPropagation()}>
             <button
               onClick={handleDeleteConfirm}
-              className="px-2 py-1 text-xs font-medium text-white bg-red-500 rounded-md hover:bg-red-600 transition-colors"
+              className="px-2 py-1 text-xs font-medium text-white bg-vermilion rounded-md hover:bg-vermilion-deep transition-colors"
             >
               删除
             </button>
             <button
               onClick={handleDeleteCancel}
-              className="px-2 py-1 text-xs font-medium text-gray-500 bg-gray-100 rounded-md hover:bg-gray-200 transition-colors"
+              className="px-2 py-1 text-xs font-medium text-ink-muted bg-paper-deep rounded-md hover:bg-divider transition-colors"
             >
               取消
             </button>

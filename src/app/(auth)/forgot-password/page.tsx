@@ -148,12 +148,12 @@ export default function ForgotPasswordPage() {
   };
 
   return (
-    <div className="min-h-screen bg-[#F7F7F5] flex items-center justify-center px-4">
+    <div className="min-h-screen bg-[#FAF7F2] flex items-center justify-center px-4">
       <div className="w-full max-w-md">
         {/* 返回登录 */}
         <Link
           href="/login"
-          className="inline-flex items-center gap-2 text-gray-600 hover:text-gray-900 mb-6 transition-colors"
+          className="inline-flex items-center gap-2 text-ink-secondary hover:text-ink mb-6 transition-colors"
         >
           <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
@@ -165,11 +165,11 @@ export default function ForgotPasswordPage() {
           {/* 步骤1: 输入邮箱/手机号 */}
           {step === 'input' && (
             <>
-              <h1 className="text-xl font-bold text-gray-900 mb-2">找回密码</h1>
-              <p className="text-sm text-gray-500 mb-6">请输入您的邮箱或手机号，我们将发送验证码</p>
+              <h1 className="text-xl font-bold text-ink mb-2">找回密码</h1>
+              <p className="text-sm text-ink-muted mb-6">请输入您的邮箱或手机号，我们将发送验证码</p>
 
               {/* 切换邮箱/手机号 */}
-              <div className="flex items-center gap-4 mb-5 border-b border-gray-200 pb-4">
+              <div className="flex items-center gap-4 mb-5 border-b border-divider pb-4">
                 <button
                   onClick={() => handleTargetTypeChange('email')}
                   className="text-sm pb-1 border-b-2 transition-all font-medium"
@@ -194,14 +194,14 @@ export default function ForgotPasswordPage() {
 
               {/* 错误提示 */}
               {error && (
-                <div className="mb-4 p-3 rounded-xl text-sm bg-red-50 border border-red-200 text-red-600">
+                <div className="mb-4 p-3 rounded-xl text-sm bg-vermilion-mist/50 border border-vermilion/30 text-vermilion">
                   {error}
                 </div>
               )}
 
               <div className="space-y-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                  <label className="block text-sm font-medium text-ink-secondary mb-2">
                     {targetType === 'email' ? '邮箱地址' : '手机号码'}
                   </label>
                   <input
@@ -209,7 +209,7 @@ export default function ForgotPasswordPage() {
                     value={target}
                     onChange={(e) => setTarget(e.target.value)}
                     placeholder={targetType === 'email' ? '请输入注册邮箱' : '请输入注册手机号'}
-                    className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-rose-400 focus:ring-4 focus:ring-rose-100 focus:outline-none transition-all"
+                    className="w-full px-4 py-3 rounded-xl border-2 border-divider focus:border-pine focus:ring-4 focus:ring-pine/15 focus:outline-none transition-all"
                   />
                 </div>
 
@@ -231,14 +231,14 @@ export default function ForgotPasswordPage() {
           {/* 步骤2: 输入验证码和新密码 */}
           {step === 'verify' && (
             <>
-              <h1 className="text-xl font-bold text-gray-900 mb-2">设置新密码</h1>
-              <p className="text-sm text-gray-500 mb-6">
-                验证码已发送至 <span className="text-rose-500">{target}</span>
+              <h1 className="text-xl font-bold text-ink mb-2">设置新密码</h1>
+              <p className="text-sm text-ink-muted mb-6">
+                验证码已发送至 <span className="text-vermilion">{target}</span>
               </p>
 
               {/* 错误提示 */}
               {error && (
-                <div className="mb-4 p-3 rounded-xl text-sm bg-red-50 border border-red-200 text-red-600">
+                <div className="mb-4 p-3 rounded-xl text-sm bg-vermilion-mist/50 border border-vermilion/30 text-vermilion">
                   {error}
                 </div>
               )}
@@ -246,7 +246,7 @@ export default function ForgotPasswordPage() {
               <form onSubmit={handleResetPassword} className="space-y-4">
                 {/* 验证码 */}
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">验证码</label>
+                  <label className="block text-sm font-medium text-ink-secondary mb-2">验证码</label>
                   <div className="flex gap-3">
                     <input
                       type="text"
@@ -255,13 +255,13 @@ export default function ForgotPasswordPage() {
                       placeholder="请输入6位验证码"
                       maxLength={6}
                       required
-                      className="flex-1 px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-rose-400 focus:ring-4 focus:ring-rose-100 focus:outline-none transition-all"
+                      className="flex-1 px-4 py-3 rounded-xl border-2 border-divider focus:border-pine focus:ring-4 focus:ring-pine/15 focus:outline-none transition-all"
                     />
                     <button
                       type="button"
                       onClick={sendVerificationCode}
                       disabled={isSendingCode || countdown > 0}
-                      className="px-4 py-3 rounded-xl font-medium whitespace-nowrap transition-all disabled:opacity-50 bg-rose-100 text-rose-600 hover:bg-rose-200 border border-rose-200"
+                      className="px-4 py-3 rounded-xl font-medium whitespace-nowrap transition-all disabled:opacity-50 bg-vermilion-mist text-vermilion hover:bg-vermilion-mist border border-vermilion/30"
                     >
                       {countdown > 0 ? `${countdown}s` : '重新发送'}
                     </button>
@@ -270,27 +270,27 @@ export default function ForgotPasswordPage() {
 
                 {/* 新密码 */}
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">新密码</label>
+                  <label className="block text-sm font-medium text-ink-secondary mb-2">新密码</label>
                   <input
                     type="password"
                     value={newPassword}
                     onChange={(e) => setNewPassword(e.target.value)}
                     placeholder="至少8个字符"
                     required
-                    className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-rose-400 focus:ring-4 focus:ring-rose-100 focus:outline-none transition-all"
+                    className="w-full px-4 py-3 rounded-xl border-2 border-divider focus:border-pine focus:ring-4 focus:ring-pine/15 focus:outline-none transition-all"
                   />
                 </div>
 
                 {/* 确认密码 */}
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">确认密码</label>
+                  <label className="block text-sm font-medium text-ink-secondary mb-2">确认密码</label>
                   <input
                     type="password"
                     value={confirmPassword}
                     onChange={(e) => setConfirmPassword(e.target.value)}
                     placeholder="再次输入新密码"
                     required
-                    className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-rose-400 focus:ring-4 focus:ring-rose-100 focus:outline-none transition-all"
+                    className="w-full px-4 py-3 rounded-xl border-2 border-divider focus:border-pine focus:ring-4 focus:ring-pine/15 focus:outline-none transition-all"
                   />
                 </div>
 
@@ -309,7 +309,7 @@ export default function ForgotPasswordPage() {
                 <button
                   type="button"
                   onClick={() => setStep('input')}
-                  className="w-full py-3 px-4 text-gray-600 font-medium rounded-xl transition-all bg-gray-100 hover:bg-gray-200"
+                  className="w-full py-3 px-4 text-ink-secondary font-medium rounded-xl transition-all bg-paper-deep hover:bg-divider"
                 >
                   返回上一步
                 </button>
@@ -320,13 +320,13 @@ export default function ForgotPasswordPage() {
           {/* 步骤3: 成功 */}
           {step === 'success' && (
             <div className="text-center py-8">
-              <div className="w-16 h-16 mx-auto mb-4 bg-green-100 rounded-full flex items-center justify-center">
-                <svg className="w-8 h-8 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <div className="w-16 h-16 mx-auto mb-4 bg-pine-mist rounded-full flex items-center justify-center">
+                <svg className="w-8 h-8 text-pine" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                 </svg>
               </div>
-              <h1 className="text-xl font-bold text-gray-900 mb-2">密码重置成功</h1>
-              <p className="text-sm text-gray-500 mb-6">您现在可以使用新密码登录了</p>
+              <h1 className="text-xl font-bold text-ink mb-2">密码重置成功</h1>
+              <p className="text-sm text-ink-muted mb-6">您现在可以使用新密码登录了</p>
               
               <button
                 onClick={() => router.push('/login')}

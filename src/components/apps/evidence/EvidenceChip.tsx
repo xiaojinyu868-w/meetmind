@@ -37,7 +37,7 @@ export function EvidenceChip({ citation, transcript, onSeek }: EvidenceChipProps
     <span className="relative inline-flex">
       <button
         type="button"
-        className="rounded-full border border-blue-200 bg-blue-50 px-2.5 py-1 text-xs font-medium text-blue-700 hover:bg-blue-100"
+        className="rounded-full border border-pine/30 bg-pine-fog px-2.5 py-1 text-xs font-medium text-pine hover:bg-pine-mist"
         onClick={() => setOpen((value) => !value)}
       >
         证据 {formatTime(citation.startMs)}

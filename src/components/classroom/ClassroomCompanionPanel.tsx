@@ -28,7 +28,7 @@
  *
  * 底部输入框：ChatGPT 风格，上文本区 + 下按钮行
  *
- * 设计系统：零渐变、零阴影、纯平涂
+ * 设计系统：v7 设计宪法：95% 克制 + 5% 仪式时刻情绪化（shadow-soft / shadow-card / shadow-ai-glow）
  */
 
 import React, { useState, useRef, useEffect, useCallback } from 'react';
@@ -128,35 +128,60 @@ function Header({
   onForesightAccept?: (f: ForesightBubble) => void;
   afterClass?: boolean;
 }) {
+  // v7 companion-head：octo-stage 圆形 + 呼吸光环 + 名称 + mono pine 状态点
   if (mode === 'listening') {
+    const statusLabel = afterClass ? '听完了' : COPY.listening.hearing;
     return (
-      <div className="flex flex-shrink-0 items-center justify-between border-b border-divider px-6 py-4 pr-11">
-        <div className="flex items-center gap-3 text-ink">
-          <OctoBuddySprite mood={afterClass ? 'happy' : 'listening'} size="sm" />
-          <span className="text-[14px] font-semibold tracking-[-0.01em] text-ink">{COPY.identity.name}</span>
-          <span className="text-[12px] text-ink-muted">· {afterClass ? '听完了' : COPY.listening.hearing}</span>
+      <div className="flex flex-shrink-0 items-center justify-between gap-3 border-b border-divider/80 bg-paper-warm/40 px-5 py-4 pr-11">
+        <div className="flex min-w-0 items-center gap-3 text-ink">
+          {/* octo-stage：44px 圆形 + 5px pine 呼吸光环 + 内部 sm sprite */}
+          <div className="octo-aura relative flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-full border border-divider bg-card">
+            <OctoBuddySprite mood={afterClass ? 'happy' : 'listening'} size="sm" />
+          </div>
+          <div className="min-w-0">
+            <p className="text-[14px] font-semibold tracking-[-0.01em] text-ink">{COPY.identity.name}</p>
+            <p className="mt-0.5 flex items-center gap-1.5 font-mono text-[10.5px] font-semibold uppercase tracking-[0.08em] text-pine">
+              <span
+                className="inline-block h-1.5 w-1.5 rounded-full bg-pine"
+                style={{
+                  boxShadow: '0 0 0 0 rgba(45,79,62,0.5)',
+                  animation: 'rec-pulse-v7 1.6s ease-in-out infinite',
+                }}
+                aria-hidden
+              />
+              {statusLabel}
+            </p>
+          </div>
         </div>
-        <div className="flex items-center gap-2 text-ink-muted/70">
+        <div className="flex flex-shrink-0 items-center gap-2 text-ink-muted/70">
           {foresightCount > 0 && latestForesight ? (
             <button
               type="button"
               onClick={() => onForesightAccept?.(latestForesight)}
-              className="flex max-w-[8.5rem] items-center gap-1.5 rounded-full border border-divider bg-white px-2.5 py-1 text-[12px] text-ink-muted transition hover:border-ink-muted hover:text-ink"
+              className="flex max-w-[8.5rem] items-center gap-1.5 rounded-full border border-divider bg-card px-2.5 py-1 text-[12px] text-ink-muted shadow-soft transition hover:border-pine hover:text-pine"
               title={latestForesight.text}
             >
               <Eye size={12} strokeWidth={1.6} />
               <span className="truncate">{COPY.companion.foresightCount(foresightCount)}</span>
             </button>
           ) : null}
-          <Radio size={14} strokeWidth={1.6} />
+          <Radio size={14} strokeWidth={1.6} className="text-pine/65" />
         </div>
       </div>
     );
   }
+  // idle 态：octo-stage + 名称 + 待命 mono 字
   return (
-    <div className="flex flex-shrink-0 items-center gap-3 border-b border-divider px-6 py-4 pr-11">
-      <OctoBuddySprite mood="idle" size="sm" />
-      <span className="text-[14px] font-semibold tracking-[-0.01em] text-ink">{COPY.identity.name}</span>
+    <div className="flex flex-shrink-0 items-center gap-3 border-b border-divider/80 bg-paper-warm/40 px-5 py-4 pr-11">
+      <div className="octo-aura relative flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-full border border-divider bg-card">
+        <OctoBuddySprite mood="idle" size="sm" />
+      </div>
+      <div className="min-w-0">
+        <p className="text-[14px] font-semibold tracking-[-0.01em] text-ink">{COPY.identity.name}</p>
+        <p className="mt-0.5 font-mono text-[10.5px] font-semibold uppercase tracking-[0.08em] text-ink-muted">
+          待命中
+        </p>
+      </div>
     </div>
   );
 }
@@ -332,7 +357,7 @@ function ListeningStarterCard({
 }) {
   return (
     <div className="px-6 pb-5">
-      <div className="rounded-[22px] border border-divider bg-[#FBFBFA] px-4 py-4">
+      <div className="rounded-[22px] border border-divider bg-[#F2EDE3] px-4 py-4">
         <div className="flex items-start gap-3">
           <OctoBuddySprite mood={afterClass ? 'happy' : 'listening'} size="md" className="-ml-1 -mt-1 flex-shrink-0" />
           <div className="min-w-0 flex-1">

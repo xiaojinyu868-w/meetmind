@@ -53,7 +53,7 @@ class WindowErrorBoundary extends React.Component<WindowErrorBoundaryProps, Wind
           <p className="max-w-xs text-xs text-ink-muted">{this.state.error?.message || '未知错误'}</p>
           <button
             type="button"
-            className="rounded-lg border border-divider px-3 py-1.5 text-xs font-medium text-ink-secondary hover:bg-[#EFEFED] hover:text-ink"
+            className="rounded-lg border border-divider px-3 py-1.5 text-xs font-medium text-ink-secondary hover:bg-paper-warm hover:text-ink"
             onClick={() => {
               this.setState({ hasError: false, error: undefined });
               this.props.onRetry?.();
@@ -181,7 +181,7 @@ function taskTone(taskState: AppTaskState): string {
 function taskDockBadge(taskState: AppTaskState): string {
   if (taskState.status === 'running') return 'bg-[#FADEC9]';
   if (taskState.status === 'success') return 'bg-ink';
-  if (taskState.status === 'error') return 'bg-[#D96B6B]';
+  if (taskState.status === 'error') return 'bg-[#B5483C]';
   return 'bg-ink-muted';
 }
 
@@ -310,7 +310,7 @@ function WindowCard(props: WindowCardProps) {
           </div>
           <div className="flex items-center gap-1.5">
             {execution.taskState.status === 'running' && (
-              <span className="text-xs text-[#787774]/80">生成中…</span>
+              <span className="text-xs text-[#5C5A55]/80">生成中…</span>
             )}
           </div>
         </header>
@@ -347,7 +347,7 @@ function WindowCard(props: WindowCardProps) {
           <ModelSelector value={model} onChange={onModelChange} compact allowedProviders={['deepseek', 'qwen', 'volcengine']} />
           <button
             type="button"
-            className="rounded-md px-2 py-1 text-ink-muted hover:bg-[#EFEFED] hover:text-ink"
+            className="rounded-md px-2 py-1 text-ink-muted hover:bg-paper-warm hover:text-ink"
             onClick={() => onClose(app.key)}
             aria-label="关闭窗口"
           >
@@ -397,7 +397,7 @@ function WindowCard(props: WindowCardProps) {
       >
         <button
           type="button"
-          className="rounded-md px-2 py-1 text-ink-muted hover:bg-[#EFEFED] hover:text-ink"
+          className="rounded-md px-2 py-1 text-ink-muted hover:bg-paper-warm hover:text-ink"
           onClick={() => onToggleMinimize(app.key)}
           data-testid={`workshop-window-minimize-${app.key}`}
           aria-label="最小化窗口"
@@ -418,7 +418,7 @@ function WindowCard(props: WindowCardProps) {
         </div>
         <button
           type="button"
-          className="rounded-md px-2 py-1 text-ink-muted hover:bg-[#EFEFED] hover:text-ink"
+          className="rounded-md px-2 py-1 text-ink-muted hover:bg-paper-warm hover:text-ink"
           onClick={() => onClose(app.key)}
           data-testid={`workshop-window-close-${app.key}`}
           aria-label="关闭窗口"
@@ -535,7 +535,7 @@ export function WorkshopWindowManager(props: WorkshopWindowManagerProps) {
                 </button>
                 <button
                   type="button"
-                  className="rounded-full px-1 text-xs text-ink-muted hover:bg-[#EFEFED] hover:text-ink"
+                  className="rounded-full px-1 text-xs text-ink-muted hover:bg-paper-warm hover:text-ink"
                   onClick={() => onClose(windowState.appKey)}
                   aria-label="关闭最小化窗口"
                 >

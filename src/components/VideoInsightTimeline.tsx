@@ -66,10 +66,10 @@ function CheckpointFlag({ color, size = 14, completed }: { color: string; size?:
 // ── 检查点状态 badge ──
 function StatusBadge({ status }: { status: string }) {
   const config: Record<string, { label: string; bg: string; text: string }> = {
-    pending: { label: '待检验', bg: 'bg-amber-50 border-amber-200', text: 'text-amber-600' },
-    active: { label: '进行中', bg: 'bg-blue-50 border-blue-200', text: 'text-blue-600' },
-    completed: { label: '已完成', bg: 'bg-emerald-50 border-emerald-200', text: 'text-emerald-600' },
-    skipped: { label: '已跳过', bg: 'bg-[#F7F7F5] border-[#E9E9E7]', text: 'text-[#A3A39E]' },
+    pending: { label: '待检验', bg: 'bg-vermilion-fog border-vermilion/30', text: 'text-vermilion' },
+    active: { label: '进行中', bg: 'bg-pine-fog border-pine/30', text: 'text-pine' },
+    completed: { label: '已完成', bg: 'bg-pine-fog border-pine/30', text: 'text-pine' },
+    skipped: { label: '已跳过', bg: 'bg-[#FAF7F2] border-[#E8E2D5]', text: 'text-[#8E8B82]' },
   };
   const c = config[status] || config.pending;
   return (
@@ -80,7 +80,7 @@ function StatusBadge({ status }: { status: string }) {
 }
 
 /** 测验检查点颜色 — 区别于高光片段的紫/绿/蓝色调 */
-const CHECKPOINT_COLOR = '#E67E22';
+const CHECKPOINT_COLOR = '#B5483C';
 
 // ── Shimmer 骨架屏动画 ──
 function InsightSkeleton() {
@@ -89,7 +89,7 @@ function InsightSkeleton() {
       {/* 时间轴骨架 */}
       <div className="py-2">
         <div className="relative" style={{ height: 40 }}>
-          <div className="absolute inset-x-0 top-1/2 -translate-y-1/2 h-[6px] rounded-full bg-[#F0F0EE]" />
+          <div className="absolute inset-x-0 top-1/2 -translate-y-1/2 h-[6px] rounded-full bg-[#F0EBDF]" />
           {[18, 38, 62, 80].map((left) => (
             <div
               key={left}
@@ -98,28 +98,28 @@ function InsightSkeleton() {
                 left: `${left}%`,
                 width: '8%',
                 height: 8,
-                backgroundColor: '#E9E9E7',
+                backgroundColor: '#E8E2D5',
                 opacity: 0.6,
               }}
             />
           ))}
         </div>
         <div className="flex items-center justify-between mt-1">
-          <div className="h-3 w-8 rounded bg-[#F0F0EE]" />
-          <div className="h-3 w-8 rounded bg-[#F0F0EE]" />
+          <div className="h-3 w-8 rounded bg-[#F0EBDF]" />
+          <div className="h-3 w-8 rounded bg-[#F0EBDF]" />
         </div>
       </div>
       {/* 章节行骨架 */}
       <div className="pt-1 space-y-0.5">
         {[0, 1, 2, 3, 4].map((i) => (
           <div key={i} className="flex items-center gap-3 px-1 py-2">
-            <div className="w-2.5 h-2.5 rounded-full bg-[#E9E9E7]" />
-            <div className="flex-1 h-3.5 rounded bg-[#F0F0EE]" style={{ width: `${60 + i * 6}%` }} />
-            <div className="h-3 w-10 rounded bg-[#F7F7F5]" />
+            <div className="w-2.5 h-2.5 rounded-full bg-[#E8E2D5]" />
+            <div className="flex-1 h-3.5 rounded bg-[#F0EBDF]" style={{ width: `${60 + i * 6}%` }} />
+            <div className="h-3 w-10 rounded bg-[#FAF7F2]" />
           </div>
         ))}
       </div>
-      <p className="text-center text-[12px] text-[#A3A39E] pt-2">
+      <p className="text-center text-[12px] text-[#8E8B82] pt-2">
         AI 正在分析课堂内容…
       </p>
     </div>
@@ -149,16 +149,16 @@ function VideoInsightTimelineComponent({
 
   if (items.length === 0) {
     return (
-      <div className="rounded-2xl border border-dashed border-[#E9E9E7] bg-[#F7F7F5] px-5 py-8 text-center">
-        <div className="mx-auto mb-3 flex h-11 w-11 items-center justify-center rounded-full bg-white border border-[#E9E9E7]">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#A3A39E" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+      <div className="rounded-2xl border border-dashed border-[#E8E2D5] bg-[#FAF7F2] px-5 py-8 text-center">
+        <div className="mx-auto mb-3 flex h-11 w-11 items-center justify-center rounded-full bg-white border border-[#E8E2D5]">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#8E8B82" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
             <rect x="2" y="3" width="20" height="14" rx="2" />
             <path d="M8 21h8" />
             <path d="M12 17v4" />
             <path d="m10 9 3 2-3 2" />
           </svg>
         </div>
-        <p className="text-[13px] text-[#787774] leading-relaxed">开启随堂检验后<br/>精选片段和检查点会自动出现在这里</p>
+        <p className="text-[13px] text-[#5C5A55] leading-relaxed">开启随堂检验后<br/>精选片段和检查点会自动出现在这里</p>
       </div>
     );
   }
@@ -174,11 +174,11 @@ function VideoInsightTimelineComponent({
         {/* 时间轴 track */}
         <div className="relative" style={{ height: 44 }}>
           {/* 底部背景轨道 */}
-          <div className="absolute inset-x-0 top-1/2 -translate-y-1/2 h-[6px] rounded-full bg-[#F0F0EE]" />
+          <div className="absolute inset-x-0 top-1/2 -translate-y-1/2 h-[6px] rounded-full bg-[#F0EBDF]" />
 
           {/* 已播放进度 */}
           <div
-            className="absolute top-1/2 -translate-y-1/2 h-[6px] rounded-full bg-[#E9E9E7] transition-[width] duration-300"
+            className="absolute top-1/2 -translate-y-1/2 h-[6px] rounded-full bg-[#E8E2D5] transition-[width] duration-300"
             style={{ left: 0, width: `${progressPct}%` }}
           />
 
@@ -269,7 +269,7 @@ function VideoInsightTimelineComponent({
 
           {/* 播放进度指针 */}
           <div
-            className="absolute top-1/2 h-4 w-1 rounded-full bg-[#232322] transition-[left] duration-300"
+            className="absolute top-1/2 h-4 w-1 rounded-full bg-[#1C1B19] transition-[left] duration-300"
             style={{
               left: `${progressPct}%`,
               transform: 'translate(-50%, -50%)',
@@ -279,7 +279,7 @@ function VideoInsightTimelineComponent({
         </div>
 
         {/* 时间刻度 */}
-        <div className="flex items-center justify-between mt-2 text-[11px] text-[#A3A39E] tabular-nums select-none">
+        <div className="flex items-center justify-between mt-2 text-[11px] text-[#8E8B82] tabular-nums select-none">
           <span>00:00</span>
           <span>{formatTime(dur)}</span>
         </div>
@@ -300,7 +300,7 @@ function VideoInsightTimelineComponent({
                 type="button"
                 onClick={() => { onSelectItem(item.id); onSeek(startMs); }}
                 className={`group w-full flex items-center gap-3 px-2 py-2.5 text-left transition-colors rounded-lg ${
-                  isActive ? 'bg-[#F7F7F5]' : 'hover:bg-[#F7F7F5]/60'
+                  isActive ? 'bg-[#FAF7F2]' : 'hover:bg-[#FAF7F2]/60'
                 }`}
               >
                 <span
@@ -308,11 +308,11 @@ function VideoInsightTimelineComponent({
                   style={{ backgroundColor: item.color, opacity: isActive ? 1 : 0.5 }}
                 />
                 <span className={`flex-1 min-w-0 text-[13px] leading-snug truncate ${
-                  isActive ? 'text-[#232322] font-medium' : 'text-[#787774]'
+                  isActive ? 'text-[#1C1B19] font-medium' : 'text-[#5C5A55]'
                 }`}>
                   {item.prompt}
                 </span>
-                <span className="shrink-0 text-[12px] tabular-nums text-[#A3A39E]">
+                <span className="shrink-0 text-[12px] tabular-nums text-[#8E8B82]">
                   {hasRange ? `${formatTime(startMs)}` : formatTime(startMs)}
                 </span>
               </button>
@@ -323,10 +323,10 @@ function VideoInsightTimelineComponent({
 
       {/* 测验检查点 */}
       {checkpoints.length > 0 && (
-        <div className={`${highlights.filter(h => !h.id.startsWith('seed-')).length > 0 ? 'border-t border-[#E9E9E7] mt-2 pt-2' : 'pt-2'}`}>
+        <div className={`${highlights.filter(h => !h.id.startsWith('seed-')).length > 0 ? 'border-t border-[#E8E2D5] mt-2 pt-2' : 'pt-2'}`}>
           <div className="flex items-center gap-1.5 px-2 py-2">
             <CheckpointFlag color={CHECKPOINT_COLOR} size={12} />
-            <span className="text-[11px] font-medium text-[#A3A39E] uppercase tracking-wide">检查点</span>
+            <span className="text-[11px] font-medium text-[#8E8B82] uppercase tracking-wide">检查点</span>
           </div>
           {checkpoints.map((cp) => {
             const isActive = cp.id === activeItem?.id;
@@ -348,18 +348,18 @@ function VideoInsightTimelineComponent({
                   }
                 }}
                 className={`group w-full flex items-center gap-3 px-2 py-2.5 text-left transition-colors rounded-lg ${
-                  isActive ? 'bg-[#F7F7F5]' : 'hover:bg-[#F7F7F5]/60'
+                  isActive ? 'bg-[#FAF7F2]' : 'hover:bg-[#FAF7F2]/60'
                 }`}
               >
                 <CheckpointFlag color={CHECKPOINT_COLOR} size={13} completed={isCompleted} />
                 <span className={`flex-1 min-w-0 text-[13px] leading-snug truncate ${
-                  isActive ? 'text-[#232322] font-medium' : 'text-[#787774]'
+                  isActive ? 'text-[#1C1B19] font-medium' : 'text-[#5C5A55]'
                 }`}>
                   {cp.prompt}
                 </span>
                 <div className="shrink-0 flex items-center gap-2">
                   {canTrigger && (
-                    <span className="text-[11px] text-amber-600 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <span className="text-[11px] text-vermilion opacity-0 group-hover:opacity-100 transition-opacity">
                       检验 →
                     </span>
                   )}
@@ -373,7 +373,7 @@ function VideoInsightTimelineComponent({
 
       {/* 加载中提示 */}
       {isPlanLoading && !hasRealItems && (
-        <p className="text-center text-[12px] text-[#A3A39E] py-3">
+        <p className="text-center text-[12px] text-[#8E8B82] py-3">
           AI 正在分析课堂内容…
         </p>
       )}

@@ -47,12 +47,12 @@ const SECTION_ACCENTS: Record<
   CheatsheetSectionKey,
   { borderColor: string; dot: string; label: string; strongTint: string }
 > = {
-  definition: { borderColor: '#232322', dot: '#232322', label: 'text-[#232322]', strongTint: '#F5F4EF' },
-  formula:    { borderColor: '#B78900', dot: '#B78900', label: 'text-[#8B6914]', strongTint: '#FFF8E5' },
-  process:    { borderColor: '#2F5D8A', dot: '#2F5D8A', label: 'text-[#2F5D8A]', strongTint: '#EEF4FA' },
-  contrast:   { borderColor: '#5C8A4F', dot: '#5C8A4F', label: 'text-[#5C8A4F]', strongTint: '#F1F6EE' },
-  pitfall:    { borderColor: '#D96B6B', dot: '#D96B6B', label: 'text-[#D96B6B]', strongTint: '#FCEFEF' },
-  exemplar:   { borderColor: '#8A6CB4', dot: '#8A6CB4', label: 'text-[#6C509C]', strongTint: '#F4F0F9' },
+  definition: { borderColor: '#1C1B19', dot: '#1C1B19', label: 'text-[#1C1B19]', strongTint: '#F2EDE3' },
+  formula:    { borderColor: '#B8842B', dot: '#B8842B', label: 'text-[#2D4F3E]', strongTint: '#FBF2EF' },
+  process:    { borderColor: '#2D4F3E', dot: '#2D4F3E', label: 'text-[#2D4F3E]', strongTint: '#F2F6F3' },
+  contrast:   { borderColor: '#2D4F3E', dot: '#2D4F3E', label: 'text-[#2D4F3E]', strongTint: '#F2F6F3' },
+  pitfall:    { borderColor: '#B5483C', dot: '#B5483C', label: 'text-[#B5483C]', strongTint: '#FCEFEF' },
+  exemplar:   { borderColor: '#2D4F3E', dot: '#2D4F3E', label: 'text-[#2D4F3E]', strongTint: '#F2F6F3' },
 };
 
 /**
@@ -192,7 +192,7 @@ function ItemRow({
               <button
                 type="button"
                 onClick={() => onSeek(item.citation!.startMs)}
-                className="print:hidden ml-auto inline-flex h-[22px] items-center rounded-full px-2 font-mono tabular-nums text-ink-muted ring-[0.5px] ring-[#232322]/[0.12] transition hover:bg-[#232322]/[0.04] hover:text-ink hover:ring-[#232322]/[0.28] active:scale-95"
+                className="print:hidden ml-auto inline-flex h-[22px] items-center rounded-full px-2 font-mono tabular-nums text-ink-muted ring-[0.5px] ring-[#1C1B19]/[0.12] transition hover:bg-[#1C1B19]/[0.04] hover:text-ink hover:ring-[#1C1B19]/[0.28] active:scale-95"
                 style={{ fontSize: 'var(--cs-ts, 10.5px)' }}
                 title={`跳到课堂 ${formatMs(item.citation.startMs)} 处`}
                 aria-label={`跳回课堂 ${formatMs(item.citation.startMs)}`}
@@ -211,7 +211,7 @@ function ItemRow({
             <button
               type="button"
               onClick={onHide}
-              className="print:hidden absolute right-1 top-1 inline-flex h-5 w-5 items-center justify-center rounded-full bg-white/80 text-ink-muted opacity-0 ring-[0.5px] ring-[#232322]/[0.18] transition group-hover:opacity-100 hover:bg-white hover:text-[#D96B6B] hover:ring-[#D96B6B]/40 active:scale-90"
+              className="print:hidden absolute right-1 top-1 inline-flex h-5 w-5 items-center justify-center rounded-full bg-white/80 text-ink-muted opacity-0 ring-[0.5px] ring-[#1C1B19]/[0.18] transition group-hover:opacity-100 hover:bg-white hover:text-[#B5483C] hover:ring-[#B5483C]/40 active:scale-90"
               title="不带这条进考场（屏幕态隐藏 / 打印不出）"
               aria-label="删除此条"
             >
@@ -229,7 +229,7 @@ function ItemRow({
           </p>
           {item.latex ? (
             <div
-              className="mt-1.5 rounded-md bg-[#FAFAF7] px-2.5 py-1.5 text-center"
+              className="mt-1.5 rounded-md bg-paper-warm px-2.5 py-1.5 text-center"
               style={{
                 borderLeft: `2px solid ${accent.borderColor}`,
                 borderRight: `2px solid ${accent.borderColor}`,
@@ -300,7 +300,7 @@ function SectionCard({
         <button
           type="button"
           onClick={onToggleCollapse}
-          className="print:hidden inline-flex h-5 w-5 items-center justify-center rounded text-ink-muted transition hover:bg-[#232322]/[0.06] hover:text-ink"
+          className="print:hidden inline-flex h-5 w-5 items-center justify-center rounded text-ink-muted transition hover:bg-[#1C1B19]/[0.06] hover:text-ink"
           title={collapsed ? '展开' : '折叠（不带进考场）'}
           aria-label={collapsed ? '展开' : '折叠'}
           aria-expanded={!collapsed}
@@ -475,9 +475,9 @@ export function CheatsheetWindow({ result, onSeek }: CheatsheetWindowProps) {
   const hasEdits = hiddenItemIds.size > 0 || collapsedSections.size > 0;
 
   return (
-    <div className="flex h-full flex-col bg-[#F7F7F5]" style={cssVars as React.CSSProperties}>
+    <div className="flex h-full flex-col bg-[#FAF7F2]" style={cssVars as React.CSSProperties}>
       {/* 顶部信息条：标题 + 密度估算 + 编辑工具 + 主操作 */}
-      <div className="flex-shrink-0 flex flex-col gap-2.5 border-b border-[#E9E9E7] bg-canvas px-8 py-3.5 print:hidden">
+      <div className="flex-shrink-0 flex flex-col gap-2.5 border-b border-[#E8E2D5] bg-canvas px-8 py-3.5 print:hidden">
         <div className="flex items-start gap-4">
           <div className="min-w-0 flex-1">
             <h2 className="truncate text-[17px] font-semibold tracking-[-0.015em] text-ink">
@@ -492,12 +492,12 @@ export function CheatsheetWindow({ result, onSeek }: CheatsheetWindowProps) {
                 {stats.strongCount > 0 ? (
                   <>
                     <span aria-hidden className="text-ink-muted/40">·</span>
-                    <span className="inline-flex items-center text-[#B78900]">★ {stats.strongCount}</span>
+                    <span className="inline-flex items-center text-[#B8842B]">★ {stats.strongCount}</span>
                   </>
                 ) : null}
                 <span aria-hidden className="text-ink-muted/40">·</span>
                 <span
-                  className={isOverflow ? 'font-medium text-[#C0392B]' : 'text-ink-muted'}
+                  className={isOverflow ? 'font-medium text-vermilion' : 'text-ink-muted'}
                   title="按字号 / 布局粗略估算，实际打印 ±10% 误差"
                 >
                   约占一页 {stats.density}%
@@ -512,7 +512,7 @@ export function CheatsheetWindow({ result, onSeek }: CheatsheetWindowProps) {
               </div>
             ) : null}
             {isOverflow ? (
-              <p className="mt-1 text-[11px] leading-relaxed text-[#C0392B]/85">
+              <p className="mt-1 text-[11px] leading-relaxed text-vermilion/85">
                 超出一页：考虑调字号到「紧凑」、删几条、或者保持横向 A4。
               </p>
             ) : null}
@@ -521,7 +521,7 @@ export function CheatsheetWindow({ result, onSeek }: CheatsheetWindowProps) {
             <button
               type="button"
               onClick={handleCopyMarkdown}
-              className="inline-flex h-[28px] items-center gap-1.5 rounded-full bg-white px-3 text-[12px] font-medium text-ink ring-[0.5px] ring-[#232322]/[0.18] transition hover:ring-[#232322]/[0.4] active:scale-95"
+              className="inline-flex h-[28px] items-center gap-1.5 rounded-full bg-white px-3 text-[12px] font-medium text-ink ring-[0.5px] ring-[#1C1B19]/[0.18] transition hover:ring-[#1C1B19]/[0.4] active:scale-95"
               title="复制为 Markdown，便于粘贴到笔记或发给同学"
             >
               {copyState === 'done' ? <Check size={12} strokeWidth={2} /> : <Copy size={12} strokeWidth={1.8} />}
@@ -544,7 +544,7 @@ export function CheatsheetWindow({ result, onSeek }: CheatsheetWindowProps) {
           {/* 布局切换 */}
           <div className="inline-flex items-center gap-1">
             <span className="text-ink-muted/70">页面</span>
-            <div className="inline-flex rounded-full bg-[#F0EFEB] p-[2px]">
+            <div className="inline-flex rounded-full bg-paper-warm p-[2px]">
               {(['landscape', 'portrait'] as const).map((opt) => (
                 <button
                   key={opt}
@@ -565,7 +565,7 @@ export function CheatsheetWindow({ result, onSeek }: CheatsheetWindowProps) {
           {/* 字号档位 */}
           <div className="inline-flex items-center gap-1">
             <span className="text-ink-muted/70">字号</span>
-            <div className="inline-flex rounded-full bg-[#F0EFEB] p-[2px]">
+            <div className="inline-flex rounded-full bg-paper-warm p-[2px]">
               {(['compact', 'standard', 'comfortable'] as const).map((opt) => (
                 <button
                   key={opt}
@@ -594,7 +594,7 @@ export function CheatsheetWindow({ result, onSeek }: CheatsheetWindowProps) {
             <button
               type="button"
               onClick={handleResetEdits}
-              className="ml-auto inline-flex items-center gap-1 rounded-full px-2.5 py-[3px] text-[11px] text-ink-muted ring-[0.5px] ring-[#232322]/[0.14] transition hover:bg-white hover:text-ink hover:ring-[#232322]/[0.3] active:scale-95"
+              className="ml-auto inline-flex items-center gap-1 rounded-full px-2.5 py-[3px] text-[11px] text-ink-muted ring-[0.5px] ring-[#1C1B19]/[0.14] transition hover:bg-white hover:text-ink hover:ring-[#1C1B19]/[0.3] active:scale-95"
               title="恢复全部（撤销所有删除和折叠）"
             >
               <RotateCcw size={11} strokeWidth={1.8} />

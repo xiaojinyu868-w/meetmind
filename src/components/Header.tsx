@@ -56,7 +56,7 @@ export function Header({ lessonTitle, courseName, viewMode = 'record', onViewMod
         </Link>
 
         {/* 分隔线 */}
-        <div className="w-px h-5 bg-gray-200 flex-shrink-0" />
+        <div className="w-px h-5 bg-divider flex-shrink-0" />
 
         {/* 模式切换器：传入 onViewModeChange 时渲染 */}
         {onViewModeChange ? (
@@ -91,9 +91,9 @@ export function Header({ lessonTitle, courseName, viewMode = 'record', onViewMod
             )}
             <div className="flex items-center gap-1.5 min-w-0">
               {viewMode === 'record' ? (
-                <Mic size={ICON_SM} strokeWidth={ICON_STROKE} className="text-[#787774] flex-shrink-0" />
+                <Mic size={ICON_SM} strokeWidth={ICON_STROKE} className="text-[#5C5A55] flex-shrink-0" />
               ) : (
-                <BookOpen size={ICON_SM} strokeWidth={ICON_STROKE} className="text-[#787774] flex-shrink-0" />
+                <BookOpen size={ICON_SM} strokeWidth={ICON_STROKE} className="text-[#5C5A55] flex-shrink-0" />
               )}
               <h1 className="text-sm font-medium text-navy truncate min-w-0">{lessonTitle}</h1>
             </div>
@@ -125,41 +125,41 @@ export function Header({ lessonTitle, courseName, viewMode = 'record', onViewMod
               </button>
               
               {showUserMenu && (
-                <div className="absolute right-0 top-full mt-2 w-48 bg-white rounded-xl border border-gray-100 py-2 animate-scale-in z-50">
-                  <div className="px-4 py-2 border-b border-gray-100">
+                <div className="absolute right-0 top-full mt-2 w-48 bg-white rounded-xl border border-divider-light py-2 animate-scale-in z-50">
+                  <div className="px-4 py-2 border-b border-divider-light">
                     <p className="text-sm font-medium text-navy">{user.nickname}</p>
-                    <p className="text-xs text-gray-500">{roleLabels[user.role] || user.role}账号</p>
+                    <p className="text-xs text-ink-muted">{roleLabels[user.role] || user.role}账号</p>
                   </div>
                   <Link
                     href="/profile"
                     onClick={() => setShowUserMenu(false)}
-                    className="flex items-center gap-2.5 w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-lilac-50 transition-colors"
+                    className="flex items-center gap-2.5 w-full px-4 py-2 text-left text-sm text-ink-secondary hover:bg-lilac-50 transition-colors"
                   >
-                    <UserCircle size={ICON_SM} strokeWidth={ICON_STROKE} className="text-gray-400" />
+                    <UserCircle size={ICON_SM} strokeWidth={ICON_STROKE} className="text-ink-muted" />
                     个人资料
                   </Link>
                   <Link
                     href="/settings"
                     onClick={() => setShowUserMenu(false)}
-                    className="flex items-center gap-2.5 w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-lilac-50 transition-colors"
+                    className="flex items-center gap-2.5 w-full px-4 py-2 text-left text-sm text-ink-secondary hover:bg-lilac-50 transition-colors"
                   >
-                    <Settings size={ICON_SM} strokeWidth={ICON_STROKE} className="text-gray-400" />
+                    <Settings size={ICON_SM} strokeWidth={ICON_STROKE} className="text-ink-muted" />
                     设置
                   </Link>
                   <Link
                     href="/help"
                     onClick={() => setShowUserMenu(false)}
-                    className="flex items-center gap-2.5 w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-lilac-50 transition-colors"
+                    className="flex items-center gap-2.5 w-full px-4 py-2 text-left text-sm text-ink-secondary hover:bg-lilac-50 transition-colors"
                   >
-                    <HelpCircle size={ICON_SM} strokeWidth={ICON_STROKE} className="text-gray-400" />
+                    <HelpCircle size={ICON_SM} strokeWidth={ICON_STROKE} className="text-ink-muted" />
                     帮助
                   </Link>
                   <Link
                     href="/feedback"
                     onClick={() => setShowUserMenu(false)}
-                    className="flex items-center gap-2.5 w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-lilac-50 transition-colors"
+                    className="flex items-center gap-2.5 w-full px-4 py-2 text-left text-sm text-ink-secondary hover:bg-lilac-50 transition-colors"
                   >
-                    <MessageSquare size={ICON_SM} strokeWidth={ICON_STROKE} className="text-gray-400" />
+                    <MessageSquare size={ICON_SM} strokeWidth={ICON_STROKE} className="text-ink-muted" />
                     意见反馈
                   </Link>
                   <button

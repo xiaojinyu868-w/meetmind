@@ -195,7 +195,7 @@ export default function SettingsPage() {
 
   if (isCheckingAuth || loading) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-[#F7F7F5]">
+      <div className="flex min-h-screen items-center justify-center bg-[#FAF7F2]">
         <div className="loading-dots">
           <span></span>
           <span></span>
@@ -211,19 +211,19 @@ export default function SettingsPage() {
     : (modelOptions.find((model) => model.id === settings.modelPreference)?.name || '自动选择');
 
   return (
-    <div className="min-h-screen bg-[#F7F7F5]">
-      <header className="sticky top-0 z-10 border-b border-[#E9E9E7] bg-[#F7F7F5]/95 backdrop-blur">
+    <div className="min-h-screen bg-[#FAF7F2]">
+      <header className="sticky top-0 z-10 border-b border-[#E8E2D5] bg-[#FAF7F2]/95 backdrop-blur">
         <div className="mx-auto flex h-14 w-full max-w-md items-center px-4">
           <Link
             href="/"
-            className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-[#E9E9E7] bg-white text-[#232322]"
+            className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-[#E8E2D5] bg-white text-[#1C1B19]"
             aria-label="返回"
           >
             <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
             </svg>
           </Link>
-          <div className="flex-1 text-center text-[17px] font-semibold text-[#232322]">设置</div>
+          <div className="flex-1 text-center text-[17px] font-semibold text-[#1C1B19]">设置</div>
           <div className="w-9" />
         </div>
       </header>
@@ -233,8 +233,8 @@ export default function SettingsPage() {
           <div
             className={`rounded-full border px-4 py-2 text-xs ${
               saveMessage.type === 'success'
-                ? 'border-[#E9E9E7] bg-white text-[#232322]'
-                : 'border-[#F0D7D1] bg-white text-[#B4513D]'
+                ? 'border-[#E8E2D5] bg-white text-[#1C1B19]'
+                : 'border-[#F0D7D1] bg-white text-[#B5483C]'
             }`}
           >
             {saveMessage.text}
@@ -249,17 +249,17 @@ export default function SettingsPage() {
             {isAuthenticated && user ? (
               <>
                 <div className="flex items-center gap-3 px-4 py-4">
-                  <Avatar className="h-14 w-14 border border-[#E9E9E7] bg-[#F7F7F5]">
+                  <Avatar className="h-14 w-14 border border-[#E8E2D5] bg-[#FAF7F2]">
                     {user.avatar ? <AvatarImage src={user.avatar} alt={user.nickname} className="object-cover" /> : null}
-                    <AvatarFallback className="bg-[#F7F7F5] text-[#232322]">
+                    <AvatarFallback className="bg-[#FAF7F2] text-[#1C1B19]">
                       {(user.nickname || user.username || 'U').slice(0, 1).toUpperCase()}
                     </AvatarFallback>
                   </Avatar>
                   <div className="min-w-0 flex-1">
-                    <div className="truncate text-[17px] font-medium text-[#232322]">
+                    <div className="truncate text-[17px] font-medium text-[#1C1B19]">
                       {user.nickname || user.username}
                     </div>
-                    <div className="mt-1 truncate text-[13px] text-[#787774]">
+                    <div className="mt-1 truncate text-[13px] text-[#5C5A55]">
                       {roleLabels[user.role] || user.role}
                       {user.email ? ` · ${user.email}` : user.phone ? ` · ${user.phone}` : ''}
                     </div>
@@ -295,7 +295,7 @@ export default function SettingsPage() {
                   <button
                     onClick={handleProfileSave}
                     disabled={savingProfile}
-                    className="inline-flex h-11 w-full items-center justify-center rounded-[14px] bg-[#232322] text-[15px] font-medium text-white transition-opacity disabled:opacity-50"
+                    className="inline-flex h-11 w-full items-center justify-center rounded-[14px] bg-[#1C1B19] text-[15px] font-medium text-white transition-opacity disabled:opacity-50"
                   >
                     {savingProfile ? '保存中...' : '保存资料'}
                   </button>
@@ -359,7 +359,7 @@ export default function SettingsPage() {
                 </>
               ) : (
                 <>
-                  <div className="px-4 py-4 text-[14px] text-[#787774]">
+                  <div className="px-4 py-4 text-[14px] text-[#5C5A55]">
                     完善学习档案，让同学更懂你
                   </div>
                   <GroupDivider />
@@ -402,7 +402,7 @@ export default function SettingsPage() {
               disabled={savingSetting}
               onChange={(checked) => updateSetting('classCheckEnabled', checked)}
             />
-            <div className="px-4 pb-3 text-[12px] text-[#A3A39E]">
+            <div className="px-4 pb-3 text-[12px] text-[#8E8B82]">
               开启后，播放视频或音频时 AI 会在合适的节点自动暂停并出题，检验是否真正听懂
             </div>
           </SettingGroup>
@@ -432,7 +432,7 @@ export default function SettingsPage() {
           <SectionCaption>导入</SectionCaption>
           <SettingGroup>
             <div className="px-4 pb-4 pt-3">
-              <div className="px-1 pb-3 text-[15px] text-[#232322]">B站 Cookie</div>
+              <div className="px-1 pb-3 text-[15px] text-[#1C1B19]">B站 Cookie</div>
               <textarea
                 value={settings.bilibiliCookie}
                 onChange={(event) => setSettings((prev) => ({ ...prev, bilibiliCookie: event.target.value }))}
@@ -440,9 +440,9 @@ export default function SettingsPage() {
                 placeholder="粘贴 SESSDATA、bili_jct、DedeUserID"
                 rows={4}
                 disabled={savingSetting}
-                className="w-full resize-none rounded-[16px] border border-[#E9E9E7] bg-[#F7F7F5] px-4 py-4 text-[14px] leading-6 text-[#232322] outline-none placeholder:text-[#A3A39E]"
+                className="w-full resize-none rounded-[16px] border border-[#E8E2D5] bg-[#FAF7F2] px-4 py-4 text-[14px] leading-6 text-[#1C1B19] outline-none placeholder:text-[#8E8B82]"
               />
-              <div className="px-1 pt-3 text-[12px] text-[#A3A39E]">仅保存在当前浏览器</div>
+              <div className="px-1 pt-3 text-[12px] text-[#8E8B82]">仅保存在当前浏览器</div>
             </div>
 
             {settings.bilibiliCookie ? (
@@ -458,8 +458,8 @@ export default function SettingsPage() {
 
             <GroupDivider />
             <details className="px-4 py-4">
-              <summary className="cursor-pointer text-[15px] text-[#232322]">如何获取导入凭证</summary>
-              <ol className="mt-3 list-decimal space-y-1.5 pl-4 text-[13px] leading-6 text-[#787774]">
+              <summary className="cursor-pointer text-[15px] text-[#1C1B19]">如何获取导入凭证</summary>
+              <ol className="mt-3 list-decimal space-y-1.5 pl-4 text-[13px] leading-6 text-[#5C5A55]">
                 <li>登录 bilibili.com</li>
                 <li>按 F12 打开开发者工具</li>
                 <li>切到「应用 / Application」</li>
@@ -486,7 +486,7 @@ export default function SettingsPage() {
 }
 
 function SectionCaption({ children }: { children: React.ReactNode }) {
-  return <div className="px-2 pb-2 text-[12px] font-medium text-[#A3A39E]">{children}</div>;
+  return <div className="px-2 pb-2 text-[12px] font-medium text-[#8E8B82]">{children}</div>;
 }
 
 function SettingGroup({
@@ -497,14 +497,14 @@ function SettingGroup({
   id?: string;
 }) {
   return (
-    <section id={id} className="overflow-hidden rounded-[20px] border border-[#E9E9E7] bg-white">
+    <section id={id} className="overflow-hidden rounded-[20px] border border-[#E8E2D5] bg-white">
       {children}
     </section>
   );
 }
 
 function GroupDivider() {
-  return <div className="h-px bg-[#E9E9E7]" />;
+  return <div className="h-px bg-[#E8E2D5]" />;
 }
 
 function InputSettingRow({
@@ -522,13 +522,13 @@ function InputSettingRow({
 }) {
   return (
     <label className="flex min-h-[56px] items-center gap-4 px-4">
-      <span className="w-16 flex-shrink-0 text-[15px] text-[#232322]">{label}</span>
+      <span className="w-16 flex-shrink-0 text-[15px] text-[#1C1B19]">{label}</span>
       <input
         type={type}
         value={value}
         onChange={(event) => onChange(event.target.value)}
         placeholder={placeholder}
-        className="h-12 min-w-0 flex-1 appearance-none bg-transparent px-0 text-right text-[15px] text-[#232322] outline-none placeholder:text-[#A3A39E]"
+        className="h-12 min-w-0 flex-1 appearance-none bg-transparent px-0 text-right text-[15px] text-[#1C1B19] outline-none placeholder:text-[#8E8B82]"
       />
     </label>
   );
@@ -547,12 +547,12 @@ function ToggleRow({
 }) {
   return (
     <div className="flex min-h-[56px] items-center gap-4 px-4">
-      <div className="min-w-0 flex-1 text-[15px] text-[#232322]">{label}</div>
+      <div className="min-w-0 flex-1 text-[15px] text-[#1C1B19]">{label}</div>
       <button
         onClick={() => onChange(!checked)}
         disabled={disabled}
         className={`relative inline-flex h-8 w-14 flex-shrink-0 rounded-full transition-colors ${
-          checked ? 'bg-[#34C759]' : 'bg-[#D8D8D4]'
+          checked ? 'bg-[#2D6A4F]' : 'bg-[#E8E2D5]'
         } ${disabled ? 'cursor-not-allowed opacity-50' : ''}`}
       >
         <span
@@ -582,13 +582,13 @@ function SelectRow({
 }) {
   return (
     <label className="relative flex min-h-[56px] items-center gap-4 px-4">
-      <span className="w-20 flex-shrink-0 text-[15px] text-[#232322]">{label}</span>
+      <span className="w-20 flex-shrink-0 text-[15px] text-[#1C1B19]">{label}</span>
       <div className="min-w-0 flex-1">
         <select
           value={value}
           onChange={(event) => onChange(event.target.value)}
           disabled={disabled}
-          className="h-12 w-full appearance-none bg-transparent pr-6 text-right text-[15px] text-[#232322] outline-none disabled:opacity-60"
+          className="h-12 w-full appearance-none bg-transparent pr-6 text-right text-[15px] text-[#1C1B19] outline-none disabled:opacity-60"
         >
           {options.map((option) => (
             <option key={option.value} value={option.value}>
@@ -598,7 +598,7 @@ function SelectRow({
         </select>
         <span className="sr-only">{displayValue}</span>
       </div>
-      <span className="pointer-events-none absolute inset-y-0 right-4 flex items-center text-[#A3A39E]">
+      <span className="pointer-events-none absolute inset-y-0 right-4 flex items-center text-[#8E8B82]">
         <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
         </svg>
@@ -617,10 +617,10 @@ function ActionLinkRow({
   return (
     <Link
       href={href}
-      className="flex min-h-[56px] items-center justify-between px-4 text-[15px] text-[#232322] transition-colors hover:bg-[#F7F7F5]"
+      className="flex min-h-[56px] items-center justify-between px-4 text-[15px] text-[#1C1B19] transition-colors hover:bg-[#FAF7F2]"
     >
       <span>{label}</span>
-      <svg className="h-4 w-4 text-[#A3A39E]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <svg className="h-4 w-4 text-[#8E8B82]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
       </svg>
     </Link>
@@ -639,12 +639,12 @@ function ActionButtonRow({
   return (
     <button
       onClick={onClick}
-      className={`flex min-h-[56px] w-full items-center justify-between px-4 text-left text-[15px] transition-colors hover:bg-[#F7F7F5] ${
-        tone === 'danger' ? 'text-[#B4513D]' : 'text-[#232322]'
+      className={`flex min-h-[56px] w-full items-center justify-between px-4 text-left text-[15px] transition-colors hover:bg-[#FAF7F2] ${
+        tone === 'danger' ? 'text-[#B5483C]' : 'text-[#1C1B19]'
       }`}
     >
       <span>{label}</span>
-      <svg className="h-4 w-4 text-[#A3A39E]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <svg className="h-4 w-4 text-[#8E8B82]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
       </svg>
     </button>
@@ -660,8 +660,8 @@ function StaticRow({
 }) {
   return (
     <div className="flex min-h-[56px] items-center justify-between px-4 text-[15px]">
-      <span className="text-[#232322]">{label}</span>
-      <span className="text-[#787774]">{value}</span>
+      <span className="text-[#1C1B19]">{label}</span>
+      <span className="text-[#5C5A55]">{value}</span>
     </div>
   );
 }

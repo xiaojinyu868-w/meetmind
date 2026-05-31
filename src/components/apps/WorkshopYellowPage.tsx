@@ -1,7 +1,6 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import Image from 'next/image';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { toast } from 'sonner';
 import {
@@ -12,6 +11,13 @@ import {
   Play,
   RotateCcw,
   ListTodo,
+  Layers,
+  BookMarked,
+  Sparkles,
+  Network,
+  Image as ImageIcon,
+  Headphones,
+  LineChart,
 } from 'lucide-react';
 import { DEFAULT_WORKSHOP_MODEL_ID } from '@/lib/services/llm-service';
 import type { Anchor, TranscriptSegment } from '@/types';
@@ -31,6 +37,92 @@ import { OctoCrystalDispatcher } from '@/components/share/OctoCrystalDispatcher'
 
 const WORKSHOP_MODEL_PREFERENCE = 'ai_workshop_model';
 const DOCK_STORAGE_PREFIX = 'app_workspace_dock:';
+
+/* ------------------------------------------------------------------ */
+/*  AppHero — 取代静态 cover.svg 的内联视觉身份                          */
+/*                                                                    */
+/*  原因：之前每个 app 一张 SVG（如 flashcards-cover.svg 把两张卡硬叠         */
+/*  在一起）——既无法统一 taste 又会被裁切错位。改为内联 = 大 lucide icon    */
+/*  + 极淡 tint + 一句 outputType。每个 app 各一种 ceremony 调，但保持      */
+/*  低饱和度（与 95% 平涂极简的 taste 一致）。                              */
+/* ------------------------------------------------------------------ */
+
+interface AppHeroVisual {
+  Icon: typeof Layers;
+  /** 极淡的 ceremony tint，hero 区背景；见 design system 第 5 节调色板 */
+  tintBg: string;
+  /** Icon 颜色，比 tint 深 1-2 阶 */
+  iconColor: string;
+}
+
+const HERO_VISUALS: Record<WorkshopAppKey, AppHeroVisual> = {
+  // v7：每个 app 都用极淡 pine fog 或 vermilion fog 为底，icon 用相应深色
+  // 双签名色家族化——告诉用户"这是同一套设计系统的 7 个工具"，而不是 7 张壁纸
+  flashcards: { Icon: Layers, tintBg: '#F2F6F3', iconColor: '#2D4F3E' },          // 闪卡 = 沉淀（pine 主）
+  cheatsheet: { Icon: BookMarked, tintBg: '#FBF2EF', iconColor: '#B5483C' },      // 速查 = 标注此刻（vermilion）
+  quiz: { Icon: Sparkles, tintBg: '#FBF2EF', iconColor: '#B5483C' },              // 测验 = 红笔批改（vermilion）
+  mindmap: { Icon: Network, tintBg: '#F2F6F3', iconColor: '#2D4F3E' },            // 思维 = 知识网（pine）
+  infographic: { Icon: ImageIcon, tintBg: '#F2F6F3', iconColor: '#2D4F3E' },      // 信息图 = pine
+  'audio-overview': { Icon: Headphones, tintBg: '#FBF2EF', iconColor: '#B5483C' },// 播客 = vermilion (此刻聆听)
+  'study-report': { Icon: LineChart, tintBg: '#F2F6F3', iconColor: '#2D4F3E' },   // 报告 = pine（沉淀）
+};
+
+function AppHero({ appKey, outputType }: { appKey: WorkshopAppKey; outputType: string }) {
+  const visual = HERO_VISUALS[appKey];
+  const { Icon } = visual;
+  return (
+    <div
+      className={styles.coverWrap}
+      style={{ background: visual.tintBg, borderColor: 'transparent' }}
+    >
+      <div className={styles.heroInner}>
+        <Icon size={42} strokeWidth={1.4} style={{ color: visual.iconColor }} />
+        <span className={styles.heroOutputType} style={{ color: visual.iconColor }}>
+          {outputType}
+        </span>
+      </div>
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/*  StatusDot — 极简状态指示，替换原来的厚边框 chip                        */
+/*                                                                    */
+/*  与 AppWindowShell.StatusIndicator 同源 taste。                       */
+/* ------------------------------------------------------------------ */
+
+interface StatusDotProps {
+  status: 'idle' | 'running' | 'success' | 'error';
+  label: string;
+}
+
+function StatusDot({ status, label }: StatusDotProps) {
+  // v7 状态色：pine = 沉淀 / 完成；vermilion = 朱批提醒（错误）
+  const config: Record<StatusDotProps['status'], { color: string; pulse: boolean }> = {
+    running: { color: '#2D4F3E', pulse: true },   // pine
+    success: { color: '#2D4F3E', pulse: false },  // pine
+    error: { color: '#B5483C', pulse: false },    // vermilion 朱批提醒
+    idle: { color: '#8E8B82', pulse: false },     // ink-muted
+  };
+  const { color, pulse } = config[status];
+  return (
+    <span className={styles.statusDot}>
+      <span className={styles.statusDotMark} aria-hidden>
+        {pulse ? (
+          <span
+            className={styles.statusDotPulse}
+            style={{ background: color }}
+          />
+        ) : null}
+        <span
+          className={styles.statusDotCore}
+          style={{ background: color }}
+        />
+      </span>
+      <span className={styles.statusDotLabel}>{label}</span>
+    </span>
+  );
+}
 
 interface CatalogResponse {
   apps?: Array<WorkshopAppCatalogItem & { enabled?: boolean }>;
@@ -167,13 +259,6 @@ function readResultPreview(sessionId: string, appKey: string): string {
   } catch {
     return '';
   }
-}
-
-function capabilityHint(app: WorkshopAppCatalogItem): string {
-  if (app.renderMode === 'custom(image-first)') {
-    return `会得到：${app.outputType} · 适合先进去选版式`;
-  }
-  return `会得到：${app.outputType} · 可以先做一版再查看`;
 }
 
 function ElapsedTimer({ startMs }: { startMs: number }) {
@@ -680,22 +765,41 @@ export function WorkshopYellowPage(props: WorkshopYellowPageProps) {
 
           return (
             <article key={app.key} className={cardClassName} data-testid={`workshop-card-${app.key}`}>
-              <div className={styles.coverWrap}>
-                <Image src={app.coverImage} alt={app.name} width={1200} height={630} className={styles.cover} />
-              </div>
+              {/* v3.0 重做：废弃静态 cover.svg，改为内联 hero（icon + tint + outputType）。
+                  原因：静态图（如 flashcards-cover.svg）会硬叠两张卡片导致截断 + 视觉冲突。
+                  新版每个 app 一种克制的 ceremony tint，统一可控。 */}
+              <AppHero appKey={app.key} outputType={app.outputType} />
+
               <div className={styles.rowTop}>
                 <div className={styles.titleGroup}>
                   <p className={styles.category}>{app.category}</p>
                   <p className={styles.appName}>{app.name}</p>
-                  <p className={styles.headline}>{app.headline}</p>
+                  {/* 删除 headline —— 它和 description 内容重叠，导致三层标题冗余 */}
                 </div>
-                <span
-                  className={`${styles.generated} ${
-                    label === '已生成' ? '' : label === '生成中' ? styles.running : styles.notGenerated
-                  }`}
-                >
-                  {isRunning && dockTask ? <ElapsedTimer startMs={dockTask.startedAt} /> : label}
-                </span>
+                {isRunning && dockTask ? (
+                  <span className={styles.statusDot}>
+                    <span className={styles.statusDotMark} aria-hidden>
+                      <span
+                        className={styles.statusDotPulse}
+                        style={{ background: '#2D4F3E' }}
+                      />
+                      <span
+                        className={styles.statusDotCore}
+                        style={{ background: '#2D4F3E' }}
+                      />
+                    </span>
+                    <span className={`${styles.statusDotLabel} tabular-nums`}>
+                      <ElapsedTimer startMs={dockTask.startedAt} />
+                    </span>
+                  </span>
+                ) : (
+                  <StatusDot
+                    status={
+                      isFailed ? 'error' : generated ? 'success' : 'idle'
+                    }
+                    label={isFailed ? '没做好' : generated ? '做好了' : '待开始'}
+                  />
+                )}
               </div>
               <div className={styles.tags}>
                 {app.tags.slice(0, 3).map((tag) => (
@@ -705,7 +809,8 @@ export function WorkshopYellowPage(props: WorkshopYellowPageProps) {
                 ))}
               </div>
               <p className={styles.description}>{app.description}</p>
-              <p className={styles.metaLine}>{capabilityHint(app)}</p>
+              {/* 删除 metaLine（capabilityHint）—— 它说的是"会得到 XXX · 可以先做一版"，
+                  但 outputType 已经在 hero 显示，按钮也已经写"先做一版"，重复 */}
               {preview ? (
                 <div className={styles.previewBlock}>
                   <p className={styles.previewLabel}>最近结果</p>
@@ -715,9 +820,11 @@ export function WorkshopYellowPage(props: WorkshopYellowPageProps) {
                   </p>
                 </div>
               ) : null}
+              {/* 失败提示：原 errorLine 是红字 + "刚才没做好：应用执行失败"，过于刺目。
+                  改为温和的 ink-secondary 一句话，把 reason 收到 title 里（hover 看） */}
               {taskState?.status === 'error' && taskState.error ? (
                 <p className={styles.errorLine} title={taskState.error}>
-                  刚才没做好：{taskState.error}
+                  上次没做完，再试一次试试
                 </p>
               ) : null}
               <div className={styles.actionRow}>
@@ -732,6 +839,8 @@ export function WorkshopYellowPage(props: WorkshopYellowPageProps) {
                     查看进度
                   </button>
                 ) : isFailed ? (
+                  /* 失败：单按钮「再做一版」。删除原本的次级"进去看看"——
+                     失败的产物没什么好看的，给用户一个清晰动作就够了 */
                   <button
                     type="button"
                     className={styles.primaryAction}
@@ -763,7 +872,7 @@ export function WorkshopYellowPage(props: WorkshopYellowPageProps) {
                   </button>
                 )}
 
-                {isRunning || isFailed ? (
+                {isRunning ? (
                   <button
                     type="button"
                     className={styles.secondaryAction}
@@ -773,6 +882,9 @@ export function WorkshopYellowPage(props: WorkshopYellowPageProps) {
                     <ExternalLink size={12} strokeWidth={1.75} className="inline mr-0.5" />
                     进去看看
                   </button>
+                ) : isFailed ? (
+                  /* 失败时不再显示次级按钮——保持单一动作焦点 */
+                  null
                 ) : (
                   <button
                     type="button"

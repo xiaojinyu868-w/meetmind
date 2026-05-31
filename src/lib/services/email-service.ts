@@ -62,7 +62,7 @@ const getEmailTemplates = () => {
             <h1 style="color: #D4A574; margin: 0; font-size: 28px;">${appName}</h1>
             <p style="color: #666; margin: 10px 0 0;">AI 驱动的智能学习助手</p>
           </div>
-          <div style="background: linear-gradient(135deg, #FFF9F5 0%, #FFFBF0 100%); border-radius: 16px; padding: 30px; text-align: center;">
+          <div style="background: linear-gradient(135deg, #FAF7F2 0%, #F2EDE3 100%); border-radius: 16px; padding: 30px; text-align: center;">
             <p style="color: #1E3B4D; font-size: 16px; margin: 0 0 20px;">您正在登录 ${appName}，验证码为：</p>
             <div style="background: white; border-radius: 12px; padding: 20px; display: inline-block; box-shadow: 0 4px 12px rgba(212,165,116,0.15);">
               <span style="font-size: 36px; font-weight: bold; color: #D4A574; letter-spacing: 8px;">${code}</span>
@@ -83,7 +83,7 @@ const getEmailTemplates = () => {
             <h1 style="color: #D4A574; margin: 0; font-size: 28px;">${appName}</h1>
             <p style="color: #666; margin: 10px 0 0;">AI 驱动的智能学习助手</p>
           </div>
-          <div style="background: linear-gradient(135deg, #FFF9F5 0%, #FFFBF0 100%); border-radius: 16px; padding: 30px; text-align: center;">
+          <div style="background: linear-gradient(135deg, #FAF7F2 0%, #F2EDE3 100%); border-radius: 16px; padding: 30px; text-align: center;">
             <p style="color: #1E3B4D; font-size: 16px; margin: 0 0 20px;">欢迎注册 ${appName}，验证码为：</p>
             <div style="background: white; border-radius: 12px; padding: 20px; display: inline-block; box-shadow: 0 4px 12px rgba(212,165,116,0.15);">
               <span style="font-size: 36px; font-weight: bold; color: #D4A574; letter-spacing: 8px;">${code}</span>
@@ -104,7 +104,7 @@ const getEmailTemplates = () => {
             <h1 style="color: #D4A574; margin: 0; font-size: 28px;">${appName}</h1>
             <p style="color: #666; margin: 10px 0 0;">AI 驱动的智能学习助手</p>
           </div>
-          <div style="background: linear-gradient(135deg, #FFF9F5 0%, #FFFBF0 100%); border-radius: 16px; padding: 30px; text-align: center;">
+          <div style="background: linear-gradient(135deg, #FAF7F2 0%, #F2EDE3 100%); border-radius: 16px; padding: 30px; text-align: center;">
             <p style="color: #1E3B4D; font-size: 16px; margin: 0 0 20px;">您正在重置密码，验证码为：</p>
             <div style="background: white; border-radius: 12px; padding: 20px; display: inline-block; box-shadow: 0 4px 12px rgba(212,165,116,0.15);">
               <span style="font-size: 36px; font-weight: bold; color: #D4A574; letter-spacing: 8px;">${code}</span>

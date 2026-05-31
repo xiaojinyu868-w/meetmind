@@ -1,20 +1,35 @@
 'use client';
 
 /**
- * SharedAgentLanding — 公开落地页主体（v3.0）
+ * SharedAgentLanding — 公开落地页主体（v3.0 · v7 视觉升级）
  *
  * 任何人凭 token 可访问。
  * 1. 拉取 GET /api/share/[token]
  * 2. 渲染分享者 + 课程标题 + 转录摘要 + artifact 预览 + 同学（如果允许对话）
  * 3. 提供「领取到我的工作台」（要登录）和「也分享给别人」按钮
+ *
+ * v3.0 P0 闭环：
+ * - 未登录点「领取」→ 跳 /login?next=/share/[token]?autoClaim=1
+ * - 登录后回到本页 → useEffect 检测 ?autoClaim=1 + 已登录 → 自动 claim 不再让用户再点一次
+ * - claim 成功 → 1.2 秒后 router.replace('/app') 引导去自己工作台看完整产物
+ *
+ * v7 视觉升级：
+ * - 大气场 hero（米白 + 极淡墨绿/朱批光晕）—— 这是 MeetMind "唯一允许放飞"的页面
+ * - Octo 永驻主图 · 大尺寸 + 呼吸光环 + hero-float 动画
+ * - 双签名色：墨松绿 = AI / 已就绪；朱批红 = 此刻 / 重点
+ * - Inter 西文 + Instrument Serif 仪式字
+ * - JetBrains Mono 引用资产化（[MM:SS] / [资料 N]）
  */
 
 import * as React from 'react';
 import Link from 'next/link';
+import Image from 'next/image';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { toast } from 'sonner';
 import { useAuth } from '@/lib/hooks/useAuth';
 import { COPY } from '@/lib/ui/copy';
-import { OctoBuddySprite } from '@/components/classroom/OctoBuddy';
+import { OctoAvatar } from '@/components/ui/octo-avatar';
+import { ArtifactRender } from '@/components/share/ArtifactRender';
 import { SharedAgentChat } from './SharedAgentChat';
 import type {
   PublicSharedAgent,
@@ -26,40 +41,44 @@ interface SharedAgentLandingProps {
 }
 
 /**
- * artifact 预览 —— v0 用文字描述 + 关键字段，不重渲染应用 UI。
- * 后续 M11.5 再把 cheatsheet / mindmap 的真实 UI 接进来。
+ * artifact 预览 —— v3.0 修正版：
+ *   v0 只显示 summary 一行字，对方看不到产物本身——这是反裂变设计。
+ *   现在用 ArtifactRender 真把 cheatsheet 6 区 / mindmap 树 / quiz 题面渲染出来，
+ *   让对方第一眼就看到价值，再决定是否对话 / 领取。
  */
-function ArtifactPreview({ artifactKind, artifact }: { artifactKind: ShareArtifactKind; artifact?: unknown }) {
+function ArtifactPreview({
+  artifactKind,
+  artifact,
+}: {
+  artifactKind: ShareArtifactKind;
+  artifact?: unknown;
+}) {
   const title = COPY.share.landing.artifactTitle(artifactKind);
-  // artifact 形态目前是开放的 unknown —— 这里只渲染少量摘要字段
-  let summary: string | null = null;
-  if (artifact && typeof artifact === 'object') {
-    const obj = artifact as { summary?: string; title?: string };
-    summary = obj.summary ?? obj.title ?? null;
-  }
   return (
-    <section className="rounded-3xl border border-divider bg-white px-5 py-5">
-      <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-ink-muted">
-        {title}
-      </p>
-      {summary ? (
-        <p className="mt-2 text-[14px] leading-7 text-ink">{summary}</p>
-      ) : (
-        <p className="mt-2 text-[13px] leading-7 text-ink-secondary">
-          完整产物会在你领取后出现在工作台里。
+    <section className="rounded-2xl border border-divider bg-card shadow-soft overflow-hidden">
+      <div className="px-6 py-4 border-b border-divider/60 bg-paper">
+        <p className="font-mono text-[11px] font-semibold uppercase tracking-caps text-pine">
+          {title}
         </p>
-      )}
+      </div>
+      <div className="px-6 py-6">
+        <ArtifactRender artifactKind={artifactKind} artifact={artifact} />
+      </div>
     </section>
   );
 }
 
 export function SharedAgentLanding({ token }: SharedAgentLandingProps) {
+  const router = useRouter();
+  const searchParams = useSearchParams();
   const { isAuthenticated, accessToken } = useAuth();
   const [share, setShare] = React.useState<PublicSharedAgent | null>(null);
   const [loading, setLoading] = React.useState(true);
   const [notFound, setNotFound] = React.useState(false);
   const [claiming, setClaiming] = React.useState(false);
   const [claimed, setClaimed] = React.useState(false);
+  /** P0：从 ?autoClaim=1 触发的自动领取，与手动 claim 分开管理避免双调 */
+  const autoClaimAttemptedRef = React.useRef(false);
 
   // 拉取 share
   React.useEffect(() => {
@@ -98,8 +117,9 @@ export function SharedAgentLanding({ token }: SharedAgentLandingProps) {
 
   const handleClaim = React.useCallback(async () => {
     if (!isAuthenticated || !accessToken) {
-      // 未登录：跳到登录，登录后回到这页
-      const next = encodeURIComponent(`/share/${token}`);
+      // 未登录：跳到登录，登录后回到这页，URL 上带 autoClaim=1
+      // 让落地页 effect 自动触发 claim，省一次手动点击
+      const next = encodeURIComponent(`/share/${token}?autoClaim=1`);
       window.location.href = `/login?next=${next}`;
       return;
     }
@@ -122,14 +142,44 @@ export function SharedAgentLanding({ token }: SharedAgentLandingProps) {
         data.alreadyClaimed
           ? COPY.share.landing.claimAlready
           : COPY.share.landing.claimDone,
+        {
+          description: '正带你去工作台看看…',
+        },
       );
+      // P0 闭环最后一步：领取成功 → 1.2 秒后跳工作台，让 B 从分享态自然进入
+      // 自己的学习现场，看到刚领取的 capture
+      window.setTimeout(() => {
+        router.replace('/app');
+      }, 1200);
     } catch (err) {
       const msg = err instanceof Error ? err.message : '领取失败';
       toast.error(msg);
     } finally {
       setClaiming(false);
     }
-  }, [accessToken, isAuthenticated, token]);
+  }, [accessToken, isAuthenticated, router, token]);
+
+  /**
+   * P0 自动 claim：
+   * 当 URL 上有 ?autoClaim=1 (来自登录回流) 且当前已登录 + share 已加载 + 未在 claiming 中
+   * → 自动触发一次 claim，并清掉 URL 参数避免刷新重复触发
+   */
+  React.useEffect(() => {
+    if (autoClaimAttemptedRef.current) return;
+    if (loading || !share) return;
+    if (!isAuthenticated || !accessToken) return;
+    if (searchParams?.get('autoClaim') !== '1') return;
+
+    autoClaimAttemptedRef.current = true;
+
+    // 清掉 URL 参数（用 history.replaceState 避免触发 next/navigation 重渲染）
+    if (typeof window !== 'undefined') {
+      const url = new URL(window.location.href);
+      url.searchParams.delete('autoClaim');
+      window.history.replaceState({}, '', url.toString());
+    }
+    void handleClaim();
+  }, [accessToken, handleClaim, isAuthenticated, loading, searchParams, share]);
 
   const handleReshare = React.useCallback(async () => {
     const url = window.location.href;
@@ -149,26 +199,43 @@ export function SharedAgentLanding({ token }: SharedAgentLandingProps) {
     }
   }, [share?.title]);
 
+  // ===== Loading 态：v7 仪式感 =====
   if (loading) {
     return (
-      <main className="mx-auto flex min-h-screen max-w-2xl flex-col items-center justify-center gap-3 px-4 py-10 text-center">
-        <OctoBuddySprite mood="thinking" size="md" />
-        <p className="text-[13px] text-ink-muted">{COPY.loading.preparing}</p>
+      <main className="relative mx-auto flex min-h-screen max-w-2xl flex-col items-center justify-center gap-4 px-4 py-10 text-center bg-paper">
+        <div
+          aria-hidden
+          className="pointer-events-none absolute inset-0 z-0"
+          style={{
+            background:
+              'radial-gradient(ellipse 60% 50% at 50% 40%, rgba(45,79,62,0.08), transparent 60%)',
+          }}
+        />
+        <div className="relative z-10 flex flex-col items-center gap-4">
+          <OctoAvatar mood="thinking" size="xl" aura />
+          <p className="font-mono text-xs uppercase tracking-caps text-ink-muted">
+            {COPY.loading.preparing}
+          </p>
+        </div>
       </main>
     );
   }
 
+  // ===== 404 态 =====
   if (notFound || !share) {
     return (
-      <main className="mx-auto flex min-h-screen max-w-2xl flex-col items-center justify-center gap-4 px-4 py-10 text-center">
-        <OctoBuddySprite mood="surprised" size="md" />
-        <h1 className="text-[18px] font-semibold text-ink">
+      <main className="mx-auto flex min-h-screen max-w-2xl flex-col items-center justify-center gap-4 px-4 py-10 text-center bg-paper">
+        <OctoAvatar mood="surprised" size="xl" aura={false} />
+        <h1 className="text-lg font-semibold tracking-h text-ink">
           {COPY.share.landing.notFoundTitle}
         </h1>
-        <p className="text-[13px] leading-7 text-ink-secondary">
+        <p className="text-sm leading-relaxed text-ink-secondary max-w-md">
           {COPY.share.landing.notFoundBody}
         </p>
-        <Link href="/" className="mt-2 text-[12.5px] text-ink-muted underline-offset-4 hover:underline">
+        <Link
+          href="/"
+          className="mt-2 text-xs text-ink-muted underline-offset-4 hover:underline hover:text-pine transition-colors"
+        >
           回 MeetMind 首页
         </Link>
       </main>
@@ -178,96 +245,149 @@ export function SharedAgentLanding({ token }: SharedAgentLandingProps) {
   const sharerNickname = share.sharerNickname?.trim() || '一位同学';
 
   return (
-    <main className="mx-auto flex min-h-screen max-w-2xl flex-col gap-5 px-4 py-8 sm:py-10">
-      {/* 头部：分享者 + 课名 */}
-      <header className="flex items-center gap-4">
-        <OctoBuddySprite mood="happy" size="lg" />
-        <div className="min-w-0 flex-1">
-          <p className="text-[12px] uppercase tracking-[0.18em] text-ink-muted">
-            {share.sharerNickname
-              ? COPY.share.landing.sharedBy(sharerNickname)
-              : COPY.share.landing.sharedByAnon}
-          </p>
-          <h1 className="mt-1 truncate text-[20px] font-semibold tracking-tight text-ink sm:text-[22px]">
-            {share.title}
-          </h1>
-          {share.subject ? (
-            <p className="mt-0.5 text-[12.5px] text-ink-secondary">{share.subject}</p>
-          ) : null}
-        </div>
-      </header>
+    <div className="relative min-h-screen overflow-x-hidden bg-paper">
+      {/* ===== 大气场背景（v7 唯一允许放飞）===== */}
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-0 z-0"
+        style={{
+          background: `
+            radial-gradient(ellipse 60% 50% at 25% 25%, rgba(45,79,62,0.16) 0%, transparent 60%),
+            radial-gradient(ellipse 60% 50% at 75% 70%, rgba(181,72,60,0.10) 0%, transparent 60%)
+          `,
+        }}
+      />
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-0 z-0 opacity-50"
+        style={{
+          backgroundImage:
+            'radial-gradient(circle at 1px 1px, rgba(28,27,25,0.04) 1px, transparent 0)',
+          backgroundSize: '40px 40px',
+        }}
+      />
 
-      {/* 转录摘要（轻量陈列） */}
-      {share.snapshot.transcriptDigest.segments.length > 0 ? (
-        <section className="rounded-3xl border border-divider bg-[#FBFBFA] px-5 py-4">
-          <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-ink-muted">
-            {COPY.share.landing.digestTitle}
-          </p>
-          <ul className="mt-3 flex flex-col gap-2.5 text-[13.5px] leading-[1.85] text-ink">
-            {share.snapshot.transcriptDigest.segments.slice(0, 6).map((seg, i) => (
-              <li key={i} className="flex gap-3">
-                <span className="flex-shrink-0 text-[11px] tabular-nums text-ink-muted">
-                  {Math.floor(seg.startSec / 60)
-                    .toString()
-                    .padStart(2, '0')}
-                  :
-                  {Math.floor(seg.startSec % 60)
-                    .toString()
-                    .padStart(2, '0')}
-                </span>
-                <span className="min-w-0 flex-1">{seg.text}</span>
-              </li>
-            ))}
-          </ul>
-          {share.snapshot.transcriptDigest.segments.length > 6 ? (
-            <p className="mt-2 text-[11.5px] text-ink-muted">
-              另 {share.snapshot.transcriptDigest.segments.length - 6} 段在同学的记忆里。
+      <main className="relative z-10 mx-auto flex min-h-screen max-w-2xl flex-col gap-5 px-4 py-8 sm:py-12">
+
+        {/* ===== Hero：分享者 + 课名 + Octo 主图 ===== */}
+        <header className="flex flex-col items-center gap-5 text-center sm:gap-6 sm:py-4">
+          {/* Octo 主图：大尺寸 + 呼吸光环 + 漂浮动画 */}
+          <div className="relative">
+            <div
+              aria-hidden
+              className="absolute inset-0 -m-8 rounded-full"
+              style={{
+                background:
+                  'radial-gradient(circle, rgba(45,79,62,0.18) 0%, rgba(181,72,60,0.08) 50%, transparent 75%)',
+                animation: 'octo-breath-v7 4s ease-in-out infinite',
+              }}
+            />
+            <Image
+              src="/images/octo-buddy/original.png"
+              alt={`${sharerNickname} 的学习同桌`}
+              width={160}
+              height={160}
+              className="relative z-10 size-32 sm:size-40 object-contain animate-hero-float"
+              style={{ filter: 'drop-shadow(0 16px 40px rgba(45,79,62,0.18))' }}
+              priority
+            />
+          </div>
+
+          {/* eyebrow + 标题 */}
+          <div className="space-y-2 max-w-xl">
+            <p className="inline-flex items-center gap-2 rounded-full bg-pine-mist px-3 py-1 font-mono text-[11px] font-semibold uppercase tracking-caps text-pine">
+              <span className="size-1.5 rounded-full bg-pine animate-rec-pulse" />
+              <span>
+                {share.sharerNickname
+                  ? COPY.share.landing.sharedBy(sharerNickname)
+                  : COPY.share.landing.sharedByAnon}
+              </span>
             </p>
-          ) : null}
-        </section>
-      ) : null}
+            <h1 className="text-2xl font-semibold tracking-display text-ink sm:text-3xl leading-tight">
+              {share.title}
+            </h1>
+            {share.subject ? (
+              <p className="text-sm text-ink-secondary">{share.subject}</p>
+            ) : null}
+          </div>
+        </header>
 
-      {/* 产物预览 */}
-      <ArtifactPreview artifactKind={share.artifactKind} artifact={share.snapshot.artifact} />
+        {/* ===== 转录摘要（轻量陈列）=====
+            不显示时间戳：访客没有原录音可跳，
+            [00:01] 这种数字对她毫无意义，反而看起来像"半成品"。 */}
+        {share.snapshot.transcriptDigest.segments.length > 0 ? (
+          <section className="rounded-2xl border border-divider bg-card/80 backdrop-blur-sm px-5 py-5 shadow-soft">
+            <p className="font-mono text-[11px] font-semibold uppercase tracking-caps text-ink-muted">
+              {COPY.share.landing.digestTitle}
+            </p>
+            <ul className="mt-3 flex flex-col gap-2 text-sm leading-loose text-ink">
+              {share.snapshot.transcriptDigest.segments.slice(0, 6).map((seg, i) => (
+                <li key={i} className="flex items-start gap-2.5">
+                  <span
+                    aria-hidden
+                    className="mt-2.5 inline-block h-1 w-1 flex-shrink-0 rounded-full bg-pine-light"
+                  />
+                  <span className="min-w-0 flex-1">
+                    {seg.speaker?.trim() ? (
+                      <span className="text-ink-secondary font-medium">
+                        {seg.speaker.trim()}：
+                      </span>
+                    ) : null}
+                    {seg.text}
+                  </span>
+                </li>
+              ))}
+            </ul>
+            {share.snapshot.transcriptDigest.segments.length > 6 ? (
+              <p className="mt-3 text-xs text-ink-muted italic">
+                另 {share.snapshot.transcriptDigest.segments.length - 6} 段在同学的记忆里。
+              </p>
+            ) : null}
+          </section>
+        ) : null}
 
-      {/* 对话面板 */}
-      {share.conversationEnabled ? (
-        <SharedAgentChat
-          shareToken={token}
-          courseTitle={share.title}
-          sharerNickname={sharerNickname}
-          authToken={accessToken ?? undefined}
-        />
-      ) : null}
+        {/* ===== 产物预览 ===== */}
+        <ArtifactPreview artifactKind={share.artifactKind} artifact={share.snapshot.artifact} />
 
-      {/* 底部动作栏 */}
-      <footer className="sticky bottom-3 mt-2 flex items-center gap-2 rounded-full border border-divider bg-white px-3 py-2 shadow-sm">
-        <button
-          type="button"
-          onClick={handleClaim}
-          disabled={claiming}
-          className="flex-1 rounded-full bg-[#232322] px-4 py-2.5 text-[13px] font-medium text-white transition hover:bg-[#111] disabled:opacity-50"
-        >
-          {claimed
-            ? COPY.share.landing.claimDone
-            : claiming
-              ? COPY.share.landing.claiming
-              : isAuthenticated
-                ? COPY.share.landing.claimAction
-                : COPY.share.landing.claimGo}
-        </button>
-        <button
-          type="button"
-          onClick={handleReshare}
-          className="rounded-full border border-divider bg-white px-4 py-2.5 text-[13px] font-medium text-ink-secondary transition hover:border-ink/30 hover:text-ink"
-        >
-          {COPY.share.landing.reshareAction}
-        </button>
-      </footer>
+        {/* ===== 对话面板 ===== */}
+        {share.conversationEnabled ? (
+          <SharedAgentChat
+            shareToken={token}
+            courseTitle={share.title}
+            sharerNickname={sharerNickname}
+            authToken={accessToken ?? undefined}
+          />
+        ) : null}
 
-      <p className="text-center text-[11px] text-ink-muted">
-        {COPY.share.landing.viewCount(share.viewCount)}
-      </p>
-    </main>
+        {/* ===== 底部动作栏 · 玻璃态 sticky ===== */}
+        <footer className="sticky bottom-3 mt-2 flex items-center gap-2 rounded-full border border-divider bg-card/95 backdrop-blur-md px-3 py-2 shadow-card">
+          <button
+            type="button"
+            onClick={handleClaim}
+            disabled={claiming}
+            className="flex-1 rounded-full bg-ink px-4 py-2.5 text-sm font-medium text-white transition-all duration-150 ease-out hover:bg-black hover:-translate-y-px active:scale-[0.98] disabled:opacity-50 disabled:cursor-wait"
+          >
+            {claimed
+              ? COPY.share.landing.claimDone
+              : claiming
+                ? COPY.share.landing.claiming
+                : isAuthenticated
+                  ? COPY.share.landing.claimAction
+                  : COPY.share.landing.claimGo}
+          </button>
+          <button
+            type="button"
+            onClick={handleReshare}
+            className="rounded-full border border-divider bg-card px-4 py-2.5 text-sm font-medium text-ink-secondary transition-all duration-150 ease-out hover:border-pine hover:text-pine hover:-translate-y-px"
+          >
+            {COPY.share.landing.reshareAction}
+          </button>
+        </footer>
+
+        <p className="text-center font-mono text-[11px] text-ink-muted">
+          {COPY.share.landing.viewCount(share.viewCount)}
+        </p>
+      </main>
+    </div>
   );
 }

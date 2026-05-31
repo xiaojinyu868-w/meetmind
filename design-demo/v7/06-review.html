@@ -1,0 +1,840 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="light">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>06 · Review · MeetMind v7</title>
+<link rel="stylesheet" href="./tokens.css" />
+<style>
+  body { overflow: hidden; }
+  .app-shell { display: grid; grid-template-rows: 56px 1fr; height: 100vh; }
+
+  /* 顶栏（同 05） */
+  .topbar {
+    display: flex; align-items: center; gap: 14px;
+    padding: 0 20px;
+    background: var(--paper);
+    border-bottom: 1px solid var(--rule);
+  }
+  .topbar .brand {
+    display: flex; align-items: center; gap: 10px;
+    font-weight: 600; font-size: 14px;
+    color: var(--ink);
+  }
+  .topbar .brand .dot {
+    width: 8px; height: 8px; border-radius: 50%;
+    background: var(--pine);
+    box-shadow: 0 0 0 3px rgba(45,79,62,0.12);
+  }
+  .topbar .breadcrumb {
+    display: flex; align-items: center; gap: 8px;
+    color: var(--ink-3); font-size: 13px;
+    margin-left: 12px;
+  }
+  .topbar .breadcrumb .sep { color: var(--ink-4); }
+  .topbar .breadcrumb .current { color: var(--ink); font-weight: 500; }
+
+  /* 模式切换 */
+  .mode-switch {
+    display: inline-flex;
+    background: var(--paper-warm);
+    border-radius: var(--radius);
+    padding: 3px;
+    margin-left: 24px;
+  }
+  .mode-switch button {
+    border: 0;
+    padding: 5px 12px;
+    font-size: 12px;
+    color: var(--ink-2);
+    background: transparent;
+    border-radius: calc(var(--radius) - 2px);
+    cursor: pointer;
+    font-weight: 500;
+    transition: all 0.15s var(--ease-out);
+    display: inline-flex; align-items: center; gap: 6px;
+  }
+  .mode-switch button.active {
+    background: var(--card);
+    color: var(--ink);
+    box-shadow: var(--shadow-soft);
+  }
+  .mode-switch button .dot { width: 5px; height: 5px; border-radius: 50%; background: var(--ink-3); }
+  .mode-switch button.active .dot { background: var(--pine); }
+
+  .session-meta {
+    margin-left: auto;
+    display: flex; align-items: center; gap: 14px;
+    color: var(--ink-2); font-size: 13px;
+  }
+  .topbar-btn {
+    height: 30px; padding: 0 14px;
+    border-radius: var(--radius);
+    background: var(--ink); color: #fff;
+    border: 0;
+    font: inherit; font-size: 12.5px; font-weight: 500;
+    cursor: pointer;
+  }
+  .topbar-btn:hover { background: #000; }
+  .topbar-btn.ghost {
+    background: transparent;
+    color: var(--ink-2);
+    border: 1px solid var(--rule);
+  }
+  .topbar-btn.ghost:hover { background: var(--paper-warm); color: var(--ink); }
+
+  /* ===== 三栏：视频复习左栏更宽 ===== */
+  main { display: grid; grid-template-columns: 420px 1fr 380px; overflow: hidden; }
+  .col { display: flex; flex-direction: column; min-width: 0; overflow: hidden; }
+
+  /* ===== 左栏：视频 + 时间轴锚点 + 转录 ===== */
+  .col-left {
+    background: var(--paper);
+    border-right: 1px solid var(--rule);
+  }
+
+  /* 视频播放器 */
+  .video-stage {
+    margin: 16px;
+    background: var(--ink);
+    border-radius: var(--radius-lg);
+    overflow: hidden;
+    aspect-ratio: 16/9;
+    position: relative;
+    flex-shrink: 0;
+  }
+  .video-stage::before {
+    /* 模拟视频画面 */
+    content: '';
+    position: absolute; inset: 0;
+    background:
+      radial-gradient(ellipse at 30% 40%, rgba(107,144,128,0.4) 0%, transparent 50%),
+      radial-gradient(ellipse at 70% 60%, rgba(181,72,60,0.3) 0%, transparent 50%),
+      linear-gradient(135deg, #2A3A35 0%, #1C1B19 100%);
+  }
+  .video-stage::after {
+    /* 黑板/老师剪影 */
+    content: '老师';
+    position: absolute; inset: 0;
+    display: grid; place-items: center;
+    color: rgba(255,255,255,0.15);
+    font-size: 80px;
+    font-family: var(--font-serif);
+    font-style: italic;
+  }
+  .video-overlay {
+    position: absolute; inset: 0;
+    display: flex; flex-direction: column;
+    z-index: 2;
+  }
+  .video-top {
+    padding: 12px 14px;
+    display: flex; justify-content: space-between; align-items: center;
+    color: #fff;
+    background: linear-gradient(to bottom, rgba(0,0,0,0.4), transparent);
+  }
+  .video-top .ttl { font-size: 12px; font-weight: 500; }
+  .video-top .live {
+    display: inline-flex; align-items: center; gap: 6px;
+    font-size: 11px;
+    font-family: var(--font-mono);
+    background: rgba(255,255,255,0.15);
+    padding: 3px 8px; border-radius: 999px;
+    backdrop-filter: blur(8px);
+  }
+  .video-bottom {
+    margin-top: auto;
+    padding: 12px 14px 14px;
+    background: linear-gradient(to top, rgba(0,0,0,0.5), transparent);
+  }
+  .video-bar {
+    height: 3px;
+    background: rgba(255,255,255,0.2);
+    border-radius: 2px;
+    position: relative;
+    margin-bottom: 10px;
+    cursor: pointer;
+  }
+  .video-bar .fill {
+    position: absolute; left: 0; top: 0; bottom: 0;
+    width: 38%;
+    background: var(--vermilion);
+    border-radius: 2px;
+  }
+  .video-bar .head {
+    position: absolute; top: 50%; left: 38%;
+    transform: translate(-50%, -50%);
+    width: 12px; height: 12px;
+    border-radius: 50%;
+    background: var(--vermilion);
+    border: 2px solid #fff;
+  }
+  /* 章节锚点 */
+  .video-bar .anchor {
+    position: absolute; top: 50%;
+    transform: translate(-50%, -50%);
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    background: rgba(255,255,255,0.5);
+  }
+  .video-controls {
+    display: flex; align-items: center; gap: 8px;
+    color: #fff;
+    font-size: 12px;
+    font-family: var(--font-mono);
+  }
+  .video-controls .btn-play {
+    width: 32px; height: 32px; border-radius: 50%;
+    background: rgba(255,255,255,0.15);
+    border: 0; color: #fff;
+    display: grid; place-items: center;
+    cursor: pointer;
+    backdrop-filter: blur(8px);
+  }
+  .video-controls .btn-play:hover { background: rgba(255,255,255,0.25); }
+  .video-controls .right { margin-left: auto; display: flex; gap: 8px; align-items: center; }
+
+  /* 章节锚点列表 */
+  .anchor-card {
+    margin: 0 16px 12px;
+    padding: 14px 16px;
+    background: var(--card);
+    border: 1px solid var(--rule);
+    border-radius: var(--radius);
+    flex-shrink: 0;
+  }
+  .anchor-card .lbl {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--ink-3);
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    margin-bottom: 8px;
+  }
+  .anchor-list { display: flex; flex-direction: column; gap: 2px; }
+  .anchor-item {
+    display: grid; grid-template-columns: 56px 1fr;
+    gap: 10px; align-items: center;
+    padding: 6px 8px;
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    transition: background 0.15s;
+    font-size: 13px;
+  }
+  .anchor-item:hover { background: var(--paper-warm); }
+  .anchor-item.active { background: var(--vermilion-mist); }
+  .anchor-item .ts {
+    font-family: var(--font-mono);
+    font-size: 11.5px;
+    color: var(--ink-3);
+  }
+  .anchor-item.active .ts { color: var(--vermilion); }
+  .anchor-item .label { color: var(--ink); }
+
+  /* 转录滚动（同步视频） */
+  .transcript-sync {
+    flex: 1;
+    overflow-y: auto;
+    padding: 0 14px 24px;
+  }
+  .transcript-sync .head {
+    padding: 12px 6px 6px;
+    display: flex; justify-content: space-between; align-items: baseline;
+  }
+  .transcript-sync .head h2 {
+    font-size: 11.5px; font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--ink-2);
+  }
+  .transcript-sync .head .sub {
+    font-size: 11px; color: var(--ink-3);
+    font-family: var(--font-mono);
+  }
+  .seg {
+    padding: 10px 12px 10px 18px;
+    border-radius: var(--radius);
+    color: var(--ink-2);
+    font-size: 13.5px; line-height: 1.7;
+    cursor: pointer;
+    transition: all 0.18s var(--ease-out);
+    position: relative;
+  }
+  .seg .ts {
+    display: block; margin-bottom: 4px;
+    font-size: 11px; color: var(--vermilion);
+    font-weight: 500;
+    font-family: var(--font-mono);
+  }
+  .seg:hover { background: var(--paper-warm); color: var(--ink); }
+  .seg.active {
+    background: var(--vermilion-mist);
+    color: var(--ink);
+  }
+  .seg.active::before {
+    content: ''; position: absolute; left: 6px; top: 12px; bottom: 12px; width: 3px;
+    background: var(--vermilion); border-radius: 2px;
+  }
+
+  /* ===== 中栏：学习工作区（应用矩阵 + 选中应用） ===== */
+  .col-mid {
+    background: var(--paper);
+    overflow-y: auto;
+    padding: 0 36px 48px;
+  }
+  .stack { display: flex; flex-direction: column; gap: 16px; padding-top: 16px; }
+
+  /* 课程卡（不带 hero shimmer，因为已经复习态了） */
+  .review-hero {
+    padding: 20px 24px;
+    background: var(--card);
+    border: 1px solid var(--rule);
+    border-radius: var(--radius-lg);
+    display: flex; align-items: center; gap: 16px;
+  }
+  .review-hero .info { flex: 1; }
+  .review-hero .eyebrow {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--ink-3);
+    margin-bottom: 6px;
+  }
+  .review-hero h1 {
+    font-size: 22px; font-weight: 600;
+    letter-spacing: -0.018em;
+    line-height: 1.25;
+    margin-bottom: 4px;
+  }
+  .review-hero h1 .em {
+    font-family: var(--font-serif); font-style: italic;
+    font-weight: 400;
+    color: var(--vermilion);
+  }
+  .review-hero .meta {
+    font-size: 12.5px; color: var(--ink-3);
+  }
+  .review-hero .meta span + span::before { content: '·'; margin: 0 8px; color: var(--rule); }
+  .review-hero .progress-arc {
+    width: 56px; height: 56px;
+    flex-shrink: 0;
+    position: relative;
+  }
+  .review-hero .progress-arc svg { width: 100%; height: 100%; transform: rotate(-90deg); }
+  .review-hero .progress-arc .label {
+    position: absolute; inset: 0;
+    display: grid; place-items: center;
+    font-family: var(--font-mono);
+    font-size: 13px; color: var(--pine);
+    font-weight: 600;
+  }
+
+  /* 应用矩阵 + 选中态 */
+  .matrix-card {
+    background: var(--card);
+    border: 1px solid var(--rule);
+    border-radius: var(--radius-xl);
+    padding: 14px 16px;
+  }
+  .matrix-card .lbl {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--ink-3);
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    margin-bottom: 10px;
+    padding: 0 4px;
+  }
+  .matrix-grid {
+    display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px;
+  }
+  .m-chip {
+    display: flex; align-items: center; gap: 8px;
+    padding: 10px 12px;
+    background: var(--paper-warm);
+    border: 1px solid transparent;
+    border-radius: var(--radius);
+    cursor: pointer;
+    transition: all 0.15s var(--ease-out);
+    font-size: 12.5px; color: var(--ink-2);
+  }
+  .m-chip:hover { background: var(--card); border-color: var(--rule); color: var(--ink); transform: translateY(-1px); }
+  .m-chip.active {
+    background: var(--ink);
+    color: #fff;
+    border-color: var(--ink);
+  }
+  .m-chip .icn { width: 6px; height: 6px; border-radius: 50%; background: var(--pine-light); }
+  .m-chip.ready .icn { background: var(--pine); }
+  .m-chip.fresh .icn { background: var(--vermilion); }
+  .m-chip.active .icn { background: var(--pine-light); }
+
+  /* 测验作答（中栏选中态） */
+  .embedded-app {
+    background: var(--card);
+    border: 1px solid var(--rule);
+    border-radius: var(--radius-xl);
+    overflow: hidden;
+    box-shadow: var(--shadow-soft);
+  }
+  .embedded-app .head {
+    padding: 16px 22px 14px;
+    display: flex; align-items: center; gap: 10px;
+    border-bottom: 1px solid var(--rule-soft);
+  }
+  .embedded-app .head .icon {
+    width: 28px; height: 28px; border-radius: var(--radius);
+    background: var(--vermilion-mist); color: var(--vermilion);
+    display: grid; place-items: center;
+    font-size: 13px; font-weight: 600;
+  }
+  .embedded-app .head h3 {
+    font-size: 14.5px; font-weight: 600; letter-spacing: -0.012em;
+  }
+  .embedded-app .head .right { margin-left: auto; display: flex; gap: 8px; align-items: center; }
+  .embedded-app .body { padding: 24px 26px; }
+
+  .quiz-q {
+    margin-bottom: 24px;
+  }
+  .quiz-q .qn {
+    font-family: var(--font-mono);
+    font-size: 11.5px;
+    color: var(--ink-3);
+    letter-spacing: 0.05em;
+    margin-bottom: 8px;
+  }
+  .quiz-q .qt {
+    font-size: 17px;
+    font-weight: 600;
+    letter-spacing: -0.014em;
+    line-height: 1.5;
+    margin-bottom: 6px;
+  }
+  .quiz-q .qm {
+    font-size: 12px; color: var(--ink-3);
+  }
+
+  .qopts { display: flex; flex-direction: column; gap: 10px; }
+  .qopt {
+    display: grid; grid-template-columns: 32px 1fr auto;
+    align-items: center; gap: 14px;
+    padding: 12px 16px;
+    background: var(--card);
+    border: 1px solid var(--rule);
+    border-radius: var(--radius-lg);
+    cursor: pointer;
+    transition: all 0.15s var(--ease-out);
+    font-size: 13.5px;
+  }
+  .qopt:hover { background: var(--paper); border-color: var(--ink-4); }
+  .qopt .l {
+    width: 26px; height: 26px;
+    border-radius: 50%;
+    border: 1px solid var(--rule);
+    display: grid; place-items: center;
+    font-family: var(--font-mono);
+    font-size: 11.5px;
+    color: var(--ink-2);
+    font-weight: 500;
+  }
+  .qopt.selected { border-color: var(--ink); background: var(--paper); }
+  .qopt.selected .l { background: var(--ink); color: #fff; border-color: var(--ink); }
+  .qopt .b { font-size: 11px; display: none; }
+
+  .qfoot {
+    display: flex; justify-content: space-between; align-items: center;
+    margin-top: 20px;
+    padding-top: 16px;
+    border-top: 1px solid var(--rule-soft);
+  }
+  .qprog { display: flex; gap: 4px; }
+  .qprog span {
+    width: 16px; height: 5px;
+    background: var(--rule);
+    border-radius: 2px;
+  }
+  .qprog span.done { background: var(--success); }
+  .qprog span.current { background: var(--ink); }
+  .qprog span.wrong { background: var(--vermilion); }
+
+  /* ===== 右栏：复盘 Octo ===== */
+  .col-right {
+    background: var(--paper);
+    border-left: 1px solid var(--rule);
+  }
+  .companion {
+    flex: 1; display: flex; flex-direction: column;
+    overflow: hidden;
+  }
+  .companion-head {
+    padding: 16px 18px 14px;
+    display: flex; align-items: center; gap: 12px;
+    border-bottom: 1px solid var(--rule-soft);
+  }
+  .octo-stage {
+    width: 44px; height: 44px;
+    border-radius: 50%;
+    background: radial-gradient(circle at 35% 30%, #FFFFFF 0%, var(--paper-warm) 70%);
+    border: 1px solid var(--rule);
+    display: grid; place-items: center;
+    position: relative;
+    flex-shrink: 0;
+  }
+  .octo-stage::before {
+    content: ''; position: absolute; inset: -5px;
+    border-radius: 50%;
+    background: radial-gradient(circle, rgba(45,79,62,0.18) 0%, transparent 65%);
+    animation: octo-breath 3.6s ease-in-out infinite;
+  }
+  .octo-stage img {
+    position: relative; z-index: 1;
+    width: 32px; height: 32px;
+  }
+  .companion-head .name { font-size: 14px; font-weight: 600; }
+  .companion-head .status {
+    font-size: 11.5px; color: var(--pine);
+    margin-top: 1px;
+    font-family: var(--font-mono);
+  }
+
+  .messages { flex: 1; overflow-y: auto; padding: 18px 18px 12px; }
+  .msg { margin-bottom: 18px; }
+  .msg.user { display: flex; }
+  .msg.user .bubble {
+    margin-left: auto;
+    background: var(--ink); color: #fff;
+    border-radius: 14px 14px 4px 14px;
+    padding: 10px 14px; max-width: 88%;
+    font-size: 13.5px; line-height: 1.6;
+  }
+  .msg.ai { font-size: 14px; line-height: 1.78; color: var(--ink); }
+  .msg.ai .who {
+    font-size: 11px; color: var(--ink-3);
+    margin-bottom: 6px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    font-weight: 500;
+    font-family: var(--font-mono);
+  }
+  .msg.ai p { margin-bottom: 8px; }
+
+  .chips {
+    padding: 12px 18px 14px;
+    display: flex; gap: 8px; flex-wrap: wrap;
+    border-top: 1px solid var(--rule-soft);
+  }
+  .skill {
+    padding: 7px 12px;
+    border: 1px solid var(--rule);
+    border-radius: 999px;
+    background: var(--card);
+    font-size: 12.5px; color: var(--ink-2);
+    cursor: pointer;
+    transition: all 0.15s var(--ease-out);
+    display: inline-flex; align-items: center; gap: 6px;
+  }
+  .skill::before { content: ''; width: 5px; height: 5px; border-radius: 50%; background: var(--pine-light); }
+  .skill:hover { border-color: var(--pine); color: var(--pine); transform: translateY(-1px); }
+  .skill.hot::before { background: var(--vermilion); }
+
+  .composer-wrap {
+    padding: 12px 14px 14px;
+    border-top: 1px solid var(--rule);
+  }
+  .comp {
+    display: flex; align-items: flex-end; gap: 8px;
+    padding: 10px 12px;
+    background: var(--card);
+    border: 1px solid var(--rule);
+    border-radius: var(--radius-lg);
+  }
+  .comp:focus-within {
+    border-color: var(--pine);
+    box-shadow: 0 0 0 3px rgba(45,79,62,0.08);
+  }
+  .comp textarea {
+    flex: 1; resize: none; border: 0; background: transparent;
+    font: inherit; font-size: 13.5px; line-height: 1.55;
+    color: var(--ink); outline: none;
+  }
+  .comp .send {
+    width: 30px; height: 30px;
+    border-radius: var(--radius);
+    background: var(--ink); color: #fff;
+    border: 0;
+    display: grid; place-items: center;
+    cursor: pointer;
+  }
+
+  .scene-note {
+    position: fixed; bottom: 14px; left: 14px; z-index: 100;
+    background: var(--card); border: 1px solid var(--rule);
+    border-radius: var(--radius-md); padding: 10px 14px;
+    font-size: 11px; color: var(--ink-3); line-height: 1.6;
+    box-shadow: var(--shadow-soft); max-width: 280px;
+    font-family: var(--font-mono);
+  }
+  .scene-note b { color: var(--pine); font-weight: 600; }
+</style>
+</head>
+<body>
+
+<div class="app-shell">
+
+  <header class="topbar">
+    <a href="./index.html" class="brand">
+      <span class="dot"></span>
+      <span>MeetMind</span>
+    </a>
+    <div class="breadcrumb">
+      <span class="sep">/</span>
+      <span>计算机网络</span>
+      <span class="sep">/</span>
+      <span class="current">第 7 讲 · 复习</span>
+    </div>
+
+    <div class="mode-switch">
+      <button class="active"><span class="dot"></span>视频</button>
+      <button><span class="dot"></span>音频</button>
+    </div>
+
+    <div class="session-meta">
+      <span class="mono" style="color: var(--pine);">已听懂 76%</span>
+      <span style="color: var(--ink-3);">·</span>
+      <span>5 个引用 · 4 处朱批</span>
+      <button class="topbar-btn ghost">分享一节</button>
+      <button class="topbar-btn">导出报告</button>
+    </div>
+  </header>
+
+  <main>
+
+    <!-- ===== 左：视频 + 章节 + 转录 ===== -->
+    <section class="col col-left">
+      <div class="video-stage">
+        <div class="video-overlay">
+          <div class="video-top">
+            <span class="ttl">计算机网络 · 第 7 讲</span>
+            <span class="live"><span class="rec-dot" style="width: 5px; height: 5px;"></span>原录像</span>
+          </div>
+          <div class="video-bottom">
+            <div class="video-bar">
+              <div class="fill"></div>
+              <div class="head"></div>
+              <div class="anchor" style="left: 12%;"></div>
+              <div class="anchor" style="left: 38%;"></div>
+              <div class="anchor" style="left: 55%;"></div>
+              <div class="anchor" style="left: 78%;"></div>
+            </div>
+            <div class="video-controls">
+              <button class="btn-play">
+                <svg width="10" height="10" viewBox="0 0 10 10"><path d="M2 1l7 4-7 4z" fill="#fff"/></svg>
+              </button>
+              <span>08:42 / 23:14</span>
+              <div class="right">
+                <span style="opacity: 0.6;">1.0x</span>
+                <span style="opacity: 0.6;">中文字幕</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="anchor-card">
+        <div class="lbl">章节锚点 · 4 段</div>
+        <div class="anchor-list">
+          <div class="anchor-item">
+            <span class="ts">02:48</span>
+            <span class="label">TCP 是什么 · 三个关键词</span>
+          </div>
+          <div class="anchor-item active">
+            <span class="ts">08:42</span>
+            <span class="label">滑动窗口的"为接收端"</span>
+          </div>
+          <div class="anchor-item">
+            <span class="ts">12:30</span>
+            <span class="label">拥塞控制 · AIMD</span>
+          </div>
+          <div class="anchor-item">
+            <span class="ts">18:00</span>
+            <span class="label">温柔地探测 · 设计哲学</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="transcript-sync">
+        <div class="head">
+          <h2>转录 · 跟随播放</h2>
+          <span class="sub">142 段</span>
+        </div>
+        <div class="seg">
+          <span class="ts">[19:34]</span>
+          那它怎么做到的？答案是<strong>确认重传 + 序号</strong>。每一段数据都有序号，接收方收到了就回 ACK；超时没收到 ACK，发送方就重传。
+        </div>
+        <div class="seg active">
+          <span class="ts">[20:01]</span>
+          但这里有个问题：如果你每发一个段都要等 ACK，吞吐就废了。所以 TCP 引入<mark class="mk-vermilion">滑动窗口</mark>——同时在飞的段可以有很多个。
+        </div>
+        <div class="seg">
+          <span class="ts">[20:41]</span>
+          那窗口多大合适？太小浪费带宽，太大又会拥塞网络。这就引出了下一个话题——<strong>拥塞控制</strong>。
+        </div>
+        <div class="seg">
+          <span class="ts">[21:12]</span>
+          拥塞控制的核心是 <mark class="mk-pine">AIMD</mark>：加性增、乘性减。
+        </div>
+      </div>
+    </section>
+
+    <!-- ===== 中：学习工作区 ===== -->
+    <section class="col col-mid">
+      <div class="stack">
+
+        <div class="review-hero">
+          <div class="info">
+            <div class="eyebrow">复习态 · REVIEW</div>
+            <h1>TCP 可靠传输的<span class="em">三道关</span></h1>
+            <div class="meta">
+              <span>2026.05.31 已结课</span>
+              <span class="mono">23 分钟</span>
+              <span>4 个朱批重点</span>
+            </div>
+          </div>
+          <div class="progress-arc">
+            <svg viewBox="0 0 56 56">
+              <circle cx="28" cy="28" r="22" stroke="var(--rule)" stroke-width="3" fill="none"/>
+              <circle cx="28" cy="28" r="22" stroke="var(--pine)" stroke-width="3" fill="none" stroke-dasharray="138" stroke-dashoffset="33" stroke-linecap="round" />
+            </svg>
+            <div class="label">76%</div>
+          </div>
+        </div>
+
+        <div class="matrix-card">
+          <div class="lbl">应用矩阵 · 点击切换</div>
+          <div class="matrix-grid">
+            <div class="m-chip ready"><span class="icn"></span>速查表</div>
+            <div class="m-chip ready"><span class="icn"></span>闪卡</div>
+            <div class="m-chip active ready"><span class="icn"></span>测验</div>
+            <div class="m-chip ready"><span class="icn"></span>思维导图</div>
+            <div class="m-chip fresh"><span class="icn"></span>课后报告</div>
+            <div class="m-chip"><span class="icn"></span>困惑钻取</div>
+            <div class="m-chip"><span class="icn"></span>10 分钟播客</div>
+            <div class="m-chip"><span class="icn"></span>信息图</div>
+          </div>
+        </div>
+
+        <!-- 测验作答态 -->
+        <div class="embedded-app">
+          <div class="head">
+            <span class="icon">测</span>
+            <h3>课堂理解测验</h3>
+            <div class="right">
+              <span class="badge dot ver mono">作答中</span>
+              <button class="topbar-btn ghost">提交全部</button>
+            </div>
+          </div>
+          <div class="body">
+            <div class="quiz-q">
+              <div class="qn">问题 06 / 08</div>
+              <div class="qt">下面关于 TCP 拥塞控制的描述，<u>哪一项是错误的</u>？</div>
+              <div class="qm">单选题 · 来自 <span class="cite-ts mono">[21:12-21:55]</span></div>
+            </div>
+
+            <div class="qopts">
+              <div class="qopt"><div class="l">A</div><div>慢启动阶段，拥塞窗口按指数级增长</div><div class="b"></div></div>
+              <div class="qopt selected"><div class="l">B</div><div>拥塞避免阶段，拥塞窗口按对数级增长</div><div class="b"></div></div>
+              <div class="qopt"><div class="l">C</div><div>遇到丢包后，拥塞窗口立即减半</div><div class="b"></div></div>
+              <div class="qopt"><div class="l">D</div><div>AIMD 是 Additive Increase Multiplicative Decrease 的缩写</div><div class="b"></div></div>
+            </div>
+
+            <div class="qfoot">
+              <div class="qprog">
+                <span class="done"></span>
+                <span class="done"></span>
+                <span class="done"></span>
+                <span class="wrong"></span>
+                <span class="done"></span>
+                <span class="current"></span>
+                <span></span>
+                <span></span>
+              </div>
+              <div style="display: flex; gap: 8px;">
+                <button class="topbar-btn ghost" style="height: 32px;">上一题</button>
+                <button class="topbar-btn" style="height: 32px;">下一题 →</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </section>
+
+    <!-- ===== 右：复盘 Octo ===== -->
+    <aside class="col col-right">
+      <div class="companion">
+
+        <div class="companion-head">
+          <div class="octo-stage">
+            <img src="/public/images/octo-buddy/idle.png" />
+          </div>
+          <div>
+            <div class="name">Octo · 课后复盘</div>
+            <div class="status">已读完整节课转录</div>
+          </div>
+        </div>
+
+        <div class="messages">
+
+          <div class="msg user">
+            <div class="bubble">为什么 B 是错的？我以为对数和线性差不多。</div>
+          </div>
+
+          <div class="msg ai">
+            <div class="who">Octo</div>
+            <p>它们在数学上完全不一样——<strong>对数</strong>是越涨越慢（前期快后期几乎不动），<strong>线性</strong>是均匀涨。</p>
+            <p>拥塞避免阶段是<mark class="mk-vermilion">每个 RTT 加一个 MSS</mark>——每过一段固定时间，窗口固定加一段固定大小，所以是<strong>线性</strong>。<span class="cite-ts mono">[21:12]</span></p>
+            <p>张老师在 <span class="cite-ts mono">[21:55]</span> 特别强调"温柔"这个词——用线性增正是为了"温柔地"接近极限。这一题如果你能记住这个意象就基本不会错了。</p>
+          </div>
+
+          <div class="msg ai">
+            <div class="who">Octo · 接下来建议</div>
+            <p>你已经答对 4 道、错 1 道。要不要试试<em class="serif">困惑钻取</em>，专门针对你混淆的那部分？我已经从你的错题里抽出了 3 个高频混淆点。</p>
+          </div>
+
+        </div>
+
+        <div class="chips">
+          <div class="skill hot">困惑钻取 · 我那道错题</div>
+          <div class="skill">出 3 道类似题</div>
+          <div class="skill">把这一段标重点</div>
+        </div>
+
+        <div class="composer-wrap">
+          <div class="comp">
+            <textarea placeholder="问 Octo 任何复习问题…" rows="1"></textarea>
+            <button class="send">
+              <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+                <path d="M2 7h10M8 3l4 4-4 4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+            </button>
+          </div>
+        </div>
+
+      </div>
+    </aside>
+
+  </main>
+
+</div>
+
+<div class="scene-note">
+  <b>06 · REVIEW</b><br/>
+  课后复习三栏：左视频证据 + 章节锚点 + 转录跟随<br/>
+  中应用工作区（这里展示测验作答）<br/>
+  右复盘 Octo · 看到错题主动建议困惑钻取
+</div>
+
+</body>
+</html>

@@ -17,8 +17,10 @@
 |---|---|---|
 | `POST /api/share/agent` | ✅ Bearer | 创建一个 SharedAgent（snapshot 在 body 里） |
 | `GET /api/share/[token]` | ❌ 公开 | 读取 share 的公开形态（隐藏 owner 信息） |
+| `DELETE /api/share/[token]` | ✅ Bearer (owner) | 撤销分享，幂等；非 owner 一律 404 |
 | `POST /api/share/[token]/track` | ❌ 公开 | 写埋点（view / chat / reshare） |
 | `POST /api/share/[token]/claim` | ✅ Bearer | 领取 share 到访问者 workspace |
+| `GET /api/share/me` | ✅ Bearer | 列出当前用户创建的所有分享（含撤销，最近 50 条） |
 
 ## 请求 / 响应契约
 
@@ -94,9 +96,10 @@
 | 文件 | 行数 | 职责 |
 |---|---|---|
 | `agent/route.ts` | ~110 | POST 创建 SharedAgent |
-| `[token]/route.ts` | ~70 | GET 公开读 + view 埋点 |
+| `[token]/route.ts` | ~110 | GET 公开读 + view 埋点；DELETE 撤销（仅 owner） |
 | `[token]/track/route.ts` | ~75 | POST 显式埋点（chat / reshare） |
 | `[token]/claim/route.ts` | ~75 | POST 领取到 claimer workspace |
+| `me/route.ts` | ~45 | GET 列出当前用户创建的所有分享 |
 
 ## 依赖
 

@@ -63,7 +63,7 @@ export function MobileLayout({
     <BottomPanelHeader
       title={panelTitle}
       badge={unresolvedCount > 0 ? (
-        <span className="px-2 py-0.5 text-xs font-semibold bg-rose-100 text-rose-600 rounded-full">
+        <span className="px-2 py-0.5 text-xs font-semibold bg-vermilion-mist text-vermilion rounded-full">
           {unresolvedCount} 待解决
         </span>
       ) : undefined}
@@ -75,7 +75,7 @@ export function MobileLayout({
     <div className={cn("flex flex-col h-full", className)}>
       {/* 波形播放器（如果有） */}
       {waveformPlayer && (
-        <div className="flex-shrink-0 px-3 py-2 border-b border-gray-100 bg-white">
+        <div className="flex-shrink-0 px-3 py-2 border-b border-divider-light bg-white">
           {waveformPlayer}
         </div>
       )}
@@ -139,7 +139,7 @@ export function MobilePanelTabs({
   onTabChange,
 }: MobilePanelTabsProps) {
   return (
-    <div className="flex items-center gap-1 px-3 py-2 overflow-x-auto scrollbar-hide border-b border-gray-100">
+    <div className="flex items-center gap-1 px-3 py-2 overflow-x-auto scrollbar-hide border-b border-divider-light">
       {tabs.map((tab) => (
         <button
           key={tab.id}
@@ -147,8 +147,8 @@ export function MobilePanelTabs({
           className={cn(
             "flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-lg whitespace-nowrap transition-all",
             activeTab === tab.id
-              ? "bg-gray-900 text-white"
-              : "text-gray-500 hover:bg-gray-100"
+              ? "bg-ink text-white"
+              : "text-ink-muted hover:bg-paper-deep"
           )}
         >
           {tab.icon}
@@ -158,7 +158,7 @@ export function MobilePanelTabs({
               "ml-1 px-1.5 py-0.5 text-xs rounded-full",
               activeTab === tab.id
                 ? "bg-white/20 text-white"
-                : "bg-rose-100 text-rose-600"
+                : "bg-vermilion-mist text-vermilion"
             )}>
               {tab.badge}
             </span>

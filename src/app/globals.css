@@ -2,168 +2,209 @@
 @tailwind components;
 @tailwind utilities;
 
-/* ========================================
-   MeetMind Design System v6.0 — 秩序白皮书
-   "高级且聪明"的 Notion 式克制设计
+/* ============================================================
+   MeetMind Design System v7.0 — 图书馆台灯 + 朱批红笔
+   "色 = 架构"：墨松绿 = AI 沉淀 / 长期上下文，
+                 朱批红 = 学生此刻 / 引用 / 标注。
 
-   铁律：
-   1. 全面封杀渐变与阴影 — 100% 纯色平涂
-   2. 大字重对比 — Bold 标题 vs 留白
-   3. IP 贴纸化 — 卡通 IP 当大 Emoji 用
+   原则：
+   1. 95% 中性色（米白 / 笔墨 / 边线）撑起主体
+   2. 双签名色仅在"信号时刻"出现（< 8% 面积）
+   3. 投影必须存在但极克制（不是 v6 的"封杀"）
+   4. AI 在场必须可见（surface-ai · stream · 思考气息）
+   5. 字 80%：Inter + Instrument Serif + JetBrains Mono
+   6. 暗色模式 first-class（不是反色，是深夜书房）
 
    色彩系统：
-   ┌─────────────────────────────────────────┐
-   │  Canvas:  #F7F7F5 燕麦浅灰（全局底色）  │
-   │  Card:    #FFFFFF 纯白卡片               │
-   │  Hover:   #EFEFEF 交互灰                │
-   │  Text:    #232322 炭黑                   │
-   │  Sub:     #787774 Notion灰              │
-   │  Divider: #E9E9E7 极细边线              │
-   │                                          │
-   │  Sand:    #FDF3C0 时间轴问答（暖沙黄）   │
-   │  Mint:    #D1F4E0 微信/资料（雾薄荷）    │
-   │  Blue:    #D3E4F4 多源解析（灰天蓝）     │
-   │  Rose:    #FADEC9 AI 私教（柔胭粉）      │
-   │                                          │
-   │  Button:  #232322 炭黑主按钮             │
-   │  Highlight: #FDECC8 荧光笔黄            │
-   └─────────────────────────────────────────┘
-   ======================================== */
+   ┌──────────────────────────────────────────────┐
+   │  Paper:      #FAF7F2  米白纸感（主底色）      │
+   │  Paper-warm: #F2EDE3  hover / 次表面          │
+   │  Card:       #FFFFFF  主卡片                  │
+   │  Ink:        #1C1B19  主文字                  │
+   │  Ink-2:      #5C5A55  次文字                  │
+   │  Ink-3:      #8E8B82  弱文字 / 标注          │
+   │  Rule:       #E8E2D5  边线                    │
+   │                                                │
+   │  Pine:       #2D4F3E  墨松绿 · AI 沉淀       │
+   │  Vermilion:  #B5483C  朱批红 · 学生此刻      │
+   │                                                │
+   │  Button:     #1C1B19  主按钮                  │
+   │  Highlight:  #FDECC8  荧光笔黄                │
+   └──────────────────────────────────────────────┘
+   ============================================================ */
 
-/* === 设计令牌 === */
+/* === v7 设计令牌 === */
 :root {
-  /* 空间骨架 */
-  --mm-canvas: #F7F7F5;
+  /* ===== 空间骨架（v7） ===== */
+  --mm-paper: #FAF7F2;            /* v7 主底色 · 米白纸感 */
+  --mm-paper-warm: #F2EDE3;
+  --mm-paper-deep: #EDE7DA;
+  --mm-canvas: #FAF7F2;            /* v6 兼容 */
   --mm-card: #FFFFFF;
-  --mm-hover: #EFEFEF;
+  --mm-hover: #F2EDE3;             /* 偏暖 */
 
-  /* 笔墨与边界 */
-  --mm-ink: #232322;
-  --mm-ink-secondary: #787774;
-  --mm-ink-muted: #A3A39E;
+  /* ===== 笔墨与边界 ===== */
+  --mm-ink: #1C1B19;               /* 略深略暖 */
+  --mm-ink-secondary: #5C5A55;
+  --mm-ink-muted: #8E8B82;
+  --mm-ink-faint: #B8B5AC;
   --mm-ink-inverse: #FFFFFF;
-  --mm-divider: #E9E9E7;
-  --mm-divider-light: #F0F0EE;
+  --mm-divider: #E8E2D5;           /* 偏暖 */
+  --mm-divider-light: #F0EBDF;
 
-  /* 核心功能色块 */
-  --mm-sand: #FDF3C0;       /* 时间轴问答 — 暖沙黄 */
-  --mm-mint: #D1F4E0;       /* 微信/资料 — 雾薄荷 */
-  --mm-blue: #D3E4F4;       /* 多源解析 — 灰天蓝 */
-  --mm-rose: #FADEC9;       /* AI 私教 — 柔胭粉 */
+  /* ===== 双签名色（v7 · 唯一真相源） ===== */
+  --mm-pine: #2D4F3E;              /* 墨松绿 · AI 沉淀 */
+  --mm-pine-deep: #1A3327;
+  --mm-pine-light: #6B9080;
+  --mm-pine-mist: #E6EDE8;
+  --mm-pine-fog: #F2F6F3;
 
-  /* 按钮与强调 */
-  --mm-button: #232322;
-  --mm-highlight: #FDECC8;  /* 荧光笔黄 */
+  --mm-vermilion: #B5483C;         /* 朱批红 · 学生此刻 */
+  --mm-vermilion-deep: #8E3328;
+  --mm-vermilion-light: #D17969;
+  --mm-vermilion-mist: #F6E6E2;
+  --mm-vermilion-fog: #FBF2EF;
 
-  /* 功能语义色 */
-  --mm-success: #4DAE6F;
-  --mm-warning: #D9A441;
-  --mm-danger: #D96B6B;
-  --mm-info: #5B8DBF;
+  /* ===== v6 内容标签色（弱化保留 · 用于内容区分） ===== */
+  --mm-sand: #FDF3C0;
+  --mm-mint: #D1F4E0;
+  --mm-blue: #D3E4F4;
+  --mm-rose: #FADEC9;
+
+  /* ===== 按钮与强调 ===== */
+  --mm-button: #1C1B19;
+  --mm-highlight: #FDECC8;
+
+  /* ===== 功能语义色（v7 · 都从签名色派生） ===== */
+  --mm-success: #2D6A4F;
+  --mm-warning: #B8842B;
+  --mm-danger: #B5483C;            /* = vermilion · 朱批本就是"提醒" */
+  --mm-info: #2D4F3E;              /* = pine */
 
   /* 功能色淡底 */
-  --mm-success-bg: #E8F5E9;
-  --mm-warning-bg: #FFF8E1;
-  --mm-danger-bg: #FDECEC;
-  --mm-info-bg: #E3F2FD;
+  --mm-success-bg: #E8F0EB;
+  --mm-warning-bg: #FBF1DC;
+  --mm-danger-bg: #F6E6E2;
+  --mm-info-bg: #E6EDE8;
 
-  /* 兼容旧变量 — 全部指向新令牌 */
+  /* ===== 仪式光（AI 时刻专属） ===== */
+  --mm-shimmer-ai: linear-gradient(110deg,
+    rgba(45,79,62,0) 0%,
+    rgba(45,79,62,0.06) 35%,
+    rgba(181,72,60,0.08) 50%,
+    rgba(45,79,62,0.06) 65%,
+    rgba(45,79,62,0) 100%);
+  --mm-shimmer-skel: linear-gradient(110deg,
+    var(--mm-paper-warm) 0%,
+    var(--mm-paper-warm) 40%,
+    rgba(255,255,255,0.6) 50%,
+    var(--mm-paper-warm) 60%,
+    var(--mm-paper-warm) 100%);
+
+  /* ===== v6 兼容（向下指向 v7 token） ===== */
   --mm-brand: var(--mm-ink);
   --mm-brand-light: var(--mm-ink-secondary);
   --mm-brand-lighter: var(--mm-divider);
   --mm-brand-dark: var(--mm-ink);
   --mm-brand-50: var(--mm-hover);
-  --mm-bg: var(--mm-canvas);
+  --mm-bg: var(--mm-paper);
   --mm-bg-pure: var(--mm-card);
-  --mm-bg-subtle: var(--mm-hover);
+  --mm-bg-subtle: var(--mm-paper-warm);
   --mm-bg-muted: var(--mm-divider-light);
   --mm-bg-card: var(--mm-card);
-  --mm-bg-warm: var(--mm-canvas);
+  --mm-bg-warm: var(--mm-paper);
   --mm-text: var(--mm-ink);
   --mm-text-secondary: var(--mm-ink-secondary);
   --mm-text-muted: var(--mm-ink-muted);
   --mm-text-inverse: var(--mm-ink-inverse);
   --mm-border: var(--mm-divider);
   --mm-border-light: var(--mm-divider-light);
-  --mm-mint-50: #F0FBF4;
-  --mm-mint-100: #E0F5EA;
-  --mm-mint-deep: #3D8A60;
-  --mm-ai: #5B8DBF;
-  --mm-ai-light: #B3D4F0;
-  --mm-ai-dark: #3A6E99;
-  --mm-ai-50: #EDF5FD;
+  --mm-mint-50: var(--mm-pine-fog);
+  --mm-mint-100: var(--mm-pine-mist);
+  --mm-mint-deep: var(--mm-pine-deep);
+  --mm-ai: var(--mm-pine);
+  --mm-ai-light: var(--mm-pine-light);
+  --mm-ai-dark: var(--mm-pine-deep);
+  --mm-ai-50: var(--mm-pine-fog);
 
   /* 兼容旧 edu/dedao 变量 */
-  --edu-bg-primary: var(--mm-canvas);
-  --edu-bg-secondary: var(--mm-hover);
+  --edu-bg-primary: var(--mm-paper);
+  --edu-bg-secondary: var(--mm-paper-warm);
   --edu-bg-card: var(--mm-card);
   --edu-bg-soft: var(--mm-divider-light);
-  --edu-bg-accent: var(--mm-hover);
+  --edu-bg-accent: var(--mm-paper-warm);
   --edu-border: var(--mm-divider);
   --edu-border-light: var(--mm-divider-light);
   --dedao-gold: var(--mm-ink);
   --dedao-gold-light: var(--mm-ink-secondary);
   --dedao-gold-dark: var(--mm-ink);
   --dedao-brown: var(--mm-ink-secondary);
-  --dedao-bg: var(--mm-canvas);
+  --dedao-bg: var(--mm-paper);
   --dedao-bg-card: var(--mm-card);
-  --dedao-bg-warm: var(--mm-canvas);
+  --dedao-bg-warm: var(--mm-paper);
   --dedao-text: var(--mm-ink);
   --dedao-text-secondary: var(--mm-ink-secondary);
   --dedao-text-muted: var(--mm-ink-muted);
-  --dedao-confusion: var(--mm-danger);
+  --dedao-confusion: var(--mm-vermilion);
   --dedao-resolved: var(--mm-success);
 
-  /* 旧 RGB 色彩变量兼容 */
-  --color-navy: 35 35 34;
-  --color-navy-light: 120 119 116;
-  --color-lavender: 35 35 34;
-  --color-lavender-light: 233 233 231;
+  /* 旧 RGB 色彩变量（v7 重映射） */
+  --color-navy: 28 27 25;          /* ink */
+  --color-navy-light: 92 90 85;
+  --color-lavender: 28 27 25;
+  --color-lavender-light: 232 226 213;
   --color-sunflower: 217 164 65;
   --color-warm-orange: 217 164 65;
-  --color-skyblue: 91 141 191;
-  --color-mint: 77 174 111;
-  --color-coral: 217 107 107;
-  --color-lilac: 240 240 238;
-  --color-cream: 247 247 245;
-  --color-surface: 247 247 245;
-  --color-surface-soft: 239 239 239;
-  --color-surface-warm: 247 247 245;
-  --color-surface-mint: 240 251 244;
-  --color-text-primary: 35 35 34;
-  --color-text-secondary: 120 119 116;
-  --color-text-muted: 163 163 158;
+  --color-skyblue: 107 144 128;    /* ← pine-light */
+  --color-mint: 45 79 62;          /* ← pine */
+  --color-coral: 181 72 60;        /* ← vermilion */
+  --color-lilac: 240 235 223;
+  --color-cream: 250 247 242;
+  --color-surface: 250 247 242;
+  --color-surface-soft: 242 237 227;
+  --color-surface-warm: 250 247 242;
+  --color-surface-mint: 242 246 243;
+  --color-text-primary: 28 27 25;
+  --color-text-secondary: 92 90 85;
+  --color-text-muted: 142 139 130;
   --color-text-inverse: 255 255 255;
-  --color-border: 233 233 231;
-  --color-border-light: 240 240 238;
+  --color-border: 232 226 213;
+  --color-border-light: 240 235 223;
 
-  /* 阴影：极度克制，仅保留微弱层级感 */
-  --shadow-sm: none;
-  --shadow-md: none;
-  --shadow-lg: none;
-  --shadow-card: none;
-  --shadow-card-hover: none;
-  --shadow-glow: none;
-  --shadow-glow-mint: none;
-  --shadow-glow-ai: none;
+  /* ===== 投影系统（v7：必须存在，但极克制） ===== */
+  --shadow-sm:    0 1px 2px rgba(28,27,25,0.04);
+  --shadow-md:    0 1px 2px rgba(28,27,25,0.04), 0 4px 16px rgba(28,27,25,0.04);
+  --shadow-lg:    0 1px 2px rgba(28,27,25,0.05), 0 8px 28px rgba(28,27,25,0.06);
+  --shadow-card:  0 1px 2px rgba(28,27,25,0.05), 0 8px 28px rgba(28,27,25,0.06);
+  --shadow-card-hover: 0 2px 6px rgba(28,27,25,0.06), 0 16px 48px rgba(28,27,25,0.08);
+  --shadow-float: 0 2px 6px rgba(28,27,25,0.06), 0 16px 48px rgba(28,27,25,0.08);
+  --shadow-modal: 0 8px 16px rgba(28,27,25,0.08), 0 32px 80px rgba(28,27,25,0.12);
+  /* AI 在场专属 glow（"它活着"信号） */
+  --shadow-glow:      0 0 0 1px rgba(45,79,62,0.10), 0 8px 28px rgba(45,79,62,0.08);
+  --shadow-glow-mint: 0 0 0 1px rgba(45,79,62,0.10), 0 8px 28px rgba(45,79,62,0.08);
+  --shadow-glow-ai:   0 0 0 1px rgba(45,79,62,0.10), 0 8px 28px rgba(45,79,62,0.08);
 
-  /* 圆角 */
-  --radius-sm: 0.375rem;
-  --radius-md: 0.5rem;
-  --radius-lg: 0.75rem;
-  --radius-xl: 1rem;
-  --radius-2xl: 1.25rem;
-  --radius-3xl: 1.5rem;
+  /* ===== 圆角 ===== */
+  --radius-2xs: 2px;
+  --radius-xs:  4px;
+  --radius-sm:  6px;
+  --radius-md:  8px;
+  --radius-lg:  10px;
+  --radius-xl:  14px;
+  --radius-2xl: 18px;
+  --radius-3xl: 24px;
   --radius-full: 9999px;
 
-  /* 动画 */
-  --duration-fast: 150ms;
+  /* ===== 动画 ===== */
+  --duration-fast:   150ms;
   --duration-normal: 200ms;
-  --duration-slow: 350ms;
-  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --duration-slow:   320ms;
+  --duration-slower: 600ms;
+  --ease-out:    cubic-bezier(0.16, 1, 0.3, 1);
   --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
 
-  /* 安全区域 */
+  /* ===== 安全区域 ===== */
   --safe-area-top: env(safe-area-inset-top, 0px);
   --safe-area-bottom: env(safe-area-inset-bottom, 0px);
   --safe-area-left: env(safe-area-inset-left, 0px);
@@ -171,10 +212,71 @@
   --browser-chrome-height: 0px;
   --ai-chat-min-height: 300px;
 
-  /* 阅读节奏：给报告、对话、卡片统一一套更疏朗的默认尺度 */
+  /* ===== 阅读节奏 ===== */
   --mm-reading-line-height: 1.78;
   --mm-reading-measure: 68ch;
   --mm-section-gap: 1.25rem;
+}
+
+/* ============================================================
+   暗色模式 · "深夜书房"（first-class · 不是反色）
+   ============================================================ */
+[data-theme='dark'] {
+  --mm-paper: #14110D;             /* 深棕墨黑（温度比纯黑高） */
+  --mm-paper-warm: #1F1B16;
+  --mm-paper-deep: #28231C;
+  --mm-canvas: #14110D;
+  --mm-card: #1A1612;
+  --mm-hover: #1F1B16;
+
+  --mm-ink: #F2EDE3;
+  --mm-ink-secondary: #B8B0A2;
+  --mm-ink-muted: #82796D;
+  --mm-ink-faint: #56504A;
+  --mm-ink-inverse: #1C1B19;
+  --mm-divider: #2A241D;
+  --mm-divider-light: #1F1B16;
+
+  /* 暗色下双签名向亮调整（保证可读对比度） */
+  --mm-pine: #6B9080;
+  --mm-pine-deep: #2D4F3E;
+  --mm-pine-light: #93B5A4;
+  --mm-pine-mist: rgba(107,144,128,0.14);
+  --mm-pine-fog: rgba(107,144,128,0.06);
+
+  --mm-vermilion: #E07A5F;
+  --mm-vermilion-deep: #B5483C;
+  --mm-vermilion-light: #F09F87;
+  --mm-vermilion-mist: rgba(224,122,95,0.14);
+  --mm-vermilion-fog: rgba(224,122,95,0.06);
+
+  --mm-button: #F2EDE3;
+  --mm-danger: #E07A5F;
+  --mm-info: #6B9080;
+
+  --mm-success-bg: rgba(107,144,128,0.14);
+  --mm-warning-bg: rgba(184,132,43,0.14);
+  --mm-danger-bg: rgba(224,122,95,0.14);
+  --mm-info-bg: rgba(107,144,128,0.14);
+
+  --mm-shimmer-ai: linear-gradient(110deg,
+    rgba(107,144,128,0) 0%,
+    rgba(107,144,128,0.10) 45%,
+    rgba(224,122,95,0.12) 55%,
+    rgba(107,144,128,0) 100%);
+
+  --shadow-sm:    0 1px 2px rgba(0,0,0,0.4);
+  --shadow-md:    0 1px 2px rgba(0,0,0,0.4), 0 4px 16px rgba(0,0,0,0.3);
+  --shadow-lg:    0 1px 2px rgba(0,0,0,0.45), 0 8px 28px rgba(0,0,0,0.35);
+  --shadow-card:  0 1px 2px rgba(0,0,0,0.45), 0 8px 28px rgba(0,0,0,0.35);
+  --shadow-card-hover: 0 2px 6px rgba(0,0,0,0.5), 0 16px 48px rgba(0,0,0,0.4);
+  --shadow-float: 0 2px 6px rgba(0,0,0,0.5), 0 16px 48px rgba(0,0,0,0.4);
+  --shadow-modal: 0 8px 16px rgba(0,0,0,0.6), 0 32px 80px rgba(0,0,0,0.5);
+  --shadow-glow:      0 0 0 1px rgba(107,144,128,0.18), 0 8px 28px rgba(107,144,128,0.12);
+  --shadow-glow-mint: 0 0 0 1px rgba(107,144,128,0.18), 0 8px 28px rgba(107,144,128,0.12);
+  --shadow-glow-ai:   0 0 0 1px rgba(107,144,128,0.18), 0 8px 28px rgba(107,144,128,0.12);
+
+  color-scheme: dark;
 }
 
 @supports (padding-top: env(safe-area-inset-top)) {
@@ -194,9 +296,12 @@ body {
   height: 100%;
   min-height: 100dvh;
   min-height: -webkit-fill-available;
-  font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
+  font-family: 'Inter', var(--font-inter), -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
+  /* v7: 中英混排紧排（'palt' 让中文标点更紧） */
+  font-feature-settings: 'cv11', 'ss01', 'ss03', 'palt', 'kern';
+  font-optical-sizing: auto;
   color: var(--mm-ink);
-  background: var(--mm-canvas);
+  background: var(--mm-paper);
   line-height: 1.55;
   letter-spacing: -0.005em;
   text-rendering: optimizeLegibility;
@@ -1000,4 +1105,279 @@ p, span, div, h1, h2, h3, h4, h5, h6, li, td, th, label {
 }
 .chip-tap-anim { animation: chip-tap-bounce 0.2s ease-out; }
 .chip-tap-check { animation: chip-tap-check 0.4s ease-out; }
+
+
+/* ============================================================
+   v7 工具类（AI 视觉语言）· 在 design system 04+ 中大量使用
+   ============================================================ */
+
+/* === Typography helpers === */
+.font-serif-italic {
+  font-family: 'Instrument Serif', var(--font-instrument-serif), 'Songti SC', serif;
+  font-style: italic;
+  letter-spacing: 0;
+}
+.font-mono-cite {
+  font-family: 'JetBrains Mono', var(--font-jetbrains-mono), ui-monospace, Menlo, monospace;
+  font-feature-settings: 'tnum';
+}
+
+/* === 引用资产化 · 朱批时间戳 === */
+.cite-ts {
+  display: inline-flex;
+  align-items: center;
+  font-family: 'JetBrains Mono', var(--font-jetbrains-mono), ui-monospace, Menlo, monospace;
+  font-size: 11.5px;
+  color: var(--mm-vermilion);
+  background: var(--mm-vermilion-mist);
+  padding: 1px 6px;
+  border-radius: var(--radius-xs);
+  cursor: pointer;
+  transition: background var(--duration-fast) var(--ease-out);
+  white-space: nowrap;
+  font-weight: 500;
+  margin: 0 1px;
+}
+.cite-ts:hover { background: rgb(240 213 205); }
+
+/* === 引用资产化 · 墨绿资料 === */
+.cite-src {
+  display: inline-flex;
+  align-items: center;
+  font-family: 'JetBrains Mono', var(--font-jetbrains-mono), ui-monospace, Menlo, monospace;
+  font-size: 11.5px;
+  color: var(--mm-pine);
+  background: var(--mm-pine-mist);
+  padding: 1px 6px;
+  border-radius: var(--radius-xs);
+  cursor: pointer;
+  transition: background var(--duration-fast) var(--ease-out);
+  font-weight: 500;
+  margin: 0 1px;
+}
+.cite-src:hover { background: rgb(216 227 220); }
+
+/* === 高亮笔（mark） === */
+.mark-pine {
+  background: linear-gradient(transparent 60%, #DCE8E1 60%);
+  padding: 0 1px;
+}
+.mark-vermilion {
+  background: linear-gradient(transparent 60%, #F2DDD7 60%);
+  padding: 0 1px;
+}
+.mark-sand {
+  background: linear-gradient(transparent 60%, #FDF1C8 60%);
+  padding: 0 1px;
+}
+[data-theme='dark'] .mark-pine {
+  background: linear-gradient(transparent 60%, rgba(107,144,128,0.25) 60%);
+}
+[data-theme='dark'] .mark-vermilion {
+  background: linear-gradient(transparent 60%, rgba(224,122,95,0.25) 60%);
+}
+
+/* === AI 在场卡片（"AI 活着"信号） === */
+.surface-ai {
+  position: relative;
+  background: var(--mm-card);
+  border: 1px solid var(--mm-divider);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-glow-ai);
+  overflow: hidden;
+}
+.surface-ai::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: var(--mm-shimmer-ai);
+  background-size: 220% 100%;
+  animation: ai-breath 6s ease-in-out infinite;
+  pointer-events: none;
+  z-index: 0;
+}
+.surface-ai > * { position: relative; z-index: 1; }
+
+@keyframes ai-breath {
+  0%, 100% { background-position: 200% 0; }
+  50%      { background-position: -100% 0; }
+}
+
+/* === 骨架屏 === */
+.skel {
+  background: var(--mm-shimmer-skel);
+  background-size: 220% 100%;
+  border-radius: var(--radius-sm);
+  animation: skel-shimmer 1.4s linear infinite;
+}
+@keyframes skel-shimmer {
+  0%   { background-position: 200% 0; }
+  100% { background-position: -100% 0; }
+}
+
+/* === 流式 typing caret === */
+.typing-caret {
+  display: inline-block;
+  width: 7px;
+  height: 14px;
+  background: var(--mm-pine);
+  vertical-align: -2px;
+  margin-left: 2px;
+  border-radius: 1px;
+  animation: caret-blink 1s steps(2) infinite;
+}
+@keyframes caret-blink { 50% { opacity: 0; } }
+
+/* === 字符 stagger 浮现（包裹流式文本的 .stream，每个字符 span） === */
+.stream span {
+  display: inline-block;
+  opacity: 0;
+  transform: translateY(2px);
+  animation: char-in 0.3s var(--ease-out) forwards;
+}
+@keyframes char-in {
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* === 思考气息流 === */
+.thinking-strip {
+  display: inline-flex;
+  align-items: center;
+  height: 22px;
+  padding: 0 12px;
+  background: var(--mm-shimmer-ai);
+  background-size: 200% 100%;
+  animation: shimmer-fast 1.6s linear infinite;
+  border-radius: var(--radius-sm);
+  font-size: 11.5px;
+  color: var(--mm-ink-muted);
+}
+@keyframes shimmer-fast {
+  0%   { background-position: 200% 0; }
+  100% { background-position: -100% 0; }
+}
+
+/* === 录音呼吸点 === */
+.rec-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--mm-vermilion);
+  box-shadow: 0 0 0 0 rgba(181,72,60,0.55);
+  animation: rec-pulse-v7 1.6s ease-in-out infinite;
+}
+@keyframes rec-pulse-v7 {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(181,72,60,0.55); }
+  50%      { box-shadow: 0 0 0 8px rgba(181,72,60,0); }
+}
+
+/* === Octo 呼吸光环（包裹 Octo 头像/sprite 的容器加 .octo-aura） === */
+.octo-aura {
+  position: relative;
+}
+.octo-aura::before {
+  content: '';
+  position: absolute;
+  inset: -8px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(45,79,62,0.18) 0%, transparent 65%);
+  animation: octo-breath-v7 3.6s ease-in-out infinite;
+  z-index: 0;
+}
+.octo-aura > * { position: relative; z-index: 1; }
+@keyframes octo-breath-v7 {
+  0%, 100% { transform: scale(0.92); opacity: 0.5; }
+  50%      { transform: scale(1.08); opacity: 0.9; }
+}
+[data-theme='dark'] .octo-aura::before {
+  background: radial-gradient(circle, rgba(107,144,128,0.25) 0%, transparent 65%);
+}
+
+/* === 选择高亮：用品牌色 === */
+::selection { background: var(--mm-vermilion-mist); color: var(--mm-ink); }
+[data-theme='dark'] ::selection { background: rgba(224,122,95,0.25); color: var(--mm-ink); }
+
+/* ============================================================
+ * v7 通用排版 utility class（让任意页面快速获得 v7 视觉灵魂）
+ *
+ * 用法：直接在 className 加 .v7-eyebrow / .v7-em / .v7-h1 即可
+ * 设计意图：把 design-demo/v7 里 5 个最关键的视觉信号资产化为单一 class
+ * ============================================================ */
+
+/* mono eyebrow：JetBrains Mono + 11px + 0.08em + uppercase + pine 600 */
+.v7-eyebrow {
+  font-family: var(--font-mono, 'JetBrains Mono', monospace);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--mm-pine);
+}
+
+/* serif italic em：Instrument Serif + italic + 朱批红装饰，用在 h1/h2 里点缀 */
+.v7-em {
+  font-family: var(--font-serif, 'Instrument Serif', serif);
+  font-style: italic;
+  font-weight: 400;
+  color: var(--mm-vermilion);
+}
+
+/* serif italic em pine 版（部分场景需要墨绿 italic，比如"AI 同学"） */
+.v7-em-pine {
+  font-family: var(--font-serif, 'Instrument Serif', serif);
+  font-style: italic;
+  font-weight: 400;
+  color: var(--mm-pine);
+}
+
+/* h1 大字：30px / 600 / -0.024em */
+.v7-h1 {
+  font-size: 30px;
+  font-weight: 600;
+  letter-spacing: -0.024em;
+  line-height: 1.18;
+  color: var(--mm-ink);
+}
+
+/* col-head section header：12.5px + uppercase + 0.04em + ink-2，with .accent pine */
+.v7-section-head {
+  font-size: 12.5px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--mm-ink-secondary);
+}
+.v7-section-head .accent { color: var(--mm-pine); }
+
+/* mono small label：11.5px + 0.06em + ink-3 + tabular-nums，用在 ts / 数字徽标 */
+.v7-mono-label {
+  font-family: var(--font-mono, 'JetBrains Mono', monospace);
+  font-size: 11.5px;
+  font-weight: 500;
+  color: var(--mm-ink-muted);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.01em;
+}
+
+/* === v7 微交互一致性：全局按钮 active scale + transition ===
+ * 任何 button/[role=button] 的 active 状态都给一个统一的 0.997 scale，
+ * 让"按下"这件事有一致的物理反馈。已经显式写了 active:scale 的不会被覆盖。
+ */
+@media (hover: hover) and (pointer: fine) {
+  button:not(.no-press), a.btn:not(.no-press), [role="button"]:not(.no-press) {
+    transition-property: color, background-color, border-color, box-shadow, transform, opacity;
+    transition-duration: 150ms;
+    transition-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
+  }
+}
+
+/* hero-float 缓动浮起（用在分享落地页 / 仪式时刻 hero） */
+.hero-float {
+  animation: hero-float-anim 7s ease-in-out infinite;
+}
+@keyframes hero-float-anim {
+  0%, 100% { transform: translateY(0) rotate(0deg); }
+  50%      { transform: translateY(-6px) rotate(-1.2deg); }
+}
 

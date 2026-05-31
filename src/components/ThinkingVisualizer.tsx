@@ -138,7 +138,7 @@ const SimpleThinking = memo(function SimpleThinking({
   isMobile?: boolean;
 }) {
   return (
-    <div className={`text-xs text-violet-700/80 leading-relaxed max-h-48 overflow-y-auto ${isMobile ? 'text-[10px]' : ''}`}>
+    <div className={`text-xs text-pine/80 leading-relaxed max-h-48 overflow-y-auto ${isMobile ? 'text-[10px]' : ''}`}>
       <StreamingMarkdown
         content={content}
         isStreaming={isThinking}
@@ -171,21 +171,21 @@ const ThinkingStepCard = memo(function ThinkingStepCard({
     <div className="relative">
       {/* 步骤卡片 */}
       <div 
-        className="bg-white/70 rounded-xl border border-violet-100 overflow-hidden shadow-sm hover:transition-shadow duration-200"
+        className="bg-white/70 rounded-xl border border-pine/15 overflow-hidden shadow-sm hover:transition-shadow duration-200"
         style={{ animationDelay: `${index * 150}ms` }}
       >
         {/* 步骤标题 */}
-        <div className="px-3 py-2 bg-[#D3E4F4]/30 border-b border-violet-100">
+        <div className="px-3 py-2 bg-[#D3E4F4]/30 border-b border-pine/15">
           <div className="flex items-center gap-2">
             <span className="text-base">{icon}</span>
-            <span className={`font-medium text-violet-800 ${isMobile ? 'text-xs' : 'text-sm'}`}>
+            <span className={`font-medium text-pine ${isMobile ? 'text-xs' : 'text-sm'}`}>
               {step.title}
             </span>
           </div>
         </div>
         
         {/* 步骤内容 */}
-        <div className={`px-3 py-2 ${isMobile ? 'text-[10px]' : 'text-xs'} text-gray-700 leading-relaxed`}>
+        <div className={`px-3 py-2 ${isMobile ? 'text-[10px]' : 'text-xs'} text-ink-secondary leading-relaxed`}>
           <StreamingMarkdown
             content={step.content}
             isStreaming={false}
@@ -195,10 +195,10 @@ const ThinkingStepCard = memo(function ThinkingStepCard({
         
         {/* 学霸笔记 */}
         {step.tip && (
-          <div className="px-3 py-2 bg-[#FDF3C0]/30 border-t border-[#E9E9E7]">
+          <div className="px-3 py-2 bg-[#FDF3C0]/30 border-t border-[#E8E2D5]">
             <div className="flex items-start gap-2">
-              <span className="text-[#787774] flex-shrink-0">💡</span>
-              <p className={`text-[#232322] ${isMobile ? 'text-[10px]' : 'text-xs'} leading-relaxed`}>
+              <span className="text-[#5C5A55] flex-shrink-0">💡</span>
+              <p className={`text-[#1C1B19] ${isMobile ? 'text-[10px]' : 'text-xs'} leading-relaxed`}>
                 <span className="font-medium">学霸笔记：</span>
                 {step.tip}
               </p>
@@ -211,7 +211,7 @@ const ThinkingStepCard = memo(function ThinkingStepCard({
       {!isLast && (
         <div className="flex justify-center py-1">
           <div className="w-px h-4 bg-[#D3E4F4]" />
-          <svg className="w-3 h-3 text-violet-400 absolute -bottom-1" fill="currentColor" viewBox="0 0 24 24">
+          <svg className="w-3 h-3 text-pine/60 absolute -bottom-1" fill="currentColor" viewBox="0 0 24 24">
             <path d="M12 16l-6-6h12l-6 6z" />
           </svg>
         </div>
@@ -264,8 +264,8 @@ const StructuredThinking = memo(function StructuredThinking({
       {parsed.summary && !isThinking && (
         <div className="mt-3 p-3 bg-[#D1F4E0]/30 rounded-xl border border-[#D1F4E0]">
           <div className="flex items-center gap-2">
-            <span className="text-[#232322]">🌟</span>
-            <p className={`text-[#232322] ${isMobile ? 'text-[10px]' : 'text-xs'} font-medium`}>
+            <span className="text-[#1C1B19]">🌟</span>
+            <p className={`text-[#1C1B19] ${isMobile ? 'text-[10px]' : 'text-xs'} font-medium`}>
               本次用到的思维方法：
               <span className="font-normal ml-1">{parsed.summary}</span>
             </p>
@@ -275,7 +275,7 @@ const StructuredThinking = memo(function StructuredThinking({
       
       {/* 思考中的提示 */}
       {isThinking && (
-        <div className="flex items-center justify-center gap-2 py-2 text-violet-500">
+        <div className="flex items-center justify-center gap-2 py-2 text-pine">
           <div className="loading-dots scale-75">
             <span></span>
             <span></span>
@@ -344,20 +344,20 @@ export const ThinkingVisualizer = memo(function ThinkingVisualizer({
       <div 
         className={`rounded-2xl border transition-all duration-300 overflow-hidden ${
           isThinking 
-            ? 'bg-[#D3E4F4]/30 border-violet-200 shadow-violet-100/50' 
-            : 'bg-violet-50/50 border-violet-100'
+            ? 'bg-[#D3E4F4]/30 border-pine/25 shadow-pine/10' 
+            : 'bg-pine-fog/60 border-pine/15'
         }`}
       >
         {/* 标题栏 */}
         <button
           onClick={onToggleCollapse}
-          className="w-full px-4 py-2.5 flex items-center justify-between text-left hover:bg-violet-100/50 transition-colors"
+          className="w-full px-4 py-2.5 flex items-center justify-between text-left hover:bg-pine-mist/60 transition-colors"
         >
           <div className="flex items-center gap-2">
-            <span className={`text-violet-600 text-lg ${isThinking ? 'animate-pulse' : ''}`}>
+            <span className={`text-pine text-lg ${isThinking ? 'animate-pulse' : ''}`}>
               {isThinking ? '🧠' : '💭'}
             </span>
-            <span className={`font-medium text-violet-700 ${isMobile ? 'text-xs' : 'text-sm'}`}>
+            <span className={`font-medium text-pine ${isMobile ? 'text-xs' : 'text-sm'}`}>
               {enableGuideMode 
                 ? (isThinking ? '跟我一起理清思路...' : '思维过程')
                 : (isThinking ? 'AI 正在思考...' : '思考过程')
@@ -375,14 +375,14 @@ export const ThinkingVisualizer = memo(function ThinkingVisualizer({
           <div className="flex items-center gap-3">
             {/* 耗时统计 */}
             {formattedTime && (
-              <span className={`text-violet-400 ${isMobile ? 'text-[10px]' : 'text-xs'}`}>
+              <span className={`text-pine/60 ${isMobile ? 'text-[10px]' : 'text-xs'}`}>
                 {formattedTime}
               </span>
             )}
             
             {/* 折叠箭头 */}
             <svg 
-              className={`w-4 h-4 text-violet-500 transition-transform duration-200 ${isCollapsed ? '' : 'rotate-180'}`}
+              className={`w-4 h-4 text-pine transition-transform duration-200 ${isCollapsed ? '' : 'rotate-180'}`}
               fill="none" 
               stroke="currentColor" 
               viewBox="0 0 24 24"

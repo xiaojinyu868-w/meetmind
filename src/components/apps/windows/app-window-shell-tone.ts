@@ -15,13 +15,13 @@ export function getAppWindowShellTone(appKey: WorkshopAppKey): AppWindowShellTon
   if (appKey === 'flashcards') {
     return {
       root: 'min-h-screen bg-[#11110F] text-white',
-      header: 'sticky top-0 z-20 border-b border-white/[0.08] bg-[#151411]/95 backdrop-blur',
+      header: 'sticky top-0 z-20 border-b border-white/[0.08] bg-ink/95 backdrop-blur',
       headerInner: 'mx-auto flex max-w-7xl items-center gap-3 px-4 py-3 sm:px-6',
       backLink: 'inline-flex items-center gap-1 rounded-full border border-white/[0.10] bg-white/[0.04] px-3 py-1.5 text-sm text-white/62 hover:border-white/[0.18] hover:text-white',
       title: 'truncate text-lg font-semibold text-white/92',
       subtitle: 'truncate text-xs text-white/42',
       main: 'mx-auto min-h-[calc(100vh-64px)] max-w-7xl px-0 py-0 sm:px-0',
-      actionButton: 'rounded-lg bg-white px-3 py-1.5 text-sm font-medium text-[#151411] hover:bg-white/90 disabled:cursor-not-allowed disabled:opacity-60',
+      actionButton: 'rounded-lg bg-white px-3 py-1.5 text-sm font-medium text-ink hover:bg-white/90 disabled:cursor-not-allowed disabled:opacity-60',
     };
   }
 

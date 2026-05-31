@@ -69,8 +69,8 @@ export const WaveformPlayer = forwardRef<WaveformPlayerRef, WaveformPlayerProps>
   onPlayStateChange,
   onReady,
   onAnchorAdd,
-  waveColor = '#D4A574',      // dedao-gold 教育金色
-  progressColor = '#F5E6D3',  // 暖米色
+  waveColor = '#6B9080',      // v7 pine-light 浅松绿（声波 = AI 沉淀的轨迹）
+  progressColor = '#2D4F3E',  // v7 pine 主签名（已播放部分 = 已沉淀）
   height: heightProp,
   showControls = true,
   allowAddAnchor = false,
@@ -135,7 +135,7 @@ export const WaveformPlayer = forwardRef<WaveformPlayerRef, WaveformPlayerProps>
       container: containerRef.current,
       waveColor,
       progressColor,
-      cursorColor: '#FF8A80',  // coral 珊瑚粉
+      cursorColor: '#B5483C',  // v7 vermilion 朱批红（光标 = 此刻）
       height,
       barWidth: 3,
       barGap: 2,
@@ -372,9 +372,9 @@ export const WaveformPlayer = forwardRef<WaveformPlayerRef, WaveformPlayerProps>
   // 无音频时的占位
   if (!src) {
     return (
-      <div className="bg-[#F7F7F5] rounded-2xl p-8">
-        <div className="flex flex-col items-center justify-center gap-3 text-gray-400">
-          <div className="w-16 h-16 bg-gray-200 rounded-full flex items-center justify-center">
+      <div className="bg-paper rounded-2xl p-8">
+        <div className="flex flex-col items-center justify-center gap-3 text-ink-muted">
+          <div className="w-16 h-16 bg-divider rounded-full flex items-center justify-center">
             <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2" />
@@ -389,12 +389,12 @@ export const WaveformPlayer = forwardRef<WaveformPlayerRef, WaveformPlayerProps>
 
   return (
     <div className={cn(
-      "bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden",
+      "bg-white rounded-2xl border border-divider shadow-sm overflow-hidden",
       compact && "rounded-xl"
     )}>
       {/* 波形容器 */}
       <div className={cn(
-        "bg-[#F7F7F5] relative",
+        "bg-paper relative",
         compact ? "p-2" : "p-4"
       )}>
         <div 
@@ -439,24 +439,24 @@ export const WaveformPlayer = forwardRef<WaveformPlayerRef, WaveformPlayerProps>
 
       {/* 困惑点图例 - 紧凑模式下隐藏 */}
       {!compact && anchors.length > 0 && (
-        <div className="px-4 py-2 bg-gray-50 border-t border-gray-100 flex items-center gap-6 text-xs">
+        <div className="px-4 py-2 bg-paper-warm border-t border-divider-light flex items-center gap-6 text-xs">
           <div className="flex items-center gap-2">
             <div className="w-4 h-4 bg-coral/30 rounded border border-coral-300" />
-            <span className="text-gray-600">未解决困惑点</span>
+            <span className="text-ink-secondary">未解决困惑点</span>
           </div>
           <div className="flex items-center gap-2">
             <div className="w-4 h-4 bg-mint/30 rounded border border-mint-300" />
-            <span className="text-gray-600">已解决</span>
+            <span className="text-ink-secondary">已解决</span>
           </div>
           <div className="flex-1" />
-          <span className="text-gray-400 font-medium">共 {anchors.length} 个困惑点</span>
+          <span className="text-ink-muted font-medium">共 {anchors.length} 个困惑点</span>
         </div>
       )}
 
       {/* 控制栏 */}
       {showControls && (
         <div className={cn(
-          "bg-white border-t border-gray-100",
+          "bg-white border-t border-divider-light",
           compact ? "px-3 py-2" : "px-4 py-3"
         )}>
           <div className="flex items-center gap-3">
@@ -467,7 +467,7 @@ export const WaveformPlayer = forwardRef<WaveformPlayerRef, WaveformPlayerProps>
                 <button
                   onClick={skipBackward}
                   disabled={!isReady}
-                  className="w-10 h-10 flex items-center justify-center text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-xl transition-all disabled:opacity-50"
+                  className="w-10 h-10 flex items-center justify-center text-ink-muted hover:text-ink-secondary hover:bg-paper-deep rounded-xl transition-all disabled:opacity-50"
                   title="后退 10 秒"
                 >
                   <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -485,9 +485,9 @@ export const WaveformPlayer = forwardRef<WaveformPlayerRef, WaveformPlayerProps>
                   compact ? 'w-8 h-8 rounded-lg' : 'w-12 h-12 rounded-xl'
                 )}
                 style={compact
-                  ? { background: '#CFA16E' }
+                  ? { background: '#1A3327' }
                   : {
-                      background: 'linear-gradient(135deg, #D4A574 0%, #C49A6C 100%)',
+                      background: 'linear-gradient(135deg, #2D4F3E 0%, #1A3327 100%)',
                       boxShadow: '0 4px 12px rgba(212, 165, 116, 0.35)'
                     }}
               >
@@ -507,7 +507,7 @@ export const WaveformPlayer = forwardRef<WaveformPlayerRef, WaveformPlayerProps>
                 <button
                   onClick={skipForward}
                   disabled={!isReady}
-                  className="w-10 h-10 flex items-center justify-center text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-xl transition-all disabled:opacity-50"
+                  className="w-10 h-10 flex items-center justify-center text-ink-muted hover:text-ink-secondary hover:bg-paper-deep rounded-xl transition-all disabled:opacity-50"
                   title="前进 10 秒"
                 >
                   <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -522,11 +522,11 @@ export const WaveformPlayer = forwardRef<WaveformPlayerRef, WaveformPlayerProps>
               "flex items-center gap-1.5",
               compact ? "text-xs" : "text-sm"
             )}>
-              <span data-testid="waveform-current-time" className="font-mono text-gray-900 font-medium">
+              <span data-testid="waveform-current-time" className="font-mono text-ink font-medium">
                 {formatTimestampMs(currentTime)}
               </span>
-              <span className="text-gray-400">/</span>
-              <span className="font-mono text-gray-500">
+              <span className="text-ink-muted">/</span>
+              <span className="font-mono text-ink-muted">
                 {formatTimestampMs(duration)}
               </span>
             </div>
@@ -543,9 +543,9 @@ export const WaveformPlayer = forwardRef<WaveformPlayerRef, WaveformPlayerProps>
                   compact ? 'px-2 py-1 text-xs' : 'px-4 py-2 text-sm'
                 )}
                 style={compact
-                  ? { background: '#F08E83' }
+                  ? { background: '#8E3328' }
                   : {
-                      background: 'linear-gradient(135deg, #FF8A80 0%, #FF574A 100%)',
+                      background: 'linear-gradient(135deg, #B5483C 0%, #8E3328 100%)',
                       boxShadow: '0 4px 12px rgba(255, 138, 128, 0.35)'
                     }}
                 title="标记当前位置为困惑点"
@@ -560,7 +560,7 @@ export const WaveformPlayer = forwardRef<WaveformPlayerRef, WaveformPlayerProps>
               onClick={cyclePlaybackRate}
               disabled={!isReady}
               className={cn(
-                "font-medium text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-all disabled:opacity-50 border border-gray-200",
+                "font-medium text-ink-secondary hover:text-ink hover:bg-paper-deep rounded-lg transition-all disabled:opacity-50 border border-divider",
                 compact ? "px-2 py-1 text-xs" : "px-3 py-1.5 text-sm"
               )}
               title="播放速度"
@@ -573,7 +573,7 @@ export const WaveformPlayer = forwardRef<WaveformPlayerRef, WaveformPlayerProps>
               <div className="flex items-center gap-2">
                 <button
                   onClick={toggleMute}
-                  className="w-8 h-8 flex items-center justify-center text-gray-500 hover:text-gray-700 rounded-lg transition-colors"
+                  className="w-8 h-8 flex items-center justify-center text-ink-muted hover:text-ink-secondary rounded-lg transition-colors"
                 >
                   {isMuted || volume === 0 ? (
                     <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -593,7 +593,7 @@ export const WaveformPlayer = forwardRef<WaveformPlayerRef, WaveformPlayerProps>
                   step="0.1"
                   value={isMuted ? 0 : volume}
                   onChange={handleVolumeChange}
-                  className="w-20 h-1.5 bg-gray-200 rounded-full appearance-none cursor-pointer accent-[#232322]"
+                  className="w-20 h-1.5 bg-divider rounded-full appearance-none cursor-pointer accent-[#1C1B19]"
                 />
               </div>
             )}
@@ -606,27 +606,27 @@ export const WaveformPlayer = forwardRef<WaveformPlayerRef, WaveformPlayerProps>
         <div className="absolute inset-0 flex items-center justify-center bg-white/90 rounded-2xl">
           <div className="flex flex-col items-center gap-3">
             <div className="relative w-12 h-12">
-              <div className="absolute inset-0 border-4 rounded-full" style={{ borderColor: '#F5E6D3' }} />
+              <div className="absolute inset-0 border-4 rounded-full" style={{ borderColor: '#E8E2D5' }} />
               <div 
                 className="absolute inset-0 border-4 rounded-full animate-spin"
                 style={{ 
                   clipPath: `polygon(50% 50%, 50% 0%, ${50 + 50 * Math.sin(loadProgress / 100 * Math.PI * 2)}% ${50 - 50 * Math.cos(loadProgress / 100 * Math.PI * 2)}%, 50% 50%)`,
                   borderColor: 'transparent',
-                  borderTopColor: '#D4A574',
+                  borderTopColor: '#2D4F3E',
                 }}
               />
             </div>
-            <span className="text-sm text-gray-600 font-medium">
+            <span className="text-sm text-ink-secondary font-medium">
               加载音频 {loadProgress > 0 ? `${loadProgress}%` : '...'}
             </span>
             {/* 进度条 */}
             {loadProgress > 0 && (
-              <div className="w-32 h-1.5 bg-gray-200 rounded-full overflow-hidden">
+              <div className="w-32 h-1.5 bg-divider rounded-full overflow-hidden">
                 <div 
                   className="h-full transition-all duration-300"
                   style={{ 
                     width: `${loadProgress}%`,
-                    background: 'linear-gradient(90deg, #D4A574 0%, #E8B88C 100%)'
+                    background: 'linear-gradient(90deg, #2D4F3E 0%, #6B9080 100%)'
                   }}
                 />
               </div>

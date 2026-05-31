@@ -356,7 +356,7 @@ export function AgreementModal({
         className="relative w-full max-w-2xl max-h-[85vh] bg-white rounded-2xl shadow-2xl overflow-hidden animate-modal-in"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="sticky top-0 z-10 flex items-center justify-between px-6 py-4 bg-[#232322] text-white">
+        <div className="sticky top-0 z-10 flex items-center justify-between px-6 py-4 bg-[#1C1B19] text-white">
           <div>
             <h2 className="text-lg font-semibold">{title}</h2>
             <p className="text-xs text-white/80 mt-0.5">生效日期：{updateDate}</p>
@@ -375,23 +375,23 @@ export function AgreementModal({
           <div className="space-y-6">
             {sections.map((section, sIdx) => (
               <div key={sIdx}>
-                <h3 className="text-base font-semibold text-gray-900 mb-3 pb-2 border-b border-gray-100">
+                <h3 className="text-base font-semibold text-ink mb-3 pb-2 border-b border-divider-light">
                   {section.title}
                 </h3>
                 <div className="space-y-3">
                   {section.content.map((item, iIdx) => {
                     if (typeof item === 'string') {
-                      return <p key={iIdx} className="text-sm text-gray-600 leading-relaxed">{item}</p>;
+                      return <p key={iIdx} className="text-sm text-ink-secondary leading-relaxed">{item}</p>;
                     }
                     if (item.subtitle) {
-                      return <h4 key={iIdx} className="text-sm font-medium text-gray-800 mt-4 mb-2">{item.subtitle}</h4>;
+                      return <h4 key={iIdx} className="text-sm font-medium text-ink mt-4 mb-2">{item.subtitle}</h4>;
                     }
                     if (item.items) {
                       return (
                         <ul key={iIdx} className="space-y-1.5 ml-4">
                           {item.items.map((li, liIdx) => (
-                            <li key={liIdx} className="text-sm text-gray-600 leading-relaxed flex items-start gap-2">
-                              <span className="text-rose-400 mt-1.5 flex-shrink-0">•</span>
+                            <li key={liIdx} className="text-sm text-ink-secondary leading-relaxed flex items-start gap-2">
+                              <span className="text-vermilion/65 mt-1.5 flex-shrink-0">•</span>
                               <span>{li}</span>
                             </li>
                           ))}
@@ -399,7 +399,7 @@ export function AgreementModal({
                       );
                     }
                     if (item.text) {
-                      return <p key={iIdx} className="text-sm text-gray-600 leading-relaxed">{item.text}</p>;
+                      return <p key={iIdx} className="text-sm text-ink-secondary leading-relaxed">{item.text}</p>;
                     }
                     return null;
                   })}
@@ -408,8 +408,8 @@ export function AgreementModal({
             ))}
           </div>
           
-          <div className="mt-8 pt-4 border-t border-gray-100">
-            <p className="text-xs text-gray-500 text-center">
+          <div className="mt-8 pt-4 border-t border-divider-light">
+            <p className="text-xs text-ink-muted text-center">
               使用 MeetMind 服务即表示您已阅读并同意本{isTerms ? '协议' : '政策'}
             </p>
           </div>

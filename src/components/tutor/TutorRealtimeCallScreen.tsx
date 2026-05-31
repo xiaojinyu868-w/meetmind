@@ -60,14 +60,14 @@ function VoiceOrb({ state }: { state: 'idle' | 'listening' | 'thinking' | 'respo
         {isActive ? (
           <>
             <span
-              className="absolute inset-0 rounded-full border border-[#232322]"
+              className="absolute inset-0 rounded-full border border-[#1C1B19]"
               style={{
                 opacity: 0.06,
                 animation: 'orbPulse 2.4s ease-in-out infinite',
               }}
             />
             <span
-              className="absolute inset-[-8px] rounded-full border border-[#232322]"
+              className="absolute inset-[-8px] rounded-full border border-[#1C1B19]"
               style={{
                 opacity: 0.03,
                 animation: 'orbPulse 2.4s ease-in-out 0.4s infinite',
@@ -77,11 +77,11 @@ function VoiceOrb({ state }: { state: 'idle' | 'listening' | 'thinking' | 'respo
         ) : null}
 
         {/* 外圈 */}
-        <span className="absolute inset-0 rounded-full border border-[#DAD8D2] bg-white" />
-        <span className="absolute inset-[10px] rounded-full border border-[#ECEBE6]" />
+        <span className="absolute inset-0 rounded-full border border-divider bg-white" />
+        <span className="absolute inset-[10px] rounded-full border border-divider-light" />
 
         {/* 核心圆 */}
-        <span className="relative z-10 flex h-[104px] w-[104px] items-center justify-center rounded-full bg-[#232322]">
+        <span className="relative z-10 flex h-[104px] w-[104px] items-center justify-center rounded-full bg-[#1C1B19]">
           {/* 声纹条 */}
           <div className="flex h-[20px] items-end justify-center gap-[4px]">
             {Array.from({ length: 5 }).map((_, i) => (
@@ -103,7 +103,7 @@ function VoiceOrb({ state }: { state: 'idle' | 'listening' | 'thinking' | 'respo
 
       {/* 状态文字（极淡） */}
       {orbLabel ? (
-        <span className="text-[13px] font-medium text-[#A3A39E]">{orbLabel}</span>
+        <span className="text-[13px] font-medium text-[#8E8B82]">{orbLabel}</span>
       ) : null}
 
       <style jsx>{`
@@ -135,10 +135,10 @@ function CallControlButton({
 
   const toneClass =
     tone === 'danger'
-      ? 'border border-[#232322] bg-[#232322] text-white'
+      ? 'border border-[#1C1B19] bg-[#1C1B19] text-white'
       : tone === 'primary'
-        ? 'border border-[#232322] bg-[#232322] text-white'
-        : 'border border-[#E9E9E7] bg-white text-[#232322]';
+        ? 'border border-[#1C1B19] bg-[#1C1B19] text-white'
+        : 'border border-[#E8E2D5] bg-white text-[#1C1B19]';
 
   return (
     <button
@@ -150,7 +150,7 @@ function CallControlButton({
       <span className={`inline-flex ${sizeClass} items-center justify-center rounded-full ${toneClass} transition-colors duration-200`}>
         <Icon size={iconSize} strokeWidth={1.8} />
       </span>
-      <span className="whitespace-nowrap text-[11px] font-medium text-[#A3A39E] transition-colors duration-200">{label}</span>
+      <span className="whitespace-nowrap text-[11px] font-medium text-[#8E8B82] transition-colors duration-200">{label}</span>
     </button>
   );
 }
@@ -280,7 +280,7 @@ export function TutorRealtimeCallScreen({
   }, [connectSession, errorMessage, hasTranscript, isConnected]);
 
   return (
-    <div className="relative flex h-full flex-col overflow-hidden bg-[#F7F7F5] px-4 pb-[max(env(safe-area-inset-bottom),20px)] pt-4">
+    <div className="relative flex h-full flex-col overflow-hidden bg-[#FAF7F2] px-4 pb-[max(env(safe-area-inset-bottom),20px)] pt-4">
 
       {/* ── 文字面板（从底部滑出） ── */}
       {showTranscript ? (
@@ -289,15 +289,15 @@ export function TutorRealtimeCallScreen({
             type="button"
             aria-label="关闭文字面板"
             onClick={() => setShowTranscript(false)}
-            className="absolute inset-0 z-20 bg-[#232322]/8"
+            className="absolute inset-0 z-20 bg-[#1C1B19]/8"
           />
-          <div className="absolute inset-x-0 bottom-0 z-30 rounded-t-[28px] border border-[#E9E9E7] bg-white px-5 pb-[max(env(safe-area-inset-bottom),18px)] pt-5">
+          <div className="absolute inset-x-0 bottom-0 z-30 rounded-t-[28px] border border-[#E8E2D5] bg-white px-5 pb-[max(env(safe-area-inset-bottom),18px)] pt-5">
             <div className="flex items-center justify-between">
-              <p className="text-[15px] font-semibold text-[#232322]">{COPY.realtime.transcriptTitle}</p>
+              <p className="text-[15px] font-semibold text-[#1C1B19]">{COPY.realtime.transcriptTitle}</p>
               <button
                 type="button"
                 onClick={() => setShowTranscript(false)}
-                className="inline-flex h-9 items-center gap-1 rounded-full border border-[#E9E9E7] bg-[#F7F7F5] px-3 text-[12px] font-medium text-[#787774]"
+                className="inline-flex h-9 items-center gap-1 rounded-full border border-[#E8E2D5] bg-[#FAF7F2] px-3 text-[12px] font-medium text-[#5C5A55]"
               >
                 {COPY.realtime.collapse}
                 <ChevronDown size={14} strokeWidth={1.8} />
@@ -305,19 +305,19 @@ export function TutorRealtimeCallScreen({
             </div>
             <div className="mt-4 max-h-[50vh] space-y-3 overflow-y-auto pb-1">
               {assistantText.trim() ? (
-                <div className="rounded-[20px] border border-[#E9E9E7] bg-[#F7F7F5] px-4 py-3.5">
-                  <p className="text-[11px] font-medium text-[#A3A39E]">{COPY.realtime.assistantLabel}</p>
-                  <p className="mt-1.5 text-[15px] leading-7 text-[#232322]">{assistantText.trim()}</p>
+                <div className="rounded-[20px] border border-[#E8E2D5] bg-[#FAF7F2] px-4 py-3.5">
+                  <p className="text-[11px] font-medium text-[#8E8B82]">{COPY.realtime.assistantLabel}</p>
+                  <p className="mt-1.5 text-[15px] leading-7 text-[#1C1B19]">{assistantText.trim()}</p>
                 </div>
               ) : null}
               {capturedText.trim() ? (
-                <div className="rounded-[20px] border border-[#E9E9E7] bg-white px-4 py-3.5">
-                  <p className="text-[11px] font-medium text-[#A3A39E]">{COPY.realtime.userLabel}</p>
-                  <p className="mt-1.5 text-[15px] leading-7 text-[#232322]">{capturedText.trim()}</p>
+                <div className="rounded-[20px] border border-[#E8E2D5] bg-white px-4 py-3.5">
+                  <p className="text-[11px] font-medium text-[#8E8B82]">{COPY.realtime.userLabel}</p>
+                  <p className="mt-1.5 text-[15px] leading-7 text-[#1C1B19]">{capturedText.trim()}</p>
                 </div>
               ) : null}
               {!assistantText.trim() && !capturedText.trim() ? (
-                <p className="py-8 text-center text-[14px] text-[#A3A39E]">{COPY.realtime.emptyTranscript}</p>
+                <p className="py-8 text-center text-[14px] text-[#8E8B82]">{COPY.realtime.emptyTranscript}</p>
               ) : null}
             </div>
           </div>
@@ -326,7 +326,7 @@ export function TutorRealtimeCallScreen({
 
       {/* ── 顶部 badge ── */}
       <div className="flex justify-center pb-2 pt-1">
-        <span className="inline-flex items-center rounded-full border border-[#E9E9E7] bg-white px-3.5 py-1.5 text-[12px] font-medium text-[#787774]">
+        <span className="inline-flex items-center rounded-full border border-[#E8E2D5] bg-white px-3.5 py-1.5 text-[12px] font-medium text-[#5C5A55]">
           {contextLabel}
         </span>
       </div>
@@ -336,13 +336,13 @@ export function TutorRealtimeCallScreen({
         <VoiceOrb state={orbState} />
 
         <div className="flex flex-col items-center gap-3 text-center">
-          <h1 className="text-[32px] font-semibold tracking-[-0.04em] text-[#232322]">{title}</h1>
+          <h1 className="text-[32px] font-semibold tracking-[-0.04em] text-[#1C1B19]">{title}</h1>
 
-          <div className="inline-flex items-center gap-2 rounded-full border border-[#E9E9E7] bg-white px-3 py-1.5">
-            <span className={`inline-flex h-2 w-2 rounded-full ${isConnected ? 'bg-emerald-500' : 'bg-[#C9C8C3]'}`} />
-            <span className="text-[13px] font-medium text-[#787774]">{statusLine}</span>
+          <div className="inline-flex items-center gap-2 rounded-full border border-[#E8E2D5] bg-white px-3 py-1.5">
+            <span className={`inline-flex h-2 w-2 rounded-full ${isConnected ? 'bg-pine' : 'bg-divider'}`} />
+            <span className="text-[13px] font-medium text-[#5C5A55]">{statusLine}</span>
             {isConnected ? (
-              <span className="text-[13px] font-semibold text-[#232322]">{elapsed}</span>
+              <span className="text-[13px] font-semibold text-[#1C1B19]">{elapsed}</span>
             ) : null}
           </div>
         </div>

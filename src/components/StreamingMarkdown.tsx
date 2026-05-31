@@ -138,8 +138,8 @@ export function StreamingMarkdown({
             className={`
               inline-flex items-center gap-1 rounded-lg border px-2 py-0.5 text-xs font-mono transition-all duration-200
               ${isActive
-                ? 'scale-105 border-[#232322] bg-[#232322] text-white'
-                : 'border-[#E9E9E7] bg-[#FDF3C0] text-[#232322] hover:border-[#232322] hover:shadow-sm'
+                ? 'scale-105 border-[#1C1B19] bg-[#1C1B19] text-white'
+                : 'border-[#E8E2D5] bg-[#FDF3C0] text-[#1C1B19] hover:border-[#1C1B19] hover:shadow-sm'
               }
             `}
           >
@@ -156,8 +156,8 @@ export function StreamingMarkdown({
         const badgeClasses = [
           'ml-0.5 inline-flex h-4.5 min-w-[18px] -translate-y-[0.42em] items-center justify-center rounded-full px-1 align-super text-[10px] font-semibold leading-none transition-all',
           isActive
-            ? 'bg-slate-800 text-white shadow-sm'
-            : 'bg-slate-100 text-slate-500 hover:bg-slate-200 hover:text-slate-700',
+            ? 'bg-ink text-white shadow-sm'
+            : 'bg-paper-deep text-ink-muted hover:bg-divider hover:text-ink-secondary',
         ].join(' ');
 
         if (citationItem) {
@@ -181,7 +181,7 @@ export function StreamingMarkdown({
           parts.push(
             <span
               key={`cite-missing-${keyIndex++}`}
-              className="ml-0.5 inline-flex h-4.5 min-w-[18px] -translate-y-[0.42em] items-center justify-center rounded-full bg-slate-100 px-1 align-super text-[10px] font-semibold leading-none text-slate-400"
+              className="ml-0.5 inline-flex h-4.5 min-w-[18px] -translate-y-[0.42em] items-center justify-center rounded-full bg-paper-deep px-1 align-super text-[10px] font-semibold leading-none text-ink-muted"
               aria-label={`资料${citationIndex}`}
             >
               {citationIndex}
@@ -251,36 +251,36 @@ export function StreamingMarkdown({
 
     // 标题样式
     h2: ({ children, ...props }) => (
-      <h2 {...props} className="mb-2 mt-4 text-base font-semibold text-gray-800 first:mt-0">
+      <h2 {...props} className="mb-2 mt-4 text-base font-semibold text-ink first:mt-0">
         {processChildren(children)}
       </h2>
     ),
     h3: ({ children, ...props }) => (
-      <h3 {...props} className="mb-1.5 mt-3 text-sm font-semibold text-gray-700">
+      <h3 {...props} className="mb-1.5 mt-3 text-sm font-semibold text-ink-secondary">
         {processChildren(children)}
       </h3>
     ),
 
     // 列表样式
     ul: ({ children, ...props }) => (
-      <ul {...props} className="mb-3 list-inside list-disc space-y-1 text-gray-700">
+      <ul {...props} className="mb-3 list-inside list-disc space-y-1 text-ink-secondary">
         {children}
       </ul>
     ),
     ol: ({ children, ...props }) => (
-      <ol {...props} className="mb-3 list-inside list-decimal space-y-1 text-gray-700">
+      <ol {...props} className="mb-3 list-inside list-decimal space-y-1 text-ink-secondary">
         {children}
       </ol>
     ),
 
     // 强调样式
     strong: ({ children, ...props }) => (
-      <strong {...props} className="font-semibold text-gray-900">
+      <strong {...props} className="font-semibold text-ink">
         {processChildren(children)}
       </strong>
     ),
     em: ({ children, ...props }) => (
-      <em {...props} className="italic text-gray-600">
+      <em {...props} className="italic text-ink-secondary">
         {processChildren(children)}
       </em>
     ),
@@ -290,13 +290,13 @@ export function StreamingMarkdown({
       const isInline = !codeClassName;
       if (isInline) {
         return (
-          <code {...props} className="rounded bg-gray-100 px-1.5 py-0.5 text-xs font-mono text-[#232322]">
+          <code {...props} className="rounded bg-paper-deep px-1.5 py-0.5 text-xs font-mono text-[#1C1B19]">
             {children}
           </code>
         );
       }
       return (
-        <code {...props} className={`block overflow-x-auto rounded-lg bg-gray-50 p-3 text-xs ${codeClassName}`}>
+        <code {...props} className={`block overflow-x-auto rounded-lg bg-paper-warm p-3 text-xs ${codeClassName}`}>
           {children}
         </code>
       );
@@ -304,7 +304,7 @@ export function StreamingMarkdown({
 
     // 引用块
     blockquote: ({ children, ...props }) => (
-      <blockquote {...props} className="my-2 rounded-r border-l-4 border-[#E9E9E7] bg-[#FDF3C0]/20 py-1 pl-3 text-gray-600 italic">
+      <blockquote {...props} className="my-2 rounded-r border-l-4 border-[#E8E2D5] bg-[#FDF3C0]/20 py-1 pl-3 text-ink-secondary italic">
         {children}
       </blockquote>
     ),
@@ -316,7 +316,7 @@ export function StreamingMarkdown({
         href={href}
         target="_blank"
         rel="noopener noreferrer"
-        className="text-[#787774] underline decoration-[#FDF3C0] transition-colors hover:text-[#232322] hover:decoration-[#232322]"
+        className="text-[#5C5A55] underline decoration-[#FDF3C0] transition-colors hover:text-[#1C1B19] hover:decoration-[#1C1B19]"
       >
         {children}
       </a>
@@ -347,7 +347,7 @@ export function StreamingMarkdown({
 
     // 分隔线
     hr: ({ ...props }) => (
-      <hr {...props} className="my-4 border-gray-200" />
+      <hr {...props} className="my-4 border-divider" />
     ),
 
     // 任务列表项
@@ -355,7 +355,7 @@ export function StreamingMarkdown({
       <input
         {...props}
         disabled
-        className="mr-2 accent-[#232322]"
+        className="mr-2 accent-[#1C1B19]"
       />
     ),
   }), [processChildren]);
@@ -373,7 +373,7 @@ export function StreamingMarkdown({
 
         {/* 流式输出时显示光标 */}
         {isStreaming && (
-          <span className="ml-0.5 inline-block h-4 w-2 animate-pulse rounded-sm bg-[#232322] align-middle" />
+          <span className="ml-0.5 inline-block h-4 w-2 animate-pulse rounded-sm bg-[#1C1B19] align-middle" />
         )}
       </div>
 

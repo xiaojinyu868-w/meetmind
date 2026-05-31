@@ -1260,7 +1260,7 @@ function StudentAppContent({
         : '';
 
     return (
-    <div className="relative flex h-full min-h-0 flex-col overflow-hidden bg-[#F7F7F5]">
+    <div className="relative flex h-full min-h-0 flex-col overflow-hidden bg-[#FAF7F2]">
       {isMobile ? (
         <MobileRecordTopBar
           viewMode={viewMode}
@@ -1294,12 +1294,12 @@ function StudentAppContent({
         <div className="mx-auto flex w-full max-w-3xl flex-col gap-2.5">
           {collectionFeedItems.length > 0 ? (
             <div className="flex items-center justify-between gap-3 px-2 py-1">
-              <div className="inline-flex items-center gap-1.5 text-[11px] font-medium text-[#A3A39E]">
-                <span className="inline-flex h-1 w-1 rounded-full bg-[#A3A39E]" />
+              <div className="inline-flex items-center gap-1.5 text-[11px] font-medium text-[#8E8B82]">
+                <span className="inline-flex h-1 w-1 rounded-full bg-[#8E8B82]" />
                 <span>今天</span>
               </div>
               {isCollectionContextSelectionMode ? (
-                <div className="text-[11px] font-medium text-[#232322]">
+                <div className="text-[11px] font-medium text-[#1C1B19]">
                   选择中
                 </div>
               ) : null}
@@ -1319,11 +1319,11 @@ function StudentAppContent({
                 <div className="rounded-2xl border border-divider bg-white">
                   <div className="px-5 py-4">
                     <div className="flex items-center gap-3">
-                      <div className="inline-flex items-center gap-3 rounded-[14px] bg-[#F7F7F5] px-3.5 py-2.5">
-                        <span className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-[#232322] text-white">
+                      <div className="inline-flex items-center gap-3 rounded-[14px] bg-[#FAF7F2] px-3.5 py-2.5">
+                        <span className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-[#1C1B19] text-white">
                           <Mic size={14} />
                         </span>
-                        <span className="flex items-end gap-[3px] text-[#787774]">
+                        <span className="flex items-end gap-[3px] text-[#5C5A55]">
                           {[8, 12, 16, 11, 15, 9, 13].map((height, index) => (
                             <span
                               key={`live-wave-${height}-${index}`}
@@ -1332,19 +1332,19 @@ function StudentAppContent({
                             />
                           ))}
                         </span>
-                        <span className="text-[12px] font-medium text-[#787774]">语音录制中</span>
+                        <span className="text-[12px] font-medium text-[#5C5A55]">语音录制中</span>
                       </div>
                     </div>
                     {currentLivePreview ? (
-                      <p className="mt-2.5 text-[14.5px] leading-[1.8] text-[#232322]">
+                      <p className="mt-2.5 text-[14.5px] leading-[1.8] text-[#1C1B19]">
                         {currentLivePreview}
                       </p>
                     ) : (
-                      <p className="mt-2.5 text-[14px] leading-[1.8] text-[#A3A39E]">
+                      <p className="mt-2.5 text-[14px] leading-[1.8] text-[#8E8B82]">
                         继续说下去，停下后这段语音会直接留在这里。
                       </p>
                     )}
-                    <div className="mt-2 text-[11px] text-[#A3A39E] tabular-nums">
+                    <div className="mt-2 text-[11px] text-[#8E8B82] tabular-nums">
                       {formatRelativeCollectionTime(new Date().toISOString())}
                     </div>
                   </div>
@@ -1379,12 +1379,12 @@ function StudentAppContent({
                   className="flex w-full items-center gap-2.5 rounded-2xl border border-divider bg-white px-5 py-3.5 transition-colors hover:border-ink-muted hover:bg-[#FAFAF9]"
                 >
                   <span className="text-[12px] text-[#D3E4F4]">✦</span>
-                  <span className="min-w-0 flex-1 truncate text-left text-[13px] leading-5 text-[#787774]">
+                  <span className="min-w-0 flex-1 truncate text-left text-[13px] leading-5 text-[#5C5A55]">
                     {workspaceEchoes.length === 1
                       ? '同桌整理了一条笔记总结'
                       : `同桌整理了 ${workspaceEchoes.length} 条笔记总结`}
                   </span>
-                  <ChevronRight size={14} className="flex-shrink-0 text-[#A3A39E]" />
+                  <ChevronRight size={14} className="flex-shrink-0 text-[#8E8B82]" />
                 </button>
               )}
             </div>
@@ -1397,7 +1397,7 @@ function StudentAppContent({
         <button
           type="button"
           onClick={() => scrollCollectionToBottom(true)}
-          className={`${collectionChromeContained ? 'absolute' : 'fixed'} bottom-28 left-1/2 z-20 -translate-x-1/2 flex items-center gap-1.5 rounded-full bg-[#232322] px-4 py-2.5 text-[13px] font-medium text-white/90 transition-all hover:bg-[#111111] active:scale-95`}
+          className={`${collectionChromeContained ? 'absolute' : 'fixed'} bottom-28 left-1/2 z-20 -translate-x-1/2 flex items-center gap-1.5 rounded-full bg-[#1C1B19] px-4 py-2.5 text-[13px] font-medium text-white/90 transition-all hover:bg-[#111111] active:scale-95`}
           aria-label="跳转到最新消息"
         >
           <ChevronsDown size={16} className="shrink-0" />
@@ -1478,7 +1478,7 @@ function StudentAppContent({
       ) : null}
 
       {showMobileRecorder ? (
-        <div className="relative z-30 flex-shrink-0 bg-[#F7F7F5] px-3 pb-[max(env(safe-area-inset-bottom),6px)] pt-2 lg:px-5 lg:pb-5 lg:pt-2">
+        <div className="relative z-30 flex-shrink-0 bg-[#FAF7F2] px-3 pb-[max(env(safe-area-inset-bottom),6px)] pt-2 lg:px-5 lg:pb-5 lg:pt-2">
           <div className="mx-auto w-full max-w-3xl">
             {/* continueCurrentSession 强制 false：每次点"录课"= 一节新课，
                必须生成新 sessionId。若沿用旧 sessionId，saveAudioSession
@@ -2295,7 +2295,7 @@ function SearchParamsReader() {
   // 如果请求了移动端预览，但当前在桌面端或者还未挂载（防止 SSR 闪烁），则渲染外壳
   if (forceMobilePreview && (!mounted || !isMobile)) {
     return (
-      <div className="min-h-dvh bg-[#F7F7F5]">
+      <div className="min-h-dvh bg-[#FAF7F2]">
         <div className="flex items-start justify-center px-5 pb-10 pt-6">
           <div className="relative h-[860px] w-[400px] rounded-[44px] border border-divider bg-white p-[10px]">
             <div className="absolute left-1/2 top-[18px] z-20 h-7 w-32 -translate-x-1/2 rounded-full bg-ink" />

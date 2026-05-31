@@ -150,13 +150,13 @@ export function AppLoading({ progress, message, onComplete }: AppLoadingProps) {
                 <div 
                   className="absolute inset-y-0 w-1/3 rounded-full animate-indeterminate"
                   style={{
-                    background: 'linear-gradient(90deg, transparent 0%, #D4A574 50%, transparent 100%)',
+                    background: 'linear-gradient(90deg, transparent 0%, #2D4F3E 50%, transparent 100%)',
                   }}
                 />
                 <div 
                   className="absolute inset-y-0 w-1/4 rounded-full animate-indeterminate-reverse"
                   style={{
-                    background: 'linear-gradient(90deg, transparent 0%, #E8C4A0 50%, transparent 100%)',
+                    background: 'linear-gradient(90deg, transparent 0%, #6B9080 50%, transparent 100%)',
                     opacity: 0.5,
                   }}
                 />
@@ -167,7 +167,7 @@ export function AppLoading({ progress, message, onComplete }: AppLoadingProps) {
                 className="absolute inset-y-0 left-0 rounded-full"
                 style={{
                   width: `${displayProgress}%`,
-                  background: 'linear-gradient(90deg, #E8C4A0 0%, #D4A574 50%, #C4956A 100%)',
+                  background: 'linear-gradient(90deg, #6B9080 0%, #2D4F3E 50%, #1A3327 100%)',
                   boxShadow: '0 0 12px rgba(212, 165, 116, 0.7)',
                   transition: 'width 0.1s ease-out',
                 }}
@@ -184,7 +184,7 @@ export function AppLoading({ progress, message, onComplete }: AppLoadingProps) {
                 <div 
                   className="absolute right-0 top-1/2 -translate-y-1/2 w-3 h-3 rounded-full animate-pulse-glow"
                   style={{
-                    background: 'radial-gradient(circle, #fff 0%, #D4A574 70%, transparent 100%)',
+                    background: 'radial-gradient(circle, #fff 0%, #2D4F3E 70%, transparent 100%)',
                   }}
                 />
               </div>

@@ -66,10 +66,16 @@ export const COPY = {
   },
 
   stages: {
+    /** v3.0：放弃假分阶段叙事，改为 Octo Buddy 听课的诚实表达
+     *  app loading 文案根据 appName 动态拼，用 listening 系列 */
     reading: '正在读你的课堂',
     selecting: '正在挑核心',
     composing: '正在排版',
     slow: '稍等一下——内容多的时候我也要再想想',
+    /** v3.0 新版 loading 文案 */
+    listenStart: (appName: string): string => `在听这节课，给你${appName}`,
+    listenSlow: '内容有点多，我多听一会儿',
+    listenVerySlow: '还在听——再给我一点时间',
   },
 
   stop: {

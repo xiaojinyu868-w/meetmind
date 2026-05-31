@@ -14,7 +14,7 @@
  *   新进来的节点会被标记在 newNodeIds 里，节点自身做 fade + scale(0.88→1)
  *   进入；对应的连线 stroke-dashoffset 随动。2 秒后回归常态。
  *
- * 设计系统：零渐变、零阴影、纯平涂。
+ * 设计系统：v7 设计宪法：95% 克制 + 5% 仪式时刻情绪化（shadow-soft / shadow-card / shadow-ai-glow）。
  */
 
 import React, { useMemo } from 'react';
@@ -130,7 +130,7 @@ function NodeChip({
       {isNew && (
         <span
           aria-hidden
-          className="pointer-events-none absolute inset-0 rounded-[6px] border border-[#232322]/10 animate-[mindPulse_1400ms_ease-out_forwards]"
+          className="pointer-events-none absolute inset-0 rounded-[6px] border border-[#1C1B19]/10 animate-[mindPulse_1400ms_ease-out_forwards]"
         />
       )}
     </div>
@@ -150,14 +150,14 @@ function Dormant({ elapsedMs }: { elapsedMs: number }) {
 
   return (
     <div className="flex h-full flex-col px-6 py-6 text-left lg:px-8">
-      <div className="rounded-[24px] border border-divider bg-[#FBFBFA] px-5 py-5">
+      <div className="rounded-[24px] border border-divider bg-[#F2EDE3] px-5 py-5">
         <div className="flex items-center justify-between gap-4">
           <div className="min-w-0">
             <p className="text-[12px] font-semibold uppercase tracking-[0.14em] text-ink-muted">课堂结构</p>
             <h2 className="mt-2 text-[24px] font-semibold tracking-[-0.04em] text-ink">我在听这节课</h2>
           </div>
           <div className="relative flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-full border border-divider bg-white">
-            <span className="absolute h-8 w-8 rounded-full border border-[#232322]/10 animate-[mindBreath_2600ms_ease-in-out_infinite]" />
+            <span className="absolute h-8 w-8 rounded-full border border-[#1C1B19]/10 animate-[mindBreath_2600ms_ease-in-out_infinite]" />
             <span className="h-3 w-3 rounded-full bg-ink" />
           </div>
         </div>
@@ -250,7 +250,7 @@ export function MindMap({
 
   return (
     <div className="flex h-full flex-col overflow-y-auto px-5 py-5 lg:px-6">
-      <div className="rounded-[24px] border border-divider bg-[#FBFBFA] px-5 py-5">
+      <div className="rounded-[24px] border border-divider bg-[#F2EDE3] px-5 py-5">
         <div className="flex items-start justify-between gap-5">
           <div className="min-w-0 flex-1">
             <NodeChip

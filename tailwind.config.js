@@ -1,34 +1,75 @@
 /** @type {import('tailwindcss').Config} */
 module.exports = {
+  darkMode: ['class', '[data-theme="dark"]'],
   content: [
     './src/**/*.{js,ts,jsx,tsx,mdx}',
   ],
   theme: {
     extend: {
       colors: {
-        /* ===================================================
-           MeetMind v6 — 秩序白皮书色彩系统
-           Notion 式克制设计 · 零渐变 · 零阴影 · 纯平涂
-           =================================================== */
+        /* ===========================================================
+           MeetMind v7 — 图书馆台灯 + 朱批红笔
+           "色 = 架构"：墨松绿是 AI 沉淀（场景上下文），
+           朱批红是学生此刻（个人上下文 / 引用 / 标注）。
+           策略：保留所有 v6 key（不破坏 200+ 文件），同时引入 v7 一等公民
+           =========================================================== */
 
-        // 空间骨架
-        canvas: '#F7F7F5',
+        /* ===== v7 一等公民 ===== */
+        paper: '#FAF7F2',          // 主底色 · 米白纸感
+        'paper-warm': '#F2EDE3',   // hover / 次表面
+        'paper-deep': '#EDE7DA',   // pressed
+        pine: {
+          DEFAULT: '#2D4F3E',
+          deep: '#1A3327',
+          light: '#6B9080',
+          mist: '#E6EDE8',
+          fog: '#F2F6F3',
+          50: '#F2F6F3',
+          100: '#E6EDE8',
+          200: '#C2D4CA',
+          300: '#93B5A4',
+          400: '#6B9080',
+          500: '#2D4F3E',
+          600: '#1A3327',
+          700: '#0E2117',
+          800: '#0A1810',
+          900: '#050C08',
+        },
+        vermilion: {
+          DEFAULT: '#B5483C',
+          deep: '#8E3328',
+          light: '#D17969',
+          mist: '#F6E6E2',
+          fog: '#FBF2EF',
+          50: '#FBF2EF',
+          100: '#F6E6E2',
+          200: '#EFCBC1',
+          300: '#E2A799',
+          400: '#D17969',
+          500: '#B5483C',
+          600: '#8E3328',
+          700: '#6B2A21',
+          800: '#4A1D17',
+          900: '#2D110D',
+        },
+
+        /* ===== v6 兼容（已映射到 v7 色板） ===== */
+        canvas: '#FAF7F2',         // ← 微调到 v7 米白
         card: '#FFFFFF',
-        hover: '#EFEFEF',
+        hover: '#F2EDE3',          // ← 暖一点
 
-        // 笔墨与边界
         ink: {
-          DEFAULT: '#232322',
-          secondary: '#787774',
-          muted: '#A3A39E',
+          DEFAULT: '#1C1B19',      // ← 略深略暖
+          secondary: '#5C5A55',
+          muted: '#8E8B82',
           inverse: '#FFFFFF',
         },
         divider: {
-          DEFAULT: '#E9E9E7',
-          light: '#F0F0EE',
+          DEFAULT: '#E8E2D5',      // ← 偏暖纸感
+          light: '#F0EBDF',
         },
 
-        // 四大功能色块（低饱和平涂）
+        /* 内容标签色（弱化） */
         sand: {
           DEFAULT: '#FDF3C0',
           light: '#FEFAEB',
@@ -59,56 +100,58 @@ module.exports = {
           light: '#FDF2E9',
           dark: '#F2C49D',
         },
-
-        // 荧光笔
         highlight: '#FDECC8',
 
-        // 仪式时刻色板：只允许用于录音呼吸球、生成扫光等白名单场景
+        /* v6 仪式色板（保留向下兼容，但 v7 用 ceremony-pine/vermilion 替代） */
         ceremony: {
           rose: '#FCE7F3',
           lilac: '#E9D5FF',
           sky: '#DBEAFE',
+          /* v7 新增 */
+          pine: '#E6EDE8',
+          vermilion: '#F6E6E2',
         },
 
-        // 兼容旧版色名
+        /* 兼容旧主色（全部映射到 v7 ink/pine） */
         navy: {
-          DEFAULT: '#232322',
-          50: '#F0F0EE',
-          100: '#E9E9E7',
-          200: '#D0D0CC',
-          300: '#A3A39E',
-          400: '#787774',
-          500: '#232322',
-          600: '#1A1A19',
-          700: '#111111',
-          800: '#0A0A0A',
-          900: '#050505',
+          DEFAULT: '#1C1B19',
+          50: '#F0EBDF',
+          100: '#E8E2D5',
+          200: '#C2BBAE',
+          300: '#8E8B82',
+          400: '#5C5A55',
+          500: '#1C1B19',
+          600: '#141311',
+          700: '#0D0C0B',
+          800: '#070605',
+          900: '#020201',
         },
         lavender: {
-          DEFAULT: '#232322',
-          50: '#F0F0EE',
-          100: '#E9E9E7',
-          200: '#D0D0CC',
-          300: '#A3A39E',
-          400: '#787774',
-          500: '#232322',
-          600: '#1A1A19',
-          700: '#111111',
-          800: '#0A0A0A',
-          900: '#050505',
+          DEFAULT: '#1C1B19',
+          50: '#F0EBDF',
+          100: '#E8E2D5',
+          200: '#C2BBAE',
+          300: '#8E8B82',
+          400: '#5C5A55',
+          500: '#1C1B19',
+          600: '#141311',
+          700: '#0D0C0B',
+          800: '#070605',
+          900: '#020201',
         },
         skyblue: {
-          DEFAULT: '#5B8DBF',
-          50: '#EDF5FD',
-          100: '#D0E4F5',
-          200: '#B3D4F0',
-          300: '#85BAE0',
-          400: '#5B8DBF',
-          500: '#3A6E99',
-          600: '#2E5878',
-          700: '#234460',
-          800: '#1A3348',
-          900: '#102230',
+          /* 改为映射到 pine 体系，保持冷色调一致性 */
+          DEFAULT: '#6B9080',
+          50: '#F2F6F3',
+          100: '#E6EDE8',
+          200: '#C2D4CA',
+          300: '#93B5A4',
+          400: '#6B9080',
+          500: '#2D4F3E',
+          600: '#1A3327',
+          700: '#0E2117',
+          800: '#0A1810',
+          900: '#050C08',
         },
         sunflower: {
           DEFAULT: '#D9A441',
@@ -137,200 +180,322 @@ module.exports = {
           900: '#4A3B12',
         },
         coral: {
-          DEFAULT: '#FADEC9',
-          50: '#FDF2E9',
-          100: '#FBE8D5',
-          200: '#F8D5B5',
-          300: '#F5C296',
-          400: '#F2AF77',
-          500: '#FADEC9',
-          600: '#E0C5B3',
-          700: '#C5AB9C',
-          800: '#AA9186',
-          900: '#8F7770',
+          /* 映射到 vermilion 体系 */
+          DEFAULT: '#D17969',
+          50: '#FBF2EF',
+          100: '#F6E6E2',
+          200: '#EFCBC1',
+          300: '#E2A799',
+          400: '#D17969',
+          500: '#B5483C',
+          600: '#8E3328',
+          700: '#6B2A21',
+          800: '#4A1D17',
+          900: '#2D110D',
         },
         lilac: {
-          DEFAULT: '#E9E9E7',
-          50: '#F7F7F5',
-          100: '#F0F0EE',
-          200: '#E9E9E7',
-          300: '#D0D0CC',
-          400: '#A3A39E',
-          500: '#787774',
-          600: '#5C5B59',
-          700: '#454443',
-          800: '#2E2E2D',
-          900: '#1A1A19',
+          DEFAULT: '#E8E2D5',
+          50: '#FAF7F2',
+          100: '#F2EDE3',
+          200: '#E8E2D5',
+          300: '#C2BBAE',
+          400: '#8E8B82',
+          500: '#5C5A55',
+          600: '#3F3D38',
+          700: '#2A2925',
+          800: '#1C1B19',
+          900: '#0D0C0B',
         },
         cream: {
-          DEFAULT: '#F7F7F5',
-          50: '#FAFAF9',
-          100: '#F7F7F5',
-          200: '#F0F0EE',
-          300: '#E9E9E7',
-          400: '#D0D0CC',
-          500: '#A3A39E',
-          600: '#787774',
-          700: '#5C5B59',
-          800: '#454443',
-          900: '#2E2E2D',
+          DEFAULT: '#FAF7F2',
+          50: '#FDFBF8',
+          100: '#FAF7F2',
+          200: '#F2EDE3',
+          300: '#E8E2D5',
+          400: '#C2BBAE',
+          500: '#8E8B82',
+          600: '#5C5A55',
+          700: '#3F3D38',
+          800: '#2A2925',
+          900: '#1C1B19',
         },
         surface: {
-          DEFAULT: '#F7F7F5',
-          soft: '#EFEFEF',
-          warm: '#F7F7F5',
-          mint: '#F0FBF4',
+          DEFAULT: '#FAF7F2',
+          soft: '#F2EDE3',
+          warm: '#FAF7F2',
+          mint: '#F2F6F3',     // ← v7 pine-fog
         },
         edu: {
-          bg: '#F7F7F5',
+          bg: '#FAF7F2',
           card: '#FFFFFF',
-          soft: '#F0F0EE',
-          accent: '#EFEFEF',
-          border: '#E9E9E7',
+          soft: '#F2EDE3',
+          accent: '#F2EDE3',
+          border: '#E8E2D5',
         },
         text: {
-          primary: '#232322',
-          secondary: '#787774',
-          muted: '#A3A39E',
+          primary: '#1C1B19',
+          secondary: '#5C5A55',
+          muted: '#8E8B82',
           inverse: '#FFFFFF',
         },
         primary: {
-          50: '#F0F0EE',
-          100: '#E9E9E7',
-          200: '#D0D0CC',
-          300: '#A3A39E',
-          400: '#787774',
-          500: '#232322',
-          600: '#1A1A19',
-          700: '#111111',
-          800: '#0A0A0A',
-          900: '#050505',
+          50: '#F0EBDF',
+          100: '#E8E2D5',
+          200: '#C2BBAE',
+          300: '#8E8B82',
+          400: '#5C5A55',
+          500: '#1C1B19',
+          600: '#141311',
+          700: '#0D0C0B',
+          800: '#070605',
+          900: '#020201',
         },
         accent: {
-          50: '#EDF5FD',
-          100: '#D0E4F5',
-          200: '#B3D4F0',
-          300: '#85BAE0',
-          400: '#5B8DBF',
-          500: '#3A6E99',
-          600: '#2E5878',
-          700: '#234460',
-          800: '#1A3348',
-          900: '#102230',
+          /* v7：accent = pine（学习智能信号色） */
+          50: '#F2F6F3',
+          100: '#E6EDE8',
+          200: '#C2D4CA',
+          300: '#93B5A4',
+          400: '#6B9080',
+          500: '#2D4F3E',
+          600: '#1A3327',
+          700: '#0E2117',
+          800: '#0A1810',
+          900: '#050C08',
         },
         success: {
-          50: '#F0FBF4',
-          100: '#E0F5EA',
-          200: '#B8E4CC',
-          300: '#8DD4AE',
-          400: '#5DAE8B',
-          500: '#4DAE6F',
-          600: '#489874',
-          700: '#3D8A60',
-          800: '#2E6948',
-          900: '#1F4830',
+          50: '#F2F6F3',
+          100: '#E6EDE8',
+          200: '#C2D4CA',
+          300: '#93B5A4',
+          400: '#6B9080',
+          500: '#2D6A4F',
+          600: '#22573F',
+          700: '#194530',
+          800: '#103423',
+          900: '#082417',
         },
         warning: {
-          50: '#FFF8E1',
-          100: '#FDF2DC',
+          50: '#FBF1DC',
+          100: '#FBF1DC',
           200: '#F5DCA8',
           300: '#EEC574',
           400: '#D9A441',
-          500: '#B8922E',
+          500: '#B8842B',
           600: '#9A7A26',
           700: '#7E6520',
           800: '#634F18',
           900: '#4A3B12',
         },
         danger: {
-          50: '#FDECEC',
-          100: '#FBD7D7',
-          200: '#F7B4B4',
-          300: '#F29292',
-          400: '#E87E7E',
-          500: '#D96B6B',
-          600: '#C55858',
-          700: '#A94545',
-          800: '#8D3434',
-          900: '#712424',
+          /* v7: danger = vermilion (语义同源 — 朱批本就是"提醒") */
+          50: '#FBF2EF',
+          100: '#F6E6E2',
+          200: '#EFCBC1',
+          300: '#E2A799',
+          400: '#D17969',
+          500: '#B5483C',
+          600: '#8E3328',
+          700: '#6B2A21',
+          800: '#4A1D17',
+          900: '#2D110D',
         },
       },
+
       fontFamily: {
-        sans: ['PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', '-apple-system', 'BlinkMacSystemFont', 'sans-serif'],
-        mono: ['JetBrains Mono', 'Fira Code', 'Menlo', 'Monaco', 'monospace'],
+        /* v7 字体栈：Inter + PingFang fallback + 紧排 */
+        sans: [
+          'Inter', 'var(--font-inter)',
+          '-apple-system', 'BlinkMacSystemFont',
+          'PingFang SC', 'Hiragino Sans GB',
+          'Microsoft YaHei', 'sans-serif'
+        ],
+        serif: [
+          'Instrument Serif', 'var(--font-instrument-serif)',
+          'Songti SC', 'Noto Serif SC', 'serif'
+        ],
+        mono: [
+          'JetBrains Mono', 'var(--font-jetbrains-mono)',
+          'ui-monospace', 'SF Mono',
+          'Menlo', 'Monaco', 'monospace'
+        ],
+        /* v7 别名 */
+        display: ['Inter', 'var(--font-inter)', 'sans-serif'],
       },
+
+      fontSize: {
+        /* v7 字号阶梯（Major Third 1.25） */
+        '2xs': ['10.5px', { lineHeight: '1.5' }],
+        xs:    ['11.5px', { lineHeight: '1.5' }],
+        sm:    ['12.5px', { lineHeight: '1.6' }],
+        base:  ['14px',   { lineHeight: '1.65' }],
+        md:    ['15px',   { lineHeight: '1.7' }],
+        lg:    ['17px',   { lineHeight: '1.7' }],
+        xl:    ['20px',   { lineHeight: '1.5' }],
+        '2xl': ['24px',   { lineHeight: '1.3' }],
+        '3xl': ['30px',   { lineHeight: '1.25' }],
+        '4xl': ['38px',   { lineHeight: '1.18' }],
+        '5xl': ['48px',   { lineHeight: '1.1' }],
+        '6xl': ['64px',   { lineHeight: '1.05' }],
+        '7xl': ['76px',   { lineHeight: '1.0' }],
+      },
+
+      letterSpacing: {
+        tightest: '-0.034em',
+        display:  '-0.024em',
+        h:        '-0.018em',
+        body:     '-0.011em',
+        normal:   '0',
+        caps:     '0.06em',
+        widest:   '0.12em',
+      },
+
       boxShadow: {
-        // 秩序白皮书：全面封杀阴影。保留 key 防止旧代码报错，但值为 none
-        'glow': 'none',
-        'glow-lg': 'none',
-        'glow-mint': 'none',
-        'glow-ai': 'none',
-        'inner-light': 'none',
-        'card': 'none',
-        'card-hover': 'none',
+        /* v7：投影必须存在但极克制 */
+        soft:  '0 1px 2px rgba(28,27,25,0.04), 0 4px 16px rgba(28,27,25,0.04)',
+        card:  '0 1px 2px rgba(28,27,25,0.05), 0 8px 28px rgba(28,27,25,0.06)',
+        float: '0 2px 6px rgba(28,27,25,0.06), 0 16px 48px rgba(28,27,25,0.08)',
+        modal: '0 8px 16px rgba(28,27,25,0.08), 0 32px 80px rgba(28,27,25,0.12)',
+        /* AI 在场专属（"它活着"信号） */
+        'ai-glow': '0 0 0 1px rgba(45,79,62,0.10), 0 8px 28px rgba(45,79,62,0.08)',
+
+        /* v6 兼容（保留 key，绑定 v7 投影） */
+        'glow':       '0 1px 2px rgba(28,27,25,0.04), 0 4px 16px rgba(28,27,25,0.04)',
+        'glow-lg':    '0 2px 6px rgba(28,27,25,0.06), 0 16px 48px rgba(28,27,25,0.08)',
+        'glow-mint':  '0 0 0 1px rgba(45,79,62,0.10), 0 8px 28px rgba(45,79,62,0.08)',
+        'glow-ai':    '0 0 0 1px rgba(45,79,62,0.10), 0 8px 28px rgba(45,79,62,0.08)',
+        'inner-light': 'inset 0 1px 0 rgba(255,255,255,0.6)',
+        'card-hover': '0 2px 6px rgba(28,27,25,0.06), 0 16px 48px rgba(28,27,25,0.08)',
       },
+
       backgroundImage: {
-        // 秩序白皮书：封杀渐变。保留 key 但映射为纯色
-        'gradient-primary': 'none',
-        'gradient-mint': 'none',
-        'gradient-soft': 'none',
-        'gradient-blue': 'none',
-        'gradient-hero': 'none',
+        /* v6 兼容 key — v7 仍以平涂为主，但保留这些以便 share landing 等"破例放飞"页 */
+        'gradient-primary': 'linear-gradient(135deg, var(--mm-pine), var(--mm-pine-deep))',
+        'gradient-mint':    'linear-gradient(135deg, var(--mm-pine-fog), var(--mm-pine-mist))',
+        'gradient-soft':    'linear-gradient(135deg, var(--mm-paper), var(--mm-paper-warm))',
+        'gradient-blue':    'linear-gradient(135deg, var(--mm-pine-fog), var(--mm-pine-mist))',
+        'gradient-hero':
+          'radial-gradient(ellipse 60% 50% at 30% 30%, rgba(45,79,62,0.12), transparent 60%), radial-gradient(ellipse 60% 50% at 70% 70%, rgba(181,72,60,0.08), transparent 60%)',
+        'shimmer-ai':
+          'linear-gradient(110deg, rgba(45,79,62,0) 0%, rgba(45,79,62,0.06) 45%, rgba(181,72,60,0.08) 55%, rgba(45,79,62,0) 100%)',
       },
+
       animation: {
-        'pulse-slow': 'pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+        'pulse-slow':    'pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite',
         'bounce-gentle': 'bounce-gentle 2s ease-in-out infinite',
-        'fade-in': 'fade-in 0.3s ease-out',
-        'slide-up': 'slide-up 0.4s cubic-bezier(0.16, 1, 0.3, 1)',
-        'scale-in': 'scale-in 0.2s cubic-bezier(0.34, 1.56, 0.64, 1)',
-        'ripple': 'ripple 0.6s cubic-bezier(0.4, 0, 0.2, 1)',
+        'fade-in':       'fade-in 0.3s ease-out',
+        'slide-up':      'slide-up 0.4s cubic-bezier(0.16, 1, 0.3, 1)',
+        'scale-in':      'scale-in 0.2s cubic-bezier(0.34, 1.56, 0.64, 1)',
+        'ripple':        'ripple 0.6s cubic-bezier(0.4, 0, 0.2, 1)',
+        /* v7 新增 */
+        'ai-breath':     'ai-breath 6s ease-in-out infinite',
+        'octo-breath':   'octo-breath 3.6s ease-in-out infinite',
+        'octo-listen':   'octo-listen 0.6s ease-in-out infinite alternate',
+        'octo-think':    'octo-think 2.4s ease-in-out infinite',
+        'shimmer-fast':  'shimmer-fast 1.6s linear infinite',
+        'caret-blink':   'caret-blink 1s steps(2) infinite',
+        'rec-pulse':     'rec-pulse 1.6s ease-in-out infinite',
+        'char-in':       'char-in 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards',
+        'hero-float':    'hero-float 6s ease-in-out infinite',
       },
+
       keyframes: {
         'bounce-gentle': {
           '0%, 100%': { transform: 'translateY(0)' },
-          '50%': { transform: 'translateY(-5px)' },
+          '50%':      { transform: 'translateY(-5px)' },
         },
         'fade-in': {
           from: { opacity: '0' },
-          to: { opacity: '1' },
+          to:   { opacity: '1' },
         },
         'slide-up': {
           from: { opacity: '0', transform: 'translateY(10px)' },
-          to: { opacity: '1', transform: 'translateY(0)' },
+          to:   { opacity: '1', transform: 'translateY(0)' },
         },
         'scale-in': {
           from: { opacity: '0', transform: 'scale(0.95)' },
-          to: { opacity: '1', transform: 'scale(1)' },
+          to:   { opacity: '1', transform: 'scale(1)' },
         },
         'ripple': {
           from: { transform: 'scale(0)', opacity: '1' },
-          to: { transform: 'scale(1)', opacity: '0' },
+          to:   { transform: 'scale(1)', opacity: '0' },
         },
-        // 思维导图：新节点生长（scale + fade）
         mindGrow: {
-          '0%': { opacity: '0', transform: 'scale(0.86)' },
-          '60%': { opacity: '1', transform: 'scale(1.02)' },
+          '0%':   { opacity: '0', transform: 'scale(0.86)' },
+          '60%':  { opacity: '1', transform: 'scale(1.02)' },
           '100%': { opacity: '1', transform: 'scale(1)' },
         },
-        // 思维导图：新节点外圈柔和呼吸，1.4s 一次后归零
         mindPulse: {
-          '0%': { opacity: '0.9', transform: 'scale(0.96)' },
-          '70%': { opacity: '0.35', transform: 'scale(1.05)' },
+          '0%':   { opacity: '0.9', transform: 'scale(0.96)' },
+          '70%':  { opacity: '0.35', transform: 'scale(1.05)' },
           '100%': { opacity: '0', transform: 'scale(1.08)' },
         },
-        // 预热态三圈呼吸
         mindBreath: {
           '0%, 100%': { opacity: '0.5', transform: 'scale(1)' },
-          '50%': { opacity: '1', transform: 'scale(1.08)' },
+          '50%':      { opacity: '1', transform: 'scale(1.08)' },
+        },
+        /* v7 keyframes */
+        'ai-breath': {
+          '0%, 100%': { 'background-position': '200% 0' },
+          '50%':      { 'background-position': '-100% 0' },
+        },
+        'octo-breath': {
+          '0%, 100%': { transform: 'scale(0.92)', opacity: '0.5' },
+          '50%':      { transform: 'scale(1.08)', opacity: '0.9' },
+        },
+        'octo-listen': {
+          from: { transform: 'rotate(-2deg) scale(1)' },
+          to:   { transform: 'rotate(2deg) scale(1.04)' },
+        },
+        'octo-think': {
+          '0%, 100%': { transform: 'rotate(0)' },
+          '25%':      { transform: 'rotate(-3deg)' },
+          '75%':      { transform: 'rotate(3deg)' },
+        },
+        'shimmer-fast': {
+          '0%':   { 'background-position': '200% 0' },
+          '100%': { 'background-position': '-100% 0' },
+        },
+        'caret-blink': {
+          '50%': { opacity: '0' },
+        },
+        'rec-pulse': {
+          '0%, 100%': { 'box-shadow': '0 0 0 0 rgba(181,72,60,0.55)' },
+          '50%':      { 'box-shadow': '0 0 0 8px rgba(181,72,60,0)' },
+        },
+        'char-in': {
+          from: { opacity: '0', transform: 'translateY(2px)' },
+          to:   { opacity: '1', transform: 'translateY(0)' },
+        },
+        'hero-float': {
+          '0%, 100%': { transform: 'translateY(0) rotate(-1deg)' },
+          '50%':      { transform: 'translateY(-12px) rotate(1deg)' },
         },
       },
+
       borderRadius: {
-        '2xl': '1rem',
-        '3xl': '1.5rem',
+        '2xs': '2px',
+        'xs':  '4px',
+        sm:    '6px',
+        DEFAULT: '8px',
+        md:    '10px',
+        lg:    '12px',
+        xl:    '14px',
+        '2xl': '18px',
+        '3xl': '24px',
       },
+
       transitionTimingFunction: {
         'out-expo': 'cubic-bezier(0.16, 1, 0.3, 1)',
-        'spring': 'cubic-bezier(0.34, 1.56, 0.64, 1)',
+        'spring':   'cubic-bezier(0.34, 1.56, 0.64, 1)',
+        'in-out':   'cubic-bezier(0.65, 0, 0.35, 1)',
+      },
+
+      transitionDuration: {
+        '150': '150ms',
+        '200': '200ms',
+        '320': '320ms',
+        '600': '600ms',
       },
     },
   },

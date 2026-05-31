@@ -101,8 +101,8 @@ export function SkillChipRow({
               disabled={disabled}
               className={cn(
                 'relative inline-flex flex-shrink-0 items-center gap-1.5 rounded-full',
-                'border border-[#E9E9E7] bg-white px-3 py-1.5 text-[11.5px] text-ink-secondary',
-                'transition-colors hover:border-[#CECEC8] hover:text-ink',
+                'border border-[#E8E2D5] bg-white px-3 py-1.5 text-[11.5px] text-ink-secondary',
+                'transition-colors hover:border-pine/40 hover:text-ink',
                 'disabled:opacity-50 disabled:cursor-not-allowed',
                 tapped && 'chip-tap-anim',
               )}

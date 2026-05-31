@@ -1,0 +1,557 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="light">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>MeetMind v7 · Design System</title>
+<link rel="stylesheet" href="./tokens.css" />
+<style>
+  body { background: var(--paper); }
+
+  /* === Hero === */
+  .hero {
+    padding: 80px 24px 100px;
+    max-width: 1200px;
+    margin: 0 auto;
+    position: relative;
+  }
+  .hero::before {
+    /* 极淡 AI 光带 */
+    content: '';
+    position: absolute; inset: 0;
+    background: radial-gradient(ellipse at 30% 40%, rgba(45,79,62,0.06) 0%, transparent 50%),
+                radial-gradient(ellipse at 70% 70%, rgba(181,72,60,0.05) 0%, transparent 50%);
+    pointer-events: none;
+    z-index: 0;
+  }
+  .hero > * { position: relative; z-index: 1; }
+
+  .hero-eyebrow {
+    font-size: 11.5px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--pine);
+    font-weight: 600;
+    margin-bottom: 24px;
+    display: flex; align-items: center; gap: 12px;
+  }
+  .hero-eyebrow::before {
+    content: ''; width: 32px; height: 1px; background: var(--pine);
+  }
+
+  .hero-title {
+    font-size: 80px;
+    font-weight: 600;
+    letter-spacing: -0.03em;
+    line-height: 1.02;
+    color: var(--ink);
+    max-width: 18ch;
+    margin-bottom: 28px;
+  }
+  .hero-title .em {
+    font-family: var(--font-serif);
+    font-style: italic;
+    font-weight: 400;
+    color: var(--vermilion);
+  }
+  .hero-title .pine {
+    color: var(--pine);
+  }
+  .hero-lede {
+    font-size: 19px;
+    line-height: 1.65;
+    color: var(--ink-2);
+    max-width: 60ch;
+    margin-bottom: 48px;
+  }
+
+  .hero-meta {
+    display: flex; gap: 40px; align-items: flex-start;
+    padding-top: 32px;
+    border-top: 1px solid var(--rule);
+  }
+  .hero-meta-item {
+    flex: 1;
+    max-width: 240px;
+  }
+  .hero-meta-item .lbl {
+    font-size: 11px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--ink-3);
+    font-weight: 500;
+    margin-bottom: 8px;
+  }
+  .hero-meta-item .val {
+    font-size: 14px;
+    color: var(--ink);
+    line-height: 1.55;
+  }
+  .hero-meta-item .val .mono {
+    font-size: 13px;
+  }
+
+  /* 双签名色块 */
+  .sig-colors {
+    display: flex; gap: 0;
+    margin: 56px 0;
+    border-radius: 16px; overflow: hidden;
+    border: 1px solid var(--rule);
+    box-shadow: var(--shadow-card);
+  }
+  .sig-block {
+    flex: 1;
+    padding: 40px 32px 36px;
+    color: #fff;
+    position: relative;
+    overflow: hidden;
+  }
+  .sig-block.pine { background: var(--pine); }
+  .sig-block.vermilion { background: var(--vermilion); }
+  .sig-block .num {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    opacity: 0.7;
+    letter-spacing: 0.05em;
+  }
+  .sig-block .label {
+    font-family: var(--font-serif);
+    font-style: italic;
+    font-size: 36px;
+    margin: 12px 0 8px;
+    line-height: 1.1;
+  }
+  .sig-block .hex {
+    font-family: var(--font-mono);
+    font-size: 14px;
+    opacity: 0.85;
+    margin-bottom: 24px;
+  }
+  .sig-block .meaning {
+    font-size: 13.5px;
+    line-height: 1.6;
+    opacity: 0.92;
+    max-width: 32ch;
+  }
+  .sig-block::after {
+    content: ''; position: absolute;
+    right: -40px; top: -40px;
+    width: 200px; height: 200px;
+    border-radius: 50%;
+    background: rgba(255,255,255,0.06);
+    pointer-events: none;
+  }
+
+  /* === 导航卡 === */
+  .nav-section {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 24px 24px 100px;
+  }
+  .nav-section-title {
+    font-size: 13px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--ink-3);
+    font-weight: 600;
+    margin-bottom: 24px;
+    padding-bottom: 16px;
+    border-bottom: 1px solid var(--rule);
+    display: flex; align-items: baseline; justify-content: space-between;
+  }
+  .nav-section-title .count {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    color: var(--ink-4);
+    text-transform: none;
+    letter-spacing: 0;
+  }
+
+  .nav-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 20px;
+  }
+
+  .nav-card {
+    display: block;
+    padding: 28px 32px 32px;
+    background: var(--card);
+    border: 1px solid var(--rule);
+    border-radius: 16px;
+    transition: all 0.3s var(--ease-out);
+    position: relative;
+    overflow: hidden;
+    color: var(--ink);
+  }
+  .nav-card:hover {
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-card);
+    border-color: var(--pine-light);
+  }
+  .nav-card.disabled {
+    opacity: 0.5;
+    pointer-events: none;
+  }
+  .nav-card .num {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--ink-3);
+    letter-spacing: 0.1em;
+    margin-bottom: 12px;
+  }
+  .nav-card h3 {
+    font-size: 22px;
+    font-weight: 600;
+    letter-spacing: -0.018em;
+    margin-bottom: 8px;
+  }
+  .nav-card h3 .em {
+    font-family: var(--font-serif);
+    font-style: italic;
+    font-weight: 400;
+    color: var(--vermilion);
+  }
+  .nav-card .desc {
+    font-size: 13.5px;
+    line-height: 1.6;
+    color: var(--ink-2);
+    margin-bottom: 16px;
+  }
+  .nav-card .badges {
+    display: flex; flex-wrap: wrap; gap: 6px;
+  }
+  .nav-card .badge {
+    font-size: 11px;
+    color: var(--ink-3);
+    background: var(--paper-warm);
+    padding: 3px 10px;
+    border-radius: 999px;
+    font-family: var(--font-mono);
+  }
+  .nav-card .badge.pine { color: var(--pine); background: var(--pine-mist); }
+  .nav-card .badge.ver  { color: var(--vermilion); background: var(--vermilion-mist); }
+  .nav-card .arrow {
+    position: absolute;
+    top: 28px; right: 32px;
+    width: 32px; height: 32px;
+    border-radius: 50%;
+    background: var(--paper-warm);
+    color: var(--ink-3);
+    display: grid; place-items: center;
+    transition: all 0.3s var(--ease-out);
+  }
+  .nav-card:hover .arrow {
+    background: var(--pine);
+    color: #fff;
+    transform: translate(2px, -2px);
+  }
+
+  /* 首字母 / 编号大字 */
+  .nav-card.feature {
+    grid-column: span 2;
+    background: linear-gradient(135deg, var(--paper) 0%, var(--paper-warm) 100%);
+    padding: 36px 40px 40px;
+  }
+  .nav-card.feature h3 { font-size: 30px; margin-bottom: 14px; max-width: 28ch; }
+  .nav-card.feature .desc { font-size: 15px; max-width: 56ch; }
+  .nav-card.feature .arrow { width: 40px; height: 40px; top: 36px; right: 40px; }
+
+  /* === 底部签名 === */
+  .footer {
+    border-top: 1px solid var(--rule);
+    padding: 40px 24px;
+    max-width: 1200px;
+    margin: 0 auto;
+    color: var(--ink-3);
+    font-size: 12px;
+    display: flex; justify-content: space-between; align-items: center;
+  }
+  .footer .left { display: flex; gap: 24px; align-items: center; }
+  .footer a { color: var(--ink-2); transition: color 0.15s; }
+  .footer a:hover { color: var(--pine); }
+
+  /* Octo 浮在 hero 角落 */
+  .octo-pet {
+    position: absolute;
+    right: -20px; top: 80px;
+    width: 240px; height: 240px;
+    z-index: 0;
+    filter: drop-shadow(0 8px 24px rgba(45,79,62,0.15));
+    animation: octo-float 6s ease-in-out infinite;
+  }
+  @keyframes octo-float {
+    0%, 100% { transform: translateY(0) rotate(-2deg); }
+    50% { transform: translateY(-12px) rotate(1deg); }
+  }
+  .octo-pet img { width: 100%; height: 100%; object-fit: contain; }
+
+  /* 主题切换浮按钮 */
+  .theme-fab {
+    position: fixed;
+    top: 20px; right: 20px;
+    z-index: 100;
+    width: 36px; height: 36px;
+    border-radius: 50%;
+    background: var(--card);
+    border: 1px solid var(--rule);
+    display: grid; place-items: center;
+    cursor: pointer;
+    transition: all 0.2s;
+    box-shadow: var(--shadow-soft);
+  }
+  .theme-fab:hover { background: var(--paper-warm); }
+</style>
+</head>
+<body>
+
+<!-- 主题切换 -->
+<button class="theme-fab" id="themeToggle" title="切换主题">
+  <svg id="iconLight" width="16" height="16" viewBox="0 0 16 16" fill="none">
+    <circle cx="8" cy="8" r="3" stroke="currentColor" stroke-width="1.5"/>
+    <path d="M8 1v2M8 13v2M1 8h2M13 8h2M2.5 2.5l1.4 1.4M12.1 12.1l1.4 1.4M2.5 13.5l1.4-1.4M12.1 3.9l1.4-1.4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+  </svg>
+</button>
+
+<!-- ===== Hero ===== -->
+<section class="hero">
+  <img class="octo-pet" src="/public/images/octo-buddy/idle.png" alt="Octo" />
+
+  <div class="hero-eyebrow">MeetMind · Design System v7</div>
+
+  <h1 class="hero-title">
+    像<span class="em">图书馆台灯</span>一样安静，<br/>
+    像<span class="pine">老师的红笔批注</span>一样清晰。
+  </h1>
+
+  <p class="hero-lede">
+    这是一份 AI 学习产品的设计宪法。它把"AI 沉淀"画成墨松绿，把"学生此刻"画成朱批红，
+    用 Inter 和 Instrument Serif 的对话感取代默认中文字栈，让每一处引用都成为视觉资产。
+    全套 token、组件、AI 视觉语言、应用矩阵、移动端、暗色模式都在这一本里。
+  </p>
+
+  <!-- 双签名色块 -->
+  <div class="sig-colors">
+    <div class="sig-block pine">
+      <div class="num">PRIMARY · 01</div>
+      <div class="label">墨松绿</div>
+      <div class="hex">#2D4F3E · Pine</div>
+      <p class="meaning">AI 长期沉淀。场景上下文。图书馆台灯下书脊的颜色。</p>
+    </div>
+    <div class="sig-block vermilion">
+      <div class="num">SECONDARY · 02</div>
+      <div class="label">朱批红</div>
+      <div class="hex">#B5483C · Vermilion</div>
+      <p class="meaning">学生此刻标注。引用与重点。老师在你卷子上画的那一笔。</p>
+    </div>
+  </div>
+
+  <!-- 元信息 -->
+  <div class="hero-meta">
+    <div class="hero-meta-item">
+      <div class="lbl">Typography</div>
+      <div class="val">Inter（正文）<br/>Instrument <em class="serif">Serif</em>（点缀）<br/><span class="mono">JetBrains Mono</span>（引用）</div>
+    </div>
+    <div class="hero-meta-item">
+      <div class="lbl">Modes</div>
+      <div class="val">Light · 米白纸感<br/>Dark · 深夜书房（first-class）</div>
+    </div>
+    <div class="hero-meta-item">
+      <div class="lbl">Octo IP</div>
+      <div class="val">8 个表情 · 永驻可变状态<br/>呼吸 / 听课 / 思考 / 庆祝</div>
+    </div>
+    <div class="hero-meta-item">
+      <div class="lbl">App Matrix</div>
+      <div class="val">7 个 AI 应用<br/>每个有独立视觉签名</div>
+    </div>
+  </div>
+</section>
+
+<!-- ===== 导航 ===== -->
+<section class="nav-section">
+
+  <!-- v7 落地状态 banner（Round 6 final） -->
+  <div style="margin: 0 0 48px; padding: 18px 22px; border-radius: 16px; background: linear-gradient(135deg, rgba(45,79,62,0.06) 0%, rgba(181,72,60,0.05) 100%); border: 1px solid rgba(45,79,62,0.10); display: flex; align-items: center; gap: 16px; flex-wrap: wrap;">
+    <span style="display: inline-flex; align-items: center; gap: 6px; font-family: 'JetBrains Mono', monospace; font-size: 10.5px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--mm-pine); font-weight: 600;">
+      <span style="display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: var(--mm-pine); box-shadow: 0 0 0 3px rgba(45,79,62,0.18);"></span>
+      v7 已 ship
+    </span>
+    <span style="font-size: 13.5px; color: var(--mm-ink-secondary); flex: 1; min-width: 280px;">
+      6 轮迭代 · <strong style="color: var(--mm-ink); font-weight: 600;">155 文件</strong>已升级 · <strong style="color: var(--mm-ink); font-weight: 600;">12 个</strong>原生 v7 组件 · <strong style="color: var(--mm-ink); font-weight: 600;">tsc 0 errors / make build 0 errors</strong> · 全产品 0 处违禁色残留
+    </span>
+    <span style="font-family: 'Instrument Serif', serif; font-style: italic; font-size: 16px; color: var(--mm-vermilion);">
+      色 = 架构 · 设计宪法已落地
+    </span>
+  </div>
+
+  <div class="nav-section-title">
+    <span>FOUNDATIONS</span>
+    <span class="count">基础层 · 03 文档</span>
+  </div>
+  <div class="nav-grid">
+
+    <a class="nav-card" href="./01-foundations.html">
+      <div class="arrow">
+        <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+          <path d="M3 7h8M7 3l4 4-4 4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
+        </svg>
+      </div>
+      <div class="num">01 · FOUNDATIONS</div>
+      <h3>基础令牌</h3>
+      <p class="desc">色彩 / 字体 / 间距 / 圆角 / 投影 / 动效——产品所有视觉的最底层规则。</p>
+      <div class="badges">
+        <span class="badge pine">Pine #2D4F3E</span>
+        <span class="badge ver">Vermilion #B5483C</span>
+        <span class="badge">12 spacing</span>
+        <span class="badge">8 radii</span>
+      </div>
+    </a>
+
+    <a class="nav-card" href="./02-ai-language.html">
+      <div class="arrow">
+        <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+          <path d="M3 7h8M7 3l4 4-4 4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
+        </svg>
+      </div>
+      <div class="num">02 · AI VISUAL LANGUAGE</div>
+      <h3>AI <span class="em">视觉语言</span></h3>
+      <p class="desc">骨架屏 / 流式 / 思考气息 / 引用资产化 / Octo 8 态。让"AI 在工作"被肉眼看见。</p>
+      <div class="badges">
+        <span class="badge pine">Skeleton</span>
+        <span class="badge pine">Stream</span>
+        <span class="badge ver">Citations</span>
+        <span class="badge">Octo Matrix</span>
+      </div>
+    </a>
+
+    <a class="nav-card" href="./03-components.html">
+      <div class="arrow">
+        <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+          <path d="M3 7h8M7 3l4 4-4 4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
+        </svg>
+      </div>
+      <div class="num">03 · COMPONENTS</div>
+      <h3>原子组件库</h3>
+      <p class="desc">按钮 / chip / 卡片 / 输入 / 模态 / tooltip / toast / progress——所有页面的积木。</p>
+      <div class="badges">
+        <span class="badge">Button</span>
+        <span class="badge">Chip</span>
+        <span class="badge">Card</span>
+        <span class="badge">Input</span>
+        <span class="badge">Modal</span>
+      </div>
+    </a>
+
+    <a class="nav-card" href="./04-app-matrix.html">
+      <div class="arrow">
+        <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+          <path d="M3 7h8M7 3l4 4-4 4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
+        </svg>
+      </div>
+      <div class="num">04 · APP MATRIX</div>
+      <h3>应用矩阵 <span class="em">视觉</span></h3>
+      <p class="desc">7 个 AI 应用——速查表 / 闪卡 / 测验 / 思维导图 / 报告 / 播客 / 信息图。每一个的独立视觉签名。</p>
+      <div class="badges">
+        <span class="badge pine">Cheatsheet</span>
+        <span class="badge pine">Flashcards</span>
+        <span class="badge pine">Quiz</span>
+        <span class="badge">Mindmap</span>
+        <span class="badge">+3</span>
+      </div>
+    </a>
+
+  </div>
+
+  <div class="nav-section-title" style="margin-top: 64px;">
+    <span>PATTERNS · 页面与场景</span>
+    <span class="count">场景层 · 05 文档</span>
+  </div>
+  <div class="nav-grid">
+
+    <a class="nav-card" href="./05-classroom.html">
+      <div class="arrow"><svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M3 7h8M7 3l4 4-4 4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg></div>
+      <div class="num">05 · CLASSROOM</div>
+      <h3>课中三栏<span class="em">现场</span></h3>
+      <p class="desc">左转录 + 中黑板 + 右 Octo 同桌——MeetMind 最核心的一屏。流式输出 + 内联闪卡。</p>
+      <div class="badges">
+        <span class="badge ver">[MM:SS]</span>
+        <span class="badge pine">Octo · 在听</span>
+        <span class="badge">stream</span>
+      </div>
+    </a>
+
+    <a class="nav-card" href="./06-review.html">
+      <div class="arrow"><svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M3 7h8M7 3l4 4-4 4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg></div>
+      <div class="num">06 · REVIEW</div>
+      <h3>课后复习三栏</h3>
+      <p class="desc">左视频 + 章节锚点 + 转录跟随 / 中应用工作区（测验作答态）/ 右 Octo 复盘。</p>
+      <div class="badges">
+        <span class="badge">视频证据</span>
+        <span class="badge ver">作答中</span>
+        <span class="badge pine">76% 听懂</span>
+      </div>
+    </a>
+
+    <a class="nav-card feature" href="./07-share-landing.html">
+      <div class="arrow"><svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M3 7h8M7 3l4 4-4 4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg></div>
+      <div class="num">07 · SHARE LANDING · v3.0</div>
+      <h3>分享落地页 <span class="em">"破例放飞"</span></h3>
+      <p class="desc">v3.0 班级裂变核心。这是<strong>唯一</strong>允许大胆使用渐变、空间感、动态背景的页面，因为它要在班级群里赢得第一眼，让不知道 MeetMind 的同学想点进去——投资人 / 学生第一印象的关键页。</p>
+      <div class="badges">
+        <span class="badge pine">Hero + 大气场</span>
+        <span class="badge ver">真实速查表预览</span>
+        <span class="badge">和这只 Octo 对话</span>
+        <span class="badge">12 位同学已领</span>
+      </div>
+    </a>
+
+    <a class="nav-card" href="./08-mobile.html">
+      <div class="arrow"><svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M3 7h8M7 3l4 4-4 4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg></div>
+      <div class="num">08 · MOBILE</div>
+      <h3>移动端 <span class="em">4 屏</span></h3>
+      <p class="desc">首屏 / 课中呼吸球 / 同桌全屏 / 复习——不是响应式裁剪，是 native sheet + 手势 + Haptic 重新设计。</p>
+      <div class="badges">
+        <span class="badge ver">仪式呼吸球</span>
+        <span class="badge pine">全屏 sheet</span>
+        <span class="badge">9:41</span>
+      </div>
+    </a>
+
+    <a class="nav-card" href="./09-dark.html">
+      <div class="arrow"><svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M3 7h8M7 3l4 4-4 4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg></div>
+      <div class="num">09 · DARK MODE</div>
+      <h3>暗色 <span class="em">First-Class</span></h3>
+      <p class="desc">不是反色，是<em class="em">深夜书房</em>。底色深棕墨黑、墨绿变浅松绿、朱批变暖橘红——凌晨两点学习也不刺眼。</p>
+      <div class="badges">
+        <span class="badge">#14110D</span>
+        <span class="badge pine">Pine · #6B9080</span>
+        <span class="badge ver">Vermilion · #E07A5F</span>
+      </div>
+    </a>
+
+  </div>
+</section>
+
+<footer class="footer">
+  <div class="left">
+    <span>MeetMind v7 · Design System</span>
+    <span style="color: var(--ink-4);">·</span>
+    <span>持续迭代</span>
+  </div>
+  <div class="right mono" style="font-size: 11px;">
+    pine #2D4F3E &nbsp;·&nbsp; vermilion #B5483C
+  </div>
+</footer>
+
+<script>
+  // 主题切换
+  const toggle = document.getElementById('themeToggle');
+  const root = document.documentElement;
+  toggle.addEventListener('click', () => {
+    const cur = root.getAttribute('data-theme');
+    root.setAttribute('data-theme', cur === 'dark' ? 'light' : 'dark');
+  });
+</script>
+
+</body>
+</html>

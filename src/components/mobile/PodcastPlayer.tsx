@@ -55,7 +55,7 @@ function ConfusionMarkerDot({
         "focus:outline-none focus:ring-2 focus:ring-offset-1",
         marker.resolved
           ? "bg-[#D1F4E0] focus:ring-[#D1F4E0]/50"
-          : "bg-rose-500 focus:ring-rose-500/50",
+          : "bg-vermilion-fog focus:ring-vermilion/50",
         isSelected && "scale-150 ring-2 ring-white/50",
         !marker.resolved && "animate-pulse"
       )}
@@ -151,7 +151,7 @@ export function PodcastPlayer({
             "bg-[#FDF3C0]",
             "text-white ",
             "active:scale-95 transition-transform",
-            "focus:outline-none focus:ring-2 focus:ring-[#232322] focus:ring-offset-2 focus:ring-offset-slate-900"
+            "focus:outline-none focus:ring-2 focus:ring-[#1C1B19] focus:ring-offset-2 focus:ring-offset-slate-900"
           )}
           aria-label={isPlaying ? '暂停' : '播放'}
         >
@@ -187,7 +187,7 @@ export function PodcastPlayer({
           ref={progressRef}
           className={cn(
             "relative h-2 rounded-full cursor-pointer",
-            "bg-slate-700/50"
+            "bg-ink-secondary/50"
           )}
           onMouseDown={handleMouseDown}
           onTouchStart={handleTouchStart}
@@ -203,7 +203,7 @@ export function PodcastPlayer({
             className={cn(
               "absolute top-1/2 -translate-y-1/2 -translate-x-1/2",
               "w-4 h-4 rounded-full bg-white",
-              "border-2 border-[#232322]",
+              "border-2 border-[#1C1B19]",
               isDragging && "scale-125"
             )}
             style={{ left: `${progress}%` }}
@@ -211,7 +211,7 @@ export function PodcastPlayer({
         </div>
 
         {/* 时间显示 */}
-        <div className="flex justify-between mt-2 text-xs text-slate-400">
+        <div className="flex justify-between mt-2 text-xs text-ink-muted">
           <span>{formatTime(currentTime)}</span>
           <span>{formatTime(duration)}</span>
         </div>
@@ -221,14 +221,14 @@ export function PodcastPlayer({
       {markers.length > 0 && (
         <div className="flex items-center justify-center gap-4 mt-3 text-xs">
           <div className="flex items-center gap-1.5">
-            <span className="w-2 h-2 rounded-full bg-rose-500" />
-            <span className="text-slate-400">
+            <span className="w-2 h-2 rounded-full bg-vermilion-fog" />
+            <span className="text-ink-muted">
               {markers.filter(m => !m.resolved).length} 待解决
             </span>
           </div>
           <div className="flex items-center gap-1.5">
             <span className="w-2 h-2 rounded-full bg-[#D1F4E0]" />
-            <span className="text-slate-400">
+            <span className="text-ink-muted">
               {markers.filter(m => m.resolved).length} 已解决
             </span>
           </div>

@@ -42,12 +42,12 @@ export function MobileAIChatHeader({
 }: MobileAIChatHeaderProps) {
   if (realtimeTeacherEnabled) {
     return (
-      <div className="flex-shrink-0 border-b border-[#E9E9E7] bg-white">
+      <div className="flex-shrink-0 border-b border-[#E8E2D5] bg-white">
         <div className="flex items-center justify-between px-3 pb-3 pt-3">
           <button
             type="button"
             onClick={onToggleRealtimeTeacher}
-            className="flex h-9 w-9 items-center justify-center rounded-full text-[#232322]"
+            className="flex h-9 w-9 items-center justify-center rounded-full text-[#1C1B19]"
             aria-label="返回聊天"
           >
             <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -56,7 +56,7 @@ export function MobileAIChatHeader({
           </button>
 
           <div className="text-center">
-            <p className="text-[17px] font-medium tracking-[-0.03em] text-[#232322]">语音同桌</p>
+            <p className="text-[17px] font-medium tracking-[-0.03em] text-[#1C1B19]">语音同桌</p>
           </div>
 
           <div className="h-9 w-9" aria-hidden="true" />
@@ -68,12 +68,12 @@ export function MobileAIChatHeader({
   const hasDuration = duration > 0;
 
   return (
-    <div className="flex-shrink-0 border-b border-[#E9E9E7] bg-white">
+    <div className="flex-shrink-0 border-b border-[#E8E2D5] bg-white">
       <div className="flex items-center justify-between px-3 pb-2 pt-3">
         <button
           type="button"
           onClick={onBack}
-          className="flex h-9 w-9 items-center justify-center rounded-full text-[#232322]"
+          className="flex h-9 w-9 items-center justify-center rounded-full text-[#1C1B19]"
           aria-label="返回"
         >
           <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -82,7 +82,7 @@ export function MobileAIChatHeader({
         </button>
 
         <div className="text-center">
-          <p className="text-[17px] font-medium tracking-[-0.03em] text-[#232322]">学习同桌</p>
+          <p className="text-[17px] font-medium tracking-[-0.03em] text-[#1C1B19]">学习同桌</p>
         </div>
 
         <div className="flex items-center gap-0.5">
@@ -91,7 +91,7 @@ export function MobileAIChatHeader({
             <button
               type="button"
               onClick={onNewConversation}
-              className="inline-flex h-9 w-9 items-center justify-center rounded-full text-[#787774] transition-colors active:bg-[#F7F7F5]"
+              className="inline-flex h-9 w-9 items-center justify-center rounded-full text-[#5C5A55] transition-colors active:bg-[#FAF7F2]"
               title="开新对话"
               aria-label="开新对话"
             >
@@ -101,7 +101,7 @@ export function MobileAIChatHeader({
           <button
             type="button"
             onClick={onToggleRealtimeTeacher}
-            className="inline-flex h-9 w-9 items-center justify-center rounded-full text-[#232322]"
+            className="inline-flex h-9 w-9 items-center justify-center rounded-full text-[#1C1B19]"
             title="语音同桌"
             aria-label="语音同桌"
           >
@@ -111,13 +111,13 @@ export function MobileAIChatHeader({
       </div>
 
       <div className="px-3 pb-2">
-        <div className="inline-flex items-center gap-1 rounded-full border border-[#E9E9E7] bg-[#F7F7F5] p-1">
+        <div className="inline-flex items-center gap-1 rounded-full border border-[#E8E2D5] bg-[#FAF7F2] p-1">
           <button
             onClick={onShowCurrent}
             className={`inline-flex h-8 items-center rounded-full px-3 text-[12px] font-medium transition-colors ${
               !showConversationHistory
-                ? 'bg-white text-[#232322]'
-                : 'text-[#A3A39E]'
+                ? 'bg-white text-[#1C1B19]'
+                : 'text-[#8E8B82]'
             }`}
           >
             当前
@@ -126,8 +126,8 @@ export function MobileAIChatHeader({
             onClick={onShowHistory}
             className={`inline-flex h-8 items-center gap-1 rounded-full px-3 text-[12px] font-medium transition-colors ${
               showConversationHistory
-                ? 'bg-white text-[#232322]'
-                : 'text-[#A3A39E]'
+                ? 'bg-white text-[#1C1B19]'
+                : 'text-[#8E8B82]'
             }`}
           >
             <History size={13} strokeWidth={1.9} />
@@ -147,7 +147,7 @@ export function MobileAIChatHeader({
             onSeek={onSeek}
             onPlayPause={onPlayPause}
             onMarkerClick={onMarkerClick}
-            className="overflow-hidden rounded-[18px] border border-[#E9E9E7]"
+            className="overflow-hidden rounded-[18px] border border-[#E8E2D5]"
           />
         </div>
       )}

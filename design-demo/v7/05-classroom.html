@@ -1,0 +1,775 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="light">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>05 · Classroom · MeetMind v7</title>
+<link rel="stylesheet" href="./tokens.css" />
+<style>
+  /* === 课中三栏布局：MeetMind 最核心一屏 === */
+  body { overflow: hidden; }
+  .app-shell { display: grid; grid-template-rows: 56px 1fr; height: 100vh; }
+
+  /* ===== Top Bar（继承 ds-topbar 但更密） ===== */
+  .topbar {
+    display: flex; align-items: center; gap: 14px;
+    padding: 0 20px;
+    background: var(--paper);
+    border-bottom: 1px solid var(--rule);
+  }
+  .topbar .brand {
+    display: flex; align-items: center; gap: 10px;
+    font-weight: 600; font-size: 14px; letter-spacing: -0.014em;
+  }
+  .topbar .brand .dot {
+    width: 8px; height: 8px; border-radius: 50%;
+    background: var(--pine);
+    box-shadow: 0 0 0 3px rgba(45,79,62,0.12);
+  }
+  .topbar .breadcrumb {
+    display: flex; align-items: center; gap: 8px;
+    color: var(--ink-3); font-size: 13px;
+    margin-left: 12px;
+  }
+  .topbar .breadcrumb .sep { color: var(--ink-4); }
+  .topbar .breadcrumb .current { color: var(--ink); font-weight: 500; }
+
+  /* Octo 永驻 IP */
+  .octo-pin {
+    margin-left: 14px; padding: 4px 12px 4px 4px;
+    display: flex; align-items: center; gap: 8px;
+    background: var(--paper-warm);
+    border: 1px solid var(--rule);
+    border-radius: 999px;
+    font-size: 12.5px; color: var(--ink-2);
+    cursor: pointer; transition: background 0.15s;
+  }
+  .octo-pin:hover { background: var(--paper-deep); }
+  .octo-pin .ava {
+    width: 24px; height: 24px;
+    border-radius: 50%;
+    background: radial-gradient(circle at 35% 30%, #FFFFFF 0%, var(--paper-warm) 70%);
+    border: 1px solid var(--rule);
+    display: grid; place-items: center;
+    overflow: hidden;
+    position: relative;
+  }
+  .octo-pin .ava::after {
+    content: ''; position: absolute; inset: -3px;
+    border-radius: 50%;
+    background: radial-gradient(circle, rgba(45,79,62,0.18) 0%, transparent 65%);
+    animation: octo-breath 3.6s ease-in-out infinite;
+  }
+  .octo-pin .ava img { width: 18px; height: 18px; object-fit: contain; position: relative; z-index: 1; }
+  .octo-pin .label { position: relative; z-index: 1; }
+
+  .session-meta {
+    margin-left: auto;
+    display: flex; align-items: center; gap: 16px;
+    color: var(--ink-2); font-size: 13px;
+  }
+  .session-meta .rec {
+    display: inline-flex; align-items: center; gap: 8px;
+    color: var(--vermilion);
+    font-weight: 500;
+  }
+
+  .topbar-btn {
+    height: 30px; padding: 0 14px;
+    border-radius: var(--radius);
+    background: var(--ink); color: #fff;
+    border: 0;
+    font: inherit; font-size: 12.5px; font-weight: 500;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .topbar-btn:hover { background: #000; transform: translateY(-0.5px); }
+  .topbar-btn.ghost {
+    background: transparent;
+    color: var(--ink-2);
+    border: 1px solid var(--rule);
+  }
+  .topbar-btn.ghost:hover { background: var(--paper-warm); color: var(--ink); }
+
+  /* ===== Main 三栏 ===== */
+  main { display: grid; grid-template-columns: 340px 1fr 400px; overflow: hidden; }
+  .col { display: flex; flex-direction: column; min-width: 0; overflow: hidden; }
+  .col-head {
+    padding: 18px 20px 12px;
+    display: flex; align-items: baseline; justify-content: space-between;
+    flex-shrink: 0;
+  }
+  .col-head h2 {
+    font-size: 12.5px; font-weight: 600; letter-spacing: 0.04em;
+    color: var(--ink-2); text-transform: uppercase;
+  }
+  .col-head h2 .accent { color: var(--pine); }
+  .col-head .sub { font-size: 11.5px; color: var(--ink-3); font-family: var(--font-mono); }
+
+  /* ===== 左栏：转录时间轴 ===== */
+  .col-left {
+    background: var(--paper);
+    border-right: 1px solid var(--rule);
+  }
+  .transcript {
+    flex: 1; overflow-y: auto;
+    padding: 4px 14px 24px;
+    scroll-behavior: smooth;
+  }
+  .seg {
+    position: relative;
+    padding: 10px 12px 10px 18px;
+    border-radius: var(--radius);
+    color: var(--ink-2);
+    font-size: 14px; line-height: 1.7;
+    transition: background 0.18s var(--ease-out), color 0.18s var(--ease-out);
+    cursor: pointer;
+  }
+  .seg + .seg { margin-top: 1px; }
+  .seg .ts {
+    display: block; margin-bottom: 4px;
+    font-size: 11px;
+    color: var(--vermilion);
+    font-weight: 500;
+    font-family: var(--font-mono);
+    letter-spacing: 0.01em;
+  }
+  .seg:hover { background: var(--paper-warm); color: var(--ink); }
+  .seg.active {
+    background: var(--vermilion-mist);
+    color: var(--ink);
+  }
+  .seg.active::before {
+    content: ''; position: absolute; left: 6px; top: 12px; bottom: 12px; width: 3px;
+    background: var(--vermilion); border-radius: 2px;
+  }
+  .seg.interim {
+    color: var(--ink-3);
+    font-style: italic;
+  }
+  .seg.interim .caret {
+    display: inline-block; width: 1.5px; height: 14px;
+    background: var(--ink-2); margin-left: 2px; vertical-align: -2px;
+    animation: caret-blink 1s steps(2) infinite;
+  }
+  .seg mark { padding: 0 1px; }
+
+  /* ===== 中栏：学习黑板 ===== */
+  .col-mid {
+    background: var(--paper);
+    overflow-y: auto;
+    padding: 0 36px 48px;
+  }
+  .stack { display: flex; flex-direction: column; gap: 16px; padding-top: 4px; }
+
+  /* Course Hero */
+  .course-hero {
+    padding: 28px 32px 24px;
+    background: var(--card);
+    border: 1px solid var(--rule);
+    border-radius: var(--radius-xl);
+    box-shadow: var(--shadow-ai-glow);
+    position: relative; overflow: hidden;
+  }
+  .course-hero::after {
+    content: ''; position: absolute; inset: 0;
+    background: var(--shimmer-ai);
+    background-size: 220% 100%;
+    animation: ai-breath 6s ease-in-out infinite;
+    pointer-events: none;
+  }
+  .course-hero > * { position: relative; z-index: 1; }
+  .course-hero .eyebrow {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--pine);
+    font-weight: 600;
+  }
+  .course-hero h1 {
+    margin: 10px 0 8px;
+    font-size: 30px; font-weight: 600;
+    letter-spacing: -0.024em; line-height: 1.18;
+  }
+  .course-hero h1 .em {
+    font-family: var(--font-serif);
+    font-style: italic; font-weight: 400;
+    color: var(--vermilion);
+  }
+  .course-hero .meta {
+    display: flex; align-items: center; gap: 16px;
+    margin-top: 16px;
+    color: var(--ink-3); font-size: 12.5px;
+  }
+  .course-hero .meta span + span::before {
+    content: '·'; margin-right: 16px; color: var(--rule);
+  }
+  .course-hero .meta .pine {
+    color: var(--pine); font-weight: 500;
+    display: inline-flex; align-items: center; gap: 6px;
+  }
+  .course-hero .meta .pine::before {
+    content: ''; width: 6px; height: 6px; border-radius: 50%;
+    background: var(--pine);
+    box-shadow: 0 0 0 0 rgba(45,79,62,.5);
+    animation: rec-pulse 1.6s ease-in-out infinite;
+  }
+
+  /* 应用矩阵 chip */
+  .matrix-card {
+    background: var(--card);
+    border: 1px solid var(--rule);
+    border-radius: var(--radius-xl);
+    padding: 14px 16px;
+  }
+  .matrix-card .lbl {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--ink-3);
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    margin-bottom: 10px;
+    padding: 0 4px;
+  }
+  .matrix-grid {
+    display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px;
+  }
+  .m-chip {
+    display: flex; align-items: center; gap: 8px;
+    padding: 10px 12px;
+    background: var(--paper-warm);
+    border: 1px solid transparent;
+    border-radius: var(--radius);
+    cursor: pointer;
+    transition: all 0.15s var(--ease-out);
+    font-size: 12.5px; color: var(--ink-2);
+  }
+  .m-chip:hover {
+    background: var(--card); border-color: var(--rule);
+    color: var(--ink); transform: translateY(-1px);
+  }
+  .m-chip .icn {
+    width: 6px; height: 6px; border-radius: 50%;
+    background: var(--pine-light);
+    flex-shrink: 0;
+  }
+  .m-chip.ready .icn { background: var(--pine); }
+  .m-chip.fresh .icn { background: var(--vermilion); }
+
+  /* App 卡 (Cheatsheet 嵌在中栏) */
+  .embedded-app {
+    background: var(--card);
+    border: 1px solid var(--rule);
+    border-radius: var(--radius-xl);
+    overflow: hidden;
+    box-shadow: var(--shadow-soft);
+  }
+  .embedded-app .head {
+    padding: 16px 22px 14px;
+    display: flex; align-items: center; gap: 10px;
+    border-bottom: 1px solid var(--rule-soft);
+  }
+  .embedded-app .head .icon {
+    width: 28px; height: 28px; border-radius: var(--radius);
+    background: #FDF1C8; color: #8E6A14;
+    display: grid; place-items: center;
+    font-size: 13px; font-weight: 600;
+  }
+  .embedded-app .head h3 {
+    font-size: 14.5px; font-weight: 600; letter-spacing: -0.012em;
+  }
+  .embedded-app .head .right { margin-left: auto; display: flex; gap: 8px; align-items: center; }
+  .embedded-app .body { padding: 18px 22px 22px; }
+
+  .cheat-rows { display: grid; gap: 14px; }
+  .cheat-row {
+    display: grid; grid-template-columns: 130px 1fr; gap: 18px;
+    padding: 4px 0;
+  }
+  .cheat-row .key {
+    font-size: 13px; color: var(--ink-2);
+    font-weight: 500; padding-top: 2px;
+    border-right: 1px solid var(--rule-soft);
+    padding-right: 14px;
+  }
+  .cheat-row .val {
+    font-size: 14px; line-height: 1.7; color: var(--ink);
+  }
+
+  /* ===== 右栏：Octo 同桌 ===== */
+  .col-right {
+    background: var(--paper);
+    border-left: 1px solid var(--rule);
+  }
+  .companion {
+    flex: 1; display: flex; flex-direction: column;
+    overflow: hidden;
+  }
+  .companion-head {
+    padding: 16px 18px 14px;
+    display: flex; align-items: center; gap: 12px;
+    border-bottom: 1px solid var(--rule-soft);
+  }
+  .octo-stage {
+    width: 44px; height: 44px;
+    border-radius: 50%;
+    background: radial-gradient(circle at 35% 30%, #FFFFFF 0%, var(--paper-warm) 70%);
+    border: 1px solid var(--rule);
+    display: grid; place-items: center;
+    position: relative;
+    flex-shrink: 0;
+  }
+  .octo-stage::before {
+    content: ''; position: absolute; inset: -5px;
+    border-radius: 50%;
+    background: radial-gradient(circle, rgba(45,79,62,0.18) 0%, transparent 65%);
+    animation: octo-breath 3.6s ease-in-out infinite;
+  }
+  .octo-stage img {
+    position: relative; z-index: 1;
+    width: 32px; height: 32px;
+    animation: octo-listen 0.6s ease-in-out infinite alternate;
+  }
+  @keyframes octo-listen {
+    from { transform: rotate(-2deg) scale(1); }
+    to   { transform: rotate(2deg) scale(1.04); }
+  }
+  .companion-head .name { font-size: 14px; font-weight: 600; letter-spacing: -0.012em; }
+  .companion-head .status {
+    font-size: 11.5px; color: var(--pine);
+    display: flex; align-items: center; gap: 6px;
+    font-family: var(--font-mono);
+    margin-top: 1px;
+  }
+  .companion-head .status::before {
+    content: ''; width: 6px; height: 6px; border-radius: 50%;
+    background: var(--pine);
+    box-shadow: 0 0 0 0 rgba(45,79,62,.5);
+    animation: rec-pulse 1.6s ease-in-out infinite;
+  }
+
+  .messages {
+    flex: 1; overflow-y: auto;
+    padding: 18px 18px 12px;
+  }
+  .msg { margin-bottom: 18px; }
+  .msg.user { display: flex; }
+  .msg.user .bubble {
+    margin-left: auto;
+    background: var(--ink); color: #fff;
+    border-radius: 14px 14px 4px 14px;
+    padding: 10px 14px; max-width: 88%;
+    font-size: 13.5px; line-height: 1.6;
+  }
+  .msg.ai { font-size: 14px; line-height: 1.78; color: var(--ink); }
+  .msg.ai .who {
+    font-size: 11px; color: var(--ink-3);
+    margin-bottom: 6px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    font-weight: 500;
+    font-family: var(--font-mono);
+  }
+  .msg.ai p { margin-bottom: 8px; }
+  .msg.ai .em { font-family: var(--font-serif); font-style: italic; color: var(--ink); }
+
+  /* 内联 app 卡（学生在对话里直接拿到） */
+  .inline-app {
+    margin-top: 12px;
+    border: 1px solid var(--rule);
+    border-radius: var(--radius-lg);
+    background: var(--card);
+    overflow: hidden;
+    box-shadow: var(--shadow-soft);
+    animation: inline-in 0.5s var(--ease-out) backwards;
+    animation-delay: 0.6s;
+  }
+  @keyframes inline-in {
+    from { opacity: 0; transform: translateY(8px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  .inline-head {
+    display: flex; align-items: center; gap: 8px;
+    padding: 10px 14px;
+    background: var(--pine-mist);
+    color: var(--pine);
+    font-size: 12px; font-weight: 600;
+    letter-spacing: -0.01em;
+  }
+  .inline-body { padding: 14px 16px; }
+  .flash-mini {
+    border: 1px solid var(--rule);
+    border-radius: var(--radius);
+    padding: 14px 16px;
+    background: var(--paper);
+  }
+  .flash-mini .q { font-size: 12.5px; color: var(--ink-2); margin-bottom: 8px; font-weight: 500; }
+  .flash-mini .a { font-size: 14px; color: var(--ink); line-height: 1.65; }
+  .flash-actions {
+    display: flex; gap: 6px; margin-top: 12px;
+  }
+  .flash-actions .pill {
+    padding: 5px 12px;
+    border: 1px solid var(--rule);
+    border-radius: 999px;
+    background: var(--card);
+    cursor: pointer;
+    font-size: 12px;
+    color: var(--ink-2);
+    transition: all 0.15s var(--ease-out);
+  }
+  .flash-actions .pill:hover { border-color: var(--pine); color: var(--pine); }
+  .flash-actions .pill.primary {
+    background: var(--pine); color: #fff; border-color: var(--pine);
+  }
+  .flash-actions .pill.primary:hover { background: var(--pine-deep); }
+
+  /* Skill chips */
+  .chips {
+    padding: 12px 18px 14px;
+    display: flex; gap: 8px; flex-wrap: wrap;
+    border-top: 1px solid var(--rule-soft);
+  }
+  .skill {
+    padding: 7px 12px;
+    border: 1px solid var(--rule);
+    border-radius: 999px;
+    background: var(--card);
+    font-size: 12.5px; color: var(--ink-2);
+    cursor: pointer;
+    transition: all 0.15s var(--ease-out);
+    display: inline-flex; align-items: center; gap: 6px;
+  }
+  .skill::before {
+    content: ''; width: 5px; height: 5px; border-radius: 50%;
+    background: var(--pine-light);
+  }
+  .skill:hover {
+    border-color: var(--pine); color: var(--pine);
+    transform: translateY(-1px);
+    box-shadow: var(--shadow-soft);
+  }
+  .skill.hot::before { background: var(--vermilion); }
+
+  /* Composer */
+  .composer-wrap {
+    padding: 12px 14px 14px;
+    border-top: 1px solid var(--rule);
+    background: var(--paper);
+  }
+  .comp {
+    display: flex; align-items: flex-end; gap: 8px;
+    padding: 10px 12px;
+    background: var(--card);
+    border: 1px solid var(--rule);
+    border-radius: var(--radius-lg);
+    transition: all 0.15s var(--ease-out);
+  }
+  .comp:focus-within {
+    border-color: var(--pine);
+    box-shadow: 0 0 0 3px rgba(45,79,62,0.08);
+  }
+  .comp textarea {
+    flex: 1; resize: none; border: 0; background: transparent;
+    font: inherit; font-size: 13.5px; line-height: 1.55;
+    color: var(--ink); outline: none;
+    min-height: 22px; max-height: 120px;
+  }
+  .comp .send {
+    width: 30px; height: 30px;
+    border-radius: var(--radius);
+    background: var(--ink); color: #fff;
+    border: 0;
+    display: grid; place-items: center;
+    cursor: pointer;
+  }
+  .comp .send:hover { background: var(--pine); }
+
+  /* Demo 注解 */
+  .scene-note {
+    position: fixed; bottom: 14px; left: 14px; z-index: 100;
+    background: var(--card); border: 1px solid var(--rule);
+    border-radius: var(--radius-md); padding: 10px 14px;
+    font-size: 11px; color: var(--ink-3); line-height: 1.6;
+    box-shadow: var(--shadow-soft); max-width: 280px;
+    font-family: var(--font-mono);
+  }
+  .scene-note b { color: var(--pine); font-weight: 600; }
+</style>
+</head>
+<body>
+
+<div class="app-shell">
+
+  <!-- ====== Top Bar ====== -->
+  <header class="topbar">
+    <a href="./index.html" class="brand">
+      <span class="dot"></span>
+      <span>MeetMind</span>
+    </a>
+
+    <div class="breadcrumb">
+      <span class="sep">/</span>
+      <span>计算机网络</span>
+      <span class="sep">/</span>
+      <span class="current">第 7 讲 · 课中</span>
+    </div>
+
+    <div class="octo-pin" title="Octo · 你的学习同桌">
+      <div class="ava"><img src="/public/images/octo-buddy/excited.png" /></div>
+      <span class="label">Octo 在听</span>
+    </div>
+
+    <div class="session-meta">
+      <span class="rec">
+        <span class="rec-dot"></span>
+        <span class="mono" id="rec-time">23:14</span>
+      </span>
+      <button class="topbar-btn ghost">分享一节</button>
+      <button class="topbar-btn">结束这节课</button>
+    </div>
+  </header>
+
+  <!-- ====== 三栏 ====== -->
+  <main>
+
+    <!-- ====== 左：转录 ====== -->
+    <section class="col col-left">
+      <div class="col-head">
+        <h2>转录时间轴 <span class="accent">·</span> <span class="sub">已稳定 142 段</span></h2>
+        <span class="sub">EN→中</span>
+      </div>
+      <div class="transcript" id="transcript">
+        <div class="seg">
+          <span class="ts">[18:42]</span>
+          所以 TCP 提供的是<strong>可靠的、面向连接的</strong>字节流服务。这里面有三个关键词：可靠、连接、字节流。
+        </div>
+        <div class="seg">
+          <span class="ts">[19:08]</span>
+          可靠是指什么？数据不丢、不重、不乱序——这是 TCP 的承诺。
+        </div>
+        <div class="seg">
+          <span class="ts">[19:34]</span>
+          那它怎么做到的？答案是<strong>确认重传 + 序号</strong>。每一段数据都有序号，接收方收到了就回 ACK；超时没收到 ACK，发送方就重传。
+        </div>
+        <div class="seg active">
+          <span class="ts">[20:01]</span>
+          但这里有个问题：如果你每发一个段都要等 ACK，吞吐就废了。所以 TCP 引入<mark class="mk-vermilion">滑动窗口</mark>——同时在飞的段可以有很多个。
+        </div>
+        <div class="seg">
+          <span class="ts">[20:41]</span>
+          那窗口多大合适？太小浪费带宽，太大又会拥塞网络。这就引出了下一个话题——<strong>拥塞控制</strong>。
+        </div>
+        <div class="seg">
+          <span class="ts">[21:12]</span>
+          拥塞控制的核心是 <mark class="mk-pine">AIMD</mark>：加性增、乘性减。慢启动阶段窗口指数涨，进入拥塞避免后线性涨；一遇到丢包，窗口直接砍半。
+        </div>
+        <div class="seg interim">
+          <span class="ts">[21:55]</span>
+          <span id="interimText">所以你看，TCP 其实在不停地探测网络的极限</span><span class="caret"></span>
+        </div>
+      </div>
+    </section>
+
+    <!-- ====== 中：学习黑板 ====== -->
+    <section class="col col-mid">
+      <div class="stack">
+
+        <!-- Hero -->
+        <div class="course-hero">
+          <div class="eyebrow">本节正在听 · LIVE</div>
+          <h1>TCP 可靠传输的<span class="em">三道关</span></h1>
+          <div class="meta">
+            <span>计算机网络 · 第 7 讲</span>
+            <span>张老师</span>
+            <span class="mono">23 分钟</span>
+            <span class="pine">Octo 已理解 76%</span>
+          </div>
+        </div>
+
+        <!-- 应用矩阵 -->
+        <div class="matrix-card">
+          <div class="lbl">应用矩阵 · 8 / 8 ready</div>
+          <div class="matrix-grid">
+            <div class="m-chip ready"><span class="icn"></span>速查表</div>
+            <div class="m-chip ready"><span class="icn"></span>闪卡</div>
+            <div class="m-chip ready"><span class="icn"></span>测验</div>
+            <div class="m-chip ready"><span class="icn"></span>思维导图</div>
+            <div class="m-chip fresh"><span class="icn"></span>课后报告</div>
+            <div class="m-chip"><span class="icn"></span>困惑钻取</div>
+            <div class="m-chip"><span class="icn"></span>10 分钟播客</div>
+            <div class="m-chip"><span class="icn"></span>信息图</div>
+          </div>
+        </div>
+
+        <!-- 速查表 -->
+        <div class="embedded-app">
+          <div class="head">
+            <span class="icon">速</span>
+            <h3>这节课的速查表</h3>
+            <div class="right">
+              <span class="badge dot pine mono">就绪</span>
+              <button class="topbar-btn ghost">导出 PDF</button>
+            </div>
+          </div>
+          <div class="body">
+            <div class="cheat-rows">
+              <div class="cheat-row">
+                <div class="key">可靠传输</div>
+                <div class="val">数据 <mark class="mk-vermilion">不丢、不重、不乱序</mark>——TCP 的核心承诺。<span class="cite-ts mono" style="margin-left: 4px;">[19:08]</span></div>
+              </div>
+              <div class="cheat-row">
+                <div class="key">实现机制</div>
+                <div class="val"><mark class="mk-pine">确认重传 + 序号</mark>。每段数据带序号，接收方回 ACK，超时未收到则重传。<span class="cite-ts mono" style="margin-left: 4px;">[19:34]</span></div>
+              </div>
+              <div class="cheat-row">
+                <div class="key">滑动窗口</div>
+                <div class="val">允许同时在飞多个数据段，避免"发一段等一段"的吞吐浪费。<span class="cite-ts mono" style="margin-left: 4px;">[20:01]</span></div>
+              </div>
+              <div class="cheat-row">
+                <div class="key">拥塞控制</div>
+                <div class="val">遵循 <mark class="mk-vermilion">AIMD</mark>：慢启动指数涨 → 拥塞避免线性涨 → 丢包窗口砍半。<span class="cite-ts mono" style="margin-left: 4px;">[21:12]</span></div>
+              </div>
+              <div class="cheat-row">
+                <div class="key">设计哲学</div>
+                <div class="val">TCP 在<mark class="mk-pine">不停探测网络极限</mark>，发现到极限就退一步——一种自适应的礼让协议。<span class="cite-ts mono" style="margin-left: 4px;">[21:55]</span></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </section>
+
+    <!-- ====== 右：Octo 同桌 ====== -->
+    <aside class="col col-right">
+      <div class="companion">
+
+        <div class="companion-head">
+          <div class="octo-stage">
+            <img src="/public/images/octo-buddy/excited.png" />
+          </div>
+          <div>
+            <div class="name">Octo</div>
+            <div class="status">正在跟着这节课</div>
+          </div>
+        </div>
+
+        <div class="messages" id="messages">
+
+          <div class="msg user">
+            <div class="bubble">滑动窗口和拥塞控制有什么区别？我有点混。</div>
+          </div>
+
+          <div class="msg ai">
+            <div class="who">Octo</div>
+            <p>这是个特别好的问题——很多人确实分不清。<strong>简单说：</strong></p>
+            <p>· <strong>滑动窗口</strong>是接收方告诉发送方"我能吃多少"，目的是<mark class="mk-vermilion">不让接收方被噎着</mark>；<span class="cite-ts mono">[20:01]</span></p>
+            <p>· <strong>拥塞控制</strong>是发送方自己揣测"网络能承载多少"，目的是<mark class="mk-pine">不让中间路由器被淹</mark>。<span class="cite-ts mono">[21:12]</span></p>
+            <p>所以两者的"窗口"看起来像，但一个是<em class="serif">为接收端</em>，一个是<em class="serif">为整个网络</em>。TCP 实际取两者最小值。<span class="cite-src mono">[资料 3]</span></p>
+          </div>
+
+          <div class="msg ai">
+            <div class="who">Octo · 想给你打个比喻</div>
+
+            <div class="thinking-strip" style="margin-bottom: 10px;">Octo 正在对照你前面问过的内容…</div>
+
+            <p class="stream" id="streamA"></p>
+
+            <div class="inline-app">
+              <div class="inline-head">
+                <span>◆</span>
+                <span>闪卡 · 滑动窗口 vs 拥塞控制</span>
+              </div>
+              <div class="inline-body">
+                <div class="flash-mini">
+                  <div class="q">Q · 滑动窗口的"窗口"是谁告诉谁的？</div>
+                  <div class="a">接收方告诉发送方。它表达的是<strong>接收方当前还能接收多少字节</strong>，本质是 flow control。</div>
+                  <div class="flash-actions">
+                    <span class="pill">忘了</span>
+                    <span class="pill">模糊</span>
+                    <span class="pill primary">记住了</span>
+                    <span class="pill" style="margin-left:auto;">下一张 →</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+        </div>
+
+        <div class="chips">
+          <div class="skill hot">出一道选择题考我</div>
+          <div class="skill">画一张思维导图</div>
+          <div class="skill">这节最容易考的是什么</div>
+          <div class="skill">老师刚才那段重听</div>
+        </div>
+
+        <div class="composer-wrap">
+          <div class="comp">
+            <textarea placeholder="问 Octo 任何关于这节课的事…" rows="1"></textarea>
+            <button class="send" title="发送">
+              <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+                <path d="M2 7h10M8 3l4 4-4 4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+            </button>
+          </div>
+        </div>
+
+      </div>
+    </aside>
+
+  </main>
+
+</div>
+
+<div class="scene-note">
+  <b>05 · CLASSROOM</b><br/>
+  课中三栏：左转录（朱批 [MM:SS]）<br/>
+  中黑板（hero + 矩阵 + 速查）<br/>
+  右 Octo（流式 + 内联闪卡）
+</div>
+
+<script>
+  // 录音时间走动
+  let secs = 23 * 60 + 14;
+  setInterval(() => {
+    secs++;
+    const m = String(Math.floor(secs / 60)).padStart(2, '0');
+    const s = String(secs % 60).padStart(2, '0');
+    document.getElementById('rec-time').textContent = `${m}:${s}`;
+  }, 1000);
+
+  // interim 文本变化
+  const interimVariants = [
+    '所以你看，TCP 其实在不停地探测网络的极限',
+    '所以你看，TCP 其实在不停地探测网络的极限，它会一点点试探',
+    '所以你看，TCP 其实在不停地探测网络的极限，它会一点点试探，发现到极限了就退一步',
+  ];
+  let vi = 0;
+  setInterval(() => {
+    document.getElementById('interimText').textContent = interimVariants[vi % interimVariants.length];
+    vi++;
+  }, 2400);
+
+  // 流式输出
+  const streamA = document.getElementById('streamA');
+  const streamText = '想让你真的记住这两个的区别，我给你打个比喻：滑动窗口像餐厅服务员控制一桌的上菜节奏——客人吃多快服务员就送多快；拥塞控制像整条街的红绿灯——整条街堵了，每个餐厅都得放慢出菜。';
+  function playStream() {
+    streamA.innerHTML = '';
+    [...streamText].forEach((ch, i) => {
+      const span = document.createElement('span');
+      span.textContent = ch;
+      span.style.animationDelay = (i * 0.025) + 's';
+      streamA.appendChild(span);
+    });
+    const caret = document.createElement('span');
+    caret.className = 'typing-caret';
+    streamA.appendChild(caret);
+  }
+  playStream();
+</script>
+
+</body>
+</html>

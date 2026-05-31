@@ -3,6 +3,7 @@
 import type { ReactNode } from 'react';
 import { TimelineView } from '@/components/TimelineView';
 import { AnchorDetailPanel } from '@/components/AnchorDetailPanel';
+import { OctoAvatar } from '@/components/ui/octo-avatar';
 import { formatTime } from '@/lib/utils/page-utils';
 import type { Anchor, Breakpoint, Timeline, TranscriptSegment } from '@/types';
 import type { ReviewTab, WorkspaceTabConfig } from '@/types/page-types';
@@ -54,11 +55,11 @@ export function ReviewWorkspacePanel({
   hideTabBar = false,
 }: ReviewWorkspacePanelProps) {
   return (
-    <div className="h-full flex flex-col bg-white border-r border-[#E9E9E7]">
+    <div className="h-full flex flex-col bg-card border-r border-divider">
       {!hideTabBar && (
       <>
-        {/* 下划线风格 tab 栏——与 DesktopVideoReviewLayout 的视频态 tab 保持一致。
-            零渐变、零阴影、纯平涂，只靠字重和下划线表达激活态。 */}
+        {/* v7 tab 栏：激活态用 pine 主签名色（"AI 在场"信号），不再纯黑下划线。
+            未激活态保持安静；hover 走 pine 微提示。 */}
         <div className="shrink-0 px-5 pt-4 flex items-center gap-5 overflow-x-auto relative z-10">
           {reviewWorkspaceTabs.map((tab) => (
             <button
@@ -67,22 +68,22 @@ export function ReviewWorkspacePanel({
               onClick={() => onReviewTabChange(tab.key)}
               className={`relative flex items-center gap-1.5 pb-3 text-[13px] transition-colors whitespace-nowrap ${
                 reviewTab === tab.key
-                  ? 'text-[#232322] font-medium'
-                  : 'text-[#A3A39E] hover:text-[#787774]'
+                  ? 'text-pine font-semibold'
+                  : 'text-ink-muted hover:text-pine/75'
               }`}
             >
               {tab.LucideIcon && <tab.LucideIcon size={iconTabSize} strokeWidth={iconTabStroke} />}
               {tab.label}
               {tab.key === 'anchor-detail' && selectedAnchor && !selectedAnchor.resolved && (
-                <span className="ml-0.5 w-1.5 h-1.5 bg-[#FADEC9] rounded-full inline-block animate-pulse" />
+                <span className="ml-0.5 w-1.5 h-1.5 bg-vermilion/65 rounded-full inline-block animate-pulse" />
               )}
               {reviewTab === tab.key && (
-                <span className="absolute bottom-0 left-0 right-0 h-[2px] bg-[#232322] rounded-full" />
+                <span className="absolute bottom-0 left-0 right-0 h-[2px] bg-pine rounded-full" />
               )}
             </button>
           ))}
         </div>
-        <div className="mx-5 h-px bg-[#E9E9E7]" />
+        <div className="mx-5 h-px bg-divider" />
       </>
       )}
 
@@ -105,20 +106,18 @@ export function ReviewWorkspacePanel({
 
         {reviewTab === 'timeline' && !timelineForView && (
           <div className="flex h-full flex-col items-center justify-center px-6">
-            <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-[#F7F7F5]">
-              <svg className="h-6 w-6 text-[#A3A39E]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
-            </div>
-            <p className="mb-1 text-[13px] font-medium text-[#787774]">这条内容没有时间轴</p>
-            <p className="text-center text-[12px] leading-relaxed text-[#A3A39E]">
+            <OctoAvatar mood="thinking" size="lg" aura className="mb-4" />
+            <p className="mb-1 text-[15px] font-semibold text-ink">
+              <span className="font-serif italic font-normal text-pine">这条内容</span>没有时间轴
+            </p>
+            <p className="text-center text-[12.5px] leading-relaxed text-ink-muted max-w-[18rem]">
               音频和视频类的内容才会生成时间轴。<br />
-              试试「应用」来和这条内容互动吧。
+              试试<span className="font-serif italic text-pine">「应用」</span>来和这条内容互动。
             </p>
             <button
               type="button"
               onClick={() => onReviewTabChange('apps')}
-              className="mt-4 rounded-lg bg-[#232322] px-4 py-2 text-[13px] font-medium text-white transition-all hover:bg-[#111111]"
+              className="mt-5 rounded-lg bg-ink px-4 py-2 text-[13px] font-medium text-white shadow-soft transition-all hover:bg-pine-deep hover:shadow-card active:scale-[0.98]"
             >
               打开应用
             </button>

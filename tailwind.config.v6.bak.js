@@ -1,0 +1,338 @@
+/** @type {import('tailwindcss').Config} */
+module.exports = {
+  content: [
+    './src/**/*.{js,ts,jsx,tsx,mdx}',
+  ],
+  theme: {
+    extend: {
+      colors: {
+        /* ===================================================
+           MeetMind v6 — 秩序白皮书色彩系统
+           Notion 式克制设计 · 零渐变 · 零阴影 · 纯平涂
+           =================================================== */
+
+        // 空间骨架
+        canvas: '#F7F7F5',
+        card: '#FFFFFF',
+        hover: '#EFEFEF',
+
+        // 笔墨与边界
+        ink: {
+          DEFAULT: '#232322',
+          secondary: '#787774',
+          muted: '#A3A39E',
+          inverse: '#FFFFFF',
+        },
+        divider: {
+          DEFAULT: '#E9E9E7',
+          light: '#F0F0EE',
+        },
+
+        // 四大功能色块（低饱和平涂）
+        sand: {
+          DEFAULT: '#FDF3C0',
+          light: '#FEFAEB',
+          dark: '#F5E48A',
+        },
+        mint: {
+          DEFAULT: '#D1F4E0',
+          50: '#F0FBF4',
+          100: '#E0F5EA',
+          200: '#B8E4CC',
+          300: '#8DD4AE',
+          400: '#5DAE8B',
+          500: '#4DAE6F',
+          600: '#489874',
+          700: '#3D8A60',
+          800: '#2E6948',
+          900: '#1F4830',
+          light: '#EDFDF4',
+          dark: '#A2E7BF',
+        },
+        dustyblue: {
+          DEFAULT: '#D3E4F4',
+          light: '#EDF5FD',
+          dark: '#A8C8E8',
+        },
+        rose: {
+          DEFAULT: '#FADEC9',
+          light: '#FDF2E9',
+          dark: '#F2C49D',
+        },
+
+        // 荧光笔
+        highlight: '#FDECC8',
+
+        // 仪式时刻色板：只允许用于录音呼吸球、生成扫光等白名单场景
+        ceremony: {
+          rose: '#FCE7F3',
+          lilac: '#E9D5FF',
+          sky: '#DBEAFE',
+        },
+
+        // 兼容旧版色名
+        navy: {
+          DEFAULT: '#232322',
+          50: '#F0F0EE',
+          100: '#E9E9E7',
+          200: '#D0D0CC',
+          300: '#A3A39E',
+          400: '#787774',
+          500: '#232322',
+          600: '#1A1A19',
+          700: '#111111',
+          800: '#0A0A0A',
+          900: '#050505',
+        },
+        lavender: {
+          DEFAULT: '#232322',
+          50: '#F0F0EE',
+          100: '#E9E9E7',
+          200: '#D0D0CC',
+          300: '#A3A39E',
+          400: '#787774',
+          500: '#232322',
+          600: '#1A1A19',
+          700: '#111111',
+          800: '#0A0A0A',
+          900: '#050505',
+        },
+        skyblue: {
+          DEFAULT: '#5B8DBF',
+          50: '#EDF5FD',
+          100: '#D0E4F5',
+          200: '#B3D4F0',
+          300: '#85BAE0',
+          400: '#5B8DBF',
+          500: '#3A6E99',
+          600: '#2E5878',
+          700: '#234460',
+          800: '#1A3348',
+          900: '#102230',
+        },
+        sunflower: {
+          DEFAULT: '#D9A441',
+          50: '#FFF8E1',
+          100: '#FDF2DC',
+          200: '#F5DCA8',
+          300: '#EEC574',
+          400: '#D9A441',
+          500: '#B8922E',
+          600: '#9A7A26',
+          700: '#7E6520',
+          800: '#634F18',
+          900: '#4A3B12',
+        },
+        warmOrange: {
+          DEFAULT: '#D9A441',
+          50: '#FFF8E1',
+          100: '#FDF2DC',
+          200: '#F5DCA8',
+          300: '#EEC574',
+          400: '#D9A441',
+          500: '#B8922E',
+          600: '#9A7A26',
+          700: '#7E6520',
+          800: '#634F18',
+          900: '#4A3B12',
+        },
+        coral: {
+          DEFAULT: '#FADEC9',
+          50: '#FDF2E9',
+          100: '#FBE8D5',
+          200: '#F8D5B5',
+          300: '#F5C296',
+          400: '#F2AF77',
+          500: '#FADEC9',
+          600: '#E0C5B3',
+          700: '#C5AB9C',
+          800: '#AA9186',
+          900: '#8F7770',
+        },
+        lilac: {
+          DEFAULT: '#E9E9E7',
+          50: '#F7F7F5',
+          100: '#F0F0EE',
+          200: '#E9E9E7',
+          300: '#D0D0CC',
+          400: '#A3A39E',
+          500: '#787774',
+          600: '#5C5B59',
+          700: '#454443',
+          800: '#2E2E2D',
+          900: '#1A1A19',
+        },
+        cream: {
+          DEFAULT: '#F7F7F5',
+          50: '#FAFAF9',
+          100: '#F7F7F5',
+          200: '#F0F0EE',
+          300: '#E9E9E7',
+          400: '#D0D0CC',
+          500: '#A3A39E',
+          600: '#787774',
+          700: '#5C5B59',
+          800: '#454443',
+          900: '#2E2E2D',
+        },
+        surface: {
+          DEFAULT: '#F7F7F5',
+          soft: '#EFEFEF',
+          warm: '#F7F7F5',
+          mint: '#F0FBF4',
+        },
+        edu: {
+          bg: '#F7F7F5',
+          card: '#FFFFFF',
+          soft: '#F0F0EE',
+          accent: '#EFEFEF',
+          border: '#E9E9E7',
+        },
+        text: {
+          primary: '#232322',
+          secondary: '#787774',
+          muted: '#A3A39E',
+          inverse: '#FFFFFF',
+        },
+        primary: {
+          50: '#F0F0EE',
+          100: '#E9E9E7',
+          200: '#D0D0CC',
+          300: '#A3A39E',
+          400: '#787774',
+          500: '#232322',
+          600: '#1A1A19',
+          700: '#111111',
+          800: '#0A0A0A',
+          900: '#050505',
+        },
+        accent: {
+          50: '#EDF5FD',
+          100: '#D0E4F5',
+          200: '#B3D4F0',
+          300: '#85BAE0',
+          400: '#5B8DBF',
+          500: '#3A6E99',
+          600: '#2E5878',
+          700: '#234460',
+          800: '#1A3348',
+          900: '#102230',
+        },
+        success: {
+          50: '#F0FBF4',
+          100: '#E0F5EA',
+          200: '#B8E4CC',
+          300: '#8DD4AE',
+          400: '#5DAE8B',
+          500: '#4DAE6F',
+          600: '#489874',
+          700: '#3D8A60',
+          800: '#2E6948',
+          900: '#1F4830',
+        },
+        warning: {
+          50: '#FFF8E1',
+          100: '#FDF2DC',
+          200: '#F5DCA8',
+          300: '#EEC574',
+          400: '#D9A441',
+          500: '#B8922E',
+          600: '#9A7A26',
+          700: '#7E6520',
+          800: '#634F18',
+          900: '#4A3B12',
+        },
+        danger: {
+          50: '#FDECEC',
+          100: '#FBD7D7',
+          200: '#F7B4B4',
+          300: '#F29292',
+          400: '#E87E7E',
+          500: '#D96B6B',
+          600: '#C55858',
+          700: '#A94545',
+          800: '#8D3434',
+          900: '#712424',
+        },
+      },
+      fontFamily: {
+        sans: ['PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', '-apple-system', 'BlinkMacSystemFont', 'sans-serif'],
+        mono: ['JetBrains Mono', 'Fira Code', 'Menlo', 'Monaco', 'monospace'],
+      },
+      boxShadow: {
+        // 秩序白皮书：全面封杀阴影。保留 key 防止旧代码报错，但值为 none
+        'glow': 'none',
+        'glow-lg': 'none',
+        'glow-mint': 'none',
+        'glow-ai': 'none',
+        'inner-light': 'none',
+        'card': 'none',
+        'card-hover': 'none',
+      },
+      backgroundImage: {
+        // 秩序白皮书：封杀渐变。保留 key 但映射为纯色
+        'gradient-primary': 'none',
+        'gradient-mint': 'none',
+        'gradient-soft': 'none',
+        'gradient-blue': 'none',
+        'gradient-hero': 'none',
+      },
+      animation: {
+        'pulse-slow': 'pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+        'bounce-gentle': 'bounce-gentle 2s ease-in-out infinite',
+        'fade-in': 'fade-in 0.3s ease-out',
+        'slide-up': 'slide-up 0.4s cubic-bezier(0.16, 1, 0.3, 1)',
+        'scale-in': 'scale-in 0.2s cubic-bezier(0.34, 1.56, 0.64, 1)',
+        'ripple': 'ripple 0.6s cubic-bezier(0.4, 0, 0.2, 1)',
+      },
+      keyframes: {
+        'bounce-gentle': {
+          '0%, 100%': { transform: 'translateY(0)' },
+          '50%': { transform: 'translateY(-5px)' },
+        },
+        'fade-in': {
+          from: { opacity: '0' },
+          to: { opacity: '1' },
+        },
+        'slide-up': {
+          from: { opacity: '0', transform: 'translateY(10px)' },
+          to: { opacity: '1', transform: 'translateY(0)' },
+        },
+        'scale-in': {
+          from: { opacity: '0', transform: 'scale(0.95)' },
+          to: { opacity: '1', transform: 'scale(1)' },
+        },
+        'ripple': {
+          from: { transform: 'scale(0)', opacity: '1' },
+          to: { transform: 'scale(1)', opacity: '0' },
+        },
+        // 思维导图：新节点生长（scale + fade）
+        mindGrow: {
+          '0%': { opacity: '0', transform: 'scale(0.86)' },
+          '60%': { opacity: '1', transform: 'scale(1.02)' },
+          '100%': { opacity: '1', transform: 'scale(1)' },
+        },
+        // 思维导图：新节点外圈柔和呼吸，1.4s 一次后归零
+        mindPulse: {
+          '0%': { opacity: '0.9', transform: 'scale(0.96)' },
+          '70%': { opacity: '0.35', transform: 'scale(1.05)' },
+          '100%': { opacity: '0', transform: 'scale(1.08)' },
+        },
+        // 预热态三圈呼吸
+        mindBreath: {
+          '0%, 100%': { opacity: '0.5', transform: 'scale(1)' },
+          '50%': { opacity: '1', transform: 'scale(1.08)' },
+        },
+      },
+      borderRadius: {
+        '2xl': '1rem',
+        '3xl': '1.5rem',
+      },
+      transitionTimingFunction: {
+        'out-expo': 'cubic-bezier(0.16, 1, 0.3, 1)',
+        'spring': 'cubic-bezier(0.34, 1.56, 0.64, 1)',
+      },
+    },
+  },
+  plugins: [],
+};

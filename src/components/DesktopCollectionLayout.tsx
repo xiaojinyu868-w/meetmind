@@ -8,7 +8,7 @@
  * - 右侧面板：回声 / 更多 / 历史 sheet
  * - 响应式：lg 以上三栏，小屏退化为全宽
  *
- * 设计系统：零渐变、零阴影、纯平涂、Notion 暖白
+ * 设计系统：v7 设计宪法：95% 克制 + 5% 仪式时刻情绪化（shadow-soft / shadow-card / shadow-ai-glow）、Notion 暖白
  */
 
 import React, { type ReactNode } from 'react';
@@ -44,7 +44,7 @@ export function DesktopCollectionLayout({
       {/* ── 右侧面板：回声 / 更多 / 历史 ── */}
       {rightPanelOpen && rightPanel ? (
         <aside
-          className="hidden lg:flex w-[340px] xl:w-[380px] flex-shrink-0 flex-col border-l border-[#E9E9E7]"
+          className="hidden lg:flex w-[340px] xl:w-[380px] flex-shrink-0 flex-col border-l border-[#E8E2D5]"
           style={{ background: 'var(--edu-bg-primary)' }}
         >
           {rightPanel}

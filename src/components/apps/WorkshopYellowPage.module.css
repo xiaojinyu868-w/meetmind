@@ -144,21 +144,44 @@
 }
 
 .cardFailed {
-  border-color: #fecaca;
+  /* v3.0：原 #fecaca 红边框过于刺目，改为温和沙色（与 yellow-page 主题同步） */
+  border-color: #E5DCC0;
 }
 
+/* v3.0：cover 区域改为内联 hero（icon + tint），废弃 SVG 静态图。
+   原因：静态 cover 把多张元素硬叠导致截断 + 视觉冲突。
+   新版每个 app 一种克制 ceremony tint 由 inline style 设置，container 只管
+   尺寸 / 圆角。 */
 .coverWrap {
   overflow: hidden;
-  border-radius: 14px;
-  border: 1px solid #dbeafe;
-  background: #eff6ff;
+  border-radius: 16px;
+  border: 1px solid transparent;
+  background: #FAF7F2;
+  height: 132px;
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
+.heroInner {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+}
+
+.heroOutputType {
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  opacity: 0.85;
+}
+
+/* 旧 cover image 类不再使用，但保留 selector 以防其他文件 reference */
 .cover {
-  display: block;
-  width: 100%;
-  height: 190px;
-  object-fit: cover;
+  display: none;
 }
 
 .rowTop {
@@ -351,12 +374,58 @@
 
 .errorLine {
   margin: 2px 0 0;
-  color: #b91c1c;
+  /* v3.0：从 #b91c1c 红字改为 ink-secondary 温和色——失败不应该尖叫 */
+  color: #5C5A55;
   font-size: 12px;
   line-height: 1.4;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+/* v3.0 StatusDot — 替换原来厚边框 chip。与 AppWindowShell.StatusIndicator 同源 taste */
+.statusDot {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11.5px;
+  color: #5C5A55;
+}
+
+.statusDotMark {
+  position: relative;
+  display: inline-flex;
+  width: 6px;
+  height: 6px;
+  flex-shrink: 0;
+}
+
+.statusDotPulse {
+  position: absolute;
+  inset: 0;
+  border-radius: 9999px;
+  opacity: 0.65;
+  animation: statusDotPing 1.6s cubic-bezier(0, 0, 0.2, 1) infinite;
+}
+
+.statusDotCore {
+  position: relative;
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 9999px;
+}
+
+.statusDotLabel {
+  font-variant-numeric: tabular-nums;
+}
+
+@keyframes statusDotPing {
+  75%, 100% {
+    transform: scale(2.2);
+    opacity: 0;
+  }
 }
 
 .previewLine {
@@ -697,7 +766,7 @@
 
 /* MeetMind UI baseline override — 应用矩阵回到暖白、平涂、无阴影 */
 .page {
-  background: #F7F7F5;
+  background: #FAF7F2;
   padding: 32px;
 }
 
@@ -706,16 +775,16 @@
 }
 
 .eyebrow {
-  border-color: #E9E9E7;
+  border-color: #E8E2D5;
   background: #FFFFFF;
-  color: #787774;
+  color: #5C5A55;
   font-size: 12px;
   font-weight: 600;
   letter-spacing: 0.08em;
 }
 
 .title {
-  color: #232322;
+  color: #1C1B19;
   font-size: 34px;
   font-weight: 700;
   letter-spacing: -0.035em;
@@ -723,20 +792,20 @@
 
 .subTitle {
   max-width: 640px;
-  color: #787774;
+  color: #5C5A55;
   font-size: 15px;
   line-height: 1.75;
 }
 
 .subStatus {
-  color: #A3A39E;
+  color: #8E8B82;
   font-size: 13px;
   font-weight: 500;
 }
 
 .generateAllButton {
-  border-color: #232322;
-  background: #232322;
+  border-color: #1C1B19;
+  background: #1C1B19;
   color: #FFFFFF;
   box-shadow: none;
   transition: opacity 0.15s ease, border-color 0.15s ease;
@@ -744,7 +813,7 @@
 
 .generateAllButton:hover {
   transform: none;
-  border-color: #232322;
+  border-color: #1C1B19;
   box-shadow: none;
   opacity: 0.86;
 }
@@ -756,7 +825,7 @@
 .card {
   gap: 14px;
   border-radius: 24px;
-  border-color: #E9E9E7;
+  border-color: #E8E2D5;
   padding: 18px;
   box-shadow: none;
   transition: border-color 0.16s ease, background-color 0.16s ease;
@@ -764,7 +833,7 @@
 
 .card:hover {
   transform: none;
-  border-color: #A3A39E;
+  border-color: #8E8B82;
   box-shadow: none;
 }
 
@@ -781,24 +850,25 @@
 }
 
 .cardFailed {
-  border-color: #F7B4B4;
+  /* v3.0：原 #F7B4B4 红边框过于刺目，改为温和沙色 */
+  border-color: #E5DCC0;
 }
 
 .coverWrap {
   border-radius: 18px;
-  border-color: #E9E9E7;
-  background: #F7F7F5;
+  border-color: #E8E2D5;
+  background: #FAF7F2;
 }
 
 .category {
-  color: #A3A39E;
+  color: #8E8B82;
   font-size: 12px;
   font-weight: 600;
   letter-spacing: 0.04em;
 }
 
 .appName {
-  color: #232322;
+  color: #1C1B19;
   font-size: 21px;
   font-weight: 700;
   letter-spacing: -0.025em;
@@ -806,7 +876,7 @@
 
 .headline,
 .description {
-  color: #787774;
+  color: #5C5A55;
   line-height: 1.68;
 }
 
@@ -816,14 +886,14 @@
 .tag,
 .dockStat,
 .dockTaskStatus {
-  border-color: #E9E9E7;
-  background: #F7F7F5;
-  color: #787774;
+  border-color: #E8E2D5;
+  background: #FAF7F2;
+  color: #5C5A55;
 }
 
 .generated::before,
 .notGenerated::before {
-  background: #A3A39E;
+  background: #8E8B82;
 }
 
 .cardGenerated .generated,
@@ -835,7 +905,7 @@
 
 .cardGenerated .generated::before,
 .dockStatussuccess::before {
-  background: #4DAE6F;
+  background: #2D6A4F;
 }
 
 .running,
@@ -860,21 +930,21 @@
 }
 
 .metaLine {
-  color: #A3A39E;
+  color: #8E8B82;
   font-size: 12.5px;
   line-height: 1.65;
 }
 
 .previewLabel {
-  color: #A3A39E;
+  color: #8E8B82;
   font-size: 11.5px;
   letter-spacing: 0.06em;
 }
 
 .previewLine {
-  border-color: #E9E9E7;
-  background: #F7F7F5;
-  color: #787774;
+  border-color: #E8E2D5;
+  background: #FAF7F2;
+  color: #5C5A55;
   font-size: 12.5px;
 }
 
@@ -889,59 +959,60 @@
 
 .primaryAction,
 .dockActionPrimary {
-  border: 1px solid #232322;
-  background: #232322;
+  border: 1px solid #1C1B19;
+  background: #1C1B19;
   color: #FFFFFF;
 }
 
 .primaryAction:hover,
 .dockActionPrimary:hover {
   transform: none;
-  background: #232322;
+  background: #1C1B19;
   opacity: 0.86;
 }
 
 .secondaryAction,
 .dockActionSecondary {
-  border-color: #E9E9E7;
+  border-color: #E8E2D5;
   background: #FFFFFF;
-  color: #787774;
+  color: #5C5A55;
 }
 
 .secondaryAction:hover,
 .dockActionSecondary:hover {
-  border-color: #A3A39E;
+  border-color: #8E8B82;
   background: #FFFFFF;
-  color: #232322;
+  color: #1C1B19;
 }
 
 .errorLine,
 .dockTaskMessage {
-  color: #A94545;
+  /* v3.0：原 #A94545 红色 → ink-secondary 温和色 */
+  color: #5C5A55;
   font-size: 12.5px;
 }
 
 .dockToggle,
 .dockPanel {
-  border-color: #E9E9E7;
+  border-color: #E8E2D5;
   background: #FFFFFF;
   box-shadow: none;
   backdrop-filter: none;
-  color: #232322;
+  color: #1C1B19;
 }
 
 .dockTaskItem {
-  border-color: #E9E9E7;
-  background: #F7F7F5;
+  border-color: #E8E2D5;
+  background: #FAF7F2;
 }
 
 .dockPanelTitle,
 .dockTaskName {
-  color: #232322;
+  color: #1C1B19;
 }
 
 .dockClose,
 .dockEmpty,
 .dockTaskMeta {
-  color: #787774;
+  color: #5C5A55;
 }

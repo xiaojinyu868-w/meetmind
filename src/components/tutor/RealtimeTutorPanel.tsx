@@ -69,7 +69,7 @@ export function RealtimeTutorPanel({
   });
 
   return (
-    <div className="h-full flex flex-col ai-chat-container bg-[#F7F7F5]">
+    <div className="h-full flex flex-col ai-chat-container bg-[#FAF7F2]">
       <TutorRealtimeCallScreen
         title="语音同桌"
         contextLabel={contextLabel}

@@ -135,6 +135,6 @@ components/
 
 改动任何组件必须遵守：
 
-- **零渐变、零阴影、纯平涂**
-- 只用系统 token：`canvas(#F7F7F5)`, `card(#fff)`, `ink(#232322)`, `ink-secondary(#787774)`, `ink-muted(#A3A39E)`, `divider(#E9E9E7)`
+- **v7 设计宪法：95% 克制 + 5% 仪式时刻情绪化（shadow-soft / shadow-card / shadow-ai-glow）**
+- 只用系统 token：`canvas(#FAF7F2)`, `card(#fff)`, `ink(#1C1B19)`, `ink-secondary(#5C5A55)`, `ink-muted(#8E8B82)`, `divider(#E8E2D5)`
 - 禁止：`bg-gradient-*`, `shadow-*`, `ring-*` 装饰

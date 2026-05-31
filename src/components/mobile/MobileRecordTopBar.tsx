@@ -20,7 +20,7 @@ export function MobileRecordTopBar({
   onOpenHistory,
 }: MobileRecordTopBarProps) {
   return (
-    <div className="flex-shrink-0 bg-[#F7F7F5] px-4 pb-1.5 pt-[max(env(safe-area-inset-top),6px)]">
+    <div className="flex-shrink-0 bg-[#FAF7F2] px-4 pb-1.5 pt-[max(env(safe-area-inset-top),6px)]">
       <div className="mx-auto flex w-full max-w-md items-center gap-2.5">
         <button
           type="button"

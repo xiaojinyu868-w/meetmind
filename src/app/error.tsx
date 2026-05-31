@@ -1,6 +1,14 @@
 'use client';
 
+/**
+ * v7 错误态：
+ * Octo · surprised 表情 + 朱批语义（错误 = 提醒，不是惊吓）。
+ * 不再用红色斜杠图标，让用户感觉是"同桌没接住"，不是"系统报错"。
+ */
+
 import { useEffect } from 'react';
+import Link from 'next/link';
+import { OctoAvatar } from '@/components/ui/octo-avatar';
 
 export default function Error({
   error,
@@ -15,34 +23,42 @@ export default function Error({
   }, [error]);
 
   return (
-    <div className="min-h-screen bg-[#F7F7F5] flex items-center justify-center p-4">
-      <div className="max-w-md w-full text-center">
-        {/* 错误图标 */}
-        <div className="mb-8">
-          <div className="w-24 h-24 mx-auto bg-[#FADEC9] rounded-full flex items-center justify-center">
-            <svg className="w-12 h-12 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-            </svg>
-          </div>
+    <main className="relative flex min-h-screen items-center justify-center bg-paper px-4 py-10">
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-0"
+        style={{
+          background:
+            'radial-gradient(ellipse 60% 50% at 50% 30%, rgba(181,72,60,0.08), transparent 60%)',
+        }}
+      />
+
+      <div className="relative max-w-md w-full text-center">
+        <div className="mx-auto mb-8">
+          <OctoAvatar mood="surprised" size="xl" aura priority />
         </div>
 
-        {/* 标题和描述 */}
-        <h1 className="text-2xl font-bold text-gray-800 mb-3">
-          出了点问题
+        {/* 标题 */}
+        <p className="font-mono text-[11px] font-semibold uppercase tracking-caps text-vermilion mb-3">
+          OOPS · 出了点问题
+        </p>
+        <h1 className="text-2xl font-semibold tracking-display text-ink mb-3">
+          Octo 没接住这条
         </h1>
-        <p className="text-gray-500 mb-6">
-          抱歉，页面加载时遇到了错误。<br />
-          请尝试刷新页面或返回首页。
+        <p className="text-sm leading-relaxed text-ink-secondary mb-6">
+          原文应该还在，重试通常能成功。
+          <br />
+          如果一直不行，再回首页或联系我们。
         </p>
 
         {/* 错误详情（开发环境显示） */}
         {process.env.NODE_ENV === 'development' && (
-          <div className="mb-6 p-4 bg-gray-100 rounded-xl text-left">
-            <p className="text-xs font-mono text-gray-600 break-all">
+          <div className="mb-6 p-4 bg-paper-warm rounded-lg text-left">
+            <p className="font-mono text-xs text-ink-secondary break-all leading-relaxed">
               {error.message}
             </p>
             {error.digest && (
-              <p className="text-xs text-gray-400 mt-2">
+              <p className="font-mono text-[11px] text-ink-muted mt-2">
                 Error ID: {error.digest}
               </p>
             )}
@@ -53,33 +69,30 @@ export default function Error({
         <div className="flex flex-col sm:flex-row gap-3 justify-center">
           <button
             onClick={reset}
-            className="inline-flex items-center justify-center gap-2 px-6 py-3 bg-[#232322] text-white font-medium rounded-xl hover:hover:-translate-y-0.5 transition-all"
+            className="inline-flex items-center justify-center gap-2 px-6 py-3 bg-ink text-white font-medium text-sm rounded-md transition-all duration-150 ease-out hover:bg-black hover:-translate-y-0.5 active:scale-[0.98]"
           >
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg className="size-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
             </svg>
             重试
           </button>
-          <a
+          <Link
             href="/app"
-            className="inline-flex items-center justify-center gap-2 px-6 py-3 bg-white text-gray-700 font-medium rounded-xl border-2 border-gray-200 hover:border-rose-200 hover:bg-rose-50 transition-all"
+            className="inline-flex items-center justify-center gap-2 px-6 py-3 bg-card text-ink-secondary font-medium text-sm rounded-md border border-divider transition-all duration-150 ease-out hover:border-pine hover:text-pine"
           >
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
-            </svg>
             返回首页
-          </a>
+          </Link>
         </div>
 
         {/* 帮助提示 */}
-        <p className="mt-8 text-sm text-gray-400">
-          如果问题持续存在，请
-          <a href="/feedback" className="text-rose-500 hover:underline mx-1">
+        <p className="mt-8 text-xs text-ink-muted">
+          如果问题持续存在，
+          <Link href="/feedback" className="text-pine hover:underline mx-1 underline-offset-4">
             联系我们
-          </a>
-          或发送邮件至 originedu@meetmind.online
+          </Link>
+          或发送邮件至 <span className="font-mono">originedu@meetmind.online</span>
         </p>
       </div>
-    </div>
+    </main>
   );
 }

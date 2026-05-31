@@ -13,6 +13,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { authService } from '@/lib/services/auth-service';
 import {
   getSharedAgentByToken,
+  revokeSharedAgent,
   trackShareInteraction,
 } from '@/lib/services/share-agent-service';
 import { createLogger } from '@/lib/logger';
@@ -58,5 +59,43 @@ export async function GET(
     const msg = err instanceof Error ? err.message : String(err);
     log.error('read failed', { token, msg });
     return NextResponse.json({ error: '读取分享失败', detail: msg }, { status: 500 });
+  }
+}
+
+/**
+ * DELETE /api/share/[token] — 撤销一个分享（仅原作者本人）
+ *
+ * 鉴权：必须登录且是 owner。其他用户传 owner 不匹配 → 返回 false（不区分 404，防探测）。
+ * 幂等：已撤销返回 success:true。
+ */
+export async function DELETE(
+  request: NextRequest,
+  { params }: { params: Promise<{ token: string }> },
+) {
+  const { token } = await params;
+  if (!token || token.length > 32) {
+    return NextResponse.json({ error: 'token 不合法' }, { status: 400 });
+  }
+
+  const authHeader = request.headers.get('Authorization');
+  if (!authHeader?.startsWith('Bearer ')) {
+    return NextResponse.json({ error: '未授权' }, { status: 401 });
+  }
+  const payload = authService.verifyToken(authHeader.slice(7));
+  if (!payload) {
+    return NextResponse.json({ error: '未授权' }, { status: 401 });
+  }
+
+  try {
+    const ok = await revokeSharedAgent({ token, ownerId: payload.sub });
+    if (!ok) {
+      // 找不到 / 不是 owner —— 一律 404，避免泄露存在性
+      return NextResponse.json({ error: '分享不存在或已撤销' }, { status: 404 });
+    }
+    return NextResponse.json({ success: true });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    log.error('revoke failed', { token, ownerId: payload.sub, msg });
+    return NextResponse.json({ error: '撤销失败', detail: msg }, { status: 500 });
   }
 }

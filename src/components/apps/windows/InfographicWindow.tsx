@@ -92,7 +92,7 @@ function GeneratingProgress({ elapsed }: { elapsed: number }) {
               <div
                 className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full transition-all ${
                   done
-                    ? 'bg-[#232322] text-white'
+                    ? 'bg-[#1C1B19] text-white'
                     : active
                       ? 'animate-pulse bg-blue-500 text-white'
                       : 'bg-slate-100 text-slate-400'
@@ -102,7 +102,7 @@ function GeneratingProgress({ elapsed }: { elapsed: number }) {
               </div>
               <span
                 className={`text-xs transition-colors ${
-                  done ? 'text-[#232322] line-through' : active ? 'font-semibold text-blue-700' : 'text-slate-400'
+                  done ? 'text-[#1C1B19] line-through' : active ? 'font-semibold text-blue-700' : 'text-slate-400'
                 }`}
               >
                 {step.label}
@@ -344,7 +344,7 @@ export function InfographicWindow({
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2">
               <p className="truncate text-sm font-semibold text-slate-900">{previewDraft.title || '信息图'}</p>
-              <span className="inline-flex items-center gap-1 rounded-full bg-[#D1F4E0]/30 px-2 py-0.5 text-[10px] font-medium text-[#232322]">
+              <span className="inline-flex items-center gap-1 rounded-full bg-[#D1F4E0]/30 px-2 py-0.5 text-[10px] font-medium text-[#1C1B19]">
                 <Check size={10} strokeWidth={3} />
                 已完成
               </span>
@@ -468,7 +468,7 @@ export function InfographicWindow({
           ) : null}
 
           {!imageEnabled && !checking ? (
-            <div className="rounded-2xl border border-[#E9E9E7]/30 bg-[#FADEC9]/10 px-4 py-3 text-sm leading-6 text-[#FDF3C0]">
+            <div className="rounded-2xl border border-[#E8E2D5]/30 bg-[#FADEC9]/10 px-4 py-3 text-sm leading-6 text-[#FDF3C0]">
               当前环境还没配置图片生成服务，所以可以先调界面，但暂时无法真正生图。
             </div>
           ) : null}

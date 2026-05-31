@@ -54,7 +54,7 @@ function defaultFormatTime(isoString: string): string {
 // ── 设计哲学 ──────────────────────────────────────
 //
 // 1. 回到系统内 — 只用设计系统 token：
-//    card(#fff), divider(#E9E9E7), ink(#232322), ink-secondary(#787774), ink-muted(#A3A39E)
+//    card(#fff), divider(#E8E2D5), ink(#1C1B19), ink-secondary(#5C5A55), ink-muted(#8E8B82)
 // 2. 唯一主角 — echo 正文是用户唯一要读的东西
 // 3. 用「无」创造存在感 — 大留白 + 排版节奏，不靠装饰
 
@@ -89,8 +89,8 @@ function EchoCardInner({
       {/* ── 标记行：极小的 ✦ + 时间，不抢戏 ── */}
       <div className="mb-3 flex items-center justify-between">
         <div className="flex items-center gap-1.5">
-          <span className="text-[10px] leading-none text-[#A3A39E]">✦</span>
-          <span className="text-[11px] text-[#A3A39E]">
+          <span className="text-[10px] leading-none text-[#8E8B82]">✦</span>
+          <span className="text-[11px] text-[#8E8B82]">
             {displayTime}
           </span>
         </div>
@@ -98,7 +98,7 @@ function EchoCardInner({
           <button
             type="button"
             onClick={handleShare}
-            className="inline-flex items-center gap-1.5 rounded-full border border-[#E9E9E7] bg-white px-2.5 py-1 text-[11px] font-medium text-[#787774] transition hover:border-[#DDDDD9] hover:bg-[#F7F7F5] hover:text-[#232322] active:scale-[0.99]"
+            className="inline-flex items-center gap-1.5 rounded-full border border-[#E8E2D5] bg-white px-2.5 py-1 text-[11px] font-medium text-[#5C5A55] transition hover:border-[#DDDDD9] hover:bg-[#FAF7F2] hover:text-[#1C1B19] active:scale-[0.99]"
             aria-label={COPY.echoShare.open}
           >
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
@@ -112,7 +112,7 @@ function EchoCardInner({
       </div>
 
       {/* ── 正文：这是全部，这是唯一的主角 ── */}
-      <div className="text-[15px] leading-[1.9] tracking-[0.01em] text-[#232322]">
+      <div className="text-[15px] leading-[1.9] tracking-[0.01em] text-[#1C1B19]">
         {displayBody.split('\n').map((line, i) => (
           <p key={i} className={i > 0 ? 'mt-2' : ''}>
             {renderEchoLine(line)}
@@ -122,7 +122,7 @@ function EchoCardInner({
           <button
             type="button"
             onClick={() => setIsExpanded(true)}
-            className="ml-0.5 inline text-[14px] text-[#A3A39E] transition-colors hover:text-[#787774]"
+            className="ml-0.5 inline text-[14px] text-[#8E8B82] transition-colors hover:text-[#5C5A55]"
           >
             展开
           </button>
@@ -133,12 +133,12 @@ function EchoCardInner({
       {highlights.length > 0 && (
         <div className="mt-5 space-y-3">
           {highlights.map((highlight, i) => (
-            <div key={i} className="border-l border-[#E9E9E7] pl-4">
-              <p className="text-[14px] italic leading-[1.8] text-[#787774]">
+            <div key={i} className="border-l border-[#E8E2D5] pl-4">
+              <p className="text-[14px] italic leading-[1.8] text-[#5C5A55]">
                 {highlight.text}
               </p>
               {(highlight.timestamp || highlight.speaker) && (
-                <p className="mt-1 text-[11px] text-[#A3A39E]">
+                <p className="mt-1 text-[11px] text-[#8E8B82]">
                   {[highlight.speaker, highlight.timestamp].filter(Boolean).join(' · ')}
                 </p>
               )}
@@ -149,7 +149,7 @@ function EchoCardInner({
 
       {/* ── 一句话带走：融为正文尾声，不另起炉灶 ── */}
       {takeaway && (
-        <p className="mt-4 text-[13px] leading-[1.8] text-[#787774]">
+        <p className="mt-4 text-[13px] leading-[1.8] text-[#5C5A55]">
           {takeaway}
         </p>
       )}
@@ -164,20 +164,20 @@ function EchoCardInner({
                 key={captureId}
                 type="button"
                 onClick={() => onNavigateToCapture?.(captureId)}
-                className="text-[11px] text-[#A3A39E] underline decoration-[#E9E9E7] underline-offset-2 transition-colors hover:text-[#787774]"
+                className="text-[11px] text-[#8E8B82] underline decoration-[#E8E2D5] underline-offset-2 transition-colors hover:text-[#5C5A55]"
               >
                 {truncate(label, 14)}
               </button>
             );
           })}
           {sources.length > MAX_SOURCE_TAGS && (
-            <span className="text-[11px] text-[#A3A39E]">+{sources.length - MAX_SOURCE_TAGS}</span>
+            <span className="text-[11px] text-[#8E8B82]">+{sources.length - MAX_SOURCE_TAGS}</span>
           )}
         </div>
       )}
 
       {/* ── 底部分隔线：与下一张卡片的呼吸 ── */}
-      <div className="mt-6 h-px bg-[#F0F0EE]" />
+      <div className="mt-6 h-px bg-[#F0EBDF]" />
     </div>
   );
 }
@@ -189,7 +189,7 @@ function renderEchoLine(line: string) {
   return parts.map((part, i) => {
     if (/^[「"][^」"]+[」"]$/.test(part) || /^"[^"]+"$/.test(part)) {
       return (
-        <span key={i} className="text-[#232322] font-medium">
+        <span key={i} className="text-[#1C1B19] font-medium">
           {part}
         </span>
       );

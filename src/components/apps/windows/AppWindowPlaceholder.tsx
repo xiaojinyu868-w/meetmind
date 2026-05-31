@@ -1,26 +1,25 @@
 'use client';
 
 /**
- * AppWindowPlaceholder — 通用应用窗口占位组件
+ * AppWindowPlaceholder — 通用应用窗口占位组件 (v7)
  *
- * v2 — M8 agent-native：loading 态升级为"三阶段叙事性骨架"。
- * 过去 60-120 秒的白空只有一个 spinner + 一行静态文字；
- * 现在按时间推进三句"同学在做什么"的描述：
- *   1 正在读你的课堂…
- *   2 正在挑核心…
- *   3 正在排版…
- * 已完成的阶段收成一条 ✓ 灰线，当前阶段有 shimmer 扫光。
- * 结果到了以后整个骨架 200ms 淡出，真实内容 200ms 淡入。
+ * 诚实 loading：
+ *   - 不假装有 step；让模型/服务端做事，UI 只表达"还在做"
+ *   - Octo Buddy 听课呼吸态（IP 即视觉主角）
+ *   - 真实 elapsed 秒数（不骗用户"已经第几步"）
+ *   - 长时（>30s / >60s）才换更柔和的文案，承认"内容多"
  *
- * 为什么是客户端时间驱动（不依赖 SSE 实时信号）：
- *   - LLM 调用时长有大致可预测的分布（15-90s），按比例推进已经够"像"
- *   - 避免把 /api/apps/execute 改成 SSE 的工程复杂度
- *   - 真正返回早/晚时：早 → 三阶段都变 ✓；晚 → 停在第三阶段加"稍等"行
+ * v7 视觉：
+ *   - 米白 paper 底 + 极淡 pine 光晕
+ *   - thinking-strip 让"AI 在做"被肉眼看见
+ *   - error 用 vermilion 朱批语义（提醒，不是惊吓）
  */
 
 import * as React from 'react';
-import { cn } from '@/lib/utils';
 import { COPY } from '@/lib/ui/copy';
+import { OctoBuddySprite } from '@/components/classroom/OctoBuddy';
+import { OctoAvatar } from '@/components/ui/octo-avatar';
+import { ThinkingStrip } from '@/components/ui/thinking-strip';
 
 interface AppWindowPlaceholderProps {
   /** 占位状态 */
@@ -38,92 +37,61 @@ interface AppWindowPlaceholderProps {
 }
 
 /* ------------------------------------------------------------------ */
-/*  三阶段叙事骨架                                                      */
+/*  Loading：诚实的「同学在听」                                          */
 /* ------------------------------------------------------------------ */
 
-type Stage = 0 | 1 | 2;
-
-/** 三阶段文案 + 各阶段目标占比（累积）。
- *  实际大多数 app 在 30-60s 完成；按比例推进即可营造"在做事"的叙事。 */
-const STAGE_ITEMS = [
-  { marker: '1', label: COPY.stages.reading },
-  { marker: '2', label: COPY.stages.selecting },
-  { marker: '3', label: COPY.stages.composing },
-] as const;
-
-// 每个阶段预计停留的毫秒。当真实执行比这快时，阶段会被一起"打勾"。
-const STAGE_DURATIONS_MS = [8000, 18000, 24000];
-// 超过 STAGE_DURATIONS_MS 总和后，停在最后阶段并显示"慢一点没关系"的软提示
-const STAGE_SLOW_HINT_AFTER_MS = STAGE_DURATIONS_MS.reduce((a, b) => a + b, 0);
-
-function useStageProgression(): { stage: Stage; slow: boolean } {
-  const [elapsed, setElapsed] = React.useState(0);
+function useElapsedSec(): number {
+  const [seconds, setSeconds] = React.useState(0);
   React.useEffect(() => {
     const startedAt = Date.now();
-    const tick = () => setElapsed(Date.now() - startedAt);
-    // 800ms 刷一次即可——阶段转换密度低，不需要每帧重渲染
-    const timer = window.setInterval(tick, 800);
+    const timer = window.setInterval(() => {
+      setSeconds(Math.floor((Date.now() - startedAt) / 1000));
+    }, 1000);
     return () => window.clearInterval(timer);
   }, []);
-
-  let acc = 0;
-  for (let i = 0; i < STAGE_DURATIONS_MS.length; i++) {
-    acc += STAGE_DURATIONS_MS[i];
-    if (elapsed < acc) {
-      return { stage: i as Stage, slow: false };
-    }
-  }
-  return { stage: 2, slow: elapsed > STAGE_SLOW_HINT_AFTER_MS };
+  return seconds;
 }
 
-function StagedLoading({ appName }: { appName: string }) {
-  const { stage, slow } = useStageProgression();
+function ListeningLoading({ appName }: { appName: string }) {
+  const seconds = useElapsedSec();
+
+  // 文案分级：30s 内一句温柔陪伴；30-60s 承认内容多；>60s 表达耐心
+  const message =
+    seconds <= 30
+      ? COPY.stages.listenStart(appName)
+      : seconds <= 60
+        ? COPY.stages.listenSlow
+        : COPY.stages.listenVerySlow;
 
   return (
-    <div className="flex h-full min-h-[320px] flex-col items-center justify-center gap-6 rounded-2xl bg-white p-8">
-      <div className="flex flex-col gap-3 w-full max-w-[320px]">
-        <p className="text-center text-[13px] text-ink-muted">
-          {`正在为你整理${appName}`}
+    <div className="relative flex h-full min-h-[420px] flex-col items-center justify-center gap-7 px-6 py-12">
+      {/* 极淡 pine / vermilion 双色光晕（v7 仪式时刻） */}
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-0"
+        style={{
+          background: `
+            radial-gradient(ellipse 60% 40% at 50% 35%, rgba(45,79,62,0.06), transparent 65%),
+            radial-gradient(ellipse 50% 30% at 50% 70%, rgba(181,72,60,0.04), transparent 70%)
+          `,
+        }}
+      />
+
+      {/* Octo Buddy listening · 主角不能小 */}
+      <div className="relative">
+        <OctoBuddySprite mood="listening" size="lg" />
+      </div>
+
+      <div className="relative flex flex-col items-center gap-3 text-center">
+        <p className="text-[15px] font-medium tracking-[-0.01em] text-ink">
+          {message}
         </p>
-
-        <ul className="flex flex-col gap-2">
-          {STAGE_ITEMS.map((item, idx) => {
-            const done = idx < stage;
-            const active = idx === stage;
-            return (
-              <li
-                key={item.label}
-                className={cn(
-                  'relative flex items-center gap-2.5 rounded-xl px-3 py-2.5 text-[13px] transition-all',
-                  done && 'text-ink-muted/70',
-                  active && 'bg-[#F7F7F5] text-ink stage-shimmer',
-                  !done && !active && 'text-ink-muted/40',
-                )}
-                aria-current={active ? 'step' : undefined}
-              >
-                <span
-                  className={cn(
-                    'inline-flex h-5 w-5 flex-shrink-0 items-center justify-center text-[13px]',
-                    done && 'opacity-60',
-                  )}
-                  aria-hidden
-                >
-                  {done ? '✓' : item.marker}
-                </span>
-                <span className="flex-1">
-                  {item.label}
-                  {active && <span className="ml-0.5">…</span>}
-                </span>
-              </li>
-            );
-          })}
-        </ul>
-
-        {slow ? (
-          <p className="mt-1 text-center text-[11.5px] text-ink-muted/70">
-            {COPY.stages.slow}
-          </p>
-        ) : null}
+        <ThinkingStrip>
+          <span className="font-mono tabular-nums text-pine">
+            {seconds.toString().padStart(2, '0')}s
+          </span>
+          <span>· Octo 在听这节课</span>
+        </ThinkingStrip>
       </div>
     </div>
   );
@@ -140,31 +108,27 @@ function EmptyGuide({ appName, description, onRetry, onBack }: {
   onBack?: () => void;
 }) {
   return (
-    <div className="flex h-full min-h-[320px] flex-col items-center justify-center gap-5 rounded-2xl border border-dashed border-divider bg-canvas p-8">
-      {/* 空态图标 */}
-      <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-white">
-        <svg className="h-8 w-8 text-ink-muted" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.2}>
-          <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />
-        </svg>
-      </div>
+    <div className="flex h-full min-h-[360px] flex-col items-center justify-center gap-6 rounded-2xl border border-dashed border-divider bg-paper p-10">
+      {/* Octo idle · 静静等着 */}
+      <OctoAvatar mood="idle" size="lg" aura />
 
       {/* 文案 */}
       <div className="text-center">
-        <p className="text-sm font-medium text-ink-secondary">
-          暂未做好{appName}
+        <p className="text-[15px] font-medium text-ink">
+          还没整理过<span className="font-serif italic text-pine"> {appName}</span>
         </p>
-        <p className="mt-1.5 max-w-xs text-[12.5px] leading-relaxed text-ink-muted">
-          {description || `点击“再做一版”或返回应用目录，为当前课堂整理${appName}内容。`}
+        <p className="mt-2 max-w-sm text-[13px] leading-relaxed text-ink-muted">
+          {description || `点击"再做一版"或返回应用目录，让 Octo 为当前课堂整理${appName}。`}
         </p>
       </div>
 
       {/* 操作按钮 */}
-      <div className="flex items-center gap-2.5">
+      <div className="flex items-center gap-3">
         {onRetry ? (
           <button
             type="button"
             onClick={onRetry}
-            className="rounded-lg bg-ink px-4 py-2 text-sm font-medium text-white transition hover:opacity-85 active:scale-[0.97]"
+            className="rounded-lg bg-ink px-4 py-2 text-sm font-medium text-white shadow-soft transition hover:opacity-85 active:scale-[0.97]"
           >
             再做一版
           </button>
@@ -173,7 +137,7 @@ function EmptyGuide({ appName, description, onRetry, onBack }: {
           <button
             type="button"
             onClick={onBack}
-            className="rounded-lg border border-divider bg-white px-4 py-2 text-sm font-medium text-ink-secondary transition hover:border-ink-muted hover:text-ink"
+            className="rounded-lg border border-divider bg-card px-4 py-2 text-sm font-medium text-ink-secondary transition hover:border-pine hover:text-pine"
           >
             返回应用
           </button>
@@ -194,35 +158,37 @@ function ErrorState({ appName, errorMessage, onRetry, onBack }: {
   onBack?: () => void;
 }) {
   return (
-    <div className="flex h-full min-h-[320px] flex-col items-center justify-center gap-5 rounded-2xl border border-coral-200 bg-[#FADEC9]/30 p-8">
-      {/* 错误图标 */}
-      <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-coral-100">
-        <svg className="h-7 w-7 text-coral-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-          <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z" />
-        </svg>
+    <div className="relative flex h-full min-h-[360px] flex-col items-center justify-center gap-6 px-8 py-12">
+      {/* 朱批红光晕 · 错误是"提醒"不是"惊吓" */}
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-0"
+        style={{
+          background:
+            'radial-gradient(ellipse 50% 40% at 50% 35%, rgba(181,72,60,0.06), transparent 65%)',
+        }}
+      />
+      <div className="relative">
+        <OctoBuddySprite mood="surprised" size="md" />
       </div>
-
-      {/* 文案 */}
-      <div className="text-center">
-        <p className="text-sm font-medium text-ink-secondary">
-          {appName}刚才没做好
+      <div className="relative text-center">
+        <p className="text-[15px] font-medium text-ink">
+          <span className="font-serif italic text-vermilion">{appName}</span> 刚才没做好
         </p>
         {errorMessage ? (
-          <p className="mt-1.5 max-w-sm text-[12.5px] leading-relaxed text-ink-muted" title={errorMessage}>
-            {errorMessage.length > 120 ? `${errorMessage.slice(0, 120)}...` : errorMessage}
+          <p className="mt-2 max-w-sm text-[12.5px] leading-relaxed text-ink-muted" title={errorMessage}>
+            {errorMessage.length > 120 ? `${errorMessage.slice(0, 120)}…` : errorMessage}
           </p>
         ) : (
-          <p className="mt-1.5 text-[12.5px] text-ink-muted">请检查网络连接后重试，或换个方式再试。</p>
+          <p className="mt-2 text-[12.5px] text-ink-muted">网络可能有点慢，再试一次看看</p>
         )}
       </div>
-
-      {/* 操作 */}
-      <div className="flex items-center gap-2.5">
+      <div className="relative flex items-center gap-3">
         {onRetry ? (
           <button
             type="button"
             onClick={onRetry}
-            className="rounded-lg bg-ink px-4 py-2 text-sm font-medium text-white transition hover:opacity-85 active:scale-[0.97]"
+            className="rounded-full bg-ink px-5 py-2 text-[13px] font-medium text-white shadow-soft transition hover:opacity-85 active:scale-[0.97]"
           >
             再试一次
           </button>
@@ -231,7 +197,7 @@ function ErrorState({ appName, errorMessage, onRetry, onBack }: {
           <button
             type="button"
             onClick={onBack}
-            className="rounded-lg border border-divider bg-white px-4 py-2 text-sm font-medium text-ink-secondary transition hover:border-ink-muted hover:text-ink"
+            className="rounded-full border border-divider bg-card px-5 py-2 text-[13px] font-medium text-ink-secondary transition hover:border-pine hover:text-pine"
           >
             返回应用
           </button>
@@ -249,7 +215,7 @@ export function AppWindowPlaceholder(props: AppWindowPlaceholderProps) {
   const { status, appName = '应用内容', errorMessage, onRetry, onBack, description } = props;
 
   if (status === 'loading') {
-    return <StagedLoading appName={appName} />;
+    return <ListeningLoading appName={appName} />;
   }
 
   if (status === 'error') {

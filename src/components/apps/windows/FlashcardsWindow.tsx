@@ -58,11 +58,11 @@ type MasteryScore = 'missed' | 'got';
 
 /* 卡片渐变色调 — 根据索引循环，营造视觉多样性 */
 const CARD_THEMES = [
-  { bg: 'from-[#1a1f35] to-[#0d1117]', accent: '#6366f1', glow: 'rgba(99,102,241,0.15)' },
-  { bg: 'from-[#1a2332] to-[#0d1117]', accent: '#3b82f6', glow: 'rgba(59,130,246,0.15)' },
-  { bg: 'from-[#1a2f2a] to-[#0d1117]', accent: '#10b981', glow: 'rgba(16,185,129,0.15)' },
-  { bg: 'from-[#2a1f35] to-[#0d1117]', accent: '#8b5cf6', glow: 'rgba(139,92,246,0.15)' },
-  { bg: 'from-[#2a2520] to-[#0d1117]', accent: '#f59e0b', glow: 'rgba(245,158,11,0.15)' },
+  { bg: 'from-[#1a1f35] to-[#14110D]', accent: '#6366f1', glow: 'rgba(99,102,241,0.15)' },
+  { bg: 'from-[#1a2332] to-[#14110D]', accent: '#3b82f6', glow: 'rgba(59,130,246,0.15)' },
+  { bg: 'from-[#1a2f2a] to-[#14110D]', accent: '#10b981', glow: 'rgba(16,185,129,0.15)' },
+  { bg: 'from-[#2a1f35] to-[#14110D]', accent: '#8b5cf6', glow: 'rgba(139,92,246,0.15)' },
+  { bg: 'from-[#2a2520] to-[#14110D]', accent: '#f59e0b', glow: 'rgba(245,158,11,0.15)' },
 ];
 
 export function FlashcardsWindow({ result, onLearningActivity }: FlashcardsWindowProps) {
@@ -247,12 +247,12 @@ export function FlashcardsWindow({ result, onLearningActivity }: FlashcardsWindo
 
           <div className="flex items-center justify-center gap-10 mb-8">
             <div className="text-center">
-              <div className="text-xl font-bold text-[#787774]">{gotCount}</div>
+              <div className="text-xl font-bold text-[#5C5A55]">{gotCount}</div>
               <div className="text-xs text-white/40 mt-0.5">已掌握</div>
             </div>
             <div className="w-px h-8 bg-white/10" />
             <div className="text-center">
-              <div className="text-xl font-bold text-rose-400">{missedCount}</div>
+              <div className="text-xl font-bold text-vermilion-light">{missedCount}</div>
               <div className="text-xs text-white/40 mt-0.5">待加强</div>
             </div>
           </div>
@@ -265,7 +265,7 @@ export function FlashcardsWindow({ result, onLearningActivity }: FlashcardsWindo
                 type="button"
                 onClick={handleShareTrialResult}
                 disabled={sharingTrial}
-                className="mt-3 w-full rounded-full bg-white px-4 py-2.5 text-[13px] font-medium text-[#232322] transition hover:bg-white/90 active:scale-[0.99] disabled:opacity-60"
+                className="mt-3 w-full rounded-full bg-white px-4 py-2.5 text-[13px] font-medium text-[#1C1B19] transition hover:bg-white/90 active:scale-[0.99] disabled:opacity-60"
               >
                 {sharingTrial ? COPY.flashcardsShare.sharing : COPY.flashcardsShare.open}
               </button>
@@ -385,7 +385,7 @@ export function FlashcardsWindow({ result, onLearningActivity }: FlashcardsWindo
 
               {/* Back face */}
               <div
-                className="absolute inset-0 rounded-[20px] bg-gradient-to-br from-[#0a2520] to-[#0d1117] p-7 md:p-8"
+                className="absolute inset-0 rounded-[20px] bg-gradient-to-br from-[#0a2520] to-[#14110D] p-7 md:p-8"
                 style={{
                   backfaceVisibility: 'hidden',
                   transform: 'rotateY(180deg)',
@@ -393,9 +393,9 @@ export function FlashcardsWindow({ result, onLearningActivity }: FlashcardsWindo
                 }}
               >
                 <div className="min-h-[220px] md:min-h-[240px] flex flex-col justify-center items-center text-center">
-                  <div className="inline-flex items-center gap-1.5 rounded-full bg-[#232322]/10 px-3 py-1 mb-4">
+                  <div className="inline-flex items-center gap-1.5 rounded-full bg-[#1C1B19]/10 px-3 py-1 mb-4">
                     <div className="w-1.5 h-1.5 rounded-full bg-[#D1F4E0]" />
-                    <span className="text-[11px] font-medium text-[#787774] tracking-wide uppercase">答案</span>
+                    <span className="text-[11px] font-medium text-[#5C5A55] tracking-wide uppercase">答案</span>
                   </div>
                   <p className="text-[17px] md:text-xl font-semibold leading-[1.7] text-white/90 tracking-wide">
                     {current.back}
@@ -435,8 +435,8 @@ export function FlashcardsWindow({ result, onLearningActivity }: FlashcardsWindo
               onClick={() => handleScore('missed')}
               className={`group relative rounded-full px-6 py-2.5 text-sm font-medium transition-all duration-200 active:scale-95 ${
                 currentScore === 'missed'
-                  ? 'bg-rose-500/20 text-rose-300 ring-1 ring-rose-500/30'
-                  : 'bg-white/[0.04] text-white/60 hover:bg-white/[0.08] hover:text-rose-300'
+                  ? 'bg-vermilion/22 text-vermilion-light ring-1 ring-vermilion/35'
+                  : 'bg-white/[0.04] text-white/60 hover:bg-white/[0.08] hover:text-vermilion-light'
               }`}
             >
               没掌握
@@ -448,7 +448,7 @@ export function FlashcardsWindow({ result, onLearningActivity }: FlashcardsWindo
               onClick={() => handleScore('got')}
               className={`group relative rounded-full px-6 py-2.5 text-sm font-medium transition-all duration-200 active:scale-95 ${
                 currentScore === 'got'
-                  ? 'bg-[#232322]/20 text-[#D1F4E0] ring-1 ring-[#D1F4E0]/30'
+                  ? 'bg-[#1C1B19]/20 text-[#D1F4E0] ring-1 ring-[#D1F4E0]/30'
                   : 'bg-white/[0.04] text-white/60 hover:bg-white/[0.08] hover:text-[#D1F4E0]'
               }`}
             >

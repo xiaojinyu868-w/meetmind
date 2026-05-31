@@ -386,8 +386,8 @@ export function AITutor({
             inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-mono mx-0.5
             transition-all duration-300 border
             ${isActive 
-              ? 'bg-[#232322] text-white border-[#232322]  scale-110 animate-pulse' 
-              : 'bg-[#FDF3C0] text-[#232322] border-[#E9E9E7] hover:bg-[#232322] hover:hover:scale-105'
+              ? 'bg-[#1C1B19] text-white border-[#1C1B19]  scale-110 animate-pulse' 
+              : 'bg-[#FDF3C0] text-[#1C1B19] border-[#E8E2D5] hover:bg-[#1C1B19] hover:hover:scale-105'
             }
           `}
           title={`点击跳转到 ${displayText}`}
@@ -1423,7 +1423,7 @@ export function AITutor({
   if (isGlobalMode) {
     if (shouldUseMobileRealtimeComposer) {
       return (
-        <div className="h-full flex flex-col ai-chat-container bg-[#F7F7F5]">
+        <div className="h-full flex flex-col ai-chat-container bg-[#FAF7F2]">
           <TutorRealtimeCallScreen
             title="语音同桌"
             contextLabel={mobileRealtimeContextLabel}
@@ -1445,15 +1445,15 @@ export function AITutor({
       <div className={`h-full flex flex-col ai-chat-container ${isMobile ? 'bg-transparent' : 'bg-white'}`}>
         {/* 头部 - 紧凑设计 */}
         {!(isMobile && hideMobileHeader) ? (
-          <div className={`${isMobile ? 'px-3 pt-3' : 'border-b border-gray-100 bg-white px-4 py-3'} flex-shrink-0`}>
-            <div className={`${isMobile ? 'rounded-[24px] border border-[#E9E9E7] bg-white px-4 py-3' : ''}`}>
+          <div className={`${isMobile ? 'px-3 pt-3' : 'border-b border-divider-light bg-white px-4 py-3'} flex-shrink-0`}>
+            <div className={`${isMobile ? 'rounded-[24px] border border-[#E8E2D5] bg-white px-4 py-3' : ''}`}>
               <div className="flex items-center justify-between gap-3">
                 <div className="flex items-center gap-2">
-                  <div className={`${isMobile ? 'flex h-9 w-9 items-center justify-center rounded-xl bg-[#F7F7F5] text-[#232322]' : ''}`}>
+                  <div className={`${isMobile ? 'flex h-9 w-9 items-center justify-center rounded-xl bg-[#FAF7F2] text-[#1C1B19]' : ''}`}>
                     <MessageCircle size={20} strokeWidth={1.75} className={isMobile ? '' : 'text-lilac-500'} />
                   </div>
                   <div>
-                  <h3 className={`font-medium text-gray-800 ${isMobile ? 'text-[15px]' : 'text-base'}`}>
+                  <h3 className={`font-medium text-ink ${isMobile ? 'text-[15px]' : 'text-base'}`}>
                       {isRealtimeTeacherMode
                         ? (isMobile ? '老师' : '像打电话一样问老师')
                         : isMobile
@@ -1461,7 +1461,7 @@ export function AITutor({
                           : 'AI 课堂助手'}
                     </h3>
                     {!isRealtimeTeacherMode && !isMobile ? (
-                      <p className="text-xs text-gray-500">
+                      <p className="text-xs text-ink-muted">
                         {preferSupportContext
                           ? '会优先沿着你刚圈出的内容继续讲解。'
                           : isMobile
@@ -1483,7 +1483,7 @@ export function AITutor({
               </div>
               {isMobile ? (
                 hasTutorContext ? null : (
-                  <div className="mt-2 flex items-center gap-1.5 text-[11px] text-slate-400">
+                  <div className="mt-2 flex items-center gap-1.5 text-[11px] text-ink-muted">
                     <AlertCircle size={11} />
                     <span>先收一条内容</span>
                   </div>
@@ -1494,27 +1494,27 @@ export function AITutor({
             {/* 功能开关 - 仅桌面端显示 */}
             {!isMobile && (
               <div className="mt-3 flex items-center gap-4">
-                <label className="flex items-center gap-2 text-xs text-gray-600 cursor-pointer group">
+                <label className="flex items-center gap-2 text-xs text-ink-secondary cursor-pointer group">
                   <input
                     type="checkbox"
                     checked={enableWeb}
                     onChange={(e) => setEnableWeb(e.target.checked)}
-                    className="w-4 h-4 rounded border-gray-300 text-[#787774] focus:ring-[#232322]"
+                    className="w-4 h-4 rounded border-divider text-[#5C5A55] focus:ring-[#1C1B19]"
                   />
-                  <span className="flex items-center gap-1 group-hover:text-gray-900 transition-colors">
+                  <span className="flex items-center gap-1 group-hover:text-ink transition-colors">
                     <Globe size={13} strokeWidth={1.75} />
                     联网搜索
                   </span>
                 </label>
-                <label className="flex items-center gap-2 text-xs text-gray-600 cursor-pointer group">
+                <label className="flex items-center gap-2 text-xs text-ink-secondary cursor-pointer group">
                   <input
                     type="checkbox"
                     checked={enableThinkingGuide}
                     onChange={(e) => setEnableThinkingGuide(e.target.checked)}
                     disabled={isRealtimeTeacherMode}
-                    className="w-4 h-4 rounded border-gray-300 text-violet-500 focus:ring-violet-400"
+                    className="w-4 h-4 rounded border-divider text-pine focus:ring-pine"
                   />
-                  <span className="flex items-center gap-1 group-hover:text-gray-900 transition-colors">
+                  <span className="flex items-center gap-1 group-hover:text-ink transition-colors">
                     <Brain size={13} strokeWidth={1.75} />
                     思维引导
                   </span>
@@ -1529,16 +1529,16 @@ export function AITutor({
           {!hasTutorContext ? (
             // 无可用上下文
             <div className="h-full flex flex-col items-center justify-center text-center">
-              <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mb-4">
-                <MessageCircle size={28} strokeWidth={1.5} className="text-gray-400" />
+              <div className="w-16 h-16 bg-paper-deep rounded-full flex items-center justify-center mb-4">
+                <MessageCircle size={28} strokeWidth={1.5} className="text-ink-muted" />
               </div>
-              <h3 className="text-lg font-medium text-gray-700 mb-2">还没有可用的学习上下文</h3>
-              <p className="text-sm text-gray-500">先录一段、贴一份材料，或者从微信发一句给我都可以。</p>
+              <h3 className="text-lg font-medium text-ink-secondary mb-2">还没有可用的学习上下文</h3>
+              <p className="text-sm text-ink-muted">先录一段、贴一份材料，或者从微信发一句给我都可以。</p>
             </div>
           ) : shouldShowAutoLaunchState ? (
             <div className="space-y-4">
               <div className="flex justify-start">
-                <div className={`${isMobile ? 'max-w-[92%]' : 'max-w-[85%]'} rounded-2xl ${isMobile ? 'px-3 py-2.5' : 'px-4 py-3'} bg-gray-100 text-gray-700`}>
+                <div className={`${isMobile ? 'max-w-[92%]' : 'max-w-[85%]'} rounded-2xl ${isMobile ? 'px-3 py-2.5' : 'px-4 py-3'} bg-paper-deep text-ink-secondary`}>
                   <div className="flex items-center gap-2 text-sm">
                     <div className="loading-dots">
                       <span></span>
@@ -1573,11 +1573,11 @@ export function AITutor({
               ) : (
                 shouldUseMobileRealtimeComposer ? (
                   <div className="flex h-full flex-col items-center justify-center text-center">
-                    <div className="flex h-24 w-24 items-center justify-center rounded-full border border-[#E9E9E7] bg-white text-2xl font-semibold text-[#232322]">
+                    <div className="flex h-24 w-24 items-center justify-center rounded-full border border-[#E8E2D5] bg-white text-2xl font-semibold text-[#1C1B19]">
                       师
                     </div>
-                    <p className="mt-5 text-base font-medium text-[#232322]">语音同桌</p>
-                    <p className="mt-2 max-w-[220px] text-xs leading-5 text-[#A3A39E]">
+                    <p className="mt-5 text-base font-medium text-[#1C1B19]">语音同桌</p>
+                    <p className="mt-2 max-w-[220px] text-xs leading-5 text-[#8E8B82]">
                       先进入通话页，再像发微信语音一样说一轮。
                     </p>
                   </div>
@@ -1606,8 +1606,8 @@ export function AITutor({
                   <div
                     className={`${isMobile ? 'max-w-[92%]' : 'max-w-[85%]'} rounded-2xl ${isMobile ? 'px-3 py-2' : 'px-4 py-3'} ${
                       msg.role === 'user'
-                        ? 'bg-[#232322] text-white'
-                        : 'bg-gray-100 text-gray-800'
+                        ? 'bg-[#1C1B19] text-white'
+                        : 'bg-paper-deep text-ink'
                     }`}
                   >
                     {msg.role === 'assistant' ? (
@@ -1675,7 +1675,7 @@ export function AITutor({
               {/* 流式输出中的消息 */}
               {isStreaming && streamingContent && (
                 <div className="flex justify-start">
-                  <div className={`${isMobile ? 'max-w-[92%]' : 'max-w-[85%]'} rounded-2xl ${isMobile ? 'px-3 py-2' : 'px-4 py-3'} bg-gray-100 text-gray-800`}>
+                  <div className={`${isMobile ? 'max-w-[92%]' : 'max-w-[85%]'} rounded-2xl ${isMobile ? 'px-3 py-2' : 'px-4 py-3'} bg-paper-deep text-ink`}>
                     {enableThinkingGuide ? (
                       <ThinkingGuideRenderer
                         content={streamingContent}
@@ -1701,15 +1701,15 @@ export function AITutor({
               {/* 等待开始流式输出时显示 loading */}
               {globalLoading && !streamingContent && !globalThinkingContent && (
                 <div className="flex justify-start">
-                  <div className="bg-gray-100 rounded-2xl px-4 py-3">
-                    <div className="flex items-center gap-2 text-gray-500">
+                  <div className="bg-paper-deep rounded-2xl px-4 py-3">
+                    <div className="flex items-center gap-2 text-ink-muted">
                       <div className="loading-dots">
                         <span></span>
                         <span></span>
                         <span></span>
                       </div>
                       <span className="text-xs">思考中...</span>
-                      {isRealtimeTeacherMode ? <span className="text-xs text-gray-400">老师正在组织下一句</span> : null}
+                      {isRealtimeTeacherMode ? <span className="text-xs text-ink-muted">老师正在组织下一句</span> : null}
                     </div>
                   </div>
                 </div>
@@ -1717,7 +1717,7 @@ export function AITutor({
 
               {shouldUseMobileRealtimeComposer && isRealtimeAssistantResponding && realtimeAssistantDraft && (
                 <div className="flex justify-start">
-                  <div className="max-w-[92%] rounded-2xl bg-gray-100 px-3 py-2 text-gray-800">
+                  <div className="max-w-[92%] rounded-2xl bg-paper-deep px-3 py-2 text-ink">
                     <div className="whitespace-pre-wrap text-xs leading-relaxed">{realtimeAssistantDraft}</div>
                   </div>
                 </div>
@@ -1725,8 +1725,8 @@ export function AITutor({
 
               {shouldUseMobileRealtimeComposer && isRealtimeAssistantResponding && !realtimeAssistantDraft ? (
                 <div className="flex justify-start">
-                  <div className="bg-gray-100 rounded-2xl px-4 py-3">
-                    <div className="flex items-center gap-2 text-gray-500">
+                  <div className="bg-paper-deep rounded-2xl px-4 py-3">
+                    <div className="flex items-center gap-2 text-ink-muted">
                       <div className="loading-dots">
                         <span></span>
                         <span></span>
@@ -1743,8 +1743,8 @@ export function AITutor({
           )}
         </div>
 
-        <div className={`${isMobile ? 'bg-transparent px-3 pb-[max(env(safe-area-inset-bottom),12px)] pt-2' : 'border-t border-gray-100 bg-white px-4 py-3'} flex-shrink-0`}>
-          <div className={`${isMobile ? 'rounded-[24px] border border-[#E9E9E7] bg-white p-2' : ''}`}>
+        <div className={`${isMobile ? 'bg-transparent px-3 pb-[max(env(safe-area-inset-bottom),12px)] pt-2' : 'border-t border-divider-light bg-white px-4 py-3'} flex-shrink-0`}>
+          <div className={`${isMobile ? 'rounded-[24px] border border-[#E8E2D5] bg-white p-2' : ''}`}>
             {isRealtimeTeacherMode && !shouldShowRealtimeCallHero ? (
               <div className={shouldUseMobileRealtimeComposer ? '' : 'mb-3'}>
                 {shouldUseMobileRealtimeComposer ? (
@@ -1770,7 +1770,7 @@ export function AITutor({
             ) : null}
 
             {!shouldUseMobileRealtimeComposer && supportsMultimodal && uploadedImages.length > 0 && (
-              <div className={`mb-3 ${isMobile ? 'rounded-xl bg-slate-50/80 p-2.5' : 'rounded-lg bg-gray-50 p-2'}`}>
+              <div className={`mb-3 ${isMobile ? 'rounded-xl bg-paper-warm/80 p-2.5' : 'rounded-lg bg-paper-warm p-2'}`}>
                 <ImageUpload
                   images={uploadedImages}
                   onImagesChange={setUploadedImages}
@@ -1794,7 +1794,7 @@ export function AITutor({
                 />
                 )}
 
-                <div className={`${isMobile ? 'flex min-w-0 flex-1 items-center gap-2 rounded-[18px] border border-slate-200/50 bg-slate-50/50 px-3 py-2.5' : 'flex min-w-0 flex-1 items-center gap-2'}`}>
+                <div className={`${isMobile ? 'flex min-w-0 flex-1 items-center gap-2 rounded-[18px] border border-divider/50 bg-paper-warm/50 px-3 py-2.5' : 'flex min-w-0 flex-1 items-center gap-2'}`}>
                   <input
                     type="text"
                     data-testid="tutor-global-input"
@@ -1806,7 +1806,7 @@ export function AITutor({
                       : preferSupportContext
                         ? '继续顺着这几条内容问...'
                         : '继续问这节课里没讲透的地方...'}
-                    className={`${isMobile ? 'min-w-0 flex-1 border-0 bg-transparent px-0 py-0 text-sm text-slate-700 outline-none ring-0 placeholder:text-slate-400' : 'input flex-1'}`}
+                    className={`${isMobile ? 'min-w-0 flex-1 border-0 bg-transparent px-0 py-0 text-sm text-ink-secondary outline-none ring-0 placeholder:text-ink-muted' : 'input flex-1'}`}
                     disabled={globalLoading || !hasTutorContext}
                   />
                   {!isRealtimeTeacherMode ? (
@@ -1825,7 +1825,7 @@ export function AITutor({
                     data-testid="tutor-global-send"
                     onClick={() => handleGlobalSend()}
                     disabled={(!userInput.trim() && uploadedImages.length === 0) || globalLoading || !hasTutorContext}
-                    className={`${isMobile ? 'inline-flex h-10 w-10 items-center justify-center rounded-full bg-[#232322] text-white disabled:opacity-30' : 'btn btn-primary px-6 disabled:opacity-50'}`}
+                    className={`${isMobile ? 'inline-flex h-10 w-10 items-center justify-center rounded-full bg-[#1C1B19] text-white disabled:opacity-30' : 'btn btn-primary px-6 disabled:opacity-50'}`}
                   >
                     发送
                   </button>
@@ -1854,7 +1854,7 @@ export function AITutor({
 
   if (shouldUseMobileRealtimeComposer) {
     return (
-      <div className="h-full flex flex-col ai-chat-container bg-[#F7F7F5]">
+      <div className="h-full flex flex-col ai-chat-container bg-[#FAF7F2]">
         <TutorRealtimeCallScreen
           title="语音同桌"
           contextLabel={mobileRealtimeContextLabel}
@@ -1876,7 +1876,7 @@ export function AITutor({
     <div className="h-full flex flex-col ai-chat-container">
       {/* 头部控制栏 - 紧凑设计 */}
       {!(isMobile && hideMobileHeader) && (
-      <div className={`border-b border-gray-100 bg-white flex-shrink-0 ${isMobile ? 'p-3' : 'px-4 py-2'}`}>
+      <div className={`border-b border-divider-light bg-white flex-shrink-0 ${isMobile ? 'p-3' : 'px-4 py-2'}`}>
           {isMobile ? (
             // 移动端紧凑布局
           <div className="space-y-2">
@@ -1913,7 +1913,7 @@ export function AITutor({
                       setResponse(null);
                       explainBreakpoint();
                     }}
-                    className="px-2 py-1 text-xs text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded transition-colors flex items-center gap-1"
+                    className="px-2 py-1 text-xs text-ink-secondary hover:text-ink hover:bg-paper-deep rounded transition-colors flex items-center gap-1"
                     title="重新生成"
                   >
                     <RefreshCw size={13} strokeWidth={1.75} />
@@ -1943,27 +1943,27 @@ export function AITutor({
                 available={IS_REALTIME_TEACHER_AVAILABLE}
                 onClick={handleRealtimeTeacherToggle}
               />
-              <label className="flex items-center gap-2 text-xs text-gray-600 cursor-pointer group">
+              <label className="flex items-center gap-2 text-xs text-ink-secondary cursor-pointer group">
                 <input
                   type="checkbox"
                   checked={enableWeb}
                   onChange={(e) => setEnableWeb(e.target.checked)}
-                  className="w-4 h-4 rounded border-gray-300 text-[#787774] focus:ring-[#232322]"
+                  className="w-4 h-4 rounded border-divider text-[#5C5A55] focus:ring-[#1C1B19]"
                 />
-                <span className="flex items-center gap-1 group-hover:text-gray-900 transition-colors">
+                <span className="flex items-center gap-1 group-hover:text-ink transition-colors">
                   <Globe size={13} strokeWidth={1.75} />
                   联网搜索
                 </span>
               </label>
-              <label className="flex items-center gap-2 text-xs text-gray-600 cursor-pointer group">
+              <label className="flex items-center gap-2 text-xs text-ink-secondary cursor-pointer group">
                 <input
                   type="checkbox"
                   checked={enableThinkingGuide}
                   onChange={(e) => setEnableThinkingGuide(e.target.checked)}
                   disabled={isRealtimeTeacherMode}
-                  className="w-4 h-4 rounded border-gray-300 text-violet-500 focus:ring-violet-400"
+                  className="w-4 h-4 rounded border-divider text-pine focus:ring-pine"
                 />
-                <span className="flex items-center gap-1 group-hover:text-gray-900 transition-colors">
+                <span className="flex items-center gap-1 group-hover:text-ink transition-colors">
                   <Brain size={13} strokeWidth={1.75} />
                   思维引导
                 </span>
@@ -1980,7 +1980,7 @@ export function AITutor({
                       setResponse(null);
                       explainBreakpoint();
                     }}
-                    className="px-2 py-1 text-xs text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded transition-colors flex items-center gap-1"
+                    className="px-2 py-1 text-xs text-ink-muted hover:text-ink-secondary hover:bg-paper-deep rounded transition-colors flex items-center gap-1"
                     title="重新生成"
                   >
                     <RefreshCw size={13} strokeWidth={1.75} />
@@ -2009,10 +2009,10 @@ export function AITutor({
         {error ? (
           <div className="flex items-center justify-center h-full animate-fade-in">
             <div className="text-center">
-              <div className="w-16 h-16 mx-auto mb-4 bg-red-100 rounded-full flex items-center justify-center">
-                <AlertTriangle size={28} strokeWidth={1.5} className="text-red-500" />
+              <div className="w-16 h-16 mx-auto mb-4 bg-vermilion-mist rounded-full flex items-center justify-center">
+                <AlertTriangle size={28} strokeWidth={1.5} className="text-vermilion" />
               </div>
-              <p className="text-red-600 mb-4">{error}</p>
+              <p className="text-vermilion mb-4">{error}</p>
               <button
                 onClick={explainBreakpoint}
                 className="btn btn-primary px-6 py-2"
@@ -2027,7 +2027,7 @@ export function AITutor({
               <>
                 <Section icon={<BookOpen size={16} strokeWidth={1.75} />} title="课堂回顾">
                   <div className="bg-sunflower-50 border border-sunflower-200 rounded-xl p-4">
-                    <div className="text-sm text-gray-700 leading-relaxed space-y-1 max-h-48 overflow-y-auto">
+                    <div className="text-sm text-ink-secondary leading-relaxed space-y-1 max-h-48 overflow-y-auto">
                       {contextSegments.length > 0 ? (
                         contextSegments.map((seg) => {
                           const isNearBreakpoint = breakpoint &&
@@ -2065,7 +2065,7 @@ export function AITutor({
                         className={`
                           mt-3 inline-flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg transition-all duration-300 border
                           ${seekingTimestamp === response.explanation.citation.startMs
-                            ? 'bg-[#232322] text-navy border-sunflower-600 shadow-sunflower-200 scale-105'
+                            ? 'bg-[#1C1B19] text-navy border-sunflower-600 shadow-sunflower-200 scale-105'
                             : 'text-warmOrange-700 hover:text-warmOrange-800 bg-sunflower-100 hover:bg-sunflower-200 border-sunflower-200 hover:shadow-md'
                           }
                         `}
@@ -2090,9 +2090,9 @@ export function AITutor({
                       selectedOptionId={selectedOptionId}
                     />
                   ) : (
-                    <div className="bg-gray-50 rounded-xl p-4 text-center text-sm text-gray-500">
+                    <div className="bg-paper-warm rounded-xl p-4 text-center text-sm text-ink-muted">
                       <p>正在准备更合适的追问...</p>
-                      <p className="text-xs mt-1 text-gray-400">会先帮你收窄到最接近的问题方向</p>
+                      <p className="text-xs mt-1 text-ink-muted">会先帮你收窄到最接近的问题方向</p>
                     </div>
                   )}
                 </Section>
@@ -2124,14 +2124,14 @@ export function AITutor({
                     {searchResults.length > 0 && (
                       <div className="space-y-2 max-h-40 overflow-y-auto">
                         {searchResults.map((result) => (
-                          <div key={result.id} className="p-3 bg-gray-50 rounded-xl text-sm">
+                          <div key={result.id} className="p-3 bg-paper-warm rounded-xl text-sm">
                             <div className="flex items-center justify-between mb-1">
-                              <span className="text-xs text-gray-500">{result.source}</span>
+                              <span className="text-xs text-ink-muted">{result.source}</span>
                               <span className="text-xs text-coral">
                                 相似度: {Math.round(result.score * 100)}%
                               </span>
                             </div>
-                            <p className="text-gray-700 line-clamp-2">{result.content}</p>
+                            <p className="text-ink-secondary line-clamp-2">{result.content}</p>
                           </div>
                         ))}
                       </div>
@@ -2142,14 +2142,14 @@ export function AITutor({
             ) : null}
 
             {(chatHistory.length > 0 || isBreakpointStreaming || breakpointThinkingContent || (isRealtimeTeacherMode && isMobile && isRealtimeAssistantResponding)) ? (
-              <div className={`space-y-3 ${response ? 'pt-4 border-t border-gray-100' : ''}`}>
-                <h3 className="text-sm font-semibold text-gray-900 flex items-center gap-2">
-                  <MessageSquare size={16} strokeWidth={1.75} className="text-gray-500" />
+              <div className={`space-y-3 ${response ? 'pt-4 border-t border-divider-light' : ''}`}>
+                <h3 className="text-sm font-semibold text-ink flex items-center gap-2">
+                  <MessageSquare size={16} strokeWidth={1.75} className="text-ink-muted" />
                   {response ? '对话记录' : '分析过程'}
                 </h3>
 
                 {!response ? (
-                  <div className="rounded-2xl border border-[#E9E9E7] bg-[#F7F7F5] px-4 py-3 text-sm text-[#787774]">
+                  <div className="rounded-2xl border border-[#E8E2D5] bg-[#FAF7F2] px-4 py-3 text-sm text-[#5C5A55]">
                     这次不会自动开分析。你点了以后，我会边想边把内容往下生成。
                   </div>
                 ) : null}
@@ -2240,14 +2240,14 @@ export function AITutor({
 
                 {isBreakpointStreaming && !breakpointStreamingContent && !breakpointThinkingContent ? (
                   <div className="chat-bubble assistant">
-                    <div className="flex items-center gap-2 text-gray-500">
+                    <div className="flex items-center gap-2 text-ink-muted">
                       <div className="loading-dots">
                         <span></span>
                         <span></span>
                         <span></span>
                       </div>
                       <span className="text-xs">思考中...</span>
-                      {isRealtimeTeacherMode ? <span className="text-xs text-gray-400">老师正在组织下一句</span> : null}
+                      {isRealtimeTeacherMode ? <span className="text-xs text-ink-muted">老师正在组织下一句</span> : null}
                     </div>
                   </div>
                 ) : null}
@@ -2260,7 +2260,7 @@ export function AITutor({
 
                 {isRealtimeTeacherMode && isMobile && isRealtimeAssistantResponding && !realtimeAssistantDraft ? (
                   <div className="chat-bubble assistant">
-                    <div className="flex items-center gap-2 text-gray-500">
+                    <div className="flex items-center gap-2 text-ink-muted">
                       <div className="loading-dots">
                         <span></span>
                         <span></span>
@@ -2283,23 +2283,23 @@ export function AITutor({
                 <span></span>
                 <span></span>
               </div>
-              <p className="text-gray-500">AI 正在分析你的困惑...</p>
-              {isMobile ? <p className="mt-1 text-xs text-gray-400">{isRealtimeTeacherMode ? '老师正在顺着你的课堂继续想…' : '正在准备回答…'}</p> : null}
+              <p className="text-ink-muted">AI 正在分析你的困惑...</p>
+              {isMobile ? <p className="mt-1 text-xs text-ink-muted">{isRealtimeTeacherMode ? '老师正在顺着你的课堂继续想…' : '正在准备回答…'}</p> : null}
             </div>
           </div>
         ) : (
           <div className="flex items-center justify-center h-full animate-fade-in">
             <div className="max-w-sm text-center">
-              <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full border border-[#E9E9E7] bg-[#F7F7F5] text-[#232322]">
+              <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full border border-[#E8E2D5] bg-[#FAF7F2] text-[#1C1B19]">
                 <MessageCircle size={22} strokeWidth={1.75} />
               </div>
-              <p className="text-base font-medium text-[#232322]">先不自动分析这个困惑点</p>
-              <p className="mt-2 text-sm leading-6 text-[#787774]">
+              <p className="text-base font-medium text-[#1C1B19]">先不自动分析这个困惑点</p>
+              <p className="mt-2 text-sm leading-6 text-[#5C5A55]">
                 你点一下再开始，我会直接流式往下讲。你也可以先在下面输入一句更具体的问题。
               </p>
               <button
                 onClick={explainBreakpoint}
-                className="mt-5 inline-flex h-10 items-center justify-center rounded-full bg-[#232322] px-5 text-sm font-medium text-white transition-colors hover:bg-black"
+                className="mt-5 inline-flex h-10 items-center justify-center rounded-full bg-[#1C1B19] px-5 text-sm font-medium text-white transition-colors hover:bg-black"
               >
                 开始分析
               </button>
@@ -2309,10 +2309,10 @@ export function AITutor({
       </div>
 
       {/* 输入框 - 紧凑设计 */}
-      <div className="px-4 py-3 border-t border-gray-100 bg-white flex-shrink-0">
+      <div className="px-4 py-3 border-t border-divider-light bg-white flex-shrink-0">
         {/* 图片预览区域 */}
         {!(isRealtimeTeacherMode && isMobile) && supportsMultimodal && uploadedImages.length > 0 && (
-          <div className="mb-3 p-2 bg-gray-50 rounded-lg">
+          <div className="mb-3 p-2 bg-paper-warm rounded-lg">
             <ImageUpload
               images={uploadedImages}
               onImagesChange={setUploadedImages}

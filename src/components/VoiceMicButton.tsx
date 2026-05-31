@@ -113,22 +113,22 @@ export function VoiceMicButton({
   // 按钮样式
   const getButtonStyles = () => {
     if (errorFlash) {
-      return 'bg-red-500 text-white shadow-red-500/30';
+      return 'bg-vermilion text-white shadow-red-500/30';
     }
     if (isRecording) {
       return dark
-        ? 'bg-[#232322] hover:bg-[#111111] text-white '
-        : 'bg-[#232322] hover:bg-[#232322] text-white ';
+        ? 'bg-[#1C1B19] hover:bg-[#111111] text-white '
+        : 'bg-[#1C1B19] hover:bg-[#1C1B19] text-white ';
     }
     if (status === 'connecting') {
       return dark
-        ? 'bg-[#232322] text-white animate-pulse'
+        ? 'bg-[#1C1B19] text-white animate-pulse'
         : 'bg-[#D1F4E0] text-white animate-pulse';
     }
     // idle
     return dark
-      ? 'bg-slate-800 text-[#787774] hover:bg-[#232322] hover:text-white border border-slate-700 hover:border-[#D1F4E0]'
-      : 'bg-[#D1F4E0]/30 text-[#232322] hover:bg-[#D1F4E0] hover:text-[#232322] border border-[#D1F4E0] hover:border-[#D1F4E0]';
+      ? 'bg-ink text-[#5C5A55] hover:bg-[#1C1B19] hover:text-white border border-ink-secondary/40 hover:border-[#D1F4E0]'
+      : 'bg-[#D1F4E0]/30 text-[#1C1B19] hover:bg-[#D1F4E0] hover:text-[#1C1B19] border border-[#D1F4E0] hover:border-[#D1F4E0]';
   };
 
   const getTitle = () => {
@@ -195,19 +195,19 @@ export function VoiceMicButton({
             pointer-events-none z-50
             animate-in fade-in slide-in-from-bottom-1 duration-200
             ${dark
-              ? 'bg-slate-800 text-[#D1F4E0] border border-slate-700'
-              : 'bg-white text-gray-700 border border-[#D1F4E0] '
+              ? 'bg-ink text-[#D1F4E0] border border-ink-secondary/40'
+              : 'bg-white text-ink-secondary border border-[#D1F4E0] '
             }
           `}
         >
-          <span className="inline-block w-1.5 h-1.5 rounded-full bg-[#232322] mr-1.5 animate-pulse" />
+          <span className="inline-block w-1.5 h-1.5 rounded-full bg-[#1C1B19] mr-1.5 animate-pulse" />
           {interimText}
         </div>
       )}
 
       {/* 错误提示 */}
       {errorFlash && (
-        <div className="absolute bottom-full mb-2 left-1/2 z-50 max-w-[260px] -translate-x-1/2 rounded-xl border border-red-200 bg-red-50 px-3 py-1.5 text-center text-xs leading-5 text-red-600 shadow-sm">
+        <div className="absolute bottom-full mb-2 left-1/2 z-50 max-w-[260px] -translate-x-1/2 rounded-xl border border-vermilion/30 bg-vermilion-mist/50 px-3 py-1.5 text-center text-xs leading-5 text-vermilion shadow-sm">
           {errorMessage}
         </div>
       )}

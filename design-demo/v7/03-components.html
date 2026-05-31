@@ -1,0 +1,921 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="light">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>03 · Components · MeetMind v7</title>
+<link rel="stylesheet" href="./tokens.css" />
+<style>
+  /* ============================================================
+     原子组件库 · 所有组件的"出厂规格"
+     ============================================================ */
+
+  /* === Buttons === */
+  .btn {
+    display: inline-flex; align-items: center; justify-content: center;
+    gap: 6px;
+    height: 36px; padding: 0 16px;
+    border: 1px solid transparent;
+    border-radius: var(--radius);
+    font-family: var(--font-sans);
+    font-size: 13.5px;
+    font-weight: 500;
+    letter-spacing: -0.011em;
+    cursor: pointer;
+    transition: all var(--duration-fast) var(--ease-out);
+    white-space: nowrap;
+  }
+  .btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+  .btn-primary { background: var(--ink); color: #fff; }
+  .btn-primary:hover:not(:disabled) { background: #000; transform: translateY(-0.5px); }
+  .btn-primary:active:not(:disabled) { transform: translateY(0); }
+
+  .btn-pine { background: var(--pine); color: #fff; }
+  .btn-pine:hover:not(:disabled) { background: var(--pine-deep); }
+
+  .btn-vermilion { background: var(--vermilion); color: #fff; }
+  .btn-vermilion:hover:not(:disabled) { background: var(--vermilion-deep); }
+
+  .btn-ghost {
+    background: transparent;
+    color: var(--ink-2);
+    border-color: var(--rule);
+  }
+  .btn-ghost:hover:not(:disabled) {
+    background: var(--paper-warm);
+    color: var(--ink);
+    border-color: var(--ink-4);
+  }
+
+  .btn-naked {
+    background: transparent;
+    color: var(--ink-2);
+    border: 0;
+  }
+  .btn-naked:hover:not(:disabled) {
+    background: var(--paper-warm);
+    color: var(--ink);
+  }
+
+  .btn-link {
+    background: transparent;
+    color: var(--pine);
+    border: 0; padding: 0; height: auto;
+  }
+  .btn-link:hover { text-decoration: underline; text-decoration-color: var(--pine-light); }
+
+  .btn-danger {
+    background: transparent;
+    color: var(--vermilion);
+    border-color: var(--vermilion-light);
+  }
+  .btn-danger:hover:not(:disabled) {
+    background: var(--vermilion);
+    color: #fff;
+    border-color: var(--vermilion);
+  }
+
+  .btn-sm { height: 28px; padding: 0 12px; font-size: 12.5px; }
+  .btn-lg { height: 44px; padding: 0 24px; font-size: 14.5px; }
+  .btn-xl { height: 52px; padding: 0 32px; font-size: 16px; font-weight: 600; }
+
+  .btn-icon {
+    width: 36px; padding: 0;
+    background: transparent;
+    color: var(--ink-2);
+    border-radius: var(--radius);
+  }
+  .btn-icon:hover { background: var(--paper-warm); color: var(--ink); }
+
+  .btn-loading {
+    pointer-events: none;
+    color: transparent !important;
+    position: relative;
+  }
+  .btn-loading::after {
+    content: '';
+    position: absolute; inset: 0;
+    margin: auto;
+    width: 14px; height: 14px;
+    border: 1.5px solid currentColor;
+    border-color: rgba(255,255,255,0.3);
+    border-top-color: #fff;
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+  }
+  .btn-ghost.btn-loading::after { border-top-color: var(--ink); border-color: rgba(28,27,25,0.2); }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* === Chips === */
+  .chip {
+    display: inline-flex; align-items: center; gap: 6px;
+    height: 28px; padding: 0 12px;
+    background: var(--card);
+    border: 1px solid var(--rule);
+    border-radius: var(--radius-full);
+    font-size: 12.5px;
+    color: var(--ink-2);
+    cursor: pointer;
+    transition: all var(--duration-fast) var(--ease-out);
+  }
+  .chip:hover { border-color: var(--ink-4); color: var(--ink); }
+  .chip.selected { background: var(--ink); color: #fff; border-color: var(--ink); }
+
+  .chip-skill {
+    height: 32px; padding: 0 14px;
+    font-size: 13px;
+  }
+  .chip-skill::before {
+    content: ''; width: 5px; height: 5px; border-radius: 50%;
+    background: var(--pine-light);
+    flex-shrink: 0;
+  }
+  .chip-skill:hover { border-color: var(--pine); color: var(--pine); transform: translateY(-1px); box-shadow: var(--shadow-soft); }
+  .chip-skill.hot::before { background: var(--vermilion); }
+
+  .chip-tag {
+    height: 22px; padding: 0 8px;
+    font-size: 11px;
+    background: var(--paper-warm);
+    border: 0;
+    color: var(--ink-3);
+  }
+  .chip-tag.pine { background: var(--pine-mist); color: var(--pine); }
+  .chip-tag.ver { background: var(--vermilion-mist); color: var(--vermilion); }
+
+  /* === Card === */
+  .card {
+    background: var(--card);
+    border: 1px solid var(--rule);
+    border-radius: var(--radius-xl);
+    overflow: hidden;
+  }
+  .card.hoverable { transition: all var(--duration) var(--ease-out); cursor: pointer; }
+  .card.hoverable:hover { transform: translateY(-2px); box-shadow: var(--shadow-card); border-color: var(--pine-light); }
+  .card.shadowed { box-shadow: var(--shadow-soft); }
+  .card-pad { padding: 24px 28px; }
+
+  /* === Input === */
+  .field {
+    display: flex; flex-direction: column;
+    gap: 6px;
+    margin-bottom: 16px;
+  }
+  .field label {
+    font-size: 12.5px;
+    color: var(--ink-2);
+    font-weight: 500;
+    letter-spacing: -0.005em;
+  }
+  .field label .req { color: var(--vermilion); margin-left: 2px; }
+  .field .help {
+    font-size: 11.5px;
+    color: var(--ink-3);
+    line-height: 1.5;
+    margin-top: 2px;
+  }
+  .input, .textarea {
+    width: 100%;
+    padding: 10px 12px;
+    background: var(--card);
+    border: 1px solid var(--rule);
+    border-radius: var(--radius);
+    font-family: inherit;
+    font-size: 14px;
+    color: var(--ink);
+    transition: all var(--duration-fast) var(--ease-out);
+    outline: none;
+  }
+  .input:hover, .textarea:hover { border-color: var(--ink-4); }
+  .input:focus, .textarea:focus {
+    border-color: var(--pine);
+    box-shadow: 0 0 0 3px rgba(45,79,62,0.08);
+  }
+  .input::placeholder, .textarea::placeholder { color: var(--ink-4); }
+  .field.error .input, .field.error .textarea {
+    border-color: var(--vermilion);
+  }
+  .field.error .input:focus { box-shadow: 0 0 0 3px rgba(181,72,60,0.08); }
+  .field.error .help { color: var(--vermilion); }
+
+  .textarea { resize: vertical; min-height: 80px; line-height: 1.55; }
+
+  .composer {
+    padding: 12px 14px;
+    background: var(--card);
+    border: 1px solid var(--rule);
+    border-radius: var(--radius-lg);
+    display: flex; align-items: flex-end; gap: 10px;
+    transition: all var(--duration-fast) var(--ease-out);
+  }
+  .composer:focus-within {
+    border-color: var(--pine);
+    box-shadow: 0 0 0 3px rgba(45,79,62,0.08);
+  }
+  .composer textarea {
+    flex: 1; resize: none; border: 0; background: transparent;
+    font: inherit; font-size: 13.5px; line-height: 1.55;
+    color: var(--ink); outline: none;
+    min-height: 22px; max-height: 120px;
+  }
+  .composer .send {
+    width: 32px; height: 32px;
+    border-radius: var(--radius);
+    background: var(--ink); color: #fff;
+    border: 0;
+    display: grid; place-items: center;
+    cursor: pointer;
+    transition: background var(--duration-fast);
+  }
+  .composer .send:hover { background: var(--pine); }
+
+  /* === Switch === */
+  .switch {
+    position: relative;
+    display: inline-block;
+    width: 36px; height: 20px;
+    cursor: pointer;
+  }
+  .switch input { display: none; }
+  .switch .track {
+    position: absolute; inset: 0;
+    background: var(--ink-4);
+    border-radius: 999px;
+    transition: background var(--duration) var(--ease-out);
+  }
+  .switch .thumb {
+    position: absolute;
+    top: 2px; left: 2px;
+    width: 16px; height: 16px;
+    background: #fff;
+    border-radius: 50%;
+    transition: transform var(--duration) var(--ease-spring);
+  }
+  .switch input:checked + .track { background: var(--pine); }
+  .switch input:checked + .track + .thumb { transform: translateX(16px); }
+
+  /* === Segmented === */
+  .segmented {
+    display: inline-flex;
+    background: var(--paper-warm);
+    border-radius: var(--radius);
+    padding: 3px;
+  }
+  .segmented button {
+    border: 0;
+    padding: 6px 14px;
+    font-size: 12.5px;
+    color: var(--ink-2);
+    background: transparent;
+    border-radius: calc(var(--radius) - 2px);
+    cursor: pointer;
+    font-weight: 500;
+    transition: all var(--duration-fast) var(--ease-out);
+  }
+  .segmented button.active {
+    background: var(--card);
+    color: var(--ink);
+    box-shadow: var(--shadow-soft);
+  }
+
+  /* === Tabs === */
+  .tabs {
+    display: flex; gap: 4px;
+    border-bottom: 1px solid var(--rule);
+    padding: 0 4px;
+  }
+  .tabs button {
+    border: 0;
+    background: transparent;
+    padding: 12px 16px 14px;
+    font-size: 13.5px;
+    color: var(--ink-2);
+    cursor: pointer;
+    position: relative;
+    font-weight: 500;
+    letter-spacing: -0.011em;
+    transition: color var(--duration-fast);
+  }
+  .tabs button:hover { color: var(--ink); }
+  .tabs button.active { color: var(--ink); }
+  .tabs button.active::after {
+    content: '';
+    position: absolute;
+    left: 16px; right: 16px; bottom: -1px;
+    height: 2px;
+    background: var(--ink);
+    border-radius: 1px;
+  }
+
+  /* === Avatar === */
+  .avatar {
+    width: 36px; height: 36px;
+    border-radius: 50%;
+    background: var(--paper-warm);
+    color: var(--ink);
+    display: grid; place-items: center;
+    font-size: 13px;
+    font-weight: 600;
+    overflow: hidden;
+    flex-shrink: 0;
+    position: relative;
+  }
+  .avatar.lg { width: 44px; height: 44px; font-size: 15px; }
+  .avatar.sm { width: 28px; height: 28px; font-size: 11px; }
+  .avatar img { width: 100%; height: 100%; object-fit: cover; }
+  .avatar.octo {
+    background: radial-gradient(circle at 35% 30%, #FFFFFF 0%, var(--paper-warm) 70%);
+    border: 1px solid var(--rule);
+  }
+  .avatar.octo img { object-fit: contain; padding: 4px; }
+
+  .avatar-stack { display: inline-flex; }
+  .avatar-stack .avatar {
+    margin-left: -8px;
+    border: 2px solid var(--card);
+  }
+  .avatar-stack .avatar:first-child { margin-left: 0; }
+
+  /* === Tooltip === */
+  .tooltip-wrap { position: relative; display: inline-block; }
+  .tooltip {
+    position: absolute;
+    bottom: calc(100% + 8px);
+    left: 50%;
+    transform: translateX(-50%);
+    padding: 6px 10px;
+    background: var(--ink);
+    color: #fff;
+    font-size: 11.5px;
+    border-radius: var(--radius-sm);
+    white-space: nowrap;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.15s, transform 0.15s;
+    z-index: 100;
+  }
+  .tooltip::after {
+    content: '';
+    position: absolute;
+    top: 100%; left: 50%;
+    transform: translateX(-50%);
+    border: 4px solid transparent;
+    border-top-color: var(--ink);
+  }
+  .tooltip-wrap:hover .tooltip {
+    opacity: 1;
+    transform: translateX(-50%) translateY(-2px);
+  }
+
+  /* === Toast === */
+  .toast {
+    display: inline-flex; align-items: center; gap: 12px;
+    padding: 12px 16px 12px 14px;
+    background: var(--ink);
+    color: #fff;
+    border-radius: var(--radius-lg);
+    font-size: 13px;
+    box-shadow: var(--shadow-float);
+    min-width: 280px;
+  }
+  .toast .icon {
+    width: 20px; height: 20px;
+    border-radius: 50%;
+    background: var(--success);
+    display: grid; place-items: center;
+    flex-shrink: 0;
+  }
+  .toast.error .icon { background: var(--vermilion); }
+  .toast .msg { flex: 1; line-height: 1.5; }
+  .toast .meta { font-size: 11px; opacity: 0.6; margin-top: 2px; }
+  .toast button {
+    background: transparent;
+    border: 0;
+    color: rgba(255,255,255,0.7);
+    cursor: pointer;
+    padding: 4px;
+    border-radius: 4px;
+    transition: color 0.15s;
+  }
+  .toast button:hover { color: #fff; }
+
+  /* === Modal === */
+  .modal-shell {
+    width: 480px;
+    background: var(--card);
+    border-radius: var(--radius-2xl);
+    box-shadow: var(--shadow-modal);
+    overflow: hidden;
+    border: 1px solid var(--rule);
+  }
+  .modal-shell .head {
+    padding: 24px 28px 8px;
+  }
+  .modal-shell .head h3 {
+    font-size: 18px;
+    font-weight: 600;
+    letter-spacing: -0.018em;
+    margin-bottom: 6px;
+  }
+  .modal-shell .head p {
+    font-size: 13.5px;
+    color: var(--ink-2);
+    line-height: 1.6;
+  }
+  .modal-shell .body { padding: 20px 28px; }
+  .modal-shell .foot {
+    padding: 16px 28px 22px;
+    display: flex; justify-content: flex-end; gap: 10px;
+    background: var(--paper);
+    border-top: 1px solid var(--rule-soft);
+  }
+
+  /* === Progress === */
+  .progress {
+    height: 4px;
+    background: var(--rule);
+    border-radius: 2px;
+    overflow: hidden;
+  }
+  .progress .fill {
+    height: 100%;
+    background: var(--pine);
+    border-radius: 2px;
+    transition: width var(--duration) var(--ease-out);
+  }
+
+  .progress-circular {
+    width: 36px; height: 36px;
+    position: relative;
+  }
+  .progress-circular svg {
+    width: 100%; height: 100%;
+    transform: rotate(-90deg);
+  }
+  .progress-circular .track { stroke: var(--rule); fill: none; }
+  .progress-circular .fill { stroke: var(--pine); fill: none; transition: stroke-dashoffset 0.4s var(--ease-out); }
+  .progress-circular .label {
+    position: absolute; inset: 0;
+    display: grid; place-items: center;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--ink);
+    font-weight: 500;
+  }
+
+  /* === Empty state === */
+  .empty-state {
+    padding: 56px 32px;
+    text-align: center;
+    background: var(--card);
+    border: 1px dashed var(--rule);
+    border-radius: var(--radius-xl);
+  }
+  .empty-state .octo-mini {
+    width: 96px; height: 96px;
+    margin: 0 auto 20px;
+    filter: drop-shadow(0 4px 12px rgba(45,79,62,0.12));
+    opacity: 0.85;
+  }
+  .empty-state h3 {
+    font-size: 17px;
+    font-weight: 600;
+    margin-bottom: 8px;
+    color: var(--ink);
+  }
+  .empty-state h3 .em {
+    font-family: var(--font-serif);
+    font-style: italic;
+    font-weight: 400;
+    color: var(--vermilion);
+  }
+  .empty-state p {
+    font-size: 13.5px;
+    color: var(--ink-2);
+    line-height: 1.65;
+    max-width: 36ch;
+    margin: 0 auto 20px;
+  }
+
+  /* === Badge === */
+  .badge {
+    display: inline-flex; align-items: center; gap: 4px;
+    height: 20px;
+    padding: 0 8px;
+    background: var(--paper-warm);
+    color: var(--ink-2);
+    font-size: 11px;
+    font-weight: 500;
+    border-radius: var(--radius-full);
+    font-family: var(--font-mono);
+  }
+  .badge.pine { background: var(--pine-mist); color: var(--pine); }
+  .badge.ver { background: var(--vermilion-mist); color: var(--vermilion); }
+  .badge.dot::before {
+    content: ''; width: 5px; height: 5px; border-radius: 50%;
+    background: currentColor;
+  }
+
+  /* === Tooltip preview row === */
+  .demo-row {
+    display: flex; flex-wrap: wrap; align-items: center; gap: 14px;
+    padding: 24px 28px;
+    background: var(--card);
+    border: 1px solid var(--rule);
+    border-radius: var(--radius-lg);
+  }
+  .demo-row + .demo-row { margin-top: 14px; }
+  .demo-row .demo-label {
+    font-family: var(--font-mono);
+    font-size: 11.5px;
+    color: var(--ink-3);
+    width: 100px;
+    flex-shrink: 0;
+    letter-spacing: 0.04em;
+  }
+
+  /* Demo: 应用矩阵 chip 卡 */
+  .matrix-grid {
+    display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px;
+  }
+  .matrix-chip {
+    display: flex; align-items: center; gap: 8px;
+    padding: 12px 14px;
+    background: var(--paper-warm);
+    border: 1px solid transparent;
+    border-radius: var(--radius);
+    cursor: pointer;
+    transition: all var(--duration) var(--ease-out);
+    font-size: 13px; color: var(--ink-2);
+  }
+  .matrix-chip:hover {
+    background: var(--card); border-color: var(--rule);
+    color: var(--ink); transform: translateY(-1px);
+    box-shadow: var(--shadow-soft);
+  }
+  .matrix-chip .icn {
+    width: 20px; height: 20px;
+    border-radius: var(--radius-xs);
+    background: var(--pine-mist);
+    color: var(--pine);
+    display: grid; place-items: center;
+    font-size: 11px; font-weight: 600;
+  }
+  .matrix-chip.hot .icn { background: var(--vermilion-mist); color: var(--vermilion); }
+</style>
+</head>
+<body>
+
+<header class="ds-topbar">
+  <a class="logo" href="./index.html">
+    <span class="dot"></span>
+    <span>MeetMind</span>
+    <span class="ds-tag">v7</span>
+  </a>
+  <nav>
+    <a href="./index.html">总览</a>
+    <a href="./01-foundations.html">01 基础</a>
+    <a href="./02-ai-language.html">02 AI 视觉</a>
+    <a href="./03-components.html" class="active">03 组件</a>
+    <a href="./04-app-matrix.html">04 应用矩阵</a>
+  </nav>
+  <div class="right">
+    <button class="ds-theme-toggle" id="themeToggle">
+      <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+        <circle cx="7" cy="7" r="2.5" stroke="currentColor" stroke-width="1.4"/>
+        <path d="M7 1v1.5M7 11.5V13M1 7h1.5M11.5 7H13M2.5 2.5l1 1M10.5 10.5l1 1M2.5 11.5l1-1M10.5 3.5l1-1" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>
+      </svg>
+    </button>
+  </div>
+</header>
+
+<main class="ds-page">
+
+  <header class="ds-pageheader">
+    <div class="ds-eyebrow">03 · COMPONENTS</div>
+    <h1 class="ds-title">原子<span class="em">组件库</span></h1>
+    <p class="ds-lede">所有页面的积木。每个组件都遵守 token 系统、不主动装饰、悬停一致、错误用朱批红。</p>
+  </header>
+
+  <!-- ============== 03.1 按钮 ============== -->
+  <section class="ds-section">
+    <div class="ds-section-head">
+      <h2><span class="num">03.1</span> &nbsp; 按钮</h2>
+      <p class="desc">主按钮 = 黑。墨绿 / 朱批 用于品牌时刻。Ghost 是日常 80%。</p>
+    </div>
+
+    <div class="demo-row">
+      <span class="demo-label">PRIMARY</span>
+      <button class="btn btn-primary">开始这节课</button>
+      <button class="btn btn-pine">让 Octo 整一张</button>
+      <button class="btn btn-vermilion">分享一节</button>
+      <button class="btn btn-primary btn-loading">加载中</button>
+    </div>
+
+    <div class="demo-row">
+      <span class="demo-label">GHOST</span>
+      <button class="btn btn-ghost">取消</button>
+      <button class="btn btn-ghost">查看历史</button>
+      <button class="btn btn-naked">跳过</button>
+      <button class="btn btn-link">了解更多 →</button>
+      <button class="btn btn-danger">删除</button>
+    </div>
+
+    <div class="demo-row">
+      <span class="demo-label">SIZES</span>
+      <button class="btn btn-primary btn-sm">小 sm</button>
+      <button class="btn btn-primary">默认</button>
+      <button class="btn btn-primary btn-lg">大 lg</button>
+      <button class="btn btn-primary btn-xl">XL · 主 CTA</button>
+    </div>
+
+    <div class="demo-row">
+      <span class="demo-label">ICON</span>
+      <button class="btn btn-icon" title="设置"><svg width="16" height="16" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="2" stroke="currentColor" stroke-width="1.4"/><path d="M8 1v2M8 13v2M1 8h2M13 8h2" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg></button>
+      <button class="btn btn-icon" title="搜索"><svg width="16" height="16" viewBox="0 0 16 16" fill="none"><circle cx="7" cy="7" r="5" stroke="currentColor" stroke-width="1.4"/><path d="M11 11l3 3" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg></button>
+      <button class="btn btn-icon" title="分享"><svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M11 5l-3-3-3 3M8 2v9M3 11v1a2 2 0 002 2h6a2 2 0 002-2v-1" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+      <button class="btn btn-ghost btn-sm">
+        <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M2 6h8M6 2l4 4-4 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+        带图标
+      </button>
+    </div>
+
+    <div class="demo-row">
+      <span class="demo-label">DISABLED</span>
+      <button class="btn btn-primary" disabled>不可用</button>
+      <button class="btn btn-ghost" disabled>不可用</button>
+    </div>
+  </section>
+
+  <!-- ============== 03.2 Chip ============== -->
+  <section class="ds-section">
+    <div class="ds-section-head">
+      <h2><span class="num">03.2</span> &nbsp; Chip / Skill / Tag</h2>
+      <p class="desc">Skill chip 是右栏 AI 同桌的"问题建议"——hot 状态用朱批，常规用墨绿。</p>
+    </div>
+
+    <div class="demo-row">
+      <span class="demo-label">SKILL CHIP</span>
+      <div class="chip chip-skill">出一道选择题考我</div>
+      <div class="chip chip-skill">画一张思维导图</div>
+      <div class="chip chip-skill hot">这节最容易考的是什么</div>
+      <div class="chip chip-skill">老师刚才那段重听</div>
+    </div>
+
+    <div class="demo-row">
+      <span class="demo-label">FILTER</span>
+      <div class="chip selected">全部</div>
+      <div class="chip">本周</div>
+      <div class="chip">已分享</div>
+      <div class="chip">需复习</div>
+    </div>
+
+    <div class="demo-row">
+      <span class="demo-label">TAG</span>
+      <span class="chip-tag chip-tag pine">墨绿 · AI</span>
+      <span class="chip-tag chip-tag ver">朱批 · 此刻</span>
+      <span class="chip-tag chip-tag">普通标签</span>
+      <span class="badge dot pine">已就绪</span>
+      <span class="badge dot ver">3 个待复习</span>
+      <span class="badge mono">v7.0.1</span>
+    </div>
+  </section>
+
+  <!-- ============== 03.3 Cards ============== -->
+  <section class="ds-section">
+    <div class="ds-section-head">
+      <h2><span class="num">03.3</span> &nbsp; Cards</h2>
+      <p class="desc">默认卡 / 可悬停 / AI 在场 / Feature。三档投影。</p>
+    </div>
+
+    <div class="ds-grid cols-3">
+      <div class="card card-pad">
+        <div class="caps" style="font-size: 11px; color: var(--ink-3); margin-bottom: 12px;">DEFAULT</div>
+        <h3 style="font-size: 16px; font-weight: 600; margin-bottom: 6px;">普通卡片</h3>
+        <p style="font-size: 13px; color: var(--ink-2); line-height: 1.6;">无投影。1px rule 边线。日常 80% 内容用这个。</p>
+      </div>
+
+      <div class="card card-pad shadowed hoverable">
+        <div class="caps" style="font-size: 11px; color: var(--ink-3); margin-bottom: 12px;">HOVERABLE</div>
+        <h3 style="font-size: 16px; font-weight: 600; margin-bottom: 6px;">可点击卡片</h3>
+        <p style="font-size: 13px; color: var(--ink-2); line-height: 1.6;">悬停上浮 2px + 投影变重 + 边缘墨绿。试试鼠标悬停。</p>
+      </div>
+
+      <div class="surface-ai card-pad" style="position: relative;">
+        <div class="caps" style="font-size: 11px; color: var(--pine); margin-bottom: 12px; position: relative; z-index: 1;">AI 在场 · SURFACE-AI</div>
+        <h3 style="font-size: 16px; font-weight: 600; margin-bottom: 6px; position: relative; z-index: 1;">这节课的速查表</h3>
+        <p style="font-size: 13px; color: var(--ink-2); line-height: 1.6; position: relative; z-index: 1;">极淡光带每 6s 缓慢扫过。1px 墨绿 ring。学生一眼能识别这是 AI 给的。</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============== 03.4 Form ============== -->
+  <section class="ds-section">
+    <div class="ds-section-head">
+      <h2><span class="num">03.4</span> &nbsp; 表单 · Input · Composer</h2>
+      <p class="desc">Focus 用墨绿 ring，Error 用朱批。无填充色，让内容主导。</p>
+    </div>
+
+    <div class="ds-grid cols-2">
+      <div class="card card-pad">
+        <div class="caps" style="font-size: 11px; color: var(--ink-3); margin-bottom: 16px;">FORM FIELDS</div>
+        <div class="field">
+          <label>课程标题<span class="req">*</span></label>
+          <input class="input" placeholder="例如：计算机网络 · 第 7 讲" />
+          <div class="help">这会显示在课中现场和分享卡</div>
+        </div>
+        <div class="field error">
+          <label>验证码</label>
+          <input class="input" value="123abc" />
+          <div class="help">验证码错误，请检查</div>
+        </div>
+        <div class="field">
+          <label>笔记摘要</label>
+          <textarea class="textarea" placeholder="可以写几句你听完后想记下的话…"></textarea>
+        </div>
+      </div>
+
+      <div class="card card-pad">
+        <div class="caps" style="font-size: 11px; color: var(--ink-3); margin-bottom: 16px;">COMPOSER · 同桌输入</div>
+
+        <div class="composer">
+          <textarea placeholder="问 Octo 任何关于这节课的事…" rows="1"></textarea>
+          <button class="send" title="发送">
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+              <path d="M2 7h10M8 3l4 4-4 4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+          </button>
+        </div>
+
+        <div style="margin-top: 16px;">
+          <div class="caps" style="font-size: 11px; color: var(--ink-3); margin-bottom: 8px;">SWITCH / SEGMENTED / TABS</div>
+          <div style="display: flex; align-items: center; gap: 16px; margin-bottom: 12px;">
+            <label class="switch"><input type="checkbox" checked /><span class="track"></span><span class="thumb"></span></label>
+            <span style="font-size: 13px;">自动总结</span>
+            <label class="switch" style="margin-left: auto;"><input type="checkbox" /><span class="track"></span><span class="thumb"></span></label>
+            <span style="font-size: 13px;">EN→中翻译</span>
+          </div>
+          <div class="segmented" style="margin-bottom: 12px;">
+            <button class="active">麦克风</button>
+            <button>电脑声</button>
+            <button>两路都录</button>
+          </div>
+          <div class="tabs">
+            <button class="active">速查表</button>
+            <button>闪卡</button>
+            <button>测验</button>
+            <button>思维导图</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============== 03.5 Avatar / Progress / Tooltip ============== -->
+  <section class="ds-section">
+    <div class="ds-section-head">
+      <h2><span class="num">03.5</span> &nbsp; Avatar · Progress · Tooltip · Toast</h2>
+      <p class="desc">配角组件。Octo 可作为头像直接复用。</p>
+    </div>
+
+    <div class="demo-row">
+      <span class="demo-label">AVATAR</span>
+      <div class="avatar octo"><img src="/public/images/octo-buddy/idle.png" /></div>
+      <div class="avatar lg octo"><img src="/public/images/octo-buddy/excited.png" /></div>
+      <div class="avatar sm octo"><img src="/public/images/octo-buddy/happy.png" /></div>
+      <div class="avatar">陈</div>
+      <div class="avatar lg">M</div>
+      <div class="avatar-stack">
+        <div class="avatar octo"><img src="/public/images/octo-buddy/idle.png" /></div>
+        <div class="avatar">李</div>
+        <div class="avatar">王</div>
+        <div class="avatar" style="background: var(--ink); color: #fff;">+12</div>
+      </div>
+    </div>
+
+    <div class="demo-row">
+      <span class="demo-label">PROGRESS</span>
+      <div style="flex: 1; max-width: 240px;">
+        <div class="progress"><div class="fill" style="width: 38%;"></div></div>
+        <div style="font-size: 11.5px; color: var(--ink-3); margin-top: 6px; font-family: var(--font-mono);">38% · 6 / 16 段已分析</div>
+      </div>
+      <div class="progress-circular">
+        <svg viewBox="0 0 36 36">
+          <circle class="track" cx="18" cy="18" r="14" stroke-width="2.5" />
+          <circle class="fill" cx="18" cy="18" r="14" stroke-width="2.5" stroke-dasharray="88" stroke-dashoffset="33" stroke-linecap="round" />
+        </svg>
+        <div class="label">62%</div>
+      </div>
+      <div class="progress-circular">
+        <svg viewBox="0 0 36 36">
+          <circle class="track" cx="18" cy="18" r="14" stroke-width="2.5" />
+          <circle class="fill" cx="18" cy="18" r="14" stroke-width="2.5" stroke-dasharray="88" stroke-dashoffset="0" stroke-linecap="round" stroke="var(--success)" />
+        </svg>
+        <div class="label" style="color: var(--success);">✓</div>
+      </div>
+    </div>
+
+    <div class="demo-row">
+      <span class="demo-label">TOOLTIP</span>
+      <div class="tooltip-wrap">
+        <button class="btn btn-ghost btn-sm">悬停看 tip</button>
+        <span class="tooltip">这是 tooltip · ⌘K</span>
+      </div>
+      <div class="tooltip-wrap">
+        <span class="cite-ts mono" style="cursor: pointer;">[20:01]</span>
+        <span class="tooltip">跳到此处转录</span>
+      </div>
+      <div class="tooltip-wrap">
+        <span class="cite-src mono" style="cursor: pointer;">[资料 3]</span>
+        <span class="tooltip">展开引用原文</span>
+      </div>
+    </div>
+
+    <div class="demo-row">
+      <span class="demo-label">TOAST</span>
+      <div class="toast">
+        <div class="icon"><svg width="10" height="8" viewBox="0 0 10 8"><path d="M1 4 L4 7 L9 1" stroke="#fff" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+        <div class="msg">速查表已生成<div class="meta">5 个核心知识点</div></div>
+        <button>×</button>
+      </div>
+      <div class="toast error">
+        <div class="icon"><svg width="2" height="10" viewBox="0 0 2 10"><rect x="0" y="0" width="2" height="6" fill="#fff" rx="1"/><circle cx="1" cy="9" r="1" fill="#fff"/></svg></div>
+        <div class="msg">网络抖动了一下<div class="meta">原文已保留 · 重试通常能成功</div></div>
+        <button>重试</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============== 03.6 Modal ============== -->
+  <section class="ds-section">
+    <div class="ds-section-head">
+      <h2><span class="num">03.6</span> &nbsp; Modal</h2>
+      <p class="desc">圆角 18px + shadow-modal + 底部分隔的 footer。绝不全屏遮罩黑。</p>
+    </div>
+
+    <div style="display: flex; justify-content: center; padding: 40px; background: var(--paper-warm); border-radius: var(--radius-xl);">
+      <div class="modal-shell">
+        <div class="head">
+          <h3>结束这节课？</h3>
+          <p>Octo 会把这节课的转录、笔记和应用矩阵都保存下来。</p>
+        </div>
+        <div class="body">
+          <div class="field">
+            <label>给这节课起个名字</label>
+            <input class="input" value="计算机网络 · 第 7 讲" />
+          </div>
+          <label style="display: flex; align-items: center; gap: 10px; padding: 10px 12px; background: var(--paper-warm); border-radius: var(--radius); cursor: pointer; font-size: 13px;">
+            <input type="checkbox" checked /> 自动生成速查表和闪卡
+          </label>
+        </div>
+        <div class="foot">
+          <button class="btn btn-ghost">继续录</button>
+          <button class="btn btn-primary">结束并保存</button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============== 03.7 Empty / Application Matrix ============== -->
+  <section class="ds-section">
+    <div class="ds-section-head">
+      <h2><span class="num">03.7</span> &nbsp; Empty 状态 · 应用矩阵</h2>
+      <p class="desc">空态从来不"无聊"。用 Octo 的 sleeping 表情，配合一句安静的话。</p>
+    </div>
+
+    <div class="ds-grid cols-2">
+      <div class="empty-state">
+        <img class="octo-mini" src="/public/images/octo-buddy/sleeping.png" />
+        <h3>课堂还没开始</h3>
+        <p>把麦克风 / 电脑声 / 两路都录任选一个，我开始<span class="em">陪你听</span>这节课。</p>
+        <button class="btn btn-primary btn-lg">开始这节课</button>
+      </div>
+
+      <div class="card card-pad">
+        <div class="caps" style="font-size: 11px; color: var(--ink-3); margin-bottom: 16px;">应用矩阵 · MATRIX CHIP</div>
+        <div class="matrix-grid">
+          <div class="matrix-chip"><div class="icn">速</div>速查表</div>
+          <div class="matrix-chip"><div class="icn">闪</div>闪卡</div>
+          <div class="matrix-chip"><div class="icn">测</div>测验</div>
+          <div class="matrix-chip"><div class="icn">图</div>思维导图</div>
+          <div class="matrix-chip hot"><div class="icn">报</div>课后报告</div>
+          <div class="matrix-chip"><div class="icn">困</div>困惑钻取</div>
+          <div class="matrix-chip"><div class="icn">播</div>播客</div>
+          <div class="matrix-chip"><div class="icn">图</div>信息图</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<script>
+  document.getElementById('themeToggle').addEventListener('click', () => {
+    const root = document.documentElement;
+    root.setAttribute('data-theme', root.getAttribute('data-theme') === 'dark' ? 'light' : 'dark');
+  });
+</script>
+
+</body>
+</html>

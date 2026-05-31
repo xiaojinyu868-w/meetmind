@@ -1,0 +1,1059 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="light">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>08 · Mobile · MeetMind v7</title>
+<link rel="stylesheet" href="./tokens.css" />
+<style>
+  body { background: var(--paper-warm); padding-bottom: 80px; }
+
+  /* Top context */
+  .ctx-bar {
+    padding: 32px 32px 0;
+    max-width: 1400px;
+    margin: 0 auto;
+  }
+  .ctx-bar .eyebrow {
+    font-family: var(--font-mono);
+    font-size: 11.5px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--pine);
+    font-weight: 600;
+    margin-bottom: 8px;
+  }
+  .ctx-bar h1 {
+    font-size: 32px;
+    font-weight: 600;
+    letter-spacing: -0.024em;
+    line-height: 1.18;
+    margin-bottom: 6px;
+  }
+  .ctx-bar h1 .em {
+    font-family: var(--font-serif); font-style: italic; font-weight: 400;
+    color: var(--vermilion);
+  }
+  .ctx-bar .lede {
+    font-size: 14.5px;
+    color: var(--ink-2);
+    line-height: 1.65;
+    max-width: 60ch;
+  }
+  .back-link {
+    display: inline-flex; align-items: center; gap: 6px;
+    margin-bottom: 20px;
+    font-size: 12.5px;
+    color: var(--ink-2);
+    text-decoration: none;
+    transition: color 0.15s;
+  }
+  .back-link:hover { color: var(--pine); }
+
+  /* Phone grid */
+  .phone-row {
+    padding: 56px 32px 80px;
+    max-width: 1600px;
+    margin: 0 auto;
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 32px;
+    align-items: flex-start;
+  }
+  @media (max-width: 1280px) {
+    .phone-row { grid-template-columns: repeat(2, 1fr); }
+  }
+  @media (max-width: 720px) {
+    .phone-row { grid-template-columns: 1fr; }
+  }
+
+  /* iPhone Frame */
+  .phone {
+    aspect-ratio: 9/19.5;
+    background: #0A0908;
+    border-radius: 48px;
+    padding: 12px;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.18), 0 32px 80px rgba(0,0,0,0.12);
+    position: relative;
+  }
+  .phone::after {
+    /* 电源键 */
+    content: '';
+    position: absolute;
+    right: -3px; top: 28%;
+    width: 4px; height: 80px;
+    background: #0A0908;
+    border-radius: 2px;
+  }
+  .phone .screen {
+    width: 100%; height: 100%;
+    background: var(--paper);
+    border-radius: 36px;
+    overflow: hidden;
+    position: relative;
+    display: flex; flex-direction: column;
+  }
+  /* iPhone status bar */
+  .phone-status {
+    padding: 14px 28px 8px;
+    display: flex; justify-content: space-between; align-items: center;
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--ink);
+    flex-shrink: 0;
+  }
+  .phone-status .icons {
+    display: flex; gap: 5px; align-items: center;
+  }
+  .phone-status .icons .bar {
+    display: flex; gap: 1px; align-items: flex-end;
+  }
+  .phone-status .icons .bar i {
+    width: 3px; background: var(--ink); border-radius: 1px;
+  }
+  .phone-status .icons .bar i:nth-child(1) { height: 4px; }
+  .phone-status .icons .bar i:nth-child(2) { height: 6px; }
+  .phone-status .icons .bar i:nth-child(3) { height: 8px; }
+  .phone-status .icons .bar i:nth-child(4) { height: 10px; }
+  .phone-status .battery {
+    width: 22px; height: 11px;
+    border: 1px solid var(--ink);
+    border-radius: 2.5px;
+    padding: 1.5px;
+    position: relative;
+  }
+  .phone-status .battery::after {
+    content: ''; position: absolute; right: -2.5px; top: 3px;
+    width: 1.5px; height: 5px;
+    background: var(--ink);
+    border-radius: 0 1px 1px 0;
+  }
+  .phone-status .battery span {
+    display: block; height: 100%;
+    background: var(--ink);
+    border-radius: 1.5px;
+  }
+  /* iPhone notch */
+  .phone-notch {
+    position: absolute;
+    top: 12px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 100px; height: 28px;
+    background: #0A0908;
+    border-radius: 14px;
+    z-index: 10;
+  }
+  /* iPhone home indicator */
+  .phone-home {
+    position: absolute;
+    bottom: 8px; left: 50%;
+    transform: translateX(-50%);
+    width: 120px; height: 4px;
+    background: var(--ink);
+    border-radius: 2px;
+    opacity: 0.95;
+    z-index: 10;
+  }
+
+  /* Screen body 共用 */
+  .scrn-body { flex: 1; overflow: hidden; display: flex; flex-direction: column; }
+
+  /* Phone label */
+  .phone-label {
+    margin-top: 20px;
+    text-align: center;
+  }
+  .phone-label .num {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--ink-3);
+    letter-spacing: 0.08em;
+    margin-bottom: 4px;
+  }
+  .phone-label h3 {
+    font-size: 15px;
+    font-weight: 600;
+    letter-spacing: -0.012em;
+    margin-bottom: 4px;
+  }
+  .phone-label h3 .em {
+    font-family: var(--font-serif); font-style: italic; font-weight: 400;
+    color: var(--vermilion);
+  }
+  .phone-label p {
+    font-size: 12px;
+    color: var(--ink-3);
+    line-height: 1.55;
+    max-width: 22ch;
+    margin: 0 auto;
+  }
+
+  /* ==================================================
+     SCREEN 1 · 首屏（零状态）
+     ================================================== */
+  .scr1-hero {
+    flex: 1;
+    padding: 28px 24px;
+    display: flex; flex-direction: column;
+    background:
+      radial-gradient(ellipse at 50% 30%, rgba(45,79,62,0.10) 0%, transparent 50%),
+      var(--paper);
+  }
+  .scr1-greeting {
+    margin-bottom: 24px;
+  }
+  .scr1-greeting .day {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--ink-3);
+    letter-spacing: 0.05em;
+    margin-bottom: 4px;
+  }
+  .scr1-greeting h1 {
+    font-size: 26px;
+    font-weight: 600;
+    letter-spacing: -0.022em;
+    line-height: 1.18;
+  }
+  .scr1-greeting h1 .em {
+    font-family: var(--font-serif); font-style: italic; font-weight: 400;
+    color: var(--vermilion);
+  }
+  .scr1-octo {
+    margin: 8px auto 24px;
+    width: 140px; height: 140px;
+    position: relative;
+  }
+  .scr1-octo::before {
+    content: ''; position: absolute; inset: -12px;
+    border-radius: 50%;
+    background: radial-gradient(circle, rgba(45,79,62,0.20), transparent 65%);
+    animation: octo-breath 3.6s ease-in-out infinite;
+  }
+  .scr1-octo img {
+    position: relative; z-index: 1;
+    width: 100%; height: 100%;
+    object-fit: contain;
+    animation: hero-float 5s ease-in-out infinite;
+    filter: drop-shadow(0 8px 24px rgba(45,79,62,0.18));
+  }
+  @keyframes hero-float {
+    0%, 100% { transform: translateY(0) rotate(-1deg); }
+    50% { transform: translateY(-6px) rotate(1deg); }
+  }
+
+  .scr1-prompt {
+    text-align: center;
+    margin-bottom: 24px;
+    font-size: 14px;
+    color: var(--ink-2);
+    line-height: 1.6;
+    padding: 0 16px;
+  }
+  .scr1-prompt .em {
+    font-family: var(--font-serif); font-style: italic; color: var(--ink);
+  }
+
+  .scr1-quick {
+    display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px;
+    margin-bottom: 16px;
+  }
+  .scr1-quick-card {
+    padding: 14px 10px;
+    background: var(--card);
+    border: 1px solid var(--rule);
+    border-radius: var(--radius-lg);
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .scr1-quick-card:hover { transform: translateY(-1px); border-color: var(--pine-light); }
+  .scr1-quick-card .icn {
+    width: 28px; height: 28px;
+    border-radius: var(--radius);
+    background: var(--pine-mist);
+    color: var(--pine);
+    display: grid; place-items: center;
+    margin: 0 auto 6px;
+  }
+  .scr1-quick-card .lbl {
+    font-size: 11px;
+    color: var(--ink);
+    font-weight: 500;
+  }
+
+  .scr1-cta {
+    margin-top: auto;
+    width: 100%;
+    height: 56px;
+    background: var(--ink);
+    color: #fff;
+    border: 0;
+    border-radius: var(--radius-xl);
+    font: inherit;
+    font-size: 16px;
+    font-weight: 600;
+    letter-spacing: -0.011em;
+    cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    gap: 10px;
+    box-shadow: var(--shadow-card);
+  }
+  .scr1-cta .pulse {
+    width: 10px; height: 10px; border-radius: 50%;
+    background: var(--vermilion);
+    box-shadow: 0 0 0 0 rgba(181,72,60,0.6);
+    animation: rec-pulse 1.6s ease-in-out infinite;
+  }
+
+  /* ==================================================
+     SCREEN 2 · 课中（录音呼吸球主屏）
+     ================================================== */
+  .scr2 {
+    flex: 1;
+    background:
+      radial-gradient(ellipse at 50% 35%, rgba(181,72,60,0.10) 0%, transparent 60%),
+      var(--paper);
+    display: flex; flex-direction: column;
+  }
+  .scr2-top {
+    padding: 8px 24px 0;
+    display: flex; align-items: center; justify-content: space-between;
+  }
+  .scr2-top .eyebrow {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--vermilion);
+    letter-spacing: 0.06em;
+    display: inline-flex; align-items: center; gap: 6px;
+    font-weight: 500;
+  }
+  .scr2-top .eyebrow::before {
+    content: ''; width: 7px; height: 7px; border-radius: 50%;
+    background: var(--vermilion);
+    box-shadow: 0 0 0 0 rgba(181,72,60,.55);
+    animation: rec-pulse 1.6s ease-in-out infinite;
+  }
+  .scr2-top .more {
+    font-size: 18px; color: var(--ink-3);
+    font-weight: 600;
+  }
+
+  .scr2-title {
+    padding: 4px 24px 16px;
+  }
+  .scr2-title h1 {
+    font-size: 21px;
+    font-weight: 600;
+    letter-spacing: -0.018em;
+    line-height: 1.22;
+  }
+  .scr2-title h1 .em {
+    font-family: var(--font-serif); font-style: italic; font-weight: 400;
+    color: var(--vermilion);
+  }
+  .scr2-title .meta {
+    font-size: 11px;
+    color: var(--ink-3);
+    margin-top: 4px;
+    font-family: var(--font-mono);
+  }
+
+  /* 呼吸球 */
+  .scr2-orb-area {
+    flex: 1;
+    display: grid; place-items: center;
+    padding: 0 24px;
+    position: relative;
+  }
+  .scr2-orb {
+    width: 180px; height: 180px;
+    position: relative;
+  }
+  .scr2-orb .ring1, .scr2-orb .ring2, .scr2-orb .ring3 {
+    position: absolute;
+    inset: 0;
+    border-radius: 50%;
+    background: radial-gradient(circle,
+      rgba(252,231,243,0.7) 0%,
+      rgba(233,213,255,0.5) 40%,
+      rgba(219,234,254,0.3) 70%,
+      transparent 100%);
+    filter: blur(12px);
+  }
+  .scr2-orb .ring1 { animation: orb-pulse 3s ease-in-out infinite; }
+  .scr2-orb .ring2 { animation: orb-pulse 3s ease-in-out infinite 1s; }
+  .scr2-orb .ring3 { animation: orb-pulse 3s ease-in-out infinite 2s; }
+  @keyframes orb-pulse {
+    0% { transform: scale(0.85); opacity: 0.4; }
+    50% { transform: scale(1.1); opacity: 1; }
+    100% { transform: scale(1.3); opacity: 0; }
+  }
+  .scr2-orb .core {
+    position: absolute; inset: 28px;
+    border-radius: 50%;
+    background: radial-gradient(circle at 35% 30%,
+      #FFFFFF 0%,
+      #FCE7F3 30%,
+      #E9D5FF 60%,
+      #DBEAFE 100%);
+    display: grid; place-items: center;
+    box-shadow: 0 8px 32px rgba(181,72,60,0.18);
+    animation: core-breath 2.4s ease-in-out infinite;
+  }
+  @keyframes core-breath {
+    0%, 100% { transform: scale(1); }
+    50% { transform: scale(1.05); }
+  }
+  .scr2-orb .core img {
+    width: 70%; height: 70%;
+    object-fit: contain;
+    filter: drop-shadow(0 4px 8px rgba(0,0,0,0.06));
+  }
+  .scr2-time {
+    text-align: center;
+    margin-top: 32px;
+    font-family: var(--font-mono);
+    font-size: 32px;
+    font-weight: 500;
+    color: var(--ink);
+    letter-spacing: 0.02em;
+  }
+  .scr2-status {
+    text-align: center;
+    margin-top: 4px;
+    font-size: 11.5px;
+    color: var(--pine);
+    font-family: var(--font-mono);
+  }
+
+  .scr2-transcript-strip {
+    padding: 14px 24px;
+    background: var(--paper-warm);
+    border-top: 1px solid var(--rule);
+    border-bottom: 1px solid var(--rule);
+    font-size: 11.5px;
+    color: var(--ink-2);
+    line-height: 1.55;
+    font-style: italic;
+    position: relative;
+  }
+  .scr2-transcript-strip::before {
+    content: '';
+    position: absolute;
+    left: 0; top: 0; bottom: 0; width: 3px;
+    background: var(--vermilion);
+  }
+
+  .scr2-actions {
+    padding: 14px 24px 14px;
+    display: grid; grid-template-columns: 56px 1fr 56px;
+    gap: 10px;
+    align-items: center;
+  }
+  .scr2-icon-btn {
+    height: 48px;
+    border-radius: var(--radius-lg);
+    background: var(--card);
+    border: 1px solid var(--rule);
+    display: grid; place-items: center;
+    color: var(--ink-2);
+  }
+  .scr2-end {
+    height: 48px;
+    background: var(--ink);
+    color: #fff;
+    border-radius: var(--radius-lg);
+    font: inherit; font-size: 14.5px; font-weight: 500;
+    border: 0;
+    display: grid; place-items: center;
+  }
+
+  /* ==================================================
+     SCREEN 3 · 同桌全屏对话
+     ================================================== */
+  .scr3 { flex: 1; display: flex; flex-direction: column; background: var(--paper); }
+  .scr3-head {
+    padding: 6px 16px 14px;
+    display: flex; align-items: center; gap: 10px;
+    border-bottom: 1px solid var(--rule);
+  }
+  .scr3-head .back {
+    width: 32px; height: 32px;
+    display: grid; place-items: center;
+    color: var(--ink);
+  }
+  .scr3-head .stage {
+    width: 36px; height: 36px;
+    border-radius: 50%;
+    background: radial-gradient(circle at 35% 30%, #FFFFFF 0%, var(--paper-warm) 70%);
+    border: 1px solid var(--rule);
+    display: grid; place-items: center;
+    position: relative;
+  }
+  .scr3-head .stage img { width: 26px; height: 26px; }
+  .scr3-head .stage::before {
+    content: ''; position: absolute; inset: -4px; border-radius: 50%;
+    background: radial-gradient(circle, rgba(45,79,62,0.18), transparent 65%);
+    animation: octo-breath 3.6s ease-in-out infinite;
+  }
+  .scr3-head .info { flex: 1; }
+  .scr3-head .name { font-size: 14px; font-weight: 600; }
+  .scr3-head .status {
+    font-size: 11px; color: var(--pine);
+    font-family: var(--font-mono);
+    margin-top: 1px;
+  }
+
+  .scr3-msgs {
+    flex: 1; overflow-y: auto;
+    padding: 16px;
+    font-size: 13.5px; line-height: 1.7;
+  }
+  .scr3-msg { margin-bottom: 16px; }
+  .scr3-msg.user { display: flex; }
+  .scr3-msg.user .b {
+    margin-left: auto;
+    background: var(--ink); color: #fff;
+    padding: 9px 14px; border-radius: 14px 14px 4px 14px;
+    max-width: 80%;
+    font-size: 13.5px;
+  }
+  .scr3-msg.ai .who {
+    font-family: var(--font-mono); font-size: 10.5px;
+    color: var(--ink-3); letter-spacing: 0.06em;
+    text-transform: uppercase;
+    margin-bottom: 4px;
+    font-weight: 500;
+  }
+  .scr3-msg.ai p { margin-bottom: 6px; color: var(--ink); font-size: 13.5px; }
+  .scr3-msg.ai .cite-ts { font-size: 11px; }
+
+  .scr3-chips {
+    padding: 10px 16px 10px;
+    display: flex; gap: 6px; overflow-x: auto;
+    border-top: 1px solid var(--rule-soft);
+  }
+  .scr3-chips .pill {
+    padding: 7px 12px;
+    background: var(--card);
+    border: 1px solid var(--rule);
+    border-radius: 999px;
+    font-size: 11.5px;
+    color: var(--ink-2);
+    white-space: nowrap;
+    display: inline-flex; align-items: center; gap: 5px;
+  }
+  .scr3-chips .pill::before {
+    content: ''; width: 4px; height: 4px; border-radius: 50%; background: var(--pine-light);
+  }
+  .scr3-chips .pill.hot::before { background: var(--vermilion); }
+
+  .scr3-comp {
+    padding: 10px 14px 14px;
+    border-top: 1px solid var(--rule);
+    display: flex; gap: 8px; align-items: flex-end;
+  }
+  .scr3-comp .input {
+    flex: 1;
+    padding: 10px 14px;
+    background: var(--card);
+    border: 1px solid var(--rule);
+    border-radius: var(--radius-lg);
+    font-size: 12.5px;
+    color: var(--ink-3);
+  }
+  .scr3-comp .send {
+    width: 38px; height: 38px;
+    background: var(--ink); color: #fff;
+    border: 0; border-radius: var(--radius-lg);
+    display: grid; place-items: center;
+  }
+  .scr3-comp .voice {
+    width: 38px; height: 38px;
+    background: transparent; color: var(--ink-2);
+    border: 1px solid var(--rule);
+    border-radius: var(--radius-lg);
+    display: grid; place-items: center;
+  }
+
+  /* ==================================================
+     SCREEN 4 · 复习
+     ================================================== */
+  .scr4 { flex: 1; overflow-y: auto; background: var(--paper); }
+  .scr4-video {
+    margin: 8px 16px 12px;
+    aspect-ratio: 16/9;
+    background:
+      radial-gradient(ellipse at 30% 40%, rgba(107,144,128,0.4) 0%, transparent 50%),
+      radial-gradient(ellipse at 70% 60%, rgba(181,72,60,0.3) 0%, transparent 50%),
+      linear-gradient(135deg, #2A3A35 0%, #1C1B19 100%);
+    border-radius: var(--radius-lg);
+    position: relative;
+    overflow: hidden;
+  }
+  .scr4-video::after {
+    content: '老师';
+    position: absolute; inset: 0;
+    display: grid; place-items: center;
+    color: rgba(255,255,255,0.15);
+    font-size: 36px;
+    font-family: var(--font-serif); font-style: italic;
+  }
+  .scr4-video .play {
+    position: absolute; top: 50%; left: 50%;
+    transform: translate(-50%, -50%);
+    width: 48px; height: 48px;
+    border-radius: 50%;
+    background: rgba(255,255,255,0.92);
+    color: var(--ink);
+    display: grid; place-items: center;
+    backdrop-filter: blur(8px);
+    z-index: 1;
+  }
+  .scr4-video .bar {
+    position: absolute; bottom: 10px; left: 12px; right: 12px;
+    height: 3px; background: rgba(255,255,255,0.25); border-radius: 2px;
+  }
+  .scr4-video .bar .fill { height: 100%; width: 38%; background: var(--vermilion); border-radius: 2px; }
+
+  .scr4-head {
+    padding: 12px 18px 8px;
+  }
+  .scr4-head h1 {
+    font-size: 19px;
+    font-weight: 600;
+    letter-spacing: -0.018em;
+    line-height: 1.22;
+  }
+  .scr4-head h1 .em {
+    font-family: var(--font-serif); font-style: italic; font-weight: 400;
+    color: var(--vermilion);
+  }
+  .scr4-head .meta {
+    font-size: 11.5px; color: var(--ink-3);
+    margin-top: 4px;
+    font-family: var(--font-mono);
+  }
+  .scr4-head .meta .pine { color: var(--pine); font-weight: 500; }
+
+  .scr4-stats {
+    padding: 8px 18px 18px;
+    display: grid; grid-template-columns: 1fr 1fr 1fr;
+    gap: 8px;
+  }
+  .scr4-stat {
+    padding: 10px 12px;
+    background: var(--card);
+    border: 1px solid var(--rule);
+    border-radius: var(--radius);
+  }
+  .scr4-stat .n {
+    font-size: 22px; font-weight: 600;
+    letter-spacing: -0.018em;
+    color: var(--pine);
+  }
+  .scr4-stat .n.ver { color: var(--vermilion); }
+  .scr4-stat .lbl {
+    font-size: 10.5px;
+    color: var(--ink-3);
+    margin-top: 2px;
+    font-family: var(--font-mono);
+  }
+
+  .scr4-apps {
+    padding: 0 18px 18px;
+  }
+  .scr4-app-list {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 8px;
+  }
+  .scr4-app {
+    padding: 14px;
+    background: var(--card);
+    border: 1px solid var(--rule);
+    border-radius: var(--radius);
+    cursor: pointer;
+  }
+  .scr4-app .icn {
+    width: 28px; height: 28px;
+    border-radius: var(--radius);
+    background: var(--pine-mist);
+    color: var(--pine);
+    display: grid; place-items: center;
+    font-size: 13px; font-weight: 600;
+    margin-bottom: 8px;
+  }
+  .scr4-app.fresh .icn { background: var(--vermilion-mist); color: var(--vermilion); }
+  .scr4-app .name {
+    font-size: 13px; font-weight: 500;
+    color: var(--ink);
+    margin-bottom: 2px;
+  }
+  .scr4-app .sub {
+    font-size: 10.5px;
+    color: var(--ink-3);
+    font-family: var(--font-mono);
+  }
+
+  /* Octo FAB on scr4 */
+  .scr4-fab {
+    position: absolute;
+    bottom: 24px; right: 18px;
+    width: 56px; height: 56px;
+    border-radius: 50%;
+    background: var(--card);
+    border: 1px solid var(--rule);
+    box-shadow: var(--shadow-float);
+    display: grid; place-items: center;
+    z-index: 5;
+  }
+  .scr4-fab img { width: 38px; height: 38px; }
+  .scr4-fab::after {
+    content: ''; position: absolute;
+    top: -2px; right: -2px;
+    width: 14px; height: 14px;
+    border-radius: 50%;
+    background: var(--vermilion);
+    border: 2px solid var(--card);
+  }
+
+  /* 主题切换 */
+  .theme-fab {
+    position: fixed;
+    top: 28px; right: 28px;
+    z-index: 100;
+    width: 36px; height: 36px;
+    border-radius: 50%;
+    background: var(--card);
+    border: 1px solid var(--rule);
+    display: grid; place-items: center;
+    cursor: pointer;
+    box-shadow: var(--shadow-soft);
+  }
+</style>
+</head>
+<body>
+
+<div class="ctx-bar">
+  <a href="./index.html" class="back-link">← 回到 Design System 总览</a>
+  <div class="eyebrow">08 · MOBILE</div>
+  <h1>移动端 ≠ 响应式裁剪 · <span class="em">原生体验</span></h1>
+  <p class="lede">
+    全屏 sheet（向上滑出）、手势导航（左右切 tab、下拉关闭）、Haptic 反馈、
+    呼吸球占主屏 60%——这是移动端被作为 first-class 重新设计，不是把桌面端压扁。
+  </p>
+</div>
+
+<div class="phone-row">
+
+  <!-- ============== Phone 1 · 首屏零状态 ============== -->
+  <div>
+    <div class="phone">
+      <div class="phone-notch"></div>
+      <div class="phone-home"></div>
+      <div class="screen">
+        <div class="phone-status">
+          <span class="mono" style="font-family: var(--font-sans);">9:41</span>
+          <div class="icons">
+            <div class="bar"><i></i><i></i><i></i><i></i></div>
+            <span style="font-size: 11px;">5G</span>
+            <div class="battery"><span></span></div>
+          </div>
+        </div>
+        <div class="scrn-body">
+          <div class="scr1-hero">
+            <div class="scr1-greeting">
+              <div class="day">SUNDAY · MAY 31</div>
+              <h1>下午好<span class="em">，陈同学</span><br/>今天想听点什么？</h1>
+            </div>
+
+            <div class="scr1-octo">
+              <img src="/public/images/octo-buddy/idle.png" />
+            </div>
+
+            <div class="scr1-prompt">
+              你只需<em class="em">按一下</em>，<br/>我就能陪你听完这节课。
+            </div>
+
+            <div class="scr1-quick">
+              <div class="scr1-quick-card">
+                <div class="icn">
+                  <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M7 1c-1.1 0-2 .9-2 2v5a2 2 0 104 0V3a2 2 0 00-2-2zM3 6v2a4 4 0 008 0V6M7 12v1" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+                </div>
+                <div class="lbl">麦克风</div>
+              </div>
+              <div class="scr1-quick-card">
+                <div class="icn">
+                  <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><rect x="2" y="3" width="10" height="7" rx="1" stroke="currentColor" stroke-width="1.5"/><path d="M5 12h4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+                </div>
+                <div class="lbl">电脑声</div>
+              </div>
+              <div class="scr1-quick-card">
+                <div class="icn">
+                  <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M7 1l3 3M4 4l6 6M1 7l3 3M4 10l-3 3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+                </div>
+                <div class="lbl">两路</div>
+              </div>
+            </div>
+
+            <button class="scr1-cta">
+              <span class="pulse"></span>
+              <span>开始这节课</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="phone-label">
+      <div class="num">SCREEN 01</div>
+      <h3>首屏 · <span class="em">零状态</span></h3>
+      <p>问候 + Octo 主图 + 一键开始。麦克风 / 电脑声 / 两路同时三选一。</p>
+    </div>
+  </div>
+
+  <!-- ============== Phone 2 · 课中（呼吸球主屏） ============== -->
+  <div>
+    <div class="phone">
+      <div class="phone-notch"></div>
+      <div class="phone-home"></div>
+      <div class="screen">
+        <div class="phone-status">
+          <span class="mono" style="font-family: var(--font-sans);">9:41</span>
+          <div class="icons">
+            <div class="bar"><i></i><i></i><i></i><i></i></div>
+            <span style="font-size: 11px;">5G</span>
+            <div class="battery"><span></span></div>
+          </div>
+        </div>
+        <div class="scrn-body">
+          <div class="scr2">
+            <div class="scr2-top">
+              <span class="eyebrow">RECORDING</span>
+              <span class="more">⋯</span>
+            </div>
+            <div class="scr2-title">
+              <h1>计算机网络<br/>第 7 讲 · <span class="em">三道关</span></h1>
+              <div class="meta">张老师 · 已录 23:14</div>
+            </div>
+
+            <div class="scr2-orb-area">
+              <div class="scr2-orb">
+                <div class="ring1"></div>
+                <div class="ring2"></div>
+                <div class="ring3"></div>
+                <div class="core">
+                  <img src="/public/images/octo-buddy/excited.png" />
+                </div>
+              </div>
+            </div>
+
+            <div class="scr2-time">23:14</div>
+            <div class="scr2-status">Octo 正在听 · 已稳定 142 段</div>
+
+            <div class="scr2-transcript-strip">
+              拥塞控制的核心是 AIMD：加性增、乘性减…
+            </div>
+
+            <div class="scr2-actions">
+              <button class="scr2-icon-btn">
+                <svg width="18" height="18" viewBox="0 0 18 18" fill="none"><path d="M3 9h12M9 3v12" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+              </button>
+              <button class="scr2-end">问 Octo / 结束</button>
+              <button class="scr2-icon-btn">
+                <svg width="18" height="18" viewBox="0 0 18 18" fill="none"><path d="M11 5l-3-3-3 3M8 2v9M3 11v1a2 2 0 002 2h6a2 2 0 002-2v-1" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="phone-label">
+      <div class="num">SCREEN 02</div>
+      <h3>课中 · <span class="em">呼吸球主屏</span></h3>
+      <p>录音呼吸球占屏幕中央。仪式色板罕见出现 = 真正在录的时刻。</p>
+    </div>
+  </div>
+
+  <!-- ============== Phone 3 · 同桌全屏对话 ============== -->
+  <div>
+    <div class="phone">
+      <div class="phone-notch"></div>
+      <div class="phone-home"></div>
+      <div class="screen">
+        <div class="phone-status">
+          <span class="mono" style="font-family: var(--font-sans);">9:41</span>
+          <div class="icons">
+            <div class="bar"><i></i><i></i><i></i><i></i></div>
+            <span style="font-size: 11px;">5G</span>
+            <div class="battery"><span></span></div>
+          </div>
+        </div>
+        <div class="scrn-body">
+          <div class="scr3">
+            <div class="scr3-head">
+              <div class="back">
+                <svg width="18" height="18" viewBox="0 0 18 18" fill="none"><path d="M11 4l-5 5 5 5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+              </div>
+              <div class="stage"><img src="/public/images/octo-buddy/excited.png" /></div>
+              <div class="info">
+                <div class="name">Octo</div>
+                <div class="status">正在跟着这节课</div>
+              </div>
+            </div>
+
+            <div class="scr3-msgs">
+              <div class="scr3-msg user">
+                <div class="b">滑动窗口和拥塞控制有啥区别？</div>
+              </div>
+              <div class="scr3-msg ai">
+                <div class="who">Octo</div>
+                <p><strong>简单说：</strong></p>
+                <p>· 滑动窗口 = 接收方说"我能吃多少" <span class="cite-ts mono">[20:01]</span></p>
+                <p>· 拥塞控制 = 发送方猜"网络受得住多少" <span class="cite-ts mono">[21:12]</span></p>
+                <p>一个为<em class="serif">接收端</em>，一个为<em class="serif">整个网络</em>。</p>
+              </div>
+              <div class="scr3-msg ai">
+                <div class="who">Octo · 想给你打个比喻</div>
+                <p style="color: var(--ink-3); font-style: italic;">
+                  滑动窗口像餐厅服务员控制上菜节奏<span class="typing-caret"></span>
+                </p>
+              </div>
+            </div>
+
+            <div class="scr3-chips">
+              <div class="pill hot">考我一题</div>
+              <div class="pill">画思维导图</div>
+              <div class="pill">这段重听</div>
+            </div>
+
+            <div class="scr3-comp">
+              <div class="input">问 Octo…</div>
+              <button class="voice">
+                <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M7 1c-1.1 0-2 .9-2 2v5a2 2 0 104 0V3a2 2 0 00-2-2zM3 6v2a4 4 0 008 0V6M7 12v1" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+              </button>
+              <button class="send">
+                <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M2 7h10M8 3l4 4-4 4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="phone-label">
+      <div class="num">SCREEN 03</div>
+      <h3>同桌 · <span class="em">全屏对话</span></h3>
+      <p>下拉关闭 / 长按消息查看引用 / 语音和文字平等。每段引用都跳得回原录音。</p>
+    </div>
+  </div>
+
+  <!-- ============== Phone 4 · 复习 ============== -->
+  <div>
+    <div class="phone">
+      <div class="phone-notch"></div>
+      <div class="phone-home"></div>
+      <div class="screen">
+        <div class="phone-status">
+          <span class="mono" style="font-family: var(--font-sans);">9:41</span>
+          <div class="icons">
+            <div class="bar"><i></i><i></i><i></i><i></i></div>
+            <span style="font-size: 11px;">5G</span>
+            <div class="battery"><span></span></div>
+          </div>
+        </div>
+        <div class="scrn-body" style="position: relative;">
+          <div class="scr4">
+            <div class="scr4-video">
+              <div class="play">
+                <svg width="14" height="14" viewBox="0 0 14 14"><path d="M3 2l9 5-9 5z" fill="currentColor"/></svg>
+              </div>
+              <div class="bar"><div class="fill"></div></div>
+            </div>
+
+            <div class="scr4-head">
+              <h1>TCP 可靠传输的<span class="em">三道关</span></h1>
+              <div class="meta">2026.05.31 · 23 分钟 · <span class="pine">76% 听懂</span></div>
+            </div>
+
+            <div class="scr4-stats">
+              <div class="scr4-stat">
+                <div class="n">5</div>
+                <div class="lbl">引用</div>
+              </div>
+              <div class="scr4-stat">
+                <div class="n ver">4</div>
+                <div class="lbl">朱批</div>
+              </div>
+              <div class="scr4-stat">
+                <div class="n">8</div>
+                <div class="lbl">应用就绪</div>
+              </div>
+            </div>
+
+            <div class="scr4-apps">
+              <div class="scr4-app-list">
+                <div class="scr4-app">
+                  <div class="icn">速</div>
+                  <div class="name">速查表</div>
+                  <div class="sub">5 个知识点</div>
+                </div>
+                <div class="scr4-app">
+                  <div class="icn">闪</div>
+                  <div class="name">闪卡</div>
+                  <div class="sub">12 张</div>
+                </div>
+                <div class="scr4-app">
+                  <div class="icn">测</div>
+                  <div class="name">测验</div>
+                  <div class="sub">8 题 · 4/8 答对</div>
+                </div>
+                <div class="scr4-app fresh">
+                  <div class="icn">报</div>
+                  <div class="name">课后报告</div>
+                  <div class="sub">刚生成</div>
+                </div>
+                <div class="scr4-app">
+                  <div class="icn">图</div>
+                  <div class="name">思维导图</div>
+                  <div class="sub">5 个分支</div>
+                </div>
+                <div class="scr4-app">
+                  <div class="icn">播</div>
+                  <div class="name">播客</div>
+                  <div class="sub">10:23</div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="scr4-fab">
+            <img src="/public/images/octo-buddy/idle.png" />
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="phone-label">
+      <div class="num">SCREEN 04</div>
+      <h3>复习 · <span class="em">应用矩阵</span></h3>
+      <p>视频 + 三个数字一目了然 + 应用 grid。Octo 角落浮按，红点 = 有新产物。</p>
+    </div>
+  </div>
+
+</div>
+
+<button class="theme-fab" id="themeToggle" title="切换主题">
+  <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+    <circle cx="7" cy="7" r="2.5" stroke="currentColor" stroke-width="1.4"/>
+    <path d="M7 1v1.5M7 11.5V13M1 7h1.5M11.5 7H13M2.5 2.5l1 1M10.5 10.5l1 1M2.5 11.5l1-1M10.5 3.5l1-1" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>
+  </svg>
+</button>
+
+<script>
+  document.getElementById('themeToggle').addEventListener('click', () => {
+    const root = document.documentElement;
+    root.setAttribute('data-theme', root.getAttribute('data-theme') === 'dark' ? 'light' : 'dark');
+  });
+</script>
+
+</body>
+</html>
