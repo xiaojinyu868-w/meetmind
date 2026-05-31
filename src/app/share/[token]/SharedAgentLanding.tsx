@@ -29,6 +29,7 @@ import { toast } from 'sonner';
 import { useAuth } from '@/lib/hooks/useAuth';
 import { COPY } from '@/lib/ui/copy';
 import { OctoAvatar } from '@/components/ui/octo-avatar';
+import { useOctoMood } from '@/lib/hooks/useOctoMood';
 import { ArtifactRender } from '@/components/share/ArtifactRender';
 import { SharedAgentChat } from './SharedAgentChat';
 import type {
@@ -71,6 +72,11 @@ function ArtifactPreview({
 export function SharedAgentLanding({ token }: SharedAgentLandingProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
+  // v7 Octo IP：分享落地页是"陌生访客在班级群点开"的场景。
+  // ctx='shared-landing' = 默认 happy（学生分享了什么作品的 hero 表情），
+  // 但凌晨自动切 sleeping（夜深了 AI 也在歇）——更人性化。
+  // claim 成功瞬间触发 react('shared') → love（让 Octo 表达"被领取"的开心）
+  const { mood: octoMoodLanding, react: octoReact } = useOctoMood({ ctx: 'shared-landing' });
   const { isAuthenticated, accessToken } = useAuth();
   const [share, setShare] = React.useState<PublicSharedAgent | null>(null);
   const [loading, setLoading] = React.useState(true);
@@ -138,6 +144,8 @@ export function SharedAgentLanding({ token }: SharedAgentLandingProps) {
       }
       const data = (await res.json()) as { success: boolean; alreadyClaimed?: boolean };
       setClaimed(true);
+      // v7 Octo IP：领取成功瞬间切到 love mood（被领取 = 被珍视 = 开心）
+      octoReact('shared');
       toast.success(
         data.alreadyClaimed
           ? COPY.share.landing.claimAlready
@@ -157,7 +165,7 @@ export function SharedAgentLanding({ token }: SharedAgentLandingProps) {
     } finally {
       setClaiming(false);
     }
-  }, [accessToken, isAuthenticated, router, token]);
+  }, [accessToken, isAuthenticated, octoReact, router, token]);
 
   /**
    * P0 自动 claim：
@@ -212,9 +220,9 @@ export function SharedAgentLanding({ token }: SharedAgentLandingProps) {
           }}
         />
         <div className="relative z-10 flex flex-col items-center gap-4">
-          <OctoAvatar mood="thinking" size="xl" aura />
+          <OctoAvatar mood={octoMoodLanding === 'sleeping' ? 'sleeping' : 'thinking'} size="xl" aura />
           <p className="font-mono text-xs uppercase tracking-caps text-ink-muted">
-            {COPY.loading.preparing}
+            {octoMoodLanding === 'sleeping' ? '夜深了 · 同学先打个盹' : COPY.loading.preparing}
           </p>
         </div>
       </main>
@@ -271,7 +279,9 @@ export function SharedAgentLanding({ token }: SharedAgentLandingProps) {
 
         {/* ===== Hero：分享者 + 课名 + Octo 主图 ===== */}
         <header className="flex flex-col items-center gap-5 text-center sm:gap-6 sm:py-4">
-          {/* Octo 主图：大尺寸 + 呼吸光环 + 漂浮动画 */}
+          {/* Octo 主图：大尺寸 + 呼吸光环 + 漂浮动画
+               v7 Octo mood：默认按 ctx 是 happy，凌晨切 sleeping，
+               claim 成功瞬间切 love（短暂 2.4s 然后回到 happy）。 */}
           <div className="relative">
             <div
               aria-hidden
@@ -283,13 +293,19 @@ export function SharedAgentLanding({ token }: SharedAgentLandingProps) {
               }}
             />
             <Image
-              src="/images/octo-buddy/original.png"
+              src={`/images/octo-buddy/${
+                octoMoodLanding === 'love' ? 'love' :
+                octoMoodLanding === 'sleeping' ? 'sleeping' :
+                octoMoodLanding === 'happy' ? 'happy' :
+                'original'
+              }.png`}
               alt={`${sharerNickname} 的学习同桌`}
               width={160}
               height={160}
               className="relative z-10 size-32 sm:size-40 object-contain animate-hero-float"
               style={{ filter: 'drop-shadow(0 16px 40px rgba(45,79,62,0.18))' }}
               priority
+              unoptimized
             />
           </div>
 
@@ -359,21 +375,43 @@ export function SharedAgentLanding({ token }: SharedAgentLandingProps) {
           />
         ) : null}
 
-        {/* ===== 底部动作栏 · 玻璃态 sticky ===== */}
+        {/* ===== 底部动作栏 · 玻璃态 sticky =====
+             v7 仪式感：主 CTA 在未点击前用 pine ring 微光环吸引注意，
+             点击后 ring 收紧 + scale；claim 成功瞬间 ring 变 vermilion 朱批闪光（"被领取"信号）。 */}
         <footer className="sticky bottom-3 mt-2 flex items-center gap-2 rounded-full border border-divider bg-card/95 backdrop-blur-md px-3 py-2 shadow-card">
           <button
             type="button"
             onClick={handleClaim}
             disabled={claiming}
-            className="flex-1 rounded-full bg-ink px-4 py-2.5 text-sm font-medium text-white transition-all duration-150 ease-out hover:bg-black hover:-translate-y-px active:scale-[0.98] disabled:opacity-50 disabled:cursor-wait"
+            className={`group relative flex-1 rounded-full bg-ink px-4 py-2.5 text-sm font-medium text-white transition-all duration-200 ease-out hover:bg-pine-deep hover:-translate-y-px active:scale-[0.98] disabled:opacity-50 disabled:cursor-wait ${
+              claimed
+                ? 'ring-2 ring-vermilion/40 shadow-[0_0_0_4px_rgba(181,72,60,0.10)]'
+                : claiming
+                  ? 'ring-2 ring-pine/40'
+                  : 'ring-1 ring-pine/0 hover:ring-pine/30 hover:shadow-[0_0_0_4px_rgba(45,79,62,0.08)]'
+            }`}
           >
-            {claimed
-              ? COPY.share.landing.claimDone
-              : claiming
-                ? COPY.share.landing.claiming
-                : isAuthenticated
-                  ? COPY.share.landing.claimAction
-                  : COPY.share.landing.claimGo}
+            {/* 极淡光带（claim 中流动） */}
+            {claiming ? (
+              <span
+                aria-hidden
+                className="pointer-events-none absolute inset-0 overflow-hidden rounded-full"
+                style={{
+                  background: 'linear-gradient(90deg, transparent, rgba(255,255,255,0.18), transparent)',
+                  backgroundSize: '200% 100%',
+                  animation: 'shimmer-fast 1.4s linear infinite',
+                }}
+              />
+            ) : null}
+            <span className="relative">
+              {claimed
+                ? COPY.share.landing.claimDone
+                : claiming
+                  ? COPY.share.landing.claiming
+                  : isAuthenticated
+                    ? COPY.share.landing.claimAction
+                    : COPY.share.landing.claimGo}
+            </span>
           </button>
           <button
             type="button"

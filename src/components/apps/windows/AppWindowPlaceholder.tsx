@@ -19,7 +19,7 @@ import * as React from 'react';
 import { COPY } from '@/lib/ui/copy';
 import { OctoBuddySprite } from '@/components/classroom/OctoBuddy';
 import { OctoAvatar } from '@/components/ui/octo-avatar';
-import { ThinkingStrip } from '@/components/ui/thinking-strip';
+import { BrewingStrip } from '@/components/ui/thinking-strip';
 
 interface AppWindowPlaceholderProps {
   /** 占位状态 */
@@ -86,12 +86,12 @@ function ListeningLoading({ appName }: { appName: string }) {
         <p className="text-[15px] font-medium tracking-[-0.01em] text-ink">
           {message}
         </p>
-        <ThinkingStrip>
+        <BrewingStrip>
           <span className="font-mono tabular-nums text-pine">
             {seconds.toString().padStart(2, '0')}s
           </span>
-          <span>· Octo 在听这节课</span>
-        </ThinkingStrip>
+          <span className="font-serif italic text-pine/85">· Octo 在酿这节课</span>
+        </BrewingStrip>
       </div>
     </div>
   );

@@ -4,6 +4,7 @@ import type { ReactNode } from 'react';
 import { TimelineView } from '@/components/TimelineView';
 import { AnchorDetailPanel } from '@/components/AnchorDetailPanel';
 import { OctoAvatar } from '@/components/ui/octo-avatar';
+import { useOctoMood } from '@/lib/hooks/useOctoMood';
 import { formatTime } from '@/lib/utils/page-utils';
 import type { Anchor, Breakpoint, Timeline, TranscriptSegment } from '@/types';
 import type { ReviewTab, WorkspaceTabConfig } from '@/types/page-types';
@@ -54,6 +55,8 @@ export function ReviewWorkspacePanel({
   sharedWorkspaceContent,
   hideTabBar = false,
 }: ReviewWorkspacePanelProps) {
+  // v7 Octo IP：复习态空态。ctx='review-empty'（默认 idle，凌晨切 sleeping）
+  const { mood: octoMoodEmpty } = useOctoMood({ ctx: 'review-empty' });
   return (
     <div className="h-full flex flex-col bg-card border-r border-divider">
       {!hideTabBar && (
@@ -106,13 +109,22 @@ export function ReviewWorkspacePanel({
 
         {reviewTab === 'timeline' && !timelineForView && (
           <div className="flex h-full flex-col items-center justify-center px-6">
-            <OctoAvatar mood="thinking" size="lg" aura className="mb-4" />
+            <OctoAvatar mood={octoMoodEmpty === 'sleeping' ? 'sleeping' : 'thinking'} size="lg" aura className="mb-4" />
             <p className="mb-1 text-[15px] font-semibold text-ink">
               <span className="font-serif italic font-normal text-pine">这条内容</span>没有时间轴
             </p>
             <p className="text-center text-[12.5px] leading-relaxed text-ink-muted max-w-[18rem]">
-              音频和视频类的内容才会生成时间轴。<br />
-              试试<span className="font-serif italic text-pine">「应用」</span>来和这条内容互动。
+              {octoMoodEmpty === 'sleeping' ? (
+                <>
+                  夜深了，<span className="font-serif italic text-pine">你也休息一下</span>。<br />
+                  明天再回来看，同学还在。
+                </>
+              ) : (
+                <>
+                  音频和视频类的内容才会生成时间轴。<br />
+                  试试<span className="font-serif italic text-pine">「应用」</span>来和这条内容互动。
+                </>
+              )}
             </p>
             <button
               type="button"

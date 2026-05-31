@@ -373,7 +373,8 @@ export function StreamingMarkdown({
 
         {/* 流式输出时显示光标 */}
         {isStreaming && (
-          <span className="ml-0.5 inline-block h-4 w-2 animate-pulse rounded-sm bg-[#1C1B19] align-middle" />
+          // v7 typing-caret：墨绿 + steps blink（"AI 在场"信号，不是冷冰冰黑色 cursor）
+          <span className="typing-caret align-middle" aria-hidden />
         )}
       </div>
 

@@ -76,7 +76,7 @@ const markdownComponents: Components = {
   ),
   em: ({ children }) => <em className="italic text-ink-secondary">{children}</em>,
   blockquote: ({ children }) => (
-    <blockquote className="my-2 border-l-2 border-[#E8E2D5] pl-3 text-[13px] italic text-ink-secondary">
+    <blockquote className="my-2 border-l-2 border-pine/40 bg-pine-fog/40 pl-3 pr-2 py-1 text-[13px] font-serif italic text-ink-secondary rounded-r-md">
       {children}
     </blockquote>
   ),
@@ -85,19 +85,19 @@ const markdownComponents: Components = {
     const isBlock = Boolean(className?.startsWith('language-'));
     if (isBlock) {
       return (
-        <code className="block overflow-x-auto rounded-lg bg-[#F2EDE3] px-3 py-2 font-mono text-[12px] leading-relaxed text-ink" {...props}>
+        <code className="block overflow-x-auto rounded-lg bg-paper-warm px-3 py-2 font-mono text-[12px] leading-relaxed text-ink ring-1 ring-divider/60" {...props}>
           {children}
         </code>
       );
     }
     return (
-      <code className="rounded bg-[#F0EBDF] px-1.5 py-0.5 font-mono text-[12px] text-ink" {...props}>
+      <code className="rounded bg-paper-deep px-1.5 py-0.5 font-mono text-[12px] text-ink" {...props}>
         {children}
       </code>
     );
   },
   pre: ({ children }) => (
-    <pre className="my-2 overflow-x-auto rounded-lg bg-[#F2EDE3] p-0 text-[12px]">
+    <pre className="my-2 overflow-x-auto rounded-lg bg-paper-warm p-0 text-[12px]">
       {children}
     </pre>
   ),
@@ -107,24 +107,24 @@ const markdownComponents: Components = {
       href={href}
       target="_blank"
       rel="noopener noreferrer"
-      className="text-ink underline decoration-ink-muted/50 underline-offset-2 hover:decoration-ink"
+      className="text-pine underline decoration-pine/40 underline-offset-2 hover:decoration-pine transition-colors"
     >
       {children}
     </a>
   ),
-  hr: () => <hr className="my-3 border-[#E8E2D5]" />,
+  hr: () => <hr className="my-3 border-divider" />,
   table: ({ children }) => (
     <div className="my-2 overflow-x-auto">
       <table className="w-full border-collapse text-[12.5px]">{children}</table>
     </div>
   ),
   th: ({ children }) => (
-    <th className="border-b border-[#E8E2D5] px-2 py-1.5 text-left font-medium text-ink">
+    <th className="border-b border-divider px-2 py-1.5 text-left font-medium text-ink">
       {children}
     </th>
   ),
   td: ({ children }) => (
-    <td className="border-b border-[#E8E2D5]/60 px-2 py-1.5 text-ink-secondary">
+    <td className="border-b border-divider/60 px-2 py-1.5 text-ink-secondary">
       {children}
     </td>
   ),
@@ -147,7 +147,8 @@ export function CompanionMarkdown({
         {cleaned}
       </ReactMarkdown>
       {isStreaming && (
-        <span className="ml-0.5 inline-block h-[13px] w-[2px] translate-y-[2px] bg-ink/60 animate-pulse" />
+        // v7 typing-caret：墨绿 + steps blink（"AI 在场"信号，不是普通 cursor）
+        <span className="typing-caret" aria-hidden />
       )}
     </div>
   );
