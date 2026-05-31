@@ -8,6 +8,8 @@ const TARGET_QUESTION_COUNT = 8;
 
 interface QuizDraft {
   stem?: string;
+  /** 题型：single | multiple | judge | fill | short。可选；缺省按 options 数量推断 */
+  type?: string;
   options?: string[];
   answer?: string;
   explanation?: string;
@@ -55,6 +57,24 @@ function normalizeOptions(options: unknown): string[] {
     .slice(0, 6);
 }
 
+/**
+ * 题型推断：当 LLM 没显式传 type 时，按 options + answer 形态推断。
+ * - 空 options + 有 answer → fill / short（保守归类为 short，前端可二次区分）
+ * - options=["正确", "错误"] / ["对", "错"] → judge
+ * - options ≥ 2 → single（不强行尝试推 multiple，避免误判）
+ */
+function inferQuestionType(options: string[], answer: string): string {
+  if (options.length === 0) return answer ? 'short' : 'short';
+  const judgePatterns = ['正确', '错误', '对', '错', '是', '否'];
+  if (
+    options.length === 2 &&
+    options.every((o) => judgePatterns.some((p) => o.replace(/[A-Da-d.、)\s]/g, '').startsWith(p)))
+  ) {
+    return 'judge';
+  }
+  return 'single';
+}
+
 function fallbackDraft(segment: TranscriptSegment): QuizDraft {
   const text = segment.text.replace(/\s+/g, ' ').trim();
   const ts = formatTimestamp(segment.startMs);
@@ -88,14 +108,30 @@ async function generateQuizWithLLM(
     [
       {
         role: 'system',
-        content: `你是一位经验丰富的命题研究员，擅长设计能区分"真懂"和"以为自己懂"的测试题。
-你的学生刚上完一堂课，想检验自己是否真正理解了课堂内容。好的测验能暴露理解偏差，而不仅仅检测记忆。
-严格基于课堂内容出题，输出纯 JSON，不要输出任何其他文字。`,
+        content: [
+          '你是一位经验丰富的命题研究员，擅长设计能区分"真懂"和"以为自己懂"的测试题。',
+          '你的学生刚上完一堂课，想检验自己是否真正理解了课堂内容。',
+          '',
+          '硬性纪律（违反任意一条都视为失败）：',
+          '1) 严禁纯记忆题（"老师说了 X 的定义是？"）。每道题都要让学生用知识，不只是背知识。',
+          '2) 严禁表面型干扰项。错误选项要有真实的迷惑性——是常见误解、相邻概念、错误类比，不是无关的胡话。',
+          '3) 严禁离开课堂内容，不要出 LLM 通识题或与本课无关的题。',
+          '4) 解析必须说"为什么对 + 其他选项错在哪 / 共同的认知陷阱是什么"，不是把答案再说一遍。',
+          '5) 学习者关注点（anchors / 困惑标记）非空时，至少 40% 题目命中这些点。',
+          '',
+          '题型分布（5-10 题；模型可按内容复杂度自行选择，但要有多样性）：',
+          '- 单选题（选项 ≥ 4，必有迷惑干扰项）',
+          '- 判断题（options=["正确", "错误"]；用于易错点和常见误解）',
+          '- 填空题（stem 含 "___"；answer 是答案文本，不是选项字母）',
+          '- 简答题（options 为空；answer 是参考答案；前端会把这种渲染成开放回答）',
+          '',
+          '严格基于课堂内容出题，输出纯 JSON，不要输出任何其他文字。',
+        ].join('\n'),
       },
       {
         role: 'user',
         content: `学习目标：${context.goal.intent}
-${anchorContext ? `学习者关注点：\n${anchorContext}\n` : ''}
+${anchorContext ? `学习者关注点（含困惑标记，请优先成题）：\n${anchorContext}\n` : ''}
 课堂原文：
 ${transcriptContext}
 
@@ -104,24 +140,71 @@ ${transcriptContext}
 渲染契约（前端解析用，请严格遵守此 JSON 结构）：
 {
   "title": "测验标题",
+  "strategy": "答题策略（一句话，比如：先独立作答再看证据回放）",
   "questions": [
     {
       "stem": "题干文本",
+      "type": "single | multiple | judge | fill | short",
       "options": ["A. 选项一", "B. 选项二", "C. 选项三", "D. 选项四"],
       "answer": "A",
-      "explanation": "解析：为什么正确，以及常见的理解误区"
+      "explanation": "为什么对 + 其他选项错在哪 / 共同的认知陷阱",
+      "startMs": 12000,
+      "endMs": 21000
     }
   ]
 }
 
 字段说明：
-- stem：题干
-- options：选项数组（每题至少 2 个选项）
-- answer：正确答案（选项字母或选项原文均可）
-- explanation：解析
-- 其他你认为有价值的字段可以自行添加（如 startMs/endMs 对应课堂时间戳）
+- type 为可选；若不传，前端按 options 数量推断（≥2 视为 single；空 options 视为 short）
+- judge 类型 options 必须是 ["正确", "错误"]
+- fill 类型 stem 含 "___"，answer 是答案文本（不是 'A'）
+- short 类型 options 留空 []，answer 是参考答案
+- single / multiple 类型 options 至少 4 个，迷惑项要真有迷惑性
 
-题型、题量、难度分布由你根据课堂内容的复杂度和知识点分布自行判断。${buildTerminologyHintBlock(context.memory.terminologyHint)}`,
+few-shot 反例（不要这样写）：
+{
+  "stem": "老师说了 X 的定义是什么？",   ← 纯记忆，禁止
+  "options": ["A. 正确", "B. 错误", "C. 不知道", "D. 跳过"],  ← 表面干扰项
+  "explanation": "正确答案是 A。"  ← 解析没说为什么
+}
+
+few-shot 正例：
+{
+  "questions": [
+    {
+      "stem": "在样本量小、特征多的回归任务中，下列哪种正则化最适合做特征选择？",
+      "type": "single",
+      "options": [
+        "A. L1 正则化（Lasso）",
+        "B. L2 正则化（Ridge）",
+        "C. Dropout",
+        "D. 早停（Early Stopping）"
+      ],
+      "answer": "A",
+      "explanation": "L1 的菱形约束让权重精确归零，天然适合特征选择。B 只缩小不归零，做不了选择；C/D 是训练技巧不直接做特征选择。常见误区是把'正则化都能做特征选择'。",
+      "startMs": 320000,
+      "endMs": 360000
+    },
+    {
+      "stem": "判断：训练误差远小于验证误差一定是过拟合。",
+      "type": "judge",
+      "options": ["正确", "错误"],
+      "answer": "错误",
+      "explanation": "通常是过拟合的信号，但也可能是训练-验证集分布不同（数据泄露的反面）。先排查数据划分，再下结论是过拟合——常见误区是直接归因。",
+      "startMs": 510000,
+      "endMs": 540000
+    },
+    {
+      "stem": "梯度下降法每一步沿 ___ 方向更新权重，目的是最小化损失函数。",
+      "type": "fill",
+      "options": [],
+      "answer": "负梯度",
+      "explanation": "沿负梯度方向是损失下降最快的方向（局部）。常见错误回答'梯度方向'——梯度方向是上升最快方向，要加负号。",
+      "startMs": 600000,
+      "endMs": 620000
+    }
+  ]
+}${buildTerminologyHintBlock(context.memory.terminologyHint)}`,
       },
     ],
     model,
@@ -194,6 +277,9 @@ function buildCards(
       meta: {
         cardKind: 'quiz',
         stem,
+        // 题型推断：显式传 type 优先，否则按 options 数量推断
+        // single (≥2 options + answer 是字母) / judge (options=正确/错误) / fill (options 空 + 有 answer) / short (空 options)
+        type: typeof draft.type === 'string' && draft.type ? draft.type : inferQuestionType(normalizedOptions, answer),
         options: normalizedOptions,
         answer,
         explanation,
@@ -208,9 +294,9 @@ export const quizPlugin: AppPlugin = {
   manifest: {
     id: 'quiz-arena',
     name: '测验工坊',
-    version: '0.1.0',
-    description: '对齐 NotebookLM 自测体验，自动生成带证据回放的课堂测验。',
-    tags: ['student', 'quiz', 'assessment'],
+    version: '0.2.0',
+    description: '生成多题型课堂测验（单选 / 判断 / 填空 / 简答）+ 证据回放 + 即时诊断。',
+    tags: ['student', 'quiz', 'assessment', 'multi-type'],
     capabilities: ['citation-card', 'seek-action', 'task-writeback'],
     enabledByDefault: true,
   },
@@ -255,7 +341,7 @@ export const quizPlugin: AppPlugin = {
 
     return {
       pluginId: 'quiz-arena',
-      version: '0.1.0',
+      version: '0.2.0',
       model,
       trace: [
         `intent=${context.goal.intent}`,
@@ -283,6 +369,7 @@ export const quizPlugin: AppPlugin = {
               id: card.id,
               title: card.title,
               stem: typeof card.meta?.stem === 'string' ? card.meta.stem : card.body,
+              type: typeof card.meta?.type === 'string' ? card.meta.type : 'single',
               options: Array.isArray(card.meta?.options) ? card.meta.options : [],
               answer: typeof card.meta?.answer === 'string' ? card.meta.answer : 'A',
               explanation: typeof card.meta?.explanation === 'string' ? card.meta.explanation : '',

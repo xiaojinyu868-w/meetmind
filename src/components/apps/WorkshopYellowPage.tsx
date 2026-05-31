@@ -21,9 +21,10 @@ import {
 } from 'lucide-react';
 import { DEFAULT_WORKSHOP_MODEL_ID } from '@/lib/services/llm-service';
 import type { Anchor, TranscriptSegment } from '@/types';
-import type { AppExecutionResult, DataSourceType } from '@/lib/ai-native/types';
+import type { AppExecutionResult, ContextTier, DataSourceType } from '@/lib/ai-native/types';
 import type { WorkshopAppCatalogItem, WorkshopAppKey } from '@/lib/ai-native/app-catalog';
 import { WORKSHOP_APP_CATALOG } from '@/lib/ai-native/app-catalog';
+import { isAppSupportedAtTier } from '@/lib/ai-native/context-pack';
 import {
   buildResultCacheKey,
   readCachedTaskState,
@@ -183,6 +184,14 @@ interface WorkshopYellowPageProps {
   summaryOverview?: string;
   keyDifficulties?: string[];
   onOpenAppWindow?: (appKey: WorkshopAppKey) => void;
+  /**
+   * 当前矩阵展示的层（PRD v1.1 §3 / §8）。
+   *
+   * 默认 'class' —— 本期所有调用点都在课堂复习页，未来单元/考试层落地时
+   * 会从对应路由传入对应 tier。catalog 中应用的 supportedTiers 字段决定
+   * 该 tier 下哪些应用应展示。
+   */
+  tier?: ContextTier;
 }
 
 function dockStorageKey(sessionId: string): string {
@@ -271,7 +280,16 @@ function ElapsedTimer({ startMs }: { startMs: number }) {
 }
 
 export function WorkshopYellowPage(props: WorkshopYellowPageProps) {
-  const { sessionId, dataSource, transcript, anchors, summaryOverview, keyDifficulties, onOpenAppWindow } = props;
+  const {
+    sessionId,
+    dataSource,
+    transcript,
+    anchors,
+    summaryOverview,
+    keyDifficulties,
+    onOpenAppWindow,
+    tier = 'class',
+  } = props;
   const router = useRouter();
   const searchParams = useSearchParams();
   const { accessToken } = useAuth();
@@ -303,9 +321,20 @@ export function WorkshopYellowPage(props: WorkshopYellowPageProps) {
   }, []);
 
   const visibleApps = useMemo(() => {
-    if (apps.length > 0) return apps;
-    return WORKSHOP_APP_CATALOG;
-  }, [apps]);
+    const source = apps.length > 0 ? apps : WORKSHOP_APP_CATALOG;
+    // 按当前 tier 过滤：本期 tier='class'，所有 catalog 应用都含 'class'，不会被过滤掉
+    // 未来 unit/exam tier 上线后，这里自动只展示该 tier 支持的应用（PRD v1.1 §8.5）
+    const filtered = source.filter((app) =>
+      isAppSupportedAtTier((app as WorkshopAppCatalogItem).supportedTiers, tier)
+    );
+    // 课堂播客降级（PRD v1.1 §5.5）：在卡片网格里排到最后，视觉次级化
+    // 它生成成本最高、不属于"桌前主流复习"，应该被理性的人主动去找而不是先看见
+    return [...filtered].sort((a, b) => {
+      if (a.key === 'audio-overview') return 1;
+      if (b.key === 'audio-overview') return -1;
+      return 0;
+    });
+  }, [apps, tier]);
 
   const appMap = useMemo(() => {
     const map: Record<string, WorkshopAppCatalogItem> = {};
@@ -649,7 +678,15 @@ export function WorkshopYellowPage(props: WorkshopYellowPageProps) {
   );
 
   const generateAll = useCallback(() => {
-    const pending = visibleApps.filter((app) => !runningMap[app.key] && !generatedMap[app.key]);
+    // 课堂播客降级（PRD v1.1 §5.5）：移出"先做一版都做"批量入口。
+    // 它生成时间长（≥3 分钟）+ 用户场景是"通勤/吃饭单点听"而非桌前批量复习。
+    // 用户仍可在卡片"先做一版"按钮里单独触发。
+    const pending = visibleApps.filter(
+      (app) =>
+        app.key !== 'audio-overview' &&
+        !runningMap[app.key] &&
+        !generatedMap[app.key]
+    );
     if (pending.length === 0) {
       toast.message('所有应用已生成或正在生成中');
       return;

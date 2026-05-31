@@ -93,6 +93,13 @@ export const ICON_STROKE = 1.75;
 /* ------------------------------------------------------------------ */
 
 export const SCENE_ITEMS: SceneItem[] = [
+  // PRD v1.1 §5.6：固定产物"一张图带走这节课"。默认场景，主分享路径。
+  {
+    key: 'class-take-away',
+    label: '一张图带走这节课',
+    description: '上=课程名+老师+日期，中=3 核心概念+老师金句，下=一句话总结+品牌',
+    Icon: ImageIcon,
+  },
   { key: 'infographic', label: '知识信息图', description: '适合课堂总结与重点提炼', Icon: BarChart3 },
   { key: 'knowledge-card', label: '知识卡片', description: '聚焦单个核心概念', Icon: BookOpen },
   { key: 'timeline', label: '时间线', description: '展示演变过程或步骤顺序', Icon: Clock },

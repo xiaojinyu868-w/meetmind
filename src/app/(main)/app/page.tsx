@@ -147,6 +147,8 @@ const MobileRecordTopBar = dynamic(() => import('@/components/mobile/MobileRecor
 const MobileAIFab = dynamic(() => import('@/components/mobile/MobileAIFab').then(m => ({ default: m.MobileAIFab })), { ssr: false });
 const MobileAIChatPanel = dynamic(() => import('@/components/mobile/MobileAIChatPanel').then(m => ({ default: m.MobileAIChatPanel })), { ssr: false });
 const MobileCollectionSheet = dynamic(() => import('@/components/mobile/MobileCollectionSheet').then(m => ({ default: m.MobileCollectionSheet })), { ssr: false });
+const MobileAppsSubPage = dynamic(() => import('@/components/mobile/MobileAppsSubPage').then(m => ({ default: m.MobileAppsSubPage })), { ssr: false });
+const MobileSimpleSubPage = dynamic(() => import('@/components/mobile/MobileAppsSubPage').then(m => ({ default: m.MobileSimpleSubPage })), { ssr: false });
 
 // ── Types → @/types/page-types · Utils → @/lib/utils/page-utils ──
 
@@ -1730,11 +1732,11 @@ function StudentAppContent({
                 handleViewModeChange('review');
               }}
               onStartRecording={() => {
-                // 课堂 tab 的 Recorder 是 sr-only 挂载点（不带 compactMode，走 streaming）。
-                // 绝对不要打开 showMobileRecorder —— 否则会同时渲染两个 Recorder：
-                //   1) showMobileRecorder 挂载点：compactMode=true，强制 batch、无流式 ASR
-                //   2) sr-only 挂载点：streaming
-                // 它们会互相抢 recorderRef 和麦克风权限，导致用户拿到的实际是 batch 模式。
+                // 课堂 tab 的 Recorder 是 sr-only 挂载点。
+                // showMobileRecorder 挂载点用 compactMode（紧凑布局），但 transcribeMode
+                // 不再被 compactMode 影响（手机端 P0 修复，Recorder.tsx 已解耦）——
+                // 两处都默认 streaming，挂载点冲突时 recorderRef / 麦克风权限会互相抢，
+                // 仍然不要同时打开两个挂载点。
                 if (recorderRef.current) {
                   void recorderRef.current.startRecording();
                 } else {
@@ -1795,8 +1797,9 @@ function StudentAppContent({
           </div>
           {/* ── 课堂 tab 下的 Recorder 挂载点：视觉隐藏，只作为录音引擎 ── */}
           {/* 这里挂载 = 录音发生在课堂 tab 内，不跳走 */}
-          {/* 注意：不传 compactMode！compactMode 会强制 batch 模式，阻止流式 ASR 初始化。
-             课堂 tab 需要实时转录，所以走 streaming 模式。UI 已被 sr-only 隐藏，样式无所谓。 */}
+          {/* 历史：旧实现里 compactMode 会强制 batch 模式、阻止流式 ASR；手机端 P0
+             修复后 compactMode 已解耦（仅影响 UI 紧凑度），现在 streaming 是默认。
+             这里仍不传 compactMode 是因为整块被 sr-only 隐藏，UI 尺寸无所谓。 */}
           {/* continueCurrentSession 强制 false：课堂场景下"开始录音"= 一节新课，
              必须生成新 sessionId，否则 saveAudioSession 的 upsert 会把新内容
              merge 到上一次课的那一行，导致课堂列表看不到新卡片。 */}
@@ -2134,45 +2137,25 @@ function StudentAppContent({
               )}
 
               {mobileSubPage === 'apps' && (
-                <div className="flex min-h-0 flex-1 flex-col bg-white">
-                  <div className="flex items-center gap-3 border-b border-divider px-4 py-3">
-                    <button
-                      onClick={() => setMobileSubPage(null)}
-                      className="flex h-8 w-8 items-center justify-center rounded-full text-ink-secondary transition-colors hover:bg-divider-light hover:text-ink"
-                    >
-                      <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-                      </svg>
-                    </button>
-                    <span className="font-medium text-ink">学习应用</span>
-                  </div>
-                  <div className="flex-1 min-h-0 overflow-hidden">
-                    {renderSharedWorkspacePanel('apps')}
-                  </div>
-                </div>
+                <MobileAppsSubPage
+                  title="学习应用"
+                  onBack={() => setMobileSubPage(null)}
+                >
+                  {renderSharedWorkspacePanel('apps')}
+                </MobileAppsSubPage>
               )}
 
               {mobileSubPage === 'tasks' && (
-                <div className="flex min-h-0 flex-1 flex-col bg-white">
-                  <div className="flex items-center gap-3 border-b border-divider px-4 py-3">
-                    <button
-                      onClick={() => setMobileSubPage(null)}
-                      className="flex h-8 w-8 items-center justify-center rounded-full text-ink-secondary transition-colors hover:bg-divider-light hover:text-ink"
-                    >
-                      <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-                      </svg>
-                    </button>
-                    <span className="font-medium text-ink">今日任务</span>
-                  </div>
-                  <div className="flex-1 min-h-0 overflow-hidden">
-                    <ActionList
-                      items={actionItems}
-                      onComplete={handleActionComplete}
-                      onStartNext={handleStartNextAction}
-                    />
-                  </div>
-                </div>
+                <MobileSimpleSubPage
+                  title="今日任务"
+                  onBack={() => setMobileSubPage(null)}
+                >
+                  <ActionList
+                    items={actionItems}
+                    onComplete={handleActionComplete}
+                    onStartNext={handleStartNextAction}
+                  />
+                </MobileSimpleSubPage>
               )}
 
               {/* Right-side drawer menu. */}

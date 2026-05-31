@@ -1,4 +1,4 @@
-import type { AppRenderMode } from './types';
+import type { AppRenderMode, ContextTier } from './types';
 
 export type WorkshopAppKey =
   | 'audio-overview'
@@ -22,6 +22,24 @@ export interface WorkshopAppCatalogItem {
   outputType: string;
   renderMode: AppRenderMode | 'custom(image-first)';
   status: 'ready' | 'preview';
+  /**
+   * 本应用支持的上下文层（PRD v1.1 §4.2）。
+   *
+   * - 'class'：单节课层（本期所有应用必含）
+   * - 'unit'：跨课单元层（v1.1 推迟）
+   * - 'exam'：考试层（v1.1 推迟）
+   *
+   * 即使本期 tier='class' 是唯一落地的层，这里也按设计意图标注全集；
+   * `WorkshopYellowPage` 当前只过滤含 'class' 的应用。
+   */
+  supportedTiers: ContextTier[];
+  /**
+   * 主舞台层。用于 UI 排序 / 推荐 hint，不影响过滤。
+   *
+   * 即使主舞台是 'unit'（如 mindmap），本期未落地时仍按 supportedTiers 包含的
+   * 'class' 层在课堂矩阵里展示其退化形态。
+   */
+  primaryTier: ContextTier;
 }
 
 export const WORKSHOP_APP_CATALOG: WorkshopAppCatalogItem[] = [
@@ -39,6 +57,9 @@ export const WORKSHOP_APP_CATALOG: WorkshopAppCatalogItem[] = [
     outputType: '可打印卡片',
     renderMode: 'document',
     status: 'ready',
+    // 心智：开卷考 / 允许带一张 A4 / quiz 时（PRD v1.1 §5.7）。已完成（fix12）。
+    supportedTiers: ['class', 'unit', 'exam'],
+    primaryTier: 'class',
   },
   {
     key: 'audio-overview',
@@ -53,6 +74,9 @@ export const WORKSHOP_APP_CATALOG: WorkshopAppCatalogItem[] = [
     outputType: '真实播客音频',
     renderMode: 'audio',
     status: 'ready',
+    // 仅课堂层：30 分钟长音频在 unit/exam 层听不下去（PRD v1.1 §5.5）。
+    supportedTiers: ['class'],
+    primaryTier: 'class',
   },
   {
     key: 'flashcards',
@@ -67,6 +91,9 @@ export const WORKSHOP_APP_CATALOG: WorkshopAppCatalogItem[] = [
     outputType: '训练型闪卡',
     renderMode: 'flashcards',
     status: 'ready',
+    // 三层都在，主舞台课堂（PRD v1.1 §5.2）。
+    supportedTiers: ['class', 'unit', 'exam'],
+    primaryTier: 'class',
   },
   {
     key: 'quiz',
@@ -81,6 +108,10 @@ export const WORKSHOP_APP_CATALOG: WorkshopAppCatalogItem[] = [
     outputType: '可作答测验',
     renderMode: 'quiz',
     status: 'ready',
+    // 注意：本应用 = 用户主动触发的事后测验。视频内随堂检验是另一个 plugin
+    // (class-check)，不在 catalog（PRD v1.1 §5.3）。
+    supportedTiers: ['class', 'unit', 'exam'],
+    primaryTier: 'class',
   },
   {
     key: 'mindmap',
@@ -95,20 +126,26 @@ export const WORKSHOP_APP_CATALOG: WorkshopAppCatalogItem[] = [
     outputType: '交互导图',
     renderMode: 'mindmap',
     status: 'ready',
+    // 单元层是主舞台（跨课节点合并），课堂层为退化形态（PRD v1.1 §5.4）。
+    supportedTiers: ['class', 'unit'],
+    primaryTier: 'unit',
   },
   {
     key: 'infographic',
     name: '信息图应用',
     category: '视觉表达',
-    headline: '课堂可视化图片生成',
-    description: '支持信息图、知识卡片、流程图、时间线等 8 种场景，可以按课堂内容生成一张清晰图片。',
-    tags: ['图片草稿', '信息图', '知识卡片', '视觉总结'],
+    headline: '一张图带走这节课',
+    description: '一键生成"一张图带走这节课"卡片：上=课程名+老师+日期，中=3 核心概念+老师金句，下=一句话总结。结构干净，可直接分享。',
+    tags: ['一张图', '课堂卡', '可分享', '视觉总结'],
     coverImage: '/images/apps/infographic-cover.svg',
     pluginId: 'studio-workshop',
-    intent: '生成课堂可视化图片，可一键直接生成，也可先定制参数或先选一种图文结构后再生成。支持多种场景预设。',
+    intent: '生成"一张图带走这节课"固定版式卡片：上中下三段，结构干净零个人化痕迹。',
     outputType: '图片',
     renderMode: 'custom(image-first)',
     status: 'ready',
+    // PR-8 重做后：固定为"一张图带走这节课"（PRD v1.1 §5.6）。
+    supportedTiers: ['class', 'unit'],
+    primaryTier: 'class',
   },
   {
     key: 'study-report',
@@ -123,6 +160,10 @@ export const WORKSHOP_APP_CATALOG: WorkshopAppCatalogItem[] = [
     outputType: '结构化报告',
     renderMode: 'document',
     status: 'ready',
+    // 家长视角，单课内闭环。依赖 class-check（视频复习场景）的答题数据
+    // （PRD v1.1 §5.8）。已完成。
+    supportedTiers: ['class'],
+    primaryTier: 'class',
   },
 ];
 

@@ -1381,3 +1381,54 @@ p, span, div, h1, h2, h3, h4, h5, h6, li, td, th, label {
   50%      { transform: translateY(-6px) rotate(-1.2deg); }
 }
 
+/* ─────────────────────────────────────────────────────────────────────
+ * 手机端 P1：基础工程 utilities（PRD docs/MOBILE_INVESTIGATION.md §5）
+ *
+ * iOS HIG / Material：触屏按钮最小 44×44px。本项目过去多处用 h-8 w-8 (32px)
+ * 导致点击精度差、误触多。提供命名 utility，让 mobile 组件按需启用。
+ * ───────────────────────────────────────────────────────────────────── */
+
+/** 44×44 最小触控目标 + 禁用双击缩放 */
+.mm-touch-target {
+  min-height: 44px;
+  min-width: 44px;
+  touch-action: manipulation;
+}
+
+/** 36×36 紧凑触控目标——只在卡片角落次要操作里使用 */
+.mm-touch-target-sm {
+  min-height: 36px;
+  min-width: 36px;
+  touch-action: manipulation;
+}
+
+/** 手机端原生滚动：动量 + 局部弹性 + 不污染父 scroll */
+.mm-mobile-scroll {
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+}
+
+/** 移动端可读字号，避免 12px 中文渲染发糊 */
+.mm-mobile-text-sm { font-size: 13px; line-height: 1.55; }
+.mm-mobile-text-base { font-size: 15px; line-height: 1.6; }
+.mm-mobile-text-lg { font-size: 17px; line-height: 1.5; font-weight: 600; }
+
+/** 手机端安全区底部填充——浮动 dock / 输入栏底部预留 */
+.mm-safe-bottom {
+  padding-bottom: max(env(safe-area-inset-bottom, 0px), 12px);
+}
+
+/** 手机端 sticky 顶部头部——配合 safe-area-inset-top */
+.mm-mobile-header {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  padding-top: max(env(safe-area-inset-top, 0px), 8px);
+}
+
+/* 触屏设备整体提升交互稳健性 */
+@media (pointer: coarse) {
+  /* 触屏 hover 残留消除：触屏点完按钮后 :hover 状态会卡住，看起来"按了没释放" */
+  *:hover { transition-duration: 0ms !important; }
+}
+
