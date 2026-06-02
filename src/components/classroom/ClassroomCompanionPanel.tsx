@@ -31,10 +31,9 @@
  * 设计系统：v7 设计宪法：95% 克制 + 5% 仪式时刻情绪化（shadow-soft / shadow-card / shadow-ai-glow）
  */
 
-import React, { useState, useRef, useEffect, useCallback } from 'react';
+import React, { useEffect } from 'react';
 import { ArrowUp, Radio, Eye } from 'lucide-react';
 import type { CompanionMessage, CompanionCard } from './types';
-import { CompanionMarkdown } from './CompanionMarkdown';
 import { OctoBuddySprite } from './OctoBuddy';
 import { ThinkingStrip } from '@/components/ui/thinking-strip';
 import { InlineAppCard, type InlineAppInteraction } from './InlineAppCard';
@@ -43,6 +42,10 @@ import type { WorkshopAppKey } from '@/lib/ai-native/app-catalog';
 import { COPY } from '@/lib/ui/copy';
 import { IN_CLASS_PENDING_REPLY_LABEL } from '@/lib/utils/classroom-companion-copy';
 import { buildClassroomCompanionPanelModel } from './ClassroomCompanionPanel.model';
+// M13：迁底座 —— 共用 ChatRenderer (KaTeX + Shiki + lightbox + useDeferredValue)
+//                共用 useChatComposer (IME 安全 + 草稿 + 大段粘贴拦截)
+import { ChatRenderer, useChatComposer } from '@/components/chat';
+import { normalizeCompanionMarkdown } from './companion-markdown-utils';
 
 const IN_CLASS_EXCLUDED_SKILL_APP_KEYS: readonly WorkshopAppKey[] = ['flashcards', 'quiz', 'study-report'];
 
@@ -218,7 +221,10 @@ function CompanionBubble({
   return (
     <div className="px-6 pt-2 pb-5">
       {message.content ? (
-        <CompanionMarkdown content={message.content} isStreaming={isStreaming} />
+        <ChatRenderer
+          content={normalizeCompanionMarkdown(message.content)}
+          isStreaming={isStreaming}
+        />
       ) : null}
       {/* 内联应用产物——在 listening 态只保留课中适合的结构/速查类内容。 */}
       {message.inlineApp ? (
@@ -394,26 +400,38 @@ function ListeningStarterCard({
   );
 }
 
-/** 底部输入框（ChatGPT 风格：上文本区 + 下按钮行） */
+/** 底部输入框（ChatGPT 风格：上文本区 + 下按钮行）
+ *
+ * M13：迁底座 —— 内部 state/IME/草稿 用 useChatComposer hook 统一处理。
+ * 保留独有的 ⌘K / "/" 全局快捷键 + ArrowUp 圆形发送按钮外观。
+ */
 function CompanionComposer({
   placeholder,
   onSend,
   statusLabel,
+  draftKey,
 }: {
   placeholder: string;
   onSend: (t: string) => void;
   statusLabel?: string;
+  draftKey?: string;
 }) {
-  const [text, setText] = useState('');
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  // M13：底座 hook —— 自动处理 IME / 草稿持久化 / 自适应高度 / Enter 发送 / 大段粘贴
+  const composer = useChatComposer({
+    draftKey,
+    onSubmit: onSend,
+    enterBehavior: 'send',
+  });
+  const { textareaProps, value, submit } = composer;
+  const textareaRef = textareaProps.ref;
 
-  // 自适应高度
+  // 自适应高度（保留原行为；底座 hook 没自带 textarea-resize）
   useEffect(() => {
     const ta = textareaRef.current;
     if (!ta) return;
     ta.style.height = 'auto';
     ta.style.height = `${Math.min(ta.scrollHeight, 120)}px`;
-  }, [text]);
+  }, [value, textareaRef]);
 
   // ⌘K / Ctrl+K 全局快捷键：把焦点切到这个 composer。
   // 用户在阅读转录时能单键唤起同学对话——跨面板焦点管理，是 agent-native 对
@@ -424,7 +442,6 @@ function CompanionComposer({
       const tag = (e.target as HTMLElement | null)?.tagName;
       const activeIsInput = tag === 'INPUT' || tag === 'TEXTAREA';
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
-        // 允许从另一个 input 跳过来，但避免和浏览器默认（地址栏）冲突
         e.preventDefault();
         textareaRef.current?.focus();
         return;
@@ -437,35 +454,9 @@ function CompanionComposer({
     };
     window.addEventListener('keydown', onKeydown);
     return () => window.removeEventListener('keydown', onKeydown);
-  }, []);
+  }, [textareaRef]);
 
-  const canSend = text.trim().length > 0;
-
-  const handleSend = useCallback(() => {
-    if (!canSend) return;
-    onSend(text.trim());
-    setText('');
-  }, [text, canSend, onSend]);
-
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    // Enter 发送；Ctrl/Cmd+Enter 换行；IME 输入中不触发
-    if (e.key !== 'Enter' || e.nativeEvent.isComposing) return;
-    if (e.ctrlKey || e.metaKey) {
-      // Ctrl/Cmd+Enter = 换行（浏览器默认不会在 textarea 里插入，手动处理）
-      e.preventDefault();
-      const textarea = e.currentTarget;
-      const start = textarea.selectionStart;
-      const end = textarea.selectionEnd;
-      const next = text.slice(0, start) + '\n' + text.slice(end);
-      setText(next);
-      requestAnimationFrame(() => {
-        textarea.selectionStart = textarea.selectionEnd = start + 1;
-      });
-      return;
-    }
-    e.preventDefault();
-    handleSend();
-  };
+  const canSend = value.trim().length > 0;
 
   return (
     <div className="flex-shrink-0 border-t border-divider px-5 pb-5 pt-4">
@@ -477,10 +468,7 @@ function CompanionComposer({
       ) : null}
       <div className="rounded-3xl border border-divider bg-white transition-colors focus-within:border-ink-muted">
         <textarea
-          ref={textareaRef}
-          value={text}
-          onChange={(e) => setText(e.target.value)}
-          onKeyDown={handleKeyDown}
+          {...textareaProps}
           placeholder={placeholder}
           rows={1}
           className="block w-full resize-none bg-transparent px-5 pt-4 pb-1 text-[14px] leading-[1.7] text-ink placeholder:text-ink-muted/70 focus:outline-none"
@@ -492,7 +480,7 @@ function CompanionComposer({
           </div>
           <button
             type="button"
-            onClick={handleSend}
+            onClick={submit}
             disabled={!canSend}
             className={`flex h-8 w-8 items-center justify-center rounded-xl transition-all ${
               canSend
@@ -541,7 +529,10 @@ function StreamingBubble({
   }
   return (
     <div className="px-6 pb-5">
-      <CompanionMarkdown content={message.content} isStreaming />
+      <ChatRenderer
+        content={normalizeCompanionMarkdown(message.content)}
+        isStreaming
+      />
     </div>
   );
 }
@@ -644,7 +635,12 @@ export function ClassroomCompanionPanel({
         </div>
       ) : null}
 
-      <CompanionComposer placeholder={effectivePlaceholder} onSend={onSend} statusLabel={pendingReplyLabel} />
+      <CompanionComposer
+        placeholder={effectivePlaceholder}
+        onSend={onSend}
+        statusLabel={pendingReplyLabel}
+        draftKey={`classroom-companion:${mode}`}
+      />
     </div>
   );
 }

@@ -926,7 +926,6 @@ export function TranscriptFlowView({
           selection={selection}
           fullContextText={fullContextText}
           onClose={clearSelection}
-          onTimestampClick={onTimestampClick}
         />
       )}
     </div>

@@ -149,7 +149,7 @@ export default function SettingsPage() {
     let alive = true;
     const loadModels = async () => {
       try {
-        const response = await fetch('/api/chat');
+        const response = await fetch('/api/llm/models');
         const data = (await response.json()) as {
           models?: Array<{ id?: string; name?: string; recommended?: boolean }>;
           defaultModel?: string;

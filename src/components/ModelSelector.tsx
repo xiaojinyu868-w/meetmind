@@ -41,7 +41,7 @@ export function ModelSelector({
   }, [allowedProviderSet, models]);
 
   useEffect(() => {
-    fetch('/api/chat')
+    fetch('/api/llm/models')
       .then(res => res.json())
       .then(data => setModels(data.models || []))
       .catch(console.error);

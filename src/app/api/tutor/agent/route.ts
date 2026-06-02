@@ -115,6 +115,14 @@ const ContextSchema = z
         sessionHint: z.string().optional(),
       })
       .optional(),
+    /** 仅 mode='word'：选词解释浮窗（M13 收口）。 */
+    word: z
+      .object({
+        selectionText: z.string().min(1).max(2000),
+        nearbyContext: z.string().max(4000).optional(),
+        fullTranscriptTail: z.string().max(8000).optional(),
+      })
+      .optional(),
   })
   .default({});
 
@@ -148,7 +156,7 @@ const BodySchema = z.object({
    * v3.0：新增 'shared' —— 走 SharedAgent 公开对话路径，需配合 shareToken。
    * 「聊聊你想要的」：新增 'goal' —— 用户和教练对话梳理目标，无课堂上下文，禁用 native tools 和 inline app。
    */
-  mode: z.enum(['in-class', 'review', 'shared', 'goal']).default('review'),
+  mode: z.enum(['in-class', 'review', 'shared', 'goal', 'word']).default('review'),
   /** v3.0 仅 shared 模式：分享 token，从 SharedAgent.snapshotJson 加载上下文 */
   shareToken: z.string().max(32).optional(),
   context: ContextSchema,

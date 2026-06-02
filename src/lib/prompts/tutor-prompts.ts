@@ -23,7 +23,7 @@
  * 版本化：`PROMPT_VERSIONS` 给 Sentry span `experimental_telemetry.metadata` 做切片。
  */
 
-export type TutorMode = 'in-class' | 'review' | 'shared' | 'goal';
+export type TutorMode = 'in-class' | 'review' | 'shared' | 'goal' | 'word';
 export type TutorInlineAppKey = 'flashcards' | 'quiz' | 'mindmap' | 'cheatsheet' | 'study-report';
 
 const IN_CLASS_INLINE_APP_KEYS: readonly TutorInlineAppKey[] = ['mindmap', 'cheatsheet'];
@@ -39,6 +39,11 @@ const SHARED_INLINE_APP_KEYS: readonly TutorInlineAppKey[] = [];
  * 当用户的目标变清晰、想动手做某件事时，应自然引导他回到主场景（录课/复习/笔记）。
  */
 const GOAL_INLINE_APP_KEYS: readonly TutorInlineAppKey[] = [];
+/**
+ * 选词解释浮窗（M13 收口）——禁用 inline app。
+ * 浮窗就是用来"快速搞懂这一个词/这一段在说什么"的，不是生产结构化产物的入口。
+ */
+const WORD_INLINE_APP_KEYS: readonly TutorInlineAppKey[] = [];
 
 const INLINE_APP_LABELS: Record<TutorInlineAppKey, string> = {
   flashcards: '闪卡',
@@ -80,6 +85,22 @@ export interface TutorSystemContext {
     existingBio?: { headline: string; detail?: string };
     /** 用户在这次对话之前留下的简短上下文（比如"想清楚下周做什么"） */
     sessionHint?: string;
+  };
+  /**
+   * 仅 word：选词解释浮窗（M13 收口）。
+   * 用户在转录里圈出一个词/一段话，浮窗弹出。AI 借这一段课堂上下文解释。
+   */
+  word?: {
+    /** 用户圈出的那段（关键） */
+    selectionText: string;
+    /** 选区前后 ~200 字的局部上下文（让 AI 知道这个词在哪句话里用） */
+    nearbyContext?: string;
+    /**
+     * 全量课堂转录（取尾部 8000 字，前置在 prompt 里参考；让 AI 知道整个上下文走向）。
+     * 注意：长上下文会增加 prefill TTFT；这是浮窗特性 vs 性能的权衡——
+     * selection.context 已经覆盖了 80% 用例，fullTranscript 是 long-tail。
+     */
+    fullTranscriptTail?: string;
   };
 }
 
@@ -478,6 +499,56 @@ function capGoalContext(goal: NonNullable<TutorSystemContext['goal']>): string {
   return '\n' + lines.join('\n');
 }
 
+/**
+ * 选词解释浮窗（mode='word'）的 system segment。
+ *
+ * 设计：浮窗是一个非常具体的微场景——学生在看课堂转录，圈出一个词或一句话，
+ * 想就着课堂语境快速搞懂它。不是抽象定义，不是百科。
+ * 体感上类似 Mac 的"查询"——按下就出结果，越快越好。
+ *
+ * 因此这个 prompt 极简：
+ *   - 不堆教科书定义（不要"X 是 Y 的一种"那种结构）
+ *   - 不要长（一两段就够，多了浮窗装不下）
+ *   - 不要时间戳（浮窗里不能跳）
+ *   - 不要 inline app（浮窗不生产产物）
+ *   - 不要 thinking guide（不演示思维过程，直接给答案）
+ *   - 用模型自己判断：到底是要解释术语？解释一句话？翻译？拆词？
+ */
+const MODE_WORD_SEGMENT = `
+此刻他在看一节课的转录，圈出了一段话——可能是一个术语、一个句子、一个公式名、甚至一段英文。
+他不是在考你"X 的定义是什么"，他是想"在这节课的语境里，这个东西到底在说什么"。
+
+你的回答方式：
+- **就着课堂语境**说，不要堆抽象定义。如果上下文里这个词被用得很特殊（比如老师赋予了某个具体含义），就说那个含义。
+- **直白且短**。一两段就够，越短越好。浮窗的空间有限，他想快速看懂就关。
+- 如果他选的是英文/外文/公式名，先用一句中文把它"还原"，再点出在这节课里它指什么。
+- 如果他选的是一整句话，帮他把这句话**用更直白的方式重述一遍**，再说"老师其实是想说 X"。
+- 如果他追问，就接着上一段往下走，**不要重新解释一遍**。
+
+不要做的事：
+- 不要写"X 是一种 Y，常用于 Z 场景"这种维基百科式开头
+- 不要列要点 / 出题 / 给练习
+- 不要在第一句话之前说"好的"、"当然"、"没问题"——直接进入解释
+- 不要回报告时间戳`;
+
+function capWordContext(word: NonNullable<TutorSystemContext['word']>): string {
+  const lines: string[] = [];
+  lines.push('【他选中的内容】');
+  lines.push(word.selectionText.trim());
+  if (word.nearbyContext?.trim()) {
+    lines.push('');
+    lines.push('【这段话出现在课堂上的具体语境】');
+    lines.push(word.nearbyContext.trim());
+  }
+  if (word.fullTranscriptTail?.trim()) {
+    // 全量转录尾部 ≤ 8000 字，给 AI 兜底参考用，不当作"必须读完"
+    lines.push('');
+    lines.push('【这节课最近讲到的整体上下文（仅作参考，不必逐句读）】');
+    lines.push(word.fullTranscriptTail.trim());
+  }
+  return '\n' + lines.join('\n');
+}
+
 // ──────────────────────────────────────────────────────────────
 // 核心组装器
 // ──────────────────────────────────────────────────────────────
@@ -509,6 +580,8 @@ export function buildTutorSystemPrompt(
   } else if (mode === 'goal') {
     // M13：按 context 选择性拼接 PATH_A/B（节省 35% prompt 长度）
     parts.push(buildGoalSegment(context));
+  } else if (mode === 'word') {
+    parts.push(MODE_WORD_SEGMENT);
   } else {
     parts.push(MODE_REVIEW_SEGMENT);
   }
@@ -528,11 +601,15 @@ export function buildTutorSystemPrompt(
     const goalSegment = capGoalContext(context.goal ?? {});
     if (goalSegment) parts.push(goalSegment);
   }
+  if (mode === 'word' && context.word) {
+    parts.push(capWordContext(context.word));
+  }
   if (context.supportMaterials && context.supportMaterials.length > 0) {
     parts.push(capSupportMaterials(context.supportMaterials));
   }
   // 隐私铁律：分享态下不注入 learnerProfile —— 那是访问者本人的，不该灌给"分享者刻下的同学"
   // goal 态可以注入：那是用户自己在和教练聊自己的事，learner profile 是他自己的画像
+  // word 态：可以注入（让 AI 知道这是谁在问，但实际很少用到）
   if (mode !== 'shared' && context.learnerProfile?.trim()) {
     parts.push(capLearnerProfile(context.learnerProfile));
   }
@@ -540,12 +617,12 @@ export function buildTutorSystemPrompt(
   // Options（可选能力段）
   // 分享态默认不返回时间戳：访客没有原录音/视频，[MM:SS] 点了不响应是"死链"
   // 体验。只有 review 真的能跳回原文，是默认开启的对象。
-  // goal 态没有课堂上下文，时间戳完全不适用，强制关闭。
+  // goal / word 态没有播放上下文，时间戳完全不适用，强制关闭。
   const returnTimestamps = options.returnTimestamps ?? mode === 'review';
-  const allowInlineApp = options.allowInlineApp ?? (mode !== 'shared' && mode !== 'goal');
+  const allowInlineApp = options.allowInlineApp ?? (mode !== 'shared' && mode !== 'goal' && mode !== 'word');
   const thinkingGuide = options.thinkingGuide ?? false;
 
-  if (returnTimestamps && mode !== 'goal') {
+  if (returnTimestamps && mode !== 'goal' && mode !== 'word') {
     parts.push(capTimestampsInstruction());
   }
   if (allowInlineApp) {
@@ -557,12 +634,14 @@ export function buildTutorSystemPrompt(
           ? SHARED_INLINE_APP_KEYS
           : mode === 'goal'
             ? GOAL_INLINE_APP_KEYS
-            : REVIEW_INLINE_APP_KEYS);
+            : mode === 'word'
+              ? WORD_INLINE_APP_KEYS
+              : REVIEW_INLINE_APP_KEYS);
     if (allowedInlineApps.length > 0) {
       parts.push(capOpenAppContract(allowedInlineApps));
     }
   }
-  // 思维引导仅在 review 下生效——in-class / shared / goal 即使 flag 为 true 也忽略
+  // 思维引导仅在 review 下生效——in-class / shared / goal / word 即使 flag 为 true 也忽略
   if (thinkingGuide && mode === 'review') {
     parts.push(capThinkingGuide());
   }
