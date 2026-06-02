@@ -24,6 +24,7 @@ const PUBLIC_ROUTES = [
   '/api/llm/models',
   '/api/asr-config',
   '/api/asr-stream',
+  '/api/asr/oneshot',
   '/api/tutor-call',
   '/api/transcribe',
   '/api/transcribe-fast',
