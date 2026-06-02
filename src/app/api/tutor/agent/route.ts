@@ -340,9 +340,14 @@ function createTutorAttemptStream({
           // R9 节奏调优（2026-05-31 二次）：默认 delayInMs=10ms 配合中文 1 字 1 切 =
           // 50 字 0.5s 闪过，体感像"愣 → 整段砸出"。改 30ms 让逐字浮现可见。
           // 50 字 1.5s 浮现，符合人眼舒适阅读节奏，又不会让用户觉得 AI 在"打字慢"。
+          //
+          // M13 TTFT 优化（2026-06-02 晚）：30ms × 50 字 = 1500ms 才"读完整段"，
+          // 实际拖慢用户"读到答案"的感知速度。压回 12ms：50 字 0.6s 浮现完，比 30ms
+          // 快 60%。**首 token 不受 delayInMs 影响**——smoothStream 第一个 chunk 立即下发；
+          // 这次调小是为了"看到第一个字到读完答案"的整体感知速度。
           experimental_transform: smoothStream({
             chunking: /[\u4E00-\u9FFF\u3000-\u303F\uFF00-\uFFEF]|\S+\s+/,
-            delayInMs: 30,
+            delayInMs: 12,
           }),
           experimental_telemetry: {
             isEnabled: true,

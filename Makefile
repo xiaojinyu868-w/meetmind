@@ -68,6 +68,11 @@ smoke-shared: ## 分享态 shared 模式 e2e（隐私铁律：不出时间戳/�
 smoke-all: ## 跑全部 4 个 mode 的 e2e smoke（goal + review + in-class + shared）
 	@$(MAKE) smoke-intent && $(MAKE) smoke-review && $(MAKE) smoke-in-class && $(MAKE) smoke-shared
 
+.PHONY: ttft
+ttft: ## 测首 token 延迟（4 mode × N=5）—— 优化任何 prompt / smoothStream / provider 后必跑
+	@PORT=$${PORT:-3002} N=$${N:-5} \
+	 npx tsx scripts/measure-ttft.ts
+
 # === Eval Harness ===
 # 设计原则：见 tests/eval/README.md
 # 每次改 ASR / Agent 前后必跑，数字变动 = 回归信号
