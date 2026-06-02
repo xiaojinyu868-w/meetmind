@@ -132,7 +132,10 @@ export class DashScopeASRClient {
         this.updateStatus('connecting');
 
         const candidateUrls = buildAsrWebSocketCandidates(window.location.href);
-        const maxAttempts = this.options.maxReconnectAttempts ?? 30;
+        // M13-fix: 默认重连次数从 30 降到 8。
+        // 30 次（指数退避到 ~10s 上限）= 最长重试 ~80s，对真·鉴权失败/服务异常场景毫无意义，
+        // 反而堆出几十条同样的报错刷爆日志。8 次（~30s）足够覆盖瞬时网络波动，重大故障应该让用户感知。
+        const maxAttempts = this.options.maxReconnectAttempts ?? 8;
 
         const tryConnect = (urlIndex: number) => {
           if (urlIndex >= candidateUrls.length) {
@@ -210,6 +213,19 @@ export class DashScopeASRClient {
             this.stopKeepAlive();
             this.ws = null;
 
+            // M13-fix: 4401 = 服务端标记的鉴权失败，重连无意义，立刻给用户清晰提示
+            if (event.code === 4401) {
+              this.userStopRequested = true;
+              if (this.reconnectTimer) {
+                clearTimeout(this.reconnectTimer);
+                this.reconnectTimer = null;
+              }
+              this.updateStatus('error');
+              this.callbacks.onError?.('实时转写服务密钥失效，请联系管理员更新 DashScope 密钥后重试');
+              settle(false);
+              return;
+            }
+
             if (!connected) {
               if (urlIndex < candidateUrls.length - 1) {
                 tryConnect(urlIndex + 1);
@@ -281,6 +297,20 @@ export class DashScopeASRClient {
           this.callbacks.onTaskStarted?.();
           this.flushAudioQueue();
           break;
+
+        // M13-fix: 服务端检测到 DashScope 401/403 时下发 auth_failed
+        // 鉴权失败重连无意义——立刻终止，给用户清晰提示
+        case 'auth_failed': {
+          this.userStopRequested = true; // 关掉重连闸门
+          if (this.reconnectTimer) {
+            clearTimeout(this.reconnectTimer);
+            this.reconnectTimer = null;
+          }
+          const reason = typeof msg.error === 'string' ? msg.error : '识别服务密钥失效';
+          this.callbacks.onError?.(`${reason}（请联系管理员更新 DashScope 密钥）`);
+          this.updateStatus('error');
+          break;
+        }
 
         case 'result':
           this.handleResult(msg.sentence, msg.replaces, msg.provisional);
@@ -587,7 +617,7 @@ export class DashScopeASRClient {
           errorCode: 'RECONNECT_START_FAILED',
           errorMsg: `lastCloseCode=${lastCloseCode} reason=${lastCloseReason}`,
         });
-        const maxAttempts = this.options.maxReconnectAttempts ?? 30;
+        const maxAttempts = this.options.maxReconnectAttempts ?? 8;
         if (!this.userStopRequested && this.reconnectAttempts < maxAttempts) {
           this.scheduleReconnect(lastCloseCode, lastCloseReason);
         } else {

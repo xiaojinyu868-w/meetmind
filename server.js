@@ -742,10 +742,18 @@ app.prepare().then(() => {
 
       dashscopeWs.on('error', (error) => {
         console.error('[ASR-Proxy] DashScope error:', error.message);
-        sendClientEvent({ event: 'error', error: `DashScope 连接错误: ${error.message}` });
+        // M13-fix: 把 401 / 403 等不可恢复的鉴权错误专门标记，让客户端立刻停止重连。
+        // 默认无差别 close=1011 会让客户端反复重试 30 次（每次都失败），日志风暴。
+        const authFailed = /401|403|InvalidApiKey|Unauthorized|access denied/i.test(error.message || '');
+        if (authFailed) {
+          sendClientEvent({ event: 'auth_failed', error: `识别服务密钥失效或无权限：${error.message}` });
+        } else {
+          sendClientEvent({ event: 'error', error: `DashScope 连接错误: ${error.message}` });
+        }
         // DashScope 连接异常，关闭客户端避免 audioQueue 无限增长
         if (clientWs.readyState === WebSocket.OPEN) {
-          clientWs.close(1011, 'DashScope connection error');
+          // 4401 = 自定义不可重连码（应用层语义：鉴权失败，重连无意义）
+          clientWs.close(authFailed ? 4401 : 1011, authFailed ? 'DashScope auth failed' : 'DashScope connection error');
         }
       });
 
@@ -1107,7 +1115,16 @@ app.prepare().then(() => {
 
       dashscopeWs.on('error', (error) => {
         console.error('[TutorCall] DashScope error:', error.message);
-        sendClientEvent({ event: 'error', error: `DashScope 连接错误: ${error.message}` });
+        // M13-fix: 401/403 透传 auth_failed，让前端不要无脑重连
+        const authFailed = /401|403|InvalidApiKey|Unauthorized|access denied/i.test(error.message || '');
+        if (authFailed) {
+          sendClientEvent({ event: 'auth_failed', error: `语音服务密钥失效或无权限：${error.message}` });
+          if (clientWs.readyState === WebSocket.OPEN) {
+            clientWs.close(4401, 'DashScope auth failed');
+          }
+        } else {
+          sendClientEvent({ event: 'error', error: `DashScope 连接错误: ${error.message}` });
+        }
       });
 
       dashscopeWs.on('close', (code, reason) => {
