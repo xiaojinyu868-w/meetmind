@@ -94,6 +94,27 @@ const ContextSchema = z
     currentTimestampSec: z.number().optional(),
     supportMaterials: z.array(SupportMaterialSchema).optional(),
     learnerProfile: z.string().optional(),
+    /** 仅 mode='goal'：用户已经记下的目标 + bio 画像 + 这次会话的 hint */
+    goal: z
+      .object({
+        existingGoals: z
+          .array(
+            z.object({
+              title: z.string(),
+              summary: z.string().optional(),
+              updatedAt: z.string().optional(),
+            }),
+          )
+          .optional(),
+        existingBio: z
+          .object({
+            headline: z.string(),
+            detail: z.string().optional(),
+          })
+          .optional(),
+        sessionHint: z.string().optional(),
+      })
+      .optional(),
   })
   .default({});
 
@@ -125,8 +146,9 @@ const BodySchema = z.object({
   /**
    * M10：mode 驱动 prompt 骨架。老客户端没传时 fallback 到 'review'（最宽容）。
    * v3.0：新增 'shared' —— 走 SharedAgent 公开对话路径，需配合 shareToken。
+   * 「聊聊你想要的」：新增 'goal' —— 用户和教练对话梳理目标，无课堂上下文，禁用 native tools 和 inline app。
    */
-  mode: z.enum(['in-class', 'review', 'shared']).default('review'),
+  mode: z.enum(['in-class', 'review', 'shared', 'goal']).default('review'),
   /** v3.0 仅 shared 模式：分享 token，从 SharedAgent.snapshotJson 加载上下文 */
   shareToken: z.string().max(32).optional(),
   context: ContextSchema,
@@ -263,14 +285,15 @@ function createTutorAttemptStream({
         const model = openai.chat(modelId);
         // 分享态禁用 native tools —— 工具会去查 transcript / sessionId，
         // 但分享态学生没有这些，且会泄露原作者上下文。
+        // goal 态同样禁用：用户和教练聊目标，没有 transcript 概念。
         const tools =
-          body.mode !== 'shared' && shouldUseNativeTutorTools(modelId)
+          body.mode !== 'shared' && body.mode !== 'goal' && shouldUseNativeTutorTools(modelId)
             ? createTutorTools({
                 sessionId: body.sessionId,
                 transcript: body.transcript,
                 subject: body.subject,
                 model: modelId,
-                // 此分支已经排除 'shared'，安全地窄化为 createTutorTools 接受的两种 mode
+                // 此分支已经排除 'shared' / 'goal'，安全地窄化为 createTutorTools 接受的两种 mode
                 mode: body.mode as 'in-class' | 'review',
               })
             : {};
@@ -304,9 +327,23 @@ function createTutorAttemptStream({
           // native tools 模型（qwen 等）留一次工具回调 + 一次正文的余地。
           // step-* / deepseek-* 走 marker 链路，根本不会进入 tool 回调，所以一步即可。
           stopWhen: stepCountIs(3),
-          // 让 token 按"词"为单位平滑流出，前端 UI 字符不再一坨一坨刷出来。
-          // delayInMs 默认 10ms，配合 chunking='word' 中文按符号也能切，体感丝滑。
-          experimental_transform: smoothStream({ chunking: 'word' }),
+          // 让 token 按"中文单字 / 英文词"为单位平滑流出，前端字符逐个浮现。
+          //
+          // ⚠️ 历史 bug（2026-05-31）：之前这里写的是 chunking: 'word'，但
+          // Vercel AI SDK 的 'word' = 按 /\S+\s+/ 切（非空白 + 空白）。
+          // 中文几乎不出现空白 → 整段中文永远等不到切分点 → 一次性吐出，
+          // 用户体感"完全没有流式输出"。
+          //
+          // 修复：换成同时匹配 [中文单字] 或 [英文词+空白] 的正则。
+          // 这样中文 1 字 1 切、英文 1 词 1 切。
+          //
+          // R9 节奏调优（2026-05-31 二次）：默认 delayInMs=10ms 配合中文 1 字 1 切 =
+          // 50 字 0.5s 闪过，体感像"愣 → 整段砸出"。改 30ms 让逐字浮现可见。
+          // 50 字 1.5s 浮现，符合人眼舒适阅读节奏，又不会让用户觉得 AI 在"打字慢"。
+          experimental_transform: smoothStream({
+            chunking: /[\u4E00-\u9FFF\u3000-\u303F\uFF00-\uFFEF]|\S+\s+/,
+            delayInMs: 30,
+          }),
           experimental_telemetry: {
             isEnabled: true,
             functionId: 'tutor.agent',
@@ -457,7 +494,18 @@ export async function POST(request: NextRequest) {
       }).catch((err) => log.warn('shared chat track failed', { sessionId, err: (err as Error).message }));
     }
 
-    return createUIMessageStreamResponse({ stream });
+    // R9: 显式给 stream response 加 X-Accel-Buffering:no
+    // —— 让 nginx 即使匹配到 /api/ 通用 location 也不缓冲。
+    // —— 这是双保险，对所有反向代理都通用（CDN / Cloudflare / nginx）。
+    // 之前用户反馈"完全没有流式输出"是因为 nginx proxy_buffering 把
+    // SSE 帧缓冲成大块才转发，前端就感觉是"白屏 → 整段炸出"。
+    return createUIMessageStreamResponse({
+      stream,
+      headers: {
+        'X-Accel-Buffering': 'no',
+        'Cache-Control': 'no-cache, no-transform',
+      },
+    });
   } catch (err) {
     const durationMs = Date.now() - startedAt;
     const msg = err instanceof Error ? err.message : String(err);

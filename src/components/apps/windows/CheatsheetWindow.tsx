@@ -192,7 +192,7 @@ function ItemRow({
               <button
                 type="button"
                 onClick={() => onSeek(item.citation!.startMs)}
-                className="print:hidden ml-auto inline-flex h-[22px] items-center rounded-full px-2 font-mono tabular-nums text-ink-muted ring-[0.5px] ring-[#1C1B19]/[0.12] transition hover:bg-[#1C1B19]/[0.04] hover:text-ink hover:ring-[#1C1B19]/[0.28] active:scale-95"
+                className="print:hidden ml-auto inline-flex h-[22px] items-center rounded-full px-2 font-mono tabular-nums text-ink-secondary ring-[0.5px] ring-ink/[0.10] transition-all duration-150 hover:bg-pine/[0.10] hover:text-pine hover:ring-pine/30 active:scale-95"
                 style={{ fontSize: 'var(--cs-ts, 10.5px)' }}
                 title={`跳到课堂 ${formatMs(item.citation.startMs)} 处`}
                 aria-label={`跳回课堂 ${formatMs(item.citation.startMs)}`}

@@ -732,36 +732,43 @@ export function ShareAgentCard({ data, open, onClose }: ShareAgentCardProps) {
 
         {imageUrl && (
           <>
+            {/* R9：图片缩为预览（不再独占视觉），主体让位给"复制链接"主操作。
+                用户反馈"图片分享没意义、太小不好看，直接复制链接分享就行"——
+                生成图保留作为可选副功能，不再是主出口。 */}
             <img
               ref={imgRef}
               src={imageUrl}
               alt={data.title}
-              className="w-full rounded-lg"
-              style={{ maxHeight: '62vh', objectFit: 'contain' }}
+              className="w-full rounded-lg opacity-80"
+              style={{ maxHeight: '36vh', objectFit: 'contain' }}
             />
-            <div className="mt-4 grid w-full grid-cols-2 gap-2">
-              <button
-                type="button"
-                onClick={handleSave}
-                className="rounded-full bg-white px-4 py-2.5 text-[13px] font-medium text-[#1C1B19] transition hover:bg-[#FAF7F2] active:scale-[0.99]"
-              >
-                {COPY.echoShare.saveImage}
-              </button>
-              <button
-                type="button"
-                onClick={handleNativeShare}
-                disabled={sharing}
-                className="rounded-full bg-[#1C1B19] px-4 py-2.5 text-[13px] font-medium text-white transition hover:bg-[#111111] active:scale-[0.99] disabled:opacity-60"
-              >
-                {sharing ? COPY.echoShare.sharing : COPY.share.creator.doneShare}
-              </button>
+            <div className="mt-4 flex w-full flex-col items-stretch gap-2">
+              {/* 主操作：复制链接（白底大按钮，权重最高） */}
               <button
                 type="button"
                 onClick={copyShareUrl}
-                className="col-span-2 rounded-full border border-white/14 px-4 py-2 text-[12px] font-medium text-white/70 transition hover:border-white/24 hover:text-white"
+                className="rounded-full bg-white px-4 py-3 text-[14px] font-semibold text-[#1C1B19] transition hover:bg-[#FAF7F2] active:scale-[0.99]"
               >
                 {COPY.share.creator.doneCopy}
               </button>
+              {/* 副操作：保存图 / 系统分享，并排小按钮 */}
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={handleSave}
+                  className="rounded-full border border-white/14 px-3 py-2 text-[12px] font-medium text-white/65 transition hover:border-white/24 hover:text-white"
+                >
+                  {COPY.echoShare.saveImage}
+                </button>
+                <button
+                  type="button"
+                  onClick={handleNativeShare}
+                  disabled={sharing}
+                  className="rounded-full border border-white/14 px-3 py-2 text-[12px] font-medium text-white/65 transition hover:border-white/24 hover:text-white disabled:opacity-60"
+                >
+                  {sharing ? COPY.echoShare.sharing : COPY.share.creator.doneShare}
+                </button>
+              </div>
             </div>
             <p className="mt-3 text-center text-xs text-white/30">{COPY.echoShare.hint}</p>
             {/* 闭环管理面入口（v3.0）：让 A 知道还能回头管理已发布的分享 */}

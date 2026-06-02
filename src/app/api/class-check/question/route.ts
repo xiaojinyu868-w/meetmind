@@ -138,45 +138,28 @@ export async function POST(request: NextRequest) {
         [
           {
             role: 'system',
-            content: `你是一位坐在学生旁边、和他一起听课的 AI 同桌。
-
-你的任务：针对某个具体知识点，出 ${count} 道选择题。
-
-你的出题风格：
-- 像朋友聊天出题，不是考官审讯
-- 题目检验真正理解，不是死记硬背
-- 选项干扰项要合理，别太弱智
-- 解析简短，点到为止
-
-严格输出 JSON，不要输出其他文字。`,
+            content: '你是一位坐在学生旁边、和他一起听课的 AI 同桌。你刚和他一起听到课里的某个知识点，现在出几道选择题来确认他真的理解了。题目要让他用知识，不只是背知识；干扰项要有真正的迷惑性，是这个知识点常见的误解或相邻概念。',
           },
           {
             role: 'user',
-            content: `以下是课堂中关于「${checkpoint.topic}」（难度 ${difficulty}/5）这个知识点的原始转录：
+            content: `知识点：${checkpoint.topic}（难度 ${difficulty}/5）
+
+这个知识点对应的课堂转录：
 
 ${transcriptContext.text}
 
-请针对这个知识点出 ${count} 道选择题，输出 JSON：
+出 ${count} 道选择题，输出 JSON：
 {
   "questions": [
-    {
-      "stem": "题干",
-      "options": ["A. ...", "B. ...", "C. ...", "D. ..."],
-      "answer": "A",
-      "explanation": "简短解析"
-    }
+    { "stem": string, "options": string[], "answer": string, "explanation": string }
   ]
 }
 
-要求：
-- 出 ${count} 道题，每道题 4 个选项，1 个正确答案
-- 题目聚焦「${checkpoint.topic}」这个知识点本身
-- 答案字段填选项字母（A/B/C/D）
-- 不要编造转录里没有的内容`,
+answer 用选项字母（A/B/C 等）；explanation 简短说明为什么对、其他选项错在哪。只输出 JSON。`,
           },
         ],
         model,
-        { temperature: 0.4, maxTokens: 1536, responseFormat: 'json_object' }
+        { temperature: 0.4, maxTokens: 1500, responseFormat: 'json_object' }
       );
 
       const parsed = parseJsonResponse<QuestionLLMOutput>(response.content);

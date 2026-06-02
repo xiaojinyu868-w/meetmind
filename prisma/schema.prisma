@@ -547,3 +547,38 @@ model ShareClaim {
   @@index([claimerWorkspaceId])
   @@index([createdAt])
 }
+
+/// AgentPack — 用户主动打包的"上下文包"（v3.1 北极星 / R9 单元 Agent）
+///
+/// 把 N 节课打包成一个"单元"或"考试" Agent。同桌进入这个 Agent 时，
+/// 加载 ContextPack { tier, lessons[] } 作为对话上下文；应用矩阵按
+/// supportedTiers.includes(tier) 过滤可用 plugins。
+///
+/// 数据结构故意保持极简：
+///   - lessonIds 是 IndexedDB 的 sessionId 数组（JSON string，保留顺序）
+///   - 不存 lesson 内容本身（每次进入时由客户端 buildPackFromMultipleSessions 拼出）
+///   - 这样不污染服务端，IndexedDB 是真相源
+model AgentPack {
+  id          String   @id @default(cuid())
+  userId      String
+  /// 上下文层级：unit | exam（class 不在此表，因为单课 Agent = AudioSession 自身）
+  tier        String
+  /// 用户起的名字（如"经济学 第三章"、"期末综合"）
+  name        String
+  /// IndexedDB sessionId 数组，JSON string，保留用户多选时的顺序
+  lessonIdsJson String
+  /// 学科 / 主题（可选，给应用矩阵 prompt 的提示用）
+  subject     String?
+  /// 备考时段 / 考试日期（可选，仅 tier='exam' 用）
+  examDate    DateTime?
+  /// 软删除标记
+  archivedAt  DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  user User @relation("UserAgentPacks", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, tier])
+  @@index([userId, archivedAt])
+  @@index([createdAt])
+}

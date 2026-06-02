@@ -40,6 +40,34 @@ test-all: test test-server eval-unit ## 运行全部单元测试（src/ + server
 smoke: ## 端到端 smoke：路由/WS/auth/API 全通（需本地 dev server 在 3101 跑）
 	SMOKE_BASE=$${SMOKE_BASE:-http://localhost:3101} npx tsx tests/smoke/smoke.ts
 
+.PHONY: smoke-intent
+smoke-intent: ## 「聊聊你想要的」goal 模式 e2e（双路径：首次会面 + 回访）
+	@PORT=$${PORT:-3002} \
+	 SMOKE_BYPASS_TOKEN=$$(grep -E '^SMOKE_BYPASS_TOKEN=' .env 2>/dev/null | cut -d= -f2-) \
+	 npx tsx tests/smoke/smoke-intent-mode.ts
+
+.PHONY: smoke-review
+smoke-review: ## 复习态 review 模式 e2e（验证 bio 注入 + 时间戳 + inline app）
+	@PORT=$${PORT:-3002} \
+	 SMOKE_BYPASS_TOKEN=$$(grep -E '^SMOKE_BYPASS_TOKEN=' .env 2>/dev/null | cut -d= -f2-) \
+	 npx tsx tests/smoke/smoke-review-mode.ts
+
+.PHONY: smoke-in-class
+smoke-in-class: ## 课堂同桌 in-class 模式 e2e（验证 recentFocus + Skill chip + bio）
+	@PORT=$${PORT:-3002} \
+	 SMOKE_BYPASS_TOKEN=$$(grep -E '^SMOKE_BYPASS_TOKEN=' .env 2>/dev/null | cut -d= -f2-) \
+	 npx tsx tests/smoke/smoke-in-class-mode.ts
+
+.PHONY: smoke-shared
+smoke-shared: ## 分享态 shared 模式 e2e（隐私铁律：不出时间戳/不出 marker/不注入访客画像）
+	@PORT=$${PORT:-3002} \
+	 SMOKE_BYPASS_TOKEN=$$(grep -E '^SMOKE_BYPASS_TOKEN=' .env 2>/dev/null | cut -d= -f2-) \
+	 npx tsx tests/smoke/smoke-shared-mode.ts
+
+.PHONY: smoke-all
+smoke-all: ## 跑全部 4 个 mode 的 e2e smoke（goal + review + in-class + shared）
+	@$(MAKE) smoke-intent && $(MAKE) smoke-review && $(MAKE) smoke-in-class && $(MAKE) smoke-shared
+
 # === Eval Harness ===
 # 设计原则：见 tests/eval/README.md
 # 每次改 ASR / Agent 前后必跑，数字变动 = 回归信号

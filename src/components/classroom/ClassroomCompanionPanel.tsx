@@ -36,6 +36,7 @@ import { ArrowUp, Radio, Eye } from 'lucide-react';
 import type { CompanionMessage, CompanionCard } from './types';
 import { CompanionMarkdown } from './CompanionMarkdown';
 import { OctoBuddySprite } from './OctoBuddy';
+import { ThinkingStrip } from '@/components/ui/thinking-strip';
 import { InlineAppCard, type InlineAppInteraction } from './InlineAppCard';
 import { SkillChipRow } from '@/components/tutor/SkillChipRow';
 import type { WorkshopAppKey } from '@/lib/ai-native/app-catalog';
@@ -508,10 +509,36 @@ function CompanionComposer({
   );
 }
 
-/** 流式气泡：正在被 token 填充的 AI 消息。 */
-function StreamingBubble({ message }: { message: CompanionMessage }) {
+/**
+ * 流式气泡：正在被 token 填充的 AI 消息。
+ *
+ * R9 重写：之前 hasContent=false 时直接 return null，导致首 token 等待 1-3s
+ * 时段 UI 完全空白——用户体感"完全没流式"。现在分两态：
+ *   - 内容为空：显示 thinking ceremony（Octo listening + ThinkingStrip）
+ *   - 内容有了：显示 markdown + typing-caret
+ * 这样从用户发送消息那一刻起，UI 永远有"AI 在场"的反馈。
+ */
+function StreamingBubble({
+  message,
+  pendingLabel,
+}: {
+  message: CompanionMessage;
+  pendingLabel?: string;
+}) {
   const hasContent = message.content.trim().length > 0;
-  if (!hasContent) return null;
+  if (!hasContent) {
+    return (
+      <div className="flex items-start gap-3 px-6 pb-5">
+        {/* 小型 octo-stage：让等待时段也有"同学"的存在感 */}
+        <div className="octo-aura relative flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full border border-divider bg-card">
+          <OctoBuddySprite mood="thinking" size="sm" />
+        </div>
+        <ThinkingStrip>
+          <span className="text-pine">{pendingLabel || '正在想…'}</span>
+        </ThinkingStrip>
+      </div>
+    );
+  }
   return (
     <div className="px-6 pb-5">
       <CompanionMarkdown content={message.content} isStreaming />
@@ -594,7 +621,7 @@ export function ClassroomCompanionPanel({
               />
             ) : null}
             {streamingMessage ? (
-              <StreamingBubble message={streamingMessage} />
+              <StreamingBubble message={streamingMessage} pendingLabel={pendingReplyLabel} />
             ) : null}
           </div>
         )}

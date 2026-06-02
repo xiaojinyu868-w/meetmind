@@ -183,6 +183,63 @@ export const COPY = {
     remainingTopics: (count: number): string => `另外 ${count} 个`,
   },
 
+  /**
+   * 「聊聊你想要的」—— 用户和 AI 教练对话梳理目标的入口。
+   * 是 v3.0 信息流哲学落地的第一个产品入口（替代旧硬编码 LearnerOnboarding 表单）。
+   * 设置页常驻 + 首次进入 app 自动弹出。
+   */
+  intent: {
+    /** 主标题（设置页 caption / 首次进入 header） */
+    title: '聊聊你想要的',
+    /** 副标 */
+    subtitle: '不用写好——说就行',
+    /** 设置页 description */
+    description: '和教练聊一聊，把脑子里的事一起捋清楚——也可以打电话语音聊',
+    /** 设置页：还没聊过的提示 */
+    emptyHint: '还没聊过。你最近想做的事 / 想去的方向 / 还在纠结的选择，都可以慢慢说。',
+    /** 设置页：开始按钮 */
+    actionStart: '和教练聊一聊',
+    /** 设置页：再聊一次按钮 */
+    actionResume: '和教练再聊一会',
+    /** IntentDialog header：右上角切换通话 */
+    switchToCall: '打电话聊',
+    /** 通话视图：切回文字 */
+    switchToText: '文字',
+    /** 通话视图：标题 */
+    callTitle: '在听你说',
+    /** 通话视图：底部状态行（基于 useOmniRealtimeCall.status） */
+    callStatusListening: '我在听你说…',
+    callStatusThinking: '我想一下…',
+    callStatusResponding: '我在说…',
+    callStatusMuted: '已静音 · 我还在',
+    callStatusConnected: '直接说就好',
+    callStatusConnecting: '正在接通…',
+    callStatusAuthorizing: '点下面按钮开始',
+    callStatusError: '没接通，点重连',
+    callStatusPreparing: '准备中…',
+    /** 输入条：占位符 */
+    inputPlaceholder: '说说你最近想做的事',
+    inputPlaceholderBusy: '同学正在听…',
+    /** 首次进入：跳过文案 */
+    firstTimeSkip: '先不聊，下次再说',
+    /** 开场提示——已有 N 个目标时 */
+    greetingWithGoals: (count: number): string =>
+      `欢迎回来。你之前留下了 ${count} 件想做的事——是想聊聊新的，还是更新一下旧的？`,
+    /** 开场提示——首次 */
+    greetingFirstTime:
+      '不急。你现在脑子里有什么想做、想去、想搞清楚的事？哪怕还没完全想明白，也可以慢慢说。',
+    /** 卡片：标题（"我听到的是"） */
+    summaryEyebrow: '我听到的是',
+    /** 卡片：先放放 */
+    summaryDismiss: '先放放',
+    /** 卡片：就是这样（保存） */
+    summaryAccept: '就是这样',
+    /** 卡片：保存中 */
+    summarySaving: '记着…',
+    /** 卡片：已保存 */
+    summarySaved: '已记下了',
+  },
+
   realtime: {
     defaultTitle: '语音同桌',
     defaultContext: '整节课',

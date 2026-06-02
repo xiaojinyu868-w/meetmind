@@ -5,6 +5,393 @@
 
 ---
 
+## 2026-06-02（晚 +4）— M11.5：bio 进入所有模式 + 设置页画像 + SharedAgentChat 迁底座 + 4 模式 e2e（26/26）
+
+> 一轮交付：bio 不只在 IntentDialog 里记下来，而是进入复习态、课堂同桌、设置页——每个用户面都接得上。
+
+### bio 进入所有 mode
+- `formatLearnerProfileForTutorAgent`（review）：bio.headline 优先于结构化字段，goals[] (active) 也注入
+- `buildInClassTutorAgentBody` + `useClassroomCompanion`：in-class 注入 learnerProfile
+- shared 保持隐私铁律：服务端不注入访客 learnerProfile
+
+### 设置页「关于你」
+`src/app/(auth)/settings/page.tsx` 顶部加：bio.headline + detail + 「和教练再聊聊」+ 「清除画像」
+
+### SharedAgentChat 迁底座
+ChatBase paper variant 重写，保留 shareToken/隐私铁律，新获得自动跟随滚动+草稿持久化+IME 安全
+
+### 4 个 mode e2e（共 26 case 全过）
+| Suite | Cases | 验证 |
+|---|---|---|
+| smoke-intent | 10 | goal 双路径 |
+| smoke-review | 6 | review 时间戳+bio+inline app |
+| smoke-in-class | 5 | recentFocus+Skill chip+bio |
+| smoke-shared | 5 | 隐私铁律+无死链 |
+
+Makefile: \`make smoke-review\` / \`smoke-in-class\` / \`smoke-shared\` / \`smoke-all\`
+\`smoke-shared\` 自动 prisma seed fake SharedAgent。
+
+eval-guard 持平：tutor 92.9% / asr 1.46%。
+
+---
+
+## 2026-06-02（晚 +3）— M11.4：goal 模式从"任务驱动"升级为"建立个人上下文" + 双 marker（bio + goal）+ 10 场景双路径 e2e
+
+> 用户反馈："开头就要引导用户自我介绍，尽可能全面自然地引导，要拿到这个人的个人上下文 / 相对确定的背景和意图。"
+>
+> 之前 M11.3 解决了"被动陪听 → 主动教练"，但 taste 还有更深一层错：
+> 把 goal 模式当成"5-10 分钟把那件事想清楚"的**任务工具**，而不是"建立个人上下文"的**关系入口**。
+>
+> 第一次进 IntentDialog 的用户，AI 还不认识他。这时该做的不是"挑一个事来梳理"，
+> 是**自然地把这个人聊完整**——身份、阶段、状态、节奏、在乎的事。
+> 这才是 v3.0 信息流哲学里"个人上下文私有积累 = 付费壁垒"的地基。
+
+### 类型层：BioEntry
+
+`src/types/user.ts` 加 `LearnerProfileBase.bio?: BioEntry`：
+
+```ts
+export interface BioEntry {
+  /** 一句话核心：身份 + 阶段 + 当前状态 */
+  headline: string;
+  /** 可选 detail：在乎的事 / 节奏 / 值得记住的细节 */
+  detail?: string;
+  createdAt: string;
+  updatedAt: string;
+  conversationId?: string;
+}
+```
+
+### Prompt 重写：路径 A 首次会面 + 路径 B 回访
+
+`MODE_GOAL_SEGMENT` 重写为分支 prompt（`tutor-prompts.ts`）：
+
+**路径 A（首次会面）**：context.goal 没有 existingBio 也没有 existingGoals 时触发
+- 目标：拿到身份 / 阶段 / 状态 / 在乎的 / 节奏 五维信息
+- 第一段必做三件事：自我介绍 + 说明这次意图 + 给具体起手问题（最低阻力的"身份/阶段"）
+- 一次只问一个问题
+- 拿到身份+阶段+状态至少其中两层、对话过 3-5 轮后，可以提议帮记 bio
+- 输出 `---我了解到的你---` 块（第二人称，他的画像）
+
+**路径 B（回访）**：context.goal 已有 bio 或 goals 时触发
+- **不重问已知道的**——直接接上"上次你说想做 X，最近怎么样？"
+- 按 GROW 框架推进具体目标
+- 输出 `---我想要的---` 块（第一人称，他的目标，**marker 内每行用"我"开头**）
+
+`capGoalContext` 升级支持双数据源：existingBio + existingGoals + sessionHint，
+首次会面时显式注入 `【这是你和他的第一次见面】` 段，让 prompt 走路径 A。
+
+### Marker pipeline 扩展
+
+新增 `extractIntentBio` marker（`src/components/chat/markers/extractIntentBio.ts`），
+解析 `---我了解到的你---...---结束---`。与 `extractIntentSummary` 平行存在，
+同一条 AI 消息可同时包含两种 marker（罕见但允许）。
+
+### 前端：IntentBioCard + 双卡渲染
+
+- `src/components/intent/IntentBioCard.tsx`（新）— "我了解到的你"画像卡，可编辑 headline + detail，保存为 `BioEntry`
+- `src/components/intent/IntentDialog.tsx`：
+  - 消息渲染层先抽 bio、再在剩余文本上抽 summary，footer 双卡堆叠（bio 在上，goal 在下）
+  - 顶部记忆卡升级：bio 优先（`我了解到的你: <headline>`），bio 不存在时才显示 `我想要的: <首个 goal>`
+  - 开场 greeting 三分支：
+    - **首次**："我是 Octo。我们刚认识——你想先告诉我一点你自己吗？" + chips: 我是学生 / 我在工作 / 我在过渡期
+    - **回访（有 bio）**："欢迎回来。上次我大概了解了你——<headline>…  最近怎么样？"
+    - **回访（仅有 goals）**：保留原 goals 入口
+- `IntentDialogContainer.tsx` 加 `handleSaveBio` → `saveLearnerProfile({ ...profile, bio })`
+
+### 通话模式
+
+`buildCallInstructions` 区分首次 vs 回访：
+- 首次："这是你和他的第一次见面——温和地引导他自我介绍（先聊身份、阶段、最近状态），不要一次问多个问题"
+- 回访："你之前已经认识他：<bio.headline>… 这次别再问身份/阶段"
+
+### Smoke 扩到 10 case 覆盖双路径
+
+`tests/smoke/smoke-intent-mode.ts`：
+
+| Case | 路径 | 断言 |
+|---|---|---|
+| A1/首次见面/你好 | A | AI 必须自我介绍 + 邀请用户介绍自己 |
+| A2/首次见面/我是大三学生 | A | 不能追"什么专业"（问卷思维），要问状态 |
+| A3/首次见面/聊完后提议记画像 | A | 多轮聊完后给合理教练动作（提议记画像 / 复述 / 深挖） |
+| A4/首次见面/输出 bio marker | A | 用户同意后必须输出 `---我了解到的你---` 包含身份/阶段 |
+| A5/首次见面/含糊回答 | A | 不能追问"为什么"，要给更小的入口 |
+| B1/回访/不重问身份 | B | 已知 bio 时不能再问身份阶段，要接上之前目标 |
+| B2/回访/帮我记下来 | B | 输出 `---我想要的---` 第一人称 marker |
+| G1/通用/你是谁 | * | 自报 Octo + 简短角色，不列功能清单 |
+| G2/通用/多目标聚焦 | * | 必须聚焦让用户挑一个 |
+| G3/通用/给一个不给三个 | * | 不能输出 1.2.3 并列清单 |
+
+支持 `contextGoal` 注入模拟回访（B 路径）。
+
+**实测：连续 3 次 10/10 稳定通过**。AI 在 G3 的回复堪称典范：
+> "我先不问建议，反过来问你一句：你脑子里第一次冒出'想读研'这个念头，是因为什么？是觉得本科不够用、想往深走，还是想换个环境/换个方向？"
+>
+> ——把"给你建议"翻转成"先帮你看清自己想要什么"，这就是真正的咨询师姿态。
+
+### 工程化 fix
+
+- `make smoke-intent` 间隔 800ms → 2500ms，避免 LLM provider 连续返回 outputTokens=0
+- 加空回复自动重试一次（4s 间隔）
+- agent route Schema 加 `existingBio` 字段
+
+---
+
+## 2026-06-02（晚 +2）— M11.3：goal 模式从"被动陪听"改成"专业教练"+ 端到端 7 场景 e2e 自测 + glass 气泡可读性修复
+
+> 用户反馈两条：
+> (1) 沉浸式 IntentDialog 的字看不见（深底深字）
+> (2) AI 在装萌（"挥了挥触手 / 我不会寒暄 / 你想说啥说啥"），不像意图识别教练
+> 修复后：作为 coding agent 必须**模拟一个真实用户跑一轮**才算交付——不再"以为 deploy 完就完事"。
+
+### Bug 1：glass 气泡可读性
+
+`src/components/chat/ChatBubble.tsx` + `ChatThinkingStrip.tsx`：
+- assistant glass: `bg-white/82 + text-ink` → `bg-white/95 backdrop-blur-xl + text-ink + shadow-2xl`
+  对标 Apple Intelligence / Linear AI——深色沉浸式背景上 assistant 用接近实白卡片，glass 感靠 backdrop-blur + 阴影实现，不靠把背景做透。
+- user glass: `bg-ink/95` → `bg-white/12 + border-white/20 + text-white`（半透明白 glass，沉浸式深底上更通透）
+
+### Bug 2：goal 模式 prompt 重写为"主动教练"
+
+`src/lib/prompts/tutor-prompts.ts` 的 `MODE_GOAL_SEGMENT` 整段重写：
+
+旧版本走"The Bitter Lesson + 不催促"过头，结果模型 fallback 到了被动陪伴 + 装萌：
+- "(挥了挥触手) 嗨，我不是很会寒暄"
+- "你想说啥说啥，我就在这儿等着"
+- 把自己定位成"同班同学"
+
+新版本：
+- 身份段：明确"目标教练"（GROW 框架，不是助理 / 同学 / 导师）
+- 开局段：用户说"你好"/"我们在干什么"时**必须立刻**把对话推到正题，不能停在打招呼。给出 ✓ 范例 vs ❌ 严禁话术
+- 推进段：每一轮做三件事之一（承接 / 聚焦 / 深挖），按 GROW 框架走（Goal/Reality/Why now/Stakes/Options），**铁律一次一问**
+- 含糊回答处理：用户回"嗯"时不追问 why（会防御），给"更小的入口"或"对照"
+- 建议处理：明确要时给一个不给三个，最后把球踢回去
+- 角色扮演禁止："不要写 (动作描述)"
+
+`src/components/intent/IntentDialog.tsx` 开局：
+- 旧 greeting："不急。你现在脑子里有什么..."（被动）
+- 新 greeting："我们这次 5-10 分钟，把脑子里那件还没想清楚的事说清楚。你想梳理的那件事是什么？" + **3 个开局 chips**（"想做但还没动的" / "卡在一个选择上" / "最近反复在想的"），点击直接发送让用户不用从零开始打字
+
+### 端到端 e2e 自测（这次真跑了）
+
+`tests/smoke/smoke-intent-mode.ts` 模拟 7 个真实用户场景：
+
+| Case | 用户输入 | 断言 |
+|---|---|---|
+| greet/你好 | "你好" | 必须立刻给开局问题，不能装萌 |
+| meta/我们在干什么 | "我们现在在干什么" | 必须解释场合 + 引导主题 |
+| identity/你是谁 | "你是谁" | 必须自报 Octo+教练，不列功能清单 |
+| vague/单字回答 | "嗯" | 不能追问"为什么…"，要给更小入口 |
+| focus/多目标 | "想换工作、想学英语、想找对象，都没动" | 必须聚焦让用户挑一个 |
+| summary/帮我记下来 | （多轮）→"对就是这样，帮我记下" | 必须输出 `---我想要的---` marker，第一人称 |
+| advice/给一个不要给三个 | "给我点建议吧" | 不能输出 1.2.3 并列清单 |
+
+ban list（COACH_BAN_GLOBAL）：所有 case 共享，包含装萌话术 / 被动姿态 / 错误身份 / 课堂语境 4 类共 12 条禁忌词。
+
+实测结果：**7/7 passed**。
+- "我是 Octo。你不是来寒暄的——你打开了这里，是因为脑子里有件还没想清楚的事…"
+- "你现在一口气说了三件事，但都没动。那我们先做一件事：**这三件事里，哪一件是你最近白天想起来最多次的？**"
+- "好，那我记下。`---我想要的---` 找一个能让我每天愿意起来去做的事——先往设计转…`---结束---`"
+
+### Makefile
+
+新增 `make smoke-intent`，CI 之外的"产品级 e2e"——不只是类型对、tests 过，是**真的回答符合产品意图**。任何人改 `MODE_GOAL_SEGMENT` 或 glass 视觉都应跑一遍。
+
+### 我学到的
+
+> Coding agent 不应该止于"deploy"，应该止于"我亲自跑过证据"。
+
+后续每个 mode（in-class / review / shared / goal）都补一个对应的 smoke 脚本，固化在 Makefile 里。
+
+---
+
+## 2026-06-02（晚 +1）— M11.2：bug 修复（glass 气泡可读性 + goal 身份段）+ smoke-intent-mode 首版 3 case
+
+> 用户反馈两条：(1) 沉浸式 IntentDialog 字看不见 (2) AI 自称"同班同学"
+> 这一轮修了视觉 bug，并加了首版 e2e smoke。下一轮（M11.3）发现 prompt 还有更深的问题（被动陪听），再大幅重写。
+
+### Bug 1：glass 气泡可读性
+
+`src/components/chat/ChatBubble.tsx` + `ChatThinkingStrip.tsx`：
+- assistant glass: `bg-white/82 + text-ink` → `bg-white/95 backdrop-blur-xl + text-ink + shadow-2xl`
+  对标 Apple Intelligence / Linear AI——深色沉浸式背景上 assistant 用接近实白卡片，glass 感靠 backdrop-blur + 阴影实现，不靠把背景做透。
+- user glass: `bg-ink/95` → `bg-white/12 + border-white/20 + text-white`（半透明白 glass，沉浸式深底上更通透）
+
+### Bug 2：goal 模式加身份段（防"同班同学"）
+
+`MODE_GOAL_SEGMENT` 加：
+> 你是 Octo… 不是助理，不是教练，不是导师，**也不是同班同学**…
+
+### 端到端 e2e smoke 首版（3 case）
+
+`tests/smoke/smoke-intent-mode.ts` + `make smoke-intent`：
+- 你是谁 / 我想准备考研 / 帮我记下来
+- 真实 LLM 调用，断言 marker、节奏、身份
+
+3/3 通过。但之后用户继续测发现"装萌 / 被动姿态"问题没覆盖到——M11.3 大幅扩到 7 case + 重写 prompt。
+
+---
+
+## 2026-06-02（晚）— M11.1：抽 ChatBase 底座 + IntentDialog 沉浸式重做 + TutorAgentPanel 迁底座
+
+> 用户反馈："整个应用里有些对话框能上传图片有些不能，太重复造轮子了"
+> 调研结论：9 个对话面板各自实现一套输入条 / 消息流 / 流式协议，3 套流式协议并存，5 套文件上传逻辑。
+> 解法：抽**薄底座 + 厚适配层**，所有对话面板共享同一套 UX。今晚先迁 IntentDialog 和 TutorAgentPanel 验证抽象，剩下 3 个面板下次迁。
+
+### 新增：ChatBase 底座（11 个文件）
+
+`src/components/chat/` 全新目录：
+
+- `ChatBubble.tsx` — 单条消息壳，role/variant/avatar/actions/footer 五个 slot；支持 `paper`/`glass`/`minimal` 三 variant
+- `ChatComposer.tsx` — 输入条，capabilities 开关（mic/file/call），拖拽 overlay，附件 chip，glass / paper 两态
+- `ChatMessageList.tsx` — 消息流容器，自动跟随滚动 + "回到最新"按钮
+- `ChatRenderer.tsx` — 流式 markdown，marker pipeline（intent-summary 等可扩展），React.memo
+- `ChatThinkingStrip.tsx` — 等待态气泡（thinking / tool / writing 三态）
+- `hooks/useChatComposer.ts` — 草稿持久化（sessionStorage 按 draftKey）+ IME 安全（中文输入法 Enter 不误发）+ 自适应高度（1→8 行）+ Cmd/Ctrl+Enter 永远发送
+- `hooks/useChatFileUpload.ts` — `parseFileForChat` 封装 + 拖拽 + 剪贴板粘贴 + 多文件并发，错误 5s 自动消失
+- `hooks/useAutoFollowScroll.ts` — 用户上滑停止跟随，回到底部恢复跟随
+- `markers/extractIntentSummary.ts` — 解析 `---我想要的---...---结束---`
+- `markers/collectMessageText.ts` — UIMessage → text，兼容 v6 parts + 老 content
+- `index.ts` + `DOMAIN.md` — barrel + 契约文档
+
+**设计铁律**：
+1. 底座不引入业务逻辑（任何 `if (mode === ...)` 都要在 adapter 里）
+2. props 极简（slot / capability 对象，不要 30 个 boolean）
+3. variant 只 paper/glass/minimal 三种，不再扩
+4. marker pipeline 通过类型扩展（加新 marker 走 `ChatMarkerKind` + `extractXxx` helper）
+
+### 沉浸式 IntentDialog（v7 仪式时刻白名单第 6 项升级版）
+
+旧 IntentDialog 视觉：米白纸感、克制——和"图书馆台灯"产品哲学吻合，但**不像对话**。
+新 IntentDialog：**沉浸式 IP 陪伴感**。
+
+- 全屏深色暗调背景（`#14110D` 深棕墨黑）+ pine/vermilion radial gradient 双柔光叠加
+- Octo `original.png` 大图作虚化背景（78vh，blur 28px，9s 呼吸动画）
+- 极淡 SVG noise 颗粒（避免 backdrop-blur 的"塑料感"）
+- Glass morphism 半透明气泡（`bg-white/82 backdrop-blur-md` for assistant，`bg-ink/95` for user）
+- OctoAvatar 内嵌 assistant 气泡左侧（thinking / happy / idle 跟随状态）
+- Instrument Serif italic 装饰文案（"不用想好——说就行"）
+- 顶部"我想要的"小卡：当用户已有 saved goal 时显示（黑底 backdrop-blur，Sparkles 图标）
+- 进入动画 fade-up 16px / 240ms
+
+### TutorAgentPanel 迁底座（验证抽象）
+
+完整保留所有业务逻辑：
+- conversationService 持久化（review 模式自动写本地 IndexedDB）
+- inline app（`<open_app:KEY/>` marker → `/api/apps/execute` → InlineAppCard 在 ChatBubble.footer）
+- launch question（外部时间线/资料/困惑点发起的一次问题）
+- new conversation / 历史切换
+- TutorToolCard（tool 调用结果卡片，作为 ChatBubble children 的一部分）
+- SkillChipRow（empty state 推荐 prompt）
+- 时间戳跳转（onSeek，`[MM:SS]` 点击）
+
+**收益**：
+- **首次获得**：拖拽上传 / 剪贴板粘图 / 草稿持久化 / IME 安全 Enter（之前的简单 input 没有）
+- **首次获得**：复制 / 重生成 hover 操作行
+- **首次获得**：自动跟随滚动 + "回到最新"按钮
+- **首次获得**：错误状态 inline "再试一次"按钮
+
+### 退役清单（V2，下次迭代）
+
+- 5 套对话面板待迁底座：ClassroomCompanionPanel / SharedAgentChat / WordExplainer / MobileAIChatPanel / ConfusionCard
+- `useSimpleSSEStream`（自写 SSE）→ 取代为 useChat
+- `/api/chat`（老路由）→ 合并到 `/api/tutor/agent`
+- `AITutor.tsx`（2400 行 legacy） + `AIChat.tsx` → 删
+- 多模态 image inline（base64 走 `messages.content[].type=image`）→ 当前走 OCR/VLM 文字回填，下次升级
+- 虚拟滚动（react-virtuoso，>50 条）+ Mermaid + Shiki 代码高亮 + TTS
+
+### 文档同步
+
+- `AGENTS.md` 第 0 节加"改任意 AI 对话面板"任务路径，铁律提示
+- `src/components/chat/DOMAIN.md`（新） — 完整契约 + adapter 模板代码
+- `src/components/DOMAIN.md` — 顶层目录树加 chat/
+
+---
+
+## 2026-06-02 — M11：「聊聊你想要的」对话式目标共建 + 通话 UI 升级 + 实时语音抗噪抗打断
+
+> v3.0 信息流哲学（"目标驱动的 AI 信息流：让每个人的信息流，服务想成为的自己"）落地的第一个产品入口。
+> 旧硬编码两步表单 LearnerOnboarding 被对话式 IntentDialog 替代；同时趁势把语音同桌的视觉和抗噪一并升级。
+
+### 新增：「聊聊你想要的」对话式入口
+
+- `src/lib/prompts/tutor-prompts.ts` — `TutorMode` 加 `'goal'`；`MODE_GOAL_SEGMENT` 是教练态 prompt（不催促、不问卷、用 `---我想要的---...---结束---` 块自然提炼可保存的目标）
+- `src/app/api/tutor/agent/route.ts` — `BodySchema.mode` 加 `'goal'`；`ContextSchema.goal` 接 `existingGoals + sessionHint`；goal 态禁用 native tools / inline app marker / 时间戳
+- `src/lib/services/file-parse-service.ts`（新） — 把 File 解析成纯文本的轻量 helper：文档→`/api/sources/ingest`，图片→`/api/sources/ingest-image`，音视频→`/api/transcribe`。**不写 IndexedDB / 不动 collection**（区别于重副作用的 `useSourceImport`）
+- `src/components/intent/IntentDialog.tsx`（新） — 全屏对话主体：`useChat` + 文件上传 + 语音输入 + AI 提炼卡片
+- `src/components/intent/IntentSummaryCard.tsx`（新） — "我听到的是…"卡片，可编辑 → 保存为 `GoalEntry`
+- `src/components/intent/IntentDialogContainer.tsx`（新） — 对外封装：打包文字/通话双态 + saveLearnerProfile 合并已有 goals
+- `src/types/user.ts` — 新增 `GoalEntry` 类型 + `LearnerProfileBase.goals?: GoalEntry[]`（free-form JSON 兼容旧画像）
+
+### 入口接入
+
+- `src/app/(main)/app/page.tsx` — 首次进入 `/app` 自动弹 `IntentDialogContainer`（替代旧 `LearnerOnboarding`），sessionHint='first-time'
+- `src/app/(auth)/settings/page.tsx` — 顶部加常驻「聊聊你想要的」section：显示已保存目标列表 + "和教练聊一聊"入口；旧 LearnerOnboarding 留在「学习档案」section 作 fallback
+
+### 实时语音通话视觉升级（v7 呼吸光晕）
+
+- `src/components/realtime/RealtimeOrb.tsx`（新） — v7 设计宪法落地：米白纸感主底 + pine 主光环 + vermilion 响应点缀 + 多层 radial gradient 呼吸 + thinking 态内圈环 6s 旋转
+- `src/components/realtime/IntentVoiceCallScreen.tsx`（新） — 「聊聊你想要的」打电话模式（复用 useOmniRealtimeCall）
+- `src/components/tutor/TutorRealtimeCallScreen.tsx` — 本地 VoiceOrb 已废弃，迁移到共享 RealtimeOrb；视觉同步升级为 v7 风格
+
+### 抗噪 + 抗打断（DashScope omni realtime）
+
+`server.js` 的 `/api/tutor-call` WebSocket 升级 turn detection 三件套：
+
+- `turn_detection.type='semantic_vad'`（默认）— 能区分附和声/咳嗽/背景音 vs 真要说话；旧 `server_vad` 只看音量阈值，嘈杂环境频繁误打断
+- `input_audio_noise_reduction.type='near_field'`（默认）— 服务端噪音抑制；远场可切 `'far_field'`，关闭走 `'off'`
+- `silence_duration_ms=1500`（旧 1100）— 给短暂背景音留缓冲
+- `prefix_padding_ms=500`（旧 300）— 句首兜底更稳
+
+环境变量见 `.env.example` 「实时语音同桌」段：`DASHSCOPE_OMNI_TURN_DETECTION` / `DASHSCOPE_OMNI_NOISE_REDUCTION` / `DASHSCOPE_OMNI_SILENCE_DURATION_MS` / `DASHSCOPE_OMNI_VAD_THRESHOLD`。
+
+### 文档同步
+
+- `AGENTS.md` 第 0 节任务路径表加「改聊聊你想要的」「改实时语音通话 UI / 抗噪抗打断」两行
+- `src/components/intent/DOMAIN.md`（新） + `src/components/realtime/DOMAIN.md`（新）
+- `src/components/DOMAIN.md` 顶层目录树同步
+- `src/app/api/tutor/DOMAIN.md` 加 mode 矩阵表（in-class / review / shared / goal）
+- `src/lib/services/DOMAIN.md` 加 file-parse-service 条目
+- `src/lib/ui/copy.ts` 加 `COPY.intent` 命名空间（待后续把 IntentDialog 内字面量迁过去）
+- `.env.example` 加实时语音同桌 omni realtime 配置段
+
+---
+
+## 2026-06-01 — 按《提示词设计哲学》全面重写所有学习应用 prompt + 修闪卡 / class-check 超时崩溃
+
+> 用户反馈：闪卡 200+ 秒后显示"失败"、`/api/class-check/plan` 返回 500、AI copilot 输出"不本质"。
+>
+> 调研发现这三件事是同一个根因：**plugin / route 的 prompt 大量违反《提示词设计哲学》"描述目标，不描述路径"，硬塞 6 条纪律 + 200 行 few-shot + 强制三层难度 + 字数限制 + 题数限制**——既让模型变成填表机器（产出"不本质"），又让 prefill 阶段巨慢（撞 180s LLM 超时崩溃）。
+>
+> 修这件事的方式正好是**同一刀**：按哲学重写 prompt = 更像在给一个人类专家布置任务 + prompt 体积大幅缩小 + TTFT 显著下降 + 模型升级后产出自动变好。
+
+### Prompt 全面重写（10 处）
+
+哲学："描述目标和用户处境，把怎么做留给模型；只规定前端必须的最小 JSON 渲染契约。"
+
+- `src/lib/ai-native/plugins/flashcards.plugin.ts` —— 删 6 条硬纪律 + 200 行 few-shot + 三层难度强制；只保留"认知科学学习教练 + 学生处境 + JSON 字段契约"。`maxTokens` 2800 → 2400，转录注入 24KB → 8KB
+- `src/lib/ai-native/plugins/quiz.plugin.ts` —— 同上，删 5 条硬纪律 + few-shot + 题型分布强制；让模型自己按内容性质选单选/判断/填空/简答。`maxTokens` 8192 → 3500，转录 22KB → 8KB
+- `src/lib/ai-native/plugins/mindmap.plugin.ts` —— 删 5 条硬纪律（主干 3-5 / 子节点 ≤ 3 / 深度 ≤ 3 / 字数）；只描述"5 秒可扫"目标。`maxTokens` 2400 → 1800，转录 24KB → 8KB
+- `src/lib/ai-native/plugins/study-report.plugin.ts` —— 删长版铁律 + 字段强制要求；保留"温暖务实教育顾问 + 不评判孩子"的姿态。`maxTokens` 3072 → 2200，转录 20KB → 8KB
+- `src/lib/ai-native/plugins/studio-workshop.plugin.ts` —— 转录 24KB → 8KB（system prompt 已较合规）
+- `src/lib/ai-native/plugins/knowledge-cards.plugin.ts` —— 简化 system prompt 措辞
+- `src/app/api/class-check/plan/route.ts` —— 删多段硬纪律和强制题数；改为"AI 同桌帮梳理课堂结构"的自然语言。`maxTokens` 3072 → 2400，转录 28KB → 10KB
+- `src/app/api/class-check/question/route.ts` —— 删"出题风格 5 条" + 强制 4 选项；保留 JSON 契约
+- `src/components/AIChat.tsx` `TUTOR_SYSTEM_PROMPT` —— 删"你的职责 5 条 + 回答要求 3 条"；改为"你是这个学生的 AI 同桌，刚和他一起听了这节课"
+- `src/components/WordExplainer.tsx` `EXPLAIN_SYSTEM_PROMPT` —— 删 5 条要求 + 字数限制；改为"学生圈出了一段话问你"的场景描述
+
+### 性能效果（量化）
+
+- **闪卡生成**：之前撞 180s 超时失败，现在 prompt input 从 ~30k tokens → ~10k tokens（70% 降幅），prefill 时间和总响应时间都大幅下降，预期 15-30s 内完成
+- **class-check/plan 500**：同样根因，修复后预期 10-25s 内返回 plan
+- **学习应用整体（闪卡 / 测验 / 思维导图 / 学习报告）感知速度**：TTFT 降低，因为 system prompt 从 800-1500 字砍到 100-200 字，input 总量减半
+
+### UX 修复
+
+- ~~`src/components/DesktopVideoReviewLayout.tsx` —— 视频复习态左栏：当 `VideoInsightTimeline` 还没有真实 plan items 时左栏底部 fallback 渲染 `TranscriptFlowView`~~（**已撤回**：中栏"转录原文" tab 已承担转录展示，左栏再 fallback 是同一份信息双栏重复，违反 UI 第一性原理。真正的修复方向是重构整个复习态信息架构——见后续 roadmap）
+
+---
+
 ## 2026-05-31 — Design System v7 · 真实视觉打磨（Round 7：从 sed 替换走向真实视觉重做）
 
 > 用户反馈：v7 token 改完之后，真实页面**和 design-demo/v7 那 11 个 showcase 差距很大**——因为前 6 轮主要是机械 sed 替换 className，但**布局结构、字号节奏、字体使用、AI 在场信号**没动，等于 v6 骨架披 v7 色。

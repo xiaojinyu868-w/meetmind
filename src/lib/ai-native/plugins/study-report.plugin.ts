@@ -63,49 +63,29 @@ async function generateReport(
     [
       {
         role: 'system',
-        content: `你是一位温暖、务实的教育顾问。家长把孩子的一节网课录音发给你，想知道这节课讲了什么。
-
-你的职责是帮家长快速理解课堂内容，而不是评判孩子。
-
-铁律：
-- 你只能分析"课堂讲了什么"，不能评价"孩子掌握了多少"——你没有任何答题或互动数据，不知道孩子听懂没有
-- 不要给任何评分（没有 1-5 分、没有百分比、没有"掌握度"）
-- 不要说"孩子已掌握""孩子理解了"这类话，你不知道
-- 温暖但诚实，不制造焦虑也不编造好消息
-- letterToParent 是给家长的一段自然文字（3-5 句），像微信聊天一样平实
-
-严格输出 JSON。`,
+        content: '你是一位温暖、务实的教育顾问。一位家长把孩子的一节网课录音发来，想知道这节课讲了什么。你帮 ta 用平实的话理解课堂内容——你只看到了课堂转录，没有任何答题或互动数据，所以你不知道孩子掌握得怎么样，也不要假装知道。不评分、不评判孩子，只描述课堂本身和值得家长关注的点。',
       },
       {
         role: 'user',
-        content: `课堂信息：
-- 时长：约 ${totalMinutes} 分钟
-- 转录片段：${segmentCount} 段
-${hasAnchors ? `- 孩子标记了 ${anchorCount} 个困惑点\n\n困惑点详情：\n${anchorContext}` : '- 孩子未标记困惑点'}
+        content: `课堂时长约 ${totalMinutes} 分钟，共 ${segmentCount} 段转录${hasAnchors ? `；孩子在听课时标记了 ${anchorCount} 个困惑点：\n${anchorContext}\n` : '；孩子未标记任何困惑点。'}
 
 课堂转录：
 ${transcriptContext}
 
-请输出 JSON：
+输出 JSON：
 {
-  "title": "这节课的主题（简短）",
-  "letterToParent": "给家长的一段话。用平实的语言告诉家长这节课讲了什么，大概什么难度，有什么值得关注的内容。${hasAnchors ? '也提一下孩子标记的困惑点意味着什么。' : ''}不要评价孩子掌握了多少。",
-  "topics": [
-    { "name": "知识点名", "difficulty": "基础/进阶/拓展", "gist": "一句话说这个点讲了什么" }
-  ],
-  ${hasAnchors ? '"confusionAnalysis": "孩子在哪些地方标记了困惑，这可能意味着什么（客观分析，不要下结论）",' : ''}
-  "chatTopics": ["今天回家可以问孩子的具体话题1", "话题2"],
-  "nextSteps": ["建议做一次随堂检验来了解掌握情况", "其他具体建议"]
+  "title": string,
+  "letterToParent": string,
+  "topics": [{ "name": string, "difficulty": string, "gist": string }],${hasAnchors ? `\n  "confusionAnalysis": string,` : ''}
+  "chatTopics": string[],
+  "nextSteps": string[]
 }
 
-要求：
-- topics 3-6 个，覆盖主要内容
-- chatTopics 2-3 个，要具体到可以直接问出口（如"今天老师讲的 XXX 是什么意思？"）
-- nextSteps 必须包含"做一次随堂检验"的建议${buildTerminologyHintBlock(context.memory.terminologyHint)}`,
+letterToParent 是给家长的一段自然文字，像微信里讲话；chatTopics 是家长今晚回家可以直接问出口的具体话题；nextSteps 包含一条"做一次随堂检验来确认孩子掌握"的建议。只输出 JSON。${buildTerminologyHintBlock(context.memory.terminologyHint)}`,
       },
     ],
     model,
-    { temperature: 0.3, maxTokens: 3072, responseFormat: 'json_object' },
+    { temperature: 0.4, maxTokens: 2200, responseFormat: 'json_object' },
   );
 
   return parseJsonResponse<StudyReportLLMOutput>(response.content);
@@ -135,7 +115,7 @@ export const studyReportPlugin: AppPlugin = {
   },
   async run(context: AppExecutionContext, tools: AppPluginTools): Promise<AppExecutionResult> {
     const promptContext = buildPromptTranscriptContext(context.input.transcript, {
-      maxChars: 20_000,
+      maxChars: 8_000,
       includeIndex: true,
       includeTimestamp: true,
       minCharsPerSegment: 40,

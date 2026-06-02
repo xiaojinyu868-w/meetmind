@@ -95,100 +95,34 @@ async function generateDeckWithLLM(
   transcriptContext: string,
   anchorContext: string
 ): Promise<FlashcardLLMOutput | null> {
+  // 提示词哲学：描述用户和目标，不描述路径。
+  // 难度分级、卡片数量、措辞风格——交给模型自己判断。
   const response = await chat(
     [
       {
         role: 'system',
         content:
-          [
-            '你是一位认知科学学习教练，擅长间隔重复和主动回忆。',
-            '你的产物会被学生在课后立刻使用——他第一次看到这组卡片就要觉得"这真的覆盖了我刚学的内容"。',
-            '',
-            '硬性纪律（违反任意一条都视为失败）：',
-            '1) 严格禁止"什么是 X？/请解释 X"这种空白式提问。每个题面都必须给出可触发回忆的具体情境或对比锚点。',
-            '2) 严格禁止口头禅（嗯/呃/啊/这个/那个）和原录音里的转写噪声进入卡面。',
-            '3) 严格禁止把"老师在 12:30 说了..."这种元层叙述当作答案——答案应该是知识本身，不是对课堂叙述的复述。',
-            '4) 答案 2-4 句、精准。题面 ≤ 30 字。",',
-            '5) 单张卡能被截图分享——题面+答案应当独立成立，不依赖外部上下文。',
-            '6) 若学习者关注点（anchors / 困惑标记）非空，至少 40% 的卡必须直接命中这些点。',
-            '',
-            '严格基于课堂证据，只输出 JSON。',
-          ].join('\n'),
+          '你是一位深谙认知科学和间隔重复理论的学习教练。学生刚上完一节课，需要通过主动回忆来真正记住核心知识，而不仅仅是机械背诵。把这节课的内容转化为一组让他"看到题就能在脑子里把答案重建出来"的闪卡。',
       },
       {
         role: 'user',
-        content: `学习目标：${context.goal.intent}
-用户画像：刚完成一节课复习，需要通过主动回忆快速定位"真懂/不懂"。
-
-请生成一组高质量闪卡。卡片应涵盖三个难度层级：
-- 基础层（core）：核心概念定义、关键术语，确保"知道是什么"
-- 进阶层（challenge）：方法步骤、原理对比、易错点辨析，检验"理解为什么"
-- 迁移层（transfer）：跨场景应用、变式问题、学科联系，考察"能用来做什么"
-
-题量：5-8 张，三个层级各覆盖至少 1 张；困惑点优先成卡。
-
-最小输出契约（仅字段约束）：
-{
-  "deckTitle": "闪卡标题",
-  "overview": "训练建议（一句话说明推荐的学习策略）",
-  "cards": [
-    {
-      "question": "正面问题",
-      "answer": "背面答案",
-      "hint": "提示（可选）",
-      "difficulty": "core|challenge|transfer",
-      "startMs": 12000,
-      "endMs": 21000
-    }
-  ]
-}
-
-few-shot 反例（不要这样写）：
-{
-  "question": "什么是过拟合？",        ← 空白式提问，禁止
-  "question": "请解释机器学习",        ← 太宽，没有可回忆锚点
-  "question": "老师在 12:30 说了什么？" ← 元叙述，禁止
-  "answer": "嗯，就是模型表现不好这种"  ← 口头禅 + 模糊
-}
-
-few-shot 正例：
-{
-  "deckTitle": "机器学习基础概念闪卡",
-  "overview": "建议先完成基础层，再逐步挑战进阶和迁移层。",
-  "cards": [
-    {
-      "question": "如何用一句话区分'过拟合'和'欠拟合'？",
-      "answer": "过拟合：训练集表现好但泛化差，学到了噪声；欠拟合：训练集本身就差，模型容量不够。两者都看训练-验证误差差距判断。",
-      "difficulty": "core",
-      "startMs": 32000,
-      "endMs": 45000
-    },
-    {
-      "question": "L1 和 L2 正则化在权重收缩效果上有什么区别？为什么 L1 能做特征选择？",
-      "answer": "L1 倾向产生稀疏权重（部分精确为 0），实现特征选择；L2 均匀缩小所有权重不归零。差别来自惩罚项的形状——L1 的菱形约束更容易让最优解落在坐标轴上。",
-      "hint": "想想它们的惩罚项几何形状",
-      "difficulty": "challenge",
-      "startMs": 120000,
-      "endMs": 138000
-    },
-    {
-      "question": "训练房价模型时验证集误差远大于训练集误差，你会按什么顺序排查？",
-      "answer": "1. 先看是不是过拟合（增正则、降复杂度、早停）2. 再查特征工程是否引入泄露 3. 最后看是否数据分布偏移（训练 vs 验证集）。先动假设链最短的。",
-      "difficulty": "transfer",
-      "startMs": 200000,
-      "endMs": 220000
-    }
-  ]
-}
-
-课堂原文：
+        content: `${context.goal.intent ? `他的学习目标：${context.goal.intent}\n\n` : ''}${anchorContext ? `他听课时的困惑点（这些地方更容易出问题，值得多覆盖）：\n${anchorContext}\n\n` : ''}课堂原文：
 ${transcriptContext}
 
-${anchorContext ? `学习者关注点（包含困惑标记，请优先成卡）：\n${anchorContext}` : ''}${buildTerminologyHintBlock(context.memory.terminologyHint)}`,
+输出 JSON：
+{
+  "deckTitle": string,
+  "overview": string,
+  "cards": [
+    { "question": string, "answer": string, "startMs": number, "endMs": number, "hint"?: string, "difficulty"?: "core"|"challenge"|"transfer" }
+  ]
+}
+
+只输出 JSON，不解释。${buildTerminologyHintBlock(context.memory.terminologyHint)}`,
       },
     ],
     model,
-    { temperature: 0.3, maxTokens: 2800 }
+    { temperature: 0.4, maxTokens: 2400 }
   );
 
   return parseJsonResponse<FlashcardLLMOutput>(response.content);
@@ -312,8 +246,12 @@ export const flashcardsPlugin: AppPlugin = {
     return context.goal.appKey === 'flashcards' || context.goal.expectedOutput === 'cards';
   },
   async run(context: AppExecutionContext, tools: AppPluginTools): Promise<AppExecutionResult> {
+    // 8000 字 ≈ 12-16k input tokens ≈ 15-20 分钟课堂内容。
+    // 长课时 prompt 会让 step-3.7-flash 等高速模型在 prefill 阶段就吃满 100s+，
+    // 加上 JSON 输出 ~1500 tokens，整体撞 180s 服务端超时。
+    // 上下文 > 指令，但上下文也要给得有节制。
     const promptContext = buildPromptTranscriptContext(context.input.transcript, {
-      maxChars: 24_000,
+      maxChars: 8_000,
       includeIndex: true,
       includeTimestamp: false,
       minCharsPerSegment: 48,

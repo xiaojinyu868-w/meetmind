@@ -12,6 +12,7 @@ import {
 } from 'lucide-react';
 import { useOmniRealtimeCall } from '@/hooks/useOmniRealtimeCall';
 import { COPY } from '@/lib/ui/copy';
+import { RealtimeOrb, type RealtimeOrbState } from '@/components/realtime/RealtimeOrb';
 
 /* ─── Props ─── */
 
@@ -48,77 +49,13 @@ function formatCallDuration(elapsedMs: number): string {
 }
 
 /* ─── Voice Orb ─── */
-
-function VoiceOrb({ state }: { state: 'idle' | 'listening' | 'thinking' | 'responding' | 'muted' }) {
-  const isActive = state === 'listening' || state === 'responding' || state === 'thinking';
-  const orbLabel = state === 'listening' ? '在听你说' : state === 'thinking' ? '在想' : state === 'responding' ? '在说' : '';
-
-  return (
-    <div className="relative flex flex-col items-center gap-5">
-      {/* 呼吸光环 */}
-      <div className="relative flex h-40 w-40 items-center justify-center">
-        {isActive ? (
-          <>
-            <span
-              className="absolute inset-0 rounded-full border border-[#1C1B19]"
-              style={{
-                opacity: 0.06,
-                animation: 'orbPulse 2.4s ease-in-out infinite',
-              }}
-            />
-            <span
-              className="absolute inset-[-8px] rounded-full border border-[#1C1B19]"
-              style={{
-                opacity: 0.03,
-                animation: 'orbPulse 2.4s ease-in-out 0.4s infinite',
-              }}
-            />
-          </>
-        ) : null}
-
-        {/* 外圈 */}
-        <span className="absolute inset-0 rounded-full border border-divider bg-white" />
-        <span className="absolute inset-[10px] rounded-full border border-divider-light" />
-
-        {/* 核心圆 */}
-        <span className="relative z-10 flex h-[104px] w-[104px] items-center justify-center rounded-full bg-[#1C1B19]">
-          {/* 声纹条 */}
-          <div className="flex h-[20px] items-end justify-center gap-[4px]">
-            {Array.from({ length: 5 }).map((_, i) => (
-              <span
-                key={i}
-                className="w-[3px] rounded-full bg-white"
-                style={{
-                  height: isActive ? '100%' : '24%',
-                  opacity: isActive ? 1 : 0.25,
-                  animation: isActive
-                    ? `voiceBar 0.6s ease-in-out ${i * 0.08}s infinite alternate`
-                    : 'none',
-                }}
-              />
-            ))}
-          </div>
-        </span>
-      </div>
-
-      {/* 状态文字（极淡） */}
-      {orbLabel ? (
-        <span className="text-[13px] font-medium text-[#8E8B82]">{orbLabel}</span>
-      ) : null}
-
-      <style jsx>{`
-        @keyframes orbPulse {
-          0%, 100% { transform: scale(1); opacity: 0.06; }
-          50% { transform: scale(1.08); opacity: 0.12; }
-        }
-        @keyframes voiceBar {
-          0% { height: 20%; opacity: 0.3; }
-          100% { height: 100%; opacity: 1; }
-        }
-      `}</style>
-    </div>
-  );
-}
+//
+// 历史上这里有一个本地 VoiceOrb（克制黑底版），现在统一用 v7 呼吸光晕版 RealtimeOrb，
+// 「聊聊你想要的」和复习态语音同桌共用一个视觉模板，避免两套并存。
+//
+// 状态映射：useOmniRealtimeCall 的 status → RealtimeOrbState
+//   listening / thinking / responding / muted 直接对应；
+//   其它（idle / connecting / authorizing / error）映射到 'idle'。
 
 /* ─── Control Button ─── */
 
@@ -222,12 +159,12 @@ export function TutorRealtimeCallScreen({
 
   /* ── Orb 状态映射 ── */
 
-  const orbState = useMemo(() => {
-    if (isMuted) return 'muted' as const;
-    if (isListening) return 'listening' as const;
-    if (isThinking) return 'thinking' as const;
-    if (isResponding) return 'responding' as const;
-    return 'idle' as const;
+  const orbState = useMemo<RealtimeOrbState>(() => {
+    if (isMuted) return 'muted';
+    if (isListening) return 'listening';
+    if (isThinking) return 'thinking';
+    if (isResponding) return 'responding';
+    return 'idle';
   }, [isMuted, isListening, isThinking, isResponding]);
 
   /* ── 顶部一句话状态 ── */
@@ -333,7 +270,7 @@ export function TutorRealtimeCallScreen({
 
       {/* ── 中央舞台：Orb + 标题 + 状态 ── */}
       <div className="flex flex-1 flex-col items-center justify-center gap-6">
-        <VoiceOrb state={orbState} />
+        <RealtimeOrb state={orbState} size={120} />
 
         <div className="flex flex-col items-center gap-3 text-center">
           <h1 className="text-[32px] font-semibold tracking-[-0.04em] text-[#1C1B19]">{title}</h1>

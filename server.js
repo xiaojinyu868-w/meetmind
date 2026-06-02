@@ -916,8 +916,28 @@ app.prepare().then(() => {
       clientWs.send(JSON.stringify(payload));
     }
 
+    // 抗噪 / 抗打断三件套：
+    //   1) turn_detection.type='semantic_vad'  让模型基于"对话语义意图"判断这是不是真要说话
+    //      （能区分"附和声 / 咳嗽 / 别人说话"和"用户真在跟你说"）。旧 server_vad 只看音量，
+    //      在嘈杂环境下被打断频繁。环境变量 DASHSCOPE_OMNI_TURN_DETECTION 可强制回退 server_vad。
+    //   2) silence_duration_ms 调大到 1500ms，给附和声 / 短暂背景音留缓冲。
+    //   3) input_audio_noise_reduction.type='near_field' 在桌面/手机贴麦场景下做服务端降噪。
+    //      远场（教室、会议室）用 'far_field'；走环境变量切换。
+    const turnDetectionType = process.env.DASHSCOPE_OMNI_TURN_DETECTION || 'semantic_vad';
+    const noiseReductionType = process.env.DASHSCOPE_OMNI_NOISE_REDUCTION || 'near_field';
+    const silenceDurationMs = Number(process.env.DASHSCOPE_OMNI_SILENCE_DURATION_MS || 1500);
+    const vadThreshold = Number(process.env.DASHSCOPE_OMNI_VAD_THRESHOLD || 0.5);
+
     function buildSessionPayload() {
-      return {
+      const turnDetection = {
+        type: turnDetectionType,
+        threshold: vadThreshold,
+        silence_duration_ms: silenceDurationMs,
+        prefix_padding_ms: 500,
+        create_response: true,
+        interrupt_response: true,
+      };
+      const payload = {
         modalities: ['text', 'audio'],
         instructions: sessionConfig.instructions,
         voice: sessionConfig.voice || defaultVoice,
@@ -926,15 +946,13 @@ app.prepare().then(() => {
         input_audio_transcription: {
           model: transcriptionModel,
         },
-        turn_detection: {
-          type: 'server_vad',
-          threshold: 0.5,
-          silence_duration_ms: 1100,
-          prefix_padding_ms: 300,
-          create_response: true,
-          interrupt_response: true,
-        },
+        turn_detection: turnDetection,
       };
+      // 服务端噪音抑制：'off' 关闭；'near_field' 适合桌面 / 手机贴麦；'far_field' 适合远场。
+      if (noiseReductionType && noiseReductionType !== 'off') {
+        payload.input_audio_noise_reduction = { type: noiseReductionType };
+      }
+      return payload;
     }
 
     function sendSessionUpdate(reason) {

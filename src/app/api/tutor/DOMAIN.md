@@ -18,6 +18,15 @@
 |------|------|
 | `/api/tutor/agent` | M10 主入口：mode-driven Agent loop；支持请求体 `model` 选择 StepFun / DeepSeek / DashScope / OpenAI-compatible 模型（默认 `step-3.7-flash`）；AI SDK 必须用 `.chat()` 走 `/chat/completions`；`stopWhen: stepCountIs(3)` + `experimental_transform: smoothStream({ chunking: 'word' })` 让首包延迟最小化；当首个 provider 在未输出内容前返回繁忙/限流/超时时，会按 StepFun → DeepSeek → DashScope 顺序自动切到下一已配置 key；DeepSeek 与 StepFun 都不暴露 native tools，结构化产物走 `<open_app:KEY/>` + 前端 `/api/apps/execute`（DeepSeek 是因为 `reasoning_content` tool-call 续写错误，StepFun 是为降低 TTFT—6 个 tool description ~700 字会拖慢 prefill） |
 
+### `/api/tutor/agent` 的 mode 矩阵
+
+| mode | 入口 | context 关键字段 | 特性 |
+|---|---|---|---|
+| `in-class` | `useClassroomCompanion`（课堂同桌） | `recentFocus` | 短回答；启用 native tools；inline app: mindmap/cheatsheet |
+| `review` | `TutorAgentPanel` / `SafeAITutor`（录音/视频复习） | `fullTranscript` + `currentTimestampSec` + `learnerProfile` | 可长答；强制时间戳；inline app 全集；可选 thinkingGuide |
+| `shared` | `SharedAgentChat` 落地页 | `shared` snapshot + `shareToken` | 禁用 native tools；禁用 inline app；禁用时间戳；不注入 learnerProfile（隐私铁律） |
+| `goal` | 「聊聊你想要的」`IntentDialog`（M11） | `goal.existingGoals` + `goal.sessionHint` + `supportMaterials` | 无 transcript；禁用 native tools；禁用 inline app；禁用时间戳；AI 用 `---我想要的---...---结束---` 块提炼可保存的 GoalEntry |
+
 ## 依赖
 
 - `lib/services/llm-service` — LLM 调用

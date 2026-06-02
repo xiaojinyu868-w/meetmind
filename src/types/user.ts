@@ -142,8 +142,62 @@ export const LEARNER_STAGE_LABELS: Record<LearnerStage, string> = {
 
 interface LearnerProfileBase {
   stage: LearnerStage;
-  goal?: string; // "期末不挂科" / "考研" / "转行"
+  goal?: string; // "期末不挂科" / "考研" / "转行" — 旧字段，保留兼容
   otherInterests?: string; // "英语、出国准备" — 和主方向无关的学习线
+  /**
+   * 「聊聊你想要的」教练对话沉淀下来的目标卡。
+   * 不是固定字段，是用户和 AI 一起聊出来的"我想做的事"——可以多条，可以更新。
+   * 这一层是 v3.0 信息流产品哲学的核心：用户带着 target 进来，剩下的内容流由 AI 围绕这些 target 组织。
+   */
+  goals?: GoalEntry[];
+  /**
+   * AI 在「聊聊你想要的」首次会面对话里提炼的"我了解到的你"画像。
+   * 1-3 句话，第二人称，写他的身份/阶段/状态/在乎的事。
+   * 这是个人上下文的核心——后续 IntentDialog 回访 / 复习态 tutor / shared 态都可以读这一段。
+   *
+   * 仅由 IntentDialog 的 ---我了解到的你--- marker 写入。
+   */
+  bio?: BioEntry;
+}
+
+/**
+ * 一条"我想做的事"。
+ * - title 必填，是用户面卡片的标题（最好用户自己说出口的那句话）
+ * - summary 可选，详细描述（同样最好是用户自己的措辞）
+ * - source 标记是从哪轮对话提炼出来的，方便后续追溯
+ */
+export interface GoalEntry {
+  /** 稳定 ID（前端生成 / 后端不强约束） */
+  id: string;
+  /** 一句话标题，最多 40 字 */
+  title: string;
+  /** 详细描述，可选 */
+  summary?: string;
+  /** ISO 创建时间 */
+  createdAt: string;
+  /** ISO 最后更新时间 */
+  updatedAt: string;
+  /** 关联的对话 conversationId（可选，用于"翻回当时聊的内容"） */
+  conversationId?: string;
+  /** 用户标记的状态：active = 正在追求 / paused = 先放放 / done = 已达成 */
+  status?: 'active' | 'paused' | 'done';
+}
+
+/**
+ * 一份"我了解到的你"画像。
+ * 是 AI 在首次会面对话里提炼 + 用户确认后才落库的。后续会话直接读这一段，不再重复问身份阶段。
+ */
+export interface BioEntry {
+  /** 一句话核心：身份 + 阶段 + 当前状态。例如"大三计算机学生，在准备考研，最近在数学上卡了一阵" */
+  headline: string;
+  /** 可选 1-2 行 detail：在乎的事 / 节奏 / 值得记住的细节 */
+  detail?: string;
+  /** ISO 首次创建时间 */
+  createdAt: string;
+  /** ISO 最近一次更新时间（用户每次主动重聊都可以更新） */
+  updatedAt: string;
+  /** 关联首次提炼时的 conversationId */
+  conversationId?: string;
 }
 
 export interface K12Profile extends LearnerProfileBase {

@@ -17,8 +17,8 @@ const DEFAULT_DASHSCOPE_BASE_URL = 'https://dashscope.aliyuncs.com/compatible-mo
 const DEFAULT_DEEPSEEK_BASE_URL = 'https://api.deepseek.com';
 const DEFAULT_STEPFUN_BASE_URL = 'https://api.stepfun.com/v1';
 const DEFAULT_STEPFUN_MODEL = 'step-3.7-flash';
-const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-flash';
-const DEFAULT_QWEN_MODEL = 'qwen3.6-plus';
+const DEFAULT_DEEPSEEK_MODEL = 'DeepSeek-V4-Flash';
+const DEFAULT_QWEN_MODEL = 'Qwen3.6-Plus-A';
 
 function pickKey(source: TutorAgentProviderConfig['keySource'], value: string | undefined) {
   const trimmed = value?.trim();
@@ -31,6 +31,10 @@ export function isStepFunModel(modelId: string): boolean {
 
 export function isDeepSeekModel(modelId: string): boolean {
   return /^deepseek-/i.test(modelId);
+}
+
+export function isQwenModel(modelId: string): boolean {
+  return /^qwen/i.test(modelId);
 }
 
 export function shouldUseNativeTutorTools(modelId: string): boolean {
@@ -107,7 +111,7 @@ export function resolveTutorAgentProviderConfig(
       ? stepfun || openai || deepseek || dashscope
       : shouldUseDeepSeek || isDeepSeekBaseUrl(baseURL)
         ? deepseek || openai || dashscope || stepfun
-        : isDashScopeBaseUrl(baseURL)
+        : isQwenModel(modelId) || isDashScopeBaseUrl(baseURL)
           ? dashscope || openai || deepseek || stepfun
           : openai || stepfun || deepseek || dashscope);
 
@@ -131,9 +135,9 @@ export function resolveTutorAgentProviderFallbacks(
 
   const primaryIsStepFun = isStepFunModel(primary.modelId) || isStepFunBaseUrl(primary.baseURL);
   const primaryIsDeepSeek = !primaryIsStepFun && (isDeepSeekModel(primary.modelId) || isDeepSeekBaseUrl(primary.baseURL));
-  const primaryIsDashScope = !primaryIsStepFun && !primaryIsDeepSeek && isDashScopeBaseUrl(primary.baseURL);
+  const primaryIsQwen = !primaryIsStepFun && !primaryIsDeepSeek && (isQwenModel(primary.modelId) || isDashScopeBaseUrl(primary.baseURL));
 
-  // Fallback chain: primary → DeepSeek → DashScope (if the corresponding key exists).
+  // Fallback chain: primary → DeepSeek → Qwen (if the corresponding key exists).
   if (primaryIsStepFun) {
     if (hasKey(env.DEEPSEEK_API_KEY)) {
       fallbacks.push(resolveTutorAgentProviderConfig(env, { modelId: DEFAULT_DEEPSEEK_MODEL }));
@@ -143,7 +147,7 @@ export function resolveTutorAgentProviderFallbacks(
     }
   } else if (primaryIsDeepSeek && hasKey(env.DASHSCOPE_API_KEY)) {
     fallbacks.push(resolveTutorAgentProviderConfig(env, { modelId: DEFAULT_QWEN_MODEL }));
-  } else if (primaryIsDashScope && hasKey(env.DEEPSEEK_API_KEY)) {
+  } else if (primaryIsQwen && hasKey(env.DEEPSEEK_API_KEY)) {
     fallbacks.push(resolveTutorAgentProviderConfig(env, { modelId: DEFAULT_DEEPSEEK_MODEL }));
   }
 

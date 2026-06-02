@@ -8,9 +8,11 @@
  * M10 之后：flag 退役，所有对话统一走 `TutorAgentPanel → /api/tutor/agent`。
  * 老 AITutor.tsx 保留为"历史 deprecated"，只在极端回滚场景下才会被用到。
  *
- * 复习态专属的两个可选能力（默认关，localStorage 持久化）由这个组件挂载：
- *   - 显示时间戳（回答里附 [MM:SS] chip）
- *   - 学霸思维引导（---思维演示--- / ---正式回答--- 分段）
+ * 复习态的两个可选能力（时间戳显示 / 思维引导）现在**不再**作为顶部 ReviewOptionsBar
+ * 出现在主舞台——这违反"主页面只做一件事"的产品原则。它们：
+ *   - 默认值由产品判断（时间戳 ON / 思维引导 OFF），写死在 `tutor-preferences.ts`
+ *   - 高级用户想覆盖，去**设置页**（/settings）调整，IndexedDB 持久化
+ * 主舞台不再插入产品配置面板。
  *
  * 课堂同桌不走这里——它直接用 useClassroomCompanion hook（更细粒度的消息管理 +
  * inline app 气泡 + 停止录音 ceremony 等 classroom-only 能力）。
@@ -23,40 +25,14 @@ import { useAuth } from '@/lib/hooks/useAuth';
 import { TutorErrorBoundary } from './TutorErrorBoundary';
 import { TutorAgentPanel } from './tutor/TutorAgentPanel';
 import { buildTutorAgentReviewContext, formatLearnerProfileForTutorAgent } from './tutor/tutor-agent-adapter';
-
-const REVIEW_OPTIONS_LS_KEY = 'meetmind_tutor_review_options_v1';
-
-interface ReviewOptions {
-  returnTimestamps: boolean;
-  thinkingGuide: boolean;
-}
-
-function loadReviewOptions(): ReviewOptions {
-  // SSR 安全
-  if (typeof window === 'undefined') {
-    return { returnTimestamps: false, thinkingGuide: false };
-  }
-  try {
-    const raw = window.localStorage.getItem(REVIEW_OPTIONS_LS_KEY);
-    if (!raw) return { returnTimestamps: false, thinkingGuide: false };
-    const parsed = JSON.parse(raw) as Partial<ReviewOptions>;
-    return {
-      returnTimestamps: parsed.returnTimestamps === true,
-      thinkingGuide: parsed.thinkingGuide === true,
-    };
-  } catch {
-    return { returnTimestamps: false, thinkingGuide: false };
-  }
-}
-
-function saveReviewOptions(opts: ReviewOptions) {
-  if (typeof window === 'undefined') return;
-  try {
-    window.localStorage.setItem(REVIEW_OPTIONS_LS_KEY, JSON.stringify(opts));
-  } catch {
-    /* localStorage 满/被禁——静默忽略 */
-  }
-}
+import { getPreference } from '@/lib/db';
+import {
+  TUTOR_PREFERENCES_DEFAULT,
+  TUTOR_SHOW_TIMESTAMPS_KEY,
+  TUTOR_THINKING_GUIDE_KEY,
+  parseTutorBooleanPreference,
+  type TutorPreferences,
+} from '@/lib/utils/tutor-preferences';
 
 /**
  * 极端回滚开关。默认走 agent 路径；显式设 `false` 走老 AITutor SSE 路径。
@@ -76,15 +52,31 @@ export function SafeAITutor(props: ComponentProps<typeof AITutor>) {
   ];
 
   const { accessToken, user } = useAuth();
-  const [reviewOpts, setReviewOpts] = React.useState<ReviewOptions>(() => loadReviewOptions());
-  const [optionsPanelOpen, setOptionsPanelOpen] = React.useState(false);
 
-  const updateReviewOpts = React.useCallback((next: Partial<ReviewOptions>) => {
-    setReviewOpts((prev) => {
-      const merged = { ...prev, ...next };
-      saveReviewOptions(merged);
-      return merged;
-    });
+  // 从 IndexedDB 读偏好（只在 mount 时一次；用户改设置后下次进对话框时生效）。
+  const [tutorPrefs, setTutorPrefs] = React.useState<TutorPreferences>(TUTOR_PREFERENCES_DEFAULT);
+  React.useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        // getPreference 的第二个参数是 fallback——这里传 null 让我们用 parser 统一处理
+        // 缺失/异常情况，避免布尔 default 和字符串 default 两套逻辑。
+        const [showTsRaw, thinkingRaw] = await Promise.all([
+          getPreference<string | null>(TUTOR_SHOW_TIMESTAMPS_KEY, null),
+          getPreference<string | null>(TUTOR_THINKING_GUIDE_KEY, null),
+        ]);
+        if (cancelled) return;
+        setTutorPrefs({
+          showTimestamps: parseTutorBooleanPreference(showTsRaw, TUTOR_PREFERENCES_DEFAULT.showTimestamps),
+          thinkingGuide: parseTutorBooleanPreference(thinkingRaw, TUTOR_PREFERENCES_DEFAULT.thinkingGuide),
+        });
+      } catch {
+        /* IndexedDB 不可用——保持产品默认值 */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const learnerProfileContext = React.useMemo(
@@ -126,12 +118,6 @@ export function SafeAITutor(props: ComponentProps<typeof AITutor>) {
   return (
     <TutorErrorBoundary panelName="AI 同桌" resetKeys={resetKeys}>
       <div className="flex h-full flex-col">
-        <ReviewOptionsBar
-          opts={reviewOpts}
-          onChange={updateReviewOpts}
-          open={optionsPanelOpen}
-          onOpenChange={setOptionsPanelOpen}
-        />
         <div className="flex-1 min-h-0">
           <TutorAgentPanel
             sessionId={props.sessionId ?? 'anon'}
@@ -157,8 +143,8 @@ export function SafeAITutor(props: ComponentProps<typeof AITutor>) {
             onLaunchQuestionConsumed={props.onLaunchQuestionConsumed}
             context={reviewContext}
             options={{
-              returnTimestamps: reviewOpts.returnTimestamps,
-              thinkingGuide: reviewOpts.thinkingGuide,
+              returnTimestamps: tutorPrefs.showTimestamps,
+              thinkingGuide: tutorPrefs.thinkingGuide,
               allowInlineApp: true,
             }}
             onOpenAppInWorkspace={props.onOpenAppInWorkspace}
@@ -166,87 +152,5 @@ export function SafeAITutor(props: ComponentProps<typeof AITutor>) {
         </div>
       </div>
     </TutorErrorBoundary>
-  );
-}
-
-// ──────────────────────────────────────────────────────────────
-// ReviewOptionsBar — 复习态 AI 设置的最小开关条
-//
-// 放在 AITutor 顶部一条细细的控件行。默认收起为一个 "⚙ 设置" 链接，
-// 点开后展开两个切换开关。不要把它做成弹窗或者模态——这是复习场景，
-// 用户可以随时开/关而不中断阅读。
-// ──────────────────────────────────────────────────────────────
-
-function ReviewOptionsBar({
-  opts,
-  onChange,
-  open,
-  onOpenChange,
-}: {
-  opts: ReviewOptions;
-  onChange: (next: Partial<ReviewOptions>) => void;
-  open: boolean;
-  onOpenChange: (v: boolean) => void;
-}) {
-  const activeCount = Number(opts.returnTimestamps) + Number(opts.thinkingGuide);
-
-  return (
-    <div className="border-b border-divider bg-white px-3 py-1.5 text-xs">
-      <button
-        type="button"
-        onClick={() => onOpenChange(!open)}
-        className="inline-flex items-center gap-1.5 text-ink-muted transition hover:text-ink"
-        aria-expanded={open}
-        aria-controls="review-options-panel"
-      >
-        <span>回答设置</span>
-        {activeCount > 0 ? (
-          <span className="ml-1 inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-ink px-1 text-[10px] font-medium text-white">
-            {activeCount}
-          </span>
-        ) : null}
-      </button>
-      {open ? (
-        <div id="review-options-panel" className="mt-2 flex flex-wrap gap-4 pb-1">
-          <OptionToggle
-            label="显示时间戳"
-            hint="回答里附 [MM:SS] chip，点击跳转"
-            checked={opts.returnTimestamps}
-            onChange={(v) => onChange({ returnTimestamps: v })}
-          />
-          <OptionToggle
-            label="学霸思维引导"
-            hint="回答分成'想的过程'和'最终答案'两段"
-            checked={opts.thinkingGuide}
-            onChange={(v) => onChange({ thinkingGuide: v })}
-          />
-        </div>
-      ) : null}
-    </div>
-  );
-}
-
-function OptionToggle({
-  label,
-  hint,
-  checked,
-  onChange,
-}: {
-  label: string;
-  hint?: string;
-  checked: boolean;
-  onChange: (v: boolean) => void;
-}) {
-  return (
-    <label className="inline-flex cursor-pointer items-center gap-2 select-none">
-      <input
-        type="checkbox"
-        checked={checked}
-        onChange={(e) => onChange(e.target.checked)}
-        className="h-3.5 w-3.5 rounded border-divider text-ink focus:ring-1 focus:ring-ink-muted"
-      />
-      <span className="text-ink-secondary">{label}</span>
-      {hint ? <span className="text-ink-muted">· {hint}</span> : null}
-    </label>
   );
 }

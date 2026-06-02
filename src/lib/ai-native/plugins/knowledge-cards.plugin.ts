@@ -55,29 +55,20 @@ async function generateCopyWithLLM(
     [
       {
         role: 'system',
-        content:
-          '你是课堂复习卡片生成助手。你只能基于给定课堂证据生成内容，不允许扩写超出证据的事实。只输出 JSON，不要解释。',
+        content: '你帮一位刚听完课的学生整理几张"翻一遍就能想起这节课讲过什么"的复习卡片。每张卡只基于他听到的真实课堂内容，不要扩写出课堂里没讲过的东西。',
       },
       {
         role: 'user',
-        content: `学习目标：${context.goal.intent}
-请基于下面课堂证据，输出 3 张复习卡片草稿，要求语言简洁、可执行。
+        content: `${context.goal.intent ? `他的学习目标：${context.goal.intent}\n\n` : ''}课堂证据：
+${prompt}
 
-JSON 格式：
+输出 JSON：
 {
-  "overview": "一句总览",
-  "cards": [
-    {
-      "title": "卡片标题",
-      "body": "卡片正文，40-90字",
-      "taskLabel": "行动任务标题",
-      "taskReason": "为什么要做"
-    }
-  ]
+  "overview": string,
+  "cards": [{ "title": string, "body": string, "taskLabel": string, "taskReason": string }]
 }
 
-课堂证据：
-${prompt}`,
+只输出 JSON。`,
       },
     ],
     model,

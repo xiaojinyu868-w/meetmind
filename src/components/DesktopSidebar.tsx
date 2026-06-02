@@ -155,7 +155,7 @@ export function DesktopSidebar({
                   className="relative z-10 h-[22px] w-[22px] object-contain"
                 />
               </div>
-              <span className="text-[15px] font-semibold tracking-display text-ink">
+              <span className="text-[15px] font-semibold tracking-display text-ink whitespace-nowrap">
                 MeetMind
               </span>
             </Link>

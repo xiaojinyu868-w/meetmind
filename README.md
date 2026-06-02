@@ -125,7 +125,7 @@ make deploy
 | 服务端 DB | Prisma 7.2 + SQLite |
 | 客户端 DB | Dexie.js (IndexedDB) — 转录文本、本地缓存、离线状态的真实数据源 |
 | 状态管理 | Zustand（7 stores，~89 状态） |
-| AI 模型 | 阿里云百炼（qwen3.5-plus / qwen3-vl-plus / qwen-omni realtime）、CommonStack（Gemini 3 Flash） |
+| AI 模型 | DXKP OpenAI-compatible（默认 `DeepSeek-V4-Flash`，可切 `DeepSeek-V4-Pro` / `Qwen3.6-Plus-A`；`qwen3.5-omni-plus` realtime 仍保留原链路）、CommonStack（Gemini 3 Flash） |
 | AI 框架 | Vercel AI SDK v6（`streamText + tools + stepCountIs`） |
 | 音频处理 | wavesurfer.js、fluent-ffmpeg、@ffmpeg-installer/ffmpeg |
 | ASR | DashScope qwen3-asr-flash（实时 WS）+ qwen3-asr-flash-filetrans（异步长音频） |

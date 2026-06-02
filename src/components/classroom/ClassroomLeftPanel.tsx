@@ -165,68 +165,70 @@ function formatTodayLabel(): string {
 }
 
 /**
- * PageHeader — v7 Course Hero（课堂页第一眼）
+ * PageHeader — 紧凑课堂 hero（v7 Round 9-2 实用概览版）
  *
- * 设计宪法（v7 第 2、5 节）落地：
- *   1. mono eyebrow 11px / 0.08em / pine 600 + pine 呼吸点
- *      —— 让"今日"这件事本身被资产化：JetBrains Mono 是 v7 的引用资产字体
- *   2. h1 30px / 600 / -0.024em，配 Instrument Serif italic em 点缀朱批红
- *      —— "课堂" 是中文 Inter 黑色，副词"今日"是西文衬线斜体朱批
- *      —— 这是 v7 双签名色 + 字体三件套的灵魂呈现
- *   3. surface-ai 工具类 = shadow-ai-glow + ai-breath shimmer 6s 循环
- *      —— "AI 在场" 这件事不是装饰，是产品 DNA。课堂第一眼必须有
- *   4. meta 行：lesson 数 + pine 状态点 rec-pulse
- *      —— 让"已经积累"这件事被看见
+ * 用户反馈（按 8 条意见整改）：
+ *   #1 之前像首页 banner，提供信息少 → 改成"待整理 · 待复习 · 已归档"实用概览
+ *   #2 "今日"用 vermilion italic 装饰过强、和"课堂"被拆开 → 统一一行 "今日课堂"，
+ *      不再拆开装饰；如果要轻强调，"课堂"用极淡 pine accent line（不是色彩）
+ *   #3 主内容栏太窄（max-w-4xl） → 改 max-w-4xl 让标题不截断
  */
-function PageHeader({ lessonCount = 0 }: { lessonCount?: number }) {
+function PageHeader({ lessons = [] }: { lessons?: Lesson[] }) {
+  // 用真实数据驱动概览数字
+  const processingCount = lessons.filter((l) => l.status === 'processing').length;
+  const pendingReviewCount = lessons.filter(
+    (l) => l.status === 'ready' && !l.reviewed,
+  ).length;
+  const archivedCount = lessons.filter(
+    (l) => l.status === 'ready' && l.reviewed,
+  ).length;
+
   return (
-    <div className="flex-shrink-0 px-8 pt-10 pb-5 lg:px-12 lg:pt-12">
-      <div className="mx-auto w-full max-w-2xl">
-        <div className="surface-ai px-7 py-7 lg:px-9 lg:py-8">
-          {/* eyebrow：mono 字体 + pine 色 + 微小呼吸点 */}
-          <div className="flex items-center gap-2.5">
-            <span
-              className="inline-block h-1.5 w-1.5 rounded-full bg-pine"
-              style={{ boxShadow: '0 0 0 3px rgba(45,79,62,0.12)' }}
-              aria-hidden
-            />
-            <span className="font-mono text-[11px] font-semibold uppercase tracking-[0.08em] text-pine">
-              {formatTodayLabel()}
-            </span>
-          </div>
+    <div className="flex-shrink-0 px-8 pt-5 pb-4 lg:px-12 lg:pt-6">
+      <div className="mx-auto flex w-full max-w-4xl items-center justify-between gap-6">
+        {/* 左：统一标题"今日课堂"，不再拆开 italic 朱批装饰 */}
+        <h1 className="text-[22px] font-semibold tracking-[-0.02em] text-ink leading-[1.2] whitespace-nowrap">
+          今日课堂
+        </h1>
 
-          {/* h1：Inter 大字 + Instrument Serif italic em 点缀朱批 */}
-          <h1 className="mt-3 text-[30px] font-semibold tracking-[-0.024em] text-ink leading-[1.18]">
-            <span className="font-serif italic font-normal text-vermilion mr-1.5">今日</span>
-            课堂
-          </h1>
+        {/* 右：概览数字 — 真正的"扫一眼知道还有多少事要做" */}
+        <div className="flex items-center gap-3 text-[12.5px] flex-shrink min-w-0 overflow-hidden">
+          <span className="font-mono uppercase tracking-[0.04em] text-ink-muted whitespace-nowrap">
+            {formatTodayLabel()}
+          </span>
 
-          {/* meta：本周已上 N 节课 + pine 呼吸点 */}
-          {lessonCount > 0 ? (
-            <div className="mt-4 flex items-center gap-2 text-[12.5px] text-ink-muted">
+          {(processingCount > 0 || pendingReviewCount > 0 || archivedCount > 0) ? (
+            <span className="h-3 w-px bg-divider flex-shrink-0" aria-hidden />
+          ) : null}
+
+          {processingCount > 0 ? (
+            <span className="flex items-center gap-1.5 whitespace-nowrap">
               <span
-                className="inline-block h-1.5 w-1.5 rounded-full bg-pine"
+                className="inline-block h-1.5 w-1.5 rounded-full bg-pine flex-shrink-0"
                 style={{
                   boxShadow: '0 0 0 0 rgba(45,79,62,0.5)',
                   animation: 'rec-pulse-v7 1.6s ease-in-out infinite',
                 }}
                 aria-hidden
               />
-              <span className="text-pine font-medium">
-                已积累
-                <span className="font-mono mx-1 tabular-nums text-pine">{lessonCount}</span>
-                节课
-              </span>
-              <span className="text-divider mx-1">·</span>
-              <span className="font-serif italic">慢慢酿，不急</span>
-            </div>
-          ) : (
-            <div className="mt-4 text-[12.5px] text-ink-muted">
-              <span className="font-serif italic text-pine">先发一节给我</span>
-              <span className="text-divider mx-1.5">·</span>
-              我会慢慢理解
-            </div>
-          )}
+              <span className="font-mono tabular-nums font-medium text-pine">{processingCount}</span>
+              <span className="text-pine">待整理</span>
+            </span>
+          ) : null}
+
+          {pendingReviewCount > 0 ? (
+            <span className="flex items-center gap-1.5 whitespace-nowrap">
+              <span className="font-mono tabular-nums font-medium text-vermilion">{pendingReviewCount}</span>
+              <span className="text-vermilion">待复习</span>
+            </span>
+          ) : null}
+
+          {archivedCount > 0 ? (
+            <span className="flex items-center gap-1.5 whitespace-nowrap text-ink-muted">
+              <span className="font-mono tabular-nums font-medium">{archivedCount}</span>
+              <span>已归档</span>
+            </span>
+          ) : null}
         </div>
       </div>
     </div>
@@ -393,10 +395,10 @@ function ListView({
 
   return (
     <>
-      <PageHeader lessonCount={groups.reduce((acc, g) => acc + g.items.length, 0)} />
+      <PageHeader lessons={groups.flatMap((g) => g.items)} />
 
       <div className="flex-1 overflow-y-auto px-8 pt-2 pb-4 lg:px-12">
-        <div className="mx-auto w-full max-w-2xl">
+        <div className="mx-auto w-full max-w-4xl">
           {/* 1. 正在录音的课 — 置顶活动条 */}
           {activeLesson && (
             <ActiveLessonPill
@@ -466,7 +468,7 @@ function StickyStartBar({
 }) {
   return (
     <div className="flex-shrink-0 bg-canvas px-8 pb-[max(env(safe-area-inset-bottom),1.25rem)] pt-4 lg:px-12">
-      <div className="mx-auto w-full max-w-2xl">
+      <div className="mx-auto w-full max-w-4xl">
         {disabled ? (
           <div className="flex w-full items-center justify-center gap-2.5 rounded-full bg-[#F0EBDF] py-3.5 text-[13px] text-ink-muted">
             <span className="inline-flex h-1.5 w-1.5 rounded-full bg-[#B5483C] animate-pulse" />
@@ -480,13 +482,13 @@ function StickyStartBar({
             <button
               type="button"
               onClick={onStart}
-              className="group flex w-full items-center justify-center gap-2.5 rounded-full bg-ink py-4 text-[14px] font-medium text-white transition hover:bg-[#1a1a19] active:scale-[0.995]"
+              className="group flex w-full items-center justify-center gap-2 rounded-full bg-ink py-3 text-[13.5px] font-medium text-white transition hover:bg-[#1a1a19] active:scale-[0.995]"
             >
-              <span className="relative flex h-2 w-2">
-                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-[#B5483C] opacity-50 group-hover:opacity-70" />
-                <span className="relative inline-flex h-2 w-2 rounded-full bg-[#B5483C]" />
+              <span className="relative flex h-1.5 w-1.5">
+                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-vermilion opacity-50 group-hover:opacity-70" />
+                <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-vermilion" />
               </span>
-              <Mic size={14} strokeWidth={2} />
+              <Mic size={13} strokeWidth={2} />
               <span>开始录一节课</span>
             </button>
           </>

@@ -86,7 +86,12 @@ import type { VideoInsightItem } from '@/components/VideoInsightTimeline';
 const ClassCheckOverlay = dynamic(() => import('@/components/ClassCheckOverlay').then(m => ({ default: m.ClassCheckOverlay })), { ssr: false });
 const ClassCheckToast = dynamic(() => import('@/components/ClassCheckToast').then(m => ({ default: m.ClassCheckToast })), { ssr: false });
 const SoftHint = dynamic(() => import('@/components/SoftHint').then(m => ({ default: m.SoftHint })), { ssr: false });
-const LearnerOnboarding = dynamic(() => import('@/components/LearnerOnboarding'), { ssr: false });
+// 「聊聊你想要的」 —— 替代旧 LearnerOnboarding 表单。
+// 旧组件留作 settings 页"重新填一份画像"的 fallback；首次进入 app 走对话式新入口。
+const IntentDialogContainer = dynamic(
+  () => import('@/components/intent/IntentDialogContainer').then((m) => ({ default: m.IntentDialogContainer })),
+  { ssr: false },
+);
 
 import { AppLoading } from '@/components/AppLoading';
 import { CollectionMessageActionSheet } from '@/components/CollectionMessageActionSheet';
@@ -328,7 +333,7 @@ function StudentAppContent({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   
-  const { user, isAuthenticated, accessToken, isCheckingAuth, saveLearnerProfile, onboardingCompleted } = useAuth();
+  const { user, isAuthenticated, accessToken, isCheckingAuth, onboardingCompleted } = useAuth();
   
 
   const { isMobile: detectedIsMobile, mounted } = useResponsive();
@@ -604,6 +609,31 @@ function StudentAppContent({
   const persistedCurrentTime = Math.max(0, Math.floor(currentTime / 5000) * 5000);
 
   // ── App State Restore Hook（应用初始化 + 状态持久化）──────
+  // R9-3：注入 onRestoreReviewSession callback，让 hook 能在 mount 时恢复 review viewMode。
+  // 用户痛点：从课后学习页进设置 → 返回 → 永远跳回课堂态（review state 丢失）。
+  // 真因：hook 之前强制 setViewMode('classroom')，因为它没法访问 restoreReviewSession。
+  // 现在通过 callback 注入解决。
+  const handleRestoreReviewFromBoot = useCallback(
+    async (
+      restoreSessionId: string,
+      saved: { reviewTab?: string; videoWorkspaceTab?: string; currentTime?: number; showTranscriptBar?: boolean }
+    ) => {
+      try {
+        type RestoreOpts = NonNullable<Parameters<typeof restoreReviewSession>[1]>;
+        return await restoreReviewSession(restoreSessionId, {
+          reviewTab: (saved.reviewTab || 'timeline') as RestoreOpts['reviewTab'],
+          videoWorkspaceTab: (saved.videoWorkspaceTab || 'chat') as RestoreOpts['videoWorkspaceTab'],
+          currentTime: saved.currentTime || 0,
+          showTranscriptBar: Boolean(saved.showTranscriptBar),
+        });
+      } catch (err) {
+        console.error('[handleRestoreReviewFromBoot] failed:', err);
+        return false;
+      }
+    },
+    [restoreReviewSession],
+  );
+
   useAppStateRestore(
     {
       isGuestFastEntry,
@@ -617,6 +647,7 @@ function StudentAppContent({
       showTranscriptBar,
       selectedAnchorId: selectedAnchor?.id,
       persistedCurrentTime,
+      onRestoreReviewSession: handleRestoreReviewFromBoot,
     },
     { hasRestoredState },
   );
@@ -630,15 +661,21 @@ function StudentAppContent({
   }, []);
 
   // ── Learner Onboarding ──────
+  // M11: 把硬编码两步表单换成对话式「聊聊你想要的」。
+  // - showOnboarding 触发条件保持原样（首次进入 / 未完成 / 非游客 / 没主动跳过）
+  // - onboardingCompleted 由 saveLearnerProfile 时自动写 onboardingCompletedAt 解决
+  //   —— 用户在 IntentDialog 里保存第一个 goal 时会触发 saveLearnerProfile，
+  //      onboardingCompletedAt 会被服务端写上，下次登录就不再弹。
+  // - onSkip 走原 handleOnboardingSkip，仅本会话内 dismiss
   const [onboardingDismissed, setOnboardingDismissed] = useState(false);
   const showOnboarding = isAuthenticated && !onboardingCompleted && !onboardingDismissed && !isGuestFastEntry;
 
-  const handleOnboardingComplete = useCallback(async (profile: import('@/types/user').LearnerProfile) => {
-    await saveLearnerProfile(profile);
-    setOnboardingDismissed(true);
-  }, [saveLearnerProfile]);
-
   const handleOnboardingSkip = useCallback(() => {
+    setOnboardingDismissed(true);
+  }, []);
+
+  const handleOnboardingClose = useCallback(() => {
+    // IntentDialog 里点 X 关闭：等同于 skip 处理（本会话 dismiss）
     setOnboardingDismissed(true);
   }, []);
 
@@ -1659,8 +1696,10 @@ function StudentAppContent({
 
   if (showOnboarding) {
     return (
-      <LearnerOnboarding
-        onComplete={handleOnboardingComplete}
+      <IntentDialogContainer
+        open
+        sessionHint="first-time"
+        onClose={handleOnboardingClose}
         onSkip={handleOnboardingSkip}
       />
     );

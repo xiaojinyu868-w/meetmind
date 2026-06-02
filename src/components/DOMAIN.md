@@ -18,12 +18,16 @@ components → hooks + stores + types + lib/utils
 ```
 components/
 ├── *.tsx              # 顶层核心组件（~45 个）
-├── tutor/DOMAIN.md    # AITutor 拆分子模块（类型/工具函数/小组件）
+├── chat/DOMAIN.md     # M11：全局对话底座（ChatBubble/Composer/MessageList/Renderer + 3 hooks + 2 markers）
+│                      # 任何新对话面板必须基于此底座做 adapter，禁止重新写输入条/气泡
+├── tutor/DOMAIN.md    # AITutor 拆分子模块（TutorAgentPanel 已迁底座）
 ├── recorder/DOMAIN.md # Recorder 拆分子模块（类型/工具函数）
 ├── apps/DOMAIN.md     # 应用系统（黄页/浮窗/证据标签/执行 hook）
 │   ├── windows/       # 浮窗组件 + 布局引擎
 │   ├── evidence/      # 证据标签
 │   └── hooks/         # 应用执行 hook
+├── intent/DOMAIN.md   # M11：「聊聊你想要的」对话式目标共建（IntentDialog 沉浸式 + Container + SummaryCard）
+├── realtime/DOMAIN.md # M11：实时语音通话视觉模板（RealtimeOrb 呼吸光晕 + IntentVoiceCallScreen）
 ├── mobile/DOMAIN.md   # 移动端专用组件（18 个）
 ├── business/DOMAIN.md # 业务展示组件（6 个）
 ├── layout/DOMAIN.md   # 布局组件（3 个）

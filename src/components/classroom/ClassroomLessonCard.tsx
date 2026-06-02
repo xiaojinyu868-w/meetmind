@@ -1,27 +1,34 @@
 'use client';
 
 /**
- * ClassroomLessonCard — 一张"课"的卡片（v7 · 双签名色 + AI 在场轻信号）
+ * ClassroomLessonCard — 一张"课"的卡片（v7 R9-2 大改版）
  *
- * 设计宪法（v7）落地：
- *   1. featured（最新一张 ready 卡）= shadow-soft + 极淡 pine ring + ai-breath 微光带
- *      —— 让"刚酿好的那节课"有 AI 在场的轻信号，但不喧闹
- *   2. StatusDot：
- *      - recording → vermilion + rec-pulse-v7（朱批"此刻"）
- *      - processing → pine + 慢呼吸（AI 在酿，墨绿信号）
- *      - ready → pine 实点（已沉淀，主签名色）
- *      - failed → vermilion 实点（朱批提醒，不是灰色）
- *      - upcoming → ink-muted（未到，克制）
- *   3. 数字资产化：keyPoints / 时间 → JetBrains Mono tabular-nums
- *   4. tags 用 pine + vermilion 双签名色家族化（不再 warning-yellow）
- *   5. action label = mono uppercase 0.06em（"已就绪 / 没做好"被资产化为状态标记）
- *   6. hover：edge ring 收紧到 pine（"AI 同学想被翻看"），不是普通灰边变深
+ * 用户反馈整改（按 8 条意见）：
+ *   #4 之前标题被截断，没法"扫一眼知道价值" → 加摘要行（用 keyPoints/材料/echo 组合）
+ *      + line-clamp-2 让长标题至少能展示两行
+ *   #5 状态（"整理中"）和操作（"继续复习"/"再看一遍"）混在同一位置 → 拆开：
+ *      左边显示内容、右边专门做"状态徽章 OR 操作按钮"
+ *   #6 "正在理解..." 太抽象 → 状态文案优先用 lesson.statusText（数据层可塞精确态：
+ *      正在转写 / 正在生成总结 / 正在整理重点）
+ *
+ * 视觉规则（v7 双签名色 + 信息层级清晰）：
+ *   - StatusDot 双签名色家族：recording=vermilion ping / processing=pine 慢呼吸 /
+ *     ready=pine 实点 / failed=vermilion / upcoming=ink-muted
+ *   - 状态徽章（小标签 pill 风格）：text-[11px] mono 中性色
+ *   - 操作按钮（pine ring + chevron）：让"继续复习"看起来像可点的真按钮
  */
 
 import React from 'react';
-import { ChevronRight, Sparkles, FileText, Check } from 'lucide-react';
+import { ChevronRight, Sparkles, Check } from 'lucide-react';
 import { COPY } from '@/lib/ui/copy';
 import type { Lesson } from './types';
+
+const PLACEHOLDER_LESSON_TITLES = new Set([
+  '课堂录音',
+  '未命名课堂',
+  '新课堂',
+  '一节课',
+]);
 
 export interface ClassroomLessonCardProps {
   lesson: Lesson;
@@ -34,7 +41,6 @@ export interface ClassroomLessonCardProps {
 function StatusDot({ lesson }: { lesson: Lesson }) {
   switch (lesson.status) {
     case 'recording':
-      // 此刻 = 朱批红 + 录音脉搏
       return (
         <span className="relative mt-[7px] flex h-2.5 w-2.5 flex-shrink-0">
           <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-vermilion opacity-55" />
@@ -42,146 +48,153 @@ function StatusDot({ lesson }: { lesson: Lesson }) {
         </span>
       );
     case 'processing':
-      // AI 在酿 = 墨绿主签名 + 慢呼吸（不是灰色，让"理解中"被看见）
       return (
         <span
           className="relative mt-[7px] flex h-2.5 w-2.5 flex-shrink-0 rounded-full bg-pine"
           style={{
             boxShadow: '0 0 0 0 rgba(45,79,62,0.45)',
-            animation: 'rec-pulse-v7 2.4s ease-in-out infinite',
+            animation: 'rec-pulse-v7 1.6s ease-in-out infinite',
           }}
           aria-label="AI 正在理解这节课"
         />
       );
-    case 'failed':
-      // 没做好 = 朱批提醒（不是灰色，让用户看见需要他注意）
-      return (
-        <span className="mt-[7px] h-2.5 w-2.5 flex-shrink-0 rounded-full bg-vermilion/65" />
-      );
-    case 'upcoming':
-      return (
-        <span className="mt-[7px] h-2.5 w-2.5 flex-shrink-0 rounded-full bg-ink-muted/40" />
-      );
     case 'ready':
+      return <span className="mt-[7px] h-2.5 w-2.5 flex-shrink-0 rounded-full bg-pine" aria-hidden />;
+    case 'failed':
+      return <span className="mt-[7px] h-2.5 w-2.5 flex-shrink-0 rounded-full bg-vermilion" aria-hidden />;
     default:
-      // 已沉淀 = pine 主签名色（v7：墨松绿 = AI 沉淀的视觉信号）
-      return (
-        <span className="mt-[7px] h-2.5 w-2.5 flex-shrink-0 rounded-full bg-pine/75" />
-      );
+      return <span className="mt-[7px] h-2.5 w-2.5 flex-shrink-0 rounded-full bg-ink-muted/35" aria-hidden />;
   }
 }
 
-/** 时间 · 时长 · 状态（主副信息行） */
-function MetaLine({ lesson, featured }: { lesson: Lesson; featured?: boolean }) {
-  const parts: React.ReactNode[] = [];
-
-  // time = mono tabular-nums，作为引用资产
-  parts.push(
-    <span key="t" className="font-mono tabular-nums text-ink-secondary">
-      {lesson.time}
-    </span>
-  );
-
-  if (lesson.status === 'upcoming') {
-    parts.push(<span key="up">即将开始</span>);
-  } else if (lesson.status === 'recording') {
-    // 朱批红 + serif italic（录音中是"此刻"语义）
-    parts.push(
-      <span key="r" className="font-serif italic font-medium text-vermilion">
-        正在录音
-      </span>
-    );
-  } else if (lesson.status === 'processing') {
-    // 墨绿 + serif italic（AI 在酿）
-    parts.push(
-      <span key="p" className="font-serif italic text-pine">
-        正在理解…
-      </span>
-    );
-  } else {
-    if (lesson.durationMin) {
-      parts.push(<span key="d" className="font-mono tabular-nums">{lesson.durationMin} 分钟</span>);
-    }
-  }
-
+/** 时间 · 时长 · 已复习（基础 meta） */
+function MetaLine({ lesson }: { lesson: Lesson }) {
   return (
-    <div className={`flex flex-wrap items-center gap-x-2.5 gap-y-1 text-ink-muted ${featured ? 'mt-2 text-[13px]' : 'mt-1 text-[12.5px]'}`}>
-      {parts.map((p, i) => (
-        <React.Fragment key={i}>
-          {i > 0 && <span className="text-ink-muted/40">·</span>}
-          {p}
-        </React.Fragment>
-      ))}
+    <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[12px] text-ink-muted">
+      <span className="font-mono tabular-nums">{lesson.time}</span>
+      {lesson.durationMin ? (
+        <>
+          <span className="text-ink-muted/40">·</span>
+          <span className="font-mono tabular-nums">{lesson.durationMin} 分钟</span>
+        </>
+      ) : null}
+      {lesson.reviewed ? (
+        <>
+          <span className="text-ink-muted/40">·</span>
+          <span className="inline-flex items-center gap-1 text-pine">
+            <Check size={11} strokeWidth={2.2} />
+            {COPY.lesson.reviewed}
+          </span>
+        </>
+      ) : null}
     </div>
   );
 }
 
-/** 底部徽标：回声 / 已复习 / 关联资料（v7 双签名色家族化） */
-function TagLine({ lesson }: { lesson: Lesson }) {
-  const tags: React.ReactNode[] = [];
-
-  if (lesson.status === 'ready' && lesson.hasEcho) {
-    // Sparkles → pine（v7：AI 已酿好的产物 = 墨绿沉淀信号）
-    tags.push(
-      <span key="echo" className="inline-flex items-center gap-1.5 text-[12px] text-ink-secondary">
-        <Sparkles size={12} strokeWidth={1.8} className="text-pine" />
-        {COPY.lesson.summaryReady}
-      </span>
-    );
-  }
-  if (lesson.status === 'ready' && lesson.keyPoints && lesson.keyPoints > 0) {
-    tags.push(
-      <span key="kp" className="inline-flex items-center gap-1.5 text-[12px] text-ink-secondary">
-        <span className="font-mono tabular-nums font-medium text-pine">{lesson.keyPoints}</span>
-        <span className="text-ink-muted">{COPY.lesson.keyPoints}</span>
-      </span>
-    );
-  }
-  if (lesson.reviewed) {
-    tags.push(
-      <span key="rev" className="inline-flex items-center gap-1.5 text-[12px] text-ink-secondary">
-        <Check size={12} strokeWidth={2} className="text-pine" />
-        {COPY.lesson.reviewed}
-      </span>
-    );
+/**
+ * SummaryLine — "扫一眼知道价值"的预览行
+ *
+ * 用 lesson 现有元数据组合（未来 lesson.summary 字段是真 AI 摘要时直接用它）
+ */
+function SummaryLine({ lesson }: { lesson: Lesson }) {
+  const fragments: string[] = [];
+  if (lesson.keyPoints && lesson.keyPoints > 0) {
+    fragments.push(`${lesson.keyPoints} 个${COPY.lesson.keyPoints}`);
   }
   if (lesson.linkedMaterials && lesson.linkedMaterials > 0) {
-    tags.push(
-      <span key="mat" className="inline-flex items-center gap-1.5 text-[12px] text-ink-secondary">
-        <FileText size={12} strokeWidth={1.7} className="text-ink-muted" />
-        {COPY.lesson.materials(lesson.linkedMaterials)}
-      </span>
-    );
+    fragments.push(COPY.lesson.materials(lesson.linkedMaterials));
   }
-
-  if (tags.length === 0) return null;
+  if (lesson.status === 'ready' && lesson.hasEcho && fragments.length === 0) {
+    fragments.push(COPY.lesson.summaryReady);
+  }
+  if (fragments.length === 0) return null;
 
   return (
-    <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1.5">
-      {tags}
-    </div>
+    <p className="mt-1 truncate text-[12.5px] text-ink-secondary leading-relaxed">
+      {lesson.hasEcho ? (
+        <Sparkles size={11} strokeWidth={1.8} className="inline-block mr-1 align-[-1px] text-pine" />
+      ) : null}
+      {fragments.map((f, i) => (
+        <React.Fragment key={i}>
+          {i > 0 ? <span className="text-ink-muted/45 mx-1.5">·</span> : null}
+          <span>{f}</span>
+        </React.Fragment>
+      ))}
+    </p>
   );
 }
 
-function lessonActionLabel(lesson: Lesson): string {
-  if (lesson.status === 'ready') return lesson.reviewed ? COPY.lesson.actionReviewed : COPY.lesson.actionReady;
-  if (lesson.status === 'failed') return COPY.lesson.actionFailed;
-  if (lesson.status === 'processing') return COPY.lesson.actionProcessing;
-  if (lesson.status === 'upcoming') return COPY.lesson.actionUpcoming;
-  return '';
+/** 状态徽章（小标签 pill）— 仅 non-ready 态显示，让位给 ActionButton */
+function StatusBadge({ lesson }: { lesson: Lesson }) {
+  if (lesson.status === 'recording') {
+    return (
+      <span className="inline-flex items-center gap-1.5 rounded-full bg-vermilion/10 px-2.5 py-1 text-[11px] font-medium text-vermilion whitespace-nowrap">
+        <span className="relative flex h-1.5 w-1.5">
+          <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-vermilion opacity-55" />
+          <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-vermilion" />
+        </span>
+        正在录
+      </span>
+    );
+  }
+  if (lesson.status === 'processing') {
+    // 优先用 lesson.statusText 显示精确态（"正在转写" / "正在生成总结" / "正在整理重点"）
+    const label = lesson.statusText?.trim() || '正在整理';
+    return (
+      <span className="inline-flex items-center gap-1.5 rounded-full bg-pine/10 px-2.5 py-1 text-[11px] font-medium text-pine whitespace-nowrap">
+        <span
+          className="inline-block h-1.5 w-1.5 rounded-full bg-pine"
+          style={{
+            boxShadow: '0 0 0 0 rgba(45,79,62,0.45)',
+            animation: 'rec-pulse-v7 1.6s ease-in-out infinite',
+          }}
+          aria-hidden
+        />
+        {label}
+      </span>
+    );
+  }
+  if (lesson.status === 'failed') {
+    return (
+      <span className="inline-flex items-center rounded-full bg-paper-warm px-2.5 py-1 text-[11px] font-medium text-ink-muted whitespace-nowrap">
+        原声已保留
+      </span>
+    );
+  }
+  if (lesson.status === 'upcoming') {
+    return (
+      <span className="inline-flex items-center rounded-full bg-paper-warm px-2.5 py-1 text-[11px] font-medium text-ink-muted whitespace-nowrap">
+        即将开始
+      </span>
+    );
+  }
+  return null;
+}
+
+/** 操作按钮（pine ring + chevron）— 仅 ready 态显示 */
+function ActionButton({ lesson }: { lesson: Lesson }) {
+  if (lesson.status !== 'ready') return null;
+  const label = lesson.reviewed ? COPY.lesson.actionReviewed : COPY.lesson.actionReady;
+  return (
+    <span className="inline-flex items-center gap-1 rounded-full border border-divider bg-card px-3 py-1.5 text-[12px] font-medium text-ink-secondary transition-all whitespace-nowrap group-hover:border-pine group-hover:text-pine group-hover:bg-pine/5">
+      {label}
+      <ChevronRight size={13} strokeWidth={1.8} className="transition-transform group-hover:translate-x-0.5" />
+    </span>
+  );
 }
 
 export function ClassroomLessonCard({ lesson, onClick, featured = false }: ClassroomLessonCardProps) {
   const opacityClass = lesson.status === 'upcoming' ? 'opacity-80' : 'opacity-100';
-  const actionLabel = lessonActionLabel(lesson);
 
-  // featured: 更大的垂直内边距 + 更大的标题字号 + shadow-soft + 极淡 pine ring（AI 在场轻信号）
-  const paddingClass = featured ? 'px-6 py-5' : 'px-6 py-4';
+  // placeholder 标题（"课堂录音 / 未命名课堂"）→ 用时间区分
+  const isPlaceholderTitle = PLACEHOLDER_LESSON_TITLES.has(lesson.title.trim());
+  const displayTitle = isPlaceholderTitle ? `${lesson.time} 的课` : lesson.title;
+
+  const paddingClass = featured ? 'px-5 py-4' : 'px-5 py-3.5';
   const titleClass = featured
-    ? 'text-[18px] font-semibold tracking-[-0.02em] text-ink leading-snug'
-    : 'text-[15px] font-medium tracking-[-0.012em] text-ink leading-snug';
+    ? 'text-[16px] font-semibold tracking-[-0.015em] text-ink leading-snug'
+    : 'text-[14.5px] font-medium tracking-[-0.01em] text-ink leading-snug';
 
-  // featured 用 surface-ai 灵感的 ring + shadow（不喧闹但能看见）
   const variantClass = featured
     ? 'bg-card shadow-soft ring-1 ring-pine/15 hover:ring-pine/40 hover:shadow-card'
     : 'bg-card border border-divider hover:border-pine/40 hover:shadow-soft';
@@ -190,31 +203,23 @@ export function ClassroomLessonCard({ lesson, onClick, featured = false }: Class
     <button
       type="button"
       onClick={onClick}
-      className={`group relative flex w-full items-start gap-4 rounded-2xl text-left transition-all duration-200 active:scale-[0.998] ${variantClass} ${paddingClass} ${opacityClass}`}
+      className={`group relative flex w-full items-start gap-3 rounded-xl text-left transition-all duration-200 active:scale-[0.998] ${variantClass} ${paddingClass} ${opacityClass}`}
     >
       <StatusDot lesson={lesson} />
 
-      {/* 中：信息块 */}
+      {/* 中：信息块（标题 line-clamp-2 + 摘要 + meta） */}
       <div className="min-w-0 flex-1">
-        <p className={`truncate ${titleClass}`}>
-          {lesson.title}
+        <p className={`${titleClass} line-clamp-2`} title={displayTitle}>
+          {displayTitle}
         </p>
-        <MetaLine lesson={lesson} featured={featured} />
-        <TagLine lesson={lesson} />
+        <SummaryLine lesson={lesson} />
+        <MetaLine lesson={lesson} />
       </div>
 
-      {/* action label：mono uppercase 0.06em，被资产化的状态 */}
-      <div className="mt-[2px] flex flex-shrink-0 items-center gap-1.5">
-        <span className="font-mono text-[10.5px] font-semibold uppercase tracking-[0.06em] text-ink-muted transition-colors group-hover:text-pine">
-          {actionLabel}
-        </span>
-        {lesson.status === 'ready' || lesson.status === 'failed' ? (
-          <ChevronRight
-            size={15}
-            strokeWidth={1.7}
-            className="text-ink-muted transition-all duration-150 group-hover:text-pine group-hover:translate-x-0.5"
-          />
-        ) : null}
+      {/* 右：状态徽章 OR 操作按钮（拆开，类型一致） */}
+      <div className="flex flex-shrink-0 items-center self-center">
+        <StatusBadge lesson={lesson} />
+        <ActionButton lesson={lesson} />
       </div>
     </button>
   );

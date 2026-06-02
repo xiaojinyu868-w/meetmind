@@ -50,7 +50,7 @@ const stepFunModels: ModelConfig[] = [
 
 const deepseekModels: ModelConfig[] = [
   {
-    id: 'deepseek-v4-flash',
+    id: 'DeepSeek-V4-Flash',
     name: 'DeepSeek V4 Flash',
     provider: 'deepseek',
     description: 'DeepSeek V4 低延迟模型，适合课堂同桌、复习问答和轻量学习应用',
@@ -59,40 +59,41 @@ const deepseekModels: ModelConfig[] = [
     enableThinking: false,
   },
   {
-    id: 'deepseek-v4-pro',
+    id: 'DeepSeek-V4-Pro',
     name: 'DeepSeek V4 Pro',
     provider: 'deepseek',
     description: 'DeepSeek V4 深度能力模型，适合复杂解释、长上下文整理和结构化学习产物',
     maxTokens: 32768,
     supportsMultimodal: false,
     enableThinking: true,
+    recommended: true,
   },
 ];
 
 const qwenModels: ModelConfig[] = [
   {
-    id: 'qwen3.6-plus',
-    name: '通义千问 3.6 Plus',
+    id: 'Qwen3.6-Plus-A',
+    name: '通义千问 3.6 Plus A',
     provider: 'qwen',
-    description: '千问3.6系列，百万级上下文(1M tokens)，混合架构，推理能力与Agent行为全面升级',
+    description: 'DXKP 平台上的 Qwen 3.6 主力模型，适合课堂问答、整理与常规学习应用',
     maxTokens: 8192,
     supportsMultimodal: true,
     enableThinking: false,
   },
   {
-    id: 'qwen3.5-plus',
-    name: '通义千问 3.5 Plus',
+    id: 'Qwen3.5-397B-A17B-Pro',
+    name: '通义千问 3.5 397B Pro',
     provider: 'qwen',
-    description: '千问3.5系列，百万级上下文(1M tokens)，支持图文输入，推理/写作/Agent能力全面提升',
-    maxTokens: 8192,
+    description: '更强的推理与写作能力，支持 thinking 模式，适合复杂说明与结构化产物',
+    maxTokens: 32768,
     supportsMultimodal: true,
-    enableThinking: false,
+    enableThinking: true,
   },
   {
-    id: 'qwen3-vl-plus-2025-12-19',
-    name: '通义千问 3 VL',
+    id: 'Qwen3-VL-235B-A22B-Instruct-A',
+    name: '通义千问 3 VL 235B',
     provider: 'qwen',
-    description: '多模态视觉模型，支持图片理解',
+    description: 'DXKP 平台上的 Qwen 多模态视觉模型，支持图片理解',
     maxTokens: 8192,
     supportsMultimodal: true,
   },
@@ -100,17 +101,17 @@ const qwenModels: ModelConfig[] = [
     id: 'qwen3.5-omni-plus',
     name: '通义千问 3.5 Omni',
     provider: 'qwen',
-    description: '全模态模型，支持文本、图片、音频输入；当前在 MeetMind 里以流式文本输出做内测',
+    description: '全模态模型，支持文本、图片、音频输入；当前仅保留给 realtime 语音 fallback',
     maxTokens: 8192,
     supportsMultimodal: true,
     supportsAudioInput: true,
     requiresStreaming: true,
   },
   {
-    id: 'qwen3-max-2026-01-23',
-    name: '通义千问 3 Max',
+    id: 'Qwen3-Max-A',
+    name: '通义千问 3 Max A',
     provider: 'qwen',
-    description: '思考模式，支持联网搜索和代码解释器，262K上下文',
+    description: '思考模式，支持联网搜索和代码解释器，适合复杂推理与 Agent 行为',
     maxTokens: 32768,
     supportsMultimodal: false,
     enableThinking: true,
@@ -158,18 +159,20 @@ const resolvedDefaultModel =
   (envDefaultModel && resolvedModels.some((model) => model.id === envDefaultModel)
     ? envDefaultModel
     : undefined) ||
+  resolvedModels.find((model) => model.id === 'DeepSeek-V4-Flash')?.id ||
+  resolvedModels.find((model) => model.id === 'DeepSeek-V4-Pro')?.id ||
+  resolvedModels.find((model) => model.id === 'Qwen3.6-Plus-A')?.id ||
+  resolvedModels.find((model) => model.id === 'Qwen3.5-397B-A17B-Pro')?.id ||
+  resolvedModels.find((model) => model.id === 'Qwen3-VL-235B-A22B-Instruct-A')?.id ||
   resolvedModels.find((model) => model.id === 'step-3.7-flash')?.id ||
-  resolvedModels.find((model) => model.id === 'deepseek-v4-flash')?.id ||
-  resolvedModels.find((model) => model.id === 'qwen3.6-plus')?.id ||
-  resolvedModels.find((model) => model.id === 'qwen3.5-plus')?.id ||
-  resolvedModels.find((model) => model.id === 'qwen3-vl-plus-2025-12-19')?.id ||
   resolvedModels.find((model) => model.supportsMultimodal)?.id ||
   resolvedModels[0]?.id ||
-  'step-3.7-flash';
+  'DeepSeek-V4-Flash';
 const resolvedDefaultVisionModel =
+  resolvedModels.find((model) => model.id === 'Qwen3-VL-235B-A22B-Instruct-A')?.id ||
   resolvedModels.find((model) => model.supportsMultimodal)?.id ||
   resolvedModels[0]?.id ||
-  'qwen3-vl-plus-2025-12-19';
+  'Qwen3-VL-235B-A22B-Instruct-A';
 
 // ==================== LLM 配置 ====================
 

@@ -106,6 +106,7 @@ api/route.ts → services → lib/utils, lib/db, lib/config
 | `memory-migration.ts` | 251 | localStorage→IndexedDB 迁移 |
 | `longcut-service.ts` | 119 | LongCut API 调用层 |
 | `longcut-utils.ts` | 160 | LongCut 本地算法封装 |
+| `file-parse-service.ts` | 220 | M11：把 File（pdf/docx/ppt/图片/音频/视频/纯文本）解析成纯文本，给「聊聊你想要的」/全局对话注入 supportMaterials 用。内部按 MIME/后缀分流到 `/api/sources/ingest` / `/api/sources/ingest-image` / `/api/transcribe`。**不写 IndexedDB / 不动 collection** —— 是 `useSourceImport` 的轻量 helper 表亲。 |
 | `index.ts` | 13 | barrel 导出 |
 
 ## ⚠️ 超标文件（>500 行）

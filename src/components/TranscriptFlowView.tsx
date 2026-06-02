@@ -424,21 +424,21 @@ function ParagraphBlock({
 
   return (
     <div
-      className={`relative ${isLastParagraph ? '' : 'mb-3'}`}
+      className={`relative ${isLastParagraph ? '' : 'mb-5'}`}
       data-paragraph={dataParagraph || true}
       data-paragraph-start-ms={paragraph.startMs}
     >
-      {/* 段落时间标签 */}
+      {/* 段落时间标签 — R9 改成块级，让"段落"像独立章节而不是文字流里的小数字 */}
       <span
         className={[
-          'inline-block text-xs font-mono tabular-nums mr-2 mb-0.5 transition-colors duration-200',
-          // 当前活跃段落 — 时间戳也用黄色高亮
-          isParaActive ? 'text-vermilion font-semibold' : '',
-          // 已播放过的段落 — 时间戳变灰
+          'inline-flex items-center mb-1.5 font-mono text-[11.5px] tabular-nums tracking-[0.02em] transition-all duration-200',
+          // 当前活跃段落 — pine 主签名 + bg 微色块（章节正在读）
+          isParaActive ? 'rounded bg-pine/10 px-1.5 py-0.5 text-pine font-semibold' : '',
+          // 已播放过的段落 — ink-faint 弱化
           !isParaActive && isParaPast ? 'text-ink-faint' : '',
-          // 正常状态
+          // 正常状态 — pine 65% 引用感
           !isParaActive && !isParaPast && isTimestampClickable
-            ? 'text-[#5C5A55]/80 hover:text-[#1C1B19] cursor-pointer'
+            ? 'text-pine/65 hover:text-pine cursor-pointer'
             : '',
           !isParaActive && !isParaPast && !isTimestampClickable ? 'text-ink-muted' : '',
           isTimestampClickable ? 'cursor-pointer' : '',
@@ -454,6 +454,8 @@ function ParagraphBlock({
         {formatCompactTime(paragraph.startMs)}
       </span>
 
+      {/* 段落正文（在时间戳下方，让"时间-内容"形成清晰的章节关系） */}
+      <div className="block">
       {/* 段落内的 segments 连续排列 */}
       {paragraph.segments.map((seg, i) => {
         const isActive =
@@ -500,6 +502,7 @@ function ParagraphBlock({
           />
         );
       })}
+      </div>
     </div>
   );
 }
@@ -851,7 +854,7 @@ export function TranscriptFlowView({
       <div
         ref={scrollRef}
         onScroll={handleScroll}
-        className="overflow-y-auto text-sm text-ink-secondary leading-relaxed select-text px-1"
+        className="overflow-y-auto text-[15px] text-ink leading-[1.85] select-text px-2 tracking-[-0.005em]"
       >
         {/* 折叠提示 */}
         {hasMore && (

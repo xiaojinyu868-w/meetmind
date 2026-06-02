@@ -358,39 +358,36 @@ export function OctoCrystalDispatcher({
 
   return (
     <section
-      className="relative overflow-hidden rounded-[28px] border border-divider/70 bg-white px-5 py-6 sm:px-7 sm:py-7 print:hidden"
+      className="relative overflow-hidden rounded-2xl border border-divider/60 bg-card px-4 py-4 sm:px-5 sm:py-5 print:hidden"
       data-testid="octo-crystal-dispatcher"
     >
-      {/* 仪式时刻：极淡的渐变光晕（白名单第 4 条「录课结束的收尾动画」）。
-          只在背景，不进按钮 / 卡片，主区域仍然是平涂。 */}
+      {/* R9-2 收缩：原大 hero 占主视觉权重抢眼，但「分享」是次要操作。
+          现在收成 callout 风：极淡光晕 + 紧凑横向 header + 4 tile 保留。 */}
       <div
         aria-hidden
-        className="pointer-events-none absolute inset-0 opacity-[0.55]"
+        className="pointer-events-none absolute inset-0 opacity-[0.4]"
         style={{
           background:
-            'radial-gradient(circle at 12% 0%, #FBF2EF 0%, transparent 38%), radial-gradient(circle at 88% 12%, #E6EDE8 0%, transparent 42%), radial-gradient(circle at 50% 100%, #F2F6F3 0%, transparent 50%)',
+            'radial-gradient(circle at 12% 0%, #FBF2EF 0%, transparent 38%), radial-gradient(circle at 88% 12%, #E6EDE8 0%, transparent 42%)',
         }}
       />
 
-      <div className="relative flex flex-col gap-5">
-        {/* 头部：Octo Buddy + 标题 */}
-        <header className="flex items-start gap-4">
-          <OctoBuddySprite mood="happy" size="lg" className="-mt-1 flex-shrink-0" />
+      <div className="relative flex flex-col gap-3.5">
+        {/* 头部 — 紧凑横向：left octo md + 中标题（更小）+ 右 status hint */}
+        <header className="flex items-center gap-3">
+          <OctoBuddySprite mood="happy" size="md" className="flex-shrink-0" />
           <div className="min-w-0 flex-1">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-ink-muted">
+            <p className="font-mono text-[10px] font-semibold uppercase tracking-[0.06em] text-ink-muted">
               {COPY.share.creator.crystal.eyebrow}
             </p>
-            <h3 className="mt-1.5 text-[20px] font-semibold leading-tight tracking-[-0.025em] text-ink sm:text-[22px]">
+            <h3 className="mt-0.5 text-[15px] font-semibold leading-tight tracking-[-0.012em] text-ink">
               {COPY.share.creator.crystal.title}
             </h3>
-            <p className="mt-1.5 text-[13px] leading-[1.7] text-ink-secondary">
-              {COPY.share.creator.crystal.subtitle}
-            </p>
           </div>
         </header>
 
         {/* 4 张 tile：响应式 2 列 / 4 列 */}
-        <div className="grid grid-cols-2 gap-2.5 lg:grid-cols-4">
+        <div className="grid grid-cols-2 gap-2 lg:grid-cols-4">
           {SHAREABLE_APPS.map((app) => {
             const status = appStatuses.find((s) => s.appKey === app.appKey) ?? {
               appKey: app.appKey,
@@ -401,11 +398,11 @@ export function OctoCrystalDispatcher({
             const isPicking = pickingKey === app.appKey || (isCreating && pickingKey === app.appKey);
 
             const tileBase =
-              'group relative flex h-full flex-col gap-2 rounded-2xl border px-4 py-3.5 text-left transition-all duration-200 ease-out';
+              'group relative flex h-full flex-col gap-1.5 rounded-xl border px-3 py-2.5 text-left transition-all duration-200 ease-out';
             const tileReady =
-              'border-divider bg-white text-ink hover:-translate-y-0.5 hover:border-ink/40';
+              'border-divider bg-card text-ink hover:-translate-y-0.5 hover:border-pine/40 hover:bg-pine/[0.03]';
             const tileMuted =
-              'border-divider/60 bg-[#F2EDE3]/70 text-ink-muted hover:bg-white hover:text-ink-secondary';
+              'border-divider/50 bg-paper-warm/50 text-ink-muted hover:bg-card hover:text-ink-secondary';
 
             const tileClass = `${tileBase} ${isReady ? tileReady : tileMuted}`;
 
@@ -415,22 +412,22 @@ export function OctoCrystalDispatcher({
                 {isReady ? (
                   <span
                     aria-hidden
-                    className="pointer-events-none absolute inset-0 rounded-2xl opacity-0 transition-opacity duration-300 group-hover:opacity-100"
+                    className="pointer-events-none absolute inset-0 rounded-xl opacity-0 transition-opacity duration-300 group-hover:opacity-100"
                     style={{
                       background: `radial-gradient(circle at 30% 0%, ${app.glow}aa 0%, transparent 65%)`,
                     }}
                   />
                 ) : null}
 
-                <div className="relative flex items-center gap-2">
-                  <span className={isReady ? 'text-ink' : 'text-ink-muted/70'}>{app.icon}</span>
-                  <span className="text-[13.5px] font-semibold tracking-[-0.01em]">{app.label}</span>
+                <div className="relative flex items-center gap-1.5">
+                  <span className={isReady ? 'text-pine' : 'text-ink-muted/70'}>{app.icon}</span>
+                  <span className="text-[12.5px] font-semibold tracking-[-0.005em]">{app.label}</span>
                 </div>
-                <p className="relative text-[11.5px] leading-relaxed text-ink-muted">{app.blurb}</p>
-                <div className="relative mt-auto flex items-center justify-between pt-1.5">
+                <p className="relative text-[11px] leading-snug text-ink-muted line-clamp-2">{app.blurb}</p>
+                <div className="relative mt-auto flex items-center justify-between pt-1">
                   <span
-                    className={`text-[11px] font-medium ${
-                      isReady ? 'text-ink-secondary' : 'text-ink-muted/80'
+                    className={`text-[10.5px] font-medium ${
+                      isReady ? 'text-pine' : 'text-ink-muted/80'
                     }`}
                   >
                     {isPicking
@@ -442,7 +439,7 @@ export function OctoCrystalDispatcher({
                   {isReady ? (
                     <span
                       aria-hidden
-                      className="text-ink-secondary transition-transform duration-200 group-hover:translate-x-0.5 group-hover:text-ink"
+                      className="text-pine/65 transition-transform duration-200 group-hover:translate-x-0.5 group-hover:text-pine"
                     >
                       →
                     </span>
@@ -480,11 +477,12 @@ export function OctoCrystalDispatcher({
           })}
         </div>
 
-        {/* 底部小字：空态 hint + 隐私铁律 */}
-        <div className="flex flex-col gap-1 text-[11px] leading-relaxed text-ink-muted">
-          {generatedCount === 0 ? <p>{COPY.share.creator.crystal.emptyHint}</p> : null}
-          <p>{COPY.share.creator.crystal.privacyNote}</p>
-        </div>
+        {/* 底部小字：仅在两个真实需要时显示，避免噪音 */}
+        {generatedCount === 0 ? (
+          <p className="text-[10.5px] leading-relaxed text-ink-muted/80">
+            {COPY.share.creator.crystal.emptyHint}
+          </p>
+        ) : null}
       </div>
 
       {/* 分享卡 modal */}

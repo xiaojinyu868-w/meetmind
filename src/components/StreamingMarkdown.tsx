@@ -7,6 +7,7 @@ import remarkMath from 'remark-math';
 import rehypeKatex from 'rehype-katex';
 import 'katex/dist/katex.min.css';
 import type { Components } from 'react-markdown';
+import { Play } from 'lucide-react';
 import type { Citation } from '@/types/dify';
 import { CitationDetailSheet, resolveCitations } from './CitationReferenceSheet';
 
@@ -126,6 +127,25 @@ export function StreamingMarkdown({
         }
         const isActive = currentTime >= startMs && currentTime <= startMs + 5000;
 
+        // R9-2 时间戳顶级 UX 重做（2026-06-01）：
+        //
+        // 用户反馈直击痛点：「pine 极淡 underline → 用户区分不出，嵌入正文影响观感。
+        // 颜色深一些适合嵌入正文里面」。
+        //
+        // 行业黄金标准（Notion @mention / Linear issue ref / GitHub PR ref）：
+        //   默认中性深色 mono pill + 极淡同色 tint bg + 紧凑 px + hover 才召唤主签名色
+        //
+        // 三态决策：
+        //   default — bg-ink/[0.055] 极淡墨黑 tint + text-ink-secondary 深灰文字 +
+        //             rounded-[5px] 小圆角 + px-1.5 py-[1px] 紧凑 + 无图标
+        //             → 嵌入正文不喧闹，但有清晰的视觉边界让用户「认得出」
+        //   hover   — bg-pine/[0.10] + text-pine（"AI 在场"信号召唤）+ ring-pine/15
+        //             → 才出现可点感，符合"信号节制"
+        //   active  — bg-pine 实底 + text-white + Play 8px 小图标（仅此态显示）
+        //             → 当前播放点，独占图标语义，让"现在"被清楚标记
+        //
+        // 关键产品决策：去掉默认态的 Play 三角图标。它让 chip 永远像按钮，
+        // 破坏阅读节奏。无图标的深色 mono pill 才是真正的"嵌入式资产引用"。
         parts.push(
           <button
             key={`ts-${keyIndex++}`}
@@ -135,15 +155,23 @@ export function StreamingMarkdown({
               e.stopPropagation();
               onTimestampClick?.(startMs);
             }}
-            className={`
-              inline-flex items-center gap-1 rounded-lg border px-2 py-0.5 text-xs font-mono transition-all duration-200
-              ${isActive
-                ? 'scale-105 border-[#1C1B19] bg-[#1C1B19] text-white'
-                : 'border-[#E8E2D5] bg-[#FDF3C0] text-[#1C1B19] hover:border-[#1C1B19] hover:shadow-sm'
-              }
-            `}
+            className={
+              isActive
+                ? 'mx-[2px] inline-flex items-center gap-1 rounded-[5px] bg-pine px-1.5 py-[1px] align-baseline font-mono text-[11.5px] font-medium tabular-nums tracking-[0.01em] text-white shadow-[0_1px_2px_rgba(45,79,62,0.25)] transition-all'
+                : 'mx-[2px] inline-flex items-center rounded-[5px] bg-ink/[0.055] px-1.5 py-[1px] align-baseline font-mono text-[11.5px] font-medium tabular-nums tracking-[0.01em] text-ink-secondary ring-[0.5px] ring-ink/[0.08] transition-all duration-150 hover:bg-pine/[0.10] hover:text-pine hover:ring-pine/25 hover:-translate-y-[0.5px] active:translate-y-0 active:bg-pine/15'
+            }
+            title={`跳到 ${fullTime}`}
+            aria-label={`跳到课堂 ${fullTime}`}
           >
-            <span className={isActive ? 'animate-pulse' : ''}>▶</span>
+            {isActive ? (
+              <Play
+                size={8}
+                strokeWidth={2.4}
+                fill="currentColor"
+                className="translate-y-[-0.5px]"
+                aria-hidden
+              />
+            ) : null}
             {fullTime}
           </button>
         );
@@ -233,49 +261,49 @@ export function StreamingMarkdown({
     });
   }, [renderTextWithTimestamps]);
 
-  // 自定义渲染器
+  // 自定义渲染器（v7 R9 顶级产品打磨：呼吸感 + 双签名色 + 信息层级）
   const components: Components = useMemo(() => ({
-    // 段落渲染，处理时间戳
+    // 段落：leading-[1.85] 让中文阅读舒适，段落间 mb-3.5 给呼吸
     p: ({ children, ...props }) => (
-      <p {...props} className="mb-3 last:mb-0">
+      <p {...props} className="mb-3.5 last:mb-0 leading-[1.85] text-[14.5px] text-ink">
         {processChildren(children)}
       </p>
     ),
 
-    // 列表项渲染，处理时间戳
+    // 列表项：行距统一 1.85，pl-1 让 marker 不挤
     li: ({ children, ...props }) => (
-      <li {...props} className="text-sm leading-relaxed">
+      <li {...props} className="leading-[1.85] text-[14.5px] text-ink pl-1">
         {processChildren(children)}
       </li>
     ),
 
-    // 标题样式
+    // 标题：与正文有清晰对比，但不喧宾夺主
     h2: ({ children, ...props }) => (
-      <h2 {...props} className="mb-2 mt-4 text-base font-semibold text-ink first:mt-0">
+      <h2 {...props} className="mb-3 mt-5 text-[16px] font-semibold tracking-[-0.012em] text-ink first:mt-0 leading-snug">
         {processChildren(children)}
       </h2>
     ),
     h3: ({ children, ...props }) => (
-      <h3 {...props} className="mb-1.5 mt-3 text-sm font-semibold text-ink-secondary">
+      <h3 {...props} className="mb-2 mt-4 text-[14.5px] font-semibold text-ink first:mt-0 leading-snug">
         {processChildren(children)}
       </h3>
     ),
 
-    // 列表样式
+    // 列表：用 marker:text-pine 让 dot/数字带主签名色，而不是普通灰
     ul: ({ children, ...props }) => (
-      <ul {...props} className="mb-3 list-inside list-disc space-y-1 text-ink-secondary">
+      <ul {...props} className="mb-3.5 list-disc space-y-1.5 pl-5 marker:text-pine/55 marker:text-[0.95em]">
         {children}
       </ul>
     ),
     ol: ({ children, ...props }) => (
-      <ol {...props} className="mb-3 list-inside list-decimal space-y-1 text-ink-secondary">
+      <ol {...props} className="mb-3.5 list-decimal space-y-1.5 pl-5 marker:font-mono marker:text-pine/70 marker:text-[0.92em] marker:font-medium">
         {children}
       </ol>
     ),
 
-    // 强调样式
+    // 强调：bold 用 ink + 微 letter-spacing 紧致；italic 用 ink-secondary
     strong: ({ children, ...props }) => (
-      <strong {...props} className="font-semibold text-ink">
+      <strong {...props} className="font-semibold tracking-[-0.005em] text-ink">
         {processChildren(children)}
       </strong>
     ),
@@ -285,52 +313,52 @@ export function StreamingMarkdown({
       </em>
     ),
 
-    // 代码块
+    // 代码块：行内薄底，块级带 paper-warm 衬底（不喧闹）
     code: ({ children, className: codeClassName, ...props }) => {
       const isInline = !codeClassName;
       if (isInline) {
         return (
-          <code {...props} className="rounded bg-paper-deep px-1.5 py-0.5 text-xs font-mono text-[#1C1B19]">
+          <code {...props} className="rounded bg-paper-warm px-1.5 py-[1px] font-mono text-[12.5px] text-ink">
             {children}
           </code>
         );
       }
       return (
-        <code {...props} className={`block overflow-x-auto rounded-lg bg-paper-warm p-3 text-xs ${codeClassName}`}>
+        <code {...props} className={`block overflow-x-auto rounded-lg bg-paper-warm p-3 font-mono text-[12.5px] leading-relaxed text-ink ${codeClassName}`}>
           {children}
         </code>
       );
     },
 
-    // 引用块
+    // 引用块：去掉 v6 黄底，用极淡 pine 衬底 + 极细 pine 左竖线
     blockquote: ({ children, ...props }) => (
-      <blockquote {...props} className="my-2 rounded-r border-l-4 border-[#E8E2D5] bg-[#FDF3C0]/20 py-1 pl-3 text-ink-secondary italic">
+      <blockquote {...props} className="my-3 rounded-r-md border-l-2 border-pine/40 bg-pine/[0.03] py-1.5 pl-3.5 pr-2 text-[14px] text-ink-secondary leading-[1.75]">
         {children}
       </blockquote>
     ),
 
-    // 链接
+    // 链接：去掉 v6 黄色 underline，改 pine 主签名色
     a: ({ children, href, ...props }) => (
       <a
         {...props}
         href={href}
         target="_blank"
         rel="noopener noreferrer"
-        className="text-[#5C5A55] underline decoration-[#FDF3C0] transition-colors hover:text-[#1C1B19] hover:decoration-[#1C1B19]"
+        className="text-pine underline decoration-pine/35 decoration-1 underline-offset-[3px] transition-all hover:decoration-pine hover:decoration-2"
       >
         {children}
       </a>
     ),
 
     table: ({ children, ...props }) => (
-      <div className="my-3 w-full overflow-x-auto rounded-xl border border-divider bg-white">
-        <table {...props} className="min-w-full border-collapse text-left text-[13px] leading-6">
+      <div className="my-4 w-full overflow-x-auto rounded-lg border border-divider bg-card">
+        <table {...props} className="min-w-full border-collapse text-left text-[13.5px] leading-[1.7]">
           {children}
         </table>
       </div>
     ),
     thead: ({ children, ...props }) => (
-      <thead {...props} className="bg-canvas text-ink-secondary">
+      <thead {...props} className="bg-paper-warm text-ink-secondary">
         {children}
       </thead>
     ),

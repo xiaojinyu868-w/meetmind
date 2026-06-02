@@ -20,13 +20,16 @@
 | 任务类型 | 阅读顺序 |
 |---------|---------|
 | **改 UI / 组件** | `src/components/DOMAIN.md` → 对应子目录 DOMAIN.md → 具体组件 |
+| **改任意 AI 对话面板（输入条 / 消息流 / 流式 / 文件上传 / 麦克风）** | `src/components/chat/DOMAIN.md` —— **M11 底座**：薄底座 ChatBubble / ChatComposer / ChatMessageList / ChatRenderer / ChatThinkingStripBubble + 三个 hook（useChatComposer 草稿+IME / useChatFileUpload 拖拽+粘贴 / useAutoFollowScroll 智能跟随）。任何新对话面板都应基于这个底座做 adapter，不要重新写一套输入条/气泡。已迁移：IntentDialog / TutorAgentPanel。待迁：ClassroomCompanionPanel / SharedAgentChat / WordExplainer。**铁律**：底座不引入业务逻辑（mode/prompt/endpoint），用 slot / capability 对象组合。 |
 | **改课堂同桌 / Hero / 内联 app 卡** | `src/components/classroom/DOMAIN.md` → 对应组件（注意：Skill chip 走 `<open_app:KEY/>` 链路，不是 `/api/apps/execute` 直调） |
 | **改复习态 Tutor / Skill chip / Tool card** | `src/components/tutor/DOMAIN.md` → 对应组件 |
 | **改 Workshop 应用窗口** | `src/components/apps/windows/DOMAIN.md` → 对应窗口组件 |
 | **改页面路由** | `src/app/DOMAIN.md` → 对应 page.tsx |
 | **改 API 接口** | `src/app/api/DOMAIN.md` → 对应子目录 DOMAIN.md → route.ts |
-| **改 Tutor 后端** | `src/app/api/tutor/DOMAIN.md`（M10：`/api/tutor/agent` 是三个对话入口的唯一后端，按 `mode: 'in-class' \| 'review'` 分支） |
+| **改 Tutor 后端** | `src/app/api/tutor/DOMAIN.md`（M10：`/api/tutor/agent` 是三个对话入口的唯一后端，按 `mode: 'in-class' \| 'review' \| 'shared' \| 'goal'` 分支） |
 | **改 prompt** | `src/lib/prompts/tutor-prompts.ts`（mode-driven `buildTutorSystemPrompt`） + `项目开发文档/提示词设计哲学.md` |
+| **改「聊聊你想要的」/ 目标共建 / onboarding 对话流** | `src/components/intent/DOMAIN.md` → `IntentDialogContainer` 是入口包装，主对话在 `IntentDialog`，提炼卡片在 `IntentSummaryCard`。后端 `/api/tutor/agent` mode='goal'，prompt 在 `tutor-prompts.ts` 的 `MODE_GOAL_SEGMENT`。文件解析 helper `src/lib/services/file-parse-service.ts`。|
+| **改实时语音通话 UI / 抗噪抗打断** | `src/components/realtime/DOMAIN.md` → `RealtimeOrb`（v7 呼吸光晕，复用于复习态 + intent 通话）+ `IntentVoiceCallScreen` / `TutorRealtimeCallScreen`。后端 WebSocket 在 `server.js` 的 `/api/tutor-call`，VAD/降噪参数走环境变量（见 `.env.example` 实时语音同桌段）。|
 | **改业务逻辑（service）** | `src/lib/services/DOMAIN.md` → 找到对应 service 文件 |
 | **改 ASR 链路** | `src/lib/services/asr/`（text-utils / render-state-machine / post-edit / audio-constraints） |
 | **改 AI-Native 插件** | `src/lib/ai-native/plugins/DOMAIN.md` → 对应 plugin |
@@ -515,7 +518,7 @@ src/
 | `src/app/api/tutor/route.ts` | 936 | Legacy SSE 路径（flag off 时仍可用，不要在它上面加新功能） |
 | `src/lib/prompts/tutor-prompts.ts` | ~300 | `buildTutorSystemPrompt(mode, context, options)` ── 三入口唯一 prompt 源 |
 | `src/lib/tutor/tutor-tools.ts` | ~225 | 4 个 Vercel AI SDK v6 tool（makeFlashcards / makeQuiz / makeMindmap / lookupTranscript） |
-| `src/lib/services/llm-service.ts` | ~660 | 统一 LLM 调用层（StepFun / DeepSeek / DashScope / Ark / Relay），默认学习应用模型优先 `step-3.7-flash`（阶跃星辰），fallback 链 `step-3.7-flash → deepseek-v4-flash → qwen3.6-plus` |
+| `src/lib/services/llm-service.ts` | ~660 | 统一 LLM 调用层（StepFun / DeepSeek / DashScope / Ark / Relay），默认学习应用模型优先 `DeepSeek-V4-Flash`，fallback 链 `DeepSeek-V4-Flash → DeepSeek-V4-Pro → Qwen3.6-Plus-A` |
 | `src/lib/utils/tutor-agent-provider.ts` | ~160 | Tutor Agent OpenAI-compatible provider 解析：按请求模型 / env 选择 StepFun、DeepSeek、DashScope 或 OpenAI，并强制 Chat Completions；暴露 `shouldUseNativeTutorTools` 禁用 DeepSeek thinking native tool-call |
 | `src/lib/utils/ai-model-preference.ts` | 19 | 设置页模型偏好的 key 与 `auto` 解析契约 |
 | `src/lib/ui/copy.ts` | ~80 | 用户面文案唯一真相源（COPY 对象 + bannedWords 校验） |

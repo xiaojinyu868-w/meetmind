@@ -11,7 +11,7 @@
  * 遵循 (deps, refs) 模式。Store 写入通过 getState().actions。
  */
 
-import { useCallback, useEffect } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 import { useUIStore } from '@/stores/ui-store';
 import { usePlayerStore } from '@/stores/player-store';
 import { useSessionStore } from '@/stores/session-store';
@@ -45,6 +45,25 @@ interface UseAppStateRestoreDeps {
   showTranscriptBar: boolean;
   selectedAnchorId: string | undefined;
   persistedCurrentTime: number;
+  /**
+   * R9-3 修：从 /settings 等页面 router.back() 回到 /app 时恢复 review 视图。
+   *
+   * 之前的注释说不能恢复 review 因为 hook 没法访问 restoreReviewSession——
+   * 现在通过这个 callback 由 page.tsx 注入 restoreReviewSession 引用。
+   *
+   * 用户痛点：在课后学习页 → 进设置 → 返回 → 永远回到课堂态（review state 丢失）。
+   * 真因：useAppStateRestore 在 mount 时强制 setViewMode('classroom')。
+   *
+   * 这个 callback 接受 saved sessionId + 完整 saved state，调用方负责：
+   *   (1) 调用 restoreReviewSession(sessionId, options)
+   *   (2) 恢复 video / audio / segments 数据
+   *   (3) 内部 setViewMode('review')
+   * 返回 true 表示恢复成功（会跳过默认 setViewMode('classroom')）。
+   */
+  onRestoreReviewSession?: (
+    sessionId: string,
+    saved: { reviewTab?: PersistedReviewTab; videoWorkspaceTab?: PersistedVideoWorkspaceTab; currentTime?: number; showTranscriptBar?: boolean }
+  ) => Promise<boolean>;
 }
 
 // ── Refs interface ──
@@ -71,9 +90,15 @@ export function useAppStateRestore(
     showTranscriptBar,
     selectedAnchorId,
     persistedCurrentTime,
+    onRestoreReviewSession,
   } = deps;
 
   const { hasRestoredState } = refs;
+
+  // R9-3：把最新 onRestoreReviewSession 存到 ref，让 init useEffect 内闭包永远拿到最新引用。
+  // useEffect 只跑一次（mount 时），但此时 page.tsx 传入的 callback 可能还引用了 stale state。
+  const onRestoreReviewSessionRef = useRef(onRestoreReviewSession);
+  onRestoreReviewSessionRef.current = onRestoreReviewSession;
 
   // ── saveAppState ──
   const saveAppState = useCallback(async () => {
@@ -156,7 +181,33 @@ export function useAppStateRestore(
         sessionActions.setSessionId(savedAppState.sessionId);
       }
 
-      uiActions.setViewMode('classroom');
+      // R9-3：尝试恢复 review viewMode（之前永远强制 classroom 是 bug）。
+      // 用户场景：在课后学习页 → 点设置 → 返回 → 应该回到课后学习页（不是首页）。
+      // /app 是单一 URL，靠 viewMode state 切换 — router.back() 会让 /app remount，
+      // 必须由 IndexedDB 持久化 + 这里恢复才能真正 "回到来源"。
+      let reviewRestored = false;
+      const restoreCallback = onRestoreReviewSessionRef.current;
+      if (
+        savedAppState?.viewMode === 'review' &&
+        savedAppState.sessionId &&
+        restoreCallback
+      ) {
+        try {
+          reviewRestored = await restoreCallback(savedAppState.sessionId, {
+            reviewTab: savedAppState.reviewTab,
+            videoWorkspaceTab: savedAppState.videoWorkspaceTab,
+            currentTime: savedAppState.currentTime,
+            showTranscriptBar: savedAppState.showTranscriptBar,
+          });
+        } catch (err) {
+          console.error('[initializeApp] restoreReviewSession failed, fallback to classroom:', err);
+          reviewRestored = false;
+        }
+      }
+
+      if (!reviewRestored) {
+        uiActions.setViewMode('classroom');
+      }
       sessionActions.setSelectedAnchor(null);
       if (!savedAppState) {
         sessionActions.setDataSource('live');
@@ -165,22 +216,22 @@ export function useAppStateRestore(
         captureEditorActions.setActiveVideoInsightId(null);
         uiActions.setVideoWorkspaceTab('chat');
         uiActions.setShowTranscriptBar(false);
-      } else if (savedAppState.dataSource !== 'video') {
+      } else if (savedAppState.dataSource !== 'video' && !reviewRestored) {
+        // R9-3：reviewRestored=true 时，restoreReviewSession 已经设过 video/transcript
+        // 状态，这里不要再覆盖；只在没恢复 review 时才走默认重置。
         captureEditorActions.setVideoSource(null);
         captureEditorActions.setVideoInsightItems([]);
         captureEditorActions.setActiveVideoInsightId(null);
         uiActions.setShowTranscriptBar(false);
         uiActions.setVideoWorkspaceTab(savedAppState.videoWorkspaceTab || 'chat');
       }
-      if (typeof savedAppState?.currentTime === 'number' && Number.isFinite(savedAppState.currentTime)) {
+      if (!reviewRestored && typeof savedAppState?.currentTime === 'number' && Number.isFinite(savedAppState.currentTime)) {
         playerActions.setCurrentTime(Math.max(0, Math.floor(savedAppState.currentTime)));
       }
       uiActions.setLoadingProgress(85);
 
-      // NOTE: 不恢复 viewMode='review'。
-      // 原因：恢复 review 模式需要从 IndexedDB 加载 segments/timeline/anchors（通过 restoreReviewSession），
-      // 但 useAppStateRestore 没有访问该函数的能力。只恢复 viewMode 不恢复数据会导致空壳复习页。
-      // 用户刷新后回到收集页，可以重新点击内容进入复习——这比看到"没有时间轴"好。
+      // R9-3：之前注释 "不恢复 viewMode='review' 因为 hook 没 access 到 restoreReviewSession" 已废弃。
+      // 现在通过 onRestoreReviewSession callback 注入解决。
 
       uiActions.setLoadingProgress(100);
       uiActions.setAppReady(true);

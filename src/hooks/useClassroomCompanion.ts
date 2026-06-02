@@ -21,10 +21,13 @@
 'use client';
 
 import { useState, useCallback, useRef, useEffect } from 'react';
+import { flushSync } from 'react-dom';
 // M10：classroom 同桌切到 /api/tutor/agent（统一 AI 对话后端）。
 // 消费 AI SDK v6 的 UIMessage stream，而不是老 /api/tutor 的自定义 SSE。
 import { fetchUIMessageStream } from '@/lib/hooks/fetchUIMessageStream';
 import { useAuth } from '@/lib/hooks/useAuth';
+// M11.5：把用户画像（含 bio + goals）注入 in-class prompt，让"同桌"也能认识用户。
+import { formatLearnerProfileForTutorAgent } from '@/components/tutor/tutor-agent-adapter';
 import { useSessionStore } from '@/stores/session-store';
 import { useCaptureEditorStore } from '@/stores/capture-editor-store';
 import { getPreference, setPreference } from '@/lib/db';
@@ -178,7 +181,7 @@ export function useClassroomCompanion(
 ): UseClassroomCompanionReturn {
   const { lessons, isRecording = false, onOpenApp, inlineAppMode = true } = input;
 
-  const { accessToken } = useAuth();
+  const { user, accessToken } = useAuth();
   const sessionId = useSessionStore((s) => s.sessionId);
   const companionMessagesKey = getCompanionMessagesPreferenceKey(sessionId);
   const segments = useCaptureEditorStore((s) => s.segments);
@@ -681,6 +684,8 @@ export function useClassroomCompanion(
           sessionId,
           segments,
           model: preferredModel,
+          // M11.5：把 bio + 结构化 + goals 注入"同桌"上下文，让 AI 也能"认识"用户
+          learnerProfile: formatLearnerProfileForTutorAgent(user?.learnerProfile),
         }),
         {
           headers,
@@ -690,10 +695,19 @@ export function useClassroomCompanion(
             // 由 onTextDelta 里处理——此处留空，只是标记 start 发生过
           },
           onTextDelta: (_chunk, fullContent) => {
-            setSseThinking(false);
-            // 流式渲染时把 <open_app:.../> 标记提前剥掉，避免用户看到半成品标签
-            const { cleaned } = extractOpenAppMarker(fullContent);
-            setStreamingMessage((prev) => prev ? { ...prev, content: cleaned } : prev);
+            // R9 流式真修：用 flushSync 强制每次 token delta 立即 commit DOM。
+            // 之前 React 18 automatic batching 把 reader 循环里连续多次 setState
+            // 合并成 1 帧 commit，导致用户看到字一坨一坨刷出。
+            // flushSync 让每个字符 delta 都触发立即渲染（配合后端 30ms delay
+            // = 60fps 友好的逐字浮现节奏）。
+            //
+            // 性能 OK：30ms 间隔 = 33 次/秒 setState，远低于 React 同步渲染上限。
+            flushSync(() => {
+              setSseThinking(false);
+              // 流式渲染时把 <open_app:.../> 标记提前剥掉，避免用户看到半成品标签
+              const { cleaned } = extractOpenAppMarker(fullContent);
+              setStreamingMessage((prev) => prev ? { ...prev, content: cleaned } : prev);
+            });
           },
         },
       );

@@ -2,9 +2,9 @@
  * LLM 服务 - 真实 AI 模型调用
  * 
  * 支持模型：
- * - 阶跃星辰 StepFun (step-3.7-flash) — MeetMind 当前默认 AI
- * - DeepSeek (deepseek-v4-flash, deepseek-v4-pro)
- * - 通义千问 (qwen3.6-plus, qwen3.5-plus, qwen3-vl-plus, qwen3-max-2026-01-23)
+ * - 阶跃星辰 StepFun (step-3.7-flash)
+ * - DeepSeek (DeepSeek-V4-Flash, DeepSeek-V4-Pro)
+ * - 通义千问 (Qwen3.6-Plus-A, Qwen3.5-397B-A17B-Pro, Qwen3-VL-235B-A22B-Instruct-A, Qwen3-Max-A, qwen3.5-omni-plus)
  * - 火山方舟 (VOLCENGINE_ARK_MODEL)
  * - 中转站聚合模型 (RELAY_MODEL，例如 gemini-3-pro-image-preview)
  */
@@ -22,7 +22,7 @@ export const AVAILABLE_MODELS: ModelConfig[] = LLMConfig.models;
 
 // 获取默认模型ID
 export const DEFAULT_MODEL_ID = LLMConfig.defaultModel;
-export const WORKSHOP_PREFERRED_MODEL_ID = 'step-3.7-flash';
+export const WORKSHOP_PREFERRED_MODEL_ID = 'DeepSeek-V4-Flash';
 export const DEFAULT_WORKSHOP_MODEL_ID = AVAILABLE_MODELS.some((model) => model.id === WORKSHOP_PREFERRED_MODEL_ID)
   ? WORKSHOP_PREFERRED_MODEL_ID
   : DEFAULT_MODEL_ID;

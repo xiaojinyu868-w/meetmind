@@ -175,47 +175,22 @@ async function generateMindMap(
   transcriptContext: string,
   anchorContext: string
 ): Promise<MindmapLLMOutput | null> {
+  // 提示词哲学：描述目标和场景，不规定主干数 / 子节点数 / 字数。
+  // "5 秒扫完"是给模型听的目标，由它自己决定该展开多深。
   const response = await chat(
     [
       {
         role: 'system',
-        content: [
-          '你是一位深谙认知科学的知识架构师。',
-          '',
-          '本场景：单节课的"5 秒可扫完"导图（PRD v1.1 §5.4 退化形态）。',
-          '它的真正主舞台是单元层（多课聚合），单课层只承担"扫一眼这节课的结构"。',
-          '所以宁可少而精，不要试图穷尽所有概念。',
-          '',
-          '硬性纪律：',
-          '1) 主干分支 3-5 个，**严格不超过 5 个**——多了 5 秒扫不完',
-          '2) 每个主干分支最多 2-3 个子节点，**严格不超过 3 个**',
-          '3) 总深度 ≤ 3 层（含根）。再深就成大纲不是导图了',
-          '4) 节点文本干净：纯知识表述，不带段落编号 / 时间戳 / 课堂原文元数据标记',
-          '5) 学习者关注点（anchors / 困惑标记）非空时，优先在主干层覆盖这些点',
-          '',
-          '不要写 JSON。直接输出纯 Markdown 大纲：第一行 # 根主题，后续 - 子节点，每级缩进两空格。',
-        ].join('\n'),
+        content: '你是一位深谙认知科学的知识架构师。你帮一位刚听完课的学生整理一张"扫一眼就能看出这节课讲了什么、几个大块"的结构图——不是详尽的课后笔记，是他余光扫到就能定位自己在课里哪一段的轻量地图。直接输出 Markdown 大纲（# 根主题 + - 子节点缩进），不要 JSON。',
       },
       {
         role: 'user',
-        content: `目标：${context.goal.intent}
-
-请基于以下课堂内容，输出一份"扫一眼能看懂这节课结构"的 Markdown 思维导图。
-
-约束（重申）：
-- 主干 3-5 个分支
-- 每个分支 2-3 个子节点
-- 总深度 ≤ 3 层
-- 节点文字简短（10 字以内更佳）
-
-课堂原文：
-${transcriptContext}
-
-${anchorContext ? `学习者关注点（含困惑标记，请优先在主干层覆盖）：\n${anchorContext}` : ''}${buildTerminologyHintBlock(context.memory.terminologyHint)}`,
+        content: `${context.goal.intent ? `他的目标：${context.goal.intent}\n\n` : ''}${anchorContext ? `他听课时的困惑点（这些主题值得在主干层出现）：\n${anchorContext}\n\n` : ''}课堂原文：
+${transcriptContext}${buildTerminologyHintBlock(context.memory.terminologyHint)}`,
       },
     ],
     model,
-    { temperature: 0.3, maxTokens: 2400 }
+    { temperature: 0.3, maxTokens: 1800 }
   );
 
   const content = (response.content || '').trim();
@@ -290,7 +265,7 @@ export const mindmapPlugin: AppPlugin = {
 
   async run(context: AppExecutionContext, tools: AppPluginTools): Promise<AppExecutionResult> {
     const promptContext = buildPromptTranscriptContext(context.input.transcript, {
-      maxChars: 24_000,
+      maxChars: 8_000,
       includeIndex: false,
       includeTimestamp: false,
       minCharsPerSegment: 52,

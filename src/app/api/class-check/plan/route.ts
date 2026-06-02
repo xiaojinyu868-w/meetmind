@@ -181,7 +181,7 @@ export async function POST(request: NextRequest) {
     const model = body.model?.trim() || DEFAULT_MODEL_ID;
 
     const transcriptContext = buildPromptTranscriptContext(transcript, {
-      maxChars: 28_000,
+      maxChars: 10_000,
       includeIndex: false,
       includeTimestamp: true,
       minCharsPerSegment: 40,
@@ -191,63 +191,39 @@ export async function POST(request: NextRequest) {
       [
         {
           role: 'system',
-          content: `你是一位坐在学生旁边、和他一起听完整节课的 AI 同桌。
-
-你的任务：快速梳理课堂结构，输出两样东西：
-1. 知识点检验计划（checkpoints）——在哪些时间点可以暂停、主题是什么
-2. 课堂精选片段（highlights）——最有价值的原文片段
-
-注意：不要出题。题目由另一个接口按 checkpoint 单独生成。
-
-你的风格：
-- 像朋友聊天，不是考官审讯
-- greeting 要和刚才的内容相关，让学生觉得你在认真听
-- encouragement 自然，不要套话
-
-严格输出 JSON，不要输出其他文字。`,
+          content: '你是一位坐在学生旁边、和他一起听完整节课的 AI 同桌。读完整节课的转录后，帮他梳理出"哪些时间点适合停下来确认理解"以及"哪些原文片段最值得回看"。不要出题——题目由另一个步骤按需要生成。',
         },
         {
           role: 'user',
-          content: `以下是一节课的完整转录，带时间戳：
+          content: `课堂转录（带时间戳）：
 
 ${transcriptContext.text}
 
-请分析这节课，输出 JSON：
+输出 JSON：
 {
-  "title": "课堂主题",
-  "summary": "一句话概括",
+  "title": string,
+  "summary": string,
   "checkpoints": [
     {
-      "triggerMs": 270000,
-      "startMs": 0,
-      "endMs": 270000,
-      "topic": "知识点主题",
-      "difficulty": 2,
-      "greeting": "一句和刚才内容相关的自然开场白",
-      "encouragement": "答完后的一句鼓励或提醒"
+      "triggerMs": number,
+      "startMs": number,
+      "endMs": number,
+      "topic": string,
+      "difficulty": number,
+      "greeting": string,
+      "encouragement": string
     }
   ],
   "highlights": [
-    {
-      "title": "片段标题（≤15字）",
-      "startMs": 30000,
-      "endMs": 90000,
-      "quote": "转录原文引用",
-      "checkpointIndex": 0
-    }
+    { "title": string, "startMs": number, "endMs": number, "quote": string, "checkpointIndex": number }
   ]
 }
 
-要求：
-- checkpoints 3-7 个，找自然断点
-- highlights 数量 ≥ checkpoints，每个知识点至少一个精选片段
-- triggerMs 必须对应转录中真实的时间点
-- quote 必须是转录原文
-- 不要输出 questions 字段`,
+triggerMs / startMs / endMs 必须落在转录里真实出现过的时间点；quote 必须是转录里的原话。只输出 JSON，不解释。`,
         },
       ],
       model,
-      { temperature: 0.3, maxTokens: 3072, responseFormat: 'json_object' }
+      { temperature: 0.3, maxTokens: 2400, responseFormat: 'json_object' }
     );
 
     const parsed = parseJsonResponse<PlanLLMOutput>(response.content);

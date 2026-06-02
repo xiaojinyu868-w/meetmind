@@ -17,6 +17,19 @@ export function formatLearnerProfileForTutorAgent(profile?: LearnerProfile | nul
   if (!profile) return undefined;
 
   const lines: string[] = ['【这个学生】'];
+
+  // M11.5：bio 优先 —— 这是「聊聊你想要的」首次会面对话沉淀的最精炼画像，
+  // 比硬编码 stage/major/year 字段更准确反映"他是谁、什么状态"。
+  // bio 存在时直接用 bio 作为头部，旧结构化字段作为补充背景。
+  if (profile.bio?.headline?.trim()) {
+    lines.push(profile.bio.headline.trim());
+    if (profile.bio.detail?.trim()) {
+      lines.push(profile.bio.detail.trim());
+    }
+    lines.push('');
+  }
+
+  // 结构化字段（旧 LearnerProfile，保留兼容）
   if (profile.stage === 'k12') {
     lines.push(`- ${profile.gradeLevel || '中小学生'}`);
     if (profile.textbookEdition) lines.push(`- 教材：${profile.textbookEdition}`);
@@ -28,13 +41,29 @@ export function formatLearnerProfileForTutorAgent(profile?: LearnerProfile | nul
     lines.push(`- 研究生 · ${profile.field || '未知方向'}`);
     if (profile.advisor) lines.push(`- 导师：${profile.advisor}`);
     if (profile.researchTopic) lines.push(`- 课题：${profile.researchTopic}`);
-  } else {
+  } else if (profile.stage) {
     lines.push(`- 在职学习 · ${profile.industry || '未知行业'}`);
     if (profile.learningGoal) lines.push(`- 学习目标：${profile.learningGoal}`);
   }
 
   if (profile.goal) lines.push(`- 最近的目标：${profile.goal}`);
   if (profile.otherInterests) lines.push(`- 同时也在学：${profile.otherInterests}`);
+
+  // M11.5：goals[] —— 「聊聊你想要的」对话沉淀的具体目标
+  // 只取 active 状态的，最多 5 条；按 updatedAt 降序
+  const activeGoals = (profile.goals ?? [])
+    .filter((g) => !g.status || g.status === 'active')
+    .slice()
+    .sort((a, b) => (b.updatedAt ?? '').localeCompare(a.updatedAt ?? ''))
+    .slice(0, 5);
+  if (activeGoals.length > 0) {
+    lines.push('');
+    lines.push('- 他正在追的事：');
+    activeGoals.forEach((g) => {
+      lines.push(`  · ${g.title}${g.summary ? `（${g.summary.slice(0, 60)}）` : ''}`);
+    });
+  }
+
   lines.push('');
   lines.push('这只是背景，不是规则。当前课堂/材料和用户这一句话仍然是主上下文。');
 

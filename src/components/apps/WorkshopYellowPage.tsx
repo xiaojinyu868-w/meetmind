@@ -802,68 +802,64 @@ export function WorkshopYellowPage(props: WorkshopYellowPageProps) {
 
           return (
             <article key={app.key} className={cardClassName} data-testid={`workshop-card-${app.key}`}>
-              {/* v3.0 重做：废弃静态 cover.svg，改为内联 hero（icon + tint + outputType）。
-                  原因：静态图（如 flashcards-cover.svg）会硬叠两张卡片导致截断 + 视觉冲突。
-                  新版每个 app 一种克制的 ceremony tint，统一可控。 */}
+              {/* R9-3 横向 list-item 布局：cover (48px) | cardBody (1fr) | actionRow (auto) */}
               <AppHero appKey={app.key} outputType={app.outputType} />
 
-              <div className={styles.rowTop}>
-                <div className={styles.titleGroup}>
-                  <p className={styles.category}>{app.category}</p>
-                  <p className={styles.appName}>{app.name}</p>
-                  {/* 删除 headline —— 它和 description 内容重叠，导致三层标题冗余 */}
+              <div className={styles.cardBody}>
+                <div className={styles.rowTop}>
+                  <div className={styles.titleGroup}>
+                    <p className={styles.category}>{app.category}</p>
+                    <p className={styles.appName} title={app.name}>{app.name}</p>
+                  </div>
+                  {isRunning && dockTask ? (
+                    <span className={styles.statusDot}>
+                      <span className={styles.statusDotMark} aria-hidden>
+                        <span
+                          className={styles.statusDotPulse}
+                          style={{ background: '#2D4F3E' }}
+                        />
+                        <span
+                          className={styles.statusDotCore}
+                          style={{ background: '#2D4F3E' }}
+                        />
+                      </span>
+                      <span className={`${styles.statusDotLabel} tabular-nums`}>
+                        <ElapsedTimer startMs={dockTask.startedAt} />
+                      </span>
+                    </span>
+                  ) : (
+                    <StatusDot
+                      status={
+                        isFailed ? 'error' : generated ? 'success' : 'idle'
+                      }
+                      label={isFailed ? '没做好' : generated ? '做好了' : '待开始'}
+                    />
+                  )}
                 </div>
-                {isRunning && dockTask ? (
-                  <span className={styles.statusDot}>
-                    <span className={styles.statusDotMark} aria-hidden>
-                      <span
-                        className={styles.statusDotPulse}
-                        style={{ background: '#2D4F3E' }}
-                      />
-                      <span
-                        className={styles.statusDotCore}
-                        style={{ background: '#2D4F3E' }}
-                      />
+                <div className={styles.tags}>
+                  {app.tags.slice(0, 3).map((tag) => (
+                    <span key={`${app.key}-${tag}`} className={styles.tag}>
+                      {tag}
                     </span>
-                    <span className={`${styles.statusDotLabel} tabular-nums`}>
-                      <ElapsedTimer startMs={dockTask.startedAt} />
-                    </span>
-                  </span>
-                ) : (
-                  <StatusDot
-                    status={
-                      isFailed ? 'error' : generated ? 'success' : 'idle'
-                    }
-                    label={isFailed ? '没做好' : generated ? '做好了' : '待开始'}
-                  />
-                )}
-              </div>
-              <div className={styles.tags}>
-                {app.tags.slice(0, 3).map((tag) => (
-                  <span key={`${app.key}-${tag}`} className={styles.tag}>
-                    {tag}
-                  </span>
-                ))}
-              </div>
-              <p className={styles.description}>{app.description}</p>
-              {/* 删除 metaLine（capabilityHint）—— 它说的是"会得到 XXX · 可以先做一版"，
-                  但 outputType 已经在 hero 显示，按钮也已经写"先做一版"，重复 */}
-              {preview ? (
-                <div className={styles.previewBlock}>
-                  <p className={styles.previewLabel}>最近结果</p>
-                  <p className={styles.previewLine} title={preview}>
-                    <ClipboardList size={12} strokeWidth={1.75} className="inline mr-1 align-text-bottom" />
-                    {preview.length > 50 ? preview.slice(0, 50) + '...' : preview}
+                  ))}
+                </div>
+                <p className={styles.description} title={app.description}>{app.description}</p>
+                {preview ? (
+                  <div className={styles.previewBlock}>
+                    <p className={styles.previewLabel}>最近结果</p>
+                    <p className={styles.previewLine} title={preview}>
+                      <ClipboardList size={12} strokeWidth={1.75} className="inline mr-1 align-text-bottom" />
+                      {preview.length > 50 ? preview.slice(0, 50) + '...' : preview}
+                    </p>
+                  </div>
+                ) : null}
+                {taskState?.status === 'error' && taskState.error ? (
+                  <p className={styles.errorLine} title={taskState.error}>
+                    上次没做完，再试一次试试
                   </p>
-                </div>
-              ) : null}
-              {/* 失败提示：原 errorLine 是红字 + "刚才没做好：应用执行失败"，过于刺目。
-                  改为温和的 ink-secondary 一句话，把 reason 收到 title 里（hover 看） */}
-              {taskState?.status === 'error' && taskState.error ? (
-                <p className={styles.errorLine} title={taskState.error}>
-                  上次没做完，再试一次试试
-                </p>
-              ) : null}
+                ) : null}
+              </div>
+
               <div className={styles.actionRow}>
                 {isRunning ? (
                   <button

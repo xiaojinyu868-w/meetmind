@@ -22,7 +22,6 @@ import { useChat } from '@ai-sdk/react';
 import { DefaultChatTransport } from 'ai';
 import type { AppExecutionResult } from '@/lib/ai-native/types';
 import { TutorToolCard } from './TutorToolCard';
-import { StreamingMarkdown } from '@/components/StreamingMarkdown';
 import { conversationMessageToUIMessage, resolveTutorAgentHistoryLabel } from './tutor-agent-history';
 import { formatRecentLearningActivityForTutorAgent, resolveTutorAgentLaunchText } from './tutor-agent-adapter';
 import { resolveTutorMessageRenderPlan } from './tutor-message-rendering';
@@ -35,6 +34,18 @@ import { getPreference } from '@/lib/db';
 import { OctoAvatar } from '@/components/ui/octo-avatar';
 import { conversationService, getEffectiveUserId } from '@/lib/services/conversation-service';
 import { cn } from '@/lib/utils';
+// M11：迁到 ChatBase 底座（薄底座 + 厚适配）
+import {
+  ChatBubble,
+  ChatComposer,
+  ChatMessageList,
+  ChatRenderer,
+  ChatThinkingStripBubble,
+  useChatComposer,
+  useChatFileUpload,
+  collectMessageText as collectChatMessageText,
+} from '@/components/chat';
+import { Copy, RefreshCw } from 'lucide-react';
 import {
   AI_MODEL_AUTO_VALUE,
   AI_MODEL_PREFERENCE_KEY,
@@ -127,20 +138,24 @@ function TutorMessageText({
   text,
   onSeek,
   isStreaming = false,
+  messageId,
 }: {
   role: string;
   text: string;
   onSeek?: (ms: number) => void;
   isStreaming?: boolean;
+  messageId?: string;
 }) {
+  // resolveTutorMessageRenderPlan 处理"思维演示 / 正式回答"分段以及空内容剔除
   const plan = React.useMemo(() => resolveTutorMessageRenderPlan({ role, text }), [role, text]);
   if (!plan.content) return null;
   if (plan.renderer === 'markdown') {
     return (
-      <StreamingMarkdown
+      <ChatRenderer
         content={plan.content}
         isStreaming={isStreaming}
         onTimestampClick={onSeek}
+        messageId={messageId}
         className="text-[14.5px] leading-[1.75] text-ink"
       />
     );
@@ -148,14 +163,9 @@ function TutorMessageText({
   return <span className="whitespace-pre-wrap">{plan.content}</span>;
 }
 
+// 复用底座 collectMessageText（保留同名 wrapper 给本文件其他地方调用）
 function collectMessageText(message: { parts?: unknown; content?: string }): string {
-  const parts = Array.isArray(message.parts) ? message.parts as Array<Record<string, unknown>> : [];
-  const fromParts = parts
-    .filter((part) => part.type === 'text' && typeof part.text === 'string')
-    .map((part) => part.text as string)
-    .join('\n');
-  if (fromParts.trim()) return fromParts;
-  return typeof message.content === 'string' ? message.content : '';
+  return collectChatMessageText(message as { parts?: unknown; content?: string });
 }
 
 export function TutorAgentPanel({
@@ -182,7 +192,6 @@ export function TutorAgentPanel({
 }: TutorAgentPanelProps) {
   const { user } = useAuth();
   const userId = getEffectiveUserId(user?.id);
-  const [input, setInput] = React.useState('');
   const [preferredModel, setPreferredModel] = React.useState<string | undefined>();
   const [inlineAppsByMessageId, setInlineAppsByMessageId] = React.useState<Record<string, ReviewInlineAppState>>({});
   const [historyHydrated, setHistoryHydrated] = React.useState(false);
@@ -497,15 +506,34 @@ export function TutorAgentPanel({
     }
   }, [busy, messages, onOpenAppInWorkspace, runInlineApp]);
 
-  const onSubmit = React.useCallback(
-    (e: React.FormEvent) => {
-      e.preventDefault();
-      const text = input.trim();
+  const onSubmitText = React.useCallback(
+    (text: string) => {
       if (!text || busy) return;
       sendMessage({ text });
-      setInput('');
     },
-    [input, busy, sendMessage],
+    [busy, sendMessage],
+  );
+
+  // M11：底座 composer hook —— 统一处理 IME / 草稿持久化 / 自适应高度 / 快捷键
+  const composer = useChatComposer({
+    draftKey: sessionId,
+    onSubmit: onSubmitText,
+    disabled: busy,
+  });
+
+  // M11：底座文件上传 hook —— 拖拽 / 粘贴 / 点击三入口统一
+  const composerRef = React.useRef<HTMLFormElement>(null);
+  const fileUpload = useChatFileUpload({
+    authToken,
+    targetRef: composerRef,
+  });
+
+  const handleVoiceTranscript = React.useCallback(
+    (text: string) => {
+      if (!text.trim()) return;
+      composer.setValue(composer.value ? `${composer.value} ${text}` : text);
+    },
+    [composer],
   );
 
   const onPickSkill = React.useCallback(
@@ -516,6 +544,28 @@ export function TutorAgentPanel({
     },
     [busy, sendMessage],
   );
+
+  // 监听最近 user 消息触发 composer 中"复制 / 重生成"等动作的可见性
+  const lastMsg = messages[messages.length - 1];
+  const lastIsUser = lastMsg && lastMsg.role === 'user';
+  const lastAssistantText =
+    lastMsg && lastMsg.role === 'assistant' ? collectMessageText(lastMsg) : '';
+  const showThinking =
+    busy && (lastIsUser || (lastMsg?.role === 'assistant' && !lastAssistantText.trim()));
+
+  // 重生成上一条 —— 删除最后一条 assistant + 重发上一条 user
+  const handleRegenerateLast = React.useCallback(() => {
+    if (busy) return;
+    const lastUserIdx = [...messages].reverse().findIndex((m) => m.role === 'user');
+    if (lastUserIdx < 0) return;
+    const realIdx = messages.length - 1 - lastUserIdx;
+    const lastUser = messages[realIdx];
+    const text = collectMessageText(lastUser);
+    if (!text.trim()) return;
+    // 砍掉这条 user 之后的所有 assistant 消息
+    setMessages(messages.slice(0, realIdx + 1));
+    sendMessage({ text });
+  }, [busy, messages, sendMessage, setMessages]);
 
   return (
     <div
@@ -580,107 +630,168 @@ export function TutorAgentPanel({
         </div>
       </div>
 
-      <div className="flex-1 space-y-4 overflow-y-auto bg-card px-6 py-5">
-        {messages.length === 0 ? (
+      {/* M11：底座消息流（自动跟随 + jump-to-latest） */}
+      <ChatMessageList
+        watchKey={messages.length + (busy ? 1 : 0) + (lastAssistantText.length || 0)}
+        showEmpty={messages.length === 0}
+        emptyState={
           <div className="flex flex-col items-center pt-6 text-center">
             <OctoAvatar mood="listening" size="lg" aura className="mb-4" />
             <div className="mx-auto max-w-[20rem] text-[15px] leading-[1.75] text-ink-secondary">
-              <span className="font-serif italic text-pine">同学</span>在这里。挑一个直接开始，也可以在下方直接问。
+              <span className="font-serif italic text-pine">同学</span>
+              在这里。挑一个直接开始，也可以在下方直接问。
             </div>
             <SkillChipRow onPick={onPickSkill} onSay={onPickSkill} disabled={busy} />
           </div>
-        ) : null}
-
-        {messages.map((m) => {
+        }
+        variant="paper"
+        contentMaxWidth="max-w-3xl"
+        innerClassName="space-y-4"
+      >
+        {messages.map((m, mIdx) => {
           const parts = (m.parts ?? []) as Array<Record<string, unknown>>;
           const inlineApp = inlineAppsByMessageId[m.id];
           const isUser = m.role === 'user';
-          return (
-            <div
-              key={m.id}
-              className={cn('flex', isUser ? 'justify-end' : 'justify-start')}
-            >
-              <div className={cn('flex flex-col', inlineApp ? 'w-full max-w-full' : 'max-w-[88%]', isUser ? 'items-end' : 'items-start')}>
-                <div
-                  className={cn(
-                    'rounded-2xl px-4 py-2.5 text-[14.5px] leading-[1.75] break-words',
-                    isUser
-                      ? 'rounded-br-md bg-ink text-white whitespace-pre-wrap'
-                      : 'rounded-bl-md border border-divider bg-canvas text-ink',
-                  )}
-                >
-                  {parts.length > 0
-                    ? parts.map((part, idx) => {
-                        const partType = typeof part.type === 'string' ? part.type : '';
-                        if (partType === 'text') {
-                          const txt = typeof part.text === 'string' ? part.text : '';
-                          return <TutorMessageText key={idx} role={m.role} text={txt} onSeek={onSeek} isStreaming={busy && idx === parts.length - 1} />;
-                        }
-                        if (partType.startsWith('tool-')) {
-                          return (
-                            <TutorToolCard
-                              key={idx}
-                              part={part as unknown as TutorToolPartLike}
-                            />
-                          );
-                        }
-                        // reasoning / 其他 part：静默忽略，不干扰对话
-                        return null;
-                      })
-                    : // 老版本兼容（content 字段）
-                      (() => {
-                        const content = (m as unknown as { content?: string }).content ?? '';
-                        return <TutorMessageText role={m.role} text={content} onSeek={onSeek} isStreaming={busy} />;
-                      })()}
-                </div>
-                {!isUser && inlineApp ? (
-                  <div className="w-full min-w-[280px]">
-                    <InlineAppCard
-                      inlineApp={inlineApp}
-                      onRetry={() => runInlineApp(m.id, inlineApp.appKey)}
+          // R9 bug 修复：isStreaming 必须同时满足
+          //   (1) busy = true（流式正在进行中）
+          //   (2) 这是 messages 数组里最后一条
+          //   (3) 这是 assistant（用户消息从来不流）
+          const isLastMessage = mIdx === messages.length - 1;
+          const messageIsStreaming = busy && isLastMessage && m.role === 'assistant';
+
+          // assistant 渲染（多 part：text + tool）—— 把每个 part 渲染成 ChatBubble 内部 children
+          const bodyChildren =
+            parts.length > 0
+              ? parts.map((part, idx) => {
+                  const partType = typeof part.type === 'string' ? part.type : '';
+                  if (partType === 'text') {
+                    const txt = typeof part.text === 'string' ? part.text : '';
+                    return (
+                      <TutorMessageText
+                        key={idx}
+                        role={m.role}
+                        text={txt}
+                        onSeek={onSeek}
+                        isStreaming={messageIsStreaming && idx === parts.length - 1}
+                        messageId={m.id}
+                      />
+                    );
+                  }
+                  if (partType.startsWith('tool-')) {
+                    return (
+                      <TutorToolCard key={idx} part={part as unknown as TutorToolPartLike} />
+                    );
+                  }
+                  return null;
+                })
+              : (() => {
+                  const content = (m as unknown as { content?: string }).content ?? '';
+                  return (
+                    <TutorMessageText
+                      role={m.role}
+                      text={content}
+                      onSeek={onSeek}
+                      isStreaming={messageIsStreaming}
+                      messageId={m.id}
                     />
-                  </div>
+                  );
+                })();
+
+          // 内联应用卡放在 ChatBubble 的 footer slot
+          const footerSlot =
+            !isUser && inlineApp ? (
+              <InlineAppCard
+                inlineApp={inlineApp}
+                onRetry={() => runInlineApp(m.id, inlineApp.appKey)}
+              />
+            ) : null;
+
+          // hover 行动按钮（复制 / 重生成）—— 只对 assistant 消息提供
+          const actionsSlot =
+            !isUser && !messageIsStreaming && collectMessageText(m).trim() ? (
+              <>
+                <button
+                  type="button"
+                  onClick={() => {
+                    void navigator.clipboard?.writeText(collectMessageText(m));
+                  }}
+                  title="复制"
+                  aria-label="复制"
+                  className="inline-flex h-7 items-center gap-1 rounded-full px-2 text-[11.5px] text-ink-muted transition-colors hover:bg-paper-warm hover:text-ink-secondary"
+                >
+                  <Copy size={12} strokeWidth={1.8} />
+                  <span className="hidden sm:inline">复制</span>
+                </button>
+                {isLastMessage ? (
+                  <button
+                    type="button"
+                    onClick={handleRegenerateLast}
+                    title="重生成"
+                    aria-label="重生成"
+                    className="inline-flex h-7 items-center gap-1 rounded-full px-2 text-[11.5px] text-ink-muted transition-colors hover:bg-paper-warm hover:text-ink-secondary"
+                  >
+                    <RefreshCw size={12} strokeWidth={1.8} />
+                    <span className="hidden sm:inline">重生成</span>
+                  </button>
                 ) : null}
-              </div>
-            </div>
+              </>
+            ) : null;
+
+          return (
+            <ChatBubble
+              key={m.id}
+              role={m.role === 'user' ? 'user' : 'assistant'}
+              variant="paper"
+              fullWidth={Boolean(inlineApp)}
+              footer={footerSlot}
+              actions={actionsSlot}
+            >
+              {bodyChildren}
+            </ChatBubble>
           );
         })}
+
+        {/* M11：底座 thinking 气泡 —— 等待首 token 时缓解焦虑 */}
+        {showThinking ? (
+          <ChatThinkingStripBubble
+            variant="paper"
+            avatar={<OctoAvatar mood="thinking" size="sm" aura />}
+          />
+        ) : null}
 
         {error ? (
           <div className="rounded-2xl border border-divider bg-canvas px-4 py-3 text-[13px] leading-relaxed text-ink-secondary">
             刚刚没接住：{error.message ?? '未知错误'}
+            <button
+              type="button"
+              onClick={handleRegenerateLast}
+              className="ml-3 underline decoration-pine/40 underline-offset-2 hover:decoration-pine hover:text-pine"
+            >
+              再试一次
+            </button>
           </div>
         ) : null}
-      </div>
+      </ChatMessageList>
 
-      <form onSubmit={onSubmit} className="flex gap-3 border-t border-divider bg-canvas p-4">
-        <input
-          type="text"
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          disabled={busy}
-          placeholder={busy ? '同学在想…' : '问点什么…'}
-          className="flex-1 rounded-2xl border border-divider bg-white px-4 py-2.5 text-[14px] text-ink outline-none transition focus:border-ink disabled:bg-divider-light disabled:text-ink-muted"
-          aria-label="向 AI 同桌提问"
-        />
-        {busy ? (
-          <button
-            type="button"
-            onClick={stop}
-            className="rounded-2xl border border-divider bg-white px-4 py-2.5 text-[14px] text-ink-secondary transition hover:text-ink"
-          >
-            停
-          </button>
-        ) : (
-          <button
-            type="submit"
-            disabled={!input.trim()}
-            className="rounded-2xl bg-ink px-5 py-2.5 text-[14px] font-medium text-white transition hover:opacity-85 disabled:cursor-not-allowed disabled:bg-divider"
-          >
-            发送
-          </button>
-        )}
-      </form>
+      {/* M11：底座输入条（复用 IntentDialog 同款 ChatComposer，只是 paper variant） */}
+      <ChatComposer
+        containerRef={composerRef}
+        textareaProps={composer.textareaProps}
+        onSubmit={composer.submit}
+        busy={busy}
+        onStop={stop}
+        attachedFiles={fileUpload.attachedFiles}
+        onAddFiles={fileUpload.addFiles}
+        onRemoveFile={fileUpload.removeFile}
+        uploadBusy={fileUpload.busy}
+        uploadError={fileUpload.error}
+        isDragging={fileUpload.isDragging}
+        capabilities={{ mic: true, file: true }}
+        onVoiceTranscript={handleVoiceTranscript}
+        placeholder="问点什么…"
+        busyPlaceholder="同学在想…"
+        variant="paper"
+      />
     </div>
   );
 }

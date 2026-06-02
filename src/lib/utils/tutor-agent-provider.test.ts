@@ -29,14 +29,14 @@ describe('resolveTutorAgentProviderConfig', () => {
     expect(config.keySource).toBe('TUTOR_API_KEY');
   });
 
-  it('defaults to DeepSeek v4 flash when DeepSeek is configured', () => {
+  it('defaults to DeepSeek V4 Flash when DeepSeek is configured', () => {
     const config = resolveTutorAgentProviderConfig({
       DEEPSEEK_API_KEY: 'deepseek-key',
     });
 
     expect(config.apiKey).toBe('deepseek-key');
     expect(config.baseURL).toBe('https://api.deepseek.com');
-    expect(config.modelId).toBe('deepseek-v4-flash');
+    expect(config.modelId).toBe('DeepSeek-V4-Flash');
     expect(config.keySource).toBe('DEEPSEEK_API_KEY');
   });
 
@@ -45,11 +45,11 @@ describe('resolveTutorAgentProviderConfig', () => {
       DEEPSEEK_API_KEY: 'deepseek-key',
       DASHSCOPE_API_KEY: 'dashscope-key',
       LLM_BASE_URL: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
-    }, { modelId: 'deepseek-v4-pro' });
+    }, { modelId: 'DeepSeek-V4-Pro' });
 
     expect(config.apiKey).toBe('deepseek-key');
     expect(config.baseURL).toBe('https://api.deepseek.com');
-    expect(config.modelId).toBe('deepseek-v4-pro');
+    expect(config.modelId).toBe('DeepSeek-V4-Pro');
     expect(config.keySource).toBe('DEEPSEEK_API_KEY');
     expect(config.modelApi).toBe('chat');
   });
@@ -59,7 +59,7 @@ describe('resolveTutorAgentProviderConfig', () => {
       DEEPSEEK_API_KEY: 'deepseek-key',
       DASHSCOPE_API_KEY: 'dashscope-key',
       TUTOR_BASE_URL: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
-    }, { modelId: 'deepseek-v4-flash' });
+    }, { modelId: 'DeepSeek-V4-Flash' });
 
     expect(config.baseURL).toBe('https://api.deepseek.com');
     expect(config.keySource).toBe('DEEPSEEK_API_KEY');
@@ -67,17 +67,17 @@ describe('resolveTutorAgentProviderConfig', () => {
   });
 
   it('TUTOR_MODEL env var overrides default', () => {
-    const config = resolveTutorAgentProviderConfig({ TUTOR_MODEL: 'qwen-max' });
-    expect(config.modelId).toBe('qwen-max');
+    const config = resolveTutorAgentProviderConfig({ TUTOR_MODEL: 'Qwen3-Max-A' });
+    expect(config.modelId).toBe('Qwen3-Max-A');
   });
 
   it('offers DashScope as a fallback when the primary Tutor model is DeepSeek', () => {
     const configs = resolveTutorAgentProviderFallbacks({
       DEEPSEEK_API_KEY: 'deepseek-key',
       DASHSCOPE_API_KEY: 'dashscope-key',
-    }, { modelId: 'deepseek-v4-flash' });
+    }, { modelId: 'DeepSeek-V4-Flash' });
 
-    expect(configs.map((config) => config.modelId)).toEqual(['deepseek-v4-flash', 'qwen3.6-plus']);
+    expect(configs.map((config) => config.modelId)).toEqual(['DeepSeek-V4-Flash', 'Qwen3.6-Plus-A']);
     expect(configs.map((config) => config.keySource)).toEqual(['DEEPSEEK_API_KEY', 'DASHSCOPE_API_KEY']);
   });
 
@@ -85,20 +85,20 @@ describe('resolveTutorAgentProviderConfig', () => {
     const configs = resolveTutorAgentProviderFallbacks({
       DEEPSEEK_API_KEY: 'deepseek-key',
       DASHSCOPE_API_KEY: 'dashscope-key',
-      TUTOR_MODEL: 'qwen3.6-plus',
+      TUTOR_MODEL: 'Qwen3.6-Plus-A',
     });
 
-    expect(configs.map((config) => config.modelId)).toEqual(['qwen3.6-plus', 'deepseek-v4-flash']);
+    expect(configs.map((config) => config.modelId)).toEqual(['Qwen3.6-Plus-A', 'DeepSeek-V4-Flash']);
     expect(configs.map((config) => config.keySource)).toEqual(['DASHSCOPE_API_KEY', 'DEEPSEEK_API_KEY']);
   });
 
   it('does not invent fallback providers when only one provider key is configured', () => {
     const configs = resolveTutorAgentProviderFallbacks({
       DEEPSEEK_API_KEY: 'deepseek-key',
-    }, { modelId: 'deepseek-v4-flash' });
+    }, { modelId: 'DeepSeek-V4-Flash' });
 
     expect(configs).toHaveLength(1);
-    expect(configs[0]?.modelId).toBe('deepseek-v4-flash');
+    expect(configs[0]?.modelId).toBe('DeepSeek-V4-Flash');
   });
 
   it('treats provider busy retry exhaustion as fallback-eligible', () => {
@@ -123,9 +123,9 @@ describe('resolveTutorAgentProviderConfig', () => {
   });
 
   it('disables native tutor tools for DeepSeek thinking models and StepFun', () => {
-    expect(shouldUseNativeTutorTools('deepseek-v4-flash')).toBe(false);
-    expect(shouldUseNativeTutorTools('deepseek-v4-pro')).toBe(false);
-    expect(shouldUseNativeTutorTools('qwen3.6-plus')).toBe(true);
+    expect(shouldUseNativeTutorTools('DeepSeek-V4-Flash')).toBe(false);
+    expect(shouldUseNativeTutorTools('DeepSeek-V4-Pro')).toBe(false);
+    expect(shouldUseNativeTutorTools('Qwen3.6-Plus-A')).toBe(true);
     // step-* 走 marker 链路（<open_app:KEY/>），避免 6 个 native tool description
     // 拖慢首包延迟。
     expect(shouldUseNativeTutorTools('step-3.7-flash')).toBe(false);
@@ -165,8 +165,8 @@ describe('resolveTutorAgentProviderConfig', () => {
 
     expect(configs.map((config) => config.modelId)).toEqual([
       'step-3.7-flash',
-      'deepseek-v4-flash',
-      'qwen3.6-plus',
+      'DeepSeek-V4-Flash',
+      'Qwen3.6-Plus-A',
     ]);
     expect(configs.map((config) => config.keySource)).toEqual([
       'STEPFUN_API_KEY',

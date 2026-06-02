@@ -104,111 +104,42 @@ async function generateQuizWithLLM(
   transcriptContext: string,
   anchorContext: string
 ): Promise<QuizLLMOutput | null> {
+  // 提示词哲学：描述用户和目标，不描述路径。
+  // 题型混搭、题数、迷惑项怎么设计、解析多详细——交给模型自己判断。
   const response = await chat(
     [
       {
         role: 'system',
-        content: [
-          '你是一位经验丰富的命题研究员，擅长设计能区分"真懂"和"以为自己懂"的测试题。',
-          '你的学生刚上完一堂课，想检验自己是否真正理解了课堂内容。',
-          '',
-          '硬性纪律（违反任意一条都视为失败）：',
-          '1) 严禁纯记忆题（"老师说了 X 的定义是？"）。每道题都要让学生用知识，不只是背知识。',
-          '2) 严禁表面型干扰项。错误选项要有真实的迷惑性——是常见误解、相邻概念、错误类比，不是无关的胡话。',
-          '3) 严禁离开课堂内容，不要出 LLM 通识题或与本课无关的题。',
-          '4) 解析必须说"为什么对 + 其他选项错在哪 / 共同的认知陷阱是什么"，不是把答案再说一遍。',
-          '5) 学习者关注点（anchors / 困惑标记）非空时，至少 40% 题目命中这些点。',
-          '',
-          '题型分布（5-10 题；模型可按内容复杂度自行选择，但要有多样性）：',
-          '- 单选题（选项 ≥ 4，必有迷惑干扰项）',
-          '- 判断题（options=["正确", "错误"]；用于易错点和常见误解）',
-          '- 填空题（stem 含 "___"；answer 是答案文本，不是选项字母）',
-          '- 简答题（options 为空；answer 是参考答案；前端会把这种渲染成开放回答）',
-          '',
-          '严格基于课堂内容出题，输出纯 JSON，不要输出任何其他文字。',
-        ].join('\n'),
+        content:
+          '你是一位经验丰富的命题研究员，擅长设计能区分"真懂"和"以为自己懂"的测试题。学生刚上完一节课，想检验自己对课堂内容的理解程度。题目类型可以是单选、判断、填空、简答任意组合，由你按内容性质决定哪种最合适。',
       },
       {
         role: 'user',
-        content: `学习目标：${context.goal.intent}
-${anchorContext ? `学习者关注点（含困惑标记，请优先成题）：\n${anchorContext}\n` : ''}
-课堂原文：
+        content: `${context.goal.intent ? `他的学习目标：${context.goal.intent}\n\n` : ''}${anchorContext ? `他听课时的困惑点（这些地方更容易出问题，值得重点检验）：\n${anchorContext}\n\n` : ''}课堂原文：
 ${transcriptContext}
 
-请基于以上课堂内容，设计一组高质量测验题。
-
-渲染契约（前端解析用，请严格遵守此 JSON 结构）：
+输出 JSON：
 {
-  "title": "测验标题",
-  "strategy": "答题策略（一句话，比如：先独立作答再看证据回放）",
+  "title": string,
+  "strategy": string,
   "questions": [
     {
-      "stem": "题干文本",
-      "type": "single | multiple | judge | fill | short",
-      "options": ["A. 选项一", "B. 选项二", "C. 选项三", "D. 选项四"],
-      "answer": "A",
-      "explanation": "为什么对 + 其他选项错在哪 / 共同的认知陷阱",
-      "startMs": 12000,
-      "endMs": 21000
+      "stem": string,
+      "type": "single" | "judge" | "fill" | "short",
+      "options": string[],   // single ≥ 2 项；judge 用 ["正确","错误"]；fill / short 留空
+      "answer": string,      // single 用选项字母；judge 用 "正确"/"错误"；fill / short 用答案文本
+      "explanation": string,
+      "startMs": number,
+      "endMs": number
     }
   ]
 }
 
-字段说明：
-- type 为可选；若不传，前端按 options 数量推断（≥2 视为 single；空 options 视为 short）
-- judge 类型 options 必须是 ["正确", "错误"]
-- fill 类型 stem 含 "___"，answer 是答案文本（不是 'A'）
-- short 类型 options 留空 []，answer 是参考答案
-- single / multiple 类型 options 至少 4 个，迷惑项要真有迷惑性
-
-few-shot 反例（不要这样写）：
-{
-  "stem": "老师说了 X 的定义是什么？",   ← 纯记忆，禁止
-  "options": ["A. 正确", "B. 错误", "C. 不知道", "D. 跳过"],  ← 表面干扰项
-  "explanation": "正确答案是 A。"  ← 解析没说为什么
-}
-
-few-shot 正例：
-{
-  "questions": [
-    {
-      "stem": "在样本量小、特征多的回归任务中，下列哪种正则化最适合做特征选择？",
-      "type": "single",
-      "options": [
-        "A. L1 正则化（Lasso）",
-        "B. L2 正则化（Ridge）",
-        "C. Dropout",
-        "D. 早停（Early Stopping）"
-      ],
-      "answer": "A",
-      "explanation": "L1 的菱形约束让权重精确归零，天然适合特征选择。B 只缩小不归零，做不了选择；C/D 是训练技巧不直接做特征选择。常见误区是把'正则化都能做特征选择'。",
-      "startMs": 320000,
-      "endMs": 360000
-    },
-    {
-      "stem": "判断：训练误差远小于验证误差一定是过拟合。",
-      "type": "judge",
-      "options": ["正确", "错误"],
-      "answer": "错误",
-      "explanation": "通常是过拟合的信号，但也可能是训练-验证集分布不同（数据泄露的反面）。先排查数据划分，再下结论是过拟合——常见误区是直接归因。",
-      "startMs": 510000,
-      "endMs": 540000
-    },
-    {
-      "stem": "梯度下降法每一步沿 ___ 方向更新权重，目的是最小化损失函数。",
-      "type": "fill",
-      "options": [],
-      "answer": "负梯度",
-      "explanation": "沿负梯度方向是损失下降最快的方向（局部）。常见错误回答'梯度方向'——梯度方向是上升最快方向，要加负号。",
-      "startMs": 600000,
-      "endMs": 620000
-    }
-  ]
-}${buildTerminologyHintBlock(context.memory.terminologyHint)}`,
+只输出 JSON，不解释。${buildTerminologyHintBlock(context.memory.terminologyHint)}`,
       },
     ],
     model,
-    { temperature: 0.3, maxTokens: 8192, responseFormat: 'json_object' }
+    { temperature: 0.4, maxTokens: 3500, responseFormat: 'json_object' }
   );
 
   const parsed = parseJsonResponse<QuizLLMOutput>(response.content);
@@ -308,8 +239,9 @@ export const quizPlugin: AppPlugin = {
     return context.goal.appKey === 'quiz' || context.goal.expectedOutput === 'cards';
   },
   async run(context: AppExecutionContext, tools: AppPluginTools): Promise<AppExecutionResult> {
+    // 8000 字 ≈ 12-16k input tokens：避免长课时 prefill 撞 180s LLM 超时。
     const promptContext = buildPromptTranscriptContext(context.input.transcript, {
-      maxChars: 22_000,
+      maxChars: 8_000,
       includeIndex: true,
       includeTimestamp: false,
       minCharsPerSegment: 52,

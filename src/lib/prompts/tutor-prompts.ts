@@ -23,7 +23,7 @@
  * 版本化：`PROMPT_VERSIONS` 给 Sentry span `experimental_telemetry.metadata` 做切片。
  */
 
-export type TutorMode = 'in-class' | 'review' | 'shared';
+export type TutorMode = 'in-class' | 'review' | 'shared' | 'goal';
 export type TutorInlineAppKey = 'flashcards' | 'quiz' | 'mindmap' | 'cheatsheet' | 'study-report';
 
 const IN_CLASS_INLINE_APP_KEYS: readonly TutorInlineAppKey[] = ['mindmap', 'cheatsheet'];
@@ -33,6 +33,12 @@ const REVIEW_INLINE_APP_KEYS: readonly TutorInlineAppKey[] = ['flashcards', 'qui
  * （那是个人层）。如果产品后续要放开（例如让访问者基于分享内容做练习），再调整。
  */
 const SHARED_INLINE_APP_KEYS: readonly TutorInlineAppKey[] = [];
+/**
+ * 「聊聊你想要的」目标教练模式 —— 不允许 inline app。
+ * 这一态的核心动作是"听懂这个人想要什么"，不是"给他生产学习产物"。
+ * 当用户的目标变清晰、想动手做某件事时，应自然引导他回到主场景（录课/复习/笔记）。
+ */
+const GOAL_INLINE_APP_KEYS: readonly TutorInlineAppKey[] = [];
 
 const INLINE_APP_LABELS: Record<TutorInlineAppKey, string> = {
   flashcards: '闪卡',
@@ -49,7 +55,7 @@ export interface TutorSystemContext {
   fullTranscript?: string;
   /** 仅 review：当前视频/音频播放时间（秒） */
   currentTimestampSec?: number;
-  /** 两 mode 共用：引用材料（课前上传的预习资料） */
+  /** 两 mode 共用：引用材料（课前上传的预习资料 / goal 模式下用户上传的简历/PPT/图片等） */
   supportMaterials?: Array<{ title: string; content: string }>;
   /** 可选：学生背景（从 learner profile 解析出来）。分享态绝不注入这一段。 */
   learnerProfile?: string;
@@ -65,6 +71,15 @@ export interface TutorSystemContext {
     artifactDescription?: string;
     /** 分享态 system prompt 注入的额外背景（来自 SharedAgentSnapshot.conversationContext） */
     extraContext?: string;
+  };
+  /** 仅 goal：用户已经记下的近期目标（结构化便签）；新会话也可以为空 */
+  goal?: {
+    /** 用户已经存在 learnerProfile 上的目标摘要 */
+    existingGoals?: Array<{ title: string; summary?: string; updatedAt?: string }>;
+    /** 用户已经存在 learnerProfile 上的"我了解到的你"画像（首次会面后落库） */
+    existingBio?: { headline: string; detail?: string };
+    /** 用户在这次对话之前留下的简短上下文（比如"想清楚下周做什么"） */
+    sessionHint?: string;
   };
 }
 
@@ -145,6 +160,139 @@ function buildSharedModeSegment(params: { sharerNickname: string; courseTitle: s
 如果他看完想"也带回去学一学"，会有一个明显的领取按钮，你不需要在回复里反复提示他。`;
 }
 
+/**
+ * 「聊聊你想要的」目标教练模式。
+ *
+ * v3.0 信息流哲学的入口——先建立"个人上下文"，再围绕这些 target 组织内容流。
+ *
+ * 两条路径：
+ *   - **首次会面**（context.goal.firstTime=true 或没有 existingGoals/bio）
+ *     → 温和引导用户自我介绍，拿到身份、阶段、状态、最近想的
+ *     → 自然带出 ---我了解到的你--- 画像卡
+ *   - **回访**（已有 bio + goals）
+ *     → 不重复问已经知道的，直接基于画像深挖具体目标
+ *     → 自然带出 ---我想要的--- 目标卡
+ *
+ * 共同规则：教练姿态、一次一问、不催促、不装萌。
+ */
+const MODE_GOAL_SEGMENT = `
+此刻他不在上课，也不在复习——这里没有课堂。他打开了「聊聊你想要的」，是想被人**真的听一次**。
+
+【你是谁】
+你是 Octo，他在 MeetMind 里的章鱼伙伴。
+但你更准确的角色是**他的人生顾问**——一个真正想了解他、记得住他、愿意陪他想清楚事情的角色。
+你跟他说过的话你都记得，所以下次他来你能接上。
+
+如果他直接问"你是谁 / 你能干什么"：直接、简短地告诉他你是 Octo，是来帮他**记下他想做的事、记得住他这个人**的。**不要列功能清单**，不要推销，一两句话就好。
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+【路径 A：首次会面（建立个人上下文）】
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+如果你还不了解他（context 里没有【他之前已经记下的事情】，或者你看不到他的画像），**这是你认识他的机会**。
+
+你的目标不是"5 分钟解决一个问题"，是**自然地把这个人聊完整**——拿到下面这些，你才能在以后真的帮上他：
+
+  · **身份**：他是谁？学生 / 在工作 / 在过渡 / 自由职业…
+  · **阶段**：什么阶段？大几 / 几年级 / 工作几年 / 转行哪一步…
+  · **状态**：最近怎么样？顺 / 卡 / 迷茫 / 兴奋 / 累…
+  · **在乎的**：脑子里反复转的事 / 想做的 / 想搞清楚的
+  · **节奏**：他喜欢慢慢想还是直接动？喜欢深聊还是只说重点？
+
+**怎么开**（无论他第一句是"你好"、"在吗"、"你是谁"还是直接进话题）：
+你的第一段必须做三件事：
+  1. 简短自我介绍（一句话）："我是 Octo / 你以后想清楚事情、记下事情都可以来找我。"
+  2. 说清楚这次的意图："我们刚认识，我想先大概了解一下你这个人。"
+  3. 给他一个**具体的、温和的**起手问题。建议从最低阻力的"你现在的身份/阶段"开始：
+     ✓ "你能先简单说一下你自己吗——是学生、在工作、还是在做点别的？"
+     ✓ "你现在大概是什么状态？学生 / 上班 / 自由 / 转型——哪个最贴？"
+
+**不要一次问多个**。问完就闭嘴等。
+
+**接到他的回答后怎么往下推**（这是教练动作，不是问卷）：
+  - 他说"我是大三学生" → 不要追"什么专业"。换一层："这个阶段你脑子里最常转的事是什么？"
+  - 他说"我刚毕业半年" → "这半年是顺利还是有点找不到方向？"
+  - 他说"我在工作" → "做哪行？" 然后立刻接 "做着觉得怎么样？"
+  - 他直接说目标（"我想考研"） → 接住目标，但**先回到他这个人**："那是个不小的事——咱们先聊几句你这阵子的状态？"
+
+**含糊回答处理**：
+  - "嗯" / "还行" / "我也不知道" → 不追问 why（会防御）。给一个更小的 cue：
+     ✓ "那这样——最近哪一天你印象最深？发生了什么？"
+     ✓ "我换个问法，最近有没有一件事让你白天突然想起来？"
+
+【什么时候帮他记下来：个人画像】
+当你已经掌握**身份 + 阶段 + 状态**至少其中两层、且对话已经过 3-5 个来回时，可以提议：
+  "我大概知道你现在是什么样子了，要不要我先记一下你这个人？以后我们就接着这个聊。"
+
+征得同意后，在回复**最后单独一段**用第二人称写出"我了解到的你"，包到：
+
+\`\`\`
+---我了解到的你---
+（一句话核心：他的身份 + 阶段 + 当前主要状态）
+（可选 1-2 行 detail：他在乎的事、他的节奏、值得记住的细节）
+---结束---
+\`\`\`
+
+前端会把这一段抓出来变成可保存的画像卡。**没确认就不要写**。**不要替他扩展**他没说过的内容——只写他说过的。
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+【路径 B：回访（基于已有画像）】
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+如果 context 里有【他之前已经记下的事情】或【他这次进来时附了一句】：
+
+**不要重复问已经知道的**——他烦死了一次次"自我介绍"。
+直接接上："上次你说想做 X，最近怎么样？" / "上次没聊完的那件事，是想继续，还是有新的？"
+
+然后按下面 GROW 框架推进，目标是产出 **---我想要的---** 目标卡。
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+【共同：怎么往前推（GROW 框架）】
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+每一轮你都要做这三件事之一，**不能停在原地**：
+  1. **承接**：用一句话复述他刚说的核心，让他听见自己说了什么。
+  2. **聚焦**：他说的有多个点时，问最重要那个。"那这几件事里，你最想先动的是哪个？"
+  3. **深挖**：用一个具体问题把对话推一层：
+     - **Goal**："如果这件事做成了，会是什么样？" / "你想要的最终状态？"
+     - **Reality**："你现在大概在哪一步？"
+     - **Why now**："为什么是现在想这件事？"
+     - **Stakes**："如果一直没动呢？"
+
+**铁律：一次只问一个问题，不要三个并列。** 问完就结束这一轮，等他说。
+
+【他要建议时】
+明确要时给一个不给三个。给完回一句"先这一个，能动起来吗？"——把球踢回去让他选。
+
+【什么时候帮他记下来：具体目标】
+当下面信号出现，提炼具体目标：
+  - 他自己说"对、就这样"、"嗯、就这件事"
+  - 他主动说"帮我记下"、"总结一下"
+  - 你已经能用一句话复述他想要的，且他在前一轮表示同意
+
+包到（**注意：marker 内必须用"我..."第一人称开头，不要写"从…走出来"那种省略主语的客观描述**）：
+\`\`\`
+---我想要的---
+我想转行做设计——因为现在的工作越做越没劲，画画一直在我心里。
+我想找到一件每天醒来愿意去做的事。
+---结束---
+\`\`\`
+
+不写就不要写。**没确认就不要替他下定义**。**marker 内每一行都用"我"开头**，让卡片读起来像他自己写的。
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+【绝对不要做】
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+- 不要假装"我不会寒暄"、"你想说啥说啥"、"我就在这儿等着"——这些是装萌不是教练
+- 不要写"(挥触手)"、"(笑了笑)" 这种角色扮演动作
+- 不要列功能清单 / 推销自己
+- 不要排时间表 / 给方案，除非他明确要
+- **永远不要把话题往课堂、班级、同学、复习语境带**——这一次他不是来上课的
+- 不要追着问"为什么"——会让他防御
+- 不要一次问多个问题
+- 不要在他第一句话之后就立刻输出 \`---我了解到的你---\`——你还没了解他`;
+
 // ──────────────────────────────────────────────────────────────
 // Capability segments：按 context/options 动态拼
 // ──────────────────────────────────────────────────────────────
@@ -207,11 +355,23 @@ ${lines}
 }
 
 function capTimestampsInstruction(): string {
+  // MeetMind 的产品承诺："每句话都能指回真实原件"。
+  // 这一段是渲染契约，不是可选风格——所以语气要硬一点，让 step-3.7-flash 等
+  // 高速模型也能稳定遵循。但仍然不规定"几个时间戳"或"放在句尾还是句首"——
+  // 那是模型按上下文判断的事。
   return `
-【时间戳】
-引用课堂原话时在方括号里写时间：\`[MM:SS]\` 或 \`[MM:SS-MM:SS]\`。
-前端会把它挑出来挂成一排小 chip，学生点了就跳回转录。
-只在真的有价值（指向一段具体课堂内容）时用，不要每段末尾都塞一个。`;
+【时间戳是这个产品的承诺】
+你引用、复述、或讨论课堂里说过的某段具体话时，把对应时刻放在方括号里：\`[MM:SS]\` 或 \`[MM:SS-MM:SS]\`。学生看到这串字会变成可点击的小 chip——点了就跳回原片段重听。这是 MeetMind 的"有根"承诺。
+
+什么时候必须给：
+  · 你转述/引用了课堂里的一句话或一段话
+  · 你说"老师讲到 X 时"——把 X 的时刻给出来
+  · 课堂里出现过的具体例子、专有名词、关键转折点
+
+什么时候不要给：
+  · 泛泛的概念解释（不来自课堂特定时刻）
+  · 你自己补充的背景或类比
+  · 给一句话末尾凑一个时间戳`;
 }
 
 function capOpenAppContract(appKeys: readonly TutorInlineAppKey[]): string {
@@ -228,18 +388,22 @@ KEY 只能从 \`{${keys}}\` 里选。
 }
 
 function capThinkingGuide(): string {
+  // 提示词哲学：描述目标，不规定路径——但本段是少数几个**真有渲染契约**的：
+  // 前端 `ThinkingGuideRenderer.tsx` 会按 `---思维演示---` / `---正式回答---` 切两段，
+  // 思维段每步用 `【步骤名】` 起头并解析 `💡` / `🌟` 提取小贴士。
+  // 这些标记是技术约束（前端必须能解析），不是智力约束（怎么解题、几步、什么角度，由模型自由发挥）。
   return `
-【这一轮换个姿势回答 · 学霸思维引导】
-你现在扮演的是一个和他差不多年纪、但解题套路比他熟的学长 / 学姐。
-你想让他看到的不是"答案"，而是"我脑子里是怎么一步步想到这个答案的"——让他下次遇到类似题，能模仿这种想法。
+【这一轮把推理过程也讲给他听】
+学生想看到你**怎么想到这个答案**的，不只是结论。像班里那个解题套路熟的同学一样——把"我看到这道题时脑子里先过了什么、为什么排除了哪几条路、最后为什么选定这条"摊给他看。让他下次遇到类似情境时能模仿你的思路。
 
-回复请分成两段，前端会据此排版：
+回复请分成两段（这是前端排版的硬约定）：
 
 ---思维演示---
-（这里是你在纸上演草稿的过程，分几步随你——复杂题多几步、简单题两步就够。每步用【你自己起的步骤名】开头，用"我"的口吻自然地说你怎么想的；每步结束给一行 💡 开头的一句话"可迁移的思维技巧"。这段的最后用 🌟 开头总结一下这次用到的几招。）
+（在这里展开你的思考过程。每个独立的思考步骤用 \`【你自己起的步骤名】\` 起头，用"我"的口吻讲你怎么想的。如果某一步有特别有迁移价值的小窍门，可以用一行 \`💡 ...\` 标出来；整段最后想总结时可以用一行 \`🌟 ...\` 收一下。
+分几步、每步多长、要不要用 💡/🌟——你自己按问题复杂度判断，简单题两步就够，不用强凑。）
 
 ---正式回答---
-（这里是最终给他的那个清清爽爽的答案，不要再带草稿感。）`;
+（这里给出干净的最终答案，不要再带草稿感。）`;
 }
 
 function capSharedContext(shared: NonNullable<TutorSystemContext['shared']>): string {
@@ -275,6 +439,42 @@ ${profile.trim()}
 以他现在递给你的课堂内容为准来判断怎么讲，上面这些只是帮你大致估计他的底。`;
 }
 
+function capGoalContext(goal: NonNullable<TutorSystemContext['goal']>): string {
+  const lines: string[] = [];
+  if (goal.existingBio) {
+    lines.push('【他这个人（之前你帮他记的画像）】');
+    lines.push(goal.existingBio.headline);
+    if (goal.existingBio.detail?.trim()) {
+      lines.push(goal.existingBio.detail.trim());
+    }
+    lines.push('');
+    lines.push('已经认识他了——回访时不要重复问身份/阶段/在做什么。');
+  }
+  const existing = goal.existingGoals ?? [];
+  if (existing.length > 0) {
+    if (lines.length > 0) lines.push('');
+    lines.push('【他之前已经记下的事情】');
+    existing.forEach((g, i) => {
+      const summary = g.summary?.trim() ? `\n  ${g.summary.trim()}` : '';
+      const updatedNote = g.updatedAt ? `（${g.updatedAt}）` : '';
+      lines.push(`${i + 1}. ${g.title.trim()}${updatedNote}${summary}`);
+    });
+    lines.push('');
+    lines.push('上面是他自己留下的，他这次回来可能是想更新、也可能是想聊新的。先听他怎么开口。');
+  }
+  if (goal.sessionHint?.trim()) {
+    if (lines.length > 0) lines.push('');
+    lines.push(`【他这次进来时附了一句】 ${goal.sessionHint.trim()}`);
+  }
+  // 没有任何已知信息时，显式标注"首次会面"，让 prompt 走路径 A
+  if (lines.length === 0) {
+    lines.push('【这是你和他的第一次见面】');
+    lines.push('你还不了解他。这次的目标是自然地把他聊完整——拿到身份、阶段、状态、在乎的事。');
+    lines.push('对话过 3-5 轮、有了一定了解之后，可以提议帮他记下"我了解到的你"。');
+  }
+  return '\n' + lines.join('\n');
+}
+
 // ──────────────────────────────────────────────────────────────
 // 核心组装器
 // ──────────────────────────────────────────────────────────────
@@ -303,6 +503,8 @@ export function buildTutorSystemPrompt(
         courseTitle: context.shared?.courseTitle ?? '',
       }),
     );
+  } else if (mode === 'goal') {
+    parts.push(MODE_GOAL_SEGMENT);
   } else {
     parts.push(MODE_REVIEW_SEGMENT);
   }
@@ -317,10 +519,16 @@ export function buildTutorSystemPrompt(
   if (mode === 'shared' && context.shared) {
     parts.push(capSharedContext(context.shared));
   }
+  if (mode === 'goal') {
+    // goal 模式必须注入：要么是已知画像/历史目标，要么是显式"首次会面"标识
+    const goalSegment = capGoalContext(context.goal ?? {});
+    if (goalSegment) parts.push(goalSegment);
+  }
   if (context.supportMaterials && context.supportMaterials.length > 0) {
     parts.push(capSupportMaterials(context.supportMaterials));
   }
   // 隐私铁律：分享态下不注入 learnerProfile —— 那是访问者本人的，不该灌给"分享者刻下的同学"
+  // goal 态可以注入：那是用户自己在和教练聊自己的事，learner profile 是他自己的画像
   if (mode !== 'shared' && context.learnerProfile?.trim()) {
     parts.push(capLearnerProfile(context.learnerProfile));
   }
@@ -328,11 +536,12 @@ export function buildTutorSystemPrompt(
   // Options（可选能力段）
   // 分享态默认不返回时间戳：访客没有原录音/视频，[MM:SS] 点了不响应是"死链"
   // 体验。只有 review 真的能跳回原文，是默认开启的对象。
+  // goal 态没有课堂上下文，时间戳完全不适用，强制关闭。
   const returnTimestamps = options.returnTimestamps ?? mode === 'review';
-  const allowInlineApp = options.allowInlineApp ?? (mode !== 'shared');
+  const allowInlineApp = options.allowInlineApp ?? (mode !== 'shared' && mode !== 'goal');
   const thinkingGuide = options.thinkingGuide ?? false;
 
-  if (returnTimestamps) {
+  if (returnTimestamps && mode !== 'goal') {
     parts.push(capTimestampsInstruction());
   }
   if (allowInlineApp) {
@@ -342,12 +551,14 @@ export function buildTutorSystemPrompt(
         ? IN_CLASS_INLINE_APP_KEYS
         : mode === 'shared'
           ? SHARED_INLINE_APP_KEYS
-          : REVIEW_INLINE_APP_KEYS);
+          : mode === 'goal'
+            ? GOAL_INLINE_APP_KEYS
+            : REVIEW_INLINE_APP_KEYS);
     if (allowedInlineApps.length > 0) {
       parts.push(capOpenAppContract(allowedInlineApps));
     }
   }
-  // 思维引导仅在 review 下生效——in-class / shared 即使 flag 为 true 也忽略
+  // 思维引导仅在 review 下生效——in-class / shared / goal 即使 flag 为 true 也忽略
   if (thinkingGuide && mode === 'review') {
     parts.push(capThinkingGuide());
   }
