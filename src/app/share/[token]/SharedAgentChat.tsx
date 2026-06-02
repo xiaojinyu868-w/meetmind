@@ -144,7 +144,7 @@ export function SharedAgentChat({
           const isStreaming = busy && isLast && m.role === 'assistant';
           if (m.role === 'user') {
             return (
-              <ChatBubble key={m.id} role="user" variant="paper">
+              <ChatBubble key={m.id} role="user" variant="paper" messageId={m.id}>
                 {text}
               </ChatBubble>
             );
@@ -155,6 +155,7 @@ export function SharedAgentChat({
                 key={m.id}
                 role="assistant"
                 variant="paper"
+                messageId={m.id}
                 avatar={
                   <OctoAvatar
                     mood={isStreaming ? 'happy' : 'idle'}

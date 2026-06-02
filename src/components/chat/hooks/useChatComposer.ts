@@ -24,6 +24,14 @@ export interface UseChatComposerOptions {
   disabled?: boolean;
   /** Enter 行为：'send' = 直接发，'newline' = 换行。默认 'send'，Shift+Enter 永远换行。 */
   enterBehavior?: 'send' | 'newline';
+  /**
+   * 大段粘贴回调（M12）—— 当用户从剪贴板粘贴的文本超过 largePasteThreshold 字符时，
+   * hook 会**阻止**默认粘贴行为，转而调用此回调，让消费者决定（弹对话框 / 转文件 / 直接接收）。
+   * 不传则不拦截，按默认粘贴行为处理。
+   */
+  onLargePaste?: (text: string) => void;
+  /** 大段粘贴阈值（默认 500 字符） */
+  largePasteThreshold?: number;
 }
 
 export interface UseChatComposerResult {
@@ -37,6 +45,7 @@ export interface UseChatComposerResult {
     value: string;
     onChange: (e: React.ChangeEvent<HTMLTextAreaElement>) => void;
     onKeyDown: (e: React.KeyboardEvent<HTMLTextAreaElement>) => void;
+    onPaste: (e: React.ClipboardEvent<HTMLTextAreaElement>) => void;
     onCompositionStart: () => void;
     onCompositionEnd: () => void;
     disabled?: boolean;
@@ -77,6 +86,8 @@ export function useChatComposer({
   clearOnSubmit = true,
   disabled = false,
   enterBehavior = 'send',
+  onLargePaste,
+  largePasteThreshold = 500,
 }: UseChatComposerOptions): UseChatComposerResult {
   const [value, setValueState] = useState<string>(() => (draftKey ? loadDraft(draftKey) : ''));
   const [isComposing, setIsComposing] = useState(false);
@@ -145,6 +156,20 @@ export function useChatComposer({
     [setValue],
   );
 
+  // 大段粘贴拦截（M12）——剪贴板纯文本 > largePasteThreshold 时调用 onLargePaste
+  // 让消费者决定（弹对话框 / 转文件 / 直接接收），不传则按默认粘贴
+  const onPaste = useCallback(
+    (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
+      if (!onLargePaste) return;
+      const text = e.clipboardData?.getData('text/plain') ?? '';
+      if (text.length >= largePasteThreshold) {
+        e.preventDefault();
+        onLargePaste(text);
+      }
+    },
+    [onLargePaste, largePasteThreshold],
+  );
+
   return {
     value,
     setValue,
@@ -154,6 +179,7 @@ export function useChatComposer({
       value,
       onChange,
       onKeyDown,
+      onPaste,
       onCompositionStart: () => setIsComposing(true),
       onCompositionEnd: () => setIsComposing(false),
       disabled,

@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useMemo, useCallback, useEffect, useState } from 'react';
+import React, { useMemo, useCallback, useEffect, useState, useDeferredValue } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import remarkMath from 'remark-math';
@@ -10,6 +10,8 @@ import type { Components } from 'react-markdown';
 import { Play } from 'lucide-react';
 import type { Citation } from '@/types/dify';
 import { CitationDetailSheet, resolveCitations } from './CitationReferenceSheet';
+import { ChatCodeBlock } from './chat/ChatCodeBlock';
+import { ChatImageLightbox } from './chat/ChatImageLightbox';
 
 interface StreamingMarkdownProps {
   content: string;
@@ -36,6 +38,10 @@ export function StreamingMarkdown({
   className = '',
   citations,
 }: StreamingMarkdownProps) {
+  // useDeferredValue：streaming 中频繁的 token 更新不阻塞主线程交互
+  // 非 streaming 时立刻更新（无副作用）；这是 React 18 顶级实践（对标 Cursor / ChatGPT）
+  const deferredContent = useDeferredValue(content);
+
   const resolvedCitations = useMemo(() => resolveCitations(citations), [citations]);
   const citationByIndex = useMemo(
     () => new Map(resolvedCitations.map((item) => [item.index, item])),
@@ -313,7 +319,7 @@ export function StreamingMarkdown({
       </em>
     ),
 
-    // 代码块：行内薄底，块级带 paper-warm 衬底（不喧闹）
+    // 代码：行内薄底；块级走 ChatCodeBlock（Shiki 高亮 + 复制 + 行号 + 语言 badge）
     code: ({ children, className: codeClassName, ...props }) => {
       const isInline = !codeClassName;
       if (isInline) {
@@ -323,11 +329,19 @@ export function StreamingMarkdown({
           </code>
         );
       }
-      return (
-        <code {...props} className={`block overflow-x-auto rounded-lg bg-paper-warm p-3 font-mono text-[12.5px] leading-relaxed text-ink ${codeClassName}`}>
-          {children}
-        </code>
-      );
+      // block code：从 className 提取 language（react-markdown 形如 "language-typescript"）
+      const langMatch = /language-([\w+-]+)/.exec(codeClassName || '');
+      const lang = langMatch?.[1];
+      const codeStr = String(children).replace(/\n$/, '');
+      return <ChatCodeBlock code={codeStr} lang={lang} isStreaming={isStreaming} />;
+    },
+    // pre 直接返回 children——ChatCodeBlock 自带完整 wrapper，不要 react-markdown 默认的 <pre> 再包一层
+    pre: ({ children }) => <>{children}</>,
+
+    // 图片：lazy-load + click-to-zoom lightbox
+    img: ({ src, alt }) => {
+      if (typeof src !== 'string' || !src) return null;
+      return <ChatImageLightbox src={src} alt={alt} />;
     },
 
     // 引用块：去掉 v6 黄底，用极淡 pine 衬底 + 极细 pine 左竖线
@@ -386,7 +400,7 @@ export function StreamingMarkdown({
         className="mr-2 accent-[#1C1B19]"
       />
     ),
-  }), [processChildren]);
+  }), [processChildren, isStreaming]);
 
   return (
     <>
@@ -396,7 +410,7 @@ export function StreamingMarkdown({
           rehypePlugins={[rehypeKatex]}
           components={components}
         >
-          {content}
+          {deferredContent}
         </ReactMarkdown>
 
         {/* 流式输出时显示光标 */}

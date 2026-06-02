@@ -47,3 +47,5 @@ export type { IntentSummaryExtraction } from './markers/extractIntentSummary';
 
 export { extractIntentBio } from './markers/extractIntentBio';
 export type { IntentBioExtraction } from './markers/extractIntentBio';
+
+export { copyMessageSmart } from './markers/copyMessageSmart';

@@ -20,7 +20,7 @@
 'use client';
 
 import * as React from 'react';
-import { Send, Paperclip, Phone, Trash2, FileText, Image as ImageIcon, Music, Video } from 'lucide-react';
+import { Send, Paperclip, Phone, Trash2, FileText, Image as ImageIcon, Music, Video, RefreshCw, WifiOff } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { VoiceMicButton } from '@/components/VoiceMicButton';
 import type { AttachedFile } from './hooks/useChatFileUpload';
@@ -43,6 +43,7 @@ export interface ChatComposerProps {
     value: string;
     onChange: (e: React.ChangeEvent<HTMLTextAreaElement>) => void;
     onKeyDown: (e: React.KeyboardEvent<HTMLTextAreaElement>) => void;
+    onPaste?: (e: React.ClipboardEvent<HTMLTextAreaElement>) => void;
     onCompositionStart: () => void;
     onCompositionEnd: () => void;
     disabled?: boolean;
@@ -61,6 +62,8 @@ export interface ChatComposerProps {
   onRemoveFile?: (id: string) => void;
   uploadBusy?: boolean;
   uploadError?: string | null;
+  /** M12：上传错误重试（caller 实现具体重试，例如 useChatFileUpload.retryLast） */
+  onRetryUpload?: () => void;
   /** 拖拽态（用于显示 overlay） */
   isDragging?: boolean;
 
@@ -115,6 +118,7 @@ export function ChatComposer({
   onRemoveFile,
   uploadBusy,
   uploadError,
+  onRetryUpload,
   isDragging,
   onCallStart,
   onVoiceTranscript,
@@ -131,13 +135,35 @@ export function ChatComposer({
   const showMic = Boolean(caps.mic && onVoiceTranscript);
   const showCall = Boolean(caps.call && onCallStart);
 
+  // M12：离线检测——浏览器报告 offline 时锁 composer
+  const [isOnline, setIsOnline] = React.useState<boolean>(() => {
+    if (typeof navigator === 'undefined') return true;
+    return navigator.onLine !== false;
+  });
+  React.useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const setOn = () => setIsOnline(true);
+    const setOff = () => setIsOnline(false);
+    window.addEventListener('online', setOn);
+    window.addEventListener('offline', setOff);
+    return () => {
+      window.removeEventListener('online', setOn);
+      window.removeEventListener('offline', setOff);
+    };
+  }, []);
+
+  // M12：字数提示（>2000 字开始警告，textarea 不阻止继续输入但视觉提醒）
+  const charCount = textareaProps.value.length;
+  const showCharWarn = charCount > 2000;
+
   const handleSubmit = React.useCallback(
     (e?: React.FormEvent) => {
       e?.preventDefault();
       if (busy) return;
+      if (!isOnline) return; // M12：离线时不提交
       onSubmit();
     },
-    [busy, onSubmit],
+    [busy, isOnline, onSubmit],
   );
 
   // glass 变体的 wrapper（沉浸式背景上要更通透）
@@ -243,8 +269,42 @@ export function ChatComposer({
               </span>
             ) : null}
             {uploadError ? (
-              <span className="text-[12px] text-vermilion">{uploadError}</span>
+              <span className="inline-flex items-center gap-1.5 text-[12px] text-vermilion">
+                <span>{uploadError}</span>
+                {onRetryUpload ? (
+                  <button
+                    type="button"
+                    onClick={onRetryUpload}
+                    className={cn(
+                      'inline-flex items-center gap-0.5 rounded px-1.5 py-0.5 transition-colors',
+                      variant === 'glass'
+                        ? 'bg-white/15 text-white hover:bg-white/25'
+                        : 'bg-paper-warm text-ink-secondary hover:bg-paper-deep hover:text-ink',
+                    )}
+                  >
+                    <RefreshCw size={10} strokeWidth={2} />
+                    重试
+                  </button>
+                ) : null}
+              </span>
             ) : null}
+          </div>
+        </div>
+      ) : null}
+
+      {/* M12：离线提示条（友好提示，并锁住发送） */}
+      {!isOnline ? (
+        <div className="mb-2">
+          <div
+            className={cn(
+              'mx-auto inline-flex w-full max-w-2xl items-center gap-2 rounded-lg px-3 py-1.5 text-[12px]',
+              variant === 'glass'
+                ? 'bg-white/15 text-white/85 backdrop-blur'
+                : 'bg-vermilion/[0.06] text-vermilion',
+            )}
+          >
+            <WifiOff size={12} strokeWidth={1.8} />
+            <span>网络不太通——回来再发</span>
           </div>
         </div>
       ) : null}
@@ -296,7 +356,14 @@ export function ChatComposer({
         <div className={innerInputClasses}>
           <textarea
             {...textareaProps}
-            placeholder={busy ? busyPlaceholder : placeholder}
+            disabled={textareaProps.disabled || !isOnline}
+            placeholder={
+              !isOnline
+                ? '无网络——回来再发'
+                : busy
+                  ? busyPlaceholder
+                  : placeholder
+            }
             rows={1}
             className={textareaClasses}
             style={{ maxHeight: '200px' }}
@@ -304,7 +371,7 @@ export function ChatComposer({
           {showMic && onVoiceTranscript ? (
             <VoiceMicButton
               onTranscript={onVoiceTranscript}
-              disabled={busy}
+              disabled={busy || !isOnline}
               size="sm"
               dark={variant === 'glass'}
             />
@@ -323,14 +390,33 @@ export function ChatComposer({
         ) : (
           <button
             type="submit"
-            disabled={!textareaProps.value.trim()}
+            disabled={!textareaProps.value.trim() || !isOnline}
             className={sendBtnClasses}
-            aria-label="发送"
+            aria-label={isOnline ? '发送' : '离线无法发送'}
+            title={isOnline ? '发送' : '回来再发'}
           >
             <Send size={16} strokeWidth={2} />
           </button>
         )}
       </div>
+
+      {/* M12：字数 >2000 提示（极克制——只在超过时显示） */}
+      {showCharWarn ? (
+        <div className="mt-1 flex justify-end px-1">
+          <span
+            className={cn(
+              'font-mono text-[10.5px] tabular-nums',
+              charCount > 4000
+                ? 'text-vermilion'
+                : variant === 'glass'
+                  ? 'text-white/55'
+                  : 'text-ink-muted',
+            )}
+          >
+            {charCount.toLocaleString()} 字
+          </span>
+        </div>
+      ) : null}
     </form>
   );
 }

@@ -55,6 +55,16 @@ export interface UseChatFileUploadResult {
   clear: () => void;
   /** 给 <input type="file" /> 的 onChange 用 */
   onInputChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
+  /**
+   * M12：把一段纯文本作为"虚拟附件"塞进 attached files。
+   * 用于"粘大段（>500 字）→ 作为文件附加"场景，不走 parseFileForChat。
+   */
+  addTextAsFile: (text: string, title?: string) => void;
+  /**
+   * M12：重试上次失败的文件上传（只重试最近一次失败的 File）。
+   * 没有失败记录则 noop。
+   */
+  retryLast: () => Promise<void>;
 }
 
 function genId(): string {
@@ -73,6 +83,8 @@ export function useChatFileUpload({
   const [error, setError] = useState<string | null>(null);
   const [isDragging, setIsDragging] = useState(false);
   const errorTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // M12：记录最近一次失败的 file，用于 retryLast
+  const lastFailedFilesRef = useRef<File[] | null>(null);
 
   // 错误提示 5s 后自动清
   useEffect(() => {
@@ -91,6 +103,7 @@ export function useChatFileUpload({
       if (list.length === 0) return;
       setError(null);
       setBusy(true);
+      const failed: File[] = [];
       try {
         for (const file of list) {
           try {
@@ -108,14 +121,46 @@ export function useChatFileUpload({
           } catch (err) {
             const msg = err instanceof Error ? err.message : '解析失败';
             setError(`${file.name}：${msg}`);
+            failed.push(file);
           }
         }
       } finally {
         setBusy(false);
+        // 全部失败才记录 retry 候选；部分成功不记录（避免重复添加成功部分）
+        lastFailedFilesRef.current = failed.length > 0 ? failed : null;
       }
     },
     [authToken, maxBytes],
   );
+
+  const retryLast = useCallback(async () => {
+    const files = lastFailedFilesRef.current;
+    if (!files || files.length === 0) return;
+    lastFailedFilesRef.current = null; // 清掉，避免重复 retry
+    await addFiles(files);
+  }, [addFiles]);
+
+  /**
+   * 把一段纯文本当作"虚拟附件"——用于粘大段（>500 字）转文件场景。
+   * 不走 parseFileForChat，直接构造 AttachedFile（kind='document'，title 取首行 / 用户自定义）。
+   */
+  const addTextAsFile = useCallback((text: string, title?: string) => {
+    const trimmed = text.trim();
+    if (!trimmed) return;
+    // title fallback：首行前 24 字符
+    const firstLine = trimmed.split('\n')[0].trim();
+    const fallbackTitle = firstLine.length > 24 ? firstLine.slice(0, 24) + '…' : firstLine;
+    setAttachedFiles((prev) => [
+      ...prev,
+      {
+        id: genId(),
+        title: title ?? fallbackTitle ?? '粘贴的内容',
+        text: trimmed,
+        characterCount: trimmed.length,
+        kind: 'document' as AttachedFile['kind'],
+      },
+    ]);
+  }, []);
 
   const removeFile = useCallback((id: string) => {
     setAttachedFiles((prev) => prev.filter((f) => f.id !== id));
@@ -201,5 +246,5 @@ export function useChatFileUpload({
     };
   }, [targetRef, enableDrop, enablePasteImage, addFiles]);
 
-  return { attachedFiles, busy, error, isDragging, addFiles, removeFile, clear, onInputChange };
+  return { attachedFiles, busy, error, isDragging, addFiles, removeFile, clear, onInputChange, addTextAsFile, retryLast };
 }

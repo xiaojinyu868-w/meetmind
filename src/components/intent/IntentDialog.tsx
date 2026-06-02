@@ -26,6 +26,7 @@ import Image from 'next/image';
 import { useChat } from '@ai-sdk/react';
 import { DefaultChatTransport, type UIMessage } from 'ai';
 import { X, Phone, Sparkles } from 'lucide-react';
+import { toast } from 'sonner';
 import { OctoAvatar } from '@/components/ui/octo-avatar';
 import {
   ChatBubble,
@@ -193,6 +194,14 @@ export function IntentDialog({
       // fileUpload.clear();
     },
     disabled: busy,
+    // M12：粘大段（>500 字）→ 自动转附件 + toast 提示
+    onLargePaste: (text) => {
+      fileUpload.addTextAsFile(text);
+      toast.success('内容较长，已作为附件附加', {
+        description: 'Octo 会先把这段读完',
+        duration: 2400,
+      });
+    },
   });
 
   const handleVoiceTranscript = React.useCallback(
@@ -438,6 +447,7 @@ export function IntentDialog({
                 key={message.id}
                 role="user"
                 variant="glass"
+                messageId={message.id}
                 className="animate-in fade-in slide-in-from-bottom-1 duration-200"
               >
                 {text}
@@ -502,6 +512,7 @@ export function IntentDialog({
                 key={message.id}
                 role="assistant"
                 variant="glass"
+                messageId={message.id}
                 avatar={
                   <OctoAvatar
                     mood={isStreaming ? 'happy' : 'idle'}
@@ -548,6 +559,7 @@ export function IntentDialog({
         onRemoveFile={fileUpload.removeFile}
         uploadBusy={fileUpload.busy}
         uploadError={fileUpload.error}
+        onRetryUpload={fileUpload.retryLast}
         isDragging={fileUpload.isDragging}
         capabilities={{ mic: true, file: true, call: Boolean(onSwitchToCall) }}
         onCallStart={onSwitchToCall}

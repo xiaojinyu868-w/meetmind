@@ -44,8 +44,10 @@ import {
   useChatComposer,
   useChatFileUpload,
   collectMessageText as collectChatMessageText,
+  copyMessageSmart,
 } from '@/components/chat';
 import { Copy, RefreshCw } from 'lucide-react';
+import { toast } from 'sonner';
 import {
   AI_MODEL_AUTO_VALUE,
   AI_MODEL_PREFERENCE_KEY,
@@ -514,18 +516,31 @@ export function TutorAgentPanel({
     [busy, sendMessage],
   );
 
-  // M11：底座 composer hook —— 统一处理 IME / 草稿持久化 / 自适应高度 / 快捷键
-  const composer = useChatComposer({
-    draftKey: sessionId,
-    onSubmit: onSubmitText,
-    disabled: busy,
-  });
-
   // M11：底座文件上传 hook —— 拖拽 / 粘贴 / 点击三入口统一
   const composerRef = React.useRef<HTMLFormElement>(null);
   const fileUpload = useChatFileUpload({
     authToken,
     targetRef: composerRef,
+  });
+
+  // M12：粘大段（>500 字）→ 自动转附件 + sonner toast 提示
+  const handleLargePaste = React.useCallback(
+    (text: string) => {
+      fileUpload.addTextAsFile(text);
+      toast.success('内容较长，已作为附件附加', {
+        description: '同学会读完整段后再回复',
+        duration: 2400,
+      });
+    },
+    [fileUpload],
+  );
+
+  // M11：底座 composer hook —— 统一处理 IME / 草稿持久化 / 自适应高度 / 快捷键 / 大段粘贴
+  const composer = useChatComposer({
+    draftKey: sessionId,
+    onSubmit: onSubmitText,
+    disabled: busy,
+    onLargePaste: handleLargePaste,
   });
 
   const handleVoiceTranscript = React.useCallback(
@@ -712,10 +727,13 @@ export function TutorAgentPanel({
               <>
                 <button
                   type="button"
-                  onClick={() => {
-                    void navigator.clipboard?.writeText(collectMessageText(m));
+                  onClick={async () => {
+                    const ok = await copyMessageSmart(collectMessageText(m), {
+                      messageId: m.id,
+                    });
+                    if (ok) toast.success('已复制（含格式）', { duration: 1500 });
                   }}
-                  title="复制"
+                  title="复制（含格式）"
                   aria-label="复制"
                   className="inline-flex h-7 items-center gap-1 rounded-full px-2 text-[11.5px] text-ink-muted transition-colors hover:bg-paper-warm hover:text-ink-secondary"
                 >
@@ -745,6 +763,7 @@ export function TutorAgentPanel({
               fullWidth={Boolean(inlineApp)}
               footer={footerSlot}
               actions={actionsSlot}
+              messageId={m.id}
             >
               {bodyChildren}
             </ChatBubble>
@@ -785,6 +804,7 @@ export function TutorAgentPanel({
         onRemoveFile={fileUpload.removeFile}
         uploadBusy={fileUpload.busy}
         uploadError={fileUpload.error}
+        onRetryUpload={fileUpload.retryLast}
         isDragging={fileUpload.isDragging}
         capabilities={{ mic: true, file: true }}
         onVoiceTranscript={handleVoiceTranscript}

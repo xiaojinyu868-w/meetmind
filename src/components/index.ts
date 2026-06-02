@@ -6,8 +6,8 @@ export { Recorder } from './Recorder';
 export { TimelineView } from './TimelineView';
 
 // AI 组件
-export { AITutor } from './AITutor';
-export { AIChat } from './AIChat';
+// M12：AITutor.tsx + AIChat.tsx 死代码已删（无引用）。AI 对话统一走 ChatBase 底座（src/components/chat/）
+// + 三个 adapter（IntentDialog / TutorAgentPanel / SharedAgentChat / SafeAITutor wrapping）。
 export { ModelSelector } from './ModelSelector';
 export { ConversationList, ConversationItem } from './ConversationHistory';
 

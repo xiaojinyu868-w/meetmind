@@ -1432,3 +1432,133 @@ p, span, div, h1, h2, h3, h4, h5, h6, li, td, th, label {
   *:hover { transition-duration: 0ms !important; }
 }
 
+
+/* ============================================================
+   M12 顶级 AI 对话组件样式
+   ChatCodeBlock + ChatImageLightbox
+   ============================================================ */
+
+/* === ChatCodeBlock：shiki 输出 + 行号 counter === */
+
+/* shiki 默认输出 <pre style="background:#fff"><code>...，重写 padding/字号 */
+.chat-code-shiki pre {
+  margin: 0 !important;
+  padding: 12px 14px !important;
+  background: transparent !important;
+  font-family: 'JetBrains Mono', 'SF Mono', Consolas, ui-monospace, monospace !important;
+  font-size: 12.5px !important;
+  line-height: 1.65 !important;
+}
+
+.chat-code-shiki code {
+  font-family: inherit !important;
+  background: transparent !important;
+  padding: 0 !important;
+}
+
+/* 行号 counter（>5 行才启用，class 由 ChatCodeBlock 加） */
+.chat-code-with-line-numbers .chat-code-shiki pre {
+  counter-reset: chat-code-line;
+  padding-left: 0 !important;
+}
+
+.chat-code-with-line-numbers .chat-code-shiki code .line {
+  counter-increment: chat-code-line;
+  display: inline-block;
+  width: 100%;
+  padding-left: 3rem;
+  position: relative;
+}
+
+.chat-code-with-line-numbers .chat-code-shiki code .line::before {
+  content: counter(chat-code-line);
+  position: absolute;
+  left: 0;
+  width: 2.5rem;
+  padding-right: 0.5rem;
+  text-align: right;
+  color: var(--mm-ink-muted, #999);
+  user-select: none;
+  -webkit-user-select: none;
+  font-feature-settings: 'tnum';
+  opacity: 0.5;
+  font-size: 0.92em;
+}
+
+/* fallback 路径（shiki 未加载完）也要看起来一致 */
+.chat-code-with-line-numbers pre:not(.shiki) {
+  counter-reset: chat-code-line;
+}
+
+/* 暗色模式：shiki 输出的 hex 颜色在暗底上不刺眼，加 filter 调暗 */
+[data-theme='dark'] .chat-code-shiki pre {
+  filter: brightness(0.92) contrast(1.05);
+}
+
+/* === ChatImageLightbox：图片 zoom 浮层 === */
+
+.chat-image-thumb {
+  cursor: zoom-in;
+  transition: transform 0.18s var(--ease-out);
+}
+
+.chat-image-thumb:hover {
+  transform: scale(1.005);
+}
+
+.chat-image-lightbox-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  background: rgba(20, 17, 13, 0.92);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 32px;
+  cursor: zoom-out;
+  animation: chatLightboxFadeIn 0.18s ease-out;
+}
+
+@keyframes chatLightboxFadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.chat-image-lightbox-img {
+  max-width: 100%;
+  max-height: 100%;
+  border-radius: 8px;
+  box-shadow: 0 12px 60px rgba(0, 0, 0, 0.5);
+  cursor: default;
+  animation: chatLightboxImgIn 0.22s var(--ease-out);
+}
+
+@keyframes chatLightboxImgIn {
+  from { opacity: 0; transform: scale(0.96); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+.chat-image-lightbox-close {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.12);
+  color: rgba(255, 255, 255, 0.95);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  transition: background 0.15s;
+}
+
+.chat-image-lightbox-close:hover {
+  background: rgba(255, 255, 255, 0.22);
+}

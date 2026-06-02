@@ -38,6 +38,8 @@ export interface ChatBubbleProps {
   children: React.ReactNode;
   /** assistant 消息可允许气泡占满（用于内联应用卡场景） */
   fullWidth?: boolean;
+  /** M12：消息 ID —— 加到消息体 DOM 的 data-msg-id，让 copyMessageSmart 能取 innerHTML 复制富文本 */
+  messageId?: string;
   className?: string;
 }
 
@@ -96,6 +98,7 @@ export const ChatBubble = React.memo(function ChatBubble({
   footer,
   children,
   fullWidth,
+  messageId,
   className,
 }: ChatBubbleProps) {
   const isUser = role === 'user';
@@ -112,7 +115,7 @@ export const ChatBubble = React.memo(function ChatBubble({
           isUser ? 'items-end' : 'items-start',
         )}
       >
-        <div className={bubbleClasses(role, variant)}>{children}</div>
+        <div className={bubbleClasses(role, variant)} data-msg-id={messageId}>{children}</div>
         {/* hover 时浮起来的操作行 */}
         {actions ? (
           <div
