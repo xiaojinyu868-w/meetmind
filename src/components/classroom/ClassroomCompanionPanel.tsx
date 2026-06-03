@@ -32,7 +32,7 @@
  */
 
 import React, { useEffect } from 'react';
-import { ArrowUp, Radio, Eye } from 'lucide-react';
+import { ArrowUp, Radio } from 'lucide-react';
 import type { CompanionMessage, CompanionCard } from './types';
 import { OctoBuddySprite } from './OctoBuddy';
 import { ThinkingStrip } from '@/components/ui/thinking-strip';
@@ -46,6 +46,8 @@ import { buildClassroomCompanionPanelModel } from './ClassroomCompanionPanel.mod
 //                共用 useChatComposer (IME 安全 + 草稿 + 大段粘贴拦截)
 import { ChatRenderer, useChatComposer } from '@/components/chat';
 import { normalizeCompanionMarkdown } from './companion-markdown-utils';
+// M14: 课堂同桌 chip 行（稳定 + 动态）
+import { ClassroomChipRow, type ClassroomDynamicChip } from './ClassroomChipRow';
 
 const IN_CLASS_EXCLUDED_SKILL_APP_KEYS: readonly WorkshopAppKey[] = ['flashcards', 'quiz', 'study-report'];
 
@@ -116,20 +118,26 @@ export interface ClassroomCompanionPanelProps {
   afterClass?: boolean;
   /** 试听课结束后，章鱼轻引导用户点击“结束这节课”进入课后复习。 */
   onAfterClassAction?: () => void;
+  /**
+   * M14: 当用户点 chip "记一下" 时触发——客户端给当前转录段打标，不发对话。
+   * 由 useClassroomCompanion 实现，落到 IndexedDB 的 markedMoments，
+   * 课后复习态自动展开成可深挖的"标记点"列表。
+   */
+  onMarkMoment?: () => void;
+  /**
+   * M14: 动态 chip（最多 2 个）——AI 后台 30s 一次写候选 utterance 缓存到 IndexedDB。
+   * 内容由模型决定（"和归并的区别？" / "这里的 LC 是啥意思" 之类），
+   * 用户**不点也行**，不强制读。
+   */
+  dynamicChips?: ClassroomDynamicChip[];
 }
 
 /** 顶部标题栏：不同 mode 不同呈现 */
 function Header({
   mode,
-  foresightCount,
-  latestForesight,
-  onForesightAccept,
   afterClass = false,
 }: {
   mode: CompanionMode;
-  foresightCount: number;
-  latestForesight?: ForesightBubble | null;
-  onForesightAccept?: (f: ForesightBubble) => void;
   afterClass?: boolean;
 }) {
   // v7 companion-head：octo-stage 圆形 + 呼吸光环 + 名称 + mono pine 状态点
@@ -158,17 +166,7 @@ function Header({
           </div>
         </div>
         <div className="flex flex-shrink-0 items-center gap-2 text-ink-muted/70">
-          {foresightCount > 0 && latestForesight ? (
-            <button
-              type="button"
-              onClick={() => onForesightAccept?.(latestForesight)}
-              className="flex max-w-[8.5rem] items-center gap-1.5 rounded-full border border-divider bg-card px-2.5 py-1 text-[12px] text-ink-muted shadow-soft transition hover:border-pine hover:text-pine"
-              title={latestForesight.text}
-            >
-              <Eye size={12} strokeWidth={1.6} />
-              <span className="truncate">{COPY.companion.foresightCount(foresightCount)}</span>
-            </button>
-          ) : null}
+          {/* M14: 移除"2 个预感"折叠药丸——错位形态。预感能力下沉到 composer chip 行（点输入框时浮）。 */}
           <Radio size={14} strokeWidth={1.6} className="text-pine/65" />
         </div>
       </div>
@@ -404,17 +402,22 @@ function ListeningStarterCard({
  *
  * M13：迁底座 —— 内部 state/IME/草稿 用 useChatComposer hook 统一处理。
  * 保留独有的 ⌘K / "/" 全局快捷键 + ArrowUp 圆形发送按钮外观。
+ *
+ * M14: 加 chipSlot prop —— composer 上方稳定 + 动态 chip 行
+ *      （只在 textarea focus 或 hover 时浮现，对齐"伸手才出现"哲学）
  */
 function CompanionComposer({
   placeholder,
   onSend,
   statusLabel,
   draftKey,
+  chipSlot,
 }: {
   placeholder: string;
   onSend: (t: string) => void;
   statusLabel?: string;
   draftKey?: string;
+  chipSlot?: React.ReactNode;
 }) {
   // M13：底座 hook —— 自动处理 IME / 草稿持久化 / 自适应高度 / Enter 发送 / 大段粘贴
   const composer = useChatComposer({
@@ -466,6 +469,8 @@ function CompanionComposer({
           <span>{statusLabel}</span>
         </div>
       ) : null}
+      {/* M14: chip slot —— 在 textarea 上方渲染稳定 + 动态 chip 行 */}
+      {chipSlot ? <div className="mb-2">{chipSlot}</div> : null}
       <div className="rounded-3xl border border-divider bg-white transition-colors focus-within:border-ink-muted">
         <textarea
           {...textareaProps}
@@ -545,8 +550,11 @@ export function ClassroomCompanionPanel({
   streamingMessage = null,
   isThinking = false,
   placeholder,
-  foresights = [],
-  onForesightAccept,
+  // M14: foresights 折叠药丸已移除；保留 props 兼容 page.tsx（不渲染）。
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  foresights: _foresights = [],
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  onForesightAccept: _onForesightAccept,
   onCitationJump,
   onInlineAction,
   onInlineAppInteraction,
@@ -554,6 +562,8 @@ export function ClassroomCompanionPanel({
   suggestedPrompts = DEFAULT_LIGHT_PROMPTS,
   afterClass = false,
   onAfterClassAction,
+  onMarkMoment,
+  dynamicChips = [],
 }: ClassroomCompanionPanelProps) {
   const effectivePlaceholder = placeholder ?? (
     mode === 'listening' ? COPY.companion.placeholderListening : COPY.companion.placeholderIdle
@@ -563,12 +573,11 @@ export function ClassroomCompanionPanel({
     mode,
     messages,
     streamingMessage,
-    foresights,
+    // M14: 不再渲染 foresights，传空数组让 visibleForesights/latestForesight 不计算
+    foresights: [],
   });
   const {
     visibleMessages,
-    visibleForesights,
-    latestForesight,
     hasMainContent,
     showListeningStarter,
   } = panelModel;
@@ -580,9 +589,6 @@ export function ClassroomCompanionPanel({
     <div className="flex h-full flex-col">
       <Header
         mode={mode}
-        foresightCount={visibleForesights.length}
-        latestForesight={latestForesight}
-        onForesightAccept={onForesightAccept}
         afterClass={afterClass}
       />
 
@@ -618,28 +624,32 @@ export function ClassroomCompanionPanel({
         )}
       </div>
 
-      {/* 有内容时：在 composer 上方挂一条横向滚动的 skill row——
-         始终一眼看得见"我能让它做什么"，但信息密度低不打扰阅读。
-         空态里 skill 已经用 grid 展示过了，这里就不重复。
-         onSay={onSend}——agent-native 主路径：chip = 发 utterance 给 AI 同桌，
-         由 AI 侧决定调用哪个工具；onOpenApp 保留作为加速路径。 */}
-      {hasMainContent && !showListeningStarter ? (
-        <div className="flex-shrink-0 border-t border-divider/70">
-          <SkillChipRow
-            variant="row"
-            onPick={onSend}
-            onSay={onSend}
-            onOpenApp={onOpenApp}
-            excludeAppKeys={IN_CLASS_EXCLUDED_SKILL_APP_KEYS}
-          />
-        </div>
-      ) : null}
+      {/* M14: 移除 hasMainContent 时底部 SkillChipRow 横滚条
+         （8 个 app 入口在课堂态显得货架感强、抢同桌主位）。
+         课堂"快通道"chip 下沉到 CompanionComposer 的 chipSlot：
+         「刚才那段 / 我没跟上 / 记一下」常驻 + 动态 chip 锦上添花。 */}
 
       <CompanionComposer
         placeholder={effectivePlaceholder}
         onSend={onSend}
         statusLabel={pendingReplyLabel}
         draftKey={`classroom-companion:${mode}`}
+        chipSlot={
+          mode === 'listening' ? (
+            <ClassroomChipRow
+              onPickStable={(kind, utterance) => {
+                if (kind === 'mark-moment') {
+                  onMarkMoment?.();
+                  return;
+                }
+                if (utterance) onSend(utterance);
+              }}
+              dynamicChips={dynamicChips}
+              onPickDynamic={(chip) => onSend(chip.text)}
+              disabled={Boolean(streamingMessage) || isThinking}
+            />
+          ) : undefined
+        }
       />
     </div>
   );

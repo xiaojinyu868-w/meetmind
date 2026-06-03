@@ -89,6 +89,14 @@ export interface ChatComposerProps {
    */
   containerRef?: React.RefObject<HTMLFormElement>;
 
+  /**
+   * M14: 顶部 chip slot —— 在 attached files 行 / 离线条 / textarea **之上**渲染。
+   * 用法：课堂同桌的稳定 chip 行（"刚才那段 / 我没跟上 / 记一下" + 动态 chip）走这里。
+   * 完全由 adapter 决定渲染什么、什么时候出现（e.g. focus 时浮 / 永远在）；
+   * 底座只负责留位置 + 样式中性。
+   */
+  topSlot?: React.ReactNode;
+
   className?: string;
 }
 
@@ -127,6 +135,7 @@ export function ChatComposer({
   busyPlaceholder = '同学在想…',
   variant = 'paper',
   containerRef,
+  topSlot,
   className,
 }: ChatComposerProps) {
   const fileInputRef = React.useRef<HTMLInputElement>(null);
@@ -308,6 +317,9 @@ export function ChatComposer({
           </div>
         </div>
       ) : null}
+
+      {/* M14: 顶部 chip slot（课堂同桌的稳定 + 动态 chip 行走这里） */}
+      {topSlot ? <div className="mx-auto w-full max-w-2xl mb-2">{topSlot}</div> : null}
 
       {/* 输入主行 */}
       <div className="mx-auto flex w-full max-w-2xl items-end gap-2">

@@ -2,11 +2,16 @@
 /**
  * smoke-in-class-mode.ts —— In-class（课堂同桌）模式真实端到端 smoke。
  *
+ * M14 更新：
+ *   - in-class 默认 allowInlineApp=false（课堂没认知带宽看 inline app）
+ *   - in-class 默认 returnTimestamps=true（让"刚才那段"能给 [MM:SS] 让学生跳回）
+ *   - 注入 fullTranscript（让"刚才那段 / 我没跟上" 能拿到全量上下文回答）
+ *
  * 验证：
  *   1. 短回答（in-class 应该精简，不长篇大论）
  *   2. 注入 bio 时 AI 体现"认识"用户
- *   3. Skill chip prompt（"整张速查表"）能触发 <open_app:cheatsheet/>
- *   4. 不出现 [MM:SS]（returnTimestamps:false）
+ *   3. 时间戳引用（returnTimestamps:true）
+ *   4. **不**出现 inline app marker（M14 后 in-class 禁用）
  *   5. 不出现 goal/bio marker（in-class 不该提炼这些）
  */
 
@@ -18,11 +23,13 @@ interface InClassBody {
   transcript: never[];
   context: {
     recentFocus?: string;
+    fullTranscript?: string;
+    currentTimestampSec?: number;
     learnerProfile?: string;
   };
   options: {
-    allowInlineApp: true;
-    returnTimestamps: false;
+    allowInlineApp: false;
+    returnTimestamps: true;
     thinkingGuide: false;
   };
   messages: ReturnType<typeof turnsToMessages>;
@@ -30,6 +37,15 @@ interface InClassBody {
 
 // 假的"最近 30s"转录（recentFocus）—— in-class 用这个做代词消歧
 const RECENT_FOCUS = `老师刚说到："快排的核心是 partition——把 pivot 放到正确位置上，左边都比它小，右边都比它大。i j 双指针扫一遍。"`;
+
+// M14: 假的当前课全量转录（让"刚才那段 / 我没跟上"等回顾型问题有上下文）
+const FULL_TRANSCRIPT = `[00:00] 这节课我们讲快速排序。
+[01:30] 快排的核心思想是分治法。
+[03:00] 我们看 partition 函数——它的作用是把 pivot 放到它最终该在的位置。
+[04:30] 左边都是比它小的元素，右边都是比它大的。i j 双指针扫一遍就完成了。
+[06:00] 接下来分析时间复杂度。平均 O(n log n)，最坏 O(n²)。
+[07:30] 最坏发生在数组已经有序、且 pivot 总取边界元素时。
+[09:00] 所以工程实践通常用三数取中或随机选 pivot。`;
 
 const BIO_PROFILE = `【这个学生】
 大三计算机学生，准备考研，最近在数学上卡了一阵。
@@ -48,11 +64,13 @@ function makeBody(
     transcript: [],
     context: {
       recentFocus: RECENT_FOCUS,
+      fullTranscript: FULL_TRANSCRIPT,
+      currentTimestampSec: 540,
       ...context,
     },
     options: {
-      allowInlineApp: true,
-      returnTimestamps: false,
+      allowInlineApp: false,
+      returnTimestamps: true,
       thinkingGuide: false,
     },
     messages: turnsToMessages(turns),
@@ -75,8 +93,9 @@ const CASES: SmokeCase<InClassBody>[] = [
     body: makeBody([{ role: 'user', content: '刚才那句我没跟上' }]),
     mustContainAny: ['partition', 'pivot', '核心', '快排', '指针'],
     mustNotContainAny: IN_CLASS_BAN,
-    // 不能出现时间戳（in-class returnTimestamps:false）
-    mustNotMatch: [/\[\d{1,2}:\d{2}\]/],
+    // M14: in-class 现在 returnTimestamps:true，"刚才那句"应该带时间戳让用户跳回
+    // 不强制要时间戳（不是每次都需要），但**绝对不能**出 inline app marker
+    mustNotMatch: [/<open_app:/],
   },
 
   // ─── IC2：短回答 —— 课中不能长篇大论 ───
@@ -93,13 +112,18 @@ const CASES: SmokeCase<InClassBody>[] = [
     mustNotContainAny: IN_CLASS_BAN,
   },
 
-  // ─── IC3：Skill chip → inline app marker ───
+  // ─── IC3：稳定 chip 「刚才那段」 → AI 用全量上下文回放 + [MM:SS] ───
+  // M14: 替代之前的"整一张速查表"——in-class 已禁用 inline app
   {
-    name: 'IC3/Skill chip/整张速查表',
-    description: '用户说"整一张速查表"，AI 应输出 <open_app:cheatsheet/>',
-    body: makeBody([{ role: 'user', content: '整一张速查表' }]),
-    mustContainAny: ['<open_app:cheatsheet/>'],
+    name: 'IC3/稳定 chip/刚才那段',
+    description: '用户点 "刚才那段" → AI 拿 fullTranscript 用一句话讲清核心，可带 [MM:SS] 让学生跳回',
+    body: makeBody([
+      { role: 'user', content: '请回放刚才那段，把核心用一句话讲清楚。' },
+    ]),
+    mustContainAny: ['partition', 'pivot', '快排', '分治', '指针'],
     mustNotContainAny: IN_CLASS_BAN,
+    // 绝对不能出 inline app marker（M14 in-class 禁用）
+    mustNotMatch: [/<open_app:/],
   },
 
   // ─── IC4：bio 注入 ───
@@ -112,6 +136,7 @@ const CASES: SmokeCase<InClassBody>[] = [
     ),
     mustContainAny: ['考', '高频', '重点', '研', '常考', '可能'],
     mustNotContainAny: IN_CLASS_BAN,
+    mustNotMatch: [/<open_app:/],
   },
 
   // ─── IC5：身份问题 ───

@@ -25,6 +25,7 @@
  */
 
 import React, { useState, useCallback, useMemo, useEffect, useRef } from 'react';
+import { toast } from 'sonner';
 import {
   ClassroomLayout,
   ClassroomLeftPanel,
@@ -395,10 +396,16 @@ export function ClassroomView({
   );
 
   // ── 预知气泡：AI 同桌的"主动性"，只在录课中工作 ──
+  // M14: foresight 引擎复用 —— 输出从"折叠药丸"形态升级为 composer 上方的动态 chip 行
   const { foresights, dismiss: dismissForesight } = useClassroomForesight({
     enabled: paneState === 'recording',
     recentText: liveTranscriptText,
   });
+  // M14: foresight → 动态 chip（最多 2 个，AI 写多长由模型决定）
+  const dynamicChips = useMemo(
+    () => foresights.slice(0, 2).map((f) => ({ id: f.id, text: f.text })),
+    [foresights],
+  );
 
   // ── 思维导图：生长中的理解结构（主画面的核心）──
   //   - 每 ~45s 拉一次，或命中"接下来/那/下一个"等主题切换词时提前拉。
@@ -473,6 +480,27 @@ export function ClassroomView({
     },
     [dismissForesight, sendToTutor],
   );
+
+  /**
+   * M14: 「记一下」——课中给当前转录瞬间打标，下课带回看。
+   * 形态目前是 toast 提示 + 暂存到内存（M14.5 持久化到 IndexedDB + 复习态左栏 marked moments 列表）。
+   * 不发对话，纯客户端动作；目的是让学生在被点名/听到关键点时一秒按下，不打断听课。
+   */
+  const markedMomentsRef = useRef<Array<{ timeMs: number; nearbyText: string }>>([]);
+  const handleMarkMoment = useCallback(() => {
+    const lastSeg = activeRecordingSegments[activeRecordingSegments.length - 1];
+    const timeMs = lastSeg?.endMs ?? lastSeg?.startMs ?? Math.floor(effectiveRecordingSeconds * 1000);
+    const nearby = activeRecordingSegments.slice(-3).map((s) => s.text).filter(Boolean).join(' ').trim().slice(-200);
+    markedMomentsRef.current.push({ timeMs, nearbyText: nearby });
+
+    const mins = Math.floor(timeMs / 60000);
+    const secs = Math.floor((timeMs % 60000) / 1000);
+    const stamp = `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+    toast.success(`已记下 ${stamp}`, {
+      description: '下课进入复习时带你回看这一段',
+      duration: 1800,
+    });
+  }, [activeRecordingSegments, effectiveRecordingSeconds]);
 
   const handleOpenLesson = useCallback((id: string) => {
     const lesson = lessons.find((l) => l.id === id);
@@ -581,9 +609,11 @@ export function ClassroomView({
         suggestedPrompts={isDemoRecordingPane ? demoSuggestedPrompts : undefined}
         afterClass={isDemoRecordingPane && demoComplete}
         onAfterClassAction={handleOpenDemoReview}
+        onMarkMoment={handleMarkMoment}
+        dynamicChips={dynamicChips}
       />
     ),
-    [companionMode, messages, streamingMessage, isThinking, handleSend, onOpenApp, foresights, handleForesightAccept, dismissForesight, handleCitationJump, handleInlineAction, handleInlineAppInteraction, retryInlineApp, isDemoRecordingPane, demoSuggestedPrompts, demoComplete, handleOpenDemoReview],
+    [companionMode, messages, streamingMessage, isThinking, handleSend, onOpenApp, foresights, handleForesightAccept, dismissForesight, handleCitationJump, handleInlineAction, handleInlineAppInteraction, retryInlineApp, isDemoRecordingPane, demoSuggestedPrompts, demoComplete, handleOpenDemoReview, handleMarkMoment, dynamicChips],
   );
 
   return (

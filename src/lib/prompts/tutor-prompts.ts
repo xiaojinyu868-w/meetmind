@@ -590,6 +590,13 @@ export function buildTutorSystemPrompt(
   if (mode === 'in-class' && context.recentFocus?.trim()) {
     parts.push(capRecentFocus(context.recentFocus));
   }
+  // M14: in-class 也注入当前课全量转录（带时间戳）。
+  // 之前只给最近 30s recentFocus，导致 AI 回答跨段、跨主题问题时凭感觉。
+  // 现在给全量（capFullTranscript 内部 8000 字硬上限保护 prefill），
+  // AI 自己决定看多长。当用户问"刚才那段"、"我没跟上"，AI 能直接回放上下文。
+  if (mode === 'in-class' && context.fullTranscript?.trim()) {
+    parts.push(capFullTranscript(context.fullTranscript, context.currentTimestampSec));
+  }
   if (mode === 'review' && context.fullTranscript?.trim()) {
     parts.push(capFullTranscript(context.fullTranscript, context.currentTimestampSec));
   }
