@@ -18,6 +18,7 @@
 import { useMemo, useEffect, useState, useCallback } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db, getPreference, setPreference, dedupeAudioSessions, repairMisflaggedVideoLinkRecordings, updateSessionStatus } from '@/lib/db';
+import { retranscribeStuckSessions } from '@/lib/services/retranscribe-stuck-sessions';
 import { useEchoStore } from '@/stores/echo-store';
 import { useCollectionStore } from '@/stores/collection-store';
 import { audioSessionToLesson } from '@/components/classroom/lessonAdapter';
@@ -136,6 +137,29 @@ export function useClassroomLessons(): UseClassroomLessonsResult {
         console.warn('[classroom] cleanup stale recordings failed:', err);
       }
     })();
+  }, []);
+
+  // ── 0c. 挂载时自愈"卡在正在整理却从没真正转写"的录音 ──
+  // 真实用户 case（2026-06-03）：手机录 1.5h 会议，流式 ASR 被锁屏/切后台/网络抖动
+  // 中断 → 0 段，blob 存了却从没转写 → session 永远「正在整理」。
+  //
+  // Recorder 侧已修根因（流式 0 段兜底批量转写），但**存量卡住的录音**靠这个 sweep 救：
+  // 找到「completed + 有 blob + 0 转录段 + 没成功/失败标记」的 session，
+  // 把 blob 重新送 /api/transcribe-fast 转出来，结果写回 IndexedDB（useLiveQuery 自动刷新 UI）。
+  //
+  // 顺序处理 + page-lifetime 幂等，避免重复扫 / 打爆后端。失败如实标 failed，不假装成功。
+  useEffect(() => {
+    retranscribeStuckSessions()
+      .then((r) => {
+        if (r.attempted > 0) {
+          // eslint-disable-next-line no-console
+          console.info('[classroom] retranscribe stuck sessions:', r);
+        }
+      })
+      .catch((err) => {
+        // eslint-disable-next-line no-console
+        console.warn('[classroom] retranscribeStuckSessions failed:', err);
+      });
   }, []);
 
   // ── 1. audioSessions（主表） ──

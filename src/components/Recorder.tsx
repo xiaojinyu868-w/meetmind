@@ -1115,6 +1115,23 @@ export const Recorder = forwardRef<RecorderHandle, RecorderProps>(function Recor
       enhanceManagerRef.current = null;
     }
 
+    // 兜底批量转写的最小 blob 阈值：< 8KB 基本是静音/噪声，转也是空，不浪费一次 API。
+    const MIN_FALLBACK_BLOB_BYTES = 8 * 1024;
+
+    // 关键修复（2026-06-03）：流式实时 ASR 一句没出，但 blob 是好的 → 必须兜底批量转写。
+    //
+    // 真实用户 case：手机录 1.5 小时会议，全程流式模式，但手机锁屏 / 切后台 /
+    // 网络抖动会断掉实时 ASR 的 WebSocket，导致 transcriptRef 收到 0 段。
+    // 之前这里直接走 else 分支「什么都不转」，blob 被存下来却从没送去转写，
+    // session 永远卡在「正在整理」——录了等于没录。
+    //
+    // 现在：streaming 模式收到 0 段但 blob 有效 → 自动降级走 transcribeWithQwenASR
+    // （内部 chooseBatchTranscribeEndpoints 会为长音频选分片转写接口）。
+    // 这不是 fallback 掩盖问题，是真的把音频转出来。
+    const streamingProducedNothing =
+      effectiveTranscribeMode === 'streaming' && transcriptRef.current.length === 0;
+    const blobIsUsable = Boolean(audioBlob && audioBlob.size > MIN_FALLBACK_BLOB_BYTES);
+
     if (effectiveTranscribeMode === 'batch' && audioBlob && audioBlob.size > 0) {
       onRecordingStop?.(audioBlob ?? undefined, getCallbackMeta());
       try {
@@ -1124,6 +1141,23 @@ export const Recorder = forwardRef<RecorderHandle, RecorderProps>(function Recor
         });
       } catch (err) {
         console.error('[Recorder] transcribeWithQwenASR error:', err);
+      }
+    } else if (streamingProducedNothing && blobIsUsable && audioBlob) {
+      // 实时没接住，但音频在 → 兜底批量转写，绝不让录音白录
+      // eslint-disable-next-line no-console
+      console.warn('[Recorder] streaming produced 0 segments — falling back to batch transcription', {
+        blobBytes: audioBlob.size,
+      });
+      // 先派发 onRecordingStop（外层据此创建 pending audio + 落盘 blob），
+      // 再跑批量转写，转好的段会通过 onTranscriptUpdate 回填那条 pending session。
+      onRecordingStop?.(audioBlob, getCallbackMeta());
+      try {
+        await transcribeWithQwenASR(audioBlob, {
+          skipEnhancement: compactMode,
+          emitStopCallback: false,
+        });
+      } catch (err) {
+        console.error('[Recorder] streaming→batch fallback transcription error:', err);
       }
     } else {
       if (effectiveTranscribeMode === 'streaming' && transcriptRef.current.length > 0) {
