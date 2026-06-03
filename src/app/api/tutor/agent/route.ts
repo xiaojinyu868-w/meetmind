@@ -544,7 +544,11 @@ export async function POST(request: NextRequest) {
   } catch (err) {
     const durationMs = Date.now() - startedAt;
     const msg = err instanceof Error ? err.message : String(err);
-    log.error('fatal', { sessionId, msg });
+    // M14.5.5: 之前只 log msg，stack 没存——遇到 entryCSSFiles 这类 framework 错误根因不可见
+    const errInfo = err instanceof Error
+      ? { msg, name: err.name, stack: err.stack?.split('\n').slice(0, 4).join(' | ') }
+      : { msg };
+    log.error('fatal', { sessionId, ...errInfo, durationMs });
     track({ kind: 'tutor.fail', sessionId, errorCode: 'TUTOR_FATAL', errorMsg: msg });
     return new Response(
       JSON.stringify({ error: 'tutor agent failed', detail: msg, durationMs }),

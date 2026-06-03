@@ -134,12 +134,11 @@ function LiveTranscriptPanel({
 
   const termsByRow = useMemo(() => {
     const next = new Map<string, string[]>();
-    const translatableRows = new Set(rows.slice(-4).map((row) => row.id));
+    // M14.5.5 fix: 之前只对最后 4 行做翻译（rows.slice(-4)），其他 6 行永远没翻译。
+    // 用户反馈"有些句子没翻译"的根因。现在所有可见 rows 都翻——
+    // useEnToZhTranslation 内置 LRU 缓存 + LocalStorage 持久化，
+    // 重复 term 不会重复调 LLM，没有性能负担。
     for (const row of rows) {
-      if (!translatableRows.has(row.id)) {
-        next.set(row.id, []);
-        continue;
-      }
       if (row.id === 'live-interim') {
         next.set(row.id, []);
         continue;
@@ -283,46 +282,50 @@ function LiveTranscriptPanel({
             </p>
           </div>
         ) : (
-          <div className="space-y-2">
+          // M14.5.5: 改为连续流（不再每段独立卡片）。
+          // 用户反馈：之前每段独立 <article> 有 border + padding + bg 把连续讲话切成离散块，
+          // 单词被中间硬切（CSS 默认行为），观感"分散"。
+          //
+          // 新设计：
+          //   - 整段 rows 渲染成单个 prose 流，自然换行不切单词（word-break: keep-all + overflow-wrap）
+          //   - 时间戳缩成 inline 灰色 chip（不占独立行），紧贴该句首
+          //   - 翻译用 italic 淡色斜体紧跟原句（不再独立卡片）
+          //   - interim 仍 italic + muted（"正在听"提示通过 caret 闪烁视觉传达，不占行）
+          //   - 唯一自由度：向上滚动看历史；新内容追加底部
+          <div
+            className="space-y-1 leading-[1.85] text-[13px]"
+            style={{ wordBreak: 'keep-all', overflowWrap: 'break-word' }}
+          >
             {rows.map((row, index) => {
               const sourceTerm = termsByRow.get(row.id)?.[0];
               const translated = sourceTerm ? lookup(sourceTerm) : undefined;
               const isLatest = index === rows.length - 1;
               const isDraft = row.id === 'live-interim';
-              const waitingForTranslation = translateEnabled && isLatest && Boolean(sourceTerm) && !translated;
 
               return (
-                <article
+                <p
                   key={row.id}
-                  className={`rounded-xl border px-3.5 py-3 transition ${
-                    isDraft ? 'border-divider bg-white' : isLatest ? 'border-divider bg-white' : 'border-transparent bg-canvas'
+                  className={`m-0 ${
+                    isDraft
+                      ? 'text-ink-muted italic'
+                      : isLatest
+                        ? 'text-ink'
+                        : 'text-ink-secondary'
                   }`}
                 >
-                  <div className="mb-1.5 flex items-center justify-between gap-2">
-                    <span className="font-mono text-[11px] tabular-nums text-ink-muted">
-                      {formatTime(Math.floor(row.startMs / 1000))}
+                  <span
+                    className="mr-1.5 inline-block align-baseline font-mono text-[10.5px] tabular-nums text-ink-muted/65"
+                    style={{ verticalAlign: '0.05em' }}
+                  >
+                    {formatTime(Math.floor(row.startMs / 1000))}
+                  </span>
+                  <span>{row.text}</span>
+                  {translateEnabled && translated && !isDraft ? (
+                    <span className="ml-1.5 inline italic text-ink-muted/85">
+                      — {translated}
                     </span>
-                    {isDraft ? (
-                      <span className="text-[11px] text-ink-muted">正在听</span>
-                    ) : isLatest ? (
-                      <span className="text-[11px] text-ink-muted">刚记下</span>
-                    ) : null}
-                  </div>
-                  <p className={`text-[13px] leading-relaxed ${isDraft ? 'text-ink-muted italic' : 'text-ink-secondary'}`}>
-                    {row.text}
-                  </p>
-                  {translateEnabled && (translated || waitingForTranslation) ? (
-                    <div className="mt-2 rounded-lg border border-divider bg-white px-2.5 py-2">
-                      {translated ? (
-                        <p className="text-[13px] leading-relaxed text-ink">
-                          {translated}
-                        </p>
-                      ) : (
-                        <p className="text-[12px] leading-relaxed text-ink-muted">正在翻译……</p>
-                      )}
-                    </div>
                   ) : null}
-                </article>
+                </p>
               );
             })}
             <div ref={endRef} />

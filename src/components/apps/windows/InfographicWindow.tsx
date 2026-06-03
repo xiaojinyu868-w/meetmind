@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import {
   Check,
@@ -318,6 +318,22 @@ export function InfographicWindow({
   const handleDirectGenerate = useCallback(() => {
     void requestImage(result);
   }, [requestImage, result]);
+
+  // M14.5.5: 用户反馈"图片生成不要复杂编辑面板，应该是点击-等待-查看"。
+  // 实现方式：AI draft 准备好后立刻自动 generate，跳过编辑面板。
+  // 用户只在"等待"和"查看"之间体验。如果对结果不满意，"重新生成"按钮仍在。
+  // 用 ref 标记已 auto-started，避免依赖变化时重复触发。
+  const hasAutoStartedGenRef = useRef(false);
+  useEffect(() => {
+    if (hasAutoStartedGenRef.current) return;
+    if (!result) return;
+    if (!imageEnabled) return;
+    if (imageUrl) return;
+    if (generating || checking) return;
+    if (taskState?.status === 'running') return;
+    hasAutoStartedGenRef.current = true;
+    void requestImage(result);
+  }, [result, imageEnabled, imageUrl, generating, checking, taskState?.status, requestImage]);
 
   const handleAiRecommend = useCallback(() => {
     void onGenerateDraft?.();
