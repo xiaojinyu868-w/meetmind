@@ -164,7 +164,10 @@ ${trimmed}`;
           { role: 'user', content: userMsg },
         ],
         'qwen3.7-plus',
-        { temperature: 0.3, maxTokens: 900, responseFormat: 'json_object' },
+        // M14.5.3 fix: maxTokens 900 不够装下 30 节点的完整 JSON（实测 finish_reason=length 频繁）。
+        // 整棵树极限是 root + 6 分支 + 6×4=24 叶子 = 31 节点 × 平均 35 token ≈ 1100 token。
+        // 提到 2000 给充足 headroom，不会再被截断。qwen3.7-plus 输出单价低，不心疼。
+        { temperature: 0.3, maxTokens: 2000, responseFormat: 'json_object' },
       );
 
       const parsed = JSON.parse(response.content);
