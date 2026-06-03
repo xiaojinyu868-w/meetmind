@@ -73,22 +73,66 @@ function shouldDedupSegment(lastSegment, nextSegment, dedupSimilarity, dedupGapM
  * 输出 [{text, beginTime, endTime}...]，时间戳按字符数等比例分配。
  * 如果切分后只有一段或无法切分，原样返回一段。
  */
+/**
+ * 把 ASR 给到的"完整一句"按需要切分成更短的片段。
+ *
+ * **顶级产品原则**：信任 ASR 已经按语义切好的句子，**永不词中切**。
+ *
+ * 历史教训（M14.5.6）：之前 length >= 60 强制 flush 不分位置，会在
+ * 词中间硬切（如 "looks" 切成 "look" + "s"）。用户视觉灾难。
+ *
+ * 新策略（按优先级递降）：
+ *   1. 短句（≤ 200 字）→ 原样返回，**不切**
+ *   2. 长句 → 在自然语义点切：
+ *      a. 句尾标点 . ! ? 。 ！ ？ + 当前累积 ≥ 40 字 → 优先切
+ *      b. 软标点 , ; ， ； + 当前累积 ≥ 130 字 → 次选切
+ *      c. 空格 + 当前累积 ≥ 220 字 → 词边界切（绝不词中切）
+ *      d. 累积 ≥ 320 字仍无空格 → 才允许字符切（罕见极长无空格 case）
+ *
+ * 输出 [{text, beginTime, endTime}...]，时间戳按字符数等比例分配。
+ */
 function splitLongTranscript(text, beginTime, endTime) {
   const normalized = String(text || '').trim();
   if (!normalized) return [];
 
-  if (normalized.length <= 80) {
+  // 200 字以内一律不切——绝大多数自然中英文句子都在这个范围
+  if (normalized.length <= 200) {
     return [{ text: normalized, beginTime, endTime }];
   }
 
   const chunks = [];
   let current = '';
-  const punctuation = /[。！？!?；;]/;
+  const sentenceEndRe = /[。！？!?]/;
+  const softBreakRe = /[，,；;:]/;
 
-  for (const ch of normalized) {
+  for (let i = 0; i < normalized.length; i++) {
+    const ch = normalized[i];
     current += ch;
-    if ((punctuation.test(ch) && current.length >= 20) || current.length >= 60) {
-      if (current.trim()) chunks.push(current.trim());
+
+    // 1. 句尾标点 + ≥ 40 字 → 切（自然语义点，最优）
+    if (sentenceEndRe.test(ch) && current.length >= 40) {
+      chunks.push(current);
+      current = '';
+      continue;
+    }
+
+    // 2. 软标点 + ≥ 130 字 → 切（次选）
+    if (softBreakRe.test(ch) && current.length >= 130) {
+      chunks.push(current);
+      current = '';
+      continue;
+    }
+
+    // 3. 空格 + ≥ 220 字 → 词边界切（保证不切词）
+    if (/\s/.test(ch) && current.length >= 220) {
+      chunks.push(current);
+      current = '';
+      continue;
+    }
+
+    // 4. 极长无空格无标点 ≥ 320 字 → 才允许硬切（罕见 case，e.g. URL/代码）
+    if (current.length >= 320) {
+      chunks.push(current);
       current = '';
     }
   }
@@ -118,7 +162,7 @@ function splitLongTranscript(text, beginTime, endTime) {
     }
 
     return {
-      text: chunk,
+      text: chunk.trim(),
       beginTime: segBegin,
       endTime: segEnd,
     };

@@ -23,6 +23,7 @@ import type { TranscriptSegment } from '@/types';
 import { extractChineseRuns, extractEnglishRuns } from '@/lib/services/translation/extract-english';
 import { useEnToZhTranslation, useTranslationMode, type TranslationMode } from '@/hooks/useEnToZhTranslation';
 import { buildLiveTranslationRows } from '@/lib/utils/live-translation-rows';
+import { stitchLiveSentences } from '@/lib/utils/stitch-live-sentences';
 import { cycleTranslationMode, resolveSessionTranslationMode } from './ClassroomRecordingView.model';
 
 // TranscriptFlowView 只在展开态用，且组件较重——code-split 一下，
@@ -123,7 +124,6 @@ function LiveTranscriptPanel({
     [segments, recentLines, interimText],
   );
   const translateEnabled = translationMode !== 'off';
-  const stableRowCount = rows.filter((row) => row.id !== 'live-interim').length;
   const hasDraftRow = rows.some((row) => row.id === 'live-interim');
   const activeDirection: Exclude<TranslationMode, 'off'> = translationMode === 'zh-en' ? 'zh-en' : 'en-zh';
   const { request, lookup } = useEnToZhTranslation(translateEnabled, activeDirection);
@@ -164,6 +164,26 @@ function LiveTranscriptPanel({
     request(terms);
   }, [request, terms, termsKey, translateEnabled]);
 
+  // M14.5.6: 把 ASR 物理切片缝合成自然句子流。
+  // 用户反馈：之前每段 row 独立 <p> 渲染，"look" + "s and..." 永远不愈合，
+  // 时间戳每 2 秒一块，对正在上课的学生是阅读灾难。
+  // stitchLiveSentences 做：词中切愈合 + 中文不加空格 + 句尾切句 + 长讲软标点 flush。
+  const stitchedSentences = useMemo(() => {
+    const inputs = rows.map((row) => {
+      const term = termsByRow.get(row.id)?.[0];
+      const translation = term && translateEnabled ? lookup(term) : undefined;
+      return {
+        id: row.id,
+        text: row.text,
+        startMs: row.startMs,
+        isInterim: row.id === 'live-interim',
+        translation,
+      };
+    });
+    return stitchLiveSentences(inputs);
+  }, [rows, termsByRow, translateEnabled, lookup]);
+  const stableSentenceCount = stitchedSentences.filter((s) => !s.isInterim).length;
+
   const updateJumpVisibility = useCallback(() => {
     const el = listRef.current;
     if (!el) return;
@@ -200,10 +220,10 @@ function LiveTranscriptPanel({
                 <p className="mt-0.5 text-[12px] text-ink-muted">
                   {hasDraftRow ? (
                     <span className="font-serif italic text-pine/85">正在听这一句…</span>
-                  ) : stableRowCount > 0 ? (
+                  ) : stableSentenceCount > 0 ? (
                     <span>
                       已记
-                      <span className="font-mono mx-1 tabular-nums text-pine font-medium">{stableRowCount}</span>
+                      <span className="font-mono mx-1 tabular-nums text-pine font-medium">{stableSentenceCount}</span>
                       句
                     </span>
                   ) : (
@@ -282,31 +302,34 @@ function LiveTranscriptPanel({
             </p>
           </div>
         ) : (
-          // M14.5.5: 改为连续流（不再每段独立卡片）。
-          // 用户反馈：之前每段独立 <article> 有 border + padding + bg 把连续讲话切成离散块，
-          // 单词被中间硬切（CSS 默认行为），观感"分散"。
+          // M14.5.6: 自然句流（stitch 后） —— 像看 YouTube 字幕，不像 ASR debug 日志。
           //
-          // 新设计：
-          //   - 整段 rows 渲染成单个 prose 流，自然换行不切单词（word-break: keep-all + overflow-wrap）
-          //   - 时间戳缩成 inline 灰色 chip（不占独立行），紧贴该句首
-          //   - 翻译用 italic 淡色斜体紧跟原句（不再独立卡片）
-          //   - interim 仍 italic + muted（"正在听"提示通过 caret 闪烁视觉传达，不占行）
+          // 之前的灾难（用户实测截图）：
+          //   - "look" + "s and..." 永远显示成两段，要在脑子里缝
+          //   - "a" + "bility" / "ev" + "eryone" 同上
+          //   - 每 2 秒一块时间戳 + 行间距，视觉跳跃严重
+          //
+          // 现在：
+          //   - stitchLiveSentences 在客户端把 rows 缝成句子（词中切愈合，中文不加空格）
+          //   - 每个 sentence 一行 <p>，时间戳只在句首给一次（淡灰小号 mono，不喧宾夺主）
+          //   - 翻译在句尾以斜体淡色形式跟随（— 译文）
+          //   - interim 单独 italic muted（"正在听这一句"的视觉提示）
           //   - 唯一自由度：向上滚动看历史；新内容追加底部
+          //
+          // 阅读手感对齐：iOS 实时听写 / Otter / YouTube 自动字幕。
           <div
-            className="space-y-1 leading-[1.85] text-[13px]"
-            style={{ wordBreak: 'keep-all', overflowWrap: 'break-word' }}
+            className="space-y-1.5 leading-[1.95] text-[13.5px]"
+            style={{ wordBreak: 'normal', overflowWrap: 'break-word' }}
           >
-            {rows.map((row, index) => {
-              const sourceTerm = termsByRow.get(row.id)?.[0];
-              const translated = sourceTerm ? lookup(sourceTerm) : undefined;
-              const isLatest = index === rows.length - 1;
-              const isDraft = row.id === 'live-interim';
+            {stitchedSentences.map((sentence, index) => {
+              const isLatest = index === stitchedSentences.length - 1;
+              const { isInterim } = sentence;
 
               return (
                 <p
-                  key={row.id}
+                  key={sentence.id}
                   className={`m-0 ${
-                    isDraft
+                    isInterim
                       ? 'text-ink-muted italic'
                       : isLatest
                         ? 'text-ink'
@@ -314,15 +337,15 @@ function LiveTranscriptPanel({
                   }`}
                 >
                   <span
-                    className="mr-1.5 inline-block align-baseline font-mono text-[10.5px] tabular-nums text-ink-muted/65"
+                    className="mr-1.5 inline-block align-baseline font-mono text-[10.5px] tabular-nums text-ink-muted/55"
                     style={{ verticalAlign: '0.05em' }}
                   >
-                    {formatTime(Math.floor(row.startMs / 1000))}
+                    {formatTime(Math.floor(sentence.startMs / 1000))}
                   </span>
-                  <span>{row.text}</span>
-                  {translateEnabled && translated && !isDraft ? (
-                    <span className="ml-1.5 inline italic text-ink-muted/85">
-                      — {translated}
+                  <span>{sentence.text}</span>
+                  {translateEnabled && sentence.translation && !isInterim ? (
+                    <span className="ml-1.5 inline italic text-ink-muted/80">
+                      — {sentence.translation}
                     </span>
                   ) : null}
                 </p>

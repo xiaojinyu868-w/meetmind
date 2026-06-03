@@ -36,7 +36,13 @@ export function buildLiveTranslationRows({
     .slice(-Math.max(1, maxFinalRows))
     .map((line) => ({
       id: line.id,
-      text: line.text.trim(),
+      // M14.5.6: 保留 ASR raw 的 trailing/leading space —— 这是区分
+      // "词边界" vs "词中切" 的关键信号。
+      //   "the standards of beauty " (词边界，带空格) + "are often..."  → 加空格连
+      //   "look" + "s and..." (词中切，没空格) → 无缝愈合成 "looks and..."
+      // 之前 .trim() 把这个信号抹掉，stitchLiveSentences 误判 "beauty"+"are"="beautyare"。
+      // 仅去掉换行/制表符，但保留普通空格。
+      text: line.text.replace(/[\n\r\t]+/g, ' '),
       startMs: Math.max(0, line.startMs),
     }));
 

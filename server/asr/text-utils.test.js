@@ -63,16 +63,33 @@ describe('shouldDedupSegment', () => {
 });
 
 describe('splitLongTranscript', () => {
-  it('returns single segment if text short', () => {
+  it('短句（≤ 200 字）原样返回，不切（绝大多数自然句）', () => {
     const r = splitLongTranscript('你好世界', 0, 1000);
     expect(r).toHaveLength(1);
     expect(r[0].text).toBe('你好世界');
   });
 
-  it('splits long text on punctuation', () => {
-    // 需要 >80 字才触发切分
-    const long = '今天我们学习了机器学习的基础知识和一些常见算法的使用场景。接下来我们讨论一下监督学习方法的具体案例。然后再看一下无监督学习里面聚类算法的例子。最后我们会简要介绍一下强化学习的基本原理和应用前景。';
-    expect(long.length).toBeGreaterThan(80);
+  it('100 字中文句不切（之前 80 字阈值会切，现在保留）', () => {
+    // 拼到约 70-90 字之间——之前阈值 80 会触发切，现在阈值 200 不会
+    const text =
+      '今天我们学习了机器学习的基础知识和一些常见算法的使用场景，' +
+      '包括监督学习的核心思想以及如何评估模型表现。' +
+      '接下来我们讨论了一下监督学习方法的具体案例。';
+    expect(text.length).toBeGreaterThan(60);
+    expect(text.length).toBeLessThan(200);
+    const r = splitLongTranscript(text, 0, 10000);
+    // 200 字以内不切（200 字以下，含逗号、句号都不该被分段）
+    expect(r).toHaveLength(1);
+    expect(r[0].text).toBe(text);
+  });
+
+  it('250+ 字超长中文按句号切，时间戳递增', () => {
+    const long =
+      '今天我们学习了机器学习的基础知识和一些常见算法的使用场景，包括监督学习的核心思想以及如何评估模型表现，模型评估常用的指标有准确率召回率F1分数等。' +
+      '接下来我们讨论了一下监督学习方法的具体案例，比如线性回归如何在房价预测里发挥作用，以及决策树的优劣对比和随机森林的提升思路。' +
+      '然后再看一下无监督学习里面聚类算法的例子，比如 K-Means 算法和层次聚类各自适用的场景以及如何选择合适的 K 值。' +
+      '最后我们简要介绍一下强化学习的基本原理和应用前景，包括 Q-learning 和策略梯度的入门概念。';
+    expect(long.length).toBeGreaterThan(200);
     const r = splitLongTranscript(long, 0, 10000);
     expect(r.length).toBeGreaterThan(1);
     // 时间戳严格递增
@@ -83,6 +100,41 @@ describe('splitLongTranscript', () => {
     expect(r[0].beginTime).toBe(0);
     // 末段结束于 endTime
     expect(r[r.length - 1].endTime).toBe(10000);
+    // 关键：所有非末段切点都在句号/软标点后
+    for (const seg of r.slice(0, -1)) {
+      const last = seg.text.replace(/\s+$/, '').slice(-1);
+      expect(['。', '！', '？', '!', '?', '，', ',', '；', ';']).toContain(last);
+    }
+  });
+
+  it('英文长句永不词中切（每段都以空格/标点为边界结尾）', () => {
+    // 英文长 transcript（无句号，纯连续讲话），看是否会切到词中
+    const long =
+      'See through popular culture, it is no longer only about looks and appearances. ' +
+      'The focus is shifting toward talent and ability, and the freedom to be yourself. ' +
+      'That makes me happy. Yeah, and I think in every society, the standards of beauty ' +
+      'are often set by others, and people end up looking the same, which is such a waste. ' +
+      'I think. Yeah, and I want to say everyone is unique and we should embrace ourselves.';
+    expect(long.length).toBeGreaterThan(200);
+    const r = splitLongTranscript(long, 0, 10000);
+    // 多段：保证每段最后一个字符不是字母（即不切词中）
+    for (const seg of r.slice(0, -1)) {
+      const lastChar = seg.text.replace(/\s+$/, '').slice(-1);
+      const isWordChar = /[A-Za-z]/.test(lastChar);
+      // 末尾应该是标点（句号/逗号/问号），不能是字母（字母 = 词中切证据）
+      expect(isWordChar).toBe(false);
+    }
+  });
+
+  it('词中切的 worst case 数据：之前 60 字硬切会切 "looks and appearances" 现在不再切', () => {
+    // 这是一段约 80 字的英文，落在 200 阈值内 → 完全不切
+    const text = 'See through popular culture, it is no longer only about looks and appearances.';
+    const r = splitLongTranscript(text, 0, 5000);
+    expect(r).toHaveLength(1);
+    expect(r[0].text).toBe(text);
+    // 强保障：完整 looks/ability/everyone 都还在
+    expect(r[0].text).toContain('looks');
+    expect(r[0].text).toContain('appearances');
   });
 });
 
