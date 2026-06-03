@@ -18,7 +18,11 @@ const DEFAULT_DEEPSEEK_BASE_URL = 'https://api.deepseek.com';
 const DEFAULT_STEPFUN_BASE_URL = 'https://api.stepfun.com/v1';
 const DEFAULT_STEPFUN_MODEL = 'step-3.7-flash';
 const DEFAULT_DEEPSEEK_MODEL = 'DeepSeek-V4-Flash';
-const DEFAULT_QWEN_MODEL = 'Qwen3.6-Plus-A';
+// M13: 阿里云 DashScope OpenAI 兼容模式的原生模型名。
+// 之前是 'Qwen3.6-Plus-A' (DXKP 中转站命名)，DashScope 原生不存在。
+// qwen3.7-plus 是阿里云百炼当前主力 thinking 模型，配合 enable_thinking=false 关闭推理后
+// 速度和稳定性都达标。完整列表见 https://bailian.console.aliyun.com/cn-beijing/?tab=model
+const DEFAULT_QWEN_MODEL = 'qwen3.7-plus';
 
 function pickKey(source: TutorAgentProviderConfig['keySource'], value: string | undefined) {
   const trimmed = value?.trim();
@@ -38,7 +42,7 @@ export function isQwenModel(modelId: string): boolean {
 }
 
 export function shouldUseNativeTutorTools(modelId: string): boolean {
-  // 不暴露 native tools 的两类模型：
+  // 不暴露 native tools 的三类模型：
   //
   // 1. **DeepSeek thinking 模型**：要求 provider-specific 的 reasoning_content
   //    在 tool call 之后回写；AI SDK 的 OpenAI-compatible adapter 不会 round-trip
@@ -49,8 +53,13 @@ export function shouldUseNativeTutorTools(modelId: string): boolean {
   //    （`<open_app:KEY/>` + 前端 `/api/apps/execute`）后，TTFT 显著下降，且复用
   //    了课堂同桌已经验证过的同一条产品链路。
   //
-  // 对这两类，结构化产物都走 `<open_app:KEY/>` marker，由前端拦截后开窗或嵌入。
-  return !isDeepSeekModel(modelId) && !isStepFunModel(modelId);
+  // 3. **Qwen3.x thinking 模型**（M13 加）：qwen3.7-plus 等是 thinking 模型，
+  //    虽然我们透传 enable_thinking=false 关闭了推理，但 tool call + 中文 +
+  //    thinking 模式三者的兼容性仍是黑盒（实测偶发首 chunk 丢失）。统一走 marker
+  //    链路，结构化产物自然落到 `<open_app:KEY/>` + /api/apps/execute。
+  //
+  // 对这三类，结构化产物都走 `<open_app:KEY/>` marker，由前端拦截后开窗或嵌入。
+  return !isDeepSeekModel(modelId) && !isStepFunModel(modelId) && !isQwenModel(modelId);
 }
 
 function isStepFunBaseUrl(baseURL: string): boolean {

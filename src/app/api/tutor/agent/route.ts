@@ -289,7 +289,29 @@ function createTutorAttemptStream({
         if (!provider.apiKey) continue;
 
         const { apiKey, baseURL, modelId } = provider;
-        const openai = createOpenAI({ apiKey, baseURL });
+        // M13: qwen3.x-plus / qwen3-* 是 thinking/reasoning 模型，默认会输出大量
+        // reasoning_content（一次回复 200-300 reasoning tokens 拖慢 TTFT 5-10s）。
+        // 透传 enable_thinking=false 关闭推理，让它当普通快速对话模型用。
+        // AI SDK 的 createOpenAI 不暴露透传非标 OpenAI 字段的 API，只能 fetch hook 注入。
+        const isQwenThinkingModel = /^qwen3?\.?(\d+)?[-.]?plus/i.test(modelId) || /^qwen3/i.test(modelId);
+        const openaiOptions: Parameters<typeof createOpenAI>[0] = { apiKey, baseURL };
+        if (isQwenThinkingModel) {
+          openaiOptions.fetch = async (url, init) => {
+            if (init?.body && typeof init.body === 'string') {
+              try {
+                const body = JSON.parse(init.body);
+                if (body.enable_thinking === undefined) {
+                  body.enable_thinking = false;
+                  init = { ...init, body: JSON.stringify(body) };
+                }
+              } catch {
+                /* keep init.body as-is */
+              }
+            }
+            return fetch(url, init);
+          };
+        }
+        const openai = createOpenAI(openaiOptions);
         const model = openai.chat(modelId);
         // 分享态禁用 native tools —— 工具会去查 transcript / sessionId，
         // 但分享态学生没有这些，且会泄露原作者上下文。

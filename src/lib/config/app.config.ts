@@ -72,50 +72,14 @@ const deepseekModels: ModelConfig[] = [
 
 const qwenModels: ModelConfig[] = [
   {
-    id: 'Qwen3.6-Plus-A',
-    name: '通义千问 3.6 Plus A',
+    id: 'qwen3.7-plus',
+    name: '通义千问 3.7 Plus',
     provider: 'qwen',
-    description: 'DXKP 平台上的 Qwen 3.6 主力模型，适合课堂问答、整理与常规学习应用',
+    description: '阿里云百炼 qwen3.7-plus，主对话模型（透传 enable_thinking=false 关闭推理，速度对齐普通 Plus；启用前请先在百炼控制台开通）',
     maxTokens: 8192,
-    supportsMultimodal: true,
-    enableThinking: false,
-  },
-  {
-    id: 'Qwen3.5-397B-A17B-Pro',
-    name: '通义千问 3.5 397B Pro',
-    provider: 'qwen',
-    description: '更强的推理与写作能力，支持 thinking 模式，适合复杂说明与结构化产物',
-    maxTokens: 32768,
-    supportsMultimodal: true,
-    enableThinking: true,
-  },
-  {
-    id: 'Qwen3-VL-235B-A22B-Instruct-A',
-    name: '通义千问 3 VL 235B',
-    provider: 'qwen',
-    description: 'DXKP 平台上的 Qwen 多模态视觉模型，支持图片理解',
-    maxTokens: 8192,
-    supportsMultimodal: true,
-  },
-  {
-    id: 'qwen3.5-omni-plus',
-    name: '通义千问 3.5 Omni',
-    provider: 'qwen',
-    description: '全模态模型，支持文本、图片、音频输入；当前仅保留给 realtime 语音 fallback',
-    maxTokens: 8192,
-    supportsMultimodal: true,
-    supportsAudioInput: true,
-    requiresStreaming: true,
-  },
-  {
-    id: 'Qwen3-Max-A',
-    name: '通义千问 3 Max A',
-    provider: 'qwen',
-    description: '思考模式，支持联网搜索和代码解释器，适合复杂推理与 Agent 行为',
-    maxTokens: 32768,
     supportsMultimodal: false,
-    enableThinking: true,
-    supportsBuiltinTools: true,
+    enableThinking: false,
+    recommended: true,
   },
 ];
 
@@ -159,20 +123,18 @@ const resolvedDefaultModel =
   (envDefaultModel && resolvedModels.some((model) => model.id === envDefaultModel)
     ? envDefaultModel
     : undefined) ||
+  resolvedModels.find((model) => model.id === 'qwen3.7-plus')?.id ||
   resolvedModels.find((model) => model.id === 'DeepSeek-V4-Flash')?.id ||
   resolvedModels.find((model) => model.id === 'DeepSeek-V4-Pro')?.id ||
-  resolvedModels.find((model) => model.id === 'Qwen3.6-Plus-A')?.id ||
-  resolvedModels.find((model) => model.id === 'Qwen3.5-397B-A17B-Pro')?.id ||
-  resolvedModels.find((model) => model.id === 'Qwen3-VL-235B-A22B-Instruct-A')?.id ||
   resolvedModels.find((model) => model.id === 'step-3.7-flash')?.id ||
   resolvedModels.find((model) => model.supportsMultimodal)?.id ||
   resolvedModels[0]?.id ||
-  'DeepSeek-V4-Flash';
+  'qwen3.7-plus';
 const resolvedDefaultVisionModel =
-  resolvedModels.find((model) => model.id === 'Qwen3-VL-235B-A22B-Instruct-A')?.id ||
+  resolvedModels.find((model) => model.id === 'qwen3.7-plus')?.id ||
   resolvedModels.find((model) => model.supportsMultimodal)?.id ||
   resolvedModels[0]?.id ||
-  'Qwen3-VL-235B-A22B-Instruct-A';
+  'qwen3.7-plus';
 
 // ==================== LLM 配置 ====================
 
