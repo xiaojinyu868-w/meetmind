@@ -32,22 +32,31 @@
  */
 
 import React from 'react';
-import { Radio } from 'lucide-react';
+import {
+  Radio,
+  ArrowUp,
+  Paperclip,
+  Trash2,
+  FileText,
+  Image as ImageIcon,
+  RefreshCw,
+  Square,
+} from 'lucide-react';
 import { toast } from 'sonner';
 import type { CompanionMessage, CompanionCard } from './types';
 import { OctoBuddySprite } from './OctoBuddy';
 import { ThinkingStrip } from '@/components/ui/thinking-strip';
 import { InlineAppCard, type InlineAppInteraction } from './InlineAppCard';
 import { SkillChipRow } from '@/components/tutor/SkillChipRow';
+import { VoiceMicButton } from '@/components/VoiceMicButton';
 import type { WorkshopAppKey } from '@/lib/ai-native/app-catalog';
 import { COPY } from '@/lib/ui/copy';
 import { IN_CLASS_PENDING_REPLY_LABEL } from '@/lib/utils/classroom-companion-copy';
 import { buildClassroomCompanionPanelModel } from './ClassroomCompanionPanel.model';
-// M14.5：完全用底座 ChatComposer + useChatFileUpload + useChatComposer
-//        课堂同桌自动获得：图片上传 / 拖拽 / 粘贴 / 流式中断 / 麦克风 / 上传重试 / 离线检测 / 大段粘贴
+// M14.5：紧凑外观 + 内部接底座 hooks（useChatComposer + useChatFileUpload）
+//        课堂窄栏不直接套 ChatComposer 容器（视觉过重），但内部全部能力共享底座
 import {
   ChatRenderer,
-  ChatComposer,
   useChatComposer,
   useChatFileUpload,
 } from '@/components/chat';
@@ -567,12 +576,18 @@ export function ClassroomCompanionPanel({
 }
 
 /**
- * M14.5: 课堂同桌输入条 adapter——把底座 ChatComposer 包成业务接口。
- * 内部组合 useChatComposer + useChatFileUpload + ChatComposer。
+ * M14.5 修订: 课堂同桌输入条 adapter
  *
- * adapter 比"内联到主函数"好的两点：
- *   1. 主函数不需要直接处理 hooks 与文件上传细节
- *   2. ClassroomChipRow 通过 topSlot 注入，仅 listening 态显示
+ * 用户实测反馈：直接套 ChatComposer（主对话面板用的）在课堂窄栏出现左右白条 + 视觉过重。
+ * 修法：复刻原 CompanionComposer 紧凑外观（圆形 ArrowUp + textarea 内嵌按钮），
+ *      但内部接底座 hooks 获得"图片上传 / 拖拽 / 粘贴 / 麦克风 / 流式中断 / 离线检测 / 大段粘贴"。
+ *
+ * 设计：
+ *   - 容器：无 max-w-2xl 居中（之前白条根因），px-5 直接贴右栏边
+ *   - textarea：圆角矩形容器，textarea 占据上半，下半左下角嵌入 paperclip 14px 小图标 + 麦克风
+ *     右下角嵌入 圆形 ArrowUp 32×32 发送按钮（busy 时变成方形"停一下"）
+ *   - 附件 chip：仅有附件 / 上传中 / 错误时**才**渲染（不预留空位）
+ *   - 整体高度 < ChatComposer，视觉权重轻
  */
 function ClassroomCompanionComposerAdapter({
   mode,
@@ -595,11 +610,12 @@ function ClassroomCompanionComposerAdapter({
   streamingMessage: CompanionMessage | null;
   isThinking: boolean;
 }) {
-  const composerRef = React.useRef<HTMLFormElement>(null);
+  const formRef = React.useRef<HTMLFormElement>(null);
+  const fileInputRef = React.useRef<HTMLInputElement>(null);
 
-  // 底座文件上传 —— 拖拽 / 粘贴 / 点击三入口统一
+  // 底座文件上传 —— 拖拽 / 粘贴 / 点击三入口
   const fileUpload = useChatFileUpload({
-    targetRef: composerRef,
+    targetRef: formRef,
   });
 
   // 提交时把 attachedFiles → supportMaterials 透传给上层 onSend，并清空附件
@@ -632,39 +648,67 @@ function ClassroomCompanionComposerAdapter({
     onSubmit: handleSubmitText,
     onLargePaste: handleLargePaste,
   });
+  const textareaRef = composer.textareaProps.ref;
 
-  // 麦克风识别后回填到 textarea
-  const handleVoiceTranscript = React.useCallback(
-    (text: string) => {
-      if (!text.trim()) return;
-      composer.setValue(composer.value ? `${composer.value} ${text}` : text);
-    },
-    [composer],
-  );
+  // ⌘K / Ctrl+K / "/" 全局快捷键聚焦 textarea
+  React.useEffect(() => {
+    const onKeydown = (e: KeyboardEvent) => {
+      const tag = (e.target as HTMLElement | null)?.tagName;
+      const activeIsInput = tag === 'INPUT' || tag === 'TEXTAREA';
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault();
+        textareaRef.current?.focus();
+        return;
+      }
+      if (!activeIsInput && e.key === '/' && !e.metaKey && !e.ctrlKey && !e.altKey) {
+        e.preventDefault();
+        textareaRef.current?.focus();
+      }
+    };
+    window.addEventListener('keydown', onKeydown);
+    return () => window.removeEventListener('keydown', onKeydown);
+  }, [textareaRef]);
 
   const busy = Boolean(streamingMessage) || isThinking;
+  const canSend = composer.value.trim().length > 0 || fileUpload.attachedFiles.length > 0;
+  const isOnline = typeof navigator === 'undefined' ? true : navigator.onLine !== false;
+
+  const showAttachmentRow =
+    fileUpload.attachedFiles.length > 0 || fileUpload.busy || Boolean(fileUpload.error);
 
   return (
-    <ChatComposer
-      containerRef={composerRef}
-      textareaProps={composer.textareaProps}
-      onSubmit={composer.submit}
-      busy={busy}
-      attachedFiles={fileUpload.attachedFiles}
-      onAddFiles={fileUpload.addFiles}
-      onRemoveFile={fileUpload.removeFile}
-      uploadBusy={fileUpload.busy}
-      uploadError={fileUpload.error}
-      onRetryUpload={fileUpload.retryLast}
-      isDragging={fileUpload.isDragging}
-      onVoiceTranscript={handleVoiceTranscript}
-      capabilities={{ mic: true, file: true, globalShortcut: true }}
-      placeholder={placeholder}
-      busyPlaceholder="同学正在补一句…"
-      statusLabel={statusLabel}
-      variant="paper"
-      topSlot={
-        mode === 'listening' ? (
+    <form
+      ref={formRef}
+      onSubmit={(e) => {
+        e.preventDefault();
+        composer.submit();
+      }}
+      className="relative flex-shrink-0 border-t border-divider px-5 pb-5 pt-4"
+    >
+      {/* 拖拽 overlay */}
+      {fileUpload.isDragging ? (
+        <div className="pointer-events-none absolute inset-3 z-10 flex items-center justify-center rounded-2xl border-2 border-dashed border-pine/50 bg-pine/5 backdrop-blur-sm">
+          <span className="rounded-full bg-white px-3 py-1 text-[12px] font-medium text-pine shadow-soft">
+            松开以添加图片
+          </span>
+        </div>
+      ) : null}
+
+      {/* 状态行（busy 提示） */}
+      {statusLabel ? (
+        <div
+          className="mb-2 flex items-center gap-2 px-1 text-[12px] text-ink-muted"
+          role="status"
+          aria-live="polite"
+        >
+          <span className="h-1.5 w-1.5 animate-[fadeIn_900ms_ease-in-out_infinite] rounded-full bg-ink-muted" />
+          <span>{statusLabel}</span>
+        </div>
+      ) : null}
+
+      {/* 稳定 + 动态 chip 行（只在 listening 态显示） */}
+      {mode === 'listening' ? (
+        <div className="mb-2">
           <ClassroomChipRow
             onPickStable={(kind, utterance) => {
               if (kind === 'mark-moment') {
@@ -677,9 +721,126 @@ function ClassroomCompanionComposerAdapter({
             onPickDynamic={(chip) => handleSubmitText(chip.text)}
             disabled={busy}
           />
-        ) : undefined
-      }
-    />
+        </div>
+      ) : null}
+
+      {/* 附件 chip 行（仅有附件 / 上传中 / 错误时） */}
+      {showAttachmentRow ? (
+        <div className="mb-2 flex flex-wrap items-center gap-1.5">
+          {fileUpload.attachedFiles.map((f) => (
+            <span
+              key={f.id}
+              className="inline-flex items-center gap-1 rounded-full border border-divider bg-white px-2 py-0.5 text-[11px] text-ink-secondary"
+            >
+              {f.kind === 'image' ? (
+                <ImageIcon size={10} strokeWidth={1.8} />
+              ) : (
+                <FileText size={10} strokeWidth={1.8} />
+              )}
+              <span className="max-w-[140px] truncate">{f.title}</span>
+              <button
+                type="button"
+                onClick={() => fileUpload.removeFile(f.id)}
+                aria-label="移除"
+                className="ml-0.5 text-ink-muted hover:text-ink"
+              >
+                <Trash2 size={10} strokeWidth={1.8} />
+              </button>
+            </span>
+          ))}
+          {fileUpload.busy ? (
+            <span className="inline-flex items-center gap-1 text-[11px] text-ink-muted">
+              <span className="h-1 w-1 animate-pulse rounded-full bg-pine" />
+              解析中…
+            </span>
+          ) : null}
+          {fileUpload.error ? (
+            <span className="inline-flex items-center gap-1.5 text-[11px] text-vermilion">
+              <span className="truncate max-w-[200px]">{fileUpload.error}</span>
+              <button
+                type="button"
+                onClick={() => void fileUpload.retryLast()}
+                className="inline-flex items-center gap-0.5 rounded bg-paper-warm px-1.5 py-0.5 text-ink-secondary hover:text-ink"
+              >
+                <RefreshCw size={9} strokeWidth={2} />
+                重试
+              </button>
+            </span>
+          ) : null}
+        </div>
+      ) : null}
+
+      {/* textarea 容器 + 内嵌按钮 */}
+      <div className="rounded-3xl border border-divider bg-white transition-colors focus-within:border-ink-muted">
+        <textarea
+          {...composer.textareaProps}
+          disabled={composer.textareaProps.disabled || !isOnline}
+          placeholder={!isOnline ? '无网络——回来再发' : (busy ? '同学正在补一句…' : placeholder)}
+          rows={1}
+          className="block w-full resize-none bg-transparent px-5 pt-4 pb-1 text-[14px] leading-[1.7] text-ink placeholder:text-ink-muted/70 focus:outline-none"
+          style={{ outline: 'none', border: 'none', boxShadow: 'none', maxHeight: 160 }}
+        />
+        {/* 底部按钮行：左 paperclip + 右 麦克风 + 发送 */}
+        <div className="flex items-center justify-between px-2.5 pb-2">
+          <div className="flex items-center gap-0.5">
+            {/* 紧凑型 paperclip 按钮（24×24，不像底座 ChatComposer 占 40×40） */}
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={fileUpload.busy}
+              className="inline-flex h-7 w-7 items-center justify-center rounded-lg text-ink-muted transition-colors hover:bg-paper-warm hover:text-ink-secondary disabled:opacity-40"
+              aria-label="上传图片或文件（也可拖入或粘贴）"
+              title="上传图片 · 拖入 · 粘贴皆可"
+            >
+              <Paperclip size={14} strokeWidth={1.8} />
+            </button>
+            <input
+              ref={fileInputRef}
+              type="file"
+              multiple
+              accept="image/*,.pdf,.docx,.txt,.md,.ppt,.pptx"
+              className="hidden"
+              onChange={(e) => fileUpload.onInputChange(e)}
+            />
+          </div>
+          <div className="flex items-center gap-1">
+            <VoiceMicButton
+              onTranscript={(text) => {
+                if (!text.trim()) return;
+                composer.setValue(composer.value ? `${composer.value} ${text}` : text);
+              }}
+              disabled={busy || !isOnline}
+              size="sm"
+            />
+            {busy ? (
+              <button
+                type="button"
+                onClick={() => onSend('__stop__')}
+                title="停一下"
+                aria-label="停一下"
+                className="inline-flex h-8 items-center gap-1 rounded-full border border-divider bg-white px-3 text-[12px] text-ink-secondary transition-colors hover:bg-paper-warm"
+              >
+                <Square size={11} strokeWidth={2} />
+                <span>停</span>
+              </button>
+            ) : (
+              <button
+                type="submit"
+                disabled={!canSend || !isOnline}
+                aria-label="发送"
+                className={`flex h-8 w-8 items-center justify-center rounded-xl transition-all ${
+                  canSend && isOnline
+                    ? 'bg-ink text-white hover:opacity-80 active:scale-95'
+                    : 'cursor-not-allowed bg-divider-light text-ink-muted/50'
+                }`}
+              >
+                <ArrowUp size={15} strokeWidth={2} />
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
+    </form>
   );
 }
 

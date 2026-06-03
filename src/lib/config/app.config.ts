@@ -75,9 +75,11 @@ const qwenModels: ModelConfig[] = [
     id: 'qwen3.7-plus',
     name: '通义千问 3.7 Plus',
     provider: 'qwen',
-    description: '阿里云百炼 qwen3.7-plus，主对话模型（透传 enable_thinking=false 关闭推理，速度对齐普通 Plus；启用前请先在百炼控制台开通）',
+    description: '阿里云百炼 qwen3.7-plus，主对话模型（透传 enable_thinking=false 关闭推理，速度对齐普通 Plus；启用前请先在百炼控制台开通）。支持图片输入。',
     maxTokens: 8192,
-    supportsMultimodal: false,
+    // M14.5: qwen3.7-plus 在百炼是多模态模型（OpenAI 兼容接口接受 image_url 内容）
+    // 之前误标 false 导致 /api/sources/ingest-image 报"当前没有可用的多模态模型"
+    supportsMultimodal: true,
     enableThinking: false,
     recommended: true,
   },
