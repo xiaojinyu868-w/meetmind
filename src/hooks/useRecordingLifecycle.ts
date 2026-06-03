@@ -16,6 +16,7 @@ import {
 import { classroomDataService } from '@/lib/services/classroom-data-service';
 import { memoryService } from '@/lib/services/memory-service';
 import { anchorService, type Anchor } from '@/lib/services/anchor-service';
+import { uploadRecordingAudio } from '@/lib/services/upload-recording-audio';
 import { resolveLiveRecordingAppendOffset } from '@/lib/capture/live-recording';
 import {
   mergeWorkspaceCaptures,
@@ -416,7 +417,37 @@ export function useRecordingLifecycle(
             })),
           },
         });
-      } else {
+      }
+
+      // 档位2（跨设备带走音频）：后台把 blob 上传到服务端持久化，拿到真实 URL，
+      // 再把 capture.mediaUrl 从临时 blob: URL 换成真实 URL → 任何设备登录都能播放，
+      // 后台也能看到/兜底转写。静默执行，失败不打扰（本地音频仍在）。
+      if (isAuthenticated && accessToken) {
+        void uploadRecordingAudio({
+          blob,
+          sessionId: effectiveSessionId,
+          authToken: accessToken,
+          onUploaded: (realMediaUrl) => {
+            void persistCaptureToWorkspace({
+              sourceType: 'live-audio',
+              sourceKey: `live:${audioCaptureId}`,
+              role: 'primary',
+              contentType: 'audio',
+              title: recordingTitle,
+              mediaUrl: realMediaUrl,
+              occurredAt: new Date().toISOString(),
+              metadata: {
+                from: 'live-recording',
+                sessionId: effectiveSessionId,
+                duration,
+                audioUploaded: true,
+              },
+            });
+          },
+        }).catch(() => undefined);
+      }
+
+      if (finalSegments.length === 0) {
         pendingRecordedAudiosRef.current.set(recordingId, {
           recordingId,
           itemId: audioCaptureId,

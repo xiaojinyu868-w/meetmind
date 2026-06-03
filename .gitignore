@@ -72,6 +72,9 @@ screenlog.0
 # 微信媒体缓存（运行时产生）
 public/wechat-media/
 
+# 跨设备录音音频持久化（运行时产生，用户数据不入库）
+public/uploads/
+
 # 一次性修复脚本
 scripts/fix_aitutor.py
 
