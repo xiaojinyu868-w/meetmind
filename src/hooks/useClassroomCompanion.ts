@@ -794,13 +794,26 @@ export function useClassroomCompanion(
         });
         return;
       }
-      const errMsg = err instanceof Error ? err.message : '我这边网络好像不太好';
+      const rawErrMsg = err instanceof Error ? err.message : '我这边网络好像不太好';
+      // M14.5.3: 错误清洁——nginx 500 HTML / 长 stack 不能直接渲染进气泡
+      const errMsg = (() => {
+        const trimmed = String(rawErrMsg).trim();
+        if (!trimmed) return '网络不太好';
+        if (
+          /<\/?(?:html|head|body|center|h1|hr|title)\b/i.test(trimmed) ||
+          /Internal Server Error|Bad Gateway|Service Unavailable/i.test(trimmed) ||
+          trimmed.length > 80
+        ) {
+          return '网络好像不通';
+        }
+        return trimmed;
+      })();
       setMessages((prev) => [
         ...prev,
         {
           id: streamId,
           role: 'companion',
-          content: `我这边没接上（${errMsg.slice(0, 60)}），待会儿再问我一次？`,
+          content: `我这边没接上（${errMsg}），待会儿再问我一次？`,
           createdAt: Date.now(),
         },
       ]);

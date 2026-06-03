@@ -175,12 +175,20 @@ ${trimmed}`;
 
       return NextResponse.json({ tree });
     } catch (llmError) {
-      log.warn('[mindmap] LLM error, returning prior or empty', llmError);
+      // M14.5.3: 之前只 log "LLM error" 不带详情，无法定位真因。
+      // 现在打印实际错误信息（status / message / stack 头几行）让根因暴露
+      const errInfo = llmError instanceof Error
+        ? { name: llmError.name, message: llmError.message.slice(0, 200), stack: llmError.stack?.split('\n')[0] }
+        : { raw: String(llmError).slice(0, 200) };
+      log.warn('[mindmap] LLM error', errInfo);
+      // 返回上一棵树是为了不打断 UI 闪烁——但这是**渲染层的 graceful**，不是产品层的 fallback。
+      // 真正的失败定位靠上面的详细日志。
       if (priorTree && priorTree.nodes.length > 0) {
-        return NextResponse.json({ tree: priorTree });
+        return NextResponse.json({ tree: priorTree, _llmError: errInfo });
       }
       return NextResponse.json({
         tree: { title: lessonTitle || '', nodes: [] } satisfies MindMapTree,
+        _llmError: errInfo,
       });
     }
   } catch (error) {

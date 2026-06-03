@@ -171,6 +171,34 @@ function collectMessageText(message: { parts?: unknown; content?: string }): str
   return collectChatMessageText(message as { parts?: unknown; content?: string });
 }
 
+/**
+ * M14.5.3: 错误信息清洁——服务端 500 / nginx 502 / 反代失败时上游会返回 HTML body，
+ * AI SDK 把整段 HTML 灌进 error.message，直接渲染会污染气泡（用户看到一坨 <html><head>...）。
+ *
+ * 检测：
+ *   - 含 <html / <head / <body / 500 Internal Server Error 字样 → 视为 HTML 错误页
+ *   - 长度 > 200 → 视为非用户面文案（多半是 stack trace 或上游响应）
+ *   → 兜底成"网络好像不通，先稍等一下再试"
+ *   - 空 / undefined → "未知错误"
+ *   - 正常字符串 → 原样显示（截断 160 字以内）
+ *
+ * 这不是 fallback——这是错误**展示**的清洁。失败本身仍然在 console / 服务端日志里清楚记录。
+ */
+function sanitizeUserFacingError(raw: string | undefined | null): string {
+  if (!raw || typeof raw !== 'string') return '未知错误';
+  const trimmed = raw.trim();
+  if (!trimmed) return '未知错误';
+  // HTML 错误页 / 长 stack trace
+  if (
+    /<\/?(?:html|head|body|center|h1|hr|title)\b/i.test(trimmed) ||
+    /Internal Server Error|Bad Gateway|Service Unavailable/i.test(trimmed) ||
+    trimmed.length > 200
+  ) {
+    return '网络好像不通，先稍等一下再试';
+  }
+  return trimmed;
+}
+
 export function TutorAgentPanel({
   sessionId,
   transcript,
@@ -811,7 +839,10 @@ export function TutorAgentPanel({
 
         {error ? (
           <div className="rounded-2xl border border-divider bg-canvas px-4 py-3 text-[13px] leading-relaxed text-ink-secondary">
-            刚刚没接住：{error.message ?? '未知错误'}
+            {/* M14.5.3 BUG FIX: 服务端 500 / nginx 502 等会返回 HTML body，
+                 AI SDK 把整段 HTML 灌进 error.message 直接渲染会污染气泡。
+                 用 sanitizeUserFacingError 检测并兜底成友好文案 */}
+            刚刚没接住：{sanitizeUserFacingError(error.message)}
             <button
               type="button"
               onClick={handleRegenerateLast}
