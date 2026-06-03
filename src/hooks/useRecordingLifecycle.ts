@@ -402,7 +402,18 @@ export function useRecordingLifecycle(
             from: 'live-recording',
             sessionId: effectiveSessionId,
             duration,
+            durationSec: Math.round(duration / 1000),
             segmentCount: finalSegments.length,
+            // 档位1（跨设备带走数据）：把完整转录段同步到服务端 capture metadata。
+            // 之前只存 segmentCount，换设备登录拿不到转录文字——课堂 tab 看到卡片却点不出内容。
+            // 现在塞 transcriptSegments（与视频导入/pending-audio 路径一致），登录回填即可重建。
+            // 上限 800 段：新版按句切分后单段更大（一句一段），800 段 ≈ 2-3 小时课，足够覆盖。
+            transcriptSegments: finalSegments.slice(0, 800).map((s) => ({
+              id: s.id,
+              text: s.text,
+              startMs: s.startMs,
+              endMs: s.endMs,
+            })),
           },
         });
       } else {

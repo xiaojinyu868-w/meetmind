@@ -25,6 +25,7 @@ import {
   mergeWechatWorkspaceCapturesIntoSourceItems,
   readJsonApiResponse,
 } from '@/lib/utils/page-utils';
+import { backfillCapturesToIndexedDB } from '@/lib/services/backfill-captures-to-indexeddb';
 import type { WorkspaceCaptureMessage, WorkspaceEchoMessage, SupportReferenceItem } from '@/types/page-types';
 
 // ── Deps interface ──
@@ -99,6 +100,19 @@ export function useWorkspaceContextLoader(
         const echoes = Array.isArray(payload.echoes) ? payload.echoes : [];
 
         if (captures.length > 0) {
+          // 档位1（跨设备带走数据）：把 capture 里的转录段回填到 IndexedDB，
+          // 让「课堂 tab」也能显示在另一台设备录的课 + 完整转录（不只是材料 feed）。
+          // 幂等 + 不覆盖本地已有转录；音频 blob 仍在原设备（档位2 上云后才跨设备可播）。
+          if (user?.id) {
+            void backfillCapturesToIndexedDB(captures, user.id)
+              .then((r) => {
+                if (r.backfilled > 0) {
+                  // eslint-disable-next-line no-console
+                  console.info('[workspace] backfilled captures to IndexedDB:', r);
+                }
+              })
+              .catch(() => undefined);
+          }
           useEchoStore.getState().actions.setWorkspaceCaptures((prev) => mergeWorkspaceCaptures(prev, captures));
           useCollectionStore.getState().actions.setSourceItems((prev) => {
             const existingIds = new Set(prev.map((item) => item.id));
