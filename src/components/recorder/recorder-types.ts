@@ -63,5 +63,5 @@ export const DEDUP_SIMILARITY = Number(process.env.NEXT_PUBLIC_ASR_DEDUP_SIMILAR
 export const DEDUP_GAP_MS = Number(process.env.NEXT_PUBLIC_ASR_DEDUP_GAP_MS || 1500);
 // AEC/NS/AGC 开关已中心化到 src/lib/services/asr/audio-constraints.ts（M5/M6）。
 // Recorder / OmniRealtimeCall 都走 buildAudioConstraints()，避免散落。
-export const CORRECTION_MODEL = process.env.NEXT_PUBLIC_TRANSCRIPT_LIGHT_MODEL || 'qwen3.5-plus';
-export const CORRECTION_FALLBACK_MODEL = process.env.NEXT_PUBLIC_TRANSCRIPT_FALLBACK_MODEL || 'qwen3.5-plus';
+export const CORRECTION_MODEL = process.env.NEXT_PUBLIC_TRANSCRIPT_LIGHT_MODEL || 'qwen3.7-plus';
+export const CORRECTION_FALLBACK_MODEL = process.env.NEXT_PUBLIC_TRANSCRIPT_FALLBACK_MODEL || 'qwen3.7-plus';

@@ -49,7 +49,7 @@ export async function POST(request: NextRequest) {
     const { terms } = parsed.data;
     const userPrompt = `请翻译下列 ${terms.length} 个片段：\n${JSON.stringify(terms)}`;
 
-    const model = process.env.TRANSLATION_MODEL || 'qwen3.5-plus';
+    const model = process.env.TRANSLATION_MODEL || 'qwen3.7-plus';
     const resp = await chat(
       [
         { role: 'system', content: SYSTEM_PROMPT },

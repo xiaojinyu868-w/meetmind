@@ -16,7 +16,7 @@ const log = createLogger('classroom/foresight');
  *   这个概念和前面哪个容易混"，结果以"预知气泡"形式放在消息流侧边。
  *   用户不看就当不存在，用户一瞥到觉得有用就点一下顺着问下去。
  *
- * 模型：qwen3.5-plus —— 追求低延迟，不开 thinking。
+ * 模型：qwen3.7-plus —— 追求低延迟，不开 thinking。
  *
  * 入参：
  *   recentText：最近一段转录（拼好的字符串，通常 300-800 字）
@@ -87,7 +87,7 @@ ${priorBlock ? priorBlock.trim() + '\n\n' : ''}技术要求（前端会按 JSON 
           { role: 'system', content: systemPrompt },
           { role: 'user', content: userMsg },
         ],
-        'qwen3.5-plus',
+        'qwen3.7-plus',
         { temperature: 0.7, maxTokens: 240, responseFormat: 'json_object' },
       );
 

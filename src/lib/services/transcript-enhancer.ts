@@ -43,8 +43,8 @@ export interface EnhanceRequestOptions {
   recentContext?: string;
 }
 
-const DEFAULT_MODEL = 'qwen3.5-plus';
-const DEFAULT_FALLBACK_MODEL = 'qwen3.5-plus';
+const DEFAULT_MODEL = 'qwen3.7-plus';
+const DEFAULT_FALLBACK_MODEL = 'qwen3.7-plus';
 const DEFAULT_STRATEGY: CorrectionStrategy = 'layered';
 let hasSeededLexicon = false;
 

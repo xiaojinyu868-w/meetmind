@@ -1,7 +1,7 @@
 /**
  * ASR LLM 后校对（M5 T5.2）
  *
- * 策略：对"低置信片段"才调 qwen3.5-plus 复核（性价比 + 效果平衡，max 按需切）。
+ * 策略：对"低置信片段"才调 qwen3.7-plus 复核（性价比 + 效果平衡，max 按需切）。
  *   1. 按 confidence 阈值筛选；confidence 缺失时按文本特征启发式判断
  *   2. 单次调用只复核 ≤ 10 条，避免 prompt 超长
  *   3. 返回的"高置信纠正"才接受（LLM 给出 {original, corrected, confidence}）
@@ -125,7 +125,7 @@ export async function postEditSegments(
   if (needsReview.length === 0) return baseResult;
 
   const baseURL = opts.baseURL ?? 'https://dashscope.aliyuncs.com/compatible-mode/v1';
-  const model = opts.model ?? 'qwen3.5-plus';
+  const model = opts.model ?? 'qwen3.7-plus';
 
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), opts.timeoutMs ?? 20000);
@@ -156,7 +156,7 @@ export async function postEditSegments(
 
     const json = (await resp.json()) as { choices?: Array<{ message?: { content?: string } }> };
     const content = json.choices?.[0]?.message?.content ?? '';
-    // qwen3.5-plus with response_format=json_object 返回的是一个 object，
+    // qwen3.7-plus with response_format=json_object 返回的是一个 object，
     // 里面的 array 通常在某个字段下；我们尝试几种形态
     let arr: unknown = null;
     try {

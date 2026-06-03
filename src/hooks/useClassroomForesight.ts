@@ -16,7 +16,7 @@
  *   - 最近转录文本至少比上次多 150 字才触发
  *   - 同时最多有 3 条可见气泡，超出时最老的一条自动让位
  *
- * 后端：/api/classroom/foresight（qwen3.5-plus）
+ * 后端：/api/classroom/foresight（qwen3.7-plus）
  */
 
 'use client';

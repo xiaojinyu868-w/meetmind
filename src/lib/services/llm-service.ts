@@ -304,7 +304,7 @@ async function callDeepSeek(
 /**
  * 调用通义千问 API (OpenAI 兼容格式)
  * 支持多模态：qwen3-vl-plus-2025-12-19
- * 支持思考模式：qwen3.5-plus, qwen3-max-2026-01-23
+ * 支持思考模式：qwen3.7-plus, qwen3-max-2026-01-23
  */
 async function callQwen(
   messages: ChatMessage[],

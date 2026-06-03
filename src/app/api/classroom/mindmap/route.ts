@@ -17,7 +17,7 @@ const log = createLogger('classroom/mindmap');
  *
  *   前端每 ~45s 调一次，或命中主题切换词时追加。
  *
- * 模型：qwen3.5-plus
+ * 模型：qwen3.7-plus
  *   又快又好又便宜。一次直接返回完整树，比快慢双模型架构简单可靠。
  *
  * 入参：
@@ -163,7 +163,7 @@ ${trimmed}`;
           { role: 'system', content: systemPrompt },
           { role: 'user', content: userMsg },
         ],
-        'qwen3.5-plus',
+        'qwen3.7-plus',
         { temperature: 0.3, maxTokens: 900, responseFormat: 'json_object' },
       );
 
