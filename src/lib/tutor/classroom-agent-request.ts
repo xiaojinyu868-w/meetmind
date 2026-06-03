@@ -14,6 +14,8 @@ export interface InClassTutorAgentBody extends Record<string, unknown> {
     /** M14: 当前录音/播放进度（秒）。让 AI 知道"现在"在哪一段，引用时给精确时间戳。 */
     currentTimestampSec?: number;
     learnerProfile?: string;
+    /** M14.5: 用户在课堂上传的图片/截图/文档解析文本。课堂场景刚需：拍 PPT 上一道题问"这个怎么做"。 */
+    supportMaterials?: Array<{ title: string; content: string }>;
   };
   options: {
     /** M14: 课堂场景禁用 inline app —— 学生没认知带宽看一张完整速查表/思维导图；
@@ -39,6 +41,8 @@ export function buildInClassTutorAgentBody(input: {
   model?: string;
   /** M11.5：individual learner profile（含 bio + 结构化字段 + goals）。in-class 也注入，让"同桌"能认识用户。 */
   learnerProfile?: string;
+  /** M14.5：用户在课堂上传的图片/截图/文档解析文本（来自底座 useChatFileUpload）。 */
+  supportMaterials?: Array<{ title: string; content: string }>;
 }): InClassTutorAgentBody {
   const recentFocus = extractRecentFocus(input.segments) || undefined;
   const model = input.model?.trim() || undefined;
@@ -67,6 +71,9 @@ export function buildInClassTutorAgentBody(input: {
   if (fullTranscript) context.fullTranscript = fullTranscript;
   if (typeof currentTimestampSec === 'number') context.currentTimestampSec = currentTimestampSec;
   if (learnerProfile) context.learnerProfile = learnerProfile;
+  if (input.supportMaterials && input.supportMaterials.length > 0) {
+    context.supportMaterials = input.supportMaterials;
+  }
 
   return {
     messages: input.messages,

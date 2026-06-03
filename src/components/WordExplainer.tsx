@@ -1,19 +1,16 @@
 'use client';
 
 /**
- * 选词解释浮窗 —— M13 收口版
+ * 选词解释浮窗 —— M14.5 收口版
  *
  * 用户选中转录文本后弹出，点「解释一下」展开 AI 对话，
  * 结合课堂语境解释选中的词。继续追问也走同一对话。
  *
- * 收口（M13）：
- *   - 流式：useChat (AI SDK v6) 替代旧 useSimpleSSEStream
- *   - 端点：/api/tutor/agent mode='word' 替代旧 /api/chat
- *   - 渲染：ChatRenderer (KaTeX + Shiki + lightbox + memo + useDeferredValue)
- *   - 麦克风：M13 push-to-record VoiceMicButton
- *
- * 保留：浮窗壳（拖拽 + 缩放 + 选区贴近）
- * 移除：ModelSelector（统一用 mode-driven provider）+ ImageUpload（浮窗场景太重）
+ * M14.5：
+ *   - 加底座 useChatFileUpload —— 支持拖图 / 粘图 / 点回形针上传
+ *     场景：学生选了一个词，又想配一张题目截图问"这个能不能用上面这个公式"
+ *   - 附件统一通过 context.supportMaterials 注入 prompt（mode='word' 自动支持）
+ *   - 提交后清空附件
  *
  * 设计系统：v7 设计宪法（克制 + 双签名色）
  */
@@ -21,13 +18,14 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { useChat } from '@ai-sdk/react';
 import { DefaultChatTransport, type UIMessage } from 'ai';
-import { X, Square } from 'lucide-react';
+import { X, Square, Paperclip, Trash2, FileText, Image as ImageIcon } from 'lucide-react';
 import { useAuth } from '@/lib/hooks/useAuth';
 import {
   ChatRenderer,
   ChatThinkingStripBubble,
   collectMessageText,
   useChatComposer,
+  useChatFileUpload,
 } from '@/components/chat';
 import { OctoAvatar } from '@/components/ui/octo-avatar';
 import { VoiceMicButton } from './VoiceMicButton';
@@ -55,6 +53,8 @@ export function WordExplainer({
   const { accessToken } = useAuth();
   const [expanded, setExpanded] = useState(false);
   const cardRef = useRef<HTMLDivElement>(null);
+  const formRef = useRef<HTMLFormElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   // 拖拽状态
@@ -64,6 +64,14 @@ export function WordExplainer({
   // 缩放状态
   const [size, setSize] = useState({ w: DEFAULT_W, h: DEFAULT_H });
   const resizeRef = useRef<{ startX: number; startY: number; origW: number; origH: number; edge: string } | null>(null);
+
+  // ──────────────────────────────────────────────────────────────
+  // M14.5：底座文件上传（学生贴题目截图问问题）
+  // ──────────────────────────────────────────────────────────────
+  const fileUpload = useChatFileUpload({
+    authToken: accessToken ?? undefined,
+    targetRef: formRef,
+  });
 
   // ──────────────────────────────────────────────────────────────
   // M13 收口：useChat → /api/tutor/agent mode='word'
@@ -78,6 +86,13 @@ export function WordExplainer({
       ? fullContextText.slice(-8000)
       : fullContextText;
   }, [fullContextText]);
+
+  // M14.5: 把 attachedFiles 接进顶层 context.supportMaterials
+  // mode='word' 的 buildTutorSystemPrompt 会自动 capSupportMaterials
+  const supportMaterials = useMemo(() => {
+    if (fileUpload.attachedFiles.length === 0) return undefined;
+    return fileUpload.attachedFiles.map((f) => ({ title: f.title, content: f.text }));
+  }, [fileUpload.attachedFiles]);
 
   const transport = useMemo(
     () =>
@@ -94,11 +109,12 @@ export function WordExplainer({
               nearbyContext: selection.context,
               fullTranscriptTail,
             },
+            ...(supportMaterials ? { supportMaterials } : {}),
           },
           options: {},
         }),
       }),
-    [accessToken, sessionId, selection.text, selection.context, fullTranscriptTail],
+    [accessToken, sessionId, selection.text, selection.context, fullTranscriptTail, supportMaterials],
   );
 
   const { messages, sendMessage, status, stop } = useChat({ transport });
@@ -117,9 +133,17 @@ export function WordExplainer({
   }, [selection.text, sendMessage]);
 
   // composer hook（统一 IME / 草稿 / 大段粘贴）
+  const handleSubmit = useCallback(
+    (text: string) => {
+      sendMessage({ text });
+      // 提交后清空附件
+      if (fileUpload.attachedFiles.length > 0) fileUpload.clear();
+    },
+    [sendMessage, fileUpload],
+  );
   const composer = useChatComposer({
     draftKey: sessionId,
-    onSubmit: (text) => sendMessage({ text }),
+    onSubmit: handleSubmit,
     disabled: busy,
   });
 
@@ -327,15 +351,80 @@ export function WordExplainer({
           <div ref={messagesEndRef} />
         </div>
 
-        {/* 输入区域 */}
+        {/* 输入区域（M14.5：加图片附件支持） */}
         <form
+          ref={formRef}
           onSubmit={(e) => {
             e.preventDefault();
             composer.submit();
           }}
           className="px-3 py-2 border-t border-divider bg-paper-warm/40 flex-shrink-0 rounded-b-2xl"
         >
+          {/* M14.5：拖拽 overlay */}
+          {fileUpload.isDragging ? (
+            <div className="pointer-events-none absolute inset-x-3 bottom-2 top-2 flex items-center justify-center rounded-xl border-2 border-dashed border-pine/50 bg-pine/10 z-20">
+              <span className="text-[12px] font-medium text-pine">松开以添加图片</span>
+            </div>
+          ) : null}
+
+          {/* M14.5：附件 chip 行 */}
+          {(fileUpload.attachedFiles.length > 0 || fileUpload.busy || fileUpload.error) ? (
+            <div className="mb-1.5 flex flex-wrap gap-1.5">
+              {fileUpload.attachedFiles.map((f) => (
+                <span
+                  key={f.id}
+                  className="inline-flex items-center gap-1 rounded-full border border-divider bg-white px-2 py-0.5 text-[11px] text-ink-secondary"
+                >
+                  {f.kind === 'image' ? (
+                    <ImageIcon size={10} strokeWidth={1.8} />
+                  ) : (
+                    <FileText size={10} strokeWidth={1.8} />
+                  )}
+                  <span className="max-w-[120px] truncate">{f.title}</span>
+                  <button
+                    type="button"
+                    onClick={() => fileUpload.removeFile(f.id)}
+                    aria-label="移除"
+                    className="ml-0.5 text-ink-muted hover:text-ink"
+                  >
+                    <Trash2 size={10} strokeWidth={1.8} />
+                  </button>
+                </span>
+              ))}
+              {fileUpload.busy ? (
+                <span className="inline-flex items-center gap-1 text-[11px] text-ink-muted">
+                  <span className="h-1 w-1 animate-pulse rounded-full bg-pine" />
+                  解析中…
+                </span>
+              ) : null}
+              {fileUpload.error ? (
+                <span className="text-[11px] text-vermilion">{fileUpload.error}</span>
+              ) : null}
+            </div>
+          ) : null}
+
           <div className="flex items-end gap-1.5">
+            {/* M14.5：图片/文件上传按钮（紧凑型） */}
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={busy || fileUpload.busy}
+              className="flex-shrink-0 inline-flex h-[32px] w-[32px] items-center justify-center rounded-lg border border-divider bg-white text-ink-secondary transition-colors hover:bg-paper-warm disabled:opacity-40"
+              aria-label="上传图片或文件"
+              title="上传图片 / 也可拖入或粘贴"
+            >
+              <Paperclip size={13} strokeWidth={1.8} />
+            </button>
+            <input
+              ref={fileInputRef}
+              type="file"
+              multiple
+              accept="image/*,.pdf,.docx,.txt,.md"
+              className="hidden"
+              onChange={(e) => {
+                fileUpload.onInputChange(e);
+              }}
+            />
             <textarea
               {...composer.textareaProps}
               placeholder="继续追问…"
@@ -351,7 +440,7 @@ export function WordExplainer({
             />
             <button
               type="submit"
-              disabled={busy || !composer.value.trim()}
+              disabled={busy || (!composer.value.trim() && fileUpload.attachedFiles.length === 0)}
               className="flex-shrink-0 px-3 py-1.5 text-[12.5px] text-white bg-pine hover:bg-pine-deep rounded-lg disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
             >
               发送

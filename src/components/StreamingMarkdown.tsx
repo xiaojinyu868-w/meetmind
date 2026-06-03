@@ -11,6 +11,7 @@ import { Play } from 'lucide-react';
 import type { Citation } from '@/types/dify';
 import { CitationDetailSheet, resolveCitations } from './CitationReferenceSheet';
 import { ChatCodeBlock } from './chat/ChatCodeBlock';
+import { ChatMermaidBlock } from './chat/ChatMermaidBlock';
 import { ChatImageLightbox } from './chat/ChatImageLightbox';
 
 interface StreamingMarkdownProps {
@@ -333,6 +334,10 @@ export function StreamingMarkdown({
       const langMatch = /language-([\w+-]+)/.exec(codeClassName || '');
       const lang = langMatch?.[1];
       const codeStr = String(children).replace(/\n$/, '');
+      // M14.5: ```mermaid → 走专门的图表渲染（svg 输出，节点图/序列图/流程图等）
+      if (lang === 'mermaid') {
+        return <ChatMermaidBlock code={codeStr} isStreaming={isStreaming} />;
+      }
       return <ChatCodeBlock code={codeStr} lang={lang} isStreaming={isStreaming} />;
     },
     // pre 直接返回 children——ChatCodeBlock 自带完整 wrapper，不要 react-markdown 默认的 <pre> 再包一层

@@ -11,8 +11,8 @@
  * ```
  */
 
-export { ChatBubble, ChatBubbleActionButton } from './ChatBubble';
-export type { ChatBubbleProps, ChatBubbleRole, ChatBubbleVariant, ChatBubbleActionButtonProps } from './ChatBubble';
+export { ChatBubble, ChatBubbleActionButton, ChatMessageFeedbackButtons } from './ChatBubble';
+export type { ChatBubbleProps, ChatBubbleRole, ChatBubbleVariant, ChatBubbleActionButtonProps, ChatMessageFeedbackButtonsProps } from './ChatBubble';
 
 export { ChatComposer } from './ChatComposer';
 export type { ChatComposerProps, ChatComposerCapabilities, ChatComposerVariant } from './ChatComposer';

@@ -51,6 +51,7 @@ const PUBLIC_ROUTES = [
   '/api/analytics',
   '/api/analytics/stats',
   '/api/feedback',
+  '/api/feedback/message',
   '/api/health',
   '/api/workspace/search',
   // v3.0 SharedAgent —— 落地页和 4 个 share API 都允许匿名打开。

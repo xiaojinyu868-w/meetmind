@@ -602,7 +602,15 @@ export function useClassroomCompanion(
     [],
   );
 
-  const send = useCallback(async (text: string) => {
+  /**
+   * M14.5: send 现在可接收第二参数 supportMaterials（来自底座 useChatFileUpload）。
+   * 课堂场景刚需：拍 PPT 上一道题、贴一张错题截图问"这个怎么做"。
+   * 不传或空数组 = 不附加（向后兼容旧调用方）。
+   */
+  const send = useCallback(async (
+    text: string,
+    supportMaterials?: Array<{ title: string; content: string }>,
+  ) => {
     const trimmed = text.trim();
     if (!trimmed) return;
 
@@ -686,6 +694,8 @@ export function useClassroomCompanion(
           model: preferredModel,
           // M11.5：把 bio + 结构化 + goals 注入"同桌"上下文，让 AI 也能"认识"用户
           learnerProfile: formatLearnerProfileForTutorAgent(user?.learnerProfile),
+          // M14.5：用户在课堂上传的图片/文档（来自底座 useChatFileUpload）
+          supportMaterials,
         }),
         {
           headers,

@@ -34,6 +34,12 @@ export interface ChatComposerCapabilities {
   file?: boolean;
   /** 切到打电话模式按钮 */
   call?: boolean;
+  /**
+   * M14.5: 全局快捷键（⌘K / Ctrl+K / "/" 唤起 textarea focus）。
+   * 课堂同桌特有——学生听课时单键切到对话焦点，不打断阅读。
+   * 默认 false。
+   */
+  globalShortcut?: boolean;
 }
 
 export interface ChatComposerProps {
@@ -97,6 +103,12 @@ export interface ChatComposerProps {
    */
   topSlot?: React.ReactNode;
 
+  /**
+   * M14.5: 状态标签（busy 态短暂提示，e.g. "同学正在补一句"）。
+   * 渲染在最顶部，attached files 行之上。
+   */
+  statusLabel?: string;
+
   className?: string;
 }
 
@@ -136,6 +148,7 @@ export function ChatComposer({
   variant = 'paper',
   containerRef,
   topSlot,
+  statusLabel,
   className,
 }: ChatComposerProps) {
   const fileInputRef = React.useRef<HTMLInputElement>(null);
@@ -143,6 +156,29 @@ export function ChatComposer({
   const showFile = Boolean(caps.file && onAddFiles);
   const showMic = Boolean(caps.mic && onVoiceTranscript);
   const showCall = Boolean(caps.call && onCallStart);
+
+  // M14.5: 全局快捷键（⌘K / Ctrl+K / "/" 聚焦 textarea）
+  // 课堂同桌特有；其他面板默认关闭以免和编辑器/快捷键冲突
+  const textareaRefForShortcut = textareaProps.ref;
+  React.useEffect(() => {
+    if (!caps.globalShortcut) return;
+    const onKeydown = (e: KeyboardEvent) => {
+      const tag = (e.target as HTMLElement | null)?.tagName;
+      const activeIsInput = tag === 'INPUT' || tag === 'TEXTAREA';
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault();
+        textareaRefForShortcut.current?.focus();
+        return;
+      }
+      // 不在其他输入框时单字符 "/" 也聚焦（VSCode / Linear 约定）
+      if (!activeIsInput && e.key === '/' && !e.metaKey && !e.ctrlKey && !e.altKey) {
+        e.preventDefault();
+        textareaRefForShortcut.current?.focus();
+      }
+    };
+    window.addEventListener('keydown', onKeydown);
+    return () => window.removeEventListener('keydown', onKeydown);
+  }, [caps.globalShortcut, textareaRefForShortcut]);
 
   // M12：离线检测——浏览器报告 offline 时锁 composer
   const [isOnline, setIsOnline] = React.useState<boolean>(() => {
@@ -222,6 +258,26 @@ export function ChatComposer({
           <div className="rounded-2xl bg-white px-4 py-2 text-[13px] font-medium text-pine shadow-soft">
             松开以添加文件
           </div>
+        </div>
+      ) : null}
+
+      {/* M14.5: 状态标签（busy 短暂提示，e.g. 同学正在补一句…）渲染在最顶部 */}
+      {statusLabel ? (
+        <div
+          className={cn(
+            'mx-auto mb-2 inline-flex items-center gap-2 px-1 text-[12px]',
+            variant === 'glass' ? 'text-white/70' : 'text-ink-muted',
+          )}
+          role="status"
+          aria-live="polite"
+        >
+          <span
+            className={cn(
+              'h-1.5 w-1.5 animate-[fadeIn_900ms_ease-in-out_infinite] rounded-full',
+              variant === 'glass' ? 'bg-white/60' : 'bg-ink-muted',
+            )}
+          />
+          <span>{statusLabel}</span>
         </div>
       ) : null}
 

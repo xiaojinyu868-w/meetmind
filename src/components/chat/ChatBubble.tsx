@@ -20,6 +20,7 @@
 'use client';
 
 import * as React from 'react';
+import { ThumbsUp, ThumbsDown } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 export type ChatBubbleRole = 'user' | 'assistant' | 'system';
@@ -165,5 +166,116 @@ export function ChatBubbleActionButton({ icon, label, onClick, active }: ChatBub
       {icon}
       <span className="hidden sm:inline">{label}</span>
     </button>
+  );
+}
+
+// ─────────────────────────────────────────────────────────
+// M14.5: 消息级 👍 / 👎 反馈按钮（标志性大厂能力）
+// ─────────────────────────────────────────────────────────
+
+export interface ChatMessageFeedbackButtonsProps {
+  /** 被反馈的消息 ID */
+  messageId: string;
+  /** 被反馈的消息文本（截断后由 API 服务端 cap 1000 字） */
+  messageText?: string;
+  /** 透传给后端，便于分析哪个 mode / model 上 👎 多 */
+  mode?: string;
+  modelId?: string;
+  /** 登录用户 ID（访客可省略，由 IP 追溯） */
+  userId?: string;
+  /**
+   * 反馈成功回调（外部可显示 toast）。失败时不调；不传则 hook 自身静默处理。
+   */
+  onFeedbackSent?: (rating: 'up' | 'down') => void;
+}
+
+/**
+ * 消息底部反馈按钮（用在 ChatBubble.actions 里）。
+ *
+ * 设计：
+ *   - 一次只能选 up 或 down（再点一次不可撤销，但可以切换）
+ *   - 点击后立刻上报，不弹对话框追问理由（追问会大幅降低参与率，详见 ChatGPT 早期 A/B）
+ *   - 网络失败静默 —— 不打扰用户主流程
+ *
+ * 复用 Feedback 表 type='message-rating'：
+ *   - title = "[messageId 前 60 字] 👍 / 👎"
+ *   - content = JSON.stringify({ rating, mode, modelId, messageText, comment })
+ */
+export function ChatMessageFeedbackButtons({
+  messageId,
+  messageText,
+  mode,
+  modelId,
+  userId,
+  onFeedbackSent,
+}: ChatMessageFeedbackButtonsProps) {
+  const [chosen, setChosen] = React.useState<'up' | 'down' | null>(null);
+  const [submitting, setSubmitting] = React.useState(false);
+
+  const send = React.useCallback(
+    async (rating: 'up' | 'down') => {
+      if (submitting) return;
+      // 切换到同一选项：忽略
+      if (chosen === rating) return;
+      setSubmitting(true);
+      const previous = chosen;
+      setChosen(rating); // optimistic
+      try {
+        const resp = await fetch('/api/feedback/message', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            messageId,
+            rating,
+            mode,
+            modelId,
+            messageText,
+            userId,
+          }),
+        });
+        if (!resp.ok) throw new Error(String(resp.status));
+        onFeedbackSent?.(rating);
+      } catch {
+        setChosen(previous); // rollback
+      } finally {
+        setSubmitting(false);
+      }
+    },
+    [chosen, submitting, messageId, mode, modelId, messageText, userId, onFeedbackSent],
+  );
+
+  return (
+    <>
+      <button
+        type="button"
+        onClick={() => void send('up')}
+        disabled={submitting}
+        title="赞"
+        aria-label="赞"
+        className={cn(
+          'inline-flex h-7 w-7 items-center justify-center rounded-full transition-colors',
+          chosen === 'up'
+            ? 'bg-pine/10 text-pine'
+            : 'text-ink-muted hover:bg-paper-warm hover:text-ink-secondary',
+        )}
+      >
+        <ThumbsUp size={12} strokeWidth={1.8} />
+      </button>
+      <button
+        type="button"
+        onClick={() => void send('down')}
+        disabled={submitting}
+        title="可以更好"
+        aria-label="可以更好"
+        className={cn(
+          'inline-flex h-7 w-7 items-center justify-center rounded-full transition-colors',
+          chosen === 'down'
+            ? 'bg-vermilion/10 text-vermilion'
+            : 'text-ink-muted hover:bg-paper-warm hover:text-ink-secondary',
+        )}
+      >
+        <ThumbsDown size={12} strokeWidth={1.8} />
+      </button>
+    </>
   );
 }

@@ -41,6 +41,7 @@ import {
   ChatMessageList,
   ChatRenderer,
   ChatThinkingStripBubble,
+  ChatMessageFeedbackButtons,
   useChatComposer,
   useChatFileUpload,
   collectMessageText as collectChatMessageText,
@@ -218,13 +219,32 @@ export function TutorAgentPanel({
     return () => { alive = false; };
   }, []);
 
+  // M11：底座文件上传 hook —— 拖拽 / 粘贴 / 点击三入口统一
+  // 提前到这里因为 agentContext 需要读 attachedFiles
+  const composerRef = React.useRef<HTMLFormElement>(null);
+  const fileUpload = useChatFileUpload({
+    authToken,
+    targetRef: composerRef,
+  });
+
   const agentContext = React.useMemo(() => {
-    if (!recentLearningActivity) return context;
+    const baseContext = context ?? {};
+    // M14.5 BUG FIX: 把已上传附件作为 supportMaterials 拼进 context
+    // 之前 fileUpload.attachedFiles 只显示 chip 但发送时没传给后端，导致"传了图也不影响 AI"
+    const userAttached = fileUpload.attachedFiles.length > 0
+      ? fileUpload.attachedFiles.map((f) => ({ title: f.title, content: f.text }))
+      : undefined;
+    const mergedSupport = [
+      ...(baseContext.supportMaterials ?? []),
+      ...(userAttached ?? []),
+    ];
     return {
-      ...(context ?? {}),
-      learnerProfile: [context?.learnerProfile, recentLearningActivity].filter(Boolean).join('\n\n') || undefined,
+      ...baseContext,
+      ...(mergedSupport.length > 0 ? { supportMaterials: mergedSupport } : {}),
+      learnerProfile:
+        [context?.learnerProfile, recentLearningActivity].filter(Boolean).join('\n\n') || undefined,
     };
-  }, [context, recentLearningActivity]);
+  }, [context, recentLearningActivity, fileUpload.attachedFiles]);
 
   // DefaultChatTransport 允许把非标字段一起发到 body。
   // M10：这里把 mode + context + options 全部透传给 /api/tutor/agent，
@@ -512,16 +532,16 @@ export function TutorAgentPanel({
     (text: string) => {
       if (!text || busy) return;
       sendMessage({ text });
+      // M14.5: 提交后清空附件——避免下一轮再次发送同一组附件
+      // attachedFiles 已经通过 agentContext.supportMaterials 拼进本次请求
+      if (fileUpload.attachedFiles.length > 0) {
+        fileUpload.clear();
+      }
     },
-    [busy, sendMessage],
+    [busy, sendMessage, fileUpload],
   );
 
-  // M11：底座文件上传 hook —— 拖拽 / 粘贴 / 点击三入口统一
-  const composerRef = React.useRef<HTMLFormElement>(null);
-  const fileUpload = useChatFileUpload({
-    authToken,
-    targetRef: composerRef,
-  });
+  // M11：底座文件上传 hook 已在 agentContext 上面实例化（提前是为了 useMemo 能读 attachedFiles）
 
   // M12：粘大段（>500 字）→ 自动转附件 + sonner toast 提示
   const handleLargePaste = React.useCallback(
@@ -721,7 +741,7 @@ export function TutorAgentPanel({
               />
             ) : null;
 
-          // hover 行动按钮（复制 / 重生成）—— 只对 assistant 消息提供
+          // hover 行动按钮（复制 / 重生成 / 反馈）—— 只对 assistant 消息提供
           const actionsSlot =
             !isUser && !messageIsStreaming && collectMessageText(m).trim() ? (
               <>
@@ -752,6 +772,17 @@ export function TutorAgentPanel({
                     <span className="hidden sm:inline">重生成</span>
                   </button>
                 ) : null}
+                {/* M14.5: 消息级 👍👎 反馈 —— 数据闭环 + 大厂标志 */}
+                <ChatMessageFeedbackButtons
+                  messageId={m.id}
+                  messageText={collectMessageText(m)}
+                  mode={mode}
+                  modelId={preferredModel}
+                  userId={user?.id}
+                  onFeedbackSent={(rating) => {
+                    toast.success(rating === 'up' ? '已反馈' : '已记录，下次会更好', { duration: 1200 });
+                  }}
+                />
               </>
             ) : null;
 

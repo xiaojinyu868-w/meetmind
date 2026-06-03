@@ -31,8 +31,9 @@
  * 设计系统：v7 设计宪法：95% 克制 + 5% 仪式时刻情绪化（shadow-soft / shadow-card / shadow-ai-glow）
  */
 
-import React, { useEffect } from 'react';
-import { ArrowUp, Radio } from 'lucide-react';
+import React from 'react';
+import { Radio } from 'lucide-react';
+import { toast } from 'sonner';
 import type { CompanionMessage, CompanionCard } from './types';
 import { OctoBuddySprite } from './OctoBuddy';
 import { ThinkingStrip } from '@/components/ui/thinking-strip';
@@ -42,9 +43,14 @@ import type { WorkshopAppKey } from '@/lib/ai-native/app-catalog';
 import { COPY } from '@/lib/ui/copy';
 import { IN_CLASS_PENDING_REPLY_LABEL } from '@/lib/utils/classroom-companion-copy';
 import { buildClassroomCompanionPanelModel } from './ClassroomCompanionPanel.model';
-// M13：迁底座 —— 共用 ChatRenderer (KaTeX + Shiki + lightbox + useDeferredValue)
-//                共用 useChatComposer (IME 安全 + 草稿 + 大段粘贴拦截)
-import { ChatRenderer, useChatComposer } from '@/components/chat';
+// M14.5：完全用底座 ChatComposer + useChatFileUpload + useChatComposer
+//        课堂同桌自动获得：图片上传 / 拖拽 / 粘贴 / 流式中断 / 麦克风 / 上传重试 / 离线检测 / 大段粘贴
+import {
+  ChatRenderer,
+  ChatComposer,
+  useChatComposer,
+  useChatFileUpload,
+} from '@/components/chat';
 import { normalizeCompanionMarkdown } from './companion-markdown-utils';
 // M14: 课堂同桌 chip 行（稳定 + 动态）
 import { ClassroomChipRow, type ClassroomDynamicChip } from './ClassroomChipRow';
@@ -72,8 +78,11 @@ export interface ForesightBubble {
 export interface ClassroomCompanionPanelProps {
   mode: CompanionMode;
   messages: CompanionMessage[];
-  /** 发送消息（暂时可以是 mock） */
-  onSend: (text: string) => void;
+  /**
+   * 发送消息（M14.5: 第二参数支持附件 supportMaterials —— 课堂场景刚需，
+   * 学生拍 PPT 上一道题、贴错题截图问"这个怎么做"）。
+   */
+  onSend: (text: string, supportMaterials?: Array<{ title: string; content: string }>) => void;
   /**
    * 打开一个 App 应用（闪卡 / 测验 / 思维导图 / 学习报告 / 考试速查表）。
    * 课堂 listening 态只展示适合课中的结构和速查类入口；课后型入口会被过滤。
@@ -398,109 +407,22 @@ function ListeningStarterCard({
   );
 }
 
-/** 底部输入框（ChatGPT 风格：上文本区 + 下按钮行）
+/**
+ * M14.5: CompanionComposer 删除。
+ * 课堂同桌的输入条现在直接用底座 ChatComposer + useChatComposer + useChatFileUpload，
+ * 通过 capabilities.globalShortcut 启用 ⌘K / "/" 全局快捷键，
+ * 通过 statusLabel 透传"同学正在补一句"提示。
  *
- * M13：迁底座 —— 内部 state/IME/草稿 用 useChatComposer hook 统一处理。
- * 保留独有的 ⌘K / "/" 全局快捷键 + ArrowUp 圆形发送按钮外观。
- *
- * M14: 加 chipSlot prop —— composer 上方稳定 + 动态 chip 行
- *      （只在 textarea focus 或 hover 时浮现，对齐"伸手才出现"哲学）
+ * 收益：
+ *   - 图片上传按钮（学生拍 PPT 上一道题问 AI）
+ *   - 文件拖拽 + 粘贴 + 上传错误重试
+ *   - 流式中断按钮（Stop generating）
+ *   - 麦克风按钮（语音→文字回填）
+ *   - 离线检测自动锁
+ *   - 大段粘贴 >500 字自动转附件
+ *   - 字数 >2000 警告
+ *   一处升级（ChatComposer），课堂同桌自动获得。
  */
-function CompanionComposer({
-  placeholder,
-  onSend,
-  statusLabel,
-  draftKey,
-  chipSlot,
-}: {
-  placeholder: string;
-  onSend: (t: string) => void;
-  statusLabel?: string;
-  draftKey?: string;
-  chipSlot?: React.ReactNode;
-}) {
-  // M13：底座 hook —— 自动处理 IME / 草稿持久化 / 自适应高度 / Enter 发送 / 大段粘贴
-  const composer = useChatComposer({
-    draftKey,
-    onSubmit: onSend,
-    enterBehavior: 'send',
-  });
-  const { textareaProps, value, submit } = composer;
-  const textareaRef = textareaProps.ref;
-
-  // 自适应高度（保留原行为；底座 hook 没自带 textarea-resize）
-  useEffect(() => {
-    const ta = textareaRef.current;
-    if (!ta) return;
-    ta.style.height = 'auto';
-    ta.style.height = `${Math.min(ta.scrollHeight, 120)}px`;
-  }, [value, textareaRef]);
-
-  // ⌘K / Ctrl+K 全局快捷键：把焦点切到这个 composer。
-  // 用户在阅读转录时能单键唤起同学对话——跨面板焦点管理，是 agent-native 对
-  // 键盘手感的基本尊重。
-  useEffect(() => {
-    const onKeydown = (e: KeyboardEvent) => {
-      // 不在其他输入框里打断用户
-      const tag = (e.target as HTMLElement | null)?.tagName;
-      const activeIsInput = tag === 'INPUT' || tag === 'TEXTAREA';
-      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
-        e.preventDefault();
-        textareaRef.current?.focus();
-        return;
-      }
-      // 当前没焦点在任何输入框时，单字符"/"也聚焦——VSCode / Linear 的约定
-      if (!activeIsInput && e.key === '/' && !e.metaKey && !e.ctrlKey && !e.altKey) {
-        e.preventDefault();
-        textareaRef.current?.focus();
-      }
-    };
-    window.addEventListener('keydown', onKeydown);
-    return () => window.removeEventListener('keydown', onKeydown);
-  }, [textareaRef]);
-
-  const canSend = value.trim().length > 0;
-
-  return (
-    <div className="flex-shrink-0 border-t border-divider px-5 pb-5 pt-4">
-      {statusLabel ? (
-        <div className="mb-2 flex items-center gap-2 px-1 text-[12px] text-ink-muted" role="status" aria-live="polite">
-          <span className="h-1.5 w-1.5 rounded-full bg-ink-muted animate-[fadeIn_900ms_ease-in-out_infinite]" />
-          <span>{statusLabel}</span>
-        </div>
-      ) : null}
-      {/* M14: chip slot —— 在 textarea 上方渲染稳定 + 动态 chip 行 */}
-      {chipSlot ? <div className="mb-2">{chipSlot}</div> : null}
-      <div className="rounded-3xl border border-divider bg-white transition-colors focus-within:border-ink-muted">
-        <textarea
-          {...textareaProps}
-          placeholder={placeholder}
-          rows={1}
-          className="block w-full resize-none bg-transparent px-5 pt-4 pb-1 text-[14px] leading-[1.7] text-ink placeholder:text-ink-muted/70 focus:outline-none"
-          style={{ outline: 'none', border: 'none', boxShadow: 'none' }}
-        />
-        <div className="flex items-center justify-between px-3 pb-3">
-          <div className="flex items-center gap-1">
-            {/* 占位：未来可放 @资料 按钮 */}
-          </div>
-          <button
-            type="button"
-            onClick={submit}
-            disabled={!canSend}
-            className={`flex h-8 w-8 items-center justify-center rounded-xl transition-all ${
-              canSend
-                ? 'bg-ink text-white hover:opacity-80 active:scale-95'
-                : 'cursor-not-allowed bg-divider-light text-ink-muted/50'
-            }`}
-            aria-label="发送"
-          >
-            <ArrowUp size={15} strokeWidth={2} />
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
 
 /**
  * 流式气泡：正在被 token 填充的 AI 消息。
@@ -626,32 +548,138 @@ export function ClassroomCompanionPanel({
 
       {/* M14: 移除 hasMainContent 时底部 SkillChipRow 横滚条
          （8 个 app 入口在课堂态显得货架感强、抢同桌主位）。
-         课堂"快通道"chip 下沉到 CompanionComposer 的 chipSlot：
+         课堂"快通道"chip 下沉到 ChatComposer 的 topSlot：
          「刚才那段 / 我没跟上 / 记一下」常驻 + 动态 chip 锦上添花。 */}
 
-      <CompanionComposer
+      <ClassroomCompanionComposerAdapter
+        mode={mode}
         placeholder={effectivePlaceholder}
         onSend={onSend}
         statusLabel={pendingReplyLabel}
         draftKey={`classroom-companion:${mode}`}
-        chipSlot={
-          mode === 'listening' ? (
-            <ClassroomChipRow
-              onPickStable={(kind, utterance) => {
-                if (kind === 'mark-moment') {
-                  onMarkMoment?.();
-                  return;
-                }
-                if (utterance) onSend(utterance);
-              }}
-              dynamicChips={dynamicChips}
-              onPickDynamic={(chip) => onSend(chip.text)}
-              disabled={Boolean(streamingMessage) || isThinking}
-            />
-          ) : undefined
-        }
+        dynamicChips={dynamicChips}
+        onMarkMoment={onMarkMoment}
+        streamingMessage={streamingMessage}
+        isThinking={isThinking}
       />
     </div>
+  );
+}
+
+/**
+ * M14.5: 课堂同桌输入条 adapter——把底座 ChatComposer 包成业务接口。
+ * 内部组合 useChatComposer + useChatFileUpload + ChatComposer。
+ *
+ * adapter 比"内联到主函数"好的两点：
+ *   1. 主函数不需要直接处理 hooks 与文件上传细节
+ *   2. ClassroomChipRow 通过 topSlot 注入，仅 listening 态显示
+ */
+function ClassroomCompanionComposerAdapter({
+  mode,
+  placeholder,
+  onSend,
+  statusLabel,
+  draftKey,
+  dynamicChips,
+  onMarkMoment,
+  streamingMessage,
+  isThinking,
+}: {
+  mode: CompanionMode;
+  placeholder: string;
+  onSend: (text: string, supportMaterials?: Array<{ title: string; content: string }>) => void;
+  statusLabel?: string;
+  draftKey: string;
+  dynamicChips: ClassroomDynamicChip[];
+  onMarkMoment?: () => void;
+  streamingMessage: CompanionMessage | null;
+  isThinking: boolean;
+}) {
+  const composerRef = React.useRef<HTMLFormElement>(null);
+
+  // 底座文件上传 —— 拖拽 / 粘贴 / 点击三入口统一
+  const fileUpload = useChatFileUpload({
+    targetRef: composerRef,
+  });
+
+  // 提交时把 attachedFiles → supportMaterials 透传给上层 onSend，并清空附件
+  const handleSubmitText = React.useCallback(
+    (text: string) => {
+      const supportMaterials = fileUpload.attachedFiles.length > 0
+        ? fileUpload.attachedFiles.map((f) => ({ title: f.title, content: f.text }))
+        : undefined;
+      onSend(text, supportMaterials);
+      if (supportMaterials) fileUpload.clear();
+    },
+    [fileUpload, onSend],
+  );
+
+  // 大段粘贴 >500 字 → 自动转附件
+  const handleLargePaste = React.useCallback(
+    (text: string) => {
+      fileUpload.addTextAsFile(text);
+      toast.success('内容较长，已作为附件附加', {
+        description: '同学会读完整段后再回复',
+        duration: 2400,
+      });
+    },
+    [fileUpload],
+  );
+
+  // 底座 composer hook —— IME 安全 / 草稿持久化 / 自适应高度 / Enter 发送
+  const composer = useChatComposer({
+    draftKey,
+    onSubmit: handleSubmitText,
+    onLargePaste: handleLargePaste,
+  });
+
+  // 麦克风识别后回填到 textarea
+  const handleVoiceTranscript = React.useCallback(
+    (text: string) => {
+      if (!text.trim()) return;
+      composer.setValue(composer.value ? `${composer.value} ${text}` : text);
+    },
+    [composer],
+  );
+
+  const busy = Boolean(streamingMessage) || isThinking;
+
+  return (
+    <ChatComposer
+      containerRef={composerRef}
+      textareaProps={composer.textareaProps}
+      onSubmit={composer.submit}
+      busy={busy}
+      attachedFiles={fileUpload.attachedFiles}
+      onAddFiles={fileUpload.addFiles}
+      onRemoveFile={fileUpload.removeFile}
+      uploadBusy={fileUpload.busy}
+      uploadError={fileUpload.error}
+      onRetryUpload={fileUpload.retryLast}
+      isDragging={fileUpload.isDragging}
+      onVoiceTranscript={handleVoiceTranscript}
+      capabilities={{ mic: true, file: true, globalShortcut: true }}
+      placeholder={placeholder}
+      busyPlaceholder="同学正在补一句…"
+      statusLabel={statusLabel}
+      variant="paper"
+      topSlot={
+        mode === 'listening' ? (
+          <ClassroomChipRow
+            onPickStable={(kind, utterance) => {
+              if (kind === 'mark-moment') {
+                onMarkMoment?.();
+                return;
+              }
+              if (utterance) handleSubmitText(utterance);
+            }}
+            dynamicChips={dynamicChips}
+            onPickDynamic={(chip) => handleSubmitText(chip.text)}
+            disabled={busy}
+          />
+        ) : undefined
+      }
+    />
   );
 }
 
