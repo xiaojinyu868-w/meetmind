@@ -6,7 +6,9 @@ export const TUTOR_STATE_KEY = 'tutor_last_state';
 export const REALTIME_TEACHER_MODEL_ID = 'qwen3.5-omni-plus';
 export const IS_REALTIME_TEACHER_AVAILABLE = AVAILABLE_MODELS.some((model) => model.id === REALTIME_TEACHER_MODEL_ID);
 export const FIXED_TUTOR_MODEL_ID = DEFAULT_WORKSHOP_MODEL_ID;
-export const FIXED_TUTOR_MODEL_LABEL = 'QWEN 3.6';
+// label 从注册表动态取当前模型展示名，避免写死的字符串与实际模型不符（历史上误标成 'QWEN 3.6'）。
+export const FIXED_TUTOR_MODEL_LABEL =
+  AVAILABLE_MODELS.find((model) => model.id === FIXED_TUTOR_MODEL_ID)?.name || FIXED_TUTOR_MODEL_ID;
 
 export interface Segment {
   id: string;

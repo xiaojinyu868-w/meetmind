@@ -19,7 +19,7 @@ import {
   Headphones,
   LineChart,
 } from 'lucide-react';
-import { DEFAULT_WORKSHOP_MODEL_ID } from '@/lib/services/llm-service';
+import { resolveWorkshopModelId } from '@/lib/utils/workshop-model-preference';
 import type { Anchor, TranscriptSegment } from '@/types';
 import type { AppExecutionResult, ContextTier, DataSourceType } from '@/lib/ai-native/types';
 import type { WorkshopAppCatalogItem, WorkshopAppKey } from '@/lib/ai-native/app-catalog';
@@ -36,7 +36,6 @@ import styles from './WorkshopYellowPage.module.css';
 import { useAuth } from '@/lib/hooks/useAuth';
 import { OctoCrystalDispatcher } from '@/components/share/OctoCrystalDispatcher';
 
-const WORKSHOP_MODEL_PREFERENCE = 'ai_workshop_model';
 const DOCK_STORAGE_PREFIX = 'app_workspace_dock:';
 
 /* ------------------------------------------------------------------ */
@@ -223,12 +222,6 @@ function taskLabel(state: AppTaskState | undefined, generated: boolean): string 
     return '失败';
   }
   return generated ? '已生成' : '未生成';
-}
-
-function readPreferredModel(): string {
-  if (typeof window === 'undefined') return DEFAULT_WORKSHOP_MODEL_ID;
-  const model = window.localStorage.getItem(WORKSHOP_MODEL_PREFERENCE)?.trim();
-  return model || DEFAULT_WORKSHOP_MODEL_ID;
 }
 
 function statusText(status: DockTaskStatus): string {
@@ -512,6 +505,31 @@ export function WorkshopYellowPage(props: WorkshopYellowPageProps) {
       let timeoutTriggered = false;
       try {
         const timeoutMs = resolveWorkshopTimeoutMs(app.key);
+        const preferredModel = await resolveWorkshopModelId();
+        const requestBody = JSON.stringify({
+          appKey: app.key,
+          model: preferredModel,
+          goal: {
+            intent: app.intent,
+            expectedOutput: 'mixed',
+            appKey: app.key,
+          },
+          input: {
+            sessionId,
+            dataSource,
+            transcript,
+            anchors,
+          },
+          memory: {
+            summary: summaryOverview,
+            keyDifficulties,
+          },
+        });
+        const yhHeaders: Record<string, string> = { 'Content-Type': 'application/json' };
+        if (accessToken) {
+          yhHeaders['Authorization'] = `Bearer ${accessToken}`;
+        }
+
         const timeoutId = window.setTimeout(() => {
           timeoutTriggered = true;
           controller.abort();
@@ -519,41 +537,33 @@ export function WorkshopYellowPage(props: WorkshopYellowPageProps) {
 
         let response: Response;
         try {
-          const yhHeaders: Record<string, string> = { 'Content-Type': 'application/json' };
-          if (accessToken) {
-            yhHeaders['Authorization'] = `Bearer ${accessToken}`;
-          }
           response = await fetch('/api/apps/execute', {
             method: 'POST',
             headers: yhHeaders,
             signal: controller.signal,
-            body: JSON.stringify({
-              appKey: app.key,
-              model: readPreferredModel(),
-              goal: {
-                intent: app.intent,
-                expectedOutput: 'mixed',
-                appKey: app.key,
-              },
-              input: {
-                sessionId,
-                dataSource,
-                transcript,
-                anchors,
-              },
-              memory: {
-                summary: summaryOverview,
-                keyDifficulties,
-              },
-            }),
+            body: requestBody,
           });
         } finally {
           window.clearTimeout(timeoutId);
         }
 
-        const data = (await response.json().catch(() => ({}))) as ExecuteApiResponse;
+        // 如实暴露失败原因，不掩盖：
+        // - route 正常报错时返回 { ok:false, error }，直接用后端给的 error；
+        // - 后端没正常响应（502/504/进程重启返回 HTML）时 response.json() 会失败，
+        //   此时把真实 HTTP 状态 + 响应片段带出来，便于定位是网关还是上游挂了，
+        //   而不是退回无信息量的字面量 "生成失败"。
+        const rawBody = await response.text();
+        let data: ExecuteApiResponse = {};
+        try {
+          data = JSON.parse(rawBody) as ExecuteApiResponse;
+        } catch {
+          data = {};
+        }
+
         if (!response.ok || !data.ok || !data.result) {
-          throw new Error(data.error || '生成失败');
+          const backendError = data.error?.trim();
+          const snippet = !backendError && rawBody ? `：${rawBody.slice(0, 120).replace(/\s+/g, ' ').trim()}` : '';
+          throw new Error(backendError || `服务端返回 HTTP ${response.status}${snippet}`);
         }
 
         writeCachedAppResult(sessionId, app.key, data.result);

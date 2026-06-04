@@ -103,7 +103,11 @@ export async function POST(request: NextRequest) {
       summary: result.summary,
     });
   } catch (error) {
-    log.error('workspace local migration error:', error);
+    // 暴露真因：之前只 log error 对象，stack 不可见。现在记 message + stack 头几行。
+    const errInfo = error instanceof Error
+      ? { msg: error.message, name: error.name, stack: error.stack?.split('\n').slice(0, 4).join(' | ') }
+      : { msg: String(error) };
+    log.error('workspace local migration error', errInfo);
     return NextResponse.json({ success: false, error: '同步本地学习历史失败' }, { status: 500 });
   }
 }

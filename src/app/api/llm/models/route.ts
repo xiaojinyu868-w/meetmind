@@ -8,7 +8,7 @@
  */
 
 import { NextResponse } from 'next/server';
-import { AVAILABLE_MODELS, DEFAULT_MODEL_ID } from '@/lib/services/llm-service';
+import { AVAILABLE_MODELS, DEFAULT_MODEL_ID, DEFAULT_WORKSHOP_MODEL_ID } from '@/lib/services/llm-service';
 
 export const dynamic = 'force-static';
 export const revalidate = 60;
@@ -18,6 +18,9 @@ export async function GET() {
     {
       models: AVAILABLE_MODELS,
       defaultModel: DEFAULT_MODEL_ID,
+      // workshop（学习应用）用途默认模型——前端不再自己硬编码，统一从这里取，
+      // 保证前后端模型列表/默认值永远一致（消除 unknown model）。
+      workshopModel: DEFAULT_WORKSHOP_MODEL_ID,
     },
     {
       headers: {

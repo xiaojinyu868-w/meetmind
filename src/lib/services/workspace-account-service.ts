@@ -158,29 +158,44 @@ export const workspaceAccountService = {
     let updated = 0;
     let skipped = 0;
 
+    let failed = 0;
     for (const session of sessions) {
-      const captureInput = buildMigrationCaptureInput(userId, session);
-      if (!captureInput) {
-        skipped += 1;
-        continue;
+      // 关键修复（2026-06-04）：per-session try/catch。
+      // 之前任一 session 抛错（脏数据 / 超大 metadata / DB 约束）会让整批 migration 500，
+      // 用户登录时整页卡住/空白。现在单条失败只跳过 + 记录真因，其余继续同步。
+      try {
+        const captureInput = buildMigrationCaptureInput(userId, session);
+        if (!captureInput) {
+          skipped += 1;
+          continue;
+        }
+
+        const existing = await prisma.workspaceCapture.findUnique({
+          where: { sourceKey: captureInput.sourceKey },
+          select: { id: true },
+        });
+
+        await workspaceContextService.upsertCaptureForUser(userId, captureInput);
+
+        if (existing) {
+          updated += 1;
+        } else {
+          created += 1;
+        }
+      } catch (sessionError) {
+        failed += 1;
+        const info = sessionError instanceof Error
+          ? { msg: sessionError.message.slice(0, 200), name: sessionError.name }
+          : { msg: String(sessionError).slice(0, 200) };
+        log.warn('migration skipped one session', {
+          userId,
+          sessionId: session.sessionId,
+          ...info,
+        });
       }
-
-      const existing = await prisma.workspaceCapture.findUnique({
-        where: {
-          sourceKey: captureInput.sourceKey,
-        },
-        select: {
-          id: true,
-        },
-      });
-
-      await workspaceContextService.upsertCaptureForUser(userId, captureInput);
-
-      if (existing) {
-        updated += 1;
-      } else {
-        created += 1;
-      }
+    }
+    if (failed > 0) {
+      log.warn(`migration completed with ${failed} failed sessions (user=${userId})`);
     }
 
     return {

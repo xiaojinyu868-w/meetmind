@@ -2,7 +2,7 @@
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ModelSelector } from '@/components/ModelSelector';
-import { DEFAULT_WORKSHOP_MODEL_ID } from '@/lib/services/llm-service';
+import { resolveWorkshopModelId, WORKSHOP_MODEL_PREFERENCE_KEY } from '@/lib/utils/workshop-model-preference';
 import type { Anchor, TranscriptSegment } from '@/types';
 import type { DataSourceType } from '@/lib/ai-native/types';
 import { getWorkshopAppByKey, type WorkshopAppKey } from '@/lib/ai-native/app-catalog';
@@ -81,8 +81,6 @@ function useIsMobile(breakpoint = 768) {
   }, [breakpoint]);
   return isMobile;
 }
-
-const WORKSHOP_MODEL_PREFERENCE = 'ai_workshop_model';
 
 /** 应用的默认展示模式 */
 const DEFAULT_DISPLAY_MODES: Partial<Record<WorkshopAppKey, 'panel' | 'fullscreen'>> = {
@@ -467,17 +465,21 @@ export function WorkshopWindowManager(props: WorkshopWindowManagerProps) {
     onFocus,
   } = props;
 
-  const [model, setModel] = useState(DEFAULT_WORKSHOP_MODEL_ID);
+  const [model, setModel] = useState('');
 
   useEffect(() => {
-    if (typeof window === 'undefined') return;
-    const saved = window.localStorage.getItem(WORKSHOP_MODEL_PREFERENCE)?.trim();
-    if (saved) setModel(saved);
+    let cancelled = false;
+    void resolveWorkshopModelId().then((resolved) => {
+      if (!cancelled && resolved) setModel(resolved);
+    });
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   useEffect(() => {
-    if (typeof window === 'undefined') return;
-    window.localStorage.setItem(WORKSHOP_MODEL_PREFERENCE, model);
+    if (typeof window === 'undefined' || !model) return;
+    window.localStorage.setItem(WORKSHOP_MODEL_PREFERENCE_KEY, model);
   }, [model]);
 
   const openedWindows = useMemo(

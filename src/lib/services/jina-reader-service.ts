@@ -11,7 +11,7 @@
 import prisma from '@/lib/prisma';
 import workspaceContextService from '@/lib/services/workspace-context-service';
 import { detectLinkProvider } from '@/lib/context-reach/link-provider';
-import { chat, WORKSHOP_PREFERRED_MODEL_ID, type ChatMessage } from '@/lib/services/llm-service';
+import { chat, DEFAULT_WORKSHOP_MODEL_ID, type ChatMessage } from '@/lib/services/llm-service';
 import { createLogger } from '@/lib/logger';
 const log = createLogger('jina-reader');
 
@@ -116,7 +116,7 @@ async function generateLinkSummary(
       },
     ];
 
-    const response = await chat(messages, WORKSHOP_PREFERRED_MODEL_ID, {
+    const response = await chat(messages, DEFAULT_WORKSHOP_MODEL_ID, {
       temperature: 0.3,
       maxTokens: 200,
       responseFormat: 'json_object',

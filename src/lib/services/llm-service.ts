@@ -20,12 +20,24 @@ export type { ModelConfig, ModelProvider };
 // 从统一配置获取模型列表
 export const AVAILABLE_MODELS: ModelConfig[] = LLMConfig.models;
 
-// 获取默认模型ID
+// 获取默认模型ID（真相源：app.config 的 ModelDefaults，环境变量驱动）
 export const DEFAULT_MODEL_ID = LLMConfig.defaultModel;
-export const WORKSHOP_PREFERRED_MODEL_ID = 'DeepSeek-V4-Flash';
-export const DEFAULT_WORKSHOP_MODEL_ID = AVAILABLE_MODELS.some((model) => model.id === WORKSHOP_PREFERRED_MODEL_ID)
-  ? WORKSHOP_PREFERRED_MODEL_ID
-  : DEFAULT_MODEL_ID;
+export const DEFAULT_WORKSHOP_MODEL_ID = LLMConfig.workshopModel;
+
+/**
+ * 把请求的 modelId 解析为「一定可用」的 modelConfig。
+ *
+ * 历史 localStorage / 旧设置 / 上游传入的过期 model 名（如 qwen3.6-plus、没 key 的
+ * DeepSeek-V4-Flash）不再让 chat() throw `未知模型` 把整条链路打成 500，而是回落到
+ * 当前默认模型并记一条 warn。这是兜底，不是主路径——前端应通过 /api/llm/models 取可用列表。
+ */
+function resolveModelConfigOrDefault(modelId: string): ModelConfig {
+  const exact = getModelConfig(modelId);
+  if (exact) return exact;
+  const fallback = getModelConfig(DEFAULT_MODEL_ID) || AVAILABLE_MODELS[0];
+  log.warn(`[LLM] 未知模型 "${modelId}"，回落到默认模型 "${fallback?.id}"`);
+  return fallback;
+}
 
 function resolveLlmHttpTimeoutMs(): number {
   const parsed = Number.parseInt(process.env.LLM_HTTP_TIMEOUT_MS || '', 10);
@@ -98,6 +110,11 @@ export function getModelConfig(modelId: string): ModelConfig | undefined {
 export function isMultimodalModel(modelId: string): boolean {
   const config = getModelConfig(modelId);
   return config?.supportsMultimodal ?? false;
+}
+
+/** DeepSeek 官方域名只接受小写模型名；其余域名沿用原始 modelId。 */
+function resolveDeepSeekApiModelName(baseUrl: string, modelId: string): string {
+  return /api\.deepseek\.com/i.test(baseUrl) ? modelId.toLowerCase() : modelId;
 }
 
 /** 获取 API 配置 */
@@ -251,7 +268,7 @@ async function callDeepSeek(
 
   const enableThinking = modelConfig?.enableThinking ?? false;
   const requestBody: Record<string, unknown> = {
-    model: modelId,
+    model: resolveDeepSeekApiModelName(config.baseUrl, modelId),
     messages: buildOpenAIMessages(messages, false),
     max_tokens: options?.maxTokens ?? (enableThinking ? 32768 : 2000),
   };
@@ -507,23 +524,20 @@ export async function chat(
   modelId: string = DEFAULT_MODEL_ID,
   options?: { temperature?: number; maxTokens?: number; responseFormat?: 'json_object' | 'text' }
 ): Promise<LLMResponse> {
-  const modelConfig = getModelConfig(modelId);
-  
-  if (!modelConfig) {
-    throw new Error(`未知模型: ${modelId}`);
-  }
+  const modelConfig = resolveModelConfigOrDefault(modelId);
+  const resolvedId = modelConfig.id;
 
   switch (modelConfig.provider) {
     case 'stepfun':
-      return callStepFun(messages, modelId, options);
+      return callStepFun(messages, resolvedId, options);
     case 'deepseek':
-      return callDeepSeek(messages, modelId, options);
+      return callDeepSeek(messages, resolvedId, options);
     case 'qwen':
-      return callQwen(messages, modelId, options);
+      return callQwen(messages, resolvedId, options);
     case 'volcengine':
-      return callVolcengine(messages, modelId, options);
+      return callVolcengine(messages, resolvedId, options);
     case 'relay':
-      return callRelay(messages, modelId, options);
+      return callRelay(messages, resolvedId, options);
     default:
       throw new Error(`不支持的模型提供商: ${modelConfig.provider}`);
   }
@@ -618,11 +632,8 @@ async function* chatStreamRaw(
   modelId: string,
   options?: { temperature?: number; maxTokens?: number }
 ): AsyncGenerator<StreamChunk> {
-  const modelConfig = getModelConfig(modelId);
-
-  if (!modelConfig) {
-    throw new Error(`未知模型: ${modelId}`);
-  }
+  const modelConfig = resolveModelConfigOrDefault(modelId);
+  const resolvedId = modelConfig.id;
 
   // DeepSeek / 通义千问 / 火山方舟 / 中转站都支持 OpenAI 兼容的流式 API
   const config = getApiConfig(modelConfig.provider);
@@ -647,13 +658,15 @@ async function* chatStreamRaw(
     throw new Error(`${modelConfig.provider === 'relay' ? 'RELAY_BASE_URL' : '模型 Base URL'} 未配置`);
   }
 
-  const supportsMultimodal = isMultimodalModel(modelId);
+  const supportsMultimodal = isMultimodalModel(resolvedId);
   const enableThinking = modelConfig.enableThinking ?? false;
   const formattedMessages = buildOpenAIMessages(messages, supportsMultimodal);
 
   // 构建请求体
   const requestBody: Record<string, unknown> = {
-    model: modelId,
+    model: modelConfig.provider === 'deepseek'
+      ? resolveDeepSeekApiModelName(config.baseUrl, resolvedId)
+      : resolvedId,
     messages: formattedMessages,
     temperature: options?.temperature ?? 0.7,
     stream: true,

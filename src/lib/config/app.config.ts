@@ -120,30 +120,58 @@ const enabledModels: ModelConfig[] = [
 ];
 
 const resolvedModels: ModelConfig[] = enabledModels.length > 0 ? enabledModels : stepFunModels;
-const envDefaultModel = process.env.LLM_MODEL || '';
-const resolvedDefaultModel =
-  (envDefaultModel && resolvedModels.some((model) => model.id === envDefaultModel)
-    ? envDefaultModel
-    : undefined) ||
-  resolvedModels.find((model) => model.id === 'qwen3.7-plus')?.id ||
-  resolvedModels.find((model) => model.id === 'DeepSeek-V4-Flash')?.id ||
-  resolvedModels.find((model) => model.id === 'DeepSeek-V4-Pro')?.id ||
-  resolvedModels.find((model) => model.id === 'step-3.7-flash')?.id ||
-  resolvedModels.find((model) => model.supportsMultimodal)?.id ||
-  resolvedModels[0]?.id ||
-  'qwen3.7-plus';
-const resolvedDefaultVisionModel =
-  resolvedModels.find((model) => model.id === 'qwen3.7-plus')?.id ||
-  resolvedModels.find((model) => model.supportsMultimodal)?.id ||
-  resolvedModels[0]?.id ||
-  'qwen3.7-plus';
+
+/**
+ * 单一真相源：从「已启用模型」里挑一个可用 id。
+ *
+ * 优先级：环境变量声明（且确实可用）→ recommended 模型 → 第一个可用模型。
+ * 任何用途的默认模型都必须经过这里，保证返回的 id 一定在 resolvedModels 里——
+ * 这是消除 "未知模型: xxx" / fallback 空壳的根本：默认值永远落在可用集合内。
+ */
+function pickAvailableModelId(
+  preferredEnvId: string | undefined,
+  predicate?: (model: ModelConfig) => boolean,
+): string {
+  const envId = (preferredEnvId || '').trim();
+  if (envId && resolvedModels.some((model) => model.id === envId)) return envId;
+  if (predicate) {
+    const byPredicate = resolvedModels.find(predicate)?.id;
+    if (byPredicate) return byPredicate;
+  }
+  return (
+    resolvedModels.find((model) => model.recommended)?.id ||
+    resolvedModels[0]?.id ||
+    'step-3.7-flash'
+  );
+}
+
+const resolvedDefaultModel = pickAvailableModelId(process.env.LLM_MODEL);
+const resolvedDefaultVisionModel = pickAvailableModelId(
+  process.env.VISION_MODEL,
+  (model) => Boolean(model.supportsMultimodal),
+);
+const resolvedWorkshopModel = pickAvailableModelId(process.env.WORKSHOP_MODEL || process.env.LLM_MODEL);
+const resolvedTutorModel = pickAvailableModelId(process.env.TUTOR_MODEL || process.env.LLM_MODEL);
+
+/**
+ * 各用途默认模型集中表（唯一计算默认模型的地方）。
+ * 上新模型只需在上面的 *Models 定义里加一条 + 在 .env 指定对应用途 env，无需改散落字面量。
+ */
+export const ModelDefaults = {
+  primary: resolvedDefaultModel,
+  vision: resolvedDefaultVisionModel,
+  workshop: resolvedWorkshopModel,
+  tutor: resolvedTutorModel,
+} as const;
 
 // ==================== LLM 配置 ====================
 
 export const LLMConfig = {
-  // 默认模型
-  defaultModel: resolvedDefaultModel,
-  defaultVisionModel: resolvedDefaultVisionModel,
+  // 默认模型（各用途集中在 ModelDefaults，这里转出方便消费）
+  defaultModel: ModelDefaults.primary,
+  defaultVisionModel: ModelDefaults.vision,
+  workshopModel: ModelDefaults.workshop,
+  tutorModel: ModelDefaults.tutor,
   
   // API 配置
   stepfun: {

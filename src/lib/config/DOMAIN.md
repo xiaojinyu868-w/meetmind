@@ -28,6 +28,19 @@ AppConfig {
 - 所有环境变量在 `.env` 中定义
 - `app.config.ts` 统一读取，不要在其他地方直接 `process.env.XXX`
 - 新增配置项必须在 `app.config.ts` 中注册
-- **DXKP OpenAI-compatible 是当前默认 AI**：`DEEPSEEK_API_KEY` / `DASHSCOPE_API_KEY` 指向 `https://ai.dxkp.com/v1` 后，所有文本 AI 调用（同桌 / 复习 / 学习应用 / 速查表 / Tutor agent）默认使用 `DeepSeek-V4-Flash`。
-- DeepSeek（`DEEPSEEK_API_KEY` + `DEEPSEEK_BASE_URL`）和 Qwen（`DASHSCOPE_API_KEY` + `LLM_BASE_URL`）共用同一兼容接口；Tutor agent 会根据模型名前缀识别 DeepSeek / Qwen，并在主通道繁忙时做 `DeepSeek ↔ Qwen` 备用切换。
-- 用户可在设置页（`/settings`）覆盖模型偏好；选择"自动"则使用 `LLMConfig.defaultModel`（当前默认 `DeepSeek-V4-Flash`）。
+
+### 模型注册表（单一真相源，环境变量驱动）
+
+> 详见 `docs/MODEL_REGISTRY_REFACTOR.md`。**模型 id 只有一个真相源：`app.config.ts` 的 `ModelConfig[]` + `ModelDefaults`。**
+
+- **启用哪些 provider**：由各 `*_API_KEY` 是否配置决定（StepFun / DeepSeek / Qwen / Ark / Relay）。
+- **每个用途默认用哪个模型**：集中在 `ModelDefaults`，由环境变量声明，未配则回落到注册表里 `recommended` 的模型：
+  - `LLM_MODEL` → `ModelDefaults.primary`（主默认）
+  - `WORKSHOP_MODEL` → `ModelDefaults.workshop`（学习应用，回落 `LLM_MODEL`）
+  - `TUTOR_MODEL` → `ModelDefaults.tutor`（同桌/复习 agent，回落 `LLM_MODEL`）
+  - `VISION_MODEL` → `ModelDefaults.vision`（多模态，回落注册表第一个多模态模型）
+- **唯一计算默认模型的地方**是 `pickAvailableModelId()`，保证返回的 id 一定在已启用模型集合内。
+- **前端不自行判断模型可用性**（`*_API_KEY` 是 server-only，浏览器拿不到）：统一通过 `GET /api/llm/models` 取 `{ models, defaultModel, workshopModel }`，再在该列表里选；偏好存储里的过期 model 名会被自动纠正。
+- **后端容错**：`llm-service.ts` `chat()` / `chatStreamRaw()` 拿到不在注册表的 model 会回落 `DEFAULT_MODEL_ID` 并 warn，不再 throw `未知模型` 把链路打成 500。
+- **DeepSeek 官方域名**（`api.deepseek.com`）只接受小写 model 名，`llm-service.resolveDeepSeekApiModelName` 在出网那一刻转小写；内部 id 仍用 `DeepSeek-V4-Flash/Pro`。
+- 上新模型：在 `app.config.ts` 加一条 `ModelConfig` + 在 `.env` 指定对应用途 env，无需改任何散落字面量。

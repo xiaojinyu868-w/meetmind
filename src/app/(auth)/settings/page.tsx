@@ -86,7 +86,7 @@ export default function SettingsPage() {
   const router = useRouter();
   const [settings, setSettings] = useState<SettingsState>(DEFAULT_SETTINGS);
   const [modelOptions, setModelOptions] = useState<ModelOption[]>([]);
-  const [defaultModelId, setDefaultModelId] = useState('DeepSeek-V4-Flash');
+  const [defaultModelId, setDefaultModelId] = useState('');
   const [profileForm, setProfileForm] = useState<ProfileForm>(DEFAULT_PROFILE_FORM);
   const [loading, setLoading] = useState(true);
   const [savingSetting, setSavingSetting] = useState(false);
@@ -155,7 +155,7 @@ export default function SettingsPage() {
           defaultModel?: string;
         };
         if (!alive) return;
-        const nextDefaultModel = data.defaultModel?.trim() || 'DeepSeek-V4-Flash';
+        const nextDefaultModel = data.defaultModel?.trim() || '';
         setDefaultModelId(nextDefaultModel);
         setModelOptions((data.models || [])
           .filter((model): model is { id: string; name: string; recommended?: boolean } => Boolean(model.id && model.name))

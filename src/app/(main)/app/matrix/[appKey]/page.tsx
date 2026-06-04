@@ -4,7 +4,6 @@ import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
 import { useParams, useSearchParams } from 'next/navigation';
 import { toast } from 'sonner';
-import { DEFAULT_WORKSHOP_MODEL_ID } from '@/lib/services/llm-service';
 import { db, getPreference, setPreference, getSessionSummary } from '@/lib/db';
 import { classroomDataService } from '@/lib/services/classroom-data-service';
 import { runMemoryMigration } from '@/lib/services/memory-migration';
@@ -112,7 +111,7 @@ export default function AppMatrixWindowPage() {
   const [anchors, setAnchors] = useState<Anchor[]>([]);
   const [summaryOverview, setSummaryOverview] = useState('');
   const [keyDifficulties, setKeyDifficulties] = useState<string[]>([]);
-  const [model, setModel] = useState(DEFAULT_WORKSHOP_MODEL_ID);
+  const [model, setModel] = useState('');
 
   const rawAppKey = params?.appKey;
   const appKey = Array.isArray(rawAppKey) ? rawAppKey[0] : rawAppKey || '';
@@ -125,11 +124,17 @@ export default function AppMatrixWindowPage() {
   useEffect(() => {
     let cancelled = false;
     const run = async () => {
-      const preferredModel = await getPreference<string>(WORKSHOP_MODEL_PREFERENCE, DEFAULT_WORKSHOP_MODEL_ID).catch(
-        () => DEFAULT_WORKSHOP_MODEL_ID
-      );
+      // 真相源：服务端 /api/llm/models（前端拿不到 server env，不能自己判断可用性）。
+      const data = await fetch('/api/llm/models')
+        .then((res) => (res.ok ? res.json() : null))
+        .catch(() => null);
+      const available: string[] = Array.isArray(data?.models) ? data.models.map((m: { id: string }) => m.id) : [];
+      const serverDefault: string = (data?.workshopModel || data?.defaultModel || '').trim();
+      const saved = await getPreference<string>(WORKSHOP_MODEL_PREFERENCE, '').catch(() => '');
       if (cancelled) return;
-      setModel(preferredModel || DEFAULT_WORKSHOP_MODEL_ID);
+      // 只有当存储的偏好仍在服务端可用列表里才采用，否则回落服务端默认。
+      const resolved = saved && (available.length === 0 || available.includes(saved)) ? saved : serverDefault;
+      setModel(resolved);
     };
     void run();
     return () => {
@@ -138,6 +143,7 @@ export default function AppMatrixWindowPage() {
   }, []);
 
   useEffect(() => {
+    if (!model) return;
     void setPreference(WORKSHOP_MODEL_PREFERENCE, model).catch(() => undefined);
   }, [model]);
 

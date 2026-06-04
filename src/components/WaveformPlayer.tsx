@@ -265,6 +265,16 @@ export const WaveformPlayer = forwardRef<WaveformPlayerRef, WaveformPlayerProps>
       url = URL.createObjectURL(src);
       audioUrlRef.current = url;
     } else {
+      // 关键修复（2026-06-04）：跳过失效的 blob: URL。
+      // blob: URL 只在创建它的那次页面会话有效；刷新/换设备后变成死链，
+      // 直接喂给 WaveSurfer.load 会 fetch 失败抛 "ERR_FILE_NOT_FOUND / Failed to fetch"
+      // 的 unhandled rejection，污染控制台也可能拖慢/卡住渲染。
+      // 这种录音的可播放源应来自 IndexedDB blob（useReviewSession 会重建 objectURL）
+      // 或档位2 上云后的 /api/workspace/audio URL；死 blob: 直接忽略不加载。
+      if (src.startsWith('blob:')) {
+        setIsReady(false);
+        return;
+      }
       url = src;
       audioUrlRef.current = null;
     }
