@@ -91,7 +91,6 @@ export interface DesktopVideoReviewLayoutProps {
   handleActionItemsUpdate: (items: ActionItem[]) => void;
   handleActionComplete: (actionId: string) => void;
   handleStartNextAction: () => void;
-  handleTimelineClick: (timeMs: number) => void;
   handlePlaybackAnchorAdd: (timeMs: number) => void;
   handleAddNote: (text: string, source?: NoteSource, metadata?: NoteMetadata) => void;
   renderSharedWorkspacePanel: (tab: SharedWorkspaceTab, options?: {
@@ -128,7 +127,6 @@ export function DesktopVideoReviewLayout(props: DesktopVideoReviewLayoutProps) {
     handleActionItemsUpdate,
     handleActionComplete,
     handleStartNextAction,
-    handleTimelineClick,
     handlePlaybackAnchorAdd,
     handleAddNote,
     renderSharedWorkspacePanel,
@@ -532,10 +530,9 @@ export function DesktopVideoReviewLayout(props: DesktopVideoReviewLayoutProps) {
                 iconTabStroke={ICON_TAB_STROKE}
                 timelineForView={timelineForView}
                 currentTime={currentTime}
-                selectedBreakpoint={selectedBreakpoint}
                 anchors={anchors}
                 segments={segments}
-                onTimelineClick={handleTimelineClick}
+                onTimelineClick={(timeMs) => handleUnifiedSeek(timeMs, true)}
                 onBreakpointSelect={handleAnchorSelect}
                 onSegmentTextUpdate={handleTranscriptTextUpdate}
                 onSeek={handleUnifiedSeek}

@@ -192,20 +192,12 @@ export function SharedAgentLanding({ token }: SharedAgentLandingProps) {
   const handleReshare = React.useCallback(async () => {
     const url = window.location.href;
     try {
-      if (navigator.share) {
-        await navigator.share({ title: share?.title ?? 'MeetMind', url });
-        return;
-      }
-    } catch {
-      // 用户取消 / 不支持，走复制兜底
-    }
-    try {
       await navigator.clipboard.writeText(url);
       toast.success(COPY.share.creator.doneCopied);
     } catch {
-      toast.error('复制失败，请手动复制地址栏');
+      toast.error(COPY.share.landing.reshareFailed);
     }
-  }, [share?.title]);
+  }, []);
 
   // ===== Loading 态：v7 仪式感 =====
   if (loading) {

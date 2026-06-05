@@ -54,6 +54,13 @@ function normalizeCards(result: AppExecutionResult | null): FlashcardItem[] {
     .filter((item) => item.front && item.back);
 }
 
+function getFallbackMessage(result: AppExecutionResult | null): string | null {
+  const payload = result?.render?.payload as { message?: unknown } | undefined;
+  return typeof payload?.message === 'string' && payload.message.trim()
+    ? payload.message.trim()
+    : null;
+}
+
 type MasteryScore = 'missed' | 'got';
 
 /* 卡片渐变色调 — 根据索引循环，营造视觉多样性 */
@@ -67,6 +74,7 @@ const CARD_THEMES = [
 
 export function FlashcardsWindow({ result, onLearningActivity }: FlashcardsWindowProps) {
   const cards = useMemo(() => normalizeCards(result), [result]);
+  const fallbackMessage = useMemo(() => getFallbackMessage(result), [result]);
   const [index, setIndex] = useState(0);
   const [flipped, setFlipped] = useState(false);
   const [isAnimating, setIsAnimating] = useState(false);
@@ -193,6 +201,15 @@ export function FlashcardsWindow({ result, onLearningActivity }: FlashcardsWindo
 
   if (!result) {
     return <AppWindowPlaceholder status="loading" appName="闪卡训练" />;
+  }
+  if (fallbackMessage) {
+    return (
+      <div className="flex h-full min-h-[420px] items-center justify-center bg-[#11110F] px-6">
+        <p className="max-w-[24rem] text-center text-[15px] leading-7 text-white/70">
+          {fallbackMessage}
+        </p>
+      </div>
+    );
   }
   if (cards.length === 0) {
     return <AppWindowPlaceholder status="empty" appName="闪卡训练" />;

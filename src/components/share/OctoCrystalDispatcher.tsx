@@ -168,7 +168,7 @@ function buildTranscriptDigest(segments: TranscriptSegment[]) {
 }
 
 /**
- * 从 AppExecutionResult 抽一句 hookLine 用于分享卡片头图 + system prompt。
+ * 从 AppExecutionResult 抽一句摘要，用于分享态上下文。
  */
 function buildArtifactSummary(result: AppExecutionResult | null): string {
   if (!result) return '';
@@ -186,7 +186,7 @@ function buildArtifactSummary(result: AppExecutionResult | null): string {
  * - 用户未设置 nickname 时，注册兜底是 username（手机号 / 邮箱前缀）
  *   → 看起来像 "1181783314"——电话号当昵称很丑、还泄露隐私
  * - 这里用启发式判断："看起来像电话号 / 纯数字 / 看起来像 user.id"
- *   都视为 invalid nickname，让 ShareAgentCard 不渲染 sharer 行
+ *   都视为 invalid nickname，避免在分享态展示可识别昵称
  */
 function sanitizeNickname(raw: string | null | undefined): string | undefined {
   if (!raw) return undefined;
@@ -319,8 +319,6 @@ export function OctoCrystalDispatcher({
           ? resolvedCourseTitle.trim()
           : artifactSummary || '一节课';
 
-        const hookLine = artifactSummary || titleClean;
-
         // 完整 artifact payload 进 snapshot.artifact —— v3.0 修正：
         //   - 之前只塞 summary 字符串，导致落地页 ArtifactPreview 无法渲染产物
         //   - artifact 是「场景层产物」按设计本来就要分享出去（不是隐私）
@@ -341,12 +339,7 @@ export function OctoCrystalDispatcher({
                 : undefined,
         };
 
-        await openCreator(snapshot, {
-          hookLine,
-          // ShareAgentCard 仍接受 artifactPayload prop（已经在 snapshot.artifact.payload 里，但
-          // useShareAgentCreator 把它单独提出来交给 Card，避免 Card 二次解 snapshot）
-          artifactPayload: fullPayload,
-        });
+        await openCreator(snapshot);
       } finally {
         setPickingKey(null);
       }

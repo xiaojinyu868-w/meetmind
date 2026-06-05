@@ -284,7 +284,8 @@ export const COPY = {
       claimDone: '已领取，去工作台看看',
       claimAlready: '你之前已经领过这一份',
       /** 也分享给别人 */
-      reshareAction: '也分享给别人',
+      reshareAction: '复制链接',
+      reshareFailed: '复制失败，请手动复制地址栏',
       /** 分享态对话输入占位符 */
       chatPlaceholder: '问问这节课…',
       /** 已撤销 / 已过期 */
@@ -322,11 +323,15 @@ export const COPY = {
       /** 创建按钮 */
       submit: '生成分享',
       submitting: '正在生成…',
-      doneTitle: '已经做好了',
       doneCopy: '复制链接',
       doneCopied: '链接已复制',
-      doneShare: '分享给同学',
-      doneViewLanding: '看看对方会看到什么',
+      doneLinkCreated: '分享链接已生成',
+      doneCopyFailed: '复制失败，请手动复制链接',
+      doneCopying: '复制中...',
+      fallbackTitle: '分享链接已生成',
+      fallbackBody: '浏览器没有允许自动复制，可以直接复制下面的链接。',
+      loginRequired: '先登录再分享',
+      createFailed: '创建分享失败',
       /** 仪式入口（应用矩阵 / 录课结束页都会用到的「递结晶」模块） */
       crystal: {
         eyebrow: '今天这节课',

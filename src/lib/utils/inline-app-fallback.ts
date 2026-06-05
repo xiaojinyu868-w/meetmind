@@ -5,6 +5,8 @@ export type InlineFallbackAppKey = 'quiz' | 'flashcards' | 'cheatsheet' | 'mindm
 
 type ThinSegment = Pick<TranscriptSegment, 'id' | 'text' | 'startMs' | 'endMs'>;
 
+const FLASHCARDS_FALLBACK_MESSAGE = '这节课暂时没能整理出可靠闪卡，稍后可以再生成一次。';
+
 function cleanText(value: string | undefined): string {
   return (value || '')
     .replace(/[\u0000-\u001f]+/g, ' ')
@@ -20,27 +22,15 @@ function pickSegments(segments: ThinSegment[], limit = 6): ThinSegment[] {
 
 function topicFrom(text: string, fallback: string): string {
   const cleaned = cleanText(text)
-    .replace(/^(老师|同学|这里|这个|那个)(说|讲到|提到)?/, '')
+    .replace(/^(老师|同学|这里|这个|那个)(说到|讲到|提到)?/, '')
     .trim();
   return cleaned.slice(0, 28) || fallback;
 }
 
 function buildFlashcards(segments: ThinSegment[]) {
-  const picked = pickSegments(segments, 5);
+  const picked = pickSegments(segments, 1);
   if (picked.length === 0) return null;
-  return {
-    cards: picked.map((segment, index) => {
-      const text = cleanText(segment.text);
-      const topic = topicFrom(text, `重点 ${index + 1}`);
-      return {
-        id: `fallback-flashcard-${index + 1}`,
-        title: `闪卡 ${index + 1}`,
-        front: `这段课里“${topic}”最关键的意思是什么？`,
-        back: text.slice(0, 160),
-        hint: '先用自己的话复述，再对照老师原话。',
-      };
-    }),
-  };
+  return { message: FLASHCARDS_FALLBACK_MESSAGE };
 }
 
 function buildQuiz(segments: ThinSegment[]) {
@@ -54,7 +44,7 @@ function buildQuiz(segments: ThinSegment[]) {
       return {
         id: `fallback-quiz-${index + 1}`,
         title: `题目 ${index + 1}`,
-        stem: `关于“${topic}”，下面哪句话最贴近老师刚才讲的意思？`,
+        stem: `关于“${topic}”，下面哪句最贴近刚才课堂内容？`,
         options: [
           `A. ${correct}`,
           'B. 这部分内容和本节课主题无关',
@@ -74,7 +64,7 @@ function buildCheatsheet(segments: ThinSegment[]) {
   const half = Math.max(1, Math.ceil(picked.length / 2));
   return {
     title: '课堂速查卡',
-    overview: '先扫核心概念，再看易错提醒。',
+    overview: '先扫核心概念，再看容易漏掉的提醒。',
     sections: [
       {
         key: 'definition',
@@ -139,8 +129,8 @@ export function buildInlineAppFallbackPayload(
 }
 
 const FALLBACK_RESULT_META: Record<InlineFallbackAppKey, { pluginId: string; mode: AppRenderMode; title: string; description: string }> = {
-  quiz: { pluginId: 'quiz-arena', mode: 'quiz', title: '课堂测验', description: '先作答，再核对答案与证据。' },
-  flashcards: { pluginId: 'flashcards-lab', mode: 'flashcards', title: '课堂闪卡', description: '先回忆再看答案。' },
+  quiz: { pluginId: 'quiz-arena', mode: 'quiz', title: '课堂测验', description: '先作答，再核对答案和证据。' },
+  flashcards: { pluginId: 'flashcards-lab', mode: 'flashcards', title: '课堂闪卡', description: FLASHCARDS_FALLBACK_MESSAGE },
   cheatsheet: { pluginId: 'cheatsheet-gen', mode: 'document', title: '课堂速查卡', description: '核心概念和易错点速览。' },
   mindmap: { pluginId: 'mindmap-outline', mode: 'mindmap', title: '课堂知识结构', description: '把课堂内容整理成结构图。' },
   'study-report': { pluginId: 'study-report', mode: 'document', title: '学习报告', description: '看清这节课讲了什么和下一步。' },
@@ -155,7 +145,7 @@ export function buildInlineAppFallbackResult(
   const meta = FALLBACK_RESULT_META[appKey];
   return {
     pluginId: meta.pluginId,
-    version: 'inline-fallback-v1',
+    version: 'inline-fallback-v2',
     cards: [],
     tasks: [],
     trace: ['inline_fallback=client'],

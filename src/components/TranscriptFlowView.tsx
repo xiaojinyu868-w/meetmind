@@ -698,7 +698,14 @@ export function TranscriptFlowView({
     const elRect = el.getBoundingClientRect();
     const containerRect = container.getBoundingClientRect();
     if (elRect.top < containerRect.top || elRect.bottom > containerRect.bottom) {
-      el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      const nextTop =
+        container.scrollTop +
+        (elRect.top - containerRect.top) -
+        (container.clientHeight - el.clientHeight) / 2;
+      container.scrollTo({
+        top: Math.max(0, nextTop),
+        behavior: 'smooth',
+      });
     }
   }, [currentTime, variant, displayParagraphs]);
 

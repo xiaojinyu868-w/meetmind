@@ -8,10 +8,11 @@ const transcript = [
 ];
 
 describe('buildInlineAppFallbackPayload', () => {
-  it('builds usable flashcards when app execution fails', () => {
+  it('does not fabricate flashcards when app execution fails', () => {
     const payload = buildInlineAppFallbackPayload('flashcards', transcript);
-    expect(payload).toBeTruthy();
-    expect((payload as { cards: unknown[] }).cards.length).toBeGreaterThan(0);
+    expect(payload).toEqual({
+      message: '这节课暂时没能整理出可靠闪卡，稍后可以再生成一次。',
+    });
   });
 
   it('builds a compact cheatsheet when app execution fails', () => {

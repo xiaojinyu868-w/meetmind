@@ -926,11 +926,6 @@ function StudentAppContent({
     selectedAnchor,
   });
 
-  const handleTimelineClick = useCallback((timeMs: number) => {
-    setCurrentTime(timeMs);
-    waveformRef.current?.seekTo(timeMs);
-  }, []);
-
   // ── Action Items Hook（行动项管理）──────
   const {
     handleActionComplete,
@@ -1888,7 +1883,6 @@ function StudentAppContent({
               handleActionItemsUpdate={handleActionItemsUpdate}
               handleActionComplete={handleActionComplete}
               handleStartNextAction={handleStartNextAction}
-              handleTimelineClick={handleTimelineClick}
               handlePlaybackAnchorAdd={handlePlaybackAnchorAdd}
               handleAddNote={handleAddNote}
               renderSharedWorkspacePanel={renderSharedWorkspacePanel}

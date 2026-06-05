@@ -1,34 +1,29 @@
 'use client';
 
 import type { Timeline, Breakpoint } from '@/types';
-import { formatTimestamp } from '@/lib/services/longcut-utils';
 import { TranscriptFlowView } from './TranscriptFlowView';
 
 interface TimelineViewProps {
   timeline: Timeline;
   currentTime: number;
-  selectedBreakpoint: Breakpoint | null;
   onTimeClick: (timeMs: number) => void;
   onBreakpointClick: (breakpoint: Breakpoint) => void;
   onSegmentTextUpdate?: (segmentId: string, text: string) => void;
-  /** 启用选词解释功能 */
+  /** Enable word explanation for selected transcript text. */
   enableWordExplainer?: boolean;
-  /** 完整转录上下文（用于 AI 解释时的参考） */
+  /** Full transcript context for word explanation. */
   fullContextText?: string;
 }
 
 export function TimelineView({
   timeline,
   currentTime,
-  selectedBreakpoint,
   onTimeClick,
   onBreakpointClick,
   onSegmentTextUpdate,
   enableWordExplainer = false,
   fullContextText,
 }: TimelineViewProps) {
-  const totalDuration = timeline.segments[timeline.segments.length - 1]?.endMs || 1;
-  const progressPercent = (currentTime / totalDuration) * 100;
   const unresolvedCount = timeline.breakpoints.filter((bp) => !bp.resolved).length;
 
   const confusionTimestamps = timeline.breakpoints.map((bp) => ({
@@ -38,39 +33,6 @@ export function TimelineView({
 
   return (
     <div className="h-full flex flex-col overflow-hidden">
-      <div className="px-4 py-3 border-b border-divider-light">
-        <div className="flex items-center justify-between mb-3">
-          <h2 className="text-sm font-semibold text-navy">课堂时间轴</h2>
-          {unresolvedCount > 0 && (
-            <span className="badge badge-streaming">{unresolvedCount} 待解决</span>
-          )}
-        </div>
-
-        <div className="relative">
-          <div className="flex items-center justify-between text-xs text-ink-muted mb-1.5">
-            <span className="font-mono">{formatTimestamp(currentTime)}</span>
-            <span className="font-mono">{formatTimestamp(totalDuration)}</span>
-          </div>
-          <div className="h-2 bg-paper-deep rounded-full relative overflow-visible">
-            <div
-              className="absolute left-0 top-0 h-full bg-[#FDF3C0] rounded-full transition-all duration-100"
-              style={{ width: `${progressPercent}%` }}
-            />
-            {timeline.breakpoints.map((bp) => (
-              <button
-                key={bp.id}
-                onClick={() => onBreakpointClick(bp)}
-                className={`absolute top-1/2 -translate-y-1/2 -translate-x-1/2 w-4 h-4 rounded-full border-2 border-white transition-all hover:scale-125 z-10 ${
-                  bp.resolved ? 'bg-mint' : 'bg-coral animate-pulse'
-                } ${selectedBreakpoint?.id === bp.id ? 'ring-2 ring-[#E8E2D5] scale-125' : ''}`}
-                style={{ left: `${(bp.timestamp / totalDuration) * 100}%` }}
-                title={`${formatTimestamp(bp.timestamp)} - ${bp.resolved ? '已解决' : '待解决'}`}
-              />
-            ))}
-          </div>
-        </div>
-      </div>
-
       <div className="flex-1 min-h-0 overflow-hidden px-4 py-3">
         <TranscriptFlowView
           segments={timeline.segments}
@@ -83,7 +45,7 @@ export function TimelineView({
           fullContextText={fullContextText}
           confusionTimestamps={confusionTimestamps}
           defaultExpanded={true}
-          showHeader={true}
+          showHeader={false}
           headerTitle="课堂转录"
           className="h-full flex flex-col"
         />
@@ -92,6 +54,7 @@ export function TimelineView({
       <div className="px-4 py-3 border-t border-divider-light">
         <div className="flex gap-2">
           <button
+            type="button"
             onClick={() => {
               const firstUnresolved = timeline.breakpoints.find((bp) => !bp.resolved);
               if (firstUnresolved) onBreakpointClick(firstUnresolved);

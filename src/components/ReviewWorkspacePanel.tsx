@@ -6,7 +6,7 @@ import { AnchorDetailPanel } from '@/components/AnchorDetailPanel';
 import { OctoAvatar } from '@/components/ui/octo-avatar';
 import { useOctoMood } from '@/lib/hooks/useOctoMood';
 import { formatTime } from '@/lib/utils/page-utils';
-import type { Anchor, Breakpoint, Timeline, TranscriptSegment } from '@/types';
+import type { Anchor, Timeline, TranscriptSegment } from '@/types';
 import type { ReviewTab, WorkspaceTabConfig } from '@/types/page-types';
 
 interface ReviewWorkspacePanelProps {
@@ -18,7 +18,6 @@ interface ReviewWorkspacePanelProps {
   iconTabStroke: number;
   timelineForView: Timeline | null;
   currentTime: number;
-  selectedBreakpoint: Breakpoint | null;
   anchors: Anchor[];
   segments: TranscriptSegment[];
   onTimelineClick: (timeMs: number) => void;
@@ -42,7 +41,6 @@ export function ReviewWorkspacePanel({
   iconTabStroke,
   timelineForView,
   currentTime,
-  selectedBreakpoint,
   anchors,
   segments,
   onTimelineClick,
@@ -95,7 +93,6 @@ export function ReviewWorkspacePanel({
           <TimelineView
             timeline={timelineForView}
             currentTime={currentTime}
-            selectedBreakpoint={selectedBreakpoint}
             onTimeClick={onTimelineClick}
             onBreakpointClick={(bp) => {
               const anchor = anchors.find((item) => item.id === bp.id);

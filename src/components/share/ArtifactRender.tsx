@@ -10,7 +10,7 @@
  * 不重写应用 UI：用极简的、可识别的预览样式（与 WorkshopWindow 同源色板，
  * 但不引入任何重交互；测验不显示答案，强裂变保留）。
  *
- * payload 兼容三种形态（与 ShareAgentCard 提取逻辑同源）：
+ * payload 兼容几种分享态产物形态：
  *   - cheatsheet     → CheatsheetPayload {sections}
  *   - mindmap        → {root, branches: [{label, children: [{label}]}]}
  *   - quiz           → {questions | items: [{stem, options}]}
@@ -57,7 +57,7 @@ function extractSummary(artifact: unknown): string {
   return '';
 }
 
-// ── 6 区 cheatsheet 色板（与 ShareAgentCard / CheatsheetWindow 一致） ──
+// ── 6 区 cheatsheet 色板（与 CheatsheetWindow 一致） ──
 
 const SECTION_ACCENT: Record<string, { bar: string; tint: string; label: string }> = {
   definition: { bar: '#1C1B19', tint: '#F2EDE3', label: '#1C1B19' },
