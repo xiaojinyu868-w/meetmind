@@ -1,4 +1,4 @@
-﻿'use client';
+'use client';
 
 import type { Timeline, Breakpoint } from '@/types';
 import { formatTimestamp } from '@/lib/services/longcut-utils';
@@ -70,30 +70,6 @@ export function TimelineView({
           </div>
         </div>
       </div>
-
-      {timeline.topics.length > 0 && (
-        <div className="px-4 py-3 border-b border-divider-light">
-          <h3 className="text-xs font-medium text-ink-muted uppercase tracking-wider mb-2">知识点</h3>
-          <div className="flex gap-1.5 flex-wrap">
-            {timeline.topics.map((topic, index) => {
-              const isActive = currentTime >= topic.startMs && currentTime < topic.endMs;
-              return (
-                <button
-                  key={topic.id}
-                  onClick={() => onTimeClick(topic.startMs)}
-                  className={`text-xs px-2.5 py-1.5 rounded-lg transition-all ${
-                    isActive
-                      ? 'bg-[#FDF3C0] text-[#1C1B19] font-medium shadow-sm'
-                      : 'bg-paper-warm text-ink-secondary hover:bg-[#F2EDE3]'
-                  }`}
-                >
-                  {index + 1}. {topic.title}
-                </button>
-              );
-            })}
-          </div>
-        </div>
-      )}
 
       <div className="flex-1 min-h-0 overflow-hidden px-4 py-3">
         <TranscriptFlowView

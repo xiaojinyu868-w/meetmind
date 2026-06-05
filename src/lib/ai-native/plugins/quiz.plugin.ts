@@ -75,27 +75,52 @@ function inferQuestionType(options: string[], answer: string): string {
   return 'single';
 }
 
+/**
+ * 兜底题——只在 LLM 完全失败（返回 null / 空）时使用。
+ * 关键：兜底题一律生成「简答题」（无选项），让学生回放原片段后口头复述。
+ * 绝不再造 "该片段主要讨论了X / 对Y的否定 / 跳过了话题" 这类与内容无关的伪干扰项，
+ * 那种选项一眼就是模板，伤害"这个 AI 真的懂我在学什么"的第一印象。
+ */
 function fallbackDraft(segment: TranscriptSegment): QuizDraft {
-  const text = segment.text.replace(/\s+/g, ' ').trim();
   const ts = formatTimestamp(segment.startMs);
-  // 从原文中提取一个关键短语用于构造有辨识度的干扰项
-  const phrases = text.split(/[，。；！？,.\s]+/).filter((p) => p.length >= 4 && p.length <= 20);
-  const keyPhrase = phrases[0] || text.slice(0, 20);
-  const altPhrase = phrases[1] || phrases[0] || text.slice(0, 15);
-
   return {
-    stem: `关于 ${ts} 附近讲述的内容，以下哪种理解最准确？`,
-    options: [
-      `该片段主要讨论了"${keyPhrase}"相关内容`,
-      `该片段的重点是对"${altPhrase}"的否定`,
-      `该片段跳过了这个话题，没有展开说明`,
-      `该片段仅做了简单引用，未做实质分析`,
-    ],
-    answer: 'A',
-    explanation: `回放 ${ts} 附近的课堂录音可以确认，该片段确实围绕"${keyPhrase}"展开。建议重新听一遍加深理解。`,
+    stem: `回放 ${ts} 附近的内容，用自己的话复述这一段讲了什么、为什么重要。`,
+    type: 'short',
+    options: [],
+    answer: segment.text.replace(/\s+/g, ' ').trim().slice(0, 160),
+    explanation: `参考原文：${segment.text.replace(/\s+/g, ' ').trim().slice(0, 160)}`,
     startMs: segment.startMs,
     endMs: segment.endMs,
   };
+}
+
+const JUDGE_OPTIONS = ['正确', '错误'];
+
+/**
+ * 按题型决定最终选项：
+ * - short / fill（主观题）→ 永远空选项，前端走"看参考答案 + 自评"
+ * - judge → 标准化为 ["正确","错误"]
+ * - single → 用 LLM 给的选项；若不足 2 项，说明这题本不该是选择题，降级为简答
+ *
+ * 返回标准化后的 { type, options }，绝不无中生有造模板干扰项。
+ */
+function resolveTypeAndOptions(
+  rawType: string | undefined,
+  rawOptions: string[],
+  answer: string
+): { type: string; options: string[] } {
+  const declared = (rawType || '').trim().toLowerCase();
+  const type = declared || inferQuestionType(rawOptions, answer);
+
+  if (type === 'short' || type === 'fill') {
+    return { type, options: [] };
+  }
+  if (type === 'judge') {
+    return { type: 'judge', options: rawOptions.length >= 2 ? rawOptions : JUDGE_OPTIONS };
+  }
+  // single（或其它）：选项不足时不造假，降级为简答
+  if (rawOptions.length >= 2) return { type: 'single', options: rawOptions };
+  return { type: 'short', options: [] };
 }
 
 async function generateQuizWithLLM(
@@ -111,7 +136,8 @@ async function generateQuizWithLLM(
       {
         role: 'system',
         content:
-          '你是一位经验丰富的命题研究员，擅长设计能区分"真懂"和"以为自己懂"的测试题。学生刚上完一节课，想检验自己对课堂内容的理解程度。题目类型可以是单选、判断、填空、简答任意组合，由你按内容性质决定哪种最合适。',
+          '你是一位经验丰富的命题研究员，擅长设计能区分"真懂"和"以为自己懂"的测试题。学生刚上完一节课，想检验自己对课堂内容的理解程度。题目类型可以是单选、判断、填空、简答任意组合，由你按内容性质决定哪种最合适。' +
+          '单选题的每个干扰项都必须来自课堂内容里真实存在的、似是而非的理解偏差或易混淆概念，写成具体、自洽、有信息量的陈述；严禁出现"该片段主要讨论了X""跳过了这个话题""仅做了简单引用，未做实质分析"这类与具体知识无关、一眼就是模板的空话选项。如果一道题凑不出 3 个有内容的干扰项，就把它出成简答题而不是硬凑选择题。',
       },
       {
         role: 'user',
@@ -173,11 +199,13 @@ function buildCards(
     const segment = segments[index % Math.max(1, segments.length)] || segments[0];
     const draft = questionDraft?.stem?.trim() ? questionDraft : fallbackDraft(segment);
     const stem = draft.stem?.trim() || `请根据 ${formatTimestamp(segment.startMs)} 片段作答`;
-    const options = normalizeOptions(draft.options);
-    const normalizedOptions = options.length >= 2
-      ? options
-      : fallbackDraft(segment).options || ['A', 'B', 'C', 'D'];
-    const answer = (draft.answer || 'A').trim();
+    const answer = (draft.answer || '').trim();
+    // 按题型决定选项：主观题保持空选项，绝不硬塞模板干扰项
+    const { type: resolvedType, options: normalizedOptions } = resolveTypeAndOptions(
+      draft.type,
+      normalizeOptions(draft.options),
+      answer
+    );
     const explanation = draft.explanation?.trim() || tools.summarizeSegments([segment], 120) || '请回放原片段核对关键概念。';
     const fallbackStart = segment?.startMs ?? 0;
     const fallbackEnd = segment?.endMs ?? fallbackStart + 8000;
@@ -208,9 +236,9 @@ function buildCards(
       meta: {
         cardKind: 'quiz',
         stem,
-        // 题型推断：显式传 type 优先，否则按 options 数量推断
-        // single (≥2 options + answer 是字母) / judge (options=正确/错误) / fill (options 空 + 有 answer) / short (空 options)
-        type: typeof draft.type === 'string' && draft.type ? draft.type : inferQuestionType(normalizedOptions, answer),
+        // 题型已在 resolveTypeAndOptions 内收口：
+        // single (≥2 options) / judge (正确/错误) / short / fill（空选项，前端走看答案+自评）
+        type: resolvedType,
         options: normalizedOptions,
         answer,
         explanation,

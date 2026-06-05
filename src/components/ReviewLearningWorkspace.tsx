@@ -112,6 +112,7 @@ export function ReviewLearningWorkspace({
           onGenerateDraft={() => (execution.hasResult ? execution.rerun() : execution.execute())}
           onResultUpdate={execution.updateResult}
           onLearningActivity={onLearningActivity}
+          mindmapDefaultFullscreen
         />
       </div>
     </section>

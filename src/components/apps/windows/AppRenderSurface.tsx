@@ -28,6 +28,8 @@ export interface AppRenderSurfaceProps {
   onGenerateDraft?: () => Promise<AppExecutionResult | null>;
   onResultUpdate?: (next: AppExecutionResult) => void;
   onLearningActivity?: (line: string) => void;
+  /** 思维导图在"查看结果"场景默认全屏（复习工作区 / 独立结果页传 true；对话内联不传） */
+  mindmapDefaultFullscreen?: boolean;
 }
 
 export function AppRenderSurface({
@@ -44,6 +46,7 @@ export function AppRenderSurface({
   onGenerateDraft,
   onResultUpdate,
   onLearningActivity,
+  mindmapDefaultFullscreen = false,
 }: AppRenderSurfaceProps) {
   if (appKey === 'audio-overview') {
     return <PodcastWindow result={result} transcript={transcript} taskState={taskState} onSeek={onSeek} onRegenerate={onRegenerate} />;
@@ -58,7 +61,7 @@ export function AppRenderSurface({
   }
 
   if (appKey === 'mindmap') {
-    return <MindmapWindow result={result} transcript={transcript} onSeek={onSeek} />;
+    return <MindmapWindow result={result} transcript={transcript} onSeek={onSeek} defaultFullscreen={mindmapDefaultFullscreen} />;
   }
 
   if (appKey === 'infographic') {

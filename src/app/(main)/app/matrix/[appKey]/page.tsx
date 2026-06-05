@@ -370,6 +370,7 @@ export default function AppMatrixWindowPage() {
         onRegenerate={() => void execution.rerun()}
         onGenerateDraft={() => (execution.hasResult ? execution.rerun() : execution.execute())}
         onResultUpdate={execution.updateResult}
+        mindmapDefaultFullscreen
       />
     </AppWindowShell>
   );

@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import type { AppExecutionResult } from '@/lib/ai-native/types';
 import type { TranscriptSegment } from '@/types';
 import { EvidenceChip } from '@/components/apps/evidence/EvidenceChip';
@@ -12,19 +13,17 @@ import {
 import {
   type LayoutNode,
   PALETTE,
-  DEPTH_HUES,
-  NODE_H,
   NODE_PAD_X,
   LEVEL_GAP_X,
   FONT_SIZE_ROOT,
-  getHueByDepth,
+  getBranchHue,
+  branchIndexOf,
   measureText,
   getFontSize,
   buildLayoutTree,
   assignPositions,
   flattenLayout,
   boundingBox,
-  findLayoutNode,
 } from './mindmap-layout';
 
 /* ================================================================== */
@@ -35,6 +34,8 @@ interface MindmapWindowProps {
   result: AppExecutionResult | null;
   transcript: TranscriptSegment[];
   onSeek?: (startMs: number) => void;
+  /** 在"查看结果"类场景（复习工作区 / 独立结果页）默认进入全屏沉浸态——思维导图全屏才有用 */
+  defaultFullscreen?: boolean;
 }
 
 interface MindmapPayload {
@@ -45,6 +46,12 @@ interface MindmapPayload {
 }
 
 type ViewMode = 'mindmap' | 'outline';
+
+const MIN_READABLE_SCALE = 0.6;
+// 允许把小图放大到铺满视口（豆包式：进来就大、就清楚），不再卡在 1.x 让小图缩在角落
+const MAX_FIT_SCALE = 2.2;
+// 自适应时留的边距系数（铺到 ~92%，四周留口气）
+const FIT_MARGIN = 0.92;
 
 /* ================================================================== */
 /*  数据标准化                                                          */
@@ -87,8 +94,24 @@ function normalizePayload(result: AppExecutionResult | null): {
   return { root: '课堂知识结构', children: [], markdown: '' };
 }
 
+/** 收集"所有有子节点的节点 id" + root —— 用于默认整图展开 */
+function buildFullExpandedSet(treeChildren: MindmapNode[]): Set<string> {
+  const set = new Set<string>(['root']);
+  const walk = (nodes: MindmapNode[], parentId: string) => {
+    nodes.forEach((node, i) => {
+      const id = `${parentId}-${i}`;
+      if (Array.isArray(node.children) && node.children.length > 0) {
+        set.add(id);
+        walk(node.children, id);
+      }
+    });
+  };
+  walk(treeChildren, 'root');
+  return set;
+}
+
 /* ================================================================== */
-/*  自绘 SVG 思维导图渲染器                                             */
+/*  自绘 SVG 思维导图渲染器 —— v7：米白纸 + 文字坐在墨线上               */
 /* ================================================================== */
 
 function CustomMindmapRenderer({
@@ -96,46 +119,34 @@ function CustomMindmapRenderer({
   children: treeChildren,
   className,
   style,
+  isFullscreen,
+  onToggleFullscreen,
 }: {
   rootTitle: string;
   children: MindmapNode[];
   className?: string;
   style?: React.CSSProperties;
+  isFullscreen?: boolean;
+  onToggleFullscreen?: () => void;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
 
-  // ★ 关键改动：初始只展开 root（只显示一级子节点）
-  // 一级子节点自身不展开（不在 set 中），所以它们的 children 不会渲染
-  const [expandedSet, setExpandedSet] = useState<Set<string>>(() => {
-    const s = new Set<string>();
-    s.add('root');
-    return s;
-  });
+  // 第一性原理：用户打开就该看见整张图。默认整棵树展开。
+  const [expandedSet, setExpandedSet] = useState<Set<string>>(() => buildFullExpandedSet(treeChildren));
   const [transform, setTransform] = useState({ x: 0, y: 0, scale: 1 });
-  const dragRef = useRef<{ startX: number; startY: number; originX: number; originY: number } | null>(null);
+  const dragRef = useRef<{ startX: number; startY: number; originX: number; originY: number; moved: boolean } | null>(null);
   const isAnimatingRef = useRef(false);
-  // 用于追踪上次展开的节点ID，以便计算新布局后聚焦
-  const pendingFocusRef = useRef<string | null>(null);
 
-  // 当 treeChildren 变化时重置展开状态 — 同样只展开 root
+  // treeChildren 变化时重新整图展开
   useEffect(() => {
-    const s = new Set<string>();
-    s.add('root');
-    setExpandedSet(s);
-    setTransform({ x: 0, y: 0, scale: 1 });
+    setExpandedSet(buildFullExpandedSet(treeChildren));
   }, [treeChildren]);
 
   const toggleNode = useCallback((id: string) => {
     setExpandedSet((prev) => {
       const next = new Set(prev);
-      if (next.has(id)) {
-        next.delete(id);
-        // 收起时不需要聚焦
-      } else {
-        next.add(id);
-        // 展开时标记需要聚焦
-        pendingFocusRef.current = id;
-      }
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
       return next;
     });
   }, []);
@@ -148,8 +159,8 @@ function CustomMindmapRenderer({
       depth: 0,
       x: 0,
       y: 0,
-      width: measureText(rootTitle, FONT_SIZE_ROOT) + NODE_PAD_X * 2 + (treeChildren.length > 0 ? 32 : 0),
-      height: NODE_H + 4,
+      width: measureText(rootTitle, FONT_SIZE_ROOT) + NODE_PAD_X * 2,
+      height: 40,
       children: buildLayoutTree(treeChildren, 1, expandedSet, 'root'),
       expanded: true,
       hasChildren: treeChildren.length > 0,
@@ -161,148 +172,127 @@ function CustomMindmapRenderer({
     return { nodes, edges, bb, rootNode };
   }, [rootTitle, treeChildren, expandedSet]);
 
-  const PADDING = 80;
+  const PADDING = 56;
   const svgWidth = layout.bb.maxX - layout.bb.minX + PADDING * 2;
   const svgHeight = layout.bb.maxY - layout.bb.minY + PADDING * 2;
   const offsetX = -layout.bb.minX + PADDING;
   const offsetY = -layout.bb.minY + PADDING;
 
-  // ★ 展开后自动平移聚焦 — 只平移不缩放，保持用户当前视角大小
-  useEffect(() => {
-    const focusId = pendingFocusRef.current;
-    if (!focusId || !containerRef.current) return;
-    pendingFocusRef.current = null;
-
-    const targetNode = findLayoutNode(layout.rootNode, focusId);
-    if (!targetNode) return;
-
+  // 自适应：整图尽量铺满视口（小图也放大到清楚），但绝不缩到读不清；放不下时让根节点贴左上
+  const fitToView = useCallback(() => {
+    if (!containerRef.current) return;
     const rect = containerRef.current.getBoundingClientRect();
-
-    // 策略：将被点击节点放在视口左侧 1/3 处，纵向居中
-    // 这样右侧 2/3 的空间自然展示展开的子节点
-    const nodeCenterX = (targetNode.x + targetNode.width / 2 + offsetX);
-    const nodeCenterY = (targetNode.y + targetNode.height / 2 + offsetY);
-
-    // 保持当前缩放不变
-    const currentScale = transform.scale;
-
-    // 目标：让被点击节点在容器的左侧 30% 处、纵向居中
-    const targetScreenX = rect.width * 0.30;
-    const targetScreenY = rect.height * 0.50;
-
-    const newX = targetScreenX - nodeCenterX * currentScale;
-    const newY = targetScreenY - nodeCenterY * currentScale;
-
+    if (rect.width === 0 || rect.height === 0) return;
+    const scaleRaw = Math.min(rect.width / svgWidth, rect.height / svgHeight) * FIT_MARGIN;
+    const scale = Math.min(Math.max(scaleRaw, MIN_READABLE_SCALE), MAX_FIT_SCALE);
+    const fitsW = svgWidth * scale <= rect.width;
+    const fitsH = svgHeight * scale <= rect.height;
+    const x = fitsW ? (rect.width - svgWidth * scale) / 2 : 24;
+    const y = fitsH ? (rect.height - svgHeight * scale) / 2 : 24;
     isAnimatingRef.current = true;
-    setTransform((t) => ({ ...t, x: newX, y: newY }));
-    setTimeout(() => { isAnimatingRef.current = false; }, 500);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [layout, offsetX, offsetY]);
+    setTransform({ x, y, scale });
+    setTimeout(() => { isAnimatingRef.current = false; }, 420);
+  }, [svgWidth, svgHeight]);
 
-  // 鼠标拖拽平移
+  // 初次 / 尺寸变化自适应
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    const raf = requestAnimationFrame(() => fitToView());
+    const ro = new ResizeObserver(() => { if (!isAnimatingRef.current) fitToView(); });
+    ro.observe(el);
+    return () => { cancelAnimationFrame(raf); ro.disconnect(); };
+  }, [fitToView]);
+
+  // 滚轮缩放 —— 用原生非被动监听器，否则 React 的 onWheel 是 passive，preventDefault 会报警告且失效。
+  // 以光标为锚点缩放：光标下的内容不动（这是"顺手"的关键）。
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    const onWheel = (e: WheelEvent) => {
+      e.preventDefault();
+      const rect = el.getBoundingClientRect();
+      const mx = e.clientX - rect.left;
+      const my = e.clientY - rect.top;
+      const delta = e.deltaY > 0 ? 0.9 : 1.1;
+      setTransform((t) => {
+        const newScale = Math.min(2.6, Math.max(0.3, t.scale * delta));
+        const ratio = newScale / t.scale;
+        return { scale: newScale, x: mx - (mx - t.x) * ratio, y: my - (my - t.y) * ratio };
+      });
+    };
+    el.addEventListener('wheel', onWheel, { passive: false });
+    return () => el.removeEventListener('wheel', onWheel);
+  }, []);
+
+  // 拖拽平移
   const handleMouseDown = useCallback((e: React.MouseEvent) => {
     if (e.button !== 0) return;
-    dragRef.current = { startX: e.clientX, startY: e.clientY, originX: transform.x, originY: transform.y };
+    dragRef.current = { startX: e.clientX, startY: e.clientY, originX: transform.x, originY: transform.y, moved: false };
   }, [transform.x, transform.y]);
 
   const handleMouseMove = useCallback((e: React.MouseEvent) => {
-    if (!dragRef.current) return;
-    const { startX, startY, originX, originY } = dragRef.current;
-    const dx = e.clientX - startX;
-    const dy = e.clientY - startY;
-    setTransform((t) => ({ ...t, x: originX + dx, y: originY + dy }));
+    const drag = dragRef.current;
+    if (!drag) return;
+    const dx = e.clientX - drag.startX;
+    const dy = e.clientY - drag.startY;
+    if (Math.abs(dx) > 3 || Math.abs(dy) > 3) drag.moved = true;
+    const nextX = drag.originX + dx;
+    const nextY = drag.originY + dy;
+    setTransform((t) => ({ ...t, x: nextX, y: nextY }));
   }, []);
 
   const handleMouseUp = useCallback(() => { dragRef.current = null; }, []);
 
-  // 滚轮缩放
-  const handleWheel = useCallback((e: React.WheelEvent) => {
-    e.preventDefault();
-    const delta = e.deltaY > 0 ? 0.92 : 1.08;
+  const zoomBy = useCallback((factor: number) => {
+    const rect = containerRef.current?.getBoundingClientRect();
+    const cx = rect ? rect.width / 2 : 0;
+    const cy = rect ? rect.height / 2 : 0;
     setTransform((t) => {
-      const newScale = Math.min(2.5, Math.max(0.25, t.scale * delta));
-      return { ...t, scale: newScale };
+      const newScale = Math.min(2.6, Math.max(0.3, t.scale * factor));
+      const ratio = newScale / t.scale;
+      return { scale: newScale, x: cx - (cx - t.x) * ratio, y: cy - (cy - t.y) * ratio };
     });
   }, []);
 
-  // 自适应居中
-  const fitToView = useCallback(() => {
-    if (!containerRef.current) return;
-    const rect = containerRef.current.getBoundingClientRect();
-    const scaleX = rect.width / svgWidth;
-    const scaleY = rect.height / svgHeight;
-    const scale = Math.min(scaleX, scaleY, 1) * 0.9;
-    const x = (rect.width - svgWidth * scale) / 2;
-    const y = (rect.height - svgHeight * scale) / 2;
-    isAnimatingRef.current = true;
-    setTransform({ x, y, scale });
-    setTimeout(() => { isAnimatingRef.current = false; }, 500);
-  }, [svgWidth, svgHeight]);
-
-  // 初次渲染时自适应
-  const initialFitDone = useRef(false);
-  useEffect(() => {
-    if (initialFitDone.current) return;
-    initialFitDone.current = true;
-    const timer = requestAnimationFrame(() => fitToView());
-    return () => cancelAnimationFrame(timer);
-  }, [fitToView]);
-
-  // resize 监听
-  useEffect(() => {
-    const el = containerRef.current;
-    if (!el) return;
-    const ro = new ResizeObserver(() => {
-      if (!isAnimatingRef.current) fitToView();
-    });
-    ro.observe(el);
-    return () => ro.disconnect();
-  }, [fitToView]);
-
-  // 全部展开 / 全部收起
+  // 展开 / 收起全部
   const expandAll = useCallback(() => {
-    const s = new Set<string>();
-    s.add('root');
-    const addAll = (nodes: MindmapNode[], parentId: string) => {
-      nodes.forEach((n, i) => {
-        const id = `${parentId}-${i}`;
-        if (Array.isArray(n.children) && n.children.length > 0) {
-          s.add(id);
-          addAll(n.children, id);
-        }
-      });
-    };
-    addAll(treeChildren, 'root');
-    setExpandedSet(s);
-    // 展开全部后，下一帧自适应
+    setExpandedSet(buildFullExpandedSet(treeChildren));
     requestAnimationFrame(() => fitToView());
   }, [treeChildren, fitToView]);
 
   const collapseAll = useCallback(() => {
-    const s = new Set<string>();
-    s.add('root');
-    setExpandedSet(s);
+    setExpandedSet(new Set<string>(['root']));
     requestAnimationFrame(() => fitToView());
   }, [fitToView]);
+
+  // 文字基线 / 墨线 y
+  const underlineY = (node: LayoutNode) => node.y + node.height - 7;
+  const textBaselineY = (node: LayoutNode) => node.y + node.height - 12;
+  const nodeTextWidth = (node: LayoutNode) => measureText(node.title, getFontSize(node.depth));
+
+  const ctrlBtn =
+    'flex h-8 w-8 items-center justify-center rounded-lg text-[15px] transition-colors';
+  const ctrlBtnStyle: React.CSSProperties = {
+    background: PALETTE.bgSurface,
+    border: `1px solid ${PALETTE.border}`,
+    color: PALETTE.textSecondary,
+  };
 
   return (
     <div
       ref={containerRef}
       className={`relative overflow-hidden ${className || ''}`}
-      style={{ background: PALETTE.bg, cursor: dragRef.current ? 'grabbing' : 'grab', ...style }}
+      style={{ background: PALETTE.bg, cursor: dragRef.current?.moved ? 'grabbing' : 'grab', ...style }}
       onMouseDown={handleMouseDown}
       onMouseMove={handleMouseMove}
       onMouseUp={handleMouseUp}
       onMouseLeave={handleMouseUp}
-      onWheel={handleWheel}
     >
-      {/* 微网格装饰 */}
+      {/* 极淡纸纹 */}
       <div
-        className="pointer-events-none absolute inset-0 opacity-[0.025]"
-        style={{
-          backgroundImage: `linear-gradient(${PALETTE.accent} 1px, transparent 1px), linear-gradient(90deg, ${PALETTE.accent} 1px, transparent 1px)`,
-          backgroundSize: '48px 48px',
-        }}
+        className="pointer-events-none absolute inset-0 opacity-[0.5]"
+        style={{ background: `radial-gradient(circle at 30% 20%, ${PALETTE.bgSurface} 0%, transparent 60%)` }}
       />
 
       <svg
@@ -314,26 +304,23 @@ function CustomMindmapRenderer({
           left: 0,
           transform: `translate(${transform.x}px, ${transform.y}px) scale(${transform.scale})`,
           transformOrigin: '0 0',
-          transition: dragRef.current ? 'none' : 'transform 0.45s cubic-bezier(0.4, 0, 0.2, 1)',
+          transition: dragRef.current ? 'none' : 'transform 0.4s cubic-bezier(0.4, 0, 0.2, 1)',
         }}
         viewBox={`0 0 ${svgWidth} ${svgHeight}`}
       >
-        <defs>
-          {/* 箭头标记 */}
-          <filter id="node-shadow" x="-10%" y="-10%" width="120%" height="120%">
-            <feDropShadow dx="0" dy="2" stdDeviation="4" floodColor="#000" floodOpacity="0.25" />
-          </filter>
-        </defs>
-
         <g transform={`translate(${offsetX}, ${offsetY})`}>
-          {/* 连线 — 贝塞尔曲线，颜色按子节点 depth */}
+          {/* 连线 —— 从父节点墨线右端流向子节点墨线左端，颜色随子节点所属主干 */}
           {layout.edges.map((edge, i) => {
-            const hue = getHueByDepth(edge.to.depth);
-            const x1 = edge.from.x + edge.from.width;
-            const y1 = edge.from.y + edge.from.height / 2;
+            const branchIdx = branchIndexOf(edge.to.id);
+            const hue = getBranchHue(branchIdx);
+            const fromRoot = edge.from.depth === 0;
+            const x1 = fromRoot
+              ? edge.from.x + edge.from.width
+              : edge.from.x + nodeTextWidth(edge.from) + 6;
+            const y1 = fromRoot ? edge.from.y + edge.from.height / 2 : underlineY(edge.from);
             const x2 = edge.to.x;
-            const y2 = edge.to.y + edge.to.height / 2;
-            const cpOffset = Math.min(LEVEL_GAP_X * 0.55, Math.abs(x2 - x1) * 0.45);
+            const y2 = underlineY(edge.to);
+            const cpOffset = Math.max(18, Math.min(LEVEL_GAP_X * 0.6, Math.abs(x2 - x1) * 0.5));
             const d = `M ${x1} ${y1} C ${x1 + cpOffset} ${y1}, ${x2 - cpOffset} ${y2}, ${x2} ${y2}`;
             return (
               <path
@@ -341,9 +328,9 @@ function CustomMindmapRenderer({
                 d={d}
                 fill="none"
                 stroke={hue.line}
-                strokeWidth={edge.from.depth === 0 ? 2.5 : 1.8}
+                strokeWidth={edge.to.depth === 1 ? 2 : 1.5}
                 strokeLinecap="round"
-                opacity={0.8}
+                opacity={edge.to.depth <= 1 ? 0.85 : 0.45}
               />
             );
           })}
@@ -351,88 +338,102 @@ function CustomMindmapRenderer({
           {/* 节点 */}
           {layout.nodes.map((node) => {
             const isRoot = node.depth === 0;
-            const hue = getHueByDepth(node.depth);
+            const branchIdx = branchIndexOf(node.id);
+            const hue = getBranchHue(branchIdx);
             const fontSize = getFontSize(node.depth);
-            const fontWeight = isRoot ? 700 : node.depth === 1 ? 600 : 500;
-            const textColor = isRoot ? '#ffffff' : PALETTE.textPrimary;
-            const rx = isRoot ? 14 : 10;
+            const fontWeight = isRoot ? 700 : node.depth === 1 ? 650 : 500;
+            const tw = nodeTextWidth(node);
+
+            if (isRoot) {
+              // 根：墨松绿胶囊，白字，整张图的起点（贴左侧）
+              return (
+                <g key={node.id}>
+                  <rect
+                    x={node.x}
+                    y={node.y}
+                    width={node.width}
+                    height={node.height}
+                    rx={node.height / 2}
+                    ry={node.height / 2}
+                    fill={PALETTE.accent}
+                  />
+                  <text
+                    x={node.x + node.width / 2}
+                    y={node.y + node.height / 2}
+                    fontSize={fontSize}
+                    fontWeight={700}
+                    fontFamily="-apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif"
+                    fill="#ffffff"
+                    dominantBaseline="central"
+                    textAnchor="middle"
+                    style={{ userSelect: 'none' }}
+                  >
+                    {node.title}
+                  </text>
+                </g>
+              );
+            }
 
             return (
               <g key={node.id}>
-                {/* 节点卡片背景 */}
-                <rect
-                  x={node.x}
-                  y={node.y}
-                  width={node.width}
-                  height={node.height}
-                  rx={rx}
-                  ry={rx}
-                  fill={isRoot ? hue.node : hue.nodeBg}
-                  stroke={isRoot ? 'none' : `${hue.node}40`}
-                  strokeWidth={1}
-                  filter={isRoot ? 'url(#node-shadow)' : undefined}
-                />
-
-                {/* 根节点光晕 */}
-                {isRoot && (
-                  <rect
-                    x={node.x - 2}
-                    y={node.y - 2}
-                    width={node.width + 4}
-                    height={node.height + 4}
-                    rx={rx + 2}
-                    ry={rx + 2}
-                    fill="none"
-                    stroke={`${hue.node}30`}
-                    strokeWidth={2}
-                  />
-                )}
-
                 {/* 文字 */}
                 <text
-                  x={node.x + (isRoot ? (node.width - (node.hasChildren ? 32 : 0)) / 2 : NODE_PAD_X)}
-                  y={node.y + node.height / 2}
+                  x={node.x}
+                  y={textBaselineY(node)}
                   fontSize={fontSize}
                   fontWeight={fontWeight}
                   fontFamily="-apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif"
-                  fill={textColor}
-                  dominantBaseline="central"
-                  textAnchor={isRoot ? 'middle' : 'start'}
+                  fill={hue.text}
+                  dominantBaseline="alphabetic"
+                  textAnchor="start"
                   style={{ userSelect: 'none' }}
                 >
                   {node.title}
                 </text>
 
-                {/* ★ 展开/收起按钮 — 对标 NotebookLM: 圆角方块 + > 箭头 */}
+                {/* 墨线（文字下划线，朱批/松墨手感） */}
+                <line
+                  x1={node.x}
+                  y1={underlineY(node)}
+                  x2={node.x + tw}
+                  y2={underlineY(node)}
+                  stroke={hue.line}
+                  strokeWidth={node.depth === 1 ? 2.4 : 1.8}
+                  strokeLinecap="round"
+                  opacity={node.depth <= 1 ? 0.9 : 0.6}
+                />
+
+                {/* 折叠点位：有子节点时出现的小圆，收起态实心、展开态空心 */}
                 {node.hasChildren && (
                   <g
                     style={{ cursor: 'pointer' }}
-                    onClick={(e) => { e.stopPropagation(); toggleNode(node.id); }}
+                    onMouseDown={(e) => e.stopPropagation()}
+                    onClick={(e) => { e.stopPropagation(); if (!dragRef.current?.moved) toggleNode(node.id); }}
                   >
-                    <rect
-                      x={node.x + node.width - 28}
-                      y={node.y + node.height / 2 - 11}
-                      width={22}
-                      height={22}
-                      rx={6}
-                      ry={6}
-                      fill={node.expanded ? `${hue.expandBtn}25` : `${hue.expandBtn}12`}
-                      stroke={`${hue.expandBtn}50`}
-                      strokeWidth={1}
+                    {/* 命中区域 */}
+                    <circle cx={node.x + tw + 13} cy={underlineY(node)} r={10} fill="transparent" />
+                    <circle
+                      cx={node.x + tw + 13}
+                      cy={underlineY(node)}
+                      r={5}
+                      fill={node.expanded ? PALETTE.bg : hue.marker}
+                      stroke={hue.marker}
+                      strokeWidth={1.6}
                     />
-                    {/* > 或 v 箭头 */}
-                    <path
-                      d={node.expanded
-                        ? `M ${node.x + node.width - 21} ${node.y + node.height / 2 - 3} l 4 4 l 4 -4`
-                        : `M ${node.x + node.width - 20} ${node.y + node.height / 2 - 4} l 4 4 l -4 4`
-                      }
-                      fill="none"
-                      stroke={hue.expandBtn}
-                      strokeWidth={1.8}
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      opacity={0.85}
-                    />
+                    {!node.expanded && (
+                      <text
+                        x={node.x + tw + 13}
+                        y={underlineY(node)}
+                        fontSize={9}
+                        fontWeight={700}
+                        fill="#ffffff"
+                        dominantBaseline="central"
+                        textAnchor="middle"
+                        style={{ userSelect: 'none' }}
+                      >
+                        +
+                      </text>
+                    )}
                   </g>
                 )}
               </g>
@@ -442,53 +443,36 @@ function CustomMindmapRenderer({
       </svg>
 
       {/* 右下角控制面板 */}
-      <div className="absolute bottom-3 right-3 z-10 flex flex-col items-center gap-1 rounded-xl p-1.5" style={{ background: `${PALETTE.bgSurface}ee`, border: `1px solid ${PALETTE.border}`, backdropFilter: 'blur(12px)' }}>
-        {/* 缩放 */}
-        <div className="flex items-center gap-1">
-          {[
-            { label: '+', action: () => setTransform((t) => ({ ...t, scale: Math.min(2.5, t.scale * 1.25) })), title: '放大' },
-            { label: '\u2212', action: () => setTransform((t) => ({ ...t, scale: Math.max(0.25, t.scale * 0.8) })), title: '缩小' },
-            { label: '⊡', action: fitToView, title: '适应窗口' },
-          ].map((btn, i) => (
-            <button
-              key={i}
-              type="button"
-              onClick={btn.action}
-              className="flex h-7 w-7 items-center justify-center rounded-lg text-sm font-medium transition-colors hover:brightness-125"
-              style={{ background: PALETTE.bgSurface, border: `1px solid ${PALETTE.border}`, color: PALETTE.textSecondary }}
-              title={btn.title}
-            >
-              {btn.label}
+      <div
+        className="absolute bottom-3 right-3 z-10 flex items-center gap-1 rounded-xl p-1"
+        style={{ background: `${PALETTE.bgSurface}f2`, border: `1px solid ${PALETTE.border}`, backdropFilter: 'blur(8px)', boxShadow: '0 4px 16px rgba(28,27,25,0.08)' }}
+      >
+        <button type="button" onClick={() => zoomBy(0.8)} className={ctrlBtn} style={ctrlBtnStyle} title="缩小">−</button>
+        <button type="button" onClick={() => zoomBy(1.25)} className={ctrlBtn} style={ctrlBtnStyle} title="放大">+</button>
+        <button type="button" onClick={fitToView} className={ctrlBtn} style={ctrlBtnStyle} title="适应窗口">
+          <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.6}><path strokeLinecap="round" strokeLinejoin="round" d="M9 9V4.5M9 9H4.5M9 9 3.75 3.75M9 15v4.5M9 15H4.5M9 15l-5.25 5.25M15 9h4.5M15 9V4.5M15 9l5.25-5.25M15 15h4.5M15 15v4.5m0-4.5 5.25 5.25" /></svg>
+        </button>
+        <span className="mx-0.5 h-5 w-px" style={{ background: PALETTE.border }} />
+        <button type="button" onClick={expandAll} className="rounded-lg px-2 text-[12px] transition-colors" style={ctrlBtnStyle} title="全部展开">展开</button>
+        <button type="button" onClick={collapseAll} className="rounded-lg px-2 text-[12px] transition-colors" style={ctrlBtnStyle} title="只看主干">主干</button>
+        {onToggleFullscreen && (
+          <>
+            <span className="mx-0.5 h-5 w-px" style={{ background: PALETTE.border }} />
+            <button type="button" onClick={onToggleFullscreen} className={ctrlBtn} style={ctrlBtnStyle} title={isFullscreen ? '退出全屏' : '全屏查看'}>
+              {isFullscreen ? (
+                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.6}><path strokeLinecap="round" strokeLinejoin="round" d="M9 9V4.5M9 9H4.5M15 9h4.5M15 9V4.5M9 15v4.5M9 15H4.5m10.5 0h4.5m-4.5 0v4.5" /></svg>
+              ) : (
+                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.6}><path strokeLinecap="round" strokeLinejoin="round" d="M3.75 3.75v4.5m0-4.5h4.5m-4.5 0L9 9M20.25 3.75v4.5m0-4.5h-4.5m4.5 0L15 9M3.75 20.25v-4.5m0 4.5h4.5m-4.5 0L9 15m11.25 5.25v-4.5m0 4.5h-4.5m4.5 0L15 15" /></svg>
+              )}
             </button>
-          ))}
-        </div>
-        {/* 全部展开/收起 */}
-        <div className="flex items-center gap-1">
-          <button
-            type="button"
-            onClick={expandAll}
-            className="flex h-7 items-center justify-center rounded-lg px-2 text-[11px] font-medium transition-colors hover:brightness-125"
-            style={{ background: PALETTE.bgSurface, border: `1px solid ${PALETTE.border}`, color: PALETTE.textSecondary }}
-            title="全部展开"
-          >
-            展开
-          </button>
-          <button
-            type="button"
-            onClick={collapseAll}
-            className="flex h-7 items-center justify-center rounded-lg px-2 text-[11px] font-medium transition-colors hover:brightness-125"
-            style={{ background: PALETTE.bgSurface, border: `1px solid ${PALETTE.border}`, color: PALETTE.textSecondary }}
-            title="全部收起"
-          >
-            收起
-          </button>
-        </div>
+          </>
+        )}
       </div>
 
       {/* 底部提示 */}
-      <div className="pointer-events-none absolute bottom-3 left-1/2 z-10 -translate-x-1/2">
+      <div className="pointer-events-none absolute bottom-3 left-3 z-10">
         <p className="rounded-full px-3 py-1 text-[11px]" style={{ background: `${PALETTE.bgSurface}cc`, border: `1px solid ${PALETTE.border}`, color: PALETTE.textMuted }}>
-          滚轮缩放 · 拖拽平移 · 点击节点 ▸ 展开下一层
+          滚轮缩放 · 拖拽平移
         </p>
       </div>
     </div>
@@ -496,7 +480,7 @@ function CustomMindmapRenderer({
 }
 
 /* ================================================================== */
-/*  大纲模式 — 深色主题递归树                                           */
+/*  大纲模式 — 浅色递归树                                               */
 /* ================================================================== */
 
 function OutlineNode({
@@ -512,15 +496,15 @@ function OutlineNode({
   cards: AppExecutionResult['cards'];
   onSeek?: (startMs: number) => void;
 }) {
-  const [expanded, setExpanded] = useState(depth < 2);
+  const [expanded, setExpanded] = useState(true);
   const hasChildren = Array.isArray(node.children) && node.children.length > 0;
-  const hue = DEPTH_HUES[depth % DEPTH_HUES.length];
+  const hue = getBranchHue(depth === 0 ? 0 : (depth - 1));
 
   const matchCard = cards.find((c) => c.title === node.title && c.citations?.[0]);
   const citation = matchCard?.citations?.[0];
 
-  const fontSizes = ['14px', '13px', '13px', '12px', '12px'];
-  const fontWeights = ['600', '500', '500', '400', '400'];
+  const fontSizes = ['15px', '14px', '13px', '13px', '13px'];
+  const fontWeights = ['650', '550', '500', '400', '400'];
   const fontSize = fontSizes[Math.min(depth, fontSizes.length - 1)];
   const fontWeight = fontWeights[Math.min(depth, fontWeights.length - 1)];
 
@@ -535,13 +519,13 @@ function OutlineNode({
         tabIndex={hasChildren ? 0 : undefined}
       >
         {hasChildren ? (
-          <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-md transition-all duration-200" style={{ background: expanded ? `${hue.node}20` : 'transparent', color: hue.node }}>
+          <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-md transition-all duration-200" style={{ background: expanded ? `${hue.line}1f` : 'transparent', color: hue.line }}>
             <svg className="h-3 w-3 transition-transform duration-200" style={{ transform: expanded ? 'rotate(90deg)' : 'rotate(0deg)' }} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
             </svg>
           </span>
         ) : (
-          <span className="mt-2 flex h-2 w-2 shrink-0"><span className="block h-1.5 w-1.5 rounded-full" style={{ background: hue.node, opacity: 0.6 }} /></span>
+          <span className="mt-2 flex h-2 w-2 shrink-0"><span className="block h-1.5 w-1.5 rounded-full" style={{ background: hue.line, opacity: 0.6 }} /></span>
         )}
         <span className="flex-1 leading-relaxed" style={{ color: depth === 0 ? PALETTE.textPrimary : PALETTE.textSecondary, fontSize, fontWeight }}>{node.title}</span>
         {citation ? (
@@ -551,7 +535,7 @@ function OutlineNode({
         ) : null}
       </div>
       {hasChildren && expanded ? (
-        <div className="animate-fade-in" style={{ borderLeft: `2px solid ${hue.node}25`, marginLeft: 10, paddingLeft: 8 }}>
+        <div className="animate-fade-in" style={{ borderLeft: `2px solid ${hue.line}25`, marginLeft: 10, paddingLeft: 8 }}>
           {node.children!.map((child, index) => (
             <OutlineNode key={`${child.title}-${index}`} node={child} depth={depth + 1} transcript={transcript} cards={cards} onSeek={onSeek} />
           ))}
@@ -565,10 +549,11 @@ function OutlineNode({
 /*  主组件                                                              */
 /* ================================================================== */
 
-export function MindmapWindow({ result, transcript, onSeek }: MindmapWindowProps) {
+export function MindmapWindow({ result, transcript, onSeek, defaultFullscreen = false }: MindmapWindowProps) {
   const { root, children, markdown } = useMemo(() => normalizePayload(result), [result]);
   const [viewMode, setViewMode] = useState<ViewMode>('mindmap');
   const [copyFeedback, setCopyFeedback] = useState(false);
+  const [isFullscreen, setIsFullscreen] = useState(defaultFullscreen);
 
   const totalNodes = useMemo(() => {
     const count = (nodes: MindmapNode[]): number => nodes.reduce((sum, n) => sum + 1 + count(n.children || []), 0);
@@ -590,6 +575,14 @@ export function MindmapWindow({ result, transcript, onSeek }: MindmapWindowProps
       setTimeout(() => setCopyFeedback(false), 2000);
     }).catch(() => { /* silent */ });
   }, [markdown]);
+
+  // Esc 退出全屏
+  useEffect(() => {
+    if (!isFullscreen) return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setIsFullscreen(false); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [isFullscreen]);
 
   // 加载中
   if (!result) {
@@ -629,64 +622,93 @@ export function MindmapWindow({ result, transcript, onSeek }: MindmapWindowProps
     );
   }
 
-  return (
-    <section className="flex h-full flex-col gap-0 animate-fade-in" data-testid="mindmap-window">
-      {/* 顶部工具栏 */}
-      <header className="flex items-center justify-between px-4 py-2.5" style={{ background: PALETTE.bgToolbar, borderBottom: `1px solid ${PALETTE.border}`, borderRadius: '12px 12px 0 0' }}>
-        <div className="flex items-center gap-3">
-          <div className="flex items-center gap-0.5 rounded-lg p-0.5" style={{ background: PALETTE.bgSurface }}>
-            {(['mindmap', 'outline'] as const).map((mode) => {
-              const isActive = viewMode === mode;
-              const label = mode === 'mindmap' ? '导图' : '大纲';
-              const icon = mode === 'mindmap' ? (
-                <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M7.5 3.75H6A2.25 2.25 0 003.75 6v1.5M16.5 3.75H18A2.25 2.25 0 0120.25 6v1.5m0 9V18A2.25 2.25 0 0118 20.25h-1.5m-9 0H6A2.25 2.25 0 013.75 18v-1.5" /></svg>
-              ) : (
-                <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M8.25 6.75h12M8.25 12h12m-12 5.25h12M3.75 6.75h.007v.008H3.75V6.75zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zM3.75 12h.007v.008H3.75V12zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm-.375 5.25h.007v.008H3.75v-.008zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0z" /></svg>
-              );
-              return (
-                <button key={mode} type="button" onClick={() => setViewMode(mode)} className="flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-all duration-200" style={{ background: isActive ? PALETTE.accent : 'transparent', color: isActive ? '#fff' : PALETTE.textSecondary, boxShadow: isActive ? `0 2px 8px ${PALETTE.accent}40` : 'none' }}>
-                  {icon}{label}
-                </button>
-              );
-            })}
-          </div>
-          <div className="hidden items-center gap-2 text-xs sm:flex" style={{ color: PALETTE.textMuted }}>
-            <span className="flex items-center gap-1"><span className="inline-block h-1.5 w-1.5 rounded-full" style={{ background: DEPTH_HUES[0].node }} />{children.length} 个分支</span>
-            <span style={{ color: PALETTE.border }}>·</span>
-            <span>{totalNodes} 个节点</span>
-            <span style={{ color: PALETTE.border }}>·</span>
-            <span>{treeDepthValue} 层</span>
-          </div>
+  const toolbar = (
+    <header className="flex items-center justify-between px-4 py-2.5" style={{ background: PALETTE.bgToolbar, borderBottom: `1px solid ${PALETTE.border}`, borderRadius: isFullscreen ? 0 : '12px 12px 0 0' }}>
+      <div className="flex items-center gap-3">
+        <div className="flex items-center gap-0.5 rounded-lg p-0.5" style={{ background: PALETTE.bg, border: `1px solid ${PALETTE.border}` }}>
+          {(['mindmap', 'outline'] as const).map((mode) => {
+            const isActive = viewMode === mode;
+            const label = mode === 'mindmap' ? '导图' : '大纲';
+            const icon = mode === 'mindmap' ? (
+              <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M7.5 3.75H6A2.25 2.25 0 003.75 6v1.5M16.5 3.75H18A2.25 2.25 0 0120.25 6v1.5m0 9V18A2.25 2.25 0 0118 20.25h-1.5m-9 0H6A2.25 2.25 0 013.75 18v-1.5" /></svg>
+            ) : (
+              <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M8.25 6.75h12M8.25 12h12m-12 5.25h12M3.75 6.75h.007v.008H3.75V6.75zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zM3.75 12h.007v.008H3.75V12zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm-.375 5.25h.007v.008H3.75v-.008zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0z" /></svg>
+            );
+            return (
+              <button key={mode} type="button" onClick={() => setViewMode(mode)} className="flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-all duration-200" style={{ background: isActive ? PALETTE.accent : 'transparent', color: isActive ? '#fff' : PALETTE.textSecondary }}>
+                {icon}{label}
+              </button>
+            );
+          })}
         </div>
-        <button type="button" onClick={handleCopyOutline} className="flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium transition-all duration-200" style={{ border: `1px solid ${PALETTE.border}`, background: 'transparent', color: copyFeedback ? '#26de81' : PALETTE.textSecondary }} title="复制文本大纲到剪贴板">
+        <div className="hidden items-center gap-2 text-xs sm:flex" style={{ color: PALETTE.textMuted }}>
+          <span className="flex items-center gap-1"><span className="inline-block h-1.5 w-1.5 rounded-full" style={{ background: getBranchHue(0).line }} />{children.length} 个分支</span>
+          <span style={{ color: PALETTE.border }}>·</span>
+          <span>{totalNodes} 个节点</span>
+          <span style={{ color: PALETTE.border }}>·</span>
+          <span>{treeDepthValue} 层</span>
+        </div>
+      </div>
+      <div className="flex items-center gap-1.5">
+        <button type="button" onClick={() => setIsFullscreen((p) => !p)} className="flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium transition-all duration-200" style={{ border: `1px solid ${PALETTE.border}`, background: 'transparent', color: PALETTE.textSecondary }} title={isFullscreen ? '退出全屏' : '全屏查看'}>
+          {isFullscreen ? (
+            <><svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.6}><path strokeLinecap="round" strokeLinejoin="round" d="M9 9V4.5M9 9H4.5M15 9h4.5M15 9V4.5M9 15v4.5M9 15H4.5m10.5 0h4.5m-4.5 0v4.5" /></svg>退出全屏</>
+          ) : (
+            <><svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.6}><path strokeLinecap="round" strokeLinejoin="round" d="M3.75 3.75v4.5m0-4.5h4.5m-4.5 0L9 9M20.25 3.75v4.5m0-4.5h-4.5m4.5 0L15 9M3.75 20.25v-4.5m0 4.5h4.5m-4.5 0L9 15m11.25 5.25v-4.5m0 4.5h-4.5m4.5 0L15 15" /></svg>全屏</>
+          )}
+        </button>
+        <button type="button" onClick={handleCopyOutline} className="flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium transition-all duration-200" style={{ border: `1px solid ${PALETTE.border}`, background: 'transparent', color: copyFeedback ? PALETTE.accent : PALETTE.textSecondary }} title="复制文本大纲到剪贴板">
           {copyFeedback ? (
             <><svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" /></svg>已复制</>
           ) : (
             <><svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M15.666 3.888A2.25 2.25 0 0013.5 2.25h-3c-1.03 0-1.9.693-2.166 1.638m7.332 0c.055.194.084.4.084.612v0a.75.75 0 01-.75.75H9.75a.75.75 0 01-.75-.75v0c0-.212.03-.418.084-.612m7.332 0c.646.049 1.288.11 1.927.184 1.1.128 1.907 1.077 1.907 2.185V19.5a2.25 2.25 0 01-2.25 2.25H6.75A2.25 2.25 0 014.5 19.5V6.257c0-1.108.806-2.057 1.907-2.185a48.208 48.208 0 011.927-.184" /></svg>复制</>
           )}
         </button>
-      </header>
+      </div>
+    </header>
+  );
 
-      {/* 内容区 */}
-      {viewMode === 'mindmap' ? (
-        <CustomMindmapRenderer rootTitle={root} className="min-h-0 flex-1" style={{ borderRadius: '0 0 12px 12px', border: `1px solid ${PALETTE.border}`, borderTop: 'none' }}>
-          {children}
-        </CustomMindmapRenderer>
-      ) : (
-        <div className="min-h-0 flex-1 overflow-auto p-4 md:p-5" style={{ background: PALETTE.bg, borderRadius: '0 0 12px 12px', border: `1px solid ${PALETTE.border}`, borderTop: 'none' }}>
-          <div className="mb-4 flex items-center gap-3 pb-3" style={{ borderBottom: `1px solid ${PALETTE.border}` }}>
-            <span className="flex h-8 w-8 items-center justify-center rounded-lg" style={{ background: `${PALETTE.accent}18` }}>
-              <svg className="h-4 w-4" style={{ color: PALETTE.accent }} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M7.5 3.75H6A2.25 2.25 0 003.75 6v1.5M16.5 3.75H18A2.25 2.25 0 0120.25 6v1.5m0 9V18A2.25 2.25 0 0118 20.25h-1.5m-9 0H6A2.25 2.25 0 013.75 18v-1.5" /></svg>
-            </span>
-            <h2 className="text-lg font-semibold" style={{ color: PALETTE.textPrimary }}>{root}</h2>
-          </div>
-          <div className="space-y-0.5">
-            {children.map((child, index) => (
-              <OutlineNode key={`${child.title}-${index}`} node={child} depth={0} transcript={transcript} cards={result?.cards || []} onSeek={onSeek} />
-            ))}
-          </div>
-        </div>
-      )}
+  const body = viewMode === 'mindmap' ? (
+    <CustomMindmapRenderer
+      rootTitle={root}
+      className="min-h-0 flex-1"
+      style={isFullscreen ? undefined : { borderRadius: '0 0 12px 12px', border: `1px solid ${PALETTE.border}`, borderTop: 'none' }}
+      isFullscreen={isFullscreen}
+      onToggleFullscreen={() => setIsFullscreen((p) => !p)}
+    >
+      {children}
+    </CustomMindmapRenderer>
+  ) : (
+    <div className="min-h-0 flex-1 overflow-auto p-4 md:p-5" style={{ background: PALETTE.bg, borderRadius: isFullscreen ? 0 : '0 0 12px 12px', border: isFullscreen ? 'none' : `1px solid ${PALETTE.border}`, borderTop: 'none' }}>
+      <div className="mb-4 flex items-center gap-3 pb-3" style={{ borderBottom: `1px solid ${PALETTE.border}` }}>
+        <span className="flex h-8 w-8 items-center justify-center rounded-lg" style={{ background: `${PALETTE.accent}18` }}>
+          <svg className="h-4 w-4" style={{ color: PALETTE.accent }} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M7.5 3.75H6A2.25 2.25 0 003.75 6v1.5M16.5 3.75H18A2.25 2.25 0 0120.25 6v1.5m0 9V18A2.25 2.25 0 0118 20.25h-1.5m-9 0H6A2.25 2.25 0 013.75 18v-1.5" /></svg>
+        </span>
+        <h2 className="text-lg font-semibold" style={{ color: PALETTE.textPrimary }}>{root}</h2>
+      </div>
+      <div className="space-y-0.5">
+        {children.map((child, index) => (
+          <OutlineNode key={`${child.title}-${index}`} node={child} depth={0} transcript={transcript} cards={result?.cards || []} onSeek={onSeek} />
+        ))}
+      </div>
+    </div>
+  );
+
+  // 全屏：沉浸阅读层（第一性原理——给用户一块真正能看清的大画布）
+  if (isFullscreen && typeof document !== 'undefined') {
+    return createPortal(
+      <div className="fixed inset-0 z-[120] flex flex-col animate-fade-in" style={{ background: PALETTE.bg }}>
+        {toolbar}
+        {body}
+      </div>,
+      document.body
+    );
+  }
+
+  return (
+    <section className="flex h-full flex-col gap-0 animate-fade-in" data-testid="mindmap-window">
+      {toolbar}
+      {body}
     </section>
   );
 }

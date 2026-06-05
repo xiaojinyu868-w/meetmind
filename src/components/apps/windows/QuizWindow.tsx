@@ -17,13 +17,28 @@ interface QuizQuestion {
   id: string;
   title?: string;
   stem: string;
+  /** single | judge | fill | short。空选项即主观题（fill / short），走"看参考答案 + 自评" */
+  type: string;
   options: string[];
   answer: string;
   explanation?: string;
 }
 
+/** 主观题自评标记：存进 selected[id]，用于和客观题统一计分 */
+const SELF_CORRECT = '__self_correct__';
+const SELF_WRONG = '__self_wrong__';
+
+/** 主观题 = 没有 ≥2 个选项的题（简答 / 填空） */
+function isSubjective(q: QuizQuestion): boolean {
+  return q.options.length < 2;
+}
+
 function normalizeQuestions(result: AppExecutionResult | null): QuizQuestion[] {
   if (!result) return [];
+  // 客观题需 ≥2 选项；主观题（short/fill）选项为空但 stem 即可成题——不再被过滤掉
+  const isRenderable = (q: QuizQuestion) =>
+    Boolean(q.stem) && (q.options.length >= 2 || q.type === 'short' || q.type === 'fill');
+
   const payload = result.render?.payload as { questions?: Array<Record<string, unknown>> } | undefined;
   const payloadQuestions = Array.isArray(payload?.questions)
     ? payload.questions
@@ -31,13 +46,14 @@ function normalizeQuestions(result: AppExecutionResult | null): QuizQuestion[] {
           id: typeof item.id === 'string' ? item.id : `quiz-${index + 1}`,
           title: typeof item.title === 'string' ? item.title : `题目 ${index + 1}`,
           stem: typeof item.stem === 'string' ? item.stem : '',
+          type: typeof item.type === 'string' ? item.type : 'single',
           options: Array.isArray(item.options)
             ? item.options.map((option) => (typeof option === 'string' ? option : '')).filter(Boolean)
             : [],
           answer: typeof item.answer === 'string' ? item.answer : '',
           explanation: typeof item.explanation === 'string' ? item.explanation : '',
         }))
-        .filter((question) => question.stem && question.options.length >= 2)
+        .filter(isRenderable)
     : [];
   if (payloadQuestions.length > 0) return payloadQuestions;
 
@@ -47,13 +63,21 @@ function normalizeQuestions(result: AppExecutionResult | null): QuizQuestion[] {
       id: card.id,
       title: card.title || `题目 ${index + 1}`,
       stem: typeof card.meta?.stem === 'string' ? card.meta.stem : card.body,
+      type: typeof card.meta?.type === 'string' ? card.meta.type : 'single',
       options: Array.isArray(card.meta?.options)
         ? card.meta.options.map((option) => (typeof option === 'string' ? option : '')).filter(Boolean)
         : [],
       answer: typeof card.meta?.answer === 'string' ? card.meta.answer : '',
       explanation: typeof card.meta?.explanation === 'string' ? card.meta.explanation : '',
     }))
-    .filter((question) => question.stem && question.options.length >= 2);
+    .filter(isRenderable);
+}
+
+/** 客观题：比对选项；主观题：看自评标记 */
+function isAnswerCorrect(q: QuizQuestion, selectedValue: string | undefined): boolean {
+  if (!selectedValue) return false;
+  if (isSubjective(q)) return selectedValue === SELF_CORRECT;
+  return selectedValue === normalizeAnswer(q.answer, q.options);
 }
 
 function normalizeAnswer(answer: string, options: string[]): string {
@@ -183,13 +207,14 @@ export function QuizWindow({ result, onLearningActivity }: QuizWindowProps) {
   const current = questions[Math.min(index, questions.length - 1)];
   const selectedOption = selected[current.id];
   const isSubmitted = Boolean(submitted[current.id]);
+  const subjective = isSubjective(current);
   const normalizedAnswer = normalizeAnswer(current.answer, current.options);
-  const isCorrect = selectedOption ? selectedOption === normalizedAnswer : false;
+  const isCorrect = isAnswerCorrect(current, selectedOption);
 
   const finishedCount = Object.values(submitted).filter(Boolean).length;
-  const correctCount = questions.filter((q) => submitted[q.id] && selected[q.id] === normalizeAnswer(q.answer, q.options)).length;
+  const correctCount = questions.filter((q) => submitted[q.id] && isAnswerCorrect(q, selected[q.id])).length;
   const allDone = finishedCount === questions.length;
-  const wrongQuestions = questions.filter((q) => submitted[q.id] && selected[q.id] !== normalizeAnswer(q.answer, q.options));
+  const wrongQuestions = questions.filter((q) => submitted[q.id] && !isAnswerCorrect(q, selected[q.id]));
   const accuracy = finishedCount > 0 ? Math.round((correctCount / finishedCount) * 100) : 0;
   const progress = questions.length > 0 ? ((index + 1) / questions.length) * 100 : 0;
   const elapsedMinutes = Math.round((Date.now() - startTime) / 60000);
@@ -277,7 +302,7 @@ export function QuizWindow({ result, onLearningActivity }: QuizWindowProps) {
                 type="button"
                 onClick={() => {
                   setShowReport(false);
-                  const firstWrong = questions.findIndex((q) => submitted[q.id] && selected[q.id] !== normalizeAnswer(q.answer, q.options));
+                  const firstWrong = questions.findIndex((q) => submitted[q.id] && !isAnswerCorrect(q, selected[q.id]));
                   if (firstWrong >= 0) { setIndex(firstWrong); setShowExplanation(true); }
                 }}
                 className="rounded-full bg-ink px-8 py-2.5 text-sm font-medium text-white transition hover:opacity-85"
@@ -361,7 +386,38 @@ export function QuizWindow({ result, onLearningActivity }: QuizWindowProps) {
               {current.stem}
             </h2>
 
-            {/* Options */}
+            {/* 简答 / 填空：无选项，先想后对照参考答案（不做花哨自评，仅一次轻量标记） */}
+            {subjective ? (
+              <div className="space-y-3">
+                {!isSubmitted ? (
+                  <p className="rounded-2xl border border-dashed border-divider bg-canvas px-4 py-4 text-[14px] leading-[1.7] text-ink-muted">
+                    先在心里组织你的回答，再对照参考。
+                  </p>
+                ) : (
+                  <div className="rounded-2xl border border-mint-200 bg-mint-50 p-4">
+                    <p className="mb-1.5 text-[12px] font-medium uppercase tracking-wider text-ink-muted">参考答案</p>
+                    <p className="text-[15px] leading-[1.75] text-ink">{current.answer || '回放原片段核对要点。'}</p>
+                    <div className="mt-3 flex items-center gap-2 border-t border-mint-200 pt-3">
+                      <span className="text-[13px] text-ink-muted">我答得：</span>
+                      <button
+                        type="button"
+                        onClick={() => setSelected((prev) => ({ ...prev, [current.id]: SELF_CORRECT }))}
+                        className={`rounded-full border px-3 py-1 text-[13px] transition ${selectedOption === SELF_CORRECT ? 'border-mint-500 bg-mint-500 text-white' : 'border-divider text-ink-secondary hover:border-mint-300'}`}
+                      >
+                        答对了
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setSelected((prev) => ({ ...prev, [current.id]: SELF_WRONG }))}
+                        className={`rounded-full border px-3 py-1 text-[13px] transition ${selectedOption === SELF_WRONG ? 'border-danger-300 bg-danger-500 text-white' : 'border-divider text-ink-secondary hover:border-danger-300'}`}
+                      >
+                        没答上
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            ) : (
             <div className="space-y-2.5">
               {current.options.map((option, optIdx) => {
                 const active = selectedOption === option;
@@ -422,20 +478,19 @@ export function QuizWindow({ result, onLearningActivity }: QuizWindowProps) {
                 );
               })}
             </div>
+            )}
 
             {/* Explanation section (slide down after submit) */}
-            {isSubmitted && (showExplanation || current.explanation) && (
+            {isSubmitted && showExplanation && current.explanation && (
               <div className={`mt-6 rounded-2xl border p-4 transition-all duration-300 ${
-                isCorrect ? 'border-mint-200 bg-mint-50' : 'border-danger-200 bg-danger-50'
+                isCorrect ? 'border-mint-200 bg-mint-50' : 'border-divider bg-canvas'
               }`}>
-                {!isCorrect && (
+                {!subjective && !isCorrect && (
                   <p className="mb-2 text-sm font-medium text-danger-700">
                     正确答案：{stripOptionPrefix(normalizedAnswer)}
                   </p>
                 )}
-                {current.explanation && (
-                  <p className="text-[14px] leading-[1.75] text-ink-secondary">{current.explanation}</p>
-                )}
+                <p className="text-[14px] leading-[1.75] text-ink-secondary">{current.explanation}</p>
               </div>
             )}
           </div>
@@ -463,21 +518,23 @@ export function QuizWindow({ result, onLearningActivity }: QuizWindowProps) {
             <button
               type="button"
               className="rounded-full bg-ink px-8 py-2.5 text-sm font-medium text-white transition hover:opacity-85 active:scale-95 disabled:cursor-not-allowed disabled:bg-divider disabled:text-ink-muted"
-              disabled={!selectedOption}
+              disabled={subjective ? false : !selectedOption}
               onClick={() => {
                 setSubmitted((prev) => ({ ...prev, [current.id]: true }));
                 setShowExplanation(true);
-                onLearningActivity?.(formatQuizActivity({
-                  index: index + 1,
-                  total: questions.length,
-                  stem: current.stem,
-                  picked: selectedOption || '',
-                  answer: normalizedAnswer,
-                  correct: isCorrect,
-                }));
+                if (!subjective) {
+                  onLearningActivity?.(formatQuizActivity({
+                    index: index + 1,
+                    total: questions.length,
+                    stem: current.stem,
+                    picked: selectedOption || '',
+                    answer: normalizedAnswer,
+                    correct: isCorrect,
+                  }));
+                }
               }}
             >
-              确认答案
+              {subjective ? '查看参考答案' : '确认答案'}
             </button>
           ) : (
             <>
@@ -511,9 +568,7 @@ export function QuizWindow({ result, onLearningActivity }: QuizWindowProps) {
           <div className="flex items-center justify-center gap-1.5 flex-wrap">
             {questions.map((q, i) => {
               const done = Boolean(submitted[q.id]);
-              const chosen = selected[q.id];
-              const ans = normalizeAnswer(q.answer, q.options);
-              const ok = done && chosen === ans;
+              const ok = done && isAnswerCorrect(q, selected[q.id]);
               const isCurrent = i === index;
               let dotColor = 'bg-divider';
               if (done) dotColor = ok ? 'bg-ink' : 'bg-danger-500';

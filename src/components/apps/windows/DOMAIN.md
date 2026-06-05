@@ -27,18 +27,27 @@ src/components/apps/windows/
 
 ### MindmapWindow（思维导图）
 
-- 主文件：`MindmapWindow.tsx`（692行）— 渲染逻辑
-- 布局引擎：`MindmapWindowLayout.ts`（168行）— 树布局算法、主题色板、位置计算
+- 主文件：`MindmapWindow.tsx` — 渲染逻辑（导图 / 大纲双视图）
+- 布局引擎：`mindmap-layout.ts` — 树布局算法、v7 色板、位置计算
 
-布局引擎包含纯函数（可单元测试）：
-- `getHueByDepth()` — 根据深度返回主题色
-- `measureText()` — 文本宽度测量
-- `getFontSize()` — 字体大小计算
-- `buildLayoutTree()` — 构建树结构
-- `subtreeHeight()` — 子树高度
-- `assignPositions()` — 坐标分配
-- `flattenLayout()` — 打平为渲染数组
-- `boundingBox()` — 包围盒计算
+**设计原则（第一性原理：用户打开就该一眼读懂整张图）**：
+- v7 米白纸感（`PALETTE.bg` 近白），不是深色画布；落在复习工作区里不突兀。
+- 节点 = **文字坐在一道墨线上**（朱批/松墨手感），不是七彩填色方块。
+- **按一级主干分配颜色**：每条主干 + 整棵子树共享一种双签名色（pine / vermilion 家族交替，见 `BRANCH_HUES` / `getBranchHue`），一眼看出"我在哪条主干"——这是可读性的真正来源，而不是按 depth 彩虹。
+- **默认整图展开 + 自适应**（`buildFullExpandedSet` + `fitToView`，带 `MIN_READABLE_SCALE` 可读下限），无需任何交互即可阅读。
+- **全屏沉浸阅读**：右上角 / 控制条「全屏」把导图 portal 到 `document.body` 全屏层（Esc 退出），给一块真正看得清的大画布。
+- 滚轮缩放**以光标为锚**（光标下内容不动），拖拽平移；这是"顺手"的关键。
+
+布局引擎纯函数（可单元测试，见 `mindmap-layout.test.ts`）：
+- `getBranchHue()` / `branchIndexOf()` — 按一级主干取色
+- `getHueByDepth()` — 旧的按深度取色（保留供测试 / 大纲兜底）
+- `measureText()` / `getFontSize()` — 文本宽度 / 字号
+- `buildLayoutTree()` / `subtreeHeight()` / `assignPositions()` / `flattenLayout()` / `boundingBox()` — 树布局
+
+### QuizWindow（课堂测验）
+
+- 客观题（single / judge）= 选项卡片即时判分；主观题（short / fill）= 看参考答案 + 一次轻量自评标记，统一进 `isAnswerCorrect` 计分。
+- **铁律**：选项质量在生成端把关——`quiz.plugin.ts` 绝不再造 "该片段主要讨论了X / 跳过了话题 / 未做实质分析" 这类模板干扰项；凑不出有内容的干扰项就出成简答题（`resolveTypeAndOptions`）。
 
 ### InfographicWindow（信息图）
 

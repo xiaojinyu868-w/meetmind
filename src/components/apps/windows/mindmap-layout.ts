@@ -21,31 +21,84 @@ export interface LayoutNode {
 }
 
 // ── Layout constants ───────────────────────────────────────────────
+//
+// 节点不再是填色方块，而是"文字坐在一条墨线上"（朱批红笔的手感）。
+// 高度 = 文字行高 + 下划线留白；宽度在 buildLayoutTree 里按文字实测。
+//
 
-export const NODE_H = 40;
-export const NODE_PAD_X = 20;
-export const LEVEL_GAP_X = 70;
-export const SIBLING_GAP_Y = 12;
-export const FONT_SIZE_ROOT = 15;
-export const FONT_SIZE_L1 = 14;
-export const FONT_SIZE_OTHER = 13;
+export const NODE_H = 38;
+export const NODE_PAD_X = 18;
+export const LEVEL_GAP_X = 58;
+export const SIBLING_GAP_Y = 16;
+export const FONT_SIZE_ROOT = 16;
+export const FONT_SIZE_L1 = 15;
+export const FONT_SIZE_OTHER = 14;
+/** 有子节点时，节点右侧为折叠点位预留的空间 */
+export const MARKER_RESERVE = 22;
 
 // ── Theme / palette ────────────────────────────────────────────────
 //
-// v7：思维导图不是七彩气球，是老师在卷子上画的层级标注。
-// 双签名色家族 + 暖纸感深底（不是冷蓝紫），让节点像"知识在被理解"的过程。
+// v7：思维导图坐落在米白纸感的复习工作区里，不该是一块突兀的深色画布。
+// 整张图就是"老师在卷子上画的层级标注"——纸是米白，线是双签名色墨水。
+// 视觉为可读性让路：节点用文字 + 一道墨线，而不是七彩气球填色方块。
 //
 
 export const PALETTE = {
-  bg: '#1A1612',           // v7：暗夜书房深棕墨黑（不再是冷蓝紫）
-  bgSurface: '#241F1A',
-  bgToolbar: '#1F1B16',
-  border: '#2A241D',
-  textPrimary: '#F2EDE3',
-  textSecondary: '#B8B0A2',
-  textMuted: '#82796D',
-  accent: '#6B9080',       // v7：浅松绿（暗色态 pine 主签名）
+  bg: '#FCFAF6',           // v7：近白米纸（比 paper 再亮一点，承托墨线）
+  bgSurface: '#FFFFFF',
+  bgToolbar: '#FAF7F2',    // paper
+  border: '#E8E2D5',       // v7 divider
+  textPrimary: '#1C1B19',  // ink
+  textSecondary: '#5C5A55',// ink-secondary
+  textMuted: '#8E8B82',    // ink-muted
+  accent: '#2D4F3E',       // v7：墨松绿主签名（pine）
 };
+
+// ── 按主干分配色（豆包式可读性的真正来源：一眼看出"我在哪条主干"）──────
+//
+// 每条一级主干 + 它的整棵子树共享一种色，而不是按 depth 彩虹切换。
+// 全部取自 v7 双签名色家族（pine / vermilion）+ 克制的墨灰，绝不引入蓝紫。
+// 顺序刻意 pine→vermilion 交替，让相邻主干天然区分。
+//
+
+export interface BranchHue {
+  /** 连线 + 下划线墨色 */
+  line: string;
+  /** 文字色（在米白纸上保证对比度，比 line 更沉） */
+  text: string;
+  /** 折叠点位描边 */
+  marker: string;
+}
+
+// 思维导图按主干配色：用多种可区分的颜色（豆包式），一眼分辨"我在哪条主干"。
+// 这是为可读性服务的刻意选择——不是七彩气球，而是一组经过收敛的"墨水盒"色：
+// 略低饱和、在米白纸上对比清晰，line 用于连线/下划线，text 取更沉的同色保证可读。
+export const BRANCH_HUES: BranchHue[] = [
+  { line: '#2F7D5B', text: '#1F5A3F', marker: '#2F7D5B' }, // 松绿
+  { line: '#C2832E', text: '#8A5D1C', marker: '#C2832E' }, // 琥珀
+  { line: '#3A78B5', text: '#2A5687', marker: '#3A78B5' }, // 墨蓝
+  { line: '#C24E3F', text: '#8E3328', marker: '#C24E3F' }, // 朱红
+  { line: '#7E5DA8', text: '#5A3F7D', marker: '#7E5DA8' }, // 紫
+  { line: '#2E8C9E', text: '#1F6675', marker: '#2E8C9E' }, // 青
+  { line: '#BC5A8C', text: '#8E3D66', marker: '#BC5A8C' }, // 品红
+  { line: '#7E8A3C', text: '#5A6328', marker: '#7E8A3C' }, // 橄榄
+];
+
+/** 按一级主干序号取色（整棵子树同色），根节点用墨松绿主签名 */
+export function getBranchHue(branchIndex: number): BranchHue {
+  if (branchIndex < 0) {
+    return { line: '#2D4F3E', text: '#1C1B19', marker: '#2D4F3E' };
+  }
+  return BRANCH_HUES[branchIndex % BRANCH_HUES.length];
+}
+
+/** 从节点 id（形如 root-2-0-1）解析它所属的一级主干序号；根节点返回 -1 */
+export function branchIndexOf(id: string): number {
+  const parts = id.split('-');
+  if (parts.length < 2) return -1;
+  const idx = Number(parts[1]);
+  return Number.isFinite(idx) ? idx : -1;
+}
 
 /**
  * v7 双签名色家族化层级调色板
@@ -111,8 +164,8 @@ export function buildLayoutTree(
     const fontSize = getFontSize(depth);
     const textW = measureText(node.title, fontSize);
     const hasChildren = Array.isArray(node.children) && node.children.length > 0;
-    const expandBtnW = hasChildren ? 32 : 0;
-    const width = textW + NODE_PAD_X * 2 + expandBtnW;
+    // 文字坐在墨线上：宽度 = 文字宽 + 少量右侧留白（有子节点时给折叠点位让位）
+    const width = textW + 6 + (hasChildren ? MARKER_RESERVE : 0);
     const height = NODE_H;
     const expanded = expandedSet.has(id);
 

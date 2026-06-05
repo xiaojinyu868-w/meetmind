@@ -77,6 +77,22 @@ export function treeToMarkdown(root: string, children: MindmapNode[], depth: num
   return lines.join('\n');
 }
 
+/**
+ * 去掉节点文本里的 inline markdown 标记（**粗体** / *斜体* / `代码` / [链接](url) / 前导 # - 等）。
+ * SVG <text> 不渲染 markdown，节点标题必须是干净纯文本，否则会显示成字面量 `**xxx**`。
+ */
+export function stripInlineMarkdown(text: string): string {
+  return text
+    .replace(/`([^`]+)`/g, '$1')
+    .replace(/\*\*([^*]+)\*\*/g, '$1')
+    .replace(/(?<!\*)\*([^*]+)\*(?!\*)/g, '$1')
+    .replace(/__([^_]+)__/g, '$1')
+    .replace(/\[([^\]]+)\]\([^)]*\)/g, '$1')
+    .replace(/^#{1,6}\s*/, '')
+    .replace(/\*+/g, '')
+    .trim();
+}
+
 /** 从 Markdown 层级大纲解析出树形结构（兼容 LLM 直接输出 Markdown） */
 export function markdownToTree(markdown: string): { root: string; children: MindmapNode[] } {
   const lines = markdown.split('\n').filter((line) => line.trim());
@@ -84,7 +100,7 @@ export function markdownToTree(markdown: string): { root: string; children: Mind
 
   const rootMatch = lines[0]?.match(/^#{1,2}\s+(.+)/);
   if (rootMatch) {
-    root = rootMatch[1].trim();
+    root = stripInlineMarkdown(rootMatch[1]);
     lines.shift();
   }
 
@@ -95,7 +111,8 @@ export function markdownToTree(markdown: string): { root: string; children: Mind
     const match = line.match(/^(\s*)-\s+(.+)/);
     if (!match) continue;
     const depth = Math.floor(match[1].length / 2);
-    const title = match[2].trim();
+    const title = stripInlineMarkdown(match[2]);
+    if (!title) continue;
     const node: MindmapNode = { title, children: [] };
 
     while (stack.length > 0 && stack[stack.length - 1].depth >= depth) {
@@ -119,9 +136,9 @@ export function markdownToTree(markdown: string): { root: string; children: Mind
 function normalizeDraftNodes(drafts: MindmapNodeDraft[] | undefined): MindmapNode[] {
   if (!Array.isArray(drafts)) return [];
   return drafts
-    .filter((draft) => draft && typeof draft.title === 'string' && draft.title.trim())
+    .filter((draft) => draft && typeof draft.title === 'string' && stripInlineMarkdown(draft.title))
     .map((draft) => ({
-      title: draft.title!.trim(),
+      title: stripInlineMarkdown(draft.title!),
       children: normalizeDraftNodes(draft.children),
       startMs: typeof draft.startMs !== 'undefined' ? toTimestamp(draft.startMs, 0) : undefined,
       endMs: typeof draft.endMs !== 'undefined' ? toTimestamp(draft.endMs, 0) : undefined,

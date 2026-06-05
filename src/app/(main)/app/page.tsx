@@ -1660,12 +1660,7 @@ function StudentAppContent({
       resolved: a.resolved,
       createdAt: a.createdAt,
     })),
-    topics: memoryService.extractTopics(timeline.segments).map(t => ({
-      id: t.id,
-      title: t.title,
-      startMs: t.startMs,
-      endMs: t.endMs,
-    })),
+    topics: [],
   } : null;
 
   const selectedBreakpoint = selectedAnchor ? {
