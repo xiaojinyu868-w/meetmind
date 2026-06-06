@@ -150,24 +150,29 @@ export const RATE_LIMITS = {
 export type RateLimitType = keyof typeof RATE_LIMITS;
 
 // 内存缓存（Redis 不可用时的降级方案）
-const memoryCache = new Map<string, { count: number; resetAt: number }[]>();
+// 每条记录带 createdAt 时间戳，用于滑动窗口精确计数
+interface MemoryRecord {
+  count: number;
+  createdAt: number; // Date.now() 毫秒
+}
+const memoryCache = new Map<string, MemoryRecord[]>();
 
-// 清理过期记录的定时器
+// 清理过期记录的定时器（超过 25 小时的记录无意义）
 let cleanupInterval: ReturnType<typeof setInterval> | null = null;
 
 function startCleanupInterval() {
   if (cleanupInterval) return;
   cleanupInterval = setInterval(() => {
-    const now = Date.now();
+    const cutoff = Date.now() - 25 * 60 * 60 * 1000;
     for (const [key, records] of memoryCache.entries()) {
-      const validRecords = records.filter(r => r.resetAt > now);
+      const validRecords = records.filter(r => r.createdAt > cutoff);
       if (validRecords.length === 0) {
         memoryCache.delete(key);
       } else {
         memoryCache.set(key, validRecords);
       }
     }
-  }, 60000); // 每分钟清理一次
+  }, 120000); // 每 2 分钟清理一次
 }
 
 interface RateLimitResult {
@@ -215,9 +220,10 @@ async function checkRateLimitRedis(
     const minuteCount = parseInt(results[0]?.[1] as string || '0', 10);
     const hourCount = parseInt(results[1]?.[1] as string || '0', 10);
     const dayCount = parseInt(results[2]?.[1] as string || '0', 10);
-    const minuteTTL = Math.max(0, results[3]?.[1] as number || 60);
-    const hourTTL = Math.max(0, results[4]?.[1] as number || 3600);
-    const dayTTL = Math.max(0, results[5]?.[1] as number || 86400);
+    // TTL 防御：Redis 可能返回 -1（无过期）或 -2（key 不存在），统一 clamp 到 >=1 避免前端误判立即可重试
+    const minuteTTL = Math.max(1, results[3]?.[1] as number || 60);
+    const hourTTL = Math.max(1, results[4]?.[1] as number || 3600);
+    const dayTTL = Math.max(1, results[5]?.[1] as number || 86400);
     
     // 检查是否超限
     if (minuteCount >= limits.perMinute) {
@@ -303,6 +309,7 @@ async function checkRateLimitRedis(
 
 /**
  * 使用内存检查速率限制（降级方案）
+ * 滑动窗口：按 createdAt 严格过滤各窗口内的记录
  */
 function checkRateLimitMemory(
   identifier: string,
@@ -313,21 +320,34 @@ function checkRateLimitMemory(
   const limits = RATE_LIMITS[apiType];
   const now = Date.now();
   
-  // 时间窗口
-  const minuteAgo = now - 60 * 1000;
-  const hourAgo = now - 60 * 60 * 1000;
-  const dayAgo = now - 24 * 60 * 60 * 1000;
+  // 时间窗口截止线（早于此线的记录不计入该窗口）
+  const minuteCutoff = now - 60 * 1000;
+  const hourCutoff = now - 60 * 60 * 1000;
+  const dayCutoff = now - 24 * 60 * 60 * 1000;
   
   const cacheKey = `${identifier}:${apiType}`;
   const records = memoryCache.get(cacheKey) || [];
   
-  // 清理过期记录
-  const validRecords = records.filter(r => r.resetAt > dayAgo);
+  // 按窗口过滤有效记录
+  const recordsInMinute = records.filter(r => r.createdAt > minuteCutoff);
+  const recordsInHour = records.filter(r => r.createdAt > hourCutoff);
+  const recordsInDay = records.filter(r => r.createdAt > dayCutoff);
   
   // 统计各时间窗口的调用次数
-  const minuteCount = validRecords.filter(r => r.resetAt > minuteAgo).reduce((sum, r) => sum + r.count, 0);
-  const hourCount = validRecords.filter(r => r.resetAt > hourAgo).reduce((sum, r) => sum + r.count, 0);
-  const dayCount = validRecords.reduce((sum, r) => sum + r.count, 0);
+  const minuteCount = recordsInMinute.reduce((sum, r) => sum + r.count, 0);
+  const hourCount = recordsInHour.reduce((sum, r) => sum + r.count, 0);
+  const dayCount = recordsInDay.reduce((sum, r) => sum + r.count, 0);
+  
+  // 更新内存缓存（只保留一天内的记录，减少内存）
+  memoryCache.set(cacheKey, recordsInDay);
+  
+  // 辅助：计算最早记录距离现在多久后过期（秒）
+  const secUntilOldestExpires = (windowMs: number, windowRecords: MemoryRecord[]): number => {
+    if (windowRecords.length === 0) return 1;
+    const oldestCreatedAt = Math.min(...windowRecords.map(r => r.createdAt));
+    const expiresAt = oldestCreatedAt + windowMs;
+    return Math.max(1, Math.ceil((expiresAt - now) / 1000));
+  };
   
   // 检查是否超限
   if (minuteCount >= limits.perMinute) {
@@ -339,9 +359,9 @@ function checkRateLimitMemory(
         perDay: Math.max(0, limits.perDay - dayCount),
       },
       resetIn: {
-        minute: 60 - Math.floor((now - minuteAgo) / 1000),
-        hour: 3600 - Math.floor((now - hourAgo) / 1000),
-        day: 86400 - Math.floor((now - dayAgo) / 1000),
+        minute: secUntilOldestExpires(60 * 1000, recordsInMinute),
+        hour: secUntilOldestExpires(60 * 60 * 1000, recordsInHour),
+        day: secUntilOldestExpires(24 * 60 * 60 * 1000, recordsInDay),
       },
       error: '请求过于频繁，请稍后再试',
     };
@@ -356,9 +376,9 @@ function checkRateLimitMemory(
         perDay: Math.max(0, limits.perDay - dayCount),
       },
       resetIn: {
-        minute: 0,
-        hour: 3600 - Math.floor((now - hourAgo) / 1000),
-        day: 86400 - Math.floor((now - dayAgo) / 1000),
+        minute: 1,
+        hour: secUntilOldestExpires(60 * 60 * 1000, recordsInHour),
+        day: secUntilOldestExpires(24 * 60 * 60 * 1000, recordsInDay),
       },
       error: '本小时请求次数已达上限，请稍后再试',
     };
@@ -373,17 +393,17 @@ function checkRateLimitMemory(
         perDay: 0,
       },
       resetIn: {
-        minute: 0,
-        hour: 0,
-        day: 86400 - Math.floor((now - dayAgo) / 1000),
+        minute: 1,
+        hour: 1,
+        day: secUntilOldestExpires(24 * 60 * 60 * 1000, recordsInDay),
       },
       error: '今日请求次数已达上限，请明天再试',
     };
   }
   
-  // 记录本次调用
-  validRecords.push({ count: 1, resetAt: now + 24 * 60 * 60 * 1000 });
-  memoryCache.set(cacheKey, validRecords);
+  // 记录本次调用（带准确时间戳）
+  const newRecords = [...recordsInDay, { count: 1, createdAt: now }];
+  memoryCache.set(cacheKey, newRecords);
   
   return {
     allowed: true,
@@ -510,7 +530,7 @@ export async function getUsageStats(identifier: string): Promise<Record<RateLimi
   for (const [apiType, limits] of Object.entries(RATE_LIMITS)) {
     const cacheKey = `${identifier}:${apiType}`;
     const records = memoryCache.get(cacheKey) || [];
-    const dayCount = records.filter(r => r.resetAt > dayAgo).reduce((sum, r) => sum + r.count, 0);
+    const dayCount = records.filter(r => r.createdAt > dayAgo).reduce((sum, r) => sum + r.count, 0);
     
     stats[apiType] = {
       used: dayCount,
