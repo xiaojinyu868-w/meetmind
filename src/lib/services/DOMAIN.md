@@ -31,7 +31,7 @@ api/route.ts → services → lib/utils, lib/db, lib/config
 |------|------|------|
 | `bilibili-import-service.ts` | 466 | B站视频：URL 解析→音频下载→字幕提取 |
 | `xiaoyuzhou-import-service.ts` | 255 | 小宇宙播客：HTML 解析→m4a 下载 |
-| `web-article-extract-service.ts` | 390 | 通用网页文章提取（Jina Reader + 直接 fetch） |
+| `web-article-extract-service.ts` | ~550 | 通用网页文章提取（OpenClaw Gateway 微信反爬 → Jina Reader → 直接 fetch） |
 | `jina-reader-service.ts` | 220 | Jina Reader API 封装 |
 
 ### 🤖 AI / LLM

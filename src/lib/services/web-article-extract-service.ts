@@ -4,13 +4,14 @@
  * 支持从微信公众号、小红书、知乎等图文平台提取正文内容。
  *
  * 提取策略（按优先级）：
- * 1. Jina Reader API（r.jina.ai）— 自带反爬能力，返回 Markdown
- * 2. 直接 fetch HTML + 本地解析 — 适合无反爬的平台
+ * 1. OpenClaw Gateway（仅微信文章）— 通过真实微信客户端环境 + MicroMessenger UA 绕过反爬
+ * 2. Jina Reader API（r.jina.ai）— 自带反爬能力，返回 Markdown
+ * 3. 直接 fetch HTML + 本地解析 — 适合无反爬的平台
  *
- * 为什么用 Jina Reader：
- * - 微信公众号：服务端直接 fetch 返回空白 weui-msg 页面（严格反爬）
- * - 小红书：服务端直接 fetch 被 302 到安全检查页（需 xsec_token）
- * - Jina Reader 通过 headless browser 绕过反爬，返回干净的 Markdown
+ * 平台适配说明：
+ * - 微信公众号：OpenClaw Gateway 优先 → Jina Reader → 本地 fetch（weui-msg 反爬严格）
+ * - 小红书：Jina Reader → 本地 fetch（需 xsec_token）
+ * - 通用网页：Jina Reader → 本地通用 HTML 解析
  */
 
 import { createLogger } from '@/lib/logger';
@@ -39,7 +40,7 @@ export interface ExtractedArticle {
   sourceUrl: string;        // 原始链接
   provider: string;         // 来源平台 ID
   providerLabel: string;    // 来源平台名
-  extractMethod: 'jina' | 'direct' | 'fallback';
+  extractMethod: 'jina' | 'direct' | 'openclaw' | 'fallback';
   wordCount: number;        // 字数
 }
 
@@ -48,6 +49,11 @@ const EXTRACT_TIMEOUT_MS = Number.parseInt(
   process.env.WEB_ARTICLE_EXTRACT_TIMEOUT_MS || '30000', 10
 );
 const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36';
+
+// OpenClaw Gateway（用于绕过微信公众号反爬）
+const OPENCLAW_GATEWAY_URL = process.env.OPENCLAW_GATEWAY_URL || '';
+const OPENCLAW_TOKEN = process.env.OPENCLAW_TOKEN || '';
+const OPENCLAW_ENABLED = Boolean(OPENCLAW_GATEWAY_URL && OPENCLAW_TOKEN);
 
 /**
  * 通过 Jina Reader API 提取网页内容为 Markdown。
@@ -109,6 +115,159 @@ async function extractViaJina(
   } finally {
     clearTimeout(timeoutId);
   }
+}
+
+/**
+ * 通过 OpenClaw Gateway 提取微信公众号文章正文。
+ * 利用对方真实的微信客户端环境 + MicroMessenger UA 绕过反爬。
+ * 仅用于 wechat-article 平台，且需要 OPENCLAW_GATEWAY_URL 和 OPENCLAW_TOKEN 环境变量。
+ */
+async function extractViaOpenClaw(
+  url: string
+): Promise<{ title: string; content: string } | null> {
+  if (!OPENCLAW_ENABLED) return null;
+
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 120_000); // 120s，Gateway 端 curl+LLM 约 15-30s
+
+  try {
+    const response = await fetch(OPENCLAW_GATEWAY_URL, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${OPENCLAW_TOKEN}`,
+        'Content-Type': 'application/json',
+        'ngrok-skip-browser-warning': 'true',
+      },
+      body: JSON.stringify({
+        model: 'openclaw',
+        messages: [
+          {
+            role: 'user',
+            content:
+              `请用MicroMessenger UA抓取这篇微信文章的正文。要求：\n` +
+              `1. 用curl加MicroMessenger的User-Agent抓取HTML\n` +
+              `2. 从var msg_title提取标题，从js_content div提取正文\n` +
+              `3. 返回格式：第一行标题，空一行，正文纯文本\n` +
+              `4. 不要加任何其他说明\n` +
+              `文章URL：${url}`,
+          },
+        ],
+        temperature: 0.1,
+      }),
+      signal: controller.signal,
+    });
+
+    if (!response.ok) {
+      log.warn(
+        `[web-article-extract] OpenClaw Gateway HTTP ${response.status} for ${url}`
+      );
+      return null;
+    }
+
+    const data = (await response.json()) as {
+      choices?: Array<{ message?: { content?: string } }>;
+    };
+    const rawContent = data?.choices?.[0]?.message?.content?.trim() || '';
+
+    if (rawContent.length < 50) {
+      log.warn(
+        `[web-article-extract] OpenClaw returned too short content (${rawContent.length} chars) for ${url}`
+      );
+      return null;
+    }
+
+    // 解析返回的「标题\n\n正文」格式
+    const parsed = parseOpenClawWechatResponse(rawContent);
+    if (!parsed || parsed.content.length < 20) {
+      log.warn(
+        `[web-article-extract] OpenClaw parsed content too short for ${url}`
+      );
+      return null;
+    }
+
+    return parsed;
+  } catch (error) {
+    if ((error as { name?: string })?.name === 'AbortError') {
+      log.warn(`[web-article-extract] OpenClaw Gateway timeout for ${url}`);
+    } else {
+      log.warn(
+        `[web-article-extract] OpenClaw Gateway error for ${url}: ${error instanceof Error ? error.message : String(error)}`
+      );
+    }
+    return null;
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
+
+/**
+ * 解析 OpenClaw Gateway 返回的微信文章文本。
+ * 预期格式：标题行 + 空行 + 正文，可能带有 Markdown 加粗/分隔线。
+ */
+function parseOpenClawWechatResponse(raw: string): { title: string; content: string } | null {
+  const lines = raw.split('\n');
+
+  let title = '';
+  let bodyStartIdx = 0;
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i].trim();
+    if (!line) continue;
+
+    // 跳过可能的前缀说明行（如 "好的"、"已抓取"）
+    if (/^(好的|已抓取|OK|Here|Title|标题)[：:.，,;；]*/i.test(line) && line.length < 30) {
+      continue;
+    }
+
+    // 如果当前行是标题标记行，取下一行非空内容作为标题
+    if (/^(Title|标题)[：:]\s*/i.test(line)) {
+      const clean = line.replace(/^\*?\*?(Title|标题)[：:]\s*\*?\*?/i, '').trim();
+      if (clean) {
+        title = clean;
+        bodyStartIdx = i + 1;
+        break;
+      }
+      continue;
+    }
+
+    // Markdown 加粗行通常就是标题
+    if (/^\*\*(.+?)\*\*$/.test(line) && line.length < 120) {
+      title = line.replace(/^\*\*|\*\*$/g, '').trim();
+      bodyStartIdx = i + 1;
+      break;
+    }
+
+    // 第一行有意义的非空内容且不太长，视为标题
+    if (line.length > 0 && line.length < 120) {
+      title = line;
+      bodyStartIdx = i + 1;
+      break;
+    }
+
+    // 第一行就超过 120 字符，可能整个内容没有标题行，取前 60 字符做标题
+    if (line.length >= 120) {
+      title = line.slice(0, 60);
+      bodyStartIdx = i;
+      break;
+    }
+  }
+
+  if (!title) return null;
+
+  // 收集正文：从 bodyStartIdx 开始，跳过开头的空行和分隔线
+  const bodyLines: string[] = [];
+  let started = false;
+  for (let i = bodyStartIdx; i < lines.length; i++) {
+    const line = lines[i];
+    if (!started && (line.trim() === '' || line.trim() === '---')) continue;
+    started = true;
+    bodyLines.push(line);
+  }
+
+  const content = bodyLines.join('\n').trim();
+  if (content.length < 20) return null;
+
+  return { title, content };
 }
 
 /**
@@ -347,6 +506,23 @@ export async function extractWebArticle(
   providerLabel: string
 ): Promise<ExtractedArticle> {
 
+  // 微信公众号：优先走 OpenClaw Gateway（绕过微信反爬）
+  if (provider === 'wechat-article') {
+    const openclawResult = await extractViaOpenClaw(url);
+    if (openclawResult && openclawResult.content.length > 50) {
+      return {
+        title: openclawResult.title,
+        content: openclawResult.content,
+        description: openclawResult.content.slice(0, 200),
+        sourceUrl: url,
+        provider,
+        providerLabel,
+        extractMethod: 'openclaw',
+        wordCount: openclawResult.content.length,
+      };
+    }
+  }
+
   // 策略 1: Jina Reader
   const jinaResult = await extractViaJina(url);
   if (jinaResult && jinaResult.content.length > 50) {
@@ -387,6 +563,6 @@ export async function extractWebArticle(
   throw new WebArticleExtractError(
     'ARTICLE_EXTRACT_FAILED',
     `无法提取文章内容`,
-    `url: ${url}, provider: ${provider}, jina: ${jinaResult ? 'empty' : 'failed'}, direct: ${directResult ? 'empty' : 'failed'}`
+    `url: ${url}, provider: ${provider}, openclaw: ${provider === 'wechat-article' ? (OPENCLAW_ENABLED ? 'failed' : 'disabled') : 'skipped'}, jina: ${jinaResult ? 'empty' : 'failed'}, direct: ${directResult ? 'empty' : 'failed'}`
   );
 }
