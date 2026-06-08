@@ -51,9 +51,13 @@ const EXTRACT_TIMEOUT_MS = Number.parseInt(
 const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36';
 
 // OpenClaw Gateway（用于绕过微信公众号反爬）
-const OPENCLAW_GATEWAY_URL = process.env.OPENCLAW_GATEWAY_URL || '';
-const OPENCLAW_TOKEN = process.env.OPENCLAW_TOKEN || '';
-const OPENCLAW_ENABLED = Boolean(OPENCLAW_GATEWAY_URL && OPENCLAW_TOKEN);
+export function getOpenClawConfig() {
+  return {
+    url: process.env.OPENCLAW_GATEWAY_URL || '',
+    token: process.env.OPENCLAW_TOKEN || '',
+    enabled: Boolean(process.env.OPENCLAW_GATEWAY_URL && process.env.OPENCLAW_TOKEN),
+  };
+}
 
 /**
  * 通过 Jina Reader API 提取网页内容为 Markdown。
@@ -125,16 +129,17 @@ async function extractViaJina(
 async function extractViaOpenClaw(
   url: string
 ): Promise<{ title: string; content: string } | null> {
-  if (!OPENCLAW_ENABLED) return null;
+  const openclaw = getOpenClawConfig();
+  if (!openclaw.enabled) return null;
 
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), 120_000); // 120s，Gateway 端 curl+LLM 约 15-30s
 
   try {
-    const response = await fetch(OPENCLAW_GATEWAY_URL, {
+    const response = await fetch(openclaw.url, {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${OPENCLAW_TOKEN}`,
+        'Authorization': `Bearer ${openclaw.token}`,
         'Content-Type': 'application/json',
         'ngrok-skip-browser-warning': 'true',
       },
@@ -204,7 +209,7 @@ async function extractViaOpenClaw(
  * 解析 OpenClaw Gateway 返回的微信文章文本。
  * 预期格式：标题行 + 空行 + 正文，可能带有 Markdown 加粗/分隔线。
  */
-function parseOpenClawWechatResponse(raw: string): { title: string; content: string } | null {
+export function parseOpenClawWechatResponse(raw: string): { title: string; content: string } | null {
   const lines = raw.split('\n');
 
   let title = '';
@@ -215,7 +220,8 @@ function parseOpenClawWechatResponse(raw: string): { title: string; content: str
     if (!line) continue;
 
     // 跳过可能的前缀说明行（如 "好的"、"已抓取"）
-    if (/^(好的|已抓取|OK|Here|Title|标题)[：:.，,;；]*/i.test(line) && line.length < 30) {
+    // 注意：不跳过 "Title/标题"，因为下一条规则会专门提取它们
+    if (/^(好的|已抓取|OK|Here)[：:.，,;；]*/i.test(line) && line.length < 30) {
       continue;
     }
 
@@ -416,7 +422,7 @@ function parseGenericHtml(html: string): { title: string; content: string } | nu
 /**
  * 简单的 HTML → 纯文本转换。
  */
-function htmlToText(html: string): string {
+export function htmlToText(html: string): string {
   return html
     .replace(/<script[\s\S]*?<\/script>/gi, '')
     .replace(/<style[\s\S]*?<\/style>/gi, '')
@@ -563,6 +569,6 @@ export async function extractWebArticle(
   throw new WebArticleExtractError(
     'ARTICLE_EXTRACT_FAILED',
     `无法提取文章内容`,
-    `url: ${url}, provider: ${provider}, openclaw: ${provider === 'wechat-article' ? (OPENCLAW_ENABLED ? 'failed' : 'disabled') : 'skipped'}, jina: ${jinaResult ? 'empty' : 'failed'}, direct: ${directResult ? 'empty' : 'failed'}`
+    `url: ${url}, provider: ${provider}, openclaw: ${provider === 'wechat-article' ? (getOpenClawConfig().enabled ? 'failed' : 'disabled') : 'skipped'}, jina: ${jinaResult ? 'empty' : 'failed'}, direct: ${directResult ? 'empty' : 'failed'}`
   );
 }

@@ -11,6 +11,10 @@
 import prisma from '@/lib/prisma';
 import workspaceContextService from '@/lib/services/workspace-context-service';
 import { detectLinkProvider } from '@/lib/context-reach/link-provider';
+import {
+  extractWebArticle,
+  WebArticleExtractError,
+} from '@/lib/services/web-article-extract-service';
 import { chat, DEFAULT_WORKSHOP_MODEL_ID, type ChatMessage } from '@/lib/services/llm-service';
 import { createLogger } from '@/lib/logger';
 const log = createLogger('jina-reader');
@@ -132,6 +136,96 @@ async function generateLinkSummary(
   } catch (error) {
     log.warn('[jina-reader] AI summary generation failed:', error);
     return null;
+  }
+}
+
+/**
+ * 异步提取 article-link 正文（含微信文章），更新 WechatInboxMessage 和 WorkspaceCapture/Echo。
+ *
+ * 该函数设计为 fire-and-forget，调用方无需 await。
+ * 仅在 article-link 类型且 sourceUrl 存在时工作。
+ * 对微信文章会优先尝试 OpenClaw Gateway 绕过反爬。
+ */
+export async function enrichArticleLinkContent(linkToken: string, url: string): Promise<void> {
+  try {
+    const message = await prisma.wechatInboxMessage.findUnique({
+      where: { linkToken },
+      select: {
+        title: true,
+        reachChannel: true,
+        normalizedText: true,
+        workspaceId: true,
+      },
+    });
+
+    if (!message || message.reachChannel !== 'article-link') {
+      return;
+    }
+
+    const article = await extractWebArticle(url, 'wechat-article', '微信公众号');
+
+    // 把原始的 title+description+url 放前面，正文附在后面
+    const existingText = message.normalizedText || '';
+    const enrichedText = existingText
+      ? `${existingText}\n\n---\n\n${article.content}`
+      : article.content;
+
+    // 更新 WechatInboxMessage
+    await prisma.wechatInboxMessage.update({
+      where: { linkToken },
+      data: { normalizedText: enrichedText },
+    });
+
+    // 如果已绑定 workspace，同步更新 WorkspaceCapture
+    if (message.workspaceId) {
+      await workspaceContextService.syncWechatInboxMessageArtifacts(linkToken);
+    }
+
+    // 异步生成 AI 摘要（不阻塞正文写入）
+    if (message.workspaceId && article.title) {
+      const summaryResult = await generateLinkSummary(
+        article.title,
+        article.content,
+        '微信公众号'
+      );
+
+      if (summaryResult) {
+        const sourceKey = `wechat:${linkToken}`;
+        const capture = await prisma.workspaceCapture.findUnique({
+          where: { sourceKey },
+          select: { id: true },
+        });
+
+        if (capture) {
+          await prisma.workspaceEcho.upsert({
+            where: { sourceKey },
+            update: {
+              title: summaryResult.summary,
+              body: summaryResult.insight
+                ? `${summaryResult.insight}\n\n原文已解析，可以随时回看。`
+                : '原文已解析，可以随时回看。',
+              status: 'active',
+            },
+            create: {
+              workspaceId: message.workspaceId,
+              captureId: capture.id,
+              sourceKey,
+              title: summaryResult.summary,
+              body: summaryResult.insight
+                ? `${summaryResult.insight}\n\n原文已解析，可以随时回看。`
+                : '原文已解析，可以随时回看。',
+              status: 'active',
+            },
+          });
+        }
+      }
+    }
+  } catch (error) {
+    if (error instanceof WebArticleExtractError) {
+      log.warn(`[jina-reader] enrichArticleLinkContent ${error.code}: ${error.message}`);
+    } else {
+      log.error('[jina-reader] enrichArticleLinkContent failed:', error);
+    }
   }
 }
 

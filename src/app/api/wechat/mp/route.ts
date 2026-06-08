@@ -11,7 +11,10 @@ import {
   parseWechatMpXml,
   verifyWechatMpSignature,
 } from '@/lib/services/wechat-mp-service';
-import { enrichLinkContent } from '@/lib/services/jina-reader-service';
+import {
+  enrichLinkContent,
+  enrichArticleLinkContent,
+} from '@/lib/services/jina-reader-service';
 import { resolveBilibiliUrl, fetchViewMeta } from '@/lib/services/bilibili-import-service';
 import { parseVideoLink } from '@/lib/utils/video-link';
 import { createLogger } from '@/lib/logger';
@@ -349,6 +352,11 @@ export async function POST(request: NextRequest) {
     // 异步抓取 web-link 正文（Jina Reader），不阻塞回执。
     if (normalized.reach?.channel === 'web-link' && normalized.sourceUrl) {
       void enrichLinkContent(linkToken);
+    }
+
+    // 异步抓取 article-link 正文（含微信文章，走 OpenClaw Gateway 优先），不阻塞回执。
+    if (normalized.reach?.channel === 'article-link' && normalized.sourceUrl) {
+      void enrichArticleLinkContent(linkToken, normalized.sourceUrl);
     }
 
     // 异步获取 video-link 元数据（解析短链 + 标题/封面/时长）+ 完整视频转写，不阻塞回执。
