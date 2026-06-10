@@ -30,6 +30,10 @@ interface ReviewWorkspacePanelProps {
   sharedWorkspaceContent: ReactNode;
   /** 当侧栏已提供 tab 导航时，隐藏面板内的 tab 栏 */
   hideTabBar?: boolean;
+  /** 非音视频类型的原文（文章/笔记），无时间轴时展示 */
+  sourceFullText?: string;
+  /** 非音视频类型的正文图片 URL 列表 */
+  sourceImageUrls?: string[];
 }
 
 export function ReviewWorkspacePanel({
@@ -52,6 +56,8 @@ export function ReviewWorkspacePanel({
   onAddAnchorNote,
   sharedWorkspaceContent,
   hideTabBar = false,
+  sourceFullText,
+  sourceImageUrls,
 }: ReviewWorkspacePanelProps) {
   // v7 Octo IP：复习态空态。ctx='review-empty'（默认 idle，凌晨切 sleeping）
   const { mood: octoMoodEmpty } = useOctoMood({ ctx: 'review-empty' });
@@ -104,7 +110,38 @@ export function ReviewWorkspacePanel({
           />
         )}
 
-        {reviewTab === 'timeline' && !timelineForView && (
+        {reviewTab === 'timeline' && !timelineForView && sourceFullText && (
+          <div className="h-full overflow-y-auto px-6 py-5">
+            {/* 文章图片：最多展示 3 张，避免过长 */}
+            {sourceImageUrls && sourceImageUrls.length > 0 && (
+              <div className="mb-5 flex flex-col gap-3">
+                {sourceImageUrls.slice(0, 3).map((imgUrl, i) => (
+                  <img
+                    key={i}
+                    src={imgUrl}
+                    alt=""
+                    className="max-h-[240px] w-full rounded-lg object-cover shadow-soft"
+                    loading="lazy"
+                    onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                  />
+                ))}
+              </div>
+            )}
+            <div className="prose prose-sm max-w-none text-[13.5px] leading-[1.8] text-ink">
+              {sourceFullText.split('\n').map((paragraph, i) => (
+                paragraph.trim() ? (
+                  <p key={i} className="mb-4">
+                    {paragraph}
+                  </p>
+                ) : (
+                  <div key={i} className="h-2" />
+                )
+              ))}
+            </div>
+          </div>
+        )}
+
+        {reviewTab === 'timeline' && !timelineForView && !sourceFullText && (
           <div className="flex h-full flex-col items-center justify-center px-6">
             <OctoAvatar mood={octoMoodEmpty === 'sleeping' ? 'sleeping' : 'thinking'} size="lg" aura className="mb-4" />
             <p className="mb-1 text-[15px] font-semibold text-ink">

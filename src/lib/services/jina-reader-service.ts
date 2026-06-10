@@ -13,6 +13,7 @@ import workspaceContextService from '@/lib/services/workspace-context-service';
 import { detectLinkProvider } from '@/lib/context-reach/link-provider';
 import {
   extractWebArticle,
+  markdownToPlainText,
   WebArticleExtractError,
 } from '@/lib/services/web-article-extract-service';
 import { chat, DEFAULT_WORKSHOP_MODEL_ID, type ChatMessage } from '@/lib/services/llm-service';
@@ -144,7 +145,7 @@ async function generateLinkSummary(
  *
  * 该函数设计为 fire-and-forget，调用方无需 await。
  * 仅在 article-link 类型且 sourceUrl 存在时工作。
- * 对微信文章会优先尝试 OpenClaw Gateway 绕过反爬。
+ * 文章提取策略由 extractWebArticle 统一调度（Firecrawl → OpenClaw fallback → Jina → Direct）。
  */
 export async function enrichArticleLinkContent(linkToken: string, url: string): Promise<void> {
   try {
@@ -163,12 +164,15 @@ export async function enrichArticleLinkContent(linkToken: string, url: string): 
     }
 
     const article = await extractWebArticle(url, 'wechat-article', '微信公众号');
+    const plainContent = markdownToPlainText(article.content);
 
-    // 把原始的 title+description+url 放前面，正文附在后面
+    // 如果原始内容看起来只是一个 URL 或很短，直接丢弃，不再拼在正文前面。
+    // 用户发的原始文字如果带有自己的备注（>100 字且不像 URL），才保留拼接。
     const existingText = message.normalizedText || '';
-    const enrichedText = existingText
-      ? `${existingText}\n\n---\n\n${article.content}`
-      : article.content;
+    const isJustUrlOrShort = !existingText || existingText.length < 100 || /^https?:\/\//i.test(existingText.trim());
+    const enrichedText = isJustUrlOrShort
+      ? plainContent
+      : `${existingText}\n\n---\n\n${plainContent}`;
 
     // 更新 WechatInboxMessage
     await prisma.wechatInboxMessage.update({
@@ -254,12 +258,14 @@ export async function enrichLinkContent(linkToken: string): Promise<void> {
 
     const content = await fetchJinaReaderContent(message.sourceUrl);
     if (!content) return;
+    const plainContent = markdownToPlainText(content);
 
-    // 把原始的 title+description+url 放前面，正文附在后面
+    // 如果原始内容看起来只是一个 URL 或很短，直接丢弃，不再拼在正文前面
     const existingText = message.normalizedText || '';
-    const enrichedText = existingText
-      ? `${existingText}\n\n---\n\n${content}`
-      : content;
+    const isJustUrlOrShort = !existingText || existingText.length < 100 || /^https?:\/\//i.test(existingText.trim());
+    const enrichedText = isJustUrlOrShort
+      ? plainContent
+      : `${existingText}\n\n---\n\n${plainContent}`;
 
     // 更新 WechatInboxMessage
     await prisma.wechatInboxMessage.update({

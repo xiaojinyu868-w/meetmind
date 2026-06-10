@@ -60,6 +60,14 @@ export const COPY = {
     actionUpcoming: '准备上课',
   },
 
+  sourceType: {
+    audio: '录音',
+    video: '视频',
+    image: '图片',
+    document: '文章',
+    text: '笔记',
+  },
+
   listening: {
     idle: '我在。',
     hearing: '我在听。',

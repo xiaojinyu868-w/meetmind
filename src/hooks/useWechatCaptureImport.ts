@@ -40,6 +40,21 @@ interface UseWechatCaptureImportDeps {
   isAuthenticated: boolean;
   user: { id?: string } | null;
   refreshDailyEcho: () => Promise<unknown>;
+  /**
+   * 当微信收集到链接/文章时，调用此函数提取文章内容。
+   * 由 useSourceImport 提供（importArticleLinkIntoSourceItem）。
+   */
+  importDocumentLink?: (
+    url: string,
+    options?: {
+      sourceItemId?: string;
+      optimisticTitle?: string;
+      persistSourceKey?: string;
+      persistSourceType?: string;
+      persistRole?: 'primary' | 'support';
+      occurredAt?: string;
+    }
+  ) => Promise<boolean>;
 }
 
 // ── Refs interface ──
@@ -187,19 +202,25 @@ export function useWechatCaptureImport(
         );
 
         const nextItem = buildWechatCaptureSourceItem(message);
+        const textReady = (message.normalizedText?.length || 0) > 200;
+        const importingStatus = sourceType === 'document' && !textReady
+          ? { status: 'parsing' as const, statusText: '正在提取内容…' }
+          : undefined;
+
         useCollectionStore.getState().actions.setSourceItems((prev) => {
           const index = prev.findIndex(
             (item) => item.id === nextItem.id || resolveSourceItemSourceKey(item) === nextItem.sourceKey
           );
 
           if (index < 0) {
-            return [...prev, nextItem];
+            return [...prev, importingStatus ? { ...nextItem, ...importingStatus } : nextItem];
           }
 
           const next = [...prev];
           next[index] = {
             ...prev[index],
             ...nextItem,
+            ...(importingStatus || {}),
           };
           return next;
         });
@@ -211,6 +232,17 @@ export function useWechatCaptureImport(
             title: getSupportReferenceDisplayTitle(nextItem),
             snippet: compactText(tutorSnippet, 2800),
           }]));
+        }
+
+        // 微信服务端 /api/wechat/mp 已异步触发 enrichArticleLinkContent 提取文章，
+        // 前端只在内容明显未就绪（normalizedText 过短）时才兜底触发一次，避免两边并发浪费 API。
+        if (sourceType === 'document' && message.sourceUrl && deps.importDocumentLink && !textReady) {
+          void deps.importDocumentLink(message.sourceUrl, {
+            sourceItemId: nextItem.id,
+            optimisticTitle: title,
+            persistRole: role,
+            occurredAt: addedAt,
+          });
         }
 
         settleWechatCaptureEntry(nextItem);

@@ -4,14 +4,15 @@
  * 支持从微信公众号、小红书、知乎等图文平台提取正文内容。
  *
  * 提取策略（按优先级）：
- * 1. OpenClaw Gateway（仅微信文章）— 通过真实微信客户端环境 + MicroMessenger UA 绕过反爬
- * 2. Jina Reader API（r.jina.ai）— 自带反爬能力，返回 Markdown
- * 3. 直接 fetch HTML + 本地解析 — 适合无反爬的平台
+ * 1. Firecrawl（所有平台）— 自带反爬绕过，对微信公众号有效，约 1 credit/篇
+ * 2. OpenClaw Gateway（仅微信文章，deprecated fallback）— 真实微信客户端环境
+ * 3. Jina Reader API（r.jina.ai）— 自带反爬能力，返回 Markdown
+ * 4. 直接 fetch HTML + 本地解析 — 适合无反爬的平台
  *
  * 平台适配说明：
- * - 微信公众号：OpenClaw Gateway 优先 → Jina Reader → 本地 fetch（weui-msg 反爬严格）
- * - 小红书：Jina Reader → 本地 fetch（需 xsec_token）
- * - 通用网页：Jina Reader → 本地通用 HTML 解析
+ * - 微信公众号：Firecrawl 优先 → OpenClaw fallback → Jina Reader → 本地 fetch
+ * - 小红书：Firecrawl → Jina Reader → 本地 fetch（需 xsec_token）
+ * - 通用网页：Firecrawl → Jina Reader → 本地通用 HTML 解析
  */
 
 import { createLogger } from '@/lib/logger';
@@ -40,23 +41,117 @@ export interface ExtractedArticle {
   sourceUrl: string;        // 原始链接
   provider: string;         // 来源平台 ID
   providerLabel: string;    // 来源平台名
-  extractMethod: 'jina' | 'direct' | 'openclaw' | 'fallback';
+  extractMethod: 'jina' | 'direct' | 'openclaw' | 'firecrawl' | 'fallback';
   wordCount: number;        // 字数
 }
 
 const JINA_READER_BASE = 'https://r.jina.ai/';
+const FIRECRAWL_API_BASE = 'https://api.firecrawl.dev/v1';
 const EXTRACT_TIMEOUT_MS = Number.parseInt(
   process.env.WEB_ARTICLE_EXTRACT_TIMEOUT_MS || '30000', 10
 );
 const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36';
 
-// OpenClaw Gateway（用于绕过微信公众号反爬）
+// Firecrawl（网页提取服务，可绕过微信公众号反爬）
+export function getFirecrawlConfig() {
+  return {
+    apiKey: process.env.FIRECRAWL_API_KEY || '',
+    enabled: Boolean(process.env.FIRECRAWL_API_KEY),
+  };
+}
+
+// OpenClaw Gateway（用于绕过微信公众号反爬，即将弃用）
 export function getOpenClawConfig() {
   return {
     url: process.env.OPENCLAW_GATEWAY_URL || '',
     token: process.env.OPENCLAW_TOKEN || '',
     enabled: Boolean(process.env.OPENCLAW_GATEWAY_URL && process.env.OPENCLAW_TOKEN),
   };
+}
+
+/**
+ * 通过 Firecrawl API 提取网页内容为 Markdown。
+ * Firecrawl 自带反爬绕过能力，对微信公众号文章有效。
+ */
+async function extractViaFirecrawl(
+  url: string
+): Promise<{ title: string; content: string; rawMarkdown: string; imageUrls?: string[] } | null> {
+  const fc = getFirecrawlConfig();
+  if (!fc.enabled) return null;
+
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), EXTRACT_TIMEOUT_MS);
+
+  try {
+    const response = await fetch(`${FIRECRAWL_API_BASE}/scrape`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${fc.apiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        url,
+        formats: ['markdown'],
+        onlyMainContent: true,
+      }),
+      signal: controller.signal,
+    });
+
+    if (!response.ok) {
+      log.warn(`[web-article-extract] Firecrawl HTTP ${response.status} for ${url}`);
+      return null;
+    }
+
+    const data = (await response.json()) as {
+      success?: boolean;
+      data?: {
+        markdown?: string;
+        metadata?: {
+          title?: string;
+          ogTitle?: string;
+          description?: string;
+          imageUrls?: string[];
+        };
+      };
+    };
+
+    if (!data.success || !data.data?.markdown) {
+      log.warn(`[web-article-extract] Firecrawl returned no markdown for ${url}`);
+      return null;
+    }
+
+    const markdown = data.data.markdown.trim();
+    if (markdown.length < 50) {
+      log.warn(`[web-article-extract] Firecrawl returned too short content (${markdown.length} chars) for ${url}`);
+      return null;
+    }
+
+    // 标题优先顺序：metadata.ogTitle > metadata.title > 从 markdown 提取
+    // 微信文章的 <title> 通常是 "Weixin Official Accounts Platform"，真正的标题在 og:title
+    let title = data.data.metadata?.ogTitle || data.data.metadata?.title || '';
+    if (!title) {
+      const h1Match = markdown.match(/^#\s+(.+)$/m);
+      if (h1Match) title = h1Match[1].trim();
+    }
+
+    if (isUselessContent(markdown)) {
+      log.warn(`[web-article-extract] Firecrawl returned useless content for ${url}`);
+      return null;
+    }
+
+    const imageUrls = data.data.metadata?.imageUrls?.filter((u) => u.startsWith('http')) || [];
+
+    return { title, content: markdown, rawMarkdown: markdown, imageUrls };
+  } catch (error) {
+    if ((error as { name?: string })?.name === 'AbortError') {
+      log.warn(`[web-article-extract] Firecrawl timeout for ${url}`);
+    } else {
+      log.warn(`[web-article-extract] Firecrawl error for ${url}: ${error instanceof Error ? error.message : String(error)}`);
+    }
+    return null;
+  } finally {
+    clearTimeout(timeoutId);
+  }
 }
 
 /**
@@ -482,19 +577,42 @@ function isUselessContent(content: string): boolean {
 }
 
 /**
- * Markdown → 纯文本（移除 Markdown 语法）。
+ * Markdown → 纯文本（移除 Markdown 语法 + HTML/SVG 残留 + data URI）。
+ *
+ * 微信公众号等平台的 Firecrawl 提取结果常混入 SVG 追踪像素、
+ * URL 编码标签、data URI 图片等垃圾，需要在此统一清洗。
  */
-function markdownToPlainText(md: string): string {
+export function markdownToPlainText(md: string): string {
   return md
-    .replace(/!\[.*?\]\(.*?\)/g, '')           // 图片
-    .replace(/\[([^\]]+)\]\(.*?\)/g, '$1')     // 链接
-    .replace(/#{1,6}\s+/g, '')                 // 标题
-    .replace(/[*_]{1,3}(.+?)[*_]{1,3}/g, '$1') // 加粗/斜体
-    .replace(/`{1,3}[^`]*`{1,3}/g, '')         // 代码
-    .replace(/^[-*+]\s+/gm, '')                // 列表
-    .replace(/^\d+\.\s+/gm, '')                // 有序列表
-    .replace(/^>\s+/gm, '')                    // 引用
-    .replace(/---+/g, '')                      // 分隔线
+    // 1. Markdown 图片（包括跨行，关键修复：. 默认不匹配换行）
+    .replace(/!\[.*?\]\([\s\S]*?\)/g, '')
+    // 2. Markdown 链接（包括跨行）
+    .replace(/\[([^\]]+)\]\([\s\S]*?\)/g, '$1')
+    // 3. HTML/SVG/XML 标签
+    .replace(/<[^>]+>/g, '')
+    // 4. URL 编码的 HTML/SVG 标签（如 %3Csvg%3E...%3C/svg%3E）
+    .replace(/%3C[\s\S]*?%3E/gi, '')
+    // 5. data URI（base64 和 raw）
+    .replace(/data:[\w/]+;[\w-]+,[\s\S]*?(?=\s|$|\)|"|')/g, '')
+    // 6. HTML 实体
+    .replace(/&[a-zA-Z0-9#]+;/g, ' ')
+    // 7. 孤立的 SVG/XML 属性残留（如 fill='...' width='1'）
+    .replace(/\s+(?:fill|stroke|width|height|x|y|rx|ry|cx|cy|r|d|transform|xmlns|viewBox|preserveAspectRatio|class|id|style)\s*=\s*['"][^'"]*['"]/gi, ' ')
+    // 8. Markdown 标题
+    .replace(/#{1,6}\s+/g, '')
+    // 9. 加粗/斜体
+    .replace(/[*_]{1,3}(.+?)[*_]{1,3}/g, '$1')
+    // 10. 代码
+    .replace(/`{1,3}[^`]*`{1,3}/g, '')
+    // 11. 列表
+    .replace(/^[-*+]\s+/gm, '')
+    .replace(/^\d+\.\s+/gm, '')
+    // 12. 引用
+    .replace(/^>\s+/gm, '')
+    // 13. 分隔线
+    .replace(/---+/g, '')
+    // 14. 清理水平多余空白（保留换行）
+    .replace(/[ \t]{2,}/g, ' ')
     .replace(/\n{3,}/g, '\n\n')
     .trim();
 }
@@ -512,7 +630,24 @@ export async function extractWebArticle(
   providerLabel: string
 ): Promise<ExtractedArticle> {
 
-  // 微信公众号：优先走 OpenClaw Gateway（绕过微信反爬）
+  // 策略 0: Firecrawl（对所有平台有效，尤其擅长绕过微信公众号反爬）
+  const firecrawlResult = await extractViaFirecrawl(url);
+  if (firecrawlResult && firecrawlResult.content.length > 50) {
+    const plainText = markdownToPlainText(firecrawlResult.content);
+    return {
+      title: firecrawlResult.title,
+      content: firecrawlResult.content,
+      description: plainText.slice(0, 200),
+      imageUrls: firecrawlResult.imageUrls,
+      sourceUrl: url,
+      provider,
+      providerLabel,
+      extractMethod: 'firecrawl',
+      wordCount: plainText.length,
+    };
+  }
+
+  // 微信公众号：OpenClaw Gateway 作为 deprecated fallback
   if (provider === 'wechat-article') {
     const openclawResult = await extractViaOpenClaw(url);
     if (openclawResult && openclawResult.content.length > 50) {
@@ -569,6 +704,6 @@ export async function extractWebArticle(
   throw new WebArticleExtractError(
     'ARTICLE_EXTRACT_FAILED',
     `无法提取文章内容`,
-    `url: ${url}, provider: ${provider}, openclaw: ${provider === 'wechat-article' ? (getOpenClawConfig().enabled ? 'failed' : 'disabled') : 'skipped'}, jina: ${jinaResult ? 'empty' : 'failed'}, direct: ${directResult ? 'empty' : 'failed'}`
+    `url: ${url}, provider: ${provider}, firecrawl: ${getFirecrawlConfig().enabled ? (firecrawlResult ? 'empty' : 'failed') : 'disabled'}, openclaw: ${provider === 'wechat-article' ? (getOpenClawConfig().enabled ? 'failed' : 'disabled') : 'skipped'}, jina: ${jinaResult ? 'empty' : 'failed'}, direct: ${directResult ? 'empty' : 'failed'}`
   );
 }

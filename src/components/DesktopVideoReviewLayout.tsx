@@ -107,6 +107,10 @@ export interface DesktopVideoReviewLayoutProps {
   onVideoTimeUpdate?: (timeMs: number) => void;
   /** 播放/暂停状态变化回调 — 同步给父组件 */
   onPlayingChange?: (isPlaying: boolean) => void;
+  /** 非音视频类型的原文（文章/笔记），无时间轴时展示 */
+  sourceFullText?: string;
+  /** 非音视频类型的正文图片 URL 列表 */
+  sourceImageUrls?: string[];
 }
 
 // ── Component ──────────────────────────────────────────────────
@@ -135,6 +139,8 @@ export function DesktopVideoReviewLayout(props: DesktopVideoReviewLayoutProps) {
     isPlanLoading,
     onVideoTimeUpdate,
     onPlayingChange,
+    sourceFullText,
+    sourceImageUrls,
   } = props;
 
   // ── Store reads ──
@@ -548,6 +554,8 @@ export function DesktopVideoReviewLayout(props: DesktopVideoReviewLayoutProps) {
                   });
                 }}
                 sharedWorkspaceContent={null}
+                sourceFullText={sourceFullText}
+                sourceImageUrls={sourceImageUrls}
               />
               </section>
             )}

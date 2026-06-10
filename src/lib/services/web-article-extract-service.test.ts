@@ -3,8 +3,10 @@ import {
   parseOpenClawWechatResponse,
   htmlToText,
   extractWebArticle,
+  markdownToPlainText,
   WebArticleExtractError,
   getOpenClawConfig,
+  getFirecrawlConfig,
 } from './web-article-extract-service';
 
 describe('parseOpenClawWechatResponse', () => {
@@ -101,18 +103,67 @@ describe('extractWebArticle fallback strategy', () => {
     vi.unstubAllGlobals();
     delete process.env.OPENCLAW_GATEWAY_URL;
     delete process.env.OPENCLAW_TOKEN;
+    delete process.env.FIRECRAWL_API_KEY;
   });
 
-  it('wechat-article: prefers OpenClaw and skips Jina when OpenClaw succeeds', async () => {
+  it('wechat-article: prefers Firecrawl and skips OpenClaw when Firecrawl succeeds', async () => {
+    process.env.FIRECRAWL_API_KEY = 'fc_test_key';
     process.env.OPENCLAW_GATEWAY_URL = 'https://gateway.example.com/v1/chat/completions';
     process.env.OPENCLAW_TOKEN = 'tk_test';
+    expect(getFirecrawlConfig().enabled).toBe(true);
     expect(getOpenClawConfig().enabled).toBe(true);
 
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
-      ok: true,
-      json: async () => ({
-        choices: [{ message: { content: '**微信文章标题**\n\n这是通过微信 Gateway 抓取的微信文章内容，长度必须超过五十个字符才能通过 extractWebArticle 的内容长度检查要求。' } }],
-      }),
+    const mockFetch = vi.fn().mockImplementation(async (input: string | Request) => {
+      const url = typeof input === 'string' ? input : input.toString();
+      if (url.includes('api.firecrawl.dev')) {
+        return {
+          ok: true,
+          json: async () => ({
+            success: true,
+            data: {
+              markdown: '# Firecrawl 微信标题\n\n这是通过 Firecrawl 抓取的微信文章内容，长度必须超过五十个字符才能通过 extractWebArticle 的内容长度检查要求，所以继续补充文字长度。',
+              metadata: { title: 'Firecrawl 微信标题' },
+            },
+          }),
+        };
+      }
+      return { ok: false, status: 500 };
+    });
+    vi.stubGlobal('fetch', mockFetch);
+
+    const result = await extractWebArticle(
+      'https://mp.weixin.qq.com/s/xxx',
+      'wechat-article',
+      '微信公众号'
+    );
+
+    expect(result.extractMethod).toBe('firecrawl');
+    expect(result.title).toBe('Firecrawl 微信标题');
+    expect(result.content).toContain('Firecrawl 抓取');
+    // OpenClaw should not be called when Firecrawl succeeds
+    const openclawCalls = mockFetch.mock.calls.filter(
+      ([url]) => typeof url === 'string' && url.includes('gateway.example.com')
+    );
+    expect(openclawCalls).toHaveLength(0);
+  });
+
+  it('wechat-article: falls back to OpenClaw when Firecrawl is disabled', async () => {
+    // no FIRECRAWL env set
+    expect(getFirecrawlConfig().enabled).toBe(false);
+    process.env.OPENCLAW_GATEWAY_URL = 'https://gateway.example.com/v1/chat/completions';
+    process.env.OPENCLAW_TOKEN = 'tk_test';
+
+    vi.stubGlobal('fetch', vi.fn().mockImplementation(async (input: string | Request) => {
+      const url = typeof input === 'string' ? input : input.toString();
+      if (url.includes('gateway.example.com')) {
+        return {
+          ok: true,
+          json: async () => ({
+            choices: [{ message: { content: '**微信文章标题**\n\n这是通过微信 Gateway 抓取的微信文章内容，长度必须超过五十个字符才能通过 extractWebArticle 的内容长度检查要求。' } }],
+          }),
+        };
+      }
+      return { ok: false, status: 500 };
     }));
 
     const result = await extractWebArticle(
@@ -123,16 +174,28 @@ describe('extractWebArticle fallback strategy', () => {
 
     expect(result.extractMethod).toBe('openclaw');
     expect(result.title).toBe('微信文章标题');
-    expect(result.content).toContain('微信 Gateway');
   });
 
-  it('wechat-article: falls back to Jina when OpenClaw is disabled', async () => {
-    // no OPENCLAW env set
-    expect(getOpenClawConfig().enabled).toBe(false);
+  it('wechat-article: falls back to Jina when Firecrawl and OpenClaw both fail', async () => {
+    process.env.FIRECRAWL_API_KEY = 'fc_test_key';
+    process.env.OPENCLAW_GATEWAY_URL = 'https://gateway.example.com/v1/chat/completions';
+    process.env.OPENCLAW_TOKEN = 'tk_test';
 
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
-      ok: true,
-      text: async () => 'Title: Jina Title\nURL Source: https://mp.weixin.qq.com/s/xxx\nMarkdown Content:\n正文来自 Jina Reader，内容必须足够长，超过五十个字符才不会被判定为空壳页面，所以继续补充文字长度。',
+    vi.stubGlobal('fetch', vi.fn().mockImplementation(async (input: string | Request) => {
+      const url = typeof input === 'string' ? input : input.toString();
+      if (url.includes('api.firecrawl.dev')) {
+        return { ok: false, status: 429 };
+      }
+      if (url.includes('gateway.example.com')) {
+        return { ok: false, status: 502 };
+      }
+      if (url.startsWith('https://r.jina.ai/')) {
+        return {
+          ok: true,
+          text: async () => 'Title: Jina Title\nURL Source: https://mp.weixin.qq.com/s/xxx\nMarkdown Content:\n正文来自 Jina Reader，内容必须足够长，超过五十个字符才不会被判定为空壳页面，所以继续补充文字长度。',
+        };
+      }
+      return { ok: false, status: 500 };
     }));
 
     const result = await extractWebArticle(
@@ -145,12 +208,16 @@ describe('extractWebArticle fallback strategy', () => {
     expect(result.title).toBe('Jina Title');
   });
 
-  it('wechat-article: falls back to direct fetch when OpenClaw and Jina both fail', async () => {
+  it('wechat-article: falls back to direct fetch when Firecrawl, OpenClaw and Jina all fail', async () => {
+    process.env.FIRECRAWL_API_KEY = 'fc_test_key';
     process.env.OPENCLAW_GATEWAY_URL = 'https://gateway.example.com/v1/chat/completions';
     process.env.OPENCLAW_TOKEN = 'tk_test';
 
     vi.stubGlobal('fetch', vi.fn().mockImplementation(async (input: string | Request) => {
       const url = typeof input === 'string' ? input : input.toString();
+      if (url.includes('api.firecrawl.dev')) {
+        return { ok: false, status: 429 };
+      }
       if (url.includes('gateway.example.com')) {
         return { ok: false, status: 502 };
       }
@@ -176,16 +243,26 @@ describe('extractWebArticle fallback strategy', () => {
     expect(result.extractMethod).toBe('direct');
     expect(result.title).toBe('直接抓取标题');
     expect(result.content).toContain('直接抓取正文');
-    expect((globalThis.fetch as ReturnType<typeof vi.fn>).mock.calls).toHaveLength(3);
+    expect((globalThis.fetch as ReturnType<typeof vi.fn>).mock.calls).toHaveLength(4);
   });
 
-  it('non-wechat article never calls OpenClaw', async () => {
+  it('non-wechat article: prefers Firecrawl then Jina, never calls OpenClaw', async () => {
+    process.env.FIRECRAWL_API_KEY = 'fc_test_key';
     process.env.OPENCLAW_GATEWAY_URL = 'https://gateway.example.com/v1/chat/completions';
     process.env.OPENCLAW_TOKEN = 'tk_test';
 
-    const mockFetch = vi.fn().mockResolvedValue({
-      ok: true,
-      text: async () => 'Title: 知乎文章\nMarkdown Content:\n正文内容必须超过五十个字符才不会被 Jina Reader 判定为空壳页面而拒绝使用，所以继续补充文字长度。',
+    const mockFetch = vi.fn().mockImplementation(async (input: string | Request) => {
+      const url = typeof input === 'string' ? input : input.toString();
+      if (url.includes('api.firecrawl.dev')) {
+        return { ok: false, status: 429 };
+      }
+      if (url.startsWith('https://r.jina.ai/')) {
+        return {
+          ok: true,
+          text: async () => 'Title: 知乎文章\nMarkdown Content:\n正文内容必须超过五十个字符才不会被 Jina Reader 判定为空壳页面而拒绝使用，所以继续补充文字长度。',
+        };
+      }
+      return { ok: false, status: 500 };
     });
     vi.stubGlobal('fetch', mockFetch);
 
@@ -212,5 +289,46 @@ describe('extractWebArticle fallback strategy', () => {
     await expect(
       extractWebArticle('https://example.com/x', 'generic', '网页')
     ).rejects.toThrow(WebArticleExtractError);
+  });
+});
+
+describe('markdownToPlainText', () => {
+  it('removes markdown images and links', () => {
+    const md = '![alt](https://example.com/img.png)\n[link text](https://example.com)';
+    expect(markdownToPlainText(md)).toBe('link text');
+  });
+
+  it('removes multi-line markdown images (wechat svg garbage)', () => {
+    const md = `![cover](data:image/svg+xml,%3Csvg%20xmlns='...'%3E%3Cg%3E%3Crect%20x='249'%20y='126'%20width='1'%20height='1'%20fill='%23FFFFFF'%3E%3C/rect%3E%3C/g%3E%3C/svg%3E)\n\n正文段落。`;
+    const result = markdownToPlainText(md);
+    expect(result).toContain('正文段落');
+    expect(result).not.toContain('rect');
+    expect(result).not.toContain('fill=');
+    expect(result).not.toContain('%3C');
+  });
+
+  it('removes url-encoded html/svg tags', () => {
+    const md = `团队荣耀%3Csvg%3E%3Cg%3E%3C/g%3E%3C/svg%3E根据队伍数据统计。`;
+    expect(markdownToPlainText(md)).toBe('团队荣耀根据队伍数据统计。');
+  });
+
+  it('removes html entities', () => {
+    const md = 'Hello&nbsp;World&mdash;test';
+    expect(markdownToPlainText(md)).toBe('Hello World test');
+  });
+
+  it('removes inline svg attributes', () => {
+    const md = `文本 fill='%23FFFFFF' width='1' height='1' 后续内容。`;
+    expect(markdownToPlainText(md)).toBe('文本 后续内容。');
+  });
+
+  it('removes standard html tags', () => {
+    const md = '<div>Hello</div>\n\n<p>World</p>';
+    expect(markdownToPlainText(md)).toBe('Hello\n\nWorld');
+  });
+
+  it('removes data URIs', () => {
+    const md = 'prefix data:image/png;base64,ABC123== suffix';
+    expect(markdownToPlainText(md)).toBe('prefix suffix');
   });
 });

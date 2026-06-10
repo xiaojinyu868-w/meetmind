@@ -408,6 +408,8 @@ function StudentAppContent({
   const sourceFileInputRef = useRef<HTMLInputElement>(null);
   const waveformRef = useRef<WaveformPlayerRef>(null);
   const recorderRef = useRef<RecorderHandle | null>(null);
+  // 记录当前进入复习态的 sourceItem，用于非音视频类型（文章/笔记）展示原文
+  const [selectedReviewItem, setSelectedReviewItem] = useState<SourceIngestItem | null>(null);
   // Ref bridge: importVideoLinkIntoSourceItem is returned by useSourceImport (defined after
   // ingestTranscriptSegments), but consumed by openReviewFromCollection (defined before).
   // We use a ref so the callback always reads the latest function at call time.
@@ -727,6 +729,7 @@ function StudentAppContent({
       setVideoInsightItems([]);
       setActiveVideoInsightId(null);
       setVideoWorkspaceTab('chat');
+      setSelectedReviewItem(null);
     }
     if (newMode === 'review' && segments.length === 0 && !hasCollectionContext) {
       try {
@@ -775,6 +778,7 @@ function StudentAppContent({
 
   const openReviewFromCollection = useCallback(async (item?: SourceIngestItem | null) => {
     if (!item) return;
+    setSelectedReviewItem(item);
     setMobileCollectionSheet(null);
     setShowMobileRecorder(false);
     setShowCollectionPulsePreview(false);
@@ -998,6 +1002,7 @@ function StudentAppContent({
     handleSourceFileButtonClick,
     handleSourceFileInputChange,
     importVideoLinkIntoSourceItem,
+    importArticleLinkIntoSourceItem,
     importComposerVideoLink,
   } = useSourceImport(
     {
@@ -1172,6 +1177,7 @@ function StudentAppContent({
       isAuthenticated,
       user,
       refreshDailyEcho,
+      importDocumentLink: importArticleLinkIntoSourceItem,
     },
     {
       collectionComposerRef,
@@ -1891,6 +1897,8 @@ function StudentAppContent({
               isPlanLoading={classCheck.isPlanLoading}
               onVideoTimeUpdate={handleVideoTimeUpdate}
               onPlayingChange={setIsPlaying}
+              sourceFullText={selectedReviewItem?.fullText}
+              sourceImageUrls={selectedReviewItem?.imageUrls}
             />
           ) : (
             /* 手机端主内容区 */

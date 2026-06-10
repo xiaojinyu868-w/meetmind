@@ -80,6 +80,10 @@ export interface SourceIngestItem {
   audioUrl?: string;
   /** 导入模式（bili-native / yt-dlp / direct 等） */
   sourceMode?: string;
+  /** 封面图 URL（文章/笔记类型） */
+  coverUrl?: string;
+  /** 正文中的图片 URL 列表（文章/笔记类型） */
+  imageUrls?: string[];
 }
 
 export interface SupportReferenceItem {

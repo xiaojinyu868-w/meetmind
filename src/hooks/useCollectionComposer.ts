@@ -57,7 +57,7 @@ export interface UseCollectionComposerDeps {
     metadata?: Record<string, unknown>;
   }) => void;
   /** Import a composer link (from useSourceImport) */
-  importComposerVideoLink: (url: string) => Promise<void>;
+  importComposerVideoLink: (url: string, composerText?: string) => Promise<void>;
   /** Handle file imports */
   handleImportFiles: (files: File[] | FileList, mode?: 'audio' | 'support' | 'all') => Promise<void>;
   /** Handle source file button click */
@@ -674,7 +674,7 @@ export function useCollectionComposer(
     clearQuotedCollectionContext();
 
     if (canAutoImportLink && inlineUrl) {
-      void importComposerVideoLink(inlineUrl);
+      void importComposerVideoLink(inlineUrl, collectionComposerText);
       return;
     }
   }, [

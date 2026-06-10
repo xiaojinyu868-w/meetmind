@@ -65,13 +65,15 @@ export interface CollectionCardProps {
 // 现在统一：媒体类（视频/音频）= pine 系，文字类（笔记）= ink-muted 中性，
 // 资料类（图片/文档）= paper-warm + ink-secondary 克制。
 
+import { COPY } from '@/lib/ui/copy';
+
 function TypeBadge({ type }: { type: string }) {
   const config: Record<string, { label: string; bg: string; text: string; dot: string }> = {
-    audio:    { label: '录音', bg: 'bg-pine/[0.08]',     text: 'text-pine',           dot: 'bg-pine' },
-    video:    { label: '视频', bg: 'bg-pine/[0.08]',     text: 'text-pine',           dot: 'bg-pine' },
-    image:    { label: '图片', bg: 'bg-paper-warm',      text: 'text-ink-secondary',  dot: 'bg-ink-muted' },
-    document: { label: '讲义', bg: 'bg-paper-warm',      text: 'text-ink-secondary',  dot: 'bg-ink-muted' },
-    text:     { label: '笔记', bg: 'bg-paper-warm',      text: 'text-ink-secondary',  dot: 'bg-ink-muted' },
+    audio:    { label: COPY.sourceType.audio,    bg: 'bg-pine/[0.08]',     text: 'text-pine',           dot: 'bg-pine' },
+    video:    { label: COPY.sourceType.video,    bg: 'bg-pine/[0.08]',     text: 'text-pine',           dot: 'bg-pine' },
+    image:    { label: COPY.sourceType.image,    bg: 'bg-paper-warm',      text: 'text-ink-secondary',  dot: 'bg-ink-muted' },
+    document: { label: COPY.sourceType.document, bg: 'bg-paper-warm',      text: 'text-ink-secondary',  dot: 'bg-ink-muted' },
+    text:     { label: COPY.sourceType.text,     bg: 'bg-paper-warm',      text: 'text-ink-secondary',  dot: 'bg-ink-muted' },
   };
   const c = config[type] || config.text;
   return (

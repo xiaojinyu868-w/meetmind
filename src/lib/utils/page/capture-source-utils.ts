@@ -11,7 +11,9 @@ import type {
 } from '@/types/page-types';
 import type { WorkspaceCaptureListItem } from '@/components/WorkspaceCaptureList';
 import { getCollectionContextDisplayTitle } from '@/lib/capture/collection-context';
+import { parseVideoLink } from '@/lib/utils/video-link';
 import { compactText, compactMultilineText } from './text-and-constants';
+import { markdownToPlainText } from '@/lib/services/web-article-extract-service';
 
 // ── Workspace capture helpers ─────────────────────────────────────
 
@@ -122,7 +124,7 @@ export function inferWechatCaptureSourceType(message: WechatCaptureMessage): Sou
   if (message.msgType === 'voice') return 'audio';
   if (message.msgType === 'image') return 'image';
   if (message.reachChannel === 'video-link') return 'video';
-  if (message.msgType === 'link') return 'document';
+  if (message.reachChannel === 'article-link' || message.msgType === 'link') return 'document';
   return 'text';
 }
 
@@ -132,7 +134,24 @@ export function inferWechatCaptureRole(message: WechatCaptureMessage): SourceIng
 }
 
 export function inferWechatCaptureTitle(message: WechatCaptureMessage): string {
-  if (message.title?.trim()) return compactText(message.title.trim(), 60);
+  const rawTitle = message.title?.trim();
+  // 过滤掉本身就是 URL 的 title（微信有时会把 URL 填到 Title 字段）
+  const isUrlLike = rawTitle && /^https?:\/\//i.test(rawTitle);
+  if (rawTitle && !isUrlLike) return compactText(rawTitle, 60);
+
+  // 对 link / article-link 类型，尝试从 sourceUrl 提取平台名作为标题
+  const hasLink = message.msgType === 'link' || message.reachChannel === 'article-link' || message.reachChannel === 'web-link';
+  if (hasLink && message.sourceUrl) {
+    const parsed = parseVideoLink(message.sourceUrl);
+    if (parsed && parsed.provider !== 'generic') {
+      return `${parsed.providerLabel} 文章`;
+    }
+    try {
+      const hostname = new URL(message.sourceUrl).hostname.replace(/^www\./i, '');
+      if (hostname) return `${hostname} 文章`;
+    } catch { /* ignore */ }
+  }
+
   if (message.msgType === 'voice') return '微信语音';
   if (message.msgType === 'image') return '微信图片';
   if (message.msgType === 'link') return '微信链接';
@@ -193,6 +212,17 @@ export function resolveSourceItemSourceKey(item: SourceIngestItem): string | nul
   return null;
 }
 
+/**
+ * 清理正文中的 Markdown 图片语法和残余分隔线，提升阅读体验。
+ * 对存量数据（服务端以前存的 Markdown）做兜底过滤。
+ *
+ * 复用 web-article-extract-service 的 markdownToPlainText，
+ * 统一处理 SVG/XML 残留、URL 编码垃圾、HTML 实体等。
+ */
+function stripMarkdownArtifacts(text: string): string {
+  return markdownToPlainText(text);
+}
+
 export function resolveCaptureSourceFullText(params: {
   type: SourceIngestType;
   normalizedText?: string | null;
@@ -203,7 +233,8 @@ export function resolveCaptureSourceFullText(params: {
   const raw = transcriptOnly
     ? params.normalizedText || ''
     : params.normalizedText || params.previewText || params.title;
-  const resolved = compactMultilineText(raw, 3200);
+  const cleaned = stripMarkdownArtifacts(raw);
+  const resolved = compactMultilineText(cleaned, 3200);
   return resolved || undefined;
 }
 

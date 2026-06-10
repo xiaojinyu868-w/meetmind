@@ -100,23 +100,7 @@ function textToSegments(text: string): Array<{
   return segments;
 }
 
-/**
- * Markdown → 纯文本。
- */
-function markdownToText(md: string): string {
-  return md
-    .replace(/!\[.*?\]\(.*?\)/g, '')
-    .replace(/\[([^\]]+)\]\(.*?\)/g, '$1')
-    .replace(/#{1,6}\s+/g, '')
-    .replace(/[*_]{1,3}(.+?)[*_]{1,3}/g, '$1')
-    .replace(/`{1,3}[^`]*`{1,3}/g, '')
-    .replace(/^[-*+]\s+/gm, '')
-    .replace(/^\d+\.\s+/gm, '')
-    .replace(/^>\s+/gm, '')
-    .replace(/---+/g, '')
-    .replace(/\n{3,}/g, '\n\n')
-    .trim();
-}
+import { markdownToPlainText } from '@/lib/services/web-article-extract-service';
 
 export async function POST(request: NextRequest) {
   try {
@@ -138,8 +122,8 @@ export async function POST(request: NextRequest) {
     // 提取文章内容
     const article = await extractWebArticle(url, provider, providerLabel);
 
-    // 转为纯文本
-    const plainText = markdownToText(article.content);
+    // 转为纯文本（统一复用 web-article-extract-service 的清洗逻辑）
+    const plainText = markdownToPlainText(article.content);
 
     // 切分为 segments
     const segments = textToSegments(plainText);
@@ -160,6 +144,7 @@ export async function POST(request: NextRequest) {
         providerLabel: article.providerLabel,
         originalUrl: url,
         extractMethod: article.extractMethod,
+        title: article.title,
       },
       segments,
       sentences: segments.map((seg) => ({

@@ -830,6 +830,7 @@ export function useSourceImport(
         description?: string;
         author?: string;
         wordCount?: number;
+        imageUrls?: string[];
         source?: {
           provider?: string;
           providerLabel?: string;
@@ -861,16 +862,10 @@ export function useSourceImport(
         return false;
       }
 
-      await handleVideoImportReady({
+      await ingestTranscriptSegments({
         segments,
-        source: {
-          provider: payload.source?.provider || detected?.provider || 'generic',
-          providerLabel: payload.source?.providerLabel || detected?.providerLabel || '图文',
-          originalUrl: payload.source?.originalUrl || url,
-          playableUrl: url,
-          title: payload.title,
-        },
-      }, {
+        sourceType: 'document',
+        sourceTitle: payload.title || optimisticTitle,
         sourceItemId: targetSourceId,
         persistSourceKey: options?.persistSourceKey,
         persistSourceType: options?.persistSourceType,
@@ -878,9 +873,16 @@ export function useSourceImport(
         occurredAt: options?.occurredAt,
       });
 
+      // 补充写入 fullText 和图片信息，供复习态原文展示使用
+      updateSourceItem(targetSourceId, {
+        fullText: payload.text || segments.map((s) => s.text).join('\n\n'),
+        imageUrls: payload.imageUrls?.filter((u) => u.startsWith('http')) || undefined,
+      });
+
       return true;
     } catch {
       updateSourceItem(targetSourceId, {
+        title: optimisticTitle,
         status: 'failed',
         statusText: '文章提取失败，稍后再试试',
       });
@@ -888,16 +890,16 @@ export function useSourceImport(
     } finally {
       setActiveSourceImportCount((count) => Math.max(0, count - 1));
     }
-  }, [appendSourceItem, handleVideoImportReady, setActiveSourceImportCount, setSourceImportError, updateSourceItem]);
+  }, [appendSourceItem, ingestTranscriptSegments, setActiveSourceImportCount, setSourceImportError, updateSourceItem]);
 
   // ── importComposerVideoLink ──
   // NOTE: composerReach is read from collectionStore.collectionComposerText at call site.
   // We keep it as a thin wrapper. The caller in page.tsx passes composerReach.channel context.
 
-  const importComposerVideoLink = useCallback(async (url: string) => {
-    // Read current composer text and detect reach channel inline
-    const composerText = useCollectionStore.getState().collectionComposerText;
-    const reach = detectReachFromText(composerText);
+  const importComposerVideoLink = useCallback(async (url: string, composerText?: string) => {
+    // 优先使用调用方传入的原始 composerText（避免 store 已被清空）
+    const text = composerText ?? useCollectionStore.getState().collectionComposerText;
+    const reach = detectReachFromText(text);
     if (reach.channel === 'article-link') {
       await importArticleLinkIntoSourceItem(url);
     } else {
