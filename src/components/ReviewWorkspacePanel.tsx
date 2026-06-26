@@ -3,6 +3,7 @@
 import type { ReactNode } from 'react';
 import { TimelineView } from '@/components/TimelineView';
 import { AnchorDetailPanel } from '@/components/AnchorDetailPanel';
+import { FeedStreamPanel } from '@/components/FeedStreamPanel';
 import { OctoAvatar } from '@/components/ui/octo-avatar';
 import { useOctoMood } from '@/lib/hooks/useOctoMood';
 import { formatTime } from '@/lib/utils/page-utils';
@@ -181,6 +182,13 @@ export function ReviewWorkspacePanel({
             onResolve={onResolveAnchor}
             onAddNote={onAddAnchorNote}
             onClose={() => onReviewTabChange('timeline')}
+          />
+        )}
+
+        {reviewTab === 'feed' && (
+          <FeedStreamPanel
+            segments={segments}
+            onSeek={onSeek}
           />
         )}
 

@@ -178,6 +178,36 @@ export const COPY = {
   },
 
   /**
+   * 信息流（M15：替换笔记总结）
+   * 基于个人上下文的 LLM 驱动信息流——同一节课不同人看到不同的内容。
+   */
+  feed: {
+    /** tab 标签 */
+    tabLabel: '信息流',
+    /** 生成中 */
+    loading: '同学正在从这节课里挑对你重要的部分…',
+    /** 空状态（没有转录内容） */
+    empty: '这节课还没有内容。录完课后同学会自动整理。',
+    /** 生成失败 */
+    error: '没整理出来，再试一次',
+    /** 重试按钮 */
+    retry: '重新整理',
+    /** 条目类型标签 */
+    typeSummary: '这节课',
+    typeProbeNear: '同主题',
+    typeProbeLateral: '相关方向',
+    typeProbeBridge: '跨界',
+    typeConfusionLink: '你标记的困惑',
+    /** 动作按钮 */
+    actionJumpTimestamp: '跳回去听',
+    actionMakeFlashcard: '做成闪卡',
+    actionAskTutor: '让同学解释',
+    actionReviewPrev: '看上节课',
+    /** whyForYou 前缀 */
+    whyPrefix: '对你',
+  },
+
+  /**
    * 「聊聊你想要的」—— 用户和 AI 教练对话梳理目标的入口。
    * 是 v3.0 信息流哲学落地的第一个产品入口（替代旧硬编码 LearnerOnboarding 表单）。
    * 设置页常驻 + 首次进入 app 自动弹出。

@@ -287,6 +287,13 @@ export const FeatureConfig = {
     minTakeaways: 4,
     maxTakeaways: 6,
   },
+
+  // 信息流（M15：替换笔记总结，基于个人上下文的 LLM 驱动信息流）
+  feed: {
+    defaultModel: LLMConfig.defaultModel,
+    maxItems: 6,
+    maxProbes: 3,
+  },
   
   // AI 家教
   tutor: {

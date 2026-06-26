@@ -59,6 +59,7 @@ const VIDEO_WORKSPACE_TABS: WorkspaceTabConfig<VideoWorkspaceTab>[] = [
 const REVIEW_WORKSPACE_TABS: WorkspaceTabConfig<ReviewTab>[] = [
   { key: 'timeline', label: '时间轴', icon: '轴', LucideIcon: Clock },
   { key: 'anchor-detail', label: '困惑点', icon: '疑', LucideIcon: AlertCircle },
+  { key: 'feed', label: '信息流', icon: '流', LucideIcon: ListChecks, testId: 'review-tab-feed' },
   ...SHARED_WORKSPACE_TABS,
 ];
 

@@ -6,7 +6,7 @@ export const APP_STATE_VERSION = 2;
 
 export type PersistedViewMode = 'record' | 'review' | 'classroom';
 export type PersistedDataSource = 'live' | 'demo' | 'video';
-export type PersistedReviewTab = 'timeline' | 'anchor-detail' | 'apps';
+export type PersistedReviewTab = 'timeline' | 'anchor-detail' | 'feed' | 'apps';
 export type PersistedVideoWorkspaceTab = 'chat' | 'confusion' | 'transcript' | 'apps';
 
 export interface PersistedAppState {

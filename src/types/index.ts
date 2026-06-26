@@ -328,6 +328,44 @@ export interface SummaryTakeaway {
   timestamps: string[];
 }
 
+// ==================== 信息流 (Feed) ====================
+
+/** 信息流条目类型 */
+export type FeedItemType =
+  | 'summary'        // 个人化总结
+  | 'probe-near'     // 同主题延伸
+  | 'probe-lateral'  // 相关方向
+  | 'probe-bridge'   // 跨界关联
+  | 'confusion-link'; // 困惑点关联
+
+/** 信息流条目可触发的动作 */
+export type FeedActionType =
+  | 'jump-timestamp'   // 跳到转录时间戳
+  | 'make-flashcard'   // 做成闪卡
+  | 'ask-tutor'        // 让同学解释
+  | 'review-prev';     // 复习上节课
+
+/** 信息流单条条目 */
+export interface FeedItem {
+  type: FeedItemType;
+  title: string;
+  body: string;
+  /** 关联的课堂时间戳（MM:SS） */
+  timestamps?: string[];
+  /** 动作按钮文案 */
+  actionLabel?: string;
+  /** 动作类型 */
+  actionType?: FeedActionType;
+  /** 为什么对你重要（基于个人画像的个性化理由） */
+  whyForYou?: string;
+}
+
+/** 信息流生成结果 */
+export interface FeedResult {
+  items: FeedItem[];
+  generatedAt: string;
+}
+
 export interface ClassSummary {
   id: string;
   sessionId: string;
