@@ -205,6 +205,19 @@ export const COPY = {
     actionReviewPrev: '看上节课',
     /** whyForYou 前缀 */
     whyPrefix: '对你',
+    /** OpenBiliClaw B站内容推荐区（Phase 2） */
+    obSection: '同学帮你找的',
+    obSectionHint: '基于你的课堂内容和 B站收藏',
+    obEmpty: '填一下 B站 Cookie 就有了',
+    obCookieLabel: 'B站 Cookie',
+    obCookiePlaceholder: '在 bilibili.com 登录后，F12 → Application → Cookies 复制完整 Cookie',
+    obCookieSubmit: '连接 B站',
+    obCookieConnecting: '连接中…',
+    obCookieSuccess: 'B站已连接，正在拉取推荐…',
+    obCookieError: 'Cookie 无效或已过期，请重新复制',
+    obInitProgress: '正在拉取你的 B站历史…',
+    obNotConnected: '本地同学没在线',
+    obWatchOnBilibili: '在 B站看',
   },
 
   /**
