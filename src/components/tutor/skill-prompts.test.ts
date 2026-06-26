@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { SKILL_PROMPTS, filterSkillPromptsForSurface } from './skill-prompts';
 
 describe('SKILL_PROMPTS catalog', () => {
-  // 这六个 skill 是产品层的"原语"——Hyperknow 的 tell 是把它们放在一眼看得见的位置。
+  // 这五个 skill 是产品层的"原语"——Hyperknow 的 tell 是把它们放在一眼看得见的位置。
   // 产品里但凡出现 skill chip 的地方（TutorAgentPanel / ClassroomCompanionPanel / 未来的 mobile）
   // 都必须用这同一份目录，避免"考试速查表"在 A 处叫这个名、B 处叫那个名的碎片化。
   //
@@ -10,11 +10,11 @@ describe('SKILL_PROMPTS catalog', () => {
   //   1. 个数
   //   2. 每条都有 label/prompt，且不再使用 emoji icon
   //   3. 没有重复标签
-  //   4. 核心 5 个 skill 必须走 appKey（结构化插件路径），不能退回 prompt-only
+  //   4. 核心 4 个 skill 必须走 appKey（结构化插件路径），不能退回 prompt-only
   //      这是 M7-fix10 的架构承诺：结构化技能 = 真实 plugin，不是 /api/tutor 下的纯 markdown
   // 以后要添加新的 skill 只要更新这个测试的预期数量即可。
-  it('has the expected six core skills', () => {
-    expect(SKILL_PROMPTS).toHaveLength(6);
+  it('has the expected five core skills', () => {
+    expect(SKILL_PROMPTS).toHaveLength(5);
   });
 
   it('每个 skill 都有 label / prompt / utterance，且不使用 emoji icon', () => {
@@ -51,7 +51,6 @@ describe('SKILL_PROMPTS catalog', () => {
       '做闪卡': 'flashcards',
       '出测验': 'quiz',
       '画思维导图': 'mindmap',
-      '学习报告': 'study-report',
     };
     for (const [label, appKey] of Object.entries(expectedApp)) {
       const skill = SKILL_PROMPTS.find((s) => s.label === label);
@@ -68,17 +67,15 @@ describe('SKILL_PROMPTS catalog', () => {
 
   it('课堂 surface 可以过滤课后型技能，但共享目录仍保留它们给复习态', () => {
     const classroomSkills = filterSkillPromptsForSurface(SKILL_PROMPTS, {
-      excludeAppKeys: ['flashcards', 'quiz', 'study-report'],
+      excludeAppKeys: ['flashcards', 'quiz'],
     });
     const classroomLabels = classroomSkills.map((s) => s.label);
     const allLabels = SKILL_PROMPTS.map((s) => s.label);
 
     expect(allLabels).toContain('做闪卡');
     expect(allLabels).toContain('出测验');
-    expect(allLabels).toContain('学习报告');
     expect(classroomLabels).not.toContain('做闪卡');
     expect(classroomLabels).not.toContain('出测验');
-    expect(classroomLabels).not.toContain('学习报告');
     expect(classroomLabels).toContain('考试速查表');
     expect(classroomLabels).toContain('画思维导图');
     expect(classroomLabels).toContain('再讲一遍');

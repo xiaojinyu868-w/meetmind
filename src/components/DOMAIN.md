@@ -118,7 +118,6 @@ components/
 | `windows/QuizWindow.tsx` | ~720 | 测验浮窗 |
 | `windows/FlashcardsWindow.tsx` | ~470 | 闪卡浮窗 |
 | `windows/PodcastWindow.tsx` | ~470 | 播客浮窗 |
-| `windows/StudyReportWindow.tsx` | ~270 | 听课报告浮窗（家长视角） |
 | `hooks/useAppExecution.ts` | ~370 | 应用执行 hook |
 
 ## ⚠️ 超标文件（>500 行）

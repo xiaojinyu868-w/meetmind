@@ -12,9 +12,6 @@ src/components/apps/windows/
 ├── MindmapWindowLayout.ts      # 思维导图布局引擎（168行）
 ├── InfographicWindow.tsx       # 信息图窗口（699行，已拆分）
 ├── InfographicWindowData.ts    # 信息图数据处理（305行）
-├── StudyReportWindow.tsx       # 学习报告入口（插件报告 / 随堂检验报告分发）
-├── StudyReportDocument.tsx     # 插件学习报告文档排版（疏朗阅读版）
-├── study-report-document-model.ts # 学习报告内容归一化纯 helper（有测试）
 ├── AppWindowShell.tsx          # 独立应用页外壳
 ├── app-window-shell-tone.ts    # 独立应用页色调策略（闪卡使用低亮度沉浸背景，避免白底眩光）
 ├── FlashcardsWindow.tsx        # 闪卡训练窗口（低亮度沉浸练习背景，demo 静态结果显示试听成果分享入口）
@@ -22,6 +19,10 @@ src/components/apps/windows/
 ├── EvidenceLabel.tsx           # 证据标签组件
 └── index.ts                    # barrel 导出
 ```
+
+## 已清理（M14.6+）
+
+- `StudyReportWindow.tsx` / `StudyReportDocument.tsx` / `study-report-document-model.ts`(+test) — 学习报告已删除（产品定位错位 + 非视频场景死入口）
 
 ## 已拆分的窗口
 
@@ -61,7 +62,7 @@ src/components/apps/windows/
 ## 排版约定
 
 - 应用窗口默认使用 `canvas/card/ink/divider` 平涂体系；闪卡这类长时间主动回忆页面允许使用低亮度沉浸背景以降低白底眩光，但不要把这种深色舞台扩散到普通文档 / 报告类应用。
-- 报告类应用优先复用 `StudyReportDocument` 的疏朗文档排版：大标题、长正文 1.75+ 行高、主内容和建议区分栏。
+- 报告类应用优先复用疏朗文档排版：大标题、长正文 1.75+ 行高、主内容和建议区分栏。
 - 用户可见应用名称必须避开 `COPY.bannedWords`；`app-catalog.test.ts` 也会额外守住目录里的 `AI / 生图 / 智能生成` 等技术词。
 - 独立应用页和 `AppWindowShell` 不展示内部 sessionId；动作文案使用“再做一版 / 已做好 / 没做好”。
 

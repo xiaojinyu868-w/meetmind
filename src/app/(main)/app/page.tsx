@@ -21,7 +21,7 @@ import { memoryService, type ClassTimeline } from '@/lib/services/memory-service
 
 import { useAuth } from '@/lib/hooks/useAuth';
 import { runMemoryMigration } from '@/lib/services/memory-migration';
-import { ANONYMOUS_USER_ID, saveAudioSession, updateSessionStatus } from '@/lib/db';
+import { ANONYMOUS_USER_ID, saveAudioSession, updateSessionStatus, updateSessionTopic, getPreference } from '@/lib/db';
 
 import { buildSelectedCollectionContextText, getCollectionContextTypeLabel } from '@/lib/capture/collection-context';
 
@@ -85,14 +85,6 @@ import type { ClassCheckHighlight } from '@/app/api/class-check/plan/route';
 import type { VideoInsightItem } from '@/components/VideoInsightTimeline';
 const ClassCheckOverlay = dynamic(() => import('@/components/ClassCheckOverlay').then(m => ({ default: m.ClassCheckOverlay })), { ssr: false });
 const ClassCheckToast = dynamic(() => import('@/components/ClassCheckToast').then(m => ({ default: m.ClassCheckToast })), { ssr: false });
-const SoftHint = dynamic(() => import('@/components/SoftHint').then(m => ({ default: m.SoftHint })), { ssr: false });
-// 「聊聊你想要的」 —— 替代旧 LearnerOnboarding 表单。
-// 旧组件留作 settings 页"重新填一份画像"的 fallback；首次进入 app 走对话式新入口。
-const IntentDialogContainer = dynamic(
-  () => import('@/components/intent/IntentDialogContainer').then((m) => ({ default: m.IntentDialogContainer })),
-  { ssr: false },
-);
-
 import { AppLoading } from '@/components/AppLoading';
 import { CollectionMessageActionSheet } from '@/components/CollectionMessageActionSheet';
 import { CollectionCard } from '@/components/CollectionCard';
@@ -333,7 +325,7 @@ function StudentAppContent({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   
-  const { user, isAuthenticated, accessToken, isCheckingAuth, onboardingCompleted } = useAuth();
+  const { user, isAuthenticated, accessToken, isCheckingAuth } = useAuth();
   
 
   const { isMobile: detectedIsMobile, mounted } = useResponsive();
@@ -365,6 +357,10 @@ function StudentAppContent({
   const collectionScrollRef = useRef<HTMLDivElement | null>(null);
   const collectionScrollNearBottomRef = useRef(true);
   const [asrContextHint] = useState('');
+  const [biliCookie, setBiliCookie] = useState('');
+  useEffect(() => {
+    void getPreference<string>('settings_bilibili_cookie', '').then(setBiliCookie);
+  }, []);
   const sourceImporting = activeSourceImportCount > 0;
   const hasCollectionContext = useMemo(
     () => segments.length > 0 || sourceItems.length > 0 || supportReferences.length > 0 || workspaceEchoes.length > 0,
@@ -662,24 +658,21 @@ function StudentAppContent({
     setShowSplash(false);
   }, []);
 
-  // ── Learner Onboarding ──────
-  // M11: 把硬编码两步表单换成对话式「聊聊你想要的」。
-  // - showOnboarding 触发条件保持原样（首次进入 / 未完成 / 非游客 / 没主动跳过）
-  // - onboardingCompleted 由 saveLearnerProfile 时自动写 onboardingCompletedAt 解决
-  //   —— 用户在 IntentDialog 里保存第一个 goal 时会触发 saveLearnerProfile，
-  //      onboardingCompletedAt 会被服务端写上，下次登录就不再弹。
-  // - onSkip 走原 handleOnboardingSkip，仅本会话内 dismiss
-  const [onboardingDismissed, setOnboardingDismissed] = useState(false);
-  const showOnboarding = isAuthenticated && !onboardingCompleted && !onboardingDismissed && !isGuestFastEntry;
-
-  const handleOnboardingSkip = useCallback(() => {
-    setOnboardingDismissed(true);
-  }, []);
-
-  const handleOnboardingClose = useCallback(() => {
-    // IntentDialog 里点 X 关闭：等同于 skip 处理（本会话 dismiss）
-    setOnboardingDismissed(true);
-  }, []);
+  // 兜底：useAppStateRestore.initializeApp 若卡在 restoreReviewSession（IndexedDB 异常等），
+  // showSplash 永远不关、AppLoading 全屏覆盖，用户卡死在"正在加载"灰屏 + sidebar 不可点。
+  // 12s 仍未就绪则强制进入，让用户至少能操作（比永远卡死好）。
+  useEffect(() => {
+    if (isGuestFastEntry) return;
+    const timer = window.setTimeout(() => {
+      const ui = useUIStore.getState();
+      if (ui.showSplash || !ui.appReady) {
+        ui.actions.setLoadingProgress(100);
+        ui.actions.setAppReady(true);
+        ui.actions.setShowSplash(false);
+      }
+    }, 12000);
+    return () => window.clearTimeout(timer);
+  }, [isGuestFastEntry]);
 
   // NOTE: refreshDailyEcho 已提取到 useEchoActions hook（见上方 hook 调用）。
 
@@ -863,9 +856,31 @@ function StudentAppContent({
     // 路径 D：audio 类型有 mediaUrl（如微信语音、App 内录音），
     // 即使前面的恢复路径都跳过了，也应该直接进入 review 模式播放。
     if (item.type === 'audio' && item.mediaUrl) {
-      if (!audioBlob) {
-        setAudioUrl(item.mediaUrl);
-      }
+      // 进入复习态前清理上一次录音/视频复习留下的媒体残留，避免串台：
+      // 旧 audioBlob 会让下面的音频守卫跳过新音频，旧 segments/videoSource
+      // 会让复习页显示别的录音的转录/视频。这条路径是"有 mediaUrl 但无
+      // sessionId/转录"的兜底——只播放音频，不加载转录；若该语音有转录，
+      // 应走路径 A（restoreReviewSession）。
+      setSegments([]);
+      setAnchors([]);
+      setTimeline(null);
+      captureEditorActions.setAudioBlob(null);
+      setVideoSource(null);
+      setVideoInsightItems([]);
+      setActiveVideoInsightId(null);
+      captureEditorActions.setNotes([]);
+      captureEditorActions.setActionItems([]);
+      setSelectedAnchor(null);
+      setCurrentTime(0);
+      setDataSource('live');
+      sessionActions.setSessionId('');
+      sessionIdRef.current = '';
+      liveSegmentsRef.current = [];
+      segmentsRef.current = [];
+      clearTopics();
+      clearSummary();
+
+      setAudioUrl(item.mediaUrl);
       // 先清零，再用 item 携带的时长（如有）；WaveformPlayer onReady 会
       // 在音频加载完成后用真实时长兜底覆盖。
       setSessionMediaDurationMs(item.durationMs || 0);
@@ -883,14 +898,40 @@ function StudentAppContent({
       return;
     }
 
+    // 文章 / 笔记 / 图片等非音视频类型进入复习态前，
+    // 必须清理上一次录音或视频复习留下的媒体残留（转录 / 音频 / 视频 / 时间轴 / sessionId）。
+    // 这条路径走 reviewTab='apps'，不复用 restoreReviewSession，不会自动覆盖 segments，
+    // 若不显式清空，复习页会串台显示别的录音的转录 / 音频 / 时间轴。
+    // selectedReviewItem 已在入口设置，复习页通过 sourceFullText 展示当前文章原文。
+    setSegments([]);
+    setAnchors([]);
+    setTimeline(null);
+    setAudioUrl(null);
+    captureEditorActions.setAudioBlob(null);
+    setVideoSource(null);
+    setVideoInsightItems([]);
+    setActiveVideoInsightId(null);
+    captureEditorActions.setNotes([]);
+    captureEditorActions.setActionItems([]);
+    setSelectedAnchor(null);
+    setCurrentTime(0);
+    setSessionMediaDurationMs(0);
+    setDataSource('live');
+    sessionActions.setSessionId('');
+    sessionIdRef.current = '';
+    liveSegmentsRef.current = [];
+    segmentsRef.current = [];
+    clearTopics();
+    clearSummary();
+
     await handleViewModeChange('review');
     setReviewTab('apps');
-    setVideoWorkspaceTab(item.type === 'video' ? 'chat' : 'chat');
-    // 移动端：视频类型留在时间轴看视频+转录，非视频进 AI 对话
+    setVideoWorkspaceTab('chat');
+    // 移动端：非音视频类型直接进 AI 对话
     if (isMobile) {
-      setMobileSubPage(item.type === 'video' ? null : 'ai-chat');
+      setMobileSubPage('ai-chat');
     }
-  }, [audioBlob, handleViewModeChange, isMobile, restoreFromServerTranscript, restoreReviewFromCollectionFallback, restoreReviewSession]);
+  }, [captureEditorActions, clearSummary, clearTopics, handleViewModeChange, isMobile, restoreFromServerTranscript, restoreReviewFromCollectionFallback, restoreReviewSession, sessionActions]);
 
   // ── Transcript Handlers Hook（转录更新/错误/增强/文本编辑）──────
   const {
@@ -1012,6 +1053,7 @@ function StudentAppContent({
       updateSourceItem,
       appendSupportSource,
       asrContextHint,
+      biliCookie,
     },
     { segmentsRef, previewObjectUrlsRef, sourceFileInputRef },
   );
@@ -1576,26 +1618,8 @@ function StudentAppContent({
   );
   };
 
-  // 轻提示：当应用打开条件不满足时，就地给一句话而不开面板
-  const [softHint, setSoftHint] = useState<string | null>(null);
-
   // 包装 openWorkshopWindow：如果随堂检验正在进行，先关掉弹窗
   const safeOpenWorkshopWindow = useCallback((appKey: Parameters<typeof openWorkshopWindow>[0]) => {
-    // 学习报告前置条件：必须有 plan 且全部 checkpoint 都完成才值得打开
-    if (appKey === 'study-report') {
-      const plan = classCheck.plan;
-      const totalCheckpoints = plan?.checkpoints.length || 0;
-      const completedCount = new Set(classCheck.rounds.map(r => r.checkpointIndex)).size;
-      if (!plan || totalCheckpoints === 0) {
-        setSoftHint('开始播放视频再来吧');
-        return;
-      }
-      if (completedCount < totalCheckpoints) {
-        setSoftHint('做完题再来看吧');
-        return;
-      }
-    }
-
     if (classCheck.isCheckActive) {
       // 跳过当前检验轮次，恢复播放，然后打开窗口
       classCheck.handleCheckComplete({
@@ -1686,17 +1710,6 @@ function StudentAppContent({
         progress={loadingProgress}
         message={loadingProgress >= 100 ? '即将进入' : undefined}
         onComplete={loadingProgress >= 100 ? handleSplashComplete : undefined}
-      />
-    );
-  }
-
-  if (showOnboarding) {
-    return (
-      <IntentDialogContainer
-        open
-        sessionHint="first-time"
-        onClose={handleOnboardingClose}
-        onSkip={handleOnboardingSkip}
       />
     );
   }
@@ -1824,9 +1837,15 @@ function StudentAppContent({
                   currentTime: 0,
                   showTranscriptBar: false,
                 });
+
                 if (!ok) {
                   console.warn('[classroom] open lesson failed (incomplete data):', lessonId);
                 }
+              }}
+              onRenameLesson={(id, title) => {
+                void updateSessionTopic(id, title).catch((err) => {
+                  console.warn('[classroom] rename lesson failed:', err);
+                });
               }}
             />
           </div>
@@ -2227,8 +2246,6 @@ function StudentAppContent({
         summaryOverview={classSummary?.overview}
         keyDifficulties={classSummary?.keyDifficulties}
         terminologyHint={extractedTermsHint || undefined}
-        classCheckRounds={classCheck.rounds}
-        classCheckPlan={classCheck.plan}
         onSeek={(timeMs) => {
           handleUnifiedSeek(timeMs, true);
         }}
@@ -2257,11 +2274,6 @@ function StudentAppContent({
           onAccept={classCheck.acceptPendingCheckpoint}
           onDismiss={classCheck.dismissPendingCheckpoint}
         />
-      ) : null}
-
-      {/* 轻提示：应用打开条件不满足时的就地反馈 */}
-      {softHint ? (
-        <SoftHint text={softHint} onDismiss={() => setSoftHint(null)} />
       ) : null}
 
       {/* 主要内容区域 */}

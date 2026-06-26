@@ -20,21 +20,15 @@
 import * as React from 'react';
 import { useChat } from '@ai-sdk/react';
 import { DefaultChatTransport } from 'ai';
-import type { AppExecutionResult } from '@/lib/ai-native/types';
-import { TutorToolCard } from './TutorToolCard';
 import { conversationMessageToUIMessage, resolveTutorAgentHistoryLabel } from './tutor-agent-history';
 import { formatRecentLearningActivityForTutorAgent, resolveTutorAgentLaunchText } from './tutor-agent-adapter';
 import { resolveTutorMessageRenderPlan } from './tutor-message-rendering';
-import type { TutorToolPartLike } from './tutor-tool-card-utils';
 import { SkillChipRow } from './SkillChipRow';
-import { InlineAppCard } from '@/components/classroom/InlineAppCard';
-import { getWorkshopAppByKey } from '@/lib/ai-native/app-catalog';
 import { useAuth } from '@/lib/hooks/useAuth';
 import { getPreference } from '@/lib/db';
 import { OctoAvatar } from '@/components/ui/octo-avatar';
 import { conversationService, getEffectiveUserId } from '@/lib/services/conversation-service';
 import { cn } from '@/lib/utils';
-// M11：迁到 ChatBase 底座（薄底座 + 厚适配）
 import {
   ChatBubble,
   ChatComposer,
@@ -54,19 +48,7 @@ import {
   AI_MODEL_PREFERENCE_KEY,
   resolveExplicitAiModelPreference,
 } from '@/lib/utils/ai-model-preference';
-import {
-  extractOpenAppMarker,
-  isInlineAppKey,
-  type InlineAppKey,
-} from '@/lib/utils/open-app-marker';
-import { buildInlineAppFallbackResult } from '@/lib/utils/inline-app-fallback';
-import {
-  readCachedReviewInlineAppState,
-  writeReviewInlineAppError,
-  writeReviewInlineAppRunning,
-  writeReviewInlineAppSuccess,
-  type ReviewInlineAppState,
-} from './tutor-inline-app-cache';
+import type { WorkshopAppKey } from '@/lib/ai-native/app-catalog';
 
 export interface TutorAgentPanelTranscriptSegment {
   id: string;
@@ -100,7 +82,6 @@ export interface TutorAgentPanelProps {
   options?: {
     returnTimestamps?: boolean;
     thinkingGuide?: boolean;
-    allowInlineApp?: boolean;
   };
   /**
    * M10：复习态的完整上下文——整节课转录 + 当前播放位置。
@@ -127,8 +108,8 @@ export interface TutorAgentPanelProps {
   /** 外层触发开新对话时递增。 */
   newConversationNonce?: number;
   onNewConversation?: () => void;
-  /** 复习态结构化应用在中间学习工作区打开，不在聊天流里承载完整应用。 */
-  onOpenAppInWorkspace?: (appKey: InlineAppKey) => void;
+  /** 点 SkillChip 的结构化 app（速查表/闪卡/测验/导图/学习报告）时直接打开 WorkshopWindow */
+  onOpenApp?: (appKey: WorkshopAppKey) => void;
 }
 
 /**
@@ -219,17 +200,14 @@ export function TutorAgentPanel({
   onLaunchQuestionConsumed,
   newConversationNonce = 0,
   onNewConversation,
-  onOpenAppInWorkspace,
+  onOpenApp,
 }: TutorAgentPanelProps) {
   const { user } = useAuth();
   const userId = getEffectiveUserId(user?.id);
   const [preferredModel, setPreferredModel] = React.useState<string | undefined>();
-  const [inlineAppsByMessageId, setInlineAppsByMessageId] = React.useState<Record<string, ReviewInlineAppState>>({});
   const [historyHydrated, setHistoryHydrated] = React.useState(false);
   const [recentLearningActivity, setRecentLearningActivity] = React.useState<string | undefined>();
   const [restoredConversationTitle, setRestoredConversationTitle] = React.useState<string | null>(null);
-  const inlineAppStartedRef = React.useRef<Set<string>>(new Set());
-  const inlineAppRunPromisesRef = React.useRef<Record<string, Promise<ReviewInlineAppState | null>>>({});
   const conversationIdRef = React.useRef<string | null>(null);
   const persistedMessageIdsRef = React.useRef<Set<string>>(new Set());
   const lastLaunchQuestionNonceRef = React.useRef<number | null>(null);
@@ -306,9 +284,6 @@ export function TutorAgentPanel({
     setRestoredConversationTitle(null);
     conversationIdRef.current = null;
     persistedMessageIdsRef.current = new Set();
-    inlineAppStartedRef.current = new Set();
-    inlineAppRunPromisesRef.current = {};
-    setInlineAppsByMessageId({});
     setMessages([]);
 
     if (mode !== 'review') {
@@ -430,9 +405,6 @@ export function TutorAgentPanel({
     stop();
     conversationIdRef.current = null;
     persistedMessageIdsRef.current = new Set();
-    inlineAppStartedRef.current = new Set();
-    inlineAppRunPromisesRef.current = {};
-    setInlineAppsByMessageId({});
     setRestoredConversationTitle(null);
     setMessages([]);
   }, [setMessages, stop]);
@@ -447,114 +419,6 @@ export function TutorAgentPanel({
     clearCurrentConversation();
     onNewConversation?.();
   }, [clearCurrentConversation, onNewConversation]);
-
-  const runInlineApp = React.useCallback(
-    async (messageId: string, appKey: InlineAppKey) => {
-      const cachedState = readCachedReviewInlineAppState(sessionId, appKey);
-      if (cachedState) {
-        setInlineAppsByMessageId((prev) => ({
-          ...prev,
-          [messageId]: cachedState,
-        }));
-        return;
-      }
-
-      setInlineAppsByMessageId((prev) => ({
-        ...prev,
-        [messageId]: { appKey, status: 'loading' },
-      }));
-
-      const runKey = `${sessionId}:${appKey}`;
-      let runPromise = inlineAppRunPromisesRef.current[runKey];
-      if (!runPromise) {
-        runPromise = (async (): Promise<ReviewInlineAppState | null> => {
-          const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-          if (authToken) headers.Authorization = `Bearer ${authToken}`;
-          const appTranscript = transcript
-            .filter((segment) => segment.text?.trim())
-            .slice(0, 180);
-
-          writeReviewInlineAppRunning(sessionId, appKey);
-
-          try {
-            const appCatalogItem = getWorkshopAppByKey(appKey);
-            const response = await fetch('/api/apps/execute', {
-              method: 'POST',
-              headers,
-              body: JSON.stringify({
-                appKey,
-                ...(preferredModel ? { model: preferredModel } : {}),
-                goal: {
-                  intent: appCatalogItem?.intent || `生成${appKey}学习应用`,
-                  expectedOutput: 'mixed',
-                  appKey,
-                },
-                input: {
-                  sessionId,
-                  dataSource: 'video',
-                  transcript: appTranscript,
-                  anchors: [],
-                },
-                memory: {},
-              }),
-            });
-            const data = (await response.json().catch(() => null)) as
-              | { ok?: boolean; error?: string; result?: AppExecutionResult }
-              | null;
-
-            if (response.ok && data?.ok && data.result) {
-              return writeReviewInlineAppSuccess(sessionId, appKey, data.result);
-            }
-
-            const fallbackResult = buildInlineAppFallbackResult(appKey, appTranscript);
-            if (fallbackResult) {
-              return writeReviewInlineAppSuccess(sessionId, appKey, fallbackResult);
-            }
-
-            const error = data?.error || `生成失败（${response.status}）`;
-            writeReviewInlineAppError(sessionId, appKey, error);
-            return { appKey, status: 'error', error };
-          } catch (err) {
-            const fallbackResult = buildInlineAppFallbackResult(appKey, appTranscript);
-            if (fallbackResult) {
-              return writeReviewInlineAppSuccess(sessionId, appKey, fallbackResult);
-            }
-
-            const error = err instanceof Error ? err.message : '网络有点问题';
-            writeReviewInlineAppError(sessionId, appKey, error);
-            return { appKey, status: 'error', error };
-          }
-        })();
-        inlineAppRunPromisesRef.current[runKey] = runPromise;
-        void runPromise.finally(() => {
-          delete inlineAppRunPromisesRef.current[runKey];
-        });
-      }
-
-      const nextState = await runPromise;
-      if (!nextState) return;
-      setInlineAppsByMessageId((prev) => ({
-        ...prev,
-        [messageId]: nextState,
-      }));
-    },
-    [authToken, preferredModel, sessionId, transcript],
-  );
-
-  React.useEffect(() => {
-    if (busy) return;
-    for (const message of messages) {
-      if (message.role !== 'assistant' || inlineAppStartedRef.current.has(message.id)) continue;
-      const marker = extractOpenAppMarker(collectMessageText(message)).key;
-      if (!isInlineAppKey(marker)) continue;
-      inlineAppStartedRef.current.add(message.id);
-      if (onOpenAppInWorkspace) {
-        onOpenAppInWorkspace(marker);
-        continue;
-      }
-      void runInlineApp(message.id, marker);
-    }
-  }, [busy, messages, onOpenAppInWorkspace, runInlineApp]);
 
   const onSubmitText = React.useCallback(
     (text: string) => {
@@ -704,7 +568,7 @@ export function TutorAgentPanel({
               <span className="font-serif italic text-pine">同学</span>
               在这里。挑一个直接开始，也可以在下方直接问。
             </div>
-            <SkillChipRow onPick={onPickSkill} onSay={onPickSkill} disabled={busy} />
+            <SkillChipRow onPick={onPickSkill} onSay={onPickSkill} onOpenApp={onOpenApp} disabled={busy} />
           </div>
         }
         variant="paper"
@@ -713,21 +577,16 @@ export function TutorAgentPanel({
       >
         {messages.map((m, mIdx) => {
           const parts = (m.parts ?? []) as Array<Record<string, unknown>>;
-          const inlineApp = inlineAppsByMessageId[m.id];
           const isUser = m.role === 'user';
-          // R9 bug 修复：isStreaming 必须同时满足
-          //   (1) busy = true（流式正在进行中）
-          //   (2) 这是 messages 数组里最后一条
-          //   (3) 这是 assistant（用户消息从来不流）
           const isLastMessage = mIdx === messages.length - 1;
           const messageIsStreaming = busy && isLastMessage && m.role === 'assistant';
 
-          // assistant 渲染（多 part：text + tool）—— 把每个 part 渲染成 ChatBubble 内部 children
+          // M14.6：纯对话渲染——只处理 text parts
           const bodyChildren =
             parts.length > 0
-              ? parts.map((part, idx) => {
-                  const partType = typeof part.type === 'string' ? part.type : '';
-                  if (partType === 'text') {
+              ? parts
+                  .filter((part) => typeof part.type === 'string' && part.type === 'text')
+                  .map((part, idx) => {
                     const txt = typeof part.text === 'string' ? part.text : '';
                     return (
                       <TutorMessageText
@@ -739,14 +598,7 @@ export function TutorAgentPanel({
                         messageId={m.id}
                       />
                     );
-                  }
-                  if (partType.startsWith('tool-')) {
-                    return (
-                      <TutorToolCard key={idx} part={part as unknown as TutorToolPartLike} />
-                    );
-                  }
-                  return null;
-                })
+                  })
               : (() => {
                   const content = (m as unknown as { content?: string }).content ?? '';
                   return (
@@ -759,15 +611,6 @@ export function TutorAgentPanel({
                     />
                   );
                 })();
-
-          // 内联应用卡放在 ChatBubble 的 footer slot
-          const footerSlot =
-            !isUser && inlineApp ? (
-              <InlineAppCard
-                inlineApp={inlineApp}
-                onRetry={() => runInlineApp(m.id, inlineApp.appKey)}
-              />
-            ) : null;
 
           // hover 行动按钮（复制 / 重生成 / 反馈）—— 只对 assistant 消息提供
           const actionsSlot =
@@ -819,8 +662,6 @@ export function TutorAgentPanel({
               key={m.id}
               role={m.role === 'user' ? 'user' : 'assistant'}
               variant="paper"
-              fullWidth={Boolean(inlineApp)}
-              footer={footerSlot}
               actions={actionsSlot}
               messageId={m.id}
             >

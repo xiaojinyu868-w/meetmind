@@ -83,11 +83,13 @@ export const WaveformPlayer = forwardRef<WaveformPlayerRef, WaveformPlayerProps>
   const wavesurferRef = useRef<WaveSurfer | null>(null);
   const regionsRef = useRef<RegionsPlugin | null>(null);
   const audioUrlRef = useRef<string | null>(null);
+  const loadingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   
   const [isPlayingState, setIsPlayingState] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
   const [isReady, setIsReady] = useState(false);
+  const [loadError, setLoadError] = useState(false);
   const [playbackRate, setPlaybackRateState] = useState(1);
   const [volume, setVolume] = useState(1);
   const [isMuted, setIsMuted] = useState(false);
@@ -150,8 +152,25 @@ export const WaveformPlayer = forwardRef<WaveformPlayerRef, WaveformPlayerProps>
       const dur = ws.getDuration() * 1000;
       setDuration(dur);
       setIsReady(true);
+      setLoadError(false);
       setLoadProgress(100);
+      if (loadingTimeoutRef.current) {
+        clearTimeout(loadingTimeoutRef.current);
+        loadingTimeoutRef.current = null;
+      }
       onReady?.(dur);
+    });
+
+    // 加载失败兜底：audioUrl 失效 / 跨域 / 网络错误时，wavesurfer 默认只抛 console，
+    // isReady 永远 false 会卡死在"加载音频..."。这里捕获 error 让 UI 能跳出。
+    ws.on('error', () => {
+      setIsReady(false);
+      setLoadProgress(0);
+      setLoadError(true);
+      if (loadingTimeoutRef.current) {
+        clearTimeout(loadingTimeoutRef.current);
+        loadingTimeoutRef.current = null;
+      }
     });
 
     // 监听加载进度
@@ -256,6 +275,7 @@ export const WaveformPlayer = forwardRef<WaveformPlayerRef, WaveformPlayerProps>
     }
 
     setIsReady(false);
+    setLoadError(false);
     setCurrentTime(0);
     setDuration(0);
 
@@ -272,7 +292,10 @@ export const WaveformPlayer = forwardRef<WaveformPlayerRef, WaveformPlayerProps>
       // 这种录音的可播放源应来自 IndexedDB blob（useReviewSession 会重建 objectURL）
       // 或档位2 上云后的 /api/workspace/audio URL；死 blob: 直接忽略不加载。
       if (src.startsWith('blob:')) {
+        // 失效的 blob: 死链——不加载，但必须置 loadError 让 UI 显示失败态，
+        // 否则 isReady=false + src 有值会永远卡在"加载音频..."（页面灰、不可点击）。
         setIsReady(false);
+        setLoadError(true);
         return;
       }
       url = src;
@@ -281,7 +304,21 @@ export const WaveformPlayer = forwardRef<WaveformPlayerRef, WaveformPlayerProps>
 
     wavesurferRef.current.load(url);
 
+    // 超时兜底：wavesurfer 的 MediaElement backend 加载失败不一定触发 'error' 事件
+    // （audio onerror 可能不冒泡），导致 isReady 永远 false 卡在"加载音频..."大片灰。
+    // 15s 未 ready 判定失败，让 UI 跳出失败态而非永远转圈。
+    if (loadingTimeoutRef.current) clearTimeout(loadingTimeoutRef.current);
+    loadingTimeoutRef.current = setTimeout(() => {
+      setIsReady(false);
+      setLoadProgress(0);
+      setLoadError(true);
+    }, 15000);
+
     return () => {
+      if (loadingTimeoutRef.current) {
+        clearTimeout(loadingTimeoutRef.current);
+        loadingTimeoutRef.current = null;
+      }
       if (audioUrlRef.current && audioUrlRef.current.startsWith('blob:')) {
         URL.revokeObjectURL(audioUrlRef.current);
       }
@@ -611,8 +648,18 @@ export const WaveformPlayer = forwardRef<WaveformPlayerRef, WaveformPlayerProps>
         </div>
       )}
 
+      {/* 加载失败兜底：避免永远卡在"加载音频..." */}
+      {loadError && src ? (
+        <div className="absolute inset-0 flex items-center justify-center bg-white/90 rounded-2xl">
+          <div className="flex flex-col items-center gap-2 text-center px-4">
+            <p className="text-sm font-medium text-vermilion">音频加载失败</p>
+            <p className="text-xs text-ink-muted">这段原声暂时无法播放，刷新页面或重新进入试试</p>
+          </div>
+        </div>
+      ) : null}
+
       {/* 加载状态 - 显示进度 */}
-      {!isReady && src && (
+      {!isReady && src && !loadError && (
         <div className="absolute inset-0 flex items-center justify-center bg-white/90 rounded-2xl">
           <div className="flex flex-col items-center gap-3">
             <div className="relative w-12 h-12">

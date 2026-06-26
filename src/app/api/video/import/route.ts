@@ -181,6 +181,24 @@ async function transcribeLongAudioDirect(
     return null;
   }
 
+  // DashScope filetrans（paraformer-v2 / qwen3-asr-flash-filetrans）对单文件时长有上限（约 30 分钟），
+  // 超过会立即返回 CONTENT_LENGTH_CHECK_FAILED。这里检测到长音频直接跳过，
+  // 让 transcribeWithFallback 走 fast mode 切片逻辑（每 180s 一段异步并行）。
+  // 保守用 28 分钟作为阈值（留 2 分钟余量）。
+  const FILETRANS_MAX_DURATION_SEC = 28 * 60;
+  if (expectedDurationSec && expectedDurationSec > FILETRANS_MAX_DURATION_SEC) {
+    log.warn(
+      `[video-import] transcribeLongAudioDirect: 跳过直接 filetrans（音频时长 ${Math.round(expectedDurationSec)}s 超过单文件上限 ${FILETRANS_MAX_DURATION_SEC}s，走 fast mode 切片 fallback）`
+    );
+    trace.push({
+      stage: 'asr-direct-skip',
+      ok: false,
+      code: 'ASR_DIRECT_SKIPPED_TOO_LONG',
+      detail: `duration=${Math.round(expectedDurationSec)}s > ${FILETRANS_MAX_DURATION_SEC}s`,
+    });
+    return null;
+  }
+
   const publicBase = resolvePublicBaseUrl();
   if (!publicBase.ok || !publicBase.baseUrl) {
     log.warn(`[video-import] transcribeLongAudioDirect: public URL not configured (${publicBase.error})`);

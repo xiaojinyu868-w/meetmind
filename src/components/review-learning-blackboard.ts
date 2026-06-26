@@ -21,7 +21,6 @@ const APP_LABELS: Partial<Record<WorkshopAppKey, string>> = {
   quiz: '测验',
   mindmap: '思维导图',
   cheatsheet: '速查表',
-  'study-report': '学习报告',
   'audio-overview': '播客',
   infographic: '信息图',
 };

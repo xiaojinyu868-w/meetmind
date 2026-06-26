@@ -77,7 +77,7 @@ export interface CompanionMessage {
    * status=error  ：失败，error 是人话描述
    */
   inlineApp?: {
-    appKey: 'quiz' | 'flashcards' | 'cheatsheet' | 'mindmap' | 'study-report';
+    appKey: 'quiz' | 'flashcards' | 'cheatsheet' | 'mindmap';
     status: 'loading' | 'ready' | 'error';
     /** 生成完毕时的完整应用执行结果，直接交给应用矩阵 UI 渲染 */
     result?: AppExecutionResult;

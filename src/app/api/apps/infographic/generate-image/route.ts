@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
+import * as fs from 'fs';
+import * as path from 'path';
 import { applyRateLimit } from '@/lib/utils/rate-limit';
 import {
   generateGeminiImage,
@@ -69,7 +71,16 @@ export async function POST(request: NextRequest) {
       scenePreset,
     });
 
-    const imageUrl = `data:${result.mimeType};base64,${result.base64}`;
+    // 写到服务端文件，返回 HTTP URL（而非 base64 data URL）。
+    // 原因：base64 data URL 会被 useAppExecution 的 stripLargeInlineData 剥空，
+    // localStorage 缓存里 image 丢失 → "查看图片"读不到 → 又重新生成。
+    // HTTP URL 小，能正常存 localStorage，跨 tab/会话可读。
+    const ext = result.mimeType === 'image/jpeg' ? 'jpg' : 'png';
+    const filename = `${result.requestId || sessionId}-${Date.now()}.${ext}`;
+    const dir = path.join(process.cwd(), 'public', 'uploads', 'infographic');
+    await fs.promises.mkdir(dir, { recursive: true });
+    await fs.promises.writeFile(path.join(dir, filename), Buffer.from(result.base64, 'base64'));
+    const imageUrl = `/api/infographic/image/${filename}`;
 
     return NextResponse.json({
       ok: true,

@@ -17,7 +17,7 @@ import {
   Network,
   Image as ImageIcon,
   Headphones,
-  LineChart,
+  Download,
 } from 'lucide-react';
 import { resolveWorkshopModelId } from '@/lib/utils/workshop-model-preference';
 import type { Anchor, TranscriptSegment } from '@/types';
@@ -57,14 +57,13 @@ interface AppHeroVisual {
 
 const HERO_VISUALS: Record<WorkshopAppKey, AppHeroVisual> = {
   // v7：每个 app 都用极淡 pine fog 或 vermilion fog 为底，icon 用相应深色
-  // 双签名色家族化——告诉用户"这是同一套设计系统的 7 个工具"，而不是 7 张壁纸
+  // 双签名色家族化——告诉用户"这是同一套设计系统的 6 个工具"，而不是 6 张壁纸
   flashcards: { Icon: Layers, tintBg: '#F2F6F3', iconColor: '#2D4F3E' },          // 闪卡 = 沉淀（pine 主）
   cheatsheet: { Icon: BookMarked, tintBg: '#FBF2EF', iconColor: '#B5483C' },      // 速查 = 标注此刻（vermilion）
   quiz: { Icon: Sparkles, tintBg: '#FBF2EF', iconColor: '#B5483C' },              // 测验 = 红笔批改（vermilion）
   mindmap: { Icon: Network, tintBg: '#F2F6F3', iconColor: '#2D4F3E' },            // 思维 = 知识网（pine）
   infographic: { Icon: ImageIcon, tintBg: '#F2F6F3', iconColor: '#2D4F3E' },      // 信息图 = pine
   'audio-overview': { Icon: Headphones, tintBg: '#FBF2EF', iconColor: '#B5483C' },// 播客 = vermilion (此刻聆听)
-  'study-report': { Icon: LineChart, tintBg: '#F2F6F3', iconColor: '#2D4F3E' },   // 报告 = pine（沉淀）
 };
 
 function AppHero({ appKey, outputType }: { appKey: WorkshopAppKey; outputType: string }) {
@@ -263,6 +262,28 @@ function readResultPreview(sessionId: string, appKey: string): string {
   }
 }
 
+function readCachedInfographicImageUrl(sessionId: string): { url: string; title: string } | null {
+  if (typeof window === 'undefined') return null;
+  try {
+    const raw = window.localStorage.getItem(buildResultCacheKey(sessionId, 'infographic'));
+    const parsed = raw ? (JSON.parse(raw) as AppExecutionResult) : null;
+    const payload = (parsed?.render?.payload || {}) as { image?: { imageUrl?: string } };
+    // imageUrl 是 base64 data URL，会被 localStorage 的 stripLargeInlineData 剥空；
+    // 退而读 sessionStorage 里生成时单独存的完整 base64。
+    let url = payload.image?.imageUrl || (parsed?.raw?.infographicImageUrl as string | undefined) || '';
+    if (!url) {
+      try {
+        url = sessionStorage.getItem(`mm_infographic_img:${sessionId}`) || '';
+      } catch { /* sessionStorage 不可用 */ }
+    }
+    if (!url) return null;
+    const title = parsed?.render?.title || parsed?.cards?.[0]?.title || '课堂信息图';
+    return { url, title };
+  } catch {
+    return null;
+  }
+}
+
 function ElapsedTimer({ startMs }: { startMs: number }) {
   const [now, setNow] = useState(Date.now());
   useEffect(() => {
@@ -345,6 +366,30 @@ export function WorkshopYellowPage(props: WorkshopYellowPageProps) {
       }`,
     [dataSource, isGuest, sessionId]
   );
+
+  // 信息图"查看图片"不跳独立页——独立页重新挂载 InfographicWindow 时，
+  // 若缓存 result 没有 imageUrl 会 auto-start 重新触发 5 步生成 loading，
+  // 导致"做好了点查看却又在生成"。改为直接从缓存读出已生成图片在当前页弹出。
+  const [infographicPreview, setInfographicPreview] = useState<{ url: string; title: string } | null>(null);
+
+  const downloadInfographicImage = useCallback(async () => {
+    if (!infographicPreview?.url) return;
+    try {
+      const response = await fetch(infographicPreview.url);
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement('a');
+      anchor.href = url;
+      anchor.download = `${infographicPreview.title || '课堂信息图'}.png`;
+      document.body.appendChild(anchor);
+      anchor.click();
+      document.body.removeChild(anchor);
+      URL.revokeObjectURL(url);
+      toast.success('图片已下载');
+    } catch {
+      toast.error('下载失败，请右键图片另存为');
+    }
+  }, [infographicPreview?.title, infographicPreview?.url]);
 
   const refreshState = useCallback(() => {
     if (!sessionId || typeof window === 'undefined') return;
@@ -584,6 +629,11 @@ export function WorkshopYellowPage(props: WorkshopYellowPageProps) {
                   label: '打开结果',
                   onClick: () => {
                     if (app.key === 'infographic') {
+                      const cached = readCachedInfographicImageUrl(sessionId);
+                      if (cached) {
+                        setInfographicPreview(cached);
+                        return;
+                      }
                       router.push(buildAppHref(app.key));
                       return;
                     }
@@ -679,12 +729,19 @@ export function WorkshopYellowPage(props: WorkshopYellowPageProps) {
       const app = appMap[appKey];
       if (!app) return;
       if (app.key === 'infographic') {
+        // 优先直接弹图片预览（从缓存读已生成的 imageUrl），不跳独立页；
+        // 缓存里没图才回退到独立页走生成流程。
+        const cached = readCachedInfographicImageUrl(sessionId);
+        if (cached) {
+          setInfographicPreview(cached);
+          return;
+        }
         router.push(buildAppHref(app.key));
         return;
       }
       openAppSurface(app.key);
     },
-    [appMap, buildAppHref, openAppSurface, router]
+    [appMap, buildAppHref, openAppSurface, router, sessionId]
   );
 
   const generateAll = useCallback(() => {
@@ -784,7 +841,7 @@ export function WorkshopYellowPage(props: WorkshopYellowPageProps) {
 
       {/* v3.0 SharedAgent · 「递结晶」入口
           仪式时刻：Octo Buddy 抱着今天的结晶出现，让你挑一个递给同学。
-          隐私：只读 cheatsheet/mindmap/quiz/infographic 的本地缓存，不读 flashcards/study-report。
+          隐私：只读 cheatsheet/mindmap/quiz/infographic 的本地缓存，不读 flashcards。
           详见 roadmap/v3.0-virality-agent.md */}
       <OctoCrystalDispatcher
         sessionId={sessionId}
@@ -1062,6 +1119,43 @@ export function WorkshopYellowPage(props: WorkshopYellowPageProps) {
               )}
             </aside>
           ) : null}
+        </div>
+      ) : null}
+      {infographicPreview ? (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 p-4 backdrop-blur-sm"
+          onClick={() => setInfographicPreview(null)}
+          role="dialog"
+          aria-modal="true"
+          aria-label="信息图预览"
+        >
+          <div
+            className="relative flex max-h-[92vh] max-w-[94vw] flex-col items-center gap-3"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <img
+              src={infographicPreview.url}
+              alt={infographicPreview.title}
+              className="max-h-[80vh] max-w-[92vw] rounded-2xl object-contain shadow-[0_24px_70px_rgba(0,0,0,0.5)]"
+            />
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={downloadInfographicImage}
+                className="inline-flex items-center gap-1.5 rounded-full bg-white px-4 py-2 text-sm font-medium text-[#1C1B19] shadow-sm transition hover:bg-paper-warm"
+              >
+                <Download size={14} strokeWidth={2} />
+                下载
+              </button>
+              <button
+                type="button"
+                onClick={() => setInfographicPreview(null)}
+                className="inline-flex items-center gap-1.5 rounded-full border border-white/40 bg-white/10 px-4 py-2 text-sm font-medium text-white transition hover:bg-white/20"
+              >
+                关闭
+              </button>
+            </div>
+          </div>
         </div>
       ) : null}
     </section>

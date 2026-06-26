@@ -23,10 +23,8 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { flushSync } from 'react-dom';
 // M10：classroom 同桌切到 /api/tutor/agent（统一 AI 对话后端）。
-// 消费 AI SDK v6 的 UIMessage stream，而不是老 /api/tutor 的自定义 SSE。
 import { fetchUIMessageStream } from '@/lib/hooks/fetchUIMessageStream';
 import { useAuth } from '@/lib/hooks/useAuth';
-// M11.5：把用户画像（含 bio + goals）注入 in-class prompt，让"同桌"也能认识用户。
 import { formatLearnerProfileForTutorAgent } from '@/components/tutor/tutor-agent-adapter';
 import { useSessionStore } from '@/stores/session-store';
 import { useCaptureEditorStore } from '@/stores/capture-editor-store';
@@ -762,15 +760,14 @@ export function useClassroomCompanion(
 
       if (openAppKey && isWorkshopAppKey(openAppKey)) {
         const safeKey: WorkshopAppKey = openAppKey;
-        // 内联渲染目前只覆盖 5 类结构化知识产物（quiz / flashcards /
-        // cheatsheet / mindmap / study-report）——audio-overview（口播）、
+        // 内联渲染目前只覆盖 4 类结构化知识产物（quiz / flashcards /
+        // cheatsheet / mindmap）——audio-overview（口播）、
         // infographic（长图）不适合塞进对话气泡里，只能开窗口。
         const inlineSupported: ReadonlyArray<WorkshopAppKey> = [
           'quiz',
           'flashcards',
           'cheatsheet',
           'mindmap',
-          'study-report',
         ];
         const canInline = inlineSupported.includes(safeKey);
         if (inlineAppMode && canInline) {

@@ -45,7 +45,7 @@ import type {
 } from '@/lib/services/share-agent-service';
 
 // ──────────────────────────────────────────────────────────────
-// 配置：可分享的场景层应用（不含 flashcards / study-report）
+// 配置：可分享的场景层应用（不含 flashcards，闪卡是个人层）
 // ──────────────────────────────────────────────────────────────
 
 interface ShareableApp {

@@ -75,6 +75,8 @@ export interface ClassroomViewProps {
   autoOpenDemoAppKey?: WorkshopAppKey;
   /** 试听课结束后进入既有课后复习页 / 应用矩阵 */
   onOpenDemoReview?: () => void;
+  /** 重命名课程标题（调 IndexedDB updateSessionTopic） */
+  onRenameLesson?: (id: string, title: string) => void;
 }
 
 export function ClassroomView({
@@ -87,6 +89,7 @@ export function ClassroomView({
   autoLoadDemo = false,
   autoOpenDemoAppKey,
   onOpenDemoReview,
+  onRenameLesson,
 }: ClassroomViewProps) {
   // ── 真实数据：Lesson[] + markReviewed ──
   const { lessons, markReviewed } = useClassroomLessons();
@@ -570,9 +573,10 @@ export function ClassroomView({
         audioSource={recorderAudioSource}
         onChangeAudioSource={setRecorderAudioSource}
         onOpenApp={onOpenApp}
+        onRenameLesson={onRenameLesson}
       />
     ),
-    [paneState, lessons, handleOpenLesson, handleStartRecording, handleStopRecording, effectiveRecordingSeconds, liveConcepts, liveTranscriptText, recordingSegments, liveInterimText, recentLines, mindMapTree, mindMapNewIds, handleMindMapAnchorClick, mindMapScrollTarget, isDemoRecordingPane, demoAudioPlaying, demoAudioNeedsGesture, handleToggleDemoAudio, demoComplete, handleReplayDemo, handleOpenDemoReview, recorderAudioSource, setRecorderAudioSource, onOpenApp],
+    [paneState, lessons, handleOpenLesson, handleStartRecording, handleStopRecording, effectiveRecordingSeconds, liveConcepts, liveTranscriptText, recordingSegments, liveInterimText, recentLines, mindMapTree, mindMapNewIds, handleMindMapAnchorClick, mindMapScrollTarget, isDemoRecordingPane, demoAudioPlaying, demoAudioNeedsGesture, handleToggleDemoAudio, demoComplete, handleReplayDemo, handleOpenDemoReview, recorderAudioSource, setRecorderAudioSource, onOpenApp, onRenameLesson],
   );
 
   const demoSuggestedPrompts = useMemo(

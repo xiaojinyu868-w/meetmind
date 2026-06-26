@@ -4,7 +4,6 @@ import {
   resolveTutorAgentProviderConfig,
   resolveTutorAgentProviderFallbacks,
   shouldFallbackTutorAgentError,
-  shouldUseNativeTutorTools,
 } from './tutor-agent-provider';
 
 describe('resolveTutorAgentProviderConfig', () => {
@@ -120,16 +119,6 @@ describe('resolveTutorAgentProviderConfig', () => {
     expect(formatTutorAgentUserError('Failed after 3 attempts. Last error: Service is too busy.', {
       attemptedFallback: true,
     })).toBe('模型服务刚刚有点忙，已尝试切换备用通道但仍未成功，请稍后再试。');
-  });
-
-  it('disables native tutor tools for DeepSeek / StepFun / Qwen, keeps them for others', () => {
-    // DeepSeek（reasoning_content 续写问题）、StepFun（TTFT）、Qwen3.x thinking 都走 marker 链路。
-    expect(shouldUseNativeTutorTools('DeepSeek-V4-Flash')).toBe(false);
-    expect(shouldUseNativeTutorTools('DeepSeek-V4-Pro')).toBe(false);
-    expect(shouldUseNativeTutorTools('qwen3.7-plus')).toBe(false);
-    expect(shouldUseNativeTutorTools('step-3.7-flash')).toBe(false);
-    // 其它（如 OpenAI 兼容）模型仍暴露 native tools。
-    expect(shouldUseNativeTutorTools('gpt-4o')).toBe(true);
   });
 
   it('defaults to StepFun step-3.7-flash when STEPFUN_API_KEY is configured', () => {

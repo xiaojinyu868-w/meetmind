@@ -1,7 +1,7 @@
 import type { TranscriptSegment } from '@/types';
 import type { AppExecutionResult, AppRenderMode } from '@/lib/ai-native/types';
 
-export type InlineFallbackAppKey = 'quiz' | 'flashcards' | 'cheatsheet' | 'mindmap' | 'study-report';
+export type InlineFallbackAppKey = 'quiz' | 'flashcards' | 'cheatsheet' | 'mindmap';
 
 type ThinSegment = Pick<TranscriptSegment, 'id' | 'text' | 'startMs' | 'endMs'>;
 
@@ -86,23 +86,6 @@ function buildCheatsheet(segments: ThinSegment[]) {
   };
 }
 
-function buildStudyReport(segments: ThinSegment[]) {
-  const picked = pickSegments(segments, 6);
-  if (picked.length === 0) return null;
-  return {
-    title: '这节课的学习报告',
-    letterToParent: '这节课已经整理出几个值得回看的知识点。建议先看课堂结构，再挑一个点让孩子用自己的话复述。',
-    topics: picked.slice(0, 4).map((segment, index) => ({
-      name: topicFrom(segment.text, `知识点 ${index + 1}`).slice(0, 16),
-      difficulty: index === 0 ? '基础' : '进阶',
-      gist: cleanText(segment.text).slice(0, 72),
-    })),
-    chatTopics: picked.slice(0, 2).map((segment) => `你能讲讲“${topicFrom(segment.text, '这个知识点').slice(0, 14)}”是什么意思吗？`),
-    nextSteps: ['先用自己的话复述一遍', '再做一次随堂检验确认薄弱点'],
-    hasAnchors: false,
-  };
-}
-
 function buildMindmap(segments: ThinSegment[]) {
   const picked = pickSegments(segments, 5);
   if (picked.length === 0) return null;
@@ -123,7 +106,6 @@ export function buildInlineAppFallbackPayload(
   if (appKey === 'flashcards') return buildFlashcards(segments);
   if (appKey === 'quiz') return buildQuiz(segments);
   if (appKey === 'cheatsheet') return buildCheatsheet(segments);
-  if (appKey === 'study-report') return buildStudyReport(segments);
   if (appKey === 'mindmap') return buildMindmap(segments);
   return null;
 }
@@ -133,7 +115,6 @@ const FALLBACK_RESULT_META: Record<InlineFallbackAppKey, { pluginId: string; mod
   flashcards: { pluginId: 'flashcards-lab', mode: 'flashcards', title: '课堂闪卡', description: FLASHCARDS_FALLBACK_MESSAGE },
   cheatsheet: { pluginId: 'cheatsheet-gen', mode: 'document', title: '课堂速查卡', description: '核心概念和易错点速览。' },
   mindmap: { pluginId: 'mindmap-outline', mode: 'mindmap', title: '课堂知识结构', description: '把课堂内容整理成结构图。' },
-  'study-report': { pluginId: 'study-report', mode: 'document', title: '学习报告', description: '看清这节课讲了什么和下一步。' },
 };
 
 export function buildInlineAppFallbackResult(

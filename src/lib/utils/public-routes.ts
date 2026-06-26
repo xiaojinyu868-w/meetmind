@@ -58,6 +58,8 @@ const PUBLIC_ROUTES = [
   // 档位2：录音音频流式服务 —— <audio> 标签无法带 Bearer，靠不可猜路径
   // （cuid userId + sessionId 文件名）控制访问，与 wechat-media 同级别。
   '/api/workspace/audio/*',
+  // 信息图图片 —— <img> 标签无法带 Bearer，分享页匿名访问；靠不可猜文件名（requestId+时间戳）控制访问。
+  '/api/infographic/image/*',
   // v3.0 SharedAgent —— 落地页和 4 个 share API 都允许匿名打开。
   // 需要鉴权的（创建、领取）由各自 route handler 内部用 authService.verifyToken 自查。
   '/share/*',

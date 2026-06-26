@@ -9,9 +9,6 @@ import { getWorkshopAppByKey, type WorkshopAppKey } from '@/lib/ai-native/app-ca
 import { useAppExecution, type AppTaskState } from '@/components/apps/hooks/useAppExecution';
 import { AppRenderSurface } from '@/components/apps/windows/AppRenderSurface';
 
-import type { ClassCheckRound } from '@/hooks/useClassCheck';
-import type { ClassCheckPlan } from '@/app/api/class-check/plan/route';
-
 /* ================================================================ */
 /*  窗口级 ErrorBoundary — 单窗口崩溃不影响其他窗口和主页面            */
 /* ================================================================ */
@@ -117,8 +114,6 @@ interface WorkshopWindowManagerProps {
   summaryOverview?: string;
   keyDifficulties?: string[];
   terminologyHint?: string;
-  classCheckRounds?: ClassCheckRound[];
-  classCheckPlan?: ClassCheckPlan | null;
   onSeek?: (startMs: number) => void;
   onClose: (appKey: WorkshopAppKey) => void;
   onToggleMinimize: (appKey: WorkshopAppKey) => void;
@@ -134,8 +129,6 @@ interface WindowCardProps {
   summaryOverview?: string;
   keyDifficulties?: string[];
   terminologyHint?: string;
-  classCheckRounds?: ClassCheckRound[];
-  classCheckPlan?: ClassCheckPlan | null;
   model: string;
   onModelChange: (modelId: string) => void;
   onSeek?: (startMs: number) => void;
@@ -239,8 +232,6 @@ function WindowCard(props: WindowCardProps) {
     summaryOverview,
     keyDifficulties,
     terminologyHint,
-    classCheckRounds,
-    classCheckPlan,
     model,
     onModelChange,
     onSeek,
@@ -268,7 +259,7 @@ function WindowCard(props: WindowCardProps) {
     keyDifficulties,
     terminologyHint,
     model,
-    autoRun: resolvedApp.key !== 'infographic' && resolvedApp.key !== 'study-report',
+    autoRun: resolvedApp.key !== 'infographic',
   });
 
 
@@ -363,8 +354,6 @@ function WindowCard(props: WindowCardProps) {
               taskState={execution.taskState}
               sessionId={sessionId}
               contentContext={infographicContentContext}
-              classCheckRounds={classCheckRounds}
-              classCheckPlan={classCheckPlan}
               onSeek={onSeek}
               onRegenerate={() => void execution.rerun()}
               onGenerateDraft={() => (execution.hasResult ? execution.rerun() : execution.execute())}
@@ -434,8 +423,6 @@ function WindowCard(props: WindowCardProps) {
             taskState={execution.taskState}
             sessionId={sessionId}
             contentContext={infographicContentContext}
-            classCheckRounds={classCheckRounds}
-            classCheckPlan={classCheckPlan}
             onSeek={onSeek}
             onRegenerate={() => void execution.rerun()}
             onGenerateDraft={() => (execution.hasResult ? execution.rerun() : execution.execute())}
@@ -457,8 +444,6 @@ export function WorkshopWindowManager(props: WorkshopWindowManagerProps) {
     summaryOverview,
     keyDifficulties,
     terminologyHint,
-    classCheckRounds,
-    classCheckPlan,
     onSeek,
     onClose,
     onToggleMinimize,
@@ -507,8 +492,6 @@ export function WorkshopWindowManager(props: WorkshopWindowManagerProps) {
           summaryOverview={summaryOverview}
           keyDifficulties={keyDifficulties}
           terminologyHint={terminologyHint}
-          classCheckRounds={classCheckRounds}
-          classCheckPlan={classCheckPlan}
           model={model}
           onModelChange={setModel}
           onSeek={onSeek}

@@ -1,23 +1,19 @@
 /**
  * skill-chip-action.ts — 纯 TS 的 chip 路由决策。
  *
- * 从 SkillChipRow.tsx 里抽出来，让 node 测试环境能直接 import，而不触发
- * vitest 的 JSX 解析。所有 agent-parity 的核心合约都在这个函数里。
+ * M14.6：课中/课后同桌回归纯 AI 对话，不在对话里生成结构化产物。
+ * 有 appKey 的 chip（速查表/闪卡/测验/导图/学习报告）直接打开 WorkshopWindow，
+ * 没有 appKey 的 chip（再讲一遍）走 utterance 发给 AI 对话。
+ * 对话和应用矩阵各司其职，边界清晰。
  */
 
 import type { WorkshopAppKey } from '@/lib/ai-native/app-catalog';
 import type { SkillPrompt } from './skill-prompts';
 
 /**
- * 决定一个 chip 被点击时走哪条路径。优先级（M8 agent-native 修正）：
- *   1. onSay + utterance  → 'say'（agent-native 主路径：chip = 用户亲口说同一句话
- *                                  给同学听。同学会自然地先回复一句"好，我来整"，
- *                                  然后在回复里带一个 <open_app:KEY/> 标记让前端
- *                                  打开对应 WorkshopWindow。这条路径保证 chip 和
- *                                  打字行为完全一致——这是 UI/agent parity 的内核。）
- *   2. onOpenApp + appKey → 'app'（加速路径：仅供"应用矩阵"这类不带 companion
- *                                   上下文的 surface 用。此时没有同学对话通道，
- *                                   直接开窗口是合理的。）
+ * 决定一个 chip 被点击时走哪条路径。优先级：
+ *   1. appKey + onOpenApp → 'app'（直接打开 WorkshopWindow——结构化产物不走对话）
+ *   2. onSay + utterance  → 'say'（发 prompt 走 AI 对话，适合"再讲一遍"等纯对话 skill）
  *   3. onPick + prompt    → 'prompt'（兜底）
  */
 export function resolveSkillAction(
@@ -30,11 +26,11 @@ export function resolveSkillAction(
   | { kind: 'say'; utterance: string }
   | { kind: 'app'; appKey: WorkshopAppKey }
   | { kind: 'prompt'; prompt: string } {
-  if (options.onSay && skill.utterance) {
-    return { kind: 'say', utterance: skill.utterance };
-  }
   if (skill.appKey && options.onOpenApp) {
     return { kind: 'app', appKey: skill.appKey };
+  }
+  if (options.onSay && skill.utterance) {
+    return { kind: 'say', utterance: skill.utterance };
   }
   return { kind: 'prompt', prompt: skill.prompt };
 }

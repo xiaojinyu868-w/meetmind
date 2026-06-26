@@ -55,10 +55,10 @@ const DEFAULT_ACTION_ITEMS = [
 const MOCK_APP_MATRIX_PLUGINS = {
   plugins: [
     {
-      id: 'knowledge-cards',
-      name: '知识卡片',
+      id: 'flashcards-lab',
+      name: '闪卡训练',
       version: '0.1.0',
-      description: '课堂证据卡片插件',
+      description: '主动回忆闪卡训练器',
       tags: ['student', 'cards'],
       capabilities: ['citation-card', 'task-writeback'],
       enabledByDefault: true,

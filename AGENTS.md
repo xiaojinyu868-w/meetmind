@@ -20,20 +20,23 @@
 | 任务类型 | 阅读顺序 |
 |---------|---------|
 | **改 UI / 组件** | `src/components/DOMAIN.md` → 对应子目录 DOMAIN.md → 具体组件 |
-| **改任意 AI 对话面板（输入条 / 消息流 / 流式 / 文件上传 / 麦克风）** | `src/components/chat/DOMAIN.md` —— **M11 底座**：薄底座 ChatBubble / ChatComposer / ChatMessageList / ChatRenderer / ChatThinkingStripBubble + 三个 hook（useChatComposer 草稿+IME / useChatFileUpload 拖拽+粘贴 / useAutoFollowScroll 智能跟随）。任何新对话面板都应基于这个底座做 adapter，不要重新写一套输入条/气泡。已迁移：IntentDialog / TutorAgentPanel。待迁：ClassroomCompanionPanel / SharedAgentChat / WordExplainer。**铁律**：底座不引入业务逻辑（mode/prompt/endpoint），用 slot / capability 对象组合。 |
+| **改任意 AI 对话面板（输入条 / 消息流 / 流式 / 文件上传 / 麦克风）** | `src/components/chat/DOMAIN.md` —— **ChatBase 底座（M11 起，M13 起 5 面板 100% 收口）**：薄底座 ChatBubble / ChatComposer / ChatMessageList / ChatRenderer / ChatThinkingStripBubble + ChatCodeBlock（Shiki 高亮）/ ChatImageLightbox / ChatMermaidBlock + 三个 hook（useChatComposer 草稿+IME / useChatFileUpload 拖拽+粘贴 / useAutoFollowScroll 智能跟随）+ `markers/`（collectMessageText / extractIntentSummary / extractIntentBio）。任何新对话面板都应基于这个底座做 adapter，不要重新写一套输入条/气泡。**已收口 5 面板**：IntentDialog(`goal`) / TutorAgentPanel(`review`,`in-class`) / ClassroomCompanionPanel(`in-class`) / SharedAgentChat(`shared`) / WordExplainer(`word`)。**铁律**：底座不引入业务逻辑（mode/prompt/endpoint），用 slot / capability 对象组合。 |
 | **改课堂同桌 / Hero / 内联 app 卡** | `src/components/classroom/DOMAIN.md` → 对应组件（注意：Skill chip 走 `<open_app:KEY/>` 链路，不是 `/api/apps/execute` 直调） |
 | **改复习态 Tutor / Skill chip / Tool card** | `src/components/tutor/DOMAIN.md` → 对应组件 |
 | **改 Workshop 应用窗口** | `src/components/apps/windows/DOMAIN.md` → 对应窗口组件 |
 | **改页面路由** | `src/app/DOMAIN.md` → 对应 page.tsx |
 | **改 API 接口** | `src/app/api/DOMAIN.md` → 对应子目录 DOMAIN.md → route.ts |
-| **改 Tutor 后端** | `src/app/api/tutor/DOMAIN.md`（M10：`/api/tutor/agent` 是三个对话入口的唯一后端，按 `mode: 'in-class' \| 'review' \| 'shared' \| 'goal'` 分支） |
+| **改 Tutor 后端** | `src/app/api/tutor/DOMAIN.md`（M10：`/api/tutor/agent` 是所有对话入口的唯一后端，按 `mode: 'in-class' \| 'review' \| 'shared' \| 'goal' \| 'word'` 5 分支） |
 | **改 prompt** | `src/lib/prompts/tutor-prompts.ts`（mode-driven `buildTutorSystemPrompt`） + `项目开发文档/提示词设计哲学.md` |
-| **改「聊聊你想要的」/ 目标共建 / onboarding 对话流** | `src/components/intent/DOMAIN.md` → `IntentDialogContainer` 是入口包装，主对话在 `IntentDialog`，提炼卡片在 `IntentSummaryCard`。后端 `/api/tutor/agent` mode='goal'，prompt 在 `tutor-prompts.ts` 的 `MODE_GOAL_SEGMENT`。文件解析 helper `src/lib/services/file-parse-service.ts`。|
+| **改「聊聊你想要的」/ 目标共建 / 教练对话** | `src/components/intent/DOMAIN.md` → `IntentDialogContainer` 是入口包装，主对话在 `IntentDialog`，提炼卡片在 `IntentSummaryCard`（bio）/ `IntentBioCard`。入口仅在设置页（M14.6 移除首登强制拦截）。后端 `/api/tutor/agent` mode='goal'，prompt 在 `tutor-prompts.ts` 的 `buildGoalSegment`（GOAL_HEADER + GOAL_PATH_A 首次会面 / GOAL_PATH_B 回访 + GOAL_COMMON）。文件解析 helper `src/lib/services/file-parse-service.ts`。|
 | **改实时语音通话 UI / 抗噪抗打断** | `src/components/realtime/DOMAIN.md` → `RealtimeOrb`（v7 呼吸光晕，复用于复习态 + intent 通话）+ `IntentVoiceCallScreen` / `TutorRealtimeCallScreen`。后端 WebSocket 在 `server.js` 的 `/api/tutor-call`，VAD/降噪参数走环境变量（见 `.env.example` 实时语音同桌段）。|
 | **改业务逻辑（service）** | `src/lib/services/DOMAIN.md` → 找到对应 service 文件 |
 | **改 ASR 链路** | `src/lib/services/asr/`（text-utils / render-state-machine / post-edit / audio-constraints） |
 | **改 AI-Native 插件** | `src/lib/ai-native/plugins/DOMAIN.md` → 对应 plugin |
 | **改 SharedAgent / 分享 Agent / 裂变** | `roadmap/v3.0-virality-agent.md`（北极星）→ `src/app/api/share/DOMAIN.md` → `src/app/share/DOMAIN.md` → `src/app/me/shares/`（A 管理面）→ `src/components/share/DOMAIN.md` → `src/lib/services/share-agent-service.ts`。**v3.0 闭环 5 个支点**：(1) 创建 `OctoCrystalDispatcher` (2) 落地页 `SharedAgentLanding` + `ArtifactRender` 真渲染产物 (3) 分享态对话 `mode='shared'` (4) 领取 `claimSharedAgent` → `WorkspaceCapture(sourceType='shared-agent')` 在 B 工作台点击跳回 `/share/[token]` (5) 管理 `MyShareList` + `DELETE /api/share/[token]`（撤销不影响已领取副本）|
+| **改文章 / 网页原文接入** | `src/app/api/article/`（无 DOMAIN.md）→ `src/lib/services/web-article-extract-service.ts` + `jina-reader-service.ts`；`.env.example` 配 `FIRECRAWL_API_KEY`（首选），`OPENCLAW_GATEWAY_URL` 已 **deprecated**（见 `openclaw/README.md`，与 MeetMind 解耦的 AI Agent Gateway，现仅 fallback） |
+| **改微信公众号 / 微信端捕获** | `src/app/api/wechat/`（bind / callback / mp / capture/[token]，无 DOMAIN.md）→ 6 个 `src/lib/services/wechat-*-service.ts`（auth / inbox / media / mp / voice-utils / web-session）→ `src/components/WechatBindForm.tsx`；`.env.example` 配 `WECHAT_APP_ID/SECRET` + `WECHAT_MP_TOKEN` |
+| **改跨设备同步** | `roadmap/v2.1-cross-browser-sync-gap.md`（**已确认架构缺口**：浏览器 A 录课，B 看到卡片但点开无转录/锚点/highlight。根因=服务端只存汇总文本不存分段 + 客户端拉回不回填 IndexedDB）→ `src/lib/services/backfill-captures-to-indexeddb.ts` + `upload-recording-audio.ts` + `src/hooks/useWorkspaceContextLoader.ts` |
 | **改用户面文案** | `src/lib/ui/copy.ts`（**唯一真相源**——不要把字符串散落到组件里） |
 | **改状态管理** | `src/stores/DOMAIN.md` → 了解哪些状态已迁移到 store |
 | **改类型定义** | `src/types/DOMAIN.md` → `src/types/index.ts` |
@@ -74,7 +77,14 @@ make test-all     # src/ + server/ + eval/ 全套
 make test-watch   # 单元测试 watch 模式
 make lint         # ESLint 检查（--max-warnings 0）
 make smoke        # 端到端 smoke：路由/WS/auth/API 全通（需 dev server 在 3101）
-make clean-logs   # 自动清理所有 console.log 残留
+make smoke-intent     # goal 模式 e2e（双路径：首次会面 + 回访）
+make smoke-review     # review 模式 e2e（bio 注入 + 时间戳 + inline app）
+make smoke-in-class   # in-class 模式 e2e（recentFocus + Skill chip + bio）
+make smoke-shared     # shared 模式 e2e（隐私铁律）
+make smoke-all       # 跑全部 4 个 mode 的 e2e smoke
+make ttft            # 测首 token 延迟（4 mode × N=5）——改 prompt/smoothStream/provider 后必跑
+make clean-logs      # 自动清理所有 console.log 残留
+make clean-logs-dry  # 预览清理效果（不修改）
 make stats        # 项目统计（超标文件、console.log 残留）
 ```
 
@@ -123,9 +133,9 @@ MeetMind 是以学习者长期上下文为中心的 AI 学习产品。
 
 **当前聚焦**：课堂场景。一个大学生录了一节课 → MeetMind 当场作为 AI **同桌**陪他听 → 课后基于用户真实意图帮他解释、定位、复述、验证或生成闪卡 / 测验 / 速查表 / 思维导图 / 学习报告 → 生成一张让他忍不住分享到班级群的回声卡。
 
-**当前里程碑**：M9（agent-native 同学：identity + citations + inline apps in chat）+ M10（mode-driven prompts，三入口收口为 `/api/tutor/agent`）+ **M11（v3.0 SharedAgent：场景上下文 = 可分享的 Agent，班级裂变核心）**。详见 `roadmap/v3.0-virality-agent.md`、`docs/UPGRADE_PLAN.md` 和 `CHANGELOG.md`。
+**当前里程碑**：M11（ChatBase 底座 + v3.0 SharedAgent 裂变）→ M12（ChatBase 升级 Shiki/Mermaid/lightbox + 退役 `AITutor.tsx` 死代码 + 文章原文展示）→ M13（5 面板 100% 收口 + 新增 `mode='word'` + 麦克风 push-to-record + TTFT p95 -32%）→ M14 / M14.5（课堂同桌 AI-native 重做：动态 chip 取代 inline app 药丸；`qwen3.7-plus` 多模态默认）。详见 `roadmap/v3.0-virality-agent.md`、`CHANGELOG.md` 和 `项目开发文档/提示词设计哲学.md`。
 
-> ⚠️ v3.0 战略转向：MeetMind 从「个人学习收纳产品」升级为「场景上下文可被分享、Agent 是裂变载体」。任何与 v3.0 哲学（"上下文是公共财产、Agent 是分享单元"）冲突的旧设计以 `roadmap/v3.0-virality-agent.md` 为准。
+> ⚠️ 文档覆盖度提示：`CHANGELOG.md` 停在 M11.5，**M12/M13/M14/M14.5 见 commit history**；`docs/UPGRADE_PLAN.md` 仅覆盖 M1-M4（M5+ 未补）。任何与 v3.0 哲学（"上下文是公共财产、Agent 是分享单元"）冲突的旧设计以 `roadmap/v3.0-virality-agent.md` 为准。
 
 ### Taste（任何改动都必须对齐）
 
@@ -217,33 +227,31 @@ MeetMind 是以学习者长期上下文为中心的 AI 学习产品。
 
 ### 3.4 AI-Native 插件系统
 
-`src/lib/ai-native/plugins/` 是 Workshop 应用的运行时（17 个 plugin）。每个插件实现统一的 `AppPlugin` 契约：
+`src/lib/ai-native/plugins/` 是 Workshop 应用的运行时（7 个 plugin，`studio-workshop` 含 3 个子模块 podcast/renderers/types）。每个插件实现统一的 `AppPlugin` 契约：
 
 - `manifest.id` + `canHandle(context)` + `run(context, tools)`
 - 输出 `AppExecutionResult { cards, trace, render }`，前端统一交给 `AppRenderSurface` 渲染；WorkshopWindow、独立应用页、InlineAppCard 不得各写一套 UI
-- 主要 plugin：cheatsheet / flashcards / quiz / mindmap / study-report / class-check / confusion-drill / review-plan / knowledge-cards / studio-workshop（播客 + 信息图）/ fallback
-- catalog：`src/lib/ai-native/app-catalog.ts` 是 UI 端的应用矩阵（7 类 ready 应用）
+- 主要 plugin：cheatsheet / flashcards / quiz / mindmap / class-check（视频内随堂检验，不在 catalog）/ studio-workshop（播客 + 信息图）/ fallback
+- catalog：`src/lib/ai-native/app-catalog.ts` 是 UI 端的应用矩阵（6 类 ready 应用：flashcards / quiz / mindmap / cheatsheet / infographic / audio-overview）
 
-### 3.5 课堂同桌 → Workshop 的统一链路（M9 关键）
+### 3.5 课堂同桌 → 应用矩阵的链路（M14.6 重做）
 
-Skill chip / 自然对话 / 内联 app 现在走**严格同链路**：
+M14.6 起，结构化产物**不再走** LLM 输出 `<open_app:KEY/>` marker 的链路（已从 prompt 与代码移除），改为前端 SkillChip 直接打开应用矩阵：
 
 ```
-用户点 chip 或手敲 "整一张速查表"
-  → useClassroomCompanion.send()
-  → POST /api/tutor/agent (mode='in-class')
-  → LLM 出 "好，我这就给你整一张<open_app:cheatsheet/>"
-  → 前端 extractOpenAppMarker 拦截
-  → 走 /api/apps/execute（appKey → pluginId）
-  → InlineAppCard 承载完整 AppExecutionResult，并通过 AppRenderSurface 复用应用矩阵 UI 嵌进对话流
-  → 学生可以在对话里直接操作与课后同款 UI
+用户点 SkillChip（如"速查表"）或手敲 "整一张速查表"
+  → 前端直接调 /api/apps/execute（appKey → pluginId）
+  → AppRenderSurface 渲染完整 AppExecutionResult
+  → 对话流里纯文字回答，应用产物在中间学习工作区 / 应用矩阵呈现
 ```
 
-**合法 appKey**：`flashcards / quiz / mindmap / cheatsheet / study-report`（合约写在 `tutor-prompts.ts` 的 `capOpenAppContract`）。`audio-overview / infographic` 不适合内联，自动 fallback 到 WorkshopWindow。
+- LLM 对话保持**纯文字**：`agent/route.ts` 的 `tools = {}`，不挂 native tools，不注入 marker 合约。
+- 应用矩阵 7 类 ready 应用（`WORKSHOP_APP_CATALOG` in `app-catalog.ts`）：`flashcards / quiz / mindmap / cheatsheet / study-report / audio-overview / infographic`。
+- **遗留死代码（M14.6 前的 marker 链路，待清理）**：`<open_app:KEY/>` marker、`extractOpenAppMarker`、`capOpenAppContract` / `TutorInlineAppKey` 类型、`InlineAppCard` 的 marker 拦截逻辑。（`tutor-tools.ts` 及 4 个无入口 plugin `study-report` / `knowledge-cards` / `confusion-drill` / `review-plan` 已在 M14.6+ 清理删除。）
 
 ### 3.6 God File 提取策略
 
-`src/app/(main)/app/page.tsx` 是已知遗留债务（~2300 行），正在按**域**分阶段提取为 hooks + 子组件：
+`src/app/(main)/app/page.tsx` 是已知遗留债务（行数见 `make stats`），正在按**域**分阶段提取为 hooks + 子组件：
 
 | 阶段 | 提取的 hooks | 减少行数 |
 |------|-------------|---------|
@@ -264,17 +272,24 @@ Skill chip / 自然对话 / 内联 app 现在走**严格同链路**：
 | 课堂同桌 | `useClassroomCompanion` | `mode: 'in-class'`, `recentFocus` (最近 30s) |
 | 录音/视频复习 | `TutorAgentPanel` / `SafeAITutor` | `mode: 'review'`, `fullTranscript`, `currentTimestampSec`（秒，不是毫秒）, `learnerProfile`（个人画像 + 当前课程近期对话痕迹）, options.thinkingGuide |
 | **分享态对话** (v3.0) | `SharedAgentChat` (落地页 `/share/[token]`) | `mode: 'shared'`, `shareToken`，服务端从 `SharedAgent.snapshotJson` 加载上下文；不读取访问者画像，禁用 native tools，禁用 inline app marker |
+| 目标共建 / onboarding | `IntentDialog` | `mode: 'goal'`, `learnerProfile`（bio 双 marker：headline + goals）；禁用 inline app marker；首次会面 vs 回访双路径 |
+| 选词解释浮窗 (M13) | `WordExplainer` | `mode: 'word'`, `selectionText` + `nearbyContext` + `fullTranscriptTail`；禁用 inline app marker；浮窗形态 |
 
 ```
 POST /api/tutor/agent
   body: { mode, context: {...}, options: {...}, transcript, messages, sessionId, subject, model? }
-  → resolveTutorAgentProviderConfig(env, { modelId }) 选择 StepFun / DeepSeek / DashScope / OpenAI-compatible provider（默认 `step-3.7-flash`）
+  → resolveTutorAgentProviderConfig(env, { modelId }) 选择 StepFun / DeepSeek / DashScope / OpenAI-compatible provider
+    （env 驱动 pickAvailableModelId：TUTOR_MODEL/LLM_MODEL → recommended → 首个可用；有 StepFun key 默认 `step-3.7-flash`，否则有 DeepSeek key 默认 `DeepSeek-V4-Flash`，否则 `qwen3.7-plus`）
   → buildTutorSystemPrompt(mode, context, options) 拼 system
-  → streamText({ model, tools: [makeXxx + lookupTranscript],
-                 // DeepSeek 与 StepFun 都不暴露 native tools，结构化产物走 <open_app:KEY/> + /api/apps/execute；
-                 // DeepSeek 是因为 reasoning_content tool-call 续写错误，StepFun 是为降低 TTFT（6 个 tool description ~700 字会拖慢 prefill）
+  → streamText({ model, tools: {},
+                 // M14.6：所有 mode 纯对话，不挂 native tools，不注入 <open_app:KEY/> marker 合约。
+                 // 结构化产物由前端 SkillChip 直接打开应用矩阵（见 §3.5）。
+                 // Qwen thinking 模型通过 fetch hook 注入 enable_thinking=false 抑制推理，降 TTFT。
                  stopWhen: stepCountIs(3),
-                 experimental_transform: smoothStream({ chunking: 'word' }),  // 让前端字节流按词平滑刷出
+                 experimental_transform: smoothStream({
+                   chunking: /[\u4E00-\u9FFF\u3000-\u303F\uFF00-\uFFEF]|\S+\s+/,  // 中文 1 字 1 切、英文 1 词 1 切
+                   delayInMs: 12,
+                 }),
                  onStepFinish: track('tutor.step') })
   → toUIMessageStreamResponse()  // AI SDK v6 帧
 ```
@@ -282,10 +297,11 @@ POST /api/tutor/agent
 **渲染契约（前端硬合同，不能删）**：
 1. `[MM:SS]` / `[MM:SS-MM:SS]` — 可点击时间戳，跳回转录（解析在 `timestamp-parsing.ts`）
 2. `[资料N]` — 引用 support material 时复用编号，禁止编造
-3. `<open_app:KEY/>` — 学生索要结构化产物时单行 marker，前端拦截后开窗或嵌入
-4. 思维引导：`---思维演示---` / `---正式回答---` / `【步骤名】` / `💡` / `🌟` 分段标记
+3. 思维引导：`---思维演示---` / `---正式回答---` / `【步骤名】` / `💡` / `🌟` 分段标记
 
-旧 `/api/tutor` (legacy SSE 路径) 仍存在并被 `SafeAITutor` 在 flag off 时降级使用；移动端文字 AI / 历史详情也应走 `SafeAITutor → TutorAgentPanel`。复习态 `open_app` 不是 iframe；桌面端有中间学习工作区时，marker 只负责把应用打开到中栏，完整 `AppRenderSurface` 不再塞进聊天气泡；恢复历史对话时必须先读 `app_workspace_result:{sessionId}:{appKey}` 共享缓存，不能因为历史里有 `<open_app:KEY/>` 就重新并发生成。`useOmniRealtimeCall` 走独立 WebSocket（qwen-omni realtime），不打这个 endpoint；移动端语音同桌由 `RealtimeTutorPanel → TutorRealtimeCallScreen` 承接，语音最终转写必须写入 `conversationService` 的 `global-chat` 并把 conversationId 接回文字 agent。
+> M14.6 已移除原第 4 条 `<open_app:KEY/>` marker 契约——结构化产物不再由 LLM 输出 marker，改由前端 SkillChip 直接打开（见 §3.5）。
+
+旧 `/api/tutor` (legacy SSE 路径) 仍存在并被 `SafeAITutor` 在 flag off 时降级使用；移动端文字 AI / 历史详情也应走 `SafeAITutor → TutorAgentPanel`。`useOmniRealtimeCall` 走独立 WebSocket（qwen-omni realtime），不打这个 endpoint；移动端语音同桌由 `RealtimeTutorPanel → TutorRealtimeCallScreen` 承接，语音最终转写必须写入 `conversationService` 的 `global-chat` 并把 conversationId 接回文字 agent。
 
 ### 3.8 ASR 飞书妙记级工艺（M2 + M5 + M8）
 
@@ -295,10 +311,27 @@ ASR 链路（`src/lib/services/asr/`）：
 - **长音频**：DashScope 异步 file-trans，分片 600s + 2s overlap + LCS 缝合（`stitchSegmentsWithOverlap` / `findOverlapLength`）
 - **稳定性**：`reconnecting-websocket` + `p-retry` Full Jitter 退避，audioQueue 跨重连保留
 - **Contextual biasing**：`buildASRContextHint` 注入 6 字段（courseTitle / courseSubject / participants / previousLessonTopics / lessonVocabulary / userHotwords）
-- **后校对**：`postEditSegments` 用 qwen3.5-plus 只打低置信片段（feature flag `ASR_POST_EDIT_ENABLED`，默认关）
+- **后校对**：`postEditSegments` 用 qwen3.7-plus 只打低置信片段（feature flag `ASR_POST_EDIT_ENABLED`，默认关）
 - **状态兜底**：`audioSessions.transcriptionStatus` 区分 pending/completed/failed；转写失败或超时后课堂卡片显示“原声已保留”，不能永久停在“整理中”
 - **静默校对 + 热词聚合**：`AsrCorrection` 表存用户编辑，`onRecordingStop` 触发 `/api/asr/corrections/aggregate` 生成下节课的 `userHotwords`
 - **AEC/NS/AGC**：`buildAudioConstraints` 是 getUserMedia 的唯一真相源，env 可覆盖
+
+### 3.9 跨设备同步现状与缺口（v2.1 待修）
+
+详见 `roadmap/v2.1-cross-browser-sync-gap.md`（2026-04-25 确认的架构缺口）。
+
+- **现象**：浏览器 A 录课，浏览器 B 登录后看到卡片但点开无转录/锚点/highlight
+- **根因**：(1) 服务端 `WorkspaceCapture` 只存 `normalizedText`（8000 字截断），分段 transcripts/anchors/summaries/highlights 无 SQLite 表；(2) 客户端 `useWorkspaceContextLoader` 拉回只 push sourceItem，不回填 IndexedDB
+- **已落点**：`backfill-captures-to-indexeddb.ts` + `upload-recording-audio.ts`（音频上云 T2）+ `useWorkspaceContextLoader`；缺服务端分段表 + 下行回写
+- **修复方向**（roadmap 选项 A）：新增 `WorkspaceTranscriptSegment` / `WorkspaceAnchor` / `WorkspaceClassSummary` / `WorkspaceHighlight` 表 + 客户端拉回时 `db.transcripts.bulkPut` 等
+
+### 3.10 内容接入扩展（M12 文章 + 微信端 + OpenClaw）
+
+| 来源 | API | Service | 备注 |
+|------|-----|---------|------|
+| 文章 / 网页 | `/api/article/import` | `web-article-extract-service.ts` + `jina-reader-service.ts` | `.env.example` 配 `FIRECRAWL_API_KEY`（首选） |
+| 微信公众号 | `/api/wechat/*`（bind / callback / mp / capture/[token]） | 6 个 `wechat-*-service.ts`（auth / inbox / media / mp / voice-utils / web-session） | `WECHAT_APP_ID/SECRET` + `WECHAT_MP_TOKEN` |
+| OpenClaw Gateway | — | `openclaw/`（仓库根目录，与 MeetMind 解耦） | **deprecated**：Firecrawl 替代微信公众号反爬，OpenClaw 仅 fallback |
 
 ---
 
@@ -317,7 +350,7 @@ ASR 链路（`src/lib/services/asr/`）：
 
 ## 5. 设计系统 v7（快速参考）
 
-> 完整设计宪法 + 可视化 showcase 在 `design-demo/v7/`（9 篇文档：tokens / foundations / AI 视觉 / 组件 / 应用矩阵 / 课中 / 复习 / 分享落地 / 移动端 / 暗色）。
+> 完整设计宪法 + 可视化 showcase 在 `design-demo/v7/`（9 篇 showcase HTML：foundations / AI 视觉 / 组件 / 应用矩阵 / 课中 / 复习 / 分享落地 / 移动端 / 暗色 + `tokens.css` + `index.html` 导航页）。
 
 **核心理念：图书馆台灯 + 朱批红笔。** "色 = 架构"——墨松绿是 AI 沉淀（场景上下文），朱批红是学生此刻（个人上下文 / 引用 / 标注）。
 
@@ -396,7 +429,13 @@ ASR 链路（`src/lib/services/asr/`）：
 | `OctoAvatar` (mood: 8 态, size, statusDot) | `octo-avatar.tsx` | 头像 wrapper，呼吸光环 + 状态点 |
 | `ThinkingStrip` / `TypingDots` / `BrewingStrip` | `thinking-strip.tsx` | 三档等待形态：轻 / 中 / 重（"酿"） |
 | `StreamText` | `stream-text.tsx` | 流式输出包装器，stagger 浮现 + caret |
-
+| `AppTopBar` | `app-topbar.tsx` | 应用顶部栏 |
+| `EmptyState` | `empty-state.tsx` | 空态占位 |
+| `SectionHeader` | `section-header.tsx` | 区块标题 |
+| `CourseHero` | `course-hero.tsx` | 课程 Hero 区 |
+| `SkillChip` | `skill-chip.tsx` | M14.6 动态能力 chip（取代 inline app 药丸，点击直接打开应用矩阵） |
+| `Composer` | `composer.tsx` | 对话输入条 |
+| `RecordingHero` | `recording-hero.tsx` | 录音 Hero 区 |
 ### 暗色模式 first-class
 
 通过 `data-theme="dark"` 切换。底色 `#14110D`（深棕墨黑，温度比纯黑高），墨绿变浅松绿 `#6B9080`，朱批变暖橘红 `#E07A5F`——给凌晨学习的学生眼睛准备的版本。所有 token 自动重映射，组件无需任何改动。
@@ -414,12 +453,15 @@ ASR 链路（`src/lib/services/asr/`）：
 
 ### 文件大小硬限制
 
-| 类型 | 上限 | 当前超标文件（遗留债务） |
-|------|------|------------------------|
-| 页面/组件 | 500 行 | `page.tsx`(~2300), `AITutor.tsx`(~2357), `Recorder.tsx`(~1850), `ClassroomLeftPanel.tsx`(~635), `ClassroomCompanionPanel.tsx`(~535) |
-| API 路由 | 500 行 | `video/import/route.ts`(1212), `tutor/route.ts`(936) |
-| 服务文件 | 500 行 | `workspace-echo-service.ts`(1297), `classroom-data-service.ts`(1009) |
-| 工具/类型 | 300 行 | — |
+| 类型 | 上限 |
+|------|------|
+| 页面/组件 | 500 行 |
+| Hook | 500 行 |
+| API 路由 | 500 行 |
+| 服务文件 | 500 行 |
+| Prompt/工具/类型 | 300 行 |
+
+> 实时超标文件清单（按行数降序）见 `make stats`，不在此静态列出——行数每次 commit 后都会变，写死只会过时误导 agent。
 
 **规则**：新文件不得超过上限；修改若导致超标，必须先拆分。
 
@@ -449,7 +491,7 @@ src/
 │   ├── DOMAIN.md         # 页面路由索引
 │   ├── share/DOMAIN.md   # v3.0 SharedAgent 公开落地页（/share/[token]）
 │   └── api/
-│       ├── DOMAIN.md     # 45+ 个 API 路由总览
+│       ├── DOMAIN.md     # 68 个 API 路由总览
 │       ├── auth/DOMAIN.md        # 认证接口组
 │       ├── workspace/DOMAIN.md    # Workspace 接口组
 │       ├── sources/DOMAIN.md      # 内容接入接口组
@@ -457,12 +499,18 @@ src/
 │       ├── tutor/DOMAIN.md        # AI 同桌 + agent loop 子路由（M10 主入口；mode='shared' 走 SharedAgent）
 │       ├── share/DOMAIN.md        # v3.0 SharedAgent 创建 / 公开读 / 领取 / 埋点
 │       └── video/import/DOMAIN.md # 视频导入管线
+         # 其余无 DOMAIN.md 的子目录：article / asr / asr-config / chat / class-check / classroom /
+         # extract-terms / feedback / generate-summary / generate-topics / llm / transcribe /
+         # transcribe-fast / transcribe-turbo / transcript-enhance / translate / upload-audio / wechat
 ├── components/
-│   ├── DOMAIN.md         # ~140 个 UI 组件索引
+│   ├── DOMAIN.md         # ~220 个 UI 组件索引（实际数见 `make stats`）
 │   ├── ui/DOMAIN.md      # 原子 UI 组件库
 │   ├── apps/DOMAIN.md
 │   ├── apps/windows/DOMAIN.md  # Workshop 窗口（cheatsheet / flashcards / quiz / mindmap / studyreport / podcast / infographic）
+│   ├── chat/DOMAIN.md    # ChatBase 底座（M11 起 5 面板 100% 收口：ChatBubble/Composer/MessageList/Renderer + Shiki/Mermaid/lightbox）
 │   ├── classroom/DOMAIN.md # M9 课堂同桌完整模块（Hero / Layout / CompanionPanel / InlineAppCard ...）
+│   ├── intent/DOMAIN.md  # 「聊聊你想要的」目标共建（IntentDialogContainer / IntentDialog / IntentSummaryCard / IntentBioCard）
+│   ├── realtime/DOMAIN.md # 实时语音通话 UI（RealtimeOrb + IntentVoiceCallScreen / TutorRealtimeCallScreen）
 │   ├── tutor/DOMAIN.md   # 复习态 Tutor + Skill chip + Tool card + Realtime call screen
 │   ├── share/DOMAIN.md   # v3.0 SharedAgent 创建器 + Canvas 长图
 │   ├── recorder/DOMAIN.md
@@ -470,25 +518,26 @@ src/
 │   ├── layout/DOMAIN.md
 │   ├── ConversationHistory/DOMAIN.md
 │   └── business/DOMAIN.md
-├── hooks/DOMAIN.md       # 48 hooks（含 useOmniRealtimeCall / useClassroomCompanion / useEnToZhTranslation / useLiveConcepts）
+├── hooks/DOMAIN.md       # ~55 hooks（含 useOmniRealtimeCall / useClassroomCompanion / useEnToZhTranslation / useLiveConcepts；实际数见 `make stats`）
 ├── hooks/data/DOMAIN.md
-├── stores/DOMAIN.md      # Zustand 状态（7 stores，~89 状态已迁移）
+├── stores/DOMAIN.md      # Zustand 状态（8 stores，状态已迁移）
 ├── types/DOMAIN.md       # 共享类型
 ├── fixtures/             # demo-app-outputs.ts（Hero 试听 demo 用）
 └── lib/
     ├── DOMAIN.md         # 库代码总览
-    ├── services/DOMAIN.md # 60+ 业务服务（按域分组）
-    ├── services/asr/      # text-utils / render-state-machine / post-edit / audio-constraints
+    ├── services/DOMAIN.md # ~80 业务服务（按域分组；实际数见 `make stats`）
+    ├── services/asr/DOMAIN.md # ASR 纯逻辑层（text-utils / render-state-machine / post-edit / audio-constraints / ws-url）
     ├── services/classroom/ # recent-focus（30s 窗口，给课堂同桌做代词消歧）
-    ├── prompts/          # tutor-prompts.ts（M10 mode-driven）
-    ├── tutor/            # tutor-tools.ts（4 个 Vercel AI SDK v6 tool）
+    ├── services/translation/ # 翻译相关服务（按域分组）
+    ├── prompts/          # tutor-prompts.ts（M10 mode-driven，5 mode）
+    ├── tutor/            # classroom-agent-request（课堂同桌瘦身请求体）+ realtime-conversation-bridge（语音同桌转写去重）
     ├── ui/               # copy.ts（用户面文案单一真相源）
     ├── hooks/DOMAIN.md   # 服务端/通用 hooks（fetchUIMessageStream / useSSEStream / useAuth）
     ├── utils/DOMAIN.md   # 工具函数
     ├── utils/page/DOMAIN.md # page-utils 拆分模块
     ├── db/DOMAIN.md      # IndexedDB Schema + CRUD
     ├── ai-native/DOMAIN.md # 应用插件系统
-    ├── ai-native/plugins/DOMAIN.md # 17 个 Workshop 插件
+    ├── ai-native/plugins/DOMAIN.md # 11 个 Workshop 插件（studio-workshop 含 3 子模块）
     ├── longcut/DOMAIN.md # 转录算法
     ├── capture/DOMAIN.md # 收集逻辑
     ├── context-reach/DOMAIN.md # 输入分流
@@ -503,45 +552,45 @@ src/
 
 ## 8. 关键文件
 
-| 文件 | 行数 | 注意 |
-|------|------|------|
-| `src/app/(main)/app/page.tsx` | ~2300 | God File（按域分 6 阶段提取为 hooks + 子组件，详见 §3.6），改前先读 `src/app/DOMAIN.md` |
-| `src/components/AITutor.tsx` | ~2357 | 复习态 Tutor legacy fallback；新路径默认走 `SafeAITutor → TutorAgentPanel`，移动端语音走 `RealtimeTutorPanel` |
-| `src/components/SafeAITutor.tsx` | ~252 | Tutor 入口分发：默认 `TutorAgentPanel`；负责把复习页/移动端/视频复习的启动问题、当前时间（秒）、选中资料、个人画像和应用学习动态适配到 agent context，flag off 才回退 `AITutor` 老 SSE 路径 |
-| `src/components/Recorder.tsx` | ~1850 | 录音组件（已拆 3 子模块到 `recorder/`，含 mic/system/mixed 三档音源） |
-| `src/components/classroom/ClassroomCompanionPanel.tsx` | ~535 | 课堂右栏同桌面板（header / 气泡 / 流式 / thinking / 输入栏） |
-| `src/components/classroom/InlineAppCard.tsx` | ~160 | 内联 app 承载卡（保存完整 AppExecutionResult，复用 AppRenderSurface / 应用矩阵 UI） |
-| `src/components/classroom/ClassroomLeftPanel.tsx` | ~635 | 课堂左侧（list / recording 切换 + ActiveLessonPill + StickyStartBar） |
-| `src/hooks/useClassroomCompanion.ts` | — | 课堂同桌 hook：消费 `[MM:SS]` citations + `<open_app:KEY/>` marker → InlineAppCard 路径 |
-| `src/hooks/useOmniRealtimeCall.ts` | ~793 | Qwen Omni realtime 语音通话 hook（语音同桌入口，独立 WebSocket，不走 /api/tutor） |
-| `src/app/api/tutor/agent/route.ts` | ~336 | **M10 主入口**：mode-driven 单一 endpoint，AI SDK v6 streamText；非 DeepSeek 模型可用 native tools，DeepSeek thinking 模型走 `<open_app:KEY/>` 渲染契约避免 `reasoning_content` tool-call 错误 |
-| `src/app/api/tutor/route.ts` | 936 | Legacy SSE 路径（flag off 时仍可用，不要在它上面加新功能） |
-| `src/lib/prompts/tutor-prompts.ts` | ~300 | `buildTutorSystemPrompt(mode, context, options)` ── 三入口唯一 prompt 源 |
-| `src/lib/tutor/tutor-tools.ts` | ~225 | 4 个 Vercel AI SDK v6 tool（makeFlashcards / makeQuiz / makeMindmap / lookupTranscript） |
-| `src/lib/services/llm-service.ts` | ~660 | 统一 LLM 调用层（StepFun / DeepSeek / DashScope / Ark / Relay），默认学习应用模型优先 `DeepSeek-V4-Flash`，fallback 链 `DeepSeek-V4-Flash → DeepSeek-V4-Pro → Qwen3.6-Plus-A` |
-| `src/lib/utils/tutor-agent-provider.ts` | ~160 | Tutor Agent OpenAI-compatible provider 解析：按请求模型 / env 选择 StepFun、DeepSeek、DashScope 或 OpenAI，并强制 Chat Completions；暴露 `shouldUseNativeTutorTools` 禁用 DeepSeek thinking native tool-call |
-| `src/lib/utils/ai-model-preference.ts` | 19 | 设置页模型偏好的 key 与 `auto` 解析契约 |
-| `src/lib/ui/copy.ts` | ~80 | 用户面文案唯一真相源（COPY 对象 + bannedWords 校验） |
-| `src/lib/ai-native/app-catalog.ts` | ~136 | Workshop 应用矩阵（7 类 ready），`WORKSHOP_APP_CATALOG` + `WorkshopAppKey` |
-| `src/app/api/video/import/route.ts` | 1212 | 多平台导入管线（已拆 3 子模块） |
-| `src/lib/services/commonstack-echo-service.ts` | ~273 | Echo LLM 调用，System Prompt 在此 |
-| `src/lib/services/workspace-echo-service.ts` | 1303 | Echo 数据管线；CommonStack 新 schema 不返回 title，需从 takeaway / echo 生成标题后再进质量门 |
-| `src/lib/services/asr/audio-constraints.ts` | — | getUserMedia constraints 唯一真相源（AEC/NS/AGC），env 可覆盖 |
-| `src/lib/services/asr/post-edit.ts` | — | 低置信片段 LLM 校对（feature-flag `ASR_POST_EDIT_ENABLED`） |
-| `src/lib/services/classroom/recent-focus.ts` | — | 课堂同桌的最近 30s 窗口提取（纯 TS，可单测） |
-| `src/components/classroom/ClassroomLayout.tsx` | ~270 | 课堂分栏；同桌只在真实录课 / 示例课听课态可见，空课堂隐藏右栏、Octo Buddy 和移动端问同学入口 |
-| `src/components/classroom/ClassroomHero.tsx` | ~160 | 课堂零存量 Hero；居中首屏避免右侧空洞，录音来源 rail 直接露出麦克风 / 电脑声音 / 两路都录，示例课只是低门槛预览 |
-| `src/components/classroom/ClassroomRecordingView.tsx` | ~610 | 课中视图；试听课播放 `/demo-audio.mp3`，由音频时间驱动转录渐进露出，结束后只显示总结卡和“结束这节课”入口，由上层切到课后复习页 / 应用矩阵 |
-| `src/components/classroom/demo-mindmap.ts` | ~103 | 试听课静态结构树；随音频秒数生长，避免中间结构画布长期空态 |
-| `src/components/classroom/ClassroomCompanionPanel.tsx` | ~585 | 同桌右栏；课中 / 课后 starter 用会动的 Octo Buddy 像素章鱼 + 轻问题 chip 引导，不做重功能导览 |
-| `src/components/classroom/OctoBuddy.tsx` | ~660 | Octo Buddy 像素 IP；Sprite 自带呼吸 / 听课 / 开心动画，悬浮球和右栏内嵌都复用它 |
-| `src/components/DesktopVideoReviewLayout.tsx` | ~647 | 桌面端课后复习三栏布局：左=视频/音频证据 + 时间轴，中=学习工作区，右=同桌解释与复盘；视频默认放大证据栏，并持有课后学习黑板 |
-| `src/components/ReviewThreePaneLayout.tsx` | ~156 | 课后复习可拖拽三栏容器；两条边界都可拖拽，学习区 / 同桌可折叠成 rail，左证据栏不自动折叠 |
-| `src/components/ReviewLearningWorkspace.tsx` | ~119 | 课后中间学习工作区；承载完整 AppRenderSurface，闪卡切低亮度练习背景，并把测验/闪卡动态写入课后学习黑板 |
-| `src/components/review-learning-blackboard.ts` | ~131 | 课后学习黑板；轻结构自然语言便签，只记录学习现场事实，不写模型指令，解耦中间应用与右侧同桌 |
-| `src/components/AISearchPanel.tsx` | ~740 | 搜索笔记面板；桌面端必须以右侧上下文 sidecar 呈现，移动端全屏 |
-| `src/components/mobile/MobileCollectionSheet.tsx` | ~430 | 收集菜单 / 历史收集 / 笔记总结；桌面端历史与笔记总结走右侧上下文抽屉，移动端保留 sheet |
-| `src/components/EchoCard.tsx` | ~209 | 回声卡，必须遵守设计系统 |
+> 行数每次 commit 都会变，不在此静态列出——查实时行数与超标清单跑 `make stats`。下表只保留不易变的架构注意点。
+
+| 文件 | 注意 |
+|------|------|
+| `src/app/(main)/app/page.tsx` | God File（按域分 6 阶段提取为 hooks + 子组件，详见 §3.6），改前先读 `src/app/DOMAIN.md` |
+| `src/components/SafeAITutor.tsx` | Tutor 入口分发：默认 `TutorAgentPanel`；负责把复习页/移动端/视频复习的启动问题、当前时间（秒）、选中资料、个人画像和应用学习动态适配到 agent context（M12 退役 `AITutor.tsx` 后精简） |
+| `src/components/Recorder.tsx` | 录音组件（已拆 3 子模块到 `recorder/`，含 mic/system/mixed 三档音源） |
+| `src/components/classroom/ClassroomCompanionPanel.tsx` | 课堂右栏同桌面板（header / 气泡 / 流式 / thinking / 输入栏）；M11 起基于 ChatBase 底座；课中 / 课后 starter 用会动的 Octo Buddy 像素章鱼 + 轻问题 chip 引导 |
+| `src/components/classroom/InlineAppCard.tsx` | 内联 app 承载卡（保存完整 AppExecutionResult，复用 AppRenderSurface / 应用矩阵 UI） |
+| `src/components/classroom/ClassroomLeftPanel.tsx` | 课堂左侧（list / recording 切换 + ActiveLessonPill + StickyStartBar） |
+| `src/hooks/useClassroomCompanion.ts` | 课堂同桌 hook：消费 `[MM:SS]` citations；M14.6 起 `<open_app:KEY/>` marker 合约已移除，结构化产物走前端 SkillChip 直接打开 |
+| `src/hooks/useOmniRealtimeCall.ts` | Qwen Omni realtime 语音通话 hook（语音同桌入口，独立 WebSocket，不走 /api/tutor） |
+| `src/app/api/tutor/agent/route.ts` | **M10 主入口**：mode-driven 单一 endpoint，AI SDK v6 streamText。M14.6 起所有 mode 纯对话（`tools = {}`），结构化产物由前端 SkillChip 直接打开；provider fallback StepFun→DeepSeek→Qwen；Qwen 注入 `enable_thinking=false` 抑制推理。详见 `src/app/api/tutor/DOMAIN.md` |
+| `src/app/api/tutor/route.ts` | Legacy SSE 路径（flag off 时仍可用，不要在它上面加新功能） |
+| `src/lib/prompts/tutor-prompts.ts` | `buildTutorSystemPrompt(mode, context, options)` ── 5 mode 唯一 prompt 源（M11.4 goal 双路径 + M13 word mode）；M14.6 已移除 `<open_app:KEY/>` marker 合约 |
+| `src/lib/tutor/classroom-agent-request.ts` | 课堂同桌打 `/api/tutor/agent` 的瘦身请求体构建（只带 recentFocus，不上传整节 transcript） |
+| `src/lib/services/llm-service.ts` | 统一 LLM 调用层（StepFun / DeepSeek / DashScope / Ark / Relay）；模型注册表在 `app.config.ts`，env 驱动 `pickAvailableModelId`，Qwen recommended=`qwen3.7-plus`（M13 改名，原 `Qwen3.6-Plus-A` 已废弃） |
+| `src/lib/utils/tutor-agent-provider.ts` | Tutor Agent provider 解析 + fallback：按请求模型/env 选 StepFun、DeepSeek、DashScope 或 OpenAI，强制 Chat Completions；`resolveTutorAgentProviderFallbacks` 在 primary 可重试失败时切 StepFun→DeepSeek→Qwen |
+| `src/lib/utils/ai-model-preference.ts` | 设置页模型偏好的 key 与 `auto` 解析契约 |
+| `src/lib/ui/copy.ts` | 用户面文案唯一真相源（COPY 对象 + bannedWords 校验） |
+| `src/lib/ai-native/app-catalog.ts` | Workshop 应用矩阵（7 类 ready），`WORKSHOP_APP_CATALOG` + `WorkshopAppKey` |
+| `src/app/api/video/import/route.ts` | 多平台导入管线（已拆 3 子模块） |
+| `src/lib/services/commonstack-echo-service.ts` | Echo LLM 调用，System Prompt 在此 |
+| `src/lib/services/workspace-echo-service.ts` | Echo 数据管线；CommonStack 新 schema 不返回 title，需从 takeaway / echo 生成标题后再进质量门 |
+| `src/lib/services/asr/audio-constraints.ts` | getUserMedia constraints 唯一真相源（AEC/NS/AGC），env 可覆盖 |
+| `src/lib/services/asr/post-edit.ts` | 低置信片段 LLM 校对（feature-flag `ASR_POST_EDIT_ENABLED`） |
+| `src/lib/services/classroom/recent-focus.ts` | 课堂同桌的最近 30s 窗口提取（纯 TS，可单测） |
+| `src/components/classroom/ClassroomLayout.tsx` | 课堂分栏；同桌只在真实录课 / 示例课听课态可见，空课堂隐藏右栏、Octo Buddy 和移动端问同学入口 |
+| `src/components/classroom/ClassroomHero.tsx` | 课堂零存量 Hero；居中首屏避免右侧空洞，录音来源 rail 直接露出麦克风 / 电脑声音 / 两路都录，示例课只是低门槛预览 |
+| `src/components/classroom/ClassroomRecordingView.tsx` | 课中视图；试听课播放 `/demo-audio.mp3`，由音频时间驱动转录渐进露出，结束后只显示总结卡和“结束这节课”入口，由上层切到课后复习页 / 应用矩阵 |
+| `src/components/classroom/demo-mindmap.ts` | 试听课静态结构树；随音频秒数生长，避免中间结构画布长期空态 |
+| `src/components/classroom/OctoBuddy.tsx` | Octo Buddy 像素 IP；Sprite 自带呼吸 / 听课 / 开心动画，悬浮球和右栏内嵌都复用它 |
+| `src/components/DesktopVideoReviewLayout.tsx` | 桌面端课后复习三栏布局：左=视频/音频证据 + 时间轴，中=学习工作区，右=同桌解释与复盘；视频默认放大证据栏，并持有课后学习黑板 |
+| `src/components/ReviewThreePaneLayout.tsx` | 课后复习可拖拽三栏容器；两条边界都可拖拽，学习区 / 同桌可折叠成 rail，左证据栏不自动折叠 |
+| `src/components/ReviewLearningWorkspace.tsx` | 课后中间学习工作区；承载完整 AppRenderSurface，闪卡切低亮度练习背景，并把测验/闪卡动态写入课后学习黑板 |
+| `src/components/review-learning-blackboard.ts` | 课后学习黑板；轻结构自然语言便签，只记录学习现场事实，不写模型指令，解耦中间应用与右侧同桌 |
+| `src/components/AISearchPanel.tsx` | 搜索笔记面板；桌面端必须以右侧上下文 sidecar 呈现，移动端全屏 |
+| `src/components/mobile/MobileCollectionSheet.tsx` | 收集菜单 / 历史收集 / 笔记总结；桌面端历史与笔记总结走右侧上下文抽屉，移动端保留 sheet |
+| `src/components/EchoCard.tsx` | 回声卡，必须遵守设计系统 |
 
 ---
 
@@ -556,6 +605,8 @@ src/
 - Sentry (`@sentry/nextjs@^10`) + pino (`^10`) + `p-retry` + `reconnecting-websocket`
 - Promptfoo + Vitest（src + server + eval 三套 config）
 - PM2 进程管理
+- **M12/M14.5 渲染与内容接入**：Shiki（代码高亮，`ChatCodeBlock`）/ Mermaid（图，`ChatMermaidBlock`）/ KaTeX + remark-math（数学公式）/ react-markdown + remark-gfm / mammoth（.docx）/ unpdf（PDF）/ youtubei.js（YouTube 导入）/ sharp（图像处理）
+- **基础设施工具**：SWR（数据请求，`lib/swr/`）/ ioredis（Redis，rate-limit / cache）/ nodemailer（邮件验证码）/ sonner（Toast）/ wavesurfer.js（音频波形）
 
 ---
 
@@ -564,14 +615,19 @@ src/
 | 文档 | 状态 | 说明 |
 |------|------|------|
 | `README.md` | ✅ | 产品哲学、技术栈、项目结构、能力清单、文档索引 |
-| `docs/UPGRADE_PLAN.md` | ✅ | M1-M9 路线图 + 业界最佳实践决策表 |
-| `CHANGELOG.md` | ✅ | 各 milestone release notes（M1-M3 已收录；M5+ 见 commit history） |
+| `docs/UPGRADE_PLAN.md` | ⚠️ | M1-M4 路线图 + 业界最佳实践决策表（M5+ 未补，AGENTS.md §3 摘要代替） |
+| `CHANGELOG.md` | ⚠️ | 停在 M11.5；M12/M13/M14/M14.5 见 commit history |
 | `docs/OBSERVABILITY.md` | ✅ | 可观测底座（pino + Sentry + track 埋点） |
 | `docs/ASR_PIPELINE.md` | ✅ | ASR 飞书妙记级工艺总图 |
 | `docs/TUTOR_AGENT.md` | ✅ | Tutor agent loop（Vercel AI SDK v6） |
 | `docs/ECHO_PRODUCT_DEFINITION.md` | ✅ | Echo 产品定义 source of truth |
+| `docs/APPLICATION_MATRIX_PRD.md` | ✅ | 应用矩阵产品定义 |
+| `docs/MODEL_REGISTRY_REFACTOR.md` | ✅ | 模型注册表重构记录 |
+| `docs/MOBILE_REFACTOR_PLAN.md` | ✅ | 移动端重构计划 |
 | `docs/SERVER_AGENT_HANDOFF_CAPTURE_V1.md` | ⚠️ | 产品定义准确，技术细节可能过时 |
 | `tests/eval/README.md` | ✅ | Eval harness 设计原则 + 数据集 + grader |
 | `项目开发文档/提示词设计哲学.md` | ✅ | Less Structure, More Intelligence |
+| `roadmap/v3.0-virality-agent.md` | ✅ | v3.0 北极星（场景上下文可分享、Agent 是裂变载体） |
+| `roadmap/v2.1-cross-browser-sync-gap.md` | ✅ | 跨设备同步架构缺口（已确认，待修） |
 | `roadmap/多模态Agent技术架构路线2026-2030.md` | ✅ | 长期技术路线 |
 | `skills/*/SKILL.md` | ✅ | Agent 工作规范（架构执行 / 变更流程 / 代码审查 / 系统化调试） |

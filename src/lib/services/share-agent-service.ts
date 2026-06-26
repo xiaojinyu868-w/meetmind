@@ -28,7 +28,7 @@ const log = createLogger('share-agent-service');
 
 /**
  * 场景层产物的种类。受控集合——客户端不能塞任意值。
- * 注意：'flashcards' 和 'study-report' 默认是个人层，但用户在分享时
+ * 注意：'flashcards' 默认是个人层，但用户在分享时
  * 显式勾选可以放进来；'chat-only' 表示纯对话分享（无产物）。
  */
 export const SHARE_ARTIFACT_KINDS = [

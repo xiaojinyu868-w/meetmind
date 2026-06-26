@@ -41,27 +41,6 @@ export function isQwenModel(modelId: string): boolean {
   return /^qwen/i.test(modelId);
 }
 
-export function shouldUseNativeTutorTools(modelId: string): boolean {
-  // 不暴露 native tools 的三类模型：
-  //
-  // 1. **DeepSeek thinking 模型**：要求 provider-specific 的 reasoning_content
-  //    在 tool call 之后回写；AI SDK 的 OpenAI-compatible adapter 不会 round-trip
-  //    这个字段，会在工具回调后续写时崩。
-  //
-  // 2. **StepFun（step-*）**：模型本身够快（号称 400 tok/s），但 6 个 tutor tool
-  //    description 加起来 ~700 字，会在 prefill 阶段拖慢首包；切到 marker 链路
-  //    （`<open_app:KEY/>` + 前端 `/api/apps/execute`）后，TTFT 显著下降，且复用
-  //    了课堂同桌已经验证过的同一条产品链路。
-  //
-  // 3. **Qwen3.x thinking 模型**（M13 加）：qwen3.7-plus 等是 thinking 模型，
-  //    虽然我们透传 enable_thinking=false 关闭了推理，但 tool call + 中文 +
-  //    thinking 模式三者的兼容性仍是黑盒（实测偶发首 chunk 丢失）。统一走 marker
-  //    链路，结构化产物自然落到 `<open_app:KEY/>` + /api/apps/execute。
-  //
-  // 对这三类，结构化产物都走 `<open_app:KEY/>` marker，由前端拦截后开窗或嵌入。
-  return !isDeepSeekModel(modelId) && !isStepFunModel(modelId) && !isQwenModel(modelId);
-}
-
 function isStepFunBaseUrl(baseURL: string): boolean {
   return /api\.stepfun\.com/i.test(baseURL);
 }

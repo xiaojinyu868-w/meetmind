@@ -62,6 +62,12 @@ export class DashScopeASRClient {
   private isReady = false;
   private audioQueue: ArrayBuffer[] = [];
   private static readonly AUDIO_QUEUE_MAX_SIZE = 500;
+  // 客户端 → ASR-proxy 这一段理论不限速，但 ASR-proxy → DashScope 有限速（2560KB/s）。
+  // 累积的 chunks 在 ready/reconnect 后同步 flush 会让 ASR-proxy 瞬时大量 send → DashScope 1007。
+  // 客户端也加节流，避免 ASR-proxy 缓冲瞬时过载。
+  private static readonly FLUSH_BATCH_SIZE = 60;
+  private static readonly FLUSH_INTERVAL_MS = 100;
+  private isFlushing = false;
 
   private sessionStartTime = 0;
 
@@ -428,12 +434,31 @@ export class DashScopeASRClient {
   }
 
   private flushAudioQueue(): void {
-    while (this.audioQueue.length > 0) {
-      const buffer = this.audioQueue.shift();
-      if (buffer && this.ws && this.ws.readyState === WebSocket.OPEN) {
-        this.ws.send(buffer);
-      }
+    if (this.isFlushing) return;
+    if (this.audioQueue.length === 0) return;
+    this.isFlushing = true;
+    this.flushNextAudioBatch();
+  }
+
+  private flushNextAudioBatch(): void {
+    if (!this.isFlushing) return;
+    if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
+      this.isFlushing = false;
+      return;
     }
+
+    const batchSize = Math.min(DashScopeASRClient.FLUSH_BATCH_SIZE, this.audioQueue.length);
+    for (let i = 0; i < batchSize; i += 1) {
+      const buffer = this.audioQueue.shift();
+      if (buffer) this.ws.send(buffer);
+    }
+
+    if (this.audioQueue.length === 0) {
+      this.isFlushing = false;
+      return;
+    }
+
+    setTimeout(() => this.flushNextAudioBatch(), DashScopeASRClient.FLUSH_INTERVAL_MS);
   }
 
   /**

@@ -1,14 +1,13 @@
-export type InlineAppKey = 'quiz' | 'flashcards' | 'cheatsheet' | 'mindmap' | 'study-report';
+export type InlineAppKey = 'quiz' | 'flashcards' | 'cheatsheet' | 'mindmap';
 
 const INLINE_APP_KEYS = new Set<InlineAppKey>([
   'quiz',
   'flashcards',
   'cheatsheet',
   'mindmap',
-  'study-report',
 ]);
 
-const IN_CLASS_BLOCKED_INLINE_APP_KEYS = new Set<InlineAppKey>(['flashcards', 'quiz', 'study-report']);
+const IN_CLASS_BLOCKED_INLINE_APP_KEYS = new Set<InlineAppKey>(['flashcards', 'quiz']);
 
 const OPEN_APP_MARKER = /<open_app:\s*([a-z0-9_-]+)\s*\/?\s*>/gi;
 
@@ -16,7 +15,7 @@ export function isInlineAppKey(value: string | null | undefined): value is Inlin
   return Boolean(value && INLINE_APP_KEYS.has(value as InlineAppKey));
 }
 
-export function isInClassBlockedInlineAppKey(value: string | null | undefined): value is Extract<InlineAppKey, 'flashcards' | 'quiz' | 'study-report'> {
+export function isInClassBlockedInlineAppKey(value: string | null | undefined): value is Extract<InlineAppKey, 'flashcards' | 'quiz'> {
   return Boolean(value && IN_CLASS_BLOCKED_INLINE_APP_KEYS.has(value as InlineAppKey));
 }
 

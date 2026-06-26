@@ -72,13 +72,13 @@ classroom/ ← hooks/useClassroomCompanion.ts（对话 hook 消费 composeFirstH
 - `linkedMaterials` 松绑定：同日期创建的非 audio/video sourceItems 计数
 - `composeFirstHello` 先静态枚举，未来可考虑接 LLM 生成但一定要保持 ≤30 字；`lessons.length === 0` 必须返回 `null`，零存量态由 Hero 承接，不让同桌无上下文主动发言
 - 同桌消息通过 preferences 表 `classroom_companion_messages:<sessionId>` key 按课持久化，最多保留 50 条，debounced 500ms 写回
-- 同桌内联应用保存完整 `AppExecutionResult`，通过 `AppRenderSurface` 复用课后应用矩阵 UI；`payload` 只做旧历史兼容；课中只开放 `mindmap / cheatsheet`，历史里已有的 `flashcards / quiz / study-report` 在 listening 态隐藏
+- 同桌内联应用保存完整 `AppExecutionResult`，通过 `AppRenderSurface` 复用课后应用矩阵 UI；`payload` 只做旧历史兼容；课中只开放 `mindmap / cheatsheet`，历史里已有的 `flashcards / quiz` 在 listening 态隐藏
 - 课中同桌首 token 前不在主消息流造一句“像回答的话”；只在输入区给 `正在回答` 状态，真实内容到达后才进入消息流
 - 右侧同桌的引导要轻：优先用 Octo Buddy 像素章鱼 + 2-3 个自然问题 chip（点了就发送），不要用大面积能力介绍卡教育用户
 - 预感是 ambient signal：只进入 header 轻入口，不进入主消息流、不影响空态和输入入口
 - 录课中关键概念用客户端启发式（2-6 字中文词 + 停用词过滤），不调用后端，追求"感知在场"而非语义精准
 - 移动端（<lg）右侧同桌面板只在录课 / 示例课听课态提供底部"问同学"按钮触发全屏 sheet；空课堂不展示该入口
-- 课中目标是“跟上老师正在讲什么”；闪卡 / 测验 / 学习报告 / 主动回忆训练放在课后复习与应用矩阵，不抢课堂主叙事
+- 课中目标是"跟上老师正在讲什么"；闪卡 / 测验 / 主动回忆训练放在课后复习与应用矩阵，不抢课堂主叙事
 - Demo 不能伪装成“完整课已经听完”的课中现场；如果进入 recording 视图，必须由真实 `/demo-audio.mp3` 播放驱动转录渐进露出，自动播放被浏览器拦截时必须提供“播放声音”按钮；停止按钮在未播完时退出 demo，音频自然结束后则进入课后复习页 / 应用矩阵
 - 英文试听课默认开启 EN→中翻译，但这是会话默认，不应强行覆盖用户手动切换后的选择
 

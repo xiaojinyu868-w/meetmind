@@ -302,7 +302,6 @@ export const flashcardsPlugin: AppPlugin = {
           })),
         },
       },
-      nextSuggestedPlugins: ['quiz-arena', 'knowledge-cards'],
       raw: {
         generatedAt: tools.now(),
       },

@@ -61,60 +61,6 @@ function DraftPreparingState() {
   );
 }
 
-function GeneratingProgress({ elapsed }: { elapsed: number }) {
-  const steps = [
-    { label: '整理你的生成要求', threshold: 0 },
-    { label: '构思视觉布局', threshold: 4 },
-    { label: '生成视觉元素', threshold: 10 },
-    { label: '渲染高清图片', threshold: 22 },
-    { label: '优化细节输出', threshold: 38 },
-  ];
-  const currentStep = Math.max(0, steps.filter((step) => elapsed >= step.threshold).length - 1);
-
-  return (
-    <div className="space-y-5">
-      <div className="flex flex-col items-center gap-3">
-        <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-blue-50">
-          <Loader2 size={24} strokeWidth={2} className="animate-spin text-blue-600" />
-        </div>
-        <div className="text-center">
-          <p className="text-sm font-semibold text-slate-800">正在生成图片</p>
-          <p className="mt-0.5 text-xs text-slate-400">AI 正在根据你的要求创作信息图</p>
-        </div>
-        <span className="rounded-full bg-blue-50 px-3 py-1 text-xs font-medium text-blue-600">{elapsed}s</span>
-      </div>
-      <div className="mx-auto max-w-[240px] space-y-2">
-        {steps.map((step, index) => {
-          const done = index < currentStep;
-          const active = index === currentStep;
-          return (
-            <div key={step.label} className="flex items-center gap-2.5">
-              <div
-                className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full transition-all ${
-                  done
-                    ? 'bg-[#1C1B19] text-white'
-                    : active
-                      ? 'animate-pulse bg-blue-500 text-white'
-                      : 'bg-slate-100 text-slate-400'
-                }`}
-              >
-                {done ? <Check size={12} strokeWidth={2.5} /> : <span className="text-[10px] font-bold">{index + 1}</span>}
-              </div>
-              <span
-                className={`text-xs transition-colors ${
-                  done ? 'text-[#1C1B19] line-through' : active ? 'font-semibold text-blue-700' : 'text-slate-400'
-                }`}
-              >
-                {step.label}
-              </span>
-            </div>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
-
 /* ------------------------------------------------------------------ */
 /*  Main Component                                                     */
 /* ------------------------------------------------------------------ */
@@ -131,7 +77,10 @@ export function InfographicWindow({
   const payload = useMemo(() => (result?.render?.payload || {}) as RenderPayload, [result?.render?.payload]);
   const draftFromRaw = (result?.raw?.infographicDraft || null) as DraftPayload | null;
   const aiDraft = useMemo(() => payload.draft || draftFromRaw || null, [payload.draft, draftFromRaw]);
-  const imageUrl = payload.image?.imageUrl || (result?.raw?.infographicImageUrl as string | undefined) || '';
+  const imageUrl =
+    payload.image?.imageUrl ||
+    (result?.raw?.infographicImageUrl as string | undefined) ||
+    (typeof window !== 'undefined' ? sessionStorage.getItem(`mm_infographic_img:${sessionId}`) || '' : '');
 
   const [language, setLanguage] = useState('中文（简体）');
   const [orientation, setOrientation] = useState<'landscape' | 'portrait' | 'square'>(
@@ -148,7 +97,6 @@ export function InfographicWindow({
   const [imageEnabled, setImageEnabled] = useState(false);
   const [checking, setChecking] = useState(true);
   const [generating, setGenerating] = useState(false);
-  const [genElapsed, setGenElapsed] = useState(0);
   const [previewMode, setPreviewMode] = useState<'fit' | 'full'>('fit');
 
   useEffect(() => {
@@ -170,15 +118,6 @@ export function InfographicWindow({
       cancelled = true;
     };
   }, []);
-
-  useEffect(() => {
-    if (!generating) {
-      setGenElapsed(0);
-      return;
-    }
-    const timer = setInterval(() => setGenElapsed((value) => value + 1), 1000);
-    return () => clearInterval(timer);
-  }, [generating]);
 
   useEffect(() => {
     if (aiDraft?.suggestedScene) setScenePreset(aiDraft.suggestedScene);
@@ -293,6 +232,12 @@ export function InfographicWindow({
         if (!response.ok || !data?.ok || !data.imageUrl) {
           throw new Error(data?.error || '生图失败');
         }
+
+        // imageUrl 是 base64 data URL，会被 localStorage 缓存的 stripLargeInlineData 剥空，
+        // 单独存 sessionStorage，让"查看图片"弹窗和独立页恢复都能读回完整图片（同 tab 有效）。
+        try {
+          sessionStorage.setItem(`mm_infographic_img:${sessionId}`, data.imageUrl);
+        } catch { /* quota exceeded — 查看时回退到独立页重新生成 */ }
 
         const next = buildSyntheticResult({
           baseResult,
@@ -452,10 +397,8 @@ export function InfographicWindow({
 
   if (generating) {
     return (
-      <section className="flex h-full items-center justify-center" data-testid="infographic-window">
-        <div className="flex min-h-80 w-full max-w-md items-center justify-center rounded-2xl border border-slate-200 bg-white shadow-sm">
-          <GeneratingProgress elapsed={genElapsed} />
-        </div>
+      <section className="flex h-full items-center justify-center px-4" data-testid="infographic-window">
+        <p className="text-sm text-ink-muted">正在生成信息图，完成后自动显示</p>
       </section>
     );
   }

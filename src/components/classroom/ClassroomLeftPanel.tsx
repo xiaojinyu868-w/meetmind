@@ -113,6 +113,8 @@ export interface ClassroomLeftPanelProps {
    * 由 ClassroomView 从 onOpenApp 透传下来。
    */
   onOpenApp?: (appKey: WorkshopAppKey) => void;
+  /** 重命名课程标题 */
+  onRenameLesson?: (id: string, title: string) => void;
 }
 
 function groupLessons(lessons: Lesson[]): Array<{ label: string; items: Lesson[] }> {
@@ -364,6 +366,7 @@ function ListView({
   onStop,
   audioSource,
   onChangeAudioSource,
+  onRenameLesson,
 }: {
   activeLesson: Lesson | null;
   activeSeconds: number;
@@ -376,6 +379,7 @@ function ListView({
   onStop: (lessonId?: string) => void;
   audioSource?: RecorderAudioSource;
   onChangeAudioSource?: (source: RecorderAudioSource) => void;
+  onRenameLesson?: (id: string, title: string) => void;
 }) {
   const isTrulyEmpty = !activeLesson && groups.length === 0;
 
@@ -421,6 +425,7 @@ function ListView({
                       key={l.id}
                       lesson={l}
                       onClick={() => onOpen(l.id)}
+                      onRename={onRenameLesson}
                       /* 最新一张（第一组第一张）用 featured 版式，有更大的呼吸 */
                       featured={groupIdx === 0 && itemIdx === 0 && l.status === 'ready'}
                     />
@@ -653,6 +658,7 @@ export function ClassroomLeftPanel({
   audioSource,
   onChangeAudioSource,
   onOpenApp,
+  onRenameLesson,
 }: ClassroomLeftPanelProps) {
   const { activeLesson, restLessons } = useMemo(() => {
     let active: Lesson | null = null;
@@ -713,6 +719,7 @@ export function ClassroomLeftPanel({
             onStop={onStopRecording}
             audioSource={audioSource}
             onChangeAudioSource={onChangeAudioSource}
+            onRenameLesson={onRenameLesson}
           />
         ) : (
           <ClassroomRecordingView

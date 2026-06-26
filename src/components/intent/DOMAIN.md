@@ -23,8 +23,9 @@
 
 | 入口 | 触发 | sessionHint |
 |---|---|---|
-| 首次进入 `/app` | `showOnboarding` 触发条件保持原 onboarding 逻辑（已认证 + 未完成 + 非游客 + 未本会话跳过） | `'first-time'` |
-| 设置页常驻 | `(auth)/settings/page.tsx` 的「聊聊你想要的」section | `undefined` |
+| 设置页常驻 | `(auth)/settings/page.tsx` 的「关于你」/「聊聊你想要的」section（4 个触发点：「和教练再聊聊(更新画像)」/「和教练聊一聊」/「和教练再聊一会」） | `undefined` |
+
+> M14.6 起移除首登强制整页替换：新注册用户直接进 `/app` 主页面（工具心智），引导教练只在设置页出现。自然引导到设置页的入口待后续设计。
 
 ## 数据流
 

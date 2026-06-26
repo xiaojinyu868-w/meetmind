@@ -36,6 +36,9 @@ import type {
   ClassCheckHighlight,
   ClassCheckQuestionData,
 } from '@/app/api/class-check/plan/route';
+import { createLogger } from '@/lib/logger';
+
+const log = createLogger('class-check');
 
 const CLASS_CHECK_ENABLED_KEY = 'settings_class_check_enabled';
 const SEEK_THRESHOLD_MS = 5000;
@@ -307,8 +310,7 @@ export function useClassCheck({
           return next;
         });
 
-        console.log('[class-check] checkpoint %d "%s" questions ready (%d)',
-          checkpointIndex, checkpoint.topic, questions.length);
+        log.debug(`[class-check] checkpoint ${checkpointIndex} "${checkpoint.topic}" questions ready (${questions.length})`);
       } catch (err) {
         if ((err as { name?: string }).name === 'AbortError') return;
         console.warn('[class-check] checkpoint %d question fetch failed:', checkpointIndex, err);
@@ -340,8 +342,7 @@ export function useClassCheck({
     }
     if (queue.length === 0) return;
 
-    console.log('[class-check] preheating %d checkpoints questions (concurrency=%d)',
-      queue.length, QUESTION_CONCURRENCY);
+    log.debug(`[class-check] preheating ${queue.length} checkpoints questions (concurrency=${QUESTION_CONCURRENCY})`);
 
     let cursor = 0;
     const worker = async () => {
@@ -394,16 +395,14 @@ export function useClassCheck({
     // 先检查 localStorage 缓存
     const cached = readCachedPlan(planRequestKey);
     if (cached) {
-      console.log('[class-check] plan loaded from cache, key=%s, %d checkpoints, %d highlights',
-        planRequestKey, cached.checkpoints.length, cached.highlights?.length || 0);
+      log.debug(`[class-check] plan loaded from cache, key=${planRequestKey}, ${cached.checkpoints.length} checkpoints, ${cached.highlights?.length || 0} highlights`);
       setIsPlanLoading(false);
       applyPlan(cached, true);
       return;
     }
 
     const transcriptSnapshot = segmentsRef.current;
-    console.log('[class-check] requesting plan skeleton, key=%s, segments=%d',
-      planRequestKey, transcriptSnapshot.length);
+    log.debug(`[class-check] requesting plan skeleton, key=${planRequestKey}, segments=${transcriptSnapshot.length}`);
 
     setIsPlanLoading(true);
     setPlan(null);
@@ -455,10 +454,9 @@ export function useClassCheck({
         }
         const data = await response.json() as { ok?: boolean; plan?: ClassCheckPlan; error?: string };
         if (data.ok && data.plan) {
-          console.log('[class-check] plan skeleton received: %d checkpoints, %d highlights',
-            data.plan.checkpoints.length, data.plan.highlights?.length || 0);
+          log.debug(`[class-check] plan skeleton received: ${data.plan.checkpoints.length} checkpoints, ${data.plan.highlights?.length || 0} highlights`);
           data.plan.checkpoints.forEach((cp, i) => {
-            console.log('[class-check]   checkpoint %d: "%s" at %dms', i, cp.topic, cp.triggerMs);
+            log.debug(`[class-check]   checkpoint ${i}: "${cp.topic}" at ${cp.triggerMs}ms`);
           });
           applyPlan(data.plan, false);
         } else {
@@ -559,7 +557,7 @@ export function useClassCheck({
 
     // 题目尚未就绪 —— 等一下，通常预热已完成
     if (checkpoint.questions.length === 0) {
-      console.log('[class-check] checkpoint %d reached but questions not ready, waiting...', nextIdx);
+      log.debug('[class-check] checkpoint %d reached but questions not ready, waiting...', nextIdx);
       triggerLockRef.current = true;
       void (async () => {
         try {
@@ -579,8 +577,7 @@ export function useClassCheck({
     }
 
     // 到达触发点 → 直接暂停 + 弹题
-    console.log('[class-check] checkpoint %d "%s" reached at %dms, pausing + showing quiz',
-      nextIdx, checkpoint.topic, currentTimeMs);
+    log.debug(`[class-check] checkpoint ${nextIdx} "${checkpoint.topic}" reached at ${currentTimeMs}ms, pausing + showing quiz`);
 
     enterCheckActive(nextIdx);
   }, [currentTimeMs, enabled, isPlaying, isCheckActive, plan, checkpointStatuses, checkpointQuestionStates, pendingCheckpointIdx, ensureCheckpointQuestions, enterCheckActive]);
@@ -620,7 +617,7 @@ export function useClassCheck({
       return;
     }
 
-    console.log('[class-check] user accepted checkpoint %d "%s"', idx, checkpoint.topic);
+    log.debug(`[class-check] user accepted checkpoint ${idx} "${checkpoint.topic}"`);
 
     if (checkpoint.questions.length === 0) {
       // 题目还没好，等一下再进入
@@ -645,7 +642,7 @@ export function useClassCheck({
   const dismissPendingCheckpoint = useCallback(() => {
     if (pendingCheckpointIdx < 0) return;
 
-    console.log('[class-check] user dismissed checkpoint %d', pendingCheckpointIdx);
+    log.debug('[class-check] user dismissed checkpoint %d', pendingCheckpointIdx);
 
     setCheckpointStatuses((prev) => {
       const next = [...prev];

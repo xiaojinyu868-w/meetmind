@@ -41,13 +41,10 @@ page.tsx → /api/apps/execute → context-builder → registry → plugin.execu
 | `mindmap.plugin.ts` | 372 | 思维导图（含 tree↔markdown 转换） |
 | `flashcards.plugin.ts` | 308 | 闪卡 |
 | `quiz.plugin.ts` | 275 | 测验 |
-| `knowledge-cards.plugin.ts` | 188 | 知识卡片 |
-| `confusion-drill.plugin.ts` | 128 | 困惑点训练 |
-| `review-plan.plugin.ts` | 78 | 复习计划 |
-| `class-check.plugin.ts` | 264 | 随堂检验（智能版，基于知识点结构） |
-| `study-report.plugin.ts` | 220 | 听课报告（家长视角，专注度+掌握度） |
+| `class-check.plugin.ts` | 264 | 随堂检验（智能版，基于知识点结构；视频内触发，不在 catalog） |
+| `cheatsheet.plugin.ts` | — | 速查表 |
 | `fallback.plugin.ts` | 43 | 兜底 |
-| `index.ts` | 29 | 插件注册 |
+| `index.ts` | — | 插件注册（7 个插件） |
 
 ## 新增插件步骤
 

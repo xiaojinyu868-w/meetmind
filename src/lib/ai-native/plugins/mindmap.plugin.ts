@@ -412,7 +412,6 @@ export const mindmapPlugin: AppPlugin = {
           children: treeChildren,
         },
       },
-      nextSuggestedPlugins: ['quiz-arena'],
       raw: {
         generatedAt: tools.now(),
       },

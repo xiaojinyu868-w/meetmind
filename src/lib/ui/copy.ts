@@ -177,20 +177,6 @@ export const COPY = {
     inlineSource: '已放进对话',
   },
 
-  studyReport: {
-    label: '学习报告',
-    defaultTitle: '这节课的学习报告',
-    emptyLetter: '这节课的结构还在整理中。',
-    focusTitle: '先抓住这一层',
-    structureTitle: '课堂知识点',
-    conversationTitle: '可以这样聊',
-    nextTitle: '下一步',
-    confusionTitle: '困惑点观察',
-    emptyTopics: '这节课的结构还在整理中。',
-    topicCount: (count: number): string => `${count} 个知识点`,
-    remainingTopics: (count: number): string => `另外 ${count} 个`,
-  },
-
   /**
    * 「聊聊你想要的」—— 用户和 AI 教练对话梳理目标的入口。
    * 是 v3.0 信息流哲学落地的第一个产品入口（替代旧硬编码 LearnerOnboarding 表单）。

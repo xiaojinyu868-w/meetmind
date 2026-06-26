@@ -111,6 +111,9 @@ export interface SourceImportDeps {
 
   /** ASR context hint (manual input). */
   asrContextHint: string;
+
+  /** User's B站 Cookie from settings (settings_bilibiliCookie preference). */
+  biliCookie: string;
 }
 
 export interface SourceImportRefs {
@@ -169,6 +172,39 @@ export interface SourceImportReturn {
   importComposerVideoLink: (url: string) => Promise<void>;
 }
 
+// ── Error mapping ──
+
+const VIDEO_IMPORT_ERROR_MESSAGES: Record<string, string> = {
+  BILI_COOKIE_EXPIRED: 'B站登录已过期，请在设置里更新 Cookie',
+  BILI_AUDIO_DOWNLOAD_FORBIDDEN: 'B站拒绝了匿名请求，请在设置里配置 B站 Cookie',
+  BILI_AUDIO_INCOMPLETE: '音频下载不完整，可能是网络限速，稍后重试',
+  BILI_PLAYURL_FAILED: 'B站拒绝了音频请求，请在设置里配置 Cookie',
+  BILI_URL_PARSE_FAILED: 'B站链接解析失败，请检查链接是否正确',
+  BILI_VIEW_META_FAILED: 'B站视频信息获取失败，稍后重试',
+  BILI_API_ERROR: 'B站接口返回异常，可能是风控限制，请配置 Cookie',
+  BILI_NETWORK_ERROR: 'B站网络请求失败，稍后重试',
+  BILI_SUBTITLE_FETCH_FAILED: 'B站字幕获取失败，稍后重试',
+  YTDLP_UNAVAILABLE: '服务器未安装 yt-dlp，请联系管理员',
+  YTDLP_DOWNLOAD_FAILED: '视频下载失败，稍后重试',
+  ASR_API_KEY_MISSING: '转写服务未配置，请联系管理员',
+  ASR_PUBLIC_HOST_MISSING: '转写服务地址未配置，请联系管理员',
+  FFMPEG_NOT_FOUND: '服务器未安装 ffmpeg，请联系管理员',
+  UNSUPPORTED_PLATFORM: '当前节点不支持该平台视频',
+  INVALID_VIDEO_URL: '无法识别的视频链接',
+  MISSING_VIDEO_URL: '缺少视频链接',
+  VIDEO_URL_UNSAFE: '不允许访问该视频地址',
+};
+
+function mapVideoImportError(code: string | undefined, fallbackError: string | undefined): string {
+  if (code && VIDEO_IMPORT_ERROR_MESSAGES[code]) {
+    return VIDEO_IMPORT_ERROR_MESSAGES[code];
+  }
+  if (fallbackError && fallbackError.trim()) {
+    return fallbackError.trim();
+  }
+  return '这条链接先收下了，稍后再试试';
+}
+
 // ── Hook ──
 
 export function useSourceImport(
@@ -182,6 +218,7 @@ export function useSourceImport(
     updateSourceItem,
     appendSupportSource,
     asrContextHint,
+    biliCookie,
   } = deps;
 
   const { segmentsRef, previewObjectUrlsRef, sourceFileInputRef } = refs;
@@ -672,6 +709,7 @@ export function useSourceImport(
           url,
           mode: 'turbo',
           language: 'zh',
+          biliCookie: biliCookie || undefined,
         }),
       });
 
@@ -680,6 +718,8 @@ export function useSourceImport(
       const payload = await readJsonApiResponse<{
         success?: boolean;
         error?: string;
+        code?: string;
+        detail?: string;
         sourceMode?: ImportedVideoResult['sourceMode'];
         trace?: ImportedVideoSource['importTrace'];
         source?: Partial<ImportedVideoSource>;
@@ -694,7 +734,12 @@ export function useSourceImport(
       }>(response, '链接解析失败');
 
       if (!response.ok || !payload.success) {
-        throw new Error(payload.error || '链接解析失败');
+        const friendlyMessage = mapVideoImportError(payload.code, payload.error);
+        updateSourceItem(targetSourceId, {
+          status: 'failed',
+          statusText: friendlyMessage,
+        });
+        return false;
       }
 
       const segments = normalizeImportedVideoSegments(payload);
@@ -705,7 +750,7 @@ export function useSourceImport(
           mediaUrl: payload.source?.playableUrl || detected?.playableUrl || url,
           attachmentUrl: payload.source?.originalUrl || url,
           status: 'failed',
-          statusText: '这条链接先收下了，稍后再试试',
+          statusText: '导入成功但没听到内容，稍后再试试',
         });
         return false;
       }
@@ -739,11 +784,12 @@ export function useSourceImport(
       });
 
       return true;
-    } catch {
+    } catch (err) {
       clearProgressTimers();
+      const message = err instanceof Error ? err.message : '导入失败';
       updateSourceItem(targetSourceId, {
         status: 'failed',
-        statusText: '这条链接先收下了，稍后再试试',
+        statusText: message,
       });
       return false;
     } finally {

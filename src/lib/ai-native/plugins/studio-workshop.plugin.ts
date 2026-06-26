@@ -357,8 +357,12 @@ export const studioWorkshopPlugin: AppPlugin = {
             detailLevel: infographicDraft.suggestedDetailLevel,
             scenePreset: infographicDraft.suggestedScene,
           });
+          // 写服务端文件返回 HTTP URL——base64 data URL 太大，进 localStorage 会被
+          // stripLargeInlineData 剥空、进分享 snapshotJson 也不可靠（分享页没图）。
+          // 动态 import 避免客户端 bundle fs。
+          const { persistInfographicImage } = await import('@/lib/services/infographic-image-storage');
           infographicImage = {
-            imageUrl: `data:${imgResult.mimeType};base64,${imgResult.base64}`,
+            imageUrl: persistInfographicImage(imgResult.base64, imgResult.mimeType, imgResult.requestId || 'infographic'),
             requestId: imgResult.requestId,
             model: imgResult.model,
           };

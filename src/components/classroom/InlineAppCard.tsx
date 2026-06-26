@@ -61,7 +61,6 @@ const INLINE_SURFACE_CLASS: Record<InlineAppKey, string> = {
   flashcards: 'h-[520px] bg-[#14110D]',
   mindmap: 'h-[560px] bg-white p-2',
   cheatsheet: 'h-[560px] bg-canvas',
-  'study-report': 'max-h-[680px] min-h-[440px] bg-canvas',
 };
 
 function renderModeForInline(appKey: InlineAppKey): AppRenderMode {

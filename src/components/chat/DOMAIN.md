@@ -1,6 +1,6 @@
 # Chat 底座 — DOMAIN.md
 
-> M11 重构：把全应用 9 个对话面板的"输入条 / 消息流 / 流式协议 / 文件上传"统一到一个底座。
+> M11 重构（M13 起 5 面板 100% 收口）：把全应用 5 个对话面板的"输入条 / 消息流 / 流式协议 / 文件上传"统一到一个底座。
 
 ## 设计契约（"薄底座 + 厚适配"）
 
@@ -19,13 +19,18 @@ chat/
 ├── ChatComposer.tsx                # 输入条（mic / file / call / send / stop）
 ├── ChatRenderer.tsx                # 流式 markdown 渲染（marker pipeline）
 ├── ChatThinkingStrip.tsx           # 等待态气泡
+├── ChatCodeBlock.tsx               # Shiki 代码高亮（M12）
+├── ChatImageLightbox.tsx           # 图片灯箱（M12）
+├── ChatMermaidBlock.tsx            # Mermaid 图渲染（M14.5）
 ├── hooks/
 │   ├── useChatComposer.ts          # 草稿 + IME + 自适应高度 + 快捷键
 │   ├── useChatFileUpload.ts        # parseFileForChat + 拖拽 + 粘贴 + 多文件并发
 │   └── useAutoFollowScroll.ts      # 用户上滑停止跟随 + 回到最新按钮
 └── markers/
     ├── collectMessageText.ts       # AI SDK v6 UIMessage → 文本
-    └── extractIntentSummary.ts     # ---我想要的---...---结束--- 解析
+    ├── copyMessageSmart.ts         # 智能复制（markdown / 纯文本双格式）
+    ├── extractIntentSummary.ts     # ---我想要的---...---结束--- 解析
+    └── extractIntentBio.ts         # M11.4 bio（headline + detail）解析
 ```
 
 ## 标准 adapter 形态
@@ -103,18 +108,18 @@ export function MyChatAdapter({ sessionId, authToken, ... }) {
 
 | Adapter | 路径 | mode | variant | 备注 |
 |---|---|---|---|---|
-| `IntentDialog` | `components/intent/IntentDialog.tsx` | `goal` | `glass` | 沉浸式 octo blur 背景；marker=`intent-summary` |
-| `TutorAgentPanel` | `components/tutor/TutorAgentPanel.tsx` | `review` / `in-class` | `paper` | 持久化到 `conversationService`；inline app；时间戳跳转 |
-| `ClassroomCompanionPanel` | `components/classroom/ClassroomCompanionPanel.tsx` | `in-class` | `paper` | TODO 下次迁 |
-| `SharedAgentChat` | `components/share/SharedAgentChat.tsx` | `shared` | `paper` | TODO 下次迁；shareToken 认证 |
-| `WordExplainer` | `components/WordExplainer.tsx` | `review` | `minimal` | TODO 下次迁；浮窗形态 |
+| `IntentDialog` | `components/intent/IntentDialog.tsx` | `goal` | `glass` | 沉浸式 octo blur 背景；marker=`intent-summary`；M11.4 bio 双 marker |
+| `TutorAgentPanel` | `components/tutor/TutorAgentPanel.tsx` | `review` / `in-class` | `paper` | 持久化到 `conversationService`；inline app；时间戳跳转；M11 迁 |
+| `ClassroomCompanionPanel` | `components/classroom/ClassroomCompanionPanel.tsx` | `in-class` | `paper` | M14/M14.5 迁；Octo Buddy chip + inline app |
+| `SharedAgentChat` | `app/share/[token]/SharedAgentChat.tsx` | `shared` | `paper` | M11.5 迁；shareToken 认证 + 隐私铁律 |
+| `WordExplainer` | `components/WordExplainer.tsx` | `word` | `minimal` | M13 迁；选词解释浮窗 |
 
-## 退役清单（V2）
+## 退役清单（M12 已完成）
 
-- `useSimpleSSEStream` → 由 useChat（AI SDK v6）取代
-- `/api/chat` route → 合并到 `/api/tutor/agent`
-- `AITutor.tsx`（2400 行 legacy） → 删
-- `AIChat.tsx`（独立栈） → 删
+- `useSimpleSSEStream` → 由 useChat（AI SDK v6）取代 ✓
+- `/api/chat` route → 合并到 `/api/tutor/agent` ✓
+- `AITutor.tsx`（2400 行 legacy） → 删 ✓（M12）
+- `AIChat.tsx`（独立栈） → 删 ✓（M12）
 
 ## 设计原则（铁律）
 
@@ -127,8 +132,9 @@ export function MyChatAdapter({ sessionId, authToken, ... }) {
 ## V2 路线图（不阻塞 V1 deploy）
 
 - 虚拟滚动（react-virtuoso）—— 长对话 >50 条
-- Mermaid 渲染 —— lazy-load
-- Shiki 代码高亮 —— 取代 paper-warm 简单块
+- ~~Mermaid 渲染~~ ✓ 已完成（M14.5，`ChatMermaidBlock`）
+- ~~Shiki 代码高亮~~ ✓ 已完成（M12，`ChatCodeBlock`）
+- ~~图片 lightbox~~ ✓ 已完成（M12，`ChatImageLightbox`）
 - 朗读 / TTS
 - 链接 hover preview
 - 多模态 image inline（file upload kind=image 直接走 messages.content[].type=image）

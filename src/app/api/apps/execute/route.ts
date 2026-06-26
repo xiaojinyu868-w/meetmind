@@ -46,10 +46,10 @@ async function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T
 }
 
 export async function POST(request: NextRequest) {
-  const rateLimitResponse = await applyRateLimit(request, 'appsExecute');
-  if (rateLimitResponse) return rateLimitResponse;
-
   try {
+    const rateLimitResponse = await applyRateLimit(request, 'appsExecute');
+    if (rateLimitResponse) return rateLimitResponse;
+
     const payload = (await request.json()) as Partial<AppExecuteRequest>;
     const appKey = typeof payload.appKey === 'string' ? payload.appKey.trim() : '';
     const traceHints: string[] = [];

@@ -108,7 +108,6 @@ export interface AppExecutionResult {
   tasks: AppTask[];
   trace: string[];
   render?: AppRenderSpec;
-  nextSuggestedPlugins?: string[];
   raw?: Record<string, unknown>;
 }
 

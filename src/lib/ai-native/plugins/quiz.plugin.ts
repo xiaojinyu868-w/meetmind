@@ -336,7 +336,6 @@ export const quizPlugin: AppPlugin = {
             })),
         },
       },
-      nextSuggestedPlugins: ['flashcards-lab', 'review-plan'],
       raw: {
         generatedAt: tools.now(),
       },

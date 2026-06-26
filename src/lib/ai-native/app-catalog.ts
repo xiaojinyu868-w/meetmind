@@ -6,7 +6,6 @@ export type WorkshopAppKey =
   | 'quiz'
   | 'mindmap'
   | 'infographic'
-  | 'study-report'
   | 'cheatsheet';
 
 export interface WorkshopAppCatalogItem {
@@ -50,14 +49,12 @@ export const WORKSHOP_APP_CATALOG: WorkshopAppCatalogItem[] = [
     headline: '一页纸考试速查表',
     description: '把课堂核心定义、公式、易错点整成可打印的一页卡片，考前最后一刻复习。',
     tags: ['考试', '速查', '一页纸', '打印'],
-    // 暂时复用 study-report 的封面图——新 SVG 打出来之前别让编译崩
     coverImage: '/images/apps/study-report-cover.svg',
     pluginId: 'cheatsheet-gen',
     intent: '生成考试速查表：核心定义、公式/步骤、易错点各一组，适合一页打印。',
     outputType: '可打印卡片',
     renderMode: 'document',
     status: 'ready',
-    // 心智：开卷考 / 允许带一张 A4 / quiz 时（PRD v1.1 §5.7）。已完成（fix12）。
     supportedTiers: ['class', 'unit', 'exam'],
     primaryTier: 'class',
   },
@@ -74,7 +71,6 @@ export const WORKSHOP_APP_CATALOG: WorkshopAppCatalogItem[] = [
     outputType: '真实播客音频',
     renderMode: 'audio',
     status: 'ready',
-    // 仅课堂层：30 分钟长音频在 unit/exam 层听不下去（PRD v1.1 §5.5）。
     supportedTiers: ['class'],
     primaryTier: 'class',
   },
@@ -91,7 +87,6 @@ export const WORKSHOP_APP_CATALOG: WorkshopAppCatalogItem[] = [
     outputType: '训练型闪卡',
     renderMode: 'flashcards',
     status: 'ready',
-    // 三层都在，主舞台课堂（PRD v1.1 §5.2）。
     supportedTiers: ['class', 'unit', 'exam'],
     primaryTier: 'class',
   },
@@ -108,8 +103,6 @@ export const WORKSHOP_APP_CATALOG: WorkshopAppCatalogItem[] = [
     outputType: '可作答测验',
     renderMode: 'quiz',
     status: 'ready',
-    // 注意：本应用 = 用户主动触发的事后测验。视频内随堂检验是另一个 plugin
-    // (class-check)，不在 catalog（PRD v1.1 §5.3）。
     supportedTiers: ['class', 'unit', 'exam'],
     primaryTier: 'class',
   },
@@ -126,7 +119,6 @@ export const WORKSHOP_APP_CATALOG: WorkshopAppCatalogItem[] = [
     outputType: '交互导图',
     renderMode: 'mindmap',
     status: 'ready',
-    // 单元层是主舞台（跨课节点合并），课堂层为退化形态（PRD v1.1 §5.4）。
     supportedTiers: ['class', 'unit'],
     primaryTier: 'unit',
   },
@@ -143,26 +135,7 @@ export const WORKSHOP_APP_CATALOG: WorkshopAppCatalogItem[] = [
     outputType: '图片',
     renderMode: 'custom(image-first)',
     status: 'ready',
-    // PR-8 重做后：固定为"一张图带走这节课"（PRD v1.1 §5.6）。
     supportedTiers: ['class', 'unit'],
-    primaryTier: 'class',
-  },
-  {
-    key: 'study-report',
-    name: '学习报告',
-    category: '学习分析',
-    headline: '随堂检验结果分析',
-    description: '基于随堂检验的答题数据，查看各知识点掌握情况和需要巩固的内容。',
-    tags: ['学习报告', '随堂检验', '掌握度'],
-    coverImage: '/images/apps/study-report-cover.svg',
-    pluginId: 'study-report',
-    intent: '查看随堂检验结果和学习报告。',
-    outputType: '结构化报告',
-    renderMode: 'document',
-    status: 'ready',
-    // 家长视角，单课内闭环。依赖 class-check（视频复习场景）的答题数据
-    // （PRD v1.1 §5.8）。已完成。
-    supportedTiers: ['class'],
     primaryTier: 'class',
   },
 ];

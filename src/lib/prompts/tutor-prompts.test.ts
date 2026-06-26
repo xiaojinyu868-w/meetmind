@@ -152,29 +152,6 @@ describe('buildTutorSystemPrompt — returnTimestamps 开关', () => {
   });
 });
 
-describe('buildTutorSystemPrompt — allowInlineApp 开关（open_app marker 合约）', () => {
-  it('in-class 默认只开放课中适合的产物，不把课后报告/闪卡/测验推到课中', () => {
-    const inClass = buildTutorSystemPrompt('in-class');
-    expect(inClass).toMatch(/<open_app:KEY\/>/);
-    expect(inClass).not.toMatch(/flashcards|quiz|study-report|闪卡|测验|学习报告/);
-    expect(inClass).toMatch(/mindmap.*cheatsheet/s);
-  });
-
-  it('review 默认保留闪卡和测验等课后复习产物', () => {
-    const review = buildTutorSystemPrompt('review');
-    expect(review).toMatch(/<open_app:KEY\/>/);
-    expect(review).toMatch(/flashcards.*quiz.*mindmap.*cheatsheet.*study-report/s);
-    expect(review).toMatch(/闪卡/);
-    expect(review).toMatch(/测验/);
-  });
-
-  it('手动关闭后 marker 合约消失', () => {
-    const prompt = buildTutorSystemPrompt('review', {}, { allowInlineApp: false });
-    expect(prompt).not.toMatch(/<open_app:KEY\/>/);
-    expect(prompt).not.toMatch(/产物合约/);
-  });
-});
-
 describe('buildTutorSystemPrompt — thinkingGuide 开关', () => {
   it('review mode + thinkingGuide=true：拼思维引导段，含 ---思维演示--- 标记', () => {
     const prompt = buildTutorSystemPrompt('review', {}, { thinkingGuide: true });
@@ -213,7 +190,7 @@ describe('buildTutorSystemPrompt — learnerProfile 注入', () => {
 });
 
 describe('buildTutorSystemPrompt — 组合场景', () => {
-  it('课堂同桌全配：mode + recentFocus + materials + allowInlineApp（默认）', () => {
+  it('课堂同桌全配：mode + recentFocus + materials', () => {
     const prompt = buildTutorSystemPrompt(
       'in-class',
       {
@@ -224,7 +201,6 @@ describe('buildTutorSystemPrompt — 组合场景', () => {
     expect(prompt).toMatch(/一两句话/);           // in-class mode
     expect(prompt).toMatch(/刚才这 30s/);         // recentFocus
     expect(prompt).toMatch(/\[资料1\]/);          // materials
-    expect(prompt).toMatch(/<open_app:KEY\/>/);   // marker 默认开
     expect(prompt).not.toMatch(/\[MM:SS\]/);      // in-class 默认不带时间戳
   });
 
@@ -235,13 +211,12 @@ describe('buildTutorSystemPrompt — 组合场景', () => {
         fullTranscript: '0:00 引言...5:00 定理证明...',
         currentTimestampSec: 300,
       },
-      { thinkingGuide: true, returnTimestamps: true, allowInlineApp: true },
+      { thinkingGuide: true, returnTimestamps: true },
     );
     expect(prompt).toMatch(/整节课的转录/);
     expect(prompt).toMatch(/05:00/);
     expect(prompt).toMatch(/\[MM:SS\]/);
     expect(prompt).toMatch(/---思维演示---/);
-    expect(prompt).toMatch(/<open_app:KEY\/>/);
   });
 
   it('最小参数 in-class：什么都不给', () => {
@@ -260,8 +235,7 @@ describe('buildTutorSystemPrompt — 回归：所有必选参数组合都产生�
     { thinkingGuide: true },
     { returnTimestamps: true },
     { returnTimestamps: false },
-    { allowInlineApp: false },
-    { thinkingGuide: true, returnTimestamps: true, allowInlineApp: true },
+    { thinkingGuide: true, returnTimestamps: true },
   ];
 
   for (const mode of modes) {

@@ -139,31 +139,44 @@ function CheatsheetPreview({ payload }: { payload: CheatsheetPayload }) {
 
 // ── Mindmap ─────────────────────────────────────────────
 
+interface MindmapNodeLike {
+  title?: string;
+  label?: string;
+  children?: Array<MindmapNodeLike>;
+}
+
 interface MindmapPayload {
   root?: string;
-  branches?: Array<{ label?: string; children?: Array<{ label?: string }> }>;
+  /** plugin 实际用的字段：children:[{title, children}] */
+  children?: Array<MindmapNodeLike>;
+  /** 旧版兼容：branches:[{label, children}] */
+  branches?: Array<MindmapNodeLike>;
+  /** markmap markdown 大纲（plugin 也存了，作为 fallback 渲染） */
+  markdown?: string;
+}
+
+function nodeLabel(node: MindmapNodeLike): string {
+  return (node.title ?? node.label ?? '').trim();
 }
 
 function MindmapPreview({ payload }: { payload: MindmapPayload }) {
-  const branches = (payload.branches ?? []).slice(0, 8);
+  // plugin 用 children:[{title}]，旧版可能 branches:[{label}]——两者都兼容
+  const rawNodes = (payload.children ?? payload.branches ?? []).slice(0, 8);
+  const nodes = rawNodes.map((b) => ({
+    label: nodeLabel(b),
+    children: (b.children ?? []).map(nodeLabel).filter(Boolean).slice(0, 3),
+  }));
+  const hasNodes = nodes.some((n) => n.label);
+
   return (
     <div className="flex flex-col gap-2">
       <h3 className="text-[16px] font-semibold tracking-tight text-ink">
         {payload.root?.trim() || '思维导图'}
       </h3>
-      {branches.length === 0 ? (
-        <p className="text-[12.5px] leading-6 text-ink-secondary">
-          导图正在准备中。
-        </p>
-      ) : (
+      {hasNodes ? (
         <ul className="mt-1 flex flex-col gap-2.5">
-          {branches.map((b, i) => {
-            const label = (b.label ?? '').trim();
-            if (!label) return null;
-            const children = (b.children ?? [])
-              .map((c) => (c.label ?? '').trim())
-              .filter(Boolean)
-              .slice(0, 3);
+          {nodes.map((b, i) => {
+            if (!b.label) return null;
             return (
               <li key={i} className="flex items-start gap-2.5">
                 <span
@@ -171,10 +184,10 @@ function MindmapPreview({ payload }: { payload: MindmapPayload }) {
                   className="mt-2 inline-block h-1.5 w-1.5 flex-shrink-0 rounded-full bg-[#2D4F3E]"
                 />
                 <div className="min-w-0 flex-1">
-                  <p className="text-[14px] font-medium text-ink">{label}</p>
-                  {children.length > 0 ? (
+                  <p className="text-[14px] font-medium text-ink">{b.label}</p>
+                  {b.children.length > 0 ? (
                     <p className="mt-0.5 text-[12.5px] leading-6 text-ink-secondary">
-                      └ {children.join(' · ')}
+                      └ {b.children.join(' · ')}
                     </p>
                   ) : null}
                 </div>
@@ -182,6 +195,14 @@ function MindmapPreview({ payload }: { payload: MindmapPayload }) {
             );
           })}
         </ul>
+      ) : payload.markdown?.trim() ? (
+        <pre className="mt-1 whitespace-pre-wrap font-sans text-[12.5px] leading-6 text-ink-secondary">
+          {payload.markdown.trim()}
+        </pre>
+      ) : (
+        <p className="text-[12.5px] leading-6 text-ink-secondary">
+          导图正在准备中。
+        </p>
       )}
     </div>
   );
@@ -317,6 +338,22 @@ export function ArtifactRender({ artifactKind, artifact }: ArtifactRenderProps) 
     const fc = payload as FlashcardsPayload;
     if (Array.isArray(fc.cards)) {
       return <FlashcardsPreview payload={fc} />;
+    }
+  }
+
+  if (artifactKind === 'infographic' && payload) {
+    const ig = payload as { image?: { imageUrl?: string }; draft?: { title?: string } };
+    if (ig.image?.imageUrl) {
+      return (
+        <div className="flex flex-col gap-2">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={ig.image.imageUrl}
+            alt={ig.draft?.title || '课堂信息图'}
+            className="w-full rounded-xl object-contain"
+          />
+        </div>
+      );
     }
   }
 

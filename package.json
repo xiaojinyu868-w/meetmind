@@ -1,7 +1,7 @@
 {
   "name": "meetmind",
   "version": "1.0.0",
-  "description": "MeetMind MVP - 课堂对齐的 AI 家教（依赖 Open Notebook + Discussion + LongCut）",
+  "description": "MeetMind - 以学习者长期上下文为中心的 AI 学习产品",
   "private": true,
   "scripts": {
     "dev": "node server.js",

@@ -8,8 +8,6 @@ import type { DataSourceType } from '@/lib/ai-native/types';
 import { getWorkshopAppByKey, type WorkshopAppKey } from '@/lib/ai-native/app-catalog';
 import { useAppExecution } from '@/components/apps/hooks/useAppExecution';
 import { AppRenderSurface } from '@/components/apps/windows/AppRenderSurface';
-import type { ClassCheckRound } from '@/hooks/useClassCheck';
-import type { ClassCheckPlan } from '@/app/api/class-check/plan/route';
 
 interface ReviewLearningWorkspaceProps {
   appKey: WorkshopAppKey;
@@ -20,8 +18,6 @@ interface ReviewLearningWorkspaceProps {
   summaryOverview?: string;
   keyDifficulties?: string[];
   terminologyHint?: string;
-  classCheckRounds?: ClassCheckRound[];
-  classCheckPlan?: ClassCheckPlan | null;
   onSeek?: (timeMs: number) => void;
   onBack: () => void;
   onLearningActivity?: (line: string) => void;
@@ -46,8 +42,6 @@ export function ReviewLearningWorkspace({
   summaryOverview,
   keyDifficulties,
   terminologyHint,
-  classCheckRounds,
-  classCheckPlan,
   onSeek,
   onBack,
   onLearningActivity,
@@ -105,8 +99,6 @@ export function ReviewLearningWorkspace({
           taskState={execution.taskState}
           sessionId={sessionId}
           contentContext={infographicContentContext}
-          classCheckRounds={classCheckRounds}
-          classCheckPlan={classCheckPlan}
           onSeek={onSeek}
           onRegenerate={() => void execution.rerun()}
           onGenerateDraft={() => (execution.hasResult ? execution.rerun() : execution.execute())}

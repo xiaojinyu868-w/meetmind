@@ -2,13 +2,13 @@
  * demo-app-outputs.ts — 首屏 hero 能力预览条使用的静态缩略图描述。
  *
  * 为什么不做"可交互的 preview 窗口"：
- *   如果每个能力都预渲染真实的 app window，就需要维护 5 套 fixture payload，
+ *   如果每个能力都预渲染真实的 app window，就需要维护多套 fixture payload，
  *   跟随插件演化而漂移；任何插件小改动都可能打破 demo。
  *   我们选择更克制的做法：
  *     - 首屏 capability strip 里每张卡片是一个静态视觉缩略图（SVG/HTML）
  *     - 点击不打开真实 app window，而是把用户引导到"试听一节 demo 课"
  *     - 加载完 demo 后，用户可以在真正的课堂视图里点对应 chip 看真实产出
- *   这样"预览 → 真实体验"的路径更顺，也避免维护 5 份 fixture 的重复成本。
+ *   这样"预览 → 真实体验"的路径更顺，也避免维护多份 fixture 的重复成本。
  *
  * 每个 preview 的组成：
  *   - appKey：对应的插件 key
@@ -20,7 +20,7 @@
 import type { WorkshopAppKey } from '@/lib/ai-native/app-catalog';
 
 export interface DemoAppPreview {
-  appKey: Extract<WorkshopAppKey, 'cheatsheet' | 'mindmap' | 'study-report'>;
+  appKey: Extract<WorkshopAppKey, 'cheatsheet' | 'mindmap'>;
   title: string;
   tagline: string;
   sampleLine: string;
@@ -38,11 +38,5 @@ export const DEMO_APP_PREVIEWS: DemoAppPreview[] = [
     title: '思维导图',
     tagline: '这节课的结构和分支一眼看完',
     sampleLine: '根主题 · 分支 · 节点跳回放',
-  },
-  {
-    appKey: 'study-report',
-    title: '学习报告',
-    tagline: '看清这节课的掌握度、薄弱点和下一步',
-    sampleLine: '已掌握 · 易错点 · 下一步',
   },
 ];

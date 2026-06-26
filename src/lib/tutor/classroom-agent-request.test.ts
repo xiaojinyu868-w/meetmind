@@ -17,11 +17,9 @@ describe('buildInClassTutorAgentBody', () => {
     });
 
     expect(body.mode).toBe('in-class');
-    expect(body.transcript).toEqual([]);
     expect(body.context.recentFocus).toContain('课堂片段 79');
     expect(body.context.recentFocus).not.toContain('很早之前讲的内容');
     expect(body.options).toEqual({
-      allowInlineApp: true,
       returnTimestamps: false,
       thinkingGuide: false,
     });

@@ -1,10 +1,13 @@
 // Real Tutor caller for eval harness.
-// Uses streamText + tutor tools end-to-end, collects output + toolCalls for graders.
+// Uses streamText end-to-end, collects output + toolCalls for graders.
+//
+// M14.6 起 agent route 纯对话（tools = {}），结构化产物走前端 SkillChip。
+// 此 caller 跟生产 route 对齐：不挂 native tools，toolCalls 永远空数组。
+// tool-selection grader 对 expectedTool case 会如实反映"模型不再调 native tool"。
 //
 // 前置：OPENAI_API_KEY 或 DASHSCOPE_API_KEY + TUTOR_MODEL / TUTOR_BASE_URL
 import { streamText, stepCountIs, convertToModelMessages, type UIMessage } from 'ai';
 import { createOpenAI } from '@ai-sdk/openai';
-import { createTutorTools } from '@/lib/tutor/tutor-tools';
 import { TUTOR_SYSTEM_CURRENT } from '@/lib/prompts/tutor-prompts';
 import { resolveTutorAgentProviderConfig } from '@/lib/utils/tutor-agent-provider';
 import type { TutorCase } from './runner';
@@ -25,8 +28,7 @@ export async function realTutorCaller(c: TutorCase): Promise<{
   const openai = createOpenAI({ apiKey: provider.apiKey, baseURL: provider.baseURL });
   const model = openai.chat(provider.modelId);
 
-  const transcript = DEFAULT_TRANSCRIPT; // TODO M3.5: 按 c.transcriptFixture 加载 JSON
-  const tools = createTutorTools({ sessionId: c.id, transcript });
+  const _transcript = DEFAULT_TRANSCRIPT; // TODO M3.5: 按 c.transcriptFixture 加载 JSON
 
   const userMessage: UIMessage = {
     id: `u-${c.id}`,
@@ -41,7 +43,6 @@ export async function realTutorCaller(c: TutorCase): Promise<{
     model,
     system: TUTOR_SYSTEM_CURRENT.content,
     messages: await convertToModelMessages([userMessage]),
-    tools,
     stopWhen: stepCountIs(6),
     onStepFinish(step) {
       for (const tc of step.toolCalls ?? []) {

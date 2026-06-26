@@ -16,42 +16,16 @@
  * 不变的渲染契约（前端能解析的硬合同，不能删）：
  *   1. `[MM:SS]` 或 `[MM:SS-MM:SS]` — 前端渲染为可点击跳转的时间戳链接（`timestamp-parsing.ts`）
  *   2. `[资料N]` — 引用 support material 时使用现有编号，不得编造
- *   3. `<open_app:KEY/>` — 学生明确索要结构化产物时在最后单行吐出 marker，
- *      前端（`useClassroomCompanion` 的 `extractOpenAppMarker`）自动拦截
- *   4. `---思维演示---` / `---正式回答---` / `【步骤名】` / `💡` / `🌟` — 思维引导模式下的分段标记
+ *   3. `---思维演示---` / `---正式回答---` / `【步骤名】` / `💡` / `🌟` — 思维引导模式下的分段标记
+ *
+ * M14.6：已移除 `<open_app:KEY/>` marker 合约和 native tools。
+ *   课中/课后同桌回归纯 AI 对话，不在对话里生成结构化产物。
+ *   闪卡/测验/导图等通过应用矩阵 SkillChip 直接打开 WorkshopWindow。
  *
  * 版本化：`PROMPT_VERSIONS` 给 Sentry span `experimental_telemetry.metadata` 做切片。
  */
 
 export type TutorMode = 'in-class' | 'review' | 'shared' | 'goal' | 'word';
-export type TutorInlineAppKey = 'flashcards' | 'quiz' | 'mindmap' | 'cheatsheet' | 'study-report';
-
-const IN_CLASS_INLINE_APP_KEYS: readonly TutorInlineAppKey[] = ['mindmap', 'cheatsheet'];
-const REVIEW_INLINE_APP_KEYS: readonly TutorInlineAppKey[] = ['flashcards', 'quiz', 'mindmap', 'cheatsheet', 'study-report'];
-/**
- * 分享态默认不允许 inline app —— 访问者不该在别人分享的 Agent 里持续生成新产物
- * （那是个人层）。如果产品后续要放开（例如让访问者基于分享内容做练习），再调整。
- */
-const SHARED_INLINE_APP_KEYS: readonly TutorInlineAppKey[] = [];
-/**
- * 「聊聊你想要的」目标教练模式 —— 不允许 inline app。
- * 这一态的核心动作是"听懂这个人想要什么"，不是"给他生产学习产物"。
- * 当用户的目标变清晰、想动手做某件事时，应自然引导他回到主场景（录课/复习/笔记）。
- */
-const GOAL_INLINE_APP_KEYS: readonly TutorInlineAppKey[] = [];
-/**
- * 选词解释浮窗（M13 收口）——禁用 inline app。
- * 浮窗就是用来"快速搞懂这一个词/这一段在说什么"的，不是生产结构化产物的入口。
- */
-const WORD_INLINE_APP_KEYS: readonly TutorInlineAppKey[] = [];
-
-const INLINE_APP_LABELS: Record<TutorInlineAppKey, string> = {
-  flashcards: '闪卡',
-  quiz: '测验',
-  mindmap: '思维导图',
-  cheatsheet: '考试速查表',
-  'study-report': '学习报告',
-};
 
 export interface TutorSystemContext {
   /** 仅 in-class：最近 30s 转录，用于"这个 / 那个 / 刚才"代词消歧 */
@@ -109,10 +83,6 @@ export interface TutorSystemOptions {
   thinkingGuide?: boolean;
   /** 在回答里附 `[MM:SS]` 时间戳（默认 mode==='review'） */
   returnTimestamps?: boolean;
-  /** 允许吐 `<open_app:KEY/>` marker（默认 true——两 mode 都允许，但可用 app 随 mode 收窄） */
-  allowInlineApp?: boolean;
-  /** 可选：覆盖当前 mode 的 inline app 白名单 */
-  allowedInlineApps?: readonly TutorInlineAppKey[];
 }
 
 // ──────────────────────────────────────────────────────────────
@@ -145,9 +115,8 @@ const MODE_IN_CLASS_SEGMENT = `
 课中的时候他最在意的是"跟上"，所以：
 - 回答尽量**一两句话**讲完，课堂节奏快，他没空看长段
 - 他用代词（"这个"、"那个"、"刚才"）的时候，参考下面给你的最近课堂片段去理解他指的是什么
-- 不要在回答里附时间戳 chip——课堂 UI 窄，时间戳反而是噪音
-- 如果他的话自然指向“结构 / 速查表”这类课中辅助产物，就走对应产物路径（见下方 open_app 合约）；报告类总结放到课后复习场景，不在课中打断他；不要用关键词硬匹配，按上下文理解
-- 课中优先帮他跟上老师正在讲的内容，不把复习训练塞进正在上课的节奏里`;
+ - 不要在回答里附时间戳 chip——课堂 UI 窄，时间戳反而是噪音
+ - 课中优先帮他跟上老师正在讲的内容，不把复习训练塞进正在上课的节奏里`;
 
 const MODE_REVIEW_SEGMENT = `
 此刻他在复习，这节课已经讲完，他把整节课拎回来问你。他有时间慢慢看、慢慢想。
@@ -402,19 +371,6 @@ function capTimestampsInstruction(): string {
   · 给一句话末尾凑一个时间戳`;
 }
 
-function capOpenAppContract(appKeys: readonly TutorInlineAppKey[]): string {
-  const labels = appKeys.map((key) => INLINE_APP_LABELS[key]).join(' / ');
-  const keys = appKeys.join(', ');
-  return `
-【产物合约】
-如果你基于上下文理解到学生是在要一个"结构化产出"——${labels}——
-就用一两句自然的话回应他（"好，我这就给你整一张"），然后在消息最后**单独一行**写：
-\`<open_app:KEY/>\`
-KEY 只能从 \`{${keys}}\` 里选。
-前端会在你说完那句话后自动打开对应窗口 / 把产物嵌进对话。
-如果学生只是想聊或者解释概念，就不要加这个标记。`;
-}
-
 function capThinkingGuide(): string {
   // 提示词哲学：描述目标，不规定路径——但本段是少数几个**真有渲染契约**的：
   // 前端 `ThinkingGuideRenderer.tsx` 会按 `---思维演示---` / `---正式回答---` 切两段，
@@ -623,27 +579,10 @@ export function buildTutorSystemPrompt(
   // 体验。只有 review 真的能跳回原文，是默认开启的对象。
   // goal / word 态没有播放上下文，时间戳完全不适用，强制关闭。
   const returnTimestamps = options.returnTimestamps ?? mode === 'review';
-  const allowInlineApp = options.allowInlineApp ?? (mode !== 'shared' && mode !== 'goal' && mode !== 'word');
   const thinkingGuide = options.thinkingGuide ?? false;
 
   if (returnTimestamps && mode !== 'goal' && mode !== 'word') {
     parts.push(capTimestampsInstruction());
-  }
-  if (allowInlineApp) {
-    const allowedInlineApps =
-      options.allowedInlineApps ??
-      (mode === 'in-class'
-        ? IN_CLASS_INLINE_APP_KEYS
-        : mode === 'shared'
-          ? SHARED_INLINE_APP_KEYS
-          : mode === 'goal'
-            ? GOAL_INLINE_APP_KEYS
-            : mode === 'word'
-              ? WORD_INLINE_APP_KEYS
-              : REVIEW_INLINE_APP_KEYS);
-    if (allowedInlineApps.length > 0) {
-      parts.push(capOpenAppContract(allowedInlineApps));
-    }
   }
   // 思维引导仅在 review 下生效——in-class / shared / goal / word 即使 flag 为 true 也忽略
   if (thinkingGuide && mode === 'review') {
@@ -732,7 +671,7 @@ export const PROMPT_VERSIONS = {
 
 export const TUTOR_SYSTEM_V3: VersionedPrompt = {
   version: '2026-05-tutor-v4-mode-driven',
-  content: buildTutorSystemPrompt('review', {}, { returnTimestamps: true, allowInlineApp: true }),
+  content: buildTutorSystemPrompt('review', {}, { returnTimestamps: true }),
 };
 
 export const TUTOR_SYSTEM_CURRENT = TUTOR_SYSTEM_V3;

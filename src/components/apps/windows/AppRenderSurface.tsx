@@ -3,15 +3,12 @@
 import type { AppExecutionResult } from '@/lib/ai-native/types';
 import type { WorkshopAppKey } from '@/lib/ai-native/app-catalog';
 import type { TranscriptSegment } from '@/types';
-import type { ClassCheckRound } from '@/hooks/useClassCheck';
-import type { ClassCheckPlan } from '@/app/api/class-check/plan/route';
 import type { AppTaskState } from '@/components/apps/hooks/useAppExecution';
 import { PodcastWindow } from './PodcastWindow';
 import { FlashcardsWindow } from './FlashcardsWindow';
 import { QuizWindow } from './QuizWindow';
 import { MindmapWindow } from './MindmapWindow';
 import { InfographicWindow } from './InfographicWindow';
-import { StudyReportWindow } from './StudyReportWindow';
 import { CheatsheetWindow } from './CheatsheetWindow';
 
 export interface AppRenderSurfaceProps {
@@ -21,8 +18,6 @@ export interface AppRenderSurfaceProps {
   taskState?: AppTaskState;
   sessionId?: string;
   contentContext?: string;
-  classCheckRounds?: ClassCheckRound[];
-  classCheckPlan?: ClassCheckPlan | null;
   onSeek?: (startMs: number) => void;
   onRegenerate?: () => void;
   onGenerateDraft?: () => Promise<AppExecutionResult | null>;
@@ -39,8 +34,6 @@ export function AppRenderSurface({
   taskState,
   sessionId = 'inline-session',
   contentContext,
-  classCheckRounds,
-  classCheckPlan,
   onSeek,
   onRegenerate,
   onGenerateDraft,
@@ -76,10 +69,6 @@ export function AppRenderSurface({
         onResultUpdate={onResultUpdate}
       />
     );
-  }
-
-  if (appKey === 'study-report') {
-    return <StudyReportWindow result={result} rounds={classCheckRounds} plan={classCheckPlan} transcript={transcript} />;
   }
 
   if (appKey === 'cheatsheet') {

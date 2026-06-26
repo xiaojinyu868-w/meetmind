@@ -45,7 +45,6 @@ import { createOpenAI } from '@ai-sdk/openai';
 import { NextRequest } from 'next/server';
 import { z } from 'zod';
 import { applyRateLimit } from '@/lib/utils/rate-limit';
-import { createTutorTools } from '@/lib/tutor/tutor-tools';
 import {
   buildTutorSystemPrompt,
   PROMPT_VERSIONS,
@@ -57,7 +56,6 @@ import {
   formatTutorAgentUserError,
   resolveTutorAgentProviderFallbacks,
   shouldFallbackTutorAgentError,
-  shouldUseNativeTutorTools,
   type TutorAgentProviderConfig,
 } from '@/lib/utils/tutor-agent-provider';
 import {
@@ -130,7 +128,6 @@ const OptionsSchema = z
   .object({
     thinkingGuide: z.boolean().optional(),
     returnTimestamps: z.boolean().optional(),
-    allowInlineApp: z.boolean().optional(),
   })
   .default({});
 
@@ -313,20 +310,8 @@ function createTutorAttemptStream({
         }
         const openai = createOpenAI(openaiOptions);
         const model = openai.chat(modelId);
-        // 分享态禁用 native tools —— 工具会去查 transcript / sessionId，
-        // 但分享态学生没有这些，且会泄露原作者上下文。
-        // goal 态同样禁用：用户和教练聊目标，没有 transcript 概念。
-        const tools =
-          body.mode !== 'shared' && body.mode !== 'goal' && shouldUseNativeTutorTools(modelId)
-            ? createTutorTools({
-                sessionId: body.sessionId,
-                transcript: body.transcript,
-                subject: body.subject,
-                model: modelId,
-                // 此分支已经排除 'shared' / 'goal'，安全地窄化为 createTutorTools 接受的两种 mode
-                mode: body.mode as 'in-class' | 'review',
-              })
-            : {};
+        // M14.6：纯对话，不挂 native tools。结构化产物通过应用矩阵 SkillChip 直接打开。
+        const tools = {};
         let deliveredOutput = false;
 
         track({
@@ -344,7 +329,6 @@ function createTutorAttemptStream({
           providerAttempts: providers.length,
           hasRecentFocus: Boolean(body.context.recentFocus),
           hasFullTranscript: Boolean(body.context.fullTranscript),
-          nativeToolsEnabled: shouldUseNativeTutorTools(modelId),
           options: body.options,
         });
 
@@ -353,9 +337,7 @@ function createTutorAttemptStream({
           system: systemPrompt,
           messages: modelMessages,
           tools,
-          // 大多数请求是「不调工具，直接答」一步搞定；保留容量到 3 步只是给
-          // native tools 模型（qwen 等）留一次工具回调 + 一次正文的余地。
-          // step-* / deepseek-* 走 marker 链路，根本不会进入 tool 回调，所以一步即可。
+          // 纯对话 1 步即完成；3 步留安全余量。
           stopWhen: stepCountIs(3),
           // 让 token 按"中文单字 / 英文词"为单位平滑流出，前端字符逐个浮现。
           //

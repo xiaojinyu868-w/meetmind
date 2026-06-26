@@ -7,6 +7,7 @@ import type { AppTaskState } from '@/components/apps/hooks/useAppExecution';
 import type { TranscriptSegment } from '@/types';
 import { EvidenceChip } from '@/components/apps/evidence/EvidenceChip';
 import { AppWindowPlaceholder } from '@/components/apps/windows/AppWindowPlaceholder';
+import { RefreshCw, Loader2 } from 'lucide-react';
 
 interface PodcastWindowProps {
   result: AppExecutionResult | null;
@@ -28,8 +29,6 @@ interface PodcastPayload {
   sections?: PodcastSection[];
   lines?: Array<{ speaker?: string; line?: string }>;
 }
-
-type PodcastView = 'overview' | 'script' | 'chapters';
 
 const TIMESTAMP_PATTERN = /\b\d{1,2}:\d{2}(?::\d{2})?\b/g;
 const CHINESE_TIME_PATTERN = /\d+点\d+分(?:\d+秒)?|\d+分\d+秒/g;
@@ -62,11 +61,6 @@ function formatDuration(seconds: number): string {
   return `${m}:${String(s).padStart(2, '0')}`;
 }
 
-function truncateText(value: string, maxLength: number): string {
-  if (value.length <= maxLength) return value;
-  return `${value.slice(0, Math.max(0, maxLength - 1))}…`;
-}
-
 export function PodcastWindow({ result, transcript, taskState, onSeek, onRegenerate }: PodcastWindowProps) {
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const scriptContainerRef = useRef<HTMLDivElement>(null);
@@ -74,6 +68,7 @@ export function PodcastWindow({ result, transcript, taskState, onSeek, onRegener
   const [audioDuration, setAudioDuration] = useState(0);
   const [audioTime, setAudioTime] = useState(0);
   const payload = (result?.render?.payload || {}) as PodcastPayload;
+  const isRegenerating = taskState?.status === 'running';
   const sections = Array.isArray(payload.sections) ? payload.sections : [];
 
   const scriptLines = useMemo(() => {
@@ -87,41 +82,9 @@ export function PodcastWindow({ result, transcript, taskState, onSeek, onRegener
       .filter((line) => line.line);
   }, [payload.lines]);
 
-  const [activeView, setActiveView] = useState<PodcastView>('overview');
-
-  useEffect(() => {
-    if (payload.audioUrl) {
-      setActiveView('overview');
-      return;
-    }
-    if (scriptLines.length > 0) {
-      setActiveView('script');
-      return;
-    }
-    setActiveView('chapters');
-  }, [payload.audioUrl, scriptLines.length]);
-
   const chapterCitations = useMemo(
     () => result?.cards.map((card) => card.citations?.[0] || null) || [],
     [result?.cards]
-  );
-
-  const summaryText = useMemo(() => {
-    const description = sanitizeNarration(result?.render?.description || '');
-    if (description) return description;
-    const firstSection = sanitizeNarration(sections[0]?.body || '');
-    if (firstSection) return firstSection;
-    const firstLines = scriptLines
-      .slice(0, 2)
-      .map((item) => item.line)
-      .join(' ')
-      .trim();
-    return firstLines || '课堂内容已经整理成可收听播客，建议先播放一遍把课堂脉络快速过一遍。';
-  }, [result?.render?.description, scriptLines, sections]);
-
-  const chapterPreview = useMemo(
-    () => sections.map((section) => ({ ...section, body: sanitizeNarration(section.body || '') })).filter((section) => section.title || section.body).slice(0, 4),
-    [sections]
   );
 
   const scriptPlainText = useMemo(
@@ -140,11 +103,10 @@ export function PodcastWindow({ result, transcript, taskState, onSeek, onRegener
 
     if (lineIndex !== activeLineIndex && lineIndex >= 0) {
       setActiveLineIndex(lineIndex);
-      if (activeView !== 'script') return;
       const lineEl = scriptContainerRef.current?.querySelector(`[data-line-index="${lineIndex}"]`);
       lineEl?.scrollIntoView({ behavior: 'smooth', block: 'center' });
     }
-  }, [activeLineIndex, activeView, scriptLines.length]);
+  }, [activeLineIndex, scriptLines.length]);
 
   useEffect(() => {
     const audio = audioRef.current;
@@ -210,215 +172,127 @@ export function PodcastWindow({ result, transcript, taskState, onSeek, onRegener
 
   return (
     <section className="space-y-4" data-testid="podcast-window">
-      <div className="rounded-[28px] border border-divider bg-white p-5 shadow-sm sm:p-6">
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-          <div className="space-y-3">
-            <div className="inline-flex items-center gap-2 rounded-full bg-vermilion-mist/50 px-3 py-1 text-xs font-medium text-vermilion">
-              {payload.audioUrl ? '已生成可播放播客' : '已生成脚本草稿'}
-            </div>
-            <div>
-              <h2 className="text-xl font-bold tracking-tight text-ink">先拿到播客结果，再决定要不要继续细看脚本</h2>
-              <p className="mt-2 max-w-3xl text-sm leading-7 text-ink-secondary">{truncateText(summaryText, 180)}</p>
-            </div>
-          </div>
-          {audioDuration > 0 ? (
-            <div className="shrink-0 rounded-2xl border border-divider bg-paper-warm px-4 py-3 text-right">
-              <p className="text-xs font-medium uppercase tracking-[0.16em] text-ink-muted">播放进度</p>
-              <p className="mt-1 text-sm font-semibold text-ink">
+      <div className="rounded-2xl border border-divider bg-white p-4 shadow-sm sm:p-5">
+        {payload.audioUrl ? (
+          <>
+            {/* 生成成功：首页就是一条播放条，其他都收起来 */}
+            <audio ref={audioRef} controls src={payload.audioUrl} className="w-full rounded-lg" />
+            {audioDuration > 0 ? (
+              <p className="mt-2 text-xs tabular-nums text-ink-muted">
                 {formatDuration(audioTime)} / {formatDuration(audioDuration)}
               </p>
-            </div>
-          ) : null}
-        </div>
-
-        <div className="mt-5 rounded-2xl border border-divider bg-paper-warm p-4">
-          {payload.audioUrl ? (
-            <audio ref={audioRef} controls src={payload.audioUrl} className="w-full rounded-lg" />
-          ) : (
-            <div className="space-y-3">
-              <p className="rounded-xl border border-[#E8E2D5] bg-[#FDF3C0]/50 px-4 py-3 text-sm leading-6 text-[#1C1B19]">
-                这次先拿到了播客脚本，还没有拿到可播放音频。{payload.error ? `原因：${payload.error}` : '你可以直接重试。'}
-              </p>
-              {onRegenerate ? (
-                <button
-                  type="button"
-                  onClick={onRegenerate}
-                  className="inline-flex rounded-full bg-vermilion px-4 py-2 text-sm font-semibold text-white transition hover:bg-vermilion-deep"
-                >
-                  重新生成播客
-                </button>
-              ) : null}
-            </div>
-          )}
-        </div>
-
-        <div className="mt-4 flex flex-wrap items-center gap-2">
-          <button
-            type="button"
-            onClick={() => setActiveView('overview')}
-            className={`rounded-full px-4 py-2 text-sm font-medium transition ${
-              activeView === 'overview' ? 'bg-ink text-white' : 'border border-divider bg-white text-ink-secondary hover:bg-paper-warm'
-            }`}
-          >
-            先听播客
-          </button>
-          <button
-            type="button"
-            onClick={() => setActiveView('script')}
-            className={`rounded-full px-4 py-2 text-sm font-medium transition ${
-              activeView === 'script' ? 'bg-ink text-white' : 'border border-divider bg-white text-ink-secondary hover:bg-paper-warm'
-            }`}
-          >
-            查看脚本
-          </button>
-          <button
-            type="button"
-            onClick={() => setActiveView('chapters')}
-            className={`rounded-full px-4 py-2 text-sm font-medium transition ${
-              activeView === 'chapters' ? 'bg-ink text-white' : 'border border-divider bg-white text-ink-secondary hover:bg-paper-warm'
-            }`}
-          >
-            章节定位
-          </button>
-          {scriptPlainText ? (
-            <button
-              type="button"
-              onClick={copyScript}
-              className="rounded-full border border-divider bg-white px-4 py-2 text-sm font-medium text-ink-secondary hover:bg-paper-warm"
-            >
-              复制脚本
-            </button>
-          ) : null}
-        </div>
-      </div>
-
-      {activeView === 'overview' ? (
-        <div className="grid gap-4 lg:grid-cols-[1.05fr_0.95fr]">
-          <div className="rounded-2xl border border-divider bg-white p-5 shadow-sm">
-            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-ink-muted">建议用法</p>
-            <div className="mt-3 space-y-3 text-sm leading-7 text-ink-secondary">
-              <p>如果你只是想快速复盘，这里就够了：先直接播放整段播客，再按章节跳去听你最关心的部分。</p>
-              <p>如果你想细修表达，再切到 <span className="font-medium text-ink">查看脚本</span>，逐段确认主持人口播内容。</p>
-            </div>
-          </div>
-          <div className="rounded-2xl border border-divider bg-white p-5 shadow-sm">
-            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-ink-muted">快速定位</p>
-            <div className="mt-3 flex flex-wrap gap-2">
-              {chapterPreview.length > 0 ? (
-                chapterPreview.map((section, index) => {
-                  const citation = chapterCitations[index];
-                  return (
-                    <button
-                      key={section.id || `preview-${index}`}
-                      type="button"
-                      onClick={() => citation && seekAudio(citation.startMs)}
-                      disabled={!citation}
-                      className="rounded-full border border-vermilion/25 bg-vermilion-mist/50 px-3 py-1.5 text-xs font-medium text-vermilion transition hover:bg-vermilion-mist disabled:cursor-default disabled:opacity-50"
-                    >
-                      {section.title || `章节 ${index + 1}`}
-                    </button>
-                  );
-                })
-              ) : (
-                <p className="text-sm text-ink-muted">暂无章节信息，建议直接播放整段播客。</p>
-              )}
-            </div>
-            {chapterPreview.length > 0 ? (
-              <div className="mt-4 space-y-3">
-                {chapterPreview.map((section, index) => (
-                  <div key={section.id || `summary-${index}`} className="rounded-xl bg-paper-warm px-3 py-3">
-                    <p className="text-sm font-semibold text-ink">{section.title || `章节 ${index + 1}`}</p>
-                    <p className="mt-1 text-sm leading-6 text-ink-secondary">{truncateText(section.body || '暂无章节摘要。', 88)}</p>
-                  </div>
-                ))}
-              </div>
             ) : null}
-          </div>
-        </div>
-      ) : null}
 
-      {activeView === 'script' ? (
-        <div className="rounded-2xl border border-divider bg-white p-5 shadow-sm">
-          <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-            <div>
-              <p className="text-sm font-semibold text-ink">播客脚本</p>
-              <p className="mt-1 text-sm text-ink-muted">默认不打扰你；只有想确认话术时再来看脚本。</p>
-            </div>
-            {scriptLines.length > 0 ? <span className="text-xs text-ink-muted">{scriptLines.length} 段</span> : null}
-          </div>
-
-          <div ref={scriptContainerRef} className="max-h-[560px] space-y-2 overflow-y-auto">
-            {scriptLines.length > 0 ? (
-              scriptLines.map((line, index) => {
-                const isActive = index === activeLineIndex;
-                return (
-                  <button
-                    key={`line-${index}`}
-                    type="button"
-                    data-line-index={index}
-                    onClick={() => seekToLine(index)}
-                    className={`w-full rounded-2xl border px-4 py-3 text-left transition-all ${
-                      isActive
-                        ? 'border-vermilion/40 bg-vermilion-mist/50 ring-1 ring-vermilion/20'
-                        : 'border-divider bg-paper-warm hover:border-divider hover:bg-white'
-                    }`}
-                  >
-                    <p className={`text-xs font-semibold uppercase tracking-[0.14em] ${isActive ? 'text-vermilion' : 'text-ink-muted'}`}>
-                      {line.speaker}
-                    </p>
-                    <p className={`mt-2 text-sm leading-7 ${isActive ? 'text-ink' : 'text-ink-secondary'}`}>{line.line}</p>
-                  </button>
-                );
-              })
-            ) : (
-              <p className="text-sm text-ink-muted">暂无脚本内容。</p>
-            )}
-          </div>
-        </div>
-      ) : null}
-
-      {activeView === 'chapters' ? (
-        <div className="rounded-2xl border border-divider bg-white p-5 shadow-sm">
-          <div className="mb-4">
-            <p className="text-sm font-semibold text-ink">章节定位</p>
-            <p className="mt-1 text-sm text-ink-muted">只有在你需要回到某段课堂证据时，再看这一层信息。</p>
-          </div>
-
-          <div className="grid gap-3">
-            {sections.length > 0 ? (
-              sections.map((section, index) => {
-                const citation = chapterCitations[index];
-                return (
-                  <article key={section.id || `section-${index}`} className="rounded-2xl border border-divider bg-paper-warm p-4">
-                    <div className="flex flex-wrap items-start justify-between gap-3">
-                      <div>
-                        <p className="text-sm font-semibold text-ink">{section.title || `章节 ${index + 1}`}</p>
-                        <p className="mt-1 text-sm leading-6 text-ink-secondary">{sanitizeNarration(section.body || '') || '暂无章节摘要。'}</p>
-                      </div>
-                      {citation ? (
+            {scriptLines.length > 0 || sections.length > 0 ? (
+              <details className="mt-3 border-t border-divider pt-3">
+                <summary className="cursor-pointer select-none text-xs font-medium text-ink-secondary hover:text-ink">
+                  展开脚本与章节
+                </summary>
+                <div className="mt-3 space-y-4">
+                  {scriptLines.length > 0 ? (
+                    <div>
+                      <div className="mb-2 flex items-center justify-between gap-2">
+                        <p className="text-xs font-semibold uppercase tracking-[0.16em] text-ink-muted">播客脚本</p>
                         <button
                           type="button"
-                          className="rounded-full border border-divider bg-white px-3 py-1.5 text-xs font-medium text-ink-secondary hover:bg-paper-warm"
-                          onClick={() => seekAudio(citation.startMs)}
+                          onClick={copyScript}
+                          className="rounded-full border border-divider bg-white px-2.5 py-1 text-[11px] font-medium text-ink-secondary transition hover:bg-paper-warm"
                         >
-                          跳到本章
+                          复制脚本
                         </button>
-                      ) : null}
-                    </div>
-                    {citation ? (
-                      <div className="mt-3 flex flex-wrap items-center gap-2">
-                        <EvidenceChip citation={citation} transcript={transcript} onSeek={seekAudio} />
                       </div>
-                    ) : null}
-                  </article>
-                );
-              })
-            ) : (
-              <p className="text-sm text-ink-muted">暂无章节信息。</p>
-            )}
-          </div>
-        </div>
-      ) : null}
+                      <div ref={scriptContainerRef} className="max-h-[480px] space-y-2 overflow-y-auto">
+                        {scriptLines.map((line, index) => {
+                          const isActive = index === activeLineIndex;
+                          return (
+                            <button
+                              key={`line-${index}`}
+                              type="button"
+                              data-line-index={index}
+                              onClick={() => seekToLine(index)}
+                              className={`w-full rounded-2xl border px-4 py-3 text-left transition-all ${
+                                isActive
+                                  ? 'border-vermilion/40 bg-vermilion-mist/50 ring-1 ring-vermilion/20'
+                                  : 'border-divider bg-paper-warm hover:border-divider hover:bg-white'
+                              }`}
+                            >
+                              <p className={`text-xs font-semibold uppercase tracking-[0.14em] ${isActive ? 'text-vermilion' : 'text-ink-muted'}`}>
+                                {line.speaker}
+                              </p>
+                              <p className={`mt-2 text-sm leading-7 ${isActive ? 'text-ink' : 'text-ink-secondary'}`}>{line.line}</p>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  ) : null}
+
+                  {sections.length > 0 ? (
+                    <div className="grid gap-3">
+                      {sections.map((section, index) => {
+                        const citation = chapterCitations[index];
+                        return (
+                          <article key={section.id || `section-${index}`} className="rounded-2xl border border-divider bg-paper-warm p-4">
+                            <div className="flex flex-wrap items-start justify-between gap-3">
+                              <div>
+                                <p className="text-sm font-semibold text-ink">{section.title || `章节 ${index + 1}`}</p>
+                                <p className="mt-1 text-sm leading-6 text-ink-secondary">{sanitizeNarration(section.body || '') || '暂无章节摘要。'}</p>
+                              </div>
+                              {citation ? (
+                                <button
+                                  type="button"
+                                  className="rounded-full border border-divider bg-white px-3 py-1.5 text-xs font-medium text-ink-secondary hover:bg-paper-warm"
+                                  onClick={() => seekAudio(citation.startMs)}
+                                >
+                                  跳到本章
+                                </button>
+                              ) : null}
+                            </div>
+                            {citation ? (
+                              <div className="mt-3 flex flex-wrap items-center gap-2">
+                                <EvidenceChip citation={citation} transcript={transcript} onSeek={seekAudio} />
+                              </div>
+                            ) : null}
+                          </article>
+                        );
+                      })}
+                    </div>
+                  ) : null}
+                </div>
+              </details>
+            ) : null}
+          </>
+        ) : (
+          /* 音频未就绪（如火山 403）：播放条形态的重试条，点整条重新生成；
+             生成中显示 spinner，成功后同位置直接变成上方播放条 */
+          <button
+            type="button"
+            onClick={onRegenerate}
+            disabled={!onRegenerate || isRegenerating}
+            className="flex w-full items-center gap-4 rounded-xl bg-paper-warm px-4 py-3 text-left transition hover:bg-paper-deep disabled:cursor-default disabled:opacity-70"
+            aria-label={isRegenerating ? '正在生成播客音频' : '重新生成播客音频'}
+          >
+            <span className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-full bg-vermilion text-white shadow-[0_6px_16px_rgba(181,72,60,0.28)]">
+              {isRegenerating ? <Loader2 size={18} className="animate-spin" /> : <RefreshCw size={18} />}
+            </span>
+            <span className="min-w-0 flex-1">
+              <span className="block text-sm font-semibold text-ink">
+                {isRegenerating ? '正在生成播客音频…' : '音频未就绪 · 点这里重新生成'}
+              </span>
+              <span className="mt-0.5 block truncate text-xs text-ink-muted">
+                {isRegenerating
+                  ? '生成完这里会变成播放条，直接就能听'
+                  : payload.error
+                    ? `上次失败：${payload.error}`
+                    : '脚本已就绪，音频稍后就好'}
+              </span>
+            </span>
+            <span className="flex-shrink-0 rounded-full bg-vermilion px-3 py-1.5 text-xs font-semibold text-white">
+              {isRegenerating ? '生成中' : '重新生成'}
+            </span>
+          </button>
+        )}
+      </div>
     </section>
   );
 }

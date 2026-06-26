@@ -64,7 +64,7 @@ import { normalizeCompanionMarkdown } from './companion-markdown-utils';
 // M14: 课堂同桌 chip 行（稳定 + 动态）
 import { ClassroomChipRow, type ClassroomDynamicChip } from './ClassroomChipRow';
 
-const IN_CLASS_EXCLUDED_SKILL_APP_KEYS: readonly WorkshopAppKey[] = ['flashcards', 'quiz', 'study-report'];
+const IN_CLASS_EXCLUDED_SKILL_APP_KEYS: readonly WorkshopAppKey[] = ['flashcards', 'quiz'];
 
 const DEFAULT_LIGHT_PROMPTS = [
   '刚才那句我没跟上',

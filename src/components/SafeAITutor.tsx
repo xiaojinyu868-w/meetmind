@@ -127,9 +127,8 @@ export function SafeAITutor(props: AITutorProps) {
             options={{
               returnTimestamps: tutorPrefs.showTimestamps,
               thinkingGuide: tutorPrefs.thinkingGuide,
-              allowInlineApp: true,
             }}
-            onOpenAppInWorkspace={props.onOpenAppInWorkspace}
+            onOpenApp={props.onOpenAppInWorkspace}
           />
         </div>
       </div>

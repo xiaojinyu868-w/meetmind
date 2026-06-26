@@ -219,7 +219,9 @@ export function useReviewSession(
       if (session.blob) {
         setAudioBlob(session.blob);
         setAudioUrl(null);
-      } else if (session.mediaUrl) {
+      } else if (session.mediaUrl && !session.mediaUrl.startsWith('blob:')) {
+        // 只在上云拿到真实 URL 时才设 audioUrl；blob: 是录音时的临时 URL，
+        // 刷新/跨设备后失效，设了会让 WaveformPlayer 卡在"加载音频..."。
         setAudioBlob(null);
         setAudioUrl(session.mediaUrl);
       } else {

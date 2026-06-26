@@ -17,7 +17,6 @@ describe('open app marker parsing', () => {
   it('marks post-class apps as blocked for in-class companion execution', () => {
     expect(isInClassBlockedInlineAppKey('flashcards')).toBe(true);
     expect(isInClassBlockedInlineAppKey('quiz')).toBe(true);
-    expect(isInClassBlockedInlineAppKey('study-report')).toBe(true);
     expect(isInClassBlockedInlineAppKey('cheatsheet')).toBe(false);
     expect(isInClassBlockedInlineAppKey('mindmap')).toBe(false);
     expect(isInClassBlockedInlineAppKey(null)).toBe(false);

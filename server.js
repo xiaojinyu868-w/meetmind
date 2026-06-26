@@ -284,6 +284,16 @@ app.prepare().then(() => {
     const audioQueue = [];
     const AUDIO_QUEUE_MAX_SIZE = 500; // 上限 500 个 chunk（约 16 秒 @16kHz）
 
+    // DashScope 限速：2560KB/s（约 2.5MB/s）。每个 PCM chunk 3.2KB。
+    // 旧 flushAudioQueue 同步 while loop 一次性 send 全部累积 chunks，
+    // 瞬时流量可达 1.6MB/极短时间（500 chunks）→ 远超 2560KB/s 限制 →
+    // DashScope 服务端 1007 Input traffic exceeds the limit 关闭连接 →
+    // "音频转写失败"。
+    // 节流策略：每批最多 60 chunks（~192KB），间隔 100ms → ~1.92MB/s ≤ 2.5MB/s 安全。
+    const FLUSH_BATCH_SIZE = 60;
+    const FLUSH_INTERVAL_MS = 100;
+    let isFlushingAudioQueue = false;
+
     let sessionStartTime = Date.now();
     let sentenceIndex = 0;
     let lastSentenceEndTime = 0;
@@ -455,10 +465,31 @@ app.prepare().then(() => {
     }
 
     function flushAudioQueue() {
-      while (audioQueue.length > 0) {
+      if (isFlushingAudioQueue) return;
+      if (audioQueue.length === 0) return;
+      isFlushingAudioQueue = true;
+      flushNextAudioBatch();
+    }
+
+    function flushNextAudioBatch() {
+      if (!isFlushingAudioQueue) return;
+      if (!dashscopeWs || dashscopeWs.readyState !== WebSocket.OPEN) {
+        isFlushingAudioQueue = false;
+        return;
+      }
+
+      const batchSize = Math.min(FLUSH_BATCH_SIZE, audioQueue.length);
+      for (let i = 0; i < batchSize; i += 1) {
         const audioData = audioQueue.shift();
         if (audioData) sendAudioToDashScope(audioData);
       }
+
+      if (audioQueue.length === 0) {
+        isFlushingAudioQueue = false;
+        return;
+      }
+
+      setTimeout(flushNextAudioBatch, FLUSH_INTERVAL_MS);
     }
 
     function resolveTimestamp(msg) {
