@@ -172,6 +172,33 @@ function compactText(value: string, limit: number): string {
   return `${normalized.slice(0, Math.max(0, limit - 3))}...`;
 }
 
+/**
+ * 从 takeaway / echo body 兜底生成标题。
+ * 不再用 slice(0, 18) 硬截断（会在词中间断开，如"…而是学"），
+ * 而是找自然断点（句号/问号/感叹号/换行/逗号），最多 40 字符。
+ */
+function makeFallbackTitle(text: string, max = 40): string {
+  const clean = String(text || '').trim();
+  if (!clean) return '';
+  if (clean.length <= max) return clean;
+
+  // 优先找句末标点（。！？\n）作为断点
+  const sentenceMatch = clean.slice(0, max + 15).match(/^([^。！？\n]{4,}[。！？\n])/);
+  if (sentenceMatch) {
+    return sentenceMatch[1].replace(/[。！？\n]$/, '').trim();
+  }
+
+  // 其次找最后一个逗号作为断点
+  const sub = clean.slice(0, max);
+  const lastComma = Math.max(sub.lastIndexOf('，'), sub.lastIndexOf(','), sub.lastIndexOf(' '));
+  if (lastComma >= 10) {
+    return sub.slice(0, lastComma).trim();
+  }
+
+  // 兜底硬截断到 max
+  return sub.trim();
+}
+
 function normalizeEchoText(value: string): string {
   return String(value || '')
     .normalize('NFKC')
@@ -509,8 +536,8 @@ export function normalizeEchoOutput(input: {
   const takeaway = input.takeaway ? clean(input.takeaway) : undefined;
   const title = [
     clean(input.title || ''),
-    takeaway ? takeaway.slice(0, 18) : '',
-    echoText.slice(0, 18),
+    takeaway ? makeFallbackTitle(takeaway) : '',
+    makeFallbackTitle(echoText),
     '今日回声',
   ].find((value) => value.length >= 4) || '今日回声';
 
