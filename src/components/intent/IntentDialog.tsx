@@ -204,14 +204,6 @@ export function IntentDialog({
     },
   });
 
-  const handleVoiceTranscript = React.useCallback(
-    (text: string) => {
-      if (!text.trim()) return;
-      composer.setValue(composer.value ? `${composer.value} ${text}` : text);
-    },
-    [composer],
-  );
-
   const handleAcceptSummary = React.useCallback(
     async (messageId: string, params: { title: string; summary?: string }) => {
       const now = new Date().toISOString();
@@ -561,9 +553,8 @@ export function IntentDialog({
         uploadError={fileUpload.error}
         onRetryUpload={fileUpload.retryLast}
         isDragging={fileUpload.isDragging}
-        capabilities={{ mic: true, file: true, call: Boolean(onSwitchToCall) }}
+        capabilities={{ file: true, call: Boolean(onSwitchToCall) }}
         onCallStart={onSwitchToCall}
-        onVoiceTranscript={handleVoiceTranscript}
         placeholder="说说你最近想做的事 · 也可以拖文件 / 粘截图进来"
         busyPlaceholder="同学在听…"
         variant="glass"

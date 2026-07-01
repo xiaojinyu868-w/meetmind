@@ -35,7 +35,6 @@ import {
   ChatMessageList,
   ChatRenderer,
   ChatThinkingStripBubble,
-  ChatMessageFeedbackButtons,
   useChatComposer,
   useChatFileUpload,
   collectMessageText as collectChatMessageText,
@@ -455,14 +454,6 @@ export function TutorAgentPanel({
     onLargePaste: handleLargePaste,
   });
 
-  const handleVoiceTranscript = React.useCallback(
-    (text: string) => {
-      if (!text.trim()) return;
-      composer.setValue(composer.value ? `${composer.value} ${text}` : text);
-    },
-    [composer],
-  );
-
   const onPickSkill = React.useCallback(
     (prompt: string) => {
       if (busy) return;
@@ -643,17 +634,6 @@ export function TutorAgentPanel({
                     <span className="hidden sm:inline">重生成</span>
                   </button>
                 ) : null}
-                {/* M14.5: 消息级 👍👎 反馈 —— 数据闭环 + 大厂标志 */}
-                <ChatMessageFeedbackButtons
-                  messageId={m.id}
-                  messageText={collectMessageText(m)}
-                  mode={mode}
-                  modelId={preferredModel}
-                  userId={user?.id}
-                  onFeedbackSent={(rating) => {
-                    toast.success(rating === 'up' ? '已反馈' : '已记录，下次会更好', { duration: 1200 });
-                  }}
-                />
               </>
             ) : null;
 
@@ -709,11 +689,7 @@ export function TutorAgentPanel({
         uploadError={fileUpload.error}
         onRetryUpload={fileUpload.retryLast}
         isDragging={fileUpload.isDragging}
-        capabilities={{ mic: true, file: true }}
-        onVoiceTranscript={handleVoiceTranscript}
-        placeholder="问点什么…"
-        busyPlaceholder="同学在想…"
-        variant="paper"
+        capabilities={{ file: true }}
       />
     </div>
   );
