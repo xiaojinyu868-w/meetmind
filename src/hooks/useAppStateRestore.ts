@@ -181,61 +181,58 @@ export function useAppStateRestore(
         sessionActions.setSessionId(savedAppState.sessionId);
       }
 
-      // R9-3：尝试恢复 review viewMode（之前永远强制 classroom 是 bug）。
-      // 用户场景：在课后学习页 → 点设置 → 返回 → 应该回到课后学习页（不是首页）。
-      // /app 是单一 URL，靠 viewMode state 切换 — router.back() 会让 /app remount，
-      // 必须由 IndexedDB 持久化 + 这里恢复才能真正 "回到来源"。
-      let reviewRestored = false;
-      const restoreCallback = onRestoreReviewSessionRef.current;
-      if (
-        savedAppState?.viewMode === 'review' &&
-        savedAppState.sessionId &&
-        restoreCallback
-      ) {
-        try {
-          reviewRestored = await restoreCallback(savedAppState.sessionId, {
-            reviewTab: savedAppState.reviewTab,
-            videoWorkspaceTab: savedAppState.videoWorkspaceTab,
-            currentTime: savedAppState.currentTime,
-            showTranscriptBar: savedAppState.showTranscriptBar,
-          });
-        } catch (err) {
-          console.error('[initializeApp] restoreReviewSession failed, fallback to classroom:', err);
-          reviewRestored = false;
+      // ── Phase 1：设置基础 UI 状态 + 立即 dismiss splash ──
+      // review session 恢复（Phase 2）放到后台异步执行，不阻塞 UI 渲染。
+      // 用户立刻看到 app（默认 classroom 态），review 数据加载完后自动切换。
+      if (!savedAppState || savedAppState.viewMode !== 'review') {
+        uiActions.setViewMode('classroom');
+        sessionActions.setSelectedAnchor(null);
+        if (!savedAppState) {
+          sessionActions.setDataSource('live');
+          captureEditorActions.setVideoSource(null);
+          captureEditorActions.setVideoInsightItems([]);
+          captureEditorActions.setActiveVideoInsightId(null);
+          uiActions.setVideoWorkspaceTab('chat');
+          uiActions.setShowTranscriptBar(false);
+        } else if (savedAppState.dataSource !== 'video') {
+          captureEditorActions.setVideoSource(null);
+          captureEditorActions.setVideoInsightItems([]);
+          captureEditorActions.setActiveVideoInsightId(null);
+          uiActions.setShowTranscriptBar(false);
+          uiActions.setVideoWorkspaceTab(savedAppState.videoWorkspaceTab || 'chat');
+        }
+        if (typeof savedAppState?.currentTime === 'number' && Number.isFinite(savedAppState.currentTime)) {
+          playerActions.setCurrentTime(Math.max(0, Math.floor(savedAppState.currentTime)));
         }
       }
+      // savedAppState.viewMode === 'review' 时，viewMode 保持 store 默认 'classroom'，
+      // Phase 2 的 restoreCallback 会切到 'review'；失败则保持 'classroom'。
 
-      if (!reviewRestored) {
-        uiActions.setViewMode('classroom');
-      }
-      sessionActions.setSelectedAnchor(null);
-      if (!savedAppState) {
-        sessionActions.setDataSource('live');
-        captureEditorActions.setVideoSource(null);
-        captureEditorActions.setVideoInsightItems([]);
-        captureEditorActions.setActiveVideoInsightId(null);
-        uiActions.setVideoWorkspaceTab('chat');
-        uiActions.setShowTranscriptBar(false);
-      } else if (savedAppState.dataSource !== 'video' && !reviewRestored) {
-        // R9-3：reviewRestored=true 时，restoreReviewSession 已经设过 video/transcript
-        // 状态，这里不要再覆盖；只在没恢复 review 时才走默认重置。
-        captureEditorActions.setVideoSource(null);
-        captureEditorActions.setVideoInsightItems([]);
-        captureEditorActions.setActiveVideoInsightId(null);
-        uiActions.setShowTranscriptBar(false);
-        uiActions.setVideoWorkspaceTab(savedAppState.videoWorkspaceTab || 'chat');
-      }
-      if (!reviewRestored && typeof savedAppState?.currentTime === 'number' && Number.isFinite(savedAppState.currentTime)) {
-        playerActions.setCurrentTime(Math.max(0, Math.floor(savedAppState.currentTime)));
-      }
-      uiActions.setLoadingProgress(85);
-
-      // R9-3：之前注释 "不恢复 viewMode='review' 因为 hook 没 access 到 restoreReviewSession" 已废弃。
-      // 现在通过 onRestoreReviewSession callback 注入解决。
-
+      // Phase 1 done — dismiss splash, app is visible and interactive
       uiActions.setLoadingProgress(100);
       uiActions.setAppReady(true);
       hasRestoredState.current = true;
+
+      // ── Phase 2（后台）：恢复 review session ──
+      // 非阻塞——用户已经看到 app 了。review 数据加载完后自动切到 review 态；
+      // 如果恢复失败，fallback 到 classroom。
+      const restoreCallback = onRestoreReviewSessionRef.current;
+      if (savedAppState?.viewMode === 'review' && savedAppState.sessionId && restoreCallback) {
+        restoreCallback(savedAppState.sessionId, {
+          reviewTab: savedAppState.reviewTab,
+          videoWorkspaceTab: savedAppState.videoWorkspaceTab,
+          currentTime: savedAppState.currentTime,
+          showTranscriptBar: savedAppState.showTranscriptBar,
+        }).then((reviewRestored) => {
+          if (!reviewRestored) {
+            useUIStore.getState().actions.setViewMode('classroom');
+          }
+          useSessionStore.getState().actions.setSelectedAnchor(null);
+        }).catch((err) => {
+          console.error('[initializeApp] background restoreReviewSession failed:', err);
+          useUIStore.getState().actions.setViewMode('classroom');
+        });
+      }
      } catch (err) {
       console.error('[initializeApp] Fatal error during init:', err);
       const uiActions = useUIStore.getState().actions;

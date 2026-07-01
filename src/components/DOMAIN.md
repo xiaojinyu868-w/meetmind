@@ -82,13 +82,15 @@ components/
 | `ClassCheckOverlay.tsx` | 430 | 随堂检验弹窗（greeting → quiz → result 三阶段，Backdrop 已提取为独立组件避免闪烁） |
 | `ClassroomView.model.ts` | ~10 | 课堂页纯交互模型（demo 录课态停止按钮应退出 demo，不走真实录音/stale DB 清理） |
 | `SharedWorkspacePanel.tsx` | ~78 | shared workspace 统一面板（仅 apps）；支持在中间工作区打开具体应用而不是只弹浮窗 |
-| `ReviewWorkspacePanel.tsx` | 127 | desktop review 左侧证据面板（timeline / anchor detail） |
+| `ReviewWorkspacePanel.tsx` | ~193 | desktop review 左侧证据面板（timeline / anchor detail；M15 起移除单课 feed tab，信息流改走侧栏全局入口） |
 | `ReviewTutorPanel.tsx` | ~268 | desktop review 右侧 Tutor 面板（历史对话、SafeAITutor / TutorAgentPanel 统一容器；音频波形已上移到左证据栏） |
 | `CollectionSelectionBar.tsx` | 94 | 收集上下文多选操作条（问 Tutor / 引用 / 批量归档删除） |
 | `CollectionComposerContextPreview.tsx` | 62 | composer 上方的引用与链接预览条 |
 | `CollectionComposerBar.tsx` | 168 | collection composer 输入区容器（预览 / textarea / 发送 / 听写 / 上传） |
 | `CollectionMessageActionSheet.tsx` | ~283 | 收集消息操作底部菜单（复习/编辑/打开原件/归档/删除），从 page.tsx 提取 |
-| `mobile/MobileCollectionSheet.tsx` | ~430 | 收集菜单 / 历史收集 / 笔记总结面板；移动端底部或侧边 sheet，桌面端历史与笔记总结以右侧上下文抽屉呈现 |
+| `mobile/MobileCollectionSheet.tsx` | ~400 | 收集菜单 / 历史收集 / 相关信息面板；移动端底部或侧边 sheet，桌面端以右侧上下文抽屉呈现；M15 起 echo 分支换成 `<CrossCourseFeedPanel>` |
+| `CrossCourseFeedPanel.tsx` | ~245 | M15 跨课程信息流面板（替代笔记总结）：LLM 跨课程探针 + B站推荐 + Echo 沉淀卡三源合并为统一 `FeedItem[]` 流，复用 `<FeedStream>` 渲染 |
+| `FeedStream.tsx` | ~245 | 信息流列表渲染器：`FeedCard` 按 type 分发（summary / probe-* / confusion-link / bili-recommend / echo），支持 `onAction` / `onShareEcho` 回调 |
 | `CollectionFeedMessageBubble.tsx` | ~340 | 收集 Feed 单条消息气泡（audio/video/image/document/text 五种类型），从 page.tsx 提取 |
 | `CollectionEmptyState.tsx` | ~82 | 收集为空时引导页（录音/图片/讲义快捷入口），从 page.tsx 提取 |
 | `ImageUpload.tsx` | ~220 | 图片上传 |
@@ -100,7 +102,7 @@ components/
 | 文件 | 行数 | 职责 |
 |------|------|------|
 | `Header.tsx` | ~280 | 顶部导航栏 |
-| `DesktopSidebar.tsx` | ~350 | 桌面侧栏（默认 168px，折叠 52px；录课专注态强制 52px，主学习区优先） |
+| `DesktopSidebar.tsx` | ~374 | 桌面侧栏（默认 168px，折叠 52px；录课专注态强制 52px；「收集 → 相关信息」子导航 M15 起打开跨课程信息流抽屉，原「笔记总结」入口已替换） |
 | `ModelSelector.tsx` | ~260 | AI 模型选择器 |
 | `WechatBindForm.tsx` | ~280 | 微信绑定表单 |
 | `AgreementModal.tsx` | ~600 | 用户协议弹窗 |

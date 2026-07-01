@@ -2,8 +2,10 @@
 
 import type { CSSProperties, ReactNode } from 'react';
 import { Boxes, ChevronRight, Sparkles, X } from 'lucide-react';
-import { EchoCard, type EchoData } from '@/components/EchoCard';
+import { type EchoData } from '@/components/EchoCard';
+import { CrossCourseFeedPanel } from '@/components/CrossCourseFeedPanel';
 import { WorkspaceCaptureList, type WorkspaceCaptureListItem } from '@/components/WorkspaceCaptureList';
+import { COPY } from '@/lib/ui/copy';
 import type {
   MobileCollectionSheet as MobileCollectionSheetType,
   WorkspaceCaptureEditorMode,
@@ -155,9 +157,9 @@ export function MobileCollectionSheet({
               ) : null}
             </span>
             <div className="min-w-0 flex-1">
-              <p className="text-sm font-semibold text-[#1C1B19]">笔记总结</p>
+              <p className="text-sm font-semibold text-[#1C1B19]">{COPY.feed.relatedInfoLabel}</p>
               <p className="mt-0.5 text-xs leading-5 text-[#5C5A55]">
-                {workspaceEchoes.length > 0 ? '同桌整理了一些重点。' : '先继续收集，笔记总结会安静出现。'}
+                {workspaceEchoes.length > 0 ? '同桌从你收集的内容里整理了方向。' : '先继续收集，相关信息会安静出现。'}
               </p>
             </div>
             <ChevronRight size={16} className="text-[#8E8B82]" />
@@ -238,55 +240,28 @@ export function MobileCollectionSheet({
             {mobileCollectionSheet === 'echo' ? (
               <div
                 data-mobile-sheet-scrollable="echo"
-                className="min-h-0 flex-1 space-y-4 overflow-y-auto overscroll-contain p-4"
+                className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-4"
                 style={mobileSheetScrollableStyle}
               >
-                {workspaceEchoes.length > 0 ? (
-                  <>
-                    {workspaceEchoes.map((echo) => (
-                      <EchoCard
-                        key={echo.id}
-                        echo={{
-                          id: echo.id,
-                          kind: echo.kind,
-                          title: echo.title,
-                          body: echo.body,
-                          highlights: echo.highlights,
-                          takeaway: echo.takeaway,
-                          sourceCaptureIds: echo.sourceCaptureIds,
-                          createdAt: echo.createdAt,
-                          updatedAt: echo.updatedAt,
-                        }}
-                        onShare={onShareEcho}
-                      />
-                    ))}
-                    {enableManualEchoTrigger ? (
-                      <div className="pt-2">
-                        {renderManualEchoTriggerButton(
-                          'text-[11px] font-medium text-[#8E8B82] transition hover:text-[#5C5A55] disabled:cursor-not-allowed disabled:opacity-60'
-                        )}
-                      </div>
-                    ) : null}
-                    {manualEchoFeedbackView}
-                    {manualEchoDebugView}
-                  </>
-                ) : (
-                  <div className="flex flex-col items-center py-12">
-                    <span className="text-2xl text-[#8E8B82]/40">✦</span>
-                    <p className="mt-3 text-[14px] leading-7 text-[#8E8B82]">
-                      先继续收集，笔记总结会安静地出现。
-                    </p>
-                    {enableManualEchoTrigger ? (
-                      <div className="mt-4">
-                        {renderManualEchoTriggerButton(
-                          'text-xs font-medium text-[#8E8B82] transition hover:text-[#5C5A55] disabled:cursor-not-allowed disabled:opacity-60'
-                        )}
-                      </div>
-                    ) : null}
-                    {manualEchoFeedbackView}
-                    {manualEchoDebugView}
-                  </div>
-                )}
+                <CrossCourseFeedPanel
+                  onOpenCapture={(rawId) => {
+                    const li = allCollectionItems.find(
+                      (c) => c.id === `workspace-${rawId}` || c.id === rawId || c.sourceKey === rawId,
+                    );
+                    if (li) onOpenReview(li);
+                  }}
+                  onAskTutor={() => {
+                    // 跨课程信息流的「问同学」暂复用最近一条收集的 tutor 入口；
+                    // 真正的「以任意文本启动 tutor」走 page 层，这里先保守接线。
+                    const li = allCollectionItems[0];
+                    if (li) onAskTutorAboutCapture(li);
+                  }}
+                  onShareEcho={onShareEcho}
+                  enableManualEchoTrigger={enableManualEchoTrigger}
+                  renderManualEchoTriggerButton={renderManualEchoTriggerButton}
+                  manualEchoFeedbackView={manualEchoFeedbackView}
+                  manualEchoDebugView={manualEchoDebugView}
+                />
               </div>
             ) : null}
 
@@ -321,14 +296,14 @@ export function MobileCollectionSheet({
               <div className="min-w-0">
                 <p className="text-[15px] font-semibold tracking-[-0.01em] text-[#1C1B19]">
                   {mobileCollectionSheet === 'echo'
-                    ? '笔记总结'
+                    ? COPY.feed.drawerTitle
                     : mobileCollectionSheet === 'history'
                       ? '历史收集'
                       : '收集菜单'}
                 </p>
                 {mobileCollectionSheet === 'echo' ? (
                   <p className="mt-2 max-w-[420px] text-[13px] leading-6 text-[#5C5A55]">
-                    这些不是弹窗通知，而是同桌从你收集过的内容里安静整理出的重点。
+                    {COPY.feed.drawerSubtitle}
                   </p>
                 ) : null}
               </div>
@@ -342,55 +317,26 @@ export function MobileCollectionSheet({
             </div>
 
             {mobileCollectionSheet === 'echo' ? (
-              <div className="min-h-0 flex-1 space-y-4 overflow-y-auto bg-[#FAF7F2] p-5">
-                {workspaceEchoes.length > 0 ? (
-                  <>
-                    {workspaceEchoes.map((echo) => (
-                      <EchoCard
-                        key={echo.id}
-                        echo={{
-                          id: echo.id,
-                          kind: echo.kind,
-                          title: echo.title,
-                          body: echo.body,
-                          highlights: echo.highlights,
-                          takeaway: echo.takeaway,
-                          sourceCaptureIds: echo.sourceCaptureIds,
-                          createdAt: echo.createdAt,
-                          updatedAt: echo.updatedAt,
-                        }}
-                        onShare={onShareEcho}
-                      />
-                    ))}
-                    {enableManualEchoTrigger ? (
-                      <div className="pt-2">
-                        {renderManualEchoTriggerButton(
-                          'text-[11px] font-medium text-[#8E8B82] transition hover:text-[#5C5A55] disabled:cursor-not-allowed disabled:opacity-60'
-                        )}
-                      </div>
-                    ) : null}
-                    {manualEchoFeedbackView}
-                    {manualEchoDebugView}
-                  </>
-                ) : (
-                  <div className="flex min-h-full flex-col justify-center rounded-[24px] border border-[#E8E2D5] bg-white px-8 py-12 text-left">
-                    <p className="max-w-[360px] text-[22px] font-semibold leading-tight tracking-[-0.03em] text-[#1C1B19]">
-                      继续收集，重点会自己浮出来。
-                    </p>
-                    <p className="mt-3 max-w-[380px] text-[14px] leading-7 text-[#5C5A55]">
-                      它不会打断你，也不会急着生成长报告。等上下文够了，这里会出现小而有根的笔记总结。
-                    </p>
-                    {enableManualEchoTrigger ? (
-                      <div className="mt-5">
-                        {renderManualEchoTriggerButton(
-                          'text-xs font-medium text-[#8E8B82] transition hover:text-[#5C5A55] disabled:cursor-not-allowed disabled:opacity-60'
-                        )}
-                      </div>
-                    ) : null}
-                    {manualEchoFeedbackView}
-                    {manualEchoDebugView}
-                  </div>
-                )}
+              <div className="min-h-0 flex-1 overflow-y-auto bg-[#FAF7F2] p-5">
+                <CrossCourseFeedPanel
+                  onOpenCapture={(rawId) => {
+                    const li = allCollectionItems.find(
+                      (c) => c.id === `workspace-${rawId}` || c.id === rawId || c.sourceKey === rawId,
+                    );
+                    if (li) onOpenReview(li);
+                  }}
+                  onAskTutor={() => {
+                    // 跨课程信息流的「问同学」暂复用最近一条收集的 tutor 入口；
+                    // 真正的「以任意文本启动 tutor」走 page 层，这里先保守接线。
+                    const li = allCollectionItems[0];
+                    if (li) onAskTutorAboutCapture(li);
+                  }}
+                  onShareEcho={onShareEcho}
+                  enableManualEchoTrigger={enableManualEchoTrigger}
+                  renderManualEchoTriggerButton={renderManualEchoTriggerButton}
+                  manualEchoFeedbackView={manualEchoFeedbackView}
+                  manualEchoDebugView={manualEchoDebugView}
+                />
               </div>
             ) : null}
 

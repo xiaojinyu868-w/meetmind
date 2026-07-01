@@ -28,6 +28,8 @@ import {
 } from './recorder/recorder-utils';
 import { acquireAudioStream } from './recorder/recorder-audio-source';
 import { buildAudioConstraints } from '@/lib/services/asr/audio-constraints';
+import { toast } from 'sonner';
+import { COPY } from '@/lib/ui/copy';
 
 export const Recorder = forwardRef<RecorderHandle, RecorderProps>(function Recorder({
   onRecordingStart,
@@ -324,6 +326,12 @@ export const Recorder = forwardRef<RecorderHandle, RecorderProps>(function Recor
       });
       stream = acquired.stream;
       audioCleanupRef.current = acquired.cleanup;
+
+      // mixed 降级提示：用户选了"两路都录"但系统音频采集失败，静默降级为纯麦克风。
+      // 不告诉用户 = 不可逆损失（课后才发现老师声音没录到）。
+      if (audioSource === 'mixed' && acquired.effectiveSource === 'mic') {
+        toast(COPY.recording.downgradeFromMixed, { duration: 6000 });
+      }
 
       startTimeRef.current = Date.now();
       

@@ -60,6 +60,7 @@ api/route.ts → services → lib/utils, lib/db, lib/config
 | `workspace-echo-service.ts` | ~1300 | 每日回响生成（AI 洞察/金句/推荐）；CommonStack 新 schema 不返回 title，需从 takeaway / echo 生成标题后再进质量门 |
 | `workspace-search-service.ts` | 175 | 全局 AI 检索（流式带引用） |
 | `commonstack-echo-service.ts` | 273 | Echo LLM 调用（System Prompt 在此） |
+| `feed-service.ts` | ~370 | M15 信息流生成：`generateFeed`（单课遗留）+ `generateCrossCourseFeed`（跨课程，默认；基于 workspace captures + 画像 + 笔记，替代笔记总结） |
 
 ### 👤 用户 / 认证
 

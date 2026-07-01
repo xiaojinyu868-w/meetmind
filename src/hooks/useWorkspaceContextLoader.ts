@@ -99,6 +99,10 @@ export function useWorkspaceContextLoader(
         const activeCaptures = captures.filter((item) => (item.status || 'active') === 'active');
         const echoes = Array.isArray(payload.echoes) ? payload.echoes : [];
 
+        if (payload.workspace?.id) {
+          useEchoStore.getState().actions.setWorkspaceId(payload.workspace.id);
+        }
+
         if (captures.length > 0) {
           // 档位1（跨设备带走数据）：把 capture 里的转录段回填到 IndexedDB，
           // 让「课堂 tab」也能显示在另一台设备录的课 + 完整转录（不只是材料 feed）。

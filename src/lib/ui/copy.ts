@@ -143,6 +143,8 @@ export const COPY = {
     sourceSystem: '电脑声音',
     sourceMixed: '两路都录',
     activeStatus: (source: string): string => `正在听 · ${source} · 点开看实时文字`,
+    /** mixed 模式系统音频采集失败、降级为纯麦克风时提示 */
+    downgradeFromMixed: '电脑声音没录到，只用麦克风在录',
   },
 
   echoShare: {
@@ -182,41 +184,52 @@ export const COPY = {
    * 基于个人上下文的 LLM 驱动信息流——同一节课不同人看到不同的内容。
    */
   feed: {
-    /** tab 标签 */
+    /** tab 标签（单课复习态遗留，跨课程信息流改走侧栏抽屉） */
     tabLabel: '信息流',
-    /** 生成中 */
-    loading: '同学正在从这节课里挑对你重要的部分…',
-    /** 空状态（没有转录内容） */
-    empty: '这节课还没有内容。录完课后同学会自动整理。',
+    /** 侧栏「收集 → 相关信息」子导航文案 */
+    relatedInfoLabel: '相关信息',
+    /** 抽屉标题——替换原「笔记总结」 */
+    drawerTitle: '相关信息',
+    drawerSubtitle: '同学从你收集过的内容里整理的方向，加上他帮你找的延伸。',
+    /** 生成中（跨课程） */
+    loading: '同学正在从你收集的内容里挑对你重要的方向…',
+    /** 空状态（没有收集内容） */
+    empty: '还没有收集内容。先去收一节课或一篇文章，同学会自动整理方向。',
+    /** 跨课程空态 */
+    crossCourseEmptyTitle: '继续收集，方向会自己浮出来。',
+    crossCourseEmptyBody: '它不会打断你，也不会急着生成长报告。等你收集的内容够了，这里会出现基于你的方向和延伸。',
     /** 生成失败 */
     error: '没整理出来，再试一次',
     /** 重试按钮 */
     retry: '重新整理',
     /** 条目类型标签 */
-    typeSummary: '这节课',
+    typeSummary: '走向',
     typeProbeNear: '同主题',
     typeProbeLateral: '相关方向',
     typeProbeBridge: '跨界',
     typeConfusionLink: '你标记的困惑',
+    typeBiliRecommend: '同学帮你找的',
+    typeEcho: '同桌沉淀',
+    /** echo 卡分享按钮 */
+    shareEcho: '分享',
     /** 动作按钮 */
     actionJumpTimestamp: '跳回去听',
     actionMakeFlashcard: '做成闪卡',
     actionAskTutor: '让同学解释',
     actionReviewPrev: '看上节课',
+    actionOpenCapture: '看这条收集',
+    actionOpenBilibili: '在 B站看',
     /** whyForYou 前缀 */
     whyPrefix: '对你',
     /** OpenBiliClaw B站内容推荐区（Phase 2） */
-    obSection: '同学帮你找的',
     obSectionHint: '基于你的课堂内容和 B站收藏',
-    obEmpty: '填一下 B站 Cookie 就有了',
-    obCookieLabel: 'B站 Cookie',
-    obCookiePlaceholder: '在 bilibili.com 登录后，F12 → Application → Cookies 复制完整 Cookie',
-    obCookieSubmit: '连接 B站',
-    obCookieConnecting: '连接中…',
-    obCookieSuccess: 'B站已连接，正在拉取推荐…',
-    obCookieError: 'Cookie 无效或已过期，请重新复制',
-    obInitProgress: '正在拉取你的 B站历史…',
-    obNotConnected: '本地同学没在线',
+    obIntroCardHint: '在 OpenBiliClaw 装上浏览器扩展、登录 B 站，这里的卡片会自动出现。',
+    obInstallButton: '装浏览器扩展',
+    obInstallUrl: 'https://github.com/whiteguo233/OpenBiliClaw/releases/latest',
+    obSkipButton: '现在不用',
+    obOtherBrowsersNote: 'Firefox / 360 / QQ / 百度 等浏览器',
+    obReleasesLinkText: '去 Releases 下载',
+    obSafariNote: 'Safari 暂不支持',
     obWatchOnBilibili: '在 B站看',
   },
 

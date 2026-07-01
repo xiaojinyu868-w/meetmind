@@ -83,34 +83,8 @@ export interface UseClassroomCompanionInput {
   inlineAppMode?: boolean;
 }
 
-/**
- * 同学回复里用 <open_app:KEY/> 这种极简 XML 自闭合标签来暗示"打开应用"。
- * 例：我来给你整一张速查表。\n<open_app:cheatsheet/>
- * 这个正则故意宽松——KEY 里允许字母/数字/短划线，防止模型偶尔多一点下划线就不 match。
- */
-const OPEN_APP_MARKER = /<open_app:\s*([a-z0-9_-]+)\s*\/?\s*>/gi;
-
-/**
- * 从 AI 回复里抽出所有 open_app 标记，同时返回清洗过的文本。
- * - 只取第一个合法 key（防止模型一条消息里撒多个）
- * - 同时把所有标记从 content 里删干净
- */
-function extractOpenAppMarker(content: string): { key: string | null; cleaned: string } {
-  let firstKey: string | null = null;
-  const cleaned = content.replace(OPEN_APP_MARKER, (_m, key) => {
-    if (!firstKey && typeof key === 'string') firstKey = key.toLowerCase().trim();
-    return '';
-  });
-  return {
-    key: firstKey,
-    cleaned: cleaned
-      .split('\n')
-      .map((line) => line.trimEnd())
-      .join('\n')
-      .replace(/\n{3,}/g, '\n\n')
-      .trim(),
-  };
-}
+// extractOpenAppMarker 已统一到 @/lib/utils/open-app-marker，见下方 import。
+// M14.6：prompt 不再注入 <open_app:KEY/> 合约，此解析仅作防御性清洗保留。
 
 /**
  * 把 TranscriptSegment[] 折叠成 tutor 接口需要的 segments 数组。
@@ -162,7 +136,7 @@ import {
   resolveExplicitAiModelPreference,
 } from '@/lib/utils/ai-model-preference';
 import { buildInClassTutorAgentBody } from '@/lib/tutor/classroom-agent-request';
-import { isInClassBlockedInlineAppKey } from '@/lib/utils/open-app-marker';
+import { extractOpenAppMarker, isInClassBlockedInlineAppKey } from '@/lib/utils/open-app-marker';
 
 /** 把长句子截成省略号版，塞进"再讲讲那道 xxx..."的追问气泡里 */
 function truncate(s: string, n: number): string {

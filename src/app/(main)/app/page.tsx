@@ -618,8 +618,10 @@ function StudentAppContent({
     ) => {
       try {
         type RestoreOpts = NonNullable<Parameters<typeof restoreReviewSession>[1]>;
+        // 老 localStorage 可能存有已删除的 'feed' tab（M15 单课 feed tab 移除）→ 兜底回 'timeline'
+        const rawReviewTab = saved.reviewTab && saved.reviewTab !== 'feed' ? saved.reviewTab : 'timeline';
         return await restoreReviewSession(restoreSessionId, {
-          reviewTab: (saved.reviewTab || 'timeline') as RestoreOpts['reviewTab'],
+          reviewTab: rawReviewTab as RestoreOpts['reviewTab'],
           videoWorkspaceTab: (saved.videoWorkspaceTab || 'chat') as RestoreOpts['videoWorkspaceTab'],
           currentTime: saved.currentTime || 0,
           showTranscriptBar: Boolean(saved.showTranscriptBar),
@@ -658,9 +660,10 @@ function StudentAppContent({
     setShowSplash(false);
   }, []);
 
-  // 兜底：useAppStateRestore.initializeApp 若卡在 restoreReviewSession（IndexedDB 异常等），
-  // showSplash 永远不关、AppLoading 全屏覆盖，用户卡死在"正在加载"灰屏 + sidebar 不可点。
-  // 12s 仍未就绪则强制进入，让用户至少能操作（比永远卡死好）。
+  // 兜底：Phase 1（checkServices + getPersistedAppState）通常 <500ms 完成。
+  // 如果 IndexedDB 异常导致 Phase 1 也卡住，6s 强制 dismiss splash——
+  // 由于 splash 是 overlay（不是 early return），app 已经在 DOM 中，
+  // dismiss 后用户立刻可交互。
   useEffect(() => {
     if (isGuestFastEntry) return;
     const timer = window.setTimeout(() => {
@@ -670,7 +673,7 @@ function StudentAppContent({
         ui.actions.setAppReady(true);
         ui.actions.setShowSplash(false);
       }
-    }, 12000);
+    }, 6000);
     return () => window.clearTimeout(timer);
   }, [isGuestFastEntry]);
 
@@ -837,8 +840,9 @@ function StudentAppContent({
       }
     }
 
-    // 路径 C：video + 有 URL + 无 sessionId + 无服务端数据 → 重新导入
-    if (item.type === 'video' && item.attachmentUrl && !item.sessionId) {
+    // 路径 C：video + 有 URL → 重新导入（即使有 sessionId，如果 IndexedDB 和服务端都没转录数据，需要重新导入）
+    // 这修复了跨设备同步时"有 sessionId 但本机 IndexedDB 没有转录"导致时间轴为空的问题
+    if (item.type === 'video' && item.attachmentUrl) {
       const imported = await importVideoLinkRef.current(item.attachmentUrl, {
         sourceItemId: item.id,
         optimisticTitle: item.title,
@@ -1704,16 +1708,6 @@ function StudentAppContent({
     return <AppLoading message="正在准备学习空间" />;
   }
 
-  if (showSplash) {
-    return (
-      <AppLoading 
-        progress={loadingProgress}
-        message={loadingProgress >= 100 ? '即将进入' : undefined}
-        onComplete={loadingProgress >= 100 ? handleSplashComplete : undefined}
-      />
-    );
-  }
-
   const shouldAllowPageScroll = !isMobile && (viewMode === 'record' || (viewMode === 'review' && !!videoSource));
   const useFixedViewportLayout = !(!isMobile && viewMode === 'record');
   const rootClassName = isDesktopMobilePreview
@@ -1736,6 +1730,14 @@ function StudentAppContent({
       className={rootClassName}
       style={rootStyle}
     >
+      {/* Splash overlay — fixed position, renders on top. App underneath is in DOM and interactive during fade-out. */}
+      {showSplash && (
+        <AppLoading 
+          progress={loadingProgress}
+          message={loadingProgress >= 100 ? '即将进入' : undefined}
+          onComplete={loadingProgress >= 100 ? handleSplashComplete : undefined}
+        />
+      )}
       {/* ── 桌面端侧边栏 ── */}
       {!isMobile && (
         <DesktopSidebar

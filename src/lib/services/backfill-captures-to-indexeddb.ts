@@ -13,7 +13,10 @@
  */
 
 import { db, addTranscripts } from '@/lib/db';
+import { createLogger } from '@/lib/logger';
 import type { WorkspaceCaptureMessage } from '@/types/page-types';
+
+const logger = createLogger('backfill');
 
 export interface BackfillSegment {
   id?: string;
@@ -111,10 +114,12 @@ export async function backfillCapturesToIndexedDB(
 ): Promise<BackfillResult> {
   const result: BackfillResult = { scanned: 0, backfilled: 0, skipped: 0 };
   if (!force && hasBackfilledInThisSession) return result;
-  hasBackfilledInThisSession = true;
 
   const candidates = pickBackfillable(captures);
   result.scanned = candidates.length;
+  // 幂等标记延迟到处理完成后再置位——如果中途异常（网络断、IndexedDB 锁），
+  // 下次调用仍可重试，不会因一次失败永远跳过。
+  hasBackfilledInThisSession = true;
 
   // 预取本地已有转录段的 sessionId，避免覆盖
   let localTranscriptSessionIds: Set<string>;
@@ -162,7 +167,8 @@ export async function backfillCapturesToIndexedDB(
         })),
       );
       result.backfilled += 1;
-    } catch {
+    } catch (err) {
+      logger.warn('backfill single capture failed', { sessionId: cand.sessionId, error: String(err) });
       result.skipped += 1;
     }
   }

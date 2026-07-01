@@ -3,7 +3,12 @@
  *
  * 通过 MeetMind 代理 route (/api/openbiliclaw/*) 调用本地 OpenBiliClaw 后端。
  * 所有请求同源，无 CORS 问题。
+ *
+ * M15 起 B站 cookie 由 OpenBiliClaw 浏览器扩展自动同步——MeetMind 不再代理
+ * 手填 cookie 入口（submitBilibiliCookie / triggerInit 等已删除）。
  */
+
+import { readStoredAccessToken } from '@/lib/hooks/useAuth';
 
 // ─── 类型定义 ────────────────────────────────────────────────
 
@@ -23,30 +28,20 @@ export interface OBRecommendation {
   body_text: string;
 }
 
-/** 画像摘要 */
-export interface OBProfileSummary {
-  initialized: boolean;
-  personality_portrait: string;
-  core_traits: string[];
-  deep_needs: string[];
-}
-
-/** B站 Cookie 设置响应 */
-export interface OBCookieResponse {
-  ok: boolean;
-  authenticated: boolean;
-  username: string;
-  message: string;
-}
-
 // ─── 基础请求 ────────────────────────────────────────────────
 
 async function obFetch(path: string, options?: RequestInit): Promise<Response> {
+  let authHeader: Record<string, string> = {};
+  try {
+    const token = readStoredAccessToken();
+    if (token) authHeader = { Authorization: `Bearer ${token}` };
+  } catch { /* SSR / 无 window */ }
   return fetch(`/api/openbiliclaw/${path}`, {
     ...options,
     headers: {
       'content-type': 'application/json',
-      ...options?.headers,
+      ...authHeader,
+      ...options?.headers as Record<string, string> | undefined,
     },
   });
 }
@@ -58,7 +53,7 @@ export async function checkHealth(): Promise<boolean> {
   try {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), 3000);
-    const res = await fetch('/api/openbiliclaw/health', { signal: controller.signal });
+    const res = await obFetch('health', { signal: controller.signal });
     clearTimeout(timer);
     if (!res.ok) return false;
     const data = await res.json();
@@ -77,72 +72,5 @@ export async function getRecommendations(limit = 5): Promise<OBRecommendation[]>
     return Array.isArray(data.items) ? data.items : [];
   } catch {
     return [];
-  }
-}
-
-/** 设置 B站 Cookie */
-export async function submitBilibiliCookie(cookie: string): Promise<OBCookieResponse> {
-  const res = await obFetch('bilibili/cookie', {
-    method: 'POST',
-    body: JSON.stringify({ cookie }),
-  });
-  return res.json();
-}
-
-/** 读取画像摘要 */
-export async function getProfileSummary(): Promise<OBProfileSummary | null> {
-  try {
-    const res = await obFetch('profile-summary');
-    if (!res.ok) return null;
-    return res.json();
-  } catch {
-    return null;
-  }
-}
-
-/** 提交反馈 */
-export async function submitFeedback(
-  recommendationId: number,
-  feedbackType: 'like' | 'dislike',
-): Promise<boolean> {
-  try {
-    const res = await obFetch('recommendations/refresh', {
-      method: 'POST',
-      body: JSON.stringify({
-        recommendation_id: recommendationId,
-        feedback_type: feedbackType,
-      }),
-    });
-    return res.ok;
-  } catch {
-    return false;
-  }
-}
-
-/** 触发 init（拉取历史 + 生成画像 + 首轮发现） */
-export async function triggerInit(): Promise<boolean> {
-  try {
-    const res = await obFetch('init', {
-      method: 'POST',
-      body: JSON.stringify({
-        no_xhs: true,
-        no_douyin: true,
-        no_youtube: true,
-      }),
-    });
-    return res.ok;
-  } catch {
-    return false;
-  }
-}
-
-/** 查询 init 状态 */
-export async function getInitStatus(): Promise<{ status: string; phase?: string } | null> {
-  try {
-    const res = await obFetch('init-status');
-    if (!res.ok) return null;
-    return res.json();
-  } catch {
-    return null;
   }
 }

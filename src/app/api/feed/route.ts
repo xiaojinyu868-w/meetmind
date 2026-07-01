@@ -2,30 +2,42 @@
  * 信息流 API — M15
  *
  * POST /api/feed
- * 基于个人上下文（转录 + 画像 + 笔记 + 困惑）生成信息流，替代笔记总结。
+ * 两种模式：
+ *   - mode='cross-course'（默认，M15 起替代笔记总结）：基于 workspace 全部 captures + 画像 + 笔记
+ *   - mode='single'（单课复习态遗留）：基于某节课 transcript
  *
- * 请求体：
- *   sessionId, transcript, learnerProfile?, notes?, confusions?, sessionInfo?
+ * 请求体（cross-course）：
+ *   mode, workspaceId, captures: [{id,title,normalizedText?,contentType?,occurredAt?}],
+ *   learnerProfile?, notes?
+ *
+ * 请求体（single）：
+ *   mode, sessionId, transcript, learnerProfile?, notes?, confusions?, sessionInfo?
  *
  * 响应：
  *   { success: true, items: FeedItem[] }
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { feedService } from '@/lib/services/feed-service';
+import { feedService, type CrossCourseCapture } from '@/lib/services/feed-service';
 import { applyRateLimit } from '@/lib/utils/rate-limit';
 import { createLogger } from '@/lib/logger';
 
 const log = createLogger('api/feed');
 
 interface FeedRequest {
-  sessionId: string;
-  transcript: Array<{
+  mode?: 'cross-course' | 'single';
+  // cross-course
+  workspaceId?: string;
+  captures?: CrossCourseCapture[];
+  // single
+  sessionId?: string;
+  transcript?: Array<{
     id?: string;
     text: string;
     startMs: number;
     endMs: number;
   }>;
+  // 共享
   learnerProfile?: {
     bio?: { headline: string; detail?: string };
     goals?: Array<{ title: string; summary?: string }>;
@@ -44,14 +56,37 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
 
   try {
     const body: FeedRequest = await request.json();
+    const mode = body.mode ?? 'cross-course';
 
+    if (mode === 'cross-course') {
+      if (!body.workspaceId) {
+        return NextResponse.json(
+          { success: false, error: '缺少 workspaceId' },
+          { status: 400 },
+        );
+      }
+      if (!body.captures || body.captures.length === 0) {
+        return NextResponse.json(
+          { success: false, error: '还没有收集内容' },
+          { status: 400 },
+        );
+      }
+
+      const result = await feedService.generateCrossCourseFeed(body.captures, {
+        learnerProfile: body.learnerProfile,
+        notes: body.notes,
+      });
+
+      return NextResponse.json({ success: true, items: result.items });
+    }
+
+    // single（单课遗留）
     if (!body.sessionId) {
       return NextResponse.json(
         { success: false, error: '缺少 sessionId' },
         { status: 400 },
       );
     }
-
     if (!body.transcript || body.transcript.length === 0) {
       return NextResponse.json(
         { success: false, error: '缺少转录内容' },
@@ -59,10 +94,9 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       );
     }
 
-    // 转换转录格式（复用 summary route 的模式）
     const segments = body.transcript.map((seg, index) => ({
       id: seg.id ? parseInt(seg.id) : index,
-      sessionId: body.sessionId,
+      sessionId: body.sessionId!,
       userId: 'anonymous',
       text: seg.text,
       startMs: seg.startMs,
@@ -78,12 +112,11 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       sessionInfo: body.sessionInfo,
     });
 
-    return NextResponse.json({
-      success: true,
-      items: result.items,
-    });
+    return NextResponse.json({ success: true, items: result.items });
   } catch (error) {
     log.error('生成信息流失败:', error);
+    const message = error instanceof Error ? error.message : '生成失败';
+    log.warn('生成信息流失败详情:', message);
     return NextResponse.json(
       {
         success: false,

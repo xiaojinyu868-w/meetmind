@@ -115,7 +115,7 @@ export function AppLoading({ progress, message, onComplete }: AppLoadingProps) {
   return (
     <div 
       className={`fixed inset-0 z-50 flex flex-col overflow-hidden transition-opacity duration-200 ${
-        isFadingOut ? 'opacity-0' : 'opacity-100'
+        isFadingOut ? 'opacity-0 pointer-events-none' : 'opacity-100'
       }`}
     >
       {/* 品牌图片背景 */}

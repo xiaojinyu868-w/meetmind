@@ -25,6 +25,7 @@ import type { EchoData } from '@/components/EchoCard';
 // ==================== 类型定义 ====================
 
 interface EchoState {
+  workspaceId: string | null;
   workspaceEchoes: WorkspaceEchoMessage[];
   workspaceCaptures: WorkspaceCaptureMessage[];
   selectedEchoChip: string;
@@ -37,6 +38,7 @@ interface EchoState {
 interface EchoActions {
   setWorkspaceEchoes: (echoes: WorkspaceEchoMessage[] | ((prev: WorkspaceEchoMessage[]) => WorkspaceEchoMessage[])) => void;
   setWorkspaceCaptures: (captures: WorkspaceCaptureMessage[] | ((prev: WorkspaceCaptureMessage[]) => WorkspaceCaptureMessage[])) => void;
+  setWorkspaceId: (id: string | null) => void;
   setSelectedEchoChip: (chip: string) => void;
   setIsManualEchoRefreshing: (refreshing: boolean) => void;
   setManualEchoDebugNote: (note: string) => void;
@@ -51,6 +53,7 @@ export type EchoStore = EchoState & { actions: EchoActions };
 // ==================== 初始状态 ====================
 
 const initialState: EchoState = {
+  workspaceId: null,
   workspaceEchoes: [],
   workspaceCaptures: [],
   selectedEchoChip: '全部',
@@ -76,6 +79,7 @@ export const useEchoStore = create<EchoStore>()(
       actions: {
         setWorkspaceEchoes: (next) => set((s) => ({ workspaceEchoes: resolveUpdate(next, s.workspaceEchoes) }), false, 'setWorkspaceEchoes'),
         setWorkspaceCaptures: (next) => set((s) => ({ workspaceCaptures: resolveUpdate(next, s.workspaceCaptures) }), false, 'setWorkspaceCaptures'),
+        setWorkspaceId: (id) => set({ workspaceId: id }, false, 'setWorkspaceId'),
         setSelectedEchoChip: (chip) => set({ selectedEchoChip: chip }, false, 'setSelectedEchoChip'),
         setIsManualEchoRefreshing: (refreshing) => set({ isManualEchoRefreshing: refreshing }, false, 'setIsManualEchoRefreshing'),
         setManualEchoDebugNote: (note) => set({ manualEchoDebugNote: note }, false, 'setManualEchoDebugNote'),
@@ -93,6 +97,7 @@ export const useEchoStore = create<EchoStore>()(
 
 export const useWorkspaceEchoes = () => useEchoStore((s) => s.workspaceEchoes);
 export const useWorkspaceCaptures = () => useEchoStore((s) => s.workspaceCaptures);
+export const useWorkspaceId = () => useEchoStore((s) => s.workspaceId);
 export const useSelectedEchoChip = () => useEchoStore((s) => s.selectedEchoChip);
 export const useIsManualEchoRefreshing = () => useEchoStore((s) => s.isManualEchoRefreshing);
 export const useManualEchoDebugNote = () => useEchoStore((s) => s.manualEchoDebugNote);

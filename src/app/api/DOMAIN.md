@@ -52,6 +52,7 @@ route.ts → lib/services/ + lib/utils/rate-limit
 | `/api/generate-summary` | POST | 课堂摘要生成 |
 | `/api/generate-topics` | POST | 精选片段生成（Smart/Fast） |
 | `/api/feedback` | POST | 用户反馈 |
+| `/api/feed` | POST | 信息流生成（M15：默认 `mode=cross-course` 基于 workspace captures + 画像 + 笔记生成跨课程信息流；`mode=single` 遗留单课模式） |
 
 ### 🧩 应用系统
 

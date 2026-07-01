@@ -217,6 +217,12 @@ export function ChatMessageFeedbackButtons({
       if (submitting) return;
       // 切换到同一选项：忽略
       if (chosen === rating) return;
+      // messageId 为空时无法上报（AI SDK 流式消息可能在某些路径下 id 缺失）
+      if (!messageId) {
+        setChosen(rating);
+        onFeedbackSent?.(rating);
+        return;
+      }
       setSubmitting(true);
       const previous = chosen;
       setChosen(rating); // optimistic
@@ -237,6 +243,12 @@ export function ChatMessageFeedbackButtons({
         onFeedbackSent?.(rating);
       } catch {
         setChosen(previous); // rollback
+        // 失败时给用户一个轻提示，避免"点了没反馈"
+        if (typeof window !== 'undefined') {
+          import('sonner').then(({ toast }) => {
+            toast.error('网络不太好，反馈没送出去', { duration: 1500 });
+          }).catch(() => undefined);
+        }
       } finally {
         setSubmitting(false);
       }

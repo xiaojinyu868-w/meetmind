@@ -55,6 +55,7 @@ interface RawFeedItem {
   actionLabel?: string;
   actionType?: string;
   whyForYou?: string;
+  captureId?: string;
 }
 
 interface RawFeedResult {
@@ -238,6 +239,187 @@ export async function generateFeed(
   return { items: validateFeedItems(raw.items) };
 }
 
+// ============ 跨课程信息流（M15：替代笔记总结的全局信息流） ============
+
+export interface CrossCourseCapture {
+  id: string;
+  title: string;
+  normalizedText?: string | null;
+  contentType?: string;
+  occurredAt?: string | null;
+}
+
+export interface GenerateCrossCourseFeedOptions {
+  model?: string;
+  learnerProfile?: {
+    bio?: { headline: string; detail?: string };
+    goals?: Array<{ title: string; summary?: string }>;
+  };
+  notes?: Array<{ text: string; source: string }>;
+}
+
+function buildCrossCoursePrompt(
+  captures: CrossCourseCapture[],
+  options: GenerateCrossCourseFeedOptions,
+): string {
+  // captures 段落：每条标题 + 截断正文
+  const MAX_CAPTURE_TEXT = 800;
+  const capturesSection = captures.slice(0, 12).map((c, i) => {
+    const text = (c.normalizedText ?? '').slice(0, MAX_CAPTURE_TEXT);
+    const when = c.occurredAt ? `（${c.occurredAt.slice(0, 10)}）` : '';
+    return `【收集${i + 1}】${c.title}${when}\n${text || '（无正文，可能是图片/音频类收集）'}`;
+  }).join('\n\n');
+
+  // 个人上下文段落
+  const profileLines: string[] = [];
+  if (options.learnerProfile?.bio?.headline) {
+    profileLines.push(`这个人：${options.learnerProfile.bio.headline}`);
+    if (options.learnerProfile.bio.detail) {
+      profileLines.push(options.learnerProfile.bio.detail);
+    }
+  }
+  const activeGoals = (options.learnerProfile?.goals ?? [])
+    .filter((g) => !g.summary || g.summary !== 'completed')
+    .slice(0, 3);
+  if (activeGoals.length > 0) {
+    profileLines.push('他正在追的事：');
+    activeGoals.forEach((g) => {
+      profileLines.push(`  · ${g.title}${g.summary ? `（${g.summary.slice(0, 50)}）` : ''}`);
+    });
+  }
+  const profileSection = profileLines.length > 0
+    ? profileLines.join('\n')
+    : '（还没有个人画像信息）';
+
+  // 笔记段落（跨课程）
+  const notesSection = (options.notes ?? []).length > 0
+    ? (options.notes ?? []).slice(0, 10).map((n) => `  · ${n.text}`).join('\n')
+    : '（还没有笔记）';
+
+  return `<task>
+<role>你是 MeetMind 的同学。你不做面面俱到的总结——你基于对「这个人」的了解，从他最近收集的内容里挑出对他重要的方向，再给出他可能想接着看的下一步。这里没有「一节课」的概念，而是他跨课程、跨来源一段时间内的收集。</role>
+<context>
+这是这个人最近收集的 ${captures.length} 条内容（课堂录音、文章、视频、笔记录音等都可能混在一起）。
+
+【这个人】
+${profileSection}
+
+【他跨课程记的笔记】
+${notesSection}
+
+【他最近的收集】
+${capturesSection || '（还没有收集内容）'}
+</context>
+<goal>生成一份跨课程信息流，不是每条收集的复述，而是基于这个人的画像从所有收集里提炼出「他现在最该关注的」+「他可以接着去的方向」。让他感觉"这个同学真的懂我在学什么、我手上攒了什么"。</goal>
+<instructions>
+  <step name="跨课程沉淀（1条，type=summary）">
+    <description>2-3句话，概括他最近收集的整体走向——从他的目标/阶段角度，说这些内容合在一起在指向什么。不要逐条复述。</description>
+    <example>你最近收的这几节课都在讲积分技巧，加上那篇换元法的文章——你在啃考研数学的硬骨头。</example>
+  </step>
+  <step name="延伸探针（${MAX_PROBES}条，type=probe-near / probe-lateral / probe-bridge）">
+    <description>基于他的画像和这些收集，给出他可能想接着看的方向。每个方向一句话说清是什么，一句话说为什么对他重要。</description>
+    <types>
+      <item>probe-near：同主题的下一步</item>
+      <item>probe-lateral：相关方向</item>
+      <item>probe-bridge：跨界关联（如编程/物理里对应的概念）</item>
+    </types>
+    <criteria>不要给泛泛的"多做题"——要具体到知识点。whyForYou 必须基于他的画像或某条具体收集，不要编造。可以在 body 里用「来自《xxx》」指回某条收集的标题。</criteria>
+  </step>
+</instructions>
+<qualityControl>
+  <item>总条数不超过 ${MAX_ITEMS} 条</item>
+  <item>每条 body 控制在 2 句话以内</item>
+  <item>不要面面俱到——省略对他不重要的收集</item>
+  <item>不要用"建议""应该"这种指令语气——像旁边同学递话</item>
+  <item>不要输出时间戳——这是跨课程信息流，没有统一时间轴</item>
+  <item>actionType 只用 open-capture（让用户跳回某条收集）或 ask-tutor；不要用 jump-timestamp</item>
+</qualityControl>
+<outputFormat>
+返回严格的 JSON 对象：
+{
+  "items": [
+    {
+      "type": "summary" | "probe-near" | "probe-lateral" | "probe-bridge",
+      "title": "标题（不超过12字）",
+      "body": "2句话以内的说明",
+      "actionLabel": "动作按钮文案（如\"看这条收集\"、\"问同学\"）",
+      "actionType": "open-capture" | "ask-tutor",
+      "captureId": "若 actionType=open-capture，填对应收集的 id；否则省略",
+      "whyForYou": "为什么对他重要（基于画像，1句话）"
+    }
+  ]
+}
+不要包含任何 markdown 标记或其他说明文字。
+</outputFormat>
+</task>`;
+}
+
+const VALID_CC_TYPES: FeedItemType[] = [
+  'summary', 'probe-near', 'probe-lateral', 'probe-bridge',
+];
+const VALID_CC_ACTIONS: FeedActionType[] = ['open-capture', 'ask-tutor'];
+
+function validateCrossCourseItems(raw: RawFeedItem[]): FeedItem[] {
+  return raw
+    .filter((item) => item.title && item.body && VALID_CC_TYPES.includes(item.type as FeedItemType))
+    .map((item) => {
+      const feedItem: FeedItem = {
+        type: item.type as FeedItemType,
+        title: item.title.slice(0, 20),
+        body: item.body,
+      };
+      if (item.actionLabel) {
+        feedItem.actionLabel = item.actionLabel.slice(0, 12);
+      }
+      const action = item.actionType as FeedActionType | undefined;
+      if (action && VALID_CC_ACTIONS.includes(action)) {
+        feedItem.actionType = action;
+      }
+      if (item.whyForYou) {
+        feedItem.whyForYou = item.whyForYou;
+      }
+      if (item.captureId) {
+        feedItem.captureId = String(item.captureId);
+      }
+      return feedItem;
+    })
+    .slice(0, MAX_ITEMS);
+}
+
+/**
+ * 跨课程信息流：基于 workspace 全部 captures + 画像 + 笔记生成。
+ * 不依赖某节课的 transcript，产物无单课时间戳语义。
+ */
+export async function generateCrossCourseFeed(
+  captures: CrossCourseCapture[],
+  options: GenerateCrossCourseFeedOptions = {},
+): Promise<{ items: FeedItem[] }> {
+  if (captures.length === 0) {
+    throw new Error('还没有收集内容');
+  }
+
+  const model = options.model ?? DEFAULT_MODEL;
+  const prompt = buildCrossCoursePrompt(captures, options);
+  const messages: ChatMessage[] = [{ role: 'user', content: prompt }];
+
+  const response = await chat(messages, model, {
+    temperature: 0.4,
+    maxTokens: 2400,
+    responseFormat: 'json_object',
+  });
+
+  console.info('[feed.cross-course] response.prefix=', response.content.slice(0, 200));
+  console.info('[feed.cross-course] response.usage=', response.usage);
+
+  const raw = parseJsonResponse<RawFeedResult>(response.content);
+  if (!raw || !Array.isArray(raw.items)) {
+    console.error('[feed.cross-course] 解析失败, content.len=', response.content.length);
+    throw new Error('无法解析信息流响应');
+  }
+  return { items: validateCrossCourseItems(raw.items) };
+}
+
 export const feedService = {
   generateFeed,
+  generateCrossCourseFeed,
 };

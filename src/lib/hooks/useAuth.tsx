@@ -58,6 +58,11 @@ function getStoredToken(): string | null {
   return localStorage.getItem(TOKEN_KEY) || localStorage.getItem(LEGACY_TOKEN_KEY);
 }
 
+/** 客户端任意 service 同源调 /api/* 时用来带 auth token（避开 middleware 401） */
+export function readStoredAccessToken(): string | null {
+  return getStoredToken();
+}
+
 function setStoredToken(token: string | null): void {
   if (typeof window === 'undefined') return;
   if (token) {

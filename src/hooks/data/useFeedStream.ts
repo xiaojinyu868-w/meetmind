@@ -1,29 +1,29 @@
 'use client';
 
 import { useState, useCallback, useRef } from 'react';
-import type { TranscriptSegment, FeedItem } from '@/types';
+import type { FeedItem } from '@/types';
 import type { LearnerProfile } from '@/types/user';
+import type { WorkspaceCaptureMessage } from '@/types/page-types';
 
 // ─── 类型定义 ────────────────────────────────────────────────
 
+interface CapturePayload {
+  id: string;
+  title: string;
+  normalizedText?: string | null;
+  contentType?: string;
+  occurredAt?: string | null;
+}
+
 interface GenerateFeedRequest {
-  sessionId: string;
-  transcript: Array<{
-    id: string;
-    text: string;
-    startMs: number;
-    endMs: number;
-  }>;
+  mode: 'cross-course';
+  workspaceId: string;
+  captures: CapturePayload[];
   learnerProfile?: {
     bio?: { headline: string; detail?: string };
     goals?: Array<{ title: string; summary?: string }>;
   };
   notes?: Array<{ text: string; source: string }>;
-  confusions?: Array<{ text: string; timestampLabel?: string }>;
-  sessionInfo?: {
-    subject?: string;
-    topic?: string;
-  };
 }
 
 interface GenerateFeedResponse {
@@ -33,15 +33,11 @@ interface GenerateFeedResponse {
 }
 
 interface UseFeedStreamOptions {
-  sessionId: string;
-  segments: TranscriptSegment[];
+  workspaceId: string;
+  captures: WorkspaceCaptureMessage[];
   learnerProfile?: LearnerProfile | null;
   notes?: Array<{ text: string; source: string }>;
-  confusions?: Array<{ text: string; timestampLabel?: string }>;
-  sessionInfo?: {
-    subject?: string;
-    topic?: string;
-  };
+  accessToken?: string | null;
 }
 
 interface UseFeedStreamReturn {
@@ -58,12 +54,11 @@ interface UseFeedStreamReturn {
 // ─── Hook 实现 ────────────────────────────────────────────────
 
 export function useFeedStream({
-  sessionId,
-  segments,
+  workspaceId,
+  captures,
   learnerProfile,
   notes,
-  confusions,
-  sessionInfo,
+  accessToken,
 }: UseFeedStreamOptions): UseFeedStreamReturn {
   const [items, setItems] = useState<FeedItem[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -71,9 +66,8 @@ export function useFeedStream({
   const abortRef = useRef<AbortController | null>(null);
 
   const generate = useCallback(async () => {
-    if (segments.length === 0) return;
+    if (captures.length === 0) return;
 
-    // 取消上一次未完成的请求
     abortRef.current?.abort();
     const controller = new AbortController();
     abortRef.current = controller;
@@ -82,7 +76,6 @@ export function useFeedStream({
     setError(null);
 
     try {
-      // 提取 learnerProfile 里的 bio + goals
       const profilePayload: GenerateFeedRequest['learnerProfile'] = learnerProfile
         ? {
             bio: learnerProfile.bio?.headline
@@ -98,23 +91,28 @@ export function useFeedStream({
           }
         : undefined;
 
+      const capturesPayload: CapturePayload[] = captures.map((c) => ({
+        id: c.id,
+        title: c.title,
+        normalizedText: c.normalizedText,
+        contentType: c.contentType,
+        occurredAt: c.occurredAt ?? c.createdAt,
+      }));
+
       const requestBody: GenerateFeedRequest = {
-        sessionId,
-        transcript: segments.map((s) => ({
-          id: String(s.id),
-          text: s.text,
-          startMs: s.startMs,
-          endMs: s.endMs,
-        })),
+        mode: 'cross-course',
+        workspaceId,
+        captures: capturesPayload,
         learnerProfile: profilePayload,
         notes,
-        confusions,
-        sessionInfo,
       };
 
       const res = await fetch('/api/feed', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+        },
         body: JSON.stringify(requestBody),
         signal: controller.signal,
       });
@@ -132,7 +130,7 @@ export function useFeedStream({
     } finally {
       setIsLoading(false);
     }
-  }, [sessionId, segments, learnerProfile, notes, confusions, sessionInfo]);
+  }, [workspaceId, captures, learnerProfile, notes, accessToken]);
 
   return { items, isLoading, error, generate };
 }

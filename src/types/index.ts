@@ -332,25 +332,29 @@ export interface SummaryTakeaway {
 
 /** 信息流条目类型 */
 export type FeedItemType =
-  | 'summary'        // 个人化总结
-  | 'probe-near'     // 同主题延伸
-  | 'probe-lateral'  // 相关方向
-  | 'probe-bridge'   // 跨界关联
-  | 'confusion-link'; // 困惑点关联
+  | 'summary'         // 个人化总结
+  | 'probe-near'      // 同主题延伸
+  | 'probe-lateral'   // 相关方向
+  | 'probe-bridge'    // 跨界关联
+  | 'confusion-link'   // 困惑点关联
+  | 'bili-recommend'  // B站视频推荐（OpenBiliClaw）
+  | 'echo';           // 同桌沉淀（并入信息流的 Echo 卡）
 
 /** 信息流条目可触发的动作 */
 export type FeedActionType =
-  | 'jump-timestamp'   // 跳到转录时间戳
+  | 'jump-timestamp'   // 跳到转录时间戳（单课复习态遗留）
   | 'make-flashcard'   // 做成闪卡
   | 'ask-tutor'        // 让同学解释
-  | 'review-prev';     // 复习上节课
+  | 'review-prev'      // 复习上节课
+  | 'open-capture'     // 打开某条收集内容
+  | 'open-bilibili';   // 在 B站看
 
 /** 信息流单条条目 */
 export interface FeedItem {
   type: FeedItemType;
   title: string;
   body: string;
-  /** 关联的课堂时间戳（MM:SS） */
+  /** 关联的课堂时间戳（MM:SS，仅单课遗留产物） */
   timestamps?: string[];
   /** 动作按钮文案 */
   actionLabel?: string;
@@ -358,6 +362,24 @@ export interface FeedItem {
   actionType?: FeedActionType;
   /** 为什么对你重要（基于个人画像的个性化理由） */
   whyForYou?: string;
+  /** bili-recommend 专属：封面 */
+  coverUrl?: string;
+  /** bili-recommend 专属：UP 主 */
+  upName?: string;
+  /** bili-recommend 专属：跳转 URL */
+  contentUrl?: string;
+  /** bili-recommend 专属：分类标签 */
+  topicLabel?: string;
+  /** bili-recommend 专属：BV 号 */
+  bvid?: string;
+  /** echo 专属：一句话要点 */
+  takeaway?: string;
+  /** echo 专属：高亮摘录 */
+  echoHighlights?: Array<{ text: string; timestamp?: string; speaker?: string }>;
+  /** echo 专属：原始 echo id（用于分享） */
+  echoId?: string;
+  /** open-capture 专属：目标 capture id */
+  captureId?: string;
 }
 
 /** 信息流生成结果 */

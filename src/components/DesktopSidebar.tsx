@@ -16,6 +16,7 @@ import { useState, useCallback } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { useAuth } from '@/lib/hooks/useAuth';
+import { COPY } from '@/lib/ui/copy';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import {
   Mic,
@@ -54,9 +55,9 @@ interface DesktopSidebarProps {
   onOpenAISearch: () => void;
   /** 打开"全部收集"面板 */
   onOpenHistory: () => void;
-  /** 打开“笔记总结”面板 */
+  /** 打开“相关信息”面板（原笔记总结，M15 起并入跨课程信息流） */
   onOpenEcho: () => void;
-  /** 笔记总结数量 badge */
+  /** 同桌沉淀数量 badge */
   echoCount: number;
   /** 复习模式：当前选中的 reviewTab */
   reviewTab?: string;
@@ -220,7 +221,7 @@ export function DesktopSidebar({
                 {!effectiveCollapsed && <span>{label}</span>}
               </button>
 
-              {/* ── 收集模式的子导航：全部收集 / 笔记总结 ── */}
+              {/* ── 收集模式的子导航：全部收集 / 相关信息 ── */}
               {key === 'record' && isActive && !effectiveCollapsed && (
                 <div className="ml-[18px] mt-0.5 flex flex-col gap-0.5 border-l border-divider/80 pl-2.5">
                   <button
@@ -237,7 +238,7 @@ export function DesktopSidebar({
                     className="flex items-center gap-2 rounded-md px-2 py-[5px] text-[12.5px] text-ink-secondary transition-all hover:bg-paper-warm hover:text-ink"
                   >
                     <Sparkles size={13} strokeWidth={1.6} className="flex-shrink-0" />
-                    <span>笔记总结</span>
+                    <span>{COPY.feed.relatedInfoLabel}</span>
                     {echoCount > 0 && (
                       <span className="inline-flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-ink px-1.5 text-[11px] font-semibold leading-none text-white">
                         {echoCount}
@@ -262,7 +263,7 @@ export function DesktopSidebar({
                     type="button"
                     onClick={onOpenEcho}
                     className="relative flex h-8 items-center justify-center rounded-lg text-ink-muted transition-all hover:bg-paper-warm hover:text-ink-secondary"
-                    title="笔记总结"
+                    title={COPY.feed.relatedInfoLabel}
                   >
                     <Sparkles size={15} strokeWidth={1.6} />
                     {echoCount > 0 && (
