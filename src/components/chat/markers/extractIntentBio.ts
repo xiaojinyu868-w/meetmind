@@ -1,25 +1,24 @@
 /**
  * extractIntentBio —— 从 mode='goal' 首次会面对话提炼的"我了解到的你"块。
  *
- * 形态（prompt 约定见 tutor-prompts.ts MODE_GOAL_SEGMENT 路径 A）：
+ * 新格式（逐条选择）：
  *
  *   ---我了解到的你---
- *   一句话核心：身份 + 阶段 + 当前主要状态
- *   （可选 1-2 行 detail）
+ *   · 你是大三学生，学计算机
+ *   · 你对算法课比较吃力
  *   ---结束---
  *
- * 与 extractIntentSummary（"---我想要的---"）平行。两者 marker 不冲突，
- * 一条消息也可能两者都有（罕见，但允许）。这里只负责抽 bio 块。
+ * 旧格式兼容（整块文本）。
  */
 
 export interface IntentBioExtraction {
-  /** 一句话核心，第二人称（你是…） */
+  /** 逐条提取的观察点 */
+  points: string[];
+  /** 兼容旧字段：第一条作为 headline */
   headline: string;
-  /** 可选详情 */
+  /** 兼容旧字段：剩余条合并为 detail */
   detail?: string;
-  /** 原始片段（含起止 marker） */
   rawBlock: string;
-  /** 去掉块后的剩余文本（用于消息气泡显示） */
   textWithoutBlock: string;
 }
 
@@ -32,21 +31,24 @@ export function extractIntentBio(text: string): IntentBioExtraction | null {
   if (!endMatch || typeof endMatch.index !== 'number') return null;
   const inner = afterStart.slice(0, endMatch.index).trim();
   if (!inner) return null;
+
   const lines = inner
     .split('\n')
     .map((l) => l.trim())
+    .filter(Boolean)
+    .map((l) => l.replace(/^[·•\-*]\s*/, '').trim())
     .filter(Boolean);
+
   if (lines.length === 0) return null;
-  const headline = lines[0].replace(/^[-•·*]\s*/, '').slice(0, 200);
-  const detail = lines.slice(1).join('\n').trim() || undefined;
+
+  const points = lines.map((l) => l.slice(0, 200));
+  const headline = points[0].slice(0, 200);
+  const detail = points.length > 1 ? points.slice(1).join('\n') : undefined;
+
   const blockEnd = startIdx + startMatch[0].length + endMatch.index + endMatch[0].length;
   const before = text.slice(0, startIdx).trim();
   const after = text.slice(blockEnd).trim();
   const textWithoutBlock = [before, after].filter(Boolean).join('\n\n');
-  return {
-    headline,
-    detail,
-    rawBlock: text.slice(startIdx, blockEnd),
-    textWithoutBlock,
-  };
+
+  return { points, headline, detail, rawBlock: text.slice(startIdx, blockEnd), textWithoutBlock };
 }

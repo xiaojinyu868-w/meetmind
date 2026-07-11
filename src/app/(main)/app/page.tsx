@@ -52,6 +52,7 @@ import { WorkspaceCaptureEditorModal } from '@/components/WorkspaceCaptureEditor
 import { DesktopVideoReviewLayout } from '@/components/DesktopVideoReviewLayout';
 import type {
   TranscriptSegment,
+  ActionItem,
 } from '@/types';
 import type {
   SharedWorkspaceTab,
@@ -76,6 +77,7 @@ import { UIConfig } from '@/lib/config';
 
 // SWR data hooks for API state management.
 import { useTopics, useSummary } from '@/hooks/data';
+import { useLessonDigest } from '@/hooks/useLessonDigest';
 
 // WaveformPlayer uses forwardRef and needs static import for ref support.
 import { WaveformPlayer, type WaveformPlayerRef, type WaveformAnchor } from '@/components/WaveformPlayer';
@@ -90,6 +92,7 @@ import { CollectionMessageActionSheet } from '@/components/CollectionMessageActi
 import { CollectionCard } from '@/components/CollectionCard';
 import { CollectionEmptyState } from '@/components/CollectionEmptyState';
 import { DesktopCollectionLayout } from '@/components/DesktopCollectionLayout';
+const LessonDigestCard = dynamic(() => import('@/components/LessonDigestCard').then(m => ({ default: m.LessonDigestCard })), { ssr: false });
 const ClassroomView = dynamic(() => import('@/components/ClassroomView').then(m => ({ default: m.ClassroomView })), { ssr: false });
 import {
   Mic,
@@ -99,6 +102,9 @@ import {
   Boxes,
   Sparkles,
   Search,
+  Camera,
+  Edit3,
+  Paperclip,
 } from 'lucide-react';
 
 // --- Performance: Dynamic imports for heavy components (code-split) ---
@@ -142,8 +148,13 @@ const DedaoMenu = dynamic(() => import('@/components/mobile/DedaoMenu').then(m =
 const MobileTopBar = dynamic(() => import('@/components/mobile/MobileTopBar').then(m => ({ default: m.MobileTopBar })), { ssr: false });
 const MobileRecordTopBar = dynamic(() => import('@/components/mobile/MobileRecordTopBar').then(m => ({ default: m.MobileRecordTopBar })), { ssr: false });
 const MobileAIFab = dynamic(() => import('@/components/mobile/MobileAIFab').then(m => ({ default: m.MobileAIFab })), { ssr: false });
+const MobileReviewSheet = dynamic(() => import('@/components/mobile/MobileReviewSheet').then(m => ({ default: m.MobileReviewSheet })), { ssr: false });
+const MobileCollectionCard = dynamic(() => import('@/components/mobile/MobileCollectionCard').then(m => ({ default: m.MobileCollectionCard })), { ssr: false });
+const MobileAppShell = dynamic(() => import('@/components/mobile/MobileAppShell').then(m => ({ default: m.MobileAppShell })), { ssr: false });
+const SafeAITutor = dynamic(() => import('@/components/SafeAITutor').then(m => ({ default: m.SafeAITutor })), { ssr: false });
 const MobileAIChatPanel = dynamic(() => import('@/components/mobile/MobileAIChatPanel').then(m => ({ default: m.MobileAIChatPanel })), { ssr: false });
 const MobileCollectionSheet = dynamic(() => import('@/components/mobile/MobileCollectionSheet').then(m => ({ default: m.MobileCollectionSheet })), { ssr: false });
+const MobileAppRunner = dynamic(() => import('@/components/mobile/MobileAppRunner').then(m => ({ default: m.MobileAppRunner })), { ssr: false });
 const MobileAppsSubPage = dynamic(() => import('@/components/mobile/MobileAppsSubPage').then(m => ({ default: m.MobileAppsSubPage })), { ssr: false });
 const MobileSimpleSubPage = dynamic(() => import('@/components/mobile/MobileAppsSubPage').then(m => ({ default: m.MobileSimpleSubPage })), { ssr: false });
 
@@ -305,6 +316,7 @@ function StudentAppContent({
   // 录音来源（麦克风 / 电脑声音 / 两路都录）——仅传给课堂挂载点的 Recorder，
   // 收集页永远走默认 'mic'（备忘录场景不需要电脑声采集）。
   const recorderAudioSource = useCaptureEditorStore((s) => s.recorderAudioSource);
+  const recorderSpeakerDiarization = useCaptureEditorStore((s) => s.recorderSpeakerDiarization);
 
   // Capture Editor Store setter aliases
   const setSegments = captureEditorActions.setSegments;
@@ -727,7 +739,7 @@ function StudentAppContent({
       setVideoWorkspaceTab('chat');
       setSelectedReviewItem(null);
     }
-    if (newMode === 'review' && segments.length === 0 && !hasCollectionContext) {
+    if (newMode === 'review' && segments.length === 0 && !hasCollectionContext && !isMobile) {
       try {
         const demoData = await loadDemoData();
         setSegments(demoData.DEMO_SEGMENTS);
@@ -1064,6 +1076,26 @@ function StudentAppContent({
 
   // Keep ref in sync so openReviewFromCollection (defined earlier) can access it.
   importVideoLinkRef.current = importVideoLinkIntoSourceItem;
+
+  // ── Lesson Digest（结构化分段总结，移动端复习态主视图）──
+  const [mobileDigestView, setMobileDigestView] = useState(false);
+  const [mobileReviewSheetOpen, setMobileReviewSheetOpen] = useState(false);
+  const digestImages = useMemo(() => {
+    return sourceItems
+      .filter((item) => item.type === 'image' && item.role === 'support')
+      .map((item) => ({
+        imageId: item.id,
+        capturedAtMs: item.capturedAtMs ?? null,
+        title: item.title,
+      }));
+  }, [sourceItems]);
+  const { digest: lessonDigest, loading: digestLoading } = useLessonDigest({
+    sessionId,
+    segments,
+    images: digestImages,
+    lessonTitle: selectedReviewItem?.title,
+    enabled: isMobile && viewMode === 'review' && mobileDigestView && segments.length > 0,
+  });
 
   // 微信内置浏览器对 accept 含 image/*/video/* 时会劫持为拍摄/相册选择器，
   // 导致无法选择文档等其他文件。检测到微信时使用通配符让系统弹出完整文件管理器。
@@ -1583,6 +1615,7 @@ function StudentAppContent({
               onTranscriptEnhanced={handleTranscriptEnhanced}
               onAnchorMark={handleAnchorMark}
               contextHint={liveASRContextHint}
+              speakerDiarization={recorderSpeakerDiarization}
             />
           </div>
         </div>
@@ -1766,7 +1799,193 @@ function StudentAppContent({
       {!isMobile && <DegradedModeBanner status={serviceStatus} />}
 
       {/* 主内容区 */}
-      {viewMode === 'classroom' ? (
+      {isMobile ? (
+        <MobileAppShell
+          collectionFeedItems={collectionFeedItems}
+          workspaceEchoes={workspaceEchoes}
+          onStartRecording={() => {
+            if (recorderRef.current) {
+              void recorderRef.current.startRecording();
+            } else {
+              captureEditorActions.setRecorderAutoStartSignal(Date.now());
+            }
+          }}
+          onOpenFilePicker={(mode) => handleSourceFileButtonClick(mode)}
+          onOpenReview={(item) => openReviewFromCollection(item)}
+          composerText={collectionComposerText}
+          onComposerChange={(text) => setCollectionComposerText(text)}
+          onComposerSubmit={handleCollectionComposerSubmit}
+          onComposerPaste={(e) => handleCollectionComposerPaste(e as React.ClipboardEvent<HTMLTextAreaElement>)}
+          composerRef={collectionComposerRef}
+          segments={segments}
+          sessionId={sessionId}
+          selectedReviewItem={selectedReviewItem}
+          onSeek={(ms) => handleUnifiedSeek(ms)}
+          currentTime={currentTime}
+          totalDuration={totalDuration}
+          isPlaying={isPlaying}
+          onPlayPause={() => { if (isPlaying) { waveformRef.current?.pause(); } else { waveformRef.current?.play(); } }}
+          isRecording={isRecording}
+          onStopRecording={() => {
+            if (isRecording) {
+              sessionActions.setIsRecording(false);
+              if (sessionId) {
+                void saveAudioSession(null, sessionId, user?.id || ANONYMOUS_USER_ID, {
+                  subject: UIConfig.defaultSubject,
+                  duration: sessionMediaDurationMs,
+                  sourceType: 'recording',
+                  transcriptionStatus: 'pending',
+                }).catch((err) => {
+                  console.warn('[mobile] pre-stop placeholder save failed:', err);
+                });
+              }
+              void recorderRef.current?.stopRecording();
+            }
+          }}
+          onPhotoCaptured={(file, capturedAtMs) => {
+            void handleImportFiles([file], 'support', { capturedAtMs, sessionId: sessionId || undefined });
+          }}
+          onOpenEcho={() => { /* MobileAppShell 内部 push echo screen */ }}
+          onOpenSearch={() => setShowAISearch(true)}
+          onOpenProfile={() => { window.location.href = '/settings'; }}
+          onQuickAsk={(question) => {
+            setMobileAIQuestion(question);
+            setMobileAIDisplayQuestion('');
+            setMobileAILaunchImages([]);
+            setMobileAILaunchSupportContextText('');
+            setMobileAIConsumedQuestionNonce(null);
+            setMobileAIPreferSelectedContext(false);
+            setMobileAIQuestionNonce((prev) => prev + 1);
+          }}
+          echoList={workspaceEchoes}
+          reviewSheetContent={
+            <SafeAITutor
+              isMobile={true}
+              sessionId={sessionId}
+              segments={segments}
+              isLoading={false}
+              onResolve={handleResolveAnchor}
+              onSeek={handleUnifiedSeek}
+              breakpoint={selectedBreakpoint}
+              supportContextText={tutorSupportContextText}
+              preferSupportContext={mobileAIPreferSelectedContext}
+              launchQuestion={mobileAIQuestion}
+              launchDisplayText={mobileAIDisplayQuestion}
+              launchImages={mobileAILaunchImages}
+              launchQuestionNonce={mobileAIQuestionNonce}
+              onLaunchQuestionConsumed={() => setMobileAIConsumedQuestionNonce(mobileAIQuestionNonce)}
+              onActionItemsUpdate={(items: ActionItem[]) => captureEditorActions.setActionItems(items)}
+              hideMobileHeader={true}
+            />
+          }
+          reviewSheetPreview={segments.length > 0 ? '这节课有问题随时问我' : '问我任何事'}
+          flashcardsContent={
+            <MobileAppRunner
+              appKey="flashcards"
+              sessionId={sessionId || 'mobile-session'}
+              segments={segments}
+              onSeek={(ms) => handleUnifiedSeek(ms)}
+            />
+          }
+          quizContent={
+            <MobileAppRunner
+              appKey="quiz"
+              sessionId={sessionId || 'mobile-session'}
+              segments={segments}
+              onSeek={(ms) => handleUnifiedSeek(ms)}
+            />
+          }
+          cheatsheetContent={
+            <MobileAppRunner
+              appKey="cheatsheet"
+              sessionId={sessionId || 'mobile-session'}
+              segments={segments}
+            />
+          }
+          mindmapContent={
+            <MobileAppRunner
+              appKey="mindmap"
+              sessionId={sessionId || 'mobile-session'}
+              segments={segments}
+              onSeek={(ms) => handleUnifiedSeek(ms)}
+            />
+          }
+          classmateContent={
+            <SafeAITutor
+              isMobile={true}
+              sessionId={sessionId}
+              segments={segments}
+              isLoading={false}
+              onResolve={handleResolveAnchor}
+              onSeek={handleUnifiedSeek}
+              breakpoint={selectedBreakpoint}
+              supportContextText={tutorSupportContextText}
+              preferSupportContext={mobileAIPreferSelectedContext}
+              launchQuestion={mobileAIQuestion}
+              launchDisplayText={mobileAIDisplayQuestion}
+              launchImages={mobileAILaunchImages}
+              launchQuestionNonce={mobileAIQuestionNonce}
+              onLaunchQuestionConsumed={() => setMobileAIConsumedQuestionNonce(mobileAIQuestionNonce)}
+              onActionItemsUpdate={(items: ActionItem[]) => captureEditorActions.setActionItems(items)}
+              hideMobileHeader={true}
+            />
+          }
+          userNickname={user?.nickname}
+          userAvatar={user?.avatar}
+          isAuthenticated={isAuthenticated}
+        >
+          {/* ── 移动端隐藏挂载：Recorder + WaveformPlayer + source file input ── */}
+          {/* 这些组件必须在移动端挂载，否则 recorderRef/waveformRef 为 null，所有录音/播放/导入按钮都失灵 */}
+          <div className="sr-only" aria-hidden>
+            <Recorder
+              ref={recorderRef}
+              activeSessionId={sessionId}
+              continueCurrentSession={false}
+              autoStartSignal={recorderAutoStartSignal}
+              onRecordingStart={handleRecordingStart}
+              onRecordingStop={handleRecordingStop}
+              onTranscriptionError={handleRecordingTranscriptionError}
+              onTranscriptUpdate={handleTranscriptUpdate}
+              onTranscriptTextUpdate={handleTranscriptTextUpdate}
+              onTranscriptEnhanced={handleTranscriptEnhanced}
+              onAnchorMark={handleAnchorMark}
+              contextHint={liveASRContextHint}
+              audioSource={recorderAudioSource}
+              speakerDiarization={recorderSpeakerDiarization}
+            />
+          </div>
+          {(audioBlob || audioUrl) && (
+            <div className="hidden">
+              <WaveformPlayer
+                ref={waveformRef}
+                src={audioBlob || audioUrl || undefined}
+                anchors={anchors.map(a => ({
+                  id: a.id,
+                  timestamp: a.timestamp,
+                }))}
+                onTimeUpdate={setCurrentTime}
+                onPlayStateChange={setIsPlaying}
+                onReady={(durationMs) => {
+                  if (durationMs > 0) {
+                    const current = useSessionStore.getState().sessionMediaDurationMs;
+                    if (current === 0 || Math.abs(current - durationMs) > 1000) {
+                      setSessionMediaDurationMs(durationMs);
+                    }
+                  }
+                }}
+              />
+            </div>
+          )}
+          <input
+            ref={sourceFileInputRef}
+            type="file"
+            accept={sourceFileAccept}
+            multiple
+            className="hidden"
+            onChange={handleSourceFileInputChange}
+          />
+        </MobileAppShell>
+      ) : viewMode === 'classroom' ? (
         <div className="flex flex-1 min-h-0 flex-col page-enter">
           <div className="flex-1 min-h-0">
             <ClassroomView
@@ -1849,6 +2068,14 @@ function StudentAppContent({
                   console.warn('[classroom] rename lesson failed:', err);
                 });
               }}
+              onQuickPhoto={(capturedAtMs) => {
+                // 课中拍照：触发隐藏的 file input，选完传 capturedAtMs
+                if (sourceFileInputRef.current) {
+                  sourceFileInputRef.current.dataset.capturedAtMs = String(capturedAtMs);
+                  sourceFileInputRef.current.dataset.sessionId = sessionId || '';
+                  sourceFileInputRef.current.click();
+                }
+              }}
             />
           </div>
           {/* ── 课堂 tab 下的 Recorder 挂载点：视觉隐藏，只作为录音引擎 ── */}
@@ -1874,6 +2101,7 @@ function StudentAppContent({
               onAnchorMark={handleAnchorMark}
               contextHint={liveASRContextHint}
               audioSource={recorderAudioSource}
+              speakerDiarization={recorderSpeakerDiarization}
             />
           </div>
         </div>
@@ -1881,7 +2109,164 @@ function StudentAppContent({
         <>
           {isMobile ? (
             <>
-              {renderCollectionFeed()}
+              {/* 移动端采集台 hero + 精简收集流 */}
+              <div className="flex-1 min-h-0 flex flex-col overflow-hidden bg-[#FAF7F2]">
+                {/* 顶栏（极简，只有 Octo + 日期 + 搜索 + 头像） */}
+                <div className="flex-shrink-0 bg-paper px-4 pt-[max(env(safe-area-inset-top),12px)] pb-2">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <div className="relative h-8 w-8">
+                        <div className="absolute inset-0 rounded-full bg-pine-mist overflow-hidden">
+                          <img src="/images/octo-buddy/idle.png" alt="Octo" className="h-full w-full object-cover" />
+                        </div>
+                      </div>
+                      <div>
+                        <p className="text-[13px] font-semibold text-ink leading-tight">MeetMind</p>
+                        <p className="font-mono text-[9px] text-ink-muted">{new Date().toLocaleDateString('zh-CN', { month: 'numeric', day: 'numeric', weekday: 'short' })}</p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <button className="flex h-8 w-8 items-center justify-center rounded-full text-ink-muted" onClick={() => setSourceImportError('搜索功能开发中')}>
+                        <Search size={16} strokeWidth={2} />
+                      </button>
+                      <div className="h-7 w-7 rounded-full bg-paper-warm ring-1 ring-divider flex items-center justify-center text-[10px] font-medium text-ink-muted">
+                        {user?.nickname?.[0] || '林'}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* 可滚动区域 */}
+                <div className="flex-1 min-h-0 overflow-y-auto px-4 pt-2 pb-20" style={{ WebkitOverflowScrolling: 'touch' }}>
+                  {/* Hero 标题 */}
+                  <h1 className="font-serif text-[22px] leading-[1.15] tracking-[-0.02em] text-ink mb-2.5">今天学点什么？</h1>
+
+                  {/* 采集三按钮 */}
+                  <div className="grid grid-cols-3 gap-2 mb-3">
+                    <button
+                      type="button"
+                      onClick={() => { handleViewModeChange('classroom'); }}
+                      className="col-span-3 flex items-center gap-3 rounded-[16px] bg-white border-2 border-vermilion/20 p-3 text-left active:scale-[0.98] transition"
+                    >
+                      <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full bg-vermilion-mist">
+                        <Mic size={16} strokeWidth={2} className="text-vermilion" />
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <p className="text-[13px] font-semibold text-vermilion">录一节课</p>
+                        <p className="text-[10px] text-ink-muted">课堂 · 讲座 · 随时听</p>
+                      </div>
+                      <span className="relative flex h-2 w-2 flex-shrink-0">
+                        <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-vermilion opacity-50"></span>
+                        <span className="relative inline-flex h-2 w-2 rounded-full bg-vermilion"></span>
+                      </span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleSourceFileButtonClick('support')}
+                      className="rounded-[14px] bg-white border border-divider p-2 text-center active:scale-95 transition"
+                    >
+                      <div className="flex h-8 w-8 mx-auto items-center justify-center rounded-full bg-vermilion-mist mb-1">
+                        <Camera size={14} strokeWidth={2} className="text-vermilion" />
+                      </div>
+                      <p className="text-[11px] font-semibold text-ink">拍一下</p>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => focusCollectionComposer()}
+                      className="col-span-2 rounded-[14px] bg-white border border-divider p-2 flex items-center gap-2 text-left active:scale-[0.98] transition"
+                    >
+                      <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-pine-mist">
+                        <Edit3 size={14} strokeWidth={2} className="text-pine" />
+                      </div>
+                      <div>
+                        <p className="text-[11px] font-semibold text-ink">速记一句</p>
+                        <p className="text-[9px] text-ink-muted">想法 · 疑问 · 课后笔记</p>
+                      </div>
+                    </button>
+                  </div>
+
+                  {/* Echo 卡片 */}
+                  {workspaceEchoes.length > 0 && (
+                    <div
+                      className="mb-3 rounded-[16px] border border-pine/20 bg-pine-mist/50 p-3 shadow-soft cursor-pointer active:scale-[0.99] transition"
+                      onClick={() => handleViewModeChange('review')}
+                    >
+                      <div className="flex items-center gap-2 mb-1.5">
+                        <div className="h-5 w-5 rounded-full bg-pine-mist overflow-hidden flex-shrink-0">
+                          <img src="/images/octo-buddy/happy.png" alt="Octo" className="h-full w-full object-cover" />
+                        </div>
+                        <span className="font-mono text-[9px] font-semibold uppercase tracking-[0.08em] text-pine">今天的笔记</span>
+                      </div>
+                      {(() => {
+                        const echo = workspaceEchoes[0];
+                        const text = echo.body || echo.title || '今天的学习内容已整理好。';
+                        return <p className="text-[11px] leading-[1.6] text-ink">{text.length > 60 ? text.slice(0, 60) + '…' : text}</p>;
+                      })()}
+                    </div>
+                  )}
+
+                  {/* 精简收集流 */}
+                  <div className="flex items-baseline gap-2 px-1 pb-2">
+                    <span className="font-mono text-[10px] font-semibold uppercase tracking-[0.08em] text-ink-secondary">最近</span>
+                    <span className="font-mono text-[10px] text-ink-muted/70">{collectionFeedItems.length}</span>
+                    <span className="ml-1 h-px flex-1 bg-divider"></span>
+                  </div>
+
+                  <div className="space-y-2" id="mobileCollectionList">
+                    {/* 隐藏的 file input */}
+                    <input
+                      ref={sourceFileInputRef}
+                      type="file"
+                      accept={sourceFileAccept}
+                      multiple
+                      className="hidden"
+                      onChange={handleSourceFileInputChange}
+                    />
+                    {collectionFeedItems.slice(0, 20).map((item) => (
+                      <MobileCollectionCard
+                        key={item.id}
+                        item={item}
+                        onClick={() => {
+                          if (item.reviewable) {
+                            void openReviewFromCollection(item);
+                          } else if (item.type === 'text' || item.type === 'document') {
+                            quoteCollectionItemToComposer(item);
+                          } else {
+                            setSourceImportError(item.title || '');
+                          }
+                        }}
+                      />
+                    ))}
+                  </div>
+                </div>
+
+                {/* 底部输入条 */}
+                <div className="flex-shrink-0 bg-paper px-3 py-2 pb-[max(env(safe-area-inset-bottom),8px)] border-t border-divider/60">
+                  <div className="flex items-center gap-2">
+                    <button className="flex h-8 w-8 items-center justify-center rounded-full text-ink-muted flex-shrink-0" onClick={() => handleSourceFileButtonClick('all')}>
+                      <Paperclip size={16} strokeWidth={2} />
+                    </button>
+                    <div className="flex-1 rounded-full bg-canvas px-3.5 py-2">
+                      <textarea
+                        ref={collectionComposerRef}
+                        rows={1}
+                        value={collectionComposerText}
+                        placeholder="发一句想法，贴个链接…"
+                        className="w-full bg-transparent text-[12.5px] text-ink placeholder:text-ink-muted outline-none resize-none"
+                        onChange={(e) => setCollectionComposerText(e.target.value)}
+                        onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleCollectionComposerSubmit(); } }}
+                        onPaste={handleCollectionComposerPaste}
+                      />
+                    </div>
+                    <button
+                      className="flex h-8 w-8 items-center justify-center rounded-full text-ink-muted flex-shrink-0"
+                      onClick={toggleComposerDictation}
+                    >
+                      <Mic size={16} strokeWidth={2} />
+                    </button>
+                  </div>
+                </div>
+              </div>
             </>
           ) : (
             <div className="flex-1 min-h-0 page-enter">
@@ -2028,6 +2413,67 @@ function StudentAppContent({
                     </div>
                   )}
 
+                  {/* Mobile digest toggle: 笔记 / 转录 */}
+                  {isMobile && segments.length > 0 && (
+                    <div className="flex items-center gap-1 px-4 py-2 border-b border-divider/60 bg-paper">
+                      <div className="inline-flex rounded-full bg-paper-warm p-0.5">
+                        <button
+                          type="button"
+                          onClick={() => setMobileDigestView(true)}
+                          className={`rounded-full px-3 py-1 text-[11px] font-medium transition ${mobileDigestView ? 'bg-white text-ink shadow-soft' : 'text-ink-muted'}`}
+                        >
+                          笔记
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setMobileDigestView(false)}
+                          className={`rounded-full px-3 py-1 text-[11px] font-medium transition ${!mobileDigestView ? 'bg-white text-ink shadow-soft' : 'text-ink-muted'}`}
+                        >
+                          转录
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Mobile Lesson Digest view */}
+                  {isMobile && mobileDigestView && segments.length > 0 ? (
+                    <div className="flex-1 min-h-0 overflow-y-auto px-4 py-4" style={{ WebkitOverflowScrolling: 'touch' }}>
+                      {digestLoading ? (
+                        <div className="flex flex-col items-center justify-center py-12">
+                          <div className="relative h-16 w-16 mb-4">
+                            <div className="absolute inset-0 rounded-full bg-pine-mist flex items-center justify-center overflow-hidden animate-pulse">
+                              <img src="/images/octo-buddy/thinking.png" alt="Octo" className="h-full w-full object-cover" />
+                            </div>
+                          </div>
+                          <p className="font-mono text-[10px] font-semibold uppercase tracking-[0.1em] text-pine mb-1">正在整理</p>
+                          <p className="text-[12px] text-ink-muted">同桌正在把这节课整理成笔记…</p>
+                        </div>
+                      ) : lessonDigest ? (
+                        <LessonDigestCard
+                          digest={lessonDigest}
+                          onSeek={(ms) => handleUnifiedSeek(ms)}
+                          getImageUrl={(imageId) => {
+                            const item = sourceItems.find((s) => s.id === imageId);
+                            return item?.previewUrl || item?.attachmentUrl;
+                          }}
+                          getOriginalTranscript={(startMs, endMs) => {
+                            const chunk = segments
+                              .filter((s) => s.startMs >= startMs && s.startMs <= endMs)
+                              .map((s) => s.text)
+                              .join(' ');
+                            return chunk || undefined;
+                          }}
+                        />
+                      ) : (
+                        <div className="flex flex-col items-center justify-center py-12">
+                          <p className="text-[12px] text-ink-muted mb-3">笔记生成失败</p>
+                          <button onClick={() => setMobileDigestView(false)} className="rounded-full bg-paper-warm px-3 py-1.5 text-[11px] font-medium text-ink-secondary">
+                            查看转录原文
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  ) : (
                   <DedaoTimeline
                     entries={toDedaoEntries(segments, anchors)}
                     currentTime={currentTime}
@@ -2054,6 +2500,7 @@ function StudentAppContent({
                     }}
                     className="flex-1 min-h-0"
                   />
+                  )}
 
                   <DedaoConfusionCard
                     isOpen={!!selectedConfusion}
@@ -2088,17 +2535,51 @@ function StudentAppContent({
                     }}
                   />
 
-                  {/* 全局 AI 入口，适合基于当前课堂继续追问。 */}
+                  {/* 全局 AI 入口 — 点击打开底部 Sheet（不再全屏跳转） */}
                   <MobileAIFab
                     onClick={() => {
-                      setSelectedAnchor(null);  // Clear selected anchor before entering global AI chat.
+                      setSelectedAnchor(null);
                       clearMobileAILaunchState();
-                      setMobileSubPage('ai-chat');
+                      setMobileReviewSheetOpen(true);
                     }}
-                    visible={!selectedConfusion}
+                    visible={!selectedConfusion && !mobileReviewSheetOpen}
                     pulse={segments.length > 0 && anchors.length === 0}
                     tooltip="问问这节课"
                   />
+
+                  {/* 底部可拖拽 Sheet（复习态 AI 同桌） */}
+                  {mobileReviewSheetOpen && !videoSource && (
+                    <MobileReviewSheet
+                      visible={mobileReviewSheetOpen}
+                      previewText={segments.length > 0 ? '这节课有问题随时问我' : '问我任何事'}
+                      avatar={
+                        <div className="h-8 w-8 rounded-full bg-pine-mist overflow-hidden">
+                          <img src="/images/octo-buddy/happy.png" alt="Octo" className="h-full w-full object-cover" />
+                        </div>
+                      }
+                    >
+                      <div className="flex-1 min-h-0 flex flex-col">
+                        <SafeAITutor
+                          isMobile={true}
+                          sessionId={sessionId}
+                          segments={segments}
+                          isLoading={false}
+                          onResolve={handleResolveAnchor}
+                          onSeek={handleUnifiedSeek}
+                          breakpoint={selectedBreakpoint}
+                          supportContextText={tutorSupportContextText}
+                          preferSupportContext={mobileAIPreferSelectedContext}
+                          launchQuestion={mobileAIQuestion}
+                          launchDisplayText={mobileAIDisplayQuestion}
+                          launchImages={mobileAILaunchImages}
+                          launchQuestionNonce={mobileAIQuestionNonce}
+                          onLaunchQuestionConsumed={() => setMobileAIConsumedQuestionNonce(mobileAIQuestionNonce)}
+                          onActionItemsUpdate={(items: ActionItem[]) => captureEditorActions.setActionItems(items)}
+                          hideMobileHeader={true}
+                        />
+                      </div>
+                    </MobileReviewSheet>
+                  )}
                 </>
               )}
 

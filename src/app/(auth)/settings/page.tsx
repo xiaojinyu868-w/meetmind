@@ -392,60 +392,138 @@ export default function SettingsPage() {
         </SettingSection>
 
         {isAuthenticated && (() => {
-          const bio = (user?.learnerProfile as { bio?: { headline: string; detail?: string; updatedAt?: string } } | undefined)?.bio;
+          const profile = user?.learnerProfile;
+          const bio = (profile as { bio?: { headline: string; detail?: string; updatedAt?: string } } | undefined)?.bio;
+          const goals = (profile as { goals?: Array<{ id: string; title: string; summary?: string; status?: string }> } | undefined)?.goals ?? [];
+          const hasBio = Boolean(bio?.headline);
+          const hasGoals = goals.length > 0;
+          const hasCoachSediment = hasBio || hasGoals;
+
           const handleClearBio = async () => {
             if (!confirm('确定要清除画像吗？以后回访时会重新认识你。')) return;
-            const profile = user?.learnerProfile;
             if (!profile) return;
             const next = { ...(profile as object) } as Record<string, unknown>;
             delete next.bio;
             await saveLearnerProfile(next as unknown as typeof profile);
           };
+
           return (
             <SettingSection
               caption="关于你"
-              description="教练在「聊聊你想要的」里和你一起记下来的画像。以后所有对话都接着这个走"
+              description="你是谁、想去哪——AI 接着这个陪你学"
             >
               <SettingGroup>
-                {bio?.headline ? (
+                {/* 学习档案（结构化身份） */}
+                {profile ? (
                   <>
-                    <div className="px-5 py-4">
-                      <p className="text-[15px] font-medium leading-7 text-ink">{bio.headline}</p>
-                      {bio.detail ? (
-                        <p className="mt-2 text-[13.5px] leading-relaxed text-ink-secondary">
-                          {bio.detail}
-                        </p>
-                      ) : null}
-                      {bio.updatedAt ? (
-                        <p className="mt-2 font-mono text-[10.5px] uppercase tracking-caps text-ink-muted">
-                          上次更新 · {new Date(bio.updatedAt).toLocaleDateString('zh-CN')}
-                        </p>
-                      ) : null}
-                    </div>
-                    <GroupDivider />
-                    <ActionButtonRow
-                      label="和教练再聊聊（更新画像）"
-                      tone="default"
-                      onClick={() => setShowIntentDialog(true)}
+                    <StaticRow
+                      label="身份"
+                      value={LEARNER_STAGE_LABELS[profile.stage as LearnerStage] || profile.stage}
                     />
+                    {profile.stage === 'k12' && (
+                      <>
+                        <GroupDivider />
+                        <StaticRow label="年级" value={(profile as { gradeLevel?: string }).gradeLevel || '未设置'} />
+                      </>
+                    )}
+                    {profile.stage === 'university' && (
+                      <>
+                        <GroupDivider />
+                        <StaticRow label="专业" value={(profile as { major?: string }).major || '未设置'} />
+                        <GroupDivider />
+                        <StaticRow label="年级" value={(profile as { year?: string }).year || '未设置'} />
+                      </>
+                    )}
+                    {profile.stage === 'graduate' && (
+                      <>
+                        <GroupDivider />
+                        <StaticRow label="方向" value={(profile as { field?: string }).field || '未设置'} />
+                      </>
+                    )}
+                    {profile.stage === 'working' && (
+                      <>
+                        <GroupDivider />
+                        <StaticRow label="行业" value={(profile as { industry?: string }).industry || '未设置'} />
+                        <GroupDivider />
+                        <StaticRow label="目标" value={(profile as { learningGoal?: string }).learningGoal || '未设置'} />
+                      </>
+                    )}
+                    {(profile as { otherInterests?: string }).otherInterests && (
+                      <>
+                        <GroupDivider />
+                        <StaticRow label="也在学" value={(profile as { otherInterests?: string }).otherInterests!} />
+                      </>
+                    )}
                     <GroupDivider />
-                    <ActionButtonRow
-                      label="清除画像"
-                      tone="danger"
-                      onClick={handleClearBio}
-                    />
+                    <ActionButtonRow label="重新填写学习档案" tone="default" onClick={() => setShowLearnerEdit(true)} />
                   </>
                 ) : (
                   <>
                     <div className="px-5 py-4 text-[13.5px] leading-relaxed text-ink-secondary">
-                      还没认识你。和教练聊聊，我会自然地了解你这个人——以后我们就接着这个聊。
+                      告诉同学你的身份背景，让 AI 回答更贴你。
                     </div>
                     <GroupDivider />
-                    <ActionButtonRow
-                      label="和教练聊一聊"
-                      tone="default"
-                      onClick={() => setShowIntentDialog(true)}
-                    />
+                    <ActionButtonRow label="填写学习档案" tone="default" onClick={() => setShowLearnerEdit(true)} />
+                  </>
+                )}
+
+                {/* 教练画像（bio + goals 自然语言沉淀，同一对话产出） */}
+                {hasCoachSediment ? (
+                  <>
+                    <GroupDivider />
+                    {hasBio && bio ? (
+                      <div className="px-5 py-4">
+                        <p className="font-mono text-[10.5px] font-semibold uppercase tracking-caps text-ink-muted">
+                          教练记下的你
+                        </p>
+                        <p className="mt-2 text-[15px] font-medium leading-7 text-ink">{bio.headline}</p>
+                        {bio.detail ? (
+                          <p className="mt-2 text-[13.5px] leading-relaxed text-ink-secondary">{bio.detail}</p>
+                        ) : null}
+                        {bio.updatedAt ? (
+                          <p className="mt-2 font-mono text-[10.5px] uppercase tracking-caps text-ink-muted">
+                            上次更新 · {new Date(bio.updatedAt).toLocaleDateString('zh-CN')}
+                          </p>
+                        ) : null}
+                      </div>
+                    ) : null}
+                    {hasGoals ? (
+                      <>
+                        {hasBio ? <GroupDivider /> : null}
+                        <div className="px-5 py-4">
+                          <p className="font-mono text-[10.5px] font-semibold uppercase tracking-caps text-ink-muted">
+                            你想要的
+                          </p>
+                          <ul className="mt-2 space-y-2.5">
+                            {goals.map((g) => (
+                              <li key={g.id}>
+                                <p className="text-[14.5px] font-medium leading-6 text-ink">{g.title}</p>
+                                {g.summary ? (
+                                  <p className="mt-1 text-[13px] leading-relaxed text-ink-secondary">{g.summary}</p>
+                                ) : null}
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      </>
+                    ) : null}
+                    <GroupDivider />
+                    <ActionButtonRow label="和教练再聊聊" tone="default" onClick={() => setShowIntentDialog(true)} />
+                    {hasBio ? (
+                      <>
+                        <GroupDivider />
+                        <ActionButtonRow label="清除画像" tone="danger" onClick={handleClearBio} />
+                      </>
+                    ) : null}
+                  </>
+                ) : (
+                  <>
+                    <GroupDivider />
+                    <div className="px-5 py-4 text-[13.5px] leading-relaxed text-ink-secondary">
+                      还没和教练聊过。你最近想做的事 / 想去的方向 / 还在纠结的选择，都可以慢慢说——也可以打电话语音聊。
+                    </div>
+                    <GroupDivider />
+                    <ActionButtonRow label="和教练聊一聊" tone="default" onClick={() => setShowIntentDialog(true)} />
                   </>
                 )}
               </SettingGroup>
@@ -453,107 +531,11 @@ export default function SettingsPage() {
           );
         })()}
 
-        {isAuthenticated && (
-          <SettingSection
-            caption="聊聊你想要的"
-            description="和教练聊一聊，把脑子里的事一起捋清楚——也可以打电话语音聊"
-          >
-            <SettingGroup>
-              {(() => {
-                const goals = (user?.learnerProfile as { goals?: Array<{ id: string; title: string; summary?: string; status?: string }> } | undefined)?.goals ?? [];
-                if (goals.length > 0) {
-                  return (
-                    <>
-                      {goals.map((g, idx) => (
-                        <div key={g.id ?? idx}>
-                          {idx > 0 ? <GroupDivider /> : null}
-                          <div className="px-5 py-4">
-                            <p className="text-[14.5px] font-medium leading-6 text-ink">{g.title}</p>
-                            {g.summary ? (
-                              <p className="mt-1 text-[13px] leading-relaxed text-ink-secondary">{g.summary}</p>
-                            ) : null}
-                          </div>
-                        </div>
-                      ))}
-                      <GroupDivider />
-                      <ActionButtonRow label="和教练再聊一会" tone="default" onClick={() => setShowIntentDialog(true)} />
-                    </>
-                  );
-                }
-                return (
-                  <>
-                    <div className="px-5 py-4 text-[13.5px] leading-relaxed text-ink-secondary">
-                      还没聊过。你最近想做的事 / 想去的方向 / 还在纠结的选择，都可以慢慢说。
-                    </div>
-                    <GroupDivider />
-                    <ActionButtonRow label="和教练聊一聊" tone="default" onClick={() => setShowIntentDialog(true)} />
-                  </>
-                );
-              })()}
-            </SettingGroup>
-          </SettingSection>
-        )}
-
         {showIntentDialog && (
           <IntentDialogContainer
             open
             onClose={() => setShowIntentDialog(false)}
           />
-        )}
-
-        {isAuthenticated && (
-          <SettingSection
-            caption="学习档案"
-            description="告诉同学你的身份背景，让 AI 回答更贴你"
-          >
-            <SettingGroup>
-              {user?.learnerProfile ? (
-                <>
-                  <StaticRow
-                    label="身份"
-                    value={LEARNER_STAGE_LABELS[user.learnerProfile.stage as LearnerStage] || user.learnerProfile.stage}
-                  />
-                  <GroupDivider />
-                  {user.learnerProfile.stage === 'k12' && (
-                    <StaticRow label="年级" value={(user.learnerProfile as { gradeLevel?: string }).gradeLevel || '未设置'} />
-                  )}
-                  {user.learnerProfile.stage === 'university' && (
-                    <>
-                      <StaticRow label="专业" value={(user.learnerProfile as { major?: string }).major || '未设置'} />
-                      <GroupDivider />
-                      <StaticRow label="年级" value={(user.learnerProfile as { year?: string }).year || '未设置'} />
-                    </>
-                  )}
-                  {user.learnerProfile.stage === 'graduate' && (
-                    <StaticRow label="方向" value={(user.learnerProfile as { field?: string }).field || '未设置'} />
-                  )}
-                  {user.learnerProfile.stage === 'working' && (
-                    <>
-                      <StaticRow label="行业" value={(user.learnerProfile as { industry?: string }).industry || '未设置'} />
-                      <GroupDivider />
-                      <StaticRow label="目标" value={(user.learnerProfile as { learningGoal?: string }).learningGoal || '未设置'} />
-                    </>
-                  )}
-                  {(user.learnerProfile as { otherInterests?: string }).otherInterests && (
-                    <>
-                      <GroupDivider />
-                      <StaticRow label="也在学" value={(user.learnerProfile as { otherInterests?: string }).otherInterests!} />
-                    </>
-                  )}
-                  <GroupDivider />
-                  <ActionButtonRow label="重新填写" tone="default" onClick={() => setShowLearnerEdit(true)} />
-                </>
-              ) : (
-                <>
-                  <div className="px-5 py-4 text-[13.5px] leading-relaxed text-ink-secondary">
-                    完善学习档案，让同学更懂你。我们会用它判断该用什么深度回答你。
-                  </div>
-                  <GroupDivider />
-                  <ActionButtonRow label="填写学习档案" tone="default" onClick={() => setShowLearnerEdit(true)} />
-                </>
-              )}
-            </SettingGroup>
-          </SettingSection>
         )}
 
         {showLearnerEdit && (
@@ -573,31 +555,8 @@ export default function SettingsPage() {
         )}
 
         <SettingSection
-          caption="偏好"
-          description="录课和复习时的默认行为"
-        >
-          <SettingGroup>
-            <ToggleRow
-              label="自动保存"
-              hint="录音结束后自动保存到云端"
-              checked={settings.autoSave}
-              disabled={savingSetting}
-              onChange={(checked) => updateSetting('autoSave', checked)}
-            />
-            <GroupDivider />
-            <ToggleRow
-              label="随堂检验"
-              hint="播放视频或音频时 AI 会在合适的节点自动暂停并出题"
-              checked={settings.classCheckEnabled}
-              disabled={savingSetting}
-              onChange={(checked) => updateSetting('classCheckEnabled', checked)}
-            />
-          </SettingGroup>
-        </SettingSection>
-
-        <SettingSection
-          caption="学习同桌"
-          description="决定 AI 回答你的方式"
+          caption="学习偏好"
+          description="录课、复习和同桌回答的默认行为"
         >
           <SettingGroup id="ai">
             <SelectRow
@@ -629,6 +588,22 @@ export default function SettingsPage() {
               checked={settings.tutorThinkingGuide}
               disabled={savingSetting}
               onChange={(checked) => updateSetting('tutorThinkingGuide', checked)}
+            />
+            <GroupDivider />
+            <ToggleRow
+              label="自动保存"
+              hint="录音结束后自动保存到云端"
+              checked={settings.autoSave}
+              disabled={savingSetting}
+              onChange={(checked) => updateSetting('autoSave', checked)}
+            />
+            <GroupDivider />
+            <ToggleRow
+              label="随堂检验"
+              hint="播放视频或音频时 AI 会在合适的节点自动暂停并出题"
+              checked={settings.classCheckEnabled}
+              disabled={savingSetting}
+              onChange={(checked) => updateSetting('classCheckEnabled', checked)}
             />
           </SettingGroup>
         </SettingSection>

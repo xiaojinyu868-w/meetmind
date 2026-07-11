@@ -1,11 +1,12 @@
-export function buildAsrWebSocketCandidates(pageHref: string): string[] {
+export function buildAsrWebSocketCandidates(pageHref: string, speakerDiarization = false): string[] {
   const pageUrl = new URL(pageHref);
   const protocol = pageUrl.protocol === 'https:' ? 'wss:' : 'ws:';
-  const primary = `${protocol}//${pageUrl.host}/api/asr-stream`;
+  const path = speakerDiarization ? '/api/asr-stream-speaker' : '/api/asr-stream';
+  const primary = `${protocol}//${pageUrl.host}${path}`;
   const candidates = [primary];
 
   if (protocol === 'wss:' && pageUrl.port !== '8443') {
-    candidates.push(`${protocol}//${pageUrl.hostname}:8443/api/asr-stream`);
+    candidates.push(`${protocol}//${pageUrl.hostname}:8443${path}`);
   }
 
   return Array.from(new Set(candidates));

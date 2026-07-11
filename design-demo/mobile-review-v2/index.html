@@ -1,0 +1,641 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>MeetMind · 移动端复习 v2 Demo</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Instrument+Serif:ital@0;1&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<script>
+tailwind.config = {
+  theme: {
+    extend: {
+      colors: {
+        pine: '#2D4F3E',
+        'pine-deep': '#1F3A2E',
+        'pine-mist': '#E8F0EC',
+        vermilion: '#B5483C',
+        'vermilion-mist': '#F5E6E3',
+        paper: '#FAF7F2',
+        'paper-warm': '#F2EDE3',
+        ink: '#1C1B19',
+        'ink-secondary': '#4A4844',
+        'ink-muted': '#8C887F',
+        canvas: '#F5F1EA',
+        divider: '#E8E2D5',
+        'divider-light': '#F0EBE0',
+      },
+      fontFamily: {
+        sans: ['Inter', 'system-ui', 'sans-serif'],
+        serif: ['Instrument Serif', 'serif'],
+        mono: ['JetBrains Mono', 'monospace'],
+      }
+    }
+  }
+}
+</script>
+<style>
+  * { -webkit-tap-highlight-color: transparent; }
+  body {
+    font-family: 'Inter', system-ui, sans-serif;
+    background: #1a1a1a;
+    overscroll-behavior: none;
+  }
+  .phone-frame {
+    width: 390px;
+    height: 844px;
+    background: #FAF7F2;
+    border-radius: 44px;
+    overflow: hidden;
+    position: relative;
+    box-shadow: 0 0 0 12px #2a2a2a, 0 0 0 13px #3a3a3a, 0 40px 80px rgba(0,0,0,0.5);
+  }
+  .digest-scroll {
+    scroll-behavior: smooth;
+    -webkit-overflow-scrolling: touch;
+  }
+  .digest-scroll::-webkit-scrollbar { display: none; }
+  .chat-scroll::-webkit-scrollbar { display: none; }
+
+  /* Bottom sheet transitions */
+  .bottom-sheet {
+    transition: transform 0.35s cubic-bezier(0.32, 0.72, 0, 1);
+    will-change: transform;
+  }
+  .bottom-sheet.dragging {
+    transition: none;
+  }
+
+  /* Timestamp chip */
+  .ts-chip {
+    transition: all 0.15s ease;
+  }
+  .ts-chip:active {
+    transform: scale(0.95);
+  }
+
+  /* Confusion mark pulse */
+  @keyframes confusion-pulse {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(181, 72, 60, 0.3); }
+    50% { box-shadow: 0 0 0 4px rgba(181, 72, 60, 0); }
+  }
+  .confusion-mark {
+    animation: confusion-pulse 2s ease-in-out infinite;
+  }
+
+  /* Mini player progress */
+  .progress-track {
+    cursor: pointer;
+  }
+
+  /* Octo breath */
+  @keyframes octo-breath {
+    0%, 100% { transform: scale(1); opacity: 0.9; }
+    50% { transform: scale(1.05); opacity: 1; }
+  }
+  .octo-breath { animation: octo-breath 3s ease-in-out infinite; }
+
+  /* Section fade-in */
+  @keyframes section-in {
+    from { opacity: 0; transform: translateY(8px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  .section-in { animation: section-in 0.4s ease-out both; }
+
+  /* Octo breath */
+  @keyframes octo-breath {
+    0%, 100% { transform: scale(1); opacity: 0.95; }
+    50% { transform: scale(1.05); opacity: 1; }
+  }
+  .octo-breath { animation: octo-breath 3s ease-in-out infinite; }
+
+  /* Typing indicator */
+  @keyframes typing-dot {
+    0%, 60%, 100% { opacity: 0.3; transform: translateY(0); }
+    30% { opacity: 1; transform: translateY(-3px); }
+  }
+  .typing-dot:nth-child(1) { animation: typing-dot 1.4s infinite; }
+  .typing-dot:nth-child(2) { animation: typing-dot 1.4s infinite 0.2s; }
+  .typing-dot:nth-child(3) { animation: typing-dot 1.4s infinite 0.4s; }
+</style>
+</head>
+<body class="flex items-center justify-center min-h-screen p-4">
+
+<div class="phone-frame flex flex-col">
+  <!-- ── Sticky Header ── -->
+  <div class="flex-shrink-0 bg-paper px-4 pt-[max(env(safe-area-inset-top),12px)] pb-2.5 border-b border-divider/60 z-20">
+    <div class="flex items-center gap-3">
+      <button class="flex h-8 w-8 items-center justify-center rounded-full text-ink-muted hover:bg-paper-warm -ml-1" onclick="showToast('返回上下文流')">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
+      </button>
+      <div class="min-w-0 flex-1">
+        <p class="truncate text-[15px] font-semibold tracking-[-0.01em] text-ink">梯度下降与学习率</p>
+        <p class="mt-0.5 text-[11px] text-ink-muted font-mono">7月3日 · 45分钟 · 已理解</p>
+      </div>
+      <button class="flex h-8 w-8 items-center justify-center rounded-full text-ink-muted hover:bg-paper-warm" onclick="showToast('菜单')">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="5" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="12" cy="19" r="1"/></svg>
+      </button>
+    </div>
+  </div>
+
+  <!-- ── Sticky Mini Player ── -->
+  <div class="flex-shrink-0 bg-paper px-4 py-2.5 border-b border-divider/60 z-10">
+    <div class="flex items-center gap-3 rounded-2xl bg-paper-warm/70 px-3 py-2 ring-[0.5px] ring-divider">
+      <button id="playBtn" class="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full bg-ink text-white transition active:scale-90" onclick="togglePlay()">
+        <svg id="playIcon" width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><polygon points="6,4 20,12 6,20"/></svg>
+        <svg id="pauseIcon" class="hidden" width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>
+      </button>
+      <span class="font-mono text-[11px] font-medium tabular-nums text-ink-secondary" id="currentTime">12:30</span>
+      <div class="progress-track relative h-1.5 flex-1 rounded-full bg-divider" id="progressTrack">
+        <div class="absolute left-0 top-0 h-full rounded-full bg-pine" style="width: 27%" id="progressFill"></div>
+        <div class="absolute top-1/2 h-3 w-3 -translate-y-1/2 rounded-full bg-pine border-2 border-paper shadow-soft" style="left: calc(27% - 6px)"></div>
+      </div>
+      <span class="font-mono text-[11px] font-medium tabular-nums text-ink-muted">45:30</span>
+    </div>
+  </div>
+
+  <!-- ── Lesson Digest (主视图) ── -->
+  <div class="digest-scroll flex-1 min-h-0 overflow-y-auto px-4 py-4" id="digestScroll">
+
+    <!-- Digest header -->
+    <div class="mb-5 section-in">
+      <p class="font-mono text-[10px] font-semibold uppercase tracking-[0.1em] text-pine">课堂总结</p>
+      <h1 class="mt-1.5 font-serif text-[26px] leading-[1.15] tracking-[-0.02em] text-ink">
+        梯度下降与<em class="text-vermilion">学习率</em>的选择
+      </h1>
+      <p class="mt-2 text-[12.5px] leading-relaxed text-ink-muted">
+        本节课围绕梯度下降的核心原理展开，重点讨论了学习率对收敛的影响，以及三种改进策略的适用场景。
+      </p>
+    </div>
+
+    <!-- Section 1 -->
+    <div class="mb-4 section-in" style="animation-delay: 0.05s">
+      <div class="rounded-[20px] border border-divider/70 bg-white p-4 shadow-[0_1px_3px_rgba(0,0,0,0.03)]">
+        <div class="flex items-center gap-2 mb-2.5">
+          <span class="font-mono text-[10px] font-semibold text-pine bg-pine-mist px-1.5 py-0.5 rounded">01</span>
+          <h3 class="text-[14px] font-semibold tracking-[-0.01em] text-ink">开场：什么是梯度下降</h3>
+          <span class="font-mono text-[9px] text-ink-muted ml-auto">02:15</span>
+        </div>
+        <p class="text-[13px] leading-[1.75] text-ink-secondary">
+          老师用"下山"的比喻引入：梯度下降就是站在山坡上，每次沿最陡的方向走一步，直到走到谷底。关键在于<span class="bg-vermilion-mist text-vermilion px-1 rounded">步子多大</span>——步子太大可能跨过谷底，步子太小走得太慢。
+        </p>
+        <div class="mt-3 flex items-center gap-2">
+          <button class="ts-chip inline-flex items-center gap-1 rounded-full bg-paper-warm px-2.5 py-1 font-mono text-[10.5px] font-medium text-pine hover:bg-pine-mist" onclick="seekTo(185)">
+            <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polygon points="5,3 19,12 5,21" fill="currentColor"/></svg>
+            03:05
+          </button>
+          <span class="text-[10.5px] text-ink-muted">老师举例</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Section 2 (with image) - KEY section -->
+    <div class="mb-4 section-in" style="animation-delay: 0.1s">
+      <div class="rounded-[20px] border border-divider/70 bg-white p-4 shadow-[0_1px_3px_rgba(0,0,0,0.03)] relative overflow-hidden">
+        <!-- Key section indicator -->
+        <div class="absolute left-0 top-4 bottom-4 w-[3px] rounded-r-full bg-pine"></div>
+        <div class="flex items-center gap-2 mb-2.5 pl-1">
+          <span class="font-mono text-[10px] font-semibold text-pine bg-pine-mist px-1.5 py-0.5 rounded">02</span>
+          <svg width="10" height="10" viewBox="0 0 24 24" fill="#2D4F3E"><path d="M12 2L9 9l-7 .5L7.5 14 6 21l6-3.5 6 3.5-1.5-7L22 9.5 15 9z"/></svg>
+          <h3 class="text-[14px] font-semibold tracking-[-0.01em] text-ink">核心公式与板书</h3>
+          <span class="font-mono text-[9px] text-ink-muted ml-auto">08:40</span>
+        </div>
+        <p class="text-[13px] leading-[1.75] text-ink-secondary pl-1">
+          老师在黑板上写了参数更新公式 <span class="font-mono text-[12px] bg-canvas px-1.5 py-0.5 rounded text-ink">θ = θ - η∇L(θ)</span>，其中 η 是学习率。强调了一个关键点：梯度方向只告诉你"往哪走"，不告诉你"走多远"——走多远完全由 η 决定。
+        </p>
+        <!-- Inline image (larger) with timestamp anchor -->
+        <div class="mt-3 relative rounded-xl overflow-hidden ring-1 ring-divider/60">
+          <img src="https://images.unsplash.com/photo-1635070041078-e363dbe005cb?w=600&h=400&fit=crop" alt="板书：梯度下降公式" class="w-full h-44 object-cover" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
+          <div class="hidden absolute inset-0 items-center justify-center bg-canvas text-ink-muted text-[11px]">
+            <div class="flex flex-col items-center gap-1.5">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="9" cy="9" r="2"/><path d="M21 15l-5-5L5 21"/></svg>
+              <span>板书照片 · 梯度下降公式</span>
+            </div>
+          </div>
+          <div class="absolute top-2 left-2 flex items-center gap-1 rounded-full bg-ink/80 backdrop-blur px-2 py-0.5">
+            <span class="font-mono text-[9px] font-medium text-white">📷 08:42</span>
+          </div>
+        </div>
+        <div class="mt-3 flex items-center gap-2 pl-1">
+          <button class="ts-chip inline-flex items-center gap-1 rounded-full bg-paper-warm px-2.5 py-1 font-mono text-[10.5px] font-medium text-pine hover:bg-pine-mist" onclick="seekTo(520)">
+            <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polygon points="5,3 19,12 5,21" fill="currentColor"/></svg>
+            08:40
+          </button>
+          <button class="ts-chip inline-flex items-center gap-1 rounded-full bg-paper-warm px-2.5 py-1 text-[10.5px] font-medium text-ink-secondary" onclick="askSection('核心公式与板书','08:40')">
+            问这段
+            <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M5 12h14M13 5l7 7-7 7"/></svg>
+          </button>
+          <!-- Confusion mark (inline) -->
+          <button class="confusion-mark inline-flex items-center gap-1 rounded-full bg-vermilion-mist px-2.5 py-1 text-[10.5px] font-medium text-vermilion" onclick="showConfusionInline(this)">
+            <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 015.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12" y2="17"/></svg>
+            没跟上
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Section 3 - KEY section -->
+    <div class="mb-4 section-in" style="animation-delay: 0.15s">
+      <div class="rounded-[20px] border border-divider/70 bg-white p-4 shadow-[0_1px_3px_rgba(0,0,0,0.03)] relative overflow-hidden">
+        <div class="absolute left-0 top-4 bottom-4 w-[3px] rounded-r-full bg-pine"></div>
+        <div class="flex items-center gap-2 mb-2.5 pl-1">
+          <span class="font-mono text-[10px] font-semibold text-pine bg-pine-mist px-1.5 py-0.5 rounded">03</span>
+          <svg width="10" height="10" viewBox="0 0 24 24" fill="#2D4F3E"><path d="M12 2L9 9l-7 .5L7.5 14 6 21l6-3.5 6 3.5-1.5-7L22 9.5 15 9z"/></svg>
+          <h3 class="text-[14px] font-semibold tracking-[-0.01em] text-ink">学习率的三种策略</h3>
+          <span class="font-mono text-[9px] text-ink-muted ml-auto">16:20</span>
+        </div>
+        <p class="text-[13px] leading-[1.75] text-ink-secondary">
+          老师对比了三种策略：<strong class="text-ink">固定学习率</strong>简单但难调参；<strong class="text-ink">学习率衰减</strong>前期快后期稳，最常用；<strong class="text-ink">自适应学习率</strong>（Adam 等）每个参数有自己的步长，适合稀疏数据。
+        </p>
+        <div class="mt-2.5 space-y-1.5">
+          <div class="flex items-center gap-2 text-[12px] text-ink-secondary">
+            <span class="text-vermilion">▸</span>
+            <span>固定：η=0.01 全程不变，容易震荡或停滞</span>
+          </div>
+          <div class="flex items-center gap-2 text-[12px] text-ink-secondary">
+            <span class="text-pine">▸</span>
+            <span>衰减：η_t = η₀ / √(1+t)，收敛更平滑</span>
+          </div>
+          <div class="flex items-center gap-2 text-[12px] text-ink-secondary">
+            <span class="text-vermilion">▸</span>
+            <span>自适应：Adam = 动量 + RMSProp，默认首选</span>
+          </div>
+        </div>
+        <div class="mt-3 flex items-center gap-2">
+          <button class="ts-chip inline-flex items-center gap-1 rounded-full bg-paper-warm px-2.5 py-1 font-mono text-[10.5px] font-medium text-pine hover:bg-pine-mist" onclick="seekTo(980)">
+            <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polygon points="5,3 19,12 5,21" fill="currentColor"/></svg>
+            16:20
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Section 4 -->
+    <div class="mb-4 section-in" style="animation-delay: 0.2s">
+      <div class="rounded-[20px] border border-divider/70 bg-white p-4 shadow-[0_1px_3px_rgba(0,0,0,0.03)]">
+        <div class="flex items-center gap-2 mb-2.5">
+          <span class="font-mono text-[10px] font-semibold text-pine bg-pine-mist px-1.5 py-0.5 rounded">04</span>
+          <h3 class="text-[14px] font-semibold tracking-[-0.01em] text-ink">实践：学习率过大的表现</h3>
+        </div>
+        <p class="text-[13px] leading-[1.75] text-ink-secondary">
+          老师演示了 η=1.0 时 loss 不降反升——梯度在谷底两侧反复横跳，每次都跨过最优解。这个例子说明：学习率不是"越大越快"，而是要匹配 loss 曲面的曲率。
+        </p>
+        <div class="mt-3 flex items-center gap-2">
+          <button class="ts-chip inline-flex items-center gap-1 rounded-full bg-paper-warm px-2.5 py-1 font-mono text-[10.5px] font-medium text-pine hover:bg-pine-mist" onclick="seekTo(1450)">
+            <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polygon points="5,3 19,12 5,21" fill="currentColor"/></svg>
+            24:10
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 课后补充区 -->
+    <div class="mb-4 section-in" style="animation-delay: 0.25s">
+      <div class="rounded-[20px] border border-dashed border-divider bg-canvas/50 p-4">
+        <p class="font-mono text-[10px] font-semibold uppercase tracking-[0.08em] text-ink-muted mb-2">课后补充</p>
+        <p class="text-[12px] leading-relaxed text-ink-muted mb-3">课后拍的补充资料，没有对应到课堂具体时间：</p>
+        <div class="grid grid-cols-3 gap-2">
+          <div class="aspect-square rounded-lg bg-paper-warm ring-1 ring-divider flex items-center justify-center text-[10px] text-ink-muted">📷 课件截图</div>
+          <div class="aspect-square rounded-lg bg-paper-warm ring-1 ring-divider flex items-center justify-center text-[10px] text-ink-muted">📷 教材页</div>
+          <div class="aspect-square rounded-lg bg-paper-warm ring-1 ring-divider flex items-center justify-center text-[10px] text-ink-muted">📷 笔记</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- AI-suggested actions (from companion, not static UI) -->
+    <div class="mb-24 section-in" style="animation-delay: 0.3s">
+      <div class="rounded-[20px] border border-pine/15 bg-pine-mist/20 p-4">
+        <div class="flex items-start gap-2.5 mb-3">
+          <div class="h-7 w-7 flex-shrink-0 rounded-full bg-pine-mist flex items-center justify-center overflow-hidden octo-breath">
+            <img src="octo/happy.png" alt="Octo" class="h-full w-full object-cover">
+          </div>
+          <div>
+            <p class="text-[12px] leading-relaxed text-ink">
+              你刚读完这节课的总结。核心是<span class="bg-vermilion-mist text-vermilion px-0.5 rounded">学习率 η</span>对收敛的影响。要不要练几张闪卡巩固一下？
+            </p>
+          </div>
+        </div>
+        <div class="grid grid-cols-2 gap-2.5">
+          <button class="rounded-2xl border border-divider bg-white p-3 text-left transition active:scale-[0.98] hover:border-pine/30" onclick="showToast('打开闪卡练习')">
+            <div class="flex items-center gap-2 mb-0.5">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#2D4F3E" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 3v18"/></svg>
+              <span class="text-[12px] font-medium text-ink">练闪卡</span>
+            </div>
+            <p class="text-[10.5px] text-ink-muted">12 张 · 核心概念</p>
+          </button>
+          <button class="rounded-2xl border border-divider bg-white p-3 text-left transition active:scale-[0.98] hover:border-pine/30" onclick="showToast('生成速查表')">
+            <div class="flex items-center gap-2 mb-0.5">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#2D4F3E" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><path d="M14 2v6h6M16 13H8M16 17H8M10 9H8"/></svg>
+              <span class="text-[12px] font-medium text-ink">速查表</span>
+            </div>
+            <p class="text-[10.5px] text-ink-muted">一页纸复习</p>
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Bottom Sheet (可拖拽) ── -->
+  <div id="bottomSheet" class="bottom-sheet absolute left-0 right-0 bottom-0 z-30 bg-white rounded-t-[24px] shadow-[0_-4px_24px_rgba(0,0,0,0.08)]" style="height: 56px; transform: translateY(0);">
+
+    <!-- Drag handle -->
+    <div class="flex justify-center pt-2.5 pb-1 cursor-grab" id="dragHandle">
+      <div class="h-1 w-9 rounded-full bg-divider"></div>
+    </div>
+
+    <!-- Collapsed state: thin bar with preview -->
+    <div id="collapsedBar" class="px-4 pb-2.5">
+      <div class="flex items-center gap-2.5">
+        <!-- Octo mini avatar -->
+        <div class="relative h-8 w-8 flex-shrink-0">
+          <div class="octo-breath absolute inset-0 rounded-full bg-pine-mist overflow-hidden flex items-center justify-center">
+            <img src="octo/thinking.png" alt="Octo" class="h-full w-full object-cover">
+          </div>
+        </div>
+        <div class="min-w-0 flex-1">
+          <p class="truncate text-[12px] text-ink-secondary">
+            <span class="font-medium text-ink">同桌：</span>这段讲的是学习率对收敛的影响，要不要我帮你理一下三种策略的区别？
+          </p>
+        </div>
+        <button class="flex-shrink-0 rounded-full bg-ink px-3 py-1.5 text-[11px] font-medium text-white active:scale-95" onclick="setSheetHeight('half')">
+          问一下
+        </button>
+      </div>
+    </div>
+
+    <!-- Expanded content (chat) -->
+    <div id="chatContent" class="flex-col h-full overflow-hidden" style="display: none;">
+      <!-- Chat header -->
+      <div class="flex-shrink-0 flex items-center justify-between px-4 py-2 border-b border-divider/60">
+        <div class="flex items-center gap-2">
+          <div class="h-6 w-6 rounded-full bg-pine-mist flex items-center justify-center overflow-hidden">
+            <img src="octo/happy.png" alt="Octo" class="h-full w-full object-cover">
+          </div>
+          <span class="text-[12px] font-medium text-ink">课堂同桌</span>
+          <span class="font-mono text-[9px] text-pine bg-pine-mist px-1.5 py-0.5 rounded">复习中</span>
+        </div>
+        <button class="flex h-7 w-7 items-center justify-center rounded-full text-ink-muted hover:bg-paper-warm" onclick="setSheetHeight('collapsed')">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
+        </button>
+      </div>
+
+      <!-- Chat messages -->
+      <div class="chat-scroll flex-1 min-h-0 overflow-y-auto px-4 py-3 space-y-3" id="chatMessages">
+        <!-- AI message -->
+        <div class="flex gap-2">
+          <div class="h-6 w-6 flex-shrink-0 rounded-full bg-pine-mist flex items-center justify-center overflow-hidden mt-0.5">
+            <img src="octo/happy.png" alt="Octo" class="h-full w-full object-cover">
+          </div>
+          <div class="max-w-[80%]">
+            <div class="rounded-[16px] rounded-tl-[4px] bg-canvas px-3 py-2">
+              <p class="text-[12.5px] leading-[1.7] text-ink">
+                这节课的核心是<span class="bg-vermilion-mist text-vermilion px-0.5 rounded">学习率 η</span>对梯度下降的影响。你刚才在 08:40 那段标了"没跟上"，我帮你理一下：
+              </p>
+            </div>
+            <div class="mt-1.5 rounded-[16px] rounded-tl-[4px] bg-canvas px-3 py-2">
+              <p class="text-[12.5px] leading-[1.7] text-ink-secondary">
+                公式 <span class="font-mono text-[11px] bg-white px-1 rounded">θ = θ - η∇L(θ)</span> 里，∇L 只给方向，η 决定步长。η 太大 → 跨过谷底；太小 → 走得太慢。
+              </p>
+            </div>
+            <p class="mt-1 font-mono text-[9px] text-ink-muted">引用 [08:40]</p>
+          </div>
+        </div>
+
+        <!-- User message -->
+        <div class="flex justify-end">
+          <div class="max-w-[80%]">
+            <div class="rounded-[16px] rounded-tr-[4px] bg-ink px-3 py-2">
+              <p class="text-[12.5px] leading-[1.7] text-white">
+                那 Adam 为什么不用手调学习率？
+              </p>
+            </div>
+            <p class="mt-1 text-right font-mono text-[9px] text-ink-muted">刚才</p>
+          </div>
+        </div>
+
+        <!-- AI streaming message -->
+        <div class="flex gap-2">
+          <div class="h-6 w-6 flex-shrink-0 rounded-full bg-pine-mist flex items-center justify-center overflow-hidden mt-0.5">
+            <img src="octo/thinking.png" alt="Octo" class="h-full w-full object-cover">
+          </div>
+          <div class="max-w-[80%]">
+            <div class="rounded-[16px] rounded-tl-[4px] bg-canvas px-3 py-2.5">
+              <div class="flex items-center gap-1">
+                <span class="typing-dot h-1.5 w-1.5 rounded-full bg-pine"></span>
+                <span class="typing-dot h-1.5 w-1.5 rounded-full bg-pine"></span>
+                <span class="typing-dot h-1.5 w-1.5 rounded-full bg-pine"></span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Quick chips -->
+      <div class="flex-shrink-0 px-3 py-1.5 flex gap-1.5 overflow-x-auto" style="scrollbar-width: none;">
+        <button class="flex-shrink-0 rounded-full bg-paper-warm px-2.5 py-1 text-[10.5px] font-medium text-ink-secondary active:scale-95" onclick="showToast('已发送')">三种策略的区别</button>
+        <button class="flex-shrink-0 rounded-full bg-paper-warm px-2.5 py-1 text-[10.5px] font-medium text-ink-secondary active:scale-95" onclick="showToast('已发送')">帮我出几道题</button>
+        <button class="flex-shrink-0 rounded-full bg-vermilion-mist px-2.5 py-1 text-[10.5px] font-medium text-vermilion active:scale-95" onclick="showToast('生成速查表')">📋 速查表</button>
+        <button class="flex-shrink-0 rounded-full bg-vermilion-mist px-2.5 py-1 text-[10.5px] font-medium text-vermilion active:scale-95" onclick="showToast('生成闪卡')">🎴 闪卡</button>
+      </div>
+
+      <!-- Input bar -->
+      <div class="flex-shrink-0 px-3 py-2.5 pb-[max(env(safe-area-inset-bottom),8px)] border-t border-divider/60">
+        <div class="flex items-center gap-2">
+          <button class="flex h-8 w-8 items-center justify-center rounded-full text-ink-muted hover:bg-paper-warm flex-shrink-0">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48"/></svg>
+          </button>
+          <div class="flex-1 rounded-full bg-canvas px-3.5 py-2">
+            <input type="text" placeholder="问同桌一个问题…" class="w-full bg-transparent text-[12.5px] text-ink placeholder:text-ink-muted outline-none" onkeydown="if(event.key==='Enter'){showToast('已发送');this.value='';}">
+          </div>
+          <button class="flex h-8 w-8 items-center justify-center rounded-full bg-ink text-white flex-shrink-0 active:scale-90" onclick="showToast('已发送')">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22,2 15,22 11,13 2,9"/></svg>
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast -->
+  <div id="toast" class="absolute left-1/2 top-20 -translate-x-1/2 rounded-full bg-ink px-4 py-2 text-[12px] font-medium text-white opacity-0 transition-opacity duration-200 pointer-events-none z-50">
+    Toast
+  </div>
+</div>
+
+<script>
+  // ── Sheet heights ──
+  const SHEET_HEIGHTS = {
+    collapsed: 56,   // thin bar
+    half: 340,       // chat + input, top still visible
+    full: 760,       // full screen chat
+  };
+
+  let currentSheetHeight = 'collapsed';
+  const sheet = document.getElementById('bottomSheet');
+  const collapsedBar = document.getElementById('collapsedBar');
+  const chatContent = document.getElementById('chatContent');
+
+  function setSheetHeight(state) {
+    currentSheetHeight = state;
+    sheet.style.height = SHEET_HEIGHTS[state] + 'px';
+    if (state === 'collapsed') {
+      collapsedBar.style.display = 'block';
+      chatContent.style.display = 'none';
+    } else {
+      collapsedBar.style.display = 'none';
+      chatContent.style.display = 'flex';
+    }
+  }
+
+  // ── Drag to resize sheet ──
+  const dragHandle = document.getElementById('dragHandle');
+  let isDragging = false;
+  let startY = 0;
+  let startHeight = 0;
+
+  function onStart(e) {
+    isDragging = true;
+    startY = e.touches ? e.touches[0].clientY : e.clientY;
+    startHeight = parseInt(sheet.style.height);
+    sheet.classList.add('dragging');
+    e.preventDefault();
+  }
+
+  function onMove(e) {
+    if (!isDragging) return;
+    const y = e.touches ? e.touches[0].clientY : e.clientY;
+    const delta = startY - y;
+    const newHeight = Math.max(56, Math.min(760, startHeight + delta));
+    sheet.style.height = newHeight + 'px';
+    if (newHeight > 100) {
+      collapsedBar.style.display = 'none';
+      chatContent.style.display = 'flex';
+    } else {
+      collapsedBar.style.display = 'block';
+      chatContent.style.display = 'none';
+    }
+    e.preventDefault();
+  }
+
+  function onEnd() {
+    if (!isDragging) return;
+    isDragging = false;
+    sheet.classList.remove('dragging');
+    const height = parseInt(sheet.style.height);
+    // Snap to nearest
+    if (height < 180) {
+      setSheetHeight('collapsed');
+    } else if (height < 560) {
+      setSheetHeight('half');
+    } else {
+      setSheetHeight('full');
+    }
+  }
+
+  dragHandle.addEventListener('mousedown', onStart);
+  dragHandle.addEventListener('touchstart', onStart, { passive: false });
+  document.addEventListener('mousemove', onMove);
+  document.addEventListener('touchmove', onMove, { passive: false });
+  document.addEventListener('mouseup', onEnd);
+  document.addEventListener('touchend', onEnd);
+
+  // Also allow tapping the collapsed bar to expand
+  collapsedBar.addEventListener('click', (e) => {
+    if (e.target.tagName !== 'BUTTON' && !e.target.closest('button')) {
+      setSheetHeight('half');
+    }
+  });
+
+  // ── Mini player ──
+  let isPlaying = false;
+  let progress = 27;
+  const playBtn = document.getElementById('playBtn');
+  const playIcon = document.getElementById('playIcon');
+  const pauseIcon = document.getElementById('pauseIcon');
+  const progressFill = document.getElementById('progressFill');
+  const progressTrack = document.getElementById('progressTrack');
+  const currentTimeEl = document.getElementById('currentTime');
+
+  function togglePlay() {
+    isPlaying = !isPlaying;
+    playIcon.classList.toggle('hidden', isPlaying);
+    pauseIcon.classList.toggle('hidden', !isPlaying);
+    if (isPlaying) {
+      interval = setInterval(() => {
+        progress += 0.1;
+        if (progress > 100) progress = 0;
+        updateProgress();
+      }, 500);
+    } else {
+      clearInterval(interval);
+    }
+  }
+
+  let interval;
+  function updateProgress() {
+    progressFill.style.width = progress + '%';
+    progressFill.nextElementSibling.style.left = `calc(${progress}% - 6px)`;
+    const totalSec = 45 * 60 + 30;
+    const curSec = Math.floor(totalSec * progress / 100);
+    const m = Math.floor(curSec / 60);
+    const s = curSec % 60;
+    currentTimeEl.textContent = `${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
+  }
+
+  progressTrack.addEventListener('click', (e) => {
+    const rect = progressTrack.getBoundingClientRect();
+    progress = ((e.clientX - rect.left) / rect.width) * 100;
+    updateProgress();
+  });
+
+  // ── Ask section (context-aware) ──
+  function askSection(title, ts) {
+    setSheetHeight('half');
+    const chat = document.getElementById('chatMessages');
+    chat.innerHTML += `
+      <div class="flex justify-end">
+        <div class="max-w-[80%]">
+          <div class="rounded-[16px] rounded-tr-[4px] bg-vermilion px-3 py-2">
+            <p class="text-[12.5px] leading-[1.7] text-white">
+              帮我详细解释一下"${title}"这段
+            </p>
+          </div>
+          <p class="mt-1 text-right font-mono text-[9px] text-ink-muted">关于 [${ts}] · 刚才</p>
+        </div>
+      </div>`;
+    chat.scrollTop = chat.scrollHeight;
+    showToast(`已问：${title}`);
+  }
+
+  // ── Seek from digest timestamps ──
+  function seekTo(seconds) {
+    const totalSec = 45 * 60 + 30;
+    progress = (seconds / totalSec) * 100;
+    updateProgress();
+    if (!isPlaying) togglePlay();
+    showToast(`跳转到 ${Math.floor(seconds/60)}:${String(seconds%60).padStart(2,'0')}`);
+  }
+
+  // ── Confusion inline ──
+  function showConfusionInline(el) {
+    el.innerHTML = '<svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M20 6L9 17l-5-5"/></svg> 已标记';
+    el.classList.remove('confusion-mark');
+    el.classList.add('bg-pine-mist', 'text-pine');
+    showToast('已标记困惑 · 同桌会在聊天里优先解释这段');
+  }
+
+  // ── Toast ──
+  let toastTimer;
+  function showToast(msg) {
+    const toast = document.getElementById('toast');
+    toast.textContent = msg;
+    toast.style.opacity = '1';
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => {
+      toast.style.opacity = '0';
+    }, 1800);
+  }
+</script>
+
+</body>
+</html>

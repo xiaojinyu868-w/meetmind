@@ -1,0 +1,543 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>MeetMind · 移动端录课中 v2.1</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Instrument+Serif:ital@0;1&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<script>
+tailwind.config = { theme: { extend: {
+  colors: {
+    pine: '#2D4F3E', 'pine-deep': '#1F3A2E', 'pine-mist': '#E8F0EC',
+    vermilion: '#B5483C', 'vermilion-mist': '#F5E6E3',
+    paper: '#FAF7F2', 'paper-warm': '#F2EDE3',
+    ink: '#1C1B19', 'ink-secondary': '#4A4844', 'ink-muted': '#8C887F',
+    canvas: '#F5F1EA', divider: '#E8E2D5', 'divider-light': '#F0EBE0',
+  },
+  fontFamily: {
+    sans: ['Inter', 'system-ui', 'sans-serif'],
+    serif: ['Instrument Serif', 'serif'],
+    mono: ['JetBrains Mono', 'monospace'],
+  }
+}}}
+</script>
+<style>
+  * { -webkit-tap-highlight-color: transparent; }
+  body { font-family: 'Inter', system-ui, sans-serif; background: #1a1a1a; overscroll-behavior: none; }
+  .phone-frame {
+    width: 390px; height: 844px; background: #FAF7F2;
+    border-radius: 44px; overflow: hidden; position: relative;
+    box-shadow: 0 0 0 12px #2a2a2a, 0 0 0 13px #3a3a3a, 0 40px 80px rgba(0,0,0,0.5);
+  }
+  .notes-scroll::-webkit-scrollbar { display: none; }
+  .chat-scroll::-webkit-scrollbar { display: none; }
+
+  @keyframes rec-pulse { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:.5;transform:scale(1.15)} }
+  .rec-dot { animation: rec-pulse 1.4s ease-in-out infinite; }
+
+  @keyframes octo-breath { 0%,100%{transform:scale(1)} 50%{transform:scale(1.04)} }
+  .octo-breath { animation: octo-breath 3s ease-in-out infinite; }
+
+  @keyframes fab-pulse {
+    0%,100% { box-shadow: 0 0 0 0 rgba(181,72,60,0.4); }
+    50% { box-shadow: 0 0 0 8px rgba(181,72,60,0); }
+  }
+  .fab-pulse { animation: fab-pulse 1.8s ease-in-out infinite; }
+
+  .bottom-sheet { transition: transform 0.35s cubic-bezier(0.32,0.72,0,1), height 0.35s cubic-bezier(0.32,0.72,0,1); will-change: transform, height; }
+  .bottom-sheet.dragging { transition: none; }
+
+  @keyframes typing-dot { 0%,60%,100%{opacity:.3;transform:translateY(0)} 30%{opacity:1;transform:translateY(-3px)} }
+  .typing-dot:nth-child(1){animation:typing-dot 1.4s infinite}
+  .typing-dot:nth-child(2){animation:typing-dot 1.4s infinite .2s}
+  .typing-dot:nth-child(3){animation:typing-dot 1.4s infinite .4s}
+
+  @keyframes card-in { from{opacity:0;transform:translateY(12px)} to{opacity:1;transform:translateY(0)} }
+  .card-in { animation: card-in 0.5s ease-out both; }
+
+  @keyframes growing-pulse { 0%,100%{opacity:.6} 50%{opacity:1} }
+  .growing { animation: growing-pulse 1.5s ease-in-out infinite; }
+
+  @keyframes wave-bar { 0%,100%{height:4px} 50%{height:14px} }
+  .wave-bar { animation: wave-bar 0.6s ease-in-out infinite; }
+
+  @keyframes line-in { from{opacity:0;transform:translateX(-4px)} to{opacity:1;transform:translateX(0)} }
+  .line-in { animation: line-in 0.3s ease-out both; }
+
+  .ts-chip { transition: all 0.15s ease; }
+  .ts-chip:active { transform: scale(0.95); }
+</style>
+</head>
+<body class="flex items-center justify-center min-h-screen p-4">
+
+<div class="phone-frame flex flex-col bg-canvas">
+  <!-- ── Status Bar ── -->
+  <div class="flex-shrink-0 bg-paper px-4 pt-[max(env(safe-area-inset-top),12px)] pb-2.5 border-b border-divider/60 z-20">
+    <div class="flex items-center gap-2.5">
+      <button class="flex h-8 w-8 items-center justify-center rounded-full text-ink-muted -ml-1" onclick="showToast('退出录音')">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
+      </button>
+
+      <div class="flex items-center gap-1.5">
+        <span class="rec-dot h-2 w-2 rounded-full bg-vermilion"></span>
+        <span class="font-mono text-[14px] font-semibold tabular-nums text-ink" id="timer">12:34</span>
+      </div>
+
+      <div class="flex items-center gap-[2px] h-5">
+        <div class="wave-bar w-[3px] bg-vermilion rounded-full" style="animation-delay:0s"></div>
+        <div class="wave-bar w-[3px] bg-vermilion rounded-full" style="animation-delay:.1s"></div>
+        <div class="wave-bar w-[3px] bg-vermilion rounded-full" style="animation-delay:.2s"></div>
+        <div class="wave-bar w-[3px] bg-vermilion/60 rounded-full" style="animation-delay:.3s"></div>
+        <div class="wave-bar w-[3px] bg-vermilion/40 rounded-full" style="animation-delay:.4s"></div>
+      </div>
+
+      <div class="flex-1"></div>
+
+      <!-- Mark moment counter -->
+      <div class="flex items-center gap-1 rounded-full bg-vermilion-mist px-2 py-0.5">
+        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#B5483C" stroke-width="2.5"><path d="M12 2L9 9l-7 .5L7.5 14 6 21l6-3.5 6 3.5-1.5-7L22 9.5 15 9z"/></svg>
+        <span class="font-mono text-[10px] font-semibold text-vermilion" id="markCount">2</span>
+      </div>
+
+      <!-- Translation toggle -->
+      <button id="transBtn" class="inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-medium text-ink-muted transition" onclick="toggleTranslation()">
+        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 5h7M9 3v2c0 4.418-2.686 8-6 8M5 11c1.66 0 3-2.24 3-5M12 20l4-9 4 9M14.5 16h3"/></svg>
+        <span id="transLabel">翻译</span>
+      </button>
+
+      <button class="flex h-8 w-8 items-center justify-center rounded-full bg-ink text-white active:scale-90 transition" onclick="showToast('结束 → 正在整理这节课…')">
+        <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="1"/></svg>
+      </button>
+    </div>
+  </div>
+
+  <!-- ── Live Notes (主画面 = 结构化笔记卡片) ── -->
+  <div class="notes-scroll flex-1 min-h-0 overflow-y-auto px-4 py-3" id="notesScroll">
+
+    <p class="font-mono text-[9px] font-semibold uppercase tracking-[0.1em] text-pine mb-2 px-1">课堂笔记 · 正在生长</p>
+
+    <!-- Card 1: completed -->
+    <div class="mb-3 card-in">
+      <div class="rounded-[18px] border border-divider/70 bg-white p-3.5 shadow-[0_1px_3px_rgba(0,0,0,0.03)]">
+        <div class="flex items-center gap-2 mb-2">
+          <span class="font-mono text-[9px] font-semibold text-pine bg-pine-mist px-1.5 py-0.5 rounded">01</span>
+          <h3 class="text-[13px] font-semibold tracking-[-0.01em] text-ink">梯度下降：下山比喻</h3>
+          <span class="font-mono text-[9px] text-ink-muted ml-auto">02:15</span>
+        </div>
+        <p class="text-[12px] leading-[1.7] text-ink-secondary">
+          老师用下山比喻引入梯度下降：站在山坡上沿最陡方向走一步，直到谷底。关键在步子大小——太大跨过谷底，太小走太慢。
+        </p>
+      </div>
+    </div>
+
+    <!-- Card 2: completed, key section -->
+    <div class="mb-3 card-in" style="animation-delay:.1s">
+      <div class="rounded-[18px] border border-divider/70 bg-white p-3.5 shadow-[0_1px_3px_rgba(0,0,0,0.03)] relative overflow-hidden">
+        <!-- Key section indicator -->
+        <div class="absolute left-0 top-3 bottom-3 w-[3px] rounded-r-full bg-pine"></div>
+        <div class="flex items-center gap-2 mb-2 pl-1">
+          <span class="font-mono text-[9px] font-semibold text-pine bg-pine-mist px-1.5 py-0.5 rounded">02</span>
+          <svg width="10" height="10" viewBox="0 0 24 24" fill="#2D4F3E"><path d="M12 2L9 9l-7 .5L7.5 14 6 21l6-3.5 6 3.5-1.5-7L22 9.5 15 9z"/></svg>
+          <h3 class="text-[13px] font-semibold tracking-[-0.01em] text-ink">参数更新公式</h3>
+          <span class="font-mono text-[9px] text-ink-muted ml-auto">08:40</span>
+        </div>
+        <p class="text-[12px] leading-[1.7] text-ink-secondary pl-1">
+          <span class="font-mono text-[11px] bg-canvas px-1.5 py-0.5 rounded text-ink">θ = θ - η∇L(θ)</span> 其中 η 是学习率。梯度只给方向，步长由 η 决定。
+        </p>
+        <!-- Photo attached -->
+        <div class="mt-2.5 pl-1 flex items-center gap-2">
+          <div class="h-12 w-16 rounded-lg bg-paper-warm ring-1 ring-divider flex items-center justify-center flex-shrink-0">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#8C887F" stroke-width="1.5"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="9" cy="9" r="2"/><path d="M21 15l-5-5L5 21"/></svg>
+          </div>
+          <span class="font-mono text-[9px] text-ink-muted">📷 板书 · 08:42</span>
+        </div>
+        <!-- Ask this section -->
+        <button class="ts-chip mt-2.5 ml-1 inline-flex items-center gap-1 rounded-full bg-paper-warm px-2.5 py-1 text-[10.5px] font-medium text-ink-secondary" onclick="askSection('参数更新公式', '08:40')">
+          问这段
+          <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M5 12h14M13 5l7 7-7 7"/></svg>
+        </button>
+      </div>
+    </div>
+
+    <!-- Card 3: completed, key section -->
+    <div class="mb-3 card-in" style="animation-delay:.2s">
+      <div class="rounded-[18px] border border-divider/70 bg-white p-3.5 shadow-[0_1px_3px_rgba(0,0,0,0.03)] relative overflow-hidden">
+        <div class="absolute left-0 top-3 bottom-3 w-[3px] rounded-r-full bg-pine"></div>
+        <div class="flex items-center gap-2 mb-2 pl-1">
+          <span class="font-mono text-[9px] font-semibold text-pine bg-pine-mist px-1.5 py-0.5 rounded">03</span>
+          <svg width="10" height="10" viewBox="0 0 24 24" fill="#2D4F3E"><path d="M12 2L9 9l-7 .5L7.5 14 6 21l6-3.5 6 3.5-1.5-7L22 9.5 15 9z"/></svg>
+          <h3 class="text-[13px] font-semibold tracking-[-0.01em] text-ink">学习率三种策略</h3>
+          <span class="font-mono text-[9px] text-ink-muted ml-auto">16:20</span>
+        </div>
+        <div class="pl-1 space-y-1">
+          <div class="flex items-start gap-2 text-[11.5px] text-ink-secondary">
+            <span class="text-vermilion flex-shrink-0">▸</span>
+            <span><strong class="text-ink">固定</strong>：η 不变，简单但难调</span>
+          </div>
+          <div class="flex items-start gap-2 text-[11.5px] text-ink-secondary">
+            <span class="text-pine flex-shrink-0">▸</span>
+            <span><strong class="text-ink">衰减</strong>：前期大后期小，最常用</span>
+          </div>
+          <div class="flex items-start gap-2 text-[11.5px] text-ink-secondary">
+            <span class="text-vermilion flex-shrink-0">▸</span>
+            <span><strong class="text-ink">Adam</strong>：每参数自适应，稀疏数据首选</span>
+          </div>
+        </div>
+        <button class="ts-chip mt-2.5 ml-1 inline-flex items-center gap-1 rounded-full bg-paper-warm px-2.5 py-1 text-[10.5px] font-medium text-ink-secondary" onclick="askSection('学习率三种策略', '16:20')">
+          问这段
+          <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M5 12h14M13 5l7 7-7 7"/></svg>
+        </button>
+      </div>
+    </div>
+
+    <!-- Card 4: completed -->
+    <div class="mb-3 card-in" style="animation-delay:.3s">
+      <div class="rounded-[18px] border border-divider/70 bg-white p-3.5 shadow-[0_1px_3px_rgba(0,0,0,0.03)]">
+        <div class="flex items-center gap-2 mb-2">
+          <span class="font-mono text-[9px] font-semibold text-pine bg-pine-mist px-1.5 py-0.5 rounded">04</span>
+          <h3 class="text-[13px] font-semibold tracking-[-0.01em] text-ink">学习率过大的表现</h3>
+          <span class="font-mono text-[9px] text-ink-muted ml-auto">24:10</span>
+        </div>
+        <p class="text-[12px] leading-[1.7] text-ink-secondary">
+          η=1.0 时 loss 不降反升，梯度在谷底两侧反复横跳。学习率不是"越大越快"，要匹配 loss 曲面曲率。
+        </p>
+      </div>
+    </div>
+
+    <!-- Card 5: growing (current) -->
+    <div class="mb-3 card-in" style="animation-delay:.4s">
+      <div class="rounded-[18px] border border-pine/20 bg-pine-mist/20 p-3.5">
+        <div class="flex items-center gap-2 mb-2">
+          <span class="font-mono text-[9px] font-semibold text-pine bg-white px-1.5 py-0.5 rounded growing">05</span>
+          <h3 class="text-[13px] font-semibold tracking-[-0.01em] text-pine growing">正在理解…</h3>
+          <span class="font-mono text-[9px] text-pine/60 ml-auto" id="currentTs">12:34</span>
+        </div>
+        <div class="flex items-center gap-1.5">
+          <div class="flex items-center gap-1">
+            <span class="typing-dot h-1.5 w-1.5 rounded-full bg-pine"></span>
+            <span class="typing-dot h-1.5 w-1.5 rounded-full bg-pine"></span>
+            <span class="typing-dot h-1.5 w-1.5 rounded-full bg-pine"></span>
+          </div>
+          <span class="text-[11px] text-pine/60">同桌正在整理这段笔记</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="h-20"></div>
+  </div>
+
+  <!-- ── LIVE raw strip (always visible above sheet) ── -->
+  <div id="liveStrip" class="flex-shrink-0 bg-paper/95 backdrop-blur border-t border-divider/60 px-4 py-2 z-10 transition-all">
+    <div class="flex items-center gap-2">
+      <span class="font-mono text-[8px] font-bold text-vermilion bg-vermilion-mist px-1.5 py-0.5 rounded flex-shrink-0 rec-dot">LIVE</span>
+      <p class="text-[11px] leading-snug text-ink-secondary line-in truncate" id="liveText">
+        …所以学习率太大的时候，梯度会在谷底两侧反复横跳…
+      </p>
+    </div>
+  </div>
+
+  <!-- ── Floating: 拍一下 (left, with photo count) ── -->
+  <button class="absolute bottom-[5.5rem] left-4 z-30 flex h-12 w-12 items-center justify-center rounded-full bg-vermilion text-white shadow-card active:scale-90 transition"
+          onclick="simulatePhoto()">
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z"/><circle cx="12" cy="13" r="4"/></svg>
+    <!-- Photo count badge -->
+    <span class="absolute -top-1 -right-1 h-5 w-5 rounded-full bg-ink flex items-center justify-center border-2 border-paper" id="photoBadge">
+      <span class="font-mono text-[9px] font-bold text-white">2</span>
+    </span>
+  </button>
+
+  <!-- Photo flash -->
+  <div id="photoFlash" class="absolute inset-0 z-50 bg-white opacity-0 pointer-events-none transition-opacity duration-150"></div>
+
+  <!-- ── Floating: 问同学 (right, with pulse + chip badge) ── -->
+  <button class="absolute bottom-[5.5rem] right-4 z-30 flex items-center gap-1.5 rounded-full bg-ink px-3.5 py-2.5 text-[12px] font-medium text-white shadow-card active:scale-95 transition fab-pulse"
+          onclick="setSheetHeight('half')">
+    <div class="relative h-7 w-7 rounded-full overflow-hidden bg-pine-mist octo-breath">
+      <img src="octo/thinking.png" alt="Octo" class="h-full w-full object-cover">
+    </div>
+    <span>问同学</span>
+    <span class="absolute -top-1 -right-1 h-4 w-4 rounded-full bg-vermilion flex items-center justify-center">
+      <span class="font-mono text-[9px] font-bold text-white">2</span>
+    </span>
+  </button>
+
+  <!-- ── Bottom Sheet ── -->
+  <div id="bottomSheet" class="bottom-sheet absolute left-0 right-0 bottom-0 z-40 bg-white rounded-t-[24px] shadow-[0_-4px_24px_rgba(0,0,0,0.1)] overflow-hidden"
+       style="height: 0; transform: translateY(100%);">
+
+    <div class="flex justify-center pt-2.5 pb-1 cursor-grab" id="dragHandle">
+      <div class="h-1 w-9 rounded-full bg-divider"></div>
+    </div>
+
+    <div class="flex flex-col overflow-hidden" style="height: calc(100% - 16px);">
+      <!-- Header -->
+      <div class="flex-shrink-0 flex items-center justify-between px-4 py-2 border-b border-divider/60">
+        <div class="flex items-center gap-2">
+          <div class="h-6 w-6 rounded-full bg-pine-mist flex items-center justify-center overflow-hidden">
+            <img src="octo/happy.png" alt="Octo" class="h-full w-full object-cover">
+          </div>
+          <span class="text-[12px] font-medium text-ink">课堂同桌</span>
+          <span class="font-mono text-[9px] text-pine bg-pine-mist px-1.5 py-0.5 rounded">听课中</span>
+        </div>
+        <!-- Context chip (when asked about a section) -->
+        <div id="contextChip" class="hidden items-center gap-1 rounded-full bg-vermilion-mist px-2 py-0.5">
+          <span class="text-[10px] text-vermilion" id="contextLabel">关于：参数更新公式</span>
+          <button onclick="clearContext()" class="text-vermilion/60 hover:text-vermilion">
+            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 6L6 18M6 6l12 12"/></svg>
+          </button>
+        </div>
+        <button class="flex h-7 w-7 items-center justify-center rounded-full text-ink-muted" onclick="setSheetHeight('collapsed')">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
+        </button>
+      </div>
+
+      <!-- Prediction chips -->
+      <div class="flex-shrink-0 px-3 py-2 border-b border-divider/40">
+        <p class="font-mono text-[9px] font-semibold uppercase tracking-[0.08em] text-ink-muted mb-1.5 px-1">同桌觉得你可能想问</p>
+        <div class="flex gap-1.5 flex-wrap">
+          <button class="rounded-full bg-pine-mist px-3 py-1.5 text-[11.5px] font-medium text-pine active:scale-95 transition" onclick="sendChip('这个和固定学习率有什么区别？')">
+            这个和固定学习率有什么区别？
+          </button>
+          <button class="rounded-full bg-pine-mist px-3 py-1.5 text-[11.5px] font-medium text-pine active:scale-95 transition" onclick="sendChip('Adam 太大了会怎样？')">
+            Adam 太大了会怎样？
+          </button>
+        </div>
+        <div class="mt-1.5 flex gap-1.5">
+          <button class="rounded-full bg-paper-warm px-2.5 py-1 text-[10.5px] font-medium text-ink-secondary active:scale-95" onclick="sendChip('请回放刚才那段')">↩ 刚才那段</button>
+          <button class="rounded-full bg-paper-warm px-2.5 py-1 text-[10.5px] font-medium text-ink-secondary active:scale-95" onclick="sendChip('我刚没跟上')">我没跟上</button>
+          <button class="rounded-full bg-vermilion-mist px-2.5 py-1 text-[10.5px] font-medium text-vermilion active:scale-95" onclick="markMoment()">📍 记一下</button>
+        </div>
+      </div>
+
+      <!-- Chat -->
+      <div class="chat-scroll flex-1 min-h-0 overflow-y-auto px-4 py-3 space-y-3" id="chatMessages">
+        <div class="flex gap-2">
+          <div class="h-6 w-6 flex-shrink-0 rounded-full bg-pine-mist flex items-center justify-center overflow-hidden mt-0.5">
+            <img src="octo/happy.png" alt="Octo" class="h-full w-full object-cover">
+          </div>
+          <div class="max-w-[80%]">
+            <div class="rounded-[16px] rounded-tl-[4px] bg-canvas px-3 py-2">
+              <p class="text-[12.5px] leading-[1.7] text-ink">
+                老师刚讲到学习率太大时梯度会横跳。你拍了板书，公式 <span class="font-mono text-[11px] bg-white px-1 rounded">θ = θ - η∇L(θ)</span> 里的 η 就是步长。
+              </p>
+            </div>
+            <p class="mt-1 font-mono text-[9px] text-ink-muted">引用 [12:30]</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Input -->
+      <div class="flex-shrink-0 px-3 py-2.5 pb-[max(env(safe-area-inset-bottom),8px)] border-t border-divider/60">
+        <div class="flex items-center gap-2">
+          <button class="flex h-8 w-8 items-center justify-center rounded-full text-ink-muted hover:bg-paper-warm flex-shrink-0">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48"/></svg>
+          </button>
+          <div class="flex-1 rounded-full bg-canvas px-3.5 py-2">
+            <input type="text" placeholder="问同桌一个问题…" class="w-full bg-transparent text-[12.5px] text-ink placeholder:text-ink-muted outline-none" onkeydown="if(event.key==='Enter'){sendMessage(this.value);this.value='';}">
+          </div>
+          <button class="flex h-8 w-8 items-center justify-center rounded-full bg-ink text-white flex-shrink-0 active:scale-90" onclick="sendMessage('')">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22,2 15,22 11,13 2,9"/></svg>
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Stop bar -->
+  <div class="flex-shrink-0 bg-canvas px-8 pb-[max(env(safe-area-inset-bottom),1rem)] pt-2">
+    <button class="flex w-full items-center justify-center gap-2.5 rounded-full bg-ink py-3.5 text-[13.5px] font-medium text-white active:scale-[0.995]" onclick="showToast('结束 → 正在整理这节课…')">
+      <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="1"/></svg>
+      结束这节课
+    </button>
+  </div>
+
+  <!-- Toasts -->
+  <div id="toast" class="absolute left-1/2 top-20 -translate-x-1/2 rounded-full bg-ink px-4 py-2 text-[12px] font-medium text-white opacity-0 transition-opacity duration-200 pointer-events-none z-50">Toast</div>
+
+  <div id="photoToast" class="absolute left-1/2 bottom-32 -translate-x-1/2 rounded-2xl bg-white border border-divider shadow-card px-4 py-3 opacity-0 transition-all duration-200 pointer-events-none z-50">
+    <div class="flex items-center gap-2.5">
+      <div class="h-10 w-10 rounded-lg bg-vermilion-mist flex items-center justify-center">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#B5483C" stroke-width="2"><path d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z"/><circle cx="12" cy="13" r="4"/></svg>
+      </div>
+      <div>
+        <p class="text-[12px] font-semibold text-ink">已拍下板书</p>
+        <p class="text-[10.5px] text-ink-muted font-mono">锚点 12:34 · 课后笔记会插到这段</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  // ── Sheet ──
+  const SHEET_HEIGHTS = { collapsed: 0, half: 380, full: 680 };
+  const sheet = document.getElementById('bottomSheet');
+  const liveStrip = document.getElementById('liveStrip');
+
+  function setSheetHeight(state) {
+    sheet.style.height = SHEET_HEIGHTS[state] + 'px';
+    sheet.style.transform = state === 'collapsed' ? 'translateY(100%)' : 'translateY(0)';
+    // LIVE strip stays above sheet — move it up when sheet opens
+    if (state !== 'collapsed') {
+      liveStrip.style.transform = `translateY(-${SHEET_HEIGHTS[state]}px)`;
+      liveStrip.style.zIndex = '45';
+    } else {
+      liveStrip.style.transform = 'translateY(0)';
+      liveStrip.style.zIndex = '10';
+    }
+  }
+
+  // Drag
+  const dragHandle = document.getElementById('dragHandle');
+  let isDragging = false, startY = 0, startHeight = 0;
+
+  function onStart(e) {
+    isDragging = true;
+    startY = e.touches ? e.touches[0].clientY : e.clientY;
+    startHeight = parseInt(sheet.style.height) || 0;
+    sheet.classList.add('dragging');
+    sheet.style.transform = 'translateY(0)';
+    e.preventDefault();
+  }
+  function onMove(e) {
+    if (!isDragging) return;
+    const y = e.touches ? e.touches[0].clientY : e.clientY;
+    const delta = startY - y;
+    const newHeight = Math.max(0, Math.min(680, startHeight + delta));
+    sheet.style.height = newHeight + 'px';
+    liveStrip.style.transform = `translateY(-${newHeight}px)`;
+    e.preventDefault();
+  }
+  function onEnd() {
+    if (!isDragging) return;
+    isDragging = false;
+    sheet.classList.remove('dragging');
+    const h = parseInt(sheet.style.height);
+    if (h < 120) setSheetHeight('collapsed');
+    else if (h < 520) setSheetHeight('half');
+    else setSheetHeight('full');
+  }
+  dragHandle.addEventListener('mousedown', onStart);
+  dragHandle.addEventListener('touchstart', onStart, { passive: false });
+  document.addEventListener('mousemove', onMove);
+  document.addEventListener('touchmove', onMove, { passive: false });
+  document.addEventListener('mouseup', onEnd);
+  document.addEventListener('touchend', onEnd);
+
+  // ── Timer ──
+  let seconds = 12 * 60 + 34;
+  setInterval(() => {
+    seconds++;
+    const m = Math.floor(seconds / 60);
+    const s = seconds % 60;
+    document.getElementById('timer').textContent = `${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
+    document.getElementById('currentTs').textContent = `${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
+  }, 1000);
+
+  // ── Translation ──
+  const transStates = ['翻译', 'EN→中', '中→EN'];
+  let transIdx = 0;
+  function toggleTranslation() {
+    transIdx = (transIdx + 1) % 3;
+    document.getElementById('transLabel').textContent = transStates[transIdx];
+    const btn = document.getElementById('transBtn');
+    if (transIdx > 0) {
+      btn.className = 'inline-flex items-center gap-1 rounded-full bg-ink px-2.5 py-1 text-[11px] font-medium text-white transition';
+    } else {
+      btn.className = 'inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-medium text-ink-muted transition';
+    }
+    showToast(transStates[transIdx]);
+  }
+
+  // ── Photo ──
+  let photoCount = 2;
+  function simulatePhoto() {
+    const flash = document.getElementById('photoFlash');
+    const toast = document.getElementById('photoToast');
+    flash.style.opacity = '0.8';
+    setTimeout(() => flash.style.opacity = '0', 150);
+    toast.style.opacity = '1';
+    toast.style.transform = 'translate(-50%, -8px)';
+    setTimeout(() => {
+      toast.style.opacity = '0';
+      toast.style.transform = 'translate(-50%, 0)';
+    }, 2200);
+    photoCount++;
+    document.getElementById('photoBadge').querySelector('span').textContent = photoCount;
+  }
+
+  // ── Mark moment ──
+  let markCount = 2;
+  function markMoment() {
+    markCount++;
+    document.getElementById('markCount').textContent = markCount;
+    showToast(`已记下 ${document.getElementById('timer').textContent}`);
+  }
+
+  // ── Ask section (context-aware) ──
+  function askSection(title, ts) {
+    document.getElementById('contextChip').style.display = 'flex';
+    document.getElementById('contextLabel').textContent = `关于：${title} [${ts}]`;
+    setSheetHeight('half');
+    // Auto-add context message
+    const chat = document.getElementById('chatMessages');
+    chat.innerHTML += `
+      <div class="flex justify-end">
+        <div class="max-w-[80%]">
+          <div class="rounded-[16px] rounded-tr-[4px] bg-vermilion px-3 py-2">
+            <p class="text-[12.5px] leading-[1.7] text-white">
+              帮我详细解释一下"${title}"这段
+            </p>
+          </div>
+          <p class="mt-1 text-right font-mono text-[9px] text-ink-muted">关于 [${ts}] · 刚才</p>
+        </div>
+      </div>`;
+    chat.scrollTop = chat.scrollHeight;
+  }
+
+  function clearContext() {
+    document.getElementById('contextChip').style.display = 'none';
+  }
+
+  function sendChip(text) {
+    showToast(`已发送：${text.slice(0, 12)}…`);
+  }
+
+  function sendMessage(text) {
+    if (!text.trim()) return;
+    showToast('已发送');
+  }
+
+  // ── Toast ──
+  let toastTimer;
+  function showToast(msg) {
+    const toast = document.getElementById('toast');
+    toast.textContent = msg;
+    toast.style.opacity = '1';
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => toast.style.opacity = '0', 1800);
+  }
+
+  // ── Live text rotation ──
+  const liveTexts = [
+    '…所以学习率太大的时候，梯度会在谷底两侧反复横跳…',
+    '…我们来看下一个策略，叫学习率衰减…',
+    '…Adam 的好处是每个参数有自己的步长…',
+  ];
+  let liveIdx = 0;
+  setInterval(() => {
+    liveIdx = (liveIdx + 1) % liveTexts.length;
+    const el = document.getElementById('liveText');
+    el.style.opacity = '0';
+    setTimeout(() => {
+      el.textContent = liveTexts[liveIdx];
+      el.style.opacity = '1';
+      el.classList.remove('line-in');
+      void el.offsetWidth;
+      el.classList.add('line-in');
+    }, 300);
+  }, 5000);
+</script>
+</body>
+</html>

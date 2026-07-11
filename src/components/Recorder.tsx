@@ -1,9 +1,9 @@
-﻿'use client';
+'use client';
 
 import { forwardRef, useState, useRef, useCallback, useEffect, useImperativeHandle } from 'react';
 import { Mic } from 'lucide-react';
 import type { TranscriptSegment } from '@/types';
-import { DashScopeASRClient } from '@/lib/services/dashscope-asr-service';
+import { DashScopeASRClient, type DashScopeASRCallbacks, type DashScopeASROptions } from '@/lib/services/dashscope-asr-service';
 import { useCaptureEditorStore } from '@/stores/capture-editor-store';
 import { TranscriptFlowView } from './TranscriptFlowView';
 import { TranscriptEnhanceManager, type EnhancedTranscriptSegment } from '@/lib/services/transcript-enhancer';
@@ -48,6 +48,7 @@ export const Recorder = forwardRef<RecorderHandle, RecorderProps>(function Recor
   contextHint = '',
   languageMode = 'auto',
   audioSource = 'mic',
+  speakerDiarization = false,
 }: RecorderProps, ref) {
   const [status, setStatus] = useState<RecorderStatus>('idle');
   const [elapsedMs, setElapsedMs] = useState(0);
@@ -120,6 +121,7 @@ export const Recorder = forwardRef<RecorderHandle, RecorderProps>(function Recor
   const [isStartingRecording, setIsStartingRecording] = useState(false);
   const manuallyEditedSegmentIdsRef = useRef<Set<string>>(new Set());
   const interimItemIdRef = useRef<string | null>(null);
+  const processedSentenceIdsRef = useRef<Set<string>>(new Set());
   const noiseFloorRef = useRef(0.02);
   const contextUpdateCountRef = useRef(0);
   const CONTEXT_UPDATE_EVERY_N_SEGMENTS = 8;
@@ -155,6 +157,111 @@ export const Recorder = forwardRef<RecorderHandle, RecorderProps>(function Recor
     isContinuation: Boolean(continueCurrentSession && activeSessionId),
     durationMs: elapsedMs,
   }), [activeSessionId, continueCurrentSession, elapsedMs]);
+
+  // ASR callbacks 工厂——startRecording / resumeRecording / 引擎切换三处共用，
+  // 避免重复定义同一份 onSentence / onInterim 逻辑。
+  // 闭包内引用的都是 ref 或 stable setter，asrClientRef.current 在切换时会指向新 client，
+  // 所以同一份 callbacks 可以同时服务新旧两个 client（切换过渡期）。
+  const createAsrCallbacks = useCallback((): DashScopeASRCallbacks => ({
+    onSentence: (sentence) => {
+      // 去重：如果同一个 sentence.id 已处理过，直接忽略（防止 ASR 重连后重放）
+      if (sentence.id && processedSentenceIdsRef.current.has(sentence.id)) return;
+      if (sentence.id) processedSentenceIdsRef.current.add(sentence.id);
+      const segment: TranscriptSegment = {
+        id: sentence.id,
+        text: sentence.text,
+        startMs: sentence.beginTime,
+        endMs: sentence.endTime || sentence.beginTime,
+        confidence: sentence.confidence ?? 0.95,
+        isFinal: true,
+        provisional: false,
+        sourceItemId: sentence.itemId,
+        speakerId: sentence.speakerId,
+      };
+
+      if (sentence.itemId && interimItemIdRef.current === sentence.itemId) {
+        interimItemIdRef.current = null;
+        setInterimText('');
+      } else {
+        setInterimText((prev) => {
+          if (!prev) return prev;
+          const prevKey = normalizeCompareText(prev);
+          const finalKey = normalizeCompareText(sentence.text);
+          return prevKey && prevKey === finalKey ? '' : prev;
+        });
+      }
+
+      const mergeResult = mergeRealtimeTranscriptSegment(transcriptRef.current, segment, {
+        replaceIds: sentence.replaces,
+      });
+      if (mergeResult.action === 'ignore') return;
+
+      const nextTranscript = mergeResult.segments;
+      const appended = mergeResult.action === 'append';
+
+      transcriptRef.current = nextTranscript;
+      setTranscript(nextTranscript);
+      onTranscriptUpdate?.(nextTranscript, getCallbackMeta());
+
+      if (enhanceManagerRef.current && !sentence.provisional && appended) {
+        enhanceManagerRef.current.addSegment(segment);
+        setEnhanceStats((prev) => ({ ...prev, total: prev.total + 1 }));
+      }
+
+      // Periodically send context update with recent transcript for better ASR consistency
+      contextUpdateCountRef.current++;
+      if (
+        contextUpdateCountRef.current >= CONTEXT_UPDATE_EVERY_N_SEGMENTS &&
+        asrClientRef.current?.isConnected()
+      ) {
+        contextUpdateCountRef.current = 0;
+        const recentText = nextTranscript
+          .slice(-15)
+          .map((s) => s.text)
+          .join('');
+        asrClientRef.current.sendContextUpdate(recentText);
+      }
+    },
+    onInterim: (interim) => {
+      if (interim.itemId) {
+        interimItemIdRef.current = interim.itemId;
+      }
+
+      const nextText = (interim.text || '').trim();
+      if (!nextText) {
+        if (!interim.itemId || interim.itemId === interimItemIdRef.current) {
+          interimItemIdRef.current = null;
+          setInterimText('');
+        }
+      } else {
+        const lastFinal = transcriptRef.current[transcriptRef.current.length - 1];
+        const interimKey = normalizeCompareText(nextText);
+        const lastKey = normalizeCompareText(lastFinal?.text || '');
+        setInterimText(interimKey && interimKey === lastKey ? '' : nextText);
+      }
+
+      if (enhanceManagerRef.current) {
+        enhanceManagerRef.current.updateActivity();
+      }
+    },
+    onError: (err) => setError(err),
+    onStatusChange: (newStatus) => {
+      if (newStatus === 'transcribing') setServiceStatus('available');
+    },
+  }), [getCallbackMeta, onTranscriptUpdate]);
+
+  // ASR options 工厂——三处共用。speakerDiarization 参数允许切换时传入新值。
+  const buildAsrOptions = useCallback((speakerDiarizationEnabled: boolean): DashScopeASROptions => ({
+    model: wsModel,
+    sampleRate: wsSampleRate,
+    format: 'pcm',
+    initialContextHint: contextHint.trim(),
+    initialLanguageMode: languageMode,
+    maxReconnectAttempts: 30,
+    reconnectBaseMs: 800,
+    reconnectCapMs: 15_000,
+    speakerDiarization: speakerDiarizationEnabled,
+  }), [wsModel, wsSampleRate, contextHint, languageMode]);
 
   useEffect(() => {
     const fetchConfig = async () => {
@@ -435,101 +542,11 @@ export const Recorder = forwardRef<RecorderHandle, RecorderProps>(function Recor
         ? activeSessionId!
         : `session-${Date.now()}`;
       recordingIdRef.current = `recording-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+      processedSentenceIdsRef.current = new Set(); // 新录音清空去重集合
 
       if (effectiveTranscribeMode === 'streaming' && streamingAvailable && apiKey && audioContext && source) {
-        asrClientRef.current = new DashScopeASRClient(apiKey, {
-          onSentence: (sentence) => {
-            const segment: TranscriptSegment = {
-              id: sentence.id,
-              text: sentence.text,
-              startMs: sentence.beginTime,
-              endMs: sentence.endTime || sentence.beginTime,
-              confidence: sentence.confidence ?? 0.95,
-              isFinal: true,
-              provisional: false,
-              sourceItemId: sentence.itemId,
-            };
+        asrClientRef.current = new DashScopeASRClient(apiKey, createAsrCallbacks(), buildAsrOptions(speakerDiarization));
 
-            if (sentence.itemId && interimItemIdRef.current === sentence.itemId) {
-              interimItemIdRef.current = null;
-              setInterimText('');
-            } else {
-              setInterimText((prev) => {
-                if (!prev) return prev;
-                const prevKey = normalizeCompareText(prev);
-                const finalKey = normalizeCompareText(sentence.text);
-                return prevKey && prevKey === finalKey ? '' : prev;
-              });
-            }
-
-            const mergeResult = mergeRealtimeTranscriptSegment(transcriptRef.current, segment, {
-              replaceIds: sentence.replaces,
-            });
-            if (mergeResult.action === 'ignore') return;
-
-            const nextTranscript = mergeResult.segments;
-            const appended = mergeResult.action === 'append';
-
-            transcriptRef.current = nextTranscript;
-            setTranscript(nextTranscript);
-            onTranscriptUpdate?.(nextTranscript, getCallbackMeta());
-
-            if (enhanceManagerRef.current && !sentence.provisional && appended) {
-              enhanceManagerRef.current.addSegment(segment);
-              setEnhanceStats((prev) => ({ ...prev, total: prev.total + 1 }));
-            }
-
-            // Periodically send context update with recent transcript for better ASR consistency
-            contextUpdateCountRef.current++;
-            if (
-              contextUpdateCountRef.current >= CONTEXT_UPDATE_EVERY_N_SEGMENTS &&
-              asrClientRef.current?.isConnected()
-            ) {
-              contextUpdateCountRef.current = 0;
-              const recentText = nextTranscript
-                .slice(-15)
-                .map((s) => s.text)
-                .join('');
-              asrClientRef.current.sendContextUpdate(recentText);
-            }
-          },
-          onInterim: (interim) => {
-            if (interim.itemId) {
-              interimItemIdRef.current = interim.itemId;
-            }
-
-            const nextText = (interim.text || '').trim();
-            if (!nextText) {
-              if (!interim.itemId || interim.itemId === interimItemIdRef.current) {
-                interimItemIdRef.current = null;
-                setInterimText('');
-              }
-            } else {
-              const lastFinal = transcriptRef.current[transcriptRef.current.length - 1];
-              const interimKey = normalizeCompareText(nextText);
-              const lastKey = normalizeCompareText(lastFinal?.text || '');
-              setInterimText(interimKey && interimKey === lastKey ? '' : nextText);
-            }
-
-            if (enhanceManagerRef.current) {
-              enhanceManagerRef.current.updateActivity();
-            }
-          },
-        onError: (err) => setError(err),
-          onStatusChange: (newStatus) => {
-            if (newStatus === 'transcribing') setServiceStatus('available');
-          },
-        }, {
-          model: wsModel,
-          sampleRate: wsSampleRate,
-          format: 'pcm',
-          initialContextHint: contextHint.trim(),
-          initialLanguageMode: languageMode,
-          maxReconnectAttempts: 30,
-          reconnectBaseMs: 800,
-          reconnectCapMs: 15_000,
-        });
-        
         const started = await asrClientRef.current.start();
         if (!started) {
           asrClientRef.current = null;
@@ -616,17 +633,20 @@ export const Recorder = forwardRef<RecorderHandle, RecorderProps>(function Recor
     activeSessionId,
     apiKey,
     audioSource,
+    buildAsrOptions,
+    compactMode,
     contextHint,
-    languageMode,
     continueCurrentSession,
+    createAsrCallbacks,
+    effectiveTranscribeMode,
     getCallbackMeta,
+    languageMode,
     onRecordingStart,
     onTranscriptEnhanced,
     onTranscriptUpdate,
+    speakerDiarization,
     status,
     stopMediaRecorderSafely,
-    compactMode,
-    effectiveTranscribeMode,
     streamingAvailable,
     VAD_CONFIG.baseEnergyThreshold,
     VAD_CONFIG.minSpeechDuration,
@@ -690,6 +710,77 @@ export const Recorder = forwardRef<RecorderHandle, RecorderProps>(function Recor
     pcmProcessorRef.current.connect(audioContext.destination);
   }, [wsSampleRate]);
 
+  // 录音中切换说话人分离引擎。
+  //
+  // 方案：立即切换 asrClientRef → newClient 缓冲音频 → 成功后关旧 client → 失败回退。
+  //
+  // 1. 创建 newClient，立即 asrClientRef.current = newClient
+  //    → PCM processor 开始往 newClient 发音频
+  //    → newClient 在 ready 前音频入队 audioQueue（不丢）
+  // 2. await newClient.start()
+  //    → ready 后 flushAudioQueue（把缓冲的音频一次性吐给上游）
+  // 3. 成功 → void oldClient.stop()（异步关闭旧 client）
+  // 4. 失败 → asrClientRef.current = oldClient（回退，旧 client 仍在）
+  //
+  // 比并行连接更简单：不 rebuild pipeline、不交接检查、不并行 callback。
+  // 中断时间 ≈ newClient.start() 的连接时间（1-3s），期间音频不丢（audioQueue 缓冲）。
+  const prevSpeakerDiarizationRef = useRef(speakerDiarization);
+  useEffect(() => {
+    if (prevSpeakerDiarizationRef.current === speakerDiarization) return;
+    prevSpeakerDiarizationRef.current = speakerDiarization;
+    if (status !== 'recording') return;
+
+    const oldClient = asrClientRef.current;
+    if (!oldClient || !apiKey) return;
+
+    console.log(`[Recorder] Speaker diarization changed to ${speakerDiarization}, switching ASR engine...`);
+    setAsrReconnecting(true);
+    setError(null);
+
+    // 清空去重集合：server proxy 的 sentence.id 是 `seg-${index}`，每个连接从 0 开始。
+    processedSentenceIdsRef.current = new Set();
+
+    const newClient = new DashScopeASRClient(apiKey, createAsrCallbacks(), buildAsrOptions(speakerDiarization));
+
+    // 立即切换：PCM processor 的 onaudioprocess 引用 asrClientRef.current（ref），
+    // 切换后自动往 newClient 发音频。newClient ready 前入队 audioQueue，ready 后 flush。
+    asrClientRef.current = newClient;
+
+    void (async () => {
+      try {
+        const ok = await newClient.start();
+        if (!ok) {
+          // 连接失败：回退到旧 client（旧 client 还活着，没被 stop）
+          console.error('[Recorder] New ASR client failed to start, reverting to old engine');
+          asrClientRef.current = oldClient;
+          try { await newClient.stop(); } catch { /* ignore */ }
+          setAsrReconnecting(false);
+          return;
+        }
+
+        // 新 client ready：发送最近上下文
+        const recentText = transcriptRef.current
+          .slice(-15)
+          .map((s) => s.text)
+          .join('');
+        if (recentText) newClient.sendContextUpdate(recentText);
+        contextUpdateCountRef.current = 0;
+
+        // 异步关闭旧 client
+        void oldClient.stop().catch(() => { /* ignore */ });
+
+        setAsrReconnecting(false);
+        console.log('[Recorder] ASR engine switch completed');
+      } catch (err) {
+        console.error('[Recorder] ASR engine switch failed:', err);
+        asrClientRef.current = oldClient;
+        try { await newClient.stop(); } catch { /* ignore */ }
+        setAsrReconnecting(false);
+      }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [speakerDiarization, status]);
+
   const resumeRecording = useCallback(async () => {
     if (mediaRecorderRef.current?.state !== 'paused') return;
 
@@ -711,95 +802,7 @@ export const Recorder = forwardRef<RecorderHandle, RecorderProps>(function Recor
       }
 
       // Create new ASR client with same callbacks
-      asrClientRef.current = new DashScopeASRClient(apiKey, {
-        onSentence: (sentence) => {
-          const segment: TranscriptSegment = {
-            id: sentence.id,
-            text: sentence.text,
-            startMs: sentence.beginTime,
-            endMs: sentence.endTime || sentence.beginTime,
-            confidence: sentence.confidence ?? 0.95,
-            isFinal: true,
-            provisional: false,
-            sourceItemId: sentence.itemId,
-          };
-
-          if (sentence.itemId && interimItemIdRef.current === sentence.itemId) {
-            interimItemIdRef.current = null;
-            setInterimText('');
-          } else {
-            setInterimText((prev) => {
-              if (!prev) return prev;
-              const prevKey = normalizeCompareText(prev);
-              const finalKey = normalizeCompareText(sentence.text);
-              return prevKey && prevKey === finalKey ? '' : prev;
-            });
-          }
-
-          const mergeResult = mergeRealtimeTranscriptSegment(transcriptRef.current, segment, {
-            replaceIds: sentence.replaces,
-          });
-          if (mergeResult.action === 'ignore') return;
-
-          const nextTranscript = mergeResult.segments;
-          const appended = mergeResult.action === 'append';
-
-          transcriptRef.current = nextTranscript;
-          setTranscript(nextTranscript);
-          onTranscriptUpdate?.(nextTranscript, getCallbackMeta());
-
-          if (enhanceManagerRef.current && !sentence.provisional && appended) {
-            enhanceManagerRef.current.addSegment(segment);
-            setEnhanceStats((prev) => ({ ...prev, total: prev.total + 1 }));
-          }
-
-          contextUpdateCountRef.current++;
-          if (
-            contextUpdateCountRef.current >= CONTEXT_UPDATE_EVERY_N_SEGMENTS &&
-            asrClientRef.current?.isConnected()
-          ) {
-            contextUpdateCountRef.current = 0;
-            const recentText = nextTranscript
-              .slice(-15)
-              .map((s) => s.text)
-              .join('');
-            asrClientRef.current.sendContextUpdate(recentText);
-          }
-        },
-        onInterim: (interim) => {
-          if (interim.itemId) {
-            interimItemIdRef.current = interim.itemId;
-          }
-          const nextText = (interim.text || '').trim();
-          if (!nextText) {
-            if (!interim.itemId || interim.itemId === interimItemIdRef.current) {
-              interimItemIdRef.current = null;
-              setInterimText('');
-            }
-          } else {
-            const lastFinal = transcriptRef.current[transcriptRef.current.length - 1];
-            const interimKey = normalizeCompareText(nextText);
-            const lastKey = normalizeCompareText(lastFinal?.text || '');
-            setInterimText(interimKey && interimKey === lastKey ? '' : nextText);
-          }
-          if (enhanceManagerRef.current) {
-            enhanceManagerRef.current.updateActivity();
-          }
-        },
-        onError: (err) => setError(err),
-        onStatusChange: (newStatus) => {
-          if (newStatus === 'transcribing') setServiceStatus('available');
-        },
-      }, {
-        model: wsModel,
-        sampleRate: wsSampleRate,
-        format: 'pcm',
-        initialContextHint: contextHint.trim(),
-        initialLanguageMode: languageMode,
-        maxReconnectAttempts: 30,
-        reconnectBaseMs: 800,
-        reconnectCapMs: 15_000,
-      });
+      asrClientRef.current = new DashScopeASRClient(apiKey, createAsrCallbacks(), buildAsrOptions(speakerDiarization));
 
       const started = await asrClientRef.current.start();
       if (started) {
@@ -842,15 +845,18 @@ export const Recorder = forwardRef<RecorderHandle, RecorderProps>(function Recor
     setStatus('recording');
   }, [
     apiKey,
+    buildAsrOptions,
+    compactMode,
     contextHint,
-    languageMode,
+    createAsrCallbacks,
+    effectiveTranscribeMode,
     elapsedMs,
     getCallbackMeta,
+    languageMode,
     onTranscriptUpdate,
     rebuildPcmPipeline,
+    speakerDiarization,
     streamingAvailable,
-    compactMode,
-    effectiveTranscribeMode,
     wsModel,
     wsSampleRate,
   ]);
@@ -1283,7 +1289,10 @@ export const Recorder = forwardRef<RecorderHandle, RecorderProps>(function Recor
       }
       if (audioContextRef.current) audioContextRef.current.close().catch(() => {});
       sourceNodeRef.current = null;
-      if (asrClientRef.current) asrClientRef.current.stop();
+      if (asrClientRef.current) {
+        asrClientRef.current.stop();
+        asrClientRef.current = null;
+      }
       if (enhanceManagerRef.current) enhanceManagerRef.current.dispose();
       // acquireAudioStream cleanup——卸载时兜底释放采集资源
       if (audioCleanupRef.current) {

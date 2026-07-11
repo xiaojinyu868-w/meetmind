@@ -205,7 +205,7 @@ export function IntentDialog({
   });
 
   const handleAcceptSummary = React.useCallback(
-    async (messageId: string, params: { title: string; summary?: string }) => {
+    async (messageId: string, params: { title: string; summary?: string; acceptedPoints?: string[]; rejectedPoints?: string[] }) => {
       const now = new Date().toISOString();
       const goal: GoalEntry = {
         id: genId(),
@@ -218,14 +218,20 @@ export function IntentDialog({
       };
       await onSaveGoal(goal);
       setSavedSummaryIds((prev) => ({ ...prev, [messageId]: true }));
+
+      // 如果有被拒绝的点，发送反馈让 AI 知道"这条不对"
+      if (params.rejectedPoints && params.rejectedPoints.length > 0) {
+        const feedback = `有几条我不太认同：\n${params.rejectedPoints.map(p => `· ${p}`).join('\n')}\n其他的没问题。`;
+        // 通过 append 注入用户反馈
+        sendMessage({ text: feedback });
+      }
     },
-    [onSaveGoal, sessionId],
+    [onSaveGoal, sessionId, sendMessage],
   );
 
   const handleAcceptBio = React.useCallback(
-    async (messageId: string, params: { headline: string; detail?: string }) => {
+    async (messageId: string, params: { headline: string; detail?: string; acceptedPoints?: string[]; rejectedPoints?: string[] }) => {
       const now = new Date().toISOString();
-      // 如果已经有 bio，保留 createdAt，仅更新 updatedAt（用户每次回访可能修订）
       const existing = learnerProfile?.bio;
       const bio: BioEntry = {
         headline: params.headline,
@@ -236,8 +242,13 @@ export function IntentDialog({
       };
       await onSaveBio(bio);
       setSavedBioIds((prev) => ({ ...prev, [messageId]: true }));
+
+      if (params.rejectedPoints && params.rejectedPoints.length > 0) {
+        const feedback = `有几条不太对：\n${params.rejectedPoints.map(p => `· ${p}`).join('\n')}\n其他的没问题。`;
+        sendMessage({ text: feedback });
+      }
     },
-    [onSaveBio, sessionId, learnerProfile?.bio],
+    [onSaveBio, sessionId, learnerProfile?.bio, sendMessage],
   );
 
   // 监听最近一条 AI 消息的 mood —— 影响顶部 Octo 表情
@@ -465,8 +476,7 @@ export function IntentDialog({
               footers.push(
                 <IntentBioCard
                   key="bio"
-                  headline={bio.headline}
-                  detail={bio.detail}
+                  points={bio.points}
                   saved={bioSaved}
                   onDismiss={() =>
                     setDismissedBioIds((prev) => ({ ...prev, [message.id]: true }))
@@ -479,8 +489,7 @@ export function IntentDialog({
               footers.push(
                 <IntentSummaryCard
                   key="summary"
-                  title={extracted.title}
-                  summary={extracted.summary}
+                  points={extracted.points}
                   saved={saved}
                   onDismiss={() =>
                     setDismissedSummaryIds((prev) => ({ ...prev, [message.id]: true }))
@@ -560,6 +569,20 @@ export function IntentDialog({
         variant="glass"
         className="relative z-10"
       />
+
+      {/* 用户想主动沉淀时可以点 */}
+      {messages.length >= 2 && !busy ? (
+        <div className="relative z-10 flex justify-center -mt-1 pb-1.5">
+          <button
+            type="button"
+            onClick={() => sendMessage({ text: '帮我记一下' })}
+            className="inline-flex items-center gap-1.5 rounded-full border border-white/20 bg-white/8 px-4 py-2 text-[12px] font-medium text-white/70 backdrop-blur-md transition-all hover:bg-white/16 hover:text-white/90 active:scale-95"
+          >
+            <Sparkles size={12} strokeWidth={2} />
+            帮我记一下
+          </button>
+        </div>
+      ) : null}
 
       {/* ─── 跳过链接（首次注册场景） ──────────────────────────────── */}
       {onSkip ? (

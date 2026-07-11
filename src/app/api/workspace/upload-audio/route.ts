@@ -89,6 +89,7 @@ export async function POST(request: NextRequest) {
       absoluteUrl,
       size: buffer.length,
     });
+    // 注意：absoluteUrl 是公网可访问的绝对 URL，用于 DashScope Fun-ASR 说话人分离
   } catch (error) {
     log.error('workspace upload-audio error:', error);
     return NextResponse.json(

@@ -77,6 +77,8 @@ export interface ClassroomViewProps {
   onOpenDemoReview?: () => void;
   /** 重命名课程标题（调 IndexedDB updateSessionTopic） */
   onRenameLesson?: (id: string, title: string) => void;
+  /** 课中拍照：透传到 ClassroomRecordingView */
+  onQuickPhoto?: (capturedAtMs: number) => void;
 }
 
 export function ClassroomView({
@@ -90,6 +92,7 @@ export function ClassroomView({
   autoOpenDemoAppKey,
   onOpenDemoReview,
   onRenameLesson,
+  onQuickPhoto,
 }: ClassroomViewProps) {
   // ── 真实数据：Lesson[] + markReviewed ──
   const { lessons, markReviewed } = useClassroomLessons();
@@ -397,6 +400,10 @@ export function ClassroomView({
   const setRecorderAudioSource = useCaptureEditorStore(
     (s) => s.actions.setRecorderAudioSource,
   );
+  const recorderSpeakerDiarization = useCaptureEditorStore((s) => s.recorderSpeakerDiarization);
+  const setRecorderSpeakerDiarization = useCaptureEditorStore(
+    (s) => s.actions.setRecorderSpeakerDiarization,
+  );
 
   // ── 预知气泡：AI 同桌的"主动性"，只在录课中工作 ──
   // M14: foresight 引擎复用 —— 输出从"折叠药丸"形态升级为 composer 上方的动态 chip 行
@@ -572,11 +579,14 @@ export function ClassroomView({
         onFinishDemo={handleOpenDemoReview}
         audioSource={recorderAudioSource}
         onChangeAudioSource={setRecorderAudioSource}
+        speakerDiarization={recorderSpeakerDiarization}
+        onChangeSpeakerDiarization={setRecorderSpeakerDiarization}
         onOpenApp={onOpenApp}
         onRenameLesson={onRenameLesson}
+        onQuickPhoto={onQuickPhoto}
       />
     ),
-    [paneState, lessons, handleOpenLesson, handleStartRecording, handleStopRecording, effectiveRecordingSeconds, liveConcepts, liveTranscriptText, recordingSegments, liveInterimText, recentLines, mindMapTree, mindMapNewIds, handleMindMapAnchorClick, mindMapScrollTarget, isDemoRecordingPane, demoAudioPlaying, demoAudioNeedsGesture, handleToggleDemoAudio, demoComplete, handleReplayDemo, handleOpenDemoReview, recorderAudioSource, setRecorderAudioSource, onOpenApp, onRenameLesson],
+    [paneState, lessons, handleOpenLesson, handleStartRecording, handleStopRecording, effectiveRecordingSeconds, liveConcepts, liveTranscriptText, recordingSegments, liveInterimText, recentLines, mindMapTree, mindMapNewIds, handleMindMapAnchorClick, mindMapScrollTarget, isDemoRecordingPane, demoAudioPlaying, demoAudioNeedsGesture, handleToggleDemoAudio, demoComplete, handleReplayDemo, handleOpenDemoReview, recorderAudioSource, setRecorderAudioSource, recorderSpeakerDiarization, setRecorderSpeakerDiarization, onOpenApp, onRenameLesson],
   );
 
   const demoSuggestedPrompts = useMemo(

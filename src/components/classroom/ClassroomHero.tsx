@@ -27,6 +27,10 @@ export interface ClassroomHeroProps {
   audioSource?: RecorderAudioSource;
   /** 切换录音来源 */
   onChangeAudioSource?: (source: RecorderAudioSource) => void;
+  /** 是否启用说话人分离（多人会议模式） */
+  speakerDiarization?: boolean;
+  /** 切换说话人分离 */
+  onChangeSpeakerDiarization?: (enabled: boolean) => void;
   className?: string;
 }
 
@@ -112,6 +116,8 @@ export function ClassroomHero({
   onStartRecording,
   audioSource = 'mic',
   onChangeAudioSource,
+  speakerDiarization = false,
+  onChangeSpeakerDiarization,
   className,
 }: ClassroomHeroProps) {
   return (
@@ -131,6 +137,31 @@ export function ClassroomHero({
             <AudioSourceRail value={audioSource} onChange={onChangeAudioSource} />
           ) : null}
         </div>
+
+        {/* 多人会议开关——启用后切到腾讯云说话人分离引擎 */}
+        {onChangeSpeakerDiarization ? (
+          <div className="mt-4 flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => onChangeSpeakerDiarization(!speakerDiarization)}
+              className={cn(
+                'inline-flex items-center gap-2 rounded-full border px-4 py-2 text-[12.5px] transition-colors',
+                speakerDiarization
+                  ? 'border-pine/40 bg-pine/5 text-pine'
+                  : 'border-divider bg-white text-ink-secondary hover:text-ink',
+              )}
+              aria-pressed={speakerDiarization}
+            >
+              <span
+                className={cn(
+                  'h-1.5 w-1.5 rounded-full',
+                  speakerDiarization ? 'bg-pine' : 'bg-ink-muted',
+                )}
+              />
+              {speakerDiarization ? '多人会议 · 说话人分离已开启' : '多人会议'}
+            </button>
+          </div>
+        ) : null}
 
         <button
           type="button"

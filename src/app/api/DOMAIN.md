@@ -27,6 +27,10 @@ route.ts → lib/services/ + lib/utils/rate-limit
 | `/api/transcript-enhance` | POST | LLM 转录文本纠错增强 |
 | `/api/upload-audio` | POST | 音频文件上传到临时目录 |
 | `/api/asr-config` | GET | ASR 配置（API Key/模型/采样率） |
+| `/api/asr/oneshot` | POST | 非实时短音频 ASR（语音输入对话框） |
+| `/api/asr/diarize` | POST | 说话人分离（Fun-ASR 非实时 + diarization_enabled） |
+| `/api/asr/corrections` | GET/POST | ASR 纠错事件记录 / 热词列表 |
+| `/api/asr/corrections/aggregate` | POST | 将纠错记录聚合为热词 |
 | `/api/extract-terms` | POST | 从课程主题提取关键术语表（用于 ASR 纠错） |
 
 ### 📥 内容导入
@@ -47,6 +51,8 @@ route.ts → lib/services/ + lib/utils/rate-limit
 | `/api/chat` | POST | AI 对话（多模型/流式/速率限制） |
 | `/api/tutor` | POST | AI 家教（解释/追问/引导/联网检索） |
 | `/api/tutor/agent` | POST | AI 同桌 agent-native 工具调用流 |
+| `/api/classroom/foresight` | POST | 课堂预知气泡生成（qwen3.7-plus） |
+| `/api/classroom/lesson-digest` | POST | 课堂结构化分段总结生成（飞书妙记形态，segments + 图片锚点 → 分段 digest） |
 | `/api/translate/en-zh` | POST | 课堂英文片段翻译为中文 |
 | `/api/translate/zh-en` | POST | 课堂中文片段翻译为英文 |
 | `/api/generate-summary` | POST | 课堂摘要生成 |

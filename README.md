@@ -73,6 +73,11 @@ DEEPSEEK_API_KEY=sk-your-api-key
 DASHSCOPE_ASR_WS_MODEL=qwen3-asr-flash-realtime
 DASHSCOPE_ASR_WS_SR=16000
 
+# 腾讯云实时说话人分离（多人会议模式，可选）
+# TENCENT_ASR_APP_ID=your-app-id
+# TENCENT_ASR_SECRET_ID=your-secret-id
+# TENCENT_ASR_SECRET_KEY=your-secret-key
+
 # 转录后校对（分层 light → fallback）
 TRANSCRIPT_CORRECTION_MODE=layered
 TRANSCRIPT_LIGHT_MODEL=qwen-turbo
@@ -137,7 +142,7 @@ make deploy
 | 渲染 | Shiki（代码高亮）/ Mermaid（图）/ KaTeX + remark-math（公式）/ react-markdown + remark-gfm |
 | 音频处理 | wavesurfer.js、fluent-ffmpeg、@ffmpeg-installer/ffmpeg |
 | 内容接入 | Firecrawl（网页文章）/ mammoth（.docx）/ unpdf（PDF）/ youtubei.js（YouTube 导入）/ sharp（图像处理） |
-| ASR | DashScope qwen3-asr-flash（实时 WS）+ qwen3-asr-flash-filetrans（异步长音频） |
+| ASR | DashScope qwen3-asr-flash-realtime（实时 WS，高精度）+ 腾讯云 16k_zh_en_speaker（实时说话人分离）+ qwen3-asr-flash-filetrans（异步长音频） |
 | 可观测 | Sentry (`vercelAIIntegration` + `pinoIntegration`) + pino 结构化日志 + AsyncLocalStorage requestId |
 | 评测 | Promptfoo + 自研 TS grader（CER / tool-selection / timestamp-citation / LLM rubric） |
 | 基础设施 | SWR（数据请求）/ ioredis（Redis）/ nodemailer（邮件验证码）/ sonner（Toast）/ PM2 |
@@ -148,7 +153,7 @@ make deploy
 
 ```
 meetmind/
-├── server.js                     # 自定义 Next.js server（ASR WS 代理 + 静态资源 + 长任务保活）
+├── server.js                     # 自定义 Next.js server（ASR WS 代理：DashScope + 腾讯云说话人分离 + 静态资源 + 长任务保活）
 ├── prisma/                       # Prisma schema + migrations（含 AsrCorrection / AsrHotword / SharedAgent）
 ├── openclaw/                     # OpenClaw AI Agent Gateway（与 MeetMind 解耦，已 deprecated，仅 fallback）
 ├── src/
@@ -235,6 +240,7 @@ meetmind/
 - 视频链接导入（B 站、YouTube、小宇宙播客、抖音、直链）
 - **文章 / 网页原文接入（M12）**：`/api/article/import` + Firecrawl（首选）/ Jina / 本地 fetch 三级回落，Markdown 清洗后展示原文
 - **长音频妙记级 ASR**：>10min 自动切 DashScope 异步模式（支持 12 小时），分片 600s + 2s 重叠 + LCS 缝合
+- **实时说话人分离（M14.6+）**：双引擎可选——DashScope（高精度无分离）+ 腾讯云 `16k_zh_en_speaker`（实时声纹聚类，支持 10 人）。录音中可无感切换。speakerId 通过 `formatTranscriptWithSpeakers` 注入同桌/复习 AI 上下文
 - 微信服务号轻收集入口（`/api/wechat/*` + 6 个 wechat service）
 
 ### 课堂同桌（M9 → M14/M14.5 AI-native 重做）

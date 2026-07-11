@@ -1562,3 +1562,110 @@ p, span, div, h1, h2, h3, h4, h5, h6, li, td, th, label {
 .chat-image-lightbox-close:hover {
   background: rgba(255, 255, 255, 0.22);
 }
+
+/* ============================================================
+   Mobile App Shell — 自定义动画（对齐 demo design-demo/mobile-review-v2）
+   ============================================================ */
+
+/* Octo 呼吸动画 */
+@keyframes m-octo-breath {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.05); }
+}
+.m-octo-breath { animation: m-octo-breath 3s ease-in-out infinite; }
+
+/* 页面切入动画 */
+@keyframes m-page-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.m-page-in { animation: m-page-in 0.3s ease-out; }
+
+/* 卡片淡入 + 上移 */
+@keyframes m-card-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.m-card-in { animation: m-card-in 0.4s ease-out both; }
+
+/* 录课波形条 */
+@keyframes m-wave-bar {
+  0%, 100% { height: 4px; }
+  50% { height: 14px; }
+}
+.m-wave-bar { animation: m-wave-bar 0.6s ease-in-out infinite; }
+
+/* 问同学按钮脉冲 */
+@keyframes m-fab-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(181,72,60,0.4); }
+  50% { box-shadow: 0 0 0 8px rgba(181,72,60,0); }
+}
+.m-fab-pulse { animation: m-fab-pulse 1.8s ease-in-out infinite; }
+
+/* 整理态脉冲环 */
+@keyframes m-pulse-ring {
+  0% { transform: scale(0.8); opacity: 0.6; }
+  100% { transform: scale(2.2); opacity: 0; }
+}
+.m-pulse-ring { animation: m-pulse-ring 2s ease-out infinite; }
+
+/* 整理态轨道粒子 */
+@keyframes m-orbit-1 {
+  from { transform: rotate(0deg) translateX(56px) rotate(0deg); }
+  to { transform: rotate(360deg) translateX(56px) rotate(-360deg); }
+}
+.m-orbit-1 { animation: m-orbit-1 3s linear infinite; }
+
+@keyframes m-orbit-2 {
+  from { transform: rotate(120deg) translateX(44px) rotate(-120deg); }
+  to { transform: rotate(480deg) translateX(44px) rotate(-480deg); }
+}
+.m-orbit-2 { animation: m-orbit-2 4s linear infinite; }
+
+@keyframes m-orbit-3 {
+  from { transform: rotate(240deg) translateX(68px) rotate(-240deg); }
+  to { transform: rotate(600deg) translateX(68px) rotate(-600deg); }
+}
+.m-orbit-3 { animation: m-orbit-3 5s linear infinite; }
+
+/* 整理态预览卡 settle */
+@keyframes m-card-settle {
+  0% { opacity: 0; transform: translateY(20px) scale(0.95); }
+  100% { opacity: 1; transform: translateY(0) scale(1); }
+}
+.m-card-settle { animation: m-card-settle 0.6s cubic-bezier(0.34, 1.56, 0.64, 1) both; }
+
+/* 实时文字逐行浮现 */
+@keyframes m-line-in {
+  from { opacity: 0; transform: translateX(-4px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+.m-line-in { animation: m-line-in 0.3s ease-out both; }
+
+/* 录课中"正在生长"卡片脉冲 */
+@keyframes m-growing-pulse {
+  0%, 100% { opacity: 0.6; }
+  50% { opacity: 1; }
+}
+.m-growing { animation: m-growing-pulse 1.5s ease-in-out infinite; }
+
+/* 困惑标记脉冲 */
+@keyframes m-confusion-pulse {
+  0%, 100% { box-shadow: inset 3px 0 0 #B5483C; }
+  50% { box-shadow: inset 3px 0 0 #B5483C, 0 0 0 4px rgba(181,72,60,0); }
+}
+.m-confusion-mark { animation: m-confusion-pulse 2s ease-in-out infinite; }
+
+/* 录课脉冲点 */
+@keyframes m-rec-pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.5; transform: scale(1.15); }
+}
+.m-rec-dot { animation: m-rec-pulse 1.4s ease-in-out infinite; }
+
+/* Mini-player 滚动折叠 */
+.m-mini-player-collapsed {
+  height: 3px !important;
+  padding: 0 !important;
+}
+.m-mini-player-collapsed > * { display: none !important; }

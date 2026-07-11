@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MeetMind · 移动端 v2 Demo</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Instrument+Serif:ital@0;1&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<script>
+tailwind.config = { theme: { extend: {
+  colors: {
+    pine: '#2D4F3E', vermilion: '#B5483C', paper: '#FAF7F2',
+    'paper-warm': '#F2EDE3', ink: '#1C1B19', 'ink-muted': '#8C887F', canvas: '#F5F1EA', divider: '#E8E2D5',
+  },
+  fontFamily: { sans: ['Inter','sans-serif'], serif: ['Instrument Serif','serif'], mono: ['JetBrains Mono','monospace'] }
+}}}
+</script>
+<style>
+  body { font-family: 'Inter', sans-serif; background: #1a1a1a; }
+  .card-hover { transition: all 0.2s ease; }
+  .card-hover:hover { transform: translateY(-2px); box-shadow: 0 8px 24px rgba(0,0,0,0.15); }
+</style>
+</head>
+<body class="min-h-screen flex items-center justify-center p-6">
+<div class="max-w-3xl w-full">
+  <div class="text-center mb-6">
+    <p class="font-mono text-[11px] font-semibold uppercase tracking-[0.12em] text-pine mb-2">MeetMind · Mobile v2</p>
+    <h1 class="font-serif text-[36px] leading-tight text-white">移动端 <em class="text-vermilion">完整体验流</em></h1>
+    <p class="mt-2 text-[13px] text-white/50">采集台 → 录课中 → 整理中 → 复习态</p>
+  </div>
+
+  <div class="flex items-center justify-center gap-2 mb-6 text-[11px]">
+    <span class="text-pine font-medium">待机</span>
+    <span class="text-white/30">→</span>
+    <span class="text-vermilion font-medium">现场</span>
+    <span class="text-white/30">→</span>
+    <span class="text-white/50 font-medium">过渡</span>
+    <span class="text-white/30">→</span>
+    <span class="text-pine font-medium">沉淀</span>
+  </div>
+
+  <div class="grid grid-cols-2 gap-4">
+    <a href="home.html" class="card-hover block rounded-2xl bg-white p-5">
+      <div class="flex items-center gap-2 mb-2.5">
+        <span class="font-mono text-[9px] font-bold text-pine bg-pine-mist px-1.5 py-0.5 rounded">01</span>
+        <span class="font-mono text-[10px] font-semibold uppercase tracking-[0.08em] text-pine">待机态</span>
+      </div>
+      <h2 class="text-[15px] font-semibold text-ink mb-1.5">采集台首页</h2>
+      <p class="text-[11.5px] leading-relaxed text-ink-muted">
+        打开 App 第一眼：录音/拍照/速记三按钮 + 下方最近采集流
+      </p>
+      <p class="mt-3 text-[11px] font-medium text-pine">点击体验 →</p>
+    </a>
+
+    <a href="recording.html" class="card-hover block rounded-2xl bg-white p-5">
+      <div class="flex items-center gap-2 mb-2.5">
+        <span class="font-mono text-[9px] font-bold text-vermilion bg-vermilion-mist px-1.5 py-0.5 rounded">02</span>
+        <span class="font-mono text-[10px] font-semibold uppercase tracking-[0.08em] text-vermilion">现场态</span>
+      </div>
+      <h2 class="text-[15px] font-semibold text-ink mb-1.5">录课中</h2>
+      <p class="text-[11.5px] leading-relaxed text-ink-muted">
+        笔记卡片生长 + 拍一下 + 问同学预测chip + 翻译开关 + 底部Sheet
+      </p>
+      <p class="mt-3 text-[11px] font-medium text-pine">点击体验 →</p>
+    </a>
+
+    <a href="processing.html" class="card-hover block rounded-2xl bg-white p-5">
+      <div class="flex items-center gap-2 mb-2.5">
+        <span class="font-mono text-[9px] font-bold text-ink-muted bg-paper-warm px-1.5 py-0.5 rounded">03</span>
+        <span class="font-mono text-[10px] font-semibold uppercase tracking-[0.08em] text-ink-muted">过渡态</span>
+      </div>
+      <h2 class="text-[15px] font-semibold text-ink mb-1.5">正在整理</h2>
+      <p class="text-[11.5px] leading-relaxed text-ink-muted">
+        停录后仪式动画：Octo呼吸 + 轨道粒子 + 轮播文案 + 笔记卡片渐入
+      </p>
+      <p class="mt-3 text-[11px] font-medium text-pine">点击体验 →</p>
+    </a>
+
+    <a href="index.html" class="card-hover block rounded-2xl bg-white p-5">
+      <div class="flex items-center gap-2 mb-2.5">
+        <span class="font-mono text-[9px] font-bold text-pine bg-pine-mist px-1.5 py-0.5 rounded">04</span>
+        <span class="font-mono text-[10px] font-semibold uppercase tracking-[0.08em] text-pine">沉淀态</span>
+      </div>
+      <h2 class="text-[15px] font-semibold text-ink mb-1.5">结构化总结复习</h2>
+      <p class="text-[11.5px] leading-relaxed text-ink-muted">
+        lesson-digest分段 + 图片内联 + 时间戳跳转 + 问这段 + 底部Sheet对话
+      </p>
+      <p class="mt-3 text-[11px] font-medium text-pine">点击体验 →</p>
+    </a>
+  </div>
+
+  <div class="mt-5 rounded-2xl bg-white/5 p-4 border border-white/10">
+    <p class="font-mono text-[10px] text-white/40 uppercase tracking-[0.08em] mb-2">交互提示</p>
+    <ul class="space-y-1 text-[11.5px] text-white/60">
+      <li>• <strong class="text-white/80">采集台</strong>：点"录一节课"开始录音 / 点录音卡片进入复习态</li>
+      <li>• <strong class="text-white/80">录课中</strong>：点左下相机拍照 / 点右下"问同学"展开chip / 点翻译切换</li>
+      <li>• <strong class="text-white/80">整理中</strong>：等待动画，笔记卡片会渐入预览</li>
+      <li>• <strong class="text-white/80">复习态</strong>：点时间戳跳播放 / 点"没赶上"标困惑 / 点"问这段"锚定对话 / 拖底部handle</li>
+    </ul>
+  </div>
+</div>
+</body>
+</html>

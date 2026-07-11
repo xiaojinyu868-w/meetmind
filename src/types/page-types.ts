@@ -84,6 +84,13 @@ export interface SourceIngestItem {
   coverUrl?: string;
   /** 正文中的图片 URL 列表（文章/笔记类型） */
   imageUrls?: string[];
+  /**
+   * 照片拍摄时间锚点（相对当前录音 session 的毫秒偏移）。
+   * 仅现场态拍照时写入（由 `handleImportFiles` 的 options 透传），
+   * 用于 lesson-digest 把图片插入到正确的时间段落。
+   * 沉淀态补拍的照片该字段为空。
+   */
+  capturedAtMs?: number;
 }
 
 export interface SupportReferenceItem {

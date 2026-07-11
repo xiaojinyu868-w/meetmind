@@ -41,6 +41,7 @@ api/route.ts → services → lib/utils, lib/db, lib/config
 | `llm-service.ts` | ~750 | 统一 LLM 调用层（StepFun / DeepSeek / 通义千问 / 火山方舟 / 中转站），默认优先 `step-3.7-flash`（阶跃星辰）；`chatStream` 默认开 word-level smoothing（中文按字 / 英文按词 / 标点独立段，10ms 节流），所有走流式的对话框（/api/chat、/api/workspace/search、legacy /api/tutor）自动按词平滑刷出，可 `options.smooth: 'off'` 关闭 |
 | `highlight-service.ts` | 675 | AI 精选片段（Smart/Fast 双模式） |
 | `summary-service.ts` | 246 | 课堂摘要生成 |
+| `lesson-digest-service.ts` | ~280 | 课堂结构化分段总结（飞书妙记形态）：segments + 图片锚点 → LLM 生成分段 digest + fallback 兜底。参照 `cheatsheet.plugin.ts` 的 LLM + JSON + citation 模式。桌面移动共享 |
 | `tutor-service.ts` | 273 | AI 家教：引用匹配 + LLM 解释 |
 | `dify-service.ts` | 354 | Dify Agent 集成（提问引导 + 联网检索） |
 | `teaching-suggestion.ts` | 256 | 教学改进建议生成 |

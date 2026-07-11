@@ -59,7 +59,7 @@ export interface UseCollectionComposerDeps {
   /** Import a composer link (from useSourceImport) */
   importComposerVideoLink: (url: string, composerText?: string) => Promise<void>;
   /** Handle file imports */
-  handleImportFiles: (files: File[] | FileList, mode?: 'audio' | 'support' | 'all') => Promise<void>;
+  handleImportFiles: (files: File[] | FileList, mode?: 'audio' | 'support' | 'all', options?: { sessionId?: string; capturedAtMs?: number }) => Promise<void>;
   /** Handle source file button click */
   handleSourceFileButtonClick: (mode?: 'audio' | 'support' | 'all') => void;
   /** Whether device is mobile */

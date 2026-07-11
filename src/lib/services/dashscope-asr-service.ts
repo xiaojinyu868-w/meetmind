@@ -13,6 +13,8 @@ export interface ASRSentence {
   itemId?: string;
   provisional?: boolean;
   replaces?: string[];
+  /** 说话人标识（腾讯云说话人分离返回，0-9） */
+  speakerId?: string;
 }
 
 export interface ASRInterim {
@@ -41,6 +43,8 @@ export interface DashScopeASROptions {
   language?: string[];
   initialContextHint?: string;
   initialLanguageMode?: 'auto' | 'zh' | 'en';
+  /** 启用说话人分离——切换到腾讯云 16k_zh_en_speaker 引擎 */
+  speakerDiarization?: boolean;
   // M2 T2.2: WebSocket 自动重连配置
   /** 允许重连的最大次数，默认 5 */
   maxReconnectAttempts?: number;
@@ -55,6 +59,11 @@ export interface DashScopeASROptions {
 export class DashScopeASRClient {
   private callbacks: DashScopeASRCallbacks;
   private options: DashScopeASROptions;
+
+  /** 运行时切换说话人分离设置（下次重连生效） */
+  setSpeakerDiarization(enabled: boolean): void {
+    this.options = { ...this.options, speakerDiarization: enabled };
+  }
 
   private ws: WebSocket | null = null;
   private status: 'idle' | 'connecting' | 'connected' | 'transcribing' | 'stopped' | 'error' = 'idle';
@@ -137,7 +146,7 @@ export class DashScopeASRClient {
       try {
         this.updateStatus('connecting');
 
-        const candidateUrls = buildAsrWebSocketCandidates(window.location.href);
+        const candidateUrls = buildAsrWebSocketCandidates(window.location.href, this.options.speakerDiarization);
         // M13-fix: 默认重连次数从 30 降到 8。
         // 30 次（指数退避到 ~10s 上限）= 最长重试 ~80s，对真·鉴权失败/服务异常场景毫无意义，
         // 反而堆出几十条同样的报错刷爆日志。8 次（~30s）足够覆盖瞬时网络波动，重大故障应该让用户感知。
@@ -319,7 +328,7 @@ export class DashScopeASRClient {
         }
 
         case 'result':
-          this.handleResult(msg.sentence, msg.replaces, msg.provisional);
+          this.handleResult(msg.sentence, msg.replaces, msg.provisional, msg.speakerId);
           break;
 
         case 'interim': {
@@ -377,12 +386,16 @@ export class DashScopeASRClient {
           isFinal?: boolean;
           itemId?: string;
           confidence?: number;
+          speakerId?: string;
         }
       | undefined,
     replaces?: string[],
     provisional?: boolean,
+    speakerId?: string,
   ): void {
     if (!sentence || !sentence.text) return;
+
+    const finalSpeakerId = sentence.speakerId || speakerId;
 
     if (sentence.isFinal !== false) {
       const beginTime = sentence.beginTime ?? 0;
@@ -398,6 +411,7 @@ export class DashScopeASRClient {
         itemId: sentence.itemId,
         provisional: provisional === true,
         replaces: Array.isArray(replaces) ? replaces : undefined,
+        speakerId: finalSpeakerId,
       };
       this.callbacks.onSentence?.(result);
     } else {
@@ -474,7 +488,9 @@ export class DashScopeASRClient {
   sendContextHint(contextHint: string, languageMode: 'auto' | 'zh' | 'en' = 'auto'): void {
     if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return;
     // 允许空 hint 但指定 languageMode 的场景（比如录课一开始没有热词，但用户选了英文课）
-    if (!contextHint.trim() && languageMode === 'auto') return;
+    // speakerDiarization 模式下无条件发送：speaker proxy 需要收到 context-hint 消息
+    // 才会建立腾讯云连接，如果这里 return 了，腾讯云连接永远不建立，start() 超时失败。
+    if (!contextHint.trim() && languageMode === 'auto' && !this.options.speakerDiarization) return;
 
     this.ws.send(
       JSON.stringify({

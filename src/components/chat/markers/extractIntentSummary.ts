@@ -1,26 +1,29 @@
 /**
  * extractIntentSummary —— 从 mode='goal' 的 AI 回复里抽出"我想要的"块。
  *
- * 形态（prompt 约定见 tutor-prompts.ts MODE_GOAL_SEGMENT）：
+ * 新格式（逐条选择）：
  *
  *   ---我想要的---
- *   一句话标题
- *   （可选多行 detail）
+ *   · 我想转行做设计
+ *   · 画画一直是我放不下的
+ *   · 我想找到每天醒来愿意去做的事
  *   ---结束---
  *
- * 容错：
- *   - 流式过程中只下了开头标记没下结束标记 → 返回 null（等下完再展示卡片）
- *   - 块内空白行 → 自动 trim
+ * 旧格式兼容（整块文本）：
  *
- * 返回：
- *   - title：第一行（去掉 list 前缀，最多 80 字）
- *   - summary：剩余行
- *   - rawBlock：原始片段（包含起止 marker，方便消费者做替换）
- *   - textWithoutBlock：去掉块后的剩余文本（用于消息气泡显示——避免重复）
+ *   ---我想要的---
+ *   我想转行做设计——因为...
+ *   ---结束---
+ *
+ * 返回 points: string[]（每个点独立），同时保持 title/summary 向后兼容。
  */
 
 export interface IntentSummaryExtraction {
+  /** 逐条提取的观察点 */
+  points: string[];
+  /** 兼容旧字段：第一条作为 title */
   title: string;
+  /** 兼容旧字段：剩余条合并为 summary */
   summary?: string;
   rawBlock: string;
   textWithoutBlock: string;
@@ -35,21 +38,27 @@ export function extractIntentSummary(text: string): IntentSummaryExtraction | nu
   if (!endMatch || typeof endMatch.index !== 'number') return null;
   const inner = afterStart.slice(0, endMatch.index).trim();
   if (!inner) return null;
+
+  // 按行拆分，去掉 `· ` / `- ` / `* ` / `• ` 前缀
   const lines = inner
     .split('\n')
     .map((l) => l.trim())
+    .filter(Boolean)
+    .map((l) => l.replace(/^[·•\-*]\s*/, '').trim())
     .filter(Boolean);
+
   if (lines.length === 0) return null;
-  const title = lines[0].replace(/^[-•·*]\s*/, '').slice(0, 80);
-  const summary = lines.slice(1).join('\n').trim() || undefined;
+
+  // 如果只有一行（旧格式），lines 就是那一行
+  // 如果多行，每行是一个独立"点"
+  const points = lines.map((l) => l.slice(0, 120));
+  const title = points[0].slice(0, 80);
+  const summary = points.length > 1 ? points.slice(1).join('\n') : undefined;
+
   const blockEnd = startIdx + startMatch[0].length + endMatch.index + endMatch[0].length;
   const before = text.slice(0, startIdx).trim();
   const after = text.slice(blockEnd).trim();
   const textWithoutBlock = [before, after].filter(Boolean).join('\n\n');
-  return {
-    title,
-    summary,
-    rawBlock: text.slice(startIdx, blockEnd),
-    textWithoutBlock,
-  };
+
+  return { points, title, summary, rawBlock: text.slice(startIdx, blockEnd), textWithoutBlock };
 }

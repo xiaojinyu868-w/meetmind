@@ -15,13 +15,18 @@ export interface UploadRecordingAudioParams {
   blob: Blob;
   sessionId: string;
   authToken: string;
-  /** 上传成功后用真实 URL 更新 capture 的回调（通常是 persistCaptureToWorkspace 再 upsert） */
-  onUploaded?: (realMediaUrl: string) => void;
+  /** 上传成功后用真实 URL 更新 capture 的回调（通常是 persistCaptureToWorkspace 再 upsert）
+   *  @param realMediaUrl 相对路径（用于页面播放）
+   *  @param absoluteUrl  公网绝对 URL（用于 DashScope Fun-ASR 说话人分离）
+   */
+  onUploaded?: (realMediaUrl: string, absoluteUrl?: string) => void;
 }
 
 export interface UploadRecordingAudioResult {
   ok: boolean;
   mediaUrl?: string;
+  /** 公网可访问的绝对 URL（用于 DashScope Fun-ASR 说话人分离） */
+  absoluteUrl?: string;
   error?: string;
 }
 
@@ -53,6 +58,7 @@ export async function uploadRecordingAudio(
     const data = (await resp.json().catch(() => ({}))) as {
       success?: boolean;
       mediaUrl?: string;
+      absoluteUrl?: string;
       error?: string;
     };
 
@@ -61,6 +67,7 @@ export async function uploadRecordingAudio(
     }
 
     const realUrl = data.mediaUrl;
+    const absoluteUrl = data.absoluteUrl || realUrl;
 
     // 更新本地 IndexedDB 的 mediaUrl（从 blob: 临时 URL → 真实 URL）
     try {
@@ -72,8 +79,8 @@ export async function uploadRecordingAudio(
       // 本地更新失败不影响上传成功
     }
 
-    onUploaded?.(realUrl);
-    return { ok: true, mediaUrl: realUrl };
+    onUploaded?.(realUrl, absoluteUrl);
+    return { ok: true, mediaUrl: realUrl, absoluteUrl };
   } catch (err) {
     return { ok: false, error: err instanceof Error ? err.message : String(err) };
   }

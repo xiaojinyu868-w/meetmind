@@ -1,0 +1,816 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>MeetMind · 移动端完整体验 v2.2</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Instrument+Serif:ital@0;1&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<script>
+tailwind.config = { theme: { extend: {
+  colors: {
+    pine: '#2D4F3E', 'pine-deep': '#1F3A2E', 'pine-mist': '#E8F0EC',
+    vermilion: '#B5483C', 'vermilion-mist': '#F5E6E3',
+    paper: '#FAF7F2', 'paper-warm': '#F2EDE3',
+    ink: '#1C1B19', 'ink-secondary': '#4A4844', 'ink-muted': '#8C887F',
+    canvas: '#F5F1EA', divider: '#E8E2D5', 'divider-light': '#F0EBE0',
+  },
+  fontFamily: {
+    sans: ['Inter', 'system-ui', 'sans-serif'],
+    serif: ['Instrument Serif', 'serif'],
+    mono: ['JetBrains Mono', 'monospace'],
+  }
+}}}
+</script>
+<style>
+  * { -webkit-tap-highlight-color: transparent; box-sizing: border-box; }
+  body { font-family: 'Inter', system-ui, sans-serif; background: #1a1a1a; overscroll-behavior: none; margin: 0; }
+  .phone-frame { width: 390px; height: 844px; background: #FAF7F2; border-radius: 44px; overflow: hidden; position: relative; box-shadow: 0 0 0 12px #2a2a2a, 0 0 0 13px #3a3a3a, 0 40px 80px rgba(0,0,0,0.5); display: flex; flex-direction: column; }
+  .scroll-area { -webkit-overflow-scrolling: touch; }
+  .scroll-area::-webkit-scrollbar { display: none; }
+  .page { display: none; flex-direction: column; flex: 1; min-height: 0; }
+  .page.active { display: flex; animation: page-in 0.3s ease-out; }
+  @keyframes page-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
+  @keyframes octo-breath { 0%,100%{transform:scale(1)} 50%{transform:scale(1.05)} }
+  .octo-breath { animation: octo-breath 3s ease-in-out infinite; }
+  @keyframes rec-pulse { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:.5;transform:scale(1.15)} }
+  .rec-dot { animation: rec-pulse 1.4s ease-in-out infinite; }
+  @keyframes wave-bar { 0%,100%{height:4px} 50%{height:14px} }
+  .wave-bar { animation: wave-bar 0.6s ease-in-out infinite; }
+  @keyframes fab-pulse { 0%,100%{box-shadow:0 0 0 0 rgba(181,72,60,0.4)} 50%{box-shadow:0 0 0 8px rgba(181,72,60,0)} }
+  .fab-pulse { animation: fab-pulse 1.8s ease-in-out infinite; }
+  .bottom-sheet { transition: transform 0.35s cubic-bezier(0.32,0.72,0,1), height 0.35s cubic-bezier(0.32,0.72,0,1); will-change: transform, height; }
+  .bottom-sheet.dragging { transition: none; }
+  @keyframes card-in { from{opacity:0;transform:translateY(8px)} to{opacity:1;transform:translateY(0)} }
+  .card-in { animation: card-in 0.4s ease-out both; }
+  @keyframes growing-pulse { 0%,100%{opacity:.6} 50%{opacity:1} }
+  .growing { animation: growing-pulse 1.5s ease-in-out infinite; }
+  @keyframes typing-dot { 0%,60%,100%{opacity:.3;transform:translateY(0)} 30%{opacity:1;transform:translateY(-3px)} }
+  .typing-dot:nth-child(1){animation:typing-dot 1.4s infinite}
+  .typing-dot:nth-child(2){animation:typing-dot 1.4s infinite .2s}
+  .typing-dot:nth-child(3){animation:typing-dot 1.4s infinite .4s}
+  @keyframes orbit { from{transform:rotate(0deg) translateX(56px) rotate(0deg)} to{transform:rotate(360deg) translateX(56px) rotate(-360deg)} }
+  .orbit-dot { animation: orbit 3s linear infinite; }
+  @keyframes orbit-2 { from{transform:rotate(120deg) translateX(44px) rotate(-120deg)} to{transform:rotate(480deg) translateX(44px) rotate(-480deg)} }
+  .orbit-dot-2 { animation: orbit-2 4s linear infinite; }
+  @keyframes orbit-3 { from{transform:rotate(240deg) translateX(68px) rotate(-240deg)} to{transform:rotate(600deg) translateX(68px) rotate(-600deg)} }
+  .orbit-dot-3 { animation: orbit-3 5s linear infinite; }
+  @keyframes pulse-ring { 0%{transform:scale(0.8);opacity:0.6} 100%{transform:scale(2.2);opacity:0} }
+  .pulse-ring { animation: pulse-ring 2s ease-out infinite; }
+  @keyframes card-settle { 0%{opacity:0;transform:translateY(20px) scale(0.95)} 100%{opacity:1;transform:translateY(0) scale(1)} }
+  .card-settle { animation: card-settle 0.6s cubic-bezier(0.34,1.56,0.64,1) both; }
+  @keyframes line-in { from{opacity:0;transform:translateX(-4px)} to{opacity:1;transform:translateX(0)} }
+  .line-in { animation: line-in 0.3s ease-out both; }
+  @keyframes confusion-pulse { 0%,100%{box-shadow:0 0 0 0 rgba(181,72,60,0.3)} 50%{box-shadow:0 0 0 4px rgba(181,72,60,0)} }
+  .confusion-mark { animation: confusion-pulse 2s ease-in-out infinite; }
+  .toast { transition: opacity 0.2s ease; }
+  .flashcard { transition: transform 0.5s; transform-style: preserve-3d; }
+  .flashcard.flipped { transform: rotateY(180deg); }
+  .flashcard-face { backface-visibility: hidden; position: absolute; inset: 0; }
+  .flashcard-back { transform: rotateY(180deg); }
+  /* Mini player auto-collapse on scroll */
+  .mini-player-collapsed { height: 3px !important; padding: 0 !important; }
+  .mini-player-collapsed .mp-inner { display: none !important; }
+</style>
+</head>
+<body class="flex items-center justify-center min-h-screen p-4">
+
+<div class="phone-frame">
+
+<!-- ═══ PAGE 1: 收集首页 ═══ -->
+<div class="page active" id="page-home">
+  <div class="flex-shrink-0 bg-paper px-4 pt-[max(env(safe-area-inset-top),12px)] pb-2.5">
+    <div class="flex items-center justify-between">
+      <div class="flex items-center gap-2">
+        <div class="relative h-8 w-8 octo-breath">
+          <div class="absolute inset-0 rounded-full bg-pine-mist overflow-hidden"><img src="octo/idle.png" alt="Octo" class="h-full w-full object-cover"></div>
+        </div>
+        <div>
+          <p class="text-[13px] font-semibold text-ink leading-tight">MeetMind</p>
+          <p class="font-mono text-[9px] text-ink-muted">7月3日 · 周四</p>
+        </div>
+      </div>
+      <div class="flex items-center gap-2">
+        <button class="flex h-8 w-8 items-center justify-center rounded-full text-ink-muted" onclick="toast('搜索')"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg></button>
+        <div class="h-7 w-7 rounded-full bg-paper-warm overflow-hidden ring-1 ring-divider flex items-center justify-center text-[10px] font-medium text-ink-muted">林</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="scroll-area flex-1 min-h-0 overflow-y-auto px-4 pt-3 pb-20" id="homeScroll">
+    <h1 class="font-serif text-[24px] leading-[1.15] tracking-[-0.02em] text-ink mb-3">今天学点什么？</h1>
+
+    <div class="grid grid-cols-3 gap-2.5 mb-5">
+      <button class="col-span-3 flex items-center gap-3 rounded-[18px] bg-white border-2 border-vermilion/20 p-3.5 text-left active:scale-[0.98] transition" onclick="go('recording')">
+        <div class="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full bg-vermilion-mist">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#B5483C" stroke-width="2"><path d="M12 2a3 3 0 00-3 3v7a3 3 0 006 0V5a3 3 0 00-3-3z"/><path d="M19 10v2a7 7 0 01-14 0v-2M12 19v3"/></svg>
+        </div>
+        <div class="min-w-0 flex-1">
+          <p class="text-[14px] font-semibold text-vermilion">录一节课</p>
+          <p class="text-[11px] text-ink-muted mt-0.5">课堂 · 讲座 · 随时听</p>
+        </div>
+        <span class="relative flex h-2 w-2 flex-shrink-0">
+          <span class="absolute inline-flex h-full w-full animate-ping rounded-full bg-vermilion opacity-50"></span>
+          <span class="relative inline-flex h-2 w-2 rounded-full bg-vermilion"></span>
+        </span>
+      </button>
+      <button class="rounded-[16px] bg-white border border-divider p-3 text-center active:scale-95 transition" onclick="toast('拍照采集')">
+        <div class="flex h-9 w-9 mx-auto items-center justify-center rounded-full bg-vermilion-mist mb-1.5"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#B5483C" stroke-width="2"><path d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z"/><circle cx="12" cy="13" r="4"/></svg></div>
+        <p class="text-[12px] font-semibold text-ink">拍一下</p>
+      </button>
+      <button class="col-span-2 rounded-[16px] bg-white border border-divider p-3 flex items-center gap-2.5 text-left active:scale-[0.98] transition" onclick="focusComposer()">
+        <div class="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full bg-pine-mist"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#2D4F3E" stroke-width="2"><path d="M12 20h9M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4L16.5 3.5z"/></svg></div>
+        <div><p class="text-[12px] font-semibold text-ink">速记一句</p><p class="text-[10px] text-ink-muted">想法 · 疑问 · 课后笔记</p></div>
+      </button>
+    </div>
+
+    <!-- [#1 fix] Echo card: no question, statement + click to review -->
+    <div class="mb-4 card-in cursor-pointer" onclick="go('review')">
+      <div class="rounded-[18px] border border-pine/20 bg-pine-mist/50 p-4 shadow-soft">
+        <div class="flex items-center gap-2 mb-2.5">
+          <div class="h-7 w-7 rounded-full bg-pine-mist flex items-center justify-center overflow-hidden octo-breath flex-shrink-0"><img src="octo/happy.png" alt="Octo" class="h-full w-full object-cover"></div>
+          <span class="font-mono text-[9px] font-semibold uppercase tracking-[0.08em] text-pine">今天的笔记</span>
+          <span class="font-mono text-[9px] text-ink-muted ml-auto">7月3日</span>
+        </div>
+        <p class="text-[13px] leading-[1.7] text-ink">
+          今天收集了 <strong class="text-vermilion">3 条</strong>内容，涉及<span class="bg-vermilion-mist text-vermilion px-1 rounded text-[12px]">梯度下降</span>和<span class="bg-vermilion-mist text-vermilion px-1 rounded text-[12px]">多目标优化</span>。下午那节梯度下降标了 2 个没跟上的地方。
+        </p>
+        <p class="mt-2.5 text-[11px] font-medium text-pine flex items-center gap-1">查看完整笔记 <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M5 12h14M13 5l7 7-7 7"/></svg></p>
+      </div>
+    </div>
+
+    <!-- [#9 fix] Collection feed -->
+    <div class="flex items-baseline gap-2 px-1 pb-2.5">
+      <span class="font-mono text-[10px] font-semibold uppercase tracking-[0.08em] text-ink-secondary">最近</span>
+      <span class="font-mono text-[10px] text-ink-muted/70">05</span>
+      <span class="ml-1 h-px flex-1 bg-divider"></span>
+    </div>
+
+    <div class="space-y-2" id="collectionFeed">
+      <!-- [#5 fix] Today group label -->
+      <div class="flex items-center gap-2 px-1 pb-1">
+        <span class="font-mono text-[9px] font-semibold uppercase tracking-[0.06em] text-ink-muted">今天</span>
+        <span class="h-px flex-1 bg-divider/50"></span>
+      </div>
+      <div class="card-in rounded-[16px] bg-white border border-divider p-3 active:scale-[0.99] transition cursor-pointer" onclick="go('review')">
+        <div class="flex items-start gap-3">
+          <div class="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full bg-pine-mist"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#2D4F3E" stroke-width="2"><path d="M12 2a3 3 0 00-3 3v7a3 3 0 006 0V5a3 3 0 00-3-3z"/><path d="M19 10v2a7 7 0 01-14 0v-2"/></svg></div>
+          <div class="min-w-0 flex-1">
+            <p class="text-[13px] font-semibold text-ink truncate">梯度下降与学习率</p>
+            <p class="text-[11px] text-ink-muted mt-0.5">14:20 · 45分钟</p>
+            <div class="mt-1.5 flex items-center gap-1.5">
+              <span class="inline-flex items-center gap-0.5 rounded-full bg-pine-mist px-1.5 py-0.5 text-[9px] font-medium text-pine"><svg width="8" height="8" viewBox="0 0 24 24" fill="currentColor"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg>已理解</span>
+              <span class="font-mono text-[9px] text-ink-muted">4段笔记 · 2张板书</span>
+            </div>
+          </div>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#8C887F" stroke-width="2" class="flex-shrink-0 mt-1"><path d="M9 18l6-6-6-6"/></svg>
+        </div>
+      </div>
+      <div class="card-in rounded-[16px] bg-white border border-divider p-3 active:scale-[0.99] transition" style="animation-delay:.05s" onclick="toast('打开速记')">
+        <div class="flex items-start gap-3">
+          <div class="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full bg-paper-warm"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#4A4844" stroke-width="2"><path d="M12 20h9M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4L16.5 3.5z"/></svg></div>
+          <div class="min-w-0 flex-1"><p class="text-[13px] font-medium text-ink leading-relaxed">多目标优化要用帕累托前沿，不是简单加权求和。老师说明天会讲 NSGA-Ⅱ…</p><p class="text-[11px] text-ink-muted mt-1">11:30 · 速记</p></div>
+        </div>
+      </div>
+      <div class="flex items-center gap-2 px-1 pb-1 pt-1">
+        <span class="font-mono text-[9px] font-semibold uppercase tracking-[0.06em] text-ink-muted">昨天</span>
+        <span class="h-px flex-1 bg-divider/50"></span>
+      </div>
+      <div class="card-in rounded-[16px] bg-white border border-divider p-3" style="animation-delay:.1s">
+        <div class="flex items-start gap-3">
+          <div class="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full bg-paper-warm"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#8C887F" stroke-width="2"><path d="M12 2a3 3 0 00-3 3v7a3 3 0 006 0V5a3 3 0 00-3-3z"/><path d="M19 10v2a7 7 0 01-14 0v-2"/></svg></div>
+          <div class="min-w-0 flex-1"><p class="text-[13px] font-medium text-ink-muted truncate">线性代数：特征值分解</p><p class="text-[11px] text-ink-muted mt-0.5">昨天 10:15 · 52分钟</p>
+            <div class="mt-1.5"><span class="inline-flex items-center gap-1 rounded-full bg-paper-warm px-1.5 py-0.5 text-[9px] font-medium text-ink-muted"><span class="h-1.5 w-1.5 rounded-full bg-pine rec-dot"></span>正在理解…</span></div>
+          </div>
+        </div>
+      </div>
+      <div class="card-in rounded-[16px] bg-white border border-divider p-3 active:scale-[0.99] transition" style="animation-delay:.15s" onclick="toast('打开照片')">
+        <div class="flex items-start gap-3">
+          <div class="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg bg-vermilion-mist overflow-hidden"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#B5483C" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="9" cy="9" r="2"/><path d="M21 15l-5-5L5 21"/></svg></div>
+          <div class="min-w-0 flex-1"><p class="text-[13px] font-medium text-ink truncate">课后补充 · 课件截图</p><p class="text-[11px] text-ink-muted mt-0.5">昨天 18:42 · 3张</p></div>
+        </div>
+      </div>
+      <div class="card-in rounded-[16px] bg-white border border-divider p-3 active:scale-[0.99] transition" style="animation-delay:.2s" onclick="toast('打开历史录音')">
+        <div class="flex items-start gap-3">
+          <div class="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full bg-pine-mist"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#2D4F3E" stroke-width="2"><path d="M12 2a3 3 0 00-3 3v7a3 3 0 006 0V5a3 3 0 00-3-3z"/><path d="M19 10v2a7 7 0 01-14 0v-2"/></svg></div>
+          <div class="min-w-0 flex-1"><p class="text-[13px] font-medium text-ink truncate">数据结构：红黑树</p><p class="text-[11px] text-ink-muted mt-0.5">7月1日 · 38分钟</p><span class="inline-flex items-center gap-0.5 rounded-full bg-pine-mist px-1.5 py-0.5 text-[9px] font-medium text-pine mt-1.5"><svg width="8" height="8" viewBox="0 0 24 24" fill="currentColor"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg>已复习</span></div>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#8C887F" stroke-width="2" class="flex-shrink-0 mt-1"><path d="M9 18l6-6-6-6"/></svg>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Composer bar -->
+  <div class="flex-shrink-0 bg-paper px-3 py-2 pb-[max(env(safe-area-inset-bottom),8px)] border-t border-divider/60">
+    <div class="flex items-center gap-2">
+      <button class="flex h-8 w-8 items-center justify-center rounded-full text-ink-muted flex-shrink-0" onclick="toast('附件')"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48"/></svg></button>
+      <div class="flex-1 rounded-full bg-canvas px-3.5 py-2"><input type="text" id="composerInput" placeholder="发一句想法，贴个链接…" class="w-full bg-transparent text-[12.5px] text-ink placeholder:text-ink-muted outline-none" onkeydown="if(event.key==='Enter'){submitNote();}"></div>
+      <button class="flex h-8 w-8 items-center justify-center rounded-full text-ink-muted flex-shrink-0" onclick="toast('语音听写')"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2a3 3 0 00-3 3v7a3 3 0 006 0V5a3 3 0 00-3-3z"/><path d="M19 10v2a7 7 0 01-14 0v-2"/></svg></button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ PAGE 2: 录课中 ═══ -->
+<div class="page" id="page-recording">
+  <!-- [#5 fix] Simplified status bar: remove mark counter + translation from header -->
+  <div class="flex-shrink-0 bg-paper px-4 pt-[max(env(safe-area-inset-top),12px)] pb-2.5 border-b border-divider/60 z-20">
+    <div class="flex items-center gap-2.5">
+      <button class="flex h-8 w-8 items-center justify-center rounded-full text-ink-muted -ml-1" onclick="go('home')"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 18l-6-6 6-6"/></svg></button>
+      <div class="flex items-center gap-1.5">
+        <span class="rec-dot h-2 w-2 rounded-full bg-vermilion"></span>
+        <span class="font-mono text-[14px] font-semibold tabular-nums text-ink" id="recTimer">12:34</span>
+      </div>
+      <div class="flex items-center gap-[2px] h-5">
+        <div class="wave-bar w-[3px] bg-vermilion rounded-full" style="animation-delay:0s"></div>
+        <div class="wave-bar w-[3px] bg-vermilion rounded-full" style="animation-delay:.1s"></div>
+        <div class="wave-bar w-[3px] bg-vermilion rounded-full" style="animation-delay:.2s"></div>
+        <div class="wave-bar w-[3px] bg-vermilion/60 rounded-full" style="animation-delay:.3s"></div>
+      </div>
+      <div class="flex-1"></div>
+      <!-- [#5 fix] Translation in a "more" menu, not inline -->
+      <button id="transBtn" class="inline-flex items-center gap-1 rounded-full px-2 py-1 text-[10.5px] font-medium text-ink-muted" onclick="toggleTranslation()">
+        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 5h7M9 3v2c0 4.418-2.686 8-6 8"/></svg>
+        <span id="transLabel">译</span>
+      </button>
+      <button class="flex h-8 w-8 items-center justify-center rounded-full bg-ink text-white active:scale-90 transition" onclick="go('processing')"><svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="1"/></svg></button>
+    </div>
+  </div>
+
+  <div class="scroll-area flex-1 min-h-0 overflow-y-auto px-4 py-3" id="notesScroll">
+    <!-- [#5 fix] Mark count moved here as a tiny inline indicator -->
+    <div class="flex items-center gap-2 mb-2 px-1">
+      <p class="font-mono text-[9px] font-semibold uppercase tracking-[0.1em] text-pine">课堂笔记 · 正在生长</p>
+      <span class="font-mono text-[9px] text-ink-muted ml-auto">📍 <span id="markCount">2</span> 标记</span>
+    </div>
+
+    <div class="mb-3 card-in">
+      <div class="rounded-[18px] border border-divider/70 bg-white p-3.5 shadow-[0_1px_3px_rgba(0,0,0,0.03)]">
+        <div class="flex items-center gap-2 mb-2"><span class="font-mono text-[9px] font-semibold text-pine bg-pine-mist px-1.5 py-0.5 rounded">01</span><h3 class="text-[13px] font-semibold text-ink">梯度下降：下山比喻</h3><span class="font-mono text-[9px] text-ink-muted ml-auto">02:15</span></div>
+        <p class="text-[12px] leading-[1.7] text-ink-secondary">老师用下山比喻引入：站在山坡上沿最陡方向走一步，直到谷底。关键在步子大小——太大跨过谷底，太小走太慢。</p>
+      </div>
+    </div>
+
+    <div class="mb-3 card-in" style="animation-delay:.1s">
+      <div class="rounded-[18px] border border-divider/70 bg-white p-3.5 shadow-[0_1px_3px_rgba(0,0,0,0.03)] relative overflow-hidden">
+        <div class="absolute left-0 top-3 bottom-3 w-[3px] rounded-r-full bg-pine"></div>
+        <div class="flex items-center gap-2 mb-2 pl-1"><span class="font-mono text-[9px] font-semibold text-pine bg-pine-mist px-1.5 py-0.5 rounded">02</span><svg width="10" height="10" viewBox="0 0 24 24" fill="#2D4F3E"><path d="M12 2L9 9l-7 .5L7.5 14 6 21l6-3.5 6 3.5-1.5-7L22 9.5 15 9z"/></svg><h3 class="text-[13px] font-semibold text-ink">参数更新公式</h3><span class="font-mono text-[9px] text-ink-muted ml-auto">08:40</span></div>
+        <p class="text-[12px] leading-[1.7] text-ink-secondary pl-1"><span class="font-mono text-[11px] bg-canvas px-1.5 py-0.5 rounded text-ink">θ = θ - η∇L(θ)</span> 其中 η 是学习率。梯度只给方向，步长由 η 决定。</p>
+        <div class="mt-2.5 pl-1 flex items-center gap-2"><div class="h-12 w-16 rounded-lg bg-paper-warm ring-1 ring-divider flex items-center justify-center flex-shrink-0"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#8C887F" stroke-width="1.5"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="9" cy="9" r="2"/><path d="M21 15l-5-5L5 21"/></svg></div><span class="font-mono text-[9px] text-ink-muted">📷 板书 · 08:42</span></div>
+      </div>
+    </div>
+
+    <div class="mb-3 card-in" style="animation-delay:.2s">
+      <div class="rounded-[18px] border border-divider/70 bg-white p-3.5 shadow-[0_1px_3px_rgba(0,0,0,0.03)] relative overflow-hidden">
+        <div class="absolute left-0 top-3 bottom-3 w-[3px] rounded-r-full bg-pine"></div>
+        <div class="flex items-center gap-2 mb-2 pl-1"><span class="font-mono text-[9px] font-semibold text-pine bg-pine-mist px-1.5 py-0.5 rounded">03</span><svg width="10" height="10" viewBox="0 0 24 24" fill="#2D4F3E"><path d="M12 2L9 9l-7 .5L7.5 14 6 21l6-3.5 6 3.5-1.5-7L22 9.5 15 9z"/></svg><h3 class="text-[13px] font-semibold text-ink">学习率三种策略</h3><span class="font-mono text-[9px] text-ink-muted ml-auto">16:20</span></div>
+        <div class="pl-1 space-y-1">
+          <div class="flex items-start gap-2 text-[11.5px] text-ink-secondary"><span class="text-vermilion">▸</span><span><strong class="text-ink">固定</strong>：η 不变，简单但难调</span></div>
+          <div class="flex items-start gap-2 text-[11.5px] text-ink-secondary"><span class="text-pine">▸</span><span><strong class="text-ink">衰减</strong>：前期大后期小，最常用</span></div>
+          <div class="flex items-start gap-2 text-[11.5px] text-ink-secondary"><span class="text-vermilion">▸</span><span><strong class="text-ink">Adam</strong>：每参数自适应，稀疏数据首选</span></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="mb-3 card-in" style="animation-delay:.3s">
+      <div class="rounded-[18px] border border-divider/70 bg-white p-3.5 shadow-[0_1px_3px_rgba(0,0,0,0.03)]">
+        <div class="flex items-center gap-2 mb-2"><span class="font-mono text-[9px] font-semibold text-pine bg-pine-mist px-1.5 py-0.5 rounded">04</span><h3 class="text-[13px] font-semibold text-ink">学习率过大的表现</h3><span class="font-mono text-[9px] text-ink-muted ml-auto">24:10</span></div>
+        <p class="text-[12px] leading-[1.7] text-ink-secondary">η=1.0 时 loss 不降反升，梯度在谷底两侧反复横跳。学习率不是"越大越快"，要匹配 loss 曲面曲率。</p>
+      </div>
+    </div>
+
+    <!-- [#12 fix] Honest growing card: not "AI is doing it now", but "will appear after class" -->
+    <div class="mb-3 card-in" style="animation-delay:.4s">
+      <div class="rounded-[18px] border border-dashed border-divider bg-canvas/40 p-3.5">
+        <div class="flex items-center gap-2 mb-2">
+          <span class="font-mono text-[9px] font-semibold text-ink-muted bg-paper-warm px-1.5 py-0.5 rounded">待整理</span>
+          <span class="font-mono text-[9px] text-ink-muted ml-auto" id="currentTs">12:34</span>
+        </div>
+        <p class="text-[11px] text-ink-muted leading-relaxed">这段老师还在讲，课后整理笔记时会补上。</p>
+      </div>
+    </div>
+    <div class="h-24"></div>
+  </div>
+
+  <!-- [#8 fix] LIVE strip hidden by default, only shown when translation is on -->
+  <div id="liveStrip" class="flex-shrink-0 bg-paper/95 backdrop-blur border-t border-divider/60 px-4 py-2 z-10" style="display:none">
+    <div class="flex items-center gap-2">
+      <span class="font-mono text-[8px] font-bold text-vermilion bg-vermilion-mist px-1.5 py-0.5 rounded flex-shrink-0 rec-dot">LIVE</span>
+      <div class="min-w-0 flex-1">
+        <p class="text-[11px] leading-snug text-ink-secondary line-in truncate" id="liveText">…so when the learning rate is too large, the gradient bounces back and forth…</p>
+        <p class="text-[10px] italic text-pine/70 truncate mt-0.5" id="liveTranslation">…学习率太大时，梯度会在谷底两侧反复横跳…</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- [#6 fix] Photo button z-index above sheet -->
+  <button id="photoBtn" class="absolute bottom-[5.5rem] left-4 z-45 flex h-12 w-12 items-center justify-center rounded-full bg-vermilion text-white shadow-card active:scale-90 transition" onclick="simulatePhoto()">
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z"/><circle cx="12" cy="13" r="4"/></svg>
+    <span class="absolute -top-1 -right-1 h-5 w-5 rounded-full bg-ink flex items-center justify-center border-2 border-paper" id="photoBadge"><span class="font-mono text-[9px] font-bold text-white">2</span></span>
+  </button>
+
+  <!-- [#4 fix] 问同学 badge clears when opened -->
+  <button id="askBtn" class="absolute bottom-[5.5rem] right-4 z-45 flex items-center gap-1.5 rounded-full bg-ink px-3.5 py-2.5 text-[12px] font-medium text-white shadow-card active:scale-95 transition fab-pulse" onclick="openSheet('half')">
+    <div class="relative h-7 w-7 rounded-full overflow-hidden bg-pine-mist octo-breath"><img src="octo/thinking.png" alt="Octo" class="h-full w-full object-cover"></div>
+    <span>问同学</span>
+    <span id="askBadge" class="absolute -top-1 -right-1 h-4 w-4 rounded-full bg-vermilion flex items-center justify-center"><span class="font-mono text-[9px] font-bold text-white">2</span></span>
+  </button>
+
+  <div id="photoFlash" class="absolute inset-0 z-50 bg-white opacity-0 pointer-events-none transition-opacity duration-150"></div>
+  <div id="photoToast" class="absolute left-1/2 bottom-32 -translate-x-1/2 rounded-2xl bg-white border border-divider shadow-card px-4 py-3 opacity-0 transition-all duration-200 pointer-events-none z-50">
+    <div class="flex items-center gap-2.5"><div class="h-10 w-10 rounded-lg bg-vermilion-mist flex items-center justify-center"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#B5483C" stroke-width="2"><path d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z"/><circle cx="12" cy="13" r="4"/></svg></div><div><p class="text-[12px] font-semibold text-ink">已拍下板书</p><p class="text-[10.5px] text-ink-muted font-mono">锚点 12:34 · 课后笔记会插到这段</p></div></div>
+  </div>
+
+  <div class="flex-shrink-0 bg-canvas px-8 pb-[max(env(safe-area-inset-bottom),1rem)] pt-2">
+    <button class="flex w-full items-center justify-center gap-2.5 rounded-full bg-ink py-3.5 text-[13.5px] font-medium text-white active:scale-[0.995]" onclick="go('processing')">结束这节课</button>
+  </div>
+</div>
+
+<!-- ═══ PAGE 3: 整理中 [#2 fix] with progress bar ═══ -->
+<div class="page" id="page-processing">
+  <div class="flex-1 flex flex-col items-center justify-center bg-paper relative overflow-hidden">
+    <div class="absolute inset-0 flex items-center justify-center pointer-events-none">
+      <div class="absolute w-32 h-32 rounded-full border border-pine/20 pulse-ring"></div>
+      <div class="absolute w-32 h-32 rounded-full border border-pine/15 pulse-ring" style="animation-delay:.7s"></div>
+      <div class="absolute w-32 h-32 rounded-full border border-pine/10 pulse-ring" style="animation-delay:1.4s"></div>
+    </div>
+    <div class="relative flex items-center justify-center mb-8">
+      <div class="absolute w-2 h-2 rounded-full bg-pine orbit-dot"></div>
+      <div class="absolute w-1.5 h-1.5 rounded-full bg-vermilion orbit-dot-2"></div>
+      <div class="absolute w-1.5 h-1.5 rounded-full bg-pine/60 orbit-dot-3"></div>
+      <div class="relative h-20 w-20 rounded-full bg-pine-mist flex items-center justify-center octo-breath overflow-hidden"><img src="octo/thinking.png" alt="Octo" class="h-full w-full object-cover"></div>
+    </div>
+    <div class="text-center px-8 mb-6">
+      <p class="font-mono text-[10px] font-semibold uppercase tracking-[0.12em] text-pine mb-2">正在整理</p>
+      <h1 class="font-serif text-[24px] leading-[1.2] tracking-[-0.02em] text-ink mb-3">把这节课<em class="text-vermilion">听懂</em></h1>
+      <p class="text-[12.5px] text-ink-muted mb-4" id="processingStatus">正在读转录原文…</p>
+      <!-- [#2 fix] Progress bar instead of just dots -->
+      <div class="w-[260px] mx-auto">
+        <div class="h-1.5 rounded-full bg-divider overflow-hidden">
+          <div id="processingProgress" class="h-full rounded-full bg-pine transition-all duration-500" style="width:0%"></div>
+        </div>
+        <div class="flex items-center justify-between mt-2">
+          <span class="font-mono text-[9px] text-ink-muted" id="processingPercent">0%</span>
+          <span class="font-mono text-[9px] text-ink-muted" id="processingEta">约 2 分钟</span>
+        </div>
+      </div>
+    </div>
+    <div class="card-settle w-[300px] rounded-[18px] bg-white border border-divider p-3.5 shadow-soft" style="animation-delay:2s">
+      <div class="flex items-center gap-2 mb-2"><span class="font-mono text-[9px] font-semibold text-pine bg-pine-mist px-1.5 py-0.5 rounded">01</span><p class="text-[12px] font-semibold text-ink truncate">梯度下降：下山比喻</p></div>
+      <p class="text-[11px] leading-relaxed text-ink-muted">老师用下山比喻引入：站在山坡上沿最陡方向走一步，直到谷底…</p>
+    </div>
+    <div class="absolute bottom-[max(env(safe-area-inset-bottom),2rem)] left-0 right-0 text-center">
+      <button class="text-[11px] text-ink-muted/60 underline" onclick="go('home')">先去做别的 →</button>
+    </div>
+    <button id="processingDoneBtn" class="absolute bottom-[max(env(safe-area-inset-bottom),5rem)] left-0 right-0 mx-auto w-[280px] rounded-full bg-ink py-3 text-[13px] font-medium text-white opacity-0 transition-opacity duration-500" style="transition-delay:0s" onclick="go('review')">笔记整理好了，去看看 →</button>
+  </div>
+</div>
+
+<!-- ═══ PAGE 4: 复习态 [#11 fix] mini-player collapses on scroll ═══ -->
+<div class="page" id="page-review">
+  <div class="flex-shrink-0 bg-paper px-4 pt-[max(env(safe-area-inset-top),12px)] pb-2.5 border-b border-divider/60 z-20">
+    <div class="flex items-center gap-3">
+      <button class="flex h-8 w-8 items-center justify-center rounded-full text-ink-muted -ml-1" onclick="go('home')"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 18l-6-6 6-6"/></svg></button>
+      <div class="min-w-0 flex-1"><p class="truncate text-[15px] font-semibold tracking-[-0.01em] text-ink">梯度下降与学习率</p><p class="mt-0.5 text-[11px] text-ink-muted font-mono">7月3日 · 45分钟 · 已理解</p></div>
+    </div>
+  </div>
+
+  <!-- [#11 fix] Mini player that collapses on scroll -->
+  <div id="miniPlayer" class="flex-shrink-0 bg-paper px-4 py-2.5 border-b border-divider/60 z-10 transition-all duration-300 overflow-hidden">
+    <div class="mp-inner flex items-center gap-3 rounded-2xl bg-paper-warm/70 px-3 py-2 ring-[0.5px] ring-divider">
+      <button id="playBtn" class="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full bg-ink text-white active:scale-90 transition" onclick="togglePlay()"><svg id="playIcon" width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><polygon points="6,4 20,12 6,20"/></svg><svg id="pauseIcon" class="hidden" width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg></button>
+      <span class="font-mono text-[11px] font-medium tabular-nums text-ink-secondary" id="currentTime">12:30</span>
+      <div class="relative h-1.5 flex-1 rounded-full bg-divider cursor-pointer" id="progressTrack"><div class="absolute left-0 top-0 h-full rounded-full bg-pine" style="width:27%" id="progressFill"></div><div class="absolute top-1/2 h-3 w-3 -translate-y-1/2 rounded-full bg-pine border-2 border-paper shadow-soft" style="left:calc(27% - 6px)"></div></div>
+      <span class="font-mono text-[11px] text-ink-muted">45:30</span>
+    </div>
+  </div>
+
+  <div class="scroll-area flex-1 min-h-0 overflow-y-auto px-4 py-4 pb-24" id="digestScroll">
+    <div class="mb-5 card-in">
+      <p class="font-mono text-[10px] font-semibold uppercase tracking-[0.1em] text-pine">课堂总结</p>
+      <h1 class="mt-1.5 font-serif text-[26px] leading-[1.15] tracking-[-0.02em] text-ink">梯度下降与<em class="text-vermilion">学习率</em>的选择</h1>
+      <p class="mt-2 text-[12.5px] leading-relaxed text-ink-muted">本节课围绕梯度下降的核心原理展开，重点讨论了学习率对收敛的影响，以及三种改进策略的适用场景。</p>
+    </div>
+
+    <div class="mb-4 card-in" style="animation-delay:.05s">
+      <div class="rounded-[20px] border border-divider/70 bg-white p-4 shadow-[0_1px_3px_rgba(0,0,0,0.03)]">
+        <div class="flex items-center gap-2 mb-2.5"><span class="font-mono text-[10px] font-semibold text-pine bg-pine-mist px-1.5 py-0.5 rounded">01</span><h3 class="text-[14px] font-semibold text-ink">开场：什么是梯度下降</h3><span class="font-mono text-[9px] text-ink-muted ml-auto">02:15</span></div>
+        <p class="text-[13px] leading-[1.75] text-ink-secondary">老师用"下山"的比喻引入：梯度下降就是站在山坡上，每次沿最陡的方向走一步，直到走到谷底。关键在于<span class="bg-vermilion-mist text-vermilion px-1 rounded">步子多大</span>——步子太大可能跨过谷底，步子太小走得太慢。</p>
+        <button class="mt-2.5 inline-flex items-center gap-1 rounded-full bg-paper-warm px-2.5 py-1 font-mono text-[10.5px] font-medium text-pine active:scale-95" onclick="seekTo(135)">▶ 02:15</button>
+      </div>
+    </div>
+
+    <div class="mb-4 card-in" style="animation-delay:.1s">
+      <div class="rounded-[20px] border border-divider/70 bg-white p-4 shadow-[0_1px_3px_rgba(0,0,0,0.03)] relative overflow-hidden">
+        <div class="absolute left-0 top-4 bottom-4 w-[3px] rounded-r-full bg-pine"></div>
+        <div class="flex items-center gap-2 mb-2.5 pl-1"><span class="font-mono text-[10px] font-semibold text-pine bg-pine-mist px-1.5 py-0.5 rounded">02</span><svg width="10" height="10" viewBox="0 0 24 24" fill="#2D4F3E"><path d="M12 2L9 9l-7 .5L7.5 14 6 21l6-3.5 6 3.5-1.5-7L22 9.5 15 9z"/></svg><h3 class="text-[14px] font-semibold text-ink">核心公式与板书</h3><span class="font-mono text-[9px] text-ink-muted ml-auto">08:40</span></div>
+        <p class="text-[13px] leading-[1.75] text-ink-secondary pl-1">老师在黑板上写了参数更新公式 <span class="font-mono text-[12px] bg-canvas px-1.5 py-0.5 rounded text-ink">θ = θ - η∇L(θ)</span>，其中 η 是学习率。强调了一个关键点：梯度方向只告诉你"往哪走"，不告诉你"走多远"——走多远完全由 η 决定。</p>
+        <!-- [#3 fix] Expandable original transcript -->
+        <div class="mt-2.5 pl-1" id="origTranscript2" style="display:none">
+          <div class="rounded-lg bg-canvas/60 px-3 py-2 border-l-2 border-pine/20">
+            <p class="font-mono text-[9px] text-ink-muted mb-1">原始转录 [08:35 - 08:48]</p>
+            <p class="text-[11px] leading-relaxed text-ink-muted italic">"好，大家看黑板啊，这个公式非常关键，θ 等于 θ 减去 η 乘以 ∇L(θ)，这个 η 就是你每次走的步长，梯度只告诉你方向，走多远全靠这个 η 来定..."</p>
+          </div>
+        </div>
+        <div class="mt-3 flex items-center gap-2 pl-1">
+          <button class="inline-flex items-center gap-1 rounded-full bg-paper-warm px-2.5 py-1 font-mono text-[10.5px] font-medium text-pine active:scale-95" onclick="seekTo(520)">▶ 08:40</button>
+          <button class="inline-flex items-center gap-1 rounded-full bg-paper-warm px-2.5 py-1 text-[10.5px] font-medium text-ink-muted active:scale-95" onclick="toggleOrig('origTranscript2', this)">原文 <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M6 9l6 6 6-6"/></svg></button>
+        </div>
+      </div>
+    </div>
+
+    <div class="mb-4 card-in" style="animation-delay:.15s">
+      <div class="rounded-[20px] border border-divider/70 bg-white p-4 shadow-[0_1px_3px_rgba(0,0,0,0.03)] relative overflow-hidden">
+        <div class="absolute left-0 top-4 bottom-4 w-[3px] rounded-r-full bg-pine"></div>
+        <div class="flex items-center gap-2 mb-2.5 pl-1"><span class="font-mono text-[10px] font-semibold text-pine bg-pine-mist px-1.5 py-0.5 rounded">03</span><svg width="10" height="10" viewBox="0 0 24 24" fill="#2D4F3E"><path d="M12 2L9 9l-7 .5L7.5 14 6 21l6-3.5 6 3.5-1.5-7L22 9.5 15 9z"/></svg><h3 class="text-[14px] font-semibold text-ink">学习率的三种策略</h3><span class="font-mono text-[9px] text-ink-muted ml-auto">16:20</span></div>
+        <div class="pl-1 space-y-1.5">
+          <div class="flex items-center gap-2 text-[12px] text-ink-secondary"><span class="text-vermilion">▸</span><span><strong class="text-ink">固定</strong>：η=0.01 全程不变，容易震荡或停滞</span></div>
+          <div class="flex items-center gap-2 text-[12px] text-ink-secondary"><span class="text-pine">▸</span><span><strong class="text-ink">衰减</strong>：η_t = η₀ / √(1+t)，收敛更平滑</span></div>
+          <div class="flex items-center gap-2 text-[12px] text-ink-secondary"><span class="text-vermilion">▸</span><span><strong class="text-ink">Adam</strong>：动量 + RMSProp，默认首选</span></div>
+        </div>
+        <button class="mt-2.5 inline-flex items-center gap-1 rounded-full bg-paper-warm px-2.5 py-1 font-mono text-[10.5px] font-medium text-pine active:scale-95" onclick="seekTo(980)">▶ 16:20</button>
+      </div>
+    </div>
+
+    <div class="mb-4 card-in" style="animation-delay:.2s">
+      <div class="rounded-[20px] border border-divider/70 bg-white p-4 shadow-[0_1px_3px_rgba(0,0,0,0.03)]">
+        <div class="flex items-center gap-2 mb-2.5"><span class="font-mono text-[10px] font-semibold text-pine bg-pine-mist px-1.5 py-0.5 rounded">04</span><h3 class="text-[14px] font-semibold text-ink">实践：学习率过大的表现</h3><span class="font-mono text-[9px] text-ink-muted ml-auto">24:10</span></div>
+        <p class="text-[13px] leading-[1.75] text-ink-secondary">老师演示了 η=1.0 时 loss 不降反升——梯度在谷底两侧反复横跳，每次都跨过最优解。这个例子说明：学习率不是"越大越快"，而是要匹配 loss 曲面的曲率。</p>
+        <button class="mt-2.5 inline-flex items-center gap-1 rounded-full bg-paper-warm px-2.5 py-1 font-mono text-[10.5px] font-medium text-pine active:scale-95" onclick="seekTo(1450)">▶ 24:10</button>
+      </div>
+    </div>
+
+    <!-- [#1 fix] AI suggestion: no question, statement -->
+    <div class="card-in" style="animation-delay:.3s">
+      <div class="rounded-[20px] border border-pine/15 bg-pine-mist/20 p-4">
+        <div class="flex items-start gap-2.5 mb-3">
+          <div class="h-7 w-7 flex-shrink-0 rounded-full bg-pine-mist flex items-center justify-center overflow-hidden octo-breath"><img src="octo/happy.png" alt="Octo" class="h-full w-full object-cover"></div>
+          <p class="text-[12px] leading-relaxed text-ink">这节课核心是<span class="bg-vermilion-mist text-vermilion px-0.5 rounded">学习率 η</span>对收敛的影响。12 张闪卡已经准备好了。</p>
+        </div>
+        <div class="grid grid-cols-2 gap-2.5">
+          <button class="rounded-2xl border border-divider bg-white p-3 text-left active:scale-[0.98] transition" onclick="go('flashcards')"><div class="flex items-center gap-2 mb-0.5"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#2D4F3E" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 3v18"/></svg><span class="text-[12px] font-medium text-ink">练闪卡</span></div><p class="text-[10.5px] text-ink-muted">12 张 · 核心概念</p></button>
+          <button class="rounded-2xl border border-divider bg-white p-3 text-left active:scale-[0.98] transition" onclick="toast('生成速查表')"><div class="flex items-center gap-2 mb-0.5"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#2D4F3E" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><path d="M14 2v6h6M16 13H8M16 17H8M10 9H8"/></svg><span class="text-[12px] font-medium text-ink">速查表</span></div><p class="text-[10.5px] text-ink-muted">一页纸复习</p></button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Bottom Sheet -->
+  <div id="reviewSheet" class="bottom-sheet absolute left-0 right-0 bottom-0 z-40 bg-white rounded-t-[24px] shadow-[0_-4px_24px_rgba(0,0,0,0.1)]" style="height:56px;transform:translateY(0)">
+    <div class="flex justify-center pt-2.5 pb-1" id="reviewDragHandle"><div class="h-1 w-9 rounded-full bg-divider"></div></div>
+    <div id="reviewCollapsed" class="px-4 pb-2.5">
+      <div class="flex items-center gap-2.5">
+        <div class="relative h-8 w-8 flex-shrink-0"><div class="octo-breath absolute inset-0 rounded-full bg-pine-mist overflow-hidden"><img src="octo/thinking.png" alt="Octo" class="h-full w-full object-cover"></div></div>
+        <div class="min-w-0 flex-1"><p class="truncate text-[12px] text-ink-secondary"><span class="font-medium text-ink">同桌：</span>这节课的核心是学习率 η 对收敛的影响。有问题随时问我。</p></div>
+        <button class="flex-shrink-0 rounded-full bg-ink px-3 py-1.5 text-[11px] font-medium text-white active:scale-95" onclick="openReviewSheet('half')">问一下</button>
+      </div>
+    </div>
+    <div id="reviewChat" class="flex-col overflow-hidden" style="display:none;height:calc(100% - 16px)">
+      <div class="flex-shrink-0 flex items-center justify-between px-4 py-2 border-b border-divider/60">
+        <div class="flex items-center gap-2"><div class="h-6 w-6 rounded-full bg-pine-mist flex items-center justify-center overflow-hidden"><img src="octo/happy.png" alt="Octo" class="h-full w-full object-cover"></div><span class="text-[12px] font-medium text-ink">课堂同桌</span><span class="font-mono text-[9px] text-pine bg-pine-mist px-1.5 py-0.5 rounded">复习中</span></div>
+        <button class="flex h-7 w-7 items-center justify-center rounded-full text-ink-muted" onclick="openReviewSheet('collapsed')"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg></button>
+      </div>
+      <div class="scroll-area flex-1 min-h-0 overflow-y-auto px-4 py-3 space-y-3" id="reviewMessages">
+        <div class="flex gap-2"><div class="h-6 w-6 flex-shrink-0 rounded-full bg-pine-mist flex items-center justify-center overflow-hidden mt-0.5"><img src="octo/happy.png" alt="Octo" class="h-full w-full object-cover"></div><div class="max-w-[80%]"><div class="rounded-[16px] rounded-tl-[4px] bg-canvas px-3 py-2"><p class="text-[12.5px] leading-[1.7] text-ink">这节课的核心是<span class="bg-vermilion-mist text-vermilion px-0.5 rounded">学习率 η</span>对梯度下降的影响。长按某段可以标记"没跟上"，我帮你讲：</p></div><div class="mt-1.5 rounded-[16px] rounded-tl-[4px] bg-canvas px-3 py-2"><p class="text-[12.5px] leading-[1.7] text-ink-secondary">公式 <span class="font-mono text-[11px] bg-white px-1 rounded">θ = θ - η∇L(θ)</span> 里，∇L 只给方向，η 决定步长。η 太大 → 跨过谷底；太小 → 走得太慢。</p></div><p class="mt-1 font-mono text-[9px] text-ink-muted">引用 [08:40]</p></div></div>
+      </div>
+      <div class="flex-shrink-0 px-3 py-1.5 flex gap-1.5 overflow-x-auto" style="scrollbar-width:none"><button class="flex-shrink-0 rounded-full bg-paper-warm px-2.5 py-1 text-[10.5px] font-medium text-ink-secondary active:scale-95" onclick="toast('已发送')">三种策略的区别</button><button class="flex-shrink-0 rounded-full bg-paper-warm px-2.5 py-1 text-[10.5px] font-medium text-ink-secondary active:scale-95" onclick="toast('已发送')">帮我出几道题</button><button class="flex-shrink-0 rounded-full bg-vermilion-mist px-2.5 py-1 text-[10.5px] font-medium text-vermilion active:scale-95" onclick="go('flashcards')">🎴 闪卡</button></div>
+      <div class="flex-shrink-0 px-3 py-2.5 pb-[max(env(safe-area-inset-bottom),8px)] border-t border-divider/60"><div class="flex items-center gap-2"><button class="flex h-8 w-8 items-center justify-center rounded-full text-ink-muted flex-shrink-0"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48"/></svg></button><div class="flex-1 rounded-full bg-canvas px-3.5 py-2"><input type="text" placeholder="问同桌一个问题…" class="w-full bg-transparent text-[12.5px] text-ink placeholder:text-ink-muted outline-none" onkeydown="if(event.key==='Enter'){toast('已发送');this.value='';}"></div><button class="flex h-8 w-8 items-center justify-center rounded-full bg-ink text-white flex-shrink-0 active:scale-90" onclick="toast('已发送')"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22,2 15,22 11,13 2,9"/></svg></button></div></div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ PAGE 5: 闪卡练习 [#3 fix] with completion state ═══ -->
+<div class="page" id="page-flashcards">
+  <div class="flex-shrink-0 bg-paper px-4 pt-[max(env(safe-area-inset-top),12px)] pb-2.5 border-b border-divider/60">
+    <div class="flex items-center justify-between">
+      <button class="flex h-8 w-8 items-center justify-center rounded-full text-ink-muted -ml-1" onclick="go('review')"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 18l-6-6 6-6"/></svg></button>
+      <div class="text-center"><p class="text-[13px] font-semibold text-ink">闪卡练习</p><p class="font-mono text-[9px] text-ink-muted">梯度下降与学习率 · 12张</p></div>
+      <span class="font-mono text-[12px] font-semibold text-pine" id="flashcardProgress">3 / 12</span>
+    </div>
+  </div>
+
+  <div class="flex-1 min-h-0 flex flex-col items-center justify-center px-6 pb-8">
+    <div class="flashcard relative w-full h-[320px] cursor-pointer" onclick="flipCard()" id="flashcardEl">
+      <div class="flashcard-face absolute inset-0 rounded-[24px] border border-divider bg-white shadow-card flex flex-col items-center justify-center p-6"><span class="font-mono text-[9px] font-semibold uppercase tracking-[0.1em] text-ink-muted mb-3">问题</span><p class="text-[16px] font-medium text-center leading-relaxed text-ink" id="cardFront">梯度下降中，学习率 η 的作用是什么？</p><p class="absolute bottom-4 text-[10px] text-ink-muted/50">点击翻转</p></div>
+      <div class="flashcard-face flashcard-back absolute inset-0 rounded-[24px] border border-pine/20 bg-pine-mist/30 shadow-card flex flex-col items-center justify-center p-6"><span class="font-mono text-[9px] font-semibold uppercase tracking-[0.1em] text-pine mb-3">答案</span><p class="text-[14px] leading-relaxed text-center text-ink-secondary" id="cardBack">η 决定每一步沿梯度方向走多远。∇L 只给方向，η 给步长。太大 → 跨过谷底；太小 → 收敛慢。</p><p class="absolute bottom-4 text-[10px] text-pine/50">点击翻回</p></div>
+    </div>
+  </div>
+
+  <div class="flex-shrink-0 px-6 pb-[max(env(safe-area-inset-bottom),1rem)] flex items-center gap-3" id="flashcardActions">
+    <button class="flex-1 rounded-2xl border border-divider bg-white py-3 text-[13px] font-medium text-ink-muted active:scale-95 transition" onclick="toast('不会 · 已记录')">不会</button>
+    <button class="flex-1 rounded-2xl bg-ink py-3 text-[13px] font-medium text-white active:scale-95 transition" onclick="nextCard()">下一张 →</button>
+  </div>
+
+  <!-- [#3 fix] Completion state -->
+  <div id="flashcardDone" class="hidden absolute inset-0 bg-paper flex-col items-center justify-center px-8 z-30">
+    <div class="h-16 w-16 rounded-full bg-pine-mist flex items-center justify-center overflow-hidden octo-breath mb-4"><img src="octo/excited.png" alt="Octo" class="h-full w-full object-cover"></div>
+    <h2 class="font-serif text-[22px] text-ink mb-2">练完了</h2>
+    <p class="text-[13px] text-ink-muted text-center leading-relaxed mb-6">12 张闪卡过完一遍，梯度下降的核心概念你掌握了。明天可以再来一遍。</p>
+    <button class="rounded-full bg-ink px-6 py-3 text-[13px] font-medium text-white active:scale-95 transition" onclick="go('review')">回到笔记 →</button>
+  </div>
+</div>
+
+<!-- ═══ PAGE 6: 空状态 [#9 fix] ═══ -->
+<div class="page" id="page-empty">
+  <div class="flex-1 flex flex-col items-center justify-center bg-paper px-8">
+    <div class="relative h-24 w-24 mb-6">
+      <div class="absolute inset-0 rounded-full bg-pine-mist flex items-center justify-center overflow-hidden octo-breath"><img src="octo/idle.png" alt="Octo" class="h-full w-full object-cover"></div>
+    </div>
+    <h1 class="font-serif text-[26px] leading-[1.15] tracking-[-0.02em] text-ink text-center mb-2">录第一节课<em class="text-vermilion">试试</em></h1>
+    <p class="text-[13px] text-ink-muted text-center leading-relaxed mb-8 max-w-[260px]">打开麦克风录一节课，同桌帮你听懂、整理成笔记。</p>
+    <button class="flex w-full max-w-[280px] items-center justify-center gap-2.5 rounded-full bg-ink py-3.5 text-[14px] font-medium text-white active:scale-[0.98] transition" onclick="go('recording')">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2a3 3 0 00-3 3v7a3 3 0 006 0V5a3 3 0 00-3-3z"/><path d="M19 10v2a7 7 0 01-14 0v-2M12 19v3"/></svg>
+      录一节课
+    </button>
+    <button class="mt-3 text-[12px] text-ink-muted underline" onclick="go('home')">已有内容，进入 →</button>
+  </div>
+</div>
+
+<!-- Shared toast + rec sheet -->
+<div id="toast" class="toast absolute left-1/2 top-20 -translate-x-1/2 rounded-full bg-ink px-4 py-2 text-[12px] font-medium text-white opacity-0 pointer-events-none z-50"></div>
+
+<div id="recSheet" class="bottom-sheet absolute left-0 right-0 bottom-0 z-40 bg-white rounded-t-[24px] shadow-[0_-4px_24px_rgba(0,0,0,0.1)] overflow-hidden" style="height:0;transform:translateY(100%)">
+  <div class="flex justify-center pt-2.5 pb-1" id="recDragHandle"><div class="h-1 w-9 rounded-full bg-divider"></div></div>
+  <div class="flex flex-col overflow-hidden" style="height:calc(100% - 16px)">
+    <div class="flex-shrink-0 flex items-center justify-between px-4 py-2 border-b border-divider/60"><div class="flex items-center gap-2"><div class="h-6 w-6 rounded-full bg-pine-mist flex items-center justify-center overflow-hidden"><img src="octo/happy.png" alt="Octo" class="h-full w-full object-cover"></div><span class="text-[12px] font-medium text-ink">课堂同桌</span><span class="font-mono text-[9px] text-pine bg-pine-mist px-1.5 py-0.5 rounded">听课中</span></div><button class="flex h-7 w-7 items-center justify-center rounded-full text-ink-muted" onclick="openSheet('collapsed')"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg></button></div>
+    <div class="flex-shrink-0 px-3 py-2 border-b border-divider/40"><p class="font-mono text-[9px] font-semibold uppercase tracking-[0.08em] text-ink-muted mb-1.5 px-1">同桌觉得你可能想问</p><div class="flex gap-1.5 flex-wrap"><button class="rounded-full bg-pine-mist px-3 py-1.5 text-[11.5px] font-medium text-pine active:scale-95" onclick="toast('已发送')">这个和固定学习率有什么区别？</button><button class="rounded-full bg-pine-mist px-3 py-1.5 text-[11.5px] font-medium text-pine active:scale-95" onclick="toast('已发送')">Adam 太大了会怎样？</button></div><div class="mt-1.5 flex gap-1.5"><button class="rounded-full bg-paper-warm px-2.5 py-1 text-[10.5px] font-medium text-ink-secondary active:scale-95" onclick="toast('已发送')">↩ 刚才那段</button><button class="rounded-full bg-paper-warm px-2.5 py-1 text-[10.5px] font-medium text-ink-secondary active:scale-95" onclick="toast('已发送')">我没跟上</button><button class="rounded-full bg-vermilion-mist px-2.5 py-1 text-[10.5px] font-medium text-vermilion active:scale-95" onclick="recMarkMoment()">📍 记一下</button></div></div>
+    <div class="scroll-area flex-1 min-h-0 overflow-y-auto px-4 py-3 space-y-3"><div class="flex gap-2"><div class="h-6 w-6 flex-shrink-0 rounded-full bg-pine-mist flex items-center justify-center overflow-hidden mt-0.5"><img src="octo/happy.png" alt="Octo" class="h-full w-full object-cover"></div><div class="max-w-[80%]"><div class="rounded-[16px] rounded-tl-[4px] bg-canvas px-3 py-2"><p class="text-[12.5px] leading-[1.7] text-ink">老师刚讲到学习率太大时梯度会横跳。你拍了板书，公式 <span class="font-mono text-[11px] bg-white px-1 rounded">θ = θ - η∇L(θ)</span> 里的 η 就是步长。</p></div><p class="mt-1 font-mono text-[9px] text-ink-muted">引用 [12:30]</p></div></div></div>
+    <div class="flex-shrink-0 px-3 py-2.5 pb-[max(env(safe-area-inset-bottom),8px)] border-t border-divider/60"><div class="flex items-center gap-2"><button class="flex h-8 w-8 items-center justify-center rounded-full text-ink-muted flex-shrink-0"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48"/></svg></button><div class="flex-1 rounded-full bg-canvas px-3.5 py-2"><input type="text" placeholder="问同桌一个问题…" class="w-full bg-transparent text-[12.5px] text-ink placeholder:text-ink-muted outline-none" onkeydown="if(event.key==='Enter'){toast('已发送');this.value='';}"></div><button class="flex h-8 w-8 items-center justify-center rounded-full bg-ink text-white flex-shrink-0 active:scale-90" onclick="toast('已发送')"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22,2 15,22 11,13 2,9"/></svg></button></div></div>
+  </div>
+</div>
+
+</div>
+
+<script>
+function go(pageId) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  const target = document.getElementById('page-' + pageId);
+  if (target) { target.classList.add('active'); target.scrollTop = 0; }
+  openSheet('collapsed'); openReviewSheet('collapsed');
+  // [#4 fix] Clear ask badge when opening sheet
+  if (pageId === 'recording') clearAskBadge();
+}
+let toastTimer;
+function toast(msg) {
+  const el = document.getElementById('toast'); el.textContent = msg; el.style.opacity = '1';
+  clearTimeout(toastTimer); toastTimer = setTimeout(() => el.style.opacity = '0', 1800);
+}
+function focusComposer() { document.getElementById('composerInput')?.focus(); }
+function submitNote() {
+  const i = document.getElementById('composerInput'); if (!i || !i.value.trim()) return;
+  // [#1 fix] Insert new card at top of feed with fade-in
+  const feed = document.getElementById('collectionFeed');
+  if (feed) {
+    const now = new Date();
+    const timeStr = `${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
+    const newCard = document.createElement('div');
+    newCard.className = 'card-in rounded-[16px] bg-white border border-vermilion/20 p-3';
+    newCard.innerHTML = `<div class="flex items-start gap-3"><div class="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full bg-vermilion-mist"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#B5483C" stroke-width="2"><path d="M12 20h9M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4L16.5 3.5z"/></svg></div><div class="min-w-0 flex-1"><p class="text-[13px] font-medium text-ink leading-relaxed">${i.value.replace(/</g,'&lt;')}</p><p class="text-[11px] text-ink-muted mt-1">${timeStr} · 刚记录</p></div></div>`;
+    // Insert after the "今天" label
+    const todayLabel = feed.querySelector('.font-mono.text-ink-muted');
+    if (todayLabel?.parentElement?.nextElementSibling) {
+      feed.insertBefore(newCard, todayLabel.parentElement.nextElementSibling);
+    } else {
+      feed.insertBefore(newCard, feed.firstChild);
+    }
+    newCard.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }
+  toast('已记录');
+  i.value = '';
+}
+
+// Recording timer
+let recSeconds = 12 * 60 + 34;
+setInterval(() => {
+  recSeconds++;
+  const m = Math.floor(recSeconds / 60), s = recSeconds % 60;
+  const ts = `${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
+  const t = document.getElementById('recTimer'); if (t) t.textContent = ts;
+  const c = document.getElementById('currentTs'); if (c) c.textContent = ts;
+}, 1000);
+
+// [#5+8 fix] Translation toggle now also shows LIVE strip
+const transStates = ['译', 'EN→中', '中→EN'];
+let transIdx = 0;
+function toggleTranslation() {
+  transIdx = (transIdx + 1) % 3;
+  document.getElementById('transLabel').textContent = transStates[transIdx];
+  const btn = document.getElementById('transBtn');
+  btn.className = transIdx > 0 ? 'inline-flex items-center gap-1 rounded-full bg-ink px-2 py-1 text-[10.5px] font-medium text-white' : 'inline-flex items-center gap-1 rounded-full px-2 py-1 text-[10.5px] font-medium text-ink-muted';
+  // [#8 fix] Show LIVE strip only when translation is on
+  document.getElementById('liveStrip').style.display = transIdx > 0 ? 'block' : 'none';
+  toast(transStates[transIdx] || '翻译关');
+}
+
+// Photo
+let photoCount = 2;
+function simulatePhoto() {
+  const f = document.getElementById('photoFlash'), p = document.getElementById('photoToast');
+  f.style.opacity = '0.8'; setTimeout(() => f.style.opacity = '0', 150);
+  p.style.opacity = '1'; p.style.transform = 'translate(-50%, -8px)';
+  setTimeout(() => { p.style.opacity = '0'; p.style.transform = 'translate(-50%, 0)'; }, 2200);
+  photoCount++; document.getElementById('photoBadge').querySelector('span').textContent = photoCount;
+}
+
+// Mark
+let markCount = 2;
+function recMarkMoment() {
+  markCount++; document.getElementById('markCount').textContent = markCount;
+  toast(`已记下 ${document.getElementById('recTimer').textContent}`);
+}
+
+// [#4 fix] Ask badge clears
+let askBadgeCleared = false;
+function clearAskBadge() {
+  if (askBadgeCleared) return;
+  askBadgeCleared = true;
+  const badge = document.getElementById('askBadge');
+  const btn = document.getElementById('askBtn');
+  if (badge) badge.style.display = 'none';
+  if (btn) btn.classList.remove('fab-pulse');
+}
+
+// Live text
+const liveTexts = [
+  { en: '…so when the learning rate is too large, the gradient bounces back and forth…', zh: '…学习率太大时，梯度会在谷底两侧反复横跳…' },
+  { en: "…let's look at the next strategy, called learning rate decay…", zh: '…我们来看下一个策略，叫学习率衰减…' },
+  { en: '…the advantage of Adam is that each parameter has its own step size…', zh: '…Adam 的好处是每个参数有自己的步长…' },
+];
+let liveIdx = 0;
+setInterval(() => {
+  liveIdx = (liveIdx + 1) % liveTexts.length;
+  const el = document.getElementById('liveText'); if (!el) return;
+  const tr = document.getElementById('liveTranslation');
+  el.style.opacity = '0';
+  if (tr) tr.style.opacity = '0';
+  setTimeout(() => {
+    el.textContent = liveTexts[liveIdx].en; el.style.opacity = '1';
+    if (tr) { tr.textContent = liveTexts[liveIdx].zh; tr.style.opacity = '1'; }
+    el.classList.remove('line-in'); void el.offsetWidth; el.classList.add('line-in');
+  }, 300);
+}, 5000);
+
+// Rec sheet
+const REC_SHEET = { collapsed: 0, half: 380, full: 680 };
+function openSheet(state) {
+  const s = document.getElementById('recSheet');
+  s.style.height = REC_SHEET[state] + 'px';
+  s.style.transform = state === 'collapsed' ? 'translateY(100%)' : 'translateY(0)';
+  // [#6 fix] Move photo button above sheet
+  const pb = document.getElementById('photoBtn');
+  if (pb) pb.style.bottom = state === 'collapsed' ? '5.5rem' : `${REC_SHEET[state] + 12}px`;
+  if (state !== 'collapsed') clearAskBadge();
+}
+(function(){const h=document.getElementById('recDragHandle'),s=document.getElementById('recSheet');let d=false,sy=0,sh=0;function st(e){d=true;sy=e.touches?e.touches[0].clientY:e.clientY;sh=parseInt(s.style.height)||0;s.classList.add('dragging');e.preventDefault();}function mv(e){if(!d)return;const y=e.touches?e.touches[0].clientY:e.clientY;const h2=Math.max(0,Math.min(680,sh+(sy-y)));s.style.height=h2+'px';const pb=document.getElementById('photoBtn');if(pb)pb.style.bottom=h2+12+'px';e.preventDefault();}function en(){if(!d)return;d=false;s.classList.remove('dragging');const h2=parseInt(s.style.height);if(h2<120)openSheet('collapsed');else if(h2<520)openSheet('half');else openSheet('full');}h.addEventListener('mousedown',st);h.addEventListener('touchstart',st,{passive:false});document.addEventListener('mousemove',mv);document.addEventListener('touchmove',mv,{passive:false});document.addEventListener('mouseup',en);document.addEventListener('touchend',en);})();
+
+// Review sheet
+const REV_SHEET = { collapsed: 56, half: 340, full: 760 };
+function openReviewSheet(state) {
+  const s = document.getElementById('reviewSheet');
+  s.style.height = REV_SHEET[state] + 'px';
+  document.getElementById('reviewCollapsed').style.display = state === 'collapsed' ? 'block' : 'none';
+  document.getElementById('reviewChat').style.display = state === 'collapsed' ? 'none' : 'flex';
+}
+(function(){const h=document.getElementById('reviewDragHandle'),s=document.getElementById('reviewSheet');let d=false,sy=0,sh=0;function st(e){d=true;sy=e.touches?e.touches[0].clientY:e.clientY;sh=parseInt(s.style.height)||56;s.classList.add('dragging');e.preventDefault();}function mv(e){if(!d)return;const y=e.touches?e.touches[0].clientY:e.clientY;const h2=Math.max(56,Math.min(760,sh+(sy-y)));s.style.height=h2+'px';if(h2>100){document.getElementById('reviewCollapsed').style.display='none';document.getElementById('reviewChat').style.display='flex';}else{document.getElementById('reviewCollapsed').style.display='block';document.getElementById('reviewChat').style.display='none';}e.preventDefault();}function en(){if(!d)return;d=false;s.classList.remove('dragging');const h2=parseInt(s.style.height);if(h2<180)openReviewSheet('collapsed');else if(h2<560)openReviewSheet('half');else openReviewSheet('full');}h.addEventListener('mousedown',st);h.addEventListener('touchstart',st,{passive:false});document.addEventListener('mousemove',mv);document.addEventListener('touchmove',mv,{passive:false});document.addEventListener('mouseup',en);document.addEventListener('touchend',en);document.getElementById('reviewCollapsed').addEventListener('click',e=>{if(!e.target.closest('button'))openReviewSheet('half');});})();
+
+// Mini player
+let isPlaying = false, progress = 27;
+function togglePlay() { isPlaying = !isPlaying; document.getElementById('playIcon').classList.toggle('hidden', isPlaying); document.getElementById('pauseIcon').classList.toggle('hidden', !isPlaying); }
+function seekTo(sec) {
+  const total = 45*60+30; progress = (sec/total)*100;
+  const f = document.getElementById('progressFill'); f.style.width = progress + '%'; f.nextElementSibling.style.left = `calc(${progress}% - 6px)`;
+  const cur = Math.floor(total * progress / 100); const m = Math.floor(cur/60), s = cur%60;
+  document.getElementById('currentTime').textContent = `${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
+  if (!isPlaying) togglePlay(); toast(`跳转到 ${m}:${String(s).padStart(2,'0')}`);
+}
+
+// [#11 fix] Mini player collapses on scroll
+(function(){
+  const scroll = document.getElementById('digestScroll');
+  const mp = document.getElementById('miniPlayer');
+  if (!scroll || !mp) return;
+  let collapsed = false;
+  scroll.addEventListener('scroll', () => {
+    const shouldCollapse = scroll.scrollTop > 60;
+    if (shouldCollapse !== collapsed) {
+      collapsed = shouldCollapse;
+      mp.classList.toggle('mini-player-collapsed', collapsed);
+    }
+  });
+})();
+
+// [#3 fix] Toggle original transcript
+function toggleOrig(id, btn) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  const isHidden = el.style.display === 'none';
+  el.style.display = isHidden ? 'block' : 'none';
+  btn.innerHTML = isHidden
+    ? '原文 <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 15l-6-6-6 6"/></svg>'
+    : '原文 <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M6 9l6 6 6-6"/></svg>';
+}
+
+// Confusion = long-press section
+function markConfusion(title, ts) {
+  toast(`已标记 · 同桌会帮你讲这段`);
+  openReviewSheet('half');
+  const chat = document.getElementById('reviewMessages');
+  chat.innerHTML += `<div class="flex justify-end"><div class="max-w-[80%]"><div class="rounded-[16px] rounded-tr-[4px] bg-vermilion px-3 py-2"><p class="text-[12.5px] leading-[1.7] text-white">"${title}"这段我没跟上</p></div><p class="mt-1 text-right font-mono text-[9px] text-ink-muted">关于 [${ts}] · 刚才</p></div></div>`;
+  chat.scrollTop = chat.scrollHeight;
+}
+(function(){
+  const scroll = document.getElementById('digestScroll');
+  if (!scroll) return;
+  let pressTimer = null;
+  scroll.addEventListener('touchstart', (e) => {
+    const card = e.target.closest('.card-in > div');
+    if (!card) return;
+    const title = card.querySelector('h3')?.textContent || '这段';
+    const ts = card.querySelector('.font-mono.ml-auto')?.textContent || '';
+    pressTimer = setTimeout(() => {
+      // Add vermilion left border to mark
+      card.style.boxShadow = 'inset 3px 0 0 #B5483C';
+      markConfusion(title, ts);
+    }, 500);
+  }, { passive: true });
+  scroll.addEventListener('touchend', () => { if (pressTimer) clearTimeout(pressTimer); });
+  scroll.addEventListener('touchmove', () => { if (pressTimer) clearTimeout(pressTimer); });
+  // Mouse support for desktop preview
+  scroll.addEventListener('mousedown', (e) => {
+    const card = e.target.closest('.card-in > div');
+    if (!card) return;
+    const title = card.querySelector('h3')?.textContent || '这段';
+    const ts = card.querySelector('.font-mono.ml-auto')?.textContent || '';
+    pressTimer = setTimeout(() => {
+      card.style.boxShadow = 'inset 3px 0 0 #B5483C';
+      markConfusion(title, ts);
+    }, 500);
+  });
+  scroll.addEventListener('mouseup', () => { if (pressTimer) clearTimeout(pressTimer); });
+  scroll.addEventListener('mouseleave', () => { if (pressTimer) clearTimeout(pressTimer); });
+})();
+
+// Flashcards [#3 fix] completion
+const cards = [
+  { front: '梯度下降中，学习率 η 的作用是什么？', back: 'η 决定每一步沿梯度方向走多远。∇L 只给方向，η 给步长。太大 → 跨过谷底；太小 → 收敛慢。' },
+  { front: '学习率衰减策略的公式是什么？', back: 'η_t = η₀ / √(1+t)。前期用大步子快速接近，后期用小步子精细调整，收敛更平滑。' },
+  { front: 'Adam 优化器的核心思想？', back: '动量 + RMSProp。每个参数有自己的自适应步长，不需要手动调 η，适合稀疏数据。' },
+  { front: '学习率过大时 loss 会怎样？', back: 'loss 不降反升。梯度在谷底两侧反复横跳，每次都跨过最优解。说明 η 要匹配 loss 曲面曲率。' },
+];
+let cardIdx = 2;
+function flipCard() { document.getElementById('flashcardEl').classList.toggle('flipped'); }
+function nextCard() {
+  if (cardIdx + 1 >= cards.length) {
+    // [#3 fix] Show completion
+    document.getElementById('flashcardActions').style.display = 'none';
+    document.getElementById('flashcardEl').style.display = 'none';
+    const done = document.getElementById('flashcardDone');
+    done.classList.remove('hidden'); done.classList.add('flex');
+    return;
+  }
+  cardIdx++;
+  document.getElementById('cardFront').textContent = cards[cardIdx].front;
+  document.getElementById('cardBack').textContent = cards[cardIdx].back;
+  document.getElementById('flashcardEl').classList.remove('flipped');
+  document.getElementById('flashcardProgress').textContent = `${cardIdx + 1} / ${cards.length}`;
+}
+
+// [#2 fix] Processing progress animation
+let procProgress = 0;
+const procSteps = ['正在读转录原文…', '正在把板书照片插到对应段落…', '正在生成分段笔记…'];
+let procStepIdx = 0;
+function startProcessingProgress() {
+  const bar = document.getElementById('processingProgress');
+  const pctEl = document.getElementById('processingPercent');
+  const etaEl = document.getElementById('processingEta');
+  const statusEl = document.getElementById('processingStatus');
+  const doneBtn = document.getElementById('processingDoneBtn');
+  procProgress = 0; procStepIdx = 0;
+  const interval = setInterval(() => {
+    procProgress += Math.random() * 8 + 3;
+    if (procProgress > 100) procProgress = 100;
+    if (bar) bar.style.width = procProgress + '%';
+    if (pctEl) pctEl.textContent = Math.floor(procProgress) + '%';
+    const newStepIdx = Math.min(2, Math.floor(procProgress / 34));
+    if (newStepIdx !== procStepIdx) { procStepIdx = newStepIdx; if (statusEl) statusEl.textContent = procSteps[procStepIdx]; }
+    const remaining = Math.ceil((100 - procProgress) / 100 * 120);
+    if (etaEl) etaEl.textContent = remaining > 5 ? `约 ${Math.ceil(remaining/60)} 分钟` : '马上好';
+    if (procProgress >= 100) {
+      clearInterval(interval);
+      if (statusEl) statusEl.textContent = '整理完成';
+      if (etaEl) etaEl.textContent = '';
+      if (doneBtn) doneBtn.style.opacity = '1';
+    }
+  }, 400);
+}
+// Start processing animation when entering that page
+const procObserver = new MutationObserver(() => {
+  if (document.getElementById('page-processing').classList.contains('active')) {
+    startProcessingProgress();
+    procObserver.disconnect();
+  }
+});
+procObserver.observe(document.getElementById('page-processing'), { attributes: true, attributeFilter: ['class'] });
+</script>
+</body>
+</html>

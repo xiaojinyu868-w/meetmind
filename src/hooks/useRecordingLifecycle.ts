@@ -17,6 +17,7 @@ import { classroomDataService } from '@/lib/services/classroom-data-service';
 import { memoryService } from '@/lib/services/memory-service';
 import { anchorService, type Anchor } from '@/lib/services/anchor-service';
 import { uploadRecordingAudio } from '@/lib/services/upload-recording-audio';
+import { runDiarizationForSession } from '@/lib/services/asr/diarization-service';
 import { resolveLiveRecordingAppendOffset } from '@/lib/capture/live-recording';
 import {
   mergeWorkspaceCaptures,
@@ -445,6 +446,24 @@ export function useRecordingLifecycle(
             });
           },
         }).catch(() => undefined);
+      }
+
+      // 说话人分离：直接把 blob 传给 /api/asr/diarize，不依赖上传链路和登录状态。
+      // 静默执行，失败不打扰。
+      // 如果实时多人模式（腾讯云）已经产出 speakerId，跳过课后 diarization——
+      // 课后 diarization 走 DashScope Fun-ASR 非实时接口，声纹模型独立，
+      // 两套引擎的 speakerId 编号无对应关系，混用会导致说话人标签错乱。
+      const hasRealtimeSpeakerId = finalSegments.some((s) => s.speakerId);
+      if (finalSegments.length > 0 && !hasRealtimeSpeakerId) {
+        void runDiarizationForSession(
+          blob,
+          effectiveSessionId,
+          finalSegments,
+          (updatedSegments) => {
+            // 刷新内存中的 transcript（如果当前 session 正在显示）
+            editorAct.setSegments(updatedSegments);
+          },
+        ).catch(() => undefined);
       }
 
       if (finalSegments.length === 0) {

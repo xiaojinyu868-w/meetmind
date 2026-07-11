@@ -14,7 +14,7 @@
 
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import dynamic from 'next/dynamic';
-import { Square, ChevronDown, ChevronUp, Languages, Play, Pause } from 'lucide-react';
+import { Square, ChevronDown, ChevronUp, Languages, Play, Pause, Camera } from 'lucide-react';
 import { MindMap } from './MindMap';
 import { OctoBuddySprite } from './OctoBuddy';
 import type { MindMapTree } from '@/hooks/useClassroomMindMap';
@@ -24,6 +24,7 @@ import { extractChineseRuns, extractEnglishRuns } from '@/lib/services/translati
 import { useEnToZhTranslation, useTranslationMode, type TranslationMode } from '@/hooks/useEnToZhTranslation';
 import { buildLiveTranslationRows } from '@/lib/utils/live-translation-rows';
 import { stitchLiveSentences } from '@/lib/utils/stitch-live-sentences';
+import { getSpeakerLabel, getSpeakerColorClass } from '@/lib/services/asr/diarization-service';
 import { cycleTranslationMode, resolveSessionTranslationMode } from './ClassroomRecordingView.model';
 
 // TranscriptFlowView 只在展开态用，且组件较重——code-split 一下，
@@ -80,6 +81,12 @@ export interface ClassroomRecordingViewProps {
   isDemoComplete?: boolean;
   onReplayDemo?: () => void;
   onFinishDemo?: () => void;
+  /** 课中拍照：传入当前录音秒数，由父组件透传到 handleImportFiles */
+  onQuickPhoto?: (capturedAtMs: number) => void;
+  /** 是否启用说话人分离（多人会议模式） */
+  speakerDiarization?: boolean;
+  /** 切换说话人分离 */
+  onToggleSpeakerDiarization?: () => void;
 }
 
 // ── 时间工具 ──────────────────────────────────────────────────────────
@@ -104,6 +111,8 @@ function LiveTranscriptPanel({
   demoAudioPlaying,
   demoAudioNeedsGesture,
   onToggleDemoAudio,
+  speakerDiarization,
+  onToggleSpeakerDiarization,
 }: {
   segments?: TranscriptSegment[];
   recentLines: Array<{ id: string; text: string; startMs: number }>;
@@ -118,9 +127,11 @@ function LiveTranscriptPanel({
   demoAudioPlaying?: boolean;
   demoAudioNeedsGesture?: boolean;
   onToggleDemoAudio?: () => void;
+  speakerDiarization?: boolean;
+  onToggleSpeakerDiarization?: () => void;
 }) {
   const rows = useMemo(
-    () => buildLiveTranslationRows({ segments, recentLines, interimText, maxFinalRows: 10 }),
+    () => buildLiveTranslationRows({ segments, recentLines, interimText, maxFinalRows: 9999 }),
     [segments, recentLines, interimText],
   );
   const translateEnabled = translationMode !== 'off';
@@ -178,20 +189,26 @@ function LiveTranscriptPanel({
         startMs: row.startMs,
         isInterim: row.id === 'live-interim',
         translation,
+        speakerId: row.speakerId,
       };
     });
     return stitchLiveSentences(inputs);
   }, [rows, termsByRow, translateEnabled, lookup]);
   const stableSentenceCount = stitchedSentences.filter((s) => !s.isInterim).length;
 
+  const isNearBottomRef = useRef(true);
+
   const updateJumpVisibility = useCallback(() => {
     const el = listRef.current;
     if (!el) return;
     const distance = el.scrollHeight - el.scrollTop - el.clientHeight;
+    const nearBottom = distance <= 96;
+    isNearBottomRef.current = nearBottom;
     setShowJumpToBottom(distance > 96);
   }, []);
 
   const jumpToBottom = useCallback(() => {
+    isNearBottomRef.current = true;
     endRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
     setShowJumpToBottom(false);
   }, []);
@@ -199,6 +216,15 @@ function LiveTranscriptPanel({
   useEffect(() => {
     updateJumpVisibility();
   }, [rows.length, updateJumpVisibility]);
+
+  // 自动跟随：新内容到来时，如果用户在底部附近（没主动上滚），自动滚到底部。
+  // 用 ref 判断（实时），不依赖 state 的异步更新——避免滚动滞后。
+  useEffect(() => {
+    if (!isNearBottomRef.current) return;
+    const el = listRef.current;
+    if (!el) return;
+    el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' });
+  }, [rows.length]);
 
   return (
     <aside className="relative flex h-full w-full min-w-0 flex-col overflow-hidden rounded-[22px] border border-divider bg-card shadow-soft">
@@ -272,21 +298,33 @@ function LiveTranscriptPanel({
         </div>
 
         <div className="mt-2 flex items-center justify-between gap-2 rounded-full border border-divider bg-card px-2 py-1.5">
-          <div className="inline-flex rounded-full bg-paper-warm p-0.5">
-            <span className="rounded-full bg-card px-3 py-1 text-[12px] font-medium text-ink shadow-soft">实时文字</span>
-            <span className="px-3 py-1 text-[12px] font-medium text-ink-muted">结构</span>
+          <span className="px-3 py-1 text-[12px] font-medium text-ink">实时文字</span>
+          <div className="flex items-center gap-1.5">
+            {onToggleSpeakerDiarization ? (
+              <button
+                type="button"
+                onClick={onToggleSpeakerDiarization}
+                className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[12px] font-medium transition ${
+                  speakerDiarization ? 'bg-pine text-white shadow-soft' : 'text-ink-muted hover:bg-paper-warm'
+                }`}
+                title={speakerDiarization ? '说话人分离已开启，点击切回单人模式' : '开启多人说话人分离（实时切换）'}
+              >
+                <span className={`h-1.5 w-1.5 rounded-full ${speakerDiarization ? 'bg-white' : 'bg-ink-muted'}`} />
+                <span>{speakerDiarization ? '多人' : '单人'}</span>
+              </button>
+            ) : null}
+            <button
+              type="button"
+              onClick={onCycleTranslationMode}
+              className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[12px] font-medium transition ${
+                translateEnabled ? 'bg-ink text-white shadow-soft' : 'text-ink-muted hover:bg-paper-warm'
+              }`}
+              title="切换翻译模式：关闭 / EN→中 / 中→EN"
+            >
+              <Languages size={11} strokeWidth={2} />
+              <span>{translationMode === 'off' ? '翻译关' : translationMode === 'en-zh' ? 'EN→中' : '中→EN'}</span>
+            </button>
           </div>
-          <button
-            type="button"
-            onClick={onCycleTranslationMode}
-            className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[12px] font-medium transition ${
-              translateEnabled ? 'bg-ink text-white shadow-soft' : 'text-ink-muted hover:bg-paper-warm'
-            }`}
-            title="切换翻译模式：关闭 / EN→中 / 中→EN"
-          >
-            <Languages size={11} strokeWidth={2} />
-            <span>{translationMode === 'off' ? '翻译关' : translationMode === 'en-zh' ? 'EN→中' : '中→EN'}</span>
-          </button>
         </div>
       </div>
 
@@ -318,7 +356,7 @@ function LiveTranscriptPanel({
           //
           // 阅读手感对齐：iOS 实时听写 / Otter / YouTube 自动字幕。
           <div
-            className="space-y-1.5 leading-[1.95] text-[13.5px]"
+            className="space-y-1.5 leading-[1.8] text-[15px]"
             style={{ wordBreak: 'normal', overflowWrap: 'break-word' }}
           >
             {stitchedSentences.map((sentence, index) => {
@@ -337,11 +375,19 @@ function LiveTranscriptPanel({
                   }`}
                 >
                   <span
-                    className="mr-1.5 inline-block align-baseline font-mono text-[10.5px] tabular-nums text-ink-muted/55"
+                    className="mr-1.5 inline-block align-baseline font-mono text-[11.5px] tabular-nums text-ink-muted/55"
                     style={{ verticalAlign: '0.05em' }}
                   >
                     {formatTime(Math.floor(sentence.startMs / 1000))}
                   </span>
+                  {sentence.speakerId && speakerDiarization ? (
+                    <span
+                      className={`mr-1.5 inline-block align-baseline text-[11.5px] font-medium ${getSpeakerColorClass(sentence.speakerId)}`}
+                      style={{ verticalAlign: '0.05em' }}
+                    >
+                      {getSpeakerLabel(sentence.speakerId)}
+                    </span>
+                  ) : null}
                   <span>{sentence.text}</span>
                   {translateEnabled && sentence.translation && !isInterim ? (
                     <span className="ml-1.5 inline italic text-ink-muted/80">
@@ -366,16 +412,6 @@ function LiveTranscriptPanel({
         </button>
       ) : null}
 
-      <div className="flex-shrink-0 border-t border-divider bg-white px-3 py-3">
-        <button
-          type="button"
-          onClick={onToggleExpanded}
-          className="flex w-full items-center justify-center gap-1.5 rounded-full bg-canvas px-3 py-2.5 text-[12px] font-medium text-ink-secondary transition hover:text-ink"
-        >
-          {expanded ? <ChevronDown size={12} /> : <ChevronUp size={12} />}
-          {expanded ? '收起完整文字' : '展开完整文字'}
-        </button>
-      </div>
     </aside>
   );
 }
@@ -446,6 +482,39 @@ function DemoAfterClassPanel({
   );
 }
 
+// ── 移动端：拍一下悬浮键 ────────────────────────────────────────────
+
+function QuickPhotoButton({ onPhoto }: { onPhoto: () => void }) {
+  const inputRef = useRef<HTMLInputElement | null>(null);
+  return (
+    <>
+      <button
+        type="button"
+        onClick={() => inputRef.current?.click()}
+        className="fixed bottom-[5.5rem] left-4 z-30 flex h-12 w-12 items-center justify-center rounded-full bg-vermilion text-white shadow-card transition active:scale-90 lg:hidden"
+        aria-label="拍一下"
+        title="拍下板书"
+      >
+        <Camera size={18} strokeWidth={2} />
+      </button>
+      <input
+        ref={inputRef}
+        type="file"
+        accept="image/*"
+        capture="environment"
+        className="hidden"
+        onChange={(e) => {
+          const files = e.target.files;
+          if (files && files.length > 0) {
+            onPhoto();
+          }
+          if (inputRef.current) inputRef.current.value = '';
+        }}
+      />
+    </>
+  );
+}
+
 // ── 底部：结束录课 ────────────────────────────────────────────────────
 
 function StopBar({ onStop }: { onStop: () => void }) {
@@ -490,6 +559,9 @@ export function ClassroomRecordingView({
   isDemoComplete = false,
   onReplayDemo,
   onFinishDemo,
+  onQuickPhoto,
+  speakerDiarization,
+  onToggleSpeakerDiarization,
 }: ClassroomRecordingViewProps) {
   const [expanded, setExpanded] = useState(false);
   const transcriptScrollRef = useRef<HTMLDivElement | null>(null);
@@ -572,6 +644,8 @@ export function ClassroomRecordingView({
               demoAudioPlaying={demoAudioPlaying}
               demoAudioNeedsGesture={demoAudioNeedsGesture}
               onToggleDemoAudio={onToggleDemoAudio}
+              speakerDiarization={speakerDiarization}
+              onToggleSpeakerDiarization={onToggleSpeakerDiarization}
             />
           </div>
           <div className="min-w-0 overflow-hidden rounded-[24px] border border-divider bg-white">
@@ -589,45 +663,10 @@ export function ClassroomRecordingView({
         </div>
       </div>
 
-      {/* 展开态：完整原文抽屉 */}
-      {expanded && (
-        <div className="flex-shrink-0 border-t border-divider bg-canvas px-4 py-3 lg:px-6">
-          <div className="mx-auto w-full max-w-4xl">
-            <div
-              ref={transcriptScrollRef}
-              className="max-h-[38vh] overflow-y-auto rounded-2xl border border-divider bg-white px-4 py-3"
-            >
-              {hasTranscriptSegments ? (
-                <TranscriptFlowView
-                  segments={segments!}
-                  variant="live"
-                  isRecording
-                  interimText={interimText}
-                  transcribeMode="streaming"
-                  enableWordExplainer
-                  fullContextText={transcriptText ?? ''}
-                  showHeader={false}
-                  defaultExpanded
-                  paragraphGapMs={30000}
-                />
-              ) : hasTranscript ? (
-                // 没有 segments 但有字符串兜底——极少数老代码路径
-                <p className="whitespace-pre-wrap text-[12.5px] leading-relaxed text-ink">
-                  {transcriptText}
-                </p>
-              ) : (
-                <p className="text-[12.5px] leading-relaxed text-ink-muted/80">
-                  还没听到内容……等老师说话我就开始记。
-                </p>
-              )}
-            </div>
-          </div>
-        </div>
+      {/* 移动端：拍一下悬浮键 */}
+      {onQuickPhoto && (
+        <QuickPhotoButton onPhoto={() => onQuickPhoto(seconds * 1000)} />
       )}
-
-      <div className="flex flex-shrink-0 justify-center border-t border-[#E8E2D5]/40 bg-canvas pt-2 pb-1 lg:hidden">
-        <TranscriptToggle expanded={expanded} onToggle={() => setExpanded((v) => !v)} />
-      </div>
 
       <StopBar onStop={onStop} />
     </div>

@@ -4,12 +4,14 @@ export interface LiveTranslationLine {
   id: string;
   text: string;
   startMs: number;
+  speakerId?: string;
 }
 
 interface RecentLine {
   id: string;
   text: string;
   startMs: number;
+  speakerId?: string;
 }
 
 export function buildLiveTranslationRows({
@@ -28,6 +30,7 @@ export function buildLiveTranslationRows({
         id: String(segment.id ?? `segment-${index}`),
         text: segment.text,
         startMs: segment.startMs,
+        speakerId: segment.speakerId,
       }))
     : recentLines;
 
@@ -38,12 +41,9 @@ export function buildLiveTranslationRows({
       id: line.id,
       // M14.5.6: 保留 ASR raw 的 trailing/leading space —— 这是区分
       // "词边界" vs "词中切" 的关键信号。
-      //   "the standards of beauty " (词边界，带空格) + "are often..."  → 加空格连
-      //   "look" + "s and..." (词中切，没空格) → 无缝愈合成 "looks and..."
-      // 之前 .trim() 把这个信号抹掉，stitchLiveSentences 误判 "beauty"+"are"="beautyare"。
-      // 仅去掉换行/制表符，但保留普通空格。
       text: line.text.replace(/[\n\r\t]+/g, ' '),
       startMs: Math.max(0, line.startMs),
+      speakerId: line.speakerId,
     }));
 
   const interim = interimText.trim();

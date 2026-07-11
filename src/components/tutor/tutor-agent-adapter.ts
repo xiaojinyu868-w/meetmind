@@ -1,6 +1,7 @@
 import type { ConversationHistory } from '@/types/conversation';
 import type { LearnerProfile } from '@/types/user';
 import type { Segment } from './tutor-types';
+import { formatTranscriptWithSpeakers } from '@/lib/utils/transcript-format';
 
 interface BreakpointLike {
   timestamp?: number | null;
@@ -131,11 +132,8 @@ export function buildTutorAgentReviewContext({
   // 全量 prefill 会让 step-3.7-flash 等高速模型的首包延迟（TTFT）从 1s 涨到 5–8s。
   // 8000 字 ≈ 12–16k input tokens ≈ 15–20 分钟课堂内容。
   const MAX_FULL_TRANSCRIPT_CHARS = 12000;
-  const rawFullTranscript = segments
-    .map((segment) => segment.text)
-    .filter(Boolean)
-    .join(' ')
-    .trim();
+  // 多人会议模式下带 [说话人N] 标记，让复习态 AI 也能区分谁在讲什么。
+  const rawFullTranscript = formatTranscriptWithSpeakers(segments);
   const fullTranscript = rawFullTranscript.length > MAX_FULL_TRANSCRIPT_CHARS
     ? rawFullTranscript.slice(-MAX_FULL_TRANSCRIPT_CHARS)
     : rawFullTranscript;

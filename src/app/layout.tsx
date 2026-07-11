@@ -83,6 +83,8 @@ export default function RootLayout({
         <link rel="shortcut icon" href="/icons/icon-192x192.svg" />
         {/* PWA: Apple Touch Icon */}
         <link rel="apple-touch-icon" href="/icons/icon-192x192.svg" />
+        {/* Preload OctoBuddy thinking.png — 课中加载态首次显示时消除白屏 */}
+        <link rel="preload" as="image" href="/images/octo-buddy/thinking.png" />
       </head>
       <body className={inter.className}>
         <AuthProvider>

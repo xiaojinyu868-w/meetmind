@@ -31,6 +31,8 @@ interface FlowSegment {
   text: string;
   startMs: number;
   endMs: number;
+  /** 说话人标识（说话人分离后回填） */
+  speakerId?: string;
   /**
    * 机器静默修正后的原始文本（M8-A2）。
    * 管线：enhance manager → /api/transcript-enhance → 3 层 rule/lexicon/llm，
@@ -453,6 +455,19 @@ function ParagraphBlock({
       >
         {formatCompactTime(paragraph.startMs)}
       </span>
+
+      {/* 说话人标签 — 录音后说话人分离回填，课堂中不显示 */}
+      {(() => {
+        const firstSpeakerId = paragraph.segments.find((s) => s.speakerId)?.speakerId;
+        if (!firstSpeakerId) return null;
+        const label = `说话人${parseInt(firstSpeakerId, 10) + 1}`;
+        const colorClass = firstSpeakerId === '0' ? 'text-pine' : 'text-vermilion';
+        return (
+          <span className={`ml-1.5 mb-1.5 inline-flex items-center text-[10.5px] font-medium ${colorClass}`}>
+            {label}
+          </span>
+        );
+      })()}
 
       {/* 段落正文（在时间戳下方，让"时间-内容"形成清晰的章节关系） */}
       <div className="block">

@@ -21,7 +21,7 @@
 |---------|---------|
 | **改 UI / 组件** | `src/components/DOMAIN.md` → 对应子目录 DOMAIN.md → 具体组件 |
 | **改任意 AI 对话面板（输入条 / 消息流 / 流式 / 文件上传 / 麦克风）** | `src/components/chat/DOMAIN.md` —— **ChatBase 底座（M11 起，M13 起 5 面板 100% 收口）**：薄底座 ChatBubble / ChatComposer / ChatMessageList / ChatRenderer / ChatThinkingStripBubble + ChatCodeBlock（Shiki 高亮）/ ChatImageLightbox / ChatMermaidBlock + 三个 hook（useChatComposer 草稿+IME / useChatFileUpload 拖拽+粘贴 / useAutoFollowScroll 智能跟随）+ `markers/`（collectMessageText / extractIntentSummary / extractIntentBio）。任何新对话面板都应基于这个底座做 adapter，不要重新写一套输入条/气泡。**已收口 5 面板**：IntentDialog(`goal`) / TutorAgentPanel(`review`,`in-class`) / ClassroomCompanionPanel(`in-class`) / SharedAgentChat(`shared`) / WordExplainer(`word`)。**铁律**：底座不引入业务逻辑（mode/prompt/endpoint），用 slot / capability 对象组合。 |
-| **改课堂同桌 / Hero / 内联 app 卡** | `src/components/classroom/DOMAIN.md` → 对应组件（注意：Skill chip 走 `<open_app:KEY/>` 链路，不是 `/api/apps/execute` 直调） |
+| **改课堂同桌 / Hero / 内联 app 卡** | `src/components/classroom/DOMAIN.md` → 对应组件（注意：M14.6 起 Skill chip 直接调 `/api/apps/execute`，不走 `<open_app:KEY/>` marker 链路） |
 | **改复习态 Tutor / Skill chip / Tool card** | `src/components/tutor/DOMAIN.md` → 对应组件 |
 | **改 Workshop 应用窗口** | `src/components/apps/windows/DOMAIN.md` → 对应窗口组件 |
 | **改页面路由** | `src/app/DOMAIN.md` → 对应 page.tsx |
@@ -31,7 +31,8 @@
 | **改「聊聊你想要的」/ 目标共建 / 教练对话** | `src/components/intent/DOMAIN.md` → `IntentDialogContainer` 是入口包装，主对话在 `IntentDialog`，提炼卡片在 `IntentSummaryCard`（bio）/ `IntentBioCard`。入口仅在设置页（M14.6 移除首登强制拦截）。后端 `/api/tutor/agent` mode='goal'，prompt 在 `tutor-prompts.ts` 的 `buildGoalSegment`（GOAL_HEADER + GOAL_PATH_A 首次会面 / GOAL_PATH_B 回访 + GOAL_COMMON）。文件解析 helper `src/lib/services/file-parse-service.ts`。|
 | **改实时语音通话 UI / 抗噪抗打断** | `src/components/realtime/DOMAIN.md` → `RealtimeOrb`（v7 呼吸光晕，复用于复习态 + intent 通话）+ `IntentVoiceCallScreen` / `TutorRealtimeCallScreen`。后端 WebSocket 在 `server.js` 的 `/api/tutor-call`，VAD/降噪参数走环境变量（见 `.env.example` 实时语音同桌段）。|
 | **改业务逻辑（service）** | `src/lib/services/DOMAIN.md` → 找到对应 service 文件 |
-| **改 ASR 链路** | `src/lib/services/asr/`（text-utils / render-state-machine / post-edit / audio-constraints） |
+| **改 ASR 链路** | `src/lib/services/asr/`（text-utils / render-state-machine / post-edit / audio-constraints）+ `src/lib/services/dashscope-asr-service.ts`（DashScopeASRClient 实时 ASR 客户端）+ `server.js`（两个 WebSocket proxy：`/api/asr-stream` DashScope + `/api/asr-stream-speaker` 腾讯云说话人分离）+ `src/lib/services/asr/ws-url.ts`（URL 选择：speakerDiarization 切换路径）|
+| **改说话人分离** | `src/lib/services/asr/diarization-service.ts`（课后 diarization + getSpeakerLabel / getSpeakerColorClass）+ `server.js` speaker proxy（腾讯云 `16k_zh_en_speaker` HMAC 签名 + 协议翻译）+ `src/components/Recorder.tsx`（并行连接无感切换引擎）+ `src/lib/utils/transcript-format.ts`（formatTranscriptWithSpeakers：fullTranscript 带 `[说话人N]` 标记，用于 in-class + review 两种 mode）|
 | **改 AI-Native 插件** | `src/lib/ai-native/plugins/DOMAIN.md` → 对应 plugin |
 | **改 SharedAgent / 分享 Agent / 裂变** | `roadmap/v3.0-virality-agent.md`（北极星）→ `src/app/api/share/DOMAIN.md` → `src/app/share/DOMAIN.md` → `src/app/me/shares/`（A 管理面）→ `src/components/share/DOMAIN.md` → `src/lib/services/share-agent-service.ts`。**v3.0 闭环 5 个支点**：(1) 创建 `OctoCrystalDispatcher` (2) 落地页 `SharedAgentLanding` + `ArtifactRender` 真渲染产物 (3) 分享态对话 `mode='shared'` (4) 领取 `claimSharedAgent` → `WorkspaceCapture(sourceType='shared-agent')` 在 B 工作台点击跳回 `/share/[token]` (5) 管理 `MyShareList` + `DELETE /api/share/[token]`（撤销不影响已领取副本）|
 | **改文章 / 网页原文接入** | `src/app/api/article/`（无 DOMAIN.md）→ `src/lib/services/web-article-extract-service.ts` + `jina-reader-service.ts`；`.env.example` 配 `FIRECRAWL_API_KEY`（首选），`OPENCLAW_GATEWAY_URL` 已 **deprecated**（见 `openclaw/README.md`，与 MeetMind 解耦的 AI Agent Gateway，现仅 fallback） |
@@ -315,6 +316,7 @@ ASR 链路（`src/lib/services/asr/`）：
 - **状态兜底**：`audioSessions.transcriptionStatus` 区分 pending/completed/failed；转写失败或超时后课堂卡片显示“原声已保留”，不能永久停在“整理中”
 - **静默校对 + 热词聚合**：`AsrCorrection` 表存用户编辑，`onRecordingStop` 触发 `/api/asr/corrections/aggregate` 生成下节课的 `userHotwords`
 - **AEC/NS/AGC**：`buildAudioConstraints` 是 getUserMedia 的唯一真相源，env 可覆盖
+- **说话人分离**（M14.6+）：双引擎可选——DashScope `qwen3-asr-flash-realtime`（高精度，无说话人分离）+ 腾讯云 `16k_zh_en_speaker`（实时声纹聚类，支持 10 人）。`server.js` 两个独立 WebSocket proxy（`/api/asr-stream` + `/api/asr-stream-speaker`），speaker proxy 做 HMAC-SHA1 签名 + 协议翻译（腾讯云格式→DashScope 兼容格式）。`DashScopeASRClient` 通过 `speakerDiarization` 选项切换 WS URL。`Recorder.tsx` 录音中无感切换（并行连接→ready 后交接 asrClientRef→异步关旧 client）。课后 diarization（`diarization-service.ts`）在已有 speakerId 时跳过（避免两套引擎编号混用）。`transcript-format.ts` 的 `formatTranscriptWithSpeakers` 把 speakerId 转成 `[说话人N]` 标记注入 fullTranscript，用于 in-class + review 两种 mode 的 AI 上下文。
 
 ### 3.9 跨设备同步现状与缺口（v2.1 待修）
 
@@ -567,7 +569,7 @@ src/
 | `src/app/api/tutor/agent/route.ts` | **M10 主入口**：mode-driven 单一 endpoint，AI SDK v6 streamText。M14.6 起所有 mode 纯对话（`tools = {}`），结构化产物由前端 SkillChip 直接打开；provider fallback StepFun→DeepSeek→Qwen；Qwen 注入 `enable_thinking=false` 抑制推理。详见 `src/app/api/tutor/DOMAIN.md` |
 | `src/app/api/tutor/route.ts` | Legacy SSE 路径（flag off 时仍可用，不要在它上面加新功能） |
 | `src/lib/prompts/tutor-prompts.ts` | `buildTutorSystemPrompt(mode, context, options)` ── 5 mode 唯一 prompt 源（M11.4 goal 双路径 + M13 word mode）；M14.6 已移除 `<open_app:KEY/>` marker 合约 |
-| `src/lib/tutor/classroom-agent-request.ts` | 课堂同桌打 `/api/tutor/agent` 的瘦身请求体构建（只带 recentFocus，不上传整节 transcript） |
+| `src/lib/tutor/classroom-agent-request.ts` | 课堂同桌打 `/api/tutor/agent` 的请求体构建（带 recentFocus + fullTranscript，fullTranscript 通过 `formatTranscriptWithSpeakers` 注入 `[说话人N]` 标记） |
 | `src/lib/services/llm-service.ts` | 统一 LLM 调用层（StepFun / DeepSeek / DashScope / Ark / Relay）；模型注册表在 `app.config.ts`，env 驱动 `pickAvailableModelId`，Qwen recommended=`qwen3.7-plus`（M13 改名，原 `Qwen3.6-Plus-A` 已废弃） |
 | `src/lib/utils/tutor-agent-provider.ts` | Tutor Agent provider 解析 + fallback：按请求模型/env 选 StepFun、DeepSeek、DashScope 或 OpenAI，强制 Chat Completions；`resolveTutorAgentProviderFallbacks` 在 primary 可重试失败时切 StepFun→DeepSeek→Qwen |
 | `src/lib/utils/ai-model-preference.ts` | 设置页模型偏好的 key 与 `auto` 解析契约 |

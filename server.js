@@ -1,5 +1,6 @@
 const fs = require('fs');
 const path = require('path');
+const crypto = require('crypto');
 if (fs.existsSync('.env.local')) {
   require('dotenv').config({ path: '.env.local' });
 } else {
@@ -207,6 +208,7 @@ app.prepare().then(() => {
   });
 
   const asrWss = new WebSocketServer({ noServer: true });
+  const speakerAsrWss = new WebSocketServer({ noServer: true });
   const tutorCallWss = new WebSocketServer({ noServer: true });
   const nextUpgradeHandler = app.getUpgradeHandler();
 
@@ -227,6 +229,13 @@ app.prepare().then(() => {
       return;
     }
 
+    if (pathname === '/api/asr-stream-speaker') {
+      speakerAsrWss.handleUpgrade(request, socket, head, (ws) => {
+        speakerAsrWss.emit('connection', ws, request);
+      });
+      return;
+    }
+
     if (pathname === '/api/tutor-call') {
       tutorCallWss.handleUpgrade(request, socket, head, (ws) => {
         tutorCallWss.emit('connection', ws, request);
@@ -240,6 +249,376 @@ app.prepare().then(() => {
       console.error('Error delegating upgrade to Next.js:', error);
       socket.destroy();
     }
+  });
+
+  // ============================================================
+  // 腾讯云实时说话人分离 WebSocket 代理
+  // /api/asr-stream-speaker
+  //
+  // 与 /api/asr-stream（DashScope）的区别：
+  //   - 用腾讯云 16k_zh_en_speaker 引擎，同时做 ASR + 声纹聚类
+  //   - 返回 speaker_id（0-9），支持最多 10 个说话人分离
+  //   - 把腾讯云的返回格式翻译成与 DashScope 代理兼容的格式
+  //     （{event:'ready'}, {event:'result', sentence:{...}}, {event:'interim', ...}）
+  //   - 前端 DashScopeASRClient 不用改，只需要换 WS URL
+  // ============================================================
+
+  function buildTencentASRSignature(params) {
+    const appId = process.env.TENCENT_ASR_APP_ID;
+    const secretId = process.env.TENCENT_ASR_SECRET_ID;
+    const secretKey = process.env.TENCENT_ASR_SECRET_KEY;
+
+    if (!appId || !secretId || !secretKey) {
+      throw new Error('腾讯云 ASR 密钥未配置');
+    }
+
+    // 腾讯云签名要求：参数按字典序排序，拼接签名原文（不含 wss://）
+    // 参数值不做 URL 编码——签名原文用原始值
+    const sortedParams = Object.keys(params)
+      .filter((k) => k !== 'signature')
+      .sort()
+      .map((k) => `${k}=${params[k]}`)
+      .join('&');
+
+    const signStr = `asr.cloud.tencent.com/asr/v2/${appId}?${sortedParams}`;
+    const signature = crypto
+      .createHmac('sha1', secretKey)
+      .update(signStr)
+      .digest('base64');
+
+    console.log('[Speaker-ASR-Proxy] Sign str:', signStr.substring(0, 120) + '...');
+    console.log('[Speaker-ASR-Proxy] Signature:', signature);
+
+    return { signature, appId, secretId };
+  }
+
+  function buildTencentASRUrl(voiceId, options) {
+    const appId = process.env.TENCENT_ASR_APP_ID;
+    const secretId = process.env.TENCENT_ASR_SECRET_ID;
+
+    const timestamp = Math.floor(Date.now() / 1000);
+    const expired = timestamp + 86400; // 1 天有效期
+    const nonce = Math.floor(Math.random() * 1000000000);
+
+    const params = {
+      secretid: secretId,
+      timestamp,
+      expired,
+      nonce,
+      engine_model_type: options.engineModelType || '16k_zh_en_speaker',
+      voice_id: voiceId,
+      voice_format: 1, // PCM
+      needvad: 1,
+      convert_num_mode: 1,
+      filter_dirty: 0,
+      filter_modal: 0,
+      filter_punc: 0,
+      speaker_diarization: 1, // 显式开启话者分离
+      sentence_strategy: 0,   // 0=语义单句
+    };
+
+    // 热词
+    if (options.hotwordList) {
+      params.hotword_list = options.hotwordList;
+    }
+
+    const { signature } = buildTencentASRSignature(params);
+    const encodedSig = encodeURIComponent(signature);
+
+    const queryStr = Object.keys(params)
+      .filter((k) => k !== 'signature')
+      .sort()
+      .map((k) => `${k}=${encodeURIComponent(params[k])}`)
+      .join('&');
+
+    return `wss://asr.cloud.tencent.com/asr/v2/${appId}?${queryStr}&signature=${encodedSig}`;
+  }
+
+  speakerAsrWss.on('connection', (clientWs) => {
+    console.log('[Speaker-ASR-Proxy] Client connected');
+
+    const appId = process.env.TENCENT_ASR_APP_ID;
+    const secretId = process.env.TENCENT_ASR_SECRET_ID;
+    const secretKey = process.env.TENCENT_ASR_SECRET_KEY;
+
+    if (!appId || !secretId || !secretKey) {
+      clientWs.send(JSON.stringify({ event: 'error', error: '腾讯云 ASR 密钥未配置，请在 .env 中设置 TENCENT_ASR_APP_ID / TENCENT_ASR_SECRET_ID / TENCENT_ASR_SECRET_KEY' }));
+      clientWs.close();
+      return;
+    }
+
+    let tencentWs = null;
+    let isReady = false;
+    let stopRequested = false;
+    let sentenceIndex = 0;
+    let lastFinalSegment = null;
+    const dedupSimilarity = clampNumber(
+      parseFloat(process.env.ASR_DEDUP_SIMILARITY || '0.95'),
+      0.7, 1, 0.95
+    );
+    const dedupGapMs = clampNumber(
+      parseInt(process.env.ASR_DEDUP_GAP_MS || '1500', 10),
+      200, 10000, 1500
+    );
+    const audioQueue = [];
+    const AUDIO_QUEUE_MAX_SIZE = 500;
+    let voiceId = '';
+
+    // 从客户端接收 context-hint（热词）
+    let hotwordList = '';
+
+    function sendClientEvent(payload) {
+      if (clientWs.readyState !== WebSocket.OPEN) return;
+      clientWs.send(JSON.stringify(payload));
+    }
+
+    function flushAudioQueue() {
+      if (audioQueue.length === 0) return;
+      const batchSize = Math.min(60, audioQueue.length);
+      for (let i = 0; i < batchSize; i++) {
+        const data = audioQueue.shift();
+        if (data && tencentWs && tencentWs.readyState === WebSocket.OPEN) {
+          tencentWs.send(data);
+        }
+      }
+      if (audioQueue.length > 0) {
+        setTimeout(flushAudioQueue, 100);
+      }
+    }
+
+    // 接收客户端文本消息（context-hint / stop）
+    clientWs.on('message', (data, isBinary) => {
+      if (isBinary) {
+        // 二进制音频数据
+        if (isReady && tencentWs && tencentWs.readyState === WebSocket.OPEN) {
+          tencentWs.send(data);
+        } else {
+          if (audioQueue.length < AUDIO_QUEUE_MAX_SIZE) {
+            audioQueue.push(data);
+          }
+        }
+        return;
+      }
+
+      try {
+        const jsonText = typeof data === 'string' ? data : data.toString('utf8');
+        const msg = JSON.parse(jsonText);
+
+        if (msg.type === 'ping') {
+          sendClientEvent({ event: 'pong', at: msg.at || Date.now() });
+          return;
+        }
+
+        if (msg.type === 'context-hint') {
+          const hint = typeof msg.contextHint === 'string' ? msg.contextHint.trim() : '';
+          if (hint) {
+            // 腾讯云热词格式：词1|权重1,词2|权重2
+            const words = hint.split(/[\n,，;；]/).map((w) => w.trim()).filter(Boolean);
+            if (words.length > 0) {
+              hotwordList = words.map((w) => `${w}|10`).join(',');
+              console.log('[Speaker-ASR-Proxy] Hotwords:', words.length, 'words');
+            }
+          }
+
+          // 如果还没连接腾讯云，现在连接
+          if (!tencentWs && !stopRequested) {
+            voiceId = crypto.randomUUID();
+            const wsUrl = buildTencentASRUrl(voiceId, { hotwordList });
+
+            tencentWs = new WebSocket(wsUrl);
+
+            tencentWs.on('open', () => {
+              console.log('[Speaker-ASR-Proxy] Tencent cloud connected, voice_id:', voiceId);
+            });
+
+            tencentWs.on('message', (tData) => {
+              console.log('[Speaker-ASR-Proxy] Raw message:', tData.toString().substring(0, 200));
+              try {
+                const tMsg = JSON.parse(tData.toString());
+
+                if (tMsg.code !== 0) {
+                  console.error('[Speaker-ASR-Proxy] Error:', tMsg.code, tMsg.message);
+                  // 资源包耗尽 / 鉴权失败等不可恢复错误——通知客户端停止重连
+                  const nonRetriable = /4004|4005|4002|4003|欠费|耗尽|鉴权|未开通/.test(tMsg.message || '');
+                  if (nonRetriable) {
+                    sendClientEvent({ event: 'auth_failed', error: `腾讯云：${tMsg.message}` });
+                  } else {
+                    sendClientEvent({ event: 'error', error: tMsg.message || `腾讯云错误 ${tMsg.code}` });
+                  }
+                  return;
+                }
+
+                // 流结束标志：final=1 表示整段音频识别已结束
+                if (tMsg.final === 1) {
+                  console.log('[Speaker-ASR-Proxy] Final');
+                  sendClientEvent({ event: 'finished' });
+                  sendClientEvent({ event: 'closed' });
+                  return;
+                }
+
+                // 实时说话人分离接口的结果在 tMsg.sentences.sentence_list[]
+                // 完整结构：{code:0, voice_id, message_id, sentences: { sentence_list: [{ sentence, sentence_type, sentence_id, speaker_id, start_time, end_time }] }}
+                // 握手成功响应里没有 sentences 字段，借此区分"握手成功"和"识别结果"
+                const sentencesObj = tMsg.sentences;
+                if (!sentencesObj || typeof sentencesObj !== 'object') {
+                  if (!isReady) {
+                    isReady = true;
+                    console.log('[Speaker-ASR-Proxy] Ready, voice_id:', voiceId);
+                    sendClientEvent({ event: 'ready' });
+                    flushAudioQueue();
+                  }
+                  return;
+                }
+
+                // sentence_list 是数组，取第一条（实时流每次返回当前句子的最新状态）
+                const sentenceList = sentencesObj.sentence_list;
+                if (!Array.isArray(sentenceList) || sentenceList.length === 0) return;
+                const sentence = sentenceList[0];
+
+                // sentence_type: 0=不确定, 1=确定(稳态)
+                // speaker_id: -1=未识别, 0-9=具体说话人
+                const isFinal = sentence.sentence_type === 1;
+                const rawSpeakerId = sentence.speaker_id;
+                if (isFinal) {
+                  console.log(`[Speaker-ASR-Proxy] Final: "${(sentence.sentence||'').substring(0,40)}" speaker_id=${rawSpeakerId} type=${sentence.sentence_type}`);
+                }
+                const speakerId =
+                  typeof rawSpeakerId === 'number' && rawSpeakerId >= 0 && rawSpeakerId <= 9
+                    ? String(rawSpeakerId)
+                    : undefined;
+                const text = sentence.sentence || '';
+                if (!text) return;
+
+                // 腾讯云返回的时间戳单位是毫秒（自流开始计），保持毫秒透传给前端
+                const beginTime = Number(sentence.start_time) || 0;
+                const endTime = Number(sentence.end_time) || 0;
+                const itemId = String(sentence.sentence_id ?? sentenceIndex);
+
+                if (isFinal) {
+                  // 幻觉过滤——跟 DashScope 代理一致
+                  const durationMs = Math.max(0, endTime - beginTime);
+                  if (isLikelyHallucination(text, durationMs)) {
+                    console.log(`[Speaker-ASR-Proxy] Dropped hallucination: "${text.substring(0, 40)}" (duration=${durationMs}ms)`);
+                    return;
+                  }
+
+                  // 长文本切分——跟 DashScope 代理一致
+                  const splitSegments = splitLongTranscript(text, beginTime, endTime);
+                  for (const seg of splitSegments) {
+                    // 去重——跟 DashScope 代理一致
+                    let replaces;
+                    const nextFinal = {
+                      id: `seg-${sentenceIndex}`,
+                      text: seg.text,
+                      beginTime: seg.beginTime,
+                      endTime: seg.endTime,
+                    };
+                    if (lastFinalSegment && shouldDedupSegment(lastFinalSegment, nextFinal, dedupSimilarity, dedupGapMs)) {
+                      replaces = [lastFinalSegment.id];
+                    }
+
+                    sendClientEvent({
+                      event: 'result',
+                      provisional: false,
+                      replaces,
+                      sentence: {
+                        id: `seg-${sentenceIndex++}`,
+                        text: seg.text,
+                        beginTime: seg.beginTime,
+                        endTime: seg.endTime,
+                        isFinal: true,
+                        confidence: 0.95,
+                        itemId,
+                      },
+                      speakerId,
+                    });
+                    lastFinalSegment = nextFinal;
+                  }
+                } else {
+                  // 中间结果
+                  sendClientEvent({
+                    event: 'interim',
+                    itemId,
+                    text,
+                    provisional: true,
+                    beginTime,
+                    endTime,
+                    speakerId,
+                  });
+                }
+              } catch (e) {
+                console.error('[Speaker-ASR-Proxy] Parse error:', e);
+              }
+            });
+
+            tencentWs.on('unexpected-response', (req, res) => {
+              console.error('[Speaker-ASR-Proxy] Unexpected HTTP response:', res.statusCode, res.statusMessage);
+              let body = '';
+              res.on('data', (chunk) => { body += chunk; });
+              res.on('end', () => {
+                console.error('[Speaker-ASR-Proxy] Response body:', body.substring(0, 500));
+              });
+              sendClientEvent({ event: 'error', error: `腾讯云握手失败: HTTP ${res.statusCode} ${res.statusMessage}` });
+            });
+
+            tencentWs.on('error', (error) => {
+              console.error('[Speaker-ASR-Proxy] Tencent error:', error.message);
+              const authFailed = /4002|4003|鉴权|未开通/.test(error.message || '');
+              if (authFailed) {
+                sendClientEvent({ event: 'auth_failed', error: `腾讯云鉴权失败：${error.message}` });
+                clientWs.close(4401, 'Tencent auth failed');
+              } else {
+                sendClientEvent({ event: 'error', error: `腾讯云连接错误: ${error.message}` });
+              }
+            });
+
+            tencentWs.on('close', (code, reason) => {
+              console.log('[Speaker-ASR-Proxy] Tencent closed:', code, String(reason || ''));
+              isReady = false;
+              if (clientWs.readyState === WebSocket.OPEN) {
+                sendClientEvent({ event: 'finished' });
+                sendClientEvent({ event: 'closed', code });
+                if (code !== 1000 && !stopRequested) {
+                  clientWs.close(1000, 'Tencent disconnected');
+                }
+              }
+            });
+          }
+          return;
+        }
+
+        if (msg.action === 'stop') {
+          stopRequested = true;
+          if (tencentWs && tencentWs.readyState === WebSocket.OPEN) {
+            tencentWs.send(JSON.stringify({ type: 'end' }));
+          }
+          setTimeout(() => {
+            if (tencentWs && tencentWs.readyState === WebSocket.OPEN) {
+              tencentWs.close(1000, 'Client stop');
+            }
+          }, 2000);
+        }
+      } catch {
+        // ignore
+      }
+    });
+
+    clientWs.on('close', () => {
+      console.log('[Speaker-ASR-Proxy] Client disconnected');
+      stopRequested = true;
+      if (tencentWs && tencentWs.readyState === WebSocket.OPEN) {
+        tencentWs.send(JSON.stringify({ type: 'end' }));
+        setTimeout(() => {
+          if (tencentWs && tencentWs.readyState === WebSocket.OPEN) {
+            tencentWs.close(1000, 'Client disconnected');
+          }
+        }, 1000);
+      }
+    });
+
+    clientWs.on('error', (error) => {
+      console.error('[Speaker-ASR-Proxy] Client error:', error.message);
+    });
   });
 
   asrWss.on('connection', (clientWs) => {

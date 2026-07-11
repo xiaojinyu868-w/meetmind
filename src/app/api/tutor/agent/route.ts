@@ -136,7 +136,7 @@ const BodySchema = z.object({
     z.object({
       id: z.string().optional(),
       role: z.enum(['user', 'assistant', 'system']),
-      content: z.string().optional(),
+      content: z.union([z.string(), z.array(z.any())]).optional(),
       parts: z.array(z.any()).optional(),
     }),
   ),

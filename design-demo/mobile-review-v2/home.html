@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>MeetMind · 采集台首页</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Instrument+Serif:ital@0;1&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<script>
+tailwind.config = { theme: { extend: {
+  colors: {
+    pine: '#2D4F3E', 'pine-deep': '#1F3A2E', 'pine-mist': '#E8F0EC',
+    vermilion: '#B5483C', 'vermilion-mist': '#F5E6E3',
+    paper: '#FAF7F2', 'paper-warm': '#F2EDE3',
+    ink: '#1C1B19', 'ink-secondary': '#4A4844', 'ink-muted': '#8C887F',
+    canvas: '#F5F1EA', divider: '#E8E2D5',
+  },
+  fontFamily: {
+    sans: ['Inter', 'system-ui', 'sans-serif'],
+    serif: ['Instrument Serif', 'serif'],
+    mono: ['JetBrains Mono', 'monospace'],
+  }
+}}}
+</script>
+<style>
+  * { -webkit-tap-highlight-color: transparent; }
+  body { font-family: 'Inter', system-ui, sans-serif; background: #1a1a1a; overscroll-behavior: none; }
+  .phone-frame {
+    width: 390px; height: 844px; background: #FAF7F2;
+    border-radius: 44px; overflow: hidden; position: relative;
+    box-shadow: 0 0 0 12px #2a2a2a, 0 0 0 13px #3a3a3a, 0 40px 80px rgba(0,0,0,0.5);
+  }
+  .feed-scroll::-webkit-scrollbar { display: none; }
+
+  @keyframes octo-breath { 0%,100%{transform:scale(1)} 50%{transform:scale(1.04)} }
+  .octo-breath { animation: octo-breath 3.5s ease-in-out infinite; }
+
+  @keyframes rec-pulse { 0%,100%{opacity:1} 50%{opacity:.5} }
+  .rec-dot { animation: rec-pulse 1.4s ease-in-out infinite; }
+
+  @keyframes card-in { from{opacity:0;transform:translateY(8px)} to{opacity:1;transform:translateY(0)} }
+  .card-in { animation: card-in 0.4s ease-out both; }
+
+  @keyframes fade-in { from{opacity:0} to{opacity:1} }
+  .fade-in { animation: fade-in 0.3s ease-out both; }
+
+  .capture-btn { transition: all 0.15s ease; }
+  .capture-btn:active { transform: scale(0.95); }
+</style>
+</head>
+<body class="flex items-center justify-center min-h-screen p-4">
+
+<div class="phone-frame flex flex-col bg-canvas">
+  <!-- ── Top Bar (minimal) ── -->
+  <div class="flex-shrink-0 bg-paper px-4 pt-[max(env(safe-area-inset-top),12px)] pb-2.5">
+    <div class="flex items-center justify-between">
+      <div class="flex items-center gap-2">
+        <div class="relative h-8 w-8 octo-breath">
+          <div class="absolute inset-0 rounded-full bg-pine-mist overflow-hidden">
+            <img src="octo/idle.png" alt="Octo" class="h-full w-full object-cover">
+          </div>
+        </div>
+        <div>
+          <p class="text-[13px] font-semibold text-ink leading-tight">MeetMind</p>
+          <p class="font-mono text-[9px] text-ink-muted" id="todayLabel">7月3日 · 周四</p>
+        </div>
+      </div>
+      <div class="flex items-center gap-2">
+        <button class="flex h-8 w-8 items-center justify-center rounded-full text-ink-muted hover:bg-paper-warm">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
+        </button>
+        <div class="h-7 w-7 rounded-full bg-paper-warm overflow-hidden ring-1 ring-divider">
+          <div class="h-full w-full flex items-center justify-center text-[10px] font-medium text-ink-muted">林</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Capture Home (Hero) ── -->
+  <div class="flex-shrink-0 px-4 pt-3 pb-4">
+    <h1 class="font-serif text-[24px] leading-[1.15] tracking-[-0.02em] text-ink mb-3">
+      今天学点什么？
+    </h1>
+
+    <!-- Three capture buttons -->
+    <div class="grid grid-cols-3 gap-2.5">
+      <!-- 录音 (primary, largest) -->
+      <button class="capture-btn col-span-3 flex items-center gap-3 rounded-[18px] bg-ink p-3.5 text-left" onclick="showToast('开始录音…')">
+        <div class="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full bg-vermilion/20">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#B5483C" stroke-width="2"><path d="M12 2a3 3 0 00-3 3v7a3 3 0 006 0V5a3 3 0 00-3-3z"/><path d="M19 10v2a7 7 0 01-14 0v-2M12 19v3"/></svg>
+        </div>
+        <div class="min-w-0 flex-1">
+          <p class="text-[14px] font-semibold text-white">录一节课</p>
+          <p class="text-[11px] text-white/50 mt-0.5">课堂 · 讲座 · 随时听</p>
+        </div>
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-opacity="0.4"><path d="M5 12h14M13 5l7 7-7 7"/></svg>
+      </button>
+
+      <!-- 拍照 -->
+      <button class="capture-btn rounded-[16px] bg-white border border-divider p-3 text-center" onclick="showToast('拍照采集')">
+        <div class="flex h-9 w-9 mx-auto items-center justify-center rounded-full bg-vermilion-mist mb-1.5">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#B5483C" stroke-width="2"><path d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z"/><circle cx="12" cy="13" r="4"/></svg>
+        </div>
+        <p class="text-[12px] font-semibold text-ink">拍一下</p>
+        <p class="text-[9.5px] text-ink-muted mt-0.5">板书 · 公式</p>
+      </button>
+
+      <!-- 速记 -->
+      <button class="capture-btn rounded-[16px] bg-white border border-divider p-3 text-center" onclick="showToast('速记')">
+        <div class="flex h-9 w-9 mx-auto items-center justify-center rounded-full bg-pine-mist mb-1.5">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#2D4F3E" stroke-width="2"><path d="M12 20h9M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+        </div>
+        <p class="text-[12px] font-semibold text-ink">速记</p>
+        <p class="text-[9.5px] text-ink-muted mt-0.5">文字 · 想法</p>
+      </button>
+    </div>
+  </div>
+
+  <!-- ── Recent Captures (上下文流) ── -->
+  <div class="flex-1 min-h-0 overflow-hidden flex flex-col">
+    <!-- Section label -->
+    <div class="flex items-baseline gap-2 px-4 pb-2 flex-shrink-0">
+      <span class="font-mono text-[10px] font-semibold uppercase tracking-[0.08em] text-ink-secondary">最近采集</span>
+      <span class="font-mono text-[10px] font-medium tabular-nums text-ink-muted/70">05</span>
+      <span class="ml-1 h-px flex-1 bg-divider" aria-hidden></span>
+    </div>
+
+    <!-- Feed -->
+    <div class="feed-scroll flex-1 min-h-0 overflow-y-auto px-4 pb-4 space-y-2">
+
+      <!-- Today's recording (ready, has digest) -->
+      <div class="card-in rounded-[16px] bg-white border border-divider p-3 active:scale-[0.99] transition cursor-pointer" onclick="window.location.href='index.html'">
+        <div class="flex items-start gap-3">
+          <!-- Recording icon -->
+          <div class="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full bg-pine-mist">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#2D4F3E" stroke-width="2"><path d="M12 2a3 3 0 00-3 3v7a3 3 0 006 0V5a3 3 0 00-3-3z"/><path d="M19 10v2a7 7 0 01-14 0v-2"/></svg>
+          </div>
+          <div class="min-w-0 flex-1">
+            <p class="text-[13px] font-semibold text-ink truncate">梯度下降与学习率</p>
+            <p class="text-[11px] text-ink-muted mt-0.5">今天 14:20 · 45分钟</p>
+            <div class="mt-1.5 flex items-center gap-1.5">
+              <span class="inline-flex items-center gap-0.5 rounded-full bg-pine-mist px-1.5 py-0.5 text-[9px] font-medium text-pine">
+                <svg width="8" height="8" viewBox="0 0 24 24" fill="currentColor"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg>
+                已理解
+              </span>
+              <span class="font-mono text-[9px] text-ink-muted">4段笔记 · 2张板书</span>
+            </div>
+          </div>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#8C887F" stroke-width="2" class="flex-shrink-0 mt-1"><path d="M9 18l6-6-6-6"/></svg>
+        </div>
+      </div>
+
+      <!-- Today's quick note -->
+      <div class="card-in rounded-[16px] bg-white border border-divider p-3 active:scale-[0.99] transition cursor-pointer" style="animation-delay:.05s" onclick="showToast('打开速记')">
+        <div class="flex items-start gap-3">
+          <div class="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full bg-paper-warm">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#4A4844" stroke-width="2"><path d="M12 20h9M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+          </div>
+          <div class="min-w-0 flex-1">
+            <p class="text-[13px] font-medium text-ink truncate">多目标优化要用帕累托前沿…</p>
+            <p class="text-[11px] text-ink-muted mt-0.5">今天 11:30 · 速记</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Yesterday's recording (processing) -->
+      <div class="card-in rounded-[16px] bg-white border border-divider p-3" style="animation-delay:.1s">
+        <div class="flex items-start gap-3">
+          <div class="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full bg-paper-warm">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#8C887F" stroke-width="2"><path d="M12 2a3 3 0 00-3 3v7a3 3 0 006 0V5a3 3 0 00-3-3z"/><path d="M19 10v2a7 7 0 01-14 0v-2"/></svg>
+          </div>
+          <div class="min-w-0 flex-1">
+            <p class="text-[13px] font-medium text-ink-muted truncate">线性代数：特征值分解</p>
+            <p class="text-[11px] text-ink-muted mt-0.5">昨天 10:15 · 52分钟</p>
+            <div class="mt-1.5 flex items-center gap-1.5">
+              <span class="inline-flex items-center gap-1 rounded-full bg-paper-warm px-1.5 py-0.5 text-[9px] font-medium text-ink-muted">
+                <span class="h-1.5 w-1.5 rounded-full bg-pine rec-dot"></span>
+                正在理解…
+              </span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Photo capture -->
+      <div class="card-in rounded-[16px] bg-white border border-divider p-3 active:scale-[0.99] transition cursor-pointer" style="animation-delay:.15s" onclick="showToast('打开照片')">
+        <div class="flex items-start gap-3">
+          <div class="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg bg-vermilion-mist overflow-hidden">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#B5483C" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="9" cy="9" r="2"/><path d="M21 15l-5-5L5 21"/></svg>
+          </div>
+          <div class="min-w-0 flex-1">
+            <p class="text-[13px] font-medium text-ink truncate">课后补充照片 · 课件截图</p>
+            <p class="text-[11px] text-ink-muted mt-0.5">昨天 18:42 · 3张</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Older recording (ready) -->
+      <div class="card-in rounded-[16px] bg-white border border-divider p-3 active:scale-[0.99] transition cursor-pointer" style="animation-delay:.2s" onclick="showToast('打开历史录音')">
+        <div class="flex items-start gap-3">
+          <div class="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full bg-pine-mist">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#2D4F3E" stroke-width="2"><path d="M12 2a3 3 0 00-3 3v7a3 3 0 006 0V5a3 3 0 00-3-3z"/><path d="M19 10v2a7 7 0 01-14 0v-2"/></svg>
+          </div>
+          <div class="min-w-0 flex-1">
+            <p class="text-[13px] font-medium text-ink truncate">数据结构：红黑树</p>
+            <p class="text-[11px] text-ink-muted mt-0.5">7月1日 · 38分钟</p>
+            <div class="mt-1.5 flex items-center gap-1.5">
+              <span class="inline-flex items-center gap-0.5 rounded-full bg-pine-mist px-1.5 py-0.5 text-[9px] font-medium text-pine">
+                <svg width="8" height="8" viewBox="0 0 24 24" fill="currentColor"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg>
+                已复习
+              </span>
+            </div>
+          </div>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#8C887F" stroke-width="2" class="flex-shrink-0 mt-1"><path d="M9 18l6-6-6-6"/></svg>
+        </div>
+      </div>
+
+      <div class="h-4"></div>
+    </div>
+  </div>
+
+  <!-- Toast -->
+  <div id="toast" class="absolute left-1/2 top-20 -translate-x-1/2 rounded-full bg-ink px-4 py-2 text-[12px] font-medium text-white opacity-0 transition-opacity duration-200 pointer-events-none z-50">Toast</div>
+</div>
+
+<script>
+  // Today label
+  const now = new Date();
+  const m = now.getMonth() + 1;
+  const d = now.getDate();
+  const weekdays = ['周日','周一','周二','周三','周四','周五','周六'];
+  const w = weekdays[now.getDay()];
+  document.getElementById('todayLabel').textContent = `${m}月${d}日 · ${w}`;
+
+  // Toast
+  let toastTimer;
+  function showToast(msg) {
+    const toast = document.getElementById('toast');
+    toast.textContent = msg;
+    toast.style.opacity = '1';
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => toast.style.opacity = '0', 1800);
+  }
+</script>
+</body>
+</html>

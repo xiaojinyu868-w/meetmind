@@ -29,6 +29,8 @@ export interface LiveSentenceInput {
   startMs: number;
   isInterim: boolean;
   translation?: string;
+  /** 说话人标识（说话人分离后回填，录音中为 undefined） */
+  speakerId?: string;
 }
 
 export interface StitchedSentence {
@@ -37,6 +39,8 @@ export interface StitchedSentence {
   text: string;
   translation: string | undefined;
   isInterim: boolean;
+  /** 说话人标识（取缓冲区第一片的 speakerId） */
+  speakerId: string | undefined;
 }
 
 const MAX_BUFFER_CHARS = 110;
@@ -52,6 +56,7 @@ export function stitchLiveSentences(rows: LiveSentenceInput[]): StitchedSentence
     rowIds: string[];
     chars: string;
     translations: string[];
+    speakerId: string | undefined;
   };
   let buf: Buffer | null = null;
 
@@ -68,6 +73,7 @@ export function stitchLiveSentences(rows: LiveSentenceInput[]): StitchedSentence
       text,
       translation: buf.translations.length > 0 ? buf.translations.join(' / ') : undefined,
       isInterim: false,
+      speakerId: buf.speakerId,
     });
     buf = null;
   };
@@ -84,13 +90,14 @@ export function stitchLiveSentences(rows: LiveSentenceInput[]): StitchedSentence
           text,
           translation: undefined,
           isInterim: true,
+          speakerId: row.speakerId,
         });
       }
       continue;
     }
 
     if (!buf) {
-      buf = { startMs: row.startMs, rowIds: [], chars: '', translations: [] };
+      buf = { startMs: row.startMs, rowIds: [], chars: '', translations: [], speakerId: row.speakerId };
     }
 
     const incoming = row.text;

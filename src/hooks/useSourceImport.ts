@@ -138,7 +138,8 @@ export interface SourceImportReturn {
 
   handleImportFiles: (
     files: FileList | File[],
-    pickerMode?: 'audio' | 'support' | 'all'
+    pickerMode?: 'audio' | 'support' | 'all',
+    options?: { sessionId?: string; capturedAtMs?: number }
   ) => Promise<void>;
 
   handleSourceFileButtonClick: (mode?: 'audio' | 'support' | 'all') => void;
@@ -274,7 +275,8 @@ export function useSourceImport(
 
   const handleImportFiles = useCallback(async (
     files: FileList | File[],
-    pickerMode: 'audio' | 'support' | 'all' = 'all'
+    pickerMode: 'audio' | 'support' | 'all' = 'all',
+    options?: { sessionId?: string; capturedAtMs?: number }
   ) => {
     const fileList = Array.from(files || []);
     if (fileList.length === 0) return;
@@ -390,6 +392,7 @@ export function useSourceImport(
               status: 'ready',
               statusText: undefined,
               origin: 'user',
+              capturedAtMs: options?.capturedAtMs,
             });
             void persistCaptureToWorkspace({
               sourceType: 'support-import',
@@ -405,6 +408,8 @@ export function useSourceImport(
                 from: 'file-import',
                 fileType: parsed.fileType,
                 fileName: file.name,
+                capturedAtMs: options?.capturedAtMs,
+                sessionId: options?.sessionId,
               },
             });
             importedReferenceTexts.push(
@@ -613,7 +618,21 @@ export function useSourceImport(
   const handleSourceFileInputChange = useCallback((event: ChangeEvent<HTMLInputElement>) => {
     const files = event.target.files;
     if (files && files.length > 0) {
-      void handleImportFiles(files, sourceFilePickerMode);
+      // 课中拍照透传：从 input dataset 读取 capturedAtMs 和 sessionId
+      const input = event.target;
+      const capturedAtMsStr = input.dataset.capturedAtMs;
+      const sessionIdFromInput = input.dataset.sessionId;
+      const capturedAtMs = capturedAtMsStr ? Number(capturedAtMsStr) : undefined;
+      const sessionId = sessionIdFromInput || undefined;
+      const hasOptions = capturedAtMs !== undefined || sessionId !== undefined;
+      void handleImportFiles(
+        files,
+        sourceFilePickerMode,
+        hasOptions ? { capturedAtMs, sessionId } : undefined,
+      );
+      // 清理 dataset
+      delete input.dataset.capturedAtMs;
+      delete input.dataset.sessionId;
     }
     if (sourceFileInputRef.current) {
       sourceFileInputRef.current.value = '';
