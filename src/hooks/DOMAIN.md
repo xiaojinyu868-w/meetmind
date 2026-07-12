@@ -71,6 +71,7 @@ hooks → stores + types + lib/db + lib/utils
 | `useTopics.ts` | 129 | 精选片段生成（调用 API）— ⚠️ UI 入口已移除，仅后台数据能力保留 |
 | `useTranscript.ts` | 121 | 转录数据请求（调用 API） |
 | `useTutor.ts` | 164 | AI 家教交互（调用 API） |
+| `useFeedStream.ts` | ~190 | 今日情报请求与缓存：按工作区上下文/目标签名缓存 6 小时，先恢复可用旧结果再后台刷新；收集或目标变化时自动失效，并过滤本机已标记不相关的卡片 |
 
 ## ⚠️ 超标文件
 

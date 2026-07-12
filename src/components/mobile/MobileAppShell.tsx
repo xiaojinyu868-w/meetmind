@@ -14,6 +14,7 @@ import { Mic, Camera, Edit3, Paperclip, ChevronRight, ChevronDown, Layers, Zap, 
 import type { SourceIngestItem } from '@/types/page-types';
 import type { TranscriptSegment } from '@/types';
 import { getSpeakerLabel, getSpeakerColorClass } from '@/lib/services/asr/diarization-service';
+import { CrossCourseFeedPanel } from '@/components/CrossCourseFeedPanel';
 
 export interface MobileAppShellProps {
   children?: React.ReactNode;
@@ -211,31 +212,33 @@ function HomeScreen({ p }: { p: MobileAppShellProps }) {
           </button>
         </div>
 
-        {/* Echo 卡 — AI 每日生成的可分享整理卡，不是"笔记" */}
-        {echo && (
+        {/* 今日情报：整理只是入口，还会给出上下文关联和外部发现。 */}
+        {(echo || p.collectionFeedItems.length > 0) && (
           <div className="mb-4 m-card-in cursor-pointer" onClick={() => push('echo')}>
             <div className="rounded-[18px] border border-pine/20 bg-pine-mist/50 p-4 shadow-soft active:scale-[0.99] transition">
               <div className="flex items-center gap-2 mb-2.5">
                 <div className="h-7 w-7 rounded-full bg-pine-mist flex items-center justify-center overflow-hidden m-octo-breath flex-shrink-0">
                   <img src="/images/octo-buddy/happy.png" alt="" className="h-full w-full object-cover" />
                 </div>
-                <span className="font-mono text-[9px] font-semibold uppercase tracking-[0.08em] text-pine">今天的整理</span>
-                <span className="font-mono text-[9px] text-ink-muted ml-auto">{echo.createdAt ? new Date(echo.createdAt).toLocaleDateString('zh-CN',{month:'numeric',day:'numeric'}) : new Date().toLocaleDateString('zh-CN',{month:'numeric',day:'numeric'})}</span>
+                <span className="font-mono text-[9px] font-semibold uppercase tracking-[0.08em] text-pine">今日情报</span>
+                <span className="font-mono text-[9px] text-ink-muted ml-auto">{echo?.createdAt ? new Date(echo.createdAt).toLocaleDateString('zh-CN',{month:'numeric',day:'numeric'}) : new Date().toLocaleDateString('zh-CN',{month:'numeric',day:'numeric'})}</span>
               </div>
               <p className="text-[13px] font-semibold leading-[1.5] text-ink mb-1.5" style={{ display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
-                {echo.title || '今天的学习整理'}
+                {echo?.title || '你收集的内容正在形成新线索'}
               </p>
               <p className="text-[12px] leading-[1.65] text-ink-secondary" style={{ display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
-                {(echo.body||'').slice(0, 200)}{echo.body && echo.body.length > 200 ? '…' : ''}
+                {echo?.body
+                  ? `${echo.body.slice(0, 200)}${echo.body.length > 200 ? '…' : ''}`
+                  : `基于 ${p.collectionFeedItems.length} 条收藏和你的目标，寻找值得继续看的内外部信息。`}
               </p>
-              {echo.takeaway && (
+              {echo?.takeaway && (
                 <div className="mt-2.5 flex items-start gap-1.5 rounded-lg bg-vermilion-mist/50 px-2.5 py-1.5">
                   <span className="font-mono text-[9px] font-semibold text-vermilion flex-shrink-0">带走</span>
                   <p className="text-[11px] leading-relaxed text-ink-secondary">{echo.takeaway}</p>
                 </div>
               )}
               <p className="mt-2.5 text-[11px] font-medium text-pine flex items-center gap-1">
-                查看完整整理 <ChevronRight size={10} strokeWidth={2.5} />
+                查看今日情报 <ChevronRight size={10} strokeWidth={2.5} />
               </p>
             </div>
           </div>
@@ -1095,11 +1098,10 @@ function ClassmateScreen({ p }: { p: MobileAppShellProps }) {
   );
 }
 
-// ═══ Echo 详情（AI 每日整理卡） ═══
+// ═══ 今日情报（个人上下文 + 目标驱动） ═══
 
 function EchoScreen({ p }: { p: MobileAppShellProps }) {
   const { pop } = useMobileNav();
-  const echoes = p.echoList ?? p.workspaceEchoes;
   return (
     <div className="flex-1 min-h-0 flex flex-col bg-[#FAF7F2] m-page-in">
       <div className="flex-shrink-0 bg-paper px-4 pt-[max(env(safe-area-inset-top),12px)] pb-2.5 border-b border-divider/60">
@@ -1111,48 +1113,25 @@ function EchoScreen({ p }: { p: MobileAppShellProps }) {
             <div className="h-6 w-6 rounded-full bg-pine-mist overflow-hidden m-octo-breath">
               <img src="/images/octo-buddy/happy.png" alt="" className="h-full w-full object-cover" />
             </div>
-            <p className="text-[15px] font-semibold text-ink">今天的整理</p>
+            <div>
+              <p className="text-[15px] font-semibold text-ink">今日情报</p>
+              <p className="mt-0.5 text-[9px] text-ink-muted">由你的收藏与目标决定</p>
+            </div>
           </div>
         </div>
       </div>
       <div className="flex-1 min-h-0 overflow-y-auto px-4 py-4 pb-20 mm-mobile-scroll" style={{ WebkitOverflowScrolling: 'touch' }}>
-        {echoes.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-12">
-            <div className="h-14 w-14 rounded-full bg-pine-mist flex items-center justify-center overflow-hidden mb-3">
-              <img src="/images/octo-buddy/idle.png" alt="" className="h-full w-full object-cover" />
-            </div>
-            <p className="text-[12px] text-ink-muted">还没有整理。多收集几条内容，同桌会帮你整理。</p>
-          </div>
-        ) : (
-          <div className="space-y-4">
-            {echoes.map((echo, i) => (
-              <div key={echo.id} className="m-card-in rounded-[20px] border border-pine/15 bg-white p-4 shadow-soft" style={{ animationDelay: `${i * 0.05}s` }}>
-                <div className="flex items-center gap-2 mb-2.5">
-                  <div className="h-7 w-7 rounded-full bg-pine-mist flex items-center justify-center overflow-hidden m-octo-breath flex-shrink-0">
-                    <img src="/images/octo-buddy/happy.png" alt="" className="h-full w-full object-cover" />
-                  </div>
-                  <span className="font-mono text-[9px] font-semibold uppercase tracking-[0.08em] text-pine">每日整理</span>
-                  <span className="font-mono text-[9px] text-ink-muted ml-auto">{echo.createdAt ? new Date(echo.createdAt).toLocaleDateString('zh-CN',{month:'numeric',day:'numeric'}) : ''}</span>
-                </div>
-                <p className="text-[15px] font-semibold text-ink mb-2 leading-[1.4]" style={{ display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{echo.title}</p>
-                <p className="text-[13px] leading-[1.75] text-ink-secondary">{echo.body}</p>
-                {echo.takeaway && (
-                  <div className="mt-3 flex items-start gap-2 rounded-lg bg-vermilion-mist/50 px-3 py-2">
-                    <span className="font-mono text-[9px] font-semibold text-vermilion flex-shrink-0 mt-0.5">带走</span>
-                    <p className="text-[12px] leading-relaxed text-ink-secondary">{echo.takeaway}</p>
-                  </div>
-                )}
-                {echo.chips && echo.chips.length > 0 && (
-                  <div className="mt-3 flex flex-wrap gap-1.5">
-                    {echo.chips.slice(0, 4).map((chip, ci) => (
-                      <span key={ci} className="rounded-full bg-paper-warm px-2.5 py-0.5 text-[10px] font-medium text-ink-muted">{chip}</span>
-                    ))}
-                  </div>
-                )}
-              </div>
-            ))}
-          </div>
-        )}
+        <CrossCourseFeedPanel
+          onAddContext={() => {
+            pop();
+            window.requestAnimationFrame(() => p.composerRef.current?.focus());
+          }}
+          onOpenCapture={(captureId) => {
+            const item = p.collectionFeedItems.find((capture) => capture.id === captureId);
+            if (item) p.onOpenReview(item);
+          }}
+          onAskTutor={(text) => p.onQuickAsk?.(text)}
+        />
       </div>
     </div>
   );

@@ -8,6 +8,24 @@ export interface FallbackCheckpointInput {
   endMs: number;
 }
 
+/** 流式转录还没走到 checkpoint 时，取时间上最接近的少量证据做诚实兜底。 */
+export function selectNearestTranscriptSegments(
+  segments: TranscriptSegment[],
+  startMs: number,
+  endMs: number,
+  limit = 3
+): TranscriptSegment[] {
+  const midpoint = (startMs + endMs) / 2;
+  return [...segments]
+    .sort((a, b) => {
+      const aMidpoint = (a.startMs + a.endMs) / 2;
+      const bMidpoint = (b.startMs + b.endMs) / 2;
+      return Math.abs(aMidpoint - midpoint) - Math.abs(bMidpoint - midpoint);
+    })
+    .slice(0, Math.max(1, limit))
+    .sort((a, b) => a.startMs - b.startMs);
+}
+
 function compactQuestionText(value: string, limit: number): string {
   const normalized = String(value || '').replace(/\s+/g, ' ').trim();
   if (!normalized) return '';

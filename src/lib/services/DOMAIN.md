@@ -48,7 +48,7 @@ api/route.ts → services → lib/utils, lib/db, lib/config
 | `gemini-image-service.ts` | 361 | Gemini 图像生成（via undyingapi 代理） |
 | `qwen-image-service.ts` | 146 | 通义千问图像生成 |
 | `volc-podcast.ts` | 582 | 火山引擎播客 TTS（WebSocket 双向流式） |
-| `web-search-service.ts` | 381 | 联网搜索（Bing/SerpAPI/DuckDuckGo） |
+| `web-search-service.ts` | 381 | 服务端联网搜索（Bing/SerpAPI/DuckDuckGo HTML + Instant Answer fallback）；`webSearchExact` 为今日情报返回真实结果，不要求用户安装插件 |
 
 ### 📦 Workspace 数据管线
 
@@ -61,7 +61,8 @@ api/route.ts → services → lib/utils, lib/db, lib/config
 | `workspace-echo-service.ts` | ~1300 | 每日回响生成（AI 洞察/金句/推荐）；CommonStack 新 schema 不返回 title，需从 takeaway / echo 生成标题后再进质量门 |
 | `workspace-search-service.ts` | 175 | 全局 AI 检索（流式带引用） |
 | `commonstack-echo-service.ts` | 273 | Echo LLM 调用（System Prompt 在此） |
-| `feed-service.ts` | ~370 | M15 信息流生成：`generateFeed`（单课遗留）+ `generateCrossCourseFeed`（跨课程，默认；基于 workspace captures + 画像 + 笔记，替代笔记总结） |
+| `feed-service.ts` | ~500 | 今日情报生成：以 workspace captures、明确目标和反馈为上下文，生成今日整理、收藏内部关联与外部发现；外部候选经来源质量底线、目标相关性和 LLM 编辑筛选后才展示，不做固定人群画像 |
+| `feed-preference-service.ts` | ~120 | 今日情报长期偏好：从账号 Feedback 读取有用/不相关记录，并与当前设备即时反馈合并；同一内容以设备最新判断优先 |
 
 ### 👤 用户 / 认证
 

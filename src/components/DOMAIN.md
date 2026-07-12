@@ -89,9 +89,9 @@ components/
 | `CollectionComposerContextPreview.tsx` | 62 | composer 上方的引用与链接预览条 |
 | `CollectionComposerBar.tsx` | 168 | collection composer 输入区容器（预览 / textarea / 发送 / 听写 / 上传） |
 | `CollectionMessageActionSheet.tsx` | ~283 | 收集消息操作菜单（引用/问 Tutor/多选/复习/编辑/打开原件/归档/删除），从 page.tsx 提取 |
-| `mobile/MobileCollectionSheet.tsx` | ~400 | 收集菜单 / 历史收集 / 相关信息面板；移动端底部或侧边 sheet，桌面端以右侧上下文抽屉呈现；M15 起 echo 分支换成 `<CrossCourseFeedPanel>` |
-| `CrossCourseFeedPanel.tsx` | ~245 | M15 跨课程信息流面板（替代笔记总结）：LLM 跨课程探针 + B站推荐 + Echo 沉淀卡三源合并为统一 `FeedItem[]` 流，复用 `<FeedStream>` 渲染 |
-| `FeedStream.tsx` | ~245 | 信息流列表渲染器：`FeedCard` 按 type 分发（summary / probe-* / confusion-link / bili-recommend / echo），支持 `onAction` / `onShareEcho` 回调 |
+| `mobile/MobileCollectionSheet.tsx` | ~400 | 收集菜单 / 历史收集 / 今日情报面板；移动端底部或侧边 sheet，桌面端以具备 dialog 语义的右侧上下文抽屉呈现；情报空态可返回收集补充上下文 |
+| `CrossCourseFeedPanel.tsx` | ~180 | 个人上下文与目标驱动的情报面板：今日整理 + 收藏内部关联 + MeetMind 服务端外部发现，对用户零配置；保留上次结果并在后台刷新，失败不清空旧内容 |
+| `FeedStream.tsx` | ~245 | 今日情报列表渲染器：分区呈现今日整理 / 收藏内部发现 / 外部发现，展示推荐理由、证据与关联目标；支持有用/不相关反馈及外链打开 |
 | `CollectionFeedMessageBubble.tsx` | ~340 | 收集 Feed 单条消息气泡（audio/video/image/document/text 五种类型），从 page.tsx 提取 |
 | `CollectionEmptyState.tsx` | ~82 | 收集为空时引导页（录音/图片/讲义快捷入口），从 page.tsx 提取 |
 | `ImageUpload.tsx` | ~220 | 图片上传 |
@@ -103,7 +103,7 @@ components/
 | 文件 | 行数 | 职责 |
 |------|------|------|
 | `Header.tsx` | ~280 | 顶部导航栏 |
-| `DesktopSidebar.tsx` | ~374 | 桌面侧栏（默认 168px，折叠 52px；录课专注态强制 52px；「收集 → 相关信息」子导航 M15 起打开跨课程信息流抽屉，原「笔记总结」入口已替换） |
+| `DesktopSidebar.tsx` | ~374 | 桌面侧栏（默认 168px，折叠 52px；录课专注态强制 52px）；「今日情报」是常驻一级入口，可从任意工作区打开个人上下文与目标驱动的情报抽屉 |
 | `AppLoading.tsx` | ~120 | 进入学习现场时的品牌过渡；只表达恢复状态和真实进度，不展示初始化、服务连接等工程阶段 |
 | `ModelSelector.tsx` | ~260 | AI 模型选择器 |
 | `WechatBindForm.tsx` | ~280 | 微信绑定表单 |
@@ -113,7 +113,7 @@ components/
 
 | 文件 | 行数 | 职责 |
 |------|------|------|
-| `WorkshopYellowPage.tsx` | 897 | Workshop 黄页导航 |
+| `WorkshopYellowPage.tsx` | 897 | Workshop 工具箱黄页；按需使用六类工具，不提供隐含高成本的一键批量生成 |
 | `windows/WorkshopWindowManager.tsx` | ~580 | 浮窗管理器 |
 | `windows/InfographicWindow.tsx` | ~700 | 信息图浮窗，类型/常量/工具已拆到 `infographic-window-data.ts` |
 | `windows/infographic-window-data.ts` | 305 | 信息图类型/场景预设/风格预设/纯工具函数 |

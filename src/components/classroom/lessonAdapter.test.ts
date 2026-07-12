@@ -40,4 +40,19 @@ describe('audioSessionToLesson transcription state', () => {
     expect(lesson.status).toBe('failed');
     expect(lesson.statusText).toBe('原声已保留');
   });
+
+  it('stops claiming an empty stale session is still processing', () => {
+    const lesson = audioSessionToLesson(
+      session({
+        createdAt: new Date(Date.now() - 2 * 60 * 60 * 1000),
+        updatedAt: new Date(Date.now() - 2 * 60 * 60 * 1000),
+        blob: undefined,
+        mediaUrl: undefined,
+      }),
+      { hasTranscript: false },
+    );
+
+    expect(lesson.status).toBe('failed');
+    expect(lesson.statusText).toBe('没有留下可用内容');
+  });
 });

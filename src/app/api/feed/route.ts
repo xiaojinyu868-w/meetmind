@@ -21,8 +21,20 @@ import { NextRequest, NextResponse } from 'next/server';
 import { feedService, type CrossCourseCapture } from '@/lib/services/feed-service';
 import { applyRateLimit } from '@/lib/utils/rate-limit';
 import { createLogger } from '@/lib/logger';
+import type { FeedPreference } from '@/lib/feed-preferences';
+import { authService } from '@/lib/services/auth-service';
+import {
+  loadAccountFeedPreferences,
+  mergeFeedPreferences,
+} from '@/lib/services/feed-preference-service';
 
 const log = createLogger('api/feed');
+
+function getAuthenticatedUserId(request: NextRequest): string | null {
+  const token = request.headers.get('Authorization')?.replace(/^Bearer\s+/i, '')
+    || request.cookies.get('accessToken')?.value;
+  return token ? authService.verifyToken(token)?.sub ?? null : null;
+}
 
 interface FeedRequest {
   mode?: 'cross-course' | 'single';
@@ -43,6 +55,7 @@ interface FeedRequest {
     goals?: Array<{ title: string; summary?: string }>;
   };
   notes?: Array<{ text: string; source: string }>;
+  feedback?: FeedPreference[];
   confusions?: Array<{ text: string; timestampLabel?: string }>;
   sessionInfo?: {
     subject?: string;
@@ -72,9 +85,13 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
         );
       }
 
+      const userId = getAuthenticatedUserId(request);
+      const accountFeedback = userId ? await loadAccountFeedPreferences(userId) : [];
+      const feedback = mergeFeedPreferences(body.feedback, accountFeedback);
       const result = await feedService.generateCrossCourseFeed(body.captures, {
         learnerProfile: body.learnerProfile,
         notes: body.notes,
+        feedback,
       });
 
       return NextResponse.json({ success: true, items: result.items });

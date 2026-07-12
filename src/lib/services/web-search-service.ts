@@ -21,10 +21,44 @@ const MAX_RESULTS = 5; // 最大返回结果数
 const BING_API_KEY = process.env.BING_SEARCH_API_KEY;
 const SERP_API_KEY = process.env.SERP_API_KEY;
 
-interface SearchOptions {
+export interface SearchOptions {
   maxResults?: number;
   language?: string;
   market?: string;
+}
+
+/**
+ * 执行精确查询，只返回搜索引擎真实命中。
+ * 信息流使用这个入口，避免把通用搜索页伪装成编辑推荐。
+ */
+export async function webSearchExact(query: string, options: SearchOptions = {}): Promise<Citation[]> {
+  let results: RawSearchResult[] = [];
+  const searchMethods = [
+    { name: 'Bing', fn: () => bingSearch(query, options), available: !!BING_API_KEY },
+    { name: 'SerpAPI', fn: () => serpApiSearch(query, options), available: !!SERP_API_KEY },
+    { name: 'DuckDuckGo HTML', fn: () => duckDuckGoHtmlSearch(query, options), available: true },
+    { name: 'DuckDuckGo Instant', fn: () => duckDuckGoSearch(query, options), available: true },
+  ];
+
+  for (const method of searchMethods) {
+    if (!method.available) continue;
+    try {
+      results = await method.fn();
+      if (results.length > 0) break;
+    } catch (error) {
+      log.warn(`[WebSearchExact] ${method.name} failed:`, error);
+    }
+  }
+
+  return results
+    .filter((result) => result.title && result.url && result.snippet)
+    .map((result, index) => ({
+      id: `web-exact-${Date.now()}-${index}`,
+      title: result.title,
+      url: result.url,
+      snippet: result.snippet,
+      source_type: 'web' as const,
+    }));
 }
 
 interface RawSearchResult {
@@ -225,6 +259,62 @@ async function duckDuckGoSearch(query: string, options: SearchOptions = {}): Pro
   }
 }
 
+/** DuckDuckGo HTML 结果页：无密钥，但能返回真实网页结果。 */
+async function duckDuckGoHtmlSearch(query: string, options: SearchOptions = {}): Promise<RawSearchResult[]> {
+  const { maxResults = MAX_RESULTS } = options;
+  const url = `https://html.duckduckgo.com/html/?q=${encodeURIComponent(query)}`;
+  try {
+    const response = await fetch(url, {
+      headers: { 'user-agent': 'Mozilla/5.0 (compatible; MeetMind/1.0)' },
+      signal: AbortSignal.timeout(SEARCH_TIMEOUT),
+    });
+    if (!response.ok) throw new Error(`DuckDuckGo HTML search failed: ${response.status}`);
+    const html = await response.text();
+    const blocks = html.split(/<div[^>]+class="result results_links[^>]*>/i).slice(1);
+    const results: RawSearchResult[] = [];
+
+    for (const block of blocks) {
+      const titleMatch = block.match(/<a[^>]*class="result__a"[^>]*href="([^"]+)"[^>]*>([\s\S]*?)<\/a>/i);
+      const snippetMatch = block.match(/<a[^>]*class="result__snippet"[^>]*>([\s\S]*?)<\/a>/i);
+      if (!titleMatch || !snippetMatch) continue;
+      const resolvedUrl = resolveDuckDuckGoResultUrl(decodeHtml(titleMatch[1]));
+      if (!resolvedUrl) continue;
+      results.push({
+        title: stripHtml(titleMatch[2]),
+        url: resolvedUrl,
+        snippet: stripHtml(snippetMatch[1]),
+      });
+      if (results.length >= maxResults) break;
+    }
+    return results;
+  } catch (error) {
+    log.warn('DuckDuckGo HTML search failed:', error);
+    return [];
+  }
+}
+
+function resolveDuckDuckGoResultUrl(value: string): string {
+  try {
+    const url = new URL(value.startsWith('//') ? `https:${value}` : value, 'https://duckduckgo.com');
+    return url.searchParams.get('uddg') || url.toString();
+  } catch {
+    return '';
+  }
+}
+
+function stripHtml(value: string): string {
+  return decodeHtml(value.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim());
+}
+
+function decodeHtml(value: string): string {
+  return value
+    .replace(/&amp;/g, '&')
+    .replace(/&quot;/g, '"')
+    .replace(/&#x27;|&#39;/g, "'")
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>');
+}
+
 /**
  * 基于教育资源的搜索（构建可靠的搜索结果）
  * 当外部 API 不可用时，返回基于内容的推荐资源
@@ -333,7 +423,8 @@ export async function webSearch(context: string, options: SearchOptions = {}): P
   const searchMethods = [
     { name: 'Bing', fn: () => bingSearch(query, options), available: !!BING_API_KEY },
     { name: 'SerpAPI', fn: () => serpApiSearch(query, options), available: !!SERP_API_KEY },
-    { name: 'DuckDuckGo', fn: () => duckDuckGoSearch(query, options), available: true },
+    { name: 'DuckDuckGo HTML', fn: () => duckDuckGoHtmlSearch(query, options), available: true },
+    { name: 'DuckDuckGo Instant', fn: () => duckDuckGoSearch(query, options), available: true },
   ];
   
   for (const method of searchMethods) {

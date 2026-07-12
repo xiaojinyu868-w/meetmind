@@ -140,10 +140,10 @@ export function ClassroomHero({
           </div>
 
           <h1 className="max-w-[720px] text-[44px] font-semibold leading-[1.04] tracking-[-0.055em] text-ink sm:text-[58px] lg:text-[68px]">
-            {COPY.identity.tagline}
+            {COPY.hero.title}
           </h1>
           <p className="mt-6 max-w-[620px] text-[16px] leading-8 text-ink-secondary sm:text-[17px]">
-            {COPY.identity.subtagline}
+            {COPY.hero.subtitle}
           </p>
 
           <div className="mt-9">

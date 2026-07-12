@@ -1,5 +1,4 @@
 import type { Metadata, Viewport } from 'next';
-import { Inter, Instrument_Serif, JetBrains_Mono } from 'next/font/google';
 import './globals.css';
 import { AuthProvider } from '@/lib/hooks/useAuth';
 import { SWRProvider } from '@/lib/swr';
@@ -8,37 +7,6 @@ import { NetworkStatusBanner } from '@/components/NetworkStatusBanner';
 import { Toaster } from 'sonner';
 import { ServiceWorkerRegister } from '@/components/ServiceWorkerRegister';
 import { COPY } from '@/lib/ui/copy';
-
-/**
- * v7 字体三件套：
- * - Inter         · 正文（紧排 'palt' 中英混排立刻 +30% 高级感）
- * - Instrument Serif · 仪式字（标题里偶尔的 italic em，老学院感）
- * - JetBrains Mono   · 引用资产化（[MM:SS] / [资料 N] 专用）
- */
-const inter = Inter({
-  subsets: ['latin'],
-  display: 'swap',
-  preload: true,
-  variable: '--font-inter',
-  weight: ['300', '400', '500', '600', '700', '800'],
-});
-
-const instrumentSerif = Instrument_Serif({
-  subsets: ['latin'],
-  display: 'swap',
-  preload: false,
-  variable: '--font-instrument-serif',
-  weight: ['400'],
-  style: ['normal', 'italic'],
-});
-
-const jetBrainsMono = JetBrains_Mono({
-  subsets: ['latin'],
-  display: 'swap',
-  preload: false,
-  variable: '--font-jetbrains-mono',
-  weight: ['400', '500', '600'],
-});
 
 export const metadata: Metadata = {
   title: `MeetMind - ${COPY.identity.tagline}`,
@@ -74,10 +42,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html
-      lang="zh-CN"
-      className={`${inter.variable} ${instrumentSerif.variable} ${jetBrainsMono.variable}`}
-    >
+    <html lang="zh-CN">
       <head>
         <meta name="mobile-web-app-capable" content="yes" />
         <link rel="icon" href="/icons/icon-192x192.svg" type="image/svg+xml" />
@@ -87,7 +52,7 @@ export default function RootLayout({
         {/* Preload OctoBuddy thinking.png — 课中加载态首次显示时消除白屏 */}
         <link rel="preload" as="image" href="/images/octo-buddy/thinking.png" />
       </head>
-      <body className={inter.className}>
+      <body>
         <AuthProvider>
           <SWRProvider>
             <AnalyticsProvider>

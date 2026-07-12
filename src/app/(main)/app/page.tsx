@@ -49,7 +49,6 @@ import { useActionItems } from '@/hooks/useActionItems';
 import { useExtractTerms } from '@/hooks/useExtractTerms';
 import { useSourceItemManagement } from '@/hooks/useSourceItemManagement';
 import { WorkspaceCaptureEditorModal } from '@/components/WorkspaceCaptureEditorModal';
-import { DesktopVideoReviewLayout } from '@/components/DesktopVideoReviewLayout';
 import type {
   TranscriptSegment,
   ActionItem,
@@ -74,6 +73,7 @@ import {
 } from '@/lib/utils/page-utils';
 import { useResponsive } from '@/hooks/useResponsive';
 import { UIConfig } from '@/lib/config';
+import { COPY } from '@/lib/ui/copy';
 
 // SWR data hooks for API state management.
 import { useTopics, useSummary } from '@/hooks/data';
@@ -111,6 +111,10 @@ import {
 // These components are not needed for initial render and are lazy-loaded
 // to drastically reduce the main JS bundle size.
 const ActionList = dynamic(() => import('@/components/ActionList').then(m => ({ default: m.ActionList })), { ssr: false });
+const DesktopVideoReviewLayout = dynamic(
+  () => import('@/components/DesktopVideoReviewLayout').then(m => ({ default: m.DesktopVideoReviewLayout })),
+  { ssr: false }
+);
 // NOTE: ActionSidebar, ActionDrawer, ResizablePanel, VideoReviewPlayer, TranscriptFlowView,
 // VideoInsightTimeline, ReviewWorkspacePanel, ReviewTutorPanel → now imported inside DesktopVideoReviewLayout.
 const VideoReviewPlayer = dynamic(() => import('@/components/VideoReviewPlayer').then(m => ({ default: m.VideoReviewPlayer })), { ssr: false });
@@ -352,10 +356,36 @@ function StudentAppContent({
   useEffect(() => {
     if (forcedWorkspaceAppliedRef.current) return;
     if (forcedWorkspaceTab !== 'apps') return;
+    forcedWorkspaceAppliedRef.current = true;
     setReviewTab('apps');
     setVideoWorkspaceTab('apps');
-    forcedWorkspaceAppliedRef.current = true;
-  }, [forcedWorkspaceTab, setReviewTab, setVideoWorkspaceTab]);
+    setViewMode('review');
+
+    // 深链可能从独立应用结果页或新标签返回。有现有课堂就复用；
+    // 没有上下文时加载示例课，避免进入一个所有工具都无法使用的空壳。
+    if (segments.length === 0) {
+      void loadDemoData().then((demoData) => {
+        setSegments(demoData.DEMO_SEGMENTS);
+        setAnchors(demoData.DEMO_ANCHORS);
+        setAudioUrl(demoData.DEMO_AUDIO_URL);
+        setVideoSource(null);
+        setDataSource('demo');
+      }).catch((error) => {
+        console.error('Failed to load demo context for apps workspace:', error);
+      });
+    }
+  }, [
+    forcedWorkspaceTab,
+    segments.length,
+    setAnchors,
+    setAudioUrl,
+    setDataSource,
+    setReviewTab,
+    setSegments,
+    setVideoSource,
+    setVideoWorkspaceTab,
+    setViewMode,
+  ]);
   const { clear: clearTopics } = useTopics({ sessionId, segments });
   
   const {
@@ -1498,9 +1528,7 @@ function StudentAppContent({
                 >
                   <span className="text-[12px] text-[#D3E4F4]">✦</span>
                   <span className="min-w-0 flex-1 truncate text-left text-[13px] leading-5 text-[#5C5A55]">
-                    {workspaceEchoes.length === 1
-                      ? '同桌整理了一条笔记总结'
-                      : `同桌整理了 ${workspaceEchoes.length} 条笔记总结`}
+                    今日情报已根据你的收藏更新
                   </span>
                   <ChevronRight size={14} className="flex-shrink-0 text-[#8E8B82]" />
                 </button>
@@ -1579,6 +1607,10 @@ function StudentAppContent({
         onDeleteCapture={deleteCollectionListItem}
         onEditCapture={editWorkspaceCaptureFromList}
         onAISearch={() => setShowAISearch(true)}
+        onAddContext={() => {
+          setMobileCollectionSheet(null);
+          window.requestAnimationFrame(() => collectionComposerRef.current?.focus());
+        }}
       />
 
       {isCollectionContextSelectionMode && selectedCollectionContextItems.length > 0 ? (
@@ -1785,8 +1817,11 @@ function StudentAppContent({
           }}
           onOpenEcho={() => {
             setShowMobileRecorder(false);
-            setMobileCollectionSheet('echo');
+            void handleViewModeChange('record').then(() => {
+              setMobileCollectionSheet('echo');
+            });
           }}
+          isEchoActive={mobileCollectionSheet === 'echo'}
           echoCount={workspaceEchoes.length}
           reviewTab={reviewTab}
           onReviewTabChange={(tab) => setReviewTab(tab as typeof reviewTab)}
@@ -2199,7 +2234,7 @@ function StudentAppContent({
                         <div className="h-5 w-5 rounded-full bg-pine-mist overflow-hidden flex-shrink-0">
                           <img src="/images/octo-buddy/happy.png" alt="Octo" className="h-full w-full object-cover" />
                         </div>
-                        <span className="font-mono text-[9px] font-semibold uppercase tracking-[0.08em] text-pine">今天的笔记</span>
+                        <span className="font-mono text-[9px] font-semibold uppercase tracking-[0.08em] text-pine">{COPY.feed.relatedInfoLabel}</span>
                       </div>
                       {(() => {
                         const echo = workspaceEchoes[0];

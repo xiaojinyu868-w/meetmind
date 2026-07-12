@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { buildFallbackCheckpointQuestions } from './question-fallback';
-import { selectNearestTranscriptSegments } from './route';
+import {
+  buildFallbackCheckpointQuestions,
+  selectNearestTranscriptSegments,
+} from './question-fallback';
 import type { TranscriptSegment } from '@/types';
 
 const transcript: TranscriptSegment[] = [

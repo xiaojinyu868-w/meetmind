@@ -10,7 +10,7 @@
  *   - 角色：一个叫"同学"的 AI 同桌。像朋友，不像老师，不像客服
  *   - 说话方式：安静、直接、克制
  *   - 禁用词：回声卡 / 酿 / 预知气泡 / 工坊 / 研判 / 引擎 / 引导
- *   - 首选词：笔记总结 / 整理 / 预感 / 应用 / 同学
+ *   - 首选词：收藏 / 整理 / 情报 / 应用 / 同学
  *
  * 使用约定：
  *   - 所有出现在用户界面（非日志/埋点）的字符串必须 import { COPY }
@@ -21,8 +21,8 @@
 export const COPY = {
   identity: {
     name: '同学',
-    tagline: '陪你听懂每一节课。',
-    subtagline: '老师讲到哪，我就听到哪。卡住时当场问；下课后，每个答案都能回到原话。',
+    tagline: '把你收下的，变成下一条有用的信息。',
+    subtagline: '基于你的整理、收藏和目标，自动发现值得继续看的内外部信息。',
   },
 
   cta: {
@@ -40,12 +40,12 @@ export const COPY = {
 
   collection: {
     askClassmate: '问同学',
-    deleteMemoryWarning: '删除后，这条内容不会再进入同学的回答、相关信息和后续记忆。',
-    permanentDeleteWarning: '彻底删除后，这条内容不会再进入同学的回答、相关信息和后续记忆。',
+    deleteMemoryWarning: '删除后，这条内容不会再进入同学的回答、后续情报和个人上下文。',
+    permanentDeleteWarning: '彻底删除后，这条内容不会再进入同学的回答、后续情报和个人上下文。',
   },
 
   login: {
-    subtitle: '和同学一起，把每节课真正听懂。',
+    subtitle: '把你每天收下的内容，变成下一条有用的信息。',
     guestCta: '先试听一节课',
   },
 
@@ -58,6 +58,8 @@ export const COPY = {
 
   hero: {
     eyebrow: 'MEETMIND · AI 同学',
+    title: '陪你听懂每一节课。',
+    subtitle: '老师讲到哪，我就听到哪。卡住时当场问；下课后，每个答案都能回到原话。',
     sideHint: '先听 90 秒示例课',
     evidencePromise: '回答有依据，点击时间就能回到老师原话。',
     proofStatus: '正在一起听',
@@ -225,10 +227,32 @@ export const COPY = {
     /** tab 标签（单课复习态遗留，跨课程信息流改走侧栏抽屉） */
     tabLabel: '信息流',
     /** 侧栏「收集 → 相关信息」子导航文案 */
-    relatedInfoLabel: '相关信息',
+    relatedInfoLabel: '今日情报',
     /** 抽屉标题——替换原「笔记总结」 */
-    drawerTitle: '相关信息',
-    drawerSubtitle: '同学从你收集过的内容里整理的方向，加上他帮你找的延伸。',
+    drawerTitle: '今日情报',
+    drawerSubtitle: '基于你的整理、收藏和学习目标，把内部线索与外部值得看的内容放到一起。',
+    todayBrief: '今日整理',
+    internalDiscoveries: '从你的收藏里发现',
+    internalDiscoveriesHint: '不是复述，而是把跨课程、跨来源的线索接起来。',
+    externalDiscoveries: '值得从外部看',
+    externalDiscoveriesHint: '只推与你当前线索有关、能带来新信息的内容。',
+    useful: '有用',
+    notRelevant: '不相关',
+    feedbackUseful: '已记下，以后多找这类内容',
+    feedbackDismissed: '已减少这类推荐',
+    refresh: '更新',
+    addContext: '补一条线索',
+    refreshing: '正在根据最新上下文更新',
+    notGeneratedYet: '等待第一次整理',
+    updatedJustNow: '刚刚更新',
+    updatedMinutesAgo: (minutes: number): string => `${minutes} 分钟前更新`,
+    updatedAt: (time: string): string => `今日 ${time} 更新`,
+    refreshFailedKeepingPrevious: '这次没更新成，先保留上一版。',
+    contextBasis: (captures: number, goals: number): string => (
+      goals > 0 ? `基于 ${captures} 条收藏 · ${goals} 个当前目标` : `基于 ${captures} 条收藏`
+    ),
+    sourceCount: (count: number): string => `来自 ${count} 条收藏`,
+    goalAlignment: (goal: string): string => `对齐目标「${goal}」`,
     /** 生成中（跨课程） */
     loading: '同学正在从你收集的内容里挑对你重要的方向…',
     /** 空状态（没有收集内容） */
@@ -246,6 +270,7 @@ export const COPY = {
     typeProbeLateral: '相关方向',
     typeProbeBridge: '跨界',
     typeConfusionLink: '你标记的困惑',
+    typeWebRecommend: '外部资料',
     typeBiliRecommend: '同学帮你找的',
     typeEcho: '同桌沉淀',
     /** echo 卡分享按钮 */
@@ -256,19 +281,10 @@ export const COPY = {
     actionAskTutor: '让同学解释',
     actionReviewPrev: '看上节课',
     actionOpenCapture: '看这条收集',
+    actionOpenExternal: '打开原文',
     actionOpenBilibili: '在 B站看',
     /** whyForYou 前缀 */
     whyPrefix: '对你',
-    /** OpenBiliClaw B站内容推荐区（Phase 2） */
-    obSectionHint: '基于你的课堂内容和 B站收藏',
-    obIntroCardHint: '在 OpenBiliClaw 装上浏览器扩展、登录 B 站，这里的卡片会自动出现。',
-    obInstallButton: '装浏览器扩展',
-    obInstallUrl: 'https://github.com/whiteguo233/OpenBiliClaw/releases/latest',
-    obSkipButton: '现在不用',
-    obOtherBrowsersNote: 'Firefox / 360 / QQ / 百度 等浏览器',
-    obReleasesLinkText: '去 Releases 下载',
-    obSafariNote: 'Safari 暂不支持',
-    obWatchOnBilibili: '在 B站看',
   },
 
   /**

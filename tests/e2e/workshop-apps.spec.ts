@@ -50,13 +50,8 @@ async function openDbInBrowser(page: Page): Promise<void> {
 }
 
 async function openApp(page: Page): Promise<void> {
-  await page.goto('/app?guest=1');
-  await expect(page.getByTestId('mode-review-button')).toBeVisible();
-}
-
-async function enterReviewMode(page: Page): Promise<void> {
-  await page.getByTestId('mode-review-button').click();
-  await expect(page.getByTestId('waveform-current-time')).toBeVisible();
+  await page.goto('/app?guest=1&workspace=apps');
+  await expect(page.getByTestId('workshop-card-flashcards')).toBeVisible({ timeout: 120_000 });
 }
 
 async function mockWorkshopApis(page: Page): Promise<void> {
@@ -183,25 +178,19 @@ test.describe('Workshop Apps', () => {
   test('cache keys are isolated by sessionId + appKey', async ({ page }) => {
     await mockWorkshopApis(page);
     await openApp(page);
-    await enterReviewMode(page);
 
-    await page.getByTestId('review-tab-apps').click();
     await expect(page.getByTestId('workshop-card-flashcards')).toBeVisible();
     await expect(page.getByTestId('workshop-card-quiz')).toBeVisible();
 
     await page.getByTestId('workshop-open-app-flashcards').click();
     await expect(page).toHaveURL(/\/app/);
-    await expect(page.getByTestId('workshop-window-flashcards-fullscreen')).toBeVisible();
+    await expect(page.getByTestId('review-learning-workspace')).toBeVisible();
     await expect(page.getByTestId('flashcards-window')).toBeVisible();
-    await page
-      .getByTestId('workshop-window-flashcards-fullscreen')
-      .getByRole('button', { name: '关闭窗口' })
-      .click();
-    await expect(page.getByTestId('workshop-window-flashcards-fullscreen')).toHaveCount(0);
+    await page.getByRole('button', { name: '应用', exact: true }).click();
+    await expect(page.getByTestId('workshop-card-quiz')).toBeVisible();
 
     await page.getByTestId('workshop-open-app-quiz').click();
     await expect(page).toHaveURL(/\/app/);
-    await expect(page.getByTestId('workshop-window-quiz-fullscreen')).toBeVisible();
     await expect(page.getByTestId('quiz-window')).toBeVisible();
 
     const isolation = await page.evaluate(() => {

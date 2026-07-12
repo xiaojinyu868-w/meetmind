@@ -12,7 +12,7 @@
    2. 双签名色仅在"信号时刻"出现（< 8% 面积）
    3. 投影必须存在但极克制（不是 v6 的"封杀"）
    4. AI 在场必须可见（surface-ai · stream · 思考气息）
-   5. 字 80%：Inter + Instrument Serif + JetBrains Mono
+   5. 字 80%：原生无衬线 + 学院衬线 + 等宽引用字体
    6. 暗色模式 first-class（不是反色，是深夜书房）
 
    色彩系统：
@@ -35,6 +35,11 @@
 
 /* === v7 设计令牌 === */
 :root {
+  /* 字体不依赖构建时外网；优先使用系统中有性格且可靠的字体。 */
+  --font-inter: 'Avenir Next', 'SF Pro Text', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
+  --font-instrument-serif: 'Iowan Old Style', 'Baskerville', 'Songti SC', 'STSong', serif;
+  --font-jetbrains-mono: 'SFMono-Regular', 'Cascadia Code', 'Roboto Mono', Menlo, Consolas, monospace;
+
   /* ===== 空间骨架（v7） ===== */
   --mm-paper: #FAF7F2;            /* v7 主底色 · 米白纸感 */
   --mm-paper-warm: #F2EDE3;
@@ -296,7 +301,7 @@ body {
   height: 100%;
   min-height: 100dvh;
   min-height: -webkit-fill-available;
-  font-family: 'Inter', var(--font-inter), -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
+  font-family: var(--font-inter);
   /* v7: 中英混排紧排（'palt' 让中文标点更紧） */
   font-feature-settings: 'cv11', 'ss01', 'ss03', 'palt', 'kern';
   font-optical-sizing: auto;

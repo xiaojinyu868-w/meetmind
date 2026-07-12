@@ -161,7 +161,7 @@ function StatusBadge({ lesson }: { lesson: Lesson }) {
   if (lesson.status === 'failed') {
     return (
       <span className="inline-flex items-center rounded-full bg-paper-warm px-2.5 py-1 text-[11px] font-medium text-ink-muted whitespace-nowrap">
-        原声已保留
+        {lesson.statusText?.trim() || '原声已保留'}
       </span>
     );
   }

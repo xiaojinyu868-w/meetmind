@@ -55,8 +55,10 @@ interface DesktopSidebarProps {
   onOpenAISearch: () => void;
   /** 打开"全部收集"面板 */
   onOpenHistory: () => void;
-  /** 打开“相关信息”面板（原笔记总结，M15 起并入跨课程信息流） */
+  /** 打开“今日情报”面板 */
   onOpenEcho: () => void;
+  /** 今日情报面板是否正在展示 */
+  isEchoActive?: boolean;
   /** 同桌沉淀数量 badge */
   echoCount: number;
   /** 复习模式：当前选中的 reviewTab */
@@ -77,6 +79,7 @@ export function DesktopSidebar({
   onOpenAISearch,
   onOpenHistory,
   onOpenEcho,
+  isEchoActive = false,
   echoCount,
   reviewTab,
   onReviewTabChange,
@@ -196,7 +199,7 @@ export function DesktopSidebar({
       <nav className={`flex flex-col gap-0.5 ${effectiveCollapsed ? 'px-1.5' : 'px-2.5'} pt-0.5`}>
         {navItems.map(({ key, label, Icon }) => {
           // review 状态下高亮课堂 tab（复习是课堂的下钻状态）
-          const isActive = viewMode === key || (key === 'classroom' && viewMode === 'review');
+          const isActive = !isEchoActive && (viewMode === key || (key === 'classroom' && viewMode === 'review'));
           return (
             <div key={key}>
               <button
@@ -221,7 +224,7 @@ export function DesktopSidebar({
                 {!effectiveCollapsed && <span>{label}</span>}
               </button>
 
-              {/* ── 收集模式的子导航：全部收集 / 相关信息 ── */}
+              {/* 收集的管理入口；今日情报已提升为一级导航。 */}
               {key === 'record' && isActive && !effectiveCollapsed && (
                 <div className="ml-[18px] mt-0.5 flex flex-col gap-0.5 border-l border-divider/80 pl-2.5">
                   <button
@@ -231,19 +234,6 @@ export function DesktopSidebar({
                   >
                     <Boxes size={13} strokeWidth={1.6} className="flex-shrink-0" />
                     <span>{COPY.navigation.allCollections}</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={onOpenEcho}
-                    className="flex items-center gap-2 rounded-md px-2 py-[5px] text-[12.5px] text-ink-secondary transition-all hover:bg-paper-warm hover:text-ink"
-                  >
-                    <Sparkles size={13} strokeWidth={1.6} className="flex-shrink-0" />
-                    <span>{COPY.feed.relatedInfoLabel}</span>
-                    {echoCount > 0 && (
-                      <span className="inline-flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-ink px-1.5 text-[11px] font-semibold leading-none text-white">
-                        {echoCount}
-                      </span>
-                    )}
                   </button>
                 </div>
               )}
@@ -259,19 +249,6 @@ export function DesktopSidebar({
                   >
                     <Boxes size={15} strokeWidth={1.6} />
                   </button>
-                  <button
-                    type="button"
-                    onClick={onOpenEcho}
-                    className="relative flex h-8 items-center justify-center rounded-lg text-ink-muted transition-all hover:bg-paper-warm hover:text-ink-secondary"
-                    title={COPY.feed.relatedInfoLabel}
-                  >
-                    <Sparkles size={15} strokeWidth={1.6} />
-                    {echoCount > 0 && (
-                      <span className="absolute -right-1 -top-1 inline-flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-ink px-1 text-[11px] font-bold leading-none text-white">
-                        {echoCount}
-                      </span>
-                    )}
-                  </button>
                 </div>
               )}
 
@@ -279,6 +256,25 @@ export function DesktopSidebar({
             </div>
           );
         })}
+
+        <button
+          type="button"
+          onClick={onOpenEcho}
+          className={`relative flex w-full items-center rounded-lg transition-all ${
+            effectiveCollapsed
+              ? `h-9 justify-center px-0 ${isEchoActive ? 'border border-divider bg-white text-ink' : 'text-ink-secondary hover:bg-paper-warm hover:text-ink'}`
+              : `gap-2.5 px-2.5 py-[7px] text-[13.5px] font-medium ${isEchoActive ? 'border border-divider bg-white text-ink' : 'text-ink-secondary hover:bg-paper-warm hover:text-ink'}`
+          }`}
+          title={effectiveCollapsed ? COPY.feed.relatedInfoLabel : undefined}
+        >
+          <Sparkles size={effectiveCollapsed ? 17 : 16} strokeWidth={1.7} className="flex-shrink-0" />
+          {!effectiveCollapsed && <span>{COPY.feed.relatedInfoLabel}</span>}
+          {echoCount > 0 && (
+            <span className={`${effectiveCollapsed ? 'absolute -right-1 -top-1' : 'ml-auto'} inline-flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-ink px-1.5 text-[11px] font-semibold leading-none text-white`}>
+              {echoCount}
+            </span>
+          )}
+        </button>
       </nav>
 
       {/* ── 弹性填充 ── */}

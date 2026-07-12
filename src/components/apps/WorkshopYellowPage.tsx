@@ -4,7 +4,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { toast } from 'sonner';
 import {
-  Zap,
   RotateCw,
   ExternalLink,
   ClipboardList,
@@ -744,26 +743,6 @@ export function WorkshopYellowPage(props: WorkshopYellowPageProps) {
     [appMap, buildAppHref, openAppSurface, router, sessionId]
   );
 
-  const generateAll = useCallback(() => {
-    // 课堂播客降级（PRD v1.1 §5.5）：移出"先做一版都做"批量入口。
-    // 它生成时间长（≥3 分钟）+ 用户场景是"通勤/吃饭单点听"而非桌前批量复习。
-    // 用户仍可在卡片"先做一版"按钮里单独触发。
-    const pending = visibleApps.filter(
-      (app) =>
-        app.key !== 'audio-overview' &&
-        !runningMap[app.key] &&
-        !generatedMap[app.key]
-    );
-    if (pending.length === 0) {
-      toast.message('所有应用已生成或正在生成中');
-      return;
-    }
-    for (const app of pending) {
-      void runInBackground(app);
-    }
-    toast.success(`已启动 ${pending.length} 个后台任务`);
-  }, [generatedMap, runInBackground, runningMap, visibleApps]);
-
   const dockList = useMemo(
     () =>
       Object.values(dockTasks)
@@ -812,31 +791,17 @@ export function WorkshopYellowPage(props: WorkshopYellowPageProps) {
   );
 
   const completedCount = useMemo(() => dockList.filter((task) => task.status === 'success').length, [dockList]);
-  const canBatchGenerate = visibleApps.some((app) => !runningMap[app.key] && !generatedMap[app.key]);
-
   return (
     <section className={styles.page}>
       <header className={styles.header}>
         <p className={styles.eyebrow}>这节课能做什么</p>
         <h2 className={styles.title}>学习应用</h2>
         <p className={styles.subTitle}>
-          把这节课变成练习、导图、播客和复习材料。先做一版，也可以进去慢慢看。
+          闪卡、测验、导图、播客都在这里。需要什么，就用什么。
         </p>
         <p className={styles.subStatus} data-testid="workshop-task-summary">
           {`${visibleApps.length} 个应用 · 已做好 ${generatedCount} 个${runningCount > 0 ? ` · 正在做 ${runningCount} 个` : ''}${failedCount > 0 ? ` · 需要处理 ${failedCount} 个` : ''}`}
         </p>
-        <div className={styles.headerActions}>
-          <button
-            type="button"
-            className={styles.generateAllButton}
-            onClick={generateAll}
-            disabled={!canBatchGenerate}
-            data-testid="workshop-generate-all"
-          >
-            <Zap size={14} strokeWidth={1.75} className="inline mr-1" />
-            把还没做的都做一版
-          </button>
-        </div>
       </header>
 
       {/* v3.0 SharedAgent · 「递结晶」入口

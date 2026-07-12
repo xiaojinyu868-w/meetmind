@@ -1,6 +1,10 @@
 'use client';
 
+import { useState } from 'react';
+import { Check, ThumbsDown, ThumbsUp } from 'lucide-react';
 import { COPY } from '@/lib/ui/copy';
+import { recordFeedPreference } from '@/lib/feed-preferences';
+import { readStoredAccessToken } from '@/lib/hooks/useAuth';
 import type { FeedItem, FeedItemType } from '@/types';
 
 // ─── 类型标签映射 ────────────────────────────────────────────
@@ -11,6 +15,7 @@ const TYPE_LABELS: Record<FeedItemType, string> = {
   'probe-lateral': COPY.feed.typeProbeLateral,
   'probe-bridge': COPY.feed.typeProbeBridge,
   'confusion-link': COPY.feed.typeConfusionLink,
+  'web-recommend': COPY.feed.typeWebRecommend,
   'bili-recommend': COPY.feed.typeBiliRecommend,
   echo: COPY.feed.typeEcho,
 };
@@ -21,6 +26,7 @@ const ACTION_LABELS: Record<string, string> = {
   'ask-tutor': COPY.feed.actionAskTutor,
   'review-prev': COPY.feed.actionReviewPrev,
   'open-capture': COPY.feed.actionOpenCapture,
+  'open-external': COPY.feed.actionOpenExternal,
   'open-bilibili': COPY.feed.actionOpenBilibili,
 };
 
@@ -56,7 +62,7 @@ interface FeedStreamProps {
 }
 
 export function FeedStream({ items, isLoading, error, onAction, onRetry, onShareEcho }: FeedStreamProps) {
-  if (isLoading) {
+  if (isLoading && items.length === 0) {
     return (
       <div className="flex flex-col items-center gap-3 py-12 text-center">
         <div className="h-1 w-24 animate-pulse rounded-full bg-pine-mist" />
@@ -65,7 +71,7 @@ export function FeedStream({ items, isLoading, error, onAction, onRetry, onShare
     );
   }
 
-  if (error) {
+  if (error && items.length === 0) {
     return (
       <div className="flex flex-col items-center gap-3 py-12 text-center">
         <p className="text-[13px] text-vermilion">{COPY.feed.error}</p>
@@ -90,12 +96,62 @@ export function FeedStream({ items, isLoading, error, onAction, onRetry, onShare
     );
   }
 
+  const briefItems = items.filter((item) => item.type === 'summary' || item.type === 'echo');
+  const externalItems = items.filter((item) => item.type === 'web-recommend' || item.type === 'bili-recommend');
+  const internalItems = items.filter((item) => !briefItems.includes(item) && !externalItems.includes(item));
+
   return (
-    <div className="flex flex-col gap-2.5">
-      {items.map((item, index) => (
-        <FeedCard key={`${item.type}-${index}`} item={item} onAction={onAction} onShareEcho={onShareEcho} />
-      ))}
+    <div className="space-y-7 pb-4">
+      <FeedSection title={COPY.feed.todayBrief} items={briefItems} onAction={onAction} onShareEcho={onShareEcho} />
+      <FeedSection
+        title={COPY.feed.internalDiscoveries}
+        hint={COPY.feed.internalDiscoveriesHint}
+        items={internalItems}
+        onAction={onAction}
+        onShareEcho={onShareEcho}
+      />
+      <FeedSection
+        title={COPY.feed.externalDiscoveries}
+        hint={COPY.feed.externalDiscoveriesHint}
+        items={externalItems}
+        onAction={onAction}
+        onShareEcho={onShareEcho}
+      />
     </div>
+  );
+}
+
+function FeedSection({
+  title,
+  hint,
+  items,
+  onAction,
+  onShareEcho,
+}: {
+  title: string;
+  hint?: string;
+  items: FeedItem[];
+  onAction?: (item: FeedItem) => void;
+  onShareEcho?: (echoId: string) => void;
+}) {
+  if (items.length === 0) return null;
+  return (
+    <section>
+      <div className="mb-2.5 px-0.5">
+        <h3 className="font-serif text-[17px] font-semibold tracking-[-0.02em] text-ink">{title}</h3>
+        {hint ? <p className="mt-1 text-[11px] leading-relaxed text-ink-muted">{hint}</p> : null}
+      </div>
+      <div className="flex flex-col gap-2.5">
+        {items.map((item, index) => (
+          <FeedCard
+            key={`${item.type}-${item.bvid || item.echoId || item.captureId || item.title}-${index}`}
+            item={item}
+            onAction={onAction}
+            onShareEcho={onShareEcho}
+          />
+        ))}
+      </div>
+    </section>
   );
 }
 
@@ -108,46 +164,85 @@ interface FeedCardProps {
 }
 
 function FeedCard({ item, onAction, onShareEcho }: FeedCardProps) {
-  // B站视频推荐卡（封面 + UP + 推荐理由）
-  if (item.type === 'bili-recommend') {
+  const [feedback, setFeedback] = useState<'up' | 'down' | null>(null);
+
+  const submitFeedback = (rating: 'up' | 'down') => {
+    setFeedback(rating);
+    recordFeedPreference(item, rating);
+    const identity = item.bvid || item.echoId || item.captureId || item.title;
+    const accessToken = readStoredAccessToken();
+    void fetch('/api/feedback/message', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+      },
+      body: JSON.stringify({
+        messageId: `feed:${item.type}:${identity}`,
+        rating,
+        mode: 'intelligence-feed',
+        messageText: `${item.title}\n${item.body}\n${item.whyForYou || ''}`.slice(0, 1000),
+      }),
+    }).catch(() => undefined);
+  };
+
+  if (feedback === 'down') {
+    return (
+      <div className="flex items-center gap-2 rounded-xl border border-divider/70 bg-paper px-3.5 py-3 text-[11px] text-ink-muted">
+        <Check size={13} className="text-pine" />
+        {COPY.feed.feedbackDismissed}
+      </div>
+    );
+  }
+
+  // 外部资料卡：MeetMind 服务端自动检索，不要求用户安装插件。
+  if (item.type === 'web-recommend' || item.type === 'bili-recommend') {
     const url = item.contentUrl || (item.bvid ? `https://www.bilibili.com/video/${item.bvid}` : '');
     return (
-      <a
-        href={url || undefined}
-        target="_blank"
-        rel="noopener noreferrer"
-        onClick={(e) => { if (!url) e.preventDefault(); onAction?.({ ...item, actionType: 'open-bilibili' }); }}
-        className="flex gap-3 rounded-xl border border-divider bg-card p-3 transition-colors hover:border-pine/30 hover:bg-paper"
-      >
-        {item.coverUrl && (
+      <div className="rounded-xl border border-divider bg-card p-3 transition-colors hover:border-pine/30">
+        <a
+          href={url || undefined}
+          target="_blank"
+          rel="noopener noreferrer"
+          onClick={(e) => { if (!url) e.preventDefault(); onAction?.({ ...item, actionType: item.type === 'web-recommend' ? 'open-external' : 'open-bilibili' }); }}
+          className="flex gap-3"
+        >
+          {item.coverUrl && (
           // eslint-disable-next-line @next/next/no-img-element
-          <img
-            src={item.coverUrl}
-            alt=""
-            className="h-[60px] w-[106px] flex-shrink-0 rounded-lg object-cover"
-            loading="lazy"
-            onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
-          />
+            <img
+              src={item.coverUrl}
+              alt=""
+              className="h-[60px] w-[106px] flex-shrink-0 rounded-lg object-cover"
+              loading="lazy"
+              onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+            />
+          )}
+          <div className="min-w-0 flex-1">
+            <p className="line-clamp-2 text-[13px] font-medium leading-snug text-ink">{item.title}</p>
+            {item.upName && <p className="mt-0.5 text-[11px] text-ink-muted">{item.upName}</p>}
+            {item.topicLabel && (
+              <span className="mt-1 inline-block rounded-md bg-pine-fog px-1.5 py-0.5 text-[10px] font-medium text-pine-deep">
+                {item.topicLabel}
+              </span>
+            )}
+          </div>
+        </a>
+        {item.body && <p className="mt-2 line-clamp-3 text-[11px] leading-relaxed text-ink-secondary">{item.body}</p>}
+        {item.whyForYou && (
+          <div className="mt-2.5 rounded-lg bg-vermilion-mist/40 px-2.5 py-2">
+            <p className="text-[10px] font-medium text-vermilion">{COPY.feed.whyPrefix}</p>
+            <p className="mt-0.5 text-[11px] leading-relaxed text-ink-secondary">{item.whyForYou}</p>
+            {(item.sourceCaptureIds?.length || item.goalLabel) ? (
+              <p className="mt-1 text-[10px] text-ink-muted">
+                {item.sourceCaptureIds?.length ? COPY.feed.sourceCount(item.sourceCaptureIds.length) : ''}
+                {item.sourceCaptureIds?.length && item.goalLabel ? ' · ' : ''}
+                {item.goalLabel ? COPY.feed.goalAlignment(item.goalLabel) : ''}
+              </p>
+            ) : null}
+          </div>
         )}
-        <div className="min-w-0 flex-1">
-          <p className="line-clamp-2 text-[13px] font-medium leading-snug text-ink">
-            {item.title}
-          </p>
-          {item.upName && (
-            <p className="mt-0.5 text-[11px] text-ink-muted">{item.upName}</p>
-          )}
-          {item.body && (
-            <p className="mt-1 line-clamp-2 text-[11px] italic leading-relaxed text-pine-light">
-              {item.body}
-            </p>
-          )}
-          {item.topicLabel && (
-            <span className="mt-1 inline-block rounded-md bg-pine-fog px-1.5 py-0.5 text-[10px] font-medium text-pine-deep">
-              {item.topicLabel}
-            </span>
-          )}
-        </div>
-      </a>
+        <FeedFeedback feedback={feedback} onFeedback={submitFeedback} />
+      </div>
     );
   }
 
@@ -191,6 +286,7 @@ function FeedCard({ item, onAction, onShareEcho }: FeedCardProps) {
             {COPY.feed.shareEcho}
           </button>
         )}
+        <FeedFeedback feedback={feedback} onFeedback={submitFeedback} />
       </div>
     );
   }
@@ -236,13 +332,20 @@ function FeedCard({ item, onAction, onShareEcho }: FeedCardProps) {
 
       {/* whyForYou */}
       {item.whyForYou && (
-        <p className="mt-2 text-[11px] italic leading-relaxed text-vermilion-light">
-          {COPY.feed.whyPrefix} · {item.whyForYou}
-        </p>
+        <div className="mt-2 rounded-lg bg-vermilion-mist/40 px-2.5 py-2 text-[11px] leading-relaxed text-vermilion-light">
+          <span className="font-medium">{COPY.feed.whyPrefix}</span> · {item.whyForYou}
+          {(item.sourceCaptureIds?.length || item.goalLabel) ? (
+            <p className="mt-1 text-[10px] text-ink-muted">
+              {item.sourceCaptureIds?.length ? COPY.feed.sourceCount(item.sourceCaptureIds.length) : ''}
+              {item.sourceCaptureIds?.length && item.goalLabel ? ' · ' : ''}
+              {item.goalLabel ? COPY.feed.goalAlignment(item.goalLabel) : ''}
+            </p>
+          ) : null}
+        </div>
       )}
 
       {/* 动作按钮 */}
-      {item.actionLabel && item.actionType && (
+      {item.actionType && (
         <button
           type="button"
           onClick={() => onAction?.(item)}
@@ -251,6 +354,36 @@ function FeedCard({ item, onAction, onShareEcho }: FeedCardProps) {
           {item.actionLabel || ACTION_LABELS[item.actionType]}
         </button>
       )}
+      <FeedFeedback feedback={feedback} onFeedback={submitFeedback} />
+    </div>
+  );
+}
+
+function FeedFeedback({
+  feedback,
+  onFeedback,
+}: {
+  feedback: 'up' | 'down' | null;
+  onFeedback: (rating: 'up' | 'down') => void;
+}) {
+  return (
+    <div className="mt-3 flex items-center gap-1.5 border-t border-divider/60 pt-2.5">
+      <button
+        type="button"
+        onClick={() => onFeedback('up')}
+        className={`inline-flex items-center gap-1 rounded-full px-2 py-1 text-[10px] transition-colors ${feedback === 'up' ? 'bg-pine-fog text-pine-deep' : 'text-ink-muted hover:bg-paper hover:text-ink-secondary'}`}
+      >
+        <ThumbsUp size={11} />
+        {feedback === 'up' ? COPY.feed.feedbackUseful : COPY.feed.useful}
+      </button>
+      <button
+        type="button"
+        onClick={() => onFeedback('down')}
+        className="inline-flex items-center gap-1 rounded-full px-2 py-1 text-[10px] text-ink-muted transition-colors hover:bg-paper hover:text-ink-secondary"
+      >
+        <ThumbsDown size={11} />
+        {COPY.feed.notRelevant}
+      </button>
     </div>
   );
 }

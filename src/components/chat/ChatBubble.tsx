@@ -20,6 +20,7 @@
 'use client';
 
 import * as React from 'react';
+import { readStoredAccessToken } from '@/lib/hooks/useAuth';
 import { ThumbsUp, ThumbsDown } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -227,9 +228,13 @@ export function ChatMessageFeedbackButtons({
       const previous = chosen;
       setChosen(rating); // optimistic
       try {
+        const accessToken = readStoredAccessToken();
         const resp = await fetch('/api/feedback/message', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: {
+            'Content-Type': 'application/json',
+            ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+          },
           body: JSON.stringify({
             messageId,
             rating,

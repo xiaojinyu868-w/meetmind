@@ -337,6 +337,7 @@ export type FeedItemType =
   | 'probe-lateral'   // 相关方向
   | 'probe-bridge'    // 跨界关联
   | 'confusion-link'   // 困惑点关联
+  | 'web-recommend'   // MeetMind 服务端自动找到的外部资料
   | 'bili-recommend'  // B站视频推荐（OpenBiliClaw）
   | 'echo';           // 同桌沉淀（并入信息流的 Echo 卡）
 
@@ -347,6 +348,7 @@ export type FeedActionType =
   | 'ask-tutor'        // 让同学解释
   | 'review-prev'      // 复习上节课
   | 'open-capture'     // 打开某条收集内容
+  | 'open-external'    // 打开外部资料
   | 'open-bilibili';   // 在 B站看
 
 /** 信息流单条条目 */
@@ -360,8 +362,12 @@ export interface FeedItem {
   actionLabel?: string;
   /** 动作类型 */
   actionType?: FeedActionType;
-  /** 为什么对你重要（基于个人画像的个性化理由） */
+  /** 为什么现在对你有用（必须有真实上下文根据） */
   whyForYou?: string;
+  /** 推荐所依据的用户收藏，用于让个性化可解释 */
+  sourceCaptureIds?: string[];
+  /** 本条推荐对齐的用户目标 */
+  goalLabel?: string;
   /** bili-recommend 专属：封面 */
   coverUrl?: string;
   /** bili-recommend 专属：UP 主 */

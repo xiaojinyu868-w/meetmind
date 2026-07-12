@@ -53,6 +53,7 @@ interface MobileCollectionSheetProps {
   onDeleteCapture: (capture: WorkspaceCaptureListItem) => void;
   onEditCapture: (capture: WorkspaceCaptureListItem, mode: WorkspaceCaptureEditorMode) => void;
   onAISearch: () => void;
+  onAddContext: () => void;
 }
 
 export function MobileCollectionSheet({
@@ -88,6 +89,7 @@ export function MobileCollectionSheet({
   onDeleteCapture,
   onEditCapture,
   onAISearch,
+  onAddContext,
 }: MobileCollectionSheetProps) {
   if (!mobileCollectionSheet) {
     return null;
@@ -102,13 +104,13 @@ export function MobileCollectionSheet({
             <div>
               <p className="text-2xl font-semibold tracking-[-0.02em] text-[#1C1B19]">收集</p>
               <p className="mt-1 text-[12px] text-[#5C5A55]">
-                已收 {captureActivitySummary.totalCount} 条 · 活跃 {captureActivitySummary.activeDays} 天 · 笔记总结{' '}
-                {workspaceEchoes.length} 条
+                已收 {captureActivitySummary.totalCount} 条 · 活跃 {captureActivitySummary.activeDays} 天
               </p>
             </div>
             <button
               type="button"
               onClick={onClose}
+              aria-label="关闭收集菜单"
               className="flex h-10 w-10 items-center justify-center rounded-[16px] border border-[#E8E2D5] text-[#5C5A55] transition hover:bg-[#FAF7F2] hover:text-[#1C1B19]"
             >
               <X size={16} />
@@ -159,7 +161,7 @@ export function MobileCollectionSheet({
             <div className="min-w-0 flex-1">
               <p className="text-sm font-semibold text-[#1C1B19]">{COPY.feed.relatedInfoLabel}</p>
               <p className="mt-0.5 text-xs leading-5 text-[#5C5A55]">
-                {workspaceEchoes.length > 0 ? '同桌从你收集的内容里整理了方向。' : '先继续收集，相关信息会安静出现。'}
+                {workspaceEchoes.length > 0 ? '同学正在把你的收藏与目标连起来。' : '先继续收集，有根据的情报会自动出现。'}
               </p>
             </div>
             <ChevronRight size={16} className="text-[#8E8B82]" />
@@ -188,7 +190,7 @@ export function MobileCollectionSheet({
         ) : (
           /* ── 桌面端：右侧上下文抽屉 ── */
           <div className={`${collectionChromeContained ? 'absolute inset-0' : 'fixed inset-0'} z-30 flex justify-end`}>
-            <div className="flex h-full w-[min(520px,calc(100vw-188px))] min-w-[420px] flex-col overflow-hidden border-l border-[#E8E2D5] bg-white animate-in fade-in slide-in-from-right-6 duration-200">
+            <div role="dialog" aria-modal="true" aria-label={COPY.feed.drawerTitle} className="flex h-full w-[min(520px,calc(100vw-188px))] min-w-[420px] flex-col overflow-hidden border-l border-[#E8E2D5] bg-white animate-in fade-in slide-in-from-right-6 duration-200">
               {moreContent}
             </div>
           </div>
@@ -212,6 +214,9 @@ export function MobileCollectionSheet({
           style={{ bottom: `${sheetBottomOffset}px` }}
         >
           <div
+            role="dialog"
+            aria-modal="true"
+            aria-label={mobileCollectionSheet === 'echo' ? COPY.feed.drawerTitle : '收集'}
             className={`mx-auto flex w-full ${sheetWidthClass} flex-col overflow-hidden rounded-[30px] border border-[#E8E2D5] bg-white`}
             style={{ maxHeight: mobileSheetMaxHeight }}
           >
@@ -219,18 +224,19 @@ export function MobileCollectionSheet({
               <div>
                 <p className="text-sm font-semibold text-[#1C1B19]">
                   {mobileCollectionSheet === 'echo'
-                    ? '笔记总结'
+                    ? COPY.feed.drawerTitle
                     : mobileCollectionSheet === 'history'
                       ? '历史收集'
                       : '收集菜单'}
                 </p>
                 {mobileCollectionSheet === 'echo' ? (
-                  <p className="text-[12px] text-[#5C5A55]">安静整理出的重点。</p>
+                  <p className="text-[12px] text-[#5C5A55]">{COPY.feed.drawerSubtitle}</p>
                 ) : null}
               </div>
               <button
                 type="button"
                 onClick={onClose}
+                aria-label="关闭收集附加层"
                 className="flex h-10 w-10 items-center justify-center rounded-[16px] border border-[#E8E2D5] bg-white/92 text-[#5C5A55] transition hover:bg-white hover:text-[#1C1B19]"
               >
                 <X size={16} />
@@ -244,6 +250,7 @@ export function MobileCollectionSheet({
                 style={mobileSheetScrollableStyle}
               >
                 <CrossCourseFeedPanel
+                  onAddContext={onAddContext}
                   onOpenCapture={(rawId) => {
                     const li = allCollectionItems.find(
                       (c) => c.id === `workspace-${rawId}` || c.id === rawId || c.sourceKey === rawId,
@@ -291,7 +298,7 @@ export function MobileCollectionSheet({
       ) : (
         /* ── 桌面端：右侧上下文抽屉 ── */
         <div className={`${collectionChromeContained ? 'absolute inset-0' : 'fixed inset-0'} z-30 flex justify-end`}>
-          <div className="flex h-full w-[min(640px,68vw)] min-w-[520px] flex-col overflow-hidden border-l border-[#E8E2D5] bg-white animate-in fade-in slide-in-from-right-6 duration-200">
+          <div role="dialog" aria-modal="true" aria-label={mobileCollectionSheet === 'echo' ? COPY.feed.drawerTitle : '收集'} className="flex h-full w-[min(640px,68vw)] min-w-[520px] flex-col overflow-hidden border-l border-[#E8E2D5] bg-white animate-in fade-in slide-in-from-right-6 duration-200">
             <div className="flex items-start justify-between gap-4 border-b border-[#E8E2D5] px-6 py-5">
               <div className="min-w-0">
                 <p className="text-[15px] font-semibold tracking-[-0.01em] text-[#1C1B19]">
@@ -310,6 +317,7 @@ export function MobileCollectionSheet({
               <button
                 type="button"
                 onClick={onClose}
+                aria-label="关闭收集附加层"
                 className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl border border-[#E8E2D5] text-[#5C5A55] transition hover:bg-[#FAF7F2] hover:text-[#1C1B19]"
               >
                 <X size={15} />
@@ -319,6 +327,7 @@ export function MobileCollectionSheet({
             {mobileCollectionSheet === 'echo' ? (
               <div className="min-h-0 flex-1 overflow-y-auto bg-[#FAF7F2] p-5">
                 <CrossCourseFeedPanel
+                  onAddContext={onAddContext}
                   onOpenCapture={(rawId) => {
                     const li = allCollectionItems.find(
                       (c) => c.id === `workspace-${rawId}` || c.id === rawId || c.sourceKey === rawId,

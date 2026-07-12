@@ -16,6 +16,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import prisma from '@/lib/prisma';
+import { authService } from '@/lib/services/auth-service';
 
 const BodySchema = z.object({
   messageId: z.string().min(1).max(200),
@@ -28,6 +29,12 @@ const BodySchema = z.object({
   comment: z.string().max(500).optional(),
   userId: z.string().optional(),
 });
+
+function getAuthenticatedUserId(request: NextRequest): string | null {
+  const token = request.headers.get('Authorization')?.replace(/^Bearer\s+/i, '')
+    || request.cookies.get('accessToken')?.value;
+  return token ? authService.verifyToken(token)?.sub ?? null : null;
+}
 
 export async function POST(request: NextRequest) {
   let body: z.infer<typeof BodySchema>;
@@ -60,7 +67,8 @@ export async function POST(request: NextRequest) {
           messageText: body.messageText?.slice(0, 1000),
           comment: body.comment,
         }),
-        userId: body.userId || null,
+        // 绝不信任客户端传入的 userId，避免将反馈写入他人账号。
+        userId: getAuthenticatedUserId(request),
         userAgent,
         ip,
         status: 'pending',

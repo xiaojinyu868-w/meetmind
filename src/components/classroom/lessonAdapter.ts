@@ -83,7 +83,6 @@ function hasRecoverableAudio(session: AudioSession): boolean {
 
 function isStaleTranscription(session: AudioSession): boolean {
   if (session.status !== 'completed') return false;
-  if (!hasRecoverableAudio(session)) return false;
   if (session.transcriptionStatus === 'pending') return Date.now() - getSessionUpdatedAtMs(session) > STALE_TRANSCRIPTION_AFTER_MS;
   if (session.transcriptionStatus) return false;
   return Date.now() - getSessionUpdatedAtMs(session) > STALE_TRANSCRIPTION_AFTER_MS;
@@ -107,6 +106,10 @@ function deriveStatus(
 
 function deriveStatusText(session: AudioSession, status: LessonStatus): string | undefined {
   if (status !== 'failed') return undefined;
+  if (session.transcriptionStatus === 'failed') {
+    return resolvePendingAudioFailureStatus(session.transcriptionError || '');
+  }
+  if (!hasRecoverableAudio(session)) return '没有留下可用内容';
   return resolvePendingAudioFailureStatus(session.transcriptionError || '');
 }
 

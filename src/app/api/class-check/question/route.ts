@@ -3,7 +3,10 @@ import { chat, DEFAULT_MODEL_ID } from '@/lib/services/llm-service';
 import { parseJsonResponse } from '@/lib/utils/json-utils';
 import { applyRateLimit } from '@/lib/utils/rate-limit';
 import { buildPromptTranscriptContext } from '@/lib/ai-native/prompt-context';
-import { buildFallbackCheckpointQuestions } from './question-fallback';
+import {
+  buildFallbackCheckpointQuestions,
+  selectNearestTranscriptSegments,
+} from './question-fallback';
 import type { TranscriptSegment } from '@/types';
 import type { ClassCheckQuestionData } from '@/app/api/class-check/plan/route';
 
@@ -83,24 +86,6 @@ function sliceSegments(
   const lo = Math.max(0, startMs - PAD_MS);
   const hi = endMs + PAD_MS;
   return segments.filter((s) => s.endMs >= lo && s.startMs <= hi);
-}
-
-/** 流式转录还没走到 checkpoint 时，取时间上最接近的少量证据做诚实兜底。 */
-export function selectNearestTranscriptSegments(
-  segments: TranscriptSegment[],
-  startMs: number,
-  endMs: number,
-  limit = 3
-): TranscriptSegment[] {
-  const midpoint = (startMs + endMs) / 2;
-  return [...segments]
-    .sort((a, b) => {
-      const aMidpoint = (a.startMs + a.endMs) / 2;
-      const bMidpoint = (b.startMs + b.endMs) / 2;
-      return Math.abs(aMidpoint - midpoint) - Math.abs(bMidpoint - midpoint);
-    })
-    .slice(0, Math.max(1, limit))
-    .sort((a, b) => a.startMs - b.startMs);
 }
 
 /** 按难度决定题数：简单出 1 道，中等 2 道，难出 3 道 */
