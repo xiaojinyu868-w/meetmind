@@ -27,6 +27,12 @@ import {
 } from '@/lib/services/workspace-echo-service';
 import workspaceService, { type WorkspaceSummary } from '@/lib/services/workspace-service';
 import { createLogger } from '@/lib/logger';
+import {
+  buildSourceProvenance,
+  canonicalizeSourceUrl,
+  readSourceProvenance,
+} from '@/lib/capture/source-provenance';
+import type { SourceIngressChannel } from '@/types/page-types';
 
 import {
   type WorkspaceCaptureStatus,
@@ -55,6 +61,15 @@ export type {
 };
 
 const log = createLogger('workspace-context');
+
+function inferIngressChannel(sourceType: string): SourceIngressChannel {
+  if (sourceType === 'wechat') return 'wechat';
+  if (sourceType === 'shared-agent') return 'share';
+  if (sourceType === 'manual-note') return 'composer';
+  if (sourceType === 'audio' || sourceType === 'video' || sourceType === 'recording') return 'recording';
+  if (sourceType === 'document' || sourceType === 'support-import') return 'upload';
+  return 'system';
+}
 
 function buildWorkspaceCaptureWriteData(params: {
   workspaceId: string;
@@ -339,19 +354,53 @@ export const workspaceContextService = {
     }
 
     const previewText = compactText(input.previewText || input.normalizedText || input.title, 180);
-    const metadataJson = input.metadata ? JSON.stringify(input.metadata) : null;
+    const canonicalUrl = canonicalizeSourceUrl(input.sourceUrl);
+    const duplicateByUrl = canonicalUrl
+      ? await prisma.workspaceCapture.findFirst({
+          where: {
+            workspaceId: workspace.id,
+            status: { not: 'deleted' },
+            sourceUrl: { in: [...new Set([canonicalUrl, input.sourceUrl].filter((value): value is string => Boolean(value)))] },
+            sourceKey: { not: input.sourceKey },
+          },
+          select: { sourceKey: true, metadataJson: true },
+        })
+      : null;
+    const existingMetadata = parseJsonObject(duplicateByUrl?.metadataJson) || {};
+    const explicitProvenance = readSourceProvenance(input.metadata || null);
+    const inferredProvenance = buildSourceProvenance({
+      ingressChannel: explicitProvenance?.ingressChannel || inferIngressChannel(input.sourceType),
+      sourceUrl: input.sourceUrl,
+      normalizedText: input.normalizedText,
+      platformId: explicitProvenance?.platformId,
+      platformLabel: explicitProvenance?.platformLabel,
+      publisher: explicitProvenance?.publisher,
+      author: explicitProvenance?.author,
+      publishedAt: explicitProvenance?.publishedAt,
+      extractionMethod: explicitProvenance?.extractionMethod,
+      contentState: explicitProvenance?.contentState,
+      completeness: explicitProvenance?.completeness,
+    });
+    const metadataJson = JSON.stringify({
+      ...existingMetadata,
+      ...(input.metadata || {}),
+      provenance: {
+        ...(readSourceProvenance(existingMetadata) || {}),
+        ...inferredProvenance,
+      },
+    });
 
     const capture = await upsertWorkspaceCaptureBySourceKey({
       workspaceId: workspace.id,
       userId,
       sourceType: input.sourceType,
-      sourceKey: input.sourceKey,
+      sourceKey: duplicateByUrl?.sourceKey || input.sourceKey,
       role: input.role,
       contentType: input.contentType,
       title: input.title,
       previewText,
       normalizedText: input.normalizedText,
-      sourceUrl: input.sourceUrl,
+      sourceUrl: canonicalUrl || input.sourceUrl,
       mediaUrl: input.mediaUrl,
       metadataJson,
       tutorContext: input.tutorContext,
@@ -438,9 +487,12 @@ export const workspaceContextService = {
     const previewText = compactText(message.previewText || message.normalizedText || title, 180);
     const providerLabel = message.sourceUrl ? detectLinkProvider(message.sourceUrl).label : undefined;
     const msgNormalizedText = message.normalizedText || undefined;
-    const sourceUrl = message.sourceUrl || undefined;
+    const sourceUrl = canonicalizeSourceUrl(message.sourceUrl) || message.sourceUrl || undefined;
     const mediaUrl = message.mediaUrl || undefined;
     const msgTutorContext = message.tutorContext || undefined;
+    const hasAsyncExtraction = message.reachChannel === 'article-link'
+      || message.reachChannel === 'web-link'
+      || message.reachChannel === 'video-link';
 
     // ── 读取已有 capture 的丰富数据，防止 enrichVideoLinkMeta / triggerVideoImportPipeline 写入的数据被覆盖 ──
     const existingCapture = await prisma.workspaceCapture.findUnique({
@@ -450,6 +502,14 @@ export const workspaceContextService = {
     const existingMeta = existingCapture?.metadataJson
       ? (() => { try { return JSON.parse(existingCapture.metadataJson); } catch { return {}; } })()
       : {};
+
+    // 如果 pipeline 已写入更丰富的转录文本，保留 pipeline 的结果
+    const normalizedText = (existingCapture?.normalizedText && existingCapture.normalizedText.length > (msgNormalizedText || '').length)
+      ? existingCapture.normalizedText
+      : msgNormalizedText;
+    const tutorContext = (existingCapture?.tutorContext && existingCapture.tutorContext.length > (msgTutorContext || '').length)
+      ? existingCapture.tutorContext
+      : msgTutorContext;
 
     // 基础字段写入，但保留已有的 enriched 字段（bvid, embedUrl, thumbnailUrl, videoImported, transcriptSegments 等）
     const metadataJson = JSON.stringify({
@@ -461,15 +521,15 @@ export const workspaceContextService = {
       reachChannel: message.reachChannel,
       mediaId: message.mediaId,
       providerLabel,
+      provenance: buildSourceProvenance({
+        ingressChannel: 'wechat',
+        sourceUrl: message.sourceUrl,
+        normalizedText: normalizedText,
+        platformLabel: providerLabel,
+        isExtracting: hasAsyncExtraction && (message.status === 'received' || message.status === 'processing'),
+        failed: message.status === 'failed',
+      }),
     });
-
-    // 如果 pipeline 已写入更丰富的转录文本，保留 pipeline 的结果
-    const normalizedText = (existingCapture?.normalizedText && existingCapture.normalizedText.length > (msgNormalizedText || '').length)
-      ? existingCapture.normalizedText
-      : msgNormalizedText;
-    const tutorContext = (existingCapture?.tutorContext && existingCapture.tutorContext.length > (msgTutorContext || '').length)
-      ? existingCapture.tutorContext
-      : msgTutorContext;
 
     if (sourceUrl && message.msgType === 'link') {
       const existingByUrl = await prisma.workspaceCapture.findFirst({
@@ -495,6 +555,14 @@ export const workspaceContextService = {
           reachChannel: message.reachChannel,
           mediaId: message.mediaId,
           providerLabel,
+          provenance: buildSourceProvenance({
+            ingressChannel: 'wechat',
+            sourceUrl: message.sourceUrl,
+            normalizedText,
+            platformLabel: providerLabel,
+            isExtracting: hasAsyncExtraction && (message.status === 'received' || message.status === 'processing'),
+            failed: message.status === 'failed',
+          }),
         });
 
         const updatedCapture = await prisma.workspaceCapture.update({

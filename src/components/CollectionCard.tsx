@@ -66,6 +66,7 @@ export interface CollectionCardProps {
 // 资料类（图片/文档）= paper-warm + ink-secondary 克制。
 
 import { COPY } from '@/lib/ui/copy';
+import { getProvenanceSourceLabel } from '@/lib/capture/source-provenance';
 
 function TypeBadge({ type }: { type: string }) {
   const config: Record<string, { label: string; bg: string; text: string; dot: string }> = {
@@ -117,6 +118,21 @@ export function CollectionCard({
     item.status === 'failed' && item.statusText && item.type !== 'audio' && item.type !== 'video'
   );
   const isAttachmentMessage = Boolean(item.attachmentUrl) && (item.type === 'document' || item.type === 'text');
+  const provenanceLabel = getProvenanceSourceLabel(item.provenance);
+  const showProvenanceState = isAttachmentMessage || item.type === 'document' || item.type === 'image';
+  const provenanceStateLabel = !showProvenanceState
+    ? ''
+    : item.provenance?.contentState === 'extracting'
+    ? COPY.sourceState.extracting
+    : item.provenance?.contentState === 'complete'
+      ? COPY.sourceState.complete
+      : item.provenance?.contentState === 'partial'
+        ? COPY.sourceState.partial
+        : item.provenance?.contentState === 'link-only'
+          ? COPY.sourceState.linkOnly
+          : item.provenance?.contentState === 'failed'
+            ? COPY.sourceState.failed
+            : '';
 
   // 孤儿检测：视频/文档卡在 parsing 超过 10 分钟，判定为异常
   const STALE_PARSING_THRESHOLD_MS = 10 * 60 * 1000;
@@ -225,10 +241,10 @@ export function CollectionCard({
               <span className="font-mono text-[10.5px] tabular-nums text-ink-muted">
                 {formatRelativeCollectionTime(item.addedAt)}
               </span>
-              {item.videoProvider ? (
+              {provenanceLabel || item.videoProvider ? (
                 <>
                   <span className="text-ink-muted/40">·</span>
-                  <span className="text-[11px] text-ink-muted">{item.videoProvider}</span>
+                  <span className="text-[11px] text-ink-muted">{provenanceLabel || item.videoProvider}</span>
                 </>
               ) : null}
               <div className="ml-auto flex flex-shrink-0 items-center">
@@ -310,6 +326,17 @@ export function CollectionCard({
               <span className="font-mono text-[10.5px] tabular-nums text-ink-muted">
                 {formatRelativeCollectionTime(item.addedAt)}
               </span>
+              {provenanceLabel ? (
+                <>
+                  <span className="text-ink-muted/40">·</span>
+                  <span className="truncate text-[11px] text-ink-muted">{provenanceLabel}</span>
+                </>
+              ) : null}
+              {provenanceStateLabel ? (
+                <span className="rounded-full bg-paper-warm px-1.5 py-0.5 text-[9px] text-ink-muted">
+                  {provenanceStateLabel}
+                </span>
+              ) : null}
             </div>
             <div className="flex shrink-0 items-center gap-1">
               {isCollectionContextSelectionMode ? (

@@ -267,6 +267,12 @@ export interface CrossCourseCapture {
   normalizedText?: string | null;
   contentType?: string;
   occurredAt?: string | null;
+  source?: {
+    platformLabel?: string;
+    author?: string;
+    contentState?: 'received' | 'extracting' | 'complete' | 'partial' | 'link-only' | 'failed';
+    completeness?: number;
+  };
 }
 
 export interface GenerateCrossCourseFeedOptions {
@@ -279,7 +285,7 @@ export interface GenerateCrossCourseFeedOptions {
   feedback?: FeedPreference[];
 }
 
-function buildCrossCoursePrompt(
+export function buildCrossCoursePrompt(
   captures: CrossCourseCapture[],
   options: GenerateCrossCourseFeedOptions,
 ): string {
@@ -288,7 +294,22 @@ function buildCrossCoursePrompt(
   const capturesSection = captures.slice(0, 12).map((c, i) => {
     const text = (c.normalizedText ?? '').slice(0, MAX_CAPTURE_TEXT);
     const when = c.occurredAt ? `（${c.occurredAt.slice(0, 10)}）` : '';
-    return `【收集${i + 1}】[id=${c.id}] ${c.title}${when}\n${text || '（无正文，可能是图片/音频类收集）'}`;
+    const sourceBits = [c.source?.platformLabel, c.source?.author].filter(Boolean).join(' · ');
+    const stateLabel = c.source?.contentState === 'complete'
+      ? '正文完整'
+      : c.source?.contentState === 'partial'
+        ? '只有摘要'
+        : c.source?.contentState === 'link-only'
+          ? '只有原链接'
+          : c.source?.contentState === 'failed'
+            ? '正文读取失败'
+            : c.source?.contentState === 'extracting'
+              ? '正文仍在读取'
+              : '';
+    const provenanceLine = sourceBits || stateLabel
+      ? `来源：${sourceBits || '未标注'}${stateLabel ? `；${stateLabel}` : ''}`
+      : '';
+    return `【收集${i + 1}】[id=${c.id}] ${c.title}${when}\n${provenanceLine}${provenanceLine ? '\n' : ''}${text || '（没有可验证正文，只能使用标题和来源，不能推断文章观点）'}`;
   }).join('\n\n');
 
   // 个人上下文段落
@@ -368,6 +389,8 @@ ${capturesSection || '（还没有收集内容）'}
   <item>尊重过去反馈：延续“有用”内容的价值类型，避免与“不相关”内容重复选题，但不要由一次反馈永久封闭一个主题</item>
   <item>禁止心理诊断和隐性动机推断：不要使用“焦虑投射”“强迫”“安全感”等缺少用户明确表达的心理归因。只描述可见的收藏、目标和行为</item>
   <item>每个查询必须返回 1-3 个 sourceCaptureIds；有匹配目标时返回真实 goalLabel，没有就留空，禁止编造</item>
+  <item>优先使用“正文完整”的收藏形成结论；“只有摘要”只能支持有限判断；“只有原链接/读取失败”的内容不得据此概括原文观点</item>
+  <item>来源平台和作者只是可信度线索，不代表内容一定正确；推荐理由仍要落到实际正文和用户目标</item>
 </qualityControl>
 <outputFormat>
 返回严格的 JSON 对象：

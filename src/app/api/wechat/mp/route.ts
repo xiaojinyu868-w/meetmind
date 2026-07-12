@@ -18,6 +18,7 @@ import {
 import { resolveBilibiliUrl, fetchViewMeta } from '@/lib/services/bilibili-import-service';
 import { parseVideoLink } from '@/lib/utils/video-link';
 import { createLogger } from '@/lib/logger';
+import { buildSourceProvenance } from '@/lib/capture/source-provenance';
 const log = createLogger('wechat/mp');
 
 
@@ -90,6 +91,7 @@ function buildAckText(baseReply: string, captureUrl: string, isBound: boolean): 
  */
 async function enrichVideoLinkMeta(linkToken: string, sourceUrl: string, request?: NextRequest): Promise<void> {
   try {
+    await prisma.wechatInboxMessage.update({ where: { linkToken }, data: { status: 'processing' } });
     const parsed = parseVideoLink(sourceUrl);
     if (!parsed || parsed.provider === 'generic') return;
 
@@ -103,6 +105,7 @@ async function enrichVideoLinkMeta(linkToken: string, sourceUrl: string, request
         data: {
           sourceUrl: resolved.resolvedUrl,
           title: meta.title || undefined,
+          status: 'ready',
         },
       });
 
@@ -127,6 +130,14 @@ async function enrichVideoLinkMeta(linkToken: string, sourceUrl: string, request
               thumbnailUrl: meta.thumbnailUrl,
               durationSec: meta.durationSec,
               videoProvider: 'bilibili',
+              provenance: buildSourceProvenance({
+                ingressChannel: 'wechat',
+                sourceUrl: resolved.resolvedUrl,
+                normalizedText: existing.normalizedText,
+                platformId: 'bilibili',
+                platformLabel: '哔哩哔哩',
+                contentState: existing.normalizedText ? 'partial' : 'link-only',
+              }),
             }),
           },
         });
@@ -137,6 +148,8 @@ async function enrichVideoLinkMeta(linkToken: string, sourceUrl: string, request
     }
     // 后续可以扩展 YouTube、Douyin 等
   } catch (error) {
+    await prisma.wechatInboxMessage.update({ where: { linkToken }, data: { status: 'failed' } }).catch(() => undefined);
+    await workspaceContextService.syncWechatInboxMessageArtifacts(linkToken).catch(() => undefined);
     log.error(`[wechat-mp] enrichVideoLinkMeta failed for ${linkToken}:`, error);
   }
 }
@@ -218,6 +231,16 @@ async function triggerVideoImportPipeline(
               startMs: s.startMs,
               endMs: s.endMs,
             })),
+            provenance: buildSourceProvenance({
+              ingressChannel: 'wechat',
+              sourceUrl: videoUrl,
+              normalizedText: fullText,
+              platformId: typeof source.provider === 'string' ? source.provider : 'bilibili',
+              platformLabel: typeof source.providerLabel === 'string' ? source.providerLabel : '哔哩哔哩',
+              extractionMethod: 'video-transcript',
+              contentState: 'complete',
+              completeness: 1,
+            }),
           }),
         },
       });

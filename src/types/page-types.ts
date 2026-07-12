@@ -45,6 +45,23 @@ export type SourceIngestType = 'audio' | 'video' | 'image' | 'document' | 'text'
 export type SourceIngestRole = 'primary' | 'support';
 export type MobileCollectionSheet = null | 'attachments' | 'video' | 'history' | 'echo' | 'more';
 
+export type SourceIngressChannel = 'composer' | 'upload' | 'recording' | 'wechat' | 'share' | 'system';
+export type SourceContentState = 'received' | 'extracting' | 'complete' | 'partial' | 'link-only' | 'failed';
+
+export interface SourceProvenance {
+  ingressChannel: SourceIngressChannel;
+  platformId?: string;
+  platformLabel?: string;
+  publisher?: string;
+  author?: string;
+  originalUrl?: string;
+  canonicalUrl?: string;
+  publishedAt?: string;
+  extractionMethod?: string;
+  contentState: SourceContentState;
+  completeness?: number;
+}
+
 export interface SourceIngestItem {
   id: string;
   sourceKey?: string;
@@ -84,6 +101,8 @@ export interface SourceIngestItem {
   coverUrl?: string;
   /** 正文中的图片 URL 列表（文章/笔记类型） */
   imageUrls?: string[];
+  /** 来源进入方式、原始平台与正文完整度；随 WorkspaceCapture.metadata 跨设备恢复。 */
+  provenance?: SourceProvenance;
   /**
    * 照片拍摄时间锚点（相对当前录音 session 的毫秒偏移）。
    * 仅现场态拍照时写入（由 `handleImportFiles` 的 options 透传），
@@ -161,6 +180,7 @@ export interface WechatCaptureMessage {
   echoBody?: string | null;
   echoChips?: string[] | null;
   tutorContext?: string | null;
+  status?: string | null;
 }
 
 // ── Workspace capture ────────────────────────────────────────────

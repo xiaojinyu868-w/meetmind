@@ -18,6 +18,7 @@ import {
 } from '@/lib/services/web-article-extract-service';
 import { chat, DEFAULT_WORKSHOP_MODEL_ID, type ChatMessage } from '@/lib/services/llm-service';
 import { createLogger } from '@/lib/logger';
+import { buildSourceProvenance } from '@/lib/capture/source-provenance';
 const log = createLogger('jina-reader');
 
 
@@ -149,6 +150,10 @@ async function generateLinkSummary(
  */
 export async function enrichArticleLinkContent(linkToken: string, url: string): Promise<void> {
   try {
+    await prisma.wechatInboxMessage.update({
+      where: { linkToken },
+      data: { status: 'processing' },
+    });
     const message = await prisma.wechatInboxMessage.findUnique({
       where: { linkToken },
       select: {
@@ -177,12 +182,38 @@ export async function enrichArticleLinkContent(linkToken: string, url: string): 
     // 更新 WechatInboxMessage
     await prisma.wechatInboxMessage.update({
       where: { linkToken },
-      data: { normalizedText: enrichedText },
+      data: { normalizedText: enrichedText, title: article.title || undefined, status: 'ready' },
     });
 
     // 如果已绑定 workspace，同步更新 WorkspaceCapture
     if (message.workspaceId) {
-      await workspaceContextService.syncWechatInboxMessageArtifacts(linkToken);
+      const capture = await workspaceContextService.syncWechatInboxMessageArtifacts(linkToken);
+      if (capture) {
+        const existingMetadata = capture.metadataJson
+          ? (() => { try { return JSON.parse(capture.metadataJson); } catch { return {}; } })()
+          : {};
+        await prisma.workspaceCapture.update({
+          where: { id: capture.id },
+          data: {
+            metadataJson: JSON.stringify({
+              ...existingMetadata,
+              extractMethod: article.extractMethod,
+              author: article.author,
+              provenance: buildSourceProvenance({
+                ingressChannel: 'wechat',
+                sourceUrl: url,
+                normalizedText: enrichedText,
+                platformId: article.provider,
+                platformLabel: article.providerLabel,
+                author: article.author,
+                extractionMethod: article.extractMethod,
+                contentState: 'complete',
+                completeness: 1,
+              }),
+            }),
+          },
+        });
+      }
     }
 
     // 异步生成 AI 摘要（不阻塞正文写入）
@@ -225,6 +256,11 @@ export async function enrichArticleLinkContent(linkToken: string, url: string): 
       }
     }
   } catch (error) {
+    await prisma.wechatInboxMessage.update({
+      where: { linkToken },
+      data: { status: 'failed' },
+    }).catch(() => undefined);
+    await workspaceContextService.syncWechatInboxMessageArtifacts(linkToken).catch(() => undefined);
     if (error instanceof WebArticleExtractError) {
       log.warn(`[jina-reader] enrichArticleLinkContent ${error.code}: ${error.message}`);
     } else {
@@ -241,6 +277,10 @@ export async function enrichArticleLinkContent(linkToken: string, url: string): 
  */
 export async function enrichLinkContent(linkToken: string): Promise<void> {
   try {
+    await prisma.wechatInboxMessage.update({
+      where: { linkToken },
+      data: { status: 'processing' },
+    });
     const message = await prisma.wechatInboxMessage.findUnique({
       where: { linkToken },
       select: {
@@ -270,12 +310,37 @@ export async function enrichLinkContent(linkToken: string): Promise<void> {
     // 更新 WechatInboxMessage
     await prisma.wechatInboxMessage.update({
       where: { linkToken },
-      data: { normalizedText: enrichedText },
+      data: { normalizedText: enrichedText, status: 'ready' },
     });
 
     // 如果已绑定 workspace，同步更新 WorkspaceCapture
     if (message.workspaceId) {
-      await workspaceContextService.syncWechatInboxMessageArtifacts(linkToken);
+      const capture = await workspaceContextService.syncWechatInboxMessageArtifacts(linkToken);
+      if (capture) {
+        const existingMetadata = capture.metadataJson
+          ? (() => { try { return JSON.parse(capture.metadataJson); } catch { return {}; } })()
+          : {};
+        const provider = detectLinkProvider(message.sourceUrl);
+        await prisma.workspaceCapture.update({
+          where: { id: capture.id },
+          data: {
+            metadataJson: JSON.stringify({
+              ...existingMetadata,
+              extractMethod: 'jina',
+              provenance: buildSourceProvenance({
+                ingressChannel: 'wechat',
+                sourceUrl: message.sourceUrl,
+                normalizedText: enrichedText,
+                platformId: provider.id,
+                platformLabel: provider.label,
+                extractionMethod: 'jina',
+                contentState: 'complete',
+                completeness: 1,
+              }),
+            }),
+          },
+        });
+      }
     }
 
     // 异步生成 AI 摘要（不阻塞正文写入）
@@ -317,6 +382,11 @@ export async function enrichLinkContent(linkToken: string): Promise<void> {
       }
     }
   } catch (error) {
+    await prisma.wechatInboxMessage.update({
+      where: { linkToken },
+      data: { status: 'failed' },
+    }).catch(() => undefined);
+    await workspaceContextService.syncWechatInboxMessageArtifacts(linkToken).catch(() => undefined);
     log.error('[jina-reader] enrichLinkContent failed:', error);
   }
 }

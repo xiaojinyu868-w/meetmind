@@ -29,7 +29,9 @@ import type {
   SourceIngestType,
   SourceIngestRole,
   SourceIngestItem,
+  SourceProvenance,
 } from '@/types/page-types';
+import { buildSourceProvenance } from '@/lib/capture/source-provenance';
 import type { AudioSession } from '@/lib/db';
 
 // ── Types ──────────────────────────────────────────────────────────
@@ -54,6 +56,7 @@ export interface UseTranscriptIngestDeps {
     sessionId?: string;
     durationMs?: number;
     reviewable?: boolean;
+    provenance?: SourceProvenance;
   }) => void;
   updateSourceItem: (id: string, patch: Partial<SourceIngestItem>) => void;
   clearTopics: () => void;
@@ -96,6 +99,8 @@ export interface IngestTranscriptParams {
   persistSourceType?: string;
   persistRole?: SourceIngestRole;
   occurredAt?: string;
+  sourceUrl?: string;
+  provenance?: SourceProvenance;
 }
 
 // ── Hook ───────────────────────────────────────────────────────────
@@ -123,6 +128,19 @@ export function useTranscriptIngest(
 
   const ingestTranscriptSegments = useCallback(async (params: IngestTranscriptParams) => {
     const incoming = Array.isArray(params.segments) ? params.segments : [];
+    const provenance = params.provenance || buildSourceProvenance({
+      ingressChannel: params.videoSource
+        ? 'composer'
+        : params.sourceType === 'audio' || params.sourceType === 'video' || params.sourceType === 'document'
+          ? 'upload'
+          : 'system',
+      sourceUrl: params.sourceUrl || params.videoSource?.originalUrl,
+      normalizedText: incoming.map((segment) => segment.text).join('\n'),
+      platformId: params.videoSource?.provider,
+      platformLabel: params.videoSource?.providerLabel,
+      contentState: 'complete',
+      completeness: 1,
+    });
     if (incoming.length === 0) {
       toast.warning('未提取到可用内容，请更换资料后重试。');
       return;
@@ -138,6 +156,7 @@ export function useTranscriptIngest(
 
     const nextSessionId = hasExisting ? sessionIdRef.current : generateSessionId();
     const sourceItemId = params.sourceItemId || `${params.sourceType}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    const resolvedSourceKey = params.persistSourceKey || `ingest:${sourceItemId}`;
     const offsetMs = hasExisting
       ? Math.max(0, (existingSegments[existingSegments.length - 1]?.endMs || 0) + 1200)
       : 0;
@@ -225,7 +244,7 @@ export function useTranscriptIngest(
 
     if (params.sourceItemId) {
       updateSourceItem(sourceItemId, {
-        sourceKey: `ingest:${sourceItemId}`,
+        sourceKey: resolvedSourceKey,
         type: params.sourceType,
         role: 'primary',
         title: params.sourceTitle,
@@ -243,11 +262,12 @@ export function useTranscriptIngest(
         durationMs: sourceDurationMs,
         reviewable: params.sourceType === 'audio' || isVideo,
         ...videoFields,
+        provenance,
       });
     } else {
       appendSourceItem({
         id: sourceItemId,
-        sourceKey: `ingest:${sourceItemId}`,
+        sourceKey: resolvedSourceKey,
         type: params.sourceType,
         role: 'primary',
         title: params.sourceTitle,
@@ -266,20 +286,21 @@ export function useTranscriptIngest(
         durationMs: sourceDurationMs,
         reviewable: params.sourceType === 'audio' || isVideo,
         ...videoFields,
+        provenance,
       });
     }
 
     void persistCaptureToWorkspace({
-      sourceType: params.sourceType,
-      sourceKey: `ingest:${sourceItemId}`,
-      role: 'primary',
-      contentType: params.sourceType === 'audio' ? 'audio' : params.sourceType === 'video' ? 'video' : 'text',
+      sourceType: params.persistSourceType || params.sourceType,
+      sourceKey: resolvedSourceKey,
+      role: params.persistRole || 'primary',
+      contentType: params.sourceType,
       title: params.sourceTitle,
       previewText: buildSourcePreviewText(normalizedSegments, 180),
       normalizedText: buildSupportReferenceSnippet(normalizedSegments, 2800),
-      sourceUrl: params.videoSource?.originalUrl,
+      sourceUrl: params.sourceUrl || params.videoSource?.originalUrl,
       tutorContext: buildSupportReferenceSnippet(normalizedSegments, 2800),
-      occurredAt: new Date().toISOString(),
+      occurredAt: params.occurredAt || new Date().toISOString(),
       metadata: {
         from: 'transcript-ingest',
         sessionId: nextSessionId,
@@ -302,6 +323,7 @@ export function useTranscriptIngest(
         cid: params.videoSource?.cid,
         audioUrl: params.videoSource?.audioUrl,
         videoImported: true,
+        provenance,
         // 存储转录片段供跨端恢复（限制大小，只存前 500 段）
         transcriptSegments: normalizedSegments.slice(0, 500).map((seg) => ({
           id: seg.id,

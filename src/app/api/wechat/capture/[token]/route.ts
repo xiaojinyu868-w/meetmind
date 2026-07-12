@@ -61,6 +61,7 @@ export async function GET(
       echoBody: message.echoBody,
       echoChips: parseEchoChips(message.echoChipsJson),
       tutorContext: message.tutorContext,
+      status: message.status,
     },
   });
 }

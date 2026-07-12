@@ -26,7 +26,9 @@ import {
 import type {
   SourceIngestItem,
   SourceIngestRole,
+  SourceProvenance,
 } from '@/types/page-types';
+import { buildSourceProvenance } from '@/lib/capture/source-provenance';
 import { useVoiceInput } from '@/hooks/useVoiceInput';
 import type { RecorderHandle } from '@/components/Recorder';
 
@@ -40,6 +42,7 @@ export interface UseCollectionComposerDeps {
     type: 'document' | 'text';
     title: string;
     segments: { id: string; text: string; startMs: number; endMs: number; confidence: number; isFinal?: boolean }[];
+    provenance?: SourceProvenance;
   }) => { supportId: string; reference: string | null };
   /** Persist capture to workspace API */
   persistCaptureToWorkspace: (params: {
@@ -631,6 +634,12 @@ export function useCollectionComposer(
         hour: '2-digit',
         minute: '2-digit',
       })}`;
+      const noteProvenance = buildSourceProvenance({
+        ingressChannel: 'composer',
+        normalizedText: noteText,
+        contentState: 'complete',
+        completeness: 1,
+      });
       const appended = appendSupportSource({
         id: draftId,
         sourceKey: `manual:${draftId}`,
@@ -646,6 +655,7 @@ export function useCollectionComposer(
             isFinal: true,
           },
         ],
+        provenance: noteProvenance,
       });
 
       void persistCaptureToWorkspace({
@@ -665,6 +675,7 @@ export function useCollectionComposer(
           quotedSourceKeys,
           quotedPrimaryId: quotedPId,
           quotedPrimaryTitle: quotedPItem?.title || null,
+          provenance: noteProvenance,
         },
       });
     }

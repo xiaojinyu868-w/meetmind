@@ -31,7 +31,7 @@ api/route.ts → services → lib/utils, lib/db, lib/config
 |------|------|------|
 | `bilibili-import-service.ts` | 466 | B站视频：URL 解析→音频下载→字幕提取 |
 | `xiaoyuzhou-import-service.ts` | 255 | 小宇宙播客：HTML 解析→m4a 下载 |
-| `web-article-extract-service.ts` | ~550 | 通用网页文章提取（OpenClaw Gateway 微信反爬 → Jina Reader → 直接 fetch） |
+| `web-article-extract-service.ts` | ~550 | 通用网页文章提取（Firecrawl → deprecated OpenClaw fallback → Jina Reader → 直接 fetch），返回平台、作者与提取方式 |
 | `jina-reader-service.ts` | 220 | Jina Reader API 封装 |
 
 ### 🤖 AI / LLM
@@ -61,7 +61,7 @@ api/route.ts → services → lib/utils, lib/db, lib/config
 | `workspace-echo-service.ts` | ~1300 | 每日回响生成（AI 洞察/金句/推荐）；CommonStack 新 schema 不返回 title，需从 takeaway / echo 生成标题后再进质量门 |
 | `workspace-search-service.ts` | 175 | 全局 AI 检索（流式带引用） |
 | `commonstack-echo-service.ts` | 273 | Echo LLM 调用（System Prompt 在此） |
-| `feed-service.ts` | ~500 | 今日情报生成：以 workspace captures、明确目标和反馈为上下文，生成今日整理、收藏内部关联与外部发现；外部候选经来源质量底线、目标相关性和 LLM 编辑筛选后才展示，不做固定人群画像 |
+| `feed-service.ts` | ~500 | 今日情报生成：读取来源平台与正文完整度，禁止从 link-only/失败内容推断原文观点；外部候选再经来源质量底线和 LLM 编辑筛选 |
 | `feed-preference-service.ts` | ~120 | 今日情报长期偏好：从账号 Feedback 读取有用/不相关记录，并与当前设备即时反馈合并；同一内容以设备最新判断优先 |
 
 ### 👤 用户 / 认证
@@ -82,7 +82,7 @@ api/route.ts → services → lib/utils, lib/db, lib/config
 | `wechat-auth-service.ts` | 413 | 微信 OAuth 2.0 登录 |
 | `wechat-mp-service.ts` | 252 | 公众号消息解析（XML/签名验证） |
 | `wechat-media-service.ts` | 222 | 媒体下载（图片/语音/视频 + 转码） |
-| `wechat-inbox-service.ts` | 195 | 消息智能路由（角色推断/echo/tutor） |
+| `wechat-inbox-service.ts` | 195 | 消息智能路由（角色推断/echo/tutor）；微信正文解析状态通过 `received/processing/ready/failed` 同步进 provenance |
 | `wechat-voice-utils.ts` | 58 | 语音工具（预览文本/路径规范化） |
 | `wechat-web-session-service.ts` | 52 | Web 会话临时存储（内存 Map, 2min TTL） |
 

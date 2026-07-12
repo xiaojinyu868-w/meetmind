@@ -3,6 +3,7 @@
 import React, { useState, useCallback, useRef, useEffect, useMemo } from 'react';
 import { MobileAppNavigatorProvider, useMobileNav } from './MobileAppNavigator';
 import { MobileCollectionCard } from './MobileCollectionCard';
+import { sortCollectionNewestFirst } from './mobile-collection-utils';
 import { MobileReviewSheet } from './MobileReviewSheet';
 import { LessonDigestCard } from '@/components/LessonDigestCard';
 import { useLessonDigest } from '@/hooks/useLessonDigest';
@@ -10,11 +11,13 @@ import { useCaptureEditorStore } from '@/stores/capture-editor-store';
 import { useSessionStore } from '@/stores/session-store';
 import { useCollectionStore } from '@/stores/collection-store';
 import { toast } from 'sonner';
-import { Mic, Camera, Edit3, Paperclip, ChevronRight, ChevronDown, Layers, Zap, FileText, Brain, Search, Star, MapPin } from 'lucide-react';
+import { Mic, Camera, Edit3, Paperclip, ChevronRight, ChevronDown, Layers, Zap, FileText, Brain, Search, Star, MapPin, ExternalLink } from 'lucide-react';
 import type { SourceIngestItem } from '@/types/page-types';
 import type { TranscriptSegment } from '@/types';
 import { getSpeakerLabel, getSpeakerColorClass } from '@/lib/services/asr/diarization-service';
 import { CrossCourseFeedPanel } from '@/components/CrossCourseFeedPanel';
+import { COPY } from '@/lib/ui/copy';
+import { getProvenanceSourceLabel } from '@/lib/capture/source-provenance';
 
 export interface MobileAppShellProps {
   children?: React.ReactNode;
@@ -126,7 +129,12 @@ function HomeScreen({ p }: { p: MobileAppShellProps }) {
     setFlashPhoto({ url: previewUrl, time: new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }) });
     toast.success('已拍下，正在识别内容…', { duration: 3000 });
   });
-  const grouped = useMemo(() => groupByDate(p.collectionFeedItems), [p.collectionFeedItems]);
+  // 移动首页是资料收件箱，不是聊天记录：最新内容应当无需滚动就能看到。
+  // 桌面收集流仍保留时间正序，两种场景不共享展示顺序。
+  const grouped = useMemo(
+    () => groupByDate(sortCollectionNewestFirst(p.collectionFeedItems)),
+    [p.collectionFeedItems]
+  );
 
   // 清除临时预览卡：OCR 完成（store 新增 image item）或 30s 超时兜底
   useEffect(() => {
@@ -290,9 +298,14 @@ function HomeScreen({ p }: { p: MobileAppShellProps }) {
                 {group.items.map((item, ii) => (
                   <div key={item.id} className="m-card-in" style={{ animationDelay: `${ii * 0.05}s` }}>
                     <MobileCollectionCard item={item} onClick={() => {
-                      if (item.reviewable) {
+                      const canOpen = item.reviewable || item.type === 'document' || item.type === 'text' || item.type === 'image';
+                      if (canOpen) {
                         p.onOpenReview(item);
-                        push('review',{sessionId:item.sessionId||'',contentType:item.type==='video'?'video':item.type==='image'?'article':'audio',title:item.title});
+                        push('review',{
+                          sessionId:item.sessionId||'',
+                          contentType:item.type==='video'?'video':item.type==='audio'?'audio':'article',
+                          title:item.title,
+                        });
                       } else toast.info(item.title || '内容暂不可复习');
                     }} />
                   </div>
@@ -707,6 +720,23 @@ function ReviewScreen({ p }: { p: MobileAppShellProps }) {
   const { digest, loading: digestLoading } = useLessonDigest({ sessionId, segments, images: digestImages, lessonTitle: reviewContext?.title||p.selectedReviewItem?.title, enabled: digestView && segments.length>0 });
   const getImageUrl = useCallback((id:string) => { const i = sourceItems.find(s=>s.id===id); return i?.previewUrl||i?.attachmentUrl; }, [sourceItems]);
   const getOrig = useCallback((sMs:number,eMs:number) => { const c = segments.filter(s=>s.startMs>=sMs&&s.startMs<=eMs).map(s=>s.text).join(' '); return c||undefined; }, [segments]);
+  const selectedItem = p.selectedReviewItem;
+  const isArticleReview = reviewContext?.contentType === 'article'
+    || selectedItem?.type === 'document'
+    || selectedItem?.type === 'text'
+    || selectedItem?.type === 'image';
+  const articleSourceLabel = getProvenanceSourceLabel(selectedItem?.provenance);
+  const articleStateLabel = selectedItem?.provenance?.contentState === 'complete'
+    ? COPY.sourceState.complete
+    : selectedItem?.provenance?.contentState === 'partial'
+      ? COPY.sourceState.partial
+      : selectedItem?.provenance?.contentState === 'link-only'
+        ? COPY.sourceState.linkOnly
+        : selectedItem?.provenance?.contentState === 'failed'
+          ? COPY.sourceState.failed
+          : selectedItem?.provenance?.contentState === 'extracting'
+            ? COPY.sourceState.extracting
+            : '';
 
   // mini-player 滚动折叠
   useEffect(() => {
@@ -730,7 +760,9 @@ function ReviewScreen({ p }: { p: MobileAppShellProps }) {
           <div className="min-w-0 flex-1">
             <p className="truncate text-[15px] font-semibold tracking-[-0.01em] text-ink">{reviewContext?.title||p.selectedReviewItem?.title||'课堂笔记'}</p>
             <p className="mt-0.5 text-[11px] text-ink-muted font-mono">
-              {p.selectedReviewItem?.addedAt ? `${new Date(p.selectedReviewItem.addedAt).toLocaleDateString('zh-CN',{month:'numeric',day:'numeric'})} · ` : ''}{p.totalDuration>0?`${fmtMs(p.totalDuration)} · `:''}已理解
+              {selectedItem?.addedAt ? `${new Date(selectedItem.addedAt).toLocaleDateString('zh-CN',{month:'numeric',day:'numeric'})} · ` : ''}
+              {articleSourceLabel ? `${articleSourceLabel} · ` : ''}
+              {isArticleReview ? articleStateLabel || COPY.sourceReader.saved : p.totalDuration>0?`${fmtMs(p.totalDuration)} · 已理解`:'已理解'}
             </p>
           </div>
         </div>
@@ -771,7 +803,40 @@ function ReviewScreen({ p }: { p: MobileAppShellProps }) {
 
       {/* 主内容区 */}
       <div ref={scrollRef} className="flex-1 min-h-0 overflow-y-auto px-4 py-4 pb-28 mm-mobile-scroll" style={{ WebkitOverflowScrolling: 'touch' }}>
-        {digestView && segments.length>0 ? (
+        {isArticleReview ? (
+          <article className="m-card-in rounded-[18px] border border-divider bg-white px-4 py-5">
+            <div className="mb-4 border-b border-divider/70 pb-4">
+              <p className="font-mono text-[9px] font-semibold uppercase tracking-[0.08em] text-pine">
+                {[articleSourceLabel, articleStateLabel].filter(Boolean).join(' · ') || COPY.sourceReader.saved}
+              </p>
+              <h1 className="mt-2 font-serif text-[25px] leading-[1.25] tracking-[-0.02em] text-ink">
+                {selectedItem?.title || COPY.sourceReader.untitled}
+              </h1>
+              {selectedItem?.provenance?.author && (
+                <p className="mt-2 text-[11px] text-ink-muted">{selectedItem.provenance.author}</p>
+              )}
+              {selectedItem?.attachmentUrl?.startsWith('http') && (
+                <a
+                  href={selectedItem.attachmentUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="mt-3 inline-flex items-center gap-1 text-[11px] font-medium text-pine"
+                >
+                  {COPY.sourceReader.openOriginal}<ExternalLink size={11} />
+                </a>
+              )}
+            </div>
+            {selectedItem?.imageUrls?.slice(0, 4).map((url) => (
+              <img key={url} src={url} alt="" className="mb-4 w-full rounded-xl border border-divider object-cover" />
+            ))}
+            {selectedItem?.previewUrl && selectedItem.type === 'image' && (
+              <img src={selectedItem.previewUrl} alt="" className="mb-4 w-full rounded-xl border border-divider object-contain" />
+            )}
+            <p className="whitespace-pre-wrap text-[14px] leading-[1.9] text-ink-secondary">
+              {selectedItem?.fullText || selectedItem?.preview || COPY.sourceReader.noBody}
+            </p>
+          </article>
+        ) : digestView && segments.length>0 ? (
           digestLoading ? (
             <div className="flex flex-col items-center justify-center py-12">
               <div className="h-16 w-16 rounded-full bg-pine-mist flex items-center justify-center overflow-hidden mb-4 animate-pulse m-octo-breath">
@@ -1139,7 +1204,7 @@ function EchoScreen({ p }: { p: MobileAppShellProps }) {
 
 // ═══ 空课堂 ═══
 
-function EmptyScreen({ p }: { p: MobileAppShellProps }) {
+function EmptyScreen({ p, onEnterHome }: { p: MobileAppShellProps; onEnterHome?: () => void }) {
   const { push } = useMobileNav();
   return (
     <div className="flex-1 flex flex-col items-center justify-center bg-paper px-8 m-page-in">
@@ -1154,7 +1219,7 @@ function EmptyScreen({ p }: { p: MobileAppShellProps }) {
         className="flex w-full max-w-[280px] items-center justify-center gap-2.5 rounded-full bg-ink py-3.5 text-[14px] font-medium text-white active:scale-[0.98] transition">
         <Mic size={16} strokeWidth={2} />录一节课
       </button>
-      <button onClick={() => push('home')} className="mt-3 text-[12px] text-ink-muted underline">已有内容，进入 →</button>
+      <button onClick={() => onEnterHome?.()} className="mt-3 text-[12px] text-ink-muted underline">已有内容，进入 →</button>
     </div>
   );
 }
@@ -1162,8 +1227,11 @@ function EmptyScreen({ p }: { p: MobileAppShellProps }) {
 // ═══ 路由 ═══
 
 function ScreenRouter({ p }: { p: MobileAppShellProps }) {
-  const { currentScreen } = useMobileNav();
-  if (currentScreen==='home' && p.collectionFeedItems.length===0 && !p.isRecording) return <EmptyScreen p={p} />;
+  const { currentScreen, replace } = useMobileNav();
+  const [hasEnteredEmptyHome, setHasEnteredEmptyHome] = useState(false);
+  if (currentScreen==='home' && p.collectionFeedItems.length===0 && !p.isRecording && !hasEnteredEmptyHome) {
+    return <EmptyScreen p={p} onEnterHome={() => setHasEnteredEmptyHome(true)} />;
+  }
   switch (currentScreen) {
     case 'home': return <HomeScreen p={p} />;
     case 'recording': return <RecordingScreen p={p} />;
@@ -1176,7 +1244,7 @@ function ScreenRouter({ p }: { p: MobileAppShellProps }) {
     case 'apps': return <AppsScreen p={p} />;
     case 'classmate': return <ClassmateScreen p={p} />;
     case 'echo': return <EchoScreen p={p} />;
-    case 'empty': return <EmptyScreen p={p} />;
+    case 'empty': return <EmptyScreen p={p} onEnterHome={() => { setHasEnteredEmptyHome(true); replace('home'); }} />;
     default: return <HomeScreen p={p} />;
   }
 }

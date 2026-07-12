@@ -58,7 +58,7 @@ route.ts → lib/services/ + lib/utils/rate-limit
 | `/api/generate-summary` | POST | 课堂摘要生成 |
 | `/api/generate-topics` | POST | 精选片段生成（Smart/Fast） |
 | `/api/feedback` | POST | 用户反馈 |
-| `/api/feed` | POST | 信息流生成（M15：默认 `mode=cross-course` 基于 workspace captures + 画像 + 笔记生成跨课程信息流；`mode=single` 遗留单课模式） |
+| `/api/feed` | POST | 信息流生成：跨课程请求包含来源平台/作者/正文完整度；link-only 与解析失败内容不能作为原文观点证据 |
 
 ### 🧩 应用系统
 
@@ -92,7 +92,7 @@ route.ts → lib/services/ + lib/utils/rate-limit
 |------|------|------|
 | `/api/workspace/current` | GET | 获取当前工作空间 |
 | `/api/workspace/local-migration` | POST | 把本地 IndexedDB 学习历史迁移到当前账号的 Workspace |
-| `/api/workspace/captures` | GET | captures 列表 |
+| `/api/workspace/captures` | POST/PATCH/DELETE | capture 写入、更新与归档删除；写入时 canonicalize URL，同工作区相同原文自动合并，并持久化 `metadata.provenance` |
 | `/api/workspace/captures/stats` | GET | captures 统计 |
 | `/api/workspace/search` | POST | 全局 AI 检索（SSE 流式） |
 | `/api/workspace/echoes/daily-refresh` | POST | 每日回响刷新 |
@@ -104,7 +104,7 @@ route.ts → lib/services/ + lib/utils/rate-limit
 | `/api/wechat/mp` | GET/POST | 公众号消息接收 + 自动回复 |
 | `/api/wechat/bind` | POST | 微信绑定发起 |
 | `/api/wechat/bind/callback` | GET | 微信绑定回调 |
-| `/api/wechat/capture/[token]` | POST | 微信 capture 数据接收 |
+| `/api/wechat/capture/[token]` | GET | 读取微信 capture、绑定状态与后台正文解析状态 |
 
 ### 📊 分析
 

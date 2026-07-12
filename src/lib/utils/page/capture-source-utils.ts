@@ -14,6 +14,10 @@ import { getCollectionContextDisplayTitle } from '@/lib/capture/collection-conte
 import { parseVideoLink } from '@/lib/utils/video-link';
 import { compactText, compactMultilineText } from './text-and-constants';
 import { markdownToPlainText } from '@/lib/services/web-article-extract-service';
+import {
+  buildSourceProvenance,
+  readSourceProvenance,
+} from '@/lib/capture/source-provenance';
 
 // ── Workspace capture helpers ─────────────────────────────────────
 
@@ -274,6 +278,21 @@ export function buildWorkspaceCaptureSourceItem(item: WorkspaceCaptureMessage): 
     typeof metadata?.sourceMode === 'string' && metadata.sourceMode.trim()
       ? metadata.sourceMode.trim()
       : undefined;
+  const provenance = readSourceProvenance(metadata) || buildSourceProvenance({
+    ingressChannel: item.sourceType === 'wechat'
+      ? 'wechat'
+      : item.sourceType === 'manual-note'
+        ? 'composer'
+        : item.sourceType === 'shared-agent'
+          ? 'share'
+          : item.sourceUrl
+            ? 'composer'
+            : 'system',
+    sourceUrl: item.sourceUrl,
+    normalizedText: item.normalizedText,
+    platformLabel: typeof metadata?.providerLabel === 'string' ? metadata.providerLabel : undefined,
+    extractionMethod: typeof metadata?.extractMethod === 'string' ? metadata.extractMethod : undefined,
+  });
   // v3.0：shared-agent capture —— 让点击 attachmentUrl 跳回 /share/[token]
   // 这样 B 领取后还能继续看完整产物 + 跟同学对话（同一个 token，幂等）
   const sharedAgentToken =
@@ -354,6 +373,7 @@ export function buildWorkspaceCaptureSourceItem(item: WorkspaceCaptureMessage): 
     cid,
     audioUrl,
     sourceMode,
+    provenance,
   };
 }
 
@@ -387,6 +407,13 @@ export function buildWechatCaptureSourceItem(message: WechatCaptureMessage): Sou
     addedAt,
     origin: 'user',
     reviewable: sourceType === 'audio' || sourceType === 'video',
+    provenance: buildSourceProvenance({
+      ingressChannel: 'wechat',
+      sourceUrl: message.sourceUrl,
+      normalizedText: message.normalizedText,
+      isExtracting: sourceType === 'document' && (message.status === 'received' || message.status === 'processing'),
+      failed: message.status === 'failed',
+    }),
   };
 }
 

@@ -98,6 +98,29 @@ export const COPY = {
     text: '笔记',
   },
 
+  sourceOrigin: {
+    quickNote: '速记',
+    wechat: '从微信发来',
+    wechatArticle: '微信公众号',
+    bilibili: '哔哩哔哩',
+    youtube: 'YouTube',
+  },
+
+  sourceState: {
+    extracting: '正在读取正文',
+    complete: '正文完整',
+    partial: '仅取得摘要',
+    linkOnly: '已保存原链接',
+    failed: '读取失败，原链接已保留',
+  },
+
+  sourceReader: {
+    saved: '已收下',
+    untitled: '未命名内容',
+    openOriginal: '查看原文',
+    noBody: '正文暂时没有读取出来，原始内容仍然保留。',
+  },
+
   listening: {
     idle: '我在。',
     hearing: '我在听。',

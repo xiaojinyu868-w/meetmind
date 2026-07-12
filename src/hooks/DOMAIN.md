@@ -43,12 +43,12 @@ hooks → stores + types + lib/db + lib/utils
 | `useCollectionComposer.ts` | ~689 | 收集 Composer 完整逻辑（输入/提交/上下文选择/引用/滚动/菜单操作/语音听写），从 page.tsx 提取（Phase 3） |
 | `useCollectionPulse.ts` | ~250 | 收集发酵脉搏（collectionPulse 状态计算 + captureActivitySummary + 自动显隐 effect），从 page.tsx 提取（Phase 3） |
 | `useTutorLauncher.ts` | ~340 | AI 家教启动逻辑（blobToDataUrl + buildTutorLaunchImages + buildTutorPrompt* + openTutor* + applyBatchAction），从 page.tsx 提取（Phase 4） |
-| `useTranscriptIngest.ts` | ~275 | 转录摄入管线（ingestTranscriptSegments 巨型函数：段落合并 + 会话创建 + 视频源设置 + DB 持久化 + 时间线构建），从 page.tsx 提取（Phase 4） |
+| `useTranscriptIngest.ts` | ~400 | 转录摄入与持久化；尊重调用方的 persistSourceKey/sourceType/role，并将来源 provenance 写入 WorkspaceCapture |
 | `useRecordingLifecycle.ts` | 477 | 录音生命周期（persistCaptureToWorkspace + handleRecordingStart + handleRecordingStop）；写入 `transcriptionStatus` pending/completed/failed |
 | `useTranscriptHandlers.ts` | 349 | 转录处理器（handleTranscriptUpdate + handleRecordingTranscriptionError + handleTranscriptEnhanced + handleVideoAssistantMessage + handleTranscriptTextUpdate）；失败时同步 audioSession 为 failed |
 | `useAudioMessagePlayback.ts` | ~130 | 收集流音频播放（stopAudioMessagePlayback + toggleAudioMessagePlayback + cleanup effect），从 page.tsx 提取（Phase 4） |
 | `useCollectionListActions.ts` | ~268 | 收集列表操作适配层（ensureWorkspaceCaptureSourceItem + resolveCollectionListSourceItem + quote/review/toggle/archive/restore/delete/edit/askTutor），从 page.tsx 提取（Phase 5） |
-| `useWechatCaptureImport.ts` | ~243 | 微信收集导入（settleWechatCaptureEntry + wechat fetch effect），从 page.tsx 提取（Phase 5） |
+| `useWechatCaptureImport.ts` | ~243 | 微信收集导入；兜底文章解析沿用 `wechat:*` sourceKey 与 provenance，避免重复 capture |
 | `useWorkspaceContextLoader.ts` | ~183 | 工作区上下文加载 + 同步（API 加载 + captures 合并 + captureDrivenPulse 自动过期），从 page.tsx 提取（Phase 5） |
 | `useAnchorActions.ts` | ~175 | 困惑点/锚点 CRUD（handleAnchorMark + handlePlaybackAnchorAdd + handleAnchorSelect + handleResolveAnchor），从 page.tsx 提取（Phase 5） |
 | `useSeekController.ts` | ~125 | 播放跳转 + 时间归一化（normalizeSeekTime + handleVideoSeek + handleUnifiedSeek），从 page.tsx 提取（Phase 5） |

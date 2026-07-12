@@ -30,7 +30,7 @@ import {
   readJsonApiResponse,
 } from '@/lib/utils/page-utils';
 import { toast } from 'sonner';
-import type { SourceIngestItem, WechatCaptureMessage } from '@/types/page-types';
+import type { SourceIngestItem, SourceProvenance, WechatCaptureMessage } from '@/types/page-types';
 
 // ── Deps interface ──
 
@@ -53,6 +53,7 @@ interface UseWechatCaptureImportDeps {
       persistSourceType?: string;
       persistRole?: 'primary' | 'support';
       occurredAt?: string;
+      provenance?: SourceProvenance;
     }
   ) => Promise<boolean>;
 }
@@ -240,8 +241,11 @@ export function useWechatCaptureImport(
           void deps.importDocumentLink(message.sourceUrl, {
             sourceItemId: nextItem.id,
             optimisticTitle: title,
+            persistSourceKey: nextItem.sourceKey,
+            persistSourceType: 'wechat',
             persistRole: role,
             occurredAt: addedAt,
+            provenance: nextItem.provenance,
           });
         }
 

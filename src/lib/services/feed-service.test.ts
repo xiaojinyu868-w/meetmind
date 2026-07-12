@@ -5,6 +5,7 @@ import {
   containsUnsupportedPsychology,
   isAcceptableExternalResult,
   scoreExternalResult,
+  buildCrossCoursePrompt,
 } from './feed-service';
 
 describe('feed recommendation quality guardrails', () => {
@@ -40,5 +41,17 @@ describe('feed recommendation quality guardrails', () => {
   it('blocks unsupported psychological interpretations', () => {
     expect(containsUnsupportedPsychology('这反映了你对知识盲区的零容忍心态')).toBe(true);
     expect(containsUnsupportedPsychology('你收藏了三篇关于快速排序的文章')).toBe(false);
+  });
+
+  it('tells the model not to invent claims from link-only captures', () => {
+    const prompt = buildCrossCoursePrompt([
+      {
+        id: 'capture-link',
+        title: '一篇待读文章',
+        source: { platformLabel: '微信公众号', contentState: 'link-only' },
+      },
+    ], {});
+    expect(prompt).toContain('微信公众号；只有原链接');
+    expect(prompt).toContain('不能推断文章观点');
   });
 });

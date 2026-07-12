@@ -24,7 +24,7 @@ export default defineConfig({
   webServer: {
     command: `npx next dev -p ${E2E_PORT} -H ${E2E_HOST}`,
     url: E2E_BASE_URL,
-    reuseExistingServer: false,
+    reuseExistingServer: !process.env.CI,
     timeout: 120_000,
   },
   projects: [

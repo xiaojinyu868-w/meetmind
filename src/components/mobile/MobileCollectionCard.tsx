@@ -9,6 +9,8 @@
 import React from 'react';
 import { Mic, FileText, Camera, Link as LinkIcon, Video, ChevronRight, Check } from 'lucide-react';
 import type { SourceIngestItem } from '@/types/page-types';
+import { COPY } from '@/lib/ui/copy';
+import { getProvenanceSourceLabel } from '@/lib/capture/source-provenance';
 
 interface MobileCollectionCardProps {
   item: SourceIngestItem;
@@ -64,11 +66,60 @@ function getStatusBadge(item: SourceIngestItem): { text: string; className: stri
   return null;
 }
 
+function getSourceLabel(item: SourceIngestItem): string {
+  const provenanceLabel = getProvenanceSourceLabel(item.provenance);
+  if (provenanceLabel && provenanceLabel !== '网页') return provenanceLabel;
+  const sourceKey = item.sourceKey || '';
+  if (sourceKey.startsWith('manual:') || item.id.startsWith('quick-note-')) {
+    return COPY.sourceOrigin.quickNote;
+  }
+
+  if (sourceKey.startsWith('wechat:')) {
+    if (item.attachmentUrl?.includes('mp.weixin.qq.com')) {
+      return COPY.sourceOrigin.wechatArticle;
+    }
+    return COPY.sourceOrigin.wechat;
+  }
+
+  if (item.videoProvider === 'bilibili') return COPY.sourceOrigin.bilibili;
+  if (item.videoProvider === 'youtube') return COPY.sourceOrigin.youtube;
+
+  if (item.attachmentUrl) {
+    try {
+      const hostname = new URL(item.attachmentUrl).hostname.replace(/^www\./, '');
+      if (hostname === 'mp.weixin.qq.com') return COPY.sourceOrigin.wechatArticle;
+      return hostname;
+    } catch {
+      return '';
+    }
+  }
+
+  return '';
+}
+
+function getContentStateLabel(item: SourceIngestItem): string {
+  switch (item.provenance?.contentState) {
+    case 'extracting': return COPY.sourceState.extracting;
+    case 'complete': return COPY.sourceState.complete;
+    case 'partial': return COPY.sourceState.partial;
+    case 'link-only': return COPY.sourceState.linkOnly;
+    case 'failed': return COPY.sourceState.failed;
+    default: return '';
+  }
+}
+
 export function MobileCollectionCard({ item, onClick }: MobileCollectionCardProps) {
   const { icon: Icon, bg, color } = getTypeIcon(item.type);
   const status = getStatusBadge(item);
   const timeLabel = formatTime(item.addedAt);
   const durLabel = formatDuration(item.durationMs);
+  const sourceLabel = getSourceLabel(item);
+  const isQuickNote = item.sourceKey?.startsWith('manual:') || item.id.startsWith('quick-note-');
+  const displayTitle = isQuickNote
+    ? item.preview?.trim() || item.fullText?.trim() || item.title
+    : item.title || '未命名';
+  const contextLine = [sourceLabel, timeLabel, durLabel].filter(Boolean).join(' · ');
+  const contentStateLabel = getContentStateLabel(item);
 
   // 补充信息：段数 / 板书数
   const metaParts: string[] = [];
@@ -88,10 +139,10 @@ export function MobileCollectionCard({ item, onClick }: MobileCollectionCardProp
         </div>
         <div className="min-w-0 flex-1">
           <p className="text-[13px] font-semibold text-ink truncate leading-snug">
-            {item.title || '未命名'}
+            {displayTitle}
           </p>
           <p className="text-[11px] text-ink-muted mt-0.5">
-            {timeLabel}{durLabel ? ` · ${durLabel}` : ''}
+            {contextLine}
           </p>
           <div className="mt-1.5 flex items-center gap-1.5 flex-wrap">
             {status && (
@@ -103,6 +154,9 @@ export function MobileCollectionCard({ item, onClick }: MobileCollectionCardProp
             )}
             {metaText && (
               <span className="font-mono text-[9px] text-ink-muted">{metaText}</span>
+            )}
+            {contentStateLabel && !isQuickNote && item.type !== 'audio' && item.type !== 'video' && (
+              <span className="font-mono text-[9px] text-ink-muted">{contentStateLabel}</span>
             )}
           </div>
         </div>

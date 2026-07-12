@@ -23,6 +23,7 @@ import type {
   SourceIngestType,
   SourceIngestRole,
   SourceIngestItem,
+  SourceProvenance,
 } from '@/types/page-types';
 
 // ── Hook ──
@@ -47,6 +48,7 @@ export function useSourceItemManagement() {
     sessionId?: string;
     durationMs?: number;
     reviewable?: boolean;
+    provenance?: SourceProvenance;
   }) => {
     useCollectionStore.getState().actions.setSourceItems((prev) => {
       const item: SourceIngestItem = {
@@ -68,6 +70,7 @@ export function useSourceItemManagement() {
         sessionId: params.sessionId,
         durationMs: params.durationMs,
         reviewable: params.reviewable,
+        provenance: params.provenance,
       };
       if (params.keepPrevious === false) {
         const supportOnly = prev.filter((sourceItem) => sourceItem.role === 'support');
@@ -90,6 +93,7 @@ export function useSourceItemManagement() {
     title: string;
     segments: TranscriptSegment[];
     appendItem?: boolean;
+    provenance?: SourceProvenance;
   }) => {
     const supportId = params.id || `${params.type}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
     const reference = buildSupportReferenceSnippet(params.segments, 2800);
@@ -105,6 +109,7 @@ export function useSourceItemManagement() {
         origin: 'user',
         status: 'ready',
         statusText: undefined,
+        provenance: params.provenance,
       });
     }
     if (reference) {

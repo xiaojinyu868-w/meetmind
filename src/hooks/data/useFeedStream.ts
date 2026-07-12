@@ -22,7 +22,15 @@ interface CapturePayload {
   normalizedText?: string | null;
   contentType?: string;
   occurredAt?: string | null;
+  source?: {
+    platformLabel?: string;
+    author?: string;
+    contentState?: 'received' | 'extracting' | 'complete' | 'partial' | 'link-only' | 'failed';
+    completeness?: number;
+  };
 }
+
+type CaptureSourcePayload = NonNullable<CapturePayload['source']>;
 
 interface GenerateFeedRequest {
   mode: 'cross-course';
@@ -126,6 +134,19 @@ export function useFeedStream({
         normalizedText: c.normalizedText,
         contentType: c.contentType,
         occurredAt: c.occurredAt ?? c.createdAt,
+        source: (() => {
+          const provenance = c.metadata?.provenance;
+          if (!provenance || typeof provenance !== 'object' || Array.isArray(provenance)) return undefined;
+          const value = provenance as Record<string, unknown>;
+          return {
+            platformLabel: typeof value.platformLabel === 'string' ? value.platformLabel : undefined,
+            author: typeof value.author === 'string' ? value.author : undefined,
+            contentState: typeof value.contentState === 'string'
+              ? value.contentState as CaptureSourcePayload['contentState']
+              : undefined,
+            completeness: typeof value.completeness === 'number' ? value.completeness : undefined,
+          };
+        })(),
       }));
 
       const requestBody: GenerateFeedRequest = {
@@ -188,7 +209,7 @@ export function buildFeedSignature(
   learnerProfile?: LearnerProfile | null,
 ): string {
   const capturePart = captures.slice(0, 20).map((capture) => (
-    `${capture.id}:${capture.occurredAt ?? capture.createdAt}:${capture.normalizedText?.length ?? 0}`
+    `${capture.id}:${capture.occurredAt ?? capture.createdAt}:${capture.normalizedText?.length ?? 0}:${JSON.stringify(capture.metadata?.provenance ?? null)}`
   )).join('|');
   const goalPart = (learnerProfile?.goals ?? [])
     .filter((goal) => !goal.status || goal.status === 'active')

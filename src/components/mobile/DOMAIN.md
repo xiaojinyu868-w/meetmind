@@ -29,7 +29,8 @@
 | `MobileAppNavigator.tsx` | 移动端统一导航栈（push/pop/replace/reset，screen 枚举：home/recording/processing/review/flashcards/quiz/cheatsheet/apps/classmate/empty） |
 | `MobileAppShell.tsx` | **移动端统一页面壳**：接入真实数据，渲染各 screen。通过 render slots 接收 page.tsx 传入的真实组件（SafeAITutor / MobileAppRunner） |
 | `MobileAppRunner.tsx` | 移动端应用执行器：封装 useAppExecution + AppRenderSurface，闪卡/测验/速查表全屏页一行调用 |
-| `MobileCollectionCard.tsx` | 移动端精简收集流卡片 |
+| `MobileCollectionCard.tsx` | 移动端精简收集流卡片；速记直接显示正文，并展示微信/公众号/B站等可识别的来源标签 |
+| `mobile-collection-utils.ts` | 移动收集区纯展示模型；以不可变方式生成最新优先的资料收件箱顺序 |
 
 ## 注意
 
@@ -38,4 +39,5 @@
 - `MobileCollectionSheet.tsx`、`MobileTopBar.tsx`、`MobileRecordTopBar.tsx`、`MobileAIChatHeader.tsx`、`MobileAIChatPanel.tsx` 是 page 拆分模板：适合承接移动端大块条件渲染 UI；其中学习同桌文字对话/历史详情统一走 `SafeAITutor → TutorAgentPanel`，语音同桌走 `RealtimeTutorPanel → TutorRealtimeCallScreen`；语音转写会落 `conversationService` 并通过 conversationId 接回文字 agent，但不要把业务逻辑和数据获取塞回组件里
 - `MobileAppShell.tsx` 是 M15 移动端重设计的统一壳：替代旧的 `viewMode + mobileSubPage` 双状态机，用 `MobileAppNavigator` 栈式导航。拍照不再依赖外部 `sourceFileInputRef`，内部创建带 `capture="environment"` 的独立 input。录课计时器内部 tick。复习态 AI 对话、应用矩阵通过 render slots 从 page.tsx 传入真实组件。
 - `MobileAppRunner.tsx` 是移动端应用执行器：一行调用即可在移动端全屏运行闪卡/测验/速查表等应用，自动执行 + 缓存 + AppRenderSurface 渲染。
+- 移动首页的收集区采用“资料收件箱”顺序（最新在上）；桌面收集流保留对话式时间正序，两者不要共享排序假设。
 - `DedaoMenu.tsx` 现在承担移动端统一"设置"入口：游客和登录用户都能进 `settings`，个人资料不再单独挂在菜单里

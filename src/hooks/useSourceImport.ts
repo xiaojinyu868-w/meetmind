@@ -36,8 +36,10 @@ import type {
   SourceIngestType,
   SourceIngestRole,
   SourceIngestItem,
+  SourceProvenance,
   SupportReferenceItem,
 } from '@/types/page-types';
+import { buildSourceProvenance, canonicalizeSourceUrl } from '@/lib/capture/source-provenance';
 
 // ── External deps that come from caller ──
 
@@ -56,6 +58,8 @@ export interface SourceImportDeps {
     persistSourceType?: string;
     persistRole?: SourceIngestRole;
     occurredAt?: string;
+    sourceUrl?: string;
+    provenance?: SourceProvenance;
   }) => Promise<void>;
 
   /** Persist a capture entry to the workspace backend. */
@@ -94,6 +98,7 @@ export interface SourceImportDeps {
     sessionId?: string;
     durationMs?: number;
     reviewable?: boolean;
+    provenance?: SourceProvenance;
   }) => void;
 
   /** Update an existing source item by id. */
@@ -107,6 +112,7 @@ export interface SourceImportDeps {
     title: string;
     segments: TranscriptSegment[];
     appendItem?: boolean;
+    provenance?: SourceProvenance;
   }) => { supportId: string; reference: string };
 
   /** ASR context hint (manual input). */
@@ -133,6 +139,7 @@ export interface SourceImportReturn {
       persistSourceType?: string;
       persistRole?: SourceIngestRole;
       occurredAt?: string;
+      provenance?: SourceProvenance;
     }
   ) => Promise<void>;
 
@@ -167,6 +174,7 @@ export interface SourceImportReturn {
       persistSourceType?: string;
       persistRole?: SourceIngestRole;
       occurredAt?: string;
+      provenance?: SourceProvenance;
     }
   ) => Promise<boolean>;
 
@@ -314,6 +322,10 @@ export function useSourceImport(
       const errorMessages: string[] = [];
 
       queuedFiles.forEach(({ id, file, isAudio, isVideo, isImage, mediaUrl, previewUrl, attachmentUrl, durationMs }) => {
+        const pendingProvenance = buildSourceProvenance({
+          ingressChannel: 'upload',
+          isExtracting: true,
+        });
         appendSourceItem({
           id,
           sourceKey: isAudio || isVideo ? `ingest:${id}` : `support:${id}`,
@@ -335,6 +347,7 @@ export function useSourceImport(
             ? '正在阅读…'
             : undefined,
           durationMs,
+          provenance: pendingProvenance,
         });
       });
 
@@ -378,6 +391,18 @@ export function useSourceImport(
               title: parsed.title,
               segments: parsed.segments,
               appendItem: false,
+              provenance: buildSourceProvenance({
+                ingressChannel: 'upload',
+                normalizedText: parsed.segments.map((segment) => segment.text).join('\n'),
+                contentState: 'complete',
+                completeness: 1,
+              }),
+            });
+            const imageProvenance = buildSourceProvenance({
+              ingressChannel: 'upload',
+              normalizedText: appended.reference,
+              contentState: 'complete',
+              completeness: 1,
             });
             updateSourceItem(id, {
               sourceKey: `support:${id}`,
@@ -393,6 +418,7 @@ export function useSourceImport(
               statusText: undefined,
               origin: 'user',
               capturedAtMs: options?.capturedAtMs,
+              provenance: imageProvenance,
             });
             void persistCaptureToWorkspace({
               sourceType: 'support-import',
@@ -410,6 +436,7 @@ export function useSourceImport(
                 fileName: file.name,
                 capturedAtMs: options?.capturedAtMs,
                 sessionId: options?.sessionId,
+                provenance: imageProvenance,
               },
             });
             importedReferenceTexts.push(
@@ -465,6 +492,18 @@ export function useSourceImport(
               title: parsed.title,
               segments: parsed.segments,
               appendItem: false,
+              provenance: buildSourceProvenance({
+                ingressChannel: 'upload',
+                normalizedText: parsed.segments.map((segment) => segment.text).join('\n'),
+                contentState: 'complete',
+                completeness: 1,
+              }),
+            });
+            const documentProvenance = buildSourceProvenance({
+              ingressChannel: 'upload',
+              normalizedText: appended.reference,
+              contentState: 'complete',
+              completeness: 1,
             });
             updateSourceItem(id, {
               sourceKey: `support:${id}`,
@@ -478,6 +517,7 @@ export function useSourceImport(
               status: 'ready',
               statusText: undefined,
               origin: 'user',
+              provenance: documentProvenance,
             });
             void persistCaptureToWorkspace({
               sourceType: 'support-import',
@@ -493,6 +533,7 @@ export function useSourceImport(
                 from: 'file-import',
                 fileType: parsed.fileType,
                 fileName: file.name,
+                provenance: documentProvenance,
               },
             });
             importedReferenceTexts.push(
@@ -561,6 +602,10 @@ export function useSourceImport(
               : resolveSourceFailureStatus({ isAudio, isVideo, isImage }),
             preview: isAudio || isVideo ? '' : file.name,
             origin: 'user',
+            provenance: buildSourceProvenance({
+              ingressChannel: 'upload',
+              failed: true,
+            }),
           });
         }
       }
@@ -653,7 +698,14 @@ export function useSourceImport(
     }
   ): Promise<boolean> => {
     const detected = parseVideoLink(url);
-    const targetSourceId = options?.sourceItemId || `video-link-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    const canonicalUrl = canonicalizeSourceUrl(url);
+    const existingByUrl = !options?.sourceItemId && canonicalUrl
+      ? useCollectionStore.getState().sourceItems.find((item) => (
+          item.provenance?.canonicalUrl === canonicalUrl
+          || canonicalizeSourceUrl(item.attachmentUrl) === canonicalUrl
+        ))
+      : undefined;
+    const targetSourceId = options?.sourceItemId || existingByUrl?.id || `video-link-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
     const optimisticTitle = options?.optimisticTitle || (() => {
       try {
         const hostname = new URL(url).hostname.replace(/^www\./i, '');
@@ -666,7 +718,15 @@ export function useSourceImport(
       }
     })();
 
-    if (options?.sourceItemId) {
+    const pendingProvenance = buildSourceProvenance({
+      ingressChannel: options?.persistSourceType === 'wechat' ? 'wechat' : 'composer',
+      sourceUrl: url,
+      platformId: detected?.provider,
+      platformLabel: detected?.providerLabel,
+      isExtracting: true,
+    });
+
+    if (options?.sourceItemId || existingByUrl) {
       updateSourceItem(targetSourceId, {
         type: 'video',
         role: 'primary',
@@ -679,6 +739,7 @@ export function useSourceImport(
         status: 'parsing',
         statusText: undefined,
         reviewable: false,
+        provenance: pendingProvenance,
       });
     } else {
       appendSourceItem({
@@ -694,6 +755,7 @@ export function useSourceImport(
         status: 'parsing',
         statusText: undefined,
         reviewable: false,
+        provenance: pendingProvenance,
       });
     }
 
@@ -757,6 +819,7 @@ export function useSourceImport(
         updateSourceItem(targetSourceId, {
           status: 'failed',
           statusText: friendlyMessage,
+          provenance: { ...pendingProvenance, contentState: 'failed' },
         });
         return false;
       }
@@ -770,6 +833,7 @@ export function useSourceImport(
           attachmentUrl: payload.source?.originalUrl || url,
           status: 'failed',
           statusText: '导入成功但没听到内容，稍后再试试',
+          provenance: { ...pendingProvenance, contentState: 'failed' },
         });
         return false;
       }
@@ -796,7 +860,7 @@ export function useSourceImport(
         trace: payload.trace,
       }, {
         sourceItemId: targetSourceId,
-        persistSourceKey: options?.persistSourceKey,
+        persistSourceKey: options?.persistSourceKey || existingByUrl?.sourceKey,
         persistSourceType: options?.persistSourceType,
         persistRole: options?.persistRole,
         occurredAt: options?.occurredAt,
@@ -809,6 +873,7 @@ export function useSourceImport(
       updateSourceItem(targetSourceId, {
         status: 'failed',
         statusText: message,
+        provenance: { ...pendingProvenance, contentState: 'failed' },
       });
       return false;
     } finally {
@@ -828,10 +893,18 @@ export function useSourceImport(
       persistSourceType?: string;
       persistRole?: SourceIngestRole;
       occurredAt?: string;
+      provenance?: SourceProvenance;
     }
   ): Promise<boolean> => {
     const detected = parseVideoLink(url);
-    const targetSourceId = options?.sourceItemId || `article-link-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    const canonicalUrl = canonicalizeSourceUrl(url);
+    const existingByUrl = !options?.sourceItemId && canonicalUrl
+      ? useCollectionStore.getState().sourceItems.find((item) => (
+          item.provenance?.canonicalUrl === canonicalUrl
+          || canonicalizeSourceUrl(item.attachmentUrl) === canonicalUrl
+        ))
+      : undefined;
+    const targetSourceId = options?.sourceItemId || existingByUrl?.id || `article-link-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
     const optimisticTitle = options?.optimisticTitle || (() => {
       try {
         if (detected?.providerLabel) {
@@ -843,8 +916,13 @@ export function useSourceImport(
         return detected?.providerLabel ? `${detected.providerLabel} 文章` : '图文链接';
       }
     })();
+    const pendingProvenance = options?.provenance || buildSourceProvenance({
+      ingressChannel: 'composer',
+      sourceUrl: url,
+      isExtracting: true,
+    });
 
-    if (options?.sourceItemId) {
+    if (options?.sourceItemId || existingByUrl) {
       updateSourceItem(targetSourceId, {
         type: 'text',
         role: 'primary',
@@ -856,6 +934,7 @@ export function useSourceImport(
         status: 'parsing',
         statusText: '正在提取文章内容…',
         reviewable: false,
+        provenance: pendingProvenance,
       });
     } else {
       appendSourceItem({
@@ -870,6 +949,7 @@ export function useSourceImport(
         status: 'parsing',
         statusText: '正在提取文章内容…',
         reviewable: false,
+        provenance: pendingProvenance,
       });
     }
 
@@ -917,12 +997,24 @@ export function useSourceImport(
       }
 
       const segments = normalizeImportedVideoSegments(payload);
+      const readyProvenance = buildSourceProvenance({
+        ingressChannel: options?.provenance?.ingressChannel || 'composer',
+        sourceUrl: payload.source?.originalUrl || url,
+        normalizedText: payload.text,
+        platformId: payload.source?.provider,
+        platformLabel: payload.source?.providerLabel,
+        author: payload.author,
+        extractionMethod: payload.source?.extractMethod,
+        contentState: 'complete',
+        completeness: 1,
+      });
       if (segments.length === 0) {
         updateSourceItem(targetSourceId, {
           title: payload.title || optimisticTitle,
           attachmentUrl: url,
           status: 'failed',
           statusText: '文章内容为空，稍后再试试',
+          provenance: { ...pendingProvenance, contentState: 'failed' },
         });
         return false;
       }
@@ -932,16 +1024,20 @@ export function useSourceImport(
         sourceType: 'document',
         sourceTitle: payload.title || optimisticTitle,
         sourceItemId: targetSourceId,
-        persistSourceKey: options?.persistSourceKey,
+        persistSourceKey: options?.persistSourceKey || existingByUrl?.sourceKey,
         persistSourceType: options?.persistSourceType,
         persistRole: options?.persistRole,
         occurredAt: options?.occurredAt,
+        sourceUrl: payload.source?.originalUrl || url,
+        provenance: readyProvenance,
       });
 
       // 补充写入 fullText 和图片信息，供复习态原文展示使用
       updateSourceItem(targetSourceId, {
         fullText: payload.text || segments.map((s) => s.text).join('\n\n'),
         imageUrls: payload.imageUrls?.filter((u) => u.startsWith('http')) || undefined,
+        attachmentUrl: payload.source?.originalUrl || url,
+        provenance: readyProvenance,
       });
 
       return true;
@@ -950,6 +1046,8 @@ export function useSourceImport(
         title: optimisticTitle,
         status: 'failed',
         statusText: '文章提取失败，稍后再试试',
+        attachmentUrl: url,
+        provenance: { ...pendingProvenance, contentState: 'failed' },
       });
       return false;
     } finally {
