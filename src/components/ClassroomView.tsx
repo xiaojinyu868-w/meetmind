@@ -43,8 +43,17 @@ import { useLiveConcepts } from '@/hooks/useLiveConcepts';
 import { useCaptureEditorStore } from '@/stores/capture-editor-store';
 import { useSessionStore } from '@/stores/session-store';
 import { useCollectionStore } from '@/stores/collection-store';
-import { loadDemoLesson, selectDemoLiveSegments } from './classroom/DemoLessonLoader';
-import { shouldExitDemoRecordingOnStop, shouldShowClassroomCompanion } from './ClassroomView.model';
+import {
+  isDemoLessonLoaded,
+  loadDemoLesson,
+  selectDemoLiveSegments,
+} from './classroom/DemoLessonLoader';
+import {
+  resolveClassroomPaneState,
+  resolveIsDemoSession,
+  shouldExitDemoRecordingOnStop,
+  shouldShowClassroomCompanion,
+} from './ClassroomView.model';
 import { buildGuestDemoFlashcardsResult } from './classroom/guest-demo-entry';
 import { writeCachedAppResult, writeCachedTaskState } from '@/components/apps/hooks/useAppExecution';
 import { DEMO_AUDIO_URL, DEMO_SEGMENTS, DEMO_SESSION_ID } from '@/fixtures/demo-data';
@@ -97,18 +106,26 @@ export function ClassroomView({
   // ── 真实数据：Lesson[] + markReviewed ──
   const { lessons, markReviewed } = useClassroomLessons();
   const captureActions = useCaptureEditorStore((s) => s.actions);
+  const segments = useCaptureEditorStore((s) => s.segments);
   const sessionActions = useSessionStore((s) => s.actions);
 
   // 左侧面板视图态：list ↔ recording
   // - isRecording=true 时优先走 recording
   // - 用户在录音中也可以手动"返回列表"（localPaneState='list'）去翻其他课
-  const [localPaneState, setLocalPaneState] = useState<ClassroomPaneState>('list');
+  const [localPaneState, setLocalPaneState] = useState<ClassroomPaneState>(() => (
+    resolveClassroomPaneState({ isRecording, autoLoadDemo })
+  ));
   const paneState: ClassroomPaneState = isRecording && localPaneState === 'recording'
     ? 'recording'
     : isRecording && localPaneState === 'list'
       ? 'list'
       : localPaneState;
-  const companionIsRecording = isRecording || (autoLoadDemo && paneState === 'recording');
+  const demoSessionActive = resolveIsDemoSession({
+    autoLoadDemo,
+    isRecording,
+    isDemoLessonLoaded: isDemoLessonLoaded(segments),
+  });
+  const companionIsRecording = isRecording || (demoSessionActive && paneState === 'recording');
 
   // ── 真 AI 同桌 ──
   const {
@@ -121,14 +138,11 @@ export function ClassroomView({
     handleInlineAppInteraction,
   } = useClassroomCompanion({ lessons, isRecording: companionIsRecording, onOpenApp });
 
-  // 录音开启 → 自动进入 recording 全屏态（第一次）
+  // 真实录音或显式访客试听入口 → 自动进入 recording 全屏态。
+  // autoLoadDemo 必须参与同步，避免 Strict Mode 重放 effect 后落回课堂空态。
   useEffect(() => {
-    if (isRecording) {
-      setLocalPaneState('recording');
-    } else {
-      setLocalPaneState('list');
-    }
-  }, [isRecording]);
+    setLocalPaneState(resolveClassroomPaneState({ isRecording, autoLoadDemo }));
+  }, [isRecording, autoLoadDemo]);
 
   // ── AI 同桌的展开策略 ──
   // 没有课堂上下文时不展示同桌入口；只有真实录课 / 示例课正在播放时才出现。
@@ -137,7 +151,7 @@ export function ClassroomView({
   const companionAvailable = shouldShowClassroomCompanion({
     paneState,
     isRecording,
-    autoLoadDemo,
+    autoLoadDemo: demoSessionActive,
   });
   useEffect(() => {
     if (companionAvailable) {
@@ -174,7 +188,7 @@ export function ClassroomView({
   // ── 录课中关键概念（客户端启发式） ──
   const liveConcepts = useLiveConcepts({ enabled: paneState === 'recording' });
 
-  const isDemoRecordingPane = autoLoadDemo && paneState === 'recording' && !isRecording;
+  const isDemoRecordingPane = demoSessionActive && paneState === 'recording' && !isRecording;
 
   // ── 录课计时：真实录音走本地 tick；试听课走 audio.currentTime ──
   const [localRecordingSeconds, setLocalRecordingSeconds] = useState(0);
@@ -200,7 +214,6 @@ export function ClassroomView({
   }, [paneState, isDemoRecordingPane]);
 
   // ── 录课中实时转录：订阅 segments，只在录课态订阅 + 拼接 ──
-  const segments = useCaptureEditorStore((s) => s.segments);
   const liveInterimText = useCaptureEditorStore((s) => s.liveInterimText);
 
   // ── 试听课音频：demo 不是无声假课。自动播放如果被浏览器拦截，UI 会露出“播放声音”。
@@ -529,7 +542,7 @@ export function ClassroomView({
   }, [onStartRecording, onStopRecording]);
 
   const handleStopRecording = useCallback((lessonId?: string) => {
-    if (shouldExitDemoRecordingOnStop({ autoLoadDemo, isRecording, paneState })) {
+    if (shouldExitDemoRecordingOnStop({ autoLoadDemo: demoSessionActive, isRecording, paneState })) {
       if (demoComplete) {
         handleOpenDemoReview();
         return;
@@ -544,7 +557,7 @@ export function ClassroomView({
     } else {
       setLocalPaneState('list');
     }
-  }, [autoLoadDemo, isRecording, paneState, demoComplete, handleOpenDemoReview, captureActions, sessionActions, onStopRecording]);
+  }, [demoSessionActive, isRecording, paneState, demoComplete, handleOpenDemoReview, captureActions, sessionActions, onStopRecording]);
 
   const handleSend = useCallback((text: string) => {
     void sendToTutor(text);

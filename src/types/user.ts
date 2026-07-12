@@ -131,9 +131,10 @@ export interface UserPreferences {
 // ==================== 学习者画像 ====================
 
 /** 身份阶段 */
-export type LearnerStage = 'k12' | 'university' | 'graduate' | 'working';
+export type LearnerStage = 'unknown' | 'k12' | 'university' | 'graduate' | 'working';
 
 export const LEARNER_STAGE_LABELS: Record<LearnerStage, string> = {
+  unknown: '未填写',
   k12: '中小学生',
   university: '大学生',
   graduate: '研究生',
@@ -227,7 +228,16 @@ export interface WorkingProfile extends LearnerProfileBase {
   learningGoal: string;      // "转行产品经理" / "CPA考证"
 }
 
-export type LearnerProfile = K12Profile | UniversityProfile | GraduateProfile | WorkingProfile;
+export interface UnknownLearnerProfile extends LearnerProfileBase {
+  stage: 'unknown';
+}
+
+export type LearnerProfile =
+  | UnknownLearnerProfile
+  | K12Profile
+  | UniversityProfile
+  | GraduateProfile
+  | WorkingProfile;
 
 // ==================== 微信登录相关 ====================
 

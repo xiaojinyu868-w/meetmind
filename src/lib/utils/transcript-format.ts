@@ -30,7 +30,7 @@ export function formatTranscriptWithSpeakers(segments: TranscriptLikeSegment[]):
       if (isNaN(speakerNum)) return text;
       return `[说话人${speakerNum}] ${text}`;
     })
-    .join('')
+    .join(' ')
     .trim();
 }
 

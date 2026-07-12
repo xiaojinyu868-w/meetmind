@@ -7,6 +7,7 @@ import { AnalyticsProvider } from '@/components/AnalyticsProvider';
 import { NetworkStatusBanner } from '@/components/NetworkStatusBanner';
 import { Toaster } from 'sonner';
 import { ServiceWorkerRegister } from '@/components/ServiceWorkerRegister';
+import { COPY } from '@/lib/ui/copy';
 
 /**
  * v7 字体三件套：
@@ -40,8 +41,8 @@ const jetBrainsMono = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
-  title: 'MeetMind - 课堂对齐的 AI 家教',
-  description: '把课堂变成可回放、可定位、可追溯的时间轴记忆',
+  title: `MeetMind - ${COPY.identity.tagline}`,
+  description: COPY.identity.subtagline,
   manifest: '/manifest.json',
   icons: {
     icon: [{ url: '/icons/icon-192x192.svg', type: 'image/svg+xml' }],

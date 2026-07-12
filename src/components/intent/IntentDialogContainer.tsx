@@ -84,10 +84,10 @@ export function IntentDialogContainer({
       const dedupedExisting = existingGoals.filter((g) => g.title.trim() !== goal.title.trim());
       const nextGoals = [...dedupedExisting, goal];
 
-      // 兼容旧 LearnerProfile：没有 stage 的话先兜底为 university
+      // 只有自然语言沉淀时不猜结构化身份，等用户主动填写学习档案。
       const baseProfile: Partial<LearnerProfile> & { goals: GoalEntry[] } = learnerProfile
         ? { ...(learnerProfile as object), goals: nextGoals } as LearnerProfile & { goals: GoalEntry[] }
-        : ({ stage: 'university', major: '未填写', year: '大一', goals: nextGoals } as unknown as LearnerProfile & { goals: GoalEntry[] });
+        : ({ stage: 'unknown', goals: nextGoals } as LearnerProfile & { goals: GoalEntry[] });
 
       await saveLearnerProfile(baseProfile as LearnerProfile);
     },
@@ -96,10 +96,10 @@ export function IntentDialogContainer({
 
   const handleSaveBio = React.useCallback(
     async (bio: BioEntry) => {
-      // 兼容旧 LearnerProfile：没有 stage 时兜底
+      // bio 已由用户逐条确认，但结构化身份仍保持未知，不能替用户补成“大一”。
       const baseProfile: Partial<LearnerProfile> & { bio: BioEntry } = learnerProfile
         ? ({ ...(learnerProfile as object), bio } as LearnerProfile & { bio: BioEntry })
-        : ({ stage: 'university', major: '未填写', year: '大一', bio } as unknown as LearnerProfile & { bio: BioEntry });
+        : ({ stage: 'unknown', bio } as LearnerProfile & { bio: BioEntry });
 
       await saveLearnerProfile(baseProfile as LearnerProfile);
     },

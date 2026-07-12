@@ -11,7 +11,7 @@
  * v3.0 P0 闭环：
  * - 未登录点「领取」→ 跳 /login?next=/share/[token]?autoClaim=1
  * - 登录后回到本页 → useEffect 检测 ?autoClaim=1 + 已登录 → 自动 claim 不再让用户再点一次
- * - claim 成功 → 1.2 秒后 router.replace('/app') 引导去自己工作台看完整产物
+ * - claim 成功 → 1.2 秒后打开 /app，引导去自己工作台看完整产物
  *
  * v7 视觉升级：
  * - 大气场 hero（米白 + 极淡墨绿/朱批光晕）—— 这是 MeetMind "唯一允许放飞"的页面
@@ -24,7 +24,7 @@
 import * as React from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useSearchParams } from 'next/navigation';
 import { toast } from 'sonner';
 import { useAuth } from '@/lib/hooks/useAuth';
 import { COPY } from '@/lib/ui/copy';
@@ -70,7 +70,6 @@ function ArtifactPreview({
 }
 
 export function SharedAgentLanding({ token }: SharedAgentLandingProps) {
-  const router = useRouter();
   const searchParams = useSearchParams();
   // v7 Octo IP：分享落地页是"陌生访客在班级群点开"的场景。
   // ctx='shared-landing' = 默认 happy（学生分享了什么作品的 hero 表情），
@@ -122,6 +121,10 @@ export function SharedAgentLanding({ token }: SharedAgentLandingProps) {
   }, [token, accessToken]);
 
   const handleClaim = React.useCallback(async () => {
+    if (claimed) {
+      window.location.assign('/app');
+      return;
+    }
     if (!isAuthenticated || !accessToken) {
       // 未登录：跳到登录，登录后回到这页，URL 上带 autoClaim=1
       // 让落地页 effect 自动触发 claim，省一次手动点击
@@ -151,13 +154,13 @@ export function SharedAgentLanding({ token }: SharedAgentLandingProps) {
           ? COPY.share.landing.claimAlready
           : COPY.share.landing.claimDone,
         {
-          description: '正带你去工作台看看…',
+          description: COPY.share.landing.claimRedirecting,
         },
       );
       // P0 闭环最后一步：领取成功 → 1.2 秒后跳工作台，让 B 从分享态自然进入
       // 自己的学习现场，看到刚领取的 capture
       window.setTimeout(() => {
-        router.replace('/app');
+        window.location.assign('/app');
       }, 1200);
     } catch (err) {
       const msg = err instanceof Error ? err.message : '领取失败';
@@ -165,7 +168,7 @@ export function SharedAgentLanding({ token }: SharedAgentLandingProps) {
     } finally {
       setClaiming(false);
     }
-  }, [accessToken, isAuthenticated, octoReact, router, token]);
+  }, [accessToken, claimed, isAuthenticated, octoReact, token]);
 
   /**
    * P0 自动 claim：

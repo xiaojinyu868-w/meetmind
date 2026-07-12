@@ -12,7 +12,7 @@
 | 文件 | 行数 | 职责 | 核心类型 |
 |------|------|------|----------|
 | `index.ts` | 363 | 核心领域类型 | `AnchorType`, `TranscriptSegment`, `SessionStatus`, `HighlightTopic`, `ClassSummary`, `Note`, `TutorResponse`, `ActionItem`, `ImportedVideoSource` |
-| `user.ts` | 295 | 用户/认证类型 | `UserRole`, `Permission`, `User`, `AuthProviderLink`, `JWTPayload`, `RegisterRequest`, `LoginRequest`, `AuthResponse` |
+| `user.ts` | 295 | 用户/认证类型 | `UserRole`, `Permission`, `User`, `LearnerProfile`（含结构化身份尚未填写时的 `stage='unknown'`）, `AuthProviderLink`, `JWTPayload`, `RegisterRequest`, `LoginRequest`, `AuthResponse` |
 | `page-types.ts` | 200 | 页面级类型（page.tsx 域） | `ViewMode`, `DataSource`, `WorkspaceTab`（含 `transcript`）, `SourceIngestItem`（含 `capturedAtMs?` 照片时间锚点）, `WechatCaptureMessage`, `WorkspaceEchoMessage` |
 | `dify.ts` | 203 | Dify 集成类型 | `ExtendedTutorRequest`, `GuidanceQuestion`, `Citation`, `WebSearchResult` |
 | `conversation.ts` | 121 | 对话历史类型 | `ConversationType`, `MessageRole`, `ConversationHistory`, `ConversationMessage` |
@@ -22,3 +22,5 @@
 1. **新增跨模块类型**必须放在 `types/` 中
 2. **模块内部类型**放在模块自己的文件里（如 `video-import-types.ts`）
 3. 类型文件**不能有运行时代码**（const/function/class），只有 `type`/`interface`/`enum`
+
+`LearnerProfile.stage='unknown'` 仅用于用户已经通过对话确认 bio/goals、但尚未主动填写结构化学习档案的场景。此时不得猜测用户是大学生、在职或具体年级；Tutor 直接使用已确认的自然语言画像。

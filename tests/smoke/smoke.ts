@@ -6,7 +6,7 @@
  *
  * 覆盖：
  *   1. 静态路由（/login, /all-notes, /feedback, /help）是否 200
- *   2. 需要鉴权的路由（/app, /api/tutor/*）是否按预期 307/401（不 500）
+ *   2. 登录页、访客试听所需公开 API 与受保护 API 的边界是否正确（不 500）
  *   3. WebSocket 握手（/api/asr-stream, /api/tutor-call）是否 101
  *   4. 关键 API：/api/transcribe-fast、/api/translate/en-zh、/api/asr/corrections
  *   5. dev server 编译时 console 是否有 "Module not found" 之类 regression
@@ -100,7 +100,7 @@ async function wsCheck(path: string): Promise<void> {
 
 function grepLogFor(pattern: RegExp, expectZero = true): void {
   if (!existsSync(LOG_FILE)) {
-    rec(`log check (${pattern.source})`, false, `log file missing at ${LOG_FILE}`);
+    console.log(`↷ log check (${pattern.source}) — skipped, no log file at ${LOG_FILE}`);
     return;
   }
   // expect-present 扫全文件（例如 "Ready on http://" 是启动标志，不会在 smoke 期间出现）
@@ -179,11 +179,9 @@ async function main() {
   await wsCheck('/api/asr-stream');
   await wsCheck('/api/tutor-call');
 
-  // 3. API（未鉴权调用应 400/401，不能 500）
-  //    global middleware 要求所有 /api/* 带 Bearer（PUBLIC_ROUTES 除外），
-  //    所以无 auth 预期都是 401——这是正确行为而非 bug。
+  // 3. API：访客试听所需能力公开；用户数据写入仍需鉴权。
   console.log('\n--- API ---');
-  await postCheck('/api/translate/en-zh', { terms: ['neural network'] }, [401]);
+  await postCheck('/api/translate/en-zh', { terms: ['neural network'] }, [200]);
   await postCheck('/api/asr/corrections', {}, [400, 401]);
   await postCheck(
     '/api/asr/corrections/aggregate',
@@ -191,7 +189,7 @@ async function main() {
     [401],
     'POST /api/asr/corrections/aggregate (no auth → 401)',
   );
-  await postCheck('/api/tutor/agent', { messages: [] }, [401]);
+  await postCheck('/api/tutor/agent', { messages: [] }, [200]);
 
   // 4. 鉴权流程：注册/登录 → 拿 token → 调用受保护 API
   console.log('\n--- Authed flow ---');

@@ -7,7 +7,7 @@
  *   2. 不注入 bio 时 AI 不假装认识
  *   3. fullTranscript 注入正确，AI 能引用课堂内容
  *   4. returnTimestamps:true 时 AI 输出 [MM:SS] chip
- *   5. allowInlineApp:true 时 AI 在用户索要产物时输出 <open_app:KEY/>
+ *   5. M14.6 纯对话契约：用户索要速查表时直接给出有根内容，不输出退役 marker
  *   6. 不出现 ---我想要的--- / ---我了解到的你--- 这些 goal 模式专属 marker
  */
 
@@ -124,12 +124,13 @@ const CASES: SmokeCase<ReviewBody>[] = [
     mustNotContainAny: REVIEW_BAN,
   },
 
-  // ─── R4：inline app marker —— 用户索要产物 ───
+  // ─── R4：M14.6 纯对话 —— 应用由前端 SkillChip 打开 ───
   {
-    name: 'R4/inline app/整张速查表',
-    description: '用户说"整张速查表"，AI 应输出 <open_app:cheatsheet/> marker',
+    name: 'R4/纯对话/整张速查表',
+    description: '用户说"整张速查表"，AI 直接给有课堂证据的内容，不输出退役 marker',
     body: makeBody([{ role: 'user', content: '帮我整一张快排的速查表' }]),
-    mustContainAny: ['<open_app:cheatsheet/>'],
+    mustContainAny: ['快速排序', '快排', 'partition', '时间复杂度', '速查表'],
+    mustNotMatch: [/<open_app:/],
     mustNotContainAny: REVIEW_BAN,
   },
 

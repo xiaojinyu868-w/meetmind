@@ -14,6 +14,7 @@ import {
   Search,
   Sparkles,
 } from 'lucide-react';
+import { COPY } from '@/lib/ui/copy';
 
 export interface WorkspaceCaptureListItem {
   id: string;
@@ -600,7 +601,7 @@ export function WorkspaceCaptureList({
                               }}
                               className="flex w-full items-center justify-between rounded-lg bg-white px-3 py-2 text-left text-xs font-medium text-ink-secondary transition hover:bg-paper-deep"
                             >
-                              <span>问 Tutor</span>
+                              <span>{COPY.collection.askClassmate}</span>
                               <ChevronRight size={14} className="text-ink-faint" />
                             </button>
                           ) : null}
@@ -663,7 +664,7 @@ export function WorkspaceCaptureList({
                             confirmDeleteCaptureId === item.id ? (
                               <div className="rounded-lg border border-vermilion/15 bg-vermilion-fog px-3 py-2.5">
                                 <p className="text-xs font-semibold leading-5 text-vermilion-deep">
-                                  彻底删除后，这条收集不会再进入 Tutor、回声和后续记忆。
+                                  {COPY.collection.permanentDeleteWarning}
                                 </p>
                                 <div className="mt-2 flex items-center gap-2">
                                   <button

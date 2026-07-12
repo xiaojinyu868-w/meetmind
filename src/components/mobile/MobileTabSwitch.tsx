@@ -2,6 +2,7 @@
 
 import React, { useRef, useEffect, useState } from 'react';
 import { cn } from '@/lib/utils';
+import { COPY } from '@/lib/ui/copy';
 
 export type TabId = 'record' | 'review' | 'classroom';
 
@@ -12,8 +13,8 @@ export interface MobileTabSwitchProps {
 }
 
 const TABS: Array<{ id: TabId; label: string }> = [
-  { id: 'classroom', label: '课堂' },
-  { id: 'record', label: '收集' },
+  { id: 'classroom', label: COPY.navigation.classroom },
+  { id: 'record', label: COPY.navigation.collection },
   { id: 'review', label: '复习' },
 ];
 

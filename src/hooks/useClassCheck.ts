@@ -169,7 +169,10 @@ async function fetchCheckpointQuestions(
     }),
   });
   if (!response.ok) {
-    if (response.status === 429) {
+    // Demo 渐进转录和真实流式 ASR 都可能在 plan 已生成、对应时间窗尚未到达时
+    // 预热后续 checkpoint。此时服务端会以 400 表示窗口暂无文本；不要把单题
+    // 永久标成 failed，先给可用的本地兜底题，后续课堂仍能顺畅推进。
+    if (response.status === 400 || response.status === 429) {
       return buildClientFallbackCheckpointQuestions({ checkpoint, transcript });
     }
     throw new Error(`question API ${response.status} ${response.statusText}`);

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { buildFallbackCheckpointQuestions } from './question-fallback';
+import { selectNearestTranscriptSegments } from './route';
 import type { TranscriptSegment } from '@/types';
 
 const transcript: TranscriptSegment[] = [
@@ -39,5 +40,12 @@ describe('buildFallbackCheckpointQuestions', () => {
     expect(questions[0].options.length).toBeGreaterThanOrEqual(4);
     expect(questions[0].answer).toBe('A');
     expect(questions[0].explanation).toContain('课堂原文');
+  });
+});
+
+describe('selectNearestTranscriptSegments', () => {
+  it('keeps future checkpoint preheating usable while streaming transcript is incomplete', () => {
+    const nearest = selectNearestTranscriptSegments(transcript, 90_000, 110_000, 1);
+    expect(nearest.map((segment) => segment.id)).toEqual(['seg-2']);
   });
 });

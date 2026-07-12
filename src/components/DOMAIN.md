@@ -88,7 +88,7 @@ components/
 | `CollectionSelectionBar.tsx` | 94 | 收集上下文多选操作条（问 Tutor / 引用 / 批量归档删除） |
 | `CollectionComposerContextPreview.tsx` | 62 | composer 上方的引用与链接预览条 |
 | `CollectionComposerBar.tsx` | 168 | collection composer 输入区容器（预览 / textarea / 发送 / 听写 / 上传） |
-| `CollectionMessageActionSheet.tsx` | ~283 | 收集消息操作底部菜单（复习/编辑/打开原件/归档/删除），从 page.tsx 提取 |
+| `CollectionMessageActionSheet.tsx` | ~283 | 收集消息操作菜单（引用/问 Tutor/多选/复习/编辑/打开原件/归档/删除），从 page.tsx 提取 |
 | `mobile/MobileCollectionSheet.tsx` | ~400 | 收集菜单 / 历史收集 / 相关信息面板；移动端底部或侧边 sheet，桌面端以右侧上下文抽屉呈现；M15 起 echo 分支换成 `<CrossCourseFeedPanel>` |
 | `CrossCourseFeedPanel.tsx` | ~245 | M15 跨课程信息流面板（替代笔记总结）：LLM 跨课程探针 + B站推荐 + Echo 沉淀卡三源合并为统一 `FeedItem[]` 流，复用 `<FeedStream>` 渲染 |
 | `FeedStream.tsx` | ~245 | 信息流列表渲染器：`FeedCard` 按 type 分发（summary / probe-* / confusion-link / bili-recommend / echo），支持 `onAction` / `onShareEcho` 回调 |
@@ -104,6 +104,7 @@ components/
 |------|------|------|
 | `Header.tsx` | ~280 | 顶部导航栏 |
 | `DesktopSidebar.tsx` | ~374 | 桌面侧栏（默认 168px，折叠 52px；录课专注态强制 52px；「收集 → 相关信息」子导航 M15 起打开跨课程信息流抽屉，原「笔记总结」入口已替换） |
+| `AppLoading.tsx` | ~120 | 进入学习现场时的品牌过渡；只表达恢复状态和真实进度，不展示初始化、服务连接等工程阶段 |
 | `ModelSelector.tsx` | ~260 | AI 模型选择器 |
 | `WechatBindForm.tsx` | ~280 | 微信绑定表单 |
 | `AgreementModal.tsx` | ~600 | 用户协议弹窗 |

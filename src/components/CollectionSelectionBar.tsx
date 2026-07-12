@@ -8,6 +8,7 @@
  */
 
 import { FileText, History, MessageCircle, X } from 'lucide-react';
+import { COPY } from '@/lib/ui/copy';
 
 interface CollectionSelectionBarProps {
   selectedCount: number;
@@ -46,7 +47,7 @@ export function CollectionSelectionBar({
                 className="inline-flex items-center gap-1.5 rounded-full bg-[#1C1B19] px-3.5 py-2.5 text-[11px] font-semibold text-white transition hover:bg-[#111111]"
               >
                 <MessageCircle size={14} />
-                <span>问 Tutor</span>
+                <span>{COPY.collection.askClassmate}</span>
               </button>
               <button
                 type="button"

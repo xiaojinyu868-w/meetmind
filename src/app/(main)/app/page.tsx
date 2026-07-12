@@ -1536,6 +1536,8 @@ function StudentAppContent({
           onClose={closeCollectionMessageMenu}
           onOpenReview={openReviewFromCollection}
           onAskTutor={openTutorFromCollectionItem}
+          onQuote={quoteCollectionItemToComposer}
+          onToggleSelect={toggleCollectionContextItem}
           onEditCapture={openWorkspaceCaptureEditor}
           onOpenOriginal={openCollectionItemOriginal}
           onUpdateCaptureStatus={updateWorkspaceCaptureStatus}
@@ -1939,6 +1941,7 @@ function StudentAppContent({
           <div className="sr-only" aria-hidden>
             <Recorder
               ref={recorderRef}
+              headless
               activeSessionId={sessionId}
               continueCurrentSession={false}
               autoStartSignal={recorderAutoStartSignal}
@@ -2089,6 +2092,7 @@ function StudentAppContent({
           <div className="sr-only" aria-hidden>
             <Recorder
               ref={recorderRef}
+              headless
               activeSessionId={sessionId}
               continueCurrentSession={false}
               autoStartSignal={recorderAutoStartSignal}

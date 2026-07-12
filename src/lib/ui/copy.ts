@@ -21,18 +21,31 @@
 export const COPY = {
   identity: {
     name: '同学',
-    tagline: '今天这节课。',
-    subtagline: '',
+    tagline: '陪你听懂每一节课。',
+    subtagline: '老师讲到哪，我就听到哪。卡住时当场问；下课后，每个答案都能回到原话。',
   },
 
   cta: {
     demo: '看一节示例课',
-    record: '开始录课',
+    record: '开始一节课',
     ask: '问同学',
   },
 
+  navigation: {
+    classroom: '课堂',
+    collection: '收集',
+    search: '搜索课堂和资料',
+    allCollections: '全部收集',
+  },
+
+  collection: {
+    askClassmate: '问同学',
+    deleteMemoryWarning: '删除后，这条内容不会再进入同学的回答、相关信息和后续记忆。',
+    permanentDeleteWarning: '彻底删除后，这条内容不会再进入同学的回答、相关信息和后续记忆。',
+  },
+
   login: {
-    subtitle: '进入你的课堂学习现场',
+    subtitle: '和同学一起，把每节课真正听懂。',
     guestCta: '先试听一节课',
   },
 
@@ -44,8 +57,15 @@ export const COPY = {
   },
 
   hero: {
-    /** 主操作下面的次级链接，邀请用户先看示例 —— 用“想先看看”而不是“demo”。 */
-    sideHint: '想先看看？',
+    eyebrow: 'MEETMIND · AI 同学',
+    sideHint: '先听 90 秒示例课',
+    evidencePromise: '回答有依据，点击时间就能回到老师原话。',
+    proofStatus: '正在一起听',
+    proofQuote: 'The exact timing is still up in the air.',
+    proofTime: '00:31',
+    proofLabel: '同学听懂了',
+    proofAnswer: '这里不是“在空中”，而是“具体时间还没有决定”。',
+    proofAction: '进入这节示例课',
   },
 
   lesson: {
@@ -58,6 +78,14 @@ export const COPY = {
     actionProcessing: '整理中',
     actionFailed: '原声已保留',
     actionUpcoming: '准备上课',
+  },
+
+  classroomHome: {
+    title: '你的课堂',
+    subtitle: '从上次没听懂的地方继续，或者开始新的一节课。',
+    today: '今天',
+    yesterday: '昨天',
+    active: '正在上课',
   },
 
   sourceType: {
@@ -136,12 +164,22 @@ export const COPY = {
     foresightCount: (count: number): string => `${count} 个预感`,
     foresightDismiss: '划掉',
     foresightAccept: '就这个 · 问下去',
+    errorTitle: '同学刚刚没接上',
+    errorBody: '只影响这次对话，你的课堂和复习内容都还在。',
+    errorRetry: '重新连接',
   },
 
   recording: {
+    sourcePrompt: '这节课的声音从哪里来？',
     sourceMic: '麦克风',
     sourceSystem: '电脑声音',
     sourceMixed: '两路都录',
+    sourceMicHint: '线下课',
+    sourceSystemShortHint: '在线课程',
+    sourceMixedHint: '网课＋自己提问',
+    sourceSystemHint: '开始后，在系统窗口勾选“分享音频”。',
+    multiSpeaker: '多人课堂',
+    multiSpeakerEnabled: '多人课堂 · 已区分说话人',
     activeStatus: (source: string): string => `正在听 · ${source} · 点开看实时文字`,
     /** mixed 模式系统音频采集失败、降级为纯麦克风时提示 */
     downgradeFromMixed: '电脑声音没录到，只用麦克风在录',
@@ -332,6 +370,7 @@ export const COPY = {
       claimAction: '领取到我的工作台',
       claiming: '正在领取…',
       claimDone: '已领取，去工作台看看',
+      claimRedirecting: '正在打开你的工作台…',
       claimAlready: '你之前已经领过这一份',
       /** 也分享给别人 */
       reshareAction: '复制链接',

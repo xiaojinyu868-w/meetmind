@@ -244,7 +244,7 @@ async function buildLocalWorkspaceMigrationPayload(userId: string): Promise<Loca
           highlightText ? `精选片段：${highlightText}` : '',
           anchorText ? `困惑锚点：${anchorText}` : '',
           noteText ? `我的笔记：${noteText}` : '',
-          conversationText ? `Tutor 对话：${conversationText}` : '',
+          conversationText ? `同学对话：${conversationText}` : '',
         ]
           .filter(Boolean)
           .join('\n\n'),

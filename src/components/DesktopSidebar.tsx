@@ -110,8 +110,8 @@ export function DesktopSidebar({
 
   // 导航项配置
   const navItems = [
-    { key: 'classroom' as const, label: '课堂', Icon: BookOpen },
-    { key: 'record' as const, label: '收集', Icon: Mic },
+    { key: 'classroom' as const, label: COPY.navigation.classroom, Icon: BookOpen },
+    { key: 'record' as const, label: COPY.navigation.collection, Icon: Mic },
   ];
 
   return (
@@ -182,10 +182,10 @@ export function DesktopSidebar({
               ? 'h-9 justify-center px-0 text-ink-muted'
               : 'gap-2.5 px-2.5 py-[7px] text-[13px] text-ink-muted'
           }`}
-          title={effectiveCollapsed ? '搜索笔记' : undefined}
+          title={effectiveCollapsed ? COPY.navigation.search : undefined}
         >
           <Search size={effectiveCollapsed ? 16 : 15} strokeWidth={1.6} className="flex-shrink-0" />
-          {!effectiveCollapsed && <span>搜索笔记</span>}
+          {!effectiveCollapsed && <span>{COPY.navigation.search}</span>}
         </button>
       </div>
 
@@ -230,7 +230,7 @@ export function DesktopSidebar({
                     className="flex items-center gap-2 rounded-md px-2 py-[5px] text-[12.5px] text-ink-secondary transition-all hover:bg-paper-warm hover:text-ink"
                   >
                     <Boxes size={13} strokeWidth={1.6} className="flex-shrink-0" />
-                    <span>全部收集</span>
+                    <span>{COPY.navigation.allCollections}</span>
                   </button>
                   <button
                     type="button"
@@ -255,7 +255,7 @@ export function DesktopSidebar({
                     type="button"
                     onClick={onOpenHistory}
                     className="flex h-8 items-center justify-center rounded-lg text-ink-muted transition-all hover:bg-paper-warm hover:text-ink-secondary"
-                    title="全部收集"
+                    title={COPY.navigation.allCollections}
                   >
                     <Boxes size={15} strokeWidth={1.6} />
                   </button>

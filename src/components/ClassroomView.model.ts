@@ -1,5 +1,20 @@
 import type { ClassroomPaneState } from './classroom';
 
+export function resolveIsDemoSession(input: {
+  autoLoadDemo: boolean;
+  isRecording: boolean;
+  isDemoLessonLoaded: boolean;
+}): boolean {
+  return input.autoLoadDemo || (!input.isRecording && input.isDemoLessonLoaded);
+}
+
+export function resolveClassroomPaneState(input: {
+  autoLoadDemo: boolean;
+  isRecording: boolean;
+}): ClassroomPaneState {
+  return input.isRecording || input.autoLoadDemo ? 'recording' : 'list';
+}
+
 export function shouldExitDemoRecordingOnStop(input: {
   autoLoadDemo: boolean;
   isRecording: boolean;

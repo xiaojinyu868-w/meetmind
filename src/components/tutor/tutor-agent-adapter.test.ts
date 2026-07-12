@@ -45,6 +45,21 @@ describe('tutor agent adapter', () => {
     expect(context.learnerProfile).toContain('这只是背景，不是规则');
   });
 
+  it('does not invent a structured identity for a context-only profile', () => {
+    const learnerProfile = formatLearnerProfileForTutorAgent({
+      stage: 'unknown',
+      bio: {
+        headline: '我正在准备考研',
+        detail: '我对数学复习感到焦虑',
+        createdAt: '2026-07-12T00:00:00.000Z',
+        updatedAt: '2026-07-12T00:00:00.000Z',
+      },
+    });
+
+    expect(learnerProfile).toContain('我正在准备考研');
+    expect(learnerProfile).not.toMatch(/大学生|在职学习|年级未知|未知专业/);
+  });
+
   it('formats recent learning activity as context, not a rule or task list', () => {
     const activity = formatRecentLearningActivityForTutorAgent([
       {

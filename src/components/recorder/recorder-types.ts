@@ -25,6 +25,8 @@ export interface RecorderProps {
   continueCurrentSession?: boolean;
   autoStartSignal?: number;
   compactMode?: boolean;
+  /** 只挂载录音引擎和 imperative ref，不渲染任何可聚焦 UI。 */
+  headless?: boolean;
   /** Optional context hint (course topic, terms, references) for ASR hot-word injection */
   contextHint?: string;
   /**

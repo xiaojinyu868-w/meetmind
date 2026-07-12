@@ -43,6 +43,10 @@
   → 服务端写 learnerProfileJson + onboardingCompletedAt
 ```
 
+Marker 选择遵循内容语义：身份、阶段、状态沉淀为 `---我了解到的你---`；愿望、方向、想完成的事沉淀为 `---我想要的---`。当用户明确确认并要求保存一个具体愿望时，目标 marker 优先，不再继续追问，也不改写成画像 marker；目标卡内使用用户第一人称，让内容像用户自己的话。
+
+当用户尚未填写结构化学习档案时，保存 bio/goals 会使用 `LearnerProfile.stage='unknown'`。自然语言画像可以先成立，但不能为了满足旧类型而伪造“大学生 / 大一”等字段；用户之后在设置页填写学习档案时再写入真实阶段。
+
 ## 文件解析（多模态输入）
 
 `IntentDialog` 内部使用 `src/lib/services/file-parse-service.ts` 的 `parseFileForChat`：

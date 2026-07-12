@@ -6,7 +6,7 @@
 
 | 文件 | 职责 |
 |------|------|
-| `recorder-types.ts` | 录音器配置/状态/props 类型（含 process.env 默认值、`RecorderAudioSource` 重导出） |
+| `recorder-types.ts` | 录音器配置/状态/props 类型（含 process.env 默认值、`RecorderAudioSource` 重导出）；`headless` 只挂载录音引擎，不输出隐藏的可聚焦 UI |
 | `recorder-utils.ts` | 录音器工具函数（纯函数；含实时 ASR final 合并器、批量转写端点选择，处理回滚重复窗口和异常重复时间戳） |
 | `recorder-audio-source.ts` | 音频源采集黑盒：`acquireAudioStream({source})` 统一封装 mic / system（getDisplayMedia）/ mixed（双路 AudioContext 合并）三种模式，返回 `{stream, effectiveSource, cleanup}` |
 

@@ -35,7 +35,7 @@ hooks → stores + types + lib/db + lib/utils
 | `useOmniRealtimeCall.ts` | ~400 | Qwen Omni realtime 语音通话（麦克风上行 + 语音下行） |
 | `useRealtimeTutorConversationBridge.ts` | ~120 | 语音同桌转写持久化到 `global-chat`，并把 conversationId 回传给文字 agent |
 | `useWorkshopWindows.ts` | 122 | Workshop 浮窗状态管理 |
-| `useClassCheck.ts` | ~455 | 随堂检验控制器（Plan 生成 + 播放追踪 + 自动/手动触发 + checkpoint 状态机），外部通过 videoPlayerRef 真正暂停/恢复媒体 |
+| `useClassCheck.ts` | ~455 | 随堂检验控制器（Plan 生成 + 播放追踪 + 自动/手动触发 + checkpoint 状态机）；流式转录尚未覆盖预热窗口或限流时降级为证据就近的兜底题，外部通过 videoPlayerRef 真正暂停/恢复媒体 |
 | `useReviewSession.ts` | 506 | 复习会话恢复（IndexedDB / 服务端转录 → 播放态），从 page.tsx 提取 |
 | `useEchoActions.tsx` | 412 | 回声操作（refreshDailyEcho + 筛选 memo + 手动触发 UI），从 page.tsx 提取 |
 | `useWorkspaceCaptureActions.ts` | ~430 | 工作空间 capture CRUD 操作（新建/编辑/保存/归档/删除等 10 个函数），从 page.tsx 提取 |

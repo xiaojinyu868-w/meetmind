@@ -12,7 +12,10 @@
 import { useMemo } from 'react';
 import {
   BookOpen,
+  CheckSquare2,
+  MessageCircle,
   PencilLine,
+  Quote,
   Link2,
   History,
   X,
@@ -27,6 +30,7 @@ import {
   resolveSourceItemSourceKey,
 } from '@/lib/utils/page-utils';
 import { getCollectionContextDisplayTitle, getCollectionContextTypeLabel } from '@/lib/capture/collection-context';
+import { COPY } from '@/lib/ui/copy';
 
 // ==================== 类型定义 ====================
 
@@ -52,6 +56,8 @@ export interface CollectionMessageActionSheetProps {
   onClose: () => void;
   onOpenReview: (item: SourceIngestItem) => void;
   onAskTutor: (item: SourceIngestItem) => void;
+  onQuote: (item: SourceIngestItem) => void;
+  onToggleSelect: (item: SourceIngestItem) => void;
   onEditCapture: (capture: WorkspaceCaptureMessage, mode: WorkspaceCaptureEditorMode) => void;
   onOpenOriginal: (item: SourceIngestItem) => void;
   onUpdateCaptureStatus: (params: {
@@ -80,6 +86,8 @@ export function CollectionMessageActionSheet({
   onClose,
   onOpenReview,
   onAskTutor,
+  onQuote,
+  onToggleSelect,
   onEditCapture,
   onOpenOriginal,
   onUpdateCaptureStatus,
@@ -185,16 +193,31 @@ export function CollectionMessageActionSheet({
                 <BookOpen size={18} strokeWidth={1.6} className="text-[#5C5A55]" />
                 <span>去复习</span>
               </button>
-            ) : (
-              <button
-                type="button"
-                onClick={() => { onClose(); onAskTutor(item); }}
-                className="flex w-full items-center gap-3 px-1 py-3 text-left text-[14px] text-[#1C1B19] transition active:bg-[#FAF7F2]"
-              >
-                <BookOpen size={18} strokeWidth={1.6} className="text-[#5C5A55]" />
-                <span>去复习</span>
-              </button>
-            )}
+            ) : null}
+            <button
+              type="button"
+              onClick={() => { onClose(); onQuote(item); }}
+              className="flex w-full items-center gap-3 px-1 py-3 text-left text-[14px] text-[#1C1B19] transition active:bg-[#FAF7F2]"
+            >
+              <Quote size={18} strokeWidth={1.6} className="text-[#5C5A55]" />
+              <span>引用</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => { onClose(); onAskTutor(item); }}
+              className="flex w-full items-center gap-3 px-1 py-3 text-left text-[14px] text-[#1C1B19] transition active:bg-[#FAF7F2]"
+            >
+              <MessageCircle size={18} strokeWidth={1.6} className="text-[#5C5A55]" />
+              <span>{COPY.collection.askClassmate}</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => { onClose(); onToggleSelect(item); }}
+              className="flex w-full items-center gap-3 px-1 py-3 text-left text-[14px] text-[#1C1B19] transition active:bg-[#FAF7F2]"
+            >
+              <CheckSquare2 size={18} strokeWidth={1.6} className="text-[#5C5A55]" />
+              <span>{selectedCollectionContextIds.includes(item.id) ? '取消选择' : '选择'}</span>
+            </button>
             {workspaceCapture ? (
               <button
                 type="button"
@@ -294,7 +317,7 @@ export function CollectionMessageActionSheet({
               </button>
             )}
             {isConfirmingDelete ? (
-              <p className="mt-2 text-[11px] font-medium text-vermilion">删除后，这条内容不会再进入 Tutor、回声和后续记忆。</p>
+              <p className="mt-2 text-[11px] font-medium text-vermilion">{COPY.collection.deleteMemoryWarning}</p>
             ) : null}
           </div>
         </div>

@@ -1,5 +1,47 @@
 import { describe, expect, it } from 'vitest';
-import { shouldExitDemoRecordingOnStop, shouldShowClassroomCompanion } from './ClassroomView.model';
+import {
+  resolveClassroomPaneState,
+  resolveIsDemoSession,
+  shouldExitDemoRecordingOnStop,
+  shouldShowClassroomCompanion,
+} from './ClassroomView.model';
+
+describe('resolveIsDemoSession', () => {
+  it('recognizes both URL-driven and manually loaded demo lessons', () => {
+    expect(resolveIsDemoSession({
+      autoLoadDemo: true,
+      isRecording: false,
+      isDemoLessonLoaded: false,
+    })).toBe(true);
+    expect(resolveIsDemoSession({
+      autoLoadDemo: false,
+      isRecording: false,
+      isDemoLessonLoaded: true,
+    })).toBe(true);
+  });
+
+  it('does not mistake a real recording for demo when fixture data is stale', () => {
+    expect(resolveIsDemoSession({
+      autoLoadDemo: false,
+      isRecording: true,
+      isDemoLessonLoaded: true,
+    })).toBe(false);
+  });
+});
+
+describe('resolveClassroomPaneState', () => {
+  it('opens the recording pane for an explicit guest demo entry', () => {
+    expect(resolveClassroomPaneState({ autoLoadDemo: true, isRecording: false })).toBe('recording');
+  });
+
+  it('opens the recording pane for a real recording', () => {
+    expect(resolveClassroomPaneState({ autoLoadDemo: false, isRecording: true })).toBe('recording');
+  });
+
+  it('keeps an empty classroom in the lesson list', () => {
+    expect(resolveClassroomPaneState({ autoLoadDemo: false, isRecording: false })).toBe('list');
+  });
+});
 
 describe('shouldExitDemoRecordingOnStop', () => {
   it('treats stopping a guest demo recording pane as exiting demo, not stale database cleanup', () => {

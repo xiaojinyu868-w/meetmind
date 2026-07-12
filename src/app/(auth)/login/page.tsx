@@ -72,7 +72,7 @@ function LazyVideoBackground() {
 function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { login, loginWithCode, isAuthenticated, getWechatAuthUrl } = useAuth();
+  const { login, loginWithCode, isAuthenticated } = useAuth();
   
   const [loginMethod, setLoginMethod] = useState<LoginMethod>('code');
   const [loginType, setLoginType] = useState<LoginType>('email');

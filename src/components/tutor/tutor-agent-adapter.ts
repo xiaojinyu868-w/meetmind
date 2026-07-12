@@ -42,7 +42,7 @@ export function formatLearnerProfileForTutorAgent(profile?: LearnerProfile | nul
     lines.push(`- 研究生 · ${profile.field || '未知方向'}`);
     if (profile.advisor) lines.push(`- 导师：${profile.advisor}`);
     if (profile.researchTopic) lines.push(`- 课题：${profile.researchTopic}`);
-  } else if (profile.stage) {
+  } else if (profile.stage === 'working') {
     lines.push(`- 在职学习 · ${profile.industry || '未知行业'}`);
     if (profile.learningGoal) lines.push(`- 学习目标：${profile.learningGoal}`);
   }

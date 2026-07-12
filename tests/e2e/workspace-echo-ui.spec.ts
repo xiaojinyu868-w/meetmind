@@ -229,6 +229,7 @@ async function mockWorkspaceEchoFlow(page: Page, options: MockWorkspaceEchoFlowO
 
 async function openEmptyEchoCenter(page: Page) {
   await page.goto('/app?mobile=1');
+  await page.getByRole('button', { name: '收集', exact: true }).first().click();
   await page.getByPlaceholder(COLLECTION_PLACEHOLDER).waitFor({ state: 'visible' });
   await page.getByRole('button', { name: '打开收集菜单' }).click();
   await page.getByRole('button', { name: '回声' }).click();
@@ -236,6 +237,7 @@ async function openEmptyEchoCenter(page: Page) {
 
 async function openGuestEmptyEchoCenter(page: Page) {
   await page.goto('/app?mobile=1&guest=1');
+  await page.getByRole('button', { name: '收集', exact: true }).first().click();
   await page.getByPlaceholder(COLLECTION_PLACEHOLDER).waitFor({ state: 'visible' });
   await page.getByRole('button', { name: '打开收集菜单' }).click();
   await page.getByRole('button', { name: '回声' }).click();
@@ -243,6 +245,7 @@ async function openGuestEmptyEchoCenter(page: Page) {
 
 async function openEchoCenterAfterCapture(page: Page) {
   await page.goto('/app?mobile=1');
+  await page.getByRole('button', { name: '收集', exact: true }).first().click();
   await page.getByPlaceholder(COLLECTION_PLACEHOLDER).waitFor({ state: 'visible' });
   await page
     .getByPlaceholder(COLLECTION_PLACEHOLDER)

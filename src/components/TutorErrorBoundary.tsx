@@ -1,6 +1,7 @@
 'use client';
 
 import React from 'react';
+import { COPY } from '@/lib/ui/copy';
 
 interface TutorErrorBoundaryProps {
   children: React.ReactNode;
@@ -24,7 +25,7 @@ export class TutorErrorBoundary extends React.Component<TutorErrorBoundaryProps,
   }
 
   componentDidCatch(error: Error, info: React.ErrorInfo) {
-    console.error(`[TutorErrorBoundary] ${this.props.panelName || 'AI 助教'} crashed:`, error, info.componentStack);
+    console.error(`[TutorErrorBoundary] ${this.props.panelName || COPY.identity.name} crashed:`, error, info.componentStack);
   }
 
   componentDidUpdate(prevProps: TutorErrorBoundaryProps) {
@@ -53,15 +54,15 @@ export class TutorErrorBoundary extends React.Component<TutorErrorBoundaryProps,
             </svg>
           </div>
           <div className="space-y-1.5">
-            <p className="text-base font-semibold text-ink">AI 助教刚刚开了个小差</p>
-            <p className="text-sm leading-6 text-ink-muted">这次只影响当前问答面板，不会把整页复习打断。点一下重试就行。</p>
+            <p className="text-base font-semibold text-ink">{COPY.companion.errorTitle}</p>
+            <p className="text-sm leading-6 text-ink-muted">{COPY.companion.errorBody}</p>
           </div>
           <button
             type="button"
             onClick={() => this.setState({ hasError: false, error: undefined })}
             className="inline-flex items-center justify-center rounded-full bg-[#1C1B19] px-4 py-2 text-sm font-medium text-white transition hover:bg-black"
           >
-            重新加载 AI 助教
+            {COPY.companion.errorRetry}
           </button>
         </div>
       );

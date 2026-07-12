@@ -26,7 +26,7 @@ classroom/ ← hooks/useClassroomCompanion.ts（对话 hook 消费 composeFirstH
 | `ClassroomCompanionPanel.tsx` | ~585 | 右侧同桌面板（header/气泡/流式气泡/thinking/输入栏）；课中 / 课后 starter 都用 Octo Buddy 像素章鱼 + 轻问题 chip 引导用户开口，不做重功能卡 |
 | `InlineAppCard.tsx` | ~160 | 对话内应用承载卡（真实应用 UI 复用 `apps/windows/AppRenderSurface`，不再手写一套窄版） |
 | `OctoBuddy.tsx` | ~660 | Octo Buddy 像素 IP（Sprite + 悬浮球）；Sprite 自带呼吸 / 听课 / 开心动画，右侧同桌内嵌也必须动起来 |
-| `ClassroomHero.tsx` | ~160 | 课堂零存量首屏；居中一句话 + 录音来源 rail（麦克风 / 电脑声音 / 两路都录）+ 主 CTA，不放右侧说明卡 |
+| `ClassroomHero.tsx` | ~250 | 课堂零存量首屏；左侧定位与录音入口，右侧用真实示例课片段呈现“听见原话 → 有依据地解释”的产品证明，不陈列功能清单 |
 | `ClassroomLessonCard.tsx` | ~160 | 一张课的卡片（四种时态视觉差异：upcoming/recording/processing/ready） |
 | `ClassroomRecordingView.tsx` | ~610 | 录课中视图（左侧实时文字 + 翻译 + 试听课音频播放控制；右侧结构 / 结束总结卡）。试听课默认 EN→中，音频结束后只引导点击“结束这节课”，由上层切到课后复习页 / 应用矩阵 |
 | `ClassroomRecordingView.model.ts` | ~16 | 录课视图纯模型：翻译模式循环 + 会话级默认翻译模式解析 |

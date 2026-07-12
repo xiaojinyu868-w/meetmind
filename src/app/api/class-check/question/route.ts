@@ -85,6 +85,24 @@ function sliceSegments(
   return segments.filter((s) => s.endMs >= lo && s.startMs <= hi);
 }
 
+/** 流式转录还没走到 checkpoint 时，取时间上最接近的少量证据做诚实兜底。 */
+export function selectNearestTranscriptSegments(
+  segments: TranscriptSegment[],
+  startMs: number,
+  endMs: number,
+  limit = 3
+): TranscriptSegment[] {
+  const midpoint = (startMs + endMs) / 2;
+  return [...segments]
+    .sort((a, b) => {
+      const aMidpoint = (a.startMs + a.endMs) / 2;
+      const bMidpoint = (b.startMs + b.endMs) / 2;
+      return Math.abs(aMidpoint - midpoint) - Math.abs(bMidpoint - midpoint);
+    })
+    .slice(0, Math.max(1, limit))
+    .sort((a, b) => a.startMs - b.startMs);
+}
+
 /** 按难度决定题数：简单出 1 道，中等 2 道，难出 3 道 */
 function desiredQuestionCount(difficulty: number, override?: number): number {
   if (override && override >= 1 && override <= 3) return Math.floor(override);
@@ -115,14 +133,27 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ ok: false, error: '转录为空' }, { status: 400 });
     }
 
+    const difficulty = Math.min(5, Math.max(1, Math.floor(checkpoint.difficulty ?? 3)));
+    const count = desiredQuestionCount(difficulty, body.count);
     const windowSegments = sliceSegments(transcript, checkpoint.startMs, checkpoint.endMs);
     if (windowSegments.length === 0) {
-      return NextResponse.json({ ok: false, error: '窗口内无转录内容' }, { status: 400 });
+      const nearestSegments = selectNearestTranscriptSegments(
+        transcript,
+        checkpoint.startMs,
+        checkpoint.endMs
+      );
+      return NextResponse.json({
+        ok: true,
+        questions: buildFallbackCheckpointQuestions({
+          checkpoint,
+          windowSegments: nearestSegments,
+          count,
+        }),
+        fallback: true,
+      });
     }
 
     const model = body.model?.trim() || DEFAULT_MODEL_ID;
-    const difficulty = Math.min(5, Math.max(1, Math.floor(checkpoint.difficulty ?? 3)));
-    const count = desiredQuestionCount(difficulty, body.count);
 
     const transcriptContext = buildPromptTranscriptContext(windowSegments, {
       maxChars: 8_000,

@@ -109,7 +109,7 @@ export default function WechatCaptureClient({
             打开收集流
           </Link>
           <p className="rounded-[20px] bg-paper-warm px-4 py-4 text-sm leading-7 text-ink-secondary">
-            补 PDF、课件、录音，或者进 Tutor 深挖，都从这里继续。
+            补 PDF、课件、录音，或者让同学继续解释，都从这里开始。
           </p>
         </div>
       </section>

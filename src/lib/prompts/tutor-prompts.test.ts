@@ -14,9 +14,9 @@ import {
 } from './tutor-prompts';
 
 describe('buildTutorSystemPrompt — mode 决定基础骨架', () => {
-  it('in-class：提到"一两句话"和"跟上"，没有复习态的长回答许可', () => {
+  it('in-class：要求简洁但完整并帮助跟上，没有复习态的长回答许可', () => {
     const prompt = buildTutorSystemPrompt('in-class');
-    expect(prompt).toMatch(/一两句话/);
+    expect(prompt).toMatch(/简洁但完整/);
     expect(prompt).toMatch(/跟上/);
     // 确保不会错误地提示复习态行为
     expect(prompt).not.toMatch(/把整节课拎回来问/);
@@ -70,7 +70,7 @@ describe('buildTutorSystemPrompt — recentFocus 仅在 in-class 注入', () => 
   });
 });
 
-describe('buildTutorSystemPrompt — fullTranscript 仅在 review 注入', () => {
+describe('buildTutorSystemPrompt — fullTranscript 在 in-class 和 review 注入', () => {
   const transcript = '老师 0:00-3:00 讲了牛顿定律。3:00-5:00 推了 F=ma。';
 
   it('review 场景：fullTranscript 被拼进 prompt', () => {
@@ -96,9 +96,10 @@ describe('buildTutorSystemPrompt — fullTranscript 仅在 review 注入', () =>
     expect(prompt).not.toMatch(/他现在播放到/);
   });
 
-  it('in-class 场景：fullTranscript 被忽略（避免把整节课塞给课堂同桌）', () => {
+  it('in-class 场景：fullTranscript 被拼进 prompt，帮助同桌理解课堂上下文', () => {
     const prompt = buildTutorSystemPrompt('in-class', { fullTranscript: transcript });
-    expect(prompt).not.toMatch(/整节课的转录/);
+    expect(prompt).toMatch(/整节课的转录/);
+    expect(prompt).toMatch(/牛顿定律/);
   });
 });
 
@@ -189,6 +190,27 @@ describe('buildTutorSystemPrompt — learnerProfile 注入', () => {
   });
 });
 
+describe('buildTutorSystemPrompt — goal 模式沉淀边界', () => {
+  it('首次会面在身份已知后转向最近状态，而不是继续盘问资料字段', () => {
+    const prompt = buildTutorSystemPrompt('goal');
+    expect(prompt).toMatch(/身份或阶段一旦已经清楚/);
+    expect(prompt).toMatch(/不要继续盘问专业、学校、年级/);
+    expect(prompt).toMatch(/最近的状态/);
+  });
+
+  it('回访确认具体愿望时优先输出我想要的 marker', () => {
+    const prompt = buildTutorSystemPrompt('goal', {
+      goal: {
+        existingBio: { headline: '工作三年的产品经理' },
+      },
+    });
+    expect(prompt).toMatch(/“对，就这样”“帮我记下”/);
+    expect(prompt).toMatch(/直接沉淀为 `---我想要的---`/);
+    expect(prompt).toMatch(/“我想要的”优先级最高/);
+    expect(prompt).toMatch(/用用户的第一人称表达/);
+  });
+});
+
 describe('buildTutorSystemPrompt — 组合场景', () => {
   it('课堂同桌全配：mode + recentFocus + materials', () => {
     const prompt = buildTutorSystemPrompt(
@@ -198,7 +220,7 @@ describe('buildTutorSystemPrompt — 组合场景', () => {
         supportMaterials: [{ title: 'ch3.md', content: 'prereq...' }],
       },
     );
-    expect(prompt).toMatch(/一两句话/);           // in-class mode
+    expect(prompt).toMatch(/简洁但完整/);         // in-class mode
     expect(prompt).toMatch(/刚才这 30s/);         // recentFocus
     expect(prompt).toMatch(/\[资料1\]/);          // materials
     expect(prompt).not.toMatch(/\[MM:SS\]/);      // in-class 默认不带时间戳

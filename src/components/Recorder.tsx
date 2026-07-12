@@ -45,6 +45,7 @@ export const Recorder = forwardRef<RecorderHandle, RecorderProps>(function Recor
   continueCurrentSession = false,
   autoStartSignal = 0,
   compactMode = false,
+  headless = false,
   contextHint = '',
   languageMode = 'auto',
   audioSource = 'mic',
@@ -1404,6 +1405,11 @@ export const Recorder = forwardRef<RecorderHandle, RecorderProps>(function Recor
       ? '正在重连'
       : '录音已暂停';
   const compactStatusTone = isRecording ? 'text-[#1C1B19] font-semibold' : 'text-[#5C5A55]';
+
+  // 课堂页和移动端需要常驻录音引擎，但不能把一整套不可见按钮塞进键盘
+  // Tab 顺序，或让固定宽度子元素从 sr-only 容器溢出。所有 hooks 和
+  // imperative methods 仍然正常工作，渲染层保持真正为空。
+  if (headless) return null;
 
   if (isIdle) {
     if (compactMode) {

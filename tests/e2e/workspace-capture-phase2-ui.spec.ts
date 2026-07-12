@@ -263,6 +263,7 @@ async function mockWorkspaceCaptureFlow(page: Page) {
 
 async function openAllCollections(page: Page) {
   await page.goto('/app?mobile=1');
+  await page.getByRole('button', { name: '收集', exact: true }).first().click();
   await page.getByPlaceholder(COLLECTION_PLACEHOLDER).waitFor({ state: 'visible' });
   await page.getByRole('button', { name: '打开收集菜单' }).click();
   await page.getByRole('button', { name: '全部收集' }).click();
@@ -334,6 +335,7 @@ test.describe('workspace capture phase2 ui', () => {
 
   test('guest local captures appear in all collections immediately', async ({ page }) => {
     await page.goto('/app?guest=1&mobile=1');
+    await page.getByRole('button', { name: '收集', exact: true }).first().click();
     await page.getByPlaceholder(COLLECTION_PLACEHOLDER).waitFor({ state: 'visible' });
 
     await page.getByPlaceholder(COLLECTION_PLACEHOLDER).fill('这条是刚刚记下来的本地收集');
@@ -348,6 +350,7 @@ test.describe('workspace capture phase2 ui', () => {
 
   test('multi-select supports batch remove and destructive delete confirmation', async ({ page }) => {
     await page.goto('/app?guest=1');
+    await page.getByRole('button', { name: '收集', exact: true }).first().click();
     await page.getByPlaceholder(COLLECTION_PLACEHOLDER).waitFor({ state: 'visible' });
 
     await page.getByPlaceholder(COLLECTION_PLACEHOLDER).fill('第一条待批量处理');
@@ -358,7 +361,7 @@ test.describe('workspace capture phase2 ui', () => {
     await expect(page.getByText('第一条待批量处理')).toBeVisible();
     await expect(page.getByText('第二条待批量处理')).toBeVisible();
 
-    await page.getByRole('button', { name: '更多操作：第一条待批量处理' }).click();
+    await page.getByRole('button', { name: '操作：第一条待批量处理' }).click();
     await page.getByRole('button', { name: '选择' }).click();
     await page.getByRole('button', { name: '选择' }).click();
 
@@ -372,7 +375,7 @@ test.describe('workspace capture phase2 ui', () => {
     await page.getByPlaceholder(COLLECTION_PLACEHOLDER).fill('第四条待彻底删除');
     await page.getByRole('button', { name: '发送到收集流' }).click();
 
-    await page.getByRole('button', { name: '更多操作：第三条待彻底删除' }).click();
+    await page.getByRole('button', { name: '操作：第三条待彻底删除' }).click();
     await page.getByRole('button', { name: '选择' }).click();
     await page.getByRole('button', { name: '选择' }).click();
 

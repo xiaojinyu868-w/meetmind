@@ -17,7 +17,9 @@ interface LearnerOnboardingProps {
   onSkip: () => void;
 }
 
-const STAGES: { key: LearnerStage; label: string; desc: string; icon: string }[] = [
+type SelectableLearnerStage = Exclude<LearnerStage, 'unknown'>;
+
+const STAGES: { key: SelectableLearnerStage; label: string; desc: string; icon: string }[] = [
   { key: 'k12', label: '中小学生', desc: '初中 / 高中', icon: '📖' },
   { key: 'university', label: '大学生', desc: '本科在读', icon: '🎓' },
   { key: 'graduate', label: '研究生', desc: '硕士 / 博士', icon: '🔬' },
@@ -29,7 +31,7 @@ const UNIVERSITY_YEARS = ['大一', '大二', '大三', '大四', '大五'];
 
 export default function LearnerOnboarding({ onComplete, onSkip }: LearnerOnboardingProps) {
   const [step, setStep] = useState<1 | 2>(1);
-  const [stage, setStage] = useState<LearnerStage | null>(null);
+  const [stage, setStage] = useState<SelectableLearnerStage | null>(null);
   const [saving, setSaving] = useState(false);
 
   // Step 2 form fields
@@ -41,7 +43,7 @@ export default function LearnerOnboarding({ onComplete, onSkip }: LearnerOnboard
   const [learningGoal, setLearningGoal] = useState('');
   const [otherInterests, setOtherInterests] = useState('');
 
-  const handleStageSelect = useCallback((s: LearnerStage) => {
+  const handleStageSelect = useCallback((s: SelectableLearnerStage) => {
     setStage(s);
     setStep(2);
   }, []);

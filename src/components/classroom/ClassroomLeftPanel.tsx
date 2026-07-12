@@ -140,7 +140,11 @@ function groupLessons(lessons: Lesson[]): Array<{ label: string; items: Lesson[]
 
   const sorted = Array.from(map.entries()).sort((a, b) => b[0].localeCompare(a[0]));
   return sorted.map(([date, items]) => ({
-    label: date === today ? 'TODAY' : date === yest ? 'YESTERDAY' : formatShortDate(date),
+    label: date === today
+      ? COPY.classroomHome.today
+      : date === yest
+        ? COPY.classroomHome.yesterday
+        : formatShortDate(date),
     items,
   }));
 }
@@ -173,71 +177,22 @@ function formatTodayLabel(): string {
 }
 
 /**
- * PageHeader — 紧凑课堂 hero（v7 Round 9-2 实用概览版）
- *
- * 用户反馈（按 8 条意见整改）：
- *   #1 之前像首页 banner，提供信息少 → 改成"待整理 · 待复习 · 已归档"实用概览
- *   #2 "今日"用 vermilion italic 装饰过强、和"课堂"被拆开 → 统一一行 "今日课堂"，
- *      不再拆开装饰；如果要轻强调，"课堂"用极淡 pine accent line（不是色彩）
- *   #3 主内容栏太窄（max-w-4xl） → 改 max-w-4xl 让标题不截断
+ * PageHeader — 返回用户的课堂首页锚点。
+ * 不把学习现场做成“待办 / 已归档”管理后台，只告诉用户在哪里，并给出下一步。
  */
-function PageHeader({ lessons = [] }: { lessons?: Lesson[] }) {
-  // 用真实数据驱动概览数字
-  const processingCount = lessons.filter((l) => l.status === 'processing').length;
-  const pendingReviewCount = lessons.filter(
-    (l) => l.status === 'ready' && !l.reviewed,
-  ).length;
-  const archivedCount = lessons.filter(
-    (l) => l.status === 'ready' && l.reviewed,
-  ).length;
-
+function PageHeader() {
   return (
-    <div className="flex-shrink-0 px-8 pt-5 pb-4 lg:px-12 lg:pt-6">
-      <div className="mx-auto flex w-full max-w-4xl items-center justify-between gap-6">
-        {/* 左：统一标题"今日课堂"，不再拆开 italic 朱批装饰 */}
-        <h1 className="text-[22px] font-semibold tracking-[-0.02em] text-ink leading-[1.2] whitespace-nowrap">
-          今日课堂
+    <div className="flex-shrink-0 px-8 pb-6 pt-8 lg:px-12 lg:pt-10">
+      <div className="mx-auto w-full max-w-4xl">
+        <p className="font-mono text-[10px] font-medium tracking-[0.08em] text-ink-muted">
+          {formatTodayLabel()}
+        </p>
+        <h1 className="mt-2 text-[32px] font-semibold leading-tight tracking-[-0.04em] text-ink">
+          {COPY.classroomHome.title}
         </h1>
-
-        {/* 右：概览数字 — 真正的"扫一眼知道还有多少事要做" */}
-        <div className="flex items-center gap-3 text-[12.5px] flex-shrink min-w-0 overflow-hidden">
-          <span className="font-mono uppercase tracking-[0.04em] text-ink-muted whitespace-nowrap">
-            {formatTodayLabel()}
-          </span>
-
-          {(processingCount > 0 || pendingReviewCount > 0 || archivedCount > 0) ? (
-            <span className="h-3 w-px bg-divider flex-shrink-0" aria-hidden />
-          ) : null}
-
-          {processingCount > 0 ? (
-            <span className="flex items-center gap-1.5 whitespace-nowrap">
-              <span
-                className="inline-block h-1.5 w-1.5 rounded-full bg-pine flex-shrink-0"
-                style={{
-                  boxShadow: '0 0 0 0 rgba(45,79,62,0.5)',
-                  animation: 'rec-pulse-v7 1.6s ease-in-out infinite',
-                }}
-                aria-hidden
-              />
-              <span className="font-mono tabular-nums font-medium text-pine">{processingCount}</span>
-              <span className="text-pine">待整理</span>
-            </span>
-          ) : null}
-
-          {pendingReviewCount > 0 ? (
-            <span className="flex items-center gap-1.5 whitespace-nowrap">
-              <span className="font-mono tabular-nums font-medium text-vermilion">{pendingReviewCount}</span>
-              <span className="text-vermilion">待复习</span>
-            </span>
-          ) : null}
-
-          {archivedCount > 0 ? (
-            <span className="flex items-center gap-1.5 whitespace-nowrap text-ink-muted">
-              <span className="font-mono tabular-nums font-medium">{archivedCount}</span>
-              <span>已归档</span>
-            </span>
-          ) : null}
-        </div>
+        <p className="mt-2 text-[13.5px] leading-6 text-ink-secondary">
+          {COPY.classroomHome.subtitle}
+        </p>
       </div>
     </div>
   );
@@ -417,7 +372,7 @@ function ListView({
 
   return (
     <>
-      <PageHeader lessons={groups.flatMap((g) => g.items)} />
+      <PageHeader />
 
       <div className="flex-1 overflow-y-auto px-8 pt-2 pb-4 lg:px-12">
         <div className="mx-auto w-full max-w-4xl">
@@ -495,7 +450,7 @@ function StickyStartBar({
         {disabled ? (
           <div className="flex w-full items-center justify-center gap-2.5 rounded-full bg-[#F0EBDF] py-3.5 text-[13px] text-ink-muted">
             <span className="inline-flex h-1.5 w-1.5 rounded-full bg-[#B5483C] animate-pulse" />
-            <span>正在录一节课</span>
+            <span>{COPY.classroomHome.active}</span>
           </div>
         ) : (
           <>
@@ -512,7 +467,7 @@ function StickyStartBar({
                 <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-vermilion" />
               </span>
               <Mic size={13} strokeWidth={2} />
-              <span>开始录一节课</span>
+              <span>{COPY.cta.record}</span>
             </button>
           </>
         )}
@@ -567,21 +522,21 @@ function AudioSourcePicker({
   }> = [
     {
       key: 'mic',
-      label: '麦克风',
+      label: COPY.recording.sourceMic,
       icon: Mic,
-      hint: '线下课',
+      hint: COPY.recording.sourceMicHint,
     },
     {
       key: 'system',
-      label: '电脑声音',
+      label: COPY.recording.sourceSystem,
       icon: Monitor,
-      hint: '在家听网课',
+      hint: COPY.recording.sourceSystemShortHint,
     },
     {
       key: 'mixed',
-      label: '两路都录',
+      label: COPY.recording.sourceMixed,
       icon: Headphones,
-      hint: '网课＋自己提问',
+      hint: COPY.recording.sourceMixedHint,
     },
   ];
 
