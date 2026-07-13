@@ -28,9 +28,9 @@ import { loadDemoLesson } from './DemoLessonLoader';
 import { useCaptureEditorActions } from '@/stores/capture-editor-store';
 import { isWorkshopAppKey, type WorkshopAppKey } from '@/lib/ai-native/app-catalog';
 import { COPY } from '@/lib/ui/copy';
-import type { MindMapTree } from '@/hooks/useClassroomMindMap';
 import type { RecorderAudioSource } from '@/stores/capture-editor-store';
 import type { TranscriptSegment } from '@/types';
+import type { ClassroomFlowState } from '@/types/classroom-flow';
 
 /**
  * canCaptureSystemAudio — 浏览器是否能拿到电脑扬声器发出的声音
@@ -79,14 +79,12 @@ export interface ClassroomLeftPanelProps {
   interimText?: string;
   /** 录课中：最近 N 句已落定句子（用于 UnderstandingCanvas 下方脉络） */
   recentLines?: Array<{ id: string; text: string; startMs: number }>;
-  /** 录课中：思维导图树 */
-  mindMapTree?: MindMapTree;
-  /** 录课中：最新一批新增节点 id */
-  mindMapNewIds?: Set<string>;
-  /** 录课中：点击节点跳转录音位置 */
-  onMindMapAnchorClick?: (ms: number) => void;
-  /** 录课中：由父组件驱动的"把这个 ms 对应段落滚入视野"信号 */
-  scrollTarget?: { ms: number; nonce: number } | null;
+  /** 录课中：模型根据真实转录形成的课堂脉络 */
+  classroomFlow?: ClassroomFlowState;
+  /** 录课中：本轮新出现的脉络项 */
+  classroomFlowNewIds?: Set<string>;
+  /** 录课中：模型正在理解最近一段 */
+  isUnderstandingClassroomFlow?: boolean;
   /** 点击活动条 → 进入录课态全屏视图 */
   onFocusRecording?: () => void;
   /** 试听课音频播放控制 */
@@ -615,10 +613,9 @@ export function ClassroomLeftPanel({
   segments,
   interimText,
   recentLines,
-  mindMapTree,
-  mindMapNewIds,
-  onMindMapAnchorClick,
-  scrollTarget,
+  classroomFlow,
+  classroomFlowNewIds,
+  isUnderstandingClassroomFlow,
   onFocusRecording,
   isDemoPlayback,
   demoAudioPlaying,
@@ -708,10 +705,9 @@ export function ClassroomLeftPanel({
             segments={segments}
             interimText={interimText}
             recentLines={recentLines}
-            mindMapTree={mindMapTree}
-            mindMapNewIds={mindMapNewIds}
-            onAnchorClick={onMindMapAnchorClick}
-            scrollTarget={scrollTarget}
+            classroomFlow={classroomFlow}
+            classroomFlowNewIds={classroomFlowNewIds}
+            isUnderstandingClassroomFlow={isUnderstandingClassroomFlow}
             isDemoPlayback={isDemoPlayback}
             demoAudioPlaying={demoAudioPlaying}
             demoAudioNeedsGesture={demoAudioNeedsGesture}

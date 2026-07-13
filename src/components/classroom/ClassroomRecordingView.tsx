@@ -6,8 +6,8 @@
  * v7 变更（M7 真接）：
  *   - 展开态的转录原文从 `<p>{transcriptText}</p>` 升级为 TranscriptFlowView。
  *     立刻解锁：段落分组、EN→中行内气泡、划词解释（WordExplainer）、搜索。
- *   - MindMap 节点点击 → 通过 scrollTargetMs 把对应段落滚到视线中央。
- *   - 保留 v6 的主画面思维导图 + 极薄状态头 + "结束这节课"按钮。
+ *   - 中间主画面是课堂脉络：当前讲解 / 近期推进 / 课后保留点。
+ *   - 思维导图、闪卡和测验留在课后应用矩阵。
  *
  * 老的 concepts / transcriptText 字段保留向后兼容。
  */
@@ -15,9 +15,9 @@
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import dynamic from 'next/dynamic';
 import { Square, ChevronDown, ChevronUp, Languages, Play, Pause, Camera } from 'lucide-react';
-import { MindMap } from './MindMap';
+import { ClassroomFlowCanvas } from './ClassroomFlowCanvas';
 import { OctoBuddySprite } from './OctoBuddy';
-import type { MindMapTree } from '@/hooks/useClassroomMindMap';
+import type { ClassroomFlowState } from '@/types/classroom-flow';
 
 import type { TranscriptSegment } from '@/types';
 import { extractChineseRuns, extractEnglishRuns } from '@/lib/services/translation/extract-english';
@@ -26,6 +26,7 @@ import { buildLiveTranslationRows } from '@/lib/utils/live-translation-rows';
 import { stitchLiveSentences } from '@/lib/utils/stitch-live-sentences';
 import { getSpeakerLabel, getSpeakerColorClass } from '@/lib/services/asr/diarization-service';
 import { cycleTranslationMode, resolveSessionTranslationMode } from './ClassroomRecordingView.model';
+import { COPY } from '@/lib/ui/copy';
 
 // TranscriptFlowView 只在展开态用，且组件较重——code-split 一下，
 // 保持课堂首屏打开时不拉这份 bundle。
@@ -55,21 +56,12 @@ export interface ClassroomRecordingViewProps {
   interimText?: string;
   /** 最近已落定的 N 句（仍在 ClassroomView 里用于其他逻辑，这里只取最后一条做单行展示） */
   recentLines?: Array<{ id: string; text: string; startMs: number }>;
-  /** 思维导图树（由 useClassroomMindMap 提供） */
-  mindMapTree?: MindMapTree;
-  /** 最近一轮新增的节点 id */
-  mindMapNewIds?: Set<string>;
-  /** 点击节点时间戳 → 跳转录音位置（可选） */
-  onAnchorClick?: (ms: number) => void;
-  /**
-   * 当 MindMap 节点被点击时传入：带 `{ ms }` 的 nonce。
-   * 本组件会：
-   *   1. 自动展开转录抽屉（如果还没展开）
-   *   2. 把该 ms 对应的段落滚到抽屉中央
-   * 每次新点击都要带一个新的对象（或 bumped version），才能触发新一次跳转——
-   * 纯数字 ms 不够，因为连续点同一个节点就无法再触发。
-   */
-  scrollTarget?: { ms: number; nonce: number } | null;
+  /** 模型基于真实转录形成的课堂脉络 */
+  classroomFlow?: ClassroomFlowState;
+  /** 最近一轮新增的脉络项 id */
+  classroomFlowNewIds?: Set<string>;
+  /** 模型正在理解最近一段 */
+  isUnderstandingClassroomFlow?: boolean;
   /** 试听课音频播放控制：浏览器自动播放失败时，这个按钮就是用户手势入口 */
   isDemoPlayback?: boolean;
   demoAudioPlaying?: boolean;
@@ -537,7 +529,7 @@ function StopBar({ onStop }: { onStop: () => void }) {
 
 // ── 主组件 ────────────────────────────────────────────────────────────
 
-const EMPTY_TREE: MindMapTree = { title: '', nodes: [] };
+const EMPTY_FLOW: ClassroomFlowState = { title: '', now: null, recent: [], keep: [], updatedAtMs: 0 };
 const EMPTY_NEW_IDS: Set<string> = new Set();
 
 export function ClassroomRecordingView({
@@ -547,10 +539,9 @@ export function ClassroomRecordingView({
   segments,
   interimText,
   recentLines = [],
-  mindMapTree = EMPTY_TREE,
-  mindMapNewIds = EMPTY_NEW_IDS,
-  onAnchorClick,
-  scrollTarget = null,
+  classroomFlow = EMPTY_FLOW,
+  classroomFlowNewIds = EMPTY_NEW_IDS,
+  isUnderstandingClassroomFlow = false,
   isDemoPlayback = false,
   demoAudioPlaying = false,
   demoAudioNeedsGesture = false,
@@ -564,54 +555,11 @@ export function ClassroomRecordingView({
   onToggleSpeakerDiarization,
 }: ClassroomRecordingViewProps) {
   const [expanded, setExpanded] = useState(false);
-  const transcriptScrollRef = useRef<HTMLDivElement | null>(null);
+  const [mobilePane, setMobilePane] = useState<'flow' | 'transcript'>('flow');
 
   // 有转录原文（从 segments 判定，不再依赖 transcriptText 字符串）
   const hasTranscriptSegments = Boolean(segments && segments.length > 0);
   const hasTranscript = hasTranscriptSegments || Boolean(transcriptText && transcriptText.trim().length > 0);
-
-  // scrollTarget 变化时：自动展开抽屉 + 滚动到对应段落 + 1.2s 黄色脉冲高亮
-  // 依赖 TranscriptFlowView 给每个段落挂的 data-paragraph-start-ms 属性，
-  // 找到距离目标 ms 最近且 ≤ 目标的那个段落，scrollIntoView + 加 class。
-  useEffect(() => {
-    if (!scrollTarget) return;
-    // 展开抽屉——如果用户手动收起过，点节点的意图就是"给我看看这段原话"
-    setExpanded(true);
-    // 等 TranscriptFlowView render + 展开动画结束再滚
-    const timer = setTimeout(() => {
-      const scope = transcriptScrollRef.current;
-      if (!scope) return;
-      const elements = Array.from(
-        scope.querySelectorAll<HTMLElement>('[data-paragraph-start-ms]'),
-      );
-      if (elements.length === 0) return;
-      // 找到 startMs ≤ target 的最后一段（即"包含这个时刻"的段落）
-      let picked: HTMLElement | null = null;
-      for (const el of elements) {
-        const ms = Number(el.dataset.paragraphStartMs || '0');
-        if (ms <= scrollTarget.ms) {
-          picked = el;
-        } else {
-          break;
-        }
-      }
-      const target = picked ?? elements[0];
-      target.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      // M8 agent-native: 1.2s 黄色脉冲高亮——让用户一眼知道"就是这段"
-      // 先移除同 class（以防连续点同一段时动画不重播），再重新 add。
-      target.classList.remove('transcript-paragraph-highlight');
-      // 强制 reflow 后再 add，浏览器才会重新播动画
-      void target.offsetWidth;
-      target.classList.add('transcript-paragraph-highlight');
-      // 动画结束后自动移除 class，避免残留影响后续交互
-      const cleanup = window.setTimeout(() => {
-        target.classList.remove('transcript-paragraph-highlight');
-      }, 1400);
-      return () => window.clearTimeout(cleanup);
-    }, 180);
-    return () => clearTimeout(timer);
-    // 故意只对 scrollTarget（含 nonce）敏感——同一个 ms 重复点击也要重新滚
-  }, [scrollTarget]);
 
   const [userTranslationMode, setUserTranslationMode] = useTranslationMode();
   const [translationTouched, setTranslationTouched] = useState(false);
@@ -628,8 +576,22 @@ export function ClassroomRecordingView({
   return (
     <div className="flex h-full flex-col">
       <div className="min-h-0 flex-1 px-2.5 py-2.5 lg:px-3">
+        <div className="mb-2 flex rounded-full border border-divider bg-card p-1 lg:hidden">
+          {(['flow', 'transcript'] as const).map((pane) => (
+            <button
+              key={pane}
+              type="button"
+              onClick={() => setMobilePane(pane)}
+              className={`flex-1 rounded-full px-3 py-2 text-[12.5px] font-medium transition ${
+                mobilePane === pane ? 'bg-ink text-white' : 'text-ink-muted'
+              }`}
+            >
+              {pane === 'flow' ? COPY.classroomFlow.mobileFlow : COPY.classroomFlow.mobileTranscript}
+            </button>
+          ))}
+        </div>
         <div className="grid h-full w-full grid-cols-1 gap-3 lg:grid-cols-[minmax(390px,0.82fr)_minmax(0,1.18fr)] xl:grid-cols-[minmax(420px,0.78fr)_minmax(0,1.22fr)]">
-          <div className="hidden min-h-0 lg:block">
+          <div className={`${mobilePane === 'transcript' ? 'block' : 'hidden'} min-h-0 lg:block`}>
             <LiveTranscriptPanel
               segments={segments}
               recentLines={recentLines}
@@ -648,15 +610,15 @@ export function ClassroomRecordingView({
               onToggleSpeakerDiarization={onToggleSpeakerDiarization}
             />
           </div>
-          <div className="min-w-0 overflow-hidden rounded-[24px] border border-divider bg-white">
+          <div className={`${mobilePane === 'flow' ? 'block' : 'hidden'} min-w-0 overflow-hidden rounded-[24px] border border-divider bg-white lg:block`}>
             {isDemoComplete ? (
               <DemoAfterClassPanel onFinish={onFinishDemo} onReplay={onReplayDemo} />
             ) : (
-              <MindMap
-                tree={mindMapTree}
-                newNodeIds={mindMapNewIds}
+              <ClassroomFlowCanvas
+                flow={classroomFlow}
+                newItemIds={classroomFlowNewIds}
                 elapsedMs={seconds * 1000}
-                onAnchorClick={onAnchorClick}
+                isUnderstanding={isUnderstandingClassroomFlow}
               />
             )}
           </div>

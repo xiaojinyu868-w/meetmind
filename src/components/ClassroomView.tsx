@@ -38,7 +38,7 @@ import type { CompanionMode } from './classroom';
 import { useClassroomLessons } from '@/hooks/useClassroomLessons';
 import { useClassroomCompanion } from '@/hooks/useClassroomCompanion';
 import { useClassroomForesight } from '@/hooks/useClassroomForesight';
-import { useClassroomMindMap } from '@/hooks/useClassroomMindMap';
+import { useClassroomFlow } from '@/hooks/useClassroomFlow';
 import { useLiveConcepts } from '@/hooks/useLiveConcepts';
 import { useCaptureEditorStore } from '@/stores/capture-editor-store';
 import { useSessionStore } from '@/stores/session-store';
@@ -57,7 +57,7 @@ import {
 import { buildGuestDemoFlashcardsResult } from './classroom/guest-demo-entry';
 import { writeCachedAppResult, writeCachedTaskState } from '@/components/apps/hooks/useAppExecution';
 import { DEMO_AUDIO_URL, DEMO_SEGMENTS, DEMO_SESSION_ID } from '@/fixtures/demo-data';
-import { buildDemoMindMapTree } from './classroom/demo-mindmap';
+import { buildDemoClassroomFlow } from './classroom/demo-classroom-flow';
 import type { ForesightBubble } from './classroom/ClassroomCompanionPanel';
 import type { WorkshopAppKey } from '@/lib/ai-native/app-catalog';
 
@@ -309,15 +309,6 @@ export function ClassroomView({
     [paneState, activeRecordingSegments],
   );
 
-  // MindMap → 转录段落跳转：记住最近一次点击的 ms + 一个自增 nonce，
-  // ClassroomRecordingView 内部用 nonce 决定"要不要重滚"。连续点同一个节点也能生效。
-  //
-  // 课中结构树节点可以定位到当前转录；AI 时间引用回跳只属于课后 review。
-  const [mindMapScrollTarget, setMindMapScrollTarget] = useState<{ ms: number; nonce: number } | null>(null);
-  const handleMindMapAnchorClick = useCallback((ms: number) => {
-    setMindMapScrollTarget((prev) => ({ ms, nonce: (prev?.nonce ?? 0) + 1 }));
-  }, []);
-
   /**
    * 用户点 AI 气泡里的内联动作（典型：停止录音那条气泡的 [整速查表] / [看转录]）。
    * 不同 kind 分别走不同响应：
@@ -416,11 +407,9 @@ export function ClassroomView({
     [foresights],
   );
 
-  // ── 思维导图：生长中的理解结构（主画面的核心）──
-  //   - 每 ~45s 拉一次，或命中"接下来/那/下一个"等主题切换词时提前拉。
-  //   - 预热 60-90s（hook + 后端双保险），避免开场寒暄污染节点。
-  //   - 课前预习材料标题作为 importedHints，帮模型识别专名。
-  const mindMapImportedHints = useMemo(() => {
+  // ── 课堂脉络：模型自主判断当前讲解、近期推进和课后保留点 ──
+  // 前端只提供转录、课程标题和附近材料，不用关键词替模型切主题。
+  const classroomFlowImportedHints = useMemo(() => {
     const todayDate = new Date().toISOString().split('T')[0];
     return sourceItems
       .filter((item) => (item.addedAt || '').startsWith(todayDate))
@@ -436,21 +425,26 @@ export function ClassroomView({
     return title;
   }, [lessons]);
 
-  const { tree: generatedMindMapTree, newNodeIds: generatedMindMapNewIds } = useClassroomMindMap({
+  const {
+    flow: generatedClassroomFlow,
+    newItemIds: generatedClassroomFlowNewIds,
+    isUnderstanding: isUnderstandingClassroomFlow,
+  } = useClassroomFlow({
     enabled: paneState === 'recording' && !isDemoRecordingPane,
-    transcriptText: liveTranscriptText,
-    interimText: paneState === 'recording' ? liveInterimText : undefined,
+    segments: recordingSegments ?? [],
     recordingStartAt,
     lessonTitle: activeRecordingLessonTitle,
-    importedHints: mindMapImportedHints,
+    importedHints: classroomFlowImportedHints,
   });
 
-  const demoMindMap = useMemo(
-    () => buildDemoMindMapTree(effectiveRecordingSeconds),
+  const demoClassroomFlow = useMemo(
+    () => buildDemoClassroomFlow(effectiveRecordingSeconds),
     [effectiveRecordingSeconds],
   );
-  const mindMapTree = isDemoRecordingPane ? demoMindMap.tree : generatedMindMapTree;
-  const mindMapNewIds = isDemoRecordingPane ? demoMindMap.newNodeIds : generatedMindMapNewIds;
+  const classroomFlow = isDemoRecordingPane ? demoClassroomFlow.flow : generatedClassroomFlow;
+  const classroomFlowNewIds = isDemoRecordingPane
+    ? demoClassroomFlow.newItemIds
+    : generatedClassroomFlowNewIds;
 
   // ── ASR 热词注入：课堂场景下，从预习材料 + 课程标题聚合专名 ──
   // ASR 专名识别差的根源是 page.tsx 里 asrContextHint 恒为 ''。
@@ -563,10 +557,9 @@ export function ClassroomView({
         segments={recordingSegments}
         interimText={paneState === 'recording' ? liveInterimText : undefined}
         recentLines={recentLines}
-        mindMapTree={mindMapTree}
-        mindMapNewIds={mindMapNewIds}
-        onMindMapAnchorClick={handleMindMapAnchorClick}
-        scrollTarget={paneState === 'recording' ? mindMapScrollTarget : null}
+        classroomFlow={classroomFlow}
+        classroomFlowNewIds={classroomFlowNewIds}
+        isUnderstandingClassroomFlow={isUnderstandingClassroomFlow}
         onFocusRecording={() => setLocalPaneState('recording')}
         isDemoPlayback={isDemoRecordingPane}
         demoAudioPlaying={demoAudioPlaying}
@@ -585,7 +578,7 @@ export function ClassroomView({
         onQuickPhoto={onQuickPhoto}
       />
     ),
-    [paneState, lessons, handleOpenLesson, handleStartRecording, handleStopRecording, effectiveRecordingSeconds, liveConcepts, liveTranscriptText, recordingSegments, liveInterimText, recentLines, mindMapTree, mindMapNewIds, handleMindMapAnchorClick, mindMapScrollTarget, isDemoRecordingPane, demoAudioPlaying, demoAudioNeedsGesture, handleToggleDemoAudio, demoComplete, handleReplayDemo, handleOpenDemoReview, recorderAudioSource, setRecorderAudioSource, recorderSpeakerDiarization, setRecorderSpeakerDiarization, onOpenApp, onRenameLesson],
+    [paneState, lessons, handleOpenLesson, handleStartRecording, handleStopRecording, effectiveRecordingSeconds, liveConcepts, liveTranscriptText, recordingSegments, liveInterimText, recentLines, classroomFlow, classroomFlowNewIds, isUnderstandingClassroomFlow, isDemoRecordingPane, demoAudioPlaying, demoAudioNeedsGesture, handleToggleDemoAudio, demoComplete, handleReplayDemo, handleOpenDemoReview, recorderAudioSource, setRecorderAudioSource, recorderSpeakerDiarization, setRecorderSpeakerDiarization, onOpenApp, onRenameLesson, onQuickPhoto],
   );
 
   const demoSuggestedPrompts = useMemo(
