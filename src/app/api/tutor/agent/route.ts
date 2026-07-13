@@ -121,6 +121,43 @@ const ContextSchema = z
         fullTranscriptTail: z.string().max(8000).optional(),
       })
       .optional(),
+    /** 全局 Ask MeetMind：长期记忆、近期学习现场与已确认的深度学习意图。 */
+    global: z
+      .object({
+        depth: z.enum(['quick', 'deep']).optional(),
+        intent: z
+          .object({
+            title: z.string().max(120),
+            outcome: z.string().max(400),
+            approach: z.string().max(40).optional(),
+            checkpoints: z.array(z.string().max(160)).max(3).optional(),
+          })
+          .optional(),
+        memories: z.array(z.object({
+          title: z.string().max(160),
+          detail: z.string().max(500).optional(),
+          kind: z.string().max(40).optional(),
+        })).max(12).optional(),
+        recentActivities: z.array(z.object({
+          title: z.string().max(160),
+          detail: z.string().max(500).optional(),
+          occurredAt: z.string().max(80).optional(),
+        })).max(8).optional(),
+        activeThread: z.object({
+          title: z.string().max(160),
+          lastSummary: z.string().max(800).optional(),
+          nextStep: z.string().max(400).optional(),
+        }).optional(),
+        goals: z.array(z.object({
+          title: z.string().max(160),
+          summary: z.string().max(500).optional(),
+        })).max(8).optional(),
+        bio: z.object({
+          headline: z.string().max(300),
+          detail: z.string().max(600).optional(),
+        }).optional(),
+      })
+      .optional(),
   })
   .default({});
 
@@ -153,7 +190,7 @@ const BodySchema = z.object({
    * v3.0：新增 'shared' —— 走 SharedAgent 公开对话路径，需配合 shareToken。
    * 「聊聊你想要的」：新增 'goal' —— 用户和教练对话梳理目标，无课堂上下文，禁用 native tools 和 inline app。
    */
-  mode: z.enum(['in-class', 'review', 'shared', 'goal', 'word']).default('review'),
+  mode: z.enum(['in-class', 'review', 'shared', 'goal', 'word', 'global']).default('review'),
   /** v3.0 仅 shared 模式：分享 token，从 SharedAgent.snapshotJson 加载上下文 */
   shareToken: z.string().max(32).optional(),
   context: ContextSchema,

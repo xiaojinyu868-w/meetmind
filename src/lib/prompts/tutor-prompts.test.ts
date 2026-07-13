@@ -37,7 +37,7 @@ describe('buildTutorSystemPrompt — mode 决定基础骨架', () => {
   });
 
   it('身份基底保持场景中立，不把 goal/shared/word 误写成刚上完课', () => {
-    for (const mode of ['goal', 'shared', 'word'] as const) {
+    for (const mode of ['goal', 'shared', 'word', 'global'] as const) {
       const prompt = buildTutorSystemPrompt(mode);
       expect(prompt).not.toMatch(/刚上完一节课/);
       expect(prompt).toMatch(/正在学、正在想的东西/);
@@ -51,6 +51,36 @@ describe('buildTutorSystemPrompt — mode 决定基础骨架', () => {
     expect(review).toMatch(/模型基于上下文理解/);
     expect(inClass).not.toMatch(/只有当.*明确|下一步动作/);
     expect(review).not.toMatch(/只有当.*明确|下一步动作|轻轻带一个下一步|马上能做/);
+  });
+});
+
+describe('buildTutorSystemPrompt — global Ask 与深度学习', () => {
+  it('普通全局提问直接回答，不自动沉淀记忆', () => {
+    const prompt = buildTutorSystemPrompt('global', { global: { depth: 'quick' } });
+    expect(prompt).toMatch(/全局 Ask MeetMind/);
+    expect(prompt).toMatch(/先直接回答/);
+    expect(prompt).toMatch(/不要输出“学习进展” marker/);
+  });
+
+  it('深度学习使用已确认意图，并输出待用户确认的进展块', () => {
+    const prompt = buildTutorSystemPrompt('global', {
+      global: {
+        depth: 'deep',
+        intent: {
+          title: '真正理解反向传播',
+          outcome: '能自己推导一次参数更新',
+          checkpoints: ['说清梯度从哪里来'],
+        },
+        memories: [{ title: '更喜欢用图理解', kind: 'preference' }],
+        recentActivities: [{ title: '刚完成神经网络闪卡' }],
+      },
+    });
+    expect(prompt).toMatch(/已经确认要进入一次深度学习会话/);
+    expect(prompt).toMatch(/真正理解反向传播/);
+    expect(prompt).toMatch(/更喜欢用图理解/);
+    expect(prompt).toMatch(/刚完成神经网络闪卡/);
+    expect(prompt).toMatch(/---学习进展---/);
+    expect(prompt).toMatch(/没有被确认的内容不能当成长久记忆/);
   });
 });
 

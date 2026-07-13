@@ -1,7 +1,7 @@
 /**
  * Tutor Prompts — Mode-driven prompt builder (M10)
  *
- * 这个文件是五类 AI 对话入口（课中 / 复习 / 分享 / 目标 / 选词）的唯一 prompt 源。
+ * 这个文件是六类 AI 对话入口（课中 / 复习 / 分享 / 目标 / 选词 / 全局学习）的唯一 prompt 源。
  *
  * 设计哲学：Less Structure, More Intelligence
  *   —— 见 `项目开发文档/提示词设计哲学.md`
@@ -25,7 +25,7 @@
  * 版本化：`PROMPT_VERSIONS` 给 Sentry span `experimental_telemetry.metadata` 做切片。
  */
 
-export type TutorMode = 'in-class' | 'review' | 'shared' | 'goal' | 'word';
+export type TutorMode = 'in-class' | 'review' | 'shared' | 'goal' | 'word' | 'global';
 
 export interface TutorSystemContext {
   /** 仅 in-class：最近 30s 转录，用于"这个 / 那个 / 刚才"代词消歧 */
@@ -75,6 +75,25 @@ export interface TutorSystemContext {
      * selection.context 已经覆盖了 80% 用例，fullTranscript 是 long-tail。
      */
     fullTranscriptTail?: string;
+  };
+  /** 全局 Ask MeetMind：可跨课堂、资料与历史继续学习。 */
+  global?: {
+    depth?: 'quick' | 'deep';
+    intent?: {
+      title: string;
+      outcome: string;
+      approach?: string;
+      checkpoints?: string[];
+    };
+    memories?: Array<{ title: string; detail?: string; kind?: string }>;
+    recentActivities?: Array<{ title: string; detail?: string; occurredAt?: string }>;
+    activeThread?: {
+      title: string;
+      lastSummary?: string;
+      nextStep?: string;
+    };
+    goals?: Array<{ title: string; summary?: string }>;
+    bio?: { headline: string; detail?: string };
   };
 }
 
@@ -132,6 +151,62 @@ const MODE_REVIEW_SEGMENT = `
 不要先反问"你想问什么样的情况"——他已经问得很清楚了，反问会让他觉得你没在听。
 
 如果转录里没讲到他问的东西，就明确告诉他这节课没讲到，再用你本来就懂的常识简单搭一下桥。不要假装课里讲过。`;
+
+function buildGlobalModeSegment(depth: 'quick' | 'deep' = 'quick'): string {
+  if (depth === 'deep') {
+    return `
+此刻他打开了全局 Ask MeetMind，并且已经确认要进入一次深度学习会话。这里不属于某一节课；你可以把他确认过的长期记忆、最近学习活动、当前材料和这次意图连起来。
+
+这次会话的目标不是一次性倾倒答案，而是让他在结束时真的多会一点：
+- 先从他已有理解开始，找到最关键的断点
+- 解释、比较、练习或共创哪一种更合适，由你根据已确认意图判断
+- 每一轮只推进一个有价值的检查点；需要他参与时，用一个自然问题或很小的练习验证
+- 不重复询问已经在上下文里确认过的信息，也不把长期目标改写成临时任务
+
+当这一轮已经形成真实进展时，在正文最后输出：
+\`---学习进展---\`
+\`· 一条已经学会、厘清或完成的事实\`
+\`· 一条下一次值得接着走的线索（确实存在时）\`
+\`---结束---\`
+前端会让用户逐条确认；没有被确认的内容不能当成长久记忆。`;
+  }
+  return `
+此刻他在全局 Ask MeetMind 提问。问题可能横跨不同课堂、资料和长期目标。先直接回答他真正问的，再在必要时指出答案依据了哪段个人或近期上下文。
+
+不要因为掌握很多背景就把每次提问都变成长报告；能一句讲清就一句。不要输出“学习进展” marker，普通问答不自动沉淀长期记忆。`;
+}
+
+function capGlobalContext(globalContext: NonNullable<TutorSystemContext['global']>): string {
+  const lines: string[] = ['【这次可用的个人学习上下文】'];
+  if (globalContext.bio) {
+    lines.push(`他本人：${globalContext.bio.headline}${globalContext.bio.detail ? `；${globalContext.bio.detail}` : ''}`);
+  }
+  if (globalContext.goals?.length) {
+    lines.push('当前目标：');
+    globalContext.goals.slice(0, 8).forEach((goal) => lines.push(`- ${goal.title}${goal.summary ? `：${goal.summary}` : ''}`));
+  }
+  if (globalContext.memories?.length) {
+    lines.push('他确认允许使用的长期记忆：');
+    globalContext.memories.slice(0, 12).forEach((memory) => lines.push(`- ${memory.title}${memory.detail ? `：${memory.detail}` : ''}`));
+  }
+  if (globalContext.recentActivities?.length) {
+    lines.push('最近学习现场：');
+    globalContext.recentActivities.slice(-8).forEach((activity) => lines.push(`- ${activity.title}${activity.detail ? `：${activity.detail}` : ''}`));
+  }
+  if (globalContext.activeThread) {
+    lines.push(`上次还在继续：${globalContext.activeThread.title}`);
+    if (globalContext.activeThread.lastSummary) lines.push(globalContext.activeThread.lastSummary);
+    if (globalContext.activeThread.nextStep) lines.push(`留下的线索：${globalContext.activeThread.nextStep}`);
+  }
+  if (globalContext.intent) {
+    lines.push('这次已经由用户确认的意图：');
+    lines.push(`- ${globalContext.intent.title}`);
+    lines.push(`- 想达到：${globalContext.intent.outcome}`);
+    globalContext.intent.checkpoints?.slice(0, 3).forEach((checkpoint) => lines.push(`- 检查点：${checkpoint}`));
+  }
+  lines.push('长期记忆只包含用户确认的内容；近期活动只是现场线索，不能据此给用户下固定结论。');
+  return `\n${lines.join('\n')}`;
+}
 
 /**
  * 分享态（v3.0 SharedAgent）的 mode segment 是动态的——需要把分享者昵称和课程
@@ -478,6 +553,8 @@ export function buildTutorSystemPrompt(
     parts.push(buildGoalSegment(context));
   } else if (mode === 'word') {
     parts.push(MODE_WORD_SEGMENT);
+  } else if (mode === 'global') {
+    parts.push(buildGlobalModeSegment(context.global?.depth));
   } else {
     parts.push(MODE_REVIEW_SEGMENT);
   }
@@ -505,6 +582,9 @@ export function buildTutorSystemPrompt(
   }
   if (mode === 'word' && context.word) {
     parts.push(capWordContext(context.word));
+  }
+  if (mode === 'global' && context.global) {
+    parts.push(capGlobalContext(context.global));
   }
   if (context.supportMaterials && context.supportMaterials.length > 0) {
     parts.push(capSupportMaterials(context.supportMaterials));
