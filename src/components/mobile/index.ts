@@ -51,3 +51,5 @@ export { MobileTopBar } from './MobileTopBar';
 export { MobileRecordTopBar } from './MobileRecordTopBar';
 export { MobileAIChatHeader } from './MobileAIChatHeader';
 export { MobileAIChatPanel } from './MobileAIChatPanel';
+export { MobileLearningCommandCenter } from './MobileLearningCommandCenter';
+export type { MobileLearningCommandCenterProps } from './MobileLearningCommandCenter';

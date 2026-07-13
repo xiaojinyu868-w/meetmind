@@ -28,6 +28,7 @@
 | `MobileReviewSheet.tsx` | 复习态底部可拖拽 Sheet（收起/半展/全展三档） |
 | `MobileAppNavigator.tsx` | 移动端统一导航栈（push/pop/replace/reset，screen 枚举：home/recording/processing/review/flashcards/quiz/cheatsheet/apps/classmate/empty） |
 | `MobileAppShell.tsx` | **移动端统一页面壳**：接入真实数据，渲染各 screen。录课页复用 `useClassroomFlow + ClassroomFlowCanvas`，默认展示课堂脉络并可切回原话；通过 render slots 接收 page.tsx 传入的真实组件（SafeAITutor / MobileAppRunner） |
+| `MobileLearningCommandCenter.tsx` | 移动首页首屏学习控制台：用一个主表面统一录课、资料、拍照、搜索入口，并显式展示课堂脉络 / 资料问答 / 闪卡 / 测验 / 思维导图 / 今日发现六类结果能力 |
 | `MobileAppRunner.tsx` | 移动端应用执行器：封装 useAppExecution + AppRenderSurface，支持六类 catalog 应用；信息图复用课堂文本作为 contentContext |
 | `MobileCollectionCard.tsx` | 移动端精简收集流卡片；速记直接显示正文，并展示微信/公众号/B站等可识别的来源标签 |
 | `mobile-collection-utils.ts` | 移动收集区纯展示模型；以不可变方式生成最新优先的资料收件箱顺序 |
@@ -40,5 +41,6 @@
 - `MobileAppShell.tsx` 是 M15 移动端重设计的统一壳：替代旧的 `viewMode + mobileSubPage` 双状态机，用 `MobileAppNavigator` 栈式导航。拍照不再依赖外部 `sourceFileInputRef`，内部创建带 `capture="environment"` 的独立 input。录课计时器内部 tick。首页输入条的交互合同是“左侧添加文件、右侧空态语音听写、有正文时切为发送”，听写必须复用 `useCollectionComposer` 的语音入口，不能降级成音频文件选择。复习态 AI 对话、应用矩阵通过 render slots 从 page.tsx 传入真实组件。处理中的“先回首页”必须真正离开处理页；超时未产生转录时不能进入永久 loading 的复习页，而应明确告知原声已保留并提供返回路径。「今日情报」同时读取服务端 workspace captures 和尚未同步完成的本地收集，首条本地笔记保存后即可生成。
 - `MobileAppRunner.tsx` 是移动端应用执行器：六类应用共用 catalog 与 AppRenderSurface；移动端矩阵不再维护缺少播客/信息图的四项手写目录。
 - 移动首页的收集区采用“资料收件箱”顺序（最新在上）；桌面收集流保留对话式时间正序，两者不要共享排序假设。
+- 移动首页第一屏只允许一个主叙事：学习控制台。采集方式是入口层，AI 产物是能力层，今日发现和最近内容是上下文层；不要再让拍照、速记、情报卡和最近列表同时争夺主视觉。
 - 移动录课页和桌面必须共享同一套课堂脉络语义：默认先看“脉络”，需要核对时切回“原话”；不能在手机端退化为只有 ASR 卡片流，也不能重新放回课中思维导图。
 - `DedaoMenu.tsx` 现在承担移动端统一"设置"入口：游客和登录用户都能进 `settings`，个人资料不再单独挂在菜单里

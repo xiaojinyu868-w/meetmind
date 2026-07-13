@@ -254,6 +254,32 @@ export const COPY = {
     listening: '我在听，说完再点一下',
   },
 
+  mobileHome: {
+    commandCenterLabel: '学习控制台',
+    contextStatus: (count: number): string => count > 0
+      ? `个人上下文 · 已连接 ${count} 条`
+      : '个人上下文 · 等待第一条',
+    systemStatus: 'CONTEXT ONLINE',
+    title: '你的学习上下文，已经在线。',
+    body: '录下一节课、放入资料，或者找回过去的内容。我会接着你的目标和历史理解。',
+    record: '开始听课',
+    recordHint: '实时转录 · 课堂脉络 · 随时问同学',
+    addMaterial: '放入资料',
+    photo: '拍板书',
+    search: '搜索内容',
+    capabilityLabel: '内容进来后，同学会接着做',
+    capabilityFlow: '课堂脉络',
+    capabilityQa: '资料问答',
+    capabilityFlashcards: '闪卡',
+    capabilityQuiz: '测验',
+    capabilityMindmap: '思维导图',
+    capabilityFeed: '今日发现',
+    intelligenceLabel: '今日发现',
+    intelligenceFallback: '从最近的学习里，找到一条值得继续的线索',
+    intelligenceAction: '查看',
+    recentLabel: '最近上下文',
+  },
+
   echoShare: {
     title: '分享这条笔记',
     open: '分享',

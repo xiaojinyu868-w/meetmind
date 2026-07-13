@@ -11,7 +11,7 @@ import { useCaptureEditorStore } from '@/stores/capture-editor-store';
 import { useSessionStore } from '@/stores/session-store';
 import { useCollectionStore } from '@/stores/collection-store';
 import { toast } from 'sonner';
-import { Mic, Camera, Edit3, Paperclip, ArrowUp, ChevronRight, ChevronDown, Layers, Zap, FileText, Brain, Search, Star, MapPin, ExternalLink, Headphones, Image as ImageIcon } from 'lucide-react';
+import { Mic, Camera, Paperclip, ArrowUp, ChevronRight, ChevronDown, Layers, Zap, FileText, Brain, Search, Star, MapPin, ExternalLink, Headphones, Newspaper, Image as ImageIcon } from 'lucide-react';
 import type { SourceIngestItem } from '@/types/page-types';
 import type { TranscriptSegment } from '@/types';
 import { getSpeakerLabel, getSpeakerColorClass } from '@/lib/services/asr/diarization-service';
@@ -23,6 +23,7 @@ import { MobileAppRunner } from './MobileAppRunner';
 import { recommendWorkshopApp } from '@/components/apps/workshop-recommendation';
 import { ClassroomFlowCanvas } from '@/components/classroom/ClassroomFlowCanvas';
 import { useClassroomFlow } from '@/hooks/useClassroomFlow';
+import { MobileLearningCommandCenter } from './MobileLearningCommandCenter';
 
 export interface MobileAppShellProps {
   children?: React.ReactNode;
@@ -202,75 +203,45 @@ function HomeScreen({ p }: { p: MobileAppShellProps }) {
 
       {/* 可滚动区 */}
       <div className="flex-1 min-h-0 overflow-y-auto px-4 pt-3 pb-20 mm-mobile-scroll" style={{ WebkitOverflowScrolling: 'touch' }}>
-        <h1 className="font-serif text-[24px] leading-[1.15] tracking-[-0.02em] text-ink mb-3">今天学点什么？</h1>
+        <MobileLearningCommandCenter
+          contextCount={p.collectionFeedItems.length}
+          onStartRecording={() => {
+            p.onStartRecording();
+            push('recording');
+          }}
+          onAddMaterial={() => p.onOpenFilePicker('all')}
+          onCapturePhoto={() => triggerCamera(0)}
+          onSearch={() => p.onOpenSearch?.()}
+        />
 
-        {/* 采集三按钮 */}
-        <div className="grid grid-cols-3 gap-2.5 mb-5">
-          <button type="button" onClick={() => { p.onStartRecording(); push('recording'); }}
-            className="col-span-3 flex items-center gap-3 rounded-[18px] bg-white border-2 border-vermilion/20 p-3.5 text-left active:scale-[0.98] transition m-card-in">
-            <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full bg-vermilion-mist">
-              <Mic size={18} strokeWidth={2} className="text-vermilion" />
-            </div>
-            <div className="min-w-0 flex-1">
-              <p className="text-[14px] font-semibold text-vermilion">录一节课</p>
-              <p className="text-[11px] text-ink-muted mt-0.5">课堂 · 讲座 · 随时听</p>
-            </div>
-            <span className="relative flex h-2 w-2 flex-shrink-0">
-              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-vermilion opacity-50" />
-              <span className="relative inline-flex h-2 w-2 rounded-full bg-vermilion" />
+        {/* 今日发现只做一条上下文入口，不再和学习控制台争夺主视觉。 */}
+        {(echo || p.collectionFeedItems.length > 0) && (
+          <button
+            type="button"
+            className="mb-5 mt-3 flex w-full items-center gap-3 rounded-[16px] border border-divider bg-white px-3.5 py-3 text-left transition active:scale-[0.99]"
+            onClick={() => push('echo')}
+          >
+            <span className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-[10px] bg-pine-mist text-pine">
+              <Newspaper size={14} strokeWidth={1.8} />
+            </span>
+            <span className="min-w-0 flex-1">
+              <span className="block font-mono text-[8.5px] font-semibold uppercase tracking-[0.1em] text-pine">
+                {COPY.mobileHome.intelligenceLabel}
+              </span>
+              <span className="mt-1 block truncate text-[12.5px] font-medium text-ink">
+                {echo?.title || COPY.mobileHome.intelligenceFallback}
+              </span>
+            </span>
+            <span className="flex items-center gap-0.5 text-[10.5px] font-medium text-ink-muted">
+              {COPY.mobileHome.intelligenceAction}
+              <ChevronRight size={11} strokeWidth={2} />
             </span>
           </button>
-          <button type="button" onClick={() => triggerCamera(0)}
-            className="rounded-[16px] bg-white border border-divider p-3 text-center active:scale-95 transition m-card-in">
-            <div className="flex h-9 w-9 mx-auto items-center justify-center rounded-full bg-vermilion-mist mb-1.5">
-              <Camera size={16} strokeWidth={2} className="text-vermilion" />
-            </div>
-            <p className="text-[12px] font-semibold text-ink">拍一下</p>
-          </button>
-          <button type="button" onClick={() => p.composerRef.current?.focus()}
-            className="col-span-2 rounded-[16px] bg-white border border-divider p-3 flex items-center gap-2.5 text-left active:scale-[0.98] transition m-card-in">
-            <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full bg-pine-mist">
-              <Edit3 size={16} strokeWidth={2} className="text-pine" />
-            </div>
-            <div><p className="text-[12px] font-semibold text-ink">速记一句</p><p className="text-[10px] text-ink-muted">想法 · 疑问 · 课后笔记</p></div>
-          </button>
-        </div>
-
-        {/* 今日情报：整理只是入口，还会给出上下文关联和外部发现。 */}
-        {(echo || p.collectionFeedItems.length > 0) && (
-          <div className="mb-4 m-card-in cursor-pointer" onClick={() => push('echo')}>
-            <div className="rounded-[18px] border border-pine/20 bg-pine-mist/50 p-4 shadow-soft active:scale-[0.99] transition">
-              <div className="flex items-center gap-2 mb-2.5">
-                <div className="h-7 w-7 rounded-full bg-pine-mist flex items-center justify-center overflow-hidden m-octo-breath flex-shrink-0">
-                  <img src="/images/octo-buddy/happy.png" alt="" className="h-full w-full object-cover" />
-                </div>
-                <span className="font-mono text-[9px] font-semibold uppercase tracking-[0.08em] text-pine">今日情报</span>
-                <span className="font-mono text-[9px] text-ink-muted ml-auto">{echo?.createdAt ? new Date(echo.createdAt).toLocaleDateString('zh-CN',{month:'numeric',day:'numeric'}) : new Date().toLocaleDateString('zh-CN',{month:'numeric',day:'numeric'})}</span>
-              </div>
-              <p className="text-[13px] font-semibold leading-[1.5] text-ink mb-1.5" style={{ display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
-                {echo?.title || '你收集的内容正在形成新线索'}
-              </p>
-              <p className="text-[12px] leading-[1.65] text-ink-secondary" style={{ display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
-                {echo?.body
-                  ? `${echo.body.slice(0, 200)}${echo.body.length > 200 ? '…' : ''}`
-                  : `基于 ${p.collectionFeedItems.length} 条收藏和你的目标，寻找值得继续看的内外部信息。`}
-              </p>
-              {echo?.takeaway && (
-                <div className="mt-2.5 flex items-start gap-1.5 rounded-lg bg-vermilion-mist/50 px-2.5 py-1.5">
-                  <span className="font-mono text-[9px] font-semibold text-vermilion flex-shrink-0">带走</span>
-                  <p className="text-[11px] leading-relaxed text-ink-secondary">{echo.takeaway}</p>
-                </div>
-              )}
-              <p className="mt-2.5 text-[11px] font-medium text-pine flex items-center gap-1">
-                查看今日情报 <ChevronRight size={10} strokeWidth={2.5} />
-              </p>
-            </div>
-          </div>
         )}
 
         {/* 收集流 — 按日期分组 */}
         <div className="flex items-baseline gap-2 px-1 pb-2.5">
-          <span className="font-mono text-[10px] font-semibold uppercase tracking-[0.08em] text-ink-secondary">最近</span>
+          <span className="font-mono text-[10px] font-semibold uppercase tracking-[0.08em] text-ink-secondary">{COPY.mobileHome.recentLabel}</span>
           <span className="font-mono text-[10px] text-ink-muted/70">{String(p.collectionFeedItems.length).padStart(2,'0')}</span>
           <span className="ml-1 h-px flex-1 bg-divider" />
         </div>
