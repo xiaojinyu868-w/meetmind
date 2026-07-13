@@ -8,65 +8,65 @@ module.exports = {
     extend: {
       colors: {
         /* ===========================================================
-           MeetMind v7 — 图书馆台灯 + 朱批红笔
+           MeetMind v7.1 — 晨雾学习台 + 朱批红笔
            "色 = 架构"：墨松绿是 AI 沉淀（场景上下文），
            朱批红是学生此刻（个人上下文 / 引用 / 标注）。
            策略：保留所有 v6 key（不破坏 200+ 文件），同时引入 v7 一等公民
            =========================================================== */
 
         /* ===== v7 一等公民 ===== */
-        paper: '#FAF7F2',          // 主底色 · 米白纸感
-        'paper-warm': '#F2EDE3',   // hover / 次表面
-        'paper-deep': '#EDE7DA',   // pressed
+        paper: '#F6F8F6',          // 主底色 · 晨雾白
+        'paper-warm': '#EDF2EE',   // hover / 次表面
+        'paper-deep': '#E4EAE6',   // pressed
         pine: {
-          DEFAULT: '#2D4F3E',
-          deep: '#1A3327',
-          light: '#6B9080',
-          mist: '#E6EDE8',
-          fog: '#F2F6F3',
-          50: '#F2F6F3',
-          100: '#E6EDE8',
-          200: '#C2D4CA',
-          300: '#93B5A4',
-          400: '#6B9080',
-          500: '#2D4F3E',
-          600: '#1A3327',
-          700: '#0E2117',
-          800: '#0A1810',
-          900: '#050C08',
+          DEFAULT: '#2F6B55',
+          deep: '#214B3C',
+          light: '#6D9C89',
+          mist: '#DFEEE6',
+          fog: '#F0F7F3',
+          50: '#F0F7F3',
+          100: '#DFEEE6',
+          200: '#BDD8CA',
+          300: '#91B7A5',
+          400: '#6D9C89',
+          500: '#2F6B55',
+          600: '#214B3C',
+          700: '#18382D',
+          800: '#10271F',
+          900: '#08140F',
         },
         vermilion: {
-          DEFAULT: '#B5483C',
-          deep: '#8E3328',
-          light: '#D17969',
-          mist: '#F6E6E2',
-          fog: '#FBF2EF',
-          50: '#FBF2EF',
-          100: '#F6E6E2',
-          200: '#EFCBC1',
-          300: '#E2A799',
-          400: '#D17969',
-          500: '#B5483C',
-          600: '#8E3328',
-          700: '#6B2A21',
-          800: '#4A1D17',
-          900: '#2D110D',
+          DEFAULT: '#C45E4C',
+          deep: '#984536',
+          light: '#D98271',
+          mist: '#F8E7E2',
+          fog: '#FCF3F0',
+          50: '#FCF3F0',
+          100: '#F8E7E2',
+          200: '#F0CEC5',
+          300: '#E4AA9B',
+          400: '#D98271',
+          500: '#C45E4C',
+          600: '#984536',
+          700: '#733229',
+          800: '#4F221C',
+          900: '#30130F',
         },
 
         /* ===== v6 兼容（已映射到 v7 色板） ===== */
-        canvas: '#FAF7F2',         // ← 微调到 v7 米白
+        canvas: '#F6F8F6',         // ← v7.1 晨雾白
         card: '#FFFFFF',
-        hover: '#F2EDE3',          // ← 暖一点
+        hover: '#EDF2EE',
 
         ink: {
-          DEFAULT: '#1C1B19',      // ← 略深略暖
-          secondary: '#5C5A55',
-          muted: '#8E8B82',
+          DEFAULT: '#20312A',      // ← 深松墨，不用纯黑
+          secondary: '#53645C',
+          muted: '#819087',
           inverse: '#FFFFFF',
         },
         divider: {
-          DEFAULT: '#E8E2D5',      // ← 偏暖纸感
-          light: '#F0EBDF',
+          DEFAULT: '#DCE5DF',
+          light: '#EAF0EC',
         },
 
         /* 内容标签色（弱化） */
@@ -100,7 +100,7 @@ module.exports = {
           light: '#FDF2E9',
           dark: '#F2C49D',
         },
-        highlight: '#FDECC8',
+        highlight: '#F4E8BE',
 
         /* v6 仪式色板（保留向下兼容，但 v7 用 ceremony-pine/vermilion 替代） */
         ceremony: {

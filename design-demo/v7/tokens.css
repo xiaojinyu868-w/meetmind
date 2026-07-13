@@ -1,7 +1,7 @@
 /* ============================================================
    MeetMind v7 · Design Tokens
    单一真相源——所有 showcase / 组件 / 页面共享这一份
-   "图书馆台灯 + 朱批红笔" 设计语言
+   "晨雾学习台 + 朱批红笔" 设计语言
    ============================================================ */
 
 /* ---------- 字体加载 ---------- */
@@ -9,29 +9,29 @@
 
 :root {
   /* ============== 笔墨与底色 ============== */
-  --paper:        #FAF7F2;   /* 米白纸感（主底色） */
-  --paper-warm:   #F2EDE3;   /* 较深米白（hover / 次级表面） */
-  --paper-deep:   #EDE7DA;   /* 更深米白（pressed） */
+  --paper:        #F6F8F6;   /* 晨雾白（主底色） */
+  --paper-warm:   #EDF2EE;   /* hover / 次级表面 */
+  --paper-deep:   #E4EAE6;   /* pressed */
   --card:         #FFFFFF;
-  --ink:          #1C1B19;   /* 主文字 / 主按钮 */
-  --ink-2:        #5C5A55;   /* 次文字 */
-  --ink-3:        #8E8B82;   /* 弱文字 / 标注 */
-  --ink-4:        #B8B5AC;   /* 占位 / 分隔 */
-  --rule:         #E8E2D5;
-  --rule-soft:    #F0EBDF;
+  --ink:          #20312A;   /* 主文字 · 深松墨 */
+  --ink-2:        #53645C;   /* 次文字 */
+  --ink-3:        #819087;   /* 弱文字 / 标注 */
+  --ink-4:        #AAB5AE;   /* 占位 / 分隔 */
+  --rule:         #DCE5DF;
+  --rule-soft:    #EAF0EC;
 
   /* ============== 双签名色 ============== */
-  --pine:         #2D4F3E;   /* 墨松绿——AI / 沉淀 / 长期上下文 */
-  --pine-deep:    #1A3327;
-  --pine-light:   #6B9080;
-  --pine-mist:    #E6EDE8;
-  --pine-fog:     #F2F6F3;
+  --pine:         #2F6B55;   /* 松石绿——AI / 沉淀 / 长期上下文 */
+  --pine-deep:    #214B3C;
+  --pine-light:   #6D9C89;
+  --pine-mist:    #DFEEE6;
+  --pine-fog:     #F0F7F3;
 
-  --vermilion:    #B5483C;   /* 朱批红——此刻 / 引用 / 学生标注 */
-  --vermilion-deep: #8E3328;
-  --vermilion-light: #D17969;
-  --vermilion-mist: #F6E6E2;
-  --vermilion-fog: #FBF2EF;
+  --vermilion:    #C45E4C;   /* 朱砂——此刻 / 引用 / 学生标注 */
+  --vermilion-deep: #984536;
+  --vermilion-light: #D98271;
+  --vermilion-mist: #F8E7E2;
+  --vermilion-fog: #FCF3F0;
 
   /* ============== 内容标签色（弱化前作功能色） ============== */
   --tag-sand:     #FDF3C0;   /* 时间轴问答 */

@@ -377,26 +377,26 @@ ASR 链路（`src/lib/services/asr/`）：
 
 > 完整设计宪法 + 可视化 showcase 在 `design-demo/v7/`（9 篇 showcase HTML：foundations / AI 视觉 / 组件 / 应用矩阵 / 课中 / 复习 / 分享落地 / 移动端 / 暗色 + `tokens.css` + `index.html` 导航页）。
 
-**核心理念：图书馆台灯 + 朱批红笔。** "色 = 架构"——墨松绿是 AI 沉淀（场景上下文），朱批红是学生此刻（个人上下文 / 引用 / 标注）。
+**核心理念：晨雾学习台 + 朱批红笔。** "色 = 架构"——松石绿是 AI 沉淀（场景上下文），朱砂是学生此刻（个人上下文 / 引用 / 标注）。大面积界面保持明亮、低饱和；深色只用于文字与小面积强调，禁止用纯黑大面营造“科技感”。
 
 ### 双签名色（Tailwind class · CSS var）
 
 | 角色 | 名称 | 色值 | Tailwind | CSS Var | 语义 |
 |------|------|------|----------|---------|------|
-| **主签名** | 墨松绿 Pine | `#2D4F3E` | `pine` / `pine-mist` / `pine-fog` | `--mm-pine` | AI / 沉淀 / 长期上下文 |
-| **次签名** | 朱批红 Vermilion | `#B5483C` | `vermilion` / `vermilion-mist` / `vermilion-fog` | `--mm-vermilion` | 此刻 / 引用 / 学生标注 |
+| **主签名** | 松石绿 Pine | `#2F6B55` | `pine` / `pine-mist` / `pine-fog` | `--mm-pine` | AI / 沉淀 / 长期上下文 |
+| **次签名** | 朱砂 Vermilion | `#C45E4C` | `vermilion` / `vermilion-mist` / `vermilion-fog` | `--mm-vermilion` | 此刻 / 引用 / 学生标注 |
 
 ### 中性色
 
 | Token | 色值 | Tailwind | 用途 |
 |-------|------|----------|------|
-| `paper` | `#FAF7F2` | `bg-paper` | 主底色 · 米白纸感（v7 升级 · 暖于 v6 燕麦灰） |
-| `paper-warm` | `#F2EDE3` | `bg-paper-warm` | hover / 次表面 |
+| `paper` | `#F6F8F6` | `bg-paper` | 主底色 · 明亮晨雾白（v7.1） |
+| `paper-warm` | `#EDF2EE` | `bg-paper-warm` | hover / 次表面 |
 | `card` | `#FFFFFF` | `bg-card` | 主卡片 |
-| `ink` | `#1C1B19` | `text-ink` | 主文字 / 主按钮 |
-| `ink-secondary` | `#5C5A55` | `text-ink-secondary` | 次文字 |
-| `ink-muted` | `#8E8B82` | `text-ink-muted` | 弱文字 / 标注 |
-| `divider` | `#E8E2D5` | `border-divider` | 边线（偏暖纸感） |
+| `ink` | `#20312A` | `text-ink` | 主文字；不再作为大面积按钮底色 |
+| `ink-secondary` | `#53645C` | `text-ink-secondary` | 次文字 |
+| `ink-muted` | `#819087` | `text-ink-muted` | 弱文字 / 标注 |
+| `divider` | `#DCE5DF` | `border-divider` | 清透冷灰绿边线 |
 
 ### 字体三件套（已在 `app/layout.tsx` 通过 next/font 加载）
 

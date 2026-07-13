@@ -3,12 +3,12 @@
 @tailwind utilities;
 
 /* ============================================================
-   MeetMind Design System v7.0 — 图书馆台灯 + 朱批红笔
+   MeetMind Design System v7.1 — 晨雾学习台 + 朱批红笔
    "色 = 架构"：墨松绿 = AI 沉淀 / 长期上下文，
                  朱批红 = 学生此刻 / 引用 / 标注。
 
    原则：
-   1. 95% 中性色（米白 / 笔墨 / 边线）撑起主体
+   1. 95% 中性色（晨雾白 / 松墨 / 边线）撑起主体
    2. 双签名色仅在"信号时刻"出现（< 8% 面积）
    3. 投影必须存在但极克制（不是 v6 的"封杀"）
    4. AI 在场必须可见（surface-ai · stream · 思考气息）
@@ -17,19 +17,19 @@
 
    色彩系统：
    ┌──────────────────────────────────────────────┐
-   │  Paper:      #FAF7F2  米白纸感（主底色）      │
-   │  Paper-warm: #F2EDE3  hover / 次表面          │
+   │  Paper:      #F6F8F6  晨雾白（主底色）        │
+   │  Paper-warm: #EDF2EE  hover / 次表面          │
    │  Card:       #FFFFFF  主卡片                  │
-   │  Ink:        #1C1B19  主文字                  │
-   │  Ink-2:      #5C5A55  次文字                  │
-   │  Ink-3:      #8E8B82  弱文字 / 标注          │
-   │  Rule:       #E8E2D5  边线                    │
+   │  Ink:        #20312A  主文字                  │
+   │  Ink-2:      #53645C  次文字                  │
+   │  Ink-3:      #819087  弱文字 / 标注          │
+   │  Rule:       #DCE5DF  边线                    │
    │                                                │
-   │  Pine:       #2D4F3E  墨松绿 · AI 沉淀       │
-   │  Vermilion:  #B5483C  朱批红 · 学生此刻      │
+   │  Pine:       #2F6B55  松石绿 · AI 沉淀       │
+   │  Vermilion:  #C45E4C  朱砂 · 学生此刻        │
    │                                                │
-   │  Button:     #1C1B19  主按钮                  │
-   │  Highlight:  #FDECC8  荧光笔黄                │
+   │  Button:     #2F6B55  主按钮                  │
+   │  Highlight:  #F4E8BE  荧光笔黄                │
    └──────────────────────────────────────────────┘
    ============================================================ */
 
@@ -41,34 +41,34 @@
   --font-jetbrains-mono: 'SFMono-Regular', 'Cascadia Code', 'Roboto Mono', Menlo, Consolas, monospace;
 
   /* ===== 空间骨架（v7） ===== */
-  --mm-paper: #FAF7F2;            /* v7 主底色 · 米白纸感 */
-  --mm-paper-warm: #F2EDE3;
-  --mm-paper-deep: #EDE7DA;
-  --mm-canvas: #FAF7F2;            /* v6 兼容 */
+  --mm-paper: #F6F8F6;            /* v7.1 主底色 · 晨雾白 */
+  --mm-paper-warm: #EDF2EE;
+  --mm-paper-deep: #E4EAE6;
+  --mm-canvas: #F6F8F6;            /* v6 兼容 */
   --mm-card: #FFFFFF;
-  --mm-hover: #F2EDE3;             /* 偏暖 */
+  --mm-hover: #EDF2EE;
 
   /* ===== 笔墨与边界 ===== */
-  --mm-ink: #1C1B19;               /* 略深略暖 */
-  --mm-ink-secondary: #5C5A55;
-  --mm-ink-muted: #8E8B82;
-  --mm-ink-faint: #B8B5AC;
+  --mm-ink: #20312A;               /* 深松墨，不使用纯黑 */
+  --mm-ink-secondary: #53645C;
+  --mm-ink-muted: #819087;
+  --mm-ink-faint: #AAB5AE;
   --mm-ink-inverse: #FFFFFF;
-  --mm-divider: #E8E2D5;           /* 偏暖 */
-  --mm-divider-light: #F0EBDF;
+  --mm-divider: #DCE5DF;
+  --mm-divider-light: #EAF0EC;
 
   /* ===== 双签名色（v7 · 唯一真相源） ===== */
-  --mm-pine: #2D4F3E;              /* 墨松绿 · AI 沉淀 */
-  --mm-pine-deep: #1A3327;
-  --mm-pine-light: #6B9080;
-  --mm-pine-mist: #E6EDE8;
-  --mm-pine-fog: #F2F6F3;
+  --mm-pine: #2F6B55;              /* 松石绿 · AI 沉淀 */
+  --mm-pine-deep: #214B3C;
+  --mm-pine-light: #6D9C89;
+  --mm-pine-mist: #DFEEE6;
+  --mm-pine-fog: #F0F7F3;
 
-  --mm-vermilion: #B5483C;         /* 朱批红 · 学生此刻 */
-  --mm-vermilion-deep: #8E3328;
-  --mm-vermilion-light: #D17969;
-  --mm-vermilion-mist: #F6E6E2;
-  --mm-vermilion-fog: #FBF2EF;
+  --mm-vermilion: #C45E4C;         /* 朱砂 · 学生此刻 */
+  --mm-vermilion-deep: #984536;
+  --mm-vermilion-light: #D98271;
+  --mm-vermilion-mist: #F8E7E2;
+  --mm-vermilion-fog: #FCF3F0;
 
   /* ===== v6 内容标签色（弱化保留 · 用于内容区分） ===== */
   --mm-sand: #FDF3C0;
@@ -77,20 +77,20 @@
   --mm-rose: #FADEC9;
 
   /* ===== 按钮与强调 ===== */
-  --mm-button: #1C1B19;
-  --mm-highlight: #FDECC8;
+  --mm-button: #2F6B55;
+  --mm-highlight: #F4E8BE;
 
   /* ===== 功能语义色（v7 · 都从签名色派生） ===== */
-  --mm-success: #2D6A4F;
+  --mm-success: #2F6B55;
   --mm-warning: #B8842B;
-  --mm-danger: #B5483C;            /* = vermilion · 朱批本就是"提醒" */
-  --mm-info: #2D4F3E;              /* = pine */
+  --mm-danger: #C45E4C;            /* = vermilion · 朱批本就是"提醒" */
+  --mm-info: #2F6B55;              /* = pine */
 
   /* 功能色淡底 */
-  --mm-success-bg: #E8F0EB;
+  --mm-success-bg: #E3F0E9;
   --mm-warning-bg: #FBF1DC;
-  --mm-danger-bg: #F6E6E2;
-  --mm-info-bg: #E6EDE8;
+  --mm-danger-bg: #F8E7E2;
+  --mm-info-bg: #DFEEE6;
 
   /* ===== 仪式光（AI 时刻专属） ===== */
   --mm-shimmer-ai: linear-gradient(110deg,
