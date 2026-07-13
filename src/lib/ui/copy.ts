@@ -522,6 +522,10 @@ export const COPY = {
     backHome: '返回首页',
   },
 
+  help: {
+    classroomRecordingAnswer: '录课中 MeetMind 会实时展示：\n\n- 实时原话：老师说的内容会跟着出现\n- 课堂脉络：告诉你现在讲到哪里、刚才如何推进、什么值得课后回来\n- 同学：有问题随时可以问，它会带着刚才的课堂上下文回答\n\n这些都会自动完成。思维导图、闪卡和测验会在课后应用中生成，不会在上课时抢走注意力。',
+  },
+
   /**
    * v3.0 SharedAgent —— 分享 Agent 的落地页 / 分享卡 / 创建对话框文案
    * 见 roadmap/v3.0-virality-agent.md。

@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
+import { COPY } from '@/lib/ui/copy';
 
 interface FAQItem {
   question: string;
@@ -40,7 +41,7 @@ const HELP_SECTIONS: HelpSection[] = [
       },
       {
         question: '录课时能看到什么？',
-        answer: '录课中 MeetMind 会实时展示：\n\n- 实时文字：老师说的内容会跟着出现\n- 思维导图：隔一会儿把讲到的概念串起来\n- 学习同桌：右侧面板进入「正在听课」模式，你有问题随时可以问\n\n这些都会自动完成，不需要你额外操作。'
+        answer: COPY.help.classroomRecordingAnswer,
       },
       {
         question: '选择「电脑声音」后需要做什么？',
