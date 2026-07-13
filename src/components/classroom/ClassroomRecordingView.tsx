@@ -4,8 +4,7 @@
  * ClassroomRecordingView — 录课中视图（v7 · 真的转录，真的可交互）
  *
  * v7 变更（M7 真接）：
- *   - 展开态的转录原文从 `<p>{transcriptText}</p>` 升级为 TranscriptFlowView。
- *     立刻解锁：段落分组、EN→中行内气泡、划词解释（WordExplainer）、搜索。
+ *   - 实时文字使用自然句流，避免把 ASR 物理切片直接暴露给用户。
  *   - 中间主画面是课堂脉络：当前讲解 / 近期推进 / 课后保留点。
  *   - 思维导图、闪卡和测验留在课后应用矩阵。
  *
@@ -13,8 +12,7 @@
  */
 
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
-import dynamic from 'next/dynamic';
-import { Square, ChevronDown, ChevronUp, Languages, Play, Pause, Camera } from 'lucide-react';
+import { Square, Languages, Play, Pause, Camera } from 'lucide-react';
 import { ClassroomFlowCanvas } from './ClassroomFlowCanvas';
 import { OctoBuddySprite } from './OctoBuddy';
 import type { ClassroomFlowState } from '@/types/classroom-flow';
@@ -27,13 +25,6 @@ import { stitchLiveSentences } from '@/lib/utils/stitch-live-sentences';
 import { getSpeakerLabel, getSpeakerColorClass } from '@/lib/services/asr/diarization-service';
 import { cycleTranslationMode, resolveSessionTranslationMode } from './ClassroomRecordingView.model';
 import { COPY } from '@/lib/ui/copy';
-
-// TranscriptFlowView 只在展开态用，且组件较重——code-split 一下，
-// 保持课堂首屏打开时不拉这份 bundle。
-const TranscriptFlowView = dynamic(
-  () => import('@/components/TranscriptFlowView').then((m) => ({ default: m.TranscriptFlowView })),
-  { ssr: false },
-);
 
 export interface LiveConcept {
   id: string;
@@ -50,7 +41,7 @@ export interface ClassroomRecordingViewProps {
   onStop: () => void;
   /** 真实转录文本（整段拼接） */
   transcriptText?: string;
-  /** 真实转录 segments（用于 TranscriptFlowView 分段展示） */
+  /** 真实转录 segments（用于自然句流与移动端原话视图） */
   segments?: TranscriptSegment[];
   /** 正在流式进来但未落定的「跟读」片段（interim） */
   interimText?: string;
@@ -95,8 +86,6 @@ function LiveTranscriptPanel({
   interimText,
   translationMode,
   seconds,
-  expanded,
-  onToggleExpanded,
   onCycleTranslationMode,
   onStop,
   isDemoPlayback,
@@ -111,8 +100,6 @@ function LiveTranscriptPanel({
   interimText?: string;
   translationMode: TranslationMode;
   seconds: number;
-  expanded: boolean;
-  onToggleExpanded: () => void;
   onCycleTranslationMode: () => void;
   onStop: () => void;
   isDemoPlayback?: boolean;
@@ -282,7 +269,7 @@ function LiveTranscriptPanel({
             <span className="font-mono text-[12px] font-medium tabular-nums text-pine">{formatTime(seconds)}</span>
             <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-paper-warm">
               <div
-                className="h-full rounded-full bg-gradient-to-r from-pine to-pine-deep transition-all"
+                className="h-full rounded-full bg-pine transition-all"
                 style={{ width: `${Math.min(100, Math.max(6, seconds / 90))}%` }}
               />
             </div>
@@ -408,27 +395,6 @@ function LiveTranscriptPanel({
   );
 }
 
-// ── 折叠区：完整转录原文 ──────────────────────────────────────────────
-
-function TranscriptToggle({
-  expanded,
-  onToggle,
-}: {
-  expanded: boolean;
-  onToggle: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onToggle}
-      className="flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[11.5px] font-medium text-ink-muted/80 hover:bg-[#F2EDE3] hover:text-ink-secondary transition"
-    >
-      {expanded ? <ChevronDown size={11} /> : <ChevronUp size={11} />}
-      {expanded ? '收起实时文字' : '查看实时文字'}
-    </button>
-  );
-}
-
 function DemoAfterClassPanel({
   onFinish,
   onReplay,
@@ -535,7 +501,6 @@ const EMPTY_NEW_IDS: Set<string> = new Set();
 export function ClassroomRecordingView({
   seconds,
   onStop,
-  transcriptText,
   segments,
   interimText,
   recentLines = [],
@@ -554,12 +519,7 @@ export function ClassroomRecordingView({
   speakerDiarization,
   onToggleSpeakerDiarization,
 }: ClassroomRecordingViewProps) {
-  const [expanded, setExpanded] = useState(false);
   const [mobilePane, setMobilePane] = useState<'flow' | 'transcript'>('flow');
-
-  // 有转录原文（从 segments 判定，不再依赖 transcriptText 字符串）
-  const hasTranscriptSegments = Boolean(segments && segments.length > 0);
-  const hasTranscript = hasTranscriptSegments || Boolean(transcriptText && transcriptText.trim().length > 0);
 
   const [userTranslationMode, setUserTranslationMode] = useTranslationMode();
   const [translationTouched, setTranslationTouched] = useState(false);
@@ -598,8 +558,6 @@ export function ClassroomRecordingView({
               interimText={interimText}
               translationMode={translationMode}
               seconds={seconds}
-              expanded={expanded}
-              onToggleExpanded={() => setExpanded((v) => !v)}
               onCycleTranslationMode={cycleTranslationModeHandler}
               onStop={onStop}
               isDemoPlayback={isDemoPlayback}
