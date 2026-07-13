@@ -9,7 +9,8 @@ import { getWorkshopAppByKey, type WorkshopAppKey } from '@/lib/ai-native/app-ca
 import { useAppExecution } from '@/components/apps/hooks/useAppExecution';
 import { AppRenderSurface } from '@/components/apps/windows/AppRenderSurface';
 import { COPY } from '@/lib/ui/copy';
-import { buildAppResultActivityDetail, useAppLearningActivity } from '@/hooks/useAppLearningActivity';
+import { useAppLearningActivity } from '@/hooks/useAppLearningActivity';
+import { buildAppResultActivityDetail } from '@/lib/utils/app-learning-activity';
 
 interface ReviewLearningWorkspaceProps {
   appKey: WorkshopAppKey;

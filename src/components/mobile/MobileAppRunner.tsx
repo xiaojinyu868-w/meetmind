@@ -13,7 +13,8 @@ import { AppRenderSurface } from '@/components/apps/windows/AppRenderSurface';
 import { WORKSHOP_APP_CATALOG, type WorkshopAppKey } from '@/lib/ai-native/app-catalog';
 import type { TranscriptSegment, Anchor } from '@/types';
 import { COPY } from '@/lib/ui/copy';
-import { buildAppResultActivityDetail, useAppLearningActivity } from '@/hooks/useAppLearningActivity';
+import { useAppLearningActivity } from '@/hooks/useAppLearningActivity';
+import { buildAppResultActivityDetail } from '@/lib/utils/app-learning-activity';
 
 export interface MobileAppRunnerProps {
   appKey: WorkshopAppKey;

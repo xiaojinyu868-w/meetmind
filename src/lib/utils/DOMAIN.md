@@ -36,6 +36,7 @@
 | `inline-app-fallback.ts` | 103 | 内联应用后端生成失败时的本地兜底 payload | `buildInlineAppFallbackPayload` |
 | `app-execution-cache.ts` | 223 | 应用矩阵 / 复习对话共用的 localStorage 产物缓存与 task 状态 key；进入历史对话时必须先读缓存，避免已生成应用重复执行 | `readCachedAppResult`, `writeCachedAppResult`, `readCachedTaskState`, `writeCachedTaskState` |
 | `learning-context.ts` | ~170 | 长期记忆 / 近期活动 / 学习线索的纯合并、去重、裁切与 Tutor 上下文格式化；活动不会自动升级为记忆 | `learningContextFromProfile`, `mergeLearningMemory`, `mergeLearningActivity`, `formatLearningContextForTutor` |
+| `app-learning-activity.ts` | ~15 | 应用结果写入学习现场前的稳定摘要选择：优先渲染说明，其次首张卡片，最后使用数量兜底 | `buildAppResultActivityDetail` |
 | `index.ts` | 40 | barrel 导出 | re-export time-utils, json-utils, transcript-utils |
 
 ### `page/` 子目录（从 page-utils.ts 拆分）
