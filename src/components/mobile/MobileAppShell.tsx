@@ -11,7 +11,7 @@ import { useCaptureEditorStore } from '@/stores/capture-editor-store';
 import { useSessionStore } from '@/stores/session-store';
 import { useCollectionStore } from '@/stores/collection-store';
 import { toast } from 'sonner';
-import { Mic, Camera, Paperclip, ArrowUp, ChevronRight, ChevronDown, Layers, Zap, FileText, Brain, Search, Star, MapPin, ExternalLink, Headphones, Newspaper, Image as ImageIcon } from 'lucide-react';
+import { Mic, Camera, Paperclip, ArrowUp, ChevronRight, ChevronDown, Layers, Zap, FileText, Brain, Sparkles, Star, MapPin, ExternalLink, Headphones, Newspaper, Image as ImageIcon } from 'lucide-react';
 import type { SourceIngestItem } from '@/types/page-types';
 import type { TranscriptSegment } from '@/types';
 import { getSpeakerLabel, getSpeakerColorClass } from '@/lib/services/asr/diarization-service';
@@ -24,6 +24,8 @@ import { recommendWorkshopApp } from '@/components/apps/workshop-recommendation'
 import { ClassroomFlowCanvas } from '@/components/classroom/ClassroomFlowCanvas';
 import { useClassroomFlow } from '@/hooks/useClassroomFlow';
 import { MobileLearningCommandCenter } from './MobileLearningCommandCenter';
+import { ContextRecoveryCard } from '@/components/ContextRecoveryCard';
+import { useLearningContext } from '@/hooks/useLearningContext';
 
 export interface MobileAppShellProps {
   children?: React.ReactNode;
@@ -127,6 +129,7 @@ function groupByDate(items: SourceIngestItem[]): Array<{ label: string; items: S
 
 function HomeScreen({ p }: { p: MobileAppShellProps }) {
   const { push } = useMobileNav();
+  const learning = useLearningContext();
   const echo = p.workspaceEchoes[0];
   const [flashPhoto, setFlashPhoto] = useState<{ url: string; time: string } | null>(null);
   const [flash, setFlash] = useState(false);
@@ -144,6 +147,10 @@ function HomeScreen({ p }: { p: MobileAppShellProps }) {
     () => groupByDate(sortCollectionNewestFirst(p.collectionFeedItems)),
     [p.collectionFeedItems]
   );
+  const latestLearningActivity = learning.recentActivities[learning.recentActivities.length - 1];
+  const connectedContextCount = learning.memories.filter((memory) => memory.status === 'active').length
+    + learning.recentActivities.length
+    + (learning.activeThread?.status === 'active' ? 1 : 0);
   const hasComposerText = p.composerText.trim().length > 0;
   const isComposerVoiceActive = p.composerVoiceStatus === 'connecting' || p.composerVoiceStatus === 'recording';
   const composerPlaceholder = p.composerVoiceInterimText
@@ -191,8 +198,8 @@ function HomeScreen({ p }: { p: MobileAppShellProps }) {
             </div>
           </div>
           <div className="flex items-center gap-2">
-            <button className="flex h-8 w-8 items-center justify-center rounded-full text-ink-muted" onClick={() => p.onOpenSearch?.()}>
-              <Search size={16} strokeWidth={2} />
+            <button type="button" className="flex h-8 w-8 items-center justify-center rounded-full text-ink-muted" onClick={() => p.onOpenSearch?.()} aria-label={COPY.globalAsk.title} title={COPY.globalAsk.title}>
+              <Sparkles size={16} strokeWidth={2} />
             </button>
             <button className="h-7 w-7 rounded-full bg-paper-warm ring-1 ring-divider flex items-center justify-center text-[10px] font-medium text-ink-muted overflow-hidden active:scale-95 transition" onClick={() => p.onOpenProfile?.()}>
               {p.userAvatar ? <img src={p.userAvatar} alt="" className="h-full w-full object-cover" /> : (p.userNickname?.[0] || '林')}
@@ -204,7 +211,7 @@ function HomeScreen({ p }: { p: MobileAppShellProps }) {
       {/* 可滚动区 */}
       <div className="flex-1 min-h-0 overflow-y-auto px-4 pt-3 pb-20 mm-mobile-scroll" style={{ WebkitOverflowScrolling: 'touch' }}>
         <MobileLearningCommandCenter
-          contextCount={p.collectionFeedItems.length}
+          contextCount={connectedContextCount}
           onStartRecording={() => {
             p.onStartRecording();
             push('recording');
@@ -213,6 +220,17 @@ function HomeScreen({ p }: { p: MobileAppShellProps }) {
           onCapturePhoto={() => triggerCamera(0)}
           onSearch={() => p.onOpenSearch?.()}
         />
+
+        {(learning.activeThread?.status === 'active' || latestLearningActivity) ? (
+          <div className="mt-3">
+            <ContextRecoveryCard
+              thread={learning.activeThread?.status === 'active' ? learning.activeThread : undefined}
+              activity={latestLearningActivity}
+              onResume={() => p.onOpenSearch?.()}
+              compact
+            />
+          </div>
+        ) : null}
 
         {/* 今日发现只做一条上下文入口，不再和学习控制台争夺主视觉。 */}
         {(echo || p.collectionFeedItems.length > 0) && (

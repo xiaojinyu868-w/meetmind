@@ -344,7 +344,7 @@ export const COPY = {
     recordHint: '实时转录 · 课堂脉络 · 随时问同学',
     addMaterial: '放入资料',
     photo: '拍板书',
-    search: '搜索内容',
+    search: 'Ask MeetMind',
     capabilityLabel: '从输入到结果，一条学习链路',
     capabilityFlow: '课堂脉络',
     capabilityQa: '资料问答',

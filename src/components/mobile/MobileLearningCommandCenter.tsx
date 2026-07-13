@@ -10,7 +10,6 @@ import {
   MessageSquareText,
   Mic,
   Newspaper,
-  Search,
   Sparkles,
 } from 'lucide-react';
 import { COPY } from '@/lib/ui/copy';
@@ -79,7 +78,7 @@ export function MobileLearningCommandCenter({
           <div className="mt-2 grid grid-cols-3 gap-2">
             <CommandAction icon={FilePlus2} label={COPY.mobileHome.addMaterial} onClick={onAddMaterial} />
             <CommandAction icon={Camera} label={COPY.mobileHome.photo} onClick={onCapturePhoto} />
-            <CommandAction icon={Search} label={COPY.mobileHome.search} onClick={onSearch} />
+            <CommandAction icon={Sparkles} label={COPY.mobileHome.search} onClick={onSearch} />
           </div>
         </div>
 
