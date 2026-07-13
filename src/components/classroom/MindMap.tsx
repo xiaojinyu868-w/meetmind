@@ -164,7 +164,7 @@ function Dormant({ elapsedMs }: { elapsedMs: number }) {
         <p className="mt-3 max-w-[32rem] text-[13px] leading-[1.75] text-ink-secondary">
           {body}
         </p>
-        <div className="mt-5 grid gap-2 sm:grid-cols-3">
+        <div className="mt-5 grid gap-2">
           {['听清开场', '抓主线', '长成小树'].map((item, index) => {
             const active = item === phase || (phase === '等待稳定结构' && index === 2);
             const done = (sec >= 30 && index === 0) || (sec >= 60 && index === 1);
@@ -185,7 +185,7 @@ function Dormant({ elapsedMs }: { elapsedMs: number }) {
         </div>
       </div>
 
-      <div className="mt-4 grid flex-1 content-start gap-3 sm:grid-cols-2">
+      <div className="mt-4 grid flex-1 content-start gap-3">
         <div className="rounded-[20px] border border-dashed border-divider bg-white px-4 py-4">
           <p className="text-[12px] font-medium text-ink-muted">现在适合</p>
           <p className="mt-2 text-[14px] leading-[1.7] text-ink-secondary">继续听；哪里没跟上，直接问右边的同学。</p>
