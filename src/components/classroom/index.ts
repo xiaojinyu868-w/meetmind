@@ -7,7 +7,7 @@ export { ClassroomLeftPanel } from './ClassroomLeftPanel';
 export { ClassroomCompanionPanel } from './ClassroomCompanionPanel';
 export { ClassroomLessonCard } from './ClassroomLessonCard';
 export { ClassroomRecordingView } from './ClassroomRecordingView';
-export { MindMap } from './MindMap';
+export { ClassroomFlowCanvas } from './ClassroomFlowCanvas';
 export type {
   Lesson,
   LessonStatus,
