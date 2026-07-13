@@ -92,6 +92,7 @@ api/route.ts → services → lib/utils, lib/db, lib/config
 | 文件 | 行数 | 职责 |
 |------|------|------|
 | `classroom-data-service.ts` | 1007 | 课堂数据共享（学生↔教师读写） |
+| `classroom-flow-service.ts` | ~215 | 课中课堂脉络生成：让默认可用模型基于实时转录自主判断当前讲解、近期推进与课后保留点；只约束渲染 JSON，不用关键词树替模型决定课堂结构 |
 | `meetmind-service.ts` | 436 | 核心业务整合（Open Notebook + LongCut） |
 | `note-service.ts` | 393 | 个人笔记 CRUD |
 | `notebook-service.ts` | 314 | Open Notebook（向量搜索/嵌入/笔记管理） |

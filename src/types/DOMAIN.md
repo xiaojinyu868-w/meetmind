@@ -16,6 +16,7 @@
 | `page-types.ts` | 200 | 页面级类型（page.tsx 域） | `ViewMode`, `DataSource`, `WorkspaceTab`（含 `transcript`）, `SourceIngestItem`（含照片锚点与 `provenance` 来源契约）, `SourceProvenance`, `WechatCaptureMessage`, `WorkspaceEchoMessage` |
 | `dify.ts` | 203 | Dify 集成类型 | `ExtendedTutorRequest`, `GuidanceQuestion`, `Citation`, `WebSearchResult` |
 | `conversation.ts` | 121 | 对话历史类型 | `ConversationType`, `MessageRole`, `ConversationHistory`, `ConversationMessage` |
+| `classroom-flow.ts` | ~35 | 课中课堂脉络契约 | `ClassroomFlowState`, `ClassroomMoment`, `ClassroomSignal` |
 
 ## 使用约定
 

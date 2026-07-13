@@ -52,6 +52,7 @@ route.ts → lib/services/ + lib/utils/rate-limit
 | `/api/tutor` | POST | AI 家教（解释/追问/引导/联网检索） |
 | `/api/tutor/agent` | POST | AI 同桌 agent-native 工具调用流 |
 | `/api/classroom/foresight` | POST | 课堂预知气泡生成（qwen3.7-plus） |
+| `/api/classroom/flow` | POST | 课中课堂脉络：模型根据带时间位置的实时转录，自主判断当前讲解、近期推进与值得课后回看的内容；前端只消费稳定 JSON 契约 |
 | `/api/classroom/lesson-digest` | POST | 课堂结构化分段总结生成（飞书妙记形态，segments + 图片锚点 → 分段 digest） |
 | `/api/translate/en-zh` | POST | 课堂英文片段翻译为中文 |
 | `/api/translate/zh-en` | POST | 课堂中文片段翻译为英文 |
