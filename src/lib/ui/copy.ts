@@ -267,9 +267,8 @@ export const COPY = {
     contextStatus: (count: number): string => count > 0
       ? `个人上下文 · 已连接 ${count} 条`
       : '个人上下文 · 等待第一条',
-    systemStatus: 'PERSONAL CONTEXT',
-    title: '把课堂和资料，变成真正会用的知识。',
-    body: '录课、放资料，MeetMind 会接着听懂、整理、追问和练习。所有结果都跟着你的目标和历史。',
+    title: '把课堂和资料，变成会用的知识。',
+    body: '录课、放资料，MeetMind 会接着听懂、整理、追问和练习。结果跟着你的目标和历史。',
     record: '开始听课',
     recordHint: '实时转录 · 课堂脉络 · 随时问同学',
     addMaterial: '放入资料',

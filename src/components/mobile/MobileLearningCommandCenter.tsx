@@ -43,17 +43,14 @@ export function MobileLearningCommandCenter({
     <section aria-label={COPY.mobileHome.commandCenterLabel}>
       <div className="overflow-hidden rounded-[24px] border border-pine/15 bg-pine-fog text-ink">
         <div className="px-5 pb-5 pt-4.5">
-          <div className="flex items-center justify-between gap-3">
-            <div className="inline-flex items-center gap-2 rounded-full border border-pine/10 bg-white px-2.5 py-1 font-mono text-[9px] font-semibold uppercase tracking-[0.1em] text-pine">
+          <div className="flex items-center">
+            <div className="inline-flex items-center gap-2 whitespace-nowrap rounded-full border border-pine/10 bg-white px-2.5 py-1 font-mono text-[9px] font-semibold uppercase tracking-[0.1em] text-pine">
               <span className="relative flex h-1.5 w-1.5" aria-hidden>
                 <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-pine opacity-20" />
                 <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-pine" />
               </span>
               {COPY.mobileHome.contextStatus(contextCount)}
             </div>
-            <span className="font-mono text-[8.5px] uppercase tracking-[0.1em] text-ink-muted">
-              {COPY.mobileHome.systemStatus}
-            </span>
           </div>
 
           <h1 className="mt-5 max-w-[20rem] text-[28px] font-semibold leading-[1.1] tracking-[-0.045em] text-ink">
