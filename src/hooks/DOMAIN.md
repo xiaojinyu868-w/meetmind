@@ -63,6 +63,7 @@ hooks → stores + types + lib/db + lib/utils
 | `useClassroomFlow.ts` | ~125 | 课中课堂脉络请求与稳定状态：按真实转录节奏调用 `/api/classroom/flow`，保留上一轮有用理解并标记新内容，不用关键词替模型切主题 |
 | `useLiveConcepts.ts` | ~100 | 录课中关键概念启发式抽取（订阅 captureEditorStore.segments，零 API），ClassroomRecordingView 消费 |
 | `useLearningContext.ts` | ~220 | 第二阶段统一学习上下文：登录态合并写入 `learnerProfile`，游客写 IndexedDB；管理用户确认的长期记忆、近期学习活动与可恢复学习线索，并通过页面事件同步多个消费组件 |
+| `useGlobalAskHistory.ts` | ~145 | 全局 Ask 的 IndexedDB 对话恢复/增量持久化 adapter；只恢复 `metadata.scope='global-ask'`，避免误接课堂复习对话 |
 
 ### data/ — API 数据 hooks
 

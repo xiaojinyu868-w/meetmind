@@ -17,6 +17,7 @@
 | `dify.ts` | 203 | Dify 集成类型 | `ExtendedTutorRequest`, `GuidanceQuestion`, `Citation`, `WebSearchResult` |
 | `conversation.ts` | 121 | 对话历史类型 | `ConversationType`, `MessageRole`, `ConversationHistory`, `ConversationMessage` |
 | `classroom-flow.ts` | ~35 | 课中课堂脉络契约 | `ClassroomFlowState`, `ClassroomMoment`, `ClassroomSignal` |
+| `learning-intent.ts` | ~20 | 深度学习开始前的可编辑意图契约 | `LearningIntentPlan`, `LearningIntentApproach`, `LearningContextFocus` |
 
 ## 使用约定
 

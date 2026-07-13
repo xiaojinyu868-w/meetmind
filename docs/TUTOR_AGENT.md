@@ -1,18 +1,35 @@
 # Tutor Agent Domain
 
+## 当前实现（2026-07）
+
+Tutor 的唯一新主链路是 `POST /api/tutor/agent`，由 `buildTutorSystemPrompt` 按六种 mode 组装：`in-class / review / shared / goal / word / global`。所有 mode 都是纯文字对话，`tools = {}`；闪卡、测验、导图等结构化产物由前端 SkillChip 直接调用 `/api/apps/execute`，不再依赖 LLM tool call 或 `<open_app:KEY/>` marker。
+
+全局 Ask MeetMind 使用 `mode='global'`：
+
+- quick：直接回答，不生成长期记忆。
+- deep：先调用 `/api/tutor/intent` 得到可编辑 `LearningIntentPlan`，用户确认后才开始；模型可在回答末尾输出 `---学习进展---` 候选，前端仍须逐条让用户确认。
+- `LearnerProfile.memories` 只存用户确认过的内容；应用结果、对话摘要与模型推断只能先进入 `recentLearningActivities`。
+- `GlobalAskPanel` 基于 ChatBase，`useGlobalAskHistory` 只恢复 `metadata.scope='global-ask'` 的 IndexedDB 对话，避免误接某节课的复习聊天。
+
+当前 prompt telemetry 版本：`2026-07-tutor-v6-global-context`。
+
+---
+
+## 历史：M3 Agent loop 方案（已被 M14.6 纯对话链路替代）
+
 > M3 交付：从"LLM 文本框"升级为"会用工具的同桌"。
 > 技术选择：Vercel AI SDK v6 `streamText + tools + stopWhen + onStepFinish`（零额外框架）。
 
 ---
 
-## 形态
+### 形态
 
 旧 Tutor：
 ```
 用户提问 → system prompt + transcript → LLM → SSE → UI
 ```
 
-M3 Tutor：
+M3 Tutor（历史）：
 ```
 用户提问
   → 你是 MeetMind 同桌（TUTOR_SYSTEM_V3）

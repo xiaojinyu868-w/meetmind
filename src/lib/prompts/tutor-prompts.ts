@@ -677,7 +677,7 @@ export const MINDMAP_GEN_V1: VersionedPrompt = {
 
 // 给 telemetry/metadata 的版本映射
 export const PROMPT_VERSIONS = {
-  tutorSystem: '2026-07-tutor-v5-context-first',
+  tutorSystem: '2026-07-tutor-v6-global-context',
   flashcardGen: FLASHCARD_GEN_V1.version,
   quizGen: QUIZ_GEN_V1.version,
   mindmapGen: MINDMAP_GEN_V1.version,

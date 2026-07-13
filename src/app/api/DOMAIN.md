@@ -51,6 +51,7 @@ route.ts → lib/services/ + lib/utils/rate-limit
 | `/api/chat` | POST | AI 对话（多模型/流式/速率限制） |
 | `/api/tutor` | POST | AI 家教（解释/追问/引导/联网检索） |
 | `/api/tutor/agent` | POST | AI 同桌 agent-native 工具调用流 |
+| `/api/tutor/intent` | POST | 深度学习开始前生成可编辑意图计划；只提出计划，不写长期记忆 |
 | `/api/classroom/foresight` | POST | 课堂预知气泡生成（qwen3.7-plus） |
 | `/api/classroom/flow` | POST | 课中课堂脉络：模型根据带时间位置的实时转录，自主判断当前讲解、近期推进与值得课后回看的内容；前端只消费稳定 JSON 契约 |
 | `/api/classroom/lesson-digest` | POST | 课堂结构化分段总结生成（飞书妙记形态，segments + 图片锚点 → 分段 digest） |

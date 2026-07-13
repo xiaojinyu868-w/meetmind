@@ -51,6 +51,8 @@ src/app/
 
 **修改策略**：任何改动前，先用 `replace_in_file`，一次只改一个精确区块（10-30行），改完立刻 `make check`。
 
+全局 `showAISearch` 状态名为历史兼容名，当前实际动态挂载的是 `GlobalAskPanel`：桌面与移动共用同一全屏 Ask MeetMind，不再挂旧单轮 `AISearchPanel`。
+
 ### `src/app/(main)/app/matrix/[appKey]/page.tsx` — 学习应用独立页
 
 根据 `appKey` 参数渲染不同学习应用的独立画布；用户可见文案避免深链、会话数据、转录内容等内部词。

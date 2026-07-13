@@ -20,13 +20,13 @@
 | 任务类型 | 阅读顺序 |
 |---------|---------|
 | **改 UI / 组件** | `src/components/DOMAIN.md` → 对应子目录 DOMAIN.md → 具体组件 |
-| **改任意 AI 对话面板（输入条 / 消息流 / 流式 / 文件上传 / 麦克风）** | `src/components/chat/DOMAIN.md` —— **ChatBase 底座（M11 起，M13 起 5 面板 100% 收口）**：薄底座 ChatBubble / ChatComposer / ChatMessageList / ChatRenderer / ChatThinkingStripBubble + ChatCodeBlock（Shiki 高亮）/ ChatImageLightbox / ChatMermaidBlock + 三个 hook（useChatComposer 草稿+IME / useChatFileUpload 拖拽+粘贴 / useAutoFollowScroll 智能跟随）+ `markers/`（collectMessageText / extractIntentSummary / extractIntentBio）。任何新对话面板都应基于这个底座做 adapter，不要重新写一套输入条/气泡。**已收口 5 面板**：IntentDialog(`goal`) / TutorAgentPanel(`review`,`in-class`) / ClassroomCompanionPanel(`in-class`) / SharedAgentChat(`shared`) / WordExplainer(`word`)。**铁律**：底座不引入业务逻辑（mode/prompt/endpoint），用 slot / capability 对象组合。 |
+| **改任意 AI 对话面板（输入条 / 消息流 / 流式 / 文件上传 / 麦克风）** | `src/components/chat/DOMAIN.md` —— **ChatBase 底座**：薄底座 ChatBubble / ChatComposer / ChatMessageList / ChatRenderer / ChatThinkingStripBubble + ChatCodeBlock / ChatImageLightbox / ChatMermaidBlock + 三个 hook + `markers/`（含 `extractLearningProgress`）。任何新对话面板都应基于这个底座做 adapter。**已收口 6 面板**：IntentDialog(`goal`) / TutorAgentPanel(`review`,`in-class`) / ClassroomCompanionPanel(`in-class`) / SharedAgentChat(`shared`) / WordExplainer(`word`) / GlobalAskPanel(`global`)。**铁律**：底座不引入业务逻辑，用 slot / capability 对象组合。 |
 | **改课堂同桌 / Hero / 内联 app 卡** | `src/components/classroom/DOMAIN.md` → 对应组件（注意：M14.6 起 Skill chip 直接调 `/api/apps/execute`，不走 `<open_app:KEY/>` marker 链路） |
 | **改复习态 Tutor / Skill chip / Tool card** | `src/components/tutor/DOMAIN.md` → 对应组件 |
 | **改 Workshop 应用窗口** | `src/components/apps/windows/DOMAIN.md` → 对应窗口组件 |
 | **改页面路由** | `src/app/DOMAIN.md` → 对应 page.tsx |
 | **改 API 接口** | `src/app/api/DOMAIN.md` → 对应子目录 DOMAIN.md → route.ts |
-| **改 Tutor 后端** | `src/app/api/tutor/DOMAIN.md`（M10：`/api/tutor/agent` 是所有对话入口的唯一后端，按 `mode: 'in-class' \| 'review' \| 'shared' \| 'goal' \| 'word'` 5 分支） |
+| **改 Tutor 后端** | `src/app/api/tutor/DOMAIN.md`（`/api/tutor/agent` 按 `mode: 'in-class' \| 'review' \| 'shared' \| 'goal' \| 'word' \| 'global'` 6 分支；深度学习意图确认走 `/api/tutor/intent`） |
 | **改 prompt** | `src/lib/prompts/tutor-prompts.ts`（mode-driven `buildTutorSystemPrompt`） + `项目开发文档/提示词设计哲学.md` |
 | **改「聊聊你想要的」/ 目标共建 / 教练对话** | `src/components/intent/DOMAIN.md` → `IntentDialogContainer` 是入口包装，主对话在 `IntentDialog`，提炼卡片在 `IntentSummaryCard`（bio）/ `IntentBioCard`。入口仅在设置页（M14.6 移除首登强制拦截）。后端 `/api/tutor/agent` mode='goal'，prompt 在 `tutor-prompts.ts` 的 `buildGoalSegment`（GOAL_HEADER + GOAL_PATH_A 首次会面 / GOAL_PATH_B 回访 + GOAL_COMMON）。文件解析 helper `src/lib/services/file-parse-service.ts`。|
 | **改实时语音通话 UI / 抗噪抗打断** | `src/components/realtime/DOMAIN.md` → `RealtimeOrb`（v7 呼吸光晕，复用于复习态 + intent 通话）+ `IntentVoiceCallScreen` / `TutorRealtimeCallScreen`。后端 WebSocket 在 `server.js` 的 `/api/tutor-call`，VAD/降噪参数走环境变量（见 `.env.example` 实时语音同桌段）。|
@@ -292,6 +292,7 @@ M14.6 起，结构化产物**不再走** LLM 输出 `<open_app:KEY/>` marker 的
 | **分享态对话** (v3.0) | `SharedAgentChat` (落地页 `/share/[token]`) | `mode: 'shared'`, `shareToken`，服务端从 `SharedAgent.snapshotJson` 加载上下文；不读取访问者画像，禁用 native tools，禁用 inline app marker |
 | 目标共建 / onboarding | `IntentDialog` | `mode: 'goal'`, `learnerProfile`（bio 双 marker：headline + goals）；禁用 inline app marker；首次会面 vs 回访双路径 |
 | 选词解释浮窗 (M13) | `WordExplainer` | `mode: 'word'`, `selectionText` + `nearbyContext` + `fullTranscriptTail`；禁用 inline app marker；浮窗形态 |
+| 全局 Ask MeetMind | `GlobalAskPanel` | `mode: 'global'`；quick 直接回答，deep 先经 `/api/tutor/intent` 让用户确认计划，再注入长期记忆 / 最近活动 / 活跃学习线索 / 当前材料；学习进展必须再次由用户确认 |
 
 ```
 POST /api/tutor/agent
@@ -313,7 +314,7 @@ POST /api/tutor/agent
 ```
 
 **渲染契约（前端硬合同，不能删）**：
-1. `[MM:SS]` / `[MM:SS-MM:SS]` — **仅 `review` 模式**可点击跳回转录（解析在 `timestamp-parsing.ts`）；`in-class / shared / goal / word` 即使传 `returnTimestamps: true` 也必须忽略
+1. `[MM:SS]` / `[MM:SS-MM:SS]` — **仅 `review` 模式**可点击跳回转录（解析在 `timestamp-parsing.ts`）；`in-class / shared / goal / word / global` 即使传 `returnTimestamps: true` 也必须忽略
 2. `[资料N]` — 引用 support material 时复用编号，禁止编造
 3. 思维引导：`---思维演示---` / `---正式回答---` / `【步骤名】` / `💡` / `🌟` 分段标记
 
@@ -532,7 +533,7 @@ src/
 │   ├── ui/DOMAIN.md      # 原子 UI 组件库
 │   ├── apps/DOMAIN.md
 │   ├── apps/windows/DOMAIN.md  # Workshop 窗口（cheatsheet / flashcards / quiz / mindmap / studyreport / podcast / infographic）
-│   ├── chat/DOMAIN.md    # ChatBase 底座（M11 起 5 面板 100% 收口：ChatBubble/Composer/MessageList/Renderer + Shiki/Mermaid/lightbox）
+│   ├── chat/DOMAIN.md    # ChatBase 底座（6 面板收口，含全局 Ask 与 learning-progress marker）
 │   ├── classroom/DOMAIN.md # M9 课堂同桌完整模块（Hero / Layout / CompanionPanel / InlineAppCard ...）
 │   ├── intent/DOMAIN.md  # 「聊聊你想要的」目标共建（IntentDialogContainer / IntentDialog / IntentSummaryCard / IntentBioCard）
 │   ├── realtime/DOMAIN.md # 实时语音通话 UI（RealtimeOrb + IntentVoiceCallScreen / TutorRealtimeCallScreen）

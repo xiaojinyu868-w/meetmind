@@ -53,7 +53,10 @@ components/
 |------|------|------|
 | `AITutor.tsx` | 1940 | 旧 AI 家教 / legacy fallback（移动端文字和语音主链路已移出），子模块在 `tutor/` |
 | `AIChat.tsx` | 691 | AI 对话组件 |
-| `AISearchPanel.tsx` | ~740 | AI 全局搜索面板；桌面端以右侧上下文 sidecar 呈现，移动端全屏 |
+| `GlobalAskPanel.tsx` | ~470 | 全局 Ask MeetMind：基于 ChatBase 的多轮问答；普通问答直接回答，深度学习先确认意图；接入当前材料、可控长期记忆、会话恢复与学习进展确认 |
+| `LearningIntentConfirmationCard.tsx` / `LearningProgressMemoryCard.tsx` | ~160 | 深度学习的两道用户确认边界：开始前确认意图，结束后逐条确认哪些进展可进入长期记忆 |
+| `LearningMemoryPanel.tsx` / `ContextRecoveryCard.tsx` | ~230 | 长期记忆可见可控（添加/暂停/删除）与首页学习现场恢复入口 |
+| `AISearchPanel.tsx` | ~740 | 旧单轮 Workspace AI 搜索面板；主入口已由 `GlobalAskPanel` 替代，保留作迁移参考 |
 | `WordExplainer.tsx` | 562 | 术语解释器 |
 | `StreamingMarkdown.tsx` | 391 | 统一流式 Markdown 渲染（GFM 表格 / 数学公式 / [MM:SS] 与 [t=MM:SS] 时间戳 / [资料N]） |
 | `ThinkingVisualizer.tsx` | ~300 | AI 思维过程可视化 |
@@ -76,7 +79,7 @@ components/
 | `WorkspaceCaptureList.tsx` | ~900 | 工作空间 capture 列表 |
 | `DesktopVideoReviewLayout.tsx` | ~647 | 桌面端课后复习三栏布局：左=视频/音频证据 + 时间轴，中=转录/困惑点/学习工作区，右=同桌；接入可拖拽三栏，视频默认放大左证据栏，并持有课后学习黑板 |
 | `ReviewThreePaneLayout.tsx` | ~156 | 课后复习可拖拽三栏容器：两条边界都可拖拽；学习区 / 同桌被挤到阈值后折叠成窄 rail；左证据栏不自动折叠 |
-| `ReviewLearningWorkspace.tsx` | ~119 | 课后中间学习工作区：用 `AppRenderSurface` 承载闪卡 / 测验 / 思维导图等完整应用；闪卡切低亮度练习背景，并把测验/闪卡动态写入课后学习黑板 |
+| `ReviewLearningWorkspace.tsx` | ~165 | 课后中间学习工作区：用 `AppRenderSurface` 承载完整应用；应用生成结果与闪卡/测验交互同时写入课后黑板和“最近学习现场”，但不自动升级为长期记忆 |
 | `review-learning-blackboard.ts` | ~131 | 课后学习黑板：轻结构自然语言便签；只记录当前中间应用和最近学习现场事实，不写“应该/提醒/建议”等模型指令，中间应用和右侧同桌通过它解耦 |
 | `WorkspaceCaptureEditorModal.tsx` | ~105 | 工作空间 capture 编辑弹窗，从 page.tsx 提取 |
 | `VideoReviewPlayer.tsx` | 823 | 视频复习播放器（pauseNonce/playNonce/seekNonce 命令式控制，点击画面暂停/播放+指示器动画，visibilitychange 倍速恢复，空格/箭头键盘快捷键，B站 Dash 双轨同步，B站封面代理） |

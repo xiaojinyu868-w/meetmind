@@ -1,6 +1,6 @@
 # Chat 底座 — DOMAIN.md
 
-> M11 重构（M13 起 5 面板 100% 收口）：把全应用 5 个对话面板的"输入条 / 消息流 / 流式协议 / 文件上传"统一到一个底座。
+> M11 重构（M13 起收口，当前含全局 Ask）：把全应用对话面板的"输入条 / 消息流 / 流式协议 / 文件上传"统一到一个底座。
 
 ## 设计契约（"薄底座 + 厚适配"）
 
@@ -30,7 +30,8 @@ chat/
     ├── collectMessageText.ts       # AI SDK v6 UIMessage → 文本
     ├── copyMessageSmart.ts         # 智能复制（markdown / 纯文本双格式）
     ├── extractIntentSummary.ts     # ---我想要的---...---结束--- 解析
-    └── extractIntentBio.ts         # M11.4 bio（headline + detail）解析
+    ├── extractIntentBio.ts         # M11.4 bio（headline + detail）解析
+    └── extractLearningProgress.ts  # ---学习进展---...---结束---；只生成候选，adapter 必须再次让用户确认
 ```
 
 ## 标准 adapter 形态
