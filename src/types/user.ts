@@ -159,6 +159,67 @@ interface LearnerProfileBase {
    * 仅由 IntentDialog 的 ---我了解到的你--- marker 写入。
    */
   bio?: BioEntry;
+  /**
+   * 用户明确确认过、允许 MeetMind 在后续会话里继续使用的长期记忆。
+   * 应用行为和模型推断不能直接写入这里；它们先进入 recentLearningActivities，
+   * 只有用户确认后才提升为 memory。
+   */
+  memories?: LearningMemoryEntry[];
+  /** 最近学习现场，负责跨页面恢复；只保留轻量摘要，不复制原始课堂内容。 */
+  recentLearningActivities?: LearningActivityEntry[];
+  /** 当前仍可继续的深度学习线索。 */
+  activeLearningThread?: LearningThreadEntry;
+}
+
+export type LearningMemoryKind =
+  | 'preference'
+  | 'strength'
+  | 'challenge'
+  | 'topic'
+  | 'progress';
+
+export interface LearningMemoryEntry {
+  id: string;
+  kind: LearningMemoryKind;
+  title: string;
+  detail?: string;
+  status: 'active' | 'paused';
+  source: 'user' | 'confirmed-ai';
+  sourceId?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface LearningActivityEntry {
+  id: string;
+  kind: 'conversation' | 'lesson' | 'app' | 'capture';
+  title: string;
+  detail?: string;
+  sessionId?: string;
+  appKey?: string;
+  sourceId?: string;
+  occurredAt: string;
+}
+
+export interface LearningThreadEntry {
+  id: string;
+  title: string;
+  intent: string;
+  outcome?: string;
+  depth: 'quick' | 'deep';
+  status: 'active' | 'paused' | 'completed';
+  conversationId?: string;
+  sessionId?: string;
+  lastSummary?: string;
+  nextStep?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface LearningContextState {
+  memories: LearningMemoryEntry[];
+  recentActivities: LearningActivityEntry[];
+  activeThread?: LearningThreadEntry;
 }
 
 /**

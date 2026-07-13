@@ -56,7 +56,9 @@ export async function PATCH(request: NextRequest) {
       );
     }
 
-    const validStages = ['k12', 'university', 'graduate', 'working'];
+    // 对话式目标共建允许用户先确认自然语言画像，再决定是否填写结构化身份。
+    // `unknown` 是正式状态，不是校验漏洞。
+    const validStages = ['unknown', 'k12', 'university', 'graduate', 'working'];
     if (!validStages.includes(body.stage)) {
       return NextResponse.json(
         { success: false, error: `无效的 stage: ${body.stage}` },
