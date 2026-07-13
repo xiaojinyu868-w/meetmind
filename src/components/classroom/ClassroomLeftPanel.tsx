@@ -24,6 +24,7 @@ import type { Lesson, ClassroomPaneState } from './types';
 import { ClassroomLessonCard } from './ClassroomLessonCard';
 import { ClassroomRecordingView } from './ClassroomRecordingView';
 import { ClassroomHero } from './ClassroomHero';
+import { ClassroomLaunchpad } from './ClassroomLaunchpad';
 import { loadDemoLesson } from './DemoLessonLoader';
 import { useCaptureEditorActions } from '@/stores/capture-editor-store';
 import { isWorkshopAppKey, type WorkshopAppKey } from '@/lib/ai-native/app-catalog';
@@ -119,6 +120,10 @@ export interface ClassroomLeftPanelProps {
   onRenameLesson?: (id: string, title: string) => void;
   /** 课中拍照：透传到 ClassroomRecordingView */
   onQuickPhoto?: (capturedAtMs: number) => void;
+  /** 首页放入材料 */
+  onAddMaterial?: () => void;
+  /** 首页搜索课堂和资料 */
+  onSearch?: () => void;
 }
 
 function groupLessons(lessons: Lesson[]): Array<{ label: string; items: Lesson[] }> {
@@ -297,6 +302,8 @@ function EmptyState({
   onChangeAudioSource,
   speakerDiarization,
   onChangeSpeakerDiarization,
+  onAddMaterial,
+  onSearch,
 }: {
   onStart: () => void;
   onTryDemo: () => void;
@@ -305,6 +312,8 @@ function EmptyState({
   onChangeAudioSource?: (source: RecorderAudioSource) => void;
   speakerDiarization?: boolean;
   onChangeSpeakerDiarization?: (enabled: boolean) => void;
+  onAddMaterial?: () => void;
+  onSearch?: () => void;
 }) {
   return (
     <ClassroomHero
@@ -315,6 +324,8 @@ function EmptyState({
       onChangeAudioSource={onChangeAudioSource}
       speakerDiarization={speakerDiarization}
       onChangeSpeakerDiarization={onChangeSpeakerDiarization}
+      onAddMaterial={onAddMaterial}
+      onSearch={onSearch}
     />
   );
 }
@@ -334,6 +345,8 @@ function ListView({
   speakerDiarization,
   onChangeSpeakerDiarization,
   onRenameLesson,
+  onAddMaterial,
+  onSearch,
 }: {
   activeLesson: Lesson | null;
   activeSeconds: number;
@@ -349,6 +362,8 @@ function ListView({
   speakerDiarization?: boolean;
   onChangeSpeakerDiarization?: (enabled: boolean) => void;
   onRenameLesson?: (id: string, title: string) => void;
+  onAddMaterial?: () => void;
+  onSearch?: () => void;
 }) {
   const isTrulyEmpty = !activeLesson && groups.length === 0;
 
@@ -364,6 +379,8 @@ function ListView({
         onChangeAudioSource={onChangeAudioSource}
         speakerDiarization={speakerDiarization}
         onChangeSpeakerDiarization={onChangeSpeakerDiarization}
+        onAddMaterial={onAddMaterial}
+        onSearch={onSearch}
       />
     );
   }
@@ -374,6 +391,14 @@ function ListView({
 
       <div className="flex-1 overflow-y-auto px-8 pt-2 pb-4 lg:px-12">
         <div className="mx-auto w-full max-w-4xl">
+          <div className="mb-8">
+            <ClassroomLaunchpad
+              onStartRecording={onStart}
+              onAddMaterial={onAddMaterial}
+              onSearch={onSearch}
+            />
+          </div>
+
           {/* 1. 正在录音的课 — 置顶活动条 */}
           {activeLesson && (
             <ActiveLessonPill
@@ -632,6 +657,8 @@ export function ClassroomLeftPanel({
   onOpenApp,
   onRenameLesson,
   onQuickPhoto,
+  onAddMaterial,
+  onSearch,
 }: ClassroomLeftPanelProps) {
   const { activeLesson, restLessons } = useMemo(() => {
     let active: Lesson | null = null;
@@ -694,6 +721,8 @@ export function ClassroomLeftPanel({
             onChangeAudioSource={onChangeAudioSource}
             speakerDiarization={speakerDiarization}
             onChangeSpeakerDiarization={onChangeSpeakerDiarization}
+            onAddMaterial={onAddMaterial}
+            onSearch={onSearch}
             onRenameLesson={onRenameLesson}
           />
         ) : (

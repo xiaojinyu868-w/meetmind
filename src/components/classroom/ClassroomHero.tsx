@@ -5,7 +5,7 @@
  *
  * Taste：直觉到不需要引导。
  * - 首屏用一句定位、一个主动作和一段可验证的课堂证据表达产品价值。
- * - 不列功能清单；示例卡直接呈现“听见原话 → 有依据地解释”的核心时刻。
+ * - 示例卡呈现“听见原话 → 有依据地解释”的核心时刻；主叙事下只露出材料与搜索两条次入口。
  * - 「电脑声音」必须第一眼可见，因为这是能力本身，不是帮助文档。
  */
 
@@ -15,6 +15,7 @@ import type { LucideIcon } from 'lucide-react';
 import { COPY } from '@/lib/ui/copy';
 import { cn } from '@/lib/utils';
 import type { RecorderAudioSource } from '@/stores/capture-editor-store';
+import { ClassroomLaunchpad } from './ClassroomLaunchpad';
 
 export interface ClassroomHeroProps {
   /** 点“想先看看”——由父组件调 loadDemoLesson + 跳转 */
@@ -31,6 +32,10 @@ export interface ClassroomHeroProps {
   speakerDiarization?: boolean;
   /** 切换说话人分离 */
   onChangeSpeakerDiarization?: (enabled: boolean) => void;
+  /** 把文件/网页/音视频放入学习上下文 */
+  onAddMaterial?: () => void;
+  /** 搜索已有课堂和资料 */
+  onSearch?: () => void;
   className?: string;
 }
 
@@ -123,6 +128,8 @@ export function ClassroomHero({
   onChangeAudioSource,
   speakerDiarization = false,
   onChangeSpeakerDiarization,
+  onAddMaterial,
+  onSearch,
   className,
 }: ClassroomHeroProps) {
   return (
@@ -202,6 +209,18 @@ export function ClassroomHero({
           <p className="mt-5 text-[11.5px] leading-5 text-ink-muted">
             {COPY.hero.evidencePromise}
           </p>
+
+          {(onAddMaterial || onSearch) ? (
+            <div className="mt-7 max-w-[620px]">
+              <ClassroomLaunchpad
+                onStartRecording={onStartRecording}
+                onAddMaterial={onAddMaterial}
+                onSearch={onSearch}
+                showRecord={false}
+                compact
+              />
+            </div>
+          ) : null}
         </section>
 
         <aside className="relative mx-auto w-full max-w-[430px] lg:mx-0">

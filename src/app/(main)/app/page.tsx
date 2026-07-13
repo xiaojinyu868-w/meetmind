@@ -2032,6 +2032,10 @@ function StudentAppContent({
             <ClassroomView
               isRecording={isRecording}
               onOpenApp={safeOpenWorkshopWindow}
+              onAddMaterial={() => {
+                void handleViewModeChange('record').then(() => handleSourceFileButtonClick('all'));
+              }}
+              onSearch={() => setShowAISearch(true)}
               autoLoadDemo={autoLoadDemo}
               autoOpenDemoAppKey={autoOpenDemoAppKey}
               onOpenDemoReview={() => {

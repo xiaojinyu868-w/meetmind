@@ -88,6 +88,10 @@ export interface ClassroomViewProps {
   onRenameLesson?: (id: string, title: string) => void;
   /** 课中拍照：透传到 ClassroomRecordingView */
   onQuickPhoto?: (capturedAtMs: number) => void;
+  /** 首页“放入学习材料”——由 page.tsx 打开收集文件入口 */
+  onAddMaterial?: () => void;
+  /** 首页“找到并继续问”——由 page.tsx 打开全局搜索 */
+  onSearch?: () => void;
 }
 
 export function ClassroomView({
@@ -102,6 +106,8 @@ export function ClassroomView({
   onOpenDemoReview,
   onRenameLesson,
   onQuickPhoto,
+  onAddMaterial,
+  onSearch,
 }: ClassroomViewProps) {
   // ── 真实数据：Lesson[] + markReviewed ──
   const { lessons, markReviewed } = useClassroomLessons();
@@ -576,9 +582,11 @@ export function ClassroomView({
         onOpenApp={onOpenApp}
         onRenameLesson={onRenameLesson}
         onQuickPhoto={onQuickPhoto}
+        onAddMaterial={onAddMaterial}
+        onSearch={onSearch}
       />
     ),
-    [paneState, lessons, handleOpenLesson, handleStartRecording, handleStopRecording, effectiveRecordingSeconds, liveConcepts, liveTranscriptText, recordingSegments, liveInterimText, recentLines, classroomFlow, classroomFlowNewIds, isUnderstandingClassroomFlow, isDemoRecordingPane, demoAudioPlaying, demoAudioNeedsGesture, handleToggleDemoAudio, demoComplete, handleReplayDemo, handleOpenDemoReview, recorderAudioSource, setRecorderAudioSource, recorderSpeakerDiarization, setRecorderSpeakerDiarization, onOpenApp, onRenameLesson, onQuickPhoto],
+    [paneState, lessons, handleOpenLesson, handleStartRecording, handleStopRecording, effectiveRecordingSeconds, liveConcepts, liveTranscriptText, recordingSegments, liveInterimText, recentLines, classroomFlow, classroomFlowNewIds, isUnderstandingClassroomFlow, isDemoRecordingPane, demoAudioPlaying, demoAudioNeedsGesture, handleToggleDemoAudio, demoComplete, handleReplayDemo, handleOpenDemoReview, recorderAudioSource, setRecorderAudioSource, recorderSpeakerDiarization, setRecorderSpeakerDiarization, onOpenApp, onRenameLesson, onQuickPhoto, onAddMaterial, onSearch],
   );
 
   const demoSuggestedPrompts = useMemo(
