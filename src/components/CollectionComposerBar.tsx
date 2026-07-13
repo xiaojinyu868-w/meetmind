@@ -170,10 +170,10 @@ export function CollectionComposerBar({
               data-testid="collection-composer-submit"
               onClick={(e) => { e.stopPropagation(); onSubmit(); }}
               disabled={!composerHasText}
-              className={`flex h-8 w-8 items-center justify-center rounded-lg transition ${
+                className={`flex h-8 w-8 items-center justify-center rounded-lg transition ${
                 composerHasText
-                  ? 'bg-[#1C1B19] text-white hover:bg-[#111111]'
-                  : 'bg-[#E8E2D5] text-[#8E8B82] cursor-default'
+                  ? 'bg-pine text-white hover:bg-pine-deep'
+                  : 'cursor-default bg-divider text-ink-muted'
               }`}
               aria-label="发送到收集流"
             >

@@ -683,7 +683,7 @@ export function AISearchPanel({
       </div>
 
       {/* ── 搜索输入框 ── */}
-      <div className="border-t border-[#E8E2D5] bg-white px-6 py-4">
+      <div className="border-t border-divider bg-white px-6 py-4">
         <div className="relative">
           <input
             ref={inputRef}
@@ -693,13 +693,13 @@ export function AISearchPanel({
             onKeyDown={handleKeyDown}
             placeholder="问一个想从笔记里找到的问题..."
             disabled={isSearching}
-            className="w-full rounded-2xl border border-[#E8E2D5] bg-[#FAF7F2] py-3.5 pl-4 pr-12 text-[14px] text-[#1C1B19] outline-none transition-colors placeholder:text-[#8E8B82] focus:border-[#8E8B82] focus:bg-white disabled:opacity-50"
+            className="w-full rounded-2xl border border-divider bg-paper py-3.5 pl-4 pr-12 text-[14px] text-ink outline-none transition-colors placeholder:text-ink-muted focus:border-pine/40 focus:bg-white disabled:opacity-50"
           />
           <button
             type="button"
             onClick={handleSearch}
             disabled={!query.trim() || isSearching}
-            className="absolute right-2 top-1/2 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-xl bg-[#1C1B19] text-white transition-colors hover:bg-[#111111] disabled:cursor-not-allowed disabled:bg-[#E8E2D5] disabled:text-[#8E8B82]"
+            className="absolute right-2 top-1/2 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-xl bg-pine text-white transition-colors hover:bg-pine-deep disabled:cursor-not-allowed disabled:bg-divider disabled:text-ink-muted"
             aria-label="搜索"
           >
             {isSearching ? (

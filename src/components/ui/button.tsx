@@ -8,7 +8,7 @@ import { cn } from "@/lib/utils"
  * MeetMind v7 · Button
  *
  * 设计哲学：
- * - 主按钮 = 黑（默认）
+ * - 主按钮 = Pine（默认，表达智能与继续）
  * - Pine = AI 主动型动作（生成、整理）
  * - Vermilion = 此刻 / 重要操作（分享、标注）
  * - Ghost = 日常 80% 用这个
@@ -31,7 +31,7 @@ const buttonVariants = cva(
       variant: {
         // ===== v7 主力 variant =====
         default:
-          "bg-ink text-white hover:bg-black hover:-translate-y-px",
+          "bg-pine text-white hover:bg-pine-deep hover:-translate-y-px",
         pine:
           "bg-pine text-white hover:bg-pine-deep hover:-translate-y-px shadow-soft hover:shadow-card",
         vermilion:

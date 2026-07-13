@@ -186,8 +186,8 @@ export function ClassroomHero({
               type="button"
               onClick={onStartRecording}
               className={cn(
-                'inline-flex items-center gap-2 rounded-[12px] bg-ink px-6 py-3.5 text-[14px] font-medium text-white',
-                'shadow-[0_1px_2px_rgba(28,27,25,0.16)] transition-all hover:-translate-y-px hover:bg-black hover:shadow-[0_5px_16px_rgba(28,27,25,0.14)] active:translate-y-0',
+                'inline-flex items-center gap-2 rounded-[12px] bg-pine px-6 py-3.5 text-[14px] font-medium text-white',
+                'transition-all hover:-translate-y-px hover:bg-pine-deep active:translate-y-0',
               )}
             >
               <Mic size={15} strokeWidth={2} />

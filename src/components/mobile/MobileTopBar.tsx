@@ -61,7 +61,7 @@ export function MobileTopBar({
           ) : (
             <a
               href="/login"
-              className="inline-flex h-7 items-center justify-center rounded-full bg-ink px-3 text-[12px] font-medium text-white transition-colors hover:bg-black"
+              className="inline-flex h-7 items-center justify-center rounded-full bg-pine px-3 text-[12px] font-medium text-white transition-colors hover:bg-pine-deep"
             >
               登录
             </a>
