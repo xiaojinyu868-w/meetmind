@@ -1,7 +1,7 @@
 /**
  * Tutor Prompts — Mode-driven prompt builder (M10)
  *
- * 这个文件是**三个 AI 对话入口**（课堂同桌 / 录音复习 / 视频复习）的唯一 prompt 源。
+ * 这个文件是五类 AI 对话入口（课中 / 复习 / 分享 / 目标 / 选词）的唯一 prompt 源。
  *
  * 设计哲学：Less Structure, More Intelligence
  *   —— 见 `项目开发文档/提示词设计哲学.md`
@@ -9,8 +9,8 @@
  * 怎么说几句话、用什么结构、要不要追问，都留给模型自己判断。
  * 这样换更强的模型时质量自动上升，不需要重写 prompt。
  *
- * 三个入口的差异由 `mode` + `options` 显式表达，而不是靠拼接不同版本：
- *   - in-class（课堂同桌）：短回答 / recentFocus 注入 / inline app marker
+ * 五个入口的差异由 `mode` + `options` 显式表达，而不是靠拼接不同版本：
+ *   - in-class（课堂同桌）：短回答 / recentFocus 注入
  *   - review（录音 & 视频复习）：可长答 / 全量转录 / 时间戳和思维引导可选
  *
  * 不变的渲染契约（前端能解析的硬合同，不能删）：
@@ -89,11 +89,11 @@ export interface TutorSystemOptions {
 // Base：身份 + 风格，两 mode 都必拼
 // ──────────────────────────────────────────────────────────────
 
-const TUTOR_IDENTITY_BASE = `你是这个学生的同桌。他刚上完一节课，有些地方没跟上，想找你把漏掉的东西补回来。
+const TUTOR_IDENTITY_BASE = `你是这个学生的同桌，也是他在 MeetMind 里的长期学习伙伴。他把正在学、正在想的东西带到这里，你负责先听懂他此刻真正需要什么，再从已有上下文里帮上忙。
 
 你对他的了解：
 - 他不是在考你，是在借你的耳朵重新听一遍课
-- 他问你的时候往往带着一个没说出口的困惑，而不是一个完整的问题
+- 他开口时往往带着一个没说出口的困惑或目的，而不是一个完整的问题
 - 他的注意力有限——说太多他就关了
 
 所以你帮他的方式是：
@@ -174,7 +174,7 @@ function buildSharedModeSegment(params: { sharerNickname: string; courseTitle: s
 const GOAL_HEADER = `
 此刻他不在上课，也不在复习——这里没有课堂。他打开了「聊聊你想要的」，是想被人**真的听一次**。
 
-你是 Octo，他在 MeetMind 里的章鱼伙伴。你更准确的角色是**他的人生顾问**——一个真正想了解他、记得住他、愿意陪他想清楚事情的角色。你跟他说过的话你都记得，所以下次他来你能接上。
+你是 Octo，他在 MeetMind 里的长期学习伙伴——真正想了解他、记得住他、愿意陪他想清楚事情。你跟他说过的话会沉淀成他确认过的个人上下文，所以下次他来你能接上；没有被确认的判断，不要当成事实。
 
 如果你已经对他的情况有了基本了解，你会在回复的最后自然地写下你对他的理解，包在 \`---我了解到的你---\` 和 \`---结束---\` 之间，让他确认或修正。同样，当你们聊清楚了一件他想做的事，你会用 \`---我想要的---\` 和 \`---结束---\` 包住，让他确认。
 
@@ -597,7 +597,7 @@ export const MINDMAP_GEN_V1: VersionedPrompt = {
 
 // 给 telemetry/metadata 的版本映射
 export const PROMPT_VERSIONS = {
-  tutorSystem: '2026-05-tutor-v4-mode-driven',
+  tutorSystem: '2026-07-tutor-v5-context-first',
   flashcardGen: FLASHCARD_GEN_V1.version,
   quizGen: QUIZ_GEN_V1.version,
   mindmapGen: MINDMAP_GEN_V1.version,
@@ -612,7 +612,7 @@ export const PROMPT_VERSIONS = {
 // ──────────────────────────────────────────────────────────────
 
 export const TUTOR_SYSTEM_V3: VersionedPrompt = {
-  version: '2026-05-tutor-v4-mode-driven',
+  version: PROMPT_VERSIONS.tutorSystem,
   content: buildTutorSystemPrompt('review', {}, { returnTimestamps: true }),
 };
 

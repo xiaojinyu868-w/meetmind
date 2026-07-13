@@ -4,18 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { toast } from 'sonner';
 import {
-  RotateCw,
-  ExternalLink,
-  ClipboardList,
-  Play,
-  RotateCcw,
   ListTodo,
-  Layers,
-  BookMarked,
-  Sparkles,
-  Network,
-  Image as ImageIcon,
-  Headphones,
   Download,
 } from 'lucide-react';
 import { resolveWorkshopModelId } from '@/lib/utils/workshop-model-preference';
@@ -34,93 +23,11 @@ import {
 import styles from './WorkshopYellowPage.module.css';
 import { useAuth } from '@/lib/hooks/useAuth';
 import { OctoCrystalDispatcher } from '@/components/share/OctoCrystalDispatcher';
+import { WorkshopAppCard, type WorkshopCardStatus } from './WorkshopAppCard';
+import { COPY } from '@/lib/ui/copy';
+import { recommendWorkshopApp } from './workshop-recommendation';
 
 const DOCK_STORAGE_PREFIX = 'app_workspace_dock:';
-
-/* ------------------------------------------------------------------ */
-/*  AppHero — 取代静态 cover.svg 的内联视觉身份                          */
-/*                                                                    */
-/*  原因：之前每个 app 一张 SVG（如 flashcards-cover.svg 把两张卡硬叠         */
-/*  在一起）——既无法统一 taste 又会被裁切错位。改为内联 = 大 lucide icon    */
-/*  + 极淡 tint + 一句 outputType。每个 app 各一种 ceremony 调，但保持      */
-/*  低饱和度（与 95% 平涂极简的 taste 一致）。                              */
-/* ------------------------------------------------------------------ */
-
-interface AppHeroVisual {
-  Icon: typeof Layers;
-  /** 极淡的 ceremony tint，hero 区背景；见 design system 第 5 节调色板 */
-  tintBg: string;
-  /** Icon 颜色，比 tint 深 1-2 阶 */
-  iconColor: string;
-}
-
-const HERO_VISUALS: Record<WorkshopAppKey, AppHeroVisual> = {
-  // v7：每个 app 都用极淡 pine fog 或 vermilion fog 为底，icon 用相应深色
-  // 双签名色家族化——告诉用户"这是同一套设计系统的 6 个工具"，而不是 6 张壁纸
-  flashcards: { Icon: Layers, tintBg: '#F2F6F3', iconColor: '#2D4F3E' },          // 闪卡 = 沉淀（pine 主）
-  cheatsheet: { Icon: BookMarked, tintBg: '#FBF2EF', iconColor: '#B5483C' },      // 速查 = 标注此刻（vermilion）
-  quiz: { Icon: Sparkles, tintBg: '#FBF2EF', iconColor: '#B5483C' },              // 测验 = 红笔批改（vermilion）
-  mindmap: { Icon: Network, tintBg: '#F2F6F3', iconColor: '#2D4F3E' },            // 思维 = 知识网（pine）
-  infographic: { Icon: ImageIcon, tintBg: '#F2F6F3', iconColor: '#2D4F3E' },      // 信息图 = pine
-  'audio-overview': { Icon: Headphones, tintBg: '#FBF2EF', iconColor: '#B5483C' },// 播客 = vermilion (此刻聆听)
-};
-
-function AppHero({ appKey, outputType }: { appKey: WorkshopAppKey; outputType: string }) {
-  const visual = HERO_VISUALS[appKey];
-  const { Icon } = visual;
-  return (
-    <div
-      className={styles.coverWrap}
-      style={{ background: visual.tintBg, borderColor: 'transparent' }}
-    >
-      <div className={styles.heroInner}>
-        <Icon size={42} strokeWidth={1.4} style={{ color: visual.iconColor }} />
-        <span className={styles.heroOutputType} style={{ color: visual.iconColor }}>
-          {outputType}
-        </span>
-      </div>
-    </div>
-  );
-}
-
-/* ------------------------------------------------------------------ */
-/*  StatusDot — 极简状态指示，替换原来的厚边框 chip                        */
-/*                                                                    */
-/*  与 AppWindowShell.StatusIndicator 同源 taste。                       */
-/* ------------------------------------------------------------------ */
-
-interface StatusDotProps {
-  status: 'idle' | 'running' | 'success' | 'error';
-  label: string;
-}
-
-function StatusDot({ status, label }: StatusDotProps) {
-  // v7 状态色：pine = 沉淀 / 完成；vermilion = 朱批提醒（错误）
-  const config: Record<StatusDotProps['status'], { color: string; pulse: boolean }> = {
-    running: { color: '#2D4F3E', pulse: true },   // pine
-    success: { color: '#2D4F3E', pulse: false },  // pine
-    error: { color: '#B5483C', pulse: false },    // vermilion 朱批提醒
-    idle: { color: '#8E8B82', pulse: false },     // ink-muted
-  };
-  const { color, pulse } = config[status];
-  return (
-    <span className={styles.statusDot}>
-      <span className={styles.statusDotMark} aria-hidden>
-        {pulse ? (
-          <span
-            className={styles.statusDotPulse}
-            style={{ background: color }}
-          />
-        ) : null}
-        <span
-          className={styles.statusDotCore}
-          style={{ background: color }}
-        />
-      </span>
-      <span className={styles.statusDotLabel}>{label}</span>
-    </span>
-  );
-}
 
 interface CatalogResponse {
   apps?: Array<WorkshopAppCatalogItem & { enabled?: boolean }>;
@@ -212,29 +119,11 @@ function writeDockTasks(sessionId: string, tasks: Record<string, DockTask>): voi
   window.localStorage.setItem(dockStorageKey(sessionId), JSON.stringify(tasks));
 }
 
-function taskLabel(state: AppTaskState | undefined, generated: boolean): string {
-  if (state?.status === 'running') return '生成中';
-  if (state?.status === 'success') return '已生成';
-  if (state?.status === 'error') {
-    if ((state.error || '').includes('取消')) return '已取消';
-    return '失败';
-  }
-  return generated ? '已生成' : '未生成';
-}
-
 function statusText(status: DockTaskStatus): string {
-  if (status === 'running') return '运行中';
-  if (status === 'success') return '已完成';
-  if (status === 'cancelled') return '已取消';
-  return '失败';
-}
-
-function formatClock(timestamp: number): string {
-  const date = new Date(timestamp);
-  const hh = String(date.getHours()).padStart(2, '0');
-  const mm = String(date.getMinutes()).padStart(2, '0');
-  const ss = String(date.getSeconds()).padStart(2, '0');
-  return `${hh}:${mm}:${ss}`;
+  if (status === 'running') return COPY.apps.matrix.running;
+  if (status === 'success') return COPY.apps.matrix.ready;
+  if (status === 'cancelled') return COPY.apps.matrix.cancel;
+  return COPY.apps.matrix.failed;
 }
 
 function formatElapsed(startMs: number, nowMs: number): string {
@@ -243,22 +132,6 @@ function formatElapsed(startMs: number, nowMs: number): string {
   const s = diffSec % 60;
   if (m > 0) return `${m}分${s}秒`;
   return `${s}秒`;
-}
-
-function readResultPreview(sessionId: string, appKey: string): string {
-  if (typeof window === 'undefined') return '';
-  try {
-    const raw = window.localStorage.getItem(buildResultCacheKey(sessionId, appKey));
-    if (!raw) return '';
-    const parsed = JSON.parse(raw) as AppExecutionResult;
-    if (parsed.render?.title) return parsed.render.title;
-    if (parsed.cards?.length > 0) {
-      return parsed.cards[0].title || parsed.cards[0].body?.slice(0, 40) || '';
-    }
-    return '';
-  } catch {
-    return '';
-  }
 }
 
 function readCachedInfographicImageUrl(sessionId: string): { url: string; title: string } | null {
@@ -348,6 +221,20 @@ export function WorkshopYellowPage(props: WorkshopYellowPageProps) {
       return 0;
     });
   }, [apps, tier]);
+
+  const activeAnchorCount = useMemo(
+    () => anchors.filter((anchor) => !anchor.cancelled && !anchor.resolved).length,
+    [anchors],
+  );
+
+  const recommendation = useMemo(() => recommendWorkshopApp({
+    activeAnchorCount,
+    difficultyCount: keyDifficulties?.length ?? 0,
+    segmentCount: transcript.length,
+  }), [activeAnchorCount, keyDifficulties?.length, transcript.length]);
+
+  const recommendedApp = visibleApps.find((app) => app.key === recommendation.key) ?? visibleApps[0];
+  const otherApps = visibleApps.filter((app) => app.key !== recommendedApp?.key);
 
   const appMap = useMemo(() => {
     const map: Record<string, WorkshopAppCatalogItem> = {};
@@ -751,26 +638,6 @@ export function WorkshopYellowPage(props: WorkshopYellowPageProps) {
     [dockTasks]
   );
 
-  const retryAllFailed = useCallback(() => {
-    const failed = dockList.filter((t) => t.status === 'error' || t.status === 'cancelled');
-    if (failed.length === 0) return;
-    for (const task of failed) {
-      retryTask(task.appKey);
-    }
-    toast.success(`正在重试 ${failed.length} 个失败任务`);
-  }, [dockList, retryTask]);
-
-  const clearCompleted = useCallback(() => {
-    setDockTasks((prev) => {
-      const next: Record<string, DockTask> = {};
-      for (const [key, task] of Object.entries(prev)) {
-        if (task.status !== 'success') next[key] = task;
-      }
-      return next;
-    });
-    toast.success('已清除完成任务');
-  }, []);
-
   const runningCount = useMemo(
     () =>
       visibleApps.filter((app) => {
@@ -791,191 +658,73 @@ export function WorkshopYellowPage(props: WorkshopYellowPageProps) {
   );
 
   const completedCount = useMemo(() => dockList.filter((task) => task.status === 'success').length, [dockList]);
+  const renderAppCard = (app: WorkshopAppCatalogItem, isRecommended = false) => {
+    const generated = Boolean(generatedMap[app.key]);
+    const taskState = taskMap[app.key];
+    const isRunning = Boolean(runningMap[app.key]) || taskState?.status === 'running';
+    const status: WorkshopCardStatus = isRunning
+      ? 'running'
+      : taskState?.status === 'error'
+        ? 'error'
+        : generated
+          ? 'success'
+          : 'idle';
+    const dockTask = dockTasks[app.key];
+    return (
+      <WorkshopAppCard
+        key={app.key}
+        app={app}
+        status={status}
+        recommended={isRecommended}
+        recommendationReason={isRecommended ? recommendation.reason : undefined}
+        progressLabel={dockTask ? <ElapsedTimer startMs={dockTask.startedAt} /> : undefined}
+        onStart={() => void runInBackground(app)}
+        onOpen={() => openTaskResult(app.key)}
+        onRetry={() => retryTask(app.key)}
+        onRemake={() => void runInBackground(app)}
+        onProgress={() => setDockOpen(true)}
+      />
+    );
+  };
   return (
     <section className={styles.page}>
       <header className={styles.header}>
-        <p className={styles.eyebrow}>这节课能做什么</p>
-        <h2 className={styles.title}>学习应用</h2>
-        <p className={styles.subTitle}>
-          闪卡、测验、导图、播客都在这里。需要什么，就用什么。
-        </p>
-        <p className={styles.subStatus} data-testid="workshop-task-summary">
-          {`${visibleApps.length} 个应用 · 已做好 ${generatedCount} 个${runningCount > 0 ? ` · 正在做 ${runningCount} 个` : ''}${failedCount > 0 ? ` · 需要处理 ${failedCount} 个` : ''}`}
-        </p>
+        <p className={styles.eyebrow}>{COPY.apps.matrix.eyebrow}</p>
+        <h2 className={styles.title}>{COPY.apps.matrix.title}</h2>
+        <p className={styles.subTitle}>{COPY.apps.matrix.subtitle}</p>
+        <p className={styles.contextBasis}>{COPY.apps.matrix.contextBasis(transcript.length, activeAnchorCount, keyDifficulties?.length ?? 0)}</p>
+        {generatedCount > 0 || runningCount > 0 || failedCount > 0 ? (
+          <p className={styles.subStatus} data-testid="workshop-task-summary">
+            {COPY.apps.matrix.summary(visibleApps.length, generatedCount, runningCount, failedCount)}
+          </p>
+        ) : null}
       </header>
 
-      {/* v3.0 SharedAgent · 「递结晶」入口
-          仪式时刻：Octo Buddy 抱着今天的结晶出现，让你挑一个递给同学。
-          隐私：只读 cheatsheet/mindmap/quiz/infographic 的本地缓存，不读 flashcards。
-          详见 roadmap/v3.0-virality-agent.md */}
-      <OctoCrystalDispatcher
-        sessionId={sessionId}
-        transcript={transcript}
-        summary={summaryOverview}
-      />
+      {recommendedApp ? (
+        <section className={styles.matrixSection} aria-labelledby="workshop-recommended-title">
+          <div className={styles.sectionHeading}>
+            <h3 id="workshop-recommended-title" className={styles.sectionTitle}>{COPY.apps.matrix.recommendedTitle}</h3>
+            <p className={styles.sectionHint}>{COPY.apps.matrix.recommendedHint}</p>
+          </div>
+          <div className={`${styles.grid} ${styles.recommendedGrid}`}>{renderAppCard(recommendedApp, true)}</div>
+        </section>
+      ) : null}
 
-      <div className={styles.grid}>
-        {visibleApps.map((app) => {
-          const generated = generatedMap[app.key];
-          const taskState = taskMap[app.key];
-          const isRunning = Boolean(runningMap[app.key]) || taskState?.status === 'running';
-          const label = taskLabel(taskState, generated);
-          const dockTask = dockTasks[app.key];
-          const isFailed = taskState?.status === 'error' && !isRunning;
-          const preview = generated ? readResultPreview(sessionId, app.key) : '';
-          const cardClassName = [
-            styles.card,
-            generated ? styles.cardGenerated : '',
-            isRunning ? styles.cardRunning : '',
-            isFailed ? styles.cardFailed : '',
-          ]
-            .filter(Boolean)
-            .join(' ');
+      <section className={styles.matrixSection} aria-labelledby="workshop-all-title">
+        <div className={styles.sectionHeading}>
+          <h3 id="workshop-all-title" className={styles.sectionTitle}>{COPY.apps.matrix.allTitle}</h3>
+        </div>
+        <div className={styles.grid}>{otherApps.map((app) => renderAppCard(app))}</div>
+      </section>
 
-          return (
-            <article key={app.key} className={cardClassName} data-testid={`workshop-card-${app.key}`}>
-              {/* R9-3 横向 list-item 布局：cover (48px) | cardBody (1fr) | actionRow (auto) */}
-              <AppHero appKey={app.key} outputType={app.outputType} />
-
-              <div className={styles.cardBody}>
-                <div className={styles.rowTop}>
-                  <div className={styles.titleGroup}>
-                    <p className={styles.category}>{app.category}</p>
-                    <p className={styles.appName} title={app.name}>{app.name}</p>
-                  </div>
-                  {isRunning && dockTask ? (
-                    <span className={styles.statusDot}>
-                      <span className={styles.statusDotMark} aria-hidden>
-                        <span
-                          className={styles.statusDotPulse}
-                          style={{ background: '#2D4F3E' }}
-                        />
-                        <span
-                          className={styles.statusDotCore}
-                          style={{ background: '#2D4F3E' }}
-                        />
-                      </span>
-                      <span className={`${styles.statusDotLabel} tabular-nums`}>
-                        <ElapsedTimer startMs={dockTask.startedAt} />
-                      </span>
-                    </span>
-                  ) : (
-                    <StatusDot
-                      status={
-                        isFailed ? 'error' : generated ? 'success' : 'idle'
-                      }
-                      label={isFailed ? '没做好' : generated ? '做好了' : '待开始'}
-                    />
-                  )}
-                </div>
-                <div className={styles.tags}>
-                  {app.tags.slice(0, 3).map((tag) => (
-                    <span key={`${app.key}-${tag}`} className={styles.tag}>
-                      {tag}
-                    </span>
-                  ))}
-                </div>
-                <p className={styles.description} title={app.description}>{app.description}</p>
-                {preview ? (
-                  <div className={styles.previewBlock}>
-                    <p className={styles.previewLabel}>最近结果</p>
-                    <p className={styles.previewLine} title={preview}>
-                      <ClipboardList size={12} strokeWidth={1.75} className="inline mr-1 align-text-bottom" />
-                      {preview.length > 50 ? preview.slice(0, 50) + '...' : preview}
-                    </p>
-                  </div>
-                ) : null}
-                {taskState?.status === 'error' && taskState.error ? (
-                  <p className={styles.errorLine} title={taskState.error}>
-                    上次没做完，再试一次试试
-                  </p>
-                ) : null}
-              </div>
-
-              <div className={styles.actionRow}>
-                {isRunning ? (
-                  <button
-                    type="button"
-                    className={styles.primaryAction}
-                    onClick={() => setDockOpen(true)}
-                    data-testid={`workshop-inline-progress-${app.key}`}
-                  >
-                    <ListTodo size={12} strokeWidth={1.75} className="inline mr-0.5" />
-                    查看进度
-                  </button>
-                ) : isFailed ? (
-                  /* 失败：单按钮「再做一版」。删除原本的次级"进去看看"——
-                     失败的产物没什么好看的，给用户一个清晰动作就够了 */
-                  <button
-                    type="button"
-                    className={styles.primaryAction}
-                    onClick={() => retryTask(app.key)}
-                    data-testid={`workshop-inline-retry-${app.key}`}
-                  >
-                    <RotateCcw size={12} strokeWidth={1.75} className="inline mr-0.5" />
-                    再做一版
-                  </button>
-                ) : generated ? (
-                  <button
-                    type="button"
-                    className={styles.primaryAction}
-                    onClick={() => openTaskResult(app.key)}
-                    data-testid={`workshop-open-result-${app.key}`}
-                  >
-                    <ExternalLink size={12} strokeWidth={1.75} className="inline mr-0.5" />
-                    {app.key === 'infographic' ? '查看图片' : '打开结果'}
-                  </button>
-                ) : (
-                  <button
-                    type="button"
-                    className={styles.primaryAction}
-                    onClick={() => openAppSurface(app.key)}
-                    data-testid={`workshop-open-app-${app.key}`}
-                  >
-                    <ExternalLink size={12} strokeWidth={1.75} className="inline mr-0.5" />
-                    进去看看
-                  </button>
-                )}
-
-                {isRunning ? (
-                  <button
-                    type="button"
-                    className={styles.secondaryAction}
-                    onClick={() => openAppSurface(app.key)}
-                    data-testid={`workshop-open-surface-${app.key}`}
-                  >
-                    <ExternalLink size={12} strokeWidth={1.75} className="inline mr-0.5" />
-                    进去看看
-                  </button>
-                ) : isFailed ? (
-                  /* 失败时不再显示次级按钮——保持单一动作焦点 */
-                  null
-                ) : (
-                  <button
-                    type="button"
-                    className={styles.secondaryAction}
-                    data-testid={`workshop-bg-generate-${app.key}`}
-                    onClick={() => void runInBackground(app)}
-                    disabled={isRunning}
-                  >
-                    {generated ? (
-                      <>
-                        <RotateCw size={12} strokeWidth={1.75} className="inline mr-0.5" />
-                        再做一版
-                      </>
-                    ) : (
-                      <>
-                        <Play size={12} strokeWidth={1.75} className="inline mr-0.5" />
-                        先做一版
-                      </>
-                    )}
-                  </button>
-                )}
-              </div>
-            </article>
-          );
-        })}
-      </div>
+      {/* 分享是产物完成后的下一步，不抢占第一次学习决策。 */}
+      {generatedCount > 0 ? (
+        <OctoCrystalDispatcher
+          sessionId={sessionId}
+          transcript={transcript}
+          summary={summaryOverview}
+        />
+      ) : null}
 
       {(runningCount > 0 || failedCount > 0 || completedCount > 0) ? (
         <div className={styles.dock}>
@@ -987,35 +736,25 @@ export function WorkshopYellowPage(props: WorkshopYellowPageProps) {
           >
             <span className="flex items-center gap-1">
               <ListTodo size={14} strokeWidth={1.75} />
-              生成进度
+              {COPY.apps.matrix.taskTray}
             </span>
             {runningCount > 0 ? (
               <span className={`${styles.dockStat} ${styles.dockStatRunning}`}>
                 <span className={styles.pulseIndicator} />
-                进行中 {runningCount}
+                {COPY.apps.matrix.taskRunning(runningCount)}
               </span>
             ) : null}
-            <span className={styles.dockStat}>已完成 {completedCount}</span>
-            {failedCount > 0 ? <span className={`${styles.dockStat} ${styles.dockStatFailed}`}>需要处理 {failedCount}</span> : null}
+            <span className={styles.dockStat}>{COPY.apps.matrix.taskDone(completedCount)}</span>
+            {failedCount > 0 ? <span className={`${styles.dockStat} ${styles.dockStatFailed}`}>{COPY.apps.matrix.taskNeedsAttention(failedCount)}</span> : null}
           </button>
 
           {dockOpen ? (
             <aside className={styles.dockPanel} data-testid="workshop-dock-panel">
               <div className={styles.dockPanelHeader}>
-                <p className={styles.dockPanelTitle}>生成进度</p>
+                <p className={styles.dockPanelTitle}>{COPY.apps.matrix.taskPanelTitle}</p>
                 <div className={styles.dockHeaderActions}>
-                  {failedCount > 0 ? (
-                    <button type="button" className={styles.dockActionSecondary} onClick={retryAllFailed} data-testid="workshop-dock-retry-all">
-                      全部重试
-                    </button>
-                  ) : null}
-                  {completedCount > 0 ? (
-                    <button type="button" className={styles.dockActionSecondary} onClick={clearCompleted} data-testid="workshop-dock-clear-done">
-                      清除已完成
-                    </button>
-                  ) : null}
                   <button type="button" className={styles.dockClose} onClick={() => setDockOpen(false)}>
-                    收起
+                    {COPY.apps.matrix.collapse}
                   </button>
                 </div>
               </div>
@@ -1041,9 +780,6 @@ export function WorkshopYellowPage(props: WorkshopYellowPageProps) {
                             {task.status === 'running' ? <ElapsedTimer startMs={task.startedAt} /> : statusText(task.status)}
                           </span>
                         </div>
-                        <p className={styles.dockTaskMeta}>
-                          第 {task.attempt} 次 · 最近更新 {formatClock(task.updatedAt)}
-                        </p>
                         {task.message ? <p className={styles.dockTaskMessage}>{task.message}</p> : null}
                         <div className={styles.dockTaskActions}>
                           {task.status === 'running' ? (
@@ -1053,7 +789,7 @@ export function WorkshopYellowPage(props: WorkshopYellowPageProps) {
                               onClick={() => cancelTask(task.appKey)}
                               data-testid={`workshop-dock-cancel-${task.appKey}`}
                             >
-                              取消
+                              {COPY.apps.matrix.cancel}
                             </button>
                           ) : null}
                           {task.status === 'error' || task.status === 'cancelled' ? (
@@ -1063,7 +799,7 @@ export function WorkshopYellowPage(props: WorkshopYellowPageProps) {
                               onClick={() => retryTask(task.appKey)}
                               data-testid={`workshop-dock-retry-${task.appKey}`}
                             >
-                              重试
+                              {COPY.apps.matrix.retry}
                             </button>
                           ) : null}
                           {canOpen ? (
@@ -1073,7 +809,7 @@ export function WorkshopYellowPage(props: WorkshopYellowPageProps) {
                               onClick={() => openTaskResult(task.appKey)}
                               data-testid={`workshop-dock-open-${task.appKey}`}
                             >
-                              {task.appKey === 'infographic' ? '查看图片' : '打开结果'}
+                              {task.appKey === 'infographic' ? COPY.apps.matrix.openImage : COPY.apps.matrix.open}
                             </button>
                           ) : null}
                         </div>

@@ -17,10 +17,15 @@
 
 import { chat, type ChatMessage } from './llm-service';
 import type { TranscriptSegment } from '@/lib/db';
-import type { FeedItem, FeedItemType, FeedActionType } from '@/types';
+import type { FeedItem, FeedItemType, FeedActionType, FeedContentKind, FeedPerspective } from '@/types';
 import { FeatureConfig } from '@/lib/config';
 import { formatTranscriptWithTimestamps, parseJsonResponse } from '@/lib/utils';
-import { webSearchExact } from '@/lib/services/web-search-service';
+import {
+  retrieveExternalCandidates,
+  scoreSource,
+  type ExternalDiscoveryBrief,
+  type ExternalFeedCandidate,
+} from './feed-retrieval-service';
 import type { FeedPreference } from '@/lib/feed-preferences';
 
 // ============ 配置 ============
@@ -67,15 +72,13 @@ interface RawFeedResult {
 
 interface RawExternalDiscovery {
   query: string;
+  academicQuery?: string;
+  bookQuery?: string;
   reason: string;
+  perspective?: FeedPerspective;
+  contentKinds?: FeedContentKind[];
   sourceCaptureIds?: string[];
   goalLabel?: string;
-}
-
-interface ExternalCandidate {
-  result: { title: string; url: string; snippet?: string };
-  discovery: RawExternalDiscovery;
-  score: number;
 }
 
 interface RawExternalRankResult {
@@ -384,8 +387,11 @@ ${capturesSection || '（还没有收集内容）'}
   <item>不要用"建议""应该"这种指令语气——像旁边同学递话</item>
   <item>不要输出时间戳——这是跨课程信息流，没有统一时间轴</item>
   <item>actionType 只用 open-capture（让用户跳回某条收集）或 ask-tutor；不要用 jump-timestamp</item>
-  <item>同时生成 1-2 个用于外部检索的精确查询，不要直接编造外部内容</item>
+  <item>同时生成 3 个用于外部检索的检索计划，不要直接编造外部内容：至少 1 个 deepen，至少 1 个 counterpoint</item>
   <item>不要把用户归类成固定人群。查询必须同时来至这次真实收藏上下文和用户当前目标</item>
+  <item>counterpoint 不是随机猎奇：它要与当前问题共享事实基础，但提供不同学科、不同方法或不同立场，帮助用户检验原有判断</item>
+  <item>contentKinds 从 web / paper / book / report 中选 1-3 种；学术问题优先包含 paper，人文与长期理解优先包含 book</item>
+  <item>academicQuery 使用适合论文数据库的英文主题词；bookQuery 使用适合图书目录的主题、作者或经典书名线索。没有必要时可以省略</item>
   <item>尊重过去反馈：延续“有用”内容的价值类型，避免与“不相关”内容重复选题，但不要由一次反馈永久封闭一个主题</item>
   <item>禁止心理诊断和隐性动机推断：不要使用“焦虑投射”“强迫”“安全感”等缺少用户明确表达的心理归因。只描述可见的收藏、目标和行为</item>
   <item>每个查询必须返回 1-3 个 sourceCaptureIds；有匹配目标时返回真实 goalLabel，没有就留空，禁止编造</item>
@@ -409,7 +415,11 @@ ${capturesSection || '（还没有收集内容）'}
   "externalDiscoveries": [
     {
       "query": "可直接交给搜索引擎的精确查询，包含主题、内容类型与必要的来源限定",
+      "academicQuery": "适合论文数据库的英文关键词，可省略",
+      "bookQuery": "适合图书目录的中英文关键词，可省略",
       "reason": "它与用户哪条收藏或哪个目标相关",
+      "perspective": "deepen | adjacent | counterpoint",
+      "contentKinds": ["web", "paper", "book", "report"],
       "sourceCaptureIds": ["上下文中真实的收藏 id"],
       "goalLabel": "上下文中真实的目标标题，无匹配时省略"
     }
@@ -485,56 +495,38 @@ export async function generateCrossCourseFeed(
   }
   const internalItems = validateCrossCourseItems(raw.items);
 
-  // 外部发现必须由 MeetMind 服务端完成，不向用户暴露搜索配置或插件。
-  // 用模型已筛出的关键方向做查询，避免对整份收藏进行无目的广泛搜索。
+  // 外部发现由 MeetMind 服务端完成：先检索真实网页/论文/书籍，再让模型只做候选排序。
   let externalItems: FeedItem[] = [];
   try {
     const fallbackDiscovery: RawExternalDiscovery = {
       query: internalItems.filter((item) => item.type !== 'summary').slice(0, 2).map((item) => item.title).join(' ') || captures[0].title,
       reason: '延伸你最近收集的主题',
+      perspective: 'deepen',
+      contentKinds: ['web', 'paper', 'book'],
       sourceCaptureIds: captures.slice(0, 2).map((capture) => capture.id),
     };
     const discoveries = (raw.externalDiscoveries ?? [])
       .filter((item) => item.query && item.reason)
-      .slice(0, 2);
-    const activeDiscoveries = discoveries.length > 0 ? discoveries : [fallbackDiscovery];
-    const searchTasks = activeDiscoveries.flatMap((discovery) => [
-      { discovery, query: discovery.query.slice(0, 180) },
-      { discovery, query: `${discovery.query.slice(0, 130)} site:edu OR site:org OR filetype:pdf` },
-    ]);
-    const resultGroups = await Promise.all(searchTasks.map(async ({ discovery, query }) => ({
-      discovery,
-      results: await webSearchExact(query, {
-        maxResults: 10,
-        language: 'zh-CN',
-        market: 'zh-CN',
-      }),
-    })));
-
-    const seenUrls = new Set<string>();
-    const candidates: ExternalCandidate[] = resultGroups
-      .flatMap(({ discovery, results }) => results
-        .filter((result) => isAcceptableExternalResult(result.url))
-        .map((result) => ({ result, discovery, score: scoreExternalResult(result.url) })))
-      .filter((candidate) => candidate.score >= 4)
-      .sort((a, b) => b.score - a.score)
-      .filter(({ result }) => {
-        const normalized = result.url.replace(/[#?].*$/, '');
-        if (seenUrls.has(normalized)) return false;
-        seenUrls.add(normalized);
-        return true;
-      })
-      .slice(0, 16);
+      .slice(0, 3);
+    const activeDiscoveries = (discoveries.length > 0 ? discoveries : [fallbackDiscovery])
+      .map(normalizeDiscoveryBrief);
+    const candidates = (await retrieveExternalCandidates(activeDiscoveries))
+      .filter((candidate) => isAcceptableExternalResult(candidate.url));
 
     const selectedCandidates = await rankExternalCandidates(candidates, options, model);
     externalItems = selectedCandidates.map(({ candidate, qualityReason }) => {
-      const { result, discovery } = candidate;
+      const { discovery } = candidate;
       return {
         type: 'web-recommend' as const,
-        title: result.title.slice(0, 60),
-        body: (result.snippet ?? '').slice(0, 240),
-        contentUrl: result.url,
-        upName: getExternalSourceLabel(result.url),
+        title: candidate.title.slice(0, 100),
+        body: candidate.snippet.slice(0, 360),
+        contentUrl: candidate.url,
+        upName: candidate.sourceLabel,
+        coverUrl: candidate.coverUrl,
+        contentKind: candidate.contentKind,
+        authors: candidate.authors,
+        publishedAt: candidate.publishedAt,
+        perspective: discovery.perspective,
         actionType: 'open-external' as const,
         actionLabel: '打开原文',
         whyForYou: `${discovery.reason}${qualityReason ? `；${qualityReason}` : ''}`.slice(0, 180),
@@ -561,12 +553,7 @@ export function isAcceptableExternalResult(url: string): boolean {
 }
 
 export function scoreExternalResult(url: string): number {
-  const hostname = getExternalSourceLabel(url).toLowerCase();
-  let score = 1;
-  if (/\.(edu|ac)\.|\.edu$|\.ac$|\.gov\.|\.gov$|\.org$/.test(hostname)) score += 3;
-  if (/(doi\.org|arxiv\.org|nature\.com|science\.org|ieee\.org|acm\.org|pubmed|jstor\.org|archive\.org|museum|library|press\.)/.test(hostname)) score += 3;
-  if (/(^|\.)docs\.|developer\.mozilla\.org|learn\.microsoft\.com|github\.com/.test(hostname)) score += 3;
-  return score;
+  return scoreSource(url);
 }
 
 export function containsUnsupportedPsychology(value: string): boolean {
@@ -591,22 +578,23 @@ export function filterValidGoalLabel(
 }
 
 async function rankExternalCandidates(
-  candidates: ExternalCandidate[],
+  candidates: ExternalFeedCandidate[],
   options: GenerateCrossCourseFeedOptions,
   model: string,
-): Promise<Array<{ candidate: ExternalCandidate; qualityReason?: string }>> {
+): Promise<Array<{ candidate: ExternalFeedCandidate; qualityReason?: string }>> {
   if (candidates.length === 0) return [];
 
   const goals = (options.learnerProfile?.goals ?? []).slice(0, 3).map((goal) => goal.title).join('、') || '未设置';
   const candidateText = candidates.map((candidate, index) => (
-    `[${index}] ${candidate.result.title}\n来源：${getExternalSourceLabel(candidate.result.url)}\n摘要：${candidate.result.snippet ?? ''}\n推荐线索：${candidate.discovery.reason}`
+    `[${index}] ${candidate.title}\n类型：${candidate.contentKind}\n来源：${candidate.sourceLabel}\n作者：${candidate.authors?.join('、') || '未标注'}\n出版：${candidate.publishedAt || '未标注'}\n摘要：${candidate.snippet}\n视角：${candidate.discovery.perspective}\n推荐线索：${candidate.discovery.reason}`
   )).join('\n\n');
 
   const prompt = `<task>
 <role>你是 MeetMind 的信息编辑。你只在真实搜索候选中做选择，不生成新链接。</role>
 <context>用户当前目标：${goals}</context>
 <criteria>
-  <item>最多选 3 条，可以一条都不选</item>
+  <item>选 3-4 条，可以一条都不选；如果候选质量足够，至少包含 1 条 paper 或 book</item>
+  <item>必须包含 1 条 perspective=counterpoint 的候选，除非所有 counterpoint 候选都明显低质或不相关</item>
   <item>先判断对这次收藏上下文是否有新信息，再判断来源是否配得上这个问题</item>
   <item>研究问题优先原始论文、大学、机构或方法文档；人文问题优先原始文本、档案、出版机构和有编辑责任的长文；实用问题优先官方文档和可验证实例</item>
   <item>拒绝 SEO 内容农场、无来源转载、只重复已知内容的浅摘要</item>
@@ -626,33 +614,67 @@ ${candidateText}
     });
     const ranked = parseJsonResponse<RawExternalRankResult>(response.content);
     const seenIndexes = new Set<number>();
-    return (ranked?.selected ?? [])
+    const selected = (ranked?.selected ?? [])
       .filter((item) => Number.isInteger(item.index) && item.index >= 0 && item.index < candidates.length)
       .filter((item) => {
         if (seenIndexes.has(item.index)) return false;
         seenIndexes.add(item.index);
         return true;
       })
-      .slice(0, 3)
+      .slice(0, 4)
       .map((item) => ({
         candidate: candidates[item.index],
         qualityReason: item.qualityReason?.slice(0, 80),
       }));
+    return ensureExternalMix(selected, candidates);
   } catch (error) {
     console.warn('[feed.cross-course] external ranking failed:', error);
-    return candidates
-      .filter((candidate) => candidate.score >= 4)
-      .slice(0, 3)
+    const fallback = candidates
+      .filter((candidate) => candidate.sourceScore >= 4)
+      .slice(0, 4)
       .map((candidate) => ({ candidate }));
+    return ensureExternalMix(fallback, candidates);
   }
 }
 
-function getExternalSourceLabel(url: string): string {
-  try {
-    return new URL(url).hostname.replace(/^www\./, '');
-  } catch {
-    return '外部资料';
+function normalizeDiscoveryBrief(discovery: RawExternalDiscovery): ExternalDiscoveryBrief {
+  const validKinds: FeedContentKind[] = ['web', 'paper', 'book', 'report'];
+  const contentKinds = (discovery.contentKinds ?? [])
+    .filter((kind): kind is FeedContentKind => validKinds.includes(kind));
+  return {
+    query: discovery.query.slice(0, 180),
+    academicQuery: discovery.academicQuery?.slice(0, 180),
+    bookQuery: discovery.bookQuery?.slice(0, 180),
+    reason: discovery.reason.slice(0, 180),
+    perspective: ['deepen', 'adjacent', 'counterpoint'].includes(discovery.perspective ?? '')
+      ? discovery.perspective as FeedPerspective
+      : 'adjacent',
+    contentKinds: contentKinds.length > 0 ? contentKinds : ['web', 'paper', 'book'],
+    sourceCaptureIds: discovery.sourceCaptureIds,
+    goalLabel: discovery.goalLabel,
+  };
+}
+
+function ensureExternalMix(
+  selected: Array<{ candidate: ExternalFeedCandidate; qualityReason?: string }>,
+  candidates: ExternalFeedCandidate[],
+): Array<{ candidate: ExternalFeedCandidate; qualityReason?: string }> {
+  const output = [...selected];
+  if (output.length === 0) return output;
+  const selectedUrls = new Set(output.map((item) => item.candidate.url));
+  const addCandidate = (candidate: ExternalFeedCandidate | undefined): void => {
+    if (!candidate || selectedUrls.has(candidate.url)) return;
+    if (output.length >= 4) output.pop();
+    output.push({ candidate });
+    selectedUrls.add(candidate.url);
+  };
+  if (!output.some((item) => item.candidate.discovery.perspective === 'counterpoint')) {
+    addCandidate(candidates.find((candidate) => candidate.discovery.perspective === 'counterpoint'));
   }
+  if (!output.some((item) => ['paper', 'book'].includes(item.candidate.contentKind))) {
+    addCandidate(candidates.find((candidate) => ['paper', 'book'].includes(candidate.contentKind)));
+  }
+  return output.slice(0, 4);
 }
 
 export const feedService = {

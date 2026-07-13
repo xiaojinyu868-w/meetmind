@@ -36,6 +36,14 @@ describe('buildTutorSystemPrompt — mode 决定基础骨架', () => {
     expect(review).toMatch(/你是这个学生的同桌/);
   });
 
+  it('身份基底保持场景中立，不把 goal/shared/word 误写成刚上完课', () => {
+    for (const mode of ['goal', 'shared', 'word'] as const) {
+      const prompt = buildTutorSystemPrompt(mode);
+      expect(prompt).not.toMatch(/刚上完一节课/);
+      expect(prompt).toMatch(/正在学、正在想的东西/);
+    }
+  });
+
   it('两种 mode 都把意图理解交给模型智能，而不是写成硬判断或主动推下一步', () => {
     const inClass = buildTutorSystemPrompt('in-class');
     const review = buildTutorSystemPrompt('review');

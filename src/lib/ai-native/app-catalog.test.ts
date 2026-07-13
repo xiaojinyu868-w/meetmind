@@ -13,12 +13,23 @@ describe('WORKSHOP_APP_CATALOG copy', () => {
         app.headline,
         app.description,
         app.outputType,
+        app.learningAction,
+        app.bestFor,
+        app.timeLabel,
         ...app.tags,
       ].join('\n');
 
       for (const word of [...COPY.bannedWords, ...catalogJargon]) {
         expect(visibleCopy.includes(word), `${app.key} contains banned word ${word}`).toBe(false);
       }
+    }
+  });
+
+  it('explains the learning action, fit, and expected effort for every app', () => {
+    for (const app of WORKSHOP_APP_CATALOG) {
+      expect(app.learningAction.length).toBeGreaterThan(2);
+      expect(app.bestFor.length).toBeGreaterThan(8);
+      expect(app.timeLabel).toContain('约');
     }
   });
 });

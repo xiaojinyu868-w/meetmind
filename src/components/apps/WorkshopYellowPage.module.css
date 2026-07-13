@@ -7,10 +7,7 @@
   touch-action: pan-y;
   padding: 24px;
   container-type: inline-size;
-  background:
-    radial-gradient(1100px 420px at 0% -10%, rgba(191, 219, 254, 0.45), transparent 60%),
-    radial-gradient(1000px 380px at 100% -15%, rgba(254, 215, 170, 0.42), transparent 62%),
-    #FAF7F2;
+  background: #FAF7F2;
 }
 
 .header {
@@ -1224,5 +1221,200 @@
   .primaryAction:hover,
   .secondaryAction:hover {
     transform: none;
+  }
+}
+
+/* M16：矩阵从“工具黄页”收口为学习动作选择。 */
+.contextBasis {
+  margin: 12px 0 0;
+  color: #2D4F3E;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.matrixSection {
+  max-width: 1180px;
+  margin: 26px auto 0;
+}
+
+.sectionHeading {
+  margin-bottom: 10px;
+}
+
+.sectionTitle {
+  margin: 0;
+  color: #1C1B19;
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: -0.015em;
+}
+
+.sectionHint {
+  margin: 4px 0 0;
+  color: #8E8B82;
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.recommendedGrid {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.recommendedGrid .card {
+  max-width: none;
+  border-color: #A8C4B5;
+  background: #FCFDFC;
+}
+
+.card {
+  min-height: 126px;
+  align-items: flex-start;
+  gap: 14px;
+  border-radius: 18px;
+  padding: 16px;
+}
+
+.cardRecommended {
+  border-color: #A8C4B5;
+}
+
+.coverWrap {
+  width: 46px;
+  height: 46px;
+  border-color: #D9E5DE;
+  background: #F2F6F3;
+  color: #2D4F3E;
+}
+
+.cardBody {
+  gap: 5px;
+}
+
+.cardLabelRow {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 7px;
+}
+
+.learningAction {
+  color: #2D4F3E;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.recommendedBadge {
+  border-radius: 999px;
+  background: #F2EDE3;
+  color: #B5483C;
+  padding: 3px 7px;
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.appName {
+  margin-top: 3px;
+  font-size: 17px;
+}
+
+.fitLine {
+  margin: 2px 0 0;
+  color: #5C5A55;
+  font-size: 12.5px;
+  line-height: 1.55;
+}
+
+.cardMeta {
+  margin: 0;
+  color: #8E8B82;
+  font-size: 11px;
+}
+
+.recommendationReason {
+  margin: 4px 0 0;
+  border-left: 2px solid #B5483C;
+  padding-left: 8px;
+  color: #5C5A55;
+  font-size: 11.5px;
+  line-height: 1.55;
+}
+
+.statusDotCore {
+  margin-top: 1px;
+  background: #8E8B82;
+}
+
+.statusrunning .statusDotCore {
+  background: #B5483C;
+  animation: pulse-dot 1.2s ease-in-out infinite;
+}
+
+.statussuccess .statusDotCore {
+  background: #2D4F3E;
+}
+
+.statuserror .statusDotCore {
+  background: #B5483C;
+}
+
+.actionRow {
+  align-self: center;
+  flex-direction: column;
+  align-items: stretch;
+  min-width: 108px;
+}
+
+.primaryAction,
+.secondaryAction {
+  min-height: 36px;
+  white-space: nowrap;
+}
+
+@media (max-width: 900px) {
+  .grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 640px) {
+  .page {
+    padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 72px);
+  }
+
+  .matrixSection {
+    margin-top: 22px;
+  }
+
+  .coverWrap {
+    display: flex;
+    width: 40px;
+    height: 40px;
+    border-radius: 13px;
+  }
+
+  .card {
+    min-height: 0;
+    flex-wrap: wrap;
+    padding: 14px;
+  }
+
+  .cardBody {
+    width: calc(100% - 54px);
+  }
+
+  .actionRow {
+    width: 100%;
+    min-width: 0;
+    flex-direction: row;
+  }
+
+  .primaryAction,
+  .secondaryAction {
+    min-height: 42px;
   }
 }

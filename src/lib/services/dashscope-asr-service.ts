@@ -68,6 +68,7 @@ export class DashScopeASRClient {
   private ws: WebSocket | null = null;
   private status: 'idle' | 'connecting' | 'connected' | 'transcribing' | 'stopped' | 'error' = 'idle';
   private sentenceIndex = 0;
+  private connectionGeneration = 0;
   private isReady = false;
   private audioQueue: ArrayBuffer[] = [];
   private static readonly AUDIO_QUEUE_MAX_SIZE = 500;
@@ -141,6 +142,7 @@ export class DashScopeASRClient {
     }
     // 重连路径：保留 audioQueue / reconnectAttempts / sentenceIndex / sessionStartTime
     this.isReady = false;
+    this.connectionGeneration += 1;
 
     return new Promise((resolve) => {
       try {
@@ -333,7 +335,7 @@ export class DashScopeASRClient {
 
         case 'interim': {
           const payload: ASRInterim = {
-            itemId: typeof msg.itemId === 'string' ? msg.itemId : undefined,
+            itemId: typeof msg.itemId === 'string' ? this.namespaceRemoteId(msg.itemId) : undefined,
             text: typeof msg.text === 'string' ? msg.text : '',
             stableText: typeof msg.stableText === 'string' ? msg.stableText : undefined,
             unstableText: typeof msg.unstableText === 'string' ? msg.unstableText : undefined,
@@ -401,22 +403,25 @@ export class DashScopeASRClient {
       const beginTime = sentence.beginTime ?? 0;
       const endTime = sentence.endTime ?? beginTime + 1000;
 
+      const rawId = sentence.id || `seg-${Date.now()}-${this.sentenceIndex++}`;
       const result: ASRSentence = {
-        id: sentence.id || `seg-${Date.now()}-${this.sentenceIndex++}`,
+        id: this.namespaceRemoteId(rawId),
         text: sentence.text,
         beginTime,
         endTime,
         isFinal: true,
         confidence: sentence.confidence,
-        itemId: sentence.itemId,
+        itemId: sentence.itemId ? this.namespaceRemoteId(sentence.itemId) : undefined,
         provisional: provisional === true,
-        replaces: Array.isArray(replaces) ? replaces : undefined,
+        replaces: Array.isArray(replaces)
+          ? replaces.map((id) => this.namespaceRemoteId(id))
+          : undefined,
         speakerId: finalSpeakerId,
       };
       this.callbacks.onSentence?.(result);
     } else {
       this.callbacks.onInterim?.({
-        itemId: sentence.itemId,
+        itemId: sentence.itemId ? this.namespaceRemoteId(sentence.itemId) : undefined,
         text: sentence.text,
         provisional: true,
         beginTime: sentence.beginTime,
@@ -434,17 +439,24 @@ export class DashScopeASRClient {
   }
 
   private sendAudioBuffer(buffer: ArrayBuffer): void {
-    if (!this.isReady) {
+    // ready/reconnect 后旧缓冲会分批回放。新音频必须继续排在旧缓冲后面，
+    // 否则上游收到乱序 PCM，表现为重复、吞字或时间轴倒退。
+    if (!this.isReady || this.isFlushing || this.audioQueue.length > 0) {
       this.audioQueue.push(buffer);
       if (this.audioQueue.length > DashScopeASRClient.AUDIO_QUEUE_MAX_SIZE) {
         this.audioQueue.shift();
       }
+      if (this.isReady) this.flushAudioQueue();
       return;
     }
 
     if (this.ws && this.ws.readyState === WebSocket.OPEN) {
       this.ws.send(buffer);
     }
+  }
+
+  private namespaceRemoteId(remoteId: string): string {
+    return `${this.sessionId}:${this.connectionGeneration}:${remoteId}`;
   }
 
   private flushAudioQueue(): void {

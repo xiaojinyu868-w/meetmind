@@ -136,7 +136,7 @@ export async function generatePodcastPlan(context: AppExecutionContext, model: s
       {
         role: 'system',
         content:
-          'You are a humorous but rigorous knowledge curator with strong cognitive-science background. Rewrite class transcript into an engaging two-host learning podcast. Use only evidence from class. Output JSON only.',
+          'You are a rigorous educational audio editor with strong cognitive-science background. Turn a class into a natural two-host learning conversation. Adapt tone to the subject instead of forcing jokes. Use only class evidence and output JSON only.',
       },
       {
         role: 'user',
@@ -158,11 +158,11 @@ Output JSON with this top-level shape:
 }
 
 Layer 2 - Role and intent:
-Turn this class into an audio-first exam-oriented discussion map.
+Turn this class into an audio-first understanding and review map.
 Goals:
-1) Reveal hidden but test-relevant logic.
-2) Reduce cognitive friction using vivid analogies.
-3) Keep strong in-class feel based on real evidence.
+1) Reveal the causal chain, conceptual contrasts, or method logic that holds the class together.
+2) Reduce cognitive friction using an analogy only when it is accurate and genuinely clarifies the idea.
+3) Preserve uncertainty, conditions, and competing views when the class contains them.
 4) Each chapter in "structure" should have clear startMs/endMs (in milliseconds) referencing the original class transcript timestamps. This enables quick chapter navigation in the player.
 
 Audience:
@@ -172,12 +172,14 @@ Hard constraints:
 - Output must be natural Simplified Chinese in script.text.
 - Do NOT output timestamps like 08:25, segment IDs in script text.
 - Use only "Host A" and "Host B" as speaker values.
+- Avoid fake banter, repetitive greetings, empty praise, and reading bullet points aloud.
+- Each host turn should move the explanation forward: question, clarification, example, counterexample, or synthesis.
 - Each "structure" entry MUST include "startMs" and "endMs" fields (integer milliseconds from the class recording).
 - "structure" should have 3-6 entries covering the full class content.
 
 PRD v1.1 §5.5 length constraint (CRITICAL):
-- Target final audio duration: 10-15 minutes.
-- This means total script.text character count across ALL lines should be 1500-2200 Chinese characters (Chinese TTS averages ~150 chars/min).
+- Target final audio duration: 6-10 minutes.
+- This means total script.text character count across ALL lines should be 900-1500 Chinese characters (Chinese TTS averages ~150 chars/min).
 - Be selective: skip lower-value content rather than rush through everything.
 - Use vivid analogies and clear pacing instead of trying to summarise the whole class.
 

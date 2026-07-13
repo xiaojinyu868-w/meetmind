@@ -17,6 +17,8 @@
 
 ## `/api/tutor/agent` 的 mode 矩阵
 
+五种 mode 共用场景中立的“同桌”身份基底；课堂是否正在进行、是否已经结束、是否来自分享，只能由各 mode segment 描述，避免 goal / shared / word 被“刚上完课”的旧身份句污染。当前 prompt telemetry 版本为 `2026-07-tutor-v5-context-first`。
+
 `TutorMode = 'in-class' | 'review' | 'shared' | 'goal' | 'word'`（定义在 `@/lib/prompts/tutor-prompts.ts`）。
 
 | mode | 入口 | context 关键字段 | 特性 |

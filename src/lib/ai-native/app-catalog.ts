@@ -1,4 +1,5 @@
 import type { AppRenderMode, ContextTier } from './types';
+import { COPY } from '@/lib/ui/copy';
 
 export type WorkshopAppKey =
   | 'audio-overview'
@@ -19,6 +20,12 @@ export interface WorkshopAppCatalogItem {
   pluginId: string;
   intent: string;
   outputType: string;
+  /** 用户此刻要完成的学习动作，而不是技术能力名称 */
+  learningAction: string;
+  /** 什么时候选择它 */
+  bestFor: string;
+  /** 让用户预判投入成本；不是生成 SLA */
+  timeLabel: string;
   renderMode: AppRenderMode | 'custom(image-first)';
   status: 'ready' | 'preview';
   /**
@@ -53,6 +60,9 @@ export const WORKSHOP_APP_CATALOG: WorkshopAppCatalogItem[] = [
     pluginId: 'cheatsheet-gen',
     intent: '生成考试速查表：核心定义、公式/步骤、易错点各一组，适合一页打印。',
     outputType: '可打印卡片',
+    learningAction: COPY.apps.matrix.catalogMeta.cheatsheet.action,
+    bestFor: COPY.apps.matrix.catalogMeta.cheatsheet.bestFor,
+    timeLabel: COPY.apps.matrix.catalogMeta.cheatsheet.time,
     renderMode: 'document',
     status: 'ready',
     supportedTiers: ['class', 'unit', 'exam'],
@@ -69,6 +79,9 @@ export const WORKSHOP_APP_CATALOG: WorkshopAppCatalogItem[] = [
     pluginId: 'studio-workshop',
     intent: '生成课堂播客，输出可播放音频和可回放章节。',
     outputType: '真实播客音频',
+    learningAction: COPY.apps.matrix.catalogMeta['audio-overview'].action,
+    bestFor: COPY.apps.matrix.catalogMeta['audio-overview'].bestFor,
+    timeLabel: COPY.apps.matrix.catalogMeta['audio-overview'].time,
     renderMode: 'audio',
     status: 'ready',
     supportedTiers: ['class'],
@@ -85,6 +98,9 @@ export const WORKSHOP_APP_CATALOG: WorkshopAppCatalogItem[] = [
     pluginId: 'flashcards-lab',
     intent: '生成课堂闪卡训练，帮助学生主动回忆并巩固核心知识。',
     outputType: '训练型闪卡',
+    learningAction: COPY.apps.matrix.catalogMeta.flashcards.action,
+    bestFor: COPY.apps.matrix.catalogMeta.flashcards.bestFor,
+    timeLabel: COPY.apps.matrix.catalogMeta.flashcards.time,
     renderMode: 'flashcards',
     status: 'ready',
     supportedTiers: ['class', 'unit', 'exam'],
@@ -101,6 +117,9 @@ export const WORKSHOP_APP_CATALOG: WorkshopAppCatalogItem[] = [
     pluginId: 'quiz-arena',
     intent: '生成课堂测验，检验理解并输出可回放证据。',
     outputType: '可作答测验',
+    learningAction: COPY.apps.matrix.catalogMeta.quiz.action,
+    bestFor: COPY.apps.matrix.catalogMeta.quiz.bestFor,
+    timeLabel: COPY.apps.matrix.catalogMeta.quiz.time,
     renderMode: 'quiz',
     status: 'ready',
     supportedTiers: ['class', 'unit', 'exam'],
@@ -117,6 +136,9 @@ export const WORKSHOP_APP_CATALOG: WorkshopAppCatalogItem[] = [
     pluginId: 'mindmap-outline',
     intent: '生成课堂思维导图，呈现主干、分支与关键证据。',
     outputType: '交互导图',
+    learningAction: COPY.apps.matrix.catalogMeta.mindmap.action,
+    bestFor: COPY.apps.matrix.catalogMeta.mindmap.bestFor,
+    timeLabel: COPY.apps.matrix.catalogMeta.mindmap.time,
     renderMode: 'mindmap',
     status: 'ready',
     supportedTiers: ['class', 'unit'],
@@ -133,6 +155,9 @@ export const WORKSHOP_APP_CATALOG: WorkshopAppCatalogItem[] = [
     pluginId: 'studio-workshop',
     intent: '生成"一张图带走这节课"固定版式卡片：上中下三段，结构干净零个人化痕迹。',
     outputType: '图片',
+    learningAction: COPY.apps.matrix.catalogMeta.infographic.action,
+    bestFor: COPY.apps.matrix.catalogMeta.infographic.bestFor,
+    timeLabel: COPY.apps.matrix.catalogMeta.infographic.time,
     renderMode: 'custom(image-first)',
     status: 'ready',
     supportedTiers: ['class', 'unit'],

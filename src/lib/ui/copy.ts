@@ -21,8 +21,8 @@
 export const COPY = {
   identity: {
     name: '同学',
-    tagline: '把你收下的，变成下一条有用的信息。',
-    subtagline: '基于你的整理、收藏和目标，自动发现值得继续看的内外部信息。',
+    tagline: '真正懂你在学什么的 AI 同学',
+    subtagline: '理解你的课堂、资料和目标，陪你学懂当下，也发现下一步值得看的内容。',
   },
 
   cta: {
@@ -45,7 +45,7 @@ export const COPY = {
   },
 
   login: {
-    subtitle: '把你每天收下的内容，变成下一条有用的信息。',
+    subtitle: '真正懂你在学什么的 AI 同学',
     guestCta: '先试听一节课',
   },
 
@@ -240,6 +240,59 @@ export const COPY = {
 
   apps: {
     inlineSource: '已放进对话',
+    matrix: {
+      eyebrow: '基于这节课',
+      title: '接下来怎么学',
+      subtitle: '先选一个当下最需要的动作。同学会在后台做好，你可以留在这里继续看。',
+      recommendedTitle: '现在最适合',
+      recommendedHint: '根据这节课的内容和你留下的标记排序，不替你做决定。',
+      allTitle: '其他学习方式',
+      contextBasis: (segments: number, anchors: number, difficulties: number): string => {
+        const parts = [`${segments} 段课堂内容`];
+        if (anchors > 0) parts.push(`${anchors} 处标记`);
+        if (difficulties > 0) parts.push(`${difficulties} 个难点`);
+        return parts.join(' · ');
+      },
+      summary: (total: number, done: number, running: number, failed: number): string => (
+        `${total} 种学习方式 · 已做好 ${done}${running > 0 ? ` · 正在做 ${running}` : ''}${failed > 0 ? ` · 待处理 ${failed}` : ''}`
+      ),
+      recommendedForConfusion: (count: number): string => `你留下了 ${count} 处标记，先检验能不能讲清楚。`,
+      recommendedForDifficulty: (count: number): string => `这节课有 ${count} 个难点，先把关键概念练到能回忆。`,
+      recommendedForStructure: '这节课内容较长，先看清主干和分支。',
+      recommendedDefault: '先把这节课压成一页，最快建立整体印象。',
+      start: '先做一版',
+      open: '继续使用',
+      openImage: '查看图片',
+      progress: '查看进度',
+      retry: '再试一次',
+      remake: '再做一版',
+      ready: '做好了',
+      waiting: '待开始',
+      failed: '没做好',
+      running: '正在做',
+      workingOn: (action: string): string => `${action}，可以先返回继续看这节课`,
+      failedWithoutLoss: '这次没做好，原课堂内容没有受到影响。',
+      recommended: '适合现在',
+      taskTray: '学习内容',
+      taskPanelTitle: '正在准备与已经做好的内容',
+      taskRunning: (count: number): string => `正在做 ${count}`,
+      taskDone: (count: number): string => `已做好 ${count}`,
+      taskNeedsAttention: (count: number): string => `待处理 ${count}`,
+      collapse: '收起',
+      cancel: '取消',
+      mobileTitle: '这节课，接下来怎么学',
+      mobileSubtitle: '选一种学习动作，同学会直接基于这节课开始。',
+      backToMatrix: '所有学习方式',
+      workspaceSubtitle: (action: string, bestFor: string): string => `${action} · ${bestFor}`,
+      catalogMeta: {
+        cheatsheet: { action: '带走重点', bestFor: '想快速建立全貌，或考前最后过一遍', time: '阅读约 1 分钟' },
+        quiz: { action: '检验理解', bestFor: '想知道自己是真懂，还是只是看懂了', time: '作答约 5–8 分钟' },
+        flashcards: { action: '记住核心', bestFor: '概念、术语和公式需要反复回忆', time: '练习约 5 分钟' },
+        mindmap: { action: '看清结构', bestFor: '内容较多，想分清主干、关系和层次', time: '浏览约 2 分钟' },
+        'audio-overview': { action: '换种方式再听', bestFor: '通勤或走路时，想用对话重新理解', time: '收听约 6–10 分钟' },
+        infographic: { action: '做成一张图', bestFor: '想分享、展示，或用视觉方式记住', time: '查看约 2 分钟' },
+      },
+    },
   },
 
   /**
@@ -253,20 +306,20 @@ export const COPY = {
     relatedInfoLabel: '今日情报',
     /** 抽屉标题——替换原「笔记总结」 */
     drawerTitle: '今日情报',
-    drawerSubtitle: '基于你的整理、收藏和学习目标，把内部线索与外部值得看的内容放到一起。',
-    todayBrief: '今日整理',
-    internalDiscoveries: '从你的收藏里发现',
-    internalDiscoveriesHint: '不是复述，而是把跨课程、跨来源的线索接起来。',
-    externalDiscoveries: '值得从外部看',
-    externalDiscoveriesHint: '只推与你当前线索有关、能带来新信息的内容。',
+    drawerSubtitle: '一半照见你正在关心的事，一半把真实的书、论文和新观点带进来。',
+    todayBrief: '看见自己',
+    internalDiscoveries: '看见自己',
+    internalDiscoveriesHint: '从你的收藏、笔记和目标里，找到正在形成的方向。',
+    externalDiscoveries: '向外看看',
+    externalDiscoveriesHint: '真实来源，可直接打开；既有顺着目标深入，也有不同视角。',
     useful: '有用',
     notRelevant: '不相关',
     feedbackUseful: '已记下，以后多找这类内容',
     feedbackDismissed: '已减少这类推荐',
     refresh: '更新',
     addContext: '补一条线索',
-    refreshing: '正在根据最新上下文更新',
-    notGeneratedYet: '等待第一次整理',
+    refreshing: '正在寻找与你有关的新内容',
+    notGeneratedYet: '等待第一次发现',
     updatedJustNow: '刚刚更新',
     updatedMinutesAgo: (minutes: number): string => `${minutes} 分钟前更新`,
     updatedAt: (time: string): string => `今日 ${time} 更新`,
@@ -277,23 +330,23 @@ export const COPY = {
     sourceCount: (count: number): string => `来自 ${count} 条收藏`,
     goalAlignment: (goal: string): string => `对齐目标「${goal}」`,
     /** 生成中（跨课程） */
-    loading: '同学正在从你收集的内容里挑对你重要的方向…',
+    loading: '同学正在查找真实的书、论文和外部资料…',
     /** 空状态（没有收集内容） */
     empty: '还没有收集内容。先去收一节课或一篇文章，同学会自动整理方向。',
     /** 跨课程空态 */
-    crossCourseEmptyTitle: '继续收集，方向会自己浮出来。',
-    crossCourseEmptyBody: '它不会打断你，也不会急着生成长报告。等你收集的内容够了，这里会出现基于你的方向和延伸。',
+    crossCourseEmptyTitle: '先留下几条你真正关心的内容。',
+    crossCourseEmptyBody: '这里会先看见你正在形成的方向，再从外部找到真实可读的书、论文和不同观点。',
     /** 生成失败 */
     error: '没整理出来，再试一次',
     /** 重试按钮 */
     retry: '重新整理',
     /** 条目类型标签 */
-    typeSummary: '走向',
+    typeSummary: '你最近在意的',
     typeProbeNear: '同主题',
     typeProbeLateral: '相关方向',
     typeProbeBridge: '跨界',
     typeConfusionLink: '你标记的困惑',
-    typeWebRecommend: '外部资料',
+    typeWebRecommend: '外部发现',
     typeBiliRecommend: '同学帮你找的',
     typeEcho: '同桌沉淀',
     /** echo 卡分享按钮 */
@@ -307,7 +360,16 @@ export const COPY = {
     actionOpenExternal: '打开原文',
     actionOpenBilibili: '在 B站看',
     /** whyForYou 前缀 */
-    whyPrefix: '对你',
+    whyPrefix: '为什么与你有关',
+    differentPerspectivePrefix: '为什么值得换个角度',
+    kindWeb: '文章',
+    kindPaper: '论文',
+    kindBook: '书籍',
+    kindReport: '研究报告',
+    perspectiveDeepen: '顺着目标深入',
+    perspectiveAdjacent: '相邻视角',
+    perspectiveCounterpoint: '不同视角',
+    unknownAuthor: '作者未标注',
   },
 
   /**
@@ -392,6 +454,28 @@ export const COPY = {
     unmute: '开麦',
     mute: '静音',
     endCall: '结束通话',
+  },
+
+  mobileJourney: {
+    processingEyebrow: '正在整理',
+    processingTitleLead: '把这节课',
+    processingTitleAccent: '听懂',
+    waitingTranscript: '等待转录完成…',
+    readingTranscript: '正在读转录原文…',
+    buildingNotes: '正在生成分段笔记…',
+    processingDone: '整理完成',
+    noSpeechStatus: '没有听到可整理的内容',
+    processingEstimate: '约 1 分钟',
+    waiting: '等待中…',
+    done: '完成',
+    leaveWhileProcessing: '先回首页',
+    openNotes: '笔记整理好了，去看看 →',
+    understood: '已理解',
+    originalPreserved: '原声已保留',
+    restoringTranscript: '正在恢复这节课的转录内容…',
+    noSpeechTitle: '这段录音里没有识别到语音',
+    noSpeechBody: '可能是录音太短或声音太小。原声已保留，可以返回首页稍后再看。',
+    backHome: '返回首页',
   },
 
   /**

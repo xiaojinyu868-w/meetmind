@@ -90,8 +90,8 @@ components/
 | `CollectionComposerBar.tsx` | 168 | collection composer 输入区容器（预览 / textarea / 发送 / 听写 / 上传） |
 | `CollectionMessageActionSheet.tsx` | ~283 | 收集消息操作菜单（引用/问 Tutor/多选/复习/编辑/打开原件/归档/删除），从 page.tsx 提取 |
 | `mobile/MobileCollectionSheet.tsx` | ~400 | 收集菜单 / 历史收集 / 今日情报面板；移动端底部或侧边 sheet，桌面端以具备 dialog 语义的右侧上下文抽屉呈现；情报空态可返回收集补充上下文 |
-| `CrossCourseFeedPanel.tsx` | ~180 | 个人上下文与目标驱动的情报面板：今日整理 + 收藏内部关联 + MeetMind 服务端外部发现，对用户零配置；保留上次结果并在后台刷新，失败不清空旧内容 |
-| `FeedStream.tsx` | ~245 | 今日情报列表渲染器：分区呈现今日整理 / 收藏内部发现 / 外部发现，展示推荐理由、证据与关联目标；支持有用/不相关反馈及外链打开 |
+| `CrossCourseFeedPanel.tsx` | ~180 | 个人上下文与目标驱动的情报面板：合并“看见自己”与真实外部信息，对用户零配置；保留上次结果并在后台刷新，失败不清空旧内容 |
+| `FeedStream.tsx` | ~420 | 今日情报列表渲染器：两段式呈现“看见自己 / 向外看看”；外部卡明确文章、论文、书籍或报告，展示作者、出版时间、来源、推荐理由与不同视角；支持反馈及外链打开 |
 | `CollectionFeedMessageBubble.tsx` | ~340 | 收集 Feed 单条消息气泡（audio/video/image/document/text 五种类型），从 page.tsx 提取 |
 | `CollectionEmptyState.tsx` | ~82 | 收集为空时引导页（录音/图片/讲义快捷入口），从 page.tsx 提取 |
 | `ImageUpload.tsx` | ~220 | 图片上传 |
@@ -113,7 +113,8 @@ components/
 
 | 文件 | 行数 | 职责 |
 |------|------|------|
-| `WorkshopYellowPage.tsx` | 897 | Workshop 工具箱黄页；按需使用六类工具，不提供隐含高成本的一键批量生成 |
+| `WorkshopYellowPage.tsx` | ~910 | 六类学习动作矩阵：基于显式课堂信号突出一个“现在最适合”，首次点击后台完成，做好后进入统一学习工作区；分享入口后置 |
+| `apps/WorkshopAppCard.tsx` | ~135 | 应用卡统一层级：学习动作、适用场景、时间投入、状态与单一主操作 |
 | `windows/WorkshopWindowManager.tsx` | ~580 | 浮窗管理器 |
 | `windows/InfographicWindow.tsx` | ~700 | 信息图浮窗，类型/常量/工具已拆到 `infographic-window-data.ts` |
 | `windows/infographic-window-data.ts` | 305 | 信息图类型/场景预设/风格预设/纯工具函数 |

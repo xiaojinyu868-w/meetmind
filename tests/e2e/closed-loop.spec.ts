@@ -640,7 +640,7 @@ test.describe('Closed Loop Regression', () => {
     await expect(page.getByTestId('workshop-card-flashcards')).toBeVisible();
 
     await page.getByTestId('workshop-bg-generate-flashcards').click();
-    await expect(page.getByTestId('workshop-task-summary')).toContainText('生成中 1 项');
+    await expect(page.getByTestId('workshop-task-summary')).toContainText('正在做 1');
 
     await page.getByRole('button', { name: '时间轴' }).first().click();
     await expect(page.getByTestId('review-tab-apps')).toBeVisible();

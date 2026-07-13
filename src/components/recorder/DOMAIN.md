@@ -29,3 +29,9 @@
 `Recorder.tsx` → `recorder/`（单向依赖）
 
 `recorder-types.ts` → `stores/capture-editor-store`（仅类型重导出 `RecorderAudioSource`）
+
+## 实时 ASR 交接
+
+- Qwen 是默认实时 ASR；腾讯多人识别由 `speakerDiarization` 显式开启。
+- 录音中切换时通过 active + pending 双 client 同步发送 PCM，pending ready 后才替换 active；禁止先断旧连接再等新连接。
+- PCM ScriptProcessor 使用 2048 帧，兼顾 Qwen 延迟与腾讯约 40ms 音频粒度。

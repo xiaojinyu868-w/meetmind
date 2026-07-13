@@ -247,7 +247,7 @@ M14.6 起，结构化产物**不再走** LLM 输出 `<open_app:KEY/>` marker 的
 ```
 
 - LLM 对话保持**纯文字**：`agent/route.ts` 的 `tools = {}`，不挂 native tools，不注入 marker 合约。
-- 应用矩阵 7 类 ready 应用（`WORKSHOP_APP_CATALOG` in `app-catalog.ts`）：`flashcards / quiz / mindmap / cheatsheet / study-report / audio-overview / infographic`。
+- 应用矩阵 6 类 ready 应用（`WORKSHOP_APP_CATALOG` in `app-catalog.ts`）：`flashcards / quiz / mindmap / cheatsheet / audio-overview / infographic`。M16 起目录按学习动作组织，只突出一个基于显式课堂信号的“现在最适合”；首次生成留在矩阵后台完成，结果页不暴露模型选择，分享入口在至少完成一个产物后出现。
 - **遗留死代码（M14.6 前的 marker 链路，待清理）**：`<open_app:KEY/>` marker、`extractOpenAppMarker`、`capOpenAppContract` / `TutorInlineAppKey` 类型、`InlineAppCard` 的 marker 拦截逻辑。（`tutor-tools.ts` 及 4 个无入口 plugin `study-report` / `knowledge-cards` / `confusion-drill` / `review-plan` 已在 M14.6+ 清理删除。）
 
 ### 3.6 God File 提取策略
@@ -334,6 +334,12 @@ ASR 链路（`src/lib/services/asr/`）：
 | 文章 / 网页 | `/api/article/import` | `web-article-extract-service.ts` + `jina-reader-service.ts` | `.env.example` 配 `FIRECRAWL_API_KEY`（首选） |
 | 微信公众号 | `/api/wechat/*`（bind / callback / mp / capture/[token]） | 6 个 `wechat-*-service.ts`（auth / inbox / media / mp / voice-utils / web-session） | `WECHAT_APP_ID/SECRET` + `WECHAT_MP_TOKEN` |
 | OpenClaw Gateway | — | `openclaw/`（仓库根目录，与 MeetMind 解耦） | **deprecated**：Firecrawl 替代微信公众号反爬，OpenClaw 仅 fallback |
+
+### 3.11 今日情报：个人上下文 × 外部真实信息
+
+`/api/feed mode='cross-course'` 不是摘要生成器。它先从收藏、笔记、目标与反馈中形成“看见自己”的内部线索，再生成包含 `deepen / adjacent / counterpoint` 的检索计划。`feed-retrieval-service.ts` 分别从普通网页、Semantic Scholar 论文目录与 Open Library 图书目录取回真实候选；普通网页结果不足且已配置 `DASHSCOPE_API_KEY` 时，可用 `qwen3.7-plus` Responses API 的 `web_search` 补充。模型只允许在真实候选中排序和解释，不能生成外链。
+
+外部卡必须携带 `contentUrl`、`contentKind`、来源，并尽可能保留作者和出版时间。推荐组合优先包含至少一条论文或书籍，以及一条与当前问题相关的不同视角；检索失败时宁可少推，不得回退成虚构资料或通用搜索页。
 
 ---
 
@@ -574,7 +580,7 @@ src/
 | `src/lib/utils/tutor-agent-provider.ts` | Tutor Agent provider 解析 + fallback：按请求模型/env 选 StepFun、DeepSeek、DashScope 或 OpenAI，强制 Chat Completions；`resolveTutorAgentProviderFallbacks` 在 primary 可重试失败时切 StepFun→DeepSeek→Qwen |
 | `src/lib/utils/ai-model-preference.ts` | 设置页模型偏好的 key 与 `auto` 解析契约 |
 | `src/lib/ui/copy.ts` | 用户面文案唯一真相源（COPY 对象 + bannedWords 校验） |
-| `src/lib/ai-native/app-catalog.ts` | Workshop 应用矩阵（7 类 ready），`WORKSHOP_APP_CATALOG` + `WorkshopAppKey` |
+| `src/lib/ai-native/app-catalog.ts` | Workshop 应用矩阵（6 类 ready），`WORKSHOP_APP_CATALOG` + `WorkshopAppKey`；每项含 learningAction / bestFor / timeLabel |
 | `src/app/api/video/import/route.ts` | 多平台导入管线（已拆 3 子模块） |
 | `src/lib/services/commonstack-echo-service.ts` | Echo LLM 调用，System Prompt 在此 |
 | `src/lib/services/workspace-echo-service.ts` | Echo 数据管线；CommonStack 新 schema 不返回 title，需从 takeaway / echo 生成标题后再进质量门 |

@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState, useCallback } from 'react';
+import { useEffect, useMemo, useRef, useState, useCallback } from 'react';
 import { useFeedStream } from '@/hooks/data/useFeedStream';
 import { useAuth } from '@/lib/hooks/useAuth';
 import { useWorkspaceId, useWorkspaceCaptures, useWorkspaceEchoes } from '@/stores/echo-store';
@@ -9,11 +9,13 @@ import type { Note as DbNote } from '@/lib/db/schema';
 import { FeedStream } from '@/components/FeedStream';
 import { COPY } from '@/lib/ui/copy';
 import type { FeedItem } from '@/types';
-import type { WorkspaceEchoMessage } from '@/types/page-types';
+import type { SourceIngestItem, WorkspaceCaptureMessage, WorkspaceEchoMessage } from '@/types/page-types';
 import type { EchoData } from '@/components/EchoCard';
 import { Plus, RefreshCw } from 'lucide-react';
 
 interface CrossCourseFeedPanelProps {
+  /** 服务端同步完成前也要使用的本地收集上下文。 */
+  localCaptures?: SourceIngestItem[];
   /** 打开某条收集内容 */
   onOpenCapture?: (captureId: string) => void;
   /** 让同学解释 */
@@ -40,6 +42,7 @@ interface CrossCourseFeedPanelProps {
  * 落位：侧栏「收集 → 今日情报」右侧抽屉。
  */
 export function CrossCourseFeedPanel({
+  localCaptures = [],
   onOpenCapture,
   onAskTutor,
   onAddContext,
@@ -53,6 +56,33 @@ export function CrossCourseFeedPanel({
   const captures = useWorkspaceCaptures();
   const echoes = useWorkspaceEchoes();
   const { user, accessToken } = useAuth();
+
+  const effectiveCaptures = useMemo<WorkspaceCaptureMessage[]>(() => {
+    const serverIds = new Set(captures.map((capture) => capture.id));
+    const localOnly = localCaptures
+      .filter((capture) => !serverIds.has(capture.id))
+      .filter((capture) => capture.status !== 'failed')
+      // 标题不是学习内容；录音转写完成前不能拿“11:48 的课”之类占位标题生成情报。
+      .filter((capture) => Boolean(capture.fullText?.trim() || capture.preview?.trim()))
+      .map((capture) => ({
+        id: capture.id,
+        sourceKey: capture.sourceKey ?? `local:${capture.id}`,
+        sourceType: capture.type,
+        role: capture.role,
+        contentType: capture.type,
+        title: capture.title,
+        previewText: capture.preview ?? '',
+        normalizedText: capture.fullText ?? capture.preview ?? capture.title,
+        sourceUrl: capture.provenance?.originalUrl ?? null,
+        mediaUrl: capture.mediaUrl ?? null,
+        tutorContext: null,
+        occurredAt: capture.addedAt,
+        createdAt: capture.addedAt,
+        metadata: capture.provenance ? { provenance: capture.provenance } : null,
+      }));
+    return [...captures, ...localOnly];
+  }, [captures, localCaptures]);
+  const effectiveWorkspaceId = workspaceId ?? `local:${user?.id ?? 'guest'}`;
 
   const [notes, setNotes] = useState<DbNote[]>([]);
   const notesLoadedRef = useRef(false);
@@ -77,21 +107,21 @@ export function CrossCourseFeedPanel({
     error,
     generate,
   } = useFeedStream({
-    workspaceId: workspaceId ?? '',
-    captures,
+    workspaceId: effectiveWorkspaceId,
+    captures: effectiveCaptures,
     learnerProfile,
     notes: notes.map((n) => ({ text: n.text, source: n.source })),
     accessToken,
   });
 
-  const generationKey = `${workspaceId ?? ''}:${captures.map((capture) => `${capture.id}:${capture.occurredAt ?? capture.createdAt}`).join('|')}`;
+  const generationKey = `${effectiveWorkspaceId}:${effectiveCaptures.map((capture) => `${capture.id}:${capture.occurredAt ?? capture.createdAt}`).join('|')}`;
   const lastAutoGenerationKeyRef = useRef('');
   useEffect(() => {
-    if (!cacheReady || captures.length === 0 || !workspaceId || isLoading) return;
+    if (!cacheReady || effectiveCaptures.length === 0 || isLoading) return;
     if (lastAutoGenerationKeyRef.current === generationKey) return;
     lastAutoGenerationKeyRef.current = generationKey;
     if (llmItems.length === 0 || isStale) void generate();
-  }, [cacheReady, captures.length, workspaceId, isLoading, generationKey, llmItems.length, isStale, generate]);
+  }, [cacheReady, effectiveCaptures.length, isLoading, generationKey, llmItems.length, isStale, generate]);
 
   const echoItems: FeedItem[] = echoes.slice(0, 2).map((echo) => ({
     type: 'echo',
@@ -121,7 +151,7 @@ export function CrossCourseFeedPanel({
   }, [echoes, onShareEcho]);
 
   const showEmptyFeed = !isLoading && !error && llmItems.length === 0 && echoItems.length === 0;
-  const canGenerate = captures.length > 0 && !!workspaceId;
+  const canGenerate = effectiveCaptures.length > 0;
 
   return (
     <div className="flex h-full flex-col">
@@ -130,7 +160,7 @@ export function CrossCourseFeedPanel({
           <div className="min-w-0">
             <p className="text-[11px] text-ink-muted">
               {COPY.feed.contextBasis(
-                captures.length,
+                effectiveCaptures.length,
                 learnerProfile?.goals?.filter((goal) => !goal.status || goal.status === 'active').length ?? 0,
               )}
             </p>

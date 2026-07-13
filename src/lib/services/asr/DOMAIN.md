@@ -21,6 +21,7 @@
 - **长音频分片缝合**（600s 分片 + 2s overlap + LCS 缝合 `stitchSegmentsWithOverlap` / `findOverlapLength`）在 `server/` 与 `src/lib/longcut/`。
 - **Contextual biasing**（`buildASRContextHint` 注入 courseTitle / subject / participants / 词汇等 6 字段）在 `src/lib/services/` 相关 service。
 - **WebSocket 稳定性**（`reconnecting-websocket` + `p-retry` Full Jitter 退避 + audioQueue 跨重连保留）在消费端 hook。
+- `DashScopeASRClient` 对待发送 PCM 强制 FIFO，且为远端 segment/item ID 添加连接命名空间，防止 Qwen/腾讯切换或重连时发生 ID 碰撞。
 - **热词聚合**（`AsrCorrection` 表 + `onRecordingStop` 触发 `/api/asr/corrections/aggregate`）走 Prisma + `/api/asr-config/`。
 
 ## 修改注意

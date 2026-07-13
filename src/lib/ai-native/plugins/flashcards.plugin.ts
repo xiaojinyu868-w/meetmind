@@ -53,13 +53,20 @@ function pickEvidenceSegments(transcript: TranscriptSegment[], count: number): T
   return picked;
 }
 
-function toTimestamp(value: unknown, fallback: number): number {
-  if (typeof value === 'number' && Number.isFinite(value)) return Math.max(0, Math.floor(value));
+function toTimestamp(value: unknown, fallback: number, timelineEndMs = 0): number {
+  const normalizeNumber = (raw: number): number => {
+    const valueMs = Math.max(0, Math.floor(raw));
+    // 模型偶尔把 startMs/endMs 返回为“秒”。当数字落在整节课秒数范围内时转回毫秒。
+    const timelineEndSec = Math.ceil(timelineEndMs / 1000);
+    if (timelineEndMs >= 1000 && valueMs > 0 && valueMs <= timelineEndSec + 2) return valueMs * 1000;
+    return valueMs;
+  };
+  if (typeof value === 'number' && Number.isFinite(value)) return normalizeNumber(value);
   if (typeof value === 'string') {
     const trimmed = value.trim();
     if (/^\d+(\.\d+)?$/.test(trimmed)) {
       const parsed = Number(trimmed);
-      if (Number.isFinite(parsed)) return Math.max(0, Math.floor(parsed));
+      if (Number.isFinite(parsed)) return normalizeNumber(parsed);
     }
 
     const match = trimmed.match(/^(\d{1,2}):(\d{2})(?::(\d{2}))?$/);
@@ -73,6 +80,57 @@ function toTimestamp(value: unknown, fallback: number): number {
     }
   }
   return fallback;
+}
+
+function textBigrams(value: string): Set<string> {
+  const normalized = cleanText(value).toLowerCase().replace(/[^\p{L}\p{N}]+/gu, '');
+  const output = new Set<string>();
+  for (let index = 0; index < normalized.length - 1; index += 1) {
+    output.add(normalized.slice(index, index + 2));
+  }
+  return output;
+}
+
+function evidenceSimilarity(segment: TranscriptSegment, draft: FlashcardDraft): number {
+  const evidence = textBigrams(segment.text || '');
+  const card = textBigrams(`${draft.question ?? ''} ${draft.answer ?? ''}`);
+  let overlap = 0;
+  for (const token of evidence) if (card.has(token)) overlap += 1;
+  return overlap;
+}
+
+/**
+ * 把闪卡重新落回真实原文。模型时间戳只能是候选，不能直接成为证据：
+ * 先用题面+答案与原文做语义近似匹配，再用合法时间范围兜底。
+ */
+export function resolveFlashcardEvidenceSegment(
+  draft: FlashcardDraft,
+  segments: TranscriptSegment[],
+  fallbackIndex = 0,
+): TranscriptSegment | undefined {
+  if (segments.length === 0) return undefined;
+
+  let best = segments[0];
+  let bestScore = -1;
+  for (const segment of segments) {
+    const score = evidenceSimilarity(segment, draft);
+    if (score > bestScore) {
+      best = segment;
+      bestScore = score;
+    }
+  }
+  if (bestScore >= 2) return best;
+
+  const timelineEndMs = Math.max(...segments.map((segment) => segment.endMs ?? segment.startMs ?? 0));
+  const candidateStartMs = toTimestamp(draft.startMs, -1, timelineEndMs);
+  if (candidateStartMs >= 0) {
+    const timestampMatch = segments.find((segment) => (
+      candidateStartMs >= (segment.startMs ?? 0) && candidateStartMs <= (segment.endMs ?? segment.startMs ?? 0)
+    ));
+    if (timestampMatch) return timestampMatch;
+  }
+
+  return segments[fallbackIndex % segments.length];
 }
 
 function fallbackDraft(segment: TranscriptSegment, tools: AppPluginTools): FlashcardDraft {
@@ -118,6 +176,14 @@ ${transcriptContext}
   ]
 }
 
+质量合同：
+- 共 8 张左右；以核心概念为主，保留 1-2 张需要比较、推理或迁移到新情境的卡
+- 一张卡只检验一个认知动作；题面脱离原文也能读懂，不问“老师讲了什么”“这段主要说什么”
+- answer 用 1-3 句话给出可核对的最小完整答案，不把整段转录搬过来
+- hint 只能给思考方向，不能直接泄露答案关键词
+- 困惑点优先覆盖，但没有课堂证据的内容宁可不出
+- startMs/endMs 必须指向真正支持答案的原文位置，不能按卡片顺序平均分配
+
 只输出 JSON，不解释。${buildTerminologyHintBlock(context.memory.terminologyHint)}`,
       },
     ],
@@ -130,13 +196,14 @@ ${transcriptContext}
 
 function buildCards(
   tools: AppPluginTools,
-  segments: TranscriptSegment[],
+  fallbackSegments: TranscriptSegment[],
+  evidenceSegments: TranscriptSegment[],
   llmOutput: FlashcardLLMOutput | null
 ): AppExecutionResult['cards'] {
   const cards: AppExecutionResult['cards'] = [];
   const overview =
     cleanText(llmOutput?.overview?.trim() || '') ||
-    cleanText(tools.summarizeSegments(segments.slice(0, 2), 180) || '') ||
+    cleanText(tools.summarizeSegments(fallbackSegments.slice(0, 2), 180) || '') ||
     '先做主动回忆，再看答案与证据。';
 
   cards.push({
@@ -150,20 +217,21 @@ function buildCards(
   const draftCards =
     Array.isArray(llmOutput?.cards) && llmOutput.cards.length > 0
       ? llmOutput.cards.slice(0, TARGET_CARD_COUNT)
-      : segments.map((segment) => fallbackDraft(segment, tools));
+      : fallbackSegments.map((segment) => fallbackDraft(segment, tools));
 
   draftCards.forEach((draftCard, index) => {
-    const segment =
-      segments[index % Math.max(1, segments.length)] ||
+    const fallbackSegment =
+      fallbackSegments[index % Math.max(1, fallbackSegments.length)] ||
       ({
         id: `virtual-${index + 1}`,
-        text: tools.summarizeSegments(segments, 120) || '请根据课堂内容完成复述。',
+        text: tools.summarizeSegments(evidenceSegments, 120) || '请根据课堂内容完成复述。',
         startMs: 0,
         endMs: 8000,
         confidence: 1,
       } as TranscriptSegment);
+    const segment = resolveFlashcardEvidenceSegment(draftCard, evidenceSegments, index) ?? fallbackSegment;
     const taskId = `flashcard-task-${index + 1}`;
-    const base = fallbackDraft(segment, tools);
+    const base = fallbackDraft(fallbackSegment, tools);
     const front = cleanText(draftCard?.question?.trim() || '');
     const back = cleanText(draftCard?.answer?.trim() || '');
     const useFallback = !front || !back || isFillerOnly(front) || isFillerOnly(back);
@@ -172,10 +240,9 @@ function buildCards(
     const finalBack = useFallback ? cleanText(base.answer || '') : back;
     const finalHint = cleanText(draftCard?.hint?.trim() || '') || cleanText(base.hint || '');
 
-    const fallbackStart = segment.startMs ?? 0;
-    const fallbackEnd = segment.endMs ?? fallbackStart + 8000;
-    const startMs = toTimestamp(draftCard?.startMs, fallbackStart);
-    const endMs = toTimestamp(draftCard?.endMs, fallbackEnd);
+    // 引用范围以匹配到的真实 segment 为准。模型给出的时间只用于定位候选，不能覆盖证据。
+    const startMs = segment.startMs ?? 0;
+    const endMs = segment.endMs ?? startMs + 8000;
 
     cards.push({
       id: `flashcard-card-${index + 1}`,
@@ -253,7 +320,7 @@ export const flashcardsPlugin: AppPlugin = {
     const promptContext = buildPromptTranscriptContext(context.input.transcript, {
       maxChars: 8_000,
       includeIndex: true,
-      includeTimestamp: false,
+      includeTimestamp: true,
       minCharsPerSegment: 48,
     });
     const anchorContext = buildPromptAnchorContext(context.input.anchors, 12);
@@ -270,7 +337,7 @@ export const flashcardsPlugin: AppPlugin = {
       llmOutput = null;
     }
 
-    const cards = buildCards(tools, evidenceSegments, llmOutput);
+    const cards = buildCards(tools, evidenceSegments, context.input.transcript, llmOutput);
     const deckCards = cards.filter((card) => card.meta?.cardKind === 'flashcard');
 
     return {

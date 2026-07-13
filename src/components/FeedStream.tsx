@@ -5,7 +5,7 @@ import { Check, ThumbsDown, ThumbsUp } from 'lucide-react';
 import { COPY } from '@/lib/ui/copy';
 import { recordFeedPreference } from '@/lib/feed-preferences';
 import { readStoredAccessToken } from '@/lib/hooks/useAuth';
-import type { FeedItem, FeedItemType } from '@/types';
+import type { FeedContentKind, FeedItem, FeedItemType, FeedPerspective } from '@/types';
 
 // ─── 类型标签映射 ────────────────────────────────────────────
 
@@ -96,13 +96,11 @@ export function FeedStream({ items, isLoading, error, onAction, onRetry, onShare
     );
   }
 
-  const briefItems = items.filter((item) => item.type === 'summary' || item.type === 'echo');
   const externalItems = items.filter((item) => item.type === 'web-recommend' || item.type === 'bili-recommend');
-  const internalItems = items.filter((item) => !briefItems.includes(item) && !externalItems.includes(item));
+  const internalItems = items.filter((item) => !externalItems.includes(item));
 
   return (
     <div className="space-y-7 pb-4">
-      <FeedSection title={COPY.feed.todayBrief} items={briefItems} onAction={onAction} onShareEcho={onShareEcho} />
       <FeedSection
         title={COPY.feed.internalDiscoveries}
         hint={COPY.feed.internalDiscoveriesHint}
@@ -198,13 +196,22 @@ function FeedCard({ item, onAction, onShareEcho }: FeedCardProps) {
   // 外部资料卡：MeetMind 服务端自动检索，不要求用户安装插件。
   if (item.type === 'web-recommend' || item.type === 'bili-recommend') {
     const url = item.contentUrl || (item.bvid ? `https://www.bilibili.com/video/${item.bvid}` : '');
+    const sourceMeta = [
+      item.authors?.slice(0, 2).join('、'),
+      item.publishedAt,
+      item.upName,
+    ].filter(Boolean).join(' · ');
     return (
       <div className="rounded-xl border border-divider bg-card p-3 transition-colors hover:border-pine/30">
         <a
           href={url || undefined}
           target="_blank"
           rel="noopener noreferrer"
-          onClick={(e) => { if (!url) e.preventDefault(); onAction?.({ ...item, actionType: item.type === 'web-recommend' ? 'open-external' : 'open-bilibili' }); }}
+          onClick={(event) => {
+            if (url) return;
+            event.preventDefault();
+            onAction?.({ ...item, actionType: item.type === 'web-recommend' ? 'open-external' : 'open-bilibili' });
+          }}
           className="flex gap-3"
         >
           {item.coverUrl && (
@@ -218,8 +225,18 @@ function FeedCard({ item, onAction, onShareEcho }: FeedCardProps) {
             />
           )}
           <div className="min-w-0 flex-1">
+            <div className="mb-1.5 flex flex-wrap items-center gap-1.5">
+              <span className="rounded-md bg-pine-fog px-1.5 py-0.5 text-[10px] font-medium text-pine-deep">
+                {getContentKindLabel(item.contentKind)}
+              </span>
+              {item.perspective ? (
+                <span className={`rounded-md px-1.5 py-0.5 text-[10px] font-medium ${item.perspective === 'counterpoint' ? 'bg-vermilion-mist text-vermilion' : 'bg-paper text-ink-muted'}`}>
+                  {getPerspectiveLabel(item.perspective)}
+                </span>
+              ) : null}
+            </div>
             <p className="line-clamp-2 text-[13px] font-medium leading-snug text-ink">{item.title}</p>
-            {item.upName && <p className="mt-0.5 text-[11px] text-ink-muted">{item.upName}</p>}
+            {sourceMeta && <p className="mt-1 line-clamp-1 text-[10.5px] text-ink-muted">{sourceMeta}</p>}
             {item.topicLabel && (
               <span className="mt-1 inline-block rounded-md bg-pine-fog px-1.5 py-0.5 text-[10px] font-medium text-pine-deep">
                 {item.topicLabel}
@@ -230,7 +247,9 @@ function FeedCard({ item, onAction, onShareEcho }: FeedCardProps) {
         {item.body && <p className="mt-2 line-clamp-3 text-[11px] leading-relaxed text-ink-secondary">{item.body}</p>}
         {item.whyForYou && (
           <div className="mt-2.5 rounded-lg bg-vermilion-mist/40 px-2.5 py-2">
-            <p className="text-[10px] font-medium text-vermilion">{COPY.feed.whyPrefix}</p>
+            <p className="text-[10px] font-medium text-vermilion">
+              {item.perspective === 'counterpoint' ? COPY.feed.differentPerspectivePrefix : COPY.feed.whyPrefix}
+            </p>
             <p className="mt-0.5 text-[11px] leading-relaxed text-ink-secondary">{item.whyForYou}</p>
             {(item.sourceCaptureIds?.length || item.goalLabel) ? (
               <p className="mt-1 text-[10px] text-ink-muted">
@@ -357,6 +376,19 @@ function FeedCard({ item, onAction, onShareEcho }: FeedCardProps) {
       <FeedFeedback feedback={feedback} onFeedback={submitFeedback} />
     </div>
   );
+}
+
+function getContentKindLabel(kind: FeedContentKind | undefined): string {
+  if (kind === 'paper') return COPY.feed.kindPaper;
+  if (kind === 'book') return COPY.feed.kindBook;
+  if (kind === 'report') return COPY.feed.kindReport;
+  return COPY.feed.kindWeb;
+}
+
+function getPerspectiveLabel(perspective: FeedPerspective): string {
+  if (perspective === 'deepen') return COPY.feed.perspectiveDeepen;
+  if (perspective === 'counterpoint') return COPY.feed.perspectiveCounterpoint;
+  return COPY.feed.perspectiveAdjacent;
 }
 
 function FeedFeedback({

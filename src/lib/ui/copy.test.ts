@@ -9,6 +9,13 @@ describe('COPY catalogue', () => {
     expect(COPY.cta.record).toBeTruthy();
   });
 
+  it('品牌主心智表达学习理解，而不是把收集功能当成产品定位', () => {
+    expect(COPY.identity.tagline).toContain('学');
+    expect(COPY.identity.tagline).toContain('AI 同学');
+    expect(COPY.identity.tagline).not.toContain('收下');
+    expect(COPY.login.subtitle).not.toContain('收下');
+  });
+
   it('banned 词列表本身不出现在任何用户可见字符串里——防止退化', () => {
     // 递归扫所有 string 值，出现 banned 词就失败。这是 M8 agent-native 的
     // 口吻护栏：只要文案调整时不小心加了"回声卡 / 预知气泡 / 工坊 / 研判 / 引擎"

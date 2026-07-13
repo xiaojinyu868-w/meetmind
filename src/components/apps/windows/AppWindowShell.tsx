@@ -2,28 +2,15 @@
 
 import Link from 'next/link';
 import { useMemo, type ReactNode } from 'react';
-import { ModelSelector } from '@/components/ModelSelector';
 import { getAppWindowShellTone } from './app-window-shell-tone';
-import type { DataSourceType } from '@/lib/ai-native/types';
 import type { WorkshopAppCatalogItem } from '@/lib/ai-native/app-catalog';
 import type { AppTaskState } from '@/components/apps/hooks/useAppExecution';
-
-function formatDataSource(dataSource: DataSourceType): string {
-  if (dataSource === 'live') return '实时录音';
-  if (dataSource === 'video') return '视频导入';
-  if (dataSource === 'demo') return '演示数据';
-  return '课堂数据';
-}
+import { COPY } from '@/lib/ui/copy';
 
 interface AppWindowShellProps {
   app: WorkshopAppCatalogItem;
-  sessionId: string;
-  dataSource: DataSourceType;
-  model: string;
-  onModelChange: (modelId: string) => void;
   taskState: AppTaskState;
   onRegenerate: () => void;
-  primaryActionLabel?: string;
   showPrimaryAction?: boolean;
   children: ReactNode;
 }
@@ -52,10 +39,10 @@ function StatusIndicator({
   //  - error → vermilion（朱批提醒，不是红色尖叫）
   //  - idle → ink-muted
   const config: Record<AppTaskState['status'], { dot: string; label: string; pulse: boolean }> = {
-    running: { dot: '#2D4F3E', label: '在做', pulse: true },
-    success: { dot: '#2D4F3E', label: '做好了', pulse: false },
-    error: { dot: '#B5483C', label: '没做好', pulse: false },
-    idle: { dot: '#8E8B82', label: '待开始', pulse: false },
+    running: { dot: '#2D4F3E', label: COPY.apps.matrix.running, pulse: true },
+    success: { dot: '#2D4F3E', label: COPY.apps.matrix.ready, pulse: false },
+    error: { dot: '#B5483C', label: COPY.apps.matrix.failed, pulse: false },
+    idle: { dot: '#8E8B82', label: COPY.apps.matrix.waiting, pulse: false },
   };
   const { dot, label, pulse } = config[status];
   const textColor = immersive ? 'text-white/55' : 'text-ink-muted';
@@ -85,12 +72,8 @@ function StatusIndicator({
 export function AppWindowShell(props: AppWindowShellProps) {
   const {
     app,
-    dataSource,
-    model,
-    onModelChange,
     taskState,
     onRegenerate,
-    primaryActionLabel,
     showPrimaryAction = true,
     children,
   } = props;
@@ -119,24 +102,18 @@ export function AppWindowShell(props: AppWindowShellProps) {
       className={`${effectiveTone.root} print:!min-h-0 print:!bg-white`}
       data-testid="app-window-shell"
     >
-      {/* 打印态：header 整条隐藏（返回按钮 / 标题 / ModelSelector / 重新生成按钮 都不上打印纸） */}
+      {/* 打印态：header 整条隐藏（返回 / 标题 / 状态 / 重做都不上打印纸） */}
       <header className={`${effectiveTone.header} print:hidden`}>
         <div className={effectiveTone.headerInner}>
           <Link href="/app?workspace=apps" className={effectiveTone.backLink}>
             <span>←</span>
-            <span>返回应用</span>
+            <span>{COPY.apps.matrix.backToMatrix}</span>
           </Link>
           <div className="min-w-0 flex-1">
             <p className={effectiveTone.title}>{app.name}</p>
-            <p className={effectiveTone.subtitle}>{formatDataSource(dataSource)}</p>
+            <p className={effectiveTone.subtitle}>{COPY.apps.matrix.workspaceSubtitle(app.learningAction, app.bestFor)}</p>
           </div>
           <StatusIndicator status={taskState.status} immersive={immersiveActive} />
-          <ModelSelector
-            value={model}
-            onChange={onModelChange}
-            compact
-            allowedProviders={['deepseek', 'qwen', 'volcengine']}
-          />
           {/* loading 时整条主操作按钮隐藏：避免视觉重量 + 用户也点不动；
               做完之后再出现「再做一版」是更自然的节奏 */}
           {showPrimaryAction && !isRunning ? (
@@ -146,7 +123,7 @@ export function AppWindowShell(props: AppWindowShellProps) {
               className={effectiveTone.actionButton}
               onClick={onRegenerate}
             >
-              {primaryActionLabel || '再做一版'}
+              {COPY.apps.matrix.remake}
             </button>
           ) : null}
         </div>

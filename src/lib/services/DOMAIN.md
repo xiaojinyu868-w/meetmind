@@ -20,7 +20,7 @@ api/route.ts → services → lib/utils, lib/db, lib/config
 | 文件 | 行数 | 职责 |
 |------|------|------|
 | `qwen-asr-service.ts` | 709 | 通义千问 ASR（同步短音频 + 异步长音频） |
-| `dashscope-asr-service.ts` | 614 | DashScope WebSocket 实时 ASR 客户端（ws/wss 地址修正、心跳保活、长录制重连） |
+| `dashscope-asr-service.ts` | ~660 | Qwen/腾讯兼容的实时 ASR 客户端（FIFO 音频缓冲、连接 ID 命名空间、心跳保活、长录制重连） |
 | `asr/ws-url.ts` | 13 | ASR WebSocket 候选地址构建（http→ws、https→wss、8443 fallback） |
 | `transcript-enhancer.ts` | 473 | 转录文本增强（规则→词库→LLM 分层纠错） |
 | `media-tooling.ts` | 244 | ffmpeg/ffprobe 调用、转码、公网 URL 解析 |
@@ -49,6 +49,7 @@ api/route.ts → services → lib/utils, lib/db, lib/config
 | `qwen-image-service.ts` | 146 | 通义千问图像生成 |
 | `volc-podcast.ts` | 582 | 火山引擎播客 TTS（WebSocket 双向流式） |
 | `web-search-service.ts` | 381 | 服务端联网搜索（Bing/SerpAPI/DuckDuckGo HTML + Instant Answer fallback）；`webSearchExact` 为今日情报返回真实结果，不要求用户安装插件 |
+| `feed-retrieval-service.ts` | ~245 | 今日情报外部检索层：网页搜索 + Semantic Scholar 论文 + Open Library 图书；网页候选不足时复用 `DASHSCOPE_API_KEY` 调 Qwen Responses `web_search`，只返回带真实 URL 的候选 |
 
 ### 📦 Workspace 数据管线
 
@@ -61,7 +62,7 @@ api/route.ts → services → lib/utils, lib/db, lib/config
 | `workspace-echo-service.ts` | ~1300 | 每日回响生成（AI 洞察/金句/推荐）；CommonStack 新 schema 不返回 title，需从 takeaway / echo 生成标题后再进质量门 |
 | `workspace-search-service.ts` | 175 | 全局 AI 检索（流式带引用） |
 | `commonstack-echo-service.ts` | 273 | Echo LLM 调用（System Prompt 在此） |
-| `feed-service.ts` | ~500 | 今日情报生成：读取来源平台与正文完整度，禁止从 link-only/失败内容推断原文观点；外部候选再经来源质量底线和 LLM 编辑筛选 |
+| `feed-service.ts` | ~690 | 今日情报编排与排序：内部线索来自收藏/目标；外部检索计划覆盖深入、相邻与不同视角，模型只在真实网页/论文/书籍候选中筛选，禁止编造外链 |
 | `feed-preference-service.ts` | ~120 | 今日情报长期偏好：从账号 Feedback 读取有用/不相关记录，并与当前设备即时反馈合并；同一内容以设备最新判断优先 |
 
 ### 👤 用户 / 认证

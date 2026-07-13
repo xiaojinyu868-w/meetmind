@@ -38,6 +38,8 @@ const PUBLIC_ROUTES = [
   '/api/sources/ingest-image',
   '/api/generate-topics',
   '/api/generate-summary',
+  // 游客可先记录本地内容并体验今日情报；route 内仍按 IP 执行生成限流。
+  '/api/feed',
   '/api/apps/plugins',
   '/api/apps/catalog',
   '/api/apps/execute',

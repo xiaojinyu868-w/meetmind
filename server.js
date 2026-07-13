@@ -352,6 +352,7 @@ app.prepare().then(() => {
     let stopRequested = false;
     let sentenceIndex = 0;
     let lastFinalSegment = null;
+    const finalizedTencentSentenceIds = new Set();
     const dedupSimilarity = clampNumber(
       parseFloat(process.env.ASR_DEDUP_SIMILARITY || '0.95'),
       0.7, 1, 0.95
@@ -362,6 +363,7 @@ app.prepare().then(() => {
     );
     const audioQueue = [];
     const AUDIO_QUEUE_MAX_SIZE = 500;
+    let isFlushingAudioQueue = false;
     let voiceId = '';
 
     // 从客户端接收 context-hint（热词）
@@ -373,29 +375,50 @@ app.prepare().then(() => {
     }
 
     function flushAudioQueue() {
+      if (isFlushingAudioQueue) return;
       if (audioQueue.length === 0) return;
+      isFlushingAudioQueue = true;
+      flushNextAudioBatch();
+    }
+
+    function flushNextAudioBatch() {
+      if (!isFlushingAudioQueue) return;
+      if (!tencentWs || tencentWs.readyState !== WebSocket.OPEN) {
+        isFlushingAudioQueue = false;
+        return;
+      }
       const batchSize = Math.min(60, audioQueue.length);
       for (let i = 0; i < batchSize; i++) {
         const data = audioQueue.shift();
-        if (data && tencentWs && tencentWs.readyState === WebSocket.OPEN) {
-          tencentWs.send(data);
-        }
+        if (data) tencentWs.send(data);
       }
-      if (audioQueue.length > 0) {
-        setTimeout(flushAudioQueue, 100);
+      if (audioQueue.length === 0) {
+        isFlushingAudioQueue = false;
+        return;
       }
+      setTimeout(flushNextAudioBatch, 100);
     }
 
     // 接收客户端文本消息（context-hint / stop）
     clientWs.on('message', (data, isBinary) => {
       if (isBinary) {
         // 二进制音频数据
-        if (isReady && tencentWs && tencentWs.readyState === WebSocket.OPEN) {
+        if (
+          isReady
+          && !isFlushingAudioQueue
+          && audioQueue.length === 0
+          && tencentWs
+          && tencentWs.readyState === WebSocket.OPEN
+        ) {
           tencentWs.send(data);
         } else {
           if (audioQueue.length < AUDIO_QUEUE_MAX_SIZE) {
             audioQueue.push(data);
+          } else if (audioQueue.length === AUDIO_QUEUE_MAX_SIZE) {
+            console.warn('[Speaker-ASR-Proxy] audioQueue reached max size, dropping new chunks until ready');
+            audioQueue.push(null);
           }
+          if (isReady) flushAudioQueue();
         }
         return;
       }
@@ -470,81 +493,86 @@ app.prepare().then(() => {
                   return;
                 }
 
-                // sentence_list 是数组，取第一条（实时流每次返回当前句子的最新状态）
+                // 官方协议明确要求遍历 sentence_list；一次回调可能携带多条句子。
+                // final 结果按腾讯 sentence_id 去重，interim 则允许同一 id 持续修订。
                 const sentenceList = sentencesObj.sentence_list;
                 if (!Array.isArray(sentenceList) || sentenceList.length === 0) return;
-                const sentence = sentenceList[0];
+                for (const sentence of sentenceList) {
 
-                // sentence_type: 0=不确定, 1=确定(稳态)
-                // speaker_id: -1=未识别, 0-9=具体说话人
-                const isFinal = sentence.sentence_type === 1;
-                const rawSpeakerId = sentence.speaker_id;
-                if (isFinal) {
-                  console.log(`[Speaker-ASR-Proxy] Final: "${(sentence.sentence||'').substring(0,40)}" speaker_id=${rawSpeakerId} type=${sentence.sentence_type}`);
-                }
-                const speakerId =
-                  typeof rawSpeakerId === 'number' && rawSpeakerId >= 0 && rawSpeakerId <= 9
-                    ? String(rawSpeakerId)
-                    : undefined;
-                const text = sentence.sentence || '';
-                if (!text) return;
-
-                // 腾讯云返回的时间戳单位是毫秒（自流开始计），保持毫秒透传给前端
-                const beginTime = Number(sentence.start_time) || 0;
-                const endTime = Number(sentence.end_time) || 0;
-                const itemId = String(sentence.sentence_id ?? sentenceIndex);
-
-                if (isFinal) {
-                  // 幻觉过滤——跟 DashScope 代理一致
-                  const durationMs = Math.max(0, endTime - beginTime);
-                  if (isLikelyHallucination(text, durationMs)) {
-                    console.log(`[Speaker-ASR-Proxy] Dropped hallucination: "${text.substring(0, 40)}" (duration=${durationMs}ms)`);
-                    return;
+                  // sentence_type: 0=不确定, 1=确定(稳态)
+                  // speaker_id: -1=未识别, 0-9=具体说话人
+                  const isFinal = sentence.sentence_type === 1;
+                  const rawSpeakerId = sentence.speaker_id;
+                  if (isFinal) {
+                    console.log(`[Speaker-ASR-Proxy] Final: "${(sentence.sentence||'').substring(0,40)}" speaker_id=${rawSpeakerId} type=${sentence.sentence_type}`);
                   }
+                  const speakerId =
+                    typeof rawSpeakerId === 'number' && rawSpeakerId >= 0 && rawSpeakerId <= 9
+                      ? String(rawSpeakerId)
+                      : undefined;
+                  const text = sentence.sentence || '';
+                  if (!text) continue;
 
-                  // 长文本切分——跟 DashScope 代理一致
-                  const splitSegments = splitLongTranscript(text, beginTime, endTime);
-                  for (const seg of splitSegments) {
-                    // 去重——跟 DashScope 代理一致
-                    let replaces;
-                    const nextFinal = {
-                      id: `seg-${sentenceIndex}`,
-                      text: seg.text,
-                      beginTime: seg.beginTime,
-                      endTime: seg.endTime,
-                    };
-                    if (lastFinalSegment && shouldDedupSegment(lastFinalSegment, nextFinal, dedupSimilarity, dedupGapMs)) {
-                      replaces = [lastFinalSegment.id];
+                  // 腾讯云返回的时间戳单位是毫秒（自流开始计），保持毫秒透传给前端
+                  const beginTime = Number(sentence.start_time) || 0;
+                  const endTime = Number(sentence.end_time) || 0;
+                  const itemId = String(sentence.sentence_id ?? sentenceIndex);
+
+                  if (isFinal) {
+                    const finalKey = String(sentence.sentence_id ?? `${beginTime}:${endTime}:${text}`);
+                    if (finalizedTencentSentenceIds.has(finalKey)) continue;
+                    finalizedTencentSentenceIds.add(finalKey);
+                    // 幻觉过滤——跟 DashScope 代理一致
+                    const durationMs = Math.max(0, endTime - beginTime);
+                    if (isLikelyHallucination(text, durationMs)) {
+                      console.log(`[Speaker-ASR-Proxy] Dropped hallucination: "${text.substring(0, 40)}" (duration=${durationMs}ms)`);
+                      continue;
                     }
 
-                    sendClientEvent({
-                      event: 'result',
-                      provisional: false,
-                      replaces,
-                      sentence: {
-                        id: `seg-${sentenceIndex++}`,
+                    // 长文本切分——跟 DashScope 代理一致
+                    const splitSegments = splitLongTranscript(text, beginTime, endTime);
+                    for (const seg of splitSegments) {
+                      // 去重——跟 DashScope 代理一致
+                      let replaces;
+                      const nextFinal = {
+                        id: `seg-${sentenceIndex}`,
                         text: seg.text,
                         beginTime: seg.beginTime,
                         endTime: seg.endTime,
-                        isFinal: true,
-                        confidence: 0.95,
-                        itemId,
-                      },
+                      };
+                      if (lastFinalSegment && shouldDedupSegment(lastFinalSegment, nextFinal, dedupSimilarity, dedupGapMs)) {
+                        replaces = [lastFinalSegment.id];
+                      }
+
+                      sendClientEvent({
+                        event: 'result',
+                        provisional: false,
+                        replaces,
+                        sentence: {
+                          id: `seg-${sentenceIndex++}`,
+                          text: seg.text,
+                          beginTime: seg.beginTime,
+                          endTime: seg.endTime,
+                          isFinal: true,
+                          confidence: 0.95,
+                          itemId,
+                        },
+                        speakerId,
+                      });
+                      lastFinalSegment = nextFinal;
+                    }
+                  } else {
+                    // 中间结果
+                    sendClientEvent({
+                      event: 'interim',
+                      itemId,
+                      text,
+                      provisional: true,
+                      beginTime,
+                      endTime,
                       speakerId,
                     });
-                    lastFinalSegment = nextFinal;
                   }
-                } else {
-                  // 中间结果
-                  sendClientEvent({
-                    event: 'interim',
-                    itemId,
-                    text,
-                    provisional: true,
-                    beginTime,
-                    endTime,
-                    speakerId,
-                  });
                 }
               } catch (e) {
                 console.error('[Speaker-ASR-Proxy] Parse error:', e);
@@ -1197,7 +1225,7 @@ app.prepare().then(() => {
           console.log(`[ASR-Proxy] Audio ingress: chunks=${receivedBinaryChunks}, bytes=${receivedBinaryBytes}, appended=${appendedChunks}`);
         }
 
-        if (isSessionReady) {
+        if (isSessionReady && !isFlushingAudioQueue && audioQueue.length === 0) {
           sendAudioToDashScope(data);
         } else {
           if (audioQueue.length < AUDIO_QUEUE_MAX_SIZE) {
@@ -1207,6 +1235,7 @@ app.prepare().then(() => {
             console.warn('[ASR-Proxy] audioQueue reached max size, dropping new chunks until DashScope ready');
             audioQueue.push(null); // 哨兵值，标记已溢出，长度变为 MAX+1 后不再进入此分支
           }
+          if (isSessionReady) flushAudioQueue();
         }
         return;
       }

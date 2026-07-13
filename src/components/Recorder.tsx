@@ -31,6 +31,10 @@ import { buildAudioConstraints } from '@/lib/services/asr/audio-constraints';
 import { toast } from 'sonner';
 import { COPY } from '@/lib/ui/copy';
 
+// 48kHz 输入下约 42.7ms，贴近腾讯实时说话人接口的 40ms PCM 读取粒度，
+// 同时比旧 4096（约 85ms）更快把音频交给 Qwen，降低首字和切换延迟。
+const PCM_PROCESSOR_BUFFER_SIZE = 2048;
+
 export const Recorder = forwardRef<RecorderHandle, RecorderProps>(function Recorder({
   onRecordingStart,
   onRecordingStop,
@@ -115,6 +119,8 @@ export const Recorder = forwardRef<RecorderHandle, RecorderProps>(function Recor
   const lastAnchorTimeRef = useRef<number>(0);
   const audioChunksRef = useRef<Blob[]>([]);
   const asrClientRef = useRef<DashScopeASRClient | null>(null);
+  const pendingAsrClientRef = useRef<DashScopeASRClient | null>(null);
+  const asrSwitchGenerationRef = useRef(0);
   const transcriptRef = useRef<TranscriptSegment[]>([]);
   const pcmProcessorRef = useRef<ScriptProcessorNode | null>(null);
   const isStartingRecordingRef = useRef(false);
@@ -137,6 +143,15 @@ export const Recorder = forwardRef<RecorderHandle, RecorderProps>(function Recor
   // 导致手机端 compactMode={true} 强制 batch、无流式 ASR、用户看不到任何反馈。
   // compactMode 现在只影响布局尺寸；转写模式由 transcribeMode 状态决定，默认 'streaming'。
   const effectiveTranscribeMode: TranscribeMode = transcribeMode;
+
+  const sendPcmToAsrClients = useCallback((buffer: ArrayBuffer): void => {
+    const activeClient = asrClientRef.current;
+    const pendingClient = pendingAsrClientRef.current;
+    activeClient?.sendAudio(buffer);
+    if (pendingClient && pendingClient !== activeClient) {
+      pendingClient.sendAudio(buffer);
+    }
+  }, []);
 
   const vadStateRef = useRef({
     isSpeaking: false,
@@ -554,15 +569,14 @@ export const Recorder = forwardRef<RecorderHandle, RecorderProps>(function Recor
         } else {
           contextUpdateCountRef.current = 0;
 
-          const bufferSize = 4096;
-          pcmProcessorRef.current = audioContext.createScriptProcessor(bufferSize, 1, 1);
+          pcmProcessorRef.current = audioContext.createScriptProcessor(PCM_PROCESSOR_BUFFER_SIZE, 1, 1);
           
           pcmProcessorRef.current.onaudioprocess = (e) => {
-            if (asrClientRef.current?.isConnected()) {
+            if (asrClientRef.current || pendingAsrClientRef.current) {
               const inputData = e.inputBuffer.getChannelData(0);
               const resampledData = resamplePcm(inputData, actualSampleRate, wsSampleRate);
               const pcmData = float32ToInt16(resampledData);
-              asrClientRef.current.sendAudio(pcmData.buffer as ArrayBuffer);
+              sendPcmToAsrClients(pcmData.buffer as ArrayBuffer);
             }
           };
           
@@ -645,6 +659,7 @@ export const Recorder = forwardRef<RecorderHandle, RecorderProps>(function Recor
     onRecordingStart,
     onTranscriptEnhanced,
     onTranscriptUpdate,
+    sendPcmToAsrClients,
     speakerDiarization,
     status,
     stopMediaRecorderSafely,
@@ -695,36 +710,25 @@ export const Recorder = forwardRef<RecorderHandle, RecorderProps>(function Recor
     }
 
     const actualSampleRate = audioContext.sampleRate;
-    const bufferSize = 4096;
-    pcmProcessorRef.current = audioContext.createScriptProcessor(bufferSize, 1, 1);
+    pcmProcessorRef.current = audioContext.createScriptProcessor(PCM_PROCESSOR_BUFFER_SIZE, 1, 1);
 
     pcmProcessorRef.current.onaudioprocess = (e) => {
-      if (asrClientRef.current?.isConnected()) {
+      if (asrClientRef.current || pendingAsrClientRef.current) {
         const inputData = e.inputBuffer.getChannelData(0);
         const resampledData = resamplePcm(inputData, actualSampleRate, wsSampleRate);
         const pcmData = float32ToInt16(resampledData);
-        asrClientRef.current.sendAudio(pcmData.buffer as ArrayBuffer);
+        sendPcmToAsrClients(pcmData.buffer as ArrayBuffer);
       }
     };
 
     source.connect(pcmProcessorRef.current);
     pcmProcessorRef.current.connect(audioContext.destination);
-  }, [wsSampleRate]);
+  }, [sendPcmToAsrClients, wsSampleRate]);
 
   // 录音中切换说话人分离引擎。
   //
-  // 方案：立即切换 asrClientRef → newClient 缓冲音频 → 成功后关旧 client → 失败回退。
-  //
-  // 1. 创建 newClient，立即 asrClientRef.current = newClient
-  //    → PCM processor 开始往 newClient 发音频
-  //    → newClient 在 ready 前音频入队 audioQueue（不丢）
-  // 2. await newClient.start()
-  //    → ready 后 flushAudioQueue（把缓冲的音频一次性吐给上游）
-  // 3. 成功 → void oldClient.stop()（异步关闭旧 client）
-  // 4. 失败 → asrClientRef.current = oldClient（回退，旧 client 仍在）
-  //
-  // 比并行连接更简单：不 rebuild pipeline、不交接检查、不并行 callback。
-  // 中断时间 ≈ newClient.start() 的连接时间（1-3s），期间音频不丢（audioQueue 缓冲）。
+  // 旧连接持续收音，新连接在 ready 前同步缓冲同一份 PCM；ready 后才原子交接。
+  // 这样切换 Qwen ↔ 腾讯时既不留下 1-3 秒空窗，也不会让失败的新连接截断旧引擎。
   const prevSpeakerDiarizationRef = useRef(speakerDiarization);
   useEffect(() => {
     if (prevSpeakerDiarizationRef.current === speakerDiarization) return;
@@ -734,32 +738,34 @@ export const Recorder = forwardRef<RecorderHandle, RecorderProps>(function Recor
     const oldClient = asrClientRef.current;
     if (!oldClient || !apiKey) return;
 
-    console.log(`[Recorder] Speaker diarization changed to ${speakerDiarization}, switching ASR engine...`);
     setAsrReconnecting(true);
     setError(null);
 
-    // 清空去重集合：server proxy 的 sentence.id 是 `seg-${index}`，每个连接从 0 开始。
-    processedSentenceIdsRef.current = new Set();
-
     const newClient = new DashScopeASRClient(apiKey, createAsrCallbacks(), buildAsrOptions(speakerDiarization));
-
-    // 立即切换：PCM processor 的 onaudioprocess 引用 asrClientRef.current（ref），
-    // 切换后自动往 newClient 发音频。newClient ready 前入队 audioQueue，ready 后 flush。
-    asrClientRef.current = newClient;
+    const switchGeneration = ++asrSwitchGenerationRef.current;
+    const previousPending = pendingAsrClientRef.current;
+    pendingAsrClientRef.current = newClient;
+    if (previousPending && previousPending !== oldClient) {
+      void previousPending.stop().catch(() => { /* ignore stale switch */ });
+    }
 
     void (async () => {
       try {
         const ok = await newClient.start();
-        if (!ok) {
-          // 连接失败：回退到旧 client（旧 client 还活着，没被 stop）
-          console.error('[Recorder] New ASR client failed to start, reverting to old engine');
-          asrClientRef.current = oldClient;
+        const isCurrentSwitch =
+          asrSwitchGenerationRef.current === switchGeneration
+          && pendingAsrClientRef.current === newClient;
+        if (!ok || !isCurrentSwitch) {
+          if (pendingAsrClientRef.current === newClient) {
+            pendingAsrClientRef.current = null;
+          }
           try { await newClient.stop(); } catch { /* ignore */ }
-          setAsrReconnecting(false);
+          if (isCurrentSwitch) setAsrReconnecting(false);
           return;
         }
 
-        // 新 client ready：发送最近上下文
+        asrClientRef.current = newClient;
+        pendingAsrClientRef.current = null;
         const recentText = transcriptRef.current
           .slice(-15)
           .map((s) => s.text)
@@ -767,16 +773,18 @@ export const Recorder = forwardRef<RecorderHandle, RecorderProps>(function Recor
         if (recentText) newClient.sendContextUpdate(recentText);
         contextUpdateCountRef.current = 0;
 
-        // 异步关闭旧 client
         void oldClient.stop().catch(() => { /* ignore */ });
 
         setAsrReconnecting(false);
-        console.log('[Recorder] ASR engine switch completed');
       } catch (err) {
-        console.error('[Recorder] ASR engine switch failed:', err);
-        asrClientRef.current = oldClient;
+        if (pendingAsrClientRef.current === newClient) {
+          pendingAsrClientRef.current = null;
+        }
         try { await newClient.stop(); } catch { /* ignore */ }
-        setAsrReconnecting(false);
+        if (asrSwitchGenerationRef.current === switchGeneration) {
+          setAsrReconnecting(false);
+          setError(err instanceof Error ? err.message : '多人识别切换失败，已继续使用原转写模式');
+        }
       }
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1056,13 +1064,18 @@ export const Recorder = forwardRef<RecorderHandle, RecorderProps>(function Recor
     // 否则用户停录后什么都看不到（体感就是"录完没记录也存不下来"）。
 
     try {
-      if (asrClientRef.current) {
-        await asrClientRef.current.stop();
-        asrClientRef.current = null;
-      }
+      asrSwitchGenerationRef.current += 1;
+      const clients = Array.from(new Set([
+        asrClientRef.current,
+        pendingAsrClientRef.current,
+      ].filter((client): client is DashScopeASRClient => Boolean(client))));
+      asrClientRef.current = null;
+      pendingAsrClientRef.current = null;
+      await Promise.all(clients.map((client) => client.stop()));
     } catch (err) {
       console.error('[Recorder] asrClient stop error:', err);
       asrClientRef.current = null;
+      pendingAsrClientRef.current = null;
     }
 
     try {
@@ -1201,10 +1214,16 @@ export const Recorder = forwardRef<RecorderHandle, RecorderProps>(function Recor
     setShowRestartConfirm(false);
 
     // 1. Tear down current recording infrastructure
-    if (asrClientRef.current) {
-      try { await asrClientRef.current.stop(); } catch { /* ignore */ }
-      asrClientRef.current = null;
-    }
+    asrSwitchGenerationRef.current += 1;
+    const clients = Array.from(new Set([
+      asrClientRef.current,
+      pendingAsrClientRef.current,
+    ].filter((client): client is DashScopeASRClient => Boolean(client))));
+    asrClientRef.current = null;
+    pendingAsrClientRef.current = null;
+    await Promise.all(clients.map(async (client) => {
+      try { await client.stop(); } catch { /* ignore */ }
+    }));
     if (pcmProcessorRef.current) {
       pcmProcessorRef.current.disconnect();
       pcmProcessorRef.current.onaudioprocess = null;
@@ -1293,6 +1312,10 @@ export const Recorder = forwardRef<RecorderHandle, RecorderProps>(function Recor
       if (asrClientRef.current) {
         asrClientRef.current.stop();
         asrClientRef.current = null;
+      }
+      if (pendingAsrClientRef.current) {
+        pendingAsrClientRef.current.stop();
+        pendingAsrClientRef.current = null;
       }
       if (enhanceManagerRef.current) enhanceManagerRef.current.dispose();
       // acquireAudioStream cleanup——卸载时兜底释放采集资源

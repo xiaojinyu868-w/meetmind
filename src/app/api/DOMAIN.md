@@ -58,7 +58,7 @@ route.ts → lib/services/ + lib/utils/rate-limit
 | `/api/generate-summary` | POST | 课堂摘要生成 |
 | `/api/generate-topics` | POST | 精选片段生成（Smart/Fast） |
 | `/api/feedback` | POST | 用户反馈 |
-| `/api/feed` | POST | 信息流生成：跨课程请求包含来源平台/作者/正文完整度；link-only 与解析失败内容不能作为原文观点证据 |
+| `/api/feed` | POST | 今日情报：允许游客携本地 captures 匿名调用并按 IP 限流；跨课程请求包含来源平台/作者/正文完整度；响应的外部卡含 `contentUrl/contentKind/authors/publishedAt/perspective`，来自真实网页、论文或图书目录；link-only 与解析失败内容不能作为原文观点证据 |
 
 ### 🧩 应用系统
 

@@ -351,6 +351,12 @@ export type FeedActionType =
   | 'open-external'    // 打开外部资料
   | 'open-bilibili';   // 在 B站看
 
+/** 外部情报的真实内容形态 */
+export type FeedContentKind = 'web' | 'paper' | 'book' | 'report';
+
+/** 推荐与用户当前信息边界的关系 */
+export type FeedPerspective = 'deepen' | 'adjacent' | 'counterpoint';
+
 /** 信息流单条条目 */
 export interface FeedItem {
   type: FeedItemType;
@@ -376,6 +382,14 @@ export interface FeedItem {
   contentUrl?: string;
   /** bili-recommend 专属：分类标签 */
   topicLabel?: string;
+  /** 外部资料的真实内容形态（网页 / 论文 / 书籍 / 研究报告） */
+  contentKind?: FeedContentKind;
+  /** 作者，来自外部目录或搜索结果，不由模型编造 */
+  authors?: string[];
+  /** 出版年份或日期，来自外部目录 */
+  publishedAt?: string;
+  /** 深入当前方向、相邻视角或不同立场 */
+  perspective?: FeedPerspective;
   /** bili-recommend 专属：BV 号 */
   bvid?: string;
   /** echo 专属：一句话要点 */

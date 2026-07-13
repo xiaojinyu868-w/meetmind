@@ -85,7 +85,16 @@ Qwen3-ASR-Flash 的 `parameters.context` 允许注入任意文本（up to 10k to
 - `userStopRequested` flag 区分主动停止 vs 意外断开
 - `onclose` 意外断开 → `scheduleReconnect` → Full Jitter 退避重连
 - `audioQueue` **跨重连保留**，重连成功后 `flushAudioQueue`
+- flush 期间的新 PCM 继续进入同一 FIFO，禁止绕过旧缓冲直发；浏览器、Qwen proxy、腾讯 speaker proxy 三层规则一致
+- 每次 WebSocket 连接的 segment/item ID 带连接命名空间，避免重连或切换引擎后的 `seg-0` 冲突被误去重
 - max 5 次尝试可配（`maxReconnectAttempts`）
+
+### Qwen ↔ 腾讯多人识别切换
+
+- Qwen `qwen3-asr-flash-realtime` 始终是默认引擎；腾讯 `16k_zh_en_speaker` 仅在用户开启多人课堂时使用。
+- 切换时旧引擎持续收音，新引擎同步接收并缓冲同一份 PCM；只有新连接 ready 后才原子交接，失败则继续使用旧引擎。
+- 浏览器 PCM chunk 使用 2048 帧（48kHz 输入约 42.7ms），贴近腾讯官方 40ms 读取粒度，也降低 Qwen 首字延迟。
+- 腾讯 `sentence_list[]` 按官方协议完整遍历，final 按 `sentence_id` 去重，不再只消费第一句。
 
 ### T2.3 Polling 退避
 `waitForSingleTask`: `p-retry` + AWS Full Jitter

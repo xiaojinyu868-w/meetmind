@@ -54,4 +54,14 @@ describe('feed recommendation quality guardrails', () => {
     expect(prompt).toContain('微信公众号；只有原链接');
     expect(prompt).toContain('不能推断文章观点');
   });
+
+  it('builds a retrieval plan with real content kinds and a counterpoint lane', () => {
+    const prompt = buildCrossCoursePrompt([
+      { id: 'capture-a', title: '生成式 AI 与教育评价', normalizedText: '课堂讨论了生成式 AI 对形成性评价的影响。' },
+    ], { learnerProfile: { goals: [{ title: '完成教育技术论文' }] } });
+    expect(prompt).toContain('至少 1 个 counterpoint');
+    expect(prompt).toContain('"academicQuery"');
+    expect(prompt).toContain('"bookQuery"');
+    expect(prompt).toContain('"contentKinds"');
+  });
 });

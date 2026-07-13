@@ -6,6 +6,10 @@ describe('isPublicRoute', () => {
     expect(isPublicRoute('/api/tutor/agent')).toBe(true);
   });
 
+  it('keeps /api/feed public so guest local captures can produce a rate-limited feed', () => {
+    expect(isPublicRoute('/api/feed')).toBe(true);
+  });
+
   it('keeps classroom translation endpoints public for live transcript bubbles', () => {
     expect(isPublicRoute('/api/translate/en-zh')).toBe(true);
     expect(isPublicRoute('/api/translate/zh-en')).toBe(true);

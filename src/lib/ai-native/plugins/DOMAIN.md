@@ -14,6 +14,7 @@
 | `studio-workshop.podcast.ts` | 播客管线（~290 行） |
 | `studio-workshop.renderers.ts` | 渲染负载构建器（~180 行） |
 | `flashcards.plugin.ts` | 闪卡 |
+| `flashcards.plugin.test.ts` | 闪卡证据回锚测试：语义匹配优先、秒/毫秒归一、禁止按卡片序号轮转原文 |
 | `mindmap.plugin.ts` | 思维导图 |
 | `cheatsheet.plugin.ts` | 速查表 |
 | `fallback.plugin.ts` | 兜底 |
@@ -33,3 +34,4 @@
 ## 已有测试
 
 - `studio-workshop.types.test.ts` — 44 tests，覆盖模式检测/时间戳/数组/对话解析
+- `flashcards.plugin.test.ts` — 覆盖模型时间戳不可信时，题面/答案仍能回到真正支持它的课堂片段

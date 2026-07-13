@@ -11,13 +11,16 @@ import { useCaptureEditorStore } from '@/stores/capture-editor-store';
 import { useSessionStore } from '@/stores/session-store';
 import { useCollectionStore } from '@/stores/collection-store';
 import { toast } from 'sonner';
-import { Mic, Camera, Edit3, Paperclip, ChevronRight, ChevronDown, Layers, Zap, FileText, Brain, Search, Star, MapPin, ExternalLink } from 'lucide-react';
+import { Mic, Camera, Edit3, Paperclip, ChevronRight, ChevronDown, Layers, Zap, FileText, Brain, Search, Star, MapPin, ExternalLink, Headphones, Image as ImageIcon } from 'lucide-react';
 import type { SourceIngestItem } from '@/types/page-types';
 import type { TranscriptSegment } from '@/types';
 import { getSpeakerLabel, getSpeakerColorClass } from '@/lib/services/asr/diarization-service';
 import { CrossCourseFeedPanel } from '@/components/CrossCourseFeedPanel';
 import { COPY } from '@/lib/ui/copy';
 import { getProvenanceSourceLabel } from '@/lib/capture/source-provenance';
+import { WORKSHOP_APP_CATALOG, getWorkshopAppByKey, type WorkshopAppKey } from '@/lib/ai-native/app-catalog';
+import { MobileAppRunner } from './MobileAppRunner';
+import { recommendWorkshopApp } from '@/components/apps/workshop-recommendation';
 
 export interface MobileAppShellProps {
   children?: React.ReactNode;
@@ -626,15 +629,11 @@ function ProcessingScreen({ p }: { p: MobileAppShellProps }) {
     enabled: segments.length > 0,
   });
 
-  // digest 加载完成 → 自动跳到 review
-  // 或者 segments 超时为空 → 直接去 review 让用户看到兜底空态
+  // digest 加载完成 → 自动跳到 review。
+  // 没有语音时留在当前页给出明确结果，不把用户送进永久 loading 的空复习页。
   const [done, setDone] = useState(false);
   useEffect(() => {
-    if (waitTimedOut) {
-      // segments 等了 15s 还没来 → 录课可能没产生任何转录，直接去 review
-      const t = setTimeout(() => replace('review'), 600);
-      return () => clearTimeout(t);
-    }
+    if (waitTimedOut) return;
     if (!loading && (digest || segments.length > 0)) {
       setDone(true);
       const t = setTimeout(() => replace('review'), done ? 600 : 1500);
@@ -643,7 +642,13 @@ function ProcessingScreen({ p }: { p: MobileAppShellProps }) {
   }, [loading, digest, segments.length, replace, done, waitTimedOut]);
 
   const progress = done ? 100 : segments.length > 0 ? Math.min(95, 30 + segments.length * 3) : 10;
-  const statusText = waitTimedOut ? '录音处理超时，直接查看…' : done ? '整理完成' : loading ? (segments.length > 0 ? '正在生成分段笔记…' : '正在读转录原文…') : '等待转录完成…';
+  const statusText = waitTimedOut
+    ? COPY.mobileJourney.noSpeechStatus
+    : done
+      ? COPY.mobileJourney.processingDone
+      : loading
+        ? (segments.length > 0 ? COPY.mobileJourney.buildingNotes : COPY.mobileJourney.readingTranscript)
+        : COPY.mobileJourney.waitingTranscript;
 
   return (
     <div className="flex-1 flex flex-col items-center justify-center bg-paper relative overflow-hidden m-page-in">
@@ -665,8 +670,8 @@ function ProcessingScreen({ p }: { p: MobileAppShellProps }) {
       </div>
 
       <div className="text-center px-8 mb-6">
-        <p className="font-mono text-[10px] font-semibold uppercase tracking-[0.12em] text-pine mb-2">正在整理</p>
-        <h1 className="font-serif text-[24px] leading-[1.2] tracking-[-0.02em] text-ink mb-3">把这节课<em className="text-vermilion">听懂</em></h1>
+        <p className="font-mono text-[10px] font-semibold uppercase tracking-[0.12em] text-pine mb-2">{COPY.mobileJourney.processingEyebrow}</p>
+        <h1 className="font-serif text-[24px] leading-[1.2] tracking-[-0.02em] text-ink mb-3">{COPY.mobileJourney.processingTitleLead}<em className="text-vermilion">{COPY.mobileJourney.processingTitleAccent}</em></h1>
         <p className="text-[12.5px] text-ink-muted mb-4">{statusText}</p>
         <div className="w-[260px] mx-auto">
           <div className="h-1.5 rounded-full bg-divider overflow-hidden">
@@ -674,7 +679,7 @@ function ProcessingScreen({ p }: { p: MobileAppShellProps }) {
           </div>
           <div className="flex items-center justify-between mt-2">
             <span className="font-mono text-[9px] text-ink-muted">{Math.floor(progress)}%</span>
-            <span className="font-mono text-[9px] text-ink-muted">{loading ? '约 1 分钟' : done ? '完成' : waitTimedOut ? '超时' : '等待中…'}</span>
+            <span className="font-mono text-[9px] text-ink-muted">{loading ? COPY.mobileJourney.processingEstimate : done ? COPY.mobileJourney.done : waitTimedOut ? COPY.mobileJourney.originalPreserved : COPY.mobileJourney.waiting}</span>
           </div>
         </div>
       </div>
@@ -693,12 +698,12 @@ function ProcessingScreen({ p }: { p: MobileAppShellProps }) {
       {/* 跳过 / 完成按钮 */}
       {!done ? (
         <div className="absolute bottom-[max(env(safe-area-inset-bottom),2rem)] left-0 right-0 text-center">
-          <button className="text-[11px] text-ink-muted/60 underline" onClick={() => replace('review')}>先去做别的 →</button>
+          <button className="text-[11px] text-ink-muted/70 underline" onClick={() => replace('home')}>{COPY.mobileJourney.leaveWhileProcessing}</button>
         </div>
       ) : (
         <button onClick={() => replace('review')}
           className="absolute bottom-[max(env(safe-area-inset-bottom),5rem)] left-0 right-0 mx-auto w-[280px] rounded-full bg-ink py-3 text-[13px] font-medium text-white transition-opacity duration-500">
-          笔记整理好了，去看看 →
+          {COPY.mobileJourney.openNotes}
         </button>
       )}
     </div>
@@ -708,7 +713,7 @@ function ProcessingScreen({ p }: { p: MobileAppShellProps }) {
 // ═══ 复习态 ═══
 
 function ReviewScreen({ p }: { p: MobileAppShellProps }) {
-  const { pop, push, reviewContext } = useMobileNav();
+  const { pop, push, reviewContext, resetToHome } = useMobileNav();
   const [digestView, setDigestView] = useState(true);
   const [sheetHeight, setSheetHeight] = useState<'collapsed' | 'half' | 'full'>('collapsed');
   const [playerCollapsed, setPlayerCollapsed] = useState(false);
@@ -737,6 +742,22 @@ function ReviewScreen({ p }: { p: MobileAppShellProps }) {
           : selectedItem?.provenance?.contentState === 'extracting'
             ? COPY.sourceState.extracting
             : '';
+  const [restoreTimedOut, setRestoreTimedOut] = useState(false);
+
+  useEffect(() => {
+    if (isArticleReview || segments.length > 0) {
+      setRestoreTimedOut(false);
+      return;
+    }
+    const timeout = setTimeout(() => setRestoreTimedOut(true), 8000);
+    return () => clearTimeout(timeout);
+  }, [isArticleReview, segments.length, sessionId]);
+
+  const audioStateLabel = segments.length > 0
+    ? COPY.mobileJourney.understood
+    : restoreTimedOut
+      ? COPY.mobileJourney.originalPreserved
+      : COPY.mobileJourney.processingEyebrow;
 
   // mini-player 滚动折叠
   useEffect(() => {
@@ -762,7 +783,11 @@ function ReviewScreen({ p }: { p: MobileAppShellProps }) {
             <p className="mt-0.5 text-[11px] text-ink-muted font-mono">
               {selectedItem?.addedAt ? `${new Date(selectedItem.addedAt).toLocaleDateString('zh-CN',{month:'numeric',day:'numeric'})} · ` : ''}
               {articleSourceLabel ? `${articleSourceLabel} · ` : ''}
-              {isArticleReview ? articleStateLabel || COPY.sourceReader.saved : p.totalDuration>0?`${fmtMs(p.totalDuration)} · 已理解`:'已理解'}
+              {isArticleReview
+                ? articleStateLabel || COPY.sourceReader.saved
+                : p.totalDuration > 0
+                  ? `${fmtMs(p.totalDuration)} · ${audioStateLabel}`
+                  : audioStateLabel}
             </p>
           </div>
         </div>
@@ -916,13 +941,24 @@ function ReviewScreen({ p }: { p: MobileAppShellProps }) {
               </div>
             ))}
           </div>
+        ) : restoreTimedOut ? (
+          <div className="flex flex-col items-center justify-center py-12 text-center">
+            <div className="h-14 w-14 rounded-full bg-paper-warm flex items-center justify-center overflow-hidden mb-3 m-octo-breath">
+              <img src="/images/octo-buddy/idle.png" alt="" className="h-full w-full object-cover" />
+            </div>
+            <p className="text-[14px] font-medium text-ink mb-1">{COPY.mobileJourney.noSpeechTitle}</p>
+            <p className="max-w-[260px] text-[12px] leading-relaxed text-ink-muted">{COPY.mobileJourney.noSpeechBody}</p>
+            <button onClick={resetToHome} className="mt-5 rounded-full bg-ink px-5 py-2.5 text-[12px] font-medium text-white active:scale-95 transition">
+              {COPY.mobileJourney.backHome}
+            </button>
+          </div>
         ) : (
           <div className="flex flex-col items-center justify-center py-12">
             <div className="h-14 w-14 rounded-full bg-pine-mist flex items-center justify-center overflow-hidden mb-3 animate-pulse m-octo-breath">
               <img src="/images/octo-buddy/thinking.png" alt="" className="h-full w-full object-cover" />
             </div>
             <p className="font-mono text-[10px] font-semibold uppercase tracking-[0.1em] text-pine mb-1">正在加载</p>
-            <p className="text-[12px] text-ink-muted">正在恢复这节课的转录内容…</p>
+            <p className="text-[12px] text-ink-muted">{COPY.mobileJourney.restoringTranscript}</p>
           </div>
         )}
       </div>
@@ -1096,12 +1132,21 @@ function MindmapScreen({ p }: { p: MobileAppShellProps }) {
 
 function AppsScreen({ p: _p }: { p: MobileAppShellProps }) {
   const { pop, push } = useMobileNav();
-  const apps: Array<{ key: string; name: string; icon: React.ReactNode; desc: string }> = [
-    { key: 'flashcards', name: '闪卡', icon: <Zap size={18} strokeWidth={2} className="text-pine" />, desc: '记忆卡片' },
-    { key: 'quiz', name: '测验', icon: <Brain size={18} strokeWidth={2} className="text-pine" />, desc: '随堂自测' },
-    { key: 'cheatsheet', name: '速查表', icon: <FileText size={18} strokeWidth={2} className="text-pine" />, desc: '一页纸' },
-    { key: 'mindmap', name: '思维导图', icon: <Layers size={18} strokeWidth={2} className="text-pine" />, desc: '知识结构' },
-  ];
+  const iconByKey: Record<WorkshopAppKey, React.ReactNode> = {
+    flashcards: <Zap size={18} strokeWidth={2} />,
+    quiz: <Brain size={18} strokeWidth={2} />,
+    cheatsheet: <FileText size={18} strokeWidth={2} />,
+    mindmap: <Layers size={18} strokeWidth={2} />,
+    'audio-overview': <Headphones size={18} strokeWidth={2} />,
+    infographic: <ImageIcon size={18} strokeWidth={2} />,
+  };
+  const recommendation = recommendWorkshopApp({
+    activeAnchorCount: 0,
+    difficultyCount: 0,
+    segmentCount: _p.segments.length,
+  });
+  const recommendedKey = recommendation.key;
+  const apps = [...WORKSHOP_APP_CATALOG].sort((a, b) => Number(b.key === recommendedKey) - Number(a.key === recommendedKey));
   return (
     <div className="flex-1 min-h-0 flex flex-col bg-paper m-page-in">
       <div className="flex-shrink-0 bg-paper px-4 pt-[max(env(safe-area-inset-top),12px)] pb-2.5 border-b border-divider/60">
@@ -1109,21 +1154,67 @@ function AppsScreen({ p: _p }: { p: MobileAppShellProps }) {
           <button onClick={() => pop()} className="flex h-8 w-8 items-center justify-center rounded-full text-ink-muted -ml-1">
             <ChevronRight size={18} strokeWidth={2} className="rotate-180" />
           </button>
-          <p className="text-[15px] font-semibold text-ink">应用</p>
+          <div>
+            <p className="text-[15px] font-semibold text-ink">{COPY.apps.matrix.mobileTitle}</p>
+            <p className="mt-0.5 text-[9px] text-ink-muted">{COPY.apps.matrix.contextBasis(_p.segments.length, 0, 0)}</p>
+          </div>
         </div>
       </div>
       <div className="flex-1 min-h-0 overflow-y-auto px-4 py-4 mm-mobile-scroll" style={{ WebkitOverflowScrolling: 'touch' }}>
-        <div className="grid grid-cols-2 gap-3">
+        <p className="mb-3 text-[12px] leading-relaxed text-ink-muted">{COPY.apps.matrix.mobileSubtitle}</p>
+        <div className="flex flex-col gap-2.5">
           {apps.map((app, i) => (
-            <button key={app.key} onClick={() => push(app.key as any)}
-              className="rounded-[16px] bg-white border border-divider p-3 text-left active:scale-[0.98] transition m-card-in"
+            <button key={app.key} onClick={() => push(app.key)}
+              className={`rounded-[18px] border bg-white p-3.5 text-left active:scale-[0.99] transition m-card-in ${app.key === recommendedKey ? 'border-pine/35' : 'border-divider'}`}
               style={{ animationDelay: `${i * 0.05}s` }}>
-              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-pine-mist mb-2">{app.icon}</div>
-              <p className="text-[13px] font-semibold text-ink">{app.name}</p>
-              <p className="text-[10px] text-ink-muted mt-0.5">{app.desc}</p>
+              <div className="flex items-start gap-3">
+                <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-[13px] bg-pine-mist text-pine">{iconByKey[app.key]}</div>
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2">
+                    <p className="text-[10px] font-semibold text-pine">{app.learningAction}</p>
+                    {app.key === recommendedKey ? <span className="rounded-full bg-vermilion-mist px-1.5 py-0.5 text-[9px] font-semibold text-vermilion">{COPY.apps.matrix.recommended}</span> : null}
+                  </div>
+                  <p className="mt-0.5 text-[14px] font-semibold text-ink">{app.name}</p>
+                  <p className="mt-1 text-[11px] leading-relaxed text-ink-muted">{app.bestFor}</p>
+                  {app.key === recommendedKey ? (
+                    <p className="mt-1.5 border-l-2 border-vermilion pl-2 text-[10px] leading-relaxed text-ink-secondary">{recommendation.reason}</p>
+                  ) : null}
+                  <p className="mt-1.5 font-mono text-[9px] text-ink-muted/80">{app.timeLabel} · {app.outputType}</p>
+                </div>
+                <ChevronRight size={15} className="mt-3 flex-shrink-0 text-ink-muted" />
+              </div>
             </button>
           ))}
         </div>
+      </div>
+    </div>
+  );
+}
+
+function CatalogAppScreen({ p, appKey }: { p: MobileAppShellProps; appKey: WorkshopAppKey }) {
+  const { pop } = useMobileNav();
+  const app = getWorkshopAppByKey(appKey)!;
+  return (
+    <div className="flex min-h-0 flex-1 flex-col bg-paper m-page-in">
+      <div className="flex-shrink-0 border-b border-divider/60 bg-paper px-4 pb-2.5 pt-[max(env(safe-area-inset-top),12px)]">
+        <div className="flex items-center justify-between">
+          <button onClick={() => pop()} className="-ml-1 flex h-8 w-8 items-center justify-center rounded-full text-ink-muted">
+            <ChevronRight size={18} strokeWidth={2} className="rotate-180" />
+          </button>
+          <div className="text-center">
+            <p className="text-[13px] font-semibold text-ink">{app.name}</p>
+            <p className="mt-0.5 text-[9px] text-ink-muted">{app.learningAction} · {app.timeLabel}</p>
+          </div>
+          <div className="w-8" />
+        </div>
+      </div>
+      <div className="min-h-0 flex-1 overflow-hidden">
+        <MobileAppRunner
+          appKey={appKey}
+          sessionId={p.sessionId || 'mobile-session'}
+          segments={p.segments}
+          onSeek={p.onSeek}
+        />
       </div>
     </div>
   );
@@ -1187,6 +1278,7 @@ function EchoScreen({ p }: { p: MobileAppShellProps }) {
       </div>
       <div className="flex-1 min-h-0 overflow-y-auto px-4 py-4 pb-20 mm-mobile-scroll" style={{ WebkitOverflowScrolling: 'touch' }}>
         <CrossCourseFeedPanel
+          localCaptures={p.collectionFeedItems}
           onAddContext={() => {
             pop();
             window.requestAnimationFrame(() => p.composerRef.current?.focus());
@@ -1241,6 +1333,8 @@ function ScreenRouter({ p }: { p: MobileAppShellProps }) {
     case 'quiz': return <QuizScreen p={p} />;
     case 'cheatsheet': return <CheatsheetScreen p={p} />;
     case 'mindmap': return <MindmapScreen p={p} />;
+    case 'audio-overview': return <CatalogAppScreen p={p} appKey="audio-overview" />;
+    case 'infographic': return <CatalogAppScreen p={p} appKey="infographic" />;
     case 'apps': return <AppsScreen p={p} />;
     case 'classmate': return <ClassmateScreen p={p} />;
     case 'echo': return <EchoScreen p={p} />;

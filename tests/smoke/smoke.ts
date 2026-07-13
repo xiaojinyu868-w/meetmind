@@ -7,7 +7,7 @@
  * 覆盖：
  *   1. 静态路由（/login, /all-notes, /feedback, /help）是否 200
  *   2. 登录页、访客试听所需公开 API 与受保护 API 的边界是否正确（不 500）
- *   3. WebSocket 握手（/api/asr-stream, /api/tutor-call）是否 101
+ *   3. WebSocket 握手（Qwen ASR / 腾讯多人 ASR / Tutor Call）是否 101
  *   4. 关键 API：/api/transcribe-fast、/api/translate/en-zh、/api/asr/corrections
  *   5. dev server 编译时 console 是否有 "Module not found" 之类 regression
  *
@@ -177,6 +177,7 @@ async function main() {
   // 2. WebSocket
   console.log('\n--- WebSocket ---');
   await wsCheck('/api/asr-stream');
+  await wsCheck('/api/asr-stream-speaker');
   await wsCheck('/api/tutor-call');
 
   // 3. API：访客试听所需能力公开；用户数据写入仍需鉴权。

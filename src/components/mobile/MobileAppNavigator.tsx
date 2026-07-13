@@ -18,7 +18,7 @@ import React, { useState, useCallback, createContext, useContext, useMemo } from
 
 // ── Types ──
 
-export type MobileScreen = 'home' | 'recording' | 'processing' | 'review' | 'flashcards' | 'quiz' | 'cheatsheet' | 'mindmap' | 'apps' | 'classmate' | 'echo' | 'empty';
+export type MobileScreen = 'home' | 'recording' | 'processing' | 'review' | 'flashcards' | 'quiz' | 'cheatsheet' | 'mindmap' | 'audio-overview' | 'infographic' | 'apps' | 'classmate' | 'echo' | 'empty';
 
 export type ReviewContentType = 'audio' | 'video' | 'article';
 

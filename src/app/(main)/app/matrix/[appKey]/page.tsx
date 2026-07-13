@@ -350,12 +350,7 @@ export default function AppMatrixWindowPage() {
   return (
     <AppWindowShell
       app={app}
-      sessionId={sessionId}
-      dataSource={dataSource}
-      model={model}
-      onModelChange={setModel}
       taskState={execution.taskState}
-      primaryActionLabel={app.key === 'audio-overview' ? '再做一版播客' : undefined}
       onRegenerate={() => {
         void execution.rerun();
       }}

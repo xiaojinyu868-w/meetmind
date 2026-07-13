@@ -11,7 +11,7 @@
 
 | 文件 | 行数 | 职责 | 核心类型 |
 |------|------|------|----------|
-| `index.ts` | 363 | 核心领域类型 | `AnchorType`, `TranscriptSegment`, `SessionStatus`, `HighlightTopic`, `ClassSummary`, `Note`, `TutorResponse`, `ActionItem`, `ImportedVideoSource` |
+| `index.ts` | ~410 | 核心领域类型 | `AnchorType`, `TranscriptSegment`, `SessionStatus`, `HighlightTopic`, `ClassSummary`, `FeedItem`（含外部内容类型、作者、出版时间与视角）, `Note`, `TutorResponse`, `ActionItem`, `ImportedVideoSource` |
 | `user.ts` | 295 | 用户/认证类型 | `UserRole`, `Permission`, `User`, `LearnerProfile`（含结构化身份尚未填写时的 `stage='unknown'`）, `AuthProviderLink`, `JWTPayload`, `RegisterRequest`, `LoginRequest`, `AuthResponse` |
 | `page-types.ts` | 200 | 页面级类型（page.tsx 域） | `ViewMode`, `DataSource`, `WorkspaceTab`（含 `transcript`）, `SourceIngestItem`（含照片锚点与 `provenance` 来源契约）, `SourceProvenance`, `WechatCaptureMessage`, `WorkspaceEchoMessage` |
 | `dify.ts` | 203 | Dify 集成类型 | `ExtendedTutorRequest`, `GuidanceQuestion`, `Citation`, `WebSearchResult` |
