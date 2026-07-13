@@ -58,6 +58,13 @@ M3 Tutor：
 
 新 endpoint（和旧 `/api/tutor` 并存，灰度友好）。请求体可带 `model`，设置页会把用户选择透传进来；服务端用 `resolveTutorAgentProviderFallbacks(env, { modelId })` 生成 DeepSeek / DashScope / OpenAI-compatible 候选，并始终用 `.chat()` 走 `/chat/completions`。
 
+#### 场景时序：时间引用仅属于课后复习
+
+- `review`：默认注入 `[MM:SS]` / `[MM:SS-MM:SS]` 合约，前端可以跳回已经保存的原声或转录。
+- `in-class`：老师仍在讲，回答只帮助学生跟上当前内容，不提供时间回跳。
+- `shared / goal / word`：没有可供当前用户回跳的原声上下文，同样禁用时间引用。
+- 这是服务端硬边界：除 `review` 外，即使请求传入 `returnTimestamps: true` 也会被忽略；课堂 adapter 还会防御性清理模型意外返回的时间戳。
+
 流式策略：
 
 ```ts
@@ -127,7 +134,7 @@ make eval-tutor-real         # 真实调 streamText + tools（优先当前模型
 - `timestamp-citation`：正则 `[t=MM:SS]` + 时间窗校验
 - `learning-rubric`：LLM-as-Judge（离线自动跳过；可 env `EVAL_JUDGE_MODEL` 覆盖）
 
-基线（seed 8 条）：`7/8 passed / tool=100% cite=66.7% rubric=100%`（1 条故意 fail，验证 harness 能检出 citation 出窗）。
+当前 dry-run 基线：`26/28 passed / tool=100% cite=71.4% rubric=100%`（保留故意失败样本，用来验证 harness 能检出 citation 出窗）。
 
 ---
 

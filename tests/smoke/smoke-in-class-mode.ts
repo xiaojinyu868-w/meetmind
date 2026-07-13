@@ -4,13 +4,13 @@
  *
  * M14 更新：
  *   - in-class 默认 allowInlineApp=false（课堂没认知带宽看 inline app）
- *   - in-class 默认 returnTimestamps=true（让"刚才那段"能给 [MM:SS] 让学生跳回）
+ *   - in-class 强制禁用时间戳回跳（即使请求误传 returnTimestamps:true 也忽略）
  *   - 注入 fullTranscript（让"刚才那段 / 我没跟上" 能拿到全量上下文回答）
  *
  * 验证：
  *   1. 短回答（in-class 应该精简，不长篇大论）
  *   2. 注入 bio 时 AI 体现"认识"用户
- *   3. 时间戳引用（returnTimestamps:true）
+ *   3. 不出现时间戳引用（课中不打断当前课堂）
  *   4. **不**出现 inline app marker（M14 后 in-class 禁用）
  *   5. 不出现 goal/bio marker（in-class 不该提炼这些）
  */
@@ -93,9 +93,8 @@ const CASES: SmokeCase<InClassBody>[] = [
     body: makeBody([{ role: 'user', content: '刚才那句我没跟上' }]),
     mustContainAny: ['partition', 'pivot', '核心', '快排', '指针'],
     mustNotContainAny: IN_CLASS_BAN,
-    // M14: in-class 现在 returnTimestamps:true，"刚才那句"应该带时间戳让用户跳回
-    // 不强制要时间戳（不是每次都需要），但**绝对不能**出 inline app marker
-    mustNotMatch: [/<open_app:/],
+    // 故意误传 returnTimestamps:true，服务端仍必须守住课中边界。
+    mustNotMatch: [/<open_app:/, /\[(?:\d{1,2}):[0-5]\d(?:-\d{1,2}:[0-5]\d)?\]/],
   },
 
   // ─── IC2：短回答 —— 课中不能长篇大论 ───
@@ -112,18 +111,18 @@ const CASES: SmokeCase<InClassBody>[] = [
     mustNotContainAny: IN_CLASS_BAN,
   },
 
-  // ─── IC3：稳定 chip 「刚才那段」 → AI 用全量上下文回放 + [MM:SS] ───
+  // ─── IC3：稳定 chip 「刚才那段」 → AI 用全量上下文直接复述，不让用户回跳 ───
   // M14: 替代之前的"整一张速查表"——in-class 已禁用 inline app
   {
     name: 'IC3/稳定 chip/刚才那段',
-    description: '用户点 "刚才那段" → AI 拿 fullTranscript 用一句话讲清核心，可带 [MM:SS] 让学生跳回',
+    description: '用户点 "刚才那段" → AI 拿 fullTranscript 用一句话讲清核心，但不提供时间回跳',
     body: makeBody([
       { role: 'user', content: '请回放刚才那段，把核心用一句话讲清楚。' },
     ]),
     mustContainAny: ['partition', 'pivot', '快排', '分治', '指针'],
     mustNotContainAny: IN_CLASS_BAN,
-    // 绝对不能出 inline app marker（M14 in-class 禁用）
-    mustNotMatch: [/<open_app:/],
+    // 绝对不能出 inline app marker 或时间戳回跳。
+    mustNotMatch: [/<open_app:/, /\[(?:\d{1,2}):[0-5]\d(?:-\d{1,2}:[0-5]\d)?\]/],
   },
 
   // ─── IC4：bio 注入 ───

@@ -312,25 +312,11 @@ export function ClassroomView({
   // MindMap → 转录段落跳转：记住最近一次点击的 ms + 一个自增 nonce，
   // ClassroomRecordingView 内部用 nonce 决定"要不要重滚"。连续点同一个节点也能生效。
   //
-  // 同一个 scrollTarget state 现在也被"同学答案下方的 citation chip"复用——
-  // 点击时除了滚转录还要把 paneState 切到 recording（用户可能在 list 态时被 chip 吸引）。
+  // 课中结构树节点可以定位到当前转录；AI 时间引用回跳只属于课后 review。
   const [mindMapScrollTarget, setMindMapScrollTarget] = useState<{ ms: number; nonce: number } | null>(null);
   const handleMindMapAnchorClick = useCallback((ms: number) => {
     setMindMapScrollTarget((prev) => ({ ms, nonce: (prev?.nonce ?? 0) + 1 }));
   }, []);
-
-  /**
-   * 用户点 AI 气泡下面的证据 chip（"🎯 01:23"）。
-   * 不只要滚动——如果当前在 list 态，要先切到 recording 态让转录可见；
-   * 然后推一个新的 scrollTarget，让 ClassroomRecordingView 自动展开抽屉并
-   * 在目标段落上放 1.2s 的黄色脉冲高亮（CSS 在 globals.css 里）。
-   */
-  const handleCitationJump = useCallback((ms: number) => {
-    if (paneState !== 'recording') {
-      setLocalPaneState('recording');
-    }
-    setMindMapScrollTarget((prev) => ({ ms, nonce: (prev?.nonce ?? 0) + 1 }));
-  }, [paneState]);
 
   /**
    * 用户点 AI 气泡里的内联动作（典型：停止录音那条气泡的 [整速查表] / [看转录]）。
@@ -629,7 +615,6 @@ export function ClassroomView({
         foresights={foresights}
         onForesightAccept={handleForesightAccept}
         onForesightDismiss={dismissForesight}
-        onCitationJump={handleCitationJump}
         onInlineAction={handleInlineAction}
         onInlineAppInteraction={handleInlineAppInteraction}
         onInlineAppRetry={retryInlineApp}
@@ -640,7 +625,7 @@ export function ClassroomView({
         dynamicChips={dynamicChips}
       />
     ),
-    [companionMode, messages, streamingMessage, isThinking, handleSend, onOpenApp, foresights, handleForesightAccept, dismissForesight, handleCitationJump, handleInlineAction, handleInlineAppInteraction, retryInlineApp, isDemoRecordingPane, demoSuggestedPrompts, demoComplete, handleOpenDemoReview, handleMarkMoment, dynamicChips],
+    [companionMode, messages, streamingMessage, isThinking, handleSend, onOpenApp, foresights, handleForesightAccept, dismissForesight, handleInlineAction, handleInlineAppInteraction, retryInlineApp, isDemoRecordingPane, demoSuggestedPrompts, demoComplete, handleOpenDemoReview, handleMarkMoment, dynamicChips],
   );
 
   return (

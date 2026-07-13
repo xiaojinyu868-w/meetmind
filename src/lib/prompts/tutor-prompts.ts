@@ -14,7 +14,7 @@
  *   - review（录音 & 视频复习）：可长答 / 全量转录 / 时间戳和思维引导可选
  *
  * 不变的渲染契约（前端能解析的硬合同，不能删）：
- *   1. `[MM:SS]` 或 `[MM:SS-MM:SS]` — 前端渲染为可点击跳转的时间戳链接（`timestamp-parsing.ts`）
+ *   1. `[MM:SS]` 或 `[MM:SS-MM:SS]` — 仅 review 模式渲染为可点击时间戳（`timestamp-parsing.ts`）
  *   2. `[资料N]` — 引用 support material 时使用现有编号，不得编造
  *   3. `---思维演示---` / `---正式回答---` / `【步骤名】` / `💡` / `🌟` — 思维引导模式下的分段标记
  *
@@ -81,7 +81,7 @@ export interface TutorSystemContext {
 export interface TutorSystemOptions {
   /** 思维引导（默认 false，仅 review 允许 true） */
   thinkingGuide?: boolean;
-  /** 在回答里附 `[MM:SS]` 时间戳（默认 mode==='review'） */
+  /** 在回答里附 `[MM:SS]` 时间戳（仅 review 生效；其他 mode 即使传 true 也忽略） */
   returnTimestamps?: boolean;
 }
 
@@ -520,10 +520,10 @@ export function buildTutorSystemPrompt(
   // 分享态默认不返回时间戳：访客没有原录音/视频，[MM:SS] 点了不响应是"死链"
   // 体验。只有 review 真的能跳回原文，是默认开启的对象。
   // goal / word 态没有播放上下文，时间戳完全不适用，强制关闭。
-  const returnTimestamps = options.returnTimestamps ?? mode === 'review';
+  const returnTimestamps = mode === 'review' && (options.returnTimestamps ?? true);
   const thinkingGuide = options.thinkingGuide ?? false;
 
-  if (returnTimestamps && mode !== 'goal' && mode !== 'word') {
+  if (returnTimestamps) {
     parts.push(capTimestampsInstruction());
   }
   // 思维引导仅在 review 下生效——in-class / shared / goal / word 即使 flag 为 true 也忽略

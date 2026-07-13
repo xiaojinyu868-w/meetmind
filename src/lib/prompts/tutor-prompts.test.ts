@@ -155,9 +155,9 @@ describe('buildTutorSystemPrompt — returnTimestamps 开关', () => {
     expect(prompt).not.toMatch(/【时间戳/);
   });
 
-  it('in-class mode 理论上也可以手动开（虽然默认不开）', () => {
+  it('in-class mode 即使手动传 true 也强制关闭', () => {
     const prompt = buildTutorSystemPrompt('in-class', {}, { returnTimestamps: true });
-    expect(prompt).toMatch(/【时间戳/);
+    expect(prompt).not.toMatch(/【时间戳/);
   });
 });
 
@@ -347,9 +347,9 @@ describe('buildTutorSystemPrompt — shared 模式（v3.0）', () => {
     expect(prompt).toMatch(/不要写 \[MM:SS\] 时间戳/);
   });
 
-  it('用户显式 returnTimestamps:true 时仍可启用——保留对接 review 风格的能力', () => {
+  it('分享态即使显式传 returnTimestamps:true 也强制关闭', () => {
     const prompt = buildTutorSystemPrompt('shared', sharedContext, { returnTimestamps: true });
-    expect(prompt).toMatch(/【时间戳/);
+    expect(prompt).not.toMatch(/【时间戳/);
   });
 
   it('thinkingGuide 在分享态被忽略（仅 review 生效）', () => {

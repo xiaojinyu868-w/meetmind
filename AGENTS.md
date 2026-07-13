@@ -148,7 +148,7 @@ MeetMind 是以学习者长期上下文为中心的 AI 学习产品。
 | **回来的比发出去的更好** | 发一节课录音，回来的是「AI 听懂了这节课」 |
 | **不急** | 像发酵，时间到了自己起来 |
 | **小** | 一个发现，三句话，不是长报告 |
-| **有根** | 每句话都能指回真实原件，引用都能跳回 `[MM:SS]` 转录 |
+| **有根** | 回答基于真实原件；课后复习中的课堂引用可以跳回 `[MM:SS]` 转录，课中不提供回跳，避免打断正在进行的课堂 |
 | **第一印象** | 学生打开 MeetMind，第一反应应该是「这个 AI 真的懂我在学什么」——不是"好看"，不是"安静"，是**智能**。视觉为这个目标服务 |
 
 **桌面上下文动作原则**：搜索笔记、历史收集、笔记总结这类“伸手拿资料”的动作，不用居中小弹窗打断主界面；优先使用右侧上下文 sidecar / 抽屉，让主学习现场仍然在背景里，像打开一页旁注而不是跳出一个 demo 弹框。
@@ -296,7 +296,7 @@ POST /api/tutor/agent
 ```
 
 **渲染契约（前端硬合同，不能删）**：
-1. `[MM:SS]` / `[MM:SS-MM:SS]` — 可点击时间戳，跳回转录（解析在 `timestamp-parsing.ts`）
+1. `[MM:SS]` / `[MM:SS-MM:SS]` — **仅 `review` 模式**可点击跳回转录（解析在 `timestamp-parsing.ts`）；`in-class / shared / goal / word` 即使传 `returnTimestamps: true` 也必须忽略
 2. `[资料N]` — 引用 support material 时复用编号，禁止编造
 3. 思维引导：`---思维演示---` / `---正式回答---` / `【步骤名】` / `💡` / `🌟` 分段标记
 
@@ -570,7 +570,7 @@ src/
 | `src/components/classroom/ClassroomCompanionPanel.tsx` | 课堂右栏同桌面板（header / 气泡 / 流式 / thinking / 输入栏）；M11 起基于 ChatBase 底座；课中 / 课后 starter 用会动的 Octo Buddy 像素章鱼 + 轻问题 chip 引导 |
 | `src/components/classroom/InlineAppCard.tsx` | 内联 app 承载卡（保存完整 AppExecutionResult，复用 AppRenderSurface / 应用矩阵 UI） |
 | `src/components/classroom/ClassroomLeftPanel.tsx` | 课堂左侧（list / recording 切换 + ActiveLessonPill + StickyStartBar） |
-| `src/hooks/useClassroomCompanion.ts` | 课堂同桌 hook：消费 `[MM:SS]` citations；M14.6 起 `<open_app:KEY/>` marker 合约已移除，结构化产物走前端 SkillChip 直接打开 |
+| `src/hooks/useClassroomCompanion.ts` | 课堂同桌 hook：显式关闭并防御性清理 `[MM:SS]`，课中不提供时间回跳；M14.6 起 `<open_app:KEY/>` marker 合约已移除，结构化产物走前端 SkillChip 直接打开 |
 | `src/hooks/useOmniRealtimeCall.ts` | Qwen Omni realtime 语音通话 hook（语音同桌入口，独立 WebSocket，不走 /api/tutor） |
 | `src/app/api/tutor/agent/route.ts` | **M10 主入口**：mode-driven 单一 endpoint，AI SDK v6 streamText。M14.6 起所有 mode 纯对话（`tools = {}`），结构化产物由前端 SkillChip 直接打开；provider fallback StepFun→DeepSeek→Qwen；Qwen 注入 `enable_thinking=false` 抑制推理。详见 `src/app/api/tutor/DOMAIN.md` |
 | `src/app/api/tutor/route.ts` | Legacy SSE 路径（flag off 时仍可用，不要在它上面加新功能） |

@@ -51,13 +51,6 @@ export interface CompanionMessage {
   /** 可选的附带卡片（比如课前要点） */
   card?: CompanionCard;
   /**
-   * 可选的时间戳引用——AI 基于课堂原文作答时指出的证据片段。
-   * 由 companion-markdown-utils.extractCitationsFromMarkdown 从 [MM:SS] 标记里抽出。
-   * 当前 UI 不渲染（课堂场景禁止时间戳），但数据留在 message 对象里，
-   * 未来复习态可以拿出来用。
-   */
-  citations?: Array<{ startMs: number; endMs: number; label: string }>;
-  /**
    * 可选的"内联动作"——让同学气泡自己带一两个 CTA。
    * 典型：停止录音时的"这节课听完了"气泡 → [整速查表] [看转录]。
    */

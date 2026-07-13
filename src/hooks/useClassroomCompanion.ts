@@ -106,9 +106,8 @@ function toTutorSegments(segs: TranscriptSegment[]): Array<{
 // M8-D3: extractRecentFocus 提取到 @/lib/services/classroom/recent-focus
 // 以便 node 测试环境直接单测，不需要 mock React/hooks。
 import { extractRecentFocus } from '@/lib/services/classroom/recent-focus';
-// M8 agent-native: commit 时把 [MM:SS] 标记抽成结构化 citations，
-// 让同学的回答在视觉上"有根"——点击证据 chip 就能跳回转录。
-import { extractCitationsFromMarkdown } from '@/components/classroom/companion-markdown-utils';
+// 课中不提供时间回跳；模型若意外返回 [MM:SS]，提交消息前防御性清理。
+import { normalizeCompanionMarkdown } from '@/components/classroom/companion-markdown-utils';
 // Agent-native chip parity：AI 消息里如果带 <open_app:KEY/>，用下面的 guard
 // 校验 KEY 是注册过的合法 appKey，再调 onOpenApp；非法 KEY 就忽略。
 import { getWorkshopAppByKey, isWorkshopAppKey, type WorkshopAppKey } from '@/lib/ai-native/app-catalog';
@@ -517,8 +516,8 @@ export function useClassroomCompanion(
    *   - flashcard_all_done    → 追加一条总结 bubble（原有行为）
    *
    * bubble 上的 action.kind='say' 会被 ClassroomView 路由回 sendToTutor，
-   * 也就是说——一次自然的追问，同学会用完整的 /api/tutor 能力（带转录上下文、
-   * 带 citation、带 open_app 能力）来回答。对话流是真的闭环的。
+   * 也就是说——一次自然的追问，同学会用完整的 /api/tutor 能力（带转录上下文，
+   * 但课中不带时间回跳）来回答。对话流是真的闭环的。
    */
   const handleInlineAppInteraction = useCallback(
     (_messageId: string, event: InlineAppInteraction) => {
@@ -699,9 +698,9 @@ export function useClassroomCompanion(
         ? streamResult.text
         : '嗯……我对这节课还没理解到能接这个问题的程度。再给我点时间，或者换个具体点的问法？';
 
-      // 先抽出 open_app 标记，再从净化后的文本里抽 citations
-      const { key: openAppKey, cleaned: finalContent } = extractOpenAppMarker(rawFinal);
-      const { citations: parsedCitations } = extractCitationsFromMarkdown(finalContent);
+      // 先抽出 open_app 标记，再防御性清理课中不应出现的时间戳。
+      const { key: openAppKey, cleaned } = extractOpenAppMarker(rawFinal);
+      const finalContent = normalizeCompanionMarkdown(cleaned);
 
       setMessages((prev) => [
         ...prev,
@@ -709,7 +708,6 @@ export function useClassroomCompanion(
           id: streamId,
           role: 'companion',
           content: finalContent,
-          citations: parsedCitations.length > 0 ? parsedCitations : undefined,
           createdAt: Date.now(),
         },
       ]);

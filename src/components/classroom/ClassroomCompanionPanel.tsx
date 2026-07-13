@@ -112,11 +112,6 @@ export interface ClassroomCompanionPanelProps {
   /** 用户划掉某个预知气泡 */
   onForesightDismiss?: (id: string) => void;
   /**
-   * 用户点了 AI 消息下面的"证据 chip"——把对应时间戳传上去，
-   * 由父组件（ClassroomView）推 scrollTarget 到转录面板并触发高亮脉冲。
-   */
-  onCitationJump?: (startMs: number) => void;
-  /**
    * 用户点了 AI 消息里的内联 action（比如停止录音时那条气泡带的
    * [整速查表] / [看转录]）。不同 kind 对应不同响应：
    *   open_app         → openWorkshopWindow(payload)
@@ -216,8 +211,6 @@ function CompanionBubble({
 }: {
   message: CompanionMessage;
   isStreaming?: boolean;
-  /** citation 已废弃，保留参数位但 CompanionBubble 内部不再渲染 */
-  onCitationJump?: (startMs: number) => void;
   onActionInvoke?: (action: NonNullable<CompanionMessage['actions']>[number]) => void;
   onInlineAppInteraction?: (messageId: string, event: InlineAppInteraction) => void;
   onInlineAppRetry?: (messageId: string) => void;
@@ -486,7 +479,6 @@ export function ClassroomCompanionPanel({
   foresights: _foresights = [],
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   onForesightAccept: _onForesightAccept,
-  onCitationJump,
   onInlineAction,
   onInlineAppInteraction,
   onInlineAppRetry,
@@ -533,7 +525,6 @@ export function ClassroomCompanionPanel({
               <CompanionBubble
                 key={m.id}
                 message={m}
-                onCitationJump={onCitationJump}
                 onActionInvoke={onInlineAction}
                 onInlineAppInteraction={onInlineAppInteraction}
                 onInlineAppRetry={onInlineAppRetry}

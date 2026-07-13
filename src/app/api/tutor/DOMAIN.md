@@ -23,7 +23,7 @@
 
 | mode | 入口 | context 关键字段 | 特性 |
 |---|---|---|---|
-| `in-class` | `useClassroomCompanion`（课堂同桌） | `recentFocus` | 短回答；可长答；M14.6 起纯对话，不挂 native tools；结构化产物由前端 SkillChip 直接打开 |
+| `in-class` | `useClassroomCompanion`（课堂同桌） | `recentFocus` | 短回答；禁时间戳回跳，避免打断正在进行的课堂；M14.6 起纯对话，不挂 native tools；结构化产物由前端 SkillChip 直接打开 |
 | `review` | `TutorAgentPanel` / `SafeAITutor`（录音/视频复习） | `fullTranscript` + `currentTimestampSec`（秒，非毫秒）+ `learnerProfile` | 可长答；强制时间戳 `[MM:SS]`；可选 `thinkingGuide`；M14.6 起纯对话，不挂 native tools |
 | `shared` | `SharedAgentChat` 落地页 `/share/[token]` | `shared` snapshot + `shareToken` | 禁 native tools；禁时间戳；不注入 `learnerProfile`（**隐私铁律**） |
 | `goal` | 「聊聊你想要的」`IntentDialog`（M11） | `goal.existingGoals` + `goal.sessionHint` + `supportMaterials` | 无 transcript；禁 native tools；禁时间戳；AI 用 `---我想要的---...---结束---` 块提炼可保存的 `GoalEntry`；首次会面 vs 回访双路径 |
@@ -35,7 +35,7 @@
 - **`<open_app:KEY/>` marker 合约已从 system prompt 移除**（见 `tutor-prompts.ts` 顶部注释）。
 - **`tutor-tools.ts` 已删除**：M14.6+ 起 `createTutorTools` 不再被调用，连同 4 个无入口 plugin（study-report / knowledge-cards / confusion-drill / review-plan）一并清理。
 - **渲染契约（前端硬合同，仅剩 2 条）**：
-  1. `[MM:SS]` / `[MM:SS-MM:SS]` — 可点击时间戳，跳回转录（解析在 `timestamp-parsing.ts`）
+  1. `[MM:SS]` / `[MM:SS-MM:SS]` — 仅 `review` 模式可点击跳回转录（解析在 `timestamp-parsing.ts`）；其余 mode 强制关闭
   2. `[资料N]` — 引用 support material 时复用编号，禁止编造
 
 ## Provider / 模型选择
