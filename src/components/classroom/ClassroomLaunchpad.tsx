@@ -56,7 +56,7 @@ export function ClassroomLaunchpad({
           <span className="text-[11.5px] text-ink-muted">{COPY.classroomHome.launchpadHint}</span>
         </div>
       ) : null}
-      <div className={`grid gap-2 ${actions.length === 2 ? 'sm:grid-cols-2' : 'sm:grid-cols-3'}`}>
+      <div className={`grid gap-2.5 ${actions.length === 2 ? 'sm:grid-cols-2' : 'sm:grid-cols-3'}`}>
         {actions.map((action) => {
           const Icon = action.icon;
           return (
@@ -64,7 +64,7 @@ export function ClassroomLaunchpad({
               key={action.key}
               type="button"
               onClick={action.onClick}
-              className={`group flex items-start gap-3 rounded-[18px] border border-divider bg-white text-left transition hover:border-pine/30 hover:bg-pine-mist/20 ${
+              className={`group flex items-start gap-3 rounded-[18px] border border-divider bg-white text-left transition hover:border-pine/25 hover:bg-pine-fog ${
                 compact ? 'px-3.5 py-3.5' : 'px-4 py-4'
               }`}
             >

@@ -1,7 +1,7 @@
 'use client';
 
 /**
- * ClassroomLeftPanel — 课堂页左侧面板（v4 · 编辑器感排版）
+ * ClassroomLeftPanel — 课堂页左侧面板（v7.1 · 学习上下文首页）
  *
  * 设计目标：从"能用的 UI"升级到"有设计感的空间"。
  * 参考：Things 3 / Linear / Craft——不是 SaaS 管理后台，是一个会呼吸的笔记本。
@@ -9,16 +9,16 @@
  * 关键设计决策：
  *   1. 顶部给一个页面大标题"课堂"+ 日期副文案，建立"我在哪儿"的视觉锚点
  *   2. 字号成倍数跳跃：32px 标题 / 16px 卡主标 / 12px Meta / 11px 标签
- *   3. 减色：只保留暖黄作为"正在发生"的唯一强调色，其他一切黑白灰
+ *   3. 减色：松石绿表达智能与连接，朱砂只表达正在发生
  *   4. 分组标签用 uppercase tracking 英式小标，不用圆点装饰
  *   5. 活动条改为 白底 + 左侧暖黄细柱 + 黑色主标——克制但焦点明确
- *   6. 主 CTA 改为 黑色主按钮 + 黄点——高级感（像 Linear）
+ *   6. 主 CTA 使用松石绿，不用纯黑伪造科技感
  *
  * 设计系统：v7 设计宪法：95% 克制 + 5% 仪式时刻情绪化（shadow-soft / shadow-card / shadow-ai-glow）
  */
 
 import React, { useMemo } from 'react';
-import { Mic, Square, Monitor, Headphones } from 'lucide-react';
+import { AudioLines, Headphones, Mic, Monitor, Network, Shapes, Square } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import type { Lesson, ClassroomPaneState } from './types';
 import { ClassroomLessonCard } from './ClassroomLessonCard';
@@ -184,18 +184,65 @@ function formatTodayLabel(): string {
  * 不把学习现场做成“待办 / 已归档”管理后台，只告诉用户在哪里，并给出下一步。
  */
 function PageHeader() {
+  const capabilities = [
+    {
+      key: 'listen',
+      icon: AudioLines,
+      title: COPY.classroomHome.capabilityListenTitle,
+      body: COPY.classroomHome.capabilityListenBody,
+    },
+    {
+      key: 'connect',
+      icon: Network,
+      title: COPY.classroomHome.capabilityConnectTitle,
+      body: COPY.classroomHome.capabilityConnectBody,
+    },
+    {
+      key: 'practice',
+      icon: Shapes,
+      title: COPY.classroomHome.capabilityPracticeTitle,
+      body: COPY.classroomHome.capabilityPracticeBody,
+    },
+  ] as const;
+
   return (
-    <div className="flex-shrink-0 px-8 pb-6 pt-8 lg:px-12 lg:pt-10">
+    <div className="flex-shrink-0 px-8 pb-5 pt-8 lg:px-12 lg:pt-10">
       <div className="mx-auto w-full max-w-4xl">
-        <p className="font-mono text-[10px] font-medium tracking-[0.08em] text-ink-muted">
-          {formatTodayLabel()}
-        </p>
+        <div className="flex items-center justify-between gap-4">
+          <p className="font-mono text-[10px] font-medium tracking-[0.08em] text-ink-muted">
+            {formatTodayLabel()}
+          </p>
+          <span className="inline-flex items-center gap-1.5 rounded-full border border-pine/10 bg-pine-fog px-2.5 py-1 font-mono text-[9px] font-semibold tracking-[0.08em] text-pine">
+            <span className="h-1.5 w-1.5 rounded-full bg-pine" aria-hidden />
+            {COPY.classroomHome.contextStatus}
+          </span>
+        </div>
         <h1 className="mt-2 text-[32px] font-semibold leading-tight tracking-[-0.04em] text-ink">
           {COPY.classroomHome.title}
         </h1>
         <p className="mt-2 text-[13.5px] leading-6 text-ink-secondary">
           {COPY.classroomHome.subtitle}
         </p>
+
+        <section
+          aria-label={COPY.classroomHome.capabilityLabel}
+          className="mt-6 grid grid-cols-3 overflow-hidden rounded-[18px] border border-pine/12 bg-white"
+        >
+          {capabilities.map(({ key, icon: Icon, title, body }, index) => (
+            <div
+              key={key}
+              className={`flex min-w-0 items-start gap-3 px-4 py-3.5 ${index > 0 ? 'border-l border-divider-light' : ''}`}
+            >
+              <span className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-[10px] bg-pine-fog text-pine">
+                <Icon size={15} strokeWidth={1.8} />
+              </span>
+              <span className="min-w-0">
+                <span className="block text-[12.5px] font-semibold text-ink">{title}</span>
+                <span className="mt-1 block truncate text-[11px] text-ink-muted">{body}</span>
+              </span>
+            </div>
+          ))}
+        </section>
       </div>
     </div>
   );
@@ -396,6 +443,7 @@ function ListView({
               onStartRecording={onStart}
               onAddMaterial={onAddMaterial}
               onSearch={onSearch}
+              showRecord={false}
             />
           </div>
 
@@ -448,9 +496,8 @@ function ListView({
 }
 
 /**
- * StickyStartBar — 底部常驻的主 CTA（v4 · 黑色主按钮 + 黄点）。
- * Linear / Things 级别的"高级感"来自于黑 + 一点有特征的颜色。
- * 不再用大片暖黄填充。
+ * StickyStartBar — 底部常驻的主 CTA。
+ * 主动作使用松石绿；录音来源保持显性，避免用户开始后才发现录错声音。
  *
  * v5（本次改动）：在主按钮上方插入一排「录音来源选择」——
  * 真实场景里同时有「线下讲堂」「在家看网课」两种情况，录音源必须先选对，
@@ -468,11 +515,11 @@ function StickyStartBar({
   onChangeAudioSource?: (source: RecorderAudioSource) => void;
 }) {
   return (
-    <div className="flex-shrink-0 bg-canvas px-8 pb-[max(env(safe-area-inset-bottom),1.25rem)] pt-4 lg:px-12">
+    <div className="flex-shrink-0 border-t border-divider-light bg-canvas/95 px-8 pb-[max(env(safe-area-inset-bottom),1.25rem)] pt-3 lg:px-12">
       <div className="mx-auto w-full max-w-4xl">
         {disabled ? (
-          <div className="flex w-full items-center justify-center gap-2.5 rounded-full bg-[#F0EBDF] py-3.5 text-[13px] text-ink-muted">
-            <span className="inline-flex h-1.5 w-1.5 rounded-full bg-[#B5483C] animate-pulse" />
+          <div className="flex w-full items-center justify-center gap-2.5 rounded-full bg-pine-mist py-3.5 text-[13px] text-pine">
+            <span className="inline-flex h-1.5 w-1.5 animate-pulse rounded-full bg-vermilion" />
             <span>{COPY.classroomHome.active}</span>
           </div>
         ) : (
@@ -483,7 +530,7 @@ function StickyStartBar({
             <button
               type="button"
               onClick={onStart}
-              className="group flex w-full items-center justify-center gap-2 rounded-full bg-ink py-3 text-[13.5px] font-medium text-white transition hover:bg-[#1a1a19] active:scale-[0.995]"
+              className="group flex w-full items-center justify-center gap-2 rounded-full bg-pine py-3 text-[13.5px] font-medium text-white transition hover:bg-pine-deep active:scale-[0.995]"
             >
               <span className="relative flex h-1.5 w-1.5">
                 <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-vermilion opacity-50 group-hover:opacity-70" />
@@ -507,7 +554,7 @@ function StickyStartBar({
  *
  * 设计：
  *   - 用 hairline 分隔，不用阴影/渐变
- *   - 选中态仅用黑底白字表达，没有色块炫技
+ *   - 选中态使用松石绿底白字，与全局主动作一致
  *   - 每个选项下有一行极小的提示，告诉用户"这按钮对应什么物理场景"
  *
  * 为什么不做成下拉菜单：
@@ -570,7 +617,7 @@ function AudioSourcePicker({
   if (!canSystem) {
     return (
       <div className="mb-3">
-        <div className="flex items-center gap-2 rounded-2xl bg-white px-3 py-2.5 ring-[0.5px] ring-[#1C1B19]/[0.08]">
+        <div className="flex items-center gap-2 rounded-2xl border border-divider bg-white px-3 py-2.5">
           <Mic size={14} strokeWidth={2} className="text-ink" />
           <span className="text-[12.5px] font-medium text-ink">麦克风</span>
           <span className="text-[11px] text-ink-muted">· 手机端只支持这一档</span>
@@ -585,7 +632,7 @@ function AudioSourcePicker({
   // ── 桌面端：segmented 三选一 ──
   return (
     <div className="mb-3">
-      <div className="grid grid-cols-3 overflow-hidden rounded-2xl bg-white ring-[0.5px] ring-[#1C1B19]/[0.08]">
+      <div className="grid grid-cols-3 overflow-hidden rounded-2xl border border-divider bg-white">
         {options.map((opt) => {
           const active = value === opt.key;
           const Icon = opt.icon;
@@ -596,8 +643,8 @@ function AudioSourcePicker({
               onClick={() => onChange(opt.key)}
               className={`flex flex-col items-center justify-center gap-1 px-2 py-2.5 text-[12px] transition ${
                 active
-                  ? 'bg-ink text-white'
-                  : 'text-ink hover:bg-[#FAF7F2]'
+                  ? 'bg-pine text-white'
+                  : 'text-ink hover:bg-pine-fog'
               }`}
               aria-pressed={active}
             >

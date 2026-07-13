@@ -209,12 +209,12 @@ export function DesktopSidebar({
                   effectiveCollapsed
                     ? `h-9 justify-center px-0 ${
                         isActive
-                          ? 'border border-divider bg-white text-ink'
+                          ? 'border border-pine/15 bg-pine-fog text-pine'
                           : 'text-ink-secondary hover:bg-paper-warm hover:text-ink'
                       }`
                     : `gap-2.5 px-2.5 py-[7px] text-[13.5px] font-medium ${
                         isActive
-                          ? 'border border-divider bg-white text-ink'
+                          ? 'border border-pine/15 bg-pine-fog text-pine'
                           : 'text-ink-secondary hover:bg-paper-warm hover:text-ink'
                       }`
                 }`}
@@ -262,15 +262,15 @@ export function DesktopSidebar({
           onClick={onOpenEcho}
           className={`relative flex w-full items-center rounded-lg transition-all ${
             effectiveCollapsed
-              ? `h-9 justify-center px-0 ${isEchoActive ? 'border border-divider bg-white text-ink' : 'text-ink-secondary hover:bg-paper-warm hover:text-ink'}`
-              : `gap-2.5 px-2.5 py-[7px] text-[13.5px] font-medium ${isEchoActive ? 'border border-divider bg-white text-ink' : 'text-ink-secondary hover:bg-paper-warm hover:text-ink'}`
+              ? `h-9 justify-center px-0 ${isEchoActive ? 'border border-pine/15 bg-pine-fog text-pine' : 'text-ink-secondary hover:bg-paper-warm hover:text-ink'}`
+              : `gap-2.5 px-2.5 py-[7px] text-[13.5px] font-medium ${isEchoActive ? 'border border-pine/15 bg-pine-fog text-pine' : 'text-ink-secondary hover:bg-paper-warm hover:text-ink'}`
           }`}
           title={effectiveCollapsed ? COPY.feed.relatedInfoLabel : undefined}
         >
           <Sparkles size={effectiveCollapsed ? 17 : 16} strokeWidth={1.7} className="flex-shrink-0" />
           {!effectiveCollapsed && <span>{COPY.feed.relatedInfoLabel}</span>}
           {echoCount > 0 && (
-            <span className={`${effectiveCollapsed ? 'absolute -right-1 -top-1' : 'ml-auto'} inline-flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-ink px-1.5 text-[11px] font-semibold leading-none text-white`}>
+            <span className={`${effectiveCollapsed ? 'absolute -right-1 -top-1' : 'ml-auto'} inline-flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-pine px-1.5 text-[11px] font-semibold leading-none text-white`}>
               {echoCount}
             </span>
           )}
@@ -343,7 +343,7 @@ export function DesktopSidebar({
                   <button
                     type="button"
                     onClick={handleLogout}
-                    className="flex w-full items-center gap-2 px-3.5 py-2 text-left text-[13px] text-[#B5483C] transition-colors hover:bg-[#FDECEC]"
+                    className="flex w-full items-center gap-2 px-3.5 py-2 text-left text-[13px] text-vermilion transition-colors hover:bg-vermilion-fog"
                   >
                     <LogOut size={ICON_SM} strokeWidth={ICON_STROKE} />
                     退出登录
@@ -355,7 +355,7 @@ export function DesktopSidebar({
         ) : (
           <Link
             href="/login"
-            className={`flex items-center justify-center rounded-lg bg-ink text-[13px] font-medium text-white transition-all hover:bg-[#111111] ${
+            className={`flex items-center justify-center rounded-lg bg-pine text-[13px] font-medium text-white transition-all hover:bg-pine-deep ${
               effectiveCollapsed ? 'mx-auto h-9 w-9 px-0' : 'w-full px-4 py-2'
             }`}
             title={effectiveCollapsed ? '登录' : undefined}
