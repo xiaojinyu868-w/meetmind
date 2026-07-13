@@ -204,7 +204,6 @@ export function GlobalAskPanel({
 
   const startNewConversation = React.useCallback(() => {
     stop();
-    setMessages([]);
     setIntentPlan(null);
     setActiveIntent(null);
     setPendingQuery('');
@@ -348,7 +347,7 @@ export function GlobalAskPanel({
             </div>
           </div>
           <div className="flex items-center gap-1.5">
-            <button type="button" onClick={() => setView('memory')} className="inline-flex h-9 items-center gap-1.5 rounded-full border border-divider bg-white px-3 text-[11.5px] text-ink-secondary hover:border-pine/25 hover:text-pine">
+            <button type="button" onClick={() => setView('memory')} className="inline-flex h-9 items-center gap-1.5 rounded-full border border-divider bg-white px-3 text-[11.5px] text-ink-secondary hover:border-pine/25 hover:text-pine" aria-label={COPY.globalAsk.memoryAction} title={COPY.globalAsk.memoryAction}>
               <History size={13} /> <span className="hidden sm:inline">{COPY.globalAsk.memoryAction}</span>
             </button>
             {messages.length > 0 ? <button type="button" onClick={startNewConversation} className="flex h-9 w-9 items-center justify-center rounded-full border border-divider bg-white text-ink-muted hover:text-pine" aria-label={COPY.globalAsk.newConversation}><Plus size={14} /></button> : null}

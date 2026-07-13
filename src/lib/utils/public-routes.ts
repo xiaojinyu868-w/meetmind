@@ -20,6 +20,7 @@ const PUBLIC_ROUTES = [
   '/wechat/open/*',
   '/api/tutor',
   '/api/tutor/agent',
+  '/api/tutor/intent',
   '/api/chat',
   '/api/llm/models',
   '/api/asr-config',
