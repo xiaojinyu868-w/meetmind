@@ -37,7 +37,7 @@
 - `PodcastPlayer.tsx` 导出的 `ConfusionMarker` 类型被 `session-store` 引用
 - Dedao 系列组件是得到 App 风格的替代 UI 方案
 - `MobileCollectionSheet.tsx`、`MobileTopBar.tsx`、`MobileRecordTopBar.tsx`、`MobileAIChatHeader.tsx`、`MobileAIChatPanel.tsx` 是 page 拆分模板：适合承接移动端大块条件渲染 UI；其中学习同桌文字对话/历史详情统一走 `SafeAITutor → TutorAgentPanel`，语音同桌走 `RealtimeTutorPanel → TutorRealtimeCallScreen`；语音转写会落 `conversationService` 并通过 conversationId 接回文字 agent，但不要把业务逻辑和数据获取塞回组件里
-- `MobileAppShell.tsx` 是 M15 移动端重设计的统一壳：替代旧的 `viewMode + mobileSubPage` 双状态机，用 `MobileAppNavigator` 栈式导航。拍照不再依赖外部 `sourceFileInputRef`，内部创建带 `capture="environment"` 的独立 input。录课计时器内部 tick。复习态 AI 对话、应用矩阵通过 render slots 从 page.tsx 传入真实组件。处理中的“先回首页”必须真正离开处理页；超时未产生转录时不能进入永久 loading 的复习页，而应明确告知原声已保留并提供返回路径。「今日情报」同时读取服务端 workspace captures 和尚未同步完成的本地收集，首条本地笔记保存后即可生成。
+- `MobileAppShell.tsx` 是 M15 移动端重设计的统一壳：替代旧的 `viewMode + mobileSubPage` 双状态机，用 `MobileAppNavigator` 栈式导航。拍照不再依赖外部 `sourceFileInputRef`，内部创建带 `capture="environment"` 的独立 input。录课计时器内部 tick。首页输入条的交互合同是“左侧添加文件、右侧空态语音听写、有正文时切为发送”，听写必须复用 `useCollectionComposer` 的语音入口，不能降级成音频文件选择。复习态 AI 对话、应用矩阵通过 render slots 从 page.tsx 传入真实组件。处理中的“先回首页”必须真正离开处理页；超时未产生转录时不能进入永久 loading 的复习页，而应明确告知原声已保留并提供返回路径。「今日情报」同时读取服务端 workspace captures 和尚未同步完成的本地收集，首条本地笔记保存后即可生成。
 - `MobileAppRunner.tsx` 是移动端应用执行器：六类应用共用 catalog 与 AppRenderSurface；移动端矩阵不再维护缺少播客/信息图的四项手写目录。
 - 移动首页的收集区采用“资料收件箱”顺序（最新在上）；桌面收集流保留对话式时间正序，两者不要共享排序假设。
 - `DedaoMenu.tsx` 现在承担移动端统一"设置"入口：游客和登录用户都能进 `settings`，个人资料不再单独挂在菜单里

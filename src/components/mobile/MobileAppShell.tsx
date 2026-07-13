@@ -11,7 +11,7 @@ import { useCaptureEditorStore } from '@/stores/capture-editor-store';
 import { useSessionStore } from '@/stores/session-store';
 import { useCollectionStore } from '@/stores/collection-store';
 import { toast } from 'sonner';
-import { Mic, Camera, Edit3, Paperclip, ChevronRight, ChevronDown, Layers, Zap, FileText, Brain, Search, Star, MapPin, ExternalLink, Headphones, Image as ImageIcon } from 'lucide-react';
+import { Mic, Camera, Edit3, Paperclip, ArrowUp, ChevronRight, ChevronDown, Layers, Zap, FileText, Brain, Search, Star, MapPin, ExternalLink, Headphones, Image as ImageIcon } from 'lucide-react';
 import type { SourceIngestItem } from '@/types/page-types';
 import type { TranscriptSegment } from '@/types';
 import { getSpeakerLabel, getSpeakerColorClass } from '@/lib/services/asr/diarization-service';
@@ -33,6 +33,9 @@ export interface MobileAppShellProps {
   onComposerChange: (text: string) => void;
   onComposerSubmit: () => void;
   onComposerPaste: (e: React.ClipboardEvent) => void;
+  onToggleComposerDictation: () => void | Promise<void>;
+  composerVoiceStatus: 'idle' | 'connecting' | 'recording' | 'error';
+  composerVoiceInterimText: string;
   composerRef: React.RefObject<HTMLTextAreaElement | null> | React.RefObject<HTMLTextAreaElement>;
   segments: TranscriptSegment[];
   sessionId: string | null;
@@ -138,6 +141,14 @@ function HomeScreen({ p }: { p: MobileAppShellProps }) {
     () => groupByDate(sortCollectionNewestFirst(p.collectionFeedItems)),
     [p.collectionFeedItems]
   );
+  const hasComposerText = p.composerText.trim().length > 0;
+  const isComposerVoiceActive = p.composerVoiceStatus === 'connecting' || p.composerVoiceStatus === 'recording';
+  const composerPlaceholder = p.composerVoiceInterimText
+    || (p.composerVoiceStatus === 'connecting'
+      ? COPY.mobileComposer.connecting
+      : p.composerVoiceStatus === 'recording'
+        ? COPY.mobileComposer.listening
+        : COPY.mobileComposer.placeholder);
 
   // 清除临时预览卡：OCR 完成（store 新增 image item）或 30s 超时兜底
   useEffect(() => {
@@ -322,21 +333,62 @@ function HomeScreen({ p }: { p: MobileAppShellProps }) {
       {/* 底部 composer */}
       <div className="flex-shrink-0 bg-paper px-3 py-2 pb-[max(env(safe-area-inset-bottom),8px)] border-t border-divider/60">
         <div className="flex items-center gap-2">
-          <button className="flex h-8 w-8 items-center justify-center rounded-full text-ink-muted flex-shrink-0" onClick={() => p.onOpenFilePicker('all')}>
-            <Paperclip size={16} strokeWidth={2} />
+          <button
+            type="button"
+            aria-label={COPY.mobileComposer.attach}
+            className="flex h-11 w-11 touch-manipulation items-center justify-center rounded-full text-ink-muted flex-shrink-0 hover:bg-canvas active:bg-canvas active:scale-95 focus-visible:ring-2 focus-visible:ring-pine/35 focus-visible:outline-none transition"
+            onClick={() => p.onOpenFilePicker('all')}
+          >
+            <Paperclip size={19} strokeWidth={2} aria-hidden="true" />
           </button>
-          <div className="flex-1 rounded-full bg-canvas px-3.5 py-2">
-            <textarea ref={p.composerRef as React.RefObject<HTMLTextAreaElement>} rows={1} value={p.composerText}
-              placeholder="发一句想法，贴个链接…"
-              className="w-full bg-transparent text-[12.5px] text-ink placeholder:text-ink-muted outline-none resize-none"
+          <div className="flex min-h-11 min-w-0 flex-1 items-center rounded-[22px] bg-canvas px-4 py-2.5 focus-within:ring-2 focus-within:ring-pine/25">
+            <textarea
+              ref={p.composerRef as React.RefObject<HTMLTextAreaElement>}
+              rows={1}
+              value={p.composerText}
+              name="mobile-quick-note"
+              autoComplete="off"
+              aria-label={COPY.mobileComposer.placeholder}
+              placeholder={composerPlaceholder}
+              className="w-full bg-transparent text-[16px] leading-5 text-ink placeholder:text-ink-muted outline-none resize-none"
               onChange={e => p.onComposerChange(e.target.value)}
-              onKeyDown={e => { if (e.key==='Enter'&&!e.shiftKey) { e.preventDefault(); p.onComposerSubmit(); toast.success('已记录'); } }}
+              onKeyDown={e => {
+                if (e.nativeEvent.isComposing) return;
+                if (e.key === 'Enter' && !e.shiftKey) {
+                  e.preventDefault();
+                  p.onComposerSubmit();
+                }
+              }}
               onPaste={p.onComposerPaste}
             />
           </div>
-          <button className="flex h-8 w-8 items-center justify-center rounded-full text-ink-muted flex-shrink-0" onClick={() => p.onOpenFilePicker('audio')}>
-            <Mic size={16} strokeWidth={2} />
-          </button>
+          {hasComposerText && !isComposerVoiceActive ? (
+            <button
+              type="button"
+              aria-label={COPY.mobileComposer.send}
+              className="flex h-11 w-11 flex-shrink-0 touch-manipulation items-center justify-center rounded-full bg-pine text-white shadow-soft hover:bg-pine/90 active:scale-95 focus-visible:ring-2 focus-visible:ring-pine/40 focus-visible:ring-offset-2 focus-visible:outline-none transition"
+              onClick={() => p.onComposerSubmit()}
+            >
+              <ArrowUp size={20} strokeWidth={2.4} aria-hidden="true" />
+            </button>
+          ) : (
+            <button
+              type="button"
+              aria-label={isComposerVoiceActive ? COPY.mobileComposer.stopDictation : COPY.mobileComposer.startDictation}
+              aria-pressed={isComposerVoiceActive}
+              className={`flex h-11 w-11 flex-shrink-0 touch-manipulation items-center justify-center rounded-full active:scale-95 focus-visible:ring-2 focus-visible:ring-vermilion/35 focus-visible:outline-none transition ${isComposerVoiceActive ? 'bg-vermilion-mist text-vermilion' : 'text-ink-muted hover:bg-canvas active:bg-canvas'}`}
+              onClick={() => void p.onToggleComposerDictation()}
+            >
+              <Mic size={19} strokeWidth={2} aria-hidden="true" className={isComposerVoiceActive ? 'animate-pulse motion-reduce:animate-none' : ''} />
+            </button>
+          )}
+          <span className="sr-only" aria-live="polite">
+            {p.composerVoiceStatus === 'connecting'
+              ? COPY.mobileComposer.connecting
+              : p.composerVoiceStatus === 'recording'
+                ? COPY.mobileComposer.listening
+                : ''}
+          </span>
         </div>
       </div>
     </div>

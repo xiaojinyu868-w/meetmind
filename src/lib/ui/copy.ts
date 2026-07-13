@@ -210,6 +210,16 @@ export const COPY = {
     downgradeFromMixed: '电脑声音没录到，只用麦克风在录',
   },
 
+  mobileComposer: {
+    placeholder: '发一句想法，贴个链接…',
+    attach: '添加文件',
+    send: '发送',
+    startDictation: '开始语音听写',
+    stopDictation: '停止语音听写',
+    connecting: '正在连接麦克风…',
+    listening: '我在听，说完再点一下',
+  },
+
   echoShare: {
     title: '分享这条笔记',
     open: '分享',

@@ -1853,6 +1853,9 @@ function StudentAppContent({
           onComposerChange={(text) => setCollectionComposerText(text)}
           onComposerSubmit={handleCollectionComposerSubmit}
           onComposerPaste={(e) => handleCollectionComposerPaste(e as React.ClipboardEvent<HTMLTextAreaElement>)}
+          onToggleComposerDictation={toggleComposerDictation}
+          composerVoiceStatus={composerVoiceStatus}
+          composerVoiceInterimText={composerVoiceInterimText}
           composerRef={collectionComposerRef}
           segments={segments}
           sessionId={sessionId}
