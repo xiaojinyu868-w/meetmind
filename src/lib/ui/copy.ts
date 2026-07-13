@@ -88,6 +88,17 @@ export const COPY = {
     today: '今天',
     yesterday: '昨天',
     active: '正在上课',
+    launchpadTitle: '从这里开始',
+    launchpadHint: '课堂、材料和问题都会进入同一份学习上下文',
+    actionRecordTitle: '开始一节课',
+    actionRecordBody: '录线下课、网课或讨论，边听边形成课堂脉络。',
+    actionRecordLabel: '选择声音开始',
+    actionMaterialTitle: '放入学习材料',
+    actionMaterialBody: '文档、网页、音视频会自动接到相关课堂和目标。',
+    actionMaterialLabel: '选择文件或链接',
+    actionSearchTitle: '找到并继续问',
+    actionSearchBody: '搜索过去的课堂和资料，带着真实原文继续理解。',
+    actionSearchLabel: '搜索我的内容',
   },
 
   sourceType: {

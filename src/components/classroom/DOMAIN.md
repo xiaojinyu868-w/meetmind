@@ -27,6 +27,7 @@ classroom/ ← hooks/useClassroomCompanion.ts（对话 hook 消费 composeFirstH
 | `InlineAppCard.tsx` | ~160 | 对话内应用承载卡（真实应用 UI 复用 `apps/windows/AppRenderSurface`，不再手写一套窄版） |
 | `OctoBuddy.tsx` | ~660 | Octo Buddy 像素 IP（Sprite + 悬浮球）；Sprite 自带呼吸 / 听课 / 开心动画，右侧同桌内嵌也必须动起来 |
 | `ClassroomHero.tsx` | ~250 | 课堂零存量首屏；左侧定位与录音入口，右侧用真实示例课片段呈现“听见原话 → 有依据地解释”的产品证明，不陈列功能清单 |
+| `ClassroomLaunchpad.tsx` | ~100 | 课堂首页能力入口：让开始课堂、放入材料、搜索并继续问第一眼可见；只呈现三条学习路径，不做完整功能黄页 |
 | `ClassroomLessonCard.tsx` | ~160 | 一张课的卡片（四种时态视觉差异：upcoming/recording/processing/ready） |
 | `ClassroomRecordingView.tsx` | ~640 | 录课中视图（桌面左侧实时文字 + 中间课堂脉络；移动端在“脉络 / 原话”之间切换；含翻译与试听课音频控制）。试听课默认 EN→中，音频结束后只引导点击“结束这节课”，由上层切到课后复习页 / 应用矩阵 |
 | `ClassroomFlowCanvas.tsx` | ~240 | 课中中间主画布：突出“正在讲”，以低权重时间线呈现近期推进，并将真正值得回来的定义/公式/问题留到课后；不画课中思维导图 |
