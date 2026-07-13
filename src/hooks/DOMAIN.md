@@ -64,6 +64,7 @@ hooks → stores + types + lib/db + lib/utils
 | `useLiveConcepts.ts` | ~100 | 录课中关键概念启发式抽取（订阅 captureEditorStore.segments，零 API），ClassroomRecordingView 消费 |
 | `useLearningContext.ts` | ~220 | 第二阶段统一学习上下文：登录态合并写入 `learnerProfile`，游客写 IndexedDB；管理用户确认的长期记忆、近期学习活动与可恢复学习线索，并通过页面事件同步多个消费组件 |
 | `useGlobalAskHistory.ts` | ~145 | 全局 Ask 的 IndexedDB 对话恢复/增量持久化 adapter；只恢复 `metadata.scope='global-ask'`，避免误接课堂复习对话 |
+| `useAppLearningActivity.ts` | ~80 | 桌面与移动应用共用的学习活动回写：记录应用生成结果及闪卡/测验交互到最近学习现场，使用稳定 sourceId 去重，不直接升级为长期记忆 |
 
 ### data/ — API 数据 hooks
 

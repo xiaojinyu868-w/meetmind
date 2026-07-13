@@ -13,6 +13,7 @@ import { AppRenderSurface } from '@/components/apps/windows/AppRenderSurface';
 import { WORKSHOP_APP_CATALOG, type WorkshopAppKey } from '@/lib/ai-native/app-catalog';
 import type { TranscriptSegment, Anchor } from '@/types';
 import { COPY } from '@/lib/ui/copy';
+import { buildAppResultActivityDetail, useAppLearningActivity } from '@/hooks/useAppLearningActivity';
 
 export interface MobileAppRunnerProps {
   appKey: WorkshopAppKey;
@@ -52,6 +53,18 @@ export function MobileAppRunner({
     keyDifficulties,
     terminologyHint,
     autoRun: false, // 手动触发
+  });
+  const resultActivityDetail = buildAppResultActivityDetail(
+    result,
+    COPY.globalAsk.appResultSummary,
+  );
+  const { recordInteraction } = useAppLearningActivity({
+    appKey,
+    sessionId: sessionId || 'mobile-session',
+    resultReady: Boolean(result) && taskState.status === 'success',
+    resultUpdatedAt: taskState.updatedAt,
+    resultDetail: resultActivityDetail,
+    activityTitle: COPY.globalAsk.appActivity(app?.name || appKey),
   });
 
   // 挂载时自动执行
@@ -100,6 +113,7 @@ export function MobileAppRunner({
           onRegenerate={rerun}
           onGenerateDraft={() => (hasResult ? rerun() : execute())}
           onResultUpdate={updateResult}
+          onLearningActivity={recordInteraction}
           mindmapDefaultFullscreen
         />
       </div>

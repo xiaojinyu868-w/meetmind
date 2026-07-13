@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useRef } from 'react';
+import { useMemo } from 'react';
 import { ArrowLeft, RotateCw } from 'lucide-react';
 import type { TranscriptSegment } from '@/types';
 import type { Anchor } from '@/lib/services/anchor-service';
@@ -9,7 +9,7 @@ import { getWorkshopAppByKey, type WorkshopAppKey } from '@/lib/ai-native/app-ca
 import { useAppExecution } from '@/components/apps/hooks/useAppExecution';
 import { AppRenderSurface } from '@/components/apps/windows/AppRenderSurface';
 import { COPY } from '@/lib/ui/copy';
-import { useLearningContext } from '@/hooks/useLearningContext';
+import { buildAppResultActivityDetail, useAppLearningActivity } from '@/hooks/useAppLearningActivity';
 
 interface ReviewLearningWorkspaceProps {
   appKey: WorkshopAppKey;
@@ -48,8 +48,6 @@ export function ReviewLearningWorkspace({
   onBack,
   onLearningActivity,
 }: ReviewLearningWorkspaceProps) {
-  const learning = useLearningContext();
-  const recordedResultRef = useRef<string | null>(null);
   const app = getWorkshopAppByKey(appKey) || getWorkshopAppByKey('flashcards')!;
   const isImmersiveApp = app.key === 'flashcards';
   const infographicContentContext = useMemo(
@@ -68,41 +66,19 @@ export function ReviewLearningWorkspace({
     autoRun: app.key !== 'infographic',
   });
 
-  const resultActivityDetail = useMemo(() => {
-    if (!execution.result) return '';
-    const renderDescription = execution.result.render?.description?.trim();
-    if (renderDescription) return renderDescription.slice(0, 220);
-    const firstCard = execution.result.cards[0];
-    if (firstCard) return `${firstCard.title}：${firstCard.body}`.slice(0, 220);
-    return COPY.globalAsk.appResultSummary(execution.result.cards.length);
-  }, [execution.result]);
-
-  useEffect(() => {
-    if (!execution.result || execution.taskState.status !== 'success') return;
-    const sourceId = `app-result:${sessionId}:${app.key}:${execution.taskState.updatedAt}`;
-    if (recordedResultRef.current === sourceId) return;
-    recordedResultRef.current = sourceId;
-    void learning.recordActivity({
-      kind: 'app',
-      title: COPY.globalAsk.appActivity(app.name),
-      detail: resultActivityDetail,
-      sessionId,
-      appKey: app.key,
-      sourceId,
-    });
-  }, [app.key, app.name, execution.result, execution.taskState.status, execution.taskState.updatedAt, learning, resultActivityDetail, sessionId]);
-
-  const handleLearningActivity = useCallback((line: string) => {
-    onLearningActivity?.(line);
-    void learning.recordActivity({
-      kind: 'app',
-      title: COPY.globalAsk.appActivity(app.name),
-      detail: line,
-      sessionId,
-      appKey: app.key,
-      sourceId: `app-interaction:${sessionId}:${app.key}:${line}`,
-    });
-  }, [app.key, app.name, learning, onLearningActivity, sessionId]);
+  const resultActivityDetail = buildAppResultActivityDetail(
+    execution.result,
+    COPY.globalAsk.appResultSummary,
+  );
+  const { recordInteraction } = useAppLearningActivity({
+    appKey: app.key,
+    sessionId,
+    resultReady: Boolean(execution.result) && execution.taskState.status === 'success',
+    resultUpdatedAt: execution.taskState.updatedAt,
+    resultDetail: resultActivityDetail,
+    activityTitle: COPY.globalAsk.appActivity(app.name),
+    onLearningActivity,
+  });
 
   return (
     <section className={`flex h-full min-h-0 flex-col ${isImmersiveApp ? 'bg-[#11110F]' : 'bg-canvas'}`} data-testid="review-learning-workspace">
@@ -144,7 +120,7 @@ export function ReviewLearningWorkspace({
           onRegenerate={() => void execution.rerun()}
           onGenerateDraft={() => (execution.hasResult ? execution.rerun() : execution.execute())}
           onResultUpdate={execution.updateResult}
-          onLearningActivity={handleLearningActivity}
+          onLearningActivity={recordInteraction}
           mindmapDefaultFullscreen
         />
       </div>
