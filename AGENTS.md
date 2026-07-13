@@ -172,7 +172,9 @@ MeetMind 是以学习者长期上下文为中心的 AI 学习产品。
 
 **首屏录音来源原则**：电脑内录是核心能力，不是帮助文档里的隐藏功能。课堂零存量首屏必须让“麦克风 / 电脑声音 / 两路都录”作为轻量选择直接可见；不要只给一个“开始录课”按钮让用户猜。
 
-**试听课原则**：试听课必须真的能听，不能只是静态转录演示。进入示例课 recording 视图时必须挂载 `/demo-audio.mp3`，用真实音频播放时间驱动转录渐进露出；中间结构树也必须随音频长出来，不能长期停在空态。若浏览器拦截自动播放，必须提供显式“播放声音”入口。英文试听课默认 EN→中，但用户手动切换后要尊重用户选择。音频自然结束后必须留在试听课堂现场，由 Octo Buddy 轻引导用户点“结束这节课”，再进入既有课后复习页 / 应用矩阵；不要在课中页面承载完整课后学习，也不能回到“原声已保留”的失败卡片。
+**试听课原则**：试听课必须真的能听，不能只是静态转录演示。进入示例课 recording 视图时必须挂载 `/demo-audio.mp3`，用真实音频播放时间驱动转录渐进露出；中间课堂脉络也必须随音频推进，不能长期停在空态。若浏览器拦截自动播放，必须提供显式“播放声音”入口。英文试听课默认 EN→中，但用户手动切换后要尊重用户选择。音频自然结束后必须留在试听课堂现场，由 Octo Buddy 轻提醒用户点“结束这节课”，再进入既有课后复习页 / 应用矩阵；不要在课中页面承载完整课后学习，也不能回到“原声已保留”的失败卡片。
+
+**课中中间画布原则**：中间区域是模型自主理解的「课堂脉络」，只回答“现在讲什么、刚才如何推进、什么值得课后回来”。前端只约束稳定渲染契约，不用关键词树或固定节点数量替模型判断课堂结构。思维导图属于课后应用矩阵，不得重新作为课中主画布。
 
 **课中轻引导原则**：同桌右栏可以引导，但必须像旁边同学轻轻递话，不像功能导览。优先用 Octo Buddy 像素章鱼 + 2-3 个自然问题 chip（点了就发送），避免大面积“我能做什么”的说明卡。Octo Buddy 是 IP，不是静态 icon；内嵌在右栏时也要有呼吸 / 听课 / 开心等轻动画。
 
@@ -604,8 +606,10 @@ src/
 | `src/lib/services/classroom/recent-focus.ts` | 课堂同桌的最近 30s 窗口提取（纯 TS，可单测） |
 | `src/components/classroom/ClassroomLayout.tsx` | 课堂分栏；同桌只在真实录课 / 示例课听课态可见，空课堂隐藏右栏、Octo Buddy 和移动端问同学入口 |
 | `src/components/classroom/ClassroomHero.tsx` | 课堂零存量 Hero；居中首屏避免右侧空洞，录音来源 rail 直接露出麦克风 / 电脑声音 / 两路都录，示例课只是低门槛预览 |
-| `src/components/classroom/ClassroomRecordingView.tsx` | 课中视图；试听课播放 `/demo-audio.mp3`，由音频时间驱动转录渐进露出，结束后只显示总结卡和“结束这节课”入口，由上层切到课后复习页 / 应用矩阵 |
-| `src/components/classroom/demo-mindmap.ts` | 试听课静态结构树；随音频秒数生长，避免中间结构画布长期空态 |
+| `src/components/classroom/ClassroomRecordingView.tsx` | 课中视图；桌面呈现实时原话 + 课堂脉络，移动端可切换“脉络 / 原话”；试听课播放 `/demo-audio.mp3`，结束后只显示总结卡和“结束这节课”入口 |
+| `src/components/classroom/ClassroomFlowCanvas.tsx` | 课中中间主画布；突出当前讲解，以低权重时间线呈现近期推进，并留下真正值得课后回来的内容 |
+| `src/hooks/useClassroomFlow.ts` + `src/lib/services/classroom-flow-service.ts` | 课堂脉络主链路；模型基于带时间位置的实时转录自主更新可修正工作状态，前端失败时保留上一轮有用理解 |
+| `src/components/classroom/demo-classroom-flow.ts` | 试听课课堂脉络；随真实音频秒数推进，避免中间画布长期空态 |
 | `src/components/classroom/OctoBuddy.tsx` | Octo Buddy 像素 IP；Sprite 自带呼吸 / 听课 / 开心动画，悬浮球和右栏内嵌都复用它 |
 | `src/components/DesktopVideoReviewLayout.tsx` | 桌面端课后复习三栏布局：左=视频/音频证据 + 时间轴，中=学习工作区，右=同桌解释与复盘；视频默认放大证据栏，并持有课后学习黑板 |
 | `src/components/ReviewThreePaneLayout.tsx` | 课后复习可拖拽三栏容器；两条边界都可拖拽，学习区 / 同桌可折叠成 rail，左证据栏不自动折叠 |
