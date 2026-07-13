@@ -4,6 +4,8 @@ import {
   formatLearningContextForTutor,
   mergeLearningActivity,
   mergeLearningMemory,
+  summarizeLearningContext,
+  updateLearningThread,
 } from './learning-context';
 
 describe('learning context', () => {
@@ -57,5 +59,26 @@ describe('learning context', () => {
     });
     expect(formatted.memories.map((item) => item.title)).toEqual(['概率论']);
     expect(formatted.goals.map((item) => item.title)).toEqual(['通过考试']);
+  });
+
+  it('restores only an active learning thread into tutor context', () => {
+    const active = updateLearningThread(createEmptyLearningContext(), {
+      id: 'thread-1',
+      title: '继续理解机会成本',
+      intent: '能分析时间选择',
+      depth: 'deep',
+      status: 'active',
+      lastSummary: '已经能区分会计成本和机会成本',
+      createdAt: '2026-07-14T00:00:00.000Z',
+      updatedAt: '2026-07-14T01:00:00.000Z',
+    });
+    const completed = updateLearningThread(active, {
+      ...active.activeThread!,
+      status: 'completed',
+    });
+
+    expect(formatLearningContextForTutor(active).activeThread?.id).toBe('thread-1');
+    expect(summarizeLearningContext(active)).toContain('继续理解机会成本');
+    expect(formatLearningContextForTutor(completed).activeThread).toBeUndefined();
   });
 });
