@@ -21,7 +21,7 @@ classroom/ ← hooks/useClassroomCompanion.ts（对话 hook 消费 composeFirstH
 
 | 文件 | 行数 | 职责 |
 |------|------|------|
-| `ClassroomLayout.tsx` | ~270 | 左右分栏容器；同桌只在真实录课 / 示例课听课态可见，无课堂上下文时隐藏右栏、Octo Buddy 和移动端问同学入口；录课态右栏默认 400px，保留拖拽放大 |
+| `ClassroomLayout.tsx` | ~270 | 左右分栏容器；同桌只在真实录课 / 示例课听课态可见，无课堂上下文时隐藏右栏、Octo Buddy 和移动端问同学入口；录课态右栏默认 340px，把宽度优先留给课堂脉络并保留拖拽放大 |
 | `ClassroomLeftPanel.tsx` | ~690 | 视图管理器（list ↔ recording 淡入切换）+ **ActiveLessonPill 置顶活动条** + StickyStartBar 底部主 CTA；零存量态把录音来源选择传给 Hero；试听课完成态透传课后引导动作 |
 | `ClassroomCompanionPanel.tsx` | ~585 | 右侧同桌面板（header/气泡/流式气泡/thinking/输入栏）；课中 / 课后 starter 都用 Octo Buddy 像素章鱼 + 轻问题 chip 引导用户开口，不做重功能卡 |
 | `InlineAppCard.tsx` | ~160 | 对话内应用承载卡（真实应用 UI 复用 `apps/windows/AppRenderSurface`，不再手写一套窄版） |
@@ -29,7 +29,7 @@ classroom/ ← hooks/useClassroomCompanion.ts（对话 hook 消费 composeFirstH
 | `ClassroomHero.tsx` | ~270 | 课堂零存量首屏；左侧定位与录音入口，右侧用真实示例课片段呈现“听见原话 → 有依据地解释”的产品证明；主叙事下只露出放入材料与搜索两条次入口 |
 | `ClassroomLaunchpad.tsx` | ~100 | 课堂首页能力入口：让开始课堂、放入材料、搜索并继续问第一眼可见；只呈现三条学习路径，不做完整功能黄页 |
 | `ClassroomLessonCard.tsx` | ~160 | 一张课的卡片（四种时态视觉差异：upcoming/recording/processing/ready） |
-| `ClassroomRecordingView.tsx` | ~640 | 录课中视图（桌面左侧实时文字 + 中间课堂脉络；移动端在“脉络 / 原话”之间切换；含翻译与试听课音频控制）。试听课默认 EN→中，音频结束后只引导点击“结束这节课”，由上层切到课后复习页 / 应用矩阵 |
+| `ClassroomRecordingView.tsx` | ~640 | 录课中视图（宽桌面左侧实时文字 + 中间课堂脉络；移动端和中等宽度桌面在“脉络 / 原话”之间切换，避免三栏硬挤；含翻译与试听课音频控制）。试听课默认 EN→中，音频结束后只引导点击“结束这节课”，由上层切到课后复习页 / 应用矩阵 |
 | `ClassroomFlowCanvas.tsx` | ~240 | 课中中间主画布：突出“正在讲”，以低权重时间线呈现近期推进，并将真正值得回来的定义/公式/问题留到课后；不画课中思维导图 |
 | `ClassroomRecordingView.model.ts` | ~16 | 录课视图纯模型：翻译模式循环 + 会话级默认翻译模式解析 |
 | `types.ts` | ~55 | Lesson / LessonStatus / ClassroomPaneState / CompanionMessage / CompanionCard |
@@ -48,6 +48,7 @@ classroom/ ← hooks/useClassroomCompanion.ts（对话 hook 消费 composeFirstH
 - **录课中显示“实时文字”卡，不再用大面积空白等待结构**；转录卡头部保持紧凑，完整文字按需展开；桌面侧栏进入 52px 专注态
 - **同桌消息无气泡背景**（像便签，只有用户消息才是 ink 胶囊）
 - **课中不提供时间回跳**：同桌只帮助用户跟上当前课堂；即使模型意外返回 `[MM:SS]` 也要从课中消息中清理。可点击时间引用只属于课后 `review`。
+- **课堂脉络优先拿到横向空间**：宽桌面才同时展示原话 + 脉络 + 同学；中等宽度桌面把原话和脉络收成显式切换，同学栏默认保持 340px，不能让三栏硬挤到主标题逐字换行。
 - **对话正文优先可读**：同桌 / 用户消息正文以 14px+、1.7+ 行高为基线，11px 只用于极少数 meta
 - **开场白基于真实数据**：不播报、不穷举，随口一句最显眼的那个点
 - **进行中的任务 > 历史**：录音中的课抽出列表，固定置顶（ActiveLessonPill），视觉权重最高

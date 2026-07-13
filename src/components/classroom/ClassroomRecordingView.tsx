@@ -536,7 +536,7 @@ export function ClassroomRecordingView({
   return (
     <div className="flex h-full flex-col">
       <div className="min-h-0 flex-1 px-2.5 py-2.5 lg:px-3">
-        <div className="mb-2 flex rounded-full border border-divider bg-card p-1 lg:hidden">
+        <div className="mb-2 flex rounded-full border border-divider bg-card p-1 xl:hidden">
           {(['flow', 'transcript'] as const).map((pane) => (
             <button
               key={pane}
@@ -550,8 +550,8 @@ export function ClassroomRecordingView({
             </button>
           ))}
         </div>
-        <div className="grid h-full w-full grid-cols-1 gap-3 lg:grid-cols-[minmax(390px,0.82fr)_minmax(0,1.18fr)] xl:grid-cols-[minmax(420px,0.78fr)_minmax(0,1.22fr)]">
-          <div className={`${mobilePane === 'transcript' ? 'block' : 'hidden'} min-h-0 lg:block`}>
+        <div className="grid h-full w-full grid-cols-1 gap-3 xl:grid-cols-[minmax(340px,0.75fr)_minmax(380px,1.25fr)]">
+          <div className={`${mobilePane === 'transcript' ? 'block' : 'hidden'} min-h-0 xl:block`}>
             <LiveTranscriptPanel
               segments={segments}
               recentLines={recentLines}
@@ -568,7 +568,7 @@ export function ClassroomRecordingView({
               onToggleSpeakerDiarization={onToggleSpeakerDiarization}
             />
           </div>
-          <div className={`${mobilePane === 'flow' ? 'block' : 'hidden'} min-w-0 overflow-hidden rounded-[24px] border border-divider bg-white lg:block`}>
+          <div className={`${mobilePane === 'flow' ? 'block' : 'hidden'} min-w-0 overflow-hidden rounded-[24px] border border-divider bg-white xl:block`}>
             {isDemoComplete ? (
               <DemoAfterClassPanel onFinish={onFinishDemo} onReplay={onReplayDemo} />
             ) : (

@@ -21,6 +21,8 @@ import { getProvenanceSourceLabel } from '@/lib/capture/source-provenance';
 import { WORKSHOP_APP_CATALOG, getWorkshopAppByKey, type WorkshopAppKey } from '@/lib/ai-native/app-catalog';
 import { MobileAppRunner } from './MobileAppRunner';
 import { recommendWorkshopApp } from '@/components/apps/workshop-recommendation';
+import { ClassroomFlowCanvas } from '@/components/classroom/ClassroomFlowCanvas';
+import { useClassroomFlow } from '@/hooks/useClassroomFlow';
 
 export interface MobileAppShellProps {
   children?: React.ReactNode;
@@ -398,13 +400,14 @@ function HomeScreen({ p }: { p: MobileAppShellProps }) {
 // ═══ 录课态 ═══
 
 function RecordingScreen({ p }: { p: MobileAppShellProps }) {
-  const { pop, push, replace } = useMobileNav();
+  const { pop, replace } = useMobileNav();
   const segments = useCaptureEditorStore(s => s.segments);
   const liveInterimText = useCaptureEditorStore(s => s.liveInterimText);
   const sessionPhotos = useCollectionStore(s => s.sourceItems).filter(i => i.type === 'image' && i.role === 'support' && (!i.sessionId || i.sessionId === p.sessionId));
   const photoCount = sessionPhotos.length;
   const [flash, setFlash] = useState(false);
   const [classmateSheet, setClassmateSheet] = useState(false);
+  const [recordingPane, setRecordingPane] = useState<'flow' | 'transcript'>('flow');
   const [transMode, setTransMode] = useState<'off' | 'en-zh' | 'zh-en'>('off');
   const transLabels: Array<{ mode: typeof transMode; label: string }> = [
     { mode: 'off', label: '译' },
@@ -419,13 +422,29 @@ function RecordingScreen({ p }: { p: MobileAppShellProps }) {
 
   // 录课计时器
   const [recordingSeconds, setRecordingSeconds] = useState(0);
+  const [recordingStartAt, setRecordingStartAt] = useState<number | null>(null);
   useEffect(() => {
-    if (!p.isRecording) { setRecordingSeconds(0); return; }
+    if (!p.isRecording) {
+      setRecordingSeconds(0);
+      setRecordingStartAt(null);
+      return;
+    }
     const startAt = Date.now();
+    setRecordingStartAt(startAt);
     setRecordingSeconds(0);
     const t = setInterval(() => setRecordingSeconds(Math.floor((Date.now() - startAt) / 1000)), 1000);
     return () => clearInterval(t);
   }, [p.isRecording]);
+
+  const {
+    flow: classroomFlow,
+    newItemIds: classroomFlowNewIds,
+    isUnderstanding: isUnderstandingClassroomFlow,
+  } = useClassroomFlow({
+    enabled: p.isRecording,
+    segments,
+    recordingStartAt,
+  });
 
   // 拍照
   const { trigger: triggerCamera, inputEl: cameraInput } = useCameraCapture((file, capturedAtMs) => {
@@ -467,9 +486,37 @@ function RecordingScreen({ p }: { p: MobileAppShellProps }) {
         </div>
       </div>
 
-      {/* 转录内容区 */}
+      <div className="flex-shrink-0 border-b border-divider/60 bg-paper px-4 py-2">
+        <div className="flex rounded-full border border-divider bg-card p-1">
+          {(['flow', 'transcript'] as const).map((pane) => (
+            <button
+              key={pane}
+              type="button"
+              onClick={() => setRecordingPane(pane)}
+              className={`flex-1 rounded-full px-3 py-1.5 text-[12px] font-medium transition ${
+                recordingPane === pane ? 'bg-ink text-white' : 'text-ink-muted'
+              }`}
+            >
+              {pane === 'flow' ? COPY.classroomFlow.mobileFlow : COPY.classroomFlow.mobileTranscript}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {recordingPane === 'flow' ? (
+        <div className="min-h-0 flex-1 overflow-hidden bg-white">
+          <ClassroomFlowCanvas
+            flow={classroomFlow}
+            newItemIds={classroomFlowNewIds}
+            elapsedMs={recordingSeconds * 1000}
+            isUnderstanding={isUnderstandingClassroomFlow}
+          />
+        </div>
+      ) : null}
+
+      {/* 原话内容区 */}
       {/* LIVE strip（翻译开启时显示最近一句英文/中文） */}
-      {transMode !== 'off' && lastSeg && (
+      {recordingPane === 'transcript' && transMode !== 'off' && lastSeg && (
         <div className="flex-shrink-0 bg-paper/95 backdrop-blur border-b border-divider/60 px-4 py-1.5 z-10">
           <div className="flex items-center gap-2">
             <span className="font-mono text-[8px] font-bold text-vermilion bg-vermilion-mist px-1.5 py-0.5 rounded flex-shrink-0 m-rec-dot">LIVE</span>
@@ -477,7 +524,10 @@ function RecordingScreen({ p }: { p: MobileAppShellProps }) {
           </div>
         </div>
       )}
-      <div className="flex-1 min-h-0 overflow-y-auto px-4 py-3 mm-mobile-scroll" style={{ WebkitOverflowScrolling: 'touch' }}>
+      <div
+        className={`${recordingPane === 'transcript' ? 'flex' : 'hidden'} flex-1 min-h-0 flex-col overflow-y-auto px-4 py-3 mm-mobile-scroll`}
+        style={{ WebkitOverflowScrolling: 'touch' }}
+      >
         {segments.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-full">
             <div className="h-16 w-16 rounded-full bg-pine-mist flex items-center justify-center mb-4 overflow-hidden m-octo-breath">

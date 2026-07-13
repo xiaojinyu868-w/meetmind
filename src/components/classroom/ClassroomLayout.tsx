@@ -3,12 +3,12 @@
 /**
  * ClassroomLayout — 课堂页左右分栏布局（桌面 + 移动响应）
  *
- * 设计决策（v4 · 可拖拽宽度）：
- *   右栏不再默认 360/380px——太窄，对话 + 内联卡片放不开。
- *   默认改成 **480px**，并且左右分隔线本身就是一个**可拖拽 handle**：
+ * 设计决策（v7 · 可拖拽宽度）：
+ *   课中同学栏默认保持紧凑，把横向空间优先留给课堂脉络；用户仍可按需拖宽。
+ *   左右分隔线本身就是一个**可拖拽 handle**：
  *     - 悬停时分隔线变粗（2px）并泛出极浅的暗色
  *     - 按下 + 拖动 → 即时调整宽度
- *     - 双击 → 在 "宽" (500) / "默认" (480) / "紧凑" (360) 三挡循环
+ *     - 双击 → 在 "紧凑" (320) / "默认" (340) / "宽" (480) 三挡循环
  *     - 释放后宽度持久化到 localStorage
  *
  * 用户不再"猜怎么调"，而是像 Linear / Notion 那样"线就是抓手"。
@@ -16,7 +16,7 @@
  * 桌面端（lg+）：
  *   - 左（主内容）：flex-1
  *   - 右（可召唤 + 可拖拽宽度）：
- *       open=true  → 用户设定宽度（默认 480，范围 320-720）
+ *       open=true  → 用户设定宽度（默认 340，范围 300-640）
  *       open=false → 48px 折叠窄条
  *
  * 移动端（< lg）：
@@ -44,10 +44,10 @@ export interface ClassroomLayoutProps {
 /** 宽度约束（px） */
 const MIN_WIDTH = 300;
 const MAX_WIDTH = 640;
-const DEFAULT_WIDTH = 400;
-const WIDTH_STORAGE_KEY = 'classroom-companion-width-px:v2';
+const DEFAULT_WIDTH = 340;
+const WIDTH_STORAGE_KEY = 'classroom-companion-width-px:v3';
 // 双击循环三挡
-const SNAP_WIDTHS = [340, 400, 520] as const;
+const SNAP_WIDTHS = [320, 340, 480] as const;
 
 function clampWidth(w: number): number {
   return Math.max(MIN_WIDTH, Math.min(MAX_WIDTH, Math.round(w)));
