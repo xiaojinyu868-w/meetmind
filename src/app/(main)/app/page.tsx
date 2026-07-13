@@ -127,7 +127,7 @@ const CollectionSelectionBar = dynamic(() => import('@/components/CollectionSele
 const CollectionComposerContextPreview = dynamic(() => import('@/components/CollectionComposerContextPreview').then(m => ({ default: m.CollectionComposerContextPreview })), { ssr: false });
 const CollectionComposerBar = dynamic(() => import('@/components/CollectionComposerBar').then(m => ({ default: m.CollectionComposerBar })), { ssr: false });
 const WorkshopWindowManager = dynamic(() => import('@/components/apps/windows/WorkshopWindowManager').then(m => ({ default: m.WorkshopWindowManager })), { ssr: false });
-const AISearchPanel = dynamic(() => import('@/components/AISearchPanel').then(m => ({ default: m.AISearchPanel })), { ssr: false });
+const GlobalAskPanel = dynamic(() => import('@/components/GlobalAskPanel').then(m => ({ default: m.GlobalAskPanel })), { ssr: false });
 import type { WorkspaceCaptureListItem } from '@/components/WorkspaceCaptureList';
 
 // Lazy-load demo data.
@@ -2806,7 +2806,7 @@ function StudentAppContent({
       ) : null}
 
       {/* 主要内容区域 */}
-      <AISearchPanel
+      <GlobalAskPanel
         open={showAISearch}
         onClose={() => setShowAISearch(false)}
         onNavigateToCapture={(captureId: string) => {

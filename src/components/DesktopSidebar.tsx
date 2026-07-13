@@ -21,7 +21,6 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import {
   Mic,
   BookOpen,
-  Search,
   User,
   UserCircle,
   Settings,
@@ -187,7 +186,7 @@ export function DesktopSidebar({
           }`}
           title={effectiveCollapsed ? COPY.navigation.search : undefined}
         >
-          <Search size={effectiveCollapsed ? 16 : 15} strokeWidth={1.6} className="flex-shrink-0" />
+          <Sparkles size={effectiveCollapsed ? 16 : 15} strokeWidth={1.6} className="flex-shrink-0" />
           {!effectiveCollapsed && <span>{COPY.navigation.search}</span>}
         </button>
       </div>
