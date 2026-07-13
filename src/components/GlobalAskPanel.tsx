@@ -2,15 +2,15 @@
 
 import * as React from 'react';
 import { useChat } from '@ai-sdk/react';
-import { DefaultChatTransport, type UIMessage } from 'ai';
+import { DefaultChatTransport } from 'ai';
 import { BrainCircuit, ChevronRight, FileText, History, Plus, Sparkles, X } from 'lucide-react';
 import { toast } from 'sonner';
 import useAuth from '@/lib/hooks/useAuth';
 import { cn } from '@/lib/utils';
 import { COPY } from '@/lib/ui/copy';
 import { useLearningContext } from '@/hooks/useLearningContext';
+import { useGlobalAskHistory } from '@/hooks/useGlobalAskHistory';
 import { formatLearningContextForTutor, summarizeLearningContext } from '@/lib/utils/learning-context';
-import { conversationService, getEffectiveUserId } from '@/lib/services/conversation-service';
 import { useSessionStore } from '@/stores/session-store';
 import { useCaptureEditorStore } from '@/stores/capture-editor-store';
 import { useCollectionStore } from '@/stores/collection-store';
@@ -41,14 +41,6 @@ interface GlobalAskPanelProps {
 
 type AskDepth = 'quick' | 'deep';
 type ProgressState = { points: string[]; status: 'pending' | 'saved' | 'dismissed' };
-
-function historyMessageToUIMessage(message: { messageId: string; role: string; content: string }): UIMessage {
-  return {
-    id: message.messageId,
-    role: message.role === 'user' ? 'user' : 'assistant',
-    parts: [{ type: 'text', text: message.content }],
-  } as UIMessage;
-}
 
 function createThread(plan: LearningIntentPlan, query: string): LearningThreadEntry {
   const now = new Date().toISOString();
@@ -83,8 +75,9 @@ export function GlobalAskPanel({
   isMobile = false,
 }: GlobalAskPanelProps) {
   const { user, accessToken } = useAuth();
-  const userId = getEffectiveUserId(user?.id);
+  const userId = user?.id || 'anonymous';
   const learning = useLearningContext();
+  const recordLearningActivity = learning.recordActivity;
   const sessionId = useSessionStore((state) => state.sessionId);
   const segments = useCaptureEditorStore((state) => state.segments);
   const sourceItems = useCollectionStore((state) => state.sourceItems);
@@ -94,11 +87,7 @@ export function GlobalAskPanel({
   const [activeIntent, setActiveIntent] = React.useState<LearningIntentPlan | null>(null);
   const [pendingQuery, setPendingQuery] = React.useState('');
   const [intentBusy, setIntentBusy] = React.useState(false);
-  const [historyHydrated, setHistoryHydrated] = React.useState(false);
-  const [restoredTitle, setRestoredTitle] = React.useState<string | null>(null);
   const [progressByMessage, setProgressByMessage] = React.useState<Record<string, ProgressState>>({});
-  const conversationIdRef = React.useRef<string | null>(null);
-  const persistedIdsRef = React.useRef<Set<string>>(new Set());
   const activeThreadRef = React.useRef(learning.activeThread);
   const composerRef = React.useRef<HTMLFormElement>(null);
 
@@ -174,89 +163,44 @@ export function GlobalAskPanel({
 
   React.useEffect(() => {
     if (!open) return;
-    let alive = true;
-    setHistoryHydrated(false);
-    conversationIdRef.current = null;
-    persistedIdsRef.current = new Set();
-    setRestoredTitle(null);
     setActiveIntent(null);
     setIntentPlan(null);
     setPendingQuery('');
-    setMessages([]);
-    const hydrate = async () => {
-      try {
-        const conversations = await conversationService.listConversations(userId, { type: 'global-chat', limit: 20 });
-        const target = conversations.find((item) => item.metadata?.scope === 'global-ask');
-        if (!target || !alive) return;
-        const history = await conversationService.getMessages(target.conversationId);
-        if (!alive) return;
-        conversationIdRef.current = target.conversationId;
-        persistedIdsRef.current = new Set(history.map((message) => message.messageId));
-        setRestoredTitle(target.title);
-        const restoredDepth = target.metadata?.depth === 'deep' ? 'deep' : 'quick';
-        setDepth(restoredDepth);
-        const restoredThread = activeThreadRef.current;
-        if (restoredDepth === 'deep' && restoredThread?.status === 'active') {
-          setActiveIntent(threadToIntent(restoredThread));
-        }
-        setMessages(history.map(historyMessageToUIMessage));
-      } catch (hydrateError) {
-        console.error('[GlobalAskPanel] failed to restore history', hydrateError);
-      } finally {
-        if (alive) setHistoryHydrated(true);
-      }
-    };
-    void hydrate();
-    return () => { alive = false; };
-  }, [open, setMessages, userId]);
+  }, [open]);
 
-  React.useEffect(() => {
-    if (!open || !historyHydrated || busy) return;
-    const persist = async () => {
-      const unsaved = messages.filter((message) => (
-        (message.role === 'user' || message.role === 'assistant')
-        && !persistedIdsRef.current.has(message.id)
-        && collectMessageText(message).trim()
-      ));
-      if (unsaved.length === 0) return;
-      try {
-        if (!conversationIdRef.current) {
-          const firstUser = unsaved.find((message) => message.role === 'user');
-          const title = conversationService.generateTitleFromMessage(
-            firstUser ? collectMessageText(firstUser) : COPY.globalAsk.recentConversation,
-          );
-          const created = await conversationService.createConversation({
-            userId,
-            type: 'global-chat',
-            title,
-            sessionId: 'global-ask',
-            model: 'tutor-agent',
-            metadata: { scope: 'global-ask', depth },
-          });
-          conversationIdRef.current = created.conversationId;
-          setRestoredTitle(created.title);
-        }
-        const conversationId = conversationIdRef.current;
-        await conversationService.addMessages(conversationId, unsaved.map((message) => ({
-          role: message.role === 'user' ? 'user' : 'assistant',
-          content: collectMessageText(message),
-        })));
-        unsaved.forEach((message) => persistedIdsRef.current.add(message.id));
-        const latestAssistant = [...unsaved].reverse().find((message) => message.role === 'assistant');
-        if (latestAssistant) {
-          await learning.recordActivity({
-            kind: 'conversation',
-            title: depth === 'deep' ? COPY.globalAsk.recentDeepSession : COPY.globalAsk.recentConversation,
-            detail: collectMessageText(latestAssistant).slice(0, 220),
-            sourceId: `global-ask:${conversationId}:${latestAssistant.id}`,
-          });
-        }
-      } catch (persistError) {
-        console.error('[GlobalAskPanel] failed to persist history', persistError);
-      }
-    };
-    void persist();
-  }, [busy, depth, historyHydrated, learning, messages, open, userId]);
+  const handleDepthRestored = React.useCallback((restoredDepth: AskDepth) => {
+    setDepth(restoredDepth);
+    const restoredThread = activeThreadRef.current;
+    if (restoredDepth === 'deep' && restoredThread?.status === 'active') {
+      setActiveIntent(threadToIntent(restoredThread));
+    }
+  }, []);
+
+  const handleAssistantPersisted = React.useCallback(async ({
+    text,
+    sourceId,
+    depth: persistedDepth,
+  }: { text: string; sourceId: string; depth: AskDepth }) => {
+    await recordLearningActivity({
+      kind: 'conversation',
+      title: persistedDepth === 'deep' ? COPY.globalAsk.recentDeepSession : COPY.globalAsk.recentConversation,
+      detail: text.slice(0, 220),
+      sourceId,
+    });
+  }, [recordLearningActivity]);
+
+  const history = useGlobalAskHistory({
+    open,
+    userId,
+    depth,
+    busy,
+    messages,
+    setMessages,
+    getMessageText: collectMessageText,
+    fallbackTitle: COPY.globalAsk.recentConversation,
+    onDepthRestored: handleDepthRestored,
+    onAssistantPersisted: handleAssistantPersisted,
+  });
 
   const startNewConversation = React.useCallback(() => {
     stop();
@@ -265,11 +209,9 @@ export function GlobalAskPanel({
     setActiveIntent(null);
     setPendingQuery('');
     setProgressByMessage({});
-    setRestoredTitle(null);
-    conversationIdRef.current = null;
-    persistedIdsRef.current = new Set();
+    history.reset();
     fileUpload.clear();
-  }, [fileUpload, setMessages, stop]);
+  }, [fileUpload, history, stop]);
 
   const sendQuick = React.useCallback((text: string) => {
     setActiveIntent(null);
@@ -363,7 +305,7 @@ export function GlobalAskPanel({
         ...learning.activeThread,
         lastSummary: points.join('；'),
         nextStep: activeIntent?.checkpoints[1] || activeIntent?.checkpoints[0],
-        conversationId: conversationIdRef.current || undefined,
+        conversationId: history.conversationId || undefined,
         updatedAt: new Date().toISOString(),
       });
     }
@@ -371,7 +313,7 @@ export function GlobalAskPanel({
       ...current,
       [messageId]: { ...current[messageId], status: 'saved' },
     }));
-  }, [activeIntent, learning]);
+  }, [activeIntent, history.conversationId, learning]);
 
   const visibleSources = sourceItems.filter((item) => item.status !== 'failed').slice(-3).reverse();
 
@@ -402,7 +344,7 @@ export function GlobalAskPanel({
             <span className="flex h-9 w-9 items-center justify-center rounded-2xl border border-pine/15 bg-pine-fog text-pine"><Sparkles size={16} /></span>
             <div className="min-w-0">
               <h1 className="truncate text-[15px] font-semibold text-ink">{COPY.globalAsk.title}</h1>
-              <p className="truncate text-[11.5px] text-ink-muted">{historyHydrated ? (restoredTitle ? `${COPY.globalAsk.historyRestored} · ${restoredTitle}` : COPY.globalAsk.subtitle) : COPY.globalAsk.historyLoading}</p>
+              <p className="truncate text-[11.5px] text-ink-muted">{history.hydrated ? (history.restoredTitle ? `${COPY.globalAsk.historyRestored} · ${history.restoredTitle}` : COPY.globalAsk.subtitle) : COPY.globalAsk.historyLoading}</p>
             </div>
           </div>
           <div className="flex items-center gap-1.5">
