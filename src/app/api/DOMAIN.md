@@ -86,6 +86,7 @@ route.ts → lib/services/ + lib/utils/rate-limit
 | `/api/auth/send-code` | POST | 发送验证码 |
 | `/api/auth/wechat` | GET | 微信 OAuth URL |
 | `/api/auth/wechat/callback` | GET | 微信 OAuth 回调 |
+| `/api/auth/learner-profile` | GET/PATCH | 读取或保存学习者画像；`stage='unknown'` 是对话确认画像后的合法状态，画像同时承载经用户确认的长期记忆与轻量学习连续性 |
 
 ### 📦 Workspace
 
