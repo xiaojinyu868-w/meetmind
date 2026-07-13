@@ -60,6 +60,7 @@ hooks → stores + types + lib/db + lib/utils
 | `useSourceItemManagement.ts` | ~120 | 源项 CRUD（appendSourceItem + updateSourceItem + appendSupportSource），从 page.tsx 提取（Phase 6） |
 | `useClassroomLessons.ts` | ~130 | 课堂列表数据适配（audioSessions + transcripts + highlightTopics + workspaceEchoes/Captures + preferences + sourceItems → Lesson[] + markReviewed），响应式 |
 | `useClassroomCompanion.ts` | ~260 | 课堂同桌对话（/api/tutor 流式 + 动态开场白 + 按 session 历史持久化 + 错误降级 + short-circuit），为 ClassroomView 专属 |
+| `useClassroomFlow.ts` | ~125 | 课中课堂脉络请求与稳定状态：按真实转录节奏调用 `/api/classroom/flow`，保留上一轮有用理解并标记新内容，不用关键词替模型切主题 |
 | `useLiveConcepts.ts` | ~100 | 录课中关键概念启发式抽取（订阅 captureEditorStore.segments，零 API），ClassroomRecordingView 消费 |
 
 ### data/ — API 数据 hooks

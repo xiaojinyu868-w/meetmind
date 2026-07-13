@@ -126,6 +126,29 @@ export const COPY = {
     hearing: '我在听。',
   },
 
+  classroomFlow: {
+    eyebrow: '课堂脉络',
+    listeningTitle: '先跟上老师正在讲的。',
+    listeningBody: '我会等内容足够清楚，再告诉你现在讲到哪里。不会把开场和闲聊硬整理成知识点。',
+    understanding: '我正在理解刚才这段，新的判断会自然接到这里。',
+    emptyPromiseTitle: '这里不会提前写课后总结',
+    emptyPromiseBody: '课堂进行时只保留方向、推进和真正值得回来的内容；思维导图、闪卡和测验会留到课后。',
+    refreshing: '正在接住刚才这段',
+    now: '正在讲',
+    recent: '刚才怎么走到这里',
+    recentHint: '只留与当前有关的推进',
+    keep: '留到课后',
+    mobileFlow: '脉络',
+    mobileTranscript: '原话',
+    kindDefinition: '定义',
+    kindFormula: '公式',
+    kindExample: '例子',
+    kindQuestion: '待弄清',
+    kindContrast: '对比',
+    kindConclusion: '结论',
+    kindOther: '值得回来',
+  },
+
   stages: {
     /** v3.0：放弃假分阶段叙事，改为 Octo Buddy 听课的诚实表达
      *  app loading 文案根据 appName 动态拼，用 listening 系列 */

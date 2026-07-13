@@ -29,6 +29,7 @@ classroom/ ← hooks/useClassroomCompanion.ts（对话 hook 消费 composeFirstH
 | `ClassroomHero.tsx` | ~250 | 课堂零存量首屏；左侧定位与录音入口，右侧用真实示例课片段呈现“听见原话 → 有依据地解释”的产品证明，不陈列功能清单 |
 | `ClassroomLessonCard.tsx` | ~160 | 一张课的卡片（四种时态视觉差异：upcoming/recording/processing/ready） |
 | `ClassroomRecordingView.tsx` | ~610 | 录课中视图（左侧实时文字 + 翻译 + 试听课音频播放控制；右侧结构 / 结束总结卡）。试听课默认 EN→中，音频结束后只引导点击“结束这节课”，由上层切到课后复习页 / 应用矩阵 |
+| `ClassroomFlowCanvas.tsx` | ~240 | 课中中间主画布：突出“正在讲”，以低权重时间线呈现近期推进，并将真正值得回来的定义/公式/问题留到课后；不画课中思维导图 |
 | `ClassroomRecordingView.model.ts` | ~16 | 录课视图纯模型：翻译模式循环 + 会话级默认翻译模式解析 |
 | `types.ts` | ~55 | Lesson / LessonStatus / ClassroomPaneState / CompanionMessage / CompanionCard |
 | `demoData.ts` | ~90 | Demo 数据（暂未使用，保留供 storybook/演示） |
