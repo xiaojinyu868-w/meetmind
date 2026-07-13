@@ -1257,7 +1257,7 @@
 }
 
 .grid {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: minmax(0, 1fr);
   gap: 12px;
 }
 
@@ -1320,6 +1320,9 @@
 .appName {
   margin-top: 3px;
   font-size: 17px;
+  white-space: normal;
+  overflow: visible;
+  text-overflow: clip;
 }
 
 .fitLine {
@@ -1375,12 +1378,6 @@
   white-space: nowrap;
 }
 
-@media (max-width: 900px) {
-  .grid {
-    grid-template-columns: minmax(0, 1fr);
-  }
-}
-
 @media (max-width: 640px) {
   .page {
     padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 72px);
@@ -1415,6 +1412,34 @@
 
   .primaryAction,
   .secondaryAction {
+    min-height: 42px;
+  }
+}
+
+@container (max-width: 640px) {
+  .coverWrap {
+    display: none;
+  }
+
+  .card {
+    min-height: 0;
+    flex-wrap: wrap;
+    padding: 14px;
+  }
+
+  .cardBody {
+    width: 100%;
+  }
+
+  .actionRow {
+    width: 100%;
+    min-width: 0;
+    flex-direction: column;
+  }
+
+  .primaryAction,
+  .secondaryAction {
+    width: 100%;
     min-height: 42px;
   }
 }
