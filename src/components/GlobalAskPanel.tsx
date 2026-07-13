@@ -65,6 +65,17 @@ function createThread(plan: LearningIntentPlan, query: string): LearningThreadEn
   };
 }
 
+function threadToIntent(thread: LearningThreadEntry): LearningIntentPlan {
+  return {
+    title: thread.title,
+    outcome: thread.outcome || thread.lastSummary || thread.intent,
+    approach: 'understand',
+    contextFocus: 'mixed',
+    checkpoints: thread.nextStep ? [thread.nextStep] : [],
+    confidence: 'high',
+  };
+}
+
 export function GlobalAskPanel({
   open,
   onClose,
@@ -88,7 +99,10 @@ export function GlobalAskPanel({
   const [progressByMessage, setProgressByMessage] = React.useState<Record<string, ProgressState>>({});
   const conversationIdRef = React.useRef<string | null>(null);
   const persistedIdsRef = React.useRef<Set<string>>(new Set());
+  const activeThreadRef = React.useRef(learning.activeThread);
   const composerRef = React.useRef<HTMLFormElement>(null);
+
+  React.useEffect(() => { activeThreadRef.current = learning.activeThread; }, [learning.activeThread]);
 
   const fileUpload = useChatFileUpload({ authToken: accessToken ?? undefined, targetRef: composerRef });
 
@@ -162,6 +176,13 @@ export function GlobalAskPanel({
     if (!open) return;
     let alive = true;
     setHistoryHydrated(false);
+    conversationIdRef.current = null;
+    persistedIdsRef.current = new Set();
+    setRestoredTitle(null);
+    setActiveIntent(null);
+    setIntentPlan(null);
+    setPendingQuery('');
+    setMessages([]);
     const hydrate = async () => {
       try {
         const conversations = await conversationService.listConversations(userId, { type: 'global-chat', limit: 20 });
@@ -172,7 +193,12 @@ export function GlobalAskPanel({
         conversationIdRef.current = target.conversationId;
         persistedIdsRef.current = new Set(history.map((message) => message.messageId));
         setRestoredTitle(target.title);
-        setDepth(target.metadata?.depth === 'deep' ? 'deep' : 'quick');
+        const restoredDepth = target.metadata?.depth === 'deep' ? 'deep' : 'quick';
+        setDepth(restoredDepth);
+        const restoredThread = activeThreadRef.current;
+        if (restoredDepth === 'deep' && restoredThread?.status === 'active') {
+          setActiveIntent(threadToIntent(restoredThread));
+        }
         setMessages(history.map(historyMessageToUIMessage));
       } catch (hydrateError) {
         console.error('[GlobalAskPanel] failed to restore history', hydrateError);
@@ -358,7 +384,10 @@ export function GlobalAskPanel({
           onResumeThread={() => {
             setView('ask');
             setDepth('deep');
-            if (learning.activeThread?.intent) composer.setValue(learning.activeThread.intent);
+            if (learning.activeThread) {
+              setActiveIntent(threadToIntent(learning.activeThread));
+              composer.setValue(learning.activeThread.intent);
+            }
           }}
         />
       </div>
@@ -415,6 +444,7 @@ export function GlobalAskPanel({
                   type="button"
                   onClick={() => {
                     setDepth('deep');
+                    if (learning.activeThread) setActiveIntent(threadToIntent(learning.activeThread));
                     composer.setValue(learning.activeThread?.intent || '');
                     window.setTimeout(() => composer.textareaRef.current?.focus(), 0);
                   }}
