@@ -19,13 +19,16 @@
 import * as React from 'react';
 import { StreamingMarkdown } from '@/components/StreamingMarkdown';
 import { extractIntentSummary, type IntentSummaryExtraction } from './markers/extractIntentSummary';
+import { extractLearningProgress, type LearningProgressExtraction } from './markers/extractLearningProgress';
 
-export type ChatMarkerKind = 'intent-summary';
+export type ChatMarkerKind = 'intent-summary' | 'learning-progress';
 
 export interface ChatMarkerHit {
   kind: ChatMarkerKind;
   /** intent-summary 的具体 payload */
   intentSummary?: IntentSummaryExtraction;
+  /** learning-progress 的候选记忆点；必须由用户确认后才能写入长期记忆。 */
+  learningProgress?: LearningProgressExtraction;
   /** 命中此 marker 的消息 ID（消费者用于状态聚合） */
   messageId: string;
 }
@@ -59,9 +62,10 @@ export const ChatRenderer = React.memo(function ChatRenderer({
   className,
 }: ChatRendererProps) {
   // 应用 marker：从 content 切出 marker 块，剩余文本交给 markdown 渲染
-  const { displayText, summary } = React.useMemo(() => {
+  const { displayText, summary, progress } = React.useMemo(() => {
     let text = content;
     let summary: IntentSummaryExtraction | undefined;
+    let progress: LearningProgressExtraction | undefined;
     if (markers?.includes('intent-summary')) {
       const hit = extractIntentSummary(text);
       if (hit) {
@@ -69,7 +73,14 @@ export const ChatRenderer = React.memo(function ChatRenderer({
         summary = hit;
       }
     }
-    return { displayText: text, summary };
+    if (markers?.includes('learning-progress')) {
+      const hit = extractLearningProgress(text);
+      if (hit) {
+        text = hit.textWithoutBlock;
+        progress = hit;
+      }
+    }
+    return { displayText: text, summary, progress };
   }, [content, markers]);
 
   // 命中 marker 时通知（仅在新命中时触发——避免重复回调）
@@ -84,6 +95,18 @@ export const ChatRenderer = React.memo(function ChatRenderer({
       });
     }
   }, [summary, onMarkerHit, messageId]);
+
+  const lastProgressRawRef = React.useRef<string | null>(null);
+  React.useEffect(() => {
+    if (progress && progress.rawBlock !== lastProgressRawRef.current) {
+      lastProgressRawRef.current = progress.rawBlock;
+      onMarkerHit?.({
+        kind: 'learning-progress',
+        learningProgress: progress,
+        messageId: messageId ?? '',
+      });
+    }
+  }, [progress, onMarkerHit, messageId]);
 
   // 全空：流式刚开始还没字符 → 不渲染（让消费者用 ThinkingStrip 占位）
   if (!displayText.trim()) return null;
