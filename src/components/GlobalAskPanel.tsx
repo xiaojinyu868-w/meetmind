@@ -410,6 +410,22 @@ export function GlobalAskPanel({
               <OctoAvatar mood="listening" size="lg" aura className="mb-5" />
               <h2 className="font-serif text-[25px] italic tracking-[-0.025em] text-ink">{COPY.globalAsk.emptyTitle}</h2>
               <p className="mt-3 max-w-lg text-[13px] leading-6 text-ink-secondary">{COPY.globalAsk.emptyBody}</p>
+              {learning.activeThread?.status === 'active' ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setDepth('deep');
+                    composer.setValue(learning.activeThread?.intent || '');
+                    window.setTimeout(() => composer.textareaRef.current?.focus(), 0);
+                  }}
+                  className="mt-6 w-full rounded-[18px] border border-pine/15 bg-pine-fog px-4 py-4 text-left transition hover:bg-pine-mist"
+                >
+                  <span className="font-mono text-[9.5px] font-semibold uppercase tracking-[0.1em] text-pine">{COPY.globalAsk.threadTitle}</span>
+                  <span className="mt-1.5 block text-[14px] font-semibold text-ink">{learning.activeThread.title}</span>
+                  {learning.activeThread.lastSummary ? <span className="mt-1 block line-clamp-2 text-[11.5px] leading-5 text-ink-secondary">{learning.activeThread.lastSummary}</span> : null}
+                  <span className="mt-3 inline-flex items-center gap-1 text-[11.5px] font-medium text-pine">{COPY.globalAsk.threadResume}<ChevronRight size={13} /></span>
+                </button>
+              ) : null}
               {visibleSources.length > 0 ? (
                 <div className="mt-7 w-full text-left">
                   <p className="mb-2 px-1 font-mono text-[9.5px] uppercase tracking-[0.1em] text-ink-muted">{COPY.globalAsk.sourceContext}</p>

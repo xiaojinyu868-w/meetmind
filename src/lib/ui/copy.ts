@@ -100,6 +100,13 @@ export const COPY = {
     thinking: '正在把上下文接起来…',
     recentConversation: 'Ask MeetMind 对话',
     recentDeepSession: '深度学习会话',
+    recoveryEyebrow: '接回学习现场',
+    recoveryTitle: '不用重新开始',
+    recoveryBody: 'MeetMind 留住了上次的脉络，回来可以直接接着走。',
+    recoveryResume: '接着上次学',
+    recoveryRecent: '最近停在这里',
+    appActivity: (name: string) => `完成了「${name}」`,
+    appResultSummary: (count: number) => `生成了 ${count} 条可继续使用的学习内容`,
   },
 
   collection: {

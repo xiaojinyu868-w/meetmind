@@ -36,6 +36,8 @@ export interface ClassroomHeroProps {
   onAddMaterial?: () => void;
   /** 搜索已有课堂和资料 */
   onSearch?: () => void;
+  /** 已有学习上下文时，在主叙事上方显示“接着上次学”。 */
+  recoverySlot?: React.ReactNode;
   className?: string;
 }
 
@@ -130,6 +132,7 @@ export function ClassroomHero({
   onChangeSpeakerDiarization,
   onAddMaterial,
   onSearch,
+  recoverySlot,
   className,
 }: ClassroomHeroProps) {
   return (
@@ -139,7 +142,9 @@ export function ClassroomHero({
         className,
       )}
     >
-      <div className="grid w-full max-w-[1120px] items-center gap-12 lg:grid-cols-[minmax(0,1fr)_minmax(340px,430px)] lg:gap-16">
+      <div className="w-full max-w-[1120px]">
+        {recoverySlot ? <div className="mb-7 max-w-[720px]">{recoverySlot}</div> : null}
+        <div className="grid w-full items-center gap-12 lg:grid-cols-[minmax(0,1fr)_minmax(340px,430px)] lg:gap-16">
         <section className="min-w-0">
           <div className="mb-5 flex items-center gap-2 font-mono text-[10px] font-semibold tracking-[0.14em] text-pine">
             <span className="h-1.5 w-1.5 rounded-full bg-pine" aria-hidden />
@@ -268,6 +273,7 @@ export function ClassroomHero({
             </div>
           </button>
         </aside>
+        </div>
       </div>
     </div>
   );

@@ -32,6 +32,8 @@ import { COPY } from '@/lib/ui/copy';
 import type { RecorderAudioSource } from '@/stores/capture-editor-store';
 import type { TranscriptSegment } from '@/types';
 import type { ClassroomFlowState } from '@/types/classroom-flow';
+import { useLearningContext } from '@/hooks/useLearningContext';
+import { ContextRecoveryCard } from '@/components/ContextRecoveryCard';
 
 /**
  * canCaptureSystemAudio — 浏览器是否能拿到电脑扬声器发出的声音
@@ -351,6 +353,7 @@ function EmptyState({
   onChangeSpeakerDiarization,
   onAddMaterial,
   onSearch,
+  recoverySlot,
 }: {
   onStart: () => void;
   onTryDemo: () => void;
@@ -361,6 +364,7 @@ function EmptyState({
   onChangeSpeakerDiarization?: (enabled: boolean) => void;
   onAddMaterial?: () => void;
   onSearch?: () => void;
+  recoverySlot?: React.ReactNode;
 }) {
   return (
     <ClassroomHero
@@ -373,6 +377,7 @@ function EmptyState({
       onChangeSpeakerDiarization={onChangeSpeakerDiarization}
       onAddMaterial={onAddMaterial}
       onSearch={onSearch}
+      recoverySlot={recoverySlot}
     />
   );
 }
@@ -412,7 +417,13 @@ function ListView({
   onAddMaterial?: () => void;
   onSearch?: () => void;
 }) {
+  const learning = useLearningContext();
   const isTrulyEmpty = !activeLesson && groups.length === 0;
+  const activeThread = learning.activeThread?.status === 'active' ? learning.activeThread : undefined;
+  const latestActivity = learning.recentActivities[learning.recentActivities.length - 1];
+  const recovery = (activeThread || latestActivity) && onSearch ? (
+    <ContextRecoveryCard thread={activeThread} activity={latestActivity} onResume={onSearch} />
+  ) : null;
 
   if (isTrulyEmpty) {
     // 零存量态：hero 独占整个视图，不挂 PageHeader / sticky bar。
@@ -428,6 +439,7 @@ function ListView({
         onChangeSpeakerDiarization={onChangeSpeakerDiarization}
         onAddMaterial={onAddMaterial}
         onSearch={onSearch}
+        recoverySlot={recovery}
       />
     );
   }
@@ -446,6 +458,8 @@ function ListView({
               showRecord={false}
             />
           </div>
+
+          {recovery ? <div className="mb-8">{recovery}</div> : null}
 
           {/* 1. 正在录音的课 — 置顶活动条 */}
           {activeLesson && (
