@@ -41,40 +41,40 @@ export function MobileLearningCommandCenter({
 }: MobileLearningCommandCenterProps) {
   return (
     <section aria-label={COPY.mobileHome.commandCenterLabel}>
-      <div className="overflow-hidden rounded-[24px] border border-ink bg-ink text-white">
+      <div className="overflow-hidden rounded-[24px] border border-pine/15 bg-pine-fog text-ink">
         <div className="px-5 pb-5 pt-4.5">
           <div className="flex items-center justify-between gap-3">
-            <div className="flex items-center gap-2 font-mono text-[9px] font-semibold uppercase tracking-[0.13em] text-white/58">
+            <div className="inline-flex items-center gap-2 rounded-full border border-pine/10 bg-white px-2.5 py-1 font-mono text-[9px] font-semibold uppercase tracking-[0.1em] text-pine">
               <span className="relative flex h-1.5 w-1.5" aria-hidden>
-                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-white opacity-25" />
-                <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-white/85" />
+                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-pine opacity-20" />
+                <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-pine" />
               </span>
               {COPY.mobileHome.contextStatus(contextCount)}
             </div>
-            <span className="font-mono text-[9px] uppercase tracking-[0.12em] text-white/38">
+            <span className="font-mono text-[8.5px] uppercase tracking-[0.1em] text-ink-muted">
               {COPY.mobileHome.systemStatus}
             </span>
           </div>
 
-          <h1 className="mt-5 max-w-[19rem] text-[29px] font-semibold leading-[1.08] tracking-[-0.045em] text-white">
+          <h1 className="mt-5 max-w-[20rem] text-[28px] font-semibold leading-[1.1] tracking-[-0.045em] text-ink">
             {COPY.mobileHome.title}
           </h1>
-          <p className="mt-3 max-w-[31rem] text-[12.5px] leading-[1.75] text-white/62">
+          <p className="mt-3 max-w-[31rem] text-[12.5px] leading-[1.75] text-ink-secondary">
             {COPY.mobileHome.body}
           </p>
 
           <button
             type="button"
             onClick={onStartRecording}
-            className="mt-5 flex w-full items-center justify-between rounded-[15px] bg-white px-4 py-3.5 text-left text-ink transition active:scale-[0.99]"
+            className="mt-5 flex w-full items-center justify-between rounded-[15px] bg-pine px-4 py-3.5 text-left text-white transition hover:bg-pine-deep active:scale-[0.99]"
           >
             <span className="flex items-center gap-3">
-              <span className="flex h-8 w-8 items-center justify-center rounded-[10px] bg-vermilion-mist text-vermilion">
+              <span className="flex h-8 w-8 items-center justify-center rounded-[10px] bg-white/14 text-white">
                 <Mic size={16} strokeWidth={2} />
               </span>
               <span>
                 <span className="block text-[13.5px] font-semibold">{COPY.mobileHome.record}</span>
-                <span className="mt-0.5 block text-[10.5px] text-ink-muted">{COPY.mobileHome.recordHint}</span>
+                <span className="mt-0.5 block text-[10.5px] text-white/70">{COPY.mobileHome.recordHint}</span>
               </span>
             </span>
           </button>
@@ -86,14 +86,14 @@ export function MobileLearningCommandCenter({
           </div>
         </div>
 
-        <div className="border-t border-white/10 bg-white/[0.035] px-4 py-3.5">
-          <p className="px-1 font-mono text-[8.5px] font-semibold uppercase tracking-[0.13em] text-white/42">
+        <div className="border-t border-pine/10 bg-white/70 px-4 py-3.5">
+          <p className="px-1 font-mono text-[8.5px] font-semibold uppercase tracking-[0.11em] text-pine/70">
             {COPY.mobileHome.capabilityLabel}
           </p>
           <div className="mt-2 grid grid-cols-3 gap-x-2 gap-y-1.5">
             {CAPABILITIES.map(({ key, label, icon: Icon }) => (
-              <span key={key} className="flex min-w-0 items-center gap-1.5 rounded-[9px] px-1.5 py-1.5 text-[10.5px] text-white/68">
-                <Icon size={11} strokeWidth={1.8} className="flex-shrink-0 text-white/42" />
+              <span key={key} className="flex min-w-0 items-center gap-1.5 rounded-[9px] px-1.5 py-1.5 text-[10.5px] text-ink-secondary">
+                <Icon size={11} strokeWidth={1.8} className="flex-shrink-0 text-pine/70" />
                 <span className="truncate">{label}</span>
               </span>
             ))}
@@ -117,7 +117,7 @@ function CommandAction({
     <button
       type="button"
       onClick={onClick}
-      className="flex min-w-0 flex-col items-start gap-2 rounded-[13px] border border-white/12 bg-white/[0.045] px-3 py-3 text-left text-white/72 transition active:scale-[0.98] active:bg-white/[0.08]"
+      className="flex min-w-0 flex-col items-start gap-2 rounded-[13px] border border-divider bg-white px-3 py-3 text-left text-ink-secondary transition hover:border-pine/25 hover:text-pine active:scale-[0.98] active:bg-pine-mist/40"
     >
       <Icon size={14} strokeWidth={1.8} />
       <span className="truncate text-[10.5px] font-medium">{label}</span>
