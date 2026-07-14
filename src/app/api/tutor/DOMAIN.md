@@ -7,7 +7,7 @@
 | 文件 | 职责 |
 |------|------|
 | `agent/route.ts` | **M10 主入口** `POST /api/tutor/agent`：mode-driven 单一 endpoint，AI SDK v6 `streamText` + `createUIMessageStreamResponse`。详见下方 mode 矩阵与 provider 说明 |
-| `intent/route.ts` | `POST /api/tutor/intent`：将原始问题与学习上下文整理为可编辑 `LearningIntentPlan`；不持久化、不替用户确认 |
+| `intent/route.ts` | `POST /api/tutor/intent`：将原始问题与学习上下文整理为 `LearningIntentPlan`；可返回 1-3 个动态选择题，前端回传 `answers[{questionId, question, optionIds, optionLabels}]` 后得到最终计划；不持久化、不替用户确认 |
 | `route.ts` | Legacy SSE 路径（M10 前的主路由）。flag off 时仍可用，但**不在上面加新功能**；非语音对话应迁移到 `agent/route.ts` |
 | `tutor-prompts.ts` | **Legacy** System Prompt 模板（M10 前的旧实现）。当前 5 mode 唯一 prompt 源在 `@/lib/prompts/tutor-prompts.ts` 的 `buildTutorSystemPrompt`，本文件勿再扩展 |
 | `tutor-types.ts` | 共享类型定义 |

@@ -14,7 +14,7 @@ import { formatLearningContextForTutor, summarizeLearningContext } from '@/lib/u
 import { useSessionStore } from '@/stores/session-store';
 import { useCaptureEditorStore } from '@/stores/capture-editor-store';
 import { useCollectionStore } from '@/stores/collection-store';
-import type { LearningIntentPlan } from '@/types/learning-intent';
+import type { LearningIntentAnswer, LearningIntentPlan } from '@/types/learning-intent';
 import type { LearningThreadEntry } from '@/types/user';
 import { OctoAvatar } from '@/components/ui/octo-avatar';
 import { LearningIntentConfirmationCard } from '@/components/LearningIntentConfirmationCard';
@@ -218,7 +218,21 @@ export function GlobalAskPanel({
     fileUpload.clear();
   }, [fileUpload, sendMessage]);
 
-  const prepareDeepIntent = React.useCallback(async (query: string) => {
+  const beginDeepSession = React.useCallback(async (plan: LearningIntentPlan, query: string) => {
+    const finalPlan = { ...plan, questions: undefined };
+    setActiveIntent(finalPlan);
+    setIntentPlan(null);
+    setPendingQuery('');
+    await learning.setActiveThread(createThread(finalPlan, query));
+    sendMessage({ text: query });
+    fileUpload.clear();
+  }, [fileUpload, learning, sendMessage]);
+
+  const prepareDeepIntent = React.useCallback(async (
+    query: string,
+    answers?: LearningIntentAnswer[],
+    fallbackPlan?: LearningIntentPlan,
+  ) => {
     setPendingQuery(query);
     setIntentBusy(true);
     try {
@@ -231,20 +245,27 @@ export function GlobalAskPanel({
           learnerContext: summary,
           recentContext: learning.recentActivities.slice(-6).map((item) => `${item.title}${item.detail ? `：${item.detail}` : ''}`).join('\n'),
           activeContext: currentMaterials.map((item) => `${item.title}\n${item.content.slice(0, 500)}`).join('\n\n').slice(0, 4_000),
+          ...(answers?.length ? { answers } : {}),
         }),
       });
       const payload = await response.json() as { ok?: boolean; plan?: LearningIntentPlan };
       if (!response.ok || !payload.plan) throw new Error('intent unavailable');
-      setIntentPlan(payload.plan);
+      if (answers?.length) await beginDeepSession(payload.plan, query);
+      else setIntentPlan(payload.plan);
     } catch {
-      toast.message(COPY.globalAsk.preparingError);
-      setDepth('quick');
-      sendQuick(query);
-      setPendingQuery('');
+      if (fallbackPlan) {
+        toast.message(COPY.globalAsk.refiningError);
+        await beginDeepSession(fallbackPlan, query);
+      } else {
+        toast.message(COPY.globalAsk.preparingError);
+        setDepth('quick');
+        sendQuick(query);
+        setPendingQuery('');
+      }
     } finally {
       setIntentBusy(false);
     }
-  }, [currentMaterials, learning, sendQuick]);
+  }, [beginDeepSession, currentMaterials, learning, sendQuick]);
 
   const submitText = React.useCallback((text: string) => {
     if (busy || intentBusy) return;
@@ -266,13 +287,8 @@ export function GlobalAskPanel({
   const confirmIntent = React.useCallback(async (plan: LearningIntentPlan) => {
     const query = pendingQuery;
     if (!query) return;
-    setActiveIntent(plan);
-    setIntentPlan(null);
-    setPendingQuery('');
-    await learning.setActiveThread(createThread(plan, query));
-    sendMessage({ text: query });
-    fileUpload.clear();
-  }, [fileUpload, learning, pendingQuery, sendMessage]);
+    await beginDeepSession(plan, query);
+  }, [beginDeepSession, pendingQuery]);
 
   const cancelIntent = React.useCallback(() => {
     const query = pendingQuery;
@@ -440,7 +456,15 @@ export function GlobalAskPanel({
             );
           })}
           {intentBusy ? <ChatThinkingStripBubble label={COPY.globalAsk.preparingIntent} avatar={<OctoAvatar mood="thinking" size="sm" aura />} /> : null}
-          {intentPlan ? <LearningIntentConfirmationCard plan={intentPlan} busy={busy} onConfirm={(plan) => void confirmIntent(plan)} onCancel={cancelIntent} /> : null}
+          {intentPlan ? (
+            <LearningIntentConfirmationCard
+              plan={intentPlan}
+              busy={busy || intentBusy}
+              onConfirm={(plan) => void confirmIntent(plan)}
+              onResolve={(answers) => void prepareDeepIntent(pendingQuery, answers, intentPlan)}
+              onCancel={cancelIntent}
+            />
+          ) : null}
           {showThinking ? <ChatThinkingStripBubble label={COPY.globalAsk.thinking} avatar={<OctoAvatar mood="thinking" size="sm" aura />} /> : null}
           {error ? <div className="rounded-xl border border-vermilion/15 bg-vermilion-fog px-4 py-3 text-[12.5px] text-vermilion">{COPY.globalAsk.responseError}</div> : null}
         </ChatMessageList>

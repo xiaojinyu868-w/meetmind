@@ -7,7 +7,7 @@ Tutor 的唯一新主链路是 `POST /api/tutor/agent`，由 `buildTutorSystemPr
 全局 Ask MeetMind 使用 `mode='global'`：
 
 - quick：直接回答，不生成长期记忆。
-- deep：先调用 `/api/tutor/intent` 得到可编辑 `LearningIntentPlan`，用户确认后才开始；模型可在回答末尾输出 `---学习进展---` 候选，前端仍须逐条让用户确认。
+- deep：先调用 `/api/tutor/intent` 得到 `LearningIntentPlan`。模型应先利用已有课堂和个人上下文；只有答案会明显改变路径时才返回 1-3 个动态单选/多选问题。前端回传包含问题与选项语义的 `answers[{questionId, question, optionIds, optionLabels}]` 后取得最终计划并开始，避免让用户编辑一份 AI 表单。模型可在回答末尾输出 `---学习进展---` 候选，前端仍须逐条让用户确认。
 - `LearnerProfile.memories` 只存用户确认过的内容；应用结果、对话摘要与模型推断只能先进入 `recentLearningActivities`。
 - `GlobalAskPanel` 基于 ChatBase，`useGlobalAskHistory` 只恢复 `metadata.scope='global-ask'` 的 IndexedDB 对话，避免误接某节课的复习聊天。
 

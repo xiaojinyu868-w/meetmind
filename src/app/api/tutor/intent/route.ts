@@ -11,6 +11,12 @@ const BodySchema = z.object({
   learnerContext: z.string().max(3_000).optional(),
   recentContext: z.string().max(3_000).optional(),
   activeContext: z.string().max(4_000).optional(),
+  answers: z.array(z.object({
+    questionId: z.string().min(1).max(24),
+    question: z.string().min(1).max(100),
+    optionIds: z.array(z.string().min(1).max(24)).min(1).max(4),
+    optionLabels: z.array(z.string().min(1).max(36)).min(1).max(4),
+  })).max(3).optional(),
 });
 
 export async function POST(request: NextRequest) {

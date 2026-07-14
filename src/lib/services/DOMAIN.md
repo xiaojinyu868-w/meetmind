@@ -43,7 +43,7 @@ api/route.ts → services → lib/utils, lib/db, lib/config
 | `summary-service.ts` | 246 | 课堂摘要生成 |
 | `lesson-digest-service.ts` | ~280 | 课堂结构化分段总结（飞书妙记形态）：segments + 图片锚点 → LLM 生成分段 digest + fallback 兜底。参照 `cheatsheet.plugin.ts` 的 LLM + JSON + citation 模式。桌面移动共享 |
 | `tutor-service.ts` | 273 | AI 家教：引用匹配 + LLM 解释 |
-| `learning-intent-service.ts` | ~150 | 深度学习意图确认：模型把原始问题整理为可编辑计划；模型不可用时返回确定性计划，最终必须由用户确认 |
+| `learning-intent-service.ts` | ~190 | 深度学习意图确认：模型先利用已有上下文，只在学习路径确有歧义时生成 1-3 个动态单选/多选问题；用户作答后再次整理为最终计划，模型不可用时返回确定性计划 |
 | `dify-service.ts` | 354 | Dify Agent 集成（提问引导 + 联网检索） |
 | `teaching-suggestion.ts` | 256 | 教学改进建议生成 |
 | `gemini-image-service.ts` | 361 | Gemini 图像生成（via undyingapi 代理） |

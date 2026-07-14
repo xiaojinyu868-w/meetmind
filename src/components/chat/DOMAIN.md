@@ -112,6 +112,7 @@ export function MyChatAdapter({ sessionId, authToken, ... }) {
 | `IntentDialog` | `components/intent/IntentDialog.tsx` | `goal` | `glass` | 沉浸式 octo blur 背景；marker=`intent-summary`；M11.4 bio 双 marker |
 | `TutorAgentPanel` | `components/tutor/TutorAgentPanel.tsx` | `review` / `in-class`（预留） | `paper` | 持久化到 `conversationService`；仅 `review` 提供时间戳跳转；M11 迁 |
 | `ClassroomCompanionPanel` | `components/classroom/ClassroomCompanionPanel.tsx` | `in-class` | `paper` | M14/M14.5 迁；Octo Buddy chip + inline app；不渲染时间戳回跳 |
+| `GlobalAskPanel` | `components/GlobalAskPanel.tsx` | `global` | `paper` | quick 直接回答；deep 在路径确有歧义时渲染模型动态选择题，用户作答后自动细化并开始 |
 | `SharedAgentChat` | `app/share/[token]/SharedAgentChat.tsx` | `shared` | `paper` | M11.5 迁；shareToken 认证 + 隐私铁律 |
 | `WordExplainer` | `components/WordExplainer.tsx` | `word` | `minimal` | M13 迁；选词解释浮窗 |
 
