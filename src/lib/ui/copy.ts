@@ -348,7 +348,7 @@ export const COPY = {
     recordHint: '实时听懂',
     addMaterial: '放入资料',
     photo: '拍板书',
-    search: 'Ask MeetMind',
+    search: '问 MeetMind',
     livePromise: '课中看见脉络',
     afterClassPromise: '课后继续练习',
     capabilityLabel: '从输入到结果，一条学习链路',
