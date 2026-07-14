@@ -20,6 +20,7 @@
 
 export const COPY = {
   identity: {
+    productName: 'MeetMind',
     name: '同学',
     tagline: '真正懂你在学什么的 AI 同学',
     subtagline: '理解你的课堂、资料和目标，陪你学懂当下，也发现下一步值得看的内容。',
@@ -157,9 +158,12 @@ export const COPY = {
   },
 
   classroomHome: {
+    commandEyebrow: '今天的学习现场',
     title: '继续你的学习现场',
     subtitle: '从最近一节课接着学，或把新的课堂和资料交给 MeetMind。',
     contextStatus: '个人上下文已连接',
+    outcomeTitle: '内容进来之后',
+    outcomeHint: '不只保存，还会继续变成能用的学习结果。',
     capabilityLabel: 'MeetMind 会把内容继续变成什么',
     capabilityListenTitle: '听懂现场',
     capabilityListenBody: '实时转录 · 课堂脉络 · 随时追问',
@@ -362,6 +366,16 @@ export const COPY = {
     intelligenceFallback: '从最近的学习里，找到一条值得继续的线索',
     intelligenceAction: '查看',
     recentLabel: '最近上下文',
+    emptyRole: '懂你上下文的 AI 同学',
+    emptyEyebrow: '先交给我一段真实学习',
+    emptyTitle: '从第一节课，开始真正理解。',
+    emptyBody: '录下课堂，放入资料，或者直接说出想弄懂的事。MeetMind 会接住现场，再陪你练会。',
+    emptyRecordHint: '边听边形成课堂脉络',
+    emptyOutcomeTitle: '回来时，你会得到',
+    emptyOutcomeFlow: '课堂脉络',
+    emptyOutcomeAnswer: '有根解释',
+    emptyOutcomePractice: '课后练习',
+    emptyBrowse: '先看看完整工作台',
   },
 
   echoShare: {

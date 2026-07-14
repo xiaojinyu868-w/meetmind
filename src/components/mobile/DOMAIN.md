@@ -27,7 +27,8 @@
 | `MobileCollectionSheet.tsx` | 收集列表底部抽屉（全量 feed） |
 | `MobileReviewSheet.tsx` | 复习态底部可拖拽 Sheet（收起/半展/全展三档） |
 | `MobileAppNavigator.tsx` | 移动端统一导航栈（push/pop/replace/reset，screen 枚举：home/recording/processing/review/flashcards/quiz/cheatsheet/apps/classmate/empty） |
-| `MobileAppShell.tsx` | **移动端统一页面壳**：接入真实数据，渲染各 screen。录课页复用 `useClassroomFlow + ClassroomFlowCanvas`，默认展示课堂脉络并可切回原话；通过 render slots 接收 page.tsx 传入的真实组件（SafeAITutor / MobileAppRunner） |
+| `MobileAppShell.tsx` | **移动端统一页面壳**：接入真实数据，渲染各 screen。零内容首屏直接展示“录课 / 放资料 / 问 MeetMind”三条真实路径和可得到的课堂脉络、有根解释、课后练习；是否为零内容同时读取收集、笔记总结、记忆、近期活动和活跃学习线程，有任何上下文都直接回工作台；录课页复用 `useClassroomFlow + ClassroomFlowCanvas`，默认展示课堂脉络并可切回原话；通过 render slots 接收 page.tsx 传入的真实组件（SafeAITutor / MobileAppRunner） |
+| `MobileFirstLearningScreen.tsx` | 手机端真正零内容用户的首次学习页：能力可见化而非单按钮拦截，直接提供录课、放资料、问 MeetMind 三条路径，并说明会得到课堂脉络、有根解释和课后练习 |
 | `MobileLearningCommandCenter.tsx` | 移动首页首屏学习控制台：用一个主表面统一录课、资料、拍照、全局“问 MeetMind”入口；首屏只保留一个录课主动作、三个大号入口和“课中看脉络 / 课后继续练习”两项承诺，不再用六项小字能力清单堆叠；朱批红标记用户当下动作，个人上下文计数读取真实学习上下文而非资料数量 |
 | `MobileAppRunner.tsx` | 移动端应用执行器：封装 useAppExecution + AppRenderSurface，支持六类 catalog 应用；信息图复用课堂文本作为 contentContext；应用生成结果与闪卡/测验交互通过共用 hook 回写最近学习现场 |
 | `MobileCollectionCard.tsx` | 移动端精简收集流卡片；速记直接显示正文，并展示微信/公众号/B站等可识别的来源标签 |

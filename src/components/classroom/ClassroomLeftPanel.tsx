@@ -18,13 +18,13 @@
  */
 
 import React, { useMemo } from 'react';
-import { AudioLines, Headphones, Mic, Monitor, Network, Shapes, Square } from 'lucide-react';
+import { Headphones, Mic, Monitor, Square } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import type { Lesson, ClassroomPaneState } from './types';
 import { ClassroomLessonCard } from './ClassroomLessonCard';
 import { ClassroomRecordingView } from './ClassroomRecordingView';
 import { ClassroomHero } from './ClassroomHero';
-import { ClassroomLaunchpad } from './ClassroomLaunchpad';
+import { ClassroomHomeCommandCenter } from './ClassroomHomeCommandCenter';
 import { loadDemoLesson } from './DemoLessonLoader';
 import { useCaptureEditorActions } from '@/stores/capture-editor-store';
 import { isWorkshopAppKey, type WorkshopAppKey } from '@/lib/ai-native/app-catalog';
@@ -169,85 +169,6 @@ function audioSourceLabel(source?: RecorderAudioSource): string {
   if (source === 'system') return COPY.recording.sourceSystem;
   if (source === 'mixed') return COPY.recording.sourceMixed;
   return COPY.recording.sourceMic;
-}
-
-/** 获取今天日期的中文展示："4 月 18 日 · 周六" */
-function formatTodayLabel(): string {
-  const now = new Date();
-  const m = now.getMonth() + 1;
-  const d = now.getDate();
-  const weekdays = ['周日', '周一', '周二', '周三', '周四', '周五', '周六'];
-  const w = weekdays[now.getDay()];
-  return `${m} 月 ${d} 日 · ${w}`;
-}
-
-/**
- * PageHeader — 返回用户的课堂首页锚点。
- * 不把学习现场做成“待办 / 已归档”管理后台，只告诉用户在哪里，并给出下一步。
- */
-function PageHeader() {
-  const capabilities = [
-    {
-      key: 'listen',
-      icon: AudioLines,
-      title: COPY.classroomHome.capabilityListenTitle,
-      body: COPY.classroomHome.capabilityListenBody,
-    },
-    {
-      key: 'connect',
-      icon: Network,
-      title: COPY.classroomHome.capabilityConnectTitle,
-      body: COPY.classroomHome.capabilityConnectBody,
-    },
-    {
-      key: 'practice',
-      icon: Shapes,
-      title: COPY.classroomHome.capabilityPracticeTitle,
-      body: COPY.classroomHome.capabilityPracticeBody,
-    },
-  ] as const;
-
-  return (
-    <div className="flex-shrink-0 px-8 pb-5 pt-8 lg:px-12 lg:pt-10">
-      <div className="mx-auto w-full max-w-4xl">
-        <div className="flex items-center justify-between gap-4">
-          <p className="font-mono text-[10px] font-medium tracking-[0.08em] text-ink-muted">
-            {formatTodayLabel()}
-          </p>
-          <span className="inline-flex items-center gap-1.5 rounded-full border border-pine/10 bg-pine-fog px-2.5 py-1 font-mono text-[9px] font-semibold tracking-[0.08em] text-pine">
-            <span className="h-1.5 w-1.5 rounded-full bg-pine" aria-hidden />
-            {COPY.classroomHome.contextStatus}
-          </span>
-        </div>
-        <h1 className="mt-2 text-[32px] font-semibold leading-tight tracking-[-0.04em] text-ink">
-          {COPY.classroomHome.title}
-        </h1>
-        <p className="mt-2 text-[13.5px] leading-6 text-ink-secondary">
-          {COPY.classroomHome.subtitle}
-        </p>
-
-        <section
-          aria-label={COPY.classroomHome.capabilityLabel}
-          className="mt-6 grid grid-cols-3 overflow-hidden rounded-[18px] border border-pine/12 bg-white"
-        >
-          {capabilities.map(({ key, icon: Icon, title, body }, index) => (
-            <div
-              key={key}
-              className={`flex min-w-0 items-start gap-3 px-4 py-3.5 ${index > 0 ? 'border-l border-divider-light' : ''}`}
-            >
-              <span className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-[10px] bg-pine-fog text-pine">
-                <Icon size={15} strokeWidth={1.8} />
-              </span>
-              <span className="min-w-0">
-                <span className="block text-[12.5px] font-semibold text-ink">{title}</span>
-                <span className="mt-1 block truncate text-[11px] text-ink-muted">{body}</span>
-              </span>
-            </div>
-          ))}
-        </section>
-      </div>
-    </div>
-  );
 }
 
 /**
@@ -422,7 +343,7 @@ function ListView({
   const activeThread = learning.activeThread?.status === 'active' ? learning.activeThread : undefined;
   const latestActivity = learning.recentActivities[learning.recentActivities.length - 1];
   const recovery = (activeThread || latestActivity) && onSearch ? (
-    <ContextRecoveryCard thread={activeThread} activity={latestActivity} onResume={onSearch} />
+    <ContextRecoveryCard thread={activeThread} activity={latestActivity} onResume={onSearch} compact />
   ) : null;
 
   if (isTrulyEmpty) {
@@ -446,21 +367,14 @@ function ListView({
 
   return (
     <>
-      <PageHeader />
+      <ClassroomHomeCommandCenter
+        onAddMaterial={onAddMaterial}
+        onSearch={onSearch}
+        recoverySlot={recovery}
+      />
 
-      <div className="flex-1 overflow-y-auto px-8 pt-2 pb-4 lg:px-12">
+      <div className="flex-1 overflow-y-auto px-8 pb-4 pt-3 lg:px-12">
         <div className="mx-auto w-full max-w-4xl">
-          <div className="mb-8">
-            <ClassroomLaunchpad
-              onStartRecording={onStart}
-              onAddMaterial={onAddMaterial}
-              onSearch={onSearch}
-              showRecord={false}
-            />
-          </div>
-
-          {recovery ? <div className="mb-8">{recovery}</div> : null}
-
           {/* 1. 正在录音的课 — 置顶活动条 */}
           {activeLesson && (
             <ActiveLessonPill
@@ -529,7 +443,7 @@ function StickyStartBar({
   onChangeAudioSource?: (source: RecorderAudioSource) => void;
 }) {
   return (
-    <div className="flex-shrink-0 border-t border-divider-light bg-canvas/95 px-8 pb-[max(env(safe-area-inset-bottom),1.25rem)] pt-3 lg:px-12">
+    <div className="flex-shrink-0 border-t border-divider-light bg-canvas/95 px-8 pb-[max(env(safe-area-inset-bottom),0.75rem)] pt-3 lg:px-12">
       <div className="mx-auto w-full max-w-4xl">
         {disabled ? (
           <div className="flex w-full items-center justify-center gap-2.5 rounded-full bg-pine-mist py-3.5 text-[13px] text-pine">
@@ -537,14 +451,14 @@ function StickyStartBar({
             <span>{COPY.classroomHome.active}</span>
           </div>
         ) : (
-          <>
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-stretch">
             {onChangeAudioSource ? (
               <AudioSourcePicker value={audioSource} onChange={onChangeAudioSource} />
             ) : null}
             <button
               type="button"
               onClick={onStart}
-              className="group flex w-full items-center justify-center gap-2 rounded-full bg-pine py-3 text-[13.5px] font-medium text-white transition hover:bg-pine-deep active:scale-[0.995]"
+              className="group flex min-h-[58px] w-full items-center justify-center gap-2 rounded-[16px] bg-pine px-6 text-[13.5px] font-medium text-white transition hover:bg-pine-deep active:scale-[0.995] sm:w-[210px] sm:flex-shrink-0"
             >
               <span className="relative flex h-1.5 w-1.5">
                 <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-vermilion opacity-50 group-hover:opacity-70" />
@@ -553,7 +467,7 @@ function StickyStartBar({
               <Mic size={13} strokeWidth={2} />
               <span>{COPY.cta.record}</span>
             </button>
-          </>
+          </div>
         )}
       </div>
     </div>
@@ -630,7 +544,7 @@ function AudioSourcePicker({
   // 把"为什么只有这一档"的理由放在一行小字里说透，不装作一切正常，也不大喊大叫。
   if (!canSystem) {
     return (
-      <div className="mb-3">
+      <div className="min-w-0 flex-1">
         <div className="flex items-center gap-2 rounded-2xl border border-divider bg-white px-3 py-2.5">
           <Mic size={14} strokeWidth={2} className="text-ink" />
           <span className="text-[12.5px] font-medium text-ink">麦克风</span>
@@ -645,7 +559,7 @@ function AudioSourcePicker({
 
   // ── 桌面端：segmented 三选一 ──
   return (
-    <div className="mb-3">
+    <div className="min-w-0 flex-1">
       <div className="grid grid-cols-3 overflow-hidden rounded-2xl border border-divider bg-white">
         {options.map((opt) => {
           const active = value === opt.key;
@@ -655,6 +569,7 @@ function AudioSourcePicker({
               key={opt.key}
               type="button"
               onClick={() => onChange(opt.key)}
+              title={opt.key === 'mic' ? opt.hint : `${opt.hint} · ${COPY.recording.sourceSystemHint}`}
               className={`flex flex-col items-center justify-center gap-1 px-2 py-2.5 text-[12px] transition ${
                 active
                   ? 'bg-pine text-white'
@@ -677,12 +592,6 @@ function AudioSourcePicker({
           );
         })}
       </div>
-      {/* 极轻的一行文字说明当前这档意味着什么——默认留白不喊话，只在电脑声音档位亮出提示 */}
-      {value !== 'mic' ? (
-        <p className="mt-2 px-1 text-[11px] leading-4 text-ink-muted">
-          点"开始"后会弹出系统窗口，请勾选「分享系统音频」或「分享标签页音频」。
-        </p>
-      ) : null}
     </div>
   );
 }

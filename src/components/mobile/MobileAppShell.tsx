@@ -26,6 +26,7 @@ import { useClassroomFlow } from '@/hooks/useClassroomFlow';
 import { MobileLearningCommandCenter } from './MobileLearningCommandCenter';
 import { ContextRecoveryCard } from '@/components/ContextRecoveryCard';
 import { useLearningContext } from '@/hooks/useLearningContext';
+import { MobileFirstLearningScreen } from './MobileFirstLearningScreen';
 
 export interface MobileAppShellProps {
   children?: React.ReactNode;
@@ -1384,35 +1385,33 @@ function EchoScreen({ p }: { p: MobileAppShellProps }) {
   );
 }
 
-// ═══ 空课堂 ═══
-
-function EmptyScreen({ p, onEnterHome }: { p: MobileAppShellProps; onEnterHome?: () => void }) {
-  const { push } = useMobileNav();
-  return (
-    <div className="flex-1 flex flex-col items-center justify-center bg-paper px-8 m-page-in">
-      <div className="relative h-24 w-24 mb-6">
-        <div className="absolute inset-0 rounded-full bg-pine-mist flex items-center justify-center overflow-hidden m-octo-breath">
-          <img src="/images/octo-buddy/idle.png" alt="" className="h-full w-full object-cover" />
-        </div>
-      </div>
-      <h1 className="font-serif text-[26px] leading-[1.15] tracking-[-0.02em] text-ink text-center mb-2">录第一节课<em className="text-vermilion">试试</em></h1>
-      <p className="text-[13px] text-ink-muted text-center leading-relaxed mb-8 max-w-[260px]">打开麦克风录一节课，同桌帮你听懂、整理成笔记。</p>
-      <button onClick={() => { p.onStartRecording(); push('recording'); }}
-        className="flex w-full max-w-[280px] items-center justify-center gap-2.5 rounded-full bg-ink py-3.5 text-[14px] font-medium text-white active:scale-[0.98] transition">
-        <Mic size={16} strokeWidth={2} />录一节课
-      </button>
-      <button onClick={() => onEnterHome?.()} className="mt-3 text-[12px] text-ink-muted underline">已有内容，进入 →</button>
-    </div>
-  );
-}
-
 // ═══ 路由 ═══
 
 function ScreenRouter({ p }: { p: MobileAppShellProps }) {
-  const { currentScreen, replace } = useMobileNav();
+  const { currentScreen, push, replace } = useMobileNav();
+  const learning = useLearningContext();
   const [hasEnteredEmptyHome, setHasEnteredEmptyHome] = useState(false);
-  if (currentScreen==='home' && p.collectionFeedItems.length===0 && !p.isRecording && !hasEnteredEmptyHome) {
-    return <EmptyScreen p={p} onEnterHome={() => setHasEnteredEmptyHome(true)} />;
+  const hasImmediateLearningContext = p.collectionFeedItems.length > 0 || p.workspaceEchoes.length > 0;
+  const hasKnownLearningContext = hasImmediateLearningContext
+    || learning.memories.some((memory) => memory.status === 'active')
+    || learning.recentActivities.length > 0
+    || learning.activeThread?.status === 'active';
+  if (currentScreen === 'home' && !hasImmediateLearningContext && !learning.hydrated) {
+    return (
+      <div className="flex flex-1 items-center justify-center bg-paper" aria-busy="true">
+        <span className="h-10 w-10 animate-pulse rounded-[14px] bg-pine-mist" aria-hidden />
+      </div>
+    );
+  }
+  if (currentScreen === 'home' && !hasKnownLearningContext && !p.isRecording && !hasEnteredEmptyHome) {
+    return (
+      <MobileFirstLearningScreen
+        onStartRecording={() => { p.onStartRecording(); push('recording'); }}
+        onAddMaterial={() => p.onOpenFilePicker('all')}
+        onAsk={p.onOpenSearch}
+        onBrowse={() => setHasEnteredEmptyHome(true)}
+      />
+    );
   }
   switch (currentScreen) {
     case 'home': return <HomeScreen p={p} />;
@@ -1428,7 +1427,14 @@ function ScreenRouter({ p }: { p: MobileAppShellProps }) {
     case 'apps': return <AppsScreen p={p} />;
     case 'classmate': return <ClassmateScreen p={p} />;
     case 'echo': return <EchoScreen p={p} />;
-    case 'empty': return <EmptyScreen p={p} onEnterHome={() => { setHasEnteredEmptyHome(true); replace('home'); }} />;
+    case 'empty': return (
+      <MobileFirstLearningScreen
+        onStartRecording={() => { p.onStartRecording(); push('recording'); }}
+        onAddMaterial={() => p.onOpenFilePicker('all')}
+        onAsk={p.onOpenSearch}
+        onBrowse={() => { setHasEnteredEmptyHome(true); replace('home'); }}
+      />
+    );
     default: return <HomeScreen p={p} />;
   }
 }
