@@ -335,16 +335,19 @@ export const COPY = {
 
   mobileHome: {
     commandCenterLabel: '学习控制台',
+    eyebrow: '今天，从这里开始',
     contextStatus: (count: number): string => count > 0
-      ? `个人上下文 · 已连接 ${count} 条`
-      : '个人上下文 · 等待第一条',
-    title: '把课堂和资料，变成会用的知识。',
-    body: '录课、放资料，MeetMind 会接着听懂、整理、追问和练习。结果跟着你的目标和历史。',
-    record: '开始听课',
-    recordHint: '实时转录 · 课堂脉络 · 随时问同学',
+      ? `已接上 ${count} 段上下文`
+      : '还没有上下文',
+    title: '今天，开始真正学会。',
+    body: '听一节课、读一份资料，或直接说出你想弄懂的事。',
+    record: '录一节课',
+    recordHint: '实时听懂',
     addMaterial: '放入资料',
     photo: '拍板书',
     search: 'Ask MeetMind',
+    livePromise: '课中看见脉络',
+    afterClassPromise: '课后继续练习',
     capabilityLabel: '从输入到结果，一条学习链路',
     capabilityFlow: '课堂脉络',
     capabilityQa: '资料问答',

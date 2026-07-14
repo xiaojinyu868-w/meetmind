@@ -16,11 +16,30 @@ export function ContextRecoveryCard({ thread, activity, onResume, compact = fals
   const detail = thread?.lastSummary || thread?.outcome || activity?.detail;
   if (!title) return null;
 
+  if (compact) {
+    return (
+      <button
+        type="button"
+        onClick={onResume}
+        className="group flex w-full items-center gap-3 rounded-[18px] border border-vermilion/16 bg-vermilion-fog px-4 py-3.5 text-left transition active:scale-[0.99]"
+      >
+        <span className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full bg-white text-vermilion">
+          <CornerDownRight size={15} />
+        </span>
+        <span className="min-w-0 flex-1">
+          <span className="block text-[12px] font-medium text-vermilion">{COPY.globalAsk.recoveryEyebrow}</span>
+          <span className="mt-0.5 block truncate text-[15px] font-semibold text-ink">{title}</span>
+        </span>
+        <ArrowRight size={15} className="text-vermilion transition-transform group-hover:translate-x-0.5" />
+      </button>
+    );
+  }
+
   return (
     <button
       type="button"
       onClick={onResume}
-      className={`group w-full rounded-[18px] border border-pine/14 bg-pine-fog text-left transition hover:border-pine/24 hover:bg-pine-mist ${compact ? 'px-4 py-3.5' : 'px-5 py-4'}`}
+      className="group w-full rounded-[18px] border border-pine/14 bg-pine-fog px-5 py-4 text-left transition hover:border-pine/24 hover:bg-pine-mist"
     >
       <div className="flex items-start gap-3.5">
         <span className="mt-0.5 flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-xl border border-pine/12 bg-white text-pine">

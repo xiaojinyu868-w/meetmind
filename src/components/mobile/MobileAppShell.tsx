@@ -258,9 +258,8 @@ function HomeScreen({ p }: { p: MobileAppShellProps }) {
         )}
 
         {/* 收集流 — 按日期分组 */}
-        <div className="flex items-baseline gap-2 px-1 pb-2.5">
-          <span className="font-mono text-[10px] font-semibold uppercase tracking-[0.08em] text-ink-secondary">{COPY.mobileHome.recentLabel}</span>
-          <span className="font-mono text-[10px] text-ink-muted/70">{String(p.collectionFeedItems.length).padStart(2,'0')}</span>
+        <div className="flex items-center gap-3 px-1 pb-3">
+          <span className="text-[13px] font-semibold text-ink-secondary">{COPY.mobileHome.recentLabel}</span>
           <span className="ml-1 h-px flex-1 bg-divider" />
         </div>
 
