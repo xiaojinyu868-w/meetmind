@@ -60,7 +60,7 @@ route.ts → lib/services/ + lib/utils/rate-limit
 | `/api/generate-summary` | POST | 课堂摘要生成 |
 | `/api/generate-topics` | POST | 精选片段生成（Smart/Fast） |
 | `/api/feedback` | POST | 用户反馈 |
-| `/api/feed` | POST | 今日情报：允许游客携本地 captures 匿名调用并按 IP 限流；跨课程请求包含来源平台/作者/正文完整度；响应的外部卡含 `contentUrl/contentKind/authors/publishedAt/perspective`，来自真实网页、论文或图书目录；link-only 与解析失败内容不能作为原文观点证据 |
+| `/api/feed` | POST | 今日情报：允许游客携本地 captures 匿名调用并按 IP 限流；跨课程请求可携 `learningContext.activeThread/memories/recentActivities`，无新收藏但有真实当前目标时也可生成；响应外部卡含 `contentUrl/contentKind/authors/publishedAt/perspective`，来自真实网页、论文或图书目录；link-only 与解析失败内容不能作为原文观点证据 |
 
 ### 🧩 应用系统
 
@@ -69,6 +69,7 @@ route.ts → lib/services/ + lib/utils/rate-limit
 | `/api/apps/execute` | POST | 执行 AI-Native 应用插件 |
 | `/api/apps/plugins` | GET | 获取已注册插件列表 |
 | `/api/apps/catalog` | GET | 获取应用目录 |
+| `/api/apps/readiness` | POST | 结合真实原文、场景标题/来源与学习信号判断当前材料是否足以生成应用，并返回模型认可的应用范围；允许明确返回“不生成”，也不得把听力练习等对话型学习材料误判为闲聊。游客复习也会调用，已在 `public-routes.ts` 放行并由 route 自身限流 |
 | `/api/apps/infographic/generate-image` | POST | Gemini 信息图生成 |
 
 ### 👤 认证

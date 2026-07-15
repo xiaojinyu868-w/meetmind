@@ -38,6 +38,7 @@ import { useShareAgentCreator } from '@/components/share/useShareAgentCreator';
 import { readCachedAppResult } from '@/lib/utils/app-execution-cache';
 import { getSessionById } from '@/lib/db/sessions';
 import type { AppExecutionResult } from '@/lib/ai-native/types';
+import type { WorkshopAppKey } from '@/lib/ai-native/app-catalog';
 import type { TranscriptSegment } from '@/types';
 import type {
   SharedAgentSnapshot,
@@ -229,6 +230,8 @@ export interface OctoCrystalDispatcherProps {
   summary?: string;
   /** 隐藏整个模块（外部条件控制） */
   hidden?: boolean;
+  /** 当前材料确实支持的应用；不展示会被内容门禁拒绝的分享入口。 */
+  allowedAppKeys?: WorkshopAppKey[];
 }
 
 interface AppGenStatus {
@@ -244,6 +247,7 @@ export function OctoCrystalDispatcher({
   transcript = [],
   summary,
   hidden = false,
+  allowedAppKeys,
 }: OctoCrystalDispatcherProps) {
   const router = useRouter();
   const { user } = useAuth();
@@ -251,6 +255,11 @@ export function OctoCrystalDispatcher({
   const [appStatuses, setAppStatuses] = React.useState<AppGenStatus[]>([]);
   const [pickingKey, setPickingKey] = React.useState<ShareableApp['appKey'] | null>(null);
   const [resolvedCourseTitle, setResolvedCourseTitle] = React.useState<string>(courseTitleProp || '');
+  const shareableApps = React.useMemo(() => {
+    if (!allowedAppKeys) return SHAREABLE_APPS;
+    const allowed = new Set(allowedAppKeys);
+    return SHAREABLE_APPS.filter((app) => allowed.has(app.appKey));
+  }, [allowedAppKeys]);
 
   // 没传 courseTitle 时，从 IndexedDB session 拿 topic 作为标题
   React.useEffect(() => {
@@ -278,7 +287,7 @@ export function OctoCrystalDispatcher({
   React.useEffect(() => {
     if (!sessionId) return;
     const refresh = () => {
-      const next: AppGenStatus[] = SHAREABLE_APPS.map(({ appKey }) => {
+      const next: AppGenStatus[] = shareableApps.map(({ appKey }) => {
         const result = readCachedAppResult(sessionId, appKey);
         return { appKey, generated: Boolean(result), result };
       });
@@ -295,7 +304,7 @@ export function OctoCrystalDispatcher({
       window.removeEventListener('storage', onStorage);
       window.clearInterval(timer);
     };
-  }, [sessionId]);
+  }, [sessionId, shareableApps]);
 
   const generatedCount = appStatuses.filter((s) => s.generated).length;
 
@@ -381,7 +390,7 @@ export function OctoCrystalDispatcher({
 
         {/* 4 张 tile：响应式 2 列 / 4 列 */}
         <div className="grid grid-cols-2 gap-2 lg:grid-cols-4">
-          {SHAREABLE_APPS.map((app) => {
+          {shareableApps.map((app) => {
             const status = appStatuses.find((s) => s.appKey === app.appKey) ?? {
               appKey: app.appKey,
               generated: false,

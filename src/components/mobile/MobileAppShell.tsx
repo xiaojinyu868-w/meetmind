@@ -11,7 +11,7 @@ import { useCaptureEditorStore } from '@/stores/capture-editor-store';
 import { useSessionStore } from '@/stores/session-store';
 import { useCollectionStore } from '@/stores/collection-store';
 import { toast } from 'sonner';
-import { Mic, Camera, Paperclip, ArrowUp, ChevronRight, ChevronDown, Layers, Zap, FileText, Brain, Sparkles, Star, MapPin, ExternalLink, Headphones, Newspaper, Image as ImageIcon } from 'lucide-react';
+import { Mic, Camera, Paperclip, ArrowUp, ChevronRight, ChevronDown, Layers, Zap, FileText, Brain, Sparkles, MapPin, ExternalLink, Headphones, Newspaper, Image as ImageIcon, Pause, Play } from 'lucide-react';
 import type { SourceIngestItem } from '@/types/page-types';
 import type { TranscriptSegment } from '@/types';
 import { getSpeakerLabel, getSpeakerColorClass } from '@/lib/services/asr/diarization-service';
@@ -21,12 +21,15 @@ import { getProvenanceSourceLabel } from '@/lib/capture/source-provenance';
 import { WORKSHOP_APP_CATALOG, getWorkshopAppByKey, type WorkshopAppKey } from '@/lib/ai-native/app-catalog';
 import { MobileAppRunner } from './MobileAppRunner';
 import { recommendWorkshopApp } from '@/components/apps/workshop-recommendation';
+import { useWorkshopReadiness } from '@/components/apps/hooks/useWorkshopReadiness';
 import { ClassroomFlowCanvas } from '@/components/classroom/ClassroomFlowCanvas';
 import { useClassroomFlow } from '@/hooks/useClassroomFlow';
 import { MobileLearningCommandCenter } from './MobileLearningCommandCenter';
 import { ContextRecoveryCard } from '@/components/ContextRecoveryCard';
 import { useLearningContext } from '@/hooks/useLearningContext';
 import { MobileFirstLearningScreen } from './MobileFirstLearningScreen';
+import { selectDemoLiveSegments } from '@/components/classroom/DemoLessonLoader';
+import { GUEST_DEMO_LESSON_TITLE } from '@/components/classroom/guest-demo-entry';
 
 export interface MobileAppShellProps {
   children?: React.ReactNode;
@@ -74,6 +77,12 @@ export interface MobileAppShellProps {
   userNickname?: string | null;
   userAvatar?: string | null;
   isAuthenticated: boolean;
+  /** 将内置试听音频与分段写入共享课堂上下文。 */
+  onStartDemo?: () => Promise<void>;
+  /** 显式 entry=demo 时直接进入试听现场。 */
+  autoStartDemo?: boolean;
+  demoMode?: boolean;
+  demoAudioUrl?: string;
 }
 
 function fmtMs(ms: number) {
@@ -148,10 +157,6 @@ function HomeScreen({ p }: { p: MobileAppShellProps }) {
     () => groupByDate(sortCollectionNewestFirst(p.collectionFeedItems)),
     [p.collectionFeedItems]
   );
-  const latestLearningActivity = learning.recentActivities[learning.recentActivities.length - 1];
-  const connectedContextCount = learning.memories.filter((memory) => memory.status === 'active').length
-    + learning.recentActivities.length
-    + (learning.activeThread?.status === 'active' ? 1 : 0);
   const hasComposerText = p.composerText.trim().length > 0;
   const isComposerVoiceActive = p.composerVoiceStatus === 'connecting' || p.composerVoiceStatus === 'recording';
   const composerPlaceholder = p.composerVoiceInterimText
@@ -212,7 +217,6 @@ function HomeScreen({ p }: { p: MobileAppShellProps }) {
       {/* 可滚动区 */}
       <div className="flex-1 min-h-0 overflow-y-auto px-4 pt-3 pb-20 mm-mobile-scroll" style={{ WebkitOverflowScrolling: 'touch' }}>
         <MobileLearningCommandCenter
-          contextCount={connectedContextCount}
           onStartRecording={() => {
             p.onStartRecording();
             push('recording');
@@ -222,11 +226,10 @@ function HomeScreen({ p }: { p: MobileAppShellProps }) {
           onSearch={() => p.onOpenSearch?.()}
         />
 
-        {(learning.activeThread?.status === 'active' || latestLearningActivity) ? (
+        {learning.activeThread?.status === 'active' ? (
           <div className="mt-3">
             <ContextRecoveryCard
-              thread={learning.activeThread?.status === 'active' ? learning.activeThread : undefined}
-              activity={latestLearningActivity}
+              thread={learning.activeThread}
               onResume={() => p.onOpenSearch?.()}
               compact
             />
@@ -390,7 +393,10 @@ function HomeScreen({ p }: { p: MobileAppShellProps }) {
 
 function RecordingScreen({ p }: { p: MobileAppShellProps }) {
   const { pop, replace } = useMobileNav();
-  const segments = useCaptureEditorStore(s => s.segments);
+  const allSegments = useCaptureEditorStore(s => s.segments);
+  const segments = p.demoMode
+    ? selectDemoLiveSegments(p.currentTime / 1000)
+    : allSegments;
   const liveInterimText = useCaptureEditorStore(s => s.liveInterimText);
   const sessionPhotos = useCollectionStore(s => s.sourceItems).filter(i => i.type === 'image' && i.role === 'support' && (!i.sessionId || i.sessionId === p.sessionId));
   const photoCount = sessionPhotos.length;
@@ -412,6 +418,10 @@ function RecordingScreen({ p }: { p: MobileAppShellProps }) {
   // 录课计时器
   const [recordingSeconds, setRecordingSeconds] = useState(0);
   const [recordingStartAt, setRecordingStartAt] = useState<number | null>(null);
+  const demoRecordingStartAt = useMemo(
+    () => p.demoMode ? Date.now() : null,
+    [p.demoMode],
+  );
   useEffect(() => {
     if (!p.isRecording) {
       setRecordingSeconds(0);
@@ -430,10 +440,31 @@ function RecordingScreen({ p }: { p: MobileAppShellProps }) {
     newItemIds: classroomFlowNewIds,
     isUnderstanding: isUnderstandingClassroomFlow,
   } = useClassroomFlow({
-    enabled: p.isRecording,
+    enabled: p.isRecording || Boolean(p.demoMode),
     segments,
-    recordingStartAt,
+    recordingStartAt: p.demoMode ? demoRecordingStartAt : recordingStartAt,
   });
+
+  const elapsedSeconds = p.demoMode ? Math.floor(p.currentTime / 1000) : recordingSeconds;
+  const demoFinished = Boolean(
+    p.demoMode
+      && p.totalDuration > 0
+      && p.currentTime >= p.totalDuration - 500,
+  );
+  const finishLesson = () => {
+    if (p.demoMode) {
+      if (p.isPlaying) p.onPlayPause();
+      replace('review', {
+        sessionId: p.sessionId || 'guest-demo',
+        contentType: 'audio',
+        title: GUEST_DEMO_LESSON_TITLE,
+        segments: allSegments,
+      });
+      return;
+    }
+    p.onStopRecording();
+    replace('processing');
+  };
 
   // 拍照
   const { trigger: triggerCamera, inputEl: cameraInput } = useCameraCapture((file, capturedAtMs) => {
@@ -441,7 +472,7 @@ function RecordingScreen({ p }: { p: MobileAppShellProps }) {
     // flash 动画
     setFlash(true);
     setTimeout(() => setFlash(false), 150);
-    toast.success(`已拍下板书 · 锚点 ${fmtSec(recordingSeconds)}`, { duration: 2200 });
+    toast.success(`已拍下板书 · 锚点 ${fmtSec(elapsedSeconds)}`, { duration: 2200 });
   });
 
   return (
@@ -455,21 +486,31 @@ function RecordingScreen({ p }: { p: MobileAppShellProps }) {
           </button>
           <div className="flex items-center gap-1.5">
             <span className="m-rec-dot h-2 w-2 rounded-full bg-vermilion" />
-            <span className="font-mono text-[14px] font-semibold tabular-nums text-ink">{fmtSec(recordingSeconds)}</span>
+            <span className="font-mono text-[14px] font-semibold tabular-nums text-ink">{fmtSec(elapsedSeconds)}</span>
           </div>
-          {/* 波形条 */}
-          <div className="flex items-center gap-[2px] h-5">
-            <div className="m-wave-bar w-[3px] bg-vermilion rounded-full" style={{ animationDelay: '0s' }} />
-            <div className="m-wave-bar w-[3px] bg-vermilion rounded-full" style={{ animationDelay: '0.1s' }} />
-            <div className="m-wave-bar w-[3px] bg-vermilion rounded-full" style={{ animationDelay: '0.2s' }} />
-            <div className="m-wave-bar w-[3px] bg-vermilion/60 rounded-full" style={{ animationDelay: '0.3s' }} />
-          </div>
+          {p.demoMode ? (
+            <button
+              type="button"
+              onClick={p.onPlayPause}
+              className="inline-flex items-center gap-1.5 rounded-full bg-pine-fog px-2.5 py-1 text-[10.5px] font-semibold text-pine"
+            >
+              {p.isPlaying ? <Pause size={11} fill="currentColor" /> : <Play size={11} fill="currentColor" />}
+              {p.isPlaying ? COPY.mobileHome.demoPause : COPY.mobileHome.demoPlay}
+            </button>
+          ) : (
+            <div className="flex items-center gap-[2px] h-5">
+              <div className="m-wave-bar w-[3px] bg-vermilion rounded-full" style={{ animationDelay: '0s' }} />
+              <div className="m-wave-bar w-[3px] bg-vermilion rounded-full" style={{ animationDelay: '0.1s' }} />
+              <div className="m-wave-bar w-[3px] bg-vermilion rounded-full" style={{ animationDelay: '0.2s' }} />
+              <div className="m-wave-bar w-[3px] bg-vermilion/60 rounded-full" style={{ animationDelay: '0.3s' }} />
+            </div>
+          )}
           <div className="flex-1" />
           <button onClick={cycleTrans} className={`inline-flex items-center gap-1 rounded-full px-2 py-1 text-[10.5px] font-medium transition ${transMode !== 'off' ? 'bg-ink text-white' : 'text-ink-muted'}`}>
             <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M4 5h7M9 3v2c0 4.418-2.686 8-6 8" /></svg>
             <span>{transLabels[transIdx].label}</span>
           </button>
-          <button onClick={() => { p.onStopRecording(); replace('processing'); }} className="flex h-8 w-8 items-center justify-center rounded-full bg-ink text-white active:scale-90 transition">
+          <button onClick={finishLesson} className="flex h-8 w-8 items-center justify-center rounded-full bg-ink text-white active:scale-90 transition">
             <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="1" /></svg>
           </button>
         </div>
@@ -497,7 +538,7 @@ function RecordingScreen({ p }: { p: MobileAppShellProps }) {
           <ClassroomFlowCanvas
             flow={classroomFlow}
             newItemIds={classroomFlowNewIds}
-            elapsedMs={recordingSeconds * 1000}
+            elapsedMs={elapsedSeconds * 1000}
             isUnderstanding={isUnderstandingClassroomFlow}
           />
         </div>
@@ -531,7 +572,10 @@ function RecordingScreen({ p }: { p: MobileAppShellProps }) {
             <div className="flex items-center gap-2 mb-2 px-1">
               <p className="font-mono text-[9px] font-semibold uppercase tracking-[0.1em] text-pine">实时文字 · 正在生长</p>
               {sessionPhotos.length > 0 && (
-                <span className="font-mono text-[9px] text-vermilion ml-auto">📷 {sessionPhotos.length}</span>
+                <span className="ml-auto inline-flex items-center gap-1 font-mono text-[9px] text-vermilion">
+                  <Camera size={10} strokeWidth={2} />
+                  {sessionPhotos.length}
+                </span>
               )}
             </div>
             {/* segments 和 photos 合并按时间排序，照片穿插在对应时间段的文字之间 */}
@@ -612,7 +656,7 @@ function RecordingScreen({ p }: { p: MobileAppShellProps }) {
             <div className="rounded-[14px] border border-dashed border-divider bg-canvas/40 p-3 m-growing">
               <div className="flex items-center gap-2 mb-1">
                 <span className="font-mono text-[9px] font-semibold text-ink-muted bg-paper-warm px-1.5 py-0.5 rounded">待整理</span>
-                <span className="font-mono text-[9px] text-ink-muted ml-auto">{fmtSec(recordingSeconds)}</span>
+                <span className="font-mono text-[9px] text-ink-muted ml-auto">{fmtSec(elapsedSeconds)}</span>
               </div>
               <p className="text-[11px] text-ink-muted leading-relaxed">这段老师还在讲，课后整理笔记时会补上。</p>
             </div>
@@ -625,7 +669,7 @@ function RecordingScreen({ p }: { p: MobileAppShellProps }) {
       {flash && <div className="absolute inset-0 z-50 bg-white pointer-events-none" style={{ opacity: 0.8, transition: 'opacity 0.15s' }} />}
 
       {/* 拍照悬浮按钮 */}
-      <button type="button" onClick={() => triggerCamera(recordingSeconds * 1000)}
+      <button type="button" onClick={() => triggerCamera(elapsedSeconds * 1000)}
         className="fixed bottom-[5.5rem] left-4 z-30 flex h-12 w-12 items-center justify-center rounded-full bg-vermilion text-white shadow-card active:scale-90 transition lg:hidden relative">
         <Camera size={18} strokeWidth={2} />
         {photoCount > 0 && (
@@ -667,7 +711,7 @@ function RecordingScreen({ p }: { p: MobileAppShellProps }) {
             </div>
             <div className="mt-1.5 flex gap-1.5">
               <button className="rounded-full bg-paper-warm px-2.5 py-1 text-[10.5px] font-medium text-ink-secondary active:scale-95" onClick={() => p.onQuickAsk?.('这段我没跟上，帮我补一下')}>我没跟上</button>
-              <button className="rounded-full bg-vermilion-mist px-2.5 py-1 text-[10.5px] font-medium text-vermilion active:scale-95" onClick={() => toast.success(`已记下 ${fmtSec(recordingSeconds)}，课后整理时会标注`)}>📍 记一下</button>
+              <button className="inline-flex items-center gap-1 rounded-full bg-vermilion-mist px-2.5 py-1 text-[10.5px] font-medium text-vermilion active:scale-95" onClick={() => toast.success(`已记下 ${fmtSec(elapsedSeconds)}，课后整理时会标注`)}><MapPin size={10} />记一下</button>
             </div>
           </div>
           {/* AI 对话内容 */}
@@ -684,10 +728,13 @@ function RecordingScreen({ p }: { p: MobileAppShellProps }) {
         </div>
       )}
       <div className="flex-shrink-0 bg-canvas px-8 pb-[max(env(safe-area-inset-bottom),1rem)] pt-2">
-        <button onClick={() => { p.onStopRecording(); replace('processing'); }}
+        {demoFinished ? (
+          <p className="mb-2 text-center text-[12px] font-medium text-pine">{COPY.mobileHome.demoFinished}</p>
+        ) : null}
+        <button onClick={finishLesson}
           className="flex w-full items-center justify-center gap-2.5 rounded-full bg-ink py-3.5 text-[13.5px] font-medium text-white active:scale-[0.995] transition">
           <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="1" /></svg>
-          结束这节课
+          {p.demoMode ? COPY.mobileHome.demoFinish : '结束这节课'}
         </button>
       </div>
     </div>
@@ -822,6 +869,15 @@ function ReviewScreen({ p }: { p: MobileAppShellProps }) {
     || selectedItem?.type === 'text'
     || selectedItem?.type === 'image';
   const articleSourceLabel = getProvenanceSourceLabel(selectedItem?.provenance);
+  const { assessment: workshopReadiness } = useWorkshopReadiness({
+    transcript: segments,
+    contextTitle: reviewContext?.title || selectedItem?.title,
+    contextType: reviewContext?.contentType || selectedItem?.type || 'review',
+    activeAnchorCount: 0,
+  });
+  const allowedWorkshopApps = new Set(
+    workshopReadiness?.allowedAppKeys ?? WORKSHOP_APP_CATALOG.map((app) => app.key),
+  );
   const articleStateLabel = selectedItem?.provenance?.contentState === 'complete'
     ? COPY.sourceState.complete
     : selectedItem?.provenance?.contentState === 'partial'
@@ -845,7 +901,9 @@ function ReviewScreen({ p }: { p: MobileAppShellProps }) {
   }, [isArticleReview, segments.length, sessionId]);
 
   const audioStateLabel = segments.length > 0
-    ? COPY.mobileJourney.understood
+    ? p.demoMode
+      ? COPY.mobileHome.demoReviewStatus
+      : COPY.mobileJourney.understood
     : restoreTimedOut
       ? COPY.mobileJourney.originalPreserved
       : COPY.mobileJourney.processingEyebrow;
@@ -858,8 +916,6 @@ function ReviewScreen({ p }: { p: MobileAppShellProps }) {
     el.addEventListener('scroll', onScroll, { passive: true });
     return () => el.removeEventListener('scroll', onScroll);
   }, []);
-
-  const sheetHeightPx = sheetHeight === 'collapsed' ? '56px' : sheetHeight === 'half' ? '340px' : '60vh';
 
   return (
     <div className="flex-1 min-h-0 flex flex-col bg-[#FAF7F2] relative m-page-in">
@@ -963,16 +1019,6 @@ function ReviewScreen({ p }: { p: MobileAppShellProps }) {
             </div>
           ) : digest ? (
             <div className="space-y-4">
-              {/* 课堂总结标题 */}
-              <div className="m-card-in">
-                <p className="font-mono text-[10px] font-semibold uppercase tracking-[0.1em] text-pine">课堂总结</p>
-                <h1 className="mt-1.5 font-serif text-[26px] leading-[1.15] tracking-[-0.02em] text-ink">
-                  {reviewContext?.title||p.selectedReviewItem?.title||'课堂笔记'}
-                </h1>
-                <p className="mt-2 text-[12.5px] leading-relaxed text-ink-muted">
-                  本节课共 {segments.length} 段转录，已整理为 {digest.sections.length} 个知识点。
-                </p>
-              </div>
               {/* Digest 卡片 */}
               <LessonDigestCard
                 digest={digest}
@@ -981,33 +1027,6 @@ function ReviewScreen({ p }: { p: MobileAppShellProps }) {
                 getOriginalTranscript={getOrig}
                 onMarkConfusion={() => { setSheetHeight('half'); toast.success('已标记，同桌会帮你讲这段'); }}
               />
-              {/* AI 建议卡 */}
-              <div className="m-card-in rounded-[20px] border border-pine/15 bg-pine-mist/20 p-4">
-                <div className="flex items-start gap-2.5 mb-3">
-                  <div className="h-7 w-7 flex-shrink-0 rounded-full bg-pine-mist flex items-center justify-center overflow-hidden m-octo-breath">
-                    <img src="/images/octo-buddy/happy.png" alt="" className="h-full w-full object-cover" />
-                  </div>
-                  <p className="text-[12px] leading-relaxed text-ink">
-                    这节课已整理完毕。可以试试下面的应用加深理解。
-                  </p>
-                </div>
-                <div className="grid grid-cols-2 gap-2.5">
-                  <button onClick={() => push('flashcards')} className="rounded-2xl border border-divider bg-white p-3 text-left active:scale-[0.98] transition">
-                    <div className="flex items-center gap-2 mb-0.5">
-                      <Zap size={13} strokeWidth={2} className="text-pine" />
-                      <span className="text-[12px] font-medium text-ink">练闪卡</span>
-                    </div>
-                    <p className="text-[10.5px] text-ink-muted">核心概念</p>
-                  </button>
-                  <button onClick={() => push('cheatsheet')} className="rounded-2xl border border-divider bg-white p-3 text-left active:scale-[0.98] transition">
-                    <div className="flex items-center gap-2 mb-0.5">
-                      <FileText size={13} strokeWidth={2} className="text-pine" />
-                      <span className="text-[12px] font-medium text-ink">速查表</span>
-                    </div>
-                    <p className="text-[10.5px] text-ink-muted">一页纸复习</p>
-                  </button>
-                </div>
-              </div>
             </div>
           ) : (
             <div className="flex flex-col items-center justify-center py-12">
@@ -1055,18 +1074,18 @@ function ReviewScreen({ p }: { p: MobileAppShellProps }) {
       </div>
 
       {/* 应用矩阵入口 */}
-      {segments.length > 0 && (
+      {segments.length > 0 && workshopReadiness?.status !== 'not_ready' && allowedWorkshopApps.size > 0 && (
         <div className="absolute left-0 right-0 z-30 flex items-center gap-2 px-4 py-2 bg-paper/95 backdrop-blur-sm border-t border-divider/60"
           style={{ bottom: sheetHeight === 'collapsed' ? '52px' : sheetHeight === 'half' ? '55vh' : '92vh', transition: 'bottom 0.3s cubic-bezier(0.32, 0.72, 0, 1)' }}>
-          <button onClick={() => push('flashcards')} className="flex items-center gap-1.5 rounded-full bg-pine-mist px-3 py-1.5 text-[11px] font-medium text-pine active:scale-95 transition">
+          {allowedWorkshopApps.has('flashcards') ? <button onClick={() => push('flashcards')} className="flex items-center gap-1.5 rounded-full bg-pine-mist px-3 py-1.5 text-[11px] font-medium text-pine active:scale-95 transition">
             <Zap size={12} strokeWidth={2} />闪卡
-          </button>
-          <button onClick={() => push('quiz')} className="flex items-center gap-1.5 rounded-full bg-paper-warm px-3 py-1.5 text-[11px] font-medium text-ink-secondary active:scale-95 transition">
+          </button> : null}
+          {allowedWorkshopApps.has('quiz') ? <button onClick={() => push('quiz')} className="flex items-center gap-1.5 rounded-full bg-paper-warm px-3 py-1.5 text-[11px] font-medium text-ink-secondary active:scale-95 transition">
             <Brain size={12} strokeWidth={2} />测验
-          </button>
-          <button onClick={() => push('cheatsheet')} className="flex items-center gap-1.5 rounded-full bg-paper-warm px-3 py-1.5 text-[11px] font-medium text-ink-secondary active:scale-95 transition">
+          </button> : null}
+          {allowedWorkshopApps.has('cheatsheet') ? <button onClick={() => push('cheatsheet')} className="flex items-center gap-1.5 rounded-full bg-paper-warm px-3 py-1.5 text-[11px] font-medium text-ink-secondary active:scale-95 transition">
             <FileText size={12} strokeWidth={2} />速查表
-          </button>
+          </button> : null}
           <div className="flex-1" />
           <button onClick={() => push('apps')} className="flex items-center gap-1 rounded-full bg-ink px-3 py-1.5 text-[11px] font-medium text-white active:scale-95 transition">
             <Layers size={12} strokeWidth={2} />更多
@@ -1222,7 +1241,7 @@ function MindmapScreen({ p }: { p: MobileAppShellProps }) {
 // ═══ 应用矩阵 ═══
 
 function AppsScreen({ p: _p }: { p: MobileAppShellProps }) {
-  const { pop, push } = useMobileNav();
+  const { pop, push, reviewContext } = useMobileNav();
   const iconByKey: Record<WorkshopAppKey, React.ReactNode> = {
     flashcards: <Zap size={18} strokeWidth={2} />,
     quiz: <Brain size={18} strokeWidth={2} />,
@@ -1236,8 +1255,28 @@ function AppsScreen({ p: _p }: { p: MobileAppShellProps }) {
     difficultyCount: 0,
     segmentCount: _p.segments.length,
   });
-  const recommendedKey = recommendation.key;
-  const apps = [...WORKSHOP_APP_CATALOG].sort((a, b) => Number(b.key === recommendedKey) - Number(a.key === recommendedKey));
+  const { assessment } = useWorkshopReadiness({
+    transcript: _p.segments,
+    contextTitle: reviewContext?.title || _p.selectedReviewItem?.title,
+    contextType: reviewContext?.contentType || _p.selectedReviewItem?.type || 'review',
+    activeAnchorCount: 0,
+  });
+  const allowed = new Set(assessment?.allowedAppKeys ?? WORKSHOP_APP_CATALOG.map((app) => app.key));
+  const recommendedKey = assessment?.recommendedAppKey
+    ?? (assessment?.status === 'ready' ? recommendation.key : null);
+  const apps = WORKSHOP_APP_CATALOG
+    .filter((app) => allowed.has(app.key))
+    .sort((a, b) => Number(b.key === recommendedKey) - Number(a.key === recommendedKey));
+  const blockedTitle = assessment?.reason === 'not_learning'
+    ? COPY.apps.matrix.notLearningTitle
+    : assessment?.reason === 'unreliable_transcript'
+      ? COPY.apps.matrix.unreliableTitle
+      : COPY.apps.matrix.insufficientTitle;
+  const blockedBody = assessment?.reason === 'not_learning'
+    ? COPY.apps.matrix.notLearningBody
+    : assessment?.reason === 'unreliable_transcript'
+      ? COPY.apps.matrix.unreliableBody
+      : COPY.apps.matrix.insufficientBody;
   return (
     <div className="flex-1 min-h-0 flex flex-col bg-paper m-page-in">
       <div className="flex-shrink-0 bg-paper px-4 pt-[max(env(safe-area-inset-top),12px)] pb-2.5 border-b border-divider/60">
@@ -1252,7 +1291,14 @@ function AppsScreen({ p: _p }: { p: MobileAppShellProps }) {
         </div>
       </div>
       <div className="flex-1 min-h-0 overflow-y-auto px-4 py-4 mm-mobile-scroll" style={{ WebkitOverflowScrolling: 'touch' }}>
-        <p className="mb-3 text-[12px] leading-relaxed text-ink-muted">{COPY.apps.matrix.mobileSubtitle}</p>
+        <p className="mb-3 text-[12px] leading-relaxed text-ink-muted">
+          {assessment?.status === 'not_ready' ? blockedBody : COPY.apps.matrix.mobileSubtitle}
+        </p>
+        {assessment?.status === 'not_ready' ? (
+          <div className="rounded-[18px] border border-divider bg-white px-4 py-5">
+            <p className="text-[15px] font-semibold text-ink">{blockedTitle}</p>
+          </div>
+        ) : null}
         <div className="flex flex-col gap-2.5">
           {apps.map((app, i) => (
             <button key={app.key} onClick={() => push(app.key)}
@@ -1268,7 +1314,9 @@ function AppsScreen({ p: _p }: { p: MobileAppShellProps }) {
                   <p className="mt-0.5 text-[14px] font-semibold text-ink">{app.name}</p>
                   <p className="mt-1 text-[11px] leading-relaxed text-ink-muted">{app.bestFor}</p>
                   {app.key === recommendedKey ? (
-                    <p className="mt-1.5 border-l-2 border-vermilion pl-2 text-[10px] leading-relaxed text-ink-secondary">{recommendation.reason}</p>
+                    <p className="mt-1.5 border-l-2 border-vermilion pl-2 text-[10px] leading-relaxed text-ink-secondary">
+                      {assessment?.recommendedAppKey ? COPY.apps.matrix.recommendedByContent : recommendation.reason}
+                    </p>
                   ) : null}
                   <p className="mt-1.5 font-mono text-[9px] text-ink-muted/80">{app.timeLabel} · {app.outputType}</p>
                 </div>
@@ -1283,7 +1331,7 @@ function AppsScreen({ p: _p }: { p: MobileAppShellProps }) {
 }
 
 function CatalogAppScreen({ p, appKey }: { p: MobileAppShellProps; appKey: WorkshopAppKey }) {
-  const { pop } = useMobileNav();
+  const { pop, reviewContext } = useMobileNav();
   const app = getWorkshopAppByKey(appKey)!;
   return (
     <div className="flex min-h-0 flex-1 flex-col bg-paper m-page-in">
@@ -1304,6 +1352,7 @@ function CatalogAppScreen({ p, appKey }: { p: MobileAppShellProps; appKey: Works
           appKey={appKey}
           sessionId={p.sessionId || 'mobile-session'}
           segments={p.segments}
+          contextTitle={reviewContext?.title || p.selectedReviewItem?.title}
           onSeek={p.onSeek}
         />
       </div>
@@ -1388,9 +1437,21 @@ function EchoScreen({ p }: { p: MobileAppShellProps }) {
 // ═══ 路由 ═══
 
 function ScreenRouter({ p }: { p: MobileAppShellProps }) {
-  const { currentScreen, push, replace } = useMobileNav();
+  const { currentScreen, push, replace, resetTo } = useMobileNav();
   const learning = useLearningContext();
   const [hasEnteredEmptyHome, setHasEnteredEmptyHome] = useState(false);
+  const hasAutoStartedDemoRef = useRef(false);
+  const { autoStartDemo, onStartDemo } = p;
+  useEffect(() => {
+    if (!autoStartDemo || !onStartDemo || hasAutoStartedDemoRef.current) return;
+    hasAutoStartedDemoRef.current = true;
+    void onStartDemo()
+      .then(() => resetTo('recording'))
+      .catch(() => {
+        hasAutoStartedDemoRef.current = false;
+        toast.error(COPY.mobileHome.demoFailed);
+      });
+  }, [autoStartDemo, onStartDemo, resetTo]);
   const hasImmediateLearningContext = p.collectionFeedItems.length > 0 || p.workspaceEchoes.length > 0;
   const hasKnownLearningContext = hasImmediateLearningContext
     || learning.memories.some((memory) => memory.status === 'active')
@@ -1409,6 +1470,11 @@ function ScreenRouter({ p }: { p: MobileAppShellProps }) {
         onStartRecording={() => { p.onStartRecording(); push('recording'); }}
         onAddMaterial={() => p.onOpenFilePicker('all')}
         onAsk={p.onOpenSearch}
+        onTryDemo={p.onStartDemo ? () => {
+          void p.onStartDemo?.()
+            .then(() => push('recording'))
+            .catch(() => toast.error(COPY.mobileHome.demoFailed));
+        } : undefined}
         onBrowse={() => setHasEnteredEmptyHome(true)}
       />
     );
@@ -1432,6 +1498,11 @@ function ScreenRouter({ p }: { p: MobileAppShellProps }) {
         onStartRecording={() => { p.onStartRecording(); push('recording'); }}
         onAddMaterial={() => p.onOpenFilePicker('all')}
         onAsk={p.onOpenSearch}
+        onTryDemo={p.onStartDemo ? () => {
+          void p.onStartDemo?.()
+            .then(() => push('recording'))
+            .catch(() => toast.error(COPY.mobileHome.demoFailed));
+        } : undefined}
         onBrowse={() => { setHasEnteredEmptyHome(true); replace('home'); }}
       />
     );
@@ -1440,10 +1511,44 @@ function ScreenRouter({ p }: { p: MobileAppShellProps }) {
 }
 
 export function MobileAppShell(props: MobileAppShellProps) {
+  const demoAudioRef = useRef<HTMLAudioElement | null>(null);
+  const [demoCurrentTime, setDemoCurrentTime] = useState(0);
+  const [demoDuration, setDemoDuration] = useState(0);
+  const [demoPlaying, setDemoPlaying] = useState(false);
+  const demoProps = props.demoMode ? {
+    ...props,
+    currentTime: demoCurrentTime,
+    totalDuration: demoDuration,
+    isPlaying: demoPlaying,
+    onPlayPause: () => {
+      const audio = demoAudioRef.current;
+      if (!audio) return;
+      if (audio.paused) {
+        void audio.play().catch(() => toast.error(COPY.mobileHome.demoFailed));
+      } else {
+        audio.pause();
+      }
+    },
+  } : props;
+
   return (
     <MobileAppNavigatorProvider>
       <div className="flex h-full min-h-0 flex-1 flex-col">
-        <ScreenRouter p={props} />
+        {props.demoMode ? (
+          <audio
+            ref={demoAudioRef}
+            src={props.demoAudioUrl || '/demo-audio.mp3'}
+            preload="metadata"
+            className="sr-only"
+            aria-hidden
+            onLoadedMetadata={(event) => setDemoDuration(event.currentTarget.duration * 1000)}
+            onTimeUpdate={(event) => setDemoCurrentTime(event.currentTarget.currentTime * 1000)}
+            onPlay={() => setDemoPlaying(true)}
+            onPause={() => setDemoPlaying(false)}
+            onEnded={() => setDemoPlaying(false)}
+          />
+        ) : null}
+        <ScreenRouter p={demoProps} />
         {props.children}
       </div>
     </MobileAppNavigatorProvider>

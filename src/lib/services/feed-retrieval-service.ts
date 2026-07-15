@@ -167,7 +167,8 @@ async function searchBooks(discovery: ExternalDiscoveryBrief): Promise<ExternalF
     return [{
       title: book.title,
       url: `https://openlibrary.org${book.key}`,
-      snippet: [authors.join('、'), book.first_publish_year, subjects].filter(Boolean).join(' · ') || '图书目录记录',
+      // 作者与年份已经作为结构化元数据展示，正文只保留主题。
+      snippet: subjects || '图书目录记录',
       sourceLabel: 'Open Library',
       contentKind: 'book',
       authors,

@@ -64,4 +64,21 @@ describe('feed recommendation quality guardrails', () => {
     expect(prompt).toContain('"bookQuery"');
     expect(prompt).toContain('"contentKinds"');
   });
+
+  it('can build a real external discovery plan from an explicit active learning thread without captures', () => {
+    const prompt = buildCrossCoursePrompt([], {
+      learningContext: {
+        activeThread: {
+          title: '为阅读经济学因果推断论文补齐统计基础',
+          intent: '一个月内读懂目标论文的方法和识别假设',
+          nextStep: '先补混淆变量与反事实框架',
+        },
+      },
+    });
+
+    expect(prompt).toContain('正在继续：为阅读经济学因果推断论文补齐统计基础');
+    expect(prompt).toContain('目标：一个月内读懂目标论文的方法和识别假设');
+    expect(prompt).toContain('即使暂时没有新收藏');
+    expect(prompt).toContain('sourceCaptureIds 允许为空');
+  });
 });

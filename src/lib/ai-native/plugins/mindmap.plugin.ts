@@ -2,6 +2,7 @@ import type { TranscriptSegment } from '@/types';
 import { chat, DEFAULT_MODEL_ID } from '@/lib/services/llm-service';
 import type { AppExecutionContext, AppExecutionResult, AppPlugin, AppPluginTools } from '../types';
 import { buildPromptAnchorContext, buildPromptTranscriptContext, buildTerminologyHintBlock } from '../prompt-context';
+import { resolveGroundedEvidence } from '../evidence-grounding';
 
 /* ------------------------------------------------------------------ */
 /*  多层嵌套树形结构                                                    */
@@ -182,6 +183,27 @@ function treeDepth(nodes: MindmapNode[]): number {
   return 1 + Math.max(...nodes.map((node) => treeDepth(node.children || [])));
 }
 
+/** 删除没有原文支撑的叶子；抽象父节点只有在自己或至少一个子节点有证据时保留。 */
+export function groundMindmapNodes(
+  nodes: MindmapNode[],
+  transcript: TranscriptSegment[],
+): MindmapNode[] {
+  return nodes.flatMap((node) => {
+    const groundedChildren = groundMindmapNodes(node.children ?? [], transcript);
+    const resolution = resolveGroundedEvidence(node.title, transcript, node.startMs);
+    if (!resolution.supported && groundedChildren.length === 0) return [];
+
+    const firstGroundedChild = groundedChildren.find((child) => typeof child.startMs === 'number');
+    const evidence = resolution.supported ? resolution.segment : undefined;
+    return [{
+      ...node,
+      children: groundedChildren,
+      startMs: evidence?.startMs ?? firstGroundedChild?.startMs,
+      endMs: evidence?.endMs ?? firstGroundedChild?.endMs,
+    }];
+  });
+}
+
 /* ------------------------------------------------------------------ */
 /*  LLM 调用                                                           */
 /* ------------------------------------------------------------------ */
@@ -312,6 +334,11 @@ export const mindmapPlugin: AppPlugin = {
       markdownBody = treeToMarkdown(rootTitle, treeChildren);
     }
 
+    treeChildren = groundMindmapNodes(treeChildren, context.input.transcript);
+    if (treeChildren.length > 0) {
+      markdownBody = treeToMarkdown(rootTitle, treeChildren);
+    }
+
     if (treeChildren.length === 0) {
       const evidenceSegments = pickEvidenceSegments(context.input.transcript, 5);
       treeChildren = evidenceSegments.map((segment) => ({
@@ -346,7 +373,9 @@ export const mindmapPlugin: AppPlugin = {
     ];
 
     topLevelBranches.forEach((branch, index) => {
-      const segment = evidenceSegments[index % Math.max(1, evidenceSegments.length)] || evidenceSegments[0];
+      const segment = context.input.transcript.find((item) => (
+        typeof branch.startMs === 'number' && branch.startMs >= item.startMs && branch.startMs <= item.endMs
+      )) ?? evidenceSegments[index % Math.max(1, evidenceSegments.length)] ?? evidenceSegments[0];
       const startMs = branch.startMs ?? segment?.startMs ?? 0;
       const endMs = branch.endMs ?? segment?.endMs ?? startMs + 8000;
 

@@ -11,6 +11,10 @@ describe('isPublicRoute', () => {
     expect(isPublicRoute('/api/feed')).toBe(true);
   });
 
+  it('keeps workshop readiness public so guest review does not fall back to generic apps', () => {
+    expect(isPublicRoute('/api/apps/readiness')).toBe(true);
+  });
+
   it('keeps classroom translation endpoints public for live transcript bubbles', () => {
     expect(isPublicRoute('/api/translate/en-zh')).toBe(true);
     expect(isPublicRoute('/api/translate/zh-en')).toBe(true);

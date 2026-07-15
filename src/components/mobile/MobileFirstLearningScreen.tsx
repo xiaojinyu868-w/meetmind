@@ -1,13 +1,14 @@
 'use client';
 
 import Image from 'next/image';
-import { ArrowUp, Mic, Paperclip, Sparkles } from 'lucide-react';
+import { ArrowUp, Mic, Paperclip, Play, Sparkles } from 'lucide-react';
 import { COPY } from '@/lib/ui/copy';
 
 export interface MobileFirstLearningScreenProps {
   onStartRecording: () => void;
   onAddMaterial: () => void;
   onAsk?: () => void;
+  onTryDemo?: () => void;
   onBrowse: () => void;
 }
 
@@ -15,6 +16,7 @@ export function MobileFirstLearningScreen({
   onStartRecording,
   onAddMaterial,
   onAsk,
+  onTryDemo,
   onBrowse,
 }: MobileFirstLearningScreenProps) {
   return (
@@ -27,16 +29,14 @@ export function MobileFirstLearningScreen({
             </div>
             <div>
               <p className="text-[15px] font-semibold text-ink">{COPY.identity.productName}</p>
-              <p className="mt-0.5 text-[12px] text-pine">{COPY.mobileHome.emptyRole}</p>
             </div>
           </div>
           <span className="h-2 w-2 rounded-full bg-vermilion" aria-hidden />
         </div>
 
-        <section className="relative mt-8 overflow-hidden rounded-[26px] border border-pine/14 bg-card px-5 pb-5 pt-6 shadow-soft">
+        <section className="relative mt-8 overflow-hidden rounded-[26px] border border-pine/14 bg-card px-5 pb-5 pt-7 shadow-soft">
           <span className="absolute left-0 top-7 h-11 w-[3px] rounded-r-full bg-vermilion" aria-hidden />
-          <p className="text-[12px] font-semibold text-vermilion">{COPY.mobileHome.emptyEyebrow}</p>
-          <h1 className="mt-3 text-[30px] font-semibold leading-[1.14] tracking-[-0.045em] text-ink">
+          <h1 className="text-[32px] font-semibold leading-[1.12] tracking-[-0.045em] text-ink">
             {COPY.mobileHome.emptyTitle}
           </h1>
           <p className="mt-3 text-[14px] leading-6 text-ink-secondary">
@@ -79,21 +79,23 @@ export function MobileFirstLearningScreen({
               <span className="text-[14px] font-semibold text-ink">{COPY.mobileHome.search}</span>
             </button>
           </div>
-        </section>
 
-        <section className="mt-4 rounded-[22px] bg-pine-fog px-5 py-4" aria-label={COPY.mobileHome.emptyOutcomeTitle}>
-          <p className="text-[12px] font-semibold text-pine">{COPY.mobileHome.emptyOutcomeTitle}</p>
-          <div className="mt-3 grid grid-cols-3 divide-x divide-pine/10 text-center">
-            <span className="px-2 text-[13px] font-medium text-ink-secondary">{COPY.mobileHome.emptyOutcomeFlow}</span>
-            <span className="px-2 text-[13px] font-medium text-ink-secondary">{COPY.mobileHome.emptyOutcomeAnswer}</span>
-            <span className="px-2 text-[13px] font-medium text-ink-secondary">{COPY.mobileHome.emptyOutcomePractice}</span>
-          </div>
+          {onTryDemo ? (
+            <button
+              type="button"
+              onClick={onTryDemo}
+              className="mt-3 flex min-h-[48px] w-full items-center justify-center gap-2 rounded-[15px] border border-pine/20 bg-pine-fog text-[14px] font-semibold text-pine transition active:scale-[0.99]"
+            >
+              <Play size={15} fill="currentColor" />
+              {COPY.mobileHome.tryDemo}
+            </button>
+          ) : null}
         </section>
 
         <button
           type="button"
           onClick={onBrowse}
-          className="mx-auto mt-auto pt-7 text-[13px] font-medium text-ink-muted"
+          className="mx-auto mt-auto pt-8 text-[13px] font-medium text-ink-muted"
         >
           {COPY.mobileHome.emptyBrowse}
         </button>

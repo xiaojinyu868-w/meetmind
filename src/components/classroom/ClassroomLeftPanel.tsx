@@ -341,9 +341,8 @@ function ListView({
   const learning = useLearningContext();
   const isTrulyEmpty = !activeLesson && groups.length === 0;
   const activeThread = learning.activeThread?.status === 'active' ? learning.activeThread : undefined;
-  const latestActivity = learning.recentActivities[learning.recentActivities.length - 1];
-  const recovery = (activeThread || latestActivity) && onSearch ? (
-    <ContextRecoveryCard thread={activeThread} activity={latestActivity} onResume={onSearch} compact />
+  const recovery = activeThread && onSearch ? (
+    <ContextRecoveryCard thread={activeThread} onResume={onSearch} compact />
   ) : null;
 
   if (isTrulyEmpty) {

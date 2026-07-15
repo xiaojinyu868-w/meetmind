@@ -15,7 +15,7 @@ export function resolveClassroomPaneState(input: {
   return input.isRecording || input.autoLoadDemo ? 'recording' : 'list';
 }
 
-export function shouldExitDemoRecordingOnStop(input: {
+export function shouldOpenDemoReviewOnStop(input: {
   autoLoadDemo: boolean;
   isRecording: boolean;
   paneState: ClassroomPaneState;

@@ -75,6 +75,8 @@ export interface DesktopVideoReviewLayoutProps {
   studentId: string;
   /** Computed from buildTutorSupportContextText */
   tutorSupportContextText: string;
+  /** 当前课堂 / 材料标题，帮助同桌与应用判断场景身份。 */
+  lessonTitle?: string;
   /** Computed from selectedAnchor → breakpoint object */
   selectedBreakpoint: Breakpoint | null;
   /** Computed timeline for review panel */
@@ -120,6 +122,7 @@ export function DesktopVideoReviewLayout(props: DesktopVideoReviewLayoutProps) {
     totalDuration,
     studentId,
     tutorSupportContextText,
+    lessonTitle,
     selectedBreakpoint,
     timelineForView,
     waveformRef,
@@ -379,6 +382,7 @@ export function DesktopVideoReviewLayout(props: DesktopVideoReviewLayoutProps) {
                             createdAt: confusionChatAnchor.createdAt,
                           }}
                           segments={segments}
+                          lessonTitle={lessonTitle}
                           isLoading={false}
                           onResolve={() => {
                             setSelectedAnchor(confusionChatAnchor);
@@ -472,6 +476,7 @@ export function DesktopVideoReviewLayout(props: DesktopVideoReviewLayoutProps) {
             <SafeAITutor
               breakpoint={null}
               segments={segments}
+              lessonTitle={lessonTitle}
               isLoading={false}
               onResolve={() => {}}
               sessionId={sessionId}
@@ -503,7 +508,7 @@ export function DesktopVideoReviewLayout(props: DesktopVideoReviewLayoutProps) {
               {(audioBlob || audioUrl) ? (
                 <div className="shrink-0 border-b border-divider bg-[#FCFBF8] px-3 py-2">
                   <WaveformPlayer
-                    ref={waveformRef as RefObject<WaveformPlayerRef>}
+                    playerRef={waveformRef as RefObject<WaveformPlayerRef>}
                     src={audioBlob || audioUrl || undefined}
                     anchors={anchors.map((anchor) => ({
                       id: anchor.id,

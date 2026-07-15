@@ -12,6 +12,7 @@ import type { FeedItem } from '@/types';
 import type { SourceIngestItem, WorkspaceCaptureMessage, WorkspaceEchoMessage } from '@/types/page-types';
 import type { EchoData } from '@/components/EchoCard';
 import { Plus, RefreshCw } from 'lucide-react';
+import { useLearningContext } from '@/hooks/useLearningContext';
 
 interface CrossCourseFeedPanelProps {
   /** 服务端同步完成前也要使用的本地收集上下文。 */
@@ -56,6 +57,12 @@ export function CrossCourseFeedPanel({
   const captures = useWorkspaceCaptures();
   const echoes = useWorkspaceEchoes();
   const { user, accessToken } = useAuth();
+  const learning = useLearningContext();
+  const learningContext = useMemo(() => ({
+    memories: learning.memories,
+    recentActivities: learning.recentActivities,
+    activeThread: learning.activeThread,
+  }), [learning.activeThread, learning.memories, learning.recentActivities]);
 
   const effectiveCaptures = useMemo<WorkspaceCaptureMessage[]>(() => {
     const serverIds = new Set(captures.map((capture) => capture.id));
@@ -112,16 +119,29 @@ export function CrossCourseFeedPanel({
     learnerProfile,
     notes: notes.map((n) => ({ text: n.text, source: n.source })),
     accessToken,
+    learningContext,
   });
 
-  const generationKey = `${effectiveWorkspaceId}:${effectiveCaptures.map((capture) => `${capture.id}:${capture.occurredAt ?? capture.createdAt}`).join('|')}`;
+  const learningGenerationKey = [
+    learningContext.activeThread?.status === 'active'
+      ? `${learningContext.activeThread.id}:${learningContext.activeThread.updatedAt}`
+      : '',
+    ...learningContext.memories.filter((memory) => memory.status === 'active').slice(-8).map((memory) => `${memory.id}:${memory.updatedAt}`),
+    ...learningContext.recentActivities.slice(-6).map((activity) => `${activity.id}:${activity.occurredAt}`),
+  ].join('|');
+  const generationKey = `${effectiveWorkspaceId}:${effectiveCaptures.map((capture) => `${capture.id}:${capture.occurredAt ?? capture.createdAt}`).join('|')}:${learningGenerationKey}`;
+  const hasLearningContext = Boolean(
+    learningContext.activeThread?.status === 'active'
+      || learningContext.memories.some((memory) => memory.status === 'active')
+      || learnerProfile?.goals?.some((goal) => !goal.status || goal.status === 'active'),
+  );
   const lastAutoGenerationKeyRef = useRef('');
   useEffect(() => {
-    if (!cacheReady || effectiveCaptures.length === 0 || isLoading) return;
+    if (!cacheReady || (!effectiveCaptures.length && !hasLearningContext) || isLoading) return;
     if (lastAutoGenerationKeyRef.current === generationKey) return;
     lastAutoGenerationKeyRef.current = generationKey;
     if (llmItems.length === 0 || isStale) void generate();
-  }, [cacheReady, effectiveCaptures.length, isLoading, generationKey, llmItems.length, isStale, generate]);
+  }, [cacheReady, effectiveCaptures.length, hasLearningContext, isLoading, generationKey, llmItems.length, isStale, generate]);
 
   const echoItems: FeedItem[] = echoes.slice(0, 2).map((echo) => ({
     type: 'echo',
@@ -151,7 +171,7 @@ export function CrossCourseFeedPanel({
   }, [echoes, onShareEcho]);
 
   const showEmptyFeed = !isLoading && !error && llmItems.length === 0 && echoItems.length === 0;
-  const canGenerate = effectiveCaptures.length > 0;
+  const canGenerate = effectiveCaptures.length > 0 || hasLearningContext;
 
   return (
     <div className="flex h-full flex-col">
@@ -161,7 +181,8 @@ export function CrossCourseFeedPanel({
             <p className="text-[11px] text-ink-muted">
               {COPY.feed.contextBasis(
                 effectiveCaptures.length,
-                learnerProfile?.goals?.filter((goal) => !goal.status || goal.status === 'active').length ?? 0,
+                (learnerProfile?.goals?.filter((goal) => !goal.status || goal.status === 'active').length ?? 0)
+                  + (learningContext.activeThread?.status === 'active' ? 1 : 0),
               )}
             </p>
             <p className="mt-0.5 text-[10px] text-ink-muted/70">

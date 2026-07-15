@@ -24,6 +24,7 @@ export interface MobileAppRunnerProps {
   summaryOverview?: string;
   keyDifficulties?: string[];
   terminologyHint?: string;
+  contextTitle?: string;
   onSeek?: (ms: number) => void;
 }
 
@@ -35,6 +36,7 @@ export function MobileAppRunner({
   summaryOverview,
   keyDifficulties,
   terminologyHint,
+  contextTitle,
   onSeek,
 }: MobileAppRunnerProps) {
   const app = WORKSHOP_APP_CATALOG.find((a) => a.key === appKey);
@@ -53,6 +55,7 @@ export function MobileAppRunner({
     summaryOverview,
     keyDifficulties,
     terminologyHint,
+    contextTitle,
     autoRun: false, // 手动触发
   });
   const resultActivityDetail = buildAppResultActivityDetail(

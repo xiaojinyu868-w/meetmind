@@ -46,6 +46,8 @@ export interface AITutorProps {
   onResolve: () => void;
   onActionItemsUpdate?: (items: ActionItem[], sourceAnchorId?: string) => void;
   sessionId?: string;  // 用于缓存关联
+  /** 当前材料标题，仅用于内容适配与场景理解，不替代真实原文。 */
+  lessonTitle?: string;
   onSeek?: (timeMs: number) => void;  // 点击时间戳跳转播放
   initialQuestion?: string;  // 移动端传入的初始问题
   isMobile?: boolean;  // 移动端模式，使用简化布局

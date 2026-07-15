@@ -21,6 +21,7 @@ interface ReviewLearningWorkspaceProps {
   summaryOverview?: string;
   keyDifficulties?: string[];
   terminologyHint?: string;
+  contextTitle?: string;
   onSeek?: (timeMs: number) => void;
   onBack: () => void;
   onLearningActivity?: (line: string) => void;
@@ -45,6 +46,7 @@ export function ReviewLearningWorkspace({
   summaryOverview,
   keyDifficulties,
   terminologyHint,
+  contextTitle,
   onSeek,
   onBack,
   onLearningActivity,
@@ -64,6 +66,7 @@ export function ReviewLearningWorkspace({
     summaryOverview,
     keyDifficulties,
     terminologyHint,
+    contextTitle,
     autoRun: app.key !== 'infographic',
   });
 

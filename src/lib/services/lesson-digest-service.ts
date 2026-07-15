@@ -55,7 +55,7 @@ export interface LessonDigest {
   extras: DigestExtra[];
 }
 
-interface DigestLLMOutput {
+export interface DigestLLMOutput {
   title?: string;
   overview?: string;
   sections?: Array<{
@@ -215,7 +215,6 @@ function buildFallbackDigest(
     if (chunkSegs.length > 0) {
       const text = chunkSegs.map((s) => cleanText(s.text)).filter(Boolean).join(' ').slice(0, 200);
       const img = findImageForSegment(images, chunkStart, chunkEnd);
-      const mins = Math.floor(chunkStart / 60000);
       sections.push({
         heading: `第 ${Math.floor(chunkStart / 60000) + 1} 段`,
         text: text || '（这段没有文字内容）',
@@ -243,6 +242,67 @@ function buildFallbackDigest(
       startMs: 0,
       endMs: 0,
     }],
+    extras,
+  };
+}
+
+/**
+ * 把模型 JSON 归一化为前端可直接渲染的 digest。
+ * 用显式循环保留上一段 endMs，避免在 sections 初始化过程中
+ * 反向引用 sections 本身导致 TDZ ReferenceError。
+ */
+export function normalizeLessonDigestOutput(
+  llmOutput: DigestLLMOutput,
+  segments: TranscriptSegment[],
+  images: DigestImageRef[],
+  lessonTitle?: string,
+): LessonDigest {
+  const title = cleanText(llmOutput.title || '') || lessonTitle || '课堂笔记';
+  const overview = cleanText(llmOutput.overview || '') || '这节课的结构化笔记。';
+  const sections: DigestSection[] = [];
+
+  for (const [index, section] of (llmOutput.sections || []).entries()) {
+    const fallbackStartMs = sections.at(-1)?.endMs || 0;
+    const startMs = toTimestamp(section.startMs, fallbackStartMs);
+    const endMs = toTimestamp(section.endMs, startMs + 60000);
+    const imageIndex = typeof section.imageIndex === 'number' ? section.imageIndex : undefined;
+    const image = imageIndex !== undefined
+      ? images[imageIndex]
+      : findImageForSegment(images, startMs, endMs);
+    const text = cleanText(section.text || '');
+    if (!text) continue;
+    sections.push({
+      heading: cleanText(section.heading || '') || `第 ${index + 1} 段`,
+      text,
+      imageId: image?.imageId,
+      startMs,
+      endMs,
+    });
+  }
+
+  const extras: DigestExtra[] = (llmOutput.extras || []).map((extra) => {
+    const imageIndex = typeof extra.imageIndex === 'number' ? extra.imageIndex : undefined;
+    return {
+      text: cleanText(extra.text || '课后补充'),
+      imageId: imageIndex !== undefined ? images[imageIndex]?.imageId : undefined,
+    };
+  });
+
+  const assignedImageIds = new Set(
+    [...sections.map((section) => section.imageId), ...extras.map((extra) => extra.imageId)]
+      .filter(Boolean) as string[],
+  );
+  for (const image of images) {
+    if (image.capturedAtMs === null || image.capturedAtMs === undefined) continue;
+    if (!assignedImageIds.has(image.imageId)) {
+      extras.push({ text: image.title || '未分配的课中照片', imageId: image.imageId });
+    }
+  }
+
+  return {
+    title,
+    overview,
+    sections: sections.length > 0 ? sections : buildFallbackDigest(segments, images).sections,
     extras,
   };
 }
@@ -278,44 +338,5 @@ export async function generateLessonDigest(
     return buildFallbackDigest(segments, images);
   }
 
-  const title = cleanText(llmOutput.title || '') || lessonTitle || '课堂笔记';
-  const overview = cleanText(llmOutput.overview || '') || '这节课的结构化笔记。';
-
-  const sections: DigestSection[] = (llmOutput.sections || []).map((s, i) => {
-    const startMs = toTimestamp(s.startMs, i > 0 ? sections[i - 1]?.endMs || 0 : 0);
-    const endMs = toTimestamp(s.endMs, startMs + 60000);
-    const imgIdx = typeof s.imageIndex === 'number' ? s.imageIndex : undefined;
-    const img = imgIdx !== undefined ? images[imgIdx] : findImageForSegment(images, startMs, endMs);
-    return {
-      heading: cleanText(s.heading || '') || `第 ${i + 1} 段`,
-      text: cleanText(s.text || ''),
-      imageId: img?.imageId,
-      startMs,
-      endMs,
-    };
-  }).filter((s) => s.text.length > 0);
-
-  const extras: DigestExtra[] = (llmOutput.extras || []).map((e) => {
-    const imgIdx = typeof e.imageIndex === 'number' ? e.imageIndex : undefined;
-    return {
-      text: cleanText(e.text || '课后补充'),
-      imageId: imgIdx !== undefined ? images[imgIdx]?.imageId : undefined,
-    };
-  });
-
-  // LLM 没分配的图片补到 extras
-  const assignedImageIds = new Set([...sections.map((s) => s.imageId), ...extras.map((e) => e.imageId)].filter(Boolean) as string[]);
-  for (const img of images) {
-    if (img.capturedAtMs === null || img.capturedAtMs === undefined) continue;
-    if (!assignedImageIds.has(img.imageId)) {
-      extras.push({ text: img.title || '未分配的课中照片', imageId: img.imageId });
-    }
-  }
-
-  return {
-    title,
-    overview,
-    sections: sections.length > 0 ? sections : buildFallbackDigest(segments, images).sections,
-    extras,
-  };
+  return normalizeLessonDigestOutput(llmOutput, segments, images, lessonTitle);
 }

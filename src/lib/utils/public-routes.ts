@@ -43,6 +43,7 @@ const PUBLIC_ROUTES = [
   '/api/feed',
   '/api/apps/plugins',
   '/api/apps/catalog',
+  '/api/apps/readiness',
   '/api/apps/execute',
   '/api/class-check/plan',
   '/api/class-check/question',

@@ -5,6 +5,7 @@ import type { Anchor, TranscriptSegment } from '@/types';
 import type { AppExecutionResult, DataSourceType } from '@/lib/ai-native/types';
 import type { WorkshopAppCatalogItem } from '@/lib/ai-native/app-catalog';
 import { useAuth } from '@/lib/hooks/useAuth';
+import { COPY } from '@/lib/ui/copy';
 
 export type AppTaskStatus = 'idle' | 'running' | 'success' | 'error';
 
@@ -253,6 +254,7 @@ interface UseAppExecutionParams {
   summaryOverview?: string;
   keyDifficulties?: string[];
   terminologyHint?: string;
+  contextTitle?: string;
   model?: string;
   autoRun?: boolean;
 }
@@ -277,6 +279,7 @@ export function useAppExecution(params: UseAppExecutionParams): UseAppExecutionR
     summaryOverview,
     keyDifficulties,
     terminologyHint,
+    contextTitle,
     model,
     autoRun = true,
   } = params;
@@ -359,6 +362,10 @@ export function useAppExecution(params: UseAppExecutionParams): UseAppExecutionR
                 dataSource,
                 transcript: slimTranscript(transcript),
                 anchors,
+                metadata: {
+                  title: contextTitle,
+                  contextType: dataSource,
+                },
               },
               memory: {
                 summary: summaryOverview,
@@ -381,6 +388,12 @@ export function useAppExecution(params: UseAppExecutionParams): UseAppExecutionR
           // 429 限流友好提示
           if (response.status === 429) {
             throw new Error(data?.error || '生成请求过于频繁，请稍等片刻再点重试');
+          }
+          if (data?.error === 'CONTENT_NOT_READY') {
+            throw new Error(COPY.apps.matrix.executeNotReady);
+          }
+          if (data?.error === 'APP_NOT_SUITABLE') {
+            throw new Error(COPY.apps.matrix.executeNotSuitable);
           }
           throw new Error(data?.error || '应用执行失败');
         }
@@ -412,7 +425,7 @@ export function useAppExecution(params: UseAppExecutionParams): UseAppExecutionR
         return null;
       }
     },
-    [accessToken, anchors, app.intent, app.key, dataSource, keyDifficulties, model, result, sessionId, summaryOverview, terminologyHint, transcript]
+    [accessToken, anchors, app.intent, app.key, contextTitle, dataSource, keyDifficulties, model, result, sessionId, summaryOverview, terminologyHint, transcript]
   );
 
   useEffect(() => {

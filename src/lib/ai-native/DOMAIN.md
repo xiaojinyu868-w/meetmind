@@ -5,14 +5,15 @@
 ## 架构
 
 ```
-page.tsx → /api/apps/execute → context-builder → registry → plugin.execute()
+page.tsx → /api/apps/readiness → /api/apps/execute → context-builder → registry → plugin.execute()
 ```
 
-1. 前端发起执行请求，带上转录 + 锚点 + 术语上下文
-2. `context-builder.ts` 构建 `AppExecutionContext`
-3. `registry.ts` 查找对应 plugin
-4. Plugin 的 `execute()` 方法调用 LLM 生成结果
-5. 前端浮窗渲染结果
+1. 前端先带转录 + 锚点 + 术语上下文调用 readiness；允许返回无推荐或不可生成
+2. 用户选择仍适配当前材料的应用后发起执行请求
+3. `/api/apps/execute` 再做一次服务端 readiness 校验，避免绕过前端硬生成
+4. `context-builder.ts` 构建 `AppExecutionContext`
+5. `registry.ts` 查找对应 plugin，Plugin 调用 LLM 生成结果
+6. 前端浮窗渲染结果
 
 ## 文件索引
 
@@ -20,10 +21,12 @@ page.tsx → /api/apps/execute → context-builder → registry → plugin.execu
 
 | 文件 | 行数 | 职责 |
 |------|------|------|
-| `types.ts` | 220 | 核心类型（AppPlugin, AppExecutionContext, AppCard 等）+ ContextPack 上下文契约（PRD v1.1 §2） |
+| `types.ts` | ~270 | 核心类型（AppPlugin, AppExecutionContext, AppCard 等）+ ContextPack 上下文契约 + Workshop readiness 契约 |
 | `context-pack.ts` | 175 | ContextPack 适配器 + renderTranscriptWithAnnotations 渲染（PR-2 完整化） |
 | `app-catalog.ts` | ~175 | 应用目录定义（6 个应用，含 learningAction / bestFor / timeLabel 与 supportedTiers / primaryTier） |
 | `app-catalog.test.ts` | — | 应用目录用户面文案护栏 |
+| `workshop-readiness.ts` | ~175 | 浏览器 / 服务端共用的纯内容证据门：安全 fallback、模型结果清洗、应用白名单 |
+| `evidence-grounding.ts` | ~115 | 生成后证据校验：模型时间戳仅作候选，题面 / 条目 / 节点必须与真实原文语义匹配；匹配失败由各插件降级或剔除 |
 | `context-builder.ts` | 83 | 从请求构建执行上下文 |
 | `registry.ts` | 65 | 插件注册中心 |
 | `prompt-context.ts` | 101 | Prompt 上下文构建（转录 + 锚点 + 术语） |

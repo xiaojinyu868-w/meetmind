@@ -19,6 +19,7 @@ import { chat, type ChatMessage } from './llm-service';
 import type { TranscriptSegment } from '@/lib/db';
 import type { FeedItem, FeedItemType, FeedActionType, FeedContentKind, FeedPerspective } from '@/types';
 import { FeatureConfig } from '@/lib/config';
+import { createLogger } from '@/lib/logger';
 import { formatTranscriptWithTimestamps, parseJsonResponse } from '@/lib/utils';
 import {
   retrieveExternalCandidates,
@@ -33,6 +34,7 @@ import type { FeedPreference } from '@/lib/feed-preferences';
 const DEFAULT_MODEL = FeatureConfig.feed.defaultModel;
 const MAX_ITEMS = FeatureConfig.feed.maxItems;
 const MAX_PROBES = FeatureConfig.feed.maxProbes;
+const log = createLogger('feed-cross-course');
 
 // ============ 类型定义 ============
 
@@ -286,6 +288,11 @@ export interface GenerateCrossCourseFeedOptions {
   };
   notes?: Array<{ text: string; source: string }>;
   feedback?: FeedPreference[];
+  learningContext?: {
+    activeThread?: { title: string; intent?: string; lastSummary?: string; nextStep?: string };
+    memories?: Array<{ title: string; detail?: string; kind?: string }>;
+    recentActivities?: Array<{ title: string; detail?: string; kind?: string }>;
+  };
 }
 
 export function buildCrossCoursePrompt(
@@ -336,6 +343,24 @@ export function buildCrossCoursePrompt(
     ? profileLines.join('\n')
     : '（还没有明确的个人上下文或目标）';
 
+  const learningContextLines: string[] = [];
+  if (options.learningContext?.activeThread?.title) {
+    const thread = options.learningContext.activeThread;
+    learningContextLines.push(`正在继续：${thread.title}`);
+    if (thread.intent) learningContextLines.push(`目标：${thread.intent}`);
+    if (thread.lastSummary) learningContextLines.push(`已经对齐：${thread.lastSummary}`);
+    if (thread.nextStep) learningContextLines.push(`下一步：${thread.nextStep}`);
+  }
+  for (const memory of options.learningContext?.memories?.slice(-8) ?? []) {
+    learningContextLines.push(`长期线索：${memory.title}${memory.detail ? `（${memory.detail.slice(0, 100)}）` : ''}`);
+  }
+  for (const activity of options.learningContext?.recentActivities?.slice(-6) ?? []) {
+    learningContextLines.push(`最近做过：${activity.title}${activity.detail ? `（${activity.detail.slice(0, 100)}）` : ''}`);
+  }
+  const learningContextSection = learningContextLines.length > 0
+    ? learningContextLines.join('\n')
+    : '（还没有持续学习线索）';
+
   // 笔记段落（跨课程）
   const notesSection = (options.notes ?? []).length > 0
     ? (options.notes ?? []).slice(0, 10).map((n) => `  · ${n.text}`).join('\n')
@@ -348,12 +373,15 @@ export function buildCrossCoursePrompt(
     : '（还没有信息流反馈）';
 
   return `<task>
-<role>你是 MeetMind 的同学。你不做面面俱到的总结——你基于对「这个人」的了解，从他最近收集的内容里挑出对他重要的方向，再给出他可能想接着看的下一步。这里没有「一节课」的概念，而是他跨课程、跨来源一段时间内的收集。</role>
+<role>你是 MeetMind 的同学。你不做面面俱到的总结——你基于对「这个人」的了解，从他的学习线和最近收集里挑出重要方向，再给出他可能想接着看的下一步。即使暂时没有新收藏，只要他刚确认了明确目标，也可以从那条学习线出发寻找真实资料。</role>
 <context>
-这是这个人最近收集的 ${captures.length} 条内容（课堂录音、文章、视频、笔记录音等都可能混在一起）。
+这个人最近有 ${captures.length} 条可用收集；同时保留了他正在推进的学习线。
 
 【这个人】
 ${profileSection}
+
+【正在形成的学习线】
+${learningContextSection}
 
 【他跨课程记的笔记】
 ${notesSection}
@@ -364,7 +392,7 @@ ${feedbackSection}
 【他最近的收集】
 ${capturesSection || '（还没有收集内容）'}
 </context>
-<goal>生成一份跨课程信息流，不是每条收集的复述。从真实收藏、明确目标和过去反馈中判断现在值得关注的方向。</goal>
+<goal>生成一份跨课程信息流，不是每条收集的复述。从真实收藏、明确目标、学习活动和过去反馈中判断现在值得关注的方向。</goal>
 <instructions>
   <step name="跨课程沉淀（1条，type=summary）">
     <description>2-3句话，概括他最近收集的整体走向——从他的目标/阶段角度，说这些内容合在一起在指向什么。不要逐条复述。</description>
@@ -394,7 +422,7 @@ ${capturesSection || '（还没有收集内容）'}
   <item>academicQuery 使用适合论文数据库的英文主题词；bookQuery 使用适合图书目录的主题、作者或经典书名线索。没有必要时可以省略</item>
   <item>尊重过去反馈：延续“有用”内容的价值类型，避免与“不相关”内容重复选题，但不要由一次反馈永久封闭一个主题</item>
   <item>禁止心理诊断和隐性动机推断：不要使用“焦虑投射”“强迫”“安全感”等缺少用户明确表达的心理归因。只描述可见的收藏、目标和行为</item>
-  <item>每个查询必须返回 1-3 个 sourceCaptureIds；有匹配目标时返回真实 goalLabel，没有就留空，禁止编造</item>
+  <item>有真实收藏时，每个查询返回 1-3 个 sourceCaptureIds；没有收藏但有明确学习线时，sourceCaptureIds 允许为空，必须把查询落到真实 activeThread / memory，并用对应标题作为 goalLabel</item>
   <item>优先使用“正文完整”的收藏形成结论；“只有摘要”只能支持有限判断；“只有原链接/读取失败”的内容不得据此概括原文观点</item>
   <item>来源平台和作者只是可信度线索，不代表内容一定正确；推荐理由仍要落到实际正文和用户目标</item>
 </qualityControl>
@@ -471,8 +499,13 @@ export async function generateCrossCourseFeed(
   captures: CrossCourseCapture[],
   options: GenerateCrossCourseFeedOptions = {},
 ): Promise<{ items: FeedItem[] }> {
-  if (captures.length === 0) {
-    throw new Error('还没有收集内容');
+  const hasLearningContext = Boolean(
+    options.learningContext?.activeThread?.title
+      || options.learningContext?.memories?.length
+      || options.learnerProfile?.goals?.length,
+  );
+  if (captures.length === 0 && !hasLearningContext && !(options.learnerProfile?.goals?.length)) {
+    throw new Error('还没有可用于生成情报的学习上下文');
   }
 
   const model = options.model ?? DEFAULT_MODEL;
@@ -485,12 +518,14 @@ export async function generateCrossCourseFeed(
     responseFormat: 'json_object',
   });
 
-  console.info('[feed.cross-course] response.prefix=', response.content.slice(0, 200));
-  console.info('[feed.cross-course] response.usage=', response.usage);
+  log.info('generation completed', {
+    responseChars: response.content.length,
+    usage: response.usage,
+  });
 
   const raw = parseJsonResponse<RawFeedResult>(response.content);
   if (!raw || !Array.isArray(raw.items)) {
-    console.error('[feed.cross-course] 解析失败, content.len=', response.content.length);
+    log.error('response parse failed', { responseChars: response.content.length });
     throw new Error('无法解析信息流响应');
   }
   const internalItems = validateCrossCourseItems(raw.items);
@@ -499,11 +534,17 @@ export async function generateCrossCourseFeed(
   let externalItems: FeedItem[] = [];
   try {
     const fallbackDiscovery: RawExternalDiscovery = {
-      query: internalItems.filter((item) => item.type !== 'summary').slice(0, 2).map((item) => item.title).join(' ') || captures[0].title,
-      reason: '延伸你最近收集的主题',
+      query: internalItems.filter((item) => item.type !== 'summary').slice(0, 2).map((item) => item.title).join(' ')
+        || captures[0]?.title
+        || options.learningContext?.activeThread?.title
+        || options.learningContext?.memories?.at(-1)?.title
+        || options.learnerProfile?.goals?.[0]?.title
+        || '学习方法',
+      reason: captures.length > 0 ? '延伸你最近收集的主题' : '沿着你正在推进的学习目标补充真实资料',
       perspective: 'deepen',
       contentKinds: ['web', 'paper', 'book'],
       sourceCaptureIds: captures.slice(0, 2).map((capture) => capture.id),
+      goalLabel: options.learningContext?.activeThread?.title || options.learnerProfile?.goals?.[0]?.title,
     };
     const discoveries = (raw.externalDiscoveries ?? [])
       .filter((item) => item.query && item.reason)
@@ -529,13 +570,20 @@ export async function generateCrossCourseFeed(
         perspective: discovery.perspective,
         actionType: 'open-external' as const,
         actionLabel: '打开原文',
-        whyForYou: `${discovery.reason}${qualityReason ? `；${qualityReason}` : ''}`.slice(0, 180),
+        // 每张卡只展示一段理由。优先用排序阶段针对该条材料的增量说明，
+        // 再用 goalLabel 独立告知它对齐了哪个目标；不把两段“为什么相关”拼在一起。
+        whyForYou: (qualityReason || discovery.reason).slice(0, 120),
         sourceCaptureIds: filterValidCaptureIds(discovery.sourceCaptureIds, captures),
-        goalLabel: filterValidGoalLabel(discovery.goalLabel, options.learnerProfile?.goals),
+        goalLabel: filterValidGoalLabel(discovery.goalLabel, [
+          ...(options.learnerProfile?.goals ?? []),
+          ...(options.learningContext?.activeThread?.title
+            ? [{ title: options.learningContext.activeThread.title }]
+            : []),
+        ]),
       };
     });
   } catch (error) {
-    console.warn('[feed.cross-course] external discovery failed:', error);
+    log.warn('external discovery failed', error);
   }
 
   return { items: [...internalItems, ...externalItems] };
@@ -584,7 +632,10 @@ async function rankExternalCandidates(
 ): Promise<Array<{ candidate: ExternalFeedCandidate; qualityReason?: string }>> {
   if (candidates.length === 0) return [];
 
-  const goals = (options.learnerProfile?.goals ?? []).slice(0, 3).map((goal) => goal.title).join('、') || '未设置';
+  const goals = [
+    ...(options.learnerProfile?.goals ?? []).slice(0, 3).map((goal) => goal.title),
+    ...(options.learningContext?.activeThread?.title ? [options.learningContext.activeThread.title] : []),
+  ].join('、') || '未设置';
   const candidateText = candidates.map((candidate, index) => (
     `[${index}] ${candidate.title}\n类型：${candidate.contentKind}\n来源：${candidate.sourceLabel}\n作者：${candidate.authors?.join('、') || '未标注'}\n出版：${candidate.publishedAt || '未标注'}\n摘要：${candidate.snippet}\n视角：${candidate.discovery.perspective}\n推荐线索：${candidate.discovery.reason}`
   )).join('\n\n');
@@ -628,7 +679,7 @@ ${candidateText}
       }));
     return ensureExternalMix(selected, candidates);
   } catch (error) {
-    console.warn('[feed.cross-course] external ranking failed:', error);
+    log.warn('external ranking failed', error);
     const fallback = candidates
       .filter((candidate) => candidate.sourceScore >= 4)
       .slice(0, 4)

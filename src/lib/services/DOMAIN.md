@@ -41,9 +41,10 @@ api/route.ts → services → lib/utils, lib/db, lib/config
 | `llm-service.ts` | ~750 | 统一 LLM 调用层（StepFun / DeepSeek / 通义千问 / 火山方舟 / 中转站），默认优先 `step-3.7-flash`（阶跃星辰）；`chatStream` 默认开 word-level smoothing（中文按字 / 英文按词 / 标点独立段，10ms 节流），所有走流式的对话框（/api/chat、/api/workspace/search、legacy /api/tutor）自动按词平滑刷出，可 `options.smooth: 'off'` 关闭 |
 | `highlight-service.ts` | 675 | AI 精选片段（Smart/Fast 双模式） |
 | `summary-service.ts` | 246 | 课堂摘要生成 |
-| `lesson-digest-service.ts` | ~280 | 课堂结构化分段总结（飞书妙记形态）：segments + 图片锚点 → LLM 生成分段 digest + fallback 兜底。参照 `cheatsheet.plugin.ts` 的 LLM + JSON + citation 模式。桌面移动共享 |
+| `lesson-digest-service.ts` | ~340 | 课堂结构化分段总结：segments + 图片锚点 → LLM 生成分段 digest + fallback 兜底；`normalizeLessonDigestOutput` 用前一段结束时间安全补齐模型遗漏的时间边界。桌面移动共享 |
 | `tutor-service.ts` | 273 | AI 家教：引用匹配 + LLM 解释 |
 | `learning-intent-service.ts` | ~190 | 深度学习意图确认：模型先利用已有上下文，只在学习路径确有歧义时生成 1-3 个动态单选/多选问题；用户作答后再次整理为最终计划，模型不可用时返回确定性计划 |
+| `workshop-readiness-service.ts` | ~220 | 应用矩阵内容适配判断：先用证据阈值拦截过短材料，再由模型判断学习内容类型、可用应用与可选推荐；允许 `not_ready` / 无推荐，避免把闲聊或不可靠转录包装成课程 |
 | `dify-service.ts` | 354 | Dify Agent 集成（提问引导 + 联网检索） |
 | `teaching-suggestion.ts` | 256 | 教学改进建议生成 |
 | `gemini-image-service.ts` | 361 | Gemini 图像生成（via undyingapi 代理） |
@@ -63,7 +64,7 @@ api/route.ts → services → lib/utils, lib/db, lib/config
 | `workspace-echo-service.ts` | ~1300 | 每日回响生成（AI 洞察/金句/推荐）；CommonStack 新 schema 不返回 title，需从 takeaway / echo 生成标题后再进质量门 |
 | `workspace-search-service.ts` | 175 | 全局 AI 检索（流式带引用） |
 | `commonstack-echo-service.ts` | 273 | Echo LLM 调用（System Prompt 在此） |
-| `feed-service.ts` | ~690 | 今日情报编排与排序：内部线索来自收藏/目标；外部检索计划覆盖深入、相邻与不同视角，模型只在真实网页/论文/书籍候选中筛选，禁止编造外链 |
+| `feed-service.ts` | ~700 | 今日情报编排与排序：内部线索来自收藏、已确认目标和活跃学习线，没有新 capture 也可由真实目标启动；外部检索计划覆盖深入、相邻与不同视角，模型只在真实网页/论文/书籍候选中筛选，禁止编造外链 |
 | `feed-preference-service.ts` | ~120 | 今日情报长期偏好：从账号 Feedback 读取有用/不相关记录，并与当前设备即时反馈合并；同一内容以设备最新判断优先 |
 
 ### 👤 用户 / 认证

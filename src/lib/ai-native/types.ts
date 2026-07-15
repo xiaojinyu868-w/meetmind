@@ -2,6 +2,47 @@ import type { Anchor, TranscriptSegment } from '@/types';
 
 export type DataSourceType = 'live' | 'video' | 'demo' | 'unknown';
 
+export type WorkshopAppKey =
+  | 'audio-overview'
+  | 'flashcards'
+  | 'quiz'
+  | 'mindmap'
+  | 'infographic'
+  | 'cheatsheet';
+
+export type WorkshopContentKind =
+  | 'lecture'
+  | 'discussion'
+  | 'reading'
+  | 'casual'
+  | 'administrative'
+  | 'fragment'
+  | 'unreliable'
+  | 'unknown';
+
+export type WorkshopReadinessStatus = 'ready' | 'limited' | 'not_ready';
+
+export type WorkshopReadinessReason =
+  | 'ready'
+  | 'partial_learning'
+  | 'insufficient_content'
+  | 'not_learning'
+  | 'unreliable_transcript';
+
+export interface WorkshopReadinessAssessment {
+  status: WorkshopReadinessStatus;
+  contentKind: WorkshopContentKind;
+  recommendedAppKey: WorkshopAppKey | null;
+  allowedAppKeys: WorkshopAppKey[];
+  reason: WorkshopReadinessReason;
+  confidence: 'high' | 'medium' | 'low';
+  evidence: {
+    segmentCount: number;
+    characterCount: number;
+    durationMs: number;
+  };
+}
+
 export interface InputLayerContext {
   sessionId: string;
   dataSource: DataSourceType;

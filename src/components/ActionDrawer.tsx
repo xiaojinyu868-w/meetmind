@@ -14,6 +14,7 @@ import { useEffect, useId } from 'react';
 import { cn } from '@/lib/utils';
 import { ActionList } from './ActionList';
 import type { ActionItem } from '@/types';
+import { COPY } from '@/lib/ui/copy';
 
 export interface ActionDrawerProps {
   /** 是否打开 */
@@ -66,6 +67,8 @@ export function ActionDrawer({
     };
   }, [isOpen]);
 
+  if (!isOpen) return null;
+
   return (
     <>
       {/* 遮罩层 */}
@@ -74,7 +77,7 @@ export function ActionDrawer({
           'fixed inset-0 bg-black/20 z-40',
           // 动画：尊重 prefers-reduced-motion
           'transition-opacity duration-300 motion-reduce:transition-none',
-          isOpen ? 'opacity-100' : 'opacity-0 pointer-events-none'
+          'opacity-100'
         )}
         onClick={onClose}
         aria-hidden="true"
@@ -92,7 +95,7 @@ export function ActionDrawer({
           // 动画：尊重 prefers-reduced-motion
           'transform transition-transform duration-300 ease-out motion-reduce:transition-none',
           'flex flex-col',
-          isOpen ? 'translate-x-0' : 'translate-x-full',
+          'translate-x-0',
           className
         )}
       >
@@ -105,7 +108,7 @@ export function ActionDrawer({
               </svg>
             </div>
             <div>
-              <h2 id={titleId} className="text-sm font-semibold text-navy">今晚行动清单</h2>
+              <h2 id={titleId} className="text-sm font-semibold text-navy">{COPY.actionList.title}</h2>
               <p className="text-xs text-ink-muted">
                 {items.filter(i => i.completed).length}/{items.length} 已完成
               </p>
@@ -134,7 +137,7 @@ export function ActionDrawer({
         {/* 底部提示 */}
         <div className="px-4 py-3 border-t border-divider-light bg-surface-soft">
           <p className="text-xs text-ink-muted text-center">
-            💡 按 ESC 或点击空白处关闭
+            {COPY.actionList.closeHint}
           </p>
         </div>
       </div>

@@ -3,6 +3,7 @@ import { parseJsonResponse } from '@/lib/utils/json-utils';
 import { chat, DEFAULT_MODEL_ID } from '@/lib/services/llm-service';
 import type { AppExecutionContext, AppExecutionResult, AppPlugin, AppPluginTools } from '../types';
 import { buildPromptAnchorContext, buildPromptTranscriptContext, buildTerminologyHintBlock } from '../prompt-context';
+import { resolveGroundedEvidence } from '../evidence-grounding';
 
 const TARGET_QUESTION_COUNT = 8;
 
@@ -175,7 +176,7 @@ ${transcriptContext}
   return parsed;
 }
 
-function buildCards(
+export function buildQuizCards(
   tools: AppPluginTools,
   segments: TranscriptSegment[],
   llmOutput: QuizLLMOutput | null
@@ -196,8 +197,20 @@ function buildCards(
       : segments.map((segment) => fallbackDraft(segment));
 
   questionDrafts.forEach((questionDraft, index) => {
-    const segment = segments[index % Math.max(1, segments.length)] || segments[0];
-    const draft = questionDraft?.stem?.trim() ? questionDraft : fallbackDraft(segment);
+    const indexedSegment = segments[index % Math.max(1, segments.length)] || segments[0];
+    const candidateDraft = questionDraft?.stem?.trim() && questionDraft?.answer?.trim()
+      ? questionDraft
+      : fallbackDraft(indexedSegment);
+    const candidateStartMs = toTimestamp(candidateDraft.startMs, -1);
+    const grounding = resolveGroundedEvidence(
+      `${candidateDraft.stem ?? ''} ${candidateDraft.answer ?? ''} ${candidateDraft.explanation ?? ''}`,
+      segments,
+      candidateStartMs,
+    );
+    const segment = grounding.segment ?? indexedSegment;
+    // 时间戳命中不等于内容受支持。语义证据不足时，整题降级为基于真实片段的
+    // 主观复述题，不能保留模型题面再随便挂一个引用。
+    const draft = grounding.supported ? candidateDraft : fallbackDraft(segment);
     const stem = draft.stem?.trim() || `请根据 ${formatTimestamp(segment.startMs)} 片段作答`;
     const answer = (draft.answer || '').trim();
     // 按题型决定选项：主观题保持空选项，绝不硬塞模板干扰项
@@ -207,10 +220,8 @@ function buildCards(
       answer
     );
     const explanation = draft.explanation?.trim() || tools.summarizeSegments([segment], 120) || '请回放原片段核对关键概念。';
-    const fallbackStart = segment?.startMs ?? 0;
-    const fallbackEnd = segment?.endMs ?? fallbackStart + 8000;
-    const startMs = toTimestamp(draft.startMs, fallbackStart);
-    const endMs = toTimestamp(draft.endMs, fallbackEnd);
+    const startMs = segment?.startMs ?? 0;
+    const endMs = segment?.endMs ?? startMs + 8000;
 
     cards.push({
       id: `quiz-card-${index + 1}`,
@@ -295,7 +306,7 @@ export const quizPlugin: AppPlugin = {
       llmOutput = null;
     }
 
-    const cards = buildCards(tools, evidenceSegments, llmOutput);
+    const cards = buildQuizCards(tools, evidenceSegments, llmOutput);
 
     const questionCards = cards.filter((card) => card.meta?.cardKind === 'quiz');
 

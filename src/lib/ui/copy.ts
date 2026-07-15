@@ -113,6 +113,20 @@ export const COPY = {
     appResultSummary: (count: number) => `生成了 ${count} 条可继续使用的学习内容`,
   },
 
+  tutor: {
+    emptyAfterName: '在这里。挑一个直接开始，也可以在下方直接问。',
+    shortContextBody: '，这段内容不用整理成应用。想问其中哪一句，直接说就好。',
+  },
+
+  actionList: {
+    title: '今晚行动清单',
+    emptyTitle: '还没有行动项',
+    emptyBody: '标记一处困惑后，同学会把下一步放在这里。',
+    completedTitle: '今天先到这里',
+    completedBody: '行动项已经全部完成。',
+    closeHint: '按 ESC 或点击空白处关闭',
+  },
+
   collection: {
     askClassmate: '问同学',
     deleteMemoryWarning: '删除后，这条内容不会再进入同学的回答、后续情报和个人上下文。',
@@ -158,10 +172,10 @@ export const COPY = {
   },
 
   classroomHome: {
-    commandEyebrow: '今天的学习现场',
-    title: '继续你的学习现场',
-    subtitle: '从最近一节课接着学，或把新的课堂和资料交给 MeetMind。',
-    contextStatus: '个人上下文已连接',
+    commandEyebrow: '今天',
+    title: '今天，继续学懂一件事。',
+    subtitle: '接着上次的进度，或开始一节新课。',
+    contextStatus: '记得你的学习进度',
     outcomeTitle: '内容进来之后',
     outcomeHint: '不只保存，还会继续变成能用的学习结果。',
     capabilityLabel: 'MeetMind 会把内容继续变成什么',
@@ -182,8 +196,8 @@ export const COPY = {
     actionMaterialTitle: '放入学习材料',
     actionMaterialBody: '文档、网页、音视频会自动接到相关课堂和目标。',
     actionMaterialLabel: '选择文件或链接',
-    actionSearchTitle: '找到并继续问',
-    actionSearchBody: '搜索过去的课堂和资料，带着真实原文继续理解。',
+    actionSearchTitle: '问 MeetMind',
+    actionSearchBody: '带上课堂、资料和目标，直接说你想弄懂什么。',
     actionSearchLabel: '搜索我的内容',
   },
 
@@ -346,8 +360,8 @@ export const COPY = {
     contextStatus: (count: number): string => count > 0
       ? `已接上 ${count} 段上下文`
       : '还没有上下文',
-    title: '今天，开始真正学会。',
-    body: '听一节课、读一份资料，或直接说出你想弄懂的事。',
+    title: '今天，学懂一件事。',
+    body: '录下课堂，放入资料，或直接问。',
     record: '录一节课',
     recordHint: '实时听懂',
     addMaterial: '放入资料',
@@ -368,9 +382,16 @@ export const COPY = {
     recentLabel: '最近上下文',
     emptyRole: '懂你上下文的 AI 同学',
     emptyEyebrow: '先交给我一段真实学习',
-    emptyTitle: '从第一节课，开始真正理解。',
-    emptyBody: '录下课堂，放入资料，或者直接说出想弄懂的事。MeetMind 会接住现场，再陪你练会。',
+    emptyTitle: '陪你听懂每一节课。',
+    emptyBody: '录下学习现场，课中理清脉络，课后继续练会。',
     emptyRecordHint: '边听边形成课堂脉络',
+    tryDemo: '试听 90 秒',
+    demoPlay: '播放声音',
+    demoPause: '暂停',
+    demoFinished: '试听结束，可以去看课后练习了',
+    demoFinish: '结束试听，看课后',
+    demoReviewStatus: '试听课',
+    demoFailed: '试听还没加载好，再试一次',
     emptyOutcomeTitle: '回来时，你会得到',
     emptyOutcomeFlow: '课堂脉络',
     emptyOutcomeAnswer: '有根解释',
@@ -415,6 +436,18 @@ export const COPY = {
       recommendedTitle: '现在最适合',
       recommendedHint: '根据这节课的内容和你留下的标记排序，不替你做决定。',
       allTitle: '其他学习方式',
+      availableTitle: '可以这样继续',
+      readinessLabel: '学习应用判断',
+      assessing: '正在判断这段内容适合怎么学',
+      recommendedByContent: '这段内容已经足以支撑这个学习动作。',
+      insufficientTitle: '先保留这段原话',
+      insufficientBody: '内容还太少。继续记录后，合适的学习方式会自然出现。',
+      notLearningTitle: '这段内容不用加工',
+      notLearningBody: '它更像普通交流，保留原话就够了。',
+      unreliableTitle: '先把原话听清',
+      unreliableBody: '当前转录还不稳定，暂时不把它整理成学习结论。',
+      executeNotReady: '这段内容还不足以形成可靠的学习应用。',
+      executeNotSuitable: '这个学习动作不适合当前内容，换一种方式更可靠。',
       contextBasis: (segments: number, anchors: number, difficulties: number): string => {
         const parts = [`${segments} 段课堂内容`];
         if (anchors > 0) parts.push(`${anchors} 处标记`);

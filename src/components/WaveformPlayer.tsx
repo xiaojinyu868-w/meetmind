@@ -4,7 +4,8 @@
 // 复用 wavesurfer.js (10k stars) 实现波形可视化
 // 支持离线回放时添加红点标注
 
-import { useEffect, useRef, useCallback, useState, forwardRef, useImperativeHandle } from 'react';
+import { useEffect, useRef, useCallback, useState, forwardRef, useImperativeHandle, type Ref } from 'react';
+import { HelpCircle } from 'lucide-react';
 import WaveSurfer from 'wavesurfer.js';
 import RegionsPlugin from 'wavesurfer.js/plugins/regions';
 import { formatTimestampMs } from '@/lib/longcut';
@@ -30,7 +31,7 @@ export interface WaveformPlayerRef {
   isPlaying: () => boolean;
 }
 
-interface WaveformPlayerProps {
+export interface WaveformPlayerProps {
   /** 音频 URL 或 Blob */
   src?: string | Blob;
   /** 困惑点列表 */
@@ -59,6 +60,8 @@ interface WaveformPlayerProps {
   selectedAnchorId?: string | number;
   /** 紧凑模式 - 高度减半，隐藏图例 */
   compact?: boolean;
+  /** dynamic() 外壳不能接 React ref；用普通 prop 穿过 LoadableComponent。 */
+  playerRef?: Ref<WaveformPlayerRef>;
 }
 
 export const WaveformPlayer = forwardRef<WaveformPlayerRef, WaveformPlayerProps>(({
@@ -76,7 +79,8 @@ export const WaveformPlayer = forwardRef<WaveformPlayerRef, WaveformPlayerProps>
   allowAddAnchor = false,
   selectedAnchorId,
   compact = false,
-}, ref) => {
+  playerRef,
+}, forwardedRef) => {
   // 紧凑模式下高度减半
   const height = heightProp ?? (compact ? 40 : 80);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -97,7 +101,7 @@ export const WaveformPlayer = forwardRef<WaveformPlayerRef, WaveformPlayerProps>
   const [loadProgress, setLoadProgress] = useState(0); // 新增：加载进度
 
   // 暴露方法给父组件
-  useImperativeHandle(ref, () => ({
+  useImperativeHandle(playerRef ?? forwardedRef, () => ({
     play: () => wavesurferRef.current?.play(),
     pause: () => wavesurferRef.current?.pause(),
     playPause: () => wavesurferRef.current?.playPause(),
@@ -589,15 +593,10 @@ export const WaveformPlayer = forwardRef<WaveformPlayerRef, WaveformPlayerProps>
                   'flex items-center gap-1.5 text-white font-medium rounded-xl disabled:opacity-50 transition-all active:scale-95',
                   compact ? 'px-2 py-1 text-xs' : 'px-4 py-2 text-sm'
                 )}
-                style={compact
-                  ? { background: '#8E3328' }
-                  : {
-                      background: 'linear-gradient(135deg, #B5483C 0%, #8E3328 100%)',
-                      boxShadow: '0 4px 12px rgba(255, 138, 128, 0.35)'
-                    }}
+                style={{ background: '#8E3328' }}
                 title="标记当前位置为困惑点"
               >
-                <span>🎯</span>
+                <HelpCircle size={compact ? 13 : 15} strokeWidth={1.9} aria-hidden />
                 <span>标记困惑</span>
               </button>
             )}

@@ -2,7 +2,7 @@
 
 import { useState, useCallback, useEffect, useRef } from 'react';
 import type { FeedItem } from '@/types';
-import type { LearnerProfile } from '@/types/user';
+import type { LearnerProfile, LearningContextState } from '@/types/user';
 import type { WorkspaceCaptureMessage } from '@/types/page-types';
 import { readFeedPreferences, type FeedPreference } from '@/lib/feed-preferences';
 
@@ -42,6 +42,11 @@ interface GenerateFeedRequest {
   };
   notes?: Array<{ text: string; source: string }>;
   feedback?: FeedPreference[];
+  learningContext?: {
+    activeThread?: { title: string; intent?: string; lastSummary?: string; nextStep?: string };
+    memories?: Array<{ title: string; detail?: string; kind?: string }>;
+    recentActivities?: Array<{ title: string; detail?: string; kind?: string }>;
+  };
 }
 
 interface GenerateFeedResponse {
@@ -56,6 +61,7 @@ interface UseFeedStreamOptions {
   learnerProfile?: LearnerProfile | null;
   notes?: Array<{ text: string; source: string }>;
   accessToken?: string | null;
+  learningContext?: LearningContextState;
 }
 
 interface UseFeedStreamReturn {
@@ -85,8 +91,9 @@ export function useFeedStream({
   learnerProfile,
   notes,
   accessToken,
+  learningContext,
 }: UseFeedStreamOptions): UseFeedStreamReturn {
-  const signature = buildFeedSignature(captures, learnerProfile);
+  const signature = buildFeedSignature(captures, learnerProfile, learningContext);
   const cacheKey = `${workspaceId}:${signature}`;
   const [items, setItems] = useState<FeedItem[]>([]);
   const [generatedAt, setGeneratedAt] = useState<string | null>(null);
@@ -103,7 +110,12 @@ export function useFeedStream({
   }, [workspaceId, signature, cacheKey]);
 
   const generate = useCallback(async () => {
-    if (captures.length === 0) return;
+    const hasLearningContext = Boolean(
+      learningContext?.activeThread?.title
+        || learningContext?.memories.length
+        || learnerProfile?.goals?.some((goal) => !goal.status || goal.status === 'active'),
+    );
+    if (captures.length === 0 && !hasLearningContext) return;
 
     abortRef.current?.abort();
     const controller = new AbortController();
@@ -156,6 +168,23 @@ export function useFeedStream({
         learnerProfile: profilePayload,
         notes,
         feedback: readFeedPreferences(),
+        learningContext: learningContext ? {
+          activeThread: learningContext.activeThread?.status === 'active'
+            ? {
+                title: learningContext.activeThread.title,
+                intent: learningContext.activeThread.intent,
+                lastSummary: learningContext.activeThread.lastSummary,
+                nextStep: learningContext.activeThread.nextStep,
+              }
+            : undefined,
+          memories: learningContext.memories
+            .filter((memory) => memory.status === 'active')
+            .slice(-8)
+            .map(({ title, detail, kind }) => ({ title, detail, kind })),
+          recentActivities: learningContext.recentActivities
+            .slice(-6)
+            .map(({ title, detail, kind }) => ({ title, detail, kind })),
+        } : undefined,
       };
 
       const res = await fetch('/api/feed', {
@@ -189,7 +218,7 @@ export function useFeedStream({
     } finally {
       setIsLoading(false);
     }
-  }, [workspaceId, captures, learnerProfile, notes, accessToken, signature]);
+  }, [workspaceId, captures, learnerProfile, notes, accessToken, signature, learningContext]);
 
   const isStale = !generatedAt || Date.now() - new Date(generatedAt).getTime() > FEED_CACHE_TTL_MS;
   return {
@@ -207,6 +236,7 @@ export function useFeedStream({
 export function buildFeedSignature(
   captures: WorkspaceCaptureMessage[],
   learnerProfile?: LearnerProfile | null,
+  learningContext?: LearningContextState,
 ): string {
   const capturePart = captures.slice(0, 20).map((capture) => (
     `${capture.id}:${capture.occurredAt ?? capture.createdAt}:${capture.normalizedText?.length ?? 0}:${JSON.stringify(capture.metadata?.provenance ?? null)}`
@@ -215,7 +245,16 @@ export function buildFeedSignature(
     .filter((goal) => !goal.status || goal.status === 'active')
     .map((goal) => `${goal.title}:${goal.summary ?? ''}`)
     .join('|');
-  return `${capturePart}::${goalPart}`;
+  const learningPart = [
+    learningContext?.activeThread?.status === 'active'
+      ? `${learningContext.activeThread.title}:${learningContext.activeThread.updatedAt}`
+      : '',
+    ...(learningContext?.memories ?? []).filter((memory) => memory.status === 'active').slice(-8)
+      .map((memory) => `${memory.id}:${memory.updatedAt}`),
+    ...(learningContext?.recentActivities ?? []).slice(-6)
+      .map((activity) => `${activity.id}:${activity.occurredAt}`),
+  ].join('|');
+  return `${capturePart}::${goalPart}::${learningPart}`;
 }
 
 function readFeedCache(workspaceId: string, signature: string): FeedCacheEntry | null {

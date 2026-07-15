@@ -8,7 +8,7 @@ export interface WorkshopRecommendationSignals {
 }
 
 export interface WorkshopRecommendation {
-  key: WorkshopAppKey;
+  key: WorkshopAppKey | null;
   reason: string;
 }
 
@@ -31,5 +31,5 @@ export function recommendWorkshopApp(signals: WorkshopRecommendationSignals): Wo
   if (signals.segmentCount >= 24) {
     return { key: 'mindmap', reason: COPY.apps.matrix.recommendedForStructure };
   }
-  return { key: 'cheatsheet', reason: COPY.apps.matrix.recommendedDefault };
+  return { key: null, reason: '' };
 }

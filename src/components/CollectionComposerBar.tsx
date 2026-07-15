@@ -12,7 +12,7 @@
  */
 
 import type { ClipboardEvent, MutableRefObject } from 'react';
-import { ArrowUp, Mic, Plus } from 'lucide-react';
+import { ArrowUp, Link2, Mic, Plus } from 'lucide-react';
 import { compactText } from '@/lib/utils/page-utils';
 import { CollectionComposerContextPreview } from '@/components/CollectionComposerContextPreview';
 
@@ -206,7 +206,8 @@ export function CollectionComposerBar({
             <span
               className="inline-flex items-center gap-1.5 rounded-full border border-[#E8E2D5] bg-white px-3 py-1.5 text-[12px] text-[#5C5A55]"
             >
-              🔗 贴链接
+              <Link2 size={13} strokeWidth={1.5} />
+              贴链接
             </span>
           </div>
         )}

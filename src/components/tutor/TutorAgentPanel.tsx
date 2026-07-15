@@ -48,6 +48,9 @@ import {
   resolveExplicitAiModelPreference,
 } from '@/lib/utils/ai-model-preference';
 import type { WorkshopAppKey } from '@/lib/ai-native/app-catalog';
+import { ALL_WORKSHOP_APP_KEYS } from '@/lib/ai-native/workshop-readiness';
+import type { WorkshopReadinessStatus } from '@/lib/ai-native/types';
+import { COPY } from '@/lib/ui/copy';
 
 export interface TutorAgentPanelTranscriptSegment {
   id: string;
@@ -109,6 +112,10 @@ export interface TutorAgentPanelProps {
   onNewConversation?: () => void;
   /** 点 SkillChip 的结构化 app（速查表/闪卡/测验/导图/学习报告）时直接打开 WorkshopWindow */
   onOpenApp?: (appKey: WorkshopAppKey) => void;
+  /** 当前材料真正支持的结构化应用；其余 chip 不在这个 surface 出现。 */
+  availableAppKeys?: readonly WorkshopAppKey[];
+  /** 材料不足时保留自由提问，但不伪装成一节可加工的课程。 */
+  workshopReadinessStatus?: WorkshopReadinessStatus;
 }
 
 /**
@@ -200,6 +207,8 @@ export function TutorAgentPanel({
   newConversationNonce = 0,
   onNewConversation,
   onOpenApp,
+  availableAppKeys,
+  workshopReadinessStatus,
 }: TutorAgentPanelProps) {
   const { user } = useAuth();
   const userId = getEffectiveUserId(user?.id);
@@ -211,6 +220,11 @@ export function TutorAgentPanel({
   const persistedMessageIdsRef = React.useRef<Set<string>>(new Set());
   const lastLaunchQuestionNonceRef = React.useRef<number | null>(null);
   const lastNewConversationNonceRef = React.useRef(newConversationNonce);
+  const excludedAppKeys = React.useMemo(() => {
+    if (!availableAppKeys) return undefined;
+    const allowed = new Set(availableAppKeys);
+    return ALL_WORKSHOP_APP_KEYS.filter((key) => !allowed.has(key));
+  }, [availableAppKeys]);
 
   React.useEffect(() => {
     let alive = true;
@@ -556,10 +570,20 @@ export function TutorAgentPanel({
           <div className="flex flex-col items-center pt-6 text-center">
             <OctoAvatar mood="listening" size="lg" aura className="mb-4" />
             <div className="mx-auto max-w-[20rem] text-[15px] leading-[1.75] text-ink-secondary">
-              <span className="font-serif italic text-pine">同学</span>
-              在这里。挑一个直接开始，也可以在下方直接问。
+              <span className="font-serif italic text-pine">{COPY.identity.name}</span>
+              {workshopReadinessStatus === 'not_ready'
+                ? COPY.tutor.shortContextBody
+                : COPY.tutor.emptyAfterName}
             </div>
-            <SkillChipRow onPick={onPickSkill} onSay={onPickSkill} onOpenApp={onOpenApp} disabled={busy} />
+            {workshopReadinessStatus !== 'not_ready' ? (
+              <SkillChipRow
+                onPick={onPickSkill}
+                onSay={onPickSkill}
+                onOpenApp={onOpenApp}
+                excludeAppKeys={excludedAppKeys}
+                disabled={busy}
+              />
+            ) : null}
           </div>
         }
         variant="paper"

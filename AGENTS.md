@@ -264,7 +264,7 @@ M14.6 起，结构化产物**不再走** LLM 输出 `<open_app:KEY/>` marker 的
 ```
 
 - LLM 对话保持**纯文字**：`agent/route.ts` 的 `tools = {}`，不挂 native tools，不注入 marker 合约。
-- 应用矩阵 6 类 ready 应用（`WORKSHOP_APP_CATALOG` in `app-catalog.ts`）：`flashcards / quiz / mindmap / cheatsheet / audio-overview / infographic`。M16 起目录按学习动作组织，只突出一个基于显式课堂信号的“现在最适合”；首次生成留在矩阵后台完成，结果页不暴露模型选择，分享入口在至少完成一个产物后出现。
+- 应用矩阵 6 类应用（`WORKSHOP_APP_CATALOG` in `app-catalog.ts`）：`flashcards / quiz / mindmap / cheatsheet / audio-overview / infographic`。进入矩阵先经 `/api/apps/readiness` 判断材料是否真的支持学习产物；过短、闲聊、行政内容或不可靠转录必须允许“不生成”，推荐也可以为空。`/api/apps/execute` 服务端再次校验以防绕过。M16 起目录按学习动作组织，只突出一个有原文依据的“现在最适合”；首次生成留在矩阵后台完成，结果页不暴露模型选择，分享入口在至少完成一个产物后出现。
 - **遗留死代码（M14.6 前的 marker 链路，待清理）**：`<open_app:KEY/>` marker、`extractOpenAppMarker`、`capOpenAppContract` / `TutorInlineAppKey` 类型、`InlineAppCard` 的 marker 拦截逻辑。（`tutor-tools.ts` 及 4 个无入口 plugin `study-report` / `knowledge-cards` / `confusion-drill` / `review-plan` 已在 M14.6+ 清理删除。）
 
 ### 3.6 God File 提取策略
@@ -355,7 +355,7 @@ ASR 链路（`src/lib/services/asr/`）：
 
 ### 3.11 今日情报：个人上下文 × 外部真实信息
 
-`/api/feed mode='cross-course'` 不是摘要生成器。它先从收藏、笔记、目标与反馈中形成“看见自己”的内部线索，再生成包含 `deepen / adjacent / counterpoint` 的检索计划。`feed-retrieval-service.ts` 分别从普通网页、Semantic Scholar 论文目录与 Open Library 图书目录取回真实候选；普通网页结果不足且已配置 `DASHSCOPE_API_KEY` 时，可用 `qwen3.7-plus` Responses API 的 `web_search` 补充。模型只允许在真实候选中排序和解释，不能生成外链。
+`/api/feed mode='cross-course'` 不是摘要生成器。它先从收藏、笔记、已确认目标、活跃学习线与反馈中形成“看见自己”的内部线索；即使没有新 capture，只要用户已明确当前学习目标也可启动。然后生成包含 `deepen / adjacent / counterpoint` 的检索计划。`feed-retrieval-service.ts` 分别从普通网页、Semantic Scholar 论文目录与 Open Library 图书目录取回真实候选；普通网页结果不足且已配置 `DASHSCOPE_API_KEY` 时，可用 `qwen3.7-plus` Responses API 的 `web_search` 补充。模型只允许在真实候选中排序和解释，不能生成外链。
 
 外部卡必须携带 `contentUrl`、`contentKind`、来源，并尽可能保留作者和出版时间。推荐组合优先包含至少一条论文或书籍，以及一条与当前问题相关的不同视角；检索失败时宁可少推，不得回退成虚构资料或通用搜索页。
 

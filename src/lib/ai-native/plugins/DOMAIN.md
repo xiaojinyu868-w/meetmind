@@ -7,16 +7,16 @@
 
 | 文件 | 职责 |
 |------|------|
-| `quiz.plugin.ts` | 测验插件（LLM 生成选择题/判断题） |
+| `quiz.plugin.ts` | 测验插件（LLM 生成选择题/判断题；题目必须重新匹配真实原文，匹配失败则降级为基于证据的简答题） |
 | `class-check.plugin.ts` | 随堂检验插件（基于知识点结构的智能随堂检验，视频内触发，不在 catalog） |
 | `studio-workshop.plugin.ts` | Studio Workshop 主文件（~340 行），子模块如下 |
 | `studio-workshop.types.ts` | 类型/模式检测/解析辅助（~210 行，有测试） |
 | `studio-workshop.podcast.ts` | 播客管线（~290 行） |
 | `studio-workshop.renderers.ts` | 渲染负载构建器（~180 行） |
-| `flashcards.plugin.ts` | 闪卡 |
+| `flashcards.plugin.ts` | 闪卡（模型题面 / 答案必须重新落回真实原文；无语义支持则用证据片段生成安全兜底卡） |
 | `flashcards.plugin.test.ts` | 闪卡证据回锚测试：语义匹配优先、秒/毫秒归一、禁止按卡片序号轮转原文 |
-| `mindmap.plugin.ts` | 思维导图 |
-| `cheatsheet.plugin.ts` | 速查表 |
+| `mindmap.plugin.ts` | 思维导图（无原文支持的叶子节点会被剔除，保留节点回写证据时间） |
+| `cheatsheet.plugin.ts` | 速查表（无原文支持的条目直接丢弃；`strong` 只有证据明确强调时保留） |
 | `fallback.plugin.ts` | 兜底 |
 | `index.ts` | 插件注册（7 个插件） |
 
@@ -35,3 +35,4 @@
 
 - `studio-workshop.types.test.ts` — 44 tests，覆盖模式检测/时间戳/数组/对话解析
 - `flashcards.plugin.test.ts` — 覆盖模型时间戳不可信时，题面/答案仍能回到真正支持它的课堂片段
+- `quiz.plugin.test.ts` / `cheatsheet.plugin.test.ts` / `mindmap.plugin.test.ts` — 覆盖错误时间戳、幻觉条目、虚假重点与无证据节点的降级 / 剔除

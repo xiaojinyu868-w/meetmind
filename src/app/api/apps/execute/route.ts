@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { applyRateLimit } from '@/lib/utils/rate-limit';
 import { appPluginRegistry, buildExecutionContext, getWorkshopAppByKey, type AppExecuteRequest } from '@/lib/ai-native';
+import { assessWorkshopReadiness } from '@/lib/services/workshop-readiness-service';
 
 function parseServerTimeoutMs(
   envValue: string | undefined,
@@ -87,6 +88,34 @@ export async function POST(request: NextRequest) {
       ...(payload as AppExecuteRequest),
       appKey: appKey || payload.appKey,
     });
+    const readiness = await assessWorkshopReadiness({
+      transcript: context.input.transcript,
+      contextTitle: typeof context.input.metadata?.title === 'string' ? context.input.metadata.title : undefined,
+      contextType: typeof context.input.metadata?.contextType === 'string'
+        ? context.input.metadata.contextType
+        : context.input.dataSource,
+      activeAnchorCount: context.input.anchors.filter((anchor) => !anchor.cancelled && !anchor.resolved).length,
+      keyDifficulties: context.memory.keyDifficulties,
+      summary: context.memory.summary,
+      goalIntent: context.goal.intent,
+    });
+
+    if (readiness.status === 'not_ready' || readiness.allowedAppKeys.length === 0) {
+      return NextResponse.json({
+        ok: false,
+        error: 'CONTENT_NOT_READY',
+        readiness,
+      }, { status: 422 });
+    }
+
+    if (appKey && !readiness.allowedAppKeys.includes(appKey as typeof readiness.allowedAppKeys[number])) {
+      return NextResponse.json({
+        ok: false,
+        error: 'APP_NOT_SUITABLE',
+        readiness,
+      }, { status: 422 });
+    }
+
     const result = await withTimeout(
       appPluginRegistry.execute(context, pluginId),
       resolveExecuteTimeoutMs(appKey)

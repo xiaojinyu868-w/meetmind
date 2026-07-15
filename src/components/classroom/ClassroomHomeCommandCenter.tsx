@@ -23,24 +23,21 @@ export function ClassroomHomeCommandCenter({
   onSearch,
   recoverySlot,
 }: ClassroomHomeCommandCenterProps) {
-  const capabilities: Array<{ key: string; icon: LucideIcon; title: string; body: string }> = [
+  const capabilities: Array<{ key: string; icon: LucideIcon; title: string }> = [
     {
       key: 'listen',
       icon: AudioLines,
       title: COPY.classroomHome.capabilityListenTitle,
-      body: COPY.classroomHome.capabilityListenBody,
     },
     {
       key: 'connect',
       icon: Network,
       title: COPY.classroomHome.capabilityConnectTitle,
-      body: COPY.classroomHome.capabilityConnectBody,
     },
     {
       key: 'practice',
       icon: Shapes,
       title: COPY.classroomHome.capabilityPracticeTitle,
-      body: COPY.classroomHome.capabilityPracticeBody,
     },
   ];
 
@@ -67,8 +64,7 @@ export function ClassroomHomeCommandCenter({
         <section className="relative overflow-hidden rounded-[26px] border border-pine/14 bg-card shadow-soft">
           <span className="absolute left-0 top-8 h-12 w-[3px] rounded-r-full bg-vermilion" aria-hidden />
 
-          <div className="grid lg:grid-cols-[minmax(0,1.45fr)_minmax(280px,0.75fr)]">
-            <div className="min-w-0 px-6 py-6 lg:px-7 lg:py-7">
+          <div className="min-w-0 px-6 py-6 lg:px-8 lg:py-7">
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <p className="font-mono text-[10px] font-medium tracking-[0.08em] text-ink-muted">
                   {formatTodayLabel()}
@@ -79,13 +75,10 @@ export function ClassroomHomeCommandCenter({
                 </span>
               </div>
 
-              <p className="mt-5 text-[11px] font-semibold tracking-[0.08em] text-vermilion">
-                {COPY.classroomHome.commandEyebrow}
-              </p>
-              <h1 className="mt-2 max-w-[620px] text-[32px] font-semibold leading-[1.12] tracking-[-0.045em] text-ink">
+              <h1 className="mt-5 max-w-[680px] text-[34px] font-semibold leading-[1.1] tracking-[-0.045em] text-ink">
                 {COPY.classroomHome.title}
               </h1>
-              <p className="mt-2.5 max-w-[610px] text-[13.5px] leading-6 text-ink-secondary">
+              <p className="mt-2.5 max-w-[610px] text-[14px] leading-6 text-ink-secondary">
                 {COPY.classroomHome.subtitle}
               </p>
 
@@ -107,7 +100,7 @@ export function ClassroomHomeCommandCenter({
                         </span>
                         <span className="min-w-0 flex-1">
                           <span className="block text-[13px] font-semibold text-ink">{action.title}</span>
-                          <span className="mt-0.5 block truncate text-[11px] text-ink-muted">{action.body}</span>
+                          <span className="mt-0.5 block truncate text-[12px] text-ink-muted">{action.body}</span>
                         </span>
                         <ArrowUpRight size={13} className="flex-shrink-0 text-ink-muted transition group-hover:-translate-y-0.5 group-hover:translate-x-0.5 group-hover:text-pine" />
                       </button>
@@ -115,29 +108,16 @@ export function ClassroomHomeCommandCenter({
                   })}
                 </div>
               ) : null}
-            </div>
 
-            <aside className="border-t border-pine/10 bg-pine-fog/70 px-6 py-6 lg:border-l lg:border-t-0 lg:px-6 lg:py-7">
-              <p className="text-[12px] font-semibold text-pine">{COPY.classroomHome.outcomeTitle}</p>
-              <p className="mt-1 text-[11px] leading-5 text-ink-muted">{COPY.classroomHome.outcomeHint}</p>
-
-              <div className="mt-5 space-y-4" aria-label={COPY.classroomHome.capabilityLabel}>
-                {capabilities.map(({ key, icon: Icon, title, body }, index) => (
-                  <div key={key} className="flex items-start gap-3">
-                    <span className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-[10px] bg-white text-pine ring-1 ring-pine/10">
-                      <Icon size={14} strokeWidth={1.9} />
-                    </span>
-                    <span className="min-w-0">
-                      <span className="flex items-center gap-2 text-[12.5px] font-semibold text-ink">
-                        <span className="font-mono text-[9px] text-vermilion">0{index + 1}</span>
-                        {title}
-                      </span>
-                      <span className="mt-0.5 block text-[10.5px] leading-5 text-ink-muted">{body}</span>
-                    </span>
+              <div className="mt-6 flex flex-wrap items-center gap-x-6 gap-y-3 border-t border-divider pt-4" aria-label={COPY.classroomHome.capabilityLabel}>
+                {capabilities.map(({ key, icon: Icon, title }, index) => (
+                  <div key={key} className="flex items-center gap-2 text-[12px] font-medium text-ink-secondary">
+                    <span className="font-mono text-[9px] text-vermilion">0{index + 1}</span>
+                    <Icon size={14} strokeWidth={1.8} className="text-pine" />
+                    <span>{title}</span>
                   </div>
                 ))}
               </div>
-            </aside>
           </div>
         </section>
       </div>

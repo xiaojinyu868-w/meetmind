@@ -22,6 +22,7 @@ interface SharedWorkspacePanelProps {
   activeAppKey?: WorkshopAppKey | null;
   onActiveAppChange?: (appKey: WorkshopAppKey | null) => void;
   terminologyHint?: string;
+  contextTitle?: string;
   onLearningActivity?: (line: string) => void;
 }
 
@@ -37,6 +38,7 @@ export function SharedWorkspacePanel({
   activeAppKey,
   onActiveAppChange,
   terminologyHint,
+  contextTitle,
   onLearningActivity,
 }: SharedWorkspacePanelProps) {
   // tab 现在只有 'apps' 一种可能
@@ -51,6 +53,7 @@ export function SharedWorkspacePanel({
         summaryOverview={classSummary?.overview}
         keyDifficulties={classSummary?.keyDifficulties}
         terminologyHint={terminologyHint}
+        contextTitle={contextTitle}
         onSeek={onSeek}
         onBack={() => onActiveAppChange?.(null)}
         onLearningActivity={onLearningActivity}
@@ -66,6 +69,7 @@ export function SharedWorkspacePanel({
       anchors={anchors}
       summaryOverview={classSummary?.overview}
       keyDifficulties={classSummary?.keyDifficulties}
+      contextTitle={contextTitle}
       onOpenAppWindow={(appKey) => {
         if (onActiveAppChange) {
           onActiveAppChange(appKey);

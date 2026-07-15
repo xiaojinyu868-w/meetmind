@@ -3,6 +3,7 @@ import { parseJsonResponse } from '@/lib/utils/json-utils';
 import { chat, DEFAULT_MODEL_ID } from '@/lib/services/llm-service';
 import type { AppExecutionContext, AppExecutionResult, AppPlugin, AppPluginTools } from '../types';
 import { buildPromptAnchorContext, buildPromptTranscriptContext, buildTerminologyHintBlock } from '../prompt-context';
+import { resolveGroundedEvidence } from '../evidence-grounding';
 
 const TARGET_CARD_COUNT = 8;
 
@@ -82,23 +83,6 @@ function toTimestamp(value: unknown, fallback: number, timelineEndMs = 0): numbe
   return fallback;
 }
 
-function textBigrams(value: string): Set<string> {
-  const normalized = cleanText(value).toLowerCase().replace(/[^\p{L}\p{N}]+/gu, '');
-  const output = new Set<string>();
-  for (let index = 0; index < normalized.length - 1; index += 1) {
-    output.add(normalized.slice(index, index + 2));
-  }
-  return output;
-}
-
-function evidenceSimilarity(segment: TranscriptSegment, draft: FlashcardDraft): number {
-  const evidence = textBigrams(segment.text || '');
-  const card = textBigrams(`${draft.question ?? ''} ${draft.answer ?? ''}`);
-  let overlap = 0;
-  for (const token of evidence) if (card.has(token)) overlap += 1;
-  return overlap;
-}
-
 /**
  * 把闪卡重新落回真实原文。模型时间戳只能是候选，不能直接成为证据：
  * 先用题面+答案与原文做语义近似匹配，再用合法时间范围兜底。
@@ -109,28 +93,13 @@ export function resolveFlashcardEvidenceSegment(
   fallbackIndex = 0,
 ): TranscriptSegment | undefined {
   if (segments.length === 0) return undefined;
-
-  let best = segments[0];
-  let bestScore = -1;
-  for (const segment of segments) {
-    const score = evidenceSimilarity(segment, draft);
-    if (score > bestScore) {
-      best = segment;
-      bestScore = score;
-    }
-  }
-  if (bestScore >= 2) return best;
-
   const timelineEndMs = Math.max(...segments.map((segment) => segment.endMs ?? segment.startMs ?? 0));
   const candidateStartMs = toTimestamp(draft.startMs, -1, timelineEndMs);
-  if (candidateStartMs >= 0) {
-    const timestampMatch = segments.find((segment) => (
-      candidateStartMs >= (segment.startMs ?? 0) && candidateStartMs <= (segment.endMs ?? segment.startMs ?? 0)
-    ));
-    if (timestampMatch) return timestampMatch;
-  }
-
-  return segments[fallbackIndex % segments.length];
+  return resolveGroundedEvidence(
+    `${draft.question ?? ''} ${draft.answer ?? ''}`,
+    segments,
+    candidateStartMs,
+  ).segment ?? segments[fallbackIndex % segments.length];
 }
 
 function fallbackDraft(segment: TranscriptSegment, tools: AppPluginTools): FlashcardDraft {
@@ -229,12 +198,18 @@ function buildCards(
         endMs: 8000,
         confidence: 1,
       } as TranscriptSegment);
-    const segment = resolveFlashcardEvidenceSegment(draftCard, evidenceSegments, index) ?? fallbackSegment;
+    const timelineEndMs = Math.max(...evidenceSegments.map((segment) => segment.endMs ?? segment.startMs ?? 0), 0);
+    const grounding = resolveGroundedEvidence(
+      `${draftCard?.question ?? ''} ${draftCard?.answer ?? ''}`,
+      evidenceSegments,
+      toTimestamp(draftCard?.startMs, -1, timelineEndMs),
+    );
+    const segment = grounding.segment ?? fallbackSegment;
     const taskId = `flashcard-task-${index + 1}`;
-    const base = fallbackDraft(fallbackSegment, tools);
+    const base = fallbackDraft(segment, tools);
     const front = cleanText(draftCard?.question?.trim() || '');
     const back = cleanText(draftCard?.answer?.trim() || '');
-    const useFallback = !front || !back || isFillerOnly(front) || isFillerOnly(back);
+    const useFallback = !grounding.supported || !front || !back || isFillerOnly(front) || isFillerOnly(back);
 
     const finalFront = useFallback ? cleanText(base.question || '') : front;
     const finalBack = useFallback ? cleanText(base.answer || '') : back;

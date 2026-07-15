@@ -3,6 +3,7 @@ import type { AppExecutionResult } from '@/lib/ai-native/types';
 import type { WorkshopAppKey } from '@/lib/ai-native/app-catalog';
 
 export const GUEST_DEMO_APP_KEY: WorkshopAppKey = 'flashcards';
+export const GUEST_DEMO_LESSON_TITLE = "Australia's Moving Experience · IELTS 听力练习";
 
 export function resolveGuestDemoEntry({
   isGuestFastEntry,

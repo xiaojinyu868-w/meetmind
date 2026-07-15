@@ -51,7 +51,7 @@ import {
 import {
   resolveClassroomPaneState,
   resolveIsDemoSession,
-  shouldExitDemoRecordingOnStop,
+  shouldOpenDemoReviewOnStop,
   shouldShowClassroomCompanion,
 } from './ClassroomView.model';
 import { buildGuestDemoFlashcardsResult } from './classroom/guest-demo-entry';
@@ -528,14 +528,8 @@ export function ClassroomView({
   }, [onStartRecording, onStopRecording]);
 
   const handleStopRecording = useCallback((lessonId?: string) => {
-    if (shouldExitDemoRecordingOnStop({ autoLoadDemo: demoSessionActive, isRecording, paneState })) {
-      if (demoComplete) {
-        handleOpenDemoReview();
-        return;
-      }
-      setLocalPaneState('list');
-      captureActions.resetCaptureEditorState();
-      sessionActions.setDataSource('live');
+    if (shouldOpenDemoReviewOnStop({ autoLoadDemo: demoSessionActive, isRecording, paneState })) {
+      handleOpenDemoReview();
       return;
     }
     if (onStopRecording) {
@@ -543,7 +537,7 @@ export function ClassroomView({
     } else {
       setLocalPaneState('list');
     }
-  }, [demoSessionActive, isRecording, paneState, demoComplete, handleOpenDemoReview, captureActions, sessionActions, onStopRecording]);
+  }, [demoSessionActive, isRecording, paneState, handleOpenDemoReview, onStopRecording]);
 
   const handleSend = useCallback((text: string) => {
     void sendToTutor(text);

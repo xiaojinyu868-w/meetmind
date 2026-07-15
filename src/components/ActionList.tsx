@@ -1,6 +1,8 @@
 'use client';
 
 import type { ActionItem } from '@/types';
+import { CheckCircle2, ListChecks } from 'lucide-react';
+import { COPY } from '@/lib/ui/copy';
 
 interface ActionListProps {
   items: ActionItem[];
@@ -21,8 +23,8 @@ export function ActionList({ items, onComplete, onStartNext }: ActionListProps) 
       {/* 标题 */}
       <div className="p-4 border-b border-divider-light">
         <h2 className="font-semibold text-ink flex items-center gap-2">
-          <span className="text-lg">📋</span>
-          今晚行动清单
+          <ListChecks size={18} strokeWidth={1.8} aria-hidden />
+          {COPY.actionList.title}
         </h2>
         {items.length > 0 && (
           <p className="text-xs text-ink-muted mt-1">
@@ -63,10 +65,10 @@ export function ActionList({ items, onComplete, onStartNext }: ActionListProps) 
         {items.length === 0 ? (
           <div className="text-center py-12 animate-fade-in">
             <div className="w-16 h-16 mx-auto mb-4 bg-paper-deep rounded-full flex items-center justify-center">
-              <span className="text-3xl">✨</span>
+              <ListChecks size={26} strokeWidth={1.5} className="text-pine/65" aria-hidden />
             </div>
-            <p className="text-sm text-ink-muted mb-1">暂无行动清单</p>
-            <p className="text-xs text-ink-muted">选择困惑点后会自动生成</p>
+            <p className="text-sm text-ink-muted mb-1">{COPY.actionList.emptyTitle}</p>
+            <p className="text-xs text-ink-muted">{COPY.actionList.emptyBody}</p>
           </div>
         ) : (
           <div className="space-y-3">
@@ -123,11 +125,11 @@ export function ActionList({ items, onComplete, onStartNext }: ActionListProps) 
         <div className="p-4 bg-[#D1F4E0]/30 border-t border-[#D1F4E0] animate-scale-in">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 bg-[#D1F4E0] rounded-full flex items-center justify-center">
-              <span className="text-xl">🎉</span>
+              <CheckCircle2 size={22} strokeWidth={1.8} className="text-pine" aria-hidden />
             </div>
             <div>
-              <p className="font-semibold text-[#1C1B19]">太棒了！</p>
-              <p className="text-xs text-[#1C1B19]">今天的任务已全部完成</p>
+              <p className="font-semibold text-[#1C1B19]">{COPY.actionList.completedTitle}</p>
+              <p className="text-xs text-[#1C1B19]">{COPY.actionList.completedBody}</p>
             </div>
           </div>
         </div>

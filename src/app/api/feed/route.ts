@@ -56,6 +56,11 @@ interface FeedRequest {
   };
   notes?: Array<{ text: string; source: string }>;
   feedback?: FeedPreference[];
+  learningContext?: {
+    activeThread?: { title: string; intent?: string; lastSummary?: string; nextStep?: string };
+    memories?: Array<{ title: string; detail?: string; kind?: string }>;
+    recentActivities?: Array<{ title: string; detail?: string; kind?: string }>;
+  };
   confusions?: Array<{ text: string; timestampLabel?: string }>;
   sessionInfo?: {
     subject?: string;
@@ -78,9 +83,14 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
           { status: 400 },
         );
       }
-      if (!body.captures || body.captures.length === 0) {
+      const hasLearningContext = Boolean(
+        body.learningContext?.activeThread?.title
+          || body.learningContext?.memories?.length
+          || body.learnerProfile?.goals?.length,
+      );
+      if ((!body.captures || body.captures.length === 0) && !hasLearningContext) {
         return NextResponse.json(
-          { success: false, error: '还没有收集内容' },
+          { success: false, error: '还没有可用于生成情报的学习上下文' },
           { status: 400 },
         );
       }
@@ -88,10 +98,11 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       const userId = getAuthenticatedUserId(request);
       const accountFeedback = userId ? await loadAccountFeedPreferences(userId) : [];
       const feedback = mergeFeedPreferences(body.feedback, accountFeedback);
-      const result = await feedService.generateCrossCourseFeed(body.captures, {
+      const result = await feedService.generateCrossCourseFeed(body.captures ?? [], {
         learnerProfile: body.learnerProfile,
         notes: body.notes,
         feedback,
+        learningContext: body.learningContext,
       });
 
       return NextResponse.json({ success: true, items: result.items });

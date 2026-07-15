@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   resolveClassroomPaneState,
   resolveIsDemoSession,
-  shouldExitDemoRecordingOnStop,
+  shouldOpenDemoReviewOnStop,
   shouldShowClassroomCompanion,
 } from './ClassroomView.model';
 
@@ -43,9 +43,9 @@ describe('resolveClassroomPaneState', () => {
   });
 });
 
-describe('shouldExitDemoRecordingOnStop', () => {
-  it('treats stopping a guest demo recording pane as exiting demo, not stale database cleanup', () => {
-    expect(shouldExitDemoRecordingOnStop({
+describe('shouldOpenDemoReviewOnStop', () => {
+  it('routes an explicit guest demo stop into the real post-class review', () => {
+    expect(shouldOpenDemoReviewOnStop({
       autoLoadDemo: true,
       isRecording: false,
       paneState: 'recording',
@@ -53,7 +53,7 @@ describe('shouldExitDemoRecordingOnStop', () => {
   });
 
   it('does not intercept real recording stop', () => {
-    expect(shouldExitDemoRecordingOnStop({
+    expect(shouldOpenDemoReviewOnStop({
       autoLoadDemo: true,
       isRecording: true,
       paneState: 'recording',

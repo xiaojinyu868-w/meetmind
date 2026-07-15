@@ -12,10 +12,10 @@ describe('recommendWorkshopApp', () => {
       .toBe('flashcards');
   });
 
-  it('uses a structure view for long classes and a compact sheet otherwise', () => {
+  it('uses a structure view for long classes and stays neutral without a real signal', () => {
     expect(recommendWorkshopApp({ activeAnchorCount: 0, difficultyCount: 0, segmentCount: 30 }).key)
       .toBe('mindmap');
     expect(recommendWorkshopApp({ activeAnchorCount: 0, difficultyCount: 0, segmentCount: 8 }).key)
-      .toBe('cheatsheet');
+      .toBeNull();
   });
 });

@@ -14,7 +14,7 @@ import { ServiceStatus, DegradedModeBanner } from '@/components/ServiceStatus';
 import { DesktopSidebar } from '@/components/DesktopSidebar';
 
 import { EchoShareCard } from '@/components/EchoShareCard';
-import { resolveGuestDemoEntry } from '@/components/classroom/guest-demo-entry';
+import { GUEST_DEMO_LESSON_TITLE, resolveGuestDemoEntry } from '@/components/classroom/guest-demo-entry';
 import type { WorkshopAppKey } from '@/lib/ai-native/app-catalog';
 import { type Anchor } from '@/lib/services/anchor-service';
 import { memoryService, type ClassTimeline } from '@/lib/services/memory-service';
@@ -448,6 +448,7 @@ function StudentAppContent({
   const recorderRef = useRef<RecorderHandle | null>(null);
   // 记录当前进入复习态的 sourceItem，用于非音视频类型（文章/笔记）展示原文
   const [selectedReviewItem, setSelectedReviewItem] = useState<SourceIngestItem | null>(null);
+  const reviewContextTitle = selectedReviewItem?.title || (autoLoadDemo ? GUEST_DEMO_LESSON_TITLE : undefined);
   // Ref bridge: importVideoLinkIntoSourceItem is returned by useSourceImport (defined after
   // ingestTranscriptSegments), but consumed by openReviewFromCollection (defined before).
   // We use a ref so the callback always reads the latest function at call time.
@@ -1725,6 +1726,7 @@ function StudentAppContent({
         activeAppKey={options?.activeAppKey}
         onActiveAppChange={options?.onActiveAppChange}
         terminologyHint={extractedTermsHint || undefined}
+        contextTitle={reviewContextTitle}
         onLearningActivity={options?.onLearningActivity}
       />
     );
@@ -1735,6 +1737,7 @@ function StudentAppContent({
     extractedTermsHint,
     handleUnifiedSeek,
     safeOpenWorkshopWindow,
+    reviewContextTitle,
     segments,
     sessionId,
   ]);
@@ -1840,6 +1843,21 @@ function StudentAppContent({
         <MobileAppShell
           collectionFeedItems={collectionFeedItems}
           workspaceEchoes={workspaceEchoes}
+          autoStartDemo={autoLoadDemo}
+          demoMode={dataSource === 'demo' || autoLoadDemo}
+          demoAudioUrl={dataSource === 'demo' ? (audioUrl || '/demo-audio.mp3') : undefined}
+          onStartDemo={async () => {
+            const demoData = await loadDemoData();
+            setSegments(demoData.DEMO_SEGMENTS);
+            setAnchors(demoData.DEMO_ANCHORS);
+            setAudioUrl(demoData.DEMO_AUDIO_URL);
+            setVideoSource(null);
+            setDataSource('demo');
+            sessionActions.setSessionId('guest-demo');
+            setSessionMediaDurationMs(demoData.DEMO_SEGMENTS.at(-1)?.endMs ?? 0);
+            setCurrentTime(0);
+            setIsPlaying(false);
+          }}
           onStartRecording={() => {
             if (recorderRef.current) {
               void recorderRef.current.startRecording();
@@ -1902,6 +1920,7 @@ function StudentAppContent({
             <SafeAITutor
               isMobile={true}
               sessionId={sessionId}
+              lessonTitle={reviewContextTitle}
               segments={segments}
               isLoading={false}
               onResolve={handleResolveAnchor}
@@ -1924,6 +1943,7 @@ function StudentAppContent({
               appKey="flashcards"
               sessionId={sessionId || 'mobile-session'}
               segments={segments}
+              contextTitle={reviewContextTitle}
               onSeek={(ms) => handleUnifiedSeek(ms)}
             />
           }
@@ -1932,6 +1952,7 @@ function StudentAppContent({
               appKey="quiz"
               sessionId={sessionId || 'mobile-session'}
               segments={segments}
+              contextTitle={reviewContextTitle}
               onSeek={(ms) => handleUnifiedSeek(ms)}
             />
           }
@@ -1940,6 +1961,7 @@ function StudentAppContent({
               appKey="cheatsheet"
               sessionId={sessionId || 'mobile-session'}
               segments={segments}
+              contextTitle={reviewContextTitle}
             />
           }
           mindmapContent={
@@ -1947,6 +1969,7 @@ function StudentAppContent({
               appKey="mindmap"
               sessionId={sessionId || 'mobile-session'}
               segments={segments}
+              contextTitle={reviewContextTitle}
               onSeek={(ms) => handleUnifiedSeek(ms)}
             />
           }
@@ -1954,6 +1977,7 @@ function StudentAppContent({
             <SafeAITutor
               isMobile={true}
               sessionId={sessionId}
+              lessonTitle={reviewContextTitle}
               segments={segments}
               isLoading={false}
               onResolve={handleResolveAnchor}
@@ -1995,8 +2019,8 @@ function StudentAppContent({
               speakerDiarization={recorderSpeakerDiarization}
             />
           </div>
-          {(audioBlob || audioUrl) && (
-            <div className="hidden">
+          {(audioBlob || audioUrl) && dataSource !== 'demo' && (
+            <div className="sr-only" aria-hidden>
               <WaveformPlayer
                 ref={waveformRef}
                 src={audioBlob || audioUrl || undefined}
@@ -2351,6 +2375,7 @@ function StudentAppContent({
               onPlayingChange={setIsPlaying}
               sourceFullText={selectedReviewItem?.fullText}
               sourceImageUrls={selectedReviewItem?.imageUrls}
+              lessonTitle={reviewContextTitle}
             />
           ) : (
             /* 手机端主内容区 */
@@ -2608,6 +2633,7 @@ function StudentAppContent({
                         <SafeAITutor
                           isMobile={true}
                           sessionId={sessionId}
+                          lessonTitle={reviewContextTitle}
                           segments={segments}
                           isLoading={false}
                           onResolve={handleResolveAnchor}

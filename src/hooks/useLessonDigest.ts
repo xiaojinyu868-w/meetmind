@@ -39,13 +39,25 @@ export function useLessonDigest({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const fetchedKeyRef = useRef<string | null>(null);
+  const inputRef = useRef({ segments, images, lessonTitle });
+  inputRef.current = { segments, images, lessonTitle };
+  const requestKey = sessionId && segments.length > 0
+    ? [
+        sessionId,
+        segments.length,
+        segments[0]?.id,
+        segments.at(-1)?.id,
+        segments.at(-1)?.endMs,
+        images.map((image) => `${image.imageId}:${image.capturedAtMs ?? 'extra'}`).join(','),
+        lessonTitle || '',
+      ].join('|')
+    : null;
 
   const fetchDigest = useCallback(async () => {
-    if (!sessionId || !enabled || segments.length === 0) return;
-
-    const cacheKey = `${sessionId}-${segments.length}`;
-    if (fetchedKeyRef.current === cacheKey && digest) return;
-    fetchedKeyRef.current = cacheKey;
+    if (!sessionId || !enabled || !requestKey) return;
+    if (fetchedKeyRef.current === requestKey) return;
+    fetchedKeyRef.current = requestKey;
+    const input = inputRef.current;
 
     setLoading(true);
     setError(null);
@@ -55,9 +67,9 @@ export function useLessonDigest({
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          segments,
-          images,
-          lessonTitle,
+          segments: input.segments,
+          images: input.images,
+          lessonTitle: input.lessonTitle,
         }),
       });
 
@@ -77,7 +89,7 @@ export function useLessonDigest({
     } finally {
       setLoading(false);
     }
-  }, [sessionId, enabled, segments, images, lessonTitle, digest]);
+  }, [sessionId, enabled, requestKey]);
 
   useEffect(() => {
     if (enabled && sessionId && segments.length > 0) {

@@ -1,13 +1,7 @@
-import type { AppRenderMode, ContextTier } from './types';
+import type { AppRenderMode, ContextTier, WorkshopAppKey } from './types';
 import { COPY } from '@/lib/ui/copy';
 
-export type WorkshopAppKey =
-  | 'audio-overview'
-  | 'flashcards'
-  | 'quiz'
-  | 'mindmap'
-  | 'infographic'
-  | 'cheatsheet';
+export type { WorkshopAppKey } from './types';
 
 export interface WorkshopAppCatalogItem {
   key: WorkshopAppKey;

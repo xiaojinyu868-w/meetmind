@@ -9,12 +9,13 @@ import {
 } from 'lucide-react';
 import { resolveWorkshopModelId } from '@/lib/utils/workshop-model-preference';
 import type { Anchor, TranscriptSegment } from '@/types';
-import type { AppExecutionResult, ContextTier, DataSourceType } from '@/lib/ai-native/types';
+import type { AppExecutionResult, ContextTier, DataSourceType, WorkshopReadinessReason } from '@/lib/ai-native/types';
 import type { WorkshopAppCatalogItem, WorkshopAppKey } from '@/lib/ai-native/app-catalog';
 import { WORKSHOP_APP_CATALOG } from '@/lib/ai-native/app-catalog';
 import { isAppSupportedAtTier } from '@/lib/ai-native/context-pack';
 import {
   buildResultCacheKey,
+  buildTaskCacheKey,
   readCachedTaskState,
   writeCachedAppResult,
   writeCachedTaskState,
@@ -26,6 +27,7 @@ import { OctoCrystalDispatcher } from '@/components/share/OctoCrystalDispatcher'
 import { WorkshopAppCard, type WorkshopCardStatus } from './WorkshopAppCard';
 import { COPY } from '@/lib/ui/copy';
 import { recommendWorkshopApp } from './workshop-recommendation';
+import { useWorkshopReadiness } from './hooks/useWorkshopReadiness';
 
 const DOCK_STORAGE_PREFIX = 'app_workspace_dock:';
 
@@ -87,6 +89,7 @@ interface WorkshopYellowPageProps {
   anchors: Anchor[];
   summaryOverview?: string;
   keyDifficulties?: string[];
+  contextTitle?: string;
   onOpenAppWindow?: (appKey: WorkshopAppKey) => void;
   /**
    * 当前矩阵展示的层（PRD v1.1 §3 / §8）。
@@ -124,6 +127,25 @@ function statusText(status: DockTaskStatus): string {
   if (status === 'success') return COPY.apps.matrix.ready;
   if (status === 'cancelled') return COPY.apps.matrix.cancel;
   return COPY.apps.matrix.failed;
+}
+
+function readinessMessage(reason: WorkshopReadinessReason): { title: string; body: string } {
+  if (reason === 'not_learning') {
+    return {
+      title: COPY.apps.matrix.notLearningTitle,
+      body: COPY.apps.matrix.notLearningBody,
+    };
+  }
+  if (reason === 'unreliable_transcript') {
+    return {
+      title: COPY.apps.matrix.unreliableTitle,
+      body: COPY.apps.matrix.unreliableBody,
+    };
+  }
+  return {
+    title: COPY.apps.matrix.insufficientTitle,
+    body: COPY.apps.matrix.insufficientBody,
+  };
 }
 
 function formatElapsed(startMs: number, nowMs: number): string {
@@ -227,14 +249,56 @@ export function WorkshopYellowPage(props: WorkshopYellowPageProps) {
     [anchors],
   );
 
-  const recommendation = useMemo(() => recommendWorkshopApp({
+  const { assessment, isAssessing, failed: readinessFailed } = useWorkshopReadiness({
+    transcript,
+    contextTitle: props.contextTitle,
+    contextType: dataSource,
+    activeAnchorCount,
+    keyDifficulties,
+    summary: summaryOverview,
+  });
+
+  const eligibleApps = useMemo(() => {
+    if (!assessment) return visibleApps;
+    const allowed = new Set(assessment.allowedAppKeys);
+    return visibleApps.filter((app) => allowed.has(app.key));
+  }, [assessment, visibleApps]);
+
+  const fallbackRecommendation = useMemo(() => recommendWorkshopApp({
     activeAnchorCount,
     difficultyCount: keyDifficulties?.length ?? 0,
     segmentCount: transcript.length,
   }), [activeAnchorCount, keyDifficulties?.length, transcript.length]);
 
-  const recommendedApp = visibleApps.find((app) => app.key === recommendation.key) ?? visibleApps[0];
-  const otherApps = visibleApps.filter((app) => app.key !== recommendedApp?.key);
+  const recommendationKey = assessment
+    ? assessment.recommendedAppKey ?? (assessment.status === 'ready' ? fallbackRecommendation.key : null)
+    : fallbackRecommendation.key;
+  const recommendationReason = assessment
+    ? COPY.apps.matrix.recommendedByContent
+    : fallbackRecommendation.reason;
+  const recommendedApp = recommendationKey
+    ? eligibleApps.find((app) => app.key === recommendationKey)
+    : undefined;
+  const otherApps = eligibleApps.filter((app) => app.key !== recommendedApp?.key);
+  const blockedCopy = assessment?.status === 'not_ready'
+    ? readinessMessage(assessment.reason)
+    : null;
+
+  useEffect(() => {
+    if (assessment?.status !== 'not_ready' || typeof window === 'undefined') return;
+
+    // 产物是课堂原文的派生缓存。材料被判断为不可加工时，继续保留旧产物会在
+    // 后续转录增长后把早期幻觉重新带回来，因此这里清掉派生结果，不碰原录音。
+    for (const app of visibleApps) {
+      window.localStorage.removeItem(buildResultCacheKey(sessionId, app.key));
+      window.localStorage.removeItem(buildTaskCacheKey(sessionId, app.key));
+    }
+    window.localStorage.removeItem(dockStorageKey(sessionId));
+    setGeneratedMap({});
+    setTaskMap({});
+    setRunningMap({});
+    setDockTasks({});
+  }, [assessment?.status, sessionId, visibleApps]);
 
   const appMap = useMemo(() => {
     const map: Record<string, WorkshopAppCatalogItem> = {};
@@ -450,6 +514,10 @@ export function WorkshopYellowPage(props: WorkshopYellowPageProps) {
             dataSource,
             transcript,
             anchors,
+            metadata: {
+              title: props.contextTitle,
+              contextType: dataSource,
+            },
           },
           memory: {
             summary: summaryOverview,
@@ -494,7 +562,12 @@ export function WorkshopYellowPage(props: WorkshopYellowPageProps) {
         if (!response.ok || !data.ok || !data.result) {
           const backendError = data.error?.trim();
           const snippet = !backendError && rawBody ? `：${rawBody.slice(0, 120).replace(/\s+/g, ' ').trim()}` : '';
-          throw new Error(backendError || `服务端返回 HTTP ${response.status}${snippet}`);
+          const safeError = backendError === 'CONTENT_NOT_READY'
+            ? COPY.apps.matrix.executeNotReady
+            : backendError === 'APP_NOT_SUITABLE'
+              ? COPY.apps.matrix.executeNotSuitable
+              : backendError;
+          throw new Error(safeError || `服务端返回 HTTP ${response.status}${snippet}`);
         }
 
         writeCachedAppResult(sessionId, app.key, data.result);
@@ -640,16 +713,24 @@ export function WorkshopYellowPage(props: WorkshopYellowPageProps) {
 
   const runningCount = useMemo(
     () =>
-      visibleApps.filter((app) => {
+      eligibleApps.filter((app) => {
         const state = taskMap[app.key];
         return state?.status === 'running' || runningMap[app.key];
       }).length,
-    [runningMap, taskMap, visibleApps]
+    [eligibleApps, runningMap, taskMap]
   );
 
   const generatedCount = useMemo(
-    () => visibleApps.filter((app) => generatedMap[app.key]).length,
-    [generatedMap, visibleApps]
+    () => eligibleApps.filter((app) => generatedMap[app.key]).length,
+    [eligibleApps, generatedMap]
+  );
+
+  const generatedShareableCount = useMemo(
+    () => eligibleApps.filter((app) => (
+      (app.key === 'cheatsheet' || app.key === 'mindmap' || app.key === 'quiz' || app.key === 'infographic')
+      && generatedMap[app.key]
+    )).length,
+    [eligibleApps, generatedMap]
   );
 
   const failedCount = useMemo(
@@ -676,7 +757,7 @@ export function WorkshopYellowPage(props: WorkshopYellowPageProps) {
         app={app}
         status={status}
         recommended={isRecommended}
-        recommendationReason={isRecommended ? recommendation.reason : undefined}
+        recommendationReason={isRecommended ? recommendationReason : undefined}
         progressLabel={dockTask ? <ElapsedTimer startMs={dockTask.startedAt} /> : undefined}
         onStart={() => void runInBackground(app)}
         onOpen={() => openTaskResult(app.key)}
@@ -687,20 +768,31 @@ export function WorkshopYellowPage(props: WorkshopYellowPageProps) {
     );
   };
   return (
-    <section className={styles.page}>
+    <section
+      className={styles.page}
+      data-testid="workshop-yellow-page"
+      data-readiness-state={readinessFailed ? 'fallback' : isAssessing ? 'assessing' : assessment ? 'remote' : 'none'}
+    >
       <header className={styles.header}>
         <p className={styles.eyebrow}>{COPY.apps.matrix.eyebrow}</p>
-        <h2 className={styles.title}>{COPY.apps.matrix.title}</h2>
-        <p className={styles.subTitle}>{COPY.apps.matrix.subtitle}</p>
+        <h2 className={styles.title}>{blockedCopy?.title ?? COPY.apps.matrix.title}</h2>
+        <p className={styles.subTitle}>{blockedCopy?.body ?? COPY.apps.matrix.subtitle}</p>
         <p className={styles.contextBasis}>{COPY.apps.matrix.contextBasis(transcript.length, activeAnchorCount, keyDifficulties?.length ?? 0)}</p>
-        {generatedCount > 0 || runningCount > 0 || failedCount > 0 ? (
+        {assessment?.status !== 'not_ready' && (generatedCount > 0 || runningCount > 0 || failedCount > 0) ? (
           <p className={styles.subStatus} data-testid="workshop-task-summary">
-            {COPY.apps.matrix.summary(visibleApps.length, generatedCount, runningCount, failedCount)}
+            {COPY.apps.matrix.summary(eligibleApps.length, generatedCount, runningCount, failedCount)}
           </p>
         ) : null}
       </header>
 
-      {recommendedApp ? (
+      {isAssessing && !assessment ? (
+        <div className={styles.readinessPending} role="status">
+          <span className={styles.readinessPulse} aria-hidden />
+          {COPY.apps.matrix.assessing}
+        </div>
+      ) : null}
+
+      {recommendedApp && assessment?.status !== 'not_ready' ? (
         <section className={styles.matrixSection} aria-labelledby="workshop-recommended-title">
           <div className={styles.sectionHeading}>
             <h3 id="workshop-recommended-title" className={styles.sectionTitle}>{COPY.apps.matrix.recommendedTitle}</h3>
@@ -710,23 +802,28 @@ export function WorkshopYellowPage(props: WorkshopYellowPageProps) {
         </section>
       ) : null}
 
-      <section className={styles.matrixSection} aria-labelledby="workshop-all-title">
-        <div className={styles.sectionHeading}>
-          <h3 id="workshop-all-title" className={styles.sectionTitle}>{COPY.apps.matrix.allTitle}</h3>
-        </div>
-        <div className={styles.grid}>{otherApps.map((app) => renderAppCard(app))}</div>
-      </section>
+      {assessment?.status !== 'not_ready' && otherApps.length > 0 ? (
+        <section className={styles.matrixSection} aria-labelledby="workshop-all-title">
+          <div className={styles.sectionHeading}>
+            <h3 id="workshop-all-title" className={styles.sectionTitle}>
+              {recommendedApp ? COPY.apps.matrix.allTitle : COPY.apps.matrix.availableTitle}
+            </h3>
+          </div>
+          <div className={styles.grid}>{otherApps.map((app) => renderAppCard(app))}</div>
+        </section>
+      ) : null}
 
       {/* 分享是产物完成后的下一步，不抢占第一次学习决策。 */}
-      {generatedCount > 0 ? (
+      {assessment?.status !== 'not_ready' && generatedShareableCount > 0 ? (
         <OctoCrystalDispatcher
           sessionId={sessionId}
           transcript={transcript}
           summary={summaryOverview}
+          allowedAppKeys={assessment?.allowedAppKeys}
         />
       ) : null}
 
-      {(runningCount > 0 || failedCount > 0 || completedCount > 0) ? (
+      {assessment?.status !== 'not_ready' && (runningCount > 0 || failedCount > 0 || completedCount > 0) ? (
         <div className={styles.dock}>
           <button
             type="button"
