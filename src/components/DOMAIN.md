@@ -54,7 +54,7 @@ components/
 | `AITutor.tsx` | 1940 | 旧 AI 家教 / legacy fallback（移动端文字和语音主链路已移出），子模块在 `tutor/` |
 | `AIChat.tsx` | 691 | AI 对话组件 |
 | `GlobalAskPanel.tsx` | ~500 | 全局 Ask MeetMind：基于 ChatBase 的多轮问答；普通问答直接回答，深度学习在消息流内保留用户原问题并仅在真实歧义时追问；接入当前材料、可控长期记忆、会话恢复与学习进展确认 |
-| `LearningIntentConfirmationCard.tsx` / `LearningProgressMemoryCard.tsx` | ~200 | 深度学习的两道用户确认边界：开始前不再让用户编辑 AI 计划；若学习路径确有歧义，渲染模型动态生成的 1-3 个单选/多选问题，作答后自动细化并开始；结束后逐条确认哪些进展可进入长期记忆 |
+| `LearningIntentConfirmationCard.tsx` / `learning-intent-confirmation-model.ts` / `LearningProgressMemoryCard.tsx` | ~250 | 深度学习的两道用户确认边界：开始前不再让用户编辑 AI 计划；若学习路径确有歧义，逐步显现模型动态生成的 1-3 个单选/多选问题，单选后自然进入下一问，最后一次确认后自动细化并开始；结束后逐条确认哪些进展可进入长期记忆 |
 | `LearningContextStatus.tsx` | ~40 | 全局 Ask 的上下文状态条；只显示实际接入的当前材料、最近学习与长期记忆数量，不暴露模型内部推理 |
 | `LearningMemoryPanel.tsx` / `ContextRecoveryCard.tsx` | ~230 | 长期记忆可见可控（添加/暂停/删除）与首页学习现场恢复入口 |
 | `AISearchPanel.tsx` | ~740 | 旧单轮 Workspace AI 搜索面板；主入口已由 `GlobalAskPanel` 替代，保留作迁移参考 |

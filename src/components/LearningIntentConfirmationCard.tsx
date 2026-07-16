@@ -1,9 +1,15 @@
 'use client';
 
 import { useState } from 'react';
-import { ArrowRight, Check, Sparkles } from 'lucide-react';
+import { ArrowRight, Check, ChevronLeft, Sparkles } from 'lucide-react';
 import type { LearningIntentAnswer, LearningIntentPlan } from '@/types/learning-intent';
 import { COPY } from '@/lib/ui/copy';
+import {
+  buildLearningIntentAnswers,
+  hasLearningIntentAnswer,
+  updateLearningIntentSelection,
+  type LearningIntentAnswerMap,
+} from './learning-intent-confirmation-model';
 
 interface LearningIntentConfirmationCardProps {
   plan: LearningIntentPlan;
@@ -21,82 +27,106 @@ export function LearningIntentConfirmationCard({
   onCancel,
 }: LearningIntentConfirmationCardProps) {
   const questions = plan.questions ?? [];
-  const [answers, setAnswers] = useState<Record<string, string[]>>({});
+  const [answers, setAnswers] = useState<LearningIntentAnswerMap>({});
+  const [activeQuestionIndex, setActiveQuestionIndex] = useState(0);
 
-  const selectOption = (questionId: string, optionId: string, multiple: boolean) => {
-    setAnswers((current) => {
-      const selected = current[questionId] ?? [];
-      if (!multiple) return { ...current, [questionId]: [optionId] };
-      return {
-        ...current,
-        [questionId]: selected.includes(optionId)
-          ? selected.filter((id) => id !== optionId)
-          : [...selected, optionId],
-      };
-    });
+  const selectOption = (optionId: string) => {
+    const question = questions[activeQuestionIndex];
+    if (!question) return;
+
+    setAnswers((current) => updateLearningIntentSelection(current, question, optionId));
+    if (question.kind === 'single' && activeQuestionIndex < questions.length - 1) {
+      setActiveQuestionIndex((current) => current + 1);
+    }
   };
 
-  const ready = questions.length > 0 && questions.every((question) => (answers[question.id]?.length ?? 0) > 0);
-  const resolve = () => onResolve(questions.map((question) => {
-    const optionIds = answers[question.id] ?? [];
-    return {
-      questionId: question.id,
-      question: question.prompt,
-      optionIds,
-      optionLabels: question.options.filter((option) => optionIds.includes(option.id)).map((option) => option.label),
-    };
-  }));
+  const activeQuestion = questions[activeQuestionIndex];
+  const ready = activeQuestion ? hasLearningIntentAnswer(answers, activeQuestion) : false;
+  const isLastQuestion = activeQuestionIndex === questions.length - 1;
+  const resolve = () => onResolve(buildLearningIntentAnswers(questions, answers));
 
   if (questions.length > 0) {
     return (
       <section className="rounded-[22px] border border-divider bg-card px-5 py-5" aria-label={COPY.globalAsk.intentEyebrow}>
-        <div className="flex items-center gap-2 text-[12px] font-medium text-vermilion">
-          <Sparkles size={14} />
-          {COPY.globalAsk.intentQuestionTitle(questions.length)}
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2 text-[12px] font-medium text-vermilion">
+            <Sparkles size={14} />
+            {COPY.globalAsk.intentEyebrow}
+          </div>
+          <span className="font-mono text-[10px] tabular-nums text-ink-muted">
+            {COPY.globalAsk.intentProgress(activeQuestionIndex + 1, questions.length)}
+          </span>
         </div>
 
-        <div className="mt-5 space-y-6">
-          {questions.map((question, questionIndex) => (
-            <fieldset key={question.id} disabled={busy}>
-              <legend className="text-[15px] font-semibold leading-6 text-ink">
-                <span className="mr-2 text-vermilion">{questionIndex + 1}.</span>
-                {question.prompt}
-              </legend>
-              <p className="mt-1 text-[12px] text-ink-muted">
-                {question.kind === 'multiple' ? COPY.globalAsk.intentMultiple : COPY.globalAsk.intentSingle}
-              </p>
-              <div className="mt-3 flex flex-wrap gap-2.5">
-                {question.options.map((option) => {
-                  const selected = answers[question.id]?.includes(option.id) ?? false;
-                  return (
-                    <button
-                      key={option.id}
-                      type="button"
-                      onClick={() => selectOption(question.id, option.id, question.kind === 'multiple')}
-                      aria-pressed={selected}
-                      className={`inline-flex min-h-10 items-center gap-2 rounded-full border px-4 py-2 text-[13.5px] font-medium transition ${selected ? 'border-vermilion/35 bg-vermilion-fog text-vermilion' : 'border-divider bg-paper text-ink-secondary hover:border-pine/25 hover:text-ink'}`}
-                    >
-                      {selected ? <Check size={14} strokeWidth={2.2} /> : null}
-                      {option.label}
-                    </button>
-                  );
-                })}
-              </div>
-            </fieldset>
-          ))}
+        {activeQuestionIndex > 0 ? (
+          <div className="mt-4 space-y-2">
+            {questions.slice(0, activeQuestionIndex).map((question, questionIndex) => (
+              <button
+                key={question.id}
+                type="button"
+                onClick={() => setActiveQuestionIndex(questionIndex)}
+                disabled={busy}
+                className="flex w-full items-center gap-3 rounded-[13px] bg-paper px-3.5 py-2.5 text-left transition hover:bg-pine-fog"
+              >
+                <span className="flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full bg-pine text-white">
+                  <Check size={11} strokeWidth={2.5} />
+                </span>
+                <span className="min-w-0 flex-1 truncate text-[12.5px] text-ink-secondary">
+                  {questions[questionIndex]?.options
+                    .filter((option) => answers[question.id]?.includes(option.id))
+                    .map((option) => option.label)
+                    .join(' · ')}
+                </span>
+              </button>
+            ))}
+          </div>
+        ) : null}
+
+        <div key={activeQuestion?.id} className="mt-5 animate-in fade-in slide-in-from-bottom-1 duration-200">
+          <fieldset disabled={busy}>
+            <legend className="text-[16px] font-semibold leading-7 text-ink">
+              {activeQuestion?.prompt}
+            </legend>
+            <p className="mt-1 text-[12px] text-ink-muted">
+              {activeQuestion?.kind === 'multiple' ? COPY.globalAsk.intentMultiple : COPY.globalAsk.intentSingle}
+            </p>
+            <div className="mt-3 flex flex-wrap gap-2.5">
+              {activeQuestion?.options.map((option) => {
+                const selected = answers[activeQuestion.id]?.includes(option.id) ?? false;
+                return (
+                  <button
+                    key={option.id}
+                    type="button"
+                    onClick={() => selectOption(option.id)}
+                    aria-pressed={selected}
+                    className={`inline-flex min-h-11 items-center gap-2 rounded-full border px-4 py-2 text-[13.5px] font-medium transition ${selected ? 'border-vermilion/35 bg-vermilion-fog text-vermilion' : 'border-divider bg-paper text-ink-secondary hover:border-pine/25 hover:text-ink'}`}
+                  >
+                    {selected ? <Check size={14} strokeWidth={2.2} /> : null}
+                    {option.label}
+                  </button>
+                );
+              })}
+            </div>
+          </fieldset>
         </div>
 
         <div className="mt-6 flex items-center justify-between gap-3 border-t border-divider pt-4">
-          <button type="button" onClick={onCancel} disabled={busy} className="px-1 py-2 text-[13px] text-ink-muted hover:text-ink">
-            {COPY.globalAsk.intentCancel}
+          <button
+            type="button"
+            onClick={activeQuestionIndex > 0 ? () => setActiveQuestionIndex((current) => current - 1) : onCancel}
+            disabled={busy}
+            className="inline-flex items-center gap-1 px-1 py-2 text-[13px] text-ink-muted hover:text-ink"
+          >
+            {activeQuestionIndex > 0 ? <ChevronLeft size={14} /> : null}
+            {activeQuestionIndex > 0 ? COPY.globalAsk.intentBack : COPY.globalAsk.intentCancel}
           </button>
           <button
             type="button"
-            onClick={resolve}
+            onClick={isLastQuestion ? resolve : () => setActiveQuestionIndex((current) => current + 1)}
             disabled={busy || !ready}
             className="inline-flex min-h-11 items-center gap-2 rounded-full bg-pine px-5 text-[13.5px] font-semibold text-white transition hover:bg-pine-deep disabled:opacity-35"
           >
-            {COPY.globalAsk.intentResolve}
+            {isLastQuestion ? COPY.globalAsk.intentResolve : COPY.globalAsk.intentContinue}
             <ArrowRight size={15} />
           </button>
         </div>
