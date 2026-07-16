@@ -23,10 +23,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Setup Node 20
+      - name: Setup Node 24
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '24'
           cache: 'npm'
 
       - name: Install deps
@@ -36,9 +36,7 @@ jobs:
         run: npx prisma generate
 
       - name: Type check (tsc --noEmit)
-        run: npx tsc --noEmit
-        # Prisma v7 baseline 类型错误已知，暂时 allow；新错误不允许
-        continue-on-error: true
+        run: make check
 
       - name: Unit tests (src/)
         run: make test

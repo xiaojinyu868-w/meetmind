@@ -62,6 +62,8 @@
 
 ## 1. Golden Commands
 
+**运行时：Node.js 24 LTS（见 `.nvmrc`）。** 首次安装或切换运行时后先执行 `nvm use && npm ci`；不要复用其他 Node 主版本编译出的 `node_modules`，否则 `better-sqlite3` 等原生依赖会在分享、同步链路运行时失败。
+
 **日常开发**
 ```bash
 make dev          # 启动开发服务器（默认端口 3001，PORT 可覆盖）
