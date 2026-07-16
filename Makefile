@@ -53,25 +53,25 @@ smoke: ## 端到端 smoke：路由/WS/auth/API 全通（需本地 dev server 在
 
 .PHONY: smoke-intent
 smoke-intent: ## 「聊聊你想要的」goal 模式 e2e（双路径：首次会面 + 回访）
-	@PORT=$${PORT:-3002} \
+	@PORT=$${PORT:-3101} \
 	 SMOKE_BYPASS_TOKEN=$$(grep -E '^SMOKE_BYPASS_TOKEN=' .env 2>/dev/null | cut -d= -f2-) \
 	 npx tsx tests/smoke/smoke-intent-mode.ts
 
 .PHONY: smoke-review
 smoke-review: ## 复习态 review 模式 e2e（验证 bio 注入 + 时间戳 + inline app）
-	@PORT=$${PORT:-3002} \
+	@PORT=$${PORT:-3101} \
 	 SMOKE_BYPASS_TOKEN=$$(grep -E '^SMOKE_BYPASS_TOKEN=' .env 2>/dev/null | cut -d= -f2-) \
 	 npx tsx tests/smoke/smoke-review-mode.ts
 
 .PHONY: smoke-in-class
 smoke-in-class: ## 课堂同桌 in-class 模式 e2e（验证 recentFocus + Skill chip + bio）
-	@PORT=$${PORT:-3002} \
+	@PORT=$${PORT:-3101} \
 	 SMOKE_BYPASS_TOKEN=$$(grep -E '^SMOKE_BYPASS_TOKEN=' .env 2>/dev/null | cut -d= -f2-) \
 	 npx tsx tests/smoke/smoke-in-class-mode.ts
 
 .PHONY: smoke-shared
 smoke-shared: ## 分享态 shared 模式 e2e（隐私铁律：不出时间戳/不出 marker/不注入访客画像）
-	@PORT=$${PORT:-3002} \
+	@PORT=$${PORT:-3101} \
 	 SMOKE_BYPASS_TOKEN=$$(grep -E '^SMOKE_BYPASS_TOKEN=' .env 2>/dev/null | cut -d= -f2-) \
 	 npx tsx tests/smoke/smoke-shared-mode.ts
 
@@ -81,7 +81,7 @@ smoke-all: ## 跑全部 4 个 mode 的 e2e smoke（goal + review + in-class + sh
 
 .PHONY: ttft
 ttft: ## 测首 token 延迟（4 mode × N=5）—— 优化任何 prompt / smoothStream / provider 后必跑
-	@PORT=$${PORT:-3002} N=$${N:-5} \
+	@PORT=$${PORT:-3101} N=$${N:-5} \
 	 npx tsx scripts/measure-ttft.ts
 
 # === Eval Harness ===

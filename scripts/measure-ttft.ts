@@ -12,8 +12,8 @@
  *   - 输出 p50 / p95 / mean / min / max + 每次明细
  *
  * Usage:
- *   make ttft           # 默认本地 3002 + N=5
- *   PORT=3002 N=10 npx tsx scripts/measure-ttft.ts
+ *   make ttft           # 默认本地 3101 + N=5
+ *   PORT=3101 N=10 npx tsx scripts/measure-ttft.ts
  *
  * 不测：
  *   - 总 token 速度（这个由模型决定，不是产品层能优化的）
@@ -24,7 +24,7 @@
 
 import * as fs from 'node:fs';
 
-const PORT = process.env.PORT || '3002';
+const PORT = process.env.PORT || '3101';
 const BASE = `http://localhost:${PORT}`;
 const N = Number(process.env.N || '5');
 const BYPASS = (() => {

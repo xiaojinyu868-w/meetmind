@@ -6,7 +6,7 @@
  * 这里只承担：HTTP 流式请求、SSE 解析、429 重试、空回复重试、断言运行。
  */
 
-const PORT = process.env.PORT || '3002';
+const PORT = process.env.PORT || '3101';
 export const SMOKE_BASE = `http://localhost:${PORT}`;
 export const SMOKE_BYPASS_TOKEN = process.env.SMOKE_BYPASS_TOKEN || '';
 
