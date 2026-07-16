@@ -64,6 +64,8 @@ export interface SourceProvenance {
 
 export interface SourceIngestItem {
   id: string;
+  /** 对应的服务端 WorkspaceCapture；用于按需读取跨设备课堂证据。 */
+  workspaceCaptureId?: string;
   sourceKey?: string;
   type: SourceIngestType;
   role: SourceIngestRole;
@@ -81,6 +83,8 @@ export interface SourceIngestItem {
   sessionId?: string;
   durationMs?: number;
   reviewable?: boolean;
+  /** capture 列表已确认存在完整证据，首次打开时可按需恢复到 IndexedDB。 */
+  evidenceAvailable?: boolean;
   /** B站等视频嵌入播放地址 */
   embedUrl?: string;
   /** 视频来源平台 (bilibili / youtube 等) */

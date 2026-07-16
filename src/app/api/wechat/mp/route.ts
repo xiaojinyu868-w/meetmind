@@ -19,6 +19,10 @@ import { resolveBilibiliUrl, fetchViewMeta } from '@/lib/services/bilibili-impor
 import { parseVideoLink } from '@/lib/utils/video-link';
 import { createLogger } from '@/lib/logger';
 import { buildSourceProvenance } from '@/lib/capture/source-provenance';
+import {
+  syncWorkspaceCaptureEvidence,
+  toLightweightEvidenceMetadata,
+} from '@/lib/services/workspace-evidence-service';
 const log = createLogger('wechat/mp');
 
 
@@ -208,40 +212,61 @@ async function triggerVideoImportPipeline(
     // 回写到 workspaceCapture
     const capture = await prisma.workspaceCapture.findFirst({ where: { sourceKey } });
     if (capture) {
-      const existingMeta = capture.metadataJson ? JSON.parse(capture.metadataJson) : {};
+      let existingMeta: Record<string, unknown> = {};
+      try {
+        existingMeta = capture.metadataJson ? JSON.parse(capture.metadataJson) : {};
+      } catch {
+        existingMeta = {};
+      }
       // 生成 sessionId 供前端直接进入复习态（不必再次调用 /api/video/import）
       const videoSessionId = existingMeta.sessionId || `video-import-${capture.id}-${Date.now()}`;
+      const fullMetadata = {
+        ...existingMeta,
+        sessionId: videoSessionId,
+        videoImported: true,
+        audioUrl: source.audioUrl,
+        sourceMode: payload.sourceMode || source.sourceMode,
+        importMode: payload.mode,
+        segmentCount: segments.length,
+        transcriptSegments: segments.slice(0, 500).map((s) => ({
+          id: s.id,
+          text: s.text,
+          startMs: s.startMs,
+          endMs: s.endMs,
+        })),
+        provenance: buildSourceProvenance({
+          ingressChannel: 'wechat' as const,
+          sourceUrl: videoUrl,
+          normalizedText: fullText,
+          platformId: typeof source.provider === 'string' ? source.provider : 'bilibili',
+          platformLabel: typeof source.providerLabel === 'string' ? source.providerLabel : '哔哩哔哩',
+          extractionMethod: 'video-transcript',
+          contentState: 'complete',
+          completeness: 1,
+        }),
+      };
       await prisma.workspaceCapture.update({
         where: { id: capture.id },
         data: {
           normalizedText: fullText.slice(0, 50000),  // 防止超大
           tutorContext: fullText.slice(0, 8000),      // AI Tutor 用的上下文
           previewText: fullText.slice(0, 500),
-          metadataJson: JSON.stringify({
-            ...existingMeta,
-            sessionId: videoSessionId,
-            videoImported: true,
-            audioUrl: source.audioUrl,
-            sourceMode: payload.sourceMode || source.sourceMode,
-            importMode: payload.mode,
-            segmentCount: segments.length,
-            transcriptSegments: segments.slice(0, 500).map((s) => ({
-              id: s.id,
-              text: s.text,
-              startMs: s.startMs,
-              endMs: s.endMs,
-            })),
-            provenance: buildSourceProvenance({
-              ingressChannel: 'wechat',
-              sourceUrl: videoUrl,
-              normalizedText: fullText,
-              platformId: typeof source.provider === 'string' ? source.provider : 'bilibili',
-              platformLabel: typeof source.providerLabel === 'string' ? source.providerLabel : '哔哩哔哩',
-              extractionMethod: 'video-transcript',
-              contentState: 'complete',
-              completeness: 1,
-            }),
-          }),
+          metadataJson: JSON.stringify(fullMetadata),
+        },
+      });
+
+      const evidenceAvailable = await syncWorkspaceCaptureEvidence({
+        captureId: capture.id,
+        metadata: fullMetadata,
+        normalizedText: fullText.slice(0, 50000),
+      });
+      await prisma.workspaceCapture.update({
+        where: { id: capture.id },
+        data: {
+          metadataJson: JSON.stringify(toLightweightEvidenceMetadata({
+            ...fullMetadata,
+            ...(evidenceAvailable ? { evidenceAvailable: true } : {}),
+          })),
         },
       });
 

@@ -37,7 +37,7 @@
 | **改 SharedAgent / 分享 Agent / 裂变** | `roadmap/v3.0-virality-agent.md`（北极星）→ `src/app/api/share/DOMAIN.md` → `src/app/share/DOMAIN.md` → `src/app/me/shares/`（A 管理面）→ `src/components/share/DOMAIN.md` → `src/lib/services/share-agent-service.ts`。**v3.0 闭环 5 个支点**：(1) 创建 `OctoCrystalDispatcher` (2) 落地页 `SharedAgentLanding` + `ArtifactRender` 真渲染产物 (3) 分享态对话 `mode='shared'` (4) 领取 `claimSharedAgent` → `WorkspaceCapture(sourceType='shared-agent')` 在 B 工作台点击跳回 `/share/[token]` (5) 管理 `MyShareList` + `DELETE /api/share/[token]`（撤销不影响已领取副本）|
 | **改文章 / 网页原文接入** | `src/app/api/article/`（无 DOMAIN.md）→ `src/lib/services/web-article-extract-service.ts` + `jina-reader-service.ts`；`.env.example` 配 `FIRECRAWL_API_KEY`（首选），`OPENCLAW_GATEWAY_URL` 已 **deprecated**（见 `openclaw/README.md`，与 MeetMind 解耦的 AI Agent Gateway，现仅 fallback） |
 | **改微信公众号 / 微信端捕获** | `src/app/api/wechat/`（bind / callback / mp / capture/[token]，无 DOMAIN.md）→ 6 个 `src/lib/services/wechat-*-service.ts`（auth / inbox / media / mp / voice-utils / web-session）→ `src/components/WechatBindForm.tsx`；`.env.example` 配 `WECHAT_APP_ID/SECRET` + `WECHAT_MP_TOKEN` |
-| **改跨设备同步** | `roadmap/v2.1-cross-browser-sync-gap.md`（**已确认架构缺口**：浏览器 A 录课，B 看到卡片但点开无转录/锚点/highlight。根因=服务端只存汇总文本不存分段 + 客户端拉回不回填 IndexedDB）→ `src/lib/services/backfill-captures-to-indexeddb.ts` + `upload-recording-audio.ts` + `src/hooks/useWorkspaceContextLoader.ts` |
+| **改跨设备同步** | `roadmap/v2.1-cross-browser-sync-gap.md` → `src/lib/services/workspace-evidence-service.ts`（服务端正规化）+ `workspace-evidence-client.ts`（按课堂懒拉）+ `backfill-captures-to-indexeddb.ts`（IndexedDB 回填）+ `upload-recording-audio.ts`（原声上云） |
 | **改用户面文案** | `src/lib/ui/copy.ts`（**唯一真相源**——不要把字符串散落到组件里） |
 | **改状态管理** | `src/stores/DOMAIN.md` → 了解哪些状态已迁移到 store |
 | **改类型定义** | `src/types/DOMAIN.md` → `src/types/index.ts` |
@@ -104,7 +104,7 @@ make eval-ci            # CI 完整流程：unit + asr + tutor + guard
 
 **数据库**
 ```bash
-make db-push      # 同步 Prisma schema 到 SQLite
+make db-push      # 同步 Prisma schema 到 SQLite + 生成 Prisma Client
 make db-studio    # 打开 Prisma Studio
 ```
 
@@ -336,13 +336,15 @@ ASR 链路（`src/lib/services/asr/`）：
 - **AEC/NS/AGC**：`buildAudioConstraints` 是 getUserMedia 的唯一真相源，env 可覆盖
 - **说话人分离**（M14.6+）：双引擎可选——DashScope `qwen3-asr-flash-realtime`（高精度，无说话人分离）+ 腾讯云 `16k_zh_en_speaker`（实时声纹聚类，支持 10 人）。`server.js` 两个独立 WebSocket proxy（`/api/asr-stream` + `/api/asr-stream-speaker`），speaker proxy 做 HMAC-SHA1 签名 + 协议翻译（腾讯云格式→DashScope 兼容格式）。`DashScopeASRClient` 通过 `speakerDiarization` 选项切换 WS URL。`Recorder.tsx` 录音中无感切换（并行连接→ready 后交接 asrClientRef→异步关旧 client）。课后 diarization（`diarization-service.ts`）在已有 speakerId 时跳过（避免两套引擎编号混用）。`transcript-format.ts` 的 `formatTranscriptWithSpeakers` 把 speakerId 转成 `[说话人N]` 标记注入 fullTranscript，用于 in-class + review 两种 mode 的 AI 上下文。
 
-### 3.9 跨设备同步现状与缺口（v2.1 进行中）
+### 3.9 跨设备课堂证据（v2.1 主链路已闭合）
 
 详见 `roadmap/v2.1-cross-browser-sync-gap.md`（2026-04-25 确认的架构缺口）。
 
 - **已修体验断裂**：新录音和登录迁移都会把 `sessionId`、转录分段 / 说话人、困惑点、课堂摘要、精选片段、个人笔记写入可恢复包；`useWorkspaceContextLoader → backfillCapturesToIndexedDB` 按 session 逐类补回 IndexedDB，不覆盖本机已有编辑。旧 v1 capture 兼容 `localSessionId + normalizedText`，至少不再恢复为空课堂。
-- **音频**：`upload-recording-audio.ts` 在登录态后台上传 Blob，成功后将服务端 `mediaUrl` 回写 Workspace capture 与本地 session；失败保留本地原声，后续仍需补自动重试队列。
-- **仍有规模化缺口**：portable bundle 仍位于 capture metadata，`/api/workspace/current` 最多返回 80 条时可能携带较大 JSON；正规化的 `WorkspaceTranscriptSegment` / `WorkspaceAnchor` / `WorkspaceClassSummary` / `WorkspaceHighlight` 表和按课堂 lazy 拉取仍是最终架构。
+- **服务端证据**：`WorkspaceTranscriptSegment` 正规化高频分段；`WorkspaceCaptureArtifact` 按 kind 保存锚点/摘要/精选片段/笔记。写 capture 时先落证据，再把 metadata 收敛为 `evidenceAvailable` 轻索引。
+- **列表与按需读取**：`/api/workspace/current` 不再携带大证据 JSON；用户在新设备首次打开课堂时，`/api/workspace/captures/[captureId]/evidence` 才返回完整证据，随后回填 IndexedDB。旧 metadata bundle 仍可读。
+- **原声**：登录态后台上传 Blob，成功后将 `mediaUrl` 绑定 capture 与本地 session；进入课堂时 `retry-pending-recording-uploads.ts` 静默补传少量失败项。
+- **恢复原则**：不覆盖当前设备已有转录或个人编辑；音频与视频保留各自会话身份，避免跨端视频误进音频复习态。
 
 ### 3.10 内容接入扩展（M12 文章 + 微信端 + OpenClaw）
 

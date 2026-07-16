@@ -82,6 +82,13 @@ export interface BackfillCandidate {
   sessionId: string;
   title: string;
   mediaUrl?: string;
+  sourceType: 'recording' | 'video-link' | 'video-file';
+  mimeType: string;
+  videoUrl?: string;
+  videoEmbedUrl?: string;
+  videoProvider?: string;
+  thumbnailUrl?: string;
+  importSourceMode?: 'bili-native' | 'bili-subtitle' | 'yt-dlp' | 'direct';
   durationMs: number;
   occurredAt: string;
   segments: BackfillSegment[];
@@ -262,10 +269,26 @@ export function extractBackfillCandidate(
   }
   if (segments.length === 0) return null;
 
+  const isVideo = capture.contentType === 'video';
+  const rawSourceMode = optionalString(meta.sourceMode) || optionalString(meta.importSourceMode);
+  const importSourceMode = rawSourceMode === 'bili-native'
+    || rawSourceMode === 'bili-subtitle'
+    || rawSourceMode === 'yt-dlp'
+    || rawSourceMode === 'direct'
+    ? rawSourceMode
+    : undefined;
+
   return {
     sessionId,
     title: capture.title || '课堂录音',
     mediaUrl: capture.mediaUrl || undefined,
+    sourceType: isVideo ? (capture.sourceUrl ? 'video-link' : 'video-file') : 'recording',
+    mimeType: isVideo ? (capture.sourceUrl ? 'video/link' : 'video/mp4') : 'audio/webm',
+    videoUrl: isVideo ? capture.sourceUrl || optionalString(meta.originalUrl) : undefined,
+    videoEmbedUrl: isVideo ? optionalString(meta.embedUrl) : undefined,
+    videoProvider: isVideo ? optionalString(meta.videoProvider) || optionalString(meta.provider) : undefined,
+    thumbnailUrl: isVideo ? optionalString(meta.thumbnailUrl) : undefined,
+    importSourceMode,
     durationMs,
     occurredAt: capture.occurredAt || capture.createdAt,
     segments,
@@ -353,15 +376,36 @@ export async function backfillCapturesToIndexedDB(
         await db.audioSessions.add({
           sessionId: cand.sessionId,
           userId,
-          mimeType: 'audio/webm',
+          mimeType: cand.mimeType,
           duration: cand.durationMs,
           topic: cand.title,
-          sourceType: 'recording',
+          sourceType: cand.sourceType,
           mediaUrl: cand.mediaUrl,
+          videoUrl: cand.videoUrl,
+          videoEmbedUrl: cand.videoEmbedUrl,
+          videoProvider: cand.videoProvider,
+          thumbnailUrl: cand.thumbnailUrl,
+          importSourceMode: cand.importSourceMode,
           transcriptionStatus: 'completed',
           transcriptionUpdatedAt: new Date(),
           status: 'completed',
           createdAt: new Date(cand.occurredAt),
+          updatedAt: new Date(),
+        });
+      } else if (existing.id && (
+        (!existing.mediaUrl && cand.mediaUrl)
+        || (cand.sourceType !== 'recording' && existing.sourceType !== cand.sourceType)
+      )) {
+        // 修复旧版回填留下的普通录音占位：视频必须恢复视频身份，否则会误进音频复习态。
+        await db.audioSessions.update(existing.id, {
+          mediaUrl: existing.mediaUrl || cand.mediaUrl,
+          sourceType: cand.sourceType,
+          mimeType: cand.mimeType,
+          videoUrl: cand.videoUrl,
+          videoEmbedUrl: cand.videoEmbedUrl,
+          videoProvider: cand.videoProvider,
+          thumbnailUrl: cand.thumbnailUrl,
+          importSourceMode: cand.importSourceMode,
           updatedAt: new Date(),
         });
       }

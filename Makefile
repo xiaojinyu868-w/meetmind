@@ -128,6 +128,7 @@ clean-logs-dry: ## 预览清理效果（不实际修改）
 .PHONY: db-push
 db-push: ## 同步 Prisma schema 到数据库
 	npx prisma db push
+	npx prisma generate
 
 .PHONY: db-studio
 db-studio: ## 打开 Prisma Studio

@@ -62,6 +62,8 @@ api/route.ts → services → lib/utils, lib/db, lib/config
 | `workspace-context-service.ts` | 838 | Capture 收集 + Ingest 处理 + 状态管理 |
 | `workspace-context-types.ts` | 161 | 类型定义 + 纯工具函数 + 微信 helper |
 | `backfill-captures-to-indexeddb.ts` | ~390 | 跨设备下行恢复：按 sessionId 将服务端课堂转录、说话人、困惑点、摘要、精选片段与个人笔记逐类补回 IndexedDB；不覆盖本机已有编辑，失败项可重试 |
+| `workspace-evidence-service.ts` | ~320 | 课堂证据服务端正规化：转录分段落表，低频产物按 kind 存储；capture 列表仅返回轻量索引，兼容旧 metadata bundle |
+| `workspace-evidence-client.ts` | ~120 | 用户首次在新设备打开课堂时懒拉完整证据，合并并发请求并复用 backfill 管线写回 IndexedDB |
 | `upload-recording-audio.ts` | ~90 | 登录态录音后台持久化：把本地 Blob 上传为跨设备 mediaUrl，并回写 IndexedDB / Workspace capture |
 | `workspace-audio-sync-service.ts` | ~70 | 服务端按 userId + sessionId 把已上传原声绑定回正确 Workspace capture，不依赖前端保留 sourceKey |
 | `retry-pending-recording-uploads.ts` | ~90 | 进入课堂时静默补传仍只有本地 Blob 的已完成录音；每次顺序处理少量，成功去重、失败保留后续重试 |

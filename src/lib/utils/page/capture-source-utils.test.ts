@@ -57,4 +57,50 @@ describe('capture provenance restoration', () => {
     });
     expect(item.provenance?.contentState).toBe('failed');
   });
+
+  it('keeps only the server capture pointer needed for lazy classroom evidence', () => {
+    const item = buildWorkspaceCaptureSourceItem({
+      id: 'capture-classroom',
+      sourceKey: 'live:classroom',
+      sourceType: 'live-audio',
+      status: 'active',
+      role: 'primary',
+      contentType: 'audio',
+      title: '量子力学课堂',
+      previewText: '今天讨论波函数。',
+      normalizedText: '今天讨论波函数。',
+      mediaUrl: 'https://cdn.example.com/class.webm',
+      createdAt: '2026-07-16T08:00:00.000Z',
+      metadata: {
+        sessionId: 'session-classroom',
+        evidenceAvailable: true,
+      },
+    });
+
+    expect(item).toMatchObject({
+      workspaceCaptureId: 'capture-classroom',
+      sessionId: 'session-classroom',
+      evidenceAvailable: true,
+      reviewable: true,
+    });
+    expect(item.serverTranscriptSegments).toBeUndefined();
+  });
+
+  it('keeps old localSessionId captures openable after background backfill', () => {
+    const item = buildWorkspaceCaptureSourceItem({
+      id: 'legacy-capture',
+      sourceKey: 'legacy:classroom',
+      sourceType: 'recording',
+      status: 'active',
+      role: 'primary',
+      contentType: 'audio',
+      title: '旧课堂',
+      previewText: '旧课堂转录',
+      normalizedText: '旧课堂转录',
+      createdAt: '2026-07-16T08:00:00.000Z',
+      metadata: { localSessionId: 'legacy-session' },
+    });
+
+    expect(item.sessionId).toBe('legacy-session');
+  });
 });

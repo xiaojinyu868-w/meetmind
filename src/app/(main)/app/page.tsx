@@ -21,6 +21,7 @@ import { memoryService, type ClassTimeline } from '@/lib/services/memory-service
 
 import { useAuth } from '@/lib/hooks/useAuth';
 import { runMemoryMigration } from '@/lib/services/memory-migration';
+import { fetchAndBackfillWorkspaceEvidence } from '@/lib/services/workspace-evidence-client';
 import { ANONYMOUS_USER_ID, saveAudioSession, updateSessionStatus, updateSessionTopic, getPreference } from '@/lib/db';
 
 import { buildSelectedCollectionContextText, getCollectionContextTypeLabel } from '@/lib/capture/collection-context';
@@ -870,7 +871,46 @@ function StudentAppContent({
       }
     }
 
-    // 路径 B（新）：有服务端 transcriptSegments → 直接从服务端数据恢复（不必重新转写）
+    // 路径 B：新设备首次打开时才拉完整课堂证据。首页/收集列表保持轻量，
+    // 拉回后复用 IndexedDB 恢复链路，后续打开不再依赖网络。
+    if (
+      item.reviewable
+      && item.evidenceAvailable
+      && item.workspaceCaptureId
+      && isAuthenticated
+      && accessToken
+      && user?.id
+    ) {
+      try {
+        const evidence = await fetchAndBackfillWorkspaceEvidence({
+          captureId: item.workspaceCaptureId,
+          accessToken,
+          userId: user.id,
+        });
+        item = {
+          ...item,
+          sessionId: evidence.sessionId,
+          mediaUrl: evidence.mediaUrl || item.mediaUrl,
+          durationMs: evidence.durationMs || item.durationMs,
+          serverTranscriptSegments: evidence.segments,
+        };
+        setSelectedReviewItem(item);
+        const restored = await restoreReviewSession(evidence.sessionId, {
+          reviewTab: 'timeline',
+          videoWorkspaceTab: 'chat',
+          currentTime: 0,
+          showTranscriptBar: false,
+        });
+        if (restored) {
+          finishReviewRestore(item);
+          return;
+        }
+      } catch (evidenceError) {
+        console.error('跨设备课堂证据恢复失败，将继续尝试兼容路径:', evidenceError);
+      }
+    }
+
+    // 路径 C（旧客户端兼容）：列表仍内嵌 transcriptSegments 时直接恢复。
     if (item.reviewable && item.serverTranscriptSegments && item.serverTranscriptSegments.length > 0) {
       try {
         const restoredFromServer = await restoreFromServerTranscript(item);
@@ -883,7 +923,7 @@ function StudentAppContent({
       }
     }
 
-    // 路径 C：video + 有 URL → 重新导入（即使有 sessionId，如果 IndexedDB 和服务端都没转录数据，需要重新导入）
+    // 路径 D：video + 有 URL → 重新导入（即使有 sessionId，如果 IndexedDB 和服务端都没转录数据，需要重新导入）
     // 这修复了跨设备同步时"有 sessionId 但本机 IndexedDB 没有转录"导致时间轴为空的问题
     if (item.type === 'video' && item.attachmentUrl) {
       const imported = await importVideoLinkRef.current(item.attachmentUrl, {
@@ -900,7 +940,7 @@ function StudentAppContent({
       return;
     }
 
-    // 路径 D：audio 类型有 mediaUrl（如微信语音、App 内录音），
+    // 路径 E：audio 类型有 mediaUrl（如微信语音、App 内录音），
     // 即使前面的恢复路径都跳过了，也应该直接进入 review 模式播放。
     if (item.type === 'audio' && item.mediaUrl) {
       // 进入复习态前清理上一次录音/视频复习留下的媒体残留，避免串台：
@@ -978,7 +1018,7 @@ function StudentAppContent({
     if (isMobile) {
       setMobileSubPage('ai-chat');
     }
-  }, [captureEditorActions, clearSummary, clearTopics, handleViewModeChange, isMobile, restoreFromServerTranscript, restoreReviewFromCollectionFallback, restoreReviewSession, sessionActions]);
+  }, [accessToken, captureEditorActions, clearSummary, clearTopics, handleViewModeChange, isAuthenticated, isMobile, restoreFromServerTranscript, restoreReviewFromCollectionFallback, restoreReviewSession, sessionActions, user?.id]);
 
   // ── Transcript Handlers Hook（转录更新/错误/增强/文本编辑）──────
   const {

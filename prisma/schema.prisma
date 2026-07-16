@@ -135,6 +135,8 @@ model WorkspaceCapture {
   workspace Workspace       @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   user      User?           @relation(fields: [userId], references: [id], onDelete: SetNull)
   echoes    WorkspaceEcho[]
+  transcriptSegments WorkspaceTranscriptSegment[]
+  artifacts          WorkspaceCaptureArtifact[]
 
   @@index([workspaceId])
   @@index([workspaceId, status])
@@ -143,6 +145,48 @@ model WorkspaceCapture {
   @@index([role])
   @@index([contentType])
   @@index([createdAt])
+}
+
+/// 课堂转录是跨设备复习的高频证据，按段正规化存储并支持按 capture/session 懒加载。
+model WorkspaceTranscriptSegment {
+  id         String   @id @default(cuid())
+  captureId  String
+  sessionId  String
+  segmentKey String
+  position   Int
+  startMs    Int
+  endMs      Int
+  text       String
+  speakerId  String?
+  confidence Float?
+  isFinal    Boolean  @default(true)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  capture WorkspaceCapture @relation(fields: [captureId], references: [id], onDelete: Cascade)
+
+  @@unique([captureId, segmentKey])
+  @@index([captureId, position])
+  @@index([sessionId])
+}
+
+/// 低频且结构差异较大的课堂产物（锚点/摘要/精选片段/笔记）独立于 capture 列表存储。
+/// payloadJson 保留各自领域契约；kind + artifactKey 支持按类检索与幂等替换。
+model WorkspaceCaptureArtifact {
+  id          String   @id @default(cuid())
+  captureId   String
+  sessionId   String
+  kind        String
+  artifactKey String
+  payloadJson String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  capture WorkspaceCapture @relation(fields: [captureId], references: [id], onDelete: Cascade)
+
+  @@unique([captureId, kind, artifactKey])
+  @@index([captureId, kind])
+  @@index([sessionId])
 }
 
 model WorkspaceEcho {

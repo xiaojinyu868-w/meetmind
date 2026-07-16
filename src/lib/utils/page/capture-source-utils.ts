@@ -336,6 +336,7 @@ export function buildWorkspaceCaptureSourceItem(item: WorkspaceCaptureMessage): 
 
   return {
     id: `workspace-${item.id}`,
+    workspaceCaptureId: item.id,
     sourceKey: item.sourceKey,
     type,
     role: inferWorkspaceCaptureRole(item),
@@ -357,7 +358,9 @@ export function buildWorkspaceCaptureSourceItem(item: WorkspaceCaptureMessage): 
     sessionId:
       metadata && typeof metadata.sessionId === 'string'
         ? metadata.sessionId
-        : undefined,
+        : metadata && typeof metadata.localSessionId === 'string'
+          ? metadata.localSessionId
+          : undefined,
     durationMs:
       durationSec != null
         ? Math.round(durationSec * 1000)
@@ -365,6 +368,7 @@ export function buildWorkspaceCaptureSourceItem(item: WorkspaceCaptureMessage): 
           ? metadata.duration
           : undefined,
     reviewable: type === 'audio' || type === 'video',
+    evidenceAvailable: metadata?.evidenceAvailable === true,
     embedUrl,
     videoProvider,
     videoImported,

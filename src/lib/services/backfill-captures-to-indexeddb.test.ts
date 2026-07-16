@@ -114,6 +114,32 @@ describe('extractBackfillCandidate', () => {
     const c = cap({ metadata: { sessionId: 'sess-1', transcriptSegments: segs } });
     expect(extractBackfillCandidate(c)!.durationMs).toBe(4000);
   });
+
+  it('跨设备视频保留视频会话身份与播放元数据', () => {
+    const c = cap({
+      contentType: 'video',
+      sourceUrl: 'https://www.bilibili.com/video/BV1example',
+      mediaUrl: 'https://cdn.example.com/audio.m4a',
+      metadata: {
+        sessionId: 'video-session',
+        transcriptSegments: segs,
+        embedUrl: 'https://player.bilibili.com/player.html?bvid=BV1example',
+        videoProvider: 'bilibili',
+        thumbnailUrl: 'https://img.example.com/cover.jpg',
+        sourceMode: 'bili-native',
+      },
+    });
+
+    expect(extractBackfillCandidate(c)).toMatchObject({
+      sourceType: 'video-link',
+      mimeType: 'video/link',
+      videoUrl: c.sourceUrl,
+      videoEmbedUrl: 'https://player.bilibili.com/player.html?bvid=BV1example',
+      videoProvider: 'bilibili',
+      thumbnailUrl: 'https://img.example.com/cover.jpg',
+      importSourceMode: 'bili-native',
+    });
+  });
 });
 
 describe('pickBackfillable', () => {

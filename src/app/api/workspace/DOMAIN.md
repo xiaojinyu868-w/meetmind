@@ -16,6 +16,7 @@ workspace route.ts ❌ 不能调用 api/ 下其他 routes
 | `/api/workspace/current` | GET | 获取当前用户的工作空间元信息 |
 | `/api/workspace/local-migration` | POST | 把本地 IndexedDB 学习历史归属到当前账号工作区 |
 | `/api/workspace/captures` | GET | 分页获取 captures 列表（支持 filter） |
+| `/api/workspace/captures/[captureId]/evidence` | GET | 按课堂懒加载正规化转录、锚点、摘要、精选片段与笔记；仅工作区成员可读 |
 | `/api/workspace/captures/stats` | GET | 获取 captures 统计（总数/时长/类型分布） |
 | `/api/workspace/search` | POST | AI 语义检索（SSE 流式返回） |
 | `/api/workspace/upload-audio` | POST | 登录态持久化录音原声，并按 sessionId 自动绑定对应 capture |
@@ -29,6 +30,7 @@ src/app/api/workspace/
 ├── current/route.ts              # 45行
 ├── local-migration/route.ts      # 本地学习历史 → Workspace 归属迁移
 ├── captures/route.ts             # 187行
+├── captures/[captureId]/evidence/route.ts # 跨设备课堂证据按需读取
 ├── captures/stats/route.ts       # 128行
 ├── search/route.ts               # 117行
 └── echoes/
@@ -42,6 +44,11 @@ src/app/api/workspace/
 - `title`, `mediaUrl`, `attachmentUrl`, `previewUrl`
 - `durationMs`, `segmentCount`, `status`
 - `addedAt`, `sourceKey`, `sourceType`
+
+课堂列表的 `metadata` 只保留 `sessionId`、视频播放信息与 `evidenceAvailable` 等轻量索引。
+完整转录写入 `WorkspaceTranscriptSegment`，锚点/摘要/精选片段/笔记写入
+`WorkspaceCaptureArtifact`，由 evidence 路由在用户打开课堂时读取。旧版仍内嵌在
+`metadataJson` 的证据会在输出列表时被剥离，并可由 evidence 路由兼容读取。
 
 ## Search 检索
 

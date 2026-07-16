@@ -32,6 +32,10 @@ import {
   canonicalizeSourceUrl,
   readSourceProvenance,
 } from '@/lib/capture/source-provenance';
+import {
+  syncWorkspaceCaptureEvidence,
+  toLightweightEvidenceMetadata,
+} from '@/lib/services/workspace-evidence-service';
 import type { SourceIngressChannel } from '@/types/page-types';
 
 import {
@@ -291,6 +295,7 @@ function toCaptureSummary(item: {
   createdAt: Date;
   metadataJson: string | null;
 }): WorkspaceCaptureSummary {
+  const isClassroomMedia = item.contentType === 'audio' || item.contentType === 'video';
   return {
     id: item.id,
     sourceKey: item.sourceKey,
@@ -300,13 +305,16 @@ function toCaptureSummary(item: {
     contentType: item.contentType,
     title: item.title,
     previewText: item.previewText || item.title,
-    normalizedText: item.normalizedText,
+    // 课堂正文由 evidence endpoint 按需读取；列表只需足够生成预览/检索引用的短文本。
+    normalizedText: isClassroomMedia && item.normalizedText
+      ? compactText(item.normalizedText, 3200)
+      : item.normalizedText,
     sourceUrl: item.sourceUrl,
     mediaUrl: item.mediaUrl,
     tutorContext: item.tutorContext,
     occurredAt: item.occurredAt?.toISOString() || null,
     createdAt: item.createdAt.toISOString(),
-    metadata: parseJsonObject(item.metadataJson),
+    metadata: toLightweightEvidenceMetadata(parseJsonObject(item.metadataJson)),
   };
 }
 
@@ -381,16 +389,17 @@ export const workspaceContextService = {
       contentState: explicitProvenance?.contentState,
       completeness: explicitProvenance?.completeness,
     });
-    const metadataJson = JSON.stringify({
+    const fullMetadata = {
       ...existingMetadata,
       ...(input.metadata || {}),
       provenance: {
         ...(readSourceProvenance(existingMetadata) || {}),
         ...inferredProvenance,
       },
-    });
+    };
+    const metadataJson = JSON.stringify(fullMetadata);
 
-    const capture = await upsertWorkspaceCaptureBySourceKey({
+    let capture = await upsertWorkspaceCaptureBySourceKey({
       workspaceId: workspace.id,
       userId,
       sourceType: input.sourceType,
@@ -406,6 +415,24 @@ export const workspaceContextService = {
       tutorContext: input.tutorContext,
       occurredAt: input.occurredAt ? new Date(input.occurredAt) : null,
     });
+
+    // 大体积课堂证据不进入 capture 列表：先正规化落表，再把 metadata 收敛为轻量索引。
+    // 若正规化失败，完整 metadata 仍保留在 capture 上，下一次写入或读取仍可恢复。
+    const evidenceAvailable = await syncWorkspaceCaptureEvidence({
+      captureId: capture.id,
+      metadata: fullMetadata,
+      normalizedText: capture.normalizedText,
+    });
+    const lightweightMetadata = toLightweightEvidenceMetadata(
+      evidenceAvailable ? { ...fullMetadata, evidenceAvailable: true } : fullMetadata,
+    );
+    const lightweightMetadataJson = lightweightMetadata ? JSON.stringify(lightweightMetadata) : null;
+    if (lightweightMetadataJson !== capture.metadataJson) {
+      capture = await prisma.workspaceCapture.update({
+        where: { id: capture.id },
+        data: { metadataJson: lightweightMetadataJson },
+      });
+    }
 
     return {
       workspace,
