@@ -41,7 +41,7 @@ export async function assessWorkshopReadiness(
   "status": "ready|limited|not_ready",
   "contentKind": "lecture|discussion|reading|casual|administrative|fragment|unreliable|unknown",
   "recommendedAppKey": "cheatsheet|flashcards|quiz|mindmap|infographic|audio-overview|null",
-  "allowedAppKeys": ["最多六个真实适配的 app key"],
+  "allowedAppKeys": ["ready 时必须返回全部六个 app key；limited 时只返回当前可靠的 app key"],
   "reason": "ready|partial_learning|insufficient_content|not_learning|unreliable_transcript",
   "confidence": "high|medium|low"
 }
@@ -52,7 +52,8 @@ export async function assessWorkshopReadiness(
 - 不得因为产品有六个应用就硬选一个。recommendedAppKey 可以为 null。
 - cheatsheet 只适合原文里真实存在定义、公式、步骤、框架或可核对要点的内容，不能默认推荐，更不能擅自引入“考试、必考、老师强调”。
 - flashcards 适合可独立回忆的稳定知识；quiz 适合存在可检验命题；mindmap 适合多个主题及其关系；infographic 适合结构完整且值得视觉表达的内容；audio-overview 需要足够丰富的多段内容。
-- limited 表示材料确有学习价值但只支持一两个低风险应用；allowedAppKeys 最多 2 个。
+- ready 表示材料足以支撑完整学习加工；allowedAppKeys 必须包含全部六个应用，recommendedAppKey 只负责指出此刻最值得先做的一项。
+- limited 表示材料确有学习价值但只支持一两个低风险应用；allowedAppKeys 最多 2 个，其余能力由前端保留展示但暂不允许生成。
 - not_ready 时 recommendedAppKey 必须为 null，allowedAppKeys 必须为空。
 - 只判断材料支持什么，不推断用户学习风格或能力。
 仅输出 JSON。`;

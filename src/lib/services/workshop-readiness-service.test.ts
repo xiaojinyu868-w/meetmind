@@ -127,4 +127,29 @@ describe('workshop readiness', () => {
     expect(assessment.status).toBe('ready');
     expect(assessment.allowedAppKeys).toHaveLength(6);
   });
+
+  it('keeps every stable capability available when a ready response suggests only a subset', () => {
+    const transcript = Array.from({ length: 12 }, (_, index) => segment(
+      `第${index + 1}段完整解释定义、例子和知识关系，足以继续做不同形式的学习加工。`,
+      index * 10_000,
+      (index + 1) * 10_000,
+    ));
+    const assessment = sanitizeWorkshopReadinessAssessment({
+      status: 'ready',
+      contentKind: 'lecture',
+      recommendedAppKey: 'mindmap',
+      allowedAppKeys: ['mindmap', 'cheatsheet'],
+      confidence: 'high',
+    }, { transcript });
+
+    expect(assessment.allowedAppKeys).toEqual([
+      'cheatsheet',
+      'flashcards',
+      'quiz',
+      'mindmap',
+      'infographic',
+      'audio-overview',
+    ]);
+    expect(assessment.recommendedAppKey).toBe('mindmap');
+  });
 });

@@ -142,14 +142,15 @@ export function sanitizeWorkshopReadinessAssessment(
   }
 
   const allowedAppKeys = sanitizeAppKeys(value.allowedAppKeys);
-  const resolvedAllowed = status === 'ready' && allowedAppKeys.length === 0
-    ? fallback.allowedAppKeys
-    : allowedAppKeys;
-  const limitedAllowed = status === 'limited' ? resolvedAllowed.slice(0, 2) : resolvedAllowed;
+  // “推荐什么”与“产品能做什么”是两件事。材料已经完整时，模型只负责挑出
+  // 此刻最合适的一项，不再通过 allowedAppKeys 裁掉其余稳定能力。
+  const resolvedAllowed = status === 'ready'
+    ? ALL_WORKSHOP_APP_KEYS
+    : allowedAppKeys.slice(0, 2);
   const rawRecommendation = typeof value.recommendedAppKey === 'string' && isWorkshopAppKey(value.recommendedAppKey)
     ? value.recommendedAppKey
     : null;
-  const recommendedAppKey = rawRecommendation && limitedAllowed.includes(rawRecommendation)
+  const recommendedAppKey = rawRecommendation && resolvedAllowed.includes(rawRecommendation)
     ? rawRecommendation
     : null;
 
@@ -157,7 +158,7 @@ export function sanitizeWorkshopReadinessAssessment(
     status,
     contentKind,
     recommendedAppKey,
-    allowedAppKeys: limitedAllowed,
+    allowedAppKeys: resolvedAllowed,
     reason: status === 'limited' ? 'partial_learning' : 'ready',
     confidence,
     evidence: fallback.evidence,
