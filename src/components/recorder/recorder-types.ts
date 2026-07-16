@@ -1,5 +1,6 @@
 import type { TranscriptSegment } from '@/types';
 import type { RecorderAudioSource } from '@/stores/capture-editor-store';
+import type { Ref } from 'react';
 
 export type { RecorderAudioSource };
 
@@ -11,6 +12,8 @@ export interface RecorderCallbackMeta {
 }
 
 export interface RecorderProps {
+  /** dynamic() 外壳不能接 React ref；首页按需加载时用普通 prop 传 imperative handle。 */
+  recorderRef?: Ref<RecorderHandle>;
   onRecordingStart?: (sessionId: string, meta?: { isContinuation?: boolean }) => void;
   onRecordingStop?: (audioBlob?: Blob, meta?: RecorderCallbackMeta) => void;
   onTranscriptionError?: (message: string, meta?: RecorderCallbackMeta) => void;

@@ -53,6 +53,8 @@ src/app/
 
 全局 `showAISearch` 状态名为历史兼容名，当前实际动态挂载的是 `GlobalAskPanel`：桌面与移动共用同一全屏 Ask MeetMind，不再挂旧单轮 `AISearchPanel`。
 
+主工作台首屏不静态打包录音与波形引擎：`Recorder` / `WaveformPlayer` 通过普通 ref prop 按需加载；录课按钮在组件尚未就绪时继续使用既有 `autoStartSignal` 衔接。
+
 `/app?claimedCapture=[captureId]` 是 SharedAgent 领取后的回流契约：页面切到收集流，等待对应 WorkspaceCapture 回填后滚动到卡片并短暂显示 AI 在场微光，随后清掉参数，避免刷新时重复播放落点反馈。
 
 ### `src/app/(main)/app/matrix/[appKey]/page.tsx` — 学习应用独立页

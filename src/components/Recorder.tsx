@@ -36,6 +36,7 @@ import { COPY } from '@/lib/ui/copy';
 const PCM_PROCESSOR_BUFFER_SIZE = 2048;
 
 export const Recorder = forwardRef<RecorderHandle, RecorderProps>(function Recorder({
+  recorderRef,
   onRecordingStart,
   onRecordingStop,
   onTranscriptionError,
@@ -1279,7 +1280,7 @@ export const Recorder = forwardRef<RecorderHandle, RecorderProps>(function Recor
     await startRecording();
   };
 
-  useImperativeHandle(ref, () => ({
+  useImperativeHandle(recorderRef ?? ref, () => ({
     startRecording,
     stopRecording,
     pauseRecording,

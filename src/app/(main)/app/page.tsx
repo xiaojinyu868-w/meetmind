@@ -80,12 +80,13 @@ import { COPY } from '@/lib/ui/copy';
 import { useTopics, useSummary } from '@/hooks/data';
 import { useLessonDigest } from '@/hooks/useLessonDigest';
 
-// WaveformPlayer uses forwardRef and needs static import for ref support.
-import { WaveformPlayer, type WaveformPlayerRef, type WaveformAnchor } from '@/components/WaveformPlayer';
-import { Recorder, type RecorderHandle } from '@/components/Recorder';
+import type { WaveformPlayerRef, WaveformAnchor } from '@/components/WaveformPlayer';
+import type { RecorderHandle } from '@/components/Recorder';
 import { useClassCheck } from '@/hooks/useClassCheck';
 import type { ClassCheckHighlight } from '@/app/api/class-check/plan/route';
 import type { VideoInsightItem } from '@/components/VideoInsightTimeline';
+const WaveformPlayer = dynamic(() => import('@/components/WaveformPlayer').then(m => ({ default: m.WaveformPlayer })), { ssr: false });
+const Recorder = dynamic(() => import('@/components/Recorder').then(m => ({ default: m.Recorder })), { ssr: false });
 const ClassCheckOverlay = dynamic(() => import('@/components/ClassCheckOverlay').then(m => ({ default: m.ClassCheckOverlay })), { ssr: false });
 const ClassCheckToast = dynamic(() => import('@/components/ClassCheckToast').then(m => ({ default: m.ClassCheckToast })), { ssr: false });
 import { AppLoading } from '@/components/AppLoading';
@@ -1718,7 +1719,7 @@ function StudentAppContent({
                必须生成新 sessionId。若沿用旧 sessionId，saveAudioSession
                的 upsert 会把新录音合并到上一节课的 DB 行，新卡片不会出现。 */}
             <Recorder
-              ref={recorderRef}
+              recorderRef={recorderRef}
               activeSessionId={sessionId}
               continueCurrentSession={false}
               autoStartSignal={recorderAutoStartSignal}
@@ -2083,7 +2084,7 @@ function StudentAppContent({
           {/* 这些组件必须在移动端挂载，否则 recorderRef/waveformRef 为 null，所有录音/播放/导入按钮都失灵 */}
           <div className="sr-only" aria-hidden>
             <Recorder
-              ref={recorderRef}
+              recorderRef={recorderRef}
               headless
               activeSessionId={sessionId}
               continueCurrentSession={false}
@@ -2103,7 +2104,7 @@ function StudentAppContent({
           {(audioBlob || audioUrl) && dataSource !== 'demo' && (
             <div className="sr-only" aria-hidden>
               <WaveformPlayer
-                ref={waveformRef}
+                playerRef={waveformRef}
                 src={audioBlob || audioUrl || undefined}
                 anchors={anchors.map(a => ({
                   id: a.id,
@@ -2238,7 +2239,7 @@ function StudentAppContent({
              merge 到上一次课的那一行，导致课堂列表看不到新卡片。 */}
           <div className="sr-only" aria-hidden>
             <Recorder
-              ref={recorderRef}
+              recorderRef={recorderRef}
               headless
               activeSessionId={sessionId}
               continueCurrentSession={false}
@@ -2515,7 +2516,7 @@ function StudentAppContent({
               {(audioBlob || audioUrl) && (
                 <div className="hidden">
                   <WaveformPlayer
-                    ref={waveformRef}
+                    playerRef={waveformRef}
                     src={audioBlob || audioUrl || undefined}
                     anchors={anchors.map(a => ({
                       id: a.id,
