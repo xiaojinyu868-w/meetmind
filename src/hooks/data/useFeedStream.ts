@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback, useEffect, useRef } from 'react';
+import { useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import type { FeedItem } from '@/types';
 import type { LearnerProfile, LearningContextState } from '@/types/user';
 import type { WorkspaceCaptureMessage } from '@/types/page-types';
@@ -95,19 +95,26 @@ export function useFeedStream({
 }: UseFeedStreamOptions): UseFeedStreamReturn {
   const signature = buildFeedSignature(captures, learnerProfile, learningContext);
   const cacheKey = `${workspaceId}:${signature}`;
+  const immediatePreview = useMemo(
+    () => buildImmediateFeedPreview(captures, learnerProfile, learningContext),
+    [captures, learnerProfile, learningContext],
+  );
   const [items, setItems] = useState<FeedItem[]>([]);
   const [generatedAt, setGeneratedAt] = useState<string | null>(null);
+  const [restoredSignature, setRestoredSignature] = useState<string | null>(null);
   const [readyCacheKey, setReadyCacheKey] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<Error | null>(null);
   const abortRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
-    const cached = readFeedCache(workspaceId, signature);
-    setItems(filterDismissedItems(cached?.items ?? []));
+    const cached = readFeedCache(workspaceId);
+    const cachedItems = filterDismissedItems(cached?.items ?? []);
+    setItems(cachedItems.length > 0 ? cachedItems : filterDismissedItems(immediatePreview));
     setGeneratedAt(cached?.generatedAt ?? null);
+    setRestoredSignature(cached?.signature ?? null);
     setReadyCacheKey(cacheKey);
-  }, [workspaceId, signature, cacheKey]);
+  }, [workspaceId, cacheKey, immediatePreview]);
 
   const generate = useCallback(async () => {
     const hasLearningContext = Boolean(
@@ -207,6 +214,7 @@ export function useFeedStream({
       const nextGeneratedAt = new Date().toISOString();
       setItems(nextItems);
       setGeneratedAt(nextGeneratedAt);
+      setRestoredSignature(signature);
       writeFeedCache(workspaceId, {
         signature,
         items: nextItems,
@@ -220,7 +228,9 @@ export function useFeedStream({
     }
   }, [workspaceId, captures, learnerProfile, notes, accessToken, signature, learningContext]);
 
-  const isStale = !generatedAt || Date.now() - new Date(generatedAt).getTime() > FEED_CACHE_TTL_MS;
+  const isStale = restoredSignature !== signature
+    || !generatedAt
+    || Date.now() - new Date(generatedAt).getTime() > FEED_CACHE_TTL_MS;
   return {
     items,
     isLoading,
@@ -257,11 +267,76 @@ export function buildFeedSignature(
   return `${capturePart}::${goalPart}::${learningPart}`;
 }
 
-function readFeedCache(workspaceId: string, signature: string): FeedCacheEntry | null {
+/**
+ * 在网络结果返回前先呈现用户已经明确留下的学习现场。
+ * 这里只复述真实目标、学习线或最近材料，不做推断，也不伪装成外部推荐。
+ */
+export function buildImmediateFeedPreview(
+  captures: WorkspaceCaptureMessage[],
+  learnerProfile?: LearnerProfile | null,
+  learningContext?: LearningContextState,
+): FeedItem[] {
+  const activeThread = learningContext?.activeThread?.status === 'active'
+    ? learningContext.activeThread
+    : undefined;
+  if (activeThread) {
+    const body = compactPreviewText(
+      activeThread.lastSummary || activeThread.intent || activeThread.nextStep || '',
+      220,
+    );
+    if (body) {
+      return [{
+        type: 'summary',
+        title: activeThread.title,
+        body,
+        whyForYou: compactPreviewText(activeThread.nextStep || '', 120) || undefined,
+      }];
+    }
+  }
+
+  const activeGoal = learnerProfile?.goals?.find((goal) => !goal.status || goal.status === 'active');
+  if (activeGoal) {
+    const body = compactPreviewText(activeGoal.summary || '', 220);
+    if (body) {
+      return [{
+        type: 'summary',
+        title: activeGoal.title,
+        body,
+        goalLabel: activeGoal.title,
+      }];
+    }
+  }
+
+  const latestCapture = [...captures]
+    .filter((capture) => Boolean((capture.normalizedText || capture.previewText || '').trim()))
+    .sort((a, b) => {
+      const aTime = new Date(a.occurredAt || a.createdAt).getTime();
+      const bTime = new Date(b.occurredAt || b.createdAt).getTime();
+      return bTime - aTime;
+    })[0];
+  if (!latestCapture) return [];
+
+  const body = compactPreviewText(latestCapture.normalizedText || latestCapture.previewText, 220);
+  if (!body) return [];
+  return [{
+    type: 'summary',
+    title: latestCapture.title,
+    body,
+    sourceCaptureIds: [latestCapture.id],
+  }];
+}
+
+function compactPreviewText(value: string, maxLength: number): string {
+  const normalized = value.replace(/\s+/g, ' ').trim();
+  if (normalized.length <= maxLength) return normalized;
+  return `${normalized.slice(0, maxLength).trimEnd()}…`;
+}
+
+function readFeedCache(workspaceId: string): FeedCacheEntry | null {
   if (typeof window === 'undefined' || !workspaceId) return null;
   try {
     const parsed = JSON.parse(window.localStorage.getItem(`meetmind-feed-cache:${workspaceId}`) || 'null') as FeedCacheEntry | null;
-    return parsed?.signature === signature && Array.isArray(parsed.items) ? parsed : null;
+    return parsed?.signature && Array.isArray(parsed.items) ? parsed : null;
   } catch {
     return null;
   }
