@@ -97,7 +97,7 @@ components/
 | `CrossCourseFeedPanel.tsx` | ~180 | 个人上下文与目标驱动的情报面板：合并“看见自己”与真实外部信息，对用户零配置；保留上次结果并在后台刷新，失败不清空旧内容 |
 | `FeedStream.tsx` | ~420 | 今日情报列表渲染器：两段式呈现“看见自己 / 向外看看”；外部卡明确文章、论文、书籍或报告，展示作者、出版时间、来源、推荐理由与不同视角；支持反馈及外链打开 |
 | `CollectionFeedMessageBubble.tsx` | ~340 | 收集 Feed 单条消息气泡（audio/video/image/document/text 五种类型），从 page.tsx 提取 |
-| `CollectionEmptyState.tsx` | ~82 | 收集为空时引导页（录音/图片/讲义快捷入口），从 page.tsx 提取 |
+| `CollectionEmptyState.tsx` | ~30 | 收集为空时的安静心智提示；所有真实动作统一留在底部输入栏，不重复列举来源能力 |
 | `ImageUpload.tsx` | ~220 | 图片上传 |
 | `Citations.tsx` | ~140 | 引用标签 |
 | `CitationReferenceSheet.tsx` | ~260 | 引用参考弹窗 |

@@ -12,7 +12,7 @@
  */
 
 import type { ClipboardEvent, MutableRefObject } from 'react';
-import { ArrowUp, Link2, Mic, Plus } from 'lucide-react';
+import { ArrowUp, Mic, Plus } from 'lucide-react';
 import { compactText } from '@/lib/utils/page-utils';
 import { CollectionComposerContextPreview } from '@/components/CollectionComposerContextPreview';
 
@@ -181,36 +181,6 @@ export function CollectionComposerBar({
             </button>
           </div>
         </div>
-
-        {/* 快捷能力标签——让用户一眼知道能干什么 */}
-        {!composerHasText && !sourceImporting && (
-          <div className="mt-2.5 flex flex-wrap items-center justify-center gap-2">
-            <button
-              type="button"
-              onClick={onOpenLiveRecorder}
-              disabled={disableLiveRecorder}
-              className="inline-flex items-center gap-1.5 rounded-full border border-[#E8E2D5] bg-white px-3 py-1.5 text-[12px] text-[#5C5A55] transition hover:border-[#D0D0CC] hover:text-[#1C1B19] disabled:opacity-40"
-              title="备忘录式短录音——完整录一节课请到课堂 Tab"
-            >
-              <Mic size={13} strokeWidth={1.5} />
-              说一段
-            </button>
-            <button
-              type="button"
-              onClick={onUploadAll}
-              className="inline-flex items-center gap-1.5 rounded-full border border-[#E8E2D5] bg-white px-3 py-1.5 text-[12px] text-[#5C5A55] transition hover:border-[#D0D0CC] hover:text-[#1C1B19]"
-            >
-              <Plus size={13} strokeWidth={1.5} />
-              传文件
-            </button>
-            <span
-              className="inline-flex items-center gap-1.5 rounded-full border border-[#E8E2D5] bg-white px-3 py-1.5 text-[12px] text-[#5C5A55]"
-            >
-              <Link2 size={13} strokeWidth={1.5} />
-              贴链接
-            </span>
-          </div>
-        )}
       </div>
     </div>
   );

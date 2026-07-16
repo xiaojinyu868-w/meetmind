@@ -1537,12 +1537,7 @@ function StudentAppContent({
           ) : null}
 
           {collectionFeedItems.length === 0 ? (
-            <CollectionEmptyState
-              onStartRecording={openLiveRecorder}
-              onUploadAudio={() => handleSourceFileButtonClick('audio')}
-              onUploadImage={() => handleSourceFileButtonClick('all')}
-              onUploadDocument={() => handleSourceFileButtonClick('all')}
-            />
+            <CollectionEmptyState />
           ) : (
             <div className="flex flex-col gap-2.5">
               {showMobileRecorder ? (

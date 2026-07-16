@@ -136,6 +136,7 @@ export const COPY = {
 
   collection: {
     askClassmate: '问同学',
+    emptyTitle: '想到什么，就留在这里。',
     deleteMemoryWarning: '删除后，这条内容不会再进入同学的回答、后续情报和个人上下文。',
     permanentDeleteWarning: '彻底删除后，这条内容不会再进入同学的回答、后续情报和个人上下文。',
   },
