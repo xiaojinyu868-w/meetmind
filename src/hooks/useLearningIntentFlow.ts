@@ -5,6 +5,7 @@ import type {
   LearningIntentAnswer,
   LearningIntentPlan,
 } from '@/types/learning-intent';
+import type { LearningThreadEntry } from '@/types/user';
 
 interface LearningIntentContext {
   learnerContext?: string;
@@ -20,6 +21,51 @@ interface RequestLearningIntentInput extends LearningIntentContext {
 interface LearningIntentResponse {
   ok?: boolean;
   plan?: LearningIntentPlan;
+}
+
+export function createLearningThread(plan: LearningIntentPlan, query: string): LearningThreadEntry {
+  const now = new Date().toISOString();
+  return {
+    id: `thread-${crypto.randomUUID()}`,
+    title: plan.title,
+    intent: query,
+    outcome: plan.outcome,
+    depth: 'deep',
+    status: 'active',
+    nextStep: plan.checkpoints[0],
+    createdAt: now,
+    updatedAt: now,
+  };
+}
+
+export function learningThreadToIntent(thread: LearningThreadEntry): LearningIntentPlan {
+  return {
+    title: thread.title,
+    outcome: thread.outcome || thread.lastSummary || thread.intent,
+    approach: 'understand',
+    contextFocus: 'mixed',
+    checkpoints: thread.nextStep ? [thread.nextStep] : [],
+    confidence: 'high',
+  };
+}
+
+export function withConfirmedLearningIntent<T extends { global: Record<string, unknown> }>(
+  context: T,
+  plan: LearningIntentPlan,
+): T {
+  return {
+    ...context,
+    global: {
+      ...context.global,
+      depth: 'deep',
+      intent: {
+        title: plan.title,
+        outcome: plan.outcome,
+        approach: plan.approach,
+        checkpoints: plan.checkpoints,
+      },
+    },
+  };
 }
 
 export function shouldAutoStartLearningIntent(

@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import type { LearningIntentPlan } from '@/types/learning-intent';
-import { shouldAutoStartLearningIntent } from './useLearningIntentFlow';
+import {
+  shouldAutoStartLearningIntent,
+  withConfirmedLearningIntent,
+} from './useLearningIntentFlow';
 
 function createPlan(overrides: Partial<LearningIntentPlan> = {}): LearningIntentPlan {
   return {
@@ -36,5 +39,29 @@ describe('shouldAutoStartLearningIntent', () => {
 
   it('always starts after the user has resolved the ambiguity', () => {
     expect(shouldAutoStartLearningIntent(createPlan({ confidence: 'medium' }), true)).toBe(true);
+  });
+});
+
+describe('withConfirmedLearningIntent', () => {
+  it('places the resolved plan in the very first tutor request context', () => {
+    const plan = createPlan({
+      title: '学会选择统计方法',
+      outcome: '能根据研究问题与数据类型选择检验方法',
+      approach: 'practice',
+      checkpoints: ['先区分变量类型', '再判断研究问题'],
+    });
+
+    expect(withConfirmedLearningIntent({ global: { depth: 'quick' }, supportMaterials: [] }, plan)).toEqual({
+      global: {
+        depth: 'deep',
+        intent: {
+          title: '学会选择统计方法',
+          outcome: '能根据研究问题与数据类型选择检验方法',
+          approach: 'practice',
+          checkpoints: ['先区分变量类型', '再判断研究问题'],
+        },
+      },
+      supportMaterials: [],
+    });
   });
 });

@@ -10,13 +10,18 @@ import { cn } from '@/lib/utils';
 import { COPY } from '@/lib/ui/copy';
 import { useLearningContext } from '@/hooks/useLearningContext';
 import { useGlobalAskHistory } from '@/hooks/useGlobalAskHistory';
-import { shouldAutoStartLearningIntent, useLearningIntentFlow } from '@/hooks/useLearningIntentFlow';
+import {
+  createLearningThread,
+  learningThreadToIntent,
+  shouldAutoStartLearningIntent,
+  useLearningIntentFlow,
+  withConfirmedLearningIntent,
+} from '@/hooks/useLearningIntentFlow';
 import { formatLearningContextForTutor, summarizeLearningContext } from '@/lib/utils/learning-context';
 import { useSessionStore } from '@/stores/session-store';
 import { useCaptureEditorStore } from '@/stores/capture-editor-store';
 import { useCollectionStore } from '@/stores/collection-store';
 import type { LearningIntentAnswer, LearningIntentPlan } from '@/types/learning-intent';
-import type { LearningThreadEntry } from '@/types/user';
 import { OctoAvatar } from '@/components/ui/octo-avatar';
 import { LearningIntentConfirmationCard } from '@/components/LearningIntentConfirmationCard';
 import { LearningProgressMemoryCard } from '@/components/LearningProgressMemoryCard';
@@ -43,32 +48,6 @@ interface GlobalAskPanelProps {
 
 type AskDepth = 'quick' | 'deep';
 type ProgressState = { points: string[]; status: 'pending' | 'saved' | 'dismissed' };
-
-function createThread(plan: LearningIntentPlan, query: string): LearningThreadEntry {
-  const now = new Date().toISOString();
-  return {
-    id: `thread-${crypto.randomUUID()}`,
-    title: plan.title,
-    intent: query,
-    outcome: plan.outcome,
-    depth: 'deep',
-    status: 'active',
-    nextStep: plan.checkpoints[0],
-    createdAt: now,
-    updatedAt: now,
-  };
-}
-
-function threadToIntent(thread: LearningThreadEntry): LearningIntentPlan {
-  return {
-    title: thread.title,
-    outcome: thread.outcome || thread.lastSummary || thread.intent,
-    approach: 'understand',
-    contextFocus: 'mixed',
-    checkpoints: thread.nextStep ? [thread.nextStep] : [],
-    confidence: 'high',
-  };
-}
 
 export function GlobalAskPanel({
   open,
@@ -174,7 +153,7 @@ export function GlobalAskPanel({
     setDepth(restoredDepth);
     const restoredThread = activeThreadRef.current;
     if (restoredDepth === 'deep' && restoredThread?.status === 'active') {
-      setActiveIntent(threadToIntent(restoredThread));
+      setActiveIntent(learningThreadToIntent(restoredThread));
     }
   }, []);
 
@@ -222,13 +201,16 @@ export function GlobalAskPanel({
 
   const beginDeepSession = React.useCallback(async (plan: LearningIntentPlan, query: string) => {
     const finalPlan = { ...plan, questions: undefined };
+    const confirmedContext = withConfirmedLearningIntent(agentContext, finalPlan);
     setActiveIntent(finalPlan);
     setIntentPlan(null);
     setPendingQuery('');
-    await learning.setActiveThread(createThread(finalPlan, query));
-    sendMessage({ text: query });
+    await learning.setActiveThread(createLearningThread(finalPlan, query));
+    sendMessage({ text: query }, {
+      body: { mode: 'global', sessionId: sessionId || 'global-ask', context: confirmedContext, options: {} },
+    });
     fileUpload.clear();
-  }, [fileUpload, learning, sendMessage]);
+  }, [agentContext, fileUpload, learning, sendMessage, sessionId]);
 
   const prepareDeepIntent = React.useCallback(async (
     query: string,
@@ -338,7 +320,7 @@ export function GlobalAskPanel({
             setView('ask');
             setDepth('deep');
             if (learning.activeThread) {
-              setActiveIntent(threadToIntent(learning.activeThread));
+              setActiveIntent(learningThreadToIntent(learning.activeThread));
               composer.setValue(learning.activeThread.intent);
             }
           }}
@@ -404,7 +386,7 @@ export function GlobalAskPanel({
                   type="button"
                   onClick={() => {
                     setDepth('deep');
-                    if (learning.activeThread) setActiveIntent(threadToIntent(learning.activeThread));
+                    if (learning.activeThread) setActiveIntent(learningThreadToIntent(learning.activeThread));
                     composer.setValue(learning.activeThread?.intent || '');
                     window.setTimeout(() => composer.textareaRef.current?.focus(), 0);
                   }}

@@ -298,7 +298,7 @@ M14.6 起，结构化产物**不再走** LLM 输出 `<open_app:KEY/>` marker 的
 POST /api/tutor/agent
   body: { mode, context: {...}, options: {...}, transcript, messages, sessionId, subject, model? }
   → resolveTutorAgentProviderConfig(env, { modelId }) 选择 StepFun / DeepSeek / DashScope / OpenAI-compatible provider
-    （env 驱动 pickAvailableModelId：TUTOR_MODEL/LLM_MODEL → recommended → 首个可用；有 StepFun key 默认 `step-3.7-flash`，否则有 DeepSeek key 默认 `DeepSeek-V4-Flash`，否则 `qwen3.7-plus`）
+    （env 驱动 pickAvailableModelId：`global quick` 用 `TUTOR_QUICK_MODEL` 或 `TUTOR_MODEL` 同 provider 的 Flash，DashScope 默认 `qwen3.6-flash`；其余 mode 用 TUTOR_MODEL/LLM_MODEL → recommended → 首个可用，有 StepFun key 默认 `step-3.7-flash`，否则有 DeepSeek key 默认 `DeepSeek-V4-Flash`，否则 `qwen3.7-plus`）
   → buildTutorSystemPrompt(mode, context, options) 拼 system
   → streamText({ model, tools: {},
                  // M14.6：所有 mode 纯对话，不挂 native tools，不注入 <open_app:KEY/> marker 合约。

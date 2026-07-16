@@ -84,10 +84,9 @@ describe('resolveTutorAgentProviderConfig', () => {
     const configs = resolveTutorAgentProviderFallbacks({
       DEEPSEEK_API_KEY: 'deepseek-key',
       DASHSCOPE_API_KEY: 'dashscope-key',
-      TUTOR_MODEL: 'Qwen3.6-Plus-A',
-    });
+    }, { modelId: 'qwen3.6-flash' });
 
-    expect(configs.map((config) => config.modelId)).toEqual(['Qwen3.6-Plus-A', 'DeepSeek-V4-Flash']);
+    expect(configs.map((config) => config.modelId)).toEqual(['qwen3.6-flash', 'DeepSeek-V4-Flash']);
     expect(configs.map((config) => config.keySource)).toEqual(['DASHSCOPE_API_KEY', 'DEEPSEEK_API_KEY']);
   });
 

@@ -38,6 +38,7 @@ AppConfig {
   - `LLM_MODEL` → `ModelDefaults.primary`（主默认）
   - `WORKSHOP_MODEL` → `ModelDefaults.workshop`（学习应用，回落 `LLM_MODEL`）
   - `TUTOR_MODEL` → `ModelDefaults.tutor`（同桌/复习 agent，回落 `LLM_MODEL`）
+  - `TUTOR_QUICK_MODEL` → `ModelDefaults.tutorQuick`（Ask MeetMind「直接问」，留空优先 `TUTOR_MODEL` 同 provider 的 Flash；显式请求模型仍优先）
   - `VISION_MODEL` → `ModelDefaults.vision`（多模态，回落注册表第一个多模态模型）
 - **唯一计算默认模型的地方**是 `pickAvailableModelId()`，保证返回的 id 一定在已启用模型集合内。
 - **前端不自行判断模型可用性**（`*_API_KEY` 是 server-only，浏览器拿不到）：统一通过 `GET /api/llm/models` 取 `{ models, defaultModel, workshopModel }`，再在该列表里选；偏好存储里的过期 model 名会被自动纠正。

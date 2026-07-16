@@ -17,19 +17,12 @@
 // 同桌的 UIMessage reader 都能直接消费。
 //
 // 设计原则：
-//   - 单 agent + 工具调用（不引入 LangGraph）
-//   - stopWhen: stepCountIs(3) 防无限循环；step-* / deepseek-* 走 marker 链路，
-//     根本不会进入 tool 回调，所以最多 1 步；native tools 模型（qwen 等）最多
-//     1 次工具回调 + 1 次正文，3 步留一档安全余量。
-//   - experimental_transform: smoothStream({ chunking: 'word' }) 让前端流式按词
-//     平滑刷出（fix "字一坨一坨刷"的体感）
+//   - 单 agent、纯文字对话（不引入 LangGraph；结构化产物由应用矩阵承接）
+//   - stopWhen: stepCountIs(3) 留安全余量，正常对话 1 步即完成
+//   - experimental_transform 使用中英文兼容正则平滑流出
 //   - onStepFinish 打 track() 埋点
 //   - prompt 来源：`src/lib/prompts/tutor-prompts.ts` 的 buildTutorSystemPrompt
-//   - 老 `<open_app:KEY/>` marker 路径仍然由前端（extractOpenAppMarker）消费，本
-//     endpoint 不对 marker 做任何处理（透传 model 输出）。
-//   - Inline app 生成：由 options.allowInlineApp 控制 system prompt 里是否注入
-//     marker 合约；marker 出现与否由 model 决定。课中不挂 native tools，轻产物
-//     由前端拿 marker 后走 /api/apps/execute，减少首 token 延迟。
+//   - global quick 默认走注册表里的低延迟 Tutor 模型；deep / 课堂 / 复习保留主模型
 
 import {
   createUIMessageStream,
@@ -52,6 +45,7 @@ import {
   type TutorSystemContext,
 } from '@/lib/prompts/tutor-prompts';
 import { createLogger, track } from '@/lib/logger';
+import { ModelDefaults } from '@/lib/config/app.config';
 import {
   formatTutorAgentUserError,
   resolveTutorAgentProviderFallbacks,
@@ -366,6 +360,8 @@ function createTutorAttemptStream({
           providerAttempts: providers.length,
           hasRecentFocus: Boolean(body.context.recentFocus),
           hasFullTranscript: Boolean(body.context.fullTranscript),
+          hasGlobalIntent: Boolean(body.context.global?.intent),
+          globalDepth: body.context.global?.depth,
           options: body.options,
         });
 
@@ -522,7 +518,12 @@ export async function POST(request: NextRequest) {
       sharedShareId = resolved.shareId;
     }
 
-    const providers = resolveTutorAgentProviderFallbacks(process.env, { modelId: parsed.data.model });
+    const requestModel = parsed.data.model || (
+      mode === 'global' && context.global?.depth === 'quick'
+        ? ModelDefaults.tutorQuick
+        : undefined
+    );
+    const providers = resolveTutorAgentProviderFallbacks(process.env, { modelId: requestModel });
     if (providers.length === 0) {
       track({ kind: 'tutor.fail', sessionId, errorCode: 'TUTOR_NO_API_KEY' });
       return new Response(JSON.stringify({ error: 'LLM API key not configured' }), {

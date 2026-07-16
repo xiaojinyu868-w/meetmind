@@ -82,7 +82,7 @@ export const COPY = {
     progressSave: '记住确认的',
     progressSaved: '已放进长期记忆',
     memoryTitle: 'MeetMind 记得什么',
-    memorySubtitle: '只有你确认过的内容，才会用于以后的回答。你可以随时暂停或删除。',
+    memorySubtitle: '长期记忆只保留你确认过的内容；最近学习现场仅用于接续当前任务。',
     memoryBack: '回到 Ask',
     memoryAdd: '添加一条',
     memoryInput: '例如：我更喜欢先看具体例子，再看公式',

@@ -72,6 +72,16 @@ const deepseekModels: ModelConfig[] = [
 
 const qwenModels: ModelConfig[] = [
   {
+    id: 'qwen3.6-flash',
+    name: '通义千问 3.6 Flash',
+    provider: 'qwen',
+    description: '阿里云百炼低延迟多模态模型；用于 Ask MeetMind 的轻量直问，复杂学习仍交给 Plus。',
+    maxTokens: 8192,
+    supportsMultimodal: true,
+    enableThinking: false,
+    supportsBuiltinTools: true,
+  },
+  {
     id: 'qwen3.7-plus',
     name: '通义千问 3.7 Plus',
     provider: 'qwen',
@@ -152,6 +162,11 @@ const resolvedDefaultVisionModel = pickAvailableModelId(
 );
 const resolvedWorkshopModel = pickAvailableModelId(process.env.WORKSHOP_MODEL || process.env.LLM_MODEL);
 const resolvedTutorModel = pickAvailableModelId(process.env.TUTOR_MODEL || process.env.LLM_MODEL);
+const resolvedTutorProvider = resolvedModels.find((model) => model.id === resolvedTutorModel)?.provider;
+const resolvedTutorQuickModel = pickAvailableModelId(
+  process.env.TUTOR_QUICK_MODEL,
+  (model) => model.provider === resolvedTutorProvider && /flash/i.test(model.id),
+);
 
 /**
  * 各用途默认模型集中表（唯一计算默认模型的地方）。
@@ -162,6 +177,7 @@ export const ModelDefaults = {
   vision: resolvedDefaultVisionModel,
   workshop: resolvedWorkshopModel,
   tutor: resolvedTutorModel,
+  tutorQuick: resolvedTutorQuickModel,
 } as const;
 
 // ==================== LLM 配置 ====================

@@ -44,7 +44,7 @@
 
 解析逻辑在 `@/lib/utils/tutor-agent-provider.ts`，env 驱动：
 
-- **默认模型**：`requestedModel`（请求体 `model`）→ `TUTOR_MODEL` / `LLM_MODEL`（env）→ 有 `STEPFUN_API_KEY` 用 `step-3.7-flash` → 有 `DEEPSEEK_API_KEY` 用 `DeepSeek-V4-Flash` → 否则 `qwen3.7-plus`（DashScope）。
+- **模型分层**：`requestedModel`（请求体 `model`）始终最高优先；`global + depth='quick'` 默认走 `ModelDefaults.tutorQuick`（`TUTOR_QUICK_MODEL`，留空优先 `TUTOR_MODEL` 同 provider 的 Flash；DashScope 为 `qwen3.6-flash`）；深度学习、课堂与复习走 `TUTOR_MODEL` / `LLM_MODEL`，无声明时依次回落 StepFun `step-3.7-flash`、DeepSeek `DeepSeek-V4-Flash`、DashScope `qwen3.7-plus`。
 - **强制 Chat Completions**：OpenAI-compatible provider 必须走 `.chat()`，`modelApi: 'chat'`（AI SDK v6 默认走 Responses API，需显式覆盖）。
 - **Provider fallback**（`resolveTutorAgentProviderFallbacks`）：primary 失败且错误可重试（5xx/限流/超时）时，按 StepFun → DeepSeek → Qwen 切换到下一已配置 key；401/403/模型不存在等不重试。设了 `TUTOR_API_KEY` 则不 fallback（专用通道）。
 - **Qwen thinking 抑制**：`qwen3.*-plus` 等推理模型默认输出大量 `reasoning_content` 拖慢 TTFT，通过 fetch hook 注入 `enable_thinking=false` 关闭推理。

@@ -171,13 +171,14 @@ make eval-tutor-real         # 真实调 streamText + tools（优先当前模型
 
 | 名称 | 默认 | 说明 |
 |---|---|---|
-| `STEPFUN_API_KEY` | — | 可选保留；仅在你仍想直连 StepFun 时使用，默认 Tutor 不再优先走它 |
+| `STEPFUN_API_KEY` | — | StepFun 凭证；未显式指定 Tutor 模型且可用时默认 `step-3.7-flash` |
 | `STEPFUN_BASE_URL` | `https://api.stepfun.com/v1` | 阶跃星辰 OpenAI-compatible baseURL（仅保留兼容） |
-| `DEEPSEEK_API_KEY` | — | **MeetMind 当前默认 AI** 的凭证之一；默认模型 `DeepSeek-V4-Flash` / `DeepSeek-V4-Pro` 走这里 |
-| `DEEPSEEK_BASE_URL` | `https://ai.dxkp.com/v1` | DeepSeek-family 通过 DXKP 平台走 OpenAI-compatible baseURL |
-| `OPENAI_API_KEY` 或 `DASHSCOPE_API_KEY` | — | 兼容凭证；Qwen-family 默认使用 `DASHSCOPE_API_KEY` 并指向 `https://ai.dxkp.com/v1`；若同时配置多个 provider key，Tutor Agent 仍会在首个 provider 繁忙/限流/超时且尚未输出内容时按主通道 → DeepSeek → Qwen 顺序自动切换 |
-| `TUTOR_MODEL` | `DeepSeek-V4-Flash` | Tutor 默认模型；可 override 成 `DeepSeek-V4-Pro`、`Qwen3.6-Plus-A`、`Qwen3.5-397B-A17B-Pro` 或其他已配置 OpenAI-compatible 模型 |
-| `TUTOR_BASE_URL` | `https://ai.dxkp.com/v1` | 非 DeepSeek/StepFun 模型的 Tutor OpenAI-compatible baseURL；StepFun 模型使用 `STEPFUN_BASE_URL`，DeepSeek 模型使用 `DEEPSEEK_BASE_URL` |
+| `DEEPSEEK_API_KEY` | — | DeepSeek 凭证；`DeepSeek-V4-Flash` / `DeepSeek-V4-Pro` 走这里 |
+| `DEEPSEEK_BASE_URL` | `https://api.deepseek.com` | DeepSeek-family 官方 OpenAI-compatible baseURL |
+| `OPENAI_API_KEY` 或 `DASHSCOPE_API_KEY` | — | 兼容凭证；Qwen-family 优先使用 `DASHSCOPE_API_KEY` 并指向百炼 OpenAI-compatible endpoint；首个 provider 繁忙/限流/超时且尚未输出内容时可自动切换备用通道 |
+| `TUTOR_MODEL` | env 驱动 | 深度学习、课堂同桌与复习默认模型；未声明时依可用凭证回落到 `step-3.7-flash` / `DeepSeek-V4-Flash` / `qwen3.7-plus` |
+| `TUTOR_QUICK_MODEL` | `TUTOR_MODEL` 同 provider 的 Flash | Ask MeetMind「直接问」专用低延迟模型；DashScope 默认 `qwen3.6-flash`，显式请求模型仍优先 |
+| `TUTOR_BASE_URL` | DashScope compatible endpoint | 非 DeepSeek/StepFun 模型的 Tutor OpenAI-compatible baseURL；StepFun 模型使用 `STEPFUN_BASE_URL`，DeepSeek 模型使用 `DEEPSEEK_BASE_URL` |
 
 ---
 
