@@ -24,6 +24,12 @@ interface ReviewThreePaneLayoutProps {
 
 const RAIL_PX = 46;
 const DIVIDER_PX = 8;
+const SOURCE_MIN_PX: Record<ReviewPaneMode, number> = {
+  video: 400,
+  audio: 260,
+};
+const WORKSPACE_MIN_PX = 320;
+const TUTOR_MIN_PX = 240;
 
 function readStoredLayout(storageKey: string, mode: ReviewPaneMode): ReviewPaneLayout {
   if (typeof window === 'undefined') return getDefaultReviewPaneLayout(mode);
@@ -100,10 +106,10 @@ export function ReviewThreePaneLayout({
   }, []);
 
   const gridTemplateColumns = useMemo(() => {
-    const workspaceColumn = layout.workspaceCollapsed ? `${RAIL_PX}px` : `minmax(260px, ${layout.workspace}fr)`;
-    const tutorColumn = layout.tutorCollapsed ? `${RAIL_PX}px` : `minmax(280px, ${layout.tutor}fr)`;
-    return `minmax(320px, ${layout.source}fr) ${DIVIDER_PX}px ${workspaceColumn} ${DIVIDER_PX}px ${tutorColumn}`;
-  }, [layout]);
+    const workspaceColumn = layout.workspaceCollapsed ? `${RAIL_PX}px` : `minmax(${WORKSPACE_MIN_PX}px, ${layout.workspace}fr)`;
+    const tutorColumn = layout.tutorCollapsed ? `${RAIL_PX}px` : `minmax(${TUTOR_MIN_PX}px, ${layout.tutor}fr)`;
+    return `minmax(${SOURCE_MIN_PX[mode]}px, ${layout.source}fr) ${DIVIDER_PX}px ${workspaceColumn} ${DIVIDER_PX}px ${tutorColumn}`;
+  }, [layout, mode]);
 
   return (
     <div

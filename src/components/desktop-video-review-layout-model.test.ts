@@ -20,7 +20,14 @@ describe('desktop video review layout model', () => {
     const layout = getDefaultReviewPaneLayout('video');
     expect(layout.source).toBeGreaterThan(layout.workspace);
     expect(layout.source).toBeGreaterThan(layout.tutor);
-    expect(layout.source).toBeGreaterThanOrEqual(48);
+    expect(layout).toMatchObject({ source: 46, workspace: 34, tutor: 20 });
+  });
+
+  it('makes the learning workspace primary for audio review', () => {
+    const layout = getDefaultReviewPaneLayout('audio');
+    expect(layout).toMatchObject({ source: 27, workspace: 49, tutor: 24 });
+    expect(layout.workspace).toBeGreaterThan(layout.source);
+    expect(layout.workspace).toBeGreaterThan(layout.tutor);
   });
 
   it('collapses the tutor pane when the right divider squeezes it below threshold', () => {
@@ -37,6 +44,6 @@ describe('desktop video review layout model', () => {
 
   it('restores a collapsed pane to the mode default', () => {
     const collapsed = applyReviewPaneDrag(getDefaultReviewPaneLayout('video'), 'workspace-tutor', 12, 'video');
-    expect(restoreReviewPane(collapsed, 'tutor', 'video')).toMatchObject({ tutorCollapsed: false, tutor: 22 });
+    expect(restoreReviewPane(collapsed, 'tutor', 'video')).toMatchObject({ tutorCollapsed: false, tutor: 20 });
   });
 });

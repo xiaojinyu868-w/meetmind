@@ -2,7 +2,7 @@
 
 import { useCallback, useMemo, useState, type RefObject } from 'react';
 import dynamic from 'next/dynamic';
-import { MessageCircle, AlertCircle, Clock, Boxes, FileText, ListChecks } from 'lucide-react';
+import { MessageCircle, AlertCircle, Clock, Boxes, FileText } from 'lucide-react';
 import { useUIStore, useUIActions } from '@/stores/ui-store';
 import { usePlayerStore, usePlayerActions } from '@/stores/player-store';
 import { useSessionStore } from '@/stores/session-store';
@@ -234,7 +234,7 @@ export function DesktopVideoReviewLayout(props: DesktopVideoReviewLayoutProps) {
       {videoSource ? (
         <ReviewThreePaneLayout
           mode="video"
-          storageKey="meetmind-review-three-pane-video"
+          storageKey="meetmind-review-three-pane-video-v2"
           sourceLabel="课堂证据"
           workspaceLabel="学习区"
           tutorLabel="同桌"
@@ -499,7 +499,7 @@ export function DesktopVideoReviewLayout(props: DesktopVideoReviewLayoutProps) {
         <>
           <ReviewThreePaneLayout
             mode="audio"
-            storageKey="meetmind-review-three-pane-audio"
+            storageKey="meetmind-review-three-pane-audio-v2"
             sourceLabel="课堂证据"
             workspaceLabel="学习区"
             tutorLabel="同桌"
@@ -566,16 +566,7 @@ export function DesktopVideoReviewLayout(props: DesktopVideoReviewLayoutProps) {
             )}
             workspace={(
               <main className="min-w-0 min-h-0 h-full bg-white">
-              <div className="flex h-full min-h-0 flex-col">
-                <header className="flex shrink-0 items-center gap-2 border-b border-divider bg-white px-4 py-3">
-                  <ListChecks size={15} strokeWidth={1.8} className="text-ink-secondary" />
-                  <div className="min-w-0">
-                    <p className="text-[13px] font-semibold tracking-[-0.01em] text-ink">学习工作区</p>
-                    <p className="text-[11.5px] text-ink-muted">闪卡、测验、导图都在这里完成</p>
-                  </div>
-                </header>
-                <div className="min-h-0 flex-1 overflow-hidden">{sharedWorkspace}</div>
-              </div>
+                <div className="h-full min-h-0 overflow-hidden">{sharedWorkspace}</div>
               </main>
             )}
             tutor={(

@@ -11,18 +11,18 @@ export interface ReviewPaneLayout {
 }
 
 const DEFAULTS: Record<ReviewPaneMode, ReviewPaneLayout> = {
-  // 视频复习里视频必须可看：默认把证据栏放到第一优先级。
-  video: { source: 50, workspace: 28, tutor: 22, workspaceCollapsed: false, tutorCollapsed: false },
-  // 音频复习的证据栏不需要占半屏，把主学习区让出来。
-  audio: { source: 31, workspace: 43, tutor: 26, workspaceCollapsed: false, tutorCollapsed: false },
+  // 视频仍以原件为根，但要给中间学习区留下可完成任务的宽度。
+  video: { source: 46, workspace: 34, tutor: 20, workspaceCollapsed: false, tutorCollapsed: false },
+  // 音频证据以波形 + 转录为主，中间学习区是课后首要工作面。
+  audio: { source: 27, workspace: 49, tutor: 24, workspaceCollapsed: false, tutorCollapsed: false },
 };
 
 const SOURCE_MIN: Record<ReviewPaneMode, number> = {
-  video: 42,
-  audio: 24,
+  video: 38,
+  audio: 22,
 };
-const WORKSPACE_MIN = 22;
-const TUTOR_MIN = 20;
+const WORKSPACE_MIN = 26;
+const TUTOR_MIN = 18;
 const WORKSPACE_COLLAPSE_AT = 18;
 const TUTOR_COLLAPSE_AT = 18;
 
