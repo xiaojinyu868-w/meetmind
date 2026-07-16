@@ -13,7 +13,6 @@ import { useCaptureEditorStore } from '@/stores/capture-editor-store';
 import { ServiceStatus, DegradedModeBanner } from '@/components/ServiceStatus';
 import { DesktopSidebar } from '@/components/DesktopSidebar';
 
-import { EchoShareCard } from '@/components/EchoShareCard';
 import { GUEST_DEMO_LESSON_TITLE, resolveGuestDemoEntry } from '@/components/classroom/guest-demo-entry';
 import type { WorkshopAppKey } from '@/lib/ai-native/app-catalog';
 import { type Anchor } from '@/lib/services/anchor-service';
@@ -49,7 +48,6 @@ import { useNoteActions } from '@/hooks/useNoteActions';
 import { useActionItems } from '@/hooks/useActionItems';
 import { useExtractTerms } from '@/hooks/useExtractTerms';
 import { useSourceItemManagement } from '@/hooks/useSourceItemManagement';
-import { WorkspaceCaptureEditorModal } from '@/components/WorkspaceCaptureEditorModal';
 import type {
   TranscriptSegment,
   ActionItem,
@@ -87,10 +85,12 @@ import type { ClassCheckHighlight } from '@/app/api/class-check/plan/route';
 import type { VideoInsightItem } from '@/components/VideoInsightTimeline';
 const WaveformPlayer = dynamic(() => import('@/components/WaveformPlayer').then(m => ({ default: m.WaveformPlayer })), { ssr: false });
 const Recorder = dynamic(() => import('@/components/Recorder').then(m => ({ default: m.Recorder })), { ssr: false });
+const EchoShareCard = dynamic(() => import('@/components/EchoShareCard').then(m => ({ default: m.EchoShareCard })), { ssr: false });
+const WorkspaceCaptureEditorModal = dynamic(() => import('@/components/WorkspaceCaptureEditorModal').then(m => ({ default: m.WorkspaceCaptureEditorModal })), { ssr: false });
+const CollectionMessageActionSheet = dynamic(() => import('@/components/CollectionMessageActionSheet').then(m => ({ default: m.CollectionMessageActionSheet })), { ssr: false });
 const ClassCheckOverlay = dynamic(() => import('@/components/ClassCheckOverlay').then(m => ({ default: m.ClassCheckOverlay })), { ssr: false });
 const ClassCheckToast = dynamic(() => import('@/components/ClassCheckToast').then(m => ({ default: m.ClassCheckToast })), { ssr: false });
 import { AppLoading } from '@/components/AppLoading';
-import { CollectionMessageActionSheet } from '@/components/CollectionMessageActionSheet';
 import { CollectionCard } from '@/components/CollectionCard';
 import { CollectionEmptyState } from '@/components/CollectionEmptyState';
 import { DesktopCollectionLayout } from '@/components/DesktopCollectionLayout';
@@ -264,6 +264,7 @@ function StudentAppContent({
   const playingAudioMessageId = useCollectionStore((s) => s.playingAudioMessageId);
   const audioPlaybackState = useCollectionStore((s) => s.audioPlaybackState);
   const expandedAudioTranscriptId = useCollectionStore((s) => s.expandedAudioTranscriptId);
+  const workspaceCaptureEditor = useCollectionStore((s) => s.workspaceCaptureEditor);
 
   // Collection Store setter aliases
   const setCollectionComposerText = collectionActions.setCollectionComposerText;
@@ -2866,13 +2867,15 @@ function StudentAppContent({
         </>
       )}
 
-      <WorkspaceCaptureEditorModal
-        captureActionsDeps={{
-          playingAudioMessageId,
-          stopAudioMessagePlayback,
-          pendingCaptureStatusBySourceKeyRef,
-        }}
-      />
+      {workspaceCaptureEditor ? (
+        <WorkspaceCaptureEditorModal
+          captureActionsDeps={{
+            playingAudioMessageId,
+            stopAudioMessagePlayback,
+            pendingCaptureStatusBySourceKeyRef,
+          }}
+        />
+      ) : null}
 
       <WorkshopWindowManager
         windows={workshopWindows}
