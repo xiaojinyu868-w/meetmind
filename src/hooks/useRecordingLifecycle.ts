@@ -415,6 +415,9 @@ export function useRecordingLifecycle(
               text: s.text,
               startMs: s.startMs,
               endMs: s.endMs,
+              speakerId: s.speakerId,
+              confidence: s.confidence,
+              isFinal: s.isFinal,
             })),
           },
         });

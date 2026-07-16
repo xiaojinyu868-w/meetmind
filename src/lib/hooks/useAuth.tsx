@@ -276,6 +276,7 @@ async function buildLocalWorkspaceMigrationPayload(userId: string): Promise<Loca
         mediaUrl: session.mediaUrl || session.videoEmbedUrl || undefined,
         occurredAt: session.createdAt.toISOString(),
         metadata: {
+          sessionId: session.sessionId,
           sourceType: session.sourceType || 'recording',
           mimeType: session.mimeType,
           duration: session.duration,
@@ -288,6 +289,55 @@ async function buildLocalWorkspaceMigrationPayload(userId: string): Promise<Loca
           conversationCount: conversations.length,
           importSourceMode: session.importSourceMode,
           thumbnailUrl: session.thumbnailUrl,
+          // 跨设备可恢复包：保留课堂证据的结构，不再只上传 8000 字拼接文本。
+          // local-migration 已按批次 + 8MB 限制保护；超限会自动缩小批次重试。
+          transcriptSegments: transcripts.slice(0, 1200).map((item) => ({
+            text: item.text,
+            startMs: item.startMs,
+            endMs: item.endMs,
+            speakerId: item.speakerId,
+            confidence: item.confidence,
+            isFinal: item.isFinal,
+          })),
+          anchors: anchors.slice(0, 200).map((item) => ({
+            timestamp: item.timestamp,
+            type: item.type,
+            status: item.status,
+            note: item.note,
+            aiExplanation: item.aiExplanation,
+            createdAt: item.createdAt.toISOString(),
+            resolvedAt: item.resolvedAt?.toISOString(),
+          })),
+          classSummary: summary ? {
+            summaryId: summary.summaryId,
+            overview: summary.overview,
+            takeaways: summary.takeaways,
+            keyDifficulties: summary.keyDifficulties,
+            structure: summary.structure,
+            createdAt: summary.createdAt.toISOString(),
+            updatedAt: summary.updatedAt.toISOString(),
+          } : undefined,
+          highlightTopics: highlights.slice(0, 100).map((item) => ({
+            topicId: item.topicId,
+            title: item.title,
+            description: item.description,
+            importance: item.importance,
+            duration: item.duration,
+            segments: item.segments,
+            keywords: item.keywords,
+            quote: item.quote,
+            createdAt: item.createdAt.toISOString(),
+            updatedAt: item.updatedAt.toISOString(),
+          })),
+          notes: notes.slice(0, 200).map((item) => ({
+            noteId: item.noteId,
+            source: item.source,
+            sourceId: item.sourceId,
+            text: item.text,
+            metadata: item.metadata,
+            createdAt: item.createdAt.toISOString(),
+            updatedAt: item.updatedAt.toISOString(),
+          })),
         },
       };
     })

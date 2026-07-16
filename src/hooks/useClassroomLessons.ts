@@ -19,6 +19,8 @@ import { useMemo, useEffect, useState, useCallback } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db, getPreference, setPreference, dedupeAudioSessions, repairMisflaggedVideoLinkRecordings, updateSessionStatus } from '@/lib/db';
 import { retranscribeStuckSessions } from '@/lib/services/retranscribe-stuck-sessions';
+import { retryPendingRecordingUploads } from '@/lib/services/retry-pending-recording-uploads';
+import { useAuth } from '@/lib/hooks/useAuth';
 import { useEchoStore } from '@/stores/echo-store';
 import { useCollectionStore } from '@/stores/collection-store';
 import { audioSessionToLesson } from '@/components/classroom/lessonAdapter';
@@ -60,6 +62,7 @@ export interface UseClassroomLessonsResult {
 }
 
 export function useClassroomLessons(): UseClassroomLessonsResult {
+  const { accessToken, isAuthenticated } = useAuth();
   // ── 0. 挂载时跑一次 dedupe（修复历史脏数据） ──
   // 背景：旧版本 saveAudioSession 走 add、加上 classroomDataService 录音开始时的
   // 空壳 add，历史数据里同一 sessionId 可能有 2-3 行。现在 saveAudioSession 已改为
@@ -81,6 +84,14 @@ export function useClassroomLessons(): UseClassroomLessonsResult {
         console.warn('[classroom] dedupe audioSessions failed:', err);
       });
   }, []);
+
+  // ── 0d. 登录后静默补传曾因断网 / 退后台失败的本地原声 ──
+  // 每次只顺序处理两条，避免进课堂时占满移动网络；成功后服务端按 sessionId
+  // 自动绑定 Workspace capture，失败仍保留 Blob，后续页面生命周期可再试。
+  useEffect(() => {
+    if (!isAuthenticated || !accessToken) return;
+    void retryPendingRecordingUploads(accessToken).catch(() => undefined);
+  }, [accessToken, isAuthenticated]);
 
   // ── 0a. 挂载时修复"有录音 blob 但被错标为 video-link"的历史数据 ──
   // 背景（2026-04-20）：用户在"看 B 站视频 + 开系统内录"的场景下，录音

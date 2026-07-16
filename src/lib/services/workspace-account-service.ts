@@ -112,10 +112,12 @@ function buildMigrationCaptureInput(
     occurredAt: session.occurredAt,
     metadata: {
       migratedFrom: 'indexeddb',
-      migrationVersion: 'workspace-account-v1',
+      migrationVersion: 'workspace-account-v2',
       migratedAt: new Date().toISOString(),
-      localSessionId: session.sessionId,
       ...(metadata || {}),
+      // 下行回填以 sessionId 为跨设备稳定主键；localSessionId 只保留兼容。
+      sessionId: session.sessionId,
+      localSessionId: session.sessionId,
     },
   };
 }

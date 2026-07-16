@@ -19,6 +19,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import * as fs from 'fs';
 import * as path from 'path';
 import { authService } from '@/lib/services/auth-service';
+import { attachUploadedAudioToWorkspaceCapture } from '@/lib/services/workspace-audio-sync-service';
 import { createLogger } from '@/lib/logger';
 
 const log = createLogger('workspace/upload-audio');
@@ -82,12 +83,21 @@ export async function POST(request: NextRequest) {
     const host = request.headers.get('x-forwarded-host') || request.headers.get('host') || '';
     const protocol = request.headers.get('x-forwarded-proto') || 'https';
     const absoluteUrl = host ? `${protocol}://${host}${relUrl}` : relUrl;
+    const attached = await attachUploadedAudioToWorkspaceCapture({
+      userId: payload.sub,
+      sessionId,
+      mediaUrl: relUrl,
+    }).catch((error) => {
+      log.warn('uploaded audio saved but capture attach failed', { sessionId, error: String(error) });
+      return null;
+    });
 
     return NextResponse.json({
       success: true,
       mediaUrl: relUrl,
       absoluteUrl,
       size: buffer.length,
+      captureAttached: Boolean(attached),
     });
     // 注意：absoluteUrl 是公网可访问的绝对 URL，用于 DashScope Fun-ASR 说话人分离
   } catch (error) {

@@ -336,14 +336,13 @@ ASR 链路（`src/lib/services/asr/`）：
 - **AEC/NS/AGC**：`buildAudioConstraints` 是 getUserMedia 的唯一真相源，env 可覆盖
 - **说话人分离**（M14.6+）：双引擎可选——DashScope `qwen3-asr-flash-realtime`（高精度，无说话人分离）+ 腾讯云 `16k_zh_en_speaker`（实时声纹聚类，支持 10 人）。`server.js` 两个独立 WebSocket proxy（`/api/asr-stream` + `/api/asr-stream-speaker`），speaker proxy 做 HMAC-SHA1 签名 + 协议翻译（腾讯云格式→DashScope 兼容格式）。`DashScopeASRClient` 通过 `speakerDiarization` 选项切换 WS URL。`Recorder.tsx` 录音中无感切换（并行连接→ready 后交接 asrClientRef→异步关旧 client）。课后 diarization（`diarization-service.ts`）在已有 speakerId 时跳过（避免两套引擎编号混用）。`transcript-format.ts` 的 `formatTranscriptWithSpeakers` 把 speakerId 转成 `[说话人N]` 标记注入 fullTranscript，用于 in-class + review 两种 mode 的 AI 上下文。
 
-### 3.9 跨设备同步现状与缺口（v2.1 待修）
+### 3.9 跨设备同步现状与缺口（v2.1 进行中）
 
 详见 `roadmap/v2.1-cross-browser-sync-gap.md`（2026-04-25 确认的架构缺口）。
 
-- **现象**：浏览器 A 录课，浏览器 B 登录后看到卡片但点开无转录/锚点/highlight
-- **根因**：(1) 服务端 `WorkspaceCapture` 只存 `normalizedText`（8000 字截断），分段 transcripts/anchors/summaries/highlights 无 SQLite 表；(2) 客户端 `useWorkspaceContextLoader` 拉回只 push sourceItem，不回填 IndexedDB
-- **已落点**：`backfill-captures-to-indexeddb.ts` + `upload-recording-audio.ts`（音频上云 T2）+ `useWorkspaceContextLoader`；缺服务端分段表 + 下行回写
-- **修复方向**（roadmap 选项 A）：新增 `WorkspaceTranscriptSegment` / `WorkspaceAnchor` / `WorkspaceClassSummary` / `WorkspaceHighlight` 表 + 客户端拉回时 `db.transcripts.bulkPut` 等
+- **已修体验断裂**：新录音和登录迁移都会把 `sessionId`、转录分段 / 说话人、困惑点、课堂摘要、精选片段、个人笔记写入可恢复包；`useWorkspaceContextLoader → backfillCapturesToIndexedDB` 按 session 逐类补回 IndexedDB，不覆盖本机已有编辑。旧 v1 capture 兼容 `localSessionId + normalizedText`，至少不再恢复为空课堂。
+- **音频**：`upload-recording-audio.ts` 在登录态后台上传 Blob，成功后将服务端 `mediaUrl` 回写 Workspace capture 与本地 session；失败保留本地原声，后续仍需补自动重试队列。
+- **仍有规模化缺口**：portable bundle 仍位于 capture metadata，`/api/workspace/current` 最多返回 80 条时可能携带较大 JSON；正规化的 `WorkspaceTranscriptSegment` / `WorkspaceAnchor` / `WorkspaceClassSummary` / `WorkspaceHighlight` 表和按课堂 lazy 拉取仍是最终架构。
 
 ### 3.10 内容接入扩展（M12 文章 + 微信端 + OpenClaw）
 

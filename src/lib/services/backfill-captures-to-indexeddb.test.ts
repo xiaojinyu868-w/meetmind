@@ -32,6 +32,38 @@ describe('extractBackfillCandidate', () => {
     expect(r!.durationMs).toBe(4000);
   });
 
+  it('保留说话人、困惑点、摘要、精选片段和个人笔记', () => {
+    const c = cap({
+      metadata: {
+        sessionId: 'sess-full',
+        transcriptSegments: [{ ...segs[0], speakerId: 'teacher', confidence: 0.88, isFinal: true }],
+        anchors: [{ timestamp: 1200, type: 'question', status: 'resolved', note: '这里没懂' }],
+        classSummary: {
+          summaryId: 'summary-1',
+          overview: '从概念到例子。',
+          takeaways: [{ label: '概念', insight: '先定义再应用', timestamps: ['00:01'] }],
+          keyDifficulties: ['边界条件'],
+          structure: ['定义', '例子'],
+        },
+        highlightTopics: [{
+          topicId: 'topic-1',
+          title: '关键定义',
+          importance: 'high',
+          duration: 1200,
+          segments: [{ start: 0, end: 1200, text: '第一句' }],
+        }],
+        notes: [{ noteId: 'note-1', source: 'custom', text: '课后再看一遍' }],
+      },
+    });
+
+    const result = extractBackfillCandidate(c);
+    expect(result?.segments[0]).toMatchObject({ speakerId: 'teacher', confidence: 0.88, isFinal: true });
+    expect(result?.anchors[0]).toMatchObject({ timestamp: 1200, type: 'question', status: 'resolved' });
+    expect(result?.summary?.summaryId).toBe('summary-1');
+    expect(result?.highlights[0]?.topicId).toBe('topic-1');
+    expect(result?.notes[0]?.noteId).toBe('note-1');
+  });
+
   it('没有 sessionId → null', () => {
     const c = cap({ metadata: { transcriptSegments: segs } });
     expect(extractBackfillCandidate(c)).toBeNull();
@@ -40,6 +72,20 @@ describe('extractBackfillCandidate', () => {
   it('没有 transcriptSegments → null', () => {
     const c = cap({ metadata: { sessionId: 'sess-1' } });
     expect(extractBackfillCandidate(c)).toBeNull();
+  });
+
+  it('兼容旧 migration-v1 的 localSessionId 与汇总转录', () => {
+    const c = cap({
+      normalizedText: '旧设备只留下了汇总转录。',
+      metadata: { localSessionId: 'legacy-session', duration: 5000 },
+    });
+    const result = extractBackfillCandidate(c);
+    expect(result?.sessionId).toBe('legacy-session');
+    expect(result?.segments).toEqual([expect.objectContaining({
+      text: '旧设备只留下了汇总转录。',
+      startMs: 0,
+      endMs: 5000,
+    })]);
   });
 
   it('archived/deleted → null（不回填非活跃）', () => {
