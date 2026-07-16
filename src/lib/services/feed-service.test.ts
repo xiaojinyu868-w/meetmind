@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  filterExternalCandidatesByFeedback,
   filterValidCaptureIds,
   filterValidGoalLabel,
   containsUnsupportedPsychology,
@@ -7,6 +8,25 @@ import {
   scoreExternalResult,
   buildCrossCoursePrompt,
 } from './feed-service';
+import type { ExternalFeedCandidate } from './feed-retrieval-service';
+
+function candidate(overrides: Partial<ExternalFeedCandidate>): ExternalFeedCandidate {
+  return {
+    title: 'Grounded source',
+    url: 'https://example.edu/source',
+    snippet: 'A grounded source.',
+    sourceLabel: 'example.edu',
+    contentKind: 'web',
+    discovery: {
+      query: 'learning science',
+      reason: '与你当前学习线有关',
+      perspective: 'deepen',
+      contentKinds: ['web'],
+    },
+    sourceScore: 5,
+    ...overrides,
+  };
+}
 
 describe('feed recommendation quality guardrails', () => {
   it('rejects malformed URLs and known low-quality aggregators', () => {
@@ -63,6 +83,35 @@ describe('feed recommendation quality guardrails', () => {
     expect(prompt).toContain('"academicQuery"');
     expect(prompt).toContain('"bookQuery"');
     expect(prompt).toContain('"contentKinds"');
+  });
+
+  it('does not bring back the same external material after explicit negative feedback', () => {
+    const kept = candidate({ title: 'A Better Follow-up', url: 'https://example.edu/better' });
+    const dismissed = candidate({ title: 'Retrieval Practice: A Review', url: 'https://example.edu/review' });
+    expect(filterExternalCandidatesByFeedback([dismissed, kept], [{
+      type: 'web-recommend',
+      title: 'Retrieval Practice — A Review',
+      rating: 'down',
+      createdAt: '2026-07-16T00:00:00.000Z',
+    }])).toEqual([kept]);
+  });
+
+  it('uses the latest normalized decision when a learner changes their mind', () => {
+    const reconsidered = candidate({ title: 'Retrieval Practice: A Review' });
+    expect(filterExternalCandidatesByFeedback([reconsidered], [
+      {
+        type: 'web-recommend',
+        title: 'Retrieval Practice — A Review',
+        rating: 'up',
+        createdAt: '2026-07-16T01:00:00.000Z',
+      },
+      {
+        type: 'web-recommend',
+        title: 'Retrieval Practice: A Review',
+        rating: 'down',
+        createdAt: '2026-07-16T00:00:00.000Z',
+      },
+    ])).toEqual([reconsidered]);
   });
 
   it('can build a real external discovery plan from an explicit active learning thread without captures', () => {

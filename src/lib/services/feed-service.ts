@@ -34,6 +34,7 @@ import type { FeedPreference } from '@/lib/feed-preferences';
 const DEFAULT_MODEL = FeatureConfig.feed.defaultModel;
 const MAX_ITEMS = FeatureConfig.feed.maxItems;
 const MAX_PROBES = FeatureConfig.feed.maxProbes;
+const MIN_EXTERNAL_FALLBACK_SOURCE_SCORE = 4;
 const log = createLogger('feed-cross-course');
 
 // ============ 类型定义 ============
@@ -551,8 +552,11 @@ export async function generateCrossCourseFeed(
       .slice(0, 3);
     const activeDiscoveries = (discoveries.length > 0 ? discoveries : [fallbackDiscovery])
       .map(normalizeDiscoveryBrief);
-    const candidates = (await retrieveExternalCandidates(activeDiscoveries))
-      .filter((candidate) => isAcceptableExternalResult(candidate.url));
+    const candidates = filterExternalCandidatesByFeedback(
+      (await retrieveExternalCandidates(activeDiscoveries))
+        .filter((candidate) => isAcceptableExternalResult(candidate.url)),
+      options.feedback,
+    );
 
     const selectedCandidates = await rankExternalCandidates(candidates, options, model);
     externalItems = selectedCandidates.map(({ candidate, qualityReason }) => {
@@ -604,6 +608,38 @@ export function scoreExternalResult(url: string): number {
   return scoreSource(url);
 }
 
+/**
+ * “不相关”首先意味着这条具体材料不应原样回来，而不是永久屏蔽整个主题。
+ * 标题经过轻量正规化后再比较，兼容站点追加分隔符或大小写差异。
+ */
+export function filterExternalCandidatesByFeedback(
+  candidates: ExternalFeedCandidate[],
+  feedback: FeedPreference[] | undefined,
+): ExternalFeedCandidate[] {
+  const latestDecisionByTitle = new Map<string, 'up' | 'down'>();
+  for (const item of feedback ?? []) {
+    if (item.type !== 'web-recommend' && item.type !== 'bili-recommend') continue;
+    const title = normalizeRecommendationTitle(item.title);
+    if (title && !latestDecisionByTitle.has(title)) latestDecisionByTitle.set(title, item.rating);
+  }
+  const dismissedTitles = new Set(
+    [...latestDecisionByTitle.entries()]
+      .filter(([, rating]) => rating === 'down')
+      .map(([title]) => title),
+  );
+  if (dismissedTitles.size === 0) return candidates;
+  return candidates.filter((candidate) => (
+    !dismissedTitles.has(normalizeRecommendationTitle(candidate.title.slice(0, 100)))
+  ));
+}
+
+function normalizeRecommendationTitle(value: string): string {
+  return value
+    .normalize('NFKC')
+    .toLocaleLowerCase()
+    .replace(/[\s\-–—:：|｜_·•]+/g, '');
+}
+
 export function containsUnsupportedPsychology(value: string): boolean {
   return /焦虑投射|细节强迫症|零容忍心态|寻找.{0,8}安全感|消除.{0,8}不确定性/.test(value);
 }
@@ -636,19 +672,27 @@ async function rankExternalCandidates(
     ...(options.learnerProfile?.goals ?? []).slice(0, 3).map((goal) => goal.title),
     ...(options.learningContext?.activeThread?.title ? [options.learningContext.activeThread.title] : []),
   ].join('、') || '未设置';
+  const feedback = (options.feedback ?? []).slice(0, 10).map((item) => (
+    `${item.rating === 'up' ? '有用' : '不相关'}：${item.title}${item.whyForYou ? `（${item.whyForYou}）` : ''}`
+  )).join('\n') || '暂无';
   const candidateText = candidates.map((candidate, index) => (
     `[${index}] ${candidate.title}\n类型：${candidate.contentKind}\n来源：${candidate.sourceLabel}\n作者：${candidate.authors?.join('、') || '未标注'}\n出版：${candidate.publishedAt || '未标注'}\n摘要：${candidate.snippet}\n视角：${candidate.discovery.perspective}\n推荐线索：${candidate.discovery.reason}`
   )).join('\n\n');
 
   const prompt = `<task>
 <role>你是 MeetMind 的信息编辑。你只在真实搜索候选中做选择，不生成新链接。</role>
-<context>用户当前目标：${goals}</context>
+<context>
+用户当前目标：${goals}
+用户过去反馈：
+${feedback}
+</context>
 <criteria>
   <item>选 3-4 条，可以一条都不选；如果候选质量足够，至少包含 1 条 paper 或 book</item>
   <item>必须包含 1 条 perspective=counterpoint 的候选，除非所有 counterpoint 候选都明显低质或不相关</item>
   <item>先判断对这次收藏上下文是否有新信息，再判断来源是否配得上这个问题</item>
   <item>研究问题优先原始论文、大学、机构或方法文档；人文问题优先原始文本、档案、出版机构和有编辑责任的长文；实用问题优先官方文档和可验证实例</item>
   <item>拒绝 SEO 内容农场、无来源转载、只重复已知内容的浅摘要</item>
+  <item>反馈“有用”表示延续其信息增量和来源类型，不是机械重复标题；反馈“不相关”的具体材料不得再次选择，也不要用同义标题换壳</item>
   <item>qualityReason 用一个短句说明这个来源带来的增量，不要宣称没有证据的权威性</item>
 </criteria>
 <candidates>
@@ -677,14 +721,15 @@ ${candidateText}
         candidate: candidates[item.index],
         qualityReason: item.qualityReason?.slice(0, 80),
       }));
-    return ensureExternalMix(selected, candidates);
+    // 排序模型可以一条都不选，也明确负责判断 counterpoint 是否相关。
+    // 不在后端把它淘汰的候选重新塞回去，否则“不同视角”会退化成硬凑多样性。
+    return selected;
   } catch (error) {
     log.warn('external ranking failed', error);
-    const fallback = candidates
-      .filter((candidate) => candidate.sourceScore >= 4)
+    return candidates
+      .filter((candidate) => candidate.sourceScore >= MIN_EXTERNAL_FALLBACK_SOURCE_SCORE)
       .slice(0, 4)
       .map((candidate) => ({ candidate }));
-    return ensureExternalMix(fallback, candidates);
   }
 }
 
@@ -704,28 +749,6 @@ function normalizeDiscoveryBrief(discovery: RawExternalDiscovery): ExternalDisco
     sourceCaptureIds: discovery.sourceCaptureIds,
     goalLabel: discovery.goalLabel,
   };
-}
-
-function ensureExternalMix(
-  selected: Array<{ candidate: ExternalFeedCandidate; qualityReason?: string }>,
-  candidates: ExternalFeedCandidate[],
-): Array<{ candidate: ExternalFeedCandidate; qualityReason?: string }> {
-  const output = [...selected];
-  if (output.length === 0) return output;
-  const selectedUrls = new Set(output.map((item) => item.candidate.url));
-  const addCandidate = (candidate: ExternalFeedCandidate | undefined): void => {
-    if (!candidate || selectedUrls.has(candidate.url)) return;
-    if (output.length >= 4) output.pop();
-    output.push({ candidate });
-    selectedUrls.add(candidate.url);
-  };
-  if (!output.some((item) => item.candidate.discovery.perspective === 'counterpoint')) {
-    addCandidate(candidates.find((candidate) => candidate.discovery.perspective === 'counterpoint'));
-  }
-  if (!output.some((item) => ['paper', 'book'].includes(item.candidate.contentKind))) {
-    addCandidate(candidates.find((candidate) => ['paper', 'book'].includes(candidate.contentKind)));
-  }
-  return output.slice(0, 4);
 }
 
 export const feedService = {

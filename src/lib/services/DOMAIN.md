@@ -70,7 +70,7 @@ api/route.ts → services → lib/utils, lib/db, lib/config
 | `workspace-echo-service.ts` | ~1300 | 每日回响生成（AI 洞察/金句/推荐）；CommonStack 新 schema 不返回 title，需从 takeaway / echo 生成标题后再进质量门 |
 | `workspace-search-service.ts` | 175 | 全局 AI 检索（流式带引用） |
 | `commonstack-echo-service.ts` | 273 | Echo LLM 调用（System Prompt 在此） |
-| `feed-service.ts` | ~700 | 今日情报编排与排序：内部线索来自收藏、已确认目标和活跃学习线，没有新 capture 也可由真实目标启动；外部检索计划覆盖深入、相邻与不同视角，模型只在真实网页/论文/书籍候选中筛选，禁止编造外链 |
+| `feed-service.ts` | ~700 | 今日情报编排与排序：内部线索来自收藏、已确认目标和活跃学习线，没有新 capture 也可由真实目标启动；外部检索计划覆盖深入、相邻与不同视角，模型只在真实网页/论文/书籍候选中筛选，禁止编造外链；明确点过“不相关”的同一材料会被排除，且不会为凑不同视角重新插回被模型淘汰的候选 |
 | `feed-preference-service.ts` | ~120 | 今日情报长期偏好：从账号 Feedback 读取有用/不相关记录，并与当前设备即时反馈合并；同一内容以设备最新判断优先 |
 
 ### 👤 用户 / 认证
