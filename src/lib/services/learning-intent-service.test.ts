@@ -1,5 +1,20 @@
 import { describe, expect, it } from 'vitest';
-import { sanitizeLearningIntentPlan } from './learning-intent-service';
+import { buildLearningIntentSystemPrompt, sanitizeLearningIntentPlan } from './learning-intent-service';
+
+describe('buildLearningIntentSystemPrompt', () => {
+  it('keeps the current request above historical context', () => {
+    const prompt = buildLearningIntentSystemPrompt(false);
+
+    expect(prompt).toContain('用户当前这句话定义目标边界');
+    expect(prompt).toContain('不能替用户把宽泛愿望静默收窄成历史里的具体目标');
+    expect(prompt).toContain('把这些方向变成一个真正影响学习路径的选择题');
+    expect(prompt).toContain('“学好某个大领域”这类宽泛愿望通常还不满足这个条件');
+  });
+
+  it('forbids another question after ambiguity has been resolved', () => {
+    expect(buildLearningIntentSystemPrompt(true)).toContain('questions 必须为空数组');
+  });
+});
 
 describe('sanitizeLearningIntentPlan', () => {
   it('keeps valid model intent fields and trims checkpoints to three', () => {

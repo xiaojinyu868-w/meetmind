@@ -43,7 +43,7 @@ api/route.ts → services → lib/utils, lib/db, lib/config
 | `summary-service.ts` | 246 | 课堂摘要生成 |
 | `lesson-digest-service.ts` | ~340 | 课堂结构化分段总结：segments + 图片锚点 → LLM 生成分段 digest + fallback 兜底；`normalizeLessonDigestOutput` 用前一段结束时间安全补齐模型遗漏的时间边界。桌面移动共享 |
 | `tutor-service.ts` | 273 | AI 家教：引用匹配 + LLM 解释 |
-| `learning-intent-service.ts` | ~190 | 深度学习意图确认：模型先利用已有上下文，只在学习路径确有歧义时生成 1-3 个动态单选/多选问题；用户作答后再次整理为最终计划，模型不可用时返回确定性计划 |
+| `learning-intent-service.ts` | ~220 | 深度学习意图确认：当前表达定义目标边界，历史上下文不能静默收窄宽泛愿望；只在学习路径确有歧义时生成 1-3 个动态单选/多选问题，用户作答后再次整理为最终计划，模型不可用时返回确定性计划 |
 | `workshop-readiness-service.ts` | ~220 | 应用矩阵内容适配判断：先用证据阈值拦截过短材料，再由模型判断学习内容类型、可用应用与可选推荐；允许 `not_ready` / 无推荐，避免把闲聊或不可靠转录包装成课程 |
 | `dify-service.ts` | 354 | Dify Agent 集成（提问引导 + 联网检索） |
 | `teaching-suggestion.ts` | 256 | 教学改进建议生成 |

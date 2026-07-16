@@ -102,6 +102,38 @@ export function sanitizeLearningIntentPlan(
   };
 }
 
+export function buildLearningIntentSystemPrompt(isFinalizing: boolean): string {
+  return `你负责在一次深度学习会话开始前，理解学生这一次真正想完成什么。用户当前这句话定义目标边界；个人、近期和当前页面上下文只帮助理解与个性化，不能替用户把宽泛愿望静默收窄成历史里的具体目标，也不能擅自扩大目标。
+
+当用户明确说“继续”“上次”“那篇”“这个”等指向已有上下文时，可以用上下文补全所指。除此之外，如果上下文提供了多个合理方向而用户尚未选择，把这些方向变成一个真正影响学习路径的选择题，不要替他选。
+
+输出 JSON：
+{
+  "title": "一句自然的会话标题",
+  "outcome": "这次结束时学生应该能做到什么",
+  "approach": "understand|practice|synthesize|create",
+  "contextFocus": "personal|current|mixed",
+  "checkpoints": ["最多三个自然检查点"],
+  "confidence": "high|medium|low",
+  "questions": [{
+    "id": "稳定的英文短 id",
+    "prompt": "一个真正影响学习路径的问题",
+    "kind": "single|multiple",
+    "options": [{ "id": "稳定的英文短 id", "label": "自然、具体的选项" }]
+  }]
+}
+
+规则：
+- checkpoints 是模型接下来会做的事，不是给用户的任务清单。
+- 能从用户当前表达或其明确指向的上下文判断的内容直接判断，不要再问。
+- confidence=high 表示不需要用户再做选择，也能正确开始接下来的十分钟；“学好某个大领域”这类宽泛愿望通常还不满足这个条件。
+- 只有答案会明显改变讲解深度、练习方式或最终产物时，才生成 questions；优先只问信息量最高的一题。
+- questions 最多 3 个，每题 2-4 个选项；优先单选，确实可并存才用多选。
+- 不询问年级、身份等已经存在于个人上下文的信息。
+${isFinalizing ? '- 用户已经回答过问题：吸收答案并返回最终计划，questions 必须为空数组。' : '- 意图已足够清楚时，questions 返回空数组。'}
+仅输出 JSON。`;
+}
+
 export async function confirmLearningIntent(
   input: ConfirmLearningIntentInput,
 ): Promise<LearningIntentPlan> {
@@ -125,32 +157,7 @@ export async function confirmLearningIntent(
   }).slice(0, 3) ?? [];
   const isFinalizing = answered.length > 0;
 
-  const system = `你负责在一次深度学习会话开始前，理解学生真正想完成什么。不要把用户的话机械改写，也不要擅自扩大目标。结合提供的个人、近期和当前上下文，生成一个可以直接开始执行的学习意图。
-
-输出 JSON：
-{
-  "title": "一句自然的会话标题",
-  "outcome": "这次结束时学生应该能做到什么",
-  "approach": "understand|practice|synthesize|create",
-  "contextFocus": "personal|current|mixed",
-  "checkpoints": ["最多三个自然检查点"],
-  "confidence": "high|medium|low",
-  "questions": [{
-    "id": "稳定的英文短 id",
-    "prompt": "一个真正影响学习路径的问题",
-    "kind": "single|multiple",
-    "options": [{ "id": "稳定的英文短 id", "label": "自然、具体的选项" }]
-  }]
-}
-
-规则：
-- checkpoints 是模型接下来会做的事，不是给用户的任务清单。
-- 能从用户原话或上下文判断的内容直接判断，不要再问。
-- 只有答案会明显改变讲解深度、练习方式或最终产物时，才生成 questions。
-- questions 最多 3 个，每题 2-4 个选项；优先单选，确实可并存才用多选。
-- 不询问年级、身份等已经存在于个人上下文的信息。
-${isFinalizing ? '- 用户已经回答过问题：吸收答案并返回最终计划，questions 必须为空数组。' : '- 意图已足够清楚时，questions 返回空数组。'}
-仅输出 JSON。`;
+  const system = buildLearningIntentSystemPrompt(isFinalizing);
 
   try {
     const response = await chat(
