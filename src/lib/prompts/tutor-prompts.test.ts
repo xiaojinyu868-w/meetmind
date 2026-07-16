@@ -233,6 +233,8 @@ describe('buildTutorSystemPrompt — goal 模式沉淀边界', () => {
     const prompt = buildTutorSystemPrompt('goal');
     expect(prompt).toMatch(/身份或阶段一旦已经清楚/);
     expect(prompt).toMatch(/不要继续盘问专业、学校、年级/);
+    expect(prompt).toMatch(/我是大三学生/);
+    expect(prompt).toMatch(/而不是追问“什么专业”/);
     expect(prompt).toMatch(/最近的状态/);
   });
 
