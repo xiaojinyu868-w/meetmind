@@ -95,7 +95,7 @@ components/
 | `CollectionMessageActionSheet.tsx` | ~283 | 收集消息操作菜单（引用/问 Tutor/多选/复习/编辑/打开原件/归档/删除），从 page.tsx 提取 |
 | `mobile/MobileCollectionSheet.tsx` | ~400 | 收集菜单 / 历史收集 / 今日情报面板；移动端底部或侧边 sheet，桌面端以具备 dialog 语义的右侧上下文抽屉呈现；情报空态可返回收集补充上下文 |
 | `CrossCourseFeedPanel.tsx` | ~180 | 个人上下文与目标驱动的情报面板：合并“看见自己”与真实外部信息，对用户零配置；保留上次结果并在后台刷新，失败不清空旧内容 |
-| `FeedStream.tsx` / `feed-stream-model.ts` | ~440 | 今日情报列表渲染器与纯分区模型：真实外部发现先于内部总结出现，打开抽屉第一屏就能看见文章、论文、书籍或报告；外部卡展示作者、出版时间、来源、个人推荐理由与不同视角，内部“看见自己”随后承接；支持反馈及外链打开 |
+| `FeedStream.tsx` / `feed-stream-model.ts` | ~420 | 今日情报列表渲染器与纯排序模型：外部发现和个人线索从首屏起交替出现，不再用两组标题把信息流切成两个报告；外部卡展示作者、出版时间、来源、个人推荐理由与不同视角；支持反馈及外链打开 |
 | `CollectionFeedMessageBubble.tsx` | ~340 | 收集 Feed 单条消息气泡（audio/video/image/document/text 五种类型），从 page.tsx 提取 |
 | `CollectionEmptyState.tsx` | ~30 | 收集为空时的安静心智提示；所有真实动作统一留在底部输入栏，不重复列举来源能力 |
 | `ImageUpload.tsx` | ~220 | 图片上传 |

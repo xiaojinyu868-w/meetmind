@@ -6,7 +6,7 @@ import { COPY } from '@/lib/ui/copy';
 import { recordFeedPreference } from '@/lib/feed-preferences';
 import { readStoredAccessToken } from '@/lib/hooks/useAuth';
 import type { FeedContentKind, FeedItem, FeedItemType, FeedPerspective } from '@/types';
-import { partitionFeedItems } from './feed-stream-model';
+import { buildFeedSequence } from './feed-stream-model';
 
 // ─── 类型标签映射 ────────────────────────────────────────────
 
@@ -97,59 +97,19 @@ export function FeedStream({ items, isLoading, error, onAction, onRetry, onShare
     );
   }
 
-  const { externalItems, internalItems } = partitionFeedItems(items);
+  const orderedItems = buildFeedSequence(items);
 
   return (
-    <div className="space-y-7 pb-4">
-      <FeedSection
-        title={COPY.feed.externalDiscoveries}
-        hint={COPY.feed.externalDiscoveriesHint}
-        items={externalItems}
-        onAction={onAction}
-        onShareEcho={onShareEcho}
-      />
-      <FeedSection
-        title={COPY.feed.internalDiscoveries}
-        hint={COPY.feed.internalDiscoveriesHint}
-        items={internalItems}
-        onAction={onAction}
-        onShareEcho={onShareEcho}
-      />
+    <div className="flex flex-col gap-2.5 pb-4">
+      {orderedItems.map((item, index) => (
+        <FeedCard
+          key={`${item.type}-${item.bvid || item.echoId || item.captureId || item.title}-${index}`}
+          item={item}
+          onAction={onAction}
+          onShareEcho={onShareEcho}
+        />
+      ))}
     </div>
-  );
-}
-
-function FeedSection({
-  title,
-  hint,
-  items,
-  onAction,
-  onShareEcho,
-}: {
-  title: string;
-  hint?: string;
-  items: FeedItem[];
-  onAction?: (item: FeedItem) => void;
-  onShareEcho?: (echoId: string) => void;
-}) {
-  if (items.length === 0) return null;
-  return (
-    <section>
-      <div className="mb-2.5 px-0.5">
-        <h3 className="font-serif text-[17px] font-semibold tracking-[-0.02em] text-ink">{title}</h3>
-        {hint ? <p className="mt-1 text-[11px] leading-relaxed text-ink-muted">{hint}</p> : null}
-      </div>
-      <div className="flex flex-col gap-2.5">
-        {items.map((item, index) => (
-          <FeedCard
-            key={`${item.type}-${item.bvid || item.echoId || item.captureId || item.title}-${index}`}
-            item={item}
-            onAction={onAction}
-            onShareEcho={onShareEcho}
-          />
-        ))}
-      </div>
-    </section>
   );
 }
 

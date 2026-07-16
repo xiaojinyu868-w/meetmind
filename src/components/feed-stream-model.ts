@@ -17,3 +17,15 @@ export function partitionFeedItems(items: FeedItem[]): {
     internalItems: items.filter((item) => !externalSet.has(item)),
   };
 }
+
+/** 外部发现与个人线索交替出现，让首屏同时具备“向外看”和“看见自己”。 */
+export function buildFeedSequence(items: FeedItem[]): FeedItem[] {
+  const { externalItems, internalItems } = partitionFeedItems(items);
+  const sequence: FeedItem[] = [];
+  const maxLength = Math.max(externalItems.length, internalItems.length);
+  for (let index = 0; index < maxLength; index += 1) {
+    if (externalItems[index]) sequence.push(externalItems[index]);
+    if (internalItems[index]) sequence.push(internalItems[index]);
+  }
+  return sequence;
+}
