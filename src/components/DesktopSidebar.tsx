@@ -89,7 +89,7 @@ export function DesktopSidebar({
   const [collapsed, setCollapsed] = useState(getInitialCollapsed);
   const effectiveCollapsed = collapsed || focusMode;
   const [showUserMenu, setShowUserMenu] = useState(false);
-  const { user, isAuthenticated, logout } = useAuth();
+  const { user, isAuthenticated, isCheckingAuth, logout } = useAuth();
 
   const toggleCollapsed = useCallback(() => {
     setCollapsed((prev) => {
@@ -281,7 +281,18 @@ export function DesktopSidebar({
 
       {/* ── 底部用户区 ── */}
       <div className={`relative ${effectiveCollapsed ? 'px-1.5' : 'px-2.5'} pb-3.5 pt-2`}>
-        {isAuthenticated && user ? (
+        {isCheckingAuth ? (
+          <div
+            aria-busy="true"
+            aria-live="polite"
+            className={`flex w-full items-center ${
+              effectiveCollapsed ? 'h-9 justify-center' : 'gap-2.5 px-2.5 py-[7px]'
+            }`}
+          >
+            <span className="skel h-7 w-7 flex-shrink-0 rounded-full" />
+            {!effectiveCollapsed ? <span className="skel h-3 w-20" /> : null}
+          </div>
+        ) : isAuthenticated && user ? (
           <>
             <button
               type="button"
