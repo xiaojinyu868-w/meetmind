@@ -53,6 +53,8 @@ src/app/
 
 全局 `showAISearch` 状态名为历史兼容名，当前实际动态挂载的是 `GlobalAskPanel`：桌面与移动共用同一全屏 Ask MeetMind，不再挂旧单轮 `AISearchPanel`。
 
+`/app?claimedCapture=[captureId]` 是 SharedAgent 领取后的回流契约：页面切到收集流，等待对应 WorkspaceCapture 回填后滚动到卡片并短暂显示 AI 在场微光，随后清掉参数，避免刷新时重复播放落点反馈。
+
 ### `src/app/(main)/app/matrix/[appKey]/page.tsx` — 学习应用独立页
 
 根据 `appKey` 参数渲染不同学习应用的独立画布；用户可见文案避免深链、会话数据、转录内容等内部词。

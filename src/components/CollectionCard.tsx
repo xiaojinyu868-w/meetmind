@@ -44,6 +44,8 @@ import {
 
 export interface CollectionCardProps {
   item: SourceIngestItem;
+  /** 刚领取或刚恢复的内容：短暂显示 AI 在场微光，帮助用户确认落点。 */
+  emphasized?: boolean;
   isCollectionContextSelectionMode: boolean;
   selectedCollectionContextIds: string[];
   audioPlaybackState: AudioPlaybackState | null;
@@ -89,6 +91,7 @@ function TypeBadge({ type }: { type: string }) {
 
 export function CollectionCard({
   item,
+  emphasized = false,
   isCollectionContextSelectionMode,
   selectedCollectionContextIds,
   audioPlaybackState,
@@ -164,8 +167,10 @@ export function CollectionCard({
 
   return (
     <div
-      className={`group relative rounded-2xl bg-card transition-all duration-200
-        ${isSelectedForContext
+      className={`group relative rounded-2xl bg-card transition-all duration-200 ${emphasized ? 'surface-ai' : ''}
+        ${emphasized
+          ? 'ring-[1.5px] ring-pine/35'
+          : isSelectedForContext
           ? 'ring-[1.5px] ring-pine/40 bg-pine/[0.03]'
           : 'ring-[0.5px] ring-ink/[0.06] hover:ring-pine/25 hover:bg-paper-warm/40'
         }`}

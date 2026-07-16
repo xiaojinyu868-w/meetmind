@@ -168,6 +168,7 @@ const MobileSimpleSubPage = dynamic(() => import('@/components/mobile/MobileApps
 function StudentAppContent({
   isGuestFastEntry,
   forcedWorkspaceTab,
+  initialClaimedCaptureId = null,
   forceMobilePreview = false,
   wechatCaptureToken = null,
   initialMobileSubPage = null,
@@ -176,6 +177,7 @@ function StudentAppContent({
 }: {
   isGuestFastEntry: boolean;
   forcedWorkspaceTab: SharedWorkspaceTab | null;
+  initialClaimedCaptureId?: string | null;
   forceMobilePreview?: boolean;
   wechatCaptureToken?: string | null;
   initialMobileSubPage?: MobileSubPage;
@@ -1238,6 +1240,43 @@ function StudentAppContent({
     },
   );
 
+  const [emphasizedCollectionItemId, setEmphasizedCollectionItemId] = useState<string | null>(null);
+  const claimedCaptureHandledRef = useRef<string | null>(null);
+
+  // 分享领取完成后，不把用户丢回通用首页：直接进入收集流。等跨设备数据
+  // 回填到本地后，把刚领取的卡片滚到视野中央，并用一次克制的 AI 微光确认落点。
+  useEffect(() => {
+    if (!initialClaimedCaptureId) return;
+    setViewMode('record');
+    setMobileCollectionSheet(null);
+  }, [initialClaimedCaptureId, setMobileCollectionSheet, setViewMode]);
+
+  useEffect(() => {
+    if (!initialClaimedCaptureId) return;
+    if (claimedCaptureHandledRef.current === initialClaimedCaptureId) return;
+
+    const target = collectionFeedItems.find((item) =>
+      item.workspaceCaptureId === initialClaimedCaptureId ||
+      item.id === initialClaimedCaptureId ||
+      item.id === `workspace-${initialClaimedCaptureId}`
+    );
+    if (!target) return;
+
+    claimedCaptureHandledRef.current = initialClaimedCaptureId;
+    setEmphasizedCollectionItemId(target.id);
+
+    window.requestAnimationFrame(() => {
+      document
+        .getElementById(`collection-item-${encodeURIComponent(target.id)}`)
+        ?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    });
+    window.setTimeout(() => setEmphasizedCollectionItemId(null), 4800);
+
+    const url = new URL(window.location.href);
+    url.searchParams.delete('claimedCapture');
+    window.history.replaceState({}, '', `${url.pathname}${url.search}${url.hash}`);
+  }, [collectionFeedItems, initialClaimedCaptureId]);
+
   const allCollectionItems = useMemo<WorkspaceCaptureListItem[]>(() => {
     const workspaceSourceKeys = new Set(
       workspaceCaptures
@@ -1541,23 +1580,25 @@ function StudentAppContent({
               ) : null}
 
               {collectionFeedItems.map((item) => (
-                <CollectionCard
-                  key={item.id}
-                  item={item}
-                  isCollectionContextSelectionMode={isCollectionContextSelectionMode}
-                  selectedCollectionContextIds={selectedCollectionContextIds}
-                  audioPlaybackState={audioPlaybackState}
-                  playingAudioMessageId={playingAudioMessageId}
-                  expandedAudioTranscriptId={expandedAudioTranscriptId}
-                  onOpenMessageMenu={openCollectionMessageMenu}
-                  onBeginLongPress={beginCollectionMessageLongPress}
-                  onCancelLongPress={cancelCollectionMessageLongPress}
-                  onToggleAudioPlayback={toggleAudioMessagePlayback}
-                  onToggleContextItem={toggleCollectionContextItem}
-                  onSetExpandedAudioTranscriptId={setExpandedAudioTranscriptId}
-                  onOpenReview={openReviewFromCollection}
-                  longPressTriggeredRef={collectionLongPressTriggeredRef}
-                />
+                <div key={item.id} id={`collection-item-${encodeURIComponent(item.id)}`}>
+                  <CollectionCard
+                    item={item}
+                    emphasized={emphasizedCollectionItemId === item.id}
+                    isCollectionContextSelectionMode={isCollectionContextSelectionMode}
+                    selectedCollectionContextIds={selectedCollectionContextIds}
+                    audioPlaybackState={audioPlaybackState}
+                    playingAudioMessageId={playingAudioMessageId}
+                    expandedAudioTranscriptId={expandedAudioTranscriptId}
+                    onOpenMessageMenu={openCollectionMessageMenu}
+                    onBeginLongPress={beginCollectionMessageLongPress}
+                    onCancelLongPress={cancelCollectionMessageLongPress}
+                    onToggleAudioPlayback={toggleAudioMessagePlayback}
+                    onToggleContextItem={toggleCollectionContextItem}
+                    onSetExpandedAudioTranscriptId={setExpandedAudioTranscriptId}
+                    onOpenReview={openReviewFromCollection}
+                    longPressTriggeredRef={collectionLongPressTriggeredRef}
+                  />
+                </div>
               ))}
 
               {/* ── 回声提示条 ── */}
@@ -2904,6 +2945,7 @@ function SearchParamsReader() {
   const { isMobile, mounted } = useResponsive();
   const isGuestFastEntry = searchParams.get('guest') === '1';
   const forcedWorkspaceTab = searchParams.get('workspace') === 'apps' ? 'apps' : null;
+  const initialClaimedCaptureId = searchParams.get('claimedCapture');
   const forceMobilePreview = searchParams.get('mobile') === '1';
   const wechatCaptureToken = searchParams.get('wechat_capture');
   const entryParam = searchParams.get('entry');
@@ -2929,6 +2971,7 @@ function SearchParamsReader() {
               <StudentAppContent
                 isGuestFastEntry={isGuestFastEntry}
                 forcedWorkspaceTab={forcedWorkspaceTab}
+                initialClaimedCaptureId={initialClaimedCaptureId}
                 forceMobilePreview
                 wechatCaptureToken={wechatCaptureToken}
                 initialMobileSubPage={initialMobileSubPage}
@@ -2946,6 +2989,7 @@ function SearchParamsReader() {
     <StudentAppContent
       isGuestFastEntry={isGuestFastEntry}
       forcedWorkspaceTab={forcedWorkspaceTab}
+      initialClaimedCaptureId={initialClaimedCaptureId}
       wechatCaptureToken={wechatCaptureToken}
       initialMobileSubPage={initialMobileSubPage}
       autoLoadDemo={guestDemoEntry.autoLoadDemo}

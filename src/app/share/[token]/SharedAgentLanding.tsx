@@ -82,6 +82,7 @@ export function SharedAgentLanding({ token }: SharedAgentLandingProps) {
   const [notFound, setNotFound] = React.useState(false);
   const [claiming, setClaiming] = React.useState(false);
   const [claimed, setClaimed] = React.useState(false);
+  const [claimedCaptureId, setClaimedCaptureId] = React.useState<string | null>(null);
   /** P0：从 ?autoClaim=1 触发的自动领取，与手动 claim 分开管理避免双调 */
   const autoClaimAttemptedRef = React.useRef(false);
 
@@ -122,7 +123,10 @@ export function SharedAgentLanding({ token }: SharedAgentLandingProps) {
 
   const handleClaim = React.useCallback(async () => {
     if (claimed) {
-      window.location.assign('/app');
+      const destination = claimedCaptureId
+        ? `/app?claimedCapture=${encodeURIComponent(claimedCaptureId)}`
+        : '/app';
+      window.location.assign(destination);
       return;
     }
     if (!isAuthenticated || !accessToken) {
@@ -145,8 +149,13 @@ export function SharedAgentLanding({ token }: SharedAgentLandingProps) {
         const detail = await res.json().catch(() => ({}));
         throw new Error(detail.error || `HTTP ${res.status}`);
       }
-      const data = (await res.json()) as { success: boolean; alreadyClaimed?: boolean };
+      const data = (await res.json()) as {
+        success: boolean;
+        captureId: string;
+        alreadyClaimed?: boolean;
+      };
       setClaimed(true);
+      setClaimedCaptureId(data.captureId);
       // v7 Octo IP：领取成功瞬间切到 love mood（被领取 = 被珍视 = 开心）
       octoReact('shared');
       toast.success(
@@ -160,7 +169,7 @@ export function SharedAgentLanding({ token }: SharedAgentLandingProps) {
       // P0 闭环最后一步：领取成功 → 1.2 秒后跳工作台，让 B 从分享态自然进入
       // 自己的学习现场，看到刚领取的 capture
       window.setTimeout(() => {
-        window.location.assign('/app');
+        window.location.assign(`/app?claimedCapture=${encodeURIComponent(data.captureId)}`);
       }, 1200);
     } catch (err) {
       const msg = err instanceof Error ? err.message : '领取失败';
@@ -168,7 +177,7 @@ export function SharedAgentLanding({ token }: SharedAgentLandingProps) {
     } finally {
       setClaiming(false);
     }
-  }, [accessToken, claimed, isAuthenticated, octoReact, token]);
+  }, [accessToken, claimed, claimedCaptureId, isAuthenticated, octoReact, token]);
 
   /**
    * P0 自动 claim：

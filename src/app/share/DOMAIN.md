@@ -13,7 +13,8 @@ Visitors can open a shared lesson without logging in. Logged-in visitors can cla
 1. `SharedAgentLanding` fetches `GET /api/share/[token]`.
 2. The page renders the shared lesson title, transcript digest, artifact preview, and optional shared chat.
 3. Claiming calls `POST /api/share/[token]/claim`.
-4. Re-sharing from the landing page copies the current public URL directly.
+4. A successful claim opens `/app?claimedCapture=[captureId]`; the workbench enters the collection feed, scrolls the claimed item into view, and briefly marks it with the AI-ready surface.
+5. Re-sharing from the landing page copies the current public URL directly.
 
 ## Files
 
