@@ -10,6 +10,7 @@ import { cn } from '@/lib/utils';
 import { COPY } from '@/lib/ui/copy';
 import { useLearningContext } from '@/hooks/useLearningContext';
 import { useGlobalAskHistory } from '@/hooks/useGlobalAskHistory';
+import { shouldAutoStartLearningIntent, useLearningIntentFlow } from '@/hooks/useLearningIntentFlow';
 import { formatLearningContextForTutor, summarizeLearningContext } from '@/lib/utils/learning-context';
 import { useSessionStore } from '@/stores/session-store';
 import { useCaptureEditorStore } from '@/stores/capture-editor-store';
@@ -20,6 +21,7 @@ import { OctoAvatar } from '@/components/ui/octo-avatar';
 import { LearningIntentConfirmationCard } from '@/components/LearningIntentConfirmationCard';
 import { LearningProgressMemoryCard } from '@/components/LearningProgressMemoryCard';
 import { LearningMemoryPanel } from '@/components/LearningMemoryPanel';
+import { LearningContextStatus } from '@/components/LearningContextStatus';
 import {
   ChatBubble,
   ChatComposer,
@@ -86,7 +88,6 @@ export function GlobalAskPanel({
   const [intentPlan, setIntentPlan] = React.useState<LearningIntentPlan | null>(null);
   const [activeIntent, setActiveIntent] = React.useState<LearningIntentPlan | null>(null);
   const [pendingQuery, setPendingQuery] = React.useState('');
-  const [intentBusy, setIntentBusy] = React.useState(false);
   const [progressByMessage, setProgressByMessage] = React.useState<Record<string, ProgressState>>({});
   const activeThreadRef = React.useRef(learning.activeThread);
   const composerRef = React.useRef<HTMLFormElement>(null);
@@ -94,6 +95,7 @@ export function GlobalAskPanel({
   React.useEffect(() => { activeThreadRef.current = learning.activeThread; }, [learning.activeThread]);
 
   const fileUpload = useChatFileUpload({ authToken: accessToken ?? undefined, targetRef: composerRef });
+  const { busy: intentBusy, requestIntent } = useLearningIntentFlow();
 
   const currentTranscript = React.useMemo(
     () => segments.map((segment) => segment.text.trim()).filter(Boolean).join('\n').slice(-10_000),
@@ -234,24 +236,20 @@ export function GlobalAskPanel({
     fallbackPlan?: LearningIntentPlan,
   ) => {
     setPendingQuery(query);
-    setIntentBusy(true);
     try {
       const summary = summarizeLearningContext(learning);
-      const response = await fetch('/api/tutor/intent', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          query,
-          learnerContext: summary,
-          recentContext: learning.recentActivities.slice(-6).map((item) => `${item.title}${item.detail ? `：${item.detail}` : ''}`).join('\n'),
-          activeContext: currentMaterials.map((item) => `${item.title}\n${item.content.slice(0, 500)}`).join('\n\n').slice(0, 4_000),
-          ...(answers?.length ? { answers } : {}),
-        }),
+      const plan = await requestIntent({
+        query,
+        learnerContext: summary,
+        recentContext: learning.recentActivities.slice(-6).map((item) => `${item.title}${item.detail ? `：${item.detail}` : ''}`).join('\n'),
+        activeContext: currentMaterials.map((item) => `${item.title}\n${item.content.slice(0, 500)}`).join('\n\n').slice(0, 4_000),
+        ...(answers?.length ? { answers } : {}),
       });
-      const payload = await response.json() as { ok?: boolean; plan?: LearningIntentPlan };
-      if (!response.ok || !payload.plan) throw new Error('intent unavailable');
-      if (answers?.length) await beginDeepSession(payload.plan, query);
-      else setIntentPlan(payload.plan);
+      if (shouldAutoStartLearningIntent(plan, Boolean(answers?.length))) {
+        await beginDeepSession(plan, query);
+      } else {
+        setIntentPlan(plan);
+      }
     } catch {
       if (fallbackPlan) {
         toast.message(COPY.globalAsk.refiningError);
@@ -262,10 +260,8 @@ export function GlobalAskPanel({
         sendQuick(query);
         setPendingQuery('');
       }
-    } finally {
-      setIntentBusy(false);
     }
-  }, [beginDeepSession, currentMaterials, learning, sendQuick]);
+  }, [beginDeepSession, currentMaterials, learning, requestIntent, sendQuick]);
 
   const submitText = React.useCallback((text: string) => {
     if (busy || intentBusy) return;
@@ -371,18 +367,25 @@ export function GlobalAskPanel({
           </div>
         </header>
 
-        <div className="flex items-center justify-center gap-1 border-b border-divider bg-white px-4 py-2">
-          {(['quick', 'deep'] as const).map((mode) => (
-            <button
-              key={mode}
-              type="button"
-              onClick={() => { setDepth(mode); if (mode === 'quick') { setIntentPlan(null); setActiveIntent(null); } }}
-              className={cn('inline-flex items-center gap-1.5 rounded-full px-3.5 py-2 text-[11.5px] transition', depth === mode ? 'bg-ink text-white' : 'text-ink-muted hover:bg-paper-warm hover:text-ink')}
-            >
-              {mode === 'deep' ? <BrainCircuit size={13} /> : <Sparkles size={12} />}
-              {mode === 'deep' ? COPY.globalAsk.deepMode : COPY.globalAsk.quickMode}
-            </button>
-          ))}
+        <div className="flex items-center gap-3 overflow-x-auto border-b border-divider bg-white px-4 py-2 sm:justify-between sm:px-6">
+          <div className="flex shrink-0 items-center gap-1">
+            {(['quick', 'deep'] as const).map((mode) => (
+              <button
+                key={mode}
+                type="button"
+                onClick={() => { setDepth(mode); if (mode === 'quick') { setIntentPlan(null); setActiveIntent(null); } }}
+                className={cn('inline-flex items-center gap-1.5 rounded-full px-3.5 py-2 text-[11.5px] transition', depth === mode ? 'bg-ink text-white' : 'text-ink-muted hover:bg-paper-warm hover:text-ink')}
+              >
+                {mode === 'deep' ? <BrainCircuit size={13} /> : <Sparkles size={12} />}
+                {mode === 'deep' ? COPY.globalAsk.deepMode : COPY.globalAsk.quickMode}
+              </button>
+            ))}
+          </div>
+          <LearningContextStatus
+            currentCount={currentMaterials.length + fileUpload.attachedFiles.length}
+            recentCount={learning.recentActivities.length}
+            memoryCount={learning.memories.filter((memory) => memory.status === 'active').length}
+          />
         </div>
 
         <ChatMessageList
@@ -455,6 +458,7 @@ export function GlobalAskPanel({
               </ChatBubble>
             );
           })}
+          {pendingQuery && !activeIntent ? <ChatBubble role="user"><span className="whitespace-pre-wrap">{pendingQuery}</span></ChatBubble> : null}
           {intentBusy ? <ChatThinkingStripBubble label={COPY.globalAsk.preparingIntent} avatar={<OctoAvatar mood="thinking" size="sm" aura />} /> : null}
           {intentPlan ? (
             <LearningIntentConfirmationCard

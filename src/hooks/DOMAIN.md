@@ -65,6 +65,7 @@ hooks → stores + types + lib/db + lib/utils
 | `useLearningContext.ts` | ~220 | 第二阶段统一学习上下文：登录态合并写入 `learnerProfile`，游客写 IndexedDB；管理用户确认的长期记忆、近期学习活动与可恢复学习线索，并通过页面事件同步多个消费组件 |
 | `useLessonDigest.ts` | ~190 | 课后课堂笔记：先用真实转录立即形成有时间锚点的可读预览，模型在后台静默整理并替换；失败时保留预览，不让用户停在空白等待 |
 | `useGlobalAskHistory.ts` | ~145 | 全局 Ask 的 IndexedDB 对话恢复/增量持久化 adapter；只恢复 `metadata.scope='global-ask'`，避免误接课堂复习对话 |
+| `useLearningIntentFlow.ts` | ~70 | 全局 Ask 的意图确认请求与自动执行判断：高置信且无关键分歧时直接开始，只有真实歧义或低置信计划才停下来确认 |
 | `useAppLearningActivity.ts` | ~80 | 桌面与移动应用共用的学习活动回写：记录应用生成结果及闪卡/测验交互到最近学习现场，使用稳定 sourceId 去重，不直接升级为长期记忆 |
 
 ### data/ — API 数据 hooks
