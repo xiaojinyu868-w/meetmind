@@ -6,6 +6,7 @@ import { COPY } from '@/lib/ui/copy';
 import { recordFeedPreference } from '@/lib/feed-preferences';
 import { readStoredAccessToken } from '@/lib/hooks/useAuth';
 import type { FeedContentKind, FeedItem, FeedItemType, FeedPerspective } from '@/types';
+import { partitionFeedItems } from './feed-stream-model';
 
 // ─── 类型标签映射 ────────────────────────────────────────────
 
@@ -96,22 +97,21 @@ export function FeedStream({ items, isLoading, error, onAction, onRetry, onShare
     );
   }
 
-  const externalItems = items.filter((item) => item.type === 'web-recommend' || item.type === 'bili-recommend');
-  const internalItems = items.filter((item) => !externalItems.includes(item));
+  const { externalItems, internalItems } = partitionFeedItems(items);
 
   return (
     <div className="space-y-7 pb-4">
       <FeedSection
-        title={COPY.feed.internalDiscoveries}
-        hint={COPY.feed.internalDiscoveriesHint}
-        items={internalItems}
+        title={COPY.feed.externalDiscoveries}
+        hint={COPY.feed.externalDiscoveriesHint}
+        items={externalItems}
         onAction={onAction}
         onShareEcho={onShareEcho}
       />
       <FeedSection
-        title={COPY.feed.externalDiscoveries}
-        hint={COPY.feed.externalDiscoveriesHint}
-        items={externalItems}
+        title={COPY.feed.internalDiscoveries}
+        hint={COPY.feed.internalDiscoveriesHint}
+        items={internalItems}
         onAction={onAction}
         onShareEcho={onShareEcho}
       />
