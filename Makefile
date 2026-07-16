@@ -1,6 +1,17 @@
 # MeetMind Golden Commands
 # Agent 和人类都只用这些命令。不要发明新脚本。
 
+RUNTIME_TARGETS := dev check build deploy test test-watch test-server test-all lint \
+	smoke smoke-intent smoke-review smoke-in-class smoke-shared smoke-all ttft \
+	eval eval-unit eval-asr eval-asr-real eval-tutor eval-tutor-real eval-guard \
+	eval-guard-update eval-ci db-push db-studio
+
+.PHONY: assert-node-runtime
+assert-node-runtime:
+	@node -e 'const major=Number(process.versions.node.split(".")[0]); if (major !== 24) { console.error("MeetMind requires Node.js 24 LTS. Run nvm use, then reinstall dependencies with npm ci."); process.exit(1); }'
+
+$(RUNTIME_TARGETS): assert-node-runtime
+
 # === 日常开发 ===
 
 .PHONY: dev

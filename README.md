@@ -284,12 +284,13 @@ Agent-native 在这里不是“让 Agent 随便改代码”，而是让每次修
 
 ## 本地运行
 
-如果你要参与开发，请先阅读 [`AGENTS.md`](./AGENTS.md)，再执行：
+如果你要参与开发，请先阅读 [`AGENTS.md`](./AGENTS.md)。MeetMind 统一使用 **Node.js 24 LTS**；SQLite 驱动包含原生模块，安装依赖后不要切换 Node 主版本，否则分享、同步等服务端路径会在运行时失败。
 
 ```bash
 git clone https://github.com/xiaojinyu868-w/meetmind.git
 cd meetmind
-npm install
+nvm use        # 读取仓库 .nvmrc，切到 Node.js 24
+npm ci
 cp .env.example .env
 
 make dev       # 默认 http://localhost:3001

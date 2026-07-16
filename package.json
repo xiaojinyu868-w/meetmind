@@ -3,6 +3,9 @@
   "version": "1.0.0",
   "description": "MeetMind - 以学习者长期上下文为中心的 AI 学习产品",
   "private": true,
+  "engines": {
+    "node": ">=24 <25"
+  },
   "scripts": {
     "dev": "node server.js",
     "dev:clean": "npm run clean:next && node server.js",
