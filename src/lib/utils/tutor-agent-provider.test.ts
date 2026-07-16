@@ -3,6 +3,7 @@ import {
   formatTutorAgentUserError,
   resolveTutorAgentProviderConfig,
   resolveTutorAgentProviderFallbacks,
+  resolveTutorFirstTokenTimeoutMs,
   shouldFallbackTutorAgentError,
 } from './tutor-agent-provider';
 
@@ -101,6 +102,16 @@ describe('resolveTutorAgentProviderConfig', () => {
 
   it('treats provider busy retry exhaustion as fallback-eligible', () => {
     expect(shouldFallbackTutorAgentError('Failed after 3 attempts. Last error: Service is too busy.')).toBe(true);
+    expect(shouldFallbackTutorAgentError('Tutor first token timeout after 15000ms')).toBe(true);
+    expect(shouldFallbackTutorAgentError('AbortError: This operation was aborted')).toBe(true);
+  });
+
+  it('uses a bounded first-token timeout', () => {
+    expect(resolveTutorFirstTokenTimeoutMs({})).toBe(15_000);
+    expect(resolveTutorFirstTokenTimeoutMs({ TUTOR_FIRST_TOKEN_TIMEOUT_MS: '12000' })).toBe(12_000);
+    expect(resolveTutorFirstTokenTimeoutMs({ TUTOR_FIRST_TOKEN_TIMEOUT_MS: '1000' })).toBe(5_000);
+    expect(resolveTutorFirstTokenTimeoutMs({ TUTOR_FIRST_TOKEN_TIMEOUT_MS: '90000' })).toBe(45_000);
+    expect(resolveTutorFirstTokenTimeoutMs({ TUTOR_FIRST_TOKEN_TIMEOUT_MS: 'invalid' })).toBe(15_000);
   });
 
   it('does not fallback authentication or model configuration errors', () => {

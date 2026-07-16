@@ -20,7 +20,7 @@
 | `rate-limit.ts` | 59 | API 速率限制中间件封装 | `applyRateLimit`, `withRateLimit` |
 | `public-routes.ts` | — | middleware 公共路由白名单与匹配函数；`/api/feed` 与 Tutor / 应用执行一样允许匿名请求，生成额度仍由 route 内 rate limit 控制 | `isPublicRoute` |
 | `inline-app-retry.ts` | 23 | 内联应用执行的瞬时失败重试策略 | `shouldRetryInlineAppExecute`, `getInlineAppRetryDelayMs` |
-| `tutor-agent-provider.ts` | 130 | Tutor Agent OpenAI-compatible provider 配置解析（按请求模型 / env 选择 DeepSeek、DashScope 或 OpenAI；强制 Chat Completions；提供 DeepSeek ↔ DashScope fallback 候选、可恢复错误分类与用户错误文案格式化；DeepSeek thinking 模型禁用 native tools，改走 `<open_app:KEY/>` + `/api/apps/execute`） | `resolveTutorAgentProviderConfig`, `resolveTutorAgentProviderFallbacks`, `shouldFallbackTutorAgentError`, `formatTutorAgentUserError`, `shouldUseNativeTutorTools` |
+| `tutor-agent-provider.ts` | ~180 | Tutor Agent OpenAI-compatible provider 配置解析（按请求模型 / env 选择 StepFun、DeepSeek、DashScope 或 OpenAI；强制 Chat Completions；提供 provider fallback、15 秒首字熔断配置、可恢复错误分类与用户错误文案格式化） | `resolveTutorAgentProviderConfig`, `resolveTutorAgentProviderFallbacks`, `resolveTutorFirstTokenTimeoutMs`, `shouldFallbackTutorAgentError`, `formatTutorAgentUserError` |
 | `ai-model-preference.ts` | 19 | 设置页 AI 模型偏好 key 与 `auto` 解析 | `AI_MODEL_PREFERENCE_KEY`, `resolveExplicitAiModelPreference` |
 | `video-source.ts` | 35 | 视频播放源标识恢复（B 站 bvid/cid） | `resolveBilibiliVideoIdentifiers` |
 | `video-resolve-url.ts` | 22 | 旧视频 URL 解析接口兼容的安全 URL 归一化 | `resolveLegacyVideoUrl` |

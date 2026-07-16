@@ -178,6 +178,7 @@ make eval-tutor-real         # 真实调 streamText + tools（优先当前模型
 | `OPENAI_API_KEY` 或 `DASHSCOPE_API_KEY` | — | 兼容凭证；Qwen-family 优先使用 `DASHSCOPE_API_KEY` 并指向百炼 OpenAI-compatible endpoint；首个 provider 繁忙/限流/超时且尚未输出内容时可自动切换备用通道 |
 | `TUTOR_MODEL` | env 驱动 | 深度学习、课堂同桌与复习默认模型；未声明时依可用凭证回落到 `step-3.7-flash` / `DeepSeek-V4-Flash` / `qwen3.7-plus` |
 | `TUTOR_QUICK_MODEL` | `TUTOR_MODEL` 同 provider 的 Flash | Ask MeetMind「直接问」专用低延迟模型；DashScope 默认 `qwen3.6-flash`，显式请求模型仍优先 |
+| `TUTOR_FIRST_TOKEN_TIMEOUT_MS` | `15000` | 单个 provider 的无首字熔断（范围 5000–45000ms）；超时切备用通道，已经开始输出的回答不截断 |
 | `TUTOR_BASE_URL` | DashScope compatible endpoint | 非 DeepSeek/StepFun 模型的 Tutor OpenAI-compatible baseURL；StepFun 模型使用 `STEPFUN_BASE_URL`，DeepSeek 模型使用 `DEEPSEEK_BASE_URL` |
 
 ---

@@ -49,6 +49,7 @@ import { ModelDefaults } from '@/lib/config/app.config';
 import {
   formatTutorAgentUserError,
   resolveTutorAgentProviderFallbacks,
+  resolveTutorFirstTokenTimeoutMs,
   shouldFallbackTutorAgentError,
   type TutorAgentProviderConfig,
 } from '@/lib/utils/tutor-agent-provider';
@@ -283,9 +284,7 @@ function getRawTutorAgentErrorMessage(error: unknown): string {
 function hasDeliveredAssistantOutput(chunk: UIMessageChunk): boolean {
   if (chunk.type.startsWith('data-')) return true;
   return [
-    'text-start',
     'text-delta',
-    'reasoning-start',
     'reasoning-delta',
     'source-url',
     'source-document',
@@ -311,6 +310,7 @@ function createTutorAttemptStream({
     onError: (error) => formatTutorAgentUserError(error),
     async execute({ writer }) {
       let attemptedProviderFallback = false;
+      const firstTokenTimeoutMs = resolveTutorFirstTokenTimeoutMs(process.env);
 
       for (let attemptIndex = 0; attemptIndex < providers.length; attemptIndex += 1) {
         const provider = providers[attemptIndex];
@@ -341,6 +341,10 @@ function createTutorAttemptStream({
         }
         const openai = createOpenAI(openaiOptions);
         const model = openai.chat(modelId);
+        const firstTokenController = new AbortController();
+        const firstTokenTimer = setTimeout(() => {
+          firstTokenController.abort(new Error(`Tutor first token timeout after ${firstTokenTimeoutMs}ms`));
+        }, firstTokenTimeoutMs);
         // M14.6：纯对话，不挂 native tools。结构化产物通过应用矩阵 SkillChip 直接打开。
         const tools = {};
         let deliveredOutput = false;
@@ -356,6 +360,7 @@ function createTutorAttemptStream({
           sessionId: body.sessionId,
           mode: body.mode,
           model: modelId,
+          firstTokenTimeoutMs,
           providerAttempt: attemptIndex + 1,
           providerAttempts: providers.length,
           hasRecentFocus: Boolean(body.context.recentFocus),
@@ -370,6 +375,7 @@ function createTutorAttemptStream({
           system: systemPrompt,
           messages: modelMessages,
           tools,
+          abortSignal: firstTokenController.signal,
           // 纯对话 1 步即完成；3 步留安全余量。
           stopWhen: stepCountIs(3),
           // 让 token 按"中文单字 / 英文词"为单位平滑流出，前端字符逐个浮现。
@@ -440,40 +446,47 @@ function createTutorAttemptStream({
           onError: getRawTutorAgentErrorMessage,
         });
 
-        for await (const chunk of uiStream) {
-          if (chunk.type === 'error' && !deliveredOutput && attemptIndex < providers.length - 1) {
-            const rawError = chunk.errorText;
-            if (shouldFallbackTutorAgentError(rawError)) {
-              shouldTryNextProvider = true;
-              attemptedProviderFallback = true;
-              track({
-                kind: 'tutor.fail',
-                sessionId: body.sessionId,
-                errorCode: 'TUTOR_PROVIDER_FALLBACK',
-                errorMsg: rawError,
-              });
-              log.warn('provider fallback', {
-                sessionId: body.sessionId,
-                fromModel: modelId,
-                toModel: providers[attemptIndex + 1]?.modelId,
-                err: rawError,
-              });
-              break;
-            }
-          }
+        try {
+          for await (const chunk of uiStream) {
+            const chunkDeliveredOutput = hasDeliveredAssistantOutput(chunk);
+            if (chunkDeliveredOutput) clearTimeout(firstTokenTimer);
 
-          if (chunk.type === 'error') {
-            writer.write({
-              ...chunk,
-              errorText: formatTutorAgentUserError(chunk.errorText, {
-                attemptedFallback: attemptedProviderFallback,
-              }),
-            });
-          } else {
-            writer.write(chunk);
+            if (chunk.type === 'error' && !deliveredOutput && attemptIndex < providers.length - 1) {
+              const rawError = chunk.errorText;
+              if (shouldFallbackTutorAgentError(rawError)) {
+                shouldTryNextProvider = true;
+                attemptedProviderFallback = true;
+                track({
+                  kind: 'tutor.fail',
+                  sessionId: body.sessionId,
+                  errorCode: 'TUTOR_PROVIDER_FALLBACK',
+                  errorMsg: rawError,
+                });
+                log.warn('provider fallback', {
+                  sessionId: body.sessionId,
+                  fromModel: modelId,
+                  toModel: providers[attemptIndex + 1]?.modelId,
+                  err: rawError,
+                });
+                break;
+              }
+            }
+
+            if (chunk.type === 'error') {
+              writer.write({
+                ...chunk,
+                errorText: formatTutorAgentUserError(chunk.errorText, {
+                  attemptedFallback: attemptedProviderFallback,
+                }),
+              });
+            } else {
+              writer.write(chunk);
+            }
+            // 工具调用帧也可能已被前端渲染；一旦有可见输出，就不再切换 provider，避免 UI 状态错乱。
+            deliveredOutput = deliveredOutput || chunkDeliveredOutput;
           }
-          // 工具调用帧也可能已被前端渲染；一旦有可见输出，就不再切换 provider，避免 UI 状态错乱。
-          deliveredOutput = deliveredOutput || hasDeliveredAssistantOutput(chunk);
+        } finally {
+          clearTimeout(firstTokenTimer);
         }
 
         if (shouldTryNextProvider) continue;

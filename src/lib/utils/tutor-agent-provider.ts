@@ -23,6 +23,9 @@ const DEFAULT_DEEPSEEK_MODEL = 'DeepSeek-V4-Flash';
 // qwen3.7-plus 是阿里云百炼当前主力 thinking 模型，配合 enable_thinking=false 关闭推理后
 // 速度和稳定性都达标。完整列表见 https://bailian.console.aliyun.com/cn-beijing/?tab=model
 const DEFAULT_QWEN_MODEL = 'qwen3.7-plus';
+const DEFAULT_FIRST_TOKEN_TIMEOUT_MS = 15_000;
+const MIN_FIRST_TOKEN_TIMEOUT_MS = 5_000;
+const MAX_FIRST_TOKEN_TIMEOUT_MS = 45_000;
 
 function pickKey(source: TutorAgentProviderConfig['keySource'], value: string | undefined) {
   const trimmed = value?.trim();
@@ -55,6 +58,16 @@ function isDeepSeekBaseUrl(baseURL: string): boolean {
 
 function hasKey(value: string | undefined): boolean {
   return Boolean(value?.trim());
+}
+
+/**
+ * 首字超时只约束“模型尚未产生任何可见内容”的阶段。
+ * 一旦开始流式输出，长回答可以继续完成，不会被这个截止时间截断。
+ */
+export function resolveTutorFirstTokenTimeoutMs(env: EnvLike): number {
+  const configured = Number(env.TUTOR_FIRST_TOKEN_TIMEOUT_MS);
+  if (!Number.isFinite(configured)) return DEFAULT_FIRST_TOKEN_TIMEOUT_MS;
+  return Math.min(MAX_FIRST_TOKEN_TIMEOUT_MS, Math.max(MIN_FIRST_TOKEN_TIMEOUT_MS, Math.round(configured)));
 }
 
 function dedupeProviderConfigs(configs: TutorAgentProviderConfig[]): TutorAgentProviderConfig[] {
@@ -148,7 +161,7 @@ export function shouldFallbackTutorAgentError(error: unknown): boolean {
   if (/\b(401|403|unauthorized|forbidden|invalid api key|api key|model not found|no such model|invalid model)\b/i.test(message)) {
     return false;
   }
-  return /\b(service is too busy|too busy|overloaded|rate limit|rate limited|429|5\d\d|timeout|timed out|econnreset|etimedout|failed after \d+ attempts)\b/i.test(message);
+  return /\b(service is too busy|too busy|overloaded|rate limit|rate limited|429|5\d\d|timeout|timed out|aborted|aborterror|econnreset|etimedout|failed after \d+ attempts)\b/i.test(message);
 }
 
 export function formatTutorAgentUserError(error: unknown, options: { attemptedFallback?: boolean } = {}): string {

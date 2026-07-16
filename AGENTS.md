@@ -306,6 +306,7 @@ POST /api/tutor/agent
                  // M14.6：所有 mode 纯对话，不挂 native tools，不注入 <open_app:KEY/> marker 合约。
                  // 结构化产物由前端 SkillChip 直接打开应用矩阵（见 §3.5）。
                  // Qwen thinking 模型通过 fetch hook 注入 enable_thinking=false 抑制推理，降 TTFT。
+                 // 单 provider 15s 无首字即熔断并切已配置备用通道；开始输出后不截断。
                  stopWhen: stepCountIs(3),
                  experimental_transform: smoothStream({
                    chunking: /[\u4E00-\u9FFF\u3000-\u303F\uFF00-\uFFEF]|\S+\s+/,  // 中文 1 字 1 切、英文 1 词 1 切
