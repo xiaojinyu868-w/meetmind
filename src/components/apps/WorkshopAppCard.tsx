@@ -23,6 +23,7 @@ export type WorkshopCardStatus = 'idle' | 'running' | 'success' | 'error';
 interface WorkshopAppCardProps {
   app: WorkshopAppCatalogItem;
   status: WorkshopCardStatus;
+  available?: boolean;
   recommended?: boolean;
   recommendationReason?: string;
   progressLabel?: ReactNode;
@@ -42,16 +43,18 @@ const APP_ICONS: Record<WorkshopAppKey, typeof Layers> = {
   'audio-overview': Headphones,
 };
 
-function statusLabel(status: WorkshopCardStatus): string {
+function statusLabel(status: WorkshopCardStatus, available: boolean): string {
   if (status === 'running') return COPY.apps.matrix.running;
   if (status === 'success') return COPY.apps.matrix.ready;
   if (status === 'error') return COPY.apps.matrix.failed;
+  if (!available) return COPY.apps.matrix.notAvailable;
   return COPY.apps.matrix.waiting;
 }
 
 export function WorkshopAppCard({
   app,
   status,
+  available = true,
   recommended = false,
   recommendationReason,
   progressLabel,
@@ -88,7 +91,7 @@ export function WorkshopAppCard({
           <span className={`${styles.statusDot} ${styles[`status${status}`]}`}>
             <span className={styles.statusDotCore} aria-hidden />
             <span className={styles.statusDotLabel}>
-              {status === 'running' && progressLabel ? progressLabel : statusLabel(status)}
+              {status === 'running' && progressLabel ? progressLabel : statusLabel(status, available)}
             </span>
           </span>
         </div>
@@ -107,7 +110,7 @@ export function WorkshopAppCard({
             {COPY.apps.matrix.progress}
           </button>
         ) : status === 'error' ? (
-          <button type="button" className={styles.primaryAction} onClick={onRetry} data-testid={`workshop-inline-retry-${app.key}`}>
+          <button type="button" className={styles.primaryAction} onClick={onRetry} disabled={!available} data-testid={`workshop-inline-retry-${app.key}`}>
             <RotateCcw size={13} strokeWidth={1.75} />
             {COPY.apps.matrix.retry}
           </button>
@@ -117,15 +120,15 @@ export function WorkshopAppCard({
               <ExternalLink size={13} strokeWidth={1.75} />
               {app.key === 'infographic' ? COPY.apps.matrix.openImage : COPY.apps.matrix.open}
             </button>
-            <button type="button" className={styles.secondaryAction} onClick={onRemake} data-testid={`workshop-bg-generate-${app.key}`}>
+            <button type="button" className={styles.secondaryAction} onClick={onRemake} disabled={!available} data-testid={`workshop-bg-generate-${app.key}`}>
               <RotateCw size={13} strokeWidth={1.75} />
               {COPY.apps.matrix.remake}
             </button>
           </>
         ) : (
-          <button type="button" className={styles.primaryAction} onClick={onStart} data-testid={`workshop-bg-generate-${app.key}`}>
+          <button type="button" className={styles.primaryAction} onClick={onStart} disabled={!available} data-testid={`workshop-bg-generate-${app.key}`}>
             <Play size={13} strokeWidth={1.75} />
-            {COPY.apps.matrix.start}
+            {available ? COPY.apps.matrix.start : COPY.apps.matrix.notAvailable}
           </button>
         )}
       </div>

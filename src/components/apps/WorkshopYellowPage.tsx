@@ -258,11 +258,9 @@ export function WorkshopYellowPage(props: WorkshopYellowPageProps) {
     summary: summaryOverview,
   });
 
-  const eligibleApps = useMemo(() => {
-    if (!assessment) return visibleApps;
-    const allowed = new Set(assessment.allowedAppKeys);
-    return visibleApps.filter((app) => allowed.has(app.key));
-  }, [assessment, visibleApps]);
+  const availableAppKeys = useMemo(() => new Set(
+    assessment?.allowedAppKeys ?? (transcript.length > 0 ? visibleApps.map((app) => app.key) : []),
+  ), [assessment?.allowedAppKeys, transcript.length, visibleApps]);
 
   const fallbackRecommendation = useMemo(() => recommendWorkshopApp({
     activeAnchorCount,
@@ -277,9 +275,9 @@ export function WorkshopYellowPage(props: WorkshopYellowPageProps) {
     ? COPY.apps.matrix.recommendedByContent
     : fallbackRecommendation.reason;
   const recommendedApp = recommendationKey
-    ? eligibleApps.find((app) => app.key === recommendationKey)
+    ? visibleApps.find((app) => app.key === recommendationKey && availableAppKeys.has(app.key))
     : undefined;
-  const otherApps = eligibleApps.filter((app) => app.key !== recommendedApp?.key);
+  const otherApps = visibleApps.filter((app) => app.key !== recommendedApp?.key);
   const blockedCopy = assessment?.status === 'not_ready'
     ? readinessMessage(assessment.reason)
     : null;
@@ -713,24 +711,24 @@ export function WorkshopYellowPage(props: WorkshopYellowPageProps) {
 
   const runningCount = useMemo(
     () =>
-      eligibleApps.filter((app) => {
+      visibleApps.filter((app) => {
         const state = taskMap[app.key];
         return state?.status === 'running' || runningMap[app.key];
       }).length,
-    [eligibleApps, runningMap, taskMap]
+    [runningMap, taskMap, visibleApps]
   );
 
   const generatedCount = useMemo(
-    () => eligibleApps.filter((app) => generatedMap[app.key]).length,
-    [eligibleApps, generatedMap]
+    () => visibleApps.filter((app) => generatedMap[app.key]).length,
+    [generatedMap, visibleApps]
   );
 
   const generatedShareableCount = useMemo(
-    () => eligibleApps.filter((app) => (
+    () => visibleApps.filter((app) => (
       (app.key === 'cheatsheet' || app.key === 'mindmap' || app.key === 'quiz' || app.key === 'infographic')
       && generatedMap[app.key]
     )).length,
-    [eligibleApps, generatedMap]
+    [generatedMap, visibleApps]
   );
 
   const failedCount = useMemo(
@@ -756,6 +754,7 @@ export function WorkshopYellowPage(props: WorkshopYellowPageProps) {
         key={app.key}
         app={app}
         status={status}
+        available={availableAppKeys.has(app.key)}
         recommended={isRecommended}
         recommendationReason={isRecommended ? recommendationReason : undefined}
         progressLabel={dockTask ? <ElapsedTimer startMs={dockTask.startedAt} /> : undefined}
@@ -780,7 +779,7 @@ export function WorkshopYellowPage(props: WorkshopYellowPageProps) {
         <p className={styles.contextBasis}>{COPY.apps.matrix.contextBasis(transcript.length, activeAnchorCount, keyDifficulties?.length ?? 0)}</p>
         {assessment?.status !== 'not_ready' && (generatedCount > 0 || runningCount > 0 || failedCount > 0) ? (
           <p className={styles.subStatus} data-testid="workshop-task-summary">
-            {COPY.apps.matrix.summary(eligibleApps.length, generatedCount, runningCount, failedCount)}
+            {COPY.apps.matrix.summary(visibleApps.length, generatedCount, runningCount, failedCount)}
           </p>
         ) : null}
       </header>
@@ -792,7 +791,7 @@ export function WorkshopYellowPage(props: WorkshopYellowPageProps) {
         </div>
       ) : null}
 
-      {recommendedApp && assessment?.status !== 'not_ready' ? (
+      {recommendedApp ? (
         <section className={styles.matrixSection} aria-labelledby="workshop-recommended-title">
           <div className={styles.sectionHeading}>
             <h3 id="workshop-recommended-title" className={styles.sectionTitle}>{COPY.apps.matrix.recommendedTitle}</h3>
@@ -802,11 +801,15 @@ export function WorkshopYellowPage(props: WorkshopYellowPageProps) {
         </section>
       ) : null}
 
-      {assessment?.status !== 'not_ready' && otherApps.length > 0 ? (
+      {otherApps.length > 0 ? (
         <section className={styles.matrixSection} aria-labelledby="workshop-all-title">
           <div className={styles.sectionHeading}>
             <h3 id="workshop-all-title" className={styles.sectionTitle}>
-              {recommendedApp ? COPY.apps.matrix.allTitle : COPY.apps.matrix.availableTitle}
+              {assessment?.status === 'not_ready'
+                ? COPY.apps.matrix.previewTitle
+                : recommendedApp
+                  ? COPY.apps.matrix.allTitle
+                  : COPY.apps.matrix.availableTitle}
             </h3>
           </div>
           <div className={styles.grid}>{otherApps.map((app) => renderAppCard(app))}</div>
