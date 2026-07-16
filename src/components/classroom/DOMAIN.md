@@ -23,7 +23,7 @@ classroom/ ← hooks/useClassroomCompanion.ts（对话 hook 消费 composeFirstH
 |------|------|------|
 | `ClassroomLayout.tsx` | ~270 | 左右分栏容器；同桌只在真实录课 / 示例课听课态可见，无课堂上下文时隐藏右栏、Octo Buddy 和移动端问同学入口；录课态右栏默认 340px，把宽度优先留给课堂脉络并保留拖拽放大 |
 | `ClassroomLeftPanel.tsx` | ~690 | 视图管理器（list ↔ recording 淡入切换）+ 首页能力旅程（听懂现场 / 连起资料 / 练成结果）+ **ActiveLessonPill 置顶活动条** + StickyStartBar 底部主 CTA；零存量态把录音来源选择传给 Hero；试听课完成态透传课后引导动作 |
-| `ClassroomHomeCommandCenter.tsx` | ~155 | 有历史课堂时的桌面首页学习控制台：把日期、个人上下文、接回现场、资料/搜索入口与“听懂→连起→练成”能力旅程收进一个首屏表面，避免多个说明区块把历史课堂挤出屏幕 |
+| `ClassroomHomeCommandCenter.tsx` | ~105 | 有历史课堂时的桌面首页续学控制台：只保留日期、续学主叙事、真实恢复现场、问课堂与放材料入口；不再重复解释能力，让最近课堂进入首屏 |
 | `ClassroomCompanionPanel.tsx` | ~585 | 右侧同桌面板（header/气泡/流式气泡/thinking/输入栏）；课中 / 课后 starter 都用 Octo Buddy 像素章鱼 + 轻问题 chip 引导用户开口，不做重功能卡 |
 | `InlineAppCard.tsx` | ~160 | 对话内应用承载卡（真实应用 UI 复用 `apps/windows/AppRenderSurface`，不再手写一套窄版） |
 | `OctoBuddy.tsx` | ~660 | Octo Buddy 像素 IP（Sprite + 悬浮球）；Sprite 自带呼吸 / 听课 / 开心动画，右侧同桌内嵌也必须动起来 |
