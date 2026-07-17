@@ -537,14 +537,9 @@ export function useRecordingLifecycle(
     editorAct.setTimeline(tl);
     memoryService.save(tl);
 
-    // v3.0 录课结束动线：让"递结晶"成为自然 flow 的一部分。
+    // v3.0 录课结束动线：有效课堂直接进入学习应用；分享跟随之后做好的成果出现。
     //
-    // 旧逻辑：classroom tab 录完 → 留在课堂 tab 的列表，用户看到卡片要自己
-    // 决定下一步——但 OctoCrystalDispatcher（应用矩阵首屏的递结晶入口）
-    // 在 review apps tab 才出现，用户不会自己摸过去 = K 系数掉一半。
-    //
-    // 新逻辑：
-    //   - classroom tab 且已有有效转录 → 跳 review apps（dispatcher 第一眼可见）
+    //   - classroom tab 且已有有效转录 → 跳 review apps
     //   - 空课堂 / 仍等最终转写 → 留在课堂列表，避免展示 0 段内容的空应用矩阵
     //   - record / 其他 tab 录完 → setViewMode('record')（保持原行为）
     const uiState = useUIStore.getState();

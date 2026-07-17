@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useCallback, useRef, useEffect, useMemo } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { MobileAppNavigatorProvider, useMobileNav } from './MobileAppNavigator';
 import { MobileCollectionCard } from './MobileCollectionCard';
 import {
@@ -1116,9 +1117,6 @@ function ReviewScreen({ p }: { p: MobileAppShellProps }) {
           {allowedWorkshopApps.has('quiz') ? <button onClick={() => push('quiz')} className="flex items-center gap-1.5 rounded-full bg-paper-warm px-3 py-1.5 text-[11px] font-medium text-ink-secondary active:scale-95 transition">
             <Brain size={12} strokeWidth={2} />测验
           </button> : null}
-          {allowedWorkshopApps.has('cheatsheet') ? <button onClick={() => push('cheatsheet')} className="flex items-center gap-1.5 rounded-full bg-paper-warm px-3 py-1.5 text-[11px] font-medium text-ink-secondary active:scale-95 transition">
-            <FileText size={12} strokeWidth={2} />速查表
-          </button> : null}
           <div className="flex-1" />
           <button onClick={() => push('apps')} className="flex items-center gap-1 rounded-full bg-ink px-3 py-1.5 text-[11px] font-medium text-white active:scale-95 transition">
             <Layers size={12} strokeWidth={2} />更多
@@ -1152,6 +1150,8 @@ function ReviewScreen({ p }: { p: MobileAppShellProps }) {
 
 function AppsScreen({ p: _p }: { p: MobileAppShellProps }) {
   const { pop, push, reviewContext } = useMobileNav();
+  const router = useRouter();
+  const searchParams = useSearchParams();
   const iconByKey: Record<WorkshopAppKey, React.ReactNode> = {
     flashcards: <Zap size={18} strokeWidth={2} />,
     quiz: <Brain size={18} strokeWidth={2} />,
@@ -1176,9 +1176,10 @@ function AppsScreen({ p: _p }: { p: MobileAppShellProps }) {
   const allowed = new Set(assessment?.allowedAppKeys ?? WORKSHOP_APP_CATALOG.map((app) => app.key));
   const recommendedKey = resolveMobileWorkshopRecommendation(assessment, recommendation.key);
   const apps = sortMobileWorkshopApps(
-    WORKSHOP_APP_CATALOG.filter((app) => allowed.has(app.key)),
+    WORKSHOP_APP_CATALOG.filter((app) => app.supportedTiers.includes('class') && allowed.has(app.key)),
     recommendedKey,
   );
+  const courseCheatsheetHref = `/app?workspace=context&intent=cheatsheet${searchParams.get('guest') === '1' ? '&guest=1' : ''}`;
   const blockedTitle = assessment?.reason === 'not_learning'
     ? COPY.apps.matrix.notLearningTitle
     : assessment?.reason === 'unreliable_transcript'
@@ -1235,6 +1236,24 @@ function AppsScreen({ p: _p }: { p: MobileAppShellProps }) {
               );
             })()
           ))}
+        </div>
+        <div className="mt-5">
+          <p className="mb-2 px-1 text-[12px] font-semibold text-ink">{COPY.apps.matrix.courseCheatsheetSection}</p>
+          <button
+            type="button"
+            onClick={() => router.push(courseCheatsheetHref)}
+            className="flex w-full items-center gap-3.5 rounded-[18px] border border-pine/25 bg-white px-4 py-4 text-left active:scale-[0.99]"
+            data-testid="mobile-course-cheatsheet-entry"
+          >
+            <span className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-[13px] bg-pine-mist text-pine">
+              <FileText size={18} strokeWidth={2} />
+            </span>
+            <span className="min-w-0 flex-1">
+              <strong className="block text-[15px] font-semibold text-ink">{COPY.apps.matrix.courseCheatsheetTitle}</strong>
+              <span className="mt-1 block text-[12px] leading-5 text-ink-muted">{COPY.apps.matrix.courseCheatsheetBody}</span>
+            </span>
+            <ChevronRight size={16} className="flex-shrink-0 text-pine" />
+          </button>
         </div>
       </div>
     </div>

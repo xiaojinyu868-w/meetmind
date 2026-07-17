@@ -175,6 +175,8 @@ function StudentAppContent({
   initialMobileSubPage = null,
   autoLoadDemo = false,
   autoOpenDemoAppKey,
+  initialGlobalAskView,
+  initialMemoryFocus,
 }: {
   isGuestFastEntry: boolean;
   forcedWorkspaceTab: SharedWorkspaceTab | null;
@@ -184,6 +186,8 @@ function StudentAppContent({
   initialMobileSubPage?: MobileSubPage;
   autoLoadDemo?: boolean;
   autoOpenDemoAppKey?: WorkshopAppKey;
+  initialGlobalAskView?: 'ask' | 'memory';
+  initialMemoryFocus?: 'cheatsheet';
 }) {
   // ==================== Zustand Store 订阅 ====================
   const uiActions = useUIStore((s) => s.actions);
@@ -242,6 +246,19 @@ function StudentAppContent({
   const setSelectedAnchor = sessionActions.setSelectedAnchor;
   const setSelectedConfusion = sessionActions.setSelectedConfusion;
   const setSelectedHistoryConversation = sessionActions.setSelectedHistoryConversation;
+
+  useEffect(() => {
+    if (initialGlobalAskView) setShowAISearch(true);
+  }, [initialGlobalAskView, setShowAISearch]);
+
+  const closeGlobalAsk = useCallback(() => {
+    setShowAISearch(false);
+    if (!initialGlobalAskView || typeof window === 'undefined') return;
+    const url = new URL(window.location.href);
+    url.searchParams.delete('workspace');
+    url.searchParams.delete('intent');
+    window.history.replaceState(window.history.state, '', `${url.pathname}${url.search}${url.hash}`);
+  }, [initialGlobalAskView, setShowAISearch]);
 
   // Collection Store — 收集流状态
   const collectionActions = useCollectionStore((s) => s.actions);
@@ -2877,7 +2894,9 @@ function StudentAppContent({
       {/* 主要内容区域 */}
       <GlobalAskPanel
         open={showAISearch}
-        onClose={() => setShowAISearch(false)}
+        onClose={closeGlobalAsk}
+        initialView={initialGlobalAskView}
+        memoryFocus={initialMemoryFocus}
         onNavigateToCapture={(captureId: string) => {
           const item = allCollectionItems.find((c) => c.id === captureId);
           if (item) {
@@ -2907,6 +2926,8 @@ function SearchParamsReader() {
   const { isMobile, mounted } = useResponsive();
   const isGuestFastEntry = searchParams.get('guest') === '1';
   const forcedWorkspaceTab = searchParams.get('workspace') === 'apps' ? 'apps' : null;
+  const initialGlobalAskView = searchParams.get('workspace') === 'context' ? 'memory' : undefined;
+  const initialMemoryFocus = searchParams.get('intent') === 'cheatsheet' ? 'cheatsheet' : undefined;
   const initialClaimedCaptureId = searchParams.get('claimedCapture');
   const forceMobilePreview = searchParams.get('mobile') === '1';
   const wechatCaptureToken = searchParams.get('wechat_capture');
@@ -2939,6 +2960,8 @@ function SearchParamsReader() {
                 initialMobileSubPage={initialMobileSubPage}
                 autoLoadDemo={guestDemoEntry.autoLoadDemo}
                 autoOpenDemoAppKey={guestDemoEntry.autoOpenAppKey}
+                initialGlobalAskView={initialGlobalAskView}
+                initialMemoryFocus={initialMemoryFocus}
               />
             </div>
           </div>
@@ -2956,6 +2979,8 @@ function SearchParamsReader() {
       initialMobileSubPage={initialMobileSubPage}
       autoLoadDemo={guestDemoEntry.autoLoadDemo}
       autoOpenDemoAppKey={guestDemoEntry.autoOpenAppKey}
+      initialGlobalAskView={initialGlobalAskView}
+      initialMemoryFocus={initialMemoryFocus}
     />
   );
 }

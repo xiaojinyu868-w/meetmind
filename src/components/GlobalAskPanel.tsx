@@ -47,6 +47,8 @@ interface GlobalAskPanelProps {
   onClose: () => void;
   onNavigateToCapture?: (captureId: string) => void;
   isMobile?: boolean;
+  initialView?: 'ask' | 'memory';
+  memoryFocus?: 'cheatsheet';
 }
 
 type AskDepth = 'quick' | 'deep';
@@ -55,6 +57,8 @@ export function GlobalAskPanel({
   onClose,
   onNavigateToCapture,
   isMobile = false,
+  initialView,
+  memoryFocus,
 }: GlobalAskPanelProps) {
   const { user, accessToken } = useAuth();
   const userId = user?.id || 'anonymous';
@@ -69,9 +73,16 @@ export function GlobalAskPanel({
   const [activeIntent, setActiveIntent] = React.useState<LearningIntentPlan | null>(null);
   const [pendingQuery, setPendingQuery] = React.useState('');
   const activeThreadRef = React.useRef(learning.activeThread);
+  const previouslyOpenRef = React.useRef(false);
   const composerRef = React.useRef<HTMLFormElement>(null);
 
   React.useEffect(() => { activeThreadRef.current = learning.activeThread; }, [learning.activeThread]);
+  React.useEffect(() => {
+    if (open && (!previouslyOpenRef.current || initialView)) {
+      setView(initialView ?? 'ask');
+    }
+    previouslyOpenRef.current = open;
+  }, [initialView, open]);
 
   const fileUpload = useChatFileUpload({ authToken: accessToken ?? undefined, targetRef: composerRef });
   const { busy: intentBusy, requestIntent } = useLearningIntentFlow();
@@ -309,6 +320,7 @@ export function GlobalAskPanel({
       <div className={cn('fixed inset-0 z-[80]', !isMobile && 'left-[var(--sidebar-width,0px)]')}>
         <LearningMemoryPanel
           onBack={() => setView('ask')}
+          initialFocus={memoryFocus}
           onTalkToMeetMind={() => {
             setView('ask');
             composer.setValue(COPY.globalAsk.memoryTalkPrompt);

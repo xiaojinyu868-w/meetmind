@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   BookOpen,
   CalendarDays,
@@ -31,6 +31,7 @@ interface CourseContextSectionProps {
     patch: Partial<Pick<CourseContextPreference, 'displayName' | 'status' | 'confirmedByUser' | 'excludedSessionIds' | 'assessments'>>,
   ) => Promise<void>;
   onOpenCheatsheet: (course: CourseContextGroup) => void;
+  focusCheatsheet?: boolean;
 }
 
 function formatDate(value: string): string {
@@ -237,12 +238,35 @@ function CourseCard({
   );
 }
 
-export function CourseContextSection({ preferences, saving, onUpdatePreference, onOpenCheatsheet }: CourseContextSectionProps) {
+export function CourseContextSection({
+  preferences,
+  saving,
+  onUpdatePreference,
+  onOpenCheatsheet,
+  focusCheatsheet = false,
+}: CourseContextSectionProps) {
   const sessions = useAudioSessions();
+  const sectionRef = useRef<HTMLElement | null>(null);
   const courses = useMemo(
     () => buildCourseContextGroups(sessions, preferences),
     [preferences, sessions],
   );
+  const eligibleCheatsheetCourses = useMemo(
+    () => courses.filter((course) => (
+      course.status === 'active'
+      && !course.detachedFromCourseKey
+      && course.lessons.length >= 2
+    )),
+    [courses],
+  );
+
+  useEffect(() => {
+    if (!focusCheatsheet) return;
+    const frame = window.requestAnimationFrame(() => {
+      sectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [focusCheatsheet]);
   const detachLesson = async (course: CourseContextGroup, sessionId: string) => {
     const preference = preferences.find((item) => item.courseKey === course.courseKey);
     const excludedSessionIds = Array.from(new Set([...(preference?.excludedSessionIds || []), sessionId]));
@@ -258,13 +282,57 @@ export function CourseContextSection({ preferences, saving, onUpdatePreference, 
   };
 
   return (
-    <section className="mt-10 border-t border-divider pt-8 sm:mt-12 sm:pt-10">
+    <section ref={sectionRef} className="mt-10 scroll-mt-4 border-t border-divider pt-8 sm:mt-12 sm:pt-10">
       <div className="mb-5 flex items-end justify-between gap-4 px-1">
         <div>
           <p className="font-mono text-[9.5px] font-semibold uppercase tracking-[0.12em] text-vermilion">{COPY.globalAsk.memoryCoursesTab}</p>
           <h2 className="mt-2 font-serif text-[25px] italic tracking-[-0.025em] text-ink sm:text-[28px]">{COPY.globalAsk.courseContextTitle}</h2>
         </div>
         {courses.length > 0 ? <span className="mb-1 text-[11px] tabular-nums text-ink-muted">{courses.length}</span> : null}
+      </div>
+
+      <div
+        className={cn(
+          'mb-4 rounded-[22px] border bg-white px-4 py-4 sm:px-5 sm:py-5',
+          focusCheatsheet ? 'border-pine/40' : 'border-divider',
+        )}
+        data-testid="course-cheatsheet-launcher"
+      >
+        <div className="flex items-start gap-3">
+          <span className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-[14px] bg-pine-fog text-pine">
+            <FileText size={17} strokeWidth={1.8} />
+          </span>
+          <div className="min-w-0 flex-1">
+            <p className="font-mono text-[9.5px] font-semibold uppercase tracking-[0.1em] text-vermilion">
+              {COPY.globalAsk.courseCheatsheetEntryEyebrow}
+            </p>
+            <h3 className="mt-1 text-[17px] font-semibold text-ink">{COPY.globalAsk.courseCheatsheetEntryTitle}</h3>
+            <p className="mt-1.5 text-[12px] leading-5 text-ink-secondary">{COPY.globalAsk.courseCheatsheetEntryBody}</p>
+          </div>
+        </div>
+
+        {eligibleCheatsheetCourses.length > 0 ? (
+          <div className="mt-4 grid gap-2 sm:grid-cols-2">
+            {eligibleCheatsheetCourses.map((course) => (
+              <button
+                key={course.courseKey}
+                type="button"
+                onClick={() => onOpenCheatsheet(course)}
+                className="flex min-h-12 items-center justify-between gap-3 rounded-[15px] border border-divider bg-canvas px-3.5 py-3 text-left hover:border-pine/30 hover:bg-pine-fog"
+              >
+                <span className="min-w-0">
+                  <strong className="block truncate text-[13px] font-semibold text-ink">{course.title}</strong>
+                  <span className="mt-0.5 block text-[10.5px] text-ink-muted">{COPY.globalAsk.courseContextLessons(course.lessons.length)}</span>
+                </span>
+                <span className="flex-shrink-0 text-[11px] font-medium text-pine">{COPY.globalAsk.courseCheatsheetEntryCourseAction}</span>
+              </button>
+            ))}
+          </div>
+        ) : (
+          <p className="mt-4 rounded-[15px] bg-canvas px-3.5 py-3 text-[11.5px] leading-5 text-ink-muted">
+            {COPY.globalAsk.courseCheatsheetEntryEmpty}
+          </p>
+        )}
       </div>
 
       <div className="space-y-3">

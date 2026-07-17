@@ -13,6 +13,7 @@ import { getWorkshopAppByKey, isWorkshopAppKey, type WorkshopAppKey } from '@/li
 import { useAppExecution } from '@/components/apps/hooks/useAppExecution';
 import { AppWindowShell } from '@/components/apps/windows/AppWindowShell';
 import { AppRenderSurface } from '@/components/apps/windows/AppRenderSurface';
+import { ShareArtifactAction } from '@/components/share/ShareArtifactAction';
 import { COPY } from '@/lib/ui/copy';
 
 const WORKSHOP_MODEL_PREFERENCE = 'ai_workshop_model';
@@ -158,6 +159,10 @@ export default function AppMatrixWindowPage() {
   );
   const classroomHref = useMemo(
     () => `/app${searchParams.get('guest') === '1' ? '?guest=1' : ''}`,
+    [searchParams],
+  );
+  const courseCheatsheetHref = useMemo(
+    () => `/app?workspace=context&intent=cheatsheet${searchParams.get('guest') === '1' ? '&guest=1' : ''}`,
     [searchParams],
   );
 
@@ -314,7 +319,7 @@ export default function AppMatrixWindowPage() {
     summaryOverview,
     keyDifficulties,
     model,
-    autoRun: loadState === 'ready' && Boolean(app) && app?.key !== 'infographic',
+    autoRun: loadState === 'ready' && Boolean(app) && app?.key !== 'infographic' && app?.key !== 'cheatsheet',
   });
 
   if (!app) {
@@ -324,6 +329,18 @@ export default function AppMatrixWindowPage() {
         body={COPY.apps.matrix.windowUnavailableBody}
         primaryHref={backHref}
         primaryLabel={COPY.apps.matrix.backToMatrix}
+      />
+    );
+  }
+
+  if (app.key === 'cheatsheet') {
+    return (
+      <MatrixRouteState
+        title={COPY.apps.matrix.courseCheatsheetRouteTitle}
+        body={COPY.apps.matrix.courseCheatsheetRouteBody}
+        primaryHref={courseCheatsheetHref}
+        primaryLabel={COPY.apps.matrix.courseCheatsheetAction}
+        secondaryHref={backHref}
       />
     );
   }
@@ -363,6 +380,15 @@ export default function AppMatrixWindowPage() {
         onRegenerate={() => void execution.rerun()}
         showPrimaryAction={false}
         backHref={backHref}
+        headerActions={execution.result ? (
+          <ShareArtifactAction
+            appKey={app.key}
+            result={execution.result}
+            sessionId={sessionId}
+            transcript={transcript}
+            summary={summaryOverview}
+          />
+        ) : undefined}
       >
         <AppRenderSurface
           appKey="infographic"
@@ -385,6 +411,15 @@ export default function AppMatrixWindowPage() {
         void execution.rerun();
       }}
       backHref={backHref}
+      headerActions={execution.result ? (
+        <ShareArtifactAction
+          appKey={app.key}
+          result={execution.result}
+          sessionId={sessionId}
+          transcript={transcript}
+          summary={summaryOverview}
+        />
+      ) : undefined}
     >
       <AppRenderSurface
         appKey={app.key}

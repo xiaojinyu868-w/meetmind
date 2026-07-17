@@ -10,6 +10,7 @@ import { useAppExecution } from '@/components/apps/hooks/useAppExecution';
 import { AppRenderSurface } from '@/components/apps/windows/AppRenderSurface';
 import { AppWindowPlaceholder } from '@/components/apps/windows/AppWindowPlaceholder';
 import { AppWindowShell } from '@/components/apps/windows/AppWindowShell';
+import { ShareArtifactAction } from '@/components/share/ShareArtifactAction';
 import type { AppTaskState } from '@/components/apps/hooks/useAppExecution';
 
 interface CourseCheatsheetWorkspaceProps {
@@ -34,6 +35,14 @@ export function CourseCheatsheetWorkspace({ course, onBack }: CourseCheatsheetWo
     [course.assessment, course.courseKey, selectedCourse.lessons],
   );
   const context = useCourseContextPack(selectedCourse);
+  const shareContext = useMemo(() => context.pack?.lessons
+    .map((lesson) => {
+      const fallback = lesson.transcript.map((segment) => segment.text.trim()).filter(Boolean).join(' ').slice(0, 500);
+      return `${lesson.title}：${lesson.summary?.trim() || fallback}`;
+    })
+    .filter(Boolean)
+    .join('\n')
+    .slice(0, 4_000), [context.pack]);
   const execution = useAppExecution({
     app,
     sessionId: executionId,
@@ -168,6 +177,15 @@ export function CourseCheatsheetWorkspace({ course, onBack }: CourseCheatsheetWo
       showPrimaryAction={started && Boolean(execution.result)}
       onBack={onBack}
       backLabel={COPY.globalAsk.courseContextBackToCourse}
+      headerActions={execution.result ? (
+        <ShareArtifactAction
+          appKey="cheatsheet"
+          result={execution.result}
+          sessionId={executionId}
+          courseTitle={course.assessment?.name || course.title}
+          summary={shareContext}
+        />
+      ) : undefined}
     >
       {content}
     </AppWindowShell>

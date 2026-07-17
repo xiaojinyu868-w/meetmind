@@ -12,7 +12,7 @@ src/components/apps/windows/
 ├── mindmap-layout.ts           # 思维导图布局引擎
 ├── InfographicWindow.tsx       # 信息图窗口（699行，已拆分）
 ├── infographic-window-data.ts  # 信息图数据处理
-├── AppWindowShell.tsx          # 六类独立结果页统一外壳：保留现场的返回、学习动作、状态与重做；手机端折叠次要文字
+├── AppWindowShell.tsx          # 六类独立结果页统一外壳：保留现场的返回、学习动作、状态、成果就地分享与重做；手机端折叠次要文字
 ├── app-window-shell-tone.ts    # 独立应用页色调策略（闪卡使用低亮度沉浸背景，避免白底眩光）
 ├── FlashcardsWindow.tsx        # 闪卡训练窗口（主动回忆 → 翻面 → 自评 → 只复习薄弱卡）
 ├── flashcards-window-model.ts  # 闪卡结果正规化、证据锚点与时间显示 helper
@@ -94,7 +94,7 @@ src/components/apps/windows/
 
 ## AppRenderSurface
 
-统一承接 `AppExecutionResult` → 具体应用 UI 的分发。`WorkshopWindowManager`、应用矩阵独立页、课堂/复习对话内联应用都必须复用这里，避免同一个 app 维护两套 UI。六类独立结果页（包括信息图）同时复用 `AppWindowShell`；不得为单个应用复制返回栏、标题或状态说明。
+统一承接 `AppExecutionResult` → 具体应用 UI 的分发。`WorkshopWindowManager`、应用矩阵独立页、课堂/复习对话内联应用都必须复用这里，避免同一个 app 维护两套 UI。六类独立结果页（包括信息图）同时复用 `AppWindowShell`；不得为单个应用复制返回栏、标题或状态说明。可分享的场景成果必须通过 `headerActions` 把 `ShareArtifactAction` 放在结果标题旁，不能要求用户回到矩阵再找分享。
 
 ## 排版约定
 

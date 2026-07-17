@@ -57,7 +57,7 @@ components/
 | `LearningIntentConfirmationCard.tsx` / `learning-intent-confirmation-model.ts` | ~210 | 深度学习的轻确认：若学习路径确有歧义，逐步显现模型动态生成的 1-3 个选择问题；学习理解在回答结束后静默整理，不把内部记忆标记塞进消息流 |
 | `LearningProgressMemoryCard.tsx` | ~50 | 旧学习进展 marker 的反馈卡，当前 `GlobalAskPanel` 不再使用；保留仅供迁移期兼容，勿在新链路继续扩展 |
 | `LearningContextStatus.tsx` | ~40 | 全局 Ask 的上下文状态条；只显示实际接入的当前材料、最近学习与长期记忆数量，不暴露模型内部推理 |
-| `LearningMemoryPanel.tsx` / `CourseContextSection.tsx` / `CourseAssessmentCard.tsx` / `CourseCheatsheetWorkspace.tsx` / `ContextRecoveryCard.tsx` | ~980 | 「我的上下文」单页连续视图：不使用嵌套 Tab，依次呈现可纠正的学习理解、由真实 session 自动归组的课堂上下文、客观最近学习现场；课程内按需出现轻量考试对象，单元/考试均由学生确认多课范围后进入打印型速查表 |
+| `LearningMemoryPanel.tsx` / `CourseContextSection.tsx` / `CourseAssessmentCard.tsx` / `CourseCheatsheetWorkspace.tsx` / `ContextRecoveryCard.tsx` | ~980 | 「我的上下文」单页连续视图：不使用嵌套 Tab，依次呈现可纠正的学习理解、由真实 session 自动归组的课堂上下文、客观最近学习现场；课堂上下文顶部显性提供考试速查表并列出可用课程，单元/考试均由学生确认多课范围后进入打印型速查表 |
 | `AISearchPanel.tsx` | ~740 | 旧单轮 Workspace AI 搜索面板；主入口已由 `GlobalAskPanel` 替代，保留作迁移参考 |
 | `WordExplainer.tsx` | 562 | 术语解释器 |
 | `StreamingMarkdown.tsx` | 391 | 统一流式 Markdown 渲染（GFM 表格 / 数学公式 / [MM:SS] 与 [t=MM:SS] 时间戳 / [资料N]） |
@@ -118,7 +118,7 @@ components/
 
 | 文件 | 行数 | 职责 |
 |------|------|------|
-| `WorkshopYellowPage.tsx` | ~960 | 六类学习动作矩阵：一个有依据的首选 + 五项两列紧凑能力；首次点击后台完成，任务托盘仅承接进行中/失败，做好后进入统一学习工作区；分享入口后置 |
+| `WorkshopYellowPage.tsx` | ~960 | 五项单课学习动作矩阵 + 一个显性的跨课考试速查表入口；首次点击后台完成，任务托盘仅承接进行中/失败，做好后进入统一学习工作区；分享贴着已完成成果出现 |
 | `apps/WorkshopAppCard.tsx` | ~170 | 应用卡统一层级：首选完整卡 + 次要能力紧凑卡；学习动作、适用场景、状态与单一主操作 |
 | `windows/WorkshopWindowManager.tsx` | ~580 | 浮窗管理器 |
 | `windows/InfographicWindow.tsx` | ~700 | 信息图浮窗，类型/常量/工具已拆到 `infographic-window-data.ts` |

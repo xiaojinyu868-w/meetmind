@@ -116,7 +116,15 @@ export function useShareAgentCreator(): UseShareAgentCreatorReturn {
   const openCreator = React.useCallback<UseShareAgentCreatorReturn['openCreator']>(
     async (snapshot) => {
       if (!isAuthenticated || !accessToken) {
-        toast.error(COPY.share.creator.loginRequired);
+        toast.error(COPY.share.creator.loginRequired, {
+          action: {
+            label: COPY.share.creator.loginAction,
+            onClick: () => {
+              const next = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+              window.location.href = `/login?next=${encodeURIComponent(next)}`;
+            },
+          },
+        });
         return;
       }
       setIsCreating(true);

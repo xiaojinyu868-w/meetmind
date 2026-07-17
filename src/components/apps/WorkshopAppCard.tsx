@@ -33,6 +33,7 @@ interface WorkshopAppCardProps {
   onRemake: () => void;
   onProgress: () => void;
   compact?: boolean;
+  shareAction?: ReactNode;
 }
 
 const APP_ICONS: Record<WorkshopAppKey, typeof Layers> = {
@@ -65,6 +66,7 @@ export function WorkshopAppCard({
   onRemake,
   onProgress,
   compact = false,
+  shareAction,
 }: WorkshopAppCardProps) {
   const Icon = APP_ICONS[app.key];
   const cardClassName = [
@@ -146,6 +148,7 @@ export function WorkshopAppCard({
                 {app.key === 'infographic' ? COPY.apps.matrix.openImage : COPY.apps.matrix.open}
               </span>
             </button>
+            {shareAction}
             {!compact ? (
               <button type="button" className={styles.secondaryAction} onClick={onRemake} disabled={!available} data-testid={`workshop-bg-generate-${app.key}`}>
                 <RotateCw size={13} strokeWidth={1.75} />

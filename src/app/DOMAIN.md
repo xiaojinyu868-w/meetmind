@@ -59,7 +59,9 @@ src/app/
 
 ### `src/app/(main)/app/matrix/[appKey]/page.tsx` — 学习应用独立页
 
-根据 `appKey` 参数渲染不同学习应用的独立画布；六类应用统一复用 `AppWindowShell`，返回矩阵时保留游客身份等入口状态。用户可见文案避免深链、会话数据、转录内容等内部词。
+根据 `appKey` 参数渲染不同学习应用的独立画布；六类应用统一复用 `AppWindowShell`，返回矩阵时保留游客身份等入口状态。可分享成果在标题栏直接创建分享链接。`cheatsheet` 深链不会用当前单课直接生成，而会转入 `/app?workspace=context&intent=cheatsheet` 的课程 / 多课范围选择。用户可见文案避免深链、会话数据、转录内容等内部词。
+
+`/app?workspace=context&intent=cheatsheet` 是考试速查表的显性入口契约：打开全局面板中的「我的上下文」，定位到课堂上下文顶部的考试速查表课程选择；关闭后清理参数，保证入口可以再次打开。
 
 ## (auth)/ 页面组
 

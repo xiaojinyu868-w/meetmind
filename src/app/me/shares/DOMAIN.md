@@ -15,6 +15,6 @@ After a user shares a lesson, they can review created links, copy them again, op
 
 ## Boundaries
 
-- Share creation entry is `OctoCrystalDispatcher` + `useShareAgentCreator`.
+- Share creation entry is the artifact-local `ShareArtifactAction` + `useShareAgentCreator`; this page only manages links after creation.
 - Business logic lives in `src/lib/services/share-agent-service.ts`.
 - Public landing UI lives in `src/app/share/[token]/`.

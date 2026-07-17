@@ -16,6 +16,8 @@ import { COPY } from '@/lib/ui/copy';
 import { useAppLearningActivity } from '@/hooks/useAppLearningActivity';
 import { buildAppResultActivityDetail } from '@/lib/utils/app-learning-activity';
 import type { DataSourceType } from '@/lib/ai-native/types';
+import { ShareArtifactAction } from '@/components/share/ShareArtifactAction';
+import { isShareableArtifactAppKey } from '@/components/share/share-artifact-model';
 
 export interface MobileAppRunnerProps {
   appKey: WorkshopAppKey;
@@ -127,22 +129,38 @@ export function MobileAppRunner({
           </div>
         </div>
       )}
-      {result ? <div className="flex-1 min-h-0 overflow-hidden">
-        <AppRenderSurface
-          appKey={appKey}
-          result={result}
-          transcript={segments}
-          taskState={taskState}
-          sessionId={sessionId}
-          contentContext={contentContext}
-          onSeek={onSeek}
-          onRegenerate={rerun}
-          onGenerateDraft={() => (hasResult ? rerun() : execute())}
-          onResultUpdate={updateResult}
-          onLearningActivity={recordInteraction}
-          mindmapDefaultViewMode="outline"
-        />
-      </div> : null}
+      {result ? (
+        <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+          {isShareableArtifactAppKey(appKey) ? (
+            <div className="flex flex-shrink-0 justify-end border-b border-divider/60 bg-white px-4 py-2">
+              <ShareArtifactAction
+                appKey={appKey}
+                result={result}
+                sessionId={sessionId}
+                transcript={segments}
+                courseTitle={contextTitle}
+                summary={summaryOverview}
+              />
+            </div>
+          ) : null}
+          <div className="min-h-0 flex-1 overflow-hidden">
+            <AppRenderSurface
+              appKey={appKey}
+              result={result}
+              transcript={segments}
+              taskState={taskState}
+              sessionId={sessionId}
+              contentContext={contentContext}
+              onSeek={onSeek}
+              onRegenerate={rerun}
+              onGenerateDraft={() => (hasResult ? rerun() : execute())}
+              onResultUpdate={updateResult}
+              onLearningActivity={recordInteraction}
+              mindmapDefaultViewMode="outline"
+            />
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

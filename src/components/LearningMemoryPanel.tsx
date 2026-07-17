@@ -31,6 +31,7 @@ interface LearningMemoryPanelProps {
   onBack: () => void;
   onResumeThread?: () => void;
   onTalkToMeetMind?: () => void;
+  initialFocus?: 'cheatsheet';
 }
 
 function formatDate(value: string, includeTime = false): string {
@@ -197,7 +198,7 @@ function MemoryCard({
   );
 }
 
-export function LearningMemoryPanel({ onBack, onResumeThread, onTalkToMeetMind }: LearningMemoryPanelProps) {
+export function LearningMemoryPanel({ onBack, onResumeThread, onTalkToMeetMind, initialFocus }: LearningMemoryPanelProps) {
   const context = useLearningContext();
   const [showAllRecent, setShowAllRecent] = useState(false);
   const [activeCourse, setActiveCourse] = useState<CourseContextGroup | null>(null);
@@ -263,6 +264,7 @@ export function LearningMemoryPanel({ onBack, onResumeThread, onTalkToMeetMind }
             saving={context.saving}
             onUpdatePreference={context.updateCoursePreference}
             onOpenCheatsheet={setActiveCourse}
+            focusCheatsheet={initialFocus === 'cheatsheet'}
           />
 
           <section className="mt-10 border-t border-divider pt-8 sm:mt-12 sm:pt-10">

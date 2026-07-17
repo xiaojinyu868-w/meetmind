@@ -112,6 +112,12 @@ export const COPY = {
     courseContextDetachTitle: (title: string): string => `将“${title}”移出这门课`,
     courseContextRestore: '放回原课程',
     courseContextCheatsheet: '单元速查表',
+    courseCheatsheetEntryEyebrow: '跨课与考试',
+    courseCheatsheetEntryTitle: '考试速查表',
+    courseCheatsheetEntryBody: '选择一门课程和至少两节课堂，整理成可编辑、可打印的高密度参考表。',
+    courseCheatsheetEntryAction: '选择课程范围',
+    courseCheatsheetEntryCourseAction: '选择这门课',
+    courseCheatsheetEntryEmpty: '同一门课程积累到两节后，就可以在这里选择范围。课堂原文会继续自动归入课程。',
     courseContextBackToCourse: '返回课程',
     courseContextCheatsheetNeedsTranscript: (count: number): string => count === 0
       ? '这些课堂还没有可用原文。'
@@ -611,6 +617,12 @@ export const COPY = {
       windowErrorBody: '课堂原文仍然保留着，回到学习方式后可以再试一次。',
       windowLoadTimeout: '这节课暂时没有接上，请返回后再试一次。',
       windowLoadFailed: '这节课暂时没有接上',
+      courseCheatsheetSection: '跨课准备',
+      courseCheatsheetTitle: '考试速查表',
+      courseCheatsheetBody: '从课程上下文选择多节课堂、考试范围与资料，做成真正能打印和带进考场的速查表。',
+      courseCheatsheetAction: '选择课程范围',
+      courseCheatsheetRouteTitle: '考试速查表从多节课开始',
+      courseCheatsheetRouteBody: '先选择一门课程和至少两节课堂；MeetMind 会把课堂、课件与考试范围合成一份可编辑、可打印的速查表。',
       mobileTitle: '这节课，接下来怎么学',
       mobileSubtitle: '选一种学习动作，同学会直接基于这节课开始。',
       backToMatrix: '所有学习方式',
@@ -1048,15 +1060,6 @@ export const COPY = {
       },
     },
     creator: {
-      /** 录音结束后 Octo Buddy 弹出的标题 */
-      title: '今天这节课的结晶',
-      subtitle: '挑一个递给同学，也可以丢进班级群',
-      /** 选哪种产物（场景层只显示这一组） */
-      pickKind: '想送什么过去？',
-      pickHint: '挑一个就好。同学会基于这节课在背后陪你回答',
-      /** 创建按钮 */
-      submit: '生成分享',
-      submitting: '正在生成…',
       doneCopy: '复制链接',
       doneCopied: '链接已复制',
       doneLinkCreated: '分享链接已生成',
@@ -1065,20 +1068,10 @@ export const COPY = {
       fallbackTitle: '分享链接已生成',
       fallbackBody: '浏览器没有允许自动复制，可以直接复制下面的链接。',
       loginRequired: '先登录再分享',
+      loginAction: '登录后继续',
       createFailed: '创建分享失败',
-      /** 仪式入口（应用矩阵 / 录课结束页都会用到的「递结晶」模块） */
-      crystal: {
-        eyebrow: '今天这节课',
-        title: '把这节课递给同学',
-        subtitle: '挑一个产物，做成一份能对话的分享',
-        cta: '递给同学',
-        ctaPreparing: '正在准备…',
-        cardReady: '已整好，递给同学',
-        cardEmpty: '还没整 · 先做一版',
-        cardGenerating: '生成中…',
-        emptyHint: '做完一个应用，这里就会出现',
-        privacyNote: '只带这节课的内容和你挑的这一份，不会带你的私人对话或答题数据',
-      },
+      currentAction: '分享',
+      currentPreparing: '正在生成链接',
     },
   },
 

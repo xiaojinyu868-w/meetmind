@@ -16,6 +16,7 @@ interface AppWindowShellProps {
   backHref?: string;
   onBack?: () => void;
   backLabel?: string;
+  headerActions?: ReactNode;
   children: ReactNode;
 }
 
@@ -82,6 +83,7 @@ export function AppWindowShell(props: AppWindowShellProps) {
     backHref = '/app?workspace=apps',
     onBack,
     backLabel = COPY.apps.matrix.backToMatrix,
+    headerActions,
     children,
   } = props;
   const tone = useMemo(() => getAppWindowShellTone(app.key), [app.key]);
@@ -116,6 +118,7 @@ export function AppWindowShell(props: AppWindowShellProps) {
             <p className={`${effectiveTone.subtitle} hidden sm:block`}>{COPY.apps.matrix.workspaceSubtitle(app.learningAction, app.bestFor)}</p>
           </div>
           <StatusIndicator status={taskState.status} immersive={immersiveActive} />
+          {headerActions}
           {/* loading 时整条主操作按钮隐藏：避免视觉重量 + 用户也点不动；
               做完之后再出现「再做一版」是更自然的节奏 */}
           {showPrimaryAction && !isRunning ? (

@@ -4,6 +4,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { toast } from 'sonner';
 import {
+  BookMarked,
+  ChevronRight,
   ListTodo,
   Download,
 } from 'lucide-react';
@@ -16,6 +18,7 @@ import { isAppSupportedAtTier } from '@/lib/ai-native/context-pack';
 import {
   buildResultCacheKey,
   buildTaskCacheKey,
+  readCachedAppResult,
   readCachedTaskState,
   writeCachedAppResult,
   writeCachedTaskState,
@@ -23,7 +26,8 @@ import {
 } from '@/components/apps/hooks/useAppExecution';
 import styles from './WorkshopYellowPage.module.css';
 import { useAuth } from '@/lib/hooks/useAuth';
-import { OctoCrystalDispatcher } from '@/components/share/OctoCrystalDispatcher';
+import { ShareArtifactAction } from '@/components/share/ShareArtifactAction';
+import { isShareableArtifactAppKey } from '@/components/share/share-artifact-model';
 import { WorkshopAppCard, type WorkshopCardStatus } from './WorkshopAppCard';
 import { COPY } from '@/lib/ui/copy';
 import { createLogger } from '@/lib/logger';
@@ -256,8 +260,8 @@ export function WorkshopYellowPage(props: WorkshopYellowPageProps) {
 
   const visibleApps = useMemo(() => {
     const source = apps.length > 0 ? apps : WORKSHOP_APP_CATALOG;
-    // 按当前 tier 过滤：本期 tier='class'，所有 catalog 应用都含 'class'，不会被过滤掉
-    // 未来 unit/exam tier 上线后，这里自动只展示该 tier 支持的应用（PRD v1.1 §8.5）
+    // 按当前 tier 过滤直接生成能力。考试速查表不在 class 结果集中退化生成，
+    // 但会由下方显性跨课入口承接到课程 / 多节课范围选择。
     const filtered = source.filter((app) =>
       isAppSupportedAtTier((app as WorkshopAppCatalogItem).supportedTiers, tier)
     );
@@ -342,6 +346,10 @@ export function WorkshopYellowPage(props: WorkshopYellowPageProps) {
         isGuest ? '&guest=1' : ''
       }`,
     [dataSource, isGuest, sessionId]
+  );
+  const courseCheatsheetHref = useMemo(
+    () => `/app?workspace=context&intent=cheatsheet${isGuest ? '&guest=1' : ''}`,
+    [isGuest],
   );
 
   // 信息图"查看图片"不跳独立页——独立页重新挂载 InfographicWindow 时，
@@ -766,14 +774,6 @@ export function WorkshopYellowPage(props: WorkshopYellowPageProps) {
     [generatedMap, visibleApps]
   );
 
-  const generatedShareableCount = useMemo(
-    () => visibleApps.filter((app) => (
-      (app.key === 'cheatsheet' || app.key === 'mindmap' || app.key === 'quiz' || app.key === 'infographic')
-      && generatedMap[app.key]
-    )).length,
-    [generatedMap, visibleApps]
-  );
-
   const failedCount = useMemo(
     () => dockList.filter((task) => task.status === 'error' || task.status === 'cancelled').length,
     [dockList]
@@ -792,6 +792,7 @@ export function WorkshopYellowPage(props: WorkshopYellowPageProps) {
           ? 'success'
           : 'idle';
     const dockTask = dockTasks[app.key];
+    const cachedResult = generated ? readCachedAppResult(sessionId, app.key) : null;
     return (
       <WorkshopAppCard
         key={app.key}
@@ -807,6 +808,17 @@ export function WorkshopYellowPage(props: WorkshopYellowPageProps) {
         onRemake={() => void runInBackground(app)}
         onProgress={() => setDockOpen(true)}
         compact={!isRecommended}
+        shareAction={cachedResult && isShareableArtifactAppKey(app.key) ? (
+          <ShareArtifactAction
+            appKey={app.key}
+            result={cachedResult}
+            sessionId={sessionId}
+            transcript={transcript}
+            courseTitle={props.contextTitle}
+            summary={summaryOverview}
+            className={styles.secondaryAction}
+          />
+        ) : undefined}
       />
     );
   };
@@ -863,14 +875,28 @@ export function WorkshopYellowPage(props: WorkshopYellowPageProps) {
         </section>
       ) : null}
 
-      {/* 分享是产物完成后的下一步，不抢占第一次学习决策。 */}
-      {assessment?.status !== 'not_ready' && generatedShareableCount > 0 ? (
-        <OctoCrystalDispatcher
-          sessionId={sessionId}
-          transcript={transcript}
-          summary={summaryOverview}
-          allowedAppKeys={assessment?.allowedAppKeys}
-        />
+      {tier === 'class' ? (
+        <section className={styles.matrixSection} aria-labelledby="course-cheatsheet-entry-title">
+          <div className={styles.sectionHeading}>
+            <h3 id="course-cheatsheet-entry-title" className={styles.sectionTitle}>{COPY.apps.matrix.courseCheatsheetSection}</h3>
+          </div>
+          <button
+            type="button"
+            className={styles.contextAppCard}
+            onClick={() => router.push(courseCheatsheetHref)}
+            data-testid="workshop-course-cheatsheet-entry"
+          >
+            <span className={styles.contextAppIcon} aria-hidden><BookMarked size={22} strokeWidth={1.6} /></span>
+            <span className={styles.contextAppBody}>
+              <strong>{COPY.apps.matrix.courseCheatsheetTitle}</strong>
+              <span>{COPY.apps.matrix.courseCheatsheetBody}</span>
+            </span>
+            <span className={styles.contextAppAction}>
+              {COPY.apps.matrix.courseCheatsheetAction}
+              <ChevronRight size={14} strokeWidth={1.8} aria-hidden />
+            </span>
+          </button>
+        </section>
       ) : null}
 
       {assessment?.status !== 'not_ready' && (runningCount > 0 || failedCount > 0) ? (
