@@ -973,6 +973,7 @@ export const COPY = {
     playAudio: '播放原声',
     pauseAudio: '暂停原声',
     finishLesson: '结束这节课',
+    photoCapturedAt: (timestamp: string): string => `已拍下板书 · ${timestamp}`,
     collapseClassmate: '收起课堂同桌',
     processingEyebrow: '正在整理',
     processingTitleLead: '把这节课',

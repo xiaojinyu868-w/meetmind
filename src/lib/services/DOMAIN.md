@@ -45,7 +45,7 @@ api/route.ts → services → lib/utils, lib/db, lib/config
 | `tutor-service.ts` | 273 | AI 家教：引用匹配 + LLM 解释 |
 | `learning-intent-service.ts` | ~220 | 深度学习意图确认：当前表达定义目标边界，历史上下文不能静默收窄宽泛愿望；只在学习路径确有歧义时生成 1-3 个动态单选/多选问题，用户作答后再次整理为最终计划，模型不可用时返回确定性计划 |
 | `learning-memory-distillation-service.ts` | ~170 | 全局学习问答持久化后的独立学习理解整理：不依赖用户手动选择模式，只从本轮真实表达/作答提炼最多 2 条，支持替换近义旧理解；拒绝愿望、建议、人格与敏感推断，证据不足返回空数组，不读取或改写客观学习现场 |
-| `workshop-readiness-service.ts` | ~220 | 应用矩阵内容适配判断：先用证据阈值拦截过短材料，再由模型判断学习内容类型、可用应用与可选推荐；允许 `not_ready` / 无推荐，避免把闲聊或不可靠转录包装成课程。官方试听课直接采用策划过的 ready 评估，真实短片段仍严格限制 |
+| `workshop-readiness-service.ts` | ~220 | 应用矩阵内容适配判断：先用客观证据阈值拦截空内容和过短材料，再由模型判断内容类型与可选推荐；证据充足后模型不得撤销当前层能力，避免误判让长课堂整页不可用。官方试听课直接采用策划过的 ready 评估 |
 | `dify-service.ts` | 354 | Dify Agent 集成（提问引导 + 联网检索） |
 | `teaching-suggestion.ts` | 256 | 教学改进建议生成 |
 | `gemini-image-service.ts` | 361 | Gemini 图像生成（via undyingapi 代理） |
@@ -63,7 +63,7 @@ api/route.ts → services → lib/utils, lib/db, lib/config
 | `workspace-context-service.ts` | 838 | Capture 收集 + Ingest 处理 + 状态管理 |
 | `workspace-context-types.ts` | 161 | 类型定义 + 纯工具函数 + 微信 helper |
 | `backfill-captures-to-indexeddb.ts` | ~390 | 跨设备下行恢复：按 sessionId 将服务端课堂转录、说话人、困惑点、摘要、精选片段与个人笔记逐类补回 IndexedDB；不覆盖本机已有编辑，失败项可重试 |
-| `workspace-evidence-service.ts` | ~320 | 课堂证据服务端正规化：转录分段落表，低频产物按 kind 存储；capture 列表仅返回轻量索引，兼容旧 metadata bundle |
+| `workspace-evidence-service.ts` | ~320 | 课堂证据服务端正规化：转录分段落表，低频产物按 kind 存储；capture 列表仅返回轻量索引但保留板书 `capturedAtMs` 等课堂定位字段，兼容旧 metadata bundle |
 | `workspace-evidence-client.ts` | ~120 | 用户首次在新设备打开课堂时懒拉完整证据，合并并发请求并复用 backfill 管线写回 IndexedDB |
 | `upload-recording-audio.ts` | ~90 | 登录态录音后台持久化：把本地 Blob 上传为跨设备 mediaUrl，并回写 IndexedDB / Workspace capture |
 | `workspace-audio-sync-service.ts` | ~70 | 服务端按 userId + sessionId 把已上传原声绑定回正确 Workspace capture，不依赖前端保留 sourceKey |

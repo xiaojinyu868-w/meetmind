@@ -8,9 +8,9 @@
 page.tsx → /api/apps/readiness → /api/apps/execute → context-builder → registry → plugin.execute()
 ```
 
-1. 前端先带转录 + 锚点 + 术语上下文调用 readiness；允许返回无推荐或不可生成
-2. 用户选择仍适配当前材料的应用后发起执行请求
-3. `/api/apps/execute` 再做一次服务端 readiness 校验，避免绕过前端硬生成
+1. 前端先带转录 + 锚点 + 术语上下文调用 readiness；客观证据门守住空内容底线，模型只负责内容分类与可选推荐
+2. 客观证据充足时，当前 `contextTier` 的全部应用都可由用户主动执行；模型误判不得降为整页不可用
+3. `/api/apps/execute` 再做一次服务端 readiness 校验，只阻止证据不足或跨层调用
 4. `context-builder.ts` 构建 `AppExecutionContext`
 5. `registry.ts` 查找对应 plugin，Plugin 调用 LLM 生成结果
 6. 前端浮窗渲染结果
@@ -25,7 +25,7 @@ page.tsx → /api/apps/readiness → /api/apps/execute → context-builder → r
 | `context-pack.ts` | ~420 | ContextPack 适配器 + 标记渲染；unit/exam 多课按时间展平供插件消费，同时保留 session/title/offset 供引用还原 |
 | `app-catalog.ts` | ~175 | 应用目录全集定义（含 learningAction / bestFor / timeLabel 与 supportedTiers / primaryTier）；单课不包含考试速查表 |
 | `app-catalog.test.ts` | — | 应用目录用户面文案护栏 |
-| `workshop-readiness.ts` | ~175 | 浏览器 / 服务端共用的纯内容证据门：安全 fallback、模型结果清洗、按 class / unit / exam 收口应用白名单 |
+| `workshop-readiness.ts` | ~190 | 浏览器 / 服务端共用的内容证据门：安全 fallback、模型结果清洗、按 class / unit / exam 收口应用白名单；客观证据充足时模型只能推荐、不能撤销能力 |
 | `evidence-grounding.ts` | ~115 | 生成后证据校验：模型时间戳仅作候选，题面 / 条目 / 节点必须与真实原文语义匹配；匹配失败由各插件降级或剔除 |
 | `context-builder.ts` | 83 | 从请求构建执行上下文 |
 | `registry.ts` | 65 | 插件注册中心 |

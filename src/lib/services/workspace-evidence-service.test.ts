@@ -37,6 +37,7 @@ describe('workspace evidence storage contract', () => {
   it('列表元数据移除大证据并保留可用索引', () => {
     expect(toLightweightEvidenceMetadata({
       sessionId: 'session-1',
+      capturedAtMs: 122_000,
       provider: 'bilibili',
       transcriptSegments: [{ text: '课堂内容' }],
       anchors: [{ timestamp: 1000 }],
@@ -45,6 +46,7 @@ describe('workspace evidence storage contract', () => {
       notes: [],
     })).toEqual({
       sessionId: 'session-1',
+      capturedAtMs: 122_000,
       provider: 'bilibili',
       evidenceAvailable: true,
     });

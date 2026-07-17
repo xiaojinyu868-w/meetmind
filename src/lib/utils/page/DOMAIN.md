@@ -18,5 +18,5 @@ page.tsx → page-utils.ts (barrel) → page/*.ts (子模块)
 | `text-and-constants.ts` | 66 | 基础层：常量 + compactText + compactMultilineText + 键生成器 + normalizeWorkshopWindows |
 | `segment-and-support.ts` | 93 | 转录片段辅助 + 补充材料合并 |
 | `echo-display-utils.ts` | 214 | Echo 显示：mergeWorkspaceEchoes, resolveEchoDisplayTime, buildManualEchoFeedbackFromPayload |
-| `capture-source-utils.ts` | 388 | Capture/Source：mergeWorkspaceCaptures, buildWorkspaceCaptureSourceItem, buildWechatCaptureSourceItem；归一化录音转写失败文案 |
+| `capture-source-utils.ts` | ~400 | Capture/Source：mergeWorkspaceCaptures, buildWorkspaceCaptureSourceItem, buildWechatCaptureSourceItem；恢复课中板书的 session + `capturedAtMs` 时间锚点；归一化录音转写失败文案 |
 | `context-and-format.ts` | 368 | ASR/Tutor 上下文 + 视频洞察 + formatTime + transcribeAudioFile/parseDocumentFile/parseImageFile；默认 ASR 热词覆盖 AI/Agent/模型/行业概念，并带常见误识别别名提示 |

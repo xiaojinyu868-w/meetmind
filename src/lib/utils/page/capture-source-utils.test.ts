@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  buildCollectionListItemFromSourceItem,
   buildWechatCaptureSourceItem,
   buildWorkspaceCaptureSourceItem,
   resolvePendingAudioFailureStatus,
@@ -102,5 +103,56 @@ describe('capture provenance restoration', () => {
     });
 
     expect(item.sessionId).toBe('legacy-session');
+  });
+
+  it('restores the classroom clock anchor for a board photo', () => {
+    const item = buildWorkspaceCaptureSourceItem({
+      id: 'board-photo',
+      sourceKey: 'image:board-photo',
+      sourceType: 'image',
+      status: 'active',
+      role: 'support',
+      contentType: 'image',
+      title: '板书',
+      previewText: '课堂板书',
+      normalizedText: '课堂板书',
+      mediaUrl: 'https://cdn.example.com/board.jpg',
+      createdAt: '2026-07-16T08:02:02.000Z',
+      metadata: {
+        sessionId: 'session-classroom',
+        capturedAtMs: 122_000,
+      },
+    });
+
+    expect(item).toMatchObject({
+      sessionId: 'session-classroom',
+      capturedAtMs: 122_000,
+    });
+  });
+
+  it('preserves a zero-second classroom photo anchor in local capture metadata', () => {
+    const item = buildWorkspaceCaptureSourceItem({
+      id: 'board-photo-zero',
+      sourceKey: 'image:board-photo-zero',
+      sourceType: 'image',
+      status: 'active',
+      role: 'support',
+      contentType: 'image',
+      title: '开场板书',
+      previewText: '开场板书',
+      normalizedText: '开场板书',
+      mediaUrl: 'https://cdn.example.com/board-zero.jpg',
+      createdAt: '2026-07-16T08:00:00.000Z',
+      metadata: {
+        sessionId: 'session-classroom',
+        capturedAtMs: 0,
+      },
+    });
+
+    expect(item.capturedAtMs).toBe(0);
+    expect(buildCollectionListItemFromSourceItem(item).metadata).toMatchObject({
+      sessionId: 'session-classroom',
+      capturedAtMs: 0,
+    });
   });
 });

@@ -167,6 +167,17 @@ export function sanitizeWorkshopReadinessAssessment(
     : fallback.confidence;
 
   if (status === 'not_ready') {
+    // 内容分类模型只能决定推荐，不是功能权限系统。客观证据门已经确认材料足够时，
+    // 即使模型把课堂讨论误判成 casual / administrative，也不能让用户面对一整页
+    // “暂不可用”。保留内容类型供后续提示使用，但恢复当前层全部稳定能力。
+    if (fallback.status !== 'not_ready') {
+      return {
+        ...fallback,
+        contentKind,
+        recommendedAppKey: null,
+        confidence,
+      };
+    }
     const reason = value.reason === 'not_learning' || contentKind === 'casual' || contentKind === 'administrative'
       ? 'not_learning'
       : value.reason === 'unreliable_transcript' || contentKind === 'unreliable'

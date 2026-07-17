@@ -15,7 +15,7 @@ apps/
 ├── workshop-recommendation.ts # 显式标记 / 已知难点的低风险推荐兜底；无可靠信号时允许不推荐
 ├── hooks/
 │   ├── useAppExecution.ts   # 应用执行 hook（SSE 流/超时/状态管理）
-│   └── useWorkshopReadiness.ts # 调用内容适配判断，控制可用应用 / 推荐 / 不生成状态
+│   └── useWorkshopReadiness.ts # 调用内容适配判断；客观证据控制空内容底线，模型只控制推荐
 ├── evidence/
 │   ├── EvidenceChip.tsx      # 证据标签芯片
 │   └── EvidencePopoverCard.tsx # 证据弹窗卡片
@@ -36,7 +36,7 @@ apps/
 
 - `AppRenderSurface.tsx` 是 `AppExecutionResult` 到应用 UI 的唯一分发层。
 - Workshop 浮窗、应用矩阵独立页、对话内联应用都应复用它；不要在 `classroom/` 或 `tutor/` 里为同一个 app 重写一套 UI。
-- `WorkshopYellowPage.tsx` + CSS module 是应用矩阵首屏基线：用户选择“检验理解 / 记住核心 / 看清结构”等学习动作。目录必须先按 `contextTier` 过滤：单课只展示五项真实成立的课后动作，考试速查表仅在 unit / exam 层出现；不能为了能力数量把跨课产物塞回单课。首选项显示适用场景、时间投入、产物和可核对的推荐依据；其余能力在宽工作区两列呈现，三栏复习页的中间容器 ≤600px 时按真实容器宽度回到单列并直接露出动作文字。`/api/apps/readiness` 的推荐只改变当前层能力的首屏优先级，不越层增删；模型主动返回 `recommendedAppKey=null` 时前端不得强行补一个“现在最适合”。材料有限时只启用有证据支撑的低风险应用；`limited` 不得与空 `allowedAppKeys` 同时出现。材料过短、非学习内容或转录不可靠时能力仍作为预览存在但禁止生成，并清理该 session 已有的派生缓存（不碰原录音）。官方试听课只开放 class 层五项能力。任务 dock 只在生成进行中或失败时出现。分享只在完成至少一个可分享且当前内容允许的产物后出现。
+- `WorkshopYellowPage.tsx` + CSS module 是应用矩阵首屏基线：用户选择“检验理解 / 记住核心 / 看清结构”等学习动作。目录必须先按 `contextTier` 过滤：单课只展示五项真实成立的课后动作，考试速查表仅在 unit / exam 层出现；不能为了能力数量把跨课产物塞回单课。首选项显示适用场景、时间投入、产物和可核对的推荐依据；其余能力在宽工作区两列呈现，三栏复习页的中间容器 ≤600px 时按真实容器宽度回到单列并直接露出动作文字。`/api/apps/readiness` 的模型结果只改变当前层能力的首屏优先级：客观证据已经达到稳定生成阈值时，模型不得通过 `not_ready` / `allowedAppKeys` 剥夺用户行动能力；模型主动返回 `recommendedAppKey=null` 时前端也不得强行补一个“现在最适合”。只有空内容、极短碎片或客观证据不足时才禁止生成。官方试听课只开放 class 层五项能力。任务 dock 只在生成进行中或失败时出现。分享只在完成至少一个可分享且当前内容允许的产物后出现。
 - 应用任务每 1.5 秒从缓存同步，但只有生成结果或任务状态真的变化时才更新 React state；无变化轮询不能让整个三栏学习区持续重渲染。
 
 ## 已有测试

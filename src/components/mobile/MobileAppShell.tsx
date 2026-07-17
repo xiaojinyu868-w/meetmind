@@ -3,7 +3,13 @@
 import React, { useState, useCallback, useRef, useEffect, useMemo } from 'react';
 import { MobileAppNavigatorProvider, useMobileNav } from './MobileAppNavigator';
 import { MobileCollectionCard } from './MobileCollectionCard';
-import { sortCollectionNewestFirst } from './mobile-collection-utils';
+import {
+  buildClassroomTimeline,
+  resolveMobileWorkshopRecommendation,
+  resolveClassroomPhotoTimestamp,
+  sortMobileWorkshopApps,
+  sortCollectionNewestFirst,
+} from './mobile-collection-utils';
 import { MobileReviewSheet } from './MobileReviewSheet';
 import { LessonDigestCard } from '@/components/LessonDigestCard';
 import { useLessonDigest } from '@/hooks/useLessonDigest';
@@ -90,7 +96,10 @@ function fmtSec(sec: number) { return fmtMs(sec * 1000); }
 
 // ── 拍照 input ──
 
-function useCameraCapture(onCaptured: (file: File, capturedAtMs: number) => void) {
+function useCameraCapture(
+  onCaptured: (file: File, capturedAtMs: number) => void,
+  resolveCapturedAtMs?: (file: File, requestedAtMs: number) => number,
+) {
   const inputRef = useRef<HTMLInputElement | null>(null);
   const capturedAtMsRef = useRef<number>(0);
   const trigger = useCallback((capturedAtMs: number) => {
@@ -101,7 +110,10 @@ function useCameraCapture(onCaptured: (file: File, capturedAtMs: number) => void
     <input ref={inputRef} type="file" accept="image/*" capture="environment" className="hidden"
       onChange={(e) => {
         const files = e.target.files;
-        if (files && files.length > 0) onCaptured(files[0], capturedAtMsRef.current);
+        if (files && files.length > 0) {
+          const file = files[0];
+          onCaptured(file, resolveCapturedAtMs?.(file, capturedAtMsRef.current) ?? capturedAtMsRef.current);
+        }
         if (inputRef.current) inputRef.current.value = '';
       }}
     />
@@ -393,7 +405,9 @@ function RecordingScreen({ p }: { p: MobileAppShellProps }) {
     ? selectDemoLiveSegments(p.currentTime / 1000)
     : allSegments;
   const liveInterimText = useCaptureEditorStore(s => s.liveInterimText);
-  const sessionPhotos = useCollectionStore(s => s.sourceItems).filter(i => i.type === 'image' && i.role === 'support' && (!i.sessionId || i.sessionId === p.sessionId));
+  const sessionPhotos = useCollectionStore(s => s.sourceItems).filter(i => (
+    i.type === 'image' && i.role === 'support' && Boolean(p.sessionId) && i.sessionId === p.sessionId
+  ));
   const photoCount = sessionPhotos.length;
   const [flash, setFlash] = useState(false);
   const [classmateSheet, setClassmateSheet] = useState(false);
@@ -464,13 +478,21 @@ function RecordingScreen({ p }: { p: MobileAppShellProps }) {
   };
 
   // 拍照
-  const { trigger: triggerCamera, inputEl: cameraInput } = useCameraCapture((file, capturedAtMs) => {
-    p.onPhotoCaptured(file, capturedAtMs);
-    // flash 动画
-    setFlash(true);
-    setTimeout(() => setFlash(false), 150);
-    toast.success(`已拍下板书 · 锚点 ${fmtSec(elapsedSeconds)}`, { duration: 2200 });
-  });
+  const { trigger: triggerCamera, inputEl: cameraInput } = useCameraCapture(
+    (file, capturedAtMs) => {
+      p.onPhotoCaptured(file, capturedAtMs);
+      // flash 动画
+      setFlash(true);
+      setTimeout(() => setFlash(false), 150);
+      toast.success(COPY.mobileJourney.photoCapturedAt(fmtMs(capturedAtMs)), { duration: 2200 });
+    },
+    (file, requestedAtMs) => resolveClassroomPhotoTimestamp({
+      requestedAtMs,
+      recordingStartedAtEpochMs: recordingStartAt,
+      fileLastModifiedEpochMs: file.lastModified,
+      capturedAtEpochMs: Date.now(),
+    }),
+  );
 
   return (
     <div className="flex-1 min-h-0 flex flex-col bg-canvas m-page-in">
@@ -577,26 +599,8 @@ function RecordingScreen({ p }: { p: MobileAppShellProps }) {
             </div>
             {/* segments 和 photos 合并按时间排序，照片穿插在对应时间段的文字之间 */}
             {(() => {
-              const recentSegs = segments.slice(-15).filter((s, i, arr) => {
-                // 文本级去重：如果和前一条标准化文本相同，跳过
-                if (i === 0) return true;
-                const prev = arr[i - 1];
-                const a = s.text.trim().replace(/[\s,，。.!！？？、的了的了]/g, '');
-                const b = prev.text.trim().replace(/[\s,，。.!！？？、的了的了]/g, '');
-                return a !== b;
-              });
-              type TimelineItem = { type: 'seg'; data: TranscriptSegment; key: string } | { type: 'photo'; data: typeof sessionPhotos[0]; key: string };
-              const timeline: TimelineItem[] = [];
-              for (const s of recentSegs) timeline.push({ type: 'seg', data: s, key: s.id });
-              for (const ph of sessionPhotos) {
-                const ts = ph.capturedAtMs ?? 0;
-                if (ts === 0) { timeline.push({ type: 'photo', data: ph, key: ph.id }); continue; }
-                // 找到第一条 startMs > capturedAtMs 的 segment，把照片插在它前面
-                const idx = timeline.findIndex(it => it.type === 'seg' && it.data.startMs > ts);
-                if (idx === -1) timeline.push({ type: 'photo', data: ph, key: ph.id });
-                else timeline.splice(idx, 0, { type: 'photo', data: ph, key: ph.id });
-              }
-              return timeline.slice(-20).map((item, i) => {
+              const timeline = buildClassroomTimeline(segments, sessionPhotos);
+              return timeline.map((item, i) => {
                 if (item.type === 'seg') {
                   const s = item.data;
                   return (
@@ -620,7 +624,7 @@ function RecordingScreen({ p }: { p: MobileAppShellProps }) {
                     <div className="flex items-center gap-1.5 mb-1.5">
                       <Camera size={11} strokeWidth={2} className="text-vermilion" />
                       <span className="font-mono text-[9px] font-semibold text-vermilion">板书</span>
-                      {ph.capturedAtMs != null && ph.capturedAtMs > 0 && (
+                      {ph.capturedAtMs != null && (
                         <span className="font-mono text-[9px] text-ink-muted ml-auto">{fmtMs(ph.capturedAtMs)}</span>
                       )}
                     </div>
@@ -853,6 +857,7 @@ function ReviewScreen({ p }: { p: MobileAppShellProps }) {
   const [sheetHeight, setSheetHeight] = useState<'collapsed' | 'half' | 'full'>('collapsed');
   const [playerCollapsed, setPlayerCollapsed] = useState(false);
   const scrollRef = useRef<HTMLDivElement | null>(null);
+  const handledEvidenceFocusRef = useRef<string | null>(null);
   const segments = useCaptureEditorStore(s => s.segments);
   const sessionId = useSessionStore(s => s.sessionId);
   const sourceItems = useCollectionStore(s => s.sourceItems);
@@ -889,6 +894,31 @@ function ReviewScreen({ p }: { p: MobileAppShellProps }) {
             ? COPY.sourceState.extracting
             : '';
   const [restoreTimedOut, setRestoreTimedOut] = useState(false);
+  const focusedTranscriptStartMs = useMemo(() => {
+    const focusTimestampMs = reviewContext?.focusTimestampMs;
+    if (focusTimestampMs == null || segments.length === 0) return null;
+    return segments.reduce((closest, segment) => (
+      Math.abs(segment.startMs - focusTimestampMs) < Math.abs(closest.startMs - focusTimestampMs)
+        ? segment
+        : closest
+    )).startMs;
+  }, [reviewContext?.focusTimestampMs, segments]);
+
+  useEffect(() => {
+    const focusTimestampMs = reviewContext?.focusTimestampMs;
+    if (focusTimestampMs == null || focusedTranscriptStartMs == null) return undefined;
+    const focusKey = `${sessionId}:${focusTimestampMs}`;
+    if (handledEvidenceFocusRef.current === focusKey) return undefined;
+    handledEvidenceFocusRef.current = focusKey;
+    setDigestView(false);
+    const timer = window.setTimeout(() => {
+      const target = scrollRef.current?.querySelector<HTMLElement>(
+        `[data-transcript-start-ms="${focusedTranscriptStartMs}"]`,
+      );
+      target?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    }, 80);
+    return () => window.clearTimeout(timer);
+  }, [focusedTranscriptStartMs, reviewContext?.focusTimestampMs, sessionId]);
 
   useEffect(() => {
     if (isArticleReview || segments.length > 0) {
@@ -1036,7 +1066,11 @@ function ReviewScreen({ p }: { p: MobileAppShellProps }) {
         ) : segments.length>0 ? (
           <div className="space-y-2">
             {segments.map(s => (
-              <div key={s.id} className="rounded-[14px] border border-divider/70 bg-white p-2.5 shadow-[0_1px_2px_rgba(0,0,0,0.02)]">
+              <div
+                key={s.id}
+                data-transcript-start-ms={s.startMs}
+                className={`rounded-[14px] border p-2.5 shadow-[0_1px_2px_rgba(0,0,0,0.02)] transition-colors ${focusedTranscriptStartMs === s.startMs ? 'border-pine/35 bg-pine-fog' : 'border-divider/70 bg-white'}`}
+              >
                 <div className="flex items-center gap-2 mb-1">
                   <span className="font-mono text-[9px] text-ink-muted/50">{fmtMs(s.startMs)}</span>
                   {s.speakerId ? (
@@ -1140,11 +1174,11 @@ function AppsScreen({ p: _p }: { p: MobileAppShellProps }) {
     activeAnchorCount: 0,
   });
   const allowed = new Set(assessment?.allowedAppKeys ?? WORKSHOP_APP_CATALOG.map((app) => app.key));
-  const recommendedKey = assessment?.recommendedAppKey
-    ?? (assessment?.status === 'ready' ? recommendation.key : null);
-  const apps = WORKSHOP_APP_CATALOG
-    .filter((app) => allowed.has(app.key))
-    .sort((a, b) => Number(b.key === recommendedKey) - Number(a.key === recommendedKey));
+  const recommendedKey = resolveMobileWorkshopRecommendation(assessment, recommendation.key);
+  const apps = sortMobileWorkshopApps(
+    WORKSHOP_APP_CATALOG.filter((app) => allowed.has(app.key)),
+    recommendedKey,
+  );
   const blockedTitle = assessment?.reason === 'not_learning'
     ? COPY.apps.matrix.notLearningTitle
     : assessment?.reason === 'unreliable_transcript'
@@ -1163,8 +1197,8 @@ function AppsScreen({ p: _p }: { p: MobileAppShellProps }) {
             <ChevronRight size={18} strokeWidth={2} className="rotate-180" />
           </button>
           <div>
-            <p className="text-[15px] font-semibold text-ink">{COPY.apps.matrix.mobileTitle}</p>
-            <p className="mt-0.5 text-[9px] text-ink-muted">{COPY.apps.matrix.contextBasis(_p.segments.length, 0, 0)}</p>
+            <p className="text-[16px] font-semibold leading-tight text-ink">{COPY.apps.matrix.mobileTitle}</p>
+            <p className="mt-1 text-[12px] text-ink-muted">{COPY.apps.matrix.contextBasis(_p.segments.length, 0, 0)}</p>
           </div>
         </div>
       </div>
@@ -1177,28 +1211,25 @@ function AppsScreen({ p: _p }: { p: MobileAppShellProps }) {
             <p className="text-[15px] font-semibold text-ink">{blockedTitle}</p>
           </div>
         ) : null}
-        <div className="grid grid-cols-2 gap-2.5">
+        <div className="flex flex-col gap-2.5">
           {apps.map((app, i) => (
             (() => {
               const isRecommended = app.key === recommendedKey;
-              const closesOddRemainder = Boolean(recommendedKey && apps.length % 2 === 0 && i === apps.length - 1);
-              const isWide = isRecommended || closesOddRemainder;
               return (
             <button key={app.key} onClick={() => push(app.key)}
-              className={`rounded-[18px] border bg-white p-3.5 text-left active:scale-[0.99] transition m-card-in ${isWide ? 'col-span-2' : ''} ${isRecommended ? 'border-pine/35' : 'border-divider'}`}
+              className={`rounded-[18px] border bg-white px-4 text-left active:scale-[0.99] transition m-card-in ${isRecommended ? 'border-pine/35 py-4 shadow-soft' : 'min-h-[74px] py-3'}`}
               style={{ animationDelay: `${i * 0.05}s` }}>
-              <div className={`flex ${isWide ? 'items-center gap-3' : 'h-full flex-col items-start'}`}>
-                <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-[12px] bg-pine-mist text-pine">{iconByKey[app.key]}</div>
+              <div className="flex items-center gap-3.5">
+                <div className={`flex flex-shrink-0 items-center justify-center rounded-[13px] bg-pine-mist text-pine ${isRecommended ? 'h-11 w-11' : 'h-10 w-10'}`}>{iconByKey[app.key]}</div>
                 <div className="min-w-0 flex-1">
-                  <div className={`flex items-center gap-2 ${isWide ? '' : 'mt-3'}`}>
-                    <p className="text-[9px] font-semibold text-pine">{app.learningAction}</p>
-                    {isRecommended ? <span className="rounded-full bg-vermilion-mist px-1.5 py-0.5 text-[9px] font-semibold text-vermilion">{COPY.apps.matrix.recommended}</span> : null}
+                  <div className="flex min-w-0 items-center gap-2">
+                    <p className="truncate text-[12px] font-semibold text-pine">{app.learningAction}</p>
+                    {isRecommended ? <span className="flex-shrink-0 rounded-full bg-vermilion-mist px-2 py-0.5 text-[11px] font-semibold text-vermilion">{COPY.apps.matrix.recommended}</span> : null}
                   </div>
-                  <p className="mt-0.5 text-[14px] font-semibold text-ink">{app.name}</p>
-                  <p className={`mt-1 text-[10.5px] leading-relaxed text-ink-muted ${isWide ? '' : 'line-clamp-2'}`}>{app.bestFor}</p>
-                  <p className="mt-2 font-mono text-[8.5px] text-ink-muted/75">{app.timeLabel}</p>
+                  <p className="mt-0.5 text-[15px] font-semibold leading-tight text-ink">{app.name}</p>
+                  {isRecommended ? <p className="mt-1.5 line-clamp-2 text-[13px] leading-5 text-ink-muted">{app.bestFor}</p> : null}
                 </div>
-                {isWide ? <ChevronRight size={15} className="flex-shrink-0 text-ink-muted" /> : null}
+                <ChevronRight size={16} className="flex-shrink-0 text-ink-muted" />
               </div>
             </button>
               );
@@ -1211,7 +1242,7 @@ function AppsScreen({ p: _p }: { p: MobileAppShellProps }) {
 }
 
 function CatalogAppScreen({ p, appKey }: { p: MobileAppShellProps; appKey: WorkshopAppKey }) {
-  const { pop, reviewContext } = useMobileNav();
+  const { pop, popTo, reviewContext } = useMobileNav();
   const app = getWorkshopAppByKey(appKey)!;
   return (
     <div className="flex min-h-0 flex-1 flex-col bg-paper m-page-in">
@@ -1221,8 +1252,8 @@ function CatalogAppScreen({ p, appKey }: { p: MobileAppShellProps; appKey: Works
             <ChevronRight size={18} strokeWidth={2} className="rotate-180" />
           </button>
           <div className="text-center">
-            <p className="text-[13px] font-semibold text-ink">{app.name}</p>
-            <p className="mt-0.5 text-[9px] text-ink-muted">{app.learningAction} · {app.timeLabel}</p>
+            <p className="text-[15px] font-semibold text-ink">{app.name}</p>
+            <p className="mt-1 text-[12px] text-ink-muted">{app.learningAction}</p>
           </div>
           <div className="w-8" />
         </div>
@@ -1234,7 +1265,10 @@ function CatalogAppScreen({ p, appKey }: { p: MobileAppShellProps; appKey: Works
           segments={p.segments}
           contextTitle={reviewContext?.title || p.selectedReviewItem?.title}
           dataSource={p.demoMode ? 'demo' : 'live'}
-          onSeek={p.onSeek}
+          onSeek={(ms) => {
+            p.onSeek(ms);
+            popTo('review', { focusTimestampMs: ms });
+          }}
           onReturnToMatrix={pop}
         />
       </div>

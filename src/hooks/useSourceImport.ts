@@ -346,9 +346,13 @@ export function useSourceImport(
             : (!isAudio && !isVideo)
             ? '正在阅读…'
             : undefined,
+          sessionId: isImage ? options?.sessionId : undefined,
           durationMs,
           provenance: pendingProvenance,
         });
+        if (isImage && options?.capturedAtMs !== undefined) {
+          updateSourceItem(id, { capturedAtMs: options.capturedAtMs });
+        }
       });
 
       for (const { id, file, isAudio, isVideo, isImage, mediaUrl, previewUrl, attachmentUrl, durationMs } of queuedFiles) {
@@ -417,6 +421,7 @@ export function useSourceImport(
               status: 'ready',
               statusText: undefined,
               origin: 'user',
+              sessionId: options?.sessionId,
               capturedAtMs: options?.capturedAtMs,
               provenance: imageProvenance,
             });

@@ -121,7 +121,7 @@ describe('workshop readiness', () => {
     });
   });
 
-  it('uses content kind when the model returns a non-standard not-learning reason', () => {
+  it('does not let a model misclassification revoke capabilities from substantial content', () => {
     const transcript = Array.from({ length: 10 }, (_, index) => segment(
       '这是一段有足够长度但只是讨论个人偏好的普通聊天。',
       index * 10_000,
@@ -136,8 +136,36 @@ describe('workshop readiness', () => {
       confidence: 'high',
     }, { transcript });
 
-    expect(assessment.reason).toBe('not_learning');
-    expect(assessment.allowedAppKeys).toEqual([]);
+    expect(assessment.status).toBe('ready');
+    expect(assessment.reason).toBe('ready');
+    expect(assessment.recommendedAppKey).toBeNull();
+    expect(assessment.allowedAppKeys).toEqual(expect.arrayContaining([
+      'flashcards',
+      'quiz',
+      'mindmap',
+      'infographic',
+      'audio-overview',
+    ]));
+  });
+
+  it('keeps a thirteen-minute discussion fully actionable even when the model calls it casual', () => {
+    const transcript = Array.from({ length: 174 }, (_, index) => segment(
+      `第${index + 1}段课堂讨论包含可以回忆、检验和重新组织的具体观点。`,
+      index * 4_500,
+      (index + 1) * 4_500,
+    ));
+    const assessment = sanitizeWorkshopReadinessAssessment({
+      status: 'not_ready',
+      contentKind: 'casual',
+      recommendedAppKey: null,
+      allowedAppKeys: [],
+      reason: 'not_learning',
+      confidence: 'high',
+    }, { transcript });
+
+    expect(assessment.evidence.durationMs).toBe(783_000);
+    expect(assessment.allowedAppKeys).toHaveLength(5);
+    expect(assessment.status).toBe('ready');
   });
 
   it('keeps at most two model-approved apps for partial learning content', () => {

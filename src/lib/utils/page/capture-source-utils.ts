@@ -278,6 +278,12 @@ export function buildWorkspaceCaptureSourceItem(item: WorkspaceCaptureMessage): 
     typeof metadata?.sourceMode === 'string' && metadata.sourceMode.trim()
       ? metadata.sourceMode.trim()
       : undefined;
+  const capturedAtMs =
+    typeof metadata?.capturedAtMs === 'number'
+      && Number.isFinite(metadata.capturedAtMs)
+      && metadata.capturedAtMs >= 0
+      ? metadata.capturedAtMs
+      : undefined;
   const provenance = readSourceProvenance(metadata) || buildSourceProvenance({
     ingressChannel: item.sourceType === 'wechat'
       ? 'wechat'
@@ -361,6 +367,7 @@ export function buildWorkspaceCaptureSourceItem(item: WorkspaceCaptureMessage): 
         : metadata && typeof metadata.localSessionId === 'string'
           ? metadata.localSessionId
           : undefined,
+    capturedAtMs,
     durationMs:
       durationSec != null
         ? Math.round(durationSec * 1000)
@@ -451,6 +458,7 @@ export function buildCollectionListItemFromSourceItem(
       sourceItemId: item.id,
       localOnly: true,
       sessionId: item.sessionId || null,
+      capturedAtMs: item.capturedAtMs ?? null,
       duration: item.durationMs || null,
       status: item.status || 'ready',
     },

@@ -15,25 +15,22 @@
  */
 
 import React, { useState, useCallback, createContext, useContext, useMemo } from 'react';
+import {
+  popMobileStackTo,
+  resolveRetainedReviewContext,
+  type MobileScreen,
+  type ReviewContext,
+  type ScreenState,
+} from './mobile-navigation-model';
+
+export type {
+  MobileScreen,
+  ReviewContentType,
+  ReviewContext,
+  ScreenState,
+} from './mobile-navigation-model';
 
 // ── Types ──
-
-export type MobileScreen = 'home' | 'recording' | 'processing' | 'review' | 'flashcards' | 'quiz' | 'cheatsheet' | 'mindmap' | 'audio-overview' | 'infographic' | 'apps' | 'classmate' | 'echo' | 'empty';
-
-export type ReviewContentType = 'audio' | 'video' | 'article';
-
-export interface ReviewContext {
-  sessionId: string;
-  contentType: ReviewContentType;
-  title: string;
-  segments?: Array<{ id: string; text: string; startMs: number; endMs: number; isFinal?: boolean }>;
-  images?: Array<{ imageId: string; capturedAtMs: number | null; title?: string }>;
-}
-
-export interface ScreenState {
-  screen: MobileScreen;
-  reviewContext?: ReviewContext;
-}
 
 interface MobileAppNavigatorContextValue {
   /** 当前栈顶 screen */
@@ -46,6 +43,8 @@ interface MobileAppNavigatorContextValue {
   replace: (screen: MobileScreen, reviewContext?: ReviewContext) => void;
   /** 弹出栈顶（返回上一页） */
   pop: () => void;
+  /** 回到栈内最近的目标页面，可同时补充复习定位信息。 */
+  popTo: (screen: MobileScreen, reviewContextPatch?: Partial<ReviewContext>) => void;
   /** 清空栈，回到首页 */
   resetToHome: () => void;
   /** 跳转到指定 screen（清空栈，只留目标） */
@@ -82,6 +81,10 @@ export function MobileAppNavigatorProvider({ children }: { children: React.React
     });
   }, []);
 
+  const popTo = useCallback((screen: MobileScreen, reviewContextPatch?: Partial<ReviewContext>) => {
+    setStack((prev) => popMobileStackTo(prev, screen, reviewContextPatch));
+  }, []);
+
   const resetToHome = useCallback(() => {
     setStack([{ screen: 'home' }]);
   }, []);
@@ -93,9 +96,9 @@ export function MobileAppNavigatorProvider({ children }: { children: React.React
   const value = useMemo<MobileAppNavigatorContextValue>(
     () => {
       const current = stack[stack.length - 1] ?? { screen: 'home' as MobileScreen };
-      return { current, stack, push, replace, pop, resetToHome, resetTo };
+      return { current, stack, push, replace, pop, popTo, resetToHome, resetTo };
     },
-    [stack, push, replace, pop, resetToHome, resetTo],
+    [stack, push, replace, pop, popTo, resetToHome, resetTo],
   );
 
   return (
@@ -108,13 +111,14 @@ export function MobileAppNavigatorProvider({ children }: { children: React.React
 // ── Hook for convenience ──
 
 export function useMobileNav() {
-  const { current, push, replace, pop, resetToHome, resetTo } = useMobileNavigator();
+  const { current, stack, push, replace, pop, popTo, resetToHome, resetTo } = useMobileNavigator();
   return {
     currentScreen: current.screen,
-    reviewContext: current.reviewContext,
+    reviewContext: current.reviewContext ?? resolveRetainedReviewContext(stack),
     push,
     replace,
     pop,
+    popTo,
     resetToHome,
     resetTo,
   };
