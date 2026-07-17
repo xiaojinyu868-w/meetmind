@@ -13,40 +13,25 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { randomBytes } from 'crypto';
 import prisma from '@/lib/prisma';
 import { wechatAuthService } from '@/lib/services/wechat-auth-service';
-import { authService } from '@/lib/services/auth-service';
-import workspaceService from '@/lib/services/workspace-service';
+import { wechatIdentityService } from '@/lib/services/wechat-identity-service';
+import { checkRateLimit, getIdentifier } from '@/lib/services/rate-limit-service';
+import { wechatOauthStateService } from '@/lib/services/wechat-oauth-state-service';
 import workspaceContextService from '@/lib/services/workspace-context-service';
 import { createWechatWebSession, consumeWechatWebSession } from '@/lib/services/wechat-web-session-service';
 import { createLogger } from '@/lib/logger';
 const log = createLogger('wechat/bind/callback');
 
 
-// state → linkToken 映射（传递 capture token 到回调）
-const stateStore = new Map<string, { linkToken: string; expiresAt: number }>();
-
-/**
- * 清理过期条目
- */
-function cleanExpired() {
-  const now = Date.now();
-  for (const [k, v] of stateStore) {
-    if (v.expiresAt < now) stateStore.delete(k);
-  }
-}
-
 /**
  * 生成微信授权 URL 并记住 linkToken
  * 
  * 前端调用: GET /api/wechat/bind/callback?action=authorize&linkToken=xxx
  */
-function handleAuthorize(request: NextRequest): NextResponse {
-  cleanExpired();
-
+async function handleAuthorize(request: NextRequest): Promise<NextResponse> {
   const { searchParams } = new URL(request.url);
-  const linkToken = searchParams.get('linkToken') || '';
+  const linkToken = searchParams.get('linkToken')?.trim() || '';
 
   if (!wechatAuthService.isConfigured()) {
     return NextResponse.json(
@@ -54,27 +39,29 @@ function handleAuthorize(request: NextRequest): NextResponse {
       { status: 503 }
     );
   }
+  if (!/^[a-zA-Z0-9_-]{32,160}$/.test(linkToken)) {
+    return NextResponse.json({ success: false, error: '微信收集凭证无效' }, { status: 400 });
+  }
+  const [message, networkLimit, tokenLimit] = await Promise.all([
+    prisma.wechatInboxMessage.findUnique({ where: { linkToken }, select: { id: true } }),
+    checkRateLimit(getIdentifier(request), 'wechatQr'),
+    checkRateLimit(`wechat-oauth:${linkToken}`, 'wechatQr'),
+  ]);
+  if (!message) {
+    return NextResponse.json({ success: false, error: '微信收集凭证无效' }, { status: 404 });
+  }
+  if (!networkLimit.allowed || !tokenLimit.allowed) {
+    return NextResponse.json({ success: false, error: '请求太频繁，请稍后再试' }, { status: 429 });
+  }
 
   // 构造回调 URL — 指向本路由自身
   const host = request.headers.get('x-forwarded-host') || request.headers.get('host') || '';
   const protocol = request.headers.get('x-forwarded-proto') || 'https';
   const callbackUrl = `${protocol}://${host}/api/wechat/bind/callback`;
 
-  // 生成授权 URL（优先走静默授权，确保服务号网页授权可稳定返回 openId）
-  const authUrl = wechatAuthService.getAuthUrl(callbackUrl, 'snsapi_base');
-
-  // 从 authUrl 中提取 state 参数
-  const authUrlObj = new URL(authUrl.replace('#wechat_redirect', ''));
-  const state = authUrlObj.searchParams.get('state') || '';
-
-  // 记住 state → linkToken 映射
-  if (state && linkToken) {
-    stateStore.set(state, {
-      linkToken,
-      expiresAt: Date.now() + 5 * 60 * 1000,
-    });
-  }
-
+  // 生成持久化一次性 state；多实例部署也能在回调时原子消费。
+  const state = await wechatOauthStateService.create(linkToken || undefined);
+  const authUrl = wechatAuthService.getAuthUrl(callbackUrl, 'snsapi_base', state);
   return NextResponse.json({ success: true, authUrl });
 }
 
@@ -84,8 +71,6 @@ function handleAuthorize(request: NextRequest): NextResponse {
  * GET /api/wechat/bind/callback?code=xxx&state=xxx
  */
 async function handleCallback(request: NextRequest): Promise<NextResponse> {
-  cleanExpired();
-
   const { searchParams } = new URL(request.url);
   const code = searchParams.get('code');
   const state = searchParams.get('state');
@@ -96,10 +81,11 @@ async function handleCallback(request: NextRequest): Promise<NextResponse> {
     return NextResponse.redirect(`${baseUrl}/login?error=missing_params`);
   }
 
-  // 找回 linkToken
-  const stateData = stateStore.get(state);
-  const linkToken = stateData?.linkToken || '';
-  if (stateData) stateStore.delete(state);
+  const consumedState = await wechatOauthStateService.consume(state);
+  if (!consumedState) {
+    return NextResponse.redirect(`${baseUrl}/login?error=invalid_state`);
+  }
+  const linkToken = consumedState.linkToken || '';
 
   try {
     // 用 code 换 access_token
@@ -121,79 +107,24 @@ async function handleCallback(request: NextRequest): Promise<NextResponse> {
       ? await wechatAuthService.getUserInfo(tokenResponse.access_token, openId)
       : null;
     const nickname = wechatUser?.nickname || '微信用户';
+    const loginResult = await wechatIdentityService.login({
+      openId,
+      accessToken: tokenResponse.access_token,
+      refreshToken: tokenResponse.refresh_token,
+      expiresAt: new Date(Date.now() + tokenResponse.expires_in * 1000).toISOString(),
+      unionid: wechatUser?.unionid || tokenResponse.unionid,
+      nickname,
+      headimgurl: wechatUser?.headimgurl,
+    });
 
-    // 查找已绑定的用户
-    const user = await authService.findUserByProvider('wechat', openId);
-    let loginResult;
-
-    if (user) {
-      // 已绑定，更新 token 后直接为原账号签发会话，避免误走验证码登录逻辑
-      await authService.linkAuthProvider(user.id, 'wechat', {
-        providerId: openId,
-        accessToken: tokenResponse.access_token,
-        refreshToken: tokenResponse.refresh_token,
-        expiresAt: new Date(Date.now() + tokenResponse.expires_in * 1000).toISOString(),
-        metadata: {
-          unionid: wechatUser?.unionid,
-          nickname,
-          headimgurl: wechatUser?.headimgurl,
-        },
-      });
-
-      loginResult = await authService.createSessionForUserId(user.id);
-    } else {
-      // 新用户，自动注册
-      // 生成满足密码强度要求的随机密码（至少含大小写字母和数字）
-      const randomPart = randomBytes(16).toString('hex');
-      const safePassword = `Wx${randomPart}9`;
-      const username = `wx_${openId.slice(-8)}_${Date.now().toString(36)}`;
-      const registerResult = await authService.register({
-        username,
-        password: safePassword,
-        nickname,
-        role: 'student',
-      });
-
-      if (!registerResult.success || !registerResult.user) {
-        const errorUrl = linkToken
-          ? `${baseUrl}/wechat/capture/${linkToken}?error=${encodeURIComponent('创建账号失败')}`
-          : `${baseUrl}/login?error=register_failed`;
-        return NextResponse.redirect(errorUrl);
-      }
-
-      // 绑定微信
-      await authService.linkAuthProvider(registerResult.user.id, 'wechat', {
-        providerId: openId,
-        accessToken: tokenResponse.access_token,
-        refreshToken: tokenResponse.refresh_token,
-        expiresAt: new Date(Date.now() + tokenResponse.expires_in * 1000).toISOString(),
-        metadata: {
-          unionid: wechatUser?.unionid || tokenResponse.unionid,
-          nickname,
-          headimgurl: wechatUser?.headimgurl,
-        },
-      });
-
-      if (wechatUser?.headimgurl) {
-        await authService.updateProfile(registerResult.user.id, {
-          avatar: wechatUser.headimgurl,
-          nickname,
-        });
-      }
-
-      loginResult = await authService.createSessionForUserId(registerResult.user.id);
-    }
-
-    if (!loginResult?.success || !loginResult.accessToken) {
+    if (!loginResult.success || !loginResult.accessToken) {
       const errorUrl = linkToken
         ? `${baseUrl}/wechat/capture/${linkToken}?error=${encodeURIComponent('登录失败')}`
         : `${baseUrl}/login?error=login_failed`;
       return NextResponse.redirect(errorUrl);
     }
 
-    // 同步工作区
-    await workspaceService.resolveWechatWorkspace(openId);
-    await workspaceContextService.syncWechatInboxArtifactsForOpenId(openId);
+    // 统一身份服务已同步 openId 归属；这里只补当前 capture 的专属产物。
     if (linkToken) {
       await workspaceContextService.syncWechatInboxMessageArtifacts(linkToken);
     }
@@ -248,8 +179,6 @@ async function handleCallback(request: NextRequest): Promise<NextResponse> {
  * POST /api/wechat/bind/callback { sessionToken: "xxx" }
  */
 export async function POST(request: NextRequest) {
-  cleanExpired();
-
   try {
     const { sessionToken } = await request.json();
 

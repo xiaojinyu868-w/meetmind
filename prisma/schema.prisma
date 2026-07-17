@@ -428,6 +428,41 @@ model WechatInboxMessage {
   @@index([createdAt])
 }
 
+/// 公众号带参二维码的短期登录/绑定挑战。只存浏览器随机令牌的 SHA-256，不存会话令牌。
+model WechatOauthState {
+  id         String    @id @default(cuid())
+  state      String    @unique
+  linkToken  String?
+  expiresAt  DateTime
+  consumedAt DateTime?
+  createdAt  DateTime  @default(now())
+
+  @@index([expiresAt])
+}
+
+model WechatQrAuthChallenge {
+  id               String    @id @default(cuid())
+  scene            String    @unique
+  mode             String
+  browserTokenHash String
+  targetUserId     String?
+  status           String    @default("pending")
+  imageUrl         String
+  openId           String?
+  resultUserId     String?
+  error            String?
+  expiresAt        DateTime
+  scannedAt        DateTime?
+  consumedAt       DateTime?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  @@index([status])
+  @@index([expiresAt])
+  @@index([targetUserId])
+  @@index([browserTokenHash, mode, targetUserId, status, expiresAt], map: "WechatQrAuthChallenge_reuse_idx")
+}
+
 /// ASR 纠错记录 (M5 T5.1)
 /// 用户在前端修改转写文本后，回写到服务端。
 /// 周度聚合：高频 (wrongText, correctedText) 对 → 进入 userHotwords / workspaceHotwords。

@@ -8,6 +8,10 @@ describe('isPublicRoute', () => {
     expect(isPublicRoute('/api/tutor/memory')).toBe(true);
   });
 
+  it('keeps WeChat QR auth public for unauthenticated browsers', () => {
+    expect(isPublicRoute('/api/auth/wechat/qr')).toBe(true);
+  });
+
   it('keeps /api/feed public so guest local captures can produce a rate-limited feed', () => {
     expect(isPublicRoute('/api/feed')).toBe(true);
   });

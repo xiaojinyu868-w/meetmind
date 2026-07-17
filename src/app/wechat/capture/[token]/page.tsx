@@ -143,7 +143,6 @@ export default async function WechatCapturePage({
         <WechatCaptureClient
           token={token}
           isBound={!!isBound}
-          openId={message.openId}
           workspaceName={message.workspace?.name}
         />
       </div>

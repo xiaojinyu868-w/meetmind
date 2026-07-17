@@ -11,6 +11,8 @@ import {
   parseWechatMpXml,
   verifyWechatMpSignature,
 } from '@/lib/services/wechat-mp-service';
+import { extractWechatQrAuthScene } from '@/lib/services/wechat-qr-auth-service';
+import { wechatQrAuthRuntime } from '@/lib/services/wechat-qr-auth-runtime';
 import {
   enrichLinkContent,
   enrichArticleLinkContent,
@@ -18,6 +20,7 @@ import {
 import { resolveBilibiliUrl, fetchViewMeta } from '@/lib/services/bilibili-import-service';
 import { parseVideoLink } from '@/lib/utils/video-link';
 import { createLogger } from '@/lib/logger';
+import { COPY } from '@/lib/ui/copy';
 import { buildSourceProvenance } from '@/lib/capture/source-provenance';
 import {
   syncWorkspaceCaptureEvidence,
@@ -308,6 +311,21 @@ export async function POST(request: NextRequest) {
 
   if (!openId || !developerId) {
     return textResponse('success');
+  }
+
+  const qrAuthScene = extractWechatQrAuthScene(payload);
+  if (qrAuthScene) {
+    try {
+      const result = await wechatQrAuthRuntime.markScanned({ scene: qrAuthScene, openId });
+      return xmlResponse(buildWechatTextReply(
+        openId,
+        developerId,
+        result.accepted ? COPY.wechatQr.mpConfirmed : COPY.wechatQr.mpExpired,
+      ));
+    } catch (error) {
+      log.error('[wechat-mp] QR auth event failed:', error);
+      return xmlResponse(buildWechatTextReply(openId, developerId, COPY.wechatQr.failed));
+    }
   }
 
   const normalized = normalizeWechatMpMessage(payload);

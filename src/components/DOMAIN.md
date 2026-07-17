@@ -111,7 +111,8 @@ components/
 | `DesktopSidebar.tsx` | ~374 | 桌面侧栏（默认 168px，折叠 52px；录课专注态强制 52px）；「今日情报」是常驻一级入口，可从任意工作区打开个人上下文与目标驱动的情报抽屉 |
 | `AppLoading.tsx` | ~120 | 进入学习现场时的品牌过渡；只表达恢复状态和真实进度，不展示初始化、服务连接等工程阶段 |
 | `ModelSelector.tsx` | ~260 | AI 模型选择器 |
-| `WechatBindForm.tsx` | ~280 | 微信绑定表单 |
+| `WechatQrAuthDialog.tsx` | ~170 | 登录/设置复用的公众号原地扫码弹窗；状态由 `useWechatQrAuth` 驱动 |
+| `WechatBindForm.tsx` | ~280 | 微信 Capture H5 的邮箱/密码兼容绑定表单 |
 | `AgreementModal.tsx` | ~600 | 用户协议弹窗 |
 
 ### apps/ — 应用系统

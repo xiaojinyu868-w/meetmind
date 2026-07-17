@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { authService } from '@/lib/services/auth-service';
 import { emailService } from '@/lib/services/email-service';
-import workspaceService from '@/lib/services/workspace-service';
+import { wechatIdentityService } from '@/lib/services/wechat-identity-service';
 import workspaceContextService from '@/lib/services/workspace-context-service';
 import { createLogger } from '@/lib/logger';
 const log = createLogger('wechat/bind');
@@ -18,14 +18,25 @@ export const runtime = 'nodejs';
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { mode = 'password', openId, linkToken } = body;
+    const { mode = 'password', linkToken } = body;
 
-    if (!openId?.trim()) {
+    if (!linkToken?.trim()) {
       return NextResponse.json(
-        { success: false, error: '缺少微信身份信息' },
-        { status: 400 }
+        { success: false, error: '缺少微信收集凭证' },
+        { status: 400 },
       );
     }
+    const captureMessage = await prisma.wechatInboxMessage.findUnique({
+      where: { linkToken: linkToken.trim() },
+      select: { openId: true },
+    });
+    if (!captureMessage?.openId) {
+      return NextResponse.json(
+        { success: false, error: '微信收集凭证无效或已过期' },
+        { status: 404 },
+      );
+    }
+    const openId = captureMessage.openId;
 
     let loginResult;
 
@@ -75,35 +86,12 @@ export async function POST(request: NextRequest) {
     }
 
     const userId = loginResult.user.id;
-
-    // 检查 openId 是否已绑定到其他账户
-    const existingBinding = await prisma.authProvider.findUnique({
-      where: {
-        provider_providerId: {
-          provider: 'wechat',
-          providerId: openId,
-        },
-      },
-    });
-
-    if (existingBinding && existingBinding.userId !== userId) {
+    const bindResult = await wechatIdentityService.bind({ userId, openId });
+    if (!bindResult.success) {
       return NextResponse.json(
-        { success: false, error: '这个微信号已经绑定了其他账户' },
-        { status: 409 }
+        { success: false, error: bindResult.error || '绑定失败，请稍后重试' },
+        { status: bindResult.error?.includes('其他账户') ? 409 : 500 },
       );
-    }
-
-    // 绑定 openId → 用户
-    if (!existingBinding) {
-      await authService.linkAuthProvider(userId, 'wechat', {
-        providerId: openId,
-      });
-    }
-
-    // 同步工作区和收集流
-    const binding = await workspaceService.resolveWechatWorkspace(openId);
-    if (binding) {
-      await workspaceContextService.syncWechatInboxArtifactsForOpenId(openId);
     }
 
     if (linkToken) {

@@ -87,8 +87,9 @@ route.ts → lib/services/ + lib/utils/rate-limit
 | `/api/auth/password/set` | POST | 设置密码 |
 | `/api/auth/reset-password` | POST | 重置密码 |
 | `/api/auth/send-code` | POST | 发送验证码 |
-| `/api/auth/wechat` | GET | 微信 OAuth URL |
-| `/api/auth/wechat/callback` | GET | 微信 OAuth 回调 |
+| `/api/auth/wechat` | GET | 微信内置浏览器 OAuth URL |
+| `/api/auth/wechat/callback` | GET/POST | 微信 OAuth 回调与一次性 Web session 交换 |
+| `/api/auth/wechat/qr` | POST/GET | 创建公众号带参二维码并轮询登录/绑定结果；挑战由 HttpOnly 浏览器 Cookie 绑定，5 分钟过期；POST 按网络身份 + 浏览器双限流并复用有效挑战 |
 | `/api/auth/learner-profile` | GET/PATCH | 读取或保存学习者画像；除可纠正的学习理解与轻量学习连续性外，只保存用户对课堂自动归组的改名/确认/暂停偏好，真实课堂 session 不复制进画像 |
 
 ### 📦 Workspace
@@ -106,9 +107,9 @@ route.ts → lib/services/ + lib/utils/rate-limit
 
 | 路由 | 方法 | 职责 |
 |------|------|------|
-| `/api/wechat/mp` | GET/POST | 公众号消息接收 + 自动回复 |
-| `/api/wechat/bind` | POST | 微信绑定发起 |
-| `/api/wechat/bind/callback` | GET | 微信绑定回调 |
+| `/api/wechat/mp` | GET/POST | 公众号验签、消息接收与自动回复；优先截获二维码 `subscribe/SCAN` 事件更新认证挑战，不写入收集流 |
+| `/api/wechat/bind` | POST | Capture 邮箱/密码兼容绑定；必须用服务端 `linkToken` 派生 openId，不接受客户端指定微信身份 |
+| `/api/wechat/bind/callback` | GET/POST | 微信内 Capture OAuth 授权与回调：authorize 必须验证真实 linkToken、双限流并创建数据库一次性 state；POST 交换一次性 Web session |
 | `/api/wechat/capture/[token]` | GET | 读取微信 capture、绑定状态与后台正文解析状态 |
 
 ### 📊 分析

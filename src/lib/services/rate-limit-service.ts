@@ -123,6 +123,20 @@ export const RATE_LIMITS = {
     perDay: 20,
     cost: 'low',
   },
+  // 公众号临时二维码创建会消耗微信接口配额，按 IP 与浏览器双重限制
+  wechatQr: {
+    perMinute: 5,
+    perHour: 30,
+    perDay: 100,
+    cost: 'medium',
+  },
+  // 正常客户端约 1.6 秒轮询一次，独立桶避免与二维码创建次数互相影响
+  wechatQrPoll: {
+    perMinute: 90,
+    perHour: 900,
+    perDay: 3000,
+    cost: 'low',
+  },
   // Workshop 应用执行（闪卡/播客/信息图等） - 每分钟30次，每小时200次
   // 单次调用后端会走大模型，耗时较长；但并发生成多个应用时需要同时通过
   appsExecute: {
@@ -205,100 +219,66 @@ async function checkRateLimitRedis(
   const keyDay = `ratelimit:${identifier}:${apiType}:day`;
   
   try {
-    // 使用 pipeline 批量获取计数
-    const pipeline = redis.pipeline();
-    pipeline.get(keyMinute);
-    pipeline.get(keyHour);
-    pipeline.get(keyDay);
-    pipeline.ttl(keyMinute);
-    pipeline.ttl(keyHour);
-    pipeline.ttl(keyDay);
-    
-    const results = await pipeline.exec();
-    if (!results) throw new Error('Pipeline failed');
-    
-    const minuteCount = parseInt(results[0]?.[1] as string || '0', 10);
-    const hourCount = parseInt(results[1]?.[1] as string || '0', 10);
-    const dayCount = parseInt(results[2]?.[1] as string || '0', 10);
-    // TTL 防御：Redis 可能返回 -1（无过期）或 -2（key 不存在），统一 clamp 到 >=1 避免前端误判立即可重试
-    const minuteTTL = Math.max(1, results[3]?.[1] as number || 60);
-    const hourTTL = Math.max(1, results[4]?.[1] as number || 3600);
-    const dayTTL = Math.max(1, results[5]?.[1] as number || 86400);
-    
-    // 检查是否超限
-    if (minuteCount >= limits.perMinute) {
-      return {
-        allowed: false,
-        remaining: {
-          perMinute: 0,
-          perHour: Math.max(0, limits.perHour - hourCount),
-          perDay: Math.max(0, limits.perDay - dayCount),
-        },
-        resetIn: {
-          minute: minuteTTL,
-          hour: hourTTL,
-          day: dayTTL,
-        },
-        error: '请求过于频繁，请稍后再试',
-      };
-    }
-    
-    if (hourCount >= limits.perHour) {
-      return {
-        allowed: false,
-        remaining: {
-          perMinute: 0,
-          perHour: 0,
-          perDay: Math.max(0, limits.perDay - dayCount),
-        },
-        resetIn: {
-          minute: 0,
-          hour: hourTTL,
-          day: dayTTL,
-        },
-        error: '本小时请求次数已达上限，请稍后再试',
-      };
-    }
-    
-    if (dayCount >= limits.perDay) {
-      return {
-        allowed: false,
-        remaining: {
-          perMinute: 0,
-          perHour: 0,
-          perDay: 0,
-        },
-        resetIn: {
-          minute: 0,
-          hour: 0,
-          day: dayTTL,
-        },
-        error: '今日请求次数已达上限，请明天再试',
-      };
-    }
-    
-    // 记录本次调用（原子操作）
-    const incrPipeline = redis.pipeline();
-    incrPipeline.incr(keyMinute);
-    incrPipeline.expire(keyMinute, 60);
-    incrPipeline.incr(keyHour);
-    incrPipeline.expire(keyHour, 3600);
-    incrPipeline.incr(keyDay);
-    incrPipeline.expire(keyDay, 86400);
-    await incrPipeline.exec();
-    
+    // 单个 Lua 脚本原子完成阈值检查、递增和 TTL，防止并发请求同时读到旧计数后穿透限额。
+    const script = `
+      local counts = {}
+      for i = 1, 3 do
+        counts[i] = tonumber(redis.call('GET', KEYS[i]) or '0')
+      end
+      local allowed = 1
+      local blocked = 0
+      for i = 1, 3 do
+        if counts[i] >= tonumber(ARGV[i]) then
+          allowed = 0
+          blocked = i
+          break
+        end
+      end
+      if allowed == 1 then
+        for i = 1, 3 do
+          counts[i] = redis.call('INCR', KEYS[i])
+          if counts[i] == 1 then redis.call('EXPIRE', KEYS[i], tonumber(ARGV[i + 3])) end
+        end
+      end
+      local ttl1 = redis.call('TTL', KEYS[1])
+      local ttl2 = redis.call('TTL', KEYS[2])
+      local ttl3 = redis.call('TTL', KEYS[3])
+      return { allowed, blocked, counts[1], counts[2], counts[3], ttl1, ttl2, ttl3 }
+    `;
+    const raw = await redis.eval(
+      script,
+      3,
+      keyMinute,
+      keyHour,
+      keyDay,
+      limits.perMinute,
+      limits.perHour,
+      limits.perDay,
+      60,
+      3600,
+      86400,
+    ) as Array<number | string>;
+    const values = raw.map((value) => Number(value));
+    const [allowedValue, blockedWindow, minuteCount, hourCount, dayCount] = values;
+    const minuteTTL = Math.max(1, values[5] || 60);
+    const hourTTL = Math.max(1, values[6] || 3600);
+    const dayTTL = Math.max(1, values[7] || 86400);
+    const allowed = allowedValue === 1;
+    const errors = [
+      '请求过于频繁，请稍后再试',
+      '本小时请求次数已达上限，请稍后再试',
+      '今日请求次数已达上限，请明天再试',
+    ];
+
     return {
-      allowed: true,
+      allowed,
       remaining: {
-        perMinute: limits.perMinute - minuteCount - 1,
-        perHour: limits.perHour - hourCount - 1,
-        perDay: limits.perDay - dayCount - 1,
+        perMinute: Math.max(0, limits.perMinute - minuteCount),
+        perHour: Math.max(0, limits.perHour - hourCount),
+        perDay: Math.max(0, limits.perDay - dayCount),
       },
-      resetIn: {
-        minute: 60,
-        hour: 3600,
-        day: 86400,
-      },
+      resetIn: { minute: minuteTTL, hour: hourTTL, day: dayTTL },
+      ...(allowed ? {} : { error: errors[Math.max(0, blockedWindow - 1)] }),
     };
   } catch (err) {
     log.error('[RateLimit] Redis error, falling back to memory:', err);
