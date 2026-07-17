@@ -661,12 +661,42 @@ export function filterValidGoalLabel(
   return matched?.title.slice(0, 60);
 }
 
+export function selectPreRankedCandidates(
+  candidates: ExternalFeedCandidate[],
+): Array<{ candidate: ExternalFeedCandidate; qualityReason?: string }> {
+  const selected: ExternalFeedCandidate[] = [];
+  const selectedSet = new Set<ExternalFeedCandidate>();
+  const seenDiscoveries = new Set<string>();
+
+  for (const candidate of candidates) {
+    const discoveryKey = `${candidate.discovery.perspective}:${candidate.discovery.query}`;
+    if (seenDiscoveries.has(discoveryKey)) continue;
+    seenDiscoveries.add(discoveryKey);
+    selected.push(candidate);
+    selectedSet.add(candidate);
+    if (selected.length >= 4) break;
+  }
+  for (const candidate of candidates) {
+    if (selected.length >= 4) break;
+    if (selectedSet.has(candidate)) continue;
+    selected.push(candidate);
+  }
+
+  return selected.map((candidate) => ({
+    candidate,
+    qualityReason: candidate.qualityReason || candidate.discovery.reason,
+  }));
+}
+
 async function rankExternalCandidates(
   candidates: ExternalFeedCandidate[],
   options: GenerateCrossCourseFeedOptions,
   model: string,
 ): Promise<Array<{ candidate: ExternalFeedCandidate; qualityReason?: string }>> {
   if (candidates.length === 0) return [];
+  if (candidates.every((candidate) => candidate.preRanked)) {
+    return selectPreRankedCandidates(candidates);
+  }
 
   const goals = [
     ...(options.learnerProfile?.goals ?? []).slice(0, 3).map((goal) => goal.title),

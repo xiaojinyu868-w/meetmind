@@ -7,6 +7,7 @@ import {
   isAcceptableExternalResult,
   scoreExternalResult,
   buildCrossCoursePrompt,
+  selectPreRankedCandidates,
 } from './feed-service';
 import type { ExternalFeedCandidate } from './feed-retrieval-service';
 
@@ -112,6 +113,29 @@ describe('feed recommendation quality guardrails', () => {
         createdAt: '2026-07-16T00:00:00.000Z',
       },
     ])).toEqual([reconsidered]);
+  });
+
+  it('keeps DashScope search ordering diverse without a second LLM ranking call', () => {
+    const discoveryA = {
+      query: 'reinforcement learning introduction',
+      reason: '补齐强化学习基础',
+      perspective: 'deepen' as const,
+      contentKinds: ['web' as const],
+    };
+    const discoveryB = {
+      query: 'reinforcement learning counterpoint',
+      reason: '补充不同视角',
+      perspective: 'counterpoint' as const,
+      contentKinds: ['web' as const],
+    };
+    const selected = selectPreRankedCandidates([
+      candidate({ title: 'A1', discovery: discoveryA, preRanked: true, qualityReason: 'A1 reason' }),
+      candidate({ title: 'A2', discovery: discoveryA, preRanked: true, qualityReason: 'A2 reason' }),
+      candidate({ title: 'B1', discovery: discoveryB, preRanked: true, qualityReason: 'B1 reason' }),
+    ]);
+
+    expect(selected.map((item) => item.candidate.title)).toEqual(['A1', 'B1', 'A2']);
+    expect(selected[0].qualityReason).toBe('A1 reason');
   });
 
   it('can build a real external discovery plan from an explicit active learning thread without captures', () => {

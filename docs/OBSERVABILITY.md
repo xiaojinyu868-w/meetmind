@@ -103,7 +103,13 @@ log.info('mic permission granted');
 
 ---
 
+## 运行健康检查
+
+- `GET /api/health`：部署与进程监控使用；同时验证 Node 进程和 SQLite 查询能力。
+- 返回 `200 { status: 'ok' }` 表示可接流量；数据库不可用时返回 `503 { status: 'degraded' }`。
+- 响应固定 `Cache-Control: no-store`，避免代理缓存旧健康状态。
+
 ## 下一步
 
 - [ ] M4.5: 让 `track()` 除了发到 pino，也 async 写入 `AnalyticsEvent` 表（现有 `analytics-service.ts`）
-- [ ] M5: 加 `/api/_health` endpoint 暴露 ASR / Tutor 最近 1min 成功率给 Prometheus
+- [ ] 在现有 `/api/health` 基础上按需增加 ASR / Tutor 最近 1min 成功率；不要让外部 provider 短暂故障阻塞基础 readiness

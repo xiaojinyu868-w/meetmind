@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { retrieveExternalCandidates, scoreSource } from './feed-retrieval-service';
+import { retrieveExternalCandidates, scoreSource, selectDashScopeSearchSources } from './feed-retrieval-service';
+import { webSearchExact } from './web-search-service';
 
 vi.mock('./web-search-service', () => ({
   webSearchExact: vi.fn(async () => [
@@ -16,6 +17,14 @@ afterEach(() => {
 });
 
 describe('feed external retrieval source quality', () => {
+  it('keeps real search sources when the model returns unmatched source indexes', () => {
+    const sources = [
+      { index: 1, title: 'Grounded result', url: 'https://example.edu/source' },
+    ];
+    expect(selectDashScopeSearchSources(sources, [{ index: 99, summary: 'unmatched' }]))
+      .toEqual(sources);
+  });
+
   it('gives scholarly and public-interest sources a stronger prior', () => {
     expect(scoreSource('https://arxiv.org/abs/2401.00001'))
       .toBeGreaterThan(scoreSource('https://example.com/post'));
@@ -60,7 +69,7 @@ describe('feed external retrieval source quality', () => {
       perspective: 'counterpoint',
       contentKinds: ['web', 'paper', 'book'],
       sourceCaptureIds: ['capture-1'],
-    }]);
+    }], { strategy: 'direct' });
 
     expect(candidates.map((candidate) => candidate.contentKind)).toEqual(
       expect.arrayContaining(['web', 'paper', 'book']),
@@ -72,5 +81,38 @@ describe('feed external retrieval source quality', () => {
     });
     expect(candidates.find((candidate) => candidate.contentKind === 'book')?.url)
       .toBe('https://openlibrary.org/works/OL123W');
+  });
+
+  it('uses DashScope native search results without calling blocked global search providers', async () => {
+    vi.mocked(webSearchExact).mockClear();
+    const searchEvents = [
+      'data:{"output":{"choices":[{"message":{"content":""},"finish_reason":"null"}],"search_info":{"search_results":[{"site_name":"OpenAI Spinning Up","index":1,"title":"Introduction to RL","url":"https://spinningup.openai.com/en/latest/spinningup/rl_intro.html"},{"site_name":"UCL","index":2,"title":"Bellman Equations","url":"https://www0.cs.ucl.ac.uk/staff/d.silver/web/Teaching_files/L3_Value_Functions.pdf"}]}}}',
+      'data:{"output":{"choices":[{"message":{"content":"{\\"items\\":[{\\"index\\":1,\\"summary\\":\\"A grounded reinforcement-learning introduction.\\"},{\\"index\\":2,\\"summary\\":\\"A lecture on value functions and Bellman equations.\\"}]}"},"finish_reason":"stop"}],"search_info":{"search_results":[]}}}',
+    ].join('\n\n');
+    globalThis.fetch = vi.fn(async () => new Response(searchEvents, {
+      status: 200,
+      headers: { 'Content-Type': 'text/event-stream' },
+    })) as typeof fetch;
+
+    const candidates = await retrieveExternalCandidates([{
+      query: 'reinforcement learning Bellman equation introduction',
+      reason: '补齐当前强化学习课程的概念基础',
+      perspective: 'deepen',
+      contentKinds: ['web'],
+      sourceCaptureIds: ['capture-rl'],
+    }], {
+      strategy: 'dashscope',
+      dashscopeApiKey: 'test-key',
+    });
+
+    expect(webSearchExact).not.toHaveBeenCalled();
+    expect(candidates).toHaveLength(2);
+    expect(candidates[0]).toMatchObject({
+      title: 'Introduction to RL',
+      snippet: 'A grounded reinforcement-learning introduction.',
+      sourceLabel: 'OpenAI Spinning Up',
+      preRanked: true,
+      retrievalProvider: 'dashscope-search',
+    });
   });
 });

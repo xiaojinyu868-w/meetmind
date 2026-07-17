@@ -27,22 +27,22 @@ build: ## 生产构建
 	NEXT_BUILD_CPUS=1 NODE_OPTIONS="--max-old-space-size=1024" npm run build
 
 .PHONY: deploy
-deploy: build ## 构建 + 重启 PM2
-	pm2 restart meetmind
+deploy: build ## 构建 + PM2 优雅停机后重启 + 健康检查
+	./scripts/deploy.sh --quick
 
 # === 代码质量 ===
 
 .PHONY: test
-test: ## 运行单元测试
-	npx vitest run
+test: ## 运行单元测试（默认单 worker，避免小规格服务器 OOM；可用 VITEST_MAX_WORKERS 覆盖）
+	npx vitest run --maxWorkers=$${VITEST_MAX_WORKERS:-1}
 
 .PHONY: test-watch
 test-watch: ## 运行单元测试（watch 模式）
 	npx vitest
 
 .PHONY: test-server
-test-server: ## 运行 server/ 下的 ASR 工具函数单测
-	npx vitest run --config vitest.server.config.ts
+test-server: ## 运行 server/ 下的运行时与 ASR 单测
+	npx vitest run --config vitest.server.config.ts --maxWorkers=$${VITEST_MAX_WORKERS:-1}
 
 .PHONY: test-all
 test-all: test test-server eval-unit ## 运行全部单元测试（src/ + server/ + eval/）
@@ -93,7 +93,7 @@ eval: eval-unit eval-asr eval-tutor ## 跑完整评测套件（单测 + ASR + Tu
 
 .PHONY: eval-unit
 eval-unit: ## Eval harness 本身的 grader 单测
-	npx vitest run --config vitest.eval.config.ts
+	npx vitest run --config vitest.eval.config.ts --maxWorkers=$${VITEST_MAX_WORKERS:-1}
 
 .PHONY: eval-asr
 eval-asr: ## ASR 评测（dry-run，基于 seed 数据集 + 未来真实 Qwen3-ASR 调用）

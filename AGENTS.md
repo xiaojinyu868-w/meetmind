@@ -69,13 +69,13 @@
 make dev          # 启动开发服务器（默认端口 3001，PORT 可覆盖）
 make check        # 类型检查（最常用，每次改完必跑）
 make build        # 生产构建（限单核 + 1GB 内存，防 OOM）
-make deploy       # 构建 + PM2 重启
+make deploy       # 构建 + PM2 优雅停机后重启 + /api/health 验证
 ```
 
 **代码质量**
 ```bash
 make test         # 运行 Vitest 单元测试（src/）
-make test-server  # server/ 下 ASR 工具函数单测
+make test-server  # server/ 下运行时与 ASR 单测
 make test-all     # src/ + server/ + eval/ 全套
 make test-watch   # 单元测试 watch 模式
 make lint         # ESLint 检查（--max-warnings 0）

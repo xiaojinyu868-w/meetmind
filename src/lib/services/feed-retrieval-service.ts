@@ -9,10 +9,13 @@
 
 import { createLogger } from '@/lib/logger';
 import type { FeedContentKind, FeedPerspective } from '@/types';
+import { parseJsonResponse } from '@/lib/utils/json-utils';
 import { webSearchExact } from './web-search-service';
 
 const log = createLogger('feed-retrieval');
 const REQUEST_TIMEOUT_MS = 10_000;
+const DASHSCOPE_SEARCH_URL = 'https://dashscope.aliyuncs.com/api/v1/services/aigc/text-generation/generation';
+const DEFAULT_DASHSCOPE_SEARCH_TIMEOUT_MS = 12_000;
 
 export interface ExternalDiscoveryBrief {
   query: string;
@@ -36,6 +39,19 @@ export interface ExternalFeedCandidate {
   coverUrl?: string;
   discovery: ExternalDiscoveryBrief;
   sourceScore: number;
+  /** 搜索服务已经结合 query 完成相关性排序，无需再调用一次 LLM。 */
+  preRanked?: boolean;
+  qualityReason?: string;
+  retrievalProvider?: 'dashscope-search' | 'direct';
+  retrievalRank?: number;
+}
+
+export type FeedRetrievalStrategy = 'auto' | 'dashscope' | 'direct';
+
+export interface FeedRetrievalOptions {
+  strategy?: FeedRetrievalStrategy;
+  dashscopeApiKey?: string;
+  timeoutMs?: number;
 }
 
 interface SemanticScholarPaper {
@@ -60,28 +76,78 @@ interface OpenLibraryWork {
   edition_count?: number;
 }
 
-interface ConnectedSearchItem {
+export interface DashScopeSearchSource {
+  site_name?: string;
+  index?: number;
   title?: string;
   url?: string;
-  snippet?: string;
-  source?: string;
+}
+
+export interface DashScopeSearchSummary {
+  index?: number;
+  summary?: string;
+}
+
+interface DashScopeSearchPayload {
+  code?: string;
+  message?: string;
+  output?: {
+    choices?: Array<{ message?: { content?: string } }>;
+    search_info?: { search_results?: DashScopeSearchSource[] };
+  };
+}
+
+export function selectDashScopeSearchSources(
+  sources: DashScopeSearchSource[],
+  summaries: DashScopeSearchSummary[],
+): DashScopeSearchSource[] {
+  const selectedIndexes = new Set(
+    summaries
+      .filter((item) => Number.isInteger(item.index) && item.summary?.trim())
+      .map((item) => item.index as number),
+  );
+  if (selectedIndexes.size === 0) return sources.slice(0, 4);
+  const matched = sources.filter((source) => selectedIndexes.has(source.index ?? -1));
+  return (matched.length > 0 ? matched : sources).slice(0, 4);
+}
+
+function resolveRetrievalStrategy(options: FeedRetrievalOptions): Exclude<FeedRetrievalStrategy, 'auto'> {
+  if (options.strategy && options.strategy !== 'auto') return options.strategy;
+  const configured = process.env.FEED_SEARCH_MODE?.trim().toLowerCase();
+  if (configured === 'direct') return 'direct';
+  if (configured === 'dashscope') return 'dashscope';
+  return (options.dashscopeApiKey || process.env.DASHSCOPE_API_KEY?.trim()) ? 'dashscope' : 'direct';
 }
 
 export async function retrieveExternalCandidates(
   discoveries: ExternalDiscoveryBrief[],
+  options: FeedRetrievalOptions = {},
 ): Promise<ExternalFeedCandidate[]> {
-  const groups = await Promise.all(discoveries.slice(0, 3).map(async (discovery) => {
-    const tasks: Array<Promise<ExternalFeedCandidate[]>> = [searchWeb(discovery)];
-    if (discovery.contentKinds.includes('paper')) tasks.push(searchPapers(discovery));
-    if (discovery.contentKinds.includes('book')) tasks.push(searchBooks(discovery));
-    const settled = await Promise.allSettled(tasks);
-    return settled.flatMap((result) => result.status === 'fulfilled' ? result.value : []);
-  }));
+  const strategy = resolveRetrievalStrategy(options);
+  const apiKey = options.dashscopeApiKey || process.env.DASHSCOPE_API_KEY?.trim() || '';
+  const activeDiscoveries = discoveries.slice(0, 3);
+  const groups = strategy === 'dashscope' && apiKey
+    ? await Promise.all(activeDiscoveries.map((discovery) => (
+      searchWithDashScope(discovery, apiKey, options.timeoutMs)
+    )))
+    : await Promise.all(activeDiscoveries.map(async (discovery) => {
+      const tasks: Array<Promise<ExternalFeedCandidate[]>> = [searchWeb(discovery)];
+      if (discovery.contentKinds.includes('paper')) tasks.push(searchPapers(discovery));
+      if (discovery.contentKinds.includes('book')) tasks.push(searchBooks(discovery));
+      const settled = await Promise.allSettled(tasks);
+      return settled.flatMap((result) => result.status === 'fulfilled' ? result.value : []);
+    }));
 
   const seen = new Set<string>();
-  return groups.flat()
+  const candidates = groups.flat()
     .filter((candidate) => candidate.title && candidate.snippet && isHttpUrl(candidate.url))
-    .sort((a, b) => b.sourceScore - a.sourceScore)
+    .sort((a, b) => {
+      if (a.preRanked && b.preRanked) {
+        return (a.retrievalRank ?? 99) - (b.retrievalRank ?? 99)
+          || b.sourceScore - a.sourceScore;
+      }
+      return b.sourceScore - a.sourceScore;
+    })
     .filter((candidate) => {
       const normalized = normalizeUrl(candidate.url);
       if (seen.has(normalized)) return false;
@@ -89,25 +155,21 @@ export async function retrieveExternalCandidates(
       return true;
     })
     .slice(0, 24);
+
+  log.info('external retrieval completed', {
+    strategy,
+    discoveries: activeDiscoveries.length,
+    candidates: candidates.length,
+  });
+  return candidates;
 }
 
 async function searchWeb(discovery: ExternalDiscoveryBrief): Promise<ExternalFeedCandidate[]> {
-  let results = await webSearchExact(discovery.query, {
+  const results = await webSearchExact(discovery.query, {
     maxResults: 8,
     language: 'zh-CN',
     market: 'zh-CN',
   });
-
-  if (results.length < 2) {
-    const connected = await searchWithQwen(discovery.query);
-    results = [...results, ...connected.map((item, index) => ({
-      id: `qwen-web-${index}`,
-      title: item.title ?? '',
-      url: item.url ?? '',
-      snippet: item.snippet ?? '',
-      source_type: 'web' as const,
-    }))];
-  }
 
   return results.map((result) => ({
     title: result.title,
@@ -180,33 +242,114 @@ async function searchBooks(discovery: ExternalDiscoveryBrief): Promise<ExternalF
   });
 }
 
-async function searchWithQwen(query: string): Promise<ConnectedSearchItem[]> {
-  const apiKey = process.env.DASHSCOPE_API_KEY?.trim();
-  if (!apiKey) return [];
-  const baseUrl = (process.env.LLM_BASE_URL || 'https://dashscope.aliyuncs.com/compatible-mode/v1').replace(/\/$/, '');
+async function searchWithDashScope(
+  discovery: ExternalDiscoveryBrief,
+  apiKey: string,
+  configuredTimeoutMs?: number,
+): Promise<ExternalFeedCandidate[]> {
+  const parsedTimeout = configuredTimeoutMs
+    ?? Number.parseInt(process.env.FEED_SEARCH_TIMEOUT_MS || '', 10);
+  const timeoutMs = Number.isFinite(parsedTimeout)
+    ? Math.min(20_000, Math.max(3_000, parsedTimeout))
+    : DEFAULT_DASHSCOPE_SEARCH_TIMEOUT_MS;
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+  const sources: DashScopeSearchSource[] = [];
+  let content = '';
+
   try {
-    const response = await fetch(`${baseUrl}/responses`, {
+    const response = await fetch(DASHSCOPE_SEARCH_URL, {
       method: 'POST',
-      headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+        'X-DashScope-SSE': 'enable',
+      },
       body: JSON.stringify({
-        model: 'qwen3.7-plus',
-        input: `联网搜索“${query}”。只返回搜索工具实际找到且可打开的资料，输出 JSON：{"items":[{"title":"","url":"https://...","snippet":"一句事实摘要","source":"站点"}]}。不要编造 URL，最多 6 条。`,
-        tools: [{ type: 'web_search' }, { type: 'web_extractor' }],
-        store: false,
+        model: process.env.FEED_SEARCH_MODEL?.trim() || 'qwen-plus',
+        input: {
+          messages: [{
+            role: 'user',
+            content: `搜索“${discovery.query}”。只从真实搜索结果中选择 3-4 条与查询最相关、可直接打开的资料。输出 JSON：{"items":[{"index":1,"summary":"基于搜索内容的一句事实简介"}]}。index 必须对应搜索结果序号，不要生成新链接。`,
+          }],
+        },
+        parameters: {
+          enable_search: true,
+          incremental_output: true,
+          result_format: 'message',
+          max_tokens: 700,
+          search_options: {
+            search_strategy: 'turbo',
+            enable_source: true,
+            prepend_search_result: true,
+          },
+        },
       }),
-      signal: AbortSignal.timeout(20_000),
+      signal: controller.signal,
     });
-    if (!response.ok) throw new Error(`Qwen web search ${response.status}`);
-    const data = await response.json() as { output?: Array<{ content?: Array<{ type?: string; text?: string }> }> };
-    const text = (data.output ?? []).flatMap((output) => output.content ?? [])
-      .filter((content) => content.type === 'output_text' && content.text)
-      .map((content) => content.text).join('');
-    const parsed = JSON.parse(text.replace(/^```json\s*|\s*```$/g, '')) as { items?: ConnectedSearchItem[] };
-    return (parsed.items ?? []).filter((item) => item.title && item.snippet && item.url && isHttpUrl(item.url)).slice(0, 6);
+    if (!response.ok || !response.body) {
+      throw new Error(`DashScope native search ${response.status}`);
+    }
+
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let pending = '';
+    while (true) {
+      const { done, value } = await reader.read();
+      pending += decoder.decode(value ?? new Uint8Array(), { stream: !done });
+      const lines = pending.split(/\r?\n/);
+      pending = done ? '' : lines.pop() ?? '';
+      for (const line of lines) {
+        if (!line.startsWith('data:')) continue;
+        const payload = JSON.parse(line.slice(5)) as DashScopeSearchPayload;
+        if (payload.code) throw new Error(`${payload.code}: ${payload.message || 'search failed'}`);
+        const nextSources = payload.output?.search_info?.search_results ?? [];
+        if (sources.length === 0 && nextSources.length > 0) sources.push(...nextSources);
+        content += payload.output?.choices?.[0]?.message?.content ?? '';
+      }
+      if (done) break;
+    }
   } catch (error) {
-    log.warn('Qwen connected search failed:', error);
-    return [];
+    log.warn('DashScope native search failed', {
+      query: discovery.query,
+      sourceCount: sources.length,
+      error: error instanceof Error ? error.message : String(error),
+    });
+  } finally {
+    clearTimeout(timeoutId);
   }
+
+  const parsed = parseJsonResponse<{ items?: DashScopeSearchSummary[] }>(content);
+  const summaries = parsed?.items ?? [];
+  const summaryByIndex = new Map(
+    summaries
+      .filter((item) => Number.isInteger(item.index) && item.summary?.trim())
+      .map((item) => [item.index as number, item.summary!.trim()]),
+  );
+  const selectedSources = selectDashScopeSearchSources(sources, summaries);
+
+  log.info('DashScope native search completed', {
+    sourceCount: sources.length,
+    summaryCount: summaryByIndex.size,
+    selectedCount: selectedSources.length,
+  });
+
+  return selectedSources.flatMap((source, rank): ExternalFeedCandidate[] => {
+    if (!source.title || !source.url || !isHttpUrl(source.url)) return [];
+    return [{
+      title: source.title,
+      url: source.url,
+      snippet: summaryByIndex.get(source.index ?? -1) || source.title,
+      sourceLabel: source.site_name || hostnameOf(source.url),
+      contentKind: inferWebContentKind(source.url),
+      discovery,
+      sourceScore: scoreSource(source.url),
+      preRanked: true,
+      qualityReason: discovery.reason,
+      retrievalProvider: 'dashscope-search',
+      retrievalRank: rank,
+    }];
+  });
 }
 
 export function scoreSource(url: string): number {

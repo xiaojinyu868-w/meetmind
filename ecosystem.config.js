@@ -13,6 +13,7 @@ module.exports = {
       name: 'meetmind',
       script: 'server.js',
       cwd: '/mnt/meetmind-capture-v1-server-handoff',
+      interpreter: '/usr/local/bin/node',
 
       // Environment
       env: {
@@ -35,8 +36,8 @@ module.exports = {
       log_date_format: 'YYYY-MM-DD HH:mm:ss Z',
 
       // Graceful restart
-      kill_timeout: 5000,
-      listen_timeout: 10000,
+      kill_timeout: 30000,
+      listen_timeout: 30000,
       shutdown_with_message: true,
 
       // Restart strategy on crash loop

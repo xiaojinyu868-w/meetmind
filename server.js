@@ -11,13 +11,14 @@ const { createServer } = require('http');
 const { parse } = require('url');
 const next = require('next');
 const { WebSocketServer, WebSocket } = require('ws');
+const { installGracefulShutdown, resolveServerHost } = require('./server/runtime-lifecycle');
 
 if (!process.env.NODE_ENV) {
   process.env.NODE_ENV = 'development';
 }
 
 const dev = process.env.NODE_ENV !== 'production';
-const hostname = 'localhost';
+const hostname = resolveServerHost({ dev, configuredHost: process.env.HOST });
 const port = parseInt(process.env.PORT || '3001', 10);
 const devDistDir = process.env.NEXT_DEV_DIST_DIR || '.next-dev';
 const activeDistDir = dev ? devDistDir : '.next';
@@ -1626,7 +1627,12 @@ app.prepare().then(() => {
     });
   });
 
-  server.listen(port, () => {
+  installGracefulShutdown({
+    server,
+    webSocketServers: [asrWss, speakerAsrWss, tutorCallWss],
+  });
+
+  server.listen(port, hostname, () => {
     console.log(`> Ready on http://${hostname}:${port}`);
     console.log(`> WebSocket proxy available at ws://${hostname}:${port}/api/asr-stream`);
     console.log(`> Tutor call proxy available at ws://${hostname}:${port}/api/tutor-call`);

@@ -61,7 +61,7 @@ route.ts → lib/services/ + lib/utils/rate-limit
 | `/api/generate-summary` | POST | 课堂摘要生成 |
 | `/api/generate-topics` | POST | 精选片段生成（Smart/Fast） |
 | `/api/feedback` | POST | 用户反馈 |
-| `/api/feed` | POST | 今日情报：允许游客携本地 captures 匿名调用并按 IP 限流；跨课程请求可携 `learningContext.activeThread/memories/recentActivities`，无新收藏但有真实当前目标时也可生成；响应外部卡含 `contentUrl/contentKind/authors/publishedAt/perspective`，来自真实网页、论文或图书目录；link-only 与解析失败内容不能作为原文观点证据 |
+| `/api/feed` | POST | 今日情报：允许游客携本地 captures 匿名调用并按 IP 限流；跨课程请求可携 `learningContext.activeThread/memories/recentActivities`，无新收藏但有真实当前目标时也可生成；有 `DASHSCOPE_API_KEY` 时外部卡默认由百炼原生 turbo 搜索返回真实 URL 与简介，不依赖服务器访问 DuckDuckGo / Open Library；响应含 `contentUrl/contentKind/authors/publishedAt/perspective`，link-only 与解析失败内容不能作为原文观点证据 |
 
 ### 🧩 应用系统
 
@@ -117,6 +117,12 @@ route.ts → lib/services/ + lib/utils/rate-limit
 |------|------|------|
 | `/api/analytics` | POST | 行为数据上报 |
 | `/api/analytics/stats` | GET | 统计数据查询 |
+
+### 🩺 运行维护
+
+| 路由 | 方法 | 职责 |
+|------|------|------|
+| `/api/health` | GET | 非缓存健康检查；同时验证进程存活与 SQLite 可查询，健康返回 200，降级返回 503 |
 
 ## ⚠️ 超标文件
 

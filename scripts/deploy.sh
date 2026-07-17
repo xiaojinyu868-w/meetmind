@@ -11,7 +11,7 @@ set -euo pipefail
 PROJECT_DIR="/mnt/meetmind-capture-v1-server-handoff"
 APP_NAME="meetmind"
 PORT=3002
-HEALTH_URL="http://127.0.0.1:${PORT}/app"
+HEALTH_URL="http://127.0.0.1:${PORT}/api/health"
 MAX_WAIT=30  # 健康检查最大等待秒数
 
 # Colors
@@ -31,7 +31,7 @@ MODE="${1:-full}"
 # ── Step 1: Build ──────────────────────────────────────────────
 if [[ "$MODE" != "--quick" ]]; then
   log "📦 Building Next.js production bundle..."
-  npm run build || fail "Build failed!"
+  make build || fail "Build failed!"
   log "✅ Build succeeded"
 fi
 
@@ -41,21 +41,15 @@ if [[ "$MODE" == "--build" ]]; then
 fi
 
 # ── Step 2: Restart ────────────────────────────────────────────
-log "🔄 Restarting pm2 process: ${APP_NAME}..."
-
-# Check if process exists
-if pm2 describe "$APP_NAME" &>/dev/null; then
-  pm2 restart "$APP_NAME" --update-env
-else
-  warn "Process not found, starting fresh..."
-  pm2 start ecosystem.config.js
-fi
+log "🔄 Applying pm2 process definition: ${APP_NAME}..."
+pm2 startOrReload ecosystem.config.js --only "$APP_NAME" --update-env
 
 # ── Step 3: Health Check ───────────────────────────────────────
 log "🏥 Waiting for health check (${HEALTH_URL})..."
 WAITED=0
 while [[ $WAITED -lt $MAX_WAIT ]]; do
-  HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" "$HEALTH_URL" 2>/dev/null || echo "000")
+  HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" "$HEALTH_URL" 2>/dev/null || true)
+  HTTP_CODE="${HTTP_CODE:-000}"
   if [[ "$HTTP_CODE" == "200" ]]; then
     log "✅ Health check passed (HTTP ${HTTP_CODE}) after ${WAITED}s"
     break
